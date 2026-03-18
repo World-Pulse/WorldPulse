@@ -416,16 +416,16 @@ async function run() {
       id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
       tag         VARCHAR(100) NOT NULL,
       category    category,
-      window      VARCHAR(20) NOT NULL DEFAULT '1h',
+      "window"    VARCHAR(20) NOT NULL DEFAULT '1h',
       score       DECIMAL(10,2) NOT NULL DEFAULT 0,
       delta       DECIMAL(6,2) NOT NULL DEFAULT 0,
       count       INTEGER NOT NULL DEFAULT 0,
       momentum    VARCHAR(20) NOT NULL DEFAULT 'steady',
       snapshot_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      UNIQUE(tag, window, snapshot_at)
+      UNIQUE(tag, "window", snapshot_at)
     )
   `)
-  await db.raw(`CREATE INDEX IF NOT EXISTS idx_trending_window ON trending_topics(window, score DESC, snapshot_at DESC)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_trending_window ON trending_topics("window", score DESC, snapshot_at DESC)`)
 
   // ── source_suggestions ────────────────────────────────────────────────────
   await db.raw(`
