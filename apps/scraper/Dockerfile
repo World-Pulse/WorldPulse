@@ -3,7 +3,7 @@ RUN npm install -g pnpm@9
 
 FROM base AS deps
 WORKDIR /app
-COPY package.json pnpm-workspace.yaml turbo.json ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json ./
 COPY packages/types/package.json packages/types/
 COPY apps/scraper/package.json apps/scraper/
 RUN pnpm install --frozen-lockfile
