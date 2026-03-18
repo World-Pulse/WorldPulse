@@ -21,6 +21,8 @@ COPY packages/types/ packages/types/
 COPY apps/api/ apps/api/
 RUN pnpm --filter @worldpulse/types build
 RUN pnpm --filter @worldpulse/api build
+# Create a self-contained deployment: resolves workspace symlinks into real copies
+RUN pnpm deploy --filter @worldpulse/api --prod /prod/api
 
 # ─── PRODUCTION IMAGE ────────────────────────────────────────
 FROM node:20-alpine AS runner
@@ -30,9 +32,9 @@ RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 worldpuls
 # Bust the dist cache on every deploy (deploy.sh passes --build-arg BUILD_TIME=<timestamp>)
 ARG BUILD_TIME
 RUN echo "Build: $BUILD_TIME"
-COPY --from=builder --chown=worldpulse:nodejs /app/apps/api/dist ./dist
-COPY --from=builder --chown=worldpulse:nodejs /app/apps/api/package.json .
-COPY --from=builder --chown=worldpulse:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=worldpulse:nodejs /prod/api/dist ./dist
+COPY --from=builder --chown=worldpulse:nodejs /prod/api/node_modules ./node_modules
+COPY --from=builder --chown=worldpulse:nodejs /prod/api/package.json .
 
 USER worldpulse
 EXPOSE 3001
