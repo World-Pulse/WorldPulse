@@ -21,7 +21,6 @@ COPY packages/types/ packages/types/
 COPY apps/api/ apps/api/
 RUN pnpm --filter @worldpulse/types build
 RUN pnpm --filter @worldpulse/api build
-RUN echo "=== dist layout ===" && find /app/apps/api/dist -type f | sort
 
 # ─── PRODUCTION IMAGE ────────────────────────────────────────
 FROM node:20-alpine AS runner
