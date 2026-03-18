@@ -238,13 +238,14 @@ async function run() {
   await db.raw(`CREATE INDEX IF NOT EXISTS idx_posts_location    ON posts USING GIST(location)`)
   await db.raw(`CREATE INDEX IF NOT EXISTS idx_posts_tags        ON posts USING gin(tags)`)
   await db.raw(`CREATE INDEX IF NOT EXISTS idx_posts_text        ON posts USING gin(to_tsvector('english', content))`)
-  await db.raw(`CREATE INDEX IF NOT EXISTS idx_posts_pinned      ON posts(pinned_in_community_id) WHERE pinned = TRUE`)
-
   // Patch existing posts table if columns are missing (handles init.sql-seeded DBs)
   await db.raw(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS is_edited BOOLEAN NOT NULL DEFAULT FALSE`)
   await db.raw(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS poll_data JSONB`)
   await db.raw(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT FALSE`)
   await db.raw(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS pinned_in_community_id UUID REFERENCES communities(id) ON DELETE SET NULL`)
+
+  // Must come after the pinned column is guaranteed to exist
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_posts_pinned      ON posts(pinned_in_community_id) WHERE pinned = TRUE`)
 
   // ── follows ───────────────────────────────────────────────────────────────
   await db.raw(`
