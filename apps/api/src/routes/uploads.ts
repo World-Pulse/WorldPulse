@@ -175,10 +175,15 @@ export const registerUploadRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(400).send({ success: false, error: 'No files received' })
     }
 
+    const firstFile = files[0]
+    if (!firstFile) {
+      return reply.status(400).send({ success: false, error: 'No files received' })
+    }
+
     return reply.status(201).send({
       success: true,
       data: {
-        url:   files[0].url,
+        url:   firstFile.url,
         urls:  files.map(f => f.url),
         types: files.map(f => f.type),
         count: files.length,

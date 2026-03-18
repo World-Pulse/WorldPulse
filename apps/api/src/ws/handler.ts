@@ -1,5 +1,8 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
-import type { WebSocket } from '@fastify/websocket'
+import type { SocketStream } from '@fastify/websocket'
+
+// Derive WebSocket type from SocketStream to avoid needing @types/ws directly
+type WebSocket = SocketStream['socket']
 import { redis } from '../db/redis'
 import { logger } from '../lib/logger'
 import type { WSMessage, WSEventType } from '@worldpulse/types'
@@ -18,9 +21,10 @@ const clients = new Map<string, WSClient>()
 // ─── WEBSOCKET HANDLER ───────────────────────────────────────────────────
 export const registerWSHandler: FastifyPluginAsync = async (app) => {
 
-  app.get('/ws', { websocket: true }, async (socket: WebSocket, req: FastifyRequest) => {
+  app.get('/ws', { websocket: true }, async (connection: SocketStream, req: FastifyRequest) => {
+    const socket: WebSocket = connection.socket
     const clientId = crypto.randomUUID()
-    
+
     // Auth (optional — anonymous connections get public events only)
     let userId: string | null = null
     try {
@@ -54,7 +58,7 @@ export const registerWSHandler: FastifyPluginAsync = async (app) => {
     })
 
     // ─── INCOMING MESSAGES ─────────────────────────────────
-    socket.on('message', (raw) => {
+    socket.on('message', (raw: Buffer | ArrayBuffer | Buffer[]) => {
       try {
         const msg = JSON.parse(raw.toString()) as { type: string; payload?: unknown }
         
@@ -86,7 +90,7 @@ export const registerWSHandler: FastifyPluginAsync = async (app) => {
       logger.debug({ clientId, total: clients.size }, 'WS client disconnected')
     })
 
-    socket.on('error', (err) => {
+    socket.on('error', (err: Error) => {
       logger.error({ clientId, err }, 'WS socket error')
       clients.delete(clientId)
     })

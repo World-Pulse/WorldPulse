@@ -17,6 +17,13 @@ import { dedup } from './pipeline/dedup'
 import { computeTrending } from './pipeline/trending'
 import type { Source } from '@worldpulse/types'
 
+// DB row has extra columns not present in the shared Source interface
+type ScraperSource = Source & {
+  rss_feeds:    string[]
+  api_endpoint: string | null
+  last_scraped: Date | null
+}
+
 const SCRAPE_INTERVAL_MS = Number(process.env.SCRAPE_INTERVAL_MS ?? 30_000)
 const kafka = new Kafka({
   clientId: 'wp-scraper',
@@ -65,7 +72,7 @@ async function bootstrap() {
 
 // ─── MAIN SCRAPE LOOP ─────────────────────────────────────────────────────
 async function scrapeAll() {
-  const sources = await db<Source>('sources')
+  const sources = await db<ScraperSource>('sources')
     .where('active', true)
     .whereRaw("last_scraped IS NULL OR last_scraped < NOW() - (scrape_interval || ' seconds')::INTERVAL")
 
@@ -81,7 +88,7 @@ async function scrapeAll() {
 }
 
 // ─── SCRAPE SINGLE SOURCE ─────────────────────────────────────────────────
-async function scrapeSource(source: Source & { rss_feeds: string[]; last_scraped: Date | null }) {
+async function scrapeSource(source: ScraperSource) {
   if (!source.rss_feeds?.length && !source.api_endpoint) return
 
   const parser = new Parser({

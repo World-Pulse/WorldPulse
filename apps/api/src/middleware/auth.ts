@@ -1,9 +1,10 @@
 import type { FastifyRequest, FastifyReply } from 'fastify'
 import { db } from '../db/postgres'
 
-declare module 'fastify' {
-  interface FastifyRequest {
-    user?: { id: string; handle: string; accountType: string; trustScore: number }
+declare module '@fastify/jwt' {
+  interface FastifyJWT {
+    payload: { id: string }
+    user: { id: string; handle: string; accountType: string; trustScore: number }
   }
 }
 
