@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+.next/
+out/
+build/
+
+# Environment — NEVER commit these
+.env
+.env.local
+.env.production
+.env.prod
+.env.*.local
+
+# Certs — managed by certbot on server
+.certbot/
+nginx/certs/
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Misc
+*.tmp
+coverage/

@@ -1,0 +1,27 @@
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'worldpulse'
+
+scrape_configs:
+  - job_name: 'worldpulse-api'
+    static_configs:
+      - targets: ['api:3001']
+    metrics_path: '/metrics'
+
+  - job_name: 'worldpulse-scraper'
+    static_configs:
+      - targets: ['scraper:9464']
+
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+
+  - job_name: 'kafka'
+    static_configs:
+      - targets: ['kafka-exporter:9308']

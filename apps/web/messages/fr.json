@@ -1,0 +1,225 @@
+{
+  "nav": {
+    "liveFeed": "Fil en direct",
+    "worldMap": "Carte du monde",
+    "alerts": "Alertes",
+    "analytics": "Analyses",
+    "explore": "Explorer",
+    "communities": "Communautés",
+    "mySources": "Mes sources",
+    "settings": "Paramètres",
+    "navigate": "Navigation",
+    "signalChannels": "Canaux de signaux",
+    "trendingNow": "Tendances actuelles",
+    "signIn": "Se connecter",
+    "joinFree": "Rejoindre gratuitement",
+    "searchSignals": "Rechercher des signaux…",
+    "tracking": "Suivi de",
+    "signals": "signaux",
+    "live": "EN DIRECT"
+  },
+  "channels": {
+    "breakingNews": "Actualités urgentes",
+    "conflictZones": "Zones de conflit",
+    "markets": "Marchés",
+    "climate": "Climat",
+    "health": "Santé",
+    "scienceTech": "Sciences & Technologies",
+    "politics": "Politique",
+    "culture": "Culture"
+  },
+  "feed": {
+    "globalPulse": "Pouls mondial",
+    "forYou": "Pour vous",
+    "following": "Abonnements",
+    "verifiedSources": "Sources vérifiées",
+    "aiDigest": "Synthèse IA",
+    "loadMore": "Charger plus de signaux",
+    "noSignals": "Aucun signal trouvé",
+    "nothingHere": "Rien ici pour l'instant",
+    "newPosts": "{count} nouveaux signaux — cliquer pour charger",
+    "tabs": {
+      "all": "Tout",
+      "breaking": "Urgent",
+      "conflict": "Conflit",
+      "climate": "Climat",
+      "markets": "Marchés",
+      "tech": "Tech",
+      "health": "Santé"
+    }
+  },
+  "signal": {
+    "impact": "IMPACT",
+    "reliability": "Fiabilité",
+    "liveResults": "RÉSULTATS EN DIRECT",
+    "breaking": "URGENT",
+    "aiSynthesis": "SYNTHÈSE IA",
+    "sources": "Sources",
+    "viewFull": "Voir le signal complet",
+    "share": "Partager",
+    "bookmark": "Favori",
+    "report": "Signaler"
+  },
+  "actions": {
+    "submitSignal": "Soumettre un signal",
+    "follow": "Suivre",
+    "following": "Abonné",
+    "like": "J'aime",
+    "boost": "Amplifier",
+    "share": "Partager",
+    "reply": "Répondre",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "confirm": "Confirmer",
+    "back": "Retour",
+    "next": "Suivant",
+    "submit": "Soumettre",
+    "close": "Fermer",
+    "edit": "Modifier",
+    "delete": "Supprimer",
+    "learnMore": "En savoir plus"
+  },
+  "auth": {
+    "login": {
+      "title": "Connexion à WorldPulse",
+      "subtitle": "Suivez les événements mondiaux en temps réel",
+      "emailLabel": "Adresse e-mail",
+      "emailPlaceholder": "vous@exemple.com",
+      "passwordLabel": "Mot de passe",
+      "passwordPlaceholder": "Votre mot de passe",
+      "submitButton": "Se connecter",
+      "forgotPassword": "Mot de passe oublié ?",
+      "noAccount": "Pas encore de compte ?",
+      "register": "Rejoindre gratuitement",
+      "orContinueWith": "Ou continuer avec",
+      "continueWithGitHub": "Continuer avec GitHub",
+      "continueWithGoogle": "Continuer avec Google",
+      "invalidCredentials": "E-mail ou mot de passe incorrect",
+      "accountSuspended": "Votre compte a été suspendu"
+    },
+    "register": {
+      "title": "Rejoindre WorldPulse",
+      "subtitle": "Le réseau de renseignement ouvert du monde",
+      "handleLabel": "Nom d'utilisateur",
+      "handlePlaceholder": "votrenom",
+      "displayNameLabel": "Nom affiché",
+      "displayNamePlaceholder": "Votre nom",
+      "emailLabel": "Adresse e-mail",
+      "emailPlaceholder": "vous@exemple.com",
+      "passwordLabel": "Mot de passe",
+      "passwordPlaceholder": "Choisissez un mot de passe fort",
+      "submitButton": "Créer un compte",
+      "alreadyAccount": "Déjà un compte ?",
+      "signIn": "Se connecter",
+      "termsNotice": "En rejoignant, vous acceptez nos Conditions d'utilisation et notre Politique de confidentialité",
+      "handleTaken": "Ce nom d'utilisateur est déjà pris",
+      "emailTaken": "Cet e-mail est déjà enregistré",
+      "passwordWeak": "Le mot de passe doit contenir au moins 8 caractères"
+    },
+    "forgotPassword": {
+      "title": "Réinitialiser votre mot de passe",
+      "subtitle": "Nous vous enverrons un lien de réinitialisation par e-mail",
+      "emailLabel": "Adresse e-mail",
+      "emailPlaceholder": "vous@exemple.com",
+      "submitButton": "Envoyer le lien de réinitialisation",
+      "backToLogin": "Retour à la connexion",
+      "successMessage": "Vérifiez votre e-mail pour le lien de réinitialisation",
+      "notFound": "Aucun compte trouvé avec cet e-mail"
+    }
+  },
+  "settings": {
+    "title": "Paramètres",
+    "sections": {
+      "account": "Compte",
+      "notifications": "Notifications",
+      "appearance": "Apparence",
+      "language": "Langue et région",
+      "privacy": "Confidentialité",
+      "security": "Sécurité",
+      "about": "À propos"
+    },
+    "language": {
+      "title": "Langue",
+      "selectLanguage": "Choisir la langue",
+      "currentLanguage": "Langue actuelle"
+    },
+    "appearance": {
+      "theme": "Thème",
+      "dark": "Sombre",
+      "light": "Clair",
+      "system": "Système"
+    },
+    "notifications": {
+      "breakingAlerts": "Alertes urgentes",
+      "alertSubscriptions": "Abonnements aux alertes",
+      "mentions": "Mentions",
+      "replies": "Réponses",
+      "follows": "Nouveaux abonnés",
+      "digestEmail": "E-mail de synthèse quotidienne"
+    },
+    "account": {
+      "editProfile": "Modifier le profil",
+      "changePassword": "Changer le mot de passe",
+      "deleteAccount": "Supprimer le compte",
+      "exportData": "Exporter mes données"
+    }
+  },
+  "errors": {
+    "generic": "Une erreur s'est produite. Veuillez réessayer.",
+    "notFound": "Page introuvable",
+    "unauthorized": "Vous devez être connecté pour faire cela",
+    "forbidden": "Vous n'avez pas la permission pour cette action",
+    "rateLimited": "Trop de requêtes. Veuillez ralentir.",
+    "networkError": "Erreur réseau. Vérifiez votre connexion.",
+    "serverError": "Erreur serveur. Nous y travaillons.",
+    "signalNotFound": "Signal introuvable",
+    "userNotFound": "Utilisateur introuvable"
+  },
+  "composer": {
+    "placeholder": "Partagez un signal ou une publication…",
+    "submitSignal": "Soumettre un signal",
+    "addLocation": "Ajouter un lieu",
+    "addMedia": "Ajouter des médias",
+    "selectCategory": "Sélectionner une catégorie",
+    "selectSeverity": "Sélectionner la gravité",
+    "sourceUrl": "URL de la source (optionnel)",
+    "characterCount": "{count}/2000"
+  },
+  "empty": {
+    "noSignals": "Aucun signal trouvé",
+    "noSignalsHint": "Essayez d'ajuster vos filtres ou revenez plus tard",
+    "nothingHere": "Rien ici pour l'instant",
+    "noFollowing": "Vous ne suivez personne encore",
+    "noAlerts": "Aucune alerte configurée",
+    "noBookmarks": "Aucun favori encore",
+    "startExploring": "Commencer à explorer"
+  },
+  "sources": {
+    "suggest": {
+      "title": "Suggérer une source",
+      "subtitle": "Aidez-nous à élargir la couverture de WorldPulse",
+      "nameLabel": "Nom de la source",
+      "namePlaceholder": "ex. BBC World Service",
+      "urlLabel": "URL du site web",
+      "urlPlaceholder": "https://exemple.com",
+      "rssLabel": "URL du flux RSS",
+      "rssPlaceholder": "https://exemple.com/feed",
+      "categoryLabel": "Catégorie",
+      "reasonLabel": "Pourquoi cette source devrait-elle être ajoutée ?",
+      "reasonPlaceholder": "Décrivez la couverture, la crédibilité de cette source et pourquoi elle bénéficierait à WorldPulse…",
+      "submitButton": "Soumettre la suggestion",
+      "successTitle": "Merci !",
+      "successMessage": "Votre suggestion a été soumise. Nous examinons toutes les suggestions dans les 48 heures.",
+      "submitAnother": "Soumettre une autre suggestion"
+    }
+  },
+  "common": {
+    "worldpulse": "WorldPulse",
+    "globalThreatIndex": "Indice de menace mondial",
+    "level": "Niveau",
+    "elevated": "Élevé",
+    "signalsCount": "{count} signaux",
+    "ago": "il y a",
+    "live": "En direct"
+  }
+}

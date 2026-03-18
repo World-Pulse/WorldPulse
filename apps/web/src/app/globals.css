@@ -1,0 +1,151 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── DESIGN TOKENS ──────────────────────────────────────── */
+:root {
+  --wp-bg:          #06070d;
+  --wp-surface:     #0d0f18;
+  --wp-surface2:    #141722;
+  --wp-surface3:    #1b2030;
+  --wp-border:      rgba(255,255,255,0.07);
+  --wp-border-bright: rgba(255,255,255,0.15);
+  --wp-amber:       #f5a623;
+  --wp-amber-dim:   rgba(245,166,35,0.12);
+  --wp-amber-glow:  rgba(245,166,35,0.35);
+  --wp-cyan:        #00d4ff;
+  --wp-cyan-dim:    rgba(0,212,255,0.10);
+  --wp-red:         #ff3b5c;
+  --wp-red-dim:     rgba(255,59,92,0.12);
+  --wp-green:       #00e676;
+  --wp-green-dim:   rgba(0,230,118,0.10);
+  --wp-text:        #e2e6f0;
+  --wp-text-2:      #8892a4;
+  --wp-text-3:      #4a5568;
+  --wp-font-display: 'Bebas Neue', sans-serif;
+  --wp-font-mono:   'JetBrains Mono', monospace;
+}
+
+/* ─── BASE ────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--wp-bg);
+  color: var(--wp-text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ─── NOISE TEXTURE ──────────────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.35;
+}
+
+/* ─── SCROLLBAR ──────────────────────────────────────────── */
+::-webkit-scrollbar         { width: 4px; height: 4px; }
+::-webkit-scrollbar-track   { background: transparent; }
+::-webkit-scrollbar-thumb   { background: var(--wp-border); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--wp-border-bright); }
+
+/* ─── ANIMATIONS ─────────────────────────────────────────── */
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.7); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-down {
+  from { transform: translateY(-100%); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes ticker-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes flash-tag {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}
+
+@keyframes pulse-ring {
+  0%   { width: 8px; height: 8px; opacity: 0.9; }
+  100% { width: 32px; height: 32px; opacity: 0; }
+}
+
+/* ─── UTILITIES ──────────────────────────────────────────── */
+.animate-live-pulse  { animation: live-pulse 1.4s ease-in-out infinite; }
+.animate-fade-in     { animation: fade-in 0.4s ease forwards; }
+.animate-slide-down  { animation: slide-down 0.4s ease forwards; }
+.animate-flash-tag   { animation: flash-tag 2s ease infinite; }
+.animate-ticker      { animation: ticker-scroll 60s linear infinite; }
+
+.text-display { font-family: var(--wp-font-display); letter-spacing: 0.1em; }
+.text-mono    { font-family: var(--wp-font-mono); }
+
+/* Glass surface */
+.glass {
+  background: rgba(13, 15, 24, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* Reliability dots */
+.rel-dots { display: flex; gap: 3px; align-items: center; }
+.rel-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--wp-surface3);
+  transition: background 0.3s;
+}
+.rel-dot.filled  { background: var(--wp-green); }
+.rel-dot.partial { background: var(--wp-amber); }
+
+/* Tag pills */
+.tag-pill {
+  display: inline-flex; align-items: center;
+  padding: 3px 8px; border-radius: 20px;
+  font-size: 11px; font-family: var(--wp-font-mono);
+  cursor: pointer; transition: all 0.2s; text-decoration: none;
+  white-space: nowrap;
+}
+.tag-breaking    { background: rgba(255,59,92,0.12); color: var(--wp-red);   border: 1px solid rgba(255,59,92,0.3); }
+.tag-conflict    { background: rgba(239,68,68,0.10); color: #ef4444;         border: 1px solid rgba(239,68,68,0.3); }
+.tag-climate     { background: rgba(34,197,94,0.10); color: #22c55e;         border: 1px solid rgba(34,197,94,0.3); }
+.tag-economy     { background: var(--wp-amber-dim); color: var(--wp-amber); border: 1px solid rgba(245,166,35,0.3); }
+.tag-technology  { background: var(--wp-cyan-dim);  color: var(--wp-cyan);  border: 1px solid rgba(0,212,255,0.3); }
+.tag-health      { background: rgba(168,85,247,0.1); color: #a855f7;        border: 1px solid rgba(168,85,247,0.3); }
+.tag-science     { background: rgba(59,130,246,0.1); color: #3b82f6;        border: 1px solid rgba(59,130,246,0.3); }
+.tag-elections   { background: rgba(16,185,129,0.1); color: #10b981;        border: 1px solid rgba(16,185,129,0.3); }
+.tag-disaster    { background: rgba(251,146,60,0.1); color: #fb923c;        border: 1px solid rgba(251,146,60,0.3); }
+.tag-geopolitics { background: rgba(99,102,241,0.1); color: #6366f1;        border: 1px solid rgba(99,102,241,0.3); }
+
+/* Source badges */
+.source-badge {
+  font-family: var(--wp-font-mono); font-size: 9px;
+  letter-spacing: 1px; padding: 2px 6px;
+  border-radius: 3px; font-weight: 700;
+}
+.badge-wire      { background: #cc0000; color: #fff; }
+.badge-bbc       { background: #bb1919; color: #fff; }
+.badge-reuters   { background: #ff8000; color: #000; }
+.badge-ap        { background: #cc0000; color: #fff; }
+.badge-ai        { background: var(--wp-cyan-dim); color: var(--wp-cyan); border: 1px solid rgba(0,212,255,0.3); }
+.badge-community { background: var(--wp-amber-dim); color: var(--wp-amber); border: 1px solid rgba(245,166,35,0.3); }
+
+/* MapLibre reset */
+.maplibregl-map { font-family: inherit !important; }
+.maplibregl-ctrl-attrib { display: none !important; }

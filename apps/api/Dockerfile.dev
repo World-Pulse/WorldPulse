@@ -1,0 +1,21 @@
+FROM node:20-alpine
+
+RUN npm install -g pnpm@9
+
+WORKDIR /app
+
+# Copy workspace root
+COPY package.json pnpm-workspace.yaml turbo.json ./
+COPY packages/types/package.json packages/types/
+COPY apps/api/package.json apps/api/
+
+RUN pnpm install --frozen-lockfile
+
+COPY packages/types/ packages/types/
+COPY apps/api/ apps/api/
+
+RUN pnpm --filter @worldpulse/types build
+
+EXPOSE 3001
+
+CMD ["pnpm", "--filter", "@worldpulse/api", "dev"]
