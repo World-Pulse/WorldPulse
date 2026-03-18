@@ -31,6 +31,15 @@ Thumbs.db
 .vscode/
 .idea/
 
+# TypeScript build info cache
+*.tsbuildinfo
+
+# packages/types emits declarations alongside source — exclude compiled outputs
+packages/types/src/*.js
+packages/types/src/*.js.map
+packages/types/src/*.d.ts
+packages/types/src/*.d.ts.map
+
 # Misc
 *.tmp
 coverage/

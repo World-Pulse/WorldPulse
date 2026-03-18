@@ -1,0 +1,567 @@
+/**
+ * WorldPulse database migration runner.
+ * Called by deploy.sh as: node dist/db/migrate.js
+ * Idempotent — safe to run on both fresh and existing databases.
+ */
+import Knex from 'knex'
+
+const DATABASE_URL = process.env.DATABASE_URL
+if (!DATABASE_URL) {
+  console.error('❌  DATABASE_URL environment variable is required')
+  process.exit(1)
+}
+
+const db = Knex({
+  client: 'pg',
+  connection: {
+    connectionString: DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production'
+      ? { rejectUnauthorized: false }
+      : false,
+  },
+  acquireConnectionTimeout: 30_000,
+})
+
+async function run() {
+  console.log('🚀  WorldPulse migrations starting…')
+
+  // ── Extensions ────────────────────────────────────────────────────────────
+  await db.raw(`CREATE EXTENSION IF NOT EXISTS postgis`)
+  await db.raw(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`)
+  await db.raw(`CREATE EXTENSION IF NOT EXISTS pg_trgm`)
+  await db.raw(`CREATE EXTENSION IF NOT EXISTS btree_gin`)
+
+  // ── Enum types (skip if already exist) ───────────────────────────────────
+  await db.raw(`DO $$ BEGIN
+    CREATE TYPE signal_severity AS ENUM ('critical','high','medium','low','info');
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`)
+
+  await db.raw(`DO $$ BEGIN
+    CREATE TYPE signal_status AS ENUM ('pending','verified','disputed','false','retracted');
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`)
+
+  await db.raw(`DO $$ BEGIN
+    CREATE TYPE account_type AS ENUM ('community','journalist','official','expert','ai','bot');
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`)
+
+  await db.raw(`DO $$ BEGIN
+    CREATE TYPE post_type AS ENUM ('signal','thread','report','boost','deep_dive','poll','ai_digest');
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`)
+
+  await db.raw(`DO $$ BEGIN
+    CREATE TYPE source_tier AS ENUM ('wire','national','regional','community','user');
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`)
+
+  await db.raw(`DO $$ BEGIN
+    CREATE TYPE category AS ENUM (
+      'breaking','conflict','geopolitics','climate','health',
+      'economy','technology','science','elections','culture',
+      'disaster','security','sports','space','other'
+    );
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`)
+
+  // ── users ─────────────────────────────────────────────────────────────────
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS users (
+      id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      handle          VARCHAR(50)  UNIQUE NOT NULL,
+      display_name    VARCHAR(100) NOT NULL,
+      email           VARCHAR(255) UNIQUE,
+      password_hash   VARCHAR(255),
+      bio             TEXT,
+      avatar_url      VARCHAR(512),
+      location        VARCHAR(100),
+      website         VARCHAR(255),
+      account_type    account_type NOT NULL DEFAULT 'community',
+      trust_score     DECIMAL(4,3) NOT NULL DEFAULT 0.500 CHECK (trust_score BETWEEN 0 AND 1),
+      follower_count  INTEGER NOT NULL DEFAULT 0,
+      following_count INTEGER NOT NULL DEFAULT 0,
+      signal_count    INTEGER NOT NULL DEFAULT 0,
+      verified        BOOLEAN NOT NULL DEFAULT FALSE,
+      verified_at     TIMESTAMPTZ,
+      verified_by     UUID REFERENCES users(id),
+      suspended       BOOLEAN NOT NULL DEFAULT FALSE,
+      suspended_at    TIMESTAMPTZ,
+      suspension_reason TEXT,
+      oauth_github    VARCHAR(255) UNIQUE,
+      oauth_google    VARCHAR(255) UNIQUE,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_seen_at    TIMESTAMPTZ
+    )
+  `)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_users_handle  ON users(handle)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_users_trust   ON users(trust_score DESC)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_users_type    ON users(account_type)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_users_created ON users(created_at DESC)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_users_search  ON users USING gin(display_name gin_trgm_ops)`)
+
+  // ── sources ───────────────────────────────────────────────────────────────
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS sources (
+      id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      slug            VARCHAR(100) UNIQUE NOT NULL,
+      name            VARCHAR(255) NOT NULL,
+      description     TEXT,
+      url             VARCHAR(512) NOT NULL,
+      logo_url        VARCHAR(512),
+      tier            source_tier NOT NULL DEFAULT 'community',
+      trust_score     DECIMAL(4,3) NOT NULL DEFAULT 0.700 CHECK (trust_score BETWEEN 0 AND 1),
+      language        CHAR(2) NOT NULL DEFAULT 'en',
+      country         CHAR(2),
+      categories      category[] NOT NULL DEFAULT '{}',
+      rss_feeds       TEXT[] NOT NULL DEFAULT '{}',
+      api_endpoint    VARCHAR(512),
+      scrape_interval INTEGER NOT NULL DEFAULT 300,
+      last_scraped    TIMESTAMPTZ,
+      active          BOOLEAN NOT NULL DEFAULT TRUE,
+      article_count   INTEGER NOT NULL DEFAULT 0,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_sources_tier    ON sources(tier, trust_score DESC)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_sources_country ON sources(country)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_sources_active  ON sources(active) WHERE active = TRUE`)
+
+  // ── signals ───────────────────────────────────────────────────────────────
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS signals (
+      id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      title             VARCHAR(500) NOT NULL,
+      summary           TEXT,
+      body              TEXT,
+      category          category NOT NULL DEFAULT 'other',
+      severity          signal_severity NOT NULL DEFAULT 'info',
+      status            signal_status NOT NULL DEFAULT 'pending',
+      reliability_score DECIMAL(4,3) NOT NULL DEFAULT 0.000 CHECK (reliability_score BETWEEN 0 AND 1),
+      source_count      INTEGER NOT NULL DEFAULT 0,
+      location          GEOMETRY(POINT, 4326),
+      location_name     VARCHAR(255),
+      country_code      CHAR(2),
+      region            VARCHAR(100),
+      tags              TEXT[] NOT NULL DEFAULT '{}',
+      source_ids        UUID[] NOT NULL DEFAULT '{}',
+      original_urls     TEXT[] NOT NULL DEFAULT '{}',
+      language          CHAR(2) NOT NULL DEFAULT 'en',
+      view_count        INTEGER NOT NULL DEFAULT 0,
+      share_count       INTEGER NOT NULL DEFAULT 0,
+      post_count        INTEGER NOT NULL DEFAULT 0,
+      event_time        TIMESTAMPTZ,
+      first_reported    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      verified_at       TIMESTAMPTZ,
+      last_updated      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_signals_category   ON signals(category, created_at DESC)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_signals_severity   ON signals(severity, created_at DESC)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_signals_status     ON signals(status) WHERE status = 'verified'`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_signals_location   ON signals USING GIST(location)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_signals_country    ON signals(country_code, created_at DESC)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_signals_created    ON signals(created_at DESC)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_signals_event_time ON signals(event_time DESC)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_signals_tags       ON signals USING gin(tags)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_signals_text       ON signals USING gin(
+    to_tsvector('english', coalesce(title,'') || ' ' || coalesce(summary,''))
+  )`)
+
+  // ── communities (before posts — posts.pinned_in_community_id references it) ─
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS communities (
+      id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      slug         VARCHAR(100) UNIQUE NOT NULL,
+      name         VARCHAR(255) NOT NULL,
+      description  TEXT,
+      avatar_url   VARCHAR(512),
+      banner_url   VARCHAR(512),
+      categories   category[] NOT NULL DEFAULT '{}',
+      member_count INTEGER NOT NULL DEFAULT 0,
+      post_count   INTEGER NOT NULL DEFAULT 0,
+      public       BOOLEAN NOT NULL DEFAULT TRUE,
+      created_by   UUID NOT NULL REFERENCES users(id),
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `)
+
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS community_members (
+      community_id UUID NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+      user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      role         VARCHAR(20) NOT NULL DEFAULT 'member',
+      joined_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (community_id, user_id)
+    )
+  `)
+
+  // ── posts ─────────────────────────────────────────────────────────────────
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS posts (
+      id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      author_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      post_type       post_type NOT NULL DEFAULT 'signal',
+      content         TEXT NOT NULL CHECK (char_length(content) <= 2000),
+      signal_id       UUID REFERENCES signals(id) ON DELETE SET NULL,
+      parent_id       UUID REFERENCES posts(id) ON DELETE CASCADE,
+      boost_of_id     UUID REFERENCES posts(id) ON DELETE SET NULL,
+      thread_root_id  UUID REFERENCES posts(id) ON DELETE CASCADE,
+      location        GEOMETRY(POINT, 4326),
+      location_name   VARCHAR(255),
+      media_urls      TEXT[] NOT NULL DEFAULT '{}',
+      media_types     TEXT[] NOT NULL DEFAULT '{}',
+      source_url      VARCHAR(512),
+      source_name     VARCHAR(255),
+      tags            TEXT[] NOT NULL DEFAULT '{}',
+      mentions        UUID[] NOT NULL DEFAULT '{}',
+      like_count      INTEGER NOT NULL DEFAULT 0,
+      boost_count     INTEGER NOT NULL DEFAULT 0,
+      reply_count     INTEGER NOT NULL DEFAULT 0,
+      view_count      INTEGER NOT NULL DEFAULT 0,
+      reliability_score DECIMAL(4,3),
+      flagged         BOOLEAN NOT NULL DEFAULT FALSE,
+      flagged_reason  TEXT,
+      is_edited       BOOLEAN NOT NULL DEFAULT FALSE,
+      poll_data       JSONB,
+      pinned          BOOLEAN NOT NULL DEFAULT FALSE,
+      pinned_in_community_id UUID REFERENCES communities(id) ON DELETE SET NULL,
+      language        CHAR(2) NOT NULL DEFAULT 'en',
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      deleted_at      TIMESTAMPTZ
+    )
+  `)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_posts_author      ON posts(author_id, created_at DESC)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_posts_signal      ON posts(signal_id, created_at DESC)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_posts_parent      ON posts(parent_id, created_at DESC)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_posts_thread_root ON posts(thread_root_id, created_at DESC)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_posts_created     ON posts(created_at DESC) WHERE deleted_at IS NULL`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_posts_location    ON posts USING GIST(location)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_posts_tags        ON posts USING gin(tags)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_posts_text        ON posts USING gin(to_tsvector('english', content))`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_posts_pinned      ON posts(pinned_in_community_id) WHERE pinned = TRUE`)
+
+  // Patch existing posts table if columns are missing (handles init.sql-seeded DBs)
+  await db.raw(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS is_edited BOOLEAN NOT NULL DEFAULT FALSE`)
+  await db.raw(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS poll_data JSONB`)
+  await db.raw(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT FALSE`)
+  await db.raw(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS pinned_in_community_id UUID REFERENCES communities(id) ON DELETE SET NULL`)
+
+  // ── follows ───────────────────────────────────────────────────────────────
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS follows (
+      follower_id  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      following_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (follower_id, following_id),
+      CHECK (follower_id != following_id)
+    )
+  `)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_follows_follower  ON follows(follower_id)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id)`)
+
+  // ── likes ─────────────────────────────────────────────────────────────────
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS likes (
+      user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      post_id    UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (user_id, post_id)
+    )
+  `)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_likes_post ON likes(post_id)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_likes_user ON likes(user_id, created_at DESC)`)
+
+  // ── bookmarks ─────────────────────────────────────────────────────────────
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS bookmarks (
+      user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      post_id    UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (user_id, post_id)
+    )
+  `)
+
+  // ── alert_subscriptions ───────────────────────────────────────────────────
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS alert_subscriptions (
+      id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name          VARCHAR(100) NOT NULL,
+      keywords      TEXT[] NOT NULL DEFAULT '{}',
+      categories    category[] NOT NULL DEFAULT '{}',
+      countries     CHAR(2)[] NOT NULL DEFAULT '{}',
+      min_severity  signal_severity NOT NULL DEFAULT 'medium',
+      channels      JSONB NOT NULL DEFAULT '{"email":true,"push":true,"in_app":true}',
+      active        BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_alerts_user ON alert_subscriptions(user_id) WHERE active = TRUE`)
+
+  // ── notifications ─────────────────────────────────────────────────────────
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type        VARCHAR(50) NOT NULL,
+      actor_id    UUID REFERENCES users(id) ON DELETE CASCADE,
+      post_id     UUID REFERENCES posts(id) ON DELETE CASCADE,
+      signal_id   UUID REFERENCES signals(id) ON DELETE CASCADE,
+      payload     JSONB NOT NULL DEFAULT '{}',
+      read        BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_notif_user   ON notifications(user_id, created_at DESC)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_notif_unread ON notifications(user_id) WHERE read = FALSE`)
+
+  // ── signal_sources (junction) ─────────────────────────────────────────────
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS signal_sources (
+      signal_id     UUID NOT NULL REFERENCES signals(id) ON DELETE CASCADE,
+      source_id     UUID NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+      article_url   VARCHAR(512) NOT NULL,
+      article_title VARCHAR(500),
+      published_at  TIMESTAMPTZ,
+      PRIMARY KEY (signal_id, source_id)
+    )
+  `)
+
+  // ── raw_articles ──────────────────────────────────────────────────────────
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS raw_articles (
+      id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      source_id    UUID NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+      url          VARCHAR(512) UNIQUE NOT NULL,
+      title        VARCHAR(500),
+      body         TEXT,
+      summary      TEXT,
+      author       VARCHAR(255),
+      published_at TIMESTAMPTZ,
+      fetched_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      processed    BOOLEAN NOT NULL DEFAULT FALSE,
+      signal_id    UUID REFERENCES signals(id) ON DELETE SET NULL,
+      language     CHAR(2) DEFAULT 'en',
+      word_count   INTEGER,
+      hash         VARCHAR(64)
+    )
+  `)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_articles_source      ON raw_articles(source_id, fetched_at DESC)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_articles_unprocessed ON raw_articles(processed) WHERE processed = FALSE`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_articles_hash        ON raw_articles(hash)`)
+
+  // ── verification_log ──────────────────────────────────────────────────────
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS verification_log (
+      id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      signal_id   UUID NOT NULL REFERENCES signals(id) ON DELETE CASCADE,
+      check_type  VARCHAR(50) NOT NULL,
+      result      VARCHAR(20) NOT NULL,
+      confidence  DECIMAL(4,3),
+      notes       TEXT,
+      actor_id    UUID REFERENCES users(id),
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_verify_signal ON verification_log(signal_id, created_at DESC)`)
+
+  // ── moderation_actions ────────────────────────────────────────────────────
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS moderation_actions (
+      id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      moderator_id UUID NOT NULL REFERENCES users(id),
+      target_type  VARCHAR(20) NOT NULL,
+      target_id    UUID NOT NULL,
+      action       VARCHAR(50) NOT NULL,
+      reason       TEXT NOT NULL,
+      public_note  TEXT,
+      reversed     BOOLEAN NOT NULL DEFAULT FALSE,
+      reversed_at  TIMESTAMPTZ,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_mod_target  ON moderation_actions(target_type, target_id, created_at DESC)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_mod_created ON moderation_actions(created_at DESC)`)
+
+  // ── polls ─────────────────────────────────────────────────────────────────
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS polls (
+      id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      author_id   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      post_id     UUID REFERENCES posts(id) ON DELETE SET NULL,
+      question    VARCHAR(500) NOT NULL,
+      options     JSONB NOT NULL DEFAULT '[]',
+      expires_at  TIMESTAMPTZ,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_polls_author ON polls(author_id, created_at DESC)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_polls_post   ON polls(post_id) WHERE post_id IS NOT NULL`)
+
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS poll_votes (
+      poll_id      UUID NOT NULL REFERENCES polls(id) ON DELETE CASCADE,
+      user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      option_index INTEGER NOT NULL CHECK (option_index BETWEEN 0 AND 9),
+      voted_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (poll_id, user_id)
+    )
+  `)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_poll_votes_poll ON poll_votes(poll_id)`)
+
+  // ── trending_topics ───────────────────────────────────────────────────────
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS trending_topics (
+      id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      tag         VARCHAR(100) NOT NULL,
+      category    category,
+      window      VARCHAR(20) NOT NULL DEFAULT '1h',
+      score       DECIMAL(10,2) NOT NULL DEFAULT 0,
+      delta       DECIMAL(6,2) NOT NULL DEFAULT 0,
+      count       INTEGER NOT NULL DEFAULT 0,
+      momentum    VARCHAR(20) NOT NULL DEFAULT 'steady',
+      snapshot_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(tag, window, snapshot_at)
+    )
+  `)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_trending_window ON trending_topics(window, score DESC, snapshot_at DESC)`)
+
+  // ── source_suggestions ────────────────────────────────────────────────────
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS source_suggestions (
+      id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      user_id     UUID REFERENCES users(id) ON DELETE SET NULL,
+      name        VARCHAR(255) NOT NULL,
+      url         VARCHAR(512) NOT NULL,
+      rss_url     VARCHAR(512),
+      category    category NOT NULL DEFAULT 'other',
+      reason      TEXT NOT NULL,
+      status      VARCHAR(20) NOT NULL DEFAULT 'pending',
+      reviewer_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      reviewed_at TIMESTAMPTZ,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_source_suggestions_status ON source_suggestions(status, created_at DESC)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_source_suggestions_user   ON source_suggestions(user_id)`)
+
+  // ── device_push_tokens ────────────────────────────────────────────────────
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS device_push_tokens (
+      id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token       VARCHAR(512) NOT NULL,
+      platform    VARCHAR(20) NOT NULL DEFAULT 'expo',
+      active      BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(user_id, token)
+    )
+  `)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_device_tokens_user ON device_push_tokens(user_id) WHERE active = TRUE`)
+
+  // ── Functions & triggers (CREATE OR REPLACE — always safe to re-run) ─────
+  await db.raw(`
+    CREATE OR REPLACE FUNCTION update_updated_at()
+    RETURNS TRIGGER AS $$
+    BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
+    $$ LANGUAGE plpgsql
+  `)
+
+  // Create triggers only if they don't exist
+  await db.raw(`DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'users_updated_at') THEN
+      CREATE TRIGGER users_updated_at   BEFORE UPDATE ON users   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+    END IF;
+  END $$`)
+  await db.raw(`DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'posts_updated_at') THEN
+      CREATE TRIGGER posts_updated_at   BEFORE UPDATE ON posts   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+    END IF;
+  END $$`)
+  await db.raw(`DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'signals_updated_at') THEN
+      CREATE TRIGGER signals_updated_at BEFORE UPDATE ON signals FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+    END IF;
+  END $$`)
+  await db.raw(`DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'sources_updated_at') THEN
+      CREATE TRIGGER sources_updated_at BEFORE UPDATE ON sources FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+    END IF;
+  END $$`)
+
+  await db.raw(`
+    CREATE OR REPLACE FUNCTION update_follow_counts()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      IF TG_OP = 'INSERT' THEN
+        UPDATE users SET follower_count  = follower_count  + 1 WHERE id = NEW.following_id;
+        UPDATE users SET following_count = following_count + 1 WHERE id = NEW.follower_id;
+      ELSIF TG_OP = 'DELETE' THEN
+        UPDATE users SET follower_count  = GREATEST(0, follower_count  - 1) WHERE id = OLD.following_id;
+        UPDATE users SET following_count = GREATEST(0, following_count - 1) WHERE id = OLD.follower_id;
+      END IF;
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql
+  `)
+  await db.raw(`DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'follows_count_trigger') THEN
+      CREATE TRIGGER follows_count_trigger
+      AFTER INSERT OR DELETE ON follows
+      FOR EACH ROW EXECUTE FUNCTION update_follow_counts();
+    END IF;
+  END $$`)
+
+  await db.raw(`
+    CREATE OR REPLACE FUNCTION update_like_count()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      IF TG_OP = 'INSERT' THEN
+        UPDATE posts SET like_count = like_count + 1 WHERE id = NEW.post_id;
+      ELSIF TG_OP = 'DELETE' THEN
+        UPDATE posts SET like_count = GREATEST(0, like_count - 1) WHERE id = OLD.post_id;
+      END IF;
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql
+  `)
+  await db.raw(`DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'likes_count_trigger') THEN
+      CREATE TRIGGER likes_count_trigger
+      AFTER INSERT OR DELETE ON likes
+      FOR EACH ROW EXECUTE FUNCTION update_like_count();
+    END IF;
+  END $$`)
+
+  // ── Seed default sources (skip duplicates) ────────────────────────────────
+  await db.raw(`
+    INSERT INTO sources (slug, name, url, tier, trust_score, language, country, categories, rss_feeds, scrape_interval)
+    VALUES
+      ('ap-news',    'AP News',       'https://apnews.com',         'wire',     0.97, 'en', 'US', '{breaking,geopolitics,economy}', '{https://apnews.com/rss}', 900),
+      ('reuters',    'Reuters',       'https://reuters.com',        'wire',     0.96, 'en', 'GB', '{breaking,economy,geopolitics}', '{https://feeds.reuters.com/reuters/topNews}', 900),
+      ('bbc-world',  'BBC World',     'https://bbc.com/news/world', 'wire',     0.95, 'en', 'GB', '{breaking,geopolitics,culture}', '{http://feeds.bbci.co.uk/news/world/rss.xml}', 900),
+      ('al-jazeera', 'Al Jazeera',    'https://aljazeera.com',      'national', 0.88, 'en', 'QA', '{geopolitics,conflict,culture}', '{https://www.aljazeera.com/xml/rss/all.xml}', 1200),
+      ('guardian',   'The Guardian',  'https://theguardian.com',    'national', 0.87, 'en', 'GB', '{climate,science,geopolitics}',  '{https://www.theguardian.com/world/rss}', 1200),
+      ('who',        'World Health Org.', 'https://who.int',        'wire',     0.98, 'en', 'CH', '{health}',                       '{https://www.who.int/rss-feeds/news-english.xml}', 1800),
+      ('usgs-quakes','USGS Earthquakes','https://earthquake.usgs.gov','wire',   0.99, 'en', 'US', '{disaster}',                     '{https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.atom}', 300)
+    ON CONFLICT (slug) DO NOTHING
+  `)
+
+  // ── Seed AI digest bot user ────────────────────────────────────────────────
+  await db.raw(`
+    INSERT INTO users (handle, display_name, account_type, verified, trust_score, bio)
+    VALUES ('worldpulse_ai', 'WorldPulse AI Digest', 'ai', TRUE, 0.950,
+            'Automated synthesis of verified global signals. Powered by open-source AI.')
+    ON CONFLICT (handle) DO NOTHING
+  `)
+
+  console.log('✅  Migrations complete.')
+}
+
+run()
+  .catch((err: unknown) => {
+    console.error('❌  Migration failed:', err)
+    process.exit(1)
+  })
+  .finally(() => db.destroy())
