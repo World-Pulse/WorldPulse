@@ -81,18 +81,24 @@ export default function MapPage() {
               attribution: '© OpenStreetMap',
             },
           },
-          layers: [{
-            id: 'osm-tiles',
-            type: 'raster',
-            source: 'osm-tiles',
-            paint: {
-              'raster-opacity': 0.15,
-              'raster-saturation': -1,
-              'raster-brightness-min': 0.1,
-              'raster-brightness-max': 0.3,
+          layers: [
+            {
+              id: 'background',
+              type: 'background' as const,
+              paint: { 'background-color': '#06070d' },
             },
-          }],
-          background: { type: 'background', paint: { 'background-color': '#06070d' } } as unknown as never,
+            {
+              id: 'osm-tiles',
+              type: 'raster' as const,
+              source: 'osm-tiles',
+              paint: {
+                'raster-opacity': 0.15,
+                'raster-saturation': -1,
+                'raster-brightness-min': 0.1,
+                'raster-brightness-max': 0.3,
+              },
+            },
+          ],
         },
         center: [10, 20],
         zoom: 2,

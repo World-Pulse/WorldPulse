@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { Post } from '@worldpulse/types'
+import type { Post, PollData } from '@worldpulse/types'
 import { PollDisplay } from './PollDisplay'
 import { RichMediaEmbed, extractFirstEmbedUrl } from '@/components/RichMediaEmbed'
 import { ImageGallery } from '@/components/ImageGallery'
@@ -274,8 +274,9 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
             )}
 
             {/* Post content */}
-            {'content' in item && item.content && (() => {
-              const text = (item.content as string).replace(/\*\*(.*?)\*\*/g, '$1')
+            {'content' in item ? ((): JSX.Element | null => {
+              const text = (item.content as string | undefined)?.replace(/\*\*(.*?)\*\*/g, '$1')
+              if (!text) return null
               const embedUrl = extractFirstEmbedUrl(text)
               return (
                 <>
@@ -299,7 +300,7 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
                   )}
                 </>
               )
-            })()}
+            })() : null}
 
             {/* Chart placeholder */}
             {'hasChart' in item && item.hasChart && (
@@ -311,7 +312,7 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
             {/* Poll */}
             {'pollData' in item && item.pollData && (
               <PollDisplay
-                poll={item.pollData}
+                poll={item.pollData as PollData}
                 pollId={'pollId' in item ? (item as { pollId?: string }).pollId : undefined}
               />
             )}
