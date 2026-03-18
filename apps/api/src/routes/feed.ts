@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 import { authenticate, optionalAuth } from '../middleware/auth'
-import type { Post, PaginatedResponse } from '@worldpulse/types'
+import type { Post, Signal, PaginatedResponse } from '@worldpulse/types'
 
 const FEED_CACHE_TTL = 30 // seconds
 const PAGE_SIZE = 20
@@ -293,9 +293,9 @@ function formatPost(
       title:            row.signal_title as string,
       summary:          row.signal_summary as string | null,
       body:             null,
-      category:         row.signal_category as Post['signal']['category'],
-      severity:         row.signal_severity as Post['signal']['severity'],
-      status:           row.signal_status as Post['signal']['status'],
+      category:         row.signal_category as Signal['category'],
+      severity:         row.signal_severity as Signal['severity'],
+      status:           row.signal_status as Signal['status'],
       reliabilityScore: (row.signal_reliability as number) ?? 0,
       sourceCount:      0,
       location:         null,
@@ -315,6 +315,8 @@ function formatPost(
       lastUpdated:      '',
       createdAt:        '',
     } : null,
+    isEdited:      (row.is_edited as boolean) ?? false,
+    pollData:      (row.poll_data as Post['pollData']) ?? null,
     hasLiked:      likedIds.has(row.id as string),
     hasBoosted:    boostedIds.has(row.id as string),
     hasBookmarked: bookmarkedIds.has(row.id as string),

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { Signal } from '@worldpulse/types'
+import 'maplibre-gl/dist/maplibre-gl.css'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -67,7 +68,6 @@ export default function MapPage() {
 
     async function initMap() {
       const maplibre = await import('maplibre-gl')
-      await import('maplibre-gl/dist/maplibre-gl.css')
 
       map = new maplibre.Map({
         container: mapContainer.current!,

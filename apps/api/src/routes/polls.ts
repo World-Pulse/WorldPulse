@@ -27,10 +27,6 @@ export const registerPollRoutes: FastifyPluginAsync = async (app) => {
     const userId = req.user!.id
     const d = body.data
 
-    if (d.optionIndex !== undefined && d.options.length <= d.optionIndex) {
-      return reply.status(400).send({ success: false, error: 'Option index out of range' })
-    }
-
     // If postId provided, ensure the post exists and belongs to caller
     if (d.postId) {
       const post = await db('posts').where('id', d.postId).whereNull('deleted_at').first('id, author_id')
