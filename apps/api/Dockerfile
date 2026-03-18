@@ -27,6 +27,8 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 worldpulse
 
+# Bust the dist cache on every deploy (deploy.sh passes --build-arg BUILD_TIME=<timestamp>)
+ARG BUILD_TIME
 COPY --from=builder --chown=worldpulse:nodejs /app/apps/api/dist ./dist
 COPY --from=builder --chown=worldpulse:nodejs /app/apps/api/package.json .
 COPY --from=builder --chown=worldpulse:nodejs /app/node_modules ./node_modules
