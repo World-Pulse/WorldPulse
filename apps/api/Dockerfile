@@ -10,8 +10,14 @@ COPY apps/api/package.json apps/api/
 RUN pnpm install --frozen-lockfile
 
 # ─── BUILD ───────────────────────────────────────────────────
-FROM deps AS builder
+# Use base (not deps) so that COPY apps/api/ starts from a clean slate.
+# Inheriting deps would leave apps/api/package.json already present,
+# causing BuildKit to compute the COPY cache key against that partial state
+# and miss new files (e.g. src/db/migrate.ts) that were added later.
+FROM base AS builder
 WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json ./
 COPY packages/types/ packages/types/
 COPY apps/api/ apps/api/
 RUN pnpm --filter @worldpulse/types build
