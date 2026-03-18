@@ -1,8 +1,5 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
-import type { SocketStream } from '@fastify/websocket'
-
-// Derive WebSocket type from SocketStream to avoid needing @types/ws directly
-type WebSocket = SocketStream['socket']
+import type { WebSocket } from '@fastify/websocket'
 import { redis } from '../db/redis'
 import { logger } from '../lib/logger'
 import type { WSMessage, WSEventType } from '@worldpulse/types'
@@ -21,8 +18,7 @@ const clients = new Map<string, WSClient>()
 // ─── WEBSOCKET HANDLER ───────────────────────────────────────────────────
 export const registerWSHandler: FastifyPluginAsync = async (app) => {
 
-  app.get('/ws', { websocket: true }, async (connection: SocketStream, req: FastifyRequest) => {
-    const socket: WebSocket = connection.socket
+  app.get('/ws', { websocket: true }, async (socket: WebSocket, req: FastifyRequest) => {
     const clientId = crypto.randomUUID()
 
     // Auth (optional — anonymous connections get public events only)
