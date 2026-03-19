@@ -14,6 +14,20 @@ WORKDIR /app
 COPY packages/ packages/
 COPY apps/web/ apps/web/
 ENV NEXT_TELEMETRY_DISABLED=1
+
+# NEXT_PUBLIC_* vars must be available at build time — Next.js inlines them
+# into the JS bundle during `next build`. Runtime env vars are too late.
+ARG NEXT_PUBLIC_API_URL=https://api.world-pulse.io
+ARG NEXT_PUBLIC_WS_URL=wss://api.world-pulse.io
+ARG NEXT_PUBLIC_MEILI_HOST=https://api.world-pulse.io/search
+ARG NEXT_PUBLIC_MEILI_KEY
+ARG NEXT_PUBLIC_VAPID_KEY
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
+ENV NEXT_PUBLIC_MEILI_HOST=$NEXT_PUBLIC_MEILI_HOST
+ENV NEXT_PUBLIC_MEILI_KEY=$NEXT_PUBLIC_MEILI_KEY
+ENV NEXT_PUBLIC_VAPID_KEY=$NEXT_PUBLIC_VAPID_KEY
+
 RUN pnpm --filter @worldpulse/types build
 RUN pnpm --filter @worldpulse/web build
 
