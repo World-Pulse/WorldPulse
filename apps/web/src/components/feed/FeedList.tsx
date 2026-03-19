@@ -1,111 +1,169 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import type { Post, PollData } from '@worldpulse/types'
 import { PollDisplay } from './PollDisplay'
 import { RichMediaEmbed, extractFirstEmbedUrl } from '@/components/RichMediaEmbed'
 import { ImageGallery } from '@/components/ImageGallery'
 
-// ─── MOCK DATA (replaced by API in production) ────────────────────────────
-const MOCK_POSTS = [
-  {
-    id: '1',
-    type: 'signal',
-    severity: 'critical',
-    source: 'AP',
-    sourceBadge: 'ap',
-    author: { initials: 'AP', name: 'AP World', handle: '@apworld', verified: true, color: 'from-red-700 to-red-900' },
-    breaking: true,
-    event: {
-      category: 'SEISMIC · DISASTER',
-      location: '📍 Manila Bay, Philippines',
-      title: 'Earthquake M5.8 strikes Manila Bay — buildings evacuated across Metro Manila',
-      summary: 'PHIVOLCS confirms M5.8 at 14km depth. Tsunami watch NOT issued. Reports of structural damage in Pasay and Parañaque. All emergency services activated. 14 aftershocks in first 20 minutes.',
-      sources: ['ap', 'reuters', 'bbc', 'ai'],
-      impact: 72,
-      impactColor: '#ff3b5c',
-    },
-    likes: 31400, boosts: 12700, replies: 4200,
-    time: '2m',
-    reliability: 4.5,
-  },
-  {
-    id: '2',
-    type: 'post',
-    author: { initials: 'SJ', name: 'Sara Johnson', handle: '@sara_seismo', verified: true, color: 'from-violet-600 to-purple-900', badge: 'Seismologist' },
-    content: `Manila M5.8 — context: this sits near the West Valley Fault. Depth of 14km is shallow = more surface shaking. Watch for delayed structural collapses in older buildings. Thread on what to expect 👇\n\n#ManilaQuake #PHIVOLCS #Seismology`,
-    tags: ['#ManilaQuake', '#PHIVOLCS', '#Seismology'],
-    tagTypes: ['conflict', 'technology', 'science'],
-    likes: 18200, boosts: 6300, replies: 892,
-    time: '4m',
-    reliability: 5,
-  },
-  {
-    id: '3',
-    type: 'signal',
-    severity: 'high',
-    author: { initials: 'EU', name: 'Reuters World', handle: '@reuters', verified: true, color: 'from-blue-700 to-blue-900' },
-    source: 'REUTERS',
-    sourceBadge: 'reuters',
-    event: {
-      category: 'REGULATION · TECHNOLOGY',
-      location: '📍 Brussels, Belgium',
-      title: 'EU issues emergency AI safety directive — 24-hour compliance window for frontier labs',
-      summary: 'European Commission invokes emergency clause under AI Act. Major AI labs must submit capability assessments within 24h. Three companies in sealed annex. Markets reacting to enforcement uncertainty.',
-      sources: ['reuters', 'bbc', 'ai'],
-      impact: 58,
-      impactColor: '#f5a623',
-    },
-    likes: 14600, boosts: 8900, replies: 2100,
-    time: '11m',
-    reliability: 4.5,
-  },
-  {
-    id: '4',
-    type: 'post',
-    author: { initials: 'MK', name: 'Marcus K.', handle: '@marcus_climate', color: 'from-green-600 to-emerald-900', badge: 'Climate Analyst' },
-    content: `The Arctic sea ice data drop today is alarming. We're not just at a new March low — we're 940,000 km² below the previous record. That's the size of Egypt gone. Feedback loops are accelerating faster than IPCC worst-case models from 2021.`,
-    tags: ['#ArcticMelt', '#ClimateEmergency', '#SeaIce'],
-    tagTypes: ['climate', 'climate', 'science'],
-    hasChart: true,
-    likes: 22800, boosts: 9200, replies: 1400,
-    time: '18m',
-    reliability: null,
-  },
-  {
-    id: '5',
-    type: 'signal',
-    severity: 'medium',
-    author: { initials: 'BBC', name: 'BBC World', handle: '@bbcworld', verified: true, color: 'from-red-800 to-red-950' },
-    source: 'BBC',
-    sourceBadge: 'bbc',
-    event: {
-      category: 'ELECTIONS · POLITICS',
-      location: '📍 South Korea',
-      title: 'South Korea Snap Presidential Election — 68.2% turnout, 23% votes counted',
-      summary: 'Opposition Democratic Party holds 3.4% lead in early count. Rural districts not yet reporting. 38 countries\' observers on-site. Results expected before 06:00 KST.',
-      sources: ['bbc', 'ai'],
-      impact: 44,
-      impactColor: '#00d4ff',
-      isLive: true,
-    },
-    likes: 7600, boosts: 4100, replies: 983,
-    time: '24m',
-    reliability: 5,
-  },
-  {
-    id: '6',
-    type: 'ai_digest',
-    author: { initials: '⚡', name: 'WorldPulse AI Digest', handle: '@worldpulse_ai', color: 'from-amber-500 to-orange-700' },
-    content: `**Market Synthesis — 14:00 UTC**\n\nMarkets reacting to three converging signals: Manila quake (PSEI -1.2%), EU AI directive uncertainty (tech sector -0.8%), and South Korea election volatility (KRW -0.4%). Gold and JPY seeing safe-haven flows. Watch: Fed minutes release in 2h may recalibrate risk appetite regardless of geopolitical developments.`,
-    tags: ['#Markets', '#GlobalEconomy', '#TechStocks'],
-    tagTypes: ['economy', 'economy', 'technology'],
-    likes: 11300, boosts: 5800, replies: 672,
-    time: '31m',
-    reliability: null,
-  },
-]
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
+// ─── INTERNAL FEED ITEM SHAPE ────────────────────────────────────────────────
+interface FeedItem {
+  id: string
+  type: 'signal' | 'post' | 'ai_digest'
+  severity?: string
+  sourceBadge?: string
+  author: { initials: string; name: string; handle: string; verified?: boolean; color: string; badge?: string }
+  breaking?: boolean
+  event?: {
+    category: string
+    location: string
+    title: string
+    summary: string
+    sources: string[]
+    impact: number
+    impactColor: string
+    isLive?: boolean
+  }
+  content?: string
+  tags?: string[]
+  tagTypes?: string[]
+  mediaUrls?: string[]
+  mediaTypes?: string[]
+  pollData?: PollData
+  pollId?: string
+  likes: number
+  boosts: number
+  replies: number
+  time: string
+  reliability: number | null
+}
+
+// ─── DATA ADAPTERS ───────────────────────────────────────────────────────────
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const m = Math.floor(diff / 60_000)
+  if (m < 1)  return 'now'
+  if (m < 60) return `${m}m`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h`
+  return `${Math.floor(h / 24)}d`
+}
+
+const CATEGORY_COLORS: Record<string, string> = {
+  breaking: '#ff3b5c',
+  conflict: '#ff3b5c',
+  disaster: '#ff3b5c',
+  high:     '#ff3b5c',
+  critical: '#ff3b5c',
+  climate:  '#00e676',
+  science:  '#00d4ff',
+  health:   '#00d4ff',
+  economy:  '#f5a623',
+  geopolitics: '#f5a623',
+  elections: '#00d4ff',
+  technology: '#a855f7',
+  security: '#f97316',
+  sports:   '#10b981',
+  space:    '#6366f1',
+}
+
+const SOURCE_SLUG_TO_BADGE: Record<string, string> = {
+  'ap-news': 'ap',
+  'reuters': 'reuters',
+  'bbc-world': 'bbc',
+  'al-jazeera': 'al-jazeera',
+  'guardian': 'guardian',
+  'who': 'who',
+  'usgs-quakes': 'usgs',
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function adaptSignal(sig: any): FeedItem {
+  const impactColor = CATEGORY_COLORS[sig.severity] ?? CATEGORY_COLORS[sig.category] ?? '#f5a623'
+  const impact = Math.round((sig.reliabilityScore ?? 0.5) * 100)
+  const sourceSlugs: string[] = (sig.sources ?? []).map((s: { slug?: string }) => SOURCE_SLUG_TO_BADGE[s.slug ?? ''] ?? s.slug ?? 'wp')
+  const badgeSlugs = sourceSlugs.slice(0, 4)
+
+  return {
+    id:       sig.id,
+    type:     'signal',
+    severity: sig.severity,
+    sourceBadge: badgeSlugs[0],
+    author: {
+      initials: 'WP',
+      name:     sig.locationName ? `WorldPulse · ${sig.locationName}` : 'WorldPulse Signal',
+      handle:   '@worldpulse',
+      verified: true,
+      color:    'from-red-700 to-red-900',
+    },
+    breaking: sig.severity === 'critical',
+    event: {
+      category: [sig.category?.toUpperCase(), sig.locationName ? sig.locationName.split(',').pop()?.trim() : null]
+        .filter(Boolean).join(' · '),
+      location: sig.locationName ? `📍 ${sig.locationName}` : '',
+      title:    sig.title,
+      summary:  sig.summary ?? '',
+      sources:  badgeSlugs,
+      impact,
+      impactColor,
+    },
+    tags:       sig.tags ?? [],
+    tagTypes:   (sig.tags ?? []).map(() => sig.category ?? 'breaking'),
+    likes:      sig.viewCount  ?? 0,
+    boosts:     sig.shareCount ?? 0,
+    replies:    sig.postCount  ?? 0,
+    time:       sig.createdAt ? timeAgo(sig.createdAt) : '?',
+    reliability: sig.reliabilityScore != null ? Math.min(5, sig.reliabilityScore * 5) : null,
+  }
+}
+
+function adaptPost(post: Post): FeedItem {
+  const initial = (post.author.displayName || post.author.handle).charAt(0).toUpperCase()
+  const base: FeedItem = {
+    id:       post.id,
+    type:     post.postType === 'signal' ? 'signal' : 'post',
+    author: {
+      initials: initial,
+      name:     post.author.displayName,
+      handle:   '@' + post.author.handle,
+      verified: post.author.verified,
+      color:    'from-violet-600 to-purple-900',
+    },
+    content:  post.content,
+    tags:     post.tags ?? [],
+    mediaUrls: post.mediaUrls ?? [],
+    mediaTypes: post.mediaTypes ?? [],
+    pollData: post.pollData ?? undefined,
+    pollId:   post.id,
+    likes:    post.likeCount  ?? 0,
+    boosts:   post.boostCount ?? 0,
+    replies:  post.replyCount ?? 0,
+    time:     timeAgo(post.createdAt),
+    reliability: post.reliabilityScore != null ? Math.min(5, post.reliabilityScore * 5) : null,
+  }
+
+  if (post.signal) {
+    const s = post.signal
+    const impactColor = CATEGORY_COLORS[s.severity] ?? '#f5a623'
+    base.severity = s.severity
+    base.breaking = s.severity === 'critical'
+    base.event = {
+      category: s.category?.toUpperCase() ?? 'SIGNAL',
+      location: s.locationName ? `📍 ${s.locationName}` : '',
+      title:    s.title,
+      summary:  s.summary ?? '',
+      sources:  [],
+      impact:   Math.round((s.reliabilityScore ?? 0.5) * 100),
+      impactColor,
+    }
+  }
+
+  return base
+}
+
+// ─── STYLING HELPERS ─────────────────────────────────────────────────────────
 const SEVERITY_BORDER: Record<string, string> = {
   critical: 'border-l-[3px] border-l-wp-red',
   high:     'border-l-[3px] border-l-wp-amber',
@@ -113,22 +171,30 @@ const SEVERITY_BORDER: Record<string, string> = {
 }
 
 const SOURCE_BADGES: Record<string, string> = {
-  ap:      'bg-red-700 text-white',
-  reuters: 'bg-orange-500 text-black',
-  bbc:     'bg-red-800 text-white',
-  ai:      'bg-[rgba(0,212,255,0.1)] text-wp-cyan border border-[rgba(0,212,255,0.3)]',
+  ap:          'bg-red-700 text-white',
+  reuters:     'bg-orange-500 text-black',
+  bbc:         'bg-red-800 text-white',
+  'al-jazeera': 'bg-[rgba(0,212,255,0.15)] text-wp-cyan border border-[rgba(0,212,255,0.3)]',
+  guardian:    'bg-[rgba(0,230,118,0.15)] text-wp-green border border-[rgba(0,230,118,0.3)]',
+  who:         'bg-[rgba(0,212,255,0.1)] text-wp-cyan border border-[rgba(0,212,255,0.3)]',
+  usgs:        'bg-[rgba(245,166,35,0.15)] text-wp-amber border border-[rgba(245,166,35,0.3)]',
+  wp:          'bg-[rgba(245,166,35,0.1)] text-wp-amber border border-[rgba(245,166,35,0.3)]',
 }
 
 const SOURCE_LABELS: Record<string, string> = {
-  ap: 'AP', reuters: 'REUTERS', bbc: 'BBC', ai: 'AI VERIFIED',
+  ap: 'AP', reuters: 'REUTERS', bbc: 'BBC',
+  'al-jazeera': 'AL JAZEERA', guardian: 'GUARDIAN',
+  who: 'WHO', usgs: 'USGS', wp: 'WorldPulse',
 }
 
 function formatCount(n: number): string {
-  return n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n)
+  return n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M`
+    : n >= 1000 ? `${(n / 1000).toFixed(1)}K`
+    : String(n)
 }
 
 function ReliabilityDots({ score }: { score: number | null }) {
-  if (!score) return null
+  if (score == null) return null
   const filled  = Math.floor(score)
   const partial = score % 1 >= 0.5 ? 1 : 0
   const empty   = 5 - filled - partial
@@ -154,7 +220,7 @@ function TagPills({ tags, types }: { tags: string[]; types?: string[] }) {
   )
 }
 
-function ActionBar({ item }: { item: typeof MOCK_POSTS[0] }) {
+function ActionBar({ item }: { item: FeedItem }) {
   const [liked, setLiked] = useState(false)
   const [likes, setLikes] = useState(item.likes)
 
@@ -198,22 +264,127 @@ function ActionBar({ item }: { item: typeof MOCK_POSTS[0] }) {
   )
 }
 
-export function FeedList({ tab, category }: { tab: string; category: string }) {
+function FeedSkeleton() {
   return (
     <div>
-      {MOCK_POSTS.map(item => (
+      {[1,2,3,4,5].map(i => (
+        <div key={i} className="flex gap-3 px-5 py-4 border-b border-[rgba(255,255,255,0.05)]">
+          <div className="w-[42px] h-[42px] rounded-full shimmer flex-shrink-0" />
+          <div className="flex-1 space-y-2">
+            <div className="h-3 w-32 rounded shimmer" />
+            <div className="h-20 rounded-[10px] shimmer" />
+            <div className="h-3 w-48 rounded shimmer" />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function EmptyState({ tab }: { tab: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-20 text-center px-6">
+      <div className="text-[48px] mb-4">📡</div>
+      <div className="text-[16px] font-semibold text-wp-text mb-2">
+        {tab === 'following' ? 'Your following feed is empty' : 'No signals yet'}
+      </div>
+      <div className="text-[13px] text-wp-text3 max-w-xs">
+        {tab === 'following'
+          ? 'Follow other users to see their posts here'
+          : 'The scraper is collecting and verifying signals. Check back shortly.'}
+      </div>
+    </div>
+  )
+}
+
+// ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
+export function FeedList({ tab, category }: { tab: string; category: string }) {
+  const [items, setItems]     = useState<FeedItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [cursor, setCursor]   = useState<string | null>(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+
+  const fetchFeed = useCallback(async (nextCursor?: string) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
+
+    const params = new URLSearchParams()
+    if (category && category !== 'all') params.set('category', category)
+    if (nextCursor) params.set('cursor', nextCursor)
+
+    let url: string
+    if (tab === 'following') {
+      url = `${API_URL}/api/v1/feed/following?${params}`
+    } else if (tab === 'verified' || tab === 'global' || tab === 'digest') {
+      url = `${API_URL}/api/v1/feed/signals?${params}`
+    } else {
+      url = `${API_URL}/api/v1/feed/signals?${params}`
+    }
+
+    const headers: Record<string, string> = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+
+    try {
+      const res = await fetch(url, { headers })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+
+      // feed/signals returns { items, cursor, hasMore }
+      // feed/following returns { items, cursor, hasMore }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rawItems: any[] = data.items ?? []
+      const mapped: FeedItem[] = rawItems.map(item => {
+        // Signals have 'status' field; posts have 'postType'
+        if ('status' in item && !('postType' in item)) {
+          return adaptSignal(item)
+        }
+        return adaptPost(item as Post)
+      })
+
+      if (nextCursor) {
+        setItems(prev => [...prev, ...mapped])
+      } else {
+        setItems(mapped)
+      }
+      setCursor(data.cursor ?? null)
+      setHasMore(data.hasMore ?? false)
+    } catch {
+      // Keep existing items on error, just stop loading
+    }
+  }, [tab, category])
+
+  useEffect(() => {
+    setLoading(true)
+    setItems([])
+    setCursor(null)
+    fetchFeed().finally(() => setLoading(false))
+  }, [fetchFeed])
+
+  async function loadMore() {
+    if (!cursor || loadingMore) return
+    setLoadingMore(true)
+    await fetchFeed(cursor)
+    setLoadingMore(false)
+  }
+
+  if (loading) return <FeedSkeleton />
+  if (items.length === 0) return <EmptyState tab={tab} />
+
+  return (
+    <div>
+      {items.map(item => (
         <article
           key={item.id}
           role="article"
           aria-label={
-            'event' in item && item.event
+            item.event
               ? item.event.title
-              : 'content' in item && item.content
+              : item.content
                 ? item.content.slice(0, 80)
                 : `Post by ${item.author.name}`
           }
           className={`flex gap-3 px-5 py-4 border-b border-[rgba(255,255,255,0.05)] hover:bg-[rgba(255,255,255,0.015)] transition-colors cursor-pointer animate-fade-in
-            ${item.type === 'signal' ? SEVERITY_BORDER[(item as typeof MOCK_POSTS[0] & {severity?:string}).severity ?? ''] ?? '' : ''}`}
+            ${item.type === 'signal' ? SEVERITY_BORDER[item.severity ?? ''] ?? '' : ''}`}
         >
           {/* Avatar */}
           <div className={`w-[42px] h-[42px] rounded-full bg-gradient-to-br ${item.author.color} flex items-center justify-center font-bold text-[14px] text-white flex-shrink-0`}>
@@ -226,44 +397,52 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
             <div className="flex items-center gap-[6px] mb-1 flex-wrap">
               <span className="font-semibold text-[14px] text-wp-text">{item.author.name}</span>
               {item.author.verified && <span className="text-wp-cyan text-[13px]">✓</span>}
-              {'sourceBadge' in item && item.sourceBadge && (
+              {item.sourceBadge && (
                 <span className={`source-badge ${SOURCE_BADGES[item.sourceBadge] ?? ''}`}>
-                  {SOURCE_LABELS[item.sourceBadge]}
+                  {SOURCE_LABELS[item.sourceBadge] ?? item.sourceBadge.toUpperCase()}
                 </span>
               )}
-              {'badge' in item.author && item.author.badge && (
+              {item.author.badge && (
                 <span className="source-badge badge-community">{item.author.badge}</span>
               )}
               {item.type === 'ai_digest' && (
                 <span className="source-badge badge-ai">AI SYNTHESIS</span>
               )}
-              {'breaking' in item && item.breaking && (
+              {item.breaking && (
                 <span className="source-badge bg-wp-red text-white animate-flash-tag">BREAKING</span>
               )}
               <span className="ml-auto font-mono text-[12px] text-wp-text3 flex-shrink-0">{item.time} ago</span>
             </div>
 
             {/* Event card for signals */}
-            {'event' in item && item.event && (
-              <div className={`bg-wp-s2 border border-[rgba(255,255,255,0.07)] rounded-[10px] p-3 mb-[10px] relative overflow-hidden`}>
-                <div className={`absolute top-0 left-0 right-0 h-[2px]`}
-                  style={{ background: `linear-gradient(to right, ${item.event.impactColor ?? '#f5a623'}, transparent)` }} />
+            {item.event && (
+              <div className="bg-wp-s2 border border-[rgba(255,255,255,0.07)] rounded-[10px] p-3 mb-[10px] relative overflow-hidden">
+                <div className="absolute top-0 left-0 right-0 h-[2px]"
+                  style={{ background: `linear-gradient(to right, ${item.event.impactColor}, transparent)` }} />
                 <div className="flex items-center gap-2 mb-[6px] flex-wrap">
                   <span className="font-mono text-[9px] tracking-[2px] text-wp-text3 uppercase">{item.event.category}</span>
-                  <span className="font-mono text-[10px] text-wp-text2">{item.event.location}</span>
-                  {'isLive' in item.event && item.event.isLive && (
+                  {item.event.location && (
+                    <span className="font-mono text-[10px] text-wp-text2">{item.event.location}</span>
+                  )}
+                  {item.event.isLive && (
                     <span className="ml-auto tag-pill tag-technology text-[8px]">LIVE RESULTS</span>
                   )}
                 </div>
                 <div className="font-semibold text-[14px] text-wp-text mb-1 leading-[1.4]">{item.event.title}</div>
-                <div className="text-[12px] text-wp-text2 leading-[1.5] mb-2">{item.event.summary}</div>
-                <div className="flex gap-1 flex-wrap mb-2">
-                  {item.event.sources.map(s => (
-                    <span key={s} className={`source-badge ${SOURCE_BADGES[s]}`}>{SOURCE_LABELS[s]}</span>
-                  ))}
-                </div>
+                {item.event.summary && (
+                  <div className="text-[12px] text-wp-text2 leading-[1.5] mb-2">{item.event.summary}</div>
+                )}
+                {item.event.sources.length > 0 && (
+                  <div className="flex gap-1 flex-wrap mb-2">
+                    {item.event.sources.map(s => (
+                      <span key={s} className={`source-badge ${SOURCE_BADGES[s] ?? SOURCE_BADGES.wp}`}>
+                        {SOURCE_LABELS[s] ?? s.toUpperCase()}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <div className="flex items-center gap-2 pt-2 border-t border-[rgba(255,255,255,0.05)]">
-                  <span className="font-mono text-[9px] text-wp-text3">IMPACT</span>
+                  <span className="font-mono text-[9px] text-wp-text3">RELIABILITY</span>
                   <div className="flex-1 h-1 bg-wp-s3 rounded-full overflow-hidden">
                     <div className="h-full rounded-full transition-all duration-1000"
                       style={{ width: `${item.event.impact}%`, background: item.event.impactColor }} />
@@ -274,52 +453,36 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
             )}
 
             {/* Post content */}
-            {'content' in item ? ((): JSX.Element | null => {
-              const text = (item.content as string | undefined)?.replace(/\*\*(.*?)\*\*/g, '$1')
-              if (!text) return null
+            {item.content && (() => {
+              const text = item.content.replace(/\*\*(.*?)\*\*/g, '$1')
               const embedUrl = extractFirstEmbedUrl(text)
               return (
                 <>
                   <div className="text-[14px] text-wp-text leading-[1.6] mb-[10px] whitespace-pre-line">
                     {text}
                   </div>
-                  {/* Auto-embed detected YouTube/Vimeo URLs */}
                   {embedUrl && (
                     <div className="mb-[10px]">
                       <RichMediaEmbed url={embedUrl} />
                     </div>
                   )}
-                  {/* Image/video gallery if post has media_urls */}
-                  {'mediaUrls' in item && Array.isArray((item as Record<string, unknown>).mediaUrls) && ((item as Record<string, unknown>).mediaUrls as string[]).length > 0 && (
+                  {item.mediaUrls && item.mediaUrls.length > 0 && (
                     <div className="mb-[10px]">
-                      <ImageGallery
-                        urls={(item as Record<string, unknown>).mediaUrls as string[]}
-                        types={(item as Record<string, unknown>).mediaTypes as string[] | undefined}
-                      />
+                      <ImageGallery urls={item.mediaUrls} types={item.mediaTypes} />
                     </div>
                   )}
                 </>
               )
-            })() : null}
-
-            {/* Chart placeholder */}
-            {'hasChart' in item && item.hasChart && (
-              <div className="bg-gradient-to-br from-[#0f2027] via-[#203a43] to-[#2c5364] rounded-[10px] border border-[rgba(255,255,255,0.07)] mb-[10px] p-5 flex items-center justify-center min-h-[80px] text-wp-cyan font-mono text-[12px]">
-                [Arctic Sea Ice Extent — Click to expand]
-              </div>
-            )}
+            })()}
 
             {/* Poll */}
-            {'pollData' in item && item.pollData && (
-              <PollDisplay
-                poll={item.pollData as PollData}
-                pollId={'pollId' in item ? (item as { pollId?: string }).pollId : undefined}
-              />
+            {item.pollData && (
+              <PollDisplay poll={item.pollData} pollId={item.pollId} />
             )}
 
             {/* Tags */}
-            {'tags' in item && item.tags && (
-              <TagPills tags={item.tags} types={'tagTypes' in item ? item.tagTypes : undefined} />
+            {item.tags && item.tags.length > 0 && (
+              <TagPills tags={item.tags} types={item.tagTypes} />
             )}
 
             {/* Actions */}
@@ -329,11 +492,17 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
       ))}
 
       {/* Load more */}
-      <div className="flex justify-center py-6">
-        <button className="px-6 py-[10px] rounded-full border border-[rgba(255,255,255,0.1)] text-[13px] text-wp-text2 hover:border-wp-amber hover:text-wp-amber hover:bg-[rgba(245,166,35,0.05)] transition-all font-medium">
-          Load more signals
-        </button>
-      </div>
+      {hasMore && (
+        <div className="flex justify-center py-6">
+          <button
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="px-6 py-[10px] rounded-full border border-[rgba(255,255,255,0.1)] text-[13px] text-wp-text2 hover:border-wp-amber hover:text-wp-amber hover:bg-[rgba(245,166,35,0.05)] transition-all font-medium disabled:opacity-50"
+          >
+            {loadingMore ? 'Loading…' : 'Load more signals'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

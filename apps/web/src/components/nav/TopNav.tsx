@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 
@@ -23,11 +23,36 @@ const DOT_COLORS: Record<string, string> = {
   green: 'bg-wp-green shadow-[0_0_6px_#00e676]',
 }
 
+interface AuthUser {
+  id: string
+  handle: string
+  displayName: string
+  avatarUrl: string | null
+  accountType: string
+}
+
 export function TopNav() {
   const [signalCount, setSignalCount] = useState(2847)
-  const pathname = usePathname()
+  const [user, setUser] = useState<AuthUser | null>(null)
+  const router = useRouter()
   const t = useTranslations('nav')
   const doubled = [...TICKER_ITEMS, ...TICKER_ITEMS]  // seamless loop
+
+  // Read auth state from localStorage on mount + sync across tabs
+  useEffect(() => {
+    const raw = localStorage.getItem('wp_user')
+    if (raw) {
+      try { setUser(JSON.parse(raw)) } catch { /* ignore malformed */ }
+    }
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'wp_user') {
+        setUser(e.newValue ? JSON.parse(e.newValue) : null)
+      }
+    }
+    window.addEventListener('storage', handleStorage)
+    return () => window.removeEventListener('storage', handleStorage)
+  }, [])
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -35,6 +60,15 @@ export function TopNav() {
     }, 3500)
     return () => clearInterval(id)
   }, [])
+
+  function logout() {
+    localStorage.removeItem('wp_access_token')
+    localStorage.removeItem('wp_refresh_token')
+    localStorage.removeItem('wp_user')
+    setUser(null)
+    router.push('/')
+    router.refresh()
+  }
 
   return (
     <nav aria-label="WorldPulse top navigation" className="fixed top-0 left-0 right-0 h-[52px] glass border-b border-[rgba(255,255,255,0.07)] flex items-center px-5 z-[1000] gap-0">
@@ -103,13 +137,60 @@ export function TopNav() {
         {/* Language switcher */}
         <LanguageSwitcher />
 
-        <Link href="/auth/login" className="px-4 py-[7px] rounded-lg border border-[rgba(255,255,255,0.15)] bg-transparent text-wp-text2 text-[13px] font-medium hover:border-wp-amber hover:text-wp-amber transition-all">
-          {t('signIn')}
-        </Link>
+        {/* Auth controls */}
+        {user ? (
+          <div className="relative group">
+            <button
+              className="flex items-center gap-2 px-2 py-[5px] rounded-lg hover:bg-[rgba(255,255,255,0.06)] transition-all"
+              aria-label="Account menu"
+            >
+              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-wp-amber to-orange-600 flex items-center justify-center font-bold text-[12px] text-black flex-shrink-0">
+                {(user.displayName || user.handle).charAt(0).toUpperCase()}
+              </div>
+              <span className="text-[13px] text-wp-text2 font-medium hidden sm:block max-w-[100px] truncate">
+                @{user.handle}
+              </span>
+            </button>
 
-        <Link href="/auth/register" className="px-4 py-[7px] rounded-lg bg-wp-amber text-black text-[13px] font-bold hover:bg-[#ffb84d] transition-all">
-          {t('joinFree')}
-        </Link>
+            {/* Dropdown */}
+            <div className="absolute right-0 top-full mt-1 w-44 glass border border-[rgba(255,255,255,0.1)] rounded-xl py-1 shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all z-50">
+              <Link
+                href={`/@${user.handle}`}
+                className="block px-4 py-[9px] text-[13px] text-wp-text2 hover:text-wp-text hover:bg-[rgba(255,255,255,0.05)] transition-colors"
+              >
+                Your Profile
+              </Link>
+              <Link
+                href="/analytics"
+                className="block px-4 py-[9px] text-[13px] text-wp-text2 hover:text-wp-text hover:bg-[rgba(255,255,255,0.05)] transition-colors"
+              >
+                Analytics
+              </Link>
+              <div className="border-t border-[rgba(255,255,255,0.07)] my-1" />
+              <button
+                onClick={logout}
+                className="w-full text-left px-4 py-[9px] text-[13px] text-wp-red hover:bg-[rgba(255,59,92,0.08)] transition-colors"
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <Link
+              href="/auth/login"
+              className="px-4 py-[7px] rounded-lg border border-[rgba(255,255,255,0.15)] bg-transparent text-wp-text2 text-[13px] font-medium hover:border-wp-amber hover:text-wp-amber transition-all"
+            >
+              {t('signIn')}
+            </Link>
+            <Link
+              href="/auth/register"
+              className="px-4 py-[7px] rounded-lg bg-wp-amber text-black text-[13px] font-bold hover:bg-[#ffb84d] transition-all"
+            >
+              {t('joinFree')}
+            </Link>
+          </>
+        )}
       </div>
     </nav>
   )
