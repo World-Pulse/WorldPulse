@@ -1,11 +1,13 @@
-import createMiddleware from 'next-intl/middleware'
-import { routing } from './i18n/routing'
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
 
-export default createMiddleware(routing)
+// Locale routing middleware is disabled — pages are not under a [locale]
+// directory so next-intl's internal rewrites (/{locale}/path) would 404.
+// Locale defaults to 'en' via the fallback in src/i18n/request.ts.
+export function middleware(_req: NextRequest) {
+  return NextResponse.next()
+}
 
 export const config = {
-  // Match all pathnames except for
-  // - … if they start with `/api`, `/_next` or `/_vercel`
-  // - … the ones containing a dot (e.g. `favicon.ico`)
-  matcher: ['/((?!api|_next|_vercel|.*\\..*).*)'],
+  matcher: [],  // match nothing — middleware is a no-op
 }
