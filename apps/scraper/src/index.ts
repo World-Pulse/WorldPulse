@@ -271,6 +271,41 @@ async function processArticleGroup(
     signal.reliability_score = verificationResult.score
   }
 
+  // Auto-create a post so the global feed shows real content
+  try {
+    const botUser = await db('users')
+      .where('account_type', 'official')
+      .orWhere('account_type', 'ai')
+      .first('id')
+
+    if (botUser) {
+      const content = signal.summary
+        ? `${signal.title}\n\n${signal.summary}`.slice(0, 2000)
+        : signal.title.slice(0, 2000)
+
+      const sourceName = await db('sources').where('id', primary.sourceId).first('name')
+
+      // Only create if no post already exists for this signal
+      const existingPost = await db('posts').where('signal_id', signal.id).first('id')
+      if (!existingPost) {
+        await db('posts').insert({
+          author_id:        botUser.id,
+          post_type:        'signal',
+          content,
+          signal_id:        signal.id,
+          source_url:       primary.url,
+          source_name:      sourceName?.name ?? null,
+          tags:             signal.tags ?? [],
+          location_name:    signal.location_name ?? null,
+          reliability_score: signal.reliability_score,
+          language:         signal.language ?? 'en',
+        })
+      }
+    }
+  } catch (err) {
+    logger.warn({ err, signalId: signal.id }, 'Auto-post creation failed (non-fatal)')
+  }
+
   // Publish to Kafka → WebSocket broadcast
   await producer.send({
     topic: 'signals.verified',
