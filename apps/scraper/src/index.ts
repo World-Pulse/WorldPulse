@@ -164,7 +164,7 @@ async function scrapeSource(source: ScraperSource) {
           body:        item.contentSnippet ?? item.content ?? '',
           publishedAt: item.pubDate ?? new Date().toISOString(),
           sourceTier:  source.tier,
-          sourceTrust: source.trustScore,
+          sourceTrust: Number(source.trustScore) || 0.5,
         }
 
         if (kafkaReady && producer) {
@@ -424,21 +424,17 @@ function computeTopicHash(title: string): string {
   return normalized
 }
 
-function computeReliability(articles: Array<{ sourceTrust: number; sourceTier: string }>): number {
+function computeReliability(articles: Array<{ sourceTrust: number | string; sourceTier: string }>): number {
   if (articles.length === 0) return 0
-  
-  // Base score from source count
+
   const countScore = Math.min(articles.length / 3, 1) * 0.4
-  
-  // Trust score average
-  const avgTrust = articles.reduce((s, a) => s + a.sourceTrust, 0) / articles.length
-  const trustScore = avgTrust * 0.4
-  
-  // Wire service bonus
+  const avgTrust = articles.reduce((s, a) => s + Number(a.sourceTrust || 0), 0) / articles.length
+  const trustScore = (isNaN(avgTrust) ? 0 : avgTrust) * 0.4
   const hasWire = articles.some(a => a.sourceTier === 'wire')
   const wireBonus = hasWire ? 0.2 : 0
-  
-  return Math.min(countScore + trustScore + wireBonus, 1)
+
+  const result = countScore + trustScore + wireBonus
+  return isNaN(result) ? 0.1 : Math.min(Math.max(result, 0), 1)
 }
 
 bootstrap().catch(err => {
