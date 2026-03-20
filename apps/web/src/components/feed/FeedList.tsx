@@ -348,8 +348,8 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
       }
       setCursor(data.cursor ?? null)
       setHasMore(data.hasMore ?? false)
-    } catch {
-      // Keep existing items on error, just stop loading
+    } catch (err) {
+      console.error('[FeedList] fetch failed:', err)
     }
   }, [tab, category])
 

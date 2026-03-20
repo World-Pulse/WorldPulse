@@ -164,7 +164,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
 
     let query = db('signals')
       .whereNotNull('location')
-      .where('status', 'verified')
+      .whereIn('status', ['verified', 'pending'])
       .where('created_at', '>', db.raw(`NOW() - INTERVAL '${Math.min(Number(hours), 168)} hours'`))
       .select([
         'id', 'title', 'category', 'severity', 'location_name', 'country_code',

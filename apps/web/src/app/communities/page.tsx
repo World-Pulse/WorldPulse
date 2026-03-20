@@ -168,10 +168,7 @@ export default function CommunitiesPage() {
         throw new Error('API failed')
       }
     } catch {
-      // Demo data
-      setCommunities(DEMO_COMMUNITIES)
-      setFeatured([...DEMO_COMMUNITIES].sort((a, b) => b.memberCount - a.memberCount).slice(0, 5))
-      setTrending([...DEMO_COMMUNITIES].sort((a, b) => b.recentPosts - a.recentPosts).filter(c => c.recentPosts > 0).slice(0, 3))
+      // API unavailable — show empty state
     } finally {
       setLoading(false)
     }

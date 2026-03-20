@@ -45,8 +45,7 @@ export default function MapPage() {
       const data = await res.json() as { success: boolean; data: MapSignal[] }
       if (data.success) setSignals(data.data)
     } catch {
-      // Use demo data if API unavailable
-      setSignals(DEMO_SIGNALS)
+      // API unavailable — show empty map
     } finally {
       setLoading(false)
     }
@@ -295,15 +294,3 @@ export default function MapPage() {
   )
 }
 
-// Demo data for when API is unavailable
-const DEMO_SIGNALS: MapSignal[] = [
-  { id:'1', title:'M5.8 Earthquake — Manila Bay', lat:14.59, lng:120.98, severity:'critical', category:'disaster',    locationName:'Manila, Philippines', countryCode:'PH', reliabilityScore:0.95, createdAt:'' },
-  { id:'2', title:'EU AI Safety Directive',        lat:50.85, lng:4.35,  severity:'high',     category:'technology',  locationName:'Brussels, Belgium',    countryCode:'BE', reliabilityScore:0.92, createdAt:'' },
-  { id:'3', title:'Arctic Ice Record Low',          lat:75.00, lng:0.00,  severity:'high',     category:'climate',     locationName:'Arctic Ocean',          countryCode:null, reliabilityScore:0.98, createdAt:'' },
-  { id:'4', title:'South Korea Election',           lat:37.56, lng:126.97,severity:'medium',   category:'elections',   locationName:'Seoul, South Korea',   countryCode:'KR', reliabilityScore:0.99, createdAt:'' },
-  { id:'5', title:'Sudan Ceasefire Talks',          lat:15.50, lng:32.56, severity:'high',     category:'conflict',    locationName:'Khartoum, Sudan',      countryCode:'SD', reliabilityScore:0.88, createdAt:'' },
-  { id:'6', title:'WHO H5N9 Containment',           lat:21.02, lng:105.85,severity:'medium',   category:'health',      locationName:'Hanoi, Vietnam',       countryCode:'VN', reliabilityScore:0.97, createdAt:'' },
-  { id:'7', title:'US Fed Minutes Release',         lat:38.90, lng:-77.03,severity:'medium',   category:'economy',     locationName:'Washington DC, USA',   countryCode:'US', reliabilityScore:0.99, createdAt:'' },
-  { id:'8', title:'Gaza Humanitarian Update',       lat:31.50, lng:34.47, severity:'critical', category:'conflict',    locationName:'Gaza',                 countryCode:'PS', reliabilityScore:0.85, createdAt:'' },
-  { id:'9', title:'Japan Seismic Monitoring',       lat:35.68, lng:139.65,severity:'low',      category:'disaster',    locationName:'Tokyo, Japan',         countryCode:'JP', reliabilityScore:0.99, createdAt:'' },
-]

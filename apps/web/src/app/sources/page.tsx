@@ -60,7 +60,7 @@ function TrustBar({ score }: { score: number }) {
 }
 
 export default function SourcesPage() {
-  const [sources, setSources]     = useState<Source[]>(DEMO_SOURCES)
+  const [sources, setSources]     = useState<Source[]>([])
   const [loading, setLoading]     = useState(true)
   const [search, setSearch]       = useState('')
   const [tierFilter, setTierFilter] = useState('')
@@ -70,10 +70,26 @@ export default function SourcesPage() {
     fetch(`${API_URL}/api/v1/sources?limit=100`)
       .then(r => r.json())
       .then(d => {
-        const items = d.data?.items ?? d.items ?? []
-        if (items.length > 0) setSources(items)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const raw: any[] = d.data?.items ?? d.items ?? []
+        if (raw.length > 0) {
+          setSources(raw.map(s => ({
+            id:           s.id,
+            slug:         s.slug,
+            name:         s.name,
+            url:          s.url,
+            tier:         s.tier,
+            trustScore:   s.trustScore   ?? s.trust_score   ?? 0,
+            language:     s.language     ?? 'en',
+            country:      s.country      ?? null,
+            categories:   s.categories   ?? [],
+            active:       s.active       ?? true,
+            articleCount: s.articleCount ?? s.article_count ?? undefined,
+            lastScraped:  s.lastScraped  ?? s.last_scraped  ?? undefined,
+          })))
+        }
       })
-      .catch(() => { /* keep demo */ })
+      .catch(() => { /* API unavailable */ })
       .finally(() => setLoading(false))
   }, [])
 
