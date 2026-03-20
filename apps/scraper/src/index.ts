@@ -15,6 +15,7 @@ import { classifyContent } from './pipeline/classify'
 import { extractGeo } from './pipeline/geo'
 import { dedup } from './pipeline/dedup'
 import { computeTrending } from './pipeline/trending'
+import { backfillUnprocessed } from './backfill'
 import type { Source } from '@worldpulse/types'
 
 // DB row has extra columns not present in the shared Source interface
@@ -76,6 +77,11 @@ async function bootstrap() {
   if (kafkaReady && verifyConsumer) {
     await startVerificationConsumer()
   }
+
+  // Backfill any articles that were scraped but never turned into signals
+  backfillUnprocessed(processArticleGroup).catch(err =>
+    logger.warn({ err }, 'Backfill failed (non-fatal)')
+  )
 
   // Start main scrape loop (works with or without Kafka)
   await scrapeAll()

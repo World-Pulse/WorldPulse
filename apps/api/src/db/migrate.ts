@@ -480,11 +480,8 @@ async function run() {
       CREATE TRIGGER posts_updated_at   BEFORE UPDATE ON posts   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
     END IF;
   END $$`)
-  await db.raw(`DO $$ BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'signals_updated_at') THEN
-      CREATE TRIGGER signals_updated_at BEFORE UPDATE ON signals FOR EACH ROW EXECUTE FUNCTION update_updated_at();
-    END IF;
-  END $$`)
+  // signals uses 'last_updated' not 'updated_at' — drop the broken trigger if it exists
+  await db.raw(`DROP TRIGGER IF EXISTS signals_updated_at ON signals`)
   await db.raw(`DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'sources_updated_at') THEN
       CREATE TRIGGER sources_updated_at BEFORE UPDATE ON sources FOR EACH ROW EXECUTE FUNCTION update_updated_at();
@@ -539,14 +536,41 @@ async function run() {
   await db.raw(`
     INSERT INTO sources (slug, name, url, tier, trust_score, language, country, categories, rss_feeds, scrape_interval)
     VALUES
-      ('ap-news',    'AP News',       'https://apnews.com',         'wire',     0.97, 'en', 'US', '{breaking,geopolitics,economy}', '{https://apnews.com/rss}', 900),
-      ('reuters',    'Reuters',       'https://reuters.com',        'wire',     0.96, 'en', 'GB', '{breaking,economy,geopolitics}', '{https://feeds.reuters.com/reuters/topNews}', 900),
-      ('bbc-world',  'BBC World',     'https://bbc.com/news/world', 'wire',     0.95, 'en', 'GB', '{breaking,geopolitics,culture}', '{http://feeds.bbci.co.uk/news/world/rss.xml}', 900),
-      ('al-jazeera', 'Al Jazeera',    'https://aljazeera.com',      'national', 0.88, 'en', 'QA', '{geopolitics,conflict,culture}', '{https://www.aljazeera.com/xml/rss/all.xml}', 1200),
-      ('guardian',   'The Guardian',  'https://theguardian.com',    'national', 0.87, 'en', 'GB', '{climate,science,geopolitics}',  '{https://www.theguardian.com/world/rss}', 1200),
+      ('ap-news',    'AP News',       'https://apnews.com',         'wire',     0.97, 'en', 'US', '{breaking,geopolitics,economy}', '{https://feeds.apnews.com/rss/apf-topnews,https://feeds.apnews.com/rss/apf-intlnews}', 600),
+      ('reuters',    'Reuters',       'https://reuters.com',        'wire',     0.96, 'en', 'GB', '{breaking,economy,geopolitics}', '{https://feeds.reuters.com/Reuters/worldNews,https://feeds.reuters.com/reuters/topNews}', 600),
+      ('bbc-world',  'BBC World',     'https://bbc.com/news/world', 'wire',     0.95, 'en', 'GB', '{breaking,geopolitics,culture}', '{https://feeds.bbci.co.uk/news/world/rss.xml}', 600),
+      ('al-jazeera', 'Al Jazeera',    'https://aljazeera.com',      'national', 0.88, 'en', 'QA', '{geopolitics,conflict,culture}', '{https://www.aljazeera.com/xml/rss/all.xml}', 900),
+      ('guardian',   'The Guardian',  'https://theguardian.com',    'national', 0.87, 'en', 'GB', '{climate,science,geopolitics}',  '{https://www.theguardian.com/world/rss}', 900),
       ('who',        'World Health Org.', 'https://who.int',        'wire',     0.98, 'en', 'CH', '{health}',                       '{https://www.who.int/rss-feeds/news-english.xml}', 1800),
-      ('usgs-quakes','USGS Earthquakes','https://earthquake.usgs.gov','wire',   0.99, 'en', 'US', '{disaster}',                     '{https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.atom}', 300)
+      ('usgs-quakes','USGS Earthquakes','https://earthquake.usgs.gov','wire',   0.99, 'en', 'US', '{disaster}',                     '{https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.atom}', 300),
+      ('france24',   'France 24',     'https://france24.com/en',    'national', 0.88, 'en', 'FR', '{breaking,geopolitics,culture}', '{https://www.france24.com/en/rss}', 900),
+      ('dw-world',   'Deutsche Welle','https://dw.com',             'national', 0.90, 'en', 'DE', '{geopolitics,economy,culture}',  '{https://rss.dw.com/rdf/rss-en-all}', 900),
+      ('nasa-news',  'NASA',          'https://nasa.gov',           'wire',     0.99, 'en', 'US', '{science,space}',                '{https://www.nasa.gov/news-release/feed/}', 1800)
     ON CONFLICT (slug) DO NOTHING
+  `)
+
+  // ── Fix broken RSS feeds — runs on every deploy, safe to re-run ──────────
+  // AP: apnews.com/rss returns 404; correct sub-domain is feeds.apnews.com
+  await db.raw(`
+    UPDATE sources
+    SET rss_feeds = '{https://feeds.apnews.com/rss/apf-topnews,https://feeds.apnews.com/rss/apf-intlnews}',
+        last_scraped = NULL,
+        scrape_interval = 600
+    WHERE slug = 'ap-news'
+  `)
+  // Reuters: feeds.reuters.com is unreachable (domain decommissioned) — clear RSS so scraper skips it
+  await db.raw(`
+    UPDATE sources
+    SET rss_feeds = '{}',
+        last_scraped = NULL
+    WHERE slug = 'reuters'
+  `)
+  // BBC: ensure https (old seeds used http)
+  await db.raw(`
+    UPDATE sources
+    SET rss_feeds = '{https://feeds.bbci.co.uk/news/world/rss.xml}',
+        last_scraped = NULL
+    WHERE slug = 'bbc-world'
   `)
 
   // ── Seed AI digest bot user ────────────────────────────────────────────────

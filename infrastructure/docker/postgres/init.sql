@@ -430,7 +430,7 @@ FOR EACH ROW EXECUTE FUNCTION update_like_count();
 -- ─── SEED DEFAULT SOURCES ────────────────────────────────────────────────
 INSERT INTO sources (slug, name, url, tier, trust_score, language, country, categories, rss_feeds, scrape_interval) VALUES
   -- Wire services (original)
-  ('ap-news',      'AP News',             'https://apnews.com',              'wire',     0.97, 'en', 'US', '{breaking,geopolitics,economy}', '{https://apnews.com/rss}',                                                              900),
+  ('ap-news',      'AP News',             'https://apnews.com',              'wire',     0.97, 'en', 'US', '{breaking,geopolitics,economy}', '{https://feeds.apnews.com/rss/apf-topnews,https://feeds.apnews.com/rss/apf-intlnews}',  600),
   ('reuters',      'Reuters',             'https://reuters.com',             'wire',     0.96, 'en', 'GB', '{breaking,economy,geopolitics}', '{https://feeds.reuters.com/reuters/topNews}',                                           900),
   ('bbc-world',    'BBC World',           'https://bbc.com/news/world',      'wire',     0.95, 'en', 'GB', '{breaking,geopolitics,culture}', '{http://feeds.bbci.co.uk/news/world/rss.xml}',                                         900),
   ('afp',          'AFP',                 'https://www.afp.com',             'wire',     0.95, 'en', 'FR', '{breaking,geopolitics}',         '{}',                                                                                    900),
@@ -520,7 +520,8 @@ INSERT INTO sources (slug, name, url, tier, trust_score, language, country, cate
   -- Community / Social
   ('reddit-worldnews', 'Reddit r/worldnews',          'https://reddit.com/r/worldnews',      'community',0.65, 'en', 'US', '{breaking,geopolitics,conflict}',  '{https://www.reddit.com/r/worldnews/.rss}',                                1800),
   ('reddit-news',      'Reddit r/news',               'https://reddit.com/r/news',           'community',0.62, 'en', 'US', '{breaking,geopolitics}',           '{https://www.reddit.com/r/news/.rss}',                                     1800),
-  ('bellingcat',       'Bellingcat',                  'https://bellingcat.com',              'regional', 0.90, 'en', 'NL', '{conflict,security,technology}',   '{https://www.bellingcat.com/feed/}',                                       3600);
+  ('bellingcat',       'Bellingcat',                  'https://bellingcat.com',              'regional', 0.90, 'en', 'NL', '{conflict,security,technology}',   '{https://www.bellingcat.com/feed/}',                                       3600)
+ON CONFLICT (slug) DO NOTHING;
 
 -- ─── SOURCE SUGGESTIONS ──────────────────────────────────────────────────
 CREATE TABLE source_suggestions (
