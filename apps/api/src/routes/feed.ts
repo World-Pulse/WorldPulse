@@ -204,11 +204,16 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
     let query = db('signals as s')
       .whereIn('s.status', ['verified', 'pending'])
       .select([
-        's.*',
+        's.id', 's.title', 's.summary', 's.body', 's.category', 's.severity', 's.status',
+        's.reliability_score', 's.source_count', 's.location_name', 's.country_code', 's.region',
+        's.tags', 's.source_ids', 's.original_urls', 's.language',
+        's.view_count', 's.share_count', 's.post_count',
+        's.event_time', 's.first_reported', 's.verified_at', 's.last_updated', 's.created_at',
+        db.raw(`ST_AsGeoJSON(s.location)::json as location_geojson`),
         db.raw(`
           ARRAY(
-            SELECT json_build_object('id', src.id, 'slug', src.slug, 'name', src.name, 
-                                     'logoUrl', src.logo_url, 'tier', src.tier, 
+            SELECT json_build_object('id', src.id, 'slug', src.slug, 'name', src.name,
+                                     'logoUrl', src.logo_url, 'tier', src.tier,
                                      'trustScore', src.trust_score)
             FROM sources src
             WHERE src.id = ANY(s.source_ids)
