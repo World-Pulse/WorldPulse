@@ -199,6 +199,8 @@ async function scrapeSource(source: ScraperSource) {
 
 // ─── VERIFICATION PIPELINE ───────────────────────────────────────────────
 async function startVerificationConsumer() {
+  if (!verifyConsumer) return
+
   await verifyConsumer.subscribe({ topic: 'articles.raw', fromBeginning: false })
 
   await verifyConsumer.run({
