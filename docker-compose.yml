@@ -143,8 +143,12 @@ services:
 
   web:
     build:
-      context: ./apps/web
-      dockerfile: Dockerfile.dev
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: https://api.world-pulse.io
+        NEXT_PUBLIC_WS_URL: wss://api.world-pulse.io
+        NEXT_PUBLIC_MEILI_HOST: https://api.world-pulse.io/search
     container_name: wp_web
     restart: unless-stopped
     depends_on:
@@ -152,15 +156,8 @@ services:
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:3001
-      NEXT_PUBLIC_WS_URL: ws://localhost:3001
-      NEXT_PUBLIC_MEILI_HOST: http://localhost:7700
-      NEXT_PUBLIC_MEILI_KEY: wp_meili_local_key
-    volumes:
-      - ./apps/web:/app
-      - /app/node_modules
-      - /app/.next
-    command: pnpm dev
+      PORT: 3000
+      HOSTNAME: "0.0.0.0"
 
   # ─── MONITORING ───────────────────────────────────────────
   prometheus:
