@@ -6,17 +6,15 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
-type ViewMode = 'points' | 'heat' | 'countries'
-
 interface MapSignal {
   id: string; title: string; summary: string | null
   lat: number; lng: number; severity: string; category: string; status: string
   locationName: string | null; location_name: string | null
-  countryCode: string | null;  country_code: string | null
-  reliabilityScore: number;    reliability_score: number
-  createdAt: string;           created_at: string
+  countryCode: string | null; country_code: string | null
+  reliabilityScore: number; reliability_score: number
+  createdAt: string; created_at: string
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  originalUrls: any;           original_urls: any
+  originalUrls: any; original_urls: any
 }
 
 function norm(s: MapSignal): MapSignal {
@@ -35,9 +33,8 @@ const SEV_COLOR: Record<string, string> = {
 }
 const SEV_BG: Record<string, string> = {
   critical: 'rgba(255,59,92,0.15)', high: 'rgba(245,166,35,0.15)',
-  medium: 'rgba(0,212,255,0.15)',   low: 'rgba(0,230,118,0.15)', info: 'rgba(136,146,164,0.15)',
+  medium: 'rgba(0,212,255,0.15)', low: 'rgba(0,230,118,0.15)', info: 'rgba(136,146,164,0.15)',
 }
-const SEV_ORDER: Record<string, number> = { critical: 5, high: 4, medium: 3, low: 2, info: 1 }
 const CAT_ICON: Record<string, string> = {
   breaking: '🚨', conflict: '⚔️', geopolitics: '🌐', climate: '🌡️', health: '🏥',
   economy: '📈', technology: '💻', science: '🔬', elections: '🗳️', culture: '🎭',
@@ -60,79 +57,17 @@ function getSourceUrl(sig: MapSignal): string | null {
   } catch { return null }
 }
 
-function toGeoJSON(sigs: MapSignal[]) {
-  return {
-    type: 'FeatureCollection' as const,
-    features: sigs
-      .filter(s => s.lat != null && s.lng != null && !isNaN(Number(s.lat)) && !isNaN(Number(s.lng)))
-      .map(s => ({
-        type: 'Feature' as const,
-        geometry: { type: 'Point' as const, coordinates: [Number(s.lng), Number(s.lat)] },
-        properties: {
-          ...s,
-          lat: Number(s.lat),
-          lng: Number(s.lng),
-          color: SEV_COLOR[s.severity] ?? '#8892a4',
-          originalUrls: JSON.stringify(Array.isArray(s.originalUrls) ? s.originalUrls : []),
-        },
-      })),
-  }
-}
-
-function choroplethPaint(sigs: MapSignal[]) {
-  const counts: Record<string, number> = {}
-  const worst:  Record<string, string> = {}
-  for (const s of sigs) {
-    const cc = s.countryCode
-    if (!cc || cc === '-99' || cc === '-1') continue
-    counts[cc] = (counts[cc] || 0) + 1
-    if (!worst[cc] || SEV_ORDER[s.severity] > SEV_ORDER[worst[cc]]) worst[cc] = s.severity
-  }
-  const colorExpr:   unknown[] = ['match', ['get', 'ISO_A2']]
-  const opacityExpr: unknown[] = ['match', ['get', 'ISO_A2']]
-  for (const cc of Object.keys(counts)) {
-    colorExpr.push(cc, SEV_COLOR[worst[cc]] ?? '#8892a4')
-    opacityExpr.push(cc, Math.min(0.08 + counts[cc] * 0.025, 0.38))
-  }
-  colorExpr.push('rgba(0,0,0,0)')
-  opacityExpr.push(0)
-  return { colorExpr, opacityExpr }
-}
-
 export default function MapPage() {
+  const mapContainer = useRef<HTMLDivElement>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const mapRef      = useRef<any>(null)
-  const mapContainer= useRef<HTMLDivElement>(null)
-  const popupRef    = useRef<{ remove: () => void } | null>(null)
-  const signalsRef  = useRef<MapSignal[]>([])        // latest signals, always current
-  const viewModeRef = useRef<ViewMode>('points')     // latest viewMode without stale closure
+  const mapRef    = useRef<any>(null)
+  const popupRef  = useRef<{ remove: () => void } | null>(null)
 
-  const [signals,    setSignals]    = useState<MapSignal[]>([])
-  const [selected,   setSelected]   = useState<MapSignal | null>(null)
-  const [loading,    setLoading]    = useState(true)
-  const [category,   setCategory]   = useState('all')
-  const [hours,      setHours]      = useState(24)
-  const [viewMode,   setViewMode]   = useState<ViewMode>('points')
-
-  // ── Push latest data to the map source ──────────────────────
-  const pushToMap = useCallback((sigs: MapSignal[]) => {
-    const map = mapRef.current
-    if (!map) return
-    const source = map.getSource('signals')
-    if (!source) return
-    source.setData(toGeoJSON(sigs))
-  }, [])
-
-  // ── Apply choropleth paint ───────────────────────────────────
-  const applyChoropleth = useCallback((sigs: MapSignal[]) => {
-    const map = mapRef.current
-    if (!map) return
-    const { colorExpr, opacityExpr } = choroplethPaint(sigs)
-    try {
-      map.setPaintProperty('country-fill', 'fill-color',   colorExpr)
-      map.setPaintProperty('country-fill', 'fill-opacity', opacityExpr)
-    } catch { /* layer not ready */ }
-  }, [])
+  const [signals,  setSignals]  = useState<MapSignal[]>([])
+  const [selected, setSelected] = useState<MapSignal | null>(null)
+  const [loading,  setLoading]  = useState(true)
+  const [category, setCategory] = useState('all')
+  const [hours,    setHours]    = useState(24)
 
   // ── Fetch signals ────────────────────────────────────────────
   const fetchSignals = useCallback(async () => {
@@ -141,52 +76,27 @@ export default function MapPage() {
       const p = new URLSearchParams({ hours: String(hours), ...(category !== 'all' ? { category } : {}) })
       const res  = await fetch(`${API_URL}/api/v1/signals/map/points?${p}`)
       const data = await res.json() as { success: boolean; data: MapSignal[] }
-      if (data.success && Array.isArray(data.data)) {
-        const normalized = data.data.map(norm)
-        signalsRef.current = normalized
-        setSignals(normalized)
-        pushToMap(normalized)                              // push immediately
-        if (viewModeRef.current === 'countries') applyChoropleth(normalized)
-      }
-    } catch (err) {
-      console.error('[map] fetch failed:', err)
+      if (data.success && Array.isArray(data.data)) setSignals(data.data.map(norm))
+    } catch (e) {
+      console.error('[map] fetch error:', e)
     } finally {
       setLoading(false)
     }
-  }, [category, hours, pushToMap, applyChoropleth])
+  }, [category, hours])
 
   useEffect(() => { fetchSignals() }, [fetchSignals])
 
-  // ── Apply view mode layers ───────────────────────────────────
-  const applyViewMode = useCallback((mode: ViewMode) => {
-    const map = mapRef.current
-    if (!map) return
-    viewModeRef.current = mode
-    const isHeat = mode === 'heat'
-    try {
-      map.setLayoutProperty('signal-heatmap', 'visibility', isHeat ? 'visible' : 'none')
-      for (const id of ['signal-glow', 'signal-points', 'signal-critical', 'cluster-halo', 'clusters']) {
-        map.setLayoutProperty(id, 'visibility', isHeat ? 'none' : 'visible')
-      }
-      if (mode === 'countries') {
-        applyChoropleth(signalsRef.current)
-      } else {
-        map.setPaintProperty('country-fill', 'fill-color',   'rgba(0,0,0,0)')
-        map.setPaintProperty('country-fill', 'fill-opacity', 0)
-      }
-    } catch { /* layers not ready */ }
-  }, [applyChoropleth])
-
-  useEffect(() => { applyViewMode(viewMode) }, [viewMode, applyViewMode])
-
-  // ── Initialize MapLibre ──────────────────────────────────────
+  // ── Initialize MapLibre once ─────────────────────────────────
   useEffect(() => {
     if (!mapContainer.current || typeof window === 'undefined') return
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let map: any
 
-    async function initMap() {
+    let cancelled = false
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let map: any = null
+
+    ;(async () => {
       const ml = await import('maplibre-gl')
+      if (cancelled) return
 
       map = new ml.Map({
         container: mapContainer.current!,
@@ -195,26 +105,16 @@ export default function MapPage() {
           sources: {
             basemap: {
               type: 'raster',
-              tiles: [
-                'https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
-                'https://b.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
-                'https://c.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
-              ],
+              tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
               tileSize: 256,
-              attribution: '© CARTO © OpenStreetMap',
-            },
-            labels: {
-              type: 'raster',
-              tiles: [
-                'https://a.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png',
-                'https://b.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png',
-              ],
-              tileSize: 256,
+              attribution: '© OpenStreetMap',
             },
           },
           layers: [
-            { id: 'bg',      type: 'background' as const, paint: { 'background-color': '#0a0b14' } },
-            { id: 'basemap', type: 'raster' as const, source: 'basemap', paint: { 'raster-opacity': 0.92 } },
+            { id: 'bg',      type: 'background' as const, paint: { 'background-color': '#06070d' } },
+            { id: 'basemap', type: 'raster'     as const, source: 'basemap',
+              paint: { 'raster-opacity': 0.15, 'raster-saturation': -1,
+                'raster-brightness-min': 0.1, 'raster-brightness-max': 0.3 } },
           ],
         },
         center: [10, 20],
@@ -227,24 +127,8 @@ export default function MapPage() {
       mapRef.current = map
 
       map.on('load', () => {
-        // ── Countries (Natural Earth 110m) ─────────────────────
-        map.addSource('countries', {
-          type: 'geojson',
-          data: 'https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_110m_admin_0_countries.geojson',
-          generateId: true,
-        })
-        map.addLayer({ id: 'country-fill', type: 'fill', source: 'countries',
-          paint: { 'fill-color': 'rgba(0,0,0,0)', 'fill-opacity': 0 } })
-        map.addLayer({ id: 'country-line', type: 'line', source: 'countries',
-          paint: { 'line-color': 'rgba(255,255,255,0.1)', 'line-width': 0.5 } })
-        map.addLayer({ id: 'country-hover', type: 'line', source: 'countries',
-          paint: {
-            'line-color': ['case', ['boolean', ['feature-state', 'hover'], false], 'rgba(255,255,255,0.5)', 'rgba(0,0,0,0)'],
-            'line-width': 1.5,
-          },
-        })
+        if (cancelled) return
 
-        // ── Signals source ─────────────────────────────────────
         map.addSource('signals', {
           type: 'geojson',
           data: { type: 'FeatureCollection', features: [] },
@@ -253,36 +137,19 @@ export default function MapPage() {
           clusterRadius: 50,
         })
 
-        // ── Heatmap ────────────────────────────────────────────
-        map.addLayer({
-          id: 'signal-heatmap', type: 'heatmap', source: 'signals',
-          layout: { visibility: 'none' },
-          paint: {
-            'heatmap-weight': ['match', ['get', 'severity'],
-              'critical', 1.0, 'high', 0.75, 'medium', 0.5, 'low', 0.25, 0.1],
-            'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 0, 2, 9, 5],
-            'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'],
-              0, 'rgba(0,0,0,0)', 0.15, 'rgba(0,100,200,0.5)',
-              0.4, 'rgba(0,212,255,0.7)', 0.6, 'rgba(245,166,35,0.85)',
-              0.8, 'rgba(255,59,92,0.9)', 1.0, 'rgba(255,0,80,1)'],
-            'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 0, 8, 9, 40],
-            'heatmap-opacity': 0.85,
-          },
-        })
-
-        // ── Cluster halos ──────────────────────────────────────
+        // Cluster halo
         map.addLayer({
           id: 'cluster-halo', type: 'circle', source: 'signals',
           filter: ['has', 'point_count'],
           paint: {
-            'circle-color': ['step', ['get', 'point_count'],
-              'rgba(245,166,35,0.1)', 10, 'rgba(255,59,92,0.1)'],
-            'circle-radius': ['step', ['get', 'point_count'], 32, 10, 40, 30, 48],
+            'circle-color': '#f5a623',
+            'circle-radius': ['step', ['get', 'point_count'], 30, 10, 38, 30, 46],
+            'circle-opacity': 0.08,
             'circle-blur': 0.7,
           },
         })
 
-        // ── Clusters ───────────────────────────────────────────
+        // Clusters
         map.addLayer({
           id: 'clusters', type: 'circle', source: 'signals',
           filter: ['has', 'point_count'],
@@ -295,17 +162,19 @@ export default function MapPage() {
           },
         })
 
-        // ── Signal glow ────────────────────────────────────────
+        // Signal glow
         map.addLayer({
           id: 'signal-glow', type: 'circle', source: 'signals',
           filter: ['!', ['has', 'point_count']],
           paint: {
             'circle-color': ['get', 'color'],
-            'circle-radius': 16, 'circle-opacity': 0.1, 'circle-blur': 1.2,
+            'circle-radius': 16,
+            'circle-opacity': 0.12,
+            'circle-blur': 1.2,
           },
         })
 
-        // ── Signal points (all non-cluster) ───────────────────
+        // Signal points
         map.addLayer({
           id: 'signal-points', type: 'circle', source: 'signals',
           filter: ['!', ['has', 'point_count']],
@@ -314,78 +183,51 @@ export default function MapPage() {
             'circle-radius': ['case', ['==', ['get', 'severity'], 'critical'], 9, 7],
             'circle-opacity': 0.92,
             'circle-stroke-color': ['get', 'color'],
-            'circle-stroke-width': ['case', ['==', ['get', 'severity'], 'critical'], 3, 2],
+            'circle-stroke-width': 2,
             'circle-stroke-opacity': 0.35,
           },
         })
 
-        // ── Pulsing ring for critical (separate layer) ─────────
-        map.addLayer({
-          id: 'signal-critical', type: 'circle', source: 'signals',
-          filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'severity'], 'critical']],
-          paint: {
-            'circle-color': 'rgba(0,0,0,0)',
-            'circle-radius': 18,
-            'circle-opacity': 0,
-            'circle-stroke-color': '#ff3b5c',
-            'circle-stroke-width': 2,
-            'circle-stroke-opacity': 0.4,
-          },
-        })
-
-        // ── CartoDB labels on top ──────────────────────────────
-        map.addLayer({ id: 'map-labels', type: 'raster', source: 'labels',
-          paint: { 'raster-opacity': 0.85 } })
-
-        // ── Immediately seed with any already-fetched signals ──
-        if (signalsRef.current.length > 0) {
-          map.getSource('signals').setData(toGeoJSON(signalsRef.current))
-          if (viewModeRef.current === 'countries') applyChoropleth(signalsRef.current)
-        }
-
-        // ── Cursors ────────────────────────────────────────────
+        // Cursors
         const on  = () => { map.getCanvas().style.cursor = 'pointer' }
         const off = () => { map.getCanvas().style.cursor = '' }
-        for (const id of ['signal-points', 'signal-critical', 'clusters']) {
-          map.on('mouseenter', id, on)
-          map.on('mouseleave', id, off)
-        }
+        map.on('mouseenter', 'signal-points', on)
+        map.on('mouseleave', 'signal-points', off)
+        map.on('mouseenter', 'clusters', on)
+        map.on('mouseleave', 'clusters', off)
 
-        // ── Hover popup ────────────────────────────────────────
+        // Hover popup
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const showPop = (e: any) => {
+        map.on('mouseenter', 'signal-points', (e: any) => {
           const p = e.features?.[0]?.properties
           if (!p) return
           if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
-          const dot = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${SEV_COLOR[p.severity] ?? '#888'};margin-right:4px;vertical-align:middle"></span>`
-          popupRef.current = new ml.Popup({ closeButton: false, closeOnClick: false, offset: 14, className: 'wp-map-popup' })
+          popupRef.current = new ml.Popup({ closeButton: false, closeOnClick: false, offset: 12, className: 'wp-map-popup' })
             .setLngLat(e.lngLat)
             .setHTML(`
-              <div style="font:10px/1 monospace;color:#8892a4;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px">${dot}${p.severity} · ${p.category}</div>
-              <div style="font:600 13px/1.4 system-ui;color:#e8eaf0;max-width:240px">${p.title}</div>
-              ${p.locationName ? `<div style="font:11px monospace;color:#8892a4;margin-top:5px">📍 ${p.locationName}</div>` : ''}
+              <div style="font:10px/1 monospace;color:#8892a4;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px">${p.severity} · ${p.category}</div>
+              <div style="font:600 13px/1.4 system-ui;color:#e8eaf0;max-width:230px">${p.title}</div>
+              ${p.locationName ? `<div style="font:11px monospace;color:#8892a4;margin-top:4px">📍 ${p.locationName}</div>` : ''}
             `)
             .addTo(map)
-        }
-        const hidePop = () => { if (popupRef.current) { popupRef.current.remove(); popupRef.current = null } }
+        })
+        map.on('mouseleave', 'signal-points', () => {
+          if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
+        })
 
-        map.on('mouseenter', 'signal-points', showPop)
-        map.on('mouseleave', 'signal-points', hidePop)
-
-        // ── Pin click: select + flyTo ──────────────────────────
+        // Pin click
         let pinClicked = false
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const onPinClick = (e: any) => {
+        map.on('click', 'signal-points', (e: any) => {
           const p = e.features?.[0]?.properties
           if (!p) return
           pinClicked = true
-          hidePop()
+          if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
           setSelected(p)
           map.flyTo({ center: [p.lng, p.lat], zoom: Math.max(map.getZoom(), 5), speed: 1.2, duration: 700 })
-        }
-        map.on('click', 'signal-points', onPinClick)
+        })
 
-        // ── Cluster click: zoom in ─────────────────────────────
+        // Cluster zoom
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         map.on('click', 'clusters', async (e: any) => {
           pinClicked = true
@@ -395,49 +237,59 @@ export default function MapPage() {
           map.flyTo({ center: feats[0].geometry.coordinates, zoom, duration: 600 })
         })
 
-        // ── Background click: deselect ─────────────────────────
+        // Background click: deselect
         map.on('click', () => { if (pinClicked) { pinClicked = false; return } setSelected(null) })
-
-        // ── Country hover ──────────────────────────────────────
-        let hovId: number | string | null = null
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        map.on('mousemove', 'country-fill', (e: any) => {
-          if (!e.features?.length) return
-          if (hovId !== null) map.setFeatureState({ source: 'countries', id: hovId }, { hover: false })
-          hovId = e.features[0].id
-          map.setFeatureState({ source: 'countries', id: hovId }, { hover: true })
-        })
-        map.on('mouseleave', 'country-fill', () => {
-          if (hovId !== null) map.setFeatureState({ source: 'countries', id: hovId }, { hover: false })
-          hovId = null
-        })
-
-        setLoading(false)
       })
+    })()
 
-      map.on('error', (e: unknown) => console.error('[maplibre]', e))
-    }
-
-    initMap()
     return () => {
-      if (popupRef.current) popupRef.current.remove()
+      cancelled = true
+      if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
       if (mapRef.current) { mapRef.current.remove(); mapRef.current = null }
     }
-  }, [applyChoropleth]) // eslint-disable-line
+  }, []) // run once
 
-  const CATS  = ['all','breaking','conflict','climate','economy','technology','health','disaster']
+  // ── Push signal data to map whenever signals change ──────────
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const map = mapRef.current as any
+    if (!map) return
+    const source = map.getSource('signals')
+    if (!source) return
+    source.setData({
+      type: 'FeatureCollection',
+      features: signals
+        .filter(s => s.lat != null && s.lng != null)
+        .map(s => ({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [Number(s.lng), Number(s.lat)] },
+          properties: {
+            ...s,
+            lat: Number(s.lat),
+            lng: Number(s.lng),
+            color: SEV_COLOR[s.severity] ?? '#8892a4',
+            originalUrls: JSON.stringify(Array.isArray(s.originalUrls) ? s.originalUrls : []),
+          },
+        })),
+    })
+  }, [signals])
+
+  const CATS   = ['all','breaking','conflict','climate','economy','technology','health','disaster']
   const HTIMES = [{ v: 6, l: '6h' }, { v: 24, l: '24h' }, { v: 72, l: '3d' }, { v: 168, l: '7d' }]
 
   const sevColor = selected ? (SEV_COLOR[selected.severity] ?? '#8892a4') : '#8892a4'
-  const sevBg    = selected ? (SEV_BG[selected.severity]   ?? 'rgba(136,146,164,0.15)') : ''
+  const sevBg    = selected ? (SEV_BG[selected.severity]    ?? 'rgba(136,146,164,0.15)') : ''
   const srcUrl   = selected ? getSourceUrl(selected) : null
-  const sevCounts = signals.reduce((a, s) => { a[s.severity] = (a[s.severity] || 0) + 1; return a }, {} as Record<string, number>)
+
+  const sevCounts = signals.reduce((a, s) => {
+    a[s.severity] = (a[s.severity] || 0) + 1; return a
+  }, {} as Record<string, number>)
 
   return (
-    <div className="h-[calc(100vh-52px)] flex flex-col bg-[#0a0b14]">
+    <div className="h-[calc(100vh-52px)] flex flex-col bg-wp-bg">
 
       {/* Toolbar */}
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-[rgba(255,255,255,0.07)] bg-[rgba(10,11,20,0.92)] backdrop-blur-xl z-10 flex-wrap">
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[rgba(255,255,255,0.07)] bg-[rgba(6,7,13,0.92)] backdrop-blur-xl z-10 flex-wrap">
         <span className="font-display text-[14px] tracking-[2.5px] text-wp-text font-bold">LIVE MAP</span>
         <div className="w-px h-4 bg-[rgba(255,255,255,0.1)]" />
 
@@ -452,18 +304,6 @@ export default function MapPage() {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
-          {/* View mode */}
-          <div className="flex items-center gap-[2px] p-[3px] rounded-lg bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.07)]">
-            {([['points','⬤ Points'],['heat','≋ Heat'],['countries','🌐 Regions']] as [ViewMode,string][]).map(([v,l]) => (
-              <button key={v} onClick={() => setViewMode(v)}
-                className={`px-3 py-[3px] rounded-[6px] text-[10px] font-mono transition-all
-                  ${viewMode === v ? 'bg-[rgba(255,255,255,0.1)] text-wp-text' : 'text-wp-text3 hover:text-wp-text2'}`}>
-                {l}
-              </button>
-            ))}
-          </div>
-
-          {/* Time window */}
           <div className="flex gap-[3px]">
             {HTIMES.map(opt => (
               <button key={opt.v} onClick={() => setHours(opt.v)}
@@ -473,7 +313,6 @@ export default function MapPage() {
               </button>
             ))}
           </div>
-
           <div className="flex items-center gap-1.5 font-mono text-[10px] text-wp-text2 border border-[rgba(255,255,255,0.07)] rounded-lg px-2.5 py-[4px]">
             <span className="w-[5px] h-[5px] rounded-full bg-wp-red animate-live-pulse" />
             {signals.length} signals
@@ -481,13 +320,13 @@ export default function MapPage() {
         </div>
       </div>
 
-      {/* Map */}
+      {/* Map area */}
       <div className="flex-1 relative" style={{ overflowX: 'clip' }}>
         <div ref={mapContainer} className="absolute inset-0" />
 
         {/* Legend */}
         <div className="absolute bottom-6 left-4 z-10 pointer-events-none">
-          <div className="bg-[rgba(10,11,20,0.88)] border border-[rgba(255,255,255,0.09)] rounded-xl p-3 backdrop-blur-xl">
+          <div className="bg-[rgba(6,7,13,0.88)] border border-[rgba(255,255,255,0.09)] rounded-xl p-3 backdrop-blur-xl">
             <div className="font-mono text-[9px] tracking-[2px] text-wp-text3 uppercase mb-2">Severity</div>
             <div className="space-y-1.5">
               {Object.entries(SEV_COLOR).map(([sev, color]) => (
@@ -504,7 +343,7 @@ export default function MapPage() {
         </div>
 
         {/* Signal detail panel */}
-        <div className={`absolute top-0 right-0 h-full w-[340px] bg-[rgba(8,9,18,0.98)] border-l border-[rgba(255,255,255,0.09)] backdrop-blur-xl z-20 flex flex-col transition-transform duration-300 ease-out ${selected ? 'translate-x-0' : 'translate-x-full'}`}>
+        <div className={`absolute top-0 right-0 h-full w-[340px] bg-[rgba(6,7,13,0.97)] border-l border-[rgba(255,255,255,0.09)] backdrop-blur-xl z-20 flex flex-col transition-transform duration-300 ease-out ${selected ? 'translate-x-0' : 'translate-x-full'}`}>
           {selected && (
             <>
               <div className="flex items-center justify-between px-5 py-4 border-b border-[rgba(255,255,255,0.07)]">
@@ -527,14 +366,11 @@ export default function MapPage() {
                 )}
                 <div className="space-y-2">
                   {selected.locationName && (
-                    <div className="flex items-center gap-2 text-[12px] text-wp-text2">
-                      <span>📍</span><span>{selected.locationName}</span>
-                    </div>
+                    <div className="flex items-center gap-2 text-[12px] text-wp-text2"><span>📍</span><span>{selected.locationName}</span></div>
                   )}
                   <div className="flex items-center gap-2 font-mono text-[11px] text-wp-text3">
                     <span>🕐</span><span>{timeAgo(selected.createdAt ?? selected.created_at)}</span>
-                    {selected.status && (<>
-                      <span className="mx-1">·</span>
+                    {selected.status && (<><span className="mx-1">·</span>
                       <span className={`uppercase tracking-wider text-[9px] ${selected.status === 'verified' ? 'text-wp-green' : 'text-wp-amber'}`}>{selected.status}</span>
                     </>)}
                   </div>
@@ -580,7 +416,7 @@ export default function MapPage() {
         </div>
 
         {loading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-[rgba(10,11,20,0.75)] z-30">
+          <div className="absolute inset-0 flex items-center justify-center bg-[rgba(6,7,13,0.7)] z-30">
             <div className="font-mono text-[12px] text-wp-amber animate-pulse">Loading signals…</div>
           </div>
         )}
@@ -588,14 +424,14 @@ export default function MapPage() {
 
       <style>{`
         .wp-map-popup .maplibregl-popup-content {
-          background: rgba(10,11,20,0.97);
+          background: rgba(6,7,13,0.97);
           border: 1px solid rgba(255,255,255,0.1);
           border-radius: 10px;
           padding: 10px 13px;
-          box-shadow: 0 8px 40px rgba(0,0,0,0.6);
-          backdrop-filter: blur(16px);
+          box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+          backdrop-filter: blur(12px);
         }
-        .wp-map-popup .maplibregl-popup-tip { border-top-color: rgba(10,11,20,0.97) !important; }
+        .wp-map-popup .maplibregl-popup-tip { border-top-color: rgba(6,7,13,0.97) !important; }
         .maplibregl-ctrl-attrib { display: none !important; }
       `}</style>
     </div>
