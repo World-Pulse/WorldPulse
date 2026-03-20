@@ -63,6 +63,8 @@ export default function MapPage() {
   const mapRef    = useRef<any>(null)
   const popupRef  = useRef<{ remove: () => void } | null>(null)
 
+  const signalsRef = useRef<MapSignal[]>([])   // always current, readable inside map closures
+
   const [signals,  setSignals]  = useState<MapSignal[]>([])
   const [selected, setSelected] = useState<MapSignal | null>(null)
   const [loading,  setLoading]  = useState(true)
@@ -76,7 +78,11 @@ export default function MapPage() {
       const p = new URLSearchParams({ hours: String(hours), ...(category !== 'all' ? { category } : {}) })
       const res  = await fetch(`${API_URL}/api/v1/signals/map/points?${p}`)
       const data = await res.json() as { success: boolean; data: MapSignal[] }
-      if (data.success && Array.isArray(data.data)) setSignals(data.data.map(norm))
+      if (data.success && Array.isArray(data.data)) {
+        const normalized = data.data.map(norm)
+        signalsRef.current = normalized
+        setSignals(normalized)
+      }
     } catch (e) {
       console.error('[map] fetch error:', e)
     } finally {
@@ -187,6 +193,25 @@ export default function MapPage() {
             'circle-stroke-opacity': 0.35,
           },
         })
+
+        // Seed with any signals already fetched before map loaded
+        if (signalsRef.current.length > 0) {
+          map.getSource('signals').setData({
+            type: 'FeatureCollection',
+            features: signalsRef.current
+              .filter(s => s.lat != null && s.lng != null)
+              .map(s => ({
+                type: 'Feature',
+                geometry: { type: 'Point', coordinates: [Number(s.lng), Number(s.lat)] },
+                properties: {
+                  ...s,
+                  lat: Number(s.lat), lng: Number(s.lng),
+                  color: SEV_COLOR[s.severity] ?? '#8892a4',
+                  originalUrls: JSON.stringify(Array.isArray(s.originalUrls) ? s.originalUrls : []),
+                },
+              })),
+          })
+        }
 
         // Cursors
         const on  = () => { map.getCanvas().style.cursor = 'pointer' }
