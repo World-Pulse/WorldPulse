@@ -94,8 +94,8 @@ services:
   # ─── APPLICATIONS ─────────────────────────────────────────
   api:
     build:
-      context: ./apps/api
-      dockerfile: Dockerfile.dev
+      context: .
+      dockerfile: apps/api/Dockerfile
     container_name: wp_api
     restart: unless-stopped
     depends_on:
@@ -106,7 +106,7 @@ services:
     ports:
       - "3001:3001"
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
       PORT: 3001
       DATABASE_URL: postgresql://wp_user:wp_secret_local@postgres:5432/worldpulse
       REDIS_URL: redis://:wp_redis_local@redis:6379
@@ -114,11 +114,14 @@ services:
       MEILI_HOST: http://meilisearch:7700
       MEILI_KEY: wp_meili_local_key
       JWT_SECRET: wp_jwt_secret_local_change_in_prod
-      CORS_ORIGINS: http://localhost:3000
-    volumes:
-      - ./apps/api:/app
-      - /app/node_modules
-    command: pnpm dev
+      CORS_ORIGINS: https://world-pulse.io
+    networks:
+      default:
+        aliases:
+          - api
+      wp_net:
+        aliases:
+          - api
 
   scraper:
     build:
@@ -162,6 +165,9 @@ services:
       default:
         aliases:
           - web
+      wp_net:
+        aliases:
+          - web
 
   # ─── MONITORING ───────────────────────────────────────────
   prometheus:
@@ -199,3 +205,8 @@ volumes:
   zookeeper_data:
   prometheus_data:
   grafana_data:
+
+networks:
+  wp_net:
+    external: true
+    name: worldpulse_wp_net
