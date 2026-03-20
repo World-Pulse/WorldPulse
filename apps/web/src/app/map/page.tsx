@@ -99,6 +99,7 @@ export default function MapPage() {
     let cancelled = false
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let map: any = null
+    let ro: ResizeObserver | null = null
 
     ;(async () => {
       const ml = await import('maplibre-gl')
@@ -119,8 +120,8 @@ export default function MapPage() {
           layers: [
             { id: 'bg',      type: 'background' as const, paint: { 'background-color': '#06070d' } },
             { id: 'basemap', type: 'raster'     as const, source: 'basemap',
-              paint: { 'raster-opacity': 0.15, 'raster-saturation': -1,
-                'raster-brightness-min': 0.1, 'raster-brightness-max': 0.3 } },
+              paint: { 'raster-opacity': 0.35, 'raster-saturation': -0.9,
+                'raster-brightness-min': 0.05, 'raster-brightness-max': 0.45 } },
           ],
         },
         center: [10, 20],
@@ -132,8 +133,17 @@ export default function MapPage() {
 
       mapRef.current = map
 
+      // Keep canvas sized to container
+      ro = new ResizeObserver(() => { if (mapRef.current) mapRef.current.resize() })
+      if (mapContainer.current) ro.observe(mapContainer.current)
+
+      map.on('error', (e: unknown) => { console.error('[maplibre] error:', e) })
+
       map.on('load', () => {
         if (cancelled) return
+
+        // Force canvas to correct dimensions after DOM layout settles
+        map.resize()
 
         map.addSource('signals', {
           type: 'geojson',
@@ -269,6 +279,7 @@ export default function MapPage() {
 
     return () => {
       cancelled = true
+      if (ro) ro.disconnect()
       if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
       if (mapRef.current) { mapRef.current.remove(); mapRef.current = null }
     }
@@ -346,8 +357,8 @@ export default function MapPage() {
       </div>
 
       {/* Map area */}
-      <div className="flex-1 relative" style={{ overflowX: 'clip' }}>
-        <div ref={mapContainer} className="absolute inset-0" />
+      <div className="flex-1 relative overflow-hidden">
+        <div ref={mapContainer} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
 
         {/* Legend */}
         <div className="absolute bottom-6 left-4 z-10 pointer-events-none">
