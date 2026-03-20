@@ -202,7 +202,7 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
     }
 
     let query = db('signals as s')
-      .where('s.status', 'verified')
+      .whereIn('s.status', ['verified', 'pending'])
       .select([
         's.*',
         db.raw(`

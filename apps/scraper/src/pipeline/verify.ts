@@ -63,9 +63,9 @@ export async function verifySignal(
 
   // Determine status
   let status: SignalStatus
-  if (finalScore >= 0.85) {
+  if (finalScore >= 0.75) {
     status = 'verified'
-  } else if (finalScore >= 0.50) {
+  } else if (finalScore >= 0.30) {
     status = 'pending'
   } else {
     status = 'disputed'
