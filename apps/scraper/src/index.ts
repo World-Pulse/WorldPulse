@@ -28,46 +28,74 @@ const SCRAPE_INTERVAL_MS = Number(process.env.SCRAPE_INTERVAL_MS ?? 30_000)
 const kafka = new Kafka({
   clientId: 'wp-scraper',
   brokers:  (process.env.KAFKA_BROKERS ?? 'localhost:9092').split(','),
-  retry: { retries: 5, initialRetryTime: 300 },
+  retry: { retries: 3, initialRetryTime: 300 },
 })
 
-let producer: Producer
-let verifyConsumer: Consumer
+let producer: Producer | null = null
+let verifyConsumer: Consumer | null = null
+let kafkaReady = false
+
+async function connectKafka(): Promise<boolean> {
+  try {
+    const p = kafka.producer({ allowAutoTopicCreation: true })
+    const c = kafka.consumer({ groupId: 'scraper-verify' })
+    await p.connect()
+    await c.connect()
+
+    const admin = kafka.admin()
+    await admin.connect()
+    await admin.createTopics({
+      topics: [
+        { topic: 'signals.raw',      numPartitions: 4, replicationFactor: 1 },
+        { topic: 'signals.verified', numPartitions: 4, replicationFactor: 1 },
+        { topic: 'signals.trending', numPartitions: 1, replicationFactor: 1 },
+        { topic: 'articles.raw',     numPartitions: 8, replicationFactor: 1 },
+      ],
+    })
+    await admin.disconnect()
+
+    producer = p
+    verifyConsumer = c
+    kafkaReady = true
+    logger.info('✅ Kafka connected')
+    return true
+  } catch (err) {
+    logger.warn({ err }, 'Kafka unavailable — running in direct mode (no Kafka required)')
+    return false
+  }
+}
 
 // ─── BOOTSTRAP ────────────────────────────────────────────────────────────
 async function bootstrap() {
   logger.info('🛰️  WorldPulse Scraper starting...')
 
-  producer = kafka.producer({ allowAutoTopicCreation: true })
-  verifyConsumer = kafka.consumer({ groupId: 'scraper-verify' })
-  
-  await producer.connect()
-  await verifyConsumer.connect()
+  // Try Kafka — non-fatal if unavailable
+  await connectKafka()
 
-  // Create topics if needed
-  const admin = kafka.admin()
-  await admin.connect()
-  await admin.createTopics({
-    topics: [
-      { topic: 'signals.raw',      numPartitions: 4, replicationFactor: 1 },
-      { topic: 'signals.verified', numPartitions: 4, replicationFactor: 1 },
-      { topic: 'signals.trending', numPartitions: 1, replicationFactor: 1 },
-      { topic: 'articles.raw',     numPartitions: 8, replicationFactor: 1 },
-    ],
-  })
-  await admin.disconnect()
+  // If Kafka connected, start async verification consumer
+  if (kafkaReady && verifyConsumer) {
+    await startVerificationConsumer()
+  }
 
-  // Start verification consumer
-  await startVerificationConsumer()
-
-  // Start main scrape loop
+  // Start main scrape loop (works with or without Kafka)
   await scrapeAll()
   setInterval(scrapeAll, SCRAPE_INTERVAL_MS)
 
   // Trending recalculation every 5 min
   setInterval(updateTrending, 5 * 60_000)
 
-  logger.info(`✅ Scraper running — interval: ${SCRAPE_INTERVAL_MS / 1000}s`)
+  // Retry Kafka connection every 60s if not connected
+  if (!kafkaReady) {
+    const kafkaRetry = setInterval(async () => {
+      const ok = await connectKafka()
+      if (ok && verifyConsumer) {
+        await startVerificationConsumer()
+        clearInterval(kafkaRetry)
+      }
+    }, 60_000)
+  }
+
+  logger.info(`✅ Scraper running — interval: ${SCRAPE_INTERVAL_MS / 1000}s — kafka: ${kafkaReady}`)
 }
 
 // ─── MAIN SCRAPE LOOP ─────────────────────────────────────────────────────
@@ -128,23 +156,31 @@ async function scrapeSource(source: ScraperSource) {
 
         if (!article) continue
         
-        // Publish to Kafka for async processing
-        await producer.send({
-          topic: 'articles.raw',
-          messages: [{
-            key:   source.id,
-            value: JSON.stringify({
-              articleId: article.id,
-              sourceId:  source.id,
-              url,
-              title:     item.title,
-              body:      item.contentSnippet ?? item.content,
-              publishedAt: item.pubDate,
-              sourceTier: source.tier,
-              sourceTrust: source.trustScore,
-            }),
-          }],
-        })
+        const articlePayload = {
+          articleId:   article.id,
+          sourceId:    source.id,
+          url,
+          title:       item.title ?? '',
+          body:        item.contentSnippet ?? item.content ?? '',
+          publishedAt: item.pubDate ?? new Date().toISOString(),
+          sourceTier:  source.tier,
+          sourceTrust: source.trustScore,
+        }
+
+        if (kafkaReady && producer) {
+          // Publish to Kafka for async processing
+          await producer.send({
+            topic: 'articles.raw',
+            messages: [{ key: source.id, value: JSON.stringify(articlePayload) }],
+          })
+        } else {
+          // Direct mode — process inline without Kafka
+          const topicHash = computeTopicHash(articlePayload.title)
+          const group = [articlePayload]
+          processArticleGroup(topicHash, group).catch(err =>
+            logger.warn({ err, url }, 'Direct article processing failed')
+          )
+        }
 
         newCount++
       }
@@ -306,18 +342,20 @@ async function processArticleGroup(
     logger.warn({ err, signalId: signal.id }, 'Auto-post creation failed (non-fatal)')
   }
 
-  // Publish to Kafka → WebSocket broadcast
-  await producer.send({
-    topic: 'signals.verified',
-    messages: [{
-      key:   signal.category,
-      value: JSON.stringify({
-        event:   'signal.new',
-        payload: signal,
-        filter:  { category: signal.category, severity: signal.severity },
-      }),
-    }],
-  })
+  // Publish to Kafka → WebSocket broadcast (optional)
+  if (kafkaReady && producer) {
+    await producer.send({
+      topic: 'signals.verified',
+      messages: [{
+        key:   signal.category,
+        value: JSON.stringify({
+          event:   'signal.new',
+          payload: signal,
+          filter:  { category: signal.category, severity: signal.severity },
+        }),
+      }],
+    })
+  }
 
   logger.info({
     signalId: signal.id,
