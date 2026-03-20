@@ -170,6 +170,65 @@ function extractCandidateLocations(text: string): string[] {
   return [...candidates]
 }
 
+// ─── COUNTRY CENTROIDS (capital / geographic center) ─────────────────────────
+const COUNTRY_CENTROIDS: Record<string, { lat: number; lng: number; name: string }> = {
+  US: { lat: 38.9072, lng: -77.0369, name: 'Washington DC' },
+  GB: { lat: 51.5074, lng: -0.1278,  name: 'London' },
+  DE: { lat: 52.5200, lng: 13.4050,  name: 'Berlin' },
+  FR: { lat: 48.8566, lng: 2.3522,   name: 'Paris' },
+  CN: { lat: 39.9042, lng: 116.4074, name: 'Beijing' },
+  RU: { lat: 55.7558, lng: 37.6173,  name: 'Moscow' },
+  JP: { lat: 35.6762, lng: 139.6503, name: 'Tokyo' },
+  IN: { lat: 28.6139, lng: 77.2090,  name: 'New Delhi' },
+  BR: { lat: -15.7975, lng: -47.8919, name: 'Brasília' },
+  CA: { lat: 45.4215, lng: -75.6972, name: 'Ottawa' },
+  AU: { lat: -35.2809, lng: 149.1300, name: 'Canberra' },
+  IL: { lat: 31.7683, lng: 35.2137,  name: 'Jerusalem' },
+  IR: { lat: 35.6892, lng: 51.3890,  name: 'Tehran' },
+  KP: { lat: 39.0392, lng: 125.7625, name: 'Pyongyang' },
+  KR: { lat: 37.5665, lng: 126.9780, name: 'Seoul' },
+  PK: { lat: 33.6844, lng: 73.0479,  name: 'Islamabad' },
+  AF: { lat: 34.5553, lng: 69.2075,  name: 'Kabul' },
+  SY: { lat: 33.5138, lng: 36.2765,  name: 'Damascus' },
+  IQ: { lat: 33.3152, lng: 44.3661,  name: 'Baghdad' },
+  SA: { lat: 24.7136, lng: 46.6753,  name: 'Riyadh' },
+  TR: { lat: 39.9334, lng: 32.8597,  name: 'Ankara' },
+  UA: { lat: 50.4501, lng: 30.5234,  name: 'Kyiv' },
+  MX: { lat: 19.4326, lng: -99.1332, name: 'Mexico City' },
+  AR: { lat: -34.6037, lng: -58.3816, name: 'Buenos Aires' },
+  CO: { lat: 4.7110,  lng: -74.0721, name: 'Bogotá' },
+  NG: { lat: 9.0579,  lng: 7.4951,   name: 'Abuja' },
+  ZA: { lat: -25.7479, lng: 28.2293, name: 'Pretoria' },
+  KE: { lat: -1.2921, lng: 36.8219,  name: 'Nairobi' },
+  ET: { lat: 9.0320,  lng: 38.7469,  name: 'Addis Ababa' },
+  ID: { lat: -6.2088, lng: 106.8456, name: 'Jakarta' },
+  PH: { lat: 14.5995, lng: 120.9842, name: 'Manila' },
+  VN: { lat: 21.0285, lng: 105.8542, name: 'Hanoi' },
+  TH: { lat: 13.7563, lng: 100.5018, name: 'Bangkok' },
+  MY: { lat: 3.1390,  lng: 101.6869, name: 'Kuala Lumpur' },
+  BD: { lat: 23.8103, lng: 90.4125,  name: 'Dhaka' },
+  EG: { lat: 30.0444, lng: 31.2357,  name: 'Cairo' },
+  SD: { lat: 15.5007, lng: 32.5599,  name: 'Khartoum' },
+  LY: { lat: 32.8872, lng: 13.1913,  name: 'Tripoli' },
+  SO: { lat: 2.0469,  lng: 45.3182,  name: 'Mogadishu' },
+  PS: { lat: 31.5017, lng: 34.4668,  name: 'Gaza' },
+  LB: { lat: 33.8938, lng: 35.5018,  name: 'Beirut' },
+  AE: { lat: 25.2048, lng: 55.2708,  name: 'Dubai' },
+  BE: { lat: 50.8503, lng: 4.3517,   name: 'Brussels' },
+  NL: { lat: 52.3676, lng: 4.9041,   name: 'Amsterdam' },
+  IT: { lat: 41.9028, lng: 12.4964,  name: 'Rome' },
+  ES: { lat: 40.4168, lng: -3.7038,  name: 'Madrid' },
+  PL: { lat: 52.2297, lng: 21.0122,  name: 'Warsaw' },
+  SE: { lat: 59.3293, lng: 18.0686,  name: 'Stockholm' },
+  NO: { lat: 59.9139, lng: 10.7522,  name: 'Oslo' },
+  DK: { lat: 55.6761, lng: 12.5683,  name: 'Copenhagen' },
+  FI: { lat: 60.1699, lng: 24.9384,  name: 'Helsinki' },
+  AT: { lat: 48.2082, lng: 16.3738,  name: 'Vienna' },
+  PT: { lat: 38.7223, lng: -9.1393,  name: 'Lisbon' },
+  CZ: { lat: 50.0755, lng: 14.4378,  name: 'Prague' },
+  HU: { lat: 47.4979, lng: 19.0402,  name: 'Budapest' },
+}
+
 // ─── COUNTRY CODE PATTERNS ───────────────────────────────────────────────────
 const COUNTRY_PATTERNS: [RegExp, string][] = [
   [/\bunited states|usa|u\.s\.a?\.?\b/i, 'US'],
@@ -307,10 +366,13 @@ export async function extractGeo(text: string): Promise<GeoResult> {
     }
   }
 
-  // 3. Country code detection from country names
+  // 3. Country code detection → use capital as map point
   for (const [pattern, code] of COUNTRY_PATTERNS) {
     if (pattern.test(text)) {
-      const result: GeoResult = { point: false, countryCode: code }
+      const capital = COUNTRY_CENTROIDS[code]
+      const result: GeoResult = capital
+        ? { point: true, lat: capital.lat, lng: capital.lng, name: capital.name, countryCode: code }
+        : { point: false, countryCode: code }
       await redis.setex(cacheKey, 3600, JSON.stringify(result))
       return result
     }
