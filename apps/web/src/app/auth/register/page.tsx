@@ -38,6 +38,13 @@ export default function RegisterPage() {
       localStorage.setItem('wp_refresh_token', data.data.refreshToken)
       localStorage.setItem('wp_user', JSON.stringify(data.data.user))
 
+      // Manually dispatch storage event so TopNav updates in the same tab
+      // (the native storage event only fires in other tabs, not the current one)
+      window.dispatchEvent(new StorageEvent('storage', {
+        key: 'wp_user',
+        newValue: JSON.stringify(data.data.user),
+      }))
+
       router.push('/')
       router.refresh()
     } catch {

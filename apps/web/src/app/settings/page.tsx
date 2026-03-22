@@ -94,10 +94,14 @@ export default function SettingsPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Update failed')
 
-      // Update stored user
+      // Update stored user and sync TopNav in the same tab
       if (data.data) {
         localStorage.setItem('wp_user', JSON.stringify(data.data))
         setUser(data.data)
+        window.dispatchEvent(new StorageEvent('storage', {
+          key: 'wp_user',
+          newValue: JSON.stringify(data.data),
+        }))
       }
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
@@ -171,30 +175,50 @@ export default function SettingsPage() {
         <h1 className="text-[18px] font-bold text-wp-text">Settings</h1>
       </div>
 
-      <div className="grid grid-cols-[180px_1fr] gap-6">
+      {/* Mobile: horizontal tab bar; desktop: sidebar + panel grid */}
+      <div className="flex flex-col md:grid md:grid-cols-[180px_1fr] gap-4 md:gap-6">
 
-        {/* Sidebar nav */}
-        <div className="space-y-1">
-          {TABS.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all text-left
-                ${tab === t.id
-                  ? 'bg-[rgba(245,166,35,0.1)] text-wp-amber border border-[rgba(245,166,35,0.2)]'
-                  : 'text-wp-text2 hover:bg-[rgba(255,255,255,0.04)] hover:text-wp-text'}`}
-            >
-              <span>{t.icon}</span> {t.label}
-            </button>
-          ))}
+        {/* Tab nav */}
+        <div>
+          {/* Mobile: horizontal scroll */}
+          <div className="flex overflow-x-auto scrollbar-none gap-1 -mx-4 px-4 md:hidden pb-1">
+            {TABS.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium transition-all whitespace-nowrap flex-shrink-0
+                  ${tab === t.id
+                    ? 'bg-[rgba(245,166,35,0.1)] text-wp-amber border border-[rgba(245,166,35,0.2)]'
+                    : 'bg-wp-s2 text-wp-text2 border border-[rgba(255,255,255,0.07)] hover:text-wp-text'}`}
+              >
+                <span aria-hidden="true">{t.icon}</span> {t.label}
+              </button>
+            ))}
+          </div>
 
-          <div className="border-t border-[rgba(255,255,255,0.07)] pt-2 mt-2">
-            <button
-              onClick={logout}
-              className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-[13px] text-wp-red hover:bg-[rgba(255,59,92,0.08)] transition-all text-left"
-            >
-              Sign Out
-            </button>
+          {/* Desktop: vertical nav */}
+          <div className="hidden md:block space-y-1">
+            {TABS.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all text-left
+                  ${tab === t.id
+                    ? 'bg-[rgba(245,166,35,0.1)] text-wp-amber border border-[rgba(245,166,35,0.2)]'
+                    : 'text-wp-text2 hover:bg-[rgba(255,255,255,0.04)] hover:text-wp-text'}`}
+              >
+                <span aria-hidden="true">{t.icon}</span> {t.label}
+              </button>
+            ))}
+
+            <div className="border-t border-[rgba(255,255,255,0.07)] pt-2 mt-2">
+              <button
+                onClick={logout}
+                className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-[13px] text-wp-red hover:bg-[rgba(255,59,92,0.08)] transition-all text-left"
+              >
+                Sign Out
+              </button>
+            </div>
           </div>
         </div>
 
@@ -362,6 +386,16 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
+
+          {/* Mobile sign-out */}
+          <div className="md:hidden border-t border-[rgba(255,255,255,0.07)] pt-4">
+            <button
+              onClick={logout}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-[13px] text-wp-red border border-[rgba(255,59,92,0.2)] hover:bg-[rgba(255,59,92,0.08)] transition-all"
+            >
+              Sign Out
+            </button>
+          </div>
         </div>
       </div>
     </div>
