@@ -16,11 +16,17 @@ import { registerAnalyticsRoutes } from './routes/analytics'
 import { registerCommunityRoutes } from './routes/communities'
 import { registerPollRoutes } from './routes/polls'
 import { registerSourceRoutes } from './routes/sources'
+import { registerAdminRoutes } from './routes/admin'
+import { registerDeveloperRoutes } from './routes/developer'
 import { registerNotificationRoutes } from './routes/notifications'
 import { registerUploadRoutes } from './routes/uploads'
 import { registerWSHandler } from './ws/handler'
 import { metricsPlugin } from './middleware/metrics'
 import { logger } from './lib/logger'
+import { setupSearchIndexes } from './lib/search'
+import { connectSearchProducer, disconnectSearchProducer } from './lib/search-events'
+import { startSearchConsumer, stopSearchConsumer } from './lib/search-consumer'
+import { initClickHouse } from './lib/search-analytics'
 
 const app = Fastify({
   logger: {
@@ -34,8 +40,29 @@ const app = Fastify({
 
 async function bootstrap() {
   // ─── PLUGINS ─────────────────────────────────────────────
+  const isDev = process.env.NODE_ENV !== 'production'
+  const allowedOrigins = isDev
+    ? [
+        'http://localhost:3000',
+        'http://localhost:3001',
+        'http://127.0.0.1:3000',
+        ...(process.env.CORS_ORIGINS ?? '').split(',').filter(Boolean),
+      ]
+    : [
+        'https://worldpulse.io',
+        'https://www.worldpulse.io',
+        ...(process.env.CORS_ORIGINS ?? '').split(',').filter(Boolean),
+      ]
+
   await app.register(cors, {
-    origin: (process.env.CORS_ORIGINS ?? 'http://localhost:3000').split(','),
+    origin: (origin, cb) => {
+      // Allow requests with no origin (server-to-server, curl, etc.)
+      if (!origin || allowedOrigins.includes(origin)) {
+        cb(null, true)
+      } else {
+        cb(new Error(`CORS: origin '${origin}' not allowed`), false)
+      }
+    },
     credentials: true,
   })
 
@@ -89,14 +116,47 @@ async function bootstrap() {
   await app.register(registerSourceRoutes,     { prefix: '/api/v1/sources' })
   await app.register(registerNotificationRoutes, { prefix: '/api/v1/notifications' })
   await app.register(registerUploadRoutes,       { prefix: '/api/v1/uploads' })
+  await app.register(registerAdminRoutes,        { prefix: '/api/v1/admin' })
+  await app.register(registerDeveloperRoutes,    { prefix: '/api/v1/developer/keys' })
 
   // ─── WEBSOCKET ───────────────────────────────────────────
   await app.register(registerWSHandler)
 
+  // ─── SEARCH INDEX SETUP ──────────────────────────────────
+  setupSearchIndexes().catch(err => {
+    logger.warn({ err }, 'Meilisearch index setup failed — search may degrade gracefully')
+  })
+
+  // ─── CLICKHOUSE INIT ─────────────────────────────────────
+  initClickHouse().catch(err => {
+    logger.warn({ err }, 'ClickHouse init failed — search analytics will be silently skipped')
+  })
+
+  // ─── SEARCH KAFKA PRODUCER + CONSUMER ────────────────────
+  // Both are non-fatal — routes fall back to direct Meilisearch calls.
+  connectSearchProducer().catch(err => {
+    logger.warn({ err }, 'Search producer failed to connect')
+  })
+  startSearchConsumer().catch(err => {
+    logger.warn({ err }, 'Search consumer failed to start')
+  })
+
+  // ─── GRACEFUL SHUTDOWN ────────────────────────────────────
+  const shutdown = async () => {
+    await Promise.allSettled([
+      stopSearchConsumer(),
+      disconnectSearchProducer(),
+      app.close(),
+    ])
+    process.exit(0)
+  }
+  process.once('SIGTERM', shutdown)
+  process.once('SIGINT',  shutdown)
+
   // ─── START ───────────────────────────────────────────────
   const port = Number(process.env.PORT ?? 3001)
   await app.listen({ port, host: '0.0.0.0' })
-  logger.info(`🌍 WorldPulse API running on port ${port}`)
+  logger.info(`WorldPulse API running on port ${port}`)
 }
 
 bootstrap().catch((err) => {
