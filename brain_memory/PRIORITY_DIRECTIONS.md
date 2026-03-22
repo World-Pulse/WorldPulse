@@ -1,108 +1,223 @@
 # WorldPulse Brain Agent — Priority Direction Brief
-Last updated: 2026-03-22
+Last updated: 2026-03-22 (full codebase audit)
 
-## ⚠️ CRITICAL: Git Commit Discipline
-The brain agent must ALWAYS commit AND push every file it creates or modifies.
-Files that are never committed cannot be deployed. Before running any task:
-1. Run `git status` to find untracked/modified files
-2. After creating files, ALWAYS run `git add <files> && git commit && git push`
-3. Never leave untracked files — they are invisible to production
+---
 
-## 🔴 P0 — Currently Broken on Production (Fix Immediately)
+## ⚠️ RULE #1: Always Commit After Creating Files
+Before ANY task, run `git status`. After creating or editing files, ALWAYS:
+```
+git add <files>
+git commit -m "description"
+git push
+```
+Never leave untracked files. They don't exist in production.
 
-### P0-1: Map Shows 0 Signals
-**Root cause:** Signals in DB have NULL location geometry — the scraper stores signals but doesn't geocode them.
-**Fix needed:**
-- Add a geocoding step in the scraper pipeline: when a signal has a `location_name` or `country_code`, call a geocoding API (Nominatim/OpenStreetMap is free) to get lat/lng and store as PostGIS POINT
-- Add a backfill script `apps/api/src/scripts/geocode-signals.ts` that geocodes all existing signals with non-null `location_name`
-- The map API endpoint at `/api/v1/signals/map/points` already works correctly — it just needs data with `location IS NOT NULL`
-- Run the backfill script after deploying
+---
 
-### P0-2: "14 New Signals" Notification is Hardcoded
-**Root cause:** `apps/web/src/app/page.tsx` line 33 has `useState(14)` — FIXED, now `useState(0)`
-**Also needed:** Wire the WebSocket `signal.new` / `post.new` events to increment newCount. The `useFeed` hook in `apps/web/src/hooks/useFeed.ts` already handles this but isn't used in page.tsx. Import and use `useFeed` hook in the main page instead of manual state.
+## 🔴 P0 — Broken on Production Right Now
 
-### P0-3: Commit All Untracked Files
-The following critical files exist locally but are NOT in git and therefore NOT deployed:
-- `apps/web/src/app/users/` (entire directory — user profile pages — shows 404 on production)
-- `apps/web/src/app/signals/` (signal detail pages)
-- `apps/web/src/app/onboarding/` (onboarding flow)
-- `apps/web/src/components/EmptyState.tsx`
-- `apps/web/src/components/ReputationChart.tsx`
-- `apps/web/src/components/nav/BottomTabBar.tsx`
-- `apps/web/src/components/signals/` (entire directory)
-- `apps/web/src/lib/` (entire directory)
-- `apps/api/src/routes/admin.ts` (admin panel API)
-- `apps/api/src/scripts/` (utility scripts)
-- `apps/scraper/src/health.ts`
-- `apps/scraper/src/lib/circuit-breaker.ts`
-- `apps/scraper/src/lib/dlq.ts`
-- `apps/scraper/src/lib/rate-limiter.ts`
-- `apps/scraper/src/lib/retry.ts`
-**Action:** `git add` all of the above, commit, push immediately.
+### P0-1: Wire the Scraper Geo Pipeline (30 min)
+The geo pipeline is FULLY BUILT at `apps/scraper/src/pipeline/geo.ts` with 140+ gazetteer entries and Nominatim integration — but it is NEVER CALLED.
 
-## 🟠 P1 — Major UX Issues
+**Fix:** In `apps/scraper/src/index.ts`, find the `processArticleGroup()` or equivalent pipeline function. After `classifyContent()`, call `extractGeo()` from `./pipeline/geo`. This single change will start populating `signals.location` geometry, which fixes the map.
 
-### P1-1: Posts Are Not Clickable
-`apps/web/src/components/feed/FeedList.tsx` renders signal/post cards but they have no `<Link>` to a detail page.
+Also create `apps/api/src/scripts/geocode-signals.ts` — a one-time backfill script that geocodes all existing signals in the DB that have `location_name IS NOT NULL` but `location IS NULL`. Uses Nominatim at 1 req/sec.
+
+### P0-2: Feed Items Are Not Clickable
+`apps/web/src/components/feed/FeedList.tsx` renders cards with no navigation. Users cannot click into anything.
+
 **Fix:**
-- Wrap signal cards in `<Link href={'/signals/' + item.id}>` (the signals/[id] page exists locally but untracked)
-- Wrap post cards in `<Link href={'/posts/' + item.id}>` and CREATE `apps/web/src/app/posts/[id]/page.tsx`
-- The post detail page should show: full content, author, signal it's attached to, replies, source URL if available
+- Wrap signal card elements in `<Link href={'/signals/' + item.id}>`
+- Wrap post cards in `<Link href={'/posts/' + item.id}>`
+- Fix `apps/web/src/app/explore/page.tsx` line ~141: change `router.push('/c/' + sig.category)` to `router.push('/signals/' + sig.id)`
+- Create `apps/web/src/app/posts/[id]/page.tsx` — post detail page showing content, author, signal context, replies, source URL
 
-### P1-2: Source Link on Posts
-When viewing a signal or post that originated from a scraped source, users should see a "View source" link that opens the original article. The `source_url` field exists on the signals table. Add it to the API response for `/api/v1/signals/:id` and display it prominently on the signal detail page.
+### P0-3: Settings Page Is Missing
+The nav links to `/settings` but there is NO page.tsx there. Users who click it get a 404.
 
-### P1-3: Live Feed WebSocket Connection
-The live feed should show truly real-time new signals via WebSocket. Current implementation in `useFeed.ts` exists but may not be connected to the main page. Verify and connect the WebSocket subscription so "X new signals" accurately reflects real-time arrivals.
+**Fix:** Create `apps/web/src/app/settings/page.tsx` with:
+- Profile editing (displayName, bio, location, website) — calls `PUT /api/v1/users/me`
+- Theme toggle (dark/light) — persist in localStorage
+- Notification preferences (copy pattern from /alerts page)
+- Account type display + verification status
+- Danger zone: delete account
+
+---
+
+## 🟠 P1 — Major UX Gaps
+
+### P1-1: Demo Data Leaking Into Production Pages
+Three pages show hardcoded sample data instead of real API data:
+- `apps/web/src/app/analytics/page.tsx` — DEMO_DATA constant (lines ~39-57)
+- `apps/web/src/app/sources/page.tsx` — DEMO_SOURCES array (lines ~39-47)
+- `apps/web/src/app/communities/page.tsx` — DEMO_COMMUNITIES array (lines ~43-51)
+
+**Fix each page:**
+1. Remove the hardcoded DEMO_* constants
+2. Add `useState` for data + loading + error
+3. Fetch from real API endpoints in `useEffect`:
+   - Analytics: `GET /api/v1/feed/trending` for trending data, user post/signal counts from profile
+   - Sources: `GET /api/v1/sources`
+   - Communities: `GET /api/v1/communities`
+4. Show loading skeletons while fetching
+5. Show empty state if no data
+
+### P1-2: Search Page Not Wired
+`apps/web/src/app/search/page.tsx` exists but doesn't call the search API.
+The API endpoint `GET /api/v1/search?q=&type=all|signals|posts|users` is FULLY IMPLEMENTED.
+
+**Fix:**
+- Wire search input to `GET /api/v1/search?q={query}&type={tab}`
+- Show results in tabs: Signals | Posts | Users
+- Add debounce 150ms
+- Show result count per tab
+- Add category filter chips + reliability range slider
+- Show "No results for X" empty state with suggestions
+
+### P1-3: Admin Dashboard Frontend Missing
+`apps/api/src/routes/admin.ts` provides scraper health data but there's no frontend.
+
+**Fix:** Create `apps/web/src/app/admin/page.tsx` (guard with `if (user.accountType !== 'admin') redirect('/')`)
+- Source health grid: shows each scraper source with status (healthy/degraded/dead), last seen, success rate, latency
+- Signal statistics: total signals, verified/pending/disputed breakdown, signals per hour chart
+- User management table: search users, change account_type, suspend/unsuspend
+- System stats: uptime, Redis memory, DB size
+
+### P1-4: Map Real-Time Updates
+Map currently has no polling or WebSocket. Data is stale on load.
+
+**Fix:**
+- Subscribe to `signal.new` WebSocket event
+- Add new signal pin immediately with 3-second pulse animation
+- Fallback: poll `GET /api/v1/signals/map/points` every 30 seconds
+- Add filter bar: category chips (Conflict / Climate / Health / Markets / Science), time range (1h / 6h / 24h / 7d)
+- Store zoom/pan in URL params so links share map position
+
+### P1-5: Communities Grid Broken on Mobile
+`apps/web/src/app/communities/page.tsx` uses `grid-cols-4` — breaks on small screens.
+**Fix:** Change to `grid-cols-2 sm:grid-cols-3 lg:grid-cols-4`
+
+### P1-6: Post Replies API Missing
+`GET /api/v1/posts/:id/replies` doesn't exist.
+**Fix:** Add to `apps/api/src/routes/posts.ts`:
+```typescript
+app.get('/:id/replies', { preHandler: [optionalAuth] }, async (req, reply) => {
+  // paginated replies to a post, cursor-based
+})
+```
+
+### P1-7: Map Not Mobile Friendly
+`apps/web/src/app/map/page.tsx` has no responsive layout. On mobile the sidebar overlaps the map.
+**Fix:**
+- Default to full-screen map on mobile
+- Signal details open as slide-up bottom sheet (`fixed bottom-0 w-full`)
+- Filter bar collapses to icon buttons on mobile
+
+---
 
 ## 🟡 P2 — High-Value Improvements
 
-### P2-1: Signal Geocoding Pipeline
-Add automatic geocoding to the scraper:
-- When a signal is created with `location_name`, call Nominatim: `https://nominatim.openstreetmap.org/search?q={location_name}&format=json&limit=1`
-- Store result as PostGIS POINT: `ST_SetSRID(ST_MakePoint({lng}, {lat}), 4326)`
-- Rate limit to 1 req/sec (Nominatim ToS)
-- Cache geocoded results in Redis with TTL 7 days to avoid duplicate calls
+### P2-1: Reliability Score Explainer Tooltip
+When users hover over reliability dots (●●●●○), show a tooltip:
+"73% — 4 sources verified · AI cross-check: confirmed · Community flags: 0"
+This is a key differentiator vs NewsGuard (opaque scoring).
+**File:** `apps/web/src/components/signals/ReliabilityDots.tsx` — add Tooltip wrapper.
 
-### P2-2: Post Detail Page
-Create `apps/web/src/app/posts/[id]/page.tsx` with:
-- Post content, author profile link, timestamp
-- Signal context panel (if post is linked to a signal)
-- Replies thread
-- Source link if available
-- Like/boost/reply actions
+### P2-2: Signal Source Chain on Detail Page
+`apps/web/src/app/signals/[id]` should prominently show:
+- All sources that reported this signal with their trust scores
+- Original article URL (source_url field)
+- "View original source →" link button
+The `source_ids` array is on the signals table. Join with sources table to get names + urls.
 
-### P2-3: Admin Dashboard
-The admin route `apps/api/src/routes/admin.ts` exists but needs a frontend at `/admin`.
-Build `apps/web/src/app/admin/page.tsx` showing:
-- Scraper health (sources: healthy/degraded/dead)
-- Recent signals with verification status
-- User management (change account_type, suspend/unsuspend)
-- System stats (signal count, user count, uptime)
+### P2-3: Scraper Process Health Monitor
+If the scraper container crashes, nothing alerts anyone.
+**Fix in `apps/scraper/src/index.ts`:**
+- Add `process.on('uncaughtException', ...)` handler that writes error to Redis
+- Add `process.on('unhandledRejection', ...)` similarly
+- Write a heartbeat to Redis every 60s: `redis.setex('scraper:alive', 90, Date.now())`
+- API can check this key in the health endpoint
 
-### P2-4: Feed Quality — Dedup & Clustering
-The feed currently shows individual scraped articles. Improve by:
-- Grouping related signals (same event, different sources) into a single clustered feed card showing source count
-- Add "X sources covering this story" to signal cards
-- This is the core "cross-source verification" differentiator vs competitors
+### P2-4: Verification Log Population
+`verification_log` table exists in DB but nothing writes to it.
+**Fix:** In `apps/scraper/src/pipeline/verify.ts`, after computing reliability_score, insert a row:
+```sql
+INSERT INTO verification_log (signal_id, verifier_type, verdict, score_delta, notes)
+VALUES ($1, 'ai', $2, $3, $4)
+```
+This gives users an audit trail of how scores were calculated.
 
-## 🟢 P3 — Competitive Differentiators to Build
+### P2-5: Input Validation on Query Params
+`GET /api/v1/signals/map/points?bbox=minLng,minLat,maxLng,maxLat` — bbox not validated.
+Add Zod parse for all GET query params across routes. A malformed bbox string will throw an unhandled exception.
 
-### P3-1: AI Reliability Score Explainer
-When users hover over reliability dots (●●●●○), show a tooltip explaining: "X sources verified · AI cross-check: confirmed · Community flags: 0". This makes WorldPulse's scoring transparent and trustworthy — a key differentiator vs competitors like NewsGuard.
+### P2-6: Public API Endpoint
+Add `GET /api/v1/public/signals` — no auth required, rate limited to 60 req/min per IP.
+Returns last 50 verified signals with id, title, category, severity, reliability_score, location_name, published_at.
+This is a core open-source differentiator. Add documentation in `/docs/api.md`.
 
-### P3-2: Public API
-Add `GET /api/v1/public/signals` (no auth, rate-limited) with documentation. WorldPulse being open-source AND having a public API is a strong competitive differentiator vs Reuters Connect (expensive) and AP Wire (paywalled).
+### P2-7: GDELT Integration
+GDELT publishes a free TSV feed every 15 minutes with 500K+ events/day at:
+`http://data.gdeltproject.org/gdeltv2/lastupdate.txt`
+Add a GDELT source adapter to the scraper that ingests this feed. Tag signals with `source: 'gdelt'`.
+This immediately gives WorldPulse massive data coverage vs competitors.
 
-### P3-3: Email Notifications
-When a signal user follows reaches a new severity level, send an email alert. Use the existing infrastructure.
+---
 
-## 📋 Deployment Reminder
-After every code change:
-1. `git add <changed files>`
-2. `git commit -m "description"`
-3. `git push`
-4. On server: `cd /opt/worldpulse && git pull && ./deploy.sh`
+## 🟢 P3 — Polish & Competitive Differentiators
 
-The server is at 142.93.71.102. Deploy script handles build + health checks automatically.
+### P3-1: Loading Skeletons Everywhere
+Replace all loading spinners with content-shaped skeleton screens.
+Key places: feed cards, signal detail, profile page, search results, map sidebar panel.
+Use a simple `SkeletonCard` component with Tailwind `animate-pulse`.
+
+### P3-2: Bottom Tab Bar for Mobile
+`apps/web/src/components/nav/BottomTabBar.tsx` was created by brain agent but never used.
+Import it in the root layout and show it on screens below `lg` breakpoint:
+```tsx
+<div className="lg:hidden fixed bottom-0 inset-x-0"><BottomTabBar /></div>
+```
+Tabs: Feed | Map | Search | Alerts | Profile
+
+### P3-3: Email Notifications on Alert Triggers
+When a signal matches a user's `alert_subscriptions` criteria (category + country + severity), send an email.
+Use `nodemailer` with SMTP or a transactional service. Queue via Redis list `notifications:email`.
+Schema for delivery already exists in `alert_subscriptions` table.
+
+### P3-4: Dark/Light Mode Toggle
+`ThemeContext` and `useTheme` already exist in `apps/web/src/components/providers.tsx`.
+Add theme toggle button to TopNav (☀ / ☾). It's wired in TopNav.tsx already — just needs the
+`document.documentElement.classList.toggle('dark')` persistence via localStorage.
+
+### P3-5: Standardize API Error Format
+Some routes return `{ success: false, error: string }`.
+Others return `{ success: false, code: string, error: string }`.
+Pick one format and apply globally. Suggested: `{ success: false, error: string, code: string }`.
+Add a shared `sendError(reply, status, code, message)` helper in `apps/api/src/lib/errors.ts`.
+
+---
+
+## 📊 Current Production Health (2026-03-22)
+- world-pulse.io → HTTP 200 ✅
+- api.world-pulse.io/health → ok ✅
+- 2,850+ active signals in DB ✅
+- Live feed streaming via WebSocket ✅
+- Map shows 0 signals ❌ (geo pipeline not wired)
+- User profiles work ✅ (just deployed)
+- Signal detail pages work ✅ (just deployed)
+- Admin accounts: devongamba, admin@worldpulse.io ✅
+
+## 🏆 Competitive Score vs Ground News (Most Direct Competitor)
+| Feature | WorldPulse | Ground News |
+|---|---|---|
+| Real-time signals | ✅ | ❌ |
+| Open source | ✅ | ❌ |
+| Self-hostable | ✅ | ❌ |
+| Reliability scoring | ✅ (opaque) | ✅ (bias meter) |
+| Interactive map | ⚠️ (no data) | ❌ |
+| Mobile app | ❌ | ✅ |
+| Community layer | ⚠️ (partial) | ❌ |
+| Source count | ~7 live | 50,000+ |
+| Public API | ❌ | ❌ |
+
+**Priority to close gap:** GDELT integration (P2-7) would instantly give WorldPulse 500K+ daily events vs Ground News's processed feed.
