@@ -5,6 +5,11 @@ import type { Post, PollData } from '@worldpulse/types'
 import { PollDisplay } from './PollDisplay'
 import { RichMediaEmbed, extractFirstEmbedUrl } from '@/components/RichMediaEmbed'
 import { ImageGallery } from '@/components/ImageGallery'
+import { EmptyState } from '@/components/EmptyState'
+import { useToast } from '@/components/Toast'
+import { ReliabilityDots } from '@/components/signals/ReliabilityDots'
+import { FlagModal } from '@/components/signals/FlagModal'
+import type { CrossCheckStatus } from '@worldpulse/types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -16,6 +21,7 @@ interface FeedItem {
   sourceBadge?: string
   author: { initials: string; name: string; handle: string; verified?: boolean; color: string; badge?: string }
   breaking?: boolean
+  contested?: boolean
   event?: {
     category: string
     location: string
@@ -37,7 +43,12 @@ interface FeedItem {
   boosts: number
   replies: number
   time: string
+  // Raw 0-1 score for ReliabilityDots
   reliability: number | null
+  // Tooltip metadata (signals only)
+  sourceCount?: number
+  crossCheckStatus?: CrossCheckStatus
+  communityFlagCount?: number
 }
 
 // ─── DATA ADAPTERS ───────────────────────────────────────────────────────────
@@ -79,12 +90,20 @@ const SOURCE_SLUG_TO_BADGE: Record<string, string> = {
   'usgs-quakes': 'usgs',
 }
 
+function crossCheckFromStatus(status: string): CrossCheckStatus {
+  if (status === 'verified') return 'confirmed'
+  if (status === 'disputed') return 'contested'
+  return 'unconfirmed'
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function adaptSignal(sig: any): FeedItem {
   const impactColor = CATEGORY_COLORS[sig.severity] ?? CATEGORY_COLORS[sig.category] ?? '#f5a623'
-  const impact = Math.round((sig.reliabilityScore ?? 0.5) * 100)
+  const impact      = Math.round((sig.reliabilityScore ?? 0.5) * 100)
   const sourceSlugs: string[] = (sig.sources ?? []).map((s: { slug?: string }) => SOURCE_SLUG_TO_BADGE[s.slug ?? ''] ?? s.slug ?? 'wp')
-  const badgeSlugs = sourceSlugs.slice(0, 4)
+  const badgeSlugs  = sourceSlugs.slice(0, 4)
+  const ageMs       = sig.createdAt ? Date.now() - new Date(sig.createdAt as string).getTime() : Infinity
+  const flagCount   = (sig.communityFlagCount ?? 0) as number
 
   return {
     id:       sig.id,
@@ -98,7 +117,8 @@ function adaptSignal(sig: any): FeedItem {
       verified: true,
       color:    'from-red-700 to-red-900',
     },
-    breaking: sig.severity === 'critical',
+    breaking:  sig.isBreaking === true && ageMs < 30 * 60_000,
+    contested: sig.status === 'disputed' || flagCount >= 3,
     event: {
       category: [sig.category?.toUpperCase(), sig.locationName ? sig.locationName.split(',').pop()?.trim() : null]
         .filter(Boolean).join(' · '),
@@ -109,13 +129,16 @@ function adaptSignal(sig: any): FeedItem {
       impact,
       impactColor,
     },
-    tags:       sig.tags ?? [],
-    tagTypes:   (sig.tags ?? []).map(() => sig.category ?? 'breaking'),
-    likes:      sig.viewCount  ?? 0,
-    boosts:     sig.shareCount ?? 0,
-    replies:    sig.postCount  ?? 0,
-    time:       sig.createdAt ? timeAgo(sig.createdAt) : '?',
-    reliability: sig.reliabilityScore != null ? Math.min(5, sig.reliabilityScore * 5) : null,
+    tags:              sig.tags ?? [],
+    tagTypes:          (sig.tags ?? []).map(() => sig.category ?? 'breaking'),
+    likes:             sig.viewCount  ?? 0,
+    boosts:            sig.shareCount ?? 0,
+    replies:           sig.postCount  ?? 0,
+    time:              sig.createdAt ? timeAgo(sig.createdAt) : '?',
+    reliability:       sig.reliabilityScore ?? null,
+    sourceCount:       sig.sourceCount,
+    crossCheckStatus:  sig.status ? crossCheckFromStatus(sig.status) : undefined,
+    communityFlagCount: flagCount,
   }
 }
 
@@ -141,7 +164,7 @@ function adaptPost(post: Post): FeedItem {
     boosts:   post.boostCount ?? 0,
     replies:  post.replyCount ?? 0,
     time:     timeAgo(post.createdAt),
-    reliability: post.reliabilityScore != null ? Math.min(5, post.reliabilityScore * 5) : null,
+    reliability: post.reliabilityScore ?? null,
   }
 
   if (post.signal) {
@@ -193,22 +216,6 @@ function formatCount(n: number): string {
     : String(n)
 }
 
-function ReliabilityDots({ score }: { score: number | null }) {
-  if (score == null) return null
-  const filled  = Math.floor(score)
-  const partial = score % 1 >= 0.5 ? 1 : 0
-  const empty   = 5 - filled - partial
-  return (
-    <div className="ml-auto flex items-center gap-1 text-wp-text3 font-mono text-[10px]">
-      <span>Reliability</span>
-      <div className="flex gap-[2px]">
-        {Array(filled).fill(0).map((_,i)  => <div key={`f${i}`} className="w-[5px] h-[5px] rounded-full bg-wp-green" />)}
-        {Array(partial).fill(0).map((_,i) => <div key={`p${i}`} className="w-[5px] h-[5px] rounded-full bg-wp-amber" />)}
-        {Array(empty).fill(0).map((_,i)   => <div key={`e${i}`} className="w-[5px] h-[5px] rounded-full bg-wp-s3" />)}
-      </div>
-    </div>
-  )
-}
 
 function TagPills({ tags, types }: { tags: string[]; types?: string[] }) {
   return (
@@ -221,12 +228,31 @@ function TagPills({ tags, types }: { tags: string[]; types?: string[] }) {
 }
 
 function ActionBar({ item }: { item: FeedItem }) {
-  const [liked, setLiked] = useState(false)
-  const [likes, setLikes] = useState(item.likes)
+  const [liked,         setLiked]         = useState(false)
+  const [boosted,       setBoosted]       = useState(false)
+  const [bookmarked,    setBookmarked]    = useState(false)
+  const [flagModalOpen, setFlagModalOpen] = useState(false)
+  const [likes,  setLikes]  = useState(item.likes)
+  const [boosts, setBoosts] = useState(item.boosts)
+  const { toast } = useToast()
 
   const toggleLike = () => {
-    setLiked(l => !l)
-    setLikes(n => liked ? n - 1 : n + 1)
+    const next = !liked
+    setLiked(next)
+    setLikes(n => next ? n + 1 : n - 1)
+  }
+
+  const toggleBoost = () => {
+    const next = !boosted
+    setBoosted(next)
+    setBoosts(n => next ? n + 1 : n - 1)
+    if (next) toast('Signal boosted — reaching more people', 'success')
+  }
+
+  const toggleBookmark = () => {
+    const next = !bookmarked
+    setBookmarked(next)
+    toast(next ? 'Signal bookmarked — saved to your collection' : 'Bookmark removed', next ? 'success' : 'info')
   }
 
   return (
@@ -238,11 +264,13 @@ function ActionBar({ item }: { item: FeedItem }) {
         <span aria-hidden="true">💬</span> {formatCount(item.replies)}
       </button>
       <button
-        className="flex items-center gap-[5px] px-3 py-[6px] rounded-full text-[12px] text-wp-text3 hover:text-wp-amber hover:bg-[rgba(245,166,35,0.1)] transition-all"
-        aria-label={`Boost — ${formatCount(item.boosts)} boosts`}
-        aria-pressed={false}
+        onClick={toggleBoost}
+        aria-label={`Boost — ${formatCount(boosts)} boosts`}
+        aria-pressed={boosted}
+        className={`flex items-center gap-[5px] px-3 py-[6px] rounded-full text-[12px] transition-all
+          ${boosted ? 'text-wp-green' : 'text-wp-text3 hover:text-wp-green hover:bg-[rgba(0,230,118,0.1)]'}`}
       >
-        <span aria-hidden="true">🔁</span> {formatCount(item.boosts)}
+        <span aria-hidden="true">🔁</span> {formatCount(boosts)}
       </button>
       <button
         onClick={toggleLike}
@@ -254,12 +282,46 @@ function ActionBar({ item }: { item: FeedItem }) {
         <span aria-hidden="true">❤️</span> {formatCount(likes)}
       </button>
       <button
+        onClick={toggleBookmark}
+        aria-label={bookmarked ? 'Remove bookmark' : 'Bookmark signal'}
+        aria-pressed={bookmarked}
+        className={`flex items-center gap-[5px] px-3 py-[6px] rounded-full text-[12px] transition-all
+          ${bookmarked ? 'text-wp-amber' : 'text-wp-text3 hover:text-wp-amber hover:bg-[rgba(245,166,35,0.1)]'}`}
+      >
+        <span aria-hidden="true">{bookmarked ? '🔖' : '🔖'}</span>
+      </button>
+      <button
         className="flex items-center gap-[5px] px-3 py-[6px] rounded-full text-[12px] text-wp-text3 hover:text-wp-amber hover:bg-[rgba(245,166,35,0.1)] transition-all"
         aria-label="Share post"
       >
         <span aria-hidden="true">📤</span>
       </button>
-      <ReliabilityDots score={item.reliability} />
+      {item.type === 'signal' && (
+        <button
+          onClick={() => setFlagModalOpen(true)}
+          className="flex items-center gap-[5px] px-3 py-[6px] rounded-full text-[12px] text-wp-text3 hover:text-wp-red hover:bg-[rgba(255,59,92,0.08)] transition-all"
+          aria-label="Flag signal"
+          title="Flag this signal"
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>
+          </svg>
+        </button>
+      )}
+      {item.reliability != null && (
+        <div className="ml-auto">
+          <ReliabilityDots
+            score={item.reliability}
+            label
+            sourceCount={item.sourceCount}
+            crossCheckStatus={item.crossCheckStatus}
+            communityFlagCount={item.communityFlagCount}
+          />
+        </div>
+      )}
+      {flagModalOpen && (
+        <FlagModal signalId={item.id} onClose={() => setFlagModalOpen(false)} />
+      )}
     </div>
   )
 }
@@ -267,13 +329,31 @@ function ActionBar({ item }: { item: FeedItem }) {
 function FeedSkeleton() {
   return (
     <div>
-      {[1,2,3,4,5].map(i => (
+      {[1, 2, 3, 4, 5].map(i => (
         <div key={i} className="flex gap-3 px-5 py-4 border-b border-[rgba(255,255,255,0.05)]">
+          {/* Avatar */}
           <div className="w-[42px] h-[42px] rounded-full shimmer flex-shrink-0" />
-          <div className="flex-1 space-y-2">
-            <div className="h-3 w-32 rounded shimmer" />
-            <div className="h-20 rounded-[10px] shimmer" />
-            <div className="h-3 w-48 rounded shimmer" />
+          <div className="flex-1 space-y-2 min-w-0">
+            {/* Name + handle row */}
+            <div className="flex items-center gap-2">
+              <div className="h-[13px] w-28 rounded shimmer" />
+              <div className="h-[10px] w-16 rounded shimmer" />
+              <div className="h-[10px] w-10 rounded shimmer ml-auto" />
+            </div>
+            {/* Signal card */}
+            <div className="rounded-[10px] shimmer h-[90px]" />
+            {/* Tags */}
+            <div className="flex gap-2">
+              <div className="h-[18px] w-16 rounded-full shimmer" />
+              <div className="h-[18px] w-20 rounded-full shimmer" />
+              <div className="h-[18px] w-14 rounded-full shimmer" />
+            </div>
+            {/* Action bar */}
+            <div className="flex gap-2 mt-1">
+              <div className="h-[28px] w-14 rounded-full shimmer" />
+              <div className="h-[28px] w-14 rounded-full shimmer" />
+              <div className="h-[28px] w-14 rounded-full shimmer" />
+            </div>
           </div>
         </div>
       ))}
@@ -281,19 +361,24 @@ function FeedSkeleton() {
   )
 }
 
-function EmptyState({ tab }: { tab: string }) {
+function FeedEmptyState({ tab }: { tab: string }) {
+  if (tab === 'following') {
+    return (
+      <EmptyState
+        icon="👥"
+        headline="Your following feed is empty"
+        message="Follow people and sources to see their signals and posts here."
+        cta={{ label: 'Explore people to follow', href: '/explore' }}
+      />
+    )
+  }
   return (
-    <div className="flex flex-col items-center justify-center py-20 text-center px-6">
-      <div className="text-[48px] mb-4">📡</div>
-      <div className="text-[16px] font-semibold text-wp-text mb-2">
-        {tab === 'following' ? 'Your following feed is empty' : 'No signals yet'}
-      </div>
-      <div className="text-[13px] text-wp-text3 max-w-xs">
-        {tab === 'following'
-          ? 'Follow other users to see their posts here'
-          : 'The scraper is collecting and verifying signals. Check back shortly.'}
-      </div>
-    </div>
+    <EmptyState
+      icon="📡"
+      headline="No signals yet"
+      message="The scraper is collecting and verifying intelligence signals. Check back shortly."
+      cta={{ label: 'Refresh feed', href: '/' }}
+    />
   )
 }
 
@@ -368,7 +453,7 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
   }
 
   if (loading) return <FeedSkeleton />
-  if (items.length === 0) return <EmptyState tab={tab} />
+  if (items.length === 0) return <FeedEmptyState tab={tab} />
 
   return (
     <div>
@@ -410,6 +495,9 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
               )}
               {item.breaking && (
                 <span className="source-badge bg-wp-red text-white animate-flash-tag">BREAKING</span>
+              )}
+              {item.contested && (
+                <span className="source-badge bg-[rgba(245,166,35,0.15)] text-wp-amber border border-[rgba(245,166,35,0.4)]">CONTESTED</span>
               )}
               <span className="ml-auto font-mono text-[12px] text-wp-text3 flex-shrink-0">{item.time} ago</span>
             </div>
