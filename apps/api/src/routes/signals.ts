@@ -4,12 +4,32 @@ import { redis } from '../db/redis'
 import { optionalAuth, authenticate } from '../middleware/auth'
 import { indexSignal, removeSignal } from '../lib/search'
 import { publishSignalUpsert, publishSignalDelete } from '../lib/search-events'
+import { generateSignalSummary, refreshSignalSummary } from '../lib/signal-summary'
+import { slopDetector } from '../lib/slop-detector'
 import { z } from 'zod'
 
 // ─── Cache TTLs ───────────────────────────────────────────────────────────────
-const MAP_CACHE_TTL    = 30  // seconds — map points refresh every 30s
+const MAP_CACHE_TTL    = 45  // seconds — map points (expensive PostGIS queries)
 const DETAIL_CACHE_TTL = 60  // seconds — signal detail (view count incremented async)
-const LIST_CACHE_TTL   = 20  // seconds — paginated list for unauthenticated users
+const LIST_CACHE_TTL   = 30  // seconds — paginated list for unauthenticated users
+
+/**
+ * Delete all Redis keys matching a glob pattern using SCAN so we never block
+ * the Redis event loop (unlike KEYS which is O(N) and single-threaded).
+ */
+async function flushCachePattern(pattern: string): Promise<void> {
+  let cursor = '0'
+  const toDelete: string[] = []
+  do {
+    const [next, keys] = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', 100)
+    cursor = next
+    toDelete.push(...keys)
+  } while (cursor !== '0')
+  if (toDelete.length > 0) {
+    // UNLINK is async on the server side — non-blocking unlike DEL
+    await redis.unlink(...toDelete)
+  }
+}
 
 const UpdateSignalSchema = z.object({
   status:            z.enum(['pending', 'verified', 'disputed', 'false', 'retracted']).optional(),
@@ -29,8 +49,30 @@ const FlagSignalSchema = z.object({
 
 export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
 
+  // Auto-tag all routes in this plugin
+  app.addHook('onRoute', (routeOptions) => {
+    routeOptions.schema ??= {}
+    routeOptions.schema.tags = routeOptions.schema.tags ?? ['signals']
+  })
+
   // ─── LIST SIGNALS ────────────────────────────────────────
   app.get('/', {
+    schema: {
+      tags: ['signals'],
+      summary: 'List verified signals',
+      querystring: {
+        type: 'object',
+        properties: {
+          category: { type: 'string', description: 'Filter by category (e.g. breaking, conflict, climate)' },
+          severity: { type: 'string', enum: ['critical', 'high', 'medium', 'low', 'info'] },
+          country:  { type: 'string', description: 'ISO 3166-1 alpha-2 country code' },
+          status:   { type: 'string', enum: ['pending', 'verified', 'disputed', 'false', 'retracted'], default: 'verified' },
+          cursor:   { type: 'string', description: 'Pagination cursor (ISO timestamp)' },
+          limit:    { type: 'number', default: 20, maximum: 100 },
+          bbox:     { type: 'string', description: 'Bounding box: minLng,minLat,maxLng,maxLat' },
+        },
+      },
+    },
     preHandler: [optionalAuth],
     config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
   }, async (req, reply) => {
@@ -48,7 +90,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     const cacheKey = `signals:list:${status}:${category ?? 'all'}:${severity ?? 'all'}:${country ?? 'all'}:${limit}`
     if (!req.user && isFirstPage) {
       const cached = await redis.get(cacheKey).catch(() => null)
-      if (cached) return reply.send(JSON.parse(cached))
+      if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
     }
 
     let query = db('signals as s')
@@ -114,7 +156,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     const cacheKey = `signals:detail:${id}`
     if (!req.user) {
       const cached = await redis.get(cacheKey).catch(() => null)
-      if (cached) return reply.send(JSON.parse(cached))
+      if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
     }
 
     const signal = await db('signals as s')
@@ -147,12 +189,25 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       .limit(10)
       .select(['check_type', 'result', 'confidence', 'notes', 'created_at'])
 
+    // Generate AI summary async (non-blocking for response cache, fire-and-get)
+    const aiSummary = await generateSignalSummary({
+      id:       signal.id as string,
+      title:    signal.title as string,
+      summary:  signal.summary as string | null,
+      body:     signal.body as string | null,
+      category: signal.category as string,
+      severity: signal.severity as string,
+      tags:     (signal.tags as string[]) ?? [],
+      language: (signal.language as string) ?? 'en',
+    }).catch(() => null)
+
     const response = {
       success: true,
       data: {
         ...formatSignal(signal),
         sources:       signal.sources_data ?? [],
         verifications,
+        aiSummary,
       },
     }
 
@@ -162,6 +217,36 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     }
 
     return reply.send(response)
+  })
+
+  // ─── AI SUMMARY (on-demand + refresh) ───────────────────
+  app.get('/:id/summary', {
+    preHandler: [optionalAuth],
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    const { id }     = req.params as { id: string }
+    const { refresh } = req.query as { refresh?: string }
+
+    const signal = await db('signals')
+      .where('id', id)
+      .first(['id', 'title', 'summary', 'body', 'category', 'severity', 'tags', 'language'])
+
+    if (!signal) return reply.status(404).send({ success: false, error: 'Signal not found' })
+
+    const fn = refresh === 'true' && req.user ? refreshSignalSummary : generateSignalSummary
+
+    const aiSummary = await fn({
+      id:       signal.id as string,
+      title:    signal.title as string,
+      summary:  signal.summary as string | null,
+      body:     signal.body as string | null,
+      category: signal.category as string,
+      severity: signal.severity as string,
+      tags:     (signal.tags as string[]) ?? [],
+      language: (signal.language as string) ?? 'en',
+    })
+
+    return reply.send({ success: true, data: { signalId: id, aiSummary } })
   })
 
   // ─── SIGNAL POSTS ────────────────────────────────────────
@@ -254,8 +339,8 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
 
     // Invalidate caches
     redis.del(`signals:detail:${id}`).catch(() => {})
-    // Bust map cache keys (broad pattern) — best-effort
-    redis.keys('signals:map:*').then(keys => keys.length && redis.del(...keys)).catch(() => {})
+    flushCachePattern('signals:list:*').catch(() => {})
+    flushCachePattern('signals:map:*').catch(() => {})
 
     // Re-index in Meilisearch — direct call (fast) + Kafka event (consumer path)
     indexSignal(signal).catch(() => {})
@@ -282,7 +367,8 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
 
     // Invalidate caches
     redis.del(`signals:detail:${id}`).catch(() => {})
-    redis.keys('signals:map:*').then(keys => keys.length && redis.del(...keys)).catch(() => {})
+    flushCachePattern('signals:list:*').catch(() => {})
+    flushCachePattern('signals:map:*').catch(() => {})
 
     removeSignal(id).catch(() => {})
     publishSignalDelete(id)
@@ -326,6 +412,50 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     return reply.status(201).send({ success: true })
   })
 
+  // ─── SLOP SCORE (admin only) ──────────────────────────────
+  // Returns AI-generated content probability score for a signal.
+  // Only visible to admin users — not exposed in public API.
+  app.get('/:id/slop-score', {
+    preHandler: [authenticate],
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const userId = req.user!.id
+
+    // Admin-only endpoint
+    const actor = await db('users').where('id', userId).first('account_type')
+    if (!actor || actor.account_type !== 'admin') {
+      return reply.status(403).send({ success: false, error: 'Forbidden — admin only' })
+    }
+
+    // Fetch signal metadata for scoring
+    const signal = await db('signals')
+      .where('id', id)
+      .first('id', 'title', 'summary', 'source_url', 'author', 'created_at')
+      .catch(() => null)
+
+    if (!signal) {
+      return reply.status(404).send({ success: false, error: 'Signal not found' })
+    }
+
+    const result = await slopDetector.scoreSignal({
+      id:           signal.id as string,
+      source_url:   signal.source_url as string | null,
+      title:        signal.title as string | null,
+      content:      signal.summary as string | null,
+      author:       signal.author as string | null,
+    })
+
+    return reply.send({
+      success:  true,
+      signalId: id,
+      score:    result.score,
+      flags:    result.flags,
+      cached:   result.cached,
+      isSlop:   result.score >= 0.7,
+    })
+  })
+
   // ─── MAP DATA ─────────────────────────────────────────────
   // Returns signals with geo data for map rendering
   app.get('/map/points', {
@@ -338,7 +468,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     // Cache map points — these are expensive PostGIS queries
     const cacheKey = `signals:map:${category ?? 'all'}:${severity ?? 'all'}:${Math.min(Number(hours), 168)}`
     const cached = await redis.get(cacheKey).catch(() => null)
-    if (cached) return reply.send(JSON.parse(cached))
+    if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
 
     let query = db('signals')
       .whereNotNull('location')

@@ -11,6 +11,11 @@ const DeviceTokenSchema = z.object({
 
 export const registerNotificationRoutes: FastifyPluginAsync = async (app) => {
 
+  app.addHook('onRoute', (routeOptions) => {
+    routeOptions.schema ??= {}
+    routeOptions.schema.tags = routeOptions.schema.tags ?? ['notifications']
+  })
+
   // ─── REGISTER DEVICE TOKEN ────────────────────────────────
   app.post('/device-token', { preHandler: [authenticate] }, async (req, reply) => {
     const body = DeviceTokenSchema.safeParse(req.body)

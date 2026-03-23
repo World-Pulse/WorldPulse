@@ -4,6 +4,8 @@ import { redis } from '../db/redis'
 import { authenticate, optionalAuth } from '../middleware/auth'
 import { broadcast } from '../ws/handler'
 import { z } from 'zod'
+import { indexPost, removePost } from '../lib/search'
+import { publishPostCreated, publishPostDeleted } from '../lib/search-events'
 
 // Simple script-based language detector — no external dependency needed.
 // Covers the languages most likely to appear in news posts.
@@ -60,8 +62,13 @@ const CreatePostSchema = z.object({
 
 export const registerPostRoutes: FastifyPluginAsync = async (app) => {
 
+  app.addHook('onRoute', (routeOptions) => {
+    routeOptions.schema ??= {}
+    routeOptions.schema.tags = routeOptions.schema.tags ?? ['posts']
+  })
+
   // ─── CREATE POST ─────────────────────────────────────────
-  app.post('/', { preHandler: [authenticate] }, async (req, reply) => {
+  app.post('/', { preHandler: [authenticate], config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const body = CreatePostSchema.safeParse(req.body)
     if (!body.success) {
       return reply.status(400).send({ success: false, error: 'Invalid input', code: 'VALIDATION' })
@@ -140,6 +147,15 @@ export const registerPostRoutes: FastifyPluginAsync = async (app) => {
 
     // Get full post with author
     const full = await getPostWithAuthor(post.id, userId)
+
+    // Index in Meilisearch — direct call (fast) + Kafka event (consumer path)
+    const author = full?.author
+    indexPost({
+      ...post,
+      author_handle:       author?.handle ?? '',
+      author_display_name: author?.displayName ?? '',
+    }).catch(() => {})
+    publishPostCreated(post.id as string)
 
     // Broadcast via WebSocket
     await redis.publish('wp:post.new', JSON.stringify({
@@ -228,7 +244,7 @@ export const registerPostRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // ─── LIKE / UNLIKE ───────────────────────────────────────
-  app.post('/:id/like', { preHandler: [authenticate] }, async (req, reply) => {
+  app.post('/:id/like', { preHandler: [authenticate], config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const { id } = req.params as { id: string }
     const userId = req.user!.id
 
@@ -261,7 +277,7 @@ export const registerPostRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // ─── BOOKMARK ────────────────────────────────────────────
-  app.post('/:id/bookmark', { preHandler: [authenticate] }, async (req, reply) => {
+  app.post('/:id/bookmark', { preHandler: [authenticate], config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const { id } = req.params as { id: string }
     const userId = req.user!.id
 
@@ -288,6 +304,8 @@ export const registerPostRoutes: FastifyPluginAsync = async (app) => {
     if (post.author_id !== userId) return reply.status(403).send({ success: false, error: 'Forbidden' })
 
     await db('posts').where('id', id).update({ deleted_at: new Date() })
+    removePost(id).catch(() => {})
+    publishPostDeleted(id)
     return reply.send({ success: true })
   })
 }

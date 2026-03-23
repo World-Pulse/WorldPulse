@@ -6,6 +6,7 @@ import {
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { feedApi, type Signal } from '@/lib/api'
 import { SignalCard } from '@/components/SignalCard'
+import { Composer } from '@/components/Composer'
 
 type FeedTab = 'global' | 'following' | 'verified'
 
@@ -33,6 +34,7 @@ const wsRef: { current: WebSocket | null } = { current: null }
 export default function FeedScreen() {
   const [activeTab, setActiveTab] = useState<FeedTab>('global')
   const [wsSignals, setWsSignals] = useState<Signal[]>([])
+  const [composerVisible, setComposerVisible] = useState(false)
   const flatListRef = useRef<FlatList>(null)
 
   const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001'
@@ -205,6 +207,20 @@ export default function FeedScreen() {
           removeClippedSubviews
         />
       )}
+
+      {/* Compose FAB */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => setComposerVisible(true)}
+        activeOpacity={0.85}
+      >
+        <Text style={styles.fabIcon}>+</Text>
+      </TouchableOpacity>
+
+      <Composer
+        visible={composerVisible}
+        onClose={() => setComposerVisible(false)}
+      />
     </View>
   )
 }
@@ -334,5 +350,27 @@ const styles = StyleSheet.create({
     color: COLORS.text2,
     textAlign: 'center',
     maxWidth: 260,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: COLORS.amber,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: COLORS.amber,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  fabIcon: {
+    fontSize: 28,
+    fontWeight: '300',
+    color: '#000',
+    lineHeight: 32,
   },
 })

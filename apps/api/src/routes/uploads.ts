@@ -53,6 +53,11 @@ function buildPublicUrl(filename: string): string {
 export const registerUploadRoutes: FastifyPluginAsync = async (app) => {
   ensureUploadsDir()
 
+  app.addHook('onRoute', (routeOptions) => {
+    routeOptions.schema ??= {}
+    routeOptions.schema.tags = routeOptions.schema.tags ?? ['uploads']
+  })
+
   // Register multipart with a generous body limit (50 MB)
   await app.register(multipart, {
     limits: {

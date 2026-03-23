@@ -13,6 +13,11 @@ const EMBED_CACHE_TTL = 30 // seconds
  */
 export const registerEmbedRoutes: FastifyPluginAsync = async (app) => {
 
+  app.addHook('onRoute', (routeOptions) => {
+    routeOptions.schema ??= {}
+    routeOptions.schema.tags = routeOptions.schema.tags ?? ['embed']
+  })
+
   // CORS pre-flight for all embed routes
   app.options('*', {
     config: { rateLimit: { max: 200, timeWindow: '1 minute' } },

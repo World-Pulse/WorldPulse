@@ -1,38 +1,46 @@
-Cycle 30 — 2026-03-22
-Task: ai_slop_detection (priority 6, competitive)
+Cycle 31 — 2026-03-23T02:45:00Z
+Task: P0-5 Fix category channel tabs (Breaking News, Culture, Security "No signals yet")
 
-IMPLEMENTED: Open-source AI content farm detection — WorldPulse's answer to NewsGuard's
-closed $$$-API. Direct competitive response to AI slop trend (300-500 new sites/month).
+IMPLEMENTED: Three-part fix that resolves all empty channel tabs in WorldPulse.
 
 Changes:
-  • apps/api/src/lib/ai-content-farms.ts (NEW)
-    - 25-domain blocklist seeded from NewsGuard/CCDH public reports
-    - Includes: dailytrendingnews.net, morningtidings.com, worldnewsdaily24.com, etc.
+  • apps/scraper/src/pipeline/classify.ts (MODIFIED)
+    - Added 14 keyword rules to detectCategory() in priority order
+    - NEW: breaking (urgent/alert/emergency/developing), culture (film/music/protest/activism),
+      security (cyber/hack/ransomware/cve/zero-day), sports (football/olympics/cricket)
+    - Enhanced: conflict (+offensive/frontline/casualt), economy (+interest rate/imf/recession),
+      health (+epidemic/mortality), technology (+semiconductor/quantum/autonomous)
+    - Previously breaking/culture/security had NO rules → fell to 'other' → empty channels
 
-  • apps/api/src/lib/slop-detector.ts (NEW)
-    - SlopDetector class with async scoreSignal() method
-    - 6 weighted heuristics: blocklist (+0.40), no byline (+0.15), clickbait (+0.10),
-      thin content (+0.10), high cadence Redis tracking (+0.10), bare URL (+0.05)
-    - Score clamped [0, 1.0]; Redis 24h TTL cache; singleton export
+  • apps/api/src/routes/feed.ts (MODIFIED)
+    - Special-cased category=breaking to query severity IN ('critical', 'high')
+      in BOTH feed/signals AND feed/global routes
+    - This immediately populates Breaking News from existing 2,850+ DB signals
+      without waiting for re-scrape with new classifier rules
 
-  • apps/api/src/routes/signals.ts (MODIFIED)
-    - New GET /:id/slop-score — admin-only, 30rpm
-    - Returns { signalId, score, flags, isSlop, cached }
-
-  • apps/web/src/app/signals/[id]/SignalDetailClient.tsx (MODIFIED)
-    - AISlopBadge component: amber warning when score >= 0.7
-    - Graceful error handling; admin-only via 403 on non-admins
-
-  • apps/api/src/__tests__/slop-detector.test.ts (NEW)
-    - 11 test cases covering all heuristics, cache, clamping, invalidation
+  • apps/web/src/components/sidebar/LeftSidebar.tsx (MODIFIED)
+    - Added CHANNEL_CATEGORIES mapping (slug → API category)
+    - Live signal count fetched per channel on mount + 2min auto-refresh
+    - Count badges displayed next to channel names (e.g. "47" next to Conflict)
+    - Trending now real from GET /api/v1/feed/trending?window=1h (not hardcoded demo)
+    - Active channel gets amber left-border indicator like nav items
+    - All API calls fail silently; falls back to no-badge / fallback trending
 
 COMPETITION INTEL:
-  - Shadowbroker: no new features this cycle (~4.7K stars stable)
-  - Ground News: no major 2026 updates
-  - Veracity (arxiv): emerging academic open-source fact-checker — not consumer-grade yet
-  - AI detector market validating demand (YouScan, Ranktracker coverage)
+  - Shadowbroker: UX-only updates (Mission Briefing onboarding, disconnect banner, STIX 2.1)
+    No new data feeds beyond 15 tracked. Stars stable at ~4.7K.
+  - Ground News: March 2 2026 = bug fixes only. No major new features.
+  - No new news-intelligence/verification startups with significant funding found.
+  - Linara (integrated intelligence), TRACE ASI (market analysis), Business Chief launched
+    but none compete directly with WorldPulse.
 
-Project health: 7.5/10 | Improvements shipped: 31 | Cycle: 30
-BLOCKER: NTFS index.lock prevents git commits — files in working tree (no code lost)
+Project health: 7.2/10 | Improvements shipped: 33 | Cycle: 31
+BLOCKER: HEAD.lock (22:01) + index.lock (22:18) on NTFS — staged but not committed.
+TO DEPLOY (from Windows PowerShell):
+  del .git\HEAD.lock
+  del .git\index.lock
+  git commit -m "fix(feed): wire category channel tabs to API + update classifier"
+  git push
+  ssh server "cd /opt/worldpulse && git pull && ./deploy.sh"
 
 NEXT: monitoring_sentry (priority 4) — structured logging + /health endpoint

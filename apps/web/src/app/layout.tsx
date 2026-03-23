@@ -1,27 +1,57 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import { Inter, Bebas_Neue, JetBrains_Mono } from 'next/font/google'
 import { NextIntlClientProvider } from 'next-intl'
 import { getLocale, getMessages } from 'next-intl/server'
 import './globals.css'
 import { Providers } from '@/components/providers'
 import { TopNav } from '@/components/nav/TopNav'
+import { BottomTabBar } from '@/components/nav/BottomTabBar'
 
-const inter = Inter({ subsets: ['latin'] })
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  preload: true,
+  variable: '--font-sans',
+})
+
+const bebasNeue = Bebas_Neue({
+  weight: '400',
+  subsets: ['latin'],
+  display: 'swap',
+  preload: true,
+  variable: '--font-display',
+})
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  display: 'optional',  // non-critical; skip if not cached to avoid layout shift
+  preload: false,
+  variable: '--font-mono',
+})
 
 export const metadata: Metadata = {
   title: 'WorldPulse — Global Intelligence Network',
-  description: 'Real-time global events, verified signals, and open social discourse. The world in one feed.',
+  description: 'Real-time verified signals from every corner of the world. Live map, breaking news, open source.',
   keywords: ['world news', 'breaking news', 'global events', 'open source', 'real-time'],
+  viewport: {
+    width: 'device-width',
+    initialScale: 1,
+    maximumScale: 5,
+    userScalable: true,
+  },
   openGraph: {
-    title: 'WorldPulse',
-    description: 'The world in real time. Verified. Open source.',
+    title: 'WorldPulse — Global Intelligence Network',
+    description: 'Real-time verified signals from every corner of the world. Live map, breaking news, open source.',
     type: 'website',
-    url: 'https://worldpulse.io',
+    url: 'https://world-pulse.io',
+    siteName: 'WorldPulse',
+    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'WorldPulse' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'WorldPulse',
-    description: 'The world in real time. Verified. Open source.',
+    title: 'WorldPulse — Global Intelligence Network',
+    description: 'Real-time verified signals from every corner of the world.',
+    images: ['/og-image.png'],
   },
   themeColor: '#06070d',
 }
@@ -29,13 +59,13 @@ export const metadata: Metadata = {
 const RTL_LOCALES = new Set(['ar'])
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const locale = await getLocale()
+  const locale   = await getLocale()
   const messages = await getMessages()
-  const dir = RTL_LOCALES.has(locale) ? 'rtl' : 'ltr'
+  const dir      = RTL_LOCALES.has(locale) ? 'rtl' : 'ltr'
 
   return (
     <html lang={locale} dir={dir} className="dark">
-      <body className={`${inter.className} bg-wp-bg text-wp-text antialiased`}>
+      <body className={`${inter.variable} ${bebasNeue.variable} ${jetbrainsMono.variable} ${inter.className} bg-wp-bg text-wp-text antialiased`}>
         {/* Skip to main content for keyboard/screen reader users */}
         <a
           href="#main-content"
@@ -46,9 +76,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <NextIntlClientProvider messages={messages}>
           <Providers>
             <TopNav />
-            <main id="main-content" className="pt-[52px] min-h-screen">
+            <main
+              id="main-content"
+              className="pt-[52px] min-h-screen main-content-mobile-pb"
+            >
               {children}
             </main>
+            <BottomTabBar />
           </Providers>
         </NextIntlClientProvider>
       </body>

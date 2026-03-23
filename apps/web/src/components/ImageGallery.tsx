@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Image from 'next/image'
 
 interface ImageGalleryProps {
   urls:    string[]
@@ -40,7 +41,7 @@ function Lightbox({
       className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center"
       onClick={onClose}
     >
-      {/* Image */}
+      {/* Image — unknown external dimensions, plain img is appropriate here */}
       <div className="relative max-w-[90vw] max-h-[90vh]" onClick={e => e.stopPropagation()}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -120,20 +121,22 @@ export function ImageGallery({ urls, types, className = '' }: ImageGalleryProps)
     <>
       <div className={`rounded-xl overflow-hidden ${className}`}>
         {imageUrls.length === 1 && (
-          // Single image — full width
+          // Single image — full width with fixed height for next/image fill
           <div
-            className="cursor-zoom-in relative group"
+            className="cursor-zoom-in relative group h-[400px]"
             onClick={() => openLightbox(0)}
             role="button"
             tabIndex={0}
             onKeyDown={e => e.key === 'Enter' && openLightbox(0)}
             aria-label="Open image"
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <Image
               src={imageUrls[0]}
               alt="Post image"
-              className="w-full max-h-[400px] object-cover rounded-xl"
+              fill
+              className="object-cover rounded-xl"
+              sizes="(max-width: 768px) 100vw, 600px"
+              loading="lazy"
             />
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors rounded-xl" />
           </div>
@@ -152,11 +155,13 @@ export function ImageGallery({ urls, types, className = '' }: ImageGalleryProps)
                 onKeyDown={e => e.key === 'Enter' && openLightbox(i)}
                 aria-label={`Open image ${i + 1}`}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <Image
                   src={url}
                   alt={`Post image ${i + 1}`}
-                  className="w-full h-full object-cover"
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 768px) 50vw, 300px"
+                  loading="lazy"
                 />
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/15 transition-colors" />
               </div>
@@ -174,8 +179,14 @@ export function ImageGallery({ urls, types, className = '' }: ImageGalleryProps)
               onKeyDown={e => e.key === 'Enter' && openLightbox(0)}
               aria-label="Open image 1"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={imageUrls[0]} alt="Post image 1" className="w-full h-full object-cover" />
+              <Image
+                src={imageUrls[0]}
+                alt="Post image 1"
+                fill
+                className="object-cover"
+                sizes="(max-width: 768px) 50vw, 300px"
+                loading="lazy"
+              />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/15 transition-colors" />
             </div>
             {[1, 2].map(i => (
@@ -188,8 +199,14 @@ export function ImageGallery({ urls, types, className = '' }: ImageGalleryProps)
                 onKeyDown={e => e.key === 'Enter' && openLightbox(i)}
                 aria-label={`Open image ${i + 1}`}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={imageUrls[i]} alt={`Post image ${i + 1}`} className="w-full h-full object-cover" />
+                <Image
+                  src={imageUrls[i]}
+                  alt={`Post image ${i + 1}`}
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 768px) 50vw, 300px"
+                  loading="lazy"
+                />
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/15 transition-colors" />
               </div>
             ))}
@@ -211,8 +228,14 @@ export function ImageGallery({ urls, types, className = '' }: ImageGalleryProps)
                   onKeyDown={e => e.key === 'Enter' && openLightbox(i)}
                   aria-label={`Open image ${i + 1}`}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={url} alt={`Post image ${i + 1}`} className="w-full h-full object-cover" />
+                  <Image
+                    src={url}
+                    alt={`Post image ${i + 1}`}
+                    fill
+                    className="object-cover"
+                    sizes="(max-width: 768px) 50vw, 300px"
+                    loading="lazy"
+                  />
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/15 transition-colors" />
                   {isLast && remaining > 0 && (
                     <div className="absolute inset-0 bg-black/60 flex items-center justify-center">

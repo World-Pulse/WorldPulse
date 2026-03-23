@@ -45,7 +45,7 @@ export default function RegisterPage() {
         newValue: JSON.stringify(data.data.user),
       }))
 
-      router.push('/')
+      router.push('/onboarding')
       router.refresh()
     } catch {
       setError('Unable to connect. Please try again.')

@@ -10,6 +10,11 @@ const PAGE_SIZE = 20
 
 export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
 
+  app.addHook('onRoute', (routeOptions) => {
+    routeOptions.schema ??= {}
+    routeOptions.schema.tags = routeOptions.schema.tags ?? ['feed']
+  })
+
   /**
    * GET /api/v1/feed/global
    * Main global feed — latest verified signals + high-trust posts

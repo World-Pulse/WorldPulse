@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 
 const INITIAL_SIGNALS = [
   { time: '14:02', color: '#ff3b5c', text: '<b>PHIVOLCS</b> issues M5.8 aftershock warning' },
@@ -79,8 +80,9 @@ export function RightSidebar() {
 
       {/* ─── WORLD MAP WIDGET ──────────────────────────────── */}
       <Widget title="Live World Map">
-        <div className="w-full aspect-square rounded-[10px] overflow-hidden relative mb-2 cursor-pointer group"
-          style={{ background: 'radial-gradient(circle at 35% 35%, #0d1a3a, #030812)' }}>
+        <Link href="/map">
+          <div className="w-full aspect-square rounded-[10px] overflow-hidden relative mb-2 cursor-pointer group"
+            style={{ background: 'radial-gradient(circle at 35% 35%, #0d1a3a, #030812)' }}>
 
           {/* Globe SVG */}
           <svg viewBox="0 0 268 268" className="w-full h-full opacity-70">
@@ -122,13 +124,14 @@ export function RightSidebar() {
             )
           })}
 
-          {/* Hover overlay */}
-          <div className="absolute inset-0 flex items-end p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-            <span className="font-mono text-[9px] text-wp-cyan bg-[rgba(0,0,0,0.6)] rounded px-2 py-1">
-              Click for full map →
-            </span>
+            {/* Hover overlay */}
+            <div className="absolute inset-0 flex items-end p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <span className="font-mono text-[9px] text-wp-cyan bg-[rgba(0,0,0,0.6)] rounded px-2 py-1">
+                Click for full map →
+              </span>
+            </div>
           </div>
-        </div>
+        </Link>
 
         {/* Legend */}
         <div className="grid grid-cols-2 gap-[6px] font-mono text-[10px]">

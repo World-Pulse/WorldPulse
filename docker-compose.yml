@@ -7,7 +7,7 @@ services:
     container_name: wp_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: worldpulse
+      POSTGRES_DB: worldpulse_db
       POSTGRES_USER: wp_user
       POSTGRES_PASSWORD: wp_secret_local
     ports:
@@ -16,7 +16,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./infrastructure/docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U wp_user -d worldpulse"]
+      test: ["CMD-SHELL", "pg_isready -U wp_user -d worldpulse_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -108,11 +108,13 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
-      DATABASE_URL: postgresql://wp_user:wp_secret_local@postgres:5432/worldpulse
+      DATABASE_URL: postgresql://wp_user:wp_secret_local@postgres:5432/worldpulse_db?sslmode=disable
       REDIS_URL: redis://:wp_redis_local@redis:6379
       KAFKA_BROKERS: kafka:29092
       MEILI_HOST: http://meilisearch:7700
       MEILI_KEY: wp_meili_local_key
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_DB: worldpulse
       JWT_SECRET: wp_jwt_secret_local_change_in_prod
       CORS_ORIGINS: https://world-pulse.io
     networks:
@@ -125,24 +127,20 @@ services:
 
   scraper:
     build:
-      context: ./apps/scraper
-      dockerfile: Dockerfile.dev
+      context: .
+      dockerfile: apps/scraper/Dockerfile
     container_name: wp_scraper
     restart: unless-stopped
     depends_on:
       - kafka
       - redis
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
       KAFKA_BROKERS: kafka:29092
       REDIS_URL: redis://:wp_redis_local@redis:6379
-      DATABASE_URL: postgresql://wp_user:wp_secret_local@postgres:5432/worldpulse
+      DATABASE_URL: postgresql://wp_user:wp_secret_local@postgres:5432/worldpulse_db?sslmode=disable
       SCRAPE_INTERVAL_MS: 30000
       LOG_LEVEL: debug
-    volumes:
-      - ./apps/scraper:/app
-      - /app/node_modules
-    command: pnpm dev
 
   web:
     build:
@@ -169,6 +167,30 @@ services:
         aliases:
           - web
 
+  # ─── ANALYTICS ────────────────────────────────────────────
+  clickhouse:
+    image: clickhouse/clickhouse-server:24-alpine
+    container_name: wp_clickhouse
+    restart: unless-stopped
+    ports:
+      - "8123:8123"   # HTTP
+      - "9000:9000"   # native
+    environment:
+      CLICKHOUSE_DB: worldpulse
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8123/ping | grep -q Ok"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
   # ─── MONITORING ───────────────────────────────────────────
   prometheus:
     image: prom/prometheus:v2.54.0
@@ -177,6 +199,7 @@ services:
       - "9090:9090"
     volumes:
       - ./infrastructure/docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./infrastructure/docker/prometheus/rules:/etc/prometheus/rules
       - prometheus_data:/prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
@@ -193,7 +216,8 @@ services:
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./infrastructure/docker/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./infrastructure/docker/grafana/provisioning:/etc/grafana/provisioning
+      - ./infrastructure/docker/grafana/dashboards:/var/lib/grafana/dashboards
     depends_on:
       - prometheus
 
@@ -205,6 +229,7 @@ volumes:
   zookeeper_data:
   prometheus_data:
   grafana_data:
+  clickhouse_data:
 
 networks:
   wp_net:

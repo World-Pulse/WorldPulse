@@ -4,6 +4,11 @@ import { authenticate } from '../middleware/auth'
 
 export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
 
+  app.addHook('onRoute', (routeOptions) => {
+    routeOptions.schema ??= {}
+    routeOptions.schema.tags = routeOptions.schema.tags ?? ['analytics']
+  })
+
   // ─── PERSONAL ANALYTICS ──────────────────────────────────
   // GET /api/v1/analytics/me
   app.get('/me', { preHandler: [authenticate] }, async (req, reply) => {

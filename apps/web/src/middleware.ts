@@ -1,13 +1,104 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-// Locale routing middleware is disabled — pages are not under a [locale]
-// directory so next-intl's internal rewrites (/{locale}/path) would 404.
-// Locale defaults to 'en' via the fallback in src/i18n/request.ts.
-export function middleware(_req: NextRequest) {
-  return NextResponse.next()
+// Content-Security-Policy
+// 'unsafe-inline' on script-src is required by Next.js for inline scripts / hydration.
+// Tighten with nonces in a future pass once Next.js nonce support is stable.
+const CSP_DIRECTIVES = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com data:",
+  "img-src 'self' data: blob: https:",
+  // Allow API and WebSocket connections to both prod and local dev
+  [
+    "connect-src 'self'",
+    'https://api.worldpulse.io',
+    'wss://api.worldpulse.io',
+    'http://localhost:3001',
+    'ws://localhost:3001',
+  ].join(' '),
+  "media-src 'self' blob:",
+  "worker-src 'self' blob:",
+  "frame-src 'none'",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "object-src 'none'",
+  "upgrade-insecure-requests",
+].join('; ')
+
+/** Routes that must be embeddable in third-party iframes. */
+const EMBED_PATHS = ['/embed']
+
+function isEmbedRoute(pathname: string): boolean {
+  return EMBED_PATHS.some(p => pathname === p || pathname.startsWith(p + '/') || pathname.startsWith(p + '?'))
 }
 
+export function middleware(req: NextRequest): NextResponse {
+  const { pathname } = req.nextUrl
+  const isEmbed = isEmbedRoute(pathname)
+  const res = NextResponse.next()
+
+  if (isEmbed) {
+    // Allow any origin to embed the widget iframe
+    res.headers.set('Access-Control-Allow-Origin', '*')
+    res.headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS')
+    res.headers.set('Access-Control-Allow-Headers', 'Content-Type')
+    // Remove clickjacking protection so the iframe can render
+    res.headers.delete('X-Frame-Options')
+    // Override CSP to allow any frame-ancestor and connect to the API
+    const embedCsp = [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      "style-src 'self' 'unsafe-inline'",
+      "font-src 'self' data:",
+      "img-src 'self' data: https:",
+      "connect-src 'self' https://api.worldpulse.io http://localhost:3001 wss://api.worldpulse.io ws://localhost:3001",
+      "frame-ancestors *",
+      "base-uri 'self'",
+      "object-src 'none'",
+    ].join('; ')
+    res.headers.set('Content-Security-Policy', embedCsp)
+    res.headers.set('X-Content-Type-Options', 'nosniff')
+    return res
+  }
+
+  // Prevent clickjacking
+  res.headers.set('X-Frame-Options', 'DENY')
+
+  // Prevent MIME-type sniffing
+  res.headers.set('X-Content-Type-Options', 'nosniff')
+
+  // Control referrer information
+  res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+
+  // Restrict browser features
+  res.headers.set(
+    'Permissions-Policy',
+    'camera=(), microphone=(), geolocation=(self), payment=()',
+  )
+
+  // Content Security Policy
+  res.headers.set('Content-Security-Policy', CSP_DIRECTIVES)
+
+  // HSTS — only send over HTTPS in production to avoid breaking local HTTP dev
+  if (process.env.NODE_ENV === 'production') {
+    res.headers.set(
+      'Strict-Transport-Security',
+      'max-age=31536000; includeSubDomains; preload',
+    )
+  }
+
+  // XSS protection header (legacy browsers)
+  res.headers.set('X-XSS-Protection', '1; mode=block')
+
+  return res
+}
+
+// Apply to all routes except static assets and Next.js internals
 export const config = {
-  matcher: [],  // match nothing — middleware is a no-op
+  matcher: [
+    '/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?|ttf|otf)).*)',
+  ],
 }

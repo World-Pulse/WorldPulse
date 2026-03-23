@@ -43,7 +43,7 @@ export default function LoginPage() {
         newValue: JSON.stringify(data.data.user),
       }))
 
-      router.push('/')
+      router.push(data.data.user.onboarded ? '/' : '/onboarding')
       router.refresh()
     } catch {
       setError('Unable to connect. Please try again.')

@@ -1,12 +1,19 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
-import type { Signal, Post } from '@worldpulse/types'
+import type { Signal, Post, CrossCheckStatus } from '@worldpulse/types'
 import type { SignalDetail, Verification } from './page'
-import { SignalMap } from './SignalMap'
 import { DiscussionThread } from './DiscussionThread'
+
+const SignalMap = dynamic(
+  () => import('./SignalMap').then(m => ({ default: m.SignalMap })),
+  { ssr: false, loading: () => <div className="h-[200px] bg-wp-s2 rounded-xl animate-pulse" /> },
+)
 import { FlagModal } from '@/components/signals/FlagModal'
+import { ReliabilityDots } from '@/components/signals/ReliabilityDots'
+import { AISummary } from '@/components/signals/AISummary'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -41,11 +48,6 @@ function timeAgo(d: string | null | undefined): string {
   if (m < 60) return `${m}m ago`
   const h = Math.floor(m / 60)
   return h < 24 ? `${h}h ago` : `${Math.floor(h / 24)}d ago`
-}
-
-function reliabilityDots(score: number): Array<boolean> {
-  const n = Math.max(0, Math.min(5, Math.round(score * 5)))
-  return Array.from({ length: 5 }, (_, i) => i < n)
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -90,94 +92,30 @@ function RelatedCard({ signal }: { signal: Signal }) {
   )
 }
 
-// Reliability dots with tooltip showing score breakdown
+// Reliability sidebar widget — uses shared ReliabilityDots for consistent dot+tooltip rendering
 function ReliabilityScore({ signal }: { signal: SignalDetail }) {
-  const score  = signal.reliabilityScore ?? 0
-  const dots   = reliabilityDots(score)
-  const color  = SEV_COLOR[signal.severity] ?? '#8892a4'
-
-  const confirmed  = signal.verifications.filter(v => v.result === 'confirmed').length
-  const total      = signal.verifications.length
-  const hasAI      = signal.verifications.some(v => v.check_type.toLowerCase().includes('ai'))
-  const hasCross   = signal.verifications.some(
-    v => v.check_type.toLowerCase().includes('cross') || v.check_type.toLowerCase().includes('reference'),
-  )
-  const avgConf    = total > 0
-    ? Math.round(signal.verifications.reduce((s, v) => s + v.confidence, 0) / total * 100)
-    : null
+  const score = signal.reliabilityScore ?? 0
+  const hasAI = signal.verifications.some(v => v.check_type.toLowerCase().includes('ai'))
+  const crossCheckStatus: CrossCheckStatus =
+    signal.status === 'verified' ? 'confirmed' :
+    signal.status === 'disputed' ? 'contested' : 'unconfirmed'
 
   return (
     <div className="p-4 rounded-xl border border-white/[0.07] bg-white/[0.02] space-y-3">
       <div className="font-mono text-[10px] tracking-widest uppercase text-wp-text3">Reliability</div>
 
-      {/* Dots row with hover tooltip */}
-      <div className="relative group/rel">
-        <div className="flex items-center justify-between cursor-default">
-          {/* 1-5 filled dots */}
-          <div className="flex items-center gap-1" aria-label={`Reliability: ${Math.round(score * 5)} out of 5`}>
-            {dots.map((filled, i) => (
-              <svg key={i} width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-                <circle
-                  cx="5" cy="5" r="4.5"
-                  fill={filled ? color : 'transparent'}
-                  stroke={filled ? color : 'rgba(255,255,255,0.15)'}
-                  strokeWidth="1"
-                />
-              </svg>
-            ))}
-          </div>
-          <span className="font-mono text-[18px] font-bold text-wp-green">
-            {Math.round(score * 100)}%
-          </span>
-        </div>
-
-        {/* Tooltip */}
-        <div
-          className="absolute left-0 bottom-full mb-2 z-10 w-[220px] rounded-xl border border-white/[0.10] bg-[#0d1117] shadow-xl p-3 space-y-2 pointer-events-none opacity-0 group-hover/rel:opacity-100 transition-opacity duration-150"
-          role="tooltip"
-        >
-          <div className="font-mono text-[10px] tracking-widest uppercase text-wp-text3 mb-1">
-            Score breakdown
-          </div>
-          <div className="space-y-1.5 text-[11px]">
-            <div className="flex items-center justify-between">
-              <span className="text-wp-text3">Sources corroborated</span>
-              <span className="font-mono text-wp-text2">{signal.sourceCount}</span>
-            </div>
-            {total > 0 && (
-              <div className="flex items-center justify-between">
-                <span className="text-wp-text3">Checks passed</span>
-                <span className="font-mono" style={{ color: confirmed === total ? '#00e676' : '#f5a623' }}>
-                  {confirmed}/{total}
-                </span>
-              </div>
-            )}
-            {avgConf !== null && (
-              <div className="flex items-center justify-between">
-                <span className="text-wp-text3">Avg confidence</span>
-                <span className="font-mono text-wp-text2">{avgConf}%</span>
-              </div>
-            )}
-            <div className="flex items-center justify-between">
-              <span className="text-wp-text3">Cross-reference</span>
-              <span className="font-mono" style={{ color: hasCross ? '#00e676' : '#8892a4' }}>
-                {hasCross ? 'yes' : 'no'}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-wp-text3">AI verification</span>
-              <span className="font-mono" style={{ color: hasAI ? '#00e676' : '#8892a4' }}>
-                {hasAI ? 'yes' : 'no'}
-              </span>
-            </div>
-            {(signal.communityFlagCount ?? 0) > 0 && (
-              <div className="flex items-center justify-between">
-                <span className="text-wp-text3">Community flags</span>
-                <span className="font-mono text-wp-amber">{signal.communityFlagCount}</span>
-              </div>
-            )}
-          </div>
-        </div>
+      <div className="flex items-center justify-between">
+        <ReliabilityDots
+          score={score}
+          size="md"
+          sourceCount={signal.sourceCount}
+          crossCheckStatus={crossCheckStatus}
+          aiVerified={hasAI}
+          communityFlagCount={signal.communityFlagCount}
+        />
+        <span className="font-mono text-[18px] font-bold text-wp-green">
+          {Math.round(score * 100)}%
+        </span>
       </div>
 
       {/* Progress bar */}
@@ -258,6 +196,36 @@ interface Props {
   related:      Signal[]
   initialPosts: Post[]
   postsTotal:   number
+}
+
+// ─── AI Slop Badge ────────────────────────────────────────────────────────────
+function AISlopBadge({ signalId }: { signalId: string }) {
+  const [isSlop, setIsSlop] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api/v1'
+    fetch(`${API_BASE}/signals/${encodeURIComponent(signalId)}/slop-score`, {
+      credentials: 'include',
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { isSlop?: boolean } | null) => {
+        if (data?.isSlop === true) setIsSlop(true)
+      })
+      .catch(() => { /* non-fatal */ })
+  }, [signalId])
+
+  if (!isSlop) return null
+
+  return (
+    <div
+      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-mono"
+      style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.3)', color: '#fbbf24' }}
+      title="Heuristic analysis suggests this content may be AI-generated or from a low-quality content farm. Manual verification recommended."
+    >
+      <span>⚠</span>
+      <span>AI-generated content suspected</span>
+    </div>
+  )
 }
 
 export function SignalDetailClient({ signal, related, initialPosts, postsTotal }: Props) {
@@ -375,6 +343,15 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
                 <p className="text-[14px] leading-[1.8]">{signal.body}</p>
               </div>
             )}
+
+            {/* AI Summary — WorldPulse differentiator vs Ground News Ground Summary */}
+            <AISummary
+              signalId={signal.id}
+              aiSummary={(signal as Signal & { aiSummary?: { text: string; model: 'openai' | 'ollama' | 'extractive'; generatedAt: string } | null }).aiSummary}
+            />
+
+            {/* AI Slop Badge — admin-only heuristic warning for AI-generated content */}
+            <AISlopBadge signalId={signal.id} />
 
             {/* Tags */}
             {signal.tags.length > 0 && (

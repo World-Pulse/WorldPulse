@@ -1,6 +1,19 @@
 {
   "history": [
     {
+      "timestamp": "2026-03-23T02:45:00.000000Z",
+      "task_id": "category_channels_fix",
+      "phase": "P0-5: Fix category channel tabs showing No signals yet",
+      "category": "feature",
+      "source": "priority_directions",
+      "priority": 10,
+      "budget": 4.0,
+      "success": true,
+      "duration_s": 420,
+      "reason": "Breaking News, Culture, Security channels all showed 'No signals yet' because (1) detectCategory() had no rules for breaking/culture/security/sports — articles fell through to 'other'; (2) even with correct classification, Breaking News needed a severity-based fallback to show existing DB signals. Fix: added 14 keyword rules to detectCategory() in classify.ts including breaking (urgent/developing/emergency keywords), culture (film/music/art/sports/religion/activism), security (cyber/hack/ransomware/cve keywords), sports. Also special-cased category=breaking in both feed/signals and feed/global API routes to query severity IN (critical,high) — immediately populates Breaking News with real production signals. Additionally upgraded LeftSidebar to show live signal counts per channel (useEffect + 2min setInterval) and real trending from GET /api/v1/feed/trending instead of hardcoded demo topics.",
+      "competition_intel_updates": "Shadowbroker: recent GitHub releases focused on UX (Mission Briefing onboarding modal, backend disconnect red banner, README Quick Start overhaul) and STIX 2.1 export. No new data feeds beyond previously tracked 15. Star count stable at ~4.7K. Ground News: v4.27.0 (March 2 2026) = bug fixes only, no major new features. No new news-intelligence/verification startups with significant funding found. AI funding overall at record levels but no direct competitors found. Linara (directions group), TRACE ASI (market analysis), Business Chief (executive intel) launched but none compete directly with WorldPulse's open-source OSINT network."
+    },
+    {
       "timestamp": "2026-03-22T08:00:00.000000Z",
       "task_id": "ai_slop_detection",
       "phase": "Competitive: AI content farm / slop detection for reliability scoring",
@@ -419,11 +432,23 @@
       "success": true,
       "duration_s": 442.0,
       "reason": null
+    },
+    {
+      "timestamp": "2026-03-23T03:03:51.600187+00:00",
+      "task_id": "docs_api_reference",
+      "phase": "Developer Experience: Auto-generate OpenAPI docs",
+      "category": "devex",
+      "source": "brain_efficiency",
+      "priority": 4,
+      "budget": 5.0,
+      "success": true,
+      "duration_s": 357.3,
+      "reason": null
     }
   ],
   "metrics": {
-    "total_tasks_executed": 33,
-    "successful": 33,
+    "total_tasks_executed": 34,
+    "successful": 34,
     "failed": 0,
     "avg_budget_used": 3.5
   }

@@ -1,8 +1,10 @@
 // @worldpulse/types — Shared TypeScript type definitions
 
-export type SignalSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info'
-export type SignalStatus   = 'pending' | 'verified' | 'disputed' | 'false' | 'retracted'
-export type AccountType    = 'community' | 'journalist' | 'official' | 'expert' | 'ai' | 'bot'
+export type SignalSeverity    = 'critical' | 'high' | 'medium' | 'low' | 'info'
+export type SignalStatus      = 'pending' | 'verified' | 'disputed' | 'false' | 'retracted'
+export type CrossCheckStatus  = 'confirmed' | 'unconfirmed' | 'contested'
+export type FlagReason        = 'inaccurate' | 'outdated' | 'duplicate' | 'misinformation'
+export type AccountType    = 'community' | 'journalist' | 'official' | 'expert' | 'ai' | 'bot' | 'admin'
 export type PostType       = 'signal' | 'thread' | 'report' | 'boost' | 'deep_dive' | 'poll' | 'ai_digest'
 export type SourceTier     = 'wire' | 'national' | 'regional' | 'community' | 'user'
 export type SignalMomentum = 'surging' | 'rising' | 'steady' | 'cooling'
@@ -58,9 +60,17 @@ export interface Signal {
   postCount:        number
   eventTime:        string | null
   firstReported:    string
-  verifiedAt:       string | null
-  lastUpdated:      string
-  createdAt:        string
+  verifiedAt:         string | null
+  lastUpdated:        string
+  createdAt:          string
+  isBreaking?:        boolean
+  communityFlagCount?: number
+  // AI-generated summary (present on signal detail, absent on list views)
+  aiSummary?: {
+    text:        string
+    model:       'openai' | 'ollama' | 'extractive'
+    generatedAt: string
+  } | null
 }
 
 // ─── USER ─────────────────────────────────────────────────────────────────
@@ -86,6 +96,7 @@ export interface User {
 
 export interface AuthUser extends User {
   email: string
+  onboarded: boolean
 }
 
 // ─── POLL ────────────────────────────────────────────────────────────────

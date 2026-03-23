@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { PollCreator } from './PollCreator'
 import type { PollDraft } from './PollCreator'
+import { useToast } from '@/components/Toast'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -19,6 +20,7 @@ const MAX_VID_MB  = 50
 type MediaFile = { file: File; preview: string; kind: 'image' | 'video' }
 
 export function Composer() {
+  const { toast } = useToast()
   const [content,    setContent]    = useState('')
   const [focused,    setFocused]    = useState(false)
   const [showPoll,   setShowPoll]   = useState(false)
@@ -148,8 +150,11 @@ export function Composer() {
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto'
       }
+      toast('Post published successfully', 'success')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong')
+      const msg = err instanceof Error ? err.message : 'Something went wrong'
+      setError(msg)
+      toast(msg, 'error')
     } finally {
       setSubmitting(false)
       setUploading(false)

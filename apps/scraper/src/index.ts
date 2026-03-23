@@ -10,22 +10,48 @@ import { Kafka, Producer, Consumer } from 'kafkajs'
 import { redis } from './lib/redis'
 import { db } from './lib/postgres'
 import { logger } from './lib/logger'
+import { withRetry } from './lib/retry'
+import { isCircuitOpen, cbSuccess, cbFailure } from './lib/circuit-breaker'
+import { acquireRateLimit } from './lib/rate-limiter'
+import { pushDLQ } from './lib/dlq'
 import { verifySignal } from './pipeline/verify'
 import { classifyContent } from './pipeline/classify'
 import { extractGeo } from './pipeline/geo'
 import { dedup } from './pipeline/dedup'
 import { computeTrending } from './pipeline/trending'
 import { backfillUnprocessed } from './backfill'
+import { recordSuccess, recordFailure, recordCycleThroughput, logHealthSummary, detectDeadSources } from './health'
+import { createSemaphore } from './lib/concurrency'
+import { startSpan, startRootSpan } from './lib/tracer'
+import { startOsintPollers } from './sources/index'
+import type { OsintCleanupFn } from './sources/index'
 import type { Source } from '@worldpulse/types'
 
 // DB row has extra columns not present in the shared Source interface
 type ScraperSource = Source & {
-  rss_feeds:    string[]
-  api_endpoint: string | null
-  last_scraped: Date | null
+  rss_feeds:       string[]
+  api_endpoint:    string | null
+  last_scraped:    Date | null
+  scrape_interval: number | null   // seconds; used for adaptive polling offset
 }
 
-const SCRAPE_INTERVAL_MS = Number(process.env.SCRAPE_INTERVAL_MS ?? 30_000)
+const SCRAPE_INTERVAL_MS  = Number(process.env.SCRAPE_INTERVAL_MS  ?? 30_000)
+const SCRAPER_CONCURRENCY = Math.max(1, Number(process.env.SCRAPER_CONCURRENCY ?? 10))
+
+// Tier priority: lower index = higher priority (processed first)
+const TIER_PRIORITY: Record<string, number> = {
+  wire:        0,
+  breaking:    1,
+  institutional: 2,
+  regional:    3,
+  community:   4,
+}
+
+// High-activity threshold: sources producing this many articles per cycle get
+// their next poll accelerated (last_scraped backdated by half the interval).
+const HIGH_VELOCITY_THRESHOLD = 5
+const ADAPTIVE_ACCELERATION_FACTOR = 0.5  // poll at 50% of configured interval
+
 const kafka = new Kafka({
   clientId: 'wp-scraper',
   brokers:  (process.env.KAFKA_BROKERS ?? 'localhost:9092').split(','),
@@ -35,6 +61,7 @@ const kafka = new Kafka({
 let producer: Producer | null = null
 let verifyConsumer: Consumer | null = null
 let kafkaReady = false
+let stopOsintPollers: OsintCleanupFn | null = null
 
 async function connectKafka(): Promise<boolean> {
   try {
@@ -87,8 +114,15 @@ async function bootstrap() {
   await scrapeAll()
   setInterval(scrapeAll, SCRAPE_INTERVAL_MS)
 
+  // Start OSINT pollers — GDELT, ADS-B, AIS (each handles its own interval)
+  stopOsintPollers = startOsintPollers(db, redis, producer)
+
   // Trending recalculation every 5 min
   setInterval(updateTrending, 5 * 60_000)
+
+  // Health summary log + dead-source detection every 5 min
+  setInterval(() => { logHealthSummary().catch(err => logger.error({ err }, 'Health summary failed')) }, 5 * 60_000)
+  setInterval(() => { detectDeadSources().catch(err => logger.error({ err }, 'Dead source detection failed')) }, 5 * 60_000)
 
   // Retry Kafka connection every 60s if not connected
   if (!kafkaReady) {
@@ -106,24 +140,64 @@ async function bootstrap() {
 
 // ─── MAIN SCRAPE LOOP ─────────────────────────────────────────────────────
 async function scrapeAll() {
-  const sources = await db<ScraperSource>('sources')
-    .where('active', true)
-    .whereRaw("last_scraped IS NULL OR last_scraped < NOW() - (scrape_interval || ' seconds')::INTERVAL")
+  await startRootSpan('scraper.cycle', async (cycleSpan) => {
+    const rawSources = await db<ScraperSource>('sources')
+      .where('active', true)
+      .whereRaw("last_scraped IS NULL OR last_scraped < NOW() - (scrape_interval || ' seconds')::INTERVAL")
 
-  logger.info({ count: sources.length }, 'Starting scrape cycle')
+    // Sort by tier priority — wire/breaking sources processed first
+    const sources = [...rawSources].sort((a, b) => {
+      const pa = TIER_PRIORITY[a.tier] ?? 5
+      const pb = TIER_PRIORITY[b.tier] ?? 5
+      return pa - pb
+    })
 
-  const results = await Promise.allSettled(
-    sources.map(source => scrapeSource(source))
-  )
+    cycleSpan.attributes['sources.count'] = sources.length
+    cycleSpan.attributes['concurrency']   = SCRAPER_CONCURRENCY
 
-  const succeeded = results.filter(r => r.status === 'fulfilled').length
-  const failed    = results.filter(r => r.status === 'rejected').length
-  logger.info({ succeeded, failed, total: sources.length }, 'Scrape cycle complete')
+    logger.info({ count: sources.length, concurrency: SCRAPER_CONCURRENCY }, 'Starting scrape cycle')
+
+    const cycleStart = Date.now()
+    let cycleTotalArticles = 0
+
+    const limit = createSemaphore(SCRAPER_CONCURRENCY)
+
+    const results = await Promise.allSettled(
+      sources.map(source =>
+        limit(async () => {
+          const count = await scrapeSource(source)
+          cycleTotalArticles += count
+          return count
+        })
+      )
+    )
+
+    const cycleDurationMs = Date.now() - cycleStart
+    const succeeded = results.filter(r => r.status === 'fulfilled').length
+    const failed    = results.filter(r => r.status === 'rejected').length
+
+    cycleSpan.attributes['articles.total']  = cycleTotalArticles
+    cycleSpan.attributes['sources.success'] = succeeded
+    cycleSpan.attributes['sources.failed']  = failed
+
+    await recordCycleThroughput(cycleTotalArticles, cycleDurationMs).catch(() => {})
+
+    logger.info(
+      { succeeded, failed, total: sources.length, articles: cycleTotalArticles, durationMs: cycleDurationMs },
+      'Scrape cycle complete',
+    )
+  })
 }
 
 // ─── SCRAPE SINGLE SOURCE ─────────────────────────────────────────────────
-async function scrapeSource(source: ScraperSource) {
-  if (!source.rss_feeds?.length && !source.api_endpoint) return
+async function scrapeSource(source: ScraperSource): Promise<number> {
+  if (!source.rss_feeds?.length && !source.api_endpoint) return 0
+
+  // ── Circuit breaker check ─────────────────────────────────────────────
+  if (await isCircuitOpen(source.id)) {
+    logger.info({ sourceId: source.id, source: source.slug }, 'Circuit open — skipping source')
+    return 0
+  }
 
   const parser = new Parser({
     timeout:   15_000,
@@ -132,11 +206,21 @@ async function scrapeSource(source: ScraperSource) {
   })
 
   let newCount = 0
+  let feedSuccesses = 0
+  let feedErrors = 0
+  let totalLatencyMs = 0
 
   for (const feedUrl of (source.rss_feeds ?? [])) {
     try {
-      const feed = await parser.parseURL(feedUrl)
-      
+      // ── Rate limit per domain ───────────────────────────────────────────
+      await acquireRateLimit(feedUrl)
+
+      // ── Fetch with exponential backoff (1 s, 5 s, 30 s) ────────────────
+      const fetchStart = Date.now()
+      const feed = await withRetry(() => parser.parseURL(feedUrl))
+      totalLatencyMs += Date.now() - fetchStart
+      feedSuccesses++
+
       for (const item of feed.items ?? []) {
         const url = item.link ?? item.guid
         if (!url) continue
@@ -161,7 +245,7 @@ async function scrapeSource(source: ScraperSource) {
           .returning('id')
 
         if (!article) continue
-        
+
         const articlePayload = {
           articleId:   article.id,
           sourceId:    source.id,
@@ -191,16 +275,59 @@ async function scrapeSource(source: ScraperSource) {
         newCount++
       }
     } catch (err) {
-      logger.warn({ feedUrl, sourceId: source.id, err }, 'Feed parse error')
+      feedErrors++
+      logger.warn({ feedUrl, sourceId: source.id, err }, 'Feed parse error after retries')
+
+      // ── Record circuit breaker failure ─────────────────────────────────
+      await cbFailure(source.id, source.name)
+
+      // ── Push to dead-letter queue ──────────────────────────────────────
+      await pushDLQ({
+        feedUrl,
+        sourceId:   source.id,
+        sourceName: source.name,
+        error:      err instanceof Error ? err.message : String(err),
+        attempts:   4,   // initial + 3 retries
+        failedAt:   new Date().toISOString(),
+      })
+
+      continue
     }
   }
 
-  // Update last_scraped
-  await db('sources').where('id', source.id).update({ last_scraped: new Date() })
-  
+  // Reset circuit breaker on any success
+  if (feedSuccesses > 0) {
+    await cbSuccess(source.id)
+  }
+
+  // ── Adaptive polling — high-activity sources are backdated so they are
+  //    eligible sooner in the next scrape cycle (no DB schema change needed).
+  const adaptiveOffsetSec = newCount >= HIGH_VELOCITY_THRESHOLD
+    ? Math.round((source.scrape_interval ?? 30) * ADAPTIVE_ACCELERATION_FACTOR)
+    : 0
+
+  if (adaptiveOffsetSec > 0) {
+    await db('sources').where('id', source.id).update({
+      last_scraped: db.raw(`NOW() - INTERVAL '${adaptiveOffsetSec} seconds'`),
+    })
+    logger.debug({ source: source.slug, newCount, adaptiveOffsetSec }, 'Adaptive polling: accelerated next cycle')
+  } else {
+    await db('sources').where('id', source.id).update({ last_scraped: new Date() })
+  }
+
+  // Record source health with throughput
+  if (feedSuccesses === 0 && feedErrors > 0) {
+    await recordFailure(source.id, source.name, source.slug, `All ${feedErrors} feed(s) failed to parse`)
+  } else {
+    const avgLatencyMs = feedSuccesses > 0 ? Math.round(totalLatencyMs / feedSuccesses) : undefined
+    await recordSuccess(source.id, source.name, source.slug, avgLatencyMs, newCount)
+  }
+
   if (newCount > 0) {
     logger.debug({ source: source.slug, newCount }, 'Articles scraped')
   }
+
+  return newCount
 }
 
 // ─── VERIFICATION PIPELINE ───────────────────────────────────────────────
@@ -268,9 +395,18 @@ async function processArticleGroup(
   // Representative article (highest trust source)
   const primary = articles.sort((a, b) => b.sourceTrust - a.sourceTrust)[0]
 
-  // AI classification
-  const classification = await classifyContent(primary.title, primary.body)
-  const geo = await extractGeo(primary.title + ' ' + (primary.body ?? ''))
+  // AI classification — traced
+  const classification = await startSpan('pipeline.classify', async (span) => {
+    span.attributes['article.url'] = primary.url
+    return classifyContent(primary.title, primary.body)
+  })
+
+  // Geo extraction — traced
+  const geo = await startSpan('pipeline.geo', async (span) => {
+    span.attributes['title'] = primary.title.slice(0, 80)
+    return extractGeo(primary.title + ' ' + (primary.body ?? ''))
+  })
+
   const reliability = computeReliability(articles)
 
   // Create signal
@@ -303,8 +439,12 @@ async function processArticleGroup(
     .whereIn('id', articles.map(a => a.articleId))
     .update({ processed: true, signal_id: signal.id })
 
-  // Run verification
-  const verificationResult = await verifySignal(signal, articles)
+  // Run verification — traced
+  const verificationResult = await startSpan('pipeline.verify', async (span) => {
+    span.attributes['signal.id']       = String(signal.id)
+    span.attributes['articles.count']  = articles.length
+    return verifySignal(signal, articles)
+  })
   if (verificationResult.status !== signal.status) {
     await db('signals').where('id', signal.id).update({
       status:            verificationResult.status,
@@ -332,7 +472,7 @@ async function processArticleGroup(
       // Only create if no post already exists for this signal
       const existingPost = await db('posts').where('signal_id', signal.id).first('id')
       if (!existingPost) {
-        await db('posts').insert({
+        const [autoPost] = await db('posts').insert({
           author_id:        botUser.id,
           post_type:        'signal',
           content,
@@ -343,7 +483,15 @@ async function processArticleGroup(
           location_name:    signal.location_name ?? null,
           reliability_score: signal.reliability_score,
           language:         signal.language ?? 'en',
-        })
+        }).returning('id')
+
+        // Notify the API search consumer so the auto-post is indexed
+        if (kafkaReady && producer && autoPost) {
+          await producer.send({
+            topic: 'posts.created',
+            messages: [{ value: JSON.stringify({ id: autoPost.id }) }],
+          }).catch(() => {})
+        }
       }
     }
   } catch (err) {

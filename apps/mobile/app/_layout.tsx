@@ -137,6 +137,27 @@ export default function RootLayout() {
             headerStyle: { backgroundColor: '#0d0f18' },
           }}
         />
+        <Stack.Screen
+          name="communities/index"
+          options={{
+            title: 'Communities',
+            headerStyle: { backgroundColor: '#0d0f18' },
+          }}
+        />
+        <Stack.Screen
+          name="communities/[slug]"
+          options={{
+            title: 'Community',
+            headerStyle: { backgroundColor: '#0d0f18' },
+          }}
+        />
+        <Stack.Screen
+          name="users/[handle]"
+          options={{
+            title: 'Profile',
+            headerStyle: { backgroundColor: '#0d0f18' },
+          }}
+        />
       </Stack>
     </QueryClientProvider>
   )

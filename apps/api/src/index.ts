@@ -3,6 +3,8 @@ import cors from '@fastify/cors'
 import jwt from '@fastify/jwt'
 import rateLimit from '@fastify/rate-limit'
 import websocket from '@fastify/websocket'
+import swagger from '@fastify/swagger'
+import swaggerUI from '@fastify/swagger-ui'
 import { redis } from './db/redis'
 import { db } from './db/postgres'
 import { registerFeedRoutes } from './routes/feed'
@@ -18,11 +20,15 @@ import { registerPollRoutes } from './routes/polls'
 import { registerSourceRoutes } from './routes/sources'
 import { registerAdminRoutes } from './routes/admin'
 import { registerDeveloperRoutes } from './routes/developer'
+import { registerEmbedRoutes } from './routes/embed'
 import { registerNotificationRoutes } from './routes/notifications'
 import { registerUploadRoutes } from './routes/uploads'
 import { registerWSHandler } from './ws/handler'
 import { metricsPlugin } from './middleware/metrics'
+import { requestLoggerPlugin } from './middleware/request-logger'
+import { registerHealthRoutes } from './routes/health'
 import { logger } from './lib/logger'
+import { initSentry, flushSentry } from './lib/sentry'
 import { setupSearchIndexes } from './lib/search'
 import { connectSearchProducer, disconnectSearchProducer } from './lib/search-events'
 import { startSearchConsumer, stopSearchConsumer } from './lib/search-consumer'
@@ -39,6 +45,9 @@ const app = Fastify({
 })
 
 async function bootstrap() {
+  // ─── SENTRY (optional, env-gated) ────────────────────────
+  initSentry()
+
   // ─── PLUGINS ─────────────────────────────────────────────
   const isDev = process.env.NODE_ENV !== 'production'
   const allowedOrigins = isDev
@@ -85,22 +94,92 @@ async function bootstrap() {
 
   await app.register(websocket)
   await app.register(metricsPlugin)
+  await app.register(requestLoggerPlugin)
+
+  // ─── SWAGGER / OPENAPI ───────────────────────────────────
+  await app.register(swagger, {
+    openapi: {
+      openapi: '3.1.0',
+      info: {
+        title: 'WorldPulse API',
+        description: [
+          'Real-time global intelligence network.',
+          '',
+          '## Authentication',
+          'Most endpoints require a Bearer JWT. Obtain tokens via `POST /api/v1/auth/login`.',
+          'Pass the access token as `Authorization: Bearer <token>`.',
+          '',
+          '## Rate Limits',
+          'Default: 200 req/min per user. Auth endpoints: 5 req/min.',
+          'Rate-limit headers are included in every response.',
+        ].join('\n'),
+        version: '1.0.0',
+        contact: {
+          name: 'WorldPulse',
+          url: 'https://worldpulse.io',
+        },
+        license: {
+          name: 'MIT',
+          url: 'https://opensource.org/licenses/MIT',
+        },
+      },
+      servers: [
+        { url: 'https://api.worldpulse.io', description: 'Production' },
+        { url: 'http://localhost:3001', description: 'Local development' },
+      ],
+      tags: [
+        { name: 'auth',          description: 'Authentication & session management' },
+        { name: 'feed',          description: 'Global feed, following feed, trending' },
+        { name: 'signals',       description: 'Verified world events / breaking signals' },
+        { name: 'posts',         description: 'User-generated content & threads' },
+        { name: 'search',        description: 'Full-text search & autocomplete' },
+        { name: 'users',         description: 'User profiles, follows, notifications' },
+        { name: 'communities',   description: 'Topic communities' },
+        { name: 'polls',         description: 'Polls attached to posts' },
+        { name: 'sources',       description: 'News sources & trust tiers' },
+        { name: 'alerts',        description: 'User alert subscriptions' },
+        { name: 'analytics',     description: 'Personal engagement analytics' },
+        { name: 'notifications', description: 'Push notification device tokens' },
+        { name: 'uploads',       description: 'Media uploads' },
+        { name: 'developer',     description: 'Developer API keys' },
+        { name: 'embed',         description: 'Public embeddable widgets' },
+        { name: 'admin',         description: 'Admin-only operations' },
+      ],
+      components: {
+        securitySchemes: {
+          bearerAuth: {
+            type: 'http' as const,
+            scheme: 'bearer',
+            bearerFormat: 'JWT',
+            description: 'JWT access token from POST /api/v1/auth/login',
+          },
+        },
+      },
+    },
+    // Strip internal/runtime fields from the spec
+    hideUntagged: false,
+    refResolver: {
+      buildLocalReference: (json, _baseUri, _fragment, _i) =>
+        (json.$id as string | undefined) ?? `model-${_i}`,
+    },
+  })
+
+  await app.register(swaggerUI, {
+    routePrefix: '/api/docs',
+    uiConfig: {
+      docExpansion: 'list',
+      deepLinking: true,
+      tryItOutEnabled: true,
+      persistAuthorization: true,
+    },
+    staticCSP: true,
+  })
 
   // ─── HEALTH ──────────────────────────────────────────────
-  app.get('/health', async () => {
-    const [pgOk, redisOk] = await Promise.allSettled([
-      db.raw('SELECT 1'),
-      redis.ping(),
-    ])
-    return {
-      status: 'ok',
-      version: process.env.npm_package_version ?? '0.1.0',
-      postgres: pgOk.status === 'fulfilled' ? 'ok' : 'error',
-      redis:    redisOk.status === 'fulfilled' ? 'ok' : 'error',
-      uptime:   process.uptime(),
-      timestamp: new Date().toISOString(),
-    }
-  })
+  // Legacy shallow health check (for load-balancer pings)
+  app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }))
+  // Enhanced per-service health check
+  await app.register(registerHealthRoutes, { prefix: '/api/v1/health' })
 
   // ─── ROUTES ──────────────────────────────────────────────
   await app.register(registerAuthRoutes,   { prefix: '/api/v1/auth' })
@@ -118,6 +197,7 @@ async function bootstrap() {
   await app.register(registerUploadRoutes,       { prefix: '/api/v1/uploads' })
   await app.register(registerAdminRoutes,        { prefix: '/api/v1/admin' })
   await app.register(registerDeveloperRoutes,    { prefix: '/api/v1/developer/keys' })
+  await app.register(registerEmbedRoutes,        { prefix: '/api/v1/embed' })
 
   // ─── WEBSOCKET ───────────────────────────────────────────
   await app.register(registerWSHandler)
@@ -146,6 +226,7 @@ async function bootstrap() {
     await Promise.allSettled([
       stopSearchConsumer(),
       disconnectSearchProducer(),
+      flushSentry(2000),
       app.close(),
     ])
     process.exit(0)

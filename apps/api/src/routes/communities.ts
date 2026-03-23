@@ -28,6 +28,11 @@ function canModerate(role: MemberRole | null): boolean {
 // ─── ROUTES ──────────────────────────────────────────────────────────────
 export const registerCommunityRoutes: FastifyPluginAsync = async (app) => {
 
+  app.addHook('onRoute', (routeOptions) => {
+    routeOptions.schema ??= {}
+    routeOptions.schema.tags = routeOptions.schema.tags ?? ['communities']
+  })
+
   // ─── LIST COMMUNITIES (with discovery features) ───────────
   app.get('/', { preHandler: [optionalAuth] }, async (req, reply) => {
     const { search, category, sort = 'members', limit = 50 } = req.query as {

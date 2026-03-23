@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import type { Post, PollData } from '@worldpulse/types'
 import { PollDisplay } from './PollDisplay'
 import { RichMediaEmbed, extractFirstEmbedUrl } from '@/components/RichMediaEmbed'
@@ -384,6 +385,7 @@ function FeedEmptyState({ tab }: { tab: string }) {
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 export function FeedList({ tab, category }: { tab: string; category: string }) {
+  const router = useRouter()
   const [items, setItems]     = useState<FeedItem[]>([])
   const [loading, setLoading] = useState(true)
   const [cursor, setCursor]   = useState<string | null>(null)
@@ -468,6 +470,14 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
                 ? item.content.slice(0, 80)
                 : `Post by ${item.author.name}`
           }
+          onClick={(e) => {
+            const target = e.target as HTMLElement
+            const tag = target.tagName.toLowerCase()
+            // Don't navigate if clicking on interactive elements
+            if (tag === 'button' || tag === 'input' || tag === 'a' || tag === 'svg' || tag === 'path' || tag === 'line' || target.closest('button') || target.closest('[role="group"]')) return
+            const href = item.type === 'signal' ? `/signals/${item.id}` : `/posts/${item.id}`
+            router.push(href)
+          }}
           className={`flex gap-3 px-5 py-4 border-b border-[rgba(255,255,255,0.05)] hover:bg-[rgba(255,255,255,0.015)] transition-colors cursor-pointer animate-fade-in
             ${item.type === 'signal' ? SEVERITY_BORDER[item.severity ?? ''] ?? '' : ''}`}
         >

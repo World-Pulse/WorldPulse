@@ -41,7 +41,7 @@ async function run() {
   EXCEPTION WHEN duplicate_object THEN NULL; END $$`)
 
   await db.raw(`DO $$ BEGIN
-    CREATE TYPE account_type AS ENUM ('community','journalist','official','expert','ai','bot');
+    CREATE TYPE account_type AS ENUM ('community','journalist','official','expert','ai','bot','admin');
   EXCEPTION WHEN duplicate_object THEN NULL; END $$`)
 
   await db.raw(`DO $$ BEGIN
@@ -461,6 +461,21 @@ async function run() {
   `)
   await db.raw(`CREATE INDEX IF NOT EXISTS idx_device_tokens_user ON device_push_tokens(user_id) WHERE active = TRUE`)
 
+  // ── search_analytics ──────────────────────────────────────────────────────
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS search_analytics (
+      id           UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+      ts           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      query        TEXT        NOT NULL,
+      search_type  VARCHAR(20) NOT NULL DEFAULT 'all',
+      result_count INTEGER     NOT NULL DEFAULT 0,
+      zero_results BOOLEAN     NOT NULL DEFAULT FALSE
+    )
+  `)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_search_analytics_ts   ON search_analytics(ts DESC)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_search_analytics_type ON search_analytics(search_type, ts DESC)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_search_analytics_zero ON search_analytics(zero_results, ts DESC) WHERE zero_results = TRUE`)
+
   // ── Functions & triggers (CREATE OR REPLACE — always safe to re-run) ─────
   await db.raw(`
     CREATE OR REPLACE FUNCTION update_updated_at()
@@ -579,6 +594,85 @@ async function run() {
     VALUES ('worldpulse_ai', 'WorldPulse AI Digest', 'ai', TRUE, 0.950,
             'Automated synthesis of verified global signals. Powered by open-source AI.')
     ON CONFLICT (handle) DO NOTHING
+  `)
+
+  // ── Onboarding fields (patch for existing DBs) ────────────────────────────
+  await db.raw(`ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarded  BOOLEAN NOT NULL DEFAULT FALSE`)
+  await db.raw(`ALTER TABLE users ADD COLUMN IF NOT EXISTS interests  TEXT[]  NOT NULL DEFAULT '{}'`)
+  await db.raw(`ALTER TABLE users ADD COLUMN IF NOT EXISTS regions    TEXT[]  NOT NULL DEFAULT '{}'`)
+
+  // ── signal_flags (community flagging) ────────────────────────────────────
+  await db.raw(`ALTER TABLE signals ADD COLUMN IF NOT EXISTS is_breaking BOOLEAN NOT NULL DEFAULT FALSE`)
+  await db.raw(`ALTER TABLE signals ADD COLUMN IF NOT EXISTS community_flag_count INTEGER NOT NULL DEFAULT 0`)
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS signal_flags (
+      id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      signal_id   UUID NOT NULL REFERENCES signals(id) ON DELETE CASCADE,
+      user_id     UUID REFERENCES users(id) ON DELETE SET NULL,
+      ip_hash     VARCHAR(64),
+      reason      VARCHAR(50) NOT NULL,
+      notes       TEXT,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_signal_flags_signal ON signal_flags(signal_id, created_at DESC)`)
+  await db.raw(`CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_flags_user_dedup ON signal_flags(signal_id, user_id) WHERE user_id IS NOT NULL`)
+
+  // ── Performance indexes (Phase 6 — query optimization) ───────────────────
+  //
+  // idx_posts_feed: partial covering index for global feed.
+  // Eliminates heap fetches for the very common deleted_at IS NULL + parent_id
+  // IS NULL filter combo used by /feed/global and /feed/following.
+  await db.raw(`
+    CREATE INDEX IF NOT EXISTS idx_posts_feed
+    ON posts(created_at DESC)
+    WHERE deleted_at IS NULL AND parent_id IS NULL
+  `)
+
+  // idx_posts_author_feed: composite for /feed/following — avoids a full
+  // posts scan when filtering by author_id on live top-level posts.
+  await db.raw(`
+    CREATE INDEX IF NOT EXISTS idx_posts_author_feed
+    ON posts(author_id, created_at DESC)
+    WHERE deleted_at IS NULL AND parent_id IS NULL
+  `)
+
+  // idx_posts_signal_active: used by GET /signals/:id/posts (top-level only).
+  await db.raw(`
+    CREATE INDEX IF NOT EXISTS idx_posts_signal_active
+    ON posts(signal_id, created_at DESC)
+    WHERE deleted_at IS NULL AND parent_id IS NULL
+  `)
+
+  // idx_signals_status_created: the existing idx_signals_status is a partial
+  // index WHERE status = 'verified' only.  The list + stream endpoints also
+  // query status IN ('verified','pending').  A full composite covers both.
+  await db.raw(`
+    CREATE INDEX IF NOT EXISTS idx_signals_status_created
+    ON signals(status, created_at DESC)
+  `)
+
+  // idx_signals_map: partial index tuned for the /signals/map/points query.
+  // Predicate matches the WHERE clause exactly so PG can skip the heap for
+  // signals that have no location or are in a non-displayable status.
+  await db.raw(`
+    CREATE INDEX IF NOT EXISTS idx_signals_map
+    ON signals(created_at DESC, category, severity)
+    WHERE location IS NOT NULL AND (status = 'verified' OR status = 'pending')
+  `)
+
+  // idx_bookmarks_user: the bookmarks table had no index at all.
+  await db.raw(`
+    CREATE INDEX IF NOT EXISTS idx_bookmarks_user
+    ON bookmarks(user_id, post_id)
+  `)
+
+  // idx_signals_tags_trgm: expression trgm index so that
+  //   array_to_string(tags, ' ') ILIKE ?
+  // uses a GIN bitmap scan instead of a seqscan.  Required by autocomplete.
+  await db.raw(`
+    CREATE INDEX IF NOT EXISTS idx_signals_tags_trgm
+    ON signals USING gin(array_to_string(tags, ' ') gin_trgm_ops)
   `)
 
   console.log('✅  Migrations complete.')

@@ -280,16 +280,82 @@ export const alertsApi = {
     request<{ success: boolean }>(`/api/v1/alerts/${id}`, { method: 'DELETE' }),
 }
 
+export type Community = {
+  id: string
+  slug: string
+  name: string
+  description: string | null
+  avatarUrl: string | null
+  bannerUrl: string | null
+  categories: string[]
+  memberCount: number
+  postCount: number
+  createdAt: string
+  isMember?: boolean
+}
+
+export type SearchResults = {
+  signals: Signal[]
+  posts: Post[]
+  users: UserProfile[]
+  tags: string[]
+}
+
 // Users
 export const usersApi = {
   getProfile: (handle: string) =>
-    request<{ success: boolean; data: UserProfile }>(`/api/v1/users/${handle}`),
+    request<{ success: boolean; data: UserProfile & { isFollowing?: boolean } }>(`/api/v1/users/${handle}`),
 
   follow: (handle: string) =>
     request<{ success: boolean }>(`/api/v1/users/${handle}/follow`, { method: 'POST' }),
 
   unfollow: (handle: string) =>
     request<{ success: boolean }>(`/api/v1/users/${handle}/follow`, { method: 'DELETE' }),
+
+  getPosts: (handle: string, params?: { cursor?: string; limit?: number }) =>
+    request<{ success: boolean; data: { items: Post[]; cursor: string | null; hasMore: boolean } }>(
+      `/api/v1/users/${handle}/posts`, { params }
+    ),
+}
+
+// Search
+export const searchApi = {
+  search: (q: string, type?: 'signals' | 'posts' | 'users' | 'tags', limit = 20) =>
+    request<{ success: boolean; data: SearchResults }>(
+      '/api/v1/search', { params: { q, type, limit }, auth: false }
+    ),
+}
+
+// Communities
+export const communitiesApi = {
+  getAll: (params?: { search?: string; sort?: 'members' | 'posts' | 'trending' | 'newest'; limit?: number }) =>
+    request<{ success: boolean; data: Community[] }>('/api/v1/communities', { params }),
+
+  getBySlug: (slug: string) =>
+    request<{ success: boolean; data: Community }>(`/api/v1/communities/${slug}`),
+
+  getPosts: (slug: string, params?: { cursor?: string; limit?: number }) =>
+    request<{ success: boolean; data: { items: Post[]; cursor: string | null; hasMore: boolean } }>(
+      `/api/v1/communities/${slug}/posts`, { params }
+    ),
+
+  join: (slug: string) =>
+    request<{ success: boolean }>(`/api/v1/communities/${slug}/join`, { method: 'POST' }),
+
+  leave: (slug: string) =>
+    request<{ success: boolean }>(`/api/v1/communities/${slug}/leave`, { method: 'DELETE' }),
+}
+
+// Posts
+export const postsApi = {
+  create: (data: { content: string; signalId?: string; postType?: string }) =>
+    request<{ success: boolean; data: Post }>('/api/v1/posts', { method: 'POST', body: data }),
+
+  like: (id: string) =>
+    request<{ success: boolean }>(`/api/v1/posts/${id}/like`, { method: 'POST' }),
+
+  unlike: (id: string) =>
+    request<{ success: boolean }>(`/api/v1/posts/${id}/like`, { method: 'DELETE' }),
 }
 
 // Notifications

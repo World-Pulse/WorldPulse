@@ -3,34 +3,39 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev":   "next dev",
+    "dev": "next dev",
     "build": "next build",
+    "analyze": "ANALYZE=true next build",
     "start": "next start",
-    "lint":  "next lint"
+    "lint": "next lint",
+    "test": "vitest run"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.62.0",
+    "@types/supercluster": "^7.1.3",
     "@worldpulse/types": "workspace:*",
-    "@worldpulse/ui":    "workspace:*",
-    "next":              "15.0.3",
-    "react":             "^19.0.0",
-    "react-dom":         "^19.0.0",
-    "next-intl":         "^3.22.0",
-    "maplibre-gl":       "^4.7.0",
-    "react-map-gl":      "^7.1.7",
-    "swr":               "^2.2.5",
-    "zustand":           "^5.0.0",
-    "date-fns":          "^4.1.0",
-    "clsx":              "^2.1.1",
-    "tailwind-merge":    "^2.5.0",
-    "lucide-react":      "^0.454.0",
-    "@tanstack/react-query": "^5.62.0"
+    "@worldpulse/ui": "workspace:*",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "maplibre-gl": "^4.7.0",
+    "next": "16.2.1",
+    "next-intl": "^3.22.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-map-gl": "^7.1.7",
+    "supercluster": "^8.0.1",
+    "swr": "^2.2.5",
+    "tailwind-merge": "^2.5.0",
+    "zustand": "^5.0.0"
   },
   "devDependencies": {
-    "@types/react":     "^19.0.0",
+    "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "typescript":       "^5.6.0",
-    "tailwindcss":      "^3.4.0",
-    "autoprefixer":     "^10.4.0",
-    "postcss":          "^8.4.0"
+    "autoprefixer": "^10.4.0",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.6.0",
+    "@next/bundle-analyzer": "^16.2.1",
+    "vitest": "^2.1.0"
   }
 }

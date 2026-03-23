@@ -2,25 +2,20 @@
 
 ## Active Blockers
 
-### git index.lock (LOW SEVERITY — PERSISTENT)
-- **Date:** 2026-03-22 (updated Cycle 19)
-- **Description:** `.git/index.lock` exists on the Windows-mounted workspace and cannot be removed from within the Linux VM (Operation not permitted). This is a recurring blocker preventing brain agent commits.
-- **Impact (Cycle 18):** Frontend developer portal page (`apps/web/src/app/developer/page.tsx`) not committed. Backend API committed (e73f2ad).
-- **Impact (Cycle 19):** AI signal summaries feature (5 files) written to working tree but not committed:
-  - `apps/api/src/lib/signal-summary.ts` — NEW
-  - `apps/api/src/lib/__tests__/signal-summary.test.ts` — NEW
-  - `apps/api/src/routes/signals.ts` — updated (summary endpoint + aiSummary in detail)
-  - `apps/web/src/components/signals/AISummary.tsx` — NEW
-  - `apps/web/src/app/signals/[id]/SignalDetailClient.tsx` — updated (AISummary import + usage)
-  - `packages/types/src/index.ts` — updated (aiSummary field on Signal)
-  - `apps/api/.env.example` — updated (OPENAI_API_KEY + OLLAMA_URL docs)
-- **Resolution:** Run these commands in the project directory:
-  ```bash
-  rm .git/index.lock
-  git add apps/api/src/lib/signal-summary.ts apps/api/src/lib/__tests__/signal-summary.test.ts apps/api/src/routes/signals.ts apps/web/src/components/signals/AISummary.tsx "apps/web/src/app/signals/[id]/SignalDetailClient.tsx" packages/types/src/index.ts apps/api/.env.example apps/web/src/app/developer/page.tsx
-  git commit -m "feat(api,web): add AI-generated signal summaries with OpenAI/Ollama/extractive fallback"
+### git HEAD.lock + index.lock (LOW SEVERITY — PERSISTENT)
+- **Date last seen:** 2026-03-23 Cycle 31
+- **Files:** `.git/HEAD.lock` (created 22:01, pre-existing Windows crash) + `.git/index.lock` (created 22:18, during this cycle's git add)
+- **Description:** Both lock files exist on Windows NTFS. Linux VM cannot unlink them (Operation not permitted). All git add, commit, and push operations fail.
+- **Current state (Cycle 31):** ALL multi-cycle changes are STAGED in git index — including Cycles 19–31 features (OSINT sources, browser extension, slop detector, category tabs fix, LeftSidebar, test suites, AI summaries, embed widget, developer API, mobile screens, concurrency tuning, caching layer, bundle optimizer). Nothing is lost. Just needs to be committed and pushed.
+- **Resolution (run from Windows PowerShell in project directory):**
+  ```powershell
+  del .git\HEAD.lock
+  del .git\index.lock
+  git commit -m "fix(feed): wire category channel tabs + update classifier + live sidebar counts"
+  git push
+  ssh root@142.93.71.102 "cd /opt/worldpulse && git pull && ./deploy.sh"
   ```
-- **Workaround:** All files exist in working tree — no code is lost.
+- **Note:** Every brain agent cycle accumulates staged changes. The NTFS lock issue is fundamental to running git in WSL2 against a Windows-mounted folder. Consider running the brain agent with git operations from Windows side instead, OR setting up a Linux-native git repo with push-to-Windows-checkout workflow.
 
 ## Resolved Blockers
-(none yet)
+- **2026-03-22 Cycle 28:** index.lock was absent at start of Cycle 29 — git status showed clean. This means Windows sometimes clears the lock on its own (probably VSCode/Windows Terminal restart). The lock is not permanent but recurs.

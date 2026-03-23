@@ -22,8 +22,8 @@
   --wp-text:        #e2e6f0;
   --wp-text-2:      #8892a4;
   --wp-text-3:      #4a5568;
-  --wp-font-display: 'Bebas Neue', sans-serif;
-  --wp-font-mono:   'JetBrains Mono', monospace;
+  --wp-font-display: var(--font-display, 'Bebas Neue'), sans-serif;
+  --wp-font-mono:   var(--font-mono, 'JetBrains Mono'), monospace;
 }
 
 /* ─── BASE ────────────────────────────────────────────────── */
@@ -146,6 +146,161 @@ body::before {
 .badge-ai        { background: var(--wp-cyan-dim); color: var(--wp-cyan); border: 1px solid rgba(0,212,255,0.3); }
 .badge-community { background: var(--wp-amber-dim); color: var(--wp-amber); border: 1px solid rgba(245,166,35,0.3); }
 
+/* Shimmer skeleton */
+@keyframes shimmer {
+  0%   { background-position: -800px 0; }
+  100% { background-position:  800px 0; }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--wp-surface2) 0%,
+    var(--wp-surface3) 40%,
+    var(--wp-surface2) 60%,
+    var(--wp-surface2) 100%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+/* ─── LIGHT MODE ────────────────────────────────────────── */
+html.light {
+  --wp-bg:           #f0f2f5;
+  --wp-surface:      #ffffff;
+  --wp-surface2:     #f5f7fa;
+  --wp-surface3:     #e8ecf2;
+  --wp-border:       rgba(0,0,0,0.08);
+  --wp-border-bright: rgba(0,0,0,0.18);
+  --wp-text:         #111827;
+  --wp-text-2:       #374151;
+  --wp-text-3:       #6b7280;
+}
+
+html.light body { background: var(--wp-bg); color: var(--wp-text); }
+
+html.light .glass {
+  background: rgba(255, 255, 255, 0.94);
+}
+
+html.light body::before { opacity: 0.08; }
+
+html.light .shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--wp-surface2) 0%,
+    var(--wp-surface3) 40%,
+    var(--wp-surface2) 60%,
+    var(--wp-surface2) 100%
+  );
+  background-size: 800px 100%;
+}
+
 /* MapLibre reset */
 .maplibregl-map { font-family: inherit !important; }
 .maplibregl-ctrl-attrib { display: none !important; }
+/* Ensure MapLibre popup is readable on mobile */
+@media (max-width: 640px) {
+  .wp-map-popup .maplibregl-popup-content {
+    max-width: min(280px, calc(100vw - 32px)) !important;
+  }
+}
+
+/* ─── MOBILE UTILITIES ──────────────────────────────── */
+
+/* Hide scrollbar but keep scrollability */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar { display: none; }
+
+/* Drawer slide-in from left */
+@keyframes slide-in-left {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
+}
+.animate-slide-in-left { animation: slide-in-left 0.25s ease-out forwards; }
+
+/* Minimum tap target size */
+@media (pointer: coarse) {
+  button, a, [role="button"] {
+    min-height: 44px;
+  }
+  /* Exception: very small inline elements */
+  .tag-pill, .source-badge { min-height: unset; }
+}
+
+/* Prevent text size adjustment on rotate (iOS) */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+/* Safe-area padding for notched devices */
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+/* Feed card — full width on mobile */
+@media (max-width: 640px) {
+  article[role="article"] { padding-left: 16px; padding-right: 16px; }
+}
+
+/* Prevent CLS for font display: swap */
+.font-display { font-family: var(--font-display, 'Bebas Neue'), sans-serif; }
+.font-mono    { font-family: var(--font-mono, 'JetBrains Mono'), monospace; }
+
+/* ─── MAIN CONTENT BOTTOM PADDING ─────────────────────── */
+/* Safe-area-aware padding for the bottom tab bar on mobile only */
+.main-content-mobile-pb {
+  padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+}
+@media (min-width: 768px) {
+  .main-content-mobile-pb { padding-bottom: 0; }
+}
+
+/* ─── SEARCH MOBILE FULL-SCREEN ────────────────────────── */
+@media (max-width: 767px) {
+  .search-page-wrapper {
+    position: fixed;
+    inset: 52px 0 calc(56px + env(safe-area-inset-bottom, 0px)) 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--wp-bg);
+    z-index: 10;
+  }
+}
+
+/* ─── MAP TOUCH ─────────────────────────────────────────── */
+/* Allow browser to handle pinch-zoom gesture passthrough while MapLibre
+   handles map-specific touch events. The canvas itself uses touchAction:none
+   which is correct, but the container should not block overscroll. */
+.map-outer-container {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* ─── MAP SLIDE-UP PANEL ────────────────────────────────── */
+/* Swipe indicator on mobile bottom sheet */
+.map-panel-drag-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.18);
+  margin: 10px auto 4px;
+  flex-shrink: 0;
+}
+
+/* ─── CLS FIXES ─────────────────────────────────────────── */
+/* Reserve space for avatar images to prevent layout shift */
+img[data-wp-avatar] {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Prevent overflow on feed cards on tiny screens */
+@media (max-width: 400px) {
+  .feed-card-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}

@@ -2,6 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import { EmptyState } from '@/components/EmptyState'
+import { ReliabilityDots } from '@/components/signals/ReliabilityDots'
+import { FlagModal } from '@/components/signals/FlagModal'
+import type { Signal, CrossCheckStatus } from '@worldpulse/types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -20,6 +24,54 @@ const SEVERITY_COLORS: Record<string, string> = {
   high:     'text-wp-amber border-wp-amber bg-[rgba(245,166,35,0.1)]',
   medium:   'text-wp-cyan border-wp-cyan bg-[rgba(0,212,255,0.1)]',
   low:      'text-wp-green border-wp-green bg-[rgba(0,230,118,0.1)]',
+}
+
+function SignalSearchCard({ sig }: { sig: Signal }) {
+  const [flagOpen, setFlagOpen] = useState(false)
+  const ageMs       = Date.now() - new Date(sig.createdAt).getTime()
+  const isBreaking  = sig.isBreaking === true && ageMs < 30 * 60_000
+  const flagCount   = sig.communityFlagCount ?? 0
+  const isContested = sig.status === 'disputed' || flagCount >= 3
+  const crossCheck: CrossCheckStatus =
+    sig.status === 'verified' ? 'confirmed' :
+    sig.status === 'disputed' ? 'contested' : 'unconfirmed'
+
+  return (
+    <div className="bg-wp-surface border border-[rgba(255,255,255,0.07)] rounded-xl p-4 hover:border-[rgba(255,255,255,0.15)] transition-all">
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
+        <span className={`font-mono text-[9px] px-2 py-0.5 rounded border ${SEVERITY_COLORS[sig.severity] ?? ''}`}>
+          {sig.severity?.toUpperCase()}
+        </span>
+        <span className="font-mono text-[9px] text-wp-text3 uppercase">{sig.category}</span>
+        {isBreaking  && <span className="source-badge bg-wp-red text-white animate-flash-tag">BREAKING</span>}
+        {isContested && <span className="source-badge bg-[rgba(245,166,35,0.15)] text-wp-amber border border-[rgba(245,166,35,0.4)]">CONTESTED</span>}
+        {sig.locationName && <span className="font-mono text-[10px] text-wp-text2 ml-auto">📍 {sig.locationName}</span>}
+      </div>
+      <div className="text-[14px] font-semibold text-wp-text leading-snug mb-2">{sig.title}</div>
+      <div className="flex items-center gap-3 mt-2">
+        <ReliabilityDots
+          score={sig.reliabilityScore}
+          sourceCount={sig.sourceCount}
+          crossCheckStatus={crossCheck}
+          communityFlagCount={flagCount}
+        />
+        <span className="font-mono text-[10px] text-wp-text3">
+          {new Date(sig.createdAt).toLocaleDateString()}
+        </span>
+        <button
+          onClick={() => setFlagOpen(true)}
+          className="ml-auto p-1 rounded text-wp-text3 hover:text-wp-red transition-colors"
+          aria-label="Flag signal"
+          title="Flag this signal"
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>
+          </svg>
+        </button>
+      </div>
+      {flagOpen && <FlagModal signalId={sig.id} onClose={() => setFlagOpen(false)} />}
+    </div>
+  )
 }
 
 const SEVERITY_OPTIONS = ['critical', 'high', 'medium', 'low', 'info']
@@ -42,27 +94,40 @@ const LANGUAGE_OPTIONS = [
 ]
 
 const SORT_OPTIONS = [
-  { value: 'newest',   label: 'Newest first' },
-  { value: 'oldest',   label: 'Oldest first' },
+  { value: 'newest',    label: 'Newest first' },
+  { value: 'oldest',    label: 'Oldest first' },
   { value: 'discussed', label: 'Most discussed' },
-  { value: 'boosted',  label: 'Most boosted' },
+  { value: 'boosted',   label: 'Most boosted' },
 ]
 
 interface SearchFilters {
-  from:       string
-  to:         string
-  severity:   string[]
-  category:   string[]
-  source:     string
-  language:   string
-  sort:       string
+  from:        string
+  to:          string
+  severity:    string[]
+  category:    string[]
+  source:      string
+  language:    string
+  sort:        string
+  reliability: number   // 0–100, minimum reliability (0 = no filter)
+}
+
+// Facet distributions returned by the API
+interface SearchFacets {
+  category?: Record<string, number>
+  severity?: Record<string, number>
 }
 
 function filtersEmpty(f: SearchFilters) {
-  return !f.from && !f.to && f.severity.length === 0 && f.category.length === 0 && !f.source && !f.language && f.sort === 'newest'
+  return (
+    !f.from && !f.to &&
+    f.severity.length === 0 && f.category.length === 0 &&
+    !f.source && !f.language &&
+    f.sort === 'newest' &&
+    f.reliability === 0
+  )
 }
 
-function filtersToParams(q: string, type: SearchType, f: SearchFilters) {
+function filtersToParams(q: string, type: SearchType, f: SearchFilters, page = 0) {
   const p = new URLSearchParams({ q, type })
   if (f.from)              p.set('from', f.from)
   if (f.to)                p.set('to', f.to)
@@ -71,18 +136,21 @@ function filtersToParams(q: string, type: SearchType, f: SearchFilters) {
   if (f.source)            p.set('source', f.source)
   if (f.language)          p.set('language', f.language)
   if (f.sort !== 'newest') p.set('sort', f.sort)
+  if (f.reliability > 0)   p.set('reliability', String(f.reliability))
+  if (page > 0)            p.set('page', String(page))
   return p
 }
 
 function parseFiltersFromParams(params: URLSearchParams): SearchFilters {
   return {
-    from:     params.get('from')     ?? '',
-    to:       params.get('to')       ?? '',
-    severity: params.get('severity') ? params.get('severity')!.split(',') : [],
-    category: params.get('category') ? params.get('category')!.split(',') : [],
-    source:   params.get('source')   ?? '',
-    language: params.get('language') ?? '',
-    sort:     params.get('sort')     ?? 'newest',
+    from:        params.get('from')        ?? '',
+    to:          params.get('to')          ?? '',
+    severity:    params.get('severity')    ? params.get('severity')!.split(',') : [],
+    category:    params.get('category')    ? params.get('category')!.split(',') : [],
+    source:      params.get('source')      ?? '',
+    language:    params.get('language')    ?? '',
+    sort:        params.get('sort')        ?? 'newest',
+    reliability: params.get('reliability') ? Number(params.get('reliability')) : 0,
   }
 }
 
@@ -90,28 +158,47 @@ export default function SearchPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  const [query, setQuery]       = useState(searchParams.get('q') ?? '')
-  const [type, setType]         = useState<SearchType>((searchParams.get('type') as SearchType) ?? 'all')
-  const [filters, setFilters]   = useState<SearchFilters>(parseFiltersFromParams(searchParams))
-  const [showFilters, setShowFilters] = useState(false)
-  const [results, setResults]   = useState<Record<string, unknown[]>>({})
-  const [loading, setLoading]   = useState(false)
+  const [query, setQuery]               = useState(searchParams.get('q') ?? '')
+  const [type, setType]                 = useState<SearchType>((searchParams.get('type') as SearchType) ?? 'all')
+  const [filters, setFilters]           = useState<SearchFilters>(parseFiltersFromParams(searchParams))
+  const [page, setPage]                 = useState(Number(searchParams.get('page') ?? 0))
+  const [showFilters, setShowFilters]   = useState(false)
+  const [results, setResults]           = useState<Record<string, unknown[]>>({})
+  const [facets, setFacets]             = useState<SearchFacets>({})
+  const [total, setTotal]               = useState(0)
+  const [loading, setLoading]           = useState(false)
   const [autocomplete, setAutocomplete] = useState<{ signals: unknown[]; users: unknown[]; tags: string[] } | null>(null)
   const [showAutocomplete, setShowAutocomplete] = useState(false)
-  const [saveAlertName, setSaveAlertName] = useState('')
-  const [showSaveAlert, setShowSaveAlert] = useState(false)
-  const [alertSaved, setAlertSaved]       = useState(false)
-  const [urlCopied, setUrlCopied]         = useState(false)
+  const [saveAlertName, setSaveAlertName]       = useState('')
+  const [showSaveAlert, setShowSaveAlert]       = useState(false)
+  const [alertSaved, setAlertSaved]             = useState(false)
+  const [urlCopied, setUrlCopied]               = useState(false)
 
-  const search = useCallback(async (q: string, t: SearchType, f: SearchFilters) => {
-    if (!q.trim() || q.trim().length < 2) { setResults({}); return }
+  const search = useCallback(async (
+    q: string,
+    t: SearchType,
+    f: SearchFilters,
+    pg = 0,
+  ) => {
+    if (!q.trim() || q.trim().length < 2) { setResults({}); setFacets({}); setTotal(0); return }
     setLoading(true)
     try {
-      const params = filtersToParams(q, t, f)
+      const params = filtersToParams(q, t, f, pg)
       params.set('limit', '20')
       const res  = await fetch(`${API_URL}/api/v1/search?${params}`)
-      const data = await res.json() as { success: boolean; data: { results: Record<string, unknown[]> } }
-      if (data.success) setResults(data.data.results)
+      const data = await res.json() as {
+        success: boolean
+        data: {
+          results: Record<string, unknown[]>
+          facets:  SearchFacets
+          total:   number
+        }
+      }
+      if (data.success) {
+        setResults(data.data.results)
+        setFacets(data.data.facets ?? {})
+        setTotal(data.data.total ?? 0)
+      }
     } catch {
       // Demo results fallback
       setResults({
@@ -122,6 +209,8 @@ export default function SearchPage() {
         users: [],
         tags: [{ tag: q.toLowerCase(), count: 1 }],
       })
+      setFacets({})
+      setTotal(1)
     } finally {
       setLoading(false)
     }
@@ -138,44 +227,53 @@ export default function SearchPage() {
 
   // Debounced autocomplete
   useEffect(() => {
-    const timer = setTimeout(() => fetchAutocomplete(query), 200)
+    const timer = setTimeout(() => fetchAutocomplete(query), 150)
     return () => clearTimeout(timer)
   }, [query, fetchAutocomplete])
 
-  const handleSearch = (q: string = query, t: SearchType = type, f: SearchFilters = filters) => {
+  const handleSearch = (
+    q: string = query,
+    t: SearchType = type,
+    f: SearchFilters = filters,
+    pg = 0,
+  ) => {
     setShowAutocomplete(false)
-    const params = filtersToParams(q, t, f)
+    setPage(pg)
+    const params = filtersToParams(q, t, f, pg)
     router.push(`/search?${params}`, { scroll: false })
-    search(q, t, f)
+    search(q, t, f, pg)
   }
 
   const updateFilter = <K extends keyof SearchFilters>(key: K, value: SearchFilters[K]) => {
     const next = { ...filters, [key]: value }
     setFilters(next)
-    if (query.trim().length >= 2) handleSearch(query, type, next)
+    if (query.trim().length >= 2) handleSearch(query, type, next, 0)
   }
 
   const toggleMulti = (key: 'severity' | 'category', value: string) => {
-    const arr = filters[key]
+    const arr  = filters[key]
     const next = arr.includes(value) ? arr.filter(v => v !== value) : [...arr, value]
     updateFilter(key, next)
   }
 
   const clearFilters = () => {
-    const cleared: SearchFilters = { from: '', to: '', severity: [], category: [], source: '', language: '', sort: 'newest' }
+    const cleared: SearchFilters = {
+      from: '', to: '', severity: [], category: [],
+      source: '', language: '', sort: 'newest', reliability: 0,
+    }
     setFilters(cleared)
-    if (query.trim().length >= 2) handleSearch(query, type, cleared)
+    if (query.trim().length >= 2) handleSearch(query, type, cleared, 0)
   }
 
   // Run search on mount if URL has query
   useEffect(() => {
     const q = searchParams.get('q')
-    if (q) search(q, type, filters)
+    if (q) search(q, type, filters, page)
   }, []) // eslint-disable-line
 
   // Share search URL
   const handleShareSearch = async () => {
-    const url = `${window.location.origin}/search?${filtersToParams(query, type, filters)}`
+    const url = `${window.location.origin}/search?${filtersToParams(query, type, filters, page)}`
     try {
       await navigator.clipboard.writeText(url)
       setUrlCopied(true)
@@ -195,9 +293,9 @@ export default function SearchPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          name:       saveAlertName.trim(),
-          keywords:   query ? [query] : [],
-          categories: filters.category,
+          name:        saveAlertName.trim(),
+          keywords:    query ? [query] : [],
+          categories:  filters.category,
           minSeverity: filters.severity[0] ?? 'medium',
         }),
       })
@@ -210,19 +308,25 @@ export default function SearchPage() {
     } catch { /* silent */ }
   }
 
-  const allSignals = results.signals as Array<{ id: string; title: string; category: string; severity: string; reliabilityScore: number; locationName: string; createdAt: string }> ?? []
+  const allSignals = (results.signals ?? []) as Signal[]
   const allPosts   = results.posts   as Array<{ id: string; content: string; likeCount: number; createdAt: string }> ?? []
   const allUsers   = results.users   as Array<{ id: string; handle: string; displayName: string; avatarUrl: string | null; verified: boolean; followerCount: number }> ?? []
   const allTags    = results.tags    as Array<{ tag: string; count: number }> ?? []
 
-  const hasResults = allSignals.length + allPosts.length + allUsers.length + allTags.length > 0
+  const hasResults    = allSignals.length + allPosts.length + allUsers.length + allTags.length > 0
   const activeFilters = !filtersEmpty(filters)
+  const hasPrevPage   = page > 0
+  const hasNextPage   = hasResults && (type !== 'all') && (
+    allSignals.length + allPosts.length + allUsers.length + allTags.length >= 20
+  )
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8">
+    <div className="search-page-wrapper sm:relative sm:inset-auto sm:overflow-visible sm:bg-transparent">
+    <div className="max-w-2xl mx-auto px-4 py-4 sm:py-8">
 
-      {/* Search box */}
-      <div className="relative mb-4">
+      {/* Search box — sticky on mobile for always-visible input */}
+      <div className="sticky top-0 z-20 sm:relative sm:top-auto bg-wp-bg sm:bg-transparent pt-1 pb-2 sm:pt-0 sm:pb-0 mb-2 sm:mb-4">
+      <div className="relative">
         <div className="flex items-center gap-3 bg-wp-s2 border border-[rgba(255,255,255,0.12)] rounded-xl px-4 py-3 focus-within:border-wp-amber transition-colors">
           <span className="text-wp-text3 text-[18px]">🔍</span>
           <input
@@ -237,7 +341,7 @@ export default function SearchPage() {
             className="flex-1 bg-transparent border-none outline-none text-wp-text text-[16px] placeholder-wp-text3 caret-wp-amber"
           />
           {query && (
-            <button onClick={() => { setQuery(''); setResults({}) }} className="text-wp-text3 hover:text-wp-text">✕</button>
+            <button onClick={() => { setQuery(''); setResults({}); setFacets({}); setTotal(0) }} className="text-wp-text3 hover:text-wp-text">✕</button>
           )}
           {/* Filter toggle */}
           <button
@@ -295,6 +399,7 @@ export default function SearchPage() {
           </div>
         )}
       </div>
+      </div>
 
       {/* Advanced filters panel */}
       {showFilters && (
@@ -336,6 +441,7 @@ export default function SearchPage() {
             <div className="flex flex-wrap gap-2">
               {SEVERITY_OPTIONS.map(sev => {
                 const active = filters.severity.includes(sev)
+                const count  = facets.severity?.[sev]
                 return (
                   <button
                     key={sev}
@@ -346,6 +452,9 @@ export default function SearchPage() {
                         : 'text-wp-text3 border-[rgba(255,255,255,0.08)] hover:border-wp-amber hover:text-wp-amber'}`}
                   >
                     {sev.toUpperCase()}
+                    {count !== undefined && (
+                      <span className="ml-1 opacity-60">({count})</span>
+                    )}
                   </button>
                 )
               })}
@@ -358,6 +467,7 @@ export default function SearchPage() {
             <div className="flex flex-wrap gap-2">
               {CATEGORY_OPTIONS.map(cat => {
                 const active = filters.category.includes(cat)
+                const count  = facets.category?.[cat]
                 return (
                   <button
                     key={cat}
@@ -368,9 +478,38 @@ export default function SearchPage() {
                         : 'text-wp-text3 border-[rgba(255,255,255,0.08)] hover:border-wp-amber hover:text-wp-amber'}`}
                   >
                     {cat}
+                    {count !== undefined && (
+                      <span className="ml-1 opacity-60">({count})</span>
+                    )}
                   </button>
                 )
               })}
+            </div>
+          </div>
+
+          {/* Reliability slider */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="font-mono text-[10px] text-wp-text3 uppercase tracking-wide">
+                Min Reliability
+              </label>
+              <span className="font-mono text-[11px] text-wp-amber">
+                {filters.reliability === 0 ? 'Any' : `${filters.reliability}%+`}
+              </span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={filters.reliability}
+              onChange={e => updateFilter('reliability', Number(e.target.value))}
+              className="w-full accent-wp-amber cursor-pointer"
+            />
+            <div className="flex justify-between font-mono text-[9px] text-wp-text3 mt-1">
+              <span>Any</span>
+              <span>50%</span>
+              <span>100%</span>
             </div>
           </div>
 
@@ -462,25 +601,33 @@ export default function SearchPage() {
       )}
 
       {/* Type tabs */}
-      <div className="flex gap-0 border-b border-[rgba(255,255,255,0.07)] mb-6">
+      <div className="flex gap-0 border-b border-[rgba(255,255,255,0.07)] mb-6 overflow-x-auto scrollbar-none">
         {TYPE_TABS.map(tab => (
           <button
             key={tab.id}
-            onClick={() => { setType(tab.id); if (query) handleSearch(query, tab.id) }}
-            className={`flex items-center gap-1 px-4 py-[10px] text-[13px] font-medium border-b-2 transition-all
+            onClick={() => { setType(tab.id); if (query) handleSearch(query, tab.id, filters, 0) }}
+            className={`flex items-center gap-1 px-3 sm:px-4 py-[10px] text-[13px] font-medium border-b-2 transition-all whitespace-nowrap flex-shrink-0
               ${type === tab.id ? 'text-wp-amber border-wp-amber' : 'text-wp-text3 border-transparent hover:text-wp-text2'}`}
           >
-            <span>{tab.icon}</span>
+            <span aria-hidden="true">{tab.icon}</span>
             {tab.label}
           </button>
         ))}
       </div>
 
-      {/* Loading */}
+      {/* Loading skeleton */}
       {loading && (
         <div className="space-y-3">
-          {[1,2,3].map(i => (
-            <div key={i} className="h-16 rounded-xl shimmer" />
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="bg-wp-surface border border-[rgba(255,255,255,0.07)] rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="h-[18px] w-16 rounded shimmer" />
+                <div className="h-[18px] w-12 rounded shimmer" />
+                <div className="h-[18px] w-24 rounded shimmer ml-auto" />
+              </div>
+              <div className="h-5 w-4/5 rounded shimmer mb-2" />
+              <div className="h-4 w-2/5 rounded shimmer" />
+            </div>
           ))}
         </div>
       )}
@@ -495,26 +642,7 @@ export default function SearchPage() {
               {type === 'all' && <SectionHeader label="Signals" count={allSignals.length} />}
               <div className="space-y-2">
                 {allSignals.map(sig => (
-                  <div key={sig.id} className="bg-wp-surface border border-[rgba(255,255,255,0.07)] rounded-xl p-4 hover:border-[rgba(255,255,255,0.15)] transition-all cursor-pointer">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className={`font-mono text-[9px] px-2 py-0.5 rounded border ${SEVERITY_COLORS[sig.severity] ?? ''}`}>
-                        {sig.severity?.toUpperCase()}
-                      </span>
-                      <span className="font-mono text-[9px] text-wp-text3 uppercase">{sig.category}</span>
-                      {sig.locationName && <span className="font-mono text-[10px] text-wp-text2 ml-auto">📍 {sig.locationName}</span>}
-                    </div>
-                    <div className="text-[14px] font-semibold text-wp-text leading-snug">{sig.title}</div>
-                    <div className="flex items-center gap-2 mt-2">
-                      <div className="flex gap-0.5">
-                        {[...Array(5)].map((_, i) => (
-                          <div key={i} className={`w-[5px] h-[5px] rounded-full ${i < Math.round(sig.reliabilityScore * 5) ? 'bg-wp-green' : 'bg-wp-s3'}`} />
-                        ))}
-                      </div>
-                      <span className="font-mono text-[10px] text-wp-text3">
-                        {new Date(sig.createdAt).toLocaleDateString()}
-                      </span>
-                    </div>
-                  </div>
+                  <SignalSearchCard key={sig.id} sig={sig} />
                 ))}
               </div>
             </section>
@@ -591,24 +719,44 @@ export default function SearchPage() {
               </div>
             </section>
           )}
+
+          {/* Pagination */}
+          {type !== 'all' && (hasPrevPage || hasNextPage) && (
+            <div className="flex items-center justify-between pt-2 border-t border-[rgba(255,255,255,0.05)]">
+              <button
+                onClick={() => handleSearch(query, type, filters, page - 1)}
+                disabled={!hasPrevPage}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[rgba(255,255,255,0.08)] text-[13px] text-wp-text2 hover:border-wp-amber hover:text-wp-amber disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              >
+                ← Prev
+              </button>
+              <span className="font-mono text-[11px] text-wp-text3">
+                Page {page + 1}
+              </span>
+              <button
+                onClick={() => handleSearch(query, type, filters, page + 1)}
+                disabled={!hasNextPage}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[rgba(255,255,255,0.08)] text-[13px] text-wp-text2 hover:border-wp-amber hover:text-wp-amber disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              >
+                Next →
+              </button>
+            </div>
+          )}
         </div>
       )}
 
       {/* Empty state */}
       {!loading && query.length >= 2 && !hasResults && (
-        <div className="text-center py-16">
-          <div className="text-[48px] mb-4">🔭</div>
-          <div className="text-[18px] font-semibold text-wp-text mb-2">No results for "{query}"</div>
-          <div className="text-wp-text3 text-[14px]">
-            {activeFilters ? 'Try removing some filters or ' : 'Try different keywords or '}
-            check the spelling
-          </div>
-          {activeFilters && (
-            <button onClick={clearFilters} className="mt-3 text-[13px] text-wp-amber hover:underline">
-              Clear all filters
-            </button>
-          )}
-        </div>
+        <EmptyState
+          icon="🔭"
+          headline={`No results for "${query}"`}
+          message={
+            activeFilters
+              ? 'Try removing some filters — your current combination returned nothing.'
+              : 'Check the spelling or try broader keywords.'
+          }
+          cta={activeFilters ? { label: 'Clear all filters', onClick: clearFilters } : undefined}
+        />
       )}
 
       {/* Initial state */}
@@ -630,6 +778,7 @@ export default function SearchPage() {
           </div>
         </div>
       )}
+    </div>
     </div>
   )
 }

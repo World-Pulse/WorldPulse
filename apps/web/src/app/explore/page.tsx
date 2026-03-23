@@ -138,7 +138,7 @@ export default function ExplorePage() {
           {!loading && signals.map(sig => (
             <div
               key={sig.id}
-              onClick={() => router.push(`/c/${sig.category}`)}
+              onClick={() => router.push(`/signals/${sig.id}`)}
               className="flex gap-3 p-4 rounded-xl border border-[rgba(255,255,255,0.05)] hover:border-[rgba(255,255,255,0.12)] hover:bg-[rgba(255,255,255,0.02)] transition-all cursor-pointer mb-2"
             >
               <div className="flex-1 min-w-0">

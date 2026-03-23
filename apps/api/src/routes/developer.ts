@@ -11,6 +11,11 @@ const CreateKeySchema = z.object({
 
 export const registerDeveloperRoutes: FastifyPluginAsync = async (app) => {
 
+  app.addHook('onRoute', (routeOptions) => {
+    routeOptions.schema ??= {}
+    routeOptions.schema.tags = routeOptions.schema.tags ?? ['developer']
+  })
+
   // ─── CREATE KEY ──────────────────────────────────────────
   app.post('/', { preHandler: [authenticate] }, async (req, reply) => {
     const body = CreateKeySchema.safeParse(req.body)

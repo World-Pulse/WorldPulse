@@ -18,6 +18,11 @@ const SuggestSourceSchema = z.object({
 
 export const registerSourceRoutes: FastifyPluginAsync = async (app) => {
 
+  app.addHook('onRoute', (routeOptions) => {
+    routeOptions.schema ??= {}
+    routeOptions.schema.tags = routeOptions.schema.tags ?? ['sources']
+  })
+
   // ─── LIST SOURCES ──────────────────────────────────────────
   app.get('/', { preHandler: [optionalAuth] }, async (req, reply) => {
     const { tier, category, limit = 50, offset = 0 } = req.query as {

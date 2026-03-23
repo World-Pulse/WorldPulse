@@ -18,6 +18,11 @@ const AlertSchema = z.object({
 
 export const registerAlertRoutes: FastifyPluginAsync = async (app) => {
 
+  app.addHook('onRoute', (routeOptions) => {
+    routeOptions.schema ??= {}
+    routeOptions.schema.tags = routeOptions.schema.tags ?? ['alerts']
+  })
+
   app.get('/', { preHandler: [authenticate] }, async (req, reply) => {
     const alerts = await db('alert_subscriptions')
       .where('user_id', req.user!.id)

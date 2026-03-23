@@ -1,5 +1,5 @@
 {
-  "last_scan": "2026-03-23T01:50:23.511053+00:00",
+  "last_scan": "2026-03-23T02:57:54.040095+00:00",
   "competitors": {
     "Shadowbroker": {
       "url": "https://github.com/BigBodyCobain/Shadowbroker",
@@ -52,7 +52,14 @@
         "Community layer, AI summaries, reliability scoring, search, developer API remain key differentiators",
         "Shadowbroker has NO community/social layer, NO user accounts, NO reliability scoring, NO search — WorldPulse moat is intact"
       ],
-      "star_count_march_2026": "~4700 (up from ~2000 in early March 2026 — rapid growth confirmed by Star History tweet)"
+      "star_count_march_2026": "~4700 (stable, confirmed March 23 2026 scan)",
+      "latest_features_march_2026": [
+        "Mission Briefing onboarding modal for new users (guides through API key setup)",
+        "Backend disconnect red warning banner (shows when FastAPI unreachable)",
+        "README Quick Start Docker snippet overhaul",
+        "STIX 2.1 export for structured threat intelligence sharing",
+        "GPS jamming detection + CCTV ground truth integrations confirmed"
+      ]
     },
     "Ground News": {
       "url": "https://ground.news",

@@ -17,6 +17,11 @@ const VoteSchema = z.object({
 
 export const registerPollRoutes: FastifyPluginAsync = async (app) => {
 
+  app.addHook('onRoute', (routeOptions) => {
+    routeOptions.schema ??= {}
+    routeOptions.schema.tags = routeOptions.schema.tags ?? ['polls']
+  })
+
   // ─── CREATE POLL ──────────────────────────────────────────
   app.post('/', { preHandler: [authenticate] }, async (req, reply) => {
     const body = CreatePollSchema.safeParse(req.body)

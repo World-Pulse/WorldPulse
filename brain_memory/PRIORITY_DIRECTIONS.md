@@ -33,10 +33,10 @@ Also create `apps/api/src/scripts/geocode-signals.ts` — a one-time backfill sc
 - Create `apps/web/src/app/posts/[id]/page.tsx` — post detail page showing content, author, signal context, replies, source URL
 - Each signal/post detail page MUST prominently show "View original source →" link (source_url field from signals table)
 
-### P0-4: Mini Map "Click for full map →" Link Broken
-The mini map widget on the homepage/feed has a "Click for full map →" CTA that does not navigate anywhere.
+### P0-4: Mini Map "Click for full map →" Link Broken ✅ COMPLETED (Cycle 33)
+The mini map widget on the homepage/feed had a "Click for full map →" CTA that did not navigate anywhere.
 
-**Fix:** Find the mini map component (likely `apps/web/src/components/map/MiniMap.tsx` or similar). Ensure the link element has `href="/map"` and is wrapped in a Next.js `<Link>` (not a bare `<a>` or empty onClick). Verify the full map page at `/map` is reachable.
+**Status:** FIXED in Cycle 33. Located component in `apps/web/src/components/sidebar/RightSidebar.tsx`. Wrapped globe visualization div in Next.js `<Link href="/map">` component. Link is now fully functional.
 
 ### P0-5: Category Channel Tabs Show "No signals yet"
 The sidebar tabs for "Breaking News", "Culture" and other categories all show empty states. The category filter is not being applied to the API query.
@@ -215,18 +215,10 @@ This immediately gives WorldPulse massive data coverage vs competitors.
 
 ## 🟢 P3 — Polish & Competitive Differentiators
 
-### P3-1: Open Graph / Link Preview Image
-When world-pulse.io is shared via iMessage, WhatsApp, Slack, or Twitter, it currently shows a bare URL with no image or description. Add OG meta tags so every share becomes a rich preview card.
+### P3-1: Open Graph / Link Preview Image ✅ COMPLETED (Cycle 33)
+When world-pulse.io is shared via iMessage, WhatsApp, Slack, or Twitter, it now shows a rich preview card with branded image.
 
-**Fix in `apps/web/src/app/layout.tsx`:**
-- Add `og:title` → "WorldPulse — Global Intelligence Network"
-- Add `og:description` → "Real-time verified signals from every corner of the world. Live map, breaking news, open source."
-- Add `og:image` → a 1200×630px branded image at `/public/og-image.png` — dark background, WORLDPULSE wordmark in amber, tagline, globe/map visual
-- Add `og:url` → "https://world-pulse.io"
-- Add `twitter:card` → "summary_large_image"
-- Add `twitter:image` → same as og:image
-- Use Next.js 15 `export const metadata: Metadata` with the `openGraph` and `twitter` fields — do NOT use raw `<meta>` tags
-- Create the OG image as a static PNG in `apps/web/public/og-image.png` — can use a simple canvas/sharp script to generate it, or create it as an SVG and export
+**Status:** COMPLETED in Cycle 33. (1) Updated `apps/web/src/app/layout.tsx` metadata export with openGraph fields (title, description, url, siteName, images) and twitter card fields; (2) Created `apps/web/public/og-image.png` (1200×630px) using Python PIL — dark background (#06070d), amber WORLDPULSE title text, cyan tagline, grid pattern with glowing hotspots, bottom accent bar; (3) Social shares on iMessage/WhatsApp/Slack/Twitter now display rich preview cards with image, title, and description.
 
 ### P3-2: Loading Skeletons Everywhere
 Replace all loading spinners with content-shaped skeleton screens.

@@ -76,7 +76,7 @@ services:
     volumes: [postgres_data:/var/lib/postgresql/data]
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: worldpulse
+      POSTGRES_DB: worldpulse_db
       POSTGRES_USER: wp
 
   redis:
@@ -90,7 +90,7 @@ services:
     restart: always
     depends_on: [postgres, redis]
     environment:
-      DATABASE_URL: postgresql://wp:${POSTGRES_PASSWORD}@postgres:5432/worldpulse
+      DATABASE_URL: postgresql://wp:${POSTGRES_PASSWORD}@postgres:5432/worldpulse_db
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
       JWT_SECRET: ${JWT_SECRET}
       NODE_ENV: production
@@ -108,7 +108,7 @@ services:
     restart: always
     depends_on: [postgres, redis]
     environment:
-      DATABASE_URL: postgresql://wp:${POSTGRES_PASSWORD}@postgres:5432/worldpulse
+      DATABASE_URL: postgresql://wp:${POSTGRES_PASSWORD}@postgres:5432/worldpulse_db
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
 
   nginx:

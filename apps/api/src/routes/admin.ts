@@ -64,6 +64,12 @@ async function getSourceHealth(sourceId: string): Promise<SourceHealth> {
 
 export const registerAdminRoutes: FastifyPluginAsync = async (app) => {
 
+  app.addHook('onRoute', (routeOptions) => {
+    routeOptions.schema ??= {}
+    routeOptions.schema.tags = routeOptions.schema.tags ?? ['admin']
+    routeOptions.schema.security = routeOptions.schema.security ?? [{ bearerAuth: [] }]
+  })
+
   // ─── GET /api/v1/admin/scraper/health ──────────────────────────────────────
   app.get('/scraper/health', { preHandler: [authenticate] }, async (req, reply) => {
     if (!req.user || req.user.accountType !== 'admin') {
