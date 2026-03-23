@@ -108,15 +108,15 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
-      DATABASE_URL: postgresql://wp_user:wp_secret_local@postgres:5432/worldpulse_db?sslmode=disable
-      REDIS_URL: redis://:wp_redis_local@redis:6379
-      KAFKA_BROKERS: kafka:29092
-      MEILI_HOST: http://meilisearch:7700
-      MEILI_KEY: wp_meili_local_key
-      CLICKHOUSE_URL: http://clickhouse:8123
-      CLICKHOUSE_DB: worldpulse
-      JWT_SECRET: wp_jwt_secret_local_change_in_prod
-      CORS_ORIGINS: https://world-pulse.io
+      DATABASE_URL: ${DATABASE_URL:-postgresql://wp_user:wp_secret_local@postgres:5432/worldpulse_db?sslmode=disable}
+      REDIS_URL: ${REDIS_URL:-redis://:wp_redis_local@redis:6379}
+      KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:29092}
+      MEILI_HOST: ${MEILI_HOST:-http://meilisearch:7700}
+      MEILI_KEY: ${MEILI_KEY:-wp_meili_local_key}
+      CLICKHOUSE_URL: ${CLICKHOUSE_URL:-http://clickhouse:8123}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-worldpulse}
+      JWT_SECRET: ${JWT_SECRET:-wp_jwt_secret_local_change_in_prod}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://world-pulse.io}
     networks:
       default:
         aliases:
@@ -136,9 +136,9 @@ services:
       - redis
     environment:
       NODE_ENV: production
-      KAFKA_BROKERS: kafka:29092
-      REDIS_URL: redis://:wp_redis_local@redis:6379
-      DATABASE_URL: postgresql://wp_user:wp_secret_local@postgres:5432/worldpulse_db?sslmode=disable
+      KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:29092}
+      REDIS_URL: ${REDIS_URL:-redis://:wp_redis_local@redis:6379}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://wp_user:wp_secret_local@postgres:5432/worldpulse_db?sslmode=disable}
       SCRAPE_INTERVAL_MS: 30000
       LOG_LEVEL: debug
 
