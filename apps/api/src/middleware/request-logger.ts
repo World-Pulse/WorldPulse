@@ -32,7 +32,6 @@ export const requestLoggerPlugin: FastifyPluginAsync = async (app) => {
     // Fastify generates a numeric id by default; upgrade to UUID for
     // cross-service correlation (e.g. to match Sentry / OTel trace IDs).
     if (!req.id || req.id === '1') {
-      // @ts-expect-error Fastify's id is typed as string but assigned here
       req.id = randomUUID()
     }
   })
@@ -53,7 +52,7 @@ export const requestLoggerPlugin: FastifyPluginAsync = async (app) => {
 
     // Skip internal endpoints to reduce noise
     const skipRoutes = new Set(['/health', '/metrics', '/api/docs', '/api/docs/'])
-    if (skipRoutes.has(req.url.split('?')[0])) return
+    if (skipRoutes.has((req.url ?? '').split('?')[0])) return
 
     req.log.info({
       requestId:  req.id,
