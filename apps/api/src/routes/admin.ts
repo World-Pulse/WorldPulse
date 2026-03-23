@@ -151,9 +151,9 @@ export const registerAdminRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({
       success: true,
       data: {
-        total:      Number(totalRow.count),
-        last24h:    Number(last24hRow.count),
-        lastHour:   Number(lastHourRow.count),
+        total:      Number(totalRow?.count ?? 0),
+        last24h:    Number(last24hRow?.count ?? 0),
+        lastHour:   Number(lastHourRow?.count ?? 0),
         bySeverity: {
           critical: bySeverity['critical'] ?? 0,
           high:     bySeverity['high']     ?? 0,

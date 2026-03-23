@@ -52,7 +52,7 @@ export const requestLoggerPlugin: FastifyPluginAsync = async (app) => {
 
     // Skip internal endpoints to reduce noise
     const skipRoutes = new Set(['/health', '/metrics', '/api/docs', '/api/docs/'])
-    if (skipRoutes.has((req.url ?? '').split('?')[0])) return
+    if (skipRoutes.has(((req.url ?? '').split('?')[0]) ?? '')) return
 
     req.log.info({
       requestId:  req.id,
