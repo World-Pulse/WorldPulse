@@ -10,7 +10,7 @@ export interface TierConfig {
   rpd: number
 }
 
-export const TIER_LIMITS: Record<string, TierConfig> = {
+export const TIER_LIMITS: Record<string, TierConfig | undefined> = {
   free:       { rpm: 60,   rpd: 1_000 },
   pro:        { rpm: 300,  rpd: 10_000 },
   enterprise: { rpm: 9999, rpd: 999_999 },

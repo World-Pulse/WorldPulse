@@ -19,7 +19,8 @@ export const registerDeveloperRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const { name, tier } = body.data
-    const limits = TIER_LIMITS[tier]
+    // Zod already validated tier is one of the three known keys
+    const limits = TIER_LIMITS[tier] ?? { rpm: 60, rpd: 1_000 }
     const { key, hash } = generateApiKey()
 
     const [row] = await db('api_keys')

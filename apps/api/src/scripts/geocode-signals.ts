@@ -78,6 +78,7 @@ async function geocode(locationName: string): Promise<{ lat: number; lon: number
     }
 
     const r = results[0]
+    if (!r) return null
     return {
       lat: parseFloat(r.lat),
       lon: parseFloat(r.lon),
@@ -100,7 +101,7 @@ async function main(): Promise<void> {
          AND location_name IS NOT NULL
          AND location_name <> ''`
     )
-    const total = parseInt(countRes.rows[0].count, 10)
+    const total = parseInt(countRes.rows[0]?.count ?? '0', 10)
     console.log(`\n🌍 WorldPulse Geocode Backfill`)
     console.log(`   Signals needing geocoding: ${total}`)
 
