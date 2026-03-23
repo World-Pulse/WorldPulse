@@ -97,7 +97,7 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
     container_name: wp_api
-    restart: unless-stopped
+    restart: always
     depends_on:
       postgres:
         condition: service_healthy
@@ -151,7 +151,7 @@ services:
         NEXT_PUBLIC_WS_URL: wss://api.world-pulse.io
         NEXT_PUBLIC_MEILI_HOST: https://api.world-pulse.io/search
     container_name: wp_web
-    restart: unless-stopped
+    restart: always
     depends_on:
       - api
     ports:
@@ -159,6 +159,22 @@ services:
     environment:
       PORT: 3000
       HOSTNAME: "0.0.0.0"
+    # Override Dockerfile HEALTHCHECK with lenient production settings.
+    # The Dockerfile hits /api/health which now exists, but we give a long
+    # start_period so a rebuild never gets killed mid-boot, and 5 retries
+    # so a momentary slowdown doesn't take the container unhealthy.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 60s
+      timeout: 15s
+      start_period: 120s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
     networks:
       default:
         aliases:
