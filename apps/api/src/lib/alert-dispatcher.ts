@@ -52,9 +52,12 @@ class AlertDispatcher {
             if (!raw) continue
 
             // Extract userId from key pattern notif:{userId}:settings
-            const match = keys[i].match(/^notif:(.+):settings$/)
+            const key = keys[i]
+            if (!key) continue
+            const match = key.match(/^notif:(.+):settings$/)
             if (!match) continue
             const userId = match[1]
+            if (!userId) continue
 
             try {
               const settings = JSON.parse(raw) as AlertSettings

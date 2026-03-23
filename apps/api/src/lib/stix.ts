@@ -310,7 +310,7 @@ export class SignalToStixConverter {
         description: signal.summary ?? signal.body ?? undefined,
         report_types: ['threat-report'],
         published,
-        object_refs: [indicator.id, ...(signal.location ? [allObjects[allObjects.length - 1].id] : [])],
+        object_refs: [indicator.id, ...(signal.location ? [allObjects[allObjects.length - 1]?.id ?? indicator.id] : [])],
         labels: [signal.category, ...(signal.tags ?? [])],
         confidence,
         lang: signal.language ?? 'en',

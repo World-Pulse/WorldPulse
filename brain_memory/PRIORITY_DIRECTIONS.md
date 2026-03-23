@@ -14,6 +14,79 @@ Never leave untracked files. They don't exist in production.
 
 ---
 
+## ⚠️ RULE #2: NEVER Add Imports Before Creating the Module
+
+**The most common build-breaking mistake:** Adding an import to `apps/api/src/index.ts`
+for a module that doesn't exist yet causes `TS2307: Cannot find module` — breaking the
+Docker build and taking down production.
+
+**ALWAYS do this in ONE commit:**
+1. Create the module file (`apps/api/src/routes/foo.ts`, etc.)
+2. Add the import to `index.ts` in the SAME commit
+3. `git add` BOTH files before committing
+
+**Before adding any import, verify the file exists:**
+```bash
+ls apps/api/src/routes/          # does the route file exist?
+ls apps/api/src/lib/             # does the lib file exist?
+ls apps/api/src/graphql/         # does the directory exist?
+```
+
+If the file doesn't exist yet, CREATE IT FIRST. Then add the import. Never the reverse.
+
+---
+
+## ⚠️ RULE #3: TypeScript Strict Mode — Required Patterns
+
+The project uses `"strict": true`. These patterns WILL cause build failures:
+
+### ❌ BROKEN — array index possibly undefined (TS18048)
+```typescript
+const [row] = await db('table').select()
+const value = row.count   // ERROR: row is T | undefined
+```
+
+### ✅ FIXED
+```typescript
+const [row] = await db('table').select()
+const value = row?.count ?? 0
+```
+
+### ❌ BROKEN — knex count destructuring (TS2339)
+```typescript
+const [{ count }] = await db('table').count('id as count')
+// ERROR: Dict<string|number>|undefined has no property 'count'
+```
+
+### ✅ FIXED
+```typescript
+const countRows = await db('table').count('id as count')
+const count = (countRows[0] as { count: string | number } | undefined)?.count ?? 0
+```
+
+### ❌ BROKEN — string | undefined in Set.has() (TS2345)
+```typescript
+const skip = new Set(['/health'])
+skip.has(req.url.split('?')[0])  // split()[0] is string | undefined
+```
+
+### ✅ FIXED
+```typescript
+skip.has(((req.url ?? '').split('?')[0]) ?? '')
+```
+
+### ❌ BROKEN — stale @ts-expect-error (TS2578)
+```typescript
+// @ts-expect-error Fastify's id is typed...
+req.id = randomUUID()   // if this line is now valid TS, the directive errors
+```
+
+### ✅ FIXED — remove @ts-expect-error if the line compiles cleanly without it
+
+---
+
+---
+
 ## 🔴 P0 — Broken on Production Right Now
 
 ### P0-1: Wire the Scraper Geo Pipeline (30 min)
