@@ -101,10 +101,12 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
     if (category && category !== 'all') countQuery = countQuery.where('category', category)
     if (severity && severity !== 'all') countQuery = countQuery.where('severity', severity)
 
-    const [rows, [{ count }]] = await Promise.all([
+    const [rows, countRows] = await Promise.all([
       query,
       countQuery.count('id as count'),
     ])
+    const countRow = countRows[0] as { count: string | number } | undefined
+    const count = countRow?.count ?? 0
 
     const response = {
       success: true,
