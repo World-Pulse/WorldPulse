@@ -21,9 +21,12 @@ import { registerSourceRoutes } from './routes/sources'
 import { registerAdminRoutes } from './routes/admin'
 import { registerDeveloperRoutes } from './routes/developer'
 import { registerEmbedRoutes } from './routes/embed'
+import { registerStixRoutes } from './routes/stix'
+import { registerPublicRoutes } from './routes/public'
 import { registerNotificationRoutes } from './routes/notifications'
 import { registerUploadRoutes } from './routes/uploads'
 import { registerWSHandler } from './ws/handler'
+import { registerGraphQL } from './graphql'
 import { metricsPlugin } from './middleware/metrics'
 import { requestLoggerPlugin } from './middleware/request-logger'
 import { registerHealthRoutes } from './routes/health'
@@ -33,6 +36,7 @@ import { setupSearchIndexes } from './lib/search'
 import { connectSearchProducer, disconnectSearchProducer } from './lib/search-events'
 import { startSearchConsumer, stopSearchConsumer } from './lib/search-consumer'
 import { initClickHouse } from './lib/search-analytics'
+import { startDispatcher, stopDispatcher } from './lib/alert-dispatcher'
 
 const app = Fastify({
   logger: {
@@ -144,6 +148,7 @@ async function bootstrap() {
         { name: 'developer',     description: 'Developer API keys' },
         { name: 'embed',         description: 'Public embeddable widgets' },
         { name: 'admin',         description: 'Admin-only operations' },
+        { name: 'stix',          description: 'STIX 2.1 threat intelligence export' },
       ],
       components: {
         securitySchemes: {
@@ -198,6 +203,11 @@ async function bootstrap() {
   await app.register(registerAdminRoutes,        { prefix: '/api/v1/admin' })
   await app.register(registerDeveloperRoutes,    { prefix: '/api/v1/developer/keys' })
   await app.register(registerEmbedRoutes,        { prefix: '/api/v1/embed' })
+  await app.register(registerStixRoutes,         { prefix: '/api/v1/stix' })
+  await app.register(registerPublicRoutes,       { prefix: '/api/v1/public' })
+
+  // ─── GRAPHQL ─────────────────────────────────────────────
+  await registerGraphQL(app)
 
   // ─── WEBSOCKET ───────────────────────────────────────────
   await app.register(registerWSHandler)
@@ -221,8 +231,13 @@ async function bootstrap() {
     logger.warn({ err }, 'Search consumer failed to start')
   })
 
+  // ─── ALERT DISPATCHER ────────────────────────────────────
+  // Non-fatal — starts 60s polling loop for Telegram/Discord alerts.
+  startDispatcher()
+
   // ─── GRACEFUL SHUTDOWN ────────────────────────────────────
   const shutdown = async () => {
+    stopDispatcher()
     await Promise.allSettled([
       stopSearchConsumer(),
       disconnectSearchProducer(),
