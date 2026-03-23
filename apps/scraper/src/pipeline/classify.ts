@@ -136,17 +136,36 @@ function ruleBasedClassify(title: string, body: string | null): ClassificationRe
 }
 
 function detectCategory(text: string): Category {
+  // NOTE: order matters — more specific rules first.
+  // 'breaking' is checked first so urgent/critical articles are categorised correctly
+  // rather than falling through to a more generic bucket.
   const rules: [RegExp, Category][] = [
-    [/\b(earthquake|tsunami|hurricane|typhoon|flood|wildfire|eruption|tornado)\b/, 'disaster'],
-    [/\b(war|attack|killed|airstrike|troops|military|missile|bomb|gunfire|ceasefire)\b/, 'conflict'],
-    [/\b(election|vote|ballot|campaign|president|prime minister|parliament|congress)\b/, 'elections'],
-    [/\b(climate|emissions|temperature|arctic|glacier|carbon|warming|sea level)\b/, 'climate'],
-    [/\b(outbreak|virus|disease|pandemic|vaccine|hospital|health|who|cdc|pathogen)\b/, 'health'],
-    [/\b(stock|market|economy|gdp|inflation|federal reserve|trade|sanctions|currency)\b/, 'economy'],
-    [/\b(ai|artificial intelligence|tech|startup|silicon valley|cyber|hack|data breach)\b/, 'technology'],
-    [/\b(space|nasa|rocket|satellite|mars|moon|astronaut|orbit|launch)\b/, 'space'],
-    [/\b(research|study|discovery|experiment|scientists|university|published)\b/, 'science'],
-    [/\b(sanctions|diplomat|treaty|nato|un|security council|foreign minister)\b/, 'geopolitics'],
+    // ── Breaking / urgent news ──────────────────────────────────────────────
+    [/\b(breaking|urgent|just in|alert|developing story|emergency|evacuation order|state of emergency|major incident)\b/, 'breaking'],
+    // ── Disasters ───────────────────────────────────────────────────────────
+    [/\b(earthquake|tsunami|hurricane|typhoon|flood|wildfire|eruption|tornado|avalanche|landslide|cyclone|blizzard|drought)\b/, 'disaster'],
+    // ── Armed conflict ───────────────────────────────────────────────────────
+    [/\b(war|attack|killed|airstrike|troops|military|missile|bomb|gunfire|ceasefire|offensive|frontline|casualt)\b/, 'conflict'],
+    // ── Elections & politics ─────────────────────────────────────────────────
+    [/\b(election|vote|ballot|campaign|president|prime minister|parliament|congress|referendum|polling)\b/, 'elections'],
+    // ── Climate & environment ────────────────────────────────────────────────
+    [/\b(climate|emissions|temperature|arctic|glacier|carbon|warming|sea level|deforestation|biodiversity|coral reef)\b/, 'climate'],
+    // ── Health & medicine ────────────────────────────────────────────────────
+    [/\b(outbreak|virus|disease|pandemic|vaccine|hospital|health|who|cdc|pathogen|epidemic|public health|mortality|infection)\b/, 'health'],
+    // ── Markets & economy ────────────────────────────────────────────────────
+    [/\b(stock|market|economy|gdp|inflation|federal reserve|interest rate|trade|sanctions|currency|recession|debt|fiscal|imf)\b/, 'economy'],
+    // ── Cybersecurity ────────────────────────────────────────────────────────
+    [/\b(cyber|hack|ransomware|data breach|phishing|malware|vulnerability|exploit|zero.day|cve|infosec)\b/, 'security'],
+    // ── Technology & AI ──────────────────────────────────────────────────────
+    [/\b(ai|artificial intelligence|tech|startup|silicon valley|semiconductor|quantum|robotics|autonomous|neural)\b/, 'technology'],
+    // ── Space & astronomy ────────────────────────────────────────────────────
+    [/\b(space|nasa|rocket|satellite|mars|moon|astronaut|orbit|launch|iss|spacex|esa|asteroid|telescope)\b/, 'space'],
+    // ── Science & research ───────────────────────────────────────────────────
+    [/\b(research|study|discovery|experiment|scientists|university|published|peer.reviewed|clinical trial|genome|physics|chemistry)\b/, 'science'],
+    // ── Geopolitics & diplomacy ───────────────────────────────────────────────
+    [/\b(sanctions|diplomat|treaty|nato|un|security council|foreign minister|geopolit|alliance|bilateral|multilateral)\b/, 'geopolitics'],
+    // ── Culture, arts & society ───────────────────────────────────────────────
+    [/\b(culture|film|music|art|award|festival|celebrity|sports|football|soccer|olympics|world cup|nba|nfl|cricket|tennis|religion|protest|movement|activism)\b/, 'culture'],
   ]
 
   for (const [regex, cat] of rules) {

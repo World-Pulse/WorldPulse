@@ -4,7 +4,8 @@ import { redis } from '../db/redis'
 import { authenticate, optionalAuth } from '../middleware/auth'
 import type { Post, Signal, PaginatedResponse } from '@worldpulse/types'
 
-const FEED_CACHE_TTL = 30 // seconds
+const FEED_CACHE_TTL    = 15  // seconds — global feed (per-user aware)
+const SIGNALS_CACHE_TTL = 30  // seconds — signals stream first-page
 const PAGE_SIZE = 20
 
 export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
@@ -13,7 +14,7 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
    * GET /api/v1/feed/global
    * Main global feed — latest verified signals + high-trust posts
    */
-  app.get('/global', { preHandler: [optionalAuth] }, async (req, reply) => {
+  app.get('/global', { preHandler: [optionalAuth], config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
     const { cursor, category, severity, limit = PAGE_SIZE } = req.query as {
       cursor?:   string
       category?: string
@@ -21,12 +22,15 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
       limit?:    number
     }
 
-    const cacheKey = `feed:global:${category ?? 'all'}:${severity ?? 'all'}:${cursor ?? 'start'}`
-    
+    // Per-user cache key: authenticated users get their own 15s cache slot
+    // (includes liked/boosted/bookmarked enrichment); unauthenticated share one.
+    const userSegment = req.user ? `user:${req.user.id}` : 'anon'
+    const cacheKey = `feed:global:${userSegment}:${category ?? 'all'}:${severity ?? 'all'}:${cursor ?? 'start'}`
+
     // Try cache first
-    const cached = await redis.get(cacheKey)
-    if (cached && !req.user) {
-      return reply.send(JSON.parse(cached))
+    const cached = await redis.get(cacheKey).catch(() => null)
+    if (cached) {
+      return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
     }
 
     const pageLimit = Math.min(Number(limit), 50)
@@ -65,8 +69,12 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    // Category filter via signal
-    if (category && category !== 'all') {
+    // Category filter via signal.
+    // Special case: category=breaking shows critical+high severity posts regardless of category,
+    // so the Breaking News channel is immediately populated from existing DB data.
+    if (category === 'breaking') {
+      query = query.whereIn('s.severity', ['critical', 'high'])
+    } else if (category && category !== 'all') {
       query = query.where('s.category', category)
     }
 
@@ -106,10 +114,8 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
       hasMore,
     }
 
-    // Cache for unauthenticated users
-    if (!req.user) {
-      await redis.setex(cacheKey, FEED_CACHE_TTL, JSON.stringify(response))
-    }
+    // Cache for all users (authenticated get their own slot with enrichment baked in)
+    redis.setex(cacheKey, FEED_CACHE_TTL, JSON.stringify(response)).catch(() => {})
 
     return reply.send(response)
   })
@@ -118,7 +124,7 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
    * GET /api/v1/feed/following
    * Personalized feed from accounts the user follows
    */
-  app.get('/following', { preHandler: [authenticate] }, async (req, reply) => {
+  app.get('/following', { preHandler: [authenticate], config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
     const { cursor, limit = PAGE_SIZE } = req.query as { cursor?: string; limit?: number }
 
     const followingIds = await db('follows')
@@ -170,12 +176,12 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
    * GET /api/v1/feed/trending
    * Trending topics across time windows
    */
-  app.get('/trending', async (req, reply) => {
+  app.get('/trending', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
     const { window = '1h' } = req.query as { window?: '1h' | '6h' | '24h' }
     const cacheKey = `trending:${window}`
     
-    const cached = await redis.get(cacheKey)
-    if (cached) return reply.send(JSON.parse(cached))
+    const cached = await redis.get(cacheKey).catch(() => null)
+    if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
 
     const topics = await db('trending_topics')
       .where('window', window)
@@ -192,7 +198,7 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
    * GET /api/v1/feed/signals
    * Breaking signals / events stream
    */
-  app.get('/signals', { preHandler: [optionalAuth] }, async (req, reply) => {
+  app.get('/signals', { preHandler: [optionalAuth], config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
     const { cursor, category, severity, country, limit = PAGE_SIZE } = req.query as {
       cursor?:   string
       category?: string
@@ -201,6 +207,19 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
       limit?:    number
     }
 
+    const pageLimit = Math.min(Number(limit), 50)
+
+    // Cache first-page (no cursor) for unauthenticated requests.
+    // Key includes all filter params so different filter combos stay isolated.
+    const isFirstPage = !cursor
+    const cacheKey = `feed:signals:${category ?? 'all'}:${severity ?? 'all'}:${country ?? 'all'}:${pageLimit}`
+    if (!req.user && isFirstPage) {
+      const cached = await redis.get(cacheKey).catch(() => null)
+      if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
+    }
+
+    // NOTE: source details are batch-loaded below to avoid N×1 correlated
+    // subqueries (one per signal row) against the sources table.
     let query = db('signals as s')
       .whereIn('s.status', ['verified', 'pending'])
       .select([
@@ -210,38 +229,66 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
         's.view_count', 's.share_count', 's.post_count',
         's.event_time', 's.first_reported', 's.verified_at', 's.last_updated', 's.created_at',
         db.raw(`ST_AsGeoJSON(s.location)::json as location_geojson`),
-        db.raw(`
-          ARRAY(
-            SELECT json_build_object('id', src.id, 'slug', src.slug, 'name', src.name,
-                                     'logoUrl', src.logo_url, 'tier', src.tier,
-                                     'trustScore', src.trust_score)
-            FROM sources src
-            WHERE src.id = ANY(s.source_ids)
-          ) as sources_data
-        `),
       ])
       .orderBy('s.created_at', 'desc')
-      .limit(Math.min(Number(limit), 50) + 1)
+      .limit(pageLimit + 1)
 
-    if (category && category !== 'all') query = query.where('s.category', category)
+    // Special case: category=breaking shows critical+high severity signals across ALL categories.
+    // This populates the Breaking News channel immediately from existing DB data,
+    // regardless of what category the scraper assigned. New signals will also get
+    // category='breaking' from the updated classifier when they match breaking keywords.
+    if (category === 'breaking') {
+      query = query.whereIn('s.severity', ['critical', 'high'])
+    } else if (category && category !== 'all') {
+      query = query.where('s.category', category)
+    }
     if (severity && severity !== 'all') query = query.where('s.severity', severity)
     if (country) query = query.where('s.country_code', country.toUpperCase())
     if (cursor) {
-      const cur = await db('signals').where('id', cursor).first()
+      const cur = await db('signals').where('id', cursor).first('created_at')
       if (cur) query = query.where('s.created_at', '<', cur.created_at)
     }
 
     const rows = await query
-    const pageLimit = Math.min(Number(limit), 50)
     const hasMore = rows.length > pageLimit
     const items = hasMore ? rows.slice(0, pageLimit) : rows
 
-    return reply.send({
-      items:   items.map(formatSignal),
-      total:   items.length,
+    // Batch-load sources: collect all distinct source IDs, single query, map back.
+    const allSourceIds = [...new Set(items.flatMap(r => (r.source_ids as string[]) ?? []))]
+    const sourcesById = new Map<string, Record<string, unknown>>()
+    if (allSourceIds.length > 0) {
+      const srcRows = await db('sources')
+        .whereIn('id', allSourceIds)
+        .select(['id', 'slug', 'name', 'logo_url', 'tier', 'trust_score'])
+      for (const s of srcRows) {
+        sourcesById.set(s.id as string, {
+          id:         s.id,
+          slug:       s.slug,
+          name:       s.name,
+          logoUrl:    s.logo_url,
+          tier:       s.tier,
+          trustScore: s.trust_score,
+        })
+      }
+    }
+
+    const enrichedItems = items.map(r => ({
+      ...r,
+      sources_data: ((r.source_ids as string[]) ?? []).map(id => sourcesById.get(id)).filter(Boolean),
+    }))
+
+    const response = {
+      items:   enrichedItems.map(formatSignal),
+      total:   enrichedItems.length,
       cursor:  hasMore ? items[items.length - 1].id : null,
       hasMore,
-    })
+    }
+
+    if (!req.user && isFirstPage) {
+      redis.setex(cacheKey, SIGNALS_CACHE_TTL, JSON.stringify(response)).catch(() => {})
+    }
+
+    return reply.send(response)
   })
 }
 

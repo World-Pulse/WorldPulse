@@ -1,0 +1,38 @@
+Cycle 30 — 2026-03-22
+Task: ai_slop_detection (priority 6, competitive)
+
+IMPLEMENTED: Open-source AI content farm detection — WorldPulse's answer to NewsGuard's
+closed $$$-API. Direct competitive response to AI slop trend (300-500 new sites/month).
+
+Changes:
+  • apps/api/src/lib/ai-content-farms.ts (NEW)
+    - 25-domain blocklist seeded from NewsGuard/CCDH public reports
+    - Includes: dailytrendingnews.net, morningtidings.com, worldnewsdaily24.com, etc.
+
+  • apps/api/src/lib/slop-detector.ts (NEW)
+    - SlopDetector class with async scoreSignal() method
+    - 6 weighted heuristics: blocklist (+0.40), no byline (+0.15), clickbait (+0.10),
+      thin content (+0.10), high cadence Redis tracking (+0.10), bare URL (+0.05)
+    - Score clamped [0, 1.0]; Redis 24h TTL cache; singleton export
+
+  • apps/api/src/routes/signals.ts (MODIFIED)
+    - New GET /:id/slop-score — admin-only, 30rpm
+    - Returns { signalId, score, flags, isSlop, cached }
+
+  • apps/web/src/app/signals/[id]/SignalDetailClient.tsx (MODIFIED)
+    - AISlopBadge component: amber warning when score >= 0.7
+    - Graceful error handling; admin-only via 403 on non-admins
+
+  • apps/api/src/__tests__/slop-detector.test.ts (NEW)
+    - 11 test cases covering all heuristics, cache, clamping, invalidation
+
+COMPETITION INTEL:
+  - Shadowbroker: no new features this cycle (~4.7K stars stable)
+  - Ground News: no major 2026 updates
+  - Veracity (arxiv): emerging academic open-source fact-checker — not consumer-grade yet
+  - AI detector market validating demand (YouScan, Ranktracker coverage)
+
+Project health: 7.5/10 | Improvements shipped: 31 | Cycle: 30
+BLOCKER: NTFS index.lock prevents git commits — files in working tree (no code lost)
+
+NEXT: monitoring_sentry (priority 4) — structured logging + /health endpoint

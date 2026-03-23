@@ -1,0 +1,374 @@
+{
+  "last_scan": "2026-03-23T01:50:23.511053+00:00",
+  "competitors": {
+    "Shadowbroker": {
+      "url": "https://github.com/BigBodyCobain/Shadowbroker",
+      "type": "open_source_osint_map",
+      "strengths": [
+        "Real-time OSINT dashboard with DOZENS of live global feeds (confirmed Mar 2026)",
+        "ADS-B commercial/military flight tracking",
+        "AIS WebSocket stream (25,000+ ships)",
+        "N2YO satellite telemetry",
+        "GDELT conflict event data",
+        "NASA FIRMS Fire Hotspots (24h) from NOAA-20 VIIRS — 5,000+ thermal anomalies",
+        "Space Weather Badge — Live geomagnetic storm Kp index from NOAA SWPC",
+        "Internet Outage Monitoring — Georgia Tech IODA regional connectivity alerts",
+        "NASA GIBS Satellite Imagery (MODIS Terra) — daily true-color overlay, 30-day time slider (NEW Mar 2026)",
+        "CelesTrak orbital tracking — 2,000+ active satellites, SGP4 propagation, mission-type color coding (NEW Mar 2026)",
+        "Carrier Strike Group Tracker — all 11 US Navy carriers with OSINT-estimated positions (NEW Mar 2026)",
+        "SIGINT/RISINT News Feed — user-customizable up to 20 sources with priority weights (NEW Mar 2026)",
+        "Software-Defined Radio integration (NEW Mar 2026)",
+        "GPS jamming tracking (confirmed on platform)",
+        "CCTV networks (confirmed on platform)",
+        "Redesigned tabbed Settings panel (API Keys / News Feeds)",
+        "Mission Briefing onboarding modal for new users",
+        "Single MapLibre unified map interface (Next.js + MapLibre GL + FastAPI + Python)",
+        "Show HN traction (March 8, 2026) — 304 HN points, 120 comments"
+      ],
+      "weaknesses": [
+        "No community/social verification layer",
+        "No user accounts or reliability scoring",
+        "No news aggregation or text content",
+        "No search or personalized feed",
+        "Primarily data visualization, not intelligence network",
+        "No embeddable widget or developer API",
+        "No browser extension"
+      ],
+      "threat_level": "high",
+      "first_seen": "2026-03-22",
+      "media_coverage": [
+        "American Partisan (March 2026)",
+        "Medium/@alborznazari4",
+        "Hackers Arise",
+        "daily.dev",
+        "X/GithubProjects",
+        "GitHub Weekly 2026-03-11 (304 HN pts)"
+      ],
+      "response_actions": [
+        "DONE (Cycle 21): WorldPulse now has GDELT + ADS-B (OpenSky) + AIS (aisstream.io)",
+        "DONE (Cycle 26): WorldPulse now has USGS Seismic + NASA FIRMS Fire + NOAA Space Weather (6 feeds total)",
+        "DONE (Cycle 22): WorldPulse embeddable widget gives distribution edge Shadowbroker lacks",
+        "DONE (Cycle 28): WorldPulse now has GPS Jamming (GPSJam.org) + Internet Outage (Georgia Tech IODA) — 8 feeds total",
+        "Community layer, AI summaries, reliability scoring, search, developer API remain key differentiators",
+        "Shadowbroker has NO community/social layer, NO user accounts, NO reliability scoring, NO search — WorldPulse moat is intact"
+      ],
+      "star_count_march_2026": "~4700 (up from ~2000 in early March 2026 — rapid growth confirmed by Star History tweet)"
+    },
+    "Ground News": {
+      "url": "https://ground.news",
+      "type": "direct_competitor",
+      "strengths": [
+        "50,000+ sources globally",
+        "7.9M monthly visits (Similarweb, confirmed Mar 2026)",
+        "Media bias visualization (left/center/right + factuality scale)",
+        "Mobile app (iOS + Android) + browser extension (Chrome/Safari)",
+        "Daily Briefing feature",
+        "Podcasts & Opinions feed (YouTube clips + podcasts)",
+        "Compact mode for more stories per scroll",
+        "Navigation customization (pin favorite topics to nav)",
+        "AI Ground Summary on all articles",
+        "Blindspot Feed — highlights stories ignored by one political side",
+        "Source Comparison — AI summaries per bias tier"
+      ],
+      "weaknesses": [
+        "No open-source",
+        "No self-hosting",
+        "Limited developer API",
+        "No real-time signals or WebSocket",
+        "No geospatial map",
+        "No embeddable widget for third-party sites"
+      ],
+      "threat_level": "very_high"
+    },
+    "NewsGuard": {
+      "url": "https://www.newsguardtech.com",
+      "type": "trust_layer",
+      "strengths": [
+        "Credibility scoring with transparent ratings",
+        "Browser extension (Chrome, Firefox, Edge, Safari)",
+        "Enterprise contracts (libraries, brands, governments)",
+        "AI content farm detection tool (with Pangram Labs, 2026) — tracks 3,006 AI content farm sites",
+        "Monthly AI Misinformation Monitor — benchmarks LLM trustworthiness",
+        "300-500 new AI content farm sites detected per month"
+      ],
+      "weaknesses": [
+        "Closed scoring methodology (vs WorldPulse open scoring)",
+        "Not real-time",
+        "US-focused",
+        "Expensive",
+        "No community layer"
+      ],
+      "threat_level": "medium",
+      "response_actions": [
+        "WorldPulse open-source reliability scoring is the transparent alternative",
+        "AI content farm detection is a new feature category — consider adding AI slop detection"
+      ]
+    },
+    "Reuters Connect": {
+      "url": "https://www.reuters.com",
+      "type": "legacy_wire",
+      "strengths": [
+        "Brand trust",
+        "Global reach",
+        "1000+ journalists",
+        "Premium API"
+      ],
+      "weaknesses": [
+        "Expensive API",
+        "Closed source",
+        "Not self-hostable",
+        "Slow feature iteration"
+      ],
+      "threat_level": "high"
+    },
+    "AP Wire": {
+      "url": "https://www.ap.org",
+      "type": "legacy_wire",
+      "strengths": [
+        "150+ years authority",
+        "6000+ journalists",
+        "Fact-checking reputation"
+      ],
+      "weaknesses": [
+        "No social layer",
+        "No reliability scoring UI",
+        "Enterprise-only pricing"
+      ],
+      "threat_level": "high"
+    },
+    "GDELT Project": {
+      "url": "https://www.gdeltproject.org",
+      "type": "data_competitor",
+      "strengths": [
+        "Massive dataset",
+        "Free access",
+        "Academic credibility",
+        "Event coding"
+      ],
+      "weaknesses": [
+        "No social layer",
+        "No real-time UI",
+        "Very complex to use",
+        "No community features"
+      ],
+      "threat_level": "medium"
+    },
+    "Logically AI": {
+      "url": "https://www.logically.ai",
+      "type": "fact_checking_ai",
+      "strengths": [
+        "AI-powered",
+        "Real-time",
+        "Multilingual"
+      ],
+      "weaknesses": [
+        "Not open-source",
+        "Limited developer access",
+        "B2B focused"
+      ],
+      "threat_level": "medium"
+    },
+    "Taranis AI": {
+      "url": "https://github.com/taranis-ai/taranis-ai",
+      "type": "open_source_osint",
+      "strengths": [
+        "Open-source (direct positioning threat)",
+        "AI-powered NLP for information gathering",
+        "Navigates diverse data sources + websites",
+        "Situational analysis capabilities",
+        "Growing GitHub community"
+      ],
+      "weaknesses": [
+        "No social verification layer",
+        "No real-time WebSocket feed",
+        "No consumer-facing UI (analyst tool)",
+        "No reliability scoring",
+        "No community features",
+        "No embeddable widget"
+      ],
+      "threat_level": "high",
+      "first_seen": "2026-03-22"
+    },
+    "WorldMonitor": {
+      "url": "https://github.com/koala73/worldmonitor",
+      "type": "open_source_direct",
+      "strengths": [
+        "Open-source (direct positioning overlap with WorldPulse)",
+        "AI-powered news aggregation",
+        "Geopolitical monitoring",
+        "Infrastructure tracking",
+        "Unified situational awareness interface"
+      ],
+      "weaknesses": [
+        "No community/social layer",
+        "No reliability scoring",
+        "No real-time WebSocket feed",
+        "No user accounts or trust system",
+        "No embeddable widget",
+        "Early-stage GitHub project"
+      ],
+      "threat_level": "high",
+      "first_seen": "2026-03-22"
+    },
+    "OpenClaw": {
+      "url": "https://openclawapi.org",
+      "type": "osint_monitoring",
+      "strengths": [
+        "Production OSINT system (Middle East deployment)",
+        "Multi-source: Al Jazeera, AP, Reddit, flight tracking, satellite, vessel",
+        "Real-time alert push",
+        "Open API documentation"
+      ],
+      "weaknesses": [
+        "Not a consumer product",
+        "No social or verification layer",
+        "Region-focused (Middle East)",
+        "No UI for end users",
+        "No embeddable distribution"
+      ],
+      "threat_level": "medium",
+      "first_seen": "2026-03-22"
+    },
+    "OpenNews": {
+      "url": "https://dev.to/opennews/i-built-a-news-app-that-runs-ai-entirely-in-your-browser-heres-how-29g1",
+      "type": "open_source_ai_aggregator",
+      "strengths": [
+        "Fully browser-based (no server needed)",
+        "AI clustering across 116 RSS feeds",
+        "Open-source",
+        "Zero backend infrastructure cost"
+      ],
+      "weaknesses": [
+        "No social/community layer",
+        "No reliability scoring",
+        "No real-time WebSocket",
+        "No map visualization",
+        "No user accounts",
+        "No embeddable widget"
+      ],
+      "threat_level": "medium",
+      "first_seen": "2026-03-22"
+    },
+    "Intell Weave": {
+      "url": "https://github.com/topics/news-aggregation",
+      "type": "ai_news_platform",
+      "strengths": [
+        "Production-minded scalable news platform",
+        "Claim verification via NLP",
+        "Hyper-personalized explainable feed"
+      ],
+      "weaknesses": [
+        "No open-source positioning confirmed",
+        "No real-time WebSocket",
+        "Details unconfirmed"
+      ],
+      "threat_level": "medium",
+      "first_seen": "2026-03-22"
+    },
+    "Valinor Intelligence": {
+      "url": "https://valinor.io",
+      "type": "intelligence_platform",
+      "strengths": [
+        "Recently launched in UK market",
+        "Enterprise-focused intelligence"
+      ],
+      "weaknesses": [
+        "Not open-source",
+        "UK-only initial focus",
+        "Early stage"
+      ],
+      "threat_level": "low",
+      "first_seen": "2026-03-22"
+    }
+  },
+  "threats": [
+    {
+      "competitor": "Reuters Connect",
+      "threat_level": "medium",
+      "note": "Monitoring Reuters Connect for feature parity with WorldPulse"
+    },
+    {
+      "competitor": "AP Wire",
+      "threat_level": "medium",
+      "note": "Monitoring AP Wire for feature parity with WorldPulse"
+    },
+    {
+      "competitor": "Ground News",
+      "threat_level": "medium",
+      "note": "Monitoring Ground News for feature parity with WorldPulse"
+    },
+    {
+      "competitor": "Logically AI",
+      "threat_level": "medium",
+      "note": "Monitoring Logically AI for feature parity with WorldPulse"
+    },
+    {
+      "competitor": "NewsGuard",
+      "threat_level": "medium",
+      "note": "Monitoring NewsGuard for feature parity with WorldPulse"
+    },
+    {
+      "competitor": "Bellingcat",
+      "threat_level": "medium",
+      "note": "Monitoring Bellingcat for feature parity with WorldPulse"
+    },
+    {
+      "competitor": "Full Fact",
+      "threat_level": "medium",
+      "note": "Monitoring Full Fact for feature parity with WorldPulse"
+    },
+    {
+      "competitor": "The GDELT Project",
+      "threat_level": "medium",
+      "note": "Monitoring The GDELT Project for feature parity with WorldPulse"
+    }
+  ],
+  "opportunities": [
+    "Open source community traction — GitHub stars, contributors",
+    "AI-powered reliability scoring differentiates from legacy wires",
+    "Self-hosting resonates with privacy-conscious newsrooms",
+    "Developer API ecosystem — first-mover advantage"
+  ],
+  "feature_gaps": [
+    "Mobile app (apps/mobile) — needs feature parity with web",
+    "API rate limiting and monetization strategy",
+    "Embeddable widget for third-party sites",
+    "Browser extension for inline signal verification",
+    "Slack/Teams integration for newsroom alerts",
+    "GraphQL API layer in addition to REST",
+    "Multilingual signal support",
+    "AI-generated signal summaries"
+  ],
+  "market_trends": [
+    "AI-native newsrooms growing rapidly — need programmatic access and embeddable tools",
+    "Trust in traditional media at historic lows — verification layer is critical",
+    "Substack/independent journalism boom — creators need wire-quality embeddable feeds",
+    "OSINT community growing — needs structured intelligence tools",
+    "EU Digital Services Act creates compliance demand for verified news APIs",
+    "Browser-based AI tools lowering barrier to entry — open-source alternatives multiplying",
+    "AI content farms growing at 300-500 new sites/month — WorldPulse now has open-source slop detector (Cycle 29); Veracity (arxiv paper) emerging as academic open-source fact-checking alternative",
+    "AI startup funding at record levels in 2026 ($25B+ in first 2 weeks)"
+  ],
+  "raw_searches": [
+    {
+      "query": "open source news aggregation platform 2025 2026",
+      "abstract": "",
+      "related": []
+    },
+    {
+      "query": "real-time news verification AI startup funding",
+      "abstract": "",
+      "related": []
+    },
+    {
+      "query": "global news intelligence API reliability scoring",
+      "abstract": "",
+      "related": []
+    },
+    {
+      "query": "open source Reuters AP alternative developer",
+      "abstract": "",
+      "related": []
+    }
+  ]
+}

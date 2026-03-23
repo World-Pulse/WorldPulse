@@ -3,6 +3,9 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import { useState, useEffect } from 'react'
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
 const NAV_ITEMS = [
   { href: '/',           icon: '⚡', labelKey: 'liveFeed' },
@@ -26,12 +29,13 @@ const CHANNELS = [
   { href: '/c/culture',    icon: '🌐', labelKey: 'culture',        color: 'text-pink-400' },
 ] as const
 
-const TRENDING = [
-  { tag: '#ManilaQuake',    count: '84.2K', momentum: 'surging', sparkHeights: [4, 7, 10, 14, 18] },
-  { tag: '#EUAIDirective',  count: '61.7K', momentum: 'rising',  sparkHeights: [8, 10, 12, 15, 16] },
-  { tag: '#ArcticMelt',     count: '48.1K', momentum: 'steady',  sparkHeights: [12, 14, 11, 13, 14] },
-  { tag: '#SudanCeasefire', count: '31.4K', momentum: 'cooling', sparkHeights: [18, 16, 13, 9, 7] },
-  { tag: '#SKoreaElection', count: '29.8K', momentum: 'rising',  sparkHeights: [5, 8, 11, 14, 17] },
+// Fallback trending topics shown before real data loads
+const TRENDING_FALLBACK = [
+  { tag: '#WorldPulse',   count: '—',  momentum: 'steady',  sparkHeights: [8, 10, 12, 10, 12] },
+  { tag: '#Breaking',     count: '—',  momentum: 'rising',  sparkHeights: [5, 8, 11, 14, 17] },
+  { tag: '#Climate',      count: '—',  momentum: 'steady',  sparkHeights: [12, 14, 11, 13, 14] },
+  { tag: '#GlobalEvents', count: '—',  momentum: 'rising',  sparkHeights: [8, 10, 12, 15, 16] },
+  { tag: '#OSINT',        count: '—',  momentum: 'surging', sparkHeights: [4, 7, 10, 14, 18] },
 ]
 
 const MOMENTUM_LABEL: Record<string, string> = {
@@ -41,11 +45,84 @@ const MOMENTUM_LABEL: Record<string, string> = {
   cooling: '↓ Cooling',
 }
 
+// Map channel slugs to API category params for live count fetch
+const CHANNEL_CATEGORIES: Record<string, string> = {
+  breaking:   'breaking',
+  conflict:   'conflict',
+  markets:    'economy',
+  climate:    'climate',
+  health:     'health',
+  technology: 'technology',
+  politics:   'elections',
+  culture:    'culture',
+}
+
+function formatCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1000)      return `${(n / 1000).toFixed(1)}K`
+  return String(n)
+}
+
 export function LeftSidebar() {
   const pathname = usePathname()
   const tNav = useTranslations('nav')
   const tChannels = useTranslations('channels')
   const tCommon = useTranslations('common')
+
+  // Live signal counts per channel (fetched once on mount, refreshes every 2 min)
+  const [channelCounts, setChannelCounts] = useState<Record<string, number>>({})
+  // Real trending topics from API
+  const [trending, setTrending] = useState(TRENDING_FALLBACK)
+
+  useEffect(() => {
+    async function loadSidebarData() {
+      try {
+        // Fetch channel counts in parallel (one request per channel)
+        const slugs = Object.keys(CHANNEL_CATEGORIES)
+        const countResults = await Promise.allSettled(
+          slugs.map(async (slug) => {
+            const cat = CHANNEL_CATEGORIES[slug]
+            const res = await fetch(`${API_URL}/api/v1/feed/signals?category=${cat}&limit=1`, { cache: 'no-store' })
+            if (!res.ok) throw new Error(`HTTP ${res.status}`)
+            const data: { total?: number; items?: unknown[] } = await res.json()
+            return { slug, count: data.total ?? (data.items?.length ?? 0) }
+          })
+        )
+        const counts: Record<string, number> = {}
+        for (const result of countResults) {
+          if (result.status === 'fulfilled') {
+            counts[result.value.slug] = result.value.count
+          }
+        }
+        setChannelCounts(counts)
+      } catch {
+        // Silently fail — counts are decorative
+      }
+
+      try {
+        // Fetch real trending topics
+        const res = await fetch(`${API_URL}/api/v1/feed/trending?window=1h`, { cache: 'no-store' })
+        if (res.ok) {
+          const data: { items?: Array<{ topic: string; score: number; window: string }> } = await res.json()
+          if (data.items && data.items.length > 0) {
+            const mapped = data.items.slice(0, 5).map((t, i) => ({
+              tag: `#${t.topic.replace(/\s+/g, '')}`,
+              count: formatCount(Math.round(t.score)),
+              momentum: i === 0 ? 'surging' : i <= 2 ? 'rising' : 'steady',
+              sparkHeights: [4 + i, 7 + i, 10 - i, 14 - i, 16 - i].map(h => Math.max(2, Math.min(20, h))),
+            }))
+            setTrending(mapped)
+          }
+        }
+      } catch {
+        // Keep fallback
+      }
+    }
+
+    loadSidebarData()
+    const interval = setInterval(loadSidebarData, 2 * 60 * 1000) // refresh every 2 min
+    return () => clearInterval(interval)
+  }, [])
 
   return (
     <aside
@@ -128,17 +205,34 @@ export function LeftSidebar() {
         <div className="font-mono text-[9px] tracking-[2px] text-wp-text3 uppercase mb-2 px-1" aria-hidden="true">
           {tNav('signalChannels')}
         </div>
-        {CHANNELS.map(ch => (
-          <Link
-            key={ch.href}
-            href={ch.href}
-            aria-current={pathname === ch.href ? 'page' : undefined}
-            className="flex items-center gap-[10px] px-3 py-[9px] rounded-lg mb-0.5 text-[14px] text-wp-text2 hover:bg-wp-s2 hover:text-wp-text transition-all no-underline"
-          >
-            <span className={`text-[16px] w-5 text-center ${ch.color}`} aria-hidden="true">{ch.icon}</span>
-            <span>{tChannels(ch.labelKey)}</span>
-          </Link>
-        ))}
+        {CHANNELS.map(ch => {
+          const slug = ch.href.replace('/c/', '')
+          const count = channelCounts[slug]
+          const isActive = pathname === ch.href
+          return (
+            <Link
+              key={ch.href}
+              href={ch.href}
+              aria-current={isActive ? 'page' : undefined}
+              className={`flex items-center gap-[10px] px-3 py-[9px] rounded-lg mb-0.5 text-[14px] transition-all no-underline relative
+                ${isActive
+                  ? 'bg-[rgba(245,166,35,0.08)] text-wp-text'
+                  : 'text-wp-text2 hover:bg-wp-s2 hover:text-wp-text'
+                }`}
+            >
+              {isActive && (
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-[60%] bg-wp-amber rounded-r" aria-hidden="true" />
+              )}
+              <span className={`text-[16px] w-5 text-center ${ch.color}`} aria-hidden="true">{ch.icon}</span>
+              <span>{tChannels(ch.labelKey)}</span>
+              {count != null && count > 0 && (
+                <span className="ml-auto font-mono text-[9px] text-wp-text3 flex-shrink-0" aria-label={`${count} signals`}>
+                  {formatCount(count)}
+                </span>
+              )}
+            </Link>
+          )
+        })}
       </nav>
 
       {/* Trending */}
@@ -146,7 +240,7 @@ export function LeftSidebar() {
         <div className="font-mono text-[9px] tracking-[2px] text-wp-text3 uppercase mb-2 px-1">
           {tNav('trendingNow')}
         </div>
-        {TRENDING.map((topic, i) => (
+        {trending.map((topic, i) => (
           <div
             key={topic.tag}
             className="flex items-start gap-[10px] px-3 py-2 rounded-lg hover:bg-wp-s2 cursor-pointer transition-all mb-0.5"

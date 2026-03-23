@@ -1,15 +1,32 @@
-import { describe, it, expect, vi } from 'vitest'
-import { classifyContent } from '../pipeline/classify'
-import { computeTopicHash } from '../pipeline/dedup'
-import { extractGeo } from '../pipeline/geo'
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
+import { classifyContent } from '../classify.js'
+import { extractGeo } from '../geo.js'
 
-// Mock redis
-vi.mock('../lib/redis', () => ({
+// Mock redis — path relative to this test file (src/pipeline/__tests__/)
+vi.mock('../../lib/redis.js', () => ({
   redis: {
-    get: vi.fn().mockResolvedValue(null),
-    setex: vi.fn().mockResolvedValue('OK'),
+    get:    vi.fn().mockResolvedValue(null),
+    setex:  vi.fn().mockResolvedValue('OK'),
+    set:    vi.fn().mockResolvedValue('OK'),
+    expire: vi.fn().mockResolvedValue(1),
   },
 }))
+
+vi.mock('../../lib/logger.js', () => ({
+  logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}))
+
+// Prevent real Nominatim calls — return empty results for all geocoding requests
+const originalFetch = globalThis.fetch
+beforeAll(() => {
+  globalThis.fetch = vi.fn().mockResolvedValue({
+    ok:   true,
+    json: async () => [],
+  } as unknown as Response)
+})
+afterAll(() => {
+  globalThis.fetch = originalFetch
+})
 
 // ─── CLASSIFICATION TESTS ────────────────────────────────────────────────
 describe('classifyContent', () => {

@@ -1,0 +1,77 @@
+[
+  {
+    "phase": "Phase 1a — DB Connection Fix (URGENT)",
+    "prompt": "Fix the PostgreSQL connection issue in the WorldPulse project. The scraper and API are trying to connect to databases named 'worldpulse' and 'postgres' but the actual database is 'worldpulse_db'. Find all .env files, docker-compose configs, and database connection strings in the project and ensure they all consistently use 'worldpulse_db' as the database name. Verify by running the connection test. Do not ask for confirmation — make the fix and move on.",
+    "budget": 5
+  },
+  {
+    "phase": "Phase 1b — Scraper Health Dashboard",
+    "prompt": "Build a scraper health dashboard for WorldPulse. In apps/scraper/, add: (1) A health tracker that records per-source status (last_seen, error_count, success_rate, latency_ms) to Redis; (2) An API endpoint GET /api/v1/admin/scraper/health that returns the status of all sources; (3) Dead-source detection: if a source has not returned a signal in 30 minutes, mark it as 'stale' and log a warning; (4) A simple health summary log line printed every 5 minutes showing: total sources, healthy, stale, failed. Write TypeScript, strict mode, no confirmation prompts needed — just build and validate.",
+    "budget": 8
+  },
+  {
+    "phase": "Phase 1c — Scraper Retry & Circuit Breaker",
+    "prompt": "Add production-grade retry logic and circuit breaker pattern to the WorldPulse scraper pipeline in apps/scraper/. Implement: (1) Exponential backoff retry (3 attempts: 1s, 5s, 30s) for transient fetch failures; (2) Circuit breaker per source: after 5 consecutive failures, pause the source for 10 minutes then retry; (3) Per-domain rate limiting: max 1 request/second per domain, configurable via env var SCRAPER_RATE_LIMIT_RPS; (4) Dead-letter queue: failed signals after all retries go to a Redis list 'scraper:dlq' for manual review; (5) Politeness headers: set a descriptive User-Agent string. TypeScript strict mode. No confirmations needed.",
+    "budget": 8
+  },
+  {
+    "phase": "Phase 1d — Kafka Consumer Lag Monitoring",
+    "prompt": "Add Kafka consumer group lag monitoring to the WorldPulse infrastructure. In the Grafana setup (infrastructure/docker/), add a Grafana dashboard JSON that shows: (1) Consumer group lag per topic (signals.raw, signals.verified, events.breaking); (2) Messages per second ingested; (3) Scraper throughput over time; (4) Error rate per source tier. Also add a Prometheus alert rule: fire if consumer lag on signals.verified exceeds 1000 messages. Save the dashboard JSON to infrastructure/docker/grafana/dashboards/scraper.json. No confirmations needed.",
+    "budget": 6
+  },
+  {
+    "phase": "Phase 2a — Map: Live Signal Pins",
+    "prompt": "Wire the WorldPulse world map to live data. In apps/web/: (1) Connect the MapLibre map component to the GET /api/v1/signals/map endpoint — fetch geolocated signals and render them as pins; (2) Implement severity-based pin styling: critical=red with pulse animation, high=orange, medium=yellow, low=grey; (3) Use Supercluster for client-side clustering — show count badges on clusters that expand on zoom; (4) Add click-through popup: shows signal title, reliability score (1-5 dots), source name, timestamp, and a 'View Full Signal' link; (5) Add a refresh interval of 30 seconds. TypeScript strict, no confirmations.",
+    "budget": 10
+  },
+  {
+    "phase": "Phase 2b — Map: Real-Time WebSocket Updates",
+    "prompt": "Connect the WorldPulse map to the WebSocket feed so new signals appear in real time without page refresh. In apps/web/: (1) Subscribe to the 'signal.new' WebSocket event; (2) When a new signal arrives with geo coordinates, add it to the map immediately with a brief 'new signal' highlight animation (pulse for 3 seconds then normalise); (3) Maintain a max of 500 pins on the map at once — remove oldest when limit exceeded; (4) Add a map filter bar: filter by category (conflict, weather, seismic, health, political), severity, and time range (1h, 6h, 24h, 7d); (5) Persist zoom/pan state in URL params. TypeScript strict, no confirmations.",
+    "budget": 10
+  },
+  {
+    "phase": "Phase 3a — Search: Meilisearch Index + Pipeline",
+    "prompt": "Build the complete search indexing pipeline for WorldPulse. (1) In apps/api/, create a Meilisearch service that manages three indexes: 'signals', 'posts', 'users'; (2) Define index schemas: signals (title, summary, category, reliability_score, source, published_at, location_name — filterable: category, reliability_score, published_at), posts (content, author_handle, signal_id — filterable: published_at), users (handle, display_name, account_type, trust_score); (3) Add indexing hooks: whenever a signal or post is created/updated in PostgreSQL, push to Meilisearch via a Kafka consumer; (4) Add a backfill script that indexes all existing signals and posts; (5) Run the backfill. TypeScript strict, no confirmations.",
+    "budget": 10
+  },
+  {
+    "phase": "Phase 3b — Search: API + UI",
+    "prompt": "Build the search feature end-to-end for WorldPulse. Backend: (1) Implement GET /api/v1/search?q=&type=all|signals|posts|users&category=&reliability=&from=&to=&page=&limit= — queries Meilisearch and returns paginated results with facets; (2) Add search analytics: log query, result count, and zero-result flag to ClickHouse. Frontend in apps/web/: (3) Build a /search page with results for signals, posts, and users in tabs; (4) Build a Cmd+K command palette overlay — instant search with keyboard navigation (arrow keys + enter); (5) Add autocomplete/typeahead with debounce 150ms; (6) Show facet filters: category chips, reliability slider, date range picker. TypeScript strict, no confirmations.",
+    "budget": 12
+  },
+  {
+    "phase": "Phase 4a — Signal Detail Page",
+    "prompt": "Build the complete signal detail page for WorldPulse at /signals/[id]. The page should show: (1) Signal headline, category badge, severity indicator; (2) Reliability score as 1-5 filled dots with a tooltip explaining the score breakdown (sources used, cross-check status, AI verification status); (3) Source chain: list of all sources that reported this signal with their trust scores and timestamps; (4) Small embedded map showing the signal location pin; (5) Discussion thread below — posts from users discussing this signal, with reply/boost/like actions; (6) Related signals sidebar (same region or category within 24h); (7) Share button (copy link). Server-side rendered with Next.js 15 App Router. TypeScript strict, no confirmations.",
+    "budget": 10
+  },
+  {
+    "phase": "Phase 4b — User Profile Pages",
+    "prompt": "Build complete user profile pages for WorldPulse at /users/[handle]. Include: (1) Avatar, display name, handle, account type badge (Verified Journalist / Domain Expert / Power User / Community / Official Source), trust score displayed as a percentage with a colour indicator; (2) Follow/unfollow button (for authenticated users); (3) Bio, joined date, follower/following counts; (4) Post history tab — paginated list of their posts; (5) Signals tab — signals they have reported or contributed to; (6) Reputation history chart (trust score over time using D3 or Recharts); (7) Own profile (/users/me) shows edit profile form. TypeScript strict, no confirmations.",
+    "budget": 8
+  },
+  {
+    "phase": "Phase 5a — UI Polish: Skeletons, Empty States, Toasts",
+    "prompt": "Add polish across the WorldPulse frontend. (1) Loading skeletons: replace all loading spinners with content-shaped skeleton screens — implement for the feed, signal cards, map sidebar, search results, and profile pages; (2) Empty states: design and implement empty state components for every major view — no signals in feed, no search results, new user with no following, map with no signals in area. Each empty state should have an icon, a headline, a sub-message, and a CTA; (3) Toast notification system: implement a toast provider (top-right, 4s auto-dismiss) for all user actions — post created, follow confirmed, signal bookmarked, error states; (4) Dark/light mode toggle in the nav — persist preference in localStorage. TypeScript strict, no confirmations.",
+    "budget": 8
+  },
+  {
+    "phase": "Phase 5b — Responsive Mobile Layouts",
+    "prompt": "Make WorldPulse fully responsive for mobile and tablet. Audit every page and component in apps/web/ and fix: (1) Navigation: add a mobile hamburger menu / bottom tab bar for mobile; (2) Feed: cards should stack to full width on mobile; (3) Map: full-screen on mobile with a slide-up panel for signal details; (4) Search: full-screen overlay on mobile; (5) Profile pages: stack layout on mobile; (6) Signal detail: single column on mobile; (7) Fix all touch interactions on the map (pinch-zoom, tap clusters, tap pins); (8) Run Lighthouse mobile audit and fix any Core Web Vitals issues (LCP < 2.5s, CLS < 0.1). TypeScript strict, no confirmations.",
+    "budget": 10
+  },
+  {
+    "phase": "Phase 6a — Verification Engine: Reliability Scoring UI",
+    "prompt": "Wire the verification engine output to the WorldPulse UI. (1) Ensure every signal in the feed displays its reliability score as filled/empty dots (1-5 scale) — make this consistent across feed cards, map popups, search results, and signal detail pages; (2) Add a tooltip on the score showing: number of sources, cross-check status (confirmed/unconfirmed/contested), AI verification status, community flags count; (3) Add a 'BREAKING' badge for signals marked as breaking with < 30 min age; (4) Add a 'CONTESTED' badge for signals with community dispute flags; (5) Build the community flagging UI: a flag button on each signal that opens a modal with flag reason options (inaccurate, outdated, duplicate, misinformation). TypeScript strict, no confirmations.",
+    "budget": 8
+  },
+  {
+    "phase": "Phase 6b — Onboarding Flow",
+    "prompt": "Build a new user onboarding flow for WorldPulse. After first login: (1) Welcome screen: brief animated intro (3 slides) explaining WorldPulse — what signals are, how reliability scoring works, how to contribute; (2) Interest selection: choose categories to follow (Conflict, Climate, Politics, Health, Technology, Economy, Natural Disasters, Science); (3) Region selection: choose regions of interest on a simple world map or checkbox list; (4) Follow suggestions: show 5-10 suggested accounts to follow (Verified Journalists, Official Sources, Domain Experts) based on selected interests; (5) Mark onboarding as complete in user profile. Skip if already completed. TypeScript strict, no confirmations.",
+    "budget": 8
+  },
+  {
+    "phase": "Phase 7 — End-to-End Tests + Security Hardening",
+    "prompt": "Add a test suite and security hardening to WorldPulse. (1) Write end-to-end API tests for all critical routes: auth (login, register, OAuth), feed (GET global, following), signals (list, detail, map), search (all types, zero results, filters), posts (create, like, boost, reply); use Vitest or Jest; (2) Add rate limiting to all API routes: auth endpoints 5 req/min, public feed 60 req/min, search 30 req/min, write endpoints 10 req/min — use Redis for tracking; (3) Add input validation to all POST/PUT endpoints using Zod; (4) Add CORS configuration: allow only worldpulse.io and localhost in development; (5) Run npm audit and fix all high/critical vulnerabilities; (6) Add security headers (CSP, HSTS, X-Frame-Options) via Next.js middleware. TypeScript strict, no confirmations.",
+    "budget": 10
+  }
+]

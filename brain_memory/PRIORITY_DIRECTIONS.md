@@ -1,5 +1,5 @@
 # WorldPulse Brain Agent — Priority Direction Brief
-Last updated: 2026-03-22 (full codebase audit)
+Last updated: 2026-03-22 (full codebase audit + live site screenshot review)
 
 ---
 
@@ -31,6 +31,22 @@ Also create `apps/api/src/scripts/geocode-signals.ts` — a one-time backfill sc
 - Wrap post cards in `<Link href={'/posts/' + item.id}>`
 - Fix `apps/web/src/app/explore/page.tsx` line ~141: change `router.push('/c/' + sig.category)` to `router.push('/signals/' + sig.id)`
 - Create `apps/web/src/app/posts/[id]/page.tsx` — post detail page showing content, author, signal context, replies, source URL
+- Each signal/post detail page MUST prominently show "View original source →" link (source_url field from signals table)
+
+### P0-4: Mini Map "Click for full map →" Link Broken
+The mini map widget on the homepage/feed has a "Click for full map →" CTA that does not navigate anywhere.
+
+**Fix:** Find the mini map component (likely `apps/web/src/components/map/MiniMap.tsx` or similar). Ensure the link element has `href="/map"` and is wrapped in a Next.js `<Link>` (not a bare `<a>` or empty onClick). Verify the full map page at `/map` is reachable.
+
+### P0-5: Category Channel Tabs Show "No signals yet"
+The sidebar tabs for "Breaking News", "Culture" and other categories all show empty states. The category filter is not being applied to the API query.
+
+**Fix:**
+- In the feed/sidebar component that renders category tabs, find the API call for channel content
+- Ensure `category` is passed as a query param: `GET /api/v1/feed?category=breaking_news`
+- Verify the API route in `apps/api/src/routes/feed.ts` accepts and filters by `category` param
+- Confirm the signal categories in DB match the frontend enum values (check `apps/scraper/src/pipeline/classify.ts` for category slugs)
+- If categories don't match, add a mapping/normalisation layer
 
 ### P0-3: Settings Page Is Missing
 The nav links to `/settings` but there is NO page.tsx there. Users who click it get a 404.
@@ -83,17 +99,50 @@ The API endpoint `GET /api/v1/search?q=&type=all|signals|posts|users` is FULLY I
 - User management table: search users, change account_type, suspend/unsuspend
 - System stats: uptime, Redis memory, DB size
 
-### P1-4: Map Real-Time Updates
-Map currently has no polling or WebSocket. Data is stale on load.
+### P1-4: Map Real-Time Updates + Full Overhaul (TOP PRIORITY)
+Map currently shows 0 signals and has no real-time updates. This is the platform's #1 visual differentiator and must be made compelling.
+
+**The vision:** A dynamic, living map — not a static image. Signals should pulse, cluster, animate in real time. This is the first thing every new user sees.
+
+**Fix (in order):**
+1. Wire geo pipeline (P0-1) first so signals have location data
+2. Connect map to `/api/v1/signals/map/points` — render all geolocated signals as pins
+3. Subscribe to `signal.new` WebSocket event — new signals animate onto map with pulse effect (3-second glow)
+4. Implement Supercluster for client-side clustering with count badges — critical for dense regions
+5. Severity-based pin styling: critical = red pulse, high = orange, medium = yellow, low = grey
+6. Click-through popup: title, reliability dots, category badge, "View full signal →" link
+7. Add filter bar: category chips (Conflict / Climate / Health / Markets / Science), time range (1h / 6h / 24h / 7d)
+8. Heatmap toggle layer for historical event density
+9. Store zoom/pan in URL params so map links are shareable
+10. Fallback polling every 30s if WebSocket disconnects
+
+**Mobile map fix:**
+- Default to full-screen map on mobile
+- Signal details open as slide-up bottom sheet (`fixed bottom-0 w-full`)
+- Filter bar collapses to icon row on small screens
+
+### P1-5: Live Signal Counter Is Hardcoded/Stale
+The "LIVE Tracking X signals" counter on the homepage displays a static number that does not update.
 
 **Fix:**
-- Subscribe to `signal.new` WebSocket event
-- Add new signal pin immediately with 3-second pulse animation
-- Fallback: poll `GET /api/v1/signals/map/points` every 30 seconds
-- Add filter bar: category chips (Conflict / Climate / Health / Markets / Science), time range (1h / 6h / 24h / 7d)
-- Store zoom/pan in URL params so links share map position
+- Find the component rendering the live counter (likely in `apps/web/src/app/page.tsx` or a stats widget)
+- Replace static value with a `useEffect` that calls `GET /api/v1/signals/stats` or `GET /api/v1/feed/stats` on mount
+- Subscribe to the WebSocket `signal.new` event and increment the counter in real time (no page refresh needed)
+- If no stats endpoint exists, create `GET /api/v1/signals/count` in `apps/api/src/routes/signals.ts` returning `{ count: number }`
+- Update the counter every 30 seconds as a fallback
 
-### P1-5: Communities Grid Broken on Mobile
+### P1-6: News Ticker Not Interactive
+The top news ticker scrolls headlines but users cannot interact with it — no pause on hover, no click-through to story.
+
+**Fix:**
+- In the ticker component (likely `apps/web/src/components/NewsTicker.tsx`):
+  - Add `onMouseEnter` → pause scroll animation (`animation-play-state: paused`)
+  - Add `onMouseLeave` → resume scroll
+  - Wrap each ticker item in `<Link href={'/signals/' + item.id}>` so clicking navigates to the signal detail
+  - Add `cursor: pointer` styling on individual items
+  - Ensure signal ID is available in the ticker data shape; if not, update the API query that feeds it
+
+### P1-7: Communities Grid Broken on Mobile
 `apps/web/src/app/communities/page.tsx` uses `grid-cols-4` — breaks on small screens.
 **Fix:** Change to `grid-cols-2 sm:grid-cols-3 lg:grid-cols-4`
 
@@ -166,7 +215,20 @@ This immediately gives WorldPulse massive data coverage vs competitors.
 
 ## 🟢 P3 — Polish & Competitive Differentiators
 
-### P3-1: Loading Skeletons Everywhere
+### P3-1: Open Graph / Link Preview Image
+When world-pulse.io is shared via iMessage, WhatsApp, Slack, or Twitter, it currently shows a bare URL with no image or description. Add OG meta tags so every share becomes a rich preview card.
+
+**Fix in `apps/web/src/app/layout.tsx`:**
+- Add `og:title` → "WorldPulse — Global Intelligence Network"
+- Add `og:description` → "Real-time verified signals from every corner of the world. Live map, breaking news, open source."
+- Add `og:image` → a 1200×630px branded image at `/public/og-image.png` — dark background, WORLDPULSE wordmark in amber, tagline, globe/map visual
+- Add `og:url` → "https://world-pulse.io"
+- Add `twitter:card` → "summary_large_image"
+- Add `twitter:image` → same as og:image
+- Use Next.js 15 `export const metadata: Metadata` with the `openGraph` and `twitter` fields — do NOT use raw `<meta>` tags
+- Create the OG image as a static PNG in `apps/web/public/og-image.png` — can use a simple canvas/sharp script to generate it, or create it as an SVG and export
+
+### P3-2: Loading Skeletons Everywhere
 Replace all loading spinners with content-shaped skeleton screens.
 Key places: feed cards, signal detail, profile page, search results, map sidebar panel.
 Use a simple `SkeletonCard` component with Tailwind `animate-pulse`.

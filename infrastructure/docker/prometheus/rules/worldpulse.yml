@@ -1,0 +1,118 @@
+groups:
+  - name: worldpulse.kafka
+    interval: 30s
+    rules:
+      # -----------------------------------------------------------------------
+      # Consumer lag alerts
+      # -----------------------------------------------------------------------
+      - alert: KafkaConsumerLagHigh
+        expr: |
+          sum(kafka_consumergroup_lag{topic="signals.verified"}) > 1000
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High consumer lag on signals.verified"
+          description: >
+            Consumer group lag on topic signals.verified has exceeded 1000 messages
+            for more than 2 minutes (current value: {{ $value | humanize }}).
+            Check scraper output rate and signals-processor consumers.
+          runbook_url: "https://github.com/worldpulse/worldpulse/wiki/runbooks/kafka-lag"
+
+      - alert: KafkaConsumerLagCritical
+        expr: |
+          sum(kafka_consumergroup_lag{topic="signals.verified"}) > 5000
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Critical consumer lag on signals.verified"
+          description: >
+            Consumer group lag on topic signals.verified has exceeded 5000 messages
+            for more than 5 minutes (current value: {{ $value | humanize }}).
+            Immediate attention required.
+
+      - alert: KafkaConsumerLagSignalsRaw
+        expr: |
+          sum(kafka_consumergroup_lag{topic="signals.raw"}) > 1000
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High consumer lag on signals.raw"
+          description: >
+            Consumer group lag on topic signals.raw has exceeded 1000 messages
+            (current value: {{ $value | humanize }}).
+
+      - alert: KafkaConsumerLagEventsBreaking
+        expr: |
+          sum(kafka_consumergroup_lag{topic="events.breaking"}) > 1000
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High consumer lag on events.breaking"
+          description: >
+            Consumer group lag on topic events.breaking has exceeded 1000 messages
+            (current value: {{ $value | humanize }}).
+
+  - name: worldpulse.scraper
+    interval: 30s
+    rules:
+      # -----------------------------------------------------------------------
+      # Scraper throughput alerts
+      # -----------------------------------------------------------------------
+      - alert: ScraperThroughputLow
+        expr: |
+          rate(worldpulse_scraper_signals_total[5m]) < 0.1
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Scraper throughput critically low"
+          description: >
+            The scraper has ingested fewer than 0.1 signals/s for the last 5 minutes.
+            The pipeline may be stalled.
+
+      - alert: ScraperErrorRateHigh
+        expr: |
+          rate(worldpulse_scraper_errors_total[5m])
+          /
+          clamp_min(
+            rate(worldpulse_scraper_signals_total[5m]) + rate(worldpulse_scraper_errors_total[5m]),
+            1e-9
+          ) > 0.10
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Scraper error rate above 10%"
+          description: >
+            More than 10% of scrape attempts are failing
+            (current rate: {{ $value | humanizePercentage }}).
+            Check source health and circuit-breaker state.
+
+      - alert: ScraperTier1ErrorRateHigh
+        expr: |
+          rate(worldpulse_scraper_errors_total{tier="1"}[5m])
+          /
+          clamp_min(
+            rate(worldpulse_scraper_signals_total{tier="1"}[5m]) + rate(worldpulse_scraper_errors_total{tier="1"}[5m]),
+            1e-9
+          ) > 0.05
+        for: 3m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Tier-1 scraper error rate above 5%"
+          description: >
+            Tier-1 (premium) sources are failing at >5% for 3+ minutes
+            (current rate: {{ $value | humanizePercentage }}).
+            These sources are highest priority — investigate immediately.
