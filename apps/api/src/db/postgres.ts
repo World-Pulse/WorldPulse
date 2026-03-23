@@ -4,8 +4,8 @@ export const db = Knex({
   client: 'pg',
   connection: {
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production'
-      ? { rejectUnauthorized: true }
+    ssl: process.env.DB_SSL === 'true'
+      ? { rejectUnauthorized: false }
       : false,
   },
   pool: {
