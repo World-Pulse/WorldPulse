@@ -491,3 +491,310 @@ describe('IODA — severity mapping from anomaly score', () => {
     expect(iodaSeverity(500)).toBe('critical')
   })
 })
+
+// ─── WHO DISEASE OUTBREAK ─────────────────────────────────────────────────
+import { whoSeverity, inferLocation, parseRssItems as parseWhoRssItems } from '../who'
+
+describe('WHO — severity mapping', () => {
+  it('returns critical for PHEIC / Ebola / pandemic declarations', () => {
+    expect(whoSeverity('Ebola outbreak declared in DRC')).toBe('critical')
+    expect(whoSeverity('WHO declares Public Health Emergency of International Concern')).toBe('critical')
+    expect(whoSeverity('Marburg virus hemorrhagic fever outbreak – Grade 3')).toBe('critical')
+  })
+
+  it('returns high for novel pathogens and multi-country spread', () => {
+    expect(whoSeverity('Novel virus strain detected in Asia — multi-country spread')).toBe('high')
+    expect(whoSeverity('High risk assessment — large-scale outbreak expanding')).toBe('high')
+  })
+
+  it('returns medium for confirmed outbreak notifications', () => {
+    expect(whoSeverity('Avian influenza cases reported in rural region')).toBe('medium')
+    expect(whoSeverity('Cholera outbreak update — confirmed cases in province')).toBe('medium')
+    expect(whoSeverity('Dengue fever cluster — Grade 1 response')).toBe('medium')
+  })
+
+  it('returns low for general disease surveillance updates', () => {
+    expect(whoSeverity('WHO surveillance report for seasonal influenza')).toBe('low')
+    expect(whoSeverity('Routine immunization coverage report')).toBe('low')
+  })
+})
+
+describe('WHO — location inference', () => {
+  it('identifies DRC from title text', () => {
+    const loc = inferLocation('Ebola outbreak in Democratic Republic of the Congo')
+    expect(loc.locationName.toLowerCase()).toContain('congo')
+    expect(typeof loc.lat).toBe('number')
+    expect(typeof loc.lng).toBe('number')
+  })
+
+  it('falls back to global centroid for unknown location', () => {
+    const loc = inferLocation('Global health security update')
+    expect(loc.locationName).toBe('Global')
+    expect(loc.lat).toBe(0.0)
+    expect(loc.lng).toBe(20.0)
+  })
+
+  it('matches country name in description if not in title', () => {
+    const loc = inferLocation('Disease outbreak update', 'Cases confirmed in Nigeria')
+    expect(loc.locationName).toBe('Nigeria')
+  })
+
+  it('matches haiti for cholera outbreaks', () => {
+    const loc = inferLocation('Cholera – Haiti: Situation Update')
+    expect(loc.locationName).toBe('Haiti')
+  })
+})
+
+describe('WHO — RSS parsing', () => {
+  const SAMPLE_RSS = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>WHO Disease Outbreak News</title>
+    <item>
+      <title><![CDATA[Ebola virus disease – Democratic Republic of the Congo]]></title>
+      <link>https://www.who.int/emergencies/disease-outbreak-news/item/2026-DON503</link>
+      <pubDate>Mon, 23 Mar 2026 12:00:00 GMT</pubDate>
+      <description><![CDATA[As of 22 March, 14 confirmed cases and 5 deaths reported.]]></description>
+      <guid>https://www.who.int/emergencies/disease-outbreak-news/item/2026-DON503</guid>
+    </item>
+    <item>
+      <title>Cholera – Haiti: Situation Update</title>
+      <link>https://www.who.int/emergencies/disease-outbreak-news/item/2026-DON504</link>
+      <pubDate>Tue, 24 Mar 2026 08:00:00 GMT</pubDate>
+      <description>Weekly cholera update for Haiti.</description>
+      <guid>https://www.who.int/emergencies/disease-outbreak-news/item/2026-DON504</guid>
+    </item>
+  </channel>
+</rss>`
+
+  it('parses CDATA-wrapped title correctly', () => {
+    const items = parseWhoRssItems(SAMPLE_RSS)
+    expect(items).toHaveLength(2)
+    expect(items[0].title).toBe('Ebola virus disease – Democratic Republic of the Congo')
+    expect(items[0].link).toContain('DON503')
+  })
+
+  it('parses plain text title correctly', () => {
+    const items = parseWhoRssItems(SAMPLE_RSS)
+    expect(items[1].title).toBe('Cholera – Haiti: Situation Update')
+  })
+
+  it('returns empty array for feed with no items', () => {
+    const items = parseWhoRssItems('<rss><channel></channel></rss>')
+    expect(items).toHaveLength(0)
+  })
+})
+
+// ─── IAEA NUCLEAR EVENTS ──────────────────────────────────────────────────
+import { iaeaSeverity, isNuclearSafetyItem, inferIaeaLocation } from '../iaea'
+
+describe('IAEA — severity mapping', () => {
+  it('returns critical for nuclear accident / INES level 4-7 / meltdown', () => {
+    expect(iaeaSeverity('Nuclear accident declared at INES level 5')).toBe('critical')
+    expect(iaeaSeverity('Major accident: meltdown at reactor – emergency declared')).toBe('critical')
+    expect(iaeaSeverity('Large release of radiation – INES level 7 event')).toBe('critical')
+    expect(iaeaSeverity('Core damage confirmed — radiation emergency')).toBe('critical')
+  })
+
+  it('returns high for serious incidents and lost radioactive sources', () => {
+    expect(iaeaSeverity('INES level 3 serious incident reported at plant')).toBe('high')
+    expect(iaeaSeverity('Lost radioactive source reported to IAEA')).toBe('high')
+    expect(iaeaSeverity('Orphan source found — confirmed contamination')).toBe('high')
+  })
+
+  it('returns medium for minor incidents and unplanned shutdowns', () => {
+    expect(iaeaSeverity('INES level 2 incident at nuclear power plant')).toBe('medium')
+    expect(iaeaSeverity('Unplanned reactor shutdown — precautionary measure taken')).toBe('medium')
+    expect(iaeaSeverity('Tritium release from nuclear facility below threshold')).toBe('medium')
+  })
+
+  it('returns low for general IAEA news without incident keywords', () => {
+    expect(iaeaSeverity('IAEA Technical Cooperation programme progress report')).toBe('low')
+    expect(iaeaSeverity('Director General visits Member State for review')).toBe('low')
+  })
+})
+
+describe('IAEA — nuclear safety keyword filter', () => {
+  it('returns true for nuclear/radiation safety items', () => {
+    expect(isNuclearSafetyItem('Nuclear safety review published')).toBe(true)
+    expect(isNuclearSafetyItem('Radiation monitoring data released for public')).toBe(true)
+    expect(isNuclearSafetyItem('Radioactive material found at border checkpoint')).toBe(true)
+    expect(isNuclearSafetyItem('Reactor shutdown after seismic event precautionary')).toBe(true)
+    expect(isNuclearSafetyItem('INES classification of nuclear incident')).toBe(true)
+  })
+
+  it('returns false for non-nuclear general IAEA news', () => {
+    expect(isNuclearSafetyItem('IAEA Director General attends conference')).toBe(false)
+    expect(isNuclearSafetyItem('Technical cooperation fund contributions overview')).toBe(false)
+    expect(isNuclearSafetyItem('Board of Governors session concludes discussion')).toBe(false)
+  })
+})
+
+describe('IAEA — location inference', () => {
+  it('identifies Fukushima NPP location', () => {
+    const loc = inferIaeaLocation('TEPCO Fukushima treated water discharge update')
+    expect(loc.locationName).toContain('Fukushima')
+    expect(loc.lat).toBeCloseTo(37.42, 0)
+    expect(loc.lng).toBeCloseTo(141.03, 0)
+  })
+
+  it('identifies Ukraine for Zaporizhzhia NPP reports', () => {
+    const loc = inferIaeaLocation('Zaporizhzhia nuclear plant external power line restored')
+    expect(loc.locationName.toLowerCase()).toContain('zaporizhzhia')
+  })
+
+  it('identifies Iran for Natanz facility reports', () => {
+    const loc = inferIaeaLocation('IAEA inspectors visit Natanz enrichment facility')
+    expect(loc.locationName.toLowerCase()).toContain('natanz')
+  })
+
+  it('falls back to IAEA HQ Vienna for unknown locations', () => {
+    const loc = inferIaeaLocation('IAEA publishes updated safety standards document')
+    expect(loc.locationName).toContain('Vienna')
+    expect(loc.lat).toBeCloseTo(48.0, 0)
+  })
+})
+
+// ─── MARKET INTELLIGENCE (Yahoo Finance) TESTS ───────────────────────────────
+import {
+  vixSeverity,
+  percentChangeSeverity,
+  shouldEmitMarketSignal,
+  formatMarketTitle,
+  marketDedupKey,
+  MARKET_INDICATORS,
+} from '../market'
+
+describe('Market — vixSeverity', () => {
+  it('returns critical when VIX >= 40 (extreme fear)', () => {
+    expect(vixSeverity(40)).toBe('critical')
+    expect(vixSeverity(55)).toBe('critical')
+    expect(vixSeverity(40.1)).toBe('critical')
+  })
+
+  it('returns high when VIX >= 30 and < 40', () => {
+    expect(vixSeverity(30)).toBe('high')
+    expect(vixSeverity(35)).toBe('high')
+    expect(vixSeverity(39.9)).toBe('high')
+  })
+
+  it('returns medium when VIX >= 25 and < 30', () => {
+    expect(vixSeverity(25)).toBe('medium')
+    expect(vixSeverity(27)).toBe('medium')
+    expect(vixSeverity(29.9)).toBe('medium')
+  })
+
+  it('returns low when VIX < 25 (normal conditions)', () => {
+    expect(vixSeverity(24)).toBe('low')
+    expect(vixSeverity(15)).toBe('low')
+    expect(vixSeverity(10)).toBe('low')
+  })
+})
+
+describe('Market — percentChangeSeverity', () => {
+  it('index: critical at >= 6%, high at >= 4%, medium at >= 2%', () => {
+    expect(percentChangeSeverity(6, 'index')).toBe('critical')
+    expect(percentChangeSeverity(4, 'index')).toBe('high')
+    expect(percentChangeSeverity(2, 'index')).toBe('medium')
+    expect(percentChangeSeverity(1.9, 'index')).toBe('low')
+  })
+
+  it('crypto: high at >= 20%, medium at >= 10%', () => {
+    expect(percentChangeSeverity(20, 'crypto')).toBe('high')
+    expect(percentChangeSeverity(10, 'crypto')).toBe('medium')
+    expect(percentChangeSeverity(9.9, 'crypto')).toBe('low')
+  })
+
+  it('commodity: high at >= 10%, medium at >= 5%', () => {
+    expect(percentChangeSeverity(10, 'commodity')).toBe('high')
+    expect(percentChangeSeverity(5, 'commodity')).toBe('medium')
+    expect(percentChangeSeverity(4.9, 'commodity')).toBe('low')
+  })
+})
+
+describe('Market — shouldEmitMarketSignal', () => {
+  const vixIndicator   = MARKET_INDICATORS.find(i => i.symbol === '^VIX')!
+  const sp500Indicator = MARKET_INDICATORS.find(i => i.symbol === '^GSPC')!
+  const btcIndicator   = MARKET_INDICATORS.find(i => i.symbol === 'BTC-USD')!
+  const oilIndicator   = MARKET_INDICATORS.find(i => i.symbol === 'CL=F')!
+
+  it('emits for VIX >= 25', () => {
+    expect(shouldEmitMarketSignal(vixIndicator, 25, 5)).toBe(true)
+    expect(shouldEmitMarketSignal(vixIndicator, 40, 0)).toBe(true)
+  })
+
+  it('does NOT emit for VIX < 25', () => {
+    expect(shouldEmitMarketSignal(vixIndicator, 24.9, 0)).toBe(false)
+    expect(shouldEmitMarketSignal(vixIndicator, 15, 0)).toBe(false)
+  })
+
+  it('emits for S&P 500 move >= 2%', () => {
+    expect(shouldEmitMarketSignal(sp500Indicator, 5000, 2.0)).toBe(true)
+    expect(shouldEmitMarketSignal(sp500Indicator, 5000, -2.5)).toBe(true)
+  })
+
+  it('does NOT emit for S&P 500 move < 2%', () => {
+    expect(shouldEmitMarketSignal(sp500Indicator, 5000, 1.9)).toBe(false)
+    expect(shouldEmitMarketSignal(sp500Indicator, 5000, 0.5)).toBe(false)
+  })
+
+  it('emits for BTC move >= 10%', () => {
+    expect(shouldEmitMarketSignal(btcIndicator, 80000, 10)).toBe(true)
+    expect(shouldEmitMarketSignal(btcIndicator, 80000, -15)).toBe(true)
+  })
+
+  it('does NOT emit for BTC move < 10%', () => {
+    expect(shouldEmitMarketSignal(btcIndicator, 80000, 9.9)).toBe(false)
+  })
+
+  it('emits for Oil move >= 5%', () => {
+    expect(shouldEmitMarketSignal(oilIndicator, 80, 5)).toBe(true)
+    expect(shouldEmitMarketSignal(oilIndicator, 80, -7)).toBe(true)
+  })
+
+  it('does NOT emit for Oil move < 5%', () => {
+    expect(shouldEmitMarketSignal(oilIndicator, 80, 4.9)).toBe(false)
+  })
+})
+
+describe('Market — formatMarketTitle', () => {
+  const vixIndicator   = MARKET_INDICATORS.find(i => i.symbol === '^VIX')!
+  const sp500Indicator = MARKET_INDICATORS.find(i => i.symbol === '^GSPC')!
+
+  it('formats a VIX extreme fear title correctly', () => {
+    const title = formatMarketTitle(vixIndicator, 42.5, 8.2)
+    expect(title).toContain('42.5')
+    expect(title.toLowerCase()).toContain('extreme')
+  })
+
+  it('formats a VIX high stress title correctly', () => {
+    const title = formatMarketTitle(vixIndicator, 32.0, 5.0)
+    expect(title).toContain('32.0')
+    expect(title.toLowerCase()).toContain('high')
+  })
+
+  it('formats an S&P 500 crash title with negative sign', () => {
+    const title = formatMarketTitle(sp500Indicator, 4800, -3.5)
+    expect(title).toContain('S&P 500')
+    expect(title).toContain('-3.5%')
+  })
+
+  it('formats an S&P 500 rally title', () => {
+    const title = formatMarketTitle(sp500Indicator, 5200, 2.8)
+    expect(title).toContain('+2.8%')
+  })
+})
+
+describe('Market — marketDedupKey', () => {
+  it('builds a correct dedup key', () => {
+    const key = marketDedupKey('^VIX', 'extreme-fear', '2026-03-23')
+    expect(key).toBe('osint:market:^VIX:extreme-fear:2026-03-23')
+  })
+
+  it('produces different keys for different dates', () => {
+    const key1 = marketDedupKey('^GSPC', 'plunge', '2026-03-22')
+    const key2 = marketDedupKey('^GSPC', 'plunge', '2026-03-23')
+    expect(key1).not.toBe(key2)
+  })
+})
+})

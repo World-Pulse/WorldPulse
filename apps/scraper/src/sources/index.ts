@@ -10,8 +10,13 @@
  *   - NOAA SWPC — space weather alerts: geomagnetic/solar/radio (10-min polls)
  *   - GPSJam.org — GPS jamming hotspots (15-min polls, crowdsourced ADS-B anomaly)
  *   - Georgia Tech IODA — internet outage alerts by country/ASN (10-min polls)
+ *   - CelesTrak — active satellite catalog, launches & re-entries (30-min polls)
+ *   - US Navy CSG Tracker — all 11 carrier strike groups via USNI News RSS (30-min polls)
+ *   - WHO Disease Outbreak News — official WHO disease outbreak notifications (30-min polls)
+ *   - IAEA Nuclear Events — nuclear safety incidents & radiation events (30-min polls)
+ *   - Market Intelligence — VIX, S&P 500, NASDAQ, BTC, Crude Oil via Yahoo Finance (15-min polls)
  *
- * Counters Shadowbroker's 15-feed OSINT dashboard advantage (8 feeds).
+ * 13 OSINT feeds total. Counters Crucix's 27-feed advantage.
  *
  * Usage:
  *   const stopOsint = startOsintPollers(db, redis, producer)
@@ -31,6 +36,11 @@ import { startFirmsPoller } from './firms'
 import { startSpaceWeatherPoller } from './spaceweather'
 import { startGpsJamPoller } from './gpsjam'
 import { startIodaPoller } from './ioda'
+import { startCelesTrakPoller } from './celestrak'
+import { startCarrierStrikeGroupPoller } from './carrier-strike-groups'
+import { startWhoPoller } from './who'
+import { startIaeaPoller } from './iaea'
+import { startMarketPoller } from './market'
 
 export type OsintCleanupFn = () => void
 
@@ -43,7 +53,7 @@ export function startOsintPollers(
   redis: Redis,
   producer?: Producer | null,
 ): OsintCleanupFn {
-  logger.info('🛰️  Starting OSINT signal pollers (GDELT + ADS-B + AIS + Seismic + FIRMS + Space Weather + GPS Jamming + IODA)')
+  logger.info('🛰️  Starting OSINT signal pollers (GDELT + ADS-B + AIS + Seismic + FIRMS + Space Weather + GPS Jamming + IODA + CelesTrak + CSG + WHO + IAEA + Market Intelligence)')
 
   const cleanups: OsintCleanupFn[] = []
 
@@ -95,6 +105,36 @@ export function startOsintPollers(
     logger.error({ err }, 'Failed to start IODA internet outage poller')
   }
 
+  try {
+    cleanups.push(startCelesTrakPoller(db, redis, producer))
+  } catch (err) {
+    logger.error({ err }, 'Failed to start CelesTrak satellite poller')
+  }
+
+  try {
+    cleanups.push(startCarrierStrikeGroupPoller(db, redis, producer))
+  } catch (err) {
+    logger.error({ err }, 'Failed to start Carrier Strike Group poller')
+  }
+
+  try {
+    cleanups.push(startWhoPoller(db, redis, producer))
+  } catch (err) {
+    logger.error({ err }, 'Failed to start WHO Disease Outbreak poller')
+  }
+
+  try {
+    cleanups.push(startIaeaPoller(db, redis, producer))
+  } catch (err) {
+    logger.error({ err }, 'Failed to start IAEA nuclear events poller')
+  }
+
+  try {
+    cleanups.push(startMarketPoller(db, redis, producer))
+  } catch (err) {
+    logger.error({ err }, 'Failed to start Market Intelligence poller')
+  }
+
   logger.info(`✅ ${cleanups.length} OSINT poller(s) active`)
 
   return () => {
@@ -111,3 +151,8 @@ export { startFirmsPoller } from './firms'
 export { startSpaceWeatherPoller } from './spaceweather'
 export { startGpsJamPoller } from './gpsjam'
 export { startIodaPoller } from './ioda'
+export { startCelesTrakPoller } from './celestrak'
+export { startCarrierStrikeGroupPoller } from './carrier-strike-groups'
+export { startWhoPoller } from './who'
+export { startIaeaPoller } from './iaea'
+export { startMarketPoller } from './market'
