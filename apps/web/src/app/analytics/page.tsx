@@ -35,26 +35,22 @@ interface AnalyticsData {
   }>
 }
 
-// Demo data for unauthenticated view
-const DEMO_DATA: AnalyticsData = {
-  overview: {
-    totalPosts: 47, totalLikesReceived: 3240, totalBoostsReceived: 891,
-    totalRepliesReceived: 412, totalViews: 52400, followerCount: 1830,
-    followingCount: 294, signalCount: 12, engagementRate: 0.0786,
-  },
-  signals: { submitted: 12, verified: 9, verificationRate: 0.75 },
-  postsPerDay: Array.from({ length: 30 }, (_, i) => {
-    const d = new Date()
-    d.setUTCDate(d.getUTCDate() - (29 - i))
-    return { date: d.toISOString().slice(0, 10), count: Math.floor(Math.random() * 5) }
-  }),
-  topPosts: [
-    { id: '1', content: 'Breaking: Manila earthquake M5.8 — full thread on structural implications', postType: 'thread', likeCount: 1240, boostCount: 380, replyCount: 112, viewCount: 18400, engagementTotal: 1732, createdAt: new Date().toISOString() },
-    { id: '2', content: 'EU AI directive emergency clause — what it means for frontier labs in practice', postType: 'deep_dive', likeCount: 870, boostCount: 260, replyCount: 89, viewCount: 12100, engagementTotal: 1219, createdAt: new Date().toISOString() },
-    { id: '3', content: 'Arctic sea ice data — 940k km² below previous record. Feedback loops accelerating beyond IPCC projections', postType: 'signal', likeCount: 620, boostCount: 190, replyCount: 54, viewCount: 9300, engagementTotal: 864, createdAt: new Date().toISOString() },
-    { id: '4', content: 'South Korea election analysis — demographic shifts in rural precincts driving unexpected results', postType: 'report', likeCount: 310, boostCount: 61, replyCount: 44, viewCount: 5800, engagementTotal: 415, createdAt: new Date().toISOString() },
-    { id: '5', content: 'Gaza humanitarian corridor update — UN convoy status and access timeline', postType: 'signal', likeCount: 200, boostCount: 0, replyCount: 113, viewCount: 6700, engagementTotal: 313, createdAt: new Date().toISOString() },
-  ],
+// Empty data when API fails
+function createEmptyAnalytics(): AnalyticsData {
+  return {
+    overview: {
+      totalPosts: 0, totalLikesReceived: 0, totalBoostsReceived: 0,
+      totalRepliesReceived: 0, totalViews: 0, followerCount: 0,
+      followingCount: 0, signalCount: 0, engagementRate: 0,
+    },
+    signals: { submitted: 0, verified: 0, verificationRate: 0 },
+    postsPerDay: Array.from({ length: 30 }, (_, i) => {
+      const d = new Date()
+      d.setUTCDate(d.getUTCDate() - (29 - i))
+      return { date: d.toISOString().slice(0, 10), count: 0 }
+    }),
+    topPosts: [],
+  }
 }
 
 function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
@@ -181,9 +177,9 @@ export default function AnalyticsPage() {
   const [isDemo, setIsDemo] = useState(false)
 
   useEffect(() => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('wp_token') : null
+    const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
     if (!token) {
-      setData(DEMO_DATA)
+      setData(createEmptyAnalytics())
       setIsDemo(true)
       setLoading(false)
       return
@@ -192,12 +188,24 @@ export default function AnalyticsPage() {
     fetch(`${API_URL}/api/v1/analytics/me`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then(r => r.json())
-      .then((d: { success: boolean; data: AnalyticsData }) => {
-        if (d.success) setData(d.data)
-        else { setData(DEMO_DATA); setIsDemo(true) }
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
       })
-      .catch(() => { setData(DEMO_DATA); setIsDemo(true) })
+      .then((d: { success?: boolean; data?: AnalyticsData }) => {
+        if (d.success && d.data) {
+          setData(d.data)
+          setIsDemo(false)
+        } else {
+          setData(createEmptyAnalytics())
+          setIsDemo(true)
+        }
+      })
+      .catch(err => {
+        console.error('[Analytics] fetch failed:', err)
+        setData(createEmptyAnalytics())
+        setIsDemo(true)
+      })
       .finally(() => setLoading(false))
   }, [])
 

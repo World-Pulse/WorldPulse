@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Inter, Bebas_Neue, JetBrains_Mono } from 'next/font/google'
 import { NextIntlClientProvider } from 'next-intl'
 import { getLocale, getMessages } from 'next-intl/server'
@@ -29,16 +29,18 @@ const jetbrainsMono = JetBrains_Mono({
   variable: '--font-mono',
 })
 
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+  themeColor: '#06070d',
+}
+
 export const metadata: Metadata = {
   title: 'WorldPulse — Global Intelligence Network',
   description: 'Real-time verified signals from every corner of the world. Live map, breaking news, open source.',
   keywords: ['world news', 'breaking news', 'global events', 'open source', 'real-time'],
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 5,
-    userScalable: true,
-  },
   openGraph: {
     title: 'WorldPulse — Global Intelligence Network',
     description: 'Real-time verified signals from every corner of the world. Live map, breaking news, open source.',
@@ -53,7 +55,6 @@ export const metadata: Metadata = {
     description: 'Real-time verified signals from every corner of the world.',
     images: ['/og-image.png'],
   },
-  themeColor: '#06070d',
 }
 
 const RTL_LOCALES = new Set(['ar'])
