@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { redis } from '../db/redis'
+import { db } from '../db/postgres'
 import { authenticate } from '../middleware/auth'
 
 // ─── Redis key helpers (must match apps/scraper/src/health.ts) ──────────────
@@ -108,6 +109,65 @@ export const registerAdminRoutes: FastifyPluginAsync = async (app) => {
           const order = { dead: 0, degraded: 1, unknown: 2, healthy: 3 }
           return order[a.status] - order[b.status]
         }),
+        generatedAt: new Date().toISOString(),
+      },
+    })
+  })
+
+  // ─── GET /api/v1/admin/signals/stats ───────────────────────────────────────
+  app.get('/signals/stats', { preHandler: [authenticate] }, async (req, reply) => {
+    if (!req.user || req.user.accountType !== 'admin') {
+      return reply.status(403).send({ success: false, error: 'Admin access required', code: 'FORBIDDEN' })
+    }
+
+    const [totalRow] = await db('signals').count('id as count')
+    const [last24hRow] = await db('signals')
+      .where('created_at', '>', db.raw("NOW() - INTERVAL '24 hours'"))
+      .count('id as count')
+    const [lastHourRow] = await db('signals')
+      .where('created_at', '>', db.raw("NOW() - INTERVAL '1 hour'"))
+      .count('id as count')
+
+    const severityRows = await db('signals')
+      .select('severity')
+      .count('id as count')
+      .groupBy('severity')
+
+    const statusRows = await db('signals')
+      .select('status')
+      .count('id as count')
+      .groupBy('status')
+
+    const bySeverity: Record<string, number> = {}
+    for (const row of severityRows) {
+      bySeverity[row.severity as string] = Number(row.count)
+    }
+
+    const byStatus: Record<string, number> = {}
+    for (const row of statusRows) {
+      byStatus[row.status as string] = Number(row.count)
+    }
+
+    return reply.send({
+      success: true,
+      data: {
+        total:      Number(totalRow.count),
+        last24h:    Number(last24hRow.count),
+        lastHour:   Number(lastHourRow.count),
+        bySeverity: {
+          critical: bySeverity['critical'] ?? 0,
+          high:     bySeverity['high']     ?? 0,
+          medium:   bySeverity['medium']   ?? 0,
+          low:      bySeverity['low']      ?? 0,
+          info:     bySeverity['info']     ?? 0,
+        },
+        byStatus: {
+          verified:  byStatus['verified']  ?? 0,
+          pending:   byStatus['pending']   ?? 0,
+          disputed:  byStatus['disputed']  ?? 0,
+          false:     byStatus['false']     ?? 0,
+          retracted: byStatus['retracted'] ?? 0,
+        },
         generatedAt: new Date().toISOString(),
       },
     })
