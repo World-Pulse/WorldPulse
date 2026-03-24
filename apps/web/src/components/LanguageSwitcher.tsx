@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useTransition } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { useLocale } from 'next-intl'
+import { useLocale } from '@/lib/i18n'
 
 const LANGUAGES = [
   { code: 'en', label: 'English',    flag: '🇺🇸', dir: 'ltr' },

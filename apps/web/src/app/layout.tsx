@@ -1,7 +1,5 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter, Bebas_Neue, JetBrains_Mono } from 'next/font/google'
-import { NextIntlClientProvider } from 'next-intl'
-import enMessages from '../../messages/en.json'
 import './globals.css'
 import { Providers } from '@/components/providers'
 import { TopNav } from '@/components/nav/TopNav'
@@ -63,12 +61,8 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic'
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const locale = 'en'
-  const messages = enMessages as Record<string, unknown>
-  const dir = 'ltr'
-
   return (
-    <html lang={locale} dir={dir} className="dark">
+    <html lang="en" dir="ltr" className="dark">
       <body className={`${inter.variable} ${bebasNeue.variable} ${jetbrainsMono.variable} ${inter.className} bg-wp-bg text-wp-text antialiased`}>
         {/* Skip to main content for keyboard/screen reader users */}
         <a
@@ -77,18 +71,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           Skip to main content
         </a>
-        <NextIntlClientProvider messages={messages}>
-          <Providers>
-            <TopNav />
-            <main
-              id="main-content"
-              className="pt-[52px] min-h-screen main-content-mobile-pb"
-            >
-              {children}
-            </main>
-            <BottomTabBar />
-          </Providers>
-        </NextIntlClientProvider>
+        <Providers>
+          <TopNav />
+          <main
+            id="main-content"
+            className="pt-[52px] min-h-screen main-content-mobile-pb"
+          >
+            {children}
+          </main>
+          <BottomTabBar />
+        </Providers>
       </body>
     </html>
   )
