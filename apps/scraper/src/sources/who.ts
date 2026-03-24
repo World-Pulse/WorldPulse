@@ -267,7 +267,7 @@ export function startWhoPoller(
             location_name:     loc.locationName,
             country_code:      null,
             region:            null,
-            tags:              JSON.stringify(['osint', 'health', 'who', 'disease-outbreak', 'public-health']),
+            tags:              ['osint', 'health', 'who', 'disease-outbreak', 'public-health'],
             language:          'en',
             event_time:        eventTime,
           }).returning('*')

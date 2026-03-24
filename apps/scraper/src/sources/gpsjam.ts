@@ -170,7 +170,7 @@ export function startGpsJamPoller(
             location_name:     regionLabel,
             country_code:      null,
             region:            null,
-            tags:              JSON.stringify(['osint', 'gps', 'jamming', 'electronic-warfare', 'gpsjam']),
+            tags:              ['osint', 'gps', 'jamming', 'electronic-warfare', 'gpsjam'],
             language:          'en',
             event_time:        new Date(),
           }).returning('*')

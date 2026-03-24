@@ -161,7 +161,7 @@ export function startGdeltPoller(
             location_name:     geo.name ?? null,
             country_code:      null,
             region:            null,
-            tags:              JSON.stringify(['osint', 'gdelt', 'conflict']),
+            tags:              ['osint', 'gdelt', 'conflict'],
             language:          article.language === 'English' ? 'en' : 'other',
             event_time:        parseGdeltDate(article.seendate),
           }).returning('*')

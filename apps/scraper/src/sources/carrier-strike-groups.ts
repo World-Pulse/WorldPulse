@@ -346,7 +346,7 @@ async function createSignal(
     const [signal] = await db('signals').insert({
       title,
       summary,
-      category:          'military',
+      category:          'conflict',
       severity,
       status:            'pending',
       reliability_score: RELIABILITY,
@@ -357,11 +357,11 @@ async function createSignal(
       location_name:     pos.locationName,
       country_code:      null,
       region:            null,
-      tags:              JSON.stringify([
-        'osint', 'military', 'navy', 'carrier', 'csg',
+      tags:              [
+        'osint', 'conflict', 'navy', 'carrier', 'csg',
         carrier.hull.toLowerCase().replace('-', ''),
         eventType,
-      ]),
+      ],
       language:          'en',
       event_time:        eventTime,
     }).returning('*')
@@ -372,11 +372,11 @@ async function createSignal(
       await producer.send({
         topic: 'signals.verified',
         messages: [{
-          key:   'military',
+          key:   'conflict',
           value: JSON.stringify({
             event:   'signal.new',
             payload: signal,
-            filter:  { category: 'military', severity },
+            filter:  { category: 'conflict', severity },
           }),
         }],
       }).catch(() => {})

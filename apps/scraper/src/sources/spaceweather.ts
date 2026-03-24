@@ -137,7 +137,7 @@ export function startSpaceWeatherPoller(
           const [signal] = await db('signals').insert({
             title,
             summary:           body,
-            category:          'weather',
+            category:          'climate',
             severity,
             status:            'pending',
             reliability_score: 0.90, // NOAA is authoritative source
@@ -149,7 +149,7 @@ export function startSpaceWeatherPoller(
             location_name:     'Global',
             country_code:      null,
             region:            null,
-            tags:              JSON.stringify(['osint', 'spaceweather', 'noaa', 'geomagnetic']),
+            tags:              ['osint', 'spaceweather', 'noaa', 'geomagnetic'],
             language:          'en',
             event_time:        issued,
           }).returning('*')
@@ -162,11 +162,11 @@ export function startSpaceWeatherPoller(
             await producer.send({
               topic: 'signals.verified',
               messages: [{
-                key:   'weather',
+                key:   'climate',
                 value: JSON.stringify({
                   event:   'signal.new',
                   payload: signal,
-                  filter:  { category: 'weather', severity },
+                  filter:  { category: 'climate', severity },
                 }),
               }],
             }).catch(() => {}) // non-fatal

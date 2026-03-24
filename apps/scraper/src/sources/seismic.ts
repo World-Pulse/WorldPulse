@@ -133,7 +133,7 @@ export function startSeismicPoller(
             location_name:     place,
             country_code:      null,
             region:            null,
-            tags:              JSON.stringify(['osint', 'seismic', 'earthquake', 'usgs']),
+            tags:              ['osint', 'seismic', 'earthquake', 'usgs'],
             language:          'en',
             event_time:        new Date(time),
           }).returning('*')

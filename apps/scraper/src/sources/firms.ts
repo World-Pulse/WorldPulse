@@ -213,7 +213,7 @@ export function startFirmsPoller(
             location_name:     `${cell.lat.toFixed(1)}°N, ${cell.lng.toFixed(1)}°E`,
             country_code:      null,
             region:            null,
-            tags:              JSON.stringify(['osint', 'firms', 'fire', 'nasa', 'viirs']),
+            tags:              ['osint', 'firms', 'fire', 'nasa', 'viirs'],
             language:          'en',
             event_time:        cell.acq_date
               ? new Date(`${cell.acq_date}T${cell.acq_time.slice(0, 2)}:${cell.acq_time.slice(2, 4)}:00Z`)

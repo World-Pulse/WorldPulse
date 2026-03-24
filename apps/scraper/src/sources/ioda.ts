@@ -168,7 +168,7 @@ export function startIodaPoller(
             location_name:     entityLabel,
             country_code:      entity.attrs?.country_code ?? null,
             region:            null,
-            tags:              JSON.stringify(['osint', 'internet', 'outage', 'ioda', 'connectivity', entity.type]),
+            tags:              ['osint', 'internet', 'outage', 'ioda', 'connectivity', entity.type],
             language:          'en',
             event_time:        new Date(time * 1_000),
           }

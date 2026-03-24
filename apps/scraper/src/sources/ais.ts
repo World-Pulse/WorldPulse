@@ -293,7 +293,7 @@ export function startAisPoller(
         location_name:     null,
         country_code:      null,
         region:            null,
-        tags:              JSON.stringify(['osint', 'ais', 'maritime', 'distress', `status-${navStatus}`]),
+        tags:              ['osint', 'ais', 'maritime', 'distress', `status-${navStatus}`],
         language:          'en',
         event_time:        new Date(),
       }).returning('*')

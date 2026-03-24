@@ -308,7 +308,7 @@ export function startMarketPoller(
           location_name:     'New York, US',
           country_code:      'US',
           region:            'Americas',
-          tags:              JSON.stringify(['osint', 'market', 'economy', indicator.type, indicator.symbol.replace(/[^a-z0-9]/gi, '').toLowerCase()]),
+          tags:              ['osint', 'market', 'economy', indicator.type, indicator.symbol.replace(/[^a-z0-9]/gi, '').toLowerCase()],
           language:          'en',
           event_time:        new Date(),
         }).returning('*')

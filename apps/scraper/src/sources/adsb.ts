@@ -151,7 +151,7 @@ export function startAdsbPoller(
             location_name:     country,
             country_code:      null,
             region:            null,
-            tags:              JSON.stringify(['osint', 'adsb', 'aviation', `squawk-${squawk}`]),
+            tags:              ['osint', 'adsb', 'aviation', `squawk-${squawk}`],
             language:          'en',
             event_time:        new Date(),
           }).returning('*')

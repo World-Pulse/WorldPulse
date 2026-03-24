@@ -177,7 +177,7 @@ export function startCelesTrakPoller(
             location_name:     'Global Orbital Space',
             country_code:      null,
             region:            null,
-            tags:              JSON.stringify(['osint', 'celestrak', 'satellite', 'space']),
+            tags:              ['osint', 'celestrak', 'satellite', 'space'],
             language:          'en',
             event_time:        now,
           }).returning('*')
@@ -245,7 +245,7 @@ export function startCelesTrakPoller(
             location_name:     sat.COUNTRY,
             country_code:      null,
             region:            null,
-            tags:              JSON.stringify(['osint', 'celestrak', 'satellite', 'launch', 'space']),
+            tags:              ['osint', 'celestrak', 'satellite', 'launch', 'space'],
             language:          'en',
             event_time:        launchDate ?? now,
           }).returning('*')
@@ -305,7 +305,7 @@ export function startCelesTrakPoller(
             location_name:     'Atmospheric Re-entry',
             country_code:      null,
             region:            null,
-            tags:              JSON.stringify(['osint', 'celestrak', 'satellite', 'reentry', 'space']),
+            tags:              ['osint', 'celestrak', 'satellite', 'reentry', 'space'],
             language:          'en',
             event_time:        decayDate ?? now,
           }).returning('*')

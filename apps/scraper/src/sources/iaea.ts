@@ -264,9 +264,7 @@ export function startIaeaPoller(
             location_name:     loc.locationName,
             country_code:      null,
             region:            null,
-            tags:              JSON.stringify([
-              'osint', 'nuclear', 'radiation', 'iaea', 'safety', 'science',
-            ]),
+            tags:              ['osint', 'nuclear', 'radiation', 'iaea', 'safety', 'science'],
             language:          'en',
             event_time:        eventTime,
           }).returning('*')
