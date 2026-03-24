@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter, Bebas_Neue, JetBrains_Mono } from 'next/font/google'
 import { NextIntlClientProvider } from 'next-intl'
 import { getLocale, getMessages } from 'next-intl/server'
+import enMessages from '../../messages/en.json'
 import './globals.css'
 import { Providers } from '@/components/providers'
 import { TopNav } from '@/components/nav/TopNav'
@@ -68,12 +69,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // next-intl requires a request context — gracefully fall back for prerendered pages
   // (e.g. /_not-found) that run outside of any locale-aware request.
   let locale   = 'en'
-  let messages: Record<string, unknown> = {}
+  let messages: Record<string, unknown> = enMessages as Record<string, unknown>
   try {
     locale   = await getLocale()
     messages = await getMessages()
   } catch {
-    // No locale context during static prerender (/_not-found, etc.) — use defaults
+    // No locale context during static prerender (/_not-found, etc.) — fall back to en
   }
   const dir = RTL_LOCALES.has(locale) ? 'rtl' : 'ltr'
 
