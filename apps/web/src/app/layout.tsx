@@ -57,9 +57,11 @@ export const metadata: Metadata = {
   },
 }
 
-// Force dynamic rendering — the root layout depends on live request context
-// (next-intl locale, auth state). This also prevents /_not-found from being
-// statically prerendered without a next-intl request context, which would throw.
+// Prevent /_not-found and other pages from being statically prerendered at build
+// time — static prerender runs without a next-intl request context, causing
+// NextIntlClientProvider/useTranslations to throw "Couldn't find config file".
+export const dynamic = 'force-dynamic'
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const locale = 'en'
   const messages = enMessages as Record<string, unknown>
