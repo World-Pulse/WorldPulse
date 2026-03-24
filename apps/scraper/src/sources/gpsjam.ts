@@ -22,7 +22,14 @@ import type { SignalSeverity } from '@worldpulse/types'
 
 const log = rootLogger.child({ module: 'gpsjam-source' })
 
-const GPSJAM_API = 'https://gpsjam.org/api/jam?z=2'
+// GPSJam API requires a date param (YYYY-MM-DD). Without it the endpoint returns HTML.
+// We use yesterday's date since today's data may not be fully processed yet.
+function gpsjamApiUrl(): string {
+  const d = new Date()
+  d.setUTCDate(d.getUTCDate() - 1)
+  const date = d.toISOString().slice(0, 10)
+  return `https://gpsjam.org/api/jam?z=2&date=${date}`
+}
 
 // ─── API TYPES ──────────────────────────────────────────────────────────────
 interface GpsJamProperties {
@@ -118,7 +125,7 @@ export function startGpsJamPoller(
   async function poll(): Promise<void> {
     try {
       log.debug('Polling GPSJam feed...')
-      const raw  = await httpsGet(GPSJAM_API)
+      const raw  = await httpsGet(gpsjamApiUrl())
       const data = JSON.parse(raw) as GpsJamFeatureCollection
 
       const features = (data.features ?? [])

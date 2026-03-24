@@ -299,8 +299,13 @@ function ActionBar({ item }: { item: FeedItem }) {
           if (typeof navigator !== 'undefined' && navigator.share) {
             try { await navigator.share({ title, url }) } catch { /* cancelled */ }
           } else {
-            await navigator.clipboard.writeText(url)
-            toast('Link copied to clipboard', 'success')
+            try {
+              await navigator.clipboard.writeText(url)
+              toast('Link copied to clipboard', 'success')
+            } catch {
+              // Clipboard API unavailable (non-HTTPS or permission denied) — use prompt fallback
+              window.prompt('Copy this link:', url)
+            }
           }
         }}
         className="flex items-center gap-[5px] px-3 py-[6px] rounded-full text-[12px] text-wp-text3 hover:text-wp-amber hover:bg-[rgba(245,166,35,0.1)] transition-all"

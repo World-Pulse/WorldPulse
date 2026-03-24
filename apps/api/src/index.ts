@@ -32,7 +32,7 @@ import { requestLoggerPlugin } from './middleware/request-logger'
 import { registerHealthRoutes } from './routes/health'
 import { logger } from './lib/logger'
 import { initSentry, flushSentry } from './lib/sentry'
-import { setupSearchIndexes } from './lib/search'
+import { meili, setupSearchIndexes, indexSignals } from './lib/search'
 import { connectSearchProducer, disconnectSearchProducer } from './lib/search-events'
 import { startSearchConsumer, stopSearchConsumer } from './lib/search-consumer'
 import { initClickHouse } from './lib/search-analytics'
@@ -213,9 +213,28 @@ async function bootstrap() {
   await app.register(registerWSHandler)
 
   // ─── SEARCH INDEX SETUP ──────────────────────────────────
-  setupSearchIndexes().catch(err => {
-    logger.warn({ err }, 'Meilisearch index setup failed — search may degrade gracefully')
-  })
+  setupSearchIndexes()
+    .then(async () => {
+      // Backfill any signals not yet in MeiliSearch (e.g. from OSINT pollers
+      // that insert directly to the DB, bypassing the API signals route).
+      try {
+        const stats = await meili.index('signals').getStats()
+        if (stats.numberOfDocuments === 0) {
+          logger.info('MeiliSearch signals index empty — backfilling from DB...')
+          const rows = await db('signals')
+            .select('*')
+            .orderBy('created_at', 'desc')
+            .limit(5000)
+          await indexSignals(rows as Record<string, unknown>[])
+          logger.info({ count: rows.length }, 'MeiliSearch backfill complete')
+        }
+      } catch (err) {
+        logger.warn({ err }, 'MeiliSearch backfill failed — search may return empty results')
+      }
+    })
+    .catch(err => {
+      logger.warn({ err }, 'Meilisearch index setup failed — search may degrade gracefully')
+    })
 
   // ─── CLICKHOUSE INIT ─────────────────────────────────────
   initClickHouse().catch(err => {
