@@ -57,6 +57,11 @@ export const metadata: Metadata = {
   },
 }
 
+// Force dynamic rendering — the root layout depends on live request context
+// (next-intl locale, auth state). This also prevents /_not-found from being
+// statically prerendered without a next-intl request context, which would throw.
+export const dynamic = 'force-dynamic'
+
 const RTL_LOCALES = new Set(['ar'])
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
