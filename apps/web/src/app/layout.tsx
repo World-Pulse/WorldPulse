@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter, Bebas_Neue, JetBrains_Mono } from 'next/font/google'
 import { NextIntlClientProvider } from 'next-intl'
-import { getLocale, getMessages } from 'next-intl/server'
 import enMessages from '../../messages/en.json'
 import './globals.css'
 import { Providers } from '@/components/providers'
@@ -61,22 +60,10 @@ export const metadata: Metadata = {
 // Force dynamic rendering — the root layout depends on live request context
 // (next-intl locale, auth state). This also prevents /_not-found from being
 // statically prerendered without a next-intl request context, which would throw.
-export const dynamic = 'force-dynamic'
-
-const RTL_LOCALES = new Set(['ar'])
-
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  // next-intl requires a request context — gracefully fall back for prerendered pages
-  // (e.g. /_not-found) that run outside of any locale-aware request.
-  let locale   = 'en'
-  let messages: Record<string, unknown> = enMessages as Record<string, unknown>
-  try {
-    locale   = await getLocale()
-    messages = await getMessages()
-  } catch {
-    // No locale context during static prerender (/_not-found, etc.) — fall back to en
-  }
-  const dir = RTL_LOCALES.has(locale) ? 'rtl' : 'ltr'
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = 'en'
+  const messages = enMessages as Record<string, unknown>
+  const dir = 'ltr'
 
   return (
     <html lang={locale} dir={dir} className="dark">
