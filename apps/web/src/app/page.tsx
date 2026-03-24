@@ -6,6 +6,7 @@ import { RightSidebar } from '@/components/sidebar/RightSidebar'
 import { FeedList } from '@/components/feed/FeedList'
 import { Composer } from '@/components/composer/Composer'
 import { NewPostsBar } from '@/components/feed/NewPostsBar'
+import { OnboardingModal } from '@/components/OnboardingModal'
 
 type FeedTab    = 'global' | 'following' | 'verified' | 'digest'
 type FilterCat  = 'all' | 'breaking' | 'conflict' | 'climate' | 'economy' | 'technology' | 'health'
@@ -33,6 +34,8 @@ export default function HomePage() {
   const [newCount,     setNewCount]     = useState(0)
 
   return (
+    <>
+    <OnboardingModal />
     <div className="min-h-[calc(100vh-52px)] lg:grid lg:grid-cols-[240px_1fr_300px]">
 
       {/* LEFT SIDEBAR — desktop only */}
@@ -117,5 +120,6 @@ export default function HomePage() {
         <RightSidebar />
       </div>
     </div>
+    </>
   )
 }

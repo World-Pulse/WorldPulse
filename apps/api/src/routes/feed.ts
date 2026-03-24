@@ -256,7 +256,28 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
 
     const rows = await query
     const hasMore = rows.length > pageLimit
-    const items = hasMore ? rows.slice(0, pageLimit) : rows
+    const rawItems = hasMore ? rows.slice(0, pageLimit) : rows
+
+    // ── Deduplicate by topic fingerprint ──────────────────────────────────────
+    // Multiple scraper runs can create near-identical signals for the same event
+    // (e.g. 8× "Israel hits Tehran"). Normalise each title to a 6-word sorted key;
+    // keep the most-reliable signal per topic and discard the rest.
+    const seenTopics = new Set<string>()
+    const items = rawItems.filter((row: Record<string, unknown>) => {
+      const title = (row.title as string) ?? ''
+      const key = title
+        .toLowerCase()
+        .replace(/[^\w\s]/g, '')
+        .split(/\s+/)
+        .filter((w: string) => w.length > 3)
+        .slice(0, 6)
+        .sort()
+        .join('_')
+      if (!key || seenTopics.has(key)) return false
+      seenTopics.add(key)
+      return true
+    })
+    // ─────────────────────────────────────────────────────────────────────────
 
     // Batch-load sources: collect all distinct source IDs, single query, map back.
     const allSourceIds = [...new Set(items.flatMap(r => (r.source_ids as string[]) ?? []))]

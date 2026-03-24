@@ -3,24 +3,17 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 
-const INITIAL_SIGNALS = [
-  { time: '14:02', color: '#ff3b5c', text: '<b>PHIVOLCS</b> issues M5.8 aftershock warning' },
-  { time: '14:01', color: '#f5a623', text: '<b>EU Commission</b> confirms AI directive scope' },
-  { time: '14:00', color: '#00d4ff', text: '<b>S.Korea</b> 23% counted — DP-Korea leads 3.4%' },
-  { time: '13:59', color: '#00e676', text: '<b>WHO</b> confirms H5N9 cluster contained — Hanoi' },
-  { time: '13:57', color: '#f5a623', text: '<b>Fed Watch</b> minutes release 16:00 UTC' },
-]
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
-const INCOMING_SIGNALS = [
-  { color: '#ff3b5c', text: '<b>PHIVOLCS</b> confirms M4.8 — no tsunami risk' },
-  { color: '#00d4ff', text: '<b>Nasdaq</b> recovering after AI directive drop' },
-  { color: '#f5a623', text: '<b>Pentagon</b> monitoring Philippines situation' },
-  { color: '#00e676', text: '<b>Red Cross PHL</b> deploying emergency teams' },
-  { color: '#00d4ff', text: '<b>S.Korea</b> 31% counted — lead narrows 2.1%' },
-  { color: '#ff3b5c', text: '<b>USGS</b> M4.0 aftershock — Laguna province' },
-  { color: '#f5a623', text: '<b>EU Parliament</b> emergency session Monday' },
-  { color: '#00e676', text: '<b>BTC</b> above $83K as quake news fades' },
-]
+// Colour map for signal type → dot colour
+const TYPE_COLORS: Record<string, string> = {
+  red:   '#ff3b5c',
+  amber: '#f5a623',
+  cyan:  '#00d4ff',
+  green: '#00e676',
+}
+
+interface LiveSignal { time: string; color: string; text: string; id?: string }
 
 const FOLLOW_SUGGESTIONS = [
   { initials: 'UN', label: 'UN News', bio: 'Official United Nations news', color: 'from-purple-600 to-purple-900', verified: true },
@@ -53,24 +46,58 @@ function now() {
 }
 
 export function RightSidebar() {
-  const [signals, setSignals] = useState(INITIAL_SIGNALS)
+  const [signals, setSignals]         = useState<LiveSignal[]>([])
+  const [signalTotal, setSignalTotal] = useState<number | null>(null)
   const [connectedCount, setConnectedCount] = useState(847213)
-  const sigIdx = useRef(0)
+  const seenIds = useRef(new Set<string>())
 
-  // Live signal stream
+  // Fetch live headlines from API and refresh every 45s
   useEffect(() => {
-    const id = setInterval(() => {
-      const sig = INCOMING_SIGNALS[sigIdx.current % INCOMING_SIGNALS.length]
-      sigIdx.current++
-      setSignals(prev => [{ time: now(), ...sig }, ...prev.slice(0, 7)])
-    }, 7000)
-    return () => clearInterval(id)
+    let mounted = true
+    async function fetchHeadlines() {
+      try {
+        const res = await fetch(`${API_URL}/api/v1/signals/headlines`)
+        if (!res.ok) return
+        const json = await res.json()
+        if (!mounted || !json.success) return
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const fresh: LiveSignal[] = (json.data as any[])
+          .filter((h: any) => !seenIds.current.has(h.id))
+          .map((h: any) => {
+            seenIds.current.add(h.id)
+            return { id: h.id, time: now(), color: TYPE_COLORS[h.type] ?? '#f5a623', text: h.text }
+          })
+        if (fresh.length > 0) {
+          setSignals(prev => [...fresh, ...prev].slice(0, 8))
+        }
+      } catch { /* ignore */ }
+    }
+    fetchHeadlines()
+    const id = setInterval(fetchHeadlines, 45_000)
+    return () => { mounted = false; clearInterval(id) }
   }, [])
 
-  // Live user count
+  // Fetch live signal count
+  useEffect(() => {
+    let mounted = true
+    async function fetchCount() {
+      try {
+        const res = await fetch(`${API_URL}/api/v1/signals/count`)
+        if (res.ok) {
+          const json = await res.json()
+          if (mounted && json.success) setSignalTotal(json.data.total)
+        }
+      } catch { /* ignore */ }
+    }
+    fetchCount()
+    const id = setInterval(fetchCount, 30_000)
+    return () => { mounted = false; clearInterval(id) }
+  }, [])
+
+  // Simulated connected count drift (websocket-style feel)
   useEffect(() => {
     const id = setInterval(() => {
-      setConnectedCount(n => n + Math.floor(Math.random() * 10) - 4)
+      setConnectedCount(n => Math.max(100_000, n + Math.floor(Math.random() * 10) - 4))
     }, 5000)
     return () => clearInterval(id)
   }, [])
@@ -148,7 +175,7 @@ export function RightSidebar() {
       <Widget title="Platform Pulse">
         <div className="grid grid-cols-2 gap-2">
           {[
-            { value: '2,847', label: 'Active Signals', color: 'text-wp-amber' },
+            { value: signalTotal != null ? signalTotal.toLocaleString() : '…', label: 'Active Signals', color: 'text-wp-amber' },
             { value: connectedCount.toLocaleString(), label: 'Online Now', color: 'text-wp-cyan' },
             { value: '99.2%',  label: 'Uptime',        color: 'text-wp-green' },
             { value: '184',    label: 'Nations',        color: 'text-wp-red' },
@@ -184,13 +211,21 @@ export function RightSidebar() {
           aria-label="Live signal stream"
           aria-relevant="additions"
         >
-          {signals.map((sig, i) => (
-            <div key={i} className="flex items-start gap-2 animate-fade-in">
+          {signals.length === 0 ? (
+            <p className="text-[11px] text-wp-text3 italic">Connecting to signal feed…</p>
+          ) : signals.map((sig, i) => (
+            <div
+              key={sig.id ?? i}
+              className="flex items-start gap-2 animate-fade-in cursor-pointer group"
+              onClick={() => sig.id && (window.location.href = `/signals/${sig.id}`)}
+              role={sig.id ? 'link' : undefined}
+            >
               <span className="font-mono text-[9px] text-wp-text3 flex-shrink-0 pt-[3px]">{sig.time}</span>
               <div className="w-[6px] h-[6px] rounded-full flex-shrink-0 mt-[5px]"
                 style={{ background: sig.color, boxShadow: `0 0 4px ${sig.color}` }} />
-              <p className="text-[11px] text-wp-text2 leading-[1.4] flex-1"
-                dangerouslySetInnerHTML={{ __html: sig.text.replace('<b>', '<strong class="text-wp-text">').replace('</b>', '</strong>') }} />
+              <p className="text-[11px] text-wp-text2 leading-[1.4] flex-1 group-hover:text-wp-text transition-colors line-clamp-2">
+                {sig.text}
+              </p>
             </div>
           ))}
         </div>

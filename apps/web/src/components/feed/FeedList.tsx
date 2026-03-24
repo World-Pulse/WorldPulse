@@ -517,11 +517,15 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
                 <span className="source-badge badge-ai">AI SYNTHESIS</span>
               )}
               {item.breaking && (
-                <span className="source-badge bg-wp-red text-white animate-flash-tag">BREAKING</span>
+                <span className="source-badge bg-wp-red text-white animate-flash-tag">⚡ BREAKING</span>
               )}
               {item.contested && (
-                <span className="source-badge bg-[rgba(245,166,35,0.15)] text-wp-amber border border-[rgba(245,166,35,0.4)]">CONTESTED</span>
+                <span className="source-badge bg-[rgba(245,166,35,0.15)] text-wp-amber border border-[rgba(245,166,35,0.4)]">⚠ CONTESTED</span>
               )}
+              {/* NEW flash for signals under 5 minutes old */}
+              {item.time === 'now' || item.time.endsWith('m') && parseInt(item.time) <= 5 ? (
+                <span className="source-badge bg-[rgba(0,230,118,0.15)] text-wp-green border border-[rgba(0,230,118,0.3)] text-[9px] animate-flash-tag">NEW</span>
+              ) : null}
               <span className="ml-auto font-mono text-[12px] text-wp-text3 flex-shrink-0">{item.time} ago</span>
             </div>
 
@@ -543,13 +547,33 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
                 {item.event.summary && (
                   <div className="text-[12px] text-wp-text2 leading-[1.5] mb-2">{item.event.summary}</div>
                 )}
-                {item.event.sources.length > 0 && (
-                  <div className="flex gap-1 flex-wrap mb-2">
+                {/* Source badges + source count */}
+                {(item.event.sources.length > 0 || (item.sourceCount ?? 0) > 0) && (
+                  <div className="flex items-center gap-1 flex-wrap mb-2">
                     {item.event.sources.map(s => (
                       <span key={s} className={`source-badge ${SOURCE_BADGES[s] ?? SOURCE_BADGES.wp}`}>
                         {SOURCE_LABELS[s] ?? s.toUpperCase()}
                       </span>
                     ))}
+                    {/* Ground-News-style source count pill */}
+                    {(item.sourceCount ?? 0) > item.event.sources.length && (
+                      <span
+                        title={`${item.sourceCount} sources confirmed this signal`}
+                        className={`source-badge text-[9px] font-mono
+                          ${(item.sourceCount ?? 0) >= 5
+                            ? 'bg-[rgba(0,230,118,0.15)] text-wp-green border border-[rgba(0,230,118,0.3)]'
+                            : 'bg-[rgba(0,212,255,0.1)] text-wp-cyan border border-[rgba(0,212,255,0.2)]'
+                          }`}
+                      >
+                        {(item.sourceCount ?? 0) >= 5 ? '🔥 ' : ''}{item.sourceCount} sources
+                      </span>
+                    )}
+                    {/* Trending indicator */}
+                    {(item.sourceCount ?? 0) >= 8 && (
+                      <span className="source-badge bg-[rgba(255,59,92,0.15)] text-wp-red border border-[rgba(255,59,92,0.3)] text-[9px] font-mono tracking-wider">
+                        TRENDING
+                      </span>
+                    )}
                   </div>
                 )}
                 <div className="flex items-center gap-2 pt-2 border-t border-[rgba(255,255,255,0.05)]">
