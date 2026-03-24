@@ -85,6 +85,36 @@ req.id = randomUUID()   // if this line is now valid TS, the directive errors
 
 ---
 
+## ⚠️ RULE #4: Production Deploy — Never Touch .env.prod
+
+The production server at `142.93.71.102:/opt/worldpulse/.env.prod` contains secrets
+that are NOT in git. **Never overwrite or regenerate this file.**
+
+### Correct deploy command (API changes):
+```bash
+ssh root@142.93.71.102 "cd /opt/worldpulse && git checkout -- docker-compose.yml && git pull && docker compose --env-file .env.prod up -d --build api && docker exec wp_nginx nginx -s reload"
+```
+
+### Correct deploy command (web + API changes):
+```bash
+ssh root@142.93.71.102 "cd /opt/worldpulse && git checkout -- docker-compose.yml && git pull && docker compose --env-file .env.prod up -d --build web api && docker exec wp_nginx nginx -s reload"
+```
+
+### NEVER do these:
+- `docker compose up` without `--env-file .env.prod` (uses fallback `wp_secret_local` DB password → API crash-loops)
+- `docker compose up` without specifying which services to build (may recreate postgres unnecessarily)
+- Write or append to `.env.prod` (it has production secrets set manually)
+- Reference `./deploy.sh` — this file does NOT exist on the server
+
+### If the API is crash-looping with "password authentication failed":
+```bash
+# Verify .env.prod has DATABASE_URL:
+grep DATABASE_URL /opt/worldpulse/.env.prod
+# If missing, add it:
+echo 'DATABASE_URL=postgresql://wp_user:hz2CfFpEEYjJ4zF@postgres:5432/worldpulse_db?sslmode=disable' >> /opt/worldpulse/.env.prod
+docker compose -f /opt/worldpulse/docker-compose.yml --env-file /opt/worldpulse/.env.prod up -d --no-build api
+```
+
 ---
 
 ## 🔴 P0 — Broken on Production Right Now
