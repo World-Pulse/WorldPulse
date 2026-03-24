@@ -522,9 +522,9 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     const response = {
       success: true,
       data: {
-        total:      Number(totalResult.count),
-        last24h:    Number(last24hResult.count),
-        lastHour:   Number(lastHourResult.count),
+        total:      Number(totalResult?.count ?? 0),
+        last24h:    Number(last24hResult?.count ?? 0),
+        lastHour:   Number(lastHourResult?.count ?? 0),
         bySeverity,
       },
     }
