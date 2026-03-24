@@ -292,6 +292,17 @@ function ActionBar({ item }: { item: FeedItem }) {
         <span aria-hidden="true">{bookmarked ? '🔖' : '🔖'}</span>
       </button>
       <button
+        onClick={async () => {
+          const base = typeof window !== 'undefined' ? window.location.origin : 'https://world-pulse.io'
+          const url  = item.type === 'signal' ? `${base}/signals/${item.id}` : `${base}/posts/${item.id}`
+          const title = item.event?.title ?? item.content?.slice(0, 80) ?? 'WorldPulse Signal'
+          if (typeof navigator !== 'undefined' && navigator.share) {
+            try { await navigator.share({ title, url }) } catch { /* cancelled */ }
+          } else {
+            await navigator.clipboard.writeText(url)
+            toast('Link copied to clipboard', 'success')
+          }
+        }}
         className="flex items-center gap-[5px] px-3 py-[6px] rounded-full text-[12px] text-wp-text3 hover:text-wp-amber hover:bg-[rgba(245,166,35,0.1)] transition-all"
         aria-label="Share post"
       >
@@ -471,12 +482,9 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
                 : `Post by ${item.author.name}`
           }
           onClick={(e) => {
-            const target = e.target as HTMLElement
-            const tag = target.tagName.toLowerCase()
-            // Don't navigate if clicking on interactive elements
-            if (tag === 'button' || tag === 'input' || tag === 'a' || tag === 'svg' || tag === 'path' || tag === 'line' || target.closest('button') || target.closest('[role="group"]')) return
-            const href = item.type === 'signal' ? `/signals/${item.id}` : `/posts/${item.id}`
-            router.push(href)
+            // Only block navigation when clicking interactive controls
+            if ((e.target as HTMLElement).closest('button, a, input, [data-no-nav]')) return
+            router.push(item.type === 'signal' ? `/signals/${item.id}` : `/posts/${item.id}`)
           }}
           className={`flex gap-3 px-5 py-4 border-b border-[rgba(255,255,255,0.05)] hover:bg-[rgba(255,255,255,0.015)] transition-colors cursor-pointer animate-fade-in
             ${item.type === 'signal' ? SEVERITY_BORDER[item.severity ?? ''] ?? '' : ''}`}

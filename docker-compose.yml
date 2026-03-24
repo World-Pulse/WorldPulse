@@ -130,7 +130,9 @@ services:
       context: .
       dockerfile: apps/scraper/Dockerfile
     container_name: wp_scraper
-    restart: unless-stopped
+    restart: always
+    labels:
+      autoheal: "true"
     depends_on:
       - kafka
       - redis
@@ -141,6 +143,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql://wp_user:wp_secret_local@postgres:5432/worldpulse_db?sslmode=disable}
       SCRAPE_INTERVAL_MS: 30000
       LOG_LEVEL: debug
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
 
   web:
     build:

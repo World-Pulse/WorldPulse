@@ -26,6 +26,7 @@ import { startSpan, startRootSpan } from './lib/tracer'
 import { startOsintPollers } from './sources/index'
 import type { OsintCleanupFn } from './sources/index'
 import type { Source } from '@worldpulse/types'
+import { enrichSignalWithGemini, geminiEnabled } from './lib/gemini'
 
 // DB row has extra columns not present in the shared Source interface
 type ScraperSource = Source & {
@@ -430,6 +431,25 @@ async function processArticleGroup(
       event_time:       primary.publishedAt ? new Date(primary.publishedAt) : null,
     })
     .returning('*')
+
+  // ── Gemini intelligence enrichment (async, non-blocking) ──
+  if (geminiEnabled) {
+    enrichSignalWithGemini(signal.title, primary.body ?? primary.title, signal.location_name)
+      .then(async enrichment => {
+        if (!enrichment) return
+        await db('signals').where('id', signal.id).update({
+          summary:           enrichment.enhancedSummary || signal.summary,
+          tags:              enrichment.keyEntities.slice(0, 8),
+          gemini_enriched:   true,
+          gemini_context:    enrichment.geopoliticalContext,
+          gemini_confidence: enrichment.confidence,
+          // Upgrade severity if Gemini flags as critical/high and current is lower
+          ...(enrichment.threatLevel === 'critical' && signal.severity !== 'critical' ? { severity: 'critical' } : {}),
+          ...(enrichment.threatLevel === 'high' && signal.severity === 'medium' ? { severity: 'high' } : {}),
+        }).catch(() => {}) // non-fatal
+      })
+      .catch(() => {})
+  }
 
   // Cache topic → signal mapping
   await redis.setex(`signal:topic:${topicHash}`, 86400, JSON.stringify({ id: signal.id }))
