@@ -621,6 +621,112 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
 
     return reply.send(response)
   })
+
+  // ─── CORRELATED SIGNALS (Event Cluster) ──────────────────────
+  app.get('/:id/correlated', {
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+
+    // Look up cluster membership in Redis
+    const clusterId = await redis.get(`correlation:signal:${id}`).catch(() => null)
+    if (!clusterId) {
+      return reply.send({ success: true, data: { cluster: null, signals: [] } })
+    }
+
+    const clusterRaw = await redis.get(`correlation:cluster:${clusterId}`).catch(() => null)
+    if (!clusterRaw) {
+      return reply.send({ success: true, data: { cluster: null, signals: [] } })
+    }
+
+    const cluster = JSON.parse(clusterRaw) as {
+      cluster_id: string
+      primary_signal_id: string
+      signal_ids: string[]
+      categories: string[]
+      sources: string[]
+      severity: string
+      correlation_type: string
+      correlation_score: number
+      created_at: string
+    }
+
+    // Fetch the correlated signals (excluding the requested one)
+    const otherIds = cluster.signal_ids.filter(sid => sid !== id)
+    const signals = otherIds.length > 0
+      ? await db('signals')
+          .select('id', 'title', 'summary', 'category', 'severity',
+                  'reliability_score', 'location_name', 'source_id', 'created_at')
+          .whereIn('id', otherIds)
+          .limit(20)
+      : []
+
+    return reply.send({
+      success: true,
+      data: {
+        cluster: {
+          id: cluster.cluster_id,
+          primarySignalId: cluster.primary_signal_id,
+          correlationType: cluster.correlation_type,
+          correlationScore: cluster.correlation_score,
+          categories: cluster.categories,
+          sourceCount: cluster.sources.length,
+          signalCount: cluster.signal_ids.length,
+          createdAt: cluster.created_at,
+        },
+        signals: signals.map((s: Record<string, unknown>) => ({
+          id: s.id,
+          title: s.title,
+          summary: s.summary,
+          category: s.category,
+          severity: s.severity,
+          reliabilityScore: s.reliability_score,
+          locationName: s.location_name,
+          sourceId: s.source_id,
+          createdAt: s.created_at ? (s.created_at as Date).toISOString() : null,
+        })),
+      },
+    })
+  })
+
+  // ─── RECENT EVENT CLUSTERS ────────────────────────────────────
+  app.get('/clusters/recent', {
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    const { limit = 20 } = req.query as { limit?: number }
+    const safeLimit = Math.min(Math.max(1, Number(limit)), 50)
+
+    const clusterIds = await redis.zrevrange('correlation:recent', 0, safeLimit - 1)
+    if (clusterIds.length === 0) {
+      return reply.send({ success: true, data: [] })
+    }
+
+    const pipeline = redis.pipeline()
+    for (const cid of clusterIds) {
+      pipeline.get(`correlation:cluster:${cid}`)
+    }
+    const results = await pipeline.exec()
+
+    const clusters = (results ?? [])
+      .map(([err, val]) => {
+        if (err || !val) return null
+        try { return JSON.parse(val as string) } catch { return null }
+      })
+      .filter(Boolean)
+      .map((c: Record<string, unknown>) => ({
+        id: c.cluster_id,
+        primarySignalId: c.primary_signal_id,
+        correlationType: c.correlation_type,
+        correlationScore: c.correlation_score,
+        categories: c.categories,
+        sourceCount: (c.sources as string[])?.length ?? 0,
+        signalCount: (c.signal_ids as string[])?.length ?? 0,
+        severity: c.severity,
+        createdAt: c.created_at,
+      }))
+
+    return reply.send({ success: true, data: clusters })
+  })
 }
 
 function formatSignal(row: Record<string, unknown>) {

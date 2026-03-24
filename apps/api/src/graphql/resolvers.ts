@@ -154,6 +154,76 @@ export const resolvers = {
       redis.setex(cacheKey, TRENDING_CACHE_TTL, JSON.stringify(result)).catch(() => {})
       return result
     },
+
+    // ─── Event Correlation Queries ────────────────────────────────
+    async correlatedSignals(_: unknown, { signalId }: { signalId: string }) {
+      const clusterId = await redis.get(`correlation:signal:${signalId}`).catch(() => null)
+      if (!clusterId) return null
+
+      const clusterRaw = await redis.get(`correlation:cluster:${clusterId}`).catch(() => null)
+      if (!clusterRaw) return null
+
+      const cluster = JSON.parse(clusterRaw) as {
+        cluster_id: string; primary_signal_id: string; signal_ids: string[]
+        categories: string[]; sources: string[]; severity: string
+        correlation_type: string; correlation_score: number; created_at: string
+      }
+
+      const signalRows = cluster.signal_ids.length > 0
+        ? await baseSignalQuery().whereIn('s.id', cluster.signal_ids).limit(20) as SignalRow[]
+        : []
+
+      return {
+        id: cluster.cluster_id,
+        primarySignalId: cluster.primary_signal_id,
+        correlationType: cluster.correlation_type,
+        correlationScore: cluster.correlation_score,
+        categories: cluster.categories,
+        sourceCount: cluster.sources.length,
+        signalCount: cluster.signal_ids.length,
+        severity: cluster.severity,
+        signals: signalRows.map(formatSignalGql),
+        createdAt: cluster.created_at,
+      }
+    },
+
+    async recentClusters(_: unknown, { limit = 20 }: { limit?: number }) {
+      const safeLimit = Math.min(Math.max(1, limit), 50)
+      const clusterIds = await redis.zrevrange('correlation:recent', 0, safeLimit - 1)
+      if (clusterIds.length === 0) return []
+
+      const pipeline = redis.pipeline()
+      for (const cid of clusterIds) pipeline.get(`correlation:cluster:${cid}`)
+      const results = await pipeline.exec()
+
+      const clusters: Array<Record<string, unknown>> = []
+      for (const [err, val] of results ?? []) {
+        if (err || !val) continue
+        try { clusters.push(JSON.parse(val as string)) } catch { /* skip */ }
+      }
+
+      // For each cluster, fetch minimal signal data
+      const formatted = []
+      for (const c of clusters) {
+        const sids = c.signal_ids as string[] ?? []
+        const signalRows = sids.length > 0
+          ? await baseSignalQuery().whereIn('s.id', sids).limit(12) as SignalRow[]
+          : []
+        formatted.push({
+          id: c.cluster_id,
+          primarySignalId: c.primary_signal_id,
+          correlationType: c.correlation_type,
+          correlationScore: c.correlation_score,
+          categories: c.categories,
+          sourceCount: (c.sources as string[])?.length ?? 0,
+          signalCount: sids.length,
+          severity: c.severity,
+          signals: signalRows.map(formatSignalGql),
+          createdAt: c.created_at,
+        })
+      }
+      return formatted
+    },
   },
 }
 

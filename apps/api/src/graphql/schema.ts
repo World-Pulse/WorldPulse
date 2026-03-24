@@ -32,6 +32,19 @@ export const typeDefs = /* GraphQL */ `
     reliabilityScore: Float
   }
 
+  type EventCluster {
+    id: ID!
+    primarySignalId: ID!
+    correlationType: String!
+    correlationScore: Float!
+    categories: [String!]!
+    sourceCount: Int!
+    signalCount: Int!
+    severity: String!
+    signals: [Signal!]!
+    createdAt: String!
+  }
+
   type Query {
     signal(id: ID!): Signal
     signals(
@@ -43,5 +56,7 @@ export const typeDefs = /* GraphQL */ `
     ): SignalConnection!
     search(q: String!, limit: Int): [Signal!]!
     trending: [Signal!]!
+    correlatedSignals(signalId: ID!): EventCluster
+    recentClusters(limit: Int): [EventCluster!]!
   }
 `
