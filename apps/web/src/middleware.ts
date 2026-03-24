@@ -13,8 +13,8 @@ const CSP_DIRECTIVES = [
   // Allow API and WebSocket connections to both prod and local dev
   [
     "connect-src 'self'",
-    'https://api.worldpulse.io',
-    'wss://api.worldpulse.io',
+    'https://api.world-pulse.io',
+    'wss://api.world-pulse.io',
     'http://localhost:3001',
     'ws://localhost:3001',
   ].join(' '),
@@ -54,7 +54,7 @@ export function middleware(req: NextRequest): NextResponse {
       "style-src 'self' 'unsafe-inline'",
       "font-src 'self' data:",
       "img-src 'self' data: https:",
-      "connect-src 'self' https://api.worldpulse.io http://localhost:3001 wss://api.worldpulse.io ws://localhost:3001",
+      "connect-src 'self' https://api.world-pulse.io http://localhost:3001 wss://api.world-pulse.io ws://localhost:3001",
       "frame-ancestors *",
       "base-uri 'self'",
       "object-src 'none'",
