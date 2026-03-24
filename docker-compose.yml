@@ -159,22 +159,20 @@ services:
     environment:
       PORT: 3000
       HOSTNAME: "0.0.0.0"
-    # Override Dockerfile HEALTHCHECK with lenient production settings.
-    # The Dockerfile hits /api/health which now exists, but we give a long
-    # start_period so a rebuild never gets killed mid-boot, and 5 retries
-    # so a momentary slowdown doesn't take the container unhealthy.
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
       interval: 60s
       timeout: 15s
       start_period: 120s
       retries: 5
+    labels:
+      autoheal: "true"
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 1G
         reservations:
-          memory: 256M
+          memory: 512M
     networks:
       default:
         aliases:
@@ -182,6 +180,21 @@ services:
       wp_net:
         aliases:
           - web
+
+  # ─── AUTOHEAL ─────────────────────────────────────────────
+  # Monitors all containers labelled autoheal=true and restarts
+  # them automatically when Docker marks them (unhealthy).
+  # Prevents wp_web memory-freeze 504s without manual intervention.
+  autoheal:
+    image: willfarrell/autoheal:latest
+    container_name: wp_autoheal
+    restart: always
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+      AUTOHEAL_INTERVAL: 10
+      AUTOHEAL_START_PERIOD: 120
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
   # ─── ANALYTICS ────────────────────────────────────────────
   clickhouse:
