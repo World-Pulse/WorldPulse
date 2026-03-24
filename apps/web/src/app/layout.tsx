@@ -60,9 +60,17 @@ export const metadata: Metadata = {
 const RTL_LOCALES = new Set(['ar'])
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const locale   = await getLocale()
-  const messages = await getMessages()
-  const dir      = RTL_LOCALES.has(locale) ? 'rtl' : 'ltr'
+  // next-intl requires a request context — gracefully fall back for prerendered pages
+  // (e.g. /_not-found) that run outside of any locale-aware request.
+  let locale   = 'en'
+  let messages: Record<string, unknown> = {}
+  try {
+    locale   = await getLocale()
+    messages = await getMessages()
+  } catch {
+    // No locale context during static prerender (/_not-found, etc.) — use defaults
+  }
+  const dir = RTL_LOCALES.has(locale) ? 'rtl' : 'ltr'
 
   return (
     <html lang={locale} dir={dir} className="dark">
