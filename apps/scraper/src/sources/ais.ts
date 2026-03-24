@@ -241,7 +241,7 @@ export function startAisPoller(
   redis: Redis,
   producer?: Producer | null,
 ): () => void {
-  const apiKey = process.env.AIS_STREAM_API_KEY
+  const apiKey = process.env.AIS_STREAM_API_KEY ?? ''
 
   if (!apiKey) {
     log.info('AIS poller disabled — set AIS_STREAM_API_KEY to enable aisstream.io vessel tracking')
