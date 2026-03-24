@@ -456,6 +456,133 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     })
   })
 
+  // ─── SIGNAL COUNT ──────────────────────────────────────────
+  // Returns total count of verified signals + recent (last 24h) count
+  app.get('/count', {
+    schema: {
+      tags: ['signals'],
+      summary: 'Get signal counts',
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                total:      { type: 'number' },
+                last24h:    { type: 'number' },
+                lastHour:   { type: 'number' },
+                bySeverity: {
+                  type: 'object',
+                  properties: {
+                    critical: { type: 'number' },
+                    high:     { type: 'number' },
+                    medium:   { type: 'number' },
+                    low:      { type: 'number' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    config: { rateLimit: { max: 120, timeWindow: '1 minute' } },
+  }, async (_req, reply) => {
+    const cacheKey = 'signals:count'
+    const cached = await redis.get(cacheKey).catch(() => null)
+    if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
+
+    const [totalResult] = await db('signals')
+      .whereIn('status', ['verified', 'pending'])
+      .count('id as count')
+
+    const [last24hResult] = await db('signals')
+      .whereIn('status', ['verified', 'pending'])
+      .where('created_at', '>', db.raw("NOW() - INTERVAL '24 hours'"))
+      .count('id as count')
+
+    const [lastHourResult] = await db('signals')
+      .whereIn('status', ['verified', 'pending'])
+      .where('created_at', '>', db.raw("NOW() - INTERVAL '1 hour'"))
+      .count('id as count')
+
+    const severityCounts = await db('signals')
+      .whereIn('status', ['verified', 'pending'])
+      .select('severity')
+      .count('id as count')
+      .groupBy('severity')
+
+    const bySeverity: Record<string, number> = {}
+    for (const row of severityCounts) {
+      bySeverity[row.severity as string] = Number(row.count)
+    }
+
+    const response = {
+      success: true,
+      data: {
+        total:      Number(totalResult.count),
+        last24h:    Number(last24hResult.count),
+        lastHour:   Number(lastHourResult.count),
+        bySeverity,
+      },
+    }
+
+    // Cache for 15 seconds — short TTL for near-real-time accuracy
+    redis.setex(cacheKey, 15, JSON.stringify(response)).catch(() => {})
+
+    return reply.send(response)
+  })
+
+  // ─── RECENT HEADLINES ─────────────────────────────────────
+  // Returns latest breaking/high-severity signals for the news ticker
+  app.get('/headlines', {
+    schema: {
+      tags: ['signals'],
+      summary: 'Get recent headlines for news ticker',
+    },
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+  }, async (_req, reply) => {
+    const cacheKey = 'signals:headlines'
+    const cached = await redis.get(cacheKey).catch(() => null)
+    if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
+
+    const headlines = await db('signals')
+      .whereIn('status', ['verified', 'pending'])
+      .where('created_at', '>', db.raw("NOW() - INTERVAL '24 hours'"))
+      .orderByRaw("CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END ASC")
+      .orderBy('created_at', 'desc')
+      .limit(10)
+      .select('id', 'title', 'category', 'severity', 'location_name', 'created_at')
+
+    const CATEGORY_COLORS: Record<string, string> = {
+      conflict:   'red',
+      security:   'red',
+      breaking:   'red',
+      politics:   'amber',
+      markets:    'amber',
+      economics:  'amber',
+      climate:    'cyan',
+      science:    'cyan',
+      technology: 'cyan',
+      health:     'green',
+      culture:    'green',
+      sports:     'green',
+    }
+
+    const data = headlines.map((h: Record<string, unknown>) => ({
+      id:    h.id,
+      type:  CATEGORY_COLORS[h.category as string] ?? 'amber',
+      label: ((h.category as string) ?? 'news').toUpperCase(),
+      text:  h.title as string,
+    }))
+
+    const response = { success: true, data }
+    redis.setex(cacheKey, 30, JSON.stringify(response)).catch(() => {})
+    return reply.send(response)
+  })
+
   // ─── MAP DATA ─────────────────────────────────────────────
   // Returns signals with geo data for map rendering
   app.get('/map/points', {

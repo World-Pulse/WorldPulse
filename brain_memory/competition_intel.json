@@ -1,5 +1,5 @@
 {
-  "last_scan": "2026-03-24T00:36:39.825745+00:00",
+  "last_scan": "2026-03-24T02:36:56.190436+00:00",
   "competitors": {
     "Shadowbroker": {
       "url": "https://github.com/BigBodyCobain/Shadowbroker",
@@ -241,25 +241,44 @@
       "first_seen": "2026-03-22"
     },
     "WorldMonitor": {
-      "url": "https://github.com/koala73/worldmonitor",
+      "url": "https://www.worldmonitor.app",
       "type": "open_source_direct",
       "strengths": [
         "Open-source (direct positioning overlap with WorldPulse)",
-        "AI-powered news aggregation",
-        "Geopolitical monitoring",
-        "Infrastructure tracking",
-        "Unified situational awareness interface"
+        "NOW HAS FULL WEBSITE (worldmonitor.app) — production deployment confirmed (cycle 65 scan, March 24)",
+        "4-tier AI fallback chain with local LLMs for fully offline analysis",
+        "AI-powered news aggregation, geopolitical monitoring, infrastructure tracking",
+        "Generates intelligence briefs + classifies threats + runs sentiment analysis offline",
+        "Financial markets + military movements + natural disasters + cyber threats on one map",
+        "Risk scoring built-in",
+        "Targets newsrooms, NGOs, and small teams that previously needed six-figure contracts",
+        "Parallel with Glint and Monitor the Situation in emerging open-source intelligence space"
       ],
       "weaknesses": [
         "No community/social layer",
-        "No reliability scoring",
+        "No reliability scoring or fact-checking",
         "No real-time WebSocket feed",
         "No user accounts or trust system",
         "No embeddable widget",
-        "Early-stage GitHub project"
+        "No developer API documented"
       ],
-      "threat_level": "high",
-      "first_seen": "2026-03-22"
+      "threat_level": "very_high",
+      "threat_upgrade": "UPGRADED to very_high — now has production website + 4-tier AI (cycle 65 scan, March 24). Direct competitor to WorldPulse's core value proposition.",
+      "first_seen": "2026-03-22",
+      "latest_features_march_2026_cycle65_update": [
+        "Full production website launched at worldmonitor.app",
+        "4-tier AI fallback chain: cloud LLMs → local LLMs → offline analysis (major differentiator vs WorldPulse's cloud-only AI summaries)",
+        "Marketing: 'intelligence that used to cost six figures, now free' — directly targets WorldPulse's market",
+        "Blog infrastructure in place — content marketing underway",
+        "Confirmed pulling: news, financial markets, military movements, disasters, cyber threats, geopolitical risk scores"
+      ],
+      "response_actions": [
+        "WorldPulse now has 5-provider LLM support (Anthropic/OpenAI/Gemini/OpenRouter/Ollama) — Ollama is the local/offline equivalent (Cycle 65)",
+        "WorldPulse community layer, verification engine, and embeddable widget remain unique differentiators",
+        "Counter worldmonitor.app marketing: emphasize WorldPulse open reliability scoring + community verification",
+        "Add Ollama offline mode documentation to README — emphasize WorldPulse can also run fully offline",
+        "PRIORITY: WorldPulse needs stronger marketing around its unique trust/verification moat vs WorldMonitor's pure aggregation approach"
+      ]
     },
     "OpenClaw": {
       "url": "https://openclawapi.org",

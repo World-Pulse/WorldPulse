@@ -145,6 +145,24 @@ function MapView() {
   const [hours,    setHours]    = useState(24)
   const [wsOnline, setWsOnline] = useState(false)
 
+  // ── NASA GIBS satellite imagery state ──────────────────────────────────────
+  const [satelliteMode, setSatelliteMode] = useState(false)
+  const [gibsDate, setGibsDate] = useState(() => {
+    // MODIS Terra imagery is typically 1 day delayed — default to yesterday
+    const d = new Date()
+    d.setUTCDate(d.getUTCDate() - 1)
+    return d.toISOString().slice(0, 10)
+  })
+
+  // ── CelesTrak satellite tracking state ─────────────────────────────────────
+  const [satTrackingMode,    setSatTrackingMode]    = useState(false)
+  const [satTrackingLoading, setSatTrackingLoading] = useState(false)
+  const [satCount,           setSatCount]           = useState(0)
+
+  // ── Carrier Strike Group tracking state ────────────────────────────────────
+  const [carrierMode,    setCarrierMode]    = useState(false)
+  const [carrierLoading, setCarrierLoading] = useState(false)
+
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
   const fetchSignals = useCallback(async () => {
@@ -584,6 +602,326 @@ function MapView() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshClusters, refreshHighlights])
 
+  // ── NASA GIBS satellite imagery layer ─────────────────────────────────────
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    const GIBS_SOURCE = 'nasa-gibs'
+    const GIBS_LAYER  = 'nasa-satellite'
+
+    const applyLayer = () => {
+      try {
+        if (satelliteMode) {
+          // Add source if not present
+          if (!map.getSource(GIBS_SOURCE)) {
+            map.addSource(GIBS_SOURCE, {
+              type:        'raster',
+              tiles:       [`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/${gibsDate}/GoogleMapsCompatible/{z}/{y}/{x}.jpg`],
+              tileSize:    256,
+              maxzoom:     9,
+              attribution: 'Imagery courtesy <a href="https://earthdata.nasa.gov/eosdis/science-system-description/eosdis-components/gibs" target="_blank">NASA GIBS</a> / MODIS Terra',
+            })
+          }
+          // Add layer above basemap, below signal pins
+          if (!map.getLayer(GIBS_LAYER)) {
+            // Insert before the first signals layer (cluster-halo) so signals stay on top
+            const beforeLayer = map.getLayer('cluster-halo') ? 'cluster-halo' : undefined
+            map.addLayer({
+              id:     GIBS_LAYER,
+              type:   'raster',
+              source: GIBS_SOURCE,
+              paint:  { 'raster-opacity': 0.72 },
+            }, beforeLayer)
+          }
+        } else {
+          if (map.getLayer(GIBS_LAYER))  map.removeLayer(GIBS_LAYER)
+          if (map.getSource(GIBS_SOURCE)) map.removeSource(GIBS_SOURCE)
+        }
+      } catch (e) {
+        console.warn('[map] GIBS layer error:', e)
+      }
+    }
+
+    // Apply immediately if map is loaded, otherwise wait for the load event
+    if (map.loaded()) {
+      applyLayer()
+    } else {
+      map.once('load', applyLayer)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [satelliteMode, gibsDate])
+
+  // ── CelesTrak satellite tracking layer ─────────────────────────────────────
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    const CT_SOURCE = 'celestrak-sats'
+    const CT_LAYER  = 'celestrak-sat-points'
+
+    const removeLayer = () => {
+      try {
+        if (map.getLayer(CT_LAYER))  map.removeLayer(CT_LAYER)
+        if (map.getSource(CT_SOURCE)) map.removeSource(CT_SOURCE)
+      } catch { /* ignore */ }
+    }
+
+    const applyLayer = async () => {
+      if (!satTrackingMode) {
+        removeLayer()
+        return
+      }
+
+      setSatTrackingLoading(true)
+      try {
+        // CelesTrak GP JSON — TLE-less orbital elements for all active objects
+        const res  = await fetch('https://celestrak.org/GP.php?GROUP=active&FORMAT=json')
+        const data = await res.json() as Array<{
+          SATNAME:          string
+          NORAD_CAT_ID:     number
+          OBJECT_TYPE:      string
+          INCLINATION:      number
+          RA_OF_ASC_NODE:   number
+          ECCENTRICITY:     number
+          MEAN_ANOMALY:     number
+          MEAN_MOTION:      number
+        }>
+
+        if (!Array.isArray(data) || data.length === 0) return
+
+        // Limit to first 200 client-side to keep rendering snappy
+        const subset = data.slice(0, 200)
+        setSatCount(subset.length)
+
+        // Approximate position: map INCLINATION → latitude range, RA_OF_ASC_NODE → longitude
+        // MEAN_ANOMALY moves the satellite along its orbit — use it to offset longitude
+        const features = subset.map(sat => {
+          // Approximate sub-satellite longitude from RAAN + mean anomaly offset
+          const lng = ((sat.RA_OF_ASC_NODE + sat.MEAN_ANOMALY) % 360 + 360) % 360
+          const lngNorm = lng > 180 ? lng - 360 : lng
+          // Latitude oscillates between ±inclination; use mean anomaly as phase
+          const incRad = (sat.INCLINATION * Math.PI) / 180
+          const maRad  = (sat.MEAN_ANOMALY * Math.PI) / 180
+          const lat    = Math.sin(maRad) * sat.INCLINATION
+          const clampedLat = Math.max(-85, Math.min(85, lat))
+
+          // Color by object type
+          const typeColor =
+            sat.OBJECT_TYPE === 'PAYLOAD'      ? '#3b82f6' :   // blue
+            sat.OBJECT_TYPE === 'ROCKET BODY'  ? '#6b7280' :   // gray
+            sat.OBJECT_TYPE === 'DEBRIS'       ? '#ef4444' :   // red
+                                                 '#f3f4f6'     // white / unknown
+
+          return {
+            type:       'Feature' as const,
+            geometry:   { type: 'Point' as const, coordinates: [lngNorm, clampedLat] },
+            properties: {
+              name:  sat.SATNAME,
+              id:    sat.NORAD_CAT_ID,
+              type:  sat.OBJECT_TYPE,
+              color: typeColor,
+            },
+          }
+        })
+
+        if (!map.getSource(CT_SOURCE)) {
+          map.addSource(CT_SOURCE, {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features },
+          })
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ;(map.getSource(CT_SOURCE) as any).setData({ type: 'FeatureCollection', features })
+        }
+
+        if (!map.getLayer(CT_LAYER)) {
+          map.addLayer({
+            id:     CT_LAYER,
+            type:   'circle',
+            source: CT_SOURCE,
+            paint:  {
+              'circle-color':   ['get', 'color'],
+              'circle-radius':  3,
+              'circle-opacity': 0.7,
+              'circle-stroke-color':  'rgba(255,255,255,0.15)',
+              'circle-stroke-width':  0.5,
+            },
+          })
+        }
+      } catch (e) {
+        console.warn('[map] CelesTrak layer error:', e)
+      } finally {
+        setSatTrackingLoading(false)
+      }
+    }
+
+    if (map.loaded()) {
+      void applyLayer()
+    } else {
+      map.once('load', () => { void applyLayer() })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [satTrackingMode])
+
+  // ── Carrier Strike Group layer ─────────────────────────────────────────────
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    const CSG_SOURCE = 'csg-carriers'
+    const CSG_LAYER  = 'csg-carrier-points'
+    const CSG_POPUP  = 'csg-carrier-cursor'
+
+    const removeLayer = () => {
+      try {
+        // Remove event listeners added for this layer
+        map.off('click',      CSG_LAYER)
+        map.off('mouseenter', CSG_LAYER)
+        map.off('mouseleave', CSG_LAYER)
+        if (map.getLayer(CSG_LAYER))  map.removeLayer(CSG_LAYER)
+        if (map.getSource(CSG_SOURCE)) map.removeSource(CSG_SOURCE)
+      } catch { /* ignore */ }
+    }
+
+    const applyLayer = async () => {
+      if (!carrierMode) {
+        removeLayer()
+        return
+      }
+
+      setCarrierLoading(true)
+      try {
+        // Fetch recent military medium/high signals and filter for carrier content
+        const res  = await fetch(
+          `${API_URL}/api/v1/signals?category=military&severity=medium&limit=50`,
+        )
+        const json = await res.json() as { success: boolean; data: Array<{
+          id:            string
+          title:         string
+          summary:       string | null
+          location:      string | null
+          location_name: string | null
+          severity:      string
+          reliability_score: number
+          created_at:    string
+        }> }
+
+        // Filter for carrier-related signals and those with positions
+        const CARRIER_KEYWORDS = [
+          'cvn-', 'carrier strike', 'uss gerald', 'uss george washington',
+          'uss harry', 'uss theodore', 'uss abraham', 'uss carl vinson',
+          'uss eisenhower', 'uss nimitz', 'uss stennis', 'uss ronald reagan',
+          'uss george h', 'carrier group', 'strike group',
+        ]
+
+        const carrierSignals = (json.data ?? []).filter(s => {
+          const text = `${s.title} ${s.summary ?? ''}`.toLowerCase()
+          return CARRIER_KEYWORDS.some(kw => text.includes(kw))
+        })
+
+        // Parse WKB/WKT locations — signals store location as WKB hex or object
+        const features = carrierSignals
+          .filter(s => s.location != null)
+          .map(s => {
+            // Attempt to parse PostGIS WKB point — fallback via location_name heuristic
+            let lat = 0
+            let lng = 0
+            try {
+              if (typeof s.location === 'string' && s.location.length > 10) {
+                // WKB hex: first 9 bytes = header, then 8-byte double lng, 8-byte double lat
+                const hex = s.location.startsWith('0101') ? s.location : null
+                if (hex) {
+                  const buf  = Buffer.from(hex, 'hex')
+                  lng = buf.readDoubleLE(5)
+                  lat = buf.readDoubleLE(13)
+                }
+              }
+            } catch { /* skip bad location */ }
+            if (lat === 0 && lng === 0) return null
+
+            return {
+              type:       'Feature' as const,
+              geometry:   { type: 'Point' as const, coordinates: [lng, lat] },
+              properties: {
+                id:           s.id,
+                title:        s.title,
+                locationName: s.location_name ?? 'Unknown position',
+                reliability:  s.reliability_score,
+                createdAt:    s.created_at,
+              },
+            }
+          })
+          .filter((f): f is NonNullable<typeof f> => f !== null)
+
+        if (!map.getSource(CSG_SOURCE)) {
+          map.addSource(CSG_SOURCE, {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features },
+          })
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ;(map.getSource(CSG_SOURCE) as any).setData({ type: 'FeatureCollection', features })
+        }
+
+        if (!map.getLayer(CSG_LAYER)) {
+          map.addLayer({
+            id:     CSG_LAYER,
+            type:   'circle',
+            source: CSG_SOURCE,
+            paint:  {
+              'circle-color':         '#1e3a5f',
+              'circle-radius':        8,
+              'circle-opacity':       0.9,
+              'circle-stroke-color':  '#4a90d9',
+              'circle-stroke-width':  2,
+              'circle-stroke-opacity': 0.8,
+            },
+          })
+
+          // Cursor
+          map.on('mouseenter', CSG_LAYER, () => { map.getCanvas().style.cursor = 'pointer' })
+          map.on('mouseleave', CSG_LAYER, () => { map.getCanvas().style.cursor = '' })
+
+          // Popup on click
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          map.on('click', CSG_LAYER, async (e: any) => {
+            const feat = e.features?.[0]
+            if (!feat) return
+            const p = feat.properties as {
+              title: string; locationName: string; reliability: number; createdAt: string
+            }
+            const { default: ml } = await import('maplibre-gl')
+            if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
+            popupRef.current = new ml.Popup({ closeButton: true, closeOnClick: false, offset: 12, className: 'wp-map-popup' })
+              .setLngLat(e.lngLat)
+              .setHTML(`
+                <div style="font:600 12px/1.4 system-ui;color:#93c5fd;margin-bottom:4px">⚓ CARRIER STRIKE GROUP</div>
+                <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:220px;margin-bottom:6px">${p.title}</div>
+                <div style="font:11px monospace;color:#8892a4;margin-bottom:4px">📍 ${p.locationName}</div>
+                <div style="font:10px monospace;color:#5a6477">OSINT-estimated · ${Math.round(p.reliability * 100)}% confidence</div>
+              `)
+              .addTo(map)
+          })
+        }
+      } catch (e) {
+        console.warn('[map] CSG layer error:', e)
+      } finally {
+        setCarrierLoading(false)
+      }
+    }
+
+    if (map.loaded()) {
+      void applyLayer()
+    } else {
+      map.once('load', () => { void applyLayer() })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [carrierMode])
+
   // ── Derived state ──────────────────────────────────────────────────────────
 
   const sevCounts = signals.reduce((a, s) => {
@@ -652,6 +990,65 @@ function MapView() {
                   {opt.l}
                 </button>
               ))}
+
+              <div className="w-px h-4 bg-[rgba(255,255,255,0.06)] flex-shrink-0 mx-1" />
+
+              {/* NASA GIBS Satellite imagery toggle */}
+              <button
+                onClick={() => setSatelliteMode(v => !v)}
+                title={satelliteMode ? `NASA MODIS Terra satellite imagery — ${gibsDate}` : 'Toggle NASA GIBS satellite imagery'}
+                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
+                  ${satelliteMode
+                    ? 'border-[rgba(0,230,118,0.6)] text-wp-green bg-[rgba(0,230,118,0.1)]'
+                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}`}>
+                🛰 SAT
+              </button>
+              {satelliteMode && (
+                <input
+                  type="date"
+                  value={gibsDate}
+                  min="2000-02-24"
+                  max={(() => { const d = new Date(); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10) })()}
+                  onChange={e => { if (e.target.value) setGibsDate(e.target.value) }}
+                  title="Select imagery date (NASA MODIS Terra, ~1 day delay)"
+                  className="bg-black/30 border border-[rgba(0,230,118,0.3)] text-wp-green text-[10px] font-mono rounded px-2 py-[4px] min-h-[32px] outline-none focus:border-[rgba(0,230,118,0.6)] transition-colors cursor-pointer"
+                />
+              )}
+
+              {/* CelesTrak satellite tracking toggle */}
+              <button
+                onClick={() => setSatTrackingMode(v => !v)}
+                disabled={satTrackingLoading}
+                title={satTrackingMode ? `CelesTrak: ${satCount} satellites displayed` : 'Toggle CelesTrak satellite tracking'}
+                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
+                  ${satTrackingMode
+                    ? 'border-[rgba(59,130,246,0.6)] text-[#93c5fd] bg-[rgba(59,130,246,0.1)]'
+                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}
+                  ${satTrackingLoading ? 'opacity-60 cursor-wait' : ''}`}>
+                {satTrackingLoading
+                  ? <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                  : '🛰️'}
+                {' '}SATS
+                {satTrackingMode && satCount > 0 && (
+                  <span className="ml-1 px-1 py-px bg-[rgba(59,130,246,0.25)] rounded text-[9px]">{satCount}</span>
+                )}
+              </button>
+
+              {/* Carrier Strike Group toggle */}
+              <button
+                onClick={() => setCarrierMode(v => !v)}
+                disabled={carrierLoading}
+                title={carrierMode ? 'Hide carrier strike group positions' : 'Toggle US Navy carrier strike group tracker (OSINT-estimated)'}
+                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
+                  ${carrierMode
+                    ? 'border-[rgba(30,58,95,0.9)] text-[#4a90d9] bg-[rgba(30,58,95,0.35)]'
+                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}
+                  ${carrierLoading ? 'opacity-60 cursor-wait' : ''}`}>
+                {carrierLoading
+                  ? <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                  : '⚓'}
+                {' '}CARRIERS
+              </button>
             </div>
           </div>
 

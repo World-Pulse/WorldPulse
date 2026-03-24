@@ -1,8 +1,62 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
+import { redis } from '../db/redis'
 import { authenticate } from '../middleware/auth'
 import { z } from 'zod'
 import { logger } from '../lib/logger'
+import { notificationService } from '../lib/notifications'
+import type { AlertSettings } from '../lib/alert-dispatcher'
+import type { Signal } from '@worldpulse/types'
+
+// ─── Alert Settings Schemas ───────────────────────────────────────────────
+
+const AlertSettingsSchema = z.object({
+  telegram_chat_id:    z.string().min(1).max(64).optional(),
+  telegram_bot_token:  z.string().min(10).max(256).optional(),
+  discord_webhook_url: z.string().url().optional(),
+  min_severity:        z.enum(['critical', 'high', 'medium', 'low']),
+  categories:          z.array(z.string()).default([]),
+  enabled:             z.boolean(),
+})
+
+function alertSettingsKey(userId: string): string {
+  return `notif:${userId}:settings`
+}
+
+// ─── Test signal fixture ──────────────────────────────────────────────────
+
+function makeTestSignal(): Signal {
+  return {
+    id:               'test-signal-0000',
+    title:            'WorldPulse Test Alert — Notification Setup Verified',
+    summary:          'This is a test notification from WorldPulse. Your alert channel is configured correctly.',
+    body:             null,
+    category:         'breaking',
+    severity:         'high',
+    status:           'verified',
+    reliabilityScore: 0.95,
+    sourceCount:      1,
+    location:         null,
+    locationName:     null,
+    countryCode:      null,
+    region:           null,
+    tags:             ['test'],
+    sources:          [],
+    originalUrls:     ['https://worldpulse.io'],
+    language:         'en',
+    viewCount:        0,
+    shareCount:       0,
+    postCount:        0,
+    eventTime:        null,
+    firstReported:    new Date().toISOString(),
+    verifiedAt:       new Date().toISOString(),
+    lastUpdated:      new Date().toISOString(),
+    createdAt:        new Date().toISOString(),
+    isBreaking:       true,
+  }
+}
+
+// ─── Device Token Schemas ─────────────────────────────────────────────────
 
 const DeviceTokenSchema = z.object({
   token:    z.string().min(10).max(512),
@@ -125,5 +179,168 @@ export const registerNotificationRoutes: FastifyPluginAsync = async (app) => {
       .first()
 
     return reply.send({ success: true, data: { count: Number(result?.count ?? 0) } })
+  })
+
+  // ─── ALERT SETTINGS: GET ──────────────────────────────────
+  app.get('/settings', {
+    preHandler: [authenticate],
+    schema: {
+      summary: 'Get Telegram/Discord alert settings',
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            data: { type: 'object' },
+          },
+        },
+      },
+    },
+  }, async (req, reply) => {
+    const raw = await redis.get(alertSettingsKey(req.user!.id)).catch(() => null)
+    const settings: Partial<AlertSettings> = raw ? (JSON.parse(raw) as AlertSettings) : {}
+
+    // Mask secrets in the response
+    return reply.send({
+      success: true,
+      data: {
+        telegram_chat_id:    settings.telegram_chat_id    ?? null,
+        telegram_bot_token:  settings.telegram_bot_token  ? '***' : null,
+        discord_webhook_url: settings.discord_webhook_url ? '***' : null,
+        min_severity:        settings.min_severity ?? 'high',
+        categories:          settings.categories   ?? [],
+        enabled:             settings.enabled      ?? false,
+      },
+    })
+  })
+
+  // ─── ALERT SETTINGS: PUT ──────────────────────────────────
+  app.put('/settings', {
+    preHandler: [authenticate],
+    schema: {
+      summary: 'Save Telegram/Discord alert settings',
+      body: {
+        type: 'object',
+        properties: {
+          telegram_chat_id:    { type: 'string' },
+          telegram_bot_token:  { type: 'string' },
+          discord_webhook_url: { type: 'string' },
+          min_severity:        { type: 'string', enum: ['critical', 'high', 'medium', 'low'] },
+          categories:          { type: 'array', items: { type: 'string' } },
+          enabled:             { type: 'boolean' },
+        },
+        required: ['min_severity', 'enabled'],
+      },
+    },
+  }, async (req, reply) => {
+    const parsed = AlertSettingsSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return reply.status(400).send({
+        success: false,
+        error: parsed.error.issues[0]?.message ?? 'Invalid input',
+        code:  'VALIDATION_ERROR',
+      })
+    }
+
+    const userId = req.user!.id
+    const key    = alertSettingsKey(userId)
+
+    // Merge with existing (preserves masked secrets if client sends ***)
+    const existingRaw = await redis.get(key).catch(() => null)
+    const existing: Partial<AlertSettings> = existingRaw
+      ? (JSON.parse(existingRaw) as AlertSettings)
+      : {}
+
+    const incoming = parsed.data
+
+    const settings: AlertSettings = {
+      telegram_chat_id: incoming.telegram_chat_id ?? existing.telegram_chat_id,
+      telegram_bot_token:
+        incoming.telegram_bot_token && incoming.telegram_bot_token !== '***'
+          ? incoming.telegram_bot_token
+          : existing.telegram_bot_token,
+      discord_webhook_url:
+        incoming.discord_webhook_url && incoming.discord_webhook_url !== '***'
+          ? incoming.discord_webhook_url
+          : existing.discord_webhook_url,
+      min_severity: incoming.min_severity,
+      categories:   incoming.categories,
+      enabled:      incoming.enabled,
+    }
+
+    await redis.set(key, JSON.stringify(settings))
+
+    logger.debug({ userId }, 'Alert settings updated')
+
+    return reply.send({ success: true, message: 'Alert settings saved' })
+  })
+
+  // ─── SEND TEST NOTIFICATION ───────────────────────────────
+  app.post('/test', {
+    preHandler: [authenticate],
+    config: { rateLimit: { max: 3, timeWindow: '1 minute' } },
+    schema: {
+      summary: 'Send a test alert to configured Telegram/Discord channels',
+    },
+  }, async (req, reply) => {
+    const userId = req.user!.id
+    const raw    = await redis.get(alertSettingsKey(userId)).catch(() => null)
+
+    if (!raw) {
+      return reply.status(400).send({
+        success: false,
+        error: 'No alert settings configured. Save your settings first.',
+        code:  'NOT_CONFIGURED',
+      })
+    }
+
+    const settings = JSON.parse(raw) as AlertSettings
+
+    if (!settings.enabled) {
+      return reply.status(400).send({
+        success: false,
+        error: 'Alerts are disabled. Enable them in your settings.',
+        code:  'ALERTS_DISABLED',
+      })
+    }
+
+    const hasTelegram = settings.telegram_chat_id && settings.telegram_bot_token
+    const hasDiscord  = !!settings.discord_webhook_url
+
+    if (!hasTelegram && !hasDiscord) {
+      return reply.status(400).send({
+        success: false,
+        error: 'No channels configured. Add a Telegram chat or Discord webhook.',
+        code:  'NO_CHANNELS',
+      })
+    }
+
+    const testSignal = makeTestSignal()
+    const promises: Promise<void>[] = []
+
+    if (hasTelegram) {
+      promises.push(
+        notificationService.sendTelegramMessage(
+          settings.telegram_chat_id!,
+          notificationService.formatSignalAlert(testSignal),
+          settings.telegram_bot_token!,
+        ),
+      )
+    }
+
+    if (hasDiscord) {
+      promises.push(
+        notificationService.sendDiscordMessage(settings.discord_webhook_url!, testSignal),
+      )
+    }
+
+    await Promise.allSettled(promises)
+
+    logger.info({ userId }, 'Test notification dispatched')
+
+    return reply.send({
+      success: true,
+      message: `Test notification sent to ${[hasTelegram && 'Telegram', hasDiscord && 'Discord'].filter(Boolean).join(' and ')}.`,
+    })
   })
 }

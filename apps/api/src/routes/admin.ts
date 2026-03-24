@@ -8,6 +8,11 @@ const HEALTH_KEY  = (sourceId: string) => `scraper:health:${sourceId}`
 const HEALTH_INDEX_KEY = 'scraper:health:index'
 const DEAD_THRESHOLD_MS = 30 * 60 * 1_000
 
+// ─── Process health keys (must match apps/scraper/src/lib/process-health.ts) ─
+const PROCESS_KEY    = 'scraper:process'
+const LAST_CRASH_KEY = 'scraper:last_crash'
+const ALIVE_THRESHOLD_MS = 90 * 1_000
+
 interface SourceHealth {
   sourceId: string
   sourceName: string
@@ -110,6 +115,43 @@ export const registerAdminRoutes: FastifyPluginAsync = async (app) => {
           return order[a.status] - order[b.status]
         }),
         generatedAt: new Date().toISOString(),
+      },
+    })
+  })
+
+  // ─── GET /api/v1/admin/scraper/process ─────────────────────────────────────
+  app.get('/scraper/process', {
+    preHandler: [authenticate],
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    if (!req.user || req.user.accountType !== 'admin') {
+      return reply.status(403).send({ success: false, error: 'Admin access required', code: 'FORBIDDEN' })
+    }
+
+    const raw        = await redis.hgetall(PROCESS_KEY)
+    const lastCrashRaw = await redis.get(LAST_CRASH_KEY)
+
+    const lastHeartbeat = raw['last_heartbeat'] ?? null
+    const isAlive = lastHeartbeat !== null
+      && (Date.now() - new Date(lastHeartbeat).getTime()) < ALIVE_THRESHOLD_MS
+
+    const processInfo = Object.keys(raw).length === 0 ? null : {
+      pid:            raw['pid']            ?? null,
+      hostname:       raw['hostname']       ?? null,
+      started_at:     raw['started_at']     ?? null,
+      last_heartbeat: lastHeartbeat,
+      status:         raw['status']         ?? null,
+      version:        raw['version']        ?? null,
+      is_alive:       isAlive,
+    }
+
+    const lastCrash = lastCrashRaw ? (JSON.parse(lastCrashRaw) as Record<string, unknown>) : null
+
+    return reply.send({
+      success: true,
+      data: {
+        process:    processInfo,
+        last_crash: lastCrash,
       },
     })
   })

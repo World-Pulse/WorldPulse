@@ -7,14 +7,10 @@ import { useTranslations } from 'next-intl'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { useTheme } from '@/components/providers'
 
-const TICKER_ITEMS = [
-  { type: 'red',   label: 'BREAKING',  text: 'Seismic activity near Manila — M5.8 confirmed' },
-  { type: 'amber', label: 'MARKETS',   text: 'S&P 500 +0.84% · BTC $82,340 +2.1% · Gold $2,941 ▲' },
-  { type: 'cyan',  label: 'CLIMATE',   text: 'Arctic sea ice at 43-year record low for March' },
-  { type: 'green', label: 'SCIENCE',   text: 'WHO confirms H5N9 cluster contained — Hanoi' },
-  { type: 'red',   label: 'CONFLICT',  text: 'Sudan peace talks stalling — Day 3 ceasefire negotiations' },
-  { type: 'amber', label: 'TECH',      text: 'EU AI safety directive — 24h compliance window' },
-  { type: 'cyan',  label: 'ELECTIONS', text: 'South Korea snap election — 68.2% turnout, 23% counted' },
+const FALLBACK_TICKER_ITEMS = [
+  { id: '', type: 'red',   label: 'BREAKING',  text: 'Loading live headlines…' },
+  { id: '', type: 'amber', label: 'MARKETS',   text: 'Connecting to signal feed…' },
+  { id: '', type: 'cyan',  label: 'CLIMATE',   text: 'Fetching latest intelligence…' },
 ]
 
 const DOT_COLORS: Record<string, string> = {
@@ -35,6 +31,15 @@ const NAV_LINKS = [
   { href: '/settings',    icon: '⚙️', label: 'Settings'     },
 ]
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
+
+interface TickerItem {
+  id: string
+  type: string
+  label: string
+  text: string
+}
+
 interface AuthUser {
   id: string
   handle: string
@@ -44,14 +49,16 @@ interface AuthUser {
 }
 
 export function TopNav() {
-  const [signalCount, setSignalCount] = useState(2847)
+  const [signalCount, setSignalCount] = useState(0)
+  const [tickerItems, setTickerItems] = useState<TickerItem[]>(FALLBACK_TICKER_ITEMS)
+  const [tickerPaused, setTickerPaused] = useState(false)
   const [user, setUser]               = useState<AuthUser | null>(null)
   const [mobileOpen, setMobileOpen]   = useState(false)
   const pathname = usePathname()
   const router   = useRouter()
   const t        = useTranslations('nav')
   const { theme, toggle } = useTheme()
-  const doubled  = [...TICKER_ITEMS, ...TICKER_ITEMS]  // seamless loop
+  const doubled  = [...tickerItems, ...tickerItems]  // seamless loop
 
   // Read auth state from localStorage on mount + sync across tabs
   useEffect(() => {
@@ -69,11 +76,40 @@ export function TopNav() {
     return () => window.removeEventListener('storage', handleStorage)
   }, [])
 
+  // Fetch real signal count from API + poll every 30s
   useEffect(() => {
-    const id = setInterval(() => {
-      setSignalCount(n => n + Math.floor(Math.random() * 3))
-    }, 3500)
-    return () => clearInterval(id)
+    let mounted = true
+    async function fetchCount() {
+      try {
+        const res = await fetch(`${API_URL}/api/v1/signals/count`)
+        if (res.ok) {
+          const json = await res.json()
+          if (mounted && json.success) setSignalCount(json.data.total)
+        }
+      } catch { /* API unavailable — keep last known value */ }
+    }
+    fetchCount()
+    const id = setInterval(fetchCount, 30_000)
+    return () => { mounted = false; clearInterval(id) }
+  }, [])
+
+  // Fetch real headlines for ticker from API + refresh every 60s
+  useEffect(() => {
+    let mounted = true
+    async function fetchHeadlines() {
+      try {
+        const res = await fetch(`${API_URL}/api/v1/signals/headlines`)
+        if (res.ok) {
+          const json = await res.json()
+          if (mounted && json.success && json.data.length > 0) {
+            setTickerItems(json.data)
+          }
+        }
+      } catch { /* API unavailable — keep fallback items */ }
+    }
+    fetchHeadlines()
+    const id = setInterval(fetchHeadlines, 60_000)
+    return () => { mounted = false; clearInterval(id) }
   }, [])
 
   // Close mobile menu on route change
@@ -123,18 +159,31 @@ export function TopNav() {
           {mobileOpen ? '✕' : '☰'}
         </button>
 
-        {/* TICKER — desktop only, decorative */}
+        {/* TICKER — desktop only, live headlines */}
         <div
           className="hidden md:flex flex-1 overflow-hidden h-[52px] items-center mx-6 relative"
-          aria-hidden="true"
+          aria-label="Live news headlines ticker"
+          onMouseEnter={() => setTickerPaused(true)}
+          onMouseLeave={() => setTickerPaused(false)}
         >
           {/* Fade edges */}
           <div className="absolute left-0 top-0 bottom-0 w-14 bg-gradient-to-r from-wp-bg to-transparent z-10 pointer-events-none" />
           <div className="absolute right-0 top-0 bottom-0 w-14 bg-gradient-to-l from-wp-bg to-transparent z-10 pointer-events-none" />
 
-          <div className="flex animate-ticker whitespace-nowrap">
+          <div
+            className="flex whitespace-nowrap"
+            style={{
+              animation: 'ticker 45s linear infinite',
+              animationPlayState: tickerPaused ? 'paused' : 'running',
+            }}
+          >
             {doubled.map((item, i) => (
-              <span key={i} className="inline-flex items-center gap-2 px-7 font-mono text-[11px] text-wp-text2 cursor-pointer hover:text-wp-text transition-colors">
+              <span
+                key={i}
+                className="inline-flex items-center gap-2 px-7 font-mono text-[11px] text-wp-text2 cursor-pointer hover:text-wp-text transition-colors"
+                role={item.id ? 'link' : undefined}
+                onClick={() => item.id && router.push(`/signals/${item.id}`)}
+              >
                 <span className={`w-[5px] h-[5px] rounded-full flex-shrink-0 ${DOT_COLORS[item.type]}`} />
                 <span className="font-semibold text-wp-text">{item.label}</span>
                 {item.text}

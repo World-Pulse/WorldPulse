@@ -286,7 +286,7 @@ export default function SearchPage() {
   // Save search as alert
   const handleSaveAlert = async () => {
     if (!saveAlertName.trim()) return
-    const token = typeof window !== 'undefined' ? localStorage.getItem('wp_token') : null
+    const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
     if (!token) { alert('Please log in to save alerts.'); return }
     try {
       const res = await fetch(`${API_URL}/api/v1/alerts`, {

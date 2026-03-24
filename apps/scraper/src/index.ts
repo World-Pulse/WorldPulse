@@ -27,6 +27,7 @@ import { startOsintPollers } from './sources/index'
 import type { OsintCleanupFn } from './sources/index'
 import type { Source } from '@worldpulse/types'
 import { enrichSignalWithGemini, geminiEnabled } from './lib/gemini'
+import { startHeartbeat, stopHeartbeat, registerCrashHandlers } from './lib/process-health.js'
 
 // DB row has extra columns not present in the shared Source interface
 type ScraperSource = Source & {
@@ -63,6 +64,7 @@ let producer: Producer | null = null
 let verifyConsumer: Consumer | null = null
 let kafkaReady = false
 let stopOsintPollers: OsintCleanupFn | null = null
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null
 
 async function connectKafka(): Promise<boolean> {
   try {
@@ -96,6 +98,9 @@ async function connectKafka(): Promise<boolean> {
 
 // ─── BOOTSTRAP ────────────────────────────────────────────────────────────
 async function bootstrap() {
+  // Register crash handlers before any connections so crashes are always recorded
+  registerCrashHandlers()
+
   logger.info('🛰️  WorldPulse Scraper starting...')
 
   // Try Kafka — non-fatal if unavailable
@@ -114,6 +119,9 @@ async function bootstrap() {
   // Start main scrape loop (works with or without Kafka)
   await scrapeAll()
   setInterval(scrapeAll, SCRAPE_INTERVAL_MS)
+
+  // Start process heartbeat now that the scraper is running
+  heartbeatTimer = startHeartbeat()
 
   // Start OSINT pollers — GDELT, ADS-B, AIS (each handles its own interval)
   stopOsintPollers = startOsintPollers(db, redis, producer)
@@ -137,6 +145,18 @@ async function bootstrap() {
   }
 
   logger.info(`✅ Scraper running — interval: ${SCRAPE_INTERVAL_MS / 1000}s — kafka: ${kafkaReady}`)
+
+  // Graceful shutdown
+  const shutdown = () => {
+    logger.info('Graceful shutdown initiated')
+    if (heartbeatTimer) stopHeartbeat(heartbeatTimer)
+    if (stopOsintPollers) stopOsintPollers()
+    void producer?.disconnect()
+    void verifyConsumer?.disconnect()
+    process.exit(0)
+  }
+  process.on('SIGTERM', shutdown)
+  process.on('SIGINT',  shutdown)
 }
 
 // ─── MAIN SCRAPE LOOP ─────────────────────────────────────────────────────
