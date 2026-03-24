@@ -10,13 +10,16 @@ const CSP_DIRECTIVES = [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com data:",
   "img-src 'self' data: blob: https:",
-  // Allow API and WebSocket connections to both prod and local dev
+  // Allow API, WebSocket, and map tile connections
   [
     "connect-src 'self'",
     'https://api.world-pulse.io',
     'wss://api.world-pulse.io',
     'http://localhost:3001',
     'ws://localhost:3001',
+    'https://tile.openstreetmap.org',
+    'https://fonts.openmaptiles.org',
+    'https://gibs.earthdata.nasa.gov',
   ].join(' '),
   "media-src 'self' blob:",
   "worker-src 'self' blob:",
