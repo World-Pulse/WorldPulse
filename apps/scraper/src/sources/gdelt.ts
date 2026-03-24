@@ -162,7 +162,7 @@ export function startGdeltPoller(
             country_code:      null,
             region:            null,
             tags:              ['osint', 'gdelt', 'conflict'],
-            language:          article.language === 'English' ? 'en' : 'other',
+            language:          article.language === 'English' ? 'en' : (article.language?.slice(0, 2)?.toLowerCase() ?? 'xx'),
             event_time:        parseGdeltDate(article.seendate),
           }).returning('*')
 
