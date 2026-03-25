@@ -203,7 +203,7 @@ function MapView() {
     const src = map.getSource('signals')
     if (!src) return
     const b    = map.getBounds()
-    const zoom = Math.max(0, Math.min(14, Math.floor(map.getZoom())))
+    const zoom = Math.max(0, Math.min(18, Math.floor(map.getZoom())))
     const clusters = sc.getClusters(
       [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
       zoom,
@@ -242,7 +242,7 @@ function MapView() {
       const { default: SuperclusterLib } = await import('supercluster')
       if (cancelled) return
       const features = toFeatures(signals)
-      const sc: SCIndex = new SuperclusterLib({ radius: 60, maxZoom: 14 })
+      const sc: SCIndex = new SuperclusterLib({ radius: 60, maxZoom: 18 })
       sc.load(features)
       scRef.current = sc
       refreshClusters()
@@ -367,7 +367,7 @@ function MapView() {
         center: [lng, lat],
         zoom,
         minZoom: 1,
-        maxZoom: 14,
+        maxZoom: 18,
         attributionControl: false,
       })
 
@@ -503,7 +503,12 @@ function MapView() {
         map.on('mouseenter', 'clusters',      cursorOn)
         map.on('mouseleave', 'clusters',      cursorOff)
 
-        // ── Cluster click: zoom in ────────────────────────────
+        // ── Cluster click: zoom in or show list popup ──────────
+        //
+        // If the expansion zoom is reachable (> current zoom), fly there.
+        // If the map is already at or past the expansion zoom the signals share
+        // the same coordinates and can never be separated by zooming — in that
+        // case show a compact list popup instead (spiderfy-lite).
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         map.on('click', 'clusters', (e: any) => {
@@ -511,9 +516,53 @@ function MapView() {
           if (!feat) return
           const sc = scRef.current
           if (!sc) return
-          const clusterId = feat.properties.cluster_id as number
-          const z = sc.getClusterExpansionZoom(clusterId)
-          map.flyTo({ center: feat.geometry.coordinates as [number, number], zoom: z, duration: 600 })
+
+          const clusterId    = feat.properties.cluster_id as number
+          const coords       = feat.geometry.coordinates as [number, number]
+          const expansionZ   = sc.getClusterExpansionZoom(clusterId)
+          const currentZ     = map.getZoom()
+
+          // If we can meaningfully zoom in — do it
+          if (expansionZ > currentZ + 0.5) {
+            map.flyTo({ center: coords, zoom: expansionZ, duration: 600 })
+            return
+          }
+
+          // Already at max useful zoom — signals are co-located.
+          // Show a popup listing all signals in this cluster.
+          const leaves = sc.getLeaves(clusterId, 20)
+          if (leaves.length === 0) return
+
+          if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
+
+          const listItems = leaves.map((leaf: any) => {
+            const p = leaf.properties as SignalProps
+            const color = SEV_COLOR[p.severity] ?? '#8892a4'
+            return `<a href="/?signal=${p.id}" style="display:block;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.07);text-decoration:none;color:#e2e6f0;font:13px/1.4 system-ui" title="${p.title}">
+              <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${color};margin-right:6px;vertical-align:middle;flex-shrink:0"></span>
+              <span style="font-size:12px">${p.title.length > 70 ? p.title.slice(0, 70) + '…' : p.title}</span>
+            </a>`
+          }).join('')
+
+          const extra = (feat.properties.point_count as number) > leaves.length
+            ? `<div style="font:11px monospace;color:#5a6477;padding-top:6px">+ ${(feat.properties.point_count as number) - leaves.length} more signals</div>`
+            : ''
+
+          popupRef.current = new ml.Popup({
+            closeButton: true,
+            closeOnClick: false,
+            offset: 14,
+            className: 'wp-map-popup',
+            maxWidth: '280px',
+          })
+            .setLngLat(coords)
+            .setHTML(`
+              <div style="font:700 11px/1 monospace;color:#8892a4;letter-spacing:1.5px;margin-bottom:8px">
+                ${feat.properties.point_count} SIGNALS · ${(leaves[0]?.properties as SignalProps)?.location_name ?? 'Same location'}
+              </div>
+              <div style="max-height:220px;overflow-y:auto">${listItems}${extra}</div>
+            `)
+            .addTo(map)
         })
 
         // ── Signal click: popup + side panel ──────────────────
