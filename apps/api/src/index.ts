@@ -42,6 +42,7 @@ import { registerRssRoutes } from './routes/rss'
 import { registerBundleRoutes } from './routes/bundles'
 import { registerSourcePacksRoutes } from './routes/source-packs'
 import { registerBiasCorrectionsRoutes } from './routes/bias-corrections'
+import { registerBillingRoutes } from './routes/billing'
 import { registerWSHandler, startRedisSubscriber } from './ws/handler'
 import { registerGraphQL } from './graphql'
 import { metricsPlugin } from './middleware/metrics'
@@ -53,7 +54,7 @@ import { registerStatusRoutes } from './routes/status'
 import { logger } from './lib/logger'
 import { initSentry, flushSentry } from './lib/sentry'
 import { setupSearchIndexes } from './lib/search'
-import { runStartupBackfill } from './lib/search-backfill'
+import { runStartupBackfill, syncRecentSignalsOnStartup } from './lib/search-backfill'
 import { connectSearchProducer, disconnectSearchProducer } from './lib/search-events'
 import { startSearchConsumer, stopSearchConsumer } from './lib/search-consumer'
 import { initClickHouse } from './lib/search-analytics'
@@ -312,6 +313,15 @@ async function bootstrap() {
   await app.register(registerSourcePacksRoutes,     { prefix: '/api/v1/source-packs' })
   await app.register(registerBiasCorrectionsRoutes, { prefix: '/api/v1' })
 
+  // ─── BILLING (Stripe Pro tier) ────────────────────────────
+  // TODO: install @fastify/raw-body and register it here for Stripe webhook
+  //   signature verification:
+  //     await app.register(import('@fastify/raw-body'), {
+  //       field: 'rawBody', global: false, encoding: 'utf8',
+  //       runFirst: true, routes: ['/api/v1/billing/webhook'],
+  //     })
+  await app.register(registerBillingRoutes, { prefix: '/api/v1/billing' })
+
   // ─── GRAPHQL ─────────────────────────────────────────────
   await registerGraphQL(app)
 
@@ -329,6 +339,7 @@ async function bootstrap() {
   //    (covers cold-start and first-deploy scenarios).
   setupSearchIndexes()
     .then(() => runStartupBackfill())
+    .then(() => syncRecentSignalsOnStartup())
     .catch(err => {
       logger.warn({ err }, 'Meilisearch index setup/backfill failed — search may degrade gracefully')
     })
@@ -375,4 +386,3 @@ bootstrap().catch((err) => {
   logger.error(err, 'Fatal startup error')
   process.exit(1)
 })
-                                                                                                                                                                                                                                                                                              

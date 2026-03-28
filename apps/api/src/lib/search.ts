@@ -11,9 +11,11 @@ export interface SignalDoc {
   id:               string
   title:            string
   summary:          string | null
+  body:             string | null
   category:         string
   severity:         string
   status:           string
+  alertTier:        string   // 'FLASH' | 'PRIORITY' | 'ROUTINE'
   reliabilityScore: number
   locationName:     string | null
   countryCode:      string | null
@@ -59,11 +61,11 @@ export interface UserDoc {
 export async function setupSearchIndexes(): Promise<void> {
   // Signals: primary search surface for global intelligence events
   await meili.index('signals').updateSettings({
-    searchableAttributes: ['title', 'summary', 'tags', 'locationName', 'countryCode'],
+    searchableAttributes: ['title', 'summary', 'body', 'tags', 'locationName', 'countryCode'],
     filterableAttributes: [
-      'category', 'severity', 'status', 'countryCode', 'language', 'createdAt', 'reliabilityScore',
+      'category', 'severity', 'status', 'countryCode', 'language', 'createdAt', 'reliabilityScore', 'alertTier',
     ],
-    sortableAttributes: ['createdAt', 'reliabilityScore', 'viewCount', 'postCount'],
+    sortableAttributes: ['createdAt', 'reliabilityScore', 'viewCount', 'postCount', 'alertTier'],
     rankingRules: [
       'words',
       'typo',
@@ -138,9 +140,11 @@ function toSignalDoc(row: Record<string, unknown>): SignalDoc {
     id:               row.id as string,
     title:            row.title as string,
     summary:          (row.summary as string | null) ?? null,
+    body:             (row.body as string | null) ?? null,
     category:         row.category as string,
     severity:         row.severity as string,
     status:           row.status as string,
+    alertTier:        (row.alert_tier as string) ?? 'ROUTINE',
     reliabilityScore: (row.reliability_score as number) ?? 0,
     locationName:     (row.location_name as string | null) ?? null,
     countryCode:      (row.country_code as string | null) ?? null,
