@@ -88,7 +88,7 @@ export function Composer() {
       let mediaTypes: string[] = []
       if (media.length > 0) {
         setUploading(true)
-        const token = typeof window !== 'undefined' ? localStorage.getItem('wp_token') : null
+        const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
         const form  = new FormData()
         for (const m of media) form.append('file', m.file)
         const upRes = await fetch(`${API_URL}/api/v1/uploads`, {

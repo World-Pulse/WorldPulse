@@ -29,8 +29,11 @@ describe('generateSignalSummary', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks()
-    // Reset env vars
+    // Reset all LLM env vars
+    delete process.env.ANTHROPIC_API_KEY
     delete process.env.OPENAI_API_KEY
+    delete process.env.GEMINI_API_KEY
+    delete process.env.OPENROUTER_API_KEY
     delete process.env.OLLAMA_URL
     const redisMod = await import('../../db/redis')
     redis = redisMod.redis as unknown as typeof redis
@@ -143,5 +146,98 @@ describe('generateSignalSummary', () => {
 
     expect(redis.del).toHaveBeenCalledWith('signal-ai-summary:sig-001')
     expect(result.model).toBe('extractive')
+  })
+
+  it('uses Anthropic when ANTHROPIC_API_KEY is set', async () => {
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-test'
+    redis.get.mockResolvedValueOnce(null)
+    redis.setex.mockResolvedValueOnce('OK')
+
+    global.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        content: [{ type: 'text', text: 'Anthropic generated summary.' }],
+      }),
+    } as unknown as Response)
+
+    const { generateSignalSummary } = await import('../signal-summary')
+    const result = await generateSignalSummary(makeSample())
+
+    expect(result.model).toBe('anthropic')
+    expect(result.text).toBe('Anthropic generated summary.')
+    const fetchCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(fetchCall[0]).toContain('anthropic.com')
+
+    delete process.env.ANTHROPIC_API_KEY
+  })
+
+  it('uses Gemini when GEMINI_API_KEY is set (no Anthropic/OpenAI)', async () => {
+    process.env.GEMINI_API_KEY = 'AIza-test-key'
+    redis.get.mockResolvedValueOnce(null)
+    redis.setex.mockResolvedValueOnce('OK')
+
+    global.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: 'Gemini generated summary.' }] } }],
+      }),
+    } as unknown as Response)
+
+    const { generateSignalSummary } = await import('../signal-summary')
+    const result = await generateSignalSummary(makeSample())
+
+    expect(result.model).toBe('gemini')
+    expect(result.text).toBe('Gemini generated summary.')
+    const fetchCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(fetchCall[0]).toContain('generativelanguage.googleapis.com')
+
+    delete process.env.GEMINI_API_KEY
+  })
+
+  it('uses OpenRouter when OPENROUTER_API_KEY is set (no higher-priority provider)', async () => {
+    process.env.OPENROUTER_API_KEY = 'sk-or-test'
+    redis.get.mockResolvedValueOnce(null)
+    redis.setex.mockResolvedValueOnce('OK')
+
+    global.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'OpenRouter generated summary.' } }],
+      }),
+    } as unknown as Response)
+
+    const { generateSignalSummary } = await import('../signal-summary')
+    const result = await generateSignalSummary(makeSample())
+
+    expect(result.model).toBe('openrouter')
+    expect(result.text).toBe('OpenRouter generated summary.')
+    const fetchCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(fetchCall[0]).toContain('openrouter.ai')
+
+    delete process.env.OPENROUTER_API_KEY
+  })
+
+  it('Anthropic takes priority over OpenAI when both keys set', async () => {
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-test'
+    process.env.OPENAI_API_KEY    = 'sk-openai-test'
+    redis.get.mockResolvedValueOnce(null)
+    redis.setex.mockResolvedValueOnce('OK')
+
+    global.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        content: [{ type: 'text', text: 'Anthropic wins priority.' }],
+      }),
+    } as unknown as Response)
+
+    const { generateSignalSummary } = await import('../signal-summary')
+    const result = await generateSignalSummary(makeSample())
+
+    expect(result.model).toBe('anthropic')
+    const fetchCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(fetchCall[0]).toContain('anthropic.com')
+
+    delete process.env.ANTHROPIC_API_KEY
+    delete process.env.OPENAI_API_KEY
   })
 })

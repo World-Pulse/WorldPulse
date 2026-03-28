@@ -4,7 +4,7 @@ import { useState } from 'react'
 
 interface AISummaryData {
   text:        string
-  model:       'openai' | 'ollama' | 'extractive'
+  model:       'anthropic' | 'openai' | 'gemini' | 'openrouter' | 'ollama' | 'extractive'
   generatedAt: string
 }
 
@@ -15,9 +15,30 @@ interface AISummaryProps {
 }
 
 const MODEL_LABELS: Record<AISummaryData['model'], string> = {
+  anthropic:  'Claude (Anthropic)',
   openai:     'GPT-4o mini',
-  ollama:     'Local AI',
+  gemini:     'Gemini Flash',
+  openrouter: 'OpenRouter',
+  ollama:     'Local AI (Ollama)',
   extractive: 'Auto-summary',
+}
+
+const MODEL_ICONS: Record<AISummaryData['model'], string> = {
+  anthropic:  '🟠',
+  openai:     '🟢',
+  gemini:     '🔵',
+  openrouter: '🟣',
+  ollama:     '🏠',
+  extractive: '📝',
+}
+
+const PROVIDER_COLORS: Record<AISummaryData['model'], { bg: string; text: string }> = {
+  anthropic:  { bg: 'rgba(251,191,36,0.15)',  text: '#f97316' },
+  openai:     { bg: 'rgba(34,197,94,0.15)',   text: '#22c55e' },
+  gemini:     { bg: 'rgba(59,130,246,0.15)',  text: '#3b82f6' },
+  openrouter: { bg: 'rgba(168,85,247,0.15)',  text: '#a855f7' },
+  ollama:     { bg: 'rgba(6,182,212,0.15)',   text: '#06b6d4' },
+  extractive: { bg: 'rgba(100,116,139,0.15)', text: '#94a3b8' },
 }
 
 export function AISummary({ signalId, aiSummary: initialSummary, isAdmin }: AISummaryProps) {
@@ -78,8 +99,14 @@ export function AISummary({ signalId, aiSummary: initialSummary, isAdmin }: AISu
           </svg>
           AI Summary
           {summary && (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-blue-100 text-blue-600 dark:bg-blue-900/50 dark:text-blue-400">
-              {MODEL_LABELS[summary.model]}
+            <span
+              className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide"
+              style={{
+                background: PROVIDER_COLORS[summary.model].bg,
+                color:      PROVIDER_COLORS[summary.model].text,
+              }}
+            >
+              {MODEL_ICONS[summary.model]} {MODEL_LABELS[summary.model]}
             </span>
           )}
         </span>

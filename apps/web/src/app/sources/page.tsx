@@ -35,16 +35,6 @@ interface Source {
   lastScraped?: string | null
 }
 
-// Default sources shown while API loads
-const DEMO_SOURCES: Source[] = [
-  { id: '1', slug: 'ap-news',     name: 'AP News',         url: 'https://apnews.com',              tier: 'wire',     trustScore: 0.97, language: 'en', country: 'US', categories: ['breaking','geopolitics','economy'],  active: true },
-  { id: '2', slug: 'reuters',     name: 'Reuters',         url: 'https://reuters.com',             tier: 'wire',     trustScore: 0.96, language: 'en', country: 'GB', categories: ['breaking','economy','geopolitics'],   active: true },
-  { id: '3', slug: 'bbc-world',   name: 'BBC World',       url: 'https://bbc.com/news/world',      tier: 'wire',     trustScore: 0.95, language: 'en', country: 'GB', categories: ['breaking','geopolitics','culture'],   active: true },
-  { id: '4', slug: 'al-jazeera', name: 'Al Jazeera',      url: 'https://aljazeera.com',           tier: 'national', trustScore: 0.88, language: 'en', country: 'QA', categories: ['geopolitics','conflict','culture'],   active: true },
-  { id: '5', slug: 'guardian',    name: 'The Guardian',    url: 'https://theguardian.com',         tier: 'national', trustScore: 0.87, language: 'en', country: 'GB', categories: ['climate','science','geopolitics'],    active: true },
-  { id: '6', slug: 'who',         name: 'WHO',             url: 'https://who.int',                 tier: 'wire',     trustScore: 0.98, language: 'en', country: null, categories: ['health'],                            active: true },
-  { id: '7', slug: 'usgs-quakes', name: 'USGS Earthquakes',url: 'https://earthquake.usgs.gov',    tier: 'wire',     trustScore: 0.99, language: 'en', country: 'US', categories: ['disaster'],                          active: true },
-]
 
 function TrustBar({ score }: { score: number }) {
   const pct = Math.round(score * 100)

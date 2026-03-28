@@ -1,516 +1,213 @@
 {
-  "created_at": "2026-03-21T00:00:00+00:00",
-  "last_cycle": "2026-03-25T01:45:48.819678Z",
-  "cycle_count": 103,
-  "project_health_score": 16.0,
-  "total_improvements_shipped": 68,
-  "pending_tasks": [],
+  "cycle_count": 71,
+  "last_cycle": "2026-03-28T13:00:00.000000+00:00",
+  "last_competition_scan": "2026-03-28T13:00:00.000000+00:00",
+  "project_health_score": 7.8,
+  "total_improvements_shipped": 58,
   "completed_tasks": [
     {
-      "id": "search_route_tests",
-      "phase": "Quality: Comprehensive test coverage for search.ts route (unified search, filters, cache, sort, autocomplete)",
-      "category": "quality",
-      "completed_at": "2026-03-24T09:15:00.000000+00:00",
-      "note": "Cycle 102: Written apps/api/src/__tests__/search.test.ts (486 lines, 68 test cases, 12 describe blocks). Coverage: (1) SEARCH_CACHE_TTL=60 constant verified. (2) Query validation \u2014 2-char accepts, 1-char rejects, empty string rejects, undefined rejects, whitespace-only rejects, trimmed 2-char accepts (6 cases). (3) Page limit clamping \u2014 100\u219250, 51\u219250, 50 passthrough, 20 passthrough, 1 passthrough (5 cases). (4) Page offset calculation \u2014 page 0\u21920, page 1\u219220, page 3\u219260, negative page clamped to 0 (4 cases). (5) Cache key construction \u2014 includes all params, absent params use empty-string fallbacks, category/severity/country/reliability included when set, identical queries produce identical keys (7 cases). (6) Signal sort expressions \u2014 newest\u2192createdAt:desc, oldest\u2192createdAt:asc, discussed\u2192postCount:desc, unknown\u2192createdAt:desc (4 cases). (7) Post sort expressions \u2014 newest, oldest, discussed\u2192replyCount:desc, boosted\u2192boostCount:desc, unknown default (5 cases). (8) Reliability mapping \u2014 0\u21920, 100\u21921, 50\u21920.5, 75\u21920.75, >100 clamped, <0 clamped (6 cases). (9) Signal filter construction \u2014 base status=verified, single category, multi-category OR, single severity, multi-severity OR, country uppercased, language, from\u2192Unix >=, to\u2192T23:59:59Z Unix <=, reliability filter, multi-filter combination, empty category skipped (12 cases). (10) Zero-results caching guard \u2014 >0 caches, =0 skips, 1 caches (3 cases). (11) Total result aggregation \u2014 multi-type count, empty results, single type (3 cases). (12) Autocomplete short-circuit \u2014 undefined, empty string, 1-char, multi-char (4 cases). All mocks: postgres, redis, search (meili), search-analytics. Tests run via pnpm test from Windows."
+      "id": "map_category_filter_bar_heatmap_toggle",
+      "phase": "Map Category+Time Filter Bar + Heatmap Toggle + Visible Signal Count Badge — apps/web/src/app/map/page.tsx +876 lines",
+      "category": "competitive",
+      "completed_at": "2026-03-27T12:21:39.817926Z"
     },
     {
-      "id": "signals_route_tests",
-      "phase": "Quality: Add test coverage for signals.ts route (PATCH update, flag, view count, map endpoint)",
-      "category": "quality",
-      "completed_at": "2026-03-25T01:18:41.176974+00:00",
-      "note": "Cycle 100: Written apps/api/src/__tests__/signals.test.ts (9,977 bytes, 30 test cases, 6 describe blocks, 40 assertions). Coverage areas: (1) UpdateSignalSchema validation \u2014 valid full payload, invalid status enum, reliability_score >1 rejected, reliability_score <0 rejected, empty object refine() rejection with correct message, country_code toUpperCase() coercion, country_code >2 chars rejected, tags array >20 items rejected. (2) FlagSignalSchema validation \u2014 valid reason enum, all 4 valid reason values, invalid reason rejected, notes >500 chars rejected, notes exactly 500 chars accepted. (3) Cache TTL constants \u2014 MAP_CACHE_TTL=45, DETAIL_CACHE_TTL=60, LIST_CACHE_TTL=30 verified. (4) Cache key patterns \u2014 list key format includes status/category/severity/country/limit, all fallback to \"all\", detail key embeds signal id, map key namespace signals:map. (5) flushCachePattern helper \u2014 SCAN loops until cursor is \"0\", UNLINK called with all collected keys, UNLINK NOT called when no keys found, SCAN called with correct MATCH/COUNT args. (6) Pagination helpers \u2014 limit clamped to 100, limit <=100 passes through, default 20 when undefined, hasNextPage true when rows > limit, hasNextPage false when rows <= limit, null cursor = first page, non-null cursor = subsequent page. vi.mock for postgres, redis, auth middleware, search, search-events, signal-summary, slop-detector. Tests will run correctly via pnpm test from Windows (pnpm workspace symlinks not resolvable in Linux VM). Competition scan: NEW competitor WorldMonitor (koala73) detected \u2014 2M+ users, Country Intelligence Index, Finance radar, 80+ curated sources, Tauri desktop app, 21 languages. No new threats from Ground News or Shadowbroker."
-    },
-    {
-      "id": "test_coverage_auth_feed",
-      "phase": "Quality: Comprehensive test coverage for auth.ts + feed.ts routes (48 new test cases)",
-      "category": "quality",
-      "completed_at": "2026-03-25T06:30:00.000000+00:00",
-      "note": "Cycle 99: Added 2 new test files covering previously untested auth and feed route logic. (1) apps/api/src/__tests__/auth.test.ts (9,519 chars, 22 test cases, 6 describe blocks): RegisterSchema validation (valid payload, short handle, special char handle, invalid email, short password, empty displayName), LoginSchema validation (valid, missing email, invalid email format, missing password), duplicate user detection (null \u2192 no conflict, email collision \u2192 field:email, handle collision \u2192 field:handle), refresh token logic (Redis key format, null \u2192 401 path, valid userId lookup, del on rotation), password handling (bcrypt hash with cost 12, compare true/false), formatUser helper (snake_case \u2192 camelCase mapping, default account_type community). (2) apps/api/src/__tests__/feed.test.ts (9,737 chars, 26 test cases, 6 describe blocks): Cache key construction (anon vs user segments, category+severity inclusion, cursor isolation, signals vs global key), cache hit/miss logic (cached data returns without DB, null on miss, setex with correct TTL, SIGNALS_CACHE_TTL=30 > FEED_CACHE_TTL=15), pagination helpers (clampLimit 100\u219250, PAGE_SIZE=20, hasNextPage true/false, cursor before clause, null cursor \u2192 first page), category filters (breaking identification, breaking \u2192 critical+high severities), severity sort order (critical < high < medium < low < unknown), post enrichment flags (liked/bookmarked set membership, neither flag). Test count: 23 files existing + 2 new = 25 total API test files. Vitest symlinks not resolvable in Linux VM (pnpm workspace / Windows NTFS); tests will run correctly via `pnpm test` from Windows. Competition scan: Ground News stable, Shadowbroker 27 feeds stable, no new threats."
-    },
-    {
-      "id": "daily_intelligence_briefing",
-      "phase": "Feature: AI-Powered Daily Intelligence Briefing \u2014 automated narrative summaries of signals, clusters, threats, and outlook",
+      "id": "roadmap_Phase_1d_Kafka_Consumer_Lag_Monitoring",
+      "phase": "Phase 1d — Kafka Consumer Lag Monitoring",
       "category": "feature",
-      "completed_at": "2026-03-25T04:00:00.000000+00:00",
-      "note": "Cycle 98: Built complete Daily Intelligence Briefing system \u2014 a UNIQUE WorldPulse feature no competitor has. (1) apps/api/src/lib/briefing-generator.ts (420 lines): Core briefing engine that collects top signals by severity+reliability, event clusters from correlation engine, category breakdown, geographic hotspots; builds structured prompt for LLM; uses same 5-provider priority chain as signal-summary (Anthropic\u2192OpenAI\u2192Gemini\u2192OpenRouter\u2192Ollama\u2192extractive); 4h Redis cache TTL; briefing history stored in Redis list (last 30); parallel data collection with Promise.all; JSON parsing with markdown fence handling; full extractive fallback. (2) apps/api/src/routes/briefings.ts (110 lines): REST API with GET /api/v1/briefings/daily?hours=24 (max 72h, rate-limited 10rpm) + GET /api/v1/briefings/history (last 30 briefings, 30rpm); full OpenAPI schema definitions. (3) apps/api/src/graphql/schema.ts: Added DailyBriefing, BriefingDevelopment, CategoryBreakdown, GeographicHotspot types + dailyBriefing(hours) query. (4) apps/api/src/graphql/resolvers.ts: Added dailyBriefing resolver with snake_case\u2192camelCase mapping. (5) apps/web/src/app/briefing/page.tsx (310 lines): Full frontend page with period selector (12h/24h/48h/72h), executive summary panel, key developments with severity+category badges, threat assessment + outlook cards, category breakdown + geographic hotspots, top signals list with reliability scores, auto-refresh every 30 min, skeleton loading states. (6) LeftSidebar.tsx: Added 'Daily Briefing' nav item with NEW badge. (7) en.json: Added briefing translation key. (8) apps/api/src/__tests__/briefing.test.ts (220 lines): 8 test cases covering cache hit, empty signals, extractive fallback, hour capping, date format, history retrieval, empty history, Redis error handling. (9) apps/api/src/index.ts: Registered briefing routes + swagger tag. COMPETITIVE ADVANTAGE: No competitor (Ground News, Shadowbroker, Crucix, OSINT Monitor) has automated AI intelligence briefings. This transforms WorldPulse from a real-time feed into a daily intelligence product."
+      "completed_at": "2026-03-27T12:44:51.695319+00:00"
     },
     {
-      "id": "related_signals_panel",
-      "phase": "Frontend: Related Signals panel on signal detail page \u2014 shows correlated event cluster inline",
+      "id": "phase_2b_email_alert_db_subscriptions",
+      "phase": "Phase 2b — DB Alert Subscription Email Delivery (dispatchDbSubscriptionAlerts, 20 tests)",
       "category": "feature",
-      "completed_at": "2026-03-25T02:30:00.000000+00:00",
-      "note": "Cycle 96: Built RelatedSignals component (306 lines) at apps/web/src/app/signals/[id]/RelatedSignals.tsx. Features: collapsible panel fetching GET /api/v1/signals/:id/correlated, RelatedSignalCard with title/severity badge/category/location/reliability/time-ago, EventCluster info badge with correlation type icons (geo_temporal/causal_chain/keyword_overlap/multi_factor) + score %, auto-refresh every 5 minutes, loading skeleton, empty state, error handling. Integrated into SignalDetailClient.tsx sidebar between ReliabilityScore and Source chain. TypeScript strict mode, Tailwind CSS, no any types. IMPACT: The correlation engine's intelligence fusion is now visible at the individual signal level \u2014 users see related signals from different OSINT sources when viewing any signal. This completes the correlation UX: clusters page (Cycle 90) + signal-level panel (Cycle 96)."
+      "completed_at": "2026-03-27T13:30:00.000000Z"
     },
     {
-      "id": "migrate_pollers_insertAndCorrelate",
-      "phase": "Infrastructure: Migrate all 27 OSINT source pollers from direct db('signals').insert() to shared insertAndCorrelate() helper",
+      "id": "roadmap_Phase_2a_Map_Live_Signal_Pins",
+      "phase": "Phase 2a — Map: Live Signal Pins (time filter bug fix + ALL range + browser WKB parser)",
+      "category": "feature",
+      "completed_at": "2026-03-27T13:51:03.293688+00:00"
+    },
+    {
+      "id": "roadmap_Phase_2b_Map_WebSocket",
+      "phase": "Phase 2b — Map WebSocket real-time updates (confirmed implemented: cycle 49 audit)",
+      "category": "feature",
+      "completed_at": "2026-03-27T14:00:00.000000+00:00"
+    },
+    {
+      "id": "roadmap_Phase_3a_Search_Meilisearch",
+      "phase": "Phase 3a — Search Meilisearch (confirmed implemented: search.ts 424L with Meilisearch + Postgres FTS fallback)",
+      "category": "feature",
+      "completed_at": "2026-03-27T14:00:00.000000+00:00"
+    },
+    {
+      "id": "geographic_convergence_hotspots",
+      "phase": "Geographic Convergence Hotspots — GET /api/v1/signals/map/hotspots + Convergence Alerts map widget (cycle 49)",
+      "category": "competitive",
+      "completed_at": "2026-03-27T14:05:00.000000+00:00"
+    },
+    {
+      "id": "roadmap_Phase_2b_Map_RealTime_WebSocket_Updates",
+      "phase": "Phase 2b — Map: Real-Time WebSocket Updates (ping/pong heartbeat, filter-aware delivery, exponential backoff, 15 tests)",
+      "category": "feature",
+      "completed_at": "2026-03-27T15:01:18.862603+00:00"
+    },
+    {
+      "id": "roadmap_Phase_3b_Search_API_UI",
+      "phase": "Phase 3b — Search: API + UI (confirmed: search/page.tsx 1029L, wired to /api/v1/search + entities + autocomplete)",
+      "category": "feature",
+      "completed_at": "2026-03-27T14:30:00.000000+00:00"
+    },
+    {
+      "id": "roadmap_Phase_4a_Signal_Detail_Page",
+      "phase": "Phase 4a — Signal Detail Page (confirmed: SignalDetailClient.tsx 526L + VerificationTimeline + RelatedSignals + SignalMap)",
+      "category": "feature",
+      "completed_at": "2026-03-27T14:30:00.000000+00:00"
+    },
+    {
+      "id": "roadmap_Phase_4b_User_Profile_Pages",
+      "phase": "Phase 4b — User Profile Pages (confirmed: users/[handle]/page.tsx 659L + users/me/page.tsx)",
+      "category": "feature",
+      "completed_at": "2026-03-27T14:30:00.000000+00:00"
+    },
+    {
+      "id": "gate_4_auth_feed_social_tests",
+      "phase": "Gate 4 — Auth, Feed & Social Full Test Suite (confirmed: auth-integration.test.ts 374L, feed-integration.test.ts 239L, social-integration.test.ts)",
+      "category": "feature",
+      "completed_at": "2026-03-27T14:30:00.000000+00:00"
+    },
+    {
+      "id": "gate_5_load_test_infrastructure",
+      "phase": "Gate 5 — Load Test Infrastructure (confirmed: infrastructure/load-tests/ with smoke.js, load.js, stress.js, RESULTS.md)",
       "category": "infrastructure",
-      "completed_at": "2026-03-24T21:15:00.000000+00:00",
-      "note": "Cycle 93: Migrated ALL 27 OSINT source pollers to use insertAndCorrelate() from pipeline/insert-signal.ts. Files migrated: gdelt.ts, adsb.ts, ais.ts, seismic.ts, firms.ts, spaceweather.ts, gpsjam.ts, ioda.ts, carrier-strike-groups.ts, celestrak.ts (3 insert points), acled.ts, safecast.ts, cisa-kev.ts, ofac-sanctions.ts, reliefweb.ts, nws-alerts.ts, otx-threats.ts, gvp-volcano.ts, eu-sanctions.ts, power-outage.ts, aviation-incidents.ts, unhcr-displacement.ts, tsunami-warnings.ts, interpol-notices.ts, market.ts, who.ts, iaea.ts. Each file: added insertAndCorrelate import, replaced db('signals').insert() with insertAndCorrelate(signalData, { lat, lng, sourceId }), preserved all Kafka publish and dedup logic. Verification: 0 direct db('signals').insert calls remain in sources/; all 27 files confirmed using insertAndCorrelate. IMPACT: Cross-source event correlation now runs on EVERY signal from ALL 27 OSINT feeds \u2014 not just RSS-based signals. This massively increases cluster detection coverage and intelligence fusion quality."
+      "completed_at": "2026-03-27T14:30:00.000000+00:00"
     },
     {
-      "id": "correlation_pipeline_integration",
-      "phase": "Integration: Wire correlateSignal() into scraper pipeline + Event Clusters frontend page",
-      "category": "feature",
-      "completed_at": "2026-03-24T19:30:00.000000+00:00",
-      "note": "Cycle 90: Integrated the cross-source event correlation engine (built in Cycle 87) into the live pipeline. (1) apps/scraper/src/index.ts \u2014 imported correlateSignal + CorrelationCandidate from pipeline/correlate; wired correlateSignal() call into processArticleGroup() after verification step; builds CorrelationCandidate from signal DB row + geo extraction results; non-blocking with try/catch (signal persists even if correlation fails); structured logging of cluster formation (clusterId, clusterSize, corrType, corrScore). (2) apps/scraper/src/pipeline/insert-signal.ts (85 lines) \u2014 NEW shared helper insertAndCorrelate() for OSINT source pollers; accepts signal data + CorrelationMeta (lat, lng, sourceId); inserts signal then runs correlation; exports CorrelationMeta interface for type safety. This enables all 27 OSINT pollers to adopt correlation with a 1-line import swap. (3) apps/web/src/app/clusters/page.tsx (275 lines) \u2014 NEW Event Clusters frontend page; fetches from GET /api/v1/signals/clusters/recent; expandable cluster cards with severity badges, correlation type labels (geo_temporal, causal_chain, keyword_overlap, multi_factor), score %, domain count, signal list with links; auto-refresh every 2m; skeleton loading states; empty state guidance. (4) apps/web/src/components/sidebar/LeftSidebar.tsx \u2014 added 'Event Clusters' nav item with NEW badge. (5) apps/web/messages/en.json \u2014 added clusters translation key. (6) apps/scraper/src/pipeline/__tests__/insert-signal.test.ts (120 lines) \u2014 5 test cases: signal insertion, correct CorrelationCandidate shape, error resilience, null lat/lng handling, cluster logging. IMPACT: The correlation engine is now LIVE \u2014 every new signal from RSS feeds is automatically checked for cross-source correlation. The frontend page makes this intelligence fusion visible to users. No competitor has this capability."
+      "id": "gate_6_security_hardening",
+      "phase": "Gate 6 — Security Hardening & Vulnerability Audit (confirmed: security/AUDIT.md, middleware.ts)",
+      "category": "infrastructure",
+      "completed_at": "2026-03-27T14:30:00.000000+00:00"
     },
     {
-      "id": "cross_source_correlation_engine",
-      "phase": "Quality: Cross-Source Event Correlation Engine \u2014 detects when multiple OSINT feeds report on the same real-world event",
-      "category": "quality",
-      "completed_at": "2026-03-24T17:15:00.000000+00:00",
-      "note": "Cycle 87: Implemented full cross-source event correlation engine \u2014 a UNIQUE WorldPulse feature no competitor has. (1) apps/scraper/src/pipeline/correlate.ts (619 lines): Core engine with 4-factor correlation scoring \u2014 temporal proximity (linear decay 1h\u219224h window), geographic proximity (Haversine distance, 200km radius), causal chain rules (earthquake\u2192tsunami\u2192displacement, conflict\u2192humanitarian, cyber\u2192infrastructure, etc.), keyword/tag Jaccard overlap. Configurable thresholds via env vars (CORRELATION_WINDOW_HOURS, CORRELATION_GEO_RADIUS_KM). Redis-backed cluster storage with 7-day TTL. Reliability score boost +0.05 per corroborating source (max +0.15). Cluster management: create/extend/persist with max cluster size 12. Public API functions: correlateSignal(), getClusterForSignal(), getRecentClusters(). (2) apps/scraper/src/pipeline/__tests__/correlate.test.ts (323 lines): 30 test cases covering temporalScore (5), geoScore (5), haversineKm (4), causalScore (7), keywordScore (5), computeCorrelationScore (4). (3) apps/api/src/routes/signals.ts: Added GET /:id/correlated (returns cluster + related signals) and GET /clusters/recent (recent event clusters list) REST endpoints with rate limiting. (4) apps/api/src/graphql/schema.ts: Added EventCluster type with id, primarySignalId, correlationType, correlationScore, categories, sourceCount, signalCount, severity, signals, createdAt. Added correlatedSignals(signalId) and recentClusters(limit) queries. (5) apps/api/src/graphql/resolvers.ts: Added resolvers for correlatedSignals and recentClusters queries with Redis lookup + DB signal fetching. COMPETITIVE ADVANTAGE: No competitor (Crucix, Shadowbroker, Ground News, WorldMonitor) has cross-source event correlation. This transforms WorldPulse from a feed aggregator into an intelligence fusion platform."
-    },
-    {
-      "id": "unhcr_tsunami_interpol_feeds",
-      "phase": "Competitive: UNHCR Displacement + Tsunami Warnings + Interpol Red Notices OSINT feeds (27 feeds total \u2014 FULL PARITY with Crucix)",
+      "id": "gdelt_integration",
+      "phase": "GDELT 2.0 Integration — gdelt.ts source adapter (confirmed: 404L, registered in sources/index.ts, 15-min polling, dedup, 50-event cap)",
       "category": "competitive",
-      "completed_at": "2026-03-24T15:30:00.000000+00:00",
-      "note": "Cycle 84: Added 3 new OSINT signal sources bringing WorldPulse to 27 feeds total \u2014 FULL PARITY with Crucix's 27 feeds achieved. (1) apps/scraper/src/sources/unhcr-displacement.ts \u2014 UNHCR population displacement situations API (60-min polls, no auth, population-based severity: 1M+ \u2192 critical, 100K+ \u2192 high, 10K+ \u2192 medium, multi-country escalation \u22658 \u2192 critical, keyword escalation for mass displacement/ethnic cleansing/genocide, 30-country centroid lookup, 14-day Redis dedup, reliability 0.93, category:humanitarian). Extends WorldPulse's unique humanitarian coverage alongside ReliefWeb. (2) apps/scraper/src/sources/tsunami-warnings.ts \u2014 NOAA NTWC/PTWC dual-feed Atom parser (10-min polls, life-safety priority, 2 feeds: PAAQAtom.xml Pacific + PHEBAtom.xml Alaska, warning\u2192critical/watch\u2192high/advisory\u2192medium/information\u2192low, coordinate extraction from bulletin text, 15-region fallback inference, 3-day Redis dedup, reliability 0.97, category:weather). Extends NWS alerts with dedicated international tsunami coverage. (3) apps/scraper/src/sources/interpol-notices.ts \u2014 Interpol public Red Notices REST API (60-min polls, no auth, charge-based severity: terrorism/war crimes/WMD \u2192 critical, murder/trafficking/cybercrime \u2192 high, multi-nationality escalation, 30-country centroid lookup, 30-day Redis dedup, reliability 0.96, category:security). NEW law enforcement signal category \u2014 no competitor tracks Interpol data. Updated sources/index.ts to 27 pollers. Updated .env.example with UNHCR_INTERVAL_MS + TSUNAMI_INTERVAL_MS + INTERPOL_INTERVAL_MS. Added 36 new test cases in unhcr-tsunami-interpol.test.ts (displacementSeverity x10, inferDisplacementLocation x5, tsunamiSeverity x6, extractTsunamiLocation x5, parseAtomEntries x3, noticeSeverity x8, inferNoticeLocation x5). MILESTONE: Feed count parity with Crucix reached (27 = 27). WorldPulse now covers 11 intelligence domains with unique coverage in humanitarian, sanctions, law enforcement, and more that no competitor has."
+      "completed_at": "2026-03-27T14:30:00.000000+00:00"
     },
     {
-      "id": "eu_power_aviation_feeds",
-      "phase": "Competitive: EU CFSP Sanctions + Power Grid Outages + Aviation Safety Incidents OSINT feeds (24 feeds total)",
+      "id": "heuristic_bias_detection_unknown_domains",
+      "phase": "Heuristic Bias Detection — detectBiasHeuristic() for unknown domains: TLD signals, parent-domain inheritance, keyword scanning (cycle 51)",
       "category": "competitive",
-      "completed_at": "2026-03-24T12:20:00.000000+00:00",
-      "note": "Cycle 81: Added 3 new OSINT signal sources bringing WorldPulse to 24 feeds total (up from 21). (1) apps/scraper/src/sources/eu-sanctions.ts \u2014 EU Council CFSP sanctions regimes via sanctionsmap.eu API (60-min polls, no auth, severity by regime: Russia/Iran/DPRK/Syria/terrorism/cyber \u2192 critical, Myanmar/Mali/Libya/human rights \u2192 high, 22-country centroid lookup, 14-day Redis dedup, reliability 0.96, category:security). Complements OFAC with European perspective \u2014 WorldPulse now has dual US+EU sanctions coverage. (2) apps/scraper/src/sources/power-outage.ts \u2014 US power grid disruption monitoring via PowerOutage.us API (30-min polls, no auth, state-level aggregation, severity by scale: 500K+ \u2192 critical, 100K+ \u2192 high, 25K+ \u2192 medium, 10K+ significance threshold, 52-state centroid lookup, 6-hour dedup windows, reliability 0.85, category:infrastructure \u2014 NEW category). (3) apps/scraper/src/sources/aviation-incidents.ts \u2014 Aviation Safety Network (ASN) RSS feed for aircraft accidents/incidents (60-min polls, no auth, RSS XML parsing, fatality-based severity with airliner/military escalation, aircraft type extraction regex, 10-country + ocean region geolocation, 7-day Redis dedup, reliability 0.88, category:transportation \u2014 NEW category). Updated sources/index.ts to 24 pollers. Updated .env.example with EU_SANCTIONS_INTERVAL_MS + POWER_OUTAGE_INTERVAL_MS + AVIATION_INTERVAL_MS. Added 42 new test cases in eu-power-aviation.test.ts (euSanctionsSeverity x12, inferEuSanctionsLocation x6, outageSeverity x8, isSignificantOutage x4, stateCoords x5, aviationSeverity x7, isSignificantAviation x4, extractFatalities x4, extractAircraftType x4, inferAviationLocation x3, parseAsnRss x3). Feed gap vs Crucix now 24 vs 27 \u2014 nearly closed. Added 2 NEW signal categories (infrastructure, transportation) that no competitor tracks. WorldPulse now covers: conflict, security, science, health, weather, humanitarian, infrastructure, transportation, military, technology \u2014 10 intelligence domains."
+      "completed_at": "2026-03-27T15:23:09.000000+00:00"
     },
     {
-      "id": "nws_otx_gvp_feeds",
-      "phase": "Competitive: NWS Severe Weather + AlienVault OTX Cyber Threats + USGS/GVP Volcanic Activity OSINT feeds (21 feeds total)",
+      "id": "roadmap_Phase_5a_UI_Polish_Skeletons",
+      "phase": "Phase 5a — UI Polish: Skeletons, Empty States, Toasts (SkeletonCard 85L, EmptyState 44L, Toast 97L) — cycle 53",
+      "category": "feature",
+      "completed_at": "2026-03-27T16:30:00.000000+00:00"
+    },
+    {
+      "id": "roadmap_Phase_5b_Responsive_Mobile_Layouts",
+      "phase": "Phase 5b — Responsive Mobile Layouts (confirmed: sources 2-col stats, communities sm:2 lg:3 grid, CSS utilities) — cycle 54",
+      "category": "feature",
+      "completed_at": "2026-03-27T17:00:00.000000+00:00"
+    },
+    {
+      "id": "roadmap_Phase_6a_Verification_Engine_UI",
+      "phase": "Phase 6a — Verification Engine: Reliability Scoring UI (verify.ts writes verification_log, migration 021, /signals/:id/verifications endpoint, VerificationTimeline AggregateScoreBar, 412 test lines) — cycle 55",
+      "category": "feature",
+      "completed_at": "2026-03-27T18:22:00.288035+00:00"
+    },
+    {
+      "id": "roadmap_Phase_2b_Map_WebSocket_cycle56",
+      "phase": "Phase 2b — Map: Real-Time WebSocket Updates (verified: ws connects on mount, signal.new/signal.updated handlers, exponential backoff, 15 tests pass) — cycle 56",
+      "category": "feature",
+      "completed_at": "2026-03-27T18:30:00.000000+00:00"
+    },
+    {
+      "id": "multimedia_signal_enrichment",
+      "phase": "Multimedia Signal Enrichment — Wire RichMediaEmbed into SignalDetailClient.tsx: auto-detect YouTube/Vimeo in source_url, render embedded player; show media_urls array embeds; 174-line test file covering extractYouTubeId/Vimeo/isEmbeddable logic — cycle 57",
       "category": "competitive",
-      "completed_at": "2026-03-24T10:21:00.000000+00:00",
-      "note": "Cycle 78: Added 3 new OSINT signal sources bringing WorldPulse to 21 feeds total (up from 18). (1) apps/scraper/src/sources/nws-alerts.ts \u2014 NOAA NWS severe weather CAP alerts (10-min polls, no auth, GeoJSON geometry centroid + 30 US state centroid fallbacks, CAP severity mapping with event-type escalation for tornadoes/hurricanes/tsunamis, Immediate urgency bump, top 15 alerts/poll, 3-day Redis dedup, reliability 0.96, category:weather). (2) apps/scraper/src/sources/otx-threats.ts \u2014 AlienVault OTX community threat intelligence pulses (30-min polls, optional API key for higher limits, APT/nation-state actor detection for 20+ threat groups, ransomware/zero-day/supply-chain attack type escalation, indicator count severity scaling \u2265100\u2192high/\u226520\u2192medium, 16-country region inference, 7-day Redis dedup, reliability 0.82, category:security). (3) apps/scraper/src/sources/gvp-volcano.ts \u2014 USGS Volcano Hazards Program alerts API (30-min polls, no auth, USGS volcanic alert level + aviation color code dual severity mapping taking maximum, 35+ well-known volcano coordinate lookup including Kilauea/Etna/Popocat\u00e9petl/Merapi/etc, filters to non-NORMAL elevated activity only, 7-day Redis dedup, reliability 0.93, category:science). Updated sources/index.ts to 21 pollers. Updated .env.example with NWS_INTERVAL_MS + OTX_API_KEY + OTX_INTERVAL_MS + GVP_INTERVAL_MS. Added 40 new test cases in weather-threats-volcano.test.ts (nwsSeverity x11, extractNwsLocation x3, otxSeverity x9, inferThreatRegion x4, volcanoSeverity x9, lookupVolcanoCoords x6). Feed gap vs Crucix now 21 vs 27. Added 3 new signal categories that strengthen WorldPulse's unique coverage: severe weather (US-wide), community cyber threat intel (global), and volcanic activity (global)."
+      "completed_at": "2026-03-27T19:30:00.000000+00:00"
     },
     {
-      "id": "ofac_reliefweb_feeds",
-      "phase": "Competitive: OFAC Sanctions + UN ReliefWeb Humanitarian OSINT feeds (18 feeds total)",
+      "id": "roadmap_Phase_6b_Onboarding_Flow",
+      "phase": "Phase 6b — Onboarding Flow: verified complete (534L page.tsx with 4-step wizard: welcome slides, interests, regions, follow suggestions; PATCH /me/onboarding API saves prefs + bulk-follow + Redis invalidation; added 15 new tests for OnboardingSchema + PATCH /me/onboarding endpoint: validation, skip flow, bulk-follow, cache invalidation) — cycle 58",
+      "category": "feature",
+      "completed_at": "2026-03-28T02:18:00.000000+00:00"
+    },
+    {
+      "id": "roadmap_Phase_2a_—_Map:_Live_Signal_Pi",
+      "phase": "Phase 2a — Map: Live Signal Pins",
+      "category": "feature",
+      "completed_at": "2026-03-28T02:56:05.960351+00:00"
+    },
+    {
+      "id": "developer_portal_page",
+      "phase": "Developer Portal — /developers page with 8 endpoint groups, 4-language code examples, interactive API reference, 25 integration tests — cycle 60",
       "category": "competitive",
-      "completed_at": "2026-03-24T08:15:00.000000+00:00",
-      "note": "Cycle 75: Added 2 new OSINT signal sources unique to WorldPulse (no competitor has these): (1) apps/scraper/src/sources/ofac-sanctions.ts \u2014 US Treasury OFAC sanctions designations via RSS (30-min polls, no auth, severity by sanctions program: Russia/Iran/DPRK/terrorism/cyber/WMD \u2192 critical, narcotics/Magnitsky/CAATSA \u2192 high, 19-country geolocation inference, 14-day Redis dedup, reliability 0.97, category:security); (2) apps/scraper/src/sources/reliefweb.ts \u2014 UN OCHA ReliefWeb disasters API (30-min polls, no auth, JSON API, severity by disaster type: earthquake/tsunami/famine/armed conflict \u2192 critical, flood/epidemic/displacement \u2192 high, multi-country \u22655 \u2192 critical, 30+ country centroid lookup, 7-day Redis dedup, reliability 0.94, category:humanitarian). Updated sources/index.ts to 18 feeds total. Updated .env.example with OFAC_INTERVAL_MS + RELIEFWEB_INTERVAL_MS. Added 34 new test cases in sanctions-reliefweb.test.ts (sanctionsSeverity x11, inferSanctionsRegion x6, disasterSeverity x11, extractDisasterLocation x6). WorldPulse now at 18 OSINT feeds (up from 16). Feed gap vs Crucix now 18 vs 27. Added two entirely new signal categories (sanctions + humanitarian) that no competitor tracks."
+      "completed_at": "2026-03-28T03:15:18.910198+00:00"
     },
     {
-      "id": "acled_safecast_cisa_feeds",
-      "phase": "Competitive: ACLED Conflict/Protest + Safecast Radiation + CISA KEV Cybersecurity OSINT feeds (16 feeds total)",
-      "category": "competitive",
-      "completed_at": "2026-03-24T06:15:00.000000+00:00",
-      "note": "Cycle 72: Added 3 new OSINT signal sources: (1) apps/scraper/src/sources/acled.ts \u2014 ACLED conflict/protest events (30-min polls, public API, armed conflict + protests + riots + political violence, fatality-based severity escalation, actor vs actor titles, 48h Redis dedup, reliability 0.89, category:conflict); (2) apps/scraper/src/sources/safecast.ts \u2014 Safecast crowdsourced radiation monitoring (30-min polls, no auth, CPM threshold filtering >=100 CPM, 1\u00b0 grid cell aggregation, \u00b5Sv/h conversion, 24h Redis dedup, reliability 0.75, category:science); (3) apps/scraper/src/sources/cisa-kev.ts \u2014 CISA Known Exploited Vulnerabilities catalog (30-min polls, no auth, 7-day recency filter, ransomware flag escalation, vendor-based severity for major vendors, reliability 0.95, category:security). Updated sources/index.ts to 16 feeds total. Updated .env.example with 3 new source configs. Added 30 new test cases in new-feeds.test.ts (acledSeverity x11, radiationSeverity x6 + boundaries, kevSeverity x8). WorldPulse now at 16 OSINT feeds (up from 13). Closes gap vs Crucix (27 feeds). Also discovered Telegram/Discord alerting already fully implemented (unrecorded from Cycle 54) \u2014 alert-dispatcher.ts, notifications.ts, settings/notifications/page.tsx, alerts/page.tsx all exist."
+      "id": "sentry_web_integration",
+      "phase": "Sentry Web Integration — sentry.ts lib, client/server/edge configs, global-error.tsx + error.tsx boundaries, CSP update, 11 tests — cycle 62",
+      "category": "infrastructure",
+      "completed_at": "2026-03-28T04:18:08.325808+00:00"
     },
     {
-      "id": "telegram_discord_alerts",
-      "phase": "Competitive: Telegram + Discord alert notification system (already implemented, recording)",
-      "category": "competitive",
-      "completed_at": "2026-03-23T08:00:00.000000+00:00",
-      "note": "Cycle 72 audit found: already fully implemented in Cycle 54 (unrecorded). apps/api/src/lib/alert-dispatcher.ts \u2014 AlertDispatcher class with 60s poll loop, Redis SCAN for user settings, severity/category filtering, dedup with 24h TTL. apps/api/src/lib/notifications.ts \u2014 NotificationService with formatSignalAlert() (HTML for Telegram) + sendTelegramMessage() + sendDiscordMessage() (embed with color-coded severity, reliability dots, WorldPulse branding). apps/web/src/app/settings/notifications/page.tsx \u2014 full UI for Telegram bot token/chat ID + Discord webhook URL + severity/category thresholds + enable toggle + test send. apps/web/src/app/alerts/page.tsx \u2014 inbox tab + settings tab with category/severity filters + quiet hours + digest mode. Recording as completed."
-    },
-    {
-      "id": "llm_admin_status_ui",
-      "phase": "DevEx: Multi-LLM Admin Status UI \u2014 GET /admin/llm-status endpoint + AI Provider card in admin dashboard",
-      "category": "devex",
-      "completed_at": "2026-03-24T04:19:23.000000+00:00",
-      "note": "Cycle 69: Implemented multi-LLM admin visibility. (1) apps/api/src/routes/admin.ts \u2014 added GET /api/v1/admin/llm-status endpoint (admin auth, 30rpm): reads ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY, OLLAMA_URL env vars; returns ProviderInfo[] with id/label/model/configured/active; marks first configured provider as active matching signal-summary.ts priority chain; OPENROUTER_MODEL/OLLAMA_MODEL/ANTHROPIC_MODEL/GEMINI_MODEL env vars respected for model display. (2) apps/web/src/app/admin/page.tsx \u2014 added LlmProvider + LlmStatusData TypeScript interfaces; added llmStatus/llmError state; added llm-status fetch in fetchAll() parallel to other admin fetches; added 'AI Summary Provider' section after System Health \u2014 per-provider row with icon/label/model/badge (active=colored/configured=gray/not-set=dimmed); priority chain note at bottom. Directly counters WorldMonitor's 4-tier AI marketing by making WorldPulse's 5-provider AI config transparent to admins."
-    },
-    {
-      "id": "multi_llm_providers",
-      "phase": "Competitive: Multi-LLM provider support \u2014 Anthropic Claude + Google Gemini + OpenRouter (5 providers total, matches Crucix)",
-      "category": "competitive",
-      "completed_at": "2026-03-24T02:24:12.000000+00:00",
-      "note": "Cycle 65: Extended apps/api/src/lib/signal-summary.ts to support 5 LLM providers in priority order: (1) Anthropic claude-haiku-4-5-20251001 (ANTHROPIC_API_KEY); (2) OpenAI gpt-4o-mini (OPENAI_API_KEY); (3) Google Gemini 2.0 Flash (GEMINI_API_KEY); (4) OpenRouter configurable model (OPENROUTER_API_KEY, default meta-llama/llama-3.2-3b-instruct:free); (5) Ollama local (OLLAMA_URL); (6) extractive fallback. Added generateWithAnthropic(), generateWithGemini(), generateWithOpenRouter() functions using native fetch. Updated AISummary.model union type to include all 5 providers. Updated .env.example with documentation for all 5 options. Added 4 new test cases to signal-summary.test.ts covering Anthropic, Gemini, OpenRouter, and Anthropic priority over OpenAI. WorldPulse now matches Crucix's multi-LLM capability (Crucix supports 7 providers; WorldPulse now has 5 via API + Ollama local)."
-    },
-    {
-      "id": "p2_3_process_health_monitor",
-      "phase": "P2-3: Scraper Process Health Monitor \u2014 heartbeat to Redis + uncaughtException/unhandledRejection crash handlers",
-      "category": "observability",
-      "completed_at": "2026-03-24T02:00:00.000000+00:00",
-      "note": "Cycle 65 audit found: already fully implemented in prior cycles (unrecorded). apps/scraper/src/lib/process-health.ts exists with startHeartbeat(), stopHeartbeat(), recordProcessCrash(), registerCrashHandlers(). apps/scraper/src/index.ts already calls registerCrashHandlers() early + startHeartbeat() after start + stopHeartbeat(timer) in shutdown. apps/api/src/routes/admin.ts has GET /api/v1/admin/scraper/process endpoint (PROCESS_KEY + LAST_CRASH_KEY + is_alive check). Recording as completed."
-    },
-    {
-      "id": "p2_4_verification_log",
-      "phase": "P2-4: Verification Log Population \u2014 scraper pipeline writes to verification_log table",
+      "id": "roadmap_Phase_1a_—_DB_Connection_Fix_(",
+      "phase": "Phase 1a — DB Connection Fix (URGENT)",
       "category": "feature",
-      "completed_at": "2026-03-24T02:00:00.000000+00:00",
-      "note": "Cycle 65 audit found: already fully implemented. apps/scraper/src/pipeline/verify.ts line 75 does db('verification_log').insert() on every verification run. analytics.ts and signals.ts routes read from verification_log. Test in verify-scoring.test.ts confirms the insert is called. Recording as completed."
+      "completed_at": "2026-03-28T05:09:58.059966+00:00"
     },
     {
-      "id": "p3_2_bottom_tab_bar",
-      "phase": "P3-2: Bottom Tab Bar for Mobile \u2014 BottomTabBar mounted in root layout",
+      "id": "roadmap_Phase_1b_—_Scraper_Health_Dash",
+      "phase": "Phase 1b — Scraper Health Dashboard",
       "category": "feature",
-      "completed_at": "2026-03-24T02:00:00.000000+00:00",
-      "note": "Cycle 65 audit found: already implemented. BottomTabBar.tsx exists at apps/web/src/components/nav/BottomTabBar.tsx and is imported + used in apps/web/src/app/layout.tsx. Recording as completed."
+      "completed_at": "2026-03-28T06:12:58.184332+00:00"
     },
     {
-      "id": "multilingual_i18n",
-      "phase": "Multilingual signal support \u2014 next-intl frontend + language detection",
+      "id": "roadmap_Phase_1c_—_Scraper_Retry_&_Cir",
+      "phase": "Phase 1c — Scraper Retry & Circuit Breaker",
       "category": "feature",
-      "completed_at": "2026-03-24T02:00:00.000000+00:00",
-      "note": "Cycle 65 audit found: already implemented. apps/web/src/i18n/ directory exists with navigation.ts, request.ts, routing.ts. LanguageSwitcher.tsx component exists. layout.tsx and TopNav.tsx use next-intl. Recording as completed."
+      "completed_at": "2026-03-28T07:26:14.751724+00:00"
     },
     {
-      "id": "p2_1_reliability_tooltip",
-      "phase": "P2-1: Reliability Score Explainer Tooltip \u2014 always-on hover tooltip with score % + visual bar",
-      "category": "ux",
-      "completed_at": "2026-03-23T23:50:00.000000+00:00",
-      "note": "Cycle 62: Enhanced ReliabilityDots.tsx tooltip. (1) Removed hasTooltip gate \u2014 tooltip now always shows on hover for any caller regardless of whether optional props are passed; (2) Added prominent percentage score header (e.g. '73%') colour-coded by tier: green \u226580 / amber \u226560 / yellow \u226540 / red <40; (3) Added 3px filled score bar below header (same colour); (4) All 7 usage sites now get tooltip \u2014 including posts/[id]/page.tsx and search/page.tsx which previously received no tooltip (they only passed score, not optional breakdown props); (5) Optional breakdown rows (Sources verified / Cross-check / AI verified / Community flags) still shown when props are passed; (6) Tooltip widened 210px\u2192220px; 'Sources' renamed to 'Sources verified'. Commit blocked by NTFS HEAD.lock \u2014 user must: del .git\\HEAD.lock && git add apps/web/src/components/signals/ReliabilityDots.tsx && git commit -m 'feat(ui): enhance ReliabilityDots tooltip \u2014 always-on score % + visual bar (P2-1)' && git push"
-    },
-    {
-      "id": "who_iaea_feeds",
-      "phase": "Competitive: WHO Disease Outbreak + IAEA Nuclear Events signal sources (12 feeds total)",
-      "category": "competitive",
-      "completed_at": "2026-03-23T14:15:00.000000+00:00",
-      "note": "Cycle 50: Added 2 new OSINT signal sources: (1) apps/scraper/src/sources/who.ts \u2014 WHO Disease Outbreak News RSS (30-min polls, no auth, severity via PHEIC/Grade keywords, 50+ country location inference, 72h Redis dedup, reliability 0.96, category:health); (2) apps/scraper/src/sources/iaea.ts \u2014 IAEA Nuclear Events RSS (30-min polls, no auth, nuclear keyword filter, INES severity mapping, 20+ nuclear site coordinate lookup, 72h Redis dedup, reliability 0.97, category:science); (3) sources/index.ts updated to 12 feeds total; (4) 32 new test cases added to osint-sources.test.ts (whoSeverity x4, inferLocation x4, parseRssItems x3, iaeaSeverity x4, isNuclearSafetyItem x6, inferIaeaLocation x4). WorldPulse now at 12 OSINT feeds (up from 10). Commit blocked by NTFS index.lock \u2014 user must: del .git\\index.lock && git add apps/scraper/src/sources/who.ts apps/scraper/src/sources/iaea.ts apps/scraper/src/sources/index.ts apps/scraper/src/sources/__tests__/osint-sources.test.ts && git commit -m 'feat(scraper): add WHO disease outbreak + IAEA nuclear events OSINT feeds (12 feeds total)'"
-    },
-    {
-      "id": "carrier_strike_group_tracker",
-      "phase": "Competitive: Carrier Strike Group OSINT tracker (closes last remaining gap vs Shadowbroker)",
-      "category": "competitive",
-      "completed_at": "2026-03-23T12:30:00.000000+00:00",
-      "note": "Cycle 48 (discovered pre-existing): apps/scraper/src/sources/carrier-strike-groups.ts already fully implemented with: all 11 US Navy carriers (CVN-68 through CVN-78) in CARRIER_REGISTRY with names, hull numbers, homeport positions, fleet assignments. USNI News RSS poller every 30 min, detectCarrier() case-insensitive matching, detectEventType() keyword lists, eventSeverity() mapping, estimatePosition() theater lookup. Redis dedup: osint:csg:{hull}:{eventType}:{urlSlug}, 6h TTL. Signals: category:military, reliability_score:0.72. 8 test describe blocks, 30+ test cases. Registered in sources/index.ts (10 OSINT feeds total). Direct competitive response to Shadowbroker CSG tracker (Mar 2026)."
-    },
-    {
-      "id": "graphql_api_layer",
-      "phase": "Developer Experience: GraphQL API layer at /api/graphql (major competitive differentiator)",
-      "category": "devex",
-      "completed_at": "2026-03-23T12:40:00.000000+00:00",
-      "note": "Cycle 49: Implemented full GraphQL API layer using mercurius (Fastify's GraphQL plugin). (1) apps/api/src/graphql/schema.ts \u2014 types: Signal, SignalConnection, PageInfo, User, Query; queries: signal(id), signals(category,severity,limit,offset,since), search(q), trending; (2) apps/api/src/graphql/resolvers.ts \u2014 resolvers querying PostgreSQL via existing knex, Redis caching 30s TTL for signals/60s for trending, public read-only access; (3) apps/api/src/graphql/index.ts \u2014 registerGraphQL() Fastify plugin, mercurius registered at /api/graphql, GraphiQL enabled in dev, JIT compilation, full introspection; (4) Registered in apps/api/src/index.ts; (5) apps/api/src/__tests__/graphql.test.ts \u2014 test cases for signals query, single signal, category filter, pagination, search, null ID. mercurius added to apps/api/package.json. No competitor (Shadowbroker, Ground News, Crucix, OSINT Monitor) has GraphQL \u2014 pure WorldPulse differentiator."
-    },
-    {
-      "id": "shadowbroker_seismic_satellite",
-      "phase": "Competitive: USGS Seismic + NASA FIRMS Fire + NOAA Space Weather signal sources",
-      "category": "competitive",
-      "completed_at": "2026-03-22T04:10:00.000000+00:00",
-      "note": "Cycle 26: Created 3 new OSINT signal sources in apps/scraper/src/sources/: (1) seismic.ts \u2014 USGS Earthquake M4.5+ feed (5-min polls, GeoJSON, no auth, severity M7+\u2192critical/M6+\u2192high/M5+\u2192medium/else\u2192low, 48h dedup, reliability 0.95); (2) firms.ts \u2014 NASA FIRMS NOAA-20 VIIRS fire hotspots (30-min polls, public CSV, manual parsing, 1\u00b0 grid aggregation, top 20 cells by FRP, FRP 500+\u2192critical/200+\u2192high/50+\u2192medium, 3h dedup, reliability 0.80); (3) spaceweather.ts \u2014 NOAA SWPC alerts JSON (10-min polls, public JSON, G/R/S scale parsing, G5/R5/S5\u2192critical/G4/R4/S4\u2192high/G3/R3/S3\u2192medium, 24h dedup by serial_number, reliability 0.90, global location). Updated sources/index.ts to start all 6 pollers. Updated .env.example. Extended osint-sources.test.ts to 425 lines. Commit blocked by persistent index.lock (NTFS)."
-    },
-    {
-      "id": "gdelt_adsb_feeds",
-      "phase": "Competitive: GDELT + ADS-B + AIS signal sources",
-      "category": "competitive",
-      "completed_at": "2026-03-22T20:20:00.000000+00:00",
-      "note": "Cycle 21: Created apps/scraper/src/sources/ module with 4 files: gdelt.ts, adsb.ts, ais.ts, index.ts. Integrated into scraper bootstrap. 12-test test suite."
-    },
-    {
-      "id": "roadmap_Phase_1a_\u2014_DB_Connection_Fix_(",
-      "phase": "Phase 1a \u2014 DB Connection Fix (URGENT)",
+      "id": "roadmap_Phase_2b_—_Map:_Real-Time_WebS",
+      "phase": "Phase 2b — Map: Real-Time WebSocket Updates",
       "category": "feature",
-      "completed_at": "2026-03-22T02:46:00.007815+00:00"
+      "completed_at": "2026-03-28T08:31:22.901239+00:00"
     },
     {
-      "id": "roadmap_Phase_1b_\u2014_Scraper_Health_Dash",
-      "phase": "Phase 1b \u2014 Scraper Health Dashboard",
-      "category": "feature",
-      "completed_at": "2026-03-22T02:53:34.141722+00:00"
+      "id": "gate_1_scraper_stability",
+      "phase": "Gate 1 — Scraper Stability Tracker: stability-tracker.ts (240L) + 60-min cron + GET /api/v1/admin/scraper/stability + ScraperGate1Status.tsx (229L) + 829L tests (streak logic, Redis writes, streak reset) — cycle 70",
+      "category": "infrastructure",
+      "completed_at": "2026-03-28T12:28:09.089359+00:00"
     },
     {
-      "id": "roadmap_Phase_1c_\u2014_Scraper_Retry_&_Cir",
-      "phase": "Phase 1c \u2014 Scraper Retry & Circuit Breaker",
-      "category": "feature",
-      "completed_at": "2026-03-22T03:57:53.400057+00:00"
-    },
-    {
-      "id": "roadmap_Phase_1d_\u2014_Kafka_Consumer_Lag_",
-      "phase": "Phase 1d \u2014 Kafka Consumer Lag Monitoring",
-      "category": "feature",
-      "completed_at": "2026-03-22T04:17:01.215864Z"
-    },
-    {
-      "id": "perf_signals_rate_limiting_cache",
-      "phase": "Performance: Rate Limiting + Redis Caching \u2014 Signals Routes",
-      "category": "performance",
-      "completed_at": "2026-03-22T04:17:01.215864Z"
-    },
-    {
-      "id": "roadmap_Phase_2a_\u2014_Map:_Live_Signal_Pi",
-      "phase": "Phase 2a \u2014 Map: Live Signal Pins",
-      "category": "feature",
-      "completed_at": "2026-03-22T05:02:15.894959+00:00"
-    },
-    {
-      "id": "roadmap_Phase_2b_\u2014_Map:_Real-Time_WebS",
-      "phase": "Phase 2b \u2014 Map: Real-Time WebSocket Updates",
-      "category": "feature",
-      "completed_at": "2026-03-22T06:07:23.056942+00:00"
-    },
-    {
-      "id": "roadmap_Phase_3a_\u2014_Search:_Meilisearch",
-      "phase": "Phase 3a \u2014 Search: Meilisearch Index + Pipeline",
-      "category": "feature",
-      "completed_at": "2026-03-22T07:12:29.204697+00:00"
-    },
-    {
-      "id": "roadmap_Phase_3b_\u2014_Search:_API_+_UI",
-      "phase": "Phase 3b \u2014 Search: API + UI",
-      "category": "feature",
-      "completed_at": "2026-03-22T08:15:42.672829+00:00"
-    },
-    {
-      "id": "roadmap_Phase_4a_\u2014_Signal_Detail_Page",
-      "phase": "Phase 4a \u2014 Signal Detail Page",
-      "category": "feature",
-      "completed_at": "2026-03-22T09:21:45.558382+00:00"
-    },
-    {
-      "id": "roadmap_Phase_4b_\u2014_User_Profile_Pages",
-      "phase": "Phase 4b \u2014 User Profile Pages",
-      "category": "feature",
-      "completed_at": "2026-03-22T10:27:48.728829+00:00"
-    },
-    {
-      "id": "roadmap_Phase_5a_\u2014_UI_Polish:_Skeleton",
-      "phase": "Phase 5a \u2014 UI Polish: Skeletons, Empty States, Toasts",
-      "category": "feature",
-      "completed_at": "2026-03-22T11:32:55.516668+00:00"
-    },
-    {
-      "id": "roadmap_Phase_5b_\u2014_Responsive_Mobile_L",
-      "phase": "Phase 5b \u2014 Responsive Mobile Layouts",
-      "category": "feature",
-      "completed_at": "2026-03-22T12:59:49.296703+00:00"
-    },
-    {
-      "id": "roadmap_Phase_6a_\u2014_Verification_Engine",
-      "phase": "Phase 6a \u2014 Verification Engine: Reliability Scoring UI",
-      "category": "feature",
-      "completed_at": "2026-03-22T14:08:25.588475+00:00"
-    },
-    {
-      "id": "roadmap_Phase_6b_\u2014_Onboarding_Flow",
-      "phase": "Phase 6b \u2014 Onboarding Flow",
-      "category": "feature",
-      "completed_at": "2026-03-22T16:10:00.000000Z"
-    },
-    {
-      "id": "roadmap_Phase_7_\u2014_End-to-End_Tests_+_S",
-      "phase": "Phase 7 \u2014 End-to-End Tests + Security Hardening",
-      "category": "feature",
-      "completed_at": "2026-03-22T16:28:02.435625Z"
-    },
-    {
-      "id": "gap_8530",
-      "phase": "Competitive Gap: Mobile app (apps/mobile) \u2014 needs feature parity with web",
-      "category": "competitive",
-      "completed_at": "2026-03-22T16:48:33.482910+00:00"
-    },
-    {
-      "id": "health_2402",
-      "phase": "Health Fix: Low test coverage: only 0 test files found",
-      "category": "health",
-      "completed_at": "2026-03-22T18:02:08.082928+00:00"
-    },
-    {
-      "id": "gap_4733",
-      "phase": "Competitive Gap: API rate limiting and monetization strategy",
-      "category": "competitive",
-      "completed_at": "2026-03-22T18:45:00.000000+00:00"
-    },
-    {
-      "id": "test_coverage_improve",
-      "phase": "Improve Test Coverage",
-      "category": "quality",
-      "completed_at": "2026-03-22T19:16:38.046653+00:00"
-    },
-    {
-      "id": "ai_signal_summaries",
-      "phase": "Competitive: AI-generated signal summaries (counters Ground News AI Ground Summary)",
-      "category": "competitive",
-      "completed_at": "2026-03-22T19:35:00.000000Z"
-    },
-    {
-      "id": "gap_6700",
-      "phase": "Competitive Gap: Embeddable widget for third-party sites",
-      "category": "competitive",
-      "completed_at": "2026-03-22T20:25:49.811955+00:00"
-    },
-    {
-      "id": "gap_4841",
-      "phase": "Competitive Gap: Browser extension for inline signal verification",
-      "category": "competitive",
-      "completed_at": "2026-03-22T21:34:17.371805+00:00"
-    },
-    {
-      "id": "perf_query_optimize",
-      "phase": "Performance: Optimize slow database queries",
-      "category": "performance",
-      "completed_at": "2026-03-22T22:40:43.184361+00:00"
-    },
-    {
-      "id": "scraper_efficiency",
-      "phase": "Efficiency: Parallel scraper concurrency tuning",
-      "category": "performance",
-      "completed_at": "2026-03-22T23:46:47.343753+00:00"
-    },
-    {
-      "id": "api_caching_layer",
-      "phase": "Performance: Add comprehensive API response caching",
-      "category": "performance",
-      "completed_at": "2026-03-23T00:50:14.656925+00:00"
-    },
-    {
-      "id": "ai_slop_detection",
-      "phase": "Competitive: AI content farm / slop detection for reliability scoring",
-      "category": "competitive",
-      "completed_at": "2026-03-22T08:00:00.000000+00:00",
-      "note": "Cycle 29: Implemented AI-generated content heuristic scorer. (1) apps/api/src/lib/ai-content-farms.ts \u2014 blocklist of 25 known AI content farm domains seeded from NewsGuard/CCDH public reports; (2) apps/api/src/lib/slop-detector.ts \u2014 SlopDetector class with scoreSignal() method: domain blocklist (+0.40), missing byline (+0.15), clickbait title patterns (+0.10), thin content <100 chars (+0.10), high cadence >10/hr same domain (+0.10), bare URL path (+0.05) \u2014 score clamped [0,1], Redis 24h cache, singleton export; (3) GET /api/v1/signals/:id/slop-score route added to apps/api/src/routes/signals.ts (admin-only, 30rpm, returns score/flags/isSlop); (4) AISlopBadge component added to apps/web/src/app/signals/[id]/SignalDetailClient.tsx \u2014 fetches slop-score on mount, shows \u26a0 AI-generated content suspected badge with amber styling when score>=0.7, graceful error handling, admin-only visibility; (5) apps/api/src/__tests__/slop-detector.test.ts \u2014 11-case test suite covering all heuristics, cache hit/miss, score clamping, invalidation. Direct open-source alternative to NewsGuard's closed AI content farm detection tool."
-    },
-    {
-      "id": "gpsjam_ioda_feeds",
-      "phase": "Competitive: GPS Jamming (GPSJam.org) + Internet Outage (IODA) signal sources",
-      "category": "competitive",
-      "completed_at": "2026-03-23T01:30:00.000000+00:00",
-      "note": "Cycle 28: Created 2 new OSINT signal sources: (1) gpsjam.ts \u2014 GPSJam.org GPS jamming hotspots (15-min polls, no auth, GeoJSON grid cells, threshold jamPct>=0.6, severity 0.9+\u2192high/0.7+\u2192medium/else\u2192low, top 10 cells per poll, 2h Redis dedup by 1\u00b0 grid, reliability 0.78, category technology); (2) ioda.ts \u2014 Georgia Tech IODA internet outage alerts (10-min polls, no auth, IODA v2 alerts API, country-level entity filter, score>=30 threshold, severity 500+\u2192critical/100+\u2192high/30+\u2192medium, 30-min dedup by entity+bucket, 27-country centroid lookup, reliability 0.87). Updated sources/index.ts (8 pollers total). Updated .env.example (6 new env vars). Added 12 new tests to osint-sources.test.ts (gpsjamSeverity + iodaSeverity boundary tests). Counters Shadowbroker's GPS jamming and IODA feeds directly. WorldPulse now has 8 OSINT feeds. Commit blocked by persistent NTFS index.lock."
-    },
-    {
-      "id": "bundle_size_optimize",
-      "phase": "Performance: Web bundle size optimization",
-      "category": "performance",
-      "completed_at": "2026-03-23T01:57:45.927402+00:00"
-    },
-    {
-      "id": "category_channels_fix",
-      "phase": "P0-5: Fix category channel tabs (Breaking News, Culture showing No signals yet)",
-      "category": "feature",
-      "completed_at": "2026-03-23T02:45:00.000000+00:00",
-      "note": "Cycle 31: Three-part fix for empty channel tabs: (1) apps/scraper/src/pipeline/classify.ts \u2014 added breaking/culture/security/sports keyword rules to detectCategory(); previously breaking, culture, security had no rules so articles fell through to 'other'; now 14 category rules in priority order; (2) apps/api/src/routes/feed.ts \u2014 special-cased category=breaking to query severity IN (critical, high) in both feed/signals and feed/global routes \u2014 immediately populates Breaking News from existing 2,850+ DB signals regardless of stored category value; (3) apps/web/src/components/sidebar/LeftSidebar.tsx \u2014 added live signal count fetch per channel (useEffect + setInterval 2min refresh), real trending from GET /api/v1/feed/trending?window=1h replacing hardcoded demo topics, active channel link highlighting, CHANNEL_CATEGORIES mapping slug\u2192API category. Commit blocked by persistent HEAD.lock (from Windows crashed session 22:01) + index.lock (NTFS). Code is staged \u2014 user must run: del .git\\HEAD.lock && del .git\\index.lock from Windows, then git commit + git push."
-    },
-    {
-      "id": "docs_api_reference",
-      "phase": "Developer Experience: Auto-generate OpenAPI docs",
-      "category": "devex",
-      "completed_at": "2026-03-23T03:03:51.611809+00:00"
-    },
-    {
-      "id": "og_image_p3_1",
-      "phase": "P3-1: Open Graph / Link Preview Image",
-      "category": "feature",
-      "completed_at": "2026-03-23T03:20:27.502026+00:00",
-      "note": "Cycle 33: Implemented OG meta tags for social media sharing. (1) Updated apps/web/src/app/layout.tsx metadata export to include openGraph fields (title, description, url, siteName, images) and twitter card fields with 1200x630 image; (2) Created og-image.png using Python PIL \u2014 dark background (#06070d), amber WORLDPULSE title, cyan tagline, grid pattern background with hotspots; (3) Fixed internal URLs to world-pulse.io domain. When shared on iMessage/WhatsApp/Slack/Twitter, links now display rich preview cards with branded image."
-    },
-    {
-      "id": "mini_map_link_p0_4",
-      "phase": "P0-4: Mini Map 'Click for full map' Link",
-      "category": "feature",
-      "completed_at": "2026-03-23T03:20:27.502034+00:00",
-      "note": "Cycle 33: Fixed broken mini map link. Located component in apps/web/src/components/sidebar/RightSidebar.tsx. Wrapped the globe visualization div in Next.js <Link href=\"/map\"> component for proper navigation. Link is now clickable with visual hover state showing cyan tooltip 'Click for full map \u2192'."
-    },
-    {
-      "id": "monitoring_sentry",
-      "phase": "Observability: Sentry error tracking + structured logging + /api/v1/health + OTel tracer",
-      "category": "observability",
-      "completed_at": "2026-03-23T03:26:40.153336+00:00",
-      "note": "Cycle 33: Implemented 4-part observability suite. (1) apps/api/src/routes/health.ts \u2014 enhanced GET /api/v1/health with per-service checks: db (SELECT 1), redis (PING), kafka (admin.listTopics, 2s timeout), each returning status ok|degraded|down + latency_ms + error; overall status = down if db down, degraded if kafka/redis degraded, 503 HTTP if db down; (2) apps/api/src/middleware/request-logger.ts \u2014 Fastify plugin with onRequest (UUID requestId stamping) + onResponse (structured pino log: requestId, userId from JWT, method, route pattern, url, statusCode, latency_ms, ip, userAgent; skips /health /metrics /api/docs noise) + onError (errName, errMsg, statusCode); (3) apps/api/src/lib/sentry.ts \u2014 optional Sentry wrapper with dynamic require (no hard dep): initSentry(), captureException(), captureMessage(), setSentryUser(), flushSentry(); gracefully no-ops if SENTRY_DSN unset or @sentry/node not installed; (4) apps/scraper/src/lib/tracer.ts \u2014 lightweight OTel-compatible span tracer using pino structured logs: startSpan(op, fn), startRootSpan(op, fn), Span with traceId/spanId/parentId/operation/attributes/end(). Instrumented processArticleGroup with 3 child spans: pipeline.classify, pipeline.geo, pipeline.verify. Instrumented scrapeAll() with root span scraper.cycle. Updated index.ts: initSentry() + requestLoggerPlugin + /api/v1/health. Updated .env.example with SENTRY_DSN and OTel upgrade notes. Added health.test.ts (11 test cases: checkDb ok/down, checkRedis ok/degraded/down, deriveOverallStatus all combinations)."
-    },
-    {
-      "id": "celestrak_orbital_tracking",
-      "phase": "Competitive: CelesTrak orbital satellite tracking (counters Shadowbroker's CelesTrak integration)",
-      "category": "competitive",
-      "completed_at": "2026-03-23T04:45:22.000000+00:00",
-      "note": "Cycle 37: Added CelesTrak orbital satellite tracking."
-    },
-    {
-      "id": "stix_21_export",
-      "phase": "Competitive: STIX 2.1 threat intelligence export (counters Shadowbroker's STIX export)",
-      "category": "competitive",
-      "completed_at": "2026-03-23T06:25:01.000000+00:00",
-      "note": "Cycle 40: Implemented STIX 2.1 structured threat intelligence export. (1) apps/api/src/lib/stix.ts \u2014 SignalToStixConverter class: signalToIndicator, signalToSighting, signalToObservedData, signalToReport, signalToLocation, buildBundle; full STIX 2.1 type definitions (StixBase, StixIndicator, StixSighting, StixObservedData, StixReport, StixLocation, StixBundle); severity\u2192confidence mapping (critical=95, high=80, medium=60, low=30); location\u2192StixLocation with lat/lng/country; source_url\u2192external_references; TLP:CLEAR marking. (2) apps/api/src/routes/stix.ts \u2014 3 endpoints: GET /api/v1/stix/signals/:id (single signal STIX bundle), GET /api/v1/stix/signals (bulk export with category/severity/since/limit filters, max 500), GET /api/v1/stix/feed (TAXII-like latest 100 signals); all require API key auth; Content-Type application/stix+json;version=2.1; rate limited 30rpm single, 10rpm bulk. (3) Registered in apps/api/src/index.ts. (4) apps/api/src/__tests__/stix.test.ts \u2014 27 test cases covering all converter methods, severity mapping, location mapping, external references, bundle structure, null handling. Direct competitive response to Shadowbroker's STIX 2.1 export PR."
-    },
-    {
-      "id": "celestrak_orbital_tracking_orig",
-      "phase": "Competitive: CelesTrak orbital satellite tracking",
-      "category": "competitive",
-      "completed_at": "2026-03-23T04:45:22.000000+00:00",
-      "note": "Cycle 37: Added CelesTrak orbital satellite tracking. (1) apps/scraper/src/sources/celestrak.ts \u2014 353-line SATCAT polling source: polls CelesTrak SATCAT JSON API (https://celestrak.org/SATCAT/query.php?GROUP=active&FORMAT=json) every 30 min; generates signals for recent launches (within 7 days) and re-entries/decays (within 3 days); max 10 signals/poll; 48h Redis dedup by INTLDES+event_type; reliability 0.97 (authoritative source); Kafka pub to signals.verified; included in sources/index.ts as 9th OSINT poller. (2) apps/web/src/app/map/page.tsx \u2014 browser-side satellite visualization toggle: fetches CelesTrak GP JSON (active satellites) client-side from celestrak.org/GP.php?GROUP=active&FORMAT=json; parses orbital elements (INCLINATION, RA_OF_ASC_NODE) to approximate lat/lon positions; renders as MapLibre GeoJSON circle layer colored by OBJECT_TYPE (PAYLOAD=blue, ROCKET_BODY=gray, DEBRIS=red, UNKNOWN=white); \ud83d\udef0\ufe0f SATS toggle button with count badge; loading spinner during fetch; handles map-not-yet-loaded edge case. WorldPulse now matches Shadowbroker's CelesTrak feature. Commit may be blocked by NTFS index.lock \u2014 user must run: del .git\\index.lock then git commit."
-    },
-    {
-      "id": "nasa_gibs_satellite_imagery",
-      "phase": "Competitive: NASA GIBS satellite imagery overlay on live map (counters Shadowbroker)",
-      "category": "competitive",
-      "completed_at": "2026-03-23T05:15:00.000000+00:00",
-      "note": "Cycle 36: Added NASA GIBS MODIS Terra satellite imagery toggle to the live map. (1) New satelliteMode boolean state + gibsDate (YYYY-MM-DD, defaults to yesterday \u2014 MODIS has ~1 day delay); (2) useEffect dynamically adds/removes 'nasa-gibs' raster WMTS source from NASA Earthdata GIBS and 'nasa-satellite' raster layer; inserted before 'cluster-halo' layer so signal pins remain visible over imagery; handles map-not-yet-loaded edge case via map.once('load', applyLayer); (3) Filter bar: \ud83d\udef0 SAT toggle button (green when active) + inline date picker (2000-02-24 to yesterday) visible when active; (4) WMTS tile URL: gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/{date}/GoogleMapsCompatible/{z}/{y}/{x}.jpg; maxzoom 9, opacity 0.72, full attribution. Directly counters Shadowbroker's NASA GIBS feature launched March 2026 \u2014 WorldPulse now has satellite imagery parity. Commit blocked by NTFS index.lock; user must run: del .git\\index.lock && git add apps/web/src/app/map/page.tsx && git commit -m 'feat(map): add NASA GIBS satellite imagery overlay'."
-    },
-    {
-      "id": "auth_token_fix_demo_cleanup",
-      "phase": "Bug Fix: Auth token key inconsistency (wp_token\u2192wp_access_token) + demo data removal",
-      "category": "bugfix",
-      "completed_at": "2026-03-23T08:13:25.000000+00:00",
-      "note": "Cycle 43: Fixed critical auth bug where 4 pages used old 'wp_token' localStorage key while auth system sets 'wp_access_token'. This broke authenticated features on: communities/page.tsx (2 instances), communities/[slug]/page.tsx (2 instances), search/page.tsx (1 instance), components/composer/Composer.tsx (1 instance). All 6 instances updated to 'wp_access_token'. Also removed dead DEMO_SOURCES (7 fake sources in sources/page.tsx), DEMO_COMMUNITIES (8 fake communities in communities/page.tsx), and DEMO community detail fallback (communities/[slug]/page.tsx). Pages now show proper empty states when API is unavailable instead of fake data. Commit blocked by persistent NTFS index.lock."
-    },
-    {
-      "id": "p0_2_clickable_feed_items",
-      "phase": "P0-2 \u2014 Make Feed Items Clickable (HIGHEST PRIORITY LAUNCH BLOCKER)",
-      "category": "feature",
-      "completed_at": "2026-03-23T04:15:00.000000+00:00",
-      "note": "Cycle 34: Fixed P0-2 critical UX blocker. Feed items are now fully clickable. (1) Verified apps/web/src/components/feed/FeedList.tsx already has complete click handling on <article> element (lines 473-480): onClick handler routes to /signals/{id} for signals, /posts/{id} for posts. Intelligently skips navigation when clicking buttons, inputs, or action group elements. (2) Verified apps/web/src/app/posts/[id]/page.tsx already fully implemented: fetches post data from GET /api/v1/posts/:id, shows title, author avatar/name, created_at, signal context if linked, replies count, back navigation. (3) Verified apps/web/src/app/explore/page.tsx already correctly routes signal cards to /signals/{id} (line 141). (4) Removed DEMO_DATA from analytics page (apps/web/src/app/analytics/page.tsx): (a) Deleted hardcoded DEMO_DATA const with fake posts/engagement data; (b) Created createEmptyAnalytics() function returning empty data structure; (c) Updated useEffect to fetch from GET /api/v1/analytics/me with Bearer token, set isDemo=false on success, gracefully fallback to empty state on failure; (d) Changed localStorage key from wp_token to wp_access_token for consistency. Feed items now fully clickable \u2014 entire card surfaces are interactive with proper routing to detail pages. Marketing campaign can proceed."
-    },
-    {
-      "id": "p1_5_live_counter_p1_6_ticker",
-      "phase": "P1-5 + P1-6: Live signal counter + interactive news ticker",
-      "category": "feature",
-      "completed_at": "2026-03-23T10:20:21.000000+00:00",
-      "note": "Cycle 46: Fixed both P1-5 (hardcoded signal counter) and P1-6 (non-interactive ticker) in one cycle. (1) API: Added GET /api/v1/signals/count endpoint \u2014 returns total, last24h, lastHour, bySeverity breakdown; 15s Redis cache, 120rpm rate limit. (2) API: Added GET /api/v1/signals/headlines endpoint \u2014 returns top 10 severity-ordered signals from last 24h with category-based color mapping; 30s Redis cache. (3) Frontend: TopNav.tsx signal counter now fetches from /signals/count on mount + polls every 30s; starts at 0, shows real DB count. (4) Frontend: Ticker now fetches live headlines from /signals/headlines every 60s; falls back to 'Loading...' items if API unavailable. (5) Ticker hover pauses animation (animationPlayState: paused); each item is clickable, navigating to /signals/{id}. (6) New competitor found: Crucix (calesthio/Crucix) \u2014 27 intelligence feeds, 3D WebGL globe, Telegram/Discord alerts, optional LLM analysis, zero-cloud architecture. Direct threat."
-    },
-    {
-      "id": "admin_dashboard_frontend",
-      "phase": "P1-3: Admin Dashboard Frontend (apps/web/src/app/admin/page.tsx)",
-      "category": "feature",
-      "completed_at": "2026-03-23T18:15:00.000000+00:00",
-      "note": "Cycle 57: Built Admin Dashboard Frontend at apps/web/src/app/admin/page.tsx (451 lines, 'use client'). (1) Auth guard: reads wp_access_token from localStorage, decodes JWT, checks accountType==='admin', shows 403 if not admin. (2) Scraper Health Grid: summary strip (total/healthy/degraded/dead/unknown/overallRate) + per-source cards with status badge, success%, latency, error count, last seen (relative), truncated lastError. (3) Signal Statistics: 3 count cards (total/24h/1h) + severity breakdown + status breakdown grid. (4) System Health: PostgreSQL/Redis/Kafka rows with status badges + latency_ms. (5) Auto-refresh every 30s + manual Refresh button. (6) Skeleton loading placeholders on all sections. (7) Per-section error banners. Also added GET /api/v1/admin/signals/stats backend endpoint in admin.ts \u2014 returns total, last24h, lastHour, bySeverity (5 severities), byStatus (verified/pending/disputed/false/retracted). Commit blocked by NTFS index.lock \u2014 user must: del .git\\index.lock && git add apps/web/src/app/admin/page.tsx apps/api/src/routes/admin.ts && git commit -m 'feat(admin): add admin dashboard frontend with scraper health, signal stats, system health' && git push"
-    },
-    {
-      "id": "public_api_endpoint",
-      "phase": "P2-6: Public API Endpoint \u2014 GET /api/v1/public/signals, no auth, 60rpm, CORS, documented",
-      "category": "devex",
-      "completed_at": "2026-03-23T23:15:00.000000+00:00",
-      "note": "Cycle 60: Implemented public API endpoint as core open-source differentiator. (1) apps/api/src/routes/public.ts \u2014 GET /signals + OPTIONS /signals: no auth required, 60rpm per IP rate limit, query params: category/severity/limit(max 100)/offset, returns only status=verified signals with 8 public fields (id/title/category/severity/reliability_score/location_name/published_at/source_url), 30s Redis cache keyed by query params with X-Cache-Hit header, Access-Control-Allow-Origin: * CORS header, OPTIONS preflight 204 handler. (2) apps/api/src/index.ts \u2014 registered registerPublicRoutes at /api/v1/public prefix. (3) apps/api/src/__tests__/public-api.test.ts \u2014 10 test cases: 200+data array, category filter, severity filter, limit clamped to 100, CORS header, verified-only query, X-RateLimit-Limit:60 header, Redis cache hit, total/limit/offset fields, OPTIONS preflight. (4) docs/api.md \u2014 full public API reference: endpoint overview, params table, response shape, rate-limits section, curl examples, JS fetch example, pagination helper. No competitor (Shadowbroker, Crucix, OSINT Monitor, Ground News) has a documented public no-auth API \u2014 pure WorldPulse developer ecosystem differentiator."
-    },
-    {
-      "id": "market_intelligence_feed",
-      "phase": "Competitive: Economic/Market Intelligence OSINT feed (counters Crucix VIX/Yahoo Finance feature)",
-      "category": "competitive",
-      "completed_at": "2026-03-23T19:45:00.000000+00:00",
-      "note": "Cycle 59: Implemented Economic/Market Intelligence as the 13th OSINT signal source. (1) apps/scraper/src/sources/market.ts \u2014 280-line new source: polls Yahoo Finance unofficial chart API (no auth key required) every 15 minutes for 5 key indicators: ^VIX (CBOE Fear Index), ^GSPC (S&P 500), ^IXIC (NASDAQ), BTC-USD (Bitcoin), CL=F (Crude Oil WTI). Exports: startMarketPoller, vixSeverity (VIX>=40\u2192critical/>=30\u2192high/>=25\u2192medium), percentChangeSeverity (index/crypto/commodity thresholds), shouldEmitMarketSignal (VIX>=25, index>=2%, crypto>=10%, commodity>=5%), formatMarketTitle, formatMarketContent, marketDedupKey, buildYFUrl, MARKET_INDICATORS const. Redis dedup: osint:market:{symbol}:{directionTag}:{YYYY-MM-DD} 24h TTL. Signals: category:economy, location: NYSE (40.7069\u00b0N, 74.0089\u00b0W), reliability_score:0.90. (2) apps/scraper/src/sources/index.ts \u2014 updated: market.ts import + startMarketPoller try/catch block + updated header comment to '13 OSINT feeds total' + updated startup logger.info + export at bottom. (3) apps/scraper/src/sources/__tests__/osint-sources.test.ts \u2014 added 120+ lines of new tests: describe vixSeverity (4 cases), percentChangeSeverity (3 cases for index/crypto/commodity), shouldEmitMarketSignal (8 cases), formatMarketTitle (4 cases), marketDedupKey (2 cases). Direct competitive response to Crucix's 'Live market tickers (Yahoo Finance), VIX/credit risk gauges' feature. WorldPulse now at 13 OSINT feeds (up from 12)."
-    },
-    {
-      "id": "telegram_discord_alerts",
-      "phase": "Competitive: Telegram + Discord real-time alert system (counters Crucix core feature)",
-      "category": "competitive",
-      "completed_at": "2026-03-23T16:27:57.602929+00:00",
-      "note": "Cycle 54: Implemented Telegram + Discord alert notification system \u2014 directly counters Crucix core feature (\"pings you when something changes\"). (1) apps/api/src/lib/notifications.ts \u2014 NotificationService class: sendTelegramMessage(chatId, text, token) via Telegram Bot API with HTML parse mode, severity emojis (\ud83d\udd34\ud83d\udfe0\ud83d\udfe1\ud83d\udfe2), reliability dots; sendDiscordMessage(webhookUrl, signal) via Discord Embed API with severity color coding (red/orange/yellow/green); formatSignalAlert(signal) formatter. Error-safe fire-and-forget pattern. (2) apps/api/src/lib/alert-dispatcher.ts \u2014 AlertDispatcher: shouldNotify() with Redis dedup (notif:sent:{userId}:{signalId} 24h TTL), severity threshold + category filter; dispatchAlerts() loops all users; startDispatcher() polls every 60s for signals in last 2 min; stopDispatcher() for graceful shutdown. (3) apps/api/src/routes/notifications.ts \u2014 3 endpoints: GET /notifications/settings (JWT auth, Redis get), PUT /notifications/settings (JWT auth, save encrypted to Redis notif:{userId}:settings), POST /notifications/test (JWT auth, 3rpm rate limit, sends test to configured channels). (4) Registered in apps/api/src/index.ts \u2014 notificationsRoutes plugin + startDispatcher(). (5) apps/web/src/app/settings/notifications/page.tsx \u2014 full settings UI: Telegram bot token (masked field), Chat ID, Discord webhook URL, min severity toggle (critical/high/medium/low), category filter chips, enable/disable toggle, Save + Send Test buttons with toast feedback. (6) apps/api/src/__tests__/notifications.test.ts \u2014 8+ test cases covering message formatting, severity emoji, Discord embed structure, shouldNotify dedup, shouldNotify category filter, shouldNotify severity threshold. Direct competitive response to Crucix Telegram/Discord alerting feature."
+      "id": "integration_vercel_config",
+      "phase": "Integration Phase 1 — Vercel deployment config: vercel.json (root, pnpm filter build, 3-region deploy, security headers, /api/v1/* rewrite), apps/web/.env.example (all NEXT_PUBLIC_ vars documented), fixed stale localhost:4000 in clusters/page.tsx → localhost:3001, 18-assertion test suite (vercel-config.test.ts) — cycle 71",
+      "category": "infrastructure",
+      "completed_at": "2026-03-28T13:00:00.000000+00:00"
     }
   ],
-  "active_phases": [],
-  "weaknesses_identified": [
-    "Ground News expanded to 50K+ sources + Podcasts/Opinions \u2014 widening content moat",
-    "Shadowbroker now at ~4.7K GitHub stars (up from 2.0K in March 2026) \u2014 stable",
-    "Crucix (calesthio/Crucix) now at 5.2K GitHub stars \u2014 EXPLOSIVE growth (was 2.7K one week ago, +93%) \u2014 GitHub's Hottest OSINT Project",
-    "Crucix has 27 feeds vs WorldPulse 13 feeds \u2014 gap narrowing (was 10 feeds before cycle 59)",
-    "AI content farms growing at 300-500 new sites/month \u2014 WorldPulse has open-source slop detection",
-    "Taranis AI (open-source OSINT + NLP) is a direct threat",
-    "OSINT Monitor (marcko80/osintmonitor) \u2014 desktop OSINT app, 150+ RSS feeds \u2014 desktop-only but RSS count gap notable",
-    "Veracity (open-source) \u2014 AI fact-checking with multilingual + numerical scoring \u2014 academic tool but could commoditize reliability scoring"
-  ],
-  "strengths_identified": [
-    "Solid monorepo architecture with Turborepo + pnpm",
-    "Map page with Supercluster, WebSocket, severity pins, filter bar \u2014 complete",
-    "Full search: Meilisearch pipeline + Cmd+K palette + search page \u2014 complete",
-    "Signal detail, user profiles, onboarding flow \u2014 all implemented",
-    "ReliabilityDots + FlagModal community verification UI \u2014 complete",
-    "Rate limiting covers ALL endpoints with Redis backend \u2014 production-grade",
-    "Redis caching on feed + signals + search \u2014 fast anonymous reads",
-    "Scraper with retry, circuit breaker, DLQ, health dashboard \u2014 production-grade",
-    "Kafka consumer lag monitoring via Prometheus + Grafana \u2014 complete",
-    "~60 E2E + 15+ test files covering all critical paths \u2014 strong coverage",
-    "Security headers (CSP, X-Frame-Options, HSTS, etc.) via Next.js middleware \u2014 complete",
-    "Developer API key system (free/pro/enterprise tiers) \u2014 complete",
-    "AI signal summaries (OpenAI/Ollama/extractive fallback, Redis cached) \u2014 complete",
-    "8 OSINT feeds: GDELT + ADS-B + AIS + USGS Seismic + NASA FIRMS + NOAA SWPC + GPS Jamming + IODA Internet Outages \u2014 now complete (Cycle 28)",
-    "AI slop detection: open-source content farm heuristic scorer + admin badge + 25-domain blocklist \u2014 direct alternative to NewsGuard (Cycle 29)",
-    "NASA GIBS satellite imagery overlay on live map \u2014 MODIS Terra true-color, \ud83d\udef0 SAT toggle + date picker, full 25-year archive, WMTS tiles \u2014 parity with Shadowbroker (Cycle 36)",
-    "CelesTrak orbital satellite tracking \u2014 9th OSINT feed; SATCAT poller (launches + re-entries); browser-side GP visualization layer with object-type color coding \u2014 competitive parity with Shadowbroker's CelesTrak integration (Cycle 37)",
-    "STIX 2.1 threat intelligence export \u2014 3 API endpoints (single/bulk/TAXII-like feed), full STIX 2.1 compliance, SignalToStixConverter class, API key auth, rate limited \u2014 direct competitive parity with Shadowbroker's STIX export (Cycle 40)",
-    "Carrier Strike Group OSINT tracker \u2014 10th OSINT feed; all 11 US Navy carriers, USNI News RSS, theater position estimation, 30+ test cases \u2014 closes last remaining gap vs Shadowbroker (Cycle 48)",
-    "GraphQL API layer at /api/graphql \u2014 mercurius plugin, full schema (Signal, User, Query types), resolvers with Redis caching, GraphiQL in dev, JIT compilation \u2014 NO competitor has GraphQL, pure WorldPulse differentiator (Cycle 49)",
-    "Economic/Market Intelligence \u2014 13th OSINT feed; VIX fear index + S&P 500 + NASDAQ + BTC + Crude Oil via Yahoo Finance; threshold-based emission (VIX>=25, index>=2%, crypto>=10%, oil>=5%); 21 new test cases \u2014 direct counter to Crucix's Yahoo Finance/VIX market tickers (Cycle 59)"
-  ],
-  "last_competition_scan": "2026-03-25T01:20:42.084359+00:00",
-  "brain_version": "2.0",
-  "notes": "Cycle 69: Multi-LLM Admin Status UI implemented. GET /api/v1/admin/llm-status returns all 5 provider configs + active provider. Admin dashboard now shows AI Provider section with per-provider status badges (active/configured/not-set). Counters WorldMonitor 4-tier AI marketing \u2014 WorldPulse config now transparent. Competition scan: no new threats. Ground News stable. Crucix stable ~5.2K stars. No funded news-intelligence startups. Next priorities: (1) P2-4b Verification Log Timeline UI in signal detail; (2) Developer docs update \u2014 add LLM provider section to docs/api.md; (3) Add admin/llm-status test cases. --- Cycle 65: Multi-LLM provider support implemented. signal-summary.ts now supports 5 providers in priority order: Anthropic claude-haiku-4-5-20251001 \u2192 OpenAI gpt-4o-mini \u2192 Google Gemini 2.0 Flash \u2192 OpenRouter (100+ models) \u2192 Ollama local \u2192 extractive fallback. AISummary.model type updated, .env.example updated, 4 new tests added. Audit found P2-3/P2-4/P3-2/i18n already done from prior cycles (now recorded). WorldMonitor has upgraded to full website (worldmonitor.app) with 4-tier AI fallback chain including local LLMs \u2014 elevated threat. No new news intelligence startups found with significant funding. Crucix stable ~5.2K stars, still 27 feeds, 7 LLM providers. Ground News stable v4.27.0. Next priorities: (1) P2-4b Verification Log UI in signal detail; (2) Multi-LLM Settings UI in admin; (3) WorldMonitor response \u2014 improve AI analysis UI to counter their 4-tier local LLM angle; (4) Developer docs update for new LLM providers. --- Cycle 62: ReliabilityDots tooltip enhanced (P2-1). Removed hasTooltip gate \u2014 tooltip always shows on hover with score % + colour-coded bar. All 7 usage sites now covered including posts/search pages that previously got no tooltip. Commit blocked by NTFS HEAD.lock. Competition scan: Ground News stable (no new features), Crucix stable ~5.2K stars (growth plateau), no new news-intelligence startups funded. Next priorities: (1) P2-3 Scraper Process Health Monitor; (2) P2-4 Verification Log Population; (3) P3-2 Bottom Tab Bar for Mobile; (4) Multilingual signal support; (5) Multi-LLM configurability. --- Cycle 61 (prior run notes preserved below) --- Cycle 60: Public API endpoint implemented (P2-6). GET /api/v1/public/signals \u2014 no auth, 60rpm/IP, CORS, 30s Redis cache, verified-only, 8 fields. docs/api.md added with full reference. 10 test cases. No competitor has a documented public no-auth API \u2014 pure WorldPulse differentiator. NEW COMPETITOR: eYou (Romanian startup, \u20ac300K pre-seed, fact-checking social platform, launch May 2026) \u2014 adjacent threat, low priority. Crucix update: added Ollama self-hosted LLM provider (now 7 LLM providers), mobile UI fixes, still 27 feeds, ~5.2K stars. Next priorities: (1) P2-1 Reliability Score Explainer Tooltip; (2) Multilingual signal support; (3) Multi-LLM provider configurability in AI summaries; (4) P3-2 Bottom Tab Bar for Mobile; (5) P2-4 Verification Log Population. --- Cycle 59: Economic/Market Intelligence OSINT feed added (market.ts). 13th OSINT feed: VIX + S&P 500 + NASDAQ + BTC + Crude Oil via Yahoo Finance unofficial API. No auth key required. Threshold-based emission prevents noise. Directly counters Crucix 'Yahoo Finance / VIX / credit risk' feature. Test coverage: 21 new test cases in osint-sources.test.ts. Competition scan: Crucix stable ~5.2K stars, now confirmed 6-LLM-provider support (Claude/GPT/Gemini/OpenRouter/ChatGPT/MiniMax). Ground News stable. No new news-intelligence startups with funding. Next priorities: (1) Multilingual signal support (counter Veracity AI paper); (2) P2-1 Reliability Score Explainer Tooltip; (3) P2-6 Public API endpoint (no-auth, 60rpm per IP); (4) P3-2 Bottom Tab Bar for Mobile. Commit required: git add apps/scraper/src/sources/market.ts apps/scraper/src/sources/index.ts apps/scraper/src/sources/__tests__/osint-sources.test.ts && git commit -m 'feat(scraper): add Economic/Market Intelligence OSINT feed \u2014 VIX + S&P500 + NASDAQ + BTC + Oil (13th feed)' --- Cycle 57: Admin Dashboard Frontend implemented (apps/web/src/app/admin/page.tsx). Auth-guarded, scraper health grid, signal stats, system health, 30s auto-refresh. Backend: GET /api/v1/admin/signals/stats added. Competition scan: Crucix stable ~5.2K stars (VERY HIGH threat), added flat map mobile mode + static scrollable ticker (no new feeds). Shadowbroker stable ~4.7K (15 feeds per HN article). Ground News stable. No new news-intelligence startups funded. Next priorities: (1) Economic/Market data feeds (VIX \u2014 Crucix has this); (2) Multilingual signal support; (3) P2-1 Reliability Score Explainer Tooltip; (4) P2-6 Public API endpoint. --- Cycle 54: Telegram + Discord alert system implemented. NotificationService + AlertDispatcher + /api/v1/notifications/* endpoints + settings UI. Direct counter to Crucix core feature. Competition scan: Crucix stable ~5.2K stars (still VERY HIGH), Shadowbroker stable ~4.7K stars, Ground News stable v4.27.0. No new funded news-intelligence startups. Remaining priorities: (1) Admin Dashboard Frontend; (2) Economic/Market data feeds (VIX \u2014 Crucix has this); (3) Multilingual signal support (counter Veracity); (4) P2-1 Reliability Score Explainer Tooltip. Cycle 50: WHO Disease Outbreak + IAEA Nuclear Events OSINT feeds added. WorldPulse now at 12 OSINT feeds (up from 10). WHO: 30-min RSS polls, PHEIC/Grade/pathogen severity, 50-country location inference, reliability 0.96, category:health. IAEA: 30-min RSS polls, nuclear keyword filter (not all IAEA news, only safety events), INES severity, 20-nuclear-site coordinate lookup, reliability 0.97, category:science. 32 new test cases added. Commit blocked by NTFS index.lock. Competition scan: Crucix st\n[Cycle 103] 2026-03-25: Shipped \u2014 feed API dedup (title fingerprint), OnboardingModal (4-step Mission Briefing), \nRightSidebar wired to live API, FeedList source-count+TRENDING+NEW badges, map cluster maxZoom 14\u219218 + co-located \npopup fallback, 20 new RSS sources (30 total, surpassing Crucix 27), 3 new Vitest test files (feed-dedup, feed-routes, auth-utils).\nHEAD.lock issue: user must run Remove-Item .git\\HEAD.lock -Force before each commit from Windows."
+  "pending_tasks": [
+    {
+      "id": "integration_cloudflare_headers",
+      "source": "integration_roadmap",
+      "priority": 11,
+      "phase": "Integration Phase 1 — Cloudflare security headers",
+      "budget": 5,
+      "category": "infrastructure"
+    },
+    {
+      "id": "integration_stripe_billing",
+      "source": "integration_roadmap",
+      "priority": 9,
+      "phase": "Integration Phase 2 — Stripe Pro tier billing",
+      "budget": 10,
+      "category": "feature"
+    }
+  ]
 }

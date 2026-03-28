@@ -18,6 +18,8 @@ import { verifySignal } from './pipeline/verify'
 import { classifyContent } from './pipeline/classify'
 import { extractGeo } from './pipeline/geo'
 import { dedup } from './pipeline/dedup'
+import { correlateSignal } from './pipeline/correlate'
+import type { CorrelationCandidate } from './pipeline/correlate'
 import { computeTrending } from './pipeline/trending'
 import { backfillUnprocessed } from './backfill'
 import { recordSuccess, recordFailure, recordCycleThroughput, logHealthSummary, detectDeadSources } from './health'
@@ -493,6 +495,39 @@ async function processArticleGroup(
     })
     signal.status = verificationResult.status
     signal.reliability_score = verificationResult.score
+  }
+
+  // ── Cross-source event correlation (async, non-blocking) ──
+  // Detect when multiple OSINT feeds report on the same underlying event
+  try {
+    const candidate: CorrelationCandidate = {
+      id:               String(signal.id),
+      title:            signal.title,
+      category:         signal.category,
+      severity:         signal.severity,
+      source_id:        primary.sourceId,
+      location_name:    signal.location_name ?? null,
+      lat:              geo.lat ?? null,
+      lng:              geo.lng ?? null,
+      published_at:     primary.publishedAt ? new Date(primary.publishedAt) : new Date(),
+      reliability_score: signal.reliability_score,
+      tags:             signal.tags ?? [],
+    }
+
+    const cluster = await correlateSignal(candidate)
+
+    if (cluster) {
+      logger.info({
+        signalId:     signal.id,
+        clusterId:    cluster.cluster_id,
+        clusterSize:  cluster.signal_ids.length,
+        corrType:     cluster.correlation_type,
+        corrScore:    cluster.correlation_score.toFixed(2),
+      }, 'Signal correlated into event cluster')
+    }
+  } catch (err) {
+    // Correlation is non-fatal — signal was already persisted
+    logger.warn({ err, signalId: signal.id }, 'Correlation failed (non-fatal)')
   }
 
   // Auto-create a post so the global feed shows real content

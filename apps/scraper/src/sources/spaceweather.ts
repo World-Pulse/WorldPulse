@@ -17,6 +17,7 @@ import type Redis from 'ioredis'
 import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
+import { insertAndCorrelate } from '../pipeline/insert-signal'
 
 const log = rootLogger.child({ module: 'spaceweather-source' })
 
@@ -134,7 +135,7 @@ export function startSpaceWeatherPoller(
         const issued = new Date(alert.issue_datetime.replace(' ', 'T') + 'Z')
 
         try {
-          const [signal] = await db('signals').insert({
+          const signal = await insertAndCorrelate({
             title,
             summary:           body,
             category:          'climate',
@@ -152,7 +153,7 @@ export function startSpaceWeatherPoller(
             tags:              ['osint', 'spaceweather', 'noaa', 'geomagnetic'],
             language:          'en',
             event_time:        issued,
-          }).returning('*')
+          }, { lat: null, lng: null, sourceId: 'spaceweather' })
 
           // Dedup for 24h (alerts don't repeat with same serial)
           await redis.setex(key, 24 * 3_600, '1')

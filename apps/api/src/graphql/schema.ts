@@ -45,6 +45,45 @@ export const typeDefs = /* GraphQL */ `
     createdAt: String!
   }
 
+  type BriefingDevelopment {
+    headline: String!
+    detail: String!
+    severity: String!
+    category: String!
+    signalCount: Int!
+  }
+
+  type CategoryBreakdown {
+    category: String!
+    count: Int!
+    criticalCount: Int!
+    highCount: Int!
+  }
+
+  type GeographicHotspot {
+    countryCode: String!
+    locationName: String
+    signalCount: Int!
+    avgSeverityScore: Float!
+  }
+
+  type DailyBriefing {
+    id: ID!
+    date: String!
+    generatedAt: String!
+    model: String!
+    periodHours: Int!
+    totalSignals: Int!
+    totalClusters: Int!
+    executiveSummary: String!
+    keyDevelopments: [BriefingDevelopment!]!
+    categoryBreakdown: [CategoryBreakdown!]!
+    geographicHotspots: [GeographicHotspot!]!
+    threatAssessment: String!
+    outlook: String!
+    topSignals: [Signal!]!
+  }
+
   type Query {
     signal(id: ID!): Signal
     signals(
@@ -58,5 +97,6 @@ export const typeDefs = /* GraphQL */ `
     trending: [Signal!]!
     correlatedSignals(signalId: ID!): EventCluster
     recentClusters(limit: Int): [EventCluster!]!
+    dailyBriefing(hours: Int): DailyBriefing!
   }
 `

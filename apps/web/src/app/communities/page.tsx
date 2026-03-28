@@ -39,17 +39,6 @@ interface Community {
   createdAt:   string
 }
 
-// Demo data
-const DEMO_COMMUNITIES: Community[] = [
-  { id: '1', slug: 'climate-watch', name: 'Climate Watch', description: 'Tracking climate events, policy and science worldwide', avatarUrl: null, categories: ['climate', 'science'], memberCount: 12400, postCount: 8900, recentPosts: 42, isMember: false, viewerRole: null, createdAt: new Date().toISOString() },
-  { id: '2', slug: 'conflict-monitor', name: 'Conflict Monitor', description: 'Global conflict tracking and analysis', avatarUrl: null, categories: ['conflict', 'geopolitics'], memberCount: 9800, postCount: 14200, recentPosts: 87, isMember: true, viewerRole: 'member', createdAt: new Date().toISOString() },
-  { id: '3', slug: 'tech-regulation', name: 'Tech & Regulation', description: 'AI governance, tech policy, and digital rights', avatarUrl: null, categories: ['technology', 'geopolitics'], memberCount: 7300, postCount: 5400, recentPosts: 23, isMember: false, viewerRole: null, createdAt: new Date().toISOString() },
-  { id: '4', slug: 'election-watchers', name: 'Election Watchers', description: 'Democratic elections, voter rights, and electoral integrity', avatarUrl: null, categories: ['elections'], memberCount: 6100, postCount: 9800, recentPosts: 156, isMember: false, viewerRole: null, createdAt: new Date().toISOString() },
-  { id: '5', slug: 'global-health', name: 'Global Health', description: 'WHO alerts, disease outbreaks, healthcare policy', avatarUrl: null, categories: ['health'], memberCount: 5900, postCount: 4100, recentPosts: 18, isMember: true, viewerRole: 'moderator', createdAt: new Date().toISOString() },
-  { id: '6', slug: 'disaster-response', name: 'Disaster Response', description: 'Natural disasters and emergency response coordination', avatarUrl: null, categories: ['disaster', 'climate'], memberCount: 4200, postCount: 3200, recentPosts: 31, isMember: false, viewerRole: null, createdAt: new Date().toISOString() },
-  { id: '7', slug: 'space-news', name: 'Space News', description: 'Space exploration, astronomy, and aerospace', avatarUrl: null, categories: ['space', 'science'], memberCount: 3800, postCount: 2900, recentPosts: 9, isMember: false, viewerRole: null, createdAt: new Date().toISOString() },
-  { id: '8', slug: 'economy-brief', name: 'Economy Brief', description: 'Markets, trade, inflation, and global economics', avatarUrl: null, categories: ['economy'], memberCount: 8100, postCount: 6700, recentPosts: 44, isMember: false, viewerRole: null, createdAt: new Date().toISOString() },
-]
 
 function ActivityDot({ count }: { count: number }) {
   if (count === 0) return <span className="w-[6px] h-[6px] rounded-full bg-wp-s3" />
@@ -147,7 +136,7 @@ export default function CommunitiesPage() {
 
   const fetchCommunities = useCallback(async (s: string, cat: string, srt: string) => {
     setLoading(true)
-    const token = typeof window !== 'undefined' ? localStorage.getItem('wp_token') : null
+    const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
     const params = new URLSearchParams({ sort: srt, limit: '100' })
     if (s)   params.set('search', s)
     if (cat) params.set('category', cat)
@@ -179,7 +168,7 @@ export default function CommunitiesPage() {
   }, []) // eslint-disable-line
 
   const handleJoin = async (communityId: string) => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('wp_token') : null
+    const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
     if (!token) { alert('Please log in to join communities.'); return }
 
     try {

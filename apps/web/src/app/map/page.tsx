@@ -163,6 +163,16 @@ function MapView() {
   const [carrierMode,    setCarrierMode]    = useState(false)
   const [carrierLoading, setCarrierLoading] = useState(false)
 
+  // ── Naval Intelligence layer state ──────────────────────────────────────────
+  const [navalMode,    setNavalMode]    = useState(false)
+  const [navalLoading, setNavalLoading] = useState(false)
+  const [navalCount,   setNavalCount]   = useState(0)
+
+  // ── Missile/Drone Threat layer state ────────────────────────────────────────
+  const [threatMode,    setThreatMode]    = useState(false)
+  const [threatLoading, setThreatLoading] = useState(false)
+  const [threatCount,   setThreatCount]   = useState(0)
+
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
   const fetchSignals = useCallback(async () => {
@@ -971,6 +981,423 @@ function MapView() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [carrierMode])
 
+  // ── Naval Intelligence layer (carriers + AIS distress + dark ships) ────────
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    const NAVAL_SOURCE         = 'naval-vessels'
+    const NAVAL_CARRIER_LAYER  = 'naval-carriers'
+    const NAVAL_DISTRESS_LAYER = 'naval-distress'
+    const NAVAL_DARK_LAYER     = 'naval-dark-ships'
+
+    const removeLayer = () => {
+      try {
+        map.off('click',      NAVAL_CARRIER_LAYER)
+        map.off('mouseenter', NAVAL_CARRIER_LAYER)
+        map.off('mouseleave', NAVAL_CARRIER_LAYER)
+        map.off('click',      NAVAL_DISTRESS_LAYER)
+        map.off('mouseenter', NAVAL_DISTRESS_LAYER)
+        map.off('mouseleave', NAVAL_DISTRESS_LAYER)
+        map.off('click',      NAVAL_DARK_LAYER)
+        map.off('mouseenter', NAVAL_DARK_LAYER)
+        map.off('mouseleave', NAVAL_DARK_LAYER)
+        if (map.getLayer(NAVAL_CARRIER_LAYER))  map.removeLayer(NAVAL_CARRIER_LAYER)
+        if (map.getLayer(NAVAL_DISTRESS_LAYER)) map.removeLayer(NAVAL_DISTRESS_LAYER)
+        if (map.getLayer(NAVAL_DARK_LAYER))     map.removeLayer(NAVAL_DARK_LAYER)
+        if (map.getSource(NAVAL_SOURCE))        map.removeSource(NAVAL_SOURCE)
+      } catch { /* ignore */ }
+    }
+
+    let refreshTimer: ReturnType<typeof setInterval> | null = null
+
+    const applyLayer = async () => {
+      if (!navalMode) {
+        removeLayer()
+        setNavalCount(0)
+        return
+      }
+
+      setNavalLoading(true)
+      try {
+        const res  = await fetch(`${API_URL}/api/v1/maritime/vessels`)
+        const json = await res.json() as {
+          success: boolean
+          data: Array<{
+            id:          string
+            title:       string
+            lat:         number
+            lng:         number
+            type:        'carrier' | 'vessel' | 'dark_ship'
+            fleet:       string | null
+            status_text: string
+            severity:    string
+            created_at:  string
+          }>
+        }
+
+        if (!json.success || !Array.isArray(json.data)) return
+
+        setNavalCount(json.data.length)
+
+        const features = json.data.map(v => ({
+          type:     'Feature' as const,
+          geometry: { type: 'Point' as const, coordinates: [v.lng, v.lat] },
+          properties: {
+            id:         v.id,
+            title:      v.title,
+            vesselType: v.type,
+            fleet:      v.fleet ?? 'Unknown',
+            statusText: v.status_text,
+            severity:   v.severity,
+            createdAt:  v.created_at,
+          },
+        }))
+
+        if (!map.getSource(NAVAL_SOURCE)) {
+          map.addSource(NAVAL_SOURCE, {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features },
+          })
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ;(map.getSource(NAVAL_SOURCE) as any).setData({ type: 'FeatureCollection', features })
+        }
+
+        // Carrier layer — blue symbol circles
+        if (!map.getLayer(NAVAL_CARRIER_LAYER)) {
+          map.addLayer({
+            id:     NAVAL_CARRIER_LAYER,
+            type:   'circle',
+            source: NAVAL_SOURCE,
+            filter: ['==', ['get', 'vesselType'], 'carrier'],
+            paint:  {
+              'circle-color':         '#1e90ff',
+              'circle-radius':        8,
+              'circle-opacity':       0.9,
+              'circle-stroke-color':  'rgba(30,144,255,0.5)',
+              'circle-stroke-width':  3,
+            },
+          })
+
+          map.on('mouseenter', NAVAL_CARRIER_LAYER, () => { map.getCanvas().style.cursor = 'pointer' })
+          map.on('mouseleave', NAVAL_CARRIER_LAYER, () => { map.getCanvas().style.cursor = '' })
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          map.on('click', NAVAL_CARRIER_LAYER, async (e: any) => {
+            const feat = e.features?.[0]
+            if (!feat) return
+            const p = feat.properties as {
+              title: string; fleet: string; statusText: string; createdAt: string
+            }
+            const { default: ml } = await import('maplibre-gl')
+            if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
+            popupRef.current = new ml.Popup({ closeButton: true, closeOnClick: false, offset: 12, className: 'wp-map-popup' })
+              .setLngLat(e.lngLat)
+              .setHTML(`
+                <div style="font:600 12px/1.4 system-ui;color:#60a5fa;margin-bottom:4px">⚓ CARRIER STRIKE GROUP</div>
+                <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:240px;margin-bottom:6px">${p.title}</div>
+                <div style="font:11px monospace;color:#8892a4;margin-bottom:3px">🚢 Fleet: ${p.fleet}</div>
+                <div style="font:11px monospace;color:#8892a4;margin-bottom:3px">📍 ${p.statusText}</div>
+                <div style="font:10px monospace;color:#5a6477">${new Date(p.createdAt).toLocaleString()}</div>
+              `)
+              .addTo(map)
+          })
+        }
+
+        // Distress vessel layer — orange circles
+        if (!map.getLayer(NAVAL_DISTRESS_LAYER)) {
+          map.addLayer({
+            id:     NAVAL_DISTRESS_LAYER,
+            type:   'circle',
+            source: NAVAL_SOURCE,
+            filter: ['==', ['get', 'vesselType'], 'vessel'],
+            paint:  {
+              'circle-color':         '#ff6600',
+              'circle-radius':        6,
+              'circle-opacity':       0.85,
+              'circle-stroke-color':  'rgba(255,102,0,0.4)',
+              'circle-stroke-width':  2,
+            },
+          })
+
+          map.on('mouseenter', NAVAL_DISTRESS_LAYER, () => { map.getCanvas().style.cursor = 'pointer' })
+          map.on('mouseleave', NAVAL_DISTRESS_LAYER, () => { map.getCanvas().style.cursor = '' })
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          map.on('click', NAVAL_DISTRESS_LAYER, async (e: any) => {
+            const feat = e.features?.[0]
+            if (!feat) return
+            const p = feat.properties as {
+              title: string; statusText: string; severity: string; createdAt: string
+            }
+            const { default: ml } = await import('maplibre-gl')
+            if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
+            popupRef.current = new ml.Popup({ closeButton: true, closeOnClick: false, offset: 12, className: 'wp-map-popup' })
+              .setLngLat(e.lngLat)
+              .setHTML(`
+                <div style="font:600 12px/1.4 system-ui;color:#fb923c;margin-bottom:4px">🆘 AIS DISTRESS SIGNAL</div>
+                <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:240px;margin-bottom:6px">${p.title}</div>
+                <div style="font:11px monospace;color:#8892a4;margin-bottom:3px">📍 ${p.statusText}</div>
+                <div style="font:11px monospace;color:#f87171;margin-bottom:3px">Severity: ${p.severity}</div>
+                <div style="font:10px monospace;color:#5a6477">${new Date(p.createdAt).toLocaleString()}</div>
+              `)
+              .addTo(map)
+          })
+        }
+
+        // Dark ship layer — red/grey circles
+        if (!map.getLayer(NAVAL_DARK_LAYER)) {
+          map.addLayer({
+            id:     NAVAL_DARK_LAYER,
+            type:   'circle',
+            source: NAVAL_SOURCE,
+            filter: ['==', ['get', 'vesselType'], 'dark_ship'],
+            paint:  {
+              'circle-color':         '#6b21a8',
+              'circle-radius':        6,
+              'circle-opacity':       0.85,
+              'circle-stroke-color':  'rgba(107,33,168,0.5)',
+              'circle-stroke-width':  2,
+            },
+          })
+
+          map.on('mouseenter', NAVAL_DARK_LAYER, () => { map.getCanvas().style.cursor = 'pointer' })
+          map.on('mouseleave', NAVAL_DARK_LAYER, () => { map.getCanvas().style.cursor = '' })
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          map.on('click', NAVAL_DARK_LAYER, async (e: any) => {
+            const feat = e.features?.[0]
+            if (!feat) return
+            const p = feat.properties as {
+              title: string; statusText: string; createdAt: string
+            }
+            const { default: ml } = await import('maplibre-gl')
+            if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
+            popupRef.current = new ml.Popup({ closeButton: true, closeOnClick: false, offset: 12, className: 'wp-map-popup' })
+              .setLngLat(e.lngLat)
+              .setHTML(`
+                <div style="font:600 12px/1.4 system-ui;color:#c084fc;margin-bottom:4px">⚠️ DARK SHIP DETECTED</div>
+                <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:240px;margin-bottom:6px">${p.title}</div>
+                <div style="font:11px monospace;color:#8892a4;margin-bottom:3px">📍 ${p.statusText}</div>
+                <div style="font:10px monospace;color:#5a6477">${new Date(p.createdAt).toLocaleString()}</div>
+              `)
+              .addTo(map)
+          })
+        }
+      } catch (e) {
+        console.warn('[map] Naval Intel layer error:', e)
+      } finally {
+        setNavalLoading(false)
+      }
+    }
+
+    if (map.loaded()) {
+      void applyLayer()
+    } else {
+      map.once('load', () => { void applyLayer() })
+    }
+
+    // Auto-refresh every 10 minutes when navalMode is active
+    if (navalMode) {
+      refreshTimer = setInterval(() => { void applyLayer() }, 10 * 60_000)
+    }
+
+    return () => {
+      if (refreshTimer) clearInterval(refreshTimer)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navalMode])
+
+  // ── Missile/Drone Threat Intelligence layer ─────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    const THREAT_SOURCE    = 'threat-signals'
+    const THREAT_BALLISTIC = 'threats-ballistic'
+    const THREAT_DRONE_L   = 'threats-drone'
+    const THREAT_OTHER     = 'threats-other'
+
+    let refreshTimer: ReturnType<typeof setInterval> | null = null
+
+    const removeThreatLayers = () => {
+      try {
+        for (const layer of [THREAT_BALLISTIC, THREAT_DRONE_L, THREAT_OTHER]) {
+          map.off('click',      layer)
+          map.off('mouseenter', layer)
+          map.off('mouseleave', layer)
+          if (map.getLayer(layer)) map.removeLayer(layer)
+        }
+        if (map.getSource(THREAT_SOURCE)) map.removeSource(THREAT_SOURCE)
+      } catch { /* ignore */ }
+    }
+
+    async function applyLayer() {
+      if (!threatMode) {
+        removeThreatLayers()
+        setThreatCount(0)
+        return
+      }
+
+      setThreatLoading(true)
+      try {
+        const res  = await fetch(`${API_URL}/api/v1/threats/missiles`)
+        const json = await res.json() as {
+          success: boolean
+          data: Array<{
+            id:                string
+            title:             string
+            lat:               number
+            lng:               number
+            threat_type:       'ballistic' | 'cruise' | 'drone' | 'hypersonic' | 'rocket' | 'unknown'
+            origin_country:    string | null
+            target_region:     string | null
+            severity:          string
+            reliability_score: number
+            created_at:        string
+          }>
+        }
+
+        if (!json.success) return
+
+        const features = json.data.map(t => ({
+          type: 'Feature' as const,
+          geometry: { type: 'Point' as const, coordinates: [t.lng, t.lat] },
+          properties: { ...t },
+        }))
+
+        setThreatCount(features.length)
+
+        if (!map!.getSource(THREAT_SOURCE)) {
+          map!.addSource(THREAT_SOURCE, {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features },
+          })
+        } else {
+          ;(map!.getSource(THREAT_SOURCE) as any).setData({ type: 'FeatureCollection', features })
+        }
+
+        // ── Build popup HTML for a threat signal ───────────────────────────────
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const makeThreatPopup = async (e: any) => {
+          const feat = e.features?.[0]
+          if (!feat) return
+          const props  = feat.properties as Record<string, unknown>
+          const tt     = String(props.threat_type ?? 'unknown')
+          const typeLabel: Record<string, string> = {
+            ballistic:  '🚀 BALLISTIC', cruise: '✈️ CRUISE', hypersonic: '⚡ HYPERSONIC',
+            rocket: '💥 ROCKET', drone: '🛸 DRONE/UAV', unknown: '⚠️ THREAT',
+          }
+          const typeColor: Record<string, string> = {
+            ballistic: '#dc2626', cruise: '#dc2626', hypersonic: '#dc2626',
+            drone: '#f97316', rocket: '#a855f7', unknown: '#a855f7',
+          }
+          const label  = typeLabel[tt] ?? '⚠️ THREAT'
+          const color  = typeColor[tt] ?? '#a855f7'
+          const ts     = new Date(String(props.created_at ?? '')).toLocaleString()
+          const origin = props.origin_country
+            ? `<div style="font:11px monospace;color:#8892a4;margin-bottom:2px">Origin: ${String(props.origin_country)}</div>`
+            : ''
+          const { default: ml } = await import('maplibre-gl')
+          if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
+          popupRef.current = new ml.Popup({ closeButton: true, closeOnClick: false, offset: 12, className: 'wp-map-popup' })
+            .setLngLat(e.lngLat)
+            .setHTML(`
+              <div style="font:600 12px/1.4 system-ui;color:${color};margin-bottom:4px">${label}</div>
+              <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:240px;margin-bottom:6px">${String(props.title ?? '')}</div>
+              <div style="font:11px monospace;color:#8892a4;margin-bottom:2px">Severity: ${String(props.severity ?? '')}</div>
+              ${origin}
+              <div style="font:10px monospace;color:#5a6477">${ts}</div>
+            `)
+            .addTo(map)
+        }
+
+        const hookLayer = (layerId: string) => {
+          map.on('mouseenter', layerId, () => { map.getCanvas().style.cursor = 'pointer' })
+          map.on('mouseleave', layerId, () => { map.getCanvas().style.cursor = '' })
+          map.on('click', layerId, makeThreatPopup)
+        }
+
+        // ── threats-ballistic: red-600 #dc2626, radius 8, pulse via stroke ─────
+        if (!map.getLayer(THREAT_BALLISTIC)) {
+          map.addLayer({
+            id:     THREAT_BALLISTIC,
+            type:   'circle',
+            source: THREAT_SOURCE,
+            filter: ['in', ['get', 'threat_type'], ['literal', ['ballistic', 'cruise', 'hypersonic']]],
+            paint:  {
+              'circle-color':        '#dc2626',
+              'circle-radius':       8,
+              'circle-opacity':      0.9,
+              'circle-stroke-color': 'rgba(220,38,38,0.35)',
+              'circle-stroke-width': 5,
+            },
+          })
+          hookLayer(THREAT_BALLISTIC)
+        }
+
+        // ── threats-drone: orange-500 #f97316, radius 6 ────────────────────────
+        if (!map.getLayer(THREAT_DRONE_L)) {
+          map.addLayer({
+            id:     THREAT_DRONE_L,
+            type:   'circle',
+            source: THREAT_SOURCE,
+            filter: ['==', ['get', 'threat_type'], 'drone'],
+            paint:  {
+              'circle-color':        '#f97316',
+              'circle-radius':       6,
+              'circle-opacity':      0.9,
+              'circle-stroke-color': 'rgba(249,115,22,0.4)',
+              'circle-stroke-width': 2,
+            },
+          })
+          hookLayer(THREAT_DRONE_L)
+        }
+
+        // ── threats-other: purple-500 #a855f7, radius 5 ────────────────────────
+        if (!map.getLayer(THREAT_OTHER)) {
+          map.addLayer({
+            id:     THREAT_OTHER,
+            type:   'circle',
+            source: THREAT_SOURCE,
+            filter: ['in', ['get', 'threat_type'], ['literal', ['rocket', 'unknown']]],
+            paint:  {
+              'circle-color':        '#a855f7',
+              'circle-radius':       5,
+              'circle-opacity':      0.85,
+              'circle-stroke-color': 'rgba(168,85,247,0.4)',
+              'circle-stroke-width': 2,
+            },
+          })
+          hookLayer(THREAT_OTHER)
+        }
+
+      } catch (err) {
+        console.error('[ThreatLayer] fetch error:', err)
+      } finally {
+        setThreatLoading(false)
+      }
+    }
+
+    if (map.loaded()) {
+      void applyLayer()
+    } else {
+      map.once('load', () => { void applyLayer() })
+    }
+
+    // Auto-refresh every 5 minutes when threatMode is active (more volatile than naval)
+    if (threatMode) {
+      refreshTimer = setInterval(() => { void applyLayer() }, 5 * 60_000)
+    }
+
+    return () => {
+      if (refreshTimer) clearInterval(refreshTimer)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threatMode])
+
   // ── Derived state ──────────────────────────────────────────────────────────
 
   const sevCounts = signals.reduce((a, s) => {
@@ -1097,6 +1524,44 @@ function MapView() {
                   ? <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
                   : '⚓'}
                 {' '}CARRIERS
+              </button>
+
+              {/* Missile / Drone Threat Intelligence toggle */}
+              <button
+                onClick={() => setThreatMode(v => !v)}
+                disabled={threatLoading}
+                title={threatMode ? `Threats: ${threatCount} active — hypersonic (purple), ballistic (red), cruise (orange), drone (amber), rocket (coral)` : 'Toggle missile/drone threat intelligence layer'}
+                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
+                  ${threatMode
+                    ? 'border-[rgba(255,34,34,0.6)] text-[#fca5a5] bg-[rgba(255,34,34,0.1)]'
+                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}
+                  ${threatLoading ? 'opacity-60 cursor-wait' : ''}`}>
+                {threatLoading
+                  ? <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                  : '🎯'}
+                {' '}THREATS
+                {threatMode && threatCount > 0 && (
+                  <span className="ml-1 px-1 py-px bg-[rgba(255,34,34,0.25)] rounded text-[9px]">{threatCount}</span>
+                )}
+              </button>
+
+              {/* Naval Intelligence toggle */}
+            <button
+                onClick={() => setNavalMode(v => !v)}
+                disabled={navalLoading}
+                title={navalMode ? `Naval Intel: ${navalCount} vessels — carriers, AIS distress, dark ships` : 'Toggle Naval Intelligence layer (carriers + AIS distress + dark ships)'}
+                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
+                  ${navalMode
+                    ? 'border-[rgba(30,144,255,0.6)] text-[#60a5fa] bg-[rgba(30,144,255,0.1)]'
+                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}
+                  ${navalLoading ? 'opacity-60 cursor-wait' : ''}`}>
+                {navalLoading
+                  ? <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                  : '🌊'}
+                {' '}NAVAL INTEL
+                {navalMode && navalCount > 0 && (
+                  <span className="ml-1 px-1 py-px bg-[rgba(30,144,255,0.25)] rounded text-[9px]">{navalCount}</span>
+                )}
               </button>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
+import helmet from '@fastify/helmet'
 import jwt from '@fastify/jwt'
 import rateLimit from '@fastify/rate-limit'
 import websocket from '@fastify/websocket'
@@ -25,6 +26,14 @@ import { registerStixRoutes } from './routes/stix'
 import { registerPublicRoutes } from './routes/public'
 import { registerNotificationRoutes } from './routes/notifications'
 import { registerUploadRoutes } from './routes/uploads'
+import { registerBriefingRoutes } from './routes/briefings'
+import { registerCountryRoutes } from './routes/countries'
+import { registerBreakingRoutes } from './routes/breaking'
+import { registerTradeRoutes } from './routes/trade'
+import { registerCameraRoutes } from './routes/cameras'
+import { registerPatentRoutes } from './routes/patents'
+import { registerMaritimeRoutes } from './routes/maritime'
+import { registerThreatsRoutes }  from './routes/threats'
 import { registerWSHandler } from './ws/handler'
 import { registerGraphQL } from './graphql'
 import { metricsPlugin } from './middleware/metrics'
@@ -77,6 +86,50 @@ async function bootstrap() {
       }
     },
     credentials: true,
+  })
+
+  // ─── SECURITY HEADERS (helmet) ────────────────────────────
+  // Must be registered after CORS so helmet doesn't override CORS headers.
+  await app.register(helmet, {
+    // Content-Security-Policy: locked down for an API-only server.
+    // The Swagger UI at /api/docs needs inline styles/scripts, so we
+    // use a relaxed policy only for that prefix via the contentSecurityPolicy
+    // override below; all other routes get the strict policy.
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc:     ["'none'"],
+        scriptSrc:      ["'self'"],
+        styleSrc:       ["'self'"],
+        imgSrc:         ["'self'", 'data:'],
+        connectSrc:     ["'self'"],
+        fontSrc:        ["'self'"],
+        objectSrc:      ["'none'"],
+        mediaSrc:       ["'none'"],
+        frameSrc:       ["'none'"],
+        frameAncestors: ["'none'"],
+        formAction:     ["'self'"],
+        baseUri:        ["'none'"],
+        upgradeInsecureRequests: isDev ? null : [],
+      },
+    },
+    // X-Frame-Options: DENY — no iframing of the API
+    frameguard: { action: 'deny' },
+    // X-Content-Type-Options: nosniff
+    noSniff: true,
+    // Referrer-Policy: strict-origin-when-cross-origin
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    // Strict-Transport-Security: 1 year + includeSubDomains (prod only)
+    hsts: isDev ? false : { maxAge: 31_536_000, includeSubDomains: true, preload: true },
+    // X-DNS-Prefetch-Control: off
+    dnsPrefetchControl: { allow: false },
+    // X-Download-Options: noopen (IE)
+    ieNoOpen: true,
+    // X-Permitted-Cross-Domain-Policies: none
+    permittedCrossDomainPolicies: { permittedPolicies: 'none' },
+    // Cross-Origin-Opener-Policy
+    crossOriginOpenerPolicy: { policy: 'same-origin' },
+    // Cross-Origin-Resource-Policy
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
   })
 
   await app.register(jwt, {
@@ -149,6 +202,11 @@ async function bootstrap() {
         { name: 'embed',         description: 'Public embeddable widgets' },
         { name: 'admin',         description: 'Admin-only operations' },
         { name: 'stix',          description: 'STIX 2.1 threat intelligence export' },
+        { name: 'briefings',     description: 'AI-powered daily intelligence briefings' },
+        { name: 'breaking-alerts', description: 'Real-time breaking news alert banners' },
+        { name: 'cameras',         description: 'Live public CCTV/webcam feeds by region' },
+        { name: 'maritime',        description: 'Naval intelligence — carrier strike groups and AIS vessel tracking' },
+        { name: 'threats',         description: 'Missile and drone threat intelligence — ballistic, cruise, hypersonic, rocket, UAV' },
       ],
       components: {
         securitySchemes: {
@@ -205,6 +263,14 @@ async function bootstrap() {
   await app.register(registerEmbedRoutes,        { prefix: '/api/v1/embed' })
   await app.register(registerStixRoutes,         { prefix: '/api/v1/stix' })
   await app.register(registerPublicRoutes,       { prefix: '/api/v1/public' })
+  await app.register(registerBriefingRoutes,    { prefix: '/api/v1/briefings' })
+  await app.register(registerCountryRoutes,     { prefix: '/api/v1/countries' })
+  await app.register(registerBreakingRoutes,    { prefix: '/api/v1/breaking' })
+  await app.register(registerTradeRoutes,       { prefix: '/api/v1/trade' })
+  await app.register(registerCameraRoutes,      { prefix: '/api/v1/cameras' })
+  await app.register(registerPatentRoutes,      { prefix: '/api/v1/patents' })
+  await app.register(registerMaritimeRoutes,    { prefix: '/api/v1/maritime' })
+  await app.register(registerThreatsRoutes,     { prefix: '/api/v1/threats' })
 
   // ─── GRAPHQL ─────────────────────────────────────────────
   await registerGraphQL(app)

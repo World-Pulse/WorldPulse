@@ -214,4 +214,77 @@ export const registerAdminRoutes: FastifyPluginAsync = async (app) => {
       },
     })
   })
+
+  // ─── GET /admin/llm-status ───────────────────────────────────────────────────
+  // Returns which LLM providers are configured and which is the active priority provider
+  fastify.get('/admin/llm-status', {
+    preHandler: [authenticate],
+    config: { rateLimit: { max: 30, timeWindow: 60_000 } },
+  }, async (_req, reply) => {
+    interface ProviderInfo {
+      id:         string
+      label:      string
+      model:      string
+      configured: boolean
+      active:     boolean
+    }
+
+    const providers: ProviderInfo[] = [
+      {
+        id:         'anthropic',
+        label:      'Claude (Anthropic)',
+        model:      process.env.ANTHROPIC_MODEL ?? 'claude-haiku-4-5-20251001',
+        configured: !!process.env.ANTHROPIC_API_KEY,
+        active:     false,
+      },
+      {
+        id:         'openai',
+        label:      'GPT-4o mini',
+        model:      process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
+        configured: !!process.env.OPENAI_API_KEY,
+        active:     false,
+      },
+      {
+        id:         'gemini',
+        label:      'Gemini Flash',
+        model:      process.env.GEMINI_MODEL ?? 'gemini-2.0-flash',
+        configured: !!process.env.GEMINI_API_KEY,
+        active:     false,
+      },
+      {
+        id:         'openrouter',
+        label:      'OpenRouter',
+        model:      process.env.OPENROUTER_MODEL ?? 'meta-llama/llama-3.2-3b-instruct:free',
+        configured: !!process.env.OPENROUTER_API_KEY,
+        active:     false,
+      },
+      {
+        id:         'ollama',
+        label:      'Local AI (Ollama)',
+        model:      process.env.OLLAMA_MODEL ?? 'llama3.2',
+        configured: !!process.env.OLLAMA_URL,
+        active:     false,
+      },
+      {
+        id:         'extractive',
+        label:      'Auto-summary',
+        model:      'extractive',
+        configured: true, // always available, no key needed
+        active:     false,
+      },
+    ]
+
+    // Mark the first configured provider as active (matches signal-summary.ts priority chain)
+    const firstConfigured = providers.find(p => p.configured)
+    if (firstConfigured) firstConfigured.active = true
+
+    return reply.send({
+      success: true,
+      data: {
+        activeProvider: firstConfigured?.id ?? 'extractive',
+        providers,
+        generatedAt: new Date().toISOString(),
+      },
+    })
+  })
 }

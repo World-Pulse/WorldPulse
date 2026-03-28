@@ -9,6 +9,7 @@ import { ImageGallery } from '@/components/ImageGallery'
 import { EmptyState } from '@/components/EmptyState'
 import { useToast } from '@/components/Toast'
 import { ReliabilityDots } from '@/components/signals/ReliabilityDots'
+import { RiskScoreGauge } from '@/components/signals/RiskScoreGauge'
 import { FlagModal } from '@/components/signals/FlagModal'
 import type { CrossCheckStatus } from '@worldpulse/types'
 
@@ -50,6 +51,7 @@ interface FeedItem {
   sourceCount?: number
   crossCheckStatus?: CrossCheckStatus
   communityFlagCount?: number
+  riskScore?: { score: number; level: string; label: string }
 }
 
 // ─── DATA ADAPTERS ───────────────────────────────────────────────────────────
@@ -140,6 +142,7 @@ function adaptSignal(sig: any): FeedItem {
     sourceCount:       sig.sourceCount,
     crossCheckStatus:  sig.status ? crossCheckFromStatus(sig.status) : undefined,
     communityFlagCount: flagCount,
+    riskScore:         sig.riskScore ?? undefined,
   }
 }
 
@@ -583,6 +586,14 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
                       style={{ width: `${item.event.impact}%`, background: item.event.impactColor }} />
                   </div>
                   <span className="font-mono text-[9px] text-wp-text3">{item.event.impact}%</span>
+                  {item.riskScore && (
+                    <RiskScoreGauge
+                      score={item.riskScore.score}
+                      level={item.riskScore.level}
+                      label={item.riskScore.label}
+                      size="sm"
+                    />
+                  )}
                 </div>
               </div>
             )}

@@ -19,6 +19,7 @@ import type Redis from 'ioredis'
 import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
+import { insertAndCorrelate } from '../pipeline/insert-signal'
 
 const log = rootLogger.child({ module: 'gpsjam-source' })
 
@@ -163,7 +164,7 @@ export function startGpsJamPoller(
         ].join(' ')
 
         try {
-          const [signal] = await db('signals').insert({
+          const signal = await insertAndCorrelate({
             title:             signalTitle.slice(0, 500),
             summary,
             category:          'technology',
@@ -180,7 +181,7 @@ export function startGpsJamPoller(
             tags:              ['osint', 'gps', 'jamming', 'electronic-warfare', 'gpsjam'],
             language:          'en',
             event_time:        new Date(),
-          }).returning('*')
+          }, { lat, lng, sourceId: 'gpsjam' })
 
           // Dedup for 2 hours — GPSJam updates frequently but we don't want duplicates per cell
           await redis.setex(key, 2 * 3_600, '1')

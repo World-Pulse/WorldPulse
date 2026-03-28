@@ -18,6 +18,7 @@ import type Redis from 'ioredis'
 import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
+import { insertAndCorrelate } from '../pipeline/insert-signal'
 
 const log = rootLogger.child({ module: 'firms-source' })
 
@@ -199,7 +200,7 @@ export function startFirmsPoller(
         ].join(' ')
 
         try {
-          const [signal] = await db('signals').insert({
+          const signal = await insertAndCorrelate({
             title:             title.slice(0, 500),
             summary,
             category:          'disaster',
@@ -218,7 +219,7 @@ export function startFirmsPoller(
             event_time:        cell.acq_date
               ? new Date(`${cell.acq_date}T${cell.acq_time.slice(0, 2)}:${cell.acq_time.slice(2, 4)}:00Z`)
               : new Date(),
-          }).returning('*')
+          }, { lat: cell.lat, lng: cell.lng, sourceId: 'firms' })
 
           // Dedup for 3h (data refreshes every ~3 hours)
           await redis.setex(key, 3 * 3_600, '1')

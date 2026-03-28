@@ -1,12 +1,181 @@
 import type { FastifyPluginAsync } from 'fastify'
+import https from 'node:https'
 import { db } from '../db/postgres'
+import { redis } from '../db/redis'
 import { authenticate } from '../middleware/auth'
+
+const THREAT_INDEX_TTL  = 120  // 2 min cache
+const MARKETS_CACHE_TTL = 300  // 5 min cache — respects Yahoo Finance rate limits
+
+// Market instruments tracked
+const MARKET_TICKERS = [
+  { symbol: '^VIX',    name: 'VIX',    type: 'volatility' },
+  { symbol: '^GSPC',   name: 'S&P 500', type: 'equity'    },
+  { symbol: '^IXIC',   name: 'NASDAQ',  type: 'equity'    },
+  { symbol: '^FTSE',   name: 'FTSE 100', type: 'equity'   },
+  { symbol: '^N225',   name: 'Nikkei',  type: 'equity'    },
+  { symbol: 'BTC-USD', name: 'BTC',     type: 'crypto'    },
+  { symbol: 'GC=F',    name: 'Gold',    type: 'commodity' },
+  { symbol: 'CL=F',    name: 'WTI Oil', type: 'commodity' },
+  { symbol: 'EURUSD=X', name: 'EUR/USD', type: 'fx'       },
+]
+
+function fetchYahooQuote(symbol: string): Promise<{ price: number; changePercent: number; prevClose: number } | null> {
+  return new Promise(resolve => {
+    const encoded = encodeURIComponent(symbol)
+    const opts = {
+      hostname: 'query1.finance.yahoo.com',
+      path:     `/v8/finance/chart/${encoded}?interval=1d&range=1d`,
+      headers:  { 'User-Agent': 'Mozilla/5.0 WorldPulse/1.0' },
+      timeout:  5000,
+    }
+    const req = https.get(opts, res => {
+      let body = ''
+      res.on('data', (chunk: Buffer) => { body += chunk.toString() })
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(body)
+          const meta = json?.chart?.result?.[0]?.meta
+          if (!meta) return resolve(null)
+          const price   = meta.regularMarketPrice ?? meta.previousClose
+          const prev    = meta.chartPreviousClose ?? meta.previousClose ?? meta.regularMarketPrice
+          const change  = prev && price ? ((price - prev) / prev) * 100 : 0
+          resolve({ price: Number(price.toFixed(4)), changePercent: Number(change.toFixed(2)), prevClose: Number(prev?.toFixed(4) ?? 0) })
+        } catch { resolve(null) }
+      })
+    })
+    req.on('error', () => resolve(null))
+    req.on('timeout', () => { req.destroy(); resolve(null) })
+  })
+}
 
 export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
 
   app.addHook('onRoute', (routeOptions) => {
     routeOptions.schema ??= {}
     routeOptions.schema.tags = routeOptions.schema.tags ?? ['analytics']
+  })
+
+  // ─── GLOBAL THREAT INDEX ─────────────────────────────────
+  // GET /api/v1/analytics/threat-index
+  // Computes live global threat level from recent signal severity distribution.
+  app.get('/threat-index', {
+    schema: {
+      summary: 'Global Threat Index',
+      description: 'Live composite threat level based on recent signal severity distribution',
+      querystring: {
+        type: 'object',
+        properties: {
+          window: { type: 'string', enum: ['1h', '6h', '24h'], default: '6h' },
+        },
+      },
+    },
+    config: { rateLimit: { max: 120, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    const { window = '6h' } = req.query as { window?: string }
+    const cacheKey = `analytics:threat-index:${window}`
+    const cached = await redis.get(cacheKey).catch(() => null)
+    if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
+
+    const hours = window === '1h' ? 1 : window === '24h' ? 24 : 6
+    const since = new Date(Date.now() - hours * 3600 * 1000).toISOString()
+
+    const rows = await db('signals')
+      .where('status', 'verified')
+      .where('created_at', '>=', since)
+      .select('severity')
+      .count('* as count')
+      .groupBy('severity')
+
+    const counts: Record<string, number> = {}
+    let total = 0
+    for (const r of rows as Array<{ severity: string; count: string }>) {
+      counts[r.severity] = Number(r.count)
+      total += Number(r.count)
+    }
+
+    if (total === 0) {
+      const empty = { level: 1, label: 'Minimal', description: 'No recent verified signals', color: '#00e676', total_signals: 0, window, distribution: {}, generated_at: new Date().toISOString() }
+      await redis.setex(cacheKey, THREAT_INDEX_TTL, JSON.stringify(empty)).catch(() => {})
+      return reply.send(empty)
+    }
+
+    // Weighted score: critical×5 + high×3 + medium×1.5 + low×0.5
+    const weighted =
+      (counts.critical ?? 0) * 5 +
+      (counts.high     ?? 0) * 3 +
+      (counts.medium   ?? 0) * 1.5 +
+      (counts.low      ?? 0) * 0.5 +
+      (counts.info     ?? 0) * 0.1
+
+    // Normalise to a 1–5 threat level
+    // Anchor: 100 weighted score = level 5, 0 = level 1
+    const maxExpected = total * 5  // if all signals were critical
+    const ratio = weighted / maxExpected
+    const rawLevel = 1 + ratio * 4  // 1.0 – 5.0
+    const level = Math.min(5, Math.max(1, Math.round(rawLevel)))
+
+    const LEVEL_META: Record<number, { label: string; color: string; description: string }> = {
+      1: { label: 'Minimal',  color: '#00e676', description: 'Low global activity — no significant emerging threats' },
+      2: { label: 'Elevated', color: '#ffd700', description: 'Moderate signal activity — some elevated events detected' },
+      3: { label: 'High',     color: '#f5a623', description: 'Elevated global threat — multiple high-severity events active' },
+      4: { label: 'Severe',   color: '#ff6b35', description: 'Severe threat environment — critical events detected in multiple regions' },
+      5: { label: 'Critical', color: '#ff3b5c', description: 'Critical global situation — multiple ongoing critical-severity events' },
+    }
+
+    const meta = LEVEL_META[level]!
+    const result = {
+      level,
+      label:       meta.label,
+      description: meta.description,
+      color:       meta.color,
+      total_signals: total,
+      window,
+      distribution: {
+        critical: counts.critical ?? 0,
+        high:     counts.high     ?? 0,
+        medium:   counts.medium   ?? 0,
+        low:      counts.low      ?? 0,
+        info:     counts.info     ?? 0,
+      },
+      weighted_score:    Math.round(weighted),
+      generated_at: new Date().toISOString(),
+    }
+
+    await redis.setex(cacheKey, THREAT_INDEX_TTL, JSON.stringify(result)).catch(() => {})
+    return reply.send(result)
+  })
+
+  // ─── MARKET TICKER ────────────────────────────────────────
+  // GET /api/v1/analytics/markets
+  // Returns live prices for key market indicators (equities, crypto, commodities, FX).
+  app.get('/markets', {
+    schema: {
+      summary: 'Market Ticker',
+      description: 'Live prices for VIX, S&P 500, NASDAQ, FTSE 100, Nikkei, Bitcoin, Gold, WTI Oil, EUR/USD from Yahoo Finance',
+    },
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (_req, reply) => {
+    const cacheKey = 'analytics:markets'
+    const cached = await redis.get(cacheKey).catch(() => null)
+    if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
+
+    // Fetch all quotes in parallel — tolerate partial failures
+    const results = await Promise.allSettled(
+      MARKET_TICKERS.map(async t => {
+        const quote = await fetchYahooQuote(t.symbol)
+        return { ...t, ...(quote ?? { price: null, changePercent: null, prevClose: null }) }
+      })
+    )
+
+    const tickers = results.map((r, i) => {
+      if (r.status === 'fulfilled') return r.value
+      return { ...MARKET_TICKERS[i]!, price: null, changePercent: null, prevClose: null }
+    })
+
+    const result = { tickers, generated_at: new Date().toISOString() }
+    await redis.setex(cacheKey, MARKETS_CACHE_TTL, JSON.stringify(result)).catch(() => {})
+    return reply.send(result)
   })
 
   // ─── PERSONAL ANALYTICS ──────────────────────────────────

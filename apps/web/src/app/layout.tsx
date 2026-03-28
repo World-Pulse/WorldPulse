@@ -4,6 +4,7 @@ import './globals.css'
 import { Providers } from '@/components/providers'
 import { TopNav } from '@/components/nav/TopNav'
 import { BottomTabBar } from '@/components/nav/BottomTabBar'
+import { BreakingAlertBanner } from '@/components/alerts/BreakingAlertBanner'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -72,6 +73,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Skip to main content
         </a>
         <Providers>
+          <BreakingAlertBanner />
           <TopNav />
           <main
             id="main-content"

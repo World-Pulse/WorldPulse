@@ -17,6 +17,7 @@ import type Redis from 'ioredis'
 import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { Category, SignalSeverity } from '@worldpulse/types'
+import { insertAndCorrelate } from '../pipeline/insert-signal'
 
 const log = rootLogger.child({ module: 'gdelt-source' })
 
@@ -145,7 +146,7 @@ export function startGdeltPoller(
 
         // Insert signal into DB
         try {
-          const [signal] = await db('signals').insert({
+          const signal = await insertAndCorrelate({
             title:             article.title.slice(0, 500),
             summary:           `GDELT signal from ${article.domain} (${article.sourcecountry})`,
             category:          'conflict' as Category,
@@ -164,7 +165,7 @@ export function startGdeltPoller(
             tags:              ['osint', 'gdelt', 'conflict'],
             language:          article.language === 'English' ? 'en' : (article.language?.slice(0, 2)?.toLowerCase() ?? 'xx'),
             event_time:        parseGdeltDate(article.seendate),
-          }).returning('*')
+          }, { lat: geo.lat ?? null, lng: geo.lng ?? null, sourceId: 'gdelt' })
 
           // Mark deduped for 24h
           await redis.setex(key, 86400, '1')

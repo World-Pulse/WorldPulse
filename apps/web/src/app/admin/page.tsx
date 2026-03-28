@@ -54,6 +54,20 @@ interface SystemHealthData {
   }
 }
 
+interface LlmProvider {
+  id:         string
+  label:      string
+  model:      string
+  configured: boolean
+  active:     boolean
+}
+
+interface LlmStatusData {
+  activeProvider: string
+  providers:      LlmProvider[]
+  generatedAt:    string
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
@@ -197,10 +211,12 @@ export default function AdminPage() {
   const [scraperData,    setScraperData]    = useState<ScraperHealthData | null>(null)
   const [signalStats,    setSignalStats]    = useState<SignalStatsData | null>(null)
   const [systemHealth,   setSystemHealth]   = useState<SystemHealthData | null>(null)
+  const [llmStatus,      setLlmStatus]      = useState<LlmStatusData | null>(null)
 
   const [scraperError,   setScraperError]   = useState('')
   const [signalError,    setSignalError]    = useState('')
   const [healthError,    setHealthError]    = useState('')
+  const [llmError,       setLlmError]       = useState('')
 
   const [loading,        setLoading]        = useState(false)
   const [lastRefresh,    setLastRefresh]    = useState<Date | null>(null)
@@ -248,6 +264,16 @@ export default function AdminPage() {
         setSystemHealth(d.data ?? d)
         setHealthError('')
       }).catch(e => setHealthError(e instanceof Error ? e.message : 'Failed to load system health')),
+
+      // LLM provider status
+      fetch(`${API_URL}/api/v1/admin/llm-status`, {
+        headers: { Authorization: `Bearer ${tok}` },
+      }).then(async r => {
+        const d = await r.json() as { success: boolean; data: LlmStatusData }
+        if (!r.ok) throw new Error('Failed to load LLM status')
+        setLlmStatus(d.data)
+        setLlmError('')
+      }).catch(e => setLlmError(e instanceof Error ? e.message : 'Failed to load LLM status')),
     ])
 
     setLoading(false)
@@ -442,6 +468,65 @@ export default function AdminPage() {
             <div className="glass border border-[rgba(255,59,92,0.3)] rounded-xl px-5 py-4 text-[13px] text-wp-red">{healthError}</div>
           ) : (
             <SkeletonCard className="h-40" />
+          )}
+        </section>
+
+        {/* AI Provider Status */}
+        <section>
+          <h2 className="text-[12px] font-mono text-wp-text3 uppercase tracking-widest mb-3">AI Summary Provider</h2>
+          {llmStatus ? (
+            <div className="glass border border-[rgba(255,255,255,0.07)] rounded-xl p-4">
+              {llmStatus.providers.map((p) => {
+                const PROVIDER_STYLE: Record<string, { icon: string; color: string; bg: string }> = {
+                  anthropic:  { icon: '🟠', color: '#f97316', bg: 'rgba(249,115,22,0.12)' },
+                  openai:     { icon: '🟢', color: '#22c55e', bg: 'rgba(34,197,94,0.12)'  },
+                  gemini:     { icon: '🔵', color: '#3b82f6', bg: 'rgba(59,130,246,0.12)' },
+                  openrouter: { icon: '🟣', color: '#a855f7', bg: 'rgba(168,85,247,0.12)' },
+                  ollama:     { icon: '🏠', color: '#06b6d4', bg: 'rgba(6,182,212,0.12)'  },
+                  extractive: { icon: '📝', color: '#94a3b8', bg: 'rgba(148,163,184,0.10)' },
+                }
+                const style = PROVIDER_STYLE[p.id] ?? PROVIDER_STYLE['extractive']!
+                return (
+                  <div
+                    key={p.id}
+                    className="flex items-center justify-between py-2.5 border-b border-[rgba(255,255,255,0.05)] last:border-0"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-[15px]">{style.icon}</span>
+                      <div>
+                        <p className="text-[13px] font-medium text-wp-text leading-tight">{p.label}</p>
+                        <p className="text-[11px] font-mono text-wp-text3">{p.model}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {p.active ? (
+                        <span
+                          className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider"
+                          style={{ background: style.bg, color: style.color }}
+                        >
+                          ✓ active
+                        </span>
+                      ) : p.configured ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider bg-[rgba(255,255,255,0.05)] text-wp-text3">
+                          configured
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-wider text-wp-text3 opacity-40">
+                          not set
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+              <p className="text-[11px] font-mono text-wp-text3 mt-3 pt-3 border-t border-[rgba(255,255,255,0.05)]">
+                Priority chain: Anthropic → OpenAI → Gemini → OpenRouter → Ollama → Extractive
+              </p>
+            </div>
+          ) : llmError ? (
+            <div className="glass border border-[rgba(255,59,92,0.3)] rounded-xl px-5 py-4 text-[13px] text-wp-red">{llmError}</div>
+          ) : (
+            <SkeletonCard className="h-52" />
           )}
         </section>
       </div>

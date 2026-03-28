@@ -6,6 +6,7 @@ import { indexSignal, removeSignal } from '../lib/search'
 import { publishSignalUpsert, publishSignalDelete } from '../lib/search-events'
 import { generateSignalSummary, refreshSignalSummary } from '../lib/signal-summary'
 import { slopDetector } from '../lib/slop-detector'
+import { computeRiskScore } from '../lib/risk-score'
 import { z } from 'zod'
 
 // ─── Cache TTLs ───────────────────────────────────────────────────────────────
@@ -731,6 +732,17 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
 
 function formatSignal(row: Record<string, unknown>) {
   const geo = row.location_geojson as { coordinates?: [number, number] } | null
+
+  const riskScore = computeRiskScore({
+    severity:         (row.severity as string) ?? 'low',
+    reliabilityScore: (row.reliability_score as number) ?? 0,
+    sourceCount:      (row.sources_data as unknown[] | null)?.length ?? (row.source_count as number) ?? 1,
+    hasLocation:      !!geo?.coordinates,
+    category:         (row.category as string) ?? 'general',
+    publishedAt:      new Date((row.created_at as Date | string | undefined) ?? Date.now()),
+    countryCode:      (row.country_code as string) ?? undefined,
+  })
+
   return {
     id:               row.id,
     title:            row.title,
@@ -759,6 +771,7 @@ function formatSignal(row: Record<string, unknown>) {
     isBreaking:         row.is_breaking ?? false,
     communityFlagCount: row.community_flag_count ?? 0,
     sources:            row.sources_data ?? [],
+    riskScore,
   }
 }
 

@@ -3,6 +3,7 @@ import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 import { meili, setupSearchIndexes, indexSignal, indexPost } from '../lib/search'
 import { logSearchQuery } from '../lib/search-analytics'
+import { searchEntities } from '../lib/opensanctions'
 
 const SEARCH_CACHE_TTL = 60 // seconds — cache search results per unique query+filters
 
@@ -261,6 +262,71 @@ export const registerSearchRoutes: FastifyPluginAsync = async (app) => {
     }
 
     return reply.send(responseBody)
+  })
+
+  // ─── ENTITY / SANCTIONS SEARCH ───────────────────────────
+  /**
+   * GET /api/v1/search/entities?q=&schema=&limit=
+   *
+   * Searches 100+ global sanctions lists via OpenSanctions:
+   *   OFAC SDN, EU FSF, UN Security Council, UK HMT, Interpol Red Notices,
+   *   World Bank Debarment, FBI Most Wanted, and 90+ more.
+   *
+   * Schema filter values: Person | Company | Organization | Vessel | Aircraft
+   * Rate-limited: 20 req/min per IP.
+   */
+  app.get('/entities', {
+    config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+    schema: {
+      tags:        ['search'],
+      summary:     'Search sanctioned entities across 100+ global sanctions lists',
+      querystring: {
+        type: 'object',
+        properties: {
+          q:      { type: 'string',  description: 'Search query (name, alias, identifier)' },
+          schema: { type: 'string',  description: 'Entity type: Person | Company | Organization | Vessel | Aircraft' },
+          limit:  { type: 'integer', description: 'Max results (1–20, default 10)' },
+        },
+        required: ['q'],
+      },
+    },
+  }, async (req, reply) => {
+    const {
+      q,
+      schema,
+      limit = 10,
+    } = req.query as { q?: string; schema?: string; limit?: number }
+
+    if (!q || q.trim().length < 2) {
+      return reply.status(400).send({ success: false, error: 'Query must be at least 2 characters' })
+    }
+
+    const safeLimit = Math.min(Math.max(1, Number(limit)), 20)
+
+    try {
+      const { entities, total } = await searchEntities(q.trim(), safeLimit, schema)
+
+      return reply.send({
+        success: true,
+        data: {
+          query:    q.trim(),
+          schema:   schema ?? null,
+          limit:    safeLimit,
+          total,
+          entities,
+          source:   'opensanctions',
+          datasets: 'default',
+          note:     'Results from OpenSanctions — 100+ global sanctions and watchlists',
+        },
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      req.log.error({ err, q }, 'OpenSanctions entity search failed')
+      return reply.status(502).send({
+        success: false,
+        error:   `Sanctions database temporarily unavailable: ${msg}`,
+      })
+    }
   })
 
   // ─── AUTOCOMPLETE ─────────────────────────────────────────

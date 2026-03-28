@@ -354,6 +354,33 @@ Add a shared `sendError(reply, status, code, message)` helper in `apps/api/src/l
 
 ---
 
+## 🔌 Integration Roadmap (added 2026-03-28)
+
+Three-phase integration plan locked in. Tasks are in worldpulse_tasks.json.
+
+### Phase 1 — NOW (priority 11, before Gate 1 clears ~Apr 9)
+1. **Sentry** — error tracking + performance monitoring (apps/web + apps/api)
+2. **Vercel** — deployment config: vercel.json, env var audit, localhost ref cleanup
+3. **Cloudflare** — security headers hardening, cache-control, real-IP trust for rate limiting
+
+### Phase 2 — BEFORE GATE 1 CLEARS (priority 9)
+4. **Stripe** — Pro tier billing: subscriptions table, checkout, webhook handler, pricing page
+   - Pro: $12/mo · 600 req/min · 90-day history · unlimited alerts · 5 webhooks
+   - Free: 60 req/min · 7-day history · 3 alerts
+5. **Pinecone** — semantic search + similar signals: embeddings on ingest, /search/semantic, /signals/:id/similar, SimilarSignals.tsx
+
+### Phase 3 — AFTER LAUNCH
+- PostHog (product analytics + feature flags — no point tracking before real users)
+
+### Critical notes for brain agent:
+- Sentry/Vercel/Cloudflare tasks are additive — no changes to existing auth, feed, or scraper routes
+- Stripe webhook endpoint MUST be excluded from CSRF/JSON body parser middleware (needs raw body)
+- All Pinecone/OpenAI calls must be non-blocking (try/catch, don't fail ingestion if Pinecone is down)
+- `STRIPE_SECRET_KEY`, `PINECONE_API_KEY`, `OPENAI_API_KEY` will be undefined in dev — init clients conditionally
+- Gate 1 clock is still running — do NOT modify scraper stability infrastructure
+
+---
+
 ## 📊 Current Production Health (2026-03-22)
 - world-pulse.io → HTTP 200 ✅
 - api.world-pulse.io/health → ok ✅

@@ -13,6 +13,9 @@ const NAV_ITEMS = [
   { href: '/alerts',     icon: '🔔', labelKey: 'alerts',      badge: '12',   badgeColor: 'red'   },
   { href: '/analytics',  icon: '📊', labelKey: 'analytics'  },
   { href: '/explore',    icon: '🔭', labelKey: 'explore'    },
+  { href: '/clusters',   icon: '🧩', labelKey: 'clusters',   badge: 'NEW', badgeColor: 'blue'   },
+  { href: '/briefing',   icon: '📋', labelKey: 'briefing',   badge: 'NEW', badgeColor: 'indigo' },
+  { href: '/countries',  icon: '🗺️', labelKey: 'countries',  badge: 'NEW', badgeColor: 'blue'   },
   { href: '/communities',icon: '🤝', labelKey: 'communities' },
   { href: '/sources',    icon: '📡', labelKey: 'mySources'  },
   { href: '/settings',   icon: '⚙️', labelKey: 'settings'   },
@@ -73,9 +76,20 @@ export function LeftSidebar() {
   const [channelCounts, setChannelCounts] = useState<Record<string, number>>({})
   // Real trending topics from API
   const [trending, setTrending] = useState(TRENDING_FALLBACK)
+  // Live Global Threat Index
+  const [threatLevel, setThreatLevel] = useState<{ level: number; label: string; color: string } | null>(null)
 
   useEffect(() => {
     async function loadSidebarData() {
+      // Fetch threat index in parallel
+      try {
+        const tres = await fetch(`${API_URL}/api/v1/analytics/threat-index?window=6h`, { cache: 'no-store' })
+        if (tres.ok) {
+          const tdata: { level: number; label: string; color: string } = await tres.json()
+          setThreatLevel(tdata)
+        }
+      } catch { /* keep static fallback */ }
+
       try {
         // Fetch channel counts in parallel (one request per channel)
         const slugs = Object.keys(CHANNEL_CATEGORIES)
@@ -130,30 +144,33 @@ export function LeftSidebar() {
       className="sticky top-[52px] h-[calc(100vh-52px)] overflow-y-auto border-r border-[rgba(255,255,255,0.07)] bg-wp-surface flex flex-col scrollbar-thin scrollbar-thumb-[rgba(255,255,255,0.07)] scrollbar-track-transparent rtl:border-r-0 rtl:border-l rtl:border-l-[rgba(255,255,255,0.07)]"
     >
 
-      {/* Threat Index */}
+      {/* Threat Index — live */}
       <div
         className="mx-4 mt-4 mb-2 bg-wp-s2 border border-[rgba(255,255,255,0.07)] rounded-[10px] p-3"
         role="status"
-        aria-label="Global Threat Index: Level 2 Elevated"
+        aria-label={`Global Threat Index: Level ${threatLevel?.level ?? '…'} ${threatLevel?.label ?? ''}`}
       >
         <div className="font-mono text-[9px] tracking-[2px] text-wp-text3 uppercase mb-2" aria-hidden="true">
           {tCommon('globalThreatIndex')}
         </div>
         <div className="flex gap-1 mb-2">
-          {[1, 2, 3, 4, 5].map(level => (
-            <div
-              key={level}
-              className={`flex-1 h-[6px] rounded-sm transition-all ${
-                level <= 2
-                  ? level === 1
-                    ? 'bg-green-500 shadow-[0_0_8px_#22c55e]'
-                    : 'bg-yellow-400 shadow-[0_0_8px_#eab308]'
-                  : 'bg-wp-s3'
-              }`}
-            />
-          ))}
+          {[1, 2, 3, 4, 5].map(lvl => {
+            const active = lvl <= (threatLevel?.level ?? 2)
+            return (
+              <div
+                key={lvl}
+                className="flex-1 h-[6px] rounded-sm transition-all duration-700"
+                style={active
+                  ? { backgroundColor: threatLevel?.color ?? '#ffd700', boxShadow: `0 0 8px ${threatLevel?.color ?? '#ffd700'}` }
+                  : { backgroundColor: 'rgba(255,255,255,0.06)' }
+                }
+              />
+            )
+          })}
         </div>
-        <div className="font-mono text-[11px] text-yellow-400">{tCommon('level').toUpperCase()} 2 · {tCommon('elevated').toUpperCase()}</div>
+        <div className="font-mono text-[11px]" style={{ color: threatLevel?.color ?? '#ffd700' }}>
+          {tCommon('level').toUpperCase()} {threatLevel?.level ?? '…'} · {(threatLevel?.label ?? tCommon('elevated')).toUpperCase()}
+        </div>
       </div>
 
       {/* Navigation */}

@@ -221,14 +221,18 @@ def analyze_project() -> dict:
         else:
             analysis["warnings"].append(f"✗ Missing: {label}")
 
-    # Check for test files using pathlib (cross-platform; skips node_modules/.next)
+    # Check for test files using os.walk (robust against NTFS symlink errors)
     try:
-        SKIP_DIRS = {"node_modules", ".next", "dist", ".turbo"}
-        test_files: list[Path] = []
-        for pattern in ("*.test.ts", "*.spec.ts", "*.test.tsx", "*.spec.tsx"):
-            for p in PROJECT_DIR.rglob(pattern):
-                if not any(part in SKIP_DIRS for part in p.parts):
-                    test_files.append(p)
+        import os as _os
+        SKIP_DIRS = {"node_modules", ".next", "dist", ".turbo", ".pnpm-store"}
+        TEST_EXTS = {".test.ts", ".spec.ts", ".test.tsx", ".spec.tsx"}
+        test_files: list[str] = []
+        for root, dirs, files in _os.walk(str(PROJECT_DIR), followlinks=False):
+            # Prune skip dirs in-place so os.walk doesn't descend into them
+            dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+            for f in files:
+                if any(f.endswith(ext) for ext in TEST_EXTS):
+                    test_files.append(_os.path.join(root, f))
         test_count = len(test_files)
     except Exception:
         test_count = 0

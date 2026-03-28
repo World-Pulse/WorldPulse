@@ -23,6 +23,7 @@ import type { Knex } from 'knex'
 import type Redis from 'ioredis'
 import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
+import { insertAndCorrelate } from '../pipeline/insert-signal'
 
 const log = rootLogger.child({ module: 'ais-source' })
 
@@ -272,7 +273,7 @@ export function startAisPoller(
 
       const title = `${shipName} broadcasting ${statusDesc}`
 
-      const [signal] = await db('signals').insert({
+      const signal = await insertAndCorrelate({
         title:             title.slice(0, 500),
         summary:           [
           `Vessel ${shipName} (MMSI: ${mmsi}) is broadcasting navigational status:`,
@@ -296,7 +297,7 @@ export function startAisPoller(
         tags:              ['osint', 'ais', 'maritime', 'distress', `status-${navStatus}`],
         language:          'en',
         event_time:        new Date(),
-      }).returning('*')
+      }, { lat: lat ?? null, lng: lng ?? null, sourceId: 'ais' })
 
       await redis.setex(key, 3_600, '1')
 

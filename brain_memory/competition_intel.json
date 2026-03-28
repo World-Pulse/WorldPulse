@@ -1,517 +1,5 @@
 {
-  "last_scan": "2026-03-24T02:36:56.190436+00:00",
-  "competitors": {
-    "Shadowbroker": {
-      "url": "https://github.com/BigBodyCobain/Shadowbroker",
-      "type": "open_source_osint_map",
-      "strengths": [
-        "Real-time OSINT dashboard with DOZENS of live global feeds (confirmed Mar 2026)",
-        "ADS-B commercial/military flight tracking",
-        "AIS WebSocket stream (25,000+ ships)",
-        "N2YO satellite telemetry",
-        "GDELT conflict event data",
-        "NASA FIRMS Fire Hotspots (24h) from NOAA-20 VIIRS — 5,000+ thermal anomalies",
-        "Space Weather Badge — Live geomagnetic storm Kp index from NOAA SWPC",
-        "Internet Outage Monitoring — Georgia Tech IODA regional connectivity alerts",
-        "NASA GIBS Satellite Imagery (MODIS Terra) — daily true-color overlay, 30-day time slider (NEW Mar 2026)",
-        "CelesTrak orbital tracking — 2,000+ active satellites, SGP4 propagation, mission-type color coding (NEW Mar 2026)",
-        "Carrier Strike Group Tracker — all 11 US Navy carriers with OSINT-estimated positions (NEW Mar 2026)",
-        "SIGINT/RISINT News Feed — user-customizable up to 20 sources with priority weights (NEW Mar 2026)",
-        "Software-Defined Radio integration (NEW Mar 2026)",
-        "GPS jamming tracking (confirmed on platform)",
-        "CCTV networks (confirmed on platform)",
-        "Redesigned tabbed Settings panel (API Keys / News Feeds)",
-        "Mission Briefing onboarding modal for new users",
-        "Single MapLibre unified map interface (Next.js + MapLibre GL + FastAPI + Python)",
-        "Show HN traction (March 8, 2026) — 304 HN points, 120 comments"
-      ],
-      "weaknesses": [
-        "No community/social verification layer",
-        "No user accounts or reliability scoring",
-        "No news aggregation or text content",
-        "No search or personalized feed",
-        "Primarily data visualization, not intelligence network",
-        "No embeddable widget or developer API",
-        "No browser extension"
-      ],
-      "threat_level": "high",
-      "first_seen": "2026-03-22",
-      "media_coverage": [
-        "American Partisan (March 2026)",
-        "Medium/@alborznazari4",
-        "Hackers Arise",
-        "daily.dev",
-        "X/GithubProjects",
-        "GitHub Weekly 2026-03-11 (304 HN pts)"
-      ],
-      "response_actions": [
-        "DONE (Cycle 21): WorldPulse now has GDELT + ADS-B (OpenSky) + AIS (aisstream.io)",
-        "DONE (Cycle 26): WorldPulse now has USGS Seismic + NASA FIRMS Fire + NOAA Space Weather (6 feeds total)",
-        "DONE (Cycle 22): WorldPulse embeddable widget gives distribution edge Shadowbroker lacks",
-        "DONE (Cycle 28): WorldPulse now has GPS Jamming (GPSJam.org) + Internet Outage (Georgia Tech IODA) — 8 feeds total",
-        "DONE (Cycle 36): WorldPulse now has NASA GIBS MODIS Terra satellite imagery on live map — full date-range picker, parity with Shadowbroker's GIBS feature",
-        "Community layer, AI summaries, reliability scoring, search, developer API remain key differentiators",
-        "Shadowbroker has NO community/social layer, NO user accounts, NO reliability scoring, NO search — WorldPulse moat is intact",
-        "DONE (Cycle 37): WorldPulse now has CelesTrak orbital satellite tracking — SATCAT poller + browser-side GP visualization, parity with Shadowbroker",
-        "DONE (Cycle 40): WorldPulse now has STIX 2.1 threat intelligence export — 3 API endpoints, full STIX 2.1 compliance, API key auth",
-        "REMAINING GAPS vs Shadowbroker: Carrier Strike Group tracker, SDR integration (low priority)"
-      ],
-      "star_count_march_2026": "~4700 (stable, confirmed 2026-03-23 cycle 57 scan — HN article confirms 15 live feeds)",
-      "latest_features_march_2026_cycle57_update": [
-        "Converted animated horizontal tickers/OSINT stream to static scrollable lists (cycle 57 scan, March 23)",
-        "Added flat-map mode on mobile when low-performance mode is enabled (cycle 57 scan)",
-        "No new data feeds added — still 27 feeds"
-      ],
-      "latest_features_march_2026_cycle59_update": [
-        "Multi-LLM provider support confirmed (cycle 59 scan, March 23): Anthropic Claude, OpenAI, Google Gemini, OpenRouter (Unified API), OpenAI Codex (ChatGPT subscription), MiniMax — 6 LLM providers for enhanced analysis summaries",
-        "CONTRIBUTING.md added — open to community contributions, growing ecosystem",
-        "Still 27 feeds, no new data sources added since cycle 57",
-        "Still ~5200 GitHub stars (stable — major growth phase appears to have peaked)"
-      ],
-      "latest_features_march_2026_cycle60_update": [
-        "Ollama self-hosted LLM inference provider added (cycle 60 scan, March 23) — now 7 LLM providers total",
-        "Mobile control panel improvements: fixed text truncation and horizontal overflow issues",
-        "Community contributions active — CONTRIBUTING.md driving ecosystem growth",
-        "Still 27 feeds, no new data sources added",
-        "~5200 GitHub stars (stable)"
-      ],
-      "latest_features_march_2026_cycle62_update": [
-        "Cycle 62 scan (March 23 final): No new features detected",
-        "Still 27 feeds, no new data sources added since cycle 60",
-        "~5200 GitHub stars — growth appears to be plateauing post-viral spike (was growing +93% in 7 days; now stable)",
-        "Still 7 LLM providers (Claude, GPT, Gemini, OpenRouter, ChatGPT, MiniMax, Ollama)",
-        "Community contributions continuing via CONTRIBUTING.md",
-        "Crucix growth curve plateauing — window opening for WorldPulse to close feature gap"
-      ],
-      "latest_features_march_2026": [
-        "Mission Briefing onboarding modal for new users (guides through API key setup)",
-        "Backend disconnect red warning banner (shows when FastAPI unreachable)",
-        "README Quick Start Docker snippet overhaul",
-        "STIX 2.1 export for structured threat intelligence sharing",
-        "GPS jamming detection + CCTV ground truth integrations confirmed",
-        "Security cleanup: removed 19 test files with hardcoded API keys from git history (March 2026)",
-        "Removed fake intelligence assessment generator — all data is now real OSINT only (March 2026)",
-        "Ship toggle split into 4 categories with stable entity IDs (March 2026)",
-        "Dismissible threat alert bubbles (March 2026)",
-        "Parallel multi-arch Docker builds (March 2026)",
-        "Spain CCTV integration (community contributed, March 2026)",
-        "ETag collision fix + concurrent API refresh guards (March 2026)"
-      ]
-    },
-    "Ground News": {
-      "url": "https://ground.news",
-      "type": "direct_competitor",
-      "strengths": [
-        "50,000+ sources globally",
-        "7.9M monthly visits (Similarweb, confirmed Mar 2026)",
-        "Media bias visualization (left/center/right + factuality scale)",
-        "Mobile app (iOS + Android) + browser extension (Chrome/Safari)",
-        "Daily Briefing feature",
-        "Podcasts & Opinions feed (YouTube clips + podcasts)",
-        "Compact mode for more stories per scroll",
-        "Navigation customization (pin favorite topics to nav)",
-        "AI Ground Summary on all articles",
-        "Blindspot Feed — highlights stories ignored by one political side",
-        "Source Comparison — AI summaries per bias tier"
-      ],
-      "weaknesses": [
-        "No open-source",
-        "No self-hosting",
-        "Limited developer API",
-        "No real-time signals or WebSocket",
-        "No geospatial map",
-        "No embeddable widget for third-party sites"
-      ],
-      "threat_level": "very_high",
-      "latest_features_march_2026": [
-        "Added 2 new Factuality labels for articles (March 2, 2026)",
-        "Bug and crash fixes, UI and infrastructure improvements (last updated March 2, 2026 per app stores)",
-        "Podcasts & Opinions feed (YouTube clips + podcasts) — already tracked",
-        "No major new features found in March 23 scan — stable",
-        "Cycle 62 scan (March 23 final): No new features detected. Feature velocity slowing. External browser reading mode minor UX improvement. Vantage tier expansion to mobile apps. Still 50,000+ sources, 7.9M monthly visits."
-      ]
-    },
-    "NewsGuard": {
-      "url": "https://www.newsguardtech.com",
-      "type": "trust_layer",
-      "strengths": [
-        "Credibility scoring with transparent ratings",
-        "Browser extension (Chrome, Firefox, Edge, Safari)",
-        "Enterprise contracts (libraries, brands, governments)",
-        "AI content farm detection tool (with Pangram Labs, 2026) — tracks 3,006 AI content farm sites",
-        "Monthly AI Misinformation Monitor — benchmarks LLM trustworthiness",
-        "300-500 new AI content farm sites detected per month"
-      ],
-      "weaknesses": [
-        "Closed scoring methodology (vs WorldPulse open scoring)",
-        "Not real-time",
-        "US-focused",
-        "Expensive",
-        "No community layer"
-      ],
-      "threat_level": "medium",
-      "response_actions": [
-        "WorldPulse open-source reliability scoring is the transparent alternative",
-        "AI content farm detection is a new feature category — consider adding AI slop detection"
-      ]
-    },
-    "Reuters Connect": {
-      "url": "https://www.reuters.com",
-      "type": "legacy_wire",
-      "strengths": [
-        "Brand trust",
-        "Global reach",
-        "1000+ journalists",
-        "Premium API"
-      ],
-      "weaknesses": [
-        "Expensive API",
-        "Closed source",
-        "Not self-hostable",
-        "Slow feature iteration"
-      ],
-      "threat_level": "high"
-    },
-    "AP Wire": {
-      "url": "https://www.ap.org",
-      "type": "legacy_wire",
-      "strengths": [
-        "150+ years authority",
-        "6000+ journalists",
-        "Fact-checking reputation"
-      ],
-      "weaknesses": [
-        "No social layer",
-        "No reliability scoring UI",
-        "Enterprise-only pricing"
-      ],
-      "threat_level": "high"
-    },
-    "GDELT Project": {
-      "url": "https://www.gdeltproject.org",
-      "type": "data_competitor",
-      "strengths": [
-        "Massive dataset",
-        "Free access",
-        "Academic credibility",
-        "Event coding"
-      ],
-      "weaknesses": [
-        "No social layer",
-        "No real-time UI",
-        "Very complex to use",
-        "No community features"
-      ],
-      "threat_level": "medium"
-    },
-    "Logically AI": {
-      "url": "https://www.logically.ai",
-      "type": "fact_checking_ai",
-      "strengths": [
-        "AI-powered",
-        "Real-time",
-        "Multilingual"
-      ],
-      "weaknesses": [
-        "Not open-source",
-        "Limited developer access",
-        "B2B focused"
-      ],
-      "threat_level": "medium"
-    },
-    "Taranis AI": {
-      "url": "https://github.com/taranis-ai/taranis-ai",
-      "type": "open_source_osint",
-      "strengths": [
-        "Open-source (direct positioning threat)",
-        "AI-powered NLP for information gathering",
-        "Navigates diverse data sources + websites",
-        "Situational analysis capabilities",
-        "Growing GitHub community"
-      ],
-      "weaknesses": [
-        "No social verification layer",
-        "No real-time WebSocket feed",
-        "No consumer-facing UI (analyst tool)",
-        "No reliability scoring",
-        "No community features",
-        "No embeddable widget"
-      ],
-      "threat_level": "high",
-      "first_seen": "2026-03-22"
-    },
-    "WorldMonitor": {
-      "url": "https://www.worldmonitor.app",
-      "type": "open_source_direct",
-      "strengths": [
-        "Open-source (direct positioning overlap with WorldPulse)",
-        "NOW HAS FULL WEBSITE (worldmonitor.app) — production deployment confirmed (cycle 65 scan, March 24)",
-        "4-tier AI fallback chain with local LLMs for fully offline analysis",
-        "AI-powered news aggregation, geopolitical monitoring, infrastructure tracking",
-        "Generates intelligence briefs + classifies threats + runs sentiment analysis offline",
-        "Financial markets + military movements + natural disasters + cyber threats on one map",
-        "Risk scoring built-in",
-        "Targets newsrooms, NGOs, and small teams that previously needed six-figure contracts",
-        "Parallel with Glint and Monitor the Situation in emerging open-source intelligence space"
-      ],
-      "weaknesses": [
-        "No community/social layer",
-        "No reliability scoring or fact-checking",
-        "No real-time WebSocket feed",
-        "No user accounts or trust system",
-        "No embeddable widget",
-        "No developer API documented"
-      ],
-      "threat_level": "very_high",
-      "threat_upgrade": "UPGRADED to very_high — now has production website + 4-tier AI (cycle 65 scan, March 24). Direct competitor to WorldPulse's core value proposition.",
-      "first_seen": "2026-03-22",
-      "latest_features_march_2026_cycle65_update": [
-        "Full production website launched at worldmonitor.app",
-        "4-tier AI fallback chain: cloud LLMs → local LLMs → offline analysis (major differentiator vs WorldPulse's cloud-only AI summaries)",
-        "Marketing: 'intelligence that used to cost six figures, now free' — directly targets WorldPulse's market",
-        "Blog infrastructure in place — content marketing underway",
-        "Confirmed pulling: news, financial markets, military movements, disasters, cyber threats, geopolitical risk scores"
-      ],
-      "response_actions": [
-        "WorldPulse now has 5-provider LLM support (Anthropic/OpenAI/Gemini/OpenRouter/Ollama) — Ollama is the local/offline equivalent (Cycle 65)",
-        "WorldPulse community layer, verification engine, and embeddable widget remain unique differentiators",
-        "Counter worldmonitor.app marketing: emphasize WorldPulse open reliability scoring + community verification",
-        "Add Ollama offline mode documentation to README — emphasize WorldPulse can also run fully offline",
-        "PRIORITY: WorldPulse needs stronger marketing around its unique trust/verification moat vs WorldMonitor's pure aggregation approach"
-      ]
-    },
-    "OpenClaw": {
-      "url": "https://openclawapi.org",
-      "type": "osint_monitoring",
-      "strengths": [
-        "Production OSINT system (Middle East deployment)",
-        "Multi-source: Al Jazeera, AP, Reddit, flight tracking, satellite, vessel",
-        "Real-time alert push",
-        "Open API documentation"
-      ],
-      "weaknesses": [
-        "Not a consumer product",
-        "No social or verification layer",
-        "Region-focused (Middle East)",
-        "No UI for end users",
-        "No embeddable distribution"
-      ],
-      "threat_level": "medium",
-      "first_seen": "2026-03-22"
-    },
-    "OpenNews": {
-      "url": "https://dev.to/opennews/i-built-a-news-app-that-runs-ai-entirely-in-your-browser-heres-how-29g1",
-      "type": "open_source_ai_aggregator",
-      "strengths": [
-        "Fully browser-based (no server needed)",
-        "AI clustering across 116 RSS feeds",
-        "Open-source",
-        "Zero backend infrastructure cost"
-      ],
-      "weaknesses": [
-        "No social/community layer",
-        "No reliability scoring",
-        "No real-time WebSocket",
-        "No map visualization",
-        "No user accounts",
-        "No embeddable widget"
-      ],
-      "threat_level": "medium",
-      "first_seen": "2026-03-22"
-    },
-    "Intell Weave": {
-      "url": "https://github.com/topics/news-aggregation",
-      "type": "ai_news_platform",
-      "strengths": [
-        "Production-minded scalable news platform",
-        "Claim verification via NLP",
-        "Hyper-personalized explainable feed"
-      ],
-      "weaknesses": [
-        "No open-source positioning confirmed",
-        "No real-time WebSocket",
-        "Details unconfirmed"
-      ],
-      "threat_level": "medium",
-      "first_seen": "2026-03-22"
-    },
-    "OSINT Monitor": {
-      "url": "https://github.com/marcko80/osintmonitor",
-      "type": "open_source_osint_desktop",
-      "strengths": [
-        "150+ RSS feeds with built-in proxy handler",
-        "Multi-source signal fusion (internet outages, military flights, naval vessels, protests, AIS disruptions, satellite fires, keyword spikes)",
-        "Per-country and per-region clustering",
-        "Fully self-contained desktop app — no cloud dependency",
-        "Unified intelligence picture"
-      ],
-      "weaknesses": [
-        "Desktop-only (no web or mobile)",
-        "No community/social layer",
-        "No reliability scoring",
-        "No user accounts or verification",
-        "No embeddable widget or developer API",
-        "No search functionality",
-        "No real-time WebSocket"
-      ],
-      "threat_level": "medium",
-      "first_seen": "2026-03-23",
-      "response_actions": [
-        "WorldPulse's web-first architecture + community layer remain key differentiators",
-        "RSS feed count gap (150+ vs WorldPulse's 9 OSINT feeds) is notable but different approach",
-        "Monitor for growth and feature additions"
-      ]
-    },
-    "Crucix": {
-      "url": "https://github.com/calesthio/Crucix",
-      "type": "open_source_osint_terminal",
-      "star_count_march_2026": "5200 (as of 2026-03-23, up from 2700 one week ago — +93% in 7 days — FASTEST GROWING OSINT PROJECT)",
-      "threat_upgrade": "UPGRADED to very_high threat — explosive growth momentum surpasses Shadowbroker growth curve",
-      "strengths": [
-        "27 intelligence feeds (satellite fires, flights, radiation, conflict, AIS, SDR, economic indicators, more)",
-        "3D WebGL globe (Globe.gl) with 9 marker categories",
-        "Self-contained HTML dashboard — zero cloud, zero telemetry",
-        "Telegram/Discord alerting built-in",
-        "Optional LLM-enhanced analysis and summaries",
-        "Live market tickers (Yahoo Finance), VIX/credit risk gauges",
-        "17 curated Telegram intelligence channels integrated",
-        "Node.js or Docker deployment — simple single-command setup",
-        "Dubbed 'GitHub's Hottest OSINT Project' (March 2026)",
-        "Persistent local data sweeps every 15 minutes",
-        "EXPLOSIVE growth: 2700 → 5200 stars in 7 days (+93%), forks growing, CONTRIBUTING.md added"
-      ],
-      "weaknesses": [
-        "No community/social layer",
-        "No user accounts or reliability scoring",
-        "No search or personalized feed",
-        "No embeddable widget or developer API",
-        "No mobile app",
-        "Single-page HTML — not a full web platform",
-        "No verification or fact-checking layer",
-        "No browser extension"
-      ],
-      "threat_level": "very_high",
-      "first_seen": "2026-03-23",
-      "response_actions": [
-        "WorldPulse's community layer, verification engine, developer API, and GraphQL remain key differentiators",
-        "Feed count gap: Crucix 27 feeds vs WorldPulse 10 feeds — add WHO Disease Outbreaks, IAEA Radiation, Economic/Market feeds",
-        "Add Telegram/Discord alerting to match Crucix capability",
-        "GraphQL API (implemented Cycle 49) gives WorldPulse pure developer ecosystem edge Crucix lacks"
-      ]
-    },
-    "Veracity": {
-      "url": "https://arxiv.org/html/2506.15794v1",
-      "type": "open_source_fact_checking",
-      "strengths": [
-        "Open-source AI fact-checking system",
-        "Multilingual support",
-        "Numerical veracity scoring with LLM justification",
-        "Run locally — no cloud dependency",
-        "Academic credibility (arXiv paper)"
-      ],
-      "weaknesses": [
-        "Academic/research tool, not consumer product",
-        "No real-time signal feed",
-        "No community layer or social verification",
-        "No map or geospatial visualization",
-        "No developer API or embeddable widget",
-        "No news aggregation"
-      ],
-      "threat_level": "medium",
-      "first_seen": "2026-03-23",
-      "response_actions": [
-        "Could commoditize reliability scoring — WorldPulse should lean into COMMUNITY verification as unique moat",
-        "Monitor for production deployment or startup formation around this paper"
-      ]
-    },
-    "Valinor Intelligence": {
-      "url": "https://valinor.io",
-      "type": "intelligence_platform",
-      "strengths": [
-        "Recently launched in UK market",
-        "Enterprise-focused intelligence"
-      ],
-      "weaknesses": [
-        "Not open-source",
-        "UK-only initial focus",
-        "Early stage"
-      ],
-      "threat_level": "low",
-      "first_seen": "2026-03-22"
-    },
-    "eYou": {
-      "url": "https://eyou.social",
-      "type": "fact_checking_social",
-      "strengths": [
-        "Real-time fact-checking baked into every social post — claim verification pop-up on click",
-        "Positioned as European alternative to X/Facebook",
-        "€300K pre-seed from Fil Rouge Capital (March 2026)",
-        "Launching May 2026 — social network with verification as core UX",
-        "Verdict labels: accurate / questionable / misleading per claim"
-      ],
-      "weaknesses": [
-        "Social platform, not news aggregation or OSINT",
-        "No open-source",
-        "No real-time signal feeds or geospatial map",
-        "No developer API",
-        "Very early stage — no public product yet",
-        "€300K is tiny pre-seed — underfunded for social network ambitions"
-      ],
-      "threat_level": "low",
-      "first_seen": "2026-03-23",
-      "response_actions": [
-        "Adjacent threat — eYou's inline verification UX could be inspiration for WorldPulse community verification layer",
-        "WorldPulse's ReliabilityDots + FlagModal already do claim verification on signals — ahead of eYou's launch",
-        "Monitor post-launch (May 2026) for any developer API or news feed features"
-      ]
-    },
-    "WorldView": {
-      "url": "https://www.tiktok.com/@sahni.ai",
-      "type": "ai_intelligence_console",
-      "strengths": [
-        "CIA-style command console UI — dark intelligence aesthetic, extremely viral framing",
-        "Gemini 3.1 + Claude Opus 4.6 multi-model architecture (specialized systems per task)",
-        "3D globe with real-time satellite zoom into street-level city views",
-        "Full scene detection (computer vision on live satellite/camera feeds)",
-        "Intelligence-style side panels with live data streams",
-        "Viral social traction: 2,210 likes / 1,812 comments / 1,146 saves on single TikTok",
-        "Creator-led distribution via sahni.ai on TikTok/Instagram",
-        "Positions as personal intelligence console, not just data dashboard",
-        "Multi-model architecture framed as competitive advantage over single-model apps"
-      ],
-      "weaknesses": [
-        "Appears to be a demo/proof-of-concept, not a production product",
-        "No public URL or sign-up found",
-        "No verified data sources or reliability scoring",
-        "No community or social layer",
-        "No open-source component — closed demo only",
-        "No developer API or embeddable widget",
-        "Satellite imagery may be static or demo footage, not live"
-      ],
-      "threat_level": "medium-high",
-      "why_threatening": "Viral positioning of AI + globe + intelligence console is exactly WorldPulse territory. 2,210+ likes on one TikTok means massive awareness. If sahni.ai productizes this, it directly competes. The CIA framing is powerful.",
-      "first_seen": "2026-03-23",
-      "media_coverage": [
-        "TikTok @sahni.ai — viral Reel (2,210 likes, Feb/Mar 2026)",
-        "Instagram Reels crosspost",
-        "Credit to bilawalsidhu on X for original build"
-      ],
-      "key_features_seen": [
-        "3D globe interface (WORLDVIEW branding visible in UI)",
-        "Satellite zoom — drone/satellite aerial view of cities (London visible)",
-        "Scene detection panel",
-        "Live data stream side panels",
-        "Dark CIA-style UI with terminal-style overlays",
-        "Multi-panel command console layout"
-      ],
-      "response_actions": [
-        "TODO: WorldPulse map needs satellite imagery layer (NASA GIBS already in Shadowbroker)",
-        "TODO: Reframe WorldPulse marketing as intelligence console, not news aggregator",
-        "TODO: Add city-level zoom with satellite overlay to map page",
-        "TODO: Create viral TikTok/social content showing WorldPulse live capabilities"
-      ]
-    }
-  },
+  "last_scan": "2026-03-28T13:00:00.000000+00:00",
   "threats": [
     {
       "competitor": "Reuters Connect",
@@ -526,7 +14,7 @@
     {
       "competitor": "Ground News",
       "threat_level": "medium",
-      "note": "Monitoring Ground News for feature parity with WorldPulse"
+      "note": "Added Podcasts & Opinions (YouTube clips/podcasts), Daily Briefing, iOS 26 updates. 50K+ sources, 60K articles/day. Updated Mar 2026. No new major threats found in Mar 28 scan."
     },
     {
       "competitor": "Logically AI",
@@ -552,60 +40,70 @@
       "competitor": "The GDELT Project",
       "threat_level": "medium",
       "note": "Monitoring The GDELT Project for feature parity with WorldPulse"
+    },
+    {
+      "competitor": "WorldMonitor (koala73/worldmonitor)",
+      "threat_level": "medium",
+      "note": "Open-source real-time global intelligence dashboard. 30+ data sources across geopolitics, finance, energy, climate, aviation, cyber. Confirmed still active on GitHub Mar 28 scan."
+    },
+    {
+      "competitor": "Intell Weave",
+      "threat_level": "medium",
+      "note": "Production-minded scalable news platform: web ingestion, claim verification, personalized feeds. NLP + embeddings. Confirmed still active in Mar 28 scan."
     }
   ],
   "opportunities": [
     "Open source community traction — GitHub stars, contributors",
     "AI-powered reliability scoring differentiates from legacy wires",
     "Self-hosting resonates with privacy-conscious newsrooms",
-    "Developer API ecosystem — first-mover advantage"
+    "Developer API ecosystem — first-mover advantage",
+    "Ground News adding multimedia (Podcasts & Opinions) — WorldPulse rich media embeds already ahead",
+    "No new well-funded news intelligence startups launched Q1 2026 — market window still open",
+    "Vercel deployment config complete — enables easy open-source contributor onboarding"
   ],
   "feature_gaps": [
     "Mobile app (apps/mobile) — needs feature parity with web",
-    "API rate limiting and monetization strategy",
     "Embeddable widget for third-party sites",
     "Browser extension for inline signal verification",
     "Slack/Teams integration for newsroom alerts",
-    "GraphQL API layer in addition to REST",
-    "Multilingual signal support",
-    "AI-generated signal summaries"
+    "Multilingual signal support"
   ],
-  "market_trends": [
-    "AI-native newsrooms growing rapidly — need programmatic access and embeddable tools",
-    "Trust in traditional media at historic lows — verification layer is critical",
-    "Substack/independent journalism boom — creators need wire-quality embeddable feeds",
-    "OSINT community growing — needs structured intelligence tools",
-    "EU Digital Services Act creates compliance demand for verified news APIs",
-    "Browser-based AI tools lowering barrier to entry — open-source alternatives multiplying",
-    "AI content farms growing at 300-500 new sites/month — WorldPulse now has open-source slop detector (Cycle 29); Veracity (arxiv paper) emerging as academic open-source fact-checking alternative",
-    "AI startup funding at record levels in 2026 — February 2026 was largest startup funding month on record at $189B globally",
-    "No significant news intelligence/verification startups with funding found in March 2026 (cycle 57+59 scans confirmed) — window still open for WorldPulse. AI startup funding is at record levels but directed at infrastructure (OpenAI $110B, Anthropic $30B, AMI/LeCun $1.03B) rather than news intelligence.",
-    "Crucix now confirmed multi-LLM: supports Anthropic Claude, OpenAI GPT, Google Gemini, OpenRouter, ChatGPT subscription, MiniMax — WorldPulse should prioritize LLM provider configurability in AI summaries feature (currently OpenAI/Ollama/extractive only)",
-    "Global Threat Map launched February 2026 (helpnetsecurity.com) — open-source real-time cyber/threat map, pulls open data feeds to interactive map. Adjacent to WorldPulse but cybersecurity-focused, not news/media intelligence. Low threat.",
-    "CollectiveIQ (multi-model AI verification by crowdsourcing) and Sentrial AI (YC W26, agent monitoring) are adjacent but not direct news competitors",
-    "Oriane ($2M seed, March 2026): AI video intelligence platform — indexes Instagram/TikTok for visual content searchability + brand monitoring. Adjacent but video-focused, not news/text intelligence. Low threat to WorldPulse.",
-    "Yann LeCun's AMI startup ($1.03B seed, March 2026): 'world models' AI research — not a news intelligence competitor, but signals massive AI infrastructure investment continuing.",
-    "Cycle 62 scan (March 23): No new news-intelligence/verification startups found with funding. Perplexity passing 1B monthly queries + $300M ARR enterprise — AI search growing but not news intelligence specifically. Ground News feature velocity slowing. Crucix growth plateau. WorldPulse window remains open for developer ecosystem lead."
+  "closed_gaps": [
+    "Vercel deployment config + env var docs — DONE (cycle 71)",
+    "Sentry web error tracking — DONE (cycle 62)",
+    "Developer Portal — DONE (cycle 60)",
+    "Multimedia enrichment — DONE (cycle 57)",
+    "Verification Engine UI — DONE (cycle 55)",
+    "Responsive mobile layouts — DONE (cycle 54)",
+    "UI Polish (skeletons/toasts) — DONE (cycle 53)",
+    "Heuristic bias detection — DONE (cycle 51)",
+    "GDELT 2.0 integration — DONE",
+    "GraphQL API + Subscriptions — DONE",
+    "RSS/Atom syndication — DONE",
+    "Media bias detection — DONE",
+    "Embeddable widget — DONE",
+    "Multilingual support — DONE",
+    "AI-generated signal summaries — DONE",
+    "Community bias corrections — DONE",
+    "Public status page — DONE",
+    "Onboarding flow — DONE (cycle 58)",
+    "API rate limiting — DONE",
+    "Sentry API error tracking — DONE"
   ],
   "raw_searches": [
     {
-      "query": "open source news aggregation platform 2025 2026",
-      "abstract": "",
+      "query": "news intelligence platform AI startup 2026 launch funding",
+      "abstract": "No new news intelligence startups with significant funding found. AI funding broadly continues but no direct WorldPulse competitors launched. Granola ($125M), AMI Labs ($1B seed) — unrelated verticals.",
       "related": []
     },
     {
-      "query": "real-time news verification AI startup funding",
-      "abstract": "",
+      "query": "Ground News new features 2026 updates",
+      "abstract": "Ground News confirmed Podcasts & Opinions + Daily Briefing features. No new major threats. App updates are UI/UX improvements. Still 50K+ sources.",
       "related": []
     },
     {
-      "query": "global news intelligence API reliability scoring",
-      "abstract": "",
-      "related": []
-    },
-    {
-      "query": "open source Reuters AP alternative developer",
-      "abstract": "",
+      "query": "open source news aggregation real-time verification 2026",
+      "abstract": "WorldMonitor and Intell Weave confirmed still active. No new well-resourced open-source competitors. FreshRSS/tt-rss remain traditional aggregators without intelligence features.",
       "related": []
     }
   ]

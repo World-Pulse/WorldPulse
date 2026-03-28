@@ -17,6 +17,7 @@ import type Redis from 'ioredis'
 import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
+import { insertAndCorrelate } from '../pipeline/insert-signal'
 
 const log = rootLogger.child({ module: 'seismic-source' })
 
@@ -119,7 +120,7 @@ export function startSeismicPoller(
         ].join(' ')
 
         try {
-          const [signal] = await db('signals').insert({
+          const signal = await insertAndCorrelate({
             title:             signalTitle.slice(0, 500),
             summary,
             category:          'disaster',
@@ -136,7 +137,7 @@ export function startSeismicPoller(
             tags:              ['osint', 'seismic', 'earthquake', 'usgs'],
             language:          'en',
             event_time:        new Date(time),
-          }).returning('*')
+          }, { lat, lng, sourceId: 'seismic' })
 
           // Dedup for 48h (earthquakes don't repeat on same event ID)
           await redis.setex(key, 48 * 3_600, '1')

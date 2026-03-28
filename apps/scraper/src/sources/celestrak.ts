@@ -16,6 +16,7 @@ import type { Knex } from 'knex'
 import type Redis from 'ioredis'
 import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
+import { insertAndCorrelate } from '../pipeline/insert-signal'
 
 const log = rootLogger.child({ module: 'celestrak-source' })
 
@@ -163,7 +164,7 @@ export function startCelesTrakPoller(
         ].filter(Boolean).join(' ')
 
         try {
-          const [signal] = await db('signals').insert({
+          const signal = await insertAndCorrelate({
             title:             aggTitle.slice(0, 500),
             summary:           aggSummary,
             category:          'technology',
@@ -180,7 +181,7 @@ export function startCelesTrakPoller(
             tags:              ['osint', 'celestrak', 'satellite', 'space'],
             language:          'en',
             event_time:        now,
-          }).returning('*')
+          }, { lat: null, lng: null, sourceId: 'celestrak' })
 
           await redis.setex(aggKey, 48 * 3_600, '1')
           created++
@@ -229,7 +230,7 @@ export function startCelesTrakPoller(
         ].filter(Boolean).join(' ')
 
         try {
-          const [signal] = await db('signals').insert({
+          const signal = await insertAndCorrelate({
             title:             title.slice(0, 500),
             summary,
             category:          'technology',
@@ -248,7 +249,7 @@ export function startCelesTrakPoller(
             tags:              ['osint', 'celestrak', 'satellite', 'launch', 'space'],
             language:          'en',
             event_time:        launchDate ?? now,
-          }).returning('*')
+          }, { lat: (lat !== 0 || lng !== 0) ? lat : null, lng: (lat !== 0 || lng !== 0) ? lng : null, sourceId: 'celestrak' })
 
           await redis.setex(key, 48 * 3_600, '1')
           created++
@@ -291,7 +292,7 @@ export function startCelesTrakPoller(
         ].filter(Boolean).join(' ')
 
         try {
-          const [signal] = await db('signals').insert({
+          const signal = await insertAndCorrelate({
             title:             title.slice(0, 500),
             summary,
             category:          'technology',
@@ -308,7 +309,7 @@ export function startCelesTrakPoller(
             tags:              ['osint', 'celestrak', 'satellite', 'reentry', 'space'],
             language:          'en',
             event_time:        decayDate ?? now,
-          }).returning('*')
+          }, { lat: null, lng: null, sourceId: 'celestrak' })
 
           await redis.setex(key, 48 * 3_600, '1')
           created++

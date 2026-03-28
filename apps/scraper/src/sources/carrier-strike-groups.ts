@@ -18,6 +18,7 @@ import type { Knex } from 'knex'
 import type Redis from 'ioredis'
 import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
+import { insertAndCorrelate } from '../pipeline/insert-signal'
 
 const log = rootLogger.child({ module: 'csg-source' })
 
@@ -343,7 +344,7 @@ async function createSignal(
   const eventTime = isNaN(pubDate.getTime()) ? new Date() : pubDate
 
   try {
-    const [signal] = await db('signals').insert({
+    const signal = await insertAndCorrelate({
       title,
       summary,
       category:          'conflict',
@@ -364,7 +365,7 @@ async function createSignal(
       ],
       language:          'en',
       event_time:        eventTime,
-    }).returning('*')
+    }, { lat: pos.lat, lng: pos.lng, sourceId: 'carrier-strike-groups' })
 
     await redis.setex(key, DEDUP_TTL_S, '1')
 

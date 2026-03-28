@@ -21,6 +21,7 @@ import type Redis from 'ioredis'
 import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
+import { insertAndCorrelate } from '../pipeline/insert-signal'
 
 const log = rootLogger.child({ module: 'iaea-source' })
 
@@ -250,7 +251,7 @@ export function startIaeaPoller(
         const eventTime = isNaN(pubDate.getTime()) ? new Date() : pubDate
 
         try {
-          const [signal] = await db('signals').insert({
+          const signal = await insertAndCorrelate({
             title,
             summary,
             category:          'science',
@@ -267,7 +268,7 @@ export function startIaeaPoller(
             tags:              ['osint', 'nuclear', 'radiation', 'iaea', 'safety', 'science'],
             language:          'en',
             event_time:        eventTime,
-          }).returning('*')
+          }, { lat: loc.lat, lng: loc.lng, sourceId: 'iaea' })
 
           await redis.setex(key, DEDUP_TTL_S, '1')
           created++

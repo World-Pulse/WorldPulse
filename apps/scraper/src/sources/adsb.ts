@@ -19,6 +19,7 @@ import type Redis from 'ioredis'
 import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { Category, SignalSeverity } from '@worldpulse/types'
+import { insertAndCorrelate } from '../pipeline/insert-signal'
 
 const log = rootLogger.child({ module: 'adsb-source' })
 
@@ -130,7 +131,7 @@ export function startAdsbPoller(
         const title = `Aircraft ${callsign} squawking ${squawk} — ${info.description} (${country})`
 
         try {
-          const [signal] = await db('signals').insert({
+          const signal = await insertAndCorrelate({
             title:             title.slice(0, 500),
             summary:           [
               `Aircraft ${callsign} (ICAO: ${icao24}) from ${country}`,
@@ -154,7 +155,7 @@ export function startAdsbPoller(
             tags:              ['osint', 'adsb', 'aviation', `squawk-${squawk}`],
             language:          'en',
             event_time:        new Date(),
-          }).returning('*')
+          }, { lat: lat ?? null, lng: lng ?? null, sourceId: 'adsb' })
 
           // Dedup for 1 hour (TTL = 3600)
           await redis.setex(key, 3_600, '1')

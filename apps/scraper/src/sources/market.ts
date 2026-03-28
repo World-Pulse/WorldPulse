@@ -24,6 +24,7 @@ import type Redis from 'ioredis'
 import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
+import { insertAndCorrelate } from '../pipeline/insert-signal'
 
 const log = rootLogger.child({ module: 'market-source' })
 
@@ -294,7 +295,7 @@ export function startMarketPoller(
       const content = formatMarketContent(indicator, price, changePercent, prevClose).slice(0, 1000)
 
       try {
-        const [signal] = await db('signals').insert({
+        const signal = await insertAndCorrelate({
           title,
           summary:           content,
           category:          'economy',
@@ -311,7 +312,7 @@ export function startMarketPoller(
           tags:              ['osint', 'market', 'economy', indicator.type, indicator.symbol.replace(/[^a-z0-9]/gi, '').toLowerCase()],
           language:          'en',
           event_time:        new Date(),
-        }).returning('*')
+        }, { lat: NYSE_LAT, lng: NYSE_LNG, sourceId: 'market' })
 
         await redis.setex(dedupKey, DEDUP_TTL_S, '1')
 

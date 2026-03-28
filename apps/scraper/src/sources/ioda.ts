@@ -24,6 +24,7 @@ import type Redis from 'ioredis'
 import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
+import { insertAndCorrelate } from '../pipeline/insert-signal'
 
 const log = rootLogger.child({ module: 'ioda-source' })
 
@@ -177,7 +178,7 @@ export function startIodaPoller(
             insertData.location = db.raw('ST_MakePoint(?, ?)', [centroid[0], centroid[1]])
           }
 
-          const [signal] = await db('signals').insert(insertData).returning('*')
+          const signal = await insertAndCorrelate(insertData, { lat: centroid?.[1] ?? null, lng: centroid?.[0] ?? null, sourceId: 'ioda' })
 
           // Dedup for 30 min — IODA refreshes every ~10 min but we deduplicate per window
           await redis.setex(key, 30 * 60, '1')

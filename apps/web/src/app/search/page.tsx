@@ -9,15 +9,133 @@ import type { Signal, CrossCheckStatus } from '@worldpulse/types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
-type SearchType = 'all' | 'signals' | 'posts' | 'users' | 'tags'
+type SearchType = 'all' | 'signals' | 'posts' | 'users' | 'tags' | 'entities'
 
 const TYPE_TABS: { id: SearchType; label: string; icon: string }[] = [
-  { id: 'all',     label: 'All',     icon: '🔍' },
-  { id: 'signals', label: 'Signals', icon: '📡' },
-  { id: 'posts',   label: 'Posts',   icon: '💬' },
-  { id: 'users',   label: 'People',  icon: '👤' },
-  { id: 'tags',    label: 'Tags',    icon: '#' },
+  { id: 'all',      label: 'All',      icon: '🔍' },
+  { id: 'signals',  label: 'Signals',  icon: '📡' },
+  { id: 'posts',    label: 'Posts',    icon: '💬' },
+  { id: 'users',    label: 'People',   icon: '👤' },
+  { id: 'tags',     label: 'Tags',     icon: '#'  },
+  { id: 'entities', label: 'Entities', icon: '🕵️' },
 ]
+
+// ─── OpenSanctions entity types ─────────────────────────────────────────────
+interface OSEntityProperties {
+  name?:        string[]
+  alias?:       string[]
+  birthDate?:   string[]
+  nationality?: string[]
+  country?:     string[]
+  position?:    string[]
+  notes?:       string[]
+  topics?:      string[]
+  address?:     string[]
+}
+
+interface OSEntity {
+  id:         string
+  caption:    string
+  schema:     string
+  datasets:   string[]
+  score:      number
+  properties: OSEntityProperties
+}
+
+const DATASET_LABELS: Record<string, string> = {
+  us_ofac_sdn:             'OFAC SDN',
+  us_ofac_cons:            'OFAC Consolidated',
+  eu_fsf:                  'EU Financial Sanctions',
+  un_sc_sanctions:         'UN Security Council',
+  gb_hmt_sanctions:        'UK HM Treasury',
+  ch_seco_sanctions:       'Switzerland SECO',
+  ca_dfatd_sema_sanctions: 'Canada SEMA',
+  au_dfat_sanctions:       'Australia DFAT',
+  interpol_red_notices:    'Interpol Red Notices',
+  worldbank_debarment:     'World Bank Debarment',
+  us_fbi_most_wanted:      'FBI Most Wanted',
+  us_bis_entity:           'US BIS Entity List',
+}
+
+function datasetLabel(id: string): string {
+  return DATASET_LABELS[id] ?? id.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
+
+function entityThreatLevel(datasets: string[]): 'critical' | 'high' | 'medium' | 'low' {
+  const CRITICAL = new Set(['us_ofac_sdn', 'un_sc_sanctions', 'eu_fsf', 'interpol_red_notices', 'us_fbi_most_wanted'])
+  const HIGH     = new Set(['gb_hmt_sanctions', 'us_bis_entity', 'us_ofac_cons', 'worldbank_debarment', 'ch_seco_sanctions', 'au_dfat_sanctions'])
+  if (datasets.some(d => CRITICAL.has(d))) return 'critical'
+  if (datasets.some(d => HIGH.has(d)))     return 'high'
+  if (datasets.length >= 2)                return 'medium'
+  return 'low'
+}
+
+function EntityCard({ entity }: { entity: OSEntity }) {
+  const threat  = entityThreatLevel(entity.datasets)
+  const country = (entity.properties.country?.[0] ?? entity.properties.nationality?.[0])
+  const pos     = entity.properties.position?.[0]
+  const notes   = entity.properties.notes?.[0]
+  const aliases = (entity.properties.alias ?? []).slice(0, 3)
+
+  const threatStyle: Record<string, string> = {
+    critical: 'text-wp-red border-wp-red bg-[rgba(255,59,92,0.1)]',
+    high:     'text-wp-amber border-wp-amber bg-[rgba(245,166,35,0.1)]',
+    medium:   'text-wp-cyan border-wp-cyan bg-[rgba(0,212,255,0.1)]',
+    low:      'text-wp-green border-wp-green bg-[rgba(0,230,118,0.1)]',
+  }
+
+  return (
+    <div className="bg-wp-surface border border-[rgba(255,255,255,0.07)] rounded-xl p-4 hover:border-[rgba(255,255,255,0.15)] transition-all">
+      <div className="flex items-start gap-2 mb-2 flex-wrap">
+        <span className={`font-mono text-[9px] px-2 py-0.5 rounded border ${threatStyle[threat] ?? ''}`}>
+          {threat.toUpperCase()}
+        </span>
+        <span className="font-mono text-[9px] text-wp-text3 uppercase border border-[rgba(255,255,255,0.15)] px-2 py-0.5 rounded">
+          {entity.schema}
+        </span>
+        {country && <span className="font-mono text-[10px] text-wp-text2 ml-auto">🌍 {country.toUpperCase()}</span>}
+      </div>
+
+      <div className="text-[14px] font-semibold text-wp-text leading-snug mb-1">{entity.caption}</div>
+
+      {pos && <div className="text-[12px] text-wp-text2 mb-1">🏛 {pos}</div>}
+
+      {aliases.length > 0 && (
+        <div className="font-mono text-[10px] text-wp-text3 mb-2">
+          Also known as: {aliases.join(' · ')}
+        </div>
+      )}
+
+      {notes && (
+        <div className="text-[11px] text-wp-text3 italic mb-2 line-clamp-2">{notes}</div>
+      )}
+
+      <div className="flex flex-wrap gap-1 mt-2">
+        {entity.datasets.map(ds => (
+          <span
+            key={ds}
+            className="font-mono text-[9px] px-2 py-0.5 rounded bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] text-wp-text3"
+            title={ds}
+          >
+            {datasetLabel(ds)}
+          </span>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-2 mt-2 pt-2 border-t border-[rgba(255,255,255,0.05)]">
+        <span className="font-mono text-[9px] text-wp-text3">Match: {Math.round(entity.score * 100)}%</span>
+        <a
+          href={`https://www.opensanctions.org/entities/${entity.id}/`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="ml-auto font-mono text-[9px] text-wp-cyan hover:text-[#00e5ff] transition-colors"
+        >
+          OpenSanctions →
+        </a>
+      </div>
+    </div>
+  )
+}
 
 const SEVERITY_COLORS: Record<string, string> = {
   critical: 'text-wp-red border-wp-red bg-[rgba(255,59,92,0.1)]',
@@ -173,6 +291,10 @@ export default function SearchPage() {
   const [showSaveAlert, setShowSaveAlert]       = useState(false)
   const [alertSaved, setAlertSaved]             = useState(false)
   const [urlCopied, setUrlCopied]               = useState(false)
+  const [entities, setEntities]                 = useState<OSEntity[]>([])
+  const [entitiesTotal, setEntitiesTotal]       = useState(0)
+  const [entitiesLoading, setEntitiesLoading]   = useState(false)
+  const [entitiesError, setEntitiesError]       = useState<string | null>(null)
 
   const search = useCallback(async (
     q: string,
@@ -216,6 +338,33 @@ export default function SearchPage() {
     }
   }, [])
 
+  // ─── Entity / Sanctions search ───────────────────────────
+  const searchSanctionedEntities = useCallback(async (q: string) => {
+    if (!q.trim() || q.trim().length < 2) { setEntities([]); setEntitiesTotal(0); return }
+    setEntitiesLoading(true)
+    setEntitiesError(null)
+    try {
+      const res  = await fetch(`${API_URL}/api/v1/search/entities?q=${encodeURIComponent(q.trim())}&limit=10`)
+      const data = await res.json() as {
+        success: boolean
+        data: { entities: OSEntity[]; total: number }
+        error?: string
+      }
+      if (data.success) {
+        setEntities(data.data.entities)
+        setEntitiesTotal(data.data.total)
+      } else {
+        setEntitiesError(data.error ?? 'Entity search failed')
+        setEntities([])
+      }
+    } catch {
+      setEntitiesError('Could not reach sanctions database')
+      setEntities([])
+    } finally {
+      setEntitiesLoading(false)
+    }
+  }, [])
+
   const fetchAutocomplete = useCallback(async (q: string) => {
     if (!q || q.length < 2) { setAutocomplete(null); return }
     try {
@@ -241,7 +390,13 @@ export default function SearchPage() {
     setPage(pg)
     const params = filtersToParams(q, t, f, pg)
     router.push(`/search?${params}`, { scroll: false })
-    search(q, t, f, pg)
+    // Entity search runs in parallel for 'entities' tab or 'all' tab
+    if (t === 'entities' || t === 'all') {
+      searchSanctionedEntities(q)
+    }
+    if (t !== 'entities') {
+      search(q, t, f, pg)
+    }
   }
 
   const updateFilter = <K extends keyof SearchFilters>(key: K, value: SearchFilters[K]) => {
@@ -268,7 +423,14 @@ export default function SearchPage() {
   // Run search on mount if URL has query
   useEffect(() => {
     const q = searchParams.get('q')
-    if (q) search(q, type, filters, page)
+    if (q) {
+      if (type === 'entities') {
+        searchSanctionedEntities(q)
+      } else {
+        search(q, type, filters, page)
+        if (type === 'all') searchSanctionedEntities(q)
+      }
+    }
   }, []) // eslint-disable-line
 
   // Share search URL
@@ -314,9 +476,10 @@ export default function SearchPage() {
   const allTags    = results.tags    as Array<{ tag: string; count: number }> ?? []
 
   const hasResults    = allSignals.length + allPosts.length + allUsers.length + allTags.length > 0
+                      || (type === 'entities' && (entities.length > 0 || entitiesLoading))
   const activeFilters = !filtersEmpty(filters)
   const hasPrevPage   = page > 0
-  const hasNextPage   = hasResults && (type !== 'all') && (
+  const hasNextPage   = hasResults && (type !== 'all') && (type !== 'entities') && (
     allSignals.length + allPosts.length + allUsers.length + allTags.length >= 20
   )
 
@@ -720,6 +883,71 @@ export default function SearchPage() {
             </section>
           )}
 
+          {/* Sanctioned Entities — shown in 'all' tab if results found, and full view in 'entities' tab */}
+          {(type === 'entities' || (type === 'all' && entities.length > 0)) && (
+            <section>
+              {(type === 'all' || type === 'entities') && (
+                <SectionHeader label="Sanctioned Entities" count={type === 'entities' ? entitiesTotal : entities.length} />
+              )}
+              {entitiesLoading && (
+                <div className="space-y-3">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="bg-wp-surface border border-[rgba(255,255,255,0.07)] rounded-xl p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="h-[18px] w-14 rounded shimmer" />
+                        <div className="h-[18px] w-16 rounded shimmer" />
+                      </div>
+                      <div className="h-5 w-3/4 rounded shimmer mb-2" />
+                      <div className="h-4 w-1/2 rounded shimmer" />
+                    </div>
+                  ))}
+                </div>
+              )}
+              {entitiesError && !entitiesLoading && (
+                <div className="bg-[rgba(255,59,92,0.05)] border border-[rgba(255,59,92,0.2)] rounded-xl p-4 text-[13px] text-wp-red">
+                  ⚠ {entitiesError}
+                </div>
+              )}
+              {!entitiesLoading && !entitiesError && entities.length > 0 && (
+                <div className="space-y-2">
+                  {entities.map(entity => (
+                    <EntityCard key={entity.id} entity={entity} />
+                  ))}
+                </div>
+              )}
+              {type === 'entities' && !entitiesLoading && !entitiesError && entities.length === 0 && (
+                <EmptyState
+                  icon="🕵️"
+                  headline={`No sanctioned entities found for "${query}"`}
+                  message="Try different spelling, an alias, or a company registration name. Data covers OFAC SDN, EU FSF, UN Security Council, Interpol Red Notices, and 100+ global sanctions lists."
+                />
+              )}
+              {type === 'entities' && entitiesTotal > entities.length && !entitiesLoading && (
+                <div className="text-center pt-3">
+                  <span className="font-mono text-[11px] text-wp-text3">
+                    Showing top {entities.length} of {entitiesTotal.toLocaleString()} results
+                  </span>
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* Entities tab — standalone loading / empty state (no regular results) */}
+          {type === 'entities' && entitiesLoading && entities.length === 0 && (
+            <div className="space-y-3">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="bg-wp-surface border border-[rgba(255,255,255,0.07)] rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="h-[18px] w-14 rounded shimmer" />
+                    <div className="h-[18px] w-16 rounded shimmer" />
+                  </div>
+                  <div className="h-5 w-3/4 rounded shimmer mb-2" />
+                  <div className="h-4 w-1/2 rounded shimmer" />
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Pagination */}
           {type !== 'all' && (hasPrevPage || hasNextPage) && (
             <div className="flex items-center justify-between pt-2 border-t border-[rgba(255,255,255,0.05)]">
@@ -745,8 +973,8 @@ export default function SearchPage() {
         </div>
       )}
 
-      {/* Empty state */}
-      {!loading && query.length >= 2 && !hasResults && (
+      {/* Empty state — not shown for entities tab (handled inline) */}
+      {!loading && !entitiesLoading && query.length >= 2 && !hasResults && type !== 'entities' && (
         <EmptyState
           icon="🔭"
           headline={`No results for "${query}"`}
@@ -764,7 +992,14 @@ export default function SearchPage() {
         <div className="text-center py-12">
           <div className="text-[48px] mb-4">🌍</div>
           <div className="text-[18px] font-semibold text-wp-text mb-2">Search WorldPulse</div>
-          <div className="text-wp-text3 text-[14px] mb-8">Find signals, posts, people, and topics</div>
+          <div className="text-wp-text3 text-[14px] mb-4">Find signals, posts, people, topics, and sanctioned entities</div>
+          <div className="flex items-center gap-2 justify-center mb-6 text-[12px] text-wp-text3">
+            <span className="px-2 py-0.5 rounded bg-[rgba(255,59,92,0.08)] border border-[rgba(255,59,92,0.2)] text-wp-red font-mono text-[10px]">NEW</span>
+            <span>
+              <button onClick={() => { setType('entities') }} className="text-wp-cyan hover:underline">Entities tab</button>
+              {' '}— search 100+ global sanctions lists (OFAC, UN, EU, Interpol)
+            </span>
+          </div>
           <div className="flex flex-wrap justify-center gap-2">
             {['#ManilaQuake','#EUAIDirective','#ArcticMelt','#Gaza','#Elections2026'].map(tag => (
               <button

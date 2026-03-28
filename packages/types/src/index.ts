@@ -68,7 +68,7 @@ export interface Signal {
   // AI-generated summary (present on signal detail, absent on list views)
   aiSummary?: {
     text:        string
-    model:       'openai' | 'ollama' | 'extractive'
+    model:       'anthropic' | 'openai' | 'gemini' | 'openrouter' | 'ollama' | 'extractive'
     generatedAt: string
   } | null
 }

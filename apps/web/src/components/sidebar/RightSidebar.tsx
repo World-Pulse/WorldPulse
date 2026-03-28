@@ -51,6 +51,11 @@ export function RightSidebar() {
   const [connectedCount, setConnectedCount] = useState(847213)
   const seenIds = useRef(new Set<string>())
 
+  // Market ticker state
+  interface MarketTicker { symbol: string; name: string; type: string; price: number | null; changePercent: number | null }
+  const [marketTickers, setMarketTickers] = useState<MarketTicker[]>([])
+  const [marketLoading, setMarketLoading] = useState(true)
+
   // Fetch live headlines from API and refresh every 45s
   useEffect(() => {
     let mounted = true
@@ -91,6 +96,23 @@ export function RightSidebar() {
     }
     fetchCount()
     const id = setInterval(fetchCount, 30_000)
+    return () => { mounted = false; clearInterval(id) }
+  }, [])
+
+  // Fetch market ticker data
+  useEffect(() => {
+    let mounted = true
+    async function fetchMarkets() {
+      try {
+        const res = await fetch(`${API_URL}/api/v1/analytics/markets`, { cache: 'no-store' })
+        if (res.ok) {
+          const data: { tickers: MarketTicker[] } = await res.json()
+          if (mounted) { setMarketTickers(data.tickers ?? []); setMarketLoading(false) }
+        }
+      } catch { if (mounted) setMarketLoading(false) }
+    }
+    fetchMarkets()
+    const id = setInterval(fetchMarkets, 5 * 60_000) // refresh every 5 min
     return () => { mounted = false; clearInterval(id) }
   }, [])
 
@@ -201,6 +223,48 @@ export function RightSidebar() {
             <span className={`font-mono text-[12px] font-bold ${item.color}`}>{item.value}</span>
           </div>
         ))}
+      </Widget>
+
+      {/* ─── MARKET TICKER ────────────────────────────────── */}
+      <Widget title="Market Pulse">
+        {marketLoading ? (
+          <div className="space-y-2">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="flex items-center gap-2 animate-pulse">
+                <div className="flex-1 h-3 bg-wp-s3 rounded" />
+                <div className="w-12 h-3 bg-wp-s3 rounded" />
+                <div className="w-10 h-3 bg-wp-s3 rounded" />
+              </div>
+            ))}
+          </div>
+        ) : marketTickers.length === 0 ? (
+          <p className="font-mono text-[10px] text-wp-text3 italic">Market data unavailable</p>
+        ) : (
+          <div className="space-y-[6px]">
+            {marketTickers.map(t => {
+              const up    = (t.changePercent ?? 0) >= 0
+              const color = t.changePercent == null ? '#888' : up ? '#00e676' : '#ff3b5c'
+              const arrow = t.changePercent == null ? '—' : up ? '▲' : '▼'
+              const pct   = t.changePercent == null ? '—' : `${Math.abs(t.changePercent).toFixed(2)}%`
+              const priceStr = t.price == null ? '—'
+                : t.type === 'fx'      ? t.price.toFixed(4)
+                : t.type === 'crypto'  ? t.price >= 1000 ? t.price.toLocaleString('en-US', { maximumFractionDigits: 0 }) : t.price.toFixed(2)
+                : t.type === 'volatility' ? t.price.toFixed(2)
+                : t.price >= 10000    ? t.price.toLocaleString('en-US', { maximumFractionDigits: 0 })
+                : t.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+              return (
+                <div key={t.symbol} className="flex items-center gap-2">
+                  <span className="font-mono text-[10px] text-wp-text2 w-16 flex-shrink-0 truncate">{t.name}</span>
+                  <span className="font-mono text-[11px] text-wp-text flex-1 text-right">{priceStr}</span>
+                  <span className="font-mono text-[10px] flex-shrink-0 flex items-center gap-0.5" style={{ color }}>
+                    {arrow} {pct}
+                  </span>
+                </div>
+              )
+            })}
+            <p className="font-mono text-[9px] text-wp-text3 text-right mt-1">Yahoo Finance · 5m delay</p>
+          </div>
+        )}
       </Widget>
 
       {/* ─── SIGNAL STREAM ────────────────────────────────── */}

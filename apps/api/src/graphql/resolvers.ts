@@ -1,5 +1,6 @@
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
+import { generateDailyBriefing } from '../lib/briefing-generator'
 
 const SIGNALS_CACHE_TTL  = 30  // seconds
 const TRENDING_CACHE_TTL = 60  // seconds
@@ -223,6 +224,55 @@ export const resolvers = {
         })
       }
       return formatted
+    },
+
+    async dailyBriefing(_: unknown, args: { hours?: number }) {
+      const hours = Math.min(args.hours ?? 24, 72)
+      const briefing = await generateDailyBriefing(hours)
+      return {
+        id: briefing.id,
+        date: briefing.date,
+        generatedAt: briefing.generated_at,
+        model: briefing.model,
+        periodHours: briefing.period_hours,
+        totalSignals: briefing.total_signals,
+        totalClusters: briefing.total_clusters,
+        executiveSummary: briefing.executive_summary,
+        keyDevelopments: briefing.key_developments.map(d => ({
+          headline: d.headline,
+          detail: d.detail,
+          severity: d.severity,
+          category: d.category,
+          signalCount: d.signal_count,
+        })),
+        categoryBreakdown: briefing.category_breakdown.map(c => ({
+          category: c.category,
+          count: c.count,
+          criticalCount: c.critical_count,
+          highCount: c.high_count,
+        })),
+        geographicHotspots: briefing.geographic_hotspots.map(h => ({
+          countryCode: h.country_code,
+          locationName: h.location_name,
+          signalCount: h.signal_count,
+          avgSeverityScore: h.avg_severity_score,
+        })),
+        threatAssessment: briefing.threat_assessment,
+        outlook: briefing.outlook,
+        topSignals: briefing.top_signals.map(s => ({
+          id: s.id,
+          title: s.title,
+          category: s.category,
+          severity: s.severity,
+          reliabilityScore: s.reliability_score,
+          createdAt: s.created_at,
+          description: null,
+          lat: null,
+          lng: null,
+          source: s.source_domain,
+          sourceUrl: null,
+        })),
+      }
     },
   },
 }

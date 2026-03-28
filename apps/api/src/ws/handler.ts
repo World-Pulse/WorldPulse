@@ -2,6 +2,8 @@ import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
 import type { WebSocket } from '@fastify/websocket'
 import { redis } from '../db/redis'
 import { logger } from '../lib/logger'
+import { checkAndEmitBreakingAlert } from '../lib/breaking-alerts'
+import type { SignalInput } from '../lib/breaking-alerts'
 import type { WSMessage, WSEventType } from '@worldpulse/types'
 
 // ─── CONNECTION REGISTRY ─────────────────────────────────────────────────
@@ -156,6 +158,16 @@ export async function startRedisSubscriber() {
     try {
       const data = JSON.parse(message) as { event: WSEventType; payload: unknown; filter?: Record<string, unknown> }
       broadcast(data.event, data.payload, data.filter as Parameters<typeof broadcast>[2])
+
+      // Evaluate new signals for breaking alert eligibility
+      if (channel === 'wp:signal.new' && data.event === 'signal.new') {
+        const signal = data.payload as SignalInput
+        if (signal?.id && signal?.title) {
+          checkAndEmitBreakingAlert(signal).catch((err) => {
+            logger.warn({ err, signalId: signal.id }, 'Breaking alert check failed (non-fatal)')
+          })
+        }
+      }
     } catch (e) {
       logger.error({ channel, e }, 'Redis message parse error')
     }

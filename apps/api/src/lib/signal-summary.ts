@@ -1,11 +1,14 @@
 /**
  * signal-summary.ts — AI-generated signal summaries
  *
- * Strategy:
+ * Strategy (priority order, first available key wins):
  *   1. Check Redis cache (TTL 24h) — return if hit
- *   2. If OPENAI_API_KEY set → call OpenAI gpt-4o-mini
- *   3. Else if OLLAMA_URL set  → call Ollama (llama3.2 or configured model)
- *   4. Fallback                → extractive summary from title + summary + body
+ *   2. If ANTHROPIC_API_KEY set → call Anthropic claude-haiku-4-5-20251001
+ *   3. Else if OPENAI_API_KEY set → call OpenAI gpt-4o-mini
+ *   4. Else if GEMINI_API_KEY set → call Google Gemini 2.0 Flash
+ *   5. Else if OPENROUTER_API_KEY set → call OpenRouter (configurable model)
+ *   6. Else if OLLAMA_URL set  → call Ollama (llama3.2 or configured model)
+ *   7. Fallback                → extractive summary from title + summary + body
  *
  * No extra npm packages — uses native fetch (Node 18+).
  */
@@ -13,11 +16,14 @@
 import { redis } from '../db/redis'
 
 // ─── Config ──────────────────────────────────────────────────────────────────
-const SUMMARY_CACHE_TTL = 60 * 60 * 24  // 24 hours in seconds
-const CACHE_KEY_PREFIX  = 'signal-ai-summary:'
-const MAX_INPUT_CHARS   = 2000           // truncate long bodies before sending to LLM
-const OPENAI_MODEL      = 'gpt-4o-mini'
-const OLLAMA_MODEL      = process.env.OLLAMA_MODEL ?? 'llama3.2'
+const SUMMARY_CACHE_TTL   = 60 * 60 * 24  // 24 hours in seconds
+const CACHE_KEY_PREFIX    = 'signal-ai-summary:'
+const MAX_INPUT_CHARS     = 2000           // truncate long bodies before sending to LLM
+const OPENAI_MODEL        = 'gpt-4o-mini'
+const ANTHROPIC_MODEL     = 'claude-haiku-4-5-20251001'
+const GEMINI_MODEL        = 'gemini-2.0-flash'
+const OLLAMA_MODEL        = process.env.OLLAMA_MODEL        ?? 'llama3.2'
+const OPENROUTER_MODEL    = process.env.OPENROUTER_MODEL    ?? 'meta-llama/llama-3.2-3b-instruct:free'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface SignalSummaryInput {
@@ -32,8 +38,8 @@ export interface SignalSummaryInput {
 }
 
 export interface AISummary {
-  text:      string
-  model:     'openai' | 'ollama' | 'extractive'
+  text:        string
+  model:       'anthropic' | 'openai' | 'gemini' | 'openrouter' | 'ollama' | 'extractive'
   generatedAt: string
 }
 
@@ -195,6 +201,127 @@ Summary:`
   }
 }
 
+// ─── Anthropic (Claude) ───────────────────────────────────────────────────────
+async function generateWithAnthropic(
+  signal: SignalSummaryInput,
+  language: string,
+): Promise<AISummary> {
+  const apiKey = process.env.ANTHROPIC_API_KEY!
+  const inputText = buildInputText(signal)
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method:  'POST',
+    headers: {
+      'Content-Type':      'application/json',
+      'x-api-key':         apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model:      ANTHROPIC_MODEL,
+      max_tokens: 200,
+      system: `You are a neutral news summarizer for WorldPulse, a global intelligence network.
+Write a concise 2-3 sentence summary of the provided news signal.
+Be objective, factual, and neutral. Avoid speculation.${language !== 'en' ? ` Respond in ${language}.` : ' Respond in English.'}`,
+      messages: [{ role: 'user', content: inputText }],
+    }),
+  })
+
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Anthropic API error ${res.status}: ${err}`)
+  }
+
+  const json = await res.json() as {
+    content: Array<{ type: string; text: string }>
+  }
+  const text = json.content.find(c => c.type === 'text')?.text?.trim()
+  if (!text) throw new Error('Anthropic returned empty response')
+
+  return { text, model: 'anthropic', generatedAt: new Date().toISOString() }
+}
+
+// ─── Google Gemini ────────────────────────────────────────────────────────────
+async function generateWithGemini(
+  signal: SignalSummaryInput,
+  language: string,
+): Promise<AISummary> {
+  const apiKey = process.env.GEMINI_API_KEY!
+  const inputText = buildInputText(signal)
+  const prompt = `You are a neutral news summarizer for WorldPulse, a global intelligence network.
+Write a concise 2-3 sentence summary of the provided news signal.
+Be objective, factual, and neutral. Avoid speculation.${language !== 'en' ? ` Respond in ${language}.` : ' Respond in English.'}
+
+${inputText}`
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`
+  const res = await fetch(url, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents:         [{ parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens: 200, temperature: 0.3 },
+    }),
+  })
+
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Gemini API error ${res.status}: ${err}`)
+  }
+
+  const json = await res.json() as {
+    candidates: Array<{ content: { parts: Array<{ text: string }> } }>
+  }
+  const text = json.candidates[0]?.content?.parts[0]?.text?.trim()
+  if (!text) throw new Error('Gemini returned empty response')
+
+  return { text, model: 'gemini', generatedAt: new Date().toISOString() }
+}
+
+// ─── OpenRouter ───────────────────────────────────────────────────────────────
+async function generateWithOpenRouter(
+  signal: SignalSummaryInput,
+  language: string,
+): Promise<AISummary> {
+  const apiKey = process.env.OPENROUTER_API_KEY!
+  const inputText = buildInputText(signal)
+
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method:  'POST',
+    headers: {
+      'Content-Type':  'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+      'HTTP-Referer':  'https://world-pulse.io',
+      'X-Title':       'WorldPulse',
+    },
+    body: JSON.stringify({
+      model:      OPENROUTER_MODEL,
+      max_tokens: 200,
+      messages: [
+        {
+          role:    'system',
+          content: `You are a neutral news summarizer for WorldPulse, a global intelligence network.
+Write a concise 2-3 sentence summary of the provided news signal.
+Be objective, factual, and neutral. Avoid speculation.${language !== 'en' ? ` Respond in ${language}.` : ' Respond in English.'}`,
+        },
+        { role: 'user', content: inputText },
+      ],
+    }),
+  })
+
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`OpenRouter API error ${res.status}: ${err}`)
+  }
+
+  const json = await res.json() as {
+    choices: Array<{ message: { content: string } }>
+  }
+  const text = json.choices[0]?.message?.content?.trim()
+  if (!text) throw new Error('OpenRouter returned empty response')
+
+  return { text, model: 'openrouter', generatedAt: new Date().toISOString() }
+}
+
 // ─── Input builder ────────────────────────────────────────────────────────────
 function buildInputText(signal: SignalSummaryInput): string {
   const parts = [
@@ -224,8 +351,14 @@ export async function generateSignalSummary(
   let summary: AISummary
 
   try {
-    if (process.env.OPENAI_API_KEY) {
+    if (process.env.ANTHROPIC_API_KEY) {
+      summary = await generateWithAnthropic(signal, language)
+    } else if (process.env.OPENAI_API_KEY) {
       summary = await generateWithOpenAI(signal, language)
+    } else if (process.env.GEMINI_API_KEY) {
+      summary = await generateWithGemini(signal, language)
+    } else if (process.env.OPENROUTER_API_KEY) {
+      summary = await generateWithOpenRouter(signal, language)
     } else if (process.env.OLLAMA_URL) {
       summary = await generateWithOllama(signal, language)
     } else {

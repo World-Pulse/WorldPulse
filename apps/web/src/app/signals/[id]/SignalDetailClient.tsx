@@ -14,6 +14,8 @@ const SignalMap = dynamic(
 import { FlagModal } from '@/components/signals/FlagModal'
 import { ReliabilityDots } from '@/components/signals/ReliabilityDots'
 import { AISummary } from '@/components/signals/AISummary'
+import { RiskScoreGauge } from '@/components/signals/RiskScoreGauge'
+import { RelatedSignals } from './RelatedSignals'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -347,7 +349,7 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
             {/* AI Summary — WorldPulse differentiator vs Ground News Ground Summary */}
             <AISummary
               signalId={signal.id}
-              aiSummary={(signal as Signal & { aiSummary?: { text: string; model: 'openai' | 'ollama' | 'extractive'; generatedAt: string } | null }).aiSummary}
+              aiSummary={(signal as Signal).aiSummary}
             />
 
             {/* AI Slop Badge — admin-only heuristic warning for AI-generated content */}
@@ -426,6 +428,17 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
 
             {/* Reliability score with tooltip */}
             <ReliabilityScore signal={signal} />
+
+            {/* Geopolitical risk score gauge */}
+            {(signal as unknown as { riskScore?: { score: number; level: string; label: string } }).riskScore && (() => {
+              const rs = (signal as unknown as { riskScore: { score: number; level: string; label: string } }).riskScore
+              return (
+                <RiskScoreGauge score={rs.score} level={rs.level} label={rs.label} size="md" />
+              )
+            })()}
+
+            {/* Related signals from event cluster */}
+            <RelatedSignals signalId={signal.id} />
 
             {/* Sources list with trust scores */}
             {signal.sources.length > 0 && (

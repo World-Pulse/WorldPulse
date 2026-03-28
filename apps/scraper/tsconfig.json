@@ -11,7 +11,11 @@
     "skipLibCheck": true,
     "declaration": true,
     "sourceMap": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "typeRoots": [
+      "./node_modules/@types",
+      "../../node_modules/.pnpm/@types+node@22.19.15/node_modules/@types"
+    ]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "src/**/__tests__/**", "src/**/*.test.ts"]

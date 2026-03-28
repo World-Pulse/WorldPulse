@@ -32,24 +32,6 @@ interface CommunityDetail {
   }>
 }
 
-const DEMO: CommunityDetail = {
-  id: '1', slug: 'climate-watch', name: 'Climate Watch',
-  description: 'Tracking climate events, policy and science worldwide. Join thousands monitoring the planet.',
-  avatarUrl: null, bannerUrl: null,
-  categories: ['climate', 'science'],
-  memberCount: 12400, postCount: 8900, public: true,
-  createdAt: new Date().toISOString(),
-  viewerRole: 'member', isMember: true,
-  pinnedPosts: [
-    {
-      id: 'p1',
-      content: '📌 PINNED: Community guidelines — please read before posting. Signal quality and source attribution are required for all reports.',
-      post_type: 'thread', like_count: 342, boost_count: 89, reply_count: 12,
-      created_at: new Date().toISOString(),
-      author_handle: 'climatemod', author_display_name: 'Climate Watch Mod',
-    },
-  ],
-}
 
 export default function CommunityDetailPage() {
   const { slug } = useParams() as { slug: string }
@@ -58,21 +40,20 @@ export default function CommunityDetailPage() {
   const [loading, setLoading]     = useState(true)
 
   useEffect(() => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('wp_token') : null
+    const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
     fetch(`${API_URL}/api/v1/communities/${slug}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
       .then(r => r.json())
       .then((d: { success: boolean; data: CommunityDetail }) => {
         if (d.success) setCommunity(d.data)
-        else setCommunity(DEMO)
       })
-      .catch(() => setCommunity(DEMO))
+      .catch(() => { /* API unavailable — community stays null, shows empty state */ })
       .finally(() => setLoading(false))
   }, [slug])
 
   const handleJoinLeave = async () => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('wp_token') : null
+    const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
     if (!token) { alert('Please log in to join communities.'); return }
     if (!community) return
 
