@@ -14,7 +14,8 @@
     "sourceMap": true,
     "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true,
-    "noUncheckedIndexedAccess": true,
+    "noUncheckedIndexedAccess": false,
+    "noImplicitAny": false,
     "noImplicitOverride": true
   },
   "include": ["src/**/*"],

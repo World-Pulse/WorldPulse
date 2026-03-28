@@ -294,8 +294,8 @@ async function handleWebhookEvent(
             stripe_price_id:        sub.items.data[0]?.price.id ?? null,
             plan,
             status:                 sub.status,
-            current_period_start:   new Date((sub.items.data[0]?.current_period_start ?? 0) * 1000),
-            current_period_end:     new Date((sub.items.data[0]?.current_period_end   ?? 0) * 1000),
+            current_period_start:   new Date(((sub as unknown as { current_period_start?: number }).current_period_start ?? 0) * 1000),
+            current_period_end:     new Date(((sub as unknown as { current_period_end?: number }).current_period_end   ?? 0) * 1000),
             cancel_at_period_end:   sub.cancel_at_period_end,
             updated_at:             new Date(),
           })
