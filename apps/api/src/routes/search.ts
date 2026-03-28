@@ -7,6 +7,7 @@ import { logSearchQuery } from '../lib/search-analytics'
 import { searchEntities } from '../lib/opensanctions'
 import { sanitizeString } from '../utils/sanitize'
 import { recordSearchLatency, maybeLogPercentiles } from '../lib/search-latency'
+import { generateEmbedding, querySimilar, isPineconeEnabled } from '../lib/pinecone'
 
 /** Wrap a Meilisearch promise with a 150ms timeout.
  *  Resolves with { result, partial: false } on success,
@@ -422,6 +423,93 @@ export const registerSearchRoutes: FastifyPluginAsync = async (app) => {
           ? tags.value.rows.map(r => r.tag)
           : [],
       },
+    })
+  })
+
+  // ─── SEMANTIC SEARCH ─────────────────────────────────────────────────────
+  // GET /api/v1/search/semantic?q=...&limit=10&category=...
+  //
+  // Generates an OpenAI embedding for q, queries Pinecone for similar signal
+  // vectors, then fetches matching signal rows from PostgreSQL.
+  // Falls back gracefully when Pinecone is not configured.
+  app.get('/semantic', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const parsed = z.object({
+      q:        z.string().trim().min(2, 'Query must be at least 2 characters').max(500),
+      limit:    z.coerce.number().int().min(1).max(50).default(10),
+      category: z.string().trim().max(200).optional(),
+    }).safeParse(req.query)
+
+    if (!parsed.success) {
+      return reply.status(400).send({
+        success: false,
+        error:   parsed.error.errors[0]?.message ?? 'Invalid query parameters',
+      })
+    }
+
+    const { q: rawQ, limit, category } = parsed.data
+    const q = sanitizeString(rawQ)
+
+    if (!isPineconeEnabled()) {
+      return reply.send({
+        success:  true,
+        results:  [],
+        semantic: false,
+        partial:  false,
+        message:  'Semantic search not configured',
+      })
+    }
+
+    const embedding = await generateEmbedding(q)
+    if (!embedding) {
+      return reply.send({
+        success:  true,
+        results:  [],
+        semantic: false,
+        partial:  true,
+        message:  'Embedding generation unavailable',
+      })
+    }
+
+    const matches = await querySimilar(embedding, limit, category ? { category } : undefined)
+    if (matches.length === 0) {
+      return reply.send({ success: true, results: [], semantic: true, partial: false })
+    }
+
+    const ids = matches.map(m => m.id)
+    const signals = await db('signals')
+      .select(
+        'id', 'title', 'summary', 'category', 'severity', 'status',
+        'reliability_score', 'location_name', 'country_code', 'tags',
+        'created_at', 'alert_tier',
+      )
+      .whereIn('id', ids)
+      .catch(() => [] as Record<string, unknown>[])
+
+    // Re-order by Pinecone score
+    const scoreMap = new Map(matches.map(m => [String(m.id), m.score]))
+    const sorted = (signals as Record<string, unknown>[])
+      .slice()
+      .sort((a, b) => (scoreMap.get(String(b.id)) ?? 0) - (scoreMap.get(String(a.id)) ?? 0))
+
+    return reply.send({
+      success:  true,
+      results:  sorted.map(s => ({
+        id:              s.id,
+        title:           s.title,
+        summary:         s.summary,
+        category:        s.category,
+        severity:        s.severity,
+        status:          s.status,
+        reliabilityScore: s.reliability_score,
+        locationName:    s.location_name,
+        countryCode:     s.country_code,
+        tags:            s.tags ?? [],
+        createdAt:       s.created_at ? (s.created_at as Date).toISOString() : null,
+        alertTier:       s.alert_tier,
+        score:           scoreMap.get(String(s.id)) ?? 0,
+      })),
+      semantic: true,
+      partial:  false,
     })
   })
 }

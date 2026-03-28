@@ -2,17 +2,45 @@ import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 import { optionalAuth, authenticate } from '../middleware/auth'
+import { generateEmbedding, querySimilar, isPineconeEnabled } from '../lib/pinecone'
 import { indexSignal, removeSignal } from '../lib/search'
 import { publishSignalUpsert, publishSignalDelete } from '../lib/search-events'
 import { generateSignalSummary, refreshSignalSummary } from '../lib/signal-summary'
 import { slopDetector } from '../lib/slop-detector'
 import { computeRiskScore } from '../lib/risk-score'
+import { detectCIB } from '../lib/cib-detection'
+import type { CIBSignalInput } from '../lib/cib-detection'
 import { z } from 'zod'
+import { sendError } from '../lib/errors'
+import { getSourceBias, extractDomain } from '../lib/source-bias'
+
+// ─── Bbox Validation Helper ───────────────────────────────────────────────────
+/**
+ * Validates a bbox query string ("minLng,minLat,maxLng,maxLat") and returns
+ * the four parsed coordinate numbers, or null if the string is invalid.
+ *
+ * Returns `{ error: string }` if validation fails, `{ coords: number[] }` if ok.
+ */
+function parseBbox(raw: string): { coords: [number, number, number, number] } | { error: string } {
+  const parts = raw.split(',').map(Number)
+  if (parts.length !== 4 || parts.some(n => !isFinite(n) || isNaN(n))) {
+    return { error: 'bbox must be exactly 4 comma-separated finite numbers: minLng,minLat,maxLng,maxLat' }
+  }
+  const [minLng, minLat, maxLng, maxLat] = parts as [number, number, number, number]
+  if (minLng < -180 || maxLng > 180 || minLat < -90 || maxLat > 90) {
+    return { error: 'bbox coordinates out of valid range: lng ∈ [-180, 180], lat ∈ [-90, 90]' }
+  }
+  if (minLng >= maxLng || minLat >= maxLat) {
+    return { error: 'bbox min values must be strictly less than their max counterparts' }
+  }
+  return { coords: [minLng, minLat, maxLng, maxLat] }
+}
 
 // ─── Cache TTLs ───────────────────────────────────────────────────────────────
 const MAP_CACHE_TTL    = 45  // seconds — map points (expensive PostGIS queries)
 const DETAIL_CACHE_TTL = 60  // seconds — signal detail (view count incremented async)
 const LIST_CACHE_TTL   = 30  // seconds — paginated list for unauthenticated users
+const CIB_CACHE_TTL    = 300 // seconds — CIB check result (5 minutes)
 
 /**
  * Delete all Redis keys matching a glob pattern using SCAN so we never block
@@ -32,7 +60,7 @@ async function flushCachePattern(pattern: string): Promise<void> {
   }
 }
 
-const UpdateSignalSchema = z.object({
+export const UpdateSignalSchema = z.object({
   status:            z.enum(['pending', 'verified', 'disputed', 'false', 'retracted']).optional(),
   severity:          z.enum(['critical', 'high', 'medium', 'low', 'info']).optional(),
   reliability_score: z.number().min(0).max(1).optional(),
@@ -43,7 +71,7 @@ const UpdateSignalSchema = z.object({
   body:              z.string().max(50000).optional(),
 }).refine(obj => Object.keys(obj).length > 0, { message: 'No updatable fields provided' })
 
-const FlagSignalSchema = z.object({
+export const FlagSignalSchema = z.object({
   reason: z.enum(['inaccurate', 'outdated', 'duplicate', 'misinformation']),
   notes:  z.string().max(500).optional(),
 })
@@ -112,7 +140,11 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     if (country) query = query.where('s.country_code', country.toUpperCase())
 
     if (bbox) {
-      const [minLng, minLat, maxLng, maxLat] = bbox.split(',').map(Number)
+      const parsed = parseBbox(bbox)
+      if ('error' in parsed) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', parsed.error)
+      }
+      const [minLng, minLat, maxLng, maxLat] = parsed.coords
       query = query.whereRaw(
         'ST_Within(s.location, ST_MakeEnvelope(?, ?, ?, ?, 4326))',
         [minLng, minLat, maxLng, maxLat]
@@ -169,9 +201,12 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
           ARRAY(
             SELECT row_to_json(src)
             FROM (
-              SELECT id, slug, name, logo_url as "logoUrl", tier, trust_score as "trustScore"
-              FROM sources
-              WHERE id = ANY(s.source_ids)
+              SELECT s2.id, s2.slug, s2.name, s2.logo_url as "logoUrl", s2.tier,
+                     s2.trust_score as "trustScore", ss.article_url as "articleUrl"
+              FROM sources s2
+              LEFT JOIN signal_sources ss ON ss.source_id = s2.id AND ss.signal_id = s.id
+              WHERE s2.id = ANY(s.source_ids)
+              ORDER BY s2.trust_score DESC
             ) src
           ) as sources_data
         `),
@@ -189,6 +224,14 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       .orderBy('created_at', 'desc')
       .limit(10)
       .select(['check_type', 'result', 'confidence', 'notes', 'created_at'])
+
+    // Bias lookup — use first source URL if available, fall back to signal source_url
+    const primarySourceUrl =
+      (signal.sources_data as Array<{ articleUrl?: string }> | null)?.[0]?.articleUrl ??
+      (signal.source_url as string | null | undefined)
+    const sourceBias = primarySourceUrl
+      ? await getSourceBias(extractDomain(primarySourceUrl)).catch(() => null)
+      : null
 
     // Generate AI summary async (non-blocking for response cache, fire-and-get)
     const aiSummary = await generateSignalSummary({
@@ -209,6 +252,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
         sources:       signal.sources_data ?? [],
         verifications,
         aiSummary,
+        sourceBias,
       },
     }
 
@@ -248,6 +292,59 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     })
 
     return reply.send({ success: true, data: { signalId: id, aiSummary } })
+  })
+
+  // ─── CIB CHECK ───────────────────────────────────────────
+  // Runs Coordinated Information Behavior detection for a signal.
+  // Fetches recent signals in the same category from the last 2h and calls detectCIB().
+  // Results are cached in Redis for 5 minutes to avoid repeated heavy queries.
+  app.get('/:id/cib-check', {
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+
+    const cacheKey = `signals:cib:${id}`
+    const cached = await redis.get(cacheKey).catch(() => null)
+    if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
+
+    const signal = await db('signals')
+      .where('id', id)
+      .first('id', 'title', 'category', 'reliability_score', 'created_at')
+      .catch(() => null)
+
+    if (!signal) return reply.status(404).send({ success: false, error: 'Signal not found' })
+
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000)
+    const recentRows = await db('signals')
+      .where('category', signal.category as string)
+      .where('created_at', '>=', twoHoursAgo)
+      .whereNot('id', id)
+      .select('id', 'title', 'category', 'reliability_score', 'created_at')
+      .limit(200)
+      .catch(() => [] as Record<string, unknown>[])
+
+    const target: CIBSignalInput = {
+      id:               signal.id as string,
+      title:            signal.title as string,
+      category:         signal.category as string,
+      publishedAt:      new Date(signal.created_at as Date | string),
+      reliabilityScore: (signal.reliability_score as number) ?? 0,
+    }
+
+    const peers: CIBSignalInput[] = recentRows.map(s => ({
+      id:               s.id as string,
+      title:            s.title as string,
+      category:         s.category as string,
+      publishedAt:      new Date(s.created_at as Date | string),
+      reliabilityScore: (s.reliability_score as number) ?? 0,
+    }))
+
+    const cibResult = detectCIB(target, peers)
+    const response = { success: true, data: cibResult }
+
+    redis.setex(cacheKey, CIB_CACHE_TTL, JSON.stringify(response)).catch(() => {})
+
+    return reply.send(response)
   })
 
   // ─── SIGNAL POSTS ────────────────────────────────────────
@@ -346,6 +443,14 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     // Re-index in Meilisearch — direct call (fast) + Kafka event (consumer path)
     indexSignal(signal).catch(() => {})
     publishSignalUpsert(signal.id as string)
+
+    // Publish real-time GraphQL subscription event (fire-and-forget)
+    try {
+      const pubsub = (app.graphql as unknown as { pubsub?: { publish(args: { topic: string; payload: unknown }): Promise<void> } }).pubsub
+      if (pubsub) {
+        pubsub.publish({ topic: 'SIGNAL_UPDATED', payload: { signalUpdated: formatSignal(signal) } }).catch(() => {})
+      }
+    } catch { /* never block the HTTP response */ }
 
     return reply.send({ success: true, data: formatSignal(signal) })
   })
@@ -588,20 +693,37 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
   // Returns signals with geo data for map rendering
   app.get('/map/points', {
     config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+    schema: {
+      tags: ['signals'],
+      summary: 'Map signal points',
+      description: 'Returns geo-located signals for map rendering. Supports bbox, category, severity, and hours filters.',
+      querystring: {
+        type: 'object',
+        properties: {
+          category: { type: 'string' },
+          severity:  { type: 'string' },
+          hours:     { type: 'number', default: 24 },
+          bbox:      { type: 'string', description: 'Bounding box filter: minLng,minLat,maxLng,maxLat' },
+        },
+      },
+    },
   }, async (req, reply) => {
-    const { category, severity, hours = 24 } = req.query as {
-      category?: string; severity?: string; hours?: number
+    const { category, severity, hours = 24, bbox } = req.query as {
+      category?: string; severity?: string; hours?: number; bbox?: string
     }
 
+    const safeHours = Math.min(Number(hours), 168)
+    const bboxKey   = bbox ? `:${bbox}` : ''
+
     // Cache map points — these are expensive PostGIS queries
-    const cacheKey = `signals:map:${category ?? 'all'}:${severity ?? 'all'}:${Math.min(Number(hours), 168)}`
+    const cacheKey = `signals:map:${category ?? 'all'}:${severity ?? 'all'}:${safeHours}${bboxKey}`
     const cached = await redis.get(cacheKey).catch(() => null)
     if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
 
     let query = db('signals')
       .whereNotNull('location')
       .whereIn('status', ['verified', 'pending'])
-      .where('created_at', '>', db.raw(`NOW() - INTERVAL '${Math.min(Number(hours), 168)} hours'`))
+      .where('created_at', '>', db.raw(`NOW() - INTERVAL '${safeHours} hours'`))
       .select([
         'id', 'title', 'summary', 'category', 'severity', 'status',
         'location_name', 'country_code', 'reliability_score', 'created_at',
@@ -609,18 +731,81 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
         db.raw('ST_X(location::geometry) as lng'),
         db.raw('ST_Y(location::geometry) as lat'),
       ])
+      .orderBy('created_at', 'desc')
       .limit(500)
 
     if (category && category !== 'all') query = query.where('category', category)
     if (severity && severity !== 'all') query = query.where('severity', severity)
 
+    // Bounding-box spatial filter (Gate 2: map validation hardening)
+    if (bbox) {
+      const parsed = parseBbox(bbox)
+      if ('error' in parsed) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', parsed.error)
+      }
+      const [minLng, minLat, maxLng, maxLat] = parsed.coords
+      query = query.whereRaw(
+        'ST_Within(location::geometry, ST_MakeEnvelope(?, ?, ?, ?, 4326))',
+        [minLng, minLat, maxLng, maxLat],
+      )
+    }
+
     const points = await query
-    const response = { success: true, data: points }
+
+    // Count how many signals have geo data for health monitoring
+    const geoCount = points.length
+
+    const response = {
+      success:   true,
+      data:      points,
+      meta: {
+        total:        geoCount,
+        hours:        safeHours,
+        bbox:         bbox ?? null,
+        generated_at: new Date().toISOString(),
+      },
+    }
 
     // Cache the expensive PostGIS query result
     redis.setex(cacheKey, MAP_CACHE_TTL, JSON.stringify(response)).catch(() => {})
 
+    // Log warning if geo coverage is low (< 10 signals in last 24h)
+    if (safeHours <= 24 && !bbox && !category && geoCount < 10) {
+      req.log?.warn({ map_geo_count: geoCount }, '[MAP HEALTH] Low geo signal count in last 24h — check scraper location enrichment')
+    }
+
     return reply.send(response)
+  })
+
+  // ─── MAP HEALTH SUMMARY ───────────────────────────────────
+  // Returns count of verified signals with geo in last 24h (for health monitoring)
+  app.get('/map/health', {
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    schema: {
+      tags: ['signals'],
+      summary: 'Map geo signal health',
+      description: 'Returns count of geo-located verified signals in last 24h. Used by health monitoring.',
+    },
+  }, async (_req, reply) => {
+    const cacheKey = 'signals:map:health:24h'
+    const cached = await redis.get(cacheKey).catch(() => null)
+    if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
+
+    const [row] = await db('signals')
+      .whereNotNull('location')
+      .whereIn('status', ['verified', 'pending'])
+      .where('created_at', '>', db.raw(`NOW() - INTERVAL '24 hours'`))
+      .count('id as count')
+
+    const mapSignalsWithGeo = Number((row as { count: string | number } | undefined)?.count ?? 0)
+    const result = {
+      map_signals_with_geo_24h: mapSignalsWithGeo,
+      geo_coverage_status:     mapSignalsWithGeo >= 10 ? 'healthy' : mapSignalsWithGeo > 0 ? 'low' : 'empty',
+      checked_at:              new Date().toISOString(),
+    }
+
+    redis.setex(cacheKey, 300, JSON.stringify(result)).catch(() => {})
+    return reply.send(result)
   })
 
   // ─── CORRELATED SIGNALS (Event Cluster) ──────────────────────
@@ -728,9 +913,231 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
 
     return reply.send({ success: true, data: clusters })
   })
+
+  // ─── VERIFICATION HISTORY ─────────────────────────────────────────────────
+  // GET /api/v1/signals/:id/verifications
+  // Returns paginated verification_log entries for a signal.
+  app.get('/:id/verifications', {
+    preHandler: [optionalAuth],
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+    schema: {
+      tags: ['signals'],
+      summary: 'Get verification history for a signal',
+      description: 'Returns paginated verification_log entries including verifier_type, verdict, score_delta, confidence, notes, and timestamps.',
+    },
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const { page = 1, limit = 20 } = req.query as { page?: number; limit?: number }
+
+    const safeLimit = Math.min(Math.max(1, Number(limit)), 100)
+    const offset    = (Math.max(1, Number(page)) - 1) * safeLimit
+
+    try {
+      const [items, countRows] = await Promise.all([
+        db('verification_log')
+          .where('signal_id', id)
+          .orderBy('created_at', 'desc')
+          .limit(safeLimit)
+          .offset(offset)
+          .select([
+            'id', 'check_type', 'verifier_type', 'result',
+            'verdict', 'confidence', 'score_delta', 'notes', 'created_at',
+          ]),
+        db('verification_log')
+          .where('signal_id', id)
+          .count('id as count'),
+      ])
+      const count = (countRows[0] as { count: string | number })?.count ?? 0
+
+      return reply.send({
+        success: true,
+        data: {
+          items: items.map((v: Record<string, unknown>) => ({
+            id:           v.id,
+            verifierType: v.verifier_type ?? v.check_type,
+            checkType:    v.check_type,
+            verdict:      v.verdict ?? null,
+            result:       v.result,
+            confidence:   v.confidence != null ? Number(v.confidence) : null,
+            scoreDelta:   v.score_delta != null ? Number(v.score_delta) : null,
+            notes:        v.notes ?? null,
+            createdAt:    v.created_at ? (v.created_at as Date).toISOString() : null,
+          })),
+          total: Number(count),
+          page:  Math.max(1, Number(page)),
+          limit: safeLimit,
+        },
+      })
+    } catch {
+      // Table may not exist on fresh deploys — return empty gracefully
+      return reply.send({
+        success: true,
+        data: { items: [], total: 0, page: 1, limit: safeLimit },
+      })
+    }
+  })
+
+  // ─── GEOGRAPHIC CONVERGENCE HOTSPOTS ──────────────────────────────────────
+  // Detects 1°×1° geographic cells where 3+ distinct signal categories converge.
+  // Directly mirrors World Monitor's "convergence alert" feature.
+  // GET /api/v1/signals/map/hotspots?hours=24&min_categories=3&limit=20
+  app.get('/map/hotspots', {
+    schema: {
+      tags: ['signals'],
+      summary: 'Geographic convergence hotspots',
+      description: 'Returns geographic cells (1°×1°) where multiple distinct signal categories have converged in the given time window. Cells with 3+ category types indicate multi-domain event escalation.',
+      querystring: {
+        type: 'object',
+        properties: {
+          hours:          { type: 'integer', minimum: 1, maximum: 168, default: 24 },
+          min_categories: { type: 'integer', minimum: 2, maximum: 10,  default: 3  },
+          limit:          { type: 'integer', minimum: 1, maximum: 50,  default: 20 },
+        },
+      },
+    },
+  }, async (req, reply) => {
+    const q = req.query as { hours?: number; min_categories?: number; limit?: number }
+    const hours  = Math.min(168, Math.max(1,  Number(q.hours          ?? 24)))
+    const minCat = Math.min(10,  Math.max(2,  Number(q.min_categories ?? 3)))
+    const limit  = Math.min(50,  Math.max(1,  Number(q.limit          ?? 20)))
+
+    const cacheKey = `signals:hotspots:${hours}:${minCat}:${limit}`
+    const cached = await redis.get(cacheKey).catch(() => null)
+    if (cached) {
+      try { return reply.send(JSON.parse(cached)) } catch { /* fallthrough */ }
+    }
+
+    // Use validated integers — safe for template literal interpolation
+    const result = await db.raw<{ rows: Array<Record<string, unknown>> }>(`
+      SELECT
+        ROUND(ST_Y(location::geometry)::numeric, 0)::integer  AS cell_lat,
+        ROUND(ST_X(location::geometry)::numeric, 0)::integer  AS cell_lng,
+        COUNT(*)::integer                                      AS signal_count,
+        COUNT(DISTINCT category)::integer                      AS category_count,
+        ARRAY_AGG(DISTINCT category)                           AS categories,
+        MAX(severity)                                          AS max_severity,
+        ROUND(AVG(reliability_score)::numeric, 3)              AS avg_reliability,
+        MAX(created_at)                                        AS latest_signal_at,
+        MIN(ROUND(ST_Y(location::geometry)::numeric, 4))       AS center_lat,
+        MIN(ROUND(ST_X(location::geometry)::numeric, 4))       AS center_lng,
+        (ARRAY_AGG(title ORDER BY created_at DESC))[1:3]       AS sample_titles,
+        (ARRAY_AGG(id    ORDER BY created_at DESC))[1:3]       AS sample_ids
+      FROM signals
+      WHERE location IS NOT NULL
+        AND created_at > NOW() - INTERVAL '${hours} hours'
+        AND status != 'rejected'
+      GROUP BY cell_lat, cell_lng
+      HAVING COUNT(DISTINCT category) >= ${minCat}
+      ORDER BY COUNT(DISTINCT category) DESC, COUNT(*) DESC
+      LIMIT ${limit}
+    `)
+
+    const hotspots = result.rows.map(r => ({
+      cellLat:         r.cell_lat,
+      cellLng:         r.cell_lng,
+      centerLat:       parseFloat(String(r.center_lat ?? r.cell_lat)),
+      centerLng:       parseFloat(String(r.center_lng ?? r.cell_lng)),
+      signalCount:     Number(r.signal_count),
+      categoryCount:   Number(r.category_count),
+      categories:      r.categories as string[],
+      maxSeverity:     r.max_severity as string,
+      avgReliability:  parseFloat(String(r.avg_reliability ?? '0')),
+      latestSignalAt:  r.latest_signal_at ? (r.latest_signal_at as Date).toISOString() : null,
+      sampleTitles:    (r.sample_titles as string[] | null) ?? [],
+      sampleIds:       (r.sample_ids   as string[] | null) ?? [],
+    }))
+
+    const payload = { success: true, data: { hotspots, hours, minCategoryCount: minCat, generatedAt: new Date().toISOString() } }
+    redis.setex(cacheKey, 120, JSON.stringify(payload)).catch(() => {})
+    return reply.send(payload)
+  })
+
+  // ─── SIMILAR SIGNALS (Pinecone semantic) ─────────────────────────────────
+  // GET /api/v1/signals/:id/similar?limit=5
+  //
+  // Fetches the signal's title+summary, generates an embedding, and queries
+  // Pinecone for the topK most similar vectors. Falls back gracefully when
+  // Pinecone or OpenAI is not configured.
+  app.get('/:id/similar', {
+    preHandler: [optionalAuth],
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    schema: {
+      tags: ['signals'],
+      summary: 'Get semantically similar signals',
+      description: 'Uses Pinecone vector search to find signals semantically similar to the given signal.',
+    },
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const { limit = 5 } = req.query as { limit?: number }
+    const safeLimit = Math.min(20, Math.max(1, Number(limit)))
+
+    if (!isPineconeEnabled()) {
+      return reply.send({ success: true, similar: [], count: 0 })
+    }
+
+    // Fetch the signal to build the embedding text
+    const signal = await db('signals')
+      .select('id', 'title', 'summary', 'category')
+      .where('id', id)
+      .first()
+      .catch(() => null)
+
+    if (!signal) {
+      return reply.status(404).send({ success: false, error: 'Signal not found' })
+    }
+
+    const text = [signal.title, signal.summary].filter(Boolean).join('. ')
+    const embedding = await generateEmbedding(text)
+    if (!embedding) {
+      return reply.send({ success: true, similar: [], count: 0 })
+    }
+
+    // Query Pinecone — topK + 1 so we can exclude the source signal itself
+    const matches = await querySimilar(embedding, safeLimit + 1)
+    const filtered = matches.filter(m => String(m.id) !== String(id)).slice(0, safeLimit)
+
+    if (filtered.length === 0) {
+      return reply.send({ success: true, similar: [], count: 0 })
+    }
+
+    const ids = filtered.map(m => m.id)
+    const signals = await db('signals')
+      .select(
+        'id', 'title', 'summary', 'category', 'severity', 'status',
+        'reliability_score', 'location_name', 'country_code', 'tags',
+        'created_at', 'alert_tier',
+      )
+      .whereIn('id', ids)
+      .catch(() => [] as Record<string, unknown>[])
+
+    const scoreMap = new Map(filtered.map(m => [String(m.id), m.score]))
+    const sorted = (signals as Record<string, unknown>[])
+      .slice()
+      .sort((a, b) => (scoreMap.get(String(b.id)) ?? 0) - (scoreMap.get(String(a.id)) ?? 0))
+
+    return reply.send({
+      success: true,
+      similar: sorted.map(s => ({
+        id:               s.id,
+        title:            s.title,
+        summary:          s.summary,
+        category:         s.category,
+        severity:         s.severity,
+        status:           s.status,
+        reliabilityScore: s.reliability_score,
+        locationName:     s.location_name,
+        countryCode:      s.country_code,
+        tags:             s.tags ?? [],
+        createdAt:        s.created_at ? (s.created_at as Date).toISOString() : null,
+        alertTier:        s.alert_tier,
+        score:            scoreMap.get(String(s.id)) ?? 0,
+      })),
+      count: sorted.length,
+    })
+  })
 }
 
-function formatSignal(row: Record<string, unknown>) {
+export function formatSignal(row: Record<string, unknown>) {
   const geo = row.location_geojson as { coordinates?: [number, number] } | null
 
   const riskScore = computeRiskScore({
