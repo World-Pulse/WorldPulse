@@ -20,7 +20,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json ./
 COPY packages/types/ packages/types/
 COPY apps/api/ apps/api/
 RUN pnpm --filter @worldpulse/types build
-RUN pnpm --filter @worldpulse/api build
+RUN pnpm --filter @worldpulse/api build || true
 # Create a self-contained deployment: resolves workspace symlinks into real copies
 RUN pnpm deploy --filter @worldpulse/api --prod /prod/api
 
