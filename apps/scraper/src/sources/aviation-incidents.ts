@@ -24,6 +24,7 @@ import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate } from '../pipeline/insert-signal'
+import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilience'
 
 const log = rootLogger.child({ module: 'aviation-incidents-source' })
 
@@ -147,30 +148,28 @@ export function inferAviationLocation(
 // ─── POLLER ─────────────────────────────────────────────────────────────────
 
 async function fetchAsnFeed(): Promise<AsnEntry[]> {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 30_000)
-
   try {
-    const res = await fetch(ASN_RSS_URL, {
-      signal: controller.signal,
-      headers: {
-        Accept: 'application/rss+xml, application/xml, text/xml',
-        'User-Agent': 'WorldPulse-OSINT/1.0 (open-source intelligence aggregator)',
+    const xml = await fetchWithResilience(
+      'aviation-incidents',
+      'Aviation Incidents',
+      ASN_RSS_URL,
+      async () => {
+        const res = await fetch(ASN_RSS_URL, {
+          headers: {
+            Accept: 'application/rss+xml, application/xml, text/xml',
+            'User-Agent': 'WorldPulse-OSINT/1.0 (open-source intelligence aggregator)',
+          },
+          signal: AbortSignal.timeout(30_000),
+        })
+        if (!res.ok) throw Object.assign(new Error(`Aviation Incidents: HTTP ${res.status}`), { statusCode: res.status })
+        return res.text()
       },
-    })
-
-    if (!res.ok) {
-      log.warn({ status: res.status }, 'ASN RSS feed returned non-OK status')
-      return []
-    }
-
-    const xml = await res.text()
+    )
     return parseAsnRss(xml)
   } catch (err) {
+    if (err instanceof CircuitOpenError) return []
     log.error({ err }, 'Failed to fetch ASN aviation incident feed')
     return []
-  } finally {
-    clearTimeout(timeout)
   }
 }
 
@@ -220,66 +219,70 @@ async function pollAviationIncidents(
   redis: Redis,
   producer?: Producer | null,
 ): Promise<void> {
-  log.debug('Polling aviation safety incident data…')
+  try {
+    log.debug('Polling aviation safety incident data…')
 
-  const entries = await fetchAsnFeed()
-  if (entries.length === 0) {
-    log.debug('No ASN entries returned')
-    return
-  }
-
-  let inserted = 0
-
-  for (const entry of entries.slice(0, 15)) {
-    if (!isSignificantAviation(entry.fatalities, entry.description)) continue
-
-    // Create stable dedup key from link (unique per incident)
-    const incidentId = entry.link.replace(/\D/g, '').slice(-10) || entry.title.slice(0, 40)
-    const dedupKey = `osint:aviation:${incidentId}`
-
-    const seen = await redis.get(dedupKey)
-    if (seen) continue
-
-    const severity = aviationSeverity(entry.fatalities, entry.aircraftType, entry.description)
-    const { lat, lon } = inferAviationLocation(entry.location, entry.description)
-
-    const signalData = {
-      title: `Aviation Incident: ${entry.title}`.slice(0, 500),
-      summary: `${entry.description.slice(0, 400)} | Aircraft: ${entry.aircraftType} | Fatalities: ${entry.fatalities}`,
-      original_urls: [entry.link || 'https://aviation-safety.net'],
-      source_ids: [],
-      category: 'transportation',
-      status: 'pending',
-      severity,
-      reliability_score: RELIABILITY,
-      location: lat !== 0 || lon !== 0 ? db.raw('ST_MakePoint(?, ?)', [lon, lat]) : null,
-      location_name: entry.location || 'Unknown',
-      country_code: null,
-      region: null,
-      tags: ['osint', 'aviation', 'incidents', 'asn'],
-      language: 'en',
-      event_time: entry.pubDate ? new Date(entry.pubDate) : new Date(),
-      source_count: 1,
+    const entries = await fetchAsnFeed()
+    if (entries.length === 0) {
+      log.debug('No ASN entries returned')
+      return
     }
 
-    try {
-      const signal = await insertAndCorrelate(signalData, { lat: lat || null, lng: lon || null, sourceId: 'aviation-incidents' })
+    let inserted = 0
 
-      if (producer) {
-        await producer.send({
-          topic: 'signals',
-          messages: [{ key: signal.source_id, value: JSON.stringify(signal) }],
-        })
+    for (const entry of entries.slice(0, 15)) {
+      if (!isSignificantAviation(entry.fatalities, entry.description)) continue
+
+      // Create stable dedup key from link (unique per incident)
+      const incidentId = entry.link.replace(/\D/g, '').slice(-10) || entry.title.slice(0, 40)
+      const dedupKey = `osint:aviation:${incidentId}`
+
+      const seen = await redis.get(dedupKey)
+      if (seen) continue
+
+      const severity = aviationSeverity(entry.fatalities, entry.aircraftType, entry.description)
+      const { lat, lon } = inferAviationLocation(entry.location, entry.description)
+
+      const signalData = {
+        title: `Aviation Incident: ${entry.title}`.slice(0, 500),
+        summary: `${entry.description.slice(0, 400)} | Aircraft: ${entry.aircraftType} | Fatalities: ${entry.fatalities}`,
+        original_urls: [entry.link || 'https://aviation-safety.net'],
+        source_ids: [],
+        category: 'transportation',
+        status: 'pending',
+        severity,
+        reliability_score: RELIABILITY,
+        location: lat !== 0 || lon !== 0 ? db.raw('ST_MakePoint(?, ?)', [lon, lat]) : null,
+        location_name: entry.location || 'Unknown',
+        country_code: null,
+        region: null,
+        tags: ['osint', 'aviation', 'incidents', 'asn'],
+        language: 'en',
+        event_time: entry.pubDate ? new Date(entry.pubDate) : new Date(),
+        source_count: 1,
       }
 
-      await redis.set(dedupKey, '1', 'EX', DEDUP_TTL_S)
-      inserted++
-    } catch (err) {
-      log.error({ err, incidentId }, 'Failed to insert aviation incident signal')
-    }
-  }
+      try {
+        const signal = await insertAndCorrelate(signalData, { lat: lat || null, lng: lon || null, sourceId: 'aviation-incidents' })
 
-  log.info({ inserted, total: entries.length }, 'Aviation incident poll complete')
+        if (producer) {
+          await producer.send({
+            topic: 'signals',
+            messages: [{ key: String(signal['source_id'] ?? ''), value: JSON.stringify(signal) }],
+          })
+        }
+
+        await redis.set(dedupKey, '1', 'EX', DEDUP_TTL_S)
+        inserted++
+      } catch (err) {
+        log.error({ err, incidentId }, 'Failed to insert aviation incident signal')
+      }
+    }
+
+    log.info({ inserted, total: entries.length }, 'Aviation incident poll complete')
+  } catch (err) {
+    log.error({ err }, 'Aviation incident poll failed')
+  }
 }
 
 // ─── EXPORTED START FUNCTION ────────────────────────────────────────────────
@@ -299,5 +302,8 @@ export function startAviationIncidentPoller(
     ),
     POLL_INTERVAL_MS,
   )
-  return () => clearInterval(timer)
+  return () => {
+    clearInterval(timer)
+    log.info('Aviation Safety Incident poller stopped')
+  }
 }

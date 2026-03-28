@@ -80,6 +80,164 @@ function buildHasNextPage(rows: unknown[], limit: number): boolean {
   return rows.length > limit
 }
 
+// ─── Imported exports (now available after export additions) ──────────────────
+import {
+  formatSignal,
+  UpdateSignalSchema as RouteUpdateSignalSchema,
+  FlagSignalSchema as RouteFlagSignalSchema,
+} from '../routes/signals'
+
+// ─── formatSignal ─────────────────────────────────────────────────────────────
+
+function minsAgo(n: number): Date {
+  return new Date(Date.now() - n * 60 * 1000)
+}
+
+function makeRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id:                   'sig-001',
+    title:                'Test Signal',
+    summary:              'A summary',
+    body:                 null,
+    category:             'conflict',
+    severity:             'high',
+    status:               'verified',
+    reliability_score:    0.8,
+    source_count:         2,
+    location_geojson:     null,
+    location_name:        'Kyiv, Ukraine',
+    country_code:         'UA',
+    region:               'Eastern Europe',
+    tags:                 ['war', 'ukraine'],
+    original_urls:        ['https://example.com/story'],
+    language:             'en',
+    view_count:           100,
+    share_count:          5,
+    post_count:           12,
+    event_time:           null,
+    first_reported:       new Date('2024-01-01T10:00:00Z'),
+    verified_at:          new Date('2024-01-01T11:00:00Z'),
+    last_updated:         new Date('2024-01-01T12:00:00Z'),
+    created_at:           minsAgo(30),
+    is_breaking:          false,
+    community_flag_count: 0,
+    sources_data:         null,
+    ...overrides,
+  }
+}
+
+describe('formatSignal', () => {
+  it('maps snake_case DB fields to camelCase output', () => {
+    const result = formatSignal(makeRow())
+    expect(result.id).toBe('sig-001')
+    expect(result.reliabilityScore).toBe(0.8)
+    expect(result.locationName).toBe('Kyiv, Ukraine')
+    expect(result.countryCode).toBe('UA')
+    expect(result.viewCount).toBe(100)
+    expect(result.isBreaking).toBe(false)
+  })
+
+  it('returns null location when location_geojson is null', () => {
+    const result = formatSignal(makeRow({ location_geojson: null }))
+    expect(result.location).toBeNull()
+  })
+
+  it('extracts lat/lng from GeoJSON coordinates', () => {
+    const result = formatSignal(makeRow({
+      location_geojson: { coordinates: [-74.006, 40.7128] },
+    }))
+    expect(result.location).toEqual({ lng: -74.006, lat: 40.7128 })
+  })
+
+  it('converts Date fields to ISO strings', () => {
+    const d = new Date('2024-06-15T08:30:00Z')
+    const result = formatSignal(makeRow({ first_reported: d, verified_at: d, last_updated: d, created_at: d }))
+    expect(result.firstReported).toBe('2024-06-15T08:30:00.000Z')
+    expect(result.verifiedAt).toBe('2024-06-15T08:30:00.000Z')
+  })
+
+  it('returns null for null Date fields', () => {
+    const result = formatSignal(makeRow({ event_time: null, verified_at: null, first_reported: null }))
+    expect(result.eventTime).toBeNull()
+    expect(result.verifiedAt).toBeNull()
+    expect(result.firstReported).toBeNull()
+  })
+
+  it('defaults tags and originalUrls to empty arrays when null', () => {
+    const result = formatSignal(makeRow({ tags: null, original_urls: null }))
+    expect(result.tags).toEqual([])
+    expect(result.originalUrls).toEqual([])
+  })
+
+  it('defaults language to "en" when null', () => {
+    expect(formatSignal(makeRow({ language: null })).language).toBe('en')
+  })
+
+  it('includes riskScore with score, level, label, and factors', () => {
+    const result = formatSignal(makeRow())
+    expect(typeof result.riskScore.score).toBe('number')
+    expect(['critical', 'high', 'medium', 'low']).toContain(result.riskScore.level)
+    expect(result.riskScore.label).toMatch(/Risk · \d+/)
+    expect(result.riskScore.factors).toHaveProperty('severityScore')
+    expect(result.riskScore.factors).toHaveProperty('corroborationScore')
+  })
+
+  it('critical severity + high reliability → riskScore.level critical', () => {
+    const result = formatSignal(makeRow({
+      severity:          'critical',
+      reliability_score: 0.95,
+      source_count:      4,
+      created_at:        minsAgo(10),
+    }))
+    expect(result.riskScore.score).toBeGreaterThanOrEqual(75)
+    expect(result.riskScore.level).toBe('critical')
+  })
+
+  it('info severity + low reliability + old signal → riskScore.level low', () => {
+    const result = formatSignal(makeRow({
+      severity:          'info',
+      reliability_score: 0.05,
+      source_count:      1,
+      created_at:        new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
+    }))
+    expect(result.riskScore.score).toBeLessThan(25)
+    expect(result.riskScore.level).toBe('low')
+  })
+
+  it('uses sources_data length for corroboration when present', () => {
+    const withFour  = formatSignal(makeRow({ sources_data: [{}, {}, {}, {}], source_count: 1 }))
+    const withOne   = formatSignal(makeRow({ sources_data: null,             source_count: 1 }))
+    expect(withFour.riskScore.factors.corroborationScore).toBeGreaterThan(
+      withOne.riskScore.factors.corroborationScore,
+    )
+  })
+
+  it('passes sources_data through as sources[]', () => {
+    const sources = [{ id: 's1', name: 'Reuters' }]
+    expect(formatSignal(makeRow({ sources_data: sources })).sources).toEqual(sources)
+  })
+})
+
+describe('Exported schemas match re-implemented schemas', () => {
+  it('RouteUpdateSignalSchema rejects empty object', () => {
+    expect(RouteUpdateSignalSchema.safeParse({}).success).toBe(false)
+  })
+
+  it('RouteUpdateSignalSchema accepts a valid status', () => {
+    expect(RouteUpdateSignalSchema.safeParse({ status: 'verified' }).success).toBe(true)
+  })
+
+  it('RouteFlagSignalSchema accepts all valid reasons', () => {
+    for (const reason of ['inaccurate', 'outdated', 'duplicate', 'misinformation'] as const) {
+      expect(RouteFlagSignalSchema.safeParse({ reason }).success).toBe(true)
+    }
+  })
+
+  it('RouteFlagSignalSchema rejects unknown reasons', () => {
+    expect(RouteFlagSignalSchema.safeParse({ reason: 'fake' }).success).toBe(false)
+  })
+})
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('UpdateSignalSchema — validation', () => {

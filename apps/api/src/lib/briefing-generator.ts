@@ -112,10 +112,11 @@ async function getTopSignals(hours: number): Promise<BriefingSignal[]> {
 
 async function getTotalSignalCount(hours: number): Promise<number> {
   const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString()
-  const [{ count }] = await db('signals')
+  const result = await db('signals')
     .where('created_at', '>=', since)
     .count('id as count')
-  return Number(count)
+    .first() as { count: string | number } | undefined
+  return Number(result?.count ?? 0)
 }
 
 async function getCategoryBreakdown(hours: number): Promise<CategoryBreakdown[]> {
@@ -286,7 +287,8 @@ async function generateWithLLM(prompt: string): Promise<{ text: string; model: s
       })
       if (res.ok) {
         const data = await res.json() as { content: Array<{ text: string }> }
-        return { text: data.content[0].text, model: 'anthropic' }
+        const anthropicText = data.content[0]?.text
+        if (anthropicText) return { text: anthropicText, model: 'anthropic' }
       }
     } catch (err) {
       logger.warn({ err }, 'Briefing: Anthropic call failed, trying next provider')
@@ -311,7 +313,8 @@ async function generateWithLLM(prompt: string): Promise<{ text: string; model: s
       })
       if (res.ok) {
         const data = await res.json() as { choices: Array<{ message: { content: string } }> }
-        return { text: data.choices[0].message.content, model: 'openai' }
+        const openaiText = data.choices[0]?.message.content
+        if (openaiText) return { text: openaiText, model: 'openai' }
       }
     } catch (err) {
       logger.warn({ err }, 'Briefing: OpenAI call failed, trying next provider')
@@ -336,7 +339,8 @@ async function generateWithLLM(prompt: string): Promise<{ text: string; model: s
       )
       if (res.ok) {
         const data = await res.json() as { candidates: Array<{ content: { parts: Array<{ text: string }> } }> }
-        return { text: data.candidates[0].content.parts[0].text, model: 'gemini' }
+        const geminiText = data.candidates[0]?.content.parts[0]?.text
+        if (geminiText) return { text: geminiText, model: 'gemini' }
       }
     } catch (err) {
       logger.warn({ err }, 'Briefing: Gemini call failed, trying next provider')
@@ -362,7 +366,8 @@ async function generateWithLLM(prompt: string): Promise<{ text: string; model: s
       })
       if (res.ok) {
         const data = await res.json() as { choices: Array<{ message: { content: string } }> }
-        return { text: data.choices[0].message.content, model: 'openrouter' }
+        const openrouterText = data.choices[0]?.message.content
+        if (openrouterText) return { text: openrouterText, model: 'openrouter' }
       }
     } catch (err) {
       logger.warn({ err }, 'Briefing: OpenRouter call failed, trying next provider')
@@ -571,7 +576,8 @@ export async function getBriefingHistory(): Promise<Array<{
   try {
     const items = await redis.lrange(BRIEFING_HISTORY_KEY, 0, 29)
     return items.map(item => JSON.parse(item))
-  } catch {
+  } catch (err) {
+    logger.warn({ err }, 'Failed to fetch briefing history')
     return []
   }
 }

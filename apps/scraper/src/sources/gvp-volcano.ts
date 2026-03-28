@@ -24,6 +24,7 @@ import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate } from '../pipeline/insert-signal'
+import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilience'
 
 const log = rootLogger.child({ module: 'gvp-volcano-source' })
 
@@ -166,19 +167,28 @@ async function pollVolcanoAlerts(
   producer?: Producer | null,
 ): Promise<void> {
   try {
-    const res = await fetch(USGS_VOLCANO_URL, {
-      headers: {
-        'User-Agent': 'WorldPulse/1.0 (https://world-pulse.io)',
-        Accept: 'application/json',
-      },
-    })
-
-    if (!res.ok) {
-      log.warn({ status: res.status }, 'USGS Volcano Alerts API non-200 response')
-      return
+    let alerts: UsgsVolcanoAlert[]
+    try {
+      alerts = await fetchWithResilience(
+        'gvp-volcano',
+        'GVP Volcano',
+        USGS_VOLCANO_URL,
+        async () => {
+          const res = await fetch(USGS_VOLCANO_URL, {
+            headers: {
+              'User-Agent': 'WorldPulse/1.0 (https://world-pulse.io)',
+              Accept: 'application/json',
+            },
+            signal: AbortSignal.timeout(30_000),
+          })
+          if (!res.ok) throw Object.assign(new Error(`GVP Volcano: HTTP ${res.status}`), { statusCode: res.status })
+          return res.json() as Promise<UsgsVolcanoAlert[]>
+        },
+      )
+    } catch (err) {
+      if (err instanceof CircuitOpenError) return
+      throw err
     }
-
-    const alerts = (await res.json()) as UsgsVolcanoAlert[]
 
     if (!Array.isArray(alerts) || !alerts.length) {
       log.debug('No active USGS volcano alerts')

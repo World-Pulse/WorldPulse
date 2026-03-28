@@ -74,9 +74,15 @@ const CAT_ICON: Record<string, string> = {
   economy: '📈', technology: '💻', science: '🔬', elections: '🗳️', culture: '🎭',
   disaster: '🌊', security: '🔒', sports: '⚽', space: '🚀', other: '🌍',
 }
-const CATS   = ['all', 'breaking', 'conflict', 'climate', 'economy', 'technology', 'health', 'disaster']
+const CATS   = ['all', 'conflict', 'climate', 'health', 'economy', 'science', 'disaster']
 const SEVS   = ['all', 'critical', 'high', 'medium', 'low']
-const HTIMES = [{ v: 1, l: '1h' }, { v: 6, l: '6h' }, { v: 24, l: '24h' }, { v: 168, l: '7d' }]
+const TRANGE = [
+  { v: '1h',  l: '1H',  hours: 1 },
+  { v: '6h',  l: '6H',  hours: 6 },
+  { v: '24h', l: '24H', hours: 24 },
+  { v: '7d',  l: '7D',  hours: 168 },
+  { v: 'all', l: 'ALL', hours: null },
+]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -119,8 +125,11 @@ function MapView() {
   // WS
   const wsRef              = useRef<WebSocket | null>(null)
   const wsReconnectRef     = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const wsReconnectDelay   = useRef<number>(1000)
   const newSignalIdsRef    = useRef<Set<string>>(new Set())
   const highlightTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+
+  const [wsNewCount, setWsNewCount] = useState(0)
 
   // URL update debounce
   const urlTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -140,10 +149,13 @@ function MapView() {
   const [selected,         setSelected]         = useState<MapSignal | null>(null)
   const [flagModalSignalId, setFlagModalSignalId] = useState<string | null>(null)
   const [loading,  setLoading]  = useState(true)
-  const [category, setCategory] = useState('all')
-  const [severity, setSeverity] = useState('all')
-  const [hours,    setHours]    = useState(24)
-  const [wsOnline, setWsOnline] = useState(false)
+  const [category,    setCategory]    = useState(() => searchParams.get('cat') ?? 'all')
+  const [severity,    setSeverity]    = useState('all')
+  const [timeRange,   setTimeRange]   = useState(() => searchParams.get('tr')  ?? '24h')
+  const [wsOnline,    setWsOnline]    = useState(false)
+  const [heatmapMode, setHeatmapMode] = useState(() => searchParams.get('hm') === '1')
+  const [heatmapItems, setHeatmapItems] = useState<Array<{ x: number; y: number; severity: string }>>([])
+  const [visibleCount, setVisibleCount] = useState(0)
 
   // ── NASA GIBS satellite imagery state ──────────────────────────────────────
   const [satelliteMode, setSatelliteMode] = useState(false)
@@ -173,12 +185,67 @@ function MapView() {
   const [threatLoading, setThreatLoading] = useState(false)
   const [threatCount,   setThreatCount]   = useState(0)
 
+  // ── GPS/GNSS Jamming layer state ─────────────────────────────────────────────
+  const [jammingMode,    setJammingMode]    = useState(false)
+  const [jammingLoading, setJammingLoading] = useState(false)
+  const [jammingCount,   setJammingCount]   = useState(0)
+
+  // ── Country Risk Choropleth layer state ───────────────────────────────────────
+  const [countryRiskMode,    setCountryRiskMode]    = useState(false)
+  const [countryRiskLoading, setCountryRiskLoading] = useState(false)
+  const [countryRiskCount,   setCountryRiskCount]   = useState(0)
+
+  // ── Geographic Convergence Hotspots state ──────────────────────────────────
+  interface Hotspot {
+    centerLat:      number
+    centerLng:      number
+    signalCount:    number
+    categoryCount:  number
+    categories:     string[]
+    maxSeverity:    string
+    avgReliability: number
+    latestSignalAt: string | null
+    sampleTitles:   string[]
+    sampleIds:      string[]
+  }
+  const [hotspots,     setHotspots]     = useState<Hotspot[]>([])
+  const [hotspotsOpen, setHotspotsOpen] = useState(false)
+
+  useEffect(() => {
+    let mounted = true
+    async function fetchHotspots() {
+      try {
+        const res  = await fetch(`${API_URL}/api/v1/signals/map/hotspots?hours=24&min_categories=3&limit=10`)
+        if (!res.ok) return
+        const json = await res.json() as { success: boolean; data: { hotspots: Hotspot[] } }
+        if (mounted && json.success) setHotspots(json.data.hotspots)
+      } catch { /* silent — non-critical widget */ }
+    }
+    fetchHotspots()
+    const id = setInterval(fetchHotspots, 5 * 60_000) // refresh every 5 min
+    return () => { mounted = false; clearInterval(id) }
+  }, [])
+
+  // ── Filter URL persistence refs ────────────────────────────────────────────
+
+  const catRef = useRef(category)
+  const sevRef = useRef(severity)
+  const trRef  = useRef(timeRange)
+  const hmRef  = useRef(heatmapMode)
+  useEffect(() => { catRef.current = category  }, [category])
+  useEffect(() => { sevRef.current = severity  }, [severity])
+  useEffect(() => { trRef.current  = timeRange  }, [timeRange])
+  useEffect(() => { hmRef.current  = heatmapMode }, [heatmapMode])
+
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
   const fetchSignals = useCallback(async () => {
     setLoading(true)
     try {
-      const p = new URLSearchParams({ hours: String(hours) })
+      const p = new URLSearchParams()
+      const trEntry = TRANGE.find(t => t.v === timeRange)
+      const h = trEntry?.hours ?? 168   // 'all' → max window the API supports (7d)
+      p.set('hours', String(h))
       if (category !== 'all') p.set('category', category)
       if (severity !== 'all') p.set('severity', severity)
       const res  = await fetch(`${API_URL}/api/v1/signals/map/points?${p}`)
@@ -192,7 +259,7 @@ function MapView() {
     } finally {
       setLoading(false)
     }
-  }, [category, severity, hours])
+  }, [category, severity, timeRange])
 
   useEffect(() => { fetchSignals() }, [fetchSignals])
 
@@ -240,6 +307,37 @@ function MapView() {
     src.setData({ type: 'FeatureCollection', features })
   }, [])
 
+  // ── Heatmap + visible-signal-count refresh ─────────────────────────────────
+
+  const refreshHeatmapAndCount = useCallback(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const map = mapRef.current as any
+    if (!map || !map.loaded()) return
+    const b = map.getBounds()
+    const w = b.getWest()
+    const e = b.getEast()
+    const s = b.getSouth()
+    const n = b.getNorth()
+    const visible = signalsRef.current.filter(sig =>
+      sig.lat != null && sig.lng != null &&
+      sig.lat >= s && sig.lat <= n &&
+      sig.lng >= w && sig.lng <= e
+    )
+    setVisibleCount(visible.length)
+    if (hmRef.current) {
+      const items = visible.map(sig => {
+        const pt = map.project([Number(sig.lng), Number(sig.lat)])
+        return { x: Math.round(pt.x), y: Math.round(pt.y), severity: sig.severity }
+      })
+      setHeatmapItems(items)
+    } else {
+      setHeatmapItems([])
+    }
+  }, [])
+
+  const refreshHeatmapAndCountRef = useRef(refreshHeatmapAndCount)
+  useEffect(() => { refreshHeatmapAndCountRef.current = refreshHeatmapAndCount }, [refreshHeatmapAndCount])
+
   // Stable ref so WS closure always calls latest version
   const refreshHighlightsRef = useRef(refreshHighlights)
   useEffect(() => { refreshHighlightsRef.current = refreshHighlights }, [refreshHighlights])
@@ -260,64 +358,129 @@ function MapView() {
     return () => { cancelled = true }
   }, [signals, refreshClusters])
 
+  // Refresh heatmap / visible count whenever signals change
+  useEffect(() => { refreshHeatmapAndCountRef.current() }, [signals])
+
+  // Also re-compute pixel positions when heatmap is toggled on/off
+  useEffect(() => { refreshHeatmapAndCountRef.current() }, [heatmapMode])
+
   // ── WebSocket ──────────────────────────────────────────────────────────────
 
   useEffect(() => {
+    let unmounted = false
+
     function connectWS() {
       const ws = new WebSocket(`${WS_URL}/ws`)
       wsRef.current = ws
 
       ws.onopen = () => {
+        if (unmounted) { ws.close(); return }
         setWsOnline(true)
+        wsReconnectDelay.current = 1000  // reset backoff on successful connect
         ws.send(JSON.stringify({ type: 'subscribe', payload: { channels: ['all'] } }))
       }
 
       ws.onmessage = (evt: MessageEvent<string>) => {
         try {
           const msg = JSON.parse(evt.data) as { event?: string; data?: unknown }
-          if (msg.event !== 'signal.new') return
 
-          const raw   = msg.data as Record<string, unknown>
-          const point = extractLatLng(raw)
-          if (!point) return
-
-          const newSig: MapSignal = {
-            id:               String(raw.id    ?? ''),
-            title:            String(raw.title  ?? ''),
-            summary:          typeof raw.summary        === 'string' ? raw.summary        : null,
-            lat:              point.lat,
-            lng:              point.lng,
-            severity:         typeof raw.severity        === 'string' ? raw.severity        : 'info',
-            category:         typeof raw.category        === 'string' ? raw.category        : 'other',
-            status:           typeof raw.status          === 'string' ? raw.status          : 'pending',
-            location_name:    typeof raw.location_name   === 'string' ? raw.location_name   : null,
-            country_code:     typeof raw.country_code    === 'string' ? raw.country_code    : null,
-            reliability_score: typeof raw.reliability_score === 'number' ? raw.reliability_score : 0,
-            created_at:       typeof raw.created_at      === 'string' ? raw.created_at      : new Date().toISOString(),
-            original_urls:    Array.isArray(raw.original_urls) ? (raw.original_urls as string[]) : null,
+          // ── Heartbeat: respond to server pings ────────────────────────────
+          if (msg.event === 'ping') {
+            ws.send(JSON.stringify({ type: 'pong' }))
+            return
           }
-          if (!newSig.id) return
 
-          // Prepend; evict oldest if over cap
-          signalsRef.current = prependSignal(signalsRef.current, newSig)
-          setSignals([...signalsRef.current])
+          // ── New signal ────────────────────────────────────────────────────
+          if (msg.event === 'signal.new') {
+            const raw   = msg.data as Record<string, unknown>
+            const point = extractLatLng(raw)
+            if (!point) return
 
-          // Highlight for 3 s
-          newSignalIdsRef.current.add(newSig.id)
-          refreshHighlightsRef.current()
-          const prev = highlightTimersRef.current.get(newSig.id)
-          if (prev) clearTimeout(prev)
-          highlightTimersRef.current.set(newSig.id, setTimeout(() => {
-            newSignalIdsRef.current.delete(newSig.id)
-            highlightTimersRef.current.delete(newSig.id)
+            const newSig: MapSignal = {
+              id:                String(raw.id    ?? ''),
+              title:             String(raw.title  ?? ''),
+              summary:           typeof raw.summary           === 'string' ? raw.summary           : null,
+              lat:               point.lat,
+              lng:               point.lng,
+              severity:          typeof raw.severity           === 'string' ? raw.severity           : 'info',
+              category:          typeof raw.category           === 'string' ? raw.category           : 'other',
+              status:            typeof raw.status             === 'string' ? raw.status             : 'pending',
+              location_name:     typeof raw.location_name      === 'string' ? raw.location_name      : null,
+              country_code:      typeof raw.country_code       === 'string' ? raw.country_code       : null,
+              reliability_score: typeof raw.reliability_score  === 'number' ? raw.reliability_score  : 0,
+              created_at:        typeof raw.created_at         === 'string' ? raw.created_at         : new Date().toISOString(),
+              original_urls:     Array.isArray(raw.original_urls) ? (raw.original_urls as string[]) : null,
+            }
+            if (!newSig.id) return
+
+            // Only add to map if it passes the active category/severity filters
+            const activeCat = catRef.current
+            const activeSev = sevRef.current
+            if (activeCat !== 'all' && newSig.category !== activeCat) return
+            if (activeSev !== 'all' && newSig.severity !== activeSev) return
+
+            // Prepend; evict oldest if over cap
+            signalsRef.current = prependSignal(signalsRef.current, newSig)
+            setSignals([...signalsRef.current])
+            setWsNewCount(n => n + 1)
+
+            // Highlight for 3 s
+            newSignalIdsRef.current.add(newSig.id)
             refreshHighlightsRef.current()
-          }, 3000))
+            const prev = highlightTimersRef.current.get(newSig.id)
+            if (prev) clearTimeout(prev)
+            highlightTimersRef.current.set(newSig.id, setTimeout(() => {
+              newSignalIdsRef.current.delete(newSig.id)
+              highlightTimersRef.current.delete(newSig.id)
+              refreshHighlightsRef.current()
+            }, 3000))
+
+            // Toast for breaking/critical signals
+            if (newSig.severity === 'critical' || newSig.is_breaking) {
+              toast(newSig.title, 'error')
+            }
+            return
+          }
+
+          // ── Signal updated ────────────────────────────────────────────────
+          if (msg.event === 'signal.updated') {
+            const raw = msg.data as Record<string, unknown>
+            const id  = String(raw.id ?? '')
+            if (!id) return
+            const idx = signalsRef.current.findIndex(s => s.id === id)
+            if (idx === -1) return
+            const existing = signalsRef.current[idx]
+            const updated: MapSignal = {
+              ...existing,
+              title:             typeof raw.title             === 'string' ? raw.title             : existing.title,
+              severity:          typeof raw.severity          === 'string' ? raw.severity          : existing.severity,
+              status:            typeof raw.status            === 'string' ? raw.status            : existing.status,
+              reliability_score: typeof raw.reliability_score === 'number' ? raw.reliability_score : existing.reliability_score,
+              summary:           typeof raw.summary           === 'string' ? raw.summary           : existing.summary,
+            }
+            // Update lat/lng if the updated signal has a location
+            const point = extractLatLng(raw)
+            if (point) { updated.lat = point.lat; updated.lng = point.lng }
+
+            signalsRef.current = [
+              ...signalsRef.current.slice(0, idx),
+              updated,
+              ...signalsRef.current.slice(idx + 1),
+            ]
+            setSignals([...signalsRef.current])
+            return
+          }
+
         } catch { /* malformed message — ignore */ }
       }
 
       ws.onclose = () => {
+        if (unmounted) return
         setWsOnline(false)
-        wsReconnectRef.current = setTimeout(connectWS, 5000)
+        // Exponential backoff: 1s → 2s → 4s → … → 30s max
+        const delay = wsReconnectDelay.current
+        wsReconnectDelay.current = Math.min(delay * 2, 30_000)
+        wsReconnectRef.current = setTimeout(connectWS, delay)
       }
 
       ws.onerror = () => { ws.close() }
@@ -326,6 +489,7 @@ function MapView() {
     connectWS()
 
     return () => {
+      unmounted = true
       if (wsReconnectRef.current) clearTimeout(wsReconnectRef.current)
       if (wsRef.current) {
         wsRef.current.onclose = null   // prevent auto-reconnect on intentional unmount
@@ -334,7 +498,7 @@ function MapView() {
       for (const t of highlightTimersRef.current.values()) clearTimeout(t)
       highlightTimersRef.current.clear()
     }
-  }, []) // run once — reconnect loop is self-contained
+  }, [toast]) // toast is stable; all filter state accessed via refs
 
   // ── Initialize MapLibre (once) ─────────────────────────────────────────────
 
@@ -629,14 +793,19 @@ function MapView() {
 
         const onViewChange = () => {
           refreshClusters()
+          refreshHeatmapAndCountRef.current()
           if (urlTimerRef.current) clearTimeout(urlTimerRef.current)
           urlTimerRef.current = setTimeout(() => {
-            const c = map.getCenter()
-            const z = map.getZoom()
-            routerRef.current.replace(
-              `?z=${z.toFixed(2)}&lat=${c.lat.toFixed(4)}&lng=${c.lng.toFixed(4)}`,
-              { scroll: false },
-            )
+            const c   = map.getCenter()
+            const z   = map.getZoom()
+            const cat = catRef.current
+            const tr  = trRef.current
+            const hm  = hmRef.current
+            let url = `?z=${z.toFixed(2)}&lat=${c.lat.toFixed(4)}&lng=${c.lng.toFixed(4)}`
+            if (cat !== 'all') url += `&cat=${cat}`
+            if (tr  !== '24h') url += `&tr=${tr}`
+            if (hm)            url += `&hm=1`
+            routerRef.current.replace(url, { scroll: false })
           }, 500)
         }
 
@@ -886,18 +1055,26 @@ function MapView() {
         const features = carrierSignals
           .filter(s => s.location != null)
           .map(s => {
-            // Attempt to parse PostGIS WKB point — fallback via location_name heuristic
+            // Attempt to parse PostGIS WKB point (little-endian, SRID-aware)
+            // Byte layout: [byteOrder:1][wkbType:4][lng:8][lat:8] or with SRID [byteOrder:1][wkbType:4][SRID:4][lng:8][lat:8]
             let lat = 0
             let lng = 0
             try {
-              if (typeof s.location === 'string' && s.location.length > 10) {
-                // WKB hex: first 9 bytes = header, then 8-byte double lng, 8-byte double lat
-                const hex = s.location.startsWith('0101') ? s.location : null
-                if (hex) {
-                  const buf  = Buffer.from(hex, 'hex')
-                  lng = buf.readDoubleLE(5)
-                  lat = buf.readDoubleLE(13)
+              if (typeof s.location === 'string' && s.location.length >= 42) {
+                const hex = s.location
+                // Convert hex string → Uint8Array via DataView (browser-safe, no Node Buffer)
+                const bytes = new Uint8Array(hex.length / 2)
+                for (let i = 0; i < bytes.length; i++) {
+                  bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16)
                 }
+                const view = new DataView(bytes.buffer)
+                const littleEndian = view.getUint8(0) === 1
+                const wkbType = view.getUint32(1, littleEndian)
+                // wkbType 0x20000001 = POINT with SRID (EWKB), 0x00000001 = plain POINT
+                const hasSrid = (wkbType & 0x20000000) !== 0
+                const offset  = hasSrid ? 9 : 5   // skip byteOrder(1)+type(4) + optional SRID(4)
+                lng = view.getFloat64(offset,     littleEndian)
+                lat = view.getFloat64(offset + 8, littleEndian)
               }
             } catch { /* skip bad location */ }
             if (lat === 0 && lng === 0) return null
@@ -1398,6 +1575,452 @@ function MapView() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threatMode])
 
+  // ── GPS/GNSS Jamming Intelligence layer ──────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    const JAMMING_SOURCE    = 'jamming-zones'
+    const JAMMING_MIL_LAYER = 'jamming-military'
+    const JAMMING_SPF_LAYER = 'jamming-spoofing'
+    const JAMMING_CIV_LAYER = 'jamming-civilian'
+
+    let refreshTimer: ReturnType<typeof setInterval> | null = null
+
+    const removeJammingLayers = () => {
+      try {
+        for (const layer of [JAMMING_MIL_LAYER, JAMMING_SPF_LAYER, JAMMING_CIV_LAYER]) {
+          map.off('click',      layer)
+          map.off('mouseenter', layer)
+          map.off('mouseleave', layer)
+          if (map.getLayer(layer)) map.removeLayer(layer)
+        }
+        if (map.getSource(JAMMING_SOURCE)) map.removeSource(JAMMING_SOURCE)
+      } catch { /* ignore */ }
+    }
+
+    async function applyLayer() {
+      if (!jammingMode) {
+        removeJammingLayers()
+        setJammingCount(0)
+        return
+      }
+
+      setJammingLoading(true)
+      try {
+        const res  = await fetch(`${API_URL}/api/v1/jamming/zones`)
+        const json = await res.json() as {
+          success: boolean
+          data: Array<{
+            id:               string
+            title:            string
+            lat:              number
+            lng:              number
+            radius_km:        number
+            jamming_type:     'military' | 'spoofing' | 'civilian' | 'unknown'
+            severity:         string
+            confidence:       number
+            affected_systems: string[]
+            first_detected:   string
+            last_confirmed:   string
+            source:           string
+          }>
+        }
+
+        if (!json.success || !Array.isArray(json.data)) return
+
+        setJammingCount(json.data.length)
+
+        const features = json.data.map(z => ({
+          type:     'Feature' as const,
+          geometry: { type: 'Point' as const, coordinates: [z.lng, z.lat] },
+          properties: {
+            id:               z.id,
+            title:            z.title,
+            jammingType:      z.jamming_type,
+            severity:         z.severity,
+            confidence:       z.confidence,
+            radiusKm:         z.radius_km,
+            affectedSystems:  z.affected_systems.join(', '),
+            firstDetected:    z.first_detected,
+            lastConfirmed:    z.last_confirmed,
+            source:           z.source,
+          },
+        }))
+
+        if (!map.getSource(JAMMING_SOURCE)) {
+          map.addSource(JAMMING_SOURCE, {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features },
+          })
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ;(map.getSource(JAMMING_SOURCE) as any).setData({ type: 'FeatureCollection', features })
+        }
+
+        // ── Popup builder ─────────────────────────────────────────────────────
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const makeJammingPopup = async (e: any) => {
+          const feat = e.features?.[0]
+          if (!feat) return
+          const p = feat.properties as {
+            title: string; jammingType: string; severity: string
+            confidence: number; radiusKm: number
+            affectedSystems: string; firstDetected: string; source: string
+          }
+          const typeLabels: Record<string, string> = {
+            military: '⚔️ MILITARY EW (GPS JAMMING)',
+            spoofing: '🎭 GPS SPOOFING',
+            civilian: '📡 CIVILIAN INTERFERENCE',
+            unknown:  '📡 GNSS ANOMALY',
+          }
+          const typeColors: Record<string, string> = {
+            military: '#ef4444',
+            spoofing: '#a855f7',
+            civilian: '#f59e0b',
+            unknown:  '#8892a4',
+          }
+          const label = typeLabels[p.jammingType] ?? '📡 GNSS ANOMALY'
+          const color = typeColors[p.jammingType] ?? '#8892a4'
+          const ts    = new Date(p.firstDetected).toLocaleString()
+          const { default: ml } = await import('maplibre-gl')
+          if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
+          popupRef.current = new ml.Popup({ closeButton: true, closeOnClick: false, offset: 12, className: 'wp-map-popup' })
+            .setLngLat(e.lngLat)
+            .setHTML(`
+              <div style="font:600 12px/1.4 system-ui;color:${color};margin-bottom:4px">${label}</div>
+              <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:260px;margin-bottom:6px">${p.title}</div>
+              <div style="font:11px monospace;color:#8892a4;margin-bottom:2px">Severity: ${p.severity} — Confidence: ${p.confidence}%</div>
+              <div style="font:11px monospace;color:#8892a4;margin-bottom:2px">Affected radius: ~${p.radiusKm} km</div>
+              <div style="font:11px monospace;color:#8892a4;margin-bottom:4px;max-width:260px">Systems: ${p.affectedSystems}</div>
+              <div style="font:10px monospace;color:#5a6477;margin-bottom:2px">Detected: ${ts}</div>
+              <div style="font:10px monospace;color:#5a6477">${p.source}</div>
+            `)
+            .addTo(map)
+        }
+
+        const hookJammingLayer = (layerId: string) => {
+          map.on('mouseenter', layerId, () => { map.getCanvas().style.cursor = 'pointer' })
+          map.on('mouseleave', layerId, () => { map.getCanvas().style.cursor = '' })
+          map.on('click', layerId, makeJammingPopup)
+        }
+
+        // ── Military jamming layer — red circles with heat-zone glow ──────────
+        if (!map.getLayer(JAMMING_MIL_LAYER)) {
+          map.addLayer({
+            id:     JAMMING_MIL_LAYER,
+            type:   'circle',
+            source: JAMMING_SOURCE,
+            filter: ['==', ['get', 'jammingType'], 'military'],
+            paint:  {
+              'circle-color':        '#ef4444',
+              'circle-radius':       ['interpolate', ['linear'], ['zoom'], 2, 8, 8, 20],
+              'circle-opacity':      0.85,
+              'circle-stroke-color': 'rgba(239,68,68,0.35)',
+              'circle-stroke-width': 6,
+            },
+          })
+          hookJammingLayer(JAMMING_MIL_LAYER)
+        }
+
+        // ── Spoofing layer — purple circles with wide dashed-look stroke ──────
+        if (!map.getLayer(JAMMING_SPF_LAYER)) {
+          map.addLayer({
+            id:     JAMMING_SPF_LAYER,
+            type:   'circle',
+            source: JAMMING_SOURCE,
+            filter: ['==', ['get', 'jammingType'], 'spoofing'],
+            paint:  {
+              'circle-color':        '#a855f7',
+              'circle-radius':       ['interpolate', ['linear'], ['zoom'], 2, 10, 8, 24],
+              'circle-opacity':      0.88,
+              'circle-stroke-color': 'rgba(168,85,247,0.5)',
+              'circle-stroke-width': 8,
+            },
+          })
+          hookJammingLayer(JAMMING_SPF_LAYER)
+        }
+
+        // ── Civilian interference layer — amber circles ───────────────────────
+        if (!map.getLayer(JAMMING_CIV_LAYER)) {
+          map.addLayer({
+            id:     JAMMING_CIV_LAYER,
+            type:   'circle',
+            source: JAMMING_SOURCE,
+            filter: ['in', ['get', 'jammingType'], ['literal', ['civilian', 'unknown']]],
+            paint:  {
+              'circle-color':        '#f59e0b',
+              'circle-radius':       ['interpolate', ['linear'], ['zoom'], 2, 6, 8, 16],
+              'circle-opacity':      0.8,
+              'circle-stroke-color': 'rgba(245,158,11,0.35)',
+              'circle-stroke-width': 4,
+            },
+          })
+          hookJammingLayer(JAMMING_CIV_LAYER)
+        }
+
+      } catch (err) {
+        console.warn('[map] GPS Jamming layer error:', err)
+      } finally {
+        setJammingLoading(false)
+      }
+    }
+
+    if (map.loaded()) {
+      void applyLayer()
+    } else {
+      map.once('load', () => { void applyLayer() })
+    }
+
+    // Auto-refresh every 5 minutes when jammingMode is active
+    if (jammingMode) {
+      refreshTimer = setInterval(() => { void applyLayer() }, 5 * 60_000)
+    }
+
+    return () => {
+      if (refreshTimer) clearInterval(refreshTimer)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jammingMode])
+
+  // ── Country Risk Choropleth layer ────────────────────────────────────────────
+  //
+  // Fetches /api/v1/countries?window=24h&limit=200 for live risk scores and
+  // joins against Natural Earth 110m country boundary GeoJSON from a public CDN.
+  // Countries with no signal activity render transparent; active countries are
+  // colored by risk band: critical #ff3b5c, high #f97316, elevated #fbbf24,
+  // moderate #3b82f6, low #6b7280.
+  //
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    const CR_SOURCE = 'country-risk-geo'
+    const CR_FILL   = 'country-risk-fill'
+    const CR_LINE   = 'country-risk-border'
+
+    const removeLayer = () => {
+      try {
+        map.off('click',      CR_FILL)
+        map.off('mouseenter', CR_FILL)
+        map.off('mouseleave', CR_FILL)
+        if (map.getLayer(CR_LINE))   map.removeLayer(CR_LINE)
+        if (map.getLayer(CR_FILL))   map.removeLayer(CR_FILL)
+        if (map.getSource(CR_SOURCE)) map.removeSource(CR_SOURCE)
+      } catch { /* ignore */ }
+    }
+
+    async function applyLayer() {
+      if (!countryRiskMode) {
+        removeLayer()
+        setCountryRiskCount(0)
+        return
+      }
+
+      setCountryRiskLoading(true)
+      try {
+        // Fetch risk API + country GeoJSON in parallel
+        const [riskRes, geoRes] = await Promise.all([
+          fetch(`${API_URL}/api/v1/countries?window=24h&limit=200`),
+          // Natural Earth 110m admin-0 GeoJSON — ~400 KB, ISO_A2 property
+          fetch('https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_110m_admin_0_countries.geojson'),
+        ])
+
+        if (!riskRes.ok || !geoRes.ok) {
+          console.warn('[map] Country risk fetch failed', riskRes.status, geoRes.status)
+          return
+        }
+
+        const riskJson = await riskRes.json() as {
+          countries: Array<{
+            code:         string
+            name:         string
+            risk_score:   number
+            risk_label:   string
+            risk_color:   string
+            signal_count: number
+            trend:        string
+            categories:   string[]
+          }>
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const geoJson = await geoRes.json() as { type: string; features: any[] }
+
+        // Build lookup: ISO-2 code → risk entry
+        const byCode = new Map<string, (typeof riskJson.countries)[0]>()
+        for (const c of riskJson.countries ?? []) {
+          byCode.set(c.code.toUpperCase(), c)
+        }
+        setCountryRiskCount(byCode.size)
+
+        // Annotate each GeoJSON feature with the live risk data
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const annotated = {
+          ...geoJson,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          features: geoJson.features.map((f: any) => {
+            // Natural Earth 110m uses ISO_A2 (some edge cases use '-99' for disputed)
+            const iso2 = String(f.properties?.ISO_A2 ?? f.properties?.iso_a2 ?? '').toUpperCase()
+            const risk = byCode.get(iso2)
+            return {
+              ...f,
+              properties: {
+                ...f.properties,
+                wpIso2:        iso2,
+                wpHasData:     !!risk,
+                wpRiskScore:   risk?.risk_score   ?? 0,
+                wpRiskLabel:   risk?.risk_label   ?? 'No Data',
+                wpRiskColor:   risk?.risk_color   ?? 'rgba(0,0,0,0)',
+                wpSignalCount: risk?.signal_count ?? 0,
+                wpTrend:       risk?.trend        ?? 'stable',
+                wpCategories:  risk?.categories?.join(', ') ?? '',
+                wpCountryName: risk?.name ?? f.properties?.NAME ?? f.properties?.ADMIN ?? iso2,
+              },
+            }
+          }),
+        }
+
+        if (!map.getSource(CR_SOURCE)) {
+          map.addSource(CR_SOURCE, { type: 'geojson', data: annotated })
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ;(map.getSource(CR_SOURCE) as any).setData(annotated)
+        }
+
+        // Insert choropleth BELOW signal layers so pins remain on top
+        const beforeLayer = map.getLayer('cluster-halo') ? 'cluster-halo' : undefined
+
+        if (!map.getLayer(CR_FILL)) {
+          map.addLayer({
+            id:     CR_FILL,
+            type:   'fill',
+            source: CR_SOURCE,
+            paint: {
+              'fill-color': [
+                'case',
+                ['!', ['get', 'wpHasData']], 'rgba(0,0,0,0)',
+                ['>=', ['get', 'wpRiskScore'], 80], '#ff3b5c',
+                ['>=', ['get', 'wpRiskScore'], 60], '#f97316',
+                ['>=', ['get', 'wpRiskScore'], 40], '#fbbf24',
+                ['>=', ['get', 'wpRiskScore'], 20], '#3b82f6',
+                '#6b7280',
+              ],
+              'fill-opacity': 0.30,
+            },
+          }, beforeLayer)
+
+          map.addLayer({
+            id:     CR_LINE,
+            type:   'line',
+            source: CR_SOURCE,
+            paint: {
+              'line-color': [
+                'case',
+                ['!', ['get', 'wpHasData']], 'rgba(255,255,255,0.04)',
+                ['>=', ['get', 'wpRiskScore'], 80], '#ff3b5c',
+                ['>=', ['get', 'wpRiskScore'], 60], '#f97316',
+                ['>=', ['get', 'wpRiskScore'], 40], '#fbbf24',
+                ['>=', ['get', 'wpRiskScore'], 20], '#3b82f6',
+                '#6b7280',
+              ],
+              'line-width':   0.6,
+              'line-opacity': 0.5,
+            },
+          }, beforeLayer)
+
+          map.on('mouseenter', CR_FILL, () => { map.getCanvas().style.cursor = 'pointer' })
+          map.on('mouseleave', CR_FILL, () => { map.getCanvas().style.cursor = '' })
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          map.on('click', CR_FILL, async (e: any) => {
+            const feat = e.features?.[0]
+            if (!feat) return
+            const p = feat.properties as {
+              wpCountryName: string
+              wpHasData:     boolean
+              wpRiskLabel:   string
+              wpRiskScore:   number
+              wpSignalCount: number
+              wpTrend:       string
+              wpCategories:  string
+            }
+            if (!p.wpHasData) return
+
+            const riskColor =
+              p.wpRiskScore >= 80 ? '#ff3b5c'
+              : p.wpRiskScore >= 60 ? '#f97316'
+              : p.wpRiskScore >= 40 ? '#fbbf24'
+              : p.wpRiskScore >= 20 ? '#3b82f6'
+              : '#6b7280'
+
+            const trendArrow =
+              p.wpTrend === 'rising'  ? '⬆' :
+              p.wpTrend === 'falling' ? '⬇' : '➡'
+
+            const { default: ml } = await import('maplibre-gl')
+            if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
+            popupRef.current = new ml.Popup({
+              closeButton: true, closeOnClick: false, offset: 12, className: 'wp-map-popup',
+            })
+              .setLngLat(e.lngLat)
+              .setHTML(`
+                <div style="font:600 14px/1.4 system-ui;color:#e2e6f0;margin-bottom:6px">${p.wpCountryName}</div>
+                <div style="font:700 28px/1 monospace;color:${riskColor};margin-bottom:4px">${p.wpRiskScore}</div>
+                <div style="font:600 11px monospace;color:${riskColor};letter-spacing:1.5px;margin-bottom:8px">${p.wpRiskLabel.toUpperCase()} RISK</div>
+                <div style="font:11px monospace;color:#8892a4;margin-bottom:2px">
+                  📊 ${p.wpSignalCount} signal${p.wpSignalCount !== 1 ? 's' : ''} (24h)
+                </div>
+                <div style="font:11px monospace;color:#8892a4;margin-bottom:2px">
+                  Trend: ${trendArrow} ${p.wpTrend}
+                </div>
+                ${p.wpCategories
+                  ? `<div style="font:10px monospace;color:#5a6477;margin-top:4px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.wpCategories}</div>`
+                  : ''}
+              `)
+              .addTo(map)
+          })
+        }
+      } catch (e) {
+        console.warn('[map] Country risk choropleth error:', e)
+      } finally {
+        setCountryRiskLoading(false)
+      }
+    }
+
+    if (map.loaded()) {
+      void applyLayer()
+    } else {
+      map.once('load', () => { void applyLayer() })
+    }
+
+    // Auto-refresh every 10 minutes when active
+    let refreshTimer: ReturnType<typeof setInterval> | null = null
+    if (countryRiskMode) {
+      refreshTimer = setInterval(() => { void applyLayer() }, 10 * 60_000)
+    }
+    return () => {
+      if (refreshTimer) clearInterval(refreshTimer)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [countryRiskMode])
+
+  // ── Sync filter state → URL (independent of map pan) ──────────────────────
+
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const map = mapRef.current as any
+    if (!map) return
+    const c = map.getCenter?.()
+    const z = map.getZoom?.()
+    if (c == null || z == null) return
+    let url = `?z=${parseFloat(z).toFixed(2)}&lat=${parseFloat(c.lat).toFixed(4)}&lng=${parseFloat(c.lng).toFixed(4)}`
+    if (category    !== 'all')  url += `&cat=${category}`
+    if (timeRange   !== '24h')  url += `&tr=${timeRange}`
+    if (heatmapMode)            url += `&hm=1`
+    routerRef.current.replace(url, { scroll: false })
+  }, [category, timeRange, heatmapMode])
+
   // ── Derived state ──────────────────────────────────────────────────────────
 
   const sevCounts = signals.reduce((a, s) => {
@@ -1425,9 +2048,9 @@ function MapView() {
               {/* Category filter */}
               {CATS.map(cat => (
                 <button key={cat} onClick={() => setCategory(cat)}
-                  className={`px-[9px] py-[5px] sm:py-[3px] rounded-full border text-[10px] font-mono capitalize transition-all whitespace-nowrap min-h-[32px]
+                  className={`px-[9px] py-[5px] sm:py-[3px] rounded-full border text-[10px] font-mono uppercase transition-all whitespace-nowrap min-h-[32px]
                     ${category === cat
-                      ? 'border-wp-cyan text-wp-cyan bg-[rgba(0,212,255,0.1)]'
+                      ? 'border-wp-amber text-wp-amber bg-[rgba(245,166,35,0.12)]'
                       : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}`}>
                   {cat}
                 </button>
@@ -1457,10 +2080,10 @@ function MapView() {
               <div className="w-px h-4 bg-[rgba(255,255,255,0.06)] flex-shrink-0 mx-1" />
 
               {/* Time range */}
-              {HTIMES.map(opt => (
-                <button key={opt.v} onClick={() => setHours(opt.v)}
+              {TRANGE.map(opt => (
+                <button key={opt.v} onClick={() => setTimeRange(opt.v)}
                   className={`px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
-                    ${hours === opt.v
+                    ${timeRange === opt.v
                       ? 'border-wp-amber text-wp-amber bg-[rgba(245,166,35,0.1)]'
                       : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.15)]'}`}>
                   {opt.l}
@@ -1545,6 +2168,64 @@ function MapView() {
                 )}
               </button>
 
+              {/* GPS/GNSS Jamming Intelligence toggle */}
+              <button
+                onClick={() => setJammingMode(v => !v)}
+                disabled={jammingLoading}
+                title={jammingMode
+                  ? `RF Jamming: ${jammingCount} active zones — military (red), spoofing (purple), civilian (amber)`
+                  : 'Toggle GPS/GNSS jamming intelligence layer (military EW, spoofing, civilian interference)'}
+                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
+                  ${jammingMode
+                    ? 'border-[rgba(239,68,68,0.6)] text-[#fca5a5] bg-[rgba(239,68,68,0.1)]'
+                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}
+                  ${jammingLoading ? 'opacity-60 cursor-wait' : ''}`}>
+                {jammingLoading
+                  ? <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                  : '📡'}
+                {' '}RF JAMMING
+                {jammingMode && jammingCount > 0 && (
+                  <span className="ml-1 px-1 py-px bg-[rgba(239,68,68,0.25)] rounded text-[9px]">{jammingCount}</span>
+                )}
+              </button>
+
+              {/* Country Risk Choropleth toggle */}
+              <button
+                onClick={() => setCountryRiskMode(v => !v)}
+                disabled={countryRiskLoading}
+                title={countryRiskMode
+                  ? `Country risk: ${countryRiskCount} countries — critical (red), high (orange), elevated (yellow), moderate (blue)`
+                  : 'Toggle country risk choropleth (live risk scores from signal activity)'}
+                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
+                  ${countryRiskMode
+                    ? 'border-[rgba(251,191,36,0.6)] text-[#fde68a] bg-[rgba(251,191,36,0.1)]'
+                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}
+                  ${countryRiskLoading ? 'opacity-60 cursor-wait' : ''}`}>
+                {countryRiskLoading
+                  ? <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                  : '🌡'}
+                {' '}RISK MAP
+                {countryRiskMode && countryRiskCount > 0 && (
+                  <span className="ml-1 px-1 py-px bg-[rgba(251,191,36,0.25)] rounded text-[9px]">{countryRiskCount}</span>
+                )}
+              </button>
+
+              {/* Heatmap density toggle */}
+              <button
+                onClick={() => setHeatmapMode(v => !v)}
+                title={heatmapMode ? 'Hide density heatmap' : 'Show signal density heatmap'}
+                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
+                  ${heatmapMode
+                    ? 'border-[rgba(255,100,30,0.6)] text-[#fdba74] bg-[rgba(255,100,30,0.1)]'
+                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}`}>
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="currentColor" className="flex-shrink-0">
+                  <circle cx="6" cy="6" r="5" opacity="0.5"/>
+                  <circle cx="6" cy="6" r="3" opacity="0.7"/>
+                  <circle cx="6" cy="6" r="1.5"/>
+                </svg>
+                {' '}HEATMAP
+              </button>
+
               {/* Naval Intelligence toggle */}
             <button
                 onClick={() => setNavalMode(v => !v)}
@@ -1566,13 +2247,29 @@ function MapView() {
             </div>
           </div>
 
-          {/* WS status + signal count */}
+          {/* Visible signal count badge (cyan) */}
+          <div
+            title={`${visibleCount} signals visible in current viewport`}
+            className="hidden sm:flex items-center gap-1 font-mono text-[10px] text-[#00d4ff] border border-[rgba(0,212,255,0.35)] bg-[rgba(0,212,255,0.07)] rounded-lg px-2 py-[4px] flex-shrink-0 whitespace-nowrap"
+          >
+            {visibleCount} SIGNALS
+          </div>
+
+          {/* WS status dot */}
           <div className="flex items-center gap-1.5 font-mono text-[10px] text-wp-text2 border border-[rgba(255,255,255,0.07)] rounded-lg px-2 sm:px-2.5 py-[4px] flex-shrink-0">
             <span
-              title={wsOnline ? 'Live' : 'Reconnecting…'}
+              title={wsOnline ? 'Live feed connected' : 'Reconnecting…'}
               className={`w-[5px] h-[5px] rounded-full animate-live-pulse flex-shrink-0 ${wsOnline ? 'bg-wp-green' : 'bg-wp-red'}`}
             />
-            <span className="hidden sm:inline">{signals.length} signals</span>
+            <span className="hidden sm:inline">{signals.length} total</span>
+            {wsNewCount > 0 && (
+              <span
+                title={`${wsNewCount} new signal${wsNewCount !== 1 ? 's' : ''} received live`}
+                className="px-1 py-px bg-[rgba(0,230,118,0.2)] border border-[rgba(0,230,118,0.35)] text-wp-green rounded text-[9px]"
+              >
+                +{wsNewCount}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -1581,7 +2278,131 @@ function MapView() {
       <div className="flex-1 relative overflow-hidden">
         <div ref={mapContainer} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', touchAction: 'none' }} />
 
+        {/* Heatmap density overlay — CSS-only radial gradients, pointer-events:none */}
+        {heatmapMode && (
+          <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 5 }}>
+            {heatmapItems.map((item, i) => {
+              const sizeMap: Record<string, number> = { critical: 80, high: 60, medium: 40, low: 20 }
+              const colorMap: Record<string, string> = { critical: '#ff3b5c', high: '#f97316', medium: '#fbbf24', low: '#8892a4' }
+              const size  = sizeMap[item.severity]  ?? 20
+              const color = colorMap[item.severity] ?? '#8892a4'
+              return (
+                <div key={i} style={{
+                  position:     'absolute',
+                  left:         item.x - size / 2,
+                  top:          item.y - size / 2,
+                  width:        size,
+                  height:       size,
+                  borderRadius: '50%',
+                  background:   `radial-gradient(circle, ${color} 0%, transparent 70%)`,
+                  opacity:      0.25,
+                  pointerEvents: 'none',
+                }} />
+              )
+            })}
+          </div>
+        )}
+
+        {/* ── Convergence Hotspots Widget ─────────────────────────────── */}
+        {/* Shows geographic cells with 3+ distinct signal categories converging */}
+        {hotspots.length > 0 && !selected && (
+          <div className="absolute right-4 top-4 z-10 max-w-[220px]">
+            <button
+              onClick={() => setHotspotsOpen(o => !o)}
+              className="w-full flex items-center gap-2 bg-[rgba(255,59,92,0.12)] border border-[rgba(255,59,92,0.35)] rounded-xl px-3 py-2 backdrop-blur-xl hover:bg-[rgba(255,59,92,0.2)] transition-all"
+              aria-expanded={hotspotsOpen}
+            >
+              <span className="text-wp-red animate-live-pulse text-[14px]">⚡</span>
+              <span className="font-mono text-[10px] text-wp-red font-bold tracking-wider flex-1 text-left">
+                {hotspots.length} CONVERGENCE{hotspots.length !== 1 ? 'S' : ''}
+              </span>
+              <span className="font-mono text-[9px] text-wp-text3">{hotspotsOpen ? '▲' : '▼'}</span>
+            </button>
+
+            {hotspotsOpen && (
+              <div className="mt-1 bg-[rgba(6,7,13,0.95)] border border-[rgba(255,255,255,0.09)] rounded-xl backdrop-blur-xl overflow-hidden">
+                <div className="px-3 pt-2 pb-1 border-b border-[rgba(255,255,255,0.06)]">
+                  <span className="font-mono text-[9px] tracking-[2px] text-wp-text3 uppercase">24h Multi-Domain Convergence</span>
+                </div>
+                <div className="max-h-[240px] overflow-y-auto scrollbar-thin scrollbar-thumb-[rgba(255,255,255,0.07)]">
+                  {hotspots.map((hs, i) => {
+                    const sevColor: Record<string, string> = { critical: '#ff3b5c', high: '#f97316', medium: '#fbbf24', low: '#8892a4', info: '#6b7280' }
+                    const color = sevColor[hs.maxSeverity] ?? '#f5a623'
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => {
+                          // Fly map to hotspot center
+                          if (mapRef.current) {
+                            mapRef.current.flyTo({ center: [hs.centerLng, hs.centerLat], zoom: 5, duration: 1200 })
+                          }
+                          setHotspotsOpen(false)
+                        }}
+                        className="w-full text-left px-3 py-2 border-b border-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.04)] transition-colors last:border-0"
+                      >
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: color, boxShadow: `0 0 4px ${color}` }} />
+                          <span className="font-mono text-[10px] font-semibold" style={{ color }}>
+                            {hs.categoryCount} domains · {hs.signalCount} signals
+                          </span>
+                        </div>
+                        <div className="font-mono text-[9px] text-wp-text3 mb-0.5">
+                          {hs.centerLat.toFixed(1)}°, {hs.centerLng.toFixed(1)}°
+                        </div>
+                        <div className="flex gap-1 flex-wrap">
+                          {hs.categories.slice(0, 4).map(cat => (
+                            <span key={cat} className="font-mono text-[8px] px-1 py-px bg-[rgba(245,166,35,0.1)] text-wp-amber border border-[rgba(245,166,35,0.2)] rounded">
+                              {cat}
+                            </span>
+                          ))}
+                          {hs.categories.length > 4 && (
+                            <span className="font-mono text-[8px] text-wp-text3">+{hs.categories.length - 4}</span>
+                          )}
+                        </div>
+                        {hs.sampleTitles[0] && (
+                          <div className="font-mono text-[9px] text-wp-text2 mt-0.5 truncate" title={hs.sampleTitles[0]}>
+                            {hs.sampleTitles[0]}
+                          </div>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="px-3 py-1.5 border-t border-[rgba(255,255,255,0.06)]">
+                  <span className="font-mono text-[8px] text-wp-text3">Click a hotspot to zoom to location</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Legend — hidden on mobile when panel is open to avoid overlap */}
+        {/* Country risk legend — shown when choropleth is active */}
+        {countryRiskMode && (
+          <div className={`absolute left-4 z-10 pointer-events-none transition-all duration-300 ${selected ? 'bottom-[calc(72%+108px)] md:bottom-[108px]' : 'bottom-[108px]'}`}>
+            <div className="bg-[rgba(6,7,13,0.88)] border border-[rgba(255,255,255,0.09)] rounded-xl p-3 backdrop-blur-xl">
+              <div className="font-mono text-[9px] tracking-[2px] text-wp-text3 uppercase mb-2">Country Risk</div>
+              <div className="space-y-1.5">
+                {([
+                  ['Critical',  '#ff3b5c', '≥80'],
+                  ['High',      '#f97316', '≥60'],
+                  ['Elevated',  '#fbbf24', '≥40'],
+                  ['Moderate',  '#3b82f6', '≥20'],
+                  ['Low',       '#6b7280', '<20'],
+                ] as const).map(([label, color, range]) => (
+                  <div key={label} className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-sm opacity-80" style={{ background: color }} />
+                      <span className="font-mono text-[10px] text-wp-text2">{label}</span>
+                    </div>
+                    <span className="font-mono text-[10px] text-wp-text3">{range}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className={`absolute left-4 z-10 pointer-events-none transition-all duration-300 ${selected ? 'bottom-[72%] md:bottom-6' : 'bottom-6'}`}>
           <div className="bg-[rgba(6,7,13,0.88)] border border-[rgba(255,255,255,0.09)] rounded-xl p-3 backdrop-blur-xl">
             <div className="font-mono text-[9px] tracking-[2px] text-wp-text3 uppercase mb-2">Severity</div>
@@ -1764,8 +2585,8 @@ function MapView() {
                 <EmptyState
                   icon="🗺️"
                   headline="No signals in this area"
-                  message={`No ${category !== 'all' ? category : ''} signals found in the last ${hours < 24 ? `${hours}h` : hours === 24 ? '24h' : '7 days'}.`}
-                  cta={{ label: 'Reset filters', onClick: () => { setCategory('all'); setSeverity('all'); setHours(24) } }}
+                  message={`No ${category !== 'all' ? category : ''} signals found in the selected time range.`}
+                  cta={{ label: 'Reset filters', onClick: () => { setCategory('all'); setSeverity('all'); setTimeRange('24h') } }}
                   compact
                 />
               </div>

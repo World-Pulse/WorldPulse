@@ -24,6 +24,7 @@ import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate } from '../pipeline/insert-signal'
+import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilience'
 
 const log = rootLogger.child({ module: 'otx-threats-source' })
 
@@ -143,14 +144,22 @@ async function pollOtxPulses(
       headers['X-OTX-API-KEY'] = apiKey
     }
 
-    const res = await fetch(OTX_ACTIVITY_URL, { headers })
-
-    if (!res.ok) {
-      log.warn({ status: res.status }, 'OTX API non-200 response')
-      return
+    let data: { results?: OtxPulse[] }
+    try {
+      data = await fetchWithResilience(
+        'otx-threats',
+        'OTX Threats',
+        OTX_ACTIVITY_URL,
+        async () => {
+          const res = await fetch(OTX_ACTIVITY_URL, { headers, signal: AbortSignal.timeout(30_000) })
+          if (!res.ok) throw Object.assign(new Error(`OTX Threats: HTTP ${res.status}`), { statusCode: res.status })
+          return res.json() as Promise<{ results?: OtxPulse[] }>
+        },
+      )
+    } catch (err) {
+      if (err instanceof CircuitOpenError) return
+      throw err
     }
-
-    const data = (await res.json()) as { results?: OtxPulse[] }
     const pulses = data.results ?? []
 
     if (!pulses.length) {
@@ -195,7 +204,7 @@ async function pollOtxPulses(
         status: 'pending',
         reliability_score: RELIABILITY,
         location: location ? db.raw('ST_MakePoint(?, ?)', [location.lon, location.lat]) : null,
-        location_name: location?.name || 'Unknown',
+        location_name: 'Unknown',
         country_code: null,
         region: null,
         tags: ['osint', 'cybersecurity', 'otx', 'threat', 'alienvault'],
@@ -210,7 +219,7 @@ async function pollOtxPulses(
         if (producer) {
           await producer.send({
             topic: 'signals.verified',
-            messages: [{ value: JSON.stringify(signal) }],
+            messages: [{ value: JSON.stringify(signalData) }],
           })
         }
 

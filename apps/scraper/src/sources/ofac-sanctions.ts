@@ -24,6 +24,7 @@ import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate } from '../pipeline/insert-signal'
+import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilience'
 
 const log = rootLogger.child({ module: 'ofac-sanctions-source' })
 
@@ -146,17 +147,25 @@ export function startOfacSanctionsPoller(
     try {
       log.info('Polling OFAC sanctions recent actions')
 
-      const res = await fetch(OFAC_RECENT_URL, {
-        headers: { 'User-Agent': 'WorldPulse/1.0 (OSINT intelligence network)' },
-        signal: AbortSignal.timeout(30_000),
-      })
-
-      if (!res.ok) {
-        log.warn({ status: res.status }, 'OFAC RSS feed returned non-OK status, trying fallback scrape')
-        return
+      let xml: string
+      try {
+        xml = await fetchWithResilience(
+          'ofac-sanctions',
+          'OFAC Sanctions',
+          OFAC_RECENT_URL,
+          async () => {
+            const res = await fetch(OFAC_RECENT_URL, {
+              headers: { 'User-Agent': 'WorldPulse/1.0 (OSINT intelligence network)' },
+              signal: AbortSignal.timeout(30_000),
+            })
+            if (!res.ok) throw Object.assign(new Error(`OFAC Sanctions: HTTP ${res.status}`), { statusCode: res.status })
+            return res.text()
+          },
+        )
+      } catch (err) {
+        if (err instanceof CircuitOpenError) return
+        throw err
       }
-
-      const xml = await res.text()
       const items = parseRssItems(xml)
 
       if (items.length === 0) {
@@ -192,8 +201,8 @@ export function startOfacSanctionsPoller(
           severity,
           status: 'pending',
           reliability_score: RELIABILITY,
-          location: location ? db.raw('ST_MakePoint(?, ?)', [location.lng, location.lat]) : null,
-          location_name: location?.name || 'Unknown',
+          location: location ? db.raw('ST_MakePoint(?, ?)', [location.lon, location.lat]) : null,
+          location_name: 'Unknown',
           country_code: null,
           region: null,
           tags: ['osint', 'sanctions', 'ofac', 'security'],
@@ -202,14 +211,14 @@ export function startOfacSanctionsPoller(
           source_count: 1,
         }
 
-        await insertAndCorrelate(signalData, { lat: location?.lat ?? null, lng: location?.lng ?? null, sourceId: 'ofac-sanctions' })
+        await insertAndCorrelate(signalData, { lat: location?.lat ?? null, lng: location?.lon ?? null, sourceId: 'ofac-sanctions' })
         await redis.set(dedupKey, '1', 'EX', DEDUP_TTL_S)
 
         if (producer) {
           try {
             await producer.send({
               topic: 'worldpulse.signals.new',
-              messages: [{ value: JSON.stringify(signal) }],
+              messages: [{ value: JSON.stringify(signalData) }],
             })
           } catch (kafkaErr) {
             log.warn({ kafkaErr }, 'Failed to publish OFAC signal to Kafka')

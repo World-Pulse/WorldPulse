@@ -366,6 +366,12 @@ async function run() {
   `)
   await db.raw(`CREATE INDEX IF NOT EXISTS idx_verify_signal ON verification_log(signal_id, created_at DESC)`)
 
+  // Add Phase 6a columns to verification_log (idempotent via IF NOT EXISTS)
+  await db.raw(`ALTER TABLE verification_log ADD COLUMN IF NOT EXISTS verifier_type VARCHAR(50)`)
+  await db.raw(`ALTER TABLE verification_log ADD COLUMN IF NOT EXISTS verdict       VARCHAR(20)`)
+  await db.raw(`ALTER TABLE verification_log ADD COLUMN IF NOT EXISTS score_delta   DECIMAL(8, 4)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_verify_verifier_type ON verification_log (signal_id, verifier_type)`)
+
   // ── moderation_actions ────────────────────────────────────────────────────
   await db.raw(`
     CREATE TABLE IF NOT EXISTS moderation_actions (

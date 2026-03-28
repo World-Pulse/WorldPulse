@@ -10,6 +10,9 @@ import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 import { Kafka } from 'kafkajs'
+import { getSearchAvgLatencyMs } from '../lib/search-latency'
+import { getSecurityMetrics, type SecurityMetrics } from '../lib/security'
+import { getLagSummary, type LagSummary } from '../lib/kafka-lag'
 
 type ServiceStatus = 'ok' | 'degraded' | 'down'
 
@@ -24,6 +27,22 @@ interface HealthResponse {
   version: string
   uptime_s: number
   timestamp: string
+  map_signals_with_geo: number
+  /** Gate 3: 5-minute exponential moving average of search endpoint latency (ms).
+   *  Null when no searches have been made recently. */
+  search_avg_latency_ms: number | null
+  /** Gate 6: Security event counters and lockout status. */
+  security: SecurityMetrics | null
+  /** Kafka consumer group lag summary. */
+  kafka_consumer_lag: {
+    total_lag:      number
+    overall_status: LagSummary['overall_status']
+    groups: Array<{
+      groupId:  string
+      totalLag: number
+      status:   'healthy' | 'warning' | 'critical'
+    }>
+  } | null
   services: {
     db: ServiceCheck
     redis: ServiceCheck
@@ -114,10 +133,12 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
           200: {
             type: 'object',
             properties: {
-              status:    { type: 'string', enum: ['ok', 'degraded', 'down'] },
-              version:   { type: 'string' },
-              uptime_s:  { type: 'number' },
-              timestamp: { type: 'string', format: 'date-time' },
+              status:                { type: 'string', enum: ['ok', 'degraded', 'down'] },
+              version:               { type: 'string' },
+              uptime_s:              { type: 'number' },
+              timestamp:             { type: 'string', format: 'date-time' },
+              map_signals_with_geo:    { type: 'number', description: 'Count of geo-located verified signals in last 24h' },
+              search_avg_latency_ms:  { type: ['number', 'null'], description: 'Gate 3: 5-min rolling avg search latency (ms). Null = no recent searches.' },
               services: {
                 type: 'object',
                 properties: {
@@ -133,20 +154,70 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
     },
     async (_req, reply) => {
       // Run all checks in parallel (timeout guarded internally)
-      const [dbCheck, redisCheck, kafkaCheck] = await Promise.all([
+      // Also fetch map geo count and search latency from cache (non-blocking, best-effort)
+      const [dbCheck, redisCheck, kafkaCheck, searchAvgLatencyMs, securityMetrics, lagSummary] = await Promise.all([
         checkDb(),
         checkRedis(),
         checkKafka(),
+        getSearchAvgLatencyMs(),
+        getSecurityMetrics().catch(() => null),
+        getLagSummary().catch(() => null),
       ])
 
       const services = { db: dbCheck, redis: redisCheck, kafka: kafkaCheck }
       const overall  = deriveOverallStatus(services)
 
+      // Gate 2: include map_signals_with_geo metric (cached, best-effort)
+      let mapSignalsWithGeo = 0
+      try {
+        const cached = await redis.get('signals:map:health:24h')
+        if (cached) {
+          const parsed = JSON.parse(cached) as { map_signals_with_geo_24h?: number }
+          mapSignalsWithGeo = parsed.map_signals_with_geo_24h ?? 0
+        } else if (dbCheck.status === 'ok') {
+          // Compute fresh if not cached (lightweight query)
+          const [row] = await db('signals')
+            .whereNotNull('location')
+            .whereIn('status', ['verified', 'pending'])
+            .where('created_at', '>', db.raw(`NOW() - INTERVAL '24 hours'`))
+            .count('id as count')
+          mapSignalsWithGeo = Number((row as { count: string | number } | undefined)?.count ?? 0)
+          redis.setex('signals:map:health:24h', 300, JSON.stringify({
+            map_signals_with_geo_24h: mapSignalsWithGeo,
+            geo_coverage_status: mapSignalsWithGeo >= 10 ? 'healthy' : mapSignalsWithGeo > 0 ? 'low' : 'empty',
+            checked_at: new Date().toISOString(),
+          })).catch(() => {})
+        }
+      } catch {
+        // Best-effort — don't fail health check due to map count
+      }
+
+      if (mapSignalsWithGeo < 10 && dbCheck.status === 'ok') {
+        // Log warning but don't degrade overall health status
+        console.warn(`[HEALTH] map_signals_with_geo=${mapSignalsWithGeo} — below 10 threshold. Check scraper location enrichment.`)
+      }
+
+      const kafkaLag = lagSummary
+        ? {
+            total_lag:      lagSummary.total_lag,
+            overall_status: lagSummary.overall_status,
+            groups: lagSummary.groups.map(g => ({
+              groupId:  g.groupId,
+              totalLag: g.totalLag,
+              status:   g.status,
+            })),
+          }
+        : null
+
       const body: HealthResponse = {
-        status:    overall,
-        version:   process.env.npm_package_version ?? '0.1.0',
-        uptime_s:  Math.floor(process.uptime()),
-        timestamp: new Date().toISOString(),
+        status:                overall,
+        version:               process.env.npm_package_version ?? '0.1.0',
+        uptime_s:              Math.floor(process.uptime()),
+        timestamp:             new Date().toISOString(),
+        map_signals_with_geo:  mapSignalsWithGeo,
+        search_avg_latency_ms: searchAvgLatencyMs,
+        security:              securityMetrics,
+        kafka_consumer_lag:    kafkaLag,
         services,
       }
 

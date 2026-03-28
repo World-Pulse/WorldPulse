@@ -121,7 +121,7 @@ export default function SourcesPage() {
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         {[
           { label: 'Total Sources',   value: sources.length },
           { label: 'Wire Services',   value: sources.filter(s => s.tier === 'wire').length },
@@ -219,7 +219,7 @@ export default function SourcesPage() {
                 {byTier[tier].map(src => (
                   <div
                     key={src.id}
-                    className="flex items-center gap-4 p-4 bg-wp-surface border border-[rgba(255,255,255,0.07)] rounded-xl hover:border-[rgba(255,255,255,0.15)] transition-all"
+                    className="flex items-center gap-3 p-3 sm:p-4 bg-wp-surface border border-[rgba(255,255,255,0.07)] rounded-xl hover:border-[rgba(255,255,255,0.15)] transition-all"
                   >
                     {/* Avatar */}
                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-wp-s2 to-wp-s3 flex items-center justify-center font-bold text-[14px] text-wp-amber flex-shrink-0">
@@ -254,10 +254,14 @@ export default function SourcesPage() {
                           </span>
                         ))}
                       </div>
+                      {/* Trust score — mobile only (inline below categories) */}
+                      <div className="sm:hidden mt-2">
+                        <TrustBar score={src.trustScore} />
+                      </div>
                     </div>
 
-                    {/* Trust score */}
-                    <div className="w-32 flex-shrink-0">
+                    {/* Trust score — desktop */}
+                    <div className="hidden sm:block w-32 flex-shrink-0">
                       <div className="font-mono text-[9px] text-wp-text3 uppercase mb-1">Trust Score</div>
                       <TrustBar score={src.trustScore} />
                     </div>

@@ -6,17 +6,21 @@ import { z } from 'zod'
 import { logger } from '../lib/logger'
 import { notificationService } from '../lib/notifications'
 import type { AlertSettings } from '../lib/alert-dispatcher'
+import { sendAlertEmail } from '../lib/email'
 import type { Signal } from '@worldpulse/types'
 
 // ─── Alert Settings Schemas ───────────────────────────────────────────────
 
 const AlertSettingsSchema = z.object({
-  telegram_chat_id:    z.string().min(1).max(64).optional(),
-  telegram_bot_token:  z.string().min(10).max(256).optional(),
-  discord_webhook_url: z.string().url().optional(),
-  min_severity:        z.enum(['critical', 'high', 'medium', 'low']),
-  categories:          z.array(z.string()).default([]),
-  enabled:             z.boolean(),
+  telegram_chat_id:      z.string().min(1).max(64).optional(),
+  telegram_bot_token:    z.string().min(10).max(256).optional(),
+  discord_webhook_url:   z.string().url().optional(),
+  slack_webhook_url:     z.string().url().optional(),
+  ms_teams_webhook_url:  z.string().url().optional(),
+  email_address:         z.string().email().optional(),
+  min_severity:          z.enum(['critical', 'high', 'medium', 'low']),
+  categories:            z.array(z.string()).default([]),
+  enabled:               z.boolean(),
 })
 
 function alertSettingsKey(userId: string): string {
@@ -35,6 +39,7 @@ function makeTestSignal(): Signal {
     severity:         'high',
     status:           'verified',
     reliabilityScore: 0.95,
+    alertTier:        'PRIORITY',
     sourceCount:      1,
     location:         null,
     locationName:     null,
@@ -61,6 +66,14 @@ function makeTestSignal(): Signal {
 const DeviceTokenSchema = z.object({
   token:    z.string().min(10).max(512),
   platform: z.enum(['expo', 'fcm', 'apns']).default('expo'),
+})
+
+const DeleteDeviceTokenSchema = z.object({
+  token: z.string().min(10).max(512),
+})
+
+const MarkReadSchema = z.object({
+  ids: z.array(z.string().uuid()).max(200).optional(),
 })
 
 export const registerNotificationRoutes: FastifyPluginAsync = async (app) => {
@@ -106,10 +119,11 @@ export const registerNotificationRoutes: FastifyPluginAsync = async (app) => {
 
   // ─── DEREGISTER DEVICE TOKEN ──────────────────────────────
   app.delete('/device-token', { preHandler: [authenticate] }, async (req, reply) => {
-    const { token } = req.body as { token: string }
-    if (!token) {
-      return reply.status(400).send({ success: false, error: 'Token is required' })
+    const parsed = DeleteDeviceTokenSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return reply.status(400).send({ success: false, error: 'Token is required', code: 'VALIDATION_ERROR' })
     }
+    const { token } = parsed.data
 
     await db('device_push_tokens')
       .where('user_id', req.user!.id)
@@ -158,7 +172,11 @@ export const registerNotificationRoutes: FastifyPluginAsync = async (app) => {
 
   // ─── MARK AS READ ─────────────────────────────────────────
   app.patch('/read', { preHandler: [authenticate] }, async (req, reply) => {
-    const { ids } = req.body as { ids?: string[] }
+    const parsed = MarkReadSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return reply.status(400).send({ success: false, error: 'Invalid input', code: 'VALIDATION_ERROR' })
+    }
+    const { ids } = parsed.data
 
     let query = db('notifications').where('user_id', req.user!.id)
     if (ids && ids.length > 0) {
@@ -185,7 +203,7 @@ export const registerNotificationRoutes: FastifyPluginAsync = async (app) => {
   app.get('/settings', {
     preHandler: [authenticate],
     schema: {
-      summary: 'Get Telegram/Discord alert settings',
+      summary: 'Get Telegram/Discord/Slack/Teams/Email alert settings',
       response: {
         200: {
           type: 'object',
@@ -201,15 +219,22 @@ export const registerNotificationRoutes: FastifyPluginAsync = async (app) => {
     const settings: Partial<AlertSettings> = raw ? (JSON.parse(raw) as AlertSettings) : {}
 
     // Mask secrets in the response
+    const maskedEmail = settings.email_address
+      ? `***@${settings.email_address.split('@')[1] ?? '***'}`
+      : null
+
     return reply.send({
       success: true,
       data: {
-        telegram_chat_id:    settings.telegram_chat_id    ?? null,
-        telegram_bot_token:  settings.telegram_bot_token  ? '***' : null,
-        discord_webhook_url: settings.discord_webhook_url ? '***' : null,
-        min_severity:        settings.min_severity ?? 'high',
-        categories:          settings.categories   ?? [],
-        enabled:             settings.enabled      ?? false,
+        telegram_chat_id:     settings.telegram_chat_id     ?? null,
+        telegram_bot_token:   settings.telegram_bot_token   ? '***' : null,
+        discord_webhook_url:  settings.discord_webhook_url  ? '***' : null,
+        slack_webhook_url:    settings.slack_webhook_url    ? '***' : null,
+        ms_teams_webhook_url: settings.ms_teams_webhook_url ? '***' : null,
+        email_address:        maskedEmail,
+        min_severity:         settings.min_severity ?? 'high',
+        categories:           settings.categories   ?? [],
+        enabled:              settings.enabled      ?? false,
       },
     })
   })
@@ -218,16 +243,18 @@ export const registerNotificationRoutes: FastifyPluginAsync = async (app) => {
   app.put('/settings', {
     preHandler: [authenticate],
     schema: {
-      summary: 'Save Telegram/Discord alert settings',
+      summary: 'Save Telegram/Discord/Slack/Teams alert settings',
       body: {
         type: 'object',
         properties: {
-          telegram_chat_id:    { type: 'string' },
-          telegram_bot_token:  { type: 'string' },
-          discord_webhook_url: { type: 'string' },
-          min_severity:        { type: 'string', enum: ['critical', 'high', 'medium', 'low'] },
-          categories:          { type: 'array', items: { type: 'string' } },
-          enabled:             { type: 'boolean' },
+          telegram_chat_id:     { type: 'string' },
+          telegram_bot_token:   { type: 'string' },
+          discord_webhook_url:  { type: 'string' },
+          slack_webhook_url:    { type: 'string' },
+          ms_teams_webhook_url: { type: 'string' },
+          min_severity:         { type: 'string', enum: ['critical', 'high', 'medium', 'low'] },
+          categories:           { type: 'array', items: { type: 'string' } },
+          enabled:              { type: 'boolean' },
         },
         required: ['min_severity', 'enabled'],
       },
@@ -263,6 +290,18 @@ export const registerNotificationRoutes: FastifyPluginAsync = async (app) => {
         incoming.discord_webhook_url && incoming.discord_webhook_url !== '***'
           ? incoming.discord_webhook_url
           : existing.discord_webhook_url,
+      slack_webhook_url:
+        incoming.slack_webhook_url && incoming.slack_webhook_url !== '***'
+          ? incoming.slack_webhook_url
+          : existing.slack_webhook_url,
+      ms_teams_webhook_url:
+        incoming.ms_teams_webhook_url && incoming.ms_teams_webhook_url !== '***'
+          ? incoming.ms_teams_webhook_url
+          : existing.ms_teams_webhook_url,
+      email_address:
+        incoming.email_address !== undefined
+          ? incoming.email_address
+          : existing.email_address,
       min_severity: incoming.min_severity,
       categories:   incoming.categories,
       enabled:      incoming.enabled,
@@ -280,7 +319,7 @@ export const registerNotificationRoutes: FastifyPluginAsync = async (app) => {
     preHandler: [authenticate],
     config: { rateLimit: { max: 3, timeWindow: '1 minute' } },
     schema: {
-      summary: 'Send a test alert to configured Telegram/Discord channels',
+      summary: 'Send a test alert to all configured channels (Telegram/Discord/Slack/Teams)',
     },
   }, async (req, reply) => {
     const userId = req.user!.id
@@ -304,13 +343,16 @@ export const registerNotificationRoutes: FastifyPluginAsync = async (app) => {
       })
     }
 
-    const hasTelegram = settings.telegram_chat_id && settings.telegram_bot_token
+    const hasTelegram = !!(settings.telegram_chat_id && settings.telegram_bot_token)
     const hasDiscord  = !!settings.discord_webhook_url
+    const hasSlack    = !!settings.slack_webhook_url
+    const hasTeams    = !!settings.ms_teams_webhook_url
+    const hasEmail    = !!settings.email_address
 
-    if (!hasTelegram && !hasDiscord) {
+    if (!hasTelegram && !hasDiscord && !hasSlack && !hasTeams && !hasEmail) {
       return reply.status(400).send({
         success: false,
-        error: 'No channels configured. Add a Telegram chat or Discord webhook.',
+        error: 'No channels configured. Add a Telegram chat, Discord webhook, Slack webhook, Teams webhook, or email address.',
         code:  'NO_CHANNELS',
       })
     }
@@ -334,13 +376,37 @@ export const registerNotificationRoutes: FastifyPluginAsync = async (app) => {
       )
     }
 
+    if (hasSlack) {
+      promises.push(
+        notificationService.sendSlackMessage(settings.slack_webhook_url!, testSignal),
+      )
+    }
+
+    if (hasTeams) {
+      promises.push(
+        notificationService.sendTeamsMessage(settings.ms_teams_webhook_url!, testSignal),
+      )
+    }
+
+    if (hasEmail) {
+      promises.push(sendAlertEmail(settings.email_address!, testSignal))
+    }
+
     await Promise.allSettled(promises)
 
-    logger.info({ userId }, 'Test notification dispatched')
+    const channelNames = [
+      hasTelegram && 'Telegram',
+      hasDiscord  && 'Discord',
+      hasSlack    && 'Slack',
+      hasTeams    && 'Microsoft Teams',
+      hasEmail    && 'Email',
+    ].filter(Boolean)
+
+    logger.info({ userId, channels: channelNames }, 'Test notification dispatched')
 
     return reply.send({
       success: true,
-      message: `Test notification sent to ${[hasTelegram && 'Telegram', hasDiscord && 'Discord'].filter(Boolean).join(' and ')}.`,
+      message: `Test notification sent to ${channelNames.join(' and ')}.`,
     })
   })
 }

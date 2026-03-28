@@ -18,6 +18,7 @@ import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate } from '../pipeline/insert-signal'
+import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilience'
 
 const log = rootLogger.child({ module: 'seismic-source' })
 
@@ -86,8 +87,18 @@ export function startSeismicPoller(
   async function poll(): Promise<void> {
     try {
       log.debug('Polling USGS seismic feed...')
-      const raw  = await httpsGet(USGS_API)
-      const data = JSON.parse(raw) as UsgsFeatureCollection
+      let data: UsgsFeatureCollection
+      try {
+        data = await fetchWithResilience(
+          'seismic',
+          'USGS Seismic',
+          USGS_API,
+          () => httpsGet(USGS_API).then(raw => JSON.parse(raw) as UsgsFeatureCollection),
+        )
+      } catch (err) {
+        if (err instanceof CircuitOpenError) return  // circuit open — skip silently
+        throw err
+      }
 
       const features = data.features ?? []
       if (features.length === 0) {
@@ -167,6 +178,7 @@ export function startSeismicPoller(
         log.debug({ total: features.length }, 'Seismic poll complete (no new events)')
       }
     } catch (err) {
+      // fetchWithResilience already logged + updated circuit breaker + pushed to DLQ
       log.warn({ err }, 'Seismic poll error (non-fatal)')
     }
   }

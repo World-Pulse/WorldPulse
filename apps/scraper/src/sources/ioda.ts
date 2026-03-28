@@ -25,6 +25,7 @@ import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate } from '../pipeline/insert-signal'
+import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilience'
 
 const log = rootLogger.child({ module: 'ioda-source' })
 
@@ -118,7 +119,18 @@ export function startIodaPoller(
       const url   = `${IODA_API_BASE}/alerts/?from=${from}&until=${now}&entityType=country&minScore=${MIN_SCORE}&limit=20`
 
       log.debug({ url }, 'Polling IODA internet outage alerts...')
-      const raw  = await httpsGet(url)
+      let raw: string
+      try {
+        raw = await fetchWithResilience(
+          'ioda',
+          'IODA',
+          url,
+          () => httpsGet(url),
+        )
+      } catch (err) {
+        if (err instanceof CircuitOpenError) return
+        throw err
+      }
       const body = JSON.parse(raw) as IodaAlertsResponse
 
       const alerts = (body.data ?? [])

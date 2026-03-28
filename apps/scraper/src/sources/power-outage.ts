@@ -24,6 +24,7 @@ import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate } from '../pipeline/insert-signal'
+import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilience'
 
 const log = rootLogger.child({ module: 'power-outage-source' })
 
@@ -109,30 +110,28 @@ interface StateOutageData {
 }
 
 async function fetchPowerOutageData(): Promise<StateOutageData[]> {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 30_000)
-
   try {
-    const res = await fetch(POWER_OUTAGE_STATE_URL, {
-      signal: controller.signal,
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': 'WorldPulse-OSINT/1.0 (open-source intelligence aggregator)',
+    const data = await fetchWithResilience(
+      'power-outage',
+      'Power Outage',
+      POWER_OUTAGE_STATE_URL,
+      async () => {
+        const res = await fetch(POWER_OUTAGE_STATE_URL, {
+          headers: {
+            Accept: 'application/json',
+            'User-Agent': 'WorldPulse-OSINT/1.0 (open-source intelligence aggregator)',
+          },
+          signal: AbortSignal.timeout(30_000),
+        })
+        if (!res.ok) throw Object.assign(new Error(`Power Outage: HTTP ${res.status}`), { statusCode: res.status })
+        return res.json() as Promise<unknown>
       },
-    })
-
-    if (!res.ok) {
-      log.warn({ status: res.status }, 'PowerOutage API returned non-OK status')
-      return []
-    }
-
-    const data = await res.json()
-    return Array.isArray(data) ? data : (data?.states ?? data?.data ?? [])
+    )
+    return (Array.isArray(data) ? data : ((data as Record<string, unknown>)?.['states'] ?? (data as Record<string, unknown>)?.['data'] ?? [])) as StateOutageData[]
   } catch (err) {
+    if (err instanceof CircuitOpenError) return []
     log.error({ err }, 'Failed to fetch power outage data')
     return []
-  } finally {
-    clearTimeout(timeout)
   }
 }
 
@@ -141,71 +140,75 @@ async function pollPowerOutages(
   redis: Redis,
   producer?: Producer | null,
 ): Promise<void> {
-  log.debug('Polling US power grid outage data…')
+  try {
+    log.debug('Polling US power grid outage data…')
 
-  const states = await fetchPowerOutageData()
-  if (states.length === 0) {
-    log.debug('No power outage data returned')
-    return
-  }
-
-  let inserted = 0
-
-  for (const state of states) {
-    const customersOut = state.customersOut ?? 0
-    if (!isSignificantOutage(customersOut)) continue
-
-    const stateAbbr = state.state ?? 'US'
-    const stateName = state.stateName ?? stateAbbr
-    const dedupKey = `osint:power-outage:${stateAbbr}:${Math.floor(Date.now() / (6 * 3_600_000))}`
-
-    // Skip if recently reported for this state in this 6-hour window
-    const seen = await redis.get(dedupKey)
-    if (seen) continue
-
-    const severity = outageSeverity(customersOut)
-    const { lat, lon } = stateCoords(stateAbbr)
-    const pct = state.outagePercentage ?? (
-      state.customersTracked ? ((customersOut / state.customersTracked) * 100).toFixed(2) : 'N/A'
-    )
-
-    const signalData = {
-      title: `Power Outage: ${stateName} — ${customersOut.toLocaleString()} customers without power`,
-      summary: `${customersOut.toLocaleString()} customers affected in ${stateName} (${pct}% of tracked customers). US power grid disruption detected via crowdsourced monitoring.`,
-      original_urls: [`https://poweroutage.us/area/state/${stateName.toLowerCase().replace(/\s+/g, '')}`],
-      source_ids: [],
-      category: 'infrastructure',
-      severity,
-      status: 'pending',
-      reliability_score: RELIABILITY,
-      location: db.raw('ST_MakePoint(?, ?)', [lon, lat]),
-      location_name: stateName,
-      country_code: 'US',
-      region: stateAbbr,
-      tags: ['osint', 'power', 'outage', 'infrastructure', stateAbbr.toLowerCase()],
-      language: 'en',
-      event_time: new Date(),
-      source_count: 1,
+    const states = await fetchPowerOutageData()
+    if (states.length === 0) {
+      log.debug('No power outage data returned')
+      return
     }
 
-    try {
-      await insertAndCorrelate(signalData, { lat, lng: lon, sourceId: 'power-outage' })
+    let inserted = 0
 
-      if (producer) {
-        await producer.send({
-          topic: 'signals',
-          messages: [{ key: signal.source_id, value: JSON.stringify(signal) }],
-        })
+    for (const state of states) {
+      const customersOut = state.customersOut ?? 0
+      if (!isSignificantOutage(customersOut)) continue
+
+      const stateAbbr = state.state ?? 'US'
+      const stateName = state.stateName ?? stateAbbr
+      const dedupKey = `osint:power-outage:${stateAbbr}:${Math.floor(Date.now() / (6 * 3_600_000))}`
+
+      // Skip if recently reported for this state in this 6-hour window
+      const seen = await redis.get(dedupKey)
+      if (seen) continue
+
+      const severity = outageSeverity(customersOut)
+      const { lat, lon } = stateCoords(stateAbbr)
+      const pct = state.outagePercentage ?? (
+        state.customersTracked ? ((customersOut / state.customersTracked) * 100).toFixed(2) : 'N/A'
+      )
+
+      const signalData = {
+        title: `Power Outage: ${stateName} — ${customersOut.toLocaleString()} customers without power`,
+        summary: `${customersOut.toLocaleString()} customers affected in ${stateName} (${pct}% of tracked customers). US power grid disruption detected via crowdsourced monitoring.`,
+        original_urls: [`https://poweroutage.us/area/state/${stateName.toLowerCase().replace(/\s+/g, '')}`],
+        source_ids: [],
+        category: 'infrastructure',
+        severity,
+        status: 'pending',
+        reliability_score: RELIABILITY,
+        location: db.raw('ST_MakePoint(?, ?)', [lon, lat]),
+        location_name: stateName,
+        country_code: 'US',
+        region: stateAbbr,
+        tags: ['osint', 'power', 'outage', 'infrastructure', stateAbbr.toLowerCase()],
+        language: 'en',
+        event_time: new Date(),
+        source_count: 1,
       }
 
-      await redis.set(dedupKey, '1', 'EX', DEDUP_TTL_S)
-      inserted++
-    } catch (err) {
-      log.error({ err, stateAbbr }, 'Failed to insert power outage signal')
-    }
-  }
+      try {
+        await insertAndCorrelate(signalData, { lat, lng: lon, sourceId: 'power-outage' })
 
-  log.info({ inserted, total: states.length }, 'Power outage poll complete')
+        if (producer) {
+          await producer.send({
+            topic: 'signals',
+            messages: [{ value: JSON.stringify(signalData) }],
+          })
+        }
+
+        await redis.set(dedupKey, '1', 'EX', DEDUP_TTL_S)
+        inserted++
+      } catch (err) {
+        log.error({ err, stateAbbr }, 'Failed to insert power outage signal')
+      }
+    }
+
+    log.info({ inserted, total: states.length }, 'Power outage poll complete')
+  } catch (err) {
+    log.error({ err }, 'Power outage poll failed')
+  }
 }
 
 // ─── EXPORTED START FUNCTION ────────────────────────────────────────────────

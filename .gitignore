@@ -9,11 +9,16 @@ out/
 build/
 
 # Environment — NEVER commit these
+# Pre-commit reminder: run `git secrets --scan` or `grep -r "sk-\|ghp_\|AKIA" .` before pushing
 .env
 .env.local
 .env.production
 .env.prod
 .env.*.local
+.env.staging
+*.pem
+*.key
+secrets/
 
 # Certs — managed by certbot on server
 .certbot/

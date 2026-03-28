@@ -220,14 +220,14 @@ export default function CommunitiesPage() {
     <div className="max-w-5xl mx-auto px-4 py-8">
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
+      <div className="flex items-start justify-between gap-3 mb-6">
+        <div className="min-w-0">
           <h1 className="text-[22px] font-bold text-wp-text">Communities</h1>
           <p className="text-[13px] text-wp-text3 mt-0.5">Join conversations around the topics you care about</p>
         </div>
         <button
           onClick={() => router.push('/communities/new')}
-          className="px-4 py-2 rounded-lg bg-wp-amber text-black text-[13px] font-bold hover:bg-[#ffb84d] transition-all"
+          className="flex-shrink-0 px-4 py-2 rounded-lg bg-wp-amber text-black text-[13px] font-bold hover:bg-[#ffb84d] transition-all"
         >
           + New
         </button>
@@ -356,14 +356,14 @@ export default function CommunitiesPage() {
 
       {/* Loading */}
       {loading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {[1,2,3,4].map(i => <div key={i} className="h-36 rounded-xl shimmer" />)}
         </div>
       )}
 
       {/* Results — grid view */}
       {!loading && view === 'grid' && communities.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {communities.map(c => (
             <CommunityCard key={c.id} community={c} onJoin={handleJoin} onClick={navigateToCommunity} />
           ))}
@@ -381,7 +381,7 @@ export default function CommunitiesPage() {
                 <span className="font-mono text-[10px] text-wp-amber bg-[rgba(245,166,35,0.1)] border border-[rgba(245,166,35,0.2)] px-2 py-0.5 rounded-full">{items.length}</span>
                 <div className="flex-1 h-px bg-[rgba(255,255,255,0.05)]" />
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {items.map(c => (
                   <CommunityCard key={c.id} community={c} onJoin={handleJoin} onClick={navigateToCommunity} />
                 ))}

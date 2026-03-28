@@ -24,6 +24,7 @@ import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate } from '../pipeline/insert-signal'
+import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilience'
 
 const log = rootLogger.child({ module: 'eu-sanctions-source' })
 
@@ -117,31 +118,29 @@ interface EuRegime {
 }
 
 async function fetchEuSanctions(): Promise<EuRegime[]> {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 30_000)
-
   try {
-    const res = await fetch(EU_SANCTIONS_URL, {
-      signal: controller.signal,
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': 'WorldPulse-OSINT/1.0 (open-source intelligence aggregator)',
+    const data = await fetchWithResilience(
+      'eu-sanctions',
+      'EU Sanctions',
+      EU_SANCTIONS_URL,
+      async () => {
+        const res = await fetch(EU_SANCTIONS_URL, {
+          headers: {
+            Accept: 'application/json',
+            'User-Agent': 'WorldPulse-OSINT/1.0 (open-source intelligence aggregator)',
+          },
+          signal: AbortSignal.timeout(30_000),
+        })
+        if (!res.ok) throw Object.assign(new Error(`EU Sanctions: HTTP ${res.status}`), { statusCode: res.status })
+        return res.json() as Promise<unknown>
       },
-    })
-
-    if (!res.ok) {
-      log.warn({ status: res.status }, 'EU Sanctions API returned non-OK status')
-      return []
-    }
-
-    const data = await res.json()
+    )
     // API may return { data: [...] } or [...] depending on version
-    return Array.isArray(data) ? data : (data?.data ?? data?.regimes ?? [])
+    return (Array.isArray(data) ? data : ((data as Record<string, unknown>)?.['data'] ?? (data as Record<string, unknown>)?.['regimes'] ?? [])) as EuRegime[]
   } catch (err) {
+    if (err instanceof CircuitOpenError) return []
     log.error({ err }, 'Failed to fetch EU sanctions data')
     return []
-  } finally {
-    clearTimeout(timeout)
   }
 }
 
@@ -150,66 +149,70 @@ async function pollEuSanctions(
   redis: Redis,
   producer?: Producer | null,
 ): Promise<void> {
-  log.debug('Polling EU CFSP sanctions regimes…')
+  try {
+    log.debug('Polling EU CFSP sanctions regimes…')
 
-  const regimes = await fetchEuSanctions()
-  if (regimes.length === 0) {
-    log.debug('No EU sanctions regimes returned')
-    return
-  }
-
-  let inserted = 0
-
-  for (const regime of regimes.slice(0, 20)) {
-    const name = regime.programme_name || regime.programme || 'Unknown Regime'
-    const desc = regime.description || ''
-    const regimeId = regime.id ?? name.slice(0, 50)
-    const dedupKey = `osint:eu-sanctions:${regimeId}`
-
-    // Skip if recently seen
-    const seen = await redis.get(dedupKey)
-    if (seen) continue
-
-    const severity = euSanctionsSeverity(name, desc)
-    const { lat, lon } = inferEuSanctionsLocation(name)
-
-    const signalData = {
-      title: `EU Sanctions: ${name}`,
-      summary: desc.slice(0, 500) || `European Union CFSP sanctions regime: ${name}`,
-      original_urls: [regime.url || `https://www.sanctionsmap.eu/#/main/details/${regimeId}`],
-      source_ids: [],
-      category: 'security',
-      severity,
-      status: 'pending',
-      reliability_score: RELIABILITY,
-      location: db.raw('ST_MakePoint(?, ?)', [lon, lat]),
-      location_name: name,
-      country_code: null,
-      region: null,
-      tags: ['osint', 'sanctions', 'eu', 'security'],
-      language: 'en',
-      event_time: new Date(),
-      source_count: 1,
+    const regimes = await fetchEuSanctions()
+    if (regimes.length === 0) {
+      log.debug('No EU sanctions regimes returned')
+      return
     }
 
-    try {
-      const signal = await insertAndCorrelate(signalData, { lat, lng: lon, sourceId: 'eu-sanctions' })
+    let inserted = 0
 
-      if (producer) {
-        await producer.send({
-          topic: 'signals',
-          messages: [{ key: signal.source_id, value: JSON.stringify(signal) }],
-        })
+    for (const regime of regimes.slice(0, 20)) {
+      const name = regime.programme_name || regime.programme || 'Unknown Regime'
+      const desc = regime.description || ''
+      const regimeId = regime.id ?? name.slice(0, 50)
+      const dedupKey = `osint:eu-sanctions:${regimeId}`
+
+      // Skip if recently seen
+      const seen = await redis.get(dedupKey)
+      if (seen) continue
+
+      const severity = euSanctionsSeverity(name, desc)
+      const { lat, lon } = inferEuSanctionsLocation(name)
+
+      const signalData = {
+        title: `EU Sanctions: ${name}`,
+        summary: desc.slice(0, 500) || `European Union CFSP sanctions regime: ${name}`,
+        original_urls: [regime.url || `https://www.sanctionsmap.eu/#/main/details/${regimeId}`],
+        source_ids: [],
+        category: 'security',
+        severity,
+        status: 'pending',
+        reliability_score: RELIABILITY,
+        location: db.raw('ST_MakePoint(?, ?)', [lon, lat]),
+        location_name: name,
+        country_code: null,
+        region: null,
+        tags: ['osint', 'sanctions', 'eu', 'security'],
+        language: 'en',
+        event_time: new Date(),
+        source_count: 1,
       }
 
-      await redis.set(dedupKey, '1', 'EX', DEDUP_TTL_S)
-      inserted++
-    } catch (err) {
-      log.error({ err, regimeId }, 'Failed to insert EU sanctions signal')
-    }
-  }
+      try {
+        const signal = await insertAndCorrelate(signalData, { lat, lng: lon, sourceId: 'eu-sanctions' })
 
-  log.info({ inserted, total: regimes.length }, 'EU CFSP sanctions poll complete')
+        if (producer) {
+          await producer.send({
+            topic: 'signals',
+            messages: [{ key: String(signal['source_id'] ?? ''), value: JSON.stringify(signal) }],
+          })
+        }
+
+        await redis.set(dedupKey, '1', 'EX', DEDUP_TTL_S)
+        inserted++
+      } catch (err) {
+        log.error({ err, regimeId }, 'Failed to insert EU sanctions signal')
+      }
+    }
+
+    log.info({ inserted, total: regimes.length }, 'EU CFSP sanctions poll complete')
+  } catch (err) {
+    log.error({ err }, 'EU sanctions poll failed')
+  }
 }
 
 // ─── EXPORTED START FUNCTION ────────────────────────────────────────────────
@@ -229,5 +232,8 @@ export function startEuSanctionsPoller(
     ),
     POLL_INTERVAL_MS,
   )
-  return () => clearInterval(timer)
+  return () => {
+    clearInterval(timer)
+    log.info('EU CFSP Sanctions poller stopped')
+  }
 }

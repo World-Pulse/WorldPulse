@@ -22,6 +22,7 @@ import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate } from '../pipeline/insert-signal'
+import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilience'
 
 const log = rootLogger.child({ module: 'cisa-kev-source' })
 
@@ -72,20 +73,28 @@ export function startCisaKevPoller(
     try {
       log.debug('Polling CISA KEV catalog...')
 
-      const res = await fetch(KEV_FEED_URL, {
-        headers: {
-          'User-Agent': 'WorldPulse/0.1 (open-source; https://worldpulse.io)',
-          'Accept':     'application/json',
-        },
-        signal: AbortSignal.timeout(30_000),
-      })
-
-      if (!res.ok) {
-        log.warn({ status: res.status }, 'CISA KEV feed returned non-OK status')
-        return
+      let catalog: KevCatalog
+      try {
+        catalog = await fetchWithResilience(
+          'cisa-kev',
+          'CISA KEV',
+          KEV_FEED_URL,
+          async () => {
+            const res = await fetch(KEV_FEED_URL, {
+              headers: {
+                'User-Agent': 'WorldPulse/0.1 (open-source; https://worldpulse.io)',
+                'Accept':     'application/json',
+              },
+              signal: AbortSignal.timeout(30_000),
+            })
+            if (!res.ok) throw Object.assign(new Error(`CISA KEV: HTTP ${res.status}`), { statusCode: res.status })
+            return res.json() as Promise<KevCatalog>
+          },
+        )
+      } catch (err) {
+        if (err instanceof CircuitOpenError) return
+        throw err
       }
-
-      const catalog = await res.json() as KevCatalog
 
       if (!catalog.vulnerabilities || catalog.vulnerabilities.length === 0) {
         log.debug('CISA KEV: no vulnerabilities in catalog')

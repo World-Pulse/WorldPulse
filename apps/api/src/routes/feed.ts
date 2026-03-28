@@ -375,6 +375,7 @@ function formatPost(
       severity:         row.signal_severity as Signal['severity'],
       status:           row.signal_status as Signal['status'],
       reliabilityScore: (row.signal_reliability as number) ?? 0,
+      alertTier:        'ROUTINE' as const,
       sourceCount:      0,
       location:         null,
       locationName:     row.signal_location as string | null,

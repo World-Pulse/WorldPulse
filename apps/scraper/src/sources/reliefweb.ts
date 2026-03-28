@@ -24,6 +24,7 @@ import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate } from '../pipeline/insert-signal'
+import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilience'
 
 const log = rootLogger.child({ module: 'reliefweb-source' })
 
@@ -173,20 +174,29 @@ export function startReliefWebPoller(
         'sort[]': 'date.created:desc',
       })
 
-      const res = await fetch(`${RELIEFWEB_API}?${params}`, {
-        headers: {
-          'User-Agent': 'WorldPulse/1.0 (OSINT intelligence network)',
-          'Accept': 'application/json',
-        },
-        signal: AbortSignal.timeout(30_000),
-      })
-
-      if (!res.ok) {
-        log.warn({ status: res.status }, 'ReliefWeb API returned non-OK status')
-        return
+      const fetchUrl = `${RELIEFWEB_API}?${params}`
+      let data: { data?: ReliefWebDisaster[] }
+      try {
+        data = await fetchWithResilience(
+          'reliefweb',
+          'ReliefWeb',
+          fetchUrl,
+          async () => {
+            const res = await fetch(fetchUrl, {
+              headers: {
+                'User-Agent': 'WorldPulse/1.0 (OSINT intelligence network)',
+                'Accept': 'application/json',
+              },
+              signal: AbortSignal.timeout(30_000),
+            })
+            if (!res.ok) throw Object.assign(new Error(`ReliefWeb: HTTP ${res.status}`), { statusCode: res.status })
+            return res.json() as Promise<{ data?: ReliefWebDisaster[] }>
+          },
+        )
+      } catch (err) {
+        if (err instanceof CircuitOpenError) return
+        throw err
       }
-
-      const data = await res.json() as { data?: ReliefWebDisaster[] }
       const disasters = data.data ?? []
 
       if (disasters.length === 0) {
@@ -226,7 +236,7 @@ export function startReliefWebPoller(
           severity,
           status: 'pending',
           reliability_score: RELIABILITY,
-          location: location ? db.raw('ST_MakePoint(?, ?)', [location.lng, location.lat]) : null,
+          location: location ? db.raw('ST_MakePoint(?, ?)', [location.lon, location.lat]) : null,
           location_name: countryNames || 'Multiple regions',
           country_code: null,
           region: null,
@@ -236,14 +246,14 @@ export function startReliefWebPoller(
           source_count: 1,
         }
 
-        await insertAndCorrelate(signalData, { lat: location?.lat ?? null, lng: location?.lng ?? null, sourceId: 'reliefweb' })
+        await insertAndCorrelate(signalData, { lat: location?.lat ?? null, lng: location?.lon ?? null, sourceId: 'reliefweb' })
         await redis.set(dedupKey, '1', 'EX', DEDUP_TTL_S)
 
         if (producer) {
           try {
             await producer.send({
               topic: 'worldpulse.signals.new',
-              messages: [{ value: JSON.stringify(signal) }],
+              messages: [{ value: JSON.stringify(signalData) }],
             })
           } catch (kafkaErr) {
             log.warn({ kafkaErr }, 'Failed to publish ReliefWeb signal to Kafka')

@@ -1,5 +1,5 @@
 {
-  "last_scan": "2026-03-28T14:00:00.000000+00:00",
+  "last_scan": "2026-03-28T15:42:06.428038+00:00",
   "threats": [
     {
       "competitor": "Reuters Connect",
@@ -14,7 +14,7 @@
     {
       "competitor": "Ground News",
       "threat_level": "medium",
-      "note": "v4.27.0 released March 9, 2026. Added Podcasts & Opinions (YouTube clips/podcasts), Daily Briefing, enhanced navigation, infrastructure stability fixes. 50K+ sources, 60K articles/day. Mar 28 cycle 72 scan: no new major threats, still primarily UI/UX iteration, no AI verification or real-time map features."
+      "note": "Monitoring Ground News for feature parity with WorldPulse"
     },
     {
       "competitor": "Logically AI",
@@ -40,38 +40,31 @@
       "competitor": "The GDELT Project",
       "threat_level": "medium",
       "note": "Monitoring The GDELT Project for feature parity with WorldPulse"
-    },
-    {
-      "competitor": "WorldMonitor (koala73/worldmonitor)",
-      "threat_level": "medium",
-      "note": "Open-source real-time global intelligence dashboard. 30+ data sources across geopolitics, finance, energy, climate, aviation, cyber. Confirmed still active Mar 28 cycle 72 scan."
-    },
-    {
-      "competitor": "Intell Weave",
-      "threat_level": "medium",
-      "note": "Production-minded scalable news platform: web ingestion, claim verification, personalized feeds. NLP + embeddings. Confirmed still active Mar 28 cycle 72 scan."
     }
   ],
   "opportunities": [
     "Open source community traction — GitHub stars, contributors",
     "AI-powered reliability scoring differentiates from legacy wires",
     "Self-hosting resonates with privacy-conscious newsrooms",
-    "Developer API ecosystem — first-mover advantage",
-    "Ground News v4.27.0 still only UI/UX — no AI verification or map features",
-    "No new well-funded news intelligence startups launched Q1 2026 — market window still open",
-    "Vercel deployment config complete — enables easy open-source contributor onboarding",
-    "Cloudflare integration complete — real-IP rate limiting ready for production edge deployment"
+    "Developer API ecosystem — first-mover advantage"
   ],
   "feature_gaps": [
     "Mobile app (apps/mobile) — needs feature parity with web",
+    "API rate limiting and monetization strategy",
     "Embeddable widget for third-party sites",
     "Browser extension for inline signal verification",
     "Slack/Teams integration for newsroom alerts",
-    "Stripe Pro billing — gate for premium API tier"
+    "GraphQL API layer in addition to REST",
+    "Multilingual signal support",
+    "AI-generated signal summaries"
   ],
   "closed_gaps": [
+    "Pinecone semantic search — DONE (cycle 75): pinecone.ts (194L), /search/semantic, /signals/:id/similar, SimilarSignals.tsx (143L), 336-line test suite",
+    "25 global news RSS feeds — DONE (cycle 74): BBC, Reuters, AP, Al Jazeera, NPR, DW, France24, Guardian, NHK, UN News, Euronews, Japan Times, Straits Times, The Hindu, SCMP, VOA, Kyiv Independent, Middle East Eye, Haaretz, Times of India, SMH, DW Africa, East African, Xinhua, TASS — news-rss.ts (700L) + 30 tests",
+    "Stripe Pro tier billing — DONE (cycle 73): subscriptions table, checkout, webhook, pricing page, 18 tests",
     "Cloudflare real-IP middleware — DONE (cycle 72): nginx CIDR trust + Fastify plugin + CF-aware rate limit keys",
     "Vercel deployment config + env var docs — DONE (cycle 71)",
+    "Gate 1 Scraper Stability Tracker — DONE (cycle 70)",
     "Sentry web error tracking — DONE (cycle 62)",
     "Developer Portal — DONE (cycle 60)",
     "Multimedia enrichment — DONE (cycle 57)",
@@ -92,20 +85,31 @@
     "API rate limiting — DONE",
     "Sentry API error tracking — DONE"
   ],
+  "cycle75_intel": {
+    "ai_funding_landscape": "17 US AI startups secured $100M+ rounds in first 2 months of 2026. February 2026 recorded largest single month of startup funding ever at $189B globally. Arena raised $150M Series A for LLM evaluation. No direct news-intelligence competitor identified with significant new funding.",
+    "ground_news_update": "Ground News processes 30K stories/day from 40K+ sources. Core features: bias meter, blindspot reports, Safari/Chrome extension. No semantic similarity search, no open-source, no self-hosting. WorldPulse Pinecone integration now differentiates clearly.",
+    "open_source_competitors": "No new significant open-source news intelligence platform detected in March 2026. FreshRSS, Tiny Tiny RSS, auto-news are RSS readers — not intelligence platforms. WorldMonitor remains closest OSINT overlap.",
+    "worldpulse_advantage": "Semantic search via Pinecone+OpenAI is now implemented. No direct competitor offers open-source, self-hostable, real-time news intelligence with vector similarity search. Source count still lags Ground News (54 vs 40K) but quality + OSINT + semantic differentiation is strong."
+  },
   "raw_searches": [
     {
-      "query": "news intelligence platform AI startup launch funding 2026",
-      "abstract": "No new news intelligence startups with significant funding found Q1 2026. Major rounds: Yann LeCun's AMI ($1B seed, world models/JEPA architecture — unrelated), Harvey legal AI ($200M at $11B — unrelated), Granola meeting AI ($125M). No direct WorldPulse competitors launched.",
+      "query": "open source news aggregation platform 2025 2026",
+      "abstract": "",
       "related": []
     },
     {
-      "query": "Ground News new features updates 2026",
-      "abstract": "v4.27.0 released March 9, 2026. Podcasts & Opinions feature (YouTube clips, podcasts), Daily Briefing, enhanced article navigation, crash fixes. Still 50K+ sources. No real-time verification, no geographic map, no AI signal scoring.",
+      "query": "real-time news verification AI startup funding",
+      "abstract": "",
       "related": []
     },
     {
-      "query": "open source news aggregation real-time verification platform 2026",
-      "abstract": "FreshRSS, tt-rss, selfoss remain traditional aggregators without intelligence features. WorldMonitor + Intell Weave confirmed active. No new well-resourced open-source intelligence platforms found. WorldPulse's real-time map + verification engine remain differentiators.",
+      "query": "global news intelligence API reliability scoring",
+      "abstract": "",
+      "related": []
+    },
+    {
+      "query": "open source Reuters AP alternative developer",
+      "abstract": "",
       "related": []
     }
   ]

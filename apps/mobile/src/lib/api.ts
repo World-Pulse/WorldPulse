@@ -145,6 +145,8 @@ export type Signal = {
   severity: 'critical' | 'high' | 'medium' | 'low' | 'info'
   status: string
   reliabilityScore: number
+  /** True if the multi-model AI consensus pipeline verified this signal */
+  consensusVerified?: boolean
   sourceCount: number
   location: { lng: number; lat: number } | null
   locationName: string | null
@@ -154,6 +156,26 @@ export type Signal = {
   postCount: number
   eventTime: string | null
   createdAt: string
+  cibScore?: number | null
+  riskScore?: number | null
+  aiSummary?: string | null
+  breaking?: boolean
+}
+
+export type TrendingEntity = {
+  entity: string
+  type: 'country' | 'org' | 'tag' | 'actor'
+  count: number
+  topCategories: string[]
+  topSeverity: 'critical' | 'high' | 'medium' | 'low' | 'info'
+}
+
+export type TrendingEntitiesResponse = {
+  window: '1h' | '6h' | '24h' | '7d'
+  entities: TrendingEntity[]
+  total_signals_scanned: number
+  unique_entity_count: number
+  generated_at: string
 }
 
 export type Post = {
@@ -163,6 +185,7 @@ export type Post = {
   likeCount: number
   boostCount: number
   replyCount: number
+  reliabilityScore?: number | null
   createdAt: string
   author: {
     id: string
@@ -346,8 +369,22 @@ export const communitiesApi = {
     request<{ success: boolean }>(`/api/v1/communities/${slug}/leave`, { method: 'DELETE' }),
 }
 
+// Analytics
+export const analyticsApi = {
+  getTrendingEntities: (window: '1h' | '6h' | '24h' | '7d' = '24h', type?: string, limit = 10) =>
+    request<{ success: boolean; data: TrendingEntitiesResponse }>(
+      '/api/v1/analytics/trending-entities',
+      { params: { window, ...(type ? { type } : {}), limit }, auth: false }
+    ),
+}
+
 // Posts
 export const postsApi = {
+  getFeed: (params?: { limit?: number; cursor?: string; tab?: 'global' | 'following' }) =>
+    request<{ success: boolean; data: { items: Post[]; cursor: string | null; hasMore: boolean } }>(
+      '/api/v1/posts', { params }
+    ),
+
   create: (data: { content: string; signalId?: string; postType?: string }) =>
     request<{ success: boolean; data: Post }>('/api/v1/posts', { method: 'POST', body: data }),
 
@@ -356,6 +393,9 @@ export const postsApi = {
 
   unlike: (id: string) =>
     request<{ success: boolean }>(`/api/v1/posts/${id}/like`, { method: 'DELETE' }),
+
+  boost: (id: string) =>
+    request<{ success: boolean }>(`/api/v1/posts/${id}/boost`, { method: 'POST' }),
 }
 
 // Notifications
@@ -377,4 +417,62 @@ export const notificationsApi = {
 
   getUnreadCount: () =>
     request<{ success: boolean; data: { count: number } }>('/api/v1/notifications/unread-count'),
+}
+
+// Briefing
+export type BriefingSection = {
+  title: string
+  summary: string
+  category: string
+  signalCount: number
+  topSignalId: string | null
+}
+
+export type Briefing = {
+  id: string
+  date: string
+  headline: string
+  summary: string
+  sections: BriefingSection[]
+  generatedAt: string
+}
+
+export const briefingApi = {
+  getLatest: () =>
+    request<{ success: boolean; data: Briefing }>('/api/v1/briefings/latest'),
+}
+
+// Countries
+export type CountrySummary = {
+  countryCode: string
+  countryName: string
+  signalCount: number
+  criticalCount: number
+  highCount: number
+  latestSignalAt: string | null
+  topCategory: string | null
+}
+
+export const countriesApi = {
+  getAll: (params?: { hours?: number }) =>
+    request<{ success: boolean; data: CountrySummary[] }>('/api/v1/countries', { params, auth: false }),
+
+  getSignals: (code: string, params?: { cursor?: string; limit?: number; severity?: string }) =>
+    request<{ success: boolean; data: FeedPage }>(`/api/v1/countries/${code}/signals`, { params }),
+}
+
+// Breaking alerts
+export type BreakingAlert = {
+  id: string
+  title: string
+  severity: 'critical' | 'high'
+  category: string
+  locationName: string | null
+  createdAt: string
+  signalId: string | null
+}
+
+export const breakingApi = {
+  getLatest: () =>
+    request<{ success: boolean; data: BreakingAlert[] }>('/api/v1/breaking/latest', { auth: false }),
 }

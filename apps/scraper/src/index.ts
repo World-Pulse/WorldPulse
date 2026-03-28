@@ -10,10 +10,10 @@ import { Kafka, Producer, Consumer } from 'kafkajs'
 import { redis } from './lib/redis'
 import { db } from './lib/postgres'
 import { logger } from './lib/logger'
-import { withRetry } from './lib/retry'
-import { isCircuitOpen, cbSuccess, cbFailure } from './lib/circuit-breaker'
+import { withRetry, RetryExhaustedError } from './lib/retry'
+import { isCircuitOpen, getCircuitState, acquireProbeSlot, cbSuccess, cbFailure, CircuitStatus } from './lib/circuit-breaker'
 import { acquireRateLimit } from './lib/rate-limiter'
-import { pushDLQ } from './lib/dlq'
+import { pushDLQ, drainDLQ } from './lib/dlq'
 import { verifySignal } from './pipeline/verify'
 import { classifyContent } from './pipeline/classify'
 import { extractGeo } from './pipeline/geo'
@@ -30,6 +30,9 @@ import type { OsintCleanupFn } from './sources/index'
 import type { Source } from '@worldpulse/types'
 import { enrichSignalWithGemini, geminiEnabled } from './lib/gemini'
 import { startHeartbeat, stopHeartbeat, registerCrashHandlers } from './lib/process-health.js'
+import { runStabilityCheck, recordUnhandledException } from './lib/stability-tracker'
+import { startKafkaLagMonitor } from './lib/kafka-lag-monitor'
+import { checkGlobalCircuitHealth } from './lib/global-circuit-guard'
 
 // DB row has extra columns not present in the shared Source interface
 type ScraperSource = Source & {
@@ -39,8 +42,12 @@ type ScraperSource = Source & {
   scrape_interval: number | null   // seconds; used for adaptive polling offset
 }
 
-const SCRAPE_INTERVAL_MS  = Number(process.env.SCRAPE_INTERVAL_MS  ?? 30_000)
-const SCRAPER_CONCURRENCY = Math.max(1, Number(process.env.SCRAPER_CONCURRENCY ?? 10))
+const SCRAPE_INTERVAL_MS    = Number(process.env.SCRAPE_INTERVAL_MS    ?? 30_000)
+const SCRAPER_CONCURRENCY   = Math.max(1, Number(process.env.SCRAPER_CONCURRENCY ?? 10))
+const DLQ_RETRY_INTERVAL_MS = Number(process.env.DLQ_RETRY_INTERVAL_MS ?? 5 * 60_000)
+const DLQ_RETRY_BATCH_SIZE  = Number(process.env.DLQ_RETRY_BATCH_SIZE  ?? 10)
+/** Discard DLQ items that have been retried this many times in total. */
+const DLQ_MAX_ATTEMPTS      = 20
 
 // Tier priority: lower index = higher priority (processed first)
 const TIER_PRIORITY: Record<string, number> = {
@@ -134,6 +141,28 @@ async function bootstrap() {
   // Health summary log + dead-source detection every 5 min
   setInterval(() => { logHealthSummary().catch(err => logger.error({ err }, 'Health summary failed')) }, 5 * 60_000)
   setInterval(() => { detectDeadSources().catch(err => logger.error({ err }, 'Dead source detection failed')) }, 5 * 60_000)
+  setInterval(() => { checkGlobalCircuitHealth().catch(err => logger.error({ err }, 'Global circuit guard failed')) }, 5 * 60_000)
+
+  // DLQ retry worker — re-attempt failed feeds on a configurable interval
+  setInterval(() => { retryDlqBatch().catch(err => logger.error({ err }, 'DLQ retry worker failed')) }, DLQ_RETRY_INTERVAL_MS)
+
+  // Gate 1 stability clock — evaluate clean-hour criteria every 60 minutes
+  // Target: 336 consecutive clean hours (14 days) before launch gate clears
+  setInterval(() => {
+    runStabilityCheck().catch(err => logger.error({ err }, '[STABILITY] Check failed'))
+  }, 60 * 60_000)
+
+  // Kafka consumer group lag monitor — checks every 5 minutes, logs summary + warns on critical lag
+  startKafkaLagMonitor()
+
+  // Record process-level exceptions for the stability tracker's unhandled-exception check.
+  // These listeners run alongside any existing crash handlers and are non-fatal.
+  process.on('uncaughtException', (err) => {
+    recordUnhandledException(err.message ?? String(err)).catch(() => {})
+  })
+  process.on('unhandledRejection', (reason) => {
+    recordUnhandledException(String(reason)).catch(() => {})
+  })
 
   // Retry Kafka connection every 60s if not connected
   if (!kafkaReady) {
@@ -159,6 +188,66 @@ async function bootstrap() {
   }
   process.on('SIGTERM', shutdown)
   process.on('SIGINT',  shutdown)
+}
+
+// ─── DLQ RETRY WORKER ─────────────────────────────────────────────────────
+/**
+ * Periodically drains a batch of DLQ items and re-fetches each feed URL.
+ *
+ * On recovery: resets the source circuit breaker (so the source is eligible
+ * for the next normal scrape cycle).
+ * On continued failure: pushes the item back to the DLQ with an incremented
+ * attempt count; items exceeding DLQ_MAX_ATTEMPTS are discarded.
+ */
+async function retryDlqBatch(): Promise<void> {
+  const items = await drainDLQ(DLQ_RETRY_BATCH_SIZE)
+  if (items.length === 0) return
+
+  logger.info({ count: items.length }, 'DLQ retry worker: processing batch')
+
+  const parser = new Parser({
+    timeout: 15_000,
+    headers: { 'User-Agent': 'WorldPulse/0.1 (open-source; https://worldpulse.io)' },
+  })
+
+  for (const item of items) {
+    if (item.attempts >= DLQ_MAX_ATTEMPTS) {
+      logger.warn(
+        { feedUrl: item.feedUrl, sourceId: item.sourceId, attempts: item.attempts },
+        'DLQ item exceeded max attempts — discarding',
+      )
+      continue
+    }
+
+    try {
+      // Rate-limit and retry with a shorter schedule (2 retries: 2 s, 10 s)
+      await acquireRateLimit(item.feedUrl)
+      await withRetry(() => parser.parseURL(item.feedUrl), { delays: [2_000, 10_000] })
+
+      // Feed is responsive again — reset the circuit breaker so the normal
+      // scrape cycle will re-include this source on its next pass.
+      await cbSuccess(item.sourceId)
+      logger.info(
+        { feedUrl: item.feedUrl, sourceId: item.sourceId, attempts: item.attempts },
+        'DLQ item recovered — circuit reset',
+      )
+    } catch (err) {
+      // Still failing — re-queue with incremented count and updated error
+      const dlqError = err instanceof RetryExhaustedError && err.cause instanceof Error
+        ? err.cause.message
+        : err instanceof Error ? err.message : String(err)
+      await pushDLQ({
+        ...item,
+        error:    dlqError,
+        attempts: item.attempts + (err instanceof RetryExhaustedError ? err.attempts : 1),
+        failedAt: new Date().toISOString(),
+      })
+      logger.debug(
+        { feedUrl: item.feedUrl, newAttempts: item.attempts + 1 },
+        'DLQ item re-queued after retry failure',
+      )
+    }
+  }
 }
 
 // ─── MAIN SCRAPE LOOP ─────────────────────────────────────────────────────
@@ -220,6 +309,19 @@ async function scrapeSource(source: ScraperSource): Promise<number> {
   if (await isCircuitOpen(source.id)) {
     logger.info({ sourceId: source.id, source: source.slug }, 'Circuit open — skipping source')
     return 0
+  }
+
+  // ── HALF_OPEN: allow exactly one probe request ─────────────────────────
+  // isCircuitOpen returns false once openUntil has passed (HALF_OPEN state),
+  // so multiple concurrent scrapers would all attempt the probe without this gate.
+  const circuitState = await getCircuitState(source.id)
+  if (circuitState.status === CircuitStatus.HALF_OPEN) {
+    const probeAcquired = await acquireProbeSlot(source.id)
+    if (!probeAcquired) {
+      logger.debug({ sourceId: source.id, source: source.slug }, 'Circuit HALF_OPEN — probe slot taken, skipping cycle')
+      return 0
+    }
+    logger.info({ sourceId: source.id, source: source.slug }, 'Circuit HALF_OPEN — probe request allowed')
   }
 
   const parser = new Parser({
@@ -305,12 +407,18 @@ async function scrapeSource(source: ScraperSource): Promise<number> {
       await cbFailure(source.id, source.name)
 
       // ── Push to dead-letter queue ──────────────────────────────────────
+      // Unwrap RetryExhaustedError to surface the root cause message and
+      // record the actual attempt count rather than a hardcoded constant.
+      const dlqError = err instanceof RetryExhaustedError && err.cause instanceof Error
+        ? err.cause.message
+        : err instanceof Error ? err.message : String(err)
+      const dlqAttempts = err instanceof RetryExhaustedError ? err.attempts : 1
       await pushDLQ({
         feedUrl,
         sourceId:   source.id,
         sourceName: source.name,
-        error:      err instanceof Error ? err.message : String(err),
-        attempts:   4,   // initial + 3 retries
+        error:      dlqError,
+        attempts:   dlqAttempts,
         failedAt:   new Date().toISOString(),
       })
 

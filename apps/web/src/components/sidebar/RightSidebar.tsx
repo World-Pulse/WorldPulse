@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import { TradeSurveillancePanel } from './TradeSurveillancePanel'
+import { TrendingEntities } from '@/components/analytics/TrendingEntities'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -113,6 +115,35 @@ export function RightSidebar() {
     }
     fetchMarkets()
     const id = setInterval(fetchMarkets, 5 * 60_000) // refresh every 5 min
+    return () => { mounted = false; clearInterval(id) }
+  }, [])
+
+  // GDELT Escalation Index state
+  interface EscalationData {
+    score: number
+    level: string
+    level_color: string
+    trend: 'rising' | 'stable' | 'falling'
+    current_count: number
+    top_regions: Array<{ name: string; count: number }>
+    generated_at: string
+  }
+  const [escalation, setEscalation] = useState<EscalationData | null>(null)
+
+  // Fetch GDELT escalation index every 5 min
+  useEffect(() => {
+    let mounted = true
+    async function fetchEscalation() {
+      try {
+        const res = await fetch(`${API_URL}/api/v1/analytics/escalation-index`, { cache: 'no-store' })
+        if (res.ok) {
+          const data: EscalationData = await res.json()
+          if (mounted) setEscalation(data)
+        }
+      } catch { /* hide widget silently on failure */ }
+    }
+    fetchEscalation()
+    const id = setInterval(fetchEscalation, 5 * 60_000)
     return () => { mounted = false; clearInterval(id) }
   }, [])
 
@@ -294,6 +325,71 @@ export function RightSidebar() {
           ))}
         </div>
       </Widget>
+
+      {/* ─── GDELT ESCALATION INDEX ───────────────────────── */}
+      {escalation && (
+        <Widget title="GDELT Escalation Index">
+          <div className="space-y-2">
+            {/* Score row */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span
+                  className="text-[28px] font-black font-mono leading-none"
+                  style={{ color: escalation.level_color }}
+                >
+                  {escalation.score}
+                </span>
+                <div className="flex flex-col gap-[2px]">
+                  <span
+                    className="text-[10px] font-bold font-mono leading-none"
+                    style={{ color: escalation.level_color }}
+                  >
+                    {escalation.level.toUpperCase()}
+                  </span>
+                  <span className="text-[10px] font-mono text-wp-text3">
+                    {escalation.trend === 'rising'  && <span className="text-red-400">↑ Rising</span>}
+                    {escalation.trend === 'stable'  && <span className="text-wp-text3">→ Stable</span>}
+                    {escalation.trend === 'falling' && <span className="text-green-400">↓ Falling</span>}
+                  </span>
+                </div>
+              </div>
+              <span className="font-mono text-[9px] text-wp-text3">{escalation.current_count} signals</span>
+            </div>
+
+            {/* Score bar */}
+            <div className="h-[4px] rounded-full bg-[rgba(255,255,255,0.06)] overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-700"
+                style={{
+                  width: `${escalation.score}%`,
+                  background: escalation.level_color,
+                  boxShadow: `0 0 6px ${escalation.level_color}`,
+                }}
+              />
+            </div>
+
+            {/* Top regions */}
+            {escalation.top_regions.length > 0 && (
+              <div className="flex flex-wrap gap-[4px] pt-[2px]">
+                {escalation.top_regions.slice(0, 3).map(r => (
+                  <span
+                    key={r.name}
+                    className="font-mono text-[9px] text-wp-text3 border border-[rgba(255,255,255,0.08)] rounded px-[6px] py-[2px]"
+                  >
+                    {r.name}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </Widget>
+      )}
+
+      {/* ─── TRENDING ENTITIES ────────────────────────────── */}
+      <TrendingEntities />
+
+      {/* ─── STRATEGIC COMMODITY FLOWS ───────────────────── */}
+      <TradeSurveillancePanel />
 
       {/* ─── WHO TO FOLLOW ────────────────────────────────── */}
       <Widget title="Signals to Follow">

@@ -8,8 +8,11 @@
     "clusters": "Event Clusters",
     "briefing": "Daily Briefing",
     "countries": "Country Intel",
+    "cameras": "Live Cameras",
+    "patents": "Patent Intel",
     "communities": "Communities",
     "mySources": "My Sources",
+    "developers": "Developers",
     "settings": "Settings",
     "navigate": "Navigate",
     "signalChannels": "Signal Channels",
@@ -19,7 +22,8 @@
     "searchSignals": "Search signals…",
     "tracking": "Tracking",
     "signals": "signals",
-    "live": "LIVE"
+    "live": "LIVE",
+    "status": "System Status"
   },
   "channels": {
     "breakingNews": "Breaking News",

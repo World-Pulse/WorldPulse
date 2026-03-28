@@ -32,7 +32,8 @@ export interface SourceHealth {
   latencyMs: number | null
   articlesScraped: number
   lastCycleArticles: number
-  status: 'healthy' | 'degraded' | 'dead' | 'unknown'
+  /** stale = no signal for >30 min; failed = success rate <50% with ≥5 attempts */
+  status: 'healthy' | 'stale' | 'failed' | 'unknown'
 }
 
 export interface ScraperThroughput {
@@ -51,8 +52,8 @@ function computeStatus(
   if (!lastAttempt) return 'unknown'
   const now = Date.now()
   const seenAt = lastSeen ? new Date(lastSeen).getTime() : 0
-  if (now - seenAt > DEAD_THRESHOLD_MS) return 'dead'
-  if (total >= 5 && successRate < 0.5) return 'degraded'
+  if (now - seenAt > DEAD_THRESHOLD_MS) return 'stale'
+  if (total >= 5 && successRate < 0.5) return 'failed'
   return 'healthy'
 }
 
@@ -83,6 +84,41 @@ export async function recordSuccess(
   if (articlesCount !== undefined && articlesCount > 0) {
     pipe.hincrby(key, 'articles_scraped', articlesCount)
   }
+  pipe.sadd(HEALTH_INDEX_KEY, sourceId)
+  await pipe.exec()
+}
+
+/**
+ * Record that an OSINT source polled successfully but produced zero new signals
+ * (e.g. all events were deduplicated from cache, or a quiet monitoring period).
+ *
+ * Unlike recordSuccess(), this does NOT increment success_count or articles_scraped —
+ * it only updates last_seen and last_attempt so the source stays HEALTHY in the
+ * stability tracker's 70% quorum check even during quiet periods.
+ *
+ * Called by the OSINT Heartbeat Watchdog (lib/osint-watchdog.ts) for any registered
+ * OSINT source that hasn't recorded a signal insertion within its polling window.
+ */
+export async function recordPollHeartbeat(
+  sourceId:   string,
+  sourceName: string,
+  sourceSlug: string,
+  latencyMs?: number,
+): Promise<void> {
+  const key = HEALTH_KEY(sourceId)
+  const now = new Date().toISOString()
+  const fields: Record<string, string | number> = {
+    source_name:         sourceName,
+    source_slug:         sourceSlug,
+    last_seen:           now,   // alive — polled successfully, just no new signals
+    last_attempt:        now,
+    last_cycle_articles: 0,
+  }
+  if (latencyMs !== undefined) {
+    fields['latency_ms'] = latencyMs
+  }
+  const pipe = redis.pipeline()
+  pipe.hset(key, fields)
   pipe.sadd(HEALTH_INDEX_KEY, sourceId)
   await pipe.exec()
 }
@@ -169,22 +205,22 @@ export async function getAllHealth(): Promise<SourceHealth[]> {
 
 export async function detectDeadSources(): Promise<string[]> {
   const all = await getAllHealth()
-  const dead = all.filter(h => h.status === 'dead')
+  const stale = all.filter(h => h.status === 'stale')
 
-  if (dead.length > 0) {
+  if (stale.length > 0) {
     logger.warn(
       {
-        deadSources: dead.map(d => ({
+        staleSources: stale.map(d => ({
           id: d.sourceId,
           name: d.sourceName,
           lastSeen: d.lastSeen,
         })),
       },
-      `Dead source detection: ${dead.length} source(s) inactive for >30 minutes`,
+      `Dead-source detection: ${stale.length} source(s) stale (no signal for >30 minutes)`,
     )
   }
 
-  return dead.map(d => d.sourceId)
+  return stale.map(d => d.sourceId)
 }
 
 export async function logHealthSummary(): Promise<void> {
@@ -201,10 +237,10 @@ export async function logHealthSummary(): Promise<void> {
     return
   }
 
-  const healthy  = all.filter(h => h.status === 'healthy').length
-  const degraded = all.filter(h => h.status === 'degraded').length
-  const dead     = all.filter(h => h.status === 'dead').length
-  const unknown  = all.filter(h => h.status === 'unknown').length
+  const healthy = all.filter(h => h.status === 'healthy').length
+  const stale   = all.filter(h => h.status === 'stale').length
+  const failed  = all.filter(h => h.status === 'failed').length
+  const unknown = all.filter(h => h.status === 'unknown').length
 
   const totalSuccesses     = all.reduce((s, h) => s + h.successCount, 0)
   const totalErrors        = all.reduce((s, h) => s + h.errorCount, 0)
@@ -223,8 +259,8 @@ export async function logHealthSummary(): Promise<void> {
     {
       total: all.length,
       healthy,
-      degraded,
-      dead,
+      stale,
+      failed,
       unknown,
       totalSuccesses,
       totalErrors,
@@ -240,6 +276,6 @@ export async function logHealthSummary(): Promise<void> {
           }
         : null,
     },
-    'Scraper health summary',
+    `Scraper health summary: ${all.length} sources — ${healthy} healthy, ${stale} stale, ${failed} failed, ${unknown} unknown`,
   )
 }

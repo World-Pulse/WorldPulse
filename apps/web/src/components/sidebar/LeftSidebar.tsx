@@ -15,10 +15,14 @@ const NAV_ITEMS = [
   { href: '/explore',    icon: '🔭', labelKey: 'explore'    },
   { href: '/clusters',   icon: '🧩', labelKey: 'clusters',   badge: 'NEW', badgeColor: 'blue'   },
   { href: '/briefing',   icon: '📋', labelKey: 'briefing',   badge: 'NEW', badgeColor: 'indigo' },
-  { href: '/countries',  icon: '🗺️', labelKey: 'countries',  badge: 'NEW', badgeColor: 'blue'   },
+  { href: '/countries',  icon: '🗺️', labelKey: 'countries',  badge: 'NEW',  badgeColor: 'blue'  },
+  { href: '/cameras',    icon: '📹', labelKey: 'cameras',    badge: 'LIVE', badgeColor: 'red'   },
+  { href: '/patents',    icon: '📜', labelKey: 'patents',    badge: 'NEW',  badgeColor: 'cyan'  },
   { href: '/communities',icon: '🤝', labelKey: 'communities' },
   { href: '/sources',    icon: '📡', labelKey: 'mySources'  },
+  { href: '/developers', icon: '🛠️', labelKey: 'developers'  },
   { href: '/settings',   icon: '⚙️', labelKey: 'settings'   },
+  { href: '/status',     icon: '🟢', labelKey: 'status'     },
 ] as const
 
 const CHANNELS = [

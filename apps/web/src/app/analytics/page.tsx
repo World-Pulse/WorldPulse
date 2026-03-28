@@ -1,6 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
+import { TrendingEntities } from '@/components/analytics/TrendingEntities'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -171,12 +173,33 @@ function EngagementFunnel({ views, likes, boosts }: { views: number; likes: numb
   )
 }
 
+// ── Page tabs ────────────────────────────────────────────────────────────────
+
+const PAGE_TABS = [
+  { id: 'personal',  label: 'Your Analytics' },
+  { id: 'entities',  label: 'Global Entities' },
+] as const
+
+type PageTab = typeof PAGE_TABS[number]['id']
+
 export default function AnalyticsPage() {
+  const searchParams = useSearchParams()
+  const router       = useRouter()
+
+  const tabParam = searchParams.get('tab') as PageTab | null
+  const [activeTab, setActiveTab] = useState<PageTab>(tabParam === 'entities' ? 'entities' : 'personal')
+
+  const handleTabChange = useCallback((tab: PageTab) => {
+    setActiveTab(tab)
+    router.replace(tab === 'personal' ? '/analytics' : `/analytics?tab=${tab}`, { scroll: false })
+  }, [router])
+
   const [data, setData]     = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [isDemo, setIsDemo] = useState(false)
 
   useEffect(() => {
+    if (activeTab !== 'personal') { setLoading(false); return }
     const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
     if (!token) {
       setData(createEmptyAnalytics())
@@ -207,9 +230,9 @@ export default function AnalyticsPage() {
         setIsDemo(true)
       })
       .finally(() => setLoading(false))
-  }, [])
+  }, [activeTab])
 
-  if (loading) {
+  if (loading && activeTab === 'personal') {
     return (
       <div className="max-w-3xl mx-auto px-4 py-10 space-y-4">
         <div className="h-8 w-48 rounded-lg shimmer" />
@@ -217,6 +240,40 @@ export default function AnalyticsPage() {
           {[1,2,3,4].map(i => <div key={i} className="h-20 rounded-xl shimmer" />)}
         </div>
         <div className="h-48 rounded-xl shimmer" />
+      </div>
+    )
+  }
+
+  // ── Tab bar (shared across all tabs) ────────────────────────────────────────
+  const TabBar = (
+    <div className="flex items-center gap-0 border-b border-[rgba(255,255,255,0.07)] mb-6">
+      {PAGE_TABS.map(tab => (
+        <button
+          key={tab.id}
+          onClick={() => handleTabChange(tab.id)}
+          className={`px-4 py-[10px] text-[13px] font-medium border-b-2 transition-all whitespace-nowrap
+            ${activeTab === tab.id
+              ? 'border-wp-amber text-wp-text'
+              : 'border-transparent text-wp-text3 hover:text-wp-text2'
+            }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  )
+
+  // ── Global Entities tab ──────────────────────────────────────────────────────
+  if (activeTab === 'entities') {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-8">
+        <div>
+          <h1 className="text-[22px] font-bold text-wp-text mb-1">Intelligence Analytics</h1>
+          <p className="text-[13px] text-wp-text3 mb-6">Real-time entity monitoring across all WorldPulse signals</p>
+        </div>
+        {TabBar}
+        {/* Full-width entities panel */}
+        <TrendingEntities />
       </div>
     )
   }
@@ -240,6 +297,7 @@ export default function AnalyticsPage() {
           </span>
         )}
       </div>
+      {TabBar}
 
       {/* Stats cards row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

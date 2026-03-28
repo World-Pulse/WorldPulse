@@ -21,6 +21,7 @@ import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate } from '../pipeline/insert-signal'
+import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilience'
 
 const log = rootLogger.child({ module: 'who-source' })
 
@@ -213,7 +214,18 @@ export function startWhoPoller(
   async function poll(): Promise<void> {
     try {
       log.debug('Polling WHO Disease Outbreak News RSS feed...')
-      const raw   = await httpsGet(WHO_RSS_URL)
+      let raw: string
+      try {
+        raw = await fetchWithResilience(
+          'who',
+          'WHO',
+          WHO_RSS_URL,
+          () => httpsGet(WHO_RSS_URL),
+        )
+      } catch (err) {
+        if (err instanceof CircuitOpenError) return
+        throw err
+      }
       const items = parseRssItems(raw)
 
       if (items.length === 0) {

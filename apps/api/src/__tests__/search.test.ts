@@ -46,6 +46,121 @@ vi.mock('../lib/search-analytics', () => ({
   logSearchQuery: vi.fn(),
 }))
 
+vi.mock('../lib/opensanctions', () => ({
+  searchEntities: vi.fn(),
+}))
+
+vi.mock('../utils/sanitize', () => ({
+  sanitizeString: vi.fn((s: string) => s),
+}))
+
+// ─── Imported exports (now available after export additions) ──────────────────
+import {
+  SearchQuerySchema,
+  EntityQuerySchema,
+  AutocompleteQuerySchema,
+} from '../routes/search'
+
+describe('SearchQuerySchema — Zod validation', () => {
+  it('accepts a minimal valid query (q ≥ 2 chars)', () => {
+    expect(SearchQuerySchema.safeParse({ q: 'ab' }).success).toBe(true)
+  })
+
+  it('rejects q shorter than 2 characters', () => {
+    expect(SearchQuerySchema.safeParse({ q: 'a' }).success).toBe(false)
+  })
+
+  it('rejects q longer than 500 characters', () => {
+    expect(SearchQuerySchema.safeParse({ q: 'x'.repeat(501) }).success).toBe(false)
+  })
+
+  it('defaults type to "all"', () => {
+    const r = SearchQuerySchema.safeParse({ q: 'ukraine' })
+    expect(r.success && r.data.type).toBe('all')
+  })
+
+  it('accepts each valid type value', () => {
+    for (const type of ['all', 'signals', 'posts', 'users', 'tags'] as const) {
+      expect(SearchQuerySchema.safeParse({ q: 'test', type }).success).toBe(true)
+    }
+  })
+
+  it('rejects invalid type value', () => {
+    expect(SearchQuerySchema.safeParse({ q: 'test', type: 'videos' }).success).toBe(false)
+  })
+
+  it('defaults limit to 20 and page to 0', () => {
+    const r = SearchQuerySchema.safeParse({ q: 'test' })
+    expect(r.success && r.data.limit).toBe(20)
+    expect(r.success && r.data.page).toBe(0)
+  })
+
+  it('coerces limit from string to number', () => {
+    const r = SearchQuerySchema.safeParse({ q: 'test', limit: '30' })
+    expect(r.success && r.data.limit).toBe(30)
+  })
+
+  it('rejects limit > 50', () => {
+    expect(SearchQuerySchema.safeParse({ q: 'test', limit: 51 }).success).toBe(false)
+  })
+
+  it('uppercases country code', () => {
+    const r = SearchQuerySchema.safeParse({ q: 'test', country: 'ua' })
+    expect(r.success && r.data.country).toBe('UA')
+  })
+
+  it('defaults sort to "newest"', () => {
+    const r = SearchQuerySchema.safeParse({ q: 'test' })
+    expect(r.success && r.data.sort).toBe('newest')
+  })
+
+  it('coerces reliability from string to number', () => {
+    const r = SearchQuerySchema.safeParse({ q: 'test', reliability: '75' })
+    expect(r.success && r.data.reliability).toBe(75)
+  })
+
+  it('rejects reliability > 100', () => {
+    expect(SearchQuerySchema.safeParse({ q: 'test', reliability: 101 }).success).toBe(false)
+  })
+})
+
+describe('EntityQuerySchema — Zod validation', () => {
+  it('accepts a valid entity query', () => {
+    expect(EntityQuerySchema.safeParse({ q: 'Putin' }).success).toBe(true)
+  })
+
+  it('rejects q shorter than 2 characters', () => {
+    expect(EntityQuerySchema.safeParse({ q: 'x' }).success).toBe(false)
+  })
+
+  it('defaults limit to 10', () => {
+    const r = EntityQuerySchema.safeParse({ q: 'Gazprom' })
+    expect(r.success && r.data.limit).toBe(10)
+  })
+
+  it('accepts optional schema filter', () => {
+    expect(EntityQuerySchema.safeParse({ q: 'Boeing', schema: 'Company' }).success).toBe(true)
+  })
+
+  it('rejects limit > 20', () => {
+    expect(EntityQuerySchema.safeParse({ q: 'test', limit: 21 }).success).toBe(false)
+  })
+})
+
+describe('AutocompleteQuerySchema — Zod validation', () => {
+  it('accepts a 1-character query', () => {
+    expect(AutocompleteQuerySchema.safeParse({ q: 'k' }).success).toBe(true)
+  })
+
+  it('rejects empty string', () => {
+    expect(AutocompleteQuerySchema.safeParse({ q: '' }).success).toBe(false)
+  })
+
+  it('rejects q longer than 200 characters', () => {
+    expect(AutocompleteQuerySchema.safeParse({ q: 'x'.repeat(201) }).success).toBe(false)
+  })
+})
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Re-implement pure logic extracted from search.ts for unit testing.
 // These mirror the route source exactly so tests remain in sync.
@@ -264,7 +379,9 @@ describe('Cache key construction', () => {
   it('uses empty strings for absent optional filters', () => {
     const key = buildCacheKey({ q: 'test', type: 'signals', page: 0, pageLimit: 20, sort: 'newest' })
     // category, severity, country, from, to, source, language, reliability all absent
-    expect(key).toBe('search:test:signals:0:20:::::::newest:')
+    // 8 colons between 20 and newest: each of the 7 optional fields (cat,sev,country,from,to,source,lang)
+    // contributes one separator, plus the separator before the first field = 8 total
+    expect(key).toBe('search:test:signals:0:20::::::::newest:')
   })
 
   it('includes category when provided', () => {

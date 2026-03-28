@@ -2,6 +2,19 @@ import type { FastifyPluginAsync } from 'fastify'
 import { redis } from '../db/redis'
 import { db } from '../db/postgres'
 import { authenticate } from '../middleware/auth'
+import { getSecurityMetrics } from '../lib/security'
+import { runFullReindex } from '../lib/search-backfill'
+
+// ─── Stability keys (mirror apps/scraper/src/lib/stability-tracker.ts) ───────
+const STABILITY_KEYS = {
+  CONSECUTIVE_CLEAN_HOURS: 'scraper:stability:consecutive_clean_hours',
+  LAST_FAILURE_AT:         'scraper:stability:last_failure_at',
+  STATUS:                  'scraper:stability:status',
+} as const
+
+const STABILITY_TARGET_HOURS = 336 // 14 days × 24 h
+const STABILITY_CACHE_KEY    = 'cache:admin:scraper:stability'
+const STABILITY_CACHE_TTL    = 5 * 60 // 5 minutes
 
 // ─── Redis key helpers (must match apps/scraper/src/health.ts) ──────────────
 const HEALTH_KEY  = (sourceId: string) => `scraper:health:${sourceId}`
@@ -24,7 +37,8 @@ interface SourceHealth {
   successCount: number
   successRate: number
   latencyMs: number | null
-  status: 'healthy' | 'degraded' | 'dead' | 'unknown'
+  /** stale = no signal for >30 min; failed = success rate <50% with ≥5 attempts */
+  status: 'healthy' | 'stale' | 'failed' | 'unknown'
 }
 
 function computeStatus(
@@ -36,8 +50,8 @@ function computeStatus(
   if (!lastAttempt) return 'unknown'
   const now = Date.now()
   const seenAt = lastSeen ? new Date(lastSeen).getTime() : 0
-  if (now - seenAt > DEAD_THRESHOLD_MS) return 'dead'
-  if (total >= 5 && successRate < 0.5) return 'degraded'
+  if (now - seenAt > DEAD_THRESHOLD_MS) return 'stale'
+  if (total >= 5 && successRate < 0.5) return 'failed'
   return 'healthy'
 }
 
@@ -85,10 +99,10 @@ export const registerAdminRoutes: FastifyPluginAsync = async (app) => {
     const sourceIds = await redis.smembers(HEALTH_INDEX_KEY)
     const sources   = await Promise.all(sourceIds.map(id => getSourceHealth(id)))
 
-    const healthy  = sources.filter(s => s.status === 'healthy').length
-    const degraded = sources.filter(s => s.status === 'degraded').length
-    const dead     = sources.filter(s => s.status === 'dead').length
-    const unknown  = sources.filter(s => s.status === 'unknown').length
+    const healthy = sources.filter(s => s.status === 'healthy').length
+    const stale   = sources.filter(s => s.status === 'stale').length
+    const failed  = sources.filter(s => s.status === 'failed').length
+    const unknown = sources.filter(s => s.status === 'unknown').length
 
     const totalSuccesses = sources.reduce((n, s) => n + s.successCount, 0)
     const totalErrors    = sources.reduce((n, s) => n + s.errorCount, 0)
@@ -102,16 +116,16 @@ export const registerAdminRoutes: FastifyPluginAsync = async (app) => {
         summary: {
           total: sources.length,
           healthy,
-          degraded,
-          dead,
+          stale,
+          failed,
           unknown,
           totalSuccesses,
           totalErrors,
           overallSuccessRate: Number(overallRate.toFixed(4)),
         },
         sources: sources.sort((a, b) => {
-          // Dead first, then degraded, then unknown, then healthy
-          const order = { dead: 0, degraded: 1, unknown: 2, healthy: 3 }
+          // Stale first, then failed, then unknown, then healthy
+          const order: Record<SourceHealth['status'], number> = { stale: 0, failed: 1, unknown: 2, healthy: 3 }
           return order[a.status] - order[b.status]
         }),
         generatedAt: new Date().toISOString(),
@@ -215,9 +229,58 @@ export const registerAdminRoutes: FastifyPluginAsync = async (app) => {
     })
   })
 
-  // ─── GET /admin/llm-status ───────────────────────────────────────────────────
+  // ─── GET /api/v1/admin/scraper/stability ────────────────────────────────────
+  // Gate 1 prerequisite: 336 consecutive clean hours (14 days) of scraper stability.
+  // Response is cached for 5 minutes in Redis.
+  app.get('/scraper/stability', {
+    preHandler: [authenticate],
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    if (!req.user || req.user.accountType !== 'admin') {
+      return reply.status(403).send({ success: false, error: 'Admin access required', code: 'FORBIDDEN' })
+    }
+
+    // Check 5-minute cache
+    const cached = await redis.get(STABILITY_CACHE_KEY)
+    if (cached) {
+      return reply.send({ success: true, data: JSON.parse(cached) })
+    }
+
+    const [streakRaw, lastFailureAt, statusRaw] = await Promise.all([
+      redis.get(STABILITY_KEYS.CONSECUTIVE_CLEAN_HOURS),
+      redis.get(STABILITY_KEYS.LAST_FAILURE_AT),
+      redis.get(STABILITY_KEYS.STATUS),
+    ])
+
+    const consecutive_clean_hours = Math.max(0, parseInt(streakRaw ?? '0', 10))
+    const status = (statusRaw ?? 'degraded') as 'stable' | 'degraded' | 'failed'
+    const percent_to_gate = Number(
+      Math.min(100, (consecutive_clean_hours / STABILITY_TARGET_HOURS) * 100).toFixed(2),
+    )
+
+    const hoursRemaining = Math.max(0, STABILITY_TARGET_HOURS - consecutive_clean_hours)
+    const estimated_gate_clear_date = hoursRemaining === 0
+      ? new Date().toISOString()
+      : new Date(Date.now() + hoursRemaining * 3_600_000).toISOString()
+
+    const data = {
+      consecutive_clean_hours,
+      target_hours:              STABILITY_TARGET_HOURS,
+      percent_to_gate,
+      status,
+      last_failure_at:           lastFailureAt ?? null,
+      estimated_gate_clear_date,
+      generatedAt:               new Date().toISOString(),
+    }
+
+    await redis.setex(STABILITY_CACHE_KEY, STABILITY_CACHE_TTL, JSON.stringify(data))
+
+    return reply.send({ success: true, data })
+  })
+
+  // ─── GET /llm-status ─────────────────────────────────────────────────────────
   // Returns which LLM providers are configured and which is the active priority provider
-  fastify.get('/admin/llm-status', {
+  app.get('/llm-status', {
     preHandler: [authenticate],
     config: { rateLimit: { max: 30, timeWindow: 60_000 } },
   }, async (_req, reply) => {
@@ -286,5 +349,104 @@ export const registerAdminRoutes: FastifyPluginAsync = async (app) => {
         generatedAt: new Date().toISOString(),
       },
     })
+  })
+
+  // ─── SECURITY DASHBOARD (Gate 6) ─────────────────────────
+  app.get('/security', {
+    preHandler: [authenticate],
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    schema: {
+      tags: ['admin'],
+      summary: 'Security metrics — blocked requests, lockouts, threat events (last 24h)',
+      security: [{ bearerAuth: [] }],
+    },
+  }, async (req, reply) => {
+    if (!req.user || req.user.accountType !== 'admin') {
+      return reply.status(403).send({ success: false, error: 'Admin access required', code: 'FORBIDDEN' })
+    }
+    try {
+      const metrics = await getSecurityMetrics()
+      return reply.send({ success: true, data: metrics })
+    } catch (err) {
+      req.log.error(err)
+      return reply.status(500).send({ success: false, error: 'Internal server error' })
+    }
+  })
+
+  // ─── POST /api/v1/admin/search/reindex ────────────────────
+  /**
+   * Trigger a full Meilisearch reindex from PostgreSQL.
+   * Wipes and rebuilds the signals, posts, and users indexes in parallel.
+   * Long-running — returns immediately with a 202 and the results are logged.
+   * Admin-only.
+   */
+  app.post('/search/reindex', {
+    preHandler: [authenticate],
+    config: { rateLimit: { max: 2, timeWindow: '1 minute' } },
+    schema: {
+      tags:     ['admin'],
+      summary:  'Full Meilisearch reindex — wipe + rebuild all search indexes from PostgreSQL',
+      security: [{ bearerAuth: [] }],
+    },
+  }, async (req, reply) => {
+    if (!req.user || req.user.accountType !== 'admin') {
+      return reply.status(403).send({ success: false, error: 'Admin access required', code: 'FORBIDDEN' })
+    }
+
+    // Fire-and-forget so the HTTP response returns immediately; the actual work
+    // may take minutes on large datasets.  Results are emitted to the logger.
+    runFullReindex().catch(err => {
+      req.log.error({ err }, 'Background reindex failed')
+    })
+
+    return reply.status(202).send({
+      success: true,
+      data: {
+        message:    'Full reindex started — check server logs for progress',
+        startedAt:  new Date().toISOString(),
+      },
+    })
+  })
+
+  // ─── GET /api/v1/admin/search/stats ───────────────────────
+  /**
+   * Returns per-index document counts from Meilisearch.
+   * Admin-only.
+   */
+  app.get('/search/stats', {
+    preHandler: [authenticate],
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    schema: {
+      tags:     ['admin'],
+      summary:  'Meilisearch index document counts',
+      security: [{ bearerAuth: [] }],
+    },
+  }, async (req, reply) => {
+    if (!req.user || req.user.accountType !== 'admin') {
+      return reply.status(403).send({ success: false, error: 'Admin access required', code: 'FORBIDDEN' })
+    }
+
+    const { meili } = await import('../lib/search.js')
+
+    try {
+      const [signals, posts, users] = await Promise.all([
+        meili.index('signals').getStats(),
+        meili.index('posts').getStats(),
+        meili.index('users').getStats(),
+      ])
+
+      return reply.send({
+        success: true,
+        data: {
+          signals: { documents: signals.numberOfDocuments, isIndexing: signals.isIndexing },
+          posts:   { documents: posts.numberOfDocuments,   isIndexing: posts.isIndexing   },
+          users:   { documents: users.numberOfDocuments,   isIndexing: users.isIndexing   },
+          fetchedAt: new Date().toISOString(),
+        },
+      })
+    } catch (err) {
+      req.log.error({ err }, 'Failed to fetch Meilisearch stats')
+      return reply.status(502).send({ success: false, error: 'Meilisearch unavailable' })
+    }
   })
 }

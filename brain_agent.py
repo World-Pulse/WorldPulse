@@ -40,7 +40,7 @@ KILL_FILE      = PROJECT_DIR / ".brain_kill"
 
 DEFAULT_BUDGET    = 8.0          # USD per execution task
 LOOP_INTERVAL_S   = 3600         # 1 hour between autonomous loops
-MAX_TASK_HISTORY  = 100          # Keep last N completed tasks in memory
+MAX_TASK_HISTORY  = 20           # Keep last 20 completed tasks — older ones auto-archived to completed_tasks_archive.json to keep brain_state.json under ~8KB and prevent NTFS truncation
 HEALTH_CHECK_CMDS = ["pnpm lint 2>&1 | tail -5", "pnpm build --dry-run 2>&1 | tail -5"]
 
 # Competitor products to monitor
@@ -151,8 +151,14 @@ def load_json(path: Path) -> dict:
         return {}
 
 def save_json(path: Path, data: dict):
-    with open(path, "w", encoding="utf-8") as f:
+    # Atomic write: write to .tmp then rename — prevents truncated JSON on Windows
+    # if the process is killed mid-write (the primary cause of brain_state corruption)
+    tmp = path.with_suffix(".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)   # atomic on NTFS / ext4
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -359,7 +365,9 @@ def generate_improvement_tasks(state: dict, analysis: dict, intel: dict) -> list
                     tasks.append({
                         "id": f"roadmap_{phase[:30].replace(' ', '_')}",
                         "source": "roadmap",
-                        "priority": 10,
+                        # Respect explicit priority from tasks file (launch gates use 12);
+                        # fall back to 10 for regular roadmap phases
+                        "priority": item.get("priority", 10),
                         "phase": phase,
                         "prompt": item.get("prompt", f"Implement: {phase}"),
                         "budget": item.get("budget", DEFAULT_BUDGET),
@@ -403,15 +411,17 @@ Do not ask for confirmation.""",
             "category": "quality",
         })
 
-    # 3. Competition-gap tasks (inject as medium-priority improvements)
+    # 3. Competition-gap tasks — LOW priority; launch gates always win.
+    #    Only 1 gap injected per cycle (top gap only) at priority 4.
+    #    This keeps competitive awareness alive without blocking gate work.
     completed_ids = {t.get("id") for t in state.get("completed_tasks", [])}
-    for i, gap in enumerate(intel.get("feature_gaps", [])[:4]):  # top 4 gaps
+    for i, gap in enumerate(intel.get("feature_gaps", [])[:1]):  # top 1 gap only
         task_id = f"gap_{abs(hash(gap)) % 10000}"
         if task_id not in completed_ids:
             tasks.append({
                 "id": task_id,
                 "source": "competition_intel",
-                "priority": 5 + (4 - i),  # 9 down to 6
+                "priority": 4,  # always below gates (12), roadmap (10), quality (8), perf (6/5)
                 "phase": f"Competitive Gap: {gap}",
                 "prompt": f"""Implement this competitive improvement for WorldPulse to stay ahead:
 
@@ -722,8 +732,34 @@ def run_brain_cycle(budget_override: float = None, dry_run: bool = False, compet
         })
         state["total_improvements_shipped"] = state.get("total_improvements_shipped", 0) + 1
 
+    # Auto-archive overflow tasks so brain_state.json stays lean
+    if len(completed_tasks) > MAX_TASK_HISTORY:
+        overflow = completed_tasks[:-MAX_TASK_HISTORY]
+        archive_path = MEMORY_DIR / "completed_tasks_archive.json"
+        try:
+            existing = load_json(archive_path) if archive_path.exists() else []
+            if not isinstance(existing, list): existing = []
+            save_json(archive_path, existing + overflow)
+        except Exception:
+            pass
     state["completed_tasks"] = completed_tasks[-MAX_TASK_HISTORY:]
     save_state(state)
+
+    # ── 7b. SYNC worldpulse_tasks.json STATUS ────────────────────────────────
+    # When a roadmap/gate task completes, write "done" back to worldpulse_tasks.json
+    # so the dashboard and next cycle don't re-queue already-completed work.
+    if result.get("success") and next_task.get("source") in ("roadmap",) and TASKS_FILE.exists():
+        try:
+            tasks_data = load_json(TASKS_FILE)
+            if isinstance(tasks_data, list):
+                completed_phase = next_task.get("phase", "")
+                for item in tasks_data:
+                    if item.get("phase") == completed_phase and item.get("status") != "done":
+                        item["status"] = "done"
+                        log(f"Synced worldpulse_tasks.json: marked '{completed_phase[:50]}' as done", GREEN)
+                save_json(TASKS_FILE, tasks_data)
+        except Exception as sync_err:
+            log(f"Task sync warning: {sync_err}", GREY)
 
     # ── 8. CYCLE SUMMARY ─────────────────────────────────────────────────────
     banner("BRAIN CYCLE COMPLETE")

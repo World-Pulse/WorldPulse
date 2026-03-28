@@ -30,7 +30,7 @@ const LATIN_STOPWORDS: Record<string, string[]> = {
   it: ['che', 'del', 'una', 'con', 'per', 'non', 'dei', 'sul'],
 }
 
-function detectLanguage(text: string): string {
+export function detectLanguage(text: string): string {
   for (const [pattern, lang] of SCRIPT_PATTERNS) {
     if (pattern.test(text)) return lang
   }
@@ -44,7 +44,7 @@ function detectLanguage(text: string): string {
   return bestLang
 }
 
-const CreatePostSchema = z.object({
+export const CreatePostSchema = z.object({
   content:     z.string().min(1).max(2000),
   postType:    z.enum(['signal', 'thread', 'report', 'boost', 'deep_dive', 'poll']).default('signal'),
   signalId:    z.string().uuid().optional(),
@@ -352,7 +352,7 @@ async function getPostWithAuthor(id: string, viewerId?: string) {
   return formatBasicPost(row, new Set(hasLiked ? [id] : []), new Set(hasBoosted ? [id] : []), new Set(hasBookmarked ? [id] : []))
 }
 
-function formatBasicPost(
+export function formatBasicPost(
   row: Record<string, unknown>,
   likedIds = new Set<string>(),
   boostedIds = new Set<string>(),

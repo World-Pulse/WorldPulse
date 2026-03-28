@@ -21,6 +21,7 @@ import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate } from '../pipeline/insert-signal'
+import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilience'
 
 const log = rootLogger.child({ module: 'acled-source' })
 
@@ -106,23 +107,27 @@ export function startAcledPoller(
       }
 
       const url = `${ACLED_API_URL}?${params.toString()}`
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent': 'WorldPulse/0.1 (open-source; https://worldpulse.io)',
-          'Accept':     'application/json',
-        },
-        signal: AbortSignal.timeout(30_000),
-      })
-
-      if (!res.ok) {
-        log.warn({ status: res.status }, 'ACLED API returned non-OK status')
-        return
-      }
-
-      const data = await res.json() as {
-        success: boolean
-        data:    AcledEvent[]
-        count:   number
+      let data: { success: boolean; data: AcledEvent[]; count: number }
+      try {
+        data = await fetchWithResilience(
+          'acled',
+          'ACLED',
+          url,
+          async () => {
+            const res = await fetch(url, {
+              headers: {
+                'User-Agent': 'WorldPulse/0.1 (open-source; https://worldpulse.io)',
+                'Accept':     'application/json',
+              },
+              signal: AbortSignal.timeout(30_000),
+            })
+            if (!res.ok) throw Object.assign(new Error(`ACLED: HTTP ${res.status}`), { statusCode: res.status })
+            return res.json() as Promise<{ success: boolean; data: AcledEvent[]; count: number }>
+          },
+        )
+      } catch (err) {
+        if (err instanceof CircuitOpenError) return
+        throw err
       }
 
       if (!data.success || !data.data || data.data.length === 0) {

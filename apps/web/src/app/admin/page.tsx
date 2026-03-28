@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
+import { ScraperGate1Status } from '@/components/scraper/ScraperGate1Status'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -212,11 +213,13 @@ export default function AdminPage() {
   const [signalStats,    setSignalStats]    = useState<SignalStatsData | null>(null)
   const [systemHealth,   setSystemHealth]   = useState<SystemHealthData | null>(null)
   const [llmStatus,      setLlmStatus]      = useState<LlmStatusData | null>(null)
+  const [securityData,   setSecurityData]   = useState<{ events_last_24h: Record<string, number>; active_lockouts: number; total_blocked_requests: number } | null>(null)
 
   const [scraperError,   setScraperError]   = useState('')
   const [signalError,    setSignalError]    = useState('')
   const [healthError,    setHealthError]    = useState('')
   const [llmError,       setLlmError]       = useState('')
+  const [securityError,  setSecurityError]  = useState('')
 
   const [loading,        setLoading]        = useState(false)
   const [lastRefresh,    setLastRefresh]    = useState<Date | null>(null)
@@ -274,6 +277,17 @@ export default function AdminPage() {
         setLlmStatus(d.data)
         setLlmError('')
       }).catch(e => setLlmError(e instanceof Error ? e.message : 'Failed to load LLM status')),
+
+      // Security metrics (Gate 6)
+      fetch(`${API_URL}/api/v1/admin/security`, {
+        headers: { Authorization: `Bearer ${tok}` },
+      }).then(async r => {
+        const d = await r.json() as { success: boolean; data: typeof securityData }
+        if (!r.ok) throw new Error('Failed to load security metrics')
+        setSecurityData(d.data)
+        setSecurityError('')
+      }).catch(e => setSecurityError(e instanceof Error ? e.message : 'Failed to load security metrics')),
+      // Note: Gate 1 stability is handled by <ScraperGate1Status> which self-polls every 60s
     ])
 
     setLoading(false)
@@ -370,6 +384,11 @@ export default function AdminPage() {
             {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
           </div>
         )}
+      </section>
+
+      {/* ── GATE 1 STABILITY CLOCK ─────────────────────────── */}
+      <section className="mb-8">
+        <ScraperGate1Status token={token} />
       </section>
 
       {/* ── SCRAPER HEALTH GRID ────────────────────────────── */}
@@ -527,6 +546,48 @@ export default function AdminPage() {
             <div className="glass border border-[rgba(255,59,92,0.3)] rounded-xl px-5 py-4 text-[13px] text-wp-red">{llmError}</div>
           ) : (
             <SkeletonCard className="h-52" />
+          )}
+        </section>
+        {/* Security Dashboard (Gate 6) */}
+        <section>
+          <h2 className="text-[12px] font-mono text-wp-text3 uppercase tracking-widest mb-3">Security (Last 24h)</h2>
+          {securityData ? (
+            <div className="glass border border-[rgba(255,255,255,0.07)] rounded-xl p-4">
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                <div className="text-center">
+                  <p className="text-[24px] font-mono font-bold text-wp-amber">{securityData.total_blocked_requests}</p>
+                  <p className="text-[11px] text-wp-text3">Blocked Requests</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[24px] font-mono font-bold text-wp-red">{securityData.active_lockouts}</p>
+                  <p className="text-[11px] text-wp-text3">Active Lockouts</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[24px] font-mono font-bold text-[#00e676]">
+                    {securityData.total_blocked_requests === 0 ? 'CLEAN' : 'ALERT'}
+                  </p>
+                  <p className="text-[11px] text-wp-text3">Status</p>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                {Object.entries(securityData.events_last_24h)
+                  .filter(([, count]) => count > 0)
+                  .sort(([, a], [, b]) => b - a)
+                  .map(([event, count]) => (
+                    <div key={event} className="flex items-center justify-between py-1.5 border-b border-[rgba(255,255,255,0.05)] last:border-0">
+                      <span className="text-[12px] font-mono text-wp-text2">{event.replace(/_/g, ' ')}</span>
+                      <span className="text-[12px] font-mono font-semibold text-wp-amber">{count}</span>
+                    </div>
+                  ))}
+                {Object.values(securityData.events_last_24h).every(c => c === 0) && (
+                  <p className="text-[12px] text-[#00e676] text-center py-2 font-mono">No security events in the last 24 hours</p>
+                )}
+              </div>
+            </div>
+          ) : securityError ? (
+            <div className="glass border border-[rgba(255,59,92,0.3)] rounded-xl px-5 py-4 text-[13px] text-wp-red">{securityError}</div>
+          ) : (
+            <SkeletonCard className="h-40" />
           )}
         </section>
       </div>

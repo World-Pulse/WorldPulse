@@ -1,8 +1,11 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
 import type { WebSocket } from '@fastify/websocket'
 import { redis } from '../db/redis'
+import { db } from '../db/postgres'
 import { logger } from '../lib/logger'
 import { checkAndEmitBreakingAlert } from '../lib/breaking-alerts'
+import { fireWebhooks } from '../lib/webhooks'
+import { indexSignal } from '../lib/search'
 import type { SignalInput } from '../lib/breaking-alerts'
 import type { WSMessage, WSEventType } from '@worldpulse/types'
 
@@ -16,6 +19,11 @@ interface WSClient {
 }
 
 const clients = new Map<string, WSClient>()
+
+/** Returns the number of active WebSocket connections (used by the status endpoint). */
+export function getWsClientCount(): number {
+  return clients.size
+}
 
 // ─── WEBSOCKET HANDLER ───────────────────────────────────────────────────
 export const registerWSHandler: FastifyPluginAsync = async (app) => {
@@ -166,7 +174,24 @@ export async function startRedisSubscriber() {
           checkAndEmitBreakingAlert(signal).catch((err) => {
             logger.warn({ err, signalId: signal.id }, 'Breaking alert check failed (non-fatal)')
           })
+          // Fire outbound developer webhooks (non-blocking, best-effort)
+          fireWebhooks('signal.new', signal as unknown as Record<string, unknown>).catch((err) => {
+            logger.warn({ err, signalId: signal.id }, 'Webhook delivery failed (non-fatal)')
+          })
+          // Index the full signal in Meilisearch — scraper signals bypass the API
+          // signals route, so we must index them here.  Fetch the full DB row so
+          // all fields (summary, tags, language, etc.) are present in the index.
+          db('signals').where('id', signal.id).first('*').then((row: Record<string, unknown> | undefined) => {
+            if (row) indexSignal(row).catch(() => {})
+          }).catch(() => {})
         }
+      }
+
+      // Fire webhooks for alert.breaking events too
+      if (channel === 'wp:alert.trigger' && data.event === 'alert.breaking') {
+        fireWebhooks('alert.breaking', data.payload as Record<string, unknown>).catch((err) => {
+          logger.warn({ err }, 'Webhook delivery for alert.breaking failed (non-fatal)')
+        })
       }
     } catch (e) {
       logger.error({ channel, e }, 'Redis message parse error')

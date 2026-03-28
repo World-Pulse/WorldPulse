@@ -18,6 +18,7 @@ import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate } from '../pipeline/insert-signal'
+import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilience'
 
 const log = rootLogger.child({ module: 'spaceweather-source' })
 
@@ -105,7 +106,18 @@ export function startSpaceWeatherPoller(
   async function poll(): Promise<void> {
     try {
       log.debug('Polling NOAA space weather alerts...')
-      const raw    = await httpsGet(NOAA_ALERTS_API)
+      let raw: string
+      try {
+        raw = await fetchWithResilience(
+          'spaceweather',
+          'Space Weather',
+          NOAA_ALERTS_API,
+          () => httpsGet(NOAA_ALERTS_API),
+        )
+      } catch (err) {
+        if (err instanceof CircuitOpenError) return
+        throw err
+      }
       const alerts = JSON.parse(raw) as NoaaAlert[]
 
       if (!Array.isArray(alerts) || alerts.length === 0) {

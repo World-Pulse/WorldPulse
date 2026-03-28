@@ -1,4 +1,6 @@
-'use client';
+'use client'
+
+import type React from 'react'
 
 interface CIBStatus {
   detected: boolean;
@@ -10,7 +12,7 @@ interface Props {
   cibStatus?: CIBStatus;
 }
 
-export default function CIBWarningBadge({ cibStatus }: Props): React.ReactElement | null {
+export function CIBWarningBadge({ cibStatus }: Props): React.ReactElement | null {
   if (!cibStatus || cibStatus.label === 'CLEAN') return null;
 
   const pct = Math.round(cibStatus.confidence * 100);
@@ -34,3 +36,5 @@ export default function CIBWarningBadge({ cibStatus }: Props): React.ReactElemen
     </span>
   );
 }
+
+export default CIBWarningBadge;

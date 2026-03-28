@@ -189,11 +189,6 @@ export function RelatedSignals({ signalId }: RelatedSignalsProps) {
     }
   }, [isOpen, signalId])
 
-  // Don't render if no cluster and not loading
-  if (!cluster && !loading && !isOpen) {
-    return null
-  }
-
   const correlationLabel =
     CORRELATION_TYPE_LABEL[cluster?.correlationType ?? ''] ?? cluster?.correlationType ?? 'Related'
   const correlationIcon = CORRELATION_TYPE_ICON[cluster?.correlationType ?? ''] ?? '🔗'

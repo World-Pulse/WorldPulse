@@ -23,6 +23,7 @@ import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate } from '../pipeline/insert-signal'
+import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilience'
 
 const log = rootLogger.child({ module: 'interpol-notices-source' })
 
@@ -147,20 +148,29 @@ export function startInterpolNoticesPoller(
         page: '1',
       })
 
-      const res = await fetch(`${INTERPOL_RED_API}?${params}`, {
-        headers: {
-          'User-Agent': 'WorldPulse/1.0 (OSINT intelligence network)',
-          'Accept': 'application/json',
-        },
-        signal: AbortSignal.timeout(30_000),
-      })
-
-      if (!res.ok) {
-        log.warn({ status: res.status }, 'Interpol API returned non-OK status')
-        return
+      const fetchUrl = `${INTERPOL_RED_API}?${params}`
+      let data: InterpolResponse
+      try {
+        data = await fetchWithResilience(
+          'interpol-notices',
+          'Interpol Notices',
+          fetchUrl,
+          async () => {
+            const res = await fetch(fetchUrl, {
+              headers: {
+                'User-Agent': 'WorldPulse/1.0 (OSINT intelligence network)',
+                'Accept': 'application/json',
+              },
+              signal: AbortSignal.timeout(30_000),
+            })
+            if (!res.ok) throw Object.assign(new Error(`Interpol Notices: HTTP ${res.status}`), { statusCode: res.status })
+            return res.json() as Promise<InterpolResponse>
+          },
+        )
+      } catch (err) {
+        if (err instanceof CircuitOpenError) return
+        throw err
       }
-
-      const data = await res.json() as InterpolResponse
       const notices = data._embedded?.notices ?? []
 
       if (notices.length === 0) {
@@ -195,7 +205,7 @@ export function startInterpolNoticesPoller(
           status: 'pending',
           reliability_score: RELIABILITY,
           location: location ? db.raw('ST_MakePoint(?, ?)', [location.lon, location.lat]) : null,
-          location_name: location?.name || 'Unknown',
+          location_name: 'Unknown',
           country_code: null,
           region: null,
           tags: ['osint', 'security', 'interpol', 'law-enforcement', 'red-notice'],
@@ -211,7 +221,7 @@ export function startInterpolNoticesPoller(
           try {
             await producer.send({
               topic: 'worldpulse.signals.new',
-              messages: [{ value: JSON.stringify(signal) }],
+              messages: [{ value: JSON.stringify(signalData) }],
             })
           } catch (kafkaErr) {
             log.warn({ kafkaErr }, 'Failed to publish Interpol signal to Kafka')

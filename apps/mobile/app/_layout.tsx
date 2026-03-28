@@ -2,10 +2,11 @@ import { useEffect, useRef } from 'react'
 import { Stack, useRouter, useSegments } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import * as Notifications from 'expo-notifications'
-import { Platform } from 'react-native'
+import { Platform, View } from 'react-native'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from '@/lib/auth'
 import { notificationsApi } from '@/lib/api'
+import { LiveFeedBanner } from '@/components/LiveFeedBanner'
 
 // Configure notification behavior
 Notifications.setNotificationHandler({
@@ -116,49 +117,52 @@ async function registerForPushNotifications() {
 export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
-      <StatusBar style="light" backgroundColor="#06070d" />
-      <AuthGate />
-      <Stack
-        screenOptions={{
-          headerStyle: { backgroundColor: '#0d0f18' },
-          headerTintColor: '#e2e6f0',
-          headerTitleStyle: { fontWeight: '700', fontSize: 16 },
-          contentStyle: { backgroundColor: '#06070d' },
-          animation: 'slide_from_right',
-        }}
-      >
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="auth/login" options={{ headerShown: false }} />
-        <Stack.Screen name="auth/register" options={{ headerShown: false }} />
-        <Stack.Screen
-          name="signal/[id]"
-          options={{
-            title: 'Signal',
+      <View style={{ flex: 1 }}>
+        <StatusBar style="light" backgroundColor="#06070d" />
+        <AuthGate />
+        <Stack
+          screenOptions={{
             headerStyle: { backgroundColor: '#0d0f18' },
+            headerTintColor: '#e2e6f0',
+            headerTitleStyle: { fontWeight: '700', fontSize: 16 },
+            contentStyle: { backgroundColor: '#06070d' },
+            animation: 'slide_from_right',
           }}
-        />
-        <Stack.Screen
-          name="communities/index"
-          options={{
-            title: 'Communities',
-            headerStyle: { backgroundColor: '#0d0f18' },
-          }}
-        />
-        <Stack.Screen
-          name="communities/[slug]"
-          options={{
-            title: 'Community',
-            headerStyle: { backgroundColor: '#0d0f18' },
-          }}
-        />
-        <Stack.Screen
-          name="users/[handle]"
-          options={{
-            title: 'Profile',
-            headerStyle: { backgroundColor: '#0d0f18' },
-          }}
-        />
-      </Stack>
+        >
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="auth/login" options={{ headerShown: false }} />
+          <Stack.Screen name="auth/register" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="signal/[id]"
+            options={{
+              title: 'Signal',
+              headerStyle: { backgroundColor: '#0d0f18' },
+            }}
+          />
+          <Stack.Screen
+            name="communities/index"
+            options={{
+              title: 'Communities',
+              headerStyle: { backgroundColor: '#0d0f18' },
+            }}
+          />
+          <Stack.Screen
+            name="communities/[slug]"
+            options={{
+              title: 'Community',
+              headerStyle: { backgroundColor: '#0d0f18' },
+            }}
+          />
+          <Stack.Screen
+            name="users/[handle]"
+            options={{
+              title: 'Profile',
+              headerStyle: { backgroundColor: '#0d0f18' },
+            }}
+          />
+        </Stack>
+        <LiveFeedBanner />
+      </View>
     </QueryClientProvider>
   )
 }

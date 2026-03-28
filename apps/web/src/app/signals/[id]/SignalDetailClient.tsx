@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import type { Signal, Post, CrossCheckStatus } from '@worldpulse/types'
-import type { SignalDetail, Verification } from './page'
+import type { SignalDetail } from './page'
 import { DiscussionThread } from './DiscussionThread'
 
 const SignalMap = dynamic(
@@ -13,9 +13,14 @@ const SignalMap = dynamic(
 )
 import { FlagModal } from '@/components/signals/FlagModal'
 import { ReliabilityDots } from '@/components/signals/ReliabilityDots'
+import { BiasCorrectionPanel } from '@/components/sources/BiasCorrectionPanel'
 import { AISummary } from '@/components/signals/AISummary'
 import { RiskScoreGauge } from '@/components/signals/RiskScoreGauge'
 import { RelatedSignals } from './RelatedSignals'
+import { CIBWarningBadge } from '@/components/signals/CIBWarningBadge'
+import { VerificationTimeline } from '@/components/signals/VerificationTimeline'
+import { VerificationBadge, buildVerificationSummary } from '@/components/signals/VerificationBadge'
+import { RichMediaEmbed, extractFirstEmbedUrl } from '@/components/RichMediaEmbed'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -54,26 +59,7 @@ function timeAgo(d: string | null | undefined): string {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function VerificationRow({ v }: { v: Verification }) {
-  const color = v.result === 'confirmed' ? '#00e676' : v.result === 'refuted' ? '#ff3b5c' : '#f5a623'
-  return (
-    <div className="flex items-start gap-3 py-2.5 border-b border-white/5 last:border-0">
-      <div className="w-1.5 h-1.5 rounded-full mt-[5px] flex-shrink-0" style={{ background: color }} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 mb-0.5">
-          <span className="font-mono text-[10px] tracking-widest uppercase" style={{ color }}>{v.result}</span>
-          <span className="font-mono text-[10px] text-wp-text3">·</span>
-          <span className="font-mono text-[10px] text-wp-text3 capitalize">{v.check_type.replace(/_/g, ' ')}</span>
-          <span className="font-mono text-[10px] text-wp-text3 ml-auto">{Math.round(v.confidence * 100)}%</span>
-        </div>
-        {v.notes && (
-          <p className="text-[12px] text-wp-text2 leading-[1.5]">{v.notes}</p>
-        )}
-        <span className="font-mono text-[10px] text-wp-text3">{timeAgo(v.created_at)}</span>
-      </div>
-    </div>
-  )
-}
+// VerificationRow replaced by VerificationTimeline component (P2-4b)
 
 function RelatedCard({ signal }: { signal: Signal }) {
   const color = SEV_COLOR[signal.severity] ?? '#8892a4'
@@ -168,7 +154,7 @@ function ShareButton() {
   return (
     <button
       onClick={handleCopy}
-      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-white/10 font-mono text-[10px] text-wp-text3 hover:border-white/20 hover:text-wp-text2 transition-all"
+      className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-full border border-white/10 font-mono text-[10px] text-wp-text3 hover:border-white/20 hover:text-wp-text2 transition-all min-h-[44px]"
       aria-label="Copy link to this signal"
     >
       {copied ? (
@@ -230,11 +216,30 @@ function AISlopBadge({ signalId }: { signalId: string }) {
   )
 }
 
+interface CIBStatus {
+  detected: boolean
+  confidence: number
+  label: string
+}
+
 export function SignalDetailClient({ signal, related, initialPosts, postsTotal }: Props) {
   const color      = SEV_COLOR[signal.severity] ?? '#8892a4'
   const bg         = SEV_BG[signal.severity]    ?? 'rgba(136,146,164,0.12)'
   const srcUrl     = signal.originalUrls?.[0] ?? null
   const [flagOpen, setFlagOpen] = useState(false)
+  const [cibResult, setCibResult] = useState<CIBStatus | null>(null)
+
+  useEffect(() => {
+    const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api/v1'
+    fetch(`${API_BASE}/signals/${encodeURIComponent(signal.id)}/cib-check`)
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { success?: boolean; data?: CIBStatus } | null) => {
+        if (data?.success && data.data && data.data.label !== 'CLEAN') {
+          setCibResult(data.data)
+        }
+      })
+      .catch(() => { /* non-fatal */ })
+  }, [signal.id])
   let srcDomain: string | null = null
   try { srcDomain = srcUrl ? new URL(srcUrl).hostname.replace(/^www\./, '') : null } catch { /* noop */ }
 
@@ -248,18 +253,18 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
       <div className="max-w-4xl mx-auto px-4 py-8">
 
         {/* Breadcrumb + share */}
-        <div className="flex items-center justify-between mb-6">
-          <nav className="flex items-center gap-2 font-mono text-[11px] text-wp-text3" aria-label="Breadcrumb">
-            <Link href="/" className="hover:text-wp-text transition-colors">Home</Link>
-            <span>/</span>
-            <Link href="/map" className="hover:text-wp-text transition-colors">Map</Link>
-            <span>/</span>
-            <span className="text-wp-text2 truncate max-w-[200px]">{signal.title}</span>
+        <div className="flex items-center justify-between gap-2 mb-6">
+          <nav className="flex items-center gap-2 font-mono text-[11px] text-wp-text3 min-w-0 flex-1" aria-label="Breadcrumb">
+            <Link href="/" className="hover:text-wp-text transition-colors flex-shrink-0">Home</Link>
+            <span className="flex-shrink-0">/</span>
+            <Link href="/map" className="hover:text-wp-text transition-colors flex-shrink-0">Map</Link>
+            <span className="flex-shrink-0">/</span>
+            <span className="text-wp-text2 truncate max-w-[120px] sm:max-w-[200px]">{signal.title}</span>
           </nav>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={() => setFlagOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-white/10 font-mono text-[10px] text-wp-text3 hover:border-wp-red/40 hover:text-wp-red transition-all"
+              className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-full border border-white/10 font-mono text-[10px] text-wp-text3 hover:border-wp-red/40 hover:text-wp-red transition-all min-h-[44px]"
               aria-label="Flag this signal"
             >
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -290,11 +295,17 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
                 <span aria-hidden="true">{CAT_ICON[signal.category] ?? ''}</span>{' '}
                 {signal.category}
               </span>
-              {signal.status === 'verified' && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-wp-green/30 bg-wp-green/10 text-[11px] font-mono text-wp-green">
-                  ✓ Verified
-                </span>
-              )}
+              {/* Verification badge — derived from verification_log */}
+              {(() => {
+                const summary = buildVerificationSummary(signal.verifications, signal.status)
+                return (
+                  <VerificationBadge
+                    status={summary.status}
+                    summary={{ confirmed_checks: summary.confirmed_checks, total_checks: summary.total_checks }}
+                    size="md"
+                  />
+                )
+              })()}
               {isBreaking && (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-wp-red text-white text-[11px] font-mono font-semibold animate-flash-tag">
                   BREAKING
@@ -355,6 +366,9 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
             {/* AI Slop Badge — admin-only heuristic warning for AI-generated content */}
             <AISlopBadge signalId={signal.id} />
 
+            {/* CIB Warning Badge — coordinated narrative detection */}
+            {cibResult && <CIBWarningBadge cibStatus={cibResult} />}
+
             {/* Tags */}
             {signal.tags.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
@@ -383,35 +397,68 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
               </div>
             )}
 
-            {/* Verifications */}
-            {signal.verifications.length > 0 && (
-              <div>
-                <div className="font-mono text-[10px] tracking-widest uppercase text-wp-text3 mb-3">
-                  Verification checks ({signal.verifications.length})
-                </div>
-                <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] divide-y divide-white/5 px-4">
-                  {signal.verifications.map((v, i) => (
-                    <VerificationRow key={i} v={v} />
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* Verification Log Timeline (P2-4b) — scrollable on mobile if content overflows */}
+            <div className="overflow-x-auto">
+              <VerificationTimeline verifications={signal.verifications} />
+            </div>
 
-            {/* Source link */}
-            {srcUrl && (
-              <a
-                href={srcUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold transition-all"
-                style={{ background: bg, color, border: `1px solid ${color}40` }}
-              >
-                Source: {srcDomain ?? srcUrl}
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                  <path d="M2 10L10 2M10 2H5M10 2V7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-              </a>
-            )}
+            {/* Source Media — embedded player + source link */}
+            {(srcUrl || (signal.media_urls?.length ?? 0) > 0) && (() => {
+              const embeddable = srcUrl ? extractFirstEmbedUrl(srcUrl) : null
+              const mediaUrls  = signal.media_urls ?? []
+
+              return (
+                <div>
+                  <div className="font-mono text-[10px] tracking-widest uppercase text-wp-text3 mb-3">
+                    Source Media
+                  </div>
+
+                  {/* Embeddable source URL player */}
+                  {embeddable && (
+                    <RichMediaEmbed url={embeddable} className="mb-3" />
+                  )}
+
+                  {/* Additional media_urls embeds */}
+                  {mediaUrls.length > 0 && (
+                    <div className="space-y-3 mb-3">
+                      {mediaUrls.map((url, i) => (
+                        <RichMediaEmbed key={i} url={url} />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Source link — prominent button if no embed, subdued attribution if embedded */}
+                  {srcUrl && (
+                    embeddable ? (
+                      <a
+                        href={srcUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 font-mono text-[11px] text-wp-text3 hover:text-wp-text transition-colors"
+                      >
+                        {srcDomain ?? srcUrl}
+                        <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                          <path d="M2 10L10 2M10 2H5M10 2V7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                        </svg>
+                      </a>
+                    ) : (
+                      <a
+                        href={srcUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold transition-all"
+                        style={{ background: bg, color, border: `1px solid ${color}40` }}
+                      >
+                        View original source →
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                          <path d="M2 10L10 2M10 2H5M10 2V7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                        </svg>
+                      </a>
+                    )
+                  )}
+                </div>
+              )
+            })()}
 
             {/* Discussion thread */}
             <div className="pt-2">
@@ -482,10 +529,29 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
                           {timeAgo(src.activeAt)}
                         </div>
                       )}
+                      {src.articleUrl && (
+                        <a
+                          href={src.articleUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 mt-1.5 ml-[calc(theme(spacing.6)+theme(spacing.2))] px-2 py-0.5 rounded-full text-[10px] font-mono font-medium transition-colors"
+                          style={{ background: 'rgba(0,210,210,0.1)', color: '#00d2d2', border: '1px solid rgba(0,210,210,0.25)' }}
+                        >
+                          View original article →
+                        </a>
+                      )}
                     </div>
                   ))}
                 </div>
               </div>
+            )}
+
+            {/* Community bias corrections — shown when signal has at least one source */}
+            {signal.sources.length > 0 && signal.sources[0] != null && (
+              <BiasCorrectionPanel
+                sourceId={signal.sources[0].id}
+                currentBiasLabel={null}
+              />
             )}
 
             {/* Related signals */}

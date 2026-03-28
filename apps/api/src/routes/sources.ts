@@ -3,6 +3,12 @@ import { db } from '../db/postgres'
 import { optionalAuth, authenticate } from '../middleware/auth'
 import { z } from 'zod'
 import { logger } from '../lib/logger'
+import { getSourceBias, extractDomain } from '../lib/source-bias'
+import { sendError } from '../lib/errors'
+
+const ReviewSuggestionSchema = z.object({
+  status: z.enum(['approved', 'rejected']),
+})
 
 const SuggestSourceSchema = z.object({
   name:     z.string().min(2).max(255),
@@ -159,6 +165,42 @@ export const registerSourceRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ success: true, data: suggestions })
   })
 
+  // ─── SOURCE BIAS ───────────────────────────────────────────
+  app.get('/:id/bias', { preHandler: [optionalAuth] }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+
+    const source = await db('sources')
+      .where('id', id)
+      .where('active', true)
+      .first(['id', 'url'])
+
+    if (!source) {
+      return sendError(reply, 404, 'NOT_FOUND', 'Source not found')
+    }
+
+    const domain = extractDomain(source.url as string)
+    const bias   = await getSourceBias(domain)
+
+    return reply.send({ success: true, data: bias })
+  })
+
+  // ─── BIAS DISTRIBUTION ─────────────────────────────────────
+  app.get('/bias-distribution', { preHandler: [optionalAuth] }, async (req, reply) => {
+    const rows = await db('sources')
+      .where('active', true)
+      .whereNot('bias_label', 'unknown')
+      .groupBy('bias_label')
+      .select('bias_label')
+      .count('id as count')
+
+    const distribution: Record<string, number> = {}
+    for (const row of rows) {
+      distribution[row.bias_label as string] = Number(row.count)
+    }
+
+    return reply.send({ success: true, data: distribution })
+  })
+
   // ─── ADMIN: REVIEW SUGGESTION ──────────────────────────────
   app.patch('/suggestions/:id', { preHandler: [authenticate] }, async (req, reply) => {
     if (!req.user || !['official', 'expert'].includes(req.user.accountType)) {
@@ -166,11 +208,11 @@ export const registerSourceRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const { id } = req.params as { id: string }
-    const { status } = req.body as { status: 'approved' | 'rejected' }
-
-    if (!['approved', 'rejected'].includes(status)) {
+    const reviewParsed = ReviewSuggestionSchema.safeParse(req.body)
+    if (!reviewParsed.success) {
       return reply.status(400).send({ success: false, error: 'Status must be approved or rejected' })
     }
+    const { status } = reviewParsed.data
 
     const suggestion = await db('source_suggestions').where('id', id).first()
     if (!suggestion) {

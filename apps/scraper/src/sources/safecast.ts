@@ -21,6 +21,7 @@ import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate } from '../pipeline/insert-signal'
+import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilience'
 
 const log = rootLogger.child({ module: 'safecast-source' })
 
@@ -73,20 +74,29 @@ export function startSafecastPoller(
         per_page:       '200',
       })
 
-      const res = await fetch(`${SAFECAST_API_URL}?${params.toString()}`, {
-        headers: {
-          'User-Agent': 'WorldPulse/0.1 (open-source; https://worldpulse.io)',
-          'Accept':     'application/json',
-        },
-        signal: AbortSignal.timeout(30_000),
-      })
-
-      if (!res.ok) {
-        log.warn({ status: res.status }, 'Safecast API returned non-OK status')
-        return
+      const safecastUrl = `${SAFECAST_API_URL}?${params.toString()}`
+      let measurements: SafecastMeasurement[]
+      try {
+        measurements = await fetchWithResilience(
+          'safecast',
+          'Safecast',
+          safecastUrl,
+          async () => {
+            const res = await fetch(safecastUrl, {
+              headers: {
+                'User-Agent': 'WorldPulse/0.1 (open-source; https://worldpulse.io)',
+                'Accept':     'application/json',
+              },
+              signal: AbortSignal.timeout(30_000),
+            })
+            if (!res.ok) throw Object.assign(new Error(`Safecast: HTTP ${res.status}`), { statusCode: res.status })
+            return res.json() as Promise<SafecastMeasurement[]>
+          },
+        )
+      } catch (err) {
+        if (err instanceof CircuitOpenError) return
+        throw err
       }
-
-      const measurements = await res.json() as SafecastMeasurement[]
 
       if (!Array.isArray(measurements) || measurements.length === 0) {
         log.debug('Safecast: no measurements returned')

@@ -36,10 +36,10 @@ export default function HomePage() {
   return (
     <>
     <OnboardingModal />
-    <div className="min-h-[calc(100vh-52px)] lg:grid lg:grid-cols-[240px_1fr_300px]">
+    <div className="min-h-[calc(100vh-52px)] md:grid md:grid-cols-[240px_1fr] lg:grid-cols-[240px_1fr_300px]">
 
-      {/* LEFT SIDEBAR — desktop only */}
-      <div className="hidden lg:block">
+      {/* LEFT SIDEBAR — tablet+ */}
+      <div className="hidden md:block">
         <LeftSidebar />
       </div>
 
@@ -115,8 +115,8 @@ export default function HomePage() {
         <FeedList tab={activeTab} category={activeFilter} />
       </div>
 
-      {/* RIGHT SIDEBAR — xl only */}
-      <div className="hidden xl:block">
+      {/* RIGHT SIDEBAR — desktop only */}
+      <div className="hidden lg:block">
         <RightSidebar />
       </div>
     </div>

@@ -32,6 +32,35 @@ const nextConfig = {
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(self)' },
+          // Allow map tile sources and country GeoJSON CDN used by the live map
+          {
+            key: 'Content-Security-Policy',
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
+              "style-src 'self' 'unsafe-inline' https://fonts.openmaptiles.org",
+              "font-src 'self' https://fonts.openmaptiles.org",
+              "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.earthdata.nasa.gov https://gibs.earthdata.nasa.gov",
+              [
+                "connect-src 'self'",
+                'https://api.world-pulse.io',
+                'wss://api.world-pulse.io',
+                'http://localhost:3001',
+                'ws://localhost:3001',
+                'https://tile.openstreetmap.org',
+                'https://celestrak.org',
+                'https://gibs.earthdata.nasa.gov',
+                // Natural Earth country boundary GeoJSON for country risk choropleth
+                'https://d2ad6b4ur7yvpq.cloudfront.net',
+                // Sentry error reporting (*.ingest.sentry.io for any org)
+                'https://*.ingest.sentry.io',
+                'https://*.ingest.us.sentry.io',
+              ].join(' '),
+              "frame-src 'none'",
+              "object-src 'none'",
+              "base-uri 'self'",
+            ].join('; '),
+          },
         ],
       },
     ]

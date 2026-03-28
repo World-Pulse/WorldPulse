@@ -1,17 +1,24 @@
 /**
  * Threats Intelligence API — Unit Tests
  *
- * Tests for classifyThreatType, parseThreatOrigin, constants, and type
- * exports from apps/api/src/routes/threats.ts
+ * Tests for classifyThreatType, parseThreatOrigin, buildSeverityDistribution,
+ * buildThreatTypeBreakdown, deriveTrendDirection, buildActiveDigest,
+ * constants, and type exports from apps/api/src/routes/threats.ts
  */
 
 import { describe, it, expect } from 'vitest'
 import {
   classifyThreatType,
   parseThreatOrigin,
+  buildSeverityDistribution,
+  buildThreatTypeBreakdown,
+  deriveTrendDirection,
+  buildActiveDigest,
   THREATS_CACHE_TTL,
+  THREATS_SUMMARY_CACHE_TTL,
   THREATS_RATE_LIMIT,
   THREATS_CACHE_KEY,
+  THREATS_SUMMARY_CACHE_KEY,
 } from '../routes/threats'
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -21,12 +28,20 @@ describe('threats constants', () => {
     expect(THREATS_CACHE_TTL).toBe(180)
   })
 
+  it('THREATS_SUMMARY_CACHE_TTL is 300 seconds (5 minutes)', () => {
+    expect(THREATS_SUMMARY_CACHE_TTL).toBe(300)
+  })
+
   it('THREATS_RATE_LIMIT is 30 rpm', () => {
     expect(THREATS_RATE_LIMIT).toBe(30)
   })
 
   it('THREATS_CACHE_KEY is threats:missiles', () => {
     expect(THREATS_CACHE_KEY).toBe('threats:missiles')
+  })
+
+  it('THREATS_SUMMARY_CACHE_KEY is threats:summary', () => {
+    expect(THREATS_SUMMARY_CACHE_KEY).toBe('threats:summary')
   })
 })
 
@@ -194,5 +209,138 @@ describe('parseThreatOrigin', () => {
   it('is case-insensitive', () => {
     expect(parseThreatOrigin('RUSSIAN MILITARY STRIKES UKRAINE')).toBe('Russia')
     expect(parseThreatOrigin('IRAN LAUNCHES DRONES')).toBe('Iran')
+  })
+})
+
+// ─── buildSeverityDistribution ────────────────────────────────────────────────
+
+describe('buildSeverityDistribution', () => {
+  it('counts each severity level correctly', () => {
+    const dist = buildSeverityDistribution(['critical', 'high', 'high', 'medium', 'low', 'low', 'low'])
+    expect(dist.critical).toBe(1)
+    expect(dist.high).toBe(2)
+    expect(dist.medium).toBe(1)
+    expect(dist.low).toBe(3)
+    expect(dist.unknown).toBe(0)
+  })
+
+  it('returns all zeros for empty array', () => {
+    const dist = buildSeverityDistribution([])
+    expect(dist.critical).toBe(0)
+    expect(dist.high).toBe(0)
+    expect(dist.medium).toBe(0)
+    expect(dist.low).toBe(0)
+    expect(dist.unknown).toBe(0)
+  })
+
+  it('counts unrecognised values as unknown', () => {
+    const dist = buildSeverityDistribution(['elevated', 'SEVERE', 'low'])
+    expect(dist.unknown).toBe(2)
+    expect(dist.low).toBe(1)
+  })
+
+  it('is case-insensitive', () => {
+    const dist = buildSeverityDistribution(['CRITICAL', 'HIGH', 'MEDIUM'])
+    expect(dist.critical).toBe(1)
+    expect(dist.high).toBe(1)
+    expect(dist.medium).toBe(1)
+  })
+})
+
+// ─── buildThreatTypeBreakdown ─────────────────────────────────────────────────
+
+describe('buildThreatTypeBreakdown', () => {
+  it('counts each threat type correctly', () => {
+    const bd = buildThreatTypeBreakdown(['drone', 'drone', 'ballistic', 'hypersonic', 'rocket', 'cruise', 'unknown'])
+    expect(bd.drone).toBe(2)
+    expect(bd.ballistic).toBe(1)
+    expect(bd.hypersonic).toBe(1)
+    expect(bd.rocket).toBe(1)
+    expect(bd.cruise).toBe(1)
+    expect(bd.unknown).toBe(1)
+  })
+
+  it('returns all zeros for empty array', () => {
+    const bd = buildThreatTypeBreakdown([])
+    expect(bd.drone).toBe(0)
+    expect(bd.ballistic).toBe(0)
+    expect(bd.hypersonic).toBe(0)
+    expect(bd.cruise).toBe(0)
+    expect(bd.rocket).toBe(0)
+    expect(bd.unknown).toBe(0)
+  })
+})
+
+// ─── deriveTrendDirection ─────────────────────────────────────────────────────
+
+describe('deriveTrendDirection', () => {
+  it('returns stable when count48h is 0', () => {
+    expect(deriveTrendDirection(0, 0)).toBe('stable')
+  })
+
+  it('returns escalating when 6h rate > 2× hourly average', () => {
+    // 48h count = 24, hourly avg = 0.5; 6h count = 10, rate = 1.67 > 1.0
+    expect(deriveTrendDirection(24, 10)).toBe('escalating')
+  })
+
+  it('returns de-escalating when 6h rate < 0.5× hourly average and < 1/8 of 48h', () => {
+    // 48h count = 96, hourly avg = 2; 6h count = 2, rate = 0.33 < 1.0; 2 < 96/8=12
+    expect(deriveTrendDirection(96, 2)).toBe('de-escalating')
+  })
+
+  it('returns stable for normal proportional activity', () => {
+    // 48h count = 48, hourly avg = 1; 6h count = 6, rate = 1 = avg
+    expect(deriveTrendDirection(48, 6)).toBe('stable')
+  })
+})
+
+// ─── buildActiveDigest ────────────────────────────────────────────────────────
+
+describe('buildActiveDigest', () => {
+  it('returns no-threat message when total_threats_48h is 0', () => {
+    const digest = buildActiveDigest({
+      total_threats_48h: 0,
+      total_threats_6h:  0,
+      trend_direction:   'stable',
+      threat_type_breakdown: { hypersonic: 0, ballistic: 0, cruise: 0, drone: 0, rocket: 0, unknown: 0 },
+      top_origin_countries: [],
+    })
+    expect(digest).toContain('No threat signals detected')
+  })
+
+  it('includes dominant type label and origin country in digest', () => {
+    const digest = buildActiveDigest({
+      total_threats_48h: 30,
+      total_threats_6h:  8,
+      trend_direction:   'escalating',
+      threat_type_breakdown: { hypersonic: 0, ballistic: 2, cruise: 3, drone: 20, rocket: 5, unknown: 0 },
+      top_origin_countries: [{ country: 'Iran', count: 15 }],
+    })
+    expect(digest).toContain('drone')
+    expect(digest).toContain('Iran')
+    expect(digest).toContain('escalating')
+  })
+
+  it('handles missing origin gracefully', () => {
+    const digest = buildActiveDigest({
+      total_threats_48h: 10,
+      total_threats_6h:  2,
+      trend_direction:   'stable',
+      threat_type_breakdown: { hypersonic: 0, ballistic: 0, cruise: 0, drone: 0, rocket: 10, unknown: 0 },
+      top_origin_countries: [],
+    })
+    expect(digest).toContain('rocket')
+    expect(digest).not.toContain('attributed to')
+  })
+
+  it('includes de-escalating language when trend is de-escalating', () => {
+    const digest = buildActiveDigest({
+      total_threats_48h: 50,
+      total_threats_6h:  1,
+      trend_direction:   'de-escalating',
+      threat_type_breakdown: { hypersonic: 0, ballistic: 0, cruise: 0, drone: 50, rocket: 0, unknown: 0 },
+      top_origin_countries: [],
+    })
+    expect(digest).toContain('de-escalating')
   })
 })

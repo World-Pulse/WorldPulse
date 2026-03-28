@@ -7,6 +7,7 @@ import { useInfiniteQuery } from '@tanstack/react-query'
 import { feedApi, type Signal } from '@/lib/api'
 import { SignalCard } from '@/components/SignalCard'
 import { Composer } from '@/components/Composer'
+import { BreakingAlertBanner } from '@/components/BreakingAlertBanner'
 
 type FeedTab = 'global' | 'following' | 'verified'
 
@@ -146,6 +147,9 @@ export default function FeedScreen() {
           <Text style={styles.liveText}>LIVE</Text>
         </View>
       </View>
+
+      {/* Breaking alert banner */}
+      <BreakingAlertBanner />
 
       {/* New signals notification bar */}
       {wsSignals.length > 0 && (

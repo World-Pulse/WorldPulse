@@ -28,6 +28,8 @@ const NAV_LINKS = [
   { href: '/explore',     icon: '🔭', label: 'Explore'      },
   { href: '/communities', icon: '🤝', label: 'Communities'  },
   { href: '/sources',     icon: '📡', label: 'Sources'      },
+  { href: '/pricing',     icon: '💎', label: 'Pricing'      },
+  { href: '/developers',  icon: '🛠️', label: 'Developers'   },
   { href: '/settings',    icon: '⚙️', label: 'Settings'     },
 ]
 
@@ -154,7 +156,7 @@ export function TopNav() {
           aria-label={mobileOpen ? 'Close menu' : 'Open navigation menu'}
           aria-expanded={mobileOpen}
           aria-controls="mobile-nav-drawer"
-          className="md:hidden ml-2 w-8 h-8 flex items-center justify-center rounded-lg text-wp-text3 hover:text-wp-text hover:bg-[rgba(255,255,255,0.06)] transition-all text-[18px] flex-shrink-0"
+          className="md:hidden ml-2 w-11 h-11 flex items-center justify-center rounded-lg text-wp-text3 hover:text-wp-text hover:bg-[rgba(255,255,255,0.06)] transition-all text-[18px] flex-shrink-0"
         >
           {mobileOpen ? '✕' : '☰'}
         </button>
@@ -173,7 +175,7 @@ export function TopNav() {
           <div
             className="flex whitespace-nowrap"
             style={{
-              animation: 'ticker 45s linear infinite',
+              animation: 'ticker-scroll 45s linear infinite',
               animationPlayState: tickerPaused ? 'paused' : 'running',
             }}
           >

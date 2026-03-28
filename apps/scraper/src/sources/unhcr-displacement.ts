@@ -23,6 +23,7 @@ import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate } from '../pipeline/insert-signal'
+import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilience'
 
 const log = rootLogger.child({ module: 'unhcr-displacement-source' })
 
@@ -134,20 +135,28 @@ export function startUnhcrDisplacementPoller(
     try {
       log.info('Polling UNHCR displacement situations API')
 
-      const res = await fetch(UNHCR_API, {
-        headers: {
-          'User-Agent': 'WorldPulse/1.0 (OSINT intelligence network)',
-          'Accept': 'application/json',
-        },
-        signal: AbortSignal.timeout(30_000),
-      })
-
-      if (!res.ok) {
-        log.warn({ status: res.status }, 'UNHCR API returned non-OK status')
-        return
+      let data: { items?: UnhcrSituation[] }
+      try {
+        data = await fetchWithResilience(
+          'unhcr-displacement',
+          'UNHCR Displacement',
+          UNHCR_API,
+          async () => {
+            const res = await fetch(UNHCR_API, {
+              headers: {
+                'User-Agent': 'WorldPulse/1.0 (OSINT intelligence network)',
+                'Accept': 'application/json',
+              },
+              signal: AbortSignal.timeout(30_000),
+            })
+            if (!res.ok) throw Object.assign(new Error(`UNHCR Displacement: HTTP ${res.status}`), { statusCode: res.status })
+            return res.json() as Promise<{ items?: UnhcrSituation[] }>
+          },
+        )
+      } catch (err) {
+        if (err instanceof CircuitOpenError) return
+        throw err
       }
-
-      const data = await res.json() as { items?: UnhcrSituation[] }
       const situations = data.items ?? []
 
       if (situations.length === 0) {
@@ -185,7 +194,7 @@ export function startUnhcrDisplacementPoller(
           severity,
           status: 'pending',
           reliability_score: RELIABILITY,
-          location: location ? db.raw('ST_MakePoint(?, ?)', [location.lng, location.lat]) : null,
+          location: location ? db.raw('ST_MakePoint(?, ?)', [location.lon, location.lat]) : null,
           location_name: countryNames || 'Multiple regions',
           country_code: null,
           region: null,
@@ -195,14 +204,14 @@ export function startUnhcrDisplacementPoller(
           source_count: 1,
         }
 
-        await insertAndCorrelate(signalData, { lat: location?.lat ?? null, lng: location?.lng ?? null, sourceId: 'unhcr-displacement' })
+        await insertAndCorrelate(signalData, { lat: location?.lat ?? null, lng: location?.lon ?? null, sourceId: 'unhcr-displacement' })
         await redis.set(dedupKey, '1', 'EX', DEDUP_TTL_S)
 
         if (producer) {
           try {
             await producer.send({
               topic: 'worldpulse.signals.new',
-              messages: [{ value: JSON.stringify(signal) }],
+              messages: [{ value: JSON.stringify(signalData) }],
             })
           } catch (kafkaErr) {
             log.warn({ kafkaErr }, 'Failed to publish UNHCR signal to Kafka')

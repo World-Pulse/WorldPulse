@@ -19,6 +19,7 @@ import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate } from '../pipeline/insert-signal'
+import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilience'
 
 const log = rootLogger.child({ module: 'firms-source' })
 
@@ -173,8 +174,19 @@ export function startFirmsPoller(
   async function poll(): Promise<void> {
     try {
       log.debug('Polling NASA FIRMS fire hotspots...')
-      const raw  = await httpsGet(FIRMS_API)
-      const rows = parseFirmsCSV(raw)
+      let rows: FirmsRow[]
+      try {
+        rows = await fetchWithResilience(
+          'firms',
+          'NASA FIRMS',
+          FIRMS_API,
+          () => httpsGet(FIRMS_API).then(raw => parseFirmsCSV(raw)),
+          { retryDelays: [2_000, 10_000] },  // slightly longer delays for large CSV
+        )
+      } catch (err) {
+        if (err instanceof CircuitOpenError) return  // circuit open — skip silently
+        throw err
+      }
 
       if (rows.length === 0) {
         log.debug('FIRMS: no qualifying detections')

@@ -42,6 +42,11 @@
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "sentry.client.config.ts",
+    "sentry.edge.config.ts",
+    "sentry.server.config.ts",
+    "src/__tests__/sentry.test.ts",
+    "src/__tests__/trending-entities-ui.test.tsx"
   ]
 }

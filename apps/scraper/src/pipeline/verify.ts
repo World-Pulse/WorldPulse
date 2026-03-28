@@ -1,12 +1,13 @@
 /**
  * Signal Verification Engine
- * 
+ *
  * Multi-layer verification:
  * 1. Cross-source corroboration
  * 2. Temporal consistency check
  * 3. Geographic plausibility
  * 4. LLM fact extraction & contradiction detection
- * 5. Community expert review queue
+ * 5. Multi-model AI consensus (Claude secondary pass for uncertain signals)
+ * 6. Community expert review queue
  */
 
 import { db } from '../lib/postgres'
@@ -24,17 +25,20 @@ interface ArticleGroup {
 }
 
 interface VerificationResult {
-  status:     SignalStatus
-  score:      number
-  reasons:    string[]
-  checkTypes: string[]
+  status:             SignalStatus
+  score:              number
+  reasons:            string[]
+  checkTypes:         string[]
+  /** True when both primary LLM and Claude consensus checks agree on the signal's validity */
+  consensus_verified: boolean
 }
 
 export async function verifySignal(
   signal:   { id: string; severity: string; category: string },
   articles: ArticleGroup[],
 ): Promise<VerificationResult> {
-  const llmConfigured = !!(process.env.LLM_API_URL || process.env.OPENAI_API_KEY)
+  const llmConfigured      = !!(process.env.LLM_API_URL || process.env.OPENAI_API_KEY)
+  const claudeConfigured   = !!process.env.ANTHROPIC_API_KEY
 
   const checks = await Promise.allSettled([
     checkCrossSource(articles),
@@ -45,8 +49,8 @@ export async function verifySignal(
   ])
 
   const results = checks.map(c => c.status === 'fulfilled' ? c.value : null).filter(Boolean) as CheckResult[]
-  
-  // Aggregate score
+
+  // Aggregate base score
   let totalScore = 0
   let totalWeight = 0
   const reasons: string[] = []
@@ -59,7 +63,43 @@ export async function verifySignal(
     checkTypes.push(result.type)
   }
 
-  const finalScore = totalWeight > 0 ? totalScore / totalWeight : 0
+  let baseScore = totalWeight > 0 ? totalScore / totalWeight : 0
+
+  // ── Multi-model consensus pass ─────────────────────────────────────────────
+  // Only run Claude consensus for signals in the uncertain zone (0.3–0.7)
+  // where single-model verification is most likely to be wrong.
+  let consensus_verified = false
+  let primaryLLMScore: number | null = null
+  let claudeResult: CheckResult | null = null
+
+  const primaryLLMCheck = results.find(r => r.type === 'llm_fact_check')
+  if (primaryLLMCheck && primaryLLMCheck.weight > 0) {
+    primaryLLMScore = primaryLLMCheck.score
+  }
+
+  if (claudeConfigured && baseScore >= 0.30 && baseScore <= 0.70) {
+    try {
+      claudeResult = await checkClaudeConsensus(signal, articles)
+
+      // Blend consensus into the final score (50/50 with base)
+      const consensusScore = (baseScore + claudeResult.score) / 2
+      baseScore = Math.max(0, Math.min(1, consensusScore))
+
+      reasons.push(...claudeResult.reasons)
+      checkTypes.push(claudeResult.type)
+
+      // Determine agreement: both LLMs must agree on pass/fail threshold (>= 0.5)
+      if (primaryLLMScore !== null) {
+        const primaryPass = primaryLLMScore >= 0.5
+        const claudePass  = claudeResult.score >= 0.5
+        consensus_verified = primaryPass === claudePass
+      }
+    } catch (err) {
+      logger.warn({ err, signalId: signal.id }, 'Claude consensus check failed, skipping')
+    }
+  }
+
+  const finalScore = baseScore
 
   // Determine status
   let status: SignalStatus
@@ -71,25 +111,49 @@ export async function verifySignal(
     status = 'disputed'
   }
 
-  // Log verification
-  await db('verification_log').insert(
-    results.map(r => ({
-      signal_id:  signal.id,
-      check_type: r.type,
-      result:     status,
-      confidence: r.score,
-      notes:      r.reasons.join('; '),
+  // Log all verification results (including consensus if it ran)
+  const allResults = claudeResult ? [...results, claudeResult] : results
+  const logTotalWeight = allResults.reduce((s, r) => s + r.weight, 0)
+
+  const VERIFIER_TYPE_MAP: Record<string, string> = {
+    cross_source:    'cross_reference',
+    temporal:        'temporal',
+    source_diversity:'source_check',
+    wire_presence:   'source_check',
+    llm_fact_check:  'ai_analysis',
+    claude_consensus:'ai_analysis',
+  }
+
+  function toVerdict(score: number): string {
+    if (score >= 0.7) return 'confirmed'
+    if (score >= 0.3) return 'unverified'
+    return 'refuted'
+  }
+
+  db('verification_log').insert(
+    allResults.map(r => ({
+      signal_id:     signal.id,
+      check_type:    r.type,
+      verifier_type: VERIFIER_TYPE_MAP[r.type] ?? 'source_check',
+      result:        status,
+      verdict:       toVerdict(r.score),
+      confidence:    r.score,
+      score_delta:   logTotalWeight > 0 ? (r.score * r.weight) / logTotalWeight : 0,
+      notes:         r.reasons.join('; '),
     }))
-  )
+  ).catch(err => {
+    logger.warn({ err, signalId: signal.id }, 'verification_log insert failed (non-blocking)')
+  })
 
   logger.debug({
-    signalId: signal.id,
-    finalScore: finalScore.toFixed(2),
+    signalId:           signal.id,
+    finalScore:         finalScore.toFixed(2),
     status,
-    checks: checkTypes.length,
+    checks:             checkTypes.length,
+    consensus_verified,
   }, 'Signal verified')
 
-  return { status, score: finalScore, reasons, checkTypes }
+  return { status, score: finalScore, reasons, checkTypes, consensus_verified }
 }
 
 // ─── CHECK FUNCTIONS ────────────────────────────────────────────────────
@@ -104,7 +168,7 @@ interface CheckResult {
 async function checkCrossSource(articles: ArticleGroup[]): Promise<CheckResult> {
   const uniqueSources = new Set(articles.map(a => a.sourceId)).size
   const score = Math.min(uniqueSources / 3, 1)
-  
+
   return {
     type:    'cross_source',
     score,
@@ -142,7 +206,7 @@ async function checkTemporalConsistency(articles: ArticleGroup[]): Promise<Check
 async function checkSourceDiversity(articles: ArticleGroup[]): Promise<CheckResult> {
   const tiers = new Set(articles.map(a => a.sourceTier))
   const avgTrust = articles.reduce((s, a) => s + a.sourceTrust, 0) / articles.length
-  
+
   const diversityScore = Math.min(tiers.size / 2, 1) * 0.5
   const trustScore = avgTrust * 0.5
   const score = diversityScore + trustScore
@@ -251,6 +315,89 @@ Are these articles factually consistent? Detect any contradictions.`
       weight:  0,   // zero weight means this check is ignored in the aggregate
       reasons: ['LLM fact-check unavailable'],
     }
+  }
+}
+
+/**
+ * Secondary verification pass using Anthropic Claude.
+ * Called only when the primary verification score is in the uncertain zone (0.3–0.7).
+ * Provides an independent model perspective to improve consensus accuracy.
+ */
+async function checkClaudeConsensus(
+  signal:   { id: string; severity: string; category: string },
+  articles: ArticleGroup[],
+): Promise<CheckResult> {
+  const anthropicKey = process.env.ANTHROPIC_API_KEY!
+
+  const summaries = articles
+    .slice(0, 5)
+    .map((a, i) => `Source ${i + 1} [trust=${a.sourceTrust.toFixed(2)}]: ${a.title}${a.body ? ' — ' + a.body.slice(0, 200) : ''}`)
+    .join('\n')
+
+  const systemPrompt = `You are a fact-checking assistant for a real-time global intelligence platform. Analyze the provided news article summaries and respond with ONLY valid JSON.
+
+Response format:
+{
+  "consistent": true or false,
+  "confidenceScore": 0.0-1.0,
+  "contradictions": ["list any factual contradictions between sources"],
+  "summary": "one sentence assessment"
+}`
+
+  const userContent = `Signal category: ${signal.category}, severity: ${signal.severity}
+
+Articles to cross-check:
+${summaries}
+
+Are these articles factually consistent? Identify any contradictions or reliability concerns.`
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method:  'POST',
+    headers: {
+      'Content-Type':    'application/json',
+      'x-api-key':       anthropicKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model:      'claude-haiku-4-5-20251001',
+      max_tokens: 256,
+      system:     systemPrompt,
+      messages:   [{ role: 'user', content: userContent }],
+    }),
+    signal: AbortSignal.timeout(15_000),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Claude API error: ${response.status}`)
+  }
+
+  const data = await response.json() as {
+    content: Array<{ type: string; text: string }>
+  }
+  const text = data.content?.find(c => c.type === 'text')?.text
+  if (!text) throw new Error('Claude returned empty response')
+
+  const parsed = JSON.parse(text) as {
+    consistent:      boolean
+    confidenceScore: number
+    contradictions:  string[]
+    summary:         string
+  }
+
+  const score = parsed.consistent
+    ? Math.max(0.5, Math.min(1, parsed.confidenceScore))
+    : Math.max(0,   Math.min(0.4, parsed.confidenceScore))
+
+  const reasons: string[] = [`[Claude] ${parsed.summary}`]
+  if (parsed.contradictions?.length > 0) {
+    reasons.push(...parsed.contradictions.slice(0, 2).map(c => `[Claude] Contradiction: ${c}`))
+  }
+
+  return {
+    type:    'claude_consensus',
+    score,
+    weight:  0,   // weight handled by the consensus blending in verifySignal
+    reasons,
   }
 }
 

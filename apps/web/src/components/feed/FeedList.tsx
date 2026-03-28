@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import type { Post, PollData } from '@worldpulse/types'
 import { PollDisplay } from './PollDisplay'
 import { RichMediaEmbed, extractFirstEmbedUrl } from '@/components/RichMediaEmbed'
@@ -11,7 +11,12 @@ import { useToast } from '@/components/Toast'
 import { ReliabilityDots } from '@/components/signals/ReliabilityDots'
 import { RiskScoreGauge } from '@/components/signals/RiskScoreGauge'
 import { FlagModal } from '@/components/signals/FlagModal'
-import type { CrossCheckStatus } from '@worldpulse/types'
+import { VerificationBadge, computeVerificationStatus } from '@/components/signals/VerificationBadge'
+import type { VerificationStatus } from '@/components/signals/VerificationBadge'
+import type { CrossCheckStatus, AlertTier } from '@worldpulse/types'
+import { AlertTierBadge } from '@/components/ui/AlertTierBadge'
+import { BiasIndicator } from '@/components/signals/BiasIndicator'
+import type { BiasLabel } from '@/components/signals/BiasIndicator'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -52,6 +57,9 @@ interface FeedItem {
   crossCheckStatus?: CrossCheckStatus
   communityFlagCount?: number
   riskScore?: { score: number; level: string; label: string }
+  verificationStatus?: VerificationStatus
+  alertTier?: AlertTier
+  sourceBias?: { label: BiasLabel; confidence: 'high' | 'medium' | 'low' }
 }
 
 // ─── DATA ADAPTERS ───────────────────────────────────────────────────────────
@@ -142,7 +150,9 @@ function adaptSignal(sig: any): FeedItem {
     sourceCount:       sig.sourceCount,
     crossCheckStatus:  sig.status ? crossCheckFromStatus(sig.status) : undefined,
     communityFlagCount: flagCount,
-    riskScore:         sig.riskScore ?? undefined,
+    riskScore:          sig.riskScore ?? undefined,
+    verificationStatus: computeVerificationStatus(sig.status, sig.reliabilityScore),
+    alertTier:          sig.alertTier ?? undefined,
   }
 }
 
@@ -404,12 +414,12 @@ function FeedEmptyState({ tab }: { tab: string }) {
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 export function FeedList({ tab, category }: { tab: string; category: string }) {
-  const router = useRouter()
   const [items, setItems]     = useState<FeedItem[]>([])
   const [loading, setLoading] = useState(true)
   const [cursor, setCursor]   = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
+  const { toast } = useToast()
 
   const fetchFeed = useCallback(async (nextCursor?: string) => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
@@ -456,8 +466,11 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
       setHasMore(data.hasMore ?? false)
     } catch (err) {
       console.error('[FeedList] fetch failed:', err)
+      if (!nextCursor) {
+        toast('Could not load feed — check your connection and try again', 'error')
+      }
     }
-  }, [tab, category])
+  }, [tab, category, toast])
 
   useEffect(() => {
     setLoading(true)
@@ -478,9 +491,21 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
 
   return (
     <div>
-      {items.map(item => (
-        <article
+      {items.map(item => {
+        const href = item.type === 'signal' ? `/signals/${item.id}` : `/posts/${item.id}`
+        return (
+        <Link
           key={item.id}
+          href={href}
+          className="block"
+          onClick={(e) => {
+            // Prevent card navigation when user clicks action buttons or interactive controls
+            if ((e.target as HTMLElement).closest('button, input, [data-no-nav]')) {
+              e.preventDefault()
+            }
+          }}
+        >
+        <article
           role="article"
           aria-label={
             item.event
@@ -489,12 +514,7 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
                 ? item.content.slice(0, 80)
                 : `Post by ${item.author.name}`
           }
-          onClick={(e) => {
-            // Only block navigation when clicking interactive controls
-            if ((e.target as HTMLElement).closest('button, a, input, [data-no-nav]')) return
-            router.push(item.type === 'signal' ? `/signals/${item.id}` : `/posts/${item.id}`)
-          }}
-          className={`flex gap-3 px-5 py-4 border-b border-[rgba(255,255,255,0.05)] hover:bg-[rgba(255,255,255,0.015)] transition-colors cursor-pointer animate-fade-in
+          className={`flex gap-3 px-5 py-4 border-b border-[rgba(255,255,255,0.05)] hover:bg-[rgba(255,255,255,0.015)] transition-colors animate-fade-in
             ${item.type === 'signal' ? SEVERITY_BORDER[item.severity ?? ''] ?? '' : ''}`}
         >
           {/* Avatar */}
@@ -522,6 +542,9 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
               {item.breaking && (
                 <span className="source-badge bg-wp-red text-white animate-flash-tag">⚡ BREAKING</span>
               )}
+              {item.alertTier && item.alertTier !== 'ROUTINE' && (
+                <AlertTierBadge tier={item.alertTier} size="sm" />
+              )}
               {item.contested && (
                 <span className="source-badge bg-[rgba(245,166,35,0.15)] text-wp-amber border border-[rgba(245,166,35,0.4)]">⚠ CONTESTED</span>
               )}
@@ -541,6 +564,9 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
                   <span className="font-mono text-[9px] tracking-[2px] text-wp-text3 uppercase">{item.event.category}</span>
                   {item.event.location && (
                     <span className="font-mono text-[10px] text-wp-text2">{item.event.location}</span>
+                  )}
+                  {item.verificationStatus && item.verificationStatus !== 'unverified' && (
+                    <VerificationBadge status={item.verificationStatus} size="sm" />
                   )}
                   {item.event.isLive && (
                     <span className="ml-auto tag-pill tag-technology text-[8px]">LIVE RESULTS</span>
@@ -635,7 +661,9 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
             <ActionBar item={item} />
           </div>
         </article>
-      ))}
+        </Link>
+        )
+      })}
 
       {/* Load more */}
       {hasMore && (

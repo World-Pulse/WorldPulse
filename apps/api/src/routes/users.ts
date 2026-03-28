@@ -5,7 +5,13 @@ import { redis } from '../db/redis'
 import { indexUser } from '../lib/search'
 import { z } from 'zod'
 
-const UpdateProfileSchema = z.object({
+export const OnboardingSchema = z.object({
+  interests:     z.array(z.string().max(50)).max(50).default([]),
+  regions:       z.array(z.string().max(50)).max(20).default([]),
+  followHandles: z.array(z.string().max(50)).max(100).default([]),
+})
+
+export const UpdateProfileSchema = z.object({
   displayName: z.string().min(1).max(100).optional(),
   bio:         z.string().max(500).optional(),
   location:    z.string().max(100).optional(),
@@ -283,11 +289,11 @@ export const registerUserRoutes: FastifyPluginAsync = async (app) => {
   // ─── COMPLETE ONBOARDING ─────────────────────────────────
   app.patch('/me/onboarding', { preHandler: [authenticate] }, async (req, reply) => {
     const userId = req.user!.id
-    const { interests, regions, followHandles } = req.body as {
-      interests?:    string[]
-      regions?:      string[]
-      followHandles?: string[]
+    const parsed = OnboardingSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return reply.status(400).send({ success: false, error: 'Invalid input', code: 'VALIDATION_ERROR' })
     }
+    const { interests, regions, followHandles } = parsed.data
 
     await db('users').where('id', userId).update({
       onboarded: true,

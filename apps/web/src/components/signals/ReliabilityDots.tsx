@@ -15,6 +15,53 @@ interface ReliabilityDotsProps {
   size?: 'sm' | 'md'
 }
 
+// ── Scoring tier definitions (5-dot system) ───────────────────────────────────
+const SCORE_TIERS = [
+  {
+    dots: 5,
+    range: '80–100%',
+    label: 'Fully Verified',
+    color: '#00e676',
+    desc: 'Multi-source confirmed, AI-verified, cross-checked',
+  },
+  {
+    dots: 4,
+    range: '60–79%',
+    label: 'High Confidence',
+    color: '#00c85a',
+    desc: 'Multiple independent sources, no contradictions',
+  },
+  {
+    dots: 3,
+    range: '40–59%',
+    label: 'Moderate',
+    color: '#f5a623',
+    desc: 'Single vetted source, partial cross-check',
+  },
+  {
+    dots: 2,
+    range: '20–39%',
+    label: 'Low Confidence',
+    color: '#fbbf24',
+    desc: 'Unverified or community-flagged content',
+  },
+  {
+    dots: 1,
+    range: '0–19%',
+    label: 'Unverified',
+    color: '#ff3b5c',
+    desc: 'No corroboration; treat as unconfirmed',
+  },
+] as const
+
+// ── Score factor descriptions ─────────────────────────────────────────────────
+const SCORE_FACTORS = [
+  { icon: '◎', label: 'Source reputation', desc: 'Publisher tier & track record' },
+  { icon: '⇄', label: 'Cross-check', desc: 'Agreement across independent sources' },
+  { icon: '◈', label: 'AI verification', desc: 'Automated fact & geo validation' },
+  { icon: '⚑', label: 'Community flags', desc: 'Reader-reported inaccuracies' },
+] as const
+
 export function ReliabilityDots({
   score,
   sourceCount,
@@ -49,6 +96,9 @@ export function ReliabilityDots({
     pct >= 40 ? '#fbbf24' :
     '#ff3b5c'
 
+  /** Active tier for this signal's current score */
+  const activeTier = SCORE_TIERS.find(t => pct >= parseInt(t.range)) ?? SCORE_TIERS[4]
+
   return (
     <div className="relative group/rdots inline-flex items-center gap-1 font-mono text-[10px] text-wp-text3">
       {label && <span>Reliability</span>}
@@ -64,32 +114,38 @@ export function ReliabilityDots({
         ))}
       </div>
 
-      {/* Tooltip — always shown on hover; score % is always present */}
+      {/* Tooltip — shown on hover */}
       <div
-        className="absolute bottom-full right-0 mb-2 z-50 w-[220px] rounded-xl border border-white/[0.10] bg-[#0d1117] shadow-xl p-3 pointer-events-none opacity-0 group-hover/rdots:opacity-100 transition-opacity duration-150"
+        className="absolute bottom-full right-0 mb-2 z-50 w-[260px] rounded-xl border border-white/[0.10] bg-[#0d1117] shadow-xl pointer-events-none opacity-0 group-hover/rdots:opacity-100 transition-opacity duration-150 overflow-hidden"
         role="tooltip"
+        aria-label={`Reliability score: ${pct}% — ${activeTier.label}`}
       >
-        {/* ── Header row: label + percentage ── */}
-        <div className="flex items-center justify-between mb-2">
-          <span className="font-mono text-[9px] tracking-widest uppercase text-wp-text3">
-            Reliability
-          </span>
-          <span className="font-mono text-[13px] font-bold leading-none" style={{ color: scoreColor }}>
+        {/* ── Header: label + percentage + tier badge ── */}
+        <div className="flex items-center justify-between px-3 pt-3 pb-2">
+          <div className="flex flex-col gap-0.5">
+            <span className="font-mono text-[9px] tracking-widest uppercase text-wp-text3">
+              Reliability Score
+            </span>
+            <span className="font-mono text-[10px]" style={{ color: activeTier.color }}>
+              {activeTier.label}
+            </span>
+          </div>
+          <span className="font-mono text-[16px] font-bold leading-none" style={{ color: scoreColor }}>
             {pct}%
           </span>
         </div>
 
         {/* ── Score bar ── */}
-        <div className="w-full h-[3px] rounded-full bg-wp-s3 mb-3">
+        <div className="w-full h-[3px] bg-wp-s3 mx-0 mb-3">
           <div
-            className="h-full rounded-full"
+            className="h-full"
             style={{ width: `${pct}%`, backgroundColor: scoreColor }}
           />
         </div>
 
-        {/* ── Optional breakdown rows ── */}
+        {/* ── Signal-specific breakdown (if data available) ── */}
         {(sourceCount != null || crossCheckStatus != null || aiVerified != null || communityFlagCount != null) && (
-          <div className="space-y-1.5 text-[11px]">
+          <div className="px-3 pb-2 space-y-1.5 text-[11px] border-b border-white/[0.06]">
             {sourceCount != null && (
               <div className="flex items-center justify-between">
                 <span className="text-wp-text3">Sources verified</span>
@@ -125,6 +181,77 @@ export function ReliabilityDots({
             )}
           </div>
         )}
+
+        {/* ── 5-dot tier explainer ── */}
+        <div className="px-3 py-2.5 border-b border-white/[0.06]">
+          <p className="font-mono text-[9px] tracking-widest uppercase text-wp-text3 mb-2">
+            Score tiers
+          </p>
+          <div className="space-y-1.5">
+            {SCORE_TIERS.map(tier => {
+              const isActive = tier.dots === activeTier.dots
+              return (
+                <div
+                  key={tier.dots}
+                  className={`flex items-start gap-2 rounded-md px-1.5 py-1 transition-colors ${
+                    isActive ? 'bg-white/[0.05]' : ''
+                  }`}
+                >
+                  {/* Mini dot row */}
+                  <div className="flex gap-[2px] mt-[3px] shrink-0">
+                    {Array(5).fill(0).map((_, di) => (
+                      <div
+                        key={di}
+                        className="w-[4px] h-[4px] rounded-full"
+                        style={{ backgroundColor: di < tier.dots ? tier.color : '#2a3142' }}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span
+                        className="font-mono text-[10px] font-semibold leading-tight"
+                        style={{ color: isActive ? tier.color : '#8892a4' }}
+                      >
+                        {tier.label}
+                      </span>
+                      <span className="font-mono text-[9px] text-wp-text3 shrink-0">
+                        {tier.range}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-wp-text3 leading-tight mt-0.5">
+                      {tier.desc}
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* ── Scoring factors ── */}
+        <div className="px-3 py-2.5">
+          <p className="font-mono text-[9px] tracking-widest uppercase text-wp-text3 mb-2">
+            What affects the score
+          </p>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+            {SCORE_FACTORS.map(f => (
+              <div key={f.label} className="flex items-start gap-1.5">
+                <span className="text-[10px] text-wp-text3 mt-px leading-none shrink-0">
+                  {f.icon}
+                </span>
+                <div className="flex flex-col">
+                  <span className="text-[10px] text-wp-text2 leading-tight font-medium">
+                    {f.label}
+                  </span>
+                  <span className="text-[9px] text-wp-text3 leading-tight">
+                    {f.desc}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   )

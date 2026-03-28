@@ -8,6 +8,8 @@ import { useQuery } from '@tanstack/react-query'
 import { signalsApi, type Post } from '@/lib/api'
 import { SeverityBadge } from '@/components/SeverityBadge'
 import { PostItem } from '@/components/PostItem'
+import { CIBWarningBadge } from '@/components/CIBWarningBadge'
+import { RiskScoreGauge } from '@/components/RiskScoreGauge'
 
 const COLORS = {
   bg:      '#06070d',
@@ -119,10 +121,29 @@ export default function SignalDetailScreen() {
           </View>
         )}
 
+        {/* Risk + CIB row */}
+        {(signal.riskScore != null || signal.cibScore != null) && (
+          <View style={styles.riskRow}>
+            {signal.riskScore != null && (
+              <View style={styles.riskGaugeBlock}>
+                <RiskScoreGauge score={signal.riskScore} size={72} />
+                <Text style={styles.riskLabel}>RISK SCORE</Text>
+              </View>
+            )}
+            {signal.cibScore != null && signal.cibScore >= 0.4 && (
+              <View style={{ flex: 1 }}>
+                <CIBWarningBadge score={signal.cibScore} />
+              </View>
+            )}
+          </View>
+        )}
+
         {/* Summary */}
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryLabel}>SUMMARY</Text>
-          <Text style={styles.summaryText}>{signal.summary}</Text>
+          <Text style={styles.summaryLabel}>
+            {signal.aiSummary ? 'AI SUMMARY' : 'SUMMARY'}
+          </Text>
+          <Text style={styles.summaryText}>{signal.aiSummary ?? signal.summary}</Text>
         </View>
 
         {/* Sources */}
@@ -253,6 +274,14 @@ const styles = StyleSheet.create({
   },
   reliabilityFill: { height: '100%', backgroundColor: COLORS.green, borderRadius: 2 },
   reliabilityValue: { fontSize: 11, color: COLORS.green, fontFamily: 'monospace', fontWeight: '700' },
+
+  riskRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16,
+  },
+  riskGaugeBlock: { alignItems: 'center', gap: 4 },
+  riskLabel: {
+    fontSize: 8, color: COLORS.text3, fontFamily: 'monospace', letterSpacing: 1.5,
+  },
 
   summaryCard: {
     backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,

@@ -6,6 +6,7 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
 import { signalsApi, searchApi, type Signal, type UserProfile } from '@/lib/api'
+import { TrendingEntities } from '@/components/TrendingEntities'
 import { useDebouncedValue } from '@/lib/useDebouncedValue'
 
 const COLORS = {
@@ -212,6 +213,10 @@ export default function ExploreScreen() {
             </View>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
+
+          {/* Trending Intelligence — global geopolitical entities */}
+          <Text style={styles.sectionLabel}>GLOBAL INTELLIGENCE</Text>
+          <TrendingEntities limit={8} />
 
           {/* Category grid */}
           <Text style={styles.sectionLabel}>BROWSE BY CATEGORY</Text>

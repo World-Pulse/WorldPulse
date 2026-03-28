@@ -5,6 +5,7 @@ import { redis } from '../db/redis'
 import { z } from 'zod'
 import type { AuthTokens, ApiResponse, AuthUser } from '@worldpulse/types'
 import { indexUser } from '../lib/search'
+import { checkLoginAttempt, recordFailedLogin, clearLoginAttempts } from '../lib/security'
 
 const RegisterSchema = z.object({
   handle:      z.string().min(3).max(50).regex(/^[a-zA-Z0-9_]+$/),
@@ -16,6 +17,10 @@ const RegisterSchema = z.object({
 const LoginSchema = z.object({
   email:    z.string().email(),
   password: z.string(),
+})
+
+const RefreshTokenSchema = z.object({
+  refreshToken: z.string().min(1).max(512),
 })
 
 // ─── OpenAPI shared schemas ───────────────────────────────────────────────────
@@ -60,6 +65,20 @@ const ErrorSchema = {
 }
 
 export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
+
+  // ─── GITHUB OAUTH COLUMN MIGRATION (idempotent) ──────────────────────────
+  try {
+    const hasCol = await db.schema.hasColumn('users', 'github_id')
+    if (!hasCol) {
+      await db.schema.table('users', (t) => {
+        t.bigInteger('github_id').nullable().unique()
+      })
+      app.log.info('✅ Added github_id column to users table')
+    }
+  } catch (err) {
+    app.log.warn({ err }, 'Could not migrate github_id column — continuing')
+  }
+
 
   // ─── REGISTER ────────────────────────────────────────────
   app.post('/register', {
@@ -171,6 +190,7 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
         400: { description: 'Validation error', ...ErrorSchema },
         401: { description: 'Invalid credentials', ...ErrorSchema },
         403: { description: 'Account suspended', ...ErrorSchema },
+        429: { description: 'Too many login attempts', ...ErrorSchema },
       },
     },
     config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
@@ -182,9 +202,20 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
 
     const { email, password } = body.data
 
+    // ── Gate 6: Brute-force protection ─────────────────────
+    const loginCheck = await checkLoginAttempt(email)
+    if (!loginCheck.allowed) {
+      return reply.status(429).send({
+        success: false,
+        error: 'Too many failed login attempts. Please try again later.',
+        code: 'ACCOUNT_LOCKED',
+      })
+    }
+
     const user = await db('users').where('email', email).first()
 
     if (!user || !user.password_hash) {
+      await recordFailedLogin(email)
       return reply.status(401).send({ success: false, error: 'Invalid credentials', code: 'INVALID_CREDENTIALS' })
     }
 
@@ -194,8 +225,12 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
 
     const valid = await bcrypt.compare(password, user.password_hash)
     if (!valid) {
+      await recordFailedLogin(email)
       return reply.status(401).send({ success: false, error: 'Invalid credentials', code: 'INVALID_CREDENTIALS' })
     }
+
+    // Clear failed attempts on successful login
+    await clearLoginAttempts(email)
 
     await db('users').where('id', user.id).update({ last_seen_at: new Date() })
     const tokens = await issueTokens(app, user.id)
@@ -230,10 +265,11 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
     },
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
   }, async (req, reply) => {
-    const { refreshToken } = req.body as { refreshToken?: string }
-    if (!refreshToken) {
+    const parsed = RefreshTokenSchema.safeParse(req.body)
+    if (!parsed.success) {
       return reply.status(400).send({ success: false, error: 'Refresh token required', code: 'MISSING_TOKEN' })
     }
+    const { refreshToken } = parsed.data
 
     // Verify refresh token from Redis
     const userId = await redis.get(`refresh:${refreshToken}`)
@@ -264,9 +300,165 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
       },
     },
   }, async (req, reply) => {
-    const { refreshToken } = req.body as { refreshToken?: string }
-    if (refreshToken) await redis.del(`refresh:${refreshToken}`)
+    const parsed = RefreshTokenSchema.safeParse(req.body)
+    if (parsed.success) await redis.del(`refresh:${parsed.data.refreshToken}`)
     return reply.send({ success: true })
+  })
+
+  // ─── GITHUB OAUTH — INITIATE ─────────────────────────────
+  app.get('/github', {
+    schema: {
+      tags: ['auth'],
+      summary: 'Redirect to GitHub OAuth authorization page',
+      response: {
+        302: { description: 'Redirect to GitHub' },
+        503: { description: 'OAuth not configured', ...ErrorSchema },
+      },
+    },
+  }, async (req, reply) => {
+    const clientId = process.env.GITHUB_CLIENT_ID
+    const redirectUri = process.env.GITHUB_REDIRECT_URI
+    if (!clientId || !redirectUri) {
+      return reply.status(503).send({ success: false, error: 'GitHub OAuth is not configured', code: 'OAUTH_NOT_CONFIGURED' })
+    }
+
+    const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('hex')
+    await redis.setex(`oauth:state:${state}`, 600, 'new')
+
+    const url = `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=user%3Aemail&state=${state}`
+    return reply.redirect(url, 302)
+  })
+
+  // ─── GITHUB OAUTH — CALLBACK ──────────────────────────────
+  app.get('/github/callback', {
+    schema: {
+      tags: ['auth'],
+      summary: 'Handle GitHub OAuth callback',
+      querystring: {
+        type: 'object',
+        properties: {
+          code:  { type: 'string' },
+          state: { type: 'string' },
+          error: { type: 'string' },
+        },
+      },
+    },
+  }, async (req, reply) => {
+    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000'
+    const errorRedirect = `${frontendUrl}/auth/login?error=oauth_failed`
+
+    const { code, state, error } = req.query as { code?: string; state?: string; error?: string }
+
+    if (error || !code || !state) {
+      return reply.redirect(errorRedirect, 302)
+    }
+
+    // Validate state
+    const stateVal = await redis.get(`oauth:state:${state}`)
+    if (!stateVal) {
+      return reply.redirect(errorRedirect, 302)
+    }
+    await redis.del(`oauth:state:${state}`)
+
+    try {
+      // Exchange code for access token
+      const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          client_id:     process.env.GITHUB_CLIENT_ID,
+          client_secret: process.env.GITHUB_CLIENT_SECRET,
+          code,
+          redirect_uri:  process.env.GITHUB_REDIRECT_URI,
+        }),
+      })
+
+      const tokenData = await tokenRes.json() as { access_token?: string; error?: string }
+      if (!tokenData.access_token) {
+        return reply.redirect(errorRedirect, 302)
+      }
+
+      const ghToken = tokenData.access_token
+      const ghHeaders = { Authorization: `token ${ghToken}`, Accept: 'application/json' }
+
+      // Fetch GitHub profile + emails in parallel
+      const [profileRes, emailsRes] = await Promise.all([
+        fetch('https://api.github.com/user', { headers: ghHeaders }),
+        fetch('https://api.github.com/user/emails', { headers: ghHeaders }),
+      ])
+
+      const ghProfile = await profileRes.json() as {
+        id: number; login: string; name: string | null; avatar_url: string
+      }
+      const ghEmails = await emailsRes.json() as Array<{
+        email: string; primary: boolean; verified: boolean
+      }>
+
+      const primaryEmail = ghEmails.find(e => e.primary && e.verified)?.email
+        ?? ghEmails.find(e => e.verified)?.email
+        ?? ghEmails[0]?.email
+
+      if (!primaryEmail) {
+        return reply.redirect(errorRedirect, 302)
+      }
+
+      // Look up existing user by github_id
+      let user = await db('users').where('github_id', ghProfile.id).first()
+
+      if (!user) {
+        // Check if email is already registered — link the account
+        user = await db('users').where('email', primaryEmail).first()
+
+        if (user) {
+          // Merge: attach github_id to existing account
+          await db('users').where('id', user.id).update({
+            github_id:  ghProfile.id,
+            avatar_url: user.avatar_url ?? ghProfile.avatar_url,
+          })
+          user = await db('users').where('id', user.id).first()
+        } else {
+          // New user — generate a unique handle from github login
+          const baseHandle = ghProfile.login.toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 48)
+          let handle = baseHandle
+          let suffix = 0
+          while (await db('users').where('handle', handle).first()) {
+            suffix++
+            handle = `${baseHandle}_${suffix}`
+          }
+
+          const [newUser] = await db('users')
+            .insert({
+              handle,
+              display_name: ghProfile.name ?? ghProfile.login,
+              email:        primaryEmail,
+              github_id:    ghProfile.id,
+              avatar_url:   ghProfile.avatar_url,
+              account_type: 'community',
+              password_hash: null,
+            })
+            .returning(['id', 'handle', 'display_name', 'email', 'bio', 'avatar_url',
+                        'account_type', 'trust_score', 'follower_count', 'following_count',
+                        'signal_count', 'verified', 'onboarded', 'created_at'])
+
+          user = newUser
+          indexUser(user).catch(() => {})
+        }
+      }
+
+      await db('users').where('id', user.id).update({ last_seen_at: new Date() })
+      const tokens = await issueTokens(app, user.id)
+
+      const params = new URLSearchParams({
+        accessToken:  tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresIn:    String(tokens.expiresIn),
+      })
+      return reply.redirect(`${frontendUrl}/auth/github/callback?${params.toString()}`, 302)
+
+    } catch (err) {
+      app.log.error({ err }, 'GitHub OAuth callback error')
+      return reply.redirect(errorRedirect, 302)
+    }
   })
 
   // ─── ME ──────────────────────────────────────────────────

@@ -24,6 +24,7 @@ import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate } from '../pipeline/insert-signal'
+import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilience'
 
 const log = rootLogger.child({ module: 'nws-alerts-source' })
 
@@ -137,19 +138,7 @@ async function pollNwsAlerts(
   producer?: Producer | null,
 ): Promise<void> {
   try {
-    const res = await fetch(NWS_ALERTS_URL, {
-      headers: {
-        'User-Agent': 'WorldPulse/1.0 (https://world-pulse.io)',
-        Accept: 'application/geo+json',
-      },
-    })
-
-    if (!res.ok) {
-      log.warn({ status: res.status }, 'NWS alerts API non-200 response')
-      return
-    }
-
-    const data = (await res.json()) as {
+    let data: {
       features?: Array<{
         id: string
         properties: {
@@ -165,6 +154,27 @@ async function pollNwsAlerts(
         }
         geometry: { type?: string; coordinates?: number[][][] } | null
       }>
+    }
+    try {
+      data = await fetchWithResilience(
+        'nws-alerts',
+        'NWS Alerts',
+        NWS_ALERTS_URL,
+        async () => {
+          const res = await fetch(NWS_ALERTS_URL, {
+            headers: {
+              'User-Agent': 'WorldPulse/1.0 (https://world-pulse.io)',
+              Accept: 'application/geo+json',
+            },
+            signal: AbortSignal.timeout(30_000),
+          })
+          if (!res.ok) throw Object.assign(new Error(`NWS Alerts: HTTP ${res.status}`), { statusCode: res.status })
+          return res.json() as Promise<typeof data>
+        },
+      )
+    } catch (err) {
+      if (err instanceof CircuitOpenError) return
+      throw err
     }
 
     const features = data.features ?? []

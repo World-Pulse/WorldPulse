@@ -50,7 +50,31 @@ function baseSignalQuery() {
 
 // ─── Resolvers ───────────────────────────────────────────────────────────────
 
+// ─── Pubsub context type (subset of MercuriusContext) ────────────────────────
+
+interface PubSubContext {
+  pubsub: {
+    subscribe(topic: string): Promise<AsyncIterable<unknown>>
+  }
+}
+
+// ─── Resolvers ───────────────────────────────────────────────────────────────
+
 export const resolvers = {
+  Subscription: {
+    signalCreated: {
+      // subscribe returns an async iterable that yields events published to
+      // the 'SIGNAL_CREATED' topic via app.graphql.pubsub.publish(...)
+      subscribe: async (_root: unknown, _args: unknown, ctx: PubSubContext) => {
+        return ctx.pubsub.subscribe('SIGNAL_CREATED')
+      },
+    },
+    signalUpdated: {
+      subscribe: async (_root: unknown, _args: unknown, ctx: PubSubContext) => {
+        return ctx.pubsub.subscribe('SIGNAL_UPDATED')
+      },
+    },
+  },
   Query: {
     // signal(id: ID!): Signal
     async signal(_: unknown, { id }: { id: string }) {

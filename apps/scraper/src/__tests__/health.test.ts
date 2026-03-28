@@ -102,6 +102,56 @@ describe('recordSuccess', () => {
   })
 })
 
+// ─── recordPollHeartbeat ──────────────────────────────────────────────────────
+describe('recordPollHeartbeat', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    pipelineMock.hset.mockReturnThis()
+    pipelineMock.hincrby.mockReturnThis()
+    pipelineMock.sadd.mockReturnThis()
+    pipelineMock.exec.mockResolvedValue([])
+    redisMock.pipeline.mockReturnValue(pipelineMock)
+  })
+
+  it('updates last_seen and last_attempt without incrementing success_count', async () => {
+    const { recordPollHeartbeat } = await import('../health.js')
+    await recordPollHeartbeat('src-hb', 'HB Source', 'hb-source')
+
+    expect(pipelineMock.hset).toHaveBeenCalledWith(
+      'scraper:health:src-hb',
+      expect.objectContaining({
+        source_name:         'HB Source',
+        source_slug:         'hb-source',
+        last_cycle_articles: 0,
+      }),
+    )
+    const successIncrements = (pipelineMock.hincrby.mock.calls as unknown[][])
+      .filter(c => c[1] === 'success_count')
+    expect(successIncrements).toHaveLength(0)
+  })
+
+  it('includes latency_ms when provided', async () => {
+    const { recordPollHeartbeat } = await import('../health.js')
+    await recordPollHeartbeat('src-hb', 'HB Source', 'hb-source', 88)
+    expect(pipelineMock.hset).toHaveBeenCalledWith(
+      'scraper:health:src-hb',
+      expect.objectContaining({ latency_ms: 88 }),
+    )
+  })
+
+  it('adds sourceId to the health index set', async () => {
+    const { recordPollHeartbeat } = await import('../health.js')
+    await recordPollHeartbeat('src-hb2', 'HB2', 'hb2')
+    expect(pipelineMock.sadd).toHaveBeenCalledWith('scraper:health:index', 'src-hb2')
+  })
+
+  it('executes the pipeline', async () => {
+    const { recordPollHeartbeat } = await import('../health.js')
+    await recordPollHeartbeat('src-hb3', 'HB3', 'hb3')
+    expect(pipelineMock.exec).toHaveBeenCalledTimes(1)
+  })
+})
+
 // ─── recordFailure ────────────────────────────────────────────────────────────
 describe('recordFailure', () => {
   beforeEach(() => {
@@ -144,6 +194,38 @@ describe('recordFailure', () => {
   })
 })
 
+// ─── getScraperThroughput ─────────────────────────────────────────────────────
+describe('getScraperThroughput', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns zero values when throughput key is empty', async () => {
+    redisMock.hgetall.mockResolvedValue({})
+    const { getScraperThroughput } = await import('../health.js')
+    const t = await getScraperThroughput()
+    expect(t.totalArticles).toBe(0)
+    expect(t.lastCycleArticles).toBe(0)
+    expect(t.lastCycleMs).toBeNull()
+    expect(t.lastCycleAt).toBeNull()
+  })
+
+  it('parses stored numeric fields correctly', async () => {
+    redisMock.hgetall.mockResolvedValue({
+      total_articles:      '9999',
+      last_cycle_articles: '42',
+      last_cycle_ms:       '1500',
+      last_cycle_at:       '2025-03-01T12:00:00.000Z',
+    })
+    const { getScraperThroughput } = await import('../health.js')
+    const t = await getScraperThroughput()
+    expect(t.totalArticles).toBe(9999)
+    expect(t.lastCycleArticles).toBe(42)
+    expect(t.lastCycleMs).toBe(1500)
+    expect(t.lastCycleAt).toBe('2025-03-01T12:00:00.000Z')
+  })
+})
+
 // ─── getSourceHealth ──────────────────────────────────────────────────────────
 describe('getSourceHealth', () => {
   beforeEach(() => {
@@ -167,7 +249,7 @@ describe('getSourceHealth', () => {
     expect(health.successRate).toBeCloseTo(10 / 12, 3)
   })
 
-  it('returns degraded status when success rate < 50% with ≥5 attempts', async () => {
+  it('returns failed status when success rate < 50% with ≥5 attempts', async () => {
     redisMock.hgetall.mockResolvedValue(rawHash({
       success_count: '2',
       error_count:   '8',
@@ -175,10 +257,10 @@ describe('getSourceHealth', () => {
     }))
     const { getSourceHealth } = await import('../health.js')
     const health = await getSourceHealth('src-2')
-    expect(health.status).toBe('degraded')
+    expect(health.status).toBe('failed')
   })
 
-  it('returns dead status when last_seen is older than 30 minutes', async () => {
+  it('returns stale status when last_seen is older than 30 minutes', async () => {
     const oldTime = new Date(Date.now() - 31 * 60 * 1_000).toISOString()
     redisMock.hgetall.mockResolvedValue(rawHash({
       last_seen:    oldTime,
@@ -186,7 +268,7 @@ describe('getSourceHealth', () => {
     }))
     const { getSourceHealth } = await import('../health.js')
     const health = await getSourceHealth('src-3')
-    expect(health.status).toBe('dead')
+    expect(health.status).toBe('stale')
   })
 
   it('parses latency_ms as integer', async () => {
@@ -240,28 +322,28 @@ describe('detectDeadSources', () => {
     vi.clearAllMocks()
   })
 
-  it('returns empty array and does not warn when no sources are dead', async () => {
+  it('returns empty array and does not warn when no sources are stale', async () => {
     redisMock.smembers.mockResolvedValue(['src-alive'])
     redisMock.hgetall.mockResolvedValue(rawHash())  // recently seen → healthy
     const { detectDeadSources } = await import('../health.js')
-    const dead = await detectDeadSources()
-    expect(dead).toEqual([])
+    const stale = await detectDeadSources()
+    expect(stale).toEqual([])
     expect(loggerMock.warn).not.toHaveBeenCalled()
   })
 
-  it('returns dead source ids and logs a warning', async () => {
+  it('returns stale source ids and logs a warning', async () => {
     const oldTime = new Date(Date.now() - 35 * 60 * 1_000).toISOString()
-    redisMock.smembers.mockResolvedValue(['src-dead'])
+    redisMock.smembers.mockResolvedValue(['src-stale'])
     redisMock.hgetall.mockResolvedValue(rawHash({
       last_seen:    oldTime,
       last_attempt: new Date().toISOString(),
     }))
     const { detectDeadSources } = await import('../health.js')
-    const dead = await detectDeadSources()
-    expect(dead).toEqual(['src-dead'])
+    const stale = await detectDeadSources()
+    expect(stale).toEqual(['src-stale'])
     expect(loggerMock.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ deadSources: expect.any(Array) }),
-      expect.stringContaining('Dead source detection'),
+      expect.objectContaining({ staleSources: expect.any(Array) }),
+      expect.stringContaining('Dead-source detection'),
     )
   })
 })
@@ -300,9 +382,9 @@ describe('logHealthSummary', () => {
       expect.objectContaining({
         total:   3,
         healthy: 1,
-        dead:    1,
+        stale:   1,
       }),
-      'Scraper health summary',
+      expect.stringContaining('Scraper health summary'),
     )
   })
 

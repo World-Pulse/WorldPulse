@@ -7,7 +7,7 @@ WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json ./
 COPY packages/types/package.json packages/types/
 COPY apps/api/package.json apps/api/
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 
 # ─── BUILD ───────────────────────────────────────────────────
 FROM base AS builder

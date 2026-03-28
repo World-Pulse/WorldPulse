@@ -25,6 +25,7 @@ import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate } from '../pipeline/insert-signal'
+import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilience'
 
 const log = rootLogger.child({ module: 'tsunami-warning-source' })
 
@@ -177,22 +178,34 @@ export function startTsunamiWarningPoller(
 
       let totalInserted = 0
 
-      for (const feedUrl of TSUNAMI_FEEDS) {
+      const TSUNAMI_SOURCE_IDS = ['tsunami-ptwc', 'tsunami-ntwc']
+
+      for (let feedIdx = 0; feedIdx < TSUNAMI_FEEDS.length; feedIdx++) {
+        const feedUrl = TSUNAMI_FEEDS[feedIdx]
+        const sourceId = TSUNAMI_SOURCE_IDS[feedIdx] ?? `tsunami-feed-${feedIdx}`
         try {
-          const res = await fetch(feedUrl, {
-            headers: {
-              'User-Agent': 'WorldPulse/1.0 (OSINT intelligence network)',
-              'Accept': 'application/atom+xml, application/xml, text/xml',
-            },
-            signal: AbortSignal.timeout(30_000),
-          })
-
-          if (!res.ok) {
-            log.warn({ status: res.status, feed: feedUrl }, 'Tsunami feed returned non-OK status')
-            continue
+          let xml: string
+          try {
+            xml = await fetchWithResilience(
+              sourceId,
+              `Tsunami Warning (${sourceId})`,
+              feedUrl,
+              async () => {
+                const res = await fetch(feedUrl, {
+                  headers: {
+                    'User-Agent': 'WorldPulse/1.0 (OSINT intelligence network)',
+                    'Accept': 'application/atom+xml, application/xml, text/xml',
+                  },
+                  signal: AbortSignal.timeout(30_000),
+                })
+                if (!res.ok) throw Object.assign(new Error(`Tsunami Warning: HTTP ${res.status}`), { statusCode: res.status })
+                return res.text()
+              },
+            )
+          } catch (err) {
+            if (err instanceof CircuitOpenError) continue
+            throw err
           }
-
-          const xml = await res.text()
           const entries = parseAtomEntries(xml)
 
           if (entries.length === 0) {
@@ -229,8 +242,8 @@ export function startTsunamiWarningPoller(
               severity,
               status: 'pending',
               reliability_score: RELIABILITY,
-              location: location ? db.raw('ST_MakePoint(?, ?)', [location.lng, location.lat]) : null,
-              location_name: location?.name || 'Tsunami Region',
+              location: location ? db.raw('ST_MakePoint(?, ?)', [location.lon, location.lat]) : null,
+              location_name: 'Tsunami Region',
               country_code: null,
               region: null,
               tags: ['osint', 'tsunami', 'warning', 'noaa', 'weather'],
@@ -239,14 +252,14 @@ export function startTsunamiWarningPoller(
               source_count: 1,
             }
 
-            await insertAndCorrelate(signalData, { lat: location?.lat ?? null, lng: location?.lng ?? null, sourceId: 'tsunami-warnings' })
+            await insertAndCorrelate(signalData, { lat: location?.lat ?? null, lng: location?.lon ?? null, sourceId: 'tsunami-warnings' })
             await redis.set(dedupKey, '1', 'EX', DEDUP_TTL_S)
 
             if (producer) {
               try {
                 await producer.send({
                   topic: 'worldpulse.signals.new',
-                  messages: [{ value: JSON.stringify(signal) }],
+                  messages: [{ value: JSON.stringify(signalData) }],
                 })
               } catch (kafkaErr) {
                 log.warn({ kafkaErr }, 'Failed to publish tsunami signal to Kafka')

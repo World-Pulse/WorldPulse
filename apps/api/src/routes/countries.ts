@@ -246,7 +246,7 @@ export const registerCountryRoutes: FastifyPluginAsync = async (app) => {
     let rawScore = 0
     for (const r of categoryBreakdown as Record<string, unknown>[]) {
       const maxSev = Number(r.max_sev ?? 0)
-      rawScore += Number(r.count ?? 0) * SEVE_MAP[maxSev]
+      rawScore += Number(r.count ?? 0) * (SEVE_MAP[maxSev] ?? 0)
     }
     const normalizedScore = totalSignals > 0
       ? Math.min(95, Math.round(Math.log(rawScore + 1) / Math.log(5000 + 1) * 85 + 10))

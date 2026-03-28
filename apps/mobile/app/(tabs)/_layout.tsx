@@ -4,6 +4,7 @@ import { Platform, View, Text, StyleSheet } from 'react-native'
 import { useQuery } from '@tanstack/react-query'
 import { notificationsApi } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth'
+import { usePushNotifications } from '@/lib/usePushNotifications'
 
 const COLORS = {
   bg:        '#06070d',
@@ -25,6 +26,7 @@ function TabBarBadge({ count }: { count: number }) {
 
 export default function TabLayout() {
   const { isAuthenticated } = useAuthStore()
+  usePushNotifications()
 
   const { data: unreadData } = useQuery({
     queryKey: ['notifications', 'unread-count'],
@@ -88,6 +90,33 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="posts"
+        options={{
+          title: 'Posts',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="chatbubbles" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="communities"
+        options={{
+          title: 'Communities',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="people" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="briefing"
+        options={{
+          title: 'Briefing',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="document-text" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="alerts"
         options={{
           title: 'Alerts',
@@ -126,9 +155,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   badgeText: {
-    color: '#fff',
     fontSize: 9,
     fontWeight: '700',
-    lineHeight: 14,
+    color: '#fff',
   },
 })

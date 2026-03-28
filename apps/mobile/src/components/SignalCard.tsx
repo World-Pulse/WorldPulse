@@ -86,28 +86,37 @@ export function SignalCard({ signal }: Props) {
           <Text style={styles.stat}>👁 {formatCount(signal.viewCount)}</Text>
         </View>
 
-        {signal.reliabilityScore > 0 && (
-          <View style={styles.reliabilityRow}>
-            <View style={styles.reliabilityBar}>
-              <View
-                style={[
-                  styles.reliabilityFill,
-                  {
-                    width: `${signal.reliabilityScore * 100}%` as `${number}%`,
-                    backgroundColor: signal.reliabilityScore > 0.8
-                      ? COLORS.green
-                      : signal.reliabilityScore > 0.6
-                        ? COLORS.amber
-                        : COLORS.red,
-                  },
-                ]}
-              />
+        <View style={styles.footerRight}>
+          {/* AI consensus verification badge */}
+          {signal.consensusVerified && (
+            <View style={styles.aiBadge}>
+              <Text style={styles.aiBadgeText}>✦ AI</Text>
             </View>
-            <Text style={styles.reliabilityText}>
-              {Math.round(signal.reliabilityScore * 100)}%
-            </Text>
-          </View>
-        )}
+          )}
+
+          {signal.reliabilityScore > 0 && (
+            <View style={styles.reliabilityRow}>
+              <View style={styles.reliabilityBar}>
+                <View
+                  style={[
+                    styles.reliabilityFill,
+                    {
+                      width: `${signal.reliabilityScore * 100}%` as `${number}%`,
+                      backgroundColor: signal.reliabilityScore > 0.8
+                        ? COLORS.green
+                        : signal.reliabilityScore > 0.6
+                          ? COLORS.amber
+                          : COLORS.red,
+                    },
+                  ]}
+                />
+              </View>
+              <Text style={styles.reliabilityText}>
+                {Math.round(signal.reliabilityScore * 100)}%
+              </Text>
+            </View>
+          )}
+        </View>
       </View>
     </TouchableOpacity>
   )
@@ -171,6 +180,26 @@ const styles = StyleSheet.create({
   stat: {
     fontSize: 12,
     color: COLORS.text3,
+  },
+  footerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  aiBadge: {
+    backgroundColor: 'rgba(0, 212, 255, 0.12)',
+    borderWidth: 1,
+    borderColor: COLORS.cyan,
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  aiBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.cyan,
+    fontFamily: 'monospace',
+    letterSpacing: 0.5,
   },
   reliabilityRow: {
     flexDirection: 'row',

@@ -29,6 +29,7 @@ function rowToSignal(row: Record<string, unknown>): Signal {
     severity:         row.severity as Signal['severity'],
     status:           row.status as Signal['status'],
     reliabilityScore: Number(row.reliability_score ?? 0.5),
+    alertTier:        (row.alert_tier as Signal['alertTier']) ?? 'ROUTINE',
     sourceCount:      Number(row.source_count ?? 1),
     location:         row.lat != null && row.lng != null
                         ? { lat: Number(row.lat), lng: Number(row.lng) }

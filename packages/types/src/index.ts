@@ -1,6 +1,7 @@
 // @worldpulse/types — Shared TypeScript type definitions
 
 export type SignalSeverity    = 'critical' | 'high' | 'medium' | 'low' | 'info'
+export type AlertTier        = 'FLASH' | 'PRIORITY' | 'ROUTINE'
 export type SignalStatus      = 'pending' | 'verified' | 'disputed' | 'false' | 'retracted'
 export type CrossCheckStatus  = 'confirmed' | 'unconfirmed' | 'contested'
 export type FlagReason        = 'inaccurate' | 'outdated' | 'duplicate' | 'misinformation'
@@ -34,6 +35,8 @@ export interface Source {
   country:     string | null
   categories:  Category[]
   activeAt:    string
+  // Per-signal article URL from signal_sources junction table (null when no direct link)
+  articleUrl?: string | null
 }
 
 // ─── SIGNAL ──────────────────────────────────────────────────────────────
@@ -46,6 +49,7 @@ export interface Signal {
   severity:         SignalSeverity
   status:           SignalStatus
   reliabilityScore: number    // 0.0 – 1.0
+  alertTier:        AlertTier  // FLASH | PRIORITY | ROUTINE — urgency classification
   sourceCount:      number
   location:         GeoPoint | null
   locationName:     string | null
@@ -65,6 +69,7 @@ export interface Signal {
   createdAt:          string
   isBreaking?:        boolean
   communityFlagCount?: number
+  media_urls?:        string[]
   // AI-generated summary (present on signal detail, absent on list views)
   aiSummary?: {
     text:        string
@@ -185,6 +190,7 @@ export type WSEventType =
   | 'post.new'
   | 'trending.update'
   | 'alert.trigger'
+  | 'alert.breaking'
   | 'ping'
 
 export interface WSMessage<T = unknown> {
@@ -243,4 +249,27 @@ export interface AlertSubscription {
   channels:    { email: boolean; push: boolean; in_app: boolean }
   active:      boolean
   createdAt:   string
+}
+
+// ─── VERIFIED SOURCE PACKS ───────────────────────────────────────────────
+export interface SignedPack {
+  id:            string          // UUID v4
+  version:       '1'
+  category:      string          // 'all' | category slug
+  generated_at:  string          // ISO timestamp
+  signal_count:  number
+  signals: Array<{
+    id:                string
+    title:             string
+    summary:           string | null
+    severity:          string
+    category:          string
+    reliability_score: number
+    location_name:     string | null
+    country_code:      string | null
+    created_at:        string
+    url:               string
+  }>
+  signature:      string         // base64url Ed25519 signature over canonical JSON payload
+  public_key_pem: string         // base64 DER of the public key, for verification
 }

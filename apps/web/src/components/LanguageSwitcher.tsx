@@ -12,6 +12,9 @@ const LANGUAGES = [
   { code: 'pt', label: 'Português',  flag: '🇧🇷', dir: 'ltr' },
   { code: 'de', label: 'Deutsch',    flag: '🇩🇪', dir: 'ltr' },
   { code: 'zh', label: '中文',       flag: '🇨🇳', dir: 'ltr' },
+  { code: 'ja', label: '日本語',     flag: '🇯🇵', dir: 'ltr' },
+  { code: 'hi', label: 'हिन्दी',    flag: '🇮🇳', dir: 'ltr' },
+  { code: 'ru', label: 'Русский',    flag: '🇷🇺', dir: 'ltr' },
 ] as const
 
 type LocaleCode = typeof LANGUAGES[number]['code']

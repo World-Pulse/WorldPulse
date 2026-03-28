@@ -1,3 +1,18 @@
+/**
+ * WorldPulse GraphQL Schema
+ *
+ * Real-time subscriptions via WebSocket:
+ *   Endpoint: ws://api.world-pulse.io/graphql
+ *
+ *   Example subscription:
+ *     subscription {
+ *       signalCreated { id title category severity }
+ *     }
+ *
+ *   Connect with graphql-ws or any GraphQL-over-WS client.
+ *   The server uses mercurius's built-in in-memory pubsub emitter.
+ *   Topics: SIGNAL_CREATED, SIGNAL_UPDATED
+ */
 export const typeDefs = /* GraphQL */ `
   type PageInfo {
     hasNextPage: Boolean!
@@ -98,5 +113,10 @@ export const typeDefs = /* GraphQL */ `
     correlatedSignals(signalId: ID!): EventCluster
     recentClusters(limit: Int): [EventCluster!]!
     dailyBriefing(hours: Int): DailyBriefing!
+  }
+
+  type Subscription {
+    signalCreated: Signal!
+    signalUpdated: Signal!
   }
 `

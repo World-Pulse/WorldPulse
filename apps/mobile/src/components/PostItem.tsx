@@ -32,9 +32,10 @@ type Props = {
   post: Post
   onReply?: (id: string) => void
   onLike?: (id: string) => void
+  onBoost?: (id: string) => void
 }
 
-export function PostItem({ post, onReply, onLike }: Props) {
+export function PostItem({ post, onReply, onLike, onBoost }: Props) {
   return (
     <View style={styles.container}>
       {/* Avatar + author */}
@@ -87,7 +88,11 @@ export function PostItem({ post, onReply, onLike }: Props) {
           <Text style={styles.actionCount}>{formatCount(post.replyCount)}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionButton} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => onBoost?.(post.id)}
+          activeOpacity={0.7}
+        >
           <Text style={styles.actionIcon}>🔁</Text>
           <Text style={styles.actionCount}>{formatCount(post.boostCount)}</Text>
         </TouchableOpacity>

@@ -6,6 +6,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
 import { alertsApi, type AlertSubscription } from '@/lib/api'
+import { CreateAlertModal } from '@/components/CreateAlertModal'
 
 const COLORS = {
   bg:      '#06070d',
@@ -102,6 +103,7 @@ function AlertItem({
 export default function AlertsScreen() {
   const queryClient = useQueryClient()
   const router = useRouter()
+  const [showCreateModal, setShowCreateModal] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['alerts'],
@@ -152,10 +154,7 @@ export default function AlertsScreen() {
         <Text style={styles.headerTitle}>Alert Subscriptions</Text>
         <TouchableOpacity
           style={styles.createButton}
-          onPress={() => {
-            // Navigate to create alert (can be extended)
-            Alert.alert('Create Alert', 'Alert creation UI coming soon.')
-          }}
+          onPress={() => setShowCreateModal(true)}
           activeOpacity={0.8}
         >
           <Text style={styles.createButtonText}>+ New Alert</Text>
@@ -184,13 +183,18 @@ export default function AlertsScreen() {
             </Text>
             <TouchableOpacity
               style={styles.emptyButton}
-              onPress={() => Alert.alert('Create Alert', 'Alert creation UI coming soon.')}
+              onPress={() => setShowCreateModal(true)}
               activeOpacity={0.8}
             >
               <Text style={styles.emptyButtonText}>Create your first alert</Text>
             </TouchableOpacity>
           </View>
         }
+      />
+
+      <CreateAlertModal
+        visible={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
       />
     </View>
   )

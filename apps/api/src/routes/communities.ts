@@ -11,6 +11,10 @@ const CreateCommunitySchema = z.object({
   isPublic:    z.boolean().default(true),
 })
 
+const UpdateMemberRoleSchema = z.object({
+  role: z.enum(['admin', 'moderator', 'member']),
+})
+
 // ─── ROLE HELPERS ────────────────────────────────────────────────────────
 type MemberRole = 'admin' | 'moderator' | 'member'
 
@@ -279,11 +283,11 @@ export const registerCommunityRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(403).send({ success: false, error: 'Only community admins can change roles' })
     }
 
-    const { role } = req.body as { role?: string }
-    const validRoles: MemberRole[] = ['admin', 'moderator', 'member']
-    if (!role || !validRoles.includes(role as MemberRole)) {
+    const roleParsed = UpdateMemberRoleSchema.safeParse(req.body)
+    if (!roleParsed.success) {
       return reply.status(400).send({ success: false, error: 'Invalid role. Must be admin, moderator, or member' })
     }
+    const { role } = roleParsed.data
 
     // Prevent demoting the last admin
     if (role !== 'admin') {

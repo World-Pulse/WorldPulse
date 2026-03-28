@@ -1,35 +1,47 @@
-Task: Build complete search indexing pipeline
-Date: 2026-03-28
-Status: Complete
+CYCLE 77 — 2026-03-28T00:00:00Z
+Task: Scraper health dashboard
+Category: feature | Priority: 10 | Status: VALIDATED — all 4 components confirmed present; tests added
 
-Changes made:
-1. apps/api/src/lib/search.ts
-   - Added `alertTier: string` and `body: string | null` to SignalDoc
-   - Updated setupSearchIndexes(): body in searchableAttributes, alertTier in filterableAttributes + sortableAttributes
-   - Updated toSignalDoc() mapper to include alertTier (from alert_tier col) and body
+## Findings
 
-2. apps/api/src/lib/search-backfill.ts
-   - Added syncRecentSignalsOnStartup(lookbackHours=24): always runs on boot regardless of index state
-   - Catches signals missed while API was down (startup backfill only runs for empty indexes)
+All 4 dashboard components were already fully implemented:
 
-3. apps/api/src/lib/search-consumer.ts
-   - Replaced no-op stub with periodic incremental sync consumer
-   - Runs every 5 min, looks back 7 min per tick
-   - Guards against double-start; stopSearchConsumer() clears timer
+1. Health tracker (apps/scraper/src/health.ts)
+   - Per-source Redis hashes: scraper:health:{sourceId}
+   - Tracks: last_seen, last_attempt, error_count, success_count, latency_ms, articles_scraped
+   - Functions: recordSuccess(), recordFailure(), recordPollHeartbeat(), getSourceHealth()
 
-4. apps/api/src/routes/search.ts
-   - Added `tier` filter param (FLASH/PRIORITY/ROUTINE) to SearchQuerySchema
-   - Added alertTier filter construction for Meilisearch queries
-   - Cache key extended with tier param
+2. API endpoint (apps/api/src/routes/admin.ts)
+   - GET /api/v1/admin/scraper/health — admin-only, reads Redis, returns per-source health + summary
+   - Registered under the /api/v1/admin prefix in apps/api/src/index.ts
 
-5. apps/api/src/index.ts
-   - Startup chain extended: setupSearchIndexes → runStartupBackfill → syncRecentSignalsOnStartup
+3. Dead-source detection (apps/scraper/src/health.ts:detectDeadSources())
+   - Marks sources with last_seen > 30 min as 'stale'
+   - Logs a structured warning with stale source list
+   - Called every 5 minutes via setInterval in apps/scraper/src/index.ts:143
 
-6. apps/api/src/__tests__/search-consumer.test.ts (new)
-   - 9 tests for consumer start/stop/tick/error behavior
+4. 5-minute health summary log (apps/scraper/src/health.ts:logHealthSummary())
+   - Logs total/healthy/stale/failed/unknown counts + success rates + throughput
+   - Called every 5 minutes via setInterval in apps/scraper/src/index.ts:142
 
-7. apps/api/src/__tests__/search-indexing.test.ts
-   - Added syncRecentSignalsOnStartup test suite (4 tests)
+## What was added
 
-Test results: 104 tests passing (search.test.ts + search-indexing.test.ts + search-consumer.test.ts)
-Pre-existing failures: search-gate3.test.ts has 15 pre-existing failures unrelated to this task
+Tests were missing for two functions and the API endpoint:
+
+apps/scraper/src/__tests__/health.test.ts — added 9 new test cases:
+- recordPollHeartbeat (4 tests): verifies last_seen updated, success_count NOT incremented
+- getScraperThroughput (2 tests): zero-value defaults, numeric parsing
+
+apps/api/src/__tests__/admin-scraper-health.test.ts — new file (8 tests):
+- Auth enforcement: 403 for non-admin and unauthenticated users
+- Empty sources response
+- Mixed-status summary counts (healthy/stale/failed/unknown)
+- Sort order: stale -> failed -> unknown -> healthy
+- overallSuccessRate computation
+- generatedAt timestamp
+- Per-source field completeness
+
+## Test results
+- Scraper health: 28/28 passed
+- API admin scraper health: 8/8 passed
+- TypeScript: scraper clean; API only has pre-existing stripe module errors (unrelated)
