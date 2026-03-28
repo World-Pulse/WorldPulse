@@ -16,7 +16,8 @@
     "forceConsistentCasingInFileNames": true,
     "noUncheckedIndexedAccess": false,
     "noImplicitAny": false,
-    "noImplicitOverride": true
+    "noImplicitOverride": true,
+    "noEmitOnError": false
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "src/**/__tests__/**", "src/**/*.test.ts"]
