@@ -1,7 +1,7 @@
 {
   "metrics": {
-    "total_tasks_executed": 72,
-    "successful": 69,
+    "total_tasks_executed": 73,
+    "successful": 70,
     "failed": 3
   },
   "history": [
@@ -52,6 +52,18 @@
       "success": true,
       "duration_s": 300,
       "reason": "vercel.json (root): nextjs framework, pnpm turbo filter build, 3-region deploy (iad1/lhr1/sin1), security headers (HSTS/XFO/XCTO/Permissions-Policy), /api/v1/* + /ws/* rewrites to api.world-pulse.io, smart ignore command. apps/web/.env.example: all 8 NEXT_PUBLIC_ vars documented with dev defaults and Sentry optional setup. Fixed stale localhost:4000 in clusters/page.tsx → localhost:3001 (port consistency). vercel-config.test.ts: 18 assertions covering JSON validity, schema, secrets safety, header presence, rewrite targets. git commit blocked by NTFS index.lock — files on disk, commit from Windows PS."
+    },
+    {
+      "timestamp": "2026-03-28T14:00:00.000000+00:00",
+      "task_id": "integration_cloudflare_headers",
+      "phase": "Integration Phase 1 — Cloudflare real-IP trust middleware",
+      "category": "infrastructure",
+      "source": "pending_tasks",
+      "priority": 11,
+      "budget": 5,
+      "success": true,
+      "duration_s": 360,
+      "reason": "nginx/conf.d/cloudflare.conf: real_ip_header CF-Connecting-IP, real_ip_recursive on, all 15 CF IPv4 + 7 CF IPv6 CIDR blocks — fixes $remote_addr for rate limiting when behind CF. apps/api/src/middleware/cloudflare.ts (175L): isCloudflareIp() CIDR range check, isValidCfRay() regex guard, isValidCfIp() injection guard, Fastify plugin decorates req.cfClientIp/cfRay/isBehindCloudflare on every request, echoes X-CF-Ray + X-Real-Client-IP in responses, buildCfAwareKeyGenerator() (user-id > CF-IP > req.ip). index.ts updated: cloudflareMiddlewarePlugin registered before rateLimit, keyGenerator swapped to buildCfAwareKeyGenerator. 20-test suite (cloudflare-middleware.test.ts). git commit blocked by NTFS index.lock — run from Windows PS."
     }
   ]
 }

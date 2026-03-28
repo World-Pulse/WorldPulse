@@ -27,6 +27,7 @@ import { registerPublicRoutes } from './routes/public'
 import { registerNotificationRoutes } from './routes/notifications'
 import { registerUploadRoutes } from './routes/uploads'
 import { registerBriefingRoutes } from './routes/briefings'
+import { registerBriefingDailyRoutes } from './routes/briefing'
 import { registerCountryRoutes } from './routes/countries'
 import { registerBreakingRoutes } from './routes/breaking'
 import { registerTradeRoutes } from './routes/trade'
@@ -34,14 +35,25 @@ import { registerCameraRoutes } from './routes/cameras'
 import { registerPatentRoutes } from './routes/patents'
 import { registerMaritimeRoutes } from './routes/maritime'
 import { registerThreatsRoutes }  from './routes/threats'
-import { registerWSHandler } from './ws/handler'
+import { registerJammingRoutes }  from './routes/jamming'
+import { registerAdminKafkaRoutes } from './routes/admin-kafka'
+import { registerSlopRoutes } from './routes/slop'
+import { registerRssRoutes } from './routes/rss'
+import { registerBundleRoutes } from './routes/bundles'
+import { registerSourcePacksRoutes } from './routes/source-packs'
+import { registerBiasCorrectionsRoutes } from './routes/bias-corrections'
+import { registerWSHandler, startRedisSubscriber } from './ws/handler'
 import { registerGraphQL } from './graphql'
 import { metricsPlugin } from './middleware/metrics'
 import { requestLoggerPlugin } from './middleware/request-logger'
+import { securityPlugin } from './middleware/security'
+import { cloudflareMiddlewarePlugin, buildCfAwareKeyGenerator } from './middleware/cloudflare'
 import { registerHealthRoutes } from './routes/health'
+import { registerStatusRoutes } from './routes/status'
 import { logger } from './lib/logger'
 import { initSentry, flushSentry } from './lib/sentry'
-import { meili, setupSearchIndexes, indexSignals } from './lib/search'
+import { setupSearchIndexes } from './lib/search'
+import { runStartupBackfill } from './lib/search-backfill'
 import { connectSearchProducer, disconnectSearchProducer } from './lib/search-events'
 import { startSearchConsumer, stopSearchConsumer } from './lib/search-consumer'
 import { initClickHouse } from './lib/search-analytics'
@@ -132,16 +144,25 @@ async function bootstrap() {
     crossOriginResourcePolicy: { policy: 'cross-origin' },
   })
 
+  const jwtSecret = process.env.JWT_SECRET
+  if (!jwtSecret && process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET environment variable is required in production')
+  }
   await app.register(jwt, {
-    secret: process.env.JWT_SECRET ?? 'dev_secret_change_in_prod',
+    secret: jwtSecret ?? 'dev_secret_change_in_prod',
     sign:   { expiresIn: '15m' },
   })
+
+  // ─── CLOUDFLARE MIDDLEWARE ────────────────────────────────
+  // Must be registered BEFORE rate-limit so the CF-aware key generator
+  // can read req.cfClientIp and req.isBehindCloudflare reliably.
+  await app.register(cloudflareMiddlewarePlugin)
 
   await app.register(rateLimit, {
     max: 200,
     timeWindow: '1 minute',
     redis,
-    keyGenerator: (req) => req.headers['x-user-id'] as string ?? req.ip,
+    keyGenerator: buildCfAwareKeyGenerator,
     errorResponseBuilder: () => ({
       success: false,
       error: 'Too many requests. Slow down.',
@@ -152,6 +173,12 @@ async function bootstrap() {
   await app.register(websocket)
   await app.register(metricsPlugin)
   await app.register(requestLoggerPlugin)
+
+  // ─── SECURITY MIDDLEWARE (Gate 6) ──────────────────────
+  // Payload scanning (SQLi/XSS/path traversal), request fingerprinting,
+  // and security event logging. Registered after rate-limit so rate-limited
+  // requests are rejected before security scanning overhead.
+  await app.register(securityPlugin)
 
   // ─── SWAGGER / OPENAPI ───────────────────────────────────
   await app.register(swagger, {
@@ -207,6 +234,9 @@ async function bootstrap() {
         { name: 'cameras',         description: 'Live public CCTV/webcam feeds by region' },
         { name: 'maritime',        description: 'Naval intelligence — carrier strike groups and AIS vessel tracking' },
         { name: 'threats',         description: 'Missile and drone threat intelligence — ballistic, cruise, hypersonic, rocket, UAV' },
+        { name: 'jamming',         description: 'GPS/GNSS jamming intelligence — military EW, spoofing, civilian interference zones' },
+        { name: 'rss',             description: 'RSS/Atom, JSON Feed, and OPML syndication feeds for signal distribution' },
+        { name: 'bundles',         description: 'Ed25519-signed verified source packs for AI agent pipelines' },
       ],
       components: {
         securitySchemes: {
@@ -243,6 +273,8 @@ async function bootstrap() {
   app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }))
   // Enhanced per-service health check
   await app.register(registerHealthRoutes, { prefix: '/api/v1/health' })
+  // Public status page endpoint
+  await app.register(registerStatusRoutes, { prefix: '/api/v1/status' })
 
   // ─── ROUTES ──────────────────────────────────────────────
   await app.register(registerAuthRoutes,   { prefix: '/api/v1/auth' })
@@ -263,7 +295,8 @@ async function bootstrap() {
   await app.register(registerEmbedRoutes,        { prefix: '/api/v1/embed' })
   await app.register(registerStixRoutes,         { prefix: '/api/v1/stix' })
   await app.register(registerPublicRoutes,       { prefix: '/api/v1/public' })
-  await app.register(registerBriefingRoutes,    { prefix: '/api/v1/briefings' })
+  await app.register(registerBriefingRoutes,        { prefix: '/api/v1/briefings' })
+  await app.register(registerBriefingDailyRoutes,   { prefix: '/api/v1/briefing' })
   await app.register(registerCountryRoutes,     { prefix: '/api/v1/countries' })
   await app.register(registerBreakingRoutes,    { prefix: '/api/v1/breaking' })
   await app.register(registerTradeRoutes,       { prefix: '/api/v1/trade' })
@@ -271,35 +304,33 @@ async function bootstrap() {
   await app.register(registerPatentRoutes,      { prefix: '/api/v1/patents' })
   await app.register(registerMaritimeRoutes,    { prefix: '/api/v1/maritime' })
   await app.register(registerThreatsRoutes,     { prefix: '/api/v1/threats' })
+  await app.register(registerJammingRoutes,       { prefix: '/api/v1/jamming' })
+  await app.register(registerAdminKafkaRoutes,   { prefix: '/api/v1/admin' })
+  await app.register(registerSlopRoutes,         { prefix: '/api/v1/slop' })
+  await app.register(registerRssRoutes,          { prefix: '/api/v1/rss' })
+  await app.register(registerBundleRoutes,       { prefix: '/api/v1/bundles' })
+  await app.register(registerSourcePacksRoutes,     { prefix: '/api/v1/source-packs' })
+  await app.register(registerBiasCorrectionsRoutes, { prefix: '/api/v1' })
 
   // ─── GRAPHQL ─────────────────────────────────────────────
   await registerGraphQL(app)
 
   // ─── WEBSOCKET ───────────────────────────────────────────
   await app.register(registerWSHandler)
+  // Start Redis pub/sub subscriber so scraper-published signals are broadcast
+  // to WebSocket clients and indexed in Meilisearch in real time.
+  startRedisSubscriber().catch(err => {
+    logger.warn({ err }, 'Redis pub/sub subscriber failed to start (non-fatal)')
+  })
 
-  // ─── SEARCH INDEX SETUP ──────────────────────────────────
+  // ─── SEARCH INDEX SETUP + BACKFILL ───────────────────────
+  // 1. Ensure index settings are configured.
+  // 2. Backfill signals, posts, and users if any index is empty
+  //    (covers cold-start and first-deploy scenarios).
   setupSearchIndexes()
-    .then(async () => {
-      // Backfill any signals not yet in MeiliSearch (e.g. from OSINT pollers
-      // that insert directly to the DB, bypassing the API signals route).
-      try {
-        const stats = await meili.index('signals').getStats()
-        if (stats.numberOfDocuments === 0) {
-          logger.info('MeiliSearch signals index empty — backfilling from DB...')
-          const rows = await db('signals')
-            .select('*')
-            .orderBy('created_at', 'desc')
-            .limit(5000)
-          await indexSignals(rows as Record<string, unknown>[])
-          logger.info({ count: rows.length }, 'MeiliSearch backfill complete')
-        }
-      } catch (err) {
-        logger.warn({ err }, 'MeiliSearch backfill failed — search may return empty results')
-      }
-    })
+    .then(() => runStartupBackfill())
     .catch(err => {
-      logger.warn({ err }, 'Meilisearch index setup failed — search may degrade gracefully')
+      logger.warn({ err }, 'Meilisearch index setup/backfill failed — search may degrade gracefully')
     })
 
   // ─── CLICKHOUSE INIT ─────────────────────────────────────
@@ -344,3 +375,4 @@ bootstrap().catch((err) => {
   logger.error(err, 'Fatal startup error')
   process.exit(1)
 })
+                                                                                                                                                                                                                                                                                              

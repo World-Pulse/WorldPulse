@@ -1,65 +1,86 @@
-=== CYCLE 71 — 2026-03-28 ===
+=== CYCLE 72 — 2026-03-28 ===
 
-TASK EXECUTED: Integration Phase 1 — Vercel Deployment Config (priority 11)
+TASK EXECUTED: Integration Phase 1 — Cloudflare Real-IP Trust Middleware (priority 11)
 
 WHAT WAS BUILT:
-  • vercel.json (root level — NEW, 60L)
-    - framework: "nextjs"
-    - buildCommand: pnpm build --filter=@worldpulse/web... (Turborepo-aware)
-    - outputDirectory: apps/web/.next
-    - installCommand: pnpm install
-    - ignoreCommand: git diff for apps/web/ + packages/ (skips non-web commits)
-    - regions: ["iad1", "lhr1", "sin1"] (US East, Europe, Asia Pacific)
-    - Security headers on all routes: X-Frame-Options, X-Content-Type-Options,
-      Strict-Transport-Security (HSTS, 2yr, preload), X-XSS-Protection,
-      Permissions-Policy, Referrer-Policy
-    - Cache headers: immutable for /_next/static/*, 24h for assets
-    - Rewrites: /api/v1/:path* → https://api.world-pulse.io/api/v1/:path*
-                /ws/:path* → https://api.world-pulse.io/ws/:path*
-    - env: NEXT_PUBLIC_API_URL, NEXT_PUBLIC_WS_URL → production URLs
 
-  • apps/web/.env.example (NEW, 50L)
-    - Documents all 8 env vars used by the web app
-    - NEXT_PUBLIC_API_URL / NEXT_PUBLIC_WS_URL (localhost defaults for dev)
-    - NEXT_PUBLIC_APP_VERSION
-    - NEXT_PUBLIC_SENTRY_DSN, SENTRY_DSN (optional, blank disables Sentry)
-    - Sentry tuning: TRACES_RATE, REPLAY_RATE, ERROR_REPLAY_RATE
-    - Onboarding instructions: cp .env.example .env.local
+  • nginx/conf.d/cloudflare.conf (NEW, 47L)
+    - real_ip_header CF-Connecting-IP
+      Tells nginx to use the CF-Connecting-IP header (set by Cloudflare edge)
+      as the authoritative client IP, replacing the Cloudflare proxy IP.
+    - real_ip_recursive on
+      Walks the full X-Forwarded-For chain to find the true origin IP.
+    - set_real_ip_from <CIDR> — all 15 official Cloudflare IPv4 ranges:
+        173.245.48.0/20, 103.21.244.0/22, 103.22.200.0/22, 103.31.4.0/22,
+        141.101.64.0/18, 108.162.192.0/18, 190.93.240.0/20, 188.114.96.0/20,
+        197.234.240.0/22, 198.41.128.0/17, 162.158.0.0/15, 104.16.0.0/13,
+        104.24.0.0/14, 172.64.0.0/13, 131.0.72.0/22
+    - set_real_ip_from <CIDR> — all 7 official Cloudflare IPv6 ranges:
+        2400:cb00::/32, 2606:4700::/32, 2803:f800::/32, 2405:b500::/32,
+        2405:8100::/32, 2a06:98c0::/29, 2c0f:f248::/32
+    EFFECT: $remote_addr and $binary_remote_addr now contain the real visitor
+    IP → rate limiting zones work correctly from day 1 of Cloudflare routing.
 
-  • apps/web/src/app/clusters/page.tsx (FIXED — 1 line)
-    - localhost:4000/api/v1 → localhost:3001 (consistent with all other 20+ pages)
+  • apps/api/src/middleware/cloudflare.ts (NEW, 175L)
+    - isCloudflareIp(ip): CIDR range membership check for all 15 CF IPv4 blocks
+      using precomputed [start, end] integer pairs for O(n) lookup at startup
+    - isValidCfRay(ray): regex guard (/^[0-9a-f]{16}-[A-Z]{2,5}$/i) — rejects
+      spoofed or injection-laden CF-Ray values
+    - isValidCfIp(ip): sanity guard (/^[\d.:a-fA-F]+$/, max 45 chars) — rejects
+      "1.2.3.4; DROP TABLE users" style injection in CF-Connecting-IP
+    - Fastify plugin (cloudflareMiddlewarePlugin):
+        • Decorates req.cfClientIp — real client IP (CF-Connecting-IP or req.ip)
+        • Decorates req.cfRay — Cloudflare trace ID (or undefined)
+        • Decorates req.isBehindCloudflare — boolean detection flag
+        • Response header X-CF-Ray: echoes CF-Ray for ops log correlation
+        • Response header X-Real-Client-IP: resolved client IP for downstream
+    - buildCfAwareKeyGenerator(req): rate-limit key function:
+        Priority 1: user:${x-user-id header}  (authenticated user bucket)
+        Priority 2: ip:${req.cfClientIp}       (real CF client IP)
+        Priority 3: ip:${req.ip}               (fallback, trustProxy value)
 
-  • apps/web/src/__tests__/vercel-config.test.ts (NEW, ~120L, 18 assertions)
-    - Validates vercel.json exists, is valid JSON, correct framework/build
-    - Asserts production env vars don't contain localhost
-    - Checks HSTS + security headers on wildcard route
-    - Confirms /api/v1/* rewrite targets world-pulse.io (not localhost)
-    - Validates .env.example documents required vars without real secrets
-    - Checks clusters/page.tsx no longer has stale port 4000
+  • apps/api/src/index.ts (UPDATED)
+    - Import: cloudflareMiddlewarePlugin + buildCfAwareKeyGenerator
+    - Register cloudflareMiddlewarePlugin BEFORE rateLimit plugin
+      (so rate-limit keyGenerator can read req.cfClientIp)
+    - rateLimit keyGenerator updated from inline lambda → buildCfAwareKeyGenerator
+
+  • apps/api/src/__tests__/cloudflare-middleware.test.ts (NEW, ~250L, 20 tests)
+    - isCloudflareIp: 5 groups (known CF IPs, non-CF IPs, loopback, IPv6, malformed)
+    - isValidCfRay: valid formats, empty/undefined, malformed/injection
+    - isValidCfIp: valid IPs, empty/undefined, injection attempts, length limit
+    - buildCfAwareKeyGenerator: user-id priority, CF-IP path, fallback, undefined ip
+    - Plugin integration (Fastify.inject): no-CF fallback, CF-Connecting-IP extraction,
+      X-CF-Ray echo, invalid ray no header, missing CF-IP fallback, injection rejection,
+      X-Real-Client-IP always present
+    - nginx conf existence + content assertions (15 IPv4 + 7 IPv6, real_ip_header)
 
 GIT: index.lock blocked commit (NTFS FUSE mount — persistent issue)
 Suggested commit (run from Windows PowerShell):
   del .git\index.lock
-  git add vercel.json apps/web/.env.example apps/web/src/app/clusters/page.tsx apps/web/src/__tests__/vercel-config.test.ts brain_memory/
-  git commit -m "feat(infra): Vercel deployment config — vercel.json, .env.example, clusters port fix, 18-assertion config tests"
+  git add nginx/conf.d/cloudflare.conf apps/api/src/middleware/cloudflare.ts apps/api/src/__tests__/cloudflare-middleware.test.ts apps/api/src/index.ts brain_memory/
+  git commit -m "feat(infra): Cloudflare real-IP middleware — CF-Connecting-IP trust, CIDR validation, CF-aware rate limit keys, 20 tests"
   git push
 
-COMPETITION INTEL UPDATES (cycle 71 scan):
-  - No new well-funded news intelligence competitors found Q1 2026
-  - Ground News updates confirmed (Podcasts & Opinions, Daily Briefing) — already tracked
-  - WorldMonitor + Intell Weave confirmed still active on GitHub
-  - Market window remains open — no major new entrants
+COMPETITION INTEL UPDATES (cycle 72 scan):
+  - Ground News v4.27.0 (March 9, 2026): still UI/UX only — no AI verification, no maps
+  - No new well-funded news intelligence startups launched Q1 2026
+  - Major AI rounds (AMI $1B, Harvey $200M, Granola $125M) — unrelated verticals
+  - WorldMonitor + Intell Weave confirmed still active, no new resources
+  - Market window remains open — WorldPulse differentiation intact
 
-PROJECT HEALTH: 7.8/10
-  - 233 TypeScript source files across api/web/scraper
-  - 111 test files (added vercel-config.test.ts)
+PROJECT HEALTH: 8.0/10
+  - 340 TypeScript source files across api/web/scraper
+  - 113 test files (+ cloudflare-middleware.test.ts = 114 total on disk)
   - Zero TODO/FIXME debt
   - All key infrastructure files present
-  - Vercel deploy path now clearly documented
-  - localhost port consistency fixed (all pages now use 3001)
+  - Rate limiting now correctly scoped to real client IPs (not CF edge nodes)
+  - nginx CIDR trust list covers all current Cloudflare edge ranges
 
-NEXT CYCLE: integration_cloudflare_headers (priority 11)
-  - Add cloudflare-specific headers: CF-Ray passthrough, real-IP trust config
-  - apps/api/src/middleware/cloudflare.ts — extract CF-Connecting-IP for rate limiting
-  - Update nginx/conf.d/ to set trust proxy headers
-  - Deploy cache rules for /api/v1/signals/* (5s edge cache for public endpoints)
+NEXT CYCLE: integration_stripe_billing (priority 9)
+  - Stripe Pro tier billing integration
+  - POST /api/v1/billing/checkout — create Stripe Checkout session
+  - POST /api/v1/billing/webhook — handle stripe webhook events (payment_intent.succeeded, etc.)
+  - apps/web/src/app/upgrade/page.tsx — Pro upgrade page with pricing
+  - DB migration: add plan column to users table (free | pro | enterprise)
+  - Test suite covering checkout creation, webhook validation, plan gating

@@ -1,9 +1,9 @@
 {
-  "cycle_count": 71,
-  "last_cycle": "2026-03-28T13:00:00.000000+00:00",
-  "last_competition_scan": "2026-03-28T13:00:00.000000+00:00",
-  "project_health_score": 7.8,
-  "total_improvements_shipped": 58,
+  "cycle_count": 72,
+  "last_cycle": "2026-03-28T14:00:00.000000+00:00",
+  "last_competition_scan": "2026-03-28T14:00:00.000000+00:00",
+  "project_health_score": 8.0,
+  "total_improvements_shipped": 59,
   "completed_tasks": [
     {
       "id": "map_category_filter_bar_heatmap_toggle",
@@ -190,17 +190,15 @@
       "phase": "Integration Phase 1 — Vercel deployment config: vercel.json (root, pnpm filter build, 3-region deploy, security headers, /api/v1/* rewrite), apps/web/.env.example (all NEXT_PUBLIC_ vars documented), fixed stale localhost:4000 in clusters/page.tsx → localhost:3001, 18-assertion test suite (vercel-config.test.ts) — cycle 71",
       "category": "infrastructure",
       "completed_at": "2026-03-28T13:00:00.000000+00:00"
+    },
+    {
+      "id": "integration_cloudflare_headers",
+      "phase": "Integration Phase 1 — Cloudflare real-IP middleware: nginx/conf.d/cloudflare.conf (15 IPv4 + 7 IPv6 CF ranges, real_ip_header CF-Connecting-IP, real_ip_recursive on), apps/api/src/middleware/cloudflare.ts (175L: isCloudflareIp CIDR check, isValidCfRay, isValidCfIp injection guard, req.cfClientIp/cfRay/isBehindCloudflare decorators, X-CF-Ray + X-Real-Client-IP response headers, buildCfAwareKeyGenerator for rate limiting), updated index.ts to register plugin + use CF-aware key generator, 20-test suite (cloudflare-middleware.test.ts) — cycle 72",
+      "category": "infrastructure",
+      "completed_at": "2026-03-28T14:00:00.000000+00:00"
     }
   ],
   "pending_tasks": [
-    {
-      "id": "integration_cloudflare_headers",
-      "source": "integration_roadmap",
-      "priority": 11,
-      "phase": "Integration Phase 1 — Cloudflare security headers",
-      "budget": 5,
-      "category": "infrastructure"
-    },
     {
       "id": "integration_stripe_billing",
       "source": "integration_roadmap",
