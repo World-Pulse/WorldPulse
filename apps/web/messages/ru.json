@@ -7,6 +7,7 @@
     "explore": "Обзор",
     "clusters": "Кластеры событий",
     "briefing": "Ежедневный брифинг",
+    "finance": "Финансы",
     "countries": "Разведка по странам",
     "cameras": "Прямые камеры",
     "patents": "Патентная разведка",
@@ -22,7 +23,8 @@
     "searchSignals": "Поиск сигналов…",
     "tracking": "Отслеживание",
     "signals": "сигналы",
-    "live": "ЭФИР"
+    "live": "ЭФИР",
+    "sanctions": "Sanctions"
   },
   "channels": {
     "breakingNews": "Срочные новости",

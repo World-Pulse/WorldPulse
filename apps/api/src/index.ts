@@ -6,6 +6,7 @@ import rateLimit from '@fastify/rate-limit'
 import websocket from '@fastify/websocket'
 import swagger from '@fastify/swagger'
 import swaggerUI from '@fastify/swagger-ui'
+import rawBody from '@fastify/raw-body'
 import { redis } from './db/redis'
 import { db } from './db/postgres'
 import { registerFeedRoutes } from './routes/feed'
@@ -43,6 +44,9 @@ import { registerBundleRoutes } from './routes/bundles'
 import { registerSourcePacksRoutes } from './routes/source-packs'
 import { registerBiasCorrectionsRoutes } from './routes/bias-corrections'
 import { registerBillingRoutes } from './routes/billing'
+import { registerDigestRoutes, registerAdminDigestRoutes } from './routes/digest'
+import { registerFinanceRoutes } from './routes/finance'
+import { registerSanctionsRoutes } from './routes/sanctions'
 import { registerWSHandler, startRedisSubscriber } from './ws/handler'
 import { registerGraphQL } from './graphql'
 import { metricsPlugin } from './middleware/metrics'
@@ -181,6 +185,17 @@ async function bootstrap() {
   // requests are rejected before security scanning overhead.
   await app.register(securityPlugin)
 
+  // ─── RAW BODY (Stripe webhook signature verification) ────
+  // Must be registered before route handlers. Routes opt-in via
+  // config: { rawBody: true } — only the Stripe webhook endpoint
+  // needs it to call stripe.webhooks.constructEvent().
+  await app.register(rawBody, {
+    field:    'rawBody',   // req.rawBody
+    global:   false,       // opt-in per route — avoids buffering all bodies
+    encoding: 'utf8',
+    runFirst: true,        // run before body parser plugins
+  })
+
   // ─── SWAGGER / OPENAPI ───────────────────────────────────
   await app.register(swagger, {
     openapi: {
@@ -238,6 +253,8 @@ async function bootstrap() {
         { name: 'jamming',         description: 'GPS/GNSS jamming intelligence — military EW, spoofing, civilian interference zones' },
         { name: 'rss',             description: 'RSS/Atom, JSON Feed, and OPML syndication feeds for signal distribution' },
         { name: 'bundles',         description: 'Ed25519-signed verified source packs for AI agent pipelines' },
+        { name: 'digest',          description: 'Weekly/daily email digest subscriptions' },
+        { name: 'finance',         description: 'Financial intelligence — market signals, central bank alerts, crypto, sanctions' },
       ],
       components: {
         securitySchemes: {
@@ -314,13 +331,20 @@ async function bootstrap() {
   await app.register(registerBiasCorrectionsRoutes, { prefix: '/api/v1' })
 
   // ─── BILLING (Stripe Pro tier) ────────────────────────────
-  // TODO: install @fastify/raw-body and register it here for Stripe webhook
-  //   signature verification:
-  //     await app.register(import('@fastify/raw-body'), {
-  //       field: 'rawBody', global: false, encoding: 'utf8',
-  //       runFirst: true, routes: ['/api/v1/billing/webhook'],
-  //     })
+  // @fastify/raw-body is registered globally (global: false, per-route opt-in)
+  // near the top of bootstrap(). The webhook route uses config: { rawBody: true }
+  // to capture rawBody for stripe.webhooks.constructEvent() signature verification.
   await app.register(registerBillingRoutes, { prefix: '/api/v1/billing' })
+
+  // ─── DIGEST (weekly/daily email newsletter) ───────────────
+  await app.register(registerDigestRoutes,      { prefix: '/api/v1/digest' })
+  await app.register(registerAdminDigestRoutes, { prefix: '/api/v1/admin' })
+
+  // ─── FINANCE INTELLIGENCE ─────────────────────────────────
+  await app.register(registerFinanceRoutes, { prefix: '/api/v1/finance' })
+
+  // ─── SANCTIONS & WATCHLIST INTELLIGENCE ──────────────────
+  await app.register(registerSanctionsRoutes, { prefix: '/api/v1/sanctions' })
 
   // ─── GRAPHQL ─────────────────────────────────────────────
   await registerGraphQL(app)

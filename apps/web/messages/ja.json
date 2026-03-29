@@ -7,6 +7,7 @@
     "explore": "探索",
     "clusters": "イベントクラスター",
     "briefing": "デイリーブリーフィング",
+    "finance": "ファイナンス",
     "countries": "国別インテル",
     "cameras": "ライブカメラ",
     "patents": "特許インテル",
@@ -22,7 +23,8 @@
     "searchSignals": "シグナルを検索…",
     "tracking": "トラッキング",
     "signals": "シグナル",
-    "live": "ライブ"
+    "live": "ライブ",
+    "sanctions": "Sanctions"
   },
   "channels": {
     "breakingNews": "速報",

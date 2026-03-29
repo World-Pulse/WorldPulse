@@ -7,6 +7,7 @@
     "explore": "एक्सप्लोर करें",
     "clusters": "इवेंट क्लस्टर",
     "briefing": "दैनिक ब्रीफिंग",
+    "finance": "वित्त",
     "countries": "देश इंटेल",
     "cameras": "लाइव कैमरा",
     "patents": "पेटेंट इंटेल",
@@ -21,7 +22,8 @@
     "searchSignals": "सिग्नल खोजें…",
     "tracking": "ट्रैकिंग",
     "signals": "सिग्नल",
-    "live": "लाइव"
+    "live": "लाइव",
+    "sanctions": "Sanctions"
   },
   "channels": {
     "breakingNews": "ब्रेकिंग न्यूज़",

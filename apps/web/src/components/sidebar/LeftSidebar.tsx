@@ -15,6 +15,8 @@ const NAV_ITEMS = [
   { href: '/explore',    icon: '🔭', labelKey: 'explore'    },
   { href: '/clusters',   icon: '🧩', labelKey: 'clusters',   badge: 'NEW', badgeColor: 'blue'   },
   { href: '/briefing',   icon: '📋', labelKey: 'briefing',   badge: 'NEW', badgeColor: 'indigo' },
+  { href: '/finance',    icon: '💹', labelKey: 'finance',    badge: 'NEW', badgeColor: 'green'  },
+  { href: '/sanctions',  icon: '🛡️', labelKey: 'sanctions',  badge: 'NEW', badgeColor: 'amber'  },
   { href: '/countries',  icon: '🗺️', labelKey: 'countries',  badge: 'NEW',  badgeColor: 'blue'  },
   { href: '/cameras',    icon: '📹', labelKey: 'cameras',    badge: 'LIVE', badgeColor: 'red'   },
   { href: '/patents',    icon: '📜', labelKey: 'patents',    badge: 'NEW',  badgeColor: 'cyan'  },
