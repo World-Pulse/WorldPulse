@@ -37,6 +37,7 @@ import { registerPatentRoutes } from './routes/patents'
 import { registerMaritimeRoutes } from './routes/maritime'
 import { registerThreatsRoutes }  from './routes/threats'
 import { registerJammingRoutes }  from './routes/jamming'
+import { registerHazardsRoutes }  from './routes/hazards'
 import { registerAdminKafkaRoutes } from './routes/admin-kafka'
 import { registerSlopRoutes } from './routes/slop'
 import { registerRssRoutes } from './routes/rss'
@@ -323,6 +324,7 @@ async function bootstrap() {
   await app.register(registerMaritimeRoutes,    { prefix: '/api/v1/maritime' })
   await app.register(registerThreatsRoutes,     { prefix: '/api/v1/threats' })
   await app.register(registerJammingRoutes,       { prefix: '/api/v1/jamming' })
+  await app.register(registerHazardsRoutes,       { prefix: '/api/v1/hazards' })
   await app.register(registerAdminKafkaRoutes,   { prefix: '/api/v1/admin' })
   await app.register(registerSlopRoutes,         { prefix: '/api/v1/slop' })
   await app.register(registerRssRoutes,          { prefix: '/api/v1/rss' })

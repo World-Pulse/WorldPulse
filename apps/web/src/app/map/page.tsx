@@ -14,8 +14,9 @@ import {
   parseWKBPoint, extractLatLng, prependSignal, MAX_SIGNALS,
 } from '@/lib/map-utils'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
-const WS_URL  = process.env.NEXT_PUBLIC_WS_URL  ?? API_URL.replace(/^http/, 'ws')
+const API_URL      = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
+const WS_URL       = process.env.NEXT_PUBLIC_WS_URL  ?? API_URL.replace(/^http/, 'ws')
+const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY ?? ''
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -52,6 +53,35 @@ interface SignalProps {
 }
 
 type SCIndex = Supercluster<SignalProps>
+
+type BasemapMode = 'satellite' | 'dark' | 'terrain'
+
+interface AdsbSignal {
+  id: string
+  title: string
+  lat: number
+  lng: number
+  reliability_score: number
+  published_at: string | null
+}
+
+interface HazardPoint {
+  id: string
+  title: string
+  lat: number
+  lng: number
+  severity: string
+  category: string
+  source_slug: string
+  published_at: string
+  reliability_score: number
+}
+
+interface AnnotationCard {
+  signal: MapSignal
+  lat: number
+  lng: number
+}
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -190,10 +220,31 @@ function MapView() {
   const [jammingLoading, setJammingLoading] = useState(false)
   const [jammingCount,   setJammingCount]   = useState(0)
 
+  // ── Natural Hazards layer state ───────────────────────────────────────────────
+  const [hazardsMode,    setHazardsMode]    = useState(false)
+  const [hazardsLoading, setHazardsLoading] = useState(false)
+  const [hazardsCount,   setHazardsCount]   = useState(0)
+
   // ── Country Risk Choropleth layer state ───────────────────────────────────────
   const [countryRiskMode,    setCountryRiskMode]    = useState(false)
   const [countryRiskLoading, setCountryRiskLoading] = useState(false)
   const [countryRiskCount,   setCountryRiskCount]   = useState(0)
+
+  // ── Basemap switcher state ────────────────────────────────────────────────────
+  const [basemap, setBasemap] = useState<BasemapMode>('satellite')
+  const basemapRef = useRef<BasemapMode>('satellite')
+  useEffect(() => { basemapRef.current = basemap }, [basemap])
+
+  // ── ADS-B Aircraft layer state ────────────────────────────────────────────────
+  const [showAircraft, setShowAircraft] = useState(false)
+  const [adsbSignals, setAdsbSignals] = useState<AdsbSignal[]>([])
+
+  // ── Annotation cards (Palantir-style intelligence overlays) ───────────────────
+  const [annotationCards, setAnnotationCards] = useState<Map<string, AnnotationCard>>(new Map())
+  const annotationCardsRef = useRef<Map<string, AnnotationCard>>(new Map())
+  useEffect(() => { annotationCardsRef.current = annotationCards }, [annotationCards])
+  // Incremented on map moveend to re-project connector lines
+  const [mapMoveCount, setMapMoveCount] = useState(0)
 
   // ── Geographic Convergence Hotspots state ──────────────────────────────────
   interface Hotspot {
@@ -540,12 +591,17 @@ function MapView() {
         },
         center: [lng, lat],
         zoom,
+        pitch:   30,
+        bearing: -8,
         minZoom: 1,
         maxZoom: 18,
         attributionControl: false,
       })
 
       mapRef.current = map
+
+      // Navigation control with 3D pitch visualization
+      map.addControl(new ml.NavigationControl({ visualizePitch: true }), 'top-right')
 
       ro = new ResizeObserver(() => { if (mapRef.current) mapRef.current.resize() })
       if (mapContainer.current) ro.observe(mapContainer.current)
@@ -646,6 +702,42 @@ function MapView() {
             'circle-stroke-opacity': 0.9,
           },
         })
+
+        // ── Sky atmosphere layer ───────────────────────────────
+
+        try {
+          map.addLayer({
+            id:   'sky',
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            type: 'sky' as any,
+            paint: {
+              'sky-type':                     'atmosphere',
+              'sky-atmosphere-sun':           [0.0, 90.0],
+              'sky-atmosphere-sun-intensity': 15,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            } as any,
+          })
+        } catch { /* sky layer unsupported in this MapLibre build — non-fatal */ }
+
+        // ── Apply initial satellite basemap ───────────────────
+
+        ;(() => {
+          try {
+            const satelliteTiles = MAPTILER_KEY && MAPTILER_KEY !== 'demo'
+              ? [`https://api.maptiler.com/tiles/satellite/{z}/{x}/{y}.jpg?key=${MAPTILER_KEY}`]
+              : ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}']
+            if (map.getLayer('basemap')) map.removeLayer('basemap')
+            if (map.getSource('basemap')) map.removeSource('basemap')
+            const beforeLayer = map.getLayer('cluster-halo') ? 'cluster-halo' : undefined
+            map.addSource('basemap', {
+              type: 'raster', tiles: satelliteTiles, tileSize: 256,
+              attribution: MAPTILER_KEY ? '© MapTiler' : '© Esri',
+            })
+            map.addLayer({ id: 'basemap', type: 'raster' as const, source: 'basemap',
+              paint: { 'raster-opacity': 0.92, 'raster-saturation': 0, 'raster-brightness-min': 0, 'raster-brightness-max': 1 },
+            }, beforeLayer)
+          } catch { /* ignore */ }
+        })()
 
         // ── Animation loop ────────────────────────────────────
 
@@ -779,6 +871,19 @@ function MapView() {
           const sig = signalsRef.current.find(s => s.id === p.id) ?? null
           setSelected(sig)
           map.flyTo({ center: coords, zoom: Math.max(map.getZoom(), 5), speed: 1.2, duration: 700 })
+
+          // Push Palantir-style annotation card
+          if (sig) {
+            const newCards = new Map(annotationCardsRef.current)
+            newCards.set(sig.id, { signal: sig, lat: Number(sig.lat), lng: Number(sig.lng) })
+            // Max 5 cards — evict oldest when 6th added
+            if (newCards.size > 5) {
+              const firstKey = newCards.keys().next().value as string
+              newCards.delete(firstKey)
+            }
+            annotationCardsRef.current = newCards
+            setAnnotationCards(new Map(newCards))
+          }
         })
 
         // ── Background click: deselect ────────────────────────
@@ -811,6 +916,11 @@ function MapView() {
 
         map.on('moveend', onViewChange)
         map.on('zoomend', onViewChange)
+
+        // Re-project annotation card connector lines after map pans/zooms
+        map.on('moveend', () => {
+          if (annotationCardsRef.current.size > 0) setMapMoveCount(c => c + 1)
+        })
 
         // Seed from already-fetched signals (if any)
         refreshClusters()
@@ -1783,6 +1893,183 @@ function MapView() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jammingMode])
 
+  // ── Natural Hazards layer (seismic, volcano, tsunami, wildfire) ────────────
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    const HAZARDS_SOURCE = 'hazards-source'
+    const HAZARDS_LAYER  = 'hazards-circles'
+
+    let refreshTimer: ReturnType<typeof setInterval> | null = null
+
+    const removeHazardsLayers = () => {
+      try {
+        map.off('click',      HAZARDS_LAYER)
+        map.off('mouseenter', HAZARDS_LAYER)
+        map.off('mouseleave', HAZARDS_LAYER)
+        if (map.getLayer(HAZARDS_LAYER)) map.removeLayer(HAZARDS_LAYER)
+        if (map.getSource(HAZARDS_SOURCE)) map.removeSource(HAZARDS_SOURCE)
+      } catch { /* ignore */ }
+    }
+
+    async function applyLayer() {
+      if (!hazardsMode) {
+        removeHazardsLayers()
+        setHazardsCount(0)
+        return
+      }
+
+      setHazardsLoading(true)
+      try {
+        const res  = await fetch(`${API_URL}/api/v1/hazards/map/points?hours=48`)
+        const json = await res.json() as {
+          success: boolean
+          data: {
+            points: HazardPoint[]
+            count: number
+          }
+        }
+
+        if (!json.success || !Array.isArray(json.data.points)) return
+
+        setHazardsCount(json.data.points.length)
+
+        const features = json.data.points.map(h => {
+          // Color by hazard type
+          let color = '#6B7280' // default gray
+          let typeLabel = 'Hazard'
+          switch (h.source_slug) {
+            case 'seismic':
+              color = '#F59E0B' // amber
+              typeLabel = 'Earthquake'
+              break
+            case 'firms':
+              color = '#EF4444' // red
+              typeLabel = 'Wildfire'
+              break
+            case 'gvp-volcano':
+              color = '#7C3AED' // purple
+              typeLabel = 'Volcano'
+              break
+            case 'tsunami-warnings':
+              color = '#0EA5E9' // cyan
+              typeLabel = 'Tsunami'
+              break
+          }
+
+          // Radius by severity
+          let radius = 8 // medium
+          switch (h.severity) {
+            case 'critical': radius = 14; break
+            case 'high':     radius = 10; break
+            case 'medium':   radius = 8;  break
+            case 'low':      radius = 6;  break
+          }
+
+          return {
+            type:     'Feature' as const,
+            geometry: { type: 'Point' as const, coordinates: [h.lng, h.lat] },
+            properties: {
+              id:                h.id,
+              title:             h.title,
+              sourceSlug:        h.source_slug,
+              severity:          h.severity,
+              reliability_score: h.reliability_score,
+              published_at:      h.published_at,
+              color,
+              typeLabel,
+              radius,
+            },
+          }
+        })
+
+        if (!map.getSource(HAZARDS_SOURCE)) {
+          map.addSource(HAZARDS_SOURCE, {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features },
+          })
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ;(map.getSource(HAZARDS_SOURCE) as any).setData({ type: 'FeatureCollection', features })
+        }
+
+        // ── Popup builder ─────────────────────────────────────────────────────
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const makeHazardsPopup = async (e: any) => {
+          const feat = e.features?.[0]
+          if (!feat) return
+          const p = feat.properties as {
+            title: string
+            typeLabel: string
+            severity: string
+            published_at: string
+            reliability_score: number
+            color: string
+          }
+          const ts = new Date(p.published_at)
+          const ago = timeAgo(ts)
+          const { default: ml } = await import('maplibre-gl')
+          if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
+          popupRef.current = new ml.Popup({ closeButton: true, closeOnClick: false, offset: 12, className: 'wp-map-popup' })
+            .setLngLat(e.lngLat)
+            .setHTML(`
+              <div style="font:600 12px/1.4 system-ui;color:${p.color};margin-bottom:4px">${p.typeLabel}</div>
+              <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:260px;margin-bottom:6px">${p.title}</div>
+              <div style="font:11px monospace;color:#8892a4;margin-bottom:4px">Severity: ${p.severity} — Confidence: ${Math.round(p.reliability_score * 100)}%</div>
+              <div style="font:10px monospace;color:#5a6477">${ago}</div>
+            `)
+            .addTo(map)
+        }
+
+        const hookHazardsLayer = () => {
+          map.on('mouseenter', HAZARDS_LAYER, () => { map.getCanvas().style.cursor = 'pointer' })
+          map.on('mouseleave', HAZARDS_LAYER, () => { map.getCanvas().style.cursor = '' })
+          map.on('click', HAZARDS_LAYER, makeHazardsPopup)
+        }
+
+        // ── Hazard circles layer ──────────────────────────────────────────────
+        if (!map.getLayer(HAZARDS_LAYER)) {
+          map.addLayer({
+            id:     HAZARDS_LAYER,
+            type:   'circle',
+            source: HAZARDS_SOURCE,
+            paint:  {
+              'circle-color':        ['get', 'color'],
+              'circle-radius':       ['get', 'radius'],
+              'circle-opacity':      0.85,
+              'circle-stroke-color': ['get', 'color'],
+              'circle-stroke-width': 1,
+              'circle-stroke-opacity': 0.5,
+            },
+          })
+          hookHazardsLayer()
+        }
+
+      } catch (err) {
+        console.warn('[map] Natural Hazards layer error:', err)
+      } finally {
+        setHazardsLoading(false)
+      }
+    }
+
+    if (map.loaded()) {
+      void applyLayer()
+    } else {
+      map.once('load', () => { void applyLayer() })
+    }
+
+    // Auto-refresh every 10 minutes when hazardsMode is active
+    if (hazardsMode) {
+      refreshTimer = setInterval(() => { void applyLayer() }, 10 * 60_000)
+    }
+
+    return () => {
+      if (refreshTimer) clearInterval(refreshTimer)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hazardsMode])
+
   // ── Country Risk Choropleth layer ────────────────────────────────────────────
   //
   // Fetches /api/v1/countries?window=24h&limit=200 for live risk scores and
@@ -2186,6 +2473,27 @@ function MapView() {
                 {' '}RF JAMMING
                 {jammingMode && jammingCount > 0 && (
                   <span className="ml-1 px-1 py-px bg-[rgba(239,68,68,0.25)] rounded text-[9px]">{jammingCount}</span>
+                )}
+              </button>
+
+              {/* Natural Hazards toggle */}
+              <button
+                onClick={() => setHazardsMode(v => !v)}
+                disabled={hazardsLoading}
+                title={hazardsMode
+                  ? `Natural Hazards: ${hazardsCount} active — earthquake (amber), fire (red), volcano (purple), tsunami (cyan)`
+                  : 'Toggle natural hazards layer (seismic, volcanic, tsunami, wildfire)'}
+                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
+                  ${hazardsMode
+                    ? 'border-[rgba(124,58,237,0.6)] text-[#d8b4fe] bg-[rgba(124,58,237,0.1)]'
+                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}
+                  ${hazardsLoading ? 'opacity-60 cursor-wait' : ''}`}>
+                {hazardsLoading
+                  ? <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                  : '🌋'}
+                {' '}NATURAL HAZARDS
+                {hazardsMode && hazardsCount > 0 && (
+                  <span className="ml-1 px-1 py-px bg-[rgba(124,58,237,0.25)] rounded text-[9px]">{hazardsCount}</span>
                 )}
               </button>
 
