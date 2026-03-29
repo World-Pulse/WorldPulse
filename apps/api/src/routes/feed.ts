@@ -413,7 +413,7 @@ function formatSignal(row: Record<string, unknown>) {
     status:           row.status,
     reliabilityScore: row.reliability_score,
     sourceCount:      row.source_count,
-    location:         row.location ? { lat: (row.location as { coordinates: number[] }).coordinates[1], lng: (row.location as { coordinates: number[] }).coordinates[0] } : null,
+    location:         row.location_geojson ? { lat: (row.location_geojson as { coordinates: number[] }).coordinates[1], lng: (row.location_geojson as { coordinates: number[] }).coordinates[0] } : null,
     locationName:     row.location_name,
     countryCode:      row.country_code,
     region:           row.region,
