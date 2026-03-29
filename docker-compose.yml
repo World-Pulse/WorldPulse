@@ -105,6 +105,9 @@ services:
         condition: service_healthy
     ports:
       - "3001:3001"
+    env_file:
+      - path: .env.prod
+        required: false
     environment:
       NODE_ENV: production
       PORT: 3001
@@ -117,6 +120,11 @@ services:
       CLICKHOUSE_DB: ${CLICKHOUSE_DB:-worldpulse}
       JWT_SECRET: ${JWT_SECRET:-wp_jwt_secret_local_change_in_prod}
       CORS_ORIGINS: ${CORS_ORIGINS:-https://world-pulse.io}
+      # AI / vector search — read from .env.prod on server, optional locally
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      PINECONE_API_KEY: ${PINECONE_API_KEY:-}
+      PINECONE_HOST: ${PINECONE_HOST:-}
+      PINECONE_INDEX: ${PINECONE_INDEX:-worldpulse-signals}
     networks:
       default:
         aliases:
