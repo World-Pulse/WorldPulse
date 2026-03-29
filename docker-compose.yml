@@ -120,11 +120,8 @@ services:
       CLICKHOUSE_DB: ${CLICKHOUSE_DB:-worldpulse}
       JWT_SECRET: ${JWT_SECRET:-wp_jwt_secret_local_change_in_prod}
       CORS_ORIGINS: ${CORS_ORIGINS:-https://world-pulse.io}
-      # AI / vector search — read from .env.prod on server, optional locally
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      PINECONE_API_KEY: ${PINECONE_API_KEY:-}
-      PINECONE_HOST: ${PINECONE_HOST:-}
-      PINECONE_INDEX: ${PINECONE_INDEX:-worldpulse-signals}
+      # AI / vector search keys are injected via env_file (.env.prod on server)
+      # Do NOT add them here with ${VAR:-} defaults — that overrides env_file with empty strings
     networks:
       default:
         aliases:
