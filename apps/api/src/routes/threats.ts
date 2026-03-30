@@ -20,6 +20,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
+import { authenticate } from '../middleware/auth'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -251,6 +252,7 @@ export const registerThreatsRoutes: FastifyPluginAsync = async (app) => {
   // ── GET /missiles ──────────────────────────────────────────────────────────
 
   app.get('/missiles', {
+    preHandler: [authenticate],
     config: {
       rateLimit: {
         max:        THREATS_RATE_LIMIT,
@@ -358,6 +360,7 @@ export const registerThreatsRoutes: FastifyPluginAsync = async (app) => {
   // ── GET /summary ───────────────────────────────────────────────────────────
 
   app.get('/summary', {
+    preHandler: [authenticate],
     config: {
       rateLimit: {
         max:        THREATS_RATE_LIMIT,

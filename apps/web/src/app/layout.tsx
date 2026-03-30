@@ -2,9 +2,11 @@ import type { Metadata, Viewport } from 'next'
 import { Inter, Bebas_Neue, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import { Providers } from '@/components/providers'
+import { PostHogProvider } from '@/components/providers/PostHogProvider'
 import { TopNav } from '@/components/nav/TopNav'
 import { BottomTabBar } from '@/components/nav/BottomTabBar'
 import { BreakingAlertBanner } from '@/components/alerts/BreakingAlertBanner'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -72,17 +74,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           Skip to main content
         </a>
-        <Providers>
-          <BreakingAlertBanner />
-          <TopNav />
-          <main
-            id="main-content"
-            className="pt-[52px] min-h-screen main-content-mobile-pb"
-          >
-            {children}
-          </main>
-          <BottomTabBar />
-        </Providers>
+        <PostHogProvider>
+          <Providers>
+            <BreakingAlertBanner />
+            <TopNav />
+            <main
+              id="main-content"
+              className="pt-[52px] min-h-screen main-content-mobile-pb"
+            >
+              <ErrorBoundary>{children}</ErrorBoundary>
+            </main>
+            <BottomTabBar />
+          </Providers>
+        </PostHogProvider>
       </body>
     </html>
   )

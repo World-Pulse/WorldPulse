@@ -1,6 +1,121 @@
 {
-  "last_scan": "2026-03-28T15:42:06.428038+00:00",
+  "last_scan": "2026-03-30T03:20:00.000000+00:00",
+  "cycle27_intel": {
+    "scan_date": "2026-03-30",
+    "ground_news_update": "Ground News: No new features detected since v4.28.0 (March 2, 2026). Last known feature: Podcasts & Opinions (v4.27.0). External browser reader for pop-up-heavy articles noted. Still Chrome-only extension, no OSINT, zero intelligence pages, no per-signal enrichment, no self-hosting. WorldPulse now has 28 shipped improvements vs Ground News 0 in March 2026. Gap continues to widen.",
+    "gdelt_update": "GDELT: TV News Visual Explorer (March 19, 2026) remains latest product — a collaboration with Internet Archive TV News Archive for journalists and scholars. GDELT 2.0 supports 65 languages, 2,300+ emotion/theme measures. No new data products or API changes detected in March 2026. WorldPulse continues to surpass GDELT by integrating TV clips and visual imagery per-signal rather than as standalone tools.",
+    "newsguard_update": "NewsGuard: 3,006+ AI content farm sites tracked via Pangram Labs. FAILSafe (AI foreign influence ops protection) still latest product. No new platform products. WorldPulse AIContentFarmBadge.tsx already covers top farms.",
+    "new_threats": "No new news intelligence startups funded or launched in late March 2026. AI funding dominated by infrastructure: AMI Labs (Yann LeCun, $1B seed, world models — not news), Dreamer (acquired by Meta for agent building — not news), Ineffable Intelligence ($1B funding, London ex-DeepMind — general AI), JetStream ($34M, AI governance — enterprise, not news), Alibaba Accio Work (agentic AI for commerce — not news). No new direct WorldPulse competitors identified. Threat landscape STABLE.",
+    "worldpulse_advantage": "After cycle 27: Vercel deployment configuration complete. vercel.json created with Turborepo-aware build command, Sentry tunnel rewrite, function timeouts, monorepo-aware ignoreCommand. Production CSP hardened — localhost:3001 now excluded from connect-src in production builds (NODE_ENV guard). Full deployment guide docs/deployment/VERCEL.md created. Integration stack: PostHog ✅ Sentry ✅ Vercel ✅ (3 of 5 Phase 1 integrations). Intelligence pages (5 unique) + per-signal enrichment (7 layers) + map (8 layers) + 80 sources remain unmatched by any competitor.",
+    "key_opportunity": "Next priorities: (1) Integration — Cloudflare Security Headers & CDN Preparation (Task 23, P11) — CF-Connecting-IP trust in Fastify, additional security headers (HSTS, Expect-CT), docs/deployment/CLOUDFLARE.md. (2) Integration — Stripe Pro Tier & Billing (Task 24, P9) — subscriptions table, checkout flow, webhook handler, pricing page. (3) Public API endpoint (P2-6) — GET /api/v1/public/signals (no-auth, 60rpm) — key open-source differentiator. (4) OSINT source heartbeat — 29 source files need quiet-hour health call (deferred since cycle 1). (5) Standardize API error format — 178 raw reply.code() calls not using sendError() helper."
+  },
+  "cycle26_intel": {
+    "scan_date": "2026-03-30",
+    "ground_news_update": "Ground News: No new features detected since v4.28.0 (March 2, 2026) + v4.24.0 iOS 26 compat patch. Still Chrome-only extension, no OSINT, zero intelligence pages, no per-signal enrichment. WorldPulse now has 27 shipped improvements vs Ground News 0 new features in March 2026. Gap continues to widen.",
+    "gdelt_update": "GDELT: TV News Visual Explorer (March 19, 2026) remains latest product. GDELT Translingual (streaming realtime machine translation in 65 languages) highlighted in March 2026 — not a new product, existing capability. GDELT Global Conflict Dashboard (protests + unrest live map) active via US Institute of Peace support. No new data products or integrations detected. WorldPulse continues to surpass GDELT's standalone TV and visual tools by integrating them per-signal.",
+    "newsguard_update": "NewsGuard: 3,006+ AI content farm sites via Pangram Labs. FAILSafe (AI foreign influence ops protection) still latest product. No new platform products. WorldPulse AIContentFarmBadge.tsx already covers top farms.",
+    "new_threats": "No new news intelligence startups funded or launched in late March 2026 beyond previously tracked. AI infrastructure dominates funding: Humans& ($480M seed, OpenAI/Anthropic/Google/xAI/Meta researchers) — general LLM, not news. Kimpton ($4.5B ARR investment research platform) — finance-specific, not news intelligence. Livedocs (January 2026, data analysis tool) — dev tool, not news. WorldMonitor (koala73/worldmonitor on GitHub) still no production launch. Intell Weave still GitHub-only. Competition landscape unchanged — no new direct WorldPulse threats identified.",
+    "worldpulse_advantage": "After cycle 26: Sentry error tracking + performance monitoring integrated (packages added, ErrorBoundary.tsx, withSentryConfig, docs). WorldPulse is now approaching production-readiness with full observability stack: PostHog product analytics + Sentry error/performance tracking. Integration roadmap: 2 of 5 Phase 1 integrations complete (PostHog ✅, Sentry ✅). Next: Vercel config + Cloudflare headers. Intelligence page stack (5 unique pages) + per-signal enrichment (7 layers) + map (8 layers) + 80 signal sources remain unmatched.",
+    "key_opportunity": "Next priorities: (1) Integration — Vercel Deployment Configuration (Task 22, P11) — vercel.json audit for localhost refs, NEXT_PUBLIC_API_URL env var standardization, docs/deployment/VERCEL.md. (2) Integration — Cloudflare Security Headers & CDN Preparation (Task 23, P11) — CSP headers in next.config.mjs, CF-Connecting-IP trust in Fastify, docs/deployment/CLOUDFLARE.md. (3) Integration — Stripe Pro Tier & Billing (Task 24, P9) — subscriptions table, checkout, webhook handler, pricing page. (4) Public API endpoint (P2-6) — GET /api/v1/public/signals open-source differentiator."
+  },
+  "cycle25_intel": {
+    "scan_date": "2026-03-29",
+    "ground_news_update": "Ground News: No new features detected since v4.28.0 (March 2, 2026). Last known features: Podcasts & Opinions (v4.27.0), 2 new Factuality labels, Interest Page Enhancements. Still Chrome-only extension, zero OSINT, no per-signal media, no intelligence pages. WorldPulse advantage continues to widen — Gate 1 validation confirms scraper infrastructure is launch-ready.",
+    "gdelt_update": "GDELT: Latest product remains TV News Visual Explorer (March 19, 2026) and GDELT Summary (visual news search). Blog activity as of March 27, 2026 shows Gemini 3.1 Pro comparison content — no new data products. GDELT Summary and GDELT TV Visual Explorer remain standalone tools, not integrated into any consumer platform. WorldPulse has directly integrated both GDELT TV API (TV clips) and GDELT DOC API (visual imagery) on signal detail pages — surpassing GDELT's own standalone tools.",
+    "newsguard_update": "NewsGuard: No new products. FAILSafe (AI foreign influence ops protection) still their latest. 3,006+ AI content farm sites still tracked via Pangram Labs. WorldPulse AIContentFarmBadge.tsx already covers top farms. Monthly AI Misinformation Monitor and AI False Claims Monitor active — not competitive products.",
+    "new_threats": "No new funded news intelligence startups detected in late March 2026. AI funding dominated by infrastructure: February 2026 was largest single month of startup funding ever ($189B globally) — driven by OpenAI ($110B), Anthropic ($30B), Waymo ($16B). JetStream ($34M seed, AI governance tooling), AMI Labs ($1B, general world models), CollectivIQ (Boston, unfunded, crowdsources AI answers) — none in news intelligence. WorldMonitor (koala73/worldmonitor) still GitHub-only, no production launch. Intell Weave still no launch. Danti (enterprise satellite+AIS+RF) remains enterprise-only, not consumer.",
+    "worldpulse_advantage": "After cycle 25: Gate 1 infrastructure fully verified — 30 OSINT pollers + 54 total feeds all have circuit breakers + error handling. stability-tracker.ts with Redis-backed 14-day stability clock is confirmed complete. 14-day stability clock can now be started. WorldPulse intelligence page stack (5 unique pages) + per-signal enrichment stack (7 layers) + map intelligence (8 layers) + 80 signal sources remain unmatched by any competitor. Gate 1 launch prerequisite: ✅ READY.",
+    "key_opportunity": "Next priorities: (1) Integration — Sentry Error Tracking (priority 11) — @sentry/nextjs + @sentry/node packages still not installed despite config files existing. Quick install + init. (2) Integration — Vercel Deployment Configuration (priority 11) — vercel.json exists but localhost refs in apps/web need replacing + docs/deployment/VERCEL.md needed. (3) Integration — Cloudflare Security Headers & CDN Preparation (priority 11) — CSP headers + Cloudflare real IP trust + docs/deployment/CLOUDFLARE.md. (4) Public API endpoint (P2-6) — GET /api/v1/public/signals (no-auth, 60rpm, docs/api.md) — key open-source differentiator. (5) OSINT source heartbeat for quiet-hour pollers — deferred from cycle 1, requires 29 source file touches."
+  },
+  "cycle24_intel": {
+    "scan_date": "2026-03-29",
+    "ground_news_update": "Ground News: No new features since v4.28.0 (March 2, 2026). Last features: enhanced Factuality labels, Interest Page Enhancements, bug fixes. Still Chrome-only extension, no OSINT layers, no TV clips, no cyber threat intelligence, no per-signal media. WorldPulse advantage continues to widen.",
+    "gdelt_update": "GDELT: Cyber Events Database enhanced with GDELT Web News NGrams 3.0 + Article List datasets — reducing English-language bias in cyber event identification. A Python package 'gdeltnews' now reconstructs full-text articles from GDELT NGrams 3.0. WorldPulse has countered by launching a dedicated /cyber-threats page (Cycle 24) using CISA KEV + OTX signals already in the WorldPulse DB — providing a consumer-friendly UI for cyber intelligence that GDELT's raw datasets do not offer. GDELT TV Visual Explorer + GDELT Summary remain standalone tools.",
+    "newsguard_update": "NewsGuard: 3,006+ AI content farm sites still tracked via Pangram Labs. Monthly AI Misinformation Monitor and AI False Claims Monitor are active — no new direct platform products. NewsGuard launched FAILSafe to protect AI from foreign influence operations. WorldPulse AIContentFarmBadge.tsx already covers top farms.",
+    "new_threats": "No new funded news intelligence startups detected in late March 2026. AMI Labs ($1B seed, Yann LeCun) is general world-model AI research, not news intelligence. Health AI startup Nabla partnered with AMI — not relevant. JetStream ($34M seed) is AI governance tooling. 200+ AI funding rounds in first two weeks of 2026 (Crunchbase) — mostly infrastructure, not news intelligence. WorldMonitor still GitHub-only. No new direct WorldPulse competitors identified.",
+    "worldpulse_advantage": "After cycle 24: WorldPulse is now the ONLY news intelligence platform with a dedicated Cyber Threat Intelligence page — surfacing CISA Known Exploited Vulnerabilities (reliability 0.95) and AlienVault OTX threat pulses (reliability 0.82) in a consumer-grade UI. Intelligence page stack is now: /finance + /sanctions + /space-weather + /internet-outages + /cyber-threats (5 unique intelligence pages). No competitor (Ground News, GDELT, Reuters Connect, AP Wire, OpenClaw, Crucix) has this combination. Per-signal enrichment (UNIQUE): reliability + virality + verification log + YouTube/podcast + GDELT TV clips + GDELT visual imagery. Map layers: signals + ADS-B + maritime + jamming + missile + natural hazards + internet outages + space weather.",
+    "key_opportunity": "Next priorities: (1) OSINT source heartbeat for quiet-hour pollers — add health-heartbeat call at end of each OSINT poll loop even when no signals emitted. Deferred from cycle 1 blockers.md, requires touching 29 source files. (2) Standardize API error format — P3-5 from PRIORITY_DIRECTIONS.md, 178 raw reply.code calls not using sendError(). (3) Public API endpoint (P2-6) — GET /api/v1/public/signals with no-auth + 60rpm rate limit + docs/api.md; key open-source differentiator vs all competitors. (4) Sentry package install — sentry.client.config.ts + apps/api/src/lib/sentry.ts exist but @sentry/nextjs and @sentry/node not yet in package.json. (5) Pinecone + OpenAI packages not yet installed despite pinecone.ts + SimilarSignals.tsx existing."
+  },
+  "cycle23_intel": {
+    "scan_date": "2026-03-29",
+    "ground_news_update": "Ground News: No new features since v4.28.0. Still Chrome-only extension, no OSINT layers, no TV clips, no visual news imagery, no space weather. WorldPulse multimedia enrichment (YouTube/podcast + TV clips + visual news images per signal) is now unreachable for Ground News — their bias-checking architecture cannot support per-signal media enrichment.",
+    "gdelt_update": "GDELT Summary (visual news search, launched cycle 17 scan) still operates as a standalone browser tool — no integration into other platforms. WorldPulse has now directly integrated the GDELT DOC API artlist mode on signal detail pages, embedding related article Open Graph images per signal. This surpasses GDELT Summary as a standalone product by contextualizing visual imagery within OSINT intelligence signals. GDELT TV Visual Explorer (March 19, 2026) remains their latest product alongside GDELT Summary.",
+    "newsguard_update": "NewsGuard unchanged — 3,006+ AI content farm sites tracked. No new products. WorldPulse AIContentFarmBadge.tsx already covers top farms.",
+    "new_threats": "No new funded news intelligence startups detected in March 2026. AI reliability startups (Temporal $300M, Resolve AI $125M) are infrastructure tools, not news platforms. Reuters Institute 2026 Annual Report confirms AI news verification remains 'emerging but not yet productized'. WorldMonitor (GitHub-only) active development confirmed in 2026 but no production launch. CollectivIQ (Boston) crowdsources AI answers — general AI, not news intelligence. No new direct WorldPulse competitors identified.",
+    "worldpulse_advantage": "After cycle 23: WorldPulse signal detail pages now surface related visual news imagery (article Open Graph thumbnails) via GDELT DOC API alongside TV clips — the FIRST news intelligence platform to combine OSINT signals + broadcast TV clips + visual news imagery in a single signal view. Complete signal enrichment stack: reliability score + virality badge + verification log audit trail + YouTube/podcast (SignalMedia) + GDELT TV clips (TVClips) + GDELT visual imagery (NewsImages). Intelligence map layers: signals + ADS-B + maritime + jamming + missile + natural hazards + internet outages + space weather. No competitor (Ground News, GDELT Live, Reuters Connect, AP Wire, OpenClaw, Crucix, Danti, star.ai.media) has this depth of per-signal enrichment.",
+    "key_opportunity": "Next priorities: (1) OSINT source heartbeat for quiet-hour pollers — add health-heartbeat call at end of each OSINT poll loop even when no signals emitted. Deferred from cycle 1 blockers.md, requires touching 29 source files. (2) Standardize API error format — 177 routes using raw reply vs 24 using sendError(). P3-5 from PRIORITY_DIRECTIONS.md. (3) Verification Audit Trail UI (P2-4) — verification_log table is being populated but no frontend panel exists on signal detail page to display it. (4) P2-1: Reliability Score Explainer Tooltip — hover tooltip on reliability dots with breakdown. (5) NewsGuard API enrichment for credibility scores (commercial API, deferred until budget)."
+  },
+  "cycle22_intel": {
+    "scan_date": "2026-03-29",
+    "ground_news_update": "Ground News: No new features detected since v4.28.0. Still Chrome-only extension, no OSINT layers, no TV news clip integration, no space weather. WorldPulse now has TV news clips on signal detail pages — a feature Ground News cannot match (their bias-checking model doesn't support OSINT signal enrichment). The Podcasts & Opinions feature (v4.27.0) was their last multimedia addition; WorldPulse now surpasses with embedded YouTube + podcast audio + GDELT TV clips per signal.",
+    "gdelt_update": "GDELT TV News Visual Explorer (March 19, 2026) remains GDELT's latest product. WorldPulse has now integrated the GDELT TV API directly — users can see TV news clips on individual signal detail pages without leaving WorldPulse. This directly counters GDELT's standalone TV Visual Explorer. GDELT Live forthcoming realtime map still not launched. GDELT Summary (visual news search) still separate from GDELT event data.",
+    "newsguard_update": "NewsGuard unchanged — 3,006+ AI content farm sites tracked via Pangram Labs. No new API products or integrations. WorldPulse AIContentFarmBadge.tsx already covers 20 top farms from their public reports.",
+    "new_threats": "No new funded news intelligence startups detected in March 2026 search. Danti (enterprise satellite+AIS+RF) threat level remains medium. AMI Labs ($1B seed, Yann LeCun) is general AI/world-model research, not news intelligence. AI news verification described in Reuters Institute 2026 Annual Report as emerging but not yet productized by any startup. JetStream (AI governance) and Humans& (general LLM) not relevant to news intelligence space. WorldMonitor still GitHub-only with no production launch.",
+    "worldpulse_advantage": "After cycle 22: WorldPulse signal detail pages now surface TV news clips from the GDELT TV corpus via /api/v1/signals/:id/tv-clips — the FIRST news intelligence platform to integrate broadcast TV news coverage alongside verified OSINT intelligence signals. Intelligence layers: signals + ADS-B + maritime + jamming + missile + natural hazards + internet outages + space weather (unique) + TV news clips per signal (unique). Signal enrichment stack: reliability score + virality badge + verification timeline + multimedia (YouTube/podcast) + TV clips (GDELT). No competitor approaches this depth.",
+    "key_opportunity": "Next priorities: (1) OSINT source heartbeat for quiet-hour sources — quiet pollers don't update health even when running. Deferred from cycle 1 blockers.md. Low-risk but closes monitoring gap. (2) Standardized API error format adoption audit — errors.ts exists but not all routes use it yet. (3) Mobile BottomTabBar render verification on iOS/Android. (4) GDELT Summary integration — surface related visual news imagery on signal pages via GDELT Summary API (complements TV clips). (5) NewsGuard API enrichment for credibility scores when budget allows."
+  },
+  "cycle21_intel": {
+    "scan_date": "2026-03-29",
+    "ground_news_update": "Ground News: No new major features beyond v4.28.0 already tracked. v4.24.0 change notes (Podcasts & Opinions) are historical. Still Chrome-only extension, no OSINT, no space weather data, no self-hosting. WorldPulse advantage: now unique in space weather intelligence layer.",
+    "gdelt_update": "GDELT: TV News Visual Explorer (March 19, 2026) still latest update. GDELT Summary now available (visual news search via Google Vision API). GDELT Live forthcoming realtime map — updates every 15 min. No space weather data. GDELT operates only in news/event space, not intelligence signal space.",
+    "newsguard_update": "NewsGuard unchanged — AI Content Farm detection datastream, 3,006+ sites tracked. No new product announcements.",
+    "new_threats": "Danti (danti.ai) detected: AI platform aggregating satellite imagery + AIS ship tracking + RF signals + social media, natural language query interface. Medium threat — enterprise-focused, not consumer news platform, closed source. No direct news intelligence overlap. WorldMonitor still GitHub-only. No new funded news intelligence startups in late March 2026. AI news verification startups are emerging (per Reuters Institute 2026 report) but none productized yet.",
+    "worldpulse_advantage": "After cycle 21: WorldPulse is now the ONLY news/intelligence platform with space weather monitoring. NOAA SWPC G/R/S scale storm data (geomagnetic, solar radiation, radio blackout) + CelesTrak satellite tracking exposed in consumer web UI at /space-weather. Intelligence layers now: signals + ADS-B + maritime + jamming + missile + natural hazards + internet outages + SPACE WEATHER (unique). No competitor (Ground News, GDELT, Reuters Connect, AP Wire, OpenClaw, Crucix, star.ai.media) has space weather intelligence.",
+    "key_opportunity": "Verification Log / Audit Trail UI (P2-4) — verify.ts already inserts to verification_log table. Adding a frontend audit trail panel on signal detail page would differentiate WorldPulse's fact-checking transparency vs. Ground News (no audit trail). Also: GDELT TV News clip integration — GDELT TV API can surface TV news clips alongside signals (counter GDELT's March 2026 TV News Visual Explorer). Also: mobile BottomTabBar verification — confirm display on iOS/Android."
+  },
+  "cycle20_intel": {
+    "scan_date": "2026-03-29",
+    "ground_news_update": "Ground News v4.28.0 (March 2, 2026): New version detected (previously tracking v4.27.0). New features: 2 new Factuality labels for granular source quality scoring; Interest Page Enhancements for follow/share/notify; enhanced navigation between articles; Daily Briefing still present. Still Chrome-only extension, no OSINT, no open-source, no self-hosting, no internet outage data. WorldPulse advantage: 30+ OSINT sources vs zero for Ground News.",
+    "gdelt_update": "GDELT: TV News Visual Explorer updated March 19, 2026 (visual search of TV news clips via Internet Archive). GDELT Live still 15-min updates. GDELT 2.0 supports 65 languages, 2,300+ emotion/theme measures. 'Forthcoming GDELT Live service' still not fully launched as dedicated product. No direct consumer UI competitor to WorldPulse.",
+    "newsguard_update": "NewsGuard unchanged — 3,006+ AI content farm sites via Pangram Labs. No new API or product announcements.",
+    "new_threats": "No new news intelligence startups launched or funded in late March 2026 beyond previously tracked. Yann LeCun AMI Labs ($1B seed) is general world-model AI, not news intelligence. OpenAI ($110B at $840B valuation) not in news intelligence space. OpenClaw remains niche OSINT terminal (no web UI). WorldMonitor and Intell Weave still GitHub-only.",
+    "worldpulse_advantage": "After cycle 20: WorldPulse is now the ONLY news intelligence platform with internet connectivity outage monitoring (IODA/Georgia Tech data) in a consumer web UI. OpenClaw has terminal-based IODA monitoring; WorldPulse's /internet-outages page provides interactive real-time country-level status. Feature set spans: 50 RSS sources + 30 OSINT sources (80 total), map with 6 intelligence layers, sanctions page, finance signals, natural hazards, internet outages — no competitor (Ground News, GDELT, Reuters Connect, AP Wire, OpenClaw) has this breadth.",
+    "key_opportunity": "Space Weather Intelligence Page: spaceweather.ts (NOAA SWPC) and celestrak.ts already ingest geomagnetic storm / solar radiation / GPS disruption signals. A dedicated /space-weather page would be another unique intelligence layer. Also: P1-5 Live Signal Counter may still be static on homepage — could add WebSocket increment. GDELT TV News Visual Explorer integration — WorldPulse could surface TV news clips alongside signals via GDELT TV API."
+  },
+  "cycle19_intel": {
+    "scan_date": "2026-03-29",
+    "ground_news_update": "Ground News v4.27.0 (March 2026): Podcasts & Opinions still present. No new major features detected in cycle 19 scan. Still Chrome-only extension, no OSINT, no open-source, no self-hosting, no natural hazard data. WorldPulse now outmatches on map intelligence: ADS-B + maritime + jamming + missile + natural hazards — no competitor has this combination.",
+    "gdelt_update": "GDELT: No new features detected in cycle 19 scan. GDELT TV News Visual Explorer updated March 19, 2026 (visual news search). GDELT Live still 15-min updates. No natural hazard visualization from GDELT.",
+    "newsguard_update": "NewsGuard unchanged — 3,006+ AI content farm sites. No new API or product announcements.",
+    "new_threats": "No new news intelligence startups launched or funded in late March 2026. Yann LeCun AMI Labs ($1B seed) is general AI, not news intelligence. No direct competitors detected in cycle 19 scan. OpenClaw (openclawapi.org) detected: real-time OSINT monitoring system with ADS-B + AIS + GDELT integration — medium threat, appears to be a niche API product, not a consumer news platform.",
+    "worldpulse_advantage": "After cycle 19: WorldPulse map now has 6 intelligence layers (signals + ADS-B + maritime + jamming + missile + natural hazards). Natural hazards layer is UNIQUE — no news intelligence competitor (Ground News, GDELT, Reuters Connect, Crucix) has unified seismic/volcanic/tsunami/wildfire map layer. Crucix had satellite fire+seismic as separate features; WorldPulse unifies all 4 natural hazard types in a single toggle.",
+    "key_opportunity": "GDELT gdeltnews integration — reconstruct full article text from GDELT NGrams 3.0 at near-zero cost; could enrich WorldPulse signal summaries that currently have short/empty body fields. Also: Standardize API error format (P3-5) — unified sendError() helper is a quick DevEx win. Post-launch: NewsGuard API data enrichment for credibility scores."
+  },
+  "cycle18_intel": {
+    "scan_date": "2026-03-29",
+    "ground_news_update": "Ground News (March 2026): Added 2 new Factuality labels for more granular source quality scoring. Interest Page Enhancements — easier to follow/share/notify on topics. Podcasts & Opinions still present (v4.27.0). Still zero OSINT, zero open-source, zero self-hosting, zero sanctions/entity intelligence. WorldPulse now has dedicated /sanctions page covering 100+ global sanctions lists — a feature Ground News cannot match.",
+    "gdelt_update": "No new GDELT features detected. GDELT Live still updates every 15 min. GDELT Summary (launched cycle 17) still non-interactive visual search. gdeltnews Python package (full-text article reconstruction from NGrams 3.0) remains an open opportunity for WorldPulse signal enrichment.",
+    "newsguard_update": "NewsGuard unchanged — 3,006+ AI content farm sites via Pangram Labs. No new API products or integrations announced.",
+    "new_threats": "No new news intelligence startups launched or funded in late March 2026. No new direct competitors detected. Crucix 'sanctions' feature gap now CLOSED by cycle 18 /sanctions page.",
+    "worldpulse_advantage": "After cycle 18: WorldPulse is now the only news/intelligence platform with a dedicated sanctions & watchlist intelligence UI, covering 100+ global lists (OFAC SDN, EU FSF, UN SC, UK HMT, Interpol, World Bank, etc.) via OpenSanctions. Combined with 87+ signal sources (29 OSINT including OFAC/EU sanctions pollers), this is a unique intelligence moat. No competitor (Ground News, GDELT, Reuters Connect, AP Wire, Crucix) has equivalent capability.",
+    "key_opportunity": "Natural Hazards Map Layer: seismic/volcano/tsunami/fire data already in DB (seismic.ts, gvp-volcano.ts, tsunami-warnings.ts, firms.ts all store lat/lng coordinates). Adding a toggle layer to the map would expose this rich dataset visually — countering Crucix's satellite fire + seismic features and expanding the map's intelligence value beyond ADS-B/maritime/missile."
+  },
   "threats": [
+    {
+      "competitor": "Danti",
+      "threat_level": "medium",
+      "note": "NEW (detected cycle 21, 2026-03-29): Danti (danti.ai) is an enterprise AI platform aggregating satellite imagery, AIS ship tracking, RF signals data, and social media — allows natural language queries across combined dataset. Enterprise-focused (defense contractors, intelligence analysts), not consumer news platform. Closed source. Medium threat: overlaps with WorldPulse's OSINT/maritime/signals intelligence positioning but targets enterprise vs. WorldPulse's open-source consumer+developer angle. Watch for consumer tier launch."
+    },
+    {
+      "competitor": "Crucix",
+      "threat_level": "medium",
+      "note": "NEW (detected 2026-03-29 via social): Open-source OSINT intelligence terminal by marc.kaz. AGPL-3.0, Node 22+, Docker, 27 sources. Self-hosted, no cloud, no web UI. Covers conflict zones, sanctions, crypto, radiation, sentiment, economic indicators, satellite fire detection, flight tracking. Viral on social (1,824 likes). Closest open-source rival to WorldPulse. Critical gap: no map layer, no semantic search, no Pro tier, no web UI, no community features. Risk: competes for developer mindshare on open-source OSINT positioning."
+    },
+    {
+      "competitor": "star.ai.media",
+      "threat_level": "medium",
+      "note": "NEW (detected 2026-03-29 via social): Unverified product promoted as 'AI dashboard gives you a real-time CIA-style intelligence map of the entire world'. Dark globe UI tracking conflicts + military aircraft, free tier. Viral on social (2,938 likes). Closed source, no API, no OSINT sourcing transparency. Risk: similar dark globe map aesthetic + free positioning targets identical user segment. Critical gap vs WorldPulse: no open source, no developer API, no semantic search, no reliability scoring, no community layer."
+    },
+    {
+      "competitor": "WorldMonitor",
+      "threat_level": "medium",
+      "note": "NEW (detected 2026-03-28): Open-source real-time global intelligence dashboard (koala73/worldmonitor on GitHub). 30+ external data sources across geopolitics, finance, energy, climate, aviation, cyber. Direct OSINT overlap with WorldPulse. Smaller scope \u2014 no search, no verification engine, no social layer. GitHub project not a production SaaS."
+    },
+    {
+      "competitor": "Intell Weave",
+      "threat_level": "medium",
+      "note": "NEW (detected 2026-03-28): Production-minded news platform with NLP, embeddings, claim verification, and hyper-personalized feeds. Not open-source. AI news verification overlaps with WorldPulse reliability scoring. Watch for public launch/funding."
+    },
     {
       "competitor": "Reuters Connect",
       "threat_level": "medium",
@@ -14,7 +129,7 @@
     {
       "competitor": "Ground News",
       "threat_level": "medium",
-      "note": "Monitoring Ground News for feature parity with WorldPulse"
+      "note": "Updated (cycle 17, 2026-03-29): Ground News v4.27.0 Podcasts & Opinions gap is NOW CLOSED — WorldPulse cycle 17 added SignalMedia.tsx with YouTube embedding (youtube-nocookie.com) and podcast audio on signal detail pages. Ground News still Chrome-only extension, no financial intelligence, no OSINT/ADS-B/maritime, no self-hosting. WorldPulse has matched their multimedia feature with broader OSINT context. Ground News focus remains bias-checking (political spectrum coverage comparison)."
     },
     {
       "competitor": "Logically AI",
@@ -24,7 +139,7 @@
     {
       "competitor": "NewsGuard",
       "threat_level": "medium",
-      "note": "Monitoring NewsGuard for feature parity with WorldPulse"
+      "note": "Updated (cycle 15, 2026-03-29): NewsGuard now tracking 3,006 AI content farm sites via Pangram Labs partnership, growing at 300-500 new sites/month. AI False Claims Monitor tracks false claims spread by AI models (35% propagation rate). Has commercial API datastream for Source Reliability Ratings (35K sources) + False Claim Fingerprints. WorldPulse already has AIContentFarmBadge.tsx covering 20 known farms. Opportunity: enrich WorldPulse credibility scores with NewsGuard API when budget allows."
     },
     {
       "competitor": "Bellingcat",
@@ -38,57 +153,244 @@
     },
     {
       "competitor": "The GDELT Project",
-      "threat_level": "medium",
-      "note": "Monitoring The GDELT Project for feature parity with WorldPulse"
+      "threat_level": "high",
+      "note": "THREAT ELEVATED (cycle 15, 2026-03-29): GDELT Live realtime global dashboard CONFIRMED LAUNCHED. Updates every 15 minutes, monitors 65 languages, interactive map updated every hour. Direct competitor to WorldPulse live map. WorldPulse differentiates via: OSINT/ADS-B/maritime layers, reliability scoring, social layer, API ecosystem, browser extension, self-hosting. Monitor GDELT Live for additional features."
     }
   ],
   "opportunities": [
-    "Open source community traction — GitHub stars, contributors",
+    "Open source community traction \u2014 GitHub stars, contributors",
     "AI-powered reliability scoring differentiates from legacy wires",
     "Self-hosting resonates with privacy-conscious newsrooms",
-    "Developer API ecosystem — first-mover advantage"
+    "Developer API ecosystem \u2014 first-mover advantage",
+    "Finance signals segment \u2014 new market for traders, analysts, newsrooms. GDELT Live is map-only, no financial intelligence. WorldPulse is now multi-domain: geopolitical + financial + OSINT."
   ],
   "feature_gaps": [
-    "Mobile app (apps/mobile) — needs feature parity with web",
-    "API rate limiting and monetization strategy",
-    "Embeddable widget for third-party sites",
-    "Browser extension for inline signal verification",
-    "Slack/Teams integration for newsroom alerts",
-    "GraphQL API layer in addition to REST",
-    "Multilingual signal support",
-    "AI-generated signal summaries"
+    "GDELT gdeltnews integration \u2014 new Python/Node package to reconstruct full-text articles from GDELT NGrams 3.0 at near-zero cost; could enrich WorldPulse signal summaries with full article text",
+    "GDELT Summary \u2014 LAUNCHED (cycle 17 scan, 2026-03-29): GDELT launched a browser-based multilingual visual news search platform (Summary) that allows deep learning-powered global news imagery search via Google Cloud Vision API. Non-interactive, no map, no OSINT. Not a direct threat but shows GDELT expanding in UI surface area.",
+    "NewsGuard for AI expansion \u2014 NewsGuard now tracks 3,000+ AI content farm sites via Pangram Labs partnership + publishes AI False Claims Monitor. Consider enriching WorldPulse credibility scores with NewsGuard API data feed when budget allows.",
+    "GDELT Live near-realtime map \u2014 CONFIRMED LAUNCHED (cycle 15). Updates every 15 min, 65 languages, hourly interactive map. Direct competitor to WorldPulse live map. WorldPulse differentiates via OSINT/ADS-B/maritime layers + reliability scoring + open-source."
   ],
   "closed_gaps": [
-    "Pinecone semantic search — DONE (cycle 75): pinecone.ts (194L), /search/semantic, /signals/:id/similar, SimilarSignals.tsx (143L), 336-line test suite",
-    "25 global news RSS feeds — DONE (cycle 74): BBC, Reuters, AP, Al Jazeera, NPR, DW, France24, Guardian, NHK, UN News, Euronews, Japan Times, Straits Times, The Hindu, SCMP, VOA, Kyiv Independent, Middle East Eye, Haaretz, Times of India, SMH, DW Africa, East African, Xinhua, TASS — news-rss.ts (700L) + 30 tests",
-    "Stripe Pro tier billing — DONE (cycle 73): subscriptions table, checkout, webhook, pricing page, 18 tests",
-    "Cloudflare real-IP middleware — DONE (cycle 72): nginx CIDR trust + Fastify plugin + CF-aware rate limit keys",
-    "Vercel deployment config + env var docs — DONE (cycle 71)",
-    "Gate 1 Scraper Stability Tracker — DONE (cycle 70)",
-    "Sentry web error tracking — DONE (cycle 62)",
-    "Developer Portal — DONE (cycle 60)",
-    "Multimedia enrichment — DONE (cycle 57)",
-    "Verification Engine UI — DONE (cycle 55)",
-    "Responsive mobile layouts — DONE (cycle 54)",
-    "UI Polish (skeletons/toasts) — DONE (cycle 53)",
-    "Heuristic bias detection — DONE (cycle 51)",
-    "GDELT 2.0 integration — DONE",
-    "GraphQL API + Subscriptions — DONE",
-    "RSS/Atom syndication — DONE",
-    "Media bias detection — DONE",
-    "Embeddable widget — DONE",
-    "Multilingual support — DONE",
-    "AI-generated signal summaries — DONE",
-    "Community bias corrections — DONE",
-    "Public status page — DONE",
-    "Onboarding flow — DONE (cycle 58)",
-    "API rate limiting — DONE",
-    "Sentry API error tracking — DONE"
+    "GDELT Summary Visual News Imagery — DONE (cycle 23): GET /api/v1/signals/:id/news-images added to signals.ts. Queries GDELT DOC API mode=artlist for articles with socialimage (Open Graph thumbnails). Filters empty socialimage. AbortSignal.timeout(5000), all errors return empty. Redis TTL 3600s, 30rpm rate limit. NewsImages.tsx (240L): 3-col desktop grid, lazy thumbnails with fallback, domain badge + caption + date, View Article CTA (purple), GDELT attribution, hidden when 0. Wired into SignalDetailClient.tsx after TVClips. news-images.test.ts (10 tests). TypeScript strict 0 errors. Git commit PENDING (index.lock, known cross-platform NTFS/Linux issue). WorldPulse is now the ONLY news/intelligence platform that combines OSINT intelligence signals + broadcast TV news clips + visual news article imagery in a single signal view — directly countering GDELT Summary standalone product.",
+    "Space Weather Intelligence Page — DONE (cycle 21): space-weather.ts (311L) GET /api/v1/space-weather/recent + GET /api/v1/space-weather/summary (G/R/S storm level extraction from NOAA SWPC alerts, CelesTrak satellite_events_24h). space-weather/page.tsx (476L): KPI cards for G/R/S scale (0-5, color-coded with labels Minor/Moderate/Strong/Severe/Extreme), event timeline, satellite section, time window selector, 5-min auto-refresh. 12 test cases. LeftSidebar + en.json + index.ts updated. WorldPulse is now the ONLY news intelligence platform with space weather monitoring. Unique competitive moat vs Ground News, GDELT, Reuters Connect, AP Wire, OpenClaw, Crucix.",
+    "Internet Outage Intelligence Page — DONE (cycle 20): outages.ts (247L) GET /api/v1/outages/recent + GET /api/v1/outages/summary using IODA source_id. internet-outages/page.tsx (326L): country status grid + event timeline + time window selector. 13 test cases. WorldPulse is the ONLY news/intelligence platform with consumer web UI for internet connectivity outage monitoring. OpenClaw has terminal-based IODA; WorldPulse has interactive web UI.",
+    "Natural Hazards Map Layer — DONE (cycle 19): GET /api/v1/hazards/map/points (hazards.ts, 247L) queries signals by source_slug IN (seismic, gvp-volcano, tsunami-warnings, firms), lat/lng filtered, hours param, 3-min Redis cache, 60rpm rate limit. map/page.tsx: showHazards state, HazardPoint type, MapLibre circle layer with color-by-type (amber=seismic, red=fire, purple=volcano, cyan=tsunami), radius-by-severity, click popups, 10-min auto-refresh, toggle button with count badge. hazards.test.ts (152L, 8 tests). Commit 70b518a. Closes Crucix satellite fire+seismic competitive gap. No news/intelligence competitor has unified natural hazards map layer.",
+    "Sanctions & Watchlist Intelligence UI \u2014 DONE (cycle 18): /sanctions page (478L, 'use client'). Debounced entity search \u2192 GET /api/v1/search/entities (OpenSanctions, 100+ lists). Schema filter pills. EntityCard with CRITICAL/HIGH/MEDIUM/LOW threat badges, dataset pills, country flags, 'Search signals \u2192' link. GET /api/v1/sanctions/featured: 14 parallel OpenSanctions searches for high-profile entities (Putin, Kim Jong-un, IRGC, Wagner Group, Hezbollah, Hamas, Assad, Kadyrov, Khamenei, Islamic State, Al-Qaida, + sanctioned vessels). Deduplicates + sorts by threat level. Shield icon + NEW badge in LeftSidebar. Closes Crucix 'sanctions' competitive gap. No other news/intelligence platform has this.",
+    "Ground News Podcasts & Opinions \u2014 DONE (cycle 17): signal_media table + media-extractor.ts (pure regex YouTube/podcast URL parser, all 3 YouTube URL formats, .mp3/.m4a/.ogg/.wav, Spotify, Apple Podcasts, Anchor.fm, Buzzsprout, SoundCloud). Non-blocking insert in scraper pipeline. GET /api/v1/signals/:id includes media: MediaItem[] in DTO. SignalMedia.tsx: collapsible 'Media & Commentary' section with youtube-nocookie.com iframe (privacy-first) + <audio controls>. 18 test cases. Wired into SignalDetailClient.tsx. WorldPulse now embeds multimedia on signal detail pages — directly counters Ground News Podcasts & Opinions feature.",
+    "Corroboration velocity persistence \u2014 DONE (cycle 16): Migration 031_last_corroborated_at.sql adds last_corroborated_at TIMESTAMPTZ to signals table (indexed, backfilled for multi-source signals). correlate.ts applyCorroborationBoost() stamps NOW() on every corroboration event. Signal type updated. feed.ts + signals.ts DTOs include field. ViralityBadge.tsx upgraded: computeViralityStatus(count, lastCorroboratedAt, lastUpdated) uses precise timestamp as primary velocity signal, falls back to lastUpdated for legacy rows. 27 test cases covering both paths. WorldPulse virality detection is now event-precise, not proxy-based.",
+    "Finance signals category \u2014 DONE (cycle 15 validation): finance category in Category type + FinanceSubcategory type. 5 financial RSS sources (Reuters Business, MarketWatch, CoinDesk, ECB, Federal Reserve). finance-classifier.ts (keyword banks for 5 subcategories + ticker extraction). GET /api/v1/finance/summary endpoint (5-min Redis cache, 60 rpm). /finance web page + Finance link in TopNav + LeftSidebar (NEW badge). finance.test.ts 289L (35 test cases). Closes OSINT Monitor Finance competitive gap.",
+    "Firefox browser extension port \u2014 DONE (cycle 14): manifest.firefox.json with background.scripts (IIFE event page, not service_worker), browser_specific_settings.gecko.id for AMO submission, strict_min_version 109.0. build.ts dual-target system: --target=chrome|firefox|all. package.json build:chrome/build:firefox/dev:chrome/dev:firefox scripts. manifest-firefox.test.ts (16 test cases: MV3 structure + Chrome/Firefox parity). WorldPulse extension now distributable on both Chrome Web Store AND Mozilla Add-Ons (AMO). Differentiates from Ground News Chrome-only bias extension and Perplexity UnCovered Chrome-only extension \u2014 WorldPulse is the only cross-browser open-source signal verifier.",
+    "Weekly digest email newsletter \u2014 DONE (cycle 13): Full weekly/daily digest system. digest_subscriptions table, email-digest.ts (365L) with buildDigestHtml/buildDigestText/sendDigestEmail/filterBySeverity, routes/digest.ts (243L) with POST /subscribe + DELETE /unsubscribe + GET /status + POST /admin/digest/send, DigestSubscription.tsx (343L) settings component, 20 unit tests. Closes Ground News 'Daily Briefing' competitive gap. Resend API. Configurable frequency (daily/weekly), category filters, severity thresholds.",
+    "Signal virality detection badge \u2014 DONE (cycle 12): ViralityBadge.tsx (110L). computeViralityStatus() 3-tier logic: viral (8+ sources), spreading (3-7 sources + last_updated within 4h), multi_source (3+ sources, older). Wired into FeedList.tsx + SignalDetailClient.tsx. 15 unit tests. Differentiates from Ground News (no corroboration velocity display anywhere).",
+    "Domain-level credibility check API endpoint \u2014 DONE (cycle 12 validation, already fully implemented in prior cycles): GET /api/v1/slop/check?domain=X in slop.ts. extractDomainFromInput(), computeDomainVerdict(), computeAiFarmConfidence(), buildDomainWarnings() \u2014 all exported + tested. Returns is_ai_farm, reliability_score, source_name, signals_indexed, verdict (unreliable/caution/trusted/unknown), warnings. Rate limited 30/min, no API key needed. slop-domain-check.test.ts exists.",
+    "Browser extension for inline signal verification \u2014 DONE (cycle 11 validation): apps/browser-extension/ fully implemented. content.ts (text-selection \u2192 signal overlay), background.ts (service worker, in-memory cache, settings), popup.ts (active-tab signal search + settings panel), api.ts (searchSignals, utility formatters), types.ts (SignalSummary, ExtensionSettings, BackgroundMessage). manifest.json MV3. api.test.ts (24 tests: getStatusColor, getSeverityColor, formatReliability, formatTimeAgo, escapeHtml, truncate). Differentiates from Ground News bias checker (shows related OSINT signals) and Perplexity UnCovered (source intelligence vs LLM fact-check). NEW THREAT: Ground News Chrome extension (bias checker, already live), Perplexity UnCovered extension (real-time LLM fact-check), Facticity AI Fact Checker \u2014 all competitors in browser-extension credibility space.",
+    "50 global news RSS feeds \u2014 DONE (cycle 11): expanded from 35\u219250. Added Tier 2c: EURACTIV, Moscow Times, Taipei Times, The Hindu National, Dawn Pakistan, Premium Times Nigeria, Bangkok Post, Jakarta Post, Al-Monitor, EU Observer, Africanews, RFE/RL, Caixin Global, Asia Times, Channel NewsAsia. Total: 50 RSS + 29 OSINT = 79 signal sources. news-rss.ts: 1237L.",
+    "35 global news RSS feeds \u2014 DONE (cycle 8): expanded from 25\u219235. Added Le Monde, Der Spiegel, El Pa\u00eds, The Wire India, Daily Maverick, Nikkei Asia, Arab News, AllAfrica, Folha de S.Paulo, The Conversation.",
+    "Pinecone semantic search \u2014 DONE (cycle 75): pinecone.ts (194L), /search/semantic, /signals/:id/similar, SimilarSignals.tsx (143L), 336-line test suite",
+    "25 global news RSS feeds \u2014 DONE (cycle 74): BBC, Reuters, AP, Al Jazeera, NPR, DW, France24, Guardian, NHK, UN News, Euronews, Japan Times, Straits Times, The Hindu, SCMP, VOA, Kyiv Independent, Middle East Eye, Haaretz, Times of India, SMH, DW Africa, East African, Xinhua, TASS \u2014 news-rss.ts (700L) + 30 tests",
+    "Stripe Pro tier billing \u2014 DONE (cycle 73): subscriptions table, checkout, webhook, pricing page, 18 tests",
+    "Cloudflare real-IP middleware \u2014 DONE (cycle 72): nginx CIDR trust + Fastify plugin + CF-aware rate limit keys",
+    "Vercel deployment config + env var docs \u2014 DONE (cycle 71)",
+    "Gate 1 Scraper Stability Tracker \u2014 DONE (cycle 70)",
+    "Sentry web error tracking \u2014 DONE (cycle 62)",
+    "Developer Portal \u2014 DONE (cycle 60)",
+    "Multimedia enrichment \u2014 DONE (cycle 57)",
+    "Verification Engine UI \u2014 DONE (cycle 55)",
+    "Responsive mobile layouts \u2014 DONE (cycle 54)",
+    "UI Polish (skeletons/toasts) \u2014 DONE (cycle 53)",
+    "Heuristic bias detection \u2014 DONE (cycle 51)",
+    "GDELT 2.0 integration \u2014 DONE",
+    "GraphQL API + Subscriptions \u2014 DONE",
+    "RSS/Atom syndication \u2014 DONE",
+    "Media bias detection \u2014 DONE",
+    "Embeddable widget \u2014 DONE",
+    "Multilingual support \u2014 DONE",
+    "AI-generated signal summaries \u2014 DONE",
+    "Community bias corrections \u2014 DONE",
+    "Public status page \u2014 DONE",
+    "Onboarding flow \u2014 DONE (cycle 58)",
+    "API rate limiting \u2014 DONE",
+    "Sentry API error tracking \u2014 DONE"
   ],
+  "cycle4_intel": {
+    "scan_date": "2026-03-28",
+    "ground_news_update": "Ground News global rank improved from 10,729 \u2192 9,228 (last 3 months), web traffic up 18.18% MoM. Now 50K+ sources processing 60K+ articles/day. Competitor landscape stable \u2014 top alternatives: newsbreak.com (31.8M visits), allsides.com (1.4M). No major new feature announcements. WorldPulse still differentiates on open-source + semantic search + OSINT + self-hosting.",
+    "ai_funding_landscape": "March 2026: Yann LeCun's AMI raised $1B seed at $3.5B valuation (world model AI). ElevenLabs $500M Series D (voice). Shield AI $1.5B Series G (defense drones). OpenAI $110B round. No direct news-intelligence competitor received significant funding.",
+    "gdelt_update": "GDELT continues to operate unchanged in 2026 \u2014 GEO 2.0 API, DOC 2.0 API, multilingual TV Visual Explorer all active. No new major API features announced. GDELT integration in WorldPulse scraper (gdelt.ts) remains current.",
+    "open_source_landscape": "FreshRSS remains dominant simple RSS aggregator. WorldMonitor (koala73) still GitHub-only OSINT project, no production launch. No new open-source news intelligence platform with real traction detected. WorldPulse remains most complete open-source global intelligence network.",
+    "worldpulse_advantage": "Palantir-style map upgrade (satellite basemap + ADS-B + maritime layer + 3D tilt) now CONFIRMED IMPLEMENTED. 31 OSINT sources active. Pinecone semantic search live. Ground News web traffic growing but zero open-source/self-hosting/OSINT differentiation. WorldPulse's technical moat expanding.",
+    "key_threat": "Ground News traffic momentum (18.18% MoM growth). Counter: WorldPulse needs more mainstream news sources to complement OSINT \u2014 adding global RSS feeds (Le Monde, El Pa\u00eds, Nikkei etc.) would close that gap faster than building user traction."
+  },
+  "cycle5_intel": {
+    "scan_date": "2026-03-28",
+    "ground_news_update": "Ground News launched 'Podcasts & Opinions' feature (in-app podcasts/YouTube clips for commentary on breaking news) + external browser for cleaner article reading experience + Sort & Filter paywall filter. Still zero semantic search, zero open-source, zero self-hosting. Three paid tiers: Pro ($9.99/yr), Premium ($29.99/yr), Vantage.",
+    "newsguard_update": "NewsGuard now tracking 3,006 AI Content Farm sites spanning 16 languages (partnered with Pangram Labs for AI-generated content detection). AI slop/content-farm detection is accelerating \u2014 Pangram sees 300-500 new AI content farm sites per month. Potential WorldPulse feature: surface AI content farm signals to users.",
+    "gdelt_update": "GDELT Context 2.0 API now live alongside DOC 2.0, GEO 2.0, TV 2.0, TVAI 2.0. No major new capabilities. WorldPulse gdelt.ts scraper integration remains current.",
+    "ai_funding_landscape": "March 2026: Harvey legal AI raised $200M at $11B valuation. Yann LeCun AMI $1B seed at $3.5B valuation. No direct news-intelligence competitor received significant funding. Total AI funding running at record pace but concentrated in LLM/legal/robotics categories.",
+    "new_threats": "None detected. WorldMonitor (koala73) still GitHub-only. Intell Weave still not publicly launched. No new open-source news intelligence platform with traction.",
+    "worldpulse_advantage": "Unique stack: open-source + self-hostable + real-time OSINT + Pinecone semantic search + AI reliability scoring + Stripe billing. Ground News growing (new UX features) but zero open-source/OSINT/semantic differentiation. NewsGuard AI content farm detection could be an integration opportunity.",
+    "opportunity": "NewsGuard's AI Content Farm tracking creates a potential partnership/integration angle. WorldPulse could surface 'AI-generated content warning' badges on signals from known AI content farms \u2014 differentiating from Ground News and adding credibility scoring depth."
+  },
+  "cycle6_intel": {
+    "scan_date": "2026-03-28",
+    "ground_news_update": "Ground News stable at 50K+ sources. Latest app update (v4.24.0, March 15 2026) added 'Podcasts & Opinions' feature \u2014 in-app podcasts/YouTube clips for commentary on breaking news. External browser for cleaner article reading experience. Vantage tier now live on mobile. Still zero semantic search, zero open-source, zero self-hosting. WorldPulse differentiates clearly.",
+    "newsguard_update": "NewsGuard tracking 3,006+ AI Content Farm sites (Pangram Labs partnership). 300-500 new AI content farm sites emerging monthly. Pre-built integration with The Trade Desk for pre-bid blocking. Opportunity: WorldPulse could surface 'AI-generated content warning' badges from NewsGuard datastream.",
+    "new_osint_competitors": [
+      {
+        "name": "Shadowbroker OSINT Dashboard",
+        "url": "https://github.com (Show HN, March 8 2026)",
+        "threat_level": "low",
+        "note": "Real-time OSINT dashboard with 15 live global feeds. GitHub project, smaller scope than WorldPulse. No production SaaS launch."
+      },
+      {
+        "name": "OpenClaw OSINT Monitoring",
+        "url": "https://openclawapi.org",
+        "threat_level": "low",
+        "note": "OSINT monitoring system integrating Al Jazeera + AP News. Production environment but narrow focus (Middle East, flight tracking). Not a general-purpose intelligence platform."
+      }
+    ],
+    "worldmonitor_update": "WorldMonitor now reported to track 220+ military bases, live aircraft, dark ships, nuclear facilities. Expanded scope since last scan. Still GitHub-only, no production SaaS, no search/verification/social layer. Remains low-medium threat.",
+    "ai_funding_landscape": "No direct news-intelligence competitor received significant new funding in March 2026. AI funding concentrated in LLM infra (OpenAI $110B, Anthropic $30B Series G), legal AI (Harvey $200M at $11B), and new labs (AMI/LeCun $1B seed, Humans& $480M seed). WorldPulse space remains wide open.",
+    "worldpulse_advantage": "Growing OSINT ecosystem but all new entrants are smaller-scope GitHub projects with no production SaaS. WorldPulse remains most complete open-source global intelligence network. OSINT moat strengthened: satellite map + ADS-B + maritime + Pinecone semantic search. PostHog integration (next task) will add product analytics to sharpen roadmap decisions.",
+    "key_opportunity": "NewsGuard AI Content Farm datastream (3,006+ sites, +300-500/month) is a strong partnership angle. Adding AI-generated content warning badges to WorldPulse signals would be a unique credibility feature vs Ground News."
+  },
+  "cycle13_intel": {
+    "scan_date": "2026-03-29",
+    "ground_news_update": "Ground News v4.24.0 still latest as of March 29 2026 \u2014 no new features since cycle 12. 50K+ sources, 60K articles/day. Has 'Daily Briefing' email feature (ground.news/daily-briefing). WorldPulse now has configurable weekly/daily digest subscriptions \u2014 closes this feature gap. Ground News still ZERO map, ZERO semantic search, ZERO self-hosting, ZERO open-source.",
+    "gdelt_update": "NEW: gdeltnews Python package launched \u2014 reconstructs full-text articles at near-zero cost using GDELT Web News NGrams 3.0. Opportunity: integrate into WorldPulse scraper to enrich signal summaries with full article text where available. GDELT TV News Visual Explorer still active (March 19, 2026 API update).",
+    "osint_landscape_update": "OSINT Monitor (marcko80) now has 4 variants: World (geopolitics), Tech (tech sector), Finance (92 stock exchanges), Social Monitor (real-time social media). Threat level remains low (GitHub-only, no production SaaS). However, Finance variant is notable \u2014 WorldPulse lacks dedicated finance/market signals category.",
+    "newsguard_update": "NewsGuard AI Content Farm tracker: launched real-time datastream for advertisers, pre-built integration with The Trade Desk for pre-bid blocking. 3,006+ sites, growing 300-500/month. WorldPulse AIContentFarmBadge already capitalizes on this data. No new WorldPulse action needed this cycle.",
+    "ai_funding_landscape": "No direct news-intelligence competitor received significant funding. AI funding concentrated in LLM infra (OpenAI $110B, Anthropic $30B), legal AI (Harvey $200M @$11B, Legora $550M @$5.55B), voice (ElevenLabs $500M), robotics/defense (Shield AI $1.5B). WorldPulse space wide open.",
+    "new_threats": "None detected. All known OSINT competitors (OSINT Monitor, Shadowbroker, OpenClaw, WorldMonitor) remain GitHub-only. Intell Weave still not publicly launched. No new open-source intelligence SaaS.",
+    "worldpulse_advantage": "After cycle 13: Weekly digest email subscriptions now live. Full stack: 79 signal sources (50 RSS + 29 OSINT), Palantir-style map (satellite/ADS-B/maritime), country intelligence pages, browser extension (Chrome MV3), AI Content Farm badges, Pinecone semantic search, ViralityBadge spreading detection, PostHog analytics, Stripe billing, weekly digest emails via Resend. No competitor matches this full stack.",
+    "key_opportunity": "Top remaining gaps: (1) Firefox extension port \u2014 extends browser-extension reach, relatively low effort; (2) Corroboration velocity persistence (last_corroborated_at DB column) \u2014 more accurate spreading detection; (3) GDELT gdeltnews integration for full-text article enrichment; (4) Finance signals category (stock market, commodities, crypto) to match OSINT Monitor Finance variant."
+  },
+  "cycle12_intel": {
+    "scan_date": "2026-03-29",
+    "ground_news_update": "Ground News v4.24.0 still latest as of March 29 2026 \u2014 no new features announced. Stable at 50K+ sources, 60K articles/day. Chrome bias-checker extension remains their primary differentiator. Still ZERO map, ZERO semantic search, ZERO self-hosting, ZERO corroboration velocity detection. WorldPulse now has ViralityBadge showing spreading velocity \u2014 a feature Ground News cannot match as they do not track signal corroboration across sources.",
+    "ai_funding_landscape": "No direct news-intelligence competitor received significant funding in March 2026. AI funding concentrated in LLM infra (OpenAI $110B, Anthropic $30B Series G), robotics (ex-DeepMind $11B valuation talks), legal AI (Harvey $200M @$11B, Legora $550M @$5.55B). WorldPulse space remains wide open.",
+    "new_threats": "None detected. WorldMonitor (koala73) still GitHub-only. Intell Weave still not publicly launched. No new open-source news intelligence platform with production SaaS launched. OSINTNova (osintnova.com) is an OSINT tools aggregator targeting investigators \u2014 different audience to WorldPulse. Tranquility AI + Fivecast partnership is government/law enforcement focused \u2014 not direct competition.",
+    "osint_landscape": "OSINTNova launched for investigators/researchers (not journalists or general public). Tranquility AI + Fivecast partnership enables government analysts to generate intelligence reports from OSINT collections \u2014 enterprise/government market, not WorldPulse's open-source/newsroom/developer market. WorldPulse's target market (newsrooms, developers, researchers, civic media) remains unaddressed by competitors.",
+    "worldpulse_advantage": "After cycle 12: ViralityBadge adds corroboration velocity to every signal card and detail page. Domain credibility check API (GET /api/v1/slop/check) confirmed fully operational. Combined: 79 signal sources (50 RSS + 29 OSINT), Palantir-style map (satellite/ADS-B/maritime), country intelligence pages, browser extension, AI Content Farm badges, Pinecone semantic search, PostHog analytics, Stripe billing. No competitor matches this full stack.",
+    "key_opportunity": "Remaining gaps: (1) Weekly digest email \u2014 engagement/retention driver; (2) Firefox extension port \u2014 extends browser-extension reach; (3) True corroboration velocity persistence (last_corroborated_at timestamp) for more accurate spreading detection than last_updated proxy currently used."
+  },
+  "cycle11_intel": {
+    "scan_date": "2026-03-29",
+    "ground_news_update": "Ground News v4.24.0 (March 2026) still latest. 50K+ sources, 60K articles/day. NEW: Ground News has its own Chrome browser extension (bias checker) \u2014 shows bias ratings and coverage blindspots inline on any news page. This is a DIRECT competitor to WorldPulse's browser extension. WorldPulse differentiates: shows related OSINT signals (intelligence-grade) vs Ground News showing bias scores (editorial-grade).",
+    "browser_extension_competitors": [
+      {
+        "name": "Ground News Bias Checker (Chrome Extension)",
+        "threat_level": "medium",
+        "note": "Chrome extension showing bias ratings and blindspots per article/site. Head-to-head with WorldPulse extension in browser-extension credibility space. WorldPulse differentiates: OSINT signal overlay vs editorial bias score."
+      },
+      {
+        "name": "Perplexity UnCovered",
+        "threat_level": "medium",
+        "note": "Chrome extension for real-time LLM-powered fact-checking with citations and verdicts via right-click. Uses Perplexity's LLM. Different approach: LLM inference vs WorldPulse's live signal database. Both solve 'is this true?' problem differently."
+      },
+      {
+        "name": "Facticity AI Fact Checker",
+        "threat_level": "low",
+        "note": "Chrome extension that detects factual claims and categorizes as True/False/Unverifiable. Newer, smaller user base. Similar LLM approach to Perplexity UnCovered."
+      }
+    ],
+    "osint_landscape_update": "No new production OSINT SaaS platforms launched. Shadowbroker (15 feeds, GitHub), OpenClaw (Middle East focus, narrow), OSINT Monitor (GitHub), Situation Monitor (GitHub) \u2014 all still GitHub-only. WorldPulse remains most complete open-source global intelligence network. WorldMonitor expanded (220+ military bases, live aircraft) but still GitHub-only.",
+    "ai_funding_landscape": "March 2026: No direct news-intelligence competitor received significant new funding. AI funding concentrated in LLM infra (OpenAI $110B, Anthropic $30B), legal AI (Harvey $200M @$11B, Legora $550M @$5.55B), robotics. WorldPulse space wide open.",
+    "worldpulse_advantage": "After cycle 11: 79 total signal sources (50 RSS + 29 OSINT). RSS expansion now includes: Eastern Europe (RFE/RL, Moscow Times), East Asia (Caixin, Taipei Times, Channel NewsAsia), SE Asia (Bangkok Post, Jakarta Post), South Asia (Dawn Pakistan, The Hindu National), Africa (Africanews, Premium Times Nigeria), EU institutions (EURACTIV, EU Observer), Middle East analysis (Al-Monitor). Geographic diversity now spans all 7 continents. Browser extension confirmed operational \u2014 differentiates from Ground News (signal intelligence vs bias scoring) and Perplexity (live database vs LLM inference).",
+    "key_opportunity": "Next gaps: (1) Domain credibility API endpoint \u2014 expose AI content farm + source reliability data to developers; (2) Signal trending/virality detection \u2014 surface fast-spreading stories; (3) Browser extension Firefox port; (4) osint_health_heartbeat still technically pending but watchdog (osint-watchdog.ts, all 54 sources registered) already handles this \u2014 recommend closing this task."
+  },
+  "cycle10_intel": {
+    "scan_date": "2026-03-29",
+    "ground_news_update": "Ground News v4.24.0 (March 15 2026) confirmed still latest. Features: Podcasts & Opinions in-app commentary, external browser, Sort & Filter paywall toggle, Vantage mobile tier. 50K+ sources, 60K articles/day. ZERO MAP FUNCTIONALITY \u2014 no map at all, let alone satellite/ADS-B/maritime. WorldPulse mobile map now has Palantir-style layers (satellite basemap + ADS-B aircraft + maritime vessels) that Ground News cannot match.",
+    "ai_funding_landscape": "March 2026: No direct news-intelligence competitor received significant new funding. AI funding concentrated in LLM infra (OpenAI $110B, Anthropic $30B), robotics (ex-DeepMind $11B valuation talks, Skild AI $1.4B), legal AI (Harvey $200M @$11B, Legora $550M @$5.55B). WorldPulse space wide open.",
+    "new_threats": "None detected. All known OSINT competitors (Shadowbroker, OpenClaw, OSINT Monitor, Situation Monitor, WorldMonitor) remain GitHub-only with no production SaaS launch. No new news-intelligence platform funded or launched.",
+    "open_source_landscape": "WorldPulse remains most complete open-source global intelligence network. No competitor offers: open-source + self-hostable + 64 signal sources + satellite/ADS-B/maritime map + Pinecone semantic search + country intelligence pages + AI content farm badges + Stripe billing. Gap from nearest competitors widening each cycle.",
+    "worldpulse_mobile_advantage": "After cycle 10, WorldPulse mobile app has Palantir-style map parity with web: satellite basemap toggle, live ADS-B aircraft overlay, maritime vessel layer (carriers/dark ships/AIS distress). Ground News mobile app has no map feature at all. AP/Reuters have no open-source mobile apps. This is a unique mobile differentiator.",
+    "key_opportunity": "Next gaps: (1) Browser extension for inline signal verification \u2014 highest remaining feature gap on list; (2) Developer API documentation improvements to grow open-source community; (3) osint_health_heartbeat (belt-and-suspenders stability, priority 3 \u2014 watchdog already covers this)."
+  },
+  "cycle9_intel": {
+    "scan_date": "2026-03-29",
+    "ground_news_update": "Ground News v4.24.0 (March 15 2026) confirmed still latest. Features unchanged: Podcasts & Opinions in-app commentary, external browser for article reading, Sort & Filter paywall toggle, Vantage mobile tier. 50K+ sources, 60K articles/day. Zero semantic search, zero open-source, zero self-hosting, zero country intelligence pages. WorldPulse now has country-level intelligence pages \u2014 a differentiated feature Ground News lacks entirely.",
+    "newsguard_update": "NewsGuard AI Content Farm tracker at 3,006 sites (Pangram partnership). Growing 300-500/month. WorldPulse already implemented AI Content Farm warning badges in cycle 7. No new NewsGuard features announced.",
+    "new_threats": "None detected. No new news-intelligence competitor launched or received significant funding. AI funding concentrated in LLM infra, robotics (ex-DeepMind $11B valuation talks), and legal AI (Harvey $200M @$11B, Legora $550M @$5.55B). WorldPulse space wide open.",
+    "ai_funding_landscape": "March 2026: Yann LeCun AMI $1.03B seed (largest European seed ever). Mind Robotics $500M Series A. Shield AI $1.5B Series G @$12.7B. No direct news/OSINT intelligence platform funded.",
+    "open_source_landscape": "Shadowbroker OSINT Dashboard (GitHub-only, low threat), OpenClaw (narrow ME focus, low threat), OSINT Monitor (marcko80, GitHub-only), Situation Monitor (GitHub-only). None are production SaaS. WorldPulse remains most complete open-source global intelligence network.",
+    "worldpulse_advantage": "Added Country Intelligence Detail Page (/countries/[code]) \u2014 no competitor offers per-country risk scoring, signal timeline, category breakdown, and trend visualization in a free open-source platform. Combined with: 35 RSS sources + 29 OSINT feeds, Palantir-style satellite/ADS-B/maritime map, Pinecone semantic search, AI Content Farm badges, PostHog analytics, Stripe billing, email+Slack+Teams+Discord alert integrations. Technical moat deepening each cycle.",
+    "key_opportunity": "Next gaps to close: (1) Mobile app Palantir-style map features (satellite/ADS-B layers missing from mobile), (2) Browser extension for inline signal verification, (3) Developer API documentation improvements for open-source community growth."
+  },
+  "cycle8_intel": {
+    "scan_date": "2026-03-29",
+    "ground_news_update": "Ground News v4.24.0 (March 15 2026) still latest. Features: Podcasts & Opinions in-app, external browser for article reading, Sort & Filter paywall filter, Vantage mobile tier. Still 50K+ sources, 60K articles/day. Zero semantic search, zero open-source, zero self-hosting. WorldPulse source gap now 35 RSS (cycle 8) vs 50K+ \u2014 still a gap in volume but WorldPulse has higher signal quality, OSINT depth, semantic search, and self-hosting.",
+    "newsguard_update": "NewsGuard AI Content Farm tracker at 3,006 sites (last updated March 17 2026) via Pangram Labs. Growing at 300-500/month. WorldPulse has already acted on this data: AI Content Farm warning badges implemented in cycle 7. Pangram raised $4M to fight AI content flooding.",
+    "new_osint_competitors": [
+      {
+        "name": "Shadowbroker OSINT Dashboard",
+        "threat_level": "low",
+        "note": "Real-time OSINT dashboard: ADS-B, AIS (25K+ ships), N2YO satellite, GDELT conflict data in MapLibre. 15 live feeds. GitHub-only, no SaaS, no search, no billing. Narrower scope than WorldPulse."
+      },
+      {
+        "name": "OpenClaw / Clawdwatch",
+        "url": "https://openclawapi.org",
+        "threat_level": "low",
+        "note": "Self-hosted AI agent framework with news/flight/satellite monitoring. Middle East & conflict keywords focus. 60+ Vercel Edge Functions for RSS proxying. Production environment but narrow scope. Not a general intelligence platform."
+      },
+      {
+        "name": "Global Threat Map",
+        "threat_level": "low",
+        "note": "Open-source cybersecurity threat map (malware, phishing, attacks). Security-only focus. Not news intelligence. No overlap with WorldPulse mainstream news coverage."
+      }
+    ],
+    "ai_funding_landscape": "March 2026: No direct news-intelligence competitor received significant new funding. AI funding concentrated in LLM infra (OpenAI $110B @ $840B val, Anthropic $30B Series G @ $380B val), legal AI (Harvey $200M @ $11B), enterprise governance platforms ($34M seed). WorldPulse space wide open. OpenAI acquired Promptfoo (AI security startup, March 9).",
+    "worldpulse_advantage": "WorldPulse now has 35 RSS sources + ~29 OSINT feeds = largest open-source global intelligence feed stack. Added multilingual sources (French, Portuguese) \u2014 broadens geographic + linguistic coverage. AI Content Farm badges (cycle 7) + Pinecone semantic search + satellite/ADS-B/maritime map + PostHog analytics + Stripe billing. No competitor matches this full stack. Ground News has more source volume but zero open-source/OSINT/semantic/self-hosting differentiation.",
+    "key_opportunity": "Next gap: OSINT poller heartbeat (stability) to ensure 14-day Gate-1 stability window is robust. After that: embeddable widget distribution, browser extension for inline verification, or mobile app (React Native apps/mobile) feature parity."
+  },
+  "cycle7_intel": {
+    "scan_date": "2026-03-29",
+    "ground_news_update": "Ground News stable at 50K+ sources. v4.24.0 (March 15 2026) features unchanged: Podcasts & Opinions, external browser, Vantage mobile. Still zero semantic search, zero open-source, zero self-hosting. WorldPulse credibility layer (AI Content Farm badges) now creates additional differentiation.",
+    "newsguard_update": "NewsGuard AI Content Farm tracker still at 3,006+ sites via Pangram Labs partnership, growing at 300-500/month. WorldPulse now ACTED on this opportunity: AIContentFarmBadge component + ai-content-farm.ts utility implemented in cycle 7 \u2014 WorldPulse now surfaces AI content farm warnings on signals, a feature no other open-source news platform offers.",
+    "new_osint_competitors": [
+      {
+        "name": "OSINT Monitor (marcko80)",
+        "url": "https://github.com/marcko80/osintmonitor",
+        "threat_level": "low",
+        "note": "NEW (detected 2026-03-29): Real-time global intelligence dashboard with AI-powered news aggregation, geopolitical monitoring, and infrastructure tracking. GitHub-only. Smaller scope than WorldPulse \u2014 no search, no verification engine, no billing, no self-hosting docs. Low threat."
+      },
+      {
+        "name": "Situation Monitor",
+        "url": "https://github.com (open-source)",
+        "threat_level": "low",
+        "note": "NEW (detected 2026-03-29): Open-source real-time dashboard for global information streams (news, financial markets, tech, geopolitical). Functions more like an intelligence monitoring system. No production SaaS, no semantic search, no OSINT sources. Low threat."
+      }
+    ],
+    "ai_funding_landscape": "No direct news-intelligence competitor received significant new funding as of March 29, 2026. AI funding concentrated in robotics (ex-DeepMind startup, $11B valuation in talks), accounting AI (Basis $1.15B valuation), legal AI (Legora $550M Series D at $5.55B). WorldPulse space remains wide open.",
+    "worldpulse_advantage": "WorldPulse now has implemented AI Content Farm warning badges \u2014 a direct response to NewsGuard's 3,006-site AI slop tracker. This is a unique credibility feature unavailable in Ground News, Reuters Connect, AP, or any open-source OSINT platform. Combined with Pinecone semantic search + satellite map + 54 OSINT sources, moat continues to deepen.",
+    "key_opportunity": "Next competitive gap to close: source volume. Ground News 50K+ sources vs WorldPulse ~34 (25 RSS + ~9 OSINT). Adding Le Monde, Der Spiegel, El Pa\u00eds, Nikkei, Arab News, AllAfrica etc. would reduce this gap."
+  },
+  "cycle78_intel": {
+    "scan_date": "2026-03-28",
+    "ai_funding_landscape": "AI funding continues at record pace in 2026. Yann LeCun's new startup raised $1B seed (Mar 2026). February 2026 was the largest single month of startup funding ever at $189B globally. No direct news-intelligence competitor identified with significant new funding.",
+    "ground_news_update": "Ground News now has 50K+ sources and 60K articles added daily. Three paid tiers: Pro ($9.99/yr), Premium ($29.99/yr), Vantage. New external browser feature for article reading. No semantic search, no open-source, no self-hosting. WorldPulse Pinecone integration differentiates clearly.",
+    "new_competitors_detected": [
+      {
+        "name": "WorldMonitor",
+        "url": "https://github.com/koala73/worldmonitor",
+        "threat_level": "medium",
+        "note": "Open-source real-time global intelligence dashboard, aggregates 30+ external data sources across geopolitics, finance, energy, climate, aviation, cyber. Direct OSINT overlap with WorldPulse. GitHub project, smaller scope than WorldPulse."
+      },
+      {
+        "name": "Intell Weave",
+        "url": null,
+        "threat_level": "medium",
+        "note": "Production-minded news platform: ingests web, understands content (text+media), verifies claims, serves hyper-personalized feeds powered by NLP, embeddings, and clean engineering. Not open-source. Direct AI news verification overlap."
+      }
+    ],
+    "open_source_landscape": "No significant new open-source news intelligence platform with real traction detected in March 2026. WorldMonitor (koala73) is closest OSINT overlap but smaller scope. WorldPulse remains the most complete open-source global intelligence network.",
+    "worldpulse_advantage": "Unique positioning: open-source + self-hostable + real-time + semantic search (Pinecone) + 54 OSINT sources + AI reliability scoring. Ground News has more sources (50K vs ~54) but zero open-source, zero semantic search, zero self-hosting. WorldMonitor is smaller in scope. No competitor matches the full stack."
+  },
   "cycle75_intel": {
     "ai_funding_landscape": "17 US AI startups secured $100M+ rounds in first 2 months of 2026. February 2026 recorded largest single month of startup funding ever at $189B globally. Arena raised $150M Series A for LLM evaluation. No direct news-intelligence competitor identified with significant new funding.",
     "ground_news_update": "Ground News processes 30K stories/day from 40K+ sources. Core features: bias meter, blindspot reports, Safari/Chrome extension. No semantic similarity search, no open-source, no self-hosting. WorldPulse Pinecone integration now differentiates clearly.",
-    "open_source_competitors": "No new significant open-source news intelligence platform detected in March 2026. FreshRSS, Tiny Tiny RSS, auto-news are RSS readers — not intelligence platforms. WorldMonitor remains closest OSINT overlap.",
+    "open_source_competitors": "No new significant open-source news intelligence platform detected in March 2026. FreshRSS, Tiny Tiny RSS, auto-news are RSS readers \u2014 not intelligence platforms. WorldMonitor remains closest OSINT overlap.",
     "worldpulse_advantage": "Semantic search via Pinecone+OpenAI is now implemented. No direct competitor offers open-source, self-hostable, real-time news intelligence with vector similarity search. Source count still lags Ground News (54 vs 40K) but quality + OSINT + semantic differentiation is strong."
   },
   "raw_searches": [

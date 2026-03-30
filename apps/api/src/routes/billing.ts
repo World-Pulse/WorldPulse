@@ -230,8 +230,8 @@ export const registerBillingRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // ── POST /webhook ──────────────────────────────────────────────────────────
-  // Raw body required for Stripe signature verification.
-  // TODO: register @fastify/raw-body in index.ts to enable signature verification.
+  // Raw body captured by @fastify/raw-body (registered in index.ts) for Stripe
+  // signature verification via stripe.webhooks.constructEvent.
   app.post('/webhook', {
     config: { rawBody: true },
     schema: {

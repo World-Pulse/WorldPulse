@@ -354,6 +354,25 @@ Add a shared `sendError(reply, status, code, message)` helper in `apps/api/src/l
 
 ---
 
+## 🧠 Skill Guides (added 2026-03-28)
+
+Four structured methodology files now live in `brain_memory/skills/`. The brain agent's
+`execute_task()` automatically tells Claude to read the relevant file before each task.
+
+| Skill | File | When to use |
+|-------|------|-------------|
+| Code Review | `brain_memory/skills/code-review.md` | Security/perf/correctness audits of any route or module |
+| Tech Debt | `brain_memory/skills/tech-debt.md` | Periodic structured debt audit with scoring + remediation plan |
+| System Design | `brain_memory/skills/system-design.md` | New feature architecture, storage choice, API design decisions |
+| Standup | `brain_memory/skills/standup.md` | Daily status generation from git/Linear activity |
+
+Three new recurring efficiency tasks use these skills explicitly:
+- `skill_code_review_audit` (priority 5): Full security + perf audit of apps/api/src/routes/, auto-fixes all 🔴 findings
+- `skill_tech_debt_audit` (priority 5): Scored debt audit across all 7 categories, auto-fixes all Quick Win items
+- `skill_system_design_review` (priority 4): Maps actual architecture vs ideal, writes to brain_memory/architecture_review.md
+
+---
+
 ## 🔌 Integration Roadmap (added 2026-03-28)
 
 Three-phase integration plan locked in. Tasks are in worldpulse_tasks.json.

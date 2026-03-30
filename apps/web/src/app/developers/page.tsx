@@ -161,32 +161,32 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
   {
     name: 'Intelligence',
     icon: '🛡️',
-    description: 'Specialized intelligence feeds — military, maritime, jamming, threat tracking.',
+    description: 'Specialized intelligence feeds — military, maritime, jamming, threat tracking. Requires Pro API key.',
     endpoints: [
       {
         method: 'GET', path: '/api/v1/briefing/daily',
         description: 'AI-generated daily intelligence briefing with narrative synthesis.',
-        auth: true,
+        auth: true, rateLimit: 'Pro plan · 10 req/day',
       },
       {
         method: 'GET', path: '/api/v1/threats/missiles',
         description: 'Missile and drone threat intelligence — ballistic, cruise, hypersonic, UAV.',
-        auth: false,
+        auth: true, rateLimit: 'Pro plan · 30 req/min',
       },
       {
         method: 'GET', path: '/api/v1/maritime/vessels',
         description: 'Naval intelligence — carrier strike groups, AIS vessel tracking, dark ships.',
-        auth: false,
+        auth: true, rateLimit: 'Pro plan · 30 req/min',
       },
       {
         method: 'GET', path: '/api/v1/jamming/zones',
         description: 'GPS/GNSS jamming intelligence — military EW, spoofing, civilian interference.',
-        auth: false,
+        auth: true, rateLimit: 'Pro plan · 30 req/min',
       },
       {
         method: 'GET', path: '/api/v1/countries',
         description: 'Country-level risk scores and geopolitical context.',
-        auth: false,
+        auth: false, rateLimit: '30 req/min per IP',
       },
     ],
   },
@@ -220,17 +220,17 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
   {
     name: 'STIX & Bundles',
     icon: '🔐',
-    description: 'Threat intelligence export in STIX 2.1 format + Ed25519-signed source packs.',
+    description: 'Threat intelligence export in STIX 2.1 format + Ed25519-signed source packs. Requires Pro API key.',
     endpoints: [
       {
         method: 'GET', path: '/api/v1/stix/bundle',
         description: 'Export signals as STIX 2.1 bundle for integration with TIPs.',
-        auth: true,
+        auth: true, rateLimit: 'Pro plan · 10 req/hour',
       },
       {
         method: 'GET', path: '/api/v1/bundles',
         description: 'Verified source pack bundles — Ed25519 signed, tamper-proof.',
-        auth: false,
+        auth: true, rateLimit: 'Pro plan · 30 req/min',
       },
       {
         method: 'GET', path: '/api/v1/bundles/public-key',
@@ -445,10 +445,15 @@ function EndpointCard({ endpoint }: { endpoint: Endpoint }) {
         </code>
         {!endpoint.auth && (
           <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex-shrink-0">
-            PUBLIC
+            FREE
           </span>
         )}
-        {endpoint.auth && (
+        {endpoint.auth && endpoint.rateLimit?.includes('Pro') && (
+          <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-purple-500/10 text-purple-400 border border-purple-500/20 flex-shrink-0">
+            PRO
+          </span>
+        )}
+        {endpoint.auth && !endpoint.rateLimit?.includes('Pro') && (
           <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20 flex-shrink-0">
             AUTH
           </span>
@@ -557,6 +562,55 @@ export default function DevelopersPage() {
               <span className="text-[16px]">◆</span>
               GraphQL Playground
             </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* API Tier Pricing */}
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10 border-b border-[rgba(255,255,255,0.07)]">
+        <h2 className="font-display text-xl text-wp-text1 mb-6 tracking-wide">API TIERS</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="bg-wp-surface border border-[rgba(255,255,255,0.07)] rounded-xl p-5">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">FREE</span>
+            </div>
+            <h3 className="text-[16px] font-bold text-wp-text mb-1">Public</h3>
+            <p className="text-[12px] text-wp-text3 mb-3">Open access for research, open-source projects, and prototyping.</p>
+            <ul className="space-y-1 text-[12px] text-wp-text3">
+              <li>• Public signals, search, feed</li>
+              <li>• RSS / Atom / JSON Feed</li>
+              <li>• Country risk scores</li>
+              <li>• 60 req/min rate limit</li>
+            </ul>
+          </div>
+          <div className="bg-wp-surface border border-wp-amber/30 rounded-xl p-5 relative">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20">AUTH</span>
+            </div>
+            <h3 className="text-[16px] font-bold text-wp-text mb-1">Authenticated</h3>
+            <p className="text-[12px] text-wp-text3 mb-3">Free account required. Higher limits and personalized data.</p>
+            <ul className="space-y-1 text-[12px] text-wp-text3">
+              <li>• Everything in Public</li>
+              <li>• Daily AI briefings</li>
+              <li>• Following feed</li>
+              <li>• 120 req/min rate limit</li>
+            </ul>
+          </div>
+          <div className="bg-wp-surface border border-purple-500/30 rounded-xl p-5 relative">
+            <div className="absolute -top-2 right-4 px-2 py-0.5 rounded text-[9px] font-mono bg-purple-500 text-white font-bold">COMING SOON</div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-purple-500/10 text-purple-400 border border-purple-500/20">PRO</span>
+            </div>
+            <h3 className="text-[16px] font-bold text-wp-text mb-1">Pro</h3>
+            <p className="text-[12px] text-wp-text3 mb-3">Full intelligence suite for analysts, newsrooms, and enterprise.</p>
+            <ul className="space-y-1 text-[12px] text-wp-text3">
+              <li>• Everything in Authenticated</li>
+              <li>• Missile & drone intelligence</li>
+              <li>• Maritime/naval tracking</li>
+              <li>• GPS/GNSS jamming zones</li>
+              <li>• STIX 2.1 export & signed bundles</li>
+              <li>• 300 req/min rate limit</li>
+            </ul>
           </div>
         </div>
       </div>

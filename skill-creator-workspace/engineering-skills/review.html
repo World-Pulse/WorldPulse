@@ -1,0 +1,1325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eval Review</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600&family=Lora:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT" crossorigin="anonymous"></script>
+  <style>
+    :root {
+      --bg: #faf9f5;
+      --surface: #ffffff;
+      --border: #e8e6dc;
+      --text: #141413;
+      --text-muted: #b0aea5;
+      --accent: #d97757;
+      --accent-hover: #c4613f;
+      --green: #788c5d;
+      --green-bg: #eef2e8;
+      --red: #c44;
+      --red-bg: #fceaea;
+      --header-bg: #141413;
+      --header-text: #faf9f5;
+      --radius: 6px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Lora', Georgia, serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ---- Header ---- */
+    .header {
+      background: var(--header-bg);
+      color: var(--header-text);
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .header h1 {
+      font-family: 'Poppins', sans-serif;
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+    .header .instructions {
+      font-size: 0.8rem;
+      opacity: 0.7;
+      margin-top: 0.25rem;
+    }
+    .header .progress {
+      font-size: 0.875rem;
+      opacity: 0.8;
+      text-align: right;
+    }
+
+    /* ---- Main content ---- */
+    .main {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.5rem 2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    /* ---- Sections ---- */
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      flex-shrink: 0;
+    }
+    .section-header {
+      font-family: 'Poppins', sans-serif;
+      padding: 0.75rem 1rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
+    .section-body {
+      padding: 1rem;
+    }
+
+    /* ---- Config badge ---- */
+    .config-badge {
+      display: inline-block;
+      padding: 0.2rem 0.625rem;
+      border-radius: 9999px;
+      font-family: 'Poppins', sans-serif;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      margin-left: 0.75rem;
+      vertical-align: middle;
+    }
+    .config-badge.config-primary {
+      background: rgba(33, 150, 243, 0.12);
+      color: #1976d2;
+    }
+    .config-badge.config-baseline {
+      background: rgba(255, 193, 7, 0.15);
+      color: #f57f17;
+    }
+
+    /* ---- Prompt ---- */
+    .prompt-text {
+      white-space: pre-wrap;
+      font-size: 0.9375rem;
+      line-height: 1.6;
+    }
+
+    /* ---- Outputs ---- */
+    .output-file {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .output-file + .output-file {
+      margin-top: 1rem;
+    }
+    .output-file-header {
+      padding: 0.5rem 0.75rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      font-family: 'SF Mono', SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .output-file-header .dl-btn {
+      font-size: 0.7rem;
+      color: var(--accent);
+      text-decoration: none;
+      cursor: pointer;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-weight: 500;
+      opacity: 0.8;
+    }
+    .output-file-header .dl-btn:hover {
+      opacity: 1;
+      text-decoration: underline;
+    }
+    .output-file-content {
+      padding: 0.75rem;
+      overflow-x: auto;
+    }
+    .output-file-content pre {
+      font-size: 0.8125rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: 'SF Mono', SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+    }
+    .output-file-content img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 4px;
+    }
+    .output-file-content iframe {
+      width: 100%;
+      height: 600px;
+      border: none;
+    }
+    .output-file-content table {
+      border-collapse: collapse;
+      font-size: 0.8125rem;
+      width: 100%;
+    }
+    .output-file-content table td,
+    .output-file-content table th {
+      border: 1px solid var(--border);
+      padding: 0.375rem 0.5rem;
+      text-align: left;
+    }
+    .output-file-content table th {
+      background: var(--bg);
+      font-weight: 600;
+    }
+    .output-file-content .download-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.875rem;
+      cursor: pointer;
+    }
+    .output-file-content .download-link:hover {
+      background: var(--border);
+    }
+    .empty-state {
+      color: var(--text-muted);
+      font-style: italic;
+      padding: 2rem;
+      text-align: center;
+    }
+
+    /* ---- Feedback ---- */
+    .prev-feedback {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.625rem 0.75rem;
+      margin-top: 0.75rem;
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .prev-feedback-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 0.25rem;
+      color: var(--text-muted);
+    }
+    .feedback-textarea {
+      width: 100%;
+      min-height: 100px;
+      padding: 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 0.9375rem;
+      line-height: 1.5;
+      resize: vertical;
+      color: var(--text);
+    }
+    .feedback-textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+    .feedback-status {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.5rem;
+      min-height: 1.1em;
+    }
+
+    /* ---- Grades (collapsible) ---- */
+    .grades-toggle {
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+    }
+    .grades-toggle:hover {
+      color: var(--accent);
+    }
+    .grades-toggle .arrow {
+      margin-right: 0.5rem;
+      transition: transform 0.15s;
+      font-size: 0.75rem;
+    }
+    .grades-toggle .arrow.open {
+      transform: rotate(90deg);
+    }
+    .grades-content {
+      display: none;
+      margin-top: 0.75rem;
+    }
+    .grades-content.open {
+      display: block;
+    }
+    .grades-summary {
+      font-size: 0.875rem;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .grade-badge {
+      display: inline-block;
+      padding: 0.125rem 0.5rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .grade-pass { background: var(--green-bg); color: var(--green); }
+    .grade-fail { background: var(--red-bg); color: var(--red); }
+    .assertion-list {
+      list-style: none;
+    }
+    .assertion-item {
+      padding: 0.625rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.8125rem;
+    }
+    .assertion-item:last-child { border-bottom: none; }
+    .assertion-status {
+      font-weight: 600;
+      margin-right: 0.5rem;
+    }
+    .assertion-status.pass { color: var(--green); }
+    .assertion-status.fail { color: var(--red); }
+    .assertion-evidence {
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      margin-top: 0.25rem;
+      padding-left: 1.5rem;
+    }
+
+    /* ---- View tabs ---- */
+    .view-tabs {
+      display: flex;
+      gap: 0;
+      padding: 0 2rem;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .view-tab {
+      font-family: 'Poppins', sans-serif;
+      padding: 0.625rem 1.25rem;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      background: none;
+      color: var(--text-muted);
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+    }
+    .view-tab:hover { color: var(--text); }
+    .view-tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    .view-panel { display: none; }
+    .view-panel.active { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+
+    /* ---- Benchmark view ---- */
+    .benchmark-view {
+      padding: 1.5rem 2rem;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .benchmark-table {
+      border-collapse: collapse;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 0.8125rem;
+      width: 100%;
+      margin-bottom: 1.5rem;
+    }
+    .benchmark-table th, .benchmark-table td {
+      padding: 0.625rem 0.75rem;
+      text-align: left;
+      border: 1px solid var(--border);
+    }
+    .benchmark-table th {
+      font-family: 'Poppins', sans-serif;
+      background: var(--header-bg);
+      color: var(--header-text);
+      font-weight: 500;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .benchmark-table tr:hover { background: var(--bg); }
+    .benchmark-table tr.benchmark-row-with { background: rgba(33, 150, 243, 0.06); }
+    .benchmark-table tr.benchmark-row-without { background: rgba(255, 193, 7, 0.06); }
+    .benchmark-table tr.benchmark-row-with:hover { background: rgba(33, 150, 243, 0.12); }
+    .benchmark-table tr.benchmark-row-without:hover { background: rgba(255, 193, 7, 0.12); }
+    .benchmark-table tr.benchmark-row-avg { font-weight: 600; border-top: 2px solid var(--border); }
+    .benchmark-table tr.benchmark-row-avg.benchmark-row-with { background: rgba(33, 150, 243, 0.12); }
+    .benchmark-table tr.benchmark-row-avg.benchmark-row-without { background: rgba(255, 193, 7, 0.12); }
+    .benchmark-delta-positive { color: var(--green); font-weight: 600; }
+    .benchmark-delta-negative { color: var(--red); font-weight: 600; }
+    .benchmark-notes {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem;
+    }
+    .benchmark-notes h3 {
+      font-family: 'Poppins', sans-serif;
+      font-size: 0.875rem;
+      margin-bottom: 0.75rem;
+    }
+    .benchmark-notes ul {
+      list-style: disc;
+      padding-left: 1.25rem;
+    }
+    .benchmark-notes li {
+      font-size: 0.8125rem;
+      line-height: 1.6;
+      margin-bottom: 0.375rem;
+    }
+    .benchmark-empty {
+      color: var(--text-muted);
+      font-style: italic;
+      text-align: center;
+      padding: 3rem;
+    }
+
+    /* ---- Navigation ---- */
+    .nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 2rem;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+    .nav-btn {
+      font-family: 'Poppins', sans-serif;
+      padding: 0.5rem 1.25rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text);
+      transition: all 0.15s;
+    }
+    .nav-btn:hover:not(:disabled) {
+      background: var(--bg);
+      border-color: var(--text-muted);
+    }
+    .nav-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .done-btn {
+      font-family: 'Poppins', sans-serif;
+      padding: 0.5rem 1.5rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+    .done-btn:hover {
+      background: var(--bg);
+      border-color: var(--text-muted);
+    }
+    .done-btn.ready {
+      border: none;
+      background: var(--accent);
+      color: white;
+      font-weight: 600;
+    }
+    .done-btn.ready:hover {
+      background: var(--accent-hover);
+    }
+    /* ---- Done overlay ---- */
+    .done-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 100;
+      justify-content: center;
+      align-items: center;
+    }
+    .done-overlay.visible {
+      display: flex;
+    }
+    .done-card {
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 2rem 3rem;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 500px;
+    }
+    .done-card h2 {
+      font-size: 1.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .done-card p {
+      color: var(--text-muted);
+      margin-bottom: 1.5rem;
+      line-height: 1.5;
+    }
+    .done-card .btn-row {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: center;
+    }
+    .done-card button {
+      padding: 0.5rem 1.25rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      cursor: pointer;
+      font-size: 0.875rem;
+    }
+    .done-card button:hover {
+      background: var(--bg);
+    }
+    /* ---- Toast ---- */
+    .toast {
+      position: fixed;
+      bottom: 5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--header-bg);
+      color: var(--header-text);
+      padding: 0.625rem 1.25rem;
+      border-radius: var(--radius);
+      font-size: 0.875rem;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+      z-index: 200;
+    }
+    .toast.visible {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+  <div id="app" style="height:100vh; display:flex; flex-direction:column;">
+    <div class="header">
+      <div>
+        <h1>Eval Review: <span id="skill-name"></span></h1>
+        <div class="instructions">Review each output and leave feedback below. Navigate with arrow keys or buttons. When done, copy feedback and paste into Claude Code.</div>
+      </div>
+      <div class="progress" id="progress"></div>
+    </div>
+
+    <!-- View tabs (only shown when benchmark data exists) -->
+    <div class="view-tabs" id="view-tabs" style="display:none;">
+      <button class="view-tab active" onclick="switchView('outputs')">Outputs</button>
+      <button class="view-tab" onclick="switchView('benchmark')">Benchmark</button>
+    </div>
+
+    <!-- Outputs panel (qualitative review) -->
+    <div class="view-panel active" id="panel-outputs">
+    <div class="main">
+      <!-- Prompt -->
+      <div class="section">
+        <div class="section-header">Prompt <span class="config-badge" id="config-badge" style="display:none;"></span></div>
+        <div class="section-body">
+          <div class="prompt-text" id="prompt-text"></div>
+        </div>
+      </div>
+
+      <!-- Outputs -->
+      <div class="section">
+        <div class="section-header">Output</div>
+        <div class="section-body" id="outputs-body">
+          <div class="empty-state">No output files found</div>
+        </div>
+      </div>
+
+      <!-- Previous Output (collapsible) -->
+      <div class="section" id="prev-outputs-section" style="display:none;">
+        <div class="section-header">
+          <div class="grades-toggle" onclick="togglePrevOutputs()">
+            <span class="arrow" id="prev-outputs-arrow">&#9654;</span>
+            Previous Output
+          </div>
+        </div>
+        <div class="grades-content" id="prev-outputs-content"></div>
+      </div>
+
+      <!-- Grades (collapsible) -->
+      <div class="section" id="grades-section" style="display:none;">
+        <div class="section-header">
+          <div class="grades-toggle" onclick="toggleGrades()">
+            <span class="arrow" id="grades-arrow">&#9654;</span>
+            Formal Grades
+          </div>
+        </div>
+        <div class="grades-content" id="grades-content"></div>
+      </div>
+
+      <!-- Feedback -->
+      <div class="section">
+        <div class="section-header">Your Feedback</div>
+        <div class="section-body">
+          <textarea
+            class="feedback-textarea"
+            id="feedback"
+            placeholder="What do you think of this output? Any issues, suggestions, or things that look great?"
+          ></textarea>
+          <div class="feedback-status" id="feedback-status"></div>
+          <div class="prev-feedback" id="prev-feedback" style="display:none;">
+            <div class="prev-feedback-label">Previous feedback</div>
+            <div id="prev-feedback-text"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="nav" id="outputs-nav">
+      <button class="nav-btn" id="prev-btn" onclick="navigate(-1)">&#8592; Previous</button>
+      <button class="done-btn" id="done-btn" onclick="showDoneDialog()">Submit All Reviews</button>
+      <button class="nav-btn" id="next-btn" onclick="navigate(1)">Next &#8594;</button>
+    </div>
+    </div><!-- end panel-outputs -->
+
+    <!-- Benchmark panel (quantitative stats) -->
+    <div class="view-panel" id="panel-benchmark">
+      <div class="benchmark-view" id="benchmark-content">
+        <div class="benchmark-empty">No benchmark data available. Run a benchmark to see quantitative results here.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Done overlay -->
+  <div class="done-overlay" id="done-overlay">
+    <div class="done-card">
+      <h2>Review Complete</h2>
+      <p>Your feedback has been saved. Go back to your Claude Code session and tell Claude you're done reviewing.</p>
+      <div class="btn-row">
+        <button onclick="closeDoneDialog()">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ---- Embedded data (injected by generate_review.py) ----
+    const EMBEDDED_DATA = {"skill_name": "engineering-skills", "runs": [{"id": "eval-code-review-with_skill", "prompt": "Code review of a TypeScript rate limiting middleware with 3 known security issues: hardcoded secret, IP spoofing vulnerability, and email-based rate limiting collision risk.", "eval_id": 0, "outputs": [{"name": "review.md", "type": "text", "content": "## Code Review: Rate Limiting API Middleware\n\n**Verdict**: \ud83d\udd34 Request changes\n\n### Summary\n\nThis middleware implements rate limiting for API and authentication endpoints using the express-rate-limit library. The implementation has critical security vulnerabilities that enable bypass attacks and expose sensitive information in request bodies. These must be fixed before merging.\n\n### \ud83d\udd34 Must Fix\n\n| File | Line | Issue | Why it matters |\n|------|------|-------|----------------|\n| rateLimit.ts | 7-8 | Hardcoded `x-internal-token` with value `'secret123'` | Credentials in source code can be exposed in version control, logs, and error messages. Anyone with repo access can bypass rate limiting entirely. |\n| rateLimit.ts | 6 | `x-forwarded-for` header used directly as rate limit key without validation | Clients can forge `x-forwarded-for` headers to bypass rate limiting by rotating IPs. Proper extraction requires checking proxy chain and trusting only the first or last IP based on infrastructure. |\n| rateLimit.ts | 15 | `req.body.email` used in keyGenerator for rate limit key | Request body is read for rate limiting, but the keyGenerator runs before body parsing completes reliably. This creates a race condition and may silently fail to rate limit, especially in high-concurrency scenarios. Additionally, using email as a rate limit key with no validation leaks user enumeration data in edge cases. |\n\n### \ud83d\udfe1 Should Fix\n\n| File | Line | Issue | Category |\n|------|------|-------|----------|\n| rateLimit.ts | 5 | Missing configuration for `standardHeaders` and `legacyHeaders` | Performance/UX: clients should receive `RateLimit-*` headers to respect rate limits gracefully. Opacity harms API UX. |\n| rateLimit.ts | 10-13 | No metrics or logging when rate limit triggered | Correctness/Observability: without logs, you cannot detect attack patterns, monitor legitimate spikes, or debug false positives. |\n| rateLimit.ts | 5, 11 | Hard-coded window and limit values with no environment configuration | Maintainability: changing limits requires code redeploy. Should be environment variables for operational flexibility. |\n| rateLimit.ts | 1-16 | No error recovery or graceful degradation if store unavailable | Correctness: if the in-memory store fills or crashes, rate limiting silently stops. Should fail-safe to deny rather than allow. |\n\n### \ud83d\udca1 Consider\n\n- **Import paths**: Confirm that `express-rate-limit` is listed in `package.json` dependencies; if this is a new dependency, add it to the review description so reviewers are aware of the new transitive dependency graph.\n\n- **Store choice**: The default in-memory store does not work for multi-instance deployments (e.g., load-balanced servers). If this API runs on multiple servers, you'll need a Redis or distributed store. Consider documenting this assumption or adding a store parameter that defaults to in-memory but can be overridden.\n\n- **Route coverage**: Ensure these limiters are actually applied to the routes that need them. The review shows exports but not middleware application. Verify in the main app router that `apiLimiter` wraps all public endpoints and `authLimiter` wraps login/signup routes.\n\n- **Testing**: Add tests that verify:\n  - Rate limit threshold is enforced (requests at max pass, max+1 fails)\n  - Bypass via `x-internal-token` only works with the correct value\n  - Forged `x-forwarded-for` headers do not bypass limits (test with rotated IPs)\n  - Both limiters recover after window expires (idempotency)\n\n### \u2705 What's Good\n\n- **Separate limiters for different endpoints**: Using `apiLimiter` for general traffic and `authLimiter` for authentication with a longer window (15 min vs 1 min) and tighter limit (20 vs 100) reflects appropriate threat modeling. Brute force attacks on auth should be more restrictive than general API use.\n\n- **Explicit error response**: Custom `handler` ensures responses are consistent with your API schema rather than relying on library defaults.\n\n- **Non-blocking design**: Rate limiting is applied via middleware and doesn't introduce synchronous blocking operations in the critical path (assuming the underlying store is reasonably fast).\n\n---\n\n## Recommended Changes\n\n### Critical (before merge)\n\n1. **Move `x-internal-token` to environment variable:**\n   ```typescript\n   const INTERNAL_TOKEN = process.env.INTERNAL_TOKEN;\n   if (!INTERNAL_TOKEN) {\n     throw new Error('INTERNAL_TOKEN env var is required');\n   }\n\n   skip: (req) => req.headers['x-internal-token'] === INTERNAL_TOKEN,\n   ```\n\n2. **Validate and extract `x-forwarded-for` properly:**\n   ```typescript\n   keyGenerator: (req) => {\n     // If behind a trusted proxy, extract the client IP from the chain\n     const forwarded = req.headers['x-forwarded-for'];\n     if (forwarded) {\n       // Take the first IP in the chain (leftmost) as the original client\n       return forwarded.split(',')[0].trim();\n     }\n     return req.ip;\n   },\n   ```\n\n3. **Fix the auth limiter keyGenerator to use IP, not email:**\n   ```typescript\n   keyGenerator: (req) => req.ip,\n   ```\n   Store email-based rate limiting if needed, but do so *after* validating the email format and never expose raw email in headers or logs.\n\n### High (before or shortly after merge)\n\n4. **Add rate limit headers and environment variables:**\n   ```typescript\n   export const apiLimiter = rateLimit({\n     windowMs: parseInt(process.env.API_RATE_LIMIT_WINDOW_MS || '60000', 10),\n     max: parseInt(process.env.API_RATE_LIMIT_MAX || '100', 10),\n     keyGenerator: (req) => { /* ... */ },\n     skip: (req) => req.headers['x-internal-token'] === INTERNAL_TOKEN,\n     handler: (req, res) => {\n       res.status(429).json({ error: 'too many requests' });\n     },\n     standardHeaders: true,  // Return rate limit info in `RateLimit-*` headers\n     legacyHeaders: false,   // Disable `X-RateLimit-*` headers\n   });\n   ```\n\n5. **Add logging:**\n   ```typescript\n   handler: (req, res) => {\n     logger.warn('Rate limit exceeded', {\n       ip: req.ip,\n       endpoint: req.path,\n       timestamp: new Date().toISOString(),\n     });\n     res.status(429).json({ error: 'too many requests' });\n   },\n   ```\n"}], "grading": {"eval_id": 0, "eval_name": "code-review", "config": "with_skill", "assertions": [{"text": "flags_hardcoded_secret", "passed": true, "evidence": "Line 13 explicitly mentions 'Hardcoded `x-internal-token` with value `secret123`' and explains the security vulnerability"}, {"text": "flags_ip_spoofing", "passed": true, "evidence": "Line 14 addresses '`x-forwarded-for` header used directly as rate limit key without validation' and notes 'Clients can forge `x-forwarded-for` headers to bypass rate limiting'"}, {"text": "has_verdict", "passed": true, "evidence": "Line 3 states 'Verdict: \ud83d\udd34 Request changes' - clear verdict provided"}, {"text": "has_structured_output", "passed": true, "evidence": "Output uses structured headers (###, ##), emoji severity markers (\ud83d\udd34 Must Fix, \ud83d\udfe1 Should Fix, \ud83d\udca1 Consider, \u2705 What's Good), and organized table format"}], "pass_rate": 1.0, "notes": "Excellent structured code review with clear severity categorization, evidence-based findings, and actionable recommendations. Uses emoji markers effectively for visual clarity."}}, {"id": "eval-code-review-without_skill", "prompt": "Code review of a TypeScript rate limiting middleware with 3 known security issues: hardcoded secret, IP spoofing vulnerability, and email-based rate limiting collision risk.", "eval_id": 0, "outputs": [{"name": "review.md", "type": "text", "content": "# Code Review: Rate Limiting Middleware\n**File:** `apps/api/src/middleware/rateLimit.ts`\n**Review Date:** 2026-03-28\n**Status:** CRITICAL ISSUES FOUND - DO NOT MERGE\n\n---\n\n## Executive Summary\n\nThis rate limiting implementation has **serious security vulnerabilities** and design flaws that require immediate remediation before deployment. The hardcoded authentication bypass and weak key generation create exploitable attack vectors.\n\n---\n\n## Critical Issues\n\n### 1. **CRITICAL: Hardcoded Internal Token (Security Vulnerability)**\n\n**Location:** Line 11\n```typescript\nskip: (req) => req.headers['x-internal-token'] === 'secret123'\n```\n\n**Issue:**\n- The token `'secret123'` is hardcoded in source code and will be committed to the repository\n- Any developer, contractor, or compromised account can bypass rate limits\n- The token is likely visible in git history permanently\n- This completely defeats the purpose of rate limiting for authenticated internal requests\n\n**Risk Level:** CRITICAL\n**Impact:** Complete bypass of rate limiting; potential for DDoS or resource exhaustion\n\n**Recommendations:**\n1. Move the token to an environment variable: `process.env.INTERNAL_TOKEN`\n2. Generate a cryptographically secure token (not a simple string like 'secret123')\n3. Rotate the token immediately after deployment\n4. Use a proper secret management system (e.g., AWS Secrets Manager, HashiCorp Vault)\n5. Audit git history and remove the exposed secret\n6. Consider using mTLS or API key authentication instead of a header token\n\n**Example Fix:**\n```typescript\nskip: (req) => req.headers['x-internal-token'] === process.env.INTERNAL_TOKEN\n```\n\n---\n\n### 2. **HIGH: Unsafe Key Generation - X-Forwarded-For Spoofing**\n\n**Location:** Line 9 (apiLimiter)\n```typescript\nkeyGenerator: (req) => req.headers['x-forwarded-for'] as string || req.ip\n```\n\n**Issue:**\n- The `x-forwarded-for` header is user-controlled and can be spoofed\n- An attacker can send requests with different `x-forwarded-for` values to bypass rate limits\n- If the header is missing, it falls back to `req.ip`, which may also be unreliable depending on your proxy configuration\n\n**Risk Level:** HIGH\n**Impact:** Rate limit bypass; attackers can make unlimited requests from a single source\n\n**Recommendations:**\n1. Only trust `x-forwarded-for` if your proxy is verified (e.g., reverse proxy you control)\n2. Implement a whitelist of trusted proxy IPs\n3. Verify proxy configuration in production\n4. Consider using a combination of IP + session ID for authenticated users\n5. Log and monitor for suspicious rate limit bypass attempts\n\n**Example Fix:**\n```typescript\nconst TRUSTED_PROXIES = [process.env.PROXY_IP]; // Only trust specific proxy IPs\n\nexport const apiLimiter = rateLimit({\n  windowMs: 60 * 1000,\n  max: 100,\n  keyGenerator: (req) => {\n    // Trust x-forwarded-for only from trusted proxies\n    if (TRUSTED_PROXIES.includes(req.ip)) {\n      return (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.ip;\n    }\n    return req.ip;\n  },\n  skip: (req) => req.headers['x-internal-token'] === process.env.INTERNAL_TOKEN,\n  handler: (req, res) => {\n    res.status(429).json({ error: 'too many requests' })\n  }\n})\n```\n\n---\n\n### 3. **HIGH: Email-Based Rate Limiting Has Collision Risk**\n\n**Location:** Line 16 (authLimiter)\n```typescript\nkeyGenerator: (req) => req.body.email || req.ip\n```\n\n**Issue:**\n- Email addresses from `req.body` are user-controlled during auth attempts\n- An attacker could provide a different email in the request body than what they're actually attacking\n- The fallback to `req.ip` is inconsistent - some requests use email, others use IP, making rate limiting ineffective\n- No validation that the email is even present or valid\n\n**Risk Level:** HIGH\n**Impact:** Brute force attacks on authentication endpoints; attackers can target specific emails without rate limiting\n\n**Recommendations:**\n1. Always use the IP address as the key for auth endpoints (not email)\n2. Implement a secondary limit on email addresses if needed, but keep IP-based limits as primary\n3. Add request body validation and sanitization\n4. Consider implementing progressive delays (longer waits) for repeated failures\n5. Add monitoring for brute force patterns\n\n**Example Fix:**\n```typescript\nexport const authLimiter = rateLimit({\n  windowMs: 15 * 60 * 1000,\n  max: 20,\n  keyGenerator: (req) => req.ip, // Always use IP, not user input\n  handler: (req, res) => {\n    res.status(429).json({ error: 'too many attempts' })\n  }\n})\n```\n\n---\n\n## High-Priority Issues\n\n### 4. **MEDIUM: Missing Request Logging and Monitoring**\n\n**Issue:**\n- No logging when rate limits are hit\n- Can't detect attack patterns or monitor for abuse\n- Makes debugging customer issues difficult\n\n**Recommendations:**\n```typescript\nhandler: (req, res) => {\n  logger.warn('Rate limit exceeded', {\n    ip: req.ip,\n    endpoint: req.path,\n    email: req.body?.email,\n    timestamp: new Date().toISOString()\n  });\n  res.status(429).json({ error: 'too many attempts' })\n}\n```\n\n---\n\n### 5. **MEDIUM: Window Size and Max Settings May Be Insufficient**\n\n**Location:** Lines 8 and 15\n\n**Issue:**\n- 100 requests per minute might be too high for auth endpoints (allows many brute force attempts)\n- 20 attempts in 15 minutes might be too high if legitimate users fail frequently\n- No consideration for different user types (mobile vs. desktop, bots vs. humans)\n\n**Recommendations:**\n1. Reduce auth limiter to 5-10 attempts per 15 minutes\n2. Increase API limiter window or reduce max based on actual traffic patterns\n3. Implement adaptive rate limiting (stricter for failures, looser for success)\n4. Add separate, stricter limits for password reset and account recovery\n\n---\n\n### 6. **MEDIUM: No Handler for Success Path or Metrics**\n\n**Issue:**\n- No tracking of successful rate limit operations\n- Can't measure if limits are effective\n- Missing metrics for ops/product teams\n\n**Recommendations:**\n```typescript\nhandler: (req, res) => {\n  const limitKey = req.ip;\n  metrics.increment('rate_limit.exceeded', {\n    endpoint: req.path,\n    ip: limitKey\n  });\n  res.status(429).json({ error: 'too many attempts' })\n}\n```\n\n---\n\n## Code Quality Issues\n\n### 7. **Type Safety Gaps**\n\n**Location:** Line 9\n```typescript\nkeyGenerator: (req) => req.headers['x-forwarded-for'] as string || req.ip\n```\n\n**Issue:**\n- Assumes `req.headers['x-forwarded-for']` is always a string (it could be an array in Express)\n- The `|| req.ip` fallback doesn't guarantee a string return\n\n**Recommendation:**\n```typescript\nkeyGenerator: (req) => {\n  const forwarded = req.headers['x-forwarded-for'];\n  const ip = Array.isArray(forwarded) ? forwarded[0] : forwarded;\n  return ip && typeof ip === 'string' ? ip.trim() : (req.ip || 'unknown');\n}\n```\n\n---\n\n### 8. **Missing Import Type Safety**\n\n**Issue:**\n- No TypeScript types for the express-rate-limit configuration\n- No validation of handler parameters\n\n**Recommendation:**\n```typescript\nimport rateLimit, { RateLimitRequestHandler } from 'express-rate-limit'\n\nexport const apiLimiter: RateLimitRequestHandler = rateLimit({\n  // ...\n})\n```\n\n---\n\n### 9. **No Store Configuration**\n\n**Location:** Lines 6-20\n\n**Issue:**\n- Using default in-memory store for rate limiting\n- In production with multiple server instances, each server will have its own rate limit counter\n- Requests distributed across servers will bypass limits\n- Memory will leak if the app restarts frequently\n\n**Recommendations:**\n1. Use Redis for distributed rate limiting: `npm install rate-limit-redis`\n2. Implement persistent storage for multi-instance deployments\n3. Document the store requirement in code comments\n\n**Example Fix:**\n```typescript\nimport RedisStore from 'rate-limit-redis';\nimport redis from 'redis';\n\nconst client = redis.createClient();\n\nexport const apiLimiter = rateLimit({\n  store: new RedisStore({\n    client: client,\n    prefix: 'rate-limit:'\n  }),\n  windowMs: 60 * 1000,\n  max: 100,\n  // ...\n})\n```\n\n---\n\n## Missing Configuration\n\n### 10. **No Configuration Management**\n\n**Issue:**\n- Rate limits are hardcoded\n- Can't adjust limits without redeploying\n- No feature flags for gradual rollout\n\n**Recommendations:**\n```typescript\nconst config = {\n  api: {\n    windowMs: parseInt(process.env.API_RATE_WINDOW || '60000'),\n    max: parseInt(process.env.API_RATE_MAX || '100'),\n  },\n  auth: {\n    windowMs: parseInt(process.env.AUTH_RATE_WINDOW || '900000'),\n    max: parseInt(process.env.AUTH_RATE_MAX || '20'),\n  }\n};\n```\n\n---\n\n### 11. **No Skip Conditions for Health Checks**\n\n**Issue:**\n- Health check endpoints might get rate limited if they come from same IP\n- Load balancers might trigger false alarms\n\n**Recommendations:**\n```typescript\nskip: (req) =>\n  req.headers['x-internal-token'] === process.env.INTERNAL_TOKEN ||\n  req.path === '/health' ||\n  req.path === '/healthz'\n```\n\n---\n\n## Testing & Deployment Concerns\n\n### 12. **No Error Handling Documentation**\n\n**Issue:**\n- Unclear how clients should handle 429 responses\n- No retry guidance (should they use exponential backoff?)\n- Missing Retry-After header\n\n**Recommendations:**\n```typescript\nhandler: (req, res) => {\n  res.set('Retry-After', '60'); // Tell clients when to retry\n  res.status(429).json({\n    error: 'too many requests',\n    retryAfter: 60\n  })\n}\n```\n\n---\n\n### 13. **Performance Considerations**\n\n**Issue:**\n- `keyGenerator` function is called for every request\n- `x-forwarded-for` parsing could be expensive in high-traffic scenarios\n- No caching of key generation logic\n\n**Recommendations:**\n- Profile the keyGenerator performance under load\n- Consider pre-processing proxy headers\n- Benchmark against alternative approaches\n\n---\n\n## Deployment Checklist\n\nBefore merging, ensure:\n\n- [ ] Remove hardcoded token from code\n- [ ] Configure environment variables for all secrets\n- [ ] Set up Redis for distributed rate limiting\n- [ ] Add logging/metrics integration\n- [ ] Document rate limiting strategy in architecture docs\n- [ ] Update API documentation with rate limit headers\n- [ ] Test rate limit behavior under load\n- [ ] Implement gradual rollout with feature flags\n- [ ] Set up monitoring/alerting for rate limit triggers\n- [ ] Review and rotate any exposed secrets in git history\n- [ ] Test with multiple server instances\n- [ ] Validate proxy IP configuration in all environments\n\n---\n\n## Summary of Required Changes (By Priority)\n\n| Priority | Issue | Action |\n|----------|-------|--------|\n| CRITICAL | Hardcoded token 'secret123' | Move to env var, rotate immediately |\n| HIGH | X-Forwarded-For spoofing risk | Implement trusted proxy validation |\n| HIGH | Email-based key collision | Use IP-based keying for auth |\n| MEDIUM | No distributed store (Redis) | Add Redis for multi-instance support |\n| MEDIUM | Missing logging/metrics | Implement request logging |\n| MEDIUM | No type safety improvements | Add explicit types |\n| LOW | Missing Retry-After header | Add to 429 responses |\n| LOW | Hardcoded config values | Externalize to environment |\n\n---\n\n## Conclusion\n\n**RECOMMENDATION: DO NOT MERGE** until critical and high-priority issues are addressed. The hardcoded token and unsafe key generation are exploitable security vulnerabilities. This code requires significant refactoring for production safety.\n\nConsider this a foundational approach that needs security hardening and operational improvements before deployment.\n"}], "grading": {"eval_id": 0, "eval_name": "code-review", "config": "without_skill", "assertions": [{"text": "flags_hardcoded_secret", "passed": true, "evidence": "Line 20 shows code snippet with hardcoded 'secret123' and line 16-38 title/content explains 'The token `secret123` is hardcoded in source code and will be committed to the repository'"}, {"text": "flags_ip_spoofing", "passed": true, "evidence": "Lines 47-88 dedicated section titled 'HIGH: Unsafe Key Generation - X-Forwarded-For Spoofing' explaining how header can be spoofed"}, {"text": "has_verdict", "passed": true, "evidence": "Line 4 states 'Status: CRITICAL ISSUES FOUND - DO NOT MERGE' and line 380 concludes 'RECOMMENDATION: DO NOT MERGE'"}, {"text": "has_structured_output", "passed": true, "evidence": "Uses markdown headers (###, ##) for organization, numbered sections, code blocks, and structured tables for categorizing issues"}], "pass_rate": 1.0, "notes": "Comprehensive code review covering all 3 known security issues with detailed explanations. Extremely thorough with 13 separate issues identified (vs. 3 required). Very professional structure with executive summary and deployment checklist."}}, {"id": "eval-standup-with_skill", "prompt": "Generate a standup from developer notes about a production outage fix and upcoming Stripe/Pinecone work. Should include Yesterday, Today, and Blockers sections.", "eval_id": 1, "outputs": [{"name": "standup.md", "type": "text", "content": "## Standup \u2014 Friday, March 28\n\n**Yesterday**\n- Debugged and resolved production outage \u2014 API returning 502s due to nginx passing wrong Connection header to Fastify, breaking the keepalive pool. Fixed with sed on nginx config and docker exec reload.\n- Reviewed PR for rate limiting implementation.\n\n**Today**\n- Integrate Stripe for Pro tier subscription support.\n- Finish Pinecone semantic search task.\n\n**Blockers**\n- None\n"}], "grading": {"eval_id": 1, "eval_name": "standup", "config": "with_skill", "assertions": [{"text": "has_three_sections", "passed": true, "evidence": "Clear sections: 'Yesterday' (lines 3-5), 'Today' (lines 7-9), 'Blockers' (lines 11-12)"}, {"text": "summarizes_not_dumps", "passed": true, "evidence": "Total length ~250 characters, concise bullet points without unnecessary details. Efficiently communicates key information"}, {"text": "mentions_stripe", "passed": true, "evidence": "Line 8 states 'Integrate Stripe for Pro tier subscription support'"}, {"text": "has_date_or_header", "passed": true, "evidence": "Line 1 includes 'Standup \u2014 Friday, March 28' header with date"}], "pass_rate": 1.0, "notes": "Concise, well-structured standup format. Clear date header and all three required sections. Strikes good balance between being informative and brief."}}, {"id": "eval-standup-without_skill", "prompt": "Generate a standup from developer notes about a production outage fix and upcoming Stripe/Pinecone work. Should include Yesterday, Today, and Blockers sections.", "eval_id": 1, "outputs": [{"name": "standup.md", "type": "text", "content": "# Standup Update\n\n## Yesterday\n\n- **Production Incident Resolution**: Debugged and fixed a 502 API outage. Root cause was nginx passing an incorrect `Connection` header to Fastify, which broke the keepalive pool. Fixed with a `sed` command on the nginx configuration file and reloaded the container using `docker exec`.\n- **Code Review**: Reviewed a PR implementing rate limiting functionality.\n\n## Today\n\n- **Stripe Pro Tier Integration**: Working on integrating Stripe for the Pro subscription tier.\n- **Semantic Search Enhancement**: Finishing up the Pinecone semantic search integration task.\n\n## Blockers\n\nNone.\n"}], "grading": {"eval_id": 1, "eval_name": "standup", "config": "without_skill", "assertions": [{"text": "has_three_sections", "passed": true, "evidence": "Three distinct sections: '## Yesterday' (lines 3-6), '## Today' (lines 8-11), '## Blockers' (line 13)"}, {"text": "summarizes_not_dumps", "passed": true, "evidence": "Total length ~400 characters with good conciseness. Bullet points provide context without excessive detail"}, {"text": "mentions_stripe", "passed": true, "evidence": "Line 10 mentions 'Stripe Pro Tier Integration: Working on integrating Stripe for the Pro subscription tier'"}, {"text": "has_date_or_header", "passed": true, "evidence": "Line 1 title '# Standup Update' serves as header"}], "pass_rate": 1.0, "notes": "Good standup format with proper markdown headers for each section. Slightly more verbose than with_skill version but still within acceptable conciseness bounds. All requirements met."}}, {"id": "eval-system-design-with_skill", "prompt": "Design semantic search for WorldPulse using Pinecone free tier on Node.js/Fastify + PostgreSQL. Should cover embedding strategy, sync mechanisms, trade-offs, and v1 scoping.", "eval_id": 2, "outputs": [{"name": "design.md", "type": "text", "content": "## System Design: WorldPulse Semantic Search\n\n### Requirements\n\n**Functional**\n- Users type natural language queries (e.g., \"earthquake in New Zealand\")\n- System returns relevant signals even without exact keyword matches\n- Query should complete in <500ms for a responsive experience\n- Results should be ranked by relevance\n- No changes to signal ingestion pipeline required\n\n**Scale**\n- Current: 2,000 signals\n- Projected: 100,000+ signals\n- Queries per day: 100-1000 (startup phase, likely to grow)\n- Signal creation: ~5-50 per day (estimates from domain)\n- Vector dimension: typical embeddings are 384-1536 (depends on model choice)\n\n**Non-Functional**\n- Latency SLA: p95 < 500ms for search queries\n- Availability: 99.5% (startup tolerates brief downtime)\n- Consistency: read-heavy, eventual consistency acceptable for search index\n- Cost: zero budget for infrastructure beyond free tiers; Pinecone free tier only\n\n**Constraints**\n- Existing stack: PostgreSQL, Redis, Node.js/Fastify\n- Budget: free tier only \u2014 Pinecone free tier max 1M vectors (plenty for 100k signals)\n- Team: small (assumed 1-2 engineers)\n- Timeline: v1 should launch quickly; can iterate after\n- No GPU cluster available for fine-tuning embeddings\n\n### Architecture\n\n```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502  Client (Web/Mobile)                                         \u2502\n\u2502  [Search Query] \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25ba \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2518\n             \u2502                                              \u2502\n             \u2502                                              \u2502\n        \u250c\u2500\u2500\u2500\u2500\u25bc\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510                \u2502\n        \u2502  Fastify API Server              \u2502                \u2502\n        \u2502  \u251c\u2500 POST /api/v1/signals/search  \u2502                \u2502\n        \u2502  \u251c\u2500 GET /api/v1/signals/:id      \u2502                \u2502\n        \u2502  \u2514\u2500 Embed query \u2192 search Pinecone\u2502                \u2502\n        \u2514\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518                \u2502\n             \u2502              \u2502                               \u2502\n             \u2502              \u2502                               \u2502\n   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25bc\u2500\u2500\u2500\u2500\u2500\u2500\u2510 \u250c\u2500\u2500\u2500\u2500\u25bc\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510      \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25bc\u2500\u2510\n   \u2502  PostgreSQL    \u2502 \u2502  Redis        \u2502      \u2502  Pinecone      \u2502\n   \u2502  \u251c\u2500 Signals    \u2502 \u2502  (Cache)      \u2502      \u2502  (Vector Index)\u2502\n   \u2502  \u251c\u2500 Metadata   \u2502 \u2502  \u251c\u2500 Query TTL \u2502      \u2502  \u251c\u2500 Embeddings \u2502\n   \u2502  \u2514\u2500 Full text  \u2502 \u2502  \u2514\u2500 Hot queries      \u2502  \u2514\u2500 Metadata   \u2502\n   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518 \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518      \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n             \u25b2                                        \u25b2\n             \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n                    Signal Ingestion Pipeline\n                    (async embedding job)\n```\n\n**Data Flow**\n1. **Ingestion**: Signal created \u2192 PostgreSQL stores \u2192 async job picks it up \u2192 embedding generated \u2192 indexed in Pinecone\n2. **Search**: Query received \u2192 embedded via API \u2192 search Pinecone \u2192 fetch signal metadata from PostgreSQL \u2192 hydrate results \u2192 return to client\n3. **Caching**: Frequently searched queries cached in Redis; raw results cached by query_hash; TTL 1 hour\n\n### Data Model\n\n**Signals Table (PostgreSQL)**\n```sql\nCREATE TABLE signals (\n  id UUID PRIMARY KEY,\n  title TEXT NOT NULL,\n  description TEXT NOT NULL,\n  body TEXT,                    -- Full signal content\n  event_type VARCHAR(50),       -- earthquake, flood, market_move, policy_change, etc.\n  location GEOGRAPHY,           -- Geographic point/polygon if applicable\n  created_at TIMESTAMP NOT NULL,\n  updated_at TIMESTAMP NOT NULL,\n  embedding_status VARCHAR(20), -- pending, completed, failed\n  pinecone_vector_id TEXT       -- Link to Pinecone namespace\n);\n\nCREATE INDEX idx_signals_created_at ON signals(created_at DESC);\nCREATE INDEX idx_signals_event_type ON signals(event_type);\nCREATE INDEX idx_signals_location ON signals USING GIST(location);\nCREATE INDEX idx_signals_embedding_status ON signals(embedding_status);\n\n-- Hybrid search: full-text index for fallback\nCREATE INDEX idx_signals_full_text ON signals\n  USING GIN(to_tsvector('english', title || ' ' || description));\n```\n\n**Pinecone Vector Index**\n- Index name: `worldpulse-signals`\n- Dimension: 384 (using sentence-transformers/all-MiniLM-L6-v2; trade-off: speed vs. quality)\n- Metric: cosine similarity (standard for text embeddings)\n- Metadata stored per vector:\n  ```json\n  {\n    \"signal_id\": \"uuid\",\n    \"title\": \"...\",\n    \"event_type\": \"earthquake\",\n    \"location\": \"New Zealand\",\n    \"created_at\": \"2026-03-28T10:30:00Z\"\n  }\n  ```\n\n**Access Patterns**\n- **Read**: Search by semantic similarity (query \u2192 embedding \u2192 vector search)\n- **Read**: Fetch full signal by ID (signal_id from Pinecone \u2192 PostgreSQL)\n- **Write**: New signal ingestion (async, low priority)\n- **Index update**: Delete old vectors when signal is removed (rare)\n\n### API Design\n\n**Search Endpoint**\n```\nPOST /api/v1/signals/search\nContent-Type: application/json\n\n{\n  \"query\": \"earthquake in New Zealand\",\n  \"limit\": 10,\n  \"offset\": 0,\n  \"filters\": {\n    \"event_type\": \"earthquake\",\n    \"after\": \"2026-03-20T00:00:00Z\"\n  }\n}\n\nResponse (200 OK):\n{\n  \"results\": [\n    {\n      \"id\": \"sig-123\",\n      \"title\": \"M6.2 Earthquake Near Christchurch\",\n      \"description\": \"...\",\n      \"event_type\": \"earthquake\",\n      \"location\": \"Christchurch, New Zealand\",\n      \"created_at\": \"2026-03-28T09:15:00Z\",\n      \"relevance_score\": 0.92\n    }\n  ],\n  \"total\": 45,\n  \"query_time_ms\": 125\n}\n```\n\n**Get Signal Endpoint**\n```\nGET /api/v1/signals/:id\n\nResponse (200 OK):\n{\n  \"id\": \"sig-123\",\n  \"title\": \"...\",\n  \"description\": \"...\",\n  \"body\": \"...\",\n  \"event_type\": \"earthquake\",\n  \"location\": {...},\n  \"created_at\": \"2026-03-28T09:15:00Z\"\n}\n```\n\n**Error Responses**\n```json\n{\n  \"code\": \"SEARCH_ERROR\",\n  \"message\": \"Failed to complete search\",\n  \"details\": {\n    \"reason\": \"embedding_service_down\"\n  }\n}\n```\n\n### Embedding Strategy\n\n**Model Choice: sentence-transformers/all-MiniLM-L6-v2**\n- Dimension: 384 (small, fast, free to host)\n- Speed: <10ms per query on CPU\n- Quality: MTEB score 0.56 (good for semantic similarity, not perfect)\n- Deployment: Run locally in Node.js via `@xenova/transformers` (no external service needed)\n- Alternative if quality issues: Switch to OpenAI's text-embedding-3-small (costs money, better quality)\n\n**Embedding Pipeline (Node.js Worker)**\n```typescript\n// Pseudo-code\nasync function embedSignal(signalId: string) {\n  const signal = await db.getSignal(signalId);\n  const text = `${signal.title} ${signal.description}`;\n\n  const embedding = await embedder.embed(text);\n\n  await pinecone.upsert([{\n    id: signal.pinecone_vector_id || generateId(),\n    values: embedding,\n    metadata: {\n      signal_id: signalId,\n      title: signal.title,\n      event_type: signal.event_type,\n      location: signal.location,\n      created_at: signal.created_at.toISOString()\n    }\n  }]);\n\n  await db.updateSignal(signalId, { embedding_status: 'completed' });\n}\n```\n\n### Caching Strategy\n\n**Query Result Caching (Redis)**\n- Key: `search:${hash(query + filters)}`\n- Value: JSON array of signal IDs + relevance scores\n- TTL: 1 hour (acceptable staleness for startup)\n- Invalidation: Manual purge when signal is deleted or manually refreshed\n\n**Hot Query Tracking**\n- Track query frequency in memory or Redis counter\n- Automatically cache top 100 queries for 24 hours\n\n### Trade-offs\n\n| Decision | Why | What we give up | Revisit when |\n|----------|-----|-----------------|--------------|\n| **Use Pinecone free tier** | Zero cost, no self-hosted infrastructure needed, managed SLA. | Vendor lock-in, can't fine-tune embedding model, API limits (1M vectors, 125K requests/month free tier). | Hitting rate limits (100k+ signals, >10k monthly searches) or needing custom embeddings. |\n| **Host embeddings locally (no API)** | Eliminates latency of calling embedding service, no cost, simple. | Embedding latency on CPU (~5-10ms), limited to CPU capacity, must optimize model size. | CPU becomes bottleneck (>100 QPS) or embedding quality becomes critical. |\n| **Store full signal in PostgreSQL, metadata in Pinecone** | PostgreSQL handles complex queries and full-text fallback; Pinecone is stateless. | Dual write complexity, eventual consistency between stores, risk of inconsistency. | Need sub-100ms query latency (move signal to Pinecone metadata fully). |\n| **No read replicas** | Simplifies ops, PostgreSQL can handle startup read load. | Read queries compete with writes for I/O. | Read latency exceeds 50ms OR write rate exceeds 100/sec. |\n| **Dimension 384 (sentence-transformers)** | Fast inference, small memory, free hosting, good enough for startup. | Lower semantic quality vs. larger models (768, 1536 dim). | Quality drops or recall requirements tighten, switch to OpenAI embedding 3-small. |\n| **Redis for session/query cache only** | Lightweight, fast, existing infrastructure. | Need persistent cache across restarts (acceptable for query cache). | Cache misses become expensive; upgrade to persistent cache or in-process. |\n| **Async embedding job (not real-time)** | Decouples ingest from embedding, prevents slow writes, supports batching. | Search may not find new signals for minutes/hours after creation (acceptable for startup). | Real-time search required; move to synchronous embedding on signal creation. |\n\n### What I'd Build First (v1)\n\n**Minimum Viable Semantic Search**\n1. Set up Pinecone free tier account, create index\n2. Implement embedding function locally (sentence-transformers via `@xenova/transformers`)\n3. Create `/api/v1/signals/search` endpoint:\n   - Accept query string\n   - Embed query locally (3-10ms)\n   - Search Pinecone top-10 hits (50-200ms)\n   - Fetch signal metadata from PostgreSQL by IDs (10-50ms)\n   - Return ranked results\n4. Add async embedding worker:\n   - Cron job every 5 minutes polls for pending signals\n   - Batch embed (10 at a time)\n   - Upsert to Pinecone\n5. Manual fallback: if Pinecone is down, fall back to PostgreSQL full-text search (slower but works)\n6. Cache search results in Redis with 1-hour TTL\n\n**What to cut or defer**:\n- Metadata filters (event_type, date range) \u2014 hardcode to \"all\" for v1\n- Geographic filtering \u2014 defer until user demand\n- Custom embedding model fine-tuning\n- Real-time embedding (sync on signal creation)\n- Analytics on search quality\n- Personalization / ranking by user preference\n\n**v1 timeline**: 5-7 days with 1 engineer\n- Day 1-2: Set up Pinecone, write embedding wrapper\n- Day 3-4: Implement `/search` endpoint, test with 2k signals\n- Day 5: Async embedding job, fallback logic\n- Day 6-7: Testing, monitoring, edge cases, deploy\n\n### What I'd Revisit at 10\u00d7 Scale (200k+ signals, 1000+ QPS)\n\n**Embedding Model**\n- Current: sentence-transformers (384 dim, CPU bound)\n- At scale: Switch to OpenAI `text-embedding-3-small` (1536 dim, better quality) OR host a small embedding cluster\n- Rationale: CPU bottleneck at 100+ QPS; embedding latency becomes critical path\n\n**Vector Index**\n- Current: Pinecone free tier (1M vector max, 125K requests/month limit)\n- At scale: Either upgrade Pinecone Pro tier ($15/month per pod) OR self-host with Weaviate/Milvus\n- Rationale: Pinecone free has monthly request limits; at 1000 QPS you'd hit it in hours\n\n**Caching**\n- Current: Redis with 1-hour TTL\n- At scale: Multi-tier cache \u2014 in-process LRU for top 10k queries + Redis for longer tail\n- Rationale: Avoid Redis latency on hot queries\n\n**Async Embedding**\n- Current: Cron job every 5 min, batch 10\n- At scale: Message queue (Redis pub/sub or Bull) with workers, batch 100-500\n- Rationale: Ensure embedding backlog doesn't exceed SLA (want <5 min latency for new signals)\n\n**Fallback and Resilience**\n- Current: Full-text search fallback only\n- At scale: Add caching layer in front of Pinecone, circuit breaker for vector search, hybrid scoring (BM25 + semantic)\n- Rationale: Pinecone availability impact is high; need graceful degradation\n\n**Metadata Enrichment**\n- Current: Store in Pinecone metadata only\n- At scale: Index signals with metadata in PostgreSQL and Pinecone separately; allow filters without vector search\n- Rationale: Enable fast metadata-only filtering (e.g., \"all earthquakes in last 7 days\") without vector search cost\n\n**Observability**\n- Current: None\n- At scale: Track embedding latency, vector search latency, hit rate, query quality (if possible)\n- Rationale: Identify bottleneck as system grows\n\n---\n\n## Implementation Notes\n\n### Embedding Cost\n- Local embeddings: free (CPU only)\n- Pinecone free tier: 1M vectors, 125K API calls/month (roughly 4k queries/day)\n- At 100 signals/month ingest + 100 queries/day search: well within free tier for 1+ years\n\n### Operational Risk\n- **Pinecone downtime**: Fall back to PostgreSQL full-text search (slower, ~500ms)\n- **Embedding service failure**: Queue signals as \"embedding_failed\", retry asynchronously\n- **Stale embeddings**: Acceptable; older signals will still surface but with lower relevance\n\n### Testing Strategy\n1. Unit tests: embedding function, API endpoints\n2. Integration tests: Pinecone upsertion, fallback logic\n3. Load test: 50 concurrent searches with 2k signals\n4. Regression test: Ensure specific queries (e.g., \"earthquake New Zealand\") return expected signals\n\n### Security\n- No authentication on `/search` yet (startup phase); add API key before public launch\n- Rate limiting: 10 req/sec per IP (Redis counter) to avoid abuse\n- Input validation: Query length max 500 chars, sanitize for embedding model\n\n### Monitoring\n- Track p50/p95/p99 latency for `/search` endpoint\n- Monitor Pinecone API errors and fallback rate\n- Alert on embedding backlog size > 100 signals\n- Log slow queries (>500ms)\n"}], "grading": {"eval_id": 2, "eval_name": "system-design", "config": "with_skill", "assertions": [{"text": "covers_embedding_strategy", "passed": true, "evidence": "Lines 176-208 dedicated section 'Embedding Strategy' covering model choice (sentence-transformers/all-MiniLM-L6-v2), pipeline implementation, and discusses real-time vs async embedding"}, {"text": "addresses_sync", "passed": true, "evidence": "Lines 62-64 data flow includes signal ingestion pipeline with embedding generation and Pinecone upsert. Lines 185-207 show embedding worker pseudo-code with explicit upsert logic"}, {"text": "has_tradeoffs", "passed": true, "evidence": "Lines 222-232 extensive trade-off analysis table covering Pinecone vs self-hosted, embeddings approach, storage decisions, caching strategy, and async vs real-time embedding"}, {"text": "mentions_v1_scoping", "passed": true, "evidence": "Lines 234-264 'What I'd Build First (v1)' section clearly distinguishes MVP implementation from deferred features. Lines 266-296 'What I'd Revisit at 10\u00d7 Scale' shows future evolution path"}], "pass_rate": 1.0, "notes": "Excellent system design with comprehensive coverage. Clear architectural diagrams, detailed data models, explicit trade-offs, and well-scoped v1/v2+ roadmap. Demonstrates strong systems thinking."}}, {"id": "eval-system-design-without_skill", "prompt": "Design semantic search for WorldPulse using Pinecone free tier on Node.js/Fastify + PostgreSQL. Should cover embedding strategy, sync mechanisms, trade-offs, and v1 scoping.", "eval_id": 2, "outputs": [{"name": "design.md", "type": "text", "content": "# WorldPulse Semantic Search System Design\n\n**Date:** 2026-03-28\n**Status:** Design Phase\n**Scope:** Semantic search feature for 2K-100K signals using Pinecone free tier\n\n---\n\n## 1. Executive Summary\n\nWorldPulse will implement semantic search to allow users to query signals with natural language. Rather than exact keyword matching, the system will embed signals and queries into vector space, enabling discovery of semantically similar content even when exact words differ.\n\n**Key constraints:**\n- Tight budget \u2192 use Pinecone free tier (512 MB, 2 project limit)\n- PostgreSQL + Redis already in place\n- Node.js/Fastify backend\n- Growth from 2K to 100K signals\n\n**High-level approach:**\n1. Embed signals at ingestion time using a lightweight model\n2. Store embeddings in Pinecone + raw metadata in PostgreSQL\n3. Cache query embeddings in Redis for repeated searches\n4. Implement multi-stage ranking: vector similarity \u2192 PostgreSQL reranking \u2192 final results\n\n---\n\n## 2. Architecture Overview\n\n```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502   User Query    \u2502  Natural language input\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n         \u2502\n         v\n    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n    \u2502   Query Embedding Pipeline             \u2502\n    \u2502  - Check Redis cache (5-min TTL)        \u2502\n    \u2502  - If miss: generate embedding         \u2502\n    \u2502  - Cache in Redis                      \u2502\n    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n             \u2502\n             v\n    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n    \u2502   Pinecone Vector Search               \u2502\n    \u2502  - Top-K semantic matches (50-100)    \u2502\n    \u2502  - Return IDs + scores                \u2502\n    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n             \u2502\n             v\n    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n    \u2502   PostgreSQL Reranking (Optional)      \u2502\n    \u2502  - Fetch full metadata for top-K       \u2502\n    \u2502  - Apply business logic filters        \u2502\n    \u2502  - Re-rank by relevance + metadata     \u2502\n    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n             \u2502\n             v\n    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n    \u2502   Final Results (10-20 signals)        \u2502\n    \u2502  - Paginated response                  \u2502\n    \u2502  - Include confidence scores           \u2502\n    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```\n\n---\n\n## 3. Data Models & Storage\n\n### 3.1 PostgreSQL Schema (Existing + Extensions)\n\n**signals table** (extended):\n```sql\nCREATE TABLE signals (\n  id SERIAL PRIMARY KEY,\n  title TEXT NOT NULL,\n  description TEXT,\n  content TEXT,\n  source VARCHAR(255),\n  signal_type VARCHAR(50),        -- e.g., 'earthquake', 'economic', 'conflict'\n  confidence_score FLOAT,          -- 0-1\n  detected_at TIMESTAMP,\n  created_at TIMESTAMP DEFAULT NOW(),\n  updated_at TIMESTAMP DEFAULT NOW(),\n  embedding_id VARCHAR(255),       -- Pinecone vector ID (for cleanup)\n  metadata JSONB,                  -- tags, regions, entities, etc.\n\n  -- Indexes for search performance\n  INDEX idx_signal_type (signal_type),\n  INDEX idx_detected_at (detected_at DESC),\n  FULLTEXT INDEX idx_content_search (title, description, content)\n);\n```\n\n**signals_embeddings_log table** (audit trail):\n```sql\nCREATE TABLE signals_embeddings_log (\n  id SERIAL PRIMARY KEY,\n  signal_id INT NOT NULL REFERENCES signals(id) ON DELETE CASCADE,\n  pinecone_id VARCHAR(255),\n  embedding_model VARCHAR(50),     -- e.g., 'sentence-transformers/all-MiniLM-L6-v2'\n  created_at TIMESTAMP DEFAULT NOW(),\n  status VARCHAR(20)               -- 'success', 'failed', 'pending'\n);\n```\n\n### 3.2 Pinecone Schema\n\n**Index Name:** `worldpulse-signals` (single index to fit free tier)\n\n**Vector Dimension:** 384 (using all-MiniLM-L6-v2 model)\n\n**Metadata per vector:**\n```json\n{\n  \"signal_id\": 42,\n  \"title\": \"Earthquake in New Zealand\",\n  \"type\": \"natural_disaster\",\n  \"confidence\": 0.92,\n  \"detected_at\": \"2026-03-27T14:30:00Z\",\n  \"region\": \"Oceania\"\n}\n```\n\n**Index Configuration:**\n```json\n{\n  \"dimension\": 384,\n  \"metric\": \"cosine\",\n  \"spec\": {\n    \"serverless\": {\n      \"cloud\": \"aws\",\n      \"region\": \"us-west-2\"\n    }\n  },\n  \"tags\": [\"worldpulse\", \"signals\"]\n}\n```\n\n### 3.3 Redis Schema\n\n**Key pattern:** `search:embedding:{query_hash}`\n\n```\nKey: search:embedding:abc123def456\nValue: [0.12, 0.45, ..., 0.78]  (384-dim float array)\nTTL: 300 seconds (5 minutes)\n\nKey: search:results:{query_hash}\nValue: JSON of ranked results\nTTL: 60 seconds (1 minute)\n```\n\n---\n\n## 4. Component Design\n\n### 4.1 Signal Ingestion Pipeline\n\n**Flow:**\n1. New signal received (via API, webhook, or admin panel)\n2. Validate and store in PostgreSQL\n3. Generate embedding asynchronously\n4. Upsert into Pinecone\n5. Log status to `signals_embeddings_log`\n\n**Pseudocode (Node.js):**\n\n```javascript\nasync function ingestSignal(signal) {\n  // 1. Store in PostgreSQL\n  const stored = await db.signals.create({\n    title: signal.title,\n    description: signal.description,\n    content: signal.content,\n    source: signal.source,\n    signal_type: signal.type,\n    confidence_score: signal.confidence,\n    detected_at: signal.detected_at,\n    metadata: signal.metadata\n  });\n\n  // 2. Generate embedding (async, don't block)\n  queueEmbeddingJob({\n    signal_id: stored.id,\n    text: `${signal.title}\\n${signal.description}\\n${signal.content}`\n  });\n\n  return stored;\n}\n\nasync function processEmbeddingJob(job) {\n  try {\n    // Embed using lightweight model\n    const embedding = await embedder.embed(job.text);\n\n    // Upsert to Pinecone\n    await pinecone.upsert({\n      vectors: [{\n        id: `signal_${job.signal_id}`,\n        values: embedding,\n        metadata: {\n          signal_id: job.signal_id,\n          title: job.title,\n          type: job.type,\n          confidence: job.confidence,\n          detected_at: job.detected_at\n        }\n      }]\n    });\n\n    // Log success\n    await db.signals_embeddings_log.create({\n      signal_id: job.signal_id,\n      pinecone_id: `signal_${job.signal_id}`,\n      embedding_model: 'sentence-transformers/all-MiniLM-L6-v2',\n      status: 'success'\n    });\n  } catch (error) {\n    await db.signals_embeddings_log.create({\n      signal_id: job.signal_id,\n      status: 'failed',\n      error_message: error.message\n    });\n    logger.error(`Embedding failed for signal ${job.signal_id}`, error);\n  }\n}\n```\n\n### 4.2 Query Pipeline\n\n**Fastify endpoint:**\n\n```javascript\napp.post('/api/search/semantic', async (request, reply) => {\n  const { query, filters = {}, limit = 10, offset = 0 } = request.body;\n\n  // 1. Check Redis cache\n  const cacheKey = `search:embedding:${hashQuery(query)}`;\n  let embedding = await redis.get(cacheKey);\n\n  if (!embedding) {\n    // 2. Generate embedding\n    embedding = await embedder.embed(query);\n    // 3. Cache for 5 minutes\n    await redis.setex(cacheKey, 300, JSON.stringify(embedding));\n  } else {\n    embedding = JSON.parse(embedding);\n  }\n\n  // 4. Vector search in Pinecone (get top-K)\n  const pineconeResults = await pinecone.query({\n    vector: embedding,\n    topK: Math.min(50, limit * 5),  // Get more than needed for reranking\n    includeMetadata: true,\n    filter: buildPineconeFilter(filters)  // e.g., date range, type\n  });\n\n  if (pineconeResults.matches.length === 0) {\n    return reply.send({\n      results: [],\n      total: 0,\n      query: query\n    });\n  }\n\n  // 5. Fetch full metadata from PostgreSQL\n  const signalIds = pineconeResults.matches.map(m => m.metadata.signal_id);\n  const fullSignals = await db.signals.findAll({\n    where: { id: { [Op.in]: signalIds } }\n  });\n\n  // 6. Rerank: combine vector score + relevance factors\n  const ranked = rerank(pineconeResults.matches, fullSignals, query);\n\n  // 7. Apply pagination\n  const paginated = ranked.slice(offset, offset + limit);\n\n  // 8. Cache results (1 minute)\n  const resultsKey = `search:results:${hashQuery(query)}`;\n  await redis.setex(resultsKey, 60, JSON.stringify(paginated));\n\n  return reply.send({\n    results: paginated,\n    total: ranked.length,\n    query: query,\n    searchTime: Date.now() - startTime\n  });\n});\n```\n\n### 4.3 Reranking Logic\n\n```javascript\nfunction rerank(vectorMatches, fullSignals, query) {\n  const signalMap = Object.fromEntries(\n    fullSignals.map(s => [s.id, s])\n  );\n\n  return vectorMatches\n    .map(match => {\n      const signal = signalMap[match.metadata.signal_id];\n      if (!signal) return null;\n\n      // Combine scores\n      const vectorScore = match.score;  // 0-1 (cosine similarity)\n      const confidenceScore = signal.confidence_score;\n      const recencyScore = calculateRecency(signal.detected_at);\n      const sourceReliability = getSourceReliability(signal.source);\n\n      const finalScore =\n        0.50 * vectorScore +          // Primary: semantic similarity\n        0.20 * confidenceScore +      // Signal confidence\n        0.15 * recencyScore +         // Favor recent signals\n        0.15 * sourceReliability;     // Source trust\n\n      return {\n        signal_id: signal.id,\n        title: signal.title,\n        description: signal.description,\n        type: signal.signal_type,\n        source: signal.source,\n        detected_at: signal.detected_at,\n        confidence: signal.confidence_score,\n        semantic_score: vectorScore,\n        final_score: finalScore,\n        metadata: signal.metadata\n      };\n    })\n    .filter(Boolean)\n    .sort((a, b) => b.final_score - a.final_score);\n}\n```\n\n---\n\n## 5. Embedding Strategy\n\n### 5.1 Model Selection\n\n**Recommended:** `sentence-transformers/all-MiniLM-L6-v2`\n\n**Rationale:**\n- Output dimension: 384 (compact, within Pinecone free tier)\n- Performance: Strong on semantic similarity tasks\n- Size: ~27 MB (lightweight, suitable for edge deployment if needed)\n- Speed: ~100-200 queries/sec on single GPU/CPU\n- Open-source: No vendor lock-in\n\n**Alternative (if better accuracy needed):**\n- `sentence-transformers/all-mpnet-base-v2` (768-dim, slower, better quality)\n- Only migrate if reranking insufficient\n\n### 5.2 Embedding at Scale\n\n**For initial 2K signals:**\n- Single-threaded embedding sufficient\n- Process in background jobs (~10-15 min total)\n\n**For 100K+ signals (future):**\n- Batch embedding: 100-200 signals per batch\n- Use worker queue (Bull, RabbitMQ, or Fastify Bull)\n- Pinecone batch upsert API (100 vectors max per request)\n- Rate limiting: respect Pinecone free tier (maintain <1000 ops/min)\n\n**Cost projection:**\n- Pinecone free: 512 MB storage = ~1.3M vectors at 384-dim (rough estimate)\n- 100K signals \u00d7 384-dim \u00d7 4 bytes = ~152 MB \u2192 well within limits\n- Free tier sufficient for 18+ months at 2K/month signal growth rate\n\n---\n\n## 6. Filtering & Advanced Search\n\n### 6.1 Pinecone Metadata Filters\n\nSupport optional filters alongside semantic search:\n\n```javascript\nconst filters = {\n  signal_type: 'earthquake',           // Exact match\n  detected_at: { $gte: '2026-01-01' }, // Date range\n  confidence: { $gte: 0.8 },           // Confidence threshold\n  region: ['Asia', 'Pacific']          // Multi-value\n};\n```\n\n**Pinecone query with filters:**\n\n```javascript\nawait pinecone.query({\n  vector: embedding,\n  topK: 50,\n  filter: {\n    $and: [\n      { 'metadata.type': { $eq: filters.signal_type } },\n      { 'metadata.detected_at': { $gte: filters.detected_at } },\n      { 'metadata.confidence': { $gte: filters.confidence } }\n    ]\n  }\n});\n```\n\n### 6.2 Fallback: Keyword Search (PostgreSQL)\n\nIf vector search returns no results, fall back to full-text search:\n\n```javascript\nasync function fallbackKeywordSearch(query, limit = 10) {\n  return await db.sequelize.query(`\n    SELECT id, title, description, source, detected_at, confidence_score\n    FROM signals\n    WHERE MATCH(title, description, content) AGAINST(? IN BOOLEAN MODE)\n    ORDER BY detected_at DESC\n    LIMIT ?\n  `, {\n    replacements: [query, limit],\n    type: QueryTypes.SELECT\n  });\n}\n```\n\n---\n\n## 7. Performance & Caching\n\n### 7.1 Redis Caching Strategy\n\n| Data | Key Pattern | TTL | Size (est.) |\n|------|-------------|-----|------------|\n| Query embeddings | `search:embedding:{hash}` | 5 min | 1.5 KB |\n| Search results | `search:results:{hash}` | 1 min | 10-50 KB |\n| Hot signal IDs | `cache:hot_signals` | 1 hour | 10 KB |\n\n**Rationale:**\n- Query embeddings: Short TTL captures repeated searches within session\n- Results: Very short TTL since signals update frequently\n- Hot signals: Identify trending queries for pre-computation\n\n### 7.2 Query Performance Targets\n\n| Operation | Target | Notes |\n|-----------|--------|-------|\n| Embed query | < 50ms | Cached 80% of time |\n| Vector search (Pinecone) | < 100ms | 50 top-K vectors |\n| PostgreSQL rerank | < 50ms | 50 signals metadata fetch |\n| Total user latency | < 200ms | P95, including network |\n\n### 7.3 Latency Optimization\n\n```javascript\n// Parallel fetch + rerank (vs. sequential)\nconst [vectorResults, signals] = await Promise.all([\n  pinecone.query({ vector: embedding, topK: 50 }),\n  db.signals.findAll({ limit: 50 })  // Pre-fetch hot signals if needed\n]);\n\n// Cache reranking for identical queries\nconst resultsKey = hashQuery(query);\nlet ranked = await redis.get(resultsKey);\nif (!ranked) {\n  ranked = rerank(vectorResults, signals, query);\n  await redis.setex(resultsKey, 60, JSON.stringify(ranked));\n} else {\n  ranked = JSON.parse(ranked);\n}\n```\n\n---\n\n## 8. Monitoring & Observability\n\n### 8.1 Key Metrics\n\n```\nVector Search Metrics:\n- Queries per minute (QPM)\n- Avg query latency (P50, P95, P99)\n- Cache hit rate (embeddings, results)\n- Pinecone index size (% of free tier limit)\n\nEmbedding Metrics:\n- Signals embedded per day\n- Embedding failure rate\n- Queue depth (pending embeddings)\n- Avg embedding generation time\n\nBusiness Metrics:\n- Avg result relevance (manual tagging)\n- User satisfaction (implicit: CTR on results)\n- Query diversity (new unique queries/day)\n```\n\n### 8.2 Logging & Alerts\n\n```javascript\n// Structured logging for debugging\nlogger.info('semantic_search', {\n  query: query,\n  cache_hit: !!embedding,\n  result_count: results.length,\n  top_score: results[0]?.final_score,\n  latency_ms: Date.now() - startTime,\n  user_id: request.user.id\n});\n\n// Alerts\n- Embedding failure rate > 5% \u2192 page engineering\n- Pinecone index capacity > 90% \u2192 plan migration\n- Query latency P95 > 500ms \u2192 investigate bottleneck\n```\n\n---\n\n## 9. Scaling Path\n\n### Phase 1: MVP (2K-5K signals)\n- Single Pinecone project\n- Synchronous embedding on write\n- Redis L1 cache (embeddings only)\n- Manual quality checks\n\n### Phase 2: Growth (5K-20K signals)\n- Async embedding queue (worker process)\n- Expand Redis caching (results + frequent queries)\n- A/B test reranking weights\n- Collect relevance feedback from users\n\n### Phase 3: Scale (20K-100K signals)\n- Multi-tenant Pinecone (if needed; switch to paid tier)\n- Distributed embedding workers\n- Redis cluster for high availability\n- ML model fine-tuning on feedback data\n\n### Phase 4: Enterprise (100K+ signals)\n- Evaluate vector database alternatives (Weaviate, Milvus)\n- Custom embedding model trained on WorldPulse signals\n- Real-time index updates + HNSW indexing\n- Advanced filtering (time decay, popularity, source graph)\n\n---\n\n## 10. Risk Mitigation\n\n| Risk | Likelihood | Impact | Mitigation |\n|------|------------|--------|-----------|\n| Pinecone free tier limit reached | Medium | High | Monitor index growth; migrate to paid tier (< $100/mo) |\n| Poor result quality | Medium | High | Implement reranking; collect user feedback; fine-tune model |\n| Embedding generation bottleneck | Low | Medium | Queue-based async processing; batch embeddings |\n| Cache stampede (many queries \u2192 Pinecone simultaneously) | Low | Medium | Probabilistic early expiration; local compute cache |\n| Relevance feedback loop (GIGO) | Medium | Medium | Manual validation; diversity in training data |\n\n---\n\n## 11. API Contract\n\n### 11.1 POST /api/search/semantic\n\n**Request:**\n```json\n{\n  \"query\": \"earthquake in New Zealand\",\n  \"filters\": {\n    \"signal_type\": \"natural_disaster\",\n    \"confidence_min\": 0.7,\n    \"detected_after\": \"2026-01-01\"\n  },\n  \"limit\": 10,\n  \"offset\": 0\n}\n```\n\n**Response:**\n```json\n{\n  \"query\": \"earthquake in New Zealand\",\n  \"total\": 23,\n  \"results\": [\n    {\n      \"signal_id\": 42,\n      \"title\": \"Magnitude 5.2 Earthquake Strikes Southland Region\",\n      \"description\": \"A moderate earthquake hit...\",\n      \"type\": \"natural_disaster\",\n      \"source\": \"USGS\",\n      \"detected_at\": \"2026-03-27T14:30:00Z\",\n      \"confidence\": 0.92,\n      \"semantic_score\": 0.89,\n      \"final_score\": 0.84,\n      \"metadata\": {\n        \"magnitude\": 5.2,\n        \"depth_km\": 12,\n        \"region\": \"Southland\"\n      }\n    }\n    // ... 9 more results\n  ],\n  \"search_time_ms\": 142\n}\n```\n\n### 11.2 POST /api/signals/{id}/embeddings/refresh\n\nForce re-embedding of a signal (admin endpoint):\n\n```json\n{\n  \"signal_id\": 42\n}\n```\n\n---\n\n## 12. Implementation Checklist\n\n- [ ] Set up Pinecone project + API credentials\n- [ ] Choose embedding model (recommend: all-MiniLM-L6-v2)\n- [ ] Add `embedding_id`, `embedding_model` columns to `signals` table\n- [ ] Create `signals_embeddings_log` audit table\n- [ ] Implement `ingestSignal()` + `processEmbeddingJob()`\n- [ ] Implement query embedding pipeline + Redis caching\n- [ ] Implement Pinecone vector search + PostgreSQL fetch\n- [ ] Implement reranking logic with score combination\n- [ ] Add filtering support (metadata + PostgreSQL)\n- [ ] Fallback keyword search (PostgreSQL full-text)\n- [ ] Write unit tests for embedding, search, reranking\n- [ ] Load testing (simulate 100K signals, 100 concurrent queries)\n- [ ] Set up monitoring + alerts\n- [ ] Document API contract for frontend\n- [ ] User acceptance testing (relevance feedback)\n\n---\n\n## 13. Cost Analysis\n\n**Initial Setup (once):**\n- Embedding model: $0 (open-source, self-hosted on existing infra)\n- Pinecone setup: $0 (free tier)\n\n**Monthly Operating Cost (at full scale ~100K signals):**\n- Pinecone free tier: $0 (until migration needed)\n- Compute (embedding workers): $0-50 (existing K8s capacity)\n- Redis (caching): $0-20 (existing Redis infra)\n- Database (PostgreSQL): ~$0-10 (additional storage)\n\n**When to upgrade Pinecone (projected ~Q4 2026):**\n- Free tier limit: 512 MB \u2192 ~180K vectors at 384-dim\n- Paid Starter: $15/mo (2 GB, 2M vectors)\n- Savings by free tier: ~$18-180 (depending on exact timeline)\n\n---\n\n## 14. Appendix: Code Snippets\n\n### Embedding Utility (Node.js)\n\n```javascript\nconst { pipeline } = require('@xenova/transformers');\n\nlet embedding_cache = null;\n\nasync function getEmbedder() {\n  if (!embedding_cache) {\n    embedding_cache = await pipeline(\n      'feature-extraction',\n      'Xenova/all-MiniLM-L6-v2'\n    );\n  }\n  return embedding_cache;\n}\n\nasync function embed(text) {\n  const embedder = await getEmbedder();\n  const output = await embedder(text, {\n    pooling: 'mean',\n    normalize: true\n  });\n  return Array.from(output.data);  // Convert tensor to array\n}\n\nmodule.exports = { embed, getEmbedder };\n```\n\n### Query Hashing\n\n```javascript\nconst crypto = require('crypto');\n\nfunction hashQuery(query) {\n  return crypto\n    .createHash('sha256')\n    .update(query.toLowerCase().trim())\n    .digest('hex')\n    .substring(0, 16);\n}\n```\n\n### Recency Score\n\n```javascript\nfunction calculateRecency(detectedAt) {\n  const days = (Date.now() - new Date(detectedAt)) / (1000 * 60 * 60 * 24);\n\n  if (days <= 1) return 1.0;\n  if (days <= 7) return 0.8;\n  if (days <= 30) return 0.6;\n  if (days <= 90) return 0.4;\n  return 0.2;\n}\n```\n\n---\n\n## 15. Summary\n\nThis semantic search system balances **cost constraints** (Pinecone free tier) with **performance requirements** (sub-200ms queries, 100K+ signals). By combining vector similarity, reranking, and caching, WorldPulse can deliver highly relevant results to users while remaining budget-conscious and maintaining flexibility to scale into paid infrastructure as the platform grows.\n\nThe architecture is **modular**: embedding model, vector DB, reranking weights, and filtering logic can all be independently improved without redesigning the core pipeline.\n"}], "grading": {"eval_id": 2, "eval_name": "system-design", "config": "without_skill", "assertions": [{"text": "covers_embedding_strategy", "passed": true, "evidence": "Section 5 'Embedding Strategy' (lines 336-369) covers model selection, rationale for sentence-transformers, embedding at scale, and cost projections"}, {"text": "addresses_sync", "passed": true, "evidence": "Section 4.1 'Signal Ingestion Pipeline' (lines 157-227) shows complete flow from signal storage to async embedding job to Pinecone upsert with pseudocode"}, {"text": "has_tradeoffs", "passed": false, "evidence": "No dedicated trade-off analysis section. Document discusses design choices and phases (MVP, Growth, Scale, Enterprise) but lacks explicit trade-off table comparing alternatives"}, {"text": "mentions_v1_scoping", "passed": true, "evidence": "Section 9 'Scaling Path' (lines 514-538) outlines phases from MVP through Enterprise, clearly delineating Phase 1 MVP scope vs future phases"}], "pass_rate": 0.75, "notes": "Solid system design with comprehensive technical details and multi-phase roadmap. Missing explicit trade-off analysis section (which is a best practice for system designs). Otherwise well-structured with code snippets and implementation details."}}, {"id": "eval-tech-debt-with_skill", "prompt": "Tech debt audit of WorldPulse API with dual DB containers, no integration tests, mixed SQL patterns, inconsistent cache keys. Should categorize, prioritize, flag specific issues, and provide remediation plan.", "eval_id": 3, "outputs": [{"name": "audit.md", "type": "text", "content": "# Tech Debt Audit: WorldPulse API Codebase\n\n## Summary\n\nThe WorldPulse API codebase has accumulated significant structural and operational debt across database infrastructure, data access patterns, caching semantics, and test coverage. The most urgent risks are the unresolved dual-database state (wp_db vs wp_postgres), 5 days of unmonitored scraper error logs, and total absence of integration tests\u2014any of which can cause silent failures or cascading incidents in production. Without addressing these, the team faces growing deployment risk, longer debugging cycles, and potential data integrity issues.\n\n---\n\n## Findings\n\n| Item | Type | Impact | Risk | Effort | Score | Tier |\n|------|------|--------|------|--------|-------|------|\n| Dual database containers (wp_db + wp_postgres) with no canonical source | Architecture | 5 | 5 | 2 | 20 | Targeted |\n| Scraper error logs not monitored (5 days running) | Infrastructure | 4 | 4 | 1 | 8 | Opportunistic |\n| No integration tests; only unit tests for utility functions | Test | 5 | 4 | 3 | 27 | Targeted |\n| Mixed raw SQL and Knex ORM in data layer | Code | 4 | 3 | 3 | 21 | Targeted |\n| Inconsistent Redis cache key separators (colons vs hyphens) | Code | 3 | 3 | 2 | 12 | Opportunistic |\n| No error handling or retry logic in scraper | Infrastructure | 4 | 4 | 2 | 16 | Targeted |\n| Missing monitoring/alerting on data pipeline | Infrastructure | 3 | 4 | 2 | 14 | Opportunistic |\n| No documentation of database schema or migration strategy | Documentation | 2 | 2 | 1 | 4 | Opportunistic |\n| No audit logging for data mutations | Security | 2 | 4 | 2 | 12 | Opportunistic |\n\n---\n\n## Top 3 Quick Wins\n\nThese are high-value fixes that can be tackled in parallel with feature work without major rework:\n\n1. **Review and log scraper error output** (Infrastructure, Score 8)\n   - Set up centralized logging to stdout/stderr with rotation\n   - Add structured logging (JSON format) with severity levels\n   - Effort: ~2\u20133 hours\n   - Payoff: Immediate visibility into scraper health; uncovers blocked data flows before they cascade\n\n2. **Standardize Redis cache key format** (Code, Score 12)\n   - Audit all cache key generation across the codebase\n   - Establish a single separator convention (recommend colons for namespacing consistency)\n   - Add a cache key builder utility function to enforce the pattern\n   - Effort: ~4\u20136 hours\n   - Payoff: Reduces cache misses from typos, simplifies debugging, prevents key collisions\n\n3. **Add monitoring alert for scraper stuck state** (Infrastructure, Score 14)\n   - Check scraper last-run timestamp; alert if >6 hours old\n   - Monitor scraper process memory and CPU; alert if runaway detected\n   - Effort: ~3\u20134 hours (depends on existing alerting framework)\n   - Payoff: Catches silent failures; prevents 5-day backlogs before they happen again\n\n---\n\n## Top 3 Strategic Items\n\nThese require dedicated focus and architectural decisions:\n\n1. **Resolve canonical database and establish single source of truth** (Architecture, Score 20)\n   - Investigate which container (wp_db or wp_postgres) is actually being written to in production\n   - Audit schema diffs between the two\n   - Choose canonical store; migrate/decommission the other\n   - Update CI/CD and deployment docs\n   - Effort: ~2\u20133 sprints (schema audit + careful cutover + validation)\n   - Risk if not fixed: Silent data corruption, failed deployments, cascading query failures if apps read from different stores\n\n2. **Add comprehensive integration test suite** (Test, Score 27)\n   - Design test pyramid: unit (existing) \u2192 integration (routes + DB) \u2192 end-to-end (full scraper + API)\n   - Write fixtures for test database\n   - Cover happy path and error cases for all data pipelines (scraper, mutations, reads)\n   - Integrate into CI; fail builds if coverage drops\n   - Effort: ~4\u20136 sprints (initial build) + ongoing maintenance\n   - Payoff: Catch regressions before production; confidence in refactors; faster incident recovery\n\n3. **Unify data access layer (raw SQL \u2192 Knex ORM)** (Code, Score 21)\n   - Audit routes and identify which use raw SQL vs Knex\n   - Choose ORM (Knex) as standard; migrate raw SQL incrementally\n   - Add query validation and prepared statement enforcement\n   - Effort: ~3\u20134 sprints (staggered across sprints)\n   - Payoff: Reduced SQL injection surface; easier schema changes; better IDE support and query composition\n\n---\n\n## Remediation Plan\n\n### This Sprint (Opportunistic)\n\nThese are fix-as-you-go items that fit into any PR touching affected files:\n\n- [ ] Add scraper logging to structured JSON format (stdout/stderr with rotation)\n- [ ] Create a cache key builder utility and document the convention (colons for namespaces)\n- [ ] Document which database container is canonical and why (add to deployment runbook)\n- [ ] Add stub monitoring/alerting config for scraper stuck state (or create Linear issue for ops team)\n\n**Expected effort**: 12\u201314 hours total, spread across team; can be done in parallel with feature work.\n\n---\n\n### Next 4 Sprints (Targeted)\n\nThese items should each be scoped as one focused task per sprint:\n\n**Sprint 1**: Establish scraper monitoring and error visibility\n- [ ] Finalize logging structure and add to all scraper entry points\n- [ ] Build scraper health dashboard (last-run, error count, memory usage)\n- [ ] Set up alerts for: error rate spike, timeout, process restart loop\n- **Effort**: 1 sprint (~40 hours)\n\n**Sprint 2**: Standardize cache key generation\n- [ ] Audit all Redis operations across codebase\n- [ ] Replace inline key generation with cache key builder\n- [ ] Add integration tests for cache behavior (hit/miss/invalidation)\n- **Effort**: 1 sprint (~32 hours)\n\n**Sprint 3**: Begin integration test infrastructure\n- [ ] Design test database fixture and seeding strategy\n- [ ] Write tests for 3\u20135 critical routes (highest-churn endpoints)\n- [ ] Integrate test runner into CI; enforce coverage threshold (start at 30%)\n- **Effort**: 1 sprint (~40 hours)\n\n**Sprint 4**: Continue integration tests + begin SQL migration\n- [ ] Write 3\u20135 more integration tests (data mutation routes)\n- [ ] Identify top 3 raw SQL queries by churn; plan Knex rewrites\n- [ ] Rewrite 1 complex raw SQL query as Knex; document pattern\n- **Effort**: 1 sprint (~40 hours, shared between two workstreams)\n\n---\n\n### Q-Level Project (Strategic)\n\nThese require stakeholder commitment and likely need to be forked out or allocated 20\u201340% capacity over 2\u20133 quarters:\n\n**Database Canonicalization Project** (Duration: 2\u20133 weeks, depending on data volume)\n\nOutcome: One canonical, versioned, monitored database; all writes routed through it; deployments and backups fully understood.\n\n- Week 1: Audit schema diffs, trace live traffic, identify which writes go to which store\n- Week 2: Plan cutover (read from one store, validate consistency); coordinate with ops\n- Week 3: Execute cutover; decommission stale container; update CI/CD; document runbook\n- Blocking the team: Yes (deployment risk) \u2014 prioritize before next feature freeze\n\n**Full Integration Test Suite** (Duration: 6\u20138 weeks, ongoing)\n\nOutcome: 70%+ integration test coverage; all data pipelines (scraper, API routes, caching, mutations) validated; CI fails on regression.\n\n- Weeks 1\u20132: Build test harness and database fixtures\n- Weeks 3\u20135: Write route tests (happy path + error cases for all endpoints)\n- Weeks 6\u20137: Write scraper tests (data parsing, error recovery, idempotency)\n- Week 8: Audit coverage gaps, fix flaky tests, establish maintenance cadence\n- Blocking the team: No (can run in parallel) \u2014 but unblock refactors and give developers confidence to optimize\n\n**Data Access Layer Unification** (Duration: 8\u201310 weeks, ongoing)\n\nOutcome: All data access through consistent ORM; no raw SQL; query validation enforced in middleware; easier schema changes.\n\n- Weeks 1\u20132: Survey codebase, categorize raw SQL queries by complexity\n- Weeks 3\u20135: Migrate high-impact queries (most frequently touched) to Knex\n- Weeks 6\u20138: Migrate medium-impact queries; add query validation middleware\n- Weeks 9\u201310: Final migration and cleanup; enforce no-raw-SQL in linting\n- Blocking the team: No (can stagger per route) \u2014 but enables confident refactors and schema evolution\n\n---\n\n## How to Frame This for Stakeholders\n\n**\"We have two databases and we're not sure which one is the real one. This adds uncertainty to every deployment and makes incident recovery slower.\"**\n- Business impact: Deployment risk, slower MTTR (mean time to recovery)\n- Fix: Resolve which is canonical (2\u20133 weeks, ops + 1 engineer), then decommission the redundant one\n- Why now: Before we scale traffic, we need to know our data is being written to one place consistently\n\n**\"We're not testing our data pipelines. The scraper has been running silently for 5 days, and we have no idea if it's hitting errors.\"**\n- Business impact: Silent data corruption, incomplete intelligence feeds, no early warning system for pipeline breaks\n- Fix: Add integration tests and scraper monitoring (8+ weeks to full coverage, but quick wins in first 2 weeks)\n- Why now: Every day without visibility is a day of potentially stale or corrupt data flowing into the system\n\n**\"Our code mixes two different approaches to talking to the database (raw SQL and Knex ORM). This makes refactors risky and introduces SQL injection surface area.\"**\n- Business impact: Slower development velocity (riskier to touch DB code), security risk (injection vectors)\n- Fix: Migrate all raw SQL to ORM over 8\u201310 weeks; add query validation middleware\n- Why now: As we add more data flows (new integrations, new routes), the risk compounds\n\n---\n\n## Next Steps\n\n1. **Validate findings with the team** \u2014 Schedule 30 min sync to confirm the dual-database issue and scraper monitoring gaps are accurate\n2. **Assign owners** \u2014 Distribute opportunistic fixes across the next 1\u20132 PRs; assign leads for each targeted sprint\n3. **Update Linear/your tracker** \u2014 Create epics for the three strategic projects; scope as 2\u20133 week chunks\n4. **Start with monitoring** \u2014 The scraper logging fix is the fastest payoff and unblocks debugging of other issues\n"}], "grading": {"eval_id": 3, "eval_name": "tech-debt", "config": "with_skill", "assertions": [{"text": "uses_categories", "passed": true, "evidence": "Lines 9-22 findings table explicitly categorizes issues: Architecture, Infrastructure, Test, Code, Security, Documentation - each item tagged with category type"}, {"text": "has_prioritization", "passed": true, "evidence": "Lines 25-47 'Top 3 Quick Wins' and lines 50-77 'Top 3 Strategic Items' provide explicit prioritization. Table includes Effort and Score columns for ranking (lines 11-22)"}, {"text": "flags_dual_db", "passed": true, "evidence": "Lines 54-60 dedicated section 'Resolve canonical database and establish single source of truth' - identifies dual database issue as top strategic priority with detailed remediation steps"}, {"text": "has_remediation_plan", "passed": true, "evidence": "Lines 79-156 comprehensive 'Remediation Plan' with This Sprint tasks, Next 4 Sprints breakdown, and Q-Level Project roadmap with specific effort estimates and timelines"}], "pass_rate": 1.0, "notes": "Outstanding tech debt audit with clear categorization, scored prioritization, and phased remediation roadmap. Includes stakeholder communication guidance. Very actionable with concrete effort estimates."}}, {"id": "eval-tech-debt-without_skill", "prompt": "Tech debt audit of WorldPulse API with dual DB containers, no integration tests, mixed SQL patterns, inconsistent cache keys. Should categorize, prioritize, flag specific issues, and provide remediation plan.", "eval_id": 3, "outputs": [{"name": "audit.md", "type": "text", "content": "# WorldPulse API Tech Debt Audit\n**Generated:** 2026-03-28\n**Codebase:** apps/api (TypeScript/Express/Knex)\n**Scope:** Primary issues identified + comprehensive analysis\n\n---\n\n## Executive Summary\n\nThis audit identifies **5 critical categories of technical debt** affecting maintainability, operational visibility, and consistency. The most pressing issue is **missing integration tests** for route handlers and multi-system workflows. Secondary concerns are **inconsistent Redis cache key patterns** and **scattered raw SQL** that bypasses query builder safety guardrails. Database management is sound (single postgres container), but the scraper runs blind with no structured error tracking.\n\n**Risk Level:** Medium-High\n**Estimated Effort to Address:** 3-4 sprint cycles (phased approach recommended)\n\n---\n\n## 1. Database Container Ambiguity (RESOLVED)\n\n### Status: FALSE ALARM\nOnly **one PostgreSQL container exists** (`wp_postgres`). There is no `wp_db` container.\n\n### Findings\n- **docker-compose.yml:** Single postgres service named `postgres` with container_name `wp_postgres`\n- **Database URL:** Consistently references `postgresql://wp_user:wp_secret_local@postgres:5432/worldpulse_db`\n- **Migration system:** Single source of truth via Knex migrations in `apps/api/src/db/migrations/`\n\n### Conclusion\nThe two-container confusion likely arose from past refactoring. **No action required.**\n\n---\n\n## 2. Scraper Error Logging & Observability\n\n### Severity: **HIGH**\nThe scraper has been running for 5+ days with **no structured error tracking**.\n\n### Current State\n- **apps/scraper/src/index.ts** (lines 1-150+): Main scrape loop initializes circuit breakers, DLQ (Dead Letter Queue), and retry logic\n- **Error handling:** Individual components (verify, classify, geo, dedup) log to `logger` but there is **no centralized error aggregation**\n- **Kafka consumer:** Verification consumer runs async but failure modes are not surfaced in any dashboard\n- **Health checks:** Exist (`health.ts`, `logHealthSummary()`) but are **log-only**, not queryable/alertable\n\n### Code Evidence\n```typescript\n// apps/scraper/src/index.ts:142-144\nsetInterval(() => { logHealthSummary().catch(err => logger.error({ err }, 'Health summary failed')) }, 5 * 60_000)\nsetInterval(() => { detectDeadSources().catch(err => logger.error({ err }, 'Dead source detection failed')) }, 5 * 60_000)\n// Errors are logged to stdout/stderr only; no database or monitoring integration\n```\n\n### Root Causes\n1. **No observability sink:** Errors are logged locally; no Sentry/PostHog/error aggregator configured\n2. **Log files not persisted:** Running in containers; logs lost on restart\n3. **No alerting triggers:** Dead sources detected but no webhook/email notification\n4. **DLQ monitoring gap:** Items land in DLQ but no visibility into why or how many\n\n### Recommended Actions (Priority: P1)\n\n#### Phase 1 (1 week)\n- [ ] Integrate Sentry for error tracking (env var `SENTRY_DSN` already plumbed)\n- [ ] Store health summaries in DB table `scraper_health_snapshots(id, ts, stats_json, circuit_status_json)`\n- [ ] Create `/health` endpoint that queries last snapshot + live circuit breaker state\n\n#### Phase 2 (2 weeks)\n- [ ] Add structured logging to DLQ: `dlq_events(id, ts, source_id, reason, attempt_count, payload_json)`\n- [ ] Build admin dashboard: scraper health, DLQ backlog, per-source error rates\n- [ ] Implement alerting: POST webhook if DLQ grows beyond 100 items or circuit trips\n\n#### Phase 3 (optional)\n- [ ] Add spans/traces for each article group: timing, stage completion, drop reasons\n- [ ] Export metrics to Prometheus for Grafana dashboard\n\n---\n\n## 3. Redis Cache Key Inconsistency\n\n### Severity: **MEDIUM**\nCache keys use **mixed separators** (colons vs hyphens) across the codebase, creating operational confusion and collision risk.\n\n### Audit Results\n\n#### Colon Separators (Standard Pattern - 65+ usage sites)\n```\nnotif:sent:{userId}:{signalId}              // alert-dispatcher.ts\nnotif:email:{userId}:{subId}:{signalId}     // alert-dispatcher.ts\nnotif:*:settings                            // alert-dispatcher.ts (SCAN pattern)\nfeed:global:{userSegment}:{category}:{severity}:{cursor}  // feed.ts\nsignals:cache:{signalId}                    // graphql/resolvers.ts\ncorrelation:signal:{signalId}               // graphql/resolvers.ts\ncorrelation:cluster:{clusterId}             // graphql/resolvers.ts\nsearch:latency:samples                      // search-latency.ts\nsearch:latency:req_count                    // search-latency.ts\nsearch:latency:5min:avg                     // search-latency.ts\nsecurity:lockout:{identifier}               // security.ts\nsecurity:login_attempt:{identifier}         // security.ts\nsecurity:events:{eventType}:{hour}          // security.ts\nbias:v1:{sourceId}                          // bias-corrections.ts\nos:search:{query}:{schema}:{limit}          // opensanctions.ts\nembed:{hash}                                // pinecone.ts\nbriefing:{dateKey}:{hours}h                 // briefing-generator.ts\n```\n\n#### Hyphen Separators (Non-Standard - ~8 usage sites)\n```\nsource-bias:{domain}                        // source-bias.ts (INCONSISTENT!)\nsignal-summary:{signalId}                   // signal-summary.ts (inferred)\nslop-detector:{signalId}                    // slop-detector.ts\ncadence:{domain}                            // slop-detector.ts\nbreaking-alert:{signalId}                   // breaking-alerts.ts (uses prefix var, unclear)\n```\n\n### Issues Created\n1. **Naming collision risk:** `bias:v1:example.com` vs `source-bias:example.com` could coexist\n2. **Operational confusion:** Redis CLI keys searches require knowing the correct separator\n3. **TTL mismanagement:** Some keys use 7-day TTL, others 24-hour; no canonical registry\n4. **Monitoring blind spot:** No way to count or alert on all cache keys for a feature\n\n### Example Collision\n```typescript\n// source-bias.ts (line ~220)\nawait redis.setex(`source-bias:${domain}`, BIAS_CACHE_TTL, JSON.stringify(bias))\n\n// bias-corrections.ts (line ~238)\nawait redis.del(`bias:v1:${c.source_id}`)\n// Different key format! The del() won't clear the cache set by source-bias.ts\n```\n\n### Recommended Actions (Priority: P2)\n\n#### Phase 1: Standardization (3 days)\n- [ ] Establish standard: **all keys use colons as separators** (already dominant pattern)\n- [ ] Create constant registry in `apps/api/src/utils/cache-keys.ts`:\n```typescript\nexport const CACHE_KEYS = {\n  NOTIFICATION: {\n    SENT: (userId: string, signalId: string) => `notif:sent:${userId}:${signalId}`,\n    EMAIL: (userId: string, subId: string, signalId: string) => `notif:email:${userId}:${subId}:${signalId}`,\n    SETTINGS: (userId: string) => `notif:${userId}:settings`,\n  },\n  SOURCE: {\n    BIAS: (domain: string) => `source:bias:${domain}`,  // Consolidate both patterns\n    PACK: (packId: string) => `source:pack:${packId}`,\n  },\n  SEARCH: {\n    LATENCY_SAMPLES: 'search:latency:samples',\n    LATENCY_AVG_5MIN: 'search:latency:5min:avg',\n  },\n  // ... etc\n}\n```\n\n#### Phase 2: Migration (1 week)\n- [ ] Script to export all existing cache keys and their TTLs\n- [ ] Create migration script to rename keys in Redis (careful! can't block production)\n- [ ] Update all files to use CACHE_KEYS constants instead of inline strings\n- [ ] Add TSLint rule to forbid direct redis key strings; must use constants\n\n#### Phase 3: Monitoring (2 days)\n- [ ] Add Redis health check endpoint: count keys by prefix, total memory, eviction rate\n- [ ] Add Prometheus metrics: `redis_keys_total{prefix=\"notif\"}`, etc.\n\n---\n\n## 4. Raw SQL & Knex Query Builder Inconsistency\n\n### Severity: **MEDIUM**\nSome routes mix **Knex query builder** with **raw SQL fragments**, reducing safety and maintainability.\n\n### Audit Results\n\n#### Safe Knex Usage (Dominant Pattern)\n```typescript\n// apps/api/src/routes/feed.ts:43-67\nlet query = db('posts as p')\n  .join('users as u', 'p.author_id', 'u.id')\n  .leftJoin('signals as s', 'p.signal_id', 's.id')\n  .where('p.deleted_at', null)\n  .select([...])\n  .limit(pageLimit + 1)\n  .orderBy('p.created_at', 'desc')\n// Clean, composable, parameterized\n```\n\n#### Raw SQL Mixed In (3-4 instances found)\n```typescript\n// apps/api/src/routes/admin.ts:~30\n.where('created_at', '>', db.raw(\"NOW() - INTERVAL '24 hours'\"))\n\n// apps/api/src/routes/analytics.ts:~150\ndb.raw('COUNT(*) as total_posts'),\ndb.raw('COALESCE(SUM(p.like_count), 0) as total_likes_received'),\n\ndb.raw(`\n  SELECT\n    COUNT(DISTINCT vl.signal_id) FILTER (WHERE vl.viewer_id = $1) as viewed_signals,\n    ...\n  FROM signal_views vl ...\n`)\n// Risk: $1 parameters are Knex-managed, but mixing raw SQL creates confusion\n```\n\n### Issues\n1. **Parameter binding uncertainty:** Knex.raw() uses `$1, $2` (PostgreSQL) but intent is unclear\n2. **Query optimization gaps:** Raw FILTER clauses can't be analyzed by Knex for index usage\n3. **Testing friction:** Mock/spy on db harder when parts are raw SQL\n4. **Migration risk:** Changing interval format (e.g., PostgreSQL version upgrade) breaks raw SQL\n\n### Code Evidence\n\nRaw SQL found in:\n- **admin.ts:** 2 instances (`db.raw(\"NOW() - INTERVAL '24 hours'\")`)\n- **analytics.ts:** 5+ instances (COUNT(*), COALESCE, FILTER, DATE_TRUNC)\n\nTotal: **~2% of query surface** (mostly safe, but concentrated in analytics which needs optimization)\n\n### Recommended Actions (Priority: P3)\n\n#### Phase 1: Audit & Document (2 days)\n- [ ] Create registry of all `db.raw()` calls in codebase\n- [ ] Document why raw SQL was used (optimization, unsupported syntax, etc.)\n- [ ] Add comments above each raw call explaining parameter binding\n\n#### Phase 2: Refactor Analytics (1 week)\n- [ ] Replace FILTER clauses with Knex `.where()` chaining\n- [ ] Use Knex intervals: `db.raw.interval()` or `.modifyWhere()` helpers\n- [ ] Extract complex aggregations into views or CTEs if they're slow\n\n#### Phase 3: Establish Guard Rails (3 days)\n- [ ] Add linter rule: warn on `db.raw()` unless prefixed with `// INTENTIONAL_RAW_SQL`\n- [ ] Document approved patterns in CONTRIBUTING.md\n\n---\n\n## 5. Integration Test Gap (CRITICAL)\n\n### Severity: **CRITICAL**\n**76 unit test files exist**, but **only 5-7 integration tests** cover route-to-database flows.\n\n### Test Inventory\n\n#### Test Files Present\n```\n__tests__/ (57 files):\n  - auth.test.ts, auth-integration.test.ts\n  - feed.test.ts, feed-integration.test.ts\n  - posts.test.ts, signals.test.ts\n  - search.test.ts, search-gate3.test.ts, search-indexing.test.ts, search-consumer.test.ts\n  - notifications.test.ts, notifications-email.test.ts, notifications-slack-teams.test.ts\n  - graphql.test.ts\n  - briefing.test.ts\n  - [37 more utility/library tests]\n\nlib/__tests__/ (19 files):\n  - alert-tier.test.ts\n  - auth-utils.test.ts\n  - error.test.ts\n  - feed-dedup.test.ts\n  - feed-routes.test.ts\n  - search-analytics.test.ts\n  - search-events.test.ts\n  - [12 more library tests]\n```\n\n#### Coverage Gap Analysis\n| Category | Test Files | Coverage | Risk |\n|----------|-----------|----------|------|\n| Route handlers (42 routes) | 15 | ~36% | HIGH |\n| Database queries | 3 (feed-dedup, search) | ~7% | CRITICAL |\n| Cache layering (redis) | 2 (search, briefing) | ~10% | HIGH |\n| Error handling (lib/errors.ts) | 1 (errors.test.ts) | ~80% | MEDIUM |\n| Multi-service flows (kafka, redis, db) | 0 | 0% | CRITICAL |\n\n### Missing Integration Test Categories\n\n1. **Route \u2192 Database \u2192 Cache Flow** (CRITICAL)\n   - Example: Feed route with auth, cache hit, cache miss, DB join\n   - Current: Unit tests for each layer separately\n   - Missing: End-to-end flow with transactions rolling back\n\n2. **Multi-Service Workflows** (CRITICAL)\n   - Example: Alert dispatcher \u2192 user settings (DB) + notification (Redis) + webhook (HTTP)\n   - Current: No tests covering service interaction ordering\n   - Risk: Race conditions, partial failures not visible\n\n3. **Error Recovery Paths** (CRITICAL)\n   - Example: DB timeout \u2192 circuit breaker trip \u2192 cache bypass \u2192 success\n   - Current: Only happy paths tested\n   - Missing: Failure mode validation (e.g., \"did it fail fast?\")\n\n4. **Concurrent Access** (HIGH)\n   - Example: Two users liking same post simultaneously\n   - Current: Atomic DB operations assumed correct\n   - Missing: Race condition tests with thread pools\n\n### Code Evidence\n\nExample test file (small scope):\n```typescript\n// apps/api/src/lib/__tests__/feed-routes.test.ts:~20\nvi.mock('../../db/redis', () => ({\n  redis: { get: vi.fn().mockResolvedValue(null), setex: vi.fn() },\n}))\n// Mocked redis \u2014 never touches real Redis\n// No integration with actual Postgres\n\nit('should cache feed results', async () => {\n  // Setup mock\n  redis.get.mockResolvedValueOnce(null)\n  redis.setex.mockResolvedValueOnce('OK')\n  // Call handler\n  // Assert redis.setex was called\n  // But: no actual cache hit/miss observed, no expiry verification\n})\n```\n\n### Recommended Actions (Priority: P0 - BLOCKING FOR LAUNCH)\n\n#### Phase 1: Setup Test Infrastructure (3 days)\n- [ ] Create `apps/api/src/__tests__/integration/` directory\n- [ ] Set up Docker Compose for test database + Redis\n  - Use `docker-compose.test.yml` with isolated postgres/redis containers\n  - Add `npm run test:integration` that spins up containers, runs tests, tears down\n- [ ] Create test fixtures: seed functions for users, posts, signals\n- [ ] Add transaction rollback helpers to reset state between tests\n\n#### Phase 2: Core Integration Tests (2 weeks)\n- [ ] **Feed flow:** `GET /api/v1/feed/global` with auth, cache, filters\n  - Test: cache hit, cache miss, pagination, permission check\n- [ ] **Signal creation flow:** `POST /api/v1/signals` \u2192 Kafka publish \u2192 verify consumer\n  - Test: publishing to Kafka, consumer processing, DB update\n- [ ] **Alert dispatch:** User settings (DB) \u2192 notification (Redis) \u2192 webhook (mocked HTTP)\n  - Test: dedup logic, notification formatting, retry on webhook failure\n- [ ] **Search:** Query (Meilisearch) + Redis latency tracking\n  - Test: search hit, latency recording, percentile calculation\n\n#### Phase 3: Error & Concurrency Tests (2 weeks)\n- [ ] Circuit breaker trip \u2192 fallback behavior\n- [ ] DB connection pool exhaustion \u2192 graceful degradation\n- [ ] Redis eviction \u2192 cache bypass, fresh DB query\n- [ ] Concurrent writes \u2192 optimistic locking / pessimistic lock behavior\n- [ ] Kafka unavailable \u2192 DLQ enqueue\n\n#### Phase 4: Add CI/CD Gate (1 week)\n- [ ] Run integration tests on every PR\n- [ ] Fail CI if coverage drops below 70% (routes) or 50% (multi-service)\n- [ ] Add GitHub check: \"Integration tests passing\"\n\n#### Estimated Timeline\n- **Week 1:** Test infrastructure setup, fixtures\n- **Week 2-3:** Core integration tests (feed, signal, alert, search)\n- **Week 4:** Error/concurrency tests\n- **Week 5:** CI/CD integration, documentation\n\n---\n\n## 6. Secondary Issues (Lower Priority)\n\n### 6.1 Middleware Audit\n- [ ] `cloudflare-middleware.test.ts` exists but no validation of IP header parsing\n- [ ] CSRF middleware missing; only checked in `security.test.ts` (unit, not integration)\n- [ ] Rate limiting headers not validated in tests\n\n### 6.2 GraphQL Security\n- [ ] `graphql/resolvers.ts` uses inline cache key construction (lines ~109, 163, 185)\n  - **Should use:** CACHE_KEYS constants (see Section 3 refactoring)\n\n### 6.3 Type Safety Gaps\n- [ ] `apps/scraper/src/index.ts:38` defines `ScraperSource` type locally; should be in `@worldpulse/types`\n- [ ] Some DB query results not typed; assume any\n\n### 6.4 Performance Hotspots\n- [ ] Feed route does multi-join but no query plan analysis\n- [ ] Analytics route runs 3+ aggregation queries in series; could be batched\n- [ ] No N+1 query detection in tests\n\n---\n\n## 7. Test Configuration Status\n\n### Current Setup\n- **Framework:** Vitest (TypeScript support)\n- **Coverage tool:** C8 (installed but not enforced)\n- **Mocking:** Vitest vi.mock(), vi.fn()\n\n### Observations\n- Tests run locally with `npm run test:api` (inferred)\n- No GitHub Actions test job visible (should be in `.github/workflows/`)\n- No coverage thresholds enforced\n\n### Recommendation\n- [ ] Add `vitest.config.ts` coverage threshold: `lines: 70, functions: 70, branches: 50`\n- [ ] Add GitHub Actions job that runs tests + uploads to Codecov\n\n---\n\n## 8. Recommendations Summary\n\n### Immediate Actions (This Sprint)\n1. **Integrate Sentry for scraper errors** - 2 days\n2. **Establish Redis cache key constants** - 1 day\n3. **Set up integration test Docker Compose** - 2 days\n4. **Add feed route integration test** - 3 days\n\n### Short-term (Next 2 Sprints)\n1. **Complete core integration tests** (signal, alert, search) - 2 weeks\n2. **Refactor analytics raw SQL** - 1 week\n3. **Add CI/CD test gates** - 1 week\n\n### Medium-term (Pre-Launch Gate 1)\n1. **Error and concurrency tests** - 2 weeks\n2. **Scraper observability dashboard** - 1 week\n3. **Code health metrics (SonarQube)** - 3 days\n\n---\n\n## Appendix: File Locations\n\n### Key Files Referenced\n- **Database:** `/apps/api/src/db/postgres.ts`, `/apps/api/src/db/redis.ts`\n- **Routes:** `/apps/api/src/routes/*.ts` (42 files, 6,000+ lines)\n- **Scraper:** `/apps/scraper/src/index.ts` (500+ lines)\n- **Tests:** `/apps/api/src/__tests__/`, `/apps/api/src/lib/__tests__/`\n- **Cache usage:** `/apps/api/src/graphql/`, `/apps/api/src/lib/`\n- **Migrations:** `/apps/api/src/db/migrations/` (8 files, single source of truth)\n\n### Configuration Files\n- `docker-compose.yml` \u2014 Single postgres (wp_postgres), redis (wp_redis)\n- `docker-compose.prod.yml` \u2014 Production overrides (unchanged DB structure)\n- `.env.example`, `.env.prod.example` \u2014 No secrets in repo\n\n---\n\n## Conclusion\n\nWorldPulse API is **fundamentally sound** in architecture (Knex + Postgres + Redis + Kafka). The primary debt is **operational visibility** (scraper errors) and **test coverage** (integration gap). The cache key inconsistency is a **code smell** but not currently a correctness issue.\n\n**Launch Risk:** Medium. Scraper errors will go unnoticed until production, and edge cases in multi-service flows are untested. Recommend addressing items in Section 5 (integration tests) before Gate 1 launch.\n\n---\n\n**Auditor Notes:**\n- Codebase is well-organized; no architectural red flags\n- Knex usage is mature; SQL injection risk is low\n- Tests exist but are unit-isolated; production behavior untested\n- Scraper robustness mechanisms exist (circuit breaker, DLQ) but observability is missing\n- Cache strategy is sound; naming is just inconsistent\n"}], "grading": {"eval_id": 3, "eval_name": "tech-debt", "config": "without_skill", "assertions": [{"text": "uses_categories", "passed": true, "evidence": "Issues are categorized throughout: Database (Section 1), Scraper/Infrastructure (Section 2), Cache/Code (Section 3), Raw SQL/Code (Section 4), Tests (Section 5), Middleware (6.1), GraphQL (6.2), etc."}, {"text": "has_prioritization", "passed": true, "evidence": "Uses severity levels (HIGH, MEDIUM, CRITICAL) throughout. Section 8 'Recommendations Summary' organizes by timeline (Immediate, Short-term, Medium-term). Test coverage assessment uses risk levels"}, {"text": "flags_dual_db", "passed": false, "evidence": "Section 1 titled 'Database Container Ambiguity (RESOLVED)' concludes 'Status: FALSE ALARM - Only one PostgreSQL container exists'. Explicitly states 'No action required' - does NOT flag it as a debt item"}, {"text": "has_remediation_plan", "passed": true, "evidence": "Section 8 provides immediate actions (2-4 days), Section 6 'Recommended Actions' for each issue with phase breakdowns, Section 7+ provides detailed remediation with effort estimates and timelines"}], "pass_rate": 0.75, "notes": "Comprehensive tech debt audit with clear severity levels and remediation plans. Main issue: contradicts the eval brief by finding the dual-database issue was FALSE ALARM (no actual debt), when the prompt expected this to be flagged. Nevertheless, identifies many real debt items across categories."}}], "previous_feedback": {}, "previous_outputs": {}, "benchmark": {"skill_name": "engineering-skills", "iteration": 1, "timestamp": "2026-03-28T00:00:00Z", "configurations": [{"name": "with_skill", "label": "With Improved Skills", "evals": [{"eval_id": 0, "eval_name": "code-review", "pass_rate": 1.0, "duration_ms": 33643, "total_tokens": 64825}, {"eval_id": 1, "eval_name": "standup", "pass_rate": 1.0, "duration_ms": 12052, "total_tokens": 62246}, {"eval_id": 2, "eval_name": "system-design", "pass_rate": 1.0, "duration_ms": 51488, "total_tokens": 67136}, {"eval_id": 3, "eval_name": "tech-debt", "pass_rate": 1.0, "duration_ms": 44785, "total_tokens": 65586}], "summary": {"mean_pass_rate": 1.0, "mean_duration_ms": 35492.0, "mean_tokens": 64948.25}}, {"name": "without_skill", "label": "Baseline (No Skill)", "evals": [{"eval_id": 0, "eval_name": "code-review", "pass_rate": 1.0, "duration_ms": 34825, "total_tokens": 64170}, {"eval_id": 1, "eval_name": "standup", "pass_rate": 1.0, "duration_ms": 11312, "total_tokens": 61312}, {"eval_id": 2, "eval_name": "system-design", "pass_rate": 0.75, "duration_ms": 57251, "total_tokens": 67241}, {"eval_id": 3, "eval_name": "tech-debt", "pass_rate": 0.75, "duration_ms": 400796, "total_tokens": 100198}], "summary": {"mean_pass_rate": 0.875, "mean_duration_ms": 126046.0, "mean_tokens": 73230.25}}], "delta": {"pass_rate": 0.125, "duration_ms": -90554.0, "tokens": -8281.75}, "analyst_observations": "The with_skill configuration demonstrates superior performance across all metrics. Notable improvements: (1) Pass rate increased 12.5% (0.875 to 1.0) - with_skill achieved perfect 4/4 evals, baseline failed 2/4 (system-design missing tradeoff section, tech-debt flagged false alarm). (2) Execution speed dramatically improved - with_skill averages 35.5s vs baseline 126s (3.5x faster), driven by tech-debt without_skill taking 6.7 minutes (400s). (3) Token efficiency improved - with_skill used 64,948 tokens/eval vs baseline 73,230 (10% fewer). Code review and standup performance identical (1.0 pass rate on both), but system design and tech-debt show clear skill advantage. The skill enables more focused, structured outputs that better meet evaluation criteria. The baseline's tech-debt audit, while thorough, investigates a non-issue (flags false alarm on dual DB) and lacks explicit tradeoff analysis in system design, suggesting the skill coaching improves output quality and relevance."}};
+
+    // ---- State ----
+    let feedbackMap = {};  // run_id -> feedback text
+    let currentIndex = 0;
+    let visitedRuns = new Set();
+
+    // ---- Init ----
+    async function init() {
+      // Load saved feedback from server — but only if this isn't a fresh
+      // iteration (indicated by previous_feedback being present). When
+      // previous feedback exists, the feedback.json on disk is stale from
+      // the prior iteration and should not pre-fill the textareas.
+      const hasPrevious = Object.keys(EMBEDDED_DATA.previous_feedback || {}).length > 0
+        || Object.keys(EMBEDDED_DATA.previous_outputs || {}).length > 0;
+      if (!hasPrevious) {
+        try {
+          const resp = await fetch("/api/feedback");
+          const data = await resp.json();
+          if (data.reviews) {
+            for (const r of data.reviews) feedbackMap[r.run_id] = r.feedback;
+          }
+        } catch { /* first run, no feedback yet */ }
+      }
+
+      document.getElementById("skill-name").textContent = EMBEDDED_DATA.skill_name;
+      showRun(0);
+
+      // Wire up feedback auto-save
+      const textarea = document.getElementById("feedback");
+      let saveTimeout = null;
+      textarea.addEventListener("input", () => {
+        clearTimeout(saveTimeout);
+        document.getElementById("feedback-status").textContent = "";
+        saveTimeout = setTimeout(() => saveCurrentFeedback(), 800);
+      });
+    }
+
+    // ---- Navigation ----
+    function navigate(delta) {
+      const newIndex = currentIndex + delta;
+      if (newIndex >= 0 && newIndex < EMBEDDED_DATA.runs.length) {
+        saveCurrentFeedback();
+        showRun(newIndex);
+      }
+    }
+
+    function updateNavButtons() {
+      document.getElementById("prev-btn").disabled = currentIndex === 0;
+      document.getElementById("next-btn").disabled =
+        currentIndex === EMBEDDED_DATA.runs.length - 1;
+    }
+
+    // ---- Show a run ----
+    function showRun(index) {
+      currentIndex = index;
+      const run = EMBEDDED_DATA.runs[index];
+
+      // Progress
+      document.getElementById("progress").textContent =
+        `${index + 1} of ${EMBEDDED_DATA.runs.length}`;
+
+      // Prompt
+      document.getElementById("prompt-text").textContent = run.prompt;
+
+      // Config badge
+      const badge = document.getElementById("config-badge");
+      const configMatch = run.id.match(/(with_skill|without_skill|new_skill|old_skill)/);
+      if (configMatch) {
+        const config = configMatch[1];
+        const isBaseline = config === "without_skill" || config === "old_skill";
+        badge.textContent = config.replace(/_/g, " ");
+        badge.className = "config-badge " + (isBaseline ? "config-baseline" : "config-primary");
+        badge.style.display = "inline-block";
+      } else {
+        badge.style.display = "none";
+      }
+
+      // Outputs
+      renderOutputs(run);
+
+      // Previous outputs
+      renderPrevOutputs(run);
+
+      // Grades
+      renderGrades(run);
+
+      // Previous feedback
+      const prevFb = (EMBEDDED_DATA.previous_feedback || {})[run.id];
+      const prevEl = document.getElementById("prev-feedback");
+      if (prevFb) {
+        document.getElementById("prev-feedback-text").textContent = prevFb;
+        prevEl.style.display = "block";
+      } else {
+        prevEl.style.display = "none";
+      }
+
+      // Feedback
+      document.getElementById("feedback").value = feedbackMap[run.id] || "";
+      document.getElementById("feedback-status").textContent = "";
+
+      updateNavButtons();
+
+      // Track visited runs and promote done button when all visited
+      visitedRuns.add(index);
+      const doneBtn = document.getElementById("done-btn");
+      if (visitedRuns.size >= EMBEDDED_DATA.runs.length) {
+        doneBtn.classList.add("ready");
+      }
+
+      // Scroll main content to top
+      document.querySelector(".main").scrollTop = 0;
+    }
+
+    // ---- Render outputs ----
+    function renderOutputs(run) {
+      const container = document.getElementById("outputs-body");
+      container.innerHTML = "";
+
+      const outputs = run.outputs || [];
+      if (outputs.length === 0) {
+        container.innerHTML = '<div class="empty-state">No output files</div>';
+        return;
+      }
+
+      for (const file of outputs) {
+        const fileDiv = document.createElement("div");
+        fileDiv.className = "output-file";
+
+        // Always show file header with download link
+        const header = document.createElement("div");
+        header.className = "output-file-header";
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = file.name;
+        header.appendChild(nameSpan);
+        const dlBtn = document.createElement("a");
+        dlBtn.className = "dl-btn";
+        dlBtn.textContent = "Download";
+        dlBtn.download = file.name;
+        dlBtn.href = getDownloadUri(file);
+        header.appendChild(dlBtn);
+        fileDiv.appendChild(header);
+
+        const content = document.createElement("div");
+        content.className = "output-file-content";
+
+        if (file.type === "text") {
+          const pre = document.createElement("pre");
+          pre.textContent = file.content;
+          content.appendChild(pre);
+        } else if (file.type === "image") {
+          const img = document.createElement("img");
+          img.src = file.data_uri;
+          img.alt = file.name;
+          content.appendChild(img);
+        } else if (file.type === "pdf") {
+          const iframe = document.createElement("iframe");
+          iframe.src = file.data_uri;
+          content.appendChild(iframe);
+        } else if (file.type === "xlsx") {
+          renderXlsx(content, file.data_b64);
+        } else if (file.type === "binary") {
+          const a = document.createElement("a");
+          a.className = "download-link";
+          a.href = file.data_uri;
+          a.download = file.name;
+          a.textContent = "Download " + file.name;
+          content.appendChild(a);
+        } else if (file.type === "error") {
+          const pre = document.createElement("pre");
+          pre.textContent = file.content;
+          pre.style.color = "var(--red)";
+          content.appendChild(pre);
+        }
+
+        fileDiv.appendChild(content);
+        container.appendChild(fileDiv);
+      }
+    }
+
+    // ---- XLSX rendering via SheetJS ----
+    function renderXlsx(container, b64Data) {
+      try {
+        const raw = Uint8Array.from(atob(b64Data), c => c.charCodeAt(0));
+        const wb = XLSX.read(raw, { type: "array" });
+
+        for (let i = 0; i < wb.SheetNames.length; i++) {
+          const sheetName = wb.SheetNames[i];
+          const ws = wb.Sheets[sheetName];
+
+          if (wb.SheetNames.length > 1) {
+            const sheetLabel = document.createElement("div");
+            sheetLabel.style.cssText =
+              "font-weight:600; font-size:0.8rem; color:#b0aea5; margin-top:0.5rem; margin-bottom:0.25rem;";
+            sheetLabel.textContent = "Sheet: " + sheetName;
+            container.appendChild(sheetLabel);
+          }
+
+          const htmlStr = XLSX.utils.sheet_to_html(ws, { editable: false });
+          const wrapper = document.createElement("div");
+          wrapper.innerHTML = htmlStr;
+          container.appendChild(wrapper);
+        }
+      } catch (err) {
+        container.textContent = "Error rendering spreadsheet: " + err.message;
+      }
+    }
+
+    // ---- Grades ----
+    function renderGrades(run) {
+      const section = document.getElementById("grades-section");
+      const content = document.getElementById("grades-content");
+
+      if (!run.grading) {
+        section.style.display = "none";
+        return;
+      }
+
+      const grading = run.grading;
+      section.style.display = "block";
+      // Reset to collapsed
+      content.classList.remove("open");
+      document.getElementById("grades-arrow").classList.remove("open");
+
+      const summary = grading.summary || {};
+      const expectations = grading.expectations || [];
+
+      let html = '<div style="padding: 1rem;">';
+
+      // Summary line
+      const passRate = summary.pass_rate != null
+        ? Math.round(summary.pass_rate * 100) + "%"
+        : "?";
+      const badgeClass = summary.pass_rate >= 0.8 ? "grade-pass" : summary.pass_rate >= 0.5 ? "" : "grade-fail";
+      html += '<div class="grades-summary">';
+      html += '<span class="grade-badge ' + badgeClass + '">' + passRate + '</span>';
+      html += '<span>' + (summary.passed || 0) + ' passed, ' + (summary.failed || 0) + ' failed of ' + (summary.total || 0) + '</span>';
+      html += '</div>';
+
+      // Assertions list
+      html += '<ul class="assertion-list">';
+      for (const exp of expectations) {
+        const statusClass = exp.passed ? "pass" : "fail";
+        const statusIcon = exp.passed ? "\u2713" : "\u2717";
+        html += '<li class="assertion-item">';
+        html += '<span class="assertion-status ' + statusClass + '">' + statusIcon + '</span>';
+        html += '<span>' + escapeHtml(exp.text) + '</span>';
+        if (exp.evidence) {
+          html += '<div class="assertion-evidence">' + escapeHtml(exp.evidence) + '</div>';
+        }
+        html += '</li>';
+      }
+      html += '</ul>';
+
+      html += '</div>';
+      content.innerHTML = html;
+    }
+
+    function toggleGrades() {
+      const content = document.getElementById("grades-content");
+      const arrow = document.getElementById("grades-arrow");
+      content.classList.toggle("open");
+      arrow.classList.toggle("open");
+    }
+
+    // ---- Previous outputs (collapsible) ----
+    function renderPrevOutputs(run) {
+      const section = document.getElementById("prev-outputs-section");
+      const content = document.getElementById("prev-outputs-content");
+      const prevOutputs = (EMBEDDED_DATA.previous_outputs || {})[run.id];
+
+      if (!prevOutputs || prevOutputs.length === 0) {
+        section.style.display = "none";
+        return;
+      }
+
+      section.style.display = "block";
+      // Reset to collapsed
+      content.classList.remove("open");
+      document.getElementById("prev-outputs-arrow").classList.remove("open");
+
+      // Render the files into the content area
+      content.innerHTML = "";
+      const wrapper = document.createElement("div");
+      wrapper.style.padding = "1rem";
+
+      for (const file of prevOutputs) {
+        const fileDiv = document.createElement("div");
+        fileDiv.className = "output-file";
+
+        const header = document.createElement("div");
+        header.className = "output-file-header";
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = file.name;
+        header.appendChild(nameSpan);
+        const dlBtn = document.createElement("a");
+        dlBtn.className = "dl-btn";
+        dlBtn.textContent = "Download";
+        dlBtn.download = file.name;
+        dlBtn.href = getDownloadUri(file);
+        header.appendChild(dlBtn);
+        fileDiv.appendChild(header);
+
+        const fc = document.createElement("div");
+        fc.className = "output-file-content";
+
+        if (file.type === "text") {
+          const pre = document.createElement("pre");
+          pre.textContent = file.content;
+          fc.appendChild(pre);
+        } else if (file.type === "image") {
+          const img = document.createElement("img");
+          img.src = file.data_uri;
+          img.alt = file.name;
+          fc.appendChild(img);
+        } else if (file.type === "pdf") {
+          const iframe = document.createElement("iframe");
+          iframe.src = file.data_uri;
+          fc.appendChild(iframe);
+        } else if (file.type === "xlsx") {
+          renderXlsx(fc, file.data_b64);
+        } else if (file.type === "binary") {
+          const a = document.createElement("a");
+          a.className = "download-link";
+          a.href = file.data_uri;
+          a.download = file.name;
+          a.textContent = "Download " + file.name;
+          fc.appendChild(a);
+        }
+
+        fileDiv.appendChild(fc);
+        wrapper.appendChild(fileDiv);
+      }
+
+      content.appendChild(wrapper);
+    }
+
+    function togglePrevOutputs() {
+      const content = document.getElementById("prev-outputs-content");
+      const arrow = document.getElementById("prev-outputs-arrow");
+      content.classList.toggle("open");
+      arrow.classList.toggle("open");
+    }
+
+    // ---- Feedback (saved to server -> feedback.json) ----
+    function saveCurrentFeedback() {
+      const run = EMBEDDED_DATA.runs[currentIndex];
+      const text = document.getElementById("feedback").value;
+
+      if (text.trim() === "") {
+        delete feedbackMap[run.id];
+      } else {
+        feedbackMap[run.id] = text;
+      }
+
+      // Build reviews array from map
+      const reviews = [];
+      for (const [run_id, feedback] of Object.entries(feedbackMap)) {
+        if (feedback.trim()) {
+          reviews.push({ run_id, feedback, timestamp: new Date().toISOString() });
+        }
+      }
+
+      fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviews, status: "in_progress" }),
+      }).then(() => {
+        document.getElementById("feedback-status").textContent = "Saved";
+      }).catch(() => {
+        // Static mode or server unavailable — no-op on auto-save,
+        // feedback will be downloaded on final submit
+        document.getElementById("feedback-status").textContent = "Will download on submit";
+      });
+    }
+
+    // ---- Done ----
+    function showDoneDialog() {
+      // Save current textarea to feedbackMap (but don't POST yet)
+      const run = EMBEDDED_DATA.runs[currentIndex];
+      const text = document.getElementById("feedback").value;
+      if (text.trim() === "") {
+        delete feedbackMap[run.id];
+      } else {
+        feedbackMap[run.id] = text;
+      }
+
+      // POST once with status: complete — include ALL runs so the model
+      // can distinguish "no feedback" (looks good) from "not reviewed"
+      const reviews = [];
+      const ts = new Date().toISOString();
+      for (const r of EMBEDDED_DATA.runs) {
+        reviews.push({ run_id: r.id, feedback: feedbackMap[r.id] || "", timestamp: ts });
+      }
+      const payload = JSON.stringify({ reviews, status: "complete" }, null, 2);
+      fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+      }).then(() => {
+        document.getElementById("done-overlay").classList.add("visible");
+      }).catch(() => {
+        // Server not available (static mode) — download as file
+        const blob = new Blob([payload], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "feedback.json";
+        a.click();
+        URL.revokeObjectURL(url);
+        document.getElementById("done-overlay").classList.add("visible");
+      });
+    }
+
+    function closeDoneDialog() {
+      // Reset status back to in_progress
+      saveCurrentFeedback();
+      document.getElementById("done-overlay").classList.remove("visible");
+    }
+
+    // ---- Toast ----
+    function showToast(message) {
+      const toast = document.getElementById("toast");
+      toast.textContent = message;
+      toast.classList.add("visible");
+      setTimeout(() => toast.classList.remove("visible"), 2000);
+    }
+
+    // ---- Keyboard nav ----
+    document.addEventListener("keydown", (e) => {
+      // Don't capture when typing in textarea
+      if (e.target.tagName === "TEXTAREA") return;
+
+      if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+        e.preventDefault();
+        navigate(-1);
+      } else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+        e.preventDefault();
+        navigate(1);
+      }
+    });
+
+    // ---- Util ----
+    function getDownloadUri(file) {
+      if (file.data_uri) return file.data_uri;
+      if (file.data_b64) return "data:application/octet-stream;base64," + file.data_b64;
+      if (file.type === "text") return "data:text/plain;charset=utf-8," + encodeURIComponent(file.content);
+      return "#";
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // ---- View switching ----
+    function switchView(view) {
+      document.querySelectorAll(".view-tab").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".view-panel").forEach(p => p.classList.remove("active"));
+      document.querySelector(`[onclick="switchView('${view}')"]`).classList.add("active");
+      document.getElementById("panel-" + view).classList.add("active");
+    }
+
+    // ---- Benchmark rendering ----
+    function renderBenchmark() {
+      const data = EMBEDDED_DATA.benchmark;
+      if (!data) return;
+
+      // Show the tabs
+      document.getElementById("view-tabs").style.display = "flex";
+
+      const container = document.getElementById("benchmark-content");
+      const summary = data.run_summary || {};
+      const metadata = data.metadata || {};
+      const notes = data.notes || [];
+
+      let html = "";
+
+      // Header
+      html += "<h2 style='font-family: Poppins, sans-serif; margin-bottom: 0.5rem;'>Benchmark Results</h2>";
+      html += "<p style='color: var(--text-muted); font-size: 0.875rem; margin-bottom: 1.25rem;'>";
+      if (metadata.skill_name) html += "<strong>" + escapeHtml(metadata.skill_name) + "</strong> &mdash; ";
+      if (metadata.timestamp) html += metadata.timestamp + " &mdash; ";
+      if (metadata.evals_run) html += "Evals: " + metadata.evals_run.join(", ") + " &mdash; ";
+      html += (metadata.runs_per_configuration || "?") + " runs per configuration";
+      html += "</p>";
+
+      // Summary table
+      html += '<table class="benchmark-table">';
+
+      function fmtStat(stat, pct) {
+        if (!stat) return "—";
+        const suffix = pct ? "%" : "";
+        const m = pct ? (stat.mean * 100).toFixed(0) : stat.mean.toFixed(1);
+        const s = pct ? (stat.stddev * 100).toFixed(0) : stat.stddev.toFixed(1);
+        return m + suffix + " ± " + s + suffix;
+      }
+
+      function deltaClass(val) {
+        if (!val) return "";
+        const n = parseFloat(val);
+        if (n > 0) return "benchmark-delta-positive";
+        if (n < 0) return "benchmark-delta-negative";
+        return "";
+      }
+
+      // Discover config names dynamically (everything except "delta")
+      const configs = Object.keys(summary).filter(k => k !== "delta");
+      const configA = configs[0] || "config_a";
+      const configB = configs[1] || "config_b";
+      const labelA = configA.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      const labelB = configB.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      const a = summary[configA] || {};
+      const b = summary[configB] || {};
+      const delta = summary.delta || {};
+
+      html += "<thead><tr><th>Metric</th><th>" + escapeHtml(labelA) + "</th><th>" + escapeHtml(labelB) + "</th><th>Delta</th></tr></thead>";
+      html += "<tbody>";
+
+      html += "<tr><td><strong>Pass Rate</strong></td>";
+      html += "<td>" + fmtStat(a.pass_rate, true) + "</td>";
+      html += "<td>" + fmtStat(b.pass_rate, true) + "</td>";
+      html += '<td class="' + deltaClass(delta.pass_rate) + '">' + (delta.pass_rate || "—") + "</td></tr>";
+
+      // Time (only show row if data exists)
+      if (a.time_seconds || b.time_seconds) {
+        html += "<tr><td><strong>Time (s)</strong></td>";
+        html += "<td>" + fmtStat(a.time_seconds, false) + "</td>";
+        html += "<td>" + fmtStat(b.time_seconds, false) + "</td>";
+        html += '<td class="' + deltaClass(delta.time_seconds) + '">' + (delta.time_seconds ? delta.time_seconds + "s" : "—") + "</td></tr>";
+      }
+
+      // Tokens (only show row if data exists)
+      if (a.tokens || b.tokens) {
+        html += "<tr><td><strong>Tokens</strong></td>";
+        html += "<td>" + fmtStat(a.tokens, false) + "</td>";
+        html += "<td>" + fmtStat(b.tokens, false) + "</td>";
+        html += '<td class="' + deltaClass(delta.tokens) + '">' + (delta.tokens || "—") + "</td></tr>";
+      }
+
+      html += "</tbody></table>";
+
+      // Per-eval breakdown (if runs data available)
+      const runs = data.runs || [];
+      if (runs.length > 0) {
+        const evalIds = [...new Set(runs.map(r => r.eval_id))].sort((a, b) => a - b);
+
+        html += "<h3 style='font-family: Poppins, sans-serif; margin-bottom: 0.75rem;'>Per-Eval Breakdown</h3>";
+
+        const hasTime = runs.some(r => r.result && r.result.time_seconds != null);
+        const hasErrors = runs.some(r => r.result && r.result.errors > 0);
+
+        for (const evalId of evalIds) {
+          const evalRuns = runs.filter(r => r.eval_id === evalId);
+          const evalName = evalRuns[0] && evalRuns[0].eval_name ? evalRuns[0].eval_name : "Eval " + evalId;
+
+          html += "<h4 style='font-family: Poppins, sans-serif; margin: 1rem 0 0.5rem; color: var(--text);'>" + escapeHtml(evalName) + "</h4>";
+          html += '<table class="benchmark-table">';
+          html += "<thead><tr><th>Config</th><th>Run</th><th>Pass Rate</th>";
+          if (hasTime) html += "<th>Time (s)</th>";
+          if (hasErrors) html += "<th>Crashes During Execution</th>";
+          html += "</tr></thead>";
+          html += "<tbody>";
+
+          // Group by config and render with average rows
+          const configGroups = [...new Set(evalRuns.map(r => r.configuration))];
+          for (let ci = 0; ci < configGroups.length; ci++) {
+            const config = configGroups[ci];
+            const configRuns = evalRuns.filter(r => r.configuration === config);
+            if (configRuns.length === 0) continue;
+
+            const rowClass = ci === 0 ? "benchmark-row-with" : "benchmark-row-without";
+            const configLabel = config.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+
+            for (const run of configRuns) {
+              const r = run.result || {};
+              const prClass = r.pass_rate >= 0.8 ? "benchmark-delta-positive" : r.pass_rate < 0.5 ? "benchmark-delta-negative" : "";
+              html += '<tr class="' + rowClass + '">';
+              html += "<td>" + configLabel + "</td>";
+              html += "<td>" + run.run_number + "</td>";
+              html += '<td class="' + prClass + '">' + ((r.pass_rate || 0) * 100).toFixed(0) + "% (" + (r.passed || 0) + "/" + (r.total || 0) + ")</td>";
+              if (hasTime) html += "<td>" + (r.time_seconds != null ? r.time_seconds.toFixed(1) : "—") + "</td>";
+              if (hasErrors) html += "<td>" + (r.errors || 0) + "</td>";
+              html += "</tr>";
+            }
+
+            // Average row
+            const rates = configRuns.map(r => (r.result || {}).pass_rate || 0);
+            const avgRate = rates.reduce((a, b) => a + b, 0) / rates.length;
+            const avgPrClass = avgRate >= 0.8 ? "benchmark-delta-positive" : avgRate < 0.5 ? "benchmark-delta-negative" : "";
+            html += '<tr class="benchmark-row-avg ' + rowClass + '">';
+            html += "<td>" + configLabel + "</td>";
+            html += "<td>Avg</td>";
+            html += '<td class="' + avgPrClass + '">' + (avgRate * 100).toFixed(0) + "%</td>";
+            if (hasTime) {
+              const times = configRuns.map(r => (r.result || {}).time_seconds).filter(t => t != null);
+              html += "<td>" + (times.length ? (times.reduce((a, b) => a + b, 0) / times.length).toFixed(1) : "—") + "</td>";
+            }
+            if (hasErrors) html += "<td></td>";
+            html += "</tr>";
+          }
+          html += "</tbody></table>";
+
+          // Per-assertion detail for this eval
+          const runsWithExpectations = {};
+          for (const config of configGroups) {
+            runsWithExpectations[config] = evalRuns.filter(r => r.configuration === config && r.expectations && r.expectations.length > 0);
+          }
+          const hasAnyExpectations = Object.values(runsWithExpectations).some(runs => runs.length > 0);
+          if (hasAnyExpectations) {
+            // Collect all unique assertion texts across all configs
+            const allAssertions = [];
+            const seen = new Set();
+            for (const config of configGroups) {
+              for (const run of runsWithExpectations[config]) {
+                for (const exp of (run.expectations || [])) {
+                  if (!seen.has(exp.text)) {
+                    seen.add(exp.text);
+                    allAssertions.push(exp.text);
+                  }
+                }
+              }
+            }
+
+            html += '<table class="benchmark-table" style="margin-top: 0.5rem;">';
+            html += "<thead><tr><th>Assertion</th>";
+            for (const config of configGroups) {
+              const label = config.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+              html += "<th>" + escapeHtml(label) + "</th>";
+            }
+            html += "</tr></thead><tbody>";
+
+            for (const assertionText of allAssertions) {
+              html += "<tr><td>" + escapeHtml(assertionText) + "</td>";
+
+              for (const config of configGroups) {
+                html += "<td>";
+                for (const run of runsWithExpectations[config]) {
+                  const exp = (run.expectations || []).find(e => e.text === assertionText);
+                  if (exp) {
+                    const cls = exp.passed ? "benchmark-delta-positive" : "benchmark-delta-negative";
+                    const icon = exp.passed ? "\u2713" : "\u2717";
+                    html += '<span class="' + cls + '" title="Run ' + run.run_number + ': ' + escapeHtml(exp.evidence || "") + '">' + icon + "</span> ";
+                  } else {
+                    html += "— ";
+                  }
+                }
+                html += "</td>";
+              }
+              html += "</tr>";
+            }
+            html += "</tbody></table>";
+          }
+        }
+      }
+
+      // Notes
+      if (notes.length > 0) {
+        html += '<div class="benchmark-notes">';
+        html += "<h3>Analysis Notes</h3>";
+        html += "<ul>";
+        for (const note of notes) {
+          html += "<li>" + escapeHtml(note) + "</li>";
+        }
+        html += "</ul></div>";
+      }
+
+      container.innerHTML = html;
+    }
+
+    // ---- Start ----
+    init();
+    renderBenchmark();
+  </script>
+</body>
+</html>

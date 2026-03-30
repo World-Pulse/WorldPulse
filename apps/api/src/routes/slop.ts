@@ -141,6 +141,65 @@ function extractDomain(url: string): string | null {
   }
 }
 
+/**
+ * Extract a bare domain from either a full URL or a plain domain string.
+ * Exported for unit testing.
+ */
+export function extractDomainFromInput(input: string): string | null {
+  const trimmed = input.trim().toLowerCase()
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return extractDomain(trimmed)
+  }
+  // Treat as bare domain — strip www. prefix and validate basic shape
+  const bare = trimmed.replace(/^www\./, '').split('/')[0]
+  if (!bare || !bare.includes('.') || bare.length > 253) return null
+  return bare
+}
+
+type DomainVerdict = 'unreliable' | 'caution' | 'trusted' | 'unknown'
+type AiFarmConfidence = 'confirmed' | 'suspected' | 'clean'
+
+/** Compute verdict from AI-farm flag and reliability score. Exported for testing. */
+export function computeDomainVerdict(
+  isAiFarm: boolean,
+  reliabilityScore: number | null,
+): DomainVerdict {
+  if (isAiFarm) return 'unreliable'
+  if (reliabilityScore === null) return 'unknown'
+  if (reliabilityScore < 0.4) return 'unreliable'
+  if (reliabilityScore < 0.65) return 'caution'
+  return 'trusted'
+}
+
+/** Compute ai_farm_confidence label. Exported for testing. */
+export function computeAiFarmConfidence(
+  isAiFarm: boolean,
+  reliabilityScore: number | null,
+): AiFarmConfidence {
+  if (isAiFarm) return 'confirmed'
+  if (reliabilityScore !== null && reliabilityScore < 0.4) return 'suspected'
+  return 'clean'
+}
+
+/** Build human-readable warning list. Exported for testing. */
+export function buildDomainWarnings(
+  isAiFarm: boolean,
+  reliabilityScore: number | null,
+  domain: string,
+): string[] {
+  const warnings: string[] = []
+  if (isAiFarm) {
+    warnings.push(`${domain} is listed in the WorldPulse AI content farm blocklist`)
+    warnings.push('Content from this domain is likely AI-generated and unreliable')
+  }
+  if (reliabilityScore !== null && reliabilityScore < 0.4) {
+    warnings.push(`Low reliability score (${reliabilityScore.toFixed(2)}) — source quality is poor`)
+  } else if (reliabilityScore !== null && reliabilityScore < 0.65) {
+    warnings.push(`Moderate reliability score (${reliabilityScore.toFixed(2)}) — verify claims independently`)
+  }
+  return warnings
+}
+
 function urlToId(url: string, prefix = 'api-check'): string {
   return `${prefix}:${Buffer.from(url).toString('base64').slice(0, 32)}`
 }
@@ -602,6 +661,117 @@ export const registerSlopRoutes: FastifyPluginAsync = async (app) => {
         tier:       req.apiKeyCtx?.tier ?? 'unknown',
         checked_at: new Date().toISOString(),
       },
+    })
+  })
+
+  // ─── GET /check ──────────────────────────────────────────────────────────────
+  /**
+   * Public domain credibility check. No API key required.
+   * Accepts a bare domain (example.com) or a full URL; extracts the domain automatically.
+   */
+  app.get('/check', {
+    schema: {
+      summary:     'Check domain credibility (public, no API key required)',
+      description: 'Returns AI content farm status, reliability score, and source metadata for a given domain. Pass a bare domain (example.com) or a full URL — the domain is extracted automatically. Rate limited to 30 req/min per IP.',
+      querystring: {
+        type:       'object',
+        required:   ['domain'],
+        properties: {
+          domain: {
+            type:        'string',
+            description: 'Domain or full URL to check (e.g. example.com or https://example.com/article/foo)',
+            maxLength:   2048,
+          },
+        },
+        additionalProperties: false,
+      },
+      response: {
+        200: {
+          type:       'object',
+          properties: {
+            success:            { type: 'boolean' },
+            domain:             { type: 'string' },
+            is_ai_farm:         { type: 'boolean' },
+            ai_farm_confidence: { type: 'string', enum: ['confirmed', 'suspected', 'clean'] },
+            reliability_score:  { type: ['number', 'null'] },
+            source_name:        { type: ['string', 'null'] },
+            signals_indexed:    { type: 'number' },
+            verdict:            { type: 'string', enum: ['unreliable', 'caution', 'trusted', 'unknown'] },
+            warnings:           { type: 'array', items: { type: 'string' } },
+            checked_at:         { type: 'string' },
+          },
+        },
+        400: {
+          type:       'object',
+          properties: {
+            success: { type: 'boolean' },
+            error:   { type: 'string' },
+            code:    { type: 'string' },
+          },
+        },
+      },
+    },
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    reply.header('Access-Control-Allow-Origin', '*')
+
+    const { domain: rawDomain } = req.query as { domain?: string }
+
+    if (!rawDomain) {
+      return reply.status(400).send({
+        success: false,
+        error:   '`domain` query parameter is required',
+        code:    'VALIDATION_ERROR',
+      })
+    }
+
+    const domain = extractDomainFromInput(rawDomain)
+    if (!domain) {
+      return reply.status(400).send({
+        success: false,
+        error:   'Invalid domain or URL. Provide a bare domain (e.g. example.com) or a full URL.',
+        code:    'VALIDATION_ERROR',
+      })
+    }
+
+    const isAiFarm = (KNOWN_AI_CONTENT_FARMS as string[]).includes(domain)
+
+    // LEFT JOIN: look up source by matching domain against the source URL
+    const sourceRow = await db('sources')
+      .whereRaw('url LIKE ?', [`%${domain}%`])
+      .select('name', 'trust_score')
+      .first()
+      .catch(() => null)
+
+    const reliabilityScore: number | null = sourceRow
+      ? parseFloat(String(sourceRow.trust_score))
+      : null
+    const sourceName: string | null = sourceRow?.name ?? null
+
+    // Count signals indexed from this domain
+    const signalCountRow = await db('signals')
+      .where('source_domain', domain)
+      .count('id as count')
+      .first()
+      .catch(() => ({ count: 0 }))
+
+    const signalsIndexed = Number(signalCountRow?.count ?? 0)
+
+    const verdict    = computeDomainVerdict(isAiFarm, reliabilityScore)
+    const confidence = computeAiFarmConfidence(isAiFarm, reliabilityScore)
+    const warnings   = buildDomainWarnings(isAiFarm, reliabilityScore, domain)
+
+    return reply.send({
+      success:            true,
+      domain,
+      is_ai_farm:         isAiFarm,
+      ai_farm_confidence: confidence,
+      reliability_score:  reliabilityScore,
+      source_name:        sourceName,
+      signals_indexed:    signalsIndexed,
+      verdict,
+      warnings,
+      checked_at:         new Date().toISOString(),
     })
   })
 }

@@ -461,6 +461,43 @@ export const countriesApi = {
     request<{ success: boolean; data: FeedPage }>(`/api/v1/countries/${code}/signals`, { params }),
 }
 
+// ─── MAP LAYERS ───────────────────────────────────────────────────────────
+
+export type AdsbSignal = {
+  id:               string
+  title:            string
+  lat:              number
+  lng:              number
+  reliability_score: number
+  published_at:     string | null
+}
+
+export type VesselType = 'carrier' | 'vessel' | 'dark_ship'
+
+export type MaritimeVessel = {
+  id:          string
+  title:       string
+  lat:         number
+  lng:         number
+  type:        VesselType
+  fleet:       string | null
+  status_text: string
+  severity:    string
+  created_at:  string
+}
+
+export const mapLayersApi = {
+  getAdsb: () =>
+    request<{ success: boolean; data: AdsbSignal[] }>(
+      '/api/v1/signals/map/adsb', { auth: false }
+    ),
+
+  getVessels: () =>
+    request<{ success: boolean; data: MaritimeVessel[] }>(
+      '/api/v1/maritime/vessels', { auth: false }
+    ),
+}
+
 // Breaking alerts
 export type BreakingAlert = {
   id: string

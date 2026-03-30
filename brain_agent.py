@@ -31,6 +31,7 @@ from typing import Any
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 PROJECT_DIR    = Path(__file__).parent.resolve()
 MEMORY_DIR     = PROJECT_DIR / "brain_memory"
+SKILLS_DIR     = MEMORY_DIR / "skills"          # Methodology guides for structured tasks
 STATE_FILE     = MEMORY_DIR / "brain_state.json"
 COMPETE_FILE   = MEMORY_DIR / "competition_intel.json"
 IMPROVE_FILE   = MEMORY_DIR / "improvement_log.json"
@@ -512,6 +513,72 @@ TypeScript strict, no confirmations.""",
             "budget": 7.0,
             "category": "observability",
         },
+        {
+            "id": "skill_code_review_audit",
+            "phase": "Code Quality: Security & performance audit of API routes",
+            "prompt": """Read brain_memory/skills/code-review.md first — it contains the structured
+review methodology to follow.
+
+Then audit the WorldPulse API (apps/api/src/routes/) using that methodology:
+- Security: injection risks, auth bypass, hardcoded secrets, missing rate limits
+- Performance: N+1 queries, unbounded queries, missing indexes, missing cache
+- Correctness: unhandled errors (catch(() => {})), missing edge cases, floating promises
+- Maintainability: duplicate logic, unclear naming, functions doing too many things
+
+For every 🔴 Must Fix finding: implement the fix.
+For every 🟡 Should Fix finding: implement if under 30 minutes; otherwise add to blockers.md.
+Write a summary of findings and fixes to brain_memory/last_improvement.txt.
+TypeScript strict, no confirmations.""",
+            "priority": 5,
+            "budget": 8.0,
+            "category": "quality",
+        },
+        {
+            "id": "skill_tech_debt_audit",
+            "phase": "Tech Debt: Structured audit and remediation of WorldPulse codebase",
+            "prompt": """Read brain_memory/skills/tech-debt.md first — it contains the categorization
+framework, prioritization scoring, and output format to use.
+
+Then audit the WorldPulse codebase for technical debt:
+- Code debt: duplication, poor abstractions, magic numbers, swallowed errors
+- Architecture debt: wrong data stores, missing abstraction layers
+- Test debt: missing integration tests, flaky tests, happy-path-only tests
+- Dependency debt: outdated packages (check apps/*/package.json)
+- Infrastructure debt: manual steps, missing monitoring, config drift
+- Security debt: unhashed credentials, missing auth, stale tokens
+
+Score each item with the framework from the skill guide.
+Fix all Quick Win items (score ≥ 20, effort ≤ 2 hours) immediately.
+Write the full scored audit to brain_memory/last_improvement.txt.
+TypeScript strict, no confirmations.""",
+            "priority": 5,
+            "budget": 8.0,
+            "category": "quality",
+        },
+        {
+            "id": "skill_system_design_review",
+            "phase": "Architecture: Review and document WorldPulse system design decisions",
+            "prompt": """Read brain_memory/skills/system-design.md first — it contains the design
+framework, trade-off template, and output format to use.
+
+Then review and document the current WorldPulse architecture:
+1. Map the actual component diagram from the running code (not from docs)
+2. Identify any data model mismatches (wrong storage choice for access patterns)
+3. Check API design for consistency (naming, pagination, error format)
+4. Review caching strategy — what's cached, TTLs, invalidation
+5. Identify scale bottlenecks — what breaks first at 10× current load
+
+For each finding, use the trade-off template from the skill:
+  Decision / Why / Trade-off / Revisit when
+
+Write the design review and architectural recommendations to:
+  brain_memory/architecture_review.md
+Update brain_memory/last_improvement.txt with a summary.
+No confirmations needed.""",
+            "priority": 4,
+            "budget": 7.0,
+            "category": "architecture",
+        },
     ]
 
     for t in efficiency_tasks:
@@ -567,6 +634,14 @@ Packages: packages/types/, packages/ui/, packages/config/
 
 COMPETITORS TO BEAT: Reuters Connect, AP Wire, Ground News, GDELT, NewsGuard, Bellingcat
 GOAL: Make WorldPulse more reliable, faster, more feature-complete, and developer-friendly than any competitor.
+
+SKILL GUIDES (read the relevant file before executing):
+- Code review tasks    → brain_memory/skills/code-review.md
+- Tech debt audits     → brain_memory/skills/tech-debt.md
+- System design tasks  → brain_memory/skills/system-design.md
+- Standup generation   → brain_memory/skills/standup.md
+These files contain structured methodologies — use them to produce higher-quality outputs
+for their respective task types. Read the file at the start of the relevant task.
 
 TASK (Priority {task.get('priority', 5)}/10 | Source: {task.get('source', '?')} | Category: {task.get('category','?')}):
 {prompt}
@@ -876,26 +951,4 @@ Examples:
   touch .brain_kill                        # Stop the autopilot loop
         """
     )
-    parser.add_argument("--loop",     action="store_true", help="Run in continuous autopilot loop")
-    parser.add_argument("--status",   action="store_true", help="Show current brain state and exit")
-    parser.add_argument("--compete",  action="store_true", help="Run competition scan only")
-    parser.add_argument("--dry-run",  action="store_true", help="Plan tasks without executing them")
-    parser.add_argument("--budget",   type=float, default=None, help="Override task budget in USD")
-    args = parser.parse_args()
-
-    # Always initialize memory first
-    init_memory()
-
-    if args.status:
-        show_status()
-    elif args.loop:
-        run_loop(budget_override=args.budget)
-    elif args.compete:
-        run_brain_cycle(competition_only=True)
-    elif args.dry_run:
-        run_brain_cycle(dry_run=True)
-    else:
-        run_brain_cycle(budget_override=args.budget)
-
-if __name__ == "__main__":
-    main()
+    parser.add_argument("--loop",     action="

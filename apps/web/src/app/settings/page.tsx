@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useTheme } from '@/components/providers'
 import { useToast } from '@/components/Toast'
+import DigestSubscription from '@/components/settings/DigestSubscription'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -465,6 +466,9 @@ export default function SettingsPage() {
                   </button>
                 </div>
               </div>
+
+              {/* ── DIGEST SUBSCRIPTION ───────────────────────────── */}
+              <DigestSubscription defaultEmail={user?.email ?? ''} />
             )}
 
             {/* ── ACCOUNT TAB ──────────────────────────────────────── */}

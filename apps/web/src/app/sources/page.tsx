@@ -52,36 +52,47 @@ function TrustBar({ score }: { score: number }) {
 export default function SourcesPage() {
   const [sources, setSources]     = useState<Source[]>([])
   const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState<string | null>(null)
   const [search, setSearch]       = useState('')
   const [tierFilter, setTierFilter] = useState('')
   const [catFilter, setCatFilter] = useState('')
 
-  useEffect(() => {
+  const loadSources = () => {
+    setLoading(true)
+    setError(null)
     fetch(`${API_URL}/api/v1/sources?limit=100`)
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error(`API returned ${r.status}`)
+        return r.json()
+      })
       .then(d => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const raw: any[] = d.data?.items ?? d.items ?? []
-        if (raw.length > 0) {
-          setSources(raw.map(s => ({
-            id:           s.id,
-            slug:         s.slug,
-            name:         s.name,
-            url:          s.url,
-            tier:         s.tier,
-            trustScore:   s.trustScore   ?? s.trust_score   ?? 0,
-            language:     s.language     ?? 'en',
-            country:      s.country      ?? null,
-            categories:   s.categories   ?? [],
-            active:       s.active       ?? true,
+        const raw: any[] = d?.data?.items ?? d?.items ?? d?.data ?? []
+        setSources(
+          (Array.isArray(raw) ? raw : []).map(s => ({
+            id:           s.id ?? s._id ?? crypto.randomUUID(),
+            slug:         s.slug ?? '',
+            name:         s.name ?? 'Unknown',
+            url:          s.url ?? '',
+            tier:         s.tier ?? 'community',
+            trustScore:   Number(s.trustScore ?? s.trust_score ?? 0),
+            language:     s.language ?? 'en',
+            country:      s.country ?? null,
+            categories:   Array.isArray(s.categories) ? s.categories : [],
+            active:       s.active ?? true,
             articleCount: s.articleCount ?? s.article_count ?? undefined,
-            lastScraped:  s.lastScraped  ?? s.last_scraped  ?? undefined,
-          })))
-        }
+            lastScraped:  s.lastScraped ?? s.last_scraped ?? undefined,
+          }))
+        )
       })
-      .catch(() => { /* API unavailable */ })
+      .catch((err) => {
+        console.error('[sources] Failed to load:', err)
+        setError('Unable to load sources. The API may be temporarily unavailable.')
+      })
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { loadSources() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const allTiers = [...new Set(sources.map(s => s.tier))]
   const allCategories = [...new Set(sources.flatMap(s => s.categories))]
@@ -198,7 +209,18 @@ export default function SourcesPage() {
       </div>
 
       {/* Sources by tier */}
-      {loading ? (
+      {error ? (
+        <div className="text-center py-16">
+          <div className="text-[48px] mb-4">⚠️</div>
+          <div className="text-[16px] font-semibold text-wp-text mb-2">{error}</div>
+          <button
+            onClick={loadSources}
+            className="px-4 py-2 rounded-lg bg-wp-amber text-black text-[13px] font-bold hover:bg-[#ffb84d] transition-all mt-2"
+          >
+            Try again
+          </button>
+        </div>
+      ) : loading ? (
         <div className="space-y-3">
           {[1,2,3,4].map(i => <div key={i} className="h-20 rounded-xl shimmer" />)}
         </div>

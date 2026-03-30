@@ -4,6 +4,7 @@ import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 import { logger } from '../lib/logger'
 import { sendError } from '../lib/errors'
+import { authenticate } from '../middleware/auth'
 import {
   generateKeyPair,
   signBundle,
@@ -171,6 +172,7 @@ export const registerBundleRoutes: FastifyPluginAsync = async (app) => {
 
   // ── GET /current ────────────────────────────────────────────────────────────
   app.get('/current', {
+    preHandler: [authenticate],
     schema: {
       summary: 'Latest verified signal bundle (signed)',
       description:
@@ -205,6 +207,7 @@ export const registerBundleRoutes: FastifyPluginAsync = async (app) => {
 
   // ── GET /current.json ────────────────────────────────────────────────────────
   app.get('/current.json', {
+    preHandler: [authenticate],
     schema: {
       summary: 'Download verified signal bundle as JSON file',
       description: 'Same as GET /current but forces a file download.',

@@ -20,6 +20,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
+import { authenticate } from '../middleware/auth'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -251,6 +252,7 @@ export const registerJammingRoutes: FastifyPluginAsync = async (app) => {
   // ── GET /zones ─────────────────────────────────────────────────────────────
 
   app.get('/zones', {
+    preHandler: [authenticate],
     config: {
       rateLimit: {
         max:        JAMMING_RATE_LIMIT,

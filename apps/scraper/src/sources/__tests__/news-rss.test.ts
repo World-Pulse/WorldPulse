@@ -18,8 +18,8 @@ import {
 // ─── REGISTRY INTEGRITY ───────────────────────────────────────────────────────
 
 describe('NEWS_SOURCE_REGISTRY', () => {
-  it('has at least 25 sources', () => {
-    expect(NEWS_SOURCE_REGISTRY.length).toBeGreaterThanOrEqual(25)
+  it('has at least 50 sources', () => {
+    expect(NEWS_SOURCE_REGISTRY.length).toBeGreaterThanOrEqual(50)
   })
 
   it('every source has a non-empty id', () => {
@@ -85,9 +85,43 @@ describe('NEWS_SOURCE_REGISTRY', () => {
     }
   })
 
-  it('all sources have language set to "en"', () => {
+  it('all sources have a non-empty language code', () => {
     for (const src of NEWS_SOURCE_REGISTRY) {
-      expect(src.language).toBe('en')
+      expect(src.language.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('non-English sources are explicitly tagged with their language', () => {
+    const nonEnglish = NEWS_SOURCE_REGISTRY.filter(s => s.language !== 'en')
+    // Le Monde (fr) and Folha de S.Paulo (pt) added in cycle 8
+    expect(nonEnglish.length).toBeGreaterThanOrEqual(2)
+    for (const src of nonEnglish) {
+      expect(src.language).not.toBe('en')
+    }
+  })
+
+  it('includes 10 new sources added in cycle 8', () => {
+    const cycle8Ids = [
+      'le-monde', 'der-spiegel-intl', 'el-pais-eng', 'the-wire-india',
+      'daily-maverick', 'nikkei-asia', 'arab-news', 'allafrica',
+      'folha-sao-paulo', 'the-conversation',
+    ]
+    for (const id of cycle8Ids) {
+      const src = NEWS_SOURCE_REGISTRY.find(s => s.id === id)
+      expect(src).toBeDefined()
+    }
+  })
+
+  it('includes 15 new sources added in cycle 9', () => {
+    const cycle9Ids = [
+      'euractiv', 'moscow-times', 'taipei-times', 'the-hindu-national',
+      'dawn-pakistan', 'premium-times-nigeria', 'bangkok-post', 'jakarta-post',
+      'al-monitor', 'eu-observer', 'africanews', 'rferl',
+      'caixin-global', 'asia-times', 'channel-news-asia',
+    ]
+    for (const id of cycle9Ids) {
+      const src = NEWS_SOURCE_REGISTRY.find(s => s.id === id)
+      expect(src).toBeDefined()
     }
   })
 })

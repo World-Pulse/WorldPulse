@@ -20,7 +20,12 @@ import { RelatedSignals } from './RelatedSignals'
 import { CIBWarningBadge } from '@/components/signals/CIBWarningBadge'
 import { VerificationTimeline } from '@/components/signals/VerificationTimeline'
 import { VerificationBadge, buildVerificationSummary } from '@/components/signals/VerificationBadge'
+import { ViralityBadge } from '@/components/signals/ViralityBadge'
 import { RichMediaEmbed, extractFirstEmbedUrl } from '@/components/RichMediaEmbed'
+import { SignalMedia } from '@/components/signals/SignalMedia'
+import { SourceChain } from '@/components/signals/SourceChain'
+import { TVClips } from '@/components/signals/TVClips'
+import { NewsImages } from '@/components/signals/NewsImages'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -306,6 +311,16 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
                   />
                 )
               })()}
+              {/* Virality badge — surfaces corroboration velocity */}
+              {signal.sourceCount >= 3 && (
+                <ViralityBadge
+                  sourceCount={signal.sourceCount}
+                  lastCorroboratedAt={signal.lastCorroboratedAt}
+                  lastUpdated={signal.lastUpdated}
+                  size="md"
+                  showCount
+                />
+              )}
               {isBreaking && (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-wp-red text-white text-[11px] font-mono font-semibold animate-flash-tag">
                   BREAKING
@@ -356,6 +371,21 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
                 <p className="text-[14px] leading-[1.8]">{signal.body}</p>
               </div>
             )}
+
+            {/* Multimedia — YouTube + podcast enrichment (closes Ground News v4.27 'Podcasts & Opinions' gap) */}
+            <SignalMedia items={(signal as Signal).media ?? []} />
+
+            {/* GDELT TV News clips — counters GDELT's own TV News Visual Explorer (Mar 2026) */}
+            <TVClips signalId={signal.id} />
+
+            {/* GDELT visual news imagery — related article images via GDELT DOC API (counters GDELT Summary) */}
+            <NewsImages signalId={signal.id} />
+
+            {/* Source chain — all sources with trust scores and article links */}
+            <SourceChain
+              sources={signal.sources}
+              sourceUrl={signal.originalUrls?.[0] ?? null}
+            />
 
             {/* AI Summary — WorldPulse differentiator vs Ground News Ground Summary */}
             <AISummary

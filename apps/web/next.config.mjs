@@ -1,5 +1,6 @@
 import createNextIntlPlugin from 'next-intl/plugin'
 import createBundleAnalyzer from '@next/bundle-analyzer'
+import { withSentryConfig } from '@sentry/nextjs'
 
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts')
 const withBundleAnalyzer = createBundleAnalyzer({
@@ -45,8 +46,10 @@ const nextConfig = {
                 "connect-src 'self'",
                 'https://api.world-pulse.io',
                 'wss://api.world-pulse.io',
-                'http://localhost:3001',
-                'ws://localhost:3001',
+                // Allow localhost API connections only in development builds
+                ...(process.env.NODE_ENV !== 'production'
+                  ? ['http://localhost:3001', 'ws://localhost:3001']
+                  : []),
                 'https://tile.openstreetmap.org',
                 'https://celestrak.org',
                 'https://gibs.earthdata.nasa.gov',
@@ -67,4 +70,27 @@ const nextConfig = {
   },
 }
 
-export default withBundleAnalyzer(withNextIntl(nextConfig))
+const nextConfigWithPlugins = withBundleAnalyzer(withNextIntl(nextConfig))
+
+export default withSentryConfig(nextConfigWithPlugins, {
+  // Suppress noisy build output
+  silent: true,
+
+  // Upload source maps to Sentry for readable stack traces
+  uploadSourceMaps: true,
+
+  // Tree-shake unused Sentry code from client bundle
+  widenClientFileUpload: true,
+
+  // Automatically instrument Next.js data-fetching (getServerSideProps, etc.)
+  autoInstrumentServerFunctions: true,
+
+  // Tunnel Sentry requests through the Next.js server to avoid ad-blockers
+  tunnelRoute: '/monitoring-tunnel',
+
+  // Hide source map files from the browser
+  hideSourceMaps: true,
+
+  // Disable SDK logger in production builds
+  disableLogger: true,
+})

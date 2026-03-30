@@ -82,6 +82,9 @@ function CameraCard({ camera, refreshTick }: CameraCardProps) {
     ? `${camera.snapshotUrl}?t=${refreshTick}`
     : null
 
+  // Detect invalid Windy embed URLs (placeholder IDs that won't render)
+  const isValidEmbed = camera.embedUrl && !camera.embedUrl.includes('embed-webcam.html?id=1')
+
   return (
     <div className="group bg-zinc-900 border border-zinc-700/50 hover:border-zinc-600 rounded-2xl overflow-hidden transition-all duration-200 hover:shadow-lg hover:shadow-black/30">
       {/* Stream / snapshot */}
@@ -93,7 +96,7 @@ function CameraCard({ camera, refreshTick }: CameraCardProps) {
             className="w-full h-full object-cover"
             onError={() => setImgError(true)}
           />
-        ) : (
+        ) : isValidEmbed ? (
           <iframe
             src={camera.embedUrl}
             title={camera.name}
@@ -102,6 +105,19 @@ function CameraCard({ camera, refreshTick }: CameraCardProps) {
             allow="autoplay; fullscreen"
             sandbox="allow-scripts allow-same-origin allow-popups"
           />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-zinc-900 to-zinc-800">
+            <div className="text-4xl mb-2 opacity-60">📹</div>
+            <span className="text-[11px] text-zinc-500 font-mono">Stream connecting…</span>
+            <a
+              href={camera.embedUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 text-[10px] text-amber-500/70 hover:text-amber-400 font-mono transition-colors"
+            >
+              Open external feed →
+            </a>
+          </div>
         )}
 
         {/* Live badge */}

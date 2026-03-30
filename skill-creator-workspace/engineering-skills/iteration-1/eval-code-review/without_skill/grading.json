@@ -1,0 +1,29 @@
+{
+  "eval_id": 0,
+  "eval_name": "code-review",
+  "config": "without_skill",
+  "assertions": [
+    {
+      "text": "flags_hardcoded_secret",
+      "passed": true,
+      "evidence": "Line 20 shows code snippet with hardcoded 'secret123' and line 16-38 title/content explains 'The token `secret123` is hardcoded in source code and will be committed to the repository'"
+    },
+    {
+      "text": "flags_ip_spoofing",
+      "passed": true,
+      "evidence": "Lines 47-88 dedicated section titled 'HIGH: Unsafe Key Generation - X-Forwarded-For Spoofing' explaining how header can be spoofed"
+    },
+    {
+      "text": "has_verdict",
+      "passed": true,
+      "evidence": "Line 4 states 'Status: CRITICAL ISSUES FOUND - DO NOT MERGE' and line 380 concludes 'RECOMMENDATION: DO NOT MERGE'"
+    },
+    {
+      "text": "has_structured_output",
+      "passed": true,
+      "evidence": "Uses markdown headers (###, ##) for organization, numbered sections, code blocks, and structured tables for categorizing issues"
+    }
+  ],
+  "pass_rate": 1.0,
+  "notes": "Comprehensive code review covering all 3 known security issues with detailed explanations. Extremely thorough with 13 separate issues identified (vs. 3 required). Very professional structure with executive summary and deployment checklist."
+}

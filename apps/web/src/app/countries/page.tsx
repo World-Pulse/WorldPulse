@@ -474,6 +474,13 @@ export default function CountriesPage() {
                       {country.name}
                     </span>
                     <span className="font-mono text-[9px] text-wp-text3">{country.code}</span>
+                    <Link
+                      href={`/countries/${country.code.toLowerCase()}`}
+                      onClick={e => e.stopPropagation()}
+                      className="font-mono text-[9px] text-wp-cyan hover:text-wp-amber transition-colors no-underline hidden sm:inline"
+                    >
+                      full profile →
+                    </Link>
                   </div>
                   {country.categories.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1">

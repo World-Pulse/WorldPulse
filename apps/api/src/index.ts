@@ -38,6 +38,7 @@ import { registerMaritimeRoutes } from './routes/maritime'
 import { registerThreatsRoutes }  from './routes/threats'
 import { registerJammingRoutes }  from './routes/jamming'
 import { registerHazardsRoutes }  from './routes/hazards'
+import { registerOutagesRoutes }  from './routes/outages'
 import { registerAdminKafkaRoutes } from './routes/admin-kafka'
 import { registerSlopRoutes } from './routes/slop'
 import { registerRssRoutes } from './routes/rss'
@@ -48,6 +49,8 @@ import { registerBillingRoutes } from './routes/billing'
 import { registerDigestRoutes, registerAdminDigestRoutes } from './routes/digest'
 import { registerFinanceRoutes } from './routes/finance'
 import { registerSanctionsRoutes } from './routes/sanctions'
+import { registerSpaceWeatherRoutes } from './routes/space-weather'
+import { registerCyberRoutes }        from './routes/cyber'
 import { registerWSHandler, startRedisSubscriber } from './ws/handler'
 import { registerGraphQL } from './graphql'
 import { metricsPlugin } from './middleware/metrics'
@@ -325,6 +328,7 @@ async function bootstrap() {
   await app.register(registerThreatsRoutes,     { prefix: '/api/v1/threats' })
   await app.register(registerJammingRoutes,       { prefix: '/api/v1/jamming' })
   await app.register(registerHazardsRoutes,       { prefix: '/api/v1/hazards' })
+  await app.register(registerOutagesRoutes,       { prefix: '/api/v1/outages' })
   await app.register(registerAdminKafkaRoutes,   { prefix: '/api/v1/admin' })
   await app.register(registerSlopRoutes,         { prefix: '/api/v1/slop' })
   await app.register(registerRssRoutes,          { prefix: '/api/v1/rss' })
@@ -347,6 +351,12 @@ async function bootstrap() {
 
   // ─── SANCTIONS & WATCHLIST INTELLIGENCE ──────────────────
   await app.register(registerSanctionsRoutes, { prefix: '/api/v1/sanctions' })
+
+  // ─── SPACE WEATHER INTELLIGENCE ──────────────────────────
+  await app.register(registerSpaceWeatherRoutes, { prefix: '/api/v1/space-weather' })
+
+  // ─── CYBER THREAT INTELLIGENCE ───────────────────────────
+  await app.register(registerCyberRoutes, { prefix: '/api/v1/cyber' })
 
   // ─── GRAPHQL ─────────────────────────────────────────────
   await registerGraphQL(app)

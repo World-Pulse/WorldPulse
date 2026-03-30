@@ -17,6 +17,7 @@ import type { CrossCheckStatus, AlertTier } from '@worldpulse/types'
 import { AlertTierBadge } from '@/components/ui/AlertTierBadge'
 import { BiasIndicator } from '@/components/signals/BiasIndicator'
 import type { BiasLabel } from '@/components/signals/BiasIndicator'
+import { ViralityBadge } from '@/components/signals/ViralityBadge'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -54,6 +55,8 @@ interface FeedItem {
   reliability: number | null
   // Tooltip metadata (signals only)
   sourceCount?: number
+  lastUpdated?: string
+  lastCorroboratedAt?: string | null
   crossCheckStatus?: CrossCheckStatus
   communityFlagCount?: number
   riskScore?: { score: number; level: string; label: string }
@@ -147,7 +150,9 @@ function adaptSignal(sig: any): FeedItem {
     replies:           sig.postCount  ?? 0,
     time:              sig.createdAt ? timeAgo(sig.createdAt) : '?',
     reliability:       sig.reliabilityScore ?? null,
-    sourceCount:       sig.sourceCount,
+    sourceCount:           sig.sourceCount,
+    lastUpdated:           sig.lastUpdated ?? undefined,
+    lastCorroboratedAt:    sig.lastCorroboratedAt ?? null,
     crossCheckStatus:  sig.status ? crossCheckFromStatus(sig.status) : undefined,
     communityFlagCount: flagCount,
     riskScore:          sig.riskScore ?? undefined,
@@ -584,24 +589,15 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
                         {SOURCE_LABELS[s] ?? s.toUpperCase()}
                       </span>
                     ))}
-                    {/* Ground-News-style source count pill */}
-                    {(item.sourceCount ?? 0) > item.event.sources.length && (
-                      <span
-                        title={`${item.sourceCount} sources confirmed this signal`}
-                        className={`source-badge text-[9px] font-mono
-                          ${(item.sourceCount ?? 0) >= 5
-                            ? 'bg-[rgba(0,230,118,0.15)] text-wp-green border border-[rgba(0,230,118,0.3)]'
-                            : 'bg-[rgba(0,212,255,0.1)] text-wp-cyan border border-[rgba(0,212,255,0.2)]'
-                          }`}
-                      >
-                        {(item.sourceCount ?? 0) >= 5 ? '🔥 ' : ''}{item.sourceCount} sources
-                      </span>
-                    )}
-                    {/* Trending indicator */}
-                    {(item.sourceCount ?? 0) >= 8 && (
-                      <span className="source-badge bg-[rgba(255,59,92,0.15)] text-wp-red border border-[rgba(255,59,92,0.3)] text-[9px] font-mono tracking-wider">
-                        TRENDING
-                      </span>
+                    {/* Virality badge — shows spreading velocity + corroboration depth */}
+                    {(item.sourceCount ?? 0) >= 3 && (
+                      <ViralityBadge
+                        sourceCount={item.sourceCount ?? 0}
+                        lastCorroboratedAt={item.lastCorroboratedAt}
+                        lastUpdated={item.lastUpdated}
+                        size="sm"
+                        showCount
+                      />
                     )}
                   </div>
                 )}

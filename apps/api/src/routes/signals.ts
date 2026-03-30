@@ -128,7 +128,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
         's.reliability_score', 's.source_count', 's.location_name', 's.country_code',
         's.region', 's.tags', 's.language', 's.view_count', 's.share_count',
         's.post_count', 's.event_time', 's.first_reported', 's.verified_at',
-        's.last_updated', 's.created_at', 's.is_breaking', 's.community_flag_count',
+        's.last_updated', 's.last_corroborated_at', 's.created_at', 's.is_breaking', 's.community_flag_count',
         db.raw('ST_AsGeoJSON(s.location)::json as location_geojson'),
       ])
       .orderBy('s.created_at', 'desc')
@@ -225,6 +225,22 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       .limit(10)
       .select(['check_type', 'result', 'confidence', 'notes', 'created_at'])
 
+    // Get multimedia items (YouTube, podcast audio)
+    const mediaRows = await db('signal_media')
+      .where('signal_id', id)
+      .orderBy('created_at', 'asc')
+      .select(['id', 'media_type', 'url', 'embed_id', 'title', 'thumbnail_url', 'source_name'])
+
+    const media = mediaRows.map((row: Record<string, unknown>) => ({
+      id:           row.id,
+      mediaType:    row.media_type,
+      url:          row.url,
+      embedId:      row.embed_id      ?? null,
+      title:        row.title         ?? null,
+      thumbnailUrl: row.thumbnail_url ?? null,
+      sourceName:   row.source_name   ?? null,
+    }))
+
     // Bias lookup — use first source URL if available, fall back to signal source_url
     const primarySourceUrl =
       (signal.sources_data as Array<{ articleUrl?: string }> | null)?.[0]?.articleUrl ??
@@ -253,6 +269,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
         verifications,
         aiSummary,
         sourceBias,
+        media,
       },
     }
 
@@ -1052,6 +1069,211 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     return reply.send(payload)
   })
 
+  // ─── ADS-B AVIATION SIGNALS MAP ──────────────────────────────────────────────
+  // GET /api/v1/signals/map/adsb
+  // Returns aviation-category signals from the last 4 hours for the live flight overlay.
+  // Cached in Redis for 60 s to allow frequent client polling.
+  app.get('/map/adsb', {
+    schema: {
+      tags: ['signals'],
+      summary: 'ADS-B aviation signals for map overlay',
+      description: 'Returns aviation signals from the last 4 hours with geographic coordinates for the ADS-B flight path map layer.',
+    },
+  }, async (_req, reply) => {
+    const cacheKey = 'signals:map:adsb'
+    const cached = await redis.get(cacheKey).catch(() => null)
+    if (cached) {
+      try { return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached)) } catch { /* fallthrough */ }
+    }
+
+    const result = await db.raw<{ rows: Array<Record<string, unknown>> }>(`
+      SELECT id, title, created_at AS published_at, reliability_score,
+        ST_Y(location::geometry) AS lat,
+        ST_X(location::geometry) AS lng
+      FROM signals
+      WHERE category = 'aviation'
+        AND location IS NOT NULL
+        AND created_at > NOW() - INTERVAL '4 hours'
+      ORDER BY created_at DESC
+      LIMIT 300
+    `)
+
+    const data = result.rows.map(r => ({
+      id:                String(r.id),
+      title:             String(r.title ?? ''),
+      lat:               parseFloat(String(r.lat)),
+      lng:               parseFloat(String(r.lng)),
+      reliability_score: parseFloat(String(r.reliability_score ?? 0)),
+      published_at:      r.published_at ? (r.published_at as Date).toISOString() : null,
+    }))
+
+    const payload = { success: true, data }
+    redis.setex(cacheKey, 60, JSON.stringify(payload)).catch(() => {})
+    return reply.send(payload)
+  })
+
+  // ─── GDELT TV CLIPS ───────────────────────────────────────────────────────────
+  // GET /api/v1/signals/:id/tv-clips
+  //
+  // Surfaces relevant TV news clips from the GDELT TV News API for the given
+  // signal. Keywords are extracted from the signal title (stop words stripped),
+  // then used to query GDELT. Results are cached in Redis for 30 min.
+  //
+  // - Recent signals (≤7d):  uses timespan=7d
+  // - Older signals:         uses startdatetime/enddatetime bracketing the event
+  // - Error/timeout:         returns empty clips array — never fails the request
+  app.get('/:id/tv-clips', {
+    config: { rateLimit: { max: TV_CLIPS_RATE_LIMIT, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+
+    // ── Redis cache ──────────────────────────────────────────────────────────
+    const cacheKey = `tv-clips:${id}`
+    const cached = await redis.get(cacheKey).catch(() => null)
+    if (cached) {
+      try { return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached)) } catch { /* fallthrough */ }
+    }
+
+    // ── Fetch signal ─────────────────────────────────────────────────────────
+    const signal = await db('signals')
+      .where('id', id)
+      .first('id', 'title', 'summary', 'created_at')
+      .catch(() => null)
+
+    if (!signal) {
+      return reply.status(404).send({ success: false, error: 'Signal not found' })
+    }
+
+    // ── Build GDELT query ────────────────────────────────────────────────────
+    const keywords = extractTVKeywords(signal.title as string)
+    const query    = keywords.join(' AND ')
+    const encodedQ = encodeURIComponent(query)
+
+    const publishedAt = new Date((signal.created_at as Date | string))
+    const ageMs       = Date.now() - publishedAt.getTime()
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000
+
+    let gdeltUrl: string
+    if (ageMs <= sevenDaysMs) {
+      gdeltUrl = `https://api.gdeltproject.org/api/v2/tv/tv?query=${encodedQ}&mode=clipgallery&format=json&maxrecords=6&timespan=7d`
+    } else {
+      const start = new Date(publishedAt.getTime() - 24 * 60 * 60 * 1000)
+      const end   = new Date(publishedAt.getTime() + 3 * 24 * 60 * 60 * 1000)
+      gdeltUrl = `https://api.gdeltproject.org/api/v2/tv/tv?query=${encodedQ}&mode=clipgallery&format=json&maxrecords=6&startdatetime=${formatGdeltDate(start)}&enddatetime=${formatGdeltDate(end)}`
+    }
+
+    // ── Fetch from GDELT (5s timeout, never throw) ───────────────────────────
+    let clips: TVClip[] = []
+    try {
+      const res = await fetch(gdeltUrl, { signal: AbortSignal.timeout(5000) })
+      if (res.ok) {
+        const json = await res.json() as GdeltTVResponse
+        clips = (json.clips ?? []).map((item, idx): TVClip => ({
+          id:          item.url ? String(idx) + '_' + item.url.slice(-12).replace(/\W/g, '') : String(idx),
+          station:     item.station ?? '',
+          showName:    item.show ?? '',
+          showDate:    item.date_time ?? '',
+          previewUrl:  item.preview_url ?? '',
+          clipUrl:     item.embed_url ?? item.url ?? '',
+          durationSecs: null,
+        }))
+      }
+    } catch {
+      // Timeout, network error, parse error — return empty clips
+      clips = []
+    }
+
+    const response = {
+      success: true,
+      data: { clips, query, total: clips.length },
+    }
+
+    redis.setex(cacheKey, TV_CLIPS_CACHE_TTL, JSON.stringify(response)).catch(() => {})
+
+    return reply.send(response)
+  })
+
+  // ─── GDELT NEWS IMAGES ────────────────────────────────────────────────────
+  // GET /api/v1/signals/:id/news-images
+  //
+  // Surfaces related visual news imagery from the GDELT DOC API for the given
+  // signal. Keywords are extracted from the signal title (stop words stripped),
+  // then used to query GDELT artlist mode which returns Open Graph images from
+  // news articles covering the same topic.
+  //
+  // - Error/timeout: returns empty images array — never fails the request
+  // - Redis cache:   'news-images:{signalId}', TTL 3600s (1 hour)
+  app.get('/:id/news-images', {
+    config: { rateLimit: { max: NEWS_IMAGES_RATE_LIMIT, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+
+    // ── Redis cache ──────────────────────────────────────────────────────────
+    const cacheKey = `news-images:${id}`
+    const cached = await redis.get(cacheKey).catch(() => null)
+    if (cached) {
+      try { return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached)) } catch { /* fallthrough */ }
+    }
+
+    // ── Fetch signal ─────────────────────────────────────────────────────────
+    const signal = await db('signals')
+      .where('id', id)
+      .first('id', 'title', 'created_at')
+      .catch(() => null)
+
+    if (!signal) {
+      return reply.status(404).send({ success: false, error: 'Signal not found' })
+    }
+
+    // ── Build GDELT DOC API query ─────────────────────────────────────────────
+    const keywords = extractTVKeywords(signal.title as string)
+    const query    = keywords.join(' ')
+    const encodedQ = encodeURIComponent(query)
+
+    // Use timespan based on signal age — recent signals get 7d window
+    const publishedAt  = new Date((signal.created_at as Date | string))
+    const ageMs        = Date.now() - publishedAt.getTime()
+    const sevenDaysMs  = 7 * 24 * 60 * 60 * 1000
+    const timespan     = ageMs <= sevenDaysMs ? '7d' : '30d'
+
+    const gdeltUrl = (
+      `https://api.gdeltproject.org/api/v2/doc/doc` +
+      `?query=${encodedQ}&mode=artlist&format=json&maxrecords=6` +
+      `&timespan=${timespan}&SOURCELANG:eng`
+    )
+
+    // ── Fetch from GDELT DOC (5s timeout, never throw) ───────────────────────
+    let images: NewsImage[] = []
+    try {
+      const res = await fetch(gdeltUrl, { signal: AbortSignal.timeout(5000) })
+      if (res.ok) {
+        const json = await res.json() as GdeltDocResponse
+        images = (json.articles ?? [])
+          .filter((item): item is GdeltDocArticle => !!(item.socialimage))
+          .map((item, idx): NewsImage => ({
+            id:           `ni_${idx}_${(item.url ?? '').slice(-10).replace(/\W/g, '')}`,
+            imageUrl:     item.socialimage ?? '',
+            caption:      item.title ?? null,
+            sourceUrl:    item.url ?? null,
+            sourceDomain: item.domain ?? null,
+            date:         item.seendate ?? null,
+          }))
+      }
+    } catch {
+      // Timeout, network error, parse error — return empty images
+      images = []
+    }
+
+    const response = {
+      success: true,
+      data: { images, query, total: images.length },
+    }
+
+    redis.setex(cacheKey, NEWS_IMAGES_CACHE_TTL, JSON.stringify(response)).catch(() => {})
+
+    return reply.send(response)
+  })
+
   // ─── SIMILAR SIGNALS (Pinecone semantic) ─────────────────────────────────
   // GET /api/v1/signals/:id/similar?limit=5
   //
@@ -1137,6 +1359,91 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
   })
 }
 
+// ─── GDELT TV CLIPS — exported types + helpers (testable) ────────────────────
+
+export const TV_CLIPS_CACHE_TTL  = 1800 // 30 minutes
+export const TV_CLIPS_RATE_LIMIT = 30   // req / min
+
+// ─── GDELT NEWS IMAGES — exported types + constants (testable) ───────────────
+
+export const NEWS_IMAGES_CACHE_TTL  = 3600 // 1 hour
+export const NEWS_IMAGES_RATE_LIMIT = 30   // req / min
+
+export interface NewsImage {
+  id:           string
+  imageUrl:     string
+  caption:      string | null
+  sourceUrl:    string | null
+  sourceDomain: string | null
+  date:         string | null
+}
+
+interface GdeltDocArticle {
+  url:          string
+  title:        string
+  seendate:     string
+  socialimage:  string
+  domain:       string
+  language:     string
+  sourcecountry: string
+}
+
+interface GdeltDocResponse {
+  articles?: GdeltDocArticle[]
+  status?:   string
+}
+
+export interface TVClip {
+  id:          string
+  station:     string
+  showName:    string
+  showDate:    string
+  previewUrl:  string
+  clipUrl:     string
+  durationSecs: number | null
+}
+
+interface GdeltTVItem {
+  url:         string
+  station:     string
+  show:        string
+  date_time:   string
+  preview_url: string
+  embed_url:   string
+}
+
+interface GdeltTVResponse {
+  clips?: GdeltTVItem[]
+}
+
+const STOP_WORDS = new Set([
+  'the', 'a', 'an', 'in', 'on', 'at', 'of', 'for',
+  'to', 'by', 'with', 'from', 'and', 'or', 'is', 'are',
+])
+
+/** Extract up to 3 meaningful keywords from a signal title. */
+export function extractTVKeywords(title: string): string[] {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .split(/\s+/)
+    .filter(w => w.length > 2 && !STOP_WORDS.has(w))
+    .slice(0, 3)
+}
+
+/** Format a Date as GDELT datetime string: YYYYMMDDHHMMSS */
+export function formatGdeltDate(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return (
+    String(date.getUTCFullYear()) +
+    pad(date.getUTCMonth() + 1) +
+    pad(date.getUTCDate()) +
+    pad(date.getUTCHours()) +
+    pad(date.getUTCMinutes()) +
+    pad(date.getUTCSeconds())
+  )
+}
+
 export function formatSignal(row: Record<string, unknown>) {
   const geo = row.location_geojson as { coordinates?: [number, number] } | null
 
@@ -1172,9 +1479,10 @@ export function formatSignal(row: Record<string, unknown>) {
     postCount:        row.post_count ?? 0,
     eventTime:        row.event_time ? (row.event_time as Date).toISOString() : null,
     firstReported:    row.first_reported ? (row.first_reported as Date).toISOString() : null,
-    verifiedAt:       row.verified_at ? (row.verified_at as Date).toISOString() : null,
-    lastUpdated:      row.last_updated ? (row.last_updated as Date).toISOString() : null,
-    createdAt:          row.created_at ? (row.created_at as Date).toISOString() : null,
+    verifiedAt:           row.verified_at ? (row.verified_at as Date).toISOString() : null,
+    lastUpdated:          row.last_updated ? (row.last_updated as Date).toISOString() : null,
+    lastCorroboratedAt:   row.last_corroborated_at ? (row.last_corroborated_at as Date).toISOString() : null,
+    createdAt:            row.created_at ? (row.created_at as Date).toISOString() : null,
     isBreaking:         row.is_breaking ?? false,
     communityFlagCount: row.community_flag_count ?? 0,
     sources:            row.sources_data ?? [],

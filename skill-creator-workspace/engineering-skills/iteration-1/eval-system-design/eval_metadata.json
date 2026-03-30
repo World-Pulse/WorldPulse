@@ -1,0 +1,23 @@
+{
+  "eval_id": 2,
+  "eval_name": "system-design",
+  "prompt": "Design semantic search for WorldPulse using Pinecone free tier on Node.js/Fastify + PostgreSQL. Should cover embedding strategy, sync mechanisms, trade-offs, and v1 scoping.",
+  "assertions": [
+    {
+      "name": "covers_embedding_strategy",
+      "description": "Discusses how signals get embedded (model, when, batch vs real-time)"
+    },
+    {
+      "name": "addresses_sync",
+      "description": "Mentions how to keep Pinecone in sync with new signals (upsert, pipeline, etc.)"
+    },
+    {
+      "name": "has_tradeoffs",
+      "description": "Includes explicit trade-off analysis section"
+    },
+    {
+      "name": "mentions_v1_scoping",
+      "description": "Distinguishes what to build first vs what to do later"
+    }
+  ]
+}

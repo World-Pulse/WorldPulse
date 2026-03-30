@@ -23,3 +23,6 @@ export type { SeverityPillProps } from './components/SeverityPill'
 
 export { EmptyState } from './components/EmptyState'
 export type { EmptyStateProps } from './components/EmptyState'
+
+export { AIContentFarmBadge } from './components/AIContentFarmBadge'
+export type { AIContentFarmBadgeProps } from './components/AIContentFarmBadge'

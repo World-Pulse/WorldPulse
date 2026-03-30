@@ -495,14 +495,17 @@ async function applyCorroborationBoost(cluster: EventCluster): Promise<void> {
       .whereIn('id', cluster.signal_ids)
       .whereRaw('reliability_score + ? <= 1.0', [boost])
       .update({
-        reliability_score: db.raw(`LEAST(reliability_score + ?, 1.0)`, [boost]),
+        reliability_score:   db.raw(`LEAST(reliability_score + ?, 1.0)`, [boost]),
+        // Stamp the precise moment of cross-source corroboration for velocity tracking.
+        // ViralityBadge uses this (instead of last_updated) to detect spreading events.
+        last_corroborated_at: db.raw('NOW()'),
       })
 
     logger.debug({
       cluster_id: cluster.cluster_id,
       boost,
       unique_sources: uniqueSources,
-    }, 'Applied corroboration reliability boost')
+    }, 'Applied corroboration reliability boost + stamped last_corroborated_at')
   } catch (err) {
     logger.warn({ err, cluster_id: cluster.cluster_id }, 'Failed to apply corroboration boost')
   }

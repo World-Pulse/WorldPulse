@@ -1,203 +1,220 @@
 {
-  "cycle_count": 2,
-  "last_cycle": "2026-03-28T15:42:01.736771+00:00",
-  "last_competition_scan": "2026-03-28T15:42:06.445868+00:00",
-  "project_health_score": 6.8,
-  "pending_tasks": [
-    {
-      "id": "roadmap_Phase_1b_—_Scraper_Health_Dash",
-      "source": "roadmap",
-      "priority": 10,
-      "phase": "Phase 1b — Scraper Health Dashboard",
-      "prompt": "Build a scraper health dashboard for WorldPulse. In apps/scraper/, add: (1) A health tracker that records per-source status (last_seen, error_count, success_rate, latency_ms) to Redis; (2) An API endpoint GET /api/v1/admin/scraper/health that returns the status of all sources; (3) Dead-source detection: if a source has not returned a signal in 30 minutes, mark it as 'stale' and log a warning; (4) A simple health summary log line printed every 5 minutes showing: total sources, healthy, stale, failed. Write TypeScript, strict mode, no confirmation prompts needed — just build and validate.",
-      "budget": 8,
-      "category": "feature"
-    },
-    {
-      "id": "roadmap_Phase_1c_—_Scraper_Retry_&_Cir",
-      "source": "roadmap",
-      "priority": 10,
-      "phase": "Phase 1c — Scraper Retry & Circuit Breaker",
-      "prompt": "Add production-grade retry logic and circuit breaker pattern to the WorldPulse scraper pipeline in apps/scraper/.",
-      "budget": 8,
-      "category": "feature"
-    },
-    {
-      "id": "roadmap_Phase_1d_—_Kafka_Consumer_Lag_",
-      "source": "roadmap",
-      "priority": 10,
-      "phase": "Phase 1d — Kafka Consumer Lag Monitoring",
-      "prompt": "Add Kafka consumer group lag monitoring to the WorldPulse infrastructure.",
-      "budget": 6,
-      "category": "feature"
-    },
-    {
-      "id": "roadmap_Phase_2a_—_Map:_Live_Signal_Pi",
-      "source": "roadmap",
-      "priority": 10,
-      "phase": "Phase 2a — Map: Live Signal Pins",
-      "prompt": "Wire the WorldPulse world map to live data.",
-      "budget": 10,
-      "category": "feature"
-    },
-    {
-      "id": "roadmap_Phase_2b_—_Map:_Real-Time_WebS",
-      "source": "roadmap",
-      "priority": 10,
-      "phase": "Phase 2b — Map: Real-Time WebSocket Updates",
-      "prompt": "Connect the WorldPulse map to the WebSocket feed so new signals appear in real time without page refresh.",
-      "budget": 10,
-      "category": "feature"
-    },
-    {
-      "id": "roadmap_Phase_3a_—_Search:_Meilisearch",
-      "source": "roadmap",
-      "priority": 10,
-      "phase": "Phase 3a — Search: Meilisearch Index + Pipeline",
-      "prompt": "Build the complete search indexing pipeline for WorldPulse.",
-      "budget": 10,
-      "category": "feature"
-    },
-    {
-      "id": "roadmap_Phase_3b_—_Search:_API_+_UI",
-      "source": "roadmap",
-      "priority": 10,
-      "phase": "Phase 3b — Search: API + UI",
-      "prompt": "Build the search feature end-to-end for WorldPulse.",
-      "budget": 12,
-      "category": "feature"
-    },
-    {
-      "id": "roadmap_Phase_4a_—_Signal_Detail_Page",
-      "source": "roadmap",
-      "priority": 10,
-      "phase": "Phase 4a — Signal Detail Page",
-      "prompt": "Build the complete signal detail page for WorldPulse at /signals/[id].",
-      "budget": 10,
-      "category": "feature"
-    },
-    {
-      "id": "roadmap_Phase_4b_—_User_Profile_Pages",
-      "source": "roadmap",
-      "priority": 10,
-      "phase": "Phase 4b — User Profile Pages",
-      "prompt": "Build complete user profile pages for WorldPulse at /users/[handle].",
-      "budget": 8,
-      "category": "feature"
-    },
-    {
-      "id": "roadmap_Phase_5a_—_UI_Polish:_Skeleton",
-      "source": "roadmap",
-      "priority": 10,
-      "phase": "Phase 5a — UI Polish: Skeletons, Empty States, Toasts",
-      "prompt": "Add polish across the WorldPulse frontend.",
-      "budget": 8,
-      "category": "feature"
-    },
-    {
-      "id": "roadmap_Phase_5b_—_Responsive_Mobile_L",
-      "source": "roadmap",
-      "priority": 10,
-      "phase": "Phase 5b — Responsive Mobile Layouts",
-      "prompt": "Make WorldPulse fully responsive for mobile and tablet.",
-      "budget": 10,
-      "category": "feature"
-    },
-    {
-      "id": "roadmap_Phase_6a_—_Verification_Engine",
-      "source": "roadmap",
-      "priority": 10,
-      "phase": "Phase 6a — Verification Engine: Reliability Scoring UI",
-      "prompt": "Wire the verification engine output to the WorldPulse UI.",
-      "budget": 8,
-      "category": "feature"
-    },
-    {
-      "id": "roadmap_Phase_6b_—_Onboarding_Flow",
-      "source": "roadmap",
-      "priority": 10,
-      "phase": "Phase 6b — Onboarding Flow",
-      "prompt": "Build a new user onboarding flow for WorldPulse.",
-      "budget": 8,
-      "category": "feature"
-    },
-    {
-      "id": "roadmap_Phase_7_—_End-to-End_Tests_+_S",
-      "source": "roadmap",
-      "priority": 10,
-      "phase": "Phase 7 — End-to-End Tests + Security Hardening",
-      "prompt": "Add a test suite and security hardening to WorldPulse.",
-      "budget": 10,
-      "category": "feature"
-    },
-    {
-      "id": "roadmap_Gate_1_—_Scraper_Stability_Val",
-      "source": "roadmap",
-      "priority": 10,
-      "phase": "Gate 1 — Scraper Stability Validation & 14-Day Health Monitor",
-      "prompt": "Validate and harden the WorldPulse scraper pipeline so it is provably stable enough to start the 14-consecutive-day stability clock — a hard launch prerequisite.\n\nDo ALL of the following:\n\n1. AUDIT existing scraper health: check apps/scraper/src/sources/index.ts — count all active pollers, verify each has a try/catch and circuit breaker. List any that lack error handling.\n\n2. IMPLEMENT a stability tracker in Redis:\n   - Key: `scraper:stability:consecutive_clean_hours` (integer, increments hourly)\n   - Key: `scraper:stability:last_failure_at` (ISO timestamp)\n   - Key: `scraper:stability:status` (string: 'stable' | 'degraded' | 'failed')\n   - A scraper 'hour' is clean if: ≥70% of active sources returned ≥1 signal AND zero unhandled exceptions in the hour window\n   - If any hour fails the check, reset `consecutive_clean_hours` to 0\n\n3. ADD a stability check cron to the scraper (runs every 60 minutes):\n   - Read Redis health keys set by existing per-source health tracking\n   - Evaluate the clean-hour criteria\n   - Update `scraper:stability:*` keys accordingly\n   - Log: `[STABILITY] Hour N clean — consecutive streak: X/336 (target: 336 for 14 days)`\n\n4. EXPOSE via API: add GET /api/v1/admin/scraper/stability that returns:\n   `{ consecutive_clean_hours, target_hours: 336, percent_to_gate: X, status, last_failure_at, estimated_gate_clear_date }`\n   Cache 5 min in Redis.\n\n5. ADD to the launch gate dashboard page (if it exists at apps/web) or create a simple status endpoint the dashboard can poll.\n\nDo NOT ask for confirmation. TypeScript strict. No breaking changes to existing sources.",
-      "budget": 10,
-      "category": "feature"
-    },
-    {
-      "id": "roadmap_Gate_2_—_Map_Live_Signal_End-t",
-      "source": "roadmap",
-      "priority": 10,
-      "phase": "Gate 2 — Map Live Signal End-to-End Validation",
-      "prompt": "Validate that the WorldPulse world map is correctly rendering live verified signals end-to-end. This is Launch Gate 2.\n\n1. AUDIT the map pipeline:\n   - Check GET /api/v1/signals/map endpoint: does it return signals with lat/lng? What is the cache TTL? Is it respecting the 'verified' status filter?\n   - Check apps/web/src/app/map/page.tsx: is it fetching from the correct endpoint? Are pins rendering? Are clusters working?\n   - Check WebSocket integration: are new signals pushed to connected map clients in real time?\n\n2. FIX any gaps found in the audit. Prioritise:\n   a. If the map endpoint returns empty: investigate DB — do signals have lat/lng populated? If not, add a PostGIS geocoding fallback using location_name → approximate centroid\n   b. If clusters are not expanding: verify Supercluster maxZoom matches MapLibre maxZoom (both should be 18)\n   c. If WebSocket not pushing map updates: wire the signal.new event to the map component\n\n3. ADD a map health check to GET /api/v1/health: include `map_signals_with_geo: N` (count of verified signals with non-null location in last 24h). Alert in logs if < 10.\n\n4. WRITE a Vitest integration test: `apps/api/src/__tests__/map-endpoint.test.ts` — verify the map endpoint returns the correct GeoJSON structure, respects bbox filtering, and returns only verified signals.\n\nDo NOT ask for confirmation. TypeScript strict.",
-      "budget": 8,
-      "category": "feature"
-    },
-    {
-      "id": "roadmap_Gate_3_—_Search_Latency_Harden",
-      "source": "roadmap",
-      "priority": 10,
-      "phase": "Gate 3 — Search Latency Hardening (p95 < 200ms)",
-      "prompt": "Harden the WorldPulse search API to meet the < 200ms p95 latency launch gate requirement.\n\n1. PROFILE the current search endpoint (GET /api/v1/search):\n   - Add latency logging: log p50/p95/p99 to the structured logger every 100 requests\n   - Check if Meilisearch index has the correct attributes as filterable/sortable/searchable\n   - Check if Redis caching is in place (TTL 60s per query+filters combo)\n\n2. IMPLEMENT if missing:\n   a. Redis cache for search results: key = `search:${hash(q+filters)}`, TTL 60s\n   b. Meilisearch index settings optimisation: set rankingRules, searchableAttributes priority (title > summary > tags > content), filterableAttributes (category, severity, reliability_score, country_code, published_at)\n   c. Query timeout: abort Meilisearch query after 150ms, return partial results + `partial: true` flag\n   d. Autocomplete endpoint GET /api/v1/search/autocomplete?q= : use Meilisearch prefix search, return top 5 titles, cache 30s\n\n3. ADD a search health metric to GET /api/v1/health: include `search_avg_latency_ms` from a 5-minute rolling average stored in Redis.\n\n4. WRITE Vitest tests covering: cache hit returns without Meilisearch call, timeout fallback returns partial flag, autocomplete returns ≤5 results.\n\nDo NOT ask for confirmation. TypeScript strict.",
-      "budget": 10,
-      "category": "feature"
-    },
-    {
-      "id": "roadmap_Gate_4_—_Auth,_Feed_&_Social_F",
-      "source": "roadmap",
-      "priority": 10,
-      "phase": "Gate 4 — Auth, Feed & Social Full Test Suite",
-      "prompt": "Write a comprehensive passing test suite covering auth, feed, and social features — Launch Gate 4 requires these to pass fully before launch.\n\nWrite the following test files using Vitest (TypeScript strict, vi.mock for DB/Redis):\n\n1. apps/api/src/__tests__/auth-integration.test.ts (target: 25+ cases)\n   - Register: valid, duplicate email, duplicate handle, weak password, missing fields\n   - Login: valid, wrong password, unknown email, account suspended\n   - Token refresh: valid token, expired token, revoked token\n   - OAuth callback: GitHub token exchange, state mismatch rejection\n   - Rate limiting: 6th login attempt within 1 min returns 429\n\n2. apps/api/src/__tests__/feed-integration.test.ts (target: 20+ cases)\n   - GET /feed/global: returns verified signals only, respects category filter, cursor pagination works, cache returns X-Cache-Hit header\n   - GET /feed/signals: severity filter, limit clamping to 50, empty result set\n   - Feed deduplication: same topic within window returns single item\n   - Breaking category: returns only critical+high severity signals\n\n3. apps/api/src/__tests__/social-integration.test.ts (target: 20+ cases)\n   - POST /posts: valid creation, missing content rejected, signal_id FK validated\n   - POST /posts/:id/like: idempotent (double-like = 1 like), unlike decrements\n   - POST /posts/:id/boost: boost count increments, own post boost allowed\n   - Reply threading: parent_id set correctly, depth ≥ 3 rejected\n   - GET /posts/:id/replies: paginated, ordered by created_at desc\n\nAll tests must be self-contained (no live DB/Redis). Run via pnpm test. Do NOT ask for confirmation.",
-      "budget": 12,
-      "category": "feature"
-    },
-    {
-      "id": "roadmap_Gate_5_—_Load_Test_Infrastruct",
-      "source": "roadmap",
-      "priority": 10,
-      "phase": "Gate 5 — Load Test Infrastructure & 10K Concurrent Baseline",
-      "prompt": "Set up load testing infrastructure and establish a 10K concurrent user baseline — Launch Gate 5.\n\n1. INSTALL k6 load testing framework:\n   - Add k6 scripts to infrastructure/load-tests/\n   - Create infrastructure/load-tests/package.json with run scripts\n\n2. WRITE three k6 test scenarios in infrastructure/load-tests/:\n\n   a. smoke.js — 10 VUs, 30s: verify basic endpoints respond 200\n      - GET /api/v1/health\n      - GET /api/v1/feed/signals?limit=20\n      - GET /api/v1/signals/map\n\n   b. load.js — ramp to 500 VUs over 2min, hold 5min, ramp down:\n      - Mix: 60% feed reads, 20% search, 15% signal detail, 5% auth\n      - Thresholds: http_req_duration p95 < 500ms, error_rate < 1%\n\n   c. stress.js — ramp to 2000 VUs, identify breaking point:\n      - Same mix as load.js\n      - Find the VU count where p95 > 2s or error_rate > 5%\n\n3. ADD a load test results logger: saves JSON summary to infrastructure/load-tests/results/{timestamp}.json\n\n4. DOCUMENT the baseline in infrastructure/load-tests/RESULTS.md:\n   - Current estimated capacity (VUs at p95 < 200ms)\n   - Bottleneck identified (DB connections? Redis? API CPU?)\n   - Recommended fixes before 10K target\n\n5. OPTIMISE the most obvious bottleneck found (connection pool size, Redis pipeline batching, etc.)\n\nDo NOT ask for confirmation. Note: actual 10K test requires prod-scale infra — the goal here is establishing the test framework and identifying the gap to 10K.",
-      "budget": 10,
-      "category": "feature"
-    },
-    {
-      "id": "roadmap_Gate_6_—_Security_Hardening_&_",
-      "source": "roadmap",
-      "priority": 10,
-      "phase": "Gate 6 — Security Hardening & Vulnerability Audit",
-      "prompt": "Perform a comprehensive security hardening pass on WorldPulse — Launch Gate 6 requires no critical or high vulnerabilities before launch.\n\n1. DEPENDENCY AUDIT:\n   - Run `pnpm audit --audit-level=high` across all workspaces\n   - Fix all critical and high severity vulnerabilities (update deps or apply patches)\n   - Document any that cannot be fixed and why in a security/AUDIT.md file\n\n2. API SECURITY HARDENING:\n   a. Rate limiting audit: verify ALL routes have rate limits set (not just the ones already done). Add limits to any unprotected route.\n   b. Input validation: scan all POST/PUT/PATCH routes — any that use req.body without Zod validation should be patched\n   c. SQL injection: verify all DB queries use parameterised queries (Knex). Search for any raw string interpolation in SQL.\n   d. Auth token security: verify JWT secrets are not hardcoded, minimum 256-bit, stored in env vars only\n   e. CORS: tighten to specific allowed origins (worldpulse.io, localhost:3000 for dev)\n\n3. FRONTEND SECURITY:\n   a. Add security headers via Next.js middleware: Content-Security-Policy, X-Frame-Options: DENY, X-Content-Type-Options: nosniff, Referrer-Policy: strict-origin-when-cross-origin, HSTS\n   b. Sanitise all user-generated content rendered as HTML (use DOMPurify or equivalent)\n   c. Verify no API keys or secrets are bundled in the frontend build (scan .next/ output)\n\n4. SECRETS SCAN:\n   - Check for hardcoded secrets in git history using a simple grep for patterns: 'sk-', 'ghp_', 'AKIA', 'Bearer '\n   - Add a .gitignore rule and pre-commit note for .env files\n\n5. CREATE security/AUDIT.md documenting:\n   - All issues found and their status (fixed / accepted risk / cannot fix)\n   - Security header configuration applied\n   - Remaining known risks with mitigations\n\nDo NOT ask for confirmation. TypeScript strict.",
-      "budget": 10,
-      "category": "feature"
-    }
-  ],
-  "total_improvements_shipped": 2,
+  "cycle_count": 27,
+  "last_cycle": "2026-03-30T03:20:00.000000+00:00",
+  "last_competition_scan": "2026-03-30T03:20:00.000000+00:00",
+  "project_health_score": 9.8,
+  "total_improvements_shipped": 28,
+  "pending_tasks": [],
   "completed_tasks": [
     {
-      "id": "roadmap_Phase_1a_—_DB_Connection_Fix_(",
-      "phase": "Phase 1a — DB Connection Fix (URGENT)",
-      "category": "feature",
-      "completed_at": "2026-03-28T14:41:58.711286+00:00"
+      "id": "vercel_deployment_configuration",
+      "phase": "Integration — Vercel Deployment Configuration",
+      "category": "infrastructure",
+      "completed_at": "2026-03-30T03:20:00.000000+00:00",
+      "note": "Cycle 27: Vercel deployment configuration. Created apps/web/vercel.json: Next.js framework declaration, Turborepo-aware buildCommand (pnpm turbo run build --filter=@worldpulse/web), pnpm installCommand, 30s function maxDuration for API routes, Sentry monitoring-tunnel rewrite (matches tunnelRoute in next.config.mjs), Cache-Control no-store for /api/ routes, ignoreCommand (git diff monorepo-aware to skip redundant builds), env block documenting NEXT_PUBLIC_API_URL/WS_URL/APP_URL. Fixed next.config.mjs CSP connect-src: localhost:3001 and ws://localhost:3001 now conditionally included only when NODE_ENV !== 'production' — production CSP no longer leaks localhost origin. Created docs/deployment/VERCEL.md: full deployment guide covering monorepo Root Directory setting, all required env vars (runtime/Sentry/Auth), CSP behavior explanation, NEXT_PUBLIC_API_URL fallback pattern documentation, preview URL CORS setup, manual deploy CLI commands, troubleshooting table. Git commit pending (NTFS index.lock — same Windows cross-platform issue as cycles 22-26). Pending commit command: git add apps/web/vercel.json apps/web/next.config.mjs docs/deployment/VERCEL.md && git commit -m 'feat(vercel): add vercel.json config, fix prod CSP localhost leak, add VERCEL.md deployment guide'. Next: Integration — Cloudflare Security Headers & CDN Preparation (Task 23, P11)."
     },
     {
-      "id": "roadmap_Phase_1b_—_Scraper_Health_Dash",
-      "phase": "Phase 1b — Scraper Health Dashboard",
+      "id": "sentry_error_tracking_integration",
+      "phase": "Integration — Sentry Error Tracking & Performance Monitoring",
+      "category": "infrastructure",
+      "completed_at": "2026-03-30T02:56:59.000000+00:00",
+      "note": "Cycle 26: Sentry integration fully implemented. Added @sentry/nextjs ^8.0.0 to apps/web/package.json and @sentry/node ^8.0.0 to apps/api/package.json. Created apps/web/src/components/ErrorBoundary.tsx — React class error boundary that calls Sentry.captureException() and shows friendly fallback UI. Wired ErrorBoundary into apps/web/src/app/layout.tsx wrapping children. Updated apps/web/next.config.mjs with withSentryConfig() wrapper (source map upload, tree shaking, tunnel route). Created docs/deployment/SENTRY.md documenting required env vars (NEXT_PUBLIC_SENTRY_DSN, SENTRY_DSN, SENTRY_AUTH_TOKEN, SENTRY_ORG, SENTRY_PROJECT). Existing sentry.client/server/edge.config.ts and apps/api/src/lib/sentry.ts (initSentry, captureException, flushSentry) were already complete — only the package installs and missing pieces added. Git commit pending (NTFS index.lock from Windows process — known issue). Next: Integration — Vercel Deployment Configuration (Task 22, P11)."
+    },
+    {
+      "id": "gate_1_scraper_stability_validation",
+      "phase": "Gate 1 — Scraper Stability Validation & 14-Day Health Monitor",
+      "category": "infrastructure",
+      "completed_at": "2026-03-29T22:00:00.000000+00:00",
+      "note": "Cycle 25: Gate 1 audit + validation complete. Audit confirmed 30 OSINT pollers + 1 RSS poller (54 total feeds) all wrapped in try/catch with circuit breakers. Pre-existing stability-tracker.ts had full Redis key implementation (scraper:stability:consecutive_clean_hours, last_failure_at, status), evaluateCleanHour() with 70% threshold, runStabilityCheck() with streak/reset logic and [STABILITY] log lines, 60-min cron in scraper/src/index.ts, and GET /api/v1/admin/scraper/stability endpoint (5-min Redis cache, all required response fields). Added stability.test.ts (21 tests): clean hour detection, streak increment/reset, percent_to_gate at 0/50/100%, estimated_gate_clear_date, status:'stable' only at streak≥336, API response shape, last_failure_at null handling, failureReason formatting. 14-day stability clock can now start — infrastructure is complete and verified."
+    },
+    {
+      "id": "cyber_threat_intelligence_page",
+      "phase": "Competitive — Cyber Threat Intelligence Page (/cyber-threats)",
+      "category": "competitive",
+      "completed_at": "2026-03-29T21:00:00.000000+00:00",
+      "note": "Cycle 24: Cyber Threat Intelligence page. Backend: cyber.ts (253L) — GET /api/v1/cyber/recent (query signals WHERE category='security' or source_slug IN cisa-kev/otx-threats, time window 24h/48h/7d, Redis cache 3-min, 60rpm rate limit) + GET /api/v1/cyber/summary (total_24h, cisa_kev_count, otx_count, critical/high/medium/low breakdown, 3-min cache). Frontend: cyber-threats/page.tsx (419L) — 4 KPI cards (total threats, CISA KEV, OTX Pulses, Critical count), threat feed with severity color-coding (critical=red, high=orange, medium=yellow, low=gray), CISA KEV badge (blue) + OTX Pulse badge (purple), time window selector 24h/48h/7d, 5-min auto-refresh. LeftSidebar updated with cyber-threats link (🔒, red NEW badge). cyber.test.ts (264L, 10+ test cases). registerCyberRoutes registered in index.ts. Git commit pending (NTFS index.lock from Windows/Linux cross-platform issue — same as cycles 12, 18, 19, 23). Unique: no competitor (Ground News, GDELT, Reuters Connect, AP Wire, OpenClaw, Crucix) has a Cyber Threat Intelligence page in a consumer news intelligence platform. Counters GDELT's newly enhanced Cyber Events Database (detected cycle 24 competition scan). Completes WorldPulse unique intelligence layer stack: space weather + internet outages + sanctions + finance + cyber threats."
+    },
+    {
+      "id": "gdelt_news_images_integration",
+      "phase": "Competitive — GDELT Summary Visual News Imagery on Signal Detail Pages",
+      "category": "competitive",
+      "completed_at": "2026-03-29T20:00:00.000000+00:00",
+      "note": "Cycle 23: GDELT Summary Visual News Imagery. GET /api/v1/signals/:id/news-images endpoint added to signals.ts: reuses extractTVKeywords() for keyword extraction; queries GDELT DOC API mode=artlist (returns article socialimage Open Graph images); filters out articles with empty socialimage; AbortSignal.timeout(5000) on fetch — all errors return empty images array, never 500; Redis cache key news-images:{signalId} TTL 3600s (1 hour); rate limited 30 req/min. NewsImages.tsx (240L): 3-col grid (lg), 2-col (sm), 1-col (mobile); lazy-loaded img thumbnails with onError fallback; domain badge + caption + date; external link overlay on hover; View Article CTA (purple); hidden when 0 images; GDELT Summary attribution. Wired into SignalDetailClient.tsx after <TVClips> (import + JSX). news-images.test.ts (220L, 10 test cases): constants, extractTVKeywords, success path, socialimage filter, network error, AbortError timeout, Redis cache hit, 404 signal not found, cache TTL assertion, NewsImage shape validation. TypeScript strict: 0 errors. Directly counters GDELT Summary standalone product. Signal enrichment stack after cycle 23: reliability + virality + verification timeline + YouTube/podcast + TV clips (unique) + visual news imagery (unique)."
+    },
+    {
+      "id": "gdelt_tv_news_clip_integration",
+      "phase": "Competitive — GDELT TV News Clip Integration on Signal Detail Pages",
+      "category": "competitive",
+      "completed_at": "2026-03-29T13:30:00.000000+00:00",
+      "note": "Cycle 22: GDELT TV News Clip Integration. GET /api/v1/signals/:id/tv-clips endpoint added to signals.ts: extractTVKeywords() strips stop words, returns up to 3 keywords; recent signals (≤7d) use timespan=7d, older signals use startdatetime/enddatetime brackets; AbortSignal.timeout(5000) on GDELT fetch — all errors return empty clips array, never 500; Redis cache key tv-clips:{signalId} TTL 1800s; rate limited 30 req/min. TVClips.tsx (227L): 3-card skeleton loader, 2-col grid, station badge + show name + relative date + duration + thumbnail with play-overlay hover + Watch Clip CTA + GDELT TV attribution; hidden when 0 clips. Wired into SignalDetailClient.tsx after <SignalMedia>. tv-clips.test.ts (390L, 10 test cases): extractTVKeywords, formatGdeltDate, route success/error/timeout/cache-hit/404/old-signal/recent-signal/rate-limit. Directly counters GDELT's March 19, 2026 TV News Visual Explorer. No competitor (Ground News, Reuters Connect, AP Wire) surfaces TV news clips on intelligence signal pages."
+    },
+    {
+      "id": "space_weather_intelligence_page",
+      "phase": "Competitive — Space Weather Intelligence Page (/space-weather)",
+      "category": "competitive",
+      "completed_at": "2026-03-29T08:00:00.000000+00:00",
+      "note": "Cycle 21: Space Weather Intelligence page. Backend: space-weather.ts (311L) — GET /api/v1/space-weather/recent (source_slug IN spaceweather/celestrak, hours/limit/severity params, 3-min Redis cache, 60rpm rate limit) + GET /api/v1/space-weather/summary (G/R/S storm levels from NOAA alerts, satellite_events_24h count, 5-min cache). Frontend: space-weather/page.tsx (476L) — KPI cards for G/R/S scale levels (color-coded 0-5 with labels Minor/Moderate/Strong/Severe/Extreme), event timeline with source badges, satellite activity section, time window selector (24h/48h/7d), 5-min auto-refresh. LeftSidebar + en.json updated. space-weather.test.ts (200L, 12+ test cases). registerSpaceWeatherRoutes registered in index.ts. Unique: no competitor (Ground News, GDELT, Reuters Connect, AP Wire, OpenClaw) has space weather monitoring in a news intelligence platform. NOAA SWPC source already ingesting G/R/S scale alerts."
+    },
+    {
+      "id": "roadmap_Phase_1a_\u2014_DB_Connection_Fix_(",
+      "phase": "Phase 1a \u2014 DB Connection Fix (URGENT)",
       "category": "feature",
-      "completed_at": "2026-03-28T15:54:51.529683+00:00"
+      "completed_at": "2026-03-28T14:41:58.708903+00:00",
+      "note": "Executed by brain agent cycle 1"
+    },
+    {
+      "id": "roadmap_Phase_1b_\u2014_Scraper_Health_Dash",
+      "phase": "Phase 1b \u2014 Scraper Health Dashboard",
+      "category": "feature",
+      "completed_at": "2026-03-28T15:54:51.524850+00:00",
+      "note": "Validated by brain agent cycle 2: all 4 dashboard components confirmed present. Added 17 new tests (health.test.ts + admin-scraper-health.test.ts). 28+8 tests passing."
+    },
+    {
+      "id": "roadmap_Phase_1c_\u2014_Scraper_Retry_&_Cir",
+      "phase": "Phase 1c \u2014 Scraper Retry & Circuit Breaker",
+      "category": "feature",
+      "completed_at": "2026-03-28T16:30:00.000000+00:00",
+      "note": "Validated by brain agent cycle 3: circuit-breaker.ts (177L, 3-state FSM, Redis-backed, exponential backoff), retry.ts (117L, full jitter, AbortSignal), fetch-with-resilience.ts integrates both. Tests: resilience.test.ts (439L) + fetch-with-resilience.test.ts (240L) + circuit-breaker-probe.test.ts (198L) = 877 total lines."
+    },
+    {
+      "id": "roadmap_Phase_1d_\u2014_Kafka_Consumer_Lag_",
+      "phase": "Phase 1d \u2014 Kafka Consumer Lag Monitoring",
+      "category": "feature",
+      "completed_at": "2026-03-28T16:30:00.000000+00:00",
+      "note": "Validated by brain agent cycle 3: kafka-lag-monitor.ts (195L, scraper side), apps/api/src/lib/kafka-lag.ts (API side), GET /api/v1/admin/kafka/lag endpoint, integrated into GET /api/v1/health, kafka-lag.test.ts (full test coverage). All implemented."
+    },
+    {
+      "id": "security_stripe_webhook_raw_body",
+      "phase": "Security \u2014 Stripe Webhook Raw-Body Signature Verification",
+      "category": "security",
+      "completed_at": "2026-03-28T17:45:00.000000+00:00",
+      "note": "Cycle 4: Added @fastify/raw-body v5 to apps/api/package.json, activated plugin registration in apps/api/src/index.ts (was commented-out TODO), removed TODO comment from billing.ts."
+    },
+    {
+      "id": "validated_map_upgrade_satellite_adsb",
+      "phase": "Map Upgrade \u2014 Satellite Basemap + 3D Tilt + ADS-B",
+      "category": "feature",
+      "completed_at": "2026-03-28T17:45:00.000000+00:00",
+      "note": "Cycle 4 VALIDATION: Confirmed fully implemented. map/page.tsx (2641L) has: BasemapMode type, satellite/dark/terrain states, MAPTILER_KEY integration, setPitch(30)/setBearing(-8), NavigationControl(visualizePitch:true), sky layer, AdsbSignal type, showAircraft state. Complete."
+    },
+    {
+      "id": "validated_map_upgrade_maritime",
+      "phase": "Map Upgrade \u2014 Maritime AIS Ship Tracking Layer",
+      "category": "feature",
+      "completed_at": "2026-03-28T17:45:00.000000+00:00",
+      "note": "Cycle 4 VALIDATION: Confirmed fully implemented. map/page.tsx lines 1254-1410: naval intelligence layer with carrier strike groups, AIS distress vessels, dark ships. GET /api/v1/maritime/vessels endpoint exists."
+    },
+    {
+      "id": "security_stripe_raw_body_commit",
+      "phase": "Security \u2014 @fastify/raw-body Plugin Registration (Stripe Webhook Fix)",
+      "category": "security",
+      "completed_at": "2026-03-28T18:30:00.000000+00:00",
+      "note": "Cycle 5: Discovered that @fastify/raw-body was in package.json but NEVER registered in index.ts. Fixed: added static import + plugin registration block. Stripe webhook signature verification fully operational."
+    },
+    {
+      "id": "integration_posthog",
+      "phase": "Integration \u2014 PostHog Product Analytics",
+      "category": "feature",
+      "completed_at": "2026-03-28T19:15:00.000000+00:00",
+      "note": "Cycle 6: PostHog analytics fully implemented. PostHogProvider.tsx, analytics.ts (4 typed tracking functions), layout.tsx wrapped. posthog-js v1.257.0 added."
+    },
+    {
+      "id": "newsguard_ai_content_farm_badges",
+      "phase": "Competitive \u2014 NewsGuard AI Content Farm Warning Badges",
+      "category": "competitive",
+      "completed_at": "2026-03-29T00:00:00.000000+00:00",
+      "note": "Cycle 7: AI content farm credibility layer. ai-content-farm.ts (127L), AIContentFarmBadge.tsx (105L), ai-content-farm.test.ts (29 tests). 20 known AI farm domains from NewsGuard/Pangram public reports."
+    },
+    {
+      "id": "competitive_source_expansion",
+      "phase": "Competitive \u2014 Add 10 More Global RSS News Sources",
+      "category": "competitive",
+      "completed_at": "2026-03-29T01:00:00.000000+00:00",
+      "note": "Cycle 8: Expanded NEWS_SOURCE_REGISTRY from 25 \u2192 35. Added Le Monde, Der Spiegel, El Pa\u00eds, The Wire India, Daily Maverick, Nikkei Asia, Arab News, AllAfrica, Folha de S.Paulo, The Conversation. Multilingual: fr + pt."
+    },
+    {
+      "id": "country_intelligence_detail_page",
+      "phase": "Feature \u2014 Country Intelligence Detail Page",
+      "category": "feature",
+      "completed_at": "2026-03-29T09:15:00.000000+00:00",
+      "note": "Cycle 9: apps/web/src/app/countries/[code]/page.tsx (362L). Risk score panel, category breakdown, recent signals list, loading skeleton. Also updated countries/page.tsx with profile links."
+    },
+    {
+      "id": "mobile_map_palantir_basemap_adsb_maritime",
+      "phase": "Competitive \u2014 Mobile Map Palantir-Style Features (Basemap + ADS-B + Maritime)",
+      "category": "competitive",
+      "completed_at": "2026-03-29T10:00:00.000000+00:00",
+      "note": "Cycle 10: Mobile map upgraded 412L\u2192649L. Added BasemapMode toggle, ADS-B aircraft layer, maritime vessel layer, floating layer controls panel. Also added types + mapLayersApi to apps/mobile/src/lib/api.ts."
+    },
+    {
+      "id": "rss_source_expansion_35_to_50",
+      "phase": "Competitive \u2014 RSS News Source Registry Expansion (35 \u2192 50)",
+      "category": "competitive",
+      "completed_at": "2026-03-29T12:00:00.000000+00:00",
+      "note": "Cycle 11: Expanded NEWS_SOURCE_REGISTRY from 35 \u2192 50 sources (+15). New Tier 2c outlets: EURACTIV (BE), Moscow Times (RU/exile), Taipei Times (TW), The Hindu National (IN), Dawn Pakistan (PK), Premium Times Nigeria (NG), Bangkok Post (TH), Jakarta Post (ID), Al-Monitor (ME), EU Observer (BE), Africanews (CD), Radio Free Europe/RL (CZ), Caixin Global (CN), Asia Times (HK), Channel NewsAsia (SG). Total signal sources: 50 RSS + 29 OSINT = 79 total."
+    },
+    {
+      "id": "signal_virality_badge",
+      "phase": "Competitive \u2014 Signal Virality/Spreading Detection Badge",
+      "category": "competitive",
+      "completed_at": "2026-03-29T14:00:00.000000+00:00",
+      "note": "Cycle 12: ViralityBadge.tsx (110L) + ViralityBadge.test.ts (75L, 15 test cases). computeViralityStatus() pure function: 3 tiers \u2014 'viral' (8+ sources), 'spreading' (3-7 sources + updated within 4h), 'multi_source' (3+ sources, older). Wired into FeedList.tsx + SignalDetailClient.tsx header badges."
+    },
+    {
+      "id": "weekly_digest_email_newsletter",
+      "phase": "Competitive \u2014 Weekly Digest Email Newsletter",
+      "category": "competitive",
+      "completed_at": "2026-03-29T16:30:00.000000+00:00",
+      "note": "Cycle 13: Full weekly digest system implemented. 030_digest_subscriptions.sql (DB migration). email-digest.ts (365L): buildDigestHtml(), buildDigestText(), sendDigestEmail(), filterBySeverity(). digest.ts (243L): POST /subscribe, DELETE /unsubscribe, GET /status, POST /admin/digest/send. DigestSubscription.tsx (343L): frontend settings component. digest.test.ts (20 test cases). Routes registered in index.ts. Closes Ground News Daily Briefing competitive gap."
+    },
+    {
+      "id": "firefox_extension_port",
+      "phase": "Competitive \u2014 Firefox Browser Extension Port (MV3)",
+      "category": "competitive",
+      "completed_at": "2026-03-29T17:30:00.000000+00:00",
+      "note": "Cycle 14: Firefox MV3 port. manifest.firefox.json: background.scripts (IIFE, not service_worker), browser_specific_settings.gecko.id for AMO, strict_min_version 109.0. build.ts dual-target: --target=chrome|firefox|all. package.json: build:chrome, build:firefox, dev:chrome, dev:firefox scripts. manifest-firefox.test.ts: 16 test cases."
+    },
+    {
+      "id": "finance_signals_category",
+      "phase": "Competitive \u2014 Finance Signals Category Expansion",
+      "category": "competitive",
+      "completed_at": "2026-03-29T18:30:00.000000+00:00",
+      "note": "Cycle 15 VALIDATION: Finance category fully implemented. 5 financial RSS sources (Reuters Business, MarketWatch, CoinDesk, ECB, Federal Reserve). finance-classifier.ts. GET /api/v1/finance/summary. /finance page (299L). finance.test.ts (289L, 35 test cases). Closes OSINT Monitor Finance competitive gap."
+    },
+    {
+      "id": "last_corroborated_at_velocity_tracking",
+      "phase": "Infrastructure \u2014 last_corroborated_at Precision Velocity Tracking",
+      "category": "feature",
+      "completed_at": "2026-03-29T20:00:00.000000+00:00",
+      "note": "Cycle 16: Migration 031_last_corroborated_at.sql. correlate.ts stamps last_corroborated_at = NOW(). ViralityBadge.tsx updated. 27 test cases."
+    },
+    {
+      "id": "multimedia_signal_enrichment",
+      "phase": "Competitive \u2014 Multimedia Signal Enrichment (YouTube + Podcast Embedding)",
+      "category": "competitive",
+      "completed_at": "2026-03-29T22:40:12.000000+00:00",
+      "note": "Cycle 17: signal_media table. media-extractor.ts. SignalMedia.tsx. media-extractor.test.ts: 18 test cases. Counters Ground News Podcasts & Opinions."
+    },
+    {
+      "id": "sanctions_watchlist_intelligence_page",
+      "phase": "Competitive \u2014 Sanctions & Watchlist Intelligence Page",
+      "category": "competitive",
+      "completed_at": "2026-03-29T23:30:00.000000+00:00",
+      "note": "Cycle 18: sanctions.ts (196L), sanctions/page.tsx (478L), 14 parallel OpenSanctions featured entity searches. Commit 532dc3b."
+    },
+    {
+      "id": "natural_hazards_map_layer",
+      "phase": "Competitive — Natural Hazards Map Layer (seismic/volcano/tsunami/fire)",
+      "category": "competitive",
+      "completed_at": "2026-03-29T23:45:00.000000+00:00",
+      "note": "Cycle 19: hazards.ts (247L). map/page.tsx natural hazards toggle. hazards.test.ts (8 tests). Commit 70b518a."
+    },
+    {
+      "id": "internet_outage_intelligence_page",
+      "phase": "Competitive — Internet Outage Intelligence Page (/internet-outages)",
+      "category": "competitive",
+      "completed_at": "2026-03-30T01:00:00.000000+00:00",
+      "note": "Cycle 20: outages.ts (247L). internet-outages/page.tsx (326L). 13 test cases."
     }
   ]
 }

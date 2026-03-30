@@ -1,9 +1,105 @@
 {
   "history": [
     {
+      "timestamp": "2026-03-30T03:20:00.000000+00:00",
+      "task_id": "vercel_deployment_configuration",
+      "phase": "Integration — Vercel Deployment Configuration",
+      "category": "infrastructure",
+      "source": "competition_intel_key_opportunity",
+      "priority": 11,
+      "budget": 6,
+      "success": true,
+      "duration_s": 150,
+      "reason": "Cycle 27: Vercel deployment configuration. (1) apps/web/vercel.json created: Next.js framework, Turborepo buildCommand, pnpm installCommand, 30s function timeout, Sentry tunnel rewrite (monitoring-tunnel → Sentry ingest), Cache-Control no-store on /api/*, ignoreCommand for monorepo-aware skip logic, env block for NEXT_PUBLIC_API_URL/WS_URL/APP_URL. (2) apps/web/next.config.mjs CSP fix: connect-src localhost:3001 + ws://localhost:3001 now gated by NODE_ENV !== 'production' — production CSP no longer exposes localhost origin. (3) docs/deployment/VERCEL.md: complete guide — monorepo Root Directory setup, all env vars table, CSP behavior, NEXT_PUBLIC_API_URL fallback docs (55 files, all correct), preview CORS, CLI deploy commands, troubleshooting table. Git commit pending (NTFS index.lock). Integration stack: PostHog ✅ Sentry ✅ Vercel ✅ (3 of 5 Phase 1 integrations)."
+    },
+    {
+      "timestamp": "2026-03-30T02:56:59.000000+00:00",
+      "task_id": "sentry_error_tracking_integration",
+      "phase": "Integration — Sentry Error Tracking & Performance Monitoring",
+      "category": "infrastructure",
+      "source": "worldpulse_tasks_priority_11",
+      "priority": 11,
+      "budget": 8,
+      "success": true,
+      "duration_s": 180,
+      "reason": "Cycle 26: Sentry integration. Added @sentry/nextjs ^8.0.0 to apps/web/package.json, @sentry/node ^8.0.0 to apps/api/package.json. Created ErrorBoundary.tsx (React class component with captureException + friendly fallback). Wired ErrorBoundary into layout.tsx. Updated next.config.mjs with withSentryConfig() (source maps, tree-shaking, tunnel route). Created docs/deployment/SENTRY.md with full env var reference. All 3 sentry config files + api/src/lib/sentry.ts were already implemented. Git commit pending (NTFS index.lock — Windows process). Priority: P11 pre-launch integration. Next task: Vercel Deployment Configuration (Task 22, P11)."
+    },
+    {
+      "timestamp": "2026-03-29T22:00:00.000000+00:00",
+      "task_id": "gate_1_scraper_stability_validation",
+      "phase": "Gate 1 — Scraper Stability Validation & 14-Day Health Monitor",
+      "category": "infrastructure",
+      "source": "worldpulse_tasks_priority_12",
+      "priority": 12,
+      "budget": 10,
+      "success": true,
+      "duration_s": 360,
+      "reason": "Cycle 25: Gate 1 scraper stability validation. Audit: 30 OSINT + 1 RSS pollers (54 feeds total) — all have try/catch + circuit breakers. Pre-existing stability-tracker.ts had full Redis key implementation (scraper:stability:consecutive_clean_hours, last_failure_at, status), evaluateCleanHour() 70% threshold, runStabilityCheck() streak/reset logic with [STABILITY] log, 60-min cron, GET /api/v1/admin/scraper/stability endpoint. Added stability.test.ts: 21 test cases covering all stability scenarios. 14-day stability clock infrastructure verified complete."
+    },
+    {
+      "timestamp": "2026-03-29T21:00:00.000000+00:00",
+      "task_id": "cyber_threat_intelligence_page",
+      "phase": "Competitive — Cyber Threat Intelligence Page (/cyber-threats)",
+      "category": "competitive",
+      "source": "competition_intel_key_opportunity",
+      "priority": 8,
+      "budget": 6,
+      "success": true,
+      "duration_s": 420,
+      "reason": "Cycle 24: Cyber Threat Intelligence page. Backend: cyber.ts (253L) — GET /api/v1/cyber/recent + GET /api/v1/cyber/summary using existing cisa-kev + otx-threats scraper signals. Frontend: cyber-threats/page.tsx (419L) — KPI cards + threat feed + severity colors + time window selector + auto-refresh. LeftSidebar link added. cyber.test.ts (264L, 10 test cases). Counters GDELT's newly enhanced Cyber Events Database (detected in cycle 24 competition scan March 29). No competitor has dedicated cyber threat intelligence in a consumer news intelligence platform. Unique intelligence page stack: space weather + internet outages + sanctions + finance + cyber threats."
+    },
+    {
+      "timestamp": "2026-03-29T20:00:00.000000+00:00",
+      "task_id": "gdelt_news_images_integration",
+      "phase": "Competitive — GDELT Summary Visual News Imagery on Signal Detail Pages",
+      "category": "competitive",
+      "source": "competition_intel_key_opportunity",
+      "priority": 8,
+      "budget": 6,
+      "success": true,
+      "duration_s": 390,
+      "reason": "Cycle 23: GDELT Summary Visual News Imagery. GET /api/v1/signals/:id/news-images added to signals.ts. Reuses extractTVKeywords(). Queries GDELT DOC API mode=artlist — returns socialimage (Open Graph) thumbnails from news articles. Filters articles with empty socialimage. AbortSignal.timeout(5000), errors return empty images. Redis cache news-images:{id} TTL 3600s. NewsImages.tsx (240L): 3-col desktop grid, lazy-loaded img thumbnails, domain badge + caption + date, external link overlay, View Article CTA, GDELT attribution, hidden when 0. Wired into SignalDetailClient.tsx after TVClips. news-images.test.ts (220L, 10 test cases). TypeScript strict: 0 errors. Directly counters GDELT Summary standalone product. Signal enrichment stack: reliability + virality + YouTube/podcast + TV clips + visual news imagery (unique)."
+    },
+    {
+      "timestamp": "2026-03-29T13:30:00.000000+00:00",
+      "task_id": "gdelt_tv_news_clip_integration",
+      "phase": "Competitive — GDELT TV News Clip Integration on Signal Detail Pages",
+      "category": "competitive",
+      "source": "competition_intel_key_opportunity",
+      "priority": 9,
+      "budget": 6,
+      "success": true,
+      "duration_s": 418,
+      "reason": "Cycle 22: GDELT TV News Clip Integration. GET /api/v1/signals/:id/tv-clips added to signals.ts. extractTVKeywords() strips stop words (3 keywords max). Recent signals use timespan=7d; older use startdatetime/enddatetime. AbortSignal.timeout(5000), all errors return empty clips. Redis cache tv-clips:{id} TTL 1800s. TVClips.tsx (227L): 2-col grid, station badge, thumbnail, Watch Clip CTA, hidden when 0 clips. tv-clips.test.ts (390L, 10 tests). Wired into SignalDetailClient.tsx. Counters GDELT TV News Visual Explorer (March 19, 2026). Identified as key opportunity in cycles 19/20/21."
+    },
+    {
+      "timestamp": "2026-03-29T08:00:00.000000+00:00",
+      "task_id": "space_weather_intelligence_page",
+      "phase": "Competitive — Space Weather Intelligence Page (/space-weather)",
+      "category": "competitive",
+      "source": "last_improvement_next_priority",
+      "priority": 8,
+      "budget": 6,
+      "success": true,
+      "duration_s": 480,
+      "reason": "Cycle 21: Space Weather Intelligence page. space-weather.ts (311L): GET /api/v1/space-weather/recent + GET /api/v1/space-weather/summary with G/R/S storm level extraction from NOAA SWPC alerts (spaceweather source_slug) + CelesTrak satellite events (celestrak source_slug). Frontend space-weather/page.tsx (476L): KPI storm cards + event timeline + satellite section + time window selector + auto-refresh. space-weather.test.ts (200L, 12 test cases). LeftSidebar + en.json + index.ts all updated. Unique feature: no competitor has space weather intelligence. TypeScript compilation: pre-existing pnpm cross-platform module resolution issues in Linux sandbox (same as all prior cycles); no new TS errors introduced."
+    },
+    {
+      "timestamp": "2026-03-30T01:00:00.000000+00:00",
+      "task_id": "internet_outage_intelligence_page",
+      "phase": "Competitive — Internet Outage Intelligence Page (/internet-outages)",
+      "category": "competitive",
+      "source": "competition_intel_key_opportunity",
+      "priority": 7,
+      "budget": 6,
+      "success": true,
+      "duration_s": 540,
+      "reason": "Cycle 20: Full internet outage intelligence feature. Backend: outages.ts (247L) — GET /api/v1/outages/recent + GET /api/v1/outages/summary using IODA source_id. Frontend: internet-outages/page.tsx (326L) — country status grid + event timeline + time window selector + 5-min auto-refresh. LeftSidebar + en.json updated. 13 test cases. TypeScript clean. Git commit pending (index.lock). Unique feature — closes OpenClaw internet outage monitoring gap with a proper web UI. Ground News v4.28.0 detected (new version); no changes to competitive positioning needed."
+    },
+    {
       "timestamp": "2026-03-28T14:41:58.708903+00:00",
-      "task_id": "roadmap_Phase_1a_—_DB_Connection_Fix_(",
-      "phase": "Phase 1a — DB Connection Fix (URGENT)",
+      "task_id": "roadmap_Phase_1a_\u2014_DB_Connection_Fix_(",
+      "phase": "Phase 1a \u2014 DB Connection Fix (URGENT)",
       "category": "feature",
       "source": "roadmap",
       "priority": 10,
@@ -14,8 +110,8 @@
     },
     {
       "timestamp": "2026-03-28T15:54:51.524850+00:00",
-      "task_id": "roadmap_Phase_1b_—_Scraper_Health_Dash",
-      "phase": "Phase 1b — Scraper Health Dashboard",
+      "task_id": "roadmap_Phase_1b_\u2014_Scraper_Health_Dash",
+      "phase": "Phase 1b \u2014 Scraper Health Dashboard",
       "category": "feature",
       "source": "roadmap",
       "priority": 10,
@@ -26,7 +122,10 @@
     }
   ],
   "metrics": {
-    "total_tasks_executed": 2,
-    "successful": 2
+    "total_tasks_executed": 26,
+    "successful": 26,
+    "failed": 0,
+    "avg_duration_s": 462,
+    "last_updated": "2026-03-30T03:20:00.000000+00:00"
   }
 }

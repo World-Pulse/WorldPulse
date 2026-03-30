@@ -13,7 +13,9 @@ export type SignalMomentum = 'surging' | 'rising' | 'steady' | 'cooling'
 export type Category =
   | 'breaking' | 'conflict' | 'geopolitics' | 'climate' | 'health'
   | 'economy'  | 'technology' | 'science' | 'elections' | 'culture'
-  | 'disaster' | 'security' | 'sports' | 'space' | 'other'
+  | 'disaster' | 'security' | 'sports' | 'space' | 'finance' | 'other'
+
+export type FinanceSubcategory = 'market_move' | 'central_bank' | 'sanctions' | 'corporate' | 'crypto'
 
 // ─── GEO ────────────────────────────────────────────────────────────────
 export interface GeoPoint {
@@ -64,8 +66,10 @@ export interface Signal {
   postCount:        number
   eventTime:        string | null
   firstReported:    string
-  verifiedAt:         string | null
-  lastUpdated:        string
+  verifiedAt:           string | null
+  lastUpdated:          string
+  /** Timestamp of last cross-source corroboration. Null = single-source, never corroborated. */
+  lastCorroboratedAt:   string | null
   createdAt:          string
   isBreaking?:        boolean
   communityFlagCount?: number
@@ -76,6 +80,16 @@ export interface Signal {
     model:       'anthropic' | 'openai' | 'gemini' | 'openrouter' | 'ollama' | 'extractive'
     generatedAt: string
   } | null
+  // Multimedia items extracted from article content (YouTube, podcast audio)
+  media?: Array<{
+    id:           string
+    mediaType:    'youtube' | 'podcast_audio' | 'video' | 'iframe'
+    url:          string
+    embedId?:     string | null
+    title?:       string | null
+    thumbnailUrl?: string | null
+    sourceName?:  string | null
+  }>
 }
 
 // ─── USER ─────────────────────────────────────────────────────────────────

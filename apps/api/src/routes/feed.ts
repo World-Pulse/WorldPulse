@@ -232,7 +232,7 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
         's.reliability_score', 's.source_count', 's.location_name', 's.country_code', 's.region',
         's.tags', 's.source_ids', 's.original_urls', 's.language',
         's.view_count', 's.share_count', 's.post_count',
-        's.event_time', 's.first_reported', 's.verified_at', 's.last_updated', 's.created_at',
+        's.event_time', 's.first_reported', 's.verified_at', 's.last_updated', 's.last_corroborated_at', 's.created_at',
         db.raw(`ST_AsGeoJSON(s.location)::json as location_geojson`),
       ])
       .orderBy('s.created_at', 'desc')
@@ -426,8 +426,9 @@ function formatSignal(row: Record<string, unknown>) {
     postCount:        row.post_count,
     eventTime:        row.event_time ? (row.event_time as Date).toISOString() : null,
     firstReported:    (row.first_reported as Date).toISOString(),
-    verifiedAt:       row.verified_at ? (row.verified_at as Date).toISOString() : null,
-    lastUpdated:      (row.last_updated as Date).toISOString(),
-    createdAt:        (row.created_at as Date).toISOString(),
+    verifiedAt:           row.verified_at ? (row.verified_at as Date).toISOString() : null,
+    lastUpdated:          (row.last_updated as Date).toISOString(),
+    lastCorroboratedAt:   row.last_corroborated_at ? (row.last_corroborated_at as Date).toISOString() : null,
+    createdAt:            (row.created_at as Date).toISOString(),
   }
 }

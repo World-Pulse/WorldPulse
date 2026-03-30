@@ -14,6 +14,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
+import { authenticate } from '../middleware/auth'
 
 // Carrier data inlined here to avoid cross-package import in the API
 export const CARRIER_REGISTRY_ALIASES: Array<{
@@ -133,6 +134,7 @@ export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
   // ── GET /vessels ────────────────────────────────────────────────────────────
 
   app.get('/vessels', {
+    preHandler: [authenticate],
     config: {
       rateLimit: {
         max:        MARITIME_RATE_LIMIT,

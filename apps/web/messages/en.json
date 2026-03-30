@@ -25,6 +25,9 @@
     "signals": "signals",
     "live": "LIVE",
     "sanctions": "Sanctions",
+    "internetOutages": "Internet Outages",
+    "spaceWeather": "Space Weather",
+    "cyberThreats": "Cyber Threats",
     "status": "System Status"
   },
   "channels": {

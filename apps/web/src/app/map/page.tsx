@@ -200,6 +200,8 @@ function MapView() {
   const [satTrackingMode,    setSatTrackingMode]    = useState(false)
   const [satTrackingLoading, setSatTrackingLoading] = useState(false)
   const [satCount,           setSatCount]           = useState(0)
+  const [satError,           setSatError]           = useState<string | null>(null)
+  const [gibsError,          setGibsError]          = useState<string | null>(null)
 
   // ── Carrier Strike Group tracking state ────────────────────────────────────
   const [carrierMode,    setCarrierMode]    = useState(false)
@@ -951,6 +953,7 @@ function MapView() {
 
     const applyLayer = () => {
       try {
+        setGibsError(null)
         if (satelliteMode) {
           // Add source if not present
           if (!map.getSource(GIBS_SOURCE)) {
@@ -979,6 +982,8 @@ function MapView() {
         }
       } catch (e) {
         console.warn('[map] GIBS layer error:', e)
+        setGibsError('NASA GIBS imagery unavailable')
+        setSatelliteMode(false)
       }
     }
 
@@ -1014,9 +1019,11 @@ function MapView() {
       }
 
       setSatTrackingLoading(true)
+      setSatError(null)
       try {
         // CelesTrak GP JSON — TLE-less orbital elements for all active objects
         const res  = await fetch('https://celestrak.org/GP.php?GROUP=active&FORMAT=json')
+        if (!res.ok) throw new Error(`CelesTrak returned ${res.status}`)
         const data = await res.json() as Array<{
           SATNAME:          string
           NORAD_CAT_ID:     number
@@ -1091,6 +1098,8 @@ function MapView() {
         }
       } catch (e) {
         console.warn('[map] CelesTrak layer error:', e)
+        setSatError('CelesTrak satellite data unavailable')
+        setSatTrackingMode(false)
       } finally {
         setSatTrackingLoading(false)
       }
@@ -2419,6 +2428,13 @@ function MapView() {
                   <span className="ml-1 px-1 py-px bg-[rgba(59,130,246,0.25)] rounded text-[9px]">{satCount}</span>
                 )}
               </button>
+
+              {/* SAT/SATS error toast */}
+              {(satError || gibsError) && (
+                <span className="text-[9px] text-red-400 font-mono px-2 py-1 bg-red-500/10 rounded border border-red-500/20 animate-pulse">
+                  ⚠ {satError || gibsError}
+                </span>
+              )}
 
               {/* Carrier Strike Group toggle */}
               <button

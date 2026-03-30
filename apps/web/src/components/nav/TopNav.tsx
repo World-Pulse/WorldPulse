@@ -23,6 +23,7 @@ const DOT_COLORS: Record<string, string> = {
 const NAV_LINKS = [
   { href: '/',            icon: '⚡', label: 'Live Feed'    },
   { href: '/map',         icon: '🌍', label: 'World Map'    },
+  { href: '/finance',     icon: '💹', label: 'Finance'      },
   { href: '/alerts',      icon: '🔔', label: 'Alerts'       },
   { href: '/analytics',   icon: '📊', label: 'Analytics'    },
   { href: '/explore',     icon: '🔭', label: 'Explore'      },

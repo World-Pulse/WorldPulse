@@ -29,6 +29,7 @@ import { startOsintPollers } from './sources/index'
 import type { OsintCleanupFn } from './sources/index'
 import type { Source } from '@worldpulse/types'
 import { enrichSignalWithGemini, geminiEnabled } from './lib/gemini'
+import { extractMediaFromContent } from './pipeline/media-extractor'
 import { startHeartbeat, stopHeartbeat, registerCrashHandlers } from './lib/process-health.js'
 import { runStabilityCheck, recordUnhandledException } from './lib/stability-tracker'
 import { startKafkaLagMonitor } from './lib/kafka-lag-monitor'
@@ -580,6 +581,30 @@ async function processArticleGroup(
       })
       .catch(() => {})
   }
+
+  // ── Multimedia media extraction (async, non-blocking) ──
+  // Extract YouTube / podcast URLs from the article and store in signal_media.
+  // Failures here must never fail signal ingestion.
+  ;(async () => {
+    try {
+      const mediaItems = extractMediaFromContent(primary.url, primary.body, primary.url)
+      if (mediaItems.length > 0) {
+        await db('signal_media').insert(
+          mediaItems.map(item => ({
+            signal_id:   signal.id,
+            media_type:  item.type,
+            url:         item.url,
+            embed_id:    item.embedId   ?? null,
+            title:       item.title     ?? null,
+            source_name: item.sourceName ?? null,
+          })),
+        )
+        logger.info({ signalId: signal.id, count: mediaItems.length }, '[MEDIA] signal %s: %d media items extracted', signal.id, mediaItems.length)
+      }
+    } catch (err) {
+      logger.warn({ err, signalId: signal.id }, '[MEDIA] media extraction failed (non-fatal)')
+    }
+  })()
 
   // Cache topic → signal mapping
   await redis.setex(`signal:topic:${topicHash}`, 86400, JSON.stringify({ id: signal.id }))
