@@ -589,9 +589,9 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
     // ── Fetch recent signals with their tags + severity + country ────────────
     const rows = await db('signals')
       .select('title', 'severity', 'country_code', 'tags', 'category')
-      .where('published_at', '>=', since)
+      .where('created_at', '>=', since)
       .whereIn('status', ['verified', 'pending'])
-      .orderBy('published_at', 'desc')
+      .orderBy('created_at', 'desc')
       .limit(2000)  // cap raw input to avoid large scans
 
     // ── Entity extraction ───────────────────────────────────────────────────
