@@ -8,7 +8,7 @@
 import { createHash } from 'crypto'
 import { redis } from '../lib/redis'
 
-const DEDUP_TTL = 7 * 24 * 60 * 60  // 7 days
+const DEDUP_TTL = 60 * 60  // 1 hour — was 7 days which blocked all re-crawled RSS items
 
 export const dedup = {
   /**

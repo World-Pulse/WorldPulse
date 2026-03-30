@@ -351,11 +351,9 @@ async function scrapeSource(source: ScraperSource): Promise<number> {
         const url = item.link ?? item.guid
         if (!url) continue
 
-        // Dedup check
-        const isDup = await dedup.check(url, source.id)
-        if (isDup) continue
-
         // Save raw article
+        // Dedup is handled by the DB UNIQUE constraint on url + .onConflict('url').ignore()
+        // Redis TTL-based pre-check was too aggressive (7-day TTL blocked all re-crawled RSS items)
         const [article] = await db('raw_articles')
           .insert({
             source_id:    source.id,
