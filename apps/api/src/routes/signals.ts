@@ -1112,6 +1112,69 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     return reply.send(payload)
   })
 
+  // ─── MARITIME AIS SIGNALS MAP ─────────────────────────────────────────────────
+  // GET /api/v1/signals/map/maritime
+  //
+  // Returns maritime-category signals from the last 4 hours as a GeoJSON
+  // FeatureCollection for the civilian AIS ship-tracking map overlay.
+  // Signals are filtered to those with a valid location (non-null, non-zero coords).
+  // Results are Redis-cached for 120 s (matches client poll interval).
+  app.get('/map/maritime', {
+    schema: {
+      tags: ['signals'],
+      summary: 'Maritime AIS signals for map overlay (GeoJSON)',
+      description: 'Returns maritime signals from the last 4 hours as a GeoJSON FeatureCollection for the civilian AIS ship-tracking layer.',
+    },
+  }, async (_req, reply) => {
+    const cacheKey = 'signals:map:maritime'
+    const cached = await redis.get(cacheKey).catch(() => null)
+    if (cached) {
+      try { return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached)) } catch { /* fallthrough */ }
+    }
+
+    const result = await db.raw<{ rows: Array<Record<string, unknown>> }>(`
+      SELECT id, title, reliability_score, severity,
+        created_at AS published_at,
+        ST_Y(location::geometry) AS lat,
+        ST_X(location::geometry) AS lng
+      FROM signals
+      WHERE category = 'maritime'
+        AND location IS NOT NULL
+        AND ST_Y(location::geometry) != 0
+        AND ST_X(location::geometry) != 0
+        AND created_at > NOW() - INTERVAL '4 hours'
+      ORDER BY created_at DESC
+      LIMIT 500
+    `)
+
+    const features = result.rows
+      .filter(r => r.lat != null && r.lng != null)
+      .map(r => ({
+        type: 'Feature' as const,
+        geometry: {
+          type: 'Point' as const,
+          coordinates: [parseFloat(String(r.lng)), parseFloat(String(r.lat))],
+        },
+        properties: {
+          id:                String(r.id),
+          title:             String(r.title ?? ''),
+          severity:          String(r.severity ?? 'low'),
+          reliability_score: parseFloat(String(r.reliability_score ?? 0)),
+          published_at:      r.published_at
+            ? (r.published_at as Date).toISOString()
+            : null,
+        },
+      }))
+
+    const payload = {
+      type: 'FeatureCollection' as const,
+      features,
+    }
+
+    redis.setex(cacheKey, 120, JSON.stringify(payload)).catch(() => {})
+    return reply.send(payload)
+  })
+
   // ─── GDELT TV CLIPS ───────────────────────────────────────────────────────────
   // GET /api/v1/signals/:id/tv-clips
   //

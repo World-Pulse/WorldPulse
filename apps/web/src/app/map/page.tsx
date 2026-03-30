@@ -212,6 +212,10 @@ function MapView() {
   const [navalLoading, setNavalLoading] = useState(false)
   const [navalCount,   setNavalCount]   = useState(0)
 
+  // ── Maritime AIS ship tracking layer state ───────────────────────────────────
+  const [showShips,    setShowShips]    = useState(false)
+  const [shipCount,    setShipCount]    = useState(0)
+
   // ── Missile/Drone Threat layer state ────────────────────────────────────────
   const [threatMode,    setThreatMode]    = useState(false)
   const [threatLoading, setThreatLoading] = useState(false)
@@ -236,6 +240,57 @@ function MapView() {
   const [basemap, setBasemap] = useState<BasemapMode>('satellite')
   const basemapRef = useRef<BasemapMode>('satellite')
   useEffect(() => { basemapRef.current = basemap }, [basemap])
+
+  // ── Basemap switcher effect ───────────────────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !map.loaded()) return
+
+    try {
+      if (map.getLayer('basemap')) map.removeLayer('basemap')
+      if (map.getSource('basemap')) map.removeSource('basemap')
+
+      const beforeLayer = map.getLayer('cluster-halo') ? 'cluster-halo' : undefined
+
+      if (basemap === 'satellite') {
+        const tiles = MAPTILER_KEY && MAPTILER_KEY !== 'demo'
+          ? [`https://api.maptiler.com/tiles/satellite/{z}/{x}/{y}.jpg?key=${MAPTILER_KEY}`]
+          : ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}']
+        map.addSource('basemap', {
+          type: 'raster', tiles, tileSize: 256,
+          attribution: MAPTILER_KEY ? '© MapTiler' : '© Esri',
+        })
+        map.addLayer({ id: 'basemap', type: 'raster' as const, source: 'basemap',
+          paint: { 'raster-opacity': 0.92, 'raster-saturation': 0, 'raster-brightness-min': 0, 'raster-brightness-max': 1 },
+        }, beforeLayer)
+      } else if (basemap === 'terrain') {
+        const tiles = MAPTILER_KEY && MAPTILER_KEY !== 'demo'
+          ? [`https://api.maptiler.com/maps/outdoor/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`]
+          : ['https://tile.openstreetmap.org/{z}/{x}/{y}.png']
+        map.addSource('basemap', {
+          type: 'raster', tiles, tileSize: 256,
+          attribution: MAPTILER_KEY ? '© MapTiler' : '© OpenStreetMap',
+        })
+        map.addLayer({ id: 'basemap', type: 'raster' as const, source: 'basemap',
+          paint: { 'raster-opacity': 0.80, 'raster-saturation': -0.3, 'raster-brightness-min': 0.02, 'raster-brightness-max': 0.7 },
+        }, beforeLayer)
+      } else {
+        // Dark mode — muted OSM
+        map.addSource('basemap', {
+          type: 'raster',
+          tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+          tileSize: 256,
+          attribution: '© OpenStreetMap',
+        })
+        map.addLayer({ id: 'basemap', type: 'raster' as const, source: 'basemap',
+          paint: { 'raster-opacity': 0.35, 'raster-saturation': -0.9, 'raster-brightness-min': 0.05, 'raster-brightness-max': 0.45 },
+        }, beforeLayer)
+      }
+    } catch (e) {
+      console.warn('[map] basemap switch error:', e)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [basemap])
 
   // ── ADS-B Aircraft layer state ────────────────────────────────────────────────
   const [showAircraft, setShowAircraft] = useState(false)
@@ -593,8 +648,8 @@ function MapView() {
         },
         center: [lng, lat],
         zoom,
-        pitch:   30,
-        bearing: -8,
+        pitch:   45,
+        bearing: -10,
         minZoom: 1,
         maxZoom: 18,
         attributionControl: false,
@@ -1276,6 +1331,278 @@ function MapView() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [carrierMode])
+
+  // ── ADS-B Live Aircraft layer ──────────────────────────────────────────────
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    const ADSB_SOURCE = 'adsb-aircraft'
+    const ADSB_LAYER  = 'adsb-aircraft-symbols'
+
+    const removeLayer = () => {
+      try {
+        map.off('click',      ADSB_LAYER)
+        map.off('mouseenter', ADSB_LAYER)
+        map.off('mouseleave', ADSB_LAYER)
+        if (map.getLayer(ADSB_LAYER))   map.removeLayer(ADSB_LAYER)
+        if (map.getSource(ADSB_SOURCE)) map.removeSource(ADSB_SOURCE)
+      } catch { /* ignore */ }
+    }
+
+    let intervalId: ReturnType<typeof setInterval> | null = null
+
+    const fetchAndUpdate = async () => {
+      try {
+        const res  = await fetch(`${API_URL}/api/v1/signals/map/adsb`)
+        const json = await res.json() as { success: boolean; data: AdsbSignal[] }
+        if (!json.success || !Array.isArray(json.data)) return
+
+        setAdsbSignals(json.data)
+
+        const features = json.data
+          .filter(a => isFinite(a.lat) && isFinite(a.lng))
+          .map(a => ({
+            type:       'Feature' as const,
+            geometry:   { type: 'Point' as const, coordinates: [a.lng, a.lat] },
+            properties: {
+              id:           a.id,
+              title:        a.title,
+              published_at: a.published_at ?? '',
+            },
+          }))
+
+        const currentMap = mapRef.current
+        if (!currentMap || !currentMap.loaded()) return
+
+        if (!currentMap.getSource(ADSB_SOURCE)) {
+          currentMap.addSource(ADSB_SOURCE, {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features },
+          })
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ;(currentMap.getSource(ADSB_SOURCE) as any).setData({ type: 'FeatureCollection', features })
+        }
+
+        if (!currentMap.getLayer(ADSB_LAYER)) {
+          currentMap.addLayer({
+            id:     ADSB_LAYER,
+            type:   'symbol',
+            source: ADSB_SOURCE,
+            layout: {
+              'text-field':           '✈',
+              'text-size':            16,
+              'text-allow-overlap':   true,
+              'text-ignore-placement': true,
+            },
+            paint: {
+              'text-color':      '#00d4ff',
+              'text-halo-color': 'rgba(0,0,0,0.7)',
+              'text-halo-width': 1,
+            },
+          })
+
+          currentMap.on('mouseenter', ADSB_LAYER, () => { currentMap.getCanvas().style.cursor = 'pointer' })
+          currentMap.on('mouseleave', ADSB_LAYER, () => { currentMap.getCanvas().style.cursor = '' })
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          currentMap.on('click', ADSB_LAYER, async (e: any) => {
+            const feat = e.features?.[0]
+            if (!feat) return
+            const p = feat.properties as { title: string; published_at: string }
+            const ts = p.published_at ? timeAgo(p.published_at) : 'unknown'
+            const { default: ml } = await import('maplibre-gl')
+            if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
+            popupRef.current = new ml.Popup({ closeButton: true, closeOnClick: false, offset: 14, className: 'wp-map-popup' })
+              .setLngLat(e.lngLat)
+              .setHTML(`
+                <div style="font:600 12px/1.4 system-ui;color:#00d4ff;margin-bottom:4px">✈ ADS-B AIRCRAFT</div>
+                <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:240px;margin-bottom:6px">${p.title}</div>
+                <div style="font:10px monospace;color:#5a6477">${ts}</div>
+              `)
+              .addTo(currentMap)
+          })
+        }
+      } catch (err) {
+        console.warn('[map] ADS-B layer error:', err)
+      }
+    }
+
+    const applyLayer = () => {
+      if (!showAircraft) {
+        removeLayer()
+        setAdsbSignals([])
+        return
+      }
+
+      if (map.loaded()) {
+        void fetchAndUpdate()
+      } else {
+        map.once('load', () => { void fetchAndUpdate() })
+      }
+
+      intervalId = setInterval(() => { void fetchAndUpdate() }, 60_000)
+    }
+
+    applyLayer()
+
+    return () => {
+      if (intervalId) clearInterval(intervalId)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showAircraft])
+
+  // ── Maritime AIS ship tracking layer (civilian vessels, GeoJSON, clustered) ────
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    const MARITIME_SOURCE        = 'maritime-layer'
+    const MARITIME_CLUSTERS      = 'maritime-clusters'
+    const MARITIME_CLUSTER_COUNT = 'maritime-cluster-count'
+    const MARITIME_SHIPS         = 'maritime-ships'
+    let intervalId: ReturnType<typeof setInterval> | null = null
+
+    const removeLayer = () => {
+      try {
+        map.off('click',      MARITIME_SHIPS)
+        map.off('mouseenter', MARITIME_SHIPS)
+        map.off('mouseleave', MARITIME_SHIPS)
+        for (const layer of [MARITIME_SHIPS, MARITIME_CLUSTER_COUNT, MARITIME_CLUSTERS]) {
+          if (map.getLayer(layer)) map.removeLayer(layer)
+        }
+        if (map.getSource(MARITIME_SOURCE)) map.removeSource(MARITIME_SOURCE)
+      } catch { /* ignore cleanup errors */ }
+    }
+
+    const fetchAndUpdate = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/v1/signals/map/maritime`)
+        if (!res.ok) return
+        const geojson = await res.json() as { type: string; features: Array<{ properties: { title?: string } }> }
+        setShipCount(geojson.features?.length ?? 0)
+
+        const src = map.getSource(MARITIME_SOURCE)
+        if (src) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ;(src as any).setData(geojson)
+        } else {
+          map.addSource(MARITIME_SOURCE, {
+            type:           'geojson',
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            data:           geojson as any,
+            cluster:        true,
+            clusterMaxZoom: 12,
+            clusterRadius:  40,
+          })
+
+          // Cluster circles — amber
+          map.addLayer({
+            id:     MARITIME_CLUSTERS,
+            type:   'circle',
+            source: MARITIME_SOURCE,
+            filter: ['has', 'point_count'],
+            paint:  {
+              'circle-color':   ['step', ['get', 'point_count'], '#f59e0b', 10, '#d97706', 50, '#b45309'],
+              'circle-radius':  ['step', ['get', 'point_count'], 14, 10, 18, 50, 22],
+              'circle-opacity': 0.82,
+              'circle-stroke-width': 1.5,
+              'circle-stroke-color': 'rgba(245,158,11,0.45)',
+            },
+          })
+
+          // Cluster count labels
+          map.addLayer({
+            id:     MARITIME_CLUSTER_COUNT,
+            type:   'symbol',
+            source: MARITIME_SOURCE,
+            filter: ['has', 'point_count'],
+            layout: {
+              'text-field':  '{point_count_abbreviated}',
+              'text-font':   ['Open Sans Semibold', 'Arial Unicode MS Bold'],
+              'text-size':   11,
+            },
+            paint: { 'text-color': '#fff' },
+          })
+
+          // Individual ship symbols (⚓ Unicode)
+          map.addLayer({
+            id:     MARITIME_SHIPS,
+            type:   'symbol',
+            source: MARITIME_SOURCE,
+            filter: ['!', ['has', 'point_count']],
+            layout: {
+              'text-field':             '⚓',
+              'text-size':              16,
+              'text-allow-overlap':     false,
+              'text-ignore-placement':  false,
+            },
+            paint: {
+              'text-color': '#f59e0b',
+              'text-halo-color': 'rgba(0,0,0,0.7)',
+              'text-halo-width': 1.5,
+            },
+          })
+
+          // Hover popup
+          const popup = new maplibregl.Popup({
+            closeButton:  false,
+            closeOnClick: false,
+            offset:       [0, -10],
+          })
+
+          map.on('mouseenter', MARITIME_SHIPS, (e) => {
+            map.getCanvas().style.cursor = 'pointer'
+            const feature = e.features?.[0]
+            if (!feature || feature.geometry.type !== 'Point') return
+            const coords = feature.geometry.coordinates as [number, number]
+            const props  = feature.properties as { title?: string; severity?: string; published_at?: string }
+            popup
+              .setLngLat(coords)
+              .setHTML(
+                `<div style="font:600 12px/1.4 system-ui;color:#f59e0b;margin-bottom:3px">⚓ VESSEL</div>` +
+                `<div style="font:400 11px/1.4 system-ui;color:#e2e8f0;max-width:200px">${props.title ?? 'Unknown vessel'}</div>` +
+                (props.severity ? `<div style="font:500 10px/1.4 system-ui;color:#94a3b8;margin-top:3px">Severity: ${props.severity}</div>` : '')
+              )
+              .addTo(map)
+          })
+
+          map.on('mouseleave', MARITIME_SHIPS, () => {
+            map.getCanvas().style.cursor = ''
+            popup.remove()
+          })
+        }
+      } catch (err) {
+        console.warn('[map] Maritime layer error:', err)
+      }
+    }
+
+    const applyLayer = () => {
+      if (!showShips) {
+        removeLayer()
+        setShipCount(0)
+        return
+      }
+
+      if (map.loaded()) {
+        void fetchAndUpdate()
+      } else {
+        map.once('load', () => { void fetchAndUpdate() })
+      }
+
+      intervalId = setInterval(() => { void fetchAndUpdate() }, 120_000)
+    }
+
+    applyLayer()
+
+    return () => {
+      if (intervalId) clearInterval(intervalId)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showShips])
 
   // ── Naval Intelligence layer (carriers + AIS distress + dark ships) ────────
 
@@ -2550,6 +2877,38 @@ function MapView() {
                 {' '}HEATMAP
               </button>
 
+              {/* ADS-B Aircraft toggle */}
+              <button
+                onClick={() => setShowAircraft(v => !v)}
+                title={showAircraft
+                  ? `ADS-B: ${adsbSignals.length} aircraft shown (aviation signals, 2h window)`
+                  : 'Toggle ADS-B live aircraft layer'}
+                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
+                  ${showAircraft
+                    ? 'border-[rgba(0,212,255,0.6)] text-[#00d4ff] bg-[rgba(0,212,255,0.1)]'
+                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}`}>
+                ✈ AIRCRAFT
+                {showAircraft && adsbSignals.length > 0 && (
+                  <span className="ml-1 px-1 py-px bg-[rgba(0,212,255,0.2)] rounded text-[9px]">{adsbSignals.length}</span>
+                )}
+              </button>
+
+              {/* Maritime AIS ship tracking toggle */}
+              <button
+                onClick={() => setShowShips(v => !v)}
+                title={showShips
+                  ? `AIS Ships: ${shipCount} vessels (maritime signals, 4h window)`
+                  : 'Toggle AIS civilian ship tracking layer (maritime signals, 4h window)'}
+                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
+                  ${showShips
+                    ? 'border-[rgba(245,158,11,0.6)] text-[#f59e0b] bg-[rgba(245,158,11,0.1)]'
+                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}`}>
+                ⚓ SHIPS
+                {showShips && shipCount > 0 && (
+                  <span className="ml-1 px-1 py-px bg-[rgba(245,158,11,0.2)] rounded text-[9px]">{shipCount}</span>
+                )}
+              </button>
+
               {/* Naval Intelligence toggle */}
             <button
                 onClick={() => setNavalMode(v => !v)}
@@ -2888,6 +3247,117 @@ function MapView() {
             <FlagModal signalId={flagModalSignalId} onClose={() => setFlagModalSignalId(null)} />
           )}
         </div>
+
+        {/* ── Basemap switcher + Reset View controls (top-right below nav) ──── */}
+        <div className="absolute right-2 z-10" style={{ top: 100 }}>
+          <div className="flex flex-col gap-1">
+            {/* Basemap cycle button */}
+            <button
+              onClick={() => setBasemap(b => b === 'satellite' ? 'dark' : b === 'dark' ? 'terrain' : 'satellite')}
+              title={`Basemap: ${basemap} — click to cycle`}
+              className="flex items-center justify-center w-8 h-8 rounded-lg bg-[rgba(6,7,13,0.92)] border border-[rgba(255,255,255,0.12)] text-[11px] font-mono text-wp-text2 hover:text-wp-amber hover:border-wp-amber/50 transition-all backdrop-blur-xl shadow-lg"
+            >
+              {basemap === 'satellite' ? '🛰' : basemap === 'terrain' ? '⛰' : '🌑'}
+            </button>
+            {/* Reset View button */}
+            <button
+              onClick={() => {
+                const map = mapRef.current
+                if (!map) return
+                map.flyTo({ center: [10, 20], zoom: 2, pitch: 45, bearing: -10, duration: 1000 })
+              }}
+              title="Reset view to top-down"
+              className="flex items-center justify-center w-8 h-8 rounded-lg bg-[rgba(6,7,13,0.92)] border border-[rgba(255,255,255,0.12)] text-[11px] font-mono text-wp-text2 hover:text-[#00d4ff] hover:border-[rgba(0,212,255,0.5)] transition-all backdrop-blur-xl shadow-lg"
+            >
+              ⊙
+            </button>
+          </div>
+        </div>
+
+        {/* ── Palantir-style Annotation Cards ───────────────────────────── */}
+        {annotationCards.size > 0 && (
+          <div className="absolute inset-0 pointer-events-none z-10" aria-label="Signal annotation cards">
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 flex flex-col gap-2 pointer-events-auto max-w-[320px] w-full">
+              {Array.from(annotationCards.values()).map(({ signal: sig }) => {
+                const color  = SEV_COLOR[sig.severity]  ?? '#8892a4'
+                const bg     = SEV_BG[sig.severity]     ?? 'rgba(136,146,164,0.15)'
+                const icon   = CAT_ICON[sig.category]   ?? '🌍'
+                const score  = Math.round((sig.reliability_score ?? 0) * 100)
+                const dots   = reliabilityDots(sig.reliability_score ?? 0)
+                const srcUrl = getSourceUrl(sig.original_urls)
+                const srcDomain = srcUrl ? getSourceDomain(srcUrl) : null
+
+                return (
+                  <div
+                    key={sig.id}
+                    style={{
+                      background:  'rgba(6,7,13,0.93)',
+                      border:      `1px solid ${color}55`,
+                      borderLeft:  `3px solid ${color}`,
+                      borderRadius: 12,
+                      backdropFilter: 'blur(16px)',
+                      boxShadow:   `0 4px 24px rgba(0,0,0,0.6), 0 0 12px ${color}22`,
+                    }}
+                    className="p-3"
+                  >
+                    {/* Card header */}
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span
+                          className="font-mono text-[9px] tracking-[1.5px] uppercase px-1.5 py-0.5 rounded"
+                          style={{ color, background: bg, border: `1px solid ${color}44` }}
+                        >
+                          {icon} {sig.category}
+                        </span>
+                        <span
+                          className="font-mono text-[9px] tracking-[1.5px] uppercase px-1.5 py-0.5 rounded"
+                          style={{ color, background: bg, border: `1px solid ${color}33` }}
+                        >
+                          {sig.severity}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setAnnotationCards(prev => {
+                            const next = new Map(prev)
+                            next.delete(sig.id)
+                            return next
+                          })
+                        }}
+                        className="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded text-wp-text3 hover:text-wp-text hover:bg-[rgba(255,255,255,0.08)] transition-all text-[14px] leading-none"
+                        aria-label="Dismiss"
+                      >
+                        ×
+                      </button>
+                    </div>
+
+                    {/* Title */}
+                    <div className="text-[12px] font-semibold text-wp-text leading-snug mb-2 line-clamp-2">
+                      {sig.title}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[10px]" style={{ color }} title={`${score}% reliability`}>
+                          {dots}
+                        </span>
+                        <span className="font-mono text-[9px] text-wp-text3">
+                          {timeAgo(sig.created_at)}
+                        </span>
+                      </div>
+                      {srcDomain && (
+                        <span className="font-mono text-[9px] text-wp-text3 truncate max-w-[90px]">
+                          via {srcDomain}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {loading && (
           <div className="absolute inset-0 z-30 pointer-events-none">
