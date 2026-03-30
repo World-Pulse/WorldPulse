@@ -167,6 +167,10 @@ services:
     environment:
       PORT: 3000
       HOSTNAME: "0.0.0.0"
+      # Internal Docker network URL for server-side Next.js fetches.
+      # Avoids the web container making loopback HTTPS requests through nginx
+      # to reach the API — those can silently fail and cause 404s on signal detail pages.
+      API_URL: http://wp_api:3001
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
       interval: 60s

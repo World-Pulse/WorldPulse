@@ -26,6 +26,7 @@ const NAV_ITEMS = [
   { href: '/communities',icon: '🤝', labelKey: 'communities' },
   { href: '/sources',    icon: '📡', labelKey: 'mySources'  },
   { href: '/developers', icon: '🛠️', labelKey: 'developers'  },
+  { href: '/pricing',    icon: '💎', labelKey: 'pricing'    },
   { href: '/settings',   icon: '⚙️', labelKey: 'settings'   },
   { href: '/status',     icon: '🟢', labelKey: 'status'     },
 ] as const

@@ -48,9 +48,12 @@ export const registerCommunityRoutes: FastifyPluginAsync = async (app) => {
 
     const pageLimit = Math.min(Number(limit), 100)
 
-    // Build query
+    // Build query — exclude demo/seeded communities from public listing
     let query = db('communities as c')
       .where('c.public', true)
+      .where(function() {
+        this.whereNull('c.is_demo').orWhere('c.is_demo', false)
+      })
       .select([
         'c.id', 'c.slug', 'c.name', 'c.description', 'c.avatar_url',
         'c.banner_url', 'c.categories', 'c.member_count', 'c.post_count',
@@ -89,6 +92,9 @@ export const registerCommunityRoutes: FastifyPluginAsync = async (app) => {
           'c.id', 'rp.cid'
         )
         .where('c.public', true)
+        .where(function() {
+          this.whereNull('c.is_demo').orWhere('c.is_demo', false)
+        })
         .select([
           'c.id', 'c.slug', 'c.name', 'c.description', 'c.avatar_url',
           'c.banner_url', 'c.categories', 'c.member_count', 'c.post_count',

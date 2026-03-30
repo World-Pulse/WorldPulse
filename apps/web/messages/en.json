@@ -28,7 +28,8 @@
     "internetOutages": "Internet Outages",
     "spaceWeather": "Space Weather",
     "cyberThreats": "Cyber Threats",
-    "status": "System Status"
+    "status": "System Status",
+    "pricing": "Pricing"
   },
   "channels": {
     "breakingNews": "Breaking News",
