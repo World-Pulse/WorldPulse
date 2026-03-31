@@ -422,6 +422,7 @@ export default function SettingsPage() {
 
             {/* ── NOTIFICATIONS TAB ────────────────────────────────── */}
             {tab === 'notifications' && (
+              <>
               <div className="bg-black/40 border border-white/10 rounded-xl p-5 space-y-5">
                 <div className="font-mono text-[11px] tracking-[2px] text-wp-text3 uppercase">Notifications</div>
 
@@ -469,6 +470,7 @@ export default function SettingsPage() {
 
               {/* ── DIGEST SUBSCRIPTION ───────────────────────────── */}
               <DigestSubscription defaultEmail={user?.email ?? ''} />
+              </>
             )}
 
             {/* ── ACCOUNT TAB ──────────────────────────────────────── */}
