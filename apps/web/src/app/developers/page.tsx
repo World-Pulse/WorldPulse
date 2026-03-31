@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
 /* ──────────────────────────────────────────────────────────────────────── *
  *  WorldPulse Developer Portal                                            *
@@ -506,8 +507,47 @@ function EndpointCard({ endpoint }: { endpoint: Endpoint }) {
 
 /* ── main page ───────────────────────────────────────────────────────── */
 export default function DevelopersPage() {
+  const router = useRouter()
   const [activeLang, setActiveLang] = useState<Lang>('curl')
   const [activeGroup, setActiveGroup] = useState<string | null>(null)
+  const [upgradeLoading, setUpgradeLoading] = useState(false)
+  const [upgradeError, setUpgradeError] = useState<string | null>(null)
+
+  async function handleUpgrade() {
+    setUpgradeLoading(true)
+    setUpgradeError(null)
+    try {
+      const token = typeof window !== 'undefined'
+        ? localStorage.getItem('wp_access_token') ?? sessionStorage.getItem('wp_access_token')
+        : null
+
+      if (!token) {
+        router.push('/auth/login?next=/developers')
+        return
+      }
+
+      const res = await fetch(`${API_BASE}/api/v1/billing/checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          plan: 'pro',
+          successUrl: `${window.location.origin}/settings?billing=success`,
+          cancelUrl:  `${window.location.origin}/developers`,
+        }),
+      })
+
+      const data = await res.json() as { url?: string; error?: string }
+      if (!res.ok || !data.url) {
+        setUpgradeError(data.error ?? 'Failed to start checkout. Please try again.')
+        return
+      }
+      window.location.href = data.url
+    } catch {
+      setUpgradeError('Network error. Please check your connection and try again.')
+    } finally {
+      setUpgradeLoading(false)
+    }
+  }
 
   return (
     <div className="min-h-[calc(100vh-52px)] bg-wp-bg">
@@ -596,10 +636,10 @@ export default function DevelopersPage() {
               <li>• 120 req/min rate limit</li>
             </ul>
           </div>
-          <div className="bg-wp-surface border border-purple-500/30 rounded-xl p-5 relative">
-            <div className="absolute -top-2 right-4 px-2 py-0.5 rounded text-[9px] font-mono bg-purple-500 text-white font-bold">COMING SOON</div>
+          <div className="bg-wp-surface border border-wp-cyan/40 rounded-xl p-5 relative shadow-[0_0_20px_rgba(0,212,255,0.06)]">
+            <div className="absolute -top-2 right-4 px-2 py-0.5 rounded text-[9px] font-mono bg-wp-cyan text-black font-bold">$12 / MO</div>
             <div className="flex items-center gap-2 mb-2">
-              <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-purple-500/10 text-purple-400 border border-purple-500/20">PRO</span>
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-wp-cyan/10 text-wp-cyan border border-wp-cyan/20">PRO</span>
             </div>
             <h3 className="text-[16px] font-bold text-wp-text mb-1">Pro</h3>
             <p className="text-[12px] text-wp-text3 mb-3">Full intelligence suite for analysts, newsrooms, and enterprise.</p>
@@ -609,7 +649,7 @@ export default function DevelopersPage() {
               <li>• Maritime/naval tracking</li>
               <li>• GPS/GNSS jamming zones</li>
               <li>• STIX 2.1 export & signed bundles</li>
-              <li>• 300 req/min rate limit</li>
+              <li>• 600 req/min rate limit</li>
             </ul>
           </div>
         </div>
@@ -789,6 +829,95 @@ export default function DevelopersPage() {
                 <code className="text-wp-cyan font-mono min-w-[160px]">alert.breaking</code>
                 <span className="text-wp-text3">A breaking news alert has been triggered</span>
               </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Pricing & Upgrade */}
+        <section className="mb-16">
+          <h2 className="text-xl font-display text-wp-text1 tracking-wide mb-2">PLANS & PRICING</h2>
+          <p className="text-[14px] text-wp-text3 mb-6">Start free, upgrade when you need more. No lock-in, cancel anytime.</p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-6">
+            {/* Free plan */}
+            <div className="rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(255,255,255,0.02)] p-6 flex flex-col">
+              <div className="mb-5">
+                <p className="text-[10px] font-mono font-semibold text-wp-text3 uppercase tracking-widest mb-2">Free</p>
+                <div className="flex items-end gap-2">
+                  <span className="text-4xl font-bold text-wp-text">$0</span>
+                  <span className="text-wp-text3 mb-1 text-[13px]">/ month</span>
+                </div>
+                <p className="mt-1.5 text-[12px] text-wp-text3">Full core access. No credit card required.</p>
+              </div>
+              <ul className="space-y-2 mb-6 flex-1 text-[13px] text-wp-text3">
+                {['60 API requests / minute', '7-day signal history', 'Up to 3 alert subscriptions', 'Global live feed & world map', 'Community access', 'RSS / JSON Feed export'].map(f => (
+                  <li key={f} className="flex items-start gap-2">
+                    <span className="text-emerald-400 mt-0.5 flex-shrink-0">✓</span>
+                    <span>{f}</span>
+                  </li>
+                ))}
+              </ul>
+              <Link
+                href="/auth/register"
+                className="block w-full text-center rounded-lg border border-[rgba(255,255,255,0.15)] bg-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.08)] text-wp-text font-semibold py-2.5 text-[14px] transition-colors"
+              >
+                Get Started — Free
+              </Link>
+            </div>
+
+            {/* Pro plan */}
+            <div className="rounded-xl border-2 border-wp-cyan/50 bg-wp-cyan/5 p-6 flex flex-col shadow-[0_0_30px_rgba(0,212,255,0.07)] relative">
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                <span className="px-3 py-1 rounded-full bg-wp-cyan text-black text-[10px] font-mono font-bold tracking-widest uppercase shadow-lg">
+                  Most Popular
+                </span>
+              </div>
+              <div className="mb-5">
+                <p className="text-[10px] font-mono font-semibold text-wp-cyan/80 uppercase tracking-widest mb-2">Pro</p>
+                <div className="flex items-end gap-2">
+                  <span className="text-4xl font-bold text-wp-text">$12</span>
+                  <span className="text-wp-text3 mb-1 text-[13px]">/ month</span>
+                </div>
+                <p className="mt-1.5 text-[12px] text-wp-text3">Higher limits, webhooks & full intelligence suite.</p>
+              </div>
+              <ul className="space-y-2 mb-6 flex-1 text-[13px] text-wp-text3">
+                {['600 API requests / minute', '90-day signal history', 'Unlimited alert subscriptions', '5 webhook endpoints', 'Advanced analytics', 'Priority support', 'Early access to beta features'].map(f => (
+                  <li key={f} className="flex items-start gap-2">
+                    <span className="text-wp-cyan mt-0.5 flex-shrink-0">✓</span>
+                    <span>{f}</span>
+                  </li>
+                ))}
+              </ul>
+
+              {upgradeError && (
+                <p className="mb-3 text-[12px] text-red-400 bg-red-400/10 rounded-lg px-3 py-2 border border-red-400/20">
+                  {upgradeError}
+                </p>
+              )}
+
+              <button
+                onClick={handleUpgrade}
+                disabled={upgradeLoading}
+                className="block w-full text-center rounded-lg bg-wp-cyan hover:bg-wp-cyan/90 active:bg-wp-cyan/80 text-black font-bold py-2.5 text-[14px] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {upgradeLoading ? 'Redirecting to Stripe…' : 'Upgrade to Pro — $12/mo'}
+              </button>
+              <p className="text-center text-[11px] text-wp-text3 mt-2">
+                Secure checkout via Stripe. Cancel anytime.
+              </p>
+            </div>
+          </div>
+
+          {/* Money-back guarantee */}
+          <div className="rounded-xl bg-wp-cyan/5 border border-wp-cyan/20 px-5 py-4 flex items-center gap-4">
+            <span className="text-2xl flex-shrink-0">🔒</span>
+            <div>
+              <p className="font-semibold text-wp-text text-[14px]">7-day money-back guarantee</p>
+              <p className="text-[12px] text-wp-text3 mt-0.5">
+                Not satisfied within 7 days? Email{' '}
+                <span className="text-wp-cyan">support@worldpulse.io</span>{' '}
+                for a full refund — no questions asked.
+              </p>
             </div>
           </div>
         </section>

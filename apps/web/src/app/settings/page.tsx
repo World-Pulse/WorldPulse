@@ -134,7 +134,7 @@ export default function SettingsPage() {
     fetch(`${API_URL}/api/v1/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
       .then(d => {
         if (d.success && d.data) {
           const u = d.data as UserProfile
@@ -143,6 +143,8 @@ export default function SettingsPage() {
           setBio(u.bio ?? '')
           setLocation(u.location ?? '')
           setWebsite(u.website ?? '')
+        } else {
+          throw new Error('No user data')
         }
       })
       .catch(() => {
@@ -156,6 +158,9 @@ export default function SettingsPage() {
             setLocation(u.location ?? '')
             setWebsite(u.website ?? '')
           } catch { /* ignore */ }
+        } else {
+          // Token invalid/expired and no cached user — redirect to login
+          router.push('/auth/login?next=/settings')
         }
       })
       .finally(() => setLoading(false))
@@ -259,7 +264,10 @@ export default function SettingsPage() {
     )
   }
 
-  if (!user) return null
+  if (!user) {
+    router.push('/auth/login?next=/settings')
+    return null
+  }
 
   return (
     <>
