@@ -74,7 +74,7 @@ export const registerSourceRoutes: FastifyPluginAsync = async (app) => {
       .first()
 
     if (!source) {
-      return reply.status(404).send({ success: false, error: 'Source not found' })
+      return sendError(reply, 404, 'NOT_FOUND', 'Source not found')
     }
 
     return reply.send({ success: true, data: source })
@@ -143,7 +143,7 @@ export const registerSourceRoutes: FastifyPluginAsync = async (app) => {
   app.get('/suggestions/list', { preHandler: [authenticate] }, async (req, reply) => {
     // Only allow admin/expert accounts
     if (!req.user || !['official', 'expert'].includes(req.user.accountType)) {
-      return reply.status(403).send({ success: false, error: 'Admin access required', code: 'FORBIDDEN' })
+      return sendError(reply, 403, 'FORBIDDEN', 'Admin access required')
     }
 
     const { status = 'pending', limit = 50 } = req.query as {
@@ -204,19 +204,19 @@ export const registerSourceRoutes: FastifyPluginAsync = async (app) => {
   // ─── ADMIN: REVIEW SUGGESTION ──────────────────────────────
   app.patch('/suggestions/:id', { preHandler: [authenticate] }, async (req, reply) => {
     if (!req.user || !['official', 'expert'].includes(req.user.accountType)) {
-      return reply.status(403).send({ success: false, error: 'Admin access required', code: 'FORBIDDEN' })
+      return sendError(reply, 403, 'FORBIDDEN', 'Admin access required')
     }
 
     const { id } = req.params as { id: string }
     const reviewParsed = ReviewSuggestionSchema.safeParse(req.body)
     if (!reviewParsed.success) {
-      return reply.status(400).send({ success: false, error: 'Status must be approved or rejected' })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Status must be approved or rejected')
     }
     const { status } = reviewParsed.data
 
     const suggestion = await db('source_suggestions').where('id', id).first()
     if (!suggestion) {
-      return reply.status(404).send({ success: false, error: 'Suggestion not found' })
+      return sendError(reply, 404, 'NOT_FOUND', 'Suggestion not found')
     }
 
     await db('source_suggestions')

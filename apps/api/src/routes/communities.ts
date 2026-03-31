@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
 import { authenticate, optionalAuth } from '../middleware/auth'
 import { z } from 'zod'
+import { sendError } from '../lib/errors'
 
 const CreateCommunitySchema = z.object({
   slug:        z.string().min(2).max(100).regex(/^[a-z0-9-]+$/),
@@ -177,7 +178,7 @@ export const registerCommunityRoutes: FastifyPluginAsync = async (app) => {
     const viewerId = req.user?.id
 
     const community = await db('communities').where('slug', slug).first()
-    if (!community) return reply.status(404).send({ success: false, error: 'Community not found' })
+    if (!community) return sendError(reply, 404, 'NOT_FOUND', 'Community not found')
 
     let viewerRole: MemberRole | null = null
     if (viewerId) {
@@ -221,14 +222,14 @@ export const registerCommunityRoutes: FastifyPluginAsync = async (app) => {
   // ─── CREATE COMMUNITY ────────────────────────────────────
   app.post('/', { preHandler: [authenticate] }, async (req, reply) => {
     const body = CreateCommunitySchema.safeParse(req.body)
-    if (!body.success) return reply.status(400).send({ success: false, error: 'Invalid input' })
+    if (!body.success) return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid input')
 
     const userId = req.user!.id
     const d = body.data
 
     // Check slug uniqueness
     const existing = await db('communities').where('slug', d.slug).first('id')
-    if (existing) return reply.status(409).send({ success: false, error: 'Slug already taken' })
+    if (existing) return sendError(reply, 409, 'CONFLICT', 'Slug already taken')
 
     const [community] = await db.transaction(async (trx) => {
       const [c] = await trx('communities')
@@ -262,8 +263,8 @@ export const registerCommunityRoutes: FastifyPluginAsync = async (app) => {
     const userId = req.user!.id
 
     const community = await db('communities').where('id', id).first('id, public')
-    if (!community) return reply.status(404).send({ success: false, error: 'Community not found' })
-    if (!community.public) return reply.status(403).send({ success: false, error: 'Community is private' })
+    if (!community) return sendError(reply, 404, 'NOT_FOUND', 'Community not found')
+    if (!community.public) return sendError(reply, 403, 'FORBIDDEN', 'Community is private')
 
     const existing = await db('community_members').where({ community_id: id, user_id: userId }).first()
     if (existing) {
@@ -286,12 +287,12 @@ export const registerCommunityRoutes: FastifyPluginAsync = async (app) => {
     // Caller must be admin
     const callerRole = await getMemberRole(id, callerId)
     if (callerRole !== 'admin') {
-      return reply.status(403).send({ success: false, error: 'Only community admins can change roles' })
+      return sendError(reply, 403, 'FORBIDDEN', 'Only community admins can change roles')
     }
 
     const roleParsed = UpdateMemberRoleSchema.safeParse(req.body)
     if (!roleParsed.success) {
-      return reply.status(400).send({ success: false, error: 'Invalid role. Must be admin, moderator, or member' })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid role. Must be admin, moderator, or member')
     }
     const { role } = roleParsed.data
 
@@ -304,7 +305,7 @@ export const registerCommunityRoutes: FastifyPluginAsync = async (app) => {
       if (Number((adminCount as { c: string })?.c ?? 0) <= 1) {
         const target = await db('community_members').where({ community_id: id, user_id: targetUserId, role: 'admin' }).first('user_id')
         if (target) {
-          return reply.status(400).send({ success: false, error: 'Cannot demote the last admin' })
+          return sendError(reply, 400, 'BAD_REQUEST', 'Cannot demote the last admin')
         }
       }
     }
@@ -315,7 +316,7 @@ export const registerCommunityRoutes: FastifyPluginAsync = async (app) => {
       .returning('*')
 
     if (!updated.length) {
-      return reply.status(404).send({ success: false, error: 'Member not found in this community' })
+      return sendError(reply, 404, 'NOT_FOUND', 'Member not found in this community')
     }
 
     return reply.send({ success: true, data: updated[0] })
@@ -328,14 +329,14 @@ export const registerCommunityRoutes: FastifyPluginAsync = async (app) => {
 
     const role = await getMemberRole(id, userId)
     if (!canModerate(role)) {
-      return reply.status(403).send({ success: false, error: 'Only moderators and admins can pin posts' })
+      return sendError(reply, 403, 'FORBIDDEN', 'Only moderators and admins can pin posts')
     }
 
     const community = await db('communities').where('id', id).first('id')
-    if (!community) return reply.status(404).send({ success: false, error: 'Community not found' })
+    if (!community) return sendError(reply, 404, 'NOT_FOUND', 'Community not found')
 
     const post = await db('posts').where('id', postId).whereNull('deleted_at').first('id, pinned, pinned_in_community_id')
-    if (!post) return reply.status(404).send({ success: false, error: 'Post not found' })
+    if (!post) return sendError(reply, 404, 'NOT_FOUND', 'Post not found')
 
     // Toggle pin
     if (post.pinned && post.pinned_in_community_id === id) {
@@ -354,7 +355,7 @@ export const registerCommunityRoutes: FastifyPluginAsync = async (app) => {
 
     const role = await getMemberRole(id, userId)
     if (!canModerate(role)) {
-      return reply.status(403).send({ success: false, error: 'Only moderators and admins can unpin posts' })
+      return sendError(reply, 403, 'FORBIDDEN', 'Only moderators and admins can unpin posts')
     }
 
     await db('posts')
@@ -371,7 +372,7 @@ export const registerCommunityRoutes: FastifyPluginAsync = async (app) => {
     const { role, limit = 50, cursor } = req.query as { role?: string; limit?: number; cursor?: string }
 
     const community = await db('communities').where('id', id).first('id')
-    if (!community) return reply.status(404).send({ success: false, error: 'Community not found' })
+    if (!community) return sendError(reply, 404, 'NOT_FOUND', 'Community not found')
 
     let query = db('community_members as cm')
       .join('users as u', 'cm.user_id', 'u.id')

@@ -4,6 +4,7 @@ import { authenticate, optionalAuth } from '../middleware/auth'
 import { redis } from '../db/redis'
 import { indexUser } from '../lib/search'
 import { z } from 'zod'
+import { sendError } from '../lib/errors'
 
 export const OnboardingSchema = z.object({
   interests:     z.array(z.string().max(50)).max(50).default([]),
@@ -38,7 +39,7 @@ export const registerUserRoutes: FastifyPluginAsync = async (app) => {
         'following_count', 'signal_count', 'verified', 'created_at',
       ])
 
-    if (!user) return reply.status(404).send({ success: false, error: 'User not found' })
+    if (!user) return sendError(reply, 404, 'NOT_FOUND', 'User not found')
 
     let isFollowing = false
     let isFollowedBy = false
@@ -134,8 +135,8 @@ export const registerUserRoutes: FastifyPluginAsync = async (app) => {
     const followerId = req.user!.id
 
     const target = await db('users').where('handle', handle.toLowerCase()).first('id')
-    if (!target) return reply.status(404).send({ success: false, error: 'User not found' })
-    if (target.id === followerId) return reply.status(400).send({ success: false, error: 'Cannot follow yourself' })
+    if (!target) return sendError(reply, 404, 'NOT_FOUND', 'User not found')
+    if (target.id === followerId) return sendError(reply, 400, 'BAD_REQUEST', 'Cannot follow yourself')
 
     const existing = await db('follows').where({ follower_id: followerId, following_id: target.id }).first()
 
@@ -163,7 +164,7 @@ export const registerUserRoutes: FastifyPluginAsync = async (app) => {
     const { cursor, limit = 20, type } = req.query as { cursor?: string; limit?: number; type?: string }
 
     const user = await db('users').where('handle', handle.toLowerCase()).first('id')
-    if (!user) return reply.status(404).send({ success: false, error: 'User not found' })
+    if (!user) return sendError(reply, 404, 'NOT_FOUND', 'User not found')
 
     let query = db('posts as p')
       .where('p.author_id', user.id)
@@ -249,7 +250,7 @@ export const registerUserRoutes: FastifyPluginAsync = async (app) => {
     const { cursor, limit = 20 } = req.query as { cursor?: string; limit?: number }
 
     const user = await db('users').where('handle', handle.toLowerCase()).first('id')
-    if (!user) return reply.status(404).send({ success: false, error: 'User not found' })
+    if (!user) return sendError(reply, 404, 'NOT_FOUND', 'User not found')
 
     const pageLimit = Math.min(Number(limit), 50)
 
@@ -291,7 +292,7 @@ export const registerUserRoutes: FastifyPluginAsync = async (app) => {
     const userId = req.user!.id
     const parsed = OnboardingSchema.safeParse(req.body)
     if (!parsed.success) {
-      return reply.status(400).send({ success: false, error: 'Invalid input', code: 'VALIDATION_ERROR' })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid input')
     }
     const { interests, regions, followHandles } = parsed.data
 

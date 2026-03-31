@@ -3,6 +3,7 @@ import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 import { authenticate, optionalAuth } from '../middleware/auth'
 import { z } from 'zod'
+import { sendError } from '../lib/errors'
 
 const CreatePollSchema = z.object({
   question:  z.string().min(1).max(500),
@@ -26,7 +27,7 @@ export const registerPollRoutes: FastifyPluginAsync = async (app) => {
   app.post('/', { preHandler: [authenticate] }, async (req, reply) => {
     const body = CreatePollSchema.safeParse(req.body)
     if (!body.success) {
-      return reply.status(400).send({ success: false, error: 'Invalid input', code: 'VALIDATION' })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid input')
     }
 
     const userId = req.user!.id
@@ -35,8 +36,8 @@ export const registerPollRoutes: FastifyPluginAsync = async (app) => {
     // If postId provided, ensure the post exists and belongs to caller
     if (d.postId) {
       const post = await db('posts').where('id', d.postId).whereNull('deleted_at').first('id, author_id')
-      if (!post) return reply.status(404).send({ success: false, error: 'Post not found' })
-      if (post.author_id !== userId) return reply.status(403).send({ success: false, error: 'Forbidden' })
+      if (!post) return sendError(reply, 404, 'NOT_FOUND', 'Post not found')
+      if (post.author_id !== userId) return sendError(reply, 403, 'FORBIDDEN', 'Forbidden')
     }
 
     // Build options JSONB: [{text, votes: 0}, ...]
@@ -62,7 +63,7 @@ export const registerPollRoutes: FastifyPluginAsync = async (app) => {
     const userId  = req.user?.id
 
     const poll = await db('polls').where('id', id).first()
-    if (!poll) return reply.status(404).send({ success: false, error: 'Poll not found' })
+    if (!poll) return sendError(reply, 404, 'NOT_FOUND', 'Poll not found')
 
     let userVote: number | null = null
     if (userId) {
@@ -82,16 +83,16 @@ export const registerPollRoutes: FastifyPluginAsync = async (app) => {
 
     const body = VoteSchema.safeParse(req.body)
     if (!body.success) {
-      return reply.status(400).send({ success: false, error: 'Invalid input', code: 'VALIDATION' })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid input')
     }
     const { optionIndex } = body.data
 
     const poll = await db('polls').where('id', id).first()
-    if (!poll) return reply.status(404).send({ success: false, error: 'Poll not found' })
+    if (!poll) return sendError(reply, 404, 'NOT_FOUND', 'Poll not found')
 
     // Check if poll expired
     if (poll.expires_at && new Date(poll.expires_at) < new Date()) {
-      return reply.status(410).send({ success: false, error: 'Poll has ended', code: 'POLL_ENDED' })
+      return sendError(reply, 400, 'BAD_REQUEST', 'Poll has ended')
     }
 
     const options: Array<{ text: string; votes: number }> = typeof poll.options === 'string'
@@ -99,13 +100,13 @@ export const registerPollRoutes: FastifyPluginAsync = async (app) => {
       : poll.options
 
     if (optionIndex >= options.length) {
-      return reply.status(400).send({ success: false, error: 'Invalid option index' })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid option index')
     }
 
     // Check for existing vote
     const existing = await db('poll_votes').where({ poll_id: id, user_id: userId }).first()
     if (existing) {
-      return reply.status(409).send({ success: false, error: 'Already voted', code: 'ALREADY_VOTED' })
+      return sendError(reply, 409, 'CONFLICT', 'Already voted')
     }
 
     // Record vote and increment option count atomically
@@ -135,8 +136,8 @@ export const registerPollRoutes: FastifyPluginAsync = async (app) => {
     const userId   = req.user!.id
 
     const poll = await db('polls').where('id', id).first('id, author_id')
-    if (!poll) return reply.status(404).send({ success: false, error: 'Poll not found' })
-    if (poll.author_id !== userId) return reply.status(403).send({ success: false, error: 'Forbidden' })
+    if (!poll) return sendError(reply, 404, 'NOT_FOUND', 'Poll not found')
+    if (poll.author_id !== userId) return sendError(reply, 403, 'FORBIDDEN', 'Forbidden')
 
     await db('poll_votes').where('poll_id', id).delete()
     await db('polls').where('id', id).delete()

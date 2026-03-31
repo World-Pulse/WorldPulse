@@ -11,6 +11,7 @@ import { z } from 'zod'
 import { db } from '../db/postgres'
 import { apiKeyAuth } from '../middleware/auth'
 import { SignalToStixConverter } from '../lib/stix'
+import { sendError } from '../lib/errors'
 import type { Signal } from '@worldpulse/types'
 
 const STIX_CONTENT_TYPE = 'application/stix+json;version=2.1'
@@ -94,7 +95,7 @@ export const registerStixRoutes: FastifyPluginAsync = async (app) => {
       .first() as Record<string, unknown> | undefined
 
     if (!row) {
-      return reply.status(404).send({ success: false, error: 'Signal not found', code: 'NOT_FOUND' })
+      return sendError(reply, 404, 'NOT_FOUND', 'Signal not found')
     }
 
     const signal = rowToSignal(row)

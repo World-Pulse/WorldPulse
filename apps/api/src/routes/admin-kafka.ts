@@ -9,6 +9,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { authenticate } from '../middleware/auth'
 import { getLagSummary } from '../lib/kafka-lag'
+import { sendError } from '../lib/errors'
 
 export const registerAdminKafkaRoutes: FastifyPluginAsync = async (app) => {
 
@@ -88,17 +89,17 @@ export const registerAdminKafkaRoutes: FastifyPluginAsync = async (app) => {
     },
   }, async (req, reply) => {
     if (!req.user || req.user.accountType !== 'admin') {
-      return reply.status(403).send({ success: false, error: 'Admin access required', code: 'FORBIDDEN' })
+      return sendError(reply, 403, 'FORBIDDEN', 'Admin access required')
     }
     try {
       const summary = await getLagSummary()
       if (summary.overall_status === 'unavailable') {
-        return reply.status(503).send({ success: false, error: 'Kafka unavailable', code: 'KAFKA_ERROR' })
+        return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'Kafka unavailable')
       }
       return reply.send({ success: true, data: summary })
     } catch (err) {
       req.log.error({ err }, 'Kafka lag fetch failed')
-      return reply.status(503).send({ success: false, error: 'Kafka unavailable', code: 'KAFKA_ERROR' })
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'Kafka unavailable')
     }
   })
 }

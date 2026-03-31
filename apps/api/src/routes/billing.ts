@@ -4,6 +4,7 @@ import { db } from '../db/postgres'
 import { authenticate } from '../middleware/auth'
 import { getStripe, PRO_PRICE_ID, WEBHOOK_SECRET, getPlanLimits } from '../lib/stripe'
 import type { Plan } from '../lib/stripe'
+import { sendError } from '../lib/errors'
 
 // ─── Plan catalogue ──────────────────────────────────────────────────────────
 
@@ -123,19 +124,19 @@ export const registerBillingRoutes: FastifyPluginAsync = async (app) => {
   }, async (req, reply) => {
     const body = CheckoutBody.safeParse(req.body)
     if (!body.success) {
-      return reply.status(400).send({ error: 'Invalid request body' })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid request body')
     }
 
     let stripe
     try {
       stripe = getStripe()
     } catch {
-      return reply.status(503).send({ error: 'Billing not configured' })
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'Billing not configured')
     }
 
     const userId = req.user.id
     const user   = await db('users').where('id', userId).first(['id', 'email', 'display_name'])
-    if (!user) return reply.status(401).send({ error: 'User not found' })
+    if (!user) return sendError(reply, 401, 'UNAUTHORIZED', 'User not found')
 
     // Look up or create Stripe customer
     let existingSub = await db('subscriptions').where('user_id', userId).first()
@@ -168,7 +169,7 @@ export const registerBillingRoutes: FastifyPluginAsync = async (app) => {
     }
 
     if (!PRO_PRICE_ID) {
-      return reply.status(503).send({ error: 'Billing not configured — price ID missing' })
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'Billing not configured — price ID missing')
     }
 
     const session = await stripe.checkout.sessions.create({
@@ -209,12 +210,12 @@ export const registerBillingRoutes: FastifyPluginAsync = async (app) => {
     try {
       stripe = getStripe()
     } catch {
-      return reply.status(503).send({ error: 'Billing not configured' })
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'Billing not configured')
     }
 
     const row = await db('subscriptions').where('user_id', req.user.id).first()
     if (!row?.stripe_subscription_id) {
-      return reply.status(404).send({ error: 'No active subscription found' })
+      return sendError(reply, 404, 'NOT_FOUND', 'No active subscription found')
     }
 
     await stripe.subscriptions.update(row.stripe_subscription_id as string, {
@@ -252,19 +253,19 @@ export const registerBillingRoutes: FastifyPluginAsync = async (app) => {
       try {
         stripe = getStripe()
       } catch {
-        return reply.status(503).send({ error: 'Billing not configured' })
+        return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'Billing not configured')
       }
       try {
         event = stripe.webhooks.constructEvent(rawBody, sig, WEBHOOK_SECRET)
       } catch {
-        return reply.status(400).send({ error: 'Invalid signature' })
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid signature')
       }
     } else {
       // rawBody not available — parse body as event directly (dev/no-secret mode)
       if (WEBHOOK_SECRET && sig) {
         // Secret configured but rawBody unavailable — reject for safety
         app.log.warn('Stripe webhook: STRIPE_WEBHOOK_SECRET is set but rawBody is unavailable — install @fastify/raw-body')
-        return reply.status(400).send({ error: 'Webhook signature verification unavailable' })
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Webhook signature verification unavailable')
       }
       event = req.body as import('stripe').default.Event
     }

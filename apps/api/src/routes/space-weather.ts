@@ -16,6 +16,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db }    from '../db/postgres'
 import { redis } from '../db/redis'
+import { sendError } from '../lib/errors'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -111,11 +112,7 @@ export const registerSpaceWeatherRoutes: FastifyPluginAsync = async (app) => {
     if (q.hours !== undefined) {
       const h = Number(q.hours)
       if (!isFinite(h) || h < 1 || h > SW_MAX_HOURS) {
-        return reply.status(400).send({
-          success: false,
-          error:   `hours must be 1-${SW_MAX_HOURS}`,
-          code:    'INVALID_HOURS',
-        })
+        return sendError(reply, 400, 'VALIDATION_ERROR', `hours must be 1-${SW_MAX_HOURS}`)
       }
       hours = h
     }
@@ -125,11 +122,7 @@ export const registerSpaceWeatherRoutes: FastifyPluginAsync = async (app) => {
     if (q.limit !== undefined) {
       const l = Number(q.limit)
       if (!isFinite(l) || l < 1 || l > SW_MAX_LIMIT) {
-        return reply.status(400).send({
-          success: false,
-          error:   `limit must be 1-${SW_MAX_LIMIT}`,
-          code:    'INVALID_LIMIT',
-        })
+        return sendError(reply, 400, 'VALIDATION_ERROR', `limit must be 1-${SW_MAX_LIMIT}`)
       }
       limit = l
     }
@@ -207,7 +200,7 @@ export const registerSpaceWeatherRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ success: true, cached: false, data: { events, count: events.length, hours } })
     } catch (err) {
       console.error('[space-weather] DB error (recent):', err)
-      return reply.status(500).send({ success: false, error: 'Database error', code: 'DB_ERROR' })
+      return sendError(reply, 500, 'INTERNAL_ERROR', 'Database error')
     }
   })
 
@@ -290,7 +283,7 @@ export const registerSpaceWeatherRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ success: true, cached: false, data: summary })
     } catch (err) {
       console.error('[space-weather] DB error (summary):', err)
-      return reply.status(500).send({ success: false, error: 'Database error', code: 'DB_ERROR' })
+      return sendError(reply, 500, 'INTERNAL_ERROR', 'Database error')
     }
   })
 }

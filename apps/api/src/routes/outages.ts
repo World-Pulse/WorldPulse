@@ -19,6 +19,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db }    from '../db/postgres'
 import { redis } from '../db/redis'
+import { sendError } from '../lib/errors'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -90,7 +91,7 @@ export const registerOutagesRoutes: FastifyPluginAsync = async (app) => {
     if (q.hours !== undefined) {
       const h = Number(q.hours)
       if (!isFinite(h) || h < 1 || h > OUTAGES_MAX_HOURS) {
-        return reply.status(400).send({ success: false, error: `hours must be 1-${OUTAGES_MAX_HOURS}`, code: 'INVALID_HOURS' })
+        return sendError(reply, 400, 'VALIDATION_ERROR', `hours must be 1-${OUTAGES_MAX_HOURS}`)
       }
       hours = h
     }
@@ -100,7 +101,7 @@ export const registerOutagesRoutes: FastifyPluginAsync = async (app) => {
     if (q.limit !== undefined) {
       const l = Number(q.limit)
       if (!isFinite(l) || l < 1 || l > 200) {
-        return reply.status(400).send({ success: false, error: 'limit must be 1-200', code: 'INVALID_LIMIT' })
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'limit must be 1-200')
       }
       limit = l
     }
@@ -162,7 +163,7 @@ export const registerOutagesRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ success: true, cached: false, data: { events, count: events.length, hours } })
     } catch (err) {
       console.error('[outages] DB error (recent):', err)
-      return reply.status(500).send({ success: false, error: 'Database error', code: 'DB_ERROR' })
+      return sendError(reply, 500, 'INTERNAL_ERROR', 'Database error')
     }
   })
 
@@ -230,7 +231,7 @@ export const registerOutagesRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ success: true, cached: false, data: { countries, count: countries.length } })
     } catch (err) {
       console.error('[outages] DB error (summary):', err)
-      return reply.status(500).send({ success: false, error: 'Database error', code: 'DB_ERROR' })
+      return sendError(reply, 500, 'INTERNAL_ERROR', 'Database error')
     }
   })
 }

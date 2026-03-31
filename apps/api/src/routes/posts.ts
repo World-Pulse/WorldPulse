@@ -6,6 +6,7 @@ import { broadcast } from '../ws/handler'
 import { z } from 'zod'
 import { indexPost, removePost } from '../lib/search'
 import { publishPostCreated, publishPostDeleted } from '../lib/search-events'
+import { sendError } from '../lib/errors'
 
 // Simple script-based language detector — no external dependency needed.
 // Covers the languages most likely to appear in news posts.
@@ -71,7 +72,7 @@ export const registerPostRoutes: FastifyPluginAsync = async (app) => {
   app.post('/', { preHandler: [authenticate], config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const body = CreatePostSchema.safeParse(req.body)
     if (!body.success) {
-      return reply.status(400).send({ success: false, error: 'Invalid input', code: 'VALIDATION' })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid input')
     }
 
     const userId = req.user!.id
@@ -80,15 +81,15 @@ export const registerPostRoutes: FastifyPluginAsync = async (app) => {
     // Validate references exist
     if (d.signalId) {
       const signal = await db('signals').where('id', d.signalId).first('id')
-      if (!signal) return reply.status(404).send({ success: false, error: 'Signal not found' })
+      if (!signal) return sendError(reply, 404, 'NOT_FOUND', 'Signal not found')
     }
     if (d.parentId) {
       const parent = await db('posts').where('id', d.parentId).whereNull('deleted_at').first('id, thread_root_id')
-      if (!parent) return reply.status(404).send({ success: false, error: 'Parent post not found' })
+      if (!parent) return sendError(reply, 404, 'NOT_FOUND', 'Parent post not found')
     }
     if (d.boostOfId) {
       const original = await db('posts').where('id', d.boostOfId).whereNull('deleted_at').first('id')
-      if (!original) return reply.status(404).send({ success: false, error: 'Original post not found' })
+      if (!original) return sendError(reply, 404, 'NOT_FOUND', 'Original post not found')
     }
 
     // Determine thread root
@@ -186,7 +187,7 @@ export const registerPostRoutes: FastifyPluginAsync = async (app) => {
     const userId = req.user?.id
 
     const post = await getPostWithAuthor(id, userId)
-    if (!post) return reply.status(404).send({ success: false, error: 'Post not found' })
+    if (!post) return sendError(reply, 404, 'NOT_FOUND', 'Post not found')
 
     // Increment view count (async, no await)
     db('posts').where('id', id).increment('view_count', 1).catch(() => {})
@@ -249,7 +250,7 @@ export const registerPostRoutes: FastifyPluginAsync = async (app) => {
     const userId = req.user!.id
 
     const post = await db('posts').where('id', id).whereNull('deleted_at').first('id, author_id, like_count')
-    if (!post) return reply.status(404).send({ success: false, error: 'Post not found' })
+    if (!post) return sendError(reply, 404, 'NOT_FOUND', 'Post not found')
 
     const existing = await db('likes').where({ user_id: userId, post_id: id }).first()
 
@@ -282,7 +283,7 @@ export const registerPostRoutes: FastifyPluginAsync = async (app) => {
     const userId = req.user!.id
 
     const post = await db('posts').where('id', id).first('id')
-    if (!post) return reply.status(404).send({ success: false, error: 'Post not found' })
+    if (!post) return sendError(reply, 404, 'NOT_FOUND', 'Post not found')
 
     const existing = await db('bookmarks').where({ user_id: userId, post_id: id }).first()
     if (existing) {
@@ -300,8 +301,8 @@ export const registerPostRoutes: FastifyPluginAsync = async (app) => {
     const userId = req.user!.id
 
     const post = await db('posts').where('id', id).first('id, author_id')
-    if (!post) return reply.status(404).send({ success: false, error: 'Not found' })
-    if (post.author_id !== userId) return reply.status(403).send({ success: false, error: 'Forbidden' })
+    if (!post) return sendError(reply, 404, 'NOT_FOUND', 'Not found')
+    if (post.author_id !== userId) return sendError(reply, 403, 'FORBIDDEN', 'Forbidden')
 
     await db('posts').where('id', id).update({ deleted_at: new Date() })
     removePost(id).catch(() => {})

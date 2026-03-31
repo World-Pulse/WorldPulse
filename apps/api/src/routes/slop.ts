@@ -19,6 +19,7 @@ import { redis } from '../db/redis'
 import { hashKey } from '../lib/api-keys'
 import { slopDetector } from '../lib/slop-detector'
 import { KNOWN_AI_CONTENT_FARMS } from '../lib/ai-content-farms'
+import { sendError } from '../lib/errors'
 
 // ─── API Key Auth ─────────────────────────────────────────────────────────────
 
@@ -46,12 +47,7 @@ async function authenticateApiKey(req: FastifyRequest, reply: FastifyReply): Pro
     })()
 
   if (!rawKey) {
-    void reply.status(401).send({
-      success: false,
-      error:   'API key required. Use X-API-Key header or Authorization: Bearer <key>',
-      code:    'UNAUTHORIZED',
-      docs:    'https://world-pulse.io/docs/api/authentication',
-    })
+    sendError(reply, 401, 'UNAUTHORIZED', 'API key required. Use X-API-Key header or Authorization: Bearer <key>')
     return
   }
 
@@ -63,11 +59,7 @@ async function authenticateApiKey(req: FastifyRequest, reply: FastifyReply): Pro
     .catch(() => null)
 
   if (!keyRow) {
-    void reply.status(401).send({
-      success: false,
-      error:   'Invalid or inactive API key',
-      code:    'UNAUTHORIZED',
-    })
+    sendError(reply, 401, 'UNAUTHORIZED', 'Invalid or inactive API key')
     return
   }
 
@@ -89,12 +81,7 @@ async function authenticateApiKey(req: FastifyRequest, reply: FastifyReply): Pro
 async function requireProTier(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   const tier = req.apiKeyCtx?.tier
   if (tier !== 'pro' && tier !== 'enterprise') {
-    void reply.status(403).send({
-      success:     false,
-      error:       'Batch slop detection requires a Pro or Enterprise API key',
-      code:        'TIER_REQUIRED',
-      upgrade_url: 'https://world-pulse.io/developer',
-    })
+    sendError(reply, 403, 'FORBIDDEN', 'Batch slop detection requires a Pro or Enterprise API key')
   }
 }
 
@@ -469,12 +456,7 @@ export const registerSlopRoutes: FastifyPluginAsync = async (app) => {
   }, async (req, reply) => {
     const parsed = CheckSchema.safeParse(req.body)
     if (!parsed.success) {
-      return reply.status(400).send({
-        success: false,
-        error:   'Invalid request body',
-        details: parsed.error.flatten(),
-        code:    'VALIDATION_ERROR',
-      })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid request body')
     }
 
     const { url, title, content, author } = parsed.data
@@ -607,12 +589,7 @@ export const registerSlopRoutes: FastifyPluginAsync = async (app) => {
   }, async (req, reply) => {
     const parsed = BatchSchema.safeParse(req.body)
     if (!parsed.success) {
-      return reply.status(400).send({
-        success: false,
-        error:   'Invalid request body',
-        details: parsed.error.flatten(),
-        code:    'VALIDATION_ERROR',
-      })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid request body')
     }
 
     const { items } = parsed.data
@@ -718,20 +695,12 @@ export const registerSlopRoutes: FastifyPluginAsync = async (app) => {
     const { domain: rawDomain } = req.query as { domain?: string }
 
     if (!rawDomain) {
-      return reply.status(400).send({
-        success: false,
-        error:   '`domain` query parameter is required',
-        code:    'VALIDATION_ERROR',
-      })
+      return sendError(reply, 400, 'VALIDATION_ERROR', '`domain` query parameter is required')
     }
 
     const domain = extractDomainFromInput(rawDomain)
     if (!domain) {
-      return reply.status(400).send({
-        success: false,
-        error:   'Invalid domain or URL. Provide a bare domain (e.g. example.com) or a full URL.',
-        code:    'VALIDATION_ERROR',
-      })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid domain or URL. Provide a bare domain (e.g. example.com) or a full URL.')
     }
 
     const isAiFarm = (KNOWN_AI_CONTENT_FARMS as string[]).includes(domain)

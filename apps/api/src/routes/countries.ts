@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
+import { sendError } from '../lib/errors'
 
 const COUNTRY_LIST_TTL   = 300  // 5 min — list is heavy (all countries aggregated)
 const COUNTRY_DETAIL_TTL = 120  // 2 min — per-country detail
@@ -254,7 +255,7 @@ export const registerCountryRoutes: FastifyPluginAsync = async (app) => {
     const band = riskBand(normalizedScore)
 
     if (totalSignals === 0) {
-      return reply.status(404).send({ error: 'No signal data found for this country', code: upperCode })
+      return sendError(reply, 404, 'NOT_FOUND', 'No signal data found for this country')
     }
 
     const result = {

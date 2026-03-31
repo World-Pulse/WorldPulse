@@ -4,6 +4,7 @@ import { db } from '../db/postgres'
 import { authenticate } from '../middleware/auth'
 import { getSecurityMetrics } from '../lib/security'
 import { runFullReindex } from '../lib/search-backfill'
+import { sendError } from '../lib/errors'
 
 // ─── Stability keys (mirror apps/scraper/src/lib/stability-tracker.ts) ───────
 const STABILITY_KEYS = {
@@ -93,7 +94,7 @@ export const registerAdminRoutes: FastifyPluginAsync = async (app) => {
   // ─── GET /api/v1/admin/scraper/health ──────────────────────────────────────
   app.get('/scraper/health', { preHandler: [authenticate] }, async (req, reply) => {
     if (!req.user || req.user.accountType !== 'admin') {
-      return reply.status(403).send({ success: false, error: 'Admin access required', code: 'FORBIDDEN' })
+      return sendError(reply, 403, 'FORBIDDEN', 'Admin access required')
     }
 
     const sourceIds = await redis.smembers(HEALTH_INDEX_KEY)
@@ -139,7 +140,7 @@ export const registerAdminRoutes: FastifyPluginAsync = async (app) => {
     config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
   }, async (req, reply) => {
     if (!req.user || req.user.accountType !== 'admin') {
-      return reply.status(403).send({ success: false, error: 'Admin access required', code: 'FORBIDDEN' })
+      return sendError(reply, 403, 'FORBIDDEN', 'Admin access required')
     }
 
     const raw        = await redis.hgetall(PROCESS_KEY)
@@ -173,7 +174,7 @@ export const registerAdminRoutes: FastifyPluginAsync = async (app) => {
   // ─── GET /api/v1/admin/signals/stats ───────────────────────────────────────
   app.get('/signals/stats', { preHandler: [authenticate] }, async (req, reply) => {
     if (!req.user || req.user.accountType !== 'admin') {
-      return reply.status(403).send({ success: false, error: 'Admin access required', code: 'FORBIDDEN' })
+      return sendError(reply, 403, 'FORBIDDEN', 'Admin access required')
     }
 
     const [totalRow] = await db('signals').count('id as count')
@@ -237,7 +238,7 @@ export const registerAdminRoutes: FastifyPluginAsync = async (app) => {
     config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
   }, async (req, reply) => {
     if (!req.user || req.user.accountType !== 'admin') {
-      return reply.status(403).send({ success: false, error: 'Admin access required', code: 'FORBIDDEN' })
+      return sendError(reply, 403, 'FORBIDDEN', 'Admin access required')
     }
 
     // Check 5-minute cache
@@ -362,14 +363,14 @@ export const registerAdminRoutes: FastifyPluginAsync = async (app) => {
     },
   }, async (req, reply) => {
     if (!req.user || req.user.accountType !== 'admin') {
-      return reply.status(403).send({ success: false, error: 'Admin access required', code: 'FORBIDDEN' })
+      return sendError(reply, 403, 'FORBIDDEN', 'Admin access required')
     }
     try {
       const metrics = await getSecurityMetrics()
       return reply.send({ success: true, data: metrics })
     } catch (err) {
       req.log.error(err)
-      return reply.status(500).send({ success: false, error: 'Internal server error' })
+      return sendError(reply, 500, 'INTERNAL_ERROR', 'Internal server error')
     }
   })
 
@@ -390,7 +391,7 @@ export const registerAdminRoutes: FastifyPluginAsync = async (app) => {
     },
   }, async (req, reply) => {
     if (!req.user || req.user.accountType !== 'admin') {
-      return reply.status(403).send({ success: false, error: 'Admin access required', code: 'FORBIDDEN' })
+      return sendError(reply, 403, 'FORBIDDEN', 'Admin access required')
     }
 
     // Fire-and-forget so the HTTP response returns immediately; the actual work
@@ -423,7 +424,7 @@ export const registerAdminRoutes: FastifyPluginAsync = async (app) => {
     },
   }, async (req, reply) => {
     if (!req.user || req.user.accountType !== 'admin') {
-      return reply.status(403).send({ success: false, error: 'Admin access required', code: 'FORBIDDEN' })
+      return sendError(reply, 403, 'FORBIDDEN', 'Admin access required')
     }
 
     const { meili } = await import('../lib/search.js')
@@ -446,7 +447,7 @@ export const registerAdminRoutes: FastifyPluginAsync = async (app) => {
       })
     } catch (err) {
       req.log.error({ err }, 'Failed to fetch Meilisearch stats')
-      return reply.status(502).send({ success: false, error: 'Meilisearch unavailable' })
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'Meilisearch unavailable')
     }
   })
 }

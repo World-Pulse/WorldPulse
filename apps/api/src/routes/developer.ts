@@ -4,6 +4,7 @@ import crypto from 'crypto'
 import { db } from '../db/postgres'
 import { authenticate } from '../middleware/auth'
 import { generateApiKey, TIER_LIMITS } from '../lib/api-keys'
+import { sendError } from '../lib/errors'
 
 const CreateKeySchema = z.object({
   name: z.string().min(1).max(100),
@@ -37,7 +38,7 @@ export const registerDeveloperRoutes: FastifyPluginAsync = async (app) => {
   app.post('/', { preHandler: [authenticate] }, async (req, reply) => {
     const body = CreateKeySchema.safeParse(req.body)
     if (!body.success) {
-      return reply.status(400).send({ success: false, error: 'Invalid input', code: 'VALIDATION_ERROR' })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid input')
     }
 
     const { name, tier } = body.data
@@ -84,7 +85,7 @@ export const registerDeveloperRoutes: FastifyPluginAsync = async (app) => {
       .update({ is_active: false })
 
     if (!updated) {
-      return reply.status(404).send({ success: false, error: 'API key not found', code: 'NOT_FOUND' })
+      return sendError(reply, 404, 'NOT_FOUND', 'API key not found')
     }
 
     return reply.send({ success: true })
@@ -104,18 +105,14 @@ export const registerDeveloperRoutes: FastifyPluginAsync = async (app) => {
   }, async (req, reply) => {
     const parsed = CreateWebhookSchema.safeParse(req.body)
     if (!parsed.success) {
-      return reply.status(400).send({ success: false, error: 'Invalid input', code: 'VALIDATION_ERROR', details: parsed.error.issues })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid input')
     }
 
     // Enforce per-user limit
     const countRows = await db('developer_webhooks').where({ user_id: req.user.id, is_active: true }).count('id as count')
     const currentCount = Number((countRows[0] as { count: string | number } | undefined)?.count ?? 0)
     if (currentCount >= MAX_WEBHOOKS_PER_USER) {
-      return reply.status(429).send({
-        success: false,
-        error:   `Maximum ${MAX_WEBHOOKS_PER_USER} active webhooks allowed per user`,
-        code:    'WEBHOOK_LIMIT_EXCEEDED',
-      })
+      return sendError(reply, 429, 'RATE_LIMITED', `Maximum ${MAX_WEBHOOKS_PER_USER} active webhooks allowed per user`)
     }
 
     const { url, events, filters } = parsed.data
@@ -167,7 +164,7 @@ export const registerDeveloperRoutes: FastifyPluginAsync = async (app) => {
       .update({ is_active: false })
 
     if (!updated) {
-      return reply.status(404).send({ success: false, error: 'Webhook not found', code: 'NOT_FOUND' })
+      return sendError(reply, 404, 'NOT_FOUND', 'Webhook not found')
     }
 
     return reply.send({ success: true })
@@ -186,7 +183,7 @@ export const registerDeveloperRoutes: FastifyPluginAsync = async (app) => {
       .first(['id'])
 
     if (!webhook) {
-      return reply.status(404).send({ success: false, error: 'Webhook not found', code: 'NOT_FOUND' })
+      return sendError(reply, 404, 'NOT_FOUND', 'Webhook not found')
     }
 
     const deliveries = await db('webhook_deliveries')

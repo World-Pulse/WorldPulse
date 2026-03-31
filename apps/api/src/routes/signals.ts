@@ -213,7 +213,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       ])
       .first()
 
-    if (!signal) return reply.status(404).send({ success: false, error: 'Signal not found' })
+    if (!signal) return sendError(reply, 404, 'NOT_FOUND', 'Signal not found')
 
     // Increment view count async
     db('signals').where('id', id).increment('view_count', 1).catch(() => {})
@@ -293,7 +293,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       .where('id', id)
       .first(['id', 'title', 'summary', 'body', 'category', 'severity', 'tags', 'language'])
 
-    if (!signal) return reply.status(404).send({ success: false, error: 'Signal not found' })
+    if (!signal) return sendError(reply, 404, 'NOT_FOUND', 'Signal not found')
 
     const fn = refresh === 'true' && req.user ? refreshSignalSummary : generateSignalSummary
 
@@ -329,7 +329,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       .first('id', 'title', 'category', 'reliability_score', 'created_at')
       .catch(() => null)
 
-    if (!signal) return reply.status(404).send({ success: false, error: 'Signal not found' })
+    if (!signal) return sendError(reply, 404, 'NOT_FOUND', 'Signal not found')
 
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000)
     const recentRows = await db('signals')
@@ -375,7 +375,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const signal = await db('signals').where('id', id).first('id')
-    if (!signal) return reply.status(404).send({ success: false, error: 'Signal not found' })
+    if (!signal) return sendError(reply, 404, 'NOT_FOUND', 'Signal not found')
 
     let query = db('posts as p')
       .join('users as u', 'p.author_id', 'u.id')
@@ -431,16 +431,12 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     // Only admins and moderators may update signals
     const actor = await db('users').where('id', userId).first('account_type')
     if (!actor || !['admin', 'official', 'journalist'].includes(actor.account_type as string)) {
-      return reply.status(403).send({ success: false, error: 'Forbidden' })
+      return sendError(reply, 403, 'FORBIDDEN', 'Forbidden')
     }
 
     const parsed = UpdateSignalSchema.safeParse(req.body)
     if (!parsed.success) {
-      return reply.status(400).send({
-        success: false,
-        error:   parsed.error.issues[0]?.message ?? 'Invalid input',
-        code:    'VALIDATION_ERROR',
-      })
+      return sendError(reply, 400, 'VALIDATION_ERROR', parsed.error.issues[0]?.message ?? 'Invalid input')
     }
 
     const updates = parsed.data
@@ -450,7 +446,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       .update({ ...updates, last_updated: new Date() })
       .returning('*')
 
-    if (!signal) return reply.status(404).send({ success: false, error: 'Signal not found' })
+    if (!signal) return sendError(reply, 404, 'NOT_FOUND', 'Signal not found')
 
     // Invalidate caches
     redis.del(`signals:detail:${id}`).catch(() => {})
@@ -482,11 +478,11 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
 
     const actor = await db('users').where('id', userId).first('account_type')
     if (!actor || actor.account_type !== 'admin') {
-      return reply.status(403).send({ success: false, error: 'Forbidden' })
+      return sendError(reply, 403, 'FORBIDDEN', 'Forbidden')
     }
 
     const deleted = await db('signals').where('id', id).delete()
-    if (!deleted) return reply.status(404).send({ success: false, error: 'Signal not found' })
+    if (!deleted) return sendError(reply, 404, 'NOT_FOUND', 'Signal not found')
 
     // Invalidate caches
     redis.del(`signals:detail:${id}`).catch(() => {})
@@ -506,16 +502,12 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     const { id } = req.params as { id: string }
     const flagBody = FlagSignalSchema.safeParse(req.body)
     if (!flagBody.success) {
-      return reply.status(400).send({
-        success: false,
-        error:   flagBody.error.issues[0]?.message ?? 'Invalid flag reason',
-        code:    'VALIDATION_ERROR',
-      })
+      return sendError(reply, 400, 'VALIDATION_ERROR', flagBody.error.issues[0]?.message ?? 'Invalid flag reason')
     }
     const { reason, notes } = flagBody.data
 
     const signal = await db('signals').where('id', id).first('id')
-    if (!signal) return reply.status(404).send({ success: false, error: 'Signal not found' })
+    if (!signal) return sendError(reply, 404, 'NOT_FOUND', 'Signal not found')
 
     const userId  = req.user?.id ?? null
     const ipRaw   = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim() ?? req.ip ?? ''
@@ -523,7 +515,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
 
     if (userId) {
       const existing = await db('signal_flags').where({ signal_id: id, user_id: userId }).first('id')
-      if (existing) return reply.status(409).send({ success: false, error: 'Already flagged' })
+      if (existing) return sendError(reply, 409, 'CONFLICT', 'Already flagged')
     }
 
     await db('signal_flags').insert({ signal_id: id, user_id: userId, ip_hash: ipHash, reason, notes: notes ?? null })
@@ -548,7 +540,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     // Admin-only endpoint
     const actor = await db('users').where('id', userId).first('account_type')
     if (!actor || actor.account_type !== 'admin') {
-      return reply.status(403).send({ success: false, error: 'Forbidden — admin only' })
+      return sendError(reply, 403, 'FORBIDDEN', 'Forbidden — admin only')
     }
 
     // Fetch signal metadata for scoring
@@ -558,7 +550,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       .catch(() => null)
 
     if (!signal) {
-      return reply.status(404).send({ success: false, error: 'Signal not found' })
+      return sendError(reply, 404, 'NOT_FOUND', 'Signal not found')
     }
 
     const result = await slopDetector.scoreSignal({
@@ -1204,7 +1196,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       .catch(() => null)
 
     if (!signal) {
-      return reply.status(404).send({ success: false, error: 'Signal not found' })
+      return sendError(reply, 404, 'NOT_FOUND', 'Signal not found')
     }
 
     // ── Build GDELT query ────────────────────────────────────────────────────
@@ -1285,7 +1277,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       .catch(() => null)
 
     if (!signal) {
-      return reply.status(404).send({ success: false, error: 'Signal not found' })
+      return sendError(reply, 404, 'NOT_FOUND', 'Signal not found')
     }
 
     // ── Build GDELT DOC API query ─────────────────────────────────────────────
@@ -1368,7 +1360,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       .catch(() => null)
 
     if (!signal) {
-      return reply.status(404).send({ success: false, error: 'Signal not found' })
+      return sendError(reply, 404, 'NOT_FOUND', 'Signal not found')
     }
 
     const text = [signal.title, signal.summary].filter(Boolean).join('. ')

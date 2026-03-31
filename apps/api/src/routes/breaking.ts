@@ -8,6 +8,7 @@ import {
 import type { BreakingAlert } from '../lib/breaking-alerts'
 import { redis } from '../db/redis'
 import { logger } from '../lib/logger'
+import { sendError } from '../lib/errors'
 
 const BREAKING_CACHE_TTL = 15 // 15-second cache for GET
 
@@ -86,7 +87,7 @@ export const registerBreakingRoutes: FastifyPluginAsync = async (app) => {
         return reply.send(body)
       } catch (err) {
         logger.error({ err }, 'Failed to fetch breaking alerts')
-        return reply.status(500).send({ success: false, data: { alerts: [], count: 0 } })
+        return sendError(reply, 500, 'INTERNAL_ERROR', 'Internal server error')
       }
     },
   )
@@ -117,7 +118,7 @@ export const registerBreakingRoutes: FastifyPluginAsync = async (app) => {
       try {
         const { alertId } = request.params
         if (!alertId || alertId.trim().length === 0) {
-          return reply.status(400).send({ success: false })
+          return sendError(reply, 400, 'BAD_REQUEST', 'Bad request')
         }
 
         await dismissBreakingAlert(alertId)
@@ -127,7 +128,7 @@ export const registerBreakingRoutes: FastifyPluginAsync = async (app) => {
         return reply.send({ success: true })
       } catch (err) {
         logger.error({ err }, 'Failed to dismiss breaking alert')
-        return reply.status(500).send({ success: false })
+        return sendError(reply, 500, 'INTERNAL_ERROR', 'Internal server error')
       }
     },
   )

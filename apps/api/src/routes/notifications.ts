@@ -8,6 +8,7 @@ import { notificationService } from '../lib/notifications'
 import type { AlertSettings } from '../lib/alert-dispatcher'
 import { sendAlertEmail } from '../lib/email'
 import type { Signal } from '@worldpulse/types'
+import { sendError } from '../lib/errors'
 
 // ─── Alert Settings Schemas ───────────────────────────────────────────────
 
@@ -121,7 +122,7 @@ export const registerNotificationRoutes: FastifyPluginAsync = async (app) => {
   app.delete('/device-token', { preHandler: [authenticate] }, async (req, reply) => {
     const parsed = DeleteDeviceTokenSchema.safeParse(req.body)
     if (!parsed.success) {
-      return reply.status(400).send({ success: false, error: 'Token is required', code: 'VALIDATION_ERROR' })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Token is required')
     }
     const { token } = parsed.data
 
@@ -174,7 +175,7 @@ export const registerNotificationRoutes: FastifyPluginAsync = async (app) => {
   app.patch('/read', { preHandler: [authenticate] }, async (req, reply) => {
     const parsed = MarkReadSchema.safeParse(req.body)
     if (!parsed.success) {
-      return reply.status(400).send({ success: false, error: 'Invalid input', code: 'VALIDATION_ERROR' })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid input')
     }
     const { ids } = parsed.data
 
@@ -262,11 +263,7 @@ export const registerNotificationRoutes: FastifyPluginAsync = async (app) => {
   }, async (req, reply) => {
     const parsed = AlertSettingsSchema.safeParse(req.body)
     if (!parsed.success) {
-      return reply.status(400).send({
-        success: false,
-        error: parsed.error.issues[0]?.message ?? 'Invalid input',
-        code:  'VALIDATION_ERROR',
-      })
+      return sendError(reply, 400, 'VALIDATION_ERROR', parsed.error.issues[0]?.message ?? 'Invalid input')
     }
 
     const userId = req.user!.id
@@ -326,21 +323,13 @@ export const registerNotificationRoutes: FastifyPluginAsync = async (app) => {
     const raw    = await redis.get(alertSettingsKey(userId)).catch(() => null)
 
     if (!raw) {
-      return reply.status(400).send({
-        success: false,
-        error: 'No alert settings configured. Save your settings first.',
-        code:  'NOT_CONFIGURED',
-      })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'No alert settings configured. Save your settings first.')
     }
 
     const settings = JSON.parse(raw) as AlertSettings
 
     if (!settings.enabled) {
-      return reply.status(400).send({
-        success: false,
-        error: 'Alerts are disabled. Enable them in your settings.',
-        code:  'ALERTS_DISABLED',
-      })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Alerts are disabled. Enable them in your settings.')
     }
 
     const hasTelegram = !!(settings.telegram_chat_id && settings.telegram_bot_token)
@@ -350,11 +339,7 @@ export const registerNotificationRoutes: FastifyPluginAsync = async (app) => {
     const hasEmail    = !!settings.email_address
 
     if (!hasTelegram && !hasDiscord && !hasSlack && !hasTeams && !hasEmail) {
-      return reply.status(400).send({
-        success: false,
-        error: 'No channels configured. Add a Telegram chat, Discord webhook, Slack webhook, Teams webhook, or email address.',
-        code:  'NO_CHANNELS',
-      })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'No channels configured. Add a Telegram chat, Discord webhook, Slack webhook, Teams webhook, or email address.')
     }
 
     const testSignal = makeTestSignal()

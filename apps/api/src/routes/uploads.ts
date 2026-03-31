@@ -6,6 +6,7 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { pipeline } from 'node:stream/promises'
 import sharp from 'sharp'
+import { sendError } from '../lib/errors'
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────
 const UPLOADS_DIR = process.env.UPLOADS_DIR ?? path.join(process.cwd(), 'uploads', 'post-media')
@@ -74,12 +75,12 @@ export const registerUploadRoutes: FastifyPluginAsync = async (app) => {
     const { filename } = req.params as { filename: string }
     // Basic path-traversal protection
     if (/[^a-zA-Z0-9._-]/.test(filename)) {
-      return reply.status(400).send({ success: false, error: 'Invalid filename' })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid filename')
     }
 
     const filePath = path.join(UPLOADS_DIR, filename)
     if (!fs.existsSync(filePath)) {
-      return reply.status(404).send({ success: false, error: 'File not found' })
+      return sendError(reply, 404, 'NOT_FOUND', 'File not found')
     }
 
     const ext = path.extname(filename).toLowerCase()
@@ -109,10 +110,7 @@ export const registerUploadRoutes: FastifyPluginAsync = async (app) => {
         if (!ALL_ALLOWED_TYPES.has(mimeType)) {
           // Drain stream to avoid memory leaks
           part.file.resume()
-          return reply.status(400).send({
-            success: false,
-            error:   `Unsupported file type: ${mimeType}. Allowed: JPEG, PNG, GIF, WebP, AVIF, MP4, WebM, MOV`,
-          })
+          return sendError(reply, 400, 'VALIDATION_ERROR', `Unsupported file type: ${mimeType}. Allowed: JPEG, PNG, GIF, WebP, AVIF, MP4, WebM, MOV`)
         }
 
         const isVideo = ALLOWED_VIDEO_TYPES.has(mimeType)
@@ -140,7 +138,7 @@ export const registerUploadRoutes: FastifyPluginAsync = async (app) => {
 
           if (bytesWritten > VIDEO_SIZE_LIMIT) {
             if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
-            return reply.status(413).send({ success: false, error: 'Video exceeds 50 MB size limit' })
+            return sendError(reply, 400, 'VALIDATION_ERROR', 'Video exceeds 50 MB size limit')
           }
 
           files.push({ url: buildPublicUrl(filename), type: 'video' })
@@ -152,7 +150,7 @@ export const registerUploadRoutes: FastifyPluginAsync = async (app) => {
           for await (const chunk of part.file) {
             totalBytes += (chunk as Buffer).length
             if (totalBytes > IMAGE_SIZE_LIMIT) {
-              return reply.status(413).send({ success: false, error: 'Image exceeds 10 MB size limit' })
+              return sendError(reply, 400, 'VALIDATION_ERROR', 'Image exceeds 10 MB size limit')
             }
             chunks.push(chunk as Buffer)
           }
@@ -173,16 +171,16 @@ export const registerUploadRoutes: FastifyPluginAsync = async (app) => {
       }
     } catch (err) {
       app.log.error(err, 'Upload error')
-      return reply.status(500).send({ success: false, error: 'Upload failed' })
+      return sendError(reply, 500, 'INTERNAL_ERROR', 'Upload failed')
     }
 
     if (files.length === 0) {
-      return reply.status(400).send({ success: false, error: 'No files received' })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'No files received')
     }
 
     const firstFile = files[0]
     if (!firstFile) {
-      return reply.status(400).send({ success: false, error: 'No files received' })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'No files received')
     }
 
     return reply.status(201).send({

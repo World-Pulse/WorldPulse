@@ -8,6 +8,7 @@ import { searchEntities } from '../lib/opensanctions'
 import { sanitizeString } from '../utils/sanitize'
 import { recordSearchLatency, maybeLogPercentiles } from '../lib/search-latency'
 import { generateEmbedding, querySimilar, isPineconeEnabled } from '../lib/pinecone'
+import { sendError } from '../lib/errors'
 
 /** Wrap a Meilisearch promise with a 150ms timeout.
  *  Resolves with { result, partial: false } on success,
@@ -70,10 +71,7 @@ export const registerSearchRoutes: FastifyPluginAsync = async (app) => {
     const reqStart = Date.now()
     const parsed = SearchQuerySchema.safeParse(req.query)
     if (!parsed.success) {
-      return reply.status(400).send({
-        success: false,
-        error:   parsed.error.errors[0]?.message ?? 'Invalid query parameters',
-      })
+      return sendError(reply, 400, 'VALIDATION_ERROR', parsed.error.errors[0]?.message ?? 'Invalid query parameters')
     }
 
     const {
@@ -357,10 +355,7 @@ export const registerSearchRoutes: FastifyPluginAsync = async (app) => {
   }, async (req, reply) => {
     const parsed = EntityQuerySchema.safeParse(req.query)
     if (!parsed.success) {
-      return reply.status(400).send({
-        success: false,
-        error:   parsed.error.errors[0]?.message ?? 'Invalid query parameters',
-      })
+      return sendError(reply, 400, 'VALIDATION_ERROR', parsed.error.errors[0]?.message ?? 'Invalid query parameters')
     }
 
     const { q: rawQ, schema, limit } = parsed.data
@@ -385,10 +380,7 @@ export const registerSearchRoutes: FastifyPluginAsync = async (app) => {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
       req.log.error({ err, q }, 'OpenSanctions entity search failed')
-      return reply.status(502).send({
-        success: false,
-        error:   `Sanctions database temporarily unavailable: ${msg}`,
-      })
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', `Sanctions database temporarily unavailable: ${msg}`)
     }
   })
 
@@ -440,10 +432,7 @@ export const registerSearchRoutes: FastifyPluginAsync = async (app) => {
     }).safeParse(req.query)
 
     if (!parsed.success) {
-      return reply.status(400).send({
-        success: false,
-        error:   parsed.error.errors[0]?.message ?? 'Invalid query parameters',
-      })
+      return sendError(reply, 400, 'VALIDATION_ERROR', parsed.error.errors[0]?.message ?? 'Invalid query parameters')
     }
 
     const { q: rawQ, limit, category } = parsed.data

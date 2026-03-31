@@ -6,6 +6,7 @@ import { z } from 'zod'
 import type { AuthTokens, ApiResponse, AuthUser } from '@worldpulse/types'
 import { indexUser } from '../lib/search'
 import { checkLoginAttempt, recordFailedLogin, clearLoginAttempts } from '../lib/security'
+import { sendError } from '../lib/errors'
 
 const RegisterSchema = z.object({
   handle:      z.string().min(3).max(50).regex(/^[a-zA-Z0-9_]+$/),
@@ -118,7 +119,7 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
   }, async (req, reply) => {
     const body = RegisterSchema.safeParse(req.body)
     if (!body.success) {
-      return reply.status(400).send({ success: false, error: 'Invalid input', code: 'VALIDATION_ERROR' })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid input')
     }
 
     const { handle, displayName, email, password } = body.data
@@ -131,7 +132,7 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
 
     if (exists) {
       const field = exists.email === email ? 'email' : 'handle'
-      return reply.status(409).send({ success: false, error: `That ${field} is already taken`, code: 'DUPLICATE' })
+      return sendError(reply, 409, 'CONFLICT', `That ${field} is already taken`)
     }
 
     const passwordHash = await bcrypt.hash(password, 12)
@@ -197,7 +198,7 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
   }, async (req, reply) => {
     const body = LoginSchema.safeParse(req.body)
     if (!body.success) {
-      return reply.status(400).send({ success: false, error: 'Invalid input', code: 'VALIDATION_ERROR' })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid input')
     }
 
     const { email, password } = body.data
@@ -205,28 +206,24 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
     // ── Gate 6: Brute-force protection ─────────────────────
     const loginCheck = await checkLoginAttempt(email)
     if (!loginCheck.allowed) {
-      return reply.status(429).send({
-        success: false,
-        error: 'Too many failed login attempts. Please try again later.',
-        code: 'ACCOUNT_LOCKED',
-      })
+      return sendError(reply, 429, 'RATE_LIMITED', 'Too many failed login attempts. Please try again later.')
     }
 
     const user = await db('users').where('email', email).first()
 
     if (!user || !user.password_hash) {
       await recordFailedLogin(email)
-      return reply.status(401).send({ success: false, error: 'Invalid credentials', code: 'INVALID_CREDENTIALS' })
+      return sendError(reply, 401, 'UNAUTHORIZED', 'Invalid credentials')
     }
 
     if (user.suspended) {
-      return reply.status(403).send({ success: false, error: 'Account suspended', code: 'SUSPENDED' })
+      return sendError(reply, 403, 'FORBIDDEN', 'Account suspended')
     }
 
     const valid = await bcrypt.compare(password, user.password_hash)
     if (!valid) {
       await recordFailedLogin(email)
-      return reply.status(401).send({ success: false, error: 'Invalid credentials', code: 'INVALID_CREDENTIALS' })
+      return sendError(reply, 401, 'UNAUTHORIZED', 'Invalid credentials')
     }
 
     // Clear failed attempts on successful login
@@ -267,14 +264,14 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
   }, async (req, reply) => {
     const parsed = RefreshTokenSchema.safeParse(req.body)
     if (!parsed.success) {
-      return reply.status(400).send({ success: false, error: 'Refresh token required', code: 'MISSING_TOKEN' })
+      return sendError(reply, 400, 'BAD_REQUEST', 'Refresh token required')
     }
     const { refreshToken } = parsed.data
 
     // Verify refresh token from Redis
     const userId = await redis.get(`refresh:${refreshToken}`)
     if (!userId) {
-      return reply.status(401).send({ success: false, error: 'Invalid or expired refresh token', code: 'INVALID_TOKEN' })
+      return sendError(reply, 401, 'UNAUTHORIZED', 'Invalid or expired refresh token')
     }
 
     // Rotate: delete old, issue new
@@ -319,7 +316,7 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
     const clientId = process.env.GITHUB_CLIENT_ID
     const redirectUri = process.env.GITHUB_REDIRECT_URI
     if (!clientId || !redirectUri) {
-      return reply.status(503).send({ success: false, error: 'GitHub OAuth is not configured', code: 'OAUTH_NOT_CONFIGURED' })
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'GitHub OAuth is not configured')
     }
 
     const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('hex')
@@ -481,7 +478,7 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
       try {
         await req.jwtVerify()
       } catch {
-        return reply.status(401).send({ success: false, error: 'Unauthorized', code: 'UNAUTHORIZED' })
+        return sendError(reply, 401, 'UNAUTHORIZED', 'Unauthorized')
       }
     },
   }, async (req, reply) => {
@@ -493,7 +490,7 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
                'signal_count', 'verified', 'onboarded', 'created_at'])
       .first()
 
-    if (!user) return reply.status(404).send({ success: false, error: 'User not found' })
+    if (!user) return sendError(reply, 404, 'NOT_FOUND', 'User not found')
     return reply.send({ success: true, data: formatUser(user) })
   })
 }

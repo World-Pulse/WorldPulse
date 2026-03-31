@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 import { logger } from '../lib/logger'
+import { sendError } from '../lib/errors'
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -224,7 +225,7 @@ export const registerRssRoutes: FastifyPluginAsync = async (app) => {
       req.query as { category?: string; severity?: string; min_reliability?: number; limit?: number }
 
     if (category && !VALID_CATEGORIES.includes(category as typeof VALID_CATEGORIES[number])) {
-      return reply.status(400).send({ success: false, error: `Invalid category: ${category}` })
+      return sendError(reply, 400, 'VALIDATION_ERROR', `Invalid category: ${category}`)
     }
 
     const cacheKey = `rss:atom:${category ?? 'all'}:${severity ?? 'all'}:${min_reliability ?? '0'}:${limit}`
@@ -274,7 +275,7 @@ export const registerRssRoutes: FastifyPluginAsync = async (app) => {
       req.query as { category?: string; severity?: string; min_reliability?: number; limit?: number }
 
     if (category && !VALID_CATEGORIES.includes(category as typeof VALID_CATEGORIES[number])) {
-      return reply.status(400).send({ success: false, error: `Invalid category: ${category}` })
+      return sendError(reply, 400, 'VALIDATION_ERROR', `Invalid category: ${category}`)
     }
 
     const cacheKey = `rss:json:${category ?? 'all'}:${severity ?? 'all'}:${min_reliability ?? '0'}:${limit}`
@@ -331,7 +332,7 @@ export const registerRssRoutes: FastifyPluginAsync = async (app) => {
       req.query as { severity?: string; min_reliability?: number; limit?: number }
 
     if (!VALID_CATEGORIES.includes(category as typeof VALID_CATEGORIES[number])) {
-      return reply.status(404).send({ success: false, error: `Unknown category: ${category}` })
+      return sendError(reply, 404, 'NOT_FOUND', `Unknown category: ${category}`)
     }
 
     const cacheKey = `rss:atom:cat:${category}:${severity ?? 'all'}:${min_reliability ?? '0'}:${limit}`
@@ -385,7 +386,7 @@ export const registerRssRoutes: FastifyPluginAsync = async (app) => {
       req.query as { severity?: string; min_reliability?: number; limit?: number }
 
     if (!VALID_CATEGORIES.includes(category as typeof VALID_CATEGORIES[number])) {
-      return reply.status(404).send({ success: false, error: `Unknown category: ${category}` })
+      return sendError(reply, 404, 'NOT_FOUND', `Unknown category: ${category}`)
     }
 
     const cacheKey = `rss:json:cat:${category}:${severity ?? 'all'}:${min_reliability ?? '0'}:${limit}`

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { db } from '../db/postgres'
 import { optionalAuth, authenticate } from '../middleware/auth'
 import { sendDigestEmail, filterBySeverity } from '../lib/email-digest'
+import { sendError } from '../lib/errors'
 import type { Signal, SignalSeverity } from '@worldpulse/types'
 
 // ─── Validation schemas ────────────────────────────────────────────────────
@@ -33,7 +34,7 @@ export const registerDigestRoutes: FastifyPluginAsync = async (app) => {
   app.post('/subscribe', { preHandler: [optionalAuth] }, async (req, reply) => {
     const parsed = SubscribeSchema.safeParse(req.body)
     if (!parsed.success) {
-      return reply.status(400).send({ success: false, error: 'Invalid input', details: parsed.error.flatten() })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid input')
     }
 
     const { email, frequency, categories, min_severity } = parsed.data
@@ -80,7 +81,7 @@ export const registerDigestRoutes: FastifyPluginAsync = async (app) => {
 
     const parsed = UnsubscribeSchema.safeParse({ email: rawEmail })
     if (!parsed.success) {
-      return reply.status(400).send({ success: false, error: 'Valid email required' })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Valid email required')
     }
 
     const { email } = parsed.data
@@ -91,7 +92,7 @@ export const registerDigestRoutes: FastifyPluginAsync = async (app) => {
       .update({ is_active: false, updated_at: db.fn.now() })
 
     if (updated === 0) {
-      return reply.status(404).send({ success: false, error: 'Subscription not found' })
+      return sendError(reply, 404, 'NOT_FOUND', 'Subscription not found')
     }
 
     return reply.send({ success: true, message: 'Unsubscribed from digest' })
@@ -102,7 +103,7 @@ export const registerDigestRoutes: FastifyPluginAsync = async (app) => {
     const email = (req.query as Record<string, string>).email
 
     if (!email || typeof email !== 'string') {
-      return reply.status(400).send({ success: false, error: 'email query parameter required' })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'email query parameter required')
     }
 
     const sub = await db('digest_subscriptions')
@@ -144,7 +145,7 @@ export const registerAdminDigestRoutes: FastifyPluginAsync = async (app) => {
   // Admin-only.
   app.post('/digest/send', { preHandler: [authenticate] }, async (req, reply) => {
     if (!req.user || req.user.accountType !== 'admin') {
-      return reply.status(403).send({ success: false, error: 'Admin access required', code: 'FORBIDDEN' })
+      return sendError(reply, 403, 'FORBIDDEN', 'Admin access required')
     }
 
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1_000)

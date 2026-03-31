@@ -16,6 +16,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db }    from '../db/postgres'
 import { redis } from '../db/redis'
+import { sendError } from '../lib/errors'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -108,11 +109,7 @@ export const registerCyberRoutes: FastifyPluginAsync = async (app) => {
     // ── Parse window ─────────────────────────────────────────────────────────
     const windowParam = typeof q.window === 'string' ? q.window : '24h'
     if (!(windowParam in WINDOW_HOURS)) {
-      return reply.status(400).send({
-        success: false,
-        error:   'window must be one of: 24h, 48h, 7d',
-        code:    'INVALID_WINDOW',
-      })
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'window must be one of: 24h, 48h, 7d')
     }
     const hours = WINDOW_HOURS[windowParam] as number
 
@@ -177,7 +174,7 @@ export const registerCyberRoutes: FastifyPluginAsync = async (app) => {
       })
     } catch (err) {
       console.error('[cyber] DB error (recent):', err)
-      return reply.status(500).send({ success: false, error: 'Database error', code: 'DB_ERROR' })
+      return sendError(reply, 500, 'INTERNAL_ERROR', 'Database error')
     }
   })
 
@@ -247,7 +244,7 @@ export const registerCyberRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ success: true, cached: false, data: summary })
     } catch (err) {
       console.error('[cyber] DB error (summary):', err)
-      return reply.status(500).send({ success: false, error: 'Database error', code: 'DB_ERROR' })
+      return sendError(reply, 500, 'INTERNAL_ERROR', 'Database error')
     }
   })
 }

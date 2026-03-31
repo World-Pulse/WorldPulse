@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
 import { authenticate } from '../middleware/auth'
 import { z } from 'zod'
+import { sendError } from '../lib/errors'
 
 const AlertSchema = z.object({
   name:        z.string().min(1).max(100),
@@ -32,12 +33,12 @@ export const registerAlertRoutes: FastifyPluginAsync = async (app) => {
 
   app.post('/', { preHandler: [authenticate] }, async (req, reply) => {
     const body = AlertSchema.safeParse(req.body)
-    if (!body.success) return reply.status(400).send({ success: false, error: 'Invalid input' })
+    if (!body.success) return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid input')
 
     // Max 20 alerts per user
     const count = await db('alert_subscriptions').where('user_id', req.user!.id).count('id as c').first()
     if (Number((count as { c: string })?.c ?? 0) >= 20) {
-      return reply.status(429).send({ success: false, error: 'Maximum 20 alerts allowed' })
+      return sendError(reply, 429, 'RATE_LIMITED', 'Maximum 20 alerts allowed')
     }
 
     const [alert] = await db('alert_subscriptions')
@@ -58,13 +59,13 @@ export const registerAlertRoutes: FastifyPluginAsync = async (app) => {
   app.put('/:id', { preHandler: [authenticate] }, async (req, reply) => {
     const { id } = req.params as { id: string }
     const body = AlertSchema.partial().safeParse(req.body)
-    if (!body.success) return reply.status(400).send({ success: false, error: 'Invalid input' })
+    if (!body.success) return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid input')
 
     const alert = await db('alert_subscriptions')
       .where({ id, user_id: req.user!.id })
       .first('id')
 
-    if (!alert) return reply.status(404).send({ success: false, error: 'Alert not found' })
+    if (!alert) return sendError(reply, 404, 'NOT_FOUND', 'Alert not found')
 
     const updates: Record<string, unknown> = {}
     if (body.data.name !== undefined) updates.name = body.data.name

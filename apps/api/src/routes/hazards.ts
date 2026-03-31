@@ -19,6 +19,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
+import { sendError } from '../lib/errors'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -134,11 +135,7 @@ export const registerHazardsRoutes: FastifyPluginAsync = async (app) => {
       if (hParam !== undefined) {
         const h = Number(hParam)
         if (!isFinite(h) || h < 1 || h > HAZARDS_MAX_HOURS) {
-          return reply.status(400).send({
-            success: false,
-            error: `hours must be between 1 and ${HAZARDS_MAX_HOURS}`,
-            code: 'INVALID_HOURS',
-          })
+          return sendError(reply, 400, 'VALIDATION_ERROR', `hours must be between 1 and ${HAZARDS_MAX_HOURS}`)
         }
         hours = h
       }
@@ -222,11 +219,7 @@ export const registerHazardsRoutes: FastifyPluginAsync = async (app) => {
       } as HazardsMapResponse)
     } catch (err) {
       console.error('[hazards] DB error:', err)
-      return reply.status(500).send({
-        success: false,
-        error: 'Database error',
-        code: 'DB_ERROR',
-      })
+      return sendError(reply, 500, 'INTERNAL_ERROR', 'Database error')
     }
   })
 }
