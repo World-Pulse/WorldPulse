@@ -51,6 +51,8 @@ import { registerFinanceRoutes } from './routes/finance'
 import { registerSanctionsRoutes } from './routes/sanctions'
 import { registerSpaceWeatherRoutes } from './routes/space-weather'
 import { registerCyberRoutes }        from './routes/cyber'
+import { registerPolymarketRoutes }   from './routes/polymarket'
+import { registerAIInfrastructureRoutes } from './routes/ai-infrastructure'
 import { registerWSHandler, startRedisSubscriber } from './ws/handler'
 import { registerGraphQL } from './graphql'
 import { metricsPlugin } from './middleware/metrics'
@@ -356,7 +358,9 @@ async function bootstrap() {
   await app.register(registerSpaceWeatherRoutes, { prefix: '/api/v1/space-weather' })
 
   // ─── CYBER THREAT INTELLIGENCE ───────────────────────────
-  await app.register(registerCyberRoutes, { prefix: '/api/v1/cyber' })
+  await app.register(registerCyberRoutes,        { prefix: '/api/v1/cyber' })
+  await app.register(registerPolymarketRoutes,   { prefix: '/api/v1/polymarket' })
+  await app.register(registerAIInfrastructureRoutes, { prefix: '/api/v1/ai-infrastructure' })
 
   // ─── GRAPHQL ─────────────────────────────────────────────
   await registerGraphQL(app)
