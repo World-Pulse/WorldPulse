@@ -24,9 +24,9 @@ import { z } from 'zod'
 /** Parse a string that represents a positive integer, apply a max cap. */
 function intParam(defaultVal: number, min = 1, max = 200) {
   return z
-    .string()
+    .union([z.string(), z.number()])
     .optional()
-    .transform(v => (v === undefined ? defaultVal : parseInt(v, 10)))
+    .transform(v => (v === undefined ? defaultVal : typeof v === 'number' ? v : parseInt(v, 10)))
     .pipe(z.number().int().min(min).max(max))
 }
 
