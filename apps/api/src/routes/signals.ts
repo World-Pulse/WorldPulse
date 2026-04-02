@@ -13,6 +13,13 @@ import type { CIBSignalInput } from '../lib/cib-detection'
 import { z } from 'zod'
 import { sendError } from '../lib/errors'
 import { getSourceBias, extractDomain } from '../lib/source-bias'
+import {
+  parseQuery,
+  SignalListQuerySchema,
+  MapPointsQuerySchema,
+  HistoryQuerySchema,
+  HotspotsQuerySchema,
+} from '../lib/query-schemas'
 
 // ─── Bbox Validation Helper ───────────────────────────────────────────────────
 /**
@@ -105,14 +112,9 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     preHandler: [optionalAuth],
     config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
   }, async (req, reply) => {
-    const {
-      category, severity, country, status = 'verified',
-      cursor, limit = 20, bbox,
-    } = req.query as {
-      category?: string; severity?: string; country?: string
-      status?: string;   cursor?: string;   limit?: number
-      bbox?: string  // "minLng,minLat,maxLng,maxLat"
-    }
+    const qr = parseQuery(SignalListQuerySchema, req.query)
+    if (qr.error) return sendError(reply, 400, 'VALIDATION_ERROR', qr.error)
+    const { category, severity, country, status, cursor, limit, bbox } = qr.data
 
     // Cache unauthenticated list requests (no cursor-based pages beyond first)
     const isFirstPage = !cursor
@@ -717,11 +719,11 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       },
     },
   }, async (req, reply) => {
-    const { category, severity, hours = 24, bbox } = req.query as {
-      category?: string; severity?: string; hours?: number; bbox?: string
-    }
+    const qr = parseQuery(MapPointsQuerySchema, req.query)
+    if (qr.error) return sendError(reply, 400, 'VALIDATION_ERROR', qr.error)
+    const { category, severity, hours, bbox } = qr.data
 
-    const safeHours = Math.min(Number(hours), 168)
+    const safeHours = hours
     const bboxKey   = bbox ? `:${bbox}` : ''
 
     // Cache map points — these are expensive PostGIS queries
@@ -936,10 +938,12 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     },
   }, async (req, reply) => {
     const { id } = req.params as { id: string }
-    const { page = 1, limit = 20 } = req.query as { page?: number; limit?: number }
+    const qr = parseQuery(HistoryQuerySchema, req.query)
+    if (qr.error) return sendError(reply, 400, 'VALIDATION_ERROR', qr.error)
+    const { page, limit } = qr.data
 
-    const safeLimit = Math.min(Math.max(1, Number(limit)), 100)
-    const offset    = (Math.max(1, Number(page)) - 1) * safeLimit
+    const safeLimit = limit
+    const offset    = (page - 1) * safeLimit
 
     try {
       const [items, countRows] = await Promise.all([
@@ -1005,10 +1009,9 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       },
     },
   }, async (req, reply) => {
-    const q = req.query as { hours?: number; min_categories?: number; limit?: number }
-    const hours  = Math.min(168, Math.max(1,  Number(q.hours          ?? 24)))
-    const minCat = Math.min(10,  Math.max(2,  Number(q.min_categories ?? 3)))
-    const limit  = Math.min(50,  Math.max(1,  Number(q.limit          ?? 20)))
+    const qr = parseQuery(HotspotsQuerySchema, req.query)
+    if (qr.error) return sendError(reply, 400, 'VALIDATION_ERROR', qr.error)
+    const { hours, min_categories: minCat, limit } = qr.data
 
     const cacheKey = `signals:hotspots:${hours}:${minCat}:${limit}`
     const cached = await redis.get(cacheKey).catch(() => null)
@@ -1034,7 +1037,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       FROM signals
       WHERE location IS NOT NULL
         AND created_at > NOW() - INTERVAL '${hours} hours'
-        AND status != 'rejected'
+        AND status IN ('verified', 'pending')
       GROUP BY cell_lat, cell_lng
       HAVING COUNT(DISTINCT category) >= ${minCat}
       ORDER BY COUNT(DISTINCT category) DESC, COUNT(*) DESC
@@ -1164,6 +1167,72 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     }
 
     redis.setex(cacheKey, 120, JSON.stringify(payload)).catch(() => {})
+    return reply.send(payload)
+  })
+
+  // ─── CONFLICT ZONE SIGNALS MAP ───────────────────────────────────────────────
+  // GET /api/v1/signals/map/conflict-zones
+  //
+  // Returns conflict/military/security-category signals from the last 72 hours
+  // as a GeoJSON FeatureCollection for the conflict zone map overlay.
+  // Signals are filtered to those with valid coordinates (non-null, non-zero).
+  // Results are Redis-cached for 90 s.
+  app.get('/map/conflict-zones', {
+    schema: {
+      tags: ['signals'],
+      summary: 'Conflict zone signals for map overlay (GeoJSON)',
+      description: 'Returns conflict, military, and security signals from the last 72 hours as a GeoJSON FeatureCollection for the conflict zone map layer.',
+    },
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+  }, async (_req, reply) => {
+    const cacheKey = 'signals:map:conflict-zones'
+    const cached = await redis.get(cacheKey).catch(() => null)
+    if (cached) {
+      try { return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached)) } catch { /* fallthrough */ }
+    }
+
+    const result = await db.raw<{ rows: Array<Record<string, unknown>> }>(`
+      SELECT id, title, severity, category, reliability_score, source_name,
+        created_at AS published_at,
+        ST_Y(location::geometry) AS lat,
+        ST_X(location::geometry) AS lng
+      FROM signals
+      WHERE category IN ('conflict', 'military', 'security')
+        AND location IS NOT NULL
+        AND ST_Y(location::geometry) IS NOT NULL
+        AND ST_X(location::geometry) IS NOT NULL
+        AND ST_Y(location::geometry) != 0
+        AND ST_X(location::geometry) != 0
+        AND created_at > NOW() - INTERVAL '72 hours'
+      ORDER BY created_at DESC
+      LIMIT 300
+    `)
+
+    const features = result.rows.map(r => ({
+      type: 'Feature' as const,
+      geometry: {
+        type: 'Point' as const,
+        coordinates: [parseFloat(String(r.lng)), parseFloat(String(r.lat))],
+      },
+      properties: {
+        id:                String(r.id),
+        title:             String(r.title ?? ''),
+        severity:          String(r.severity ?? 'low'),
+        category:          String(r.category ?? 'conflict'),
+        reliability_score: parseFloat(String(r.reliability_score ?? 0)),
+        source_name:       r.source_name ? String(r.source_name) : null,
+        published_at:      r.published_at
+          ? (r.published_at as Date).toISOString()
+          : null,
+      },
+    }))
+
+    const payload = {
+      type: 'FeatureCollection' as const,
+      features,
+    }
+
+    redis.setex(cacheKey, 90, JSON.stringify(payload)).catch(() => {})
     return reply.send(payload)
   })
 
