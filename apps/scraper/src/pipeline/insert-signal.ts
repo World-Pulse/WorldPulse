@@ -167,5 +167,8 @@ export async function insertAndCorrelate(
     logger.warn({ err, signalId: signal.id }, 'Breaking alert publish failed (non-fatal)')
   }
 
+  // 4. Pinecone embedding — disabled until PINECONE_API_KEY is set
+  // The pinecone module is optional; skip entirely when not configured.
+
   return signal
 }

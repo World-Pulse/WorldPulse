@@ -734,8 +734,20 @@ async function updateTrending() {
   for (const window of ['1h', '6h', '24h'] as const) {
     try {
       const topics = await computeTrending(window)
-      
+
       await db.transaction(async trx => {
+        // Ensure 'window' column exists (may be missing on older DB schemas)
+        const hasWindowCol = await trx.raw(`
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'trending_topics' AND column_name = 'window' LIMIT 1
+        `)
+        if (!hasWindowCol.rows?.length) {
+          await trx.raw(`ALTER TABLE trending_topics ADD COLUMN IF NOT EXISTS window VARCHAR(20) NOT NULL DEFAULT '1h'`)
+          await trx.raw(`ALTER TABLE trending_topics DROP CONSTRAINT IF EXISTS trending_topics_tag_window_snapshot_at_key`)
+          await trx.raw(`ALTER TABLE trending_topics ADD CONSTRAINT trending_topics_tag_window_snapshot_at_key UNIQUE(tag, window, snapshot_at)`)
+          logger.info('Added missing "window" column to trending_topics')
+        }
+
         // Clear old snapshot for this window
         await trx('trending_topics')
           .where('window', window)
