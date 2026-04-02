@@ -184,7 +184,8 @@ async function fetchRecentSignals(signal: CorrelationCandidate): Promise<Correla
 
   const query = db('signals')
     .select(
-      'id', 'title', 'category', 'severity', 'source_id',
+      'id', 'title', 'category', 'severity',
+      db.raw('source_ids[1]::text as source_id'),
       'location_name', 'reliability_score', 'published_at', 'tags',
     )
     .where('published_at', '>=', since.toISOString())
@@ -200,7 +201,7 @@ async function fetchRecentSignals(signal: CorrelationCandidate): Promise<Correla
     title: r.title as string,
     category: r.category as string,
     severity: r.severity as string,
-    source_id: r.source_id as string,
+    source_id: (r.source_id as string) ?? '',
     location_name: r.location_name as string | null,
     lat: r.lat as number | null,
     lng: r.lng as number | null,
