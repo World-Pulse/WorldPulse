@@ -111,35 +111,45 @@ export const registerCameraRoutes: FastifyPluginAsync = async (app) => {
       },
     },
   }, async (req, reply) => {
-    const region = req.query.region ?? 'global'
-    const limit  = Math.min(Number(req.query.limit ?? CAMERAS_DEFAULT_LIMIT), CAMERAS_MAX_LIMIT)
-    const type   = (req.query.type && VALID_TYPES.has(req.query.type))
-      ? (req.query.type as CameraType)
-      : undefined
+    try {
+      const region = req.query.region ?? 'global'
+      const limit  = Math.min(Number(req.query.limit ?? CAMERAS_DEFAULT_LIMIT), CAMERAS_MAX_LIMIT)
+      const type   = (req.query.type && VALID_TYPES.has(req.query.type))
+        ? (req.query.type as CameraType)
+        : undefined
 
-    const cacheKey = `cameras:${region}:${type ?? 'all'}:${limit}`
+      const cacheKey = `cameras:${region}:${type ?? 'all'}:${limit}`
 
-    // ── Cache hit ─────────────────────────────────────────────────────────────
-    const cached = await redis.get(cacheKey)
-    if (cached) {
-      void reply.header('X-Cache', 'HIT')
-      return reply.send(JSON.parse(cached) as unknown)
+      // ── Cache hit ─────────────────────────────────────────────────────────────
+      const cached = await redis.get(cacheKey)
+      if (cached) {
+        void reply.header('X-Cache', 'HIT')
+        return reply.send(JSON.parse(cached) as unknown)
+      }
+
+      // ── Fetch + filter ────────────────────────────────────────────────────────
+      let cameras = await fetchPublicCameras(region, CAMERAS_MAX_LIMIT)
+      if (type) cameras = cameras.filter(c => c.type === type)
+      const page = cameras.slice(0, limit)
+
+      const payload = {
+        cameras: page,
+        total:   page.length,
+        region,
+        regions: CAMERA_REGIONS.map(r => ({ id: r.id, label: r.label })),
+      }
+
+      await redis.setex(cacheKey, CAMERAS_CACHE_TTL, JSON.stringify(payload))
+      void reply.header('X-Cache', 'MISS')
+      return reply.send(payload)
+    } catch (err) {
+      req.log.error({ err }, '[cameras] Handler error')
+      return reply.send({
+        cameras: [],
+        total: 0,
+        region: req.query.region ?? 'global',
+        regions: CAMERA_REGIONS.map(r => ({ id: r.id, label: r.label })),
+      })
     }
-
-    // ── Fetch + filter ────────────────────────────────────────────────────────
-    let cameras = await fetchPublicCameras(region, CAMERAS_MAX_LIMIT)
-    if (type) cameras = cameras.filter(c => c.type === type)
-    const page = cameras.slice(0, limit)
-
-    const payload = {
-      cameras: page,
-      total:   page.length,
-      region,
-      regions: CAMERA_REGIONS.map(r => ({ id: r.id, label: r.label })),
-    }
-
-    await redis.setex(cacheKey, CAMERAS_CACHE_TTL, JSON.stringify(payload))
-    void reply.header('X-Cache', 'MISS')
-    return reply.send(payload)
   })
 }

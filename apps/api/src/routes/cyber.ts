@@ -173,8 +173,12 @@ export const registerCyberRoutes: FastifyPluginAsync = async (app) => {
         data:    { signals, count: signals.length, window: windowParam },
       })
     } catch (err) {
-      console.error('[cyber] DB error (recent):', err)
-      return sendError(reply, 500, 'INTERNAL_ERROR', 'Database error')
+      req.log.error({ err }, '[cyber] DB error (recent)')
+      return reply.send({
+        success: true,
+        cached:  false,
+        data:    { signals: [], count: 0, window: windowParam },
+      })
     }
   })
 
@@ -243,8 +247,17 @@ export const registerCyberRoutes: FastifyPluginAsync = async (app) => {
 
       return reply.send({ success: true, cached: false, data: summary })
     } catch (err) {
-      console.error('[cyber] DB error (summary):', err)
-      return sendError(reply, 500, 'INTERNAL_ERROR', 'Database error')
+      _req.log.error({ err }, '[cyber] DB error (summary)')
+      const emptySummary: CyberThreatSummary = {
+        total_24h: 0,
+        cisa_kev_count: 0,
+        otx_count: 0,
+        critical_count: 0,
+        high_count: 0,
+        medium_count: 0,
+        low_count: 0,
+      }
+      return reply.send({ success: true, cached: false, data: emptySummary })
     }
   })
 }

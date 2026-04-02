@@ -121,6 +121,7 @@ export const registerBriefingDailyRoutes: FastifyPluginAsync = async (app) => {
     },
     config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
   }, async (req, reply) => {
+    try {
     const { date, category } = req.query as { date?: string; category?: string }
 
     // Determine date window
@@ -240,5 +241,19 @@ export const registerBriefingDailyRoutes: FastifyPluginAsync = async (app) => {
     redis.setex(cacheKey, BRIEFING_CACHE_TTL, JSON.stringify(response)).catch(() => {})
 
     return reply.send(response)
+    } catch (err) {
+      req.log.error({ err }, 'briefing/daily: handler error')
+      return reply.send({
+        success: true,
+        data: {
+          date: new Date().toISOString().slice(0, 10),
+          generated_at: new Date().toISOString(),
+          headline_count: 0,
+          sections: [],
+          top_locations: [],
+          severity_breakdown: { critical: 0, high: 0, medium: 0, low: 0 },
+        },
+      })
+    }
   })
 }

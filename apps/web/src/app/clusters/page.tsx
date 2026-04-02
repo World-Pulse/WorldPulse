@@ -73,8 +73,9 @@ export default function ClustersPage() {
       setLoading(true)
       const res = await fetch(`${API_BASE}/signals/clusters/recent?limit=50`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
-      setClusters(Array.isArray(data) ? data : data.clusters ?? [])
+      const json = await res.json()
+      const items = json.data ?? json.clusters ?? (Array.isArray(json) ? json : [])
+      setClusters(items)
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load clusters')

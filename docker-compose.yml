@@ -138,9 +138,16 @@ services:
     restart: always
     labels:
       autoheal: "true"
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     depends_on:
-      - kafka
-      - redis
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      redis:
+        condition: service_started
     environment:
       NODE_ENV: production
       KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:29092}
@@ -149,6 +156,10 @@ services:
       SCRAPE_INTERVAL_MS: 30000
       LOG_LEVEL: debug
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    networks:
+      default:
+        aliases:
+          - scraper
 
   web:
     build:

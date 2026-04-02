@@ -170,6 +170,7 @@ export const registerPatentRoutes: FastifyPluginAsync = async (app) => {
       },
     },
     handler: async (req, reply) => {
+      try {
       const { window = '30d', limit = 50, severity } = req.query as {
         window?: string
         limit?: number
@@ -317,6 +318,20 @@ export const registerPatentRoutes: FastifyPluginAsync = async (app) => {
 
       await redis.setex(cacheKey, PATENTS_CACHE_TTL, JSON.stringify(result))
       return reply.send(result)
+      } catch (err) {
+        req.log.error({ err }, 'patents: handler error')
+        return reply.status(500).send({
+          window: req.query && (req.query as Record<string, unknown>).window || '30d',
+          total_patents: 0,
+          severity_distribution: [],
+          cpc_breakdown: [],
+          top_assignees: [],
+          timeline: [],
+          recent_patents: [],
+          generated_at: new Date().toISOString(),
+          error: 'Temporary data unavailable',
+        })
+      }
     },
   })
 }

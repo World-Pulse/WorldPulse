@@ -196,66 +196,92 @@ export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
         },
       },
     },
-  }, async (_req, reply) => {
-    // ── Cache check ──────────────────────────────────────────────────────────
-    const cached = await redis.get(FINANCE_CACHE_KEY)
-    if (cached) {
-      const summary = JSON.parse(cached) as FinanceSummary
-      return reply.send({ success: true, cached: true, data: summary })
+  }, async (req, reply) => {
+    try {
+      // ── Cache check ──────────────────────────────────────────────────────────
+      const cached = await redis.get(FINANCE_CACHE_KEY)
+      if (cached) {
+        const summary = JSON.parse(cached) as FinanceSummary
+        return reply.send({ success: true, cached: true, data: summary })
+      }
+
+      // ── Query DB ─────────────────────────────────────────────────────────────
+      const now   = new Date()
+      const ago24 = new Date(now.getTime() - 24 * 60 * 60 * 1_000)
+      const ago6  = new Date(now.getTime() -  6 * 60 * 60 * 1_000)
+
+      const [rows24h, rows6h, topRows] = await Promise.all([
+        db('signals')
+          .where('category', 'finance')
+          .where('created_at', '>=', ago24.toISOString())
+          .select('title', 'tags'),
+        db('signals')
+          .where('category', 'finance')
+          .where('created_at', '>=', ago6.toISOString())
+          .select('title', 'tags'),
+        db('signals')
+          .where('category', 'finance')
+          .where('created_at', '>=', ago24.toISOString())
+          .orderBy('reliability_score', 'desc')
+          .orderBy('created_at', 'desc')
+          .limit(20)
+          .select(
+            'id', 'title', 'tags', 'severity',
+            'reliability_score', 'location_name', 'country_code', 'created_at',
+          ),
+      ])
+
+      const subcategory_breakdown = buildSubcategoryBreakdown(rows24h)
+      const trend_direction       = deriveFinanceTrend(rows24h.length, rows6h.length)
+
+      const top_signals: FinanceSignalEntry[] = topRows.map((r) => ({
+        id:                r.id as string,
+        title:             r.title as string,
+        subcategory:       inferSubcategory(r.title as string, (r.tags as string[] | null) ?? []),
+        severity:          r.severity as string,
+        reliability_score: Number(r.reliability_score),
+        location_name:     (r.location_name as string | null) ?? null,
+        country_code:      (r.country_code  as string | null) ?? null,
+        created_at:        r.created_at as string,
+      }))
+
+      const summary: FinanceSummary = {
+        period_hours:          24,
+        total_signals_24h:     rows24h.length,
+        total_signals_6h:      rows6h.length,
+        trend_direction,
+        subcategory_breakdown,
+        top_signals,
+        generated_at:          now.toISOString(),
+      }
+
+      await redis.setex(FINANCE_CACHE_KEY, FINANCE_CACHE_TTL, JSON.stringify(summary))
+
+      return reply.send({ success: true, cached: false, data: summary })
+    } catch (err) {
+      req.log.error({ err }, '[finance] Handler error')
+      const now = new Date()
+      const emptyBreakdown: SubcategoryBreakdown = {
+        market_move: 0,
+        central_bank: 0,
+        sanctions: 0,
+        corporate: 0,
+        crypto: 0,
+        unclassified: 0,
+      }
+      return reply.send({
+        success: true,
+        cached: false,
+        data: {
+          period_hours: 24,
+          total_signals_24h: 0,
+          total_signals_6h: 0,
+          trend_direction: 'stable',
+          subcategory_breakdown: emptyBreakdown,
+          top_signals: [],
+          generated_at: now.toISOString(),
+        },
+      })
     }
-
-    // ── Query DB ─────────────────────────────────────────────────────────────
-    const now   = new Date()
-    const ago24 = new Date(now.getTime() - 24 * 60 * 60 * 1_000)
-    const ago6  = new Date(now.getTime() -  6 * 60 * 60 * 1_000)
-
-    const [rows24h, rows6h, topRows] = await Promise.all([
-      db('signals')
-        .where('category', 'finance')
-        .where('created_at', '>=', ago24.toISOString())
-        .select('title', 'tags'),
-      db('signals')
-        .where('category', 'finance')
-        .where('created_at', '>=', ago6.toISOString())
-        .select('title', 'tags'),
-      db('signals')
-        .where('category', 'finance')
-        .where('created_at', '>=', ago24.toISOString())
-        .orderBy('reliability_score', 'desc')
-        .orderBy('created_at', 'desc')
-        .limit(20)
-        .select(
-          'id', 'title', 'tags', 'severity',
-          'reliability_score', 'location_name', 'country_code', 'created_at',
-        ),
-    ])
-
-    const subcategory_breakdown = buildSubcategoryBreakdown(rows24h)
-    const trend_direction       = deriveFinanceTrend(rows24h.length, rows6h.length)
-
-    const top_signals: FinanceSignalEntry[] = topRows.map((r) => ({
-      id:                r.id as string,
-      title:             r.title as string,
-      subcategory:       inferSubcategory(r.title as string, (r.tags as string[] | null) ?? []),
-      severity:          r.severity as string,
-      reliability_score: Number(r.reliability_score),
-      location_name:     (r.location_name as string | null) ?? null,
-      country_code:      (r.country_code  as string | null) ?? null,
-      created_at:        r.created_at as string,
-    }))
-
-    const summary: FinanceSummary = {
-      period_hours:          24,
-      total_signals_24h:     rows24h.length,
-      total_signals_6h:      rows6h.length,
-      trend_direction,
-      subcategory_breakdown,
-      top_signals,
-      generated_at:          now.toISOString(),
-    }
-
-    await redis.setex(FINANCE_CACHE_KEY, FINANCE_CACHE_TTL, JSON.stringify(summary))
-
-    return reply.send({ success: true, cached: false, data: summary })
   })
 }

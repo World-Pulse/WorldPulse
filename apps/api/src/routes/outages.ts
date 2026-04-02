@@ -162,8 +162,8 @@ export const registerOutagesRoutes: FastifyPluginAsync = async (app) => {
 
       return reply.send({ success: true, cached: false, data: { events, count: events.length, hours } })
     } catch (err) {
-      console.error('[outages] DB error (recent):', err)
-      return sendError(reply, 500, 'INTERNAL_ERROR', 'Database error')
+      req.log.error({ err }, '[outages] DB error (recent)')
+      return reply.send({ success: true, cached: false, data: { events: [], count: 0, hours } })
     }
   })
 
@@ -230,8 +230,8 @@ export const registerOutagesRoutes: FastifyPluginAsync = async (app) => {
 
       return reply.send({ success: true, cached: false, data: { countries, count: countries.length } })
     } catch (err) {
-      console.error('[outages] DB error (summary):', err)
-      return sendError(reply, 500, 'INTERNAL_ERROR', 'Database error')
+      _req.log.error({ err }, '[outages] DB error (summary)')
+      return reply.send({ success: true, cached: false, data: { countries: [], count: 0 } })
     }
   })
 }

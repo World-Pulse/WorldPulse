@@ -660,44 +660,49 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       summary: 'Get recent headlines for news ticker',
     },
     config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
-  }, async (_req, reply) => {
-    const cacheKey = 'signals:headlines'
-    const cached = await redis.get(cacheKey).catch(() => null)
-    if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
+  }, async (req, reply) => {
+    try {
+      const cacheKey = 'signals:headlines'
+      const cached = await redis.get(cacheKey).catch(() => null)
+      if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
 
-    const headlines = await db('signals')
-      .whereIn('status', ['verified', 'pending'])
-      .where('created_at', '>', db.raw("NOW() - INTERVAL '24 hours'"))
-      .orderByRaw("CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END ASC")
-      .orderBy('created_at', 'desc')
-      .limit(10)
-      .select('id', 'title', 'category', 'severity', 'location_name', 'created_at')
+      const headlines = await db('signals')
+        .whereIn('status', ['verified', 'pending'])
+        .where('created_at', '>', db.raw("NOW() - INTERVAL '24 hours'"))
+        .orderByRaw("CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END ASC")
+        .orderBy('created_at', 'desc')
+        .limit(10)
+        .select('id', 'title', 'category', 'severity', 'location_name', 'created_at')
 
-    const CATEGORY_COLORS: Record<string, string> = {
-      conflict:   'red',
-      security:   'red',
-      breaking:   'red',
-      politics:   'amber',
-      markets:    'amber',
-      economics:  'amber',
-      climate:    'cyan',
-      science:    'cyan',
-      technology: 'cyan',
-      health:     'green',
-      culture:    'green',
-      sports:     'green',
+      const CATEGORY_COLORS: Record<string, string> = {
+        conflict:   'red',
+        security:   'red',
+        breaking:   'red',
+        politics:   'amber',
+        markets:    'amber',
+        economics:  'amber',
+        climate:    'cyan',
+        science:    'cyan',
+        technology: 'cyan',
+        health:     'green',
+        culture:    'green',
+        sports:     'green',
+      }
+
+      const data = headlines.map((h: Record<string, unknown>) => ({
+        id:    h.id,
+        type:  CATEGORY_COLORS[h.category as string] ?? 'amber',
+        label: ((h.category as string) ?? 'news').toUpperCase(),
+        text:  h.title as string,
+      }))
+
+      const response = { success: true, data }
+      redis.setex(cacheKey, 30, JSON.stringify(response)).catch(() => {})
+      return reply.send(response)
+    } catch (err) {
+      req.log.error({ err }, 'headlines: handler error')
+      return reply.send({ success: true, data: [] })
     }
-
-    const data = headlines.map((h: Record<string, unknown>) => ({
-      id:    h.id,
-      type:  CATEGORY_COLORS[h.category as string] ?? 'amber',
-      label: ((h.category as string) ?? 'news').toUpperCase(),
-      text:  h.title as string,
-    }))
-
-    const response = { success: true, data }
-    redis.setex(cacheKey, 30, JSON.stringify(response)).catch(() => {})
-    return reply.send(response)
   })
 
   // ─── MAP DATA ─────────────────────────────────────────────
