@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useRef, useState, useCallback, Suspense } from 'react'
+import { useEffect, useRef, useState, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import type Supercluster from 'supercluster'
@@ -8,13 +8,6 @@ import { EmptyState } from '@/components/EmptyState'
 import { useToast } from '@/components/Toast'
 import { ReliabilityDots } from '@/components/signals/ReliabilityDots'
 import { FlagModal } from '@/components/signals/FlagModal'
-import { TimeSlider } from '@/components/map/TimeSlider'
-import { ShareButton } from '@/components/map/ShareButton'
-import HotspotLabels from '@/components/map/HotspotLabels'
-import { EnhancedHeatmap } from '@/components/map/EnhancedHeatmap'
-import { useTimelinePlayback } from '@/hooks/useTimelinePlayback'
-import { parseWindowHash, encodePermalink, type MapPermalinkState, type LayerKey } from '@/lib/map-permalink'
-import { SignalCounter } from '@/components/SignalCounter'
 
 import {
   timeAgo, getSourceUrl, getSourceDomain, reliabilityDots,
@@ -70,20 +63,6 @@ interface AdsbSignal {
   lng: number
   reliability_score: number
   published_at: string | null
-}
-
-interface CameraFeed {
-  id:          string
-  name:        string
-  region:      string
-  country:     string
-  countryCode: string
-  lat:         number
-  lng:         number
-  embedUrl:    string
-  snapshotUrl: string | null
-  type:        'traffic' | 'weather' | 'city' | 'nature'
-  isLive:      boolean
 }
 
 interface HazardPoint {
@@ -187,19 +166,11 @@ function MapView() {
   // Stable ref to router (router is stable in App Router, but capture for closure clarity)
   const routerRef   = useRef(router)
 
-  // ── Permalink hash — parse once at mount, takes priority over ?lat/?lng/?z ──
-  // Must be evaluated synchronously before useState initializers below.
-  const permalinkRef = useRef<MapPermalinkState | null>(
-    typeof window !== 'undefined' ? parseWindowHash() : null
-  )
-  const hashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
   // Initial map position from URL params — read once at mount
-  // If a permalink hash is present, it takes priority over query params.
   const initPosRef = useRef({
-    lat:  permalinkRef.current?.lat  ?? Number(searchParams.get('lat') ?? '20'),
-    lng:  permalinkRef.current?.lng  ?? Number(searchParams.get('lng') ?? '10'),
-    zoom: permalinkRef.current?.zoom ?? Number(searchParams.get('z')   ?? '2'),
+    lat:  Number(searchParams.get('lat') ?? '20'),
+    lng:  Number(searchParams.get('lng') ?? '10'),
+    zoom: Number(searchParams.get('z')   ?? '2'),
   })
 
   const { toast } = useToast()
@@ -213,11 +184,8 @@ function MapView() {
   const [timeRange,   setTimeRange]   = useState(() => searchParams.get('tr')  ?? '24h')
   const [wsOnline,    setWsOnline]    = useState(false)
   const [heatmapMode, setHeatmapMode] = useState(() => searchParams.get('hm') === '1')
+  const [heatmapItems, setHeatmapItems] = useState<Array<{ x: number; y: number; severity: string }>>([])
   const [visibleCount, setVisibleCount] = useState(0)
-  const [mapZoom, setMapZoom] = useState(2)
-  // BAT-16: EnhancedHeatmap instance — created once after map loads
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const enhancedHeatmapRef = useRef<EnhancedHeatmap | null>(null)
 
   // ── NASA GIBS satellite imagery state ──────────────────────────────────────
   const [satelliteMode, setSatelliteMode] = useState(false)
@@ -268,32 +236,8 @@ function MapView() {
   const [countryRiskLoading, setCountryRiskLoading] = useState(false)
   const [countryRiskCount,   setCountryRiskCount]   = useState(0)
 
-  // ── Conflict Zone Overlay layer state (BAT-17) ─────────────────────────────
-  const [conflictMode,    setConflictMode]    = useState(false)
-  const [conflictLoading, setConflictLoading] = useState(false)
-  const [conflictCount,   setConflictCount]   = useState(0)
-  const conflictLayerRef  = useRef<import('@/components/map/ConflictZoneOverlay').ConflictZoneOverlay | null>(null)
-  const conflictRegionRef = useRef<import('@/components/map/ConflictRegions').ConflictRegionLayer | null>(null)
-
-  // ── Wind Particle Flow layer state ─────────────────────────────────────────────
-  const [windMode,    setWindMode]    = useState(false)
-  const [windLoading, setWindLoading] = useState(false)
-  const [windDensity, setWindDensity] = useState<'16k' | '32k' | '65k'>('32k')
-  const windLayerRef = useRef<import('@/components/map/WindParticleLayer').WindParticleLayer | null>(null)
-
-  // ── Timeline Playback state (BAT-14) ────────────────────────────────────────────
-  const [timelineActive, setTimelineActive] = useState(
-    () => !!(permalinkRef.current?.timelineRange)
-  )
-  const [timelineRange, setTimelineRange] = useState(
-    () => permalinkRef.current?.timelineRange ?? '24h'
-  )
-  const timeline = useTimelinePlayback()
-
   // ── Basemap switcher state ────────────────────────────────────────────────────
-  const [basemap, setBasemap] = useState<BasemapMode>(
-    () => (permalinkRef.current?.basemap as BasemapMode) ?? 'satellite'
-  )
+  const [basemap, setBasemap] = useState<BasemapMode>('satellite')
   const basemapRef = useRef<BasemapMode>('satellite')
   useEffect(() => { basemapRef.current = basemap }, [basemap])
 
@@ -352,10 +296,6 @@ function MapView() {
   const [showAircraft, setShowAircraft] = useState(false)
   const [adsbSignals, setAdsbSignals] = useState<AdsbSignal[]>([])
 
-  // ── Live Webcam / IP Camera layer state ───────────────────────────────────────
-  const [showCameras, setShowCameras] = useState(false)
-  const [cameraCount, setCameraCount] = useState(0)
-
   // ── Annotation cards (Palantir-style intelligence overlays) ───────────────────
   const [annotationCards, setAnnotationCards] = useState<Map<string, AnnotationCard>>(new Map())
   const annotationCardsRef = useRef<Map<string, AnnotationCard>>(new Map())
@@ -404,50 +344,6 @@ function MapView() {
   useEffect(() => { sevRef.current = severity  }, [severity])
   useEffect(() => { trRef.current  = timeRange  }, [timeRange])
   useEffect(() => { hmRef.current  = heatmapMode }, [heatmapMode])
-
-  // ── Permalink state refs (BAT-15) — kept current for hash encoder ────────────
-  const windModeRef       = useRef(windMode)
-  const timelineActiveRef = useRef(timelineActive)
-  const timelineRangeRef  = useRef(timelineRange)
-  const selectedRef       = useRef(selected)
-  useEffect(() => { windModeRef.current       = windMode       }, [windMode])
-  useEffect(() => { timelineActiveRef.current = timelineActive }, [timelineActive])
-  useEffect(() => { timelineRangeRef.current  = timelineRange  }, [timelineRange])
-  useEffect(() => { selectedRef.current       = selected       }, [selected])
-
-  /** Collect current map state for permalink encoding. */
-  const getPermalinkState = useCallback((): MapPermalinkState => {
-    const map = mapRef.current
-    const center = map?.getCenter?.() ?? { lat: 20, lng: 10 }
-    const zoom   = map?.getZoom?.()   ?? 2
-    const layers: LayerKey[] = []
-    if (windModeRef.current)       layers.push('wind')
-    if (hmRef.current)             layers.push('heat')
-    if (timelineActiveRef.current) layers.push('timeline')
-    return {
-      lat:           Number(center.lat.toFixed(4)),
-      lng:           Number(center.lng.toFixed(4)),
-      zoom:          Number(zoom.toFixed(2)),
-      layers,
-      timelineRange: timelineActiveRef.current ? timelineRangeRef.current : undefined,
-      signalId:      selectedRef.current?.id,
-      basemap:       basemapRef.current,
-    }
-  }, [])
-
-  /** Write permalink hash to window.location (debounced, 500ms). */
-  const updateHash = useCallback(() => {
-    if (typeof window === 'undefined') return
-    if (hashTimerRef.current) clearTimeout(hashTimerRef.current)
-    hashTimerRef.current = setTimeout(() => {
-      const state = getPermalinkState()
-      const hash  = encodePermalink(state)
-      window.history.replaceState(null, '', `#${hash}`)
-    }, 500)
-  }, [getPermalinkState])
-
-  // Re-write hash whenever layer toggles or selected signal changes (BAT-15)
-  useEffect(() => { updateHash() }, [windMode, timelineActive, timelineRange, basemap, selected?.id, updateHash])
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
@@ -536,7 +432,15 @@ function MapView() {
       sig.lng >= w && sig.lng <= e
     )
     setVisibleCount(visible.length)
-    // BAT-16: heatmap is now a native MapLibre layer — no CSS items needed
+    if (hmRef.current) {
+      const items = visible.map(sig => {
+        const pt = map.project([Number(sig.lng), Number(sig.lat)])
+        return { x: Math.round(pt.x), y: Math.round(pt.y), severity: sig.severity }
+      })
+      setHeatmapItems(items)
+    } else {
+      setHeatmapItems([])
+    }
   }, [])
 
   const refreshHeatmapAndCountRef = useRef(refreshHeatmapAndCount)
@@ -565,27 +469,8 @@ function MapView() {
   // Refresh heatmap / visible count whenever signals change
   useEffect(() => { refreshHeatmapAndCountRef.current() }, [signals])
 
-  // Refresh visible count when heatmap is toggled on/off
+  // Also re-compute pixel positions when heatmap is toggled on/off
   useEffect(() => { refreshHeatmapAndCountRef.current() }, [heatmapMode])
-
-  // BAT-16: EnhancedHeatmap — show/hide when heatmap mode changes
-  useEffect(() => {
-    const hm = enhancedHeatmapRef.current
-    if (!hm) return
-    if (heatmapMode) {
-      hm.show(category)
-    } else {
-      hm.hide()
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [heatmapMode])
-
-  // BAT-16: cross-fade colour ramp when category filter changes
-  useEffect(() => {
-    if (heatmapMode) {
-      enhancedHeatmapRef.current?.setCategory(category)
-    }
-  }, [category, heatmapMode])
 
   // ── WebSocket ──────────────────────────────────────────────────────────────
 
@@ -1071,8 +956,6 @@ function MapView() {
         const onViewChange = () => {
           refreshClusters()
           refreshHeatmapAndCountRef.current()
-          // BAT-16: track zoom for HotspotLabels threshold
-          setMapZoom(parseFloat(map.getZoom().toFixed(1)))
           if (urlTimerRef.current) clearTimeout(urlTimerRef.current)
           urlTimerRef.current = setTimeout(() => {
             const c   = map.getCenter()
@@ -1086,8 +969,6 @@ function MapView() {
             if (hm)            url += `&hm=1`
             routerRef.current.replace(url, { scroll: false })
           }, 500)
-          // Also update the URL hash for permalink sharing (BAT-15)
-          updateHash()
         }
 
         map.on('moveend', onViewChange)
@@ -1101,12 +982,6 @@ function MapView() {
         // Seed from already-fetched signals (if any)
         refreshClusters()
         refreshHighlights()
-
-        // BAT-16: Create EnhancedHeatmap instance — activates when heatmapMode is true
-        enhancedHeatmapRef.current = new EnhancedHeatmap(map)
-        if (hmRef.current) {
-          enhancedHeatmapRef.current.show(catRef.current)
-        }
       })
     })()
 
@@ -1116,11 +991,7 @@ function MapView() {
       if (urlTimerRef.current)  { clearTimeout(urlTimerRef.current);           urlTimerRef.current  = null }
       if (ro) ro.disconnect()
       if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
-      // BAT-16: cleanup EnhancedHeatmap RAF loop
-      enhancedHeatmapRef.current?.destroy()
-      enhancedHeatmapRef.current = null
       if (mapRef.current)   { mapRef.current.remove();   mapRef.current   = null }
-      if (hashTimerRef.current) { clearTimeout(hashTimerRef.current); hashTimerRef.current = null }
     }
   // refreshClusters and refreshHighlights are stable useCallbacks with [] deps
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1583,149 +1454,6 @@ function MapView() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showAircraft])
 
-  // ── Live Webcam / IP Camera map layer ─────────────────────────────────────────
-
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
-
-    const CAM_SOURCE = 'cameras-layer'
-    const CAM_LAYER  = 'cameras-symbols'
-
-    const removeLayer = () => {
-      try {
-        map.off('click',      CAM_LAYER)
-        map.off('mouseenter', CAM_LAYER)
-        map.off('mouseleave', CAM_LAYER)
-        if (map.getLayer(CAM_LAYER))   map.removeLayer(CAM_LAYER)
-        if (map.getSource(CAM_SOURCE)) map.removeSource(CAM_SOURCE)
-      } catch { /* ignore */ }
-    }
-
-    let intervalId: ReturnType<typeof setInterval> | null = null
-
-    const TYPE_COLOR: Record<string, string> = {
-      traffic: '#f59e0b',
-      weather: '#60a5fa',
-      city:    '#a78bfa',
-      nature:  '#34d399',
-    }
-
-    const fetchAndUpdate = async () => {
-      try {
-        const res  = await fetch(`${API_URL}/api/v1/cameras?region=global&limit=50`)
-        const json = await res.json() as { cameras: CameraFeed[]; total: number }
-        if (!Array.isArray(json.cameras)) return
-
-        setCameraCount(json.cameras.length)
-
-        const features = json.cameras
-          .filter(c => isFinite(c.lat) && isFinite(c.lng))
-          .map(c => ({
-            type:       'Feature' as const,
-            geometry:   { type: 'Point' as const, coordinates: [c.lng, c.lat] },
-            properties: {
-              id:          c.id,
-              name:        c.name,
-              country:     c.country,
-              countryCode: c.countryCode,
-              embedUrl:    c.embedUrl,
-              type:        c.type,
-              isLive:      c.isLive,
-              color:       TYPE_COLOR[c.type] ?? '#34d399',
-            },
-          }))
-
-        const currentMap = mapRef.current
-        if (!currentMap || !currentMap.loaded()) return
-
-        if (!currentMap.getSource(CAM_SOURCE)) {
-          currentMap.addSource(CAM_SOURCE, {
-            type: 'geojson',
-            data: { type: 'FeatureCollection', features },
-          })
-        } else {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ;(currentMap.getSource(CAM_SOURCE) as any).setData({ type: 'FeatureCollection', features })
-        }
-
-        if (!currentMap.getLayer(CAM_LAYER)) {
-          currentMap.addLayer({
-            id:     CAM_LAYER,
-            type:   'symbol',
-            source: CAM_SOURCE,
-            layout: {
-              'text-field':            '📹',
-              'text-size':             15,
-              'text-allow-overlap':    true,
-              'text-ignore-placement': true,
-            },
-            paint: {
-              'text-halo-color': 'rgba(0,0,0,0.75)',
-              'text-halo-width': 1.5,
-            },
-          })
-
-          currentMap.on('mouseenter', CAM_LAYER, () => { currentMap.getCanvas().style.cursor = 'pointer' })
-          currentMap.on('mouseleave', CAM_LAYER, () => { currentMap.getCanvas().style.cursor = '' })
-
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          currentMap.on('click', CAM_LAYER, async (e: any) => {
-            const feat = e.features?.[0]
-            if (!feat) return
-            const p = feat.properties as {
-              name: string; country: string; countryCode: string
-              embedUrl: string; type: string; isLive: boolean
-            }
-            const typeLabel = p.type ? p.type.toUpperCase() : 'WEBCAM'
-            const liveTag   = p.isLive ? '<span style="color:#34d399;font-size:9px;font-weight:700;letter-spacing:0.05em">● LIVE</span>' : ''
-            const { default: ml } = await import('maplibre-gl')
-            if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
-            popupRef.current = new ml.Popup({ closeButton: true, closeOnClick: false, offset: 14, className: 'wp-map-popup' })
-              .setLngLat(e.lngLat)
-              .setHTML(`
-                <div style="font:600 11px/1.4 system-ui;color:#34d399;margin-bottom:4px;display:flex;align-items:center;gap:6px">
-                  📹 LIVE WEBCAM ${liveTag}
-                </div>
-                <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:240px;margin-bottom:4px">${p.name}</div>
-                <div style="font:11px system-ui;color:#9aa5b4;margin-bottom:6px">${p.country} · ${typeLabel}</div>
-                <a href="${p.embedUrl}" target="_blank" rel="noopener noreferrer"
-                   style="display:inline-block;font:11px system-ui;color:#34d399;text-decoration:underline">
-                  ↗ Open feed
-                </a>
-              `)
-              .addTo(currentMap)
-          })
-        }
-      } catch (err) {
-        console.warn('[map] Live webcam layer error:', err)
-      }
-    }
-
-    const applyLayer = () => {
-      if (!showCameras) {
-        removeLayer()
-        setCameraCount(0)
-        return
-      }
-
-      if (map.loaded()) {
-        void fetchAndUpdate()
-      } else {
-        map.once('load', () => { void fetchAndUpdate() })
-      }
-
-      intervalId = setInterval(() => { void fetchAndUpdate() }, 90_000)
-    }
-
-    applyLayer()
-
-    return () => {
-      if (intervalId) clearInterval(intervalId)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showCameras])
-
   // ── Maritime AIS ship tracking layer (civilian vessels, GeoJSON, clustered) ────
 
   useEffect(() => {
@@ -2104,67 +1832,6 @@ function MapView() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navalMode])
-
-  // ── Conflict Zone Overlay (BAT-17) ─────────────────────────────────────────
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
-
-    let refreshTimer: ReturnType<typeof setInterval> | null = null
-
-    const applyLayer = async (): Promise<void> => {
-      if (!conflictMode) {
-        conflictLayerRef.current?.hide()
-        conflictRegionRef.current?.removeFromMap()
-        return
-      }
-
-      setConflictLoading(true)
-      try {
-        const [{ ConflictZoneOverlay }, { ConflictRegionLayer }, res] = await Promise.all([
-          import('@/components/map/ConflictZoneOverlay'),
-          import('@/components/map/ConflictRegions'),
-          fetch('/api/v1/signals/map/conflict-zones'),
-        ])
-
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const geojson = await res.json() as { type: string; features: unknown[] }
-
-        // Init overlay
-        if (!conflictLayerRef.current) {
-          conflictLayerRef.current = new ConflictZoneOverlay(map)
-        }
-        conflictLayerRef.current.show(geojson as Parameters<typeof conflictLayerRef.current.show>[0])
-        setConflictCount(geojson.features.length)
-
-        // Init region polygons
-        if (!conflictRegionRef.current) {
-          conflictRegionRef.current = new ConflictRegionLayer(map)
-        }
-        conflictRegionRef.current.addToMap()
-      } catch (err) {
-        console.error('[ConflictZone] fetch error', err)
-      } finally {
-        setConflictLoading(false)
-      }
-    }
-
-    if (map.loaded()) {
-      void applyLayer()
-    } else {
-      map.once('load', () => { void applyLayer() })
-    }
-
-    // Auto-refresh every 3 minutes when active
-    if (conflictMode) {
-      refreshTimer = setInterval(() => { void applyLayer() }, 3 * 60_000)
-    }
-
-    return () => {
-      if (refreshTimer) clearInterval(refreshTimer)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conflictMode])
 
   // ── Missile/Drone Threat Intelligence layer ─────────────────────────────────
   useEffect(() => {
@@ -2961,141 +2628,6 @@ function MapView() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [countryRiskMode])
 
-  // ── Wind Particle Flow layer (WebGL custom layer, BAT-13) ────────────────────
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
-
-    const WIND_LAYER_ID = 'wind-particles'
-
-    async function applyWindLayer() {
-      if (!windMode) {
-        // Remove layer
-        try {
-          if (map.getLayer(WIND_LAYER_ID)) map.removeLayer(WIND_LAYER_ID)
-        } catch { /* ignore */ }
-        windLayerRef.current = null
-        return
-      }
-
-      setWindLoading(true)
-      try {
-        // Dynamic import to avoid loading WebGL code until needed
-        const { WindParticleLayer, detectOptimalDensity } = await import('@/components/map/WindParticleLayer')
-
-        // Auto-detect optimal density on first use
-        const detectedDensity = detectOptimalDensity()
-        setWindDensity(detectedDensity)
-
-        const layer = new WindParticleLayer({
-          density: detectedDensity,
-          speedFactor: 0.25,
-          opacity: 0.97,
-          apiUrl: API_URL,
-        })
-
-        windLayerRef.current = layer
-
-        // Remove existing if somehow already present
-        if (map.getLayer(WIND_LAYER_ID)) map.removeLayer(WIND_LAYER_ID)
-
-        // Add as custom layer (above basemap, below signal pins)
-        const beforeLayer = map.getLayer('cluster-halo') ? 'cluster-halo' : undefined
-        map.addLayer(layer as unknown as maplibregl.LayerSpecification, beforeLayer)
-      } catch (err) {
-        console.error('[map] Wind particle layer error:', err)
-      } finally {
-        setWindLoading(false)
-      }
-    }
-
-    applyWindLayer()
-
-    return () => {
-      try {
-        if (map.getLayer(WIND_LAYER_ID)) map.removeLayer(WIND_LAYER_ID)
-      } catch { /* ignore */ }
-      windLayerRef.current = null
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [windMode])
-
-  // Wind density change handler
-  useEffect(() => {
-    if (windLayerRef.current) {
-      windLayerRef.current.setDensity(windDensity)
-    }
-  }, [windDensity])
-
-  // ── Timeline Playback data fetch + map integration (BAT-14) ─────────────────
-  useEffect(() => {
-    if (!timelineActive) return
-    timeline.fetchTimeline(timelineRange, category, severity)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timelineActive, timelineRange, category, severity])
-
-  // When timeline is active and has visible signals, update the map source
-  useEffect(() => {
-    if (!timelineActive || !timeline.data) return
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const map = mapRef.current as any
-    if (!map) return
-
-    // Convert timeline visible signals to MapSignal format and update clusters
-    const timelineSignals: MapSignal[] = timeline.visibleSignals.map(s => ({
-      id: s.id,
-      title: s.title,
-      summary: null,
-      lat: s.lat,
-      lng: s.lng,
-      severity: s.severity,
-      category: s.category,
-      status: 'verified',
-      location_name: null,
-      country_code: null,
-      reliability_score: 0.7,
-      created_at: timeline.currentTime ?? new Date().toISOString(),
-      original_urls: null,
-      is_breaking: s.is_breaking,
-    }))
-
-    // Update the Supercluster index with timeline signals
-    const features = toFeatures(timelineSignals)
-    const Sc = scRef.current
-    if (Sc) {
-      Sc.load(features)
-      // Trigger a re-render of clusters
-      if (map.getSource?.('signals-cluster')) {
-        const bounds = map.getBounds()
-        const zoom = Math.floor(map.getZoom())
-        if (bounds) {
-          const clusters = Sc.getClusters(
-            [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()],
-            zoom,
-          )
-          try {
-            map.getSource('signals-cluster').setData({
-              type: 'FeatureCollection',
-              features: clusters,
-            })
-          } catch { /* source may not exist yet */ }
-        }
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timelineActive, timeline.visibleSignals, timeline.currentTime])
-
-  // Timeline range change handler
-  const handleTimelineRangeChange = useCallback((range: string) => {
-    setTimelineRange(range)
-  }, [])
-
-  // Timeline close handler
-  const handleTimelineClose = useCallback(() => {
-    setTimelineActive(false)
-    timeline.reset()
-  }, [timeline])
-
   // ── Sync filter state → URL (independent of map pan) ──────────────────────
 
   useEffect(() => {
@@ -3109,8 +2641,6 @@ function MapView() {
     if (category    !== 'all')  url += `&cat=${category}`
     if (timeRange   !== '24h')  url += `&tr=${timeRange}`
     if (heatmapMode)            url += `&hm=1`
-    if (timelineActive)         url += `&tl=${timelineRange}`
-    if (timelineActive && timeline.currentTime) url += `&tt=${encodeURIComponent(timeline.currentTime)}`
     routerRef.current.replace(url, { scroll: false })
   }, [category, timeRange, heatmapMode])
 
@@ -3347,56 +2877,6 @@ function MapView() {
                 {' '}HEATMAP
               </button>
 
-              {/* Wind Particle Flow toggle (BAT-13) */}
-              <button
-                onClick={() => setWindMode(v => !v)}
-                disabled={windLoading}
-                title={windMode
-                  ? `Wind Flow: ${windDensity} particles — speed-colored blue→cyan→green→yellow`
-                  : 'Toggle animated wind particle flow layer (earth.nullschool.net-style)'}
-                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
-                  ${windMode
-                    ? 'border-[rgba(0,200,200,0.6)] text-[#67e8f9] bg-[rgba(0,200,200,0.1)]'
-                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}
-                  ${windLoading ? 'opacity-60 cursor-wait' : ''}`}>
-                {windLoading
-                  ? <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                  : '💨'}
-                {' '}WIND
-              </button>
-              {windMode && (
-                <select
-                  value={windDensity}
-                  onChange={e => setWindDensity(e.target.value as '16k' | '32k' | '65k')}
-                  title="Wind particle density (higher = more particles, more GPU usage)"
-                  className="bg-black/30 border border-[rgba(0,200,200,0.3)] text-[#67e8f9] text-[10px] font-mono rounded px-1.5 py-[4px] min-h-[32px] outline-none focus:border-[rgba(0,200,200,0.6)] transition-colors cursor-pointer">
-                  <option value="16k">16K</option>
-                  <option value="32k">32K</option>
-                  <option value="65k">65K</option>
-                </select>
-              )}
-
-              {/* Timeline Playback toggle (BAT-14) */}
-              <button
-                onClick={() => setTimelineActive(v => !v)}
-                disabled={timeline.loading}
-                title={timelineActive
-                  ? `Timeline: ${timelineRange} — ${timeline.data?.total_signals ?? 0} signals, ${timeline.isPlaying ? 'playing' : 'paused'}`
-                  : 'Toggle historical signal playback timeline'}
-                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
-                  ${timelineActive
-                    ? 'border-[rgba(168,85,247,0.6)] text-[#c084fc] bg-[rgba(168,85,247,0.1)]'
-                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}
-                  ${timeline.loading ? 'opacity-60 cursor-wait' : ''}`}>
-                {timeline.loading
-                  ? <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                  : '⏱'}
-                {' '}TIMELINE
-                {timelineActive && timeline.data && (
-                  <span className="ml-1 px-1 py-px bg-[rgba(168,85,247,0.25)] rounded text-[9px]">{timeline.data.total_signals}</span>
-                )}
-              </button>
-
               {/* ADS-B Aircraft toggle */}
               <button
                 onClick={() => setShowAircraft(v => !v)}
@@ -3429,22 +2909,6 @@ function MapView() {
                 )}
               </button>
 
-              {/* Live Webcam / IP Camera toggle */}
-              <button
-                onClick={() => setShowCameras(v => !v)}
-                title={showCameras
-                  ? `Live Webcams: ${cameraCount} feeds — traffic, weather, city, nature cameras`
-                  : 'Toggle live webcam layer (public IP cameras worldwide)'}
-                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
-                  ${showCameras
-                    ? 'border-[rgba(52,211,153,0.6)] text-[#34d399] bg-[rgba(52,211,153,0.1)]'
-                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}`}>
-                📹 LIVE CAMS
-                {showCameras && cameraCount > 0 && (
-                  <span className="ml-1 px-1 py-px bg-[rgba(52,211,153,0.2)] rounded text-[9px]">{cameraCount}</span>
-                )}
-              </button>
-
               {/* Naval Intelligence toggle */}
             <button
                 onClick={() => setNavalMode(v => !v)}
@@ -3463,27 +2927,6 @@ function MapView() {
                   <span className="ml-1 px-1 py-px bg-[rgba(30,144,255,0.25)] rounded text-[9px]">{navalCount}</span>
                 )}
               </button>
-
-              {/* Conflict Zone Overlay toggle (BAT-17) */}
-              <button
-                onClick={() => setConflictMode(v => !v)}
-                disabled={conflictLoading}
-                title={conflictMode
-                  ? `Conflict Zones: ${conflictCount} signals — active front lines, military activity, security incidents`
-                  : 'Toggle conflict zone overlay (conflict/military/security signals + geofenced regions, 72h window)'}
-                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
-                  ${conflictMode
-                    ? 'border-[rgba(239,68,68,0.6)] text-[#fca5a5] bg-[rgba(239,68,68,0.1)]'
-                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}
-                  ${conflictLoading ? 'opacity-60 cursor-wait' : ''}`}>
-                {conflictLoading
-                  ? <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                  : '⚔️'}
-                {' '}CONFLICT
-                {conflictMode && conflictCount > 0 && (
-                  <span className="ml-1 px-1 py-px bg-[rgba(239,68,68,0.25)] rounded text-[9px]">{conflictCount}</span>
-                )}
-              </button>
             </div>
           </div>
 
@@ -3495,20 +2938,13 @@ function MapView() {
             {visibleCount} SIGNALS
           </div>
 
-          {/* BAT-18: Global signal counter badge — live total with odometer animation */}
-          <SignalCounter
-            mode="badge"
-            externalNewCount={wsNewCount}
-            className="hidden sm:flex"
-          />
-
-          {/* WS status dot (viewport count) */}
+          {/* WS status dot */}
           <div className="flex items-center gap-1.5 font-mono text-[10px] text-wp-text2 border border-[rgba(255,255,255,0.07)] rounded-lg px-2 sm:px-2.5 py-[4px] flex-shrink-0">
             <span
               title={wsOnline ? 'Live feed connected' : 'Reconnecting…'}
               className={`w-[5px] h-[5px] rounded-full animate-live-pulse flex-shrink-0 ${wsOnline ? 'bg-wp-green' : 'bg-wp-red'}`}
             />
-            <span className="hidden sm:inline">{signals.length} view</span>
+            <span className="hidden sm:inline">{signals.length} total</span>
             {wsNewCount > 0 && (
               <span
                 title={`${wsNewCount} new signal${wsNewCount !== 1 ? 's' : ''} received live`}
@@ -3525,13 +2961,30 @@ function MapView() {
       <div className="flex-1 relative overflow-hidden">
         <div ref={mapContainer} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', touchAction: 'none' }} />
 
-        {/* BAT-16: Hotspot labels overlay — floating labels for dense signal zones at zoom > 5 */}
-        <HotspotLabels
-          hotspots={hotspots}
-          mapRef={mapRef as React.RefObject<import('maplibre-gl').Map | null>}
-          moveCount={mapMoveCount}
-          currentZoom={mapZoom}
-        />
+        {/* Heatmap density overlay — CSS-only radial gradients, pointer-events:none */}
+        {heatmapMode && (
+          <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 5 }}>
+            {heatmapItems.map((item, i) => {
+              const sizeMap: Record<string, number> = { critical: 80, high: 60, medium: 40, low: 20 }
+              const colorMap: Record<string, string> = { critical: '#ff3b5c', high: '#f97316', medium: '#fbbf24', low: '#8892a4' }
+              const size  = sizeMap[item.severity]  ?? 20
+              const color = colorMap[item.severity] ?? '#8892a4'
+              return (
+                <div key={i} style={{
+                  position:     'absolute',
+                  left:         item.x - size / 2,
+                  top:          item.y - size / 2,
+                  width:        size,
+                  height:       size,
+                  borderRadius: '50%',
+                  background:   `radial-gradient(circle, ${color} 0%, transparent 70%)`,
+                  opacity:      0.25,
+                  pointerEvents: 'none',
+                }} />
+              )
+            })}
+          </div>
+        )}
 
         {/* ── Convergence Hotspots Widget ─────────────────────────────── */}
         {/* Shows geographic cells with 3+ distinct signal categories converging */}
@@ -3904,28 +3357,6 @@ function MapView() {
               })}
             </div>
           </div>
-        )}
-
-        {/* Share Button — floating bottom-right (BAT-15) */}
-        <ShareButton getState={getPermalinkState} />
-
-        {/* Timeline Slider (BAT-14) */}
-        {timelineActive && (
-          <TimeSlider
-            buckets={timeline.data?.buckets ?? []}
-            currentIndex={timeline.currentIndex}
-            isPlaying={timeline.isPlaying}
-            speed={timeline.speed}
-            currentTime={timeline.currentTime}
-            range={timelineRange}
-            loading={timeline.loading}
-            totalSignals={timeline.data?.total_signals ?? 0}
-            onSeek={timeline.seekTo}
-            onTogglePlay={timeline.togglePlay}
-            onSpeedChange={timeline.setSpeed}
-            onRangeChange={handleTimelineRangeChange}
-            onClose={handleTimelineClose}
-          />
         )}
 
         {loading && (

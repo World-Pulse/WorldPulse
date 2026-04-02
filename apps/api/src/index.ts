@@ -53,11 +53,6 @@ import { registerSpaceWeatherRoutes } from './routes/space-weather'
 import { registerCyberRoutes }        from './routes/cyber'
 import { registerPolymarketRoutes }   from './routes/polymarket'
 import { registerAIInfrastructureRoutes } from './routes/ai-infrastructure'
-import { registerWindRoutes }             from './routes/wind'
-import { registerTimelineRoutes }        from './routes/timeline'
-import underseaCablesPlugin              from './routes/undersea-cables'
-import { registerMapOgRoutes }           from './routes/map/og'
-import { registerClaimsRoutes }          from './routes/claims'
 import { registerWSHandler, startRedisSubscriber } from './ws/handler'
 import { registerGraphQL } from './graphql'
 import { metricsPlugin } from './middleware/metrics'
@@ -310,7 +305,6 @@ async function bootstrap() {
   await app.register(registerFeedRoutes,   { prefix: '/api/v1/feed' })
   await app.register(registerPostRoutes,   { prefix: '/api/v1/posts' })
   await app.register(registerSignalRoutes, { prefix: '/api/v1/signals' })
-  await app.register(registerTimelineRoutes, { prefix: '/api/v1/signals' })
   await app.register(registerSearchRoutes, { prefix: '/api/v1/search' })
   await app.register(registerUserRoutes,   { prefix: '/api/v1/users' })
   await app.register(registerAlertRoutes,     { prefix: '/api/v1/alerts' })
@@ -367,10 +361,6 @@ async function bootstrap() {
   await app.register(registerCyberRoutes,        { prefix: '/api/v1/cyber' })
   await app.register(registerPolymarketRoutes,   { prefix: '/api/v1/polymarket' })
   await app.register(registerAIInfrastructureRoutes, { prefix: '/api/v1/ai-infrastructure' })
-  await app.register(registerWindRoutes)
-  await app.register(underseaCablesPlugin,            { prefix: '/api/v1/undersea-cables' })
-  await app.register(registerMapOgRoutes,             { prefix: '/api/v1/map' })
-  await app.register(registerClaimsRoutes,            { prefix: '/api/v1/claims' })
 
   // ─── GRAPHQL ─────────────────────────────────────────────
   await registerGraphQL(app)

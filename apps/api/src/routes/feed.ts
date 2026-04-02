@@ -3,8 +3,6 @@ import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 import { authenticate, optionalAuth } from '../middleware/auth'
 import type { Post, Signal, PaginatedResponse } from '@worldpulse/types'
-import { FeedQuerySchema, parseQuery } from '../lib/query-schemas'
-import { sendError } from '../lib/errors'
 
 const FEED_CACHE_TTL    = 15  // seconds — global feed (per-user aware)
 const SIGNALS_CACHE_TTL = 30  // seconds — signals stream first-page
@@ -22,9 +20,12 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
    * Main global feed — latest verified signals + high-trust posts
    */
   app.get('/global', { preHandler: [optionalAuth], config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
-    const qr = parseQuery(FeedQuerySchema, req.query)
-    if (qr.error) return sendError(reply, 400, 'VALIDATION_ERROR', qr.error)
-    const { cursor, category, severity, limit } = qr.data
+    const { cursor, category, severity, limit = PAGE_SIZE } = req.query as {
+      cursor?:   string
+      category?: string
+      severity?: string
+      limit?:    number
+    }
 
     // Per-user cache key: authenticated users get their own 15s cache slot
     // (includes liked/boosted/bookmarked enrichment); unauthenticated share one.
@@ -37,8 +38,8 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
       return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
     }
 
-    const pageLimit = Math.min(limit, 50)
-
+    const pageLimit = Math.min(Number(limit), 50)
+    
     let query = db('posts as p')
       .join('users as u', 'p.author_id', 'u.id')
       .leftJoin('signals as s', 'p.signal_id', 's.id')
@@ -203,11 +204,15 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
    * Breaking signals / events stream
    */
   app.get('/signals', { preHandler: [optionalAuth], config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
-    const qr2 = parseQuery(FeedQuerySchema, req.query)
-    if (qr2.error) return sendError(reply, 400, 'VALIDATION_ERROR', qr2.error)
-    const { cursor, category, severity, country, limit } = qr2.data
+    const { cursor, category, severity, country, limit = PAGE_SIZE } = req.query as {
+      cursor?:   string
+      category?: string
+      severity?: string
+      country?:  string
+      limit?:    number
+    }
 
-    const pageLimit = Math.min(limit, 50)
+    const pageLimit = Math.min(Number(limit), 50)
 
     // Cache first-page (no cursor) for unauthenticated requests.
     // Key includes all filter params so different filter combos stay isolated.

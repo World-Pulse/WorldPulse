@@ -7,8 +7,6 @@ import { TopNav } from '@/components/nav/TopNav'
 import { BottomTabBar } from '@/components/nav/BottomTabBar'
 import { BreakingAlertBanner } from '@/components/alerts/BreakingAlertBanner'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
-import { CommandPaletteProvider, CommandPalette } from '@/components/CommandPalette'
-import { LocaleAttributes } from '@/components/locale/LocaleAttributes'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -77,21 +75,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Skip to main content
         </a>
         <PostHogProvider>
-          <LocaleAttributes />
           <Providers>
-            {/* CommandPaletteProvider registers the ⌘K/Ctrl+K global shortcut */}
-            <CommandPaletteProvider>
-              <CommandPalette />
-              <BreakingAlertBanner />
-              <TopNav />
-              <main
-                id="main-content"
-                className="pt-[52px] min-h-screen main-content-mobile-pb"
-              >
-                <ErrorBoundary>{children}</ErrorBoundary>
-              </main>
-              <BottomTabBar />
-            </CommandPaletteProvider>
+            <BreakingAlertBanner />
+            <TopNav />
+            <main
+              id="main-content"
+              className="pt-[52px] min-h-screen main-content-mobile-pb"
+            >
+              <ErrorBoundary>{children}</ErrorBoundary>
+            </main>
+            <BottomTabBar />
           </Providers>
         </PostHogProvider>
       </body>

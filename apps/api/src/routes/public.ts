@@ -1,8 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
-import { PublicSignalsQuerySchema, parseQuery } from '../lib/query-schemas'
-import { sendError } from '../lib/errors'
 
 const PUBLIC_CACHE_TTL = 30  // seconds
 
@@ -53,14 +51,25 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
     },
     config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
   }, async (req, reply) => {
+    const {
+      category,
+      severity,
+      limit  = 50,
+      offset = 0,
+    } = req.query as {
+      category?: string
+      severity?: string
+      limit?:    number
+      offset?:   number
+    }
+
     // Always set public CORS header
     reply.header('Access-Control-Allow-Origin', '*')
     reply.header('Access-Control-Allow-Methods', 'GET, OPTIONS')
     reply.header('Access-Control-Allow-Headers', 'Content-Type')
 
-    const qr = parseQuery(PublicSignalsQuerySchema, req.query)
-    if (qr.error) return sendError(reply, 400, 'VALIDATION_ERROR', qr.error)
-    const { category, severity, limit: safeLimit, offset: safeOffset } = qr.data
+    const safeLimit  = Math.min(Math.max(Number(limit),  1), 100)
+    const safeOffset = Math.max(Number(offset), 0)
 
     // Cache key encodes all query params
     const cacheKey = `public:signals:${category ?? 'all'}:${severity ?? 'all'}:${safeLimit}:${safeOffset}`

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { EmptyState } from '@/components/EmptyState'
 import { ReliabilityDots } from '@/components/signals/ReliabilityDots'
@@ -144,8 +144,7 @@ const SEVERITY_COLORS: Record<string, string> = {
   low:      'text-wp-green border-wp-green bg-[rgba(0,230,118,0.1)]',
 }
 
-function SignalSearchCard({ sig, isActive }: { sig: Signal; isActive?: boolean }) {
-  const router      = useRouter()
+function SignalSearchCard({ sig }: { sig: Signal }) {
   const [flagOpen, setFlagOpen] = useState(false)
   const ageMs       = Date.now() - new Date(sig.createdAt).getTime()
   const isBreaking  = sig.isBreaking === true && ageMs < 30 * 60_000
@@ -155,17 +154,8 @@ function SignalSearchCard({ sig, isActive }: { sig: Signal; isActive?: boolean }
     sig.status === 'verified' ? 'confirmed' :
     sig.status === 'disputed' ? 'contested' : 'unconfirmed'
 
-  const mapHref = sig.lat != null && sig.lng != null
-    ? `/map#@${sig.lat.toFixed(4)},${sig.lng.toFixed(4)},14|s=${sig.id}`
-    : null
-
   return (
-    <div
-      className={`bg-wp-surface border rounded-xl p-4 hover:border-[rgba(255,255,255,0.15)] transition-all cursor-pointer ${
-        isActive ? 'border-wp-amber ring-1 ring-wp-amber/30' : 'border-[rgba(255,255,255,0.07)]'
-      }`}
-      onClick={() => router.push(`/signals/${sig.id}`)}
-    >
+    <div className="bg-wp-surface border border-[rgba(255,255,255,0.07)] rounded-xl p-4 hover:border-[rgba(255,255,255,0.15)] transition-all">
       <div className="flex items-center gap-2 mb-2 flex-wrap">
         <span className={`font-mono text-[9px] px-2 py-0.5 rounded border ${SEVERITY_COLORS[sig.severity] ?? ''}`}>
           {sig.severity?.toUpperCase()}
@@ -186,17 +176,8 @@ function SignalSearchCard({ sig, isActive }: { sig: Signal; isActive?: boolean }
         <span className="font-mono text-[10px] text-wp-text3">
           {new Date(sig.createdAt).toLocaleDateString()}
         </span>
-        {mapHref && (
-          <button
-            onClick={e => { e.stopPropagation(); router.push(mapHref) }}
-            className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono text-wp-cyan border border-[rgba(0,212,255,0.3)] hover:bg-[rgba(0,212,255,0.08)] transition-colors"
-            title="View on map"
-          >
-            🗺 Map
-          </button>
-        )}
         <button
-          onClick={e => { e.stopPropagation(); setFlagOpen(true) }}
+          onClick={() => setFlagOpen(true)}
           className="ml-auto p-1 rounded text-wp-text3 hover:text-wp-red transition-colors"
           aria-label="Flag signal"
           title="Flag this signal"
@@ -304,9 +285,6 @@ export default function SearchPage() {
   const [facets, setFacets]             = useState<SearchFacets>({})
   const [total, setTotal]               = useState(0)
   const [loading, setLoading]           = useState(false)
-  const [searchError, setSearchError]   = useState<string | null>(null)
-  const [activeIndex, setActiveIndex]   = useState(-1)
-  const resultsRef                      = useRef<HTMLDivElement>(null)
   const [autocomplete, setAutocomplete] = useState<{ signals: unknown[]; users: unknown[]; tags: string[] } | null>(null)
   const [showAutocomplete, setShowAutocomplete] = useState(false)
   const [saveAlertName, setSaveAlertName]       = useState('')
@@ -324,15 +302,12 @@ export default function SearchPage() {
     f: SearchFilters,
     pg = 0,
   ) => {
-    if (!q.trim() || q.trim().length < 2) { setResults({}); setFacets({}); setTotal(0); setSearchError(null); return }
+    if (!q.trim() || q.trim().length < 2) { setResults({}); setFacets({}); setTotal(0); return }
     setLoading(true)
-    setSearchError(null)
-    setActiveIndex(-1)
     try {
       const params = filtersToParams(q, t, f, pg)
       params.set('limit', '20')
       const res  = await fetch(`${API_URL}/api/v1/search?${params}`)
-      if (!res.ok) throw new Error(`Search API returned ${res.status}`)
       const data = await res.json() as {
         success: boolean
         data: {
@@ -345,14 +320,19 @@ export default function SearchPage() {
         setResults(data.data.results)
         setFacets(data.data.facets ?? {})
         setTotal(data.data.total ?? 0)
-      } else {
-        throw new Error('Search returned success=false')
       }
-    } catch (err) {
-      setSearchError(err instanceof Error ? err.message : 'Search failed — check your connection.')
-      setResults({})
+    } catch {
+      // Demo results fallback
+      setResults({
+        signals: [
+          { id: '1', title: `Search result for "${q}"`, category: 'breaking', severity: 'high', reliabilityScore: 0.95, locationName: 'Global', createdAt: new Date().toISOString() },
+        ],
+        posts: [],
+        users: [],
+        tags: [{ tag: q.toLowerCase(), count: 1 }],
+      })
       setFacets({})
-      setTotal(0)
+      setTotal(1)
     } finally {
       setLoading(false)
     }
@@ -439,38 +419,6 @@ export default function SearchPage() {
     setFilters(cleared)
     if (query.trim().length >= 2) handleSearch(query, type, cleared, 0)
   }
-
-  // ─── Keyboard navigation through results ─────────────────────
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      // Esc — clear search
-      if (e.key === 'Escape') {
-        setQuery('')
-        setResults({})
-        setFacets({})
-        setTotal(0)
-        setSearchError(null)
-        setActiveIndex(-1)
-        return
-      }
-
-      const signals = (results.signals ?? []) as Signal[]
-      if (signals.length === 0) return
-
-      if (e.key === 'ArrowDown') {
-        e.preventDefault()
-        setActiveIndex(i => Math.min(i + 1, signals.length - 1))
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault()
-        setActiveIndex(i => Math.max(i - 1, -1))
-      } else if (e.key === 'Enter' && activeIndex >= 0) {
-        const sig = signals[activeIndex]
-        if (sig) router.push(`/signals/${(sig as Signal).id}`)
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [results, activeIndex, router])
 
   // Run search on mount if URL has query
   useEffect(() => {
@@ -853,18 +801,13 @@ export default function SearchPage() {
 
           {/* Signals */}
           {allSignals.length > 0 && (
-            <section ref={resultsRef}>
+            <section>
               {type === 'all' && <SectionHeader label="Signals" count={allSignals.length} />}
               <div className="space-y-2">
-                {allSignals.map((sig, idx) => (
-                  <SignalSearchCard key={sig.id} sig={sig} isActive={idx === activeIndex} />
+                {allSignals.map(sig => (
+                  <SignalSearchCard key={sig.id} sig={sig} />
                 ))}
               </div>
-              {type === 'signals' && allSignals.length > 0 && (
-                <div className="mt-2 text-center font-mono text-[10px] text-wp-text3">
-                  ↑↓ navigate · Enter open · Esc clear
-                </div>
-              )}
             </section>
           )}
 
@@ -1030,23 +973,8 @@ export default function SearchPage() {
         </div>
       )}
 
-      {/* Error state with retry */}
-      {!loading && searchError && (
-        <div className="flex flex-col items-center justify-center py-10 gap-3">
-          <div className="text-[36px]">⚠️</div>
-          <div className="text-[14px] font-semibold text-wp-text">Search unavailable</div>
-          <div className="font-mono text-[11px] text-wp-text3 text-center max-w-xs">{searchError}</div>
-          <button
-            onClick={() => handleSearch(query, type, filters, page)}
-            className="mt-2 px-4 py-2 rounded-lg bg-wp-amber text-black text-[13px] font-bold hover:bg-[#ffb84d] transition-all"
-          >
-            Retry
-          </button>
-        </div>
-      )}
-
       {/* Empty state — not shown for entities tab (handled inline) */}
-      {!loading && !searchError && !entitiesLoading && query.length >= 2 && !hasResults && type !== 'entities' && (
+      {!loading && !entitiesLoading && query.length >= 2 && !hasResults && type !== 'entities' && (
         <EmptyState
           icon="🔭"
           headline={`No results for "${query}"`}
