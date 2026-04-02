@@ -321,6 +321,15 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   word-break: break-word;
 }
 
+/* ─── RTL SUPPORT ───────────────────────────────────────── */
+/* RTL logical property helpers */
+[dir='rtl'] { --direction: rtl; }
+[dir='ltr'] { --direction: ltr; }
+
+/* Flip text alignment for RTL locales */
+[dir='rtl'] .rtl\:text-right { text-align: right; }
+[dir='rtl'] .rtl\:text-left { text-align: left; }
+
 /* ─── CLS FIXES ─────────────────────────────────────────── */
 /* Reserve space for avatar images to prevent layout shift */
 img[data-wp-avatar] {

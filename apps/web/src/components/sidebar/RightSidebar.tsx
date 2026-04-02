@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { TradeSurveillancePanel } from './TradeSurveillancePanel'
 import { TrendingEntities } from '@/components/analytics/TrendingEntities'
+import { SignalCounter } from '@/components/SignalCounter'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -224,14 +225,21 @@ export function RightSidebar() {
         </div>
       </Widget>
 
+      {/* ─── BAT-18: LIVE INTELLIGENCE COUNTER (hero) ────── */}
+      <Widget title="Live Intelligence">
+        <div className="bg-wp-s2 rounded-xl p-3 flex flex-col gap-1">
+          <SignalCounter mode="hero" />
+        </div>
+      </Widget>
+
       {/* ─── PLATFORM PULSE ───────────────────────────────── */}
       <Widget title="Platform Pulse">
         <div className="grid grid-cols-2 gap-2">
           {[
-            { value: signalTotal != null ? signalTotal.toLocaleString() : '…', label: 'Active Signals', color: 'text-wp-amber' },
-            { value: connectedCount.toLocaleString(), label: 'Online Now', color: 'text-wp-cyan' },
-            { value: '99.2%',  label: 'Uptime',        color: 'text-wp-green' },
-            { value: '184',    label: 'Nations',        color: 'text-wp-red' },
+            { value: connectedCount.toLocaleString(), label: 'Online Now',  color: 'text-wp-cyan'  },
+            { value: '99.2%',  label: 'Uptime',   color: 'text-wp-green' },
+            { value: '184',    label: 'Nations',  color: 'text-wp-red'   },
+            { value: '300+',   label: 'Sources',  color: 'text-wp-amber' },
           ].map(stat => (
             <div key={stat.label} className="bg-wp-s2 rounded-lg p-[10px] text-center">
               <div className={`font-display text-[22px] leading-none mb-1 ${stat.color}`}>{stat.value}</div>

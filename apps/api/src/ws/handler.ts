@@ -184,6 +184,14 @@ export async function startRedisSubscriber() {
           db('signals').where('id', signal.id).first('*').then((row: Record<string, unknown> | undefined) => {
             if (row) indexSignal(row).catch(() => {})
           }).catch(() => {})
+
+          // BAT-18: Increment Redis real-time signal counter (avoids DB COUNT(*) on
+          // every /signals/count request).  Keys reset themselves when the count
+          // endpoint is next queried and re-caches fresh DB values.
+          redis.incr('signals:live:total').catch(() => {})
+          redis.incr('signals:live:last_hour').catch(() => {})
+          // Expire the hourly key after 65 minutes so it stays accurate
+          redis.expire('signals:live:last_hour', 3900).catch(() => {})
         }
       }
 

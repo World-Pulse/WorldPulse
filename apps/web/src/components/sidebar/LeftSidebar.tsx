@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useTranslations } from '@/lib/i18n'
 import { useState, useEffect } from 'react'
 
@@ -20,10 +20,12 @@ const NAV_ITEMS = [
   { href: '/internet-outages', icon: '🔌', labelKey: 'internetOutages', badge: 'NEW', badgeColor: 'cyan'   },
   { href: '/space-weather',   icon: '🛰️', labelKey: 'spaceWeather',    badge: 'NEW', badgeColor: 'cyan'   },
   { href: '/cyber-threats',   icon: '🔒', labelKey: 'cyberThreats',    badge: 'NEW', badgeColor: 'red'    },
+  { href: '/undersea-cables', icon: '🌊', labelKey: 'underseaCables', badge: 'NEW', badgeColor: 'cyan'   },
   { href: '/countries',  icon: '🗺️', labelKey: 'countries',  badge: 'NEW',  badgeColor: 'blue'  },
   { href: '/cameras',    icon: '📹', labelKey: 'cameras',    badge: 'LIVE', badgeColor: 'red'   },
   { href: '/patents',    icon: '📜', labelKey: 'patents',    badge: 'NEW',  badgeColor: 'cyan'  },
   { href: '/communities',icon: '🤝', labelKey: 'communities' },
+  { href: '/claims',     icon: '🔍', labelKey: 'claims',     badge: 'NEW', badgeColor: 'amber'  },
   { href: '/sources',    icon: '📡', labelKey: 'mySources'  },
   { href: '/developers', icon: '🛠️', labelKey: 'developers'  },
   { href: '/settings',   icon: '⚙️', labelKey: 'settings'   },
@@ -77,6 +79,7 @@ function formatCount(n: number): string {
 
 export function LeftSidebar() {
   const pathname = usePathname()
+  const router   = useRouter()
   const tNav = useTranslations('nav')
   const tChannels = useTranslations('channels')
   const tCommon = useTranslations('common')
@@ -87,6 +90,18 @@ export function LeftSidebar() {
   const [trending, setTrending] = useState(TRENDING_FALLBACK)
   // Live Global Threat Index
   const [threatLevel, setThreatLevel] = useState<{ level: number; label: string; color: string } | null>(null)
+
+  // Global Cmd+K / Ctrl+K → open search
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        router.push('/search')
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [router])
 
   useEffect(() => {
     async function loadSidebarData() {

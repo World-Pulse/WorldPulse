@@ -219,6 +219,23 @@ export default function CommunitiesPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
 
+      {/* Early Access Banner */}
+      <div className="mb-6 rounded-xl border border-[rgba(245,166,35,0.3)] bg-[rgba(245,166,35,0.06)] px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="text-[18px] flex-shrink-0">🔐</span>
+          <div className="min-w-0">
+            <span className="font-semibold text-[13px] text-wp-amber">Communities are in early access.</span>
+            <span className="text-[13px] text-wp-text2 ml-1.5">Pro members get priority access to create and moderate communities.</span>
+          </div>
+        </div>
+        <button
+          onClick={() => router.push('/developers#pricing')}
+          className="flex-shrink-0 px-4 py-1.5 rounded-full bg-wp-amber text-black text-[12px] font-bold hover:bg-[#ffb84d] transition-all whitespace-nowrap"
+        >
+          Get Pro Access →
+        </button>
+      </div>
+
       {/* Header */}
       <div className="flex items-start justify-between gap-3 mb-6">
         <div className="min-w-0">
@@ -395,14 +412,30 @@ export default function CommunitiesPage() {
       {!loading && communities.length === 0 && (
         <div className="text-center py-16">
           <div className="text-[48px] mb-4">🌐</div>
-          <div className="text-[18px] font-semibold text-wp-text mb-2">No communities found</div>
-          <div className="text-wp-text3 text-[14px]">Try different search terms or be the first to create one.</div>
-          <button
-            onClick={() => router.push('/communities/new')}
-            className="mt-4 px-5 py-2 rounded-lg bg-wp-amber text-black font-bold text-[13px] hover:bg-[#ffb84d] transition-all"
-          >
-            Create community
-          </button>
+          <div className="text-[18px] font-semibold text-wp-text mb-2">
+            {search || category ? 'No communities found' : 'Communities are coming'}
+          </div>
+          <div className="text-wp-text3 text-[14px] max-w-sm mx-auto">
+            {search || category
+              ? 'Try different search terms or broaden your category filter.'
+              : 'Pro members get early access to create and join communities around the intelligence topics they track.'}
+          </div>
+          <div className="flex items-center justify-center gap-3 mt-5 flex-wrap">
+            {!search && !category && (
+              <button
+                onClick={() => router.push('/developers#pricing')}
+                className="px-5 py-2 rounded-lg bg-wp-amber text-black font-bold text-[13px] hover:bg-[#ffb84d] transition-all"
+              >
+                Get Pro Access →
+              </button>
+            )}
+            <button
+              onClick={() => router.push('/communities/new')}
+              className="px-5 py-2 rounded-lg border border-[rgba(255,255,255,0.12)] text-wp-text2 font-medium text-[13px] hover:border-wp-amber hover:text-wp-amber transition-all"
+            >
+              Create community
+            </button>
+          </div>
         </div>
       )}
     </div>
