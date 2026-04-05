@@ -297,10 +297,29 @@ function EmptyState({ tab }: { tab: string }) {
   )
 }
 
+function ErrorBanner({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="mx-4 mt-4 flex items-start gap-3 rounded-xl border border-wp-red/40 bg-wp-red/10 px-4 py-3">
+      <span className="mt-[1px] text-wp-red text-[16px] flex-shrink-0">✕</span>
+      <p className="flex-1 text-[13px] text-wp-text leading-[1.5]">
+        Could not load feed — check your connection and try again
+      </p>
+      <button
+        onClick={onRetry}
+        className="flex-shrink-0 ml-2 text-wp-text3 hover:text-wp-text text-[18px] leading-none"
+        aria-label="Dismiss"
+      >
+        ×
+      </button>
+    </div>
+  )
+}
+
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 export function FeedList({ tab, category }: { tab: string; category: string }) {
   const [items, setItems]     = useState<FeedItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState(false)
   const [cursor, setCursor]   = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -348,15 +367,25 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
       }
       setCursor(data.cursor ?? null)
       setHasMore(data.hasMore ?? false)
+      setError(false)
     } catch {
-      // Keep existing items on error, just stop loading
+      setError(true)
     }
   }, [tab, category])
+
+  const retry = useCallback(() => {
+    setLoading(true)
+    setItems([])
+    setCursor(null)
+    setError(false)
+    fetchFeed().finally(() => setLoading(false))
+  }, [fetchFeed])
 
   useEffect(() => {
     setLoading(true)
     setItems([])
     setCursor(null)
+    setError(false)
     fetchFeed().finally(() => setLoading(false))
   }, [fetchFeed])
 
@@ -368,6 +397,19 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
   }
 
   if (loading) return <FeedSkeleton />
+  if (error) return (
+    <div>
+      <ErrorBanner onRetry={retry} />
+      <div className="flex justify-center mt-6">
+        <button
+          onClick={retry}
+          className="px-6 py-[10px] rounded-full bg-wp-amber text-black text-[13px] font-semibold hover:bg-wp-amber/90 transition-all"
+        >
+          Refresh feed
+        </button>
+      </div>
+    </div>
+  )
   if (items.length === 0) return <EmptyState tab={tab} />
 
   return (
