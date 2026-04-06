@@ -28,6 +28,10 @@
     "internetOutages": "Internet Outages",
     "spaceWeather": "Space Weather",
     "cyberThreats": "Cyber Threats",
+    "underseaCables": "Undersea Cables",
+    "governance": "Governance",
+    "foodSecurity": "Food Security",
+    "digitalRights": "Digital Rights",
     "status": "System Status",
     "pricing": "Pricing"
   },

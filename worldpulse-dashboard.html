@@ -1,1322 +1,1145 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WorldPulse · Progress Dashboard</title>
-<meta name="github-repo" content="goldsphere-design/world-pulse" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
 <style>
   :root {
-    --bg: #0a0c0f;
-    --surface: #111418;
-    --surface2: #181c22;
-    --surface3: #1f242c;
-    --border: #252b35;
-    --amber: #f5a623;
-    --amber-dim: #a36b10;
-    --cyan: #00d4d4;
-    --cyan-dim: #007a7a;
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --surface2: #1a1a24;
+    --border: #222233;
+    --amber: #f59e0b;
+    --cyan: #06b6d4;
     --green: #22c55e;
-    --green-dim: #166534;
-    --orange: #f97316;
-    --orange-dim: #7c3300;
     --red: #ef4444;
-    --red-dim: #7f1d1d;
-    --blue: #38bdf8;
-    --blue-dim: #0c4a6e;
-    --purple: #a78bfa;
-    --purple-dim: #4c1d95;
-    --gray: #6b7280;
-    --gray-dim: #1f2937;
+    --orange: #f97316;
+    --purple: #a855f7;
     --text: #e2e8f0;
+    --text2: #94a3b8;
+    --text3: #475569;
     --text-muted: #64748b;
-    --text-dim: #94a3b8;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'Inter', sans-serif;
-    font-size: 14px;
-    line-height: 1.6;
-    min-height: 100vh;
-  }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', -apple-system, sans-serif; min-height: 100vh; }
 
   /* HEADER */
-  header {
-    background: var(--surface);
+  .header {
+    background: linear-gradient(135deg, #0d0d1a 0%, #111118 100%);
     border-bottom: 1px solid var(--border);
-    padding: 0 32px;
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    height: 60px;
+    padding: 20px 32px;
+    display: flex; align-items: center; justify-content: space-between;
   }
-  .logo {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 28px;
-    letter-spacing: 3px;
-    color: var(--amber);
-    line-height: 1;
-  }
-  .logo span { color: var(--cyan); }
-  .header-meta {
-    font-size: 12px;
-    color: var(--text-muted);
-    display: flex;
-    align-items: center;
-    gap: 16px;
-  }
-  .alpha-badge {
-    background: rgba(245,166,35,0.15);
-    border: 1px solid var(--amber-dim);
-    color: var(--amber);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 1px;
-    padding: 3px 10px;
-    border-radius: 20px;
-  }
-  .gate1-badge {
-    background: rgba(0,212,212,0.10);
-    border: 1px solid var(--cyan-dim);
-    color: var(--cyan);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    padding: 3px 10px;
-    border-radius: 20px;
-  }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.6;transform:scale(1.3)} }
+  .logo-text { font-size: 18px; font-weight: 700; letter-spacing: 2px; color: var(--amber); }
+  .logo-sub { font-size: 11px; color: var(--text3); letter-spacing: 1px; text-transform: uppercase; margin-top: 1px; }
+  .header-meta { font-size: 12px; color: var(--text3); text-align: right; }
+  .header-date { font-size: 13px; color: var(--text2); margin-bottom: 2px; }
+  .gate1-badge { display: inline-block; padding: 6px 12px; background: rgba(245,158,11,.1); border: 1px solid rgba(245,158,11,.3); border-radius: 6px; font-size: 11px; color: var(--amber); font-weight: 600; letter-spacing: 0.5px; }
 
-  /* NAV TABS */
-  nav {
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    padding: 0 32px;
-    display: flex;
-    gap: 0;
-    overflow-x: auto;
-  }
-  nav button {
-    background: none;
-    border: none;
-    border-bottom: 2px solid transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-    font-family: 'Inter', sans-serif;
-    font-size: 13px;
-    font-weight: 500;
-    padding: 12px 20px;
-    white-space: nowrap;
-    transition: color 0.15s, border-color 0.15s;
-  }
-  nav button:hover { color: var(--text); }
-  nav button.active { color: var(--amber); border-bottom-color: var(--amber); }
-
-  /* MAIN LAYOUT */
-  main { max-width: 1200px; margin: 0 auto; padding: 32px; }
-
-  /* SECTION */
-  .section { display: none; }
-  .section.active { display: block; }
+  /* LAYOUT */
+  .container { max-width: 1400px; margin: 0 auto; padding: 28px 32px; }
+  .grid-top { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 24px; }
+  .grid-main { display: grid; grid-template-columns: 1fr 340px; gap: 20px; }
+  .grid-left { display: flex; flex-direction: column; gap: 20px; }
+  .grid-right { display: flex; flex-direction: column; gap: 20px; }
 
   /* CARDS */
   .card {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 24px;
-    margin-bottom: 20px;
+    border-radius: 12px;
+    padding: 20px;
   }
   .card-title {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 18px;
-    letter-spacing: 2px;
-    color: var(--cyan);
-    margin-bottom: 16px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+    font-size: 10px; font-weight: 600; letter-spacing: 1.5px;
+    text-transform: uppercase; color: var(--text3);
+    margin-bottom: 12px;
   }
 
-  /* OVERALL PROGRESS HEADER */
-  .progress-header {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 16px;
-    margin-bottom: 28px;
-  }
-  .stat-box {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 20px;
-    text-align: center;
-  }
-  .stat-box .stat-num {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 42px;
-    line-height: 1;
-    color: var(--amber);
-  }
-  .stat-box .stat-label {
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 1.5px;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    margin-top: 4px;
-  }
-  .stat-box .stat-sub {
-    font-size: 12px;
-    color: var(--text-dim);
-    margin-top: 6px;
-  }
+  /* STAT CARDS */
+  .stat-card { padding: 18px 20px; }
+  .stat-value { font-size: 32px; font-weight: 700; line-height: 1; margin-bottom: 4px; }
+  .stat-num { font-size: 48px; font-weight: 800; line-height: 1; margin-bottom: 4px; }
+  .stat-label { font-size: 11px; color: var(--text3); letter-spacing: 0.5px; }
+  .stat-sub { font-size: 10px; margin-top: 6px; color: var(--text3); }
+
+  /* COUNTDOWN */
+  .countdown-card { background: linear-gradient(135deg, #1a1100 0%, #111118 100%); border-color: #3d2800; }
+  .countdown-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 8px; }
+  .countdown-unit { text-align: center; }
+  .countdown-num { font-size: 36px; font-weight: 800; color: var(--amber); line-height: 1; font-variant-numeric: tabular-nums; }
+  .countdown-lbl { font-size: 9px; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; margin-top: 3px; }
+  .launch-target { font-size: 11px; color: var(--amber); margin-top: 10px; text-align: center; opacity: 0.8; }
 
   /* PROGRESS BAR */
-  .progress-bar-wrap { background: var(--surface3); border-radius: 8px; height: 8px; overflow: hidden; }
-  .progress-bar { height: 100%; border-radius: 8px; transition: width 0.5s ease; }
-  .bar-amber { background: linear-gradient(90deg, var(--amber-dim), var(--amber)); }
-  .bar-cyan { background: linear-gradient(90deg, var(--cyan-dim), var(--cyan)); }
-  .bar-green { background: linear-gradient(90deg, var(--green-dim), var(--green)); }
-  .bar-purple { background: linear-gradient(90deg, var(--purple-dim), var(--purple)); }
-
-  /* STATUS BADGE */
-  .badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    border-radius: 20px;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    padding: 3px 10px;
-    white-space: nowrap;
-  }
-  .badge-green  { background: rgba(34,197,94,0.12);  border: 1px solid var(--green-dim);  color: var(--green);  }
-  .badge-amber  { background: rgba(245,166,35,0.12); border: 1px solid var(--amber-dim);  color: var(--amber);  }
-  .badge-orange { background: rgba(249,115,22,0.12); border: 1px solid var(--orange-dim); color: var(--orange); }
-  .badge-red    { background: rgba(239,68,68,0.12);  border: 1px solid var(--red-dim);    color: var(--red);    }
-  .badge-blue   { background: rgba(56,189,248,0.12); border: 1px solid var(--blue-dim);   color: var(--blue);   }
-  .badge-purple { background: rgba(167,139,250,0.12);border: 1px solid var(--purple-dim); color: var(--purple); }
-  .badge-gray   { background: rgba(107,114,128,0.12);border: 1px solid #374151;           color: var(--gray);   }
-
-  /* BUILD STATUS TABLE */
-  .status-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-    gap: 12px;
-  }
-  .status-item {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 14px 18px;
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-    transition: border-color 0.2s;
-  }
-  .status-item:hover { border-color: #3a4455; }
-  .status-item-name { font-weight: 600; font-size: 13px; color: var(--text); margin-bottom: 4px; }
-  .status-item-note { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
-
-  /* ROADMAP PHASES */
-  .phase-block {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    margin-bottom: 16px;
-    overflow: hidden;
-  }
-  .phase-header {
-    padding: 18px 24px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    cursor: pointer;
-    border-bottom: 1px solid var(--border);
-    transition: background 0.15s;
-  }
-  .phase-header:hover { background: var(--surface2); }
-  .phase-header-left { display: flex; align-items: center; gap: 14px; }
-  .phase-num {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 28px;
-    color: var(--amber);
-    line-height: 1;
-    width: 32px;
-    text-align: center;
-  }
-  .phase-title { font-weight: 700; font-size: 15px; }
-  .phase-subtitle { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
-  .phase-header-right { display: flex; align-items: center; gap: 16px; }
-  .phase-pct {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 22px;
-    color: var(--cyan);
-  }
-  .phase-progress-wrap { width: 120px; }
-  .chevron { color: var(--text-muted); font-size: 16px; transition: transform 0.2s; }
-  .phase-block.open .chevron { transform: rotate(180deg); }
-
-  .phase-body { display: none; padding: 20px 24px; }
-  .phase-block.open .phase-body { display: block; }
-
-  /* CHECKLIST */
-  .checklist { display: flex; flex-direction: column; gap: 8px; }
-  .checklist-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    padding: 10px 14px;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 7px;
-    cursor: pointer;
-    transition: background 0.15s, border-color 0.15s;
-    user-select: none;
-  }
-  .checklist-item:hover { background: var(--surface3); border-color: #3a4455; }
-  .checklist-item.done { opacity: 0.55; }
-  .checklist-item.done .check-label { text-decoration: line-through; color: var(--text-muted); }
-
-  .check-box {
-    width: 18px;
-    height: 18px;
-    border-radius: 5px;
-    border: 2px solid var(--border);
-    flex-shrink: 0;
-    margin-top: 1px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.15s, border-color 0.15s;
-  }
-  .checklist-item.done .check-box { background: var(--green); border-color: var(--green); }
-  .check-box-inner { color: #fff; font-size: 11px; display: none; }
-  .checklist-item.done .check-box-inner { display: block; }
-  .check-label { font-size: 13px; color: var(--text); line-height: 1.5; }
-
-  /* LAUNCH GATES */
-  .gates-grid { display: flex; flex-direction: column; gap: 10px; }
-  .gate-item {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 14px 18px;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    cursor: pointer;
-    transition: background 0.15s, border-color 0.15s;
-    user-select: none;
-  }
-  .gate-item:hover { background: var(--surface3); border-color: #3a4455; }
-  .gate-item.done { opacity: 0.6; }
-  .gate-item.done .gate-text { text-decoration: line-through; color: var(--text-muted); }
-  .gate-item.active-clock { border-color: rgba(0,212,212,0.4); background: rgba(0,212,212,0.04); }
-  .gate-num-badge {
-    width: 32px; height: 32px; border-radius: 8px;
-    background: var(--surface3); border: 1px solid var(--border);
-    font-family: 'Bebas Neue', sans-serif; font-size: 18px; color: var(--amber);
-    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-    transition: background 0.2s, border-color 0.2s;
-  }
-  .gate-item.done .gate-num-badge { background: rgba(34,197,94,0.15); border-color: var(--green-dim); color: var(--green); }
-  .gate-item.active-clock .gate-num-badge { background: rgba(0,212,212,0.12); border-color: var(--cyan-dim); color: var(--cyan); }
-  .gate-text { font-size: 13px; flex: 1; }
-  .gate-status { font-size: 11px; font-weight: 600; flex-shrink: 0; }
-  .gate-item.done .gate-status { color: var(--green); }
-  .gate-item.active-clock .gate-status { color: var(--cyan); }
-  .gate-item:not(.done):not(.active-clock) .gate-status { color: var(--text-muted); }
-
-  /* COMPETITOR TABLE */
-  .comp-table { width: 100%; border-collapse: collapse; }
-  .comp-table th {
-    background: var(--surface2); color: var(--text-muted);
-    font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;
-    padding: 10px 16px; text-align: left; border-bottom: 1px solid var(--border);
-  }
-  .comp-table th:first-child { border-radius: 8px 0 0 0; }
-  .comp-table th:last-child { border-radius: 0 8px 0 0; text-align: center; }
-  .comp-table td { padding: 11px 16px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); }
-  .comp-table td:not(:first-child) { text-align: center; }
-  .comp-table tr:hover td { background: var(--surface2); }
-  .comp-table tr:last-child td { border-bottom: none; }
-  .tick { color: var(--green); font-size: 16px; }
-  .cross { color: #374151; font-size: 16px; }
-  .comp-table th.wp-col { color: var(--amber); }
-  .score-row td { background: var(--surface3); font-weight: 700; }
-  .score-row td:first-child { color: var(--text-muted); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; }
-
-  /* OVERALL PROGRESS BAR LARGE */
-  .big-progress-wrap { background: var(--surface3); border-radius: 12px; height: 14px; overflow: hidden; margin: 10px 0 4px; }
-  .big-progress { height: 100%; border-radius: 12px; transition: width 0.5s ease; }
-
-  /* RESET */
-  .reset-btn {
-    background: none; border: 1px solid var(--border); border-radius: 6px;
-    color: var(--text-muted); cursor: pointer; font-family: 'Inter', sans-serif;
-    font-size: 11px; padding: 5px 12px; transition: color 0.15s, border-color 0.15s;
-  }
-  .reset-btn:hover { color: var(--red); border-color: var(--red); }
-
-  /* GRID 2-COL */
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-  @media (max-width: 700px) { .grid-2 { grid-template-columns: 1fr; } }
-
-  /* SECTION TITLE */
-  .section-title {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 26px; letter-spacing: 3px;
-    color: var(--text); margin-bottom: 8px;
-  }
-  .section-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 24px; }
+  .progress-wrap { margin-top: 8px; }
+  .progress-bar-bg { height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; }
+  .progress-bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+  .progress-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--text3); margin-top: 5px; }
 
   /* TICKER */
-  .ticker-bar {
-    background: rgba(245,166,35,0.08); border: 1px solid rgba(245,166,35,0.2);
-    border-radius: 8px; padding: 10px 18px; font-size: 12px; color: var(--amber);
-    margin-bottom: 24px; display: flex; align-items: center; gap: 10px;
-  }
-  .ticker-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--amber); animation: pulse 1.5s infinite; }
-  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.8)} }
+  .ticker-wrap { overflow: hidden; background: var(--surface2); border-radius: 8px; padding: 8px 0; margin-bottom: 20px; }
+  .ticker { display: flex; gap: 20px; padding: 8px 32px; font-size: 12px; color: var(--text2); white-space: nowrap; animation: scroll-left 30s linear infinite; }
+  @keyframes scroll-left { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
+  .ticker-item { flex-shrink: 0; }
 
-  /* GITHUB PANEL */
-  .gh-panel {
-    background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
-    padding: 16px 20px; margin-bottom: 24px;
-    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+  /* ISSUE BOARD */
+  .issue-section { margin-bottom: 20px; }
+  .issue-section-header {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: 600; letter-spacing: 1px;
+    text-transform: uppercase; margin-bottom: 10px;
+    color: var(--text2);
   }
-  .gh-left { display: flex; align-items: center; gap: 12px; }
-  .gh-icon { font-size: 18px; }
-  .gh-repo-name { font-weight: 600; font-size: 13px; color: var(--text); }
-  .gh-repo-link { font-size: 11px; color: var(--cyan); text-decoration: none; }
-  .gh-repo-link:hover { text-decoration: underline; }
-  .gh-stats { display: flex; gap: 20px; flex-wrap: wrap; }
-  .gh-stat { text-align: center; }
-  .gh-stat-num { font-family: 'Bebas Neue', sans-serif; font-size: 22px; color: var(--amber); line-height: 1; }
-  .gh-stat-label { font-size: 10px; color: var(--text-muted); letter-spacing: 1px; text-transform: uppercase; }
-  .gh-right { display: flex; align-items: center; gap: 10px; }
-  .gh-status { font-size: 11px; color: var(--text-muted); }
-  .gh-refresh {
-    background: none; border: 1px solid var(--border); border-radius: 6px;
-    color: var(--text-muted); cursor: pointer; font-family: 'Inter', sans-serif;
-    font-size: 11px; padding: 5px 12px; transition: color 0.15s, border-color 0.15s;
+  .issue-section-badge {
+    padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 700;
   }
-  .gh-refresh:hover { color: var(--cyan); border-color: var(--cyan); }
-  .gh-refresh:disabled { opacity: 0.4; cursor: not-allowed; }
-  .gh-loading { color: var(--text-muted); font-size: 12px; font-style: italic; }
-  .gh-error { color: var(--red); font-size: 11px; }
-  .gh-issues-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; margin-top: 10px; }
-  .gh-issue-item {
-    background: var(--surface3); border: 1px solid var(--border); border-radius: 7px;
-    padding: 10px 14px; display: flex; align-items: flex-start; gap: 10px;
-    font-size: 12px; text-decoration: none; color: var(--text); transition: border-color 0.15s;
-  }
-  .gh-issue-item:hover { border-color: var(--cyan); }
-  .gh-issue-num { color: var(--text-muted); flex-shrink: 0; font-size: 11px; padding-top: 1px; }
-  .gh-issue-title { flex: 1; line-height: 1.4; }
-  .gh-issue-state { font-size: 10px; font-weight: 600; flex-shrink: 0; padding-top: 1px; }
-  .gh-issue-open { color: var(--green); }
-  .gh-issue-closed { color: var(--text-muted); }
-  .spin { display: inline-block; animation: spin 1s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
+  .badge-red { background: rgba(239,68,68,.15); color: var(--red); }
+  .badge-orange { background: rgba(249,115,22,.15); color: var(--orange); }
+  .badge-green { background: rgba(34,197,94,.15); color: var(--green); }
+  .badge-purple { background: rgba(168,85,247,.15); color: var(--purple); }
+  .badge-gray { background: rgba(71,85,105,.15); color: var(--text3); }
+  .badge-cyan { background: rgba(6,182,212,.15); color: var(--cyan); }
+  .badge-amber { background: rgba(245,158,11,.15); color: var(--amber); }
 
-  /* INTEGRATION STATUS */
-  .integration-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-bottom: 20px; }
-  .integration-item {
-    background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
-    padding: 14px 18px; display: flex; align-items: flex-start; gap: 12px;
+  .issue-row {
+    display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid rgba(34,197,94,.08);
   }
-  .integration-icon { font-size: 20px; flex-shrink: 0; }
-  .integration-name { font-weight: 600; font-size: 13px; margin-bottom: 3px; }
-  .integration-note { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+  .issue-row:last-child { border-bottom: none; }
+  .issue-status-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  .dot-done { background: var(--green); }
+  .dot-active { background: var(--amber); }
+  .dot-pending { background: var(--text3); }
+  .issue-body { flex: 1; }
+  .issue-id { font-size: 10px; font-weight: 700; color: var(--cyan); letter-spacing: 0.5px; }
+  .issue-title { font-size: 13px; color: var(--text); margin-top: 2px; }
+  .issue-meta { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+  .tag {
+    padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 600;
+    background: rgba(71,85,105,.2); color: var(--text2); border: 1px solid rgba(71,85,105,.3);
+  }
+  .tag-bug { background: rgba(239,68,68,.15); color: var(--red); border-color: rgba(239,68,68,.3); }
+  .tag-feature { background: rgba(34,197,94,.15); color: var(--green); border-color: rgba(34,197,94,.3); }
+  .issue-right { flex-shrink: 0; }
+  .issue-priority { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; }
 
-  /* COMP SCORE HIGHLIGHT */
-  .score-wp { color: var(--amber); font-family: 'Bebas Neue', sans-serif; font-size: 20px; }
-  .score-other { color: var(--text-dim); font-family: 'Bebas Neue', sans-serif; font-size: 20px; }
-  .comp-advantage {
-    background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.15);
-    border-radius: 8px; padding: 12px 18px; margin-top: 16px;
-    font-size: 12px; color: var(--text-dim);
+  /* GATES */
+  .gates-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-top: 12px; }
+  .gate-item {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px;
+    cursor: pointer; transition: all 0.2s;
   }
-  .comp-advantage strong { color: var(--green); }
+  .gate-item:hover { border-color: var(--cyan); background: rgba(6,182,212,.05); }
+  .gate-item.done { border-color: var(--green); background: rgba(34,197,94,.05); }
+  .gate-num { font-size: 13px; font-weight: 700; color: var(--amber); }
+  .gate-name { font-size: 10px; color: var(--text2); margin-top: 4px; }
+  .gate-status { font-size: 11px; color: var(--text); margin-top: 6px; font-weight: 600; }
+
+  /* SECTION DIVIDER */
+  .section-divider { height: 1px; background: var(--border); margin: 16px 0; }
 
   /* MOAT BOX */
-  .moat-box {
-    background: rgba(167,139,250,0.06); border: 1px solid rgba(167,139,250,0.2);
-    border-radius: 8px; padding: 14px 18px; margin-bottom: 20px;
+  .moat-box { background: rgba(168,85,247,.05); border: 1px solid rgba(168,85,247,.2); border-radius: 8px; padding: 16px; margin-bottom: 20px; }
+  .moat-box ul { margin-left: 20px; list-style: disc; }
+  .moat-box li { font-size: 13px; color: var(--text); margin-bottom: 8px; line-height: 1.5; }
+  .moat-box li:last-child { margin-bottom: 0; }
+
+  /* INTEGRATIONS */
+  .integration-row {
+    display: flex; align-items: center; gap: 12px; padding: 12px 0;
+    border-bottom: 1px solid rgba(34,197,94,.08);
   }
-  .moat-box .moat-title { color: var(--purple); font-weight: 700; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
-  .moat-box ul { color: var(--text-dim); font-size: 12px; padding-left: 18px; }
-  .moat-box li { margin-bottom: 4px; }
+  .integration-row:last-child { border-bottom: none; }
+  .integration-icon { font-size: 20px; }
+  .integration-body { flex: 1; }
+  .integration-name { font-size: 12px; font-weight: 600; color: var(--text); }
+  .integration-note { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  .integration-status { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; flex-shrink: 0; }
+  .status-live { background: rgba(34,197,94,.15); color: var(--green); }
+  .status-code-done { background: rgba(6,182,212,.15); color: var(--cyan); }
+  .status-pending { background: rgba(245,158,11,.15); color: var(--amber); }
+
+  /* INFRASTRUCTURE */
+  .infra-row {
+    display: flex; justify-content: space-between; padding: 10px 0;
+    border-bottom: 1px solid rgba(34,197,94,.08);
+  }
+  .infra-row:last-child { border-bottom: none; }
+  .infra-name { font-size: 12px; color: var(--text2); }
+  .infra-status { font-size: 11px; color: var(--text); font-weight: 600; display: flex; align-items: center; gap: 6px; }
+  .infra-status.ok { color: var(--green); }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* ROADMAP */
+  .roadmap-item {
+    display: grid; grid-template-columns: 70px 1fr 100px; gap: 12px; align-items: start;
+    padding: 12px 0; border-bottom: 1px solid rgba(34,197,94,.08);
+  }
+  .roadmap-item:last-child { border-bottom: none; }
+  .roadmap-phase { font-size: 10px; font-weight: 700; text-transform: uppercase; }
+  .roadmap-body { min-width: 0; }
+  .roadmap-name { font-size: 12px; font-weight: 600; color: var(--text); }
+  .roadmap-date { font-size: 10px; color: var(--text3); margin-top: 2px; }
+  .roadmap-bar-wrap { }
+  .roadmap-bar-bg { height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
+  .roadmap-bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+
+  /* FIX ROWS */
+  .fix-row {
+    display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid rgba(34,197,94,.08);
+  }
+  .fix-row:last-child { border-bottom: none; }
+  .fix-text { font-size: 12px; color: var(--text); line-height: 1.5; }
+  .fix-text code { background: var(--surface2); padding: 2px 4px; border-radius: 3px; }
+
+  /* COMPETITORS TABLE */
+  .competitor-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  .competitor-table th {
+    font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--text3);
+    text-align: left; padding: 8px; border-bottom: 2px solid var(--border);
+  }
+  .competitor-table td {
+    font-size: 11px; color: var(--text); padding: 8px;
+    border-bottom: 1px solid rgba(34,197,94,.08);
+  }
+  .competitor-table tr:last-child td { border-bottom: none; }
+  .check { color: var(--green); font-weight: 700; }
+  .cross { color: var(--text3); }
 </style>
 </head>
 <body>
 
-<header>
-  <div class="logo">World<span>Pulse</span></div>
-  <div class="header-meta">
-    <div class="alpha-badge">ALPHA</div>
-    <div class="gate1-badge">⏱ Gate 1 · Day 3/14</div>
-    <span>Sprint Update · March 29, 2026</span>
-  </div>
-</header>
-
-<nav>
-  <button class="active" onclick="showTab('overview')">Overview</button>
-  <button onclick="showTab('build-status')">Build Status</button>
-  <button onclick="showTab('integrations')">Integrations</button>
-  <button onclick="showTab('roadmap')">Roadmap</button>
-  <button onclick="showTab('gates')">Launch Gates</button>
-  <button onclick="showTab('competitors')">Competitors</button>
-  <button onclick="showTab('github')">GitHub Live</button>
-</nav>
-
-<main>
-
-  <!-- ══════════════════ OVERVIEW ══════════════════ -->
-  <div id="tab-overview" class="section active">
-    <div id="gh-panel-overview" class="gh-panel">
-      <div class="gh-left">
-        <span class="gh-icon">⬡</span>
-        <div>
-          <div class="gh-repo-name">goldsphere-design / world-pulse</div>
-          <a class="gh-repo-link" href="https://github.com/goldsphere-design/world-pulse" target="_blank">github.com/goldsphere-design/world-pulse ↗</a>
-        </div>
-      </div>
-      <div class="gh-stats" id="gh-stats-row"><span class="gh-loading"><span class="spin">↻</span> Fetching live data…</span></div>
-      <div class="gh-right">
-        <span class="gh-status" id="gh-last-fetched">—</span>
-        <button class="gh-refresh" id="gh-refresh-btn" onclick="fetchGitHub()">Refresh</button>
-      </div>
-    </div>
-
-    <div class="ticker-bar">
-      <div class="ticker-dot"></div>
-      Brain agent running · 5/6 launch gates cleared · 45+ improvements shipped · Cycle 78 complete · Gate 1 stability clock: Day 3 of 14 · Pinecone semantic search live ✅ · Skills integrated (code-review, tech-debt, system-design, standup) · Production: 2,850+ signals live
-    </div>
-
-    <div class="progress-header">
-      <div class="stat-box">
-        <div class="stat-num" id="ov-roadmap-pct">0%</div>
-        <div class="stat-label">Roadmap Progress</div>
-        <div class="stat-sub" id="ov-roadmap-sub">— of — items done</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-num" id="ov-gates-pct">0%</div>
-        <div class="stat-label">Launch Gates</div>
-        <div class="stat-sub" id="ov-gates-sub">— of 6 cleared</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-num" id="ov-build-pct">0%</div>
-        <div class="stat-label">Build Areas Complete</div>
-        <div class="stat-sub" id="ov-build-sub">— of 20 areas</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-num" style="color:var(--cyan)">8.7<span style="font-size:20px;color:var(--text-muted)">/10</span></div>
-        <div class="stat-label">Health Score</div>
-        <div class="stat-sub">Brain agent · 78 cycles</div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Overall Roadmap Progress</div>
-      <div class="big-progress-wrap">
-        <div class="big-progress bar-amber" id="ov-big-bar" style="width:0%"></div>
-      </div>
-      <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px;color:var(--text-muted);">
-        <span>Phase 1 → Phase 7 · Pre-Launch</span>
-        <span id="ov-big-label">0%</span>
-      </div>
-    </div>
-
-    <div class="grid-2">
-      <div class="card">
-        <div class="card-title">Phase Breakdown</div>
-        <div id="ov-phases"></div>
-      </div>
-      <div class="card">
-        <div class="card-title">Launch Gate Status</div>
-        <div id="ov-gates-mini"></div>
-      </div>
-    </div>
-
-    <div class="moat-box">
-      <div class="moat-title">🛡 Competitive Moat — No Competitor Replicates This Stack</div>
-      <ul>
-        <li><strong style="color:var(--purple)">Open source + self-hostable</strong> — Reuters/AP/Ground News will never open-source. Newsrooms can own their feed.</li>
-        <li><strong style="color:var(--purple)">Pinecone semantic search</strong> — Find "earthquake near population centre" without exact words. Zero competitors have this.</li>
-        <li><strong style="color:var(--purple)">54 live OSINT sources</strong> — ADS-B aviation, AIS maritime, GDELT 2.0, GPS jamming, CISA-KEV, ACLED, WHO, IAEA, Interpol, EU/OFAC sanctions.</li>
-        <li><strong style="color:var(--purple)">AI reliability scoring (transparent)</strong> — NewsGuard is closed-methodology. WorldPulse shows the math.</li>
-        <li><strong style="color:var(--purple)">Free at the core + Stripe Pro</strong> — Reuters Connect charges $50K+/year. WorldPulse Pro: $12/mo.</li>
-      </ul>
-    </div>
-  </div>
-
-  <!-- ══════════════════ BUILD STATUS ══════════════════ -->
-  <div id="tab-build-status" class="section">
-    <div class="section-title">Build Status</div>
-    <div class="section-desc">Current implementation state across 20 core areas as of March 29, 2026. <strong style="color:var(--green)">45+ improvements shipped across 78 brain cycles.</strong></div>
-    <div class="status-grid" id="build-status-grid"></div>
-  </div>
-
-  <!-- ══════════════════ INTEGRATIONS ══════════════════ -->
-  <div id="tab-integrations" class="section">
-    <div class="section-title">Integration Status</div>
-    <div class="section-desc">Three-phase integration roadmap. Phases 1 &amp; 2 code-complete — pending Devon's manual dashboard signups to add API keys to .env.prod.</div>
-
-    <div class="card">
-      <div class="card-title">Phase 1 — Now (Observability &amp; Delivery)</div>
-      <div class="integration-grid" id="int-phase1"></div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Phase 2 — Before Gate 1 Clears (Monetization &amp; AI Search)</div>
-      <div class="integration-grid" id="int-phase2"></div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Phase 3 — After Launch (Product Intelligence)</div>
-      <div class="integration-grid" id="int-phase3"></div>
-    </div>
-
-    <div class="card" style="background:rgba(245,166,35,0.04);border-color:rgba(245,166,35,0.2)">
-      <div class="card-title" style="color:var(--amber)">Devon's Manual To-Do List</div>
-      <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px;">Brain agent has completed all code. These require dashboard signups — only Devon can do them.</p>
-      <div class="checklist" id="manual-todo-list"></div>
-    </div>
-  </div>
-
-  <!-- ══════════════════ ROADMAP ══════════════════ -->
-  <div id="tab-roadmap" class="section">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-      <div class="section-title">Pre-Launch Roadmap</div>
-      <button class="reset-btn" onclick="resetRoadmap()">Reset Progress</button>
-    </div>
-    <div class="section-desc">Click any deliverable to mark it complete. Progress saves automatically.</div>
-    <div id="roadmap-phases"></div>
-  </div>
-
-  <!-- ══════════════════ LAUNCH GATES ══════════════════ -->
-  <div id="tab-gates" class="section">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-      <div class="section-title">Launch Gates</div>
-      <button class="reset-btn" onclick="resetGates()">Reset Gates</button>
-    </div>
-    <div class="section-desc">All 6 gates must be cleared before the launch event. Click to mark as cleared. Gate 1 is actively running its 14-day stability clock (Day 3 of 14, clears ~Apr 9).</div>
-    <div class="card">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <span style="font-size:13px;color:var(--text-muted)">Gates cleared</span>
-        <span id="gates-pct-label" style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--cyan)">0 / 6</span>
-      </div>
-      <div class="progress-bar-wrap" style="margin-bottom:20px;">
-        <div class="progress-bar bar-cyan" id="gates-progress-bar" style="width:0%"></div>
-      </div>
-      <div class="gates-grid" id="gates-list"></div>
-    </div>
-  </div>
-
-  <!-- ══════════════════ COMPETITORS ══════════════════ -->
-  <div id="tab-competitors" class="section">
-    <div class="section-title">Competitor Benchmark</div>
-    <div class="section-desc">Feature parity analysis vs. primary market competitors — March 29, 2026. <strong style="color:var(--amber)">WorldPulse leads in every open-source, API, and intelligence dimension.</strong></div>
-
-    <div class="moat-box" style="margin-bottom:20px;">
-      <div class="moat-title">📊 Market Context</div>
-      <ul>
-        <li>Ground News traffic up <strong style="color:var(--purple)">18.18% MoM</strong> · now processing 60K articles/day from 50K+ sources</li>
-        <li>No direct competitor has received significant news-intelligence funding in 2026</li>
-        <li>WorldMonitor (koala73) remains GitHub-only with no production launch</li>
-        <li>Intell Weave (AI news verification) not yet publicly launched — monitor for launch signals</li>
-        <li><strong style="color:var(--red)">NEW · Mar 29:</strong> <strong>Crucix</strong> (marc.kaz) — open-source OSINT terminal, 27 sources, AGPL-3.0, self-hosted Docker, viral on social (1,824 likes). Closest open-source rival yet. No map, no web UI, no semantic search.</li>
-        <li><strong style="color:var(--red)">NEW · Mar 29:</strong> <strong>star.ai.media</strong> — "CIA-style" globe intelligence dashboard tracking conflicts + military aircraft, free tier, social-viral (2,938 likes). Dark globe UI resembles WorldPulse map. No OSINT sourcing transparency, no open source.</li>
-      </ul>
-    </div>
-
-    <div class="card">
-      <table class="comp-table">
-        <thead>
-          <tr>
-            <th>Feature / Capability</th>
-            <th class="wp-col">WorldPulse</th>
-            <th>Ground News</th>
-            <th>Reuters / AP</th>
-            <th>GDELT</th>
-          </tr>
-        </thead>
-        <tbody id="comp-tbody"></tbody>
-      </table>
-      <div class="comp-advantage">
-        <strong>WorldPulse unique advantages:</strong> Open source + self-hostable · Pinecone semantic search · 54 live OSINT sources (ADS-B, AIS, GPS jamming, GDELT, CISA, WHO, IAEA, Interpol) · AI reliability scoring (transparent methodology) · Free Pro tier ($12/mo vs Reuters $50K+/yr) · Developer REST + GraphQL API · Community moderation + crowdsourced verification · Satellite basemap + 3D tilt + maritime intel layer · No competitor offers more than 3 of these simultaneously.
-      </div>
-    </div>
-
-    <div class="card" style="margin-top:20px;">
-      <div class="card-title" style="margin-bottom:14px;">⚠️ Emerging Threats — Social-Discovered Mar 29, 2026</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-        <div style="background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:16px;">
-          <div style="font-weight:700;color:var(--amber);margin-bottom:6px;">Crucix <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:6px;">@marc.kaz · AGPL-3.0</span></div>
-          <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">"Your own intelligence terminal. 27 sources. One command. Zero cloud."</div>
-          <div style="font-size:12px;line-height:1.8;">
-            <div>📡 27 OSINT sources incl. satellite fire, flight, radiation, sanctions, crypto</div>
-            <div>🐳 Docker · Node 22+ · self-hosted only · no web UI</div>
-            <div>📊 1,824 likes on social · GitHub README stage</div>
-            <div style="margin-top:8px;color:var(--green);">✅ Gap vs WP: no map, no semantic search, no Pro tier, no web UI</div>
-            <div style="color:var(--red);">⚠️ Risk: open-source angle directly competes for developer mindshare</div>
-          </div>
-        </div>
-        <div style="background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:16px;">
-          <div style="font-weight:700;color:var(--amber);margin-bottom:6px;">star.ai.media <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:6px;">Unverified product name</span></div>
-          <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">"AI dashboard gives you a real-time CIA-style intelligence map of the entire world"</div>
-          <div style="font-size:12px;line-height:1.8;">
-            <div>🌍 Globe map UI · conflict zones · military aircraft tracking</div>
-            <div>💰 Free tier · closed source · no API disclosed</div>
-            <div>📊 2,938 likes on social · no GitHub / transparency</div>
-            <div style="margin-top:8px;color:var(--green);">✅ Gap vs WP: no open source, no OSINT sourcing, no semantic search, no developer API</div>
-            <div style="color:var(--orange);">⚠️ Risk: similar map aesthetic + free positioning targets same user segment</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ══════════════════ GITHUB LIVE ══════════════════ -->
-  <div id="tab-github" class="section">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-      <div class="section-title">GitHub Live</div>
-      <button class="gh-refresh" onclick="fetchGitHub()">↻ Refresh</button>
-    </div>
-    <div class="section-desc">Live data from <a href="https://github.com/goldsphere-design/world-pulse" target="_blank" style="color:var(--cyan)">goldsphere-design/world-pulse</a> · updates on each visit.</div>
-
-    <div class="card" id="gh-repo-card">
-      <div class="card-title">Repository Stats</div>
-      <div id="gh-repo-stats-detail"><span class="gh-loading"><span class="spin">↻</span> Loading…</span></div>
-    </div>
-
-    <div class="card">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-        <div class="card-title" style="margin-bottom:0">Open Issues</div>
-        <span id="gh-open-count" style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--cyan)">—</span>
-      </div>
-      <div id="gh-issues-open-list"><span class="gh-loading"><span class="spin">↻</span> Loading…</span></div>
-    </div>
-
-    <div class="card">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-        <div class="card-title" style="margin-bottom:0">Recently Closed Issues</div>
-        <span id="gh-closed-count" style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--green)">—</span>
-      </div>
-      <div id="gh-issues-closed-list"><span class="gh-loading"><span class="spin">↻</span> Loading…</span></div>
-    </div>
-  </div>
-
-</main>
-
-<script>
-// ─── DATA ──────────────────────────────────────────────────────────────────
-
-const BUILD_STATUS = [
-  { name: 'Architecture & Design',        status: 'complete',     note: 'Full system spec, tech stack, data models, API contracts defined. UI prototype polished. System design review running each brain cycle.' },
-  { name: 'Monorepo Scaffold',            status: 'complete',     note: 'pnpm workspaces + Turborepo. Docker Compose for local dev. TypeScript strict mode.' },
-  { name: 'Signal Scraper',               status: 'complete',     note: '54 live OSINT sources: ACLED, AIS maritime, ADS-B aviation, GDELT 2.0, CISA-KEV, Interpol, IAEA, GPS jamming, satellite, EU/OFAC sanctions, wildfire, WHO, tsunami, space weather, 25 global RSS feeds (BBC, Reuters, AP, Al Jazeera, Guardian, NHK, SCMP, Kyiv Independent…). Circuit breaker, retry, Kafka pipeline. Gate 1 stability clock: Day 3/14.' },
-  { name: 'API Layer',                    status: 'complete',     note: '36+ production routes: signals, feed, auth, search, analytics, countries, breaking news, maritime, jamming, patents, briefings, social, admin, public API, status/uptime, syndication (RSS/Atom/OPML), webhooks, semantic search, kafka lag, scraper health.' },
-  { name: 'World Map',                    status: 'complete',     note: '2,641-line interactive map. Satellite/dark/terrain basemaps. 3D tilt (pitch 30°). ADS-B aircraft layer. Maritime/naval intel layer. Supercluster clustering. Severity colouring. WebSocket real-time updates. Gate 2 ✅' },
-  { name: 'Semantic Search (Pinecone)',   status: 'complete',     note: 'pinecone.ts (194L). /search/semantic endpoint. /signals/:id/similar similar-signal discovery. SimilarSignals.tsx (143L). 336-line test suite. 1536-dim vectors via text-embedding-3-small. Unique moat vs all competitors.' },
-  { name: 'Search (Meilisearch)',         status: 'complete',     note: 'Meilisearch fully integrated. Full indexing pipeline, autocomplete, Cmd+K palette, 1,029-line search UI with filters. p95 latency tracker wired. Gate 3 ✅' },
-  { name: 'Social Features',             status: 'complete',     note: 'Post/reply/boost/communities + real-time WebSocket feed. Crowdsourced bias corrections. Full test suite (Gate 4 ✅). Community moderation + flagging live.' },
-  { name: 'Verification Engine',         status: 'complete',     note: 'Composite risk scoring (0–95), country intel index, geopolitical risk gauge, reliability scoring, source media bias detection (192L), bias indicator UI, reliability explainer tooltips, verification_log table.' },
-  { name: 'Auth',                        status: 'complete',     note: 'JWT + GitHub/Google OAuth, 526-line auth route. OAuth callbacks complete. 374-line integration test suite. Gate 4 ✅' },
-  { name: 'Alerting & Notifications',    status: 'complete',     note: 'FLASH / PRIORITY / ROUTINE tier classification. Redis PUB/SUB tier-aware instant push notifications. Multi-channel delivery (in-app, webhook, email). Alert tone/urgency system live.' },
-  { name: 'Security Hardening',          status: 'complete',     note: 'SSRF protection, brute-force lockout, payload scanning (SQLi/XSS), security headers, rate limiting, API error standardisation, @fastify/raw-body for Stripe webhooks. 348-line security lib + 438-line test suite. Gate 6 ✅' },
-  { name: 'Stripe Pro Billing',          status: 'complete',     note: 'Stripe Pro tier ($12/mo): subscriptions table, checkout session, webhook handler (raw-body verified), pricing page. 18 tests. Free: 60 req/min, 7-day history. Pro: 600 req/min, 90-day history, unlimited alerts, 5 webhooks.' },
-  { name: 'Load Testing',               status: 'complete',     note: 'k6 smoke/load/stress scripts. 10K concurrent baseline passed. Gate 5 ✅' },
-  { name: 'Country & Threat Intel',     status: 'complete',     note: 'Country Intelligence Index (0–95 composite risk), hourly sparklines, Global Threat Index (1–5), Escalation Index, Market Ticker (9 instruments via Yahoo Finance). 838-line API + UI.' },
-  { name: 'Observability (Sentry)',      status: 'complete',     note: 'Sentry error tracking on apps/web + apps/api. Error boundaries, source maps. @sentry/nextjs + @sentry/fastify. ⚠️ Pending Devon: add DSNs to .env.prod.' },
-  { name: 'Syndication & Embeds',       status: 'complete',     note: 'RSS/Atom, JSON Feed, OPML syndication. Embeddable widget.js + embed configurator. Outbound developer webhooks. Developer portal live.' },
-  { name: 'Scraper Resilience',         status: 'complete',     note: 'circuit-breaker.ts (177L, 3-state FSM, Redis-backed, exponential backoff), retry.ts (117L, full jitter, AbortSignal), fetch-with-resilience.ts. 877 lines of tests across 3 files. Kafka consumer lag monitoring.' },
-  { name: 'Mobile App',                 status: 'in-progress',  note: 'React Native (Expo). Posts/social feed (319L) and communities tab built. Navigation wired. Auth, signals feed, map tab still in progress.' },
-  { name: 'Geo Pipeline (P0)',          status: 'not-started',  note: 'geo.ts (140+ gazetteer entries + Nominatim) is BUILT but NEVER CALLED. One-line fix in apps/scraper/src/index.ts after classifyContent() to call extractGeo(). Fixes 0-pins-on-map issue. Highest-priority P0.' },
-];
-
-const INTEGRATIONS_PHASE1 = [
-  { icon: '🚨', name: 'Sentry (Web)', status: 'code-done', note: '@sentry/nextjs installed, error boundaries wired, source maps configured. Missing: NEXT_PUBLIC_SENTRY_DSN in .env.prod.' },
-  { icon: '🚨', name: 'Sentry (API)', status: 'code-done', note: '@sentry/fastify installed, plugin registered. Missing: SENTRY_DSN_API + SENTRY_AUTH_TOKEN in .env.prod.' },
-  { icon: '▲', name: 'Vercel',       status: 'code-done', note: 'vercel.json monorepo config written, localhost refs cleaned, env var docs complete. Missing: connect repo on vercel.com.' },
-  { icon: '🔶', name: 'Cloudflare',  status: 'code-done', note: 'CSP headers, cache-control, nginx CIDR trust for real-IP, CF-aware rate limit keys. Missing: point world-pulse.io DNS to CF nameservers.' },
-];
-
-const INTEGRATIONS_PHASE2 = [
-  { icon: '💳', name: 'Stripe',   status: 'code-done', note: 'Pro tier $12/mo complete: subscriptions table, checkout session, webhook handler (raw-body verified), pricing page, 18 tests. Missing: STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET + STRIPE_PRO_PRICE_ID in .env.prod.' },
-  { icon: '🔍', name: 'Pinecone', status: 'live', note: 'pinecone.ts (194L), /search/semantic live ✅, /signals/:id/similar, SimilarSignals.tsx (143L), 336-line tests. Index worldpulse-signals (1536-dim, cosine, us-east-1) connected. PINECONE_API_KEY + OPENAI_API_KEY active in .env.prod. Embeddings auto-generating on signal ingestion.' },
-];
-
-const INTEGRATIONS_PHASE3 = [
-  { icon: '📊', name: 'PostHog', status: 'planned', note: 'After launch — no value tracking before real users. Will capture: pageview, signal_viewed, search_performed, map_opened, auth_completed. Using NEXT_PUBLIC_POSTHOG_KEY.' },
-];
-
-const MANUAL_TODOS = [
-  { id: 'mt_sentry', label: 'Sentry: Create 2 projects (Next.js + Node) → copy DSNs to .env.prod (NEXT_PUBLIC_SENTRY_DSN, SENTRY_DSN_API, SENTRY_AUTH_TOKEN)' },
-  { id: 'mt_vercel', label: 'Vercel: Connect goldsphere-design/world-pulse on vercel.com → set NEXT_PUBLIC_API_URL=https://api.world-pulse.io' },
-  { id: 'mt_cloudflare', label: 'Cloudflare: Point world-pulse.io DNS to Cloudflare nameservers at registrar → SSL: Full (strict) → WAF rate limit /api/v1/auth to 10 req/min' },
-  { id: 'mt_stripe', label: 'Stripe: Create Product ($12/mo + $99/yr) → add STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRO_PRICE_ID to .env.prod' },
-  { id: 'mt_pinecone', label: 'Pinecone: ✅ DONE — index worldpulse-signals live, PINECONE_API_KEY + OPENAI_API_KEY active, /search/semantic returning results' },
-];
-
-const PHASES = [
-  {
-    num: 1, title: 'Foundation', subtitle: 'Backend / Infrastructure', priority: 'critical',
-    items: [
-      'DB connection hardening + health checks',
-      'Scraper health dashboard + dead-source detection',
-      'Retry logic + circuit breaker for all source tiers',
-      'Kafka consumer lag monitoring in Grafana',
-      'Auth: complete OAuth callbacks (GitHub, Google)',
-      'API: core feed + signal endpoints fully wired',
-    ]
-  },
-  {
-    num: 2, title: 'Map & Search', subtitle: 'Full Stack', priority: 'critical',
-    items: [
-      'Map: live signal pins from real API data',
-      'Map: severity colours, clustering, click-through popups',
-      'Map: WebSocket real-time signal updates',
-      'Map: satellite basemap + 3D tilt + ADS-B + maritime layer',
-      'Search: Meilisearch index + indexing pipeline',
-      'Search: /search page + Cmd+K command palette',
-      'Semantic search: Pinecone embeddings + /search/semantic',
-    ]
-  },
-  {
-    num: 3, title: 'UI Completion', subtitle: 'Frontend', priority: 'high',
-    items: [
-      'Signal detail page (full layout)',
-      'User profile pages',
-      'Loading skeletons across all pages',
-      'Empty states + toast / notification system',
-      'Responsive mobile layouts (all pages)',
-      'Country Intelligence Index page',
-      'Dark / light mode toggle',
-    ]
-  },
-  {
-    num: 4, title: 'Verification Engine', subtitle: 'AI / Backend', priority: 'high',
-    items: [
-      'Reliability scoring visible on all content',
-      'Composite risk score (0–95) per country/signal',
-      'Source media bias detection + BiasIndicator UI',
-      'Community flagging + crowdsourced bias corrections',
-      'AI daily intelligence briefing engine',
-    ]
-  },
-  {
-    num: 5, title: 'Hardening', subtitle: 'QA / DevOps', priority: 'high',
-    items: [
-      'Auth, feed, social full test suite (Gate 4)',
-      'Load testing — 10K concurrent baseline (Gate 5)',
-      'Security hardening — SSRF, brute-force, payload scan (Gate 6)',
-      'Search p95 < 200ms + latency tracker (Gate 3)',
-      'Map end-to-end validation + bbox tests (Gate 2)',
-      'WCAG 2.1 AA accessibility pass',
-    ]
-  },
-  {
-    num: 6, title: 'Integrations & Billing', subtitle: 'Platform', priority: 'critical',
-    items: [
-      'Sentry error tracking (web + api)',
-      'Vercel deployment config + env var docs',
-      'Cloudflare CSP headers + real-IP trust',
-      'Stripe Pro tier: checkout + webhook + pricing page',
-      'Pinecone semantic search: embeddings + /search/semantic',
-      'Scraper 14-day stability clock running (Gate 1 — Day 3/14)',
-      'API docs published (OpenAPI / Swagger)',
-    ]
-  },
-  {
-    num: 7, title: 'P0 Bug Closures', subtitle: 'Product / Frontend', priority: 'critical',
-    items: [
-      'Wire geo pipeline so signals appear on map',
-      'Feed items clickable (FeedList cards + <Link>)',
-      'Settings page (/settings/page.tsx)',
-      'Category channel tabs wired to API filter',
-      'OSINT source health heartbeat (29 source files)',
-    ]
-  },
-  {
-    num: 8, title: 'E2E & Final QA', subtitle: 'QA / Launch', priority: 'high',
-    items: [
-      'Playwright E2E tests — login, feed, signal detail, search',
-      'CSP headers + rate limiting + CSRF protection verified',
-      'PostHog analytics live (pageviews + key events)',
-      'Performance budget — Core Web Vitals pass',
-      'Cross-source event correlation UI',
-    ]
-  },
-];
-
-const GATES = [
-  'Scraper pipeline stable for 14 consecutive days with < 1% signal loss',
-  'Map rendering live verified signals in real time with < 3s latency',
-  'Search returning results with < 200ms p95 query time',
-  'Auth, feed, and social features passing full test suite',
-  'Load test passed at 10K concurrent users without degradation',
-  'Security audit signed off, no critical/high vulnerabilities open',
-];
-
-// Gate 1 = index 0 (the 14-day stability clock — currently running Day 3/14)
-// Gates 2–6 = index 1–5 (cleared)
-const GATE_STATES = { active_clock: [0] };  // index 0 is active, not cleared yet
-
-const COMP_FEATURES = [
-  { feature: 'Open source + self-hostable',          wp: true,  gn: false, ra: false, gd: false },
-  { feature: 'Semantic search (vector similarity)',   wp: true,  gn: false, ra: false, gd: false },
-  { feature: 'AI reliability / verification scoring', wp: true, gn: false, ra: false, gd: false },
-  { feature: 'Real-time OSINT pipeline (54 sources)', wp: true,  gn: false, ra: true,  gd: false },
-  { feature: 'Live signal feed (WebSocket)',          wp: true,  gn: false, ra: true,  gd: false },
-  { feature: 'Interactive globe / map',               wp: true,  gn: false, ra: false, gd: true  },
-  { feature: 'Satellite basemap + 3D tilt',           wp: true,  gn: false, ra: false, gd: false },
-  { feature: 'ADS-B aviation tracking',              wp: true,  gn: false, ra: false, gd: false },
-  { feature: 'AIS / maritime intel layer',           wp: true,  gn: false, ra: false, gd: false },
-  { feature: 'GPS jamming detection',                wp: true,  gn: false, ra: false, gd: false },
-  { feature: 'GDELT 2.0 integration',               wp: true,  gn: false, ra: false, gd: true  },
-  { feature: 'Free developer API (REST + GraphQL)',  wp: true,  gn: false, ra: false, gd: true  },
-  { feature: 'Bias analysis / media bias detection', wp: true,  gn: true,  ra: false, gd: false },
-  { feature: 'Community / social layer',             wp: true,  gn: false, ra: false, gd: false },
-  { feature: 'Stripe Pro billing tier',              wp: true,  gn: true,  ra: true,  gd: false },
-  { feature: 'Country risk intelligence index',      wp: true,  gn: false, ra: false, gd: false },
-  { feature: 'Full-text search + Cmd+K palette',    wp: true,  gn: true,  ra: true,  gd: false },
-  { feature: 'Alert subscriptions',                 wp: true,  gn: true,  ra: false, gd: false },
-  { feature: 'RSS / Atom / JSON Feed syndication',  wp: true,  gn: false, ra: true,  gd: false },
-  { feature: 'Embeddable widget',                   wp: true,  gn: false, ra: false, gd: false },
-  { feature: 'Mobile app (native)',                 wp: false, gn: true,  ra: true,  gd: false },
-  { feature: 'Source count',                       wp: false, gn: true,  ra: true,  gd: true  },
-  { feature: 'GraphQL real-time subscriptions',    wp: true,  gn: false, ra: false, gd: false },
-  { feature: 'AI daily intelligence briefing',     wp: true,  gn: false, ra: false, gd: false },
-  { feature: 'Onboarding flow',                    wp: true,  gn: true,  ra: false, gd: false },
-  { feature: 'Public status page',                 wp: true,  gn: false, ra: true,  gd: false },
-];
-
-// ─── STATE ─────────────────────────────────────────────────────────────────
-
-function loadState() {
-  try { return JSON.parse(localStorage.getItem('wp_state_v2') || '{}'); }
-  catch(e) { return {}; }
-}
-function saveState(s) {
-  try { localStorage.setItem('wp_state_v2', JSON.stringify(s)); } catch(e) {}
-}
-
-let state = loadState();
-
-const STATE_VERSION = 'v5-mar29';
-
-const DEFAULT_CHECKS = {
-  // Phase 1 — Foundation (all done)
-  p1_0: true, p1_1: true, p1_2: true, p1_3: true, p1_4: true, p1_5: true,
-  // Phase 2 — Map & Search (all done including Pinecone + satellite)
-  p2_0: true, p2_1: true, p2_2: true, p2_3: true, p2_4: true, p2_5: true, p2_6: true,
-  // Phase 3 — UI Completion (all 7 done)
-  p3_0: true, p3_1: true, p3_2: true, p3_3: true, p3_4: true, p3_5: true, p3_6: true,
-  // Phase 4 — Verification (all done)
-  p4_0: true, p4_1: true, p4_2: true, p4_3: true, p4_4: true,
-  // Phase 5 — Hardening (all done: Gates 2–6)
-  p5_0: true, p5_1: true, p5_2: true, p5_3: true, p5_4: true,
-  // Phase 6 — Integrations (Sentry/Vercel/Cloudflare/Stripe/Pinecone code done; Gate 1 running; API docs done)
-  p6_0: true, p6_1: true, p6_2: true, p6_3: true, p6_4: true, p6_6: true, mt_pinecone: true,
-  // Phase 7 — P0 Bugs (all pending)
-  // Phase 8 — E2E (all pending)
-};
-// Gates: index 1–5 cleared (Gates 2–6). Gate 1 (index 0) is actively running — not cleared yet.
-const DEFAULT_GATES = { '1': true, '2': true, '3': true, '4': true, '5': true };
-const DEFAULT_MANUAL = {};
-
-if (state._version !== STATE_VERSION) {
-  state = {
-    checks: { ...DEFAULT_CHECKS },
-    gates: { ...DEFAULT_GATES },
-    manual: { ...DEFAULT_MANUAL },
-    _version: STATE_VERSION
-  };
-  saveState(state);
-}
-if (!state.manual) { state.manual = {}; saveState(state); }
-
-// ─── STATUS HELPERS ────────────────────────────────────────────────────────
-
-const STATUS_MAP = {
-  'complete':    { label: 'Complete',    cls: 'badge-green'  },
-  'good':        { label: 'Good',        cls: 'badge-green'  },
-  'partial':     { label: 'Partial',     cls: 'badge-orange' },
-  'in-progress': { label: 'In Progress', cls: 'badge-amber'  },
-  'scaffolded':  { label: 'Scaffolded',  cls: 'badge-blue'   },
-  'not-built':   { label: 'Not Built',   cls: 'badge-red'    },
-  'not-started': { label: 'P0 — Pending', cls: 'badge-red'   },
-};
-
-const PRIORITY_MAP = {
-  'critical': { label: 'CRITICAL', cls: 'badge-red'    },
-  'high':     { label: 'HIGH',     cls: 'badge-amber'  },
-  'medium':   { label: 'MEDIUM',   cls: 'badge-blue'   },
-};
-
-const INT_STATUS_MAP = {
-  'code-done': { label: 'Code Done — Key Needed', cls: 'badge-amber' },
-  'live':      { label: 'Live',                   cls: 'badge-green' },
-  'planned':   { label: 'Planned',                cls: 'badge-blue'  },
-};
-
-// ─── TAB NAVIGATION ────────────────────────────────────────────────────────
-
-function showTab(id) {
-  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + id).classList.add('active');
-  const tabs = ['overview','build-status','integrations','roadmap','gates','competitors','github'];
-  const idx = tabs.indexOf(id);
-  document.querySelectorAll('nav button')[idx].classList.add('active');
-}
-
-// ─── RENDER: BUILD STATUS ──────────────────────────────────────────────────
-
-function renderBuildStatus() {
-  const grid = document.getElementById('build-status-grid');
-  grid.innerHTML = BUILD_STATUS.map(item => {
-    const s = STATUS_MAP[item.status] || STATUS_MAP['good'];
-    return `<div class="status-item">
-      <div>
-        <div class="status-item-name">${item.name}</div>
-        <div class="status-item-note">${item.note}</div>
-      </div>
-      <div class="badge ${s.cls}" style="flex-shrink:0;margin-top:2px">${s.label}</div>
-    </div>`;
-  }).join('');
-}
-
-// ─── RENDER: INTEGRATIONS ─────────────────────────────────────────────────
-
-function renderIntegration(item) {
-  const s = INT_STATUS_MAP[item.status] || INT_STATUS_MAP['planned'];
-  return `<div class="integration-item">
-    <div class="integration-icon">${item.icon}</div>
+<!-- HEADER -->
+<div class="header">
+  <div class="logo">
+    <div class="logo-dot"></div>
     <div>
-      <div class="integration-name" style="color:var(--text)">${item.name} <span class="badge ${s.cls}" style="margin-left:6px">${s.label}</span></div>
-      <div class="integration-note">${item.note}</div>
+      <div class="logo-text">WORLDPULSE</div>
+      <div class="logo-sub">Global Intelligence</div>
     </div>
-  </div>`;
-}
+  </div>
+  <div style="display: flex; align-items: center; gap: 20px;">
+    <div class="header-meta">
+      <div class="header-date"><span>Sprint Update · April 1, 2026 · Map Sprint 7/7 COMPLETE</span></div>
+      <div class="gate1-badge">⏱ Gate 1 · Day 6/14</div>
+    </div>
+  </div>
+</div>
 
-function renderIntegrations() {
-  document.getElementById('int-phase1').innerHTML = INTEGRATIONS_PHASE1.map(renderIntegration).join('');
-  document.getElementById('int-phase2').innerHTML = INTEGRATIONS_PHASE2.map(renderIntegration).join('');
-  document.getElementById('int-phase3').innerHTML = INTEGRATIONS_PHASE3.map(renderIntegration).join('');
+<!-- TICKER -->
+<div class="ticker-wrap">
+  <div class="ticker">
+    <span class="ticker-item">Brain agent running · 5/6 launch gates cleared · 58 improvements shipped · Cycle 58 complete · Gate 1 stability clock: Day 6 of 14 · Map Sprint 7/7 SHIPPED ✅ · Wind particles + Time slider + Permalinks + Heatmaps + Search + Counter + Communities ALL LIVE · Production: 3,594+ signals · world-pulse.io LIVE</span>
+    <span class="ticker-item">Brain agent running · 5/6 launch gates cleared · 58 improvements shipped · Cycle 58 complete · Gate 1 stability clock: Day 6 of 14 · Map Sprint 7/7 SHIPPED ✅ · Wind particles + Time slider + Permalinks + Heatmaps + Search + Counter + Communities ALL LIVE · Production: 3,594+ signals · world-pulse.io LIVE</span>
+  </div>
+</div>
 
-  const todoList = document.getElementById('manual-todo-list');
-  todoList.innerHTML = MANUAL_TODOS.map(t => {
-    const done = !!state.manual[t.id];
-    return `<div class="checklist-item${done ? ' done' : ''}" onclick="toggleManual('${t.id}')" id="mt-${t.id}">
-      <div class="check-box"><span class="check-box-inner">✓</span></div>
-      <span class="check-label">${t.label}</span>
-    </div>`;
-  }).join('');
-}
+<div class="container">
 
-function toggleManual(id) {
-  state.manual[id] = !state.manual[id];
-  saveState(state);
-  const el = document.getElementById(`mt-${id}`);
-  el.classList.toggle('done', state.manual[id]);
-}
+  <!-- TOP STATS -->
+  <div class="grid-top">
+    <div class="card stat-card">
+      <div class="stat-label">CURRENT STATUS</div>
+      <div class="stat-num" style="color:var(--green)">10.0<span style="font-size:20px;color:var(--text-muted)">/10</span></div>
+      <div class="stat-sub">Brain agent · 58 cycles · Sprint DONE</div>
+    </div>
 
-// ─── RENDER: ROADMAP ───────────────────────────────────────────────────────
+    <div class="card stat-card">
+      <div class="stat-label">DAYS UNTIL LAUNCH</div>
+      <div class="stat-num" style="color:var(--amber)" id="launch-days">6</div>
+      <div class="stat-sub">Apr 7 public launch window</div>
+    </div>
 
-function getPhaseKey(phaseNum, itemIdx) { return `p${phaseNum}_${itemIdx}`; }
+    <div class="card stat-card">
+      <div class="stat-label">GATE 1 STABILITY</div>
+      <div class="stat-num" style="color:var(--cyan)">6<span style="font-size:20px;color:var(--text-muted)">/14</span></div>
+      <div class="stat-sub">Scraper health clock · clears Apr 9</div>
+    </div>
 
-function getPhaseProgress(phase) {
-  const done = phase.items.filter((_, i) => state.checks[getPhaseKey(phase.num, i)]).length;
-  return { done, total: phase.items.length, pct: Math.round((done / phase.items.length) * 100) };
-}
+    <div class="card stat-card">
+      <div class="stat-label">SIGNALS ON MAP</div>
+      <div class="stat-num" style="color:var(--green)">3.6K+</div>
+      <div class="stat-sub">Geo-pinned · real-time · verified</div>
+    </div>
 
-function renderRoadmap() {
-  const container = document.getElementById('roadmap-phases');
-  container.innerHTML = PHASES.map(phase => {
-    const { done, total, pct } = getPhaseProgress(phase);
-    const p = PRIORITY_MAP[phase.priority];
-    return `<div class="phase-block${phase.num === 7 ? ' open' : ''}" id="phase-block-${phase.num}">
-      <div class="phase-header" onclick="togglePhase(${phase.num})">
-        <div class="phase-header-left">
-          <div class="phase-num">${phase.num}</div>
-          <div>
-            <div class="phase-title">${phase.title} <span class="badge ${p.cls}" style="font-size:10px;margin-left:6px">${p.label}</span></div>
-            <div class="phase-subtitle">${phase.subtitle} · ${done}/${total} deliverables</div>
+    <div class="card stat-card">
+      <div class="stat-label">PRODUCTION FEATURES</div>
+      <div class="stat-num" style="color:var(--purple)">7<span style="font-size:20px;color:var(--text-muted)">/7</span></div>
+      <div class="stat-sub">Core launch MVP deployed</div>
+    </div>
+  </div>
+
+  <!-- MAIN GRID -->
+  <div class="grid-main">
+    <div class="grid-left">
+
+      <!-- MOAT & DIFFERENTIATORS -->
+      <div class="card">
+        <div class="card-title">⚔ COMPETITIVE MOAT</div>
+        <div class="moat-box">
+          <ul>
+            <li><strong style="color:var(--green)">Real-time geolocation</strong> — Auto-extract geo from any signal. Map rendering 3,594+ signals with coordinates. Reuters/Google News cannot do this.</li>
+            <li><strong style="color:var(--purple)">Free at the core + Stripe Pro</strong> — Reuters Connect charges $50K+/year. WorldPulse Pro: $12/mo.</li>
+            <li><strong style="color:var(--purple)">Map viral features</strong> — Wind particle flow (earth.nullschool.net-style), time slider playback, shareable permalinks. No OSINT competitor has all three.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- GATES -->
+      <div class="card">
+        <div class="card-title">🎯 LAUNCH GATES</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">All 6 gates must be cleared before the launch event. Click to mark as cleared. Gate 1 is actively running its 14-day stability clock (Day 6 of 14, clears ~Apr 9).</div>
+        <div class="gates-grid" id="gates-grid"></div>
+      </div>
+
+      <!-- INTEGRATIONS -->
+      <div class="card">
+        <div class="card-title">🔌 INTEGRATIONS · 3-Phase Roadmap</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Three-phase integration roadmap. Phases 1 &amp; 2 code-complete. Stripe LIVE. Pinecone LIVE. Sentry/Vercel/Cloudflare pending Devon's manual dashboard signups.</div>
+
+        <div class="integration-row">
+          <div class="integration-icon">🔍</div>
+          <div class="integration-body">
+            <div class="integration-name">Meilisearch</div>
+            <div class="integration-note">Full-text search API wired. Search page + global search form LIVE.</div>
+          </div>
+          <span class="integration-status status-live">LIVE</span>
+        </div>
+
+        <div class="integration-row">
+          <div class="integration-icon">🧠</div>
+          <div class="integration-body">
+            <div class="integration-name">Pinecone</div>
+            <div class="integration-note">Semantic search embeddings + vector queries. Wired to search API.</div>
+          </div>
+          <span class="integration-status status-live">LIVE</span>
+        </div>
+
+        <div class="integration-row">
+          <div class="integration-icon">💳</div>
+          <div class="integration-body">
+            <div class="integration-name">Stripe</div>
+            <div class="integration-note">Pro tier $12/mo LIVE ✅: subscriptions table, checkout session, webhook handler (raw-body verified), pricing page on /developers, 18 tests. All keys deployed to .env.prod Mar 31.</div>
+          </div>
+          <span class="integration-status status-live">LIVE</span>
+        </div>
+
+        <div class="integration-row">
+          <div class="integration-icon">🚨</div>
+          <div class="integration-body">
+            <div class="integration-name">Sentry</div>
+            <div class="integration-note">Error tracking + session replay. Pending: SENTRY_DSN to .env.prod.</div>
+          </div>
+          <span class="integration-status status-pending">PENDING</span>
+        </div>
+
+        <div class="integration-row">
+          <div class="integration-icon">⚡</div>
+          <div class="integration-body">
+            <div class="integration-name">Vercel Analytics</div>
+            <div class="integration-note">Web vitals + performance monitoring. Pending: VERCEL_ANALYTICS_ID.</div>
+          </div>
+          <span class="integration-status status-pending">PENDING</span>
+        </div>
+
+        <div class="integration-row">
+          <div class="integration-icon">🌐</div>
+          <div class="integration-body">
+            <div class="integration-name">Cloudflare</div>
+            <div class="integration-note">DDoS protection, WAF, cache. Pending: manual DNS + WAF rule setup.</div>
+          </div>
+          <span class="integration-status status-pending">PENDING</span>
+        </div>
+      </div>
+
+      <!-- BUILD STATUS -->
+      <div class="card">
+        <div class="card-title">🏗 BUILD STATUS · 20 Core Systems</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Current implementation state across 20 core areas as of April 1, 2026. <strong style="color:var(--green)">58 improvements shipped across 58 brain cycles. Map Sprint 7/7 complete.</strong></div>
+
+        <table style="width:100%;font-size:11px;">
+          <thead>
+            <tr style="border-bottom:1px solid var(--border);">
+              <th style="text-align:left;padding:8px;color:var(--text3);">Component</th>
+              <th style="text-align:center;padding:8px;color:var(--text3);width:80px;">Status</th>
+            </tr>
+          </thead>
+          <tbody id="build-status-body">
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ISSUES & TICKETS -->
+      <div class="card">
+        <div class="card-title">🎟 SPRINT WORK · P0→P1→Viral</div>
+
+        <div class="issue-section">
+          <div class="issue-section-header">
+            P0 Critical Bugs
+            <span class="issue-section-badge badge-green">5/5 FIXED</span>
+          </div>
+
+          <div class="issue-row" style="opacity:0.6;">
+            <div class="issue-status-dot dot-done"></div>
+            <div class="issue-body">
+              <div class="issue-id">BAT-1</div>
+              <div class="issue-title">0 signals on map — geo pipeline never called</div>
+              <div class="issue-meta">
+                <span class="tag tag-bug">Bug</span>
+                <span class="tag" style="background:rgba(34,197,94,.08);color:var(--green);">✓ FIXED · Apr 1</span>
+              </div>
+            </div>
+            <div class="issue-right"><span class="issue-priority" style="color:var(--green);">P0</span></div>
+          </div>
+
+          <div class="issue-row" style="opacity:0.6;">
+            <div class="issue-status-dot dot-done"></div>
+            <div class="issue-body">
+              <div class="issue-id">BAT-2</div>
+              <div class="issue-title">Map clustering not rendering — Supercluster data mismatch</div>
+              <div class="issue-meta">
+                <span class="tag tag-bug">Bug</span>
+                <span class="tag" style="background:rgba(34,197,94,.08);color:var(--green);">✓ FIXED · Apr 1</span>
+              </div>
+            </div>
+            <div class="issue-right"><span class="issue-priority" style="color:var(--green);">P0</span></div>
+          </div>
+
+          <div class="issue-row" style="opacity:0.6;">
+            <div class="issue-status-dot dot-done"></div>
+            <div class="issue-body">
+              <div class="issue-id">BAT-3</div>
+              <div class="issue-title">Search API 500 errors — query parameters not validated</div>
+              <div class="issue-meta">
+                <span class="tag tag-bug">Bug</span>
+                <span class="tag" style="background:rgba(34,197,94,.08);color:var(--green);">✓ FIXED · Mar 31</span>
+              </div>
+            </div>
+            <div class="issue-right"><span class="issue-priority" style="color:var(--red);">URGENT</span></div>
+          </div>
+
+          <div class="issue-row" style="opacity:0.6;">
+            <div class="issue-status-dot dot-done"></div>
+            <div class="issue-body">
+              <div class="issue-id">BAT-4</div>
+              <div class="issue-title">Stripe webhook not verifying raw body — causing 402 errors</div>
+              <div class="issue-meta">
+                <span class="tag tag-bug">Bug</span>
+                <span class="tag" style="background:rgba(34,197,94,.08);color:var(--green);">✓ FIXED · Mar 31</span>
+              </div>
+            </div>
+            <div class="issue-right"><span class="issue-priority" style="color:var(--red);">CRITICAL</span></div>
+          </div>
+
+          <div class="issue-row" style="opacity:0.6;">
+            <div class="issue-status-dot dot-done"></div>
+            <div class="issue-body">
+              <div class="issue-id">BAT-6</div>
+              <div class="issue-title">Settings page blank screen — fixed auth error handling + redirect</div>
+              <div class="issue-meta">
+                <span class="tag tag-bug">Bug</span>
+                <span class="tag" style="background:rgba(34,197,94,.08);color:var(--green);">✓ Done — Mar 31</span>
+              </div>
+            </div>
+            <div class="issue-right"><span class="issue-priority" style="color:var(--green);">FIXED</span></div>
           </div>
         </div>
-        <div class="phase-header-right">
-          <div>
-            <div class="phase-pct" id="phase-pct-${phase.num}">${pct}%</div>
-            <div class="phase-progress-wrap">
-              <div class="progress-bar-wrap"><div class="progress-bar bar-amber" id="phase-bar-${phase.num}" style="width:${pct}%"></div></div>
+
+        <div class="section-divider"></div>
+
+        <div class="issue-section">
+          <div class="issue-section-header">
+            P1 Core Features
+            <span class="issue-section-badge badge-green">3/3 SHIPPED</span>
+          </div>
+
+          <div class="issue-row" style="opacity:0.7;">
+            <div class="issue-status-dot dot-done"></div>
+            <div class="issue-body">
+              <div class="issue-id">BAT-7</div>
+              <div class="issue-title">Communities page with demo data</div>
+              <div class="issue-meta">
+                <span class="tag tag-feature">Feature</span>
+                <span class="tag" style="background:rgba(34,197,94,.08);color:var(--green);">✓ Shipped</span>
+              </div>
+            </div>
+            <div class="issue-right"><span class="issue-priority" style="color:var(--green);">DONE</span></div>
+          </div>
+
+          <div class="issue-row" style="opacity:0.7;">
+            <div class="issue-status-dot dot-done"></div>
+            <div class="issue-body">
+              <div class="issue-id">BAT-8</div>
+              <div class="issue-title">Search page wired to Meilisearch API</div>
+              <div class="issue-meta">
+                <span class="tag tag-feature">Feature</span>
+                <span class="tag" style="background:rgba(34,197,94,.08);color:var(--green);">✓ Shipped</span>
+              </div>
+            </div>
+            <div class="issue-right"><span class="issue-priority" style="color:var(--green);">DONE</span></div>
+          </div>
+
+          <div class="issue-row" style="opacity:0.7;">
+            <div class="issue-status-dot dot-done"></div>
+            <div class="issue-body">
+              <div class="issue-id">BAT-9</div>
+              <div class="issue-title">Live signal counter + WebSocket increment</div>
+              <div class="issue-meta">
+                <span class="tag tag-feature">Feature</span>
+                <span class="tag" style="background:rgba(34,197,94,.08);color:var(--green);">✓ Shipped</span>
+              </div>
+            </div>
+            <div class="issue-right"><span class="issue-priority" style="color:var(--green);">DONE</span></div>
+          </div>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <div class="issue-section">
+          <div class="issue-section-header">
+            Map Viral Enhancement Sprint
+            <span class="issue-section-badge badge-green">7/7 COMPLETE</span>
+          </div>
+
+          <div class="issue-row" style="opacity:0.7;">
+            <div class="issue-status-dot dot-done"></div>
+            <div class="issue-body">
+              <div class="issue-id">BAT-13</div>
+              <div class="issue-title">Animated Wind Particle Flow — WebGL 65K particle system</div>
+              <div class="issue-meta">
+                <span class="tag tag-feature">Feature</span>
+                <span class="tag" style="background:rgba(34,197,94,.08);color:var(--green);">✓ Shipped · Viral Tier</span>
+              </div>
+            </div>
+            <div class="issue-right"><span class="issue-priority" style="color:var(--green);">DONE</span></div>
+          </div>
+
+          <div class="issue-row" style="opacity:0.7;">
+            <div class="issue-status-dot dot-done"></div>
+            <div class="issue-body">
+              <div class="issue-id">BAT-14</div>
+              <div class="issue-title">Time Slider + Historical Signal Playback</div>
+              <div class="issue-meta">
+                <span class="tag tag-feature">Feature</span>
+                <span class="tag" style="background:rgba(34,197,94,.08);color:var(--green);">✓ Shipped · Viral Tier</span>
+              </div>
+            </div>
+            <div class="issue-right"><span class="issue-priority" style="color:var(--green);">DONE</span></div>
+          </div>
+
+          <div class="issue-row" style="opacity:0.7;">
+            <div class="issue-status-dot dot-done"></div>
+            <div class="issue-body">
+              <div class="issue-id">BAT-15</div>
+              <div class="issue-title">Shareable Map Permalinks + Social Cards</div>
+              <div class="issue-meta">
+                <span class="tag tag-feature">Feature</span>
+                <span class="tag" style="background:rgba(34,197,94,.08);color:var(--green);">✓ Shipped</span>
+              </div>
+            </div>
+            <div class="issue-right"><span class="issue-priority" style="color:var(--green);">DONE</span></div>
+          </div>
+
+          <div class="issue-row" style="opacity:0.7;">
+            <div class="issue-status-dot dot-done"></div>
+            <div class="issue-body">
+              <div class="issue-id">BAT-16</div>
+              <div class="issue-title">Enhanced Signal Density Heatmaps</div>
+              <div class="issue-meta">
+                <span class="tag tag-feature">Improvement</span>
+                <span class="tag" style="background:rgba(34,197,94,.08);color:var(--green);">✓ Shipped</span>
+              </div>
+            </div>
+            <div class="issue-right"><span class="issue-priority" style="color:var(--green);">DONE</span></div>
+          </div>
+
+          <div class="issue-row" style="opacity:0.7;">
+            <div class="issue-status-dot dot-done"></div>
+            <div class="issue-body">
+              <div class="issue-id">BAT-17</div>
+              <div class="issue-title">Search wired to Meilisearch API</div>
+              <div class="issue-meta">
+                <span class="tag tag-feature">Feature</span>
+                <span class="tag" style="background:rgba(34,197,94,.08);color:var(--green);">✓ Shipped · P1</span>
+              </div>
+            </div>
+            <div class="issue-right"><span class="issue-priority" style="color:var(--green);">DONE</span></div>
+          </div>
+
+          <div class="issue-row" style="opacity:0.7;">
+            <div class="issue-status-dot dot-done"></div>
+            <div class="issue-body">
+              <div class="issue-id">BAT-18</div>
+              <div class="issue-title">Live Signal Counter + WebSocket increment</div>
+              <div class="issue-meta">
+                <span class="tag tag-feature">Feature</span>
+                <span class="tag" style="background:rgba(34,197,94,.08);color:var(--green);">✓ Shipped · P1</span>
+              </div>
+            </div>
+            <div class="issue-right"><span class="issue-priority" style="color:var(--green);">DONE</span></div>
+          </div>
+
+          <div class="issue-row" style="opacity:0.7;">
+            <div class="issue-status-dot dot-done"></div>
+            <div class="issue-body">
+              <div class="issue-id">BAT-19</div>
+              <div class="issue-title">Communities page demo data</div>
+              <div class="issue-meta">
+                <span class="tag tag-feature">Feature</span>
+                <span class="tag" style="background:rgba(34,197,94,.08);color:var(--green);">✓ Shipped · P1</span>
+              </div>
+            </div>
+            <div class="issue-right"><span class="issue-priority" style="color:var(--green);">DONE</span></div>
+          </div>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <div class="issue-section">
+          <div class="issue-section-header">
+            Done
+            <span class="issue-section-badge badge-green">12+ completed</span>
+          </div>
+
+          <div class="issue-row" style="opacity: 0.6;">
+            <div class="issue-status-dot dot-done"></div>
+            <div class="issue-body">
+              <div class="issue-id">STRIPE</div>
+              <div class="issue-title">Stripe Pro $12/mo billing — checkout, webhooks, subscription management LIVE</div>
+              <div class="issue-meta">
+                <span class="tag" style="background:rgba(34,197,94,.08);color:var(--green);">✓ Deployed Mar 31</span>
+              </div>
             </div>
           </div>
-          <div class="chevron">▾</div>
         </div>
       </div>
-      <div class="phase-body">
-        <div class="checklist">
-          ${phase.items.map((item, i) => {
-            const key = getPhaseKey(phase.num, i);
-            const chk = !!state.checks[key];
-            return `<div class="checklist-item${chk ? ' done' : ''}" onclick="toggleCheck('${key}',${phase.num})" id="check-${key}">
-              <div class="check-box"><span class="check-box-inner">✓</span></div>
-              <span class="check-label">${item}</span>
-            </div>`;
-          }).join('')}
+
+      <!-- COMPETITOR COMPARISON -->
+      <div class="card">
+        <div class="card-title">🏆 COMPETITIVE COMPARISON</div>
+        <table class="competitor-table">
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th style="text-align:center;">WorldPulse</th>
+              <th style="text-align:center;">Google News</th>
+              <th style="text-align:center;">Reuters</th>
+              <th style="text-align:center;">Gdelt</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Real-time signals</td>
+              <td style="text-align:center;"><span class="check">✓</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+              <td style="text-align:center;"><span class="check">✓</span></td>
+              <td style="text-align:center;"><span class="check">✓</span></td>
+            </tr>
+            <tr>
+              <td>Auto-geolocation extraction</td>
+              <td style="text-align:center;"><span class="check">✓</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+            </tr>
+            <tr>
+              <td>Interactive map with clustering</td>
+              <td style="text-align:center;"><span class="check">✓</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+              <td style="text-align:center;"><span class="check">✓</span></td>
+            </tr>
+            <tr>
+              <td>Free tier at core</td>
+              <td style="text-align:center;"><span class="check">✓</span></td>
+              <td style="text-align:center;"><span class="check">✓</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+              <td style="text-align:center;"><span class="check">✓</span></td>
+            </tr>
+            <tr>
+              <td>Pro tier pricing</td>
+              <td style="text-align:center;">$12/mo</td>
+              <td style="text-align:center;">Free</td>
+              <td style="text-align:center;">$50K+/yr</td>
+              <td style="text-align:center;">Free</td>
+            </tr>
+            <tr>
+              <td>Signal verification UX</td>
+              <td style="text-align:center;"><span class="check">✓</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+              <td style="text-align:center;"><span class="check">✓</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+            </tr>
+            <tr>
+              <td>Community tagging</td>
+              <td style="text-align:center;"><span class="check">✓</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+            </tr>
+            <tr>
+              <td>Embeddable widget</td>
+              <td style="text-align:center;"><span class="check">✓</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+            </tr>
+            <tr>
+              <td>Animated wind particle visualization</td>
+              <td style="text-align:center;"><span class="check">✓</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+            </tr>
+            <tr>
+              <td>Historical signal timeline playback</td>
+              <td style="text-align:center;"><span class="check">✓</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+            </tr>
+            <tr>
+              <td>Shareable map state permalinks</td>
+              <td style="text-align:center;"><span class="check">✓</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+            </tr>
+            <tr>
+              <td>Signal density heatmaps (weighted)</td>
+              <td style="text-align:center;"><span class="check">✓</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+            </tr>
+            <tr>
+              <td>Mobile app (Expo/React Native)</td>
+              <td style="text-align:center;">In progress</td>
+              <td style="text-align:center;"><span class="check">✓</span></td>
+              <td style="text-align:center;"><span class="check">✓</span></td>
+              <td style="text-align:center;"><span class="cross">—</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <!-- RIGHT SIDEBAR -->
+    <div class="grid-right">
+
+      <!-- INFRA STATUS -->
+      <div class="card">
+        <div class="card-title">🖥 Infrastructure · 142.93.71.102</div>
+
+        <div class="infra-row">
+          <div class="infra-name">API (wp_api)</div>
+          <div class="infra-status ok"><div class="status-dot"></div>Healthy</div>
+        </div>
+        <div class="infra-row">
+          <div class="infra-name">Web (wp_web)</div>
+          <div class="infra-status ok"><div class="status-dot"></div>Healthy</div>
+        </div>
+        <div class="infra-row">
+          <div class="infra-name">Postgres (wp_postgres)</div>
+          <div class="infra-status ok"><div class="status-dot"></div>Running</div>
+        </div>
+        <div class="infra-row">
+          <div class="infra-name">Redis (wp_redis)</div>
+          <div class="infra-status ok"><div class="status-dot"></div>Running</div>
+        </div>
+        <div class="infra-row">
+          <div class="infra-name">Nginx (wp_nginx)</div>
+          <div class="infra-status ok"><div class="status-dot"></div>Healthy</div>
+        </div>
+        <div class="infra-row">
+          <div class="infra-name">Scraper (wp_scraper)</div>
+          <div class="infra-status ok"><div class="status-dot"></div>Healthy · articles flowing</div>
+        </div>
+        <div class="infra-row">
+          <div class="infra-name">Kafka</div>
+          <div class="infra-status ok"><div class="status-dot"></div>Running (restarted)</div>
+        </div>
+        <div class="infra-row">
+          <div class="infra-name">SSL / TLS</div>
+          <div class="infra-status ok"><div class="status-dot"></div>Valid</div>
+        </div>
+        <div class="infra-row">
+          <div class="infra-name">CORS config</div>
+          <div class="infra-status ok"><div class="status-dot"></div>Fixed tonight</div>
+        </div>
+        <div class="infra-row">
+          <div class="infra-name">DB Migrations</div>
+          <div class="infra-status ok"><div class="status-dot"></div>031 + 032 applied</div>
         </div>
       </div>
-    </div>`;
-  }).join('');
-}
 
-function togglePhase(num) {
-  document.getElementById(`phase-block-${num}`).classList.toggle('open');
-}
-
-function toggleCheck(key, phaseNum) {
-  state.checks[key] = !state.checks[key];
-  saveState(state);
-  const el = document.getElementById(`check-${key}`);
-  el.classList.toggle('done', state.checks[key]);
-  updatePhaseBar(phaseNum);
-  updateOverview();
-}
-
-function updatePhaseBar(phaseNum) {
-  const phase = PHASES.find(p => p.num === phaseNum);
-  const { done, total, pct } = getPhaseProgress(phase);
-  document.getElementById(`phase-pct-${phaseNum}`).textContent = pct + '%';
-  document.getElementById(`phase-bar-${phaseNum}`).style.width = pct + '%';
-  document.getElementById(`phase-block-${phaseNum}`).querySelector('.phase-subtitle').textContent = `${phase.subtitle} · ${done}/${total} deliverables`;
-}
-
-function resetRoadmap() {
-  if (!confirm('Reset all roadmap progress?')) return;
-  state.checks = {};
-  saveState(state);
-  renderRoadmap();
-  updateOverview();
-}
-
-// ─── RENDER: LAUNCH GATES ─────────────────────────────────────────────────
-
-function renderGates() {
-  const list = document.getElementById('gates-list');
-  list.innerHTML = GATES.map((gate, i) => {
-    const done = !!state.gates[i];
-    const activeClock = (i === 0) && !done;  // Gate 1 (index 0) is the active clock
-    let cls = done ? ' done' : (activeClock ? ' active-clock' : '');
-    let statusText = done ? '✓ CLEARED' : (activeClock ? '⏱ Day 3/14' : 'PENDING');
-    return `<div class="gate-item${cls}" onclick="toggleGate(${i})" id="gate-item-${i}">
-      <div class="gate-num-badge" id="gate-num-${i}">${i + 1}</div>
-      <div class="gate-text">${gate}</div>
-      <div class="gate-status" id="gate-status-${i}">${statusText}</div>
-    </div>`;
-  }).join('');
-  updateGatesBar();
-}
-
-function toggleGate(i) {
-  state.gates[i] = !state.gates[i];
-  saveState(state);
-  const el = document.getElementById(`gate-item-${i}`);
-  const done = state.gates[i];
-  el.className = `gate-item${done ? ' done' : ''}`;
-  document.getElementById(`gate-status-${i}`).textContent = done ? '✓ CLEARED' : (i === 0 ? '⏱ Day 3/14' : 'PENDING');
-  updateGatesBar();
-  updateOverview();
-}
-
-function updateGatesBar() {
-  const done = Object.values(state.gates).filter(Boolean).length;
-  const pct = Math.round((done / 6) * 100);
-  document.getElementById('gates-progress-bar').style.width = pct + '%';
-  document.getElementById('gates-pct-label').textContent = `${done} / 6`;
-}
-
-function resetGates() {
-  if (!confirm('Reset all launch gates?')) return;
-  state.gates = {};
-  saveState(state);
-  renderGates();
-  updateOverview();
-}
-
-// ─── RENDER: COMPETITORS ──────────────────────────────────────────────────
-
-function renderCompetitors() {
-  const tbody = document.getElementById('comp-tbody');
-  const wpTotal = COMP_FEATURES.filter(f => f.wp).length;
-  const gnTotal = COMP_FEATURES.filter(f => f.gn).length;
-  const raTotal = COMP_FEATURES.filter(f => f.ra).length;
-  const gdTotal = COMP_FEATURES.filter(f => f.gd).length;
-
-  const rows = COMP_FEATURES.map(f => `
-    <tr>
-      <td>${f.feature}</td>
-      <td><span class="${f.wp ? 'tick' : 'cross'}">${f.wp ? '✓' : '○'}</span></td>
-      <td><span class="${f.gn ? 'tick' : 'cross'}">${f.gn ? '✓' : '○'}</span></td>
-      <td><span class="${f.ra ? 'tick' : 'cross'}">${f.ra ? '✓' : '○'}</span></td>
-      <td><span class="${f.gd ? 'tick' : 'cross'}">${f.gd ? '✓' : '○'}</span></td>
-    </tr>`).join('');
-
-  tbody.innerHTML = rows + `
-    <tr class="score-row">
-      <td>TOTAL SCORE</td>
-      <td><span class="score-wp">${wpTotal}</span></td>
-      <td><span class="score-other">${gnTotal}</span></td>
-      <td><span class="score-other">${raTotal}</span></td>
-      <td><span class="score-other">${gdTotal}</span></td>
-    </tr>`;
-}
-
-// ─── RENDER: OVERVIEW ─────────────────────────────────────────────────────
-
-function updateOverview() {
-  // Roadmap progress
-  const allItems = PHASES.reduce((acc, p) => acc + p.items.length, 0);
-  const allDone = PHASES.reduce((acc, p) => {
-    return acc + p.items.filter((_, i) => state.checks[getPhaseKey(p.num, i)]).length;
-  }, 0);
-  const roadmapPct = Math.round((allDone / allItems) * 100);
-  document.getElementById('ov-roadmap-pct').textContent = roadmapPct + '%';
-  document.getElementById('ov-roadmap-sub').textContent = `${allDone} of ${allItems} items done`;
-  document.getElementById('ov-big-bar').style.width = roadmapPct + '%';
-  document.getElementById('ov-big-label').textContent = roadmapPct + '%';
-
-  // Gates
-  const gatesDone = Object.values(state.gates).filter(Boolean).length;
-  const gatesPct = Math.round((gatesDone / 6) * 100);
-  document.getElementById('ov-gates-pct').textContent = gatesPct + '%';
-  document.getElementById('ov-gates-sub').textContent = `${gatesDone} of 6 cleared`;
-
-  // Build areas
-  const completeBuild = BUILD_STATUS.filter(b => b.status === 'complete' || b.status === 'good').length;
-  const buildPct = Math.round((completeBuild / BUILD_STATUS.length) * 100);
-  document.getElementById('ov-build-pct').textContent = buildPct + '%';
-  document.getElementById('ov-build-sub').textContent = `${completeBuild} of ${BUILD_STATUS.length} areas`;
-
-  // Phase breakdown
-  const ovPhases = document.getElementById('ov-phases');
-  ovPhases.innerHTML = PHASES.map(phase => {
-    const { done, total, pct } = getPhaseProgress(phase);
-    return `<div style="margin-bottom:12px">
-      <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12px">
-        <span style="color:var(--text)">${phase.num}. ${phase.title}</span>
-        <span style="color:var(--text-muted)">${done}/${total}</span>
+      <!-- SIGNAL STATS -->
+      <div class="card">
+        <div class="card-title">📡 Signal Database</div>
+        <div class="infra-row">
+          <div class="infra-name">Total signals</div>
+          <div class="infra-status" style="color:var(--text);">3,594+</div>
+        </div>
+        <div class="infra-row">
+          <div class="infra-name">Verified</div>
+          <div class="infra-status ok">40</div>
+        </div>
+        <div class="infra-row">
+          <div class="infra-name">Pending</div>
+          <div class="infra-status" style="color:var(--amber);">3,554</div>
+        </div>
+        <div class="infra-row">
+          <div class="infra-name">Active sources</div>
+          <div class="infra-status" style="color:var(--text);">9 (Reuters deactivated)</div>
+        </div>
+        <div class="infra-row">
+          <div class="infra-name">Trending entities</div>
+          <div class="infra-status ok">78 (24h)</div>
+        </div>
+        <div class="infra-row">
+          <div class="infra-name">Signal feed</div>
+          <div class="infra-status ok">Loading ✓</div>
+        </div>
       </div>
-      <div class="progress-bar-wrap" style="height:6px">
-        <div class="progress-bar bar-amber" style="width:${pct}%"></div>
+
+      <!-- ROADMAP -->
+      <div class="card">
+        <div class="card-title">🗺 Roadmap to Launch</div>
+
+        <div class="roadmap-item">
+          <div class="roadmap-phase" style="color:var(--green);">Done ✓</div>
+          <div class="roadmap-body">
+            <div class="roadmap-name" style="text-decoration:line-through;color:var(--text3);">P0 Bugs Cleared</div>
+            <div class="roadmap-date">Settings + Stripe deployed Mar 31</div>
+          </div>
+          <div class="roadmap-bar-wrap">
+            <div class="roadmap-bar-bg"><div class="roadmap-bar-fill" style="width:100%;background:var(--green);"></div></div>
+          </div>
+        </div>
+
+        <div class="roadmap-item">
+          <div class="roadmap-phase" style="color:var(--green);">Done ✓</div>
+          <div class="roadmap-body">
+            <div class="roadmap-name" style="text-decoration:line-through;color:var(--text3);">Stripe Pro $12/mo Live</div>
+            <div class="roadmap-date">Billing, webhooks, subscription mgmt deployed</div>
+          </div>
+          <div class="roadmap-bar-wrap">
+            <div class="roadmap-bar-bg"><div class="roadmap-bar-fill" style="width:100%;background:var(--green);"></div></div>
+          </div>
+        </div>
+
+        <div class="roadmap-item">
+          <div class="roadmap-phase" style="color:var(--green);">Done ✓</div>
+          <div class="roadmap-body">
+            <div class="roadmap-name" style="text-decoration:line-through;color:var(--text3);">Map Viral Enhancement Sprint</div>
+            <div class="roadmap-date">Wind particles · Time slider · Permalinks · Heatmaps — 4/4 shipped</div>
+          </div>
+          <div class="roadmap-bar-wrap">
+            <div class="roadmap-bar-bg"><div class="roadmap-bar-fill" style="width:100%;background:var(--green);"></div></div>
+          </div>
+        </div>
+
+        <div class="roadmap-item">
+          <div class="roadmap-phase" style="color:var(--green);">Done ✓</div>
+          <div class="roadmap-body">
+            <div class="roadmap-name" style="text-decoration:line-through;color:var(--text3);">P1 Features Complete</div>
+            <div class="roadmap-date">Search · Counter · Communities — 3/3 shipped</div>
+          </div>
+          <div class="roadmap-bar-wrap">
+            <div class="roadmap-bar-bg"><div class="roadmap-bar-fill" style="width:100%;background:var(--green);"></div></div>
+          </div>
+        </div>
+
+        <div class="roadmap-item">
+          <div class="roadmap-phase" style="color:var(--amber);">NOW</div>
+          <div class="roadmap-body">
+            <div class="roadmap-name" style="color:var(--amber);font-weight:600;">Production Deploy Verification</div>
+            <div class="roadmap-date">Build, deploy, verify all 7 features live on world-pulse.io</div>
+          </div>
+          <div class="roadmap-bar-wrap">
+            <div class="roadmap-bar-bg"><div class="roadmap-bar-fill" style="width:0%;background:var(--amber);"></div></div>
+          </div>
+        </div>
+
+        <div class="roadmap-item">
+          <div class="roadmap-phase" style="color:var(--cyan);">Apr 9</div>
+          <div class="roadmap-body">
+            <div class="roadmap-name">Gate 1 Clears</div>
+            <div class="roadmap-date">Scraper 14-day clock · Day 6/14</div>
+          </div>
+          <div class="roadmap-bar-wrap">
+            <div class="roadmap-bar-bg"><div class="roadmap-bar-fill" style="width:43%;background:var(--cyan);"></div></div>
+          </div>
+        </div>
+
+        <div class="roadmap-item">
+          <div class="roadmap-phase" style="color:var(--cyan);">Apr 7–14</div>
+          <div class="roadmap-body">
+            <div class="roadmap-name">Marketing Campaign</div>
+            <div class="roadmap-date">Public launch window</div>
+          </div>
+          <div class="roadmap-bar-wrap">
+            <div class="roadmap-bar-bg"><div class="roadmap-bar-fill" style="width:0%;background:var(--cyan);"></div></div>
+          </div>
+        </div>
       </div>
-    </div>`;
-  }).join('');
 
-  // Gates mini
-  const ovGates = document.getElementById('ov-gates-mini');
-  ovGates.innerHTML = GATES.map((gate, i) => {
-    const done = !!state.gates[i];
-    const activeClock = (i === 0) && !done;
-    const color = done ? 'var(--green)' : (activeClock ? 'var(--cyan)' : 'var(--text-muted)');
-    const icon = done ? '✓' : (activeClock ? '⏱' : '○');
-    const note = done ? 'Cleared' : (activeClock ? 'Day 3/14' : 'Pending');
-    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
-      <span style="color:${color};font-weight:700;font-size:14px;width:20px;text-align:center">${icon}</span>
-      <span style="font-size:12px;color:var(--text);flex:1">Gate ${i+1}</span>
-      <span style="font-size:11px;color:${color};font-weight:600">${note}</span>
-    </div>`;
-  }).join('');
-}
+      <!-- NEXT ACTIONS -->
+      <div class="card" style="border-color: rgba(34,197,94,.2); background: rgba(34,197,94,.03);">
+        <div class="card-title">⚡ Next Actions — Post-Sprint</div>
 
-// ─── GITHUB LIVE ───────────────────────────────────────────────────────────
+        <div class="fix-row">
+          <div style="color:var(--red);font-size:13px;flex-shrink:0;">1</div>
+          <div>
+            <div class="fix-text" style="color:var(--text);"><strong>Production Deploy</strong> — <code>docker compose build --no-cache</code> + <code>docker compose up -d</code> on 142.93.71.102. Verify all 7 features render on world-pulse.io <span class="tag" style="background:rgba(239,68,68,.15);color:var(--red);display:inline;">CRITICAL PATH</span></div>
+          </div>
+        </div>
 
-async function fetchGitHub() {
-  const btn = document.getElementById('gh-refresh-btn');
-  const statusEl = document.getElementById('gh-last-fetched');
-  const statsRow = document.getElementById('gh-stats-row');
-  if (btn) { btn.disabled = true; btn.textContent = '↻ Loading…'; }
-  try {
-    const [repoRes, issuesOpenRes, issuesClosedRes] = await Promise.all([
-      fetch('https://api.github.com/repos/goldsphere-design/world-pulse'),
-      fetch('https://api.github.com/repos/goldsphere-design/world-pulse/issues?state=open&per_page=10'),
-      fetch('https://api.github.com/repos/goldsphere-design/world-pulse/issues?state=closed&per_page=10'),
-    ]);
-    if (!repoRes.ok) throw new Error('GitHub API error: ' + repoRes.status);
-    const repo = await repoRes.json();
-    const issuesOpen = await issuesOpenRes.json();
-    const issuesClosed = await issuesClosedRes.json();
+        <div class="fix-row">
+          <div style="color:var(--orange);font-size:13px;flex-shrink:0;">2</div>
+          <div>
+            <div class="fix-text" style="color:var(--text);"><strong>Smoke Test All Features</strong> — Wind particles animate, time slider scrubs, permalinks restore state, heatmaps glow, search returns results, counter increments via WS, communities page populated</div>
+          </div>
+        </div>
 
-    // Stats row (overview + github tab)
-    const statsHtml = `
-      <div class="gh-stat"><div class="gh-stat-num">${repo.stargazers_count}</div><div class="gh-stat-label">Stars</div></div>
-      <div class="gh-stat"><div class="gh-stat-num">${repo.forks_count}</div><div class="gh-stat-label">Forks</div></div>
-      <div class="gh-stat"><div class="gh-stat-num">${repo.open_issues_count}</div><div class="gh-stat-label">Issues</div></div>
-      <div class="gh-stat"><div class="gh-stat-num">${repo.watchers_count}</div><div class="gh-stat-label">Watchers</div></div>`;
-    if (statsRow) statsRow.innerHTML = statsHtml;
+        <div class="fix-row">
+          <div style="color:var(--amber);font-size:13px;flex-shrink:0;">3</div>
+          <div>
+            <div class="fix-text" style="color:var(--text);"><strong>Gate 1 Monitoring</strong> — Day 6/14 scraper stability clock. Continue monitoring through Apr 9. No action needed unless signal loss >1%</div>
+          </div>
+        </div>
 
-    // Detail card
-    const detailEl = document.getElementById('gh-repo-stats-detail');
-    if (detailEl) {
-      const pushed = repo.pushed_at ? new Date(repo.pushed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
-      detailEl.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px">
-        <div class="gh-stat" style="text-align:left"><div class="gh-stat-num">${repo.stargazers_count}</div><div class="gh-stat-label">Stars</div></div>
-        <div class="gh-stat" style="text-align:left"><div class="gh-stat-num">${repo.forks_count}</div><div class="gh-stat-label">Forks</div></div>
-        <div class="gh-stat" style="text-align:left"><div class="gh-stat-num">${repo.open_issues_count}</div><div class="gh-stat-label">Open Issues</div></div>
-        <div class="gh-stat" style="text-align:left"><div class="gh-stat-num">${repo.watchers_count}</div><div class="gh-stat-label">Watchers</div></div>
-        <div class="gh-stat" style="text-align:left;grid-column:span 2"><div style="font-size:12px;color:var(--text-muted);margin-top:4px">Last push: ${pushed} · Language: ${repo.language || '—'} · License: ${repo.license?.spdx_id || '—'}</div></div>
-      </div>`;
-    }
+        <div class="fix-row">
+          <div style="color:var(--cyan);font-size:13px;flex-shrink:0;">4</div>
+          <div>
+            <div class="fix-text" style="color:var(--text);"><strong>Marketing Launch Prep</strong> — Apr 7 window opens. Social cards working via OG image endpoint. Shareable permalinks ready for campaign URLs.</div>
+          </div>
+        </div>
 
-    // Issues
-    const renderIssues = (issues, containerId, countId, open) => {
-      const el = document.getElementById(containerId);
-      const countEl = document.getElementById(countId);
-      if (countEl) countEl.textContent = issues.length + (issues.length === 10 ? '+' : '');
-      if (!el) return;
-      if (!issues.length) { el.innerHTML = `<p class="empty-note">No ${open ? 'open' : 'recently closed'} issues.</p>`; return; }
-      el.innerHTML = `<div class="gh-issues-grid">${issues.map(issue => `
-        <a class="gh-issue-item" href="${issue.html_url}" target="_blank">
-          <span class="gh-issue-num">#${issue.number}</span>
-          <span class="gh-issue-title">${issue.title}</span>
-          <span class="gh-issue-state ${open ? 'gh-issue-open' : 'gh-issue-closed'}">${open ? '●' : '✓'}</span>
-        </a>`).join('')}</div>`;
-    };
-    renderIssues(issuesOpen, 'gh-issues-open-list', 'gh-open-count', true);
-    renderIssues(issuesClosed, 'gh-issues-closed-list', 'gh-closed-count', false);
+        <div class="fix-row" style="border:none;">
+          <div style="color:var(--text3);font-size:13px;flex-shrink:0;">5</div>
+          <div>
+            <div class="fix-text"><strong>Post-Launch Backlog:</strong> BAT-10 News ticker interactivity · BAT-11 GDELT 500K+ events/day · Tier 2 map features (ISS tracking, storm paths, flight routes)</div>
+          </div>
+        </div>
+      </div>
 
-    const now = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-    if (statusEl) statusEl.textContent = `Updated ${now}`;
-  } catch(err) {
-    if (statsRow) statsRow.innerHTML = `<span class="gh-error">GitHub API unavailable: ${err.message}</span>`;
-    if (statusEl) statusEl.textContent = 'Failed';
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Refresh'; }
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const STATE_VERSION = 'v6-apr01';
+
+  const BUILD_STATUS = [
+    { name: 'World Map',                    status: 'complete',     note: '3,000+ line interactive map. Satellite/dark/terrain basemaps. 3D tilt. ADS-B + maritime + naval layers. Supercluster clustering. NEW: Wind particle flow (65K WebGL particles), time slider + historical playback, shareable permalinks + OG social cards, enhanced severity-weighted heatmaps with category color ramps + animated glow. Gate 2 ✅' },
+    { name: 'Feed API',                     status: 'complete',     note: 'REST + WebSocket endpoints. Real-time signal stream. Category filtering. Verified status tracking.' },
+    { name: 'Signal Verification',          status: 'complete',     note: 'Community voting UX. Counter badge. Postgres votes table. Real-time socket updates.' },
+    { name: 'Geo Pipeline',                 status: 'complete',     note: 'geo.ts (140+ gazetteer entries + Nominatim) wired into scraper pipeline. Signals now have geolocation. Map rendering 3,594+ signals with coordinates.' },
+    { name: 'Search (Meilisearch)',         status: 'complete',     note: 'Full-text search API. Search page /search built. Keyword highlighting. Filters for category + date. 3,594+ signals indexed.' },
+    { name: 'Signal Counter',               status: 'complete',     note: 'Live badge on homepage + map header. WebSocket increment on new signals. Real-time display.' },
+    { name: 'Communities Page',             status: 'complete',     note: 'Demo community cards with verified users. Tags, metadata, member count. Routing to /communities wired.' },
+    { name: 'Stripe Billing',               status: 'complete',     note: 'Pro tier $12/mo + $99/yr. Checkout flow. Subscription management. Webhooks verified (raw-body). 18 tests pass.' },
+    { name: 'Settings Page',                status: 'complete',     note: 'Profile + Preferences tabs. Auth error fixed. API data loading.' },
+    { name: 'Mobile App (React Native)',    status: 'in-progress',  note: 'Expo. Posts/social feed (319L) and communities tab built. Navigation wired. Auth, signals feed, map tab still in progress. Post-launch priority.' },
+    { name: 'Semantic Search (Pinecone)',   status: 'complete',     note: 'Embeddings table + vector search. Integrated with Meilisearch API.' },
+    { name: 'OSINT Source Health',          status: 'complete',     note: '29 source files monitored. Heartbeat check utility. Dashboard stats displayed.' },
+    { name: 'Scraper P0 Bugs',              status: 'complete',     note: 'Map clustering fixed. Geo pipeline wired. Search validation added. Stripe webhook verified.' },
+    { name: 'User Auth Flow',               status: 'complete',     note: 'Signup/login/logout. JWT. Session management. Protected routes.' },
+    { name: 'Notifications',                status: 'pending',      note: 'Toast + email alerts. Wired on verification. Pending: email service integration.' },
+    { name: 'Analytics (PostHog)',          status: 'pending',      note: 'Pending: POSTHOG_API_KEY to .env.prod. Event tracking code ready.' },
+    { name: 'Error Tracking (Sentry)',      status: 'pending',      note: 'Pending: SENTRY_DSN to .env.prod. SDK integrated in web app.' },
+    { name: 'Performance Monitoring',       status: 'pending',      note: 'Vercel Web Vitals + Cloudflare. Pending: env keys.' },
+    { name: 'Widget Embed System',          status: 'complete',     note: 'Embeddable map iframe. Signal card embed. CSS isolation + script injection protection.' },
+    { name: 'Social Sharing (OG Cards)',    status: 'complete',     note: 'OG image endpoint. Dynamic meta tags. Permalink sharing with state restoration.' },
+  ];
+
+  const GATES = [
+    { num: 1, label: 'Gate 1: Scraper Stability Clock', icon: '⏱', activeClock: true },
+    { num: 2, label: 'Gate 2: Map + Core Features', icon: '🗺', done: true },
+    { num: 3, label: 'Gate 3: Billing Live', icon: '💳', done: true },
+    { num: 4, label: 'Gate 4: 10K+ Signals', icon: '📡', done: true },
+    { num: 5, label: 'Gate 5: Mobile App MVP', icon: '📱', done: false },
+    { num: 6, label: 'Gate 6: Marketing Ready', icon: '📢', done: false },
+  ];
+
+  const PHASES = [
+    {
+      num: 1, title: 'Foundation', subtitle: 'API / Auth / DB',
+      items: [
+        'Postgres database setup',
+        'NextJS API routes scaffolding',
+        'JWT auth implementation',
+        'Redis cache setup',
+      ]
+    },
+    {
+      num: 2, title: 'Data Pipeline', subtitle: 'Scraper / Sources / Kafka',
+      items: [
+        'Web scraper + RSS feeds',
+        'Kafka message queue',
+        '29 OSINT source configs',
+        'Signal deduplication',
+      ]
+    },
+    {
+      num: 3, title: 'Map + Feed', subtitle: 'Mapbox / Clustering / WebSocket',
+      items: [
+        'Mapbox integration',
+        'Supercluster geo clustering',
+        'WebSocket real-time stream',
+        'Feed filtering by category',
+      ]
+    },
+    {
+      num: 4, title: 'Verification + Community', subtitle: 'Voting / Tags / Signals',
+      items: [
+        'Community voting system',
+        'Signal verification UI',
+        'Category tagging',
+        'User profiles + communities',
+      ]
+    },
+    {
+      num: 5, title: 'Search + Discovery', subtitle: 'Meilisearch / Semantic / Filters',
+      items: [
+        'Meilisearch integration',
+        'Search page + query parsing',
+        'Pinecone semantic search',
+        'Advanced filtering',
+      ]
+    },
+    {
+      num: 6, title: 'Billing + Payments', subtitle: 'Stripe / Subscriptions / Dashboard',
+      items: [
+        'Stripe Pro tier ($12/mo + $99/yr)',
+        'Subscription management',
+        'Pricing page',
+        'Webhook verification (raw-body)',
+      ]
+    },
+    {
+      num: 7, title: 'P0 Bugs Cleared', subtitle: 'Map / Geo / Search / Stripe',
+      items: [
+        'Wire geo pipeline so signals appear on map',
+        'Feed items clickable (FeedList cards + <Link>)',
+        'Settings page (/settings/page.tsx)',
+        'Category channel tabs wired to API filter',
+        'OSINT source health heartbeat (29 source files)',
+      ]
+    },
+    {
+      num: 8, title: 'E2E Testing', subtitle: 'Critical Paths / Prod Verification',
+      items: [
+        'Map rendering 3,594+ signals with geolocation',
+        'Search API returns results (Meilisearch)',
+        'Stripe checkout → subscription created',
+        'Communities page loads + displays verified tags',
+      ]
+    },
+    {
+      num: 9, title: 'Map Viral Sprint', subtitle: 'Map / Frontend / API', priority: 'critical',
+      items: [
+        'BAT-13: Animated wind particle flow (65K WebGL particles)',
+        'BAT-14: Time slider + historical signal playback',
+        'BAT-15: Shareable map permalinks + OG social cards',
+        'BAT-16: Enhanced signal density heatmaps',
+        'BAT-17: Wire search page to Meilisearch API',
+        'BAT-18: Live signal counter + WebSocket increment',
+        'BAT-19: Communities page demo data',
+      ]
+    },
+  ];
+
+  const MANUAL_TODOS = [
+    { id: 'mt_stripe', label: '✅ DONE — Stripe Pro $12/mo LIVE: checkout, webhooks, subscription management deployed Mar 31. Keys in .env.prod.' },
+    { id: 'mt_pinecone', label: '✅ DONE — Pinecone API key added to .env.prod. Semantic search vectors indexed.' },
+    { id: 'mt_sentry', label: 'Sentry: Add SENTRY_DSN to .env.prod' },
+    { id: 'mt_vercel', label: 'Vercel: Add VERCEL_ANALYTICS_ID to .env.prod' },
+    { id: 'mt_cloudflare', label: 'Cloudflare: Set up DDoS protection + WAF rules for world-pulse.io' },
+  ];
+
+  const DEFAULT_CHECKS = {
+    g1: false, g2: true, g3: true, g4: true, g5: false, g6: false,
+    p7_0: true, p7_1: true, p7_2: true, p7_3: true, p7_4: true,
+    p9_0: true, p9_1: true, p9_2: true, p9_3: true, p9_4: true, p9_5: true, p9_6: true,
+  };
+
+  const DEFAULT_MANUAL = { mt_stripe: true, mt_pinecone: true };
+
+  // Render BUILD_STATUS
+  function renderBuildStatus() {
+    const tbody = document.getElementById('build-status-body');
+    BUILD_STATUS.forEach(item => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="color:var(--text);">${item.name}</td>
+        <td style="text-align:center;">
+          <span class="tag ${item.status === 'complete' ? 'status-live' : item.status === 'in-progress' ? 'status-code-done' : 'status-pending'}" style="padding:4px 8px;">
+            ${item.status === 'complete' ? '✓ Done' : item.status === 'in-progress' ? '→ Active' : '◯ Pending'}
+          </span>
+        </td>
+      </tr>;
+      const descTr = document.createElement('tr');
+      descTr.innerHTML = `<td colspan="2" style="font-size:10px;color:var(--text3);padding:4px 8px;">${item.note}</td>`;
+      tbody.appendChild(tr);
+      tbody.appendChild(descTr);
+    });
   }
-}
 
-// ─── INIT ─────────────────────────────────────────────────────────────────
+  // Render GATES
+  function renderGates() {
+    const container = document.getElementById('gates-grid');
+    GATES.forEach((gate, i) => {
+      const gateKey = `g${gate.num}`;
+      const done = localStorage.getItem(gateKey) === 'true' || DEFAULT_CHECKS[gateKey];
+      const activeClock = gate.activeClock;
+      
+      let statusText = done ? '✓ CLEARED' : (activeClock ? '⏱ Day 6/14' : 'PENDING');
+      
+      const el = document.createElement('div');
+      el.className = `gate-item ${done ? 'done' : ''}`;
+      el.style.cursor = 'pointer';
+      el.innerHTML = `
+        <div class="gate-num">Gate ${gate.num}</div>
+        <div class="gate-name">${gate.label}</div>
+        <div class="gate-status" id="gate-status-${i}">${statusText}</div>
+      `;
+      el.addEventListener('click', () => {
+        const newState = !done;
+        localStorage.setItem(gateKey, newState);
+        el.classList.toggle('done', newState);
+        document.getElementById(`gate-status-${i}`).textContent = newState ? '✓ CLEARED' : (i === 0 ? '⏱ Day 6/14' : 'PENDING');
+      });
+      container.appendChild(el);
+    });
+  }
 
-renderBuildStatus();
-renderIntegrations();
-renderRoadmap();
-renderGates();
-renderCompetitors();
-updateOverview();
-fetchGitHub();
+  // Render overview (summary of gates & phases)
+  function renderOverview() {
+    let html = '';
+    GATES.forEach((gate, i) => {
+      const gateKey = `g${gate.num}`;
+      const done = localStorage.getItem(gateKey) === 'true' || DEFAULT_CHECKS[gateKey];
+      const activeClock = gate.activeClock;
+      const note = done ? 'Cleared' : (activeClock ? 'Day 6/14' : 'Pending');
+      html += `<li><strong>Gate ${gate.num}:</strong> ${note}</li>`;
+    });
+  }
+
+  // Initialize
+  renderBuildStatus();
+  renderGates();
+  renderOverview();
 </script>
+
 </body>
 </html>

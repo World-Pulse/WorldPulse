@@ -3,6 +3,7 @@ import { db } from '../db/postgres'
 import { authenticate, optionalAuth } from '../middleware/auth'
 import { z } from 'zod'
 import { sendError } from '../lib/errors'
+import { parseQuery, CommunityListQuerySchema, CommunityMembersQuerySchema } from '../lib/query-schemas'
 
 const CreateCommunitySchema = z.object({
   slug:        z.string().min(2).max(100).regex(/^[a-z0-9-]+$/),
@@ -40,14 +41,11 @@ export const registerCommunityRoutes: FastifyPluginAsync = async (app) => {
 
   // ─── LIST COMMUNITIES (with discovery features) ───────────
   app.get('/', { preHandler: [optionalAuth] }, async (req, reply) => {
-    const { search, category, sort = 'members', limit = 50 } = req.query as {
-      search?:   string
-      category?: string
-      sort?:     'members' | 'posts' | 'trending' | 'newest'
-      limit?:    number
-    }
+    const qr = parseQuery(CommunityListQuerySchema, req.query)
+    if (qr.error) return sendError(reply, 400, 'VALIDATION_ERROR', qr.error)
+    const { search, category, sort, limit } = qr.data
 
-    const pageLimit = Math.min(Number(limit), 100)
+    const pageLimit = limit
 
     // Build query — exclude demo/seeded communities from public listing
     let query = db('communities as c')
@@ -369,7 +367,9 @@ export const registerCommunityRoutes: FastifyPluginAsync = async (app) => {
   // ─── GET COMMUNITY MEMBERS ───────────────────────────────
   app.get('/:id/members', { preHandler: [optionalAuth] }, async (req, reply) => {
     const { id } = req.params as { id: string }
-    const { role, limit = 50, cursor } = req.query as { role?: string; limit?: number; cursor?: string }
+    const qr = parseQuery(CommunityMembersQuerySchema, req.query)
+    if (qr.error) return sendError(reply, 400, 'VALIDATION_ERROR', qr.error)
+    const { role, limit, cursor } = qr.data
 
     const community = await db('communities').where('id', id).first('id')
     if (!community) return sendError(reply, 404, 'NOT_FOUND', 'Community not found')
@@ -383,7 +383,7 @@ export const registerCommunityRoutes: FastifyPluginAsync = async (app) => {
         'cm.role', 'cm.joined_at',
       ])
       .orderBy('cm.joined_at', 'asc')
-      .limit(Math.min(Number(limit), 100) + 1)
+      .limit(limit + 1)
 
     if (role) query = query.where('cm.role', role)
     if (cursor) {
@@ -392,7 +392,7 @@ export const registerCommunityRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const rows = await query
-    const pageLimit = Math.min(Number(limit), 100)
+    const pageLimit = limit
     const hasMore = rows.length > pageLimit
     const items = hasMore ? rows.slice(0, pageLimit) : rows
 

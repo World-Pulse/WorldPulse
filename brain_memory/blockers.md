@@ -2,7 +2,75 @@
 
 ## Active Blockers
 
-*No active blockers as of 2026-03-28 (commit b22076f cleared all pending staged changes).*
+### NTFS Index Lock (Recurring) — Cycles 47, 48, 57, 61, 62, 63, 69, 73
+**Status:** ACTIVE — requires manual resolution on Windows host
+**Symptom:** `.git/index.lock` 0-byte file with NTFS permissions, cannot be deleted from Linux sandbox
+**Resolution:** Delete `.git/index.lock` from Windows (File Explorer or `del .git\index.lock` in CMD) then run the commits below.
+
+**Cycle 73 — Labor Rights Intelligence Page:**
+```bash
+git add apps/api/src/routes/labor-rights.ts \
+        apps/api/src/routes/__tests__/labor-rights.test.ts \
+        apps/web/src/app/labor-rights/page.tsx \
+        apps/api/src/index.ts \
+        apps/web/src/components/sidebar/LeftSidebar.tsx \
+        apps/web/src/components/CommandPalette.tsx
+git commit -m "feat(labor-rights): add Labor Rights Intelligence Page — 45+ countries, 5 indicators, 48 tests, full dashboard"
+```
+
+**Cycle 69 — RSS Source Expansion 500+:**
+```bash
+git add apps/api/migrations/20260402000003_expand_sources_500.ts \
+        apps/api/migrations/__tests__/expand-sources-500.test.ts
+git commit -m "feat(sources): expand RSS registry to 500+ feeds (50 new: EastAfrica/CEE/MiddleEast/Pacific/Water/Nuclear/Humanitarian/DigitalRights/Labor/Space)"
+```
+
+**Cycle 63 — Semantic Claim Verification v2:**
+```bash
+git add apps/api/src/routes/claims.ts \
+        apps/api/src/routes/__tests__/claims-semantic.test.ts
+git commit -m "feat(claims): upgrade Claim Verification Engine to v2.0 — Pinecone semantic similarity, contradiction detection, 38 tests"
+```
+
+**Cycle 62 — Claim Extraction & Verification API:**
+```bash
+git add apps/api/src/routes/claims.ts \
+        apps/api/src/routes/__tests__/claims.test.ts \
+        apps/web/src/app/claims/page.tsx \
+        apps/api/src/index.ts \
+        apps/web/src/components/sidebar/LeftSidebar.tsx
+git commit -m "feat(claims): add Claim Extraction & Verification API — 3 endpoints, 30 tests, dashboard page (Factiverse counter)"
+```
+
+**Cycle 61 — RSS Expansion 350+ & Tasks Cleanup:**
+```bash
+git add apps/api/migrations/20260401000008_expand_sources_350.ts \
+        apps/api/migrations/__tests__/expand-sources-350.test.ts \
+        worldpulse_tasks.json
+git commit -m "feat(sources): expand RSS registry to 346+ feeds (46 new: LatAm/SouthAsia/HornOfAfrica/WestAfrica/CentralAfrica/CentralAm/Conflict/Climate)"
+```
+
+**Cycle 57 — BAT-16 EnhancedHeatmap Tests:**
+```bash
+git add apps/web/src/__tests__/enhanced-heatmap.test.ts
+git commit -m "test(map): BAT-16 EnhancedHeatmap — 28 unit tests (lifecycle, RAF, category ramps)"
+```
+
+**Cycle 47 — RSS Source Registry 250+:**
+```bash
+git add apps/api/migrations/20260401000005_expand_sources_250.ts \
+        apps/api/migrations/__tests__/expand-sources-250.test.ts
+git commit -m "feat(sources): expand RSS registry to 250+ feeds (40 new: SEAsia/Pacific/Nordic/EastEurope/SouthAsia/AfricaFR/Maritime/Space/Health/Arctic)"
+```
+
+**Cycle 48 — Country Resilience Score:**
+```bash
+git add apps/api/src/routes/countries.ts \
+        apps/api/migrations/20260401000006_country_resilience_cache.ts \
+        apps/api/src/routes/__tests__/countries-resilience.test.ts \
+        apps/web/src/app/countries/resilience/page.tsx
+git commit -m "feat(countries): Country Resilience Score — 6-dimension scoring system with /resilience/rankings page and per-country endpoint"
+```
 
 ---
 

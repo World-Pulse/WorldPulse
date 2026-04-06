@@ -118,44 +118,105 @@ worldpulse/
 ## Key Features
 
 ### 🛰️ Signal Pipeline
-The scraper monitors 500+ global sources across:
-- **Tier 1 Wire Services**: AP, Reuters, AFP, BBC, Bloomberg
-- **Official Sources**: UN, WHO, USGS, NOAA, NASA, PHIVOLCS
-- **National Media**: 200+ vetted outlets in 50 languages
-- **Specialized Feeds**: ACLED (conflict), ProMED (disease), OpenSky (aviation)
-- **Community Reports**: Geolocated user reports, reputation-weighted
+The scraper monitors 80+ verified global sources across:
+- **Tier 1 Wire Services**: AP, Reuters, AFP, BBC, Bloomberg, Nikkei Asia, Al Jazeera
+- **Official Sources**: UN, WHO, USGS, NOAA, NASA, PHIVOLCS, FEMA
+- **Global Media**: Le Monde, Der Spiegel, El País, The Wire India, Daily Maverick, AllAfrica, Folha, Arab News
+- **Specialized Feeds**: ACLED (conflict), ProMED (disease), OpenSky (aviation), AIS (maritime)
 
-### 🔍 Verification Engine
-Every signal goes through a multi-layer check:
-1. **Cross-source corroboration** — confirmed by independent sources
-2. **Temporal consistency** — timestamps align across sources
-3. **Source diversity scoring** — wire service vs community source
-4. **AI fact extraction** — claim checking, contradiction detection
-5. **Community expert review** — verified experts can flag/confirm
-
-Reliability scores are shown on every piece of content (1–5 dots).
+### 🔍 7-Layer Signal Enrichment
+Every verified signal is enriched with:
+1. **Reliability score** (0–1) — cross-source corroboration + temporal consistency
+2. **Virality badge** — spreading velocity across sources and social channels
+3. **Geolocation** — PostGIS coordinates for map rendering
+4. **GDELT TV clips** — broadcast news segments mentioning the event
+5. **GDELT visual imagery** — editorial photos from global press
+6. **YouTube/podcast embedding** — multimedia context per signal
+7. **Semantic vector embedding** — Pinecone-powered similarity search
 
 ### ⚡ Real-Time Feed
 - WebSocket-powered live updates (zero-refresh)
-- Server-sent events for breaking signals
-- Cursor-based pagination for performance
+- ⌘K / Ctrl+K global command palette for instant navigation
 - Redis-cached public feeds (30s TTL)
+- Configurable alerts: Email, Telegram, Discord, Slack, Teams
 
-### 🗺️ Live World Map
-- MapLibre GL (fully open-source, no API key required)
-- Hotspots for verified critical/high severity signals
-- Click-through to signal detail + discussion
+### 🗺️ Palantir-Style Intelligence Map
+- MapLibre GL — open-source, no proprietary API key required
+- Satellite + dark + terrain basemap switcher
+- 3D tilt (45° pitch) with NavigationControl
+- Live intelligence overlays:
+  - ✈️ **ADS-B Aircraft** — real-time aviation signals (60s refresh)
+  - ⚓ **Maritime AIS** — ship tracking with clustering (120s refresh)
+  - 🌊 **Naval Intel** — carrier movements, dark ship alerts
+  - 🌋 **Natural Hazards** — earthquakes, floods, wildfires
+- Palantir-style annotation cards on click
+- Supercluster for marker clustering at all zoom levels
 
-### 🏷️ Trust & Reputation
-```
-Account Types:
-  🏛️  Official Source     — Government, NGO, institution
-  ✅  Verified Journalist  — Press credential verified
-  🔬  Domain Expert       — Academic/professional verified  
-  ⚡  Power User          — Community trust > 0.85
-  👤  Community           — Standard account
-  🤖  AI Digest           — Platform synthesis
-```
+### 🕵️ Intelligence Pages
+Dedicated deep-dive pages for specialized analysts:
+- **[/cyber-threats](/cyber-threats)** — APT activity, CVEs, ransomware, DDoS events
+- **[/sanctions](/sanctions)** — Watchlist entries, OFAC/UN/EU sanctions data
+- **[/finance](/finance)** — Market signals, central bank events, economic indicators
+- **[/space-weather](/space-weather)** — Solar flares, geomagnetic storms, NOAA alerts
+- **[/internet-outages](/internet-outages)** — BGP disruptions, submarine cable cuts, Cloudflare Radar data
+
+### 🏷️ Source Credibility
+- **AI Content Farm Detection** — 3,000+ flagged AI-generated content farms via Pangram Labs data
+- **Reliability Scores** shown on every signal (0–1 scale, color-coded)
+- **NewsGuard integration** — known disinformation domains flagged
+- **Source trust tiers**: Wire Service → Official → Verified Media → Community
+
+### 📧 Alerts & Digest
+- **Real-time alerts**: Telegram, Discord, Slack, Teams, email (Resend)
+- **Category + severity filters**: Get only what matters
+- **Country-level targeting**: Alerts scoped to specific countries
+- **Weekly email digest**: Curated top signals, delivered Sunday
+
+### 🧩 Browser Extensions
+- **Chrome** (MV3 Manifest V3, Chromium-compatible)
+- **Firefox** (MV3, Android Firefox-compatible)
+- Floating overlay on any news page — surface WorldPulse signals for the article you're reading
+
+### 💳 Pro Tier
+| Plan | Rate Limit | History | Price |
+|------|-----------|---------|-------|
+| Free | 60 req/min · 1,000/day | 7 days | Free |
+| Pro  | 300 req/min · 10,000/day | 90 days | $12/mo |
+| Enterprise | Unlimited | Full archive | Contact us |
+
+---
+
+## How WorldPulse Compares
+
+WorldPulse is built around **verified, enriched intelligence** — not raw data dumps. Here's how it stacks up against the leading alternatives:
+
+| Feature | WorldPulse | WorldMonitor | Ground News |
+|---------|-----------|-------------|-------------|
+| **Signal verification** | ✅ Multi-layer (5-step pipeline) | ❌ Raw aggregation | ⚠️ Bias labels only |
+| **Per-signal enrichment** | ✅ 7 layers (TV clips, imagery, reliability, virality, semantic, media, geolocation) | ❌ None | ⚠️ Podcast clips |
+| **Public REST API** | ✅ Open, rate-limited, documented | ⚠️ Proto/gRPC (complex) | ❌ None |
+| **Semantic search** | ✅ Pinecone vector embeddings | ❌ No | ❌ No |
+| **Real-time WebSocket feed** | ✅ Yes | ❌ No | ❌ No |
+| **Pro subscription tier** | ✅ $12/mo · 300 rpm · 90-day history | ✅ Yes | ✅ ~$40/yr |
+| **Browser extensions** | ✅ Chrome + Firefox (MV3) | ❌ Chrome only | ✅ Chrome only |
+| **Mobile app** | ✅ React Native (iOS + Android) | ✅ iOS (Tauri) | ✅ iOS + Android |
+| **Intelligence pages** | ✅ 5 unique: Cyber, Sanctions, Finance, Space Weather, Internet Outages | ❌ No dedicated pages | ❌ No |
+| **Configurable alerts** | ✅ Email, Telegram, Discord, Slack, SMS | ❌ Passive only | ⚠️ Push only |
+| **Weekly digest emails** | ✅ Yes | ❌ No | ✅ Daily Briefing |
+| **Webhooks** | ✅ Push events to your server | ❌ No | ❌ No |
+| **Self-hostable** | ✅ Docker + Kubernetes | ✅ Yes | ❌ No |
+| **Open source** | ✅ MIT | ✅ AGPL-3.0 | ❌ Closed source |
+| **AI content farm detection** | ✅ 3,000+ farms flagged | ❌ No | ❌ No |
+| **Sanctions & watchlist data** | ✅ Yes (/sanctions) | ❌ No | ❌ No |
+| **⌘K Command palette** | ✅ Yes | ✅ Yes | ❌ No |
+| **Live map layers** | ✅ 4 layers: ADS-B aircraft, Maritime AIS, Natural Hazards, Naval Intel | ✅ 45 raw layers | ❌ No |
+| **Data sources** | ✅ 80+ verified, enriched | ✅ 435+ raw feeds | ✅ 50,000+ (bias labels) |
+
+### WorldPulse's philosophy: **Quality over Quantity**
+
+- **WorldMonitor** aggregates the most raw data (45 layers, 435+ feeds). It's excellent for OSINT reconnaissance but gives you raw data with no verification, enrichment, or actionability.
+- **Ground News** excels at bias comparison but provides no OSINT, no API, no intelligence synthesis, and no alerting.
+- **WorldPulse** sits between wire-service quality and open-source flexibility — verified signals with a full enrichment pipeline, a developer API, configurable alerts, and no walled garden.
 
 ---
 

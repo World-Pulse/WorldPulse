@@ -101,11 +101,30 @@ export async function verifySignal(
 
   const finalScore = baseScore
 
-  // Determine status
+  // Severity-aware verification thresholds.
+  // Critical/high severity signals require stronger evidence to pass as verified,
+  // but get a lower dispute threshold — we surface them faster for human review
+  // rather than silently discarding them.
+  let verifyThreshold: number
+  let disputeThreshold: number
+  switch (signal.severity) {
+    case 'critical':
+      verifyThreshold  = 0.80 // critical claims need strong multi-source backing
+      disputeThreshold = 0.20 // but surface borderline critical signals as pending, not disputed
+      break
+    case 'high':
+      verifyThreshold  = 0.75
+      disputeThreshold = 0.25
+      break
+    default:
+      verifyThreshold  = 0.70 // slightly relaxed for medium/low — less damage from false positive
+      disputeThreshold = 0.30
+  }
+
   let status: SignalStatus
-  if (finalScore >= 0.75) {
+  if (finalScore >= verifyThreshold) {
     status = 'verified'
-  } else if (finalScore >= 0.30) {
+  } else if (finalScore >= disputeThreshold) {
     status = 'pending'
   } else {
     status = 'disputed'
@@ -167,15 +186,29 @@ interface CheckResult {
 
 async function checkCrossSource(articles: ArticleGroup[]): Promise<CheckResult> {
   const uniqueSources = new Set(articles.map(a => a.sourceId)).size
-  const score = Math.min(uniqueSources / 3, 1)
+  const uniqueTiers   = new Set(articles.map(a => a.sourceTier)).size
+
+  // Scoring: 1 source = 0.33, 2 sources = 0.67, 3+ = 1.0
+  let score = Math.min(uniqueSources / 3, 1)
+
+  // Tier diversity bonus: sources from different tiers (wire + regional + community)
+  // are far stronger evidence than multiple articles from the same tier
+  if (uniqueTiers >= 3) score = Math.min(score + 0.15, 1.0)
+  else if (uniqueTiers >= 2) score = Math.min(score + 0.08, 1.0)
+
+  // High-trust source bonus: if average trust >= 0.8, bump score
+  const avgTrust = articles.reduce((s, a) => s + a.sourceTrust, 0) / articles.length
+  if (avgTrust >= 0.8 && uniqueSources >= 2) score = Math.min(score + 0.10, 1.0)
 
   return {
     type:    'cross_source',
     score,
     weight:  0.40,
     reasons: uniqueSources >= 3
-      ? [`Confirmed by ${uniqueSources} independent sources`]
-      : [`Only ${uniqueSources} source(s) — pending corroboration`],
+      ? [`Confirmed by ${uniqueSources} independent sources across ${uniqueTiers} tier(s)`]
+      : uniqueSources === 2
+        ? [`Corroborated by 2 sources — moderate confidence`]
+        : [`Only 1 source — pending corroboration`],
   }
 }
 
@@ -402,18 +435,37 @@ Are these articles factually consistent? Identify any contradictions or reliabil
 }
 
 async function checkWirePresence(articles: ArticleGroup[]): Promise<CheckResult> {
-  const wireServices  = articles.filter(a => a.sourceTier === 'wire')
-  const hasMultiWire  = wireServices.length >= 2
-  const hasSingleWire = wireServices.length === 1
+  const wireServices        = articles.filter(a => a.sourceTier === 'wire')
+  const institutionalSources = articles.filter(a => a.sourceTier === 'institutional')
+  // OSINT institutional feeds (USGS, WHO, IAEA, CISA, etc.) are as authoritative
+  // as wire services for their specific domains — treat them equivalently
+  const authoritativeCount  = wireServices.length + institutionalSources.length
 
-  const score = hasMultiWire ? 1 : hasSingleWire ? 0.75 : 0.3
+  let score: number
+  let reasons: string[]
+
+  if (authoritativeCount >= 3) {
+    score = 1.0
+    reasons = [`${authoritativeCount} authoritative sources (${wireServices.length} wire + ${institutionalSources.length} institutional)`]
+  } else if (authoritativeCount >= 2) {
+    score = 0.85
+    reasons = [`${authoritativeCount} authoritative sources — high confidence`]
+  } else if (authoritativeCount === 1) {
+    score = 0.70
+    reasons = [wireServices.length > 0 ? '1 wire service confirmed' : '1 institutional source confirmed']
+  } else {
+    // No wire or institutional — check if there are high-trust regional sources
+    const highTrustCount = articles.filter(a => a.sourceTrust >= 0.7).length
+    score = highTrustCount >= 2 ? 0.45 : 0.25
+    reasons = highTrustCount >= 2
+      ? [`No wire/institutional sources, but ${highTrustCount} high-trust sources`]
+      : ['No authoritative sources yet — awaiting wire/institutional coverage']
+  }
 
   return {
     type:    'wire_presence',
     score,
     weight:  0.25,
-    reasons: wireServices.length > 0
-      ? [`${wireServices.length} wire service(s): confirmed`]
-      : ['No wire service coverage yet'],
+    reasons,
   }
 }

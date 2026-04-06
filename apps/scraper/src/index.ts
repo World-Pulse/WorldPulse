@@ -798,16 +798,53 @@ function computeTopicHash(title: string): string {
   return normalized
 }
 
+/**
+ * Compute initial reliability score for a signal from its source articles.
+ *
+ * Four weighted factors:
+ *   1. Source count       (0.30) — more independent sources = higher confidence
+ *   2. Trust-weighted avg (0.30) — weighted by tier: wire > institutional > regional > community
+ *   3. Tier authority     (0.25) — bonus for wire/institutional presence
+ *   4. Tier diversity     (0.15) — bonus when sources span multiple tiers
+ */
 function computeReliability(articles: Array<{ sourceTrust: number | string; sourceTier: string }>): number {
   if (articles.length === 0) return 0
 
-  const countScore = Math.min(articles.length / 3, 1) * 0.4
-  const avgTrust = articles.reduce((s, a) => s + Number(a.sourceTrust || 0), 0) / articles.length
-  const trustScore = (isNaN(avgTrust) ? 0 : avgTrust) * 0.4
-  const hasWire = articles.some(a => a.sourceTier === 'wire')
-  const wireBonus = hasWire ? 0.2 : 0
+  // Tier authority weights — wire and institutional sources count more heavily
+  const TIER_WEIGHTS: Record<string, number> = {
+    wire: 1.5, institutional: 1.3, breaking: 1.1, regional: 1.0, community: 0.7,
+  }
 
-  const result = countScore + trustScore + wireBonus
+  // 1. Source count score (diminishing returns: 1→0.33, 2→0.67, 3→1.0, 4+→1.0)
+  const countScore = Math.min(articles.length / 3, 1) * 0.30
+
+  // 2. Trust-weighted average — higher-tier sources get more weight
+  let weightedTrustSum = 0
+  let weightSum = 0
+  for (const a of articles) {
+    const trust  = Number(a.sourceTrust || 0)
+    const tw     = TIER_WEIGHTS[a.sourceTier] ?? 1.0
+    weightedTrustSum += trust * tw
+    weightSum += tw
+  }
+  const avgTrust  = weightSum > 0 ? weightedTrustSum / weightSum : 0
+  const trustScore = (isNaN(avgTrust) ? 0 : avgTrust) * 0.30
+
+  // 3. Tier authority: does the article set include a wire or institutional source?
+  const hasWire          = articles.some(a => a.sourceTier === 'wire')
+  const hasInstitutional = articles.some(a => a.sourceTier === 'institutional')
+  const tierAuthority = hasWire ? 0.25
+    : hasInstitutional ? 0.20
+    : articles.some(a => Number(a.sourceTrust || 0) >= 0.8) ? 0.12
+    : 0.05
+
+  // 4. Tier diversity: sources from multiple tiers strengthen the signal
+  const uniqueTiers = new Set(articles.map(a => a.sourceTier)).size
+  const tierDiversity = uniqueTiers >= 3 ? 0.15
+    : uniqueTiers >= 2 ? 0.10
+    : 0.03
+
+  const result = countScore + trustScore + tierAuthority + tierDiversity
   return isNaN(result) ? 0.1 : Math.min(Math.max(result, 0), 1)
 }
 

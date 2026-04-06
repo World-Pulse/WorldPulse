@@ -4,32 +4,39 @@ import type { NextRequest } from 'next/server'
 // Content-Security-Policy
 // 'unsafe-inline' on script-src is required by Next.js for inline scripts / hydration.
 // Tighten with nonces in a future pass once Next.js nonce support is stable.
-const CSP_DIRECTIVES = [
-  "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' https://fonts.gstatic.com data:",
-  "img-src 'self' data: blob: https:",
-  // Allow API, WebSocket, and map tile connections
-  [
-    "connect-src 'self'",
-    'https://api.world-pulse.io',
-    'wss://api.world-pulse.io',
-    'http://localhost:3001',
-    'ws://localhost:3001',
-    'https://tile.openstreetmap.org',
-    'https://fonts.openmaptiles.org',
-    'https://gibs.earthdata.nasa.gov',
-  ].join(' '),
-  "media-src 'self' blob:",
-  "worker-src 'self' blob:",
-  "frame-src 'none'",
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "object-src 'none'",
-  "upgrade-insecure-requests",
-].join('; ')
+//
+// localhost:3001 / ws://localhost:3001 are ONLY included in development builds.
+// Production deployments (Vercel, Docker) must not expose localhost origins in CSP —
+// this was the same class of leak fixed in next.config.mjs (Cycle 27).
+const isDev = process.env.NODE_ENV !== 'production'
+
+function buildCspDirectives(): string {
+  return [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com data:",
+    "img-src 'self' data: blob: https:",
+    // Allow API, WebSocket, and map tile connections
+    [
+      "connect-src 'self'",
+      'https://api.world-pulse.io',
+      'wss://api.world-pulse.io',
+      ...(isDev ? ['http://localhost:3001', 'ws://localhost:3001'] : []),
+      'https://tile.openstreetmap.org',
+      'https://fonts.openmaptiles.org',
+      'https://gibs.earthdata.nasa.gov',
+    ].join(' '),
+    "media-src 'self' blob:",
+    "worker-src 'self' blob:",
+    "frame-src 'none'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+    "upgrade-insecure-requests",
+  ].join('; ')
+}
 
 /** Routes that must be embeddable in third-party iframes. */
 const EMBED_PATHS = ['/embed']
@@ -50,14 +57,20 @@ export function middleware(req: NextRequest): NextResponse {
     res.headers.set('Access-Control-Allow-Headers', 'Content-Type')
     // Remove clickjacking protection so the iframe can render
     res.headers.delete('X-Frame-Options')
-    // Override CSP to allow any frame-ancestor and connect to the API
+    // Override CSP to allow any frame-ancestor and connect to the API.
+    // localhost origins are only included in development (same guard as main CSP).
     const embedCsp = [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
       "style-src 'self' 'unsafe-inline'",
       "font-src 'self' data:",
       "img-src 'self' data: https:",
-      "connect-src 'self' https://api.world-pulse.io http://localhost:3001 wss://api.world-pulse.io ws://localhost:3001",
+      [
+        "connect-src 'self'",
+        'https://api.world-pulse.io',
+        'wss://api.world-pulse.io',
+        ...(isDev ? ['http://localhost:3001', 'ws://localhost:3001'] : []),
+      ].join(' '),
       "frame-ancestors *",
       "base-uri 'self'",
       "object-src 'none'",
@@ -83,7 +96,7 @@ export function middleware(req: NextRequest): NextResponse {
   )
 
   // Content Security Policy
-  res.headers.set('Content-Security-Policy', CSP_DIRECTIVES)
+  res.headers.set('Content-Security-Policy', buildCspDirectives())
 
   // HSTS — only send over HTTPS in production to avoid breaking local HTTP dev
   if (process.env.NODE_ENV === 'production') {

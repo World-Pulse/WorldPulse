@@ -677,8 +677,13 @@ async function run() {
   //   array_to_string(tags, ' ') ILIKE ?
   // uses a GIN bitmap scan instead of a seqscan.  Required by autocomplete.
   await db.raw(`
+    CREATE OR REPLACE FUNCTION immutable_array_to_string(arr text[], sep text)
+    RETURNS text LANGUAGE sql IMMUTABLE PARALLEL SAFE AS
+    $fn$ SELECT array_to_string(arr, sep) $fn$
+  `)
+  await db.raw(`
     CREATE INDEX IF NOT EXISTS idx_signals_tags_trgm
-    ON signals USING gin(array_to_string(tags, ' ') gin_trgm_ops)
+    ON signals USING gin(immutable_array_to_string(tags, ' ') gin_trgm_ops)
   `)
 
   // ── Expanded source coverage (Phase 7 — closing Crucix feed gap) ──────────

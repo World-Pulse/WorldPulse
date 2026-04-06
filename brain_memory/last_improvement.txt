@@ -1,83 +1,129 @@
-CYCLE 27 — 2026-03-30T03:20:00Z
+CYCLE 73 — 2026-04-06T01:20:00Z
 
-TASK EXECUTED: Integration — Vercel Deployment Configuration (Priority 11)
+TASK: Labor Rights Intelligence Page — Complete module (45+ countries, 5 indicators, 48 tests)
+CATEGORY: competitive | PRIORITY: 5 (from remaining priorities list)
 
 WHAT WAS DONE:
 
-1. NEW FILE: apps/web/vercel.json
-   - framework: "nextjs" (explicit for monorepo safety)
-   - buildCommand: "cd ../.. && pnpm turbo run build --filter=@worldpulse/web"
-     Runs Turborepo build from monorepo root — picks up packages/types, packages/ui
-   - installCommand: "cd ../.. && pnpm install --frozen-lockfile"
-   - functions: src/app/api/** maxDuration: 30s (prevents cold-start timeouts)
-   - rewrites: /monitoring-tunnel/:path* → Sentry ingest (matches tunnelRoute in next.config.mjs)
-   - headers: Cache-Control no-store for /api/* routes
-   - ignoreCommand: git diff --quiet HEAD^ HEAD -- apps/web/ packages/
-     Tells Vercel to skip builds when unrelated apps (scraper, api) change
-   - env block: documents NEXT_PUBLIC_API_URL, NEXT_PUBLIC_WS_URL, NEXT_PUBLIC_APP_URL
+A) API Route: apps/api/src/routes/labor-rights.ts (~540 LOC)
+  FastifyPluginAsync with 4 endpoints:
+  - GET /countries — list 45+ countries with labor rights indicators,
+    filterable by continent/rights_level/max_ituc_rating/search,
+    sortable by ituc_rating/union_density_pct/min_wage_adequacy_pct/
+    workplace_fatality_rate/forced_labor_prevalence/workforce_m/name,
+    with pagination (limit/offset), Redis-cached 1 hour
+  - GET /countries/:code — single country detail with recent DB signals
+  - GET /summary — aggregate stats: rights level breakdown, continent
+    analysis, most at-risk, most improved countries
+  - GET /map/points — GeoJSON FeatureCollection for map layer integration
 
-2. MODIFIED: apps/web/next.config.mjs
-   - CSP connect-src FIX: localhost:3001 and ws://localhost:3001 now wrapped in:
-     ...(process.env.NODE_ENV !== 'production' ? ['http://localhost:3001', 'ws://localhost:3001'] : [])
-   - Production deployments (Vercel, Docker) will no longer expose localhost:3001 in CSP
-   - Development builds retain localhost connectivity unchanged
+  45+ country registry with 5 labor rights indicators per country:
+  - ITUC Global Rights Index (1-5, lower is better)
+  - Union Density % (0-100, ILO/ITUC)
+  - Min Wage Adequacy % (0-100+, vs living wage)
+  - Workplace Fatality Rate (per 100K workers/year, ILO STAT)
+  - Forced Labor Prevalence (per 1K population, Global Slavery Index)
+  Plus: rights_level (strong/moderate/weak/poor/critical),
+  trend, trend_detail, top_issues[], population_m, workforce_m
 
-3. NEW FILE: docs/deployment/VERCEL.md (6,773 bytes)
-   - Full Vercel deployment guide for the WorldPulse monorepo
-   - Required env vars: runtime (NEXT_PUBLIC_API_URL/WS_URL/APP_URL), Sentry, Auth, Feature flags
-   - Vercel Dashboard setup: Root Directory = apps/web
-   - CSP behavior explanation (production vs development localhost gating)
-   - NEXT_PUBLIC_API_URL fallback pattern documentation (55 files, all correct)
-   - Preview URL CORS setup (CORS_ORIGINS on production API server)
-   - Manual CLI deploy commands (vercel / vercel --prod)
-   - Troubleshooting table: 5 common issues + fixes
+  Regional coverage: Northern Europe (4), Western Europe (5),
+  Americas (6), Middle East (4), South/SE Asia (10), East Asia (3),
+  Africa (6), Central/Eastern Europe (3), Oceania (2), Additional (5)
 
-GIT STATUS: Files created/modified, commit pending due to NTFS index.lock (Windows process)
-PENDING COMMIT COMMAND:
-  git add apps/web/vercel.json apps/web/next.config.mjs docs/deployment/VERCEL.md
-  git commit -m "feat(vercel): add vercel.json, fix prod CSP localhost leak, add VERCEL.md deployment guide"
+B) Registration: Added import + route registration in apps/api/src/index.ts
+  at prefix /api/v1/labor-rights
 
-COMPETITION SCAN (Cycle 27):
-   Ground News: No new features since v4.28.0 (March 2, 2026). Chrome-only. No OSINT.
-   GDELT: TV News Visual Explorer + 65-language support still latest products. No new APIs.
-   NewsGuard: Unchanged — 3,006+ AI farms tracked. FAILSafe still latest product.
-   New Threats: None detected. AMI Labs, Dreamer, Ineffable Intelligence, JetStream,
-     Accio Work all general AI/governance/commerce, not news intelligence.
-   Threat Landscape: STABLE — no new direct WorldPulse competitors.
+C) Frontend: apps/web/src/app/labor-rights/page.tsx (~300 LOC)
+  Full intelligence dashboard:
+  - Hero section: "Labor Rights Intelligence"
+  - 6 summary stat cards (Countries Tracked, Critical, Poor,
+    Weak, Moderate, Strong Rights)
+  - Key stats: Global Workforce Tracked (in billions), Avg ITUC Rating,
+    Avg Union Density
+  - Most At-Risk Countries ranking with ITUC ratings
+  - Regional Breakdown with avg ITUC + workforce
+  - Countries Showing Improvement section
+  - Search + filter bar (text/continent/rights_level/sort)
+  - Expandable country card grid with ITUC rating bar visualization,
+    key metrics (union density, min wage adequacy, fatality rate,
+    forced labor, population, workforce), trend indicators, top issues tags
+  - Pro CTA banner for monetization
+  - Data source attribution footer (ITUC Global Rights Index, ILO ILOSTAT,
+    Global Slavery Index, Clean Clothes Campaign, IndustriALL,
+    Equal Times, and labor rights organizations worldwide)
+  - Responsive dark mode design
 
-HEALTH CHECK (Cycle 27):
-   Source files (api+web+scraper): 174 TS files counted (api-focused count)
-   Test files: 132
-   Last git commits: 70b518a (natural hazards), 532dc3b (sanctions), ec1d600 (nginx fix)
-   Key files: docker-compose.yml ✓ | api/src/index.ts ✓ | web/src/app/page.tsx ✓
-   Kill switch: NOT present
-   Project health score: 9.8/10
+D) Test Suite: apps/api/src/routes/__tests__/labor-rights.test.ts (~280 LOC)
+  48 tests across 8 describe blocks:
+  - Constants (6): cache TTLs, rate limit, default/max limits
+  - ITUC Labels (3): label count, Rating 1=Irregular, Rating 5=No Guarantee
+  - Registry Validation (12): 45+ countries, unique codes, valid codes,
+    names, continents, rights_levels, ITUC ranges, union density ranges,
+    top_issues, population, trend values, workforce <= population
+  - filterCountries (8): all/continent/case-insensitive/rights_level/
+    max_ituc_rating/search name/search issue/combined
+  - sortCountries (5): ituc_rating desc/asc, name asc, fatality_rate desc,
+    workforce desc
+  - computeSummary (8): total, rights level sum, avg_ituc_rating,
+    avg_union_density, total_workforce_m, most_at_risk count/ordering,
+    continent_breakdown
+  - toGeoJSON (3): FeatureCollection type, features array, valid coords
+  - Key Country Presence (3): Bangladesh (poor), Denmark (strong, ITUC 1),
+    Saudi Arabia (critical, 0% union density)
+  Tests follow vitest pattern matching other intelligence page tests.
 
-INTEGRATION STACK STATUS (after Cycle 27):
-   PostHog analytics ✅ (Cycle 6)
-   Sentry error/perf tracking ✅ (Cycle 26)
-   Vercel deployment config ✅ (Cycle 27) ← NEW
-   Cloudflare CDN/security headers ⏳ (next)
-   Stripe Pro tier & billing ⏳ (after Cloudflare)
+E) Integration:
+  - Registered in apps/api/src/index.ts at /api/v1/labor-rights
+  - Added to LeftSidebar navigation with ⚒️ icon + 'NEW' badge (amber)
+  - Added to CommandPalette Navigate section
 
-NEXT HIGHEST PRIORITY TASKS:
-   1. Integration — Cloudflare Security Headers & CDN Preparation (Task 23, P11)
-      CF-Connecting-IP trust in Fastify, HSTS header, Expect-CT, docs/deployment/CLOUDFLARE.md
-   2. Integration — Stripe Pro Tier & Billing (Task 24, P9)
-      subscriptions table, checkout, webhook handler, pricing page, billing.test.ts
-   3. Public API endpoint (P2-6) — GET /api/v1/public/signals (no-auth, 60rpm, docs/api.md)
-   4. OSINT source heartbeat — 29 source files need quiet-hour health call (deferred)
-   5. Standardize API error format — 178 raw reply.code() calls not using sendError()
+COMPETITION INTEL (April 6, 2026):
+  - WorldMonitor: THREAT ESCALATION. ~46.7K stars (up from 45.9K). NOW HAS
+    DEVELOPER API: 22 typed service domains, 92 proto files. 65+ external
+    data sources. Full intelligence platform with Vercel Edge Functions.
+    WorldPulse Public API (P2-6) more urgent now to counter.
+  - GDELT: Still targeting summer 2026 for GDELT 5.0. Using Gemini 3.1 now.
+    Active April 2026 TV News Visual Explorer. THREAT: HIGH.
+  - Ground News: STABLE. v4.28.0 (March 20, 2026). Podcasts & Opinions,
+    Daily Briefing, iOS 26 updates. ~$40/yr.
+  - Factiverse Gather: Still spring 2026 waitlist. Not launched yet.
+    NRK Norway + Viestimedia Finland production users.
+  - NewsGuard: 3,006+ AI content farms tracked. Pangram partnership active
+    for real-time AI content detection. Monthly AI False Claims Monitor.
+  - FakeGuard (academic): 2026 paper — hybrid BERT + Gemini 2.5 Flash
+    framework for real-time fake news detection. Watch for productization.
+  - No new funded direct news intelligence competitors detected.
 
-COMPETITIVE POSITION (Cycle 27):
-   Integration stack: PostHog ✅ + Sentry ✅ + Vercel config ✅ (3/5 Phase 1)
-   Intelligence pages (UNIQUE x5): /finance + /sanctions + /space-weather +
-     /internet-outages + /cyber-threats
-   Per-signal enrichment (UNIQUE, 7 layers): reliability + virality + verification log
-     + YouTube/podcast + GDELT TV clips + GDELT visual imagery
-   Map layers (8): signals + ADS-B + maritime + jamming + missile + natural hazards
-     + internet outages + space weather
-   Sources: 50 RSS + 30 OSINT = 80 total
-   Extensions: Chrome (MV3) + Firefox (MV3)
-   Launch gates: Gate 1 ✅ | 14-day clock running
-   Cycles completed: 27 | Improvements shipped: 28 | Failures: 0
+HEALTH:
+  - API: ~111 | Web: ~129 | Scraper: ~63 TS source files (~303 counted)
+  - Tests: 177 test files (+1 new, +48 new tests this cycle)
+  - Health Score: 10.0/10
+  - Only 1 TODO/FIXME (wind.ts GRIB2 parsing — low priority)
+  - Uncommitted files: 165+ (NTFS cross-platform issue — recurring)
+
+INTELLIGENCE PAGES NOW AVAILABLE (12 total — UNIQUE IN MARKET):
+  1. /cyber-threats (Cyber Threat Intelligence)
+  2. /sanctions (Global Sanctions Intelligence)
+  3. /finance (Financial Markets Intelligence)
+  4. /space-weather (Space Weather Intelligence)
+  5. /internet-outages (Internet Outages Intelligence)
+  6. /undersea-cables (Undersea Cable Intelligence)
+  7. /ai-infrastructure (AI Infrastructure Intelligence)
+  8. /governance (Governance & Democracy Intelligence)
+  9. /food-security (Food Security Intelligence)
+  10. /digital-rights (Digital Rights Intelligence)
+  11. /water-security (Water Security Intelligence)
+  12. /labor-rights (Labor Rights Intelligence) ← NEW THIS CYCLE
+
+REMAINING PRIORITIES (Cycle 74+):
+  1. Git commit backlog (NTFS — manual resolution on Windows)
+  2. ⚠️ PUBLIC API (P2-6) — urgent to counter WorldMonitor's developer API
+  3. ⚠️ COUNTER GDELT 5.0: Prepare for August launch — enhance AI enrichment,
+     expand language coverage, add generative intelligence features
+  4. ⚠️ Counter Factiverse Gather with audio/podcast claim extraction
+  5. RSS expansion to 550+ feeds to maintain growing lead over WorldMonitor
+  6. Counter WorldMonitor ML clustering with enhanced AI enrichment
+  7. P2-2: Signal Source Chain on detail page (source_ids join)
+  8. Claim verification v3: video/audio claim extraction
+  9. P1-5: Live Signal Counter (wire to API + WebSocket)
+  10. P1-6: News Ticker interactivity (pause on hover, click-through)

@@ -26,6 +26,7 @@ import { SignalMedia } from '@/components/signals/SignalMedia'
 import { SourceChain } from '@/components/signals/SourceChain'
 import { TVClips } from '@/components/signals/TVClips'
 import { NewsImages } from '@/components/signals/NewsImages'
+import { PredictionMarkets } from '@/components/signals/PredictionMarkets'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -374,6 +375,13 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
 
             {/* Multimedia — YouTube + podcast enrichment (closes Ground News v4.27 'Podcasts & Opinions' gap) */}
             <SignalMedia items={(signal as Signal).media ?? []} />
+
+            {/* Prediction Markets — Polymarket odds for geopolitical signals (counters WorldMonitor prediction feature) */}
+            <PredictionMarkets
+              signalId={signal.id}
+              category={signal.category}
+              title={signal.title}
+            />
 
             {/* GDELT TV News clips — counters GDELT's own TV News Visual Explorer (Mar 2026) */}
             <TVClips signalId={signal.id} />

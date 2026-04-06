@@ -71,7 +71,7 @@ export default function ClustersPage() {
   const fetchClusters = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await fetch(`${API_BASE}/signals/clusters/recent?limit=50`)
+      const res = await fetch(`${API_BASE}/api/v1/signals/clusters/recent?limit=50`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const json = await res.json()
       const items = json.data ?? json.clusters ?? (Array.isArray(json) ? json : [])

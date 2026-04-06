@@ -4,6 +4,7 @@ import { redis } from '../db/redis'
 import { optionalAuth } from '../middleware/auth'
 import { z } from 'zod'
 import { sendError } from '../lib/errors'
+import { generateEmbedding, querySimilar, isPineconeEnabled } from '../lib/pinecone'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -110,74 +111,198 @@ function extractClaims(text: string): Array<{ text: string; type: ExtractedClaim
   return claims.slice(0, 50) // cap at 50 claims per signal
 }
 
-// ─── Cross-reference verification ────────────────────────────────────────────
+// ─── Semantic similarity helpers ─────────────────────────────────────────────
+
+const SEMANTIC_SIMILARITY_THRESHOLD = 0.75  // above this = agrees
+const SEMANTIC_CONTRADICTION_THRESHOLD = 0.40 // below this = potential disagree
+
+/** Contradiction keywords that, combined with low similarity, signal disagreement */
+const CONTRADICTION_SIGNALS = [
+  'denied', 'refuted', 'contradicted', 'false', 'incorrect', 'debunked',
+  'disputed', 'rejected', 'untrue', 'misleading', 'misinformation', 'retracted',
+  'not true', 'no evidence', 'unsubstantiated', 'fabricated', 'disproven',
+]
+
+/**
+ * Determines if a corroborating signal's snippet agrees or disagrees with a claim.
+ * Uses Pinecone semantic similarity when available, falls back to keyword heuristics.
+ */
+async function determineAgreement(
+  claimText: string,
+  snippet: string | null,
+  claimEmbedding: number[] | null,
+): Promise<{ agrees: boolean; semanticScore: number | null }> {
+  if (!snippet) return { agrees: true, semanticScore: null }
+
+  const snippetLower = snippet.toLowerCase()
+  const hasContradiction = CONTRADICTION_SIGNALS.some(sig => snippetLower.includes(sig))
+
+  // If we have embeddings, use semantic similarity for fine-grained agreement
+  if (claimEmbedding && isPineconeEnabled()) {
+    try {
+      const snippetEmbedding = await generateEmbedding(snippet)
+      if (snippetEmbedding) {
+        // Cosine similarity between claim and snippet embeddings
+        const dotProduct = claimEmbedding.reduce((sum, val, i) => sum + val * snippetEmbedding[i]!, 0)
+        const magA = Math.sqrt(claimEmbedding.reduce((sum, val) => sum + val * val, 0))
+        const magB = Math.sqrt(snippetEmbedding.reduce((sum, val) => sum + val * val, 0))
+        const cosineSim = magA > 0 && magB > 0 ? dotProduct / (magA * magB) : 0
+
+        // High similarity + contradiction keywords = disagrees (semantically related but contradicting)
+        if (hasContradiction && cosineSim > SEMANTIC_CONTRADICTION_THRESHOLD) {
+          return { agrees: false, semanticScore: cosineSim }
+        }
+        // High similarity without contradiction = agrees
+        if (cosineSim >= SEMANTIC_SIMILARITY_THRESHOLD) {
+          return { agrees: true, semanticScore: cosineSim }
+        }
+        // Low similarity = not enough evidence either way, default agrees
+        return { agrees: !hasContradiction, semanticScore: cosineSim }
+      }
+    } catch {
+      // Fall through to keyword heuristic
+    }
+  }
+
+  // Keyword-only fallback: check for contradiction signals
+  return { agrees: !hasContradiction, semanticScore: null }
+}
+
+// ─── Cross-reference verification (v2 — semantic + full-text hybrid) ────────
 
 async function crossReferenceClaim(
   claimText: string,
   signalSourceSlug: string | null,
-): Promise<{ score: number; status: ExtractedClaim['status']; sources: VerificationSource[] }> {
-  // Find other signals with overlapping content/entities
+): Promise<{ score: number; status: ExtractedClaim['status']; sources: VerificationSource[]; method: string }> {
+  // Attempt semantic search via Pinecone first, then fall back to full-text
+  let semanticSignalIds: string[] = []
+  let claimEmbedding: number[] | null = null
+  let method = 'full-text'
+
+  if (isPineconeEnabled()) {
+    try {
+      claimEmbedding = await generateEmbedding(claimText)
+      if (claimEmbedding) {
+        const similar = await querySimilar(claimEmbedding, 15)
+        semanticSignalIds = similar
+          .filter(r => r.score >= 0.6) // only semantically relevant signals
+          .map(r => r.id)
+        if (semanticSignalIds.length > 0) {
+          method = 'semantic+full-text'
+        }
+      }
+    } catch {
+      // Semantic search failed — continue with full-text only
+    }
+  }
+
+  // Full-text keyword search
   const keywords = claimText
     .replace(/[^a-zA-Z0-9\s]/g, '')
     .split(/\s+/)
     .filter(w => w.length > 4)
     .slice(0, 8)
 
-  if (keywords.length === 0) {
-    return { score: 0.5, status: 'unverified', sources: [] }
+  if (keywords.length === 0 && semanticSignalIds.length === 0) {
+    return { score: 0.5, status: 'unverified', sources: [], method: 'none' }
   }
 
-  const tsQuery = keywords.map(k => `${k}:*`).join(' & ')
-
   try {
+    // Combine semantic IDs with full-text search results
+    const conditions: string[] = []
+    const bindings: (string | string[])[] = []
+
+    if (keywords.length > 0) {
+      const tsQuery = keywords.map(k => `${k}:*`).join(' & ')
+      conditions.push('s.search_vector @@ to_tsquery(\'english\', ?)')
+      bindings.push(tsQuery)
+    }
+
+    if (semanticSignalIds.length > 0) {
+      conditions.push('s.id = ANY(?)')
+      bindings.push(semanticSignalIds)
+    }
+
+    const whereClause = conditions.length > 0
+      ? `(${conditions.join(' OR ')})`
+      : 'FALSE'
+
     const corroborating = await db.raw(`
       SELECT DISTINCT
         s.id,
         s.title,
         s.url,
+        s.content,
         src.name AS source_name,
         src.slug AS source_slug,
         src.trust_score,
-        ts_headline('english', s.content, to_tsquery('english', ?), 'MaxWords=30,MinWords=10') AS snippet
+        ts_headline('english', COALESCE(s.content, ''), to_tsquery('english', ?), 'MaxWords=30,MinWords=10') AS snippet
       FROM signals s
       LEFT JOIN sources src ON s.source_id = src.id
-      WHERE s.search_vector @@ to_tsquery('english', ?)
+      WHERE ${whereClause}
         AND (src.slug IS NULL OR src.slug != ?)
       ORDER BY src.trust_score DESC NULLS LAST
       LIMIT 10
-    `, [tsQuery, tsQuery, signalSourceSlug ?? ''])
+    `, [
+      keywords.length > 0 ? keywords.map(k => `${k}:*`).join(' & ') : '',
+      ...bindings,
+      signalSourceSlug ?? '',
+    ])
 
-    const sources: VerificationSource[] = (corroborating.rows ?? []).map((row: {
-      source_name: string | null
-      source_slug: string | null
-      url: string | null
-      trust_score: number | null
-      snippet: string | null
-    }) => ({
-      name: row.source_name ?? 'Unknown',
-      slug: row.source_slug ?? 'unknown',
-      url: row.url,
-      trustScore: row.trust_score ?? 0.5,
-      agrees: true, // simplified — full impl would do semantic similarity
-      snippet: row.snippet,
-    }))
+    // Determine agreement for each corroborating source using semantic similarity
+    const sources: VerificationSource[] = await Promise.all(
+      (corroborating.rows ?? []).map(async (row: {
+        id: string
+        title: string
+        content: string | null
+        source_name: string | null
+        source_slug: string | null
+        url: string | null
+        trust_score: number | null
+        snippet: string | null
+      }) => {
+        const snippetText = row.snippet ?? row.title ?? null
+        const { agrees, semanticScore } = await determineAgreement(
+          claimText,
+          snippetText,
+          claimEmbedding,
+        )
 
-    // Score based on number and trust of corroborating sources
-    const weightedSum = sources.reduce((sum, src) => sum + src.trustScore * (src.agrees ? 1 : -0.5), 0)
+        return {
+          name: row.source_name ?? 'Unknown',
+          slug: row.source_slug ?? 'unknown',
+          url: row.url,
+          trustScore: row.trust_score ?? 0.5,
+          agrees,
+          snippet: row.snippet,
+          ...(semanticScore !== null ? { semanticScore: Math.round(semanticScore * 100) / 100 } : {}),
+        } as VerificationSource
+      }),
+    )
+
+    // Score based on number, trust, and agreement of sources
+    const agreeingSources = sources.filter(s => s.agrees)
+    const disagreeingSources = sources.filter(s => !s.agrees)
+
+    const weightedSum = sources.reduce(
+      (sum, src) => sum + src.trustScore * (src.agrees ? 1 : -0.5),
+      0,
+    )
     const maxPossible = sources.length * 1.0
     const score = maxPossible > 0
       ? Math.min(1, Math.max(0, 0.3 + (weightedSum / maxPossible) * 0.7))
       : 0.5
 
     let status: ExtractedClaim['status'] = 'unverified'
-    if (sources.length >= 3 && score >= 0.7) status = 'verified'
+    if (agreeingSources.length >= 3 && score >= 0.7) status = 'verified'
+    else if (disagreeingSources.length >= 2) status = 'disputed'
     else if (sources.length >= 2 && score >= 0.5) status = 'mixed'
-    else if (sources.some(s => !s.agrees)) status = 'disputed'
+    else if (disagreeingSources.length >= 1) status = 'disputed'
 
-    return { score, status, sources }
+    return { score, status, sources, method }
   } catch {
-    // If full-text search fails (missing column, etc.), return unverified
-    return { score: 0.5, status: 'unverified', sources: [] }
+    // If search fails, return unverified
+    return { score: 0.5, status: 'unverified', sources: [], method: 'error' }
   }
 }
 
@@ -432,8 +557,11 @@ export const registerClaimsRoutes: FastifyPluginAsync = async (fastify) => {
       },
       claimTypesSupported: ['factual', 'statistical', 'attribution', 'causal', 'predictive'],
       verificationEngine: {
-        version: '1.0.0',
-        method: 'multi-source-cross-reference',
+        version: '2.0.0',
+        method: isPineconeEnabled() ? 'semantic+full-text-hybrid' : 'full-text-cross-reference',
+        semanticEnabled: isPineconeEnabled(),
+        similarityThreshold: SEMANTIC_SIMILARITY_THRESHOLD,
+        contradictionThreshold: SEMANTIC_CONTRADICTION_THRESHOLD,
         patternsCount: CLAIM_PATTERNS.length,
         maxClaimsPerSignal: 50,
         cacheTtlSeconds: CLAIMS_CACHE_TTL,

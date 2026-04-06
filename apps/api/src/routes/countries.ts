@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 import { sendError } from '../lib/errors'
+import { parseQuery, CountryIndexQuerySchema, CountryDetailQuerySchema } from '../lib/query-schemas'
 
 const COUNTRY_LIST_TTL   = 300  // 5 min — list is heavy (all countries aggregated)
 const COUNTRY_DETAIL_TTL = 120  // 2 min — per-country detail
@@ -69,11 +70,326 @@ function riskBand(score: number): { label: string; color: string } {
   return              { label: 'Low',         color: '#00e676' }
 }
 
+// ─── Resilience Scoring ───────────────────────────────────────────────────────
+
+const RESILIENCE_CACHE_TTL   = 600  // 10 min
+const RANKINGS_CACHE_TTL     = 1200 // 20 min
+
+// Category → resilience dimension mapping
+const CATEGORY_DIMENSION: Record<string, string> = {
+  conflict:         'security',
+  military:         'security',
+  terrorism:        'security',
+  weapons:          'security',
+  political:        'political',
+  government:       'political',
+  elections:        'political',
+  protests:         'political',
+  economic:         'economic',
+  finance:          'economic',
+  trade:            'economic',
+  sanctions:        'economic',
+  climate:          'environmental',
+  environment:      'environmental',
+  natural_disaster: 'environmental',
+  health:           'environmental',
+  infrastructure:   'infrastructure',
+  energy:           'infrastructure',
+  transport:        'infrastructure',
+  outages:          'infrastructure',
+  cyber:            'cyber',
+  technology:       'cyber',
+  hacking:          'cyber',
+  surveillance:     'cyber',
+}
+
+const DIMENSION_WEIGHTS: Record<string, number> = {
+  security:       0.25,
+  political:      0.20,
+  economic:       0.20,
+  environmental:  0.15,
+  infrastructure: 0.10,
+  cyber:          0.10,
+}
+
+// resilienceBand: high composite = low risk = resilient
+function resilienceBand(score: number): { label: string; color: string } {
+  if (score >= 80) return { label: 'Low',       color: '#00e676' }
+  if (score >= 60) return { label: 'Moderate',  color: '#ffd700' }
+  if (score >= 40) return { label: 'Elevated',  color: '#f5a623' }
+  if (score >= 20) return { label: 'High',      color: '#ff6b35' }
+  return              { label: 'Critical',  color: '#ff3b5c' }
+}
+
+interface SignalRow {
+  category:  string | null
+  severity:  string | null
+  cnt:       string | number
+  risk_sum:  string | number
+}
+
+interface DimensionScore {
+  score:        number
+  weight:       number
+  signal_count: number
+}
+
+function computeResilienceFromRows(rows: SignalRow[]): {
+  composite_score: number
+  dimensions: Record<string, DimensionScore>
+  signals_analyzed: number
+} {
+  // Accumulate risk per dimension
+  const dimRisk: Record<string, { risk_sum: number; count: number }> = {
+    security:       { risk_sum: 0, count: 0 },
+    political:      { risk_sum: 0, count: 0 },
+    economic:       { risk_sum: 0, count: 0 },
+    environmental:  { risk_sum: 0, count: 0 },
+    infrastructure: { risk_sum: 0, count: 0 },
+    cyber:          { risk_sum: 0, count: 0 },
+  }
+
+  let totalSignals = 0
+
+  for (const row of rows) {
+    const cnt     = Number(row.cnt ?? 0)
+    const riskSum = Number(row.risk_sum ?? 0)
+    totalSignals += cnt
+
+    const dim = CATEGORY_DIMENSION[row.category ?? '']
+    if (dim) {
+      dimRisk[dim]!.risk_sum += riskSum
+      dimRisk[dim]!.count    += cnt
+    } else {
+      // Unrecognized category contributes 20% to all dimensions
+      for (const d of Object.keys(dimRisk)) {
+        dimRisk[d]!.risk_sum += riskSum * 0.20
+        dimRisk[d]!.count    += cnt * 0.20
+      }
+    }
+  }
+
+  // Convert risk accumulation to 0-100 resilience per dimension
+  // Log-normalize risk_sum (max reference = 10000), then invert
+  const dimensions: Record<string, DimensionScore> = {}
+  let weightedSum   = 0
+  let totalWeight   = 0
+
+  for (const [dim, weight] of Object.entries(DIMENSION_WEIGHTS)) {
+    const { risk_sum, count } = dimRisk[dim] ?? { risk_sum: 0, count: 0 }
+    const normalizedRisk = risk_sum > 0
+      ? Math.min(100, Math.round(Math.log(risk_sum + 1) / Math.log(10000 + 1) * 100))
+      : 0
+    const score = Math.max(0, Math.min(100, 100 - normalizedRisk))
+
+    dimensions[dim] = {
+      score,
+      weight,
+      signal_count: Math.round(count),
+    }
+
+    weightedSum += score * weight
+    totalWeight += weight
+  }
+
+  const composite_score = totalWeight > 0
+    ? Math.round(weightedSum / totalWeight)
+    : 100  // no signals = fully resilient
+
+  return { composite_score, dimensions, signals_analyzed: totalSignals }
+}
+
 export const registerCountryRoutes: FastifyPluginAsync = async (app) => {
 
   app.addHook('onRoute', (routeOptions) => {
     routeOptions.schema ??= {}
     routeOptions.schema.tags = routeOptions.schema.tags ?? ['countries']
+  })
+
+  // ─── GET /api/v1/countries/resilience/rankings ────────────────────────────
+  // Must be registered BEFORE /:code to avoid static segment being consumed by param.
+  app.get('/resilience/rankings', {
+    schema: {
+      summary: 'Country Resilience Rankings',
+      description: 'Sorted resilience scores for all countries with recent signal activity',
+      querystring: {
+        type: 'object',
+        properties: {
+          limit:       { type: 'number', default: 50,  maximum: 200 },
+          min_signals: { type: 'number', default: 3 },
+        },
+      },
+    },
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    const query = req.query as { limit?: number; min_signals?: number }
+    const limit      = Math.min(Number(query.limit ?? 50), 200)
+    const minSignals = Number(query.min_signals ?? 3)
+
+    const cacheKey = `country:resilience:rankings:${limit}:${minSignals}`
+    const cached = await redis.get(cacheKey).catch(() => null)
+    if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
+
+    const now      = new Date()
+    const since30d = new Date(now.getTime() - 30 * 24 * 3600 * 1000).toISOString()
+    const since60d = new Date(now.getTime() - 60 * 24 * 3600 * 1000).toISOString()
+
+    // Fetch all signal rows for both current and previous period in one query
+    const allRows = await db('signals')
+      .whereNotNull('country_code')
+      .where('status', 'verified')
+      .where('created_at', '>=', since60d)
+      .select(
+        'country_code',
+        'category',
+        db.raw('CASE WHEN created_at >= ? THEN \'current\' ELSE \'prev\' END as period', [since30d]),
+        db.raw('COUNT(*) as cnt'),
+        db.raw(`SUM(CASE
+          WHEN severity = 'critical' THEN ${SEVERITY_WEIGHT.critical}
+          WHEN severity = 'high'     THEN ${SEVERITY_WEIGHT.high}
+          WHEN severity = 'medium'   THEN ${SEVERITY_WEIGHT.medium}
+          WHEN severity = 'low'      THEN ${SEVERITY_WEIGHT.low}
+          ELSE ${SEVERITY_WEIGHT.info}
+        END) as risk_sum`),
+      )
+      .groupBy('country_code', 'category', db.raw('CASE WHEN created_at >= ? THEN \'current\' ELSE \'prev\' END', [since30d]))
+
+    // Group rows by country + period
+    const byCountry: Record<string, { current: SignalRow[]; prev: SignalRow[] }> = {}
+    for (const row of allRows as Array<SignalRow & { country_code: string; period: string }>) {
+      const cc = row.country_code
+      byCountry[cc] ??= { current: [], prev: [] }
+      if (row.period === 'current') {
+        byCountry[cc]!.current.push(row)
+      } else {
+        byCountry[cc]!.prev.push(row)
+      }
+    }
+
+    const rankings: Array<{
+      country_code:    string
+      country_name:    string
+      composite_score: number
+      risk_level:      string
+      risk_color:      string
+      signal_count:    number
+      trend:           string
+      trend_delta:     number
+    }> = []
+
+    for (const [cc, { current, prev }] of Object.entries(byCountry)) {
+      const { composite_score, signals_analyzed } = computeResilienceFromRows(current)
+      if (signals_analyzed < minSignals) continue
+
+      const { composite_score: prevScore } = computeResilienceFromRows(prev)
+      const trend_delta = composite_score - prevScore
+      const trend = trend_delta > 2 ? 'improving' : trend_delta < -2 ? 'deteriorating' : 'stable'
+      const band  = resilienceBand(composite_score)
+
+      rankings.push({
+        country_code:    cc,
+        country_name:    COUNTRY_NAMES[cc] ?? cc,
+        composite_score,
+        risk_level:      band.label,
+        risk_color:      band.color,
+        signal_count:    signals_analyzed,
+        trend,
+        trend_delta,
+      })
+    }
+
+    // Sort by composite_score descending (most resilient first)
+    rankings.sort((a, b) => b.composite_score - a.composite_score)
+    const sliced = rankings.slice(0, limit)
+
+    const result = {
+      success:      true,
+      total:        sliced.length,
+      period_days:  30,
+      rankings:     sliced,
+      generated_at: now.toISOString(),
+    }
+
+    await redis.setex(cacheKey, RANKINGS_CACHE_TTL, JSON.stringify(result)).catch(() => {})
+    return reply.send(result)
+  })
+
+  // ─── GET /api/v1/countries/:code/resilience ───────────────────────────────
+  app.get('/:code/resilience', {
+    schema: {
+      summary: 'Country Resilience Score',
+      description: 'Multi-dimensional resilience/stability score for a single country based on 30-day signal data',
+      params: {
+        type: 'object',
+        required: ['code'],
+        properties: { code: { type: 'string', minLength: 2, maxLength: 2 } },
+      },
+    },
+    config: { rateLimit: { max: 120, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    const { code } = req.params as { code: string }
+    const upperCode = code.toUpperCase()
+
+    const cacheKey = `country:resilience:${upperCode}`
+    const cached = await redis.get(cacheKey).catch(() => null)
+    if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
+
+    const now      = new Date()
+    const since30d = new Date(now.getTime() - 30 * 24 * 3600 * 1000).toISOString()
+    const since60d = new Date(now.getTime() - 60 * 24 * 3600 * 1000).toISOString()
+
+    // Fetch current and previous period in one query
+    const allRows = await db('signals')
+      .where('country_code', upperCode)
+      .where('status', 'verified')
+      .where('created_at', '>=', since60d)
+      .select(
+        'category',
+        db.raw('CASE WHEN created_at >= ? THEN \'current\' ELSE \'prev\' END as period', [since30d]),
+        db.raw('COUNT(*) as cnt'),
+        db.raw(`SUM(CASE
+          WHEN severity = 'critical' THEN ${SEVERITY_WEIGHT.critical}
+          WHEN severity = 'high'     THEN ${SEVERITY_WEIGHT.high}
+          WHEN severity = 'medium'   THEN ${SEVERITY_WEIGHT.medium}
+          WHEN severity = 'low'      THEN ${SEVERITY_WEIGHT.low}
+          ELSE ${SEVERITY_WEIGHT.info}
+        END) as risk_sum`),
+      )
+      .groupBy('category', db.raw('CASE WHEN created_at >= ? THEN \'current\' ELSE \'prev\' END', [since30d]))
+
+    const currentRows: SignalRow[] = []
+    const prevRows:    SignalRow[] = []
+    for (const row of allRows as Array<SignalRow & { period: string }>) {
+      if (row.period === 'current') currentRows.push(row)
+      else prevRows.push(row)
+    }
+
+    const { composite_score, dimensions, signals_analyzed } = computeResilienceFromRows(currentRows)
+    const { composite_score: prevScore } = computeResilienceFromRows(prevRows)
+
+    const trend_delta = composite_score - prevScore
+    const trend       = trend_delta > 2 ? 'improving' : trend_delta < -2 ? 'deteriorating' : 'stable'
+    const band        = resilienceBand(composite_score)
+
+    const result = {
+      success: true,
+      data: {
+        country_code:     upperCode,
+        country_name:     COUNTRY_NAMES[upperCode] ?? upperCode,
+        composite_score,
+        risk_level:       band.label,
+        risk_color:       band.color,
+        trend,
+        trend_delta,
+        dimensions,
+        signals_analyzed,
+        period_days:      30,
+        computed_at:      now.toISOString(),
+      },
+    }
+
+    await redis.setex(cacheKey, RESILIENCE_CACHE_TTL, JSON.stringify(result)).catch(() => {})
+    return reply.send(result)
   })
 
   // ─── GET /api/v1/countries ─────────────────────────────────────────────────
@@ -93,9 +409,9 @@ export const registerCountryRoutes: FastifyPluginAsync = async (app) => {
     },
     config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
   }, async (req, reply) => {
-    const { window = '24h', limit = 50, category } = req.query as {
-      window?: string; limit?: number; category?: string
-    }
+    const qr = parseQuery(CountryIndexQuerySchema, req.query)
+    if (qr.error) return sendError(reply, 400, 'VALIDATION_ERROR', qr.error)
+    const { window, limit, category } = qr.data
 
     const cacheKey = `countries:index:${window}:${limit}:${category ?? 'all'}`
     const cached = await redis.get(cacheKey).catch(() => null)
@@ -194,7 +510,9 @@ export const registerCountryRoutes: FastifyPluginAsync = async (app) => {
     config: { rateLimit: { max: 120, timeWindow: '1 minute' } },
   }, async (req, reply) => {
     const { code } = req.params as { code: string }
-    const { window = '7d', limit = 10 } = req.query as { window?: string; limit?: number }
+    const qr = parseQuery(CountryDetailQuerySchema, req.query)
+    if (qr.error) return sendError(reply, 400, 'VALIDATION_ERROR', qr.error)
+    const { window, limit } = qr.data
     const upperCode = code.toUpperCase()
 
     const cacheKey = `countries:detail:${upperCode}:${window}:${limit}`

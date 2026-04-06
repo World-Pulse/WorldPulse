@@ -85,26 +85,41 @@ const MAX_CLUSTER_SIZE = 12
 // ─── CAUSAL CHAIN RULES ──────────────────────────────────────────────────────
 // Maps category pairs that have known causal relationships.
 // { trigger → [possible effects] }
+/**
+ * Causal chain rules using ACTUAL DB category enum values:
+ *   breaking, conflict, geopolitics, climate, health, economy,
+ *   technology, science, elections, culture, disaster, security,
+ *   sports, space, other
+ *
+ * Maps { trigger_category → [effect_categories] }.
+ * When signal A's category is a trigger and signal B's category is
+ * one of the effects (or vice-versa), the causal score = 1.0.
+ */
 const CAUSAL_CHAINS: Record<string, string[]> = {
-  // Natural disasters cascade
-  'science:earthquake':     ['weather:tsunami', 'humanitarian:displacement', 'infrastructure:power_outage'],
-  'weather:tsunami':        ['humanitarian:displacement', 'humanitarian:disaster'],
-  'science:volcano':        ['weather:severe', 'humanitarian:displacement', 'transportation:aviation'],
-  'weather:severe':         ['infrastructure:power_outage', 'humanitarian:disaster'],
+  // Natural disaster cascades
+  disaster:    ['health', 'climate', 'economy', 'security', 'breaking'],
+  climate:     ['disaster', 'health', 'economy'],
+  science:     ['disaster', 'climate', 'health', 'space'],
 
-  // Conflict cascade
-  'conflict:armed_conflict': ['humanitarian:displacement', 'humanitarian:crisis', 'security:sanctions'],
-  'conflict:protest':        ['security:sanctions', 'conflict:armed_conflict'],
+  // Conflict / geopolitical cascades
+  conflict:    ['security', 'geopolitics', 'economy', 'disaster', 'breaking'],
+  geopolitics: ['conflict', 'security', 'economy', 'elections'],
+  security:    ['conflict', 'geopolitics', 'technology', 'economy'],
 
-  // Cyber cascade
-  'security:vulnerability':  ['security:threat', 'infrastructure:power_outage'],
-  'security:threat':         ['infrastructure:power_outage', 'security:vulnerability'],
+  // Cyber / technology cascades
+  technology:  ['security', 'economy'],
 
-  // Radiation cascade
-  'science:radiation':       ['humanitarian:displacement', 'health:outbreak'],
+  // Health cascades
+  health:      ['disaster', 'economy', 'science'],
 
-  // Military cascade
-  'military:deployment':     ['conflict:armed_conflict', 'security:sanctions'],
+  // Economic cascades
+  economy:     ['geopolitics', 'elections', 'security'],
+
+  // Elections → political instability
+  elections:   ['geopolitics', 'conflict', 'security'],
+
+  // Space → science, security (satellite jamming, re-entry hazards)
+  space:       ['science', 'security', 'technology'],
 }
 
 // ─── SEVERITY ORDERING ───────────────────────────────────────────────────────
@@ -187,13 +202,15 @@ async function fetchRecentSignals(signal: CorrelationCandidate): Promise<Correla
       'id', 'title', 'category', 'severity',
       db.raw('source_ids[1]::text as source_id'),
       'location_name', 'reliability_score', 'published_at', 'tags',
+      // Extract lat/lng from PostGIS geometry so geo scoring actually works
+      db.raw('ST_Y(location::geometry) as lat'),
+      db.raw('ST_X(location::geometry) as lng'),
     )
     .where('published_at', '>=', since.toISOString())
     .whereNot('id', signal.id)
     .orderBy('published_at', 'desc')
     .limit(200)
 
-  // If we have PostGIS and location, also fetch lat/lng
   const rows = await query
 
   return rows.map((r: Record<string, unknown>) => ({
@@ -203,8 +220,8 @@ async function fetchRecentSignals(signal: CorrelationCandidate): Promise<Correla
     severity: r.severity as string,
     source_id: (r.source_id as string) ?? '',
     location_name: r.location_name as string | null,
-    lat: r.lat as number | null,
-    lng: r.lng as number | null,
+    lat: typeof r.lat === 'number' ? r.lat : null,
+    lng: typeof r.lng === 'number' ? r.lng : null,
     published_at: r.published_at as string,
     reliability_score: r.reliability_score as number,
     tags: Array.isArray(r.tags) ? r.tags as string[] : [],
@@ -273,33 +290,20 @@ export function geoScore(a: CorrelationCandidate, b: CorrelationCandidate): numb
  * Partial score (0.5) if categories are in the same domain.
  */
 export function causalScore(a: CorrelationCandidate, b: CorrelationCandidate): number {
-  const catA = `${a.category}:${a.severity}`
-  const catB = `${b.category}:${b.severity}`
+  // Direct causal chain: A's category triggers B's category (or vice-versa)
+  const effectsOfA = CAUSAL_CHAINS[a.category]
+  if (effectsOfA && effectsOfA.includes(b.category)) return 1.0
 
-  // Check direct causal chains
-  for (const [trigger, effects] of Object.entries(CAUSAL_CHAINS)) {
-    const triggerCategory = trigger.split(':')[0] ?? ''
-    if (a.category === triggerCategory) {
-      for (const effect of effects) {
-        const effectCategory = effect.split(':')[0] ?? ''
-        if (b.category === effectCategory) return 1.0
-      }
-    }
-    if (b.category === triggerCategory) {
-      for (const effect of effects) {
-        const effectCategory = effect.split(':')[0] ?? ''
-        if (a.category === effectCategory) return 1.0
-      }
-    }
-  }
+  const effectsOfB = CAUSAL_CHAINS[b.category]
+  if (effectsOfB && effectsOfB.includes(a.category)) return 1.0
 
-  // Same category = moderate correlation (different sources reporting same type of event)
-  if (a.category === b.category && a.source_id !== b.source_id) return 0.6
+  // Same category from different sources = strong correlation signal
+  if (a.category === b.category && a.source_id !== b.source_id) return 0.7
 
-  // Same domain family
+  // Same domain family = moderate correlation
   const familyA = getCategoryFamily(a.category)
   const familyB = getCategoryFamily(b.category)
-  if (familyA && familyA === familyB) return 0.3
+  if (familyA && familyA === familyB) return 0.35
 
   return 0
 }
@@ -486,27 +490,59 @@ async function applyCorroborationBoost(cluster: EventCluster): Promise<void> {
   if (cluster.sources.length < 2) return // Need 2+ unique sources
 
   const uniqueSources = cluster.sources.length
-  const boost = Math.min(
+  const categoryCount = cluster.categories.length
+
+  // Base boost per corroborating source
+  let boost = Math.min(
     CORROBORATION_BOOST * (uniqueSources - 1),
     MAX_CORROBORATION_BOOST
   )
 
+  // Cross-category corroboration is much stronger evidence (e.g., earthquake from USGS
+  // + tsunami from NOAA + displacement from UNHCR = extremely high confidence)
+  if (categoryCount >= 3) {
+    boost = Math.min(boost + 0.05, 0.25) // up to +0.25 for 3+ category convergence
+  } else if (categoryCount >= 2) {
+    boost = Math.min(boost + 0.03, 0.20) // up to +0.20 for 2 category convergence
+  }
+
+  // Severity multiplier: critical events with multi-source confirmation deserve
+  // stronger boost because false positives at critical severity are very costly
+  const severityMultiplier = cluster.severity === 'critical' ? 1.15
+    : cluster.severity === 'high' ? 1.10
+    : 1.0
+  boost = Math.min(boost * severityMultiplier, 0.30) // absolute cap
+
   try {
+    // Apply reliability boost
     await db('signals')
       .whereIn('id', cluster.signal_ids)
-      .whereRaw('reliability_score + ? <= 1.0', [boost])
       .update({
         reliability_score:   db.raw(`LEAST(reliability_score + ?, 1.0)`, [boost]),
-        // Stamp the precise moment of cross-source corroboration for velocity tracking.
-        // ViralityBadge uses this (instead of last_updated) to detect spreading events.
         last_corroborated_at: db.raw('NOW()'),
       })
 
-    logger.debug({
+    // Promote pending → verified when corroboration pushes score above threshold.
+    // This is the key mechanism: signals that start as pending (single-source, low trust)
+    // can be promoted to verified purely through independent multi-source corroboration.
+    const promoted = await db('signals')
+      .whereIn('id', cluster.signal_ids)
+      .where('status', 'pending')
+      .where('reliability_score', '>=', 0.65) // lower threshold for corroborated signals
+      .update({
+        status:      'verified',
+        verified_at: db.raw('NOW()'),
+      })
+
+    logger.info({
       cluster_id: cluster.cluster_id,
-      boost,
+      boost:      +boost.toFixed(3),
       unique_sources: uniqueSources,
-    }, 'Applied corroboration reliability boost + stamped last_corroborated_at')
+      cross_categories: categoryCount,
+      severity: cluster.severity,
+      promoted_count: promoted,
+    }, 'Applied corroboration boost: %d sources, %d categories, +%.3f reliability',
+       uniqueSources, categoryCount, boost)
   } catch (err) {
     logger.warn({ err, cluster_id: cluster.cluster_id }, 'Failed to apply corroboration boost')
   }
@@ -568,19 +604,24 @@ function toRad(deg: number): number {
   return deg * (Math.PI / 180)
 }
 
-/** Category family grouping for partial causal matching */
+/** Category family grouping for partial causal matching (uses actual DB enum values) */
 function getCategoryFamily(category: string): string | null {
   const families: Record<string, string> = {
-    conflict: 'security',
-    security: 'security',
-    military: 'security',
-    weather: 'environment',
-    science: 'environment',
-    health: 'health',
-    humanitarian: 'humanitarian',
-    infrastructure: 'infrastructure',
-    transportation: 'infrastructure',
-    technology: 'technology',
+    conflict:    'security',
+    security:    'security',
+    geopolitics: 'security',
+    elections:   'political',
+    culture:     'political',
+    climate:     'environment',
+    disaster:    'environment',
+    science:     'science_tech',
+    technology:  'science_tech',
+    space:       'science_tech',
+    health:      'health',
+    economy:     'economy',
+    breaking:    'breaking',  // breaking is its own family — correlates via other factors
+    sports:      'sports',
+    other:       'other',
   }
   return families[category] ?? null
 }

@@ -4,6 +4,28 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { use } from 'react'
 
+// ─── Resilience Types ─────────────────────────────────────────────────────────
+
+interface DimensionScore {
+  score:        number
+  weight:       number
+  signal_count: number
+}
+
+interface ResilienceData {
+  country_code:     string
+  country_name:     string
+  composite_score:  number
+  risk_level:       string
+  risk_color:       string
+  trend:            string
+  trend_delta:      number
+  dimensions:       Record<string, DimensionScore>
+  signals_analyzed: number
+  period_days:      number
+  computed_at:      string
+}
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -123,17 +145,27 @@ export default function CountryDetailPage({
   params: Promise<{ code: string }>
 }) {
   const { code } = use(params)
-  const [detail, setDetail]   = useState<CountryDetail | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState<string | null>(null)
+  const [detail, setDetail]         = useState<CountryDetail | null>(null)
+  const [resilience, setResilience] = useState<ResilienceData | null>(null)
+  const [loading, setLoading]       = useState(true)
+  const [error, setError]           = useState<string | null>(null)
 
   useEffect(() => {
     const upperCode = code.toUpperCase()
     setLoading(true)
     setError(null)
-    fetch(`${API_URL}/api/v1/countries/${upperCode}?window=7d&limit=10`)
-      .then(r => r.ok ? r.json() : r.json().then((e: { error?: string }) => Promise.reject(e.error ?? `HTTP error`)))
-      .then((data: CountryDetail) => { setDetail(data); setLoading(false) })
+    Promise.all([
+      fetch(`${API_URL}/api/v1/countries/${upperCode}?window=7d&limit=10`)
+        .then(r => r.ok ? r.json() : r.json().then((e: { error?: string }) => Promise.reject(e.error ?? 'HTTP error'))),
+      fetch(`${API_URL}/api/v1/countries/${upperCode}/resilience`)
+        .then(r => r.ok ? r.json() : null)
+        .catch(() => null),
+    ])
+      .then(([detailData, resData]: [CountryDetail, { success: boolean; data: ResilienceData } | null]) => {
+        setDetail(detailData)
+        if (resData?.success) setResilience(resData.data)
+        setLoading(false)
+      })
       .catch((e: unknown) => { setError(e instanceof Error ? e.message : String(e)); setLoading(false) })
   }, [code])
 
@@ -234,6 +266,105 @@ export default function CountryDetailPage({
             <span className="font-mono text-[9px] text-wp-text3">CRITICAL</span>
           </div>
         </div>
+
+        {/* ── Resilience Score card ───────────────────────────────────────── */}
+        {resilience && (
+          <div className="bg-wp-surface border border-[rgba(255,255,255,0.07)] rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <p className="font-mono text-[10px] text-wp-text3 tracking-widest uppercase">
+                Resilience Score
+              </p>
+              <Link
+                href="/countries/resilience"
+                className="font-mono text-[10px] text-wp-text3 hover:text-wp-amber transition-colors no-underline"
+              >
+                Global Rankings →
+              </Link>
+            </div>
+
+            {/* Composite score + trend */}
+            <div className="flex items-end gap-4 mb-4">
+              <div>
+                <span
+                  className="font-display text-[44px] leading-none font-bold"
+                  style={{ color: resilience.risk_color }}
+                >
+                  {resilience.composite_score}
+                </span>
+                <span className="font-mono text-[13px] text-wp-text3 ml-1">/100</span>
+              </div>
+              <div className="mb-1 flex flex-col gap-1">
+                <span
+                  className="font-mono text-[11px] px-2.5 py-0.5 rounded-full font-bold"
+                  style={{
+                    backgroundColor: `${resilience.risk_color}22`,
+                    color: resilience.risk_color,
+                    border: `1px solid ${resilience.risk_color}44`,
+                  }}
+                >
+                  {resilience.risk_level.toUpperCase()} RISK
+                </span>
+                <span className={`font-mono text-[10px] ${
+                  resilience.trend === 'improving'     ? 'text-[#00e676]' :
+                  resilience.trend === 'deteriorating' ? 'text-[#ff3b5c]' :
+                  'text-wp-text3'
+                }`}>
+                  {resilience.trend === 'improving' ? '↑' : resilience.trend === 'deteriorating' ? '↓' : '→'}{' '}
+                  {resilience.trend}
+                  {resilience.trend_delta !== 0
+                    ? ` (${resilience.trend_delta > 0 ? '+' : ''}${resilience.trend_delta})`
+                    : ''}
+                </span>
+              </div>
+            </div>
+
+            {/* Score bar */}
+            <div className="h-2 bg-wp-s3 rounded-full overflow-hidden mb-1">
+              <div
+                className="h-full rounded-full transition-all duration-700"
+                style={{ width: `${resilience.composite_score}%`, backgroundColor: resilience.risk_color }}
+              />
+            </div>
+            <div className="flex justify-between mb-4">
+              <span className="font-mono text-[9px] text-wp-text3">CRITICAL</span>
+              <span className="font-mono text-[9px] text-wp-text3">RESILIENT</span>
+            </div>
+
+            {/* Dimension mini bars */}
+            <div className="space-y-2">
+              {Object.entries(resilience.dimensions).map(([dim, ds]) => (
+                <div key={dim}>
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="font-mono text-[10px] text-wp-text3 capitalize">{dim}</span>
+                    <span
+                      className="font-mono text-[10px]"
+                      style={{ color: resilience.risk_color }}
+                    >
+                      {ds.score}
+                    </span>
+                  </div>
+                  <div className="h-1 bg-wp-s3 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${ds.score}%`,
+                        backgroundColor: ds.score >= 60
+                          ? '#00e676'
+                          : ds.score >= 40
+                          ? '#f5a623'
+                          : '#ff3b5c',
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <p className="font-mono text-[9px] text-wp-text3 mt-3">
+              Based on {resilience.signals_analyzed.toLocaleString()} signals · 30-day window
+            </p>
+          </div>
+        )}
 
         {/* ── Stats row ───────────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">

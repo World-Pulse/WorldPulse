@@ -220,14 +220,14 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 header "Starting infrastructure"
 
-$COMPOSE up -d --no-recreate db redis meilisearch kafka zookeeper
+$COMPOSE up -d --no-recreate postgres redis meilisearch kafka zookeeper
 
 log "Waiting for PostgreSQL..."
 DB_USER=$(grep -E '^DB_USER=' .env.prod | cut -d= -f2)
 DB_NAME=$(grep -E '^DB_NAME=' .env.prod | cut -d= -f2)
 
 for i in $(seq 1 40); do
-  if $COMPOSE exec -T db pg_isready -U "$DB_USER" -d "$DB_NAME" &>/dev/null; then
+  if $COMPOSE exec -T postgres pg_isready -U "$DB_USER" -d "$DB_NAME" &>/dev/null; then
     ok "PostgreSQL ready."
     break
   fi
