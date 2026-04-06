@@ -2,10 +2,20 @@
 
 ## Active Blockers
 
-### NTFS Index Lock (Recurring) — Cycles 47, 48, 57, 61, 62, 63, 69, 73
+### NTFS Index Lock (Recurring) — Cycles 47, 48, 57, 61, 62, 63, 69, 73, 74
 **Status:** ACTIVE — requires manual resolution on Windows host
 **Symptom:** `.git/index.lock` 0-byte file with NTFS permissions, cannot be deleted from Linux sandbox
 **Resolution:** Delete `.git/index.lock` from Windows (File Explorer or `del .git\index.lock` in CMD) then run the commits below.
+
+**Cycle 74 — Public API v1 Expansion (10 endpoints, 66 tests, API docs page):**
+```bash
+git add apps/api/src/routes/public.ts \
+        apps/api/src/routes/__tests__/public.test.ts \
+        apps/web/src/app/developer/api-docs/page.tsx \
+        apps/web/src/components/sidebar/LeftSidebar.tsx \
+        apps/web/src/components/CommandPalette.tsx
+git commit -m "feat(api): expand Public API v1 to 10 endpoints — categories, breaking, stats, sources, intelligence, countries, threats, OpenAPI spec + API docs page (66 tests)"
+```
 
 **Cycle 73 — Labor Rights Intelligence Page:**
 ```bash
