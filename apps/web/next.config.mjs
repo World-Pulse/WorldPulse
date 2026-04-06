@@ -59,6 +59,9 @@ const nextConfig = {
                 'https://*.ingest.sentry.io',
                 'https://*.ingest.us.sentry.io',
               ].join(' '),
+              // MapLibre GL JS requires Web Workers + blob: for tile decoding
+              "worker-src 'self' blob:",
+              "child-src 'self' blob:",
               "frame-src 'none'",
               "object-src 'none'",
               "base-uri 'self'",
