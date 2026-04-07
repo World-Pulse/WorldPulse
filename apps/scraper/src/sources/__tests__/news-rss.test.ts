@@ -18,8 +18,8 @@ import {
 // ─── REGISTRY INTEGRITY ───────────────────────────────────────────────────────
 
 describe('NEWS_SOURCE_REGISTRY', () => {
-  it('has at least 50 sources', () => {
-    expect(NEWS_SOURCE_REGISTRY.length).toBeGreaterThanOrEqual(50)
+  it('has at least 108 sources', () => {
+    expect(NEWS_SOURCE_REGISTRY.length).toBeGreaterThanOrEqual(108)
   })
 
   it('every source has a non-empty id', () => {
