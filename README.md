@@ -140,7 +140,7 @@ Every verified signal is enriched with:
 - Redis-cached public feeds (30s TTL)
 - Configurable alerts: Email, Telegram, Discord, Slack, Teams
 
-### 🗺️ Palantir-Style Intelligence Map
+### 🗺️ Enterpise Intelligence Map
 - MapLibre GL — open-source, no proprietary API key required
 - Satellite + dark + terrain basemap switcher
 - 3D tilt (45° pitch) with NavigationControl
