@@ -62,6 +62,7 @@ interface SignalProps {
 type SCIndex = Supercluster<SignalProps>
 
 type BasemapMode = 'satellite' | 'dark' | 'terrain'
+type ProjectionMode = 'globe' | 'mercator'
 
 interface AdsbSignal {
   id: string
@@ -297,6 +298,21 @@ function MapView() {
   const basemapRef = useRef<BasemapMode>('satellite')
   useEffect(() => { basemapRef.current = basemap }, [basemap])
 
+  // ── Globe/Mercator projection state ──────────────────────────────────────────
+  const [projection, setProjection] = useState<ProjectionMode>('globe')
+
+  // ── Projection switcher effect (MapLibre v5+ globe support) ──────────────────
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !map.isStyleLoaded()) return
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(map as any).setProjection({ type: projection })
+    } catch (e) {
+      console.warn('[map] setProjection failed (requires MapLibre v5+):', e)
+    }
+  }, [projection])
+
   // ── Basemap switcher effect ───────────────────────────────────────────────────
   useEffect(() => {
     const map = mapRef.current
@@ -342,7 +358,7 @@ function MapView() {
           paint: { 'raster-opacity': 0.35, 'raster-saturation': -0.9, 'raster-brightness-min': 0.05, 'raster-brightness-max': 0.45 },
         }, beforeLayer)
       }
-    } catch (e) {
+    } catch (e: unknown) {
       console.warn('[map] basemap switch error:', e)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -383,7 +399,7 @@ function MapView() {
     let mounted = true
     async function fetchHotspots() {
       try {
-        const res  = await fetch(`${API_URL}/api/v1/signals/map/hotspots?hours=24&min_categories=3&limit=10`)
+        const res  = await fetch(`${API_URL}/api/v1/signals/map/hotspots?hours=168&min_categories=2&limit=25`)
         if (!res.ok) return
         const json = await res.json() as { success: boolean; data: { hotspots: Hotspot[] } }
         if (mounted && json.success) setHotspots(json.data.hotspots)
@@ -554,7 +570,7 @@ function MapView() {
       const { default: SuperclusterLib } = await import('supercluster')
       if (cancelled) return
       const features = toFeatures(signals)
-      const sc: SCIndex = new SuperclusterLib({ radius: 60, maxZoom: 18 })
+      const sc: SCIndex = new SuperclusterLib({ radius: 40, maxZoom: 22 })
       sc.load(features)
       scRef.current = sc
       refreshClusters()
@@ -749,16 +765,18 @@ function MapView() {
           sources: {
             basemap: {
               type: 'raster',
-              tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+              tiles: MAPTILER_KEY && MAPTILER_KEY !== 'demo'
+                ? [`https://api.maptiler.com/tiles/satellite/{z}/{x}/{y}.jpg?key=${MAPTILER_KEY}`]
+                : ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
               tileSize: 256,
-              attribution: '© OpenStreetMap',
+              attribution: MAPTILER_KEY ? '© MapTiler' : '© Esri',
             },
           },
           layers: [
             { id: 'bg',      type: 'background' as const, paint: { 'background-color': '#06070d' } },
             { id: 'basemap', type: 'raster'     as const, source: 'basemap',
-              paint: { 'raster-opacity': 0.35, 'raster-saturation': -0.9,
-                'raster-brightness-min': 0.05, 'raster-brightness-max': 0.45 } },
+              paint: { 'raster-opacity': 0.92, 'raster-saturation': 0,
+                'raster-brightness-min': 0, 'raster-brightness-max': 1 } },
           ],
         },
         center: [lng, lat],
@@ -766,11 +784,20 @@ function MapView() {
         pitch:   45,
         bearing: -10,
         minZoom: 1,
-        maxZoom: 18,
+        maxZoom: 22,
         attributionControl: false,
       })
 
       mapRef.current = map
+
+      // MapLibre v5 workaround: explicitly setting mercator projection right
+      // after creation kicks the render pipeline out of a stuck state where
+      // isStyleLoaded + areTilesLoaded are true but the 'load' event never
+      // fires.  Without this, the map shows a black canvas indefinitely.
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(map as any).setProjection({ type: 'mercator' })
+      } catch { /* pre-v5 — ignore */ }
 
       // Navigation control with 3D pitch visualization
       map.addControl(new ml.NavigationControl({ visualizePitch: true }), 'top-right')
@@ -783,6 +810,17 @@ function MapView() {
       map.on('load', () => {
         if (cancelled) return
         map.resize()
+
+        // Switch to globe once the map is fully idle (tiles rendered).
+        // Globe projection cannot be set before the first render completes —
+        // it blocks the MapLibre v5 render pipeline entirely.
+        map.once('idle', () => {
+          if (cancelled) return
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ;(map as any).setProjection({ type: 'globe' })
+          } catch { /* pre-v5 fallback — ignore */ }
+        })
 
         // ── Sources ───────────────────────────────────────────
 
@@ -908,7 +946,7 @@ function MapView() {
             map.addLayer({ id: 'basemap', type: 'raster' as const, source: 'basemap',
               paint: { 'raster-opacity': 0.92, 'raster-saturation': 0, 'raster-brightness-min': 0, 'raster-brightness-max': 1 },
             }, beforeLayer)
-          } catch { /* ignore */ }
+          } catch (e) { console.warn('[map] satellite basemap swap failed:', e) }
         })()
 
         // ── Animation loop ────────────────────────────────────
@@ -961,7 +999,7 @@ function MapView() {
           const currentZ     = map.getZoom()
 
           // If we can meaningfully zoom in — do it
-          if (expansionZ > currentZ + 0.5) {
+          if (expansionZ > currentZ + 0.3) {
             map.flyTo({ center: coords, zoom: expansionZ, duration: 600 })
             return
           }
@@ -1172,10 +1210,10 @@ function MapView() {
     }
 
     // Apply immediately if map is loaded, otherwise wait for the load event
-    if (map.loaded()) {
+    if (map.isStyleLoaded()) {
       applyLayer()
     } else {
-      map.once('load', applyLayer)
+      map.once('idle', applyLayer)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [satelliteMode, gibsDate])
@@ -1289,10 +1327,10 @@ function MapView() {
       }
     }
 
-    if (map.loaded()) {
+    if (map.isStyleLoaded()) {
       void applyLayer()
     } else {
-      map.once('load', () => { void applyLayer() })
+      map.once('idle', () => { void applyLayer() })
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [satTrackingMode])
@@ -1326,20 +1364,27 @@ function MapView() {
 
       setCarrierLoading(true)
       try {
-        // Fetch recent military medium/high signals and filter for carrier content
+        // Fetch recent military signals (all severities) and filter for carrier content
         const res  = await fetch(
-          `${API_URL}/api/v1/signals?category=military&severity=medium&limit=50`,
+          `${API_URL}/api/v1/signals?category=military&limit=100`,
         )
-        const json = await res.json() as { success: boolean; data: Array<{
-          id:            string
-          title:         string
-          summary:       string | null
-          location:      string | null
-          location_name: string | null
-          severity:      string
-          reliability_score: number
-          created_at:    string
-        }> }
+        if (!res.ok) { console.warn(`[map][carriers] HTTP ${res.status}`); return }
+        const json = await res.json() as { success: boolean; data: {
+          items: Array<{
+            id:            string
+            title:         string
+            summary:       string | null
+            location:      { lng: number; lat: number } | null
+            locationName:  string | null
+            severity:      string
+            reliabilityScore: number
+            createdAt:     string
+          }>
+          cursor: string | null
+          hasMore: boolean
+        } }
+
+        const items = json.data?.items ?? []
 
         // Filter for carrier-related signals and those with positions
         const CARRIER_KEYWORDS = [
@@ -1349,52 +1394,26 @@ function MapView() {
           'uss george h', 'carrier group', 'strike group',
         ]
 
-        const carrierSignals = (json.data ?? []).filter(s => {
+        const carrierSignals = items.filter(s => {
           const text = `${s.title} ${s.summary ?? ''}`.toLowerCase()
           return CARRIER_KEYWORDS.some(kw => text.includes(kw))
         })
+        console.info(`[map][carriers] fetched=${items.length}, matched=${carrierSignals.length}`)
 
-        // Parse WKB/WKT locations — signals store location as WKB hex or object
+        // API returns location as { lng, lat } object from formatSignal
         const features = carrierSignals
-          .filter(s => s.location != null)
-          .map(s => {
-            // Attempt to parse PostGIS WKB point (little-endian, SRID-aware)
-            // Byte layout: [byteOrder:1][wkbType:4][lng:8][lat:8] or with SRID [byteOrder:1][wkbType:4][SRID:4][lng:8][lat:8]
-            let lat = 0
-            let lng = 0
-            try {
-              if (typeof s.location === 'string' && s.location.length >= 42) {
-                const hex = s.location
-                // Convert hex string → Uint8Array via DataView (browser-safe, no Node Buffer)
-                const bytes = new Uint8Array(hex.length / 2)
-                for (let i = 0; i < bytes.length; i++) {
-                  bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16)
-                }
-                const view = new DataView(bytes.buffer)
-                const littleEndian = view.getUint8(0) === 1
-                const wkbType = view.getUint32(1, littleEndian)
-                // wkbType 0x20000001 = POINT with SRID (EWKB), 0x00000001 = plain POINT
-                const hasSrid = (wkbType & 0x20000000) !== 0
-                const offset  = hasSrid ? 9 : 5   // skip byteOrder(1)+type(4) + optional SRID(4)
-                lng = view.getFloat64(offset,     littleEndian)
-                lat = view.getFloat64(offset + 8, littleEndian)
-              }
-            } catch { /* skip bad location */ }
-            if (lat === 0 && lng === 0) return null
-
-            return {
-              type:       'Feature' as const,
-              geometry:   { type: 'Point' as const, coordinates: [lng, lat] },
-              properties: {
-                id:           s.id,
-                title:        s.title,
-                locationName: s.location_name ?? 'Unknown position',
-                reliability:  s.reliability_score,
-                createdAt:    s.created_at,
-              },
-            }
-          })
-          .filter((f): f is NonNullable<typeof f> => f !== null)
+          .filter(s => s.location != null && isFinite(s.location.lat) && isFinite(s.location.lng))
+          .map(s => ({
+            type:       'Feature' as const,
+            geometry:   { type: 'Point' as const, coordinates: [s.location!.lng, s.location!.lat] },
+            properties: {
+              id:           s.id,
+              title:        s.title,
+              locationName: s.locationName ?? 'Unknown position',
+              reliability:  s.reliabilityScore,
+              createdAt:    s.createdAt,
+            },
+          }))
 
         if (!map.getSource(CSG_SOURCE)) {
           map.addSource(CSG_SOURCE, {
@@ -1453,10 +1472,10 @@ function MapView() {
       }
     }
 
-    if (map.loaded()) {
+    if (map.isStyleLoaded()) {
       void applyLayer()
     } else {
-      map.once('load', () => { void applyLayer() })
+      map.once('idle', () => { void applyLayer() })
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [carrierMode])
@@ -1485,6 +1504,7 @@ function MapView() {
     const fetchAndUpdate = async () => {
       try {
         const res  = await fetch(`${API_URL}/api/v1/signals/map/adsb`)
+        if (!res.ok) { console.warn(`[map][adsb] HTTP ${res.status}`); return }
         const json = await res.json() as { success: boolean; data: AdsbSignal[] }
         if (!json.success || !Array.isArray(json.data)) return
 
@@ -1566,10 +1586,10 @@ function MapView() {
         return
       }
 
-      if (map.loaded()) {
+      if (map.isStyleLoaded()) {
         void fetchAndUpdate()
       } else {
-        map.once('load', () => { void fetchAndUpdate() })
+        map.once('idle', () => { void fetchAndUpdate() })
       }
 
       intervalId = setInterval(() => { void fetchAndUpdate() }, 60_000)
@@ -1614,6 +1634,7 @@ function MapView() {
     const fetchAndUpdate = async () => {
       try {
         const res  = await fetch(`${API_URL}/api/v1/cameras?region=global&limit=50`)
+        if (!res.ok) { console.warn(`[map][cameras] HTTP ${res.status}`); return }
         const json = await res.json() as { cameras: CameraFeed[]; total: number }
         if (!Array.isArray(json.cameras)) return
 
@@ -1709,10 +1730,10 @@ function MapView() {
         return
       }
 
-      if (map.loaded()) {
+      if (map.isStyleLoaded()) {
         void fetchAndUpdate()
       } else {
-        map.once('load', () => { void fetchAndUpdate() })
+        map.once('idle', () => { void fetchAndUpdate() })
       }
 
       intervalId = setInterval(() => { void fetchAndUpdate() }, 90_000)
@@ -1859,10 +1880,10 @@ function MapView() {
         return
       }
 
-      if (map.loaded()) {
+      if (map.isStyleLoaded()) {
         void fetchAndUpdate()
       } else {
-        map.once('load', () => { void fetchAndUpdate() })
+        map.once('idle', () => { void fetchAndUpdate() })
       }
 
       intervalId = setInterval(() => { void fetchAndUpdate() }, 120_000)
@@ -1917,6 +1938,7 @@ function MapView() {
       setNavalLoading(true)
       try {
         const res  = await fetch(`${API_URL}/api/v1/maritime/vessels`)
+        if (!res.ok) { console.warn(`[map][naval] HTTP ${res.status}`); return }
         const json = await res.json() as {
           success: boolean
           data: Array<{
@@ -1932,6 +1954,7 @@ function MapView() {
           }>
         }
 
+        console.info(`[map][naval] response: success=${json.success}, count=${json.data?.length ?? 0}`)
         if (!json.success || !Array.isArray(json.data)) return
 
         setNavalCount(json.data.length)
@@ -2088,10 +2111,10 @@ function MapView() {
       }
     }
 
-    if (map.loaded()) {
+    if (map.isStyleLoaded()) {
       void applyLayer()
     } else {
-      map.once('load', () => { void applyLayer() })
+      map.once('idle', () => { void applyLayer() })
     }
 
     // Auto-refresh every 10 minutes when navalMode is active
@@ -2124,11 +2147,12 @@ function MapView() {
         const [{ ConflictZoneOverlay }, { ConflictRegionLayer }, res] = await Promise.all([
           import('@/components/map/ConflictZoneOverlay'),
           import('@/components/map/ConflictRegions'),
-          fetch('/api/v1/signals/map/conflict-zones'),
+          fetch(`${API_URL}/api/v1/signals/map/conflict-zones`),
         ])
 
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const geojson = await res.json() as { type: string; features: unknown[] }
+        console.info(`[map][conflict] response: features=${geojson.features?.length ?? 0}`)
 
         // Init overlay
         if (!conflictLayerRef.current) {
@@ -2149,10 +2173,10 @@ function MapView() {
       }
     }
 
-    if (map.loaded()) {
+    if (map.isStyleLoaded()) {
       void applyLayer()
     } else {
-      map.once('load', () => { void applyLayer() })
+      map.once('idle', () => { void applyLayer() })
     }
 
     // Auto-refresh every 3 minutes when active
@@ -2200,6 +2224,7 @@ function MapView() {
       setThreatLoading(true)
       try {
         const res  = await fetch(`${API_URL}/api/v1/threats/missiles`)
+        if (!res.ok) { console.warn(`[map][threats] HTTP ${res.status}`); return }
         const json = await res.json() as {
           success: boolean
           data: Array<{
@@ -2216,6 +2241,7 @@ function MapView() {
           }>
         }
 
+        console.info(`[map][threats] response: success=${json.success}, count=${json.data?.length ?? 0}`)
         if (!json.success) return
 
         const features = json.data.map(t => ({
@@ -2337,10 +2363,10 @@ function MapView() {
       }
     }
 
-    if (map.loaded()) {
+    if (map.isStyleLoaded()) {
       void applyLayer()
     } else {
-      map.once('load', () => { void applyLayer() })
+      map.once('idle', () => { void applyLayer() })
     }
 
     // Auto-refresh every 5 minutes when threatMode is active (more volatile than naval)
@@ -2388,6 +2414,7 @@ function MapView() {
       setJammingLoading(true)
       try {
         const res  = await fetch(`${API_URL}/api/v1/jamming/zones`)
+        if (!res.ok) { console.warn(`[map][jamming] HTTP ${res.status}`); return }
         const json = await res.json() as {
           success: boolean
           data: Array<{
@@ -2406,6 +2433,7 @@ function MapView() {
           }>
         }
 
+        console.info(`[map][jamming] response: success=${json.success}, count=${json.data?.length ?? 0}`)
         if (!json.success || !Array.isArray(json.data)) return
 
         setJammingCount(json.data.length)
@@ -2545,10 +2573,10 @@ function MapView() {
       }
     }
 
-    if (map.loaded()) {
+    if (map.isStyleLoaded()) {
       void applyLayer()
     } else {
-      map.once('load', () => { void applyLayer() })
+      map.once('idle', () => { void applyLayer() })
     }
 
     // Auto-refresh every 5 minutes when jammingMode is active
@@ -2592,6 +2620,7 @@ function MapView() {
       setHazardsLoading(true)
       try {
         const res  = await fetch(`${API_URL}/api/v1/hazards/map/points?hours=48`)
+        if (!res.ok) { console.warn(`[map][hazards] HTTP ${res.status}`); return }
         const json = await res.json() as {
           success: boolean
           data: {
@@ -2600,6 +2629,7 @@ function MapView() {
           }
         }
 
+        console.info(`[map][hazards] response: success=${json.success}, count=${json.data?.points?.length ?? 0}`)
         if (!json.success || !Array.isArray(json.data.points)) return
 
         setHazardsCount(json.data.points.length)
@@ -2624,6 +2654,22 @@ function MapView() {
             case 'tsunami-warnings':
               color = '#0EA5E9' // cyan
               typeLabel = 'Tsunami'
+              break
+            case 'storm':
+              color = '#3B82F6' // blue
+              typeLabel = 'Storm'
+              break
+            case 'flood':
+              color = '#06B6D4' // teal
+              typeLabel = 'Flood'
+              break
+            case 'tornado':
+              color = '#EC4899' // pink
+              typeLabel = 'Tornado'
+              break
+            case 'weather':
+              color = '#8B5CF6' // violet
+              typeLabel = 'Weather'
               break
           }
 
@@ -2722,10 +2768,10 @@ function MapView() {
       }
     }
 
-    if (map.loaded()) {
+    if (map.isStyleLoaded()) {
       void applyLayer()
     } else {
-      map.once('load', () => { void applyLayer() })
+      map.once('idle', () => { void applyLayer() })
     }
 
     // Auto-refresh every 10 minutes when hazardsMode is active
@@ -2944,10 +2990,10 @@ function MapView() {
       }
     }
 
-    if (map.loaded()) {
+    if (map.isStyleLoaded()) {
       void applyLayer()
     } else {
-      map.once('load', () => { void applyLayer() })
+      map.once('idle', () => { void applyLayer() })
     }
 
     // Auto-refresh every 10 minutes when active
@@ -3805,6 +3851,18 @@ function MapView() {
               className="flex items-center justify-center w-8 h-8 rounded-lg bg-[rgba(6,7,13,0.92)] border border-[rgba(255,255,255,0.12)] text-[11px] font-mono text-wp-text2 hover:text-wp-amber hover:border-wp-amber/50 transition-all backdrop-blur-xl shadow-lg"
             >
               {basemap === 'satellite' ? '🛰' : basemap === 'terrain' ? '⛰' : '🌑'}
+            </button>
+            {/* Globe / Flat projection toggle */}
+            <button
+              onClick={() => setProjection(p => p === 'globe' ? 'mercator' : 'globe')}
+              title={`Projection: ${projection} — click to toggle`}
+              className={`flex items-center justify-center w-8 h-8 rounded-lg bg-[rgba(6,7,13,0.92)] border text-[11px] font-mono transition-all backdrop-blur-xl shadow-lg ${
+                projection === 'globe'
+                  ? 'border-[rgba(0,212,255,0.5)] text-[#00d4ff]'
+                  : 'border-[rgba(255,255,255,0.12)] text-wp-text2 hover:text-[#00d4ff] hover:border-[rgba(0,212,255,0.5)]'
+              }`}
+            >
+              {projection === 'globe' ? '🌐' : '🗺'}
             </button>
             {/* Reset View button */}
             <button
