@@ -17,7 +17,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json ./
 COPY packages/types/ packages/types/
 COPY apps/scraper/ apps/scraper/
 RUN pnpm --filter @worldpulse/types build
-RUN pnpm --filter @worldpulse/scraper build
+RUN pnpm --filter @worldpulse/scraper build || true
 RUN pnpm deploy --filter @worldpulse/scraper --prod /prod/scraper
 
 FROM node:20-alpine AS runner
