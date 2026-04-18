@@ -327,13 +327,13 @@ function MapView() {
       if (basemap === 'satellite') {
         const tiles = MAPTILER_KEY && MAPTILER_KEY !== 'demo'
           ? [`https://api.maptiler.com/tiles/satellite/{z}/{x}/{y}.jpg?key=${MAPTILER_KEY}`]
-          : ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png']
+          : ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}']
         map.addSource('basemap', {
           type: 'raster', tiles, tileSize: 256,
-          attribution: MAPTILER_KEY ? '© MapTiler' : '© CARTO © OpenStreetMap',
+          attribution: MAPTILER_KEY ? '© MapTiler' : '© Esri',
         })
         map.addLayer({ id: 'basemap', type: 'raster' as const, source: 'basemap',
-          paint: { 'raster-opacity': 0.85, 'raster-saturation': -0.2, 'raster-brightness-min': 0, 'raster-brightness-max': 0.75 },
+          paint: { 'raster-opacity': 0.92, 'raster-saturation': 0, 'raster-brightness-min': 0, 'raster-brightness-max': 1 },
         }, beforeLayer)
       } else if (basemap === 'terrain') {
         const tiles = MAPTILER_KEY && MAPTILER_KEY !== 'demo'
@@ -762,21 +762,9 @@ function MapView() {
         style: {
           version: 8,
           glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
-          sources: {
-            basemap: {
-              type: 'raster',
-              tiles: MAPTILER_KEY && MAPTILER_KEY !== 'demo'
-                ? [`https://api.maptiler.com/tiles/satellite/{z}/{x}/{y}.jpg?key=${MAPTILER_KEY}`]
-                : ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'],
-              tileSize: 256,
-              attribution: MAPTILER_KEY ? '© MapTiler' : '© CARTO © OpenStreetMap',
-            },
-          },
+          sources: {},
           layers: [
-            { id: 'bg',      type: 'background' as const, paint: { 'background-color': '#06070d' } },
-            { id: 'basemap', type: 'raster'     as const, source: 'basemap',
-              paint: { 'raster-opacity': 0.85, 'raster-saturation': -0.2,
-                'raster-brightness-min': 0, 'raster-brightness-max': 0.75 } },
+            { id: 'bg', type: 'background' as const, paint: { 'background-color': '#06070d' } },
           ],
         },
         center: [lng, lat],
@@ -816,6 +804,20 @@ function MapView() {
       map.on('load', () => {
         if (cancelled) return
         map.resize()
+
+        // ── Basemap tiles (added after load so they can't block init) ──
+        const baseTiles = MAPTILER_KEY && MAPTILER_KEY !== 'demo'
+          ? [`https://api.maptiler.com/tiles/satellite/{z}/{x}/{y}.jpg?key=${MAPTILER_KEY}`]
+          : ['https://tile.openstreetmap.org/{z}/{x}/{y}.png']
+        map.addSource('basemap', {
+          type: 'raster', tiles: baseTiles, tileSize: 256,
+          attribution: MAPTILER_KEY ? '© MapTiler' : '© OpenStreetMap',
+        })
+        map.addLayer({
+          id: 'basemap', type: 'raster' as const, source: 'basemap',
+          paint: { 'raster-opacity': 0.55, 'raster-saturation': -0.6,
+            'raster-brightness-min': 0.02, 'raster-brightness-max': 0.45 },
+        })  // renders above bg background, below signal layers added after
 
         // Switch to globe once the map is fully idle (tiles rendered).
         // Globe projection cannot be set before the first render completes —
