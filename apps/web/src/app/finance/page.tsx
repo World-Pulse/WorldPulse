@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { MarketPulse } from '@/components/MarketPulse'
+import { TradeSurveillancePanel } from '@/components/sidebar/TradeSurveillancePanel'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -287,6 +288,9 @@ export default function FinancePage() {
               </div>
             )}
           </div>
+
+          {/* Strategic Commodity Flows */}
+          <TradeSurveillancePanel />
 
           {/* Central Bank Watch */}
           <div className="bg-wp-surface border border-[rgba(255,255,255,0.07)] rounded-2xl overflow-hidden">
