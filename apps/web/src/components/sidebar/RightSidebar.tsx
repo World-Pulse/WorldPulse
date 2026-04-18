@@ -1,10 +1,12 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, lazy, Suspense } from 'react'
 import Link from 'next/link'
 import { TradeSurveillancePanel } from './TradeSurveillancePanel'
 import { TrendingEntities } from '@/components/analytics/TrendingEntities'
 import { SignalCounter } from '@/components/SignalCounter'
+
+const SpinningGlobe = lazy(() => import('./SpinningGlobe').then(m => ({ default: m.SpinningGlobe })))
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -165,48 +167,25 @@ export function RightSidebar() {
           <div className="w-full aspect-square rounded-[10px] overflow-hidden relative mb-2 cursor-pointer group"
             style={{ background: 'radial-gradient(circle at 35% 35%, #0d1a3a, #030812)' }}>
 
-          {/* Globe SVG */}
-          <svg viewBox="0 0 268 268" className="w-full h-full opacity-70">
-            <defs>
-              <radialGradient id="g" cx="38%" cy="35%" r="65%">
-                <stop offset="0%" stopColor="#1a3a6e" stopOpacity="0.9"/>
-                <stop offset="100%" stopColor="#030812"/>
-              </radialGradient>
-            </defs>
-            <ellipse cx="134" cy="134" rx="128" ry="128" fill="url(#g)"/>
-            {/* Simplified continents */}
-            {[
-              "M60,80 L85,70 L100,82 L95,100 L80,110 L62,105 Z",
-              "M100,65 L130,60 L145,75 L148,95 L130,110 L108,108 L98,88 Z",
-              "M155,70 L185,65 L200,80 L198,100 L180,112 L160,108 L150,90 Z",
-              "M65,120 L90,115 L95,140 L85,160 L65,158 L58,138 Z",
-              "M100,120 L140,118 L148,145 L130,170 L105,165 L95,140 Z",
-              "M155,120 L185,118 L192,150 L175,168 L152,162 L148,140 Z",
-              "M165,85 L205,80 L220,100 L205,115 L168,112 Z",
-            ].map((d, i) => <path key={i} d={d} fill="rgba(255,255,255,0.07)"/>)}
-            {/* Grid lines */}
-            <ellipse cx="134" cy="134" rx="128" ry="128" fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="0.5"/>
-            <ellipse cx="134" cy="134" rx="85" ry="128" fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="0.5"/>
-            <ellipse cx="134" cy="100" rx="108" ry="34" fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="0.5"/>
-            <ellipse cx="134" cy="134" rx="128" ry="10" fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="0.5"/>
-            <ellipse cx="134" cy="168" rx="108" ry="34" fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="0.5"/>
-            <ellipse cx="104" cy="90" rx="35" ry="22" fill="rgba(255,255,255,0.04)"/>
-          </svg>
+            {/* Spinning MapLibre globe */}
+            <Suspense fallback={<div className="w-full h-full bg-[#030812]" />}>
+              <SpinningGlobe />
+            </Suspense>
 
-          {/* Hotspot markers */}
-          {HOTSPOTS.map(([l, t, type], i) => {
-            const c = HOTSPOT_COLORS[type]
-            return (
-              <div key={i} className="absolute -translate-x-1/2 -translate-y-1/2" style={{ left: `${l}%`, top: `${t}%` }}>
-                <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 ${c.ring} animate-pulse-ring`}
-                  style={{ animationDelay: `${i * 0.3}s` }} />
-                <div className={`w-[6px] h-[6px] rounded-full ${c.dot} relative z-10`} />
-              </div>
-            )
-          })}
+            {/* Hotspot markers */}
+            {HOTSPOTS.map(([l, t, type], i) => {
+              const c = HOTSPOT_COLORS[type]
+              return (
+                <div key={i} className="absolute -translate-x-1/2 -translate-y-1/2 z-10" style={{ left: `${l}%`, top: `${t}%` }}>
+                  <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 ${c.ring} animate-pulse-ring`}
+                    style={{ animationDelay: `${i * 0.3}s` }} />
+                  <div className={`w-[6px] h-[6px] rounded-full ${c.dot} relative z-10`} />
+                </div>
+              )
+            })}
 
             {/* Hover overlay */}
-            <div className="absolute inset-0 flex items-end p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="absolute inset-0 flex items-end p-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
               <span className="font-mono text-[9px] text-wp-cyan bg-[rgba(0,0,0,0.6)] rounded px-2 py-1">
                 Click for full map →
               </span>
