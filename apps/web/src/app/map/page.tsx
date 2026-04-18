@@ -327,10 +327,10 @@ function MapView() {
       if (basemap === 'satellite') {
         const tiles = MAPTILER_KEY && MAPTILER_KEY !== 'demo'
           ? [`https://api.maptiler.com/tiles/satellite/{z}/{x}/{y}.jpg?key=${MAPTILER_KEY}`]
-          : ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}']
+          : ['https://tile.openstreetmap.org/{z}/{x}/{y}.png']
         map.addSource('basemap', {
           type: 'raster', tiles, tileSize: 256,
-          attribution: MAPTILER_KEY ? '© MapTiler' : '© Esri',
+          attribution: MAPTILER_KEY ? '© MapTiler' : '© OpenStreetMap',
         })
         map.addLayer({ id: 'basemap', type: 'raster' as const, source: 'basemap',
           paint: { 'raster-opacity': 0.92, 'raster-saturation': 0, 'raster-brightness-min': 0, 'raster-brightness-max': 1 },
@@ -767,9 +767,9 @@ function MapView() {
               type: 'raster',
               tiles: MAPTILER_KEY && MAPTILER_KEY !== 'demo'
                 ? [`https://api.maptiler.com/tiles/satellite/{z}/{x}/{y}.jpg?key=${MAPTILER_KEY}`]
-                : ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+                : ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
               tileSize: 256,
-              attribution: MAPTILER_KEY ? '© MapTiler' : '© Esri',
+              attribution: MAPTILER_KEY ? '© MapTiler' : '© OpenStreetMap',
             },
           },
           layers: [
@@ -935,13 +935,13 @@ function MapView() {
           try {
             const satelliteTiles = MAPTILER_KEY && MAPTILER_KEY !== 'demo'
               ? [`https://api.maptiler.com/tiles/satellite/{z}/{x}/{y}.jpg?key=${MAPTILER_KEY}`]
-              : ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}']
+              : ['https://tile.openstreetmap.org/{z}/{x}/{y}.png']
             if (map.getLayer('basemap')) map.removeLayer('basemap')
             if (map.getSource('basemap')) map.removeSource('basemap')
             const beforeLayer = map.getLayer('cluster-halo') ? 'cluster-halo' : undefined
             map.addSource('basemap', {
               type: 'raster', tiles: satelliteTiles, tileSize: 256,
-              attribution: MAPTILER_KEY ? '© MapTiler' : '© Esri',
+              attribution: MAPTILER_KEY ? '© MapTiler' : '© OpenStreetMap',
             })
             map.addLayer({ id: 'basemap', type: 'raster' as const, source: 'basemap',
               paint: { 'raster-opacity': 0.92, 'raster-saturation': 0, 'raster-brightness-min': 0, 'raster-brightness-max': 1 },
