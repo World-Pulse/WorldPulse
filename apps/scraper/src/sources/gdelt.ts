@@ -30,6 +30,9 @@ import { logger as rootLogger }        from '../lib/logger'
 import type { Category, SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate }          from '../pipeline/insert-signal'
 import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilience'
+import { extractArticle, setArticleExtractorRedis } from '../pipeline/article-extractor'
+import { extractGeo }                  from '../pipeline/geo'
+import { classifyContent }             from '../pipeline/classify'
 
 const log = rootLogger.child({ module: 'gdelt-source' })
 
@@ -270,6 +273,9 @@ export function startGdeltPoller(
 ): () => void {
   const INTERVAL_MS = Number(process.env.GDELT_INTERVAL_MS ?? 15 * 60_000)
 
+  // Give article extractor access to Redis for caching
+  setArticleExtractorRedis(redis as any)
+
   async function poll(): Promise<void> {
     try {
       log.debug('GDELT: polling lastupdate.txt')
@@ -340,17 +346,69 @@ export function startGdeltPoller(
         const dedupKey = `gdelt:seen:${row.globalEventId}`
         if (await redis.get(dedupKey)) { skipped++; continue }
 
-        const category  = gdeltCameoCategory(row.eventRootCode)
-        const severity  = gdeltSeverity(row.goldstein)
+        const cameoCat  = gdeltCameoCategory(row.eventRootCode)
+        const cameoSev  = gdeltSeverity(row.goldstein)
         const eventTime = parseDateAdded(row.dateAdded)
 
         const rootLabel = CAMEO_LABEL[row.eventRootCode.padStart(2, '0')] ?? `CAMEO-${row.eventCode}`
         const locPart   = row.geoName ? ` in ${row.geoName}` : ''
-        const title     = `${rootLabel}${locPart}`.slice(0, 500)
-        const summary   = (
-          `GDELT CAMEO event ${row.eventCode}${locPart}. ` +
-          `GoldsteinScale: ${row.goldstein}. Source: ${row.sourceUrl}`
-        ).slice(0, 600)
+
+        // ── Fetch real article content for AI enrichment ────────────────
+        const article = await extractArticle(row.sourceUrl)
+
+        // Use article title if available, fall back to CAMEO label
+        const title = article?.title
+          ? article.title.slice(0, 500)
+          : `${rootLabel}${locPart}`.slice(0, 500)
+
+        // ── AI classification from article content (upgrades category + summary) ──
+        let category: Category = cameoCat
+        let severity: SignalSeverity = cameoSev
+        let summary: string
+        let tags: string[] = ['osint', 'gdelt', `cameo-${row.eventRootCode}`]
+        let language = 'en'
+
+        if (article?.body) {
+          try {
+            const classified = await classifyContent(title, article.body)
+            category = classified.category
+            severity = classified.severity
+            summary  = classified.summary
+            tags     = [...tags, ...classified.tags]
+            language = classified.language
+          } catch {
+            // LLM unavailable — use article excerpt as summary instead of CAMEO dump
+            summary = article.excerpt || `${rootLabel}${locPart}`.slice(0, 300)
+          }
+        } else {
+          // No article fetched — fall back to CAMEO-derived summary (better than raw codes)
+          summary = `${rootLabel}${locPart}. Goldstein intensity: ${row.goldstein}.`
+        }
+
+        // ── Smart geolocation: prefer article-derived location over ActionGeo ──
+        let signalLat  = row.lat
+        let signalLng  = row.lng
+        let signalLoc  = row.geoName || null
+        let signalCC   = row.countryCode || null
+        let signalRegion: string | null = null
+
+        if (article) {
+          // Use title + body to detect real event location
+          const geoText = `${title} ${article.body?.slice(0, 500) ?? ''}`
+          try {
+            const geo = await extractGeo(geoText)
+            if (geo.point && geo.lat != null && geo.lng != null) {
+              signalLat    = geo.lat
+              signalLng    = geo.lng
+              signalLoc    = geo.name ?? signalLoc
+              signalCC     = geo.countryCode ?? signalCC
+              signalRegion = geo.region ?? null
+              log.debug({ oldGeo: row.geoName, newGeo: geo.name }, 'GDELT: overrode ActionGeo with article-derived location')
+            }
+          } catch {
+            // Geo extraction failed — keep ActionGeo as fallback
+          }
+        }
 
         try {
           const signal = await insertAndCorrelate({
@@ -363,18 +421,18 @@ export function startGdeltPoller(
             source_count:      1,
             source_ids:        [],
             original_urls:     [row.sourceUrl],
-            location: row.lat != null && row.lng != null
-              ? db.raw('ST_MakePoint(?, ?)', [row.lng, row.lat])
+            location: signalLat != null && signalLng != null
+              ? db.raw('ST_MakePoint(?, ?)', [signalLng, signalLat])
               : null,
-            location_name: row.geoName || null,
-            country_code:  row.countryCode || null,
-            region:        null,
-            tags:          ['osint', 'gdelt', `cameo-${row.eventRootCode}`],
-            language:      'en',
+            location_name: signalLoc,
+            country_code:  signalCC,
+            region:        signalRegion,
+            tags:          [...new Set(tags)].slice(0, 10),
+            language,
             event_time:    eventTime,
           }, {
-            lat:        row.lat ?? null,
-            lng:        row.lng ?? null,
+            lat:        signalLat ?? null,
+            lng:        signalLng ?? null,
             sourceId:   'gdelt',
             sourceName: 'GDELT',
             sourceSlug: 'gdelt',

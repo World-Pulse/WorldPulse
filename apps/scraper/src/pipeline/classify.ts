@@ -12,13 +12,14 @@ import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
 
 interface ClassificationResult {
-  category:  Category
-  severity:  SignalSeverity
-  summary:   string
-  tags:      string[]
-  language:  string
-  isBreaking: boolean
-  topics:    string[]
+  category:     Category
+  subcategory?: string
+  severity:     SignalSeverity
+  summary:      string
+  tags:         string[]
+  language:     string
+  isBreaking:   boolean
+  topics:       string[]
 }
 
 // ─── LLM CLASSIFICATION ──────────────────────────────────────────────────
@@ -56,27 +57,47 @@ async function llmClassify(title: string, body: string | null): Promise<Classifi
     throw new Error('No LLM configured')
   }
 
-  const systemPrompt = `You are a news classification system. Analyze the article and respond with ONLY valid JSON.
+  const systemPrompt = `You are an intelligence-grade news classification system for a global signals platform. Analyze the article and respond with ONLY valid JSON.
 
 Respond with exactly this JSON structure:
 {
   "category": one of [breaking,conflict,geopolitics,climate,health,economy,technology,science,elections,culture,disaster,security,sports,space,other],
+  "subcategory": a more specific label (see below),
   "severity": one of [critical,high,medium,low,info],
-  "summary": "one sentence summary under 150 chars",
+  "summary": "concise 1-2 sentence intelligence summary under 200 chars — what happened, where, and why it matters",
   "tags": ["tag1", "tag2", "tag3"],
   "language": "2-letter ISO code",
   "isBreaking": true or false,
   "topics": ["main topic", "secondary topic"]
 }
 
-Rules:
-- severity=critical: mass casualties, nuclear/chemical threats, major natural disaster
-- severity=high: significant geopolitical events, major economic shocks, serious conflict
-- severity=medium: elections, policy changes, notable accidents
-- severity=low: routine news, minor events
-- severity=info: updates, background, context`
+SUBCATEGORY GUIDANCE (pick the most specific that fits):
+- conflict → armed-conflict, military-operation, insurgency, terrorism, ceasefire-violation, arms-trade, naval-confrontation, border-clash, civil-war
+- geopolitics → diplomatic-tension, sanctions, treaty, alliance-shift, territorial-dispute, diplomatic-cooperation, summit, foreign-policy
+- security → cyber-attack, espionage, law-enforcement, border-security, intelligence, arms-control
+- disaster → earthquake, flood, hurricane, wildfire, industrial-accident, famine, volcanic-eruption
+- economy → market-crash, trade-dispute, sanctions-impact, currency-crisis, energy-crisis, supply-chain
+- health → pandemic, outbreak, drug-approval, public-health-crisis, epidemic
+- elections → presidential, parliamentary, referendum, political-crisis, protest
+- climate → emissions, policy, extreme-weather, sea-level, deforestation, biodiversity
+- technology → ai, semiconductor, space-tech, cyber, quantum, social-media
+- For other categories, use a descriptive 1-2 word subcategory
 
-  const userContent = `Title: ${title}\nBody: ${body ? body.slice(0, 800) : 'N/A'}`
+CLASSIFICATION RULES:
+- "conflict" means ACTIVE violence, armed confrontation, or direct military action. Do NOT use conflict for: diplomatic disputes, political rhetoric, economic sanctions, protests (use geopolitics or elections instead)
+- "military" mention alone does NOT mean conflict — a military exercise, arms deal, or defense policy is geopolitics or security
+- severity=critical: mass casualties, nuclear/chemical threats, major natural disaster active now
+- severity=high: significant geopolitical events, major economic shocks, active armed conflict
+- severity=medium: elections, policy changes, notable accidents, military posturing
+- severity=low: routine news, minor events, diplomatic meetings
+- severity=info: updates, background, context, analysis pieces
+
+SUMMARY RULES:
+- Write like an intelligence briefing: what happened, where, why it matters
+- Never copy-paste the headline — synthesize the key facts
+- Include the actual location of the event, not the author's location`
+
+  const userContent = `Title: ${title}\nBody: ${body ? body.slice(0, 1500) : 'N/A'}`
 
   // OpenAI-compatible chat completions API (works for OpenAI and custom LLM_API_URL)
   const endpoint = llmApiUrl
@@ -144,8 +165,10 @@ function detectCategory(text: string): Category {
     [/\b(breaking|urgent|just in|alert|developing story|emergency|evacuation order|state of emergency|major incident)\b/, 'breaking'],
     // ── Disasters ───────────────────────────────────────────────────────────
     [/\b(earthquake|tsunami|hurricane|typhoon|flood|wildfire|eruption|tornado|avalanche|landslide|cyclone|blizzard|drought)\b/, 'disaster'],
-    // ── Armed conflict ───────────────────────────────────────────────────────
-    [/\b(war|attack|killed|airstrike|troops|military|missile|bomb|gunfire|ceasefire|offensive|frontline|casualt)\b/, 'conflict'],
+    // ── Armed conflict (must indicate ACTIVE violence, not just military mention) ──
+    [/\b(war\b|attack(?:ed|s)?|killed|airstrike|missile strike|bomb(?:ing|ed)|gunfire|shelling|offensive\b|frontline|casualt(?:y|ies)|armed clash|combat|insurgent|firefight)\b/, 'conflict'],
+    // ── Security / military (non-violent military, defense, intelligence) ────────
+    [/\b(military exercise|defense polic|arms (?:deal|sale|trade)|naval deployment|intelligence|espionage|surveillance|defense budget|troops deploy|military aid)\b/, 'security'],
     // ── Elections & politics ─────────────────────────────────────────────────
     [/\b(election|vote|ballot|campaign|president|prime minister|parliament|congress|referendum|polling)\b/, 'elections'],
     // ── Climate & environment ────────────────────────────────────────────────
@@ -176,17 +199,17 @@ function detectCategory(text: string): Category {
 }
 
 function detectSeverity(text: string, category: Category): SignalSeverity {
-  const critical = /\b(mass casualty|nuclear|chemical weapon|catastrophic|collapse|emergency declared)\b/
-  const high     = /\b(killed|deaths|major|significant|breaking|urgent|alert|critical)\b/
-  const medium   = /\b(injured|damage|concern|warning|developing)\b/
+  const critical = /\b(mass casualt|nuclear|chemical weapon|catastrophic|collapse|emergency declared|massacre)\b/
+  const high     = /\b(killed\s+\d|deaths?\s+toll|major\s+(?:attack|earthquake|flood|explosion)|significant\s+casualt|breaking|urgent|alert)\b/
+  const medium   = /\b(injured|damage|concern|warning|developing|troops|military|missile|sanctions)\b/
 
-  if (critical.test(text) || ['disaster', 'conflict'].includes(category)) {
-    if (critical.test(text)) return 'critical'
-    return 'high'
-  }
+  if (critical.test(text)) return 'critical'
   if (high.test(text)) return 'high'
   if (medium.test(text)) return 'medium'
-  return category === 'breaking' ? 'high' : 'info'
+  // Breaking news defaults to high; disaster/conflict only bump to medium, not high
+  if (category === 'breaking') return 'high'
+  if (['disaster', 'conflict'].includes(category)) return 'medium'
+  return 'low'
 }
 
 function extractTags(text: string): string[] {

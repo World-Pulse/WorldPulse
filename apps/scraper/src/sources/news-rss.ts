@@ -1750,6 +1750,21 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['georgia-today', 'georgia', 'caucasus', 'eastern-europe'],
     language:        'en',
   },
+  // ── Maritime ───────────────────────────────────────────────────────────────
+  {
+    id:              'maritime-executive',
+    name:            'The Maritime Executive',
+    feedUrl:         'https://maritime-executive.com/articles.rss',
+    category:        'infrastructure',
+    biasLabel:       'center',
+    reliability:     0.80,
+    countryCode:     'US',
+    defaultLat:      33.74,
+    defaultLng:      -118.28,
+    defaultLocation: 'Fort Lauderdale, United States',
+    extraTags:       ['maritime', 'shipping', 'naval', 'ports', 'trade', 'undersea-cables'],
+    language:        'en',
+  },
 ]
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────
