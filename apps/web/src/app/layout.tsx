@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next'
+import Script from 'next/script'
 import { Inter, Bebas_Neue, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import { Providers } from '@/components/providers'
@@ -68,6 +69,18 @@ export const dynamic = 'force-dynamic'
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" dir="ltr" className="dark">
+      <Script
+        src="https://www.googletagmanager.com/gtag/js?id=G-VS98QLC4B5"
+        strategy="afterInteractive"
+      />
+      <Script id="gtag-init" strategy="afterInteractive">
+        {`
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-VS98QLC4B5');
+        `}
+      </Script>
       <body className={`${inter.variable} ${bebasNeue.variable} ${jetbrainsMono.variable} ${inter.className} bg-wp-bg text-wp-text antialiased`}>
         {/* Skip to main content for keyboard/screen reader users */}
         <a
