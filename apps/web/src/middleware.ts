@@ -13,19 +13,25 @@ const isDev = process.env.NODE_ENV !== 'production'
 function buildCspDirectives(): string {
   return [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: blob: https:",
-    // Allow API, WebSocket, and map tile connections
+    // Allow API, WebSocket, map tile, and analytics connections
     [
       "connect-src 'self'",
       'https://api.world-pulse.io',
       'wss://api.world-pulse.io',
       ...(isDev ? ['http://localhost:3001', 'ws://localhost:3001'] : []),
       'https://tile.openstreetmap.org',
+      'https://server.arcgisonline.com',
+      'https://*.maptiler.com',
       'https://fonts.openmaptiles.org',
       'https://gibs.earthdata.nasa.gov',
+      'https://www.googletagmanager.com',
+      'https://www.google-analytics.com',
+      'https://*.google-analytics.com',
+      'https://*.analytics.google.com',
     ].join(' '),
     "media-src 'self' blob:",
     "worker-src 'self' blob:",
