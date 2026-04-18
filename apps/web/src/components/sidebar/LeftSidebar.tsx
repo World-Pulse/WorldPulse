@@ -27,10 +27,12 @@ const NAV_ITEMS = [
   { href: '/water-security', icon: '💧', labelKey: 'waterSecurity',   badge: 'NEW', badgeColor: 'amber'  },
   { href: '/labor-rights',  icon: '⚒️', labelKey: 'laborRights',    badge: 'NEW', badgeColor: 'amber'  },
   { href: '/countries',  icon: '🗺️', labelKey: 'countries',  badge: 'NEW',  badgeColor: 'blue'  },
-  { href: '/cameras',    icon: '📹', labelKey: 'cameras',    badge: 'LIVE', badgeColor: 'red'   },
+  // { href: '/cameras',    icon: '📹', labelKey: 'cameras',    badge: 'LIVE', badgeColor: 'red'   }, // Hidden pre-launch: EarthCam hotlink-blocks snapshots; needs backend image proxy
   { href: '/patents',    icon: '📜', labelKey: 'patents',    badge: 'NEW',  badgeColor: 'cyan'  },
   { href: '/communities',icon: '🤝', labelKey: 'communities' },
   { href: '/claims',     icon: '🔍', labelKey: 'claims',     badge: 'NEW', badgeColor: 'amber'  },
+  { href: '/audio-claims', icon: '🎙️', labelKey: 'audioClaims', badge: 'NEW', badgeColor: 'red'   },
+  { href: '/video-claims', icon: '📹', labelKey: 'videoClaims', badge: 'NEW', badgeColor: 'red'   },
   { href: '/sources',    icon: '📡', labelKey: 'mySources'  },
   { href: '/developers', icon: '🛠️', labelKey: 'developers'  },
   { href: '/settings',   icon: '⚙️', labelKey: 'settings'   },
