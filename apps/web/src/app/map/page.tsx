@@ -327,13 +327,13 @@ function MapView() {
       if (basemap === 'satellite') {
         const tiles = MAPTILER_KEY && MAPTILER_KEY !== 'demo'
           ? [`https://api.maptiler.com/tiles/satellite/{z}/{x}/{y}.jpg?key=${MAPTILER_KEY}`]
-          : ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}']
+          : ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png']
         map.addSource('basemap', {
           type: 'raster', tiles, tileSize: 256,
-          attribution: MAPTILER_KEY ? '© MapTiler' : '© Esri',
+          attribution: MAPTILER_KEY ? '© MapTiler' : '© CARTO © OpenStreetMap',
         })
         map.addLayer({ id: 'basemap', type: 'raster' as const, source: 'basemap',
-          paint: { 'raster-opacity': 0.92, 'raster-saturation': 0, 'raster-brightness-min': 0, 'raster-brightness-max': 1 },
+          paint: { 'raster-opacity': 0.85, 'raster-saturation': -0.2, 'raster-brightness-min': 0, 'raster-brightness-max': 0.75 },
         }, beforeLayer)
       } else if (basemap === 'terrain') {
         const tiles = MAPTILER_KEY && MAPTILER_KEY !== 'demo'
@@ -767,16 +767,16 @@ function MapView() {
               type: 'raster',
               tiles: MAPTILER_KEY && MAPTILER_KEY !== 'demo'
                 ? [`https://api.maptiler.com/tiles/satellite/{z}/{x}/{y}.jpg?key=${MAPTILER_KEY}`]
-                : ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+                : ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'],
               tileSize: 256,
-              attribution: MAPTILER_KEY ? '© MapTiler' : '© Esri',
+              attribution: MAPTILER_KEY ? '© MapTiler' : '© CARTO © OpenStreetMap',
             },
           },
           layers: [
             { id: 'bg',      type: 'background' as const, paint: { 'background-color': '#06070d' } },
             { id: 'basemap', type: 'raster'     as const, source: 'basemap',
-              paint: { 'raster-opacity': 0.92, 'raster-saturation': 0,
-                'raster-brightness-min': 0, 'raster-brightness-max': 1 } },
+              paint: { 'raster-opacity': 0.85, 'raster-saturation': -0.2,
+                'raster-brightness-min': 0, 'raster-brightness-max': 0.75 } },
           ],
         },
         center: [lng, lat],
@@ -790,14 +790,20 @@ function MapView() {
 
       mapRef.current = map
 
+      // Log MapLibre version for debugging
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      console.log('[worldpulse] MapLibre version:', (ml as any).version ?? (ml as any).default?.version ?? 'unknown')
+
       // MapLibre v5 workaround: explicitly setting mercator projection right
       // after creation kicks the render pipeline out of a stuck state where
       // isStyleLoaded + areTilesLoaded are true but the 'load' event never
       // fires.  Without this, the map shows a black canvas indefinitely.
-      try {
+      const hasProjectionAPI = typeof (map as any).setProjection === 'function'
+      console.log('[worldpulse] setProjection available:', hasProjectionAPI)
+      if (hasProjectionAPI) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ;(map as any).setProjection({ type: 'mercator' })
-      } catch { /* pre-v5 — ignore */ }
+      }
 
       // Navigation control with 3D pitch visualization
       map.addControl(new ml.NavigationControl({ visualizePitch: true }), 'top-right')
@@ -816,10 +822,13 @@ function MapView() {
         // it blocks the MapLibre v5 render pipeline entirely.
         map.once('idle', () => {
           if (cancelled) return
-          try {
+          if (typeof (map as any).setProjection === 'function') {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             ;(map as any).setProjection({ type: 'globe' })
-          } catch { /* pre-v5 fallback — ignore */ }
+            console.log('[worldpulse] Globe projection enabled')
+          } else {
+            console.warn('[worldpulse] setProjection not available — MapLibre v4 detected, globe disabled')
+          }
         })
 
         // ── Sources ───────────────────────────────────────────
