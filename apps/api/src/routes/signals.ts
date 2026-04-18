@@ -207,7 +207,9 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
                      s2.trust_score as "trustScore", ss.article_url as "articleUrl"
               FROM sources s2
               LEFT JOIN signal_sources ss ON ss.source_id = s2.id AND ss.signal_id = s.id
-              WHERE s2.id = ANY(s.source_ids)
+              -- Cast to text on both sides: prod's source_ids was migrated to text[]
+              -- during Apr 15 hotfix, so uuid = text fails without an explicit cast.
+              WHERE s2.id::text = ANY(s.source_ids::text[])
               ORDER BY s2.trust_score DESC
             ) src
           ) as sources_data
@@ -227,26 +229,31 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       .limit(10)
       .select(['check_type', 'result', 'confidence', 'notes', 'created_at'])
 
-    // Get multimedia items (YouTube, podcast audio)
-    const mediaRows = await db('signal_media')
-      .where('signal_id', id)
-      .orderBy('created_at', 'asc')
-      .select(['id', 'media_type', 'url', 'embed_id', 'title', 'thumbnail_url', 'source_name'])
+    // Get multimedia items (YouTube, podcast audio) — table may not exist yet
+    let media: Array<Record<string, unknown>> = []
+    try {
+      const mediaRows = await db('signal_media')
+        .where('signal_id', id)
+        .orderBy('created_at', 'asc')
+        .select(['id', 'media_type', 'url', 'embed_id', 'title', 'thumbnail_url', 'source_name'])
 
-    const media = mediaRows.map((row: Record<string, unknown>) => ({
-      id:           row.id,
-      mediaType:    row.media_type,
-      url:          row.url,
-      embedId:      row.embed_id      ?? null,
-      title:        row.title         ?? null,
-      thumbnailUrl: row.thumbnail_url ?? null,
-      sourceName:   row.source_name   ?? null,
-    }))
+      media = mediaRows.map((row: Record<string, unknown>) => ({
+        id:           row.id,
+        mediaType:    row.media_type,
+        url:          row.url,
+        embedId:      row.embed_id      ?? null,
+        title:        row.title         ?? null,
+        thumbnailUrl: row.thumbnail_url ?? null,
+        sourceName:   row.source_name   ?? null,
+      }))
+    } catch {
+      // signal_media table may not exist yet — non-critical
+    }
 
-    // Bias lookup — use first source URL if available, fall back to signal source_url
+    // Bias lookup — use first source URL if available, fall back to original_urls
     const primarySourceUrl =
       (signal.sources_data as Array<{ articleUrl?: string }> | null)?.[0]?.articleUrl ??
-      (signal.source_url as string | null | undefined)
+      (Array.isArray(signal.original_urls) && (signal.original_urls as string[]).length > 0 ? (signal.original_urls as string[])[0] : null)
     const sourceBias = primarySourceUrl
       ? await getSourceBias(extractDomain(primarySourceUrl)).catch(() => null)
       : null
@@ -916,15 +923,17 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       })
       .filter(Boolean)
       .map((c: Record<string, unknown>) => ({
-        id: c.cluster_id,
-        primarySignalId: c.primary_signal_id,
-        correlationType: c.correlation_type,
-        correlationScore: c.correlation_score,
+        cluster_id: c.cluster_id,
+        primary_signal_id: c.primary_signal_id,
+        signal_ids: c.signal_ids,
+        correlation_type: c.correlation_type,
+        correlation_score: c.correlation_score,
         categories: c.categories,
-        sourceCount: (c.sources as string[])?.length ?? 0,
-        signalCount: (c.signal_ids as string[])?.length ?? 0,
+        sources: c.sources,
+        source_count: (c.sources as string[])?.length ?? 0,
+        signal_count: (c.signal_ids as string[])?.length ?? 0,
         severity: c.severity,
-        createdAt: c.created_at,
+        created_at: c.created_at,
       }))
 
     return reply.send({ success: true, data: clusters })
@@ -1093,7 +1102,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       FROM signals
       WHERE category = 'aviation'
         AND location IS NOT NULL
-        AND created_at > NOW() - INTERVAL '4 hours'
+        AND created_at > NOW() - INTERVAL '168 hours'
       ORDER BY created_at DESC
       LIMIT 300
     `)
@@ -1142,7 +1151,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
         AND location IS NOT NULL
         AND ST_Y(location::geometry) != 0
         AND ST_X(location::geometry) != 0
-        AND created_at > NOW() - INTERVAL '4 hours'
+        AND created_at > NOW() - INTERVAL '168 hours'
       ORDER BY created_at DESC
       LIMIT 500
     `)
@@ -1197,7 +1206,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const result = await db.raw<{ rows: Array<Record<string, unknown>> }>(`
-      SELECT id, title, severity, category, reliability_score, source_name,
+      SELECT id, title, severity, category, reliability_score, location_name,
         created_at AS published_at,
         ST_Y(location::geometry) AS lat,
         ST_X(location::geometry) AS lng
@@ -1208,7 +1217,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
         AND ST_X(location::geometry) IS NOT NULL
         AND ST_Y(location::geometry) != 0
         AND ST_X(location::geometry) != 0
-        AND created_at > NOW() - INTERVAL '72 hours'
+        AND created_at > NOW() - INTERVAL '168 hours'
       ORDER BY created_at DESC
       LIMIT 300
     `)
@@ -1225,7 +1234,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
         severity:          String(r.severity ?? 'low'),
         category:          String(r.category ?? 'conflict'),
         reliability_score: parseFloat(String(r.reliability_score ?? 0)),
-        source_name:       r.source_name ? String(r.source_name) : null,
+        source_name:       r.location_name ? String(r.location_name) : null,
         published_at:      r.published_at
           ? (r.published_at as Date).toISOString()
           : null,
