@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { Bell, Inbox } from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -168,7 +169,7 @@ export default function AlertsPage() {
         <>
           {!loggedIn && (
             <div className="glass border border-[rgba(255,255,255,0.07)] rounded-xl p-8 text-center">
-              <div className="text-[40px] mb-3">🔔</div>
+              <Bell className="w-10 h-10 text-wp-text3 mx-auto mb-3" />
               <div className="text-[16px] font-semibold text-wp-text mb-2">Sign in to see your alerts</div>
               <p className="text-[13px] text-wp-text3 mb-5">Get notified about breaking signals matching your interests</p>
               <div className="flex gap-3 justify-center">
@@ -190,7 +191,7 @@ export default function AlertsPage() {
 
           {loggedIn && !loading && alerts.length === 0 && (
             <div className="text-center py-16">
-              <div className="text-[48px] mb-4">📭</div>
+              <Inbox className="w-12 h-12 text-wp-text3 mx-auto mb-4" />
               <div className="text-[16px] font-semibold text-wp-text mb-2">No alerts yet</div>
               <p className="text-[13px] text-wp-text3">Configure your alert preferences to start receiving notifications about breaking signals.</p>
               <button

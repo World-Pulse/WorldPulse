@@ -3,6 +3,10 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import {
+  Radio, Newspaper, Search, Zap, Shield, KeyRound, Key,
+  Globe, Bot, MapPin, Unlock, type LucideIcon,
+} from 'lucide-react'
 
 /* ──────────────────────────────────────────────────────────────────────── *
  *  WorldPulse Developer Portal                                            *
@@ -35,7 +39,7 @@ interface Endpoint {
 
 interface EndpointGroup {
   name: string
-  icon: string
+  icon: LucideIcon
   description: string
   endpoints: Endpoint[]
 }
@@ -43,7 +47,7 @@ interface EndpointGroup {
 const ENDPOINT_GROUPS: EndpointGroup[] = [
   {
     name: 'Public Signals',
-    icon: '📡',
+    icon: Radio,
     description: 'Access verified world events — no authentication required.',
     endpoints: [
       {
@@ -77,7 +81,7 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
   },
   {
     name: 'Feed',
-    icon: '📰',
+    icon: Newspaper,
     description: 'Real-time global feed with trending topics and AI-curated content.',
     endpoints: [
       {
@@ -103,7 +107,7 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
   },
   {
     name: 'Search',
-    icon: '🔍',
+    icon: Search,
     description: 'Full-text search with Meilisearch — typo-tolerant, faceted, and fast.',
     endpoints: [
       {
@@ -129,7 +133,7 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
   },
   {
     name: 'Signals',
-    icon: '⚡',
+    icon: Zap,
     description: 'Detailed signal data — verification history, source chain, geolocation.',
     endpoints: [
       {
@@ -161,7 +165,7 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
   },
   {
     name: 'Intelligence',
-    icon: '🛡️',
+    icon: Shield,
     description: 'Specialized intelligence feeds — military, maritime, jamming, threat tracking. Requires Pro API key.',
     endpoints: [
       {
@@ -193,7 +197,7 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
   },
   {
     name: 'Syndication',
-    icon: '📡',
+    icon: Radio,
     description: 'RSS, Atom, JSON Feed, and OPML for integrating WorldPulse into any reader.',
     endpoints: [
       {
@@ -220,7 +224,7 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
   },
   {
     name: 'STIX & Bundles',
-    icon: '🔐',
+    icon: KeyRound,
     description: 'Threat intelligence export in STIX 2.1 format + Ed25519-signed source packs. Requires Pro API key.',
     endpoints: [
       {
@@ -242,7 +246,7 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
   },
   {
     name: 'Authentication',
-    icon: '🔑',
+    icon: Key,
     description: 'JWT-based authentication for accessing protected endpoints.',
     endpoints: [
       {
@@ -585,7 +589,7 @@ export default function DevelopersPage() {
               Interactive API Docs
             </a>
             <a
-              href="https://github.com/worldpulse/worldpulse"
+              href="https://github.com/World-Pulse/WorldPulse"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-[rgba(255,255,255,0.15)] text-wp-text2 font-medium text-[14px] hover:border-[rgba(255,255,255,0.3)] hover:text-wp-text1 transition-all"
@@ -702,16 +706,16 @@ export default function DevelopersPage() {
         <section className="mb-16">
           <h2 className="text-xl font-display text-wp-text1 tracking-wide mb-6">WHY WORLDPULSE API</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {[
-              { icon: '🌍', title: '50K+ Sources', desc: 'Wire services, OSINT feeds, GDELT, government databases, and community reports — all deduplicated and verified.' },
-              { icon: '🤖', title: 'AI Verification', desc: 'Multi-stage reliability scoring with transparent audit trails. Every score is explainable.' },
-              { icon: '📍', title: 'Geolocation', desc: 'PostGIS-powered spatial queries. Bounding box filters, hotspot detection, and convergence analysis.' },
-              { icon: '⚡', title: 'Real-Time', desc: 'WebSocket streaming for live signal updates. New events hit your app within seconds.' },
-              { icon: '🔓', title: 'Open Source', desc: 'MIT licensed. Self-host the entire stack or use our hosted API. Your data, your rules.' },
-              { icon: '🛡️', title: 'STIX 2.1 Export', desc: 'Threat intelligence in industry-standard format. Integrates with any TIP or SIEM.' },
-            ].map(f => (
+            {([
+              { icon: Globe, title: '50K+ Sources', desc: 'Wire services, OSINT feeds, GDELT, government databases, and community reports — all deduplicated and verified.' },
+              { icon: Bot, title: 'AI Verification', desc: 'Multi-stage reliability scoring with transparent audit trails. Every score is explainable.' },
+              { icon: MapPin, title: 'Geolocation', desc: 'PostGIS-powered spatial queries. Bounding box filters, hotspot detection, and convergence analysis.' },
+              { icon: Zap, title: 'Real-Time', desc: 'WebSocket streaming for live signal updates. New events hit your app within seconds.' },
+              { icon: Unlock, title: 'Open Source', desc: 'MIT licensed. Self-host the entire stack or use our hosted API. Your data, your rules.' },
+              { icon: Shield, title: 'STIX 2.1 Export', desc: 'Threat intelligence in industry-standard format. Integrates with any TIP or SIEM.' },
+            ] as const).map(f => (
               <div key={f.title} className="p-4 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.02)] hover:border-[rgba(255,255,255,0.12)] transition-all">
-                <span className="text-2xl mb-3 block">{f.icon}</span>
+                <f.icon className="w-6 h-6 mb-3 text-wp-cyan" />
                 <h3 className="text-[14px] font-medium text-wp-text1 mb-1">{f.title}</h3>
                 <p className="text-[13px] text-wp-text3 leading-relaxed">{f.desc}</p>
               </div>
@@ -734,7 +738,7 @@ export default function DevelopersPage() {
                   onClick={() => setActiveGroup(activeGroup === group.name ? null : group.name)}
                   className="w-full flex items-center gap-3 mb-3 group"
                 >
-                  <span className="text-xl">{group.icon}</span>
+                  <group.icon className="w-5 h-5" />
                   <h3 className="text-[15px] font-medium text-wp-text1 group-hover:text-wp-cyan transition-colors">
                     {group.name}
                   </h3>

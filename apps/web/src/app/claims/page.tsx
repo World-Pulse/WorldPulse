@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { Search } from 'lucide-react'
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 
@@ -258,7 +259,7 @@ export default function ClaimsPage() {
         {/* Claims List */}
         {!loading && !error && claims.length === 0 && (
           <div className="text-center py-16 text-zinc-500">
-            <div className="text-4xl mb-3">🔍</div>
+            <Search className="w-10 h-10 text-zinc-500 mx-auto mb-3" />
             <p className="text-lg font-medium">No claims found</p>
             <p className="text-sm mt-1">
               Claims are extracted automatically as new signals are ingested.

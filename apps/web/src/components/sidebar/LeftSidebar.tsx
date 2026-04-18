@@ -3,51 +3,59 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useTranslations } from '@/lib/i18n'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ElementType } from 'react'
+import {
+  Zap, Globe, Bell, BarChart3, Telescope, LayoutGrid, ClipboardList,
+  TrendingUp, Shield, Unplug, Satellite, Lock, Waves, Landmark,
+  Wheat, KeyRound, Droplets, Pickaxe, Map, ScrollText, Users, Search,
+  Mic, Video, Radio, Wrench, Settings, Activity,
+  CircleDot, Swords, LineChart, Leaf, Pill, FlaskConical, Vote, Globe2,
+  type LucideProps,
+} from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
 const NAV_ITEMS = [
-  { href: '/',           icon: '⚡', labelKey: 'liveFeed' },
-  { href: '/map',        icon: '🌍', labelKey: 'worldMap',    badge: 'LIVE', badgeColor: 'amber' },
-  { href: '/alerts',     icon: '🔔', labelKey: 'alerts',      badge: '12',   badgeColor: 'red'   },
-  { href: '/analytics',  icon: '📊', labelKey: 'analytics'  },
-  { href: '/explore',    icon: '🔭', labelKey: 'explore'    },
-  { href: '/clusters',   icon: '🧩', labelKey: 'clusters',   badge: 'NEW', badgeColor: 'blue'   },
-  { href: '/briefing',   icon: '📋', labelKey: 'briefing',   badge: 'NEW', badgeColor: 'indigo' },
-  { href: '/finance',    icon: '💹', labelKey: 'finance',    badge: 'NEW', badgeColor: 'green'  },
-  { href: '/sanctions',        icon: '🛡️', labelKey: 'sanctions',       badge: 'NEW', badgeColor: 'amber'  },
-  { href: '/internet-outages', icon: '🔌', labelKey: 'internetOutages', badge: 'NEW', badgeColor: 'cyan'   },
-  { href: '/space-weather',   icon: '🛰️', labelKey: 'spaceWeather',    badge: 'NEW', badgeColor: 'cyan'   },
-  { href: '/cyber-threats',   icon: '🔒', labelKey: 'cyberThreats',    badge: 'NEW', badgeColor: 'red'    },
-  { href: '/undersea-cables', icon: '🌊', labelKey: 'underseaCables', badge: 'NEW', badgeColor: 'cyan'   },
-  { href: '/governance',      icon: '🏛️', labelKey: 'governance',      badge: 'NEW', badgeColor: 'purple' },
-  { href: '/food-security',  icon: '🌾', labelKey: 'foodSecurity',    badge: 'NEW', badgeColor: 'amber'  },
-  { href: '/digital-rights', icon: '🔐', labelKey: 'digitalRights',   badge: 'NEW', badgeColor: 'amber'  },
-  { href: '/water-security', icon: '💧', labelKey: 'waterSecurity',   badge: 'NEW', badgeColor: 'amber'  },
-  { href: '/labor-rights',  icon: '⚒️', labelKey: 'laborRights',    badge: 'NEW', badgeColor: 'amber'  },
-  { href: '/countries',  icon: '🗺️', labelKey: 'countries',  badge: 'NEW',  badgeColor: 'blue'  },
-  // { href: '/cameras',    icon: '📹', labelKey: 'cameras',    badge: 'LIVE', badgeColor: 'red'   }, // Hidden pre-launch: EarthCam hotlink-blocks snapshots; needs backend image proxy
-  { href: '/patents',    icon: '📜', labelKey: 'patents',    badge: 'NEW',  badgeColor: 'cyan'  },
-  { href: '/communities',icon: '🤝', labelKey: 'communities' },
-  { href: '/claims',     icon: '🔍', labelKey: 'claims',     badge: 'NEW', badgeColor: 'amber'  },
-  { href: '/audio-claims', icon: '🎙️', labelKey: 'audioClaims', badge: 'NEW', badgeColor: 'red'   },
-  { href: '/video-claims', icon: '📹', labelKey: 'videoClaims', badge: 'NEW', badgeColor: 'red'   },
-  { href: '/sources',    icon: '📡', labelKey: 'mySources'  },
-  { href: '/developers', icon: '🛠️', labelKey: 'developers'  },
-  { href: '/settings',   icon: '⚙️', labelKey: 'settings'   },
-  { href: '/status',     icon: '🟢', labelKey: 'status'     },
+  { href: '/',           icon: Zap,           labelKey: 'liveFeed' },
+  { href: '/map',        icon: Globe,         labelKey: 'worldMap',    badge: 'LIVE', badgeColor: 'amber' },
+  { href: '/alerts',     icon: Bell,          labelKey: 'alerts',      badge: '12',   badgeColor: 'red'   },
+  { href: '/analytics',  icon: BarChart3,     labelKey: 'analytics'  },
+  { href: '/explore',    icon: Telescope,     labelKey: 'explore'    },
+  { href: '/clusters',   icon: LayoutGrid,    labelKey: 'clusters',   badge: 'NEW', badgeColor: 'blue'   },
+  { href: '/briefing',   icon: ClipboardList, labelKey: 'briefing',   badge: 'NEW', badgeColor: 'indigo' },
+  { href: '/finance',    icon: TrendingUp,    labelKey: 'finance',    badge: 'NEW', badgeColor: 'green'  },
+  { href: '/sanctions',        icon: Shield,    labelKey: 'sanctions',       badge: 'NEW', badgeColor: 'amber'  },
+  { href: '/internet-outages', icon: Unplug,    labelKey: 'internetOutages', badge: 'NEW', badgeColor: 'cyan'   },
+  { href: '/space-weather',   icon: Satellite,  labelKey: 'spaceWeather',    badge: 'NEW', badgeColor: 'cyan'   },
+  { href: '/cyber-threats',   icon: Lock,       labelKey: 'cyberThreats',    badge: 'NEW', badgeColor: 'red'    },
+  { href: '/undersea-cables', icon: Waves,      labelKey: 'underseaCables', badge: 'NEW', badgeColor: 'cyan'   },
+  { href: '/governance',      icon: Landmark,   labelKey: 'governance',      badge: 'NEW', badgeColor: 'purple' },
+  { href: '/food-security',  icon: Wheat,       labelKey: 'foodSecurity',    badge: 'NEW', badgeColor: 'amber'  },
+  { href: '/digital-rights', icon: KeyRound,    labelKey: 'digitalRights',   badge: 'NEW', badgeColor: 'amber'  },
+  { href: '/water-security', icon: Droplets,    labelKey: 'waterSecurity',   badge: 'NEW', badgeColor: 'amber'  },
+  { href: '/labor-rights',  icon: Pickaxe,      labelKey: 'laborRights',    badge: 'NEW', badgeColor: 'amber'  },
+  { href: '/countries',  icon: Map,            labelKey: 'countries',  badge: 'NEW',  badgeColor: 'blue'  },
+  // { href: '/cameras',    icon: Camera,      labelKey: 'cameras',    badge: 'LIVE', badgeColor: 'red'   }, // Hidden pre-launch: EarthCam hotlink-blocks snapshots; needs backend image proxy
+  { href: '/patents',    icon: ScrollText,    labelKey: 'patents',    badge: 'NEW',  badgeColor: 'cyan'  },
+  { href: '/communities',icon: Users,         labelKey: 'communities' },
+  { href: '/claims',     icon: Search,        labelKey: 'claims',     badge: 'NEW', badgeColor: 'amber'  },
+  { href: '/audio-claims', icon: Mic,         labelKey: 'audioClaims', badge: 'NEW', badgeColor: 'red'   },
+  { href: '/video-claims', icon: Video,       labelKey: 'videoClaims', badge: 'NEW', badgeColor: 'red'   },
+  { href: '/sources',    icon: Radio,         labelKey: 'mySources'  },
+  { href: '/developers', icon: Wrench,        labelKey: 'developers'  },
+  { href: '/settings',   icon: Settings,      labelKey: 'settings'   },
+  { href: '/status',     icon: Activity,      labelKey: 'status'     },
 ] as const
 
 const CHANNELS = [
-  { href: '/c/breaking',   icon: '🔴', labelKey: 'breakingNews',  color: 'text-wp-red' },
-  { href: '/c/conflict',   icon: '⚔️', labelKey: 'conflictZones', color: 'text-red-500' },
-  { href: '/c/markets',    icon: '📈', labelKey: 'markets',        color: 'text-wp-amber' },
-  { href: '/c/climate',    icon: '🌱', labelKey: 'climate',        color: 'text-green-400' },
-  { href: '/c/health',     icon: '💊', labelKey: 'health',         color: 'text-purple-400' },
-  { href: '/c/technology', icon: '🔬', labelKey: 'scienceTech',    color: 'text-wp-cyan' },
-  { href: '/c/politics',   icon: '🗳️', labelKey: 'politics',       color: 'text-blue-400' },
-  { href: '/c/culture',    icon: '🌐', labelKey: 'culture',        color: 'text-pink-400' },
+  { href: '/c/breaking',   icon: CircleDot,   labelKey: 'breakingNews',  color: 'text-wp-red' },
+  { href: '/c/conflict',   icon: Swords,      labelKey: 'conflictZones', color: 'text-red-500' },
+  { href: '/c/markets',    icon: LineChart,    labelKey: 'markets',        color: 'text-wp-amber' },
+  { href: '/c/climate',    icon: Leaf,         labelKey: 'climate',        color: 'text-green-400' },
+  { href: '/c/health',     icon: Pill,         labelKey: 'health',         color: 'text-purple-400' },
+  { href: '/c/technology', icon: FlaskConical, labelKey: 'scienceTech',    color: 'text-wp-cyan' },
+  { href: '/c/politics',   icon: Vote,         labelKey: 'politics',       color: 'text-blue-400' },
+  { href: '/c/culture',    icon: Globe2,       labelKey: 'culture',        color: 'text-pink-400' },
 ] as const
 
 // Fallback trending topics shown before real data loads
@@ -60,7 +68,7 @@ const TRENDING_FALLBACK = [
 ]
 
 const MOMENTUM_LABEL: Record<string, string> = {
-  surging: '🔥 Surging',
+  surging: 'Surging',
   rising:  '↑ Rising',
   steady:  '→ Steady',
   cooling: '↓ Cooling',
@@ -225,7 +233,7 @@ export function LeftSidebar() {
               {isActive && (
                 <span className="absolute left-0 rtl:left-auto rtl:right-0 top-1/2 -translate-y-1/2 w-[3px] h-[60%] bg-wp-amber rounded-r rtl:rounded-r-none rtl:rounded-l" aria-hidden="true" />
               )}
-              <span className="text-[16px] w-5 text-center" aria-hidden="true">{item.icon}</span>
+              <item.icon className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
               <span>{tNav(item.labelKey)}</span>
               {'badge' in item && item.badge && (
                 <span
@@ -271,7 +279,7 @@ export function LeftSidebar() {
               {isActive && (
                 <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-[60%] bg-wp-amber rounded-r" aria-hidden="true" />
               )}
-              <span className={`text-[16px] w-5 text-center ${ch.color}`} aria-hidden="true">{ch.icon}</span>
+              <ch.icon className={`w-4 h-4 flex-shrink-0 ${ch.color}`} aria-hidden="true" />
               <span>{tChannels(ch.labelKey)}</span>
               {count != null && count > 0 && (
                 <span className="ml-auto font-mono text-[9px] text-wp-text3 flex-shrink-0" aria-label={`${count} signals`}>

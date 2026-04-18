@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
+import { UserCircle, Radio, Landmark, BadgeCheck, FlaskConical } from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -23,10 +24,10 @@ interface UserProfile {
   isFollowing:    boolean
 }
 
-const ACCOUNT_TYPE_ICONS: Record<string, string> = {
-  official:   '🏛️',
-  journalist: '✅',
-  expert:     '🔬',
+const ACCOUNT_TYPE_ICONS: Record<string, typeof Landmark> = {
+  official:   Landmark,
+  journalist: BadgeCheck,
+  expert:     FlaskConical,
   ai:         '🤖',
   community:  '👤',
 }
@@ -84,7 +85,7 @@ export default function ProfilePage() {
   if (!user) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-20 text-center">
-        <div className="text-[48px] mb-4">👤</div>
+        <UserCircle className="w-12 h-12 text-wp-text3 mx-auto mb-4" />
         <div className="text-[18px] font-semibold text-wp-text mb-2">User not found</div>
         <div className="text-wp-text3">@{handle} doesn't exist on WorldPulse</div>
       </div>
@@ -93,7 +94,7 @@ export default function ProfilePage() {
 
   const trustPct  = Math.round(user.trustScore * 100)
   const joinDate  = new Date(user.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-  const typeIcon  = ACCOUNT_TYPE_ICONS[user.accountType] ?? '👤'
+  const TypeIcon  = ACCOUNT_TYPE_ICONS[user.accountType] ?? UserCircle
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -128,8 +129,8 @@ export default function ProfilePage() {
         <div className="mb-3">
           <div className="flex items-center gap-2 mb-1">
             <h1 className="text-[22px] font-bold text-wp-text">{user.displayName}</h1>
-            {user.verified && <span className="text-wp-cyan text-[16px]">✓</span>}
-            <span className="text-[18px]">{typeIcon}</span>
+            {user.verified && <BadgeCheck className="w-4 h-4 text-wp-cyan" />}
+            <TypeIcon className="w-[18px] h-[18px] text-wp-text2" />
           </div>
           <div className="font-mono text-[14px] text-wp-text3">@{user.handle}</div>
         </div>
@@ -191,7 +192,7 @@ export default function ProfilePage() {
 
         {/* Empty state for tabs */}
         <div className="text-center py-12">
-          <div className="text-[40px] mb-3">📡</div>
+          <Radio className="w-10 h-10 text-wp-text3 mx-auto mb-3" />
           <div className="text-wp-text2 text-[14px]">
             {activeTab === 'posts'   && `@${user.handle} hasn't posted yet`}
             {activeTab === 'signals' && `No signals from @${user.handle}`}

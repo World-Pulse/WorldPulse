@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react'
+import { Satellite } from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://api.world-pulse.io'
 
@@ -224,7 +225,7 @@ export default function SpaceWeatherPage() {
       <div className="border-b border-white/[0.08] px-4 py-4 md:px-8">
         <div className="mx-auto max-w-6xl flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">🛰️</span>
+            <Satellite className="w-6 h-6 text-cyan-400" />
             <div>
               <h1 className="text-xl font-bold text-white">Space Weather Intelligence</h1>
               <p className="text-sm text-wp-text2 mt-0.5">

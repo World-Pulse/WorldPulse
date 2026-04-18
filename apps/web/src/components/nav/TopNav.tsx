@@ -6,6 +6,11 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useTranslations } from '@/lib/i18n'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { useTheme } from '@/components/providers'
+import {
+  Zap, Globe, Bell, BarChart3, Telescope, Users, Radio,
+  TrendingUp, Wrench, Settings, Search, Sun, Moon, Menu, X, LogOut,
+  Gem,
+} from 'lucide-react'
 
 const FALLBACK_TICKER_ITEMS = [
   { id: '', type: 'red',   label: 'BREAKING',  text: 'Loading live headlines…' },
@@ -21,17 +26,17 @@ const DOT_COLORS: Record<string, string> = {
 }
 
 const NAV_LINKS = [
-  { href: '/',            icon: '⚡', label: 'Live Feed'    },
-  { href: '/map',         icon: '🌍', label: 'World Map'    },
-  { href: '/finance',     icon: '💹', label: 'Finance'      },
-  { href: '/alerts',      icon: '🔔', label: 'Alerts'       },
-  { href: '/analytics',   icon: '📊', label: 'Analytics'    },
-  { href: '/explore',     icon: '🔭', label: 'Explore'      },
-  { href: '/communities', icon: '🤝', label: 'Communities'  },
-  { href: '/sources',     icon: '📡', label: 'Sources'      },
-  { href: '/pricing',     icon: '💎', label: 'Pricing'      },
-  { href: '/developers',  icon: '🛠️', label: 'Developers'   },
-  { href: '/settings',    icon: '⚙️', label: 'Settings'     },
+  { href: '/',            icon: Zap,        label: 'Live Feed'    },
+  { href: '/map',         icon: Globe,      label: 'World Map'    },
+  { href: '/finance',     icon: TrendingUp, label: 'Finance'      },
+  { href: '/alerts',      icon: Bell,       label: 'Alerts'       },
+  { href: '/analytics',   icon: BarChart3,  label: 'Analytics'    },
+  { href: '/explore',     icon: Telescope,  label: 'Explore'      },
+  { href: '/communities', icon: Users,      label: 'Communities'  },
+  { href: '/sources',     icon: Radio,      label: 'Sources'      },
+  { href: '/pricing',     icon: Gem,        label: 'Pricing'      },
+  { href: '/developers',  icon: Wrench,     label: 'Developers'   },
+  { href: '/settings',    icon: Settings,   label: 'Settings'     },
 ]
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
@@ -159,7 +164,7 @@ export function TopNav() {
           aria-controls="mobile-nav-drawer"
           className="md:hidden ml-2 w-11 h-11 flex items-center justify-center rounded-lg text-wp-text3 hover:text-wp-text hover:bg-[rgba(255,255,255,0.06)] transition-all text-[18px] flex-shrink-0"
         >
-          {mobileOpen ? '✕' : '☰'}
+          {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
 
         {/* TICKER — desktop only, live headlines */}
@@ -227,7 +232,7 @@ export function TopNav() {
             aria-label="Search WorldPulse — or press ⌘K"
             className="hidden md:flex items-center gap-2 bg-wp-s2 border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-[6px] text-wp-text3 hover:text-wp-text hover:border-[rgba(255,255,255,0.15)] transition-all text-[13px] w-44"
           >
-            <span aria-hidden="true">🔍</span>
+            <Search className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
             <span aria-hidden="true" className="flex-1">{t('searchSignals')}</span>
             <kbd className="font-mono text-[10px] border border-[rgba(255,255,255,0.1)] rounded px-1 py-px ml-auto" aria-hidden="true">⌘K</kbd>
           </Link>
@@ -239,7 +244,7 @@ export function TopNav() {
             title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
             className="w-8 h-8 flex items-center justify-center rounded-lg text-wp-text3 hover:text-wp-text hover:bg-[rgba(255,255,255,0.06)] transition-all text-[15px]"
           >
-            {theme === 'dark' ? '☀' : '☾'}
+            {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
 
           {/* Language switcher — sm+ only */}
@@ -333,13 +338,13 @@ export function TopNav() {
                 aria-label="Close menu"
                 className="w-8 h-8 flex items-center justify-center rounded-lg text-wp-text3 hover:text-wp-text transition-all"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Nav links */}
             <nav aria-label="Primary navigation" className="flex-1 px-3 py-4 space-y-0.5">
-              {NAV_LINKS.map(({ href, icon, label }) => {
+              {NAV_LINKS.map(({ href, icon: Icon, label }) => {
                 const active = href === '/' ? pathname === '/' : pathname.startsWith(href)
                 return (
                   <Link
@@ -352,7 +357,7 @@ export function TopNav() {
                         : 'text-wp-text2 hover:bg-wp-s2 hover:text-wp-text'
                       }`}
                   >
-                    <span className="text-[18px] w-6 text-center flex-shrink-0" aria-hidden="true">{icon}</span>
+                    <Icon className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
                     <span>{label}</span>
                   </Link>
                 )
@@ -375,7 +380,7 @@ export function TopNav() {
                   onClick={logout}
                   className="w-full flex items-center gap-3 px-3 py-[10px] rounded-lg text-[15px] text-wp-red hover:bg-[rgba(255,59,92,0.08)] transition-all text-left"
                 >
-                  <span className="text-[18px] w-6 text-center flex-shrink-0" aria-hidden="true">🚪</span>
+                  <LogOut className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
                   Sign Out
                 </button>
               </div>

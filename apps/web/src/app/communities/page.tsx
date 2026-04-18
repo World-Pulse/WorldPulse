@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { KeyRound, Globe2 } from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -222,7 +223,7 @@ export default function CommunitiesPage() {
       {/* Early Access Banner */}
       <div className="mb-6 rounded-xl border border-[rgba(245,166,35,0.3)] bg-[rgba(245,166,35,0.06)] px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3 min-w-0">
-          <span className="text-[18px] flex-shrink-0">🔐</span>
+          <KeyRound className="w-[18px] h-[18px] flex-shrink-0 text-wp-amber" />
           <div className="min-w-0">
             <span className="font-semibold text-[13px] text-wp-amber">Communities are in early access.</span>
             <span className="text-[13px] text-wp-text2 ml-1.5">Pro members get priority access to create and moderate communities.</span>
@@ -411,7 +412,7 @@ export default function CommunitiesPage() {
       {/* Empty */}
       {!loading && communities.length === 0 && (
         <div className="text-center py-16">
-          <div className="text-[48px] mb-4">🌐</div>
+          <Globe2 className="w-12 h-12 text-wp-text3 mx-auto mb-4" />
           <div className="text-[18px] font-semibold text-wp-text mb-2">
             {search || category ? 'No communities found' : 'Communities are coming'}
           </div>

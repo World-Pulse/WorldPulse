@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { ScraperGate1Status } from '@/components/scraper/ScraperGate1Status'
+import { Lock } from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -323,7 +324,7 @@ export default function AdminPage() {
   if (!isAdmin) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-4">
-        <p className="text-[48px]">🔒</p>
+        <Lock className="w-12 h-12 text-wp-text3 mx-auto" />
         <h1 className="font-display text-[24px] tracking-widest text-wp-text">403 — ACCESS DENIED</h1>
         <p className="text-[14px] text-wp-text2">Admin access required.</p>
         <Link href="/" className="mt-4 text-[13px] text-wp-amber hover:underline">← Back to WorldPulse</Link>

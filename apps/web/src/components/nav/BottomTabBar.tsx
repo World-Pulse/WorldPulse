@@ -2,13 +2,14 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { Zap, Globe, Search, Bell, Settings } from 'lucide-react'
 
 const TABS = [
-  { href: '/',         icon: '⚡', label: 'Feed'    },
-  { href: '/map',      icon: '🌍', label: 'Map'     },
-  { href: '/search',   icon: '🔍', label: 'Search'  },
-  { href: '/alerts',   icon: '🔔', label: 'Alerts'  },
-  { href: '/settings', icon: '⚙️', label: 'More'    },
+  { href: '/',         icon: Zap,      label: 'Feed'    },
+  { href: '/map',      icon: Globe,    label: 'Map'     },
+  { href: '/search',   icon: Search,   label: 'Search'  },
+  { href: '/alerts',   icon: Bell,     label: 'Alerts'  },
+  { href: '/settings', icon: Settings, label: 'More'    },
 ] as const
 
 export function BottomTabBar() {
@@ -32,7 +33,7 @@ export function BottomTabBar() {
             className={`flex-1 flex flex-col items-center justify-center gap-[2px] py-2 min-h-[52px] text-[9px] font-mono tracking-[0.5px] uppercase transition-colors
               ${active ? 'text-wp-amber' : 'text-wp-text3 hover:text-wp-text2'}`}
           >
-            <span className="text-[20px] leading-none" aria-hidden="true">{tab.icon}</span>
+            <tab.icon className="w-5 h-5" aria-hidden="true" />
             <span>{tab.label}</span>
           </Link>
         )

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { Globe2 } from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -88,7 +89,7 @@ export default function CommunityDetailPage() {
   if (!community) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-16 text-center">
-        <div className="text-[48px] mb-4">🌐</div>
+        <Globe2 className="w-12 h-12 text-wp-text3 mx-auto mb-4" />
         <div className="text-[18px] font-semibold text-wp-text">Community not found</div>
         <button onClick={() => router.push('/communities')} className="mt-4 text-wp-amber hover:underline text-[14px]">
           Browse communities

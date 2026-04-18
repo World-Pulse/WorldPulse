@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { ReputationChart, generateReputationHistory } from '@/components/ReputationChart'
 import type { User } from '@worldpulse/types'
 import { EmptyState } from '@/components/EmptyState'
+import { UserCircle } from 'lucide-react'
 import { useToast } from '@/components/Toast'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
@@ -385,7 +386,7 @@ export default function UserProfilePage() {
   if (notFound || !user) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-24 text-center">
-        <div className="text-[52px] mb-4">👤</div>
+        <UserCircle className="w-12 h-12 text-wp-text3 mx-auto mb-4" />
         <div className="text-[20px] font-bold text-wp-text mb-2">User not found</div>
         <div className="text-[14px] text-wp-text3 mb-6">@{handle} doesn&apos;t exist on WorldPulse</div>
         <Link href="/" className="px-5 py-2 rounded-lg bg-wp-amber text-black text-[13px] font-bold hover:bg-[#ffb84d] transition-all">

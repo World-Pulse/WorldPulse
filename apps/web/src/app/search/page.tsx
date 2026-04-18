@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { EmptyState } from '@/components/EmptyState'
 import { ReliabilityDots } from '@/components/signals/ReliabilityDots'
+import { Globe, Landmark, MapPin, Map as MapIcon } from 'lucide-react'
 import { FlagModal } from '@/components/signals/FlagModal'
 import type { Signal, CrossCheckStatus } from '@worldpulse/types'
 
@@ -93,12 +94,12 @@ function EntityCard({ entity }: { entity: OSEntity }) {
         <span className="font-mono text-[9px] text-wp-text3 uppercase border border-[rgba(255,255,255,0.15)] px-2 py-0.5 rounded">
           {entity.schema}
         </span>
-        {country && <span className="font-mono text-[10px] text-wp-text2 ml-auto">🌍 {country.toUpperCase()}</span>}
+        {country && <span className="font-mono text-[10px] text-wp-text2 ml-auto inline-flex items-center gap-1"><Globe className="w-3 h-3" /> {country.toUpperCase()}</span>}
       </div>
 
       <div className="text-[14px] font-semibold text-wp-text leading-snug mb-1">{entity.caption}</div>
 
-      {pos && <div className="text-[12px] text-wp-text2 mb-1">🏛 {pos}</div>}
+      {pos && <div className="text-[12px] text-wp-text2 mb-1 flex items-center gap-1"><Landmark className="w-3 h-3" /> {pos}</div>}
 
       {aliases.length > 0 && (
         <div className="font-mono text-[10px] text-wp-text3 mb-2">
@@ -173,7 +174,7 @@ function SignalSearchCard({ sig, isActive }: { sig: Signal; isActive?: boolean }
         <span className="font-mono text-[9px] text-wp-text3 uppercase">{sig.category}</span>
         {isBreaking  && <span className="source-badge bg-wp-red text-white animate-flash-tag">BREAKING</span>}
         {isContested && <span className="source-badge bg-[rgba(245,166,35,0.15)] text-wp-amber border border-[rgba(245,166,35,0.4)]">CONTESTED</span>}
-        {sig.locationName && <span className="font-mono text-[10px] text-wp-text2 ml-auto">📍 {sig.locationName}</span>}
+        {sig.locationName && <span className="font-mono text-[10px] text-wp-text2 ml-auto inline-flex items-center gap-1"><MapPin className="w-3 h-3" /> {sig.locationName}</span>}
       </div>
       <div className="text-[14px] font-semibold text-wp-text leading-snug mb-2">{sig.title}</div>
       <div className="flex items-center gap-3 mt-2">
@@ -192,7 +193,7 @@ function SignalSearchCard({ sig, isActive }: { sig: Signal; isActive?: boolean }
             className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono text-wp-cyan border border-[rgba(0,212,255,0.3)] hover:bg-[rgba(0,212,255,0.08)] transition-colors"
             title="View on map"
           >
-            🗺 Map
+            <MapIcon className="w-3 h-3" /> Map
           </button>
         )}
         <button
@@ -1062,7 +1063,7 @@ export default function SearchPage() {
       {/* Initial state */}
       {!query && (
         <div className="text-center py-12">
-          <div className="text-[48px] mb-4">🌍</div>
+          <Globe className="w-12 h-12 text-wp-text3 mx-auto mb-4" />
           <div className="text-[18px] font-semibold text-wp-text mb-2">Search WorldPulse</div>
           <div className="text-wp-text3 text-[14px] mb-4">Find signals, posts, people, topics, and sanctioned entities</div>
           <div className="flex items-center gap-2 justify-center mb-6 text-[12px] text-wp-text3">

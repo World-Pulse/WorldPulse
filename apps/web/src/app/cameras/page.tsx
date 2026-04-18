@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { Video } from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 const SNAPSHOT_REFRESH_MS = 30_000
@@ -107,16 +108,18 @@ function CameraCard({ camera, refreshTick }: CameraCardProps) {
           />
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-zinc-900 to-zinc-800">
-            <div className="text-4xl mb-2 opacity-60">📹</div>
+            <Video className="w-10 h-10 mb-2 opacity-60 mx-auto" />
             <span className="text-[11px] text-zinc-500 font-mono">Stream connecting…</span>
-            <a
-              href={camera.embedUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 text-[10px] text-amber-500/70 hover:text-amber-400 font-mono transition-colors"
-            >
-              Open external feed →
-            </a>
+            {isValidEmbed && (
+              <a
+                href={camera.embedUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 text-[10px] text-amber-500/70 hover:text-amber-400 font-mono transition-colors"
+              >
+                Open external feed →
+              </a>
+            )}
           </div>
         )}
 
@@ -212,7 +215,7 @@ export default function CamerasPage() {
 
           {/* Title row */}
           <div className="px-6 pt-2 pb-3 flex items-center gap-3">
-            <span className="text-2xl">📹</span>
+            <Video className="w-6 h-6 text-red-400" />
             <div>
               <h1 className="text-xl font-bold text-zinc-100 leading-none">Live Cameras</h1>
               <p className="text-[12px] text-zinc-500 mt-0.5">Public CCTV & webcam feeds worldwide</p>
@@ -286,7 +289,7 @@ export default function CamerasPage() {
             </div>
           ) : cameras.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 text-center">
-              <span className="text-4xl mb-4">📷</span>
+              <Video className="w-10 h-10 mb-4 text-zinc-400 mx-auto" />
               <p className="text-zinc-400 text-[15px] font-medium">No cameras found</p>
               <p className="text-zinc-600 text-[13px] mt-1">Try a different region or remove the type filter.</p>
             </div>

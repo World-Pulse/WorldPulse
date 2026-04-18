@@ -1755,7 +1755,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     id:              'maritime-executive',
     name:            'The Maritime Executive',
     feedUrl:         'https://maritime-executive.com/articles.rss',
-    category:        'infrastructure',
+    category:        'economy',
     biasLabel:       'center',
     reliability:     0.80,
     countryCode:     'US',

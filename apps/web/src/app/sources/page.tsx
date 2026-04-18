@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { Radio } from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -297,7 +298,7 @@ export default function SourcesPage() {
 
       {filtered.length === 0 && !loading && (
         <div className="text-center py-16">
-          <div className="text-[48px] mb-4">📡</div>
+          <Radio className="w-12 h-12 text-wp-text3 mx-auto mb-4" />
           <div className="text-[16px] font-semibold text-wp-text mb-2">No sources match your filters</div>
           <button onClick={() => { setSearch(''); setTierFilter(''); setCatFilter('') }} className="text-wp-amber hover:underline text-[13px]">
             Clear filters

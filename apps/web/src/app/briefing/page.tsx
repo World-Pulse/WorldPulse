@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { Inbox } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -268,7 +269,7 @@ export default function BriefingPage() {
         {/* ── No signals empty state ── */}
         {!loading && briefing && briefing.headline_count === 0 && (
           <div className="text-center py-16 text-zinc-500">
-            <p className="text-4xl mb-4">📭</p>
+            <Inbox className="w-10 h-10 text-zinc-500 mx-auto mb-4" />
             <p className="text-lg font-medium text-zinc-400">No signals for this period</p>
             <p className="text-sm mt-2">
               Try a different date or category, or check back later as new signals are verified.
