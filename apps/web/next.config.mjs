@@ -38,10 +38,10 @@ const nextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
+              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com",
               "style-src 'self' 'unsafe-inline' https://fonts.openmaptiles.org",
               "font-src 'self' https://fonts.openmaptiles.org",
-              "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.earthdata.nasa.gov https://gibs.earthdata.nasa.gov",
+              "img-src 'self' data: blob: https://tile.openstreetmap.org https://server.arcgisonline.com https://*.maptiler.com https://*.earthdata.nasa.gov https://gibs.earthdata.nasa.gov https://www.google-analytics.com https://*.google-analytics.com",
               [
                 "connect-src 'self'",
                 'https://api.world-pulse.io',
@@ -51,6 +51,8 @@ const nextConfig = {
                   ? ['http://localhost:3001', 'ws://localhost:3001']
                   : []),
                 'https://tile.openstreetmap.org',
+                'https://server.arcgisonline.com',
+                'https://*.maptiler.com',
                 'https://celestrak.org',
                 'https://gibs.earthdata.nasa.gov',
                 // Natural Earth country boundary GeoJSON for country risk choropleth
@@ -58,6 +60,11 @@ const nextConfig = {
                 // Sentry error reporting (*.ingest.sentry.io for any org)
                 'https://*.ingest.sentry.io',
                 'https://*.ingest.us.sentry.io',
+                // Google Analytics
+                'https://www.googletagmanager.com',
+                'https://www.google-analytics.com',
+                'https://*.google-analytics.com',
+                'https://*.analytics.google.com',
               ].join(' '),
               // MapLibre GL JS requires Web Workers + blob: for tile decoding
               "worker-src 'self' blob:",
