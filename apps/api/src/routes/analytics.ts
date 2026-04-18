@@ -86,7 +86,7 @@ export function parseWindowHours(window: string): number {
   return 24  // default: 24h
 }
 
-// Market instruments tracked
+// Market instruments tracked — core set (sidebar widget)
 const MARKET_TICKERS = [
   { symbol: '^VIX',    name: 'VIX',    type: 'volatility' },
   { symbol: '^GSPC',   name: 'S&P 500', type: 'equity'    },
@@ -97,6 +97,23 @@ const MARKET_TICKERS = [
   { symbol: 'GC=F',    name: 'Gold',    type: 'commodity' },
   { symbol: 'CL=F',    name: 'WTI Oil', type: 'commodity' },
   { symbol: 'EURUSD=X', name: 'EUR/USD', type: 'fx'       },
+]
+
+// Extended set — additional instruments for the /finance page
+const EXTENDED_TICKERS = [
+  { symbol: '^DJI',     name: 'Dow Jones',  type: 'equity'    },
+  { symbol: '^RUT',     name: 'Russell 2K',  type: 'equity'    },
+  { symbol: '^STOXX50E', name: 'Euro Stoxx', type: 'equity'   },
+  { symbol: '^HSI',     name: 'Hang Seng',  type: 'equity'    },
+  { symbol: 'ETH-USD',  name: 'ETH',        type: 'crypto'    },
+  { symbol: 'SOL-USD',  name: 'SOL',        type: 'crypto'    },
+  { symbol: 'SI=F',     name: 'Silver',     type: 'commodity' },
+  { symbol: 'NG=F',     name: 'Nat Gas',    type: 'commodity' },
+  { symbol: 'HG=F',     name: 'Copper',     type: 'commodity' },
+  { symbol: 'GBPUSD=X', name: 'GBP/USD',   type: 'fx'        },
+  { symbol: 'JPY=X',    name: 'USD/JPY',   type: 'fx'         },
+  { symbol: '^TNX',     name: '10Y Yield',  type: 'bond'      },
+  { symbol: 'DX-Y.NYB', name: 'DXY',       type: 'fx'         },
 ]
 
 function fetchYahooQuote(symbol: string): Promise<{ price: number; changePercent: number; prevClose: number } | null> {
@@ -234,14 +251,17 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
       description: 'Live prices for VIX, S&P 500, NASDAQ, FTSE 100, Nikkei, Bitcoin, Gold, WTI Oil, EUR/USD from Yahoo Finance',
     },
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
-  }, async (_req, reply) => {
-    const cacheKey = 'analytics:markets'
+  }, async (req, reply) => {
+    const extended = (req.query as Record<string, string>).extended === 'true'
+    const cacheKey = extended ? 'analytics:markets:extended' : 'analytics:markets'
     const cached = await redis.get(cacheKey).catch(() => null)
     if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
 
+    const instruments = extended ? [...MARKET_TICKERS, ...EXTENDED_TICKERS] : MARKET_TICKERS
+
     // Fetch all quotes in parallel — tolerate partial failures
     const results = await Promise.allSettled(
-      MARKET_TICKERS.map(async t => {
+      instruments.map(async t => {
         const quote = await fetchYahooQuote(t.symbol)
         return { ...t, ...(quote ?? { price: null, changePercent: null, prevClose: null }) }
       })
@@ -249,7 +269,7 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
 
     const tickers = results.map((r, i) => {
       if (r.status === 'fulfilled') return r.value
-      return { ...MARKET_TICKERS[i]!, price: null, changePercent: null, prevClose: null }
+      return { ...instruments[i]!, price: null, changePercent: null, prevClose: null }
     })
 
     const result = { tickers, generated_at: new Date().toISOString() }

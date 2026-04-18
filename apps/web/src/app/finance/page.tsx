@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { MarketPulse } from '@/components/MarketPulse'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -222,6 +223,20 @@ export default function FinancePage() {
           })}
         </div>
       )}
+
+      {/* ── Market Pulse — live prices ── */}
+      <div className="bg-wp-surface border border-[rgba(255,255,255,0.07)] rounded-2xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-[rgba(255,255,255,0.07)] flex items-center justify-between">
+          <h2 className="text-[14px] font-semibold text-wp-text flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-green-500 animate-live-pulse" />
+            Market Pulse
+          </h2>
+          <span className="text-[11px] text-wp-text3 font-mono">live · 22 instruments</span>
+        </div>
+        <div className="p-4">
+          <MarketPulse extended />
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
