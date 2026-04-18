@@ -473,7 +473,6 @@ export default function CountriesPage() {
                     <span className="text-wp-text font-medium text-[14px] group-hover:text-wp-amber transition-colors">
                       {country.name}
                     </span>
-                    <span className="font-mono text-[9px] text-wp-text3">{country.code}</span>
                     <Link
                       href={`/countries/${country.code.toLowerCase()}`}
                       onClick={e => e.stopPropagation()}
