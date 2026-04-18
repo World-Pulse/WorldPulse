@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { Waves } from 'lucide-react'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -78,7 +79,7 @@ const FLAG_MAP: Record<string, string> = {
   SA: '🇸🇦', AE: '🇦🇪', OM: '🇴🇲', JO: '🇯🇴', QA: '🇶🇦',
   RU: '🇷🇺', EE: '🇪🇪', CA: '🇨🇦', MX: '🇲🇽',
 }
-function getFlag(code: string): string { return FLAG_MAP[code] ?? '🌐' }
+function getFlag(code: string): string { return FLAG_MAP[code] ?? '--' }
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -136,7 +137,7 @@ export default function UnderseaCablesPage() {
         <div className="absolute inset-0 bg-gradient-to-br from-cyan-900/20 via-transparent to-blue-900/20" />
         <div className="relative max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3 mb-2">
-            <span className="text-3xl">🌊</span>
+            <Waves className="w-8 h-8 text-cyan-400" />
             <h1 className="text-3xl font-bold tracking-tight">Undersea Cable Intelligence</h1>
           </div>
           <p className="text-zinc-400 text-lg max-w-2xl">

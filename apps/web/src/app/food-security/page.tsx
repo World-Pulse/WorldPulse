@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { Wheat, TrendingUp, TrendingDown, ArrowRight } from 'lucide-react'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -76,10 +77,10 @@ const IPC_COLORS: Record<number, string> = {
   5: 'bg-red-900',
 }
 
-const TREND_ICONS: Record<string, string> = {
-  improving: '📈',
-  declining: '📉',
-  stable: '➡️',
+function TrendIcon({ trend }: { trend: string }) {
+  if (trend === 'improving') return <TrendingUp className="w-3.5 h-3.5 text-emerald-400 inline-block" />
+  if (trend === 'declining') return <TrendingDown className="w-3.5 h-3.5 text-red-400 inline-block" />
+  return <ArrowRight className="w-3.5 h-3.5 text-gray-400 inline-block" />
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -135,7 +136,7 @@ export default function FoodSecurityPage() {
       {/* Hero */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-amber-400 flex items-center gap-3">
-          🌾 Food Security Intelligence
+          <Wheat className="w-8 h-8" /> Food Security Intelligence
         </h1>
         <p className="text-gray-400 mt-2 max-w-2xl">
           Real-time monitoring of global food security — hunger indices, IPC classifications,
@@ -223,7 +224,7 @@ export default function FoodSecurityPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
             {summary.most_improved.map(r => (
               <div key={r.code} className="flex items-start gap-2 text-sm">
-                <span className="text-emerald-400">📈</span>
+                <TrendingUp className="w-4 h-4 text-emerald-400 flex-shrink-0" />
                 <div>
                   <span className="text-gray-200 font-medium">{r.name}</span>
                   <p className="text-gray-500 text-xs mt-0.5">{r.trend_detail}</p>
@@ -345,7 +346,7 @@ export default function FoodSecurityPage() {
 
                 {/* Trend */}
                 <div className="flex items-center gap-2 text-xs">
-                  <span>{TREND_ICONS[region.trend]}</span>
+                  <TrendIcon trend={region.trend} />
                   <span className="text-gray-400">{region.trend_detail}</span>
                 </div>
 

@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react'
+import { ShieldAlert, CheckCircle, Shield, Search } from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://api.world-pulse.io'
 
@@ -196,7 +197,7 @@ export default function CyberThreatsPage() {
       <div className="border-b border-white/[0.08] px-4 py-4 md:px-8">
         <div className="mx-auto max-w-6xl flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">🔒</span>
+            <ShieldAlert className="w-6 h-6 text-red-400" />
             <div>
               <h1 className="text-xl font-bold text-white">Cyber Threat Intelligence</h1>
               <p className="text-sm text-wp-text2 mt-0.5">
@@ -275,7 +276,7 @@ export default function CyberThreatsPage() {
         {/* ─── Empty state ─────────────────────────────────────────────────── */}
         {isEmpty && !error && (
           <div className="rounded-xl border border-green-500/20 bg-green-500/10 p-6 text-center">
-            <div className="text-3xl mb-2">✅</div>
+            <CheckCircle className="w-8 h-8 text-green-400 mx-auto mb-2" />
             <div className="font-semibold text-green-400">No Active Threats Detected</div>
             <div className="text-sm text-wp-text3 mt-1">
               No cyber threat signals in the selected time window
@@ -320,8 +321,8 @@ export default function CyberThreatsPage() {
                   }}
                 >
                   <div className="flex items-start gap-3">
-                    <span className="text-lg mt-0.5">
-                      {sig.source_slug === 'cisa-kev' ? '🛡️' : '🔍'}
+                    <span className="mt-0.5">
+                      {sig.source_slug === 'cisa-kev' ? <Shield className="w-5 h-5 text-blue-400" /> : <Search className="w-5 h-5 text-purple-400" />}
                     </span>
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2 mb-1">

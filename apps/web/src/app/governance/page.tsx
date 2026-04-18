@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { Landmark, TrendingUp, TrendingDown, ArrowRight } from 'lucide-react'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -55,10 +56,10 @@ const REGIME_LABELS: Record<string, string> = {
   authoritarian: 'Authoritarian',
 }
 
-const TREND_ICONS: Record<string, string> = {
-  improving: '📈',
-  declining: '📉',
-  stable: '➡️',
+function TrendIcon({ trend }: { trend: string }) {
+  if (trend === 'improving') return <TrendingUp className="w-3.5 h-3.5 text-emerald-400 inline-block" />
+  if (trend === 'declining') return <TrendingDown className="w-3.5 h-3.5 text-red-400 inline-block" />
+  return <ArrowRight className="w-3.5 h-3.5 text-zinc-400 inline-block" />
 }
 
 function formatScore(n: number, max: number = 10): string {
@@ -74,7 +75,7 @@ const FLAG_MAP: Record<string, string> = {
   AU: '🇦🇺', NZ: '🇳🇿', ZA: '🇿🇦', NG: '🇳🇬', KE: '🇰🇪', EG: '🇪🇬', ET: '🇪🇹', GH: '🇬🇭',
   IL: '🇮🇱', TR: '🇹🇷', SA: '🇸🇦', AE: '🇦🇪', IR: '🇮🇷', PL: '🇵🇱', CZ: '🇨🇿', HU: '🇭🇺', RO: '🇷🇴', UA: '🇺🇦', RU: '🇷🇺',
 }
-function getFlag(code: string): string { return FLAG_MAP[code] ?? '🌐' }
+function getFlag(code: string): string { return FLAG_MAP[code] ?? '--' }
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -124,7 +125,7 @@ export default function GovernancePage() {
         <div className="absolute inset-0 bg-gradient-to-br from-purple-900/20 via-transparent to-blue-900/20" />
         <div className="relative max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3 mb-2">
-            <span className="text-3xl">🏛️</span>
+            <Landmark className="w-8 h-8 text-purple-400" />
             <h1 className="text-3xl font-bold tracking-tight">Governance & Democracy Intelligence</h1>
           </div>
           <p className="text-zinc-400 text-lg max-w-2xl">
@@ -355,8 +356,8 @@ export default function GovernancePage() {
                   </div>
 
                   <div className="flex flex-wrap gap-1 mb-2">
-                    <span className="text-xs bg-zinc-800 text-zinc-400 rounded px-1.5 py-0.5">
-                      {TREND_ICONS[country.trend]} {country.trend}
+                    <span className="text-xs bg-zinc-800 text-zinc-400 rounded px-1.5 py-0.5 inline-flex items-center gap-1">
+                      <TrendIcon trend={country.trend} /> {country.trend}
                     </span>
                     {country.related_signals > 0 && (
                       <span className="text-xs bg-amber-500/20 text-amber-400 rounded px-1.5 py-0.5">
@@ -375,7 +376,7 @@ export default function GovernancePage() {
                       <div>
                         <span className="text-zinc-500">Trend:</span>{' '}
                         <span className="text-zinc-300">
-                          {TREND_ICONS[country.trend]} {country.trend} ({country.trend_magnitude > 0 ? '+' : ''}{country.trend_magnitude.toFixed(1)})
+                          <span className="inline-flex items-center gap-1"><TrendIcon trend={country.trend} /> {country.trend} ({country.trend_magnitude > 0 ? '+' : ''}{country.trend_magnitude.toFixed(1)})</span>
                         </span>
                       </div>
                       <div className="text-xs text-zinc-500 italic">

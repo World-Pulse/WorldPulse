@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { ScrollText, MapPin, SearchX } from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -72,22 +73,22 @@ const SEVERITY_BG: Record<string, string> = {
   info:     'bg-zinc-500/20 border-zinc-500/40 text-zinc-400',
 }
 
-const CPC_ICONS: Record<string, string> = {
-  'F41':    '\u2694\ufe0f',  // Weapons
-  'F42':    '\ud83d\udca3',  // Ammunition
-  'B64C30': '\u2708\ufe0f',  // Military Aircraft
-  'B64G':   '\ud83d\ude80',  // Space
-  'B63G':   '\u2693',        // Naval
-  'F42B15': '\ud83c\udfaf',  // Missiles
-  'G01S':   '\ud83d\udce1',  // Radar
-  'G21':    '\u2622\ufe0f',  // Nuclear
-  'G21J':   '\u2622\ufe0f',  // Nuclear Explosives
-  'H04K':   '\ud83d\udd12',  // EW
-  'H04L9':  '\ud83d\udd10',  // Crypto
-  'B64U':   '\ud83d\udef8',  // UAVs
-  'H01S':   '\ud83d\udd2b',  // Lasers
-  'G01V':   '\ud83d\udc41\ufe0f', // Surveillance
-  'H04N7':  '\ud83d\udcf7',  // Cameras
+const CPC_LABELS: Record<string, string> = {
+  'F41':    'WPN',   // Weapons
+  'F42':    'AMM',   // Ammunition
+  'B64C30': 'AIR',   // Military Aircraft
+  'B64G':   'SPC',   // Space
+  'B63G':   'NAV',   // Naval
+  'F42B15': 'MSL',   // Missiles
+  'G01S':   'RDR',   // Radar
+  'G21':    'NUC',   // Nuclear
+  'G21J':   'NUC',   // Nuclear Explosives
+  'H04K':   'EW',    // Electronic Warfare
+  'H04L9':  'CRY',   // Crypto
+  'B64U':   'UAV',   // UAVs
+  'H01S':   'LAS',   // Lasers
+  'G01V':   'ISR',   // Surveillance
+  'H04N7':  'CAM',   // Cameras
 }
 
 const WINDOW_OPTIONS = ['7d', '14d', '30d', '90d'] as const
@@ -255,7 +256,7 @@ export default function PatentsPage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <div className="flex items-center gap-3">
-                <span className="text-2xl" role="img" aria-label="patent">&#x1F4DC;</span>
+                <ScrollText className="w-6 h-6 text-cyan-400" />
                 <h1 className="font-display text-xl tracking-wide text-wp-text">Patent Intelligence</h1>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-widest bg-cyan-500/20 border border-cyan-500/40 text-cyan-400">
                   DEFENSE & DUAL-USE
@@ -408,7 +409,7 @@ export default function PatentsPage() {
                 <div className="space-y-2">
                   {data.cpc_breakdown.map(cpc => (
                     <div key={cpc.cpc_group} className="flex items-center gap-2 group">
-                      <span className="text-base w-6 text-center">{CPC_ICONS[cpc.cpc_group] ?? '\ud83d\udccc'}</span>
+                      <span className="text-[9px] font-mono font-bold w-6 text-center text-wp-cyan">{CPC_LABELS[cpc.cpc_group] ?? '---'}</span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs text-wp-text truncate">{cpc.label}</span>
@@ -499,7 +500,7 @@ export default function PatentsPage() {
                             </span>
                             {p.location_name && (
                               <span className="flex items-center gap-1">
-                                <span className="opacity-50">&#x1F4CD;</span>
+                                <MapPin className="w-3 h-3 opacity-50" />
                                 {p.location_name}
                               </span>
                             )}
@@ -513,7 +514,7 @@ export default function PatentsPage() {
                   ))
                 ) : (
                   <div className="py-16 text-center">
-                    <div className="text-4xl mb-3" role="img" aria-label="no data">&#x1F50D;</div>
+                    <SearchX className="w-10 h-10 text-wp-text3 mx-auto mb-3" />
                     <div className="text-wp-text3 text-sm">No patent signals found for this window</div>
                     <div className="text-wp-text3 text-xs mt-1">Try a longer time window or clear severity filter</div>
                   </div>

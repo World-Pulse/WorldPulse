@@ -14,6 +14,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
+import { Globe, CheckCircle } from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://api.world-pulse.io'
 
@@ -81,7 +82,7 @@ function timeAgo(iso: string): string {
 }
 
 function flagEmoji(code: string | null): string {
-  if (!code || code.length !== 2) return '🌐'
+  if (!code || code.length !== 2) return '--'
   const offset = 0x1F1E6 - 65
   return String.fromCodePoint(code.charCodeAt(0) + offset, code.charCodeAt(1) + offset)
 }
@@ -147,7 +148,7 @@ export default function InternetOutagesPage() {
       <div className="border-b border-white/[0.08] px-4 py-4 md:px-8">
         <div className="mx-auto max-w-6xl flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">🌐</span>
+            <Globe className="w-6 h-6 text-blue-400" />
             <div>
               <h1 className="text-xl font-bold text-white">Internet Outage Intelligence</h1>
               <p className="text-sm text-wp-text2 mt-0.5">
@@ -245,7 +246,7 @@ export default function InternetOutagesPage() {
         {/* ─── Empty state for countries ───────────────────────────────── */}
         {!loading && countries.length === 0 && !error && (
           <div className="rounded-xl border border-green-500/20 bg-green-500/10 p-6 text-center">
-            <div className="text-3xl mb-2">✅</div>
+            <CheckCircle className="w-8 h-8 text-green-400 mx-auto mb-2" />
             <div className="font-semibold text-green-400">No Active Outages Detected</div>
             <div className="text-sm text-wp-text3 mt-1">Global internet connectivity appears stable</div>
           </div>

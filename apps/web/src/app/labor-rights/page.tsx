@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { Hammer } from 'lucide-react'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -135,7 +136,7 @@ export default function LaborRightsPage() {
       <div className="border-b border-white/10 bg-gradient-to-r from-[#06070d] via-[#1a0f0f] to-[#06070d]">
         <div className="mx-auto max-w-7xl px-4 py-10">
           <div className="flex items-center gap-3 mb-2">
-            <span className="text-3xl">⚒️</span>
+            <Hammer className="w-8 h-8 text-amber-400" />
             <h1 className="text-3xl font-bold tracking-tight">Labor Rights Intelligence</h1>
             <span className="ml-2 rounded bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-400 border border-amber-500/30">
               NEW

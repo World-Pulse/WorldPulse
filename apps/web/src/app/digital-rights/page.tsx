@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { ShieldCheck, TrendingUp, TrendingDown, ArrowRight } from 'lucide-react'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -77,10 +78,10 @@ const CENSORSHIP_COLORS: Record<number, string> = {
   5: 'bg-red-600',
 }
 
-const TREND_ICONS: Record<string, string> = {
-  improving: '📈',
-  declining: '📉',
-  stable:    '➡️',
+function TrendIcon({ trend }: { trend: string }) {
+  if (trend === 'improving') return <TrendingUp className="w-3.5 h-3.5 text-emerald-400 inline-block" />
+  if (trend === 'declining') return <TrendingDown className="w-3.5 h-3.5 text-red-400 inline-block" />
+  return <ArrowRight className="w-3.5 h-3.5 text-zinc-400 inline-block" />
 }
 
 const FLAG_MAP: Record<string, string> = {
@@ -94,7 +95,7 @@ const FLAG_MAP: Record<string, string> = {
   MM: '🇲🇲', VN: '🇻🇳', CU: '🇨🇺', BY: '🇧🇾', KR: '🇰🇷', TW: '🇹🇼',
   AR: '🇦🇷', CO: '🇨🇴', IL: '🇮🇱',
 }
-function getFlag(code: string): string { return FLAG_MAP[code] ?? '🌐' }
+function getFlag(code: string): string { return FLAG_MAP[code] ?? '--' }
 
 function formatPop(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}B`
@@ -148,7 +149,7 @@ export default function DigitalRightsPage() {
         <div className="absolute inset-0 bg-gradient-to-br from-cyan-900/20 via-transparent to-indigo-900/20" />
         <div className="relative max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3 mb-2">
-            <span className="text-3xl">🔐</span>
+            <ShieldCheck className="w-8 h-8 text-cyan-400" />
             <h1 className="text-3xl font-bold tracking-tight">Digital Rights Intelligence</h1>
           </div>
           <p className="text-zinc-400 text-lg max-w-2xl">
@@ -257,7 +258,7 @@ export default function DigitalRightsPage() {
                   {summary.most_improved.map(item => (
                     <div key={item.code} className="py-1">
                       <div className="flex items-center gap-2 text-sm mb-0.5">
-                        <span className="text-emerald-400">📈</span>
+                        <TrendingUp className="w-4 h-4 text-emerald-400 flex-shrink-0" />
                         <span className="text-zinc-300 font-medium">{getFlag(item.code)} {item.name}</span>
                       </div>
                       <p className="text-xs text-zinc-500 pl-5 line-clamp-2">{item.trend_detail}</p>
@@ -400,7 +401,7 @@ export default function DigitalRightsPage() {
                   {/* Trend + Signals */}
                   <div className="flex flex-wrap gap-1 mb-2">
                     <span className="text-xs bg-zinc-800 text-zinc-400 rounded px-1.5 py-0.5">
-                      {TREND_ICONS[country.trend]} {country.trend}
+                      <span className="inline-flex items-center gap-1"><TrendIcon trend={country.trend} /> {country.trend}</span>
                     </span>
                     {country.related_signals > 0 && (
                       <span className="text-xs bg-amber-500/20 text-amber-400 rounded px-1.5 py-0.5">

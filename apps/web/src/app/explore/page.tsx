@@ -3,18 +3,22 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import {
+  Siren, Swords, LineChart, Thermometer, Hospital, Laptop,
+  Landmark, Drama, MapPin, Map as MapIcon,
+} from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
 const CATEGORIES = [
-  { slug: 'breaking',   label: 'Breaking',    icon: '🚨', color: '#ff3b5c' },
-  { slug: 'conflict',   label: 'Conflict',    icon: '⚔️', color: '#ff3b5c' },
-  { slug: 'markets',    label: 'Markets',     icon: '📈', color: '#f5a623' },
-  { slug: 'climate',    label: 'Climate',     icon: '🌡️', color: '#00e676' },
-  { slug: 'health',     label: 'Health',      icon: '🏥', color: '#00d4ff' },
-  { slug: 'technology', label: 'Technology',  icon: '💻', color: '#a855f7' },
-  { slug: 'politics',   label: 'Politics',    icon: '🏛️', color: '#f5a623' },
-  { slug: 'culture',    label: 'Culture',     icon: '🎭', color: '#00d4ff' },
+  { slug: 'breaking',   label: 'Breaking',    icon: Siren,        color: '#ff3b5c' },
+  { slug: 'conflict',   label: 'Conflict',    icon: Swords,       color: '#ff3b5c' },
+  { slug: 'markets',    label: 'Markets',     icon: LineChart,    color: '#f5a623' },
+  { slug: 'climate',    label: 'Climate',     icon: Thermometer,  color: '#00e676' },
+  { slug: 'health',     label: 'Health',      icon: Hospital,     color: '#00d4ff' },
+  { slug: 'technology', label: 'Technology',  icon: Laptop,       color: '#a855f7' },
+  { slug: 'politics',   label: 'Politics',    icon: Landmark,     color: '#f5a623' },
+  { slug: 'culture',    label: 'Culture',     icon: Drama,        color: '#00d4ff' },
 ]
 
 interface Signal {
@@ -103,7 +107,7 @@ export default function ExplorePage() {
                 className="w-12 h-12 rounded-full flex items-center justify-center text-[24px]"
                 style={{ background: `${cat.color}18`, border: `1px solid ${cat.color}33` }}
               >
-                {cat.icon}
+                <cat.icon className="w-6 h-6" />
               </div>
               <span className="text-[13px] font-semibold text-wp-text group-hover:text-wp-amber transition-colors">
                 {cat.label}
@@ -148,7 +152,7 @@ export default function ExplorePage() {
                   </span>
                   <span className="font-mono text-[10px] text-wp-text3 uppercase">{sig.category}</span>
                   {sig.locationName && (
-                    <span className="font-mono text-[10px] text-wp-text3">📍 {sig.locationName.split(',').slice(-1)[0]?.trim()}</span>
+                    <span className="font-mono text-[10px] text-wp-text3 inline-flex items-center gap-1"><MapPin className="w-3 h-3" /> {sig.locationName.split(',').slice(-1)[0]?.trim()}</span>
                   )}
                 </div>
                 <div className="text-[13px] font-semibold text-wp-text leading-snug line-clamp-2">{sig.title}</div>
@@ -225,7 +229,7 @@ export default function ExplorePage() {
             href="/map"
             className="block p-4 rounded-xl border border-[rgba(255,255,255,0.07)] hover:border-wp-amber bg-gradient-to-br from-wp-s2 to-wp-bg transition-all group"
           >
-            <div className="text-[20px] mb-2">🗺️</div>
+            <MapIcon className="w-5 h-5 mb-2 text-wp-text3" />
             <div className="text-[13px] font-semibold text-wp-text group-hover:text-wp-amber transition-colors">Signal World Map</div>
             <div className="text-[11px] text-wp-text3 mt-0.5">Live geospatial view of all active signals</div>
           </Link>

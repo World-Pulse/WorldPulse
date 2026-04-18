@@ -1,9 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { MarketPulse } from '@/components/MarketPulse'
 import { TradeSurveillancePanel } from '@/components/sidebar/TradeSurveillancePanel'
+import {
+  TrendingUp, LineChart, Building2, Ban, Building, Bitcoin, BarChart3,
+  Clock, Newspaper, Landmark as Bank, MapPin,
+} from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -48,13 +52,13 @@ const SEV_COLOR: Record<string, string> = {
   low:      'text-blue-400 bg-blue-500/10 border-blue-500/30',
 }
 
-const SUBCATEGORY_LABEL: Record<string, { label: string; icon: string; color: string }> = {
-  market_move:  { label: 'Market Move',   icon: '📈', color: 'text-green-400' },
-  central_bank: { label: 'Central Bank',  icon: '🏦', color: 'text-blue-400'  },
-  sanctions:    { label: 'Sanctions',     icon: '🚫', color: 'text-red-400'   },
-  corporate:    { label: 'Corporate',     icon: '🏢', color: 'text-amber-400' },
-  crypto:       { label: 'Crypto',        icon: '₿',  color: 'text-purple-400'},
-  unclassified: { label: 'Other Finance', icon: '💹', color: 'text-wp-text3'  },
+const SUBCATEGORY_LABEL: Record<string, { label: string; color: string }> = {
+  market_move:  { label: 'Market Move',   color: 'text-green-400' },
+  central_bank: { label: 'Central Bank',  color: 'text-blue-400'  },
+  sanctions:    { label: 'Sanctions',     color: 'text-red-400'   },
+  corporate:    { label: 'Corporate',     color: 'text-amber-400' },
+  crypto:       { label: 'Crypto',        color: 'text-purple-400'},
+  unclassified: { label: 'Other Finance', color: 'text-wp-text3'  },
 }
 
 const TREND_ICON: Record<string, string> = {
@@ -90,7 +94,7 @@ function SignalRow({ s }: { s: FinanceSignalEntry }) {
       href={`/signals/${s.id}`}
       className="flex items-start gap-3 px-4 py-3 hover:bg-wp-s2 transition-colors rounded-lg group"
     >
-      <span className="text-[18px] flex-shrink-0 mt-0.5" title={sub.label}>{sub.icon}</span>
+      <span className={`text-[13px] font-semibold flex-shrink-0 mt-0.5 ${sub.color}`} title={sub.label}>{sub.label.charAt(0)}</span>
       <div className="flex-1 min-w-0">
         <p className="text-[13px] text-wp-text group-hover:text-wp-amber transition-colors leading-snug line-clamp-2">
           {s.title}
@@ -101,7 +105,7 @@ function SignalRow({ s }: { s: FinanceSignalEntry }) {
           </span>
           <span className={`text-[11px] font-medium ${sub.color}`}>{sub.label}</span>
           {s.location_name && (
-            <span className="text-[11px] text-wp-text3">📍 {s.location_name}</span>
+            <span className="text-[11px] text-wp-text3 inline-flex items-center gap-0.5"><MapPin className="w-3 h-3" /> {s.location_name}</span>
           )}
           <span className="text-[11px] text-wp-text3 ml-auto">{timeAgo(s.created_at)}</span>
         </div>
@@ -110,11 +114,11 @@ function SignalRow({ s }: { s: FinanceSignalEntry }) {
   )
 }
 
-function StatCard({ icon, label, value, sub }: { icon: string; label: string; value: number | string; sub?: string }) {
+function StatCard({ icon, label, value, sub }: { icon: ReactNode; label: string; value: ReactNode; sub?: string }) {
   return (
     <div className="bg-wp-s2 border border-[rgba(255,255,255,0.07)] rounded-xl p-4 flex flex-col gap-1">
       <div className="flex items-center gap-2 text-wp-text3 text-[12px]">
-        <span>{icon}</span>
+        {icon}
         <span>{label}</span>
       </div>
       <div className="font-mono text-[26px] font-bold text-wp-text">{value}</div>
@@ -168,7 +172,7 @@ export default function FinancePage() {
       {/* ── Header ── */}
       <div>
         <h1 className="font-display text-[28px] tracking-wide text-wp-text flex items-center gap-3">
-          <span>💹</span> Finance Intelligence
+          <LineChart className="w-7 h-7 text-wp-amber" /> Finance Intelligence
         </h1>
         <p className="text-[13px] text-wp-text3 mt-1">
           Real-time financial signals — markets, central banks, sanctions, corporate events, crypto
@@ -184,15 +188,15 @@ export default function FinancePage() {
         </div>
       ) : summary ? (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard icon="📊" label="Signals (24h)"  value={summary.total_signals_24h} />
-          <StatCard icon="⏱"  label="Signals (6h)"   value={summary.total_signals_6h} />
+          <StatCard icon={<BarChart3 className="w-4 h-4" />} label="Signals (24h)"  value={summary.total_signals_24h} />
+          <StatCard icon={<Clock className="w-4 h-4" />}  label="Signals (6h)"   value={summary.total_signals_6h} />
           <StatCard
-            icon="📈"
+            icon={<TrendingUp className="w-4 h-4" />}
             label="Trend"
             value={<span className={TREND_COLOR[summary.trend_direction]}>{TREND_ICON[summary.trend_direction]}</span>}
           />
           <StatCard
-            icon="₿"
+            icon={<Bitcoin className="w-4 h-4" />}
             label="Crypto signals"
             value={summary.subcategory_breakdown.crypto}
             sub={`${summary.subcategory_breakdown.central_bank} central bank`}
@@ -216,7 +220,7 @@ export default function FinancePage() {
                 key={key}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-wp-s2 border border-[rgba(255,255,255,0.07)] text-[12px]"
               >
-                <span>{meta.icon}</span>
+                <span className={`font-semibold ${meta.color}`}>{meta.label.charAt(0)}</span>
                 <span className={`font-medium ${meta.color}`}>{meta.label}</span>
                 <span className="text-wp-text3 font-mono">{count}</span>
               </span>
@@ -245,7 +249,7 @@ export default function FinancePage() {
         <div className="lg:col-span-2 space-y-0 bg-wp-surface border border-[rgba(255,255,255,0.07)] rounded-2xl overflow-hidden">
           <div className="px-4 py-3 border-b border-[rgba(255,255,255,0.07)] flex items-center justify-between">
             <h2 className="text-[14px] font-semibold text-wp-text flex items-center gap-2">
-              <span>📰</span> Finance Signal Feed
+              <Newspaper className="w-4 h-4" /> Finance Signal Feed
             </h2>
             <span className="text-[11px] text-wp-text3 font-mono">last 24h</span>
           </div>
@@ -295,7 +299,7 @@ export default function FinancePage() {
           {/* Central Bank Watch */}
           <div className="bg-wp-surface border border-[rgba(255,255,255,0.07)] rounded-2xl overflow-hidden">
             <div className="px-4 py-3 border-b border-[rgba(255,255,255,0.07)] flex items-center gap-2">
-              <span>🏦</span>
+              <Bank className="w-4 h-4" />
               <h2 className="text-[14px] font-semibold text-wp-text">Central Bank Watch</h2>
             </div>
             {loading ? (

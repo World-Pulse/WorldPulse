@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { Video } from 'lucide-react'
+import { Video, AlertTriangle } from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 const SNAPSHOT_REFRESH_MS = 30_000
@@ -28,14 +28,14 @@ interface CameraFeed {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const REGIONS = [
-  { id: 'global',     label: 'Global',       icon: '🌍' },
-  { id: 'americas',   label: 'Americas',     icon: '🌎' },
-  { id: 'europe',     label: 'Europe',       icon: '🇪🇺' },
-  { id: 'mena',       label: 'MENA',         icon: '🌙' },
-  { id: 'asia',       label: 'Asia',         icon: '🌏' },
-  { id: 'africa',     label: 'Africa',       icon: '🌍' },
-  { id: 'oceania',    label: 'Oceania',      icon: '🦘' },
-  { id: 'easteurope', label: 'East Europe',  icon: '🏛️' },
+  { id: 'global',     label: 'Global'      },
+  { id: 'americas',   label: 'Americas'    },
+  { id: 'europe',     label: 'Europe'      },
+  { id: 'mena',       label: 'MENA'        },
+  { id: 'asia',       label: 'Asia'        },
+  { id: 'africa',     label: 'Africa'      },
+  { id: 'oceania',    label: 'Oceania'     },
+  { id: 'easteurope', label: 'East Europe' },
 ]
 
 const TYPE_META: Record<CameraType, { label: string; color: string }> = {
@@ -246,7 +246,6 @@ export default function CamerasPage() {
                     : 'text-zinc-500 border-zinc-700 hover:border-zinc-600 hover:text-zinc-300'
                   }`}
               >
-                <span>{r.icon}</span>
                 <span>{r.label}</span>
               </button>
             ))}
@@ -274,7 +273,7 @@ export default function CamerasPage() {
         <div className="px-4 sm:px-6 py-6">
           {error ? (
             <div className="flex flex-col items-center justify-center py-24 text-center">
-              <span className="text-4xl mb-4">⚠️</span>
+              <AlertTriangle className="w-10 h-10 text-amber-400 mx-auto mb-4" />
               <p className="text-zinc-400 mb-4">{error}</p>
               <button
                 onClick={() => void load(region, typeFilter)}
