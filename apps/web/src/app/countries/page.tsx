@@ -457,15 +457,10 @@ export default function CountriesPage() {
               <button
                 key={country.code}
                 onClick={() => setSelectedCode(country.code)}
-                className="w-full text-left group sm:grid grid-cols-[2rem_3rem_1fr_6rem_5rem_5rem_4rem] flex flex-wrap items-center gap-3 px-4 py-3 border-b border-[rgba(255,255,255,0.04)] hover:bg-wp-s2 transition-all last:border-b-0"
+                className="w-full text-left group sm:grid grid-cols-[2rem_1fr_6rem_5rem_5rem_4rem] flex flex-wrap items-center gap-3 px-4 py-3 border-b border-[rgba(255,255,255,0.04)] hover:bg-wp-s2 transition-all last:border-b-0"
               >
                 {/* Rank */}
                 <span className="font-mono text-[11px] text-wp-text3 w-8 text-right flex-shrink-0">{idx + 1}</span>
-
-                {/* Flag emoji (using code to get flag) */}
-                <span className="text-[20px] w-8 text-center flex-shrink-0" aria-hidden="true">
-                  {String.fromCodePoint(...country.code.split('').map(c => 0x1F1E0 - 65 + c.charCodeAt(0)))}
-                </span>
 
                 {/* Name + categories */}
                 <div className="flex-1 min-w-0">
