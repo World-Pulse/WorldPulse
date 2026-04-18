@@ -214,7 +214,7 @@ async function crossReferenceClaim(
 
     if (keywords.length > 0) {
       const tsQuery = keywords.map(k => `${k}:*`).join(' & ')
-      conditions.push('s.search_vector @@ to_tsquery(\'english\', ?)')
+      conditions.push("to_tsvector('english', coalesce(s.title,'') || ' ' || coalesce(s.summary,'')) @@ to_tsquery('english', ?)")
       bindings.push(tsQuery)
     }
 
@@ -231,14 +231,14 @@ async function crossReferenceClaim(
       SELECT DISTINCT
         s.id,
         s.title,
-        s.url,
-        s.content,
+        s.original_urls[1] AS url,
+        s.body AS content,
         src.name AS source_name,
         src.slug AS source_slug,
         src.trust_score,
-        ts_headline('english', COALESCE(s.content, ''), to_tsquery('english', ?), 'MaxWords=30,MinWords=10') AS snippet
+        ts_headline('english', COALESCE(s.body, s.summary, ''), to_tsquery('english', ?), 'MaxWords=30,MinWords=10') AS snippet
       FROM signals s
-      LEFT JOIN sources src ON s.source_id = src.id
+      LEFT JOIN sources src ON src.id::text = ANY(s.source_ids::text[])
       WHERE ${whereClause}
         AND (src.slug IS NULL OR src.slug != ?)
       ORDER BY src.trust_score DESC NULLS LAST
@@ -353,7 +353,7 @@ export const registerClaimsRoutes: FastifyPluginAsync = async (fastify) => {
 
     // Fetch signal content
     const signal = await db('signals')
-      .select('id', 'title', 'content', 'summary', 'source_id')
+      .select('id', 'title', 'body', 'summary', 'source_ids')
       .where('id', signalId)
       .first()
 
@@ -363,12 +363,12 @@ export const registerClaimsRoutes: FastifyPluginAsync = async (fastify) => {
 
     // Get source info for cross-ref exclusion
     let sourceSlug: string | null = null
-    if (signal.source_id) {
-      const source = await db('sources').select('slug').where('id', signal.source_id).first()
+    if (Array.isArray(signal.source_ids) && signal.source_ids.length > 0) {
+      const source = await db('sources').select('slug').where('id', signal.source_ids[0]).first()
       sourceSlug = source?.slug ?? null
     }
 
-    const fullText = [signal.title, signal.content, signal.summary].filter(Boolean).join('. ')
+    const fullText = [signal.title, signal.body, signal.summary].filter(Boolean).join('. ')
     const rawClaims = extractClaims(fullText)
 
     // Cross-reference each claim
@@ -441,7 +441,7 @@ export const registerClaimsRoutes: FastifyPluginAsync = async (fastify) => {
 
     // Fetch recent signals with content
     let query = db('signals')
-      .select('id', 'title', 'content', 'summary', 'source_id', 'created_at')
+      .select('id', 'title', 'body', 'summary', 'source_ids', 'created_at')
       .orderBy('created_at', 'desc')
       .limit(50) // process last 50 signals
 
@@ -450,12 +450,12 @@ export const registerClaimsRoutes: FastifyPluginAsync = async (fastify) => {
     const allClaims: Array<ExtractedClaim & { signalId: string; signalTitle: string }> = []
 
     for (const signal of signals) {
-      const fullText = [signal.title, signal.content, signal.summary].filter(Boolean).join('. ')
+      const fullText = [signal.title, signal.body, signal.summary].filter(Boolean).join('. ')
       const rawClaims = extractClaims(fullText)
 
       let sourceSlug: string | null = null
-      if (signal.source_id) {
-        const source = await db('sources').select('slug').where('id', signal.source_id).first()
+      if (Array.isArray(signal.source_ids) && signal.source_ids.length > 0) {
+        const source = await db('sources').select('slug').whereRaw('id::text = ?', [signal.source_ids[0]]).first()
         sourceSlug = source?.slug ?? null
       }
 
@@ -530,21 +530,31 @@ export const registerClaimsRoutes: FastifyPluginAsync = async (fastify) => {
 
     const [totalSignals] = await db('signals').count('* as count')
 
-    // Count sources by trust tier
+    // Count sources by trust tier.
+    // NOTE: `sources.tier` is an existing enum column, so we use the alias
+    // `trust_bucket` to avoid Knex quoting `"tier"` and colliding with it.
+    // Using groupByRaw with the full CASE expression sidesteps the alias
+    // resolution issue entirely.
     const sourceTiers = await db('sources')
       .select(db.raw(`
         CASE
           WHEN trust_score >= 0.8 THEN 'high_trust'
           WHEN trust_score >= 0.5 THEN 'medium_trust'
           ELSE 'low_trust'
-        END AS tier
+        END AS trust_bucket
       `))
       .count('* as count')
-      .groupBy('tier')
+      .groupByRaw(`
+        CASE
+          WHEN trust_score >= 0.8 THEN 'high_trust'
+          WHEN trust_score >= 0.5 THEN 'medium_trust'
+          ELSE 'low_trust'
+        END
+      `)
 
     const tierMap: Record<string, number> = {}
     for (const row of sourceTiers) {
-      tierMap[row.tier as string] = Number(row.count)
+      tierMap[row.trust_bucket as string] = Number(row.count)
     }
 
     const stats = {
@@ -558,21 +568,4 @@ export const registerClaimsRoutes: FastifyPluginAsync = async (fastify) => {
       claimTypesSupported: ['factual', 'statistical', 'attribution', 'causal', 'predictive'],
       verificationEngine: {
         version: '2.0.0',
-        method: isPineconeEnabled() ? 'semantic+full-text-hybrid' : 'full-text-cross-reference',
-        semanticEnabled: isPineconeEnabled(),
-        similarityThreshold: SEMANTIC_SIMILARITY_THRESHOLD,
-        contradictionThreshold: SEMANTIC_CONTRADICTION_THRESHOLD,
-        patternsCount: CLAIM_PATTERNS.length,
-        maxClaimsPerSignal: 50,
-        cacheTtlSeconds: CLAIMS_CACHE_TTL,
-      },
-      updatedAt: new Date().toISOString(),
-    }
-
-    try {
-      await redis.set(cacheKey, JSON.stringify(stats), 'EX', 300)
-    } catch { /* non-fatal */ }
-
-    return reply.send(stats)
-  })
-}
+        method: isPineco
