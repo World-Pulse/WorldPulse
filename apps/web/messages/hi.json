@@ -23,7 +23,12 @@
     "tracking": "ट्रैकिंग",
     "signals": "सिग्नल",
     "live": "लाइव",
-    "sanctions": "Sanctions"
+    "sanctions": "Sanctions",
+    "waterSecurity": "Water Security",
+    "laborRights": "Labor Rights",
+    "claims": "Claims",
+    "audioClaims": "Audio Claims",
+    "videoClaims": "Video Claims"
   },
   "channels": {
     "breakingNews": "ब्रेकिंग न्यूज़",

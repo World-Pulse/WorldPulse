@@ -24,7 +24,12 @@
     "tracking": "Отслеживание",
     "signals": "сигналы",
     "live": "ЭФИР",
-    "sanctions": "Sanctions"
+    "sanctions": "Sanctions",
+    "waterSecurity": "Water Security",
+    "laborRights": "Labor Rights",
+    "claims": "Claims",
+    "audioClaims": "Audio Claims",
+    "videoClaims": "Video Claims"
   },
   "channels": {
     "breakingNews": "Срочные новости",

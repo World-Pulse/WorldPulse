@@ -18,7 +18,12 @@
     "tracking": "Suivi de",
     "signals": "signaux",
     "live": "EN DIRECT",
-    "sanctions": "Sanctions"
+    "sanctions": "Sanctions",
+    "waterSecurity": "Water Security",
+    "laborRights": "Labor Rights",
+    "claims": "Claims",
+    "audioClaims": "Audio Claims",
+    "videoClaims": "Video Claims"
   },
   "channels": {
     "breakingNews": "Actualités urgentes",

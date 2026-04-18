@@ -32,6 +32,11 @@
     "governance": "Governance",
     "foodSecurity": "Food Security",
     "digitalRights": "Digital Rights",
+    "waterSecurity": "Water Security",
+    "laborRights": "Labor Rights",
+    "claims": "Claims",
+    "audioClaims": "Audio Claims",
+    "videoClaims": "Video Claims",
     "status": "System Status",
     "pricing": "Pricing"
   },

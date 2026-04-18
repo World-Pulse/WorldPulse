@@ -24,7 +24,12 @@
     "tracking": "トラッキング",
     "signals": "シグナル",
     "live": "ライブ",
-    "sanctions": "Sanctions"
+    "sanctions": "Sanctions",
+    "waterSecurity": "Water Security",
+    "laborRights": "Labor Rights",
+    "claims": "Claims",
+    "audioClaims": "Audio Claims",
+    "videoClaims": "Video Claims"
   },
   "channels": {
     "breakingNews": "速報",

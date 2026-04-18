@@ -18,7 +18,12 @@
     "tracking": "تتبع",
     "signals": "إشارة",
     "live": "مباشر",
-    "sanctions": "Sanctions"
+    "sanctions": "Sanctions",
+    "waterSecurity": "Water Security",
+    "laborRights": "Labor Rights",
+    "claims": "Claims",
+    "audioClaims": "Audio Claims",
+    "videoClaims": "Video Claims"
   },
   "channels": {
     "breakingNews": "أخبار عاجلة",
