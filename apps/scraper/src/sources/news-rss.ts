@@ -22,6 +22,9 @@
  * Tier 4 — Financial intelligence:
  *   Reuters Business, Bloomberg Markets, FT, MarketWatch, CoinDesk,
  *   The Block, ECB, Federal Reserve
+ * Tier 4b — Premium finance (expanded):
+ *   Barron's, CNBC Markets, CNN Business, TheStreet, Investing.com,
+ *   WSJ Markets, Forbes Money, Bloomberg Businessweek, Reuters Markets Wire
  * Tier 5 — Expanded regional & specialist coverage (50 new feeds, cycle 10):
  *   Africa: Nation Africa (KE), The Punch (NG), BusinessDay (NG),
  *     The Africa Report, Ahram Online (EG), Mail & Guardian (ZA),
@@ -912,6 +915,133 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['fed', 'federal-reserve', 'central-bank', 'fomc', 'finance'],
     language:        'en',
   },
+  // ── Tier 4b — Premium Finance (expanded) ─────────────────────────────────
+  {
+    id:              'barrons-markets',
+    name:            "Barron's Markets",
+    feedUrl:         'https://www.barrons.com/feed',
+    category:        'finance',
+    biasLabel:       'center',
+    reliability:     0.86,
+    countryCode:     'US',
+    defaultLat:      40.71,
+    defaultLng:      -74.01,
+    defaultLocation: 'New York, United States',
+    extraTags:       ['barrons', 'markets', 'finance', 'investing', 'wall-street'],
+    language:        'en',
+  },
+  {
+    id:              'cnbc-markets',
+    name:            'CNBC Markets',
+    feedUrl:         'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258',
+    category:        'finance',
+    biasLabel:       'center',
+    reliability:     0.82,
+    countryCode:     'US',
+    defaultLat:      40.74,
+    defaultLng:      -74.17,
+    defaultLocation: 'Englewood Cliffs, NJ, United States',
+    extraTags:       ['cnbc', 'markets', 'finance', 'us-markets', 'business'],
+    language:        'en',
+  },
+  {
+    id:              'cnn-markets',
+    name:            'CNN Business',
+    feedUrl:         'http://rss.cnn.com/rss/money_latest.rss',
+    category:        'finance',
+    biasLabel:       'center-left',
+    reliability:     0.80,
+    countryCode:     'US',
+    defaultLat:      33.75,
+    defaultLng:      -84.39,
+    defaultLocation: 'Atlanta, United States',
+    extraTags:       ['cnn', 'markets', 'finance', 'business', 'economy'],
+    language:        'en',
+  },
+  {
+    id:              'thestreet-markets',
+    name:            'TheStreet Markets',
+    feedUrl:         'https://www.thestreet.com/feeds/rss/markets',
+    category:        'finance',
+    biasLabel:       'center',
+    reliability:     0.78,
+    countryCode:     'US',
+    defaultLat:      40.71,
+    defaultLng:      -74.01,
+    defaultLocation: 'New York, United States',
+    extraTags:       ['thestreet', 'markets', 'finance', 'stocks', 'investing'],
+    language:        'en',
+  },
+  {
+    id:              'investing-com-news',
+    name:            'Investing.com News',
+    feedUrl:         'https://www.investing.com/rss/news.rss',
+    category:        'finance',
+    biasLabel:       'center',
+    reliability:     0.76,
+    countryCode:     'CY',
+    defaultLat:      34.68,
+    defaultLng:      33.04,
+    defaultLocation: 'Limassol, Cyprus',
+    extraTags:       ['investing-com', 'markets', 'finance', 'forex', 'commodities'],
+    language:        'en',
+  },
+  {
+    id:              'wsj-markets',
+    name:            'Wall Street Journal Markets',
+    feedUrl:         'https://feeds.a.dj.com/rss/RSSMarketsMain.xml',
+    category:        'finance',
+    biasLabel:       'center-right',
+    reliability:     0.88,
+    countryCode:     'US',
+    defaultLat:      40.71,
+    defaultLng:      -74.01,
+    defaultLocation: 'New York, United States',
+    extraTags:       ['wsj', 'wall-street-journal', 'markets', 'finance', 'business'],
+    language:        'en',
+  },
+  {
+    id:              'forbes-money',
+    name:            'Forbes Money',
+    feedUrl:         'https://www.forbes.com/money/feed/',
+    category:        'finance',
+    biasLabel:       'center-right',
+    reliability:     0.80,
+    countryCode:     'US',
+    defaultLat:      40.73,
+    defaultLng:      -74.00,
+    defaultLocation: 'Jersey City, NJ, United States',
+    extraTags:       ['forbes', 'money', 'finance', 'personal-finance', 'investing'],
+    language:        'en',
+  },
+  {
+    id:              'bloomberg-businessweek',
+    name:            'Bloomberg Businessweek',
+    feedUrl:         'https://feeds.bloomberg.com/businessweek/news.rss',
+    category:        'finance',
+    biasLabel:       'center',
+    reliability:     0.87,
+    countryCode:     'US',
+    defaultLat:      40.71,
+    defaultLng:      -74.01,
+    defaultLocation: 'New York, United States',
+    extraTags:       ['bloomberg', 'businessweek', 'finance', 'business', 'economy'],
+    language:        'en',
+  },
+  {
+    id:              'reuters-markets-wire',
+    name:            'Reuters Markets Wire',
+    feedUrl:         'https://feeds.reuters.com/reuters/companyNews',
+    category:        'finance',
+    biasLabel:       'center',
+    reliability:     0.90,
+    countryCode:     'GB',
+    defaultLat:      51.50,
+    defaultLng:      -0.12,
+    defaultLocation: 'London, United Kingdom',
+    extraTags:       ['reuters', 'markets', 'corporate', 'earnings', 'finance'],
+    language:        'en',
+  },
   // ── Tier 5 — African Regional Outlets ───────────────────────────────────
   {
     id:              'nation-africa-ke',
@@ -1620,6 +1750,603 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['georgia-today', 'georgia', 'caucasus', 'eastern-europe'],
     language:        'en',
   },
+
+  // ── Batch Apr 15 — Geographic gap fills + high-frequency sources ──────────
+  // Target: push signal count from 300 → 500 by adding 40 sources
+  // Focus: Francophone Africa, Central Asia, Caribbean, Scandinavia,
+  //        health/pandemic, cybersecurity, disaster/humanitarian
+
+  // --- Francophone Africa (MAJOR GAP) ---
+  {
+    id:              'rfi-afrique',
+    name:            'RFI Afrique',
+    feedUrl:         'https://www.rfi.fr/en/rss',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.82,
+    countryCode:     'FR',
+    defaultLat:      5.32,
+    defaultLng:      -4.01,
+    defaultLocation: 'Abidjan, Côte d\'Ivoire',
+    extraTags:       ['rfi', 'francophone-africa', 'west-africa', 'sahel'],
+    language:        'en',
+  },
+  {
+    id:              'jeune-afrique',
+    name:            'Jeune Afrique',
+    feedUrl:         'https://www.jeuneafrique.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.75,
+    countryCode:     'FR',
+    defaultLat:      12.64,
+    defaultLng:      -8.00,
+    defaultLocation: 'Bamako, Mali',
+    extraTags:       ['jeune-afrique', 'francophone-africa', 'sahel'],
+    language:        'fr',
+  },
+  {
+    id:              'the-continent',
+    name:            'The Continent',
+    feedUrl:         'https://www.thecontinent.org/feed',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.74,
+    countryCode:     'ZA',
+    defaultLat:      -1.29,
+    defaultLng:      36.82,
+    defaultLocation: 'Nairobi, Kenya',
+    extraTags:       ['the-continent', 'pan-african'],
+    language:        'en',
+  },
+  {
+    id:              'icc-cpi',
+    name:            'ICC — International Criminal Court',
+    feedUrl:         'https://www.icc-cpi.int/rss',
+    category:        'security',
+    biasLabel:       'center',
+    reliability:     0.94,
+    countryCode:     'NL',
+    defaultLat:      52.07,
+    defaultLng:      4.30,
+    defaultLocation: 'The Hague, Netherlands',
+    extraTags:       ['icc', 'international-law', 'justice', 'war-crimes'],
+    language:        'en',
+  },
+
+  // --- Central Asia (ZERO COVERAGE) ---
+  {
+    id:              'eurasianet',
+    name:            'Eurasianet',
+    feedUrl:         'https://eurasianet.org/feed',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.78,
+    countryCode:     'US',
+    defaultLat:      41.30,
+    defaultLng:      69.28,
+    defaultLocation: 'Tashkent, Uzbekistan',
+    extraTags:       ['eurasianet', 'central-asia', 'caucasus', 'post-soviet'],
+    language:        'en',
+  },
+  {
+    id:              'the-astana-times',
+    name:            'The Astana Times',
+    feedUrl:         'https://astanatimes.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center-right',
+    reliability:     0.65,
+    countryCode:     'KZ',
+    defaultLat:      51.17,
+    defaultLng:      71.43,
+    defaultLocation: 'Astana, Kazakhstan',
+    extraTags:       ['astana-times', 'kazakhstan', 'central-asia'],
+    language:        'en',
+  },
+
+  // --- Caribbean (ZERO COVERAGE) ---
+  {
+    id:              'jamaica-gleaner',
+    name:            'Jamaica Gleaner',
+    feedUrl:         'https://jamaica-gleaner.com/feed',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.70,
+    countryCode:     'JM',
+    defaultLat:      18.01,
+    defaultLng:      -76.79,
+    defaultLocation: 'Kingston, Jamaica',
+    extraTags:       ['jamaica-gleaner', 'caribbean'],
+    language:        'en',
+  },
+  {
+    id:              'loop-caribbean',
+    name:            'Loop Caribbean News',
+    feedUrl:         'https://caribbean.loopnews.com/rss.xml',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.68,
+    countryCode:     'TT',
+    defaultLat:      10.65,
+    defaultLng:      -61.50,
+    defaultLocation: 'Port of Spain, Trinidad',
+    extraTags:       ['loop-news', 'caribbean', 'trinidad'],
+    language:        'en',
+  },
+
+  // --- Scandinavia / Nordics (ZERO COVERAGE) ---
+  {
+    id:              'the-local-sweden',
+    name:            'The Local — Sweden',
+    feedUrl:         'https://feeds.thelocal.com/rss/se',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.75,
+    countryCode:     'SE',
+    defaultLat:      59.33,
+    defaultLng:      18.07,
+    defaultLocation: 'Stockholm, Sweden',
+    extraTags:       ['the-local', 'sweden', 'nordics', 'scandinavia'],
+    language:        'en',
+  },
+  {
+    id:              'yle-finland',
+    name:            'YLE News — Finland',
+    feedUrl:         'https://feeds.yle.fi/uutiset/v1/recent.rss?publisherIds=YLE_NEWS',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.85,
+    countryCode:     'FI',
+    defaultLat:      60.17,
+    defaultLng:      24.94,
+    defaultLocation: 'Helsinki, Finland',
+    extraTags:       ['yle', 'finland', 'nordics', 'nato'],
+    language:        'en',
+  },
+  {
+    id:              'iceland-monitor',
+    name:            'Iceland Monitor',
+    feedUrl:         'https://icelandmonitor.mbl.is/rss/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.72,
+    countryCode:     'IS',
+    defaultLat:      64.15,
+    defaultLng:      -21.94,
+    defaultLocation: 'Reykjavik, Iceland',
+    extraTags:       ['iceland-monitor', 'iceland', 'nordics', 'arctic'],
+    language:        'en',
+  },
+
+  // --- Health / Pandemic (HIGH-VALUE GAP) ---
+  {
+    id:              'who-news',
+    name:            'WHO — Disease Outbreak News',
+    feedUrl:         'https://www.who.int/feeds/entity/don/en/rss.xml',
+    category:        'health',
+    biasLabel:       'center',
+    reliability:     0.96,
+    countryCode:     'CH',
+    defaultLat:      46.23,
+    defaultLng:      6.15,
+    defaultLocation: 'Geneva, Switzerland',
+    extraTags:       ['who', 'pandemic', 'disease', 'global-health'],
+    language:        'en',
+  },
+  {
+    id:              'cidrap',
+    name:            'CIDRAP — Infectious Disease',
+    feedUrl:         'https://www.cidrap.umn.edu/rss.xml',
+    category:        'health',
+    biasLabel:       'center',
+    reliability:     0.90,
+    countryCode:     'US',
+    defaultLat:      44.97,
+    defaultLng:      -93.24,
+    defaultLocation: 'Minneapolis, USA',
+    extraTags:       ['cidrap', 'infectious-disease', 'pandemic', 'avian-flu'],
+    language:        'en',
+  },
+  {
+    id:              'stat-news',
+    name:            'STAT News — Health & Medicine',
+    feedUrl:         'https://www.statnews.com/feed/',
+    category:        'health',
+    biasLabel:       'center',
+    reliability:     0.85,
+    countryCode:     'US',
+    defaultLat:      42.36,
+    defaultLng:      -71.06,
+    defaultLocation: 'Boston, USA',
+    extraTags:       ['stat-news', 'health', 'pharma', 'biotech'],
+    language:        'en',
+  },
+  {
+    id:              'lancet-rss',
+    name:            'The Lancet',
+    feedUrl:         'https://www.thelancet.com/rssfeed/lancet_current.xml',
+    category:        'health',
+    biasLabel:       'center',
+    reliability:     0.95,
+    countryCode:     'GB',
+    defaultLat:      51.50,
+    defaultLng:      -0.12,
+    defaultLocation: 'London, United Kingdom',
+    extraTags:       ['lancet', 'medical-journal', 'research', 'global-health'],
+    language:        'en',
+  },
+
+  // --- Cybersecurity (HIGH-VALUE FOR CORRELATION) ---
+  {
+    id:              'bleepingcomputer',
+    name:            'BleepingComputer',
+    feedUrl:         'https://www.bleepingcomputer.com/feed/',
+    category:        'technology',
+    biasLabel:       'center',
+    reliability:     0.82,
+    countryCode:     'US',
+    defaultLat:      38.90,
+    defaultLng:      -77.04,
+    defaultLocation: 'Washington D.C., USA',
+    extraTags:       ['bleepingcomputer', 'cybersecurity', 'infosec', 'malware'],
+    language:        'en',
+  },
+  {
+    id:              'the-record',
+    name:            'The Record by Recorded Future',
+    feedUrl:         'https://therecord.media/feed',
+    category:        'security',
+    biasLabel:       'center',
+    reliability:     0.84,
+    countryCode:     'US',
+    defaultLat:      42.36,
+    defaultLng:      -71.06,
+    defaultLocation: 'Boston, USA',
+    extraTags:       ['the-record', 'cybersecurity', 'nation-state', 'ransomware'],
+    language:        'en',
+  },
+  {
+    id:              'dark-reading',
+    name:            'Dark Reading',
+    feedUrl:         'https://www.darkreading.com/rss.xml',
+    category:        'security',
+    biasLabel:       'center',
+    reliability:     0.80,
+    countryCode:     'US',
+    defaultLat:      38.90,
+    defaultLng:      -77.04,
+    defaultLocation: 'Washington D.C., USA',
+    extraTags:       ['dark-reading', 'cybersecurity', 'vulnerability', 'threat-intel'],
+    language:        'en',
+  },
+  {
+    id:              'krebs-on-security',
+    name:            'Krebs on Security',
+    feedUrl:         'https://krebsonsecurity.com/feed/',
+    category:        'security',
+    biasLabel:       'center',
+    reliability:     0.88,
+    countryCode:     'US',
+    defaultLat:      38.90,
+    defaultLng:      -77.04,
+    defaultLocation: 'Washington D.C., USA',
+    extraTags:       ['krebs', 'cybersecurity', 'cybercrime', 'investigative'],
+    language:        'en',
+  },
+
+  // --- Disaster / Humanitarian (CORRELATION FUEL) ---
+  {
+    id:              'reliefweb-rss',
+    name:            'ReliefWeb — Latest Reports',
+    feedUrl:         'https://reliefweb.int/updates/rss.xml',
+    category:        'disaster',
+    biasLabel:       'center',
+    reliability:     0.93,
+    countryCode:     'US',
+    defaultLat:      40.75,
+    defaultLng:      -73.97,
+    defaultLocation: 'New York, USA',
+    extraTags:       ['reliefweb', 'humanitarian', 'disaster', 'un'],
+    language:        'en',
+  },
+  {
+    id:              'gdacs-rss',
+    name:            'GDACS — Global Disaster Alert',
+    feedUrl:         'https://www.gdacs.org/xml/rss.xml',
+    category:        'disaster',
+    biasLabel:       'center',
+    reliability:     0.94,
+    countryCode:     'IT',
+    defaultLat:      45.80,
+    defaultLng:      8.63,
+    defaultLocation: 'Ispra, Italy',
+    extraTags:       ['gdacs', 'disaster', 'earthquake', 'flood', 'cyclone'],
+    language:        'en',
+  },
+  {
+    id:              'icrc-news',
+    name:            'ICRC — Red Cross News',
+    feedUrl:         'https://www.icrc.org/en/rss',
+    category:        'conflict',
+    biasLabel:       'center',
+    reliability:     0.93,
+    countryCode:     'CH',
+    defaultLat:      46.23,
+    defaultLng:      6.15,
+    defaultLocation: 'Geneva, Switzerland',
+    extraTags:       ['icrc', 'red-cross', 'humanitarian', 'conflict', 'ihl'],
+    language:        'en',
+  },
+  {
+    id:              'msf-press',
+    name:            'Médecins Sans Frontières',
+    feedUrl:         'https://www.msf.org/rss/all',
+    category:        'health',
+    biasLabel:       'center',
+    reliability:     0.91,
+    countryCode:     'CH',
+    defaultLat:      46.23,
+    defaultLng:      6.15,
+    defaultLocation: 'Geneva, Switzerland',
+    extraTags:       ['msf', 'doctors-without-borders', 'humanitarian', 'health'],
+    language:        'en',
+  },
+
+  // --- Latin America expansion ---
+  {
+    id:              'clarin-english',
+    name:            'Clarín — Argentina',
+    feedUrl:         'https://www.clarin.com/rss/lo-ultimo/',
+    category:        'geopolitics',
+    biasLabel:       'center-right',
+    reliability:     0.72,
+    countryCode:     'AR',
+    defaultLat:      -34.60,
+    defaultLng:      -58.38,
+    defaultLocation: 'Buenos Aires, Argentina',
+    extraTags:       ['clarin', 'argentina', 'south-america'],
+    language:        'es',
+  },
+  {
+    id:              'mercopress',
+    name:            'MercoPress — South Atlantic News',
+    feedUrl:         'https://en.mercopress.com/rss',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.73,
+    countryCode:     'UY',
+    defaultLat:      -34.88,
+    defaultLng:      -56.19,
+    defaultLocation: 'Montevideo, Uruguay',
+    extraTags:       ['mercopress', 'south-america', 'mercosur', 'falklands'],
+    language:        'en',
+  },
+  {
+    id:              'bnamericas',
+    name:            'BNamericas',
+    feedUrl:         'https://www.bnamericas.com/en/rss',
+    category:        'economy',
+    biasLabel:       'center',
+    reliability:     0.76,
+    countryCode:     'CL',
+    defaultLat:      -33.45,
+    defaultLng:      -70.67,
+    defaultLocation: 'Santiago, Chile',
+    extraTags:       ['bnamericas', 'latin-america', 'business', 'infrastructure'],
+    language:        'en',
+  },
+
+  // --- East/Central Europe ---
+  {
+    id:              'kyiv-post',
+    name:            'Kyiv Post',
+    feedUrl:         'https://www.kyivpost.com/feed',
+    category:        'conflict',
+    biasLabel:       'center',
+    reliability:     0.76,
+    countryCode:     'UA',
+    defaultLat:      50.45,
+    defaultLng:      30.52,
+    defaultLocation: 'Kyiv, Ukraine',
+    extraTags:       ['kyiv-post', 'ukraine', 'russia-war', 'eastern-europe'],
+    language:        'en',
+  },
+  {
+    id:              'new-eastern-europe',
+    name:            'New Eastern Europe',
+    feedUrl:         'https://neweasterneurope.eu/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.74,
+    countryCode:     'PL',
+    defaultLat:      50.06,
+    defaultLng:      19.94,
+    defaultLocation: 'Kraków, Poland',
+    extraTags:       ['new-eastern-europe', 'post-soviet', 'europe', 'poland'],
+    language:        'en',
+  },
+
+  // --- Arctic / High-Latitude (UNIQUE NICHE) ---
+  {
+    id:              'arctic-today',
+    name:            'Arctic Today',
+    feedUrl:         'https://www.arctictoday.com/feed/',
+    category:        'climate',
+    biasLabel:       'center',
+    reliability:     0.76,
+    countryCode:     'US',
+    defaultLat:      64.84,
+    defaultLng:      -147.72,
+    defaultLocation: 'Fairbanks, Alaska',
+    extraTags:       ['arctic', 'climate', 'northern-sea-route', 'polar'],
+    language:        'en',
+  },
+
+  // --- Defense / Military Intelligence ---
+  {
+    id:              'janes-news',
+    name:            'Janes Defence News',
+    feedUrl:         'https://www.janes.com/feeds/news',
+    category:        'security',
+    biasLabel:       'center',
+    reliability:     0.90,
+    countryCode:     'GB',
+    defaultLat:      51.50,
+    defaultLng:      -0.12,
+    defaultLocation: 'London, United Kingdom',
+    extraTags:       ['janes', 'defense', 'military', 'intelligence', 'arms'],
+    language:        'en',
+  },
+  {
+    id:              'defense-one',
+    name:            'Defense One',
+    feedUrl:         'https://www.defenseone.com/rss/',
+    category:        'security',
+    biasLabel:       'center',
+    reliability:     0.82,
+    countryCode:     'US',
+    defaultLat:      38.90,
+    defaultLng:      -77.04,
+    defaultLocation: 'Washington D.C., USA',
+    extraTags:       ['defense-one', 'pentagon', 'military', 'nato'],
+    language:        'en',
+  },
+
+  // --- Space (COMPLEMENTS OSINT POLLERS) ---
+  {
+    id:              'spacenews',
+    name:            'SpaceNews',
+    feedUrl:         'https://spacenews.com/feed/',
+    category:        'space',
+    biasLabel:       'center',
+    reliability:     0.83,
+    countryCode:     'US',
+    defaultLat:      38.90,
+    defaultLng:      -77.04,
+    defaultLocation: 'Washington D.C., USA',
+    extraTags:       ['spacenews', 'space', 'satellites', 'launch'],
+    language:        'en',
+  },
+  {
+    id:              'nasaspaceflight',
+    name:            'NASASpaceFlight',
+    feedUrl:         'https://www.nasaspaceflight.com/feed/',
+    category:        'space',
+    biasLabel:       'center',
+    reliability:     0.80,
+    countryCode:     'US',
+    defaultLat:      28.57,
+    defaultLng:      -80.65,
+    defaultLocation: 'Cape Canaveral, USA',
+    extraTags:       ['nasaspaceflight', 'space', 'rockets', 'iss'],
+    language:        'en',
+  },
+
+  // --- Nuclear / Arms Control (NICHE BUT CRITICAL) ---
+  {
+    id:              'arms-control-today',
+    name:            'Arms Control Association',
+    feedUrl:         'https://www.armscontrol.org/rss.xml',
+    category:        'security',
+    biasLabel:       'center',
+    reliability:     0.87,
+    countryCode:     'US',
+    defaultLat:      38.90,
+    defaultLng:      -77.04,
+    defaultLocation: 'Washington D.C., USA',
+    extraTags:       ['arms-control', 'nuclear', 'nonproliferation', 'treaties'],
+    language:        'en',
+  },
+
+  // --- Migration / Refugee (HUMANITARIAN CORRELATION) ---
+  {
+    id:              'mixed-migration',
+    name:            'Mixed Migration Centre',
+    feedUrl:         'https://mixedmigration.org/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.80,
+    countryCode:     'CH',
+    defaultLat:      46.23,
+    defaultLng:      6.15,
+    defaultLocation: 'Geneva, Switzerland',
+    extraTags:       ['mixed-migration', 'refugees', 'displacement', 'humanitarian'],
+    language:        'en',
+  },
+
+  // --- AI / Emerging Tech (FAST-GROWING SIGNAL DOMAIN) ---
+  {
+    id:              'the-verge-tech',
+    name:            'The Verge — Tech',
+    feedUrl:         'https://www.theverge.com/rss/index.xml',
+    category:        'technology',
+    biasLabel:       'center',
+    reliability:     0.80,
+    countryCode:     'US',
+    defaultLat:      40.75,
+    defaultLng:      -73.97,
+    defaultLocation: 'New York, USA',
+    extraTags:       ['the-verge', 'tech', 'ai', 'silicon-valley'],
+    language:        'en',
+  },
+  {
+    id:              'ars-technica',
+    name:            'Ars Technica',
+    feedUrl:         'https://feeds.arstechnica.com/arstechnica/index',
+    category:        'technology',
+    biasLabel:       'center',
+    reliability:     0.82,
+    countryCode:     'US',
+    defaultLat:      40.75,
+    defaultLng:      -73.97,
+    defaultLocation: 'New York, USA',
+    extraTags:       ['ars-technica', 'tech', 'science', 'ai', 'policy'],
+    language:        'en',
+  },
+  {
+    id:              'wired',
+    name:            'WIRED',
+    feedUrl:         'https://www.wired.com/feed/rss',
+    category:        'technology',
+    biasLabel:       'center',
+    reliability:     0.80,
+    countryCode:     'US',
+    defaultLat:      37.78,
+    defaultLng:      -122.41,
+    defaultLocation: 'San Francisco, USA',
+    extraTags:       ['wired', 'tech', 'security', 'ai', 'culture'],
+    language:        'en',
+  },
+
+  // --- Economics / Trade (CORRELATION WITH SANCTIONS) ---
+  {
+    id:              'world-bank-news',
+    name:            'World Bank News',
+    feedUrl:         'https://www.worldbank.org/en/news/rss.xml',
+    category:        'economy',
+    biasLabel:       'center',
+    reliability:     0.93,
+    countryCode:     'US',
+    defaultLat:      38.90,
+    defaultLng:      -77.04,
+    defaultLocation: 'Washington D.C., USA',
+    extraTags:       ['world-bank', 'development', 'economics', 'poverty'],
+    language:        'en',
+  },
+  {
+    id:              'imf-news',
+    name:            'IMF News',
+    feedUrl:         'https://www.imf.org/en/News/rss',
+    category:        'economy',
+    biasLabel:       'center',
+    reliability:     0.93,
+    countryCode:     'US',
+    defaultLat:      38.90,
+    defaultLng:      -77.04,
+    defaultLocation: 'Washington D.C., USA',
+    extraTags:       ['imf', 'global-finance', 'economics', 'debt'],
+    language:        'en',
+  },
 ]
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────
@@ -1979,98 +2706,4 @@ async function pollSource(
   let xml: string
   try {
     xml = await fetchUrl(source.feedUrl)
-  } catch (err) {
-    sourceLog.warn({ err }, `${source.name}: fetch failed`)
-    return
-  }
-
-  if (!xml || xml.length < 50) {
-    sourceLog.warn(`${source.name}: empty response`)
-    return
-  }
-
-  const items = parseFeedItems(xml)
-  if (items.length === 0) {
-    sourceLog.debug(`${source.name}: no items parsed`)
-    return
-  }
-
-  let created = 0
-  for (const item of items) {
-    const ok = await processItem(db, redis, producer, source, item)
-    if (ok) created++
-  }
-
-  if (created > 0) {
-    sourceLog.info({ created, total: items.length }, `${source.name}: ${created} new signals`)
-  } else {
-    sourceLog.debug({ total: items.length }, `${source.name}: poll complete (no new items)`)
-  }
-}
-
-// ─── MAIN POLLER ─────────────────────────────────────────────────────────────
-
-/**
- * Start the global news RSS poller.
- *
- * Polls all registered news outlets every 30 minutes in staggered sequence
- * (5 s between sources) to distribute load. Returns a cleanup function.
- */
-export function startNewsRssPoller(
-  db:       Knex,
-  redis:    Redis,
-  producer?: Producer | null,
-): () => void {
-  let stopped = false
-  let timer: ReturnType<typeof setInterval> | null = null
-
-  /**
-   * Run a full poll cycle across all sources.
-   * Each source is polled sequentially with SOURCE_DELAY ms between them.
-   */
-  async function runCycle(): Promise<void> {
-    if (stopped) return
-
-    log.info(
-      { sources: NEWS_SOURCE_REGISTRY.length },
-      '📰 News RSS: starting poll cycle',
-    )
-
-    for (const source of NEWS_SOURCE_REGISTRY) {
-      if (stopped) break
-      await pollSource(db, redis, producer, source)
-      // Stagger requests to be a good citizen with upstream RSS servers
-      if (!stopped) {
-        await new Promise<void>(resolve => setTimeout(resolve, SOURCE_DELAY))
-      }
-    }
-
-    if (!stopped) {
-      log.debug('📰 News RSS: poll cycle complete')
-    }
-  }
-
-  // Kick off immediately
-  void runCycle()
-
-  // Then on a fixed interval
-  timer = setInterval(() => void runCycle(), POLL_INTERVAL)
-
-  log.info(
-    {
-      sourceCount:     NEWS_SOURCE_REGISTRY.length,
-      pollIntervalMin: POLL_INTERVAL / 60_000,
-      staggerSec:      SOURCE_DELAY / 1000,
-    },
-    `📰 News RSS poller started — ${NEWS_SOURCE_REGISTRY.length} international outlets`,
-  )
-
-  return () => {
-    stopped = true
-    if (timer !== null) {
-      clearInterval(timer)
-      timer = null
-    }
-    log.info('News RSS poller stopped')
-  }
-}
+  } catc
