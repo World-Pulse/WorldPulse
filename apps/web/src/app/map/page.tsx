@@ -762,9 +762,21 @@ function MapView() {
         style: {
           version: 8,
           glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
-          sources: {},
+          sources: {
+            basemap: {
+              type: 'raster',
+              tiles: MAPTILER_KEY && MAPTILER_KEY !== 'demo'
+                ? [`https://api.maptiler.com/tiles/satellite/{z}/{x}/{y}.jpg?key=${MAPTILER_KEY}`]
+                : ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+              tileSize: 256,
+              attribution: MAPTILER_KEY ? '© MapTiler' : '© Esri',
+            },
+          },
           layers: [
-            { id: 'bg', type: 'background' as const, paint: { 'background-color': '#06070d' } },
+            { id: 'bg',      type: 'background' as const, paint: { 'background-color': '#06070d' } },
+            { id: 'basemap', type: 'raster'     as const, source: 'basemap',
+              paint: { 'raster-opacity': 0.92, 'raster-saturation': 0,
+                'raster-brightness-min': 0, 'raster-brightness-max': 1 } },
           ],
         },
         center: [lng, lat],
@@ -778,20 +790,14 @@ function MapView() {
 
       mapRef.current = map
 
-      // Log MapLibre version for debugging
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      console.log('[worldpulse] MapLibre version:', (ml as any).version ?? (ml as any).default?.version ?? 'unknown')
-
       // MapLibre v5 workaround: explicitly setting mercator projection right
       // after creation kicks the render pipeline out of a stuck state where
       // isStyleLoaded + areTilesLoaded are true but the 'load' event never
       // fires.  Without this, the map shows a black canvas indefinitely.
-      const hasProjectionAPI = typeof (map as any).setProjection === 'function'
-      console.log('[worldpulse] setProjection available:', hasProjectionAPI)
-      if (hasProjectionAPI) {
+      try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ;(map as any).setProjection({ type: 'mercator' })
-      }
+      } catch { /* pre-v5 — ignore */ }
 
       // Navigation control with 3D pitch visualization
       map.addControl(new ml.NavigationControl({ visualizePitch: true }), 'top-right')
@@ -805,32 +811,15 @@ function MapView() {
         if (cancelled) return
         map.resize()
 
-        // ── Basemap tiles (added after load so they can't block init) ──
-        const baseTiles = MAPTILER_KEY && MAPTILER_KEY !== 'demo'
-          ? [`https://api.maptiler.com/tiles/satellite/{z}/{x}/{y}.jpg?key=${MAPTILER_KEY}`]
-          : ['https://tile.openstreetmap.org/{z}/{x}/{y}.png']
-        map.addSource('basemap', {
-          type: 'raster', tiles: baseTiles, tileSize: 256,
-          attribution: MAPTILER_KEY ? '© MapTiler' : '© OpenStreetMap',
-        })
-        map.addLayer({
-          id: 'basemap', type: 'raster' as const, source: 'basemap',
-          paint: { 'raster-opacity': 0.55, 'raster-saturation': -0.6,
-            'raster-brightness-min': 0.02, 'raster-brightness-max': 0.45 },
-        })  // renders above bg background, below signal layers added after
-
         // Switch to globe once the map is fully idle (tiles rendered).
         // Globe projection cannot be set before the first render completes —
         // it blocks the MapLibre v5 render pipeline entirely.
         map.once('idle', () => {
           if (cancelled) return
-          if (typeof (map as any).setProjection === 'function') {
+          try {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             ;(map as any).setProjection({ type: 'globe' })
-            console.log('[worldpulse] Globe projection enabled')
-          } else {
-            console.warn('[worldpulse] setProjection not available — MapLibre v4 detected, globe disabled')
-          }
+          } catch { /* pre-v5 fallback — ignore */ }
         })
 
         // ── Sources ───────────────────────────────────────────
