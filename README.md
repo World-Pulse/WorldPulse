@@ -273,4 +273,4 @@ See [ROADMAP.md](ROADMAP.md) for details.
 
 MIT — see [LICENSE](LICENSE) for details.
 
-WorldPulse is free forever. The open-source core will never have paywalls or feature restrictions.
+
