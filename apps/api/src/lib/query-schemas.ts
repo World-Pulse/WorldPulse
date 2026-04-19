@@ -85,9 +85,9 @@ export const PublicSignalsQuerySchema = z.object({
   severity: z.enum(SEVERITY_VALUES).optional(),
   limit:    intParam(50, 1, 100),
   offset:   z
-    .string()
+    .union([z.string(), z.number()])
     .optional()
-    .transform(v => (v === undefined ? 0 : parseInt(v, 10)))
+    .transform(v => (v === undefined ? 0 : typeof v === 'number' ? v : parseInt(v, 10)))
     .pipe(z.number().int().min(0).max(10_000)),
 })
 
