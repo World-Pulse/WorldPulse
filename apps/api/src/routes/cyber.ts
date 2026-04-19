@@ -136,7 +136,7 @@ export const registerCyberRoutes: FastifyPluginAsync = async (app) => {
           'source_url',
           'reliability_score',
           'published_at',
-          'source_id as source_slug',
+          'source_ids',
         )
         .where('category', CYBER_CATEGORY)
         .whereRaw(`published_at > now() - interval '${hours} hours'`)
@@ -147,7 +147,7 @@ export const registerCyberRoutes: FastifyPluginAsync = async (app) => {
           summary:           string | null
           severity:          string
           source_url:        string | null
-          source_slug:       string
+          source_ids:        string[] | null
           reliability_score: number
           published_at:      string | Date
         }>
@@ -157,7 +157,7 @@ export const registerCyberRoutes: FastifyPluginAsync = async (app) => {
         title:             r.title,
         summary:           r.summary ?? '',
         severity:          r.severity,
-        source_slug:       r.source_slug,
+        source_slug:       (r.source_ids ?? [])[0] ?? 'unknown',
         source_url:        r.source_url,
         published_at:      typeof r.published_at === 'string'
           ? r.published_at
@@ -204,12 +204,12 @@ export const registerCyberRoutes: FastifyPluginAsync = async (app) => {
     // ── DB query ─────────────────────────────────────────────────────────────
     try {
       const rows = await db('signals')
-        .select('severity', 'source_id')
+        .select('severity', 'source_ids')
         .where('category', CYBER_CATEGORY)
         .whereRaw("published_at > now() - interval '24 hours'")
         .limit(1000) as Array<{
-          severity:  string
-          source_id: string
+          severity:   string
+          source_ids: string[] | null
         }>
 
       let total_24h      = 0
@@ -223,8 +223,9 @@ export const registerCyberRoutes: FastifyPluginAsync = async (app) => {
       for (const row of rows) {
         total_24h++
 
-        if (row.source_id === CISA_KEV_SOURCE) cisa_kev_count++
-        else if (row.source_id === OTX_SOURCE)  otx_count++
+        const slug = (row.source_ids ?? [])[0] ?? ''
+        if (slug === CISA_KEV_SOURCE) cisa_kev_count++
+        else if (slug === OTX_SOURCE)  otx_count++
 
         const sev = SEVERITY_ORDER.includes(row.severity) ? row.severity : 'low'
         if (sev === 'critical')      critical_count++

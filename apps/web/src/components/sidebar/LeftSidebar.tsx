@@ -21,7 +21,7 @@ const NAV_ITEMS = [
   { href: '/alerts',     icon: Bell,          labelKey: 'alerts',      badge: '12',   badgeColor: 'red'   },
   { href: '/analytics',  icon: BarChart3,     labelKey: 'analytics'  },
   { href: '/explore',    icon: Telescope,     labelKey: 'explore'    },
-  { href: '/clusters',   icon: LayoutGrid,    labelKey: 'clusters',   badge: 'NEW', badgeColor: 'blue'   },
+  // { href: '/clusters',   icon: LayoutGrid,    labelKey: 'clusters',   badge: 'NEW', badgeColor: 'blue'   }, // Hidden — needs correlation engine (Aether)
   { href: '/briefing',   icon: ClipboardList, labelKey: 'briefing',   badge: 'NEW', badgeColor: 'indigo' },
   { href: '/finance',    icon: TrendingUp,    labelKey: 'finance',    badge: 'NEW', badgeColor: 'green'  },
   { href: '/sanctions',        icon: Shield,    labelKey: 'sanctions',       badge: 'NEW', badgeColor: 'amber'  },
