@@ -8,7 +8,7 @@ Real-time signals from 300+ sources across 184 nations — verified, enriched, a
 [![Node.js 20+](https://img.shields.io/badge/Node.js-20+-green.svg)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue.svg)](https://typescriptlang.org)
 
-**[Live Demo](https://world-pulse.io)** · **[API Docs](#api-reference)** · **[Self-Host Guide](#self-hosting)** · **[Contributing](#contributing)**
+**[Home Base](https://world-pulse.io)** · **[API Docs](#api-reference)** · **[Self-Host Guide](#self-hosting)** · **[Contributing](#contributing)**
 
 ---
 
