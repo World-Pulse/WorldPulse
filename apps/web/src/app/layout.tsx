@@ -3,7 +3,6 @@ import Script from 'next/script'
 import { Inter, Bebas_Neue, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import { Providers } from '@/components/providers'
-import { PostHogProvider } from '@/components/providers/PostHogProvider'
 import { TopNav } from '@/components/nav/TopNav'
 import { BottomTabBar } from '@/components/nav/BottomTabBar'
 import { BreakingAlertBanner } from '@/components/alerts/BreakingAlertBanner'
@@ -70,7 +69,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" dir="ltr" className="dark">
       <Script
-        src="https://www.googletagmanager.com/gtag/js?id=G-VS98QLC4B5"
+        src="https://www.googletagmanager.com/gtag/js?id=G-YJXNFP4046"
         strategy="afterInteractive"
       />
       <Script id="gtag-init" strategy="afterInteractive">
@@ -78,7 +77,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           window.dataLayer = window.dataLayer || [];
           function gtag(){dataLayer.push(arguments);}
           gtag('js', new Date());
-          gtag('config', 'G-VS98QLC4B5');
+          gtag('config', 'G-YJXNFP4046');
         `}
       </Script>
       <body className={`${inter.variable} ${bebasNeue.variable} ${jetbrainsMono.variable} ${inter.className} bg-wp-bg text-wp-text antialiased`}>
@@ -89,8 +88,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           Skip to main content
         </a>
-        <PostHogProvider>
-          <LocaleAttributes />
+        <LocaleAttributes />
           <Providers>
             {/* CommandPaletteProvider registers the ⌘K/Ctrl+K global shortcut */}
             <CommandPaletteProvider>
@@ -106,7 +104,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <BottomTabBar />
             </CommandPaletteProvider>
           </Providers>
-        </PostHogProvider>
       </body>
     </html>
   )
