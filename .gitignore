@@ -50,6 +50,7 @@ brain_memory/
 brain_agent.py
 brain_agent.log
 START_BRAIN.bat
+claude_autopilot*.ps1
 
 # Claude / Cowork workspace files
 .claude/
