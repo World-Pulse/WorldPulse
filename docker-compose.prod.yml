@@ -153,6 +153,10 @@ services:
       # Optional — Web Push
       VAPID_PUBLIC_KEY:  ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      # Stripe billing
+      STRIPE_SECRET_KEY:     ${STRIPE_SECRET_KEY:-}
+      STRIPE_PRO_PRICE_ID:   ${STRIPE_PRO_PRICE_ID:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
     volumes:
       - uploads_data:/app/uploads
     networks:

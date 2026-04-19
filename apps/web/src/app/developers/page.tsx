@@ -599,13 +599,6 @@ export default function DevelopersPage() {
               </svg>
               View on GitHub
             </a>
-            <Link
-              href="/api-docs/graphql"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-[rgba(255,255,255,0.15)] text-wp-text2 font-medium text-[14px] hover:border-[rgba(255,255,255,0.3)] hover:text-wp-text1 transition-all"
-            >
-              <span className="text-[16px]">◆</span>
-              GraphQL Playground
-            </Link>
           </div>
         </div>
       </div>
@@ -923,19 +916,13 @@ export default function DevelopersPage() {
           </p>
           <div className="flex justify-center gap-3 flex-wrap">
             <a
-              href={`${API_BASE}/api/v1/public/signals`}
+              href="https://github.com/World-Pulse/WorldPulse"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-wp-cyan text-black font-medium text-[14px] hover:bg-wp-cyan/90 transition-all"
             >
               Try the API Now
             </a>
-            <Link
-              href="/settings"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-[rgba(255,255,255,0.15)] text-wp-text2 font-medium text-[14px] hover:border-[rgba(255,255,255,0.3)] hover:text-wp-text1 transition-all"
-            >
-              Get Your API Key
-            </Link>
           </div>
         </section>
       </div>
