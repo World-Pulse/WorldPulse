@@ -1,55 +1,59 @@
-# 🌍 WorldPulse
+# WorldPulse
 
-**The open-source global intelligence network.**  
-Real-time world events + social discourse, verified and trustworthy.
+**Open-source global intelligence platform.**
+Real-time signals from 300+ sources across 184 nations — verified, enriched, and mapped.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-amber.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Node.js 20+](https://img.shields.io/badge/Node.js-20+-green.svg)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue.svg)](https://typescriptlang.org)
 
+**[Live Demo](https://world-pulse.io)** · **[API Docs](#api-reference)** · **[Self-Host Guide](#self-hosting)** · **[Contributing](#contributing)**
+
 ---
+
+<!-- TODO: Replace with actual screenshots before launch -->
+<!-- ![WorldPulse Dashboard](docs/images/hero-screenshot.png) -->
 
 ## What is WorldPulse?
 
-WorldPulse is what you get when you combine the live event monitoring of a global wire service with the social dynamics of the early internet — open-source, verifiable, and free.
+WorldPulse monitors the world so you don't have to. It ingests signals from wire services, government feeds, OSINT APIs, and specialized data sources — then classifies, geolocates, verifies, and maps every event in real-time.
 
-- **Real-time signals** from 500+ global sources, verified and cross-checked
-- **Social layer** where journalists, experts, and communities add context
-- **Reliability scores** on every piece of content (no more guessing)
-- **Open API** — build on top of WorldPulse freely
-- **Self-hostable** — run your own instance in minutes
+The kind of situational awareness that used to cost six figures, now open-source and free.
+
+- **300+ verified sources** — AP, Reuters, USGS, NOAA, ACLED, OpenSanctions, GDELT, and more
+- **50,000+ intelligence signals** indexed and growing continuously
+- **AI-powered verification** — cross-source correlation, reliability scoring, deduplication
+- **Interactive world map** — live conflict, hazard, cyber, and maritime layers on MapLibre GL
+- **Real-time updates** — WebSocket-powered, signals appear within 60 seconds
+- **Open API** — build on top of WorldPulse, no API key required for public data
+- **Self-hostable** — `docker compose up` and you're running
 
 ---
 
-## Quick Start (Local Dev)
+## Quick Start
 
 ### Prerequisites
+
 - Node.js 20+
 - pnpm 9+
 - Docker + Docker Compose
 
-### 1. Clone & Install
+### 1. Clone and install
 
 ```bash
-git clone https://github.com/worldpulse/worldpulse.git
-cd worldpulse
+git clone https://github.com/World-Pulse/WorldPulse.git
+cd WorldPulse
 pnpm install
 ```
 
-### 2. Start Infrastructure
+### 2. Start infrastructure
 
 ```bash
-docker compose up -d postgres redis kafka meilisearch
+docker compose up -d postgres redis
 ```
 
-This starts:
-- PostgreSQL 16 + PostGIS on `localhost:5432`
-- Redis 7 on `localhost:6379`
-- Kafka + Zookeeper on `localhost:9092`
-- Meilisearch on `localhost:7700`
-
-### 3. Configure Environment
+### 3. Configure environment
 
 ```bash
 cp apps/api/.env.example     apps/api/.env.local
@@ -57,45 +61,39 @@ cp apps/scraper/.env.example apps/scraper/.env.local
 cp apps/web/.env.example     apps/web/.env.local
 ```
 
-### 4. Run Migrations & Seed
+### 4. Run migrations and seed
 
 ```bash
 pnpm db:migrate
 pnpm db:seed
 ```
 
-### 5. Start Development
+### 5. Start development
 
 ```bash
 pnpm dev
 ```
 
-This starts:
-- **Web app** → http://localhost:3000
-- **API server** → http://localhost:3001
-- **Signal scraper** → background process
-- **Kafka UI** → http://localhost:8090
-- **Grafana** → http://localhost:3100 (admin/admin)
+- **Web app** at http://localhost:3000
+- **API server** at http://localhost:3001
+- **Scraper** runs as a background process
 
 ---
 
 ## Architecture
 
 ```
-worldpulse/
+WorldPulse/
 ├── apps/
-│   ├── web/          # Next.js 15 frontend (TypeScript)
+│   ├── web/          # Next.js 15 frontend
 │   ├── api/          # Fastify API + WebSocket server
 │   └── scraper/      # Signal intelligence pipeline
 ├── packages/
 │   ├── types/        # Shared TypeScript types
-│   ├── ui/           # Shared React component library
-│   └── config/       # Shared ESLint/TS configs
-├── infrastructure/
-│   ├── docker/       # Docker configs, init scripts
-│   ├── k8s/          # Kubernetes manifests (production)
-│   └── terraform/    # Cloud infrastructure (AWS/GCP/self-hosted)
-└── docs/             # Documentation
+│   ├── ui/           # Shared component library
+│   └── config/       # ESLint/TS configs
+└── infrastructure/
+    └── docker/       # Docker configs, init scripts
 ```
 
 ### Tech Stack
@@ -104,119 +102,72 @@ worldpulse/
 |-------|-----------|
 | Frontend | Next.js 15, TypeScript, Tailwind CSS |
 | API | Fastify, TypeScript, WebSocket |
-| Scraper | Node.js, Kafka, RSS/web scraping |
 | Database | PostgreSQL 16 + PostGIS |
 | Cache | Redis 7 |
-| Search | Meilisearch |
-| Queue | Apache Kafka |
-| Maps | MapLibre GL (open-source) |
-| Monitoring | Prometheus + Grafana |
-| AI | Ollama (local) / OpenAI-compatible API |
+| Maps | MapLibre GL (no proprietary APIs) |
+| Search | Pinecone (semantic) + Meilisearch (full-text) |
+| Scraper | Node.js, 30+ source adapters |
+| AI | Anthropic (verification), Ollama (local classification) |
 
 ---
 
 ## Key Features
 
-### 🛰️ Signal Pipeline
-The scraper monitors 80+ verified global sources across:
-- **Tier 1 Wire Services**: AP, Reuters, AFP, BBC, Bloomberg, Nikkei Asia, Al Jazeera
-- **Official Sources**: UN, WHO, USGS, NOAA, NASA, PHIVOLCS, FEMA
-- **Global Media**: Le Monde, Der Spiegel, El País, The Wire India, Daily Maverick, AllAfrica, Folha, Arab News
-- **Specialized Feeds**: ACLED (conflict), ProMED (disease), OpenSky (aviation), AIS (maritime)
+### Signal Pipeline
 
-### 🔍 7-Layer Signal Enrichment
-Every verified signal is enriched with:
-1. **Reliability score** (0–1) — cross-source corroboration + temporal consistency
-2. **Virality badge** — spreading velocity across sources and social channels
-3. **Geolocation** — PostGIS coordinates for map rendering
-4. **GDELT TV clips** — broadcast news segments mentioning the event
-5. **GDELT visual imagery** — editorial photos from global press
-6. **YouTube/podcast embedding** — multimedia context per signal
-7. **Semantic vector embedding** — Pinecone-powered similarity search
+The scraper monitors 300+ verified global sources:
 
-### ⚡ Real-Time Feed
-- WebSocket-powered live updates (zero-refresh)
-- ⌘K / Ctrl+K global command palette for instant navigation
+- **Wire Services**: AP, Reuters, AFP, BBC, Bloomberg, Al Jazeera
+- **Government Feeds**: USGS, NOAA, WHO, NWS, NASA, FEMA
+- **OSINT Sources**: ACLED (conflict), OpenSanctions, IODA (outages), OTX (cyber threats)
+- **Specialized**: GDELT, maritime AIS, aviation ADS-B, ProMED (disease)
+
+Every signal passes through a 5-stage enrichment pipeline: extraction, classification, geolocation, cross-source correlation, and reliability scoring.
+
+### Intelligence Map
+
+- MapLibre GL globe — no proprietary API keys
+- Satellite, dark, and terrain basemap switcher
+- 3D tilt with NavigationControl
+- Live overlay layers: conflict, natural hazards, cyber threats, maritime/aviation
+- Click any signal for a full verification timeline
+- Supercluster for marker grouping at all zoom levels
+
+### Intelligence Pages
+
+Dedicated deep-dive dashboards for specialized analysis:
+
+- **/cyber-threats** — APT activity, CVEs, ransomware tracking
+- **/sanctions** — OFAC, EU, UN watchlist entries
+- **/finance** — Market signals, central bank events, economic indicators
+- **/space-weather** — Solar flares, geomagnetic storms, NOAA alerts
+- **/internet-outages** — BGP disruptions, submarine cable cuts
+- **/governance** — Democracy indices, policy changes by country
+- **/food-security** — Famine early warning, crop disruptions
+- **/digital-rights** — Internet shutdowns, surveillance events
+- **/undersea-cables** — Global cable infrastructure monitoring
+
+### Source Credibility
+
+- AI content farm detection — 3,000+ flagged domains
+- Reliability scores on every signal (0–1 scale, color-coded)
+- Source trust tiers: Wire Service > Official > Verified Media > Community
+
+### Real-Time Feed
+
+- WebSocket-powered live updates
+- Command palette (Cmd+K / Ctrl+K) for instant navigation
+- Category and severity filters
 - Redis-cached public feeds (30s TTL)
-- Configurable alerts: Email, Telegram, Discord, Slack, Teams
 
-### 🗺️ Enterpise Intelligence Map
-- MapLibre GL — open-source, no proprietary API key required
-- Satellite + dark + terrain basemap switcher
-- 3D tilt (45° pitch) with NavigationControl
-- Live intelligence overlays:
-  - ✈️ **ADS-B Aircraft** — real-time aviation signals (60s refresh)
-  - ⚓ **Maritime AIS** — ship tracking with clustering (120s refresh)
-  - 🌊 **Naval Intel** — carrier movements, dark ship alerts
-  - 🌋 **Natural Hazards** — earthquakes, floods, wildfires
-- Palantir-style annotation cards on click
-- Supercluster for marker clustering at all zoom levels
+### Developer API
 
-### 🕵️ Intelligence Pages
-Dedicated deep-dive pages for specialized analysts:
-- **[/cyber-threats](/cyber-threats)** — APT activity, CVEs, ransomware, DDoS events
-- **[/sanctions](/sanctions)** — Watchlist entries, OFAC/UN/EU sanctions data
-- **[/finance](/finance)** — Market signals, central bank events, economic indicators
-- **[/space-weather](/space-weather)** — Solar flares, geomagnetic storms, NOAA alerts
-- **[/internet-outages](/internet-outages)** — BGP disruptions, submarine cable cuts, Cloudflare Radar data
+No API key required for public endpoints. Full REST API + WebSocket.
 
-### 🏷️ Source Credibility
-- **AI Content Farm Detection** — 3,000+ flagged AI-generated content farms via Pangram Labs data
-- **Reliability Scores** shown on every signal (0–1 scale, color-coded)
-- **NewsGuard integration** — known disinformation domains flagged
-- **Source trust tiers**: Wire Service → Official → Verified Media → Community
-
-### 📧 Alerts & Digest
-- **Real-time alerts**: Telegram, Discord, Slack, Teams, email (Resend)
-- **Category + severity filters**: Get only what matters
-- **Country-level targeting**: Alerts scoped to specific countries
-- **Weekly email digest**: Curated top signals, delivered Sunday
-
-### 🧩 Browser Extensions
-- **Chrome** (MV3 Manifest V3, Chromium-compatible)
-- **Firefox** (MV3, Android Firefox-compatible)
-- Floating overlay on any news page — surface WorldPulse signals for the article you're reading
-
-### 💳 Pro Tier
 | Plan | Rate Limit | History | Price |
 |------|-----------|---------|-------|
-| Free | 60 req/min · 1,000/day | 7 days | Free |
-| Pro  | 300 req/min · 10,000/day | 90 days | $12/mo |
-| Enterprise | Unlimited | Full archive | Contact us |
-
----
-
-## How WorldPulse Compares
-
-WorldPulse is built around **verified, enriched intelligence** — not raw data dumps. Here's how it stacks up against the leading alternatives:
-
-| Feature | WorldPulse | WorldMonitor | Ground News |
-|---------|-----------|-------------|-------------|
-| **Signal verification** | ✅ Multi-layer (5-step pipeline) | ❌ Raw aggregation | ⚠️ Bias labels only |
-| **Per-signal enrichment** | ✅ 7 layers (TV clips, imagery, reliability, virality, semantic, media, geolocation) | ❌ None | ⚠️ Podcast clips |
-| **Public REST API** | ✅ Open, rate-limited, documented | ⚠️ Proto/gRPC (complex) | ❌ None |
-| **Semantic search** | ✅ Pinecone vector embeddings | ❌ No | ❌ No |
-| **Real-time WebSocket feed** | ✅ Yes | ❌ No | ❌ No |
-| **Pro subscription tier** | ✅ $12/mo · 300 rpm · 90-day history | ✅ Yes | ✅ ~$40/yr |
-| **Browser extensions** | ✅ Chrome + Firefox (MV3) | ❌ Chrome only | ✅ Chrome only |
-| **Mobile app** | ✅ React Native (iOS + Android) | ✅ iOS (Tauri) | ✅ iOS + Android |
-| **Intelligence pages** | ✅ 5 unique: Cyber, Sanctions, Finance, Space Weather, Internet Outages | ❌ No dedicated pages | ❌ No |
-| **Configurable alerts** | ✅ Email, Telegram, Discord, Slack, SMS | ❌ Passive only | ⚠️ Push only |
-| **Weekly digest emails** | ✅ Yes | ❌ No | ✅ Daily Briefing |
-| **Webhooks** | ✅ Push events to your server | ❌ No | ❌ No |
-| **Self-hostable** | ✅ Docker + Kubernetes | ✅ Yes | ❌ No |
-| **Open source** | ✅ MIT | ✅ AGPL-3.0 | ❌ Closed source |
-| **AI content farm detection** | ✅ 3,000+ farms flagged | ❌ No | ❌ No |
-| **Sanctions & watchlist data** | ✅ Yes (/sanctions) | ❌ No | ❌ No |
-| **⌘K Command palette** | ✅ Yes | ✅ Yes | ❌ No |
-| **Live map layers** | ✅ 4 layers: ADS-B aircraft, Maritime AIS, Natural Hazards, Naval Intel | ✅ 45 raw layers | ❌ No |
-| **Data sources** | ✅ 80+ verified, enriched | ✅ 435+ raw feeds | ✅ 50,000+ (bias labels) |
-
-### WorldPulse's philosophy: **Quality over Quantity**
-
-- **WorldMonitor** aggregates the most raw data (45 layers, 435+ feeds). It's excellent for OSINT reconnaissance but gives you raw data with no verification, enrichment, or actionability.
-- **Ground News** excels at bias comparison but provides no OSINT, no API, no intelligence synthesis, and no alerting.
-- **WorldPulse** sits between wire-service quality and open-source flexibility — verified signals with a full enrichment pipeline, a developer API, configurable alerts, and no walled garden.
+| Free | 60 req/min | 7 days | $0 |
+| Pro | 300 req/min | 90 days | $12/mo |
 
 ---
 
@@ -224,169 +175,102 @@ WorldPulse is built around **verified, enriched intelligence** — not raw data 
 
 ### REST API
 
-Base URL: `https://api.worldpulse.io/api/v1`  
-Auth: Bearer JWT token (optional for read, required for write)
-
-#### Feed Endpoints
+Base URL: `https://api.world-pulse.io/api/v1`
 
 ```
-GET  /feed/global          Global public feed
-GET  /feed/following       Personalized feed (auth required)
-GET  /feed/signals         Breaking signals stream
-GET  /feed/trending        Trending topics
+GET  /feed/signals                 Live signal feed
+GET  /signals                      List signals (filterable)
+GET  /signals/:id                  Signal detail + verification trail
+GET  /signals/map                  Geo-located signals for map rendering
+GET  /search?q=...                 Full-text + semantic search
+GET  /api/v1/public/signals        Public API (no auth, CORS enabled)
 ```
 
-#### Signal Endpoints
+### WebSocket
 
 ```
-GET  /signals              List signals
-GET  /signals/:id          Signal detail
-GET  /signals/:id/posts    Posts discussing this signal
-GET  /signals/map          Signals with geo data (for map)
+wss://api.world-pulse.io/ws
+
+Subscribe:  { "type": "subscribe", "payload": { "channels": ["breaking"] } }
+Receive:    { "event": "signal.new", "data": { "signal": {...} } }
 ```
 
-#### Post Endpoints
-
-```
-GET  /posts/:id            Post detail + replies
-POST /posts                Create post (auth required)
-POST /posts/:id/like       Like/unlike
-POST /posts/:id/boost      Boost
-GET  /posts/:id/replies    Reply thread
-```
-
-#### User Endpoints
-
-```
-GET  /users/:handle        User profile
-GET  /users/:handle/posts  User's posts
-POST /users/:handle/follow Follow (auth)
-GET  /users/me             Own profile (auth)
-PUT  /users/me             Update profile (auth)
-```
-
-#### Search
-
-```
-GET /search?q=...&type=all|signals|posts|users
-```
-
-### WebSocket API
-
-Connect: `wss://api.worldpulse.io/ws?token=<optional_jwt>`
-
-**Send:**
-```json
-{ "type": "subscribe",   "payload": { "channels": ["breaking", "climate"] } }
-{ "type": "unsubscribe", "payload": { "channels": ["sports"] } }
-{ "type": "pong" }
-```
-
-**Receive:**
-```json
-{ "event": "signal.new",      "data": { "signal": Signal }  }
-{ "event": "signal.updated",  "data": { "signal": Signal }  }
-{ "event": "post.new",        "data": { "post": Post }      }
-{ "event": "trending.update", "data": { "topics": [...] }   }
-{ "event": "alert.trigger",   "data": { "alert": {...} }    }
-{ "event": "ping",            "data": { "serverTime": "..." }}
-```
-
----
-
-## Contributing
-
-WorldPulse is fully open-source and welcomes contributions of all kinds.
-
-### Ways to Contribute
-- 🐛 **Bug reports** — [Open an issue](https://github.com/worldpulse/worldpulse/issues)
-- ✨ **Feature requests** — [Discussions tab](https://github.com/worldpulse/worldpulse/discussions)
-- 🔧 **Code** — Fork, branch, PR
-- 🌍 **Translations** — Help localize the UI
-- 📡 **Scraper nodes** — Run a scraper instance for your region
-- 🏛️  **Source curation** — Propose new verified sources
-- 📖 **Documentation** — Improve docs
-
-### Development Setup
-
-```bash
-# Fork the repo, then:
-git clone https://github.com/<your-fork>/worldpulse.git
-cd worldpulse
-pnpm install
-docker compose up -d
-pnpm db:migrate && pnpm db:seed
-pnpm dev
-```
-
-### Code Style
-- TypeScript strict mode
-- ESLint + Prettier (config in `packages/config`)
-- Conventional commits (`feat:`, `fix:`, `docs:`, `chore:`)
-- Tests required for new pipeline features
+Full API documentation: [docs/api.md](docs/api.md)
 
 ---
 
 ## Self-Hosting
 
-### Single-Server (1–10K users)
+### Docker Compose (recommended)
 
 ```bash
-# Clone
-git clone https://github.com/worldpulse/worldpulse.git
-cd worldpulse
-
-# Configure
+git clone https://github.com/World-Pulse/WorldPulse.git
+cd WorldPulse
 cp .env.production.example .env.production
 # Edit .env.production with your values
-
-# Launch
 docker compose -f docker-compose.prod.yml up -d
-
-# WorldPulse is now running at http://your-server:80
 ```
 
-### Kubernetes (Production Scale)
+WorldPulse is now running on port 80. Point a reverse proxy with TLS at it and you're production-ready.
 
-```bash
-# Install Helm chart
-helm repo add worldpulse https://charts.worldpulse.io
-helm install worldpulse worldpulse/worldpulse \
-  --set domain=yourdomain.com \
-  --set postgres.size=100Gi \
-  --values my-values.yaml
-```
-
-Full self-hosting docs: [docs/self-hosting.md](docs/self-hosting.md)
+Full self-hosting guide: [docs/self-hosting.md](docs/self-hosting.md)
 
 ---
 
-## Community & Support
+## Contributing
+
+WorldPulse welcomes contributions of all kinds.
+
+**Good first issues** are labeled and ready for new contributors: [browse them here](https://github.com/World-Pulse/WorldPulse/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
+
+### Ways to contribute
+
+- **Bug reports** — [Open an issue](https://github.com/World-Pulse/WorldPulse/issues)
+- **Feature requests** — [Start a discussion](https://github.com/World-Pulse/WorldPulse/discussions)
+- **Code** — Fork, branch, PR. See [CONTRIBUTING.md](CONTRIBUTING.md)
+- **New sources** — Propose or build a scraper adapter for a data source we're missing
+- **Documentation** — Improve guides, add examples, fix typos
+
+### Development setup
+
+```bash
+git clone https://github.com/<your-fork>/WorldPulse.git
+cd WorldPulse
+pnpm install
+docker compose up -d postgres redis
+pnpm db:migrate && pnpm db:seed
+pnpm dev
+```
+
+### Code style
+
+- TypeScript strict mode
+- Conventional commits (`feat:`, `fix:`, `docs:`, `chore:`)
+- Tests required for new pipeline features
+
+---
+
+## Community
 
 - **Discord**: [discord.gg/worldpulse](https://discord.gg/worldpulse)
-- **GitHub Discussions**: [github.com/worldpulse/worldpulse/discussions](https://github.com/worldpulse/worldpulse/discussions)
-- **Matrix**: `#worldpulse:matrix.org`
-- **Status Page**: [status.worldpulse.io](https://status.worldpulse.io)
+- **GitHub Discussions**: [World-Pulse/WorldPulse/discussions](https://github.com/World-Pulse/WorldPulse/discussions)
 
 ---
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for the full roadmap.
+**Now**: Expanding source coverage, mobile app, contributor onboarding
 
-**v0.2 (Next):** Expanded sources, mobile app beta, full-text search  
-**v0.3:** Communities, expert verification program  
-**v1.0:** Production-ready, stable API, native iOS/Android  
+**Next**: Communities, expert verification program, Telegram channel monitoring
+
+**Later**: Satellite imagery integration, real-time radio intercepts, native iOS/Android
+
+See [ROADMAP.md](ROADMAP.md) for details.
 
 ---
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT — see [LICENSE](LICENSE) for details.
 
-**WorldPulse is free forever. The open-source version will never have paywalls or feature restrictions.**
-
----
-
-*Built with ❤️ by the global open-source community.*  
-*No investors. No ad revenue. No data sales. Just the world, in real time.*
+WorldPulse is free forever. The open-source core will never have paywalls or feature restrictions.
