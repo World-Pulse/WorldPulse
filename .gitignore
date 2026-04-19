@@ -45,6 +45,12 @@ packages/types/src/*.js.map
 packages/types/src/*.d.ts
 packages/types/src/*.d.ts.map
 
+# Brain agent state (internal, not shipped)
+brain_memory/
+
+# Claude / Cowork workspace files
+.claude/
+
 # Misc
 *.tmp
 coverage/
