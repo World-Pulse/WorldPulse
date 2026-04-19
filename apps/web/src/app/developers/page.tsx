@@ -912,18 +912,6 @@ export default function DevelopersPage() {
             </div>
           </div>
 
-          {/* Money-back guarantee */}
-          <div className="rounded-xl bg-wp-cyan/5 border border-wp-cyan/20 px-5 py-4 flex items-center gap-4">
-            <span className="text-2xl flex-shrink-0">🔒</span>
-            <div>
-              <p className="font-semibold text-wp-text text-[14px]">7-day money-back guarantee</p>
-              <p className="text-[12px] text-wp-text3 mt-0.5">
-                Not satisfied within 7 days? Email{' '}
-                <span className="text-wp-cyan">support@worldpulse.io</span>{' '}
-                for a full refund — no questions asked.
-              </p>
-            </div>
-          </div>
         </section>
 
         {/* Footer CTA */}
