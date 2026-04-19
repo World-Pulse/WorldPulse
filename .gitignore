@@ -59,4 +59,4 @@ worldpulse_autopilot.py
 # Misc
 *.tmp
 coverage/
-.github/
+.github/workflows/
