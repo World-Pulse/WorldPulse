@@ -814,15 +814,23 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     const cached = await redis.get(cacheKey).catch(() => null)
     if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
 
-    const [row] = await db('signals')
-      .whereNotNull('location')
-      .whereIn('status', ['verified', 'pending'])
-      .where('created_at', '>', db.raw(`NOW() - INTERVAL '24 hours'`))
-      .count('id as count')
+    const [[row], [countryRow]] = await Promise.all([
+      db('signals')
+        .whereNotNull('location')
+        .whereIn('status', ['verified', 'pending'])
+        .where('created_at', '>', db.raw(`NOW() - INTERVAL '24 hours'`))
+        .count('id as count'),
+      db('signals')
+        .whereNotNull('country_code')
+        .whereIn('status', ['verified', 'pending'])
+        .countDistinct('country_code as count'),
+    ])
 
     const mapSignalsWithGeo = Number((row as { count: string | number } | undefined)?.count ?? 0)
+    const countryCount = Number((countryRow as { count: string | number } | undefined)?.count ?? 0)
     const result = {
       map_signals_with_geo_24h: mapSignalsWithGeo,
+      country_count:           countryCount,
       geo_coverage_status:     mapSignalsWithGeo >= 10 ? 'healthy' : mapSignalsWithGeo > 0 ? 'low' : 'empty',
       checked_at:              new Date().toISOString(),
     }

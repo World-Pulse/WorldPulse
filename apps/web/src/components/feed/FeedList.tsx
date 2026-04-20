@@ -265,15 +265,20 @@ function ActionBar({ item }: { item: FeedItem }) {
   const { toast } = useToast()
 
   const toggleLike = async () => {
+    // Signal-only items (no post backing) can't be liked via the posts API
+    if (item.type === 'signal' && !item.signalId) return
+    const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
+    if (!token) { toast('Sign in to like posts', 'info'); return }
+
     const next = !liked
     setLiked(next)
     setLikes(n => next ? n + 1 : Math.max(0, n - 1))
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
-      await fetch(`${API_URL}/api/v1/posts/${item.id}/like`, {
+      const res = await fetch(`${API_URL}/api/v1/posts/${item.id}/like`, {
         method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: { Authorization: `Bearer ${token}` },
       })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
     } catch {
       // Revert on failure
       setLiked(!next)
@@ -289,16 +294,21 @@ function ActionBar({ item }: { item: FeedItem }) {
   }
 
   const toggleBookmark = async () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
+    if (!token) { toast('Sign in to bookmark posts', 'info'); return }
+
     const next = !bookmarked
     setBookmarked(next)
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
-      await fetch(`${API_URL}/api/v1/posts/${item.id}/bookmark`, {
+      const res = await fetch(`${API_URL}/api/v1/posts/${item.id}/bookmark`, {
         method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: { Authorization: `Bearer ${token}` },
       })
-    } catch { /* silent */ }
-    toast(next ? 'Signal bookmarked — saved to your collection' : 'Bookmark removed', next ? 'success' : 'info')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      toast(next ? 'Signal bookmarked — saved to your collection' : 'Bookmark removed', next ? 'success' : 'info')
+    } catch {
+      setBookmarked(!next)
+    }
   }
 
   return (
@@ -655,7 +665,17 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
                 const t = item.event.title.trim().toLowerCase()
                 const s = (item.event.summary ?? '').trim().toLowerCase()
                 const c = text.toLowerCase()
+                // Exact match or substring overlap
                 if (c === t || c === s || t.includes(c) || c.includes(t)) return null
+                // Also suppress if content matches summary (which is already displayed in the card)
+                if (s && (s.includes(c) || c.includes(s))) return null
+                // Similarity check: if >80% of words overlap, treat as duplicate
+                const cWords = new Set(c.split(/\s+/).filter(w => w.length > 3))
+                const tWords = new Set(t.split(/\s+/).filter(w => w.length > 3))
+                if (cWords.size > 0 && tWords.size > 0) {
+                  const overlap = [...cWords].filter(w => tWords.has(w)).length
+                  if (overlap / Math.min(cWords.size, tWords.size) > 0.8) return null
+                }
               }
               const embedUrl = extractFirstEmbedUrl(text)
               return (

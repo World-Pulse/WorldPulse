@@ -257,8 +257,10 @@ export const registerPostRoutes: FastifyPluginAsync = async (app) => {
     if (existing) {
       // Unlike
       await db('likes').where({ user_id: userId, post_id: id }).delete()
-      await db('posts').where('id', id).decrement('like_count', 1).where('like_count', '>', 0)
+      await db('posts').where('id', id).where('like_count', '>', 0).decrement('like_count', 1)
       const newCount = Math.max(0, post.like_count - 1)
+      // Bust feed cache so next refresh shows correct state
+      invalidateUserFeedCache(userId).catch(() => {})
       return reply.send({ success: true, data: { liked: false, count: newCount } })
     }
 
@@ -277,6 +279,8 @@ export const registerPostRoutes: FastifyPluginAsync = async (app) => {
       })
     }
 
+    // Bust feed cache so next refresh shows correct state
+    invalidateUserFeedCache(userId).catch(() => {})
     return reply.send({ success: true, data: { liked: true, count: post.like_count + 1 } })
   })
 
@@ -291,10 +295,12 @@ export const registerPostRoutes: FastifyPluginAsync = async (app) => {
     const existing = await db('bookmarks').where({ user_id: userId, post_id: id }).first()
     if (existing) {
       await db('bookmarks').where({ user_id: userId, post_id: id }).delete()
+      invalidateUserFeedCache(userId).catch(() => {})
       return reply.send({ success: true, data: { bookmarked: false } })
     }
 
     await db('bookmarks').insert({ user_id: userId, post_id: id })
+    invalidateUserFeedCache(userId).catch(() => {})
     return reply.send({ success: true, data: { bookmarked: true } })
   })
 
@@ -315,6 +321,14 @@ export const registerPostRoutes: FastifyPluginAsync = async (app) => {
 }
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────
+
+/** Delete the user's per-user feed cache keys so the next fetch returns fresh hasLiked/hasBookmarked data */
+async function invalidateUserFeedCache(userId: string) {
+  const pattern = `feed:global:user:${userId}:*`
+  const keys = await redis.keys(pattern)
+  if (keys.length > 0) await redis.del(...keys)
+}
+
 async function getPostWithAuthor(id: string, viewerId?: string) {
   const row = await db('posts as p')
     .join('users as u', 'p.author_id', 'u.id')

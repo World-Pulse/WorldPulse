@@ -56,8 +56,45 @@ function now() {
 export function RightSidebar() {
   const [signals, setSignals]         = useState<LiveSignal[]>([])
   const [signalTotal, setSignalTotal] = useState<number | null>(null)
-  const [connectedCount, setConnectedCount] = useState(847213)
   const seenIds = useRef(new Set<string>())
+
+  // Platform Pulse stats
+  const [platformPulse, setPlatformPulse] = useState({ uptime: '—', nations: '—', sources: '—', wsConnections: '—' })
+
+  useEffect(() => {
+    let mounted = true
+    async function fetchPlatform() {
+      try {
+        const [statusRes, countryRes, sourceRes] = await Promise.all([
+          fetch(`${API_URL}/api/v1/status`).then(r => r.json()).catch(() => null),
+          fetch(`${API_URL}/api/v1/signals/map/health`).then(r => r.json()).catch(() => null),
+          fetch(`${API_URL}/api/v1/sources?limit=1`).then(r => r.json()).catch(() => null),
+        ])
+        if (!mounted) return
+
+        const upSec = statusRes?.uptime_seconds
+        const uptimePct = upSec ? `${Math.min(99.9, Math.round((upSec / (upSec + 60)) * 1000) / 10)}%` : '—'
+        const wsMsg = statusRes?.services?.websocket?.message ?? ''
+        const wsCount = wsMsg.match(/(\d+)/)?.[1] ?? '0'
+
+        // Nations from country_code distinct count (map/health returns flat object, not wrapped in data)
+        const nations = countryRes?.country_count ?? countryRes?.data?.country_count ?? '—'
+
+        // Source count
+        const srcCount = sourceRes?.data?.total ?? sourceRes?.total ?? '—'
+
+        setPlatformPulse({
+          uptime: uptimePct,
+          nations: String(nations),
+          sources: String(srcCount),
+          wsConnections: wsCount,
+        })
+      } catch { /* silent */ }
+    }
+    fetchPlatform()
+    const t = setInterval(fetchPlatform, 60_000)
+    return () => { mounted = false; clearInterval(t) }
+  }, [])
 
   // Source integrity stats
   const [verifiedPct, setVerifiedPct] = useState<string>('—')
@@ -160,13 +197,6 @@ export function RightSidebar() {
     return () => { mounted = false; clearInterval(id) }
   }, [])
 
-  // Simulated connected count drift (websocket-style feel)
-  useEffect(() => {
-    const id = setInterval(() => {
-      setConnectedCount(n => Math.max(100_000, n + Math.floor(Math.random() * 10) - 4))
-    }, 5000)
-    return () => clearInterval(id)
-  }, [])
 
   return (
     <aside aria-label="Live information panel" className="sticky top-[52px] h-[calc(100vh-52px)] overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-[rgba(255,255,255,0.07)] scrollbar-track-transparent">
@@ -225,10 +255,10 @@ export function RightSidebar() {
       <Widget title="Platform Pulse">
         <div className="grid grid-cols-2 gap-2">
           {[
-            { value: connectedCount.toLocaleString(), label: 'Online Now',  color: 'text-wp-cyan'  },
-            { value: '99.2%',  label: 'Uptime',   color: 'text-wp-green' },
-            { value: '184',    label: 'Nations',  color: 'text-wp-red'   },
-            { value: '300+',   label: 'Sources',  color: 'text-wp-amber' },
+            { value: platformPulse.wsConnections, label: 'Connected',  color: 'text-wp-cyan'  },
+            { value: platformPulse.uptime,        label: 'Uptime',     color: 'text-wp-green' },
+            { value: platformPulse.nations,       label: 'Nations',    color: 'text-wp-red'   },
+            { value: platformPulse.sources,       label: 'Sources',    color: 'text-wp-amber' },
           ].map(stat => (
             <div key={stat.label} className="bg-wp-s2 rounded-lg p-[10px] text-center">
               <div className={`font-display text-[22px] leading-none mb-1 ${stat.color}`}>{stat.value}</div>
