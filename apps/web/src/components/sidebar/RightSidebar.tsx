@@ -53,42 +53,51 @@ function now() {
   return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`
 }
 
+function formatPulseCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return String(n)
+}
+
 export function RightSidebar() {
   const [signals, setSignals]         = useState<LiveSignal[]>([])
   const [signalTotal, setSignalTotal] = useState<number | null>(null)
   const seenIds = useRef(new Set<string>())
 
   // Platform Pulse stats
-  const [platformPulse, setPlatformPulse] = useState({ uptime: '—', nations: '—', sources: '—', wsConnections: '—' })
+  const [platformPulse, setPlatformPulse] = useState({ uptime: '—', nations: '195', sources: '—', wsConnections: '—' })
 
   useEffect(() => {
     let mounted = true
     async function fetchPlatform() {
       try {
-        const [statusRes, countryRes, sourceRes] = await Promise.all([
+        const [statusRes, sourceRes] = await Promise.all([
           fetch(`${API_URL}/api/v1/status`).then(r => r.json()).catch(() => null),
-          fetch(`${API_URL}/api/v1/signals/map/health`).then(r => r.json()).catch(() => null),
           fetch(`${API_URL}/api/v1/sources?limit=1`).then(r => r.json()).catch(() => null),
         ])
         if (!mounted) return
 
+        // Uptime as human-readable duration
         const upSec = statusRes?.uptime_seconds
-        const uptimePct = upSec ? `${Math.min(99.9, Math.round((upSec / (upSec + 60)) * 1000) / 10)}%` : '—'
+        let uptimeStr = '—'
+        if (upSec) {
+          const d = Math.floor(upSec / 86400)
+          const h = Math.floor((upSec % 86400) / 3600)
+          uptimeStr = d > 0 ? `${d}d ${h}h` : `${h}h ${Math.floor((upSec % 3600) / 60)}m`
+        }
+
         const wsMsg = statusRes?.services?.websocket?.message ?? ''
         const wsCount = wsMsg.match(/(\d+)/)?.[1] ?? '0'
 
-        // Nations from country_code distinct count (map/health returns flat object, not wrapped in data)
-        const nations = countryRes?.country_count ?? countryRes?.data?.country_count ?? '—'
+        // Source count (total coverage including inactive)
+        const srcCount = sourceRes?.data?.totalAll ?? sourceRes?.data?.total ?? '—'
 
-        // Source count
-        const srcCount = sourceRes?.data?.total ?? sourceRes?.total ?? '—'
-
-        setPlatformPulse({
-          uptime: uptimePct,
-          nations: String(nations),
+        setPlatformPulse(prev => ({
+          ...prev,
+          uptime: uptimeStr,
           sources: String(srcCount),
           wsConnections: wsCount,
-        })
+        }))
       } catch { /* silent */ }
     }
     fetchPlatform()
@@ -255,10 +264,10 @@ export function RightSidebar() {
       <Widget title="Platform Pulse">
         <div className="grid grid-cols-2 gap-2">
           {[
-            { value: platformPulse.wsConnections, label: 'Connected',  color: 'text-wp-cyan'  },
-            { value: platformPulse.uptime,        label: 'Uptime',     color: 'text-wp-green' },
-            { value: platformPulse.nations,       label: 'Nations',    color: 'text-wp-red'   },
-            { value: platformPulse.sources,       label: 'Sources',    color: 'text-wp-amber' },
+            { value: signalTotal != null ? formatPulseCount(signalTotal) : '—', label: 'Signals',  color: 'text-wp-cyan'  },
+            { value: platformPulse.uptime,   label: 'Uptime',   color: 'text-wp-green' },
+            { value: platformPulse.nations,  label: 'Nations',  color: 'text-wp-red'   },
+            { value: platformPulse.sources,  label: 'Sources',  color: 'text-wp-amber' },
           ].map(stat => (
             <div key={stat.label} className="bg-wp-s2 rounded-lg p-[10px] text-center">
               <div className={`font-display text-[22px] leading-none mb-1 ${stat.color}`}>{stat.value}</div>

@@ -53,13 +53,17 @@ export const registerSourceRoutes: FastifyPluginAsync = async (app) => {
     if (category) query = query.whereRaw('? = ANY(categories)', [category])
 
     const sources = await query
-    const total = await db('sources').where('active', true).count('id as count').first()
+    const [activeCount, allCount] = await Promise.all([
+      db('sources').where('active', true).count('id as count').first(),
+      db('sources').count('id as count').first(),
+    ])
 
     return reply.send({
       success: true,
       data: {
         items: sources,
-        total: Number(total?.count ?? 0),
+        total: Number(activeCount?.count ?? 0),
+        totalAll: Number(allCount?.count ?? 0),
       },
     })
   })
