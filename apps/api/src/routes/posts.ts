@@ -257,11 +257,14 @@ export const registerPostRoutes: FastifyPluginAsync = async (app) => {
     if (existing) {
       // Unlike
       await db('likes').where({ user_id: userId, post_id: id }).delete()
-      return reply.send({ success: true, data: { liked: false, count: Math.max(0, post.like_count - 1) } })
+      await db('posts').where('id', id).decrement('like_count', 1).where('like_count', '>', 0)
+      const newCount = Math.max(0, post.like_count - 1)
+      return reply.send({ success: true, data: { liked: false, count: newCount } })
     }
 
     // Like
     await db('likes').insert({ user_id: userId, post_id: id })
+    await db('posts').where('id', id).increment('like_count', 1)
 
     // Notify post author (not self-likes)
     if (post.author_id !== userId) {
