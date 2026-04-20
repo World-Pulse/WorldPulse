@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, type ElementType } from 'react'
+import { Zap, Database, MemoryStick, Search, Satellite, Plug, type LucideProps } from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -27,13 +28,13 @@ interface StatusResponse {
   }
 }
 
-const SERVICE_META: Record<string, { label: string; icon: string; description: string }> = {
-  api:       { label: 'API',         icon: '⚡', description: 'REST API server' },
-  database:  { label: 'Database',    icon: '🗄️', description: 'PostgreSQL' },
-  redis:     { label: 'Cache',       icon: '⚡', description: 'Redis cache & pub/sub' },
-  search:    { label: 'Search',      icon: '🔍', description: 'Meilisearch full-text' },
-  scraper:   { label: 'Data Scraper',icon: '📡', description: 'Signal ingestion pipeline' },
-  websocket: { label: 'WebSocket',   icon: '🔌', description: 'Real-time feed' },
+const SERVICE_META: Record<string, { label: string; Icon: ElementType<LucideProps>; description: string }> = {
+  api:       { label: 'API',         Icon: Zap,        description: 'REST API server' },
+  database:  { label: 'Database',    Icon: Database,    description: 'PostgreSQL' },
+  redis:     { label: 'Cache',       Icon: MemoryStick, description: 'Redis cache & pub/sub' },
+  search:    { label: 'Search',      Icon: Search,      description: 'Meilisearch full-text' },
+  scraper:   { label: 'Data Scraper',Icon: Satellite,   description: 'Signal ingestion pipeline' },
+  websocket: { label: 'WebSocket',   Icon: Plug,        description: 'Real-time feed' },
 }
 
 const STATUS_CONFIG: Record<ServiceStatus, { label: string; dot: string; bg: string; text: string }> = {
@@ -180,7 +181,7 @@ export default function StatusPage() {
                 </div>
               ))
             : data && Object.entries(data.services).map(([key, check]) => {
-                const meta   = SERVICE_META[key] ?? { label: key, icon: '●', description: '' }
+                const meta   = SERVICE_META[key] ?? { label: key, Icon: Zap, description: '' }
                 const config = STATUS_CONFIG[check.status]
                 return (
                   <div
@@ -188,8 +189,8 @@ export default function StatusPage() {
                     className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-wp-surface px-5 py-4 flex items-center gap-4 transition-colors hover:border-[rgba(255,255,255,0.12)]"
                   >
                     {/* Icon */}
-                    <div className="w-9 h-9 rounded-lg bg-wp-s2 flex items-center justify-center text-base flex-shrink-0">
-                      {meta.icon}
+                    <div className="w-9 h-9 rounded-lg bg-wp-s2 flex items-center justify-center flex-shrink-0">
+                      <meta.Icon className="w-4 h-4 text-wp-text2" />
                     </div>
 
                     {/* Name + description */}
