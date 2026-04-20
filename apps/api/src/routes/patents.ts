@@ -191,12 +191,11 @@ export const registerPatentRoutes: FastifyPluginAsync = async (app) => {
 
       const since = new Date(Date.now() - windowHours * 3600_000).toISOString()
 
-      // Base query builder — patent signals from the patents source
+      // Base query builder — patent signals matched by tags or title
       const baseWhere = (qb: ReturnType<typeof db>) => {
         qb.where('created_at', '>=', since)
           .where(function (this: ReturnType<typeof db>) {
-            this.where('source_name', 'like', '%patent%')
-              .orWhere('source_name', 'like', '%USPTO%')
+            this.whereRaw("tags @> ARRAY['patent']::text[]")
               .orWhere('title', 'like', '%Patent%')
               .orWhere('title', 'like', '%patent%')
           })
