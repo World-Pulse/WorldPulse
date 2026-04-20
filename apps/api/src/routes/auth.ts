@@ -497,13 +497,13 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────
 async function issueTokens(app: Parameters<FastifyPluginAsync>[0], userId: string): Promise<AuthTokens> {
-  const accessToken  = app.jwt.sign({ id: userId }, { expiresIn: '15m' })
+  const accessToken  = app.jwt.sign({ id: userId }, { expiresIn: '24h' })
   const refreshToken = crypto.randomUUID()
-  
+
   // Store refresh token in Redis (30 days)
   await redis.setex(`refresh:${refreshToken}`, 30 * 24 * 60 * 60, userId)
-  
-  return { accessToken, refreshToken, expiresIn: 15 * 60 }
+
+  return { accessToken, refreshToken, expiresIn: 24 * 60 * 60 }
 }
 
 function formatUser(user: Record<string, unknown>): AuthUser {

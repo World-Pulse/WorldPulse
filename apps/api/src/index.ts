@@ -171,7 +171,7 @@ async function bootstrap() {
   }
   await app.register(jwt, {
     secret: jwtSecret ?? 'dev_secret_change_in_prod',
-    sign:   { expiresIn: '15m' },
+    sign:   { expiresIn: '24h' },
   })
 
   // ─── CLOUDFLARE MIDDLEWARE ────────────────────────────────

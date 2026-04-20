@@ -83,12 +83,14 @@ export function Composer() {
     setError(null)
 
     try {
+      // Auth token for all API calls
+      const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
+
       // Upload media if any
       let mediaUrls:  string[] = []
       let mediaTypes: string[] = []
       if (media.length > 0) {
         setUploading(true)
-        const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
         const form  = new FormData()
         for (const m of media) form.append('file', m.file)
         const upRes = await fetch(`${API_URL}/api/v1/uploads`, {
@@ -115,7 +117,10 @@ export function Composer() {
       const postRes = await fetch(`${API_URL}/api/v1/posts`, {
         method:      'POST',
         credentials: 'include',
-        headers:     { 'Content-Type': 'application/json' },
+        headers:     {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body:        JSON.stringify(postPayload),
       })
 
@@ -134,10 +139,13 @@ export function Composer() {
           expiresAt: poll.expiresAt || undefined,
           postId:    postData.data.id,
         }
-        await fetch('/api/v1/polls', {
+        await fetch(`${API_URL}/api/v1/polls`, {
           method:      'POST',
           credentials: 'include',
-          headers:     { 'Content-Type': 'application/json' },
+          headers:     {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
           body:        JSON.stringify(pollPayload),
         })
       }
