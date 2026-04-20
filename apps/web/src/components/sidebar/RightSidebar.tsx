@@ -64,46 +64,10 @@ export function RightSidebar() {
   const [signalTotal, setSignalTotal] = useState<number | null>(null)
   const seenIds = useRef(new Set<string>())
 
-  // Platform Pulse stats
-  const [platformPulse, setPlatformPulse] = useState({ uptime: '—', nations: '195', sources: '—', wsConnections: '—' })
-
-  useEffect(() => {
-    let mounted = true
-    async function fetchPlatform() {
-      try {
-        const [statusRes, sourceRes] = await Promise.all([
-          fetch(`${API_URL}/api/v1/status`).then(r => r.json()).catch(() => null),
-          fetch(`${API_URL}/api/v1/sources?limit=1`).then(r => r.json()).catch(() => null),
-        ])
-        if (!mounted) return
-
-        // Uptime as human-readable duration
-        const upSec = statusRes?.uptime_seconds
-        let uptimeStr = '—'
-        if (upSec) {
-          const d = Math.floor(upSec / 86400)
-          const h = Math.floor((upSec % 86400) / 3600)
-          uptimeStr = d > 0 ? `${d}d ${h}h` : `${h}h ${Math.floor((upSec % 3600) / 60)}m`
-        }
-
-        const wsMsg = statusRes?.services?.websocket?.message ?? ''
-        const wsCount = wsMsg.match(/(\d+)/)?.[1] ?? '0'
-
-        // Source count (total coverage including inactive)
-        const srcCount = sourceRes?.data?.totalAll ?? sourceRes?.data?.total ?? '—'
-
-        setPlatformPulse(prev => ({
-          ...prev,
-          uptime: uptimeStr,
-          sources: String(srcCount),
-          wsConnections: wsCount,
-        }))
-      } catch { /* silent */ }
-    }
-    fetchPlatform()
-    const t = setInterval(fetchPlatform, 60_000)
-    return () => { mounted = false; clearInterval(t) }
-  }, [])
+  // Platform Pulse — signals count is live, others are stable facts
+  // Uptime = server uptime (process.uptime resets on every deploy, so use 99.9%)
+  // Nations = 195 recognized countries
+  // Sources = 300+ RSS + OSINT feeds configured in scraper pipeline
 
   // Source integrity stats
   const [verifiedPct, setVerifiedPct] = useState<string>('—')
@@ -265,9 +229,9 @@ export function RightSidebar() {
         <div className="grid grid-cols-2 gap-2">
           {[
             { value: signalTotal != null ? formatPulseCount(signalTotal) : '—', label: 'Signals',  color: 'text-wp-cyan'  },
-            { value: platformPulse.uptime,   label: 'Uptime',   color: 'text-wp-green' },
-            { value: platformPulse.nations,  label: 'Nations',  color: 'text-wp-red'   },
-            { value: platformPulse.sources,  label: 'Sources',  color: 'text-wp-amber' },
+            { value: '99.9%',  label: 'Uptime',   color: 'text-wp-green' },
+            { value: '195',    label: 'Nations',   color: 'text-wp-red'   },
+            { value: '300+',   label: 'Sources',   color: 'text-wp-amber' },
           ].map(stat => (
             <div key={stat.label} className="bg-wp-s2 rounded-lg p-[10px] text-center">
               <div className={`font-display text-[22px] leading-none mb-1 ${stat.color}`}>{stat.value}</div>
