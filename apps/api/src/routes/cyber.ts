@@ -133,37 +133,42 @@ export const registerCyberRoutes: FastifyPluginAsync = async (app) => {
           'title',
           'summary',
           'severity',
-          'source_url',
+          'original_urls',
           'reliability_score',
-          'published_at',
-          'source_ids',
+          'created_at',
+          'tags',
         )
         .where('category', CYBER_CATEGORY)
-        .whereRaw(`published_at > now() - interval '${hours} hours'`)
-        .orderBy('published_at', 'desc')
+        .whereRaw(`created_at > now() - interval '${hours} hours'`)
+        .orderBy('created_at', 'desc')
         .limit(CYBER_DEFAULT_LIMIT) as Array<{
           id:                string
           title:             string
           summary:           string | null
           severity:          string
-          source_url:        string | null
-          source_ids:        string[] | null
+          original_urls:     string[] | null
+          tags:              string[] | null
           reliability_score: number
-          published_at:      string | Date
+          created_at:        string | Date
         }>
 
-      const signals: CyberThreatSignal[] = rows.map(r => ({
+      const signals: CyberThreatSignal[] = rows.map(r => {
+        const tags = r.tags ?? []
+        const slug = tags.includes('cisa') ? 'cisa-kev'
+          : tags.includes('otx') ? 'otx-threats'
+          : 'unknown'
+        return {
         id:                r.id,
         title:             r.title,
         summary:           r.summary ?? '',
         severity:          r.severity,
-        source_slug:       (r.source_ids ?? [])[0] ?? 'unknown',
-        source_url:        r.source_url,
-        published_at:      typeof r.published_at === 'string'
-          ? r.published_at
-          : (r.published_at as Date).toISOString(),
+        source_slug:       slug,
+        source_url:        (r.original_urls ?? [])[0] ?? null,
+        published_at:      typeof r.created_at === 'string'
+          ? r.created_at
+          : (r.created_at as Date).toISOString(),
         reliability_score: r.reliability_score,
-      }))
+      }})
 
       await redis.setex(cacheKey, CYBER_CACHE_TTL, JSON.stringify(signals))
 
@@ -204,12 +209,12 @@ export const registerCyberRoutes: FastifyPluginAsync = async (app) => {
     // ── DB query ─────────────────────────────────────────────────────────────
     try {
       const rows = await db('signals')
-        .select('severity', 'source_ids')
+        .select('severity', 'tags')
         .where('category', CYBER_CATEGORY)
-        .whereRaw("published_at > now() - interval '24 hours'")
+        .whereRaw("created_at > now() - interval '24 hours'")
         .limit(1000) as Array<{
-          severity:   string
-          source_ids: string[] | null
+          severity: string
+          tags:     string[] | null
         }>
 
       let total_24h      = 0
@@ -223,9 +228,9 @@ export const registerCyberRoutes: FastifyPluginAsync = async (app) => {
       for (const row of rows) {
         total_24h++
 
-        const slug = (row.source_ids ?? [])[0] ?? ''
-        if (slug === CISA_KEV_SOURCE) cisa_kev_count++
-        else if (slug === OTX_SOURCE)  otx_count++
+        const tags = row.tags ?? []
+        if (tags.includes('cisa') || tags.includes('kev')) cisa_kev_count++
+        else if (tags.includes('otx') || tags.includes('alienvault')) otx_count++
 
         const sev = SEVERITY_ORDER.includes(row.severity) ? row.severity : 'low'
         if (sev === 'critical')      critical_count++
