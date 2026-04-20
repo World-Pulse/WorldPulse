@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, lazy, Suspense } from 'react'
 import Link from 'next/link'
+import { ShieldCheck, BotMessageSquare, ShieldAlert } from 'lucide-react'
 import { TradeSurveillancePanel } from './TradeSurveillancePanel'
 import { TrendingEntities } from '@/components/analytics/TrendingEntities'
 import { SignalCounter } from '@/components/SignalCounter'
@@ -57,6 +58,31 @@ export function RightSidebar() {
   const [signalTotal, setSignalTotal] = useState<number | null>(null)
   const [connectedCount, setConnectedCount] = useState(847213)
   const seenIds = useRef(new Set<string>())
+
+  // Source integrity stats
+  const [verifiedPct, setVerifiedPct] = useState<string>('—')
+  const [blockedToday, setBlockedToday] = useState<string>('—')
+
+  useEffect(() => {
+    let mounted = true
+    async function fetchIntegrity() {
+      try {
+        const res = await fetch(`${API_URL}/api/v1/slop/stats`)
+        if (!res.ok) return
+        const json = await res.json()
+        if (!mounted || !json.data) return
+        const { total_signals_analyzed: total, signals_flagged_as_slop: blocked } = json.data
+        if (total > 0) {
+          const cleanPct = Math.round(((total - blocked) / total) * 1000) / 10
+          setVerifiedPct(`${cleanPct}%`)
+        }
+        setBlockedToday(String(blocked ?? 0))
+      } catch { /* silent */ }
+    }
+    fetchIntegrity()
+    const t = setInterval(fetchIntegrity, 120_000)
+    return () => { mounted = false; clearInterval(t) }
+  }, [])
 
   // Market ticker state — now managed by MarketPulse component
 
@@ -214,17 +240,21 @@ export function RightSidebar() {
 
       {/* ─── SOURCE INTEGRITY ─────────────────────────────── */}
       <Widget title="Source Integrity">
-        {[
-          { icon: '🛡️', label: 'Cross-source verified', value: '98.7%',    color: 'text-wp-green' },
-          { icon: '🤖', label: 'AI fact-check',          value: 'LIVE',    color: 'text-wp-cyan'  },
-          { icon: '⚠️', label: 'Blocked today',          value: '312',     color: 'text-wp-amber' },
-        ].map(item => (
-          <div key={item.label} className="flex items-center gap-2 bg-wp-s2 rounded-lg p-[10px] mb-2 last:mb-0">
-            <span className="text-[16px]">{item.icon}</span>
-            <span className="flex-1 text-[11px] text-wp-text2">{item.label}</span>
-            <span className={`font-mono text-[12px] font-bold ${item.color}`}>{item.value}</span>
-          </div>
-        ))}
+        <div className="flex items-center gap-2 bg-wp-s2 rounded-lg p-[10px] mb-2">
+          <ShieldCheck className="w-4 h-4 text-wp-green flex-shrink-0" />
+          <span className="flex-1 text-[11px] text-wp-text2">Cross-source verified</span>
+          <span className="font-mono text-[12px] font-bold text-wp-green">{verifiedPct}</span>
+        </div>
+        <div className="flex items-center gap-2 bg-wp-s2 rounded-lg p-[10px] mb-2">
+          <BotMessageSquare className="w-4 h-4 text-wp-cyan flex-shrink-0" />
+          <span className="flex-1 text-[11px] text-wp-text2">AI fact-check</span>
+          <span className="font-mono text-[12px] font-bold text-wp-cyan">LIVE</span>
+        </div>
+        <div className="flex items-center gap-2 bg-wp-s2 rounded-lg p-[10px]">
+          <ShieldAlert className="w-4 h-4 text-wp-amber flex-shrink-0" />
+          <span className="flex-1 text-[11px] text-wp-text2">Blocked today</span>
+          <span className="font-mono text-[12px] font-bold text-wp-amber">{blockedToday}</span>
+        </div>
       </Widget>
 
       {/* ─── MARKET TICKER ────────────────────────────────── */}
