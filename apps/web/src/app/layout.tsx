@@ -5,7 +5,7 @@ import './globals.css'
 import { Providers } from '@/components/providers'
 import { TopNav } from '@/components/nav/TopNav'
 import { BottomTabBar } from '@/components/nav/BottomTabBar'
-import { BreakingAlertBanner } from '@/components/alerts/BreakingAlertBanner'
+// import { BreakingAlertBanner } from '@/components/alerts/BreakingAlertBanner'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { CommandPaletteProvider, CommandPalette } from '@/components/CommandPalette'
 import { LocaleAttributes } from '@/components/locale/LocaleAttributes'
@@ -93,7 +93,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             {/* CommandPaletteProvider registers the ⌘K/Ctrl+K global shortcut */}
             <CommandPaletteProvider>
               <CommandPalette />
-              <BreakingAlertBanner />
+              {/* <BreakingAlertBanner /> */}
               <TopNav />
               <main
                 id="main-content"
