@@ -148,9 +148,16 @@ async function callOpenAI(
   })
 
   const data = await res.json() as {
-    choices: Array<{ message: { content: string } }>
+    choices?: Array<{ message: { content: string } }>
     usage?: { total_tokens: number }
-    model: string
+    model?: string
+    error?: { message: string; type: string }
+  }
+
+  if (!res.ok || data.error) {
+    const errMsg = data.error?.message ?? `HTTP ${res.status}`
+    console.error(`[PULSE] OpenAI API error: ${errMsg} (model: ${model})`)
+    return { text: '', model, tokens: 0, durationMs: Date.now() - t0, provider: 'openai' }
   }
 
   return {
@@ -188,9 +195,23 @@ async function callAnthropic(
   })
 
   const data = await res.json() as {
-    content: Array<{ text: string }>
+    content?: Array<{ text: string }>
     usage?: { input_tokens: number; output_tokens: number }
-    model: string
+    model?: string
+    error?: { type: string; message: string }
+    type?: string
+  }
+
+  if (!res.ok || data.error) {
+    const errMsg = data.error?.message ?? `HTTP ${res.status}`
+    console.error(`[PULSE] Anthropic API error: ${errMsg} (model: ${model})`)
+    // Fall through to OpenAI if available
+    if (process.env.OPENAI_API_KEY) {
+      console.log('[PULSE] Falling back to OpenAI after Anthropic failure')
+      const fallbackModel = process.env.PULSE_OPENAI_MODEL ?? 'gpt-4o-mini'
+      return callOpenAI(prompt, systemPrompt, maxTokens, fallbackModel, temperature)
+    }
+    return { text: '', model, tokens: 0, durationMs: Date.now() - t0, provider: 'anthropic' }
   }
 
   return {
