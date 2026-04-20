@@ -50,6 +50,9 @@ interface FeedItem {
   likes: number
   boosts: number
   replies: number
+  hasLiked?: boolean
+  hasBoosted?: boolean
+  hasBookmarked?: boolean
   time: string
   // Raw 0-1 score for ReliabilityDots
   reliability: number | null
@@ -182,6 +185,9 @@ function adaptPost(post: Post): FeedItem {
     likes:    post.likeCount  ?? 0,
     boosts:   post.boostCount ?? 0,
     replies:  post.replyCount ?? 0,
+    hasLiked:     post.hasLiked ?? false,
+    hasBoosted:   post.hasBoosted ?? false,
+    hasBookmarked: post.hasBookmarked ?? false,
     time:     timeAgo(post.createdAt),
     reliability: post.reliabilityScore ?? null,
   }
@@ -247,30 +253,48 @@ function TagPills({ tags, types }: { tags: string[]; types?: string[] }) {
 }
 
 function ActionBar({ item }: { item: FeedItem }) {
-  const [liked,         setLiked]         = useState(false)
-  const [boosted,       setBoosted]       = useState(false)
-  const [bookmarked,    setBookmarked]    = useState(false)
+  const [liked,         setLiked]         = useState(item.hasLiked ?? false)
+  const [boosted,       setBoosted]       = useState(item.hasBoosted ?? false)
+  const [bookmarked,    setBookmarked]    = useState(item.hasBookmarked ?? false)
   const [flagModalOpen, setFlagModalOpen] = useState(false)
   const [likes,  setLikes]  = useState(item.likes)
   const [boosts, setBoosts] = useState(item.boosts)
   const { toast } = useToast()
 
-  const toggleLike = () => {
+  const toggleLike = async () => {
     const next = !liked
     setLiked(next)
-    setLikes(n => next ? n + 1 : n - 1)
+    setLikes(n => next ? n + 1 : Math.max(0, n - 1))
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
+      await fetch(`${API_URL}/api/v1/posts/${item.id}/like`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+    } catch {
+      // Revert on failure
+      setLiked(!next)
+      setLikes(n => next ? Math.max(0, n - 1) : n + 1)
+    }
   }
 
   const toggleBoost = () => {
     const next = !boosted
     setBoosted(next)
-    setBoosts(n => next ? n + 1 : n - 1)
+    setBoosts(n => next ? n + 1 : Math.max(0, n - 1))
     if (next) toast('Signal boosted — reaching more people', 'success')
   }
 
-  const toggleBookmark = () => {
+  const toggleBookmark = async () => {
     const next = !bookmarked
     setBookmarked(next)
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
+      await fetch(`${API_URL}/api/v1/posts/${item.id}/bookmark`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+    } catch { /* silent */ }
     toast(next ? 'Signal bookmarked — saved to your collection' : 'Bookmark removed', next ? 'success' : 'info')
   }
 
@@ -620,12 +644,16 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
               </div>
             )}
 
-            {/* Post content — skip if it just duplicates the signal title/summary */}
+            {/* Post content — skip if it duplicates the signal title/summary */}
             {item.content && (() => {
-              const text = item.content.replace(/\*\*(.*?)\*\*/g, '$1')
-              const eventTitle = item.event?.title ?? ''
-              const eventSummary = item.event?.summary ?? ''
-              if (eventTitle && (text.trim() === eventTitle.trim() || text.trim() === eventSummary.trim())) return null
+              const text = item.content.replace(/\*\*(.*?)\*\*/g, '$1').trim()
+              // If there's an event card, suppress content that repeats the title or summary
+              if (item.event?.title) {
+                const t = item.event.title.trim().toLowerCase()
+                const s = (item.event.summary ?? '').trim().toLowerCase()
+                const c = text.toLowerCase()
+                if (c === t || c === s || t.includes(c) || c.includes(t)) return null
+              }
               const embedUrl = extractFirstEmbedUrl(text)
               return (
                 <>
