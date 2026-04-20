@@ -25,7 +25,7 @@ const NAV_ITEMS = [
   { href: '/briefing',   icon: ClipboardList, labelKey: 'briefing',   badge: 'NEW', badgeColor: 'indigo' },
   { href: '/finance',    icon: TrendingUp,    labelKey: 'finance',    badge: 'NEW', badgeColor: 'green'  },
   { href: '/sanctions',        icon: Shield,    labelKey: 'sanctions',       badge: 'NEW', badgeColor: 'amber'  },
-  { href: '/internet-outages', icon: Unplug,    labelKey: 'internetOutages', badge: 'NEW', badgeColor: 'cyan'   },
+  // { href: '/internet-outages', icon: Unplug,    labelKey: 'internetOutages', badge: 'NEW', badgeColor: 'cyan'   }, // Hidden — IODA source (ioda.caida.org) is down
   // { href: '/space-weather',   icon: Satellite,  labelKey: 'spaceWeather',    badge: 'NEW', badgeColor: 'cyan'   }, // Hidden — needs more work before launch
   { href: '/cyber-threats',   icon: Lock,       labelKey: 'cyberThreats',    badge: 'NEW', badgeColor: 'red'    },
   { href: '/undersea-cables', icon: Waves,      labelKey: 'underseaCables', badge: 'NEW', badgeColor: 'cyan'   },
