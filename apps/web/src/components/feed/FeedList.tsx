@@ -620,9 +620,12 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
               </div>
             )}
 
-            {/* Post content */}
+            {/* Post content — skip if it just duplicates the signal title/summary */}
             {item.content && (() => {
               const text = item.content.replace(/\*\*(.*?)\*\*/g, '$1')
+              const eventTitle = item.event?.title ?? ''
+              const eventSummary = item.event?.summary ?? ''
+              if (eventTitle && (text.trim() === eventTitle.trim() || text.trim() === eventSummary.trim())) return null
               const embedUrl = extractFirstEmbedUrl(text)
               return (
                 <>
