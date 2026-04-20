@@ -18,6 +18,7 @@ import { AlertTierBadge } from '@/components/ui/AlertTierBadge'
 import { BiasIndicator } from '@/components/signals/BiasIndicator'
 import type { BiasLabel } from '@/components/signals/BiasIndicator'
 import { ViralityBadge } from '@/components/signals/ViralityBadge'
+import { Users, Cpu, Radio, Newspaper } from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -478,7 +479,7 @@ function FeedEmptyState({ tab }: { tab: string }) {
   if (tab === 'following') {
     return (
       <EmptyState
-        icon="👥"
+        icon={<Users className="w-10 h-10 text-wp-text3" />}
         headline="Your following feed is empty"
         message="Follow people and sources to see their signals and posts here."
         cta={{ label: 'Explore people to follow', href: '/explore' }}
@@ -488,7 +489,7 @@ function FeedEmptyState({ tab }: { tab: string }) {
   if (tab === 'digest') {
     return (
       <EmptyState
-        icon="📋"
+        icon={<Cpu className="w-10 h-10 text-wp-cyan" />}
         headline="PULSE is warming up"
         message="The AI Bureau is preparing its first briefings. Flash briefs, daily briefings, and analysis posts will appear here."
       />
@@ -496,7 +497,7 @@ function FeedEmptyState({ tab }: { tab: string }) {
   }
   return (
     <EmptyState
-      icon="📡"
+      icon={<Radio className="w-10 h-10 text-wp-text3" />}
       headline="No signals yet"
       message="The scraper is collecting and verifying intelligence signals. Check back shortly."
       cta={{ label: 'Refresh feed', href: '/' }}

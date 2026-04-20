@@ -1,9 +1,10 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import Link from 'next/link'
 
 export interface EmptyStateProps {
-  icon:     string
+  icon:     ReactNode
   headline: string
   message:  string
   cta?:     { label: string; href?: string; onClick?: () => void }

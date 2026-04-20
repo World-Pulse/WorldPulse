@@ -1,9 +1,17 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Inbox } from 'lucide-react'
+import { Inbox, FileText, Clock, MapPin, RefreshCw, Share2, Check } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+interface PulseBriefing {
+  id: string
+  content: string
+  created_at: string
+  pulse_content_type: string
+  tags: string[] | null
+}
 
 interface BriefingSignal {
   id: string
@@ -113,16 +121,89 @@ function formatDate(iso: string): string {
   })
 }
 
+/** Parse PULSE briefing content into structured sections */
+function parseBriefingContent(raw: string): { header: string; body: string } {
+  // Strip the leading emoji + "DAILY BRIEFING" header line and trailing signature
+  const lines = raw.split('\n')
+  let headerEnd = 0
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i]?.match(/^(DAILY BRIEFING|EXECUTIVE SUMMARY|SECTION)/i) || lines[i]?.match(/^[\u{1F4CB}\u{1F4CA}]/u)) {
+      headerEnd = i + 1
+      continue
+    }
+    if (lines[i]?.trim()) break
+  }
+
+  // Remove trailing signature line
+  let bodyEnd = lines.length
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i]?.match(/^\u2014\s*PULSE/)) {
+      bodyEnd = i
+      break
+    }
+    if (lines[i]?.trim()) break
+  }
+
+  const header = lines.slice(0, Math.max(headerEnd, 1)).join('\n').replace(/^[\u{1F4CB}\u{1F4CA}\u{1F4DD}]\s*/u, '').trim()
+  const body = lines.slice(headerEnd, bodyEnd).join('\n').trim()
+
+  return { header: header || 'Daily Intelligence Briefing', body }
+}
+
+/** Render markdown-like text with bold headers */
+function BriefingBody({ text }: { text: string }) {
+  const sections = text.split(/\n(?=\*\*[^*]+\*\*)/).filter(Boolean)
+
+  return (
+    <div className="space-y-4">
+      {sections.map((section, i) => {
+        const headerMatch = section.match(/^\*\*([^*]+)\*\*\s*/)
+        if (headerMatch) {
+          const title = headerMatch[1]
+          const content = section.slice(headerMatch[0].length).trim()
+          return (
+            <div key={i}>
+              <h3 className="text-sm font-semibold text-indigo-400 uppercase tracking-wider mb-2">
+                {title}
+              </h3>
+              <div className="text-sm text-zinc-300 leading-relaxed whitespace-pre-line">
+                {content}
+              </div>
+            </div>
+          )
+        }
+        // Bullet points or plain text
+        return (
+          <div key={i} className="text-sm text-zinc-300 leading-relaxed whitespace-pre-line">
+            {section}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
 function BriefingSkeleton() {
   return (
     <div className="space-y-6 animate-pulse">
+      {/* Narrative skeleton */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-4">
+        <div className="h-5 w-48 bg-zinc-800 rounded" />
+        <div className="h-3 w-full bg-zinc-800 rounded" />
+        <div className="h-3 w-full bg-zinc-800 rounded" />
+        <div className="h-3 w-3/4 bg-zinc-800 rounded" />
+        <div className="h-3 w-full bg-zinc-800 rounded" />
+        <div className="h-3 w-5/6 bg-zinc-800 rounded" />
+      </div>
+      {/* Stats skeleton */}
       <div className="flex gap-4">
         {[1, 2, 3, 4].map((i) => (
           <div key={i} className="h-16 flex-1 bg-zinc-800 rounded-xl" />
         ))}
       </div>
+      {/* Signals skeleton */}
       {[1, 2, 3].map((i) => (
         <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-3">
           <div className="h-4 w-32 bg-zinc-800 rounded" />
@@ -150,6 +231,7 @@ function StatCard({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function BriefingPage() {
+  const [pulseBriefing, setPulseBriefing] = useState<PulseBriefing | null>(null)
   const [briefing, setBriefing]   = useState<DailyBriefing | null>(null)
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState<string | null>(null)
@@ -162,11 +244,26 @@ export default function BriefingPage() {
     setLoading(true)
     setError(null)
     try {
+      // Fetch PULSE narrative briefing and signal breakdown in parallel
       const params = new URLSearchParams()
       if (category) params.set('category', category)
-      const res = await fetch(`${apiBase}/api/v1/briefing/daily?${params.toString()}`)
-      if (!res.ok) throw new Error(`API returned ${res.status}`)
-      const json = await res.json() as { data: DailyBriefing }
+
+      const [pulseRes, signalRes] = await Promise.all([
+        fetch(`${apiBase}/api/v1/pulse/latest?content_type=daily_briefing`).catch(() => null),
+        fetch(`${apiBase}/api/v1/briefing/daily?${params.toString()}`),
+      ])
+
+      // Parse PULSE narrative (non-critical — page works without it)
+      if (pulseRes?.ok) {
+        const pulseJson = await pulseRes.json()
+        if (pulseJson.success && pulseJson.data) {
+          setPulseBriefing(pulseJson.data)
+        }
+      }
+
+      // Parse signal breakdown
+      if (!signalRes.ok) throw new Error(`API returned ${signalRes.status}`)
+      const json = await signalRes.json() as { data: DailyBriefing }
       setBriefing(json.data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load briefing')
@@ -192,6 +289,7 @@ export default function BriefingPage() {
   }, [])
 
   const sb = briefing?.severity_breakdown
+  const parsed = pulseBriefing ? parseBriefingContent(pulseBriefing.content) : null
 
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100">
@@ -203,16 +301,21 @@ export default function BriefingPage() {
             <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
               <span>Daily Intelligence Briefing</span>
               <span className="text-xs font-semibold bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-2 py-0.5 rounded-full">
-                AI-Verified
+                AI-Generated
               </span>
             </h1>
-            {briefing ? (
+            {pulseBriefing ? (
+              <p className="text-sm text-zinc-500 mt-1 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5" />
+                Generated {timeAgo(pulseBriefing.created_at)} by PULSE AI Bureau
+              </p>
+            ) : briefing ? (
               <p className="text-sm text-zinc-500 mt-1">
                 {formatDate(briefing.date)} · generated {timeAgo(briefing.generated_at)}
               </p>
             ) : (
               <p className="text-sm text-zinc-500 mt-1">
-                Structured intelligence from AI-verified signals
+                AI-authored intelligence from verified global signals
               </p>
             )}
           </div>
@@ -239,18 +342,19 @@ export default function BriefingPage() {
             {/* Share button */}
             <button
               onClick={handleShare}
-              className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors"
+              className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5"
             >
-              {copied ? '✓ Copied' : '↗ Share Briefing'}
+              {copied ? <><Check className="w-3.5 h-3.5" /> Copied</> : <><Share2 className="w-3.5 h-3.5" /> Share</>}
             </button>
 
             {/* Refresh button */}
             <button
               onClick={fetchBriefing}
               disabled={loading}
-              className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition-colors"
+              className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition-colors flex items-center gap-1.5"
             >
-              {loading ? 'Loading…' : 'Refresh'}
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+              {loading ? 'Loading...' : 'Refresh'}
             </button>
           </div>
         </div>
@@ -264,10 +368,10 @@ export default function BriefingPage() {
         )}
 
         {/* ── Loading ── */}
-        {loading && !briefing && <BriefingSkeleton />}
+        {loading && !briefing && !pulseBriefing && <BriefingSkeleton />}
 
-        {/* ── No signals empty state ── */}
-        {!loading && briefing && briefing.headline_count === 0 && (
+        {/* ── No content empty state ── */}
+        {!loading && !pulseBriefing && briefing && briefing.headline_count === 0 && (
           <div className="text-center py-16 text-zinc-500">
             <Inbox className="w-10 h-10 text-zinc-500 mx-auto mb-4" />
             <p className="text-lg font-medium text-zinc-400">No signals for this period</p>
@@ -277,9 +381,33 @@ export default function BriefingPage() {
           </div>
         )}
 
-        {/* ── Briefing Content ── */}
+        {/* ── PULSE Narrative Briefing ── */}
+        {parsed && (
+          <div className="bg-zinc-900 border border-indigo-500/20 rounded-xl p-6 mb-6">
+            <div className="flex items-center gap-2 mb-4">
+              <FileText className="w-5 h-5 text-indigo-400" />
+              <h2 className="text-lg font-bold text-zinc-100">PULSE Briefing</h2>
+              <span className="text-xs bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-2 py-0.5 rounded-full font-medium">
+                AI-Authored
+              </span>
+            </div>
+            <BriefingBody text={parsed.body} />
+          </div>
+        )}
+
+        {/* ── Signal Breakdown ── */}
         {briefing && briefing.headline_count > 0 && (
           <div className="space-y-6">
+
+            {/* Section header for signals */}
+            {parsed && (
+              <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider flex items-center gap-2 pt-2">
+                Signal Breakdown
+                <span className="bg-zinc-800 text-zinc-400 rounded-full px-2 py-0.5 text-xs font-mono">
+                  {briefing.headline_count}
+                </span>
+              </h2>
+            )}
 
             {/* Severity breakdown stats */}
             {sb && (
@@ -326,7 +454,7 @@ export default function BriefingPage() {
                       key={loc.location_name}
                       className="inline-flex items-center gap-1.5 bg-zinc-800 border border-zinc-700 rounded-full px-3 py-1 text-sm text-zinc-300"
                     >
-                      <span className="text-zinc-500 text-xs">{loc.count}×</span>
+                      <span className="text-zinc-500 text-xs">{loc.count}x</span>
                       {loc.location_name}
                     </span>
                   ))}
@@ -375,7 +503,7 @@ export default function BriefingPage() {
                           <div className="flex items-center gap-3 mt-2 text-xs text-zinc-500">
                             {signal.location_name && (
                               <span className="flex items-center gap-1">
-                                <span>📍</span>{signal.location_name}
+                                <MapPin className="w-3 h-3" />{signal.location_name}
                               </span>
                             )}
                             <span>{timeAgo(signal.published_at)}</span>
@@ -412,13 +540,13 @@ export default function BriefingPage() {
                 href="/settings#notifications"
                 className="shrink-0 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
               >
-                Subscribe →
+                Subscribe
               </a>
             </div>
 
             {/* Footer */}
             <p className="text-center text-xs text-zinc-600 pt-2 border-t border-zinc-800">
-              WorldPulse Daily Intelligence Briefing · {briefing.date} · {briefing.headline_count} signals
+              WorldPulse Daily Intelligence Briefing · {briefing.date} · {briefing.headline_count} signals · Powered by PULSE AI
             </p>
           </div>
         )}

@@ -157,6 +157,11 @@ services:
       STRIPE_SECRET_KEY:     ${STRIPE_SECRET_KEY:-}
       STRIPE_PRO_PRICE_ID:   ${STRIPE_PRO_PRICE_ID:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      # PULSE AI Publisher
+      PULSE_ENABLED:     ${PULSE_ENABLED:-false}
+      PULSE_API_KEY:     ${PULSE_API_KEY:-}
+      OPENAI_API_KEY:    ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     volumes:
       - uploads_data:/app/uploads
     networks:

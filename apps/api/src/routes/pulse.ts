@@ -112,8 +112,8 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
 
       if (userId) {
         const [likeRow, bookmarkRow] = await Promise.all([
-          db('post_likes').where({ post_id: post.id, user_id: userId }).first(),
-          db('post_bookmarks').where({ post_id: post.id, user_id: userId }).first(),
+          db('likes').where({ post_id: post.id, user_id: userId }).first(),
+          db('bookmarks').where({ post_id: post.id, user_id: userId }).first(),
         ])
         hasLiked = !!likeRow
         hasBookmarked = !!bookmarkRow
