@@ -19,11 +19,12 @@ import {
   schemaLabel,
   type OSEntity,
 } from '../lib/opensanctions'
+import { FEATURED_SEED } from '../lib/sanctions-seed'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-/** Redis TTL for featured sanctions cache: 10 minutes */
-const CACHE_TTL = 600
+/** Redis TTL for featured sanctions cache: 1 hour (reduce OpenSanctions API pressure) */
+const CACHE_TTL = 3600
 
 /** Redis key for the featured sanctions cache */
 const CACHE_KEY = 'sanctions:featured'
@@ -121,6 +122,11 @@ async function fetchFeaturedEntities(): Promise<FeaturedEntity[]> {
     const rankDiff = (THREAT_RANK[b.threatLevel] ?? 0) - (THREAT_RANK[a.threatLevel] ?? 0)
     return rankDiff !== 0 ? rankDiff : b.score - a.score
   })
+
+  // If all API calls failed (rate-limited / down), fall back to seed data
+  if (entities.length === 0) {
+    return FEATURED_SEED
+  }
 
   return entities.slice(0, 20)
 }
