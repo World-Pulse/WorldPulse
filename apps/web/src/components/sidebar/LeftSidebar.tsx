@@ -39,7 +39,7 @@ const NAV_ITEMS = [
   { href: '/patents',    icon: ScrollText,    labelKey: 'patents',    badge: 'NEW',  badgeColor: 'cyan'  },
   { href: '/communities',icon: Users,         labelKey: 'communities' },
   { href: '/claims',     icon: Search,        labelKey: 'claims',     badge: 'NEW', badgeColor: 'amber'  },
-  // { href: '/audio-claims', icon: Mic,         labelKey: 'audioClaims', badge: 'NEW', badgeColor: 'red'   }, // Hidden — pipeline not wired up yet
+  { href: '/audio-claims', icon: Mic,         labelKey: 'audioClaims', badge: 'NEW', badgeColor: 'red'   },
   // { href: '/video-claims', icon: Video,       labelKey: 'videoClaims', badge: 'NEW', badgeColor: 'red'   }, // Hidden — pipeline not wired up yet
   { href: '/sources',    icon: Radio,         labelKey: 'mySources'  },
   { href: '/developers', icon: Wrench,        labelKey: 'developers'  },
