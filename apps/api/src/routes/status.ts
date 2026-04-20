@@ -117,13 +117,25 @@ export async function checkScraper(): Promise<ServiceCheck> {
       return { status, latency_ms, ...(stability !== 'stable' ? { message: `Scraper status: ${stability}` } : {}) }
     }
 
-    // Fallback: check scraper health keys
+    // Fallback 1: check scraper health keys
     const keys = await redis.keys('scraper:health:*')
-    const latency_ms = Date.now() - t0
-    if (keys.length === 0) {
-      return { status: 'degraded', latency_ms, message: 'No scraper health data available' }
+    if (keys.length > 0) {
+      return { status: 'operational', latency_ms: Date.now() - t0 }
     }
-    return { status: 'operational', latency_ms }
+
+    // Fallback 2: check actual signal ingest recency — if signals arrived
+    // in the last 2 hours, the pipeline is working even if Redis keys are missing
+    const recentSignal = await db('signals')
+      .where('created_at', '>', new Date(Date.now() - 2 * 60 * 60 * 1000))
+      .select(db.raw('1'))
+      .first()
+
+    const latency_ms = Date.now() - t0
+    if (recentSignal) {
+      return { status: 'operational', latency_ms, message: 'Ingest active (signals arriving)' }
+    }
+
+    return { status: 'degraded', latency_ms, message: 'No recent signal ingest detected' }
   } catch (err) {
     return {
       status:     'degraded',

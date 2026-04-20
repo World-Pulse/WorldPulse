@@ -394,6 +394,10 @@ ${signalList}`
   // Daily briefing → Anthropic (deep tier): long-form, editorial, connecting patterns
   const result = await generateContent(prompt, 2000, 'deep')
 
+  if (!result.text || result.text.trim().length < 50) {
+    return { success: false, error: 'LLM returned empty or insufficient briefing content' }
+  }
+
   return publishPost(
     `📋 DAILY BRIEFING — ${dateStr}\n\n${result.text}\n\n— PULSE · WorldPulse AI Bureau`,
     ContentType.DAILY_BRIEFING,

@@ -382,7 +382,7 @@ export default function BriefingPage() {
         )}
 
         {/* ── PULSE Narrative Briefing ── */}
-        {parsed && (
+        {parsed && parsed.body ? (
           <div className="bg-zinc-900 border border-indigo-500/20 rounded-xl p-6 mb-6">
             <div className="flex items-center gap-2 mb-4">
               <FileText className="w-5 h-5 text-indigo-400" />
@@ -393,7 +393,20 @@ export default function BriefingPage() {
             </div>
             <BriefingBody text={parsed.body} />
           </div>
-        )}
+        ) : pulseBriefing && !loading ? (
+          <div className="bg-zinc-900 border border-indigo-500/20 rounded-xl p-6 mb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <FileText className="w-5 h-5 text-indigo-400" />
+              <h2 className="text-lg font-bold text-zinc-100">PULSE Briefing</h2>
+              <span className="text-xs bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 px-2 py-0.5 rounded-full font-medium">
+                Generating
+              </span>
+            </div>
+            <p className="text-sm text-zinc-400">
+              PULSE is composing today&apos;s intelligence briefing. This typically takes a few minutes — refresh shortly.
+            </p>
+          </div>
+        ) : null}
 
         {/* ── Signal Breakdown ── */}
         {briefing && briefing.headline_count > 0 && (
