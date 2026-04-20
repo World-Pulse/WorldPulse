@@ -107,15 +107,14 @@ export async function checkSearch(): Promise<ServiceCheck> {
 export async function checkScraper(): Promise<ServiceCheck> {
   const t0 = Date.now()
   try {
-    // Primary: read scraper stability status key
+    // Primary: read scraper stability status key (plain string: 'stable' | 'degraded' | 'failed')
     const stability = await redis.get('scraper:stability:status')
     if (stability) {
-      const parsed = JSON.parse(stability) as { status?: string; message?: string }
       const latency_ms = Date.now() - t0
       const status: ServiceStatus =
-        parsed.status === 'healthy'  ? 'operational' :
-        parsed.status === 'degraded' ? 'degraded'    : 'outage'
-      return { status, latency_ms, ...(parsed.message ? { message: parsed.message } : {}) }
+        stability === 'stable'   ? 'operational' :
+        stability === 'degraded' ? 'degraded'    : 'outage'
+      return { status, latency_ms, ...(stability !== 'stable' ? { message: `Scraper status: ${stability}` } : {}) }
     }
 
     // Fallback: check scraper health keys
