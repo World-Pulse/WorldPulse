@@ -228,6 +228,13 @@ function adaptPulseItem(item: any): FeedItem {
 
   const badge = contentTypeLabels[item.pulseContentType] ?? 'PULSE'
 
+  // Strip emoji/bracket header prefix and trailing signature from display content
+  const cleanContent = (item.content ?? '')
+    .replace(/^[\u{1F4CB}\u{1F4CA}\u{26A1}\u{1F4DD}\u{1F50D}\u{1F504}\u{1F319}\u{1F4F0}]\s*[^\n]*\n*/u, '')
+    .replace(/^\[(?:FLASH BRIEF|DAILY BRIEFING|ANALYSIS|MID-DAY UPDATE|EVENING WRAP|FACT CHECK)\][^\n]*\n*/i, '')
+    .replace(/\n*\u2014\s*PULSE[^\n]*$/m, '')
+    .trim()
+
   return {
     id:       item.id,
     signalId: item.signalId ?? null,
@@ -240,7 +247,7 @@ function adaptPulseItem(item: any): FeedItem {
       color:    'from-cyan-600 to-blue-900',
       badge,
     },
-    content:  item.content,
+    content:  cleanContent,
     tags:     item.tags ?? [],
     mediaUrls: item.mediaUrls ?? [],
     mediaTypes: item.mediaTypes ?? [],

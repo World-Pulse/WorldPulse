@@ -103,7 +103,7 @@ End with an overall assessment of information quality in the current signal stre
       .insert({
         author_id:          PULSE_USER_ID,
         post_type:          'signal',
-        content:            `🔍 FACT CHECK BULLETIN\n\n${result.text}\n\n— PULSE Fact-Check Bureau · WorldPulse AI`,
+        content:            `[FACT CHECK]\n\n${result.text}\n\n— PULSE Fact-Check Bureau · WorldPulse AI`,
         pulse_content_type: ContentType.ANALYSIS,
         tags:               ['pulse', 'fact-check', 'verification'],
         language:           'en',

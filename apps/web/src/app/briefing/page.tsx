@@ -123,15 +123,20 @@ function formatDate(iso: string): string {
 
 /** Parse PULSE briefing content into structured sections */
 function parseBriefingContent(raw: string): { header: string; body: string } {
-  // Strip the leading emoji + "DAILY BRIEFING" header line and trailing signature
+  // Strip the leading header line (bracket or emoji format) and trailing signature
   const lines = raw.split('\n')
   let headerEnd = 0
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i]?.match(/^(DAILY BRIEFING|EXECUTIVE SUMMARY|SECTION)/i) || lines[i]?.match(/^[\u{1F4CB}\u{1F4CA}]/u)) {
+    const line = lines[i] ?? ''
+    if (
+      line.match(/^\[?(DAILY BRIEFING|FLASH BRIEF|ANALYSIS|MID-DAY UPDATE|EVENING WRAP|FACT CHECK)/i) ||
+      line.match(/^(EXECUTIVE SUMMARY|SECTION)/i) ||
+      line.match(/^[\u{1F4CB}\u{1F4CA}\u{26A1}\u{1F4DD}\u{1F50D}\u{1F504}\u{1F319}]/u)
+    ) {
       headerEnd = i + 1
       continue
     }
-    if (lines[i]?.trim()) break
+    if (line.trim()) break
   }
 
   // Remove trailing signature line
@@ -144,7 +149,10 @@ function parseBriefingContent(raw: string): { header: string; body: string } {
     if (lines[i]?.trim()) break
   }
 
-  const header = lines.slice(0, Math.max(headerEnd, 1)).join('\n').replace(/^[\u{1F4CB}\u{1F4CA}\u{1F4DD}]\s*/u, '').trim()
+  const header = lines.slice(0, Math.max(headerEnd, 1)).join('\n')
+    .replace(/^[\u{1F4CB}\u{1F4CA}\u{1F4DD}\u{26A1}\u{1F50D}\u{1F504}\u{1F319}]\s*/u, '')
+    .replace(/^\[.*?\]\s*/, '')
+    .trim()
   const body = lines.slice(headerEnd, bodyEnd).join('\n').trim()
 
   return { header: header || 'Daily Intelligence Briefing', body }

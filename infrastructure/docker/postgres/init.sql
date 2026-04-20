@@ -136,7 +136,7 @@ CREATE TABLE posts (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   author_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   post_type       post_type NOT NULL DEFAULT 'signal',
-  content         TEXT NOT NULL CHECK (char_length(content) <= 2000),
+  content         TEXT NOT NULL CHECK (char_length(content) <= 10000),
   
   -- Relations
   signal_id       UUID REFERENCES signals(id) ON DELETE SET NULL,  -- linked event

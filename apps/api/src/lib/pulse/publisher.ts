@@ -343,7 +343,7 @@ Format: Lead with what happened and where. Include source count. End with immedi
   const result = await generateContent(prompt, 200, 'fast')
 
   return publishPost(
-    `⚡ FLASH BRIEF\n\n${result.text}\n\n— PULSE · WorldPulse AI Bureau`,
+    `[FLASH BRIEF]\n\n${result.text}\n\n— PULSE · WorldPulse AI Bureau`,
     ContentType.FLASH_BRIEF,
     [signal.id],
     { severity: signal.severity, category: signal.category, provider: result.provider },
@@ -370,7 +370,7 @@ Include source counts and reliability scores in your analysis.`
   const result = await generateContent(prompt, 600, 'deep')
 
   return publishPost(
-    `📊 ANALYSIS: ${topic}\n\n${result.text}\n\n— PULSE · WorldPulse AI Bureau`,
+    `[ANALYSIS] ${topic}\n\n${result.text}\n\n— PULSE · WorldPulse AI Bureau`,
     ContentType.ANALYSIS,
     signals.map(s => s.id),
     { topic },
@@ -420,7 +420,7 @@ ${signalList}`
   }
 
   return publishPost(
-    `📋 DAILY BRIEFING — ${dateStr}\n\n${result.text}\n\n— PULSE · WorldPulse AI Bureau`,
+    `[DAILY BRIEFING] ${dateStr}\n\n${result.text}\n\n— PULSE · WorldPulse AI Bureau`,
     ContentType.DAILY_BRIEFING,
     signals.map(s => s.id),
     { date: dateStr, signalCount: signals.length, provider: result.provider },
@@ -465,9 +465,8 @@ ${signalList}`
   // Updates use OpenAI (fast) — they're shorter and more time-sensitive
   const result = await generateContent(prompt, 600, 'fast')
 
-  const emoji = updateType === 'midday' ? '🔄' : '🌙'
   return publishPost(
-    `${emoji} ${label} — ${dateStr}\n\n${result.text}\n\n— PULSE · WorldPulse AI Bureau`,
+    `[${label}] ${dateStr}\n\n${result.text}\n\n— PULSE · WorldPulse AI Bureau`,
     ContentType.DAILY_BRIEFING,
     signals.map(s => s.id),
     { date: dateStr, updateType, signalCount: signals.length, provider: result.provider },
