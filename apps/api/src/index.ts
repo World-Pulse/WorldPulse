@@ -63,6 +63,7 @@ import waterSecurityPlugin               from './routes/water-security'
 import laborRightsPlugin                 from './routes/labor-rights'
 import { registerMapOgRoutes }           from './routes/map/og'
 import { registerClaimsRoutes }          from './routes/claims'
+import { registerPulseRoutes }           from './routes/pulse'
 import { registerWSHandler, startRedisSubscriber } from './ws/handler'
 import { registerGraphQL } from './graphql'
 import { metricsPlugin } from './middleware/metrics'
@@ -79,6 +80,7 @@ import { connectSearchProducer, disconnectSearchProducer } from './lib/search-ev
 import { startSearchConsumer, stopSearchConsumer } from './lib/search-consumer'
 import { initClickHouse } from './lib/search-analytics'
 import { startDispatcher, stopDispatcher } from './lib/alert-dispatcher'
+import { startPulseScheduler, stopPulseScheduler } from './lib/pulse/scheduler'
 
 const app = Fastify({
   logger: {
@@ -382,6 +384,9 @@ async function bootstrap() {
   await app.register(registerMapOgRoutes,             { prefix: '/api/v1/map' })
   await app.register(registerClaimsRoutes,            { prefix: '/api/v1/claims' })
 
+  // ─── PULSE AI PUBLISHER ──────────────────────────────────
+  await app.register(registerPulseRoutes,             { prefix: '/api/v1/pulse' })
+
   // ─── GRAPHQL ─────────────────────────────────────────────
   await registerGraphQL(app)
 
@@ -422,8 +427,14 @@ async function bootstrap() {
   // Non-fatal — starts 60s polling loop for Telegram/Discord alerts.
   startDispatcher()
 
+  // ─── PULSE AI PUBLISHER SCHEDULER ────────────────────────
+  // Gated by PULSE_ENABLED=true — runs flash brief checks (5m)
+  // and daily briefing (7am ET).
+  startPulseScheduler()
+
   // ─── GRACEFUL SHUTDOWN ────────────────────────────────────
   const shutdown = async () => {
+    stopPulseScheduler()
     stopDispatcher()
     await Promise.allSettled([
       stopSearchConsumer(),

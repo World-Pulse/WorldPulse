@@ -214,6 +214,47 @@ function adaptPost(post: Post): FeedItem {
   return base
 }
 
+/** Adapt a PULSE editorial item (from /api/v1/pulse/feed) */
+function adaptPulseItem(item: any): FeedItem {
+  const contentTypeLabels: Record<string, string> = {
+    flash_brief:    'FLASH BRIEF',
+    analysis:       'ANALYSIS',
+    daily_briefing: 'DAILY BRIEFING',
+    social_thread:  'SOCIAL THREAD',
+    weekly_report:  'WEEKLY REPORT',
+    syndicated:     'SYNDICATED',
+  }
+
+  const badge = contentTypeLabels[item.pulseContentType] ?? 'PULSE'
+
+  return {
+    id:       item.id,
+    signalId: item.signalId ?? null,
+    type:     'ai_digest',
+    author: {
+      initials: 'P',
+      name:     item.author?.displayName ?? 'PULSE',
+      handle:   '@' + (item.author?.handle ?? 'pulse'),
+      verified: item.author?.verified ?? true,
+      color:    'from-cyan-600 to-blue-900',
+      badge,
+    },
+    content:  item.content,
+    tags:     item.tags ?? [],
+    mediaUrls: item.mediaUrls ?? [],
+    mediaTypes: item.mediaTypes ?? [],
+    likes:    item.likeCount  ?? 0,
+    boosts:   item.boostCount ?? 0,
+    replies:  item.replyCount ?? 0,
+    hasLiked:     item.hasLiked ?? false,
+    hasBoosted:   false,
+    hasBookmarked: item.hasBookmarked ?? false,
+    time:     timeAgo(item.createdAt),
+    reliability: item.reliabilityScore ?? null,
+    sourceBadge: badge,
+  }
+}
+
 // ─── STYLING HELPERS ─────────────────────────────────────────────────────────
 const SEVERITY_BORDER: Record<string, string> = {
   critical: 'border-l-[3px] border-l-wp-red',
@@ -444,6 +485,15 @@ function FeedEmptyState({ tab }: { tab: string }) {
       />
     )
   }
+  if (tab === 'digest') {
+    return (
+      <EmptyState
+        icon="📋"
+        headline="PULSE is warming up"
+        message="The AI Bureau is preparing its first briefings. Flash briefs, daily briefings, and analysis posts will appear here."
+      />
+    )
+  }
   return (
     <EmptyState
       icon="📡"
@@ -475,6 +525,8 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
       url = `${API_URL}/api/v1/feed/following?${params}`
     } else if (tab === 'global') {
       url = `${API_URL}/api/v1/feed/global?${params}`
+    } else if (tab === 'digest') {
+      url = `${API_URL}/api/v1/pulse/feed?${params}`
     } else {
       url = `${API_URL}/api/v1/feed/signals?${params}`
     }
@@ -492,6 +544,10 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rawItems: any[] = data.items ?? []
       const mapped: FeedItem[] = rawItems.map(item => {
+        // PULSE feed returns pre-formatted items with type: 'ai_digest'
+        if (item.type === 'ai_digest') {
+          return adaptPulseItem(item)
+        }
         // Signals have 'status' field; posts have 'postType'
         if ('status' in item && !('postType' in item)) {
           return adaptSignal(item)
