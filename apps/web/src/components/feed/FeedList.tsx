@@ -24,6 +24,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 // ─── INTERNAL FEED ITEM SHAPE ────────────────────────────────────────────────
 interface FeedItem {
   id: string
+  signalId?: string | null
   type: 'signal' | 'post' | 'ai_digest'
   severity?: string
   sourceBadge?: string
@@ -124,6 +125,7 @@ function adaptSignal(sig: any): FeedItem {
 
   return {
     id:       sig.id,
+    signalId: sig.id,
     type:     'signal',
     severity: sig.severity,
     sourceBadge: badgeSlugs[0],
@@ -168,6 +170,7 @@ function adaptPost(post: Post): FeedItem {
   const initial = (post.author.displayName || post.author.handle).charAt(0).toUpperCase()
   const base: FeedItem = {
     id:       post.id,
+    signalId: post.signalId ?? null,
     type:     post.postType === 'signal' ? 'signal' : 'post',
     author: {
       initials: initial,
@@ -336,7 +339,7 @@ function ActionBar({ item }: { item: FeedItem }) {
       <button
         onClick={async () => {
           const base = typeof window !== 'undefined' ? window.location.origin : 'https://world-pulse.io'
-          const url  = item.type === 'signal' ? `${base}/signals/${item.id}` : `${base}/posts/${item.id}`
+          const url  = item.type === 'signal' && item.signalId ? `${base}/signals/${item.signalId}` : `${base}/posts/${item.id}`
           const title = item.event?.title ?? item.content?.slice(0, 80) ?? 'WorldPulse Signal'
           if (typeof navigator !== 'undefined' && navigator.share) {
             try { await navigator.share({ title, url }) } catch { /* cancelled */ }
@@ -521,7 +524,7 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
   return (
     <div>
       {items.map(item => {
-        const href = item.type === 'signal' ? `/signals/${item.id}` : `/posts/${item.id}`
+        const href = item.type === 'signal' && item.signalId ? `/signals/${item.signalId}` : `/posts/${item.id}`
         return (
         <Link
           key={item.id}
