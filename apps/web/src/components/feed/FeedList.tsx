@@ -436,8 +436,8 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
     let url: string
     if (tab === 'following') {
       url = `${API_URL}/api/v1/feed/following?${params}`
-    } else if (tab === 'verified' || tab === 'global' || tab === 'digest') {
-      url = `${API_URL}/api/v1/feed/signals?${params}`
+    } else if (tab === 'global') {
+      url = `${API_URL}/api/v1/feed/global?${params}`
     } else {
       url = `${API_URL}/api/v1/feed/signals?${params}`
     }
