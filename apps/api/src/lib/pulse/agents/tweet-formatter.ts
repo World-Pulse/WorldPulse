@@ -209,24 +209,78 @@ export function formatAnalysis(content: string, topic: string = ''): FormattedTw
 }
 
 /**
- * Fact Check → single tweet with verdict.
+ * Fact Check → 2-3 tweet thread with verdicts, context, and quality rating.
+ *
+ * Thread structure:
+ *   1. Lead verdict(s) — the most newsworthy findings
+ *   2. Signal quality rating + key concern
+ *   3. CTA with link
  */
 export function formatFactCheck(content: string): FormattedTweet {
   const clean = stripPulseMarkup(content)
+  const tweets: string[] = []
 
-  // Try to extract the verdict lines (CONFIRMED, CONTESTED, UNVERIFIED, LIKELY FALSE)
-  const verdicts = clean.match(/(CONFIRMED|CONTESTED|UNVERIFIED|LIKELY FALSE)\s*[—–-]\s*.+/g)
+  // Extract verdict lines
+  const verdicts = clean.match(/(CONFIRMED|CONTESTED|UNVERIFIED|LIKELY FALSE)\s*[—–-]\s*.+/g) ?? []
 
-  let tweetBody: string
-  if (verdicts && verdicts.length > 0) {
-    // Lead with the most newsworthy verdict
-    tweetBody = `PULSE Fact Check:\n\n${verdicts.slice(0, 2).join('\n')}`
-  } else {
-    tweetBody = `PULSE Fact Check:\n\n${clean.slice(0, 200)}`
+  // Extract signal quality rating
+  const qualityMatch = clean.match(/(HEALTHY|DEGRADED|POOR)\s*[—–-]\s*.+/i)
+  const qualityRating = qualityMatch?.[0] ?? null
+
+  // Count verdicts by type for summary stats
+  const verdictCounts: Record<string, number> = {}
+  for (const v of verdicts) {
+    const type = v.match(/^(CONFIRMED|CONTESTED|UNVERIFIED|LIKELY FALSE)/)?.[1] ?? 'UNKNOWN'
+    verdictCounts[type] = (verdictCounts[type] ?? 0) + 1
   }
 
-  const tweet = truncateToTweet(tweetBody) + SUFFIX
-  return { contentType: 'fact_check', tweets: [tweet], totalChars: tweet.length }
+  // ── Tweet 1: Lead verdicts ──────────────────────────────────────────────
+  if (verdicts.length > 0) {
+    // Pick the most newsworthy: LIKELY FALSE first, then CONTESTED, then UNVERIFIED
+    const priority = ['LIKELY FALSE', 'CONTESTED', 'UNVERIFIED', 'CONFIRMED']
+    const sorted = [...verdicts].sort((a, b) => {
+      const aType = a.match(/^(LIKELY FALSE|CONTESTED|UNVERIFIED|CONFIRMED)/)?.[1] ?? ''
+      const bType = b.match(/^(LIKELY FALSE|CONTESTED|UNVERIFIED|CONFIRMED)/)?.[1] ?? ''
+      return priority.indexOf(aType) - priority.indexOf(bType)
+    })
+
+    const header = `PULSE Fact Check [${verdicts.length} claims reviewed]:\n\n`
+    const leadVerdicts = sorted.slice(0, 2).map(v => {
+      // Add emoji indicators for scan-ability
+      if (v.startsWith('LIKELY FALSE')) return `\u274C ${v}`
+      if (v.startsWith('CONTESTED'))    return `\u26A0\uFE0F ${v}`
+      if (v.startsWith('UNVERIFIED'))   return `\u2753 ${v}`
+      if (v.startsWith('CONFIRMED'))    return `\u2705 ${v}`
+      return v
+    })
+
+    tweets.push(truncateToTweet(header + leadVerdicts.join('\n')))
+  } else {
+    tweets.push(truncateToTweet(`PULSE Fact Check:\n\n${clean.slice(0, 200)}`))
+  }
+
+  // ── Tweet 2: Quality assessment + stats ─────────────────────────────────
+  const statsLine = Object.entries(verdictCounts)
+    .map(([type, count]) => `${count} ${type}`)
+    .join(', ')
+
+  let tweet2: string
+  if (qualityRating) {
+    tweet2 = `Signal Quality: ${qualityRating}\n\nOf ${verdicts.length} claims checked: ${statsLine || 'see full report'}.`
+  } else if (verdicts.length > 2) {
+    // Show remaining verdicts
+    const remaining = verdicts.slice(2, 4)
+    tweet2 = `Also flagged:\n${remaining.join('\n')}`
+  } else {
+    tweet2 = `${statsLine ? `Verdict breakdown: ${statsLine}` : 'Full analysis'} — including source diversity assessment and corroboration gaps.`
+  }
+  tweets.push(truncateToTweet(tweet2))
+
+  // ── Tweet 3: CTA ────────────────────────────────────────────────────────
+  tweets.push(`Full fact-check report and live signal verification at ${SITE_URL}\n\nWorldPulse tracks 65,000+ signals from 300+ sources. Every claim is scored for reliability.`)
+
+  const totalChars = tweets.reduce((sum, t) => sum + t.length, 0)
+  return { contentType: 'fact_check', tweets, totalChars }
 }
 
 // ─── Main Router ────────────────────────────────────────────────────────────

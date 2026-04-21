@@ -327,17 +327,19 @@ async function publishPost(
 
 /** Generate and publish a flash brief for a critical signal */
 export async function publishFlashBrief(signal: SignalSummary): Promise<PublishResult> {
-  const prompt = `Write a flash brief (2-3 sentences) for this breaking signal:
+  const prompt = `Write a 2-3 sentence intelligence flash brief about this signal. DO NOT repeat the headline — add context, sourcing, and impact that the headline alone doesn't convey.
 
-Title: ${signal.title}
-Summary: ${signal.summary ?? 'N/A'}
-Category: ${signal.category}
-Severity: ${signal.severity}
-Location: ${signal.location_name ?? 'Unknown'}
-Source count: ${signal.source_count}
-Reliability: ${signal.reliability_score}
+Signal: ${signal.title}
+${signal.summary && signal.summary !== 'N/A' ? `Detail: ${signal.summary}` : ''}
+Category: ${signal.category} | Severity: ${signal.severity} | Location: ${signal.location_name ?? 'Unknown'}
+Sources: ${signal.source_count} verified | Reliability: ${signal.reliability_score}
 
-Format: Lead with what happened and where. Include source count. End with immediate impact or what to watch.`
+Rules:
+- Start with the key development, NOT by restating the headline verbatim
+- Include "according to X sources" or name the source type (wire, institutional, OSINT)
+- End with why this matters or what to watch next
+- If reliability is below 0.7, note it is unconfirmed
+- Keep it under 280 characters if possible (tweet-sized)`
 
   // Flash briefs → OpenAI (fast tier): quick, cheap, high-volume
   const result = await generateContent(prompt, 200, 'fast')

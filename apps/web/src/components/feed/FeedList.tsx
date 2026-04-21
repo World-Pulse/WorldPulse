@@ -229,11 +229,23 @@ function adaptPulseItem(item: any): FeedItem {
   const badge = contentTypeLabels[item.pulseContentType] ?? 'PULSE'
 
   // Strip emoji/bracket header prefix and trailing signature from display content
-  const cleanContent = (item.content ?? '')
+  let cleanContent = (item.content ?? '')
     .replace(/^[\u{1F4CB}\u{1F4CA}\u{26A1}\u{1F4DD}\u{1F50D}\u{1F504}\u{1F319}\u{1F4F0}]\s*[^\n]*\n*/u, '')
     .replace(/^\[(?:FLASH BRIEF|DAILY BRIEFING|ANALYSIS|MID-DAY UPDATE|EVENING WRAP|FACT CHECK)\][^\n]*\n*/i, '')
     .replace(/\n*\u2014\s*PULSE[^\n]*$/m, '')
+    .replace(/\n*— PULSE[^\n]*$/m, '')
     .trim()
+
+  // Deduplicate consecutive identical lines (LLM sometimes echoes the headline)
+  const lines = cleanContent.split('\n')
+  const deduped: string[] = []
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (trimmed === '' && deduped.length > 0 && deduped[deduped.length - 1].trim() === '') continue
+    if (deduped.length > 0 && trimmed.toLowerCase() === deduped[deduped.length - 1].trim().toLowerCase()) continue
+    deduped.push(line)
+  }
+  cleanContent = deduped.join('\n').trim()
 
   return {
     id:       item.id,
