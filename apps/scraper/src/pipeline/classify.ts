@@ -34,17 +34,67 @@ export async function classifyContent(
 
   // Try LLM if configured (requires LLM_API_URL or OPENAI_API_KEY)
   const llmConfigured = !!(process.env.LLM_API_URL || process.env.OPENAI_API_KEY)
+  let result: ClassificationResult
   if (llmConfigured) {
     try {
-      const result = await llmClassify(title, body)
-      await redis.setex(cacheKey, 3600, JSON.stringify(result))
-      return result
+      result = await llmClassify(title, body)
     } catch (err) {
       logger.warn({ err }, 'LLM classification failed, falling back to rule-based')
+      result = ruleBasedClassify(title, body)
+    }
+  } else {
+    result = ruleBasedClassify(title, body)
+  }
+
+  // ── Severity recalibration ──────────────────────────────────────────────
+  // Cultural events, sports, entertainment, opinion pieces should never be
+  // classified as CRITICAL or HIGH — cap them at MEDIUM.
+  result = recalibrateSeverity(result)
+
+  await redis.setex(cacheKey, 3600, JSON.stringify(result))
+  return result
+}
+
+/**
+ * Post-classification severity recalibration.
+ *
+ * Rules:
+ * 1. Non-security categories are capped at MEDIUM severity max.
+ *    Sports, culture, entertainment, opinion, and lifestyle content
+ *    should not trigger CRITICAL/HIGH alerts.
+ * 2. The "other" category is capped at LOW — if we can't even classify it,
+ *    it's not intelligence-grade.
+ * 3. "breaking" category respects the LLM's severity judgment since it
+ *    was explicitly tagged as breaking news.
+ */
+function recalibrateSeverity(result: ClassificationResult): ClassificationResult {
+  // Categories that should NEVER be critical or high
+  const cappedAtMedium: Category[] = ['culture', 'sports', 'science', 'space']
+  // Categories that should be capped at low
+  const cappedAtLow: Category[] = ['other']
+
+  if (cappedAtLow.includes(result.category)) {
+    if (['critical', 'high', 'medium'].includes(result.severity)) {
+      result.severity = 'low'
+      result.isBreaking = false
+    }
+  } else if (cappedAtMedium.includes(result.category)) {
+    if (['critical', 'high'].includes(result.severity)) {
+      result.severity = 'medium'
+      result.isBreaking = false
     }
   }
 
-  return ruleBasedClassify(title, body)
+  // Opinion/editorial detection — cap at medium
+  const opinionPatterns = /\b(opinion|editorial|commentary|op-?ed|analysis|column|perspective|review|why\s+(?:we|you|i)\s|should\s+(?:we|you)|what\s+(?:we|you)\s+(?:can|need|must))\b/i
+  if (opinionPatterns.test(result.summary) || opinionPatterns.test(result.topics?.join(' ') ?? '')) {
+    if (['critical', 'high'].includes(result.severity)) {
+      result.severity = 'medium'
+      result.isBreaking = false
+    }
+  }
+
+  return result
 }
 
 async function llmClassify(title: string, body: string | null): Promise<ClassificationResult> {

@@ -26,6 +26,7 @@ import { logger } from '../lib/logger'
 import { correlateSignal } from './correlate'
 import type { CorrelationCandidate } from './correlate'
 import { recordSuccess } from '../health'
+import { computeReliabilityScore, maxSeverityForSourceCount } from './reliability-score'
 
 // ─── Alert Tier Classification (inlined — canonical in apps/api/src/lib/alert-tier.ts) ──
 const FLASH_RELIABILITY_THRESHOLD = 0.65
@@ -66,11 +67,48 @@ export async function insertAndCorrelate(
   signalData: Record<string, unknown>,
   meta: CorrelationMeta,
 ): Promise<Record<string, unknown>> {
+  // 0a. Dynamic reliability scoring — adds per-signal variance
+  const rawSeverity  = String(signalData.severity ?? 'low')
+  const rawCategory  = String(signalData.category ?? 'other')
+  const sourceCount  = Number(signalData.source_count ?? 1)
+  const rawSummary   = String(signalData.summary ?? '')
+  const rawTitle     = String(signalData.title ?? '')
+  const rawTags      = Array.isArray(signalData.tags) ? signalData.tags as string[] : []
+
+  const dynamicScore = computeReliabilityScore({
+    baseReliability: Number(signalData.reliability_score ?? 0.5),
+    severity:        rawSeverity,
+    category:        rawCategory,
+    hasSummary:      rawSummary.length > 0 && rawSummary !== rawTitle,
+    hasLocation:     !!(meta.lat != null && meta.lng != null),
+    tagCount:        rawTags.length,
+    isStateMedia:    rawTags.includes('state-media'),
+    sourceCount,
+    language:        String(signalData.language ?? 'en'),
+  })
+  signalData.reliability_score = dynamicScore
+
+  // 0b. Corroboration threshold — cap severity for single-source signals
+  const maxSev = maxSeverityForSourceCount(sourceCount, rawCategory)
+  const SEVERITY_RANK: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1, info: 0 }
+  const MAX_RANK = SEVERITY_RANK[maxSev] ?? 4
+  const currentRank = SEVERITY_RANK[rawSeverity] ?? 1
+  if (currentRank > MAX_RANK) {
+    signalData.severity = maxSev
+    logger.info({
+      title:      rawTitle.slice(0, 80),
+      original:   rawSeverity,
+      capped:     maxSev,
+      sourceCount,
+      category:   rawCategory,
+    }, 'Severity capped by corroboration threshold')
+  }
+
   // 1. Compute alert tier before insert (FLASH/PRIORITY/ROUTINE urgency classification)
   const alertTierComputed = computeAlertTier(
     String(signalData.severity ?? 'low'),
-    Number(signalData.reliability_score ?? 0),
-    String(signalData.category ?? 'other'),
+    dynamicScore,
+    rawCategory,
   )
   const signalWithTier = { ...signalData, alert_tier: alertTierComputed }
 

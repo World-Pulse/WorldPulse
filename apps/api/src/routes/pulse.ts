@@ -34,6 +34,7 @@ import {
   batchRegisterSocialPosts,
   getSyndicatedPosts,
 } from '../lib/pulse/syndication'
+import { generateSignalSummary } from '../lib/signal-summary'
 
 // ─── Internal auth — requires PULSE_API_KEY env var ───────────────────────
 
@@ -75,10 +76,38 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
     const contentType = query.content_type
     const limit = Math.min(Number(query.limit) || 20, 50)
 
+    // ── Quality-filtered PULSE feed ─────────────────────────────────────────
+    // Flash briefs must be linked to quality signals (high/critical, 2+ sources,
+    // reliability >= 0.6). Daily briefings, analysis, and other editorial content
+    // pass through unfiltered.
     let q = db('posts as p')
       .join('users as u', 'p.author_id', 'u.id')
+      .leftJoin('signals as s', 'p.signal_id', 's.id')
       .where('p.author_id', PULSE_USER_ID)
       .where('p.deleted_at', null)
+      .where(function () {
+        this
+          // Editorial content (briefings, analysis) — always show
+          .whereIn('p.pulse_content_type', ['daily_briefing', 'analysis', 'social_thread', 'weekly_report', 'syndicated'])
+          // Flash briefs — only if linked to quality signals
+          .orWhere(function () {
+            this.where('p.pulse_content_type', 'flash_brief')
+              .whereIn('s.severity', ['critical', 'high'])
+              .where('s.source_count', '>=', 2)
+              .where('s.reliability_score', '>=', 0.6)
+          })
+          // Posts without a content type (legacy) — let through if signal is good
+          .orWhere(function () {
+            this.whereNull('p.pulse_content_type')
+              .where(function () {
+                this.whereNull('p.signal_id')  // no signal = editorial
+                  .orWhere(function () {
+                    this.whereIn('s.severity', ['critical', 'high'])
+                      .where('s.source_count', '>=', 2)
+                  })
+              })
+          })
+      })
       .orderBy('p.created_at', 'desc')
       .limit(limit)
       .select([
@@ -87,6 +116,12 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
         'p.boost_count', 'p.reply_count', 'p.view_count', 'p.reliability_score',
         'p.location_name', 'p.language', 'p.created_at', 'p.updated_at',
         'p.signal_id', 'p.pulse_content_type',
+        // Signal metadata for enrichment
+        's.title as signal_title', 's.summary as signal_summary',
+        's.body as signal_body', 's.category as signal_category',
+        's.severity as signal_severity', 's.source_count as signal_source_count',
+        's.reliability_score as signal_reliability',
+        's.tags as signal_tags', 's.language as signal_language',
         // Author
         'u.id as author_id', 'u.handle as author_handle',
         'u.display_name as author_display_name', 'u.avatar_url as author_avatar',
@@ -119,11 +154,40 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
         hasBookmarked = !!bookmarkRow
       }
 
+      // ── Enrich flash briefs with AI summary ──────────────────────────────
+      // If this is a flash brief linked to a signal, use the AI summary
+      // (from signal-summary.ts) as the display content instead of the raw
+      // headline echo. The AI summary is the good-quality 2-3 sentence
+      // summary visible on each signal's detail page.
+      let displayContent = post.content
+      if (post.signal_id && post.signal_title && post.pulse_content_type === 'flash_brief') {
+        try {
+          const aiSummary = await generateSignalSummary({
+            id:       post.signal_id,
+            title:    post.signal_title,
+            summary:  post.signal_summary,
+            body:     post.signal_body,
+            category: post.signal_category ?? 'other',
+            severity: post.signal_severity ?? 'medium',
+            tags:     post.signal_tags ?? [],
+            language: post.signal_language ?? 'en',
+          })
+          if (aiSummary.text && aiSummary.text.length > 30) {
+            displayContent = `${post.signal_title}\n\n${aiSummary.text}`
+          }
+        } catch {
+          // Non-fatal — fall back to original content
+        }
+      }
+
+      // Strip **RECOMMENDATIONS:** section from fact-check posts
+      displayContent = displayContent.replace(/\n*\*\*RECOMMENDATIONS:?\*\*[\s\S]*$/i, '').trim()
+
       return {
         id: post.id,
         type: 'ai_digest' as const,
         postType: post.post_type,
-        content: post.content,
+        content: displayContent,
         mediaUrls: post.media_urls,
         mediaTypes: post.media_types,
         sourceUrl: post.source_url,
@@ -140,6 +204,11 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
         updatedAt: post.updated_at,
         signalId: post.signal_id,
         pulseContentType: post.pulse_content_type,
+        // Signal quality context for the UI
+        signalSeverity: post.signal_severity,
+        signalSourceCount: post.signal_source_count,
+        signalReliability: post.signal_reliability,
+        signalCategory: post.signal_category,
         author: {
           id: post.author_id,
           handle: post.author_handle,

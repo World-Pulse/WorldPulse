@@ -234,6 +234,8 @@ function adaptPulseItem(item: any): FeedItem {
     .replace(/^\[(?:FLASH BRIEF|DAILY BRIEFING|ANALYSIS|MID-DAY UPDATE|EVENING WRAP|FACT CHECK)\][^\n]*\n*/i, '')
     .replace(/\n*\u2014\s*PULSE[^\n]*$/m, '')
     .replace(/\n*— PULSE[^\n]*$/m, '')
+    // Strip **RECOMMENDATIONS:** section (developer notes, not for users)
+    .replace(/\n*\*\*RECOMMENDATIONS:?\*\*[\s\S]*$/i, '')
     .trim()
 
   // Deduplicate repeated lines (LLM echoes the headline separated by blank lines)

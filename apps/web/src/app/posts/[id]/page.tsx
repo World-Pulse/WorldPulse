@@ -69,6 +69,8 @@ function cleanPostContent(raw: string): string {
     // Strip trailing PULSE signatures (both unicode and ascii dashes)
     .replace(/\n*\u2014\s*PULSE[^\n]*$/m, '')
     .replace(/\n*— PULSE[^\n]*$/m, '')
+    // Strip **RECOMMENDATIONS:** section (developer notes, not for users)
+    .replace(/\n*\*\*RECOMMENDATIONS:?\*\*[\s\S]*$/i, '')
     .trim()
 
   // Deduplicate repeated lines (LLM sometimes echoes the headline)

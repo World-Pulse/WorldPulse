@@ -190,7 +190,7 @@ Rate the overall quality of the signal stream:
 
 ${anomalies.length > 0 ? 'Note: Identical reliability scores across unrelated signals are a SCORING PIPELINE issue, not misinformation. Report this under signal quality, not claim verification.' : ''}
 
-End with 1-2 specific recommendations for improving information quality.`
+Do NOT include recommendations or developer notes — only report verdicts and quality assessment.`
 
   const result = await generateContent(prompt, 1000, 'deep', EDITORIAL_SYSTEM_PROMPT + '\n\n' + agent.specialization)
 
