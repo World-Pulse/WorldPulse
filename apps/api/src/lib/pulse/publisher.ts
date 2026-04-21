@@ -327,6 +327,19 @@ async function publishPost(
 
 /** Generate and publish a flash brief for a critical signal */
 export async function publishFlashBrief(signal: SignalSummary): Promise<PublishResult> {
+  // ── Quality gate: severity ──────────────────────────────────────────────
+  // Only publish flash briefs for critical/high severity signals
+  const allowedSeverities = ['critical', 'high']
+  if (!allowedSeverities.includes(signal.severity)) {
+    return { success: false, error: `Severity ${signal.severity} below flash brief threshold` }
+  }
+
+  // ── Quality gate: source count ──────────────────────────────────────────
+  // Single-source signals are too unreliable for flash briefs
+  if ((signal.source_count ?? 0) < 2) {
+    return { success: false, error: `Only ${signal.source_count} source(s) — need 2+ for flash brief` }
+  }
+
   const prompt = `Write a 2-3 sentence intelligence flash brief about this signal. DO NOT repeat the headline — add context, sourcing, and impact that the headline alone doesn't convey.
 
 Signal: ${signal.title}
@@ -339,10 +352,38 @@ Rules:
 - Include "according to X sources" or name the source type (wire, institutional, OSINT)
 - End with why this matters or what to watch next
 - If reliability is below 0.7, note it is unconfirmed
-- Keep it under 280 characters if possible (tweet-sized)`
+- Keep it under 280 characters if possible (tweet-sized)
+- Your output must be DIFFERENT from the signal title — add value or don't publish`
 
   // Flash briefs → OpenAI (fast tier): quick, cheap, high-volume
   const result = await generateContent(prompt, 200, 'fast')
+
+  // ── Quality gate: LLM output ────────────────────────────────────────────
+  // Reject empty output or output that's just the headline echoed back
+  const outputText = result.text.trim()
+  if (!outputText || outputText.length < 30) {
+    console.warn(`[PULSE] Flash brief rejected: LLM returned empty/short output for "${signal.title}"`)
+    return { success: false, error: 'LLM output too short — skipping flash brief' }
+  }
+
+  // Check if the output is just the headline repeated
+  const titleNorm = signal.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim()
+  const outputNorm = outputText.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim()
+  if (outputNorm === titleNorm || outputNorm.startsWith(titleNorm) || titleNorm.startsWith(outputNorm)) {
+    console.warn(`[PULSE] Flash brief rejected: output echoes headline for "${signal.title}"`)
+    return { success: false, error: 'LLM echoed headline — no editorial value added' }
+  }
+
+  // Check word overlap — if >80% of output words are in the title, it's too similar
+  const titleWords = new Set(titleNorm.split(/\s+/).filter(w => w.length > 3))
+  const outputWords = outputNorm.split(/\s+/).filter(w => w.length > 3)
+  if (titleWords.size > 0 && outputWords.length > 0) {
+    const overlap = outputWords.filter(w => titleWords.has(w)).length
+    if (overlap / outputWords.length > 0.8) {
+      console.warn(`[PULSE] Flash brief rejected: >80% word overlap with headline for "${signal.title}"`)
+      return { success: false, error: 'Output too similar to headline' }
+    }
+  }
 
   return publishPost(
     `[FLASH BRIEF]\n\n${result.text}\n\n— PULSE · WorldPulse AI Bureau`,

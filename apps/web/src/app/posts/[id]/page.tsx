@@ -59,6 +59,34 @@ const SEVERITY_COLORS: Record<string, string> = {
   low:      'bg-slate-800/50 text-slate-400 border border-slate-700/40',
 }
 
+/** Strip PULSE markup headers/signatures and deduplicate echoed lines */
+function cleanPostContent(raw: string): string {
+  let text = raw
+    // Strip emoji-prefixed header lines (📋 DAILY BRIEFING …, ⚡ FLASH BRIEF …, etc.)
+    .replace(/^[\u{1F4CB}\u{1F4CA}\u{26A1}\u{1F4DD}\u{1F50D}\u{1F504}\u{1F319}\u{1F4F0}]\s*[^\n]*\n*/u, '')
+    // Strip bracket-prefixed header lines ([FLASH BRIEF] Apr 20, 2026 …)
+    .replace(/^\[(?:FLASH BRIEF|DAILY BRIEFING|ANALYSIS|MID-DAY UPDATE|EVENING WRAP|FACT CHECK)\][^\n]*\n*/i, '')
+    // Strip trailing PULSE signatures (both unicode and ascii dashes)
+    .replace(/\n*\u2014\s*PULSE[^\n]*$/m, '')
+    .replace(/\n*— PULSE[^\n]*$/m, '')
+    .trim()
+
+  // Deduplicate repeated lines (LLM sometimes echoes the headline)
+  const seen = new Set<string>()
+  const deduped: string[] = []
+  for (const line of text.split('\n')) {
+    const key = line.trim().toLowerCase()
+    if (key === '') {
+      if (deduped.length > 0 && deduped[deduped.length - 1].trim() === '') continue
+      deduped.push(line)
+    } else if (!seen.has(key)) {
+      seen.add(key)
+      deduped.push(line)
+    }
+  }
+  return deduped.join('\n').trim()
+}
+
 export default function PostDetailPage() {
   const params  = useParams()
   const router  = useRouter()
@@ -143,9 +171,9 @@ export default function PostDetailPage() {
           </div>
         </div>
 
-        {/* Content */}
+        {/* Content — cleaned and deduped (matches FeedList treatment) */}
         <div className="text-[16px] text-wp-text leading-[1.7] mb-4 whitespace-pre-line">
-          {post.content}
+          {cleanPostContent(post.content)}
         </div>
 
         {/* Tags */}
