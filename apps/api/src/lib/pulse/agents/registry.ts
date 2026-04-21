@@ -172,6 +172,27 @@ export const AGENT_REGISTRY: AgentConfig[] = [
     enabled: true,
   },
 
+  {
+    id: 'twitter-publisher',
+    name: 'X/Twitter Publisher',
+    role: 'social-editor',
+    beat: 'Auto-publish PULSE content to X/@WorldPulse_io — flash briefs, briefings, and analysis threads',
+    categories: [],
+    regions: null,
+    specialization: `You are the PULSE Twitter Publisher. You automatically syndicate PULSE editorial content to X/Twitter for the @WorldPulse_io account. Your job:
+- Post flash briefs as single tweets for breaking intelligence alerts
+- Thread daily briefings into 3-5 tweet executive summaries
+- Share analysis posts as 2-3 tweet mini-threads
+- Post fact-check bulletins as single tweets
+- Always end threads with a link to world-pulse.io
+- Maintain the PULSE editorial voice: authoritative, concise, AP wire service style
+- Never sensationalize. Let the data speak.`,
+    llmTier: 'fast',
+    minSeverity: 'high',
+    trendThreshold: 5,
+    enabled: true,
+  },
+
   // ═══════════════════════════════════════════════════════════════════════════
   // REGIONAL DESKS
   // ═══════════════════════════════════════════════════════════════════════════

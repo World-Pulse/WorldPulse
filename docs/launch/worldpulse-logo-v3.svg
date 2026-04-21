@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0d0f18"/>
+      <stop offset="100%" style="stop-color:#06070d"/>
+    </linearGradient>
+    <linearGradient id="globeFill" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#141722"/>
+      <stop offset="100%" style="stop-color:#0d0f18"/>
+    </linearGradient>
+    <radialGradient id="subtleGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#00e676" stop-opacity="0.06"/>
+      <stop offset="100%" style="stop-color:#00e676" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="80" ry="80" fill="url(#bg)"/>
+
+  <!-- Subtle inner glow -->
+  <circle cx="256" cy="232" r="180" fill="url(#subtleGlow)"/>
+
+  <!-- Globe — clean wireframe, no playful dots -->
+  <circle cx="256" cy="232" r="135" fill="url(#globeFill)" stroke="#00e676" stroke-width="1.4" stroke-opacity="0.3"/>
+
+  <!-- Latitude lines -->
+  <ellipse cx="256" cy="232" rx="135" ry="46" fill="none" stroke="#00e676" stroke-width="0.8" stroke-opacity="0.15"/>
+  <ellipse cx="256" cy="178" rx="114" ry="32" fill="none" stroke="#00e676" stroke-width="0.6" stroke-opacity="0.1"/>
+  <ellipse cx="256" cy="286" rx="114" ry="32" fill="none" stroke="#00e676" stroke-width="0.6" stroke-opacity="0.1"/>
+
+  <!-- Longitude lines -->
+  <ellipse cx="256" cy="232" rx="50" ry="135" fill="none" stroke="#00e676" stroke-width="0.8" stroke-opacity="0.15"/>
+  <ellipse cx="256" cy="232" rx="98" ry="135" fill="none" stroke="#00e676" stroke-width="0.6" stroke-opacity="0.1"/>
+
+  <!-- Single clean pulse line across equator -->
+  <polyline
+    points="100,232 168,232 192,232 208,198 222,262 236,220 248,246 256,185 266,278 280,218 294,248 310,232 344,232 412,232"
+    fill="none"
+    stroke="#00e676"
+    stroke-width="2.2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    opacity="0.7"
+  />
+
+  <!-- WORLDPULSE wordmark -->
+  <text x="256" y="418" text-anchor="middle" font-family="'Helvetica Neue', Arial, sans-serif" font-weight="600" font-size="40" fill="#e2e6f0" letter-spacing="6" opacity="0.9">WORLDPULSE</text>
+
+  <!-- Thin separator line -->
+  <line x1="120" y1="388" x2="392" y2="388" stroke="#00e676" stroke-width="0.8" stroke-opacity="0.25"/>
+</svg>

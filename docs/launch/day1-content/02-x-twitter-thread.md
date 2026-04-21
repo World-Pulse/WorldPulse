@@ -1,6 +1,6 @@
 # X/Twitter Launch Thread
 
-Post at **09:00 ET Monday**. Pin the thread to your profile.
+Post at **10:05 ET Monday** (5 min after HN). Pin the thread to your profile.
 
 ---
 
@@ -8,7 +8,7 @@ Post at **09:00 ET Monday**. Pin the thread to your profile.
 
 I just open-sourced a global intelligence platform that monitors 300+ sources across 184 nations in real-time.
 
-50,000+ signals. Live map. AI-powered verification.
+55,000+ signals. Live map. AI-powered verification.
 
 The kind of situational awareness that used to cost six figures — now it's free and open-source.
 
@@ -97,7 +97,7 @@ Built with:
 - Fastify + WebSocket (sub-60s latency)
 - PostgreSQL + PostGIS
 - MapLibre GL (no proprietary APIs)
-- Custom scraper pipeline (30+ adapters)
+- Custom scraper pipeline (178 feeds, 30+ adapters)
 - Pinecone for semantic search
 
 Everything is MIT licensed. Self-host with docker compose up.

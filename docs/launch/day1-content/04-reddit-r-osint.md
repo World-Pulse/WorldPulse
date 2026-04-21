@@ -1,6 +1,6 @@
 # Reddit — r/OSINT Launch Post
 
-Post at **12:00 ET Monday**. Educational angle, not promotional.
+Post at **10:30 ET Monday** (after HN/X/LinkedIn wave). Educational angle, not promotional.
 
 ---
 
@@ -45,7 +45,7 @@ WorldPulse ingests from 300+ sources — wire services (AP, Reuters, AFP), gover
 - Interactive MapLibre globe with live layers (conflict, hazards, cyber, maritime)
 - Real-time signal feed with WebSocket updates
 - Dedicated pages for cyber threats, sanctions, finance, space weather, internet outages
-- 50,000+ signals indexed and growing
+- 55,000+ signals indexed and growing
 
 **Tech and links:**
 

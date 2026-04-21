@@ -26,7 +26,7 @@ WorldPulse is an open-source intelligence platform that monitors 300+ sources ac
 - Fastify API with WebSocket support
 - PostgreSQL 16 + PostGIS for geospatial queries
 - Redis for caching + pub/sub
-- Custom scraper pipeline (Node.js, ~30 source adapters)
+- Custom scraper pipeline (Node.js, 178 active feeds across 30+ source adapters)
 - MapLibre GL for the map (no proprietary tile APIs)
 - Pinecone for semantic signal similarity search
 
@@ -34,7 +34,7 @@ WorldPulse is an open-source intelligence platform that monitors 300+ sources ac
 
 The entire platform is MIT licensed. You can self-host with `docker compose up` or use the hosted version.
 
-50,000+ signals indexed so far. The scraper runs continuously.
+55,000+ signals indexed so far and growing. The scraper runs continuously — ingesting ~300 new signals per hour.
 
 Live: https://world-pulse.io
 GitHub: https://github.com/World-Pulse/WorldPulse
@@ -45,7 +45,7 @@ Happy to answer any questions about the architecture, the scraper pipeline, or t
 
 ## Posting Notes
 
-- Post at **08:00 ET Monday** (peak HN activity)
+- Post at **10:00 ET Monday** (peak HN activity, after site is confirmed healthy)
 - Stay online and respond to every comment for 4+ hours
 - Be technical, not salesy — HN penalizes marketing speak
 - If asked about AI: emphasize it's for classification/correlation, not generation

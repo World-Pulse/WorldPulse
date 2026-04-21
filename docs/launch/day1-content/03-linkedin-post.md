@@ -1,6 +1,6 @@
 # LinkedIn Founder Post
 
-Post at **10:00 ET Monday**. From Devon's personal profile.
+Post at **10:10 ET Monday** (after HN + X). From Devon's personal profile.
 
 ---
 
@@ -15,14 +15,14 @@ WorldPulse changes that.
 What it does:
 - Monitors 300+ verified sources (AP, Reuters, USGS, NOAA, ACLED, OpenSanctions, GDELT, and more)
 - AI-powered classification, geolocation, and cross-source verification on every signal
-- 50,000+ intelligence signals indexed and growing
+- 55,000+ intelligence signals indexed and growing
 - Interactive world map with live conflict, hazard, cyber, and maritime layers
 - Dedicated intelligence pages for cyber threats, sanctions, finance, space weather, and internet outages
 - Real-time WebSocket updates — signals appear within 60 seconds of detection
 
 The entire platform is open-source (MIT license). You can self-host it or use the hosted version at world-pulse.io.
 
-The tech stack: Next.js 15, Fastify, PostgreSQL + PostGIS, Redis, MapLibre GL, and a custom scraper pipeline with 30+ source adapters.
+The tech stack: Next.js 15, Fastify, PostgreSQL + PostGIS, Redis, MapLibre GL, and a custom scraper pipeline with 178 active feeds across 30+ adapters.
 
 If you work in security, risk, intelligence, journalism, or just care about knowing what's happening in the world — I'd love your feedback.
 

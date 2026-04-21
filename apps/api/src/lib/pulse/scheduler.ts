@@ -12,15 +12,19 @@
  */
 import { checkAndPublishFlashBriefs, publishDailyBriefing, publishBriefingUpdate } from './publisher'
 import { runAgentBeatScan } from './agents/coordinator'
+import { runTwitterPublisher } from './agents/twitter-publisher'
+import { getAgent } from './agents/registry'
 
 let flashTimer: ReturnType<typeof setInterval> | null = null
 let briefingTimer: ReturnType<typeof setInterval> | null = null
 let agentTimer: ReturnType<typeof setInterval> | null = null
+let twitterTimer: ReturnType<typeof setInterval> | null = null
 let isRunning = false
 
 const FLASH_INTERVAL_MS   = 5 * 60 * 1000   // 5 minutes
 const BRIEFING_CHECK_MS   = 60 * 1000        // check every minute
 const AGENT_SCAN_MS       = 2 * 60 * 60_000  // 2 hours
+const TWITTER_INTERVAL_MS = 15 * 60 * 1000   // 15 minutes — check for new content to tweet
 
 // UTC hours for briefing schedule (EDT: subtract 4)
 const MORNING_HOUR_UTC = 11   // 7am ET
@@ -62,7 +66,7 @@ export function startPulseScheduler(): void {
   }
 
   isRunning = true
-  console.log('[PULSE] Scheduler started — flash briefs (5m), briefings (7am/1pm/7pm ET), agent scans (2h)')
+  console.log('[PULSE] Scheduler started — flash briefs (5m), briefings (7am/1pm/7pm ET), agent scans (2h), twitter (15m)')
 
   // ── Flash brief checker ────────────────────────────────────────────────
   flashTimer = setInterval(async () => {
@@ -148,6 +152,25 @@ export function startPulseScheduler(): void {
       console.error('[PULSE] Agent beat scan failed:', err)
     }
   }, AGENT_SCAN_MS)
+
+  // ── Twitter auto-publisher ────────────────────────────────────────────
+  // Every 15 minutes, check for new PULSE posts to tweet.
+  // Gated by TWITTER_API_KEY — no-ops if not configured.
+  twitterTimer = setInterval(async () => {
+    if (!process.env.TWITTER_API_KEY) return // Skip if not configured
+
+    const agent = getAgent('twitter-publisher')
+    if (!agent || !agent.enabled) return
+
+    try {
+      const result = await runTwitterPublisher(agent)
+      if (result.published) {
+        console.log(`[PULSE] Twitter: posted for ${result.postId}`)
+      }
+    } catch (err) {
+      console.error('[PULSE] Twitter publisher failed:', err)
+    }
+  }, TWITTER_INTERVAL_MS)
 }
 
 /** Stop the PULSE scheduler */
@@ -155,6 +178,7 @@ export function stopPulseScheduler(): void {
   if (flashTimer)    { clearInterval(flashTimer);    flashTimer = null }
   if (briefingTimer) { clearInterval(briefingTimer); briefingTimer = null }
   if (agentTimer)    { clearInterval(agentTimer);    agentTimer = null }
+  if (twitterTimer)  { clearInterval(twitterTimer);  twitterTimer = null }
   isRunning = false
   console.log('[PULSE] Scheduler stopped')
 }

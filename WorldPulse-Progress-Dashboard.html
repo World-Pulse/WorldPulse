@@ -3,662 +3,483 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WorldPulse · Progress Dashboard</title>
+<title>WorldPulse — Launch Progress Dashboard</title>
 <style>
   :root {
-    --bg: #0a0a0f;
-    --surface: #111118;
-    --surface2: #1a1a24;
-    --border: #222233;
-    --amber: #f59e0b;
-    --cyan: #06b6d4;
-    --green: #22c55e;
-    --red: #ef4444;
+    --bg: #0a0e17; --surface: #111827; --border: #1e293b;
+    --text: #e2e8f0; --muted: #94a3b8; --accent: #f59e0b;
+    --green: #22c55e; --red: #ef4444; --blue: #3b82f6; --purple: #a855f7;
     --orange: #f97316;
-    --purple: #a855f7;
-    --text: #e2e8f0;
-    --text2: #94a3b8;
-    --text3: #475569;
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font-family: 'Inter', -apple-system, sans-serif; min-height: 100vh; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; line-height: 1.6; }
+  .container { max-width: 960px; margin: 0 auto; padding: 24px; }
 
-  .header {
-    background: linear-gradient(135deg, #0d0d1a 0%, #111118 100%);
-    border-bottom: 1px solid var(--border);
-    padding: 20px 32px;
-    display: flex; align-items: center; justify-content: space-between;
-  }
-  .logo { display: flex; align-items: center; gap: 10px; }
-  .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); animation: pulse 2s infinite; }
-  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.6;transform:scale(1.3)} }
-  .logo-text { font-size: 18px; font-weight: 700; letter-spacing: 2px; color: var(--amber); }
-  .logo-sub { font-size: 11px; color: var(--text3); letter-spacing: 1px; text-transform: uppercase; margin-top: 1px; }
-  .header-meta { font-size: 12px; color: var(--text3); text-align: right; }
-  .header-date { font-size: 13px; color: var(--text2); margin-bottom: 2px; }
+  .header { text-align: center; padding: 40px 0 28px; border-bottom: 1px solid var(--border); margin-bottom: 28px; }
+  .header h1 { font-size: 26px; font-weight: 700; color: var(--accent); margin-bottom: 6px; }
+  .header .subtitle { font-size: 15px; color: var(--muted); margin-bottom: 14px; }
+  .header .meta { display: flex; justify-content: center; gap: 16px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+  .header .meta span { background: var(--surface); padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border); }
 
-  .container { max-width: 1400px; margin: 0 auto; padding: 28px 32px; }
-  .grid-top { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 24px; }
-  .grid-main { display: grid; grid-template-columns: 1fr 340px; gap: 20px; }
-  .grid-left { display: flex; flex-direction: column; gap: 20px; }
-  .grid-right { display: flex; flex-direction: column; gap: 20px; }
+  .section { margin-bottom: 32px; }
+  .section h2 { font-size: 18px; font-weight: 700; color: var(--accent); margin-bottom: 14px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  .section h3 { font-size: 15px; font-weight: 600; color: var(--text); margin: 14px 0 8px; }
 
-  .card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
-  }
-  .card-title {
-    font-size: 10px; font-weight: 600; letter-spacing: 1.5px;
-    text-transform: uppercase; color: var(--text3);
-    margin-bottom: 12px;
-  }
+  /* Progress bar */
+  .progress-wrap { margin: 16px 0 24px; }
+  .progress-bar-bg { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; height: 28px; overflow: hidden; position: relative; }
+  .progress-bar-fill { height: 100%; border-radius: 8px; transition: width 0.4s; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #000; }
+  .progress-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 4px; }
 
-  .stat-card { padding: 18px 20px; }
-  .stat-value { font-size: 32px; font-weight: 700; line-height: 1; margin-bottom: 4px; }
-  .stat-label { font-size: 11px; color: var(--text3); letter-spacing: 0.5px; }
-  .stat-sub { font-size: 10px; margin-top: 6px; }
+  /* KPI grid */
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 14px 0; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; text-align: center; }
+  .kpi .number { font-size: 24px; font-weight: 800; }
+  .kpi .number.green { color: var(--green); }
+  .kpi .number.amber { color: var(--accent); }
+  .kpi .number.blue { color: var(--blue); }
+  .kpi .number.red { color: var(--red); }
+  .kpi .number.purple { color: var(--purple); }
+  .kpi .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
 
-  .countdown-card { background: linear-gradient(135deg, #1a1100 0%, #111118 100%); border-color: #3d2800; }
-  .countdown-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 8px; }
-  .countdown-unit { text-align: center; }
-  .countdown-num { font-size: 36px; font-weight: 800; color: var(--amber); line-height: 1; font-variant-numeric: tabular-nums; }
-  .countdown-lbl { font-size: 9px; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; margin-top: 3px; }
-  .launch-target { font-size: 11px; color: var(--amber); margin-top: 10px; text-align: center; opacity: 0.8; }
+  /* Tags */
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-right: 4px; }
+  .tag-green { background: rgba(34,197,94,0.15); color: var(--green); }
+  .tag-blue { background: rgba(59,130,246,0.15); color: var(--blue); }
+  .tag-purple { background: rgba(168,85,247,0.15); color: var(--purple); }
+  .tag-red { background: rgba(239,68,68,0.15); color: var(--red); }
+  .tag-amber { background: rgba(245,158,11,0.15); color: var(--accent); }
+  .tag-orange { background: rgba(249,115,22,0.15); color: var(--orange); }
 
-  .progress-wrap { margin-top: 8px; }
-  .progress-bar-bg { height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; }
-  .progress-bar-fill { height: 100%; border-radius: 4px; }
-  .progress-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--text3); margin-top: 5px; }
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px; }
+  th { background: var(--surface); color: var(--accent); text-align: left; padding: 8px 10px; font-weight: 600; border-bottom: 2px solid var(--border); }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+  tr:hover td { background: rgba(245,158,11,0.04); }
 
-  .issue-section { margin-bottom: 20px; }
-  .issue-section-header {
-    display: flex; align-items: center; gap: 8px;
-    font-size: 11px; font-weight: 600; letter-spacing: 1px;
-    text-transform: uppercase; margin-bottom: 10px;
-    color: var(--text2);
-  }
-  .issue-section-badge { padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 700; }
-  .badge-green { background: rgba(34,197,94,.15); color: var(--green); }
+  /* Workstream cards */
+  .ws-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 12px; }
+  .ws-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .ws-title { font-weight: 700; font-size: 14px; }
+  .ws-bar { background: rgba(255,255,255,0.08); border-radius: 4px; height: 6px; overflow: hidden; margin-top: 8px; }
+  .ws-bar-fill { height: 100%; border-radius: 4px; }
+  .ws-items { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .ws-items .done { color: var(--green); }
+  .ws-items .pending { color: var(--accent); }
 
-  .issue-row {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 12px 14px;
-    margin-bottom: 8px;
-    display: flex; align-items: flex-start; gap: 12px;
-  }
-  .issue-row:last-child { margin-bottom: 0; }
-  .dot-done { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; background: var(--green); }
+  .highlight { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.25); border-radius: 8px; padding: 14px; margin: 12px 0; font-size: 14px; }
+  .highlight strong { color: var(--accent); }
 
-  .issue-body { flex: 1; min-width: 0; }
-  .issue-id { font-size: 10px; color: var(--text3); margin-bottom: 2px; font-family: monospace; }
-  .issue-title { font-size: 13px; color: var(--text); line-height: 1.4; }
-  .issue-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
-  .tag { font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 500; }
-  .issue-right { text-align: right; flex-shrink: 0; }
-  .issue-priority { font-size: 10px; font-weight: 600; }
+  .countdown { font-size: 48px; font-weight: 900; color: var(--accent); text-align: center; margin: 8px 0; }
+  .countdown-label { text-align: center; font-size: 13px; color: var(--muted); }
 
-  .infra-row {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 8px 0; border-bottom: 1px solid var(--border);
-  }
-  .infra-row:last-child { border-bottom: none; }
-  .infra-name { font-size: 12px; color: var(--text2); }
-  .infra-status { font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 5px; }
-  .status-dot { width: 6px; height: 6px; border-radius: 50%; }
-  .ok { color: var(--green); }
-  .ok .status-dot { background: var(--green); }
-
-  .route-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 8px; }
-  .route-item {
-    background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
-    padding: 12px; display: flex; align-items: center; gap: 8px; font-size: 12px;
-  }
-  .route-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-  .route-dot.green { background: var(--green); }
-  .route-dot.amber { background: var(--amber); }
-
-  .session-stat { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
-  .session-stat:last-child { border-bottom: none; }
-  .session-val { font-weight: 700; color: var(--green); }
-
-  .section-divider { height: 1px; background: var(--border); margin: 4px 0 16px; }
-
-  /* CHART */
-  .chart-container {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 28px 32px;
-    margin-bottom: 24px;
-  }
-  .chart-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; }
-  .chart-title { font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; }
-  .chart-subtitle { font-size: 12px; color: var(--text3); margin-top: 4px; }
-  .chart-legend { display: flex; gap: 20px; align-items: center; }
-  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text2); }
-  .legend-line { width: 20px; height: 3px; border-radius: 2px; }
-  .legend-line-dashed { width: 20px; height: 0; border-top: 2px dashed; }
-  .chart-canvas-wrap { position: relative; width: 100%; height: 400px; }
-  .chart-canvas-wrap canvas { width: 100%; height: 100%; }
-
-  .milestones { display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap; }
-  .milestone {
-    background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
-    padding: 10px 14px; flex: 1; min-width: 140px;
-  }
-  .milestone-date { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; }
-  .milestone-val { font-size: 20px; font-weight: 800; margin: 4px 0 2px; }
-  .milestone-label { font-size: 10px; color: var(--text3); }
-
-  .gate-mini {
-    background: rgba(34,197,94,.04); border: 1px solid rgba(34,197,94,.15);
-    border-radius: 10px; padding: 10px 12px; display: flex; align-items: center; gap: 10px;
-  }
-  .gate-num {
-    width: 24px; height: 24px; border-radius: 6px; background: rgba(34,197,94,.15);
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 800; font-size: 11px; color: var(--green); flex-shrink: 0;
-  }
-  .gate-text { flex: 1; font-size: 11px; color: var(--text3); text-decoration: line-through; }
-  .gate-check { font-size: 10px; font-weight: 700; color: var(--green); flex-shrink: 0; }
-
-  ::-webkit-scrollbar { width: 4px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .next-actions { list-style: none; }
+  .next-actions li { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; display: flex; gap: 10px; align-items: flex-start; }
+  .next-actions .pri { flex-shrink: 0; width: 24px; height: 24px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; }
+  .next-actions .p0 { background: rgba(239,68,68,0.15); color: var(--red); }
+  .next-actions .p1 { background: rgba(245,158,11,0.15); color: var(--accent); }
+  .next-actions .p2 { background: rgba(59,130,246,0.15); color: var(--blue); }
 </style>
 </head>
 <body>
-
-<div class="header">
-  <div class="logo">
-    <div class="logo-dot"></div>
-    <div>
-      <div class="logo-text">WORLDPULSE</div>
-      <div class="logo-sub">Progress Dashboard</div>
-    </div>
-  </div>
-  <div class="header-meta">
-    <div class="header-date">April 18, 2026 · 13 BUGS FIXED · 300+ Sources · 47,887 Signals LIVE · 2 Days to Launch</div>
-    <div>GA integrated · CSP fixed · Signal detail 404 · Claims 500 · Commodity flows · Country flags · Sidebar nav</div>
-  </div>
-</div>
-
 <div class="container">
 
-  <!-- TOP STATS -->
-  <div class="grid-top">
-    <div class="card stat-card countdown-card" style="grid-column: span 2;">
-      <div class="card-title">Launch Countdown</div>
-      <div class="countdown-grid">
-        <div class="countdown-unit"><div class="countdown-num" id="days">02</div><div class="countdown-lbl">Days</div></div>
-        <div class="countdown-unit"><div class="countdown-num" id="hours">00</div><div class="countdown-lbl">Hours</div></div>
-        <div class="countdown-unit"><div class="countdown-num" id="mins">00</div><div class="countdown-lbl">Mins</div></div>
-        <div class="countdown-unit"><div class="countdown-num" id="secs">00</div><div class="countdown-lbl">Secs</div></div>
-      </div>
-      <div class="launch-target">Launch Apr 20 · All prod bugs fixed · GA tracking live · 47,887 signals</div>
+<!-- HEADER -->
+<div class="header">
+  <h1>WORLDPULSE LAUNCH PROGRESS</h1>
+  <div class="subtitle">Real-time status across all workstreams</div>
+  <div class="meta">
+    <span>Updated: Apr 20, 2026 — Launch Day Morning</span>
+    <span>Launch: TODAY</span>
+    <span>world-pulse.io</span>
+  </div>
+</div>
+
+<!-- COUNTDOWN -->
+<div class="section" style="text-align: center;">
+  <div class="countdown">LAUNCH DAY</div>
+  <div class="countdown-label">WorldPulse is LIVE — world-pulse.io</div>
+</div>
+
+<!-- OVERALL PROGRESS -->
+<div class="section">
+  <h2>Overall Launch Readiness</h2>
+  <div class="progress-wrap">
+    <div class="progress-bar-bg">
+      <div class="progress-bar-fill" style="width: 94%; background: linear-gradient(90deg, var(--green), var(--accent));">94%</div>
     </div>
-    <div class="card stat-card">
-      <div class="card-title">Sprint Progress</div>
-      <div class="stat-value" style="color: var(--green);">100%</div>
-      <div class="stat-label">All Issues Resolved</div>
-      <div class="progress-wrap" style="margin-top: 10px;">
-        <div class="progress-bar-bg"><div class="progress-bar-fill" style="width: 100%; background: linear-gradient(90deg, var(--green), #4ade80);"></div></div>
-        <div class="progress-label"><span>7 of 7 done</span><span>Apr 20</span></div>
-      </div>
-    </div>
-    <div class="card stat-card" style="border-color: rgba(34,197,94,.3); background: rgba(34,197,94,.04);">
-      <div class="card-title">P0 Blockers</div>
-      <div class="stat-value" style="color: var(--green);">0</div>
-      <div class="stat-label">All prod bugs fixed Apr 15-18</div>
-      <div class="stat-sub" style="color: var(--green);">13 bugs squashed across 2 sessions</div>
-    </div>
-    <div class="card stat-card" style="border-color: rgba(34,197,94,.2); background: rgba(34,197,94,.03);">
-      <div class="card-title">Production</div>
-      <div class="stat-value" style="color: var(--green);">LIVE</div>
-      <div class="stat-label">api.world-pulse.io</div>
-      <div class="stat-sub" style="color: var(--green); font-size: 11px;">GA tracking · CSP updated · 7 deploys today</div>
+    <div class="progress-label">
+      <span>85 of 90 tasks completed</span>
+      <span>5 remaining (0 critical)</span>
     </div>
   </div>
 
-  <!-- SIGNAL GROWTH CHART -->
-  <div class="chart-container">
-    <div class="chart-header">
-      <div>
-        <div class="chart-title">Signal Growth — From Zero to 50K in 22 Days</div>
-        <div class="chart-subtitle">Actual ingestion data from scraper pipeline · 300+ sources active · Crossing 50K overnight</div>
-      </div>
-      <div class="chart-legend">
-        <div class="legend-item"><div class="legend-line" style="background: var(--cyan);"></div>Actual signals</div>
-        <div class="legend-item"><div class="legend-line-dashed" style="border-color: var(--green);"></div>Projected (300 src)</div>
-        <div class="legend-item"><div class="legend-line-dashed" style="border-color: var(--purple);"></div>Projected (500+ src)</div>
-      </div>
+  <div class="kpi-grid">
+    <div class="kpi"><div class="number green">85</div><div class="label">Tasks Done</div></div>
+    <div class="kpi"><div class="number amber">5</div><div class="label">Remaining</div></div>
+    <div class="kpi"><div class="number blue">65,083</div><div class="label">Signals Live</div></div>
+    <div class="kpi"><div class="number purple">300+</div><div class="label">Sources</div></div>
+    <div class="kpi"><div class="number green">178</div><div class="label">Active Feeds</div></div>
+  </div>
+</div>
+
+<!-- WORKSTREAM BREAKDOWN -->
+<div class="section">
+  <h2>Workstream Status</h2>
+
+  <!-- Product & Infrastructure -->
+  <div class="ws-card">
+    <div class="ws-header">
+      <div class="ws-title">Product & Infrastructure</div>
+      <span class="tag tag-green">98% Complete</span>
     </div>
-    <div class="chart-canvas-wrap"><canvas id="growthChart"></canvas></div>
-    <div class="milestones">
-      <div class="milestone">
-        <div class="milestone-date">Mar 27</div>
-        <div class="milestone-val" style="color: var(--text3);">0</div>
-        <div class="milestone-label">Project start</div>
-      </div>
-      <div class="milestone">
-        <div class="milestone-date">Apr 5</div>
-        <div class="milestone-val" style="color: var(--cyan);">2,830</div>
-        <div class="milestone-label">DB recovery complete</div>
-      </div>
-      <div class="milestone">
-        <div class="milestone-date">Apr 12</div>
-        <div class="milestone-val" style="color: var(--cyan);">5,304</div>
-        <div class="milestone-label">Route fixes deployed</div>
-      </div>
-      <div class="milestone">
-        <div class="milestone-date">Apr 15</div>
-        <div class="milestone-val" style="color: var(--cyan);">18,906</div>
-        <div class="milestone-label">41 sources added</div>
-      </div>
-      <div class="milestone" style="border-color: var(--amber); background: rgba(245,158,11,.06);">
-        <div class="milestone-date" style="color: var(--amber);">Apr 18 — Today</div>
-        <div class="milestone-val" style="color: var(--amber);">47,887</div>
-        <div class="milestone-label">GA live · 7 bugs fixed</div>
-      </div>
-      <div class="milestone" style="border-color: rgba(34,197,94,.3); background: rgba(34,197,94,.04);">
-        <div class="milestone-date" style="color: var(--green);">Apr 20 — Launch</div>
-        <div class="milestone-val" style="color: var(--green);">50K+</div>
-        <div class="milestone-label">Public launch target</div>
-      </div>
+    <div class="ws-bar"><div class="ws-bar-fill" style="width: 98%; background: var(--green);"></div></div>
+    <div class="ws-items">
+      <span class="done">&#10003; Emoji removal (all pages)</span> &middot;
+      <span class="done">&#10003; Signal detail 500 fix</span> &middot;
+      <span class="done">&#10003; Schema drift resolved</span> &middot;
+      <span class="done">&#10003; Sanctions seed fallback</span> &middot;
+      <span class="done">&#10003; Source expansion (178 feeds)</span> &middot;
+      <span class="done">&#10003; Deploy pipeline (deploy-bg.ps1)</span> &middot;
+      <span class="done">&#10003; Money-back guarantee removed</span> &middot;
+      <span class="done">&#10003; DB recovery + migrations</span> &middot;
+      <span class="done">&#10003; PULSE AI Bureau live</span> &middot;
+      <span class="done">&#10003; Feed 500 fix deployed</span> &middot;
+      <span class="done">&#10003; Breaking banner removed</span> &middot;
+      <span class="done">&#10003; Briefing page upgraded</span> &middot;
+      <span class="done">&#10003; Stripe keys rotated</span> &middot;
+      <span class="done">&#10003; Deploy pipeline stable</span><br>
+      <span class="done">&#10003; Scraper status → Operational</span> &middot;
+      <span class="done">&#10003; PULSE emoji cleanup</span> &middot;
+      <span class="pending">&#9679; Cache prime endpoints</span>
     </div>
   </div>
 
-  <!-- MAIN GRID -->
-  <div class="grid-main">
-    <div class="grid-left">
-
-      <!-- APRIL 18 SESSION -->
-      <div class="card" style="border-color: rgba(34,197,94,.3); background: rgba(34,197,94,.04);">
-        <div class="card-title">Pre-Launch Bug Fix Session · April 18 — 7 FIXES DEPLOYED</div>
-        <div style="font-size:12px; color:var(--text2); margin-bottom:14px;">Final pre-launch polish: fixed signal detail pages, sidebar navigation, claims endpoint, commodity flow parser, country page display, and integrated Google Analytics with CSP fixes.</div>
-        <div class="issue-section" style="margin-bottom:0;">
-          <div class="issue-section-header">Code Fixes — ALL DEPLOYED<span class="issue-section-badge badge-green">7/7</span></div>
-
-          <div class="issue-row" style="opacity:0.85;">
-            <div class="dot-done"></div>
-            <div class="issue-body">
-              <div class="issue-id">FIX-SIGNAL-404</div>
-              <div class="issue-title">Signal detail 404 — source_ids UUID/text[] mismatch cast fix</div>
-              <div class="issue-meta"><span class="tag" style="background:rgba(34,197,94,.08);color:var(--green);">signals.ts · ::text cast</span></div>
-              <div style="font-size:11px; color:var(--text3); margin-top:4px;">Root cause: <code>WHERE s2.id = ANY(s.source_ids)</code> — UUID vs text[]. Fixed to <code>::text</code> cast on both sides.</div>
-            </div>
-            <div class="issue-right"><span class="issue-priority" style="color:var(--green);">LIVE</span></div>
-          </div>
-
-          <div class="issue-row" style="opacity:0.85;">
-            <div class="dot-done"></div>
-            <div class="issue-body">
-              <div class="issue-id">FIX-SIDEBAR</div>
-              <div class="issue-title">Sidebar nav — removed Live Cameras, added Audio/Video Claims, fixed i18n keys</div>
-              <div class="issue-meta"><span class="tag" style="background:rgba(34,197,94,.08);color:var(--green);">LeftSidebar.tsx + 10 locale files</span></div>
-              <div style="font-size:11px; color:var(--text3); margin-top:4px;">Added waterSecurity, laborRights, claims, audioClaims, videoClaims to all locale JSON files.</div>
-            </div>
-            <div class="issue-right"><span class="issue-priority" style="color:var(--green);">LIVE</span></div>
-          </div>
-
-          <div class="issue-row" style="opacity:0.85;">
-            <div class="dot-done"></div>
-            <div class="issue-body">
-              <div class="issue-id">FIX-CLAIMS-500</div>
-              <div class="issue-title">Claims 500 — corrected SQL columns in crossReferenceClaim()</div>
-              <div class="issue-meta"><span class="tag" style="background:rgba(34,197,94,.08);color:var(--green);">claims.ts</span></div>
-              <div style="font-size:11px; color:var(--text3); margin-top:4px;"><code>s.url→original_urls[1]</code>, <code>s.content→body</code>, <code>s.source_id→source_ids</code> with cast, inline tsvector.</div>
-            </div>
-            <div class="issue-right"><span class="issue-priority" style="color:var(--green);">LIVE</span></div>
-          </div>
-
-          <div class="issue-row" style="opacity:0.85;">
-            <div class="dot-done"></div>
-            <div class="issue-body">
-              <div class="issue-id">FIX-COMMODITY</div>
-              <div class="issue-title">Commodity flows "Unknown → World, $0" — new parser regex + 25 seed flows</div>
-              <div class="issue-meta"><span class="tag" style="background:rgba(34,197,94,.08);color:var(--green);">trade.ts · UN Comtrade data</span></div>
-              <div style="font-size:11px; color:var(--text3); margin-top:4px;">Old regex expected "Alert:" format but scraper uses arrow. Added USD parsing with B/M/K multipliers + seed fallback.</div>
-            </div>
-            <div class="issue-right"><span class="issue-priority" style="color:var(--green);">LIVE</span></div>
-          </div>
-
-          <div class="issue-row" style="opacity:0.85;">
-            <div class="dot-done"></div>
-            <div class="issue-body">
-              <div class="issue-id">FIX-COUNTRY-FLAGS</div>
-              <div class="issue-title">Country Intel — removed broken flag emojis and stale country codes</div>
-              <div class="issue-meta"><span class="tag" style="background:rgba(34,197,94,.08);color:var(--green);">countries/page.tsx</span></div>
-            </div>
-            <div class="issue-right"><span class="issue-priority" style="color:var(--green);">LIVE</span></div>
-          </div>
-
-          <div class="issue-row" style="opacity:0.85;">
-            <div class="dot-done"></div>
-            <div class="issue-body">
-              <div class="issue-id">FIX-GA</div>
-              <div class="issue-title">Google Analytics G-VS98QLC4B5 integrated — Stream ID 14393745957</div>
-              <div class="issue-meta"><span class="tag" style="background:rgba(34,197,94,.08);color:var(--green);">layout.tsx · afterInteractive</span></div>
-            </div>
-            <div class="issue-right"><span class="issue-priority" style="color:var(--green);">LIVE</span></div>
-          </div>
-
-          <div class="issue-row" style="opacity:0.85;">
-            <div class="dot-done"></div>
-            <div class="issue-body">
-              <div class="issue-id">FIX-CSP</div>
-              <div class="issue-title">CSP blocking GA — middleware.ts overriding next.config.mjs headers</div>
-              <div class="issue-meta"><span class="tag" style="background:rgba(34,197,94,.08);color:var(--green);">middleware.ts + next.config.mjs</span></div>
-              <div style="font-size:11px; color:var(--text3); margin-top:4px;">script-src + connect-src + img-src all needed GA domains whitelisted in BOTH config files.</div>
-            </div>
-            <div class="issue-right"><span class="issue-priority" style="color:var(--green);">LIVE</span></div>
-          </div>
-
-        </div>
-      </div>
-
-      <!-- PREVIOUS SESSIONS (collapsed) -->
-      <div class="card" style="opacity:0.6;">
-        <div class="card-title">Previous: Prod Bug Fix Session · April 15 — 6 FIXES + DB MIGRATION</div>
-        <div style="font-size:11px; color:var(--text3); line-height:1.6;">OpenSanctions ?? → || fix, space-weather ::text[] cast, ReliefWeb URL fix, --no-cache deploy. DB migration: 4 new enums, source_ids→text[], alert_tier, developer_webhooks. EU sanctions null safety. NWS title overflow migration. 41 new RSS sources (108→149). deploy-bg.ps1 hardened.</div>
-      </div>
-      <div class="card" style="opacity:0.5;">
-        <div class="card-title">Previous: API Route Fixes · April 12 — 16 routes + 2 web components</div>
-        <div style="font-size:11px; color:var(--text3); line-height:1.6;">16 API route files fixed. Signal detail 404. Clusters camelCase→snake_case. LeftSidebar null bytes. CommandPalette restored. Deploy pipeline hardened with setsid+nohup.</div>
-      </div>
-      <div class="card" style="opacity:0.5;">
-        <div class="card-title">Launch Sprint · BAT Issues — ALL 12+ COMPLETE</div>
-        <div style="font-size:11px; color:var(--text3); line-height:1.7; display:grid; grid-template-columns:1fr 1fr; gap:4px 16px;">
-          <div>BAT-13: Wind Particle Flow</div><div>BAT-14: Time Slider</div>
-          <div>BAT-15: Map Permalinks</div><div>BAT-16: Density Heatmaps</div>
-          <div>BAT-17: Search → Meilisearch</div><div>BAT-18: Live Counter + WS</div>
-          <div>BAT-19: Communities data</div><div>Stripe Pro $12/mo</div>
-          <div>Pricing page</div><div>API docs + WebSocket</div>
-          <div>Settings + auth fixes</div><div style="color:var(--green);">All shipped</div>
-        </div>
-      </div>
-
-      <!-- LAUNCH GATES — MOVED DOWN -->
-      <div class="card" style="border-color: rgba(34,197,94,.2); background: linear-gradient(135deg, #0a1512 0%, #111118 100%);">
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 16px;">
-          <div>
-            <div class="card-title" style="margin-bottom:4px;">Launch Gates — ALL 6 CLEARED</div>
-            <div style="font-size:11px; color:var(--text3);">Gate 1 Day 22/14 PASSED · Scraper uptime 12d+ · 47,887+ signals · 300+ sources</div>
-          </div>
-          <div style="text-align:right;">
-            <div style="font-size:28px; font-weight:800; color:var(--green);">6<span style="color:var(--text3);font-size:18px;">/6</span></div>
-            <div style="font-size:10px; color:var(--text3); text-transform:uppercase; letter-spacing:1px;">Gates Cleared</div>
-          </div>
-        </div>
-        <div style="display:grid; grid-template-columns: repeat(2,1fr); gap:8px;">
-          <div class="gate-mini"><div class="gate-num">1</div><div class="gate-text">Scraper stable 14+ days — Day 22</div><div class="gate-check">PASSED</div></div>
-          <div class="gate-mini"><div class="gate-num">2</div><div class="gate-text">Map rendering &lt;3s latency</div><div class="gate-check">PASSED</div></div>
-          <div class="gate-mini"><div class="gate-num">3</div><div class="gate-text">Search &lt;200ms p95</div><div class="gate-check">PASSED</div></div>
-          <div class="gate-mini"><div class="gate-num">4</div><div class="gate-text">Auth system verified</div><div class="gate-check">PASSED</div></div>
-          <div class="gate-mini"><div class="gate-num">5</div><div class="gate-text">Load test passed</div><div class="gate-check">PASSED</div></div>
-          <div class="gate-mini"><div class="gate-num">6</div><div class="gate-text">Security audit cleared</div><div class="gate-check">PASSED</div></div>
-        </div>
-      </div>
-
+  <!-- GitHub & Open Source -->
+  <div class="ws-card">
+    <div class="ws-header">
+      <div class="ws-title">GitHub & Open Source Readiness</div>
+      <span class="tag tag-green">100% Complete</span>
     </div>
+    <div class="ws-bar"><div class="ws-bar-fill" style="width: 100%; background: var(--green);"></div></div>
+    <div class="ws-items">
+      <span class="done">&#10003; Git history rewritten (sole author)</span> &middot;
+      <span class="done">&#10003; Co-Authored-By lines removed</span> &middot;
+      <span class="done">&#10003; Internal automation files purged</span> &middot;
+      <span class="done">&#10003; CODE_OF_CONDUCT.md</span> &middot;
+      <span class="done">&#10003; SECURITY.md</span> &middot;
+      <span class="done">&#10003; Issue templates (bug, feature, new source)</span> &middot;
+      <span class="done">&#10003; PR template</span> &middot;
+      <span class="done">&#10003; README overhaul</span> &middot;
+      <span class="done">&#10003; Force push to remote</span> &middot;
+      <span class="done">&#10003; Good first issues created</span>
+    </div>
+  </div>
 
-    <!-- RIGHT COLUMN -->
-    <div class="grid-right">
+  <!-- Marketing Content -->
+  <div class="ws-card">
+    <div class="ws-header">
+      <div class="ws-title">Marketing Content</div>
+      <span class="tag tag-green">85% Complete</span>
+    </div>
+    <div class="ws-bar"><div class="ws-bar-fill" style="width: 85%; background: var(--green);"></div></div>
+    <div class="ws-items">
+      <span class="done">&#10003; HN Show post drafted</span> &middot;
+      <span class="done">&#10003; X/Twitter launch thread drafted</span> &middot;
+      <span class="done">&#10003; LinkedIn founder post drafted</span> &middot;
+      <span class="done">&#10003; Reddit r/OSINT post drafted</span> &middot;
+      <span class="done">&#10003; Competitive + SEO battlecard</span> &middot;
+      <span class="done">&#10003; Brand voice guidelines</span> &middot;
+      <span class="done">&#10003; Campaign brief + 7-day calendar</span> &middot;
+      <span class="done">&#10003; Product Hunt listing</span> &middot;
+      <span class="done">&#10003; Press pitch email</span> &middot;
+      <span class="done">&#10003; Reddit r/selfhosted</span> &middot;
+      <span class="done">&#10003; Reddit r/geopolitics</span> &middot;
+      <span class="done">&#10003; Reddit r/opensource</span> &middot;
+      <span class="done">&#10003; Platform screenshots</span><br>
+      <span class="pending">&#9679; Evening social media blitz (5PM ET)</span> &middot;
+      <span class="pending">&#9679; Building WorldPulse blog post</span> &middot;
+      <span class="pending">&#9679; Demo video (60-90s)</span>
+    </div>
+  </div>
 
-      <div class="card">
-        <div class="card-title">Infrastructure · 142.93.71.102</div>
-        <div class="infra-row"><div class="infra-name">API (wp_api)</div><div class="infra-status ok"><div class="status-dot"></div>Healthy</div></div>
-        <div class="infra-row"><div class="infra-name">Web (wp_web)</div><div class="infra-status ok"><div class="status-dot"></div>Running · GA active</div></div>
-        <div class="infra-row"><div class="infra-name">Database</div><div class="infra-status ok"><div class="status-dot"></div>16ms</div></div>
-        <div class="infra-row"><div class="infra-name">Redis</div><div class="infra-status ok"><div class="status-dot"></div>18ms</div></div>
-        <div class="infra-row"><div class="infra-name">Meilisearch</div><div class="infra-status ok"><div class="status-dot"></div>102ms</div></div>
-        <div class="infra-row"><div class="infra-name">Scraper</div><div class="infra-status ok"><div class="status-dot"></div>Running · 12d+</div></div>
-        <div class="infra-row"><div class="infra-name">WebSocket</div><div class="infra-status ok"><div class="status-dot"></div>Active</div></div>
-        <div class="infra-row"><div class="infra-name">Google Analytics</div><div class="infra-status ok"><div class="status-dot"></div>Tracking</div></div>
-      </div>
+  <!-- Launch Docs & Strategy -->
+  <div class="ws-card">
+    <div class="ws-header">
+      <div class="ws-title">Launch Docs & Strategy</div>
+      <span class="tag tag-green">100% Complete</span>
+    </div>
+    <div class="ws-bar"><div class="ws-bar-fill" style="width: 100%; background: var(--green);"></div></div>
+    <div class="ws-items">
+      <span class="done">&#10003; Master roadmap (4-day plan)</span> &middot;
+      <span class="done">&#10003; Campaign plan (5-day runbook)</span> &middot;
+      <span class="done">&#10003; Competitive SEO battlecard</span> &middot;
+      <span class="done">&#10003; Brand voice guidelines</span> &middot;
+      <span class="done">&#10003; Design critique checklist</span> &middot;
+      <span class="done">&#10003; Performance baseline + targets</span> &middot;
+      <span class="done">&#10003; User research plan</span> &middot;
+      <span class="done">&#10003; Launch index</span> &middot;
+      <span class="done">&#10003; Internal docs cleaned of AI references</span>
+    </div>
+  </div>
 
-      <div class="card">
-        <div class="card-title">Route Health Matrix</div>
-        <div class="route-grid">
-          <div class="route-item"><div class="route-dot green"></div><span>/ Home</span></div>
-          <div class="route-item"><div class="route-dot green"></div><span>/search</span></div>
-          <div class="route-item"><div class="route-dot green"></div><span>/analytics</span></div>
-          <div class="route-item"><div class="route-dot green"></div><span>/developers</span></div>
-          <div class="route-item"><div class="route-dot green"></div><span>/settings</span></div>
-          <div class="route-item"><div class="route-dot green"></div><span>/alerts</span></div>
-          <div class="route-item"><div class="route-dot green"></div><span>/finance</span></div>
-          <div class="route-item"><div class="route-dot green"></div><span>/briefing</span></div>
-          <div class="route-item"><div class="route-dot green"></div><span>/status</span></div>
-          <div class="route-item"><div class="route-dot green"></div><span>/map</span></div>
-          <div class="route-item"><div class="route-dot green"></div><span>/claims</span></div>
-          <div class="route-item"><div class="route-dot green"></div><span>/audio-claims</span></div>
-          <div class="route-item"><div class="route-dot green"></div><span>/video-claims</span></div>
-          <div class="route-item"><div class="route-dot green"></div><span>/countries</span></div>
-          <div class="route-item"><div class="route-dot green"></div><span>/sanctions</span></div>
-          <div class="route-item"><div class="route-dot green"></div><span>/signals/:id</span></div>
-          <div class="route-item"><div class="route-dot green"></div><span>/space-weather</span></div>
-          <div class="route-item"><div class="route-dot green"></div><span>/communities</span></div>
-          <div class="route-item"><div class="route-dot amber"></div><span>/clusters</span></div>
-        </div>
-        <div style="font-size:11px; color:var(--text3); margin-top:14px; padding:10px; background:var(--surface2); border-radius:8px; border-left:2px solid var(--green);">
-          <span style="color:var(--green);">18/19 routes verified green.</span> Clusters auto-populates with signal density.
-        </div>
-      </div>
+  <!-- Automation & Monitoring -->
+  <div class="ws-card">
+    <div class="ws-header">
+      <div class="ws-title">Automation & Monitoring</div>
+      <span class="tag tag-green">95% Complete</span>
+    </div>
+    <div class="ws-bar"><div class="ws-bar-fill" style="width: 95%; background: var(--green);"></div></div>
+    <div class="ws-items">
+      <span class="done">&#10003; Scheduled: daily reflection (8am)</span> &middot;
+      <span class="done">&#10003; Scheduled: weekly competitor watch (Mon 9am)</span> &middot;
+      <span class="done">&#10003; Scheduled: HN snapshot (Apr 20)</span> &middot;
+      <span class="done">&#10003; Scheduled: 6h health pulse</span> &middot;
+      <span class="done">&#10003; Deploy-bg.ps1 background deploy</span> &middot;
+      <span class="done">&#10003; Scraper pipeline stable</span> &middot;
+      <span class="done">&#10003; PULSE scheduler (flash briefs 5m, briefings 3x/day, agent scans 2h)</span> &middot;
+      <span class="done">&#10003; PULSE AI Bureau generating content autonomously</span><br>
+      <span class="pending">&#9679; API 5xx alerting</span>
+    </div>
+  </div>
 
-      <div class="card">
-        <div class="card-title">Signal Database</div>
-        <div class="session-stat"><span>Total Signals</span><span class="session-val" style="font-size:16px;">47,887</span></div>
-        <div class="session-stat"><span>Active Sources</span><span class="session-val">300+</span></div>
-        <div class="session-stat"><span>Growth (3 days)</span><span class="session-val">+28,981</span></div>
-        <div class="session-stat"><span>Scraper Uptime</span><span class="session-val">12d+</span></div>
-        <div class="session-stat"><span>Gate 1 Status</span><span class="session-val" style="color:var(--green);">Day 22/14</span></div>
-        <div class="session-stat"><span>Google Analytics</span><span class="session-val" style="color:var(--green);">LIVE</span></div>
-        <div style="margin-top:14px; padding:10px; background:var(--surface2); border-radius:8px; border-left:2px solid var(--cyan);">
-          <div style="font-size:11px; color:var(--text2); line-height:1.5;">
-            <strong>Trajectory:</strong> 0 → 2.8K → 5.3K → 18.9K → 47.9K. Crossing 50K overnight before launch.
-          </div>
-        </div>
-      </div>
-
-      <div class="card" style="border-color: rgba(245,158,11,.3); background: rgba(245,158,11,.05);">
-        <div class="card-title">Next Actions</div>
-        <div style="display:flex; flex-direction:column; gap:10px;">
-          <div style="padding:10px; background:var(--surface2); border-radius:8px; border-left:3px solid var(--red);">
-            <div style="font-size:11px; font-weight:700; color:var(--red); margin-bottom:4px;">1. Rotate secrets before repo goes public</div>
-            <div style="font-size:11px; color:var(--text3);">Stripe rk_live_, whsec, JWT_SECRET in .env.prod before Apr 20.</div>
-          </div>
-          <div style="padding:10px; background:var(--surface2); border-radius:8px; border-left:3px solid var(--amber);">
-            <div style="font-size:11px; font-weight:700; color:var(--amber); margin-bottom:4px;">2. Verify 50K milestone</div>
-            <div style="font-size:11px; color:var(--text3);">Should cross overnight. Check morning Apr 19.</div>
-          </div>
-          <div style="padding:10px; background:var(--surface2); border-radius:8px; border-left:3px solid var(--cyan);">
-            <div style="font-size:11px; font-weight:700; color:var(--cyan); margin-bottom:4px;">3. Final smoke test phone + desktop</div>
-            <div style="font-size:11px; color:var(--text3);">All routes, GA tracking, mobile bottom nav.</div>
-          </div>
-          <div style="padding:10px; background:var(--surface2); border-radius:8px; border-left:3px solid var(--text3);">
-            <div style="font-size:11px; font-weight:700; color:var(--text2); margin-bottom:4px;">4. Pre-launch ops checklist</div>
-            <div style="font-size:11px; color:var(--text3);">DNS/SSL, backup crons, scraper CPU, HSTS preload.</div>
-          </div>
-        </div>
-      </div>
-
+  <!-- PULSE AI Bureau -->
+  <div class="ws-card">
+    <div class="ws-header">
+      <div class="ws-title">PULSE AI Bureau</div>
+      <span class="tag tag-green">100% Complete</span>
+    </div>
+    <div class="ws-bar"><div class="ws-bar-fill" style="width: 100%; background: var(--green);"></div></div>
+    <div class="ws-items">
+      <span class="done">&#10003; 11-agent system deployed</span> &middot;
+      <span class="done">&#10003; Flash briefs every 5 min</span> &middot;
+      <span class="done">&#10003; Daily briefings 7am/1pm/7pm ET</span> &middot;
+      <span class="done">&#10003; Agent beat scans every 2h</span> &middot;
+      <span class="done">&#10003; Dual-LLM (Anthropic + OpenAI)</span> &middot;
+      <span class="done">&#10003; AI Digest tab live</span> &middot;
+      <span class="done">&#10003; Daily Briefing page live</span> &middot;
+      <span class="done">&#10003; Social syndication pipeline</span> &middot;
+      <span class="done">&#10003; Content queue system</span> &middot;
+      <span class="done">&#10003; Fact-checker agent active</span>
     </div>
   </div>
 </div>
 
-<!-- CHART SCRIPT -->
-<script>
-(function() {
-  const canvas = document.getElementById('growthChart');
-  const dpr = window.devicePixelRatio || 1;
-  const rect = canvas.parentElement.getBoundingClientRect();
-  const W = rect.width;
-  const H = 400;
-  canvas.width = W * dpr;
-  canvas.height = H * dpr;
-  canvas.style.width = W + 'px';
-  canvas.style.height = H + 'px';
-  const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr);
+<!-- GATE CHECKS -->
+<div class="section">
+  <h2>Gate Checks</h2>
+  <table>
+    <tr><th>Day</th><th>Gate 1</th><th>Gate 2</th><th>Gate 3</th><th>Status</th></tr>
+    <tr>
+      <td><strong>Day 0 (Apr 16)</strong></td>
+      <td>Rotate Stripe + JWT</td>
+      <td>Scraper healthy</td>
+      <td>Drafts written</td>
+      <td><span class="tag tag-green">PASSED</span></td>
+    </tr>
+    <tr>
+      <td><strong>Day 1 (Apr 17)</strong></td>
+      <td>Stranger gets it in 10s</td>
+      <td>Graph explorer &lt; 4s mobile</td>
+      <td>GA4 tracking live</td>
+      <td><span class="tag tag-green">PASSED</span></td>
+    </tr>
+    <tr>
+      <td><strong>Day 2 (Apr 18)</strong></td>
+      <td>15 press targets emailed</td>
+      <td>Monday social queued</td>
+      <td>Demo-ready feel</td>
+      <td><span class="tag tag-green">PASSED</span></td>
+    </tr>
+    <tr>
+      <td><strong>Day 3 (Apr 19)</strong></td>
+      <td>Nothing broke</td>
+      <td>Rested</td>
+      <td>Checklist printed</td>
+      <td><span class="tag tag-green">PASSED</span></td>
+    </tr>
+    <tr>
+      <td><strong>LAUNCH (Apr 20)</strong></td>
+      <td>Launched</td>
+      <td>PULSE Live</td>
+      <td>Signals &gt;60K</td>
+      <td><span class="tag tag-green">PASSED</span></td>
+    </tr>
+  </table>
+</div>
 
-  const pad = { t: 50, b: 50, l: 70, r: 30 };
-  const cW = W - pad.l - pad.r;
-  const cH = H - pad.t - pad.b;
+<!-- EVENING PUSH -->
+<div class="section">
+  <h2>Evening Push — 5:00 PM ET</h2>
 
-  const actual = [
-    { day: 0, signals: 0 },
-    { day: 9, signals: 2830 },
-    { day: 16, signals: 5304 },
-    { day: 19, signals: 18906 },
-    { day: 22, signals: 47887 },
-  ];
-  const proj300 = [
-    { day: 22, signals: 47887 },
-    { day: 24, signals: 55000 },
-    { day: 30, signals: 95000 },
-    { day: 40, signals: 200000 },
-    { day: 57, signals: 450000 },
-  ];
-  const proj500 = [
-    { day: 22, signals: 47887 },
-    { day: 24, signals: 58000 },
-    { day: 30, signals: 130000 },
-    { day: 40, signals: 350000 },
-    { day: 57, signals: 900000 },
-  ];
+  <ul class="next-actions">
+    <li>
+      <div class="pri p0">P0</div>
+      <div><strong>Push all social media content simultaneously (X, LinkedIn, Reddit, HN)</strong><br><span style="color: var(--muted); font-size: 12px;">Coordinated launch blast across all channels at 5:00 PM ET.</span></div>
+    </li>
+    <li>
+      <div class="pri p0">P0</div>
+      <div><strong>Monitor first-hour engagement metrics</strong><br><span style="color: var(--muted); font-size: 12px;">Track upvotes, stars, signups, and traffic in real time from 5-6 PM.</span></div>
+    </li>
+    <li>
+      <div class="pri p1">P1</div>
+      <div><strong>Respond to all HN comments within 30 min</strong><br><span style="color: var(--muted); font-size: 12px;">Founder presence in the thread is critical for traction. Technical, honest, concise.</span></div>
+    </li>
+    <li>
+      <div class="pri p1">P1</div>
+      <div><strong>Share to additional subreddits based on reception</strong><br><span style="color: var(--muted); font-size: 12px;">If initial posts gain traction, expand to r/dataisbeautiful, r/cybersecurity, r/netsec.</span></div>
+    </li>
+    <li>
+      <div class="pri p2">P2</div>
+      <div><strong>Draft Day 2 follow-up content based on metrics</strong><br><span style="color: var(--muted); font-size: 12px;">Prepare thank-you posts, metrics screenshots, and lessons-learned thread.</span></div>
+    </li>
+  </ul>
+</div>
 
-  const maxDay = 57;
-  const maxSig = 950000;
-  function x(d) { return pad.l + (d / maxDay) * cW; }
-  function y(s) { return pad.t + cH - (s / maxSig) * cH; }
+<!-- CONTENT STATUS MATRIX -->
+<div class="section">
+  <h2>Content Assets — Status Matrix</h2>
+  <table>
+    <tr><th>Asset</th><th>Type</th><th>Priority</th><th>Status</th></tr>
+    <tr>
+      <td><strong>HN Show post</strong><br><span style="color: var(--muted); font-size: 12px;">Title + technical first comment</span></td>
+      <td>Text</td>
+      <td><span class="tag tag-red">Must-have</span></td>
+      <td><span class="tag tag-green">Done</span></td>
+    </tr>
+    <tr>
+      <td><strong>X/Twitter launch thread</strong><br><span style="color: var(--muted); font-size: 12px;">9 tweets with hook, screenshots, CTA</span></td>
+      <td>Social</td>
+      <td><span class="tag tag-red">Must-have</span></td>
+      <td><span class="tag tag-green">Done</span></td>
+    </tr>
+    <tr>
+      <td><strong>LinkedIn founder post</strong><br><span style="color: var(--muted); font-size: 12px;">Personal narrative, professional tone</span></td>
+      <td>Social</td>
+      <td><span class="tag tag-red">Must-have</span></td>
+      <td><span class="tag tag-green">Done</span></td>
+    </tr>
+    <tr>
+      <td><strong>Reddit r/OSINT post</strong><br><span style="color: var(--muted); font-size: 12px;">Educational, leads with technical learnings</span></td>
+      <td>Social</td>
+      <td><span class="tag tag-red">Must-have</span></td>
+      <td><span class="tag tag-green">Done</span></td>
+    </tr>
+    <tr>
+      <td><strong>GitHub README</strong><br><span style="color: var(--muted); font-size: 12px;">Hero, features, quick start, architecture</span></td>
+      <td>Docs</td>
+      <td><span class="tag tag-red">Must-have</span></td>
+      <td><span class="tag tag-green">Done</span></td>
+    </tr>
+    <tr>
+      <td><strong>Competitive battlecard</strong><br><span style="color: var(--muted); font-size: 12px;">9 competitors, threat matrix, SEO clusters</span></td>
+      <td>Strategy</td>
+      <td><span class="tag tag-red">Must-have</span></td>
+      <td><span class="tag tag-green">Done</span></td>
+    </tr>
+    <tr>
+      <td><strong>Brand voice guidelines</strong><br><span style="color: var(--muted); font-size: 12px;">Voice attributes, word bank, kill list</span></td>
+      <td>Strategy</td>
+      <td><span class="tag tag-red">Must-have</span></td>
+      <td><span class="tag tag-green">Done</span></td>
+    </tr>
+    <tr>
+      <td><strong>Product Hunt listing</strong><br><span style="color: var(--muted); font-size: 12px;">Tagline, description, screenshots, maker comment</span></td>
+      <td>Listing</td>
+      <td><span class="tag tag-red">Must-have</span></td>
+      <td><span class="tag tag-green">Done</span></td>
+    </tr>
+    <tr>
+      <td><strong>Press pitch email</strong><br><span style="color: var(--muted); font-size: 12px;">Template + 10-15 journalist targets</span></td>
+      <td>Email</td>
+      <td><span class="tag tag-blue">High</span></td>
+      <td><span class="tag tag-green">Done</span></td>
+    </tr>
+    <tr>
+      <td><strong>Reddit r/selfhosted post</strong><br><span style="color: var(--muted); font-size: 12px;">Docker Compose angle, self-hosting focus</span></td>
+      <td>Social</td>
+      <td><span class="tag tag-blue">High</span></td>
+      <td><span class="tag tag-green">Done</span></td>
+    </tr>
+    <tr>
+      <td><strong>Reddit r/geopolitics post</strong><br><span style="color: var(--muted); font-size: 12px;">Data observations angle, pattern analysis</span></td>
+      <td>Social</td>
+      <td><span class="tag tag-blue">High</span></td>
+      <td><span class="tag tag-green">Done</span></td>
+    </tr>
+    <tr>
+      <td><strong>Reddit r/opensource post</strong><br><span style="color: var(--muted); font-size: 12px;">Mission angle, contribution guide, tech stack</span></td>
+      <td>Social</td>
+      <td><span class="tag tag-blue">High</span></td>
+      <td><span class="tag tag-green">Done</span></td>
+    </tr>
+    <tr>
+      <td><strong>Platform screenshots</strong><br><span style="color: var(--muted); font-size: 12px;">Map, feed, signal detail, graph, mobile</span></td>
+      <td>Visual</td>
+      <td><span class="tag tag-blue">High</span></td>
+      <td><span class="tag tag-green">Done</span></td>
+    </tr>
+    <tr>
+      <td><strong>60-90s demo video</strong><br><span style="color: var(--muted); font-size: 12px;">Screen recording, text captions</span></td>
+      <td>Video</td>
+      <td><span class="tag tag-blue">High</span></td>
+      <td><span class="tag tag-red">To do</span></td>
+    </tr>
+    <tr>
+      <td><strong>"Building WorldPulse" blog post</strong><br><span style="color: var(--muted); font-size: 12px;">Founder story + technical deep-dive</span></td>
+      <td>Content</td>
+      <td><span class="tag tag-purple">Nice-to-have</span></td>
+      <td><span class="tag tag-red">To do</span></td>
+    </tr>
+    <tr>
+      <td><strong>Data viz for r/dataisbeautiful</strong><br><span style="color: var(--muted); font-size: 12px;">Signal density map or event chart</span></td>
+      <td>Visual</td>
+      <td><span class="tag tag-purple">Nice-to-have</span></td>
+      <td><span class="tag tag-red">To do</span></td>
+    </tr>
+  </table>
+</div>
 
-  // Background
-  ctx.fillStyle = '#0a0a0f';
-  ctx.fillRect(0, 0, W, H);
+<!-- SIGNAL METRICS -->
+<div class="section">
+  <h2>Platform Metrics (Live)</h2>
+  <div class="kpi-grid">
+    <div class="kpi"><div class="number green">65,083</div><div class="label">Total Signals</div></div>
+    <div class="kpi"><div class="number green">60K+</div><div class="label">EXCEEDED</div></div>
+    <div class="kpi"><div class="number blue">178</div><div class="label">Active Feeds</div></div>
+    <div class="kpi"><div class="number purple">195</div><div class="label">Nations Covered</div></div>
+    <div class="kpi"><div class="number green">300+</div><div class="label">Total Sources</div></div>
+    <div class="kpi"><div class="number amber">25+</div><div class="label">PULSE Posts</div></div>
+  </div>
+  <div class="highlight">
+    <strong>65,000 signals exceeded — PULSE AI Bureau publishing autonomously.</strong> AI Digest live, Daily Briefings generated with OpenAI fallback. All services operational. Platform is a full-stack AI news agency. Marketing push initiated 6:38 PM.
+  </div>
+</div>
 
-  // Grid
-  ctx.strokeStyle = 'rgba(34,51,85,0.3)';
-  ctx.lineWidth = 0.5;
-  [0, 100000, 200000, 300000, 400000, 500000, 600000, 700000, 800000, 900000].forEach(v => {
-    ctx.beginPath(); ctx.moveTo(pad.l, y(v)); ctx.lineTo(W - pad.r, y(v)); ctx.stroke();
-  });
+<!-- TIMELINE -->
+<div class="section">
+  <h2>What Happened When</h2>
+  <table>
+    <tr><th>Date</th><th>Milestone</th></tr>
+    <tr><td>Apr 3-5</td><td>DB recovery from WAL corruption, schema rebuild</td></tr>
+    <tr><td>Apr 6</td><td>Source expansion: 108 &rarr; 149 RSS feeds</td></tr>
+    <tr><td>Apr 9</td><td>Stripe Pro tier + Pinecone integration</td></tr>
+    <tr><td>Apr 15</td><td>Schema drift fixed, 18,906 signals, OpenSanctions live</td></tr>
+    <tr><td>Apr 16</td><td>Full launch package: campaign plan, battlecard, brand voice, roadmap, design critique</td></tr>
+    <tr><td>Apr 16</td><td>Scheduled tasks wired: daily reflection, competitor watch, HN snapshot, health pulse</td></tr>
+    <tr><td>Apr 18 AM</td><td>Emoji removal, Lucide icon migration across all pages</td></tr>
+    <tr><td>Apr 18 PM</td><td>Git history rewrite, GitHub community standards, Day 1 content bundle, README overhaul</td></tr>
+    <tr><td>Apr 18 EVE</td><td>Money-back guarantee removed, force push to remote, 43,684 signals</td></tr>
+    <tr><td style="color: var(--green);">Apr 19 AM</td><td>Stripe key rotation + JWT_SECRET rotation complete</td></tr>
+    <tr><td style="color: var(--green);">Apr 19 PM</td><td>PULSE AI Publisher system deployed (11 agents, dual-LLM)</td></tr>
+    <tr><td style="color: var(--green);">Apr 19 EVE</td><td>PULSE database tables, scheduler started, first flash brief published</td></tr>
+    <tr><td style="color: var(--accent);">Apr 20 12:30AM</td><td>Feed 500 fix (likes/bookmarks table names), briefing page rewrite deployed</td></tr>
+    <tr><td style="color: var(--accent);">Apr 20 1:00AM</td><td>PULSE generating autonomously — flash briefs, daily briefings, AI synthesis</td></tr>
+    <tr><td>Apr 20 7:56AM</td><td>60,970 signals live, AI Digest flowing, platform ready for launch push</td></tr>
+    <tr><td style="color: var(--accent); font-weight: 700;">Apr 20 6:38PM</td><td><strong>65,083 signals. Scraper→Operational, PULSE briefings live (OpenAI fallback), emoji cleanup deployed. Marketing push initiated.</strong></td></tr>
+  </table>
+</div>
 
-  // Y labels
-  ctx.fillStyle = '#475569';
-  ctx.font = '11px -apple-system, sans-serif';
-  ctx.textAlign = 'right';
-  ctx.textBaseline = 'middle';
-  [0, 100000, 200000, 300000, 400000, 500000, 600000, 700000, 800000, 900000].forEach(v => {
-    ctx.fillText(v === 0 ? '0' : (v/1000)+'K', pad.l - 12, y(v));
-  });
-
-  // X labels
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  [
-    {d:0,l:'Mar 27'},{d:9,l:'Apr 5'},{d:16,l:'Apr 12'},{d:19,l:'Apr 15'},
-    {d:22,l:'Apr 18'},{d:24,l:'Apr 20'},{d:30,l:'Apr 26'},{d:40,l:'May 6'},
-    {d:50,l:'May 16'},{d:57,l:'May 23'}
-  ].forEach(p => {
-    ctx.fillStyle = p.d===22?'#f59e0b':p.d===24?'#22c55e':'#475569';
-    ctx.font = (p.d===22||p.d===24)?'bold 11px -apple-system, sans-serif':'11px -apple-system, sans-serif';
-    ctx.fillText(p.l, x(p.d), H - pad.b + 8);
-  });
-
-  function curve(pts, color, lw, dash, fill) {
-    if (pts.length < 2) return;
-    if (fill) {
-      ctx.beginPath();
-      ctx.moveTo(x(pts[0].day), y(pts[0].signals));
-      for (let i=1;i<pts.length;i++) {
-        const cpx = (x(pts[i-1].day)+x(pts[i].day))/2;
-        ctx.bezierCurveTo(cpx,y(pts[i-1].signals),cpx,y(pts[i].signals),x(pts[i].day),y(pts[i].signals));
-      }
-      ctx.lineTo(x(pts[pts.length-1].day), y(0));
-      ctx.lineTo(x(pts[0].day), y(0));
-      ctx.closePath();
-      ctx.fillStyle = fill;
-      ctx.fill();
-    }
-    ctx.beginPath();
-    ctx.moveTo(x(pts[0].day), y(pts[0].signals));
-    for (let i=1;i<pts.length;i++) {
-      const cpx = (x(pts[i-1].day)+x(pts[i].day))/2;
-      ctx.bezierCurveTo(cpx,y(pts[i-1].signals),cpx,y(pts[i].signals),x(pts[i].day),y(pts[i].signals));
-    }
-    ctx.strokeStyle = color; ctx.lineWidth = lw;
-    if (dash) ctx.setLineDash(dash); else ctx.setLineDash([]);
-    ctx.stroke(); ctx.setLineDash([]);
-  }
-
-  curve(proj500, 'rgba(168,85,247,0.5)', 2, [8,5], 'rgba(168,85,247,0.06)');
-  curve(proj300, 'rgba(34,197,94,0.5)', 2, [6,4], 'rgba(34,197,94,0.06)');
-  curve(actual, '#06b6d4', 3, null, 'rgba(6,182,212,0.12)');
-
-  // Launch marker
-  ctx.beginPath(); ctx.moveTo(x(24),pad.t); ctx.lineTo(x(24),H-pad.b);
-  ctx.strokeStyle='rgba(34,197,94,0.6)'; ctx.lineWidth=2; ctx.setLineDash([6,4]); ctx.stroke(); ctx.setLineDash([]);
-  ctx.fillStyle='#22c55e'; ctx.font='bold 12px -apple-system, sans-serif';
-  ctx.textAlign='center'; ctx.textBaseline='bottom';
-  ctx.fillText('LAUNCH', x(24), pad.t-6);
-
-  // Today marker
-  ctx.beginPath(); ctx.moveTo(x(22),pad.t); ctx.lineTo(x(22),H-pad.b);
-  ctx.strokeStyle='rgba(245,158,11,0.7)'; ctx.lineWidth=2; ctx.setLineDash([4,4]); ctx.stroke(); ctx.setLineDash([]);
-  ctx.fillStyle='#f59e0b'; ctx.font='bold 12px -apple-system, sans-serif';
-  ctx.fillText('TODAY', x(22), pad.t-6);
-
-  // 50K target line
-  ctx.beginPath(); ctx.moveTo(pad.l, y(50000)); ctx.lineTo(W-pad.r, y(50000));
-  ctx.strokeStyle='rgba(245,158,11,0.3)'; ctx.lineWidth=1; ctx.setLineDash([3,3]); ctx.stroke(); ctx.setLineDash([]);
-  ctx.fillStyle='rgba(245,158,11,0.5)'; ctx.font='10px -apple-system, sans-serif';
-  ctx.textAlign='left'; ctx.textBaseline='bottom';
-  ctx.fillText('50K TARGET', pad.l+4, y(50000)-3);
-
-  // Data points
-  const labels = ['0','2.8K','5.3K','18.9K','47.9K'];
-  actual.forEach((p, i) => {
-    const px=x(p.day), py=y(p.signals);
-    const isToday = i===actual.length-1;
-    if (isToday) {
-      ctx.beginPath(); ctx.arc(px,py,14,0,Math.PI*2); ctx.fillStyle='rgba(245,158,11,0.15)'; ctx.fill();
-      ctx.beginPath(); ctx.arc(px,py,9,0,Math.PI*2); ctx.fillStyle='rgba(245,158,11,0.25)'; ctx.fill();
-    }
-    ctx.beginPath(); ctx.arc(px,py,isToday?6:4,0,Math.PI*2);
-    ctx.fillStyle=isToday?'#f59e0b':'#06b6d4'; ctx.fill();
-    if (isToday) { ctx.strokeStyle='rgba(245,158,11,0.5)'; ctx.lineWidth=2; ctx.stroke(); }
-    if (p.signals > 0) {
-      ctx.fillStyle=isToday?'#f59e0b':'#94a3b8';
-      ctx.font=isToday?'bold 13px -apple-system, sans-serif':'11px -apple-system, sans-serif';
-      ctx.textAlign='center'; ctx.textBaseline='bottom';
-      ctx.fillText(labels[i], px, py-(isToday?16:10));
-    }
-  });
-})();
-</script>
-
-<!-- COUNTDOWN -->
-<script>
-  function updateCountdown() {
-    const launch = new Date('2026-04-20T00:00:00');
-    const now = new Date();
-    const diff = launch - now;
-    if (diff <= 0) {
-      ['days','hours','mins','secs'].forEach(id => document.getElementById(id).textContent = '00');
-      return;
-    }
-    document.getElementById('days').textContent = String(Math.floor(diff/86400000)).padStart(2,'0');
-    document.getElementById('hours').textContent = String(Math.floor((diff%86400000)/3600000)).padStart(2,'0');
-    document.getElementById('mins').textContent = String(Math.floor((diff%3600000)/60000)).padStart(2,'0');
-    document.getElementById('secs').textContent = String(Math.floor((diff%60000)/1000)).padStart(2,'0');
-  }
-  updateCountdown();
-  setInterval(updateCountdown, 1000);
-</script>
-
+</div>
 </body>
 </html>
