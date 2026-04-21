@@ -89,21 +89,32 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
         this
           // Editorial content (briefings, analysis) — always show
           .whereIn('p.pulse_content_type', ['daily_briefing', 'analysis', 'social_thread', 'weekly_report', 'syndicated'])
-          // Flash briefs — only if linked to quality signals
+          // Flash briefs — quality gate based on severity + reliability
+          // Two tiers: multi-source signals at lower reliability, single-source at higher
           .orWhere(function () {
             this.where('p.pulse_content_type', 'flash_brief')
               .whereIn('s.severity', ['critical', 'high'])
-              .where('s.source_count', '>=', 2)
-              .where('s.reliability_score', '>=', 0.6)
+              .where(function () {
+                // Tier 1: multi-source (corroborated) — lower reliability bar
+                this.where(function () {
+                  this.where('s.source_count', '>=', 2)
+                    .where('s.reliability_score', '>=', 0.55)
+                })
+                // Tier 2: single-source — must be high reliability + not soft category
+                .orWhere(function () {
+                  this.where('s.reliability_score', '>=', 0.75)
+                    .whereNotIn('s.category', ['culture', 'sports', 'other', 'space'])
+                })
+              })
           })
-          // Posts without a content type (legacy) — let through if signal is good
+          // Posts without a content type (legacy) — let through if signal is decent
           .orWhere(function () {
             this.whereNull('p.pulse_content_type')
               .where(function () {
                 this.whereNull('p.signal_id')  // no signal = editorial
                   .orWhere(function () {
                     this.whereIn('s.severity', ['critical', 'high'])
-                      .where('s.source_count', '>=', 2)
+                      .where('s.reliability_score', '>=', 0.65)
                   })
               })
           })
