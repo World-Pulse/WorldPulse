@@ -236,14 +236,20 @@ function adaptPulseItem(item: any): FeedItem {
     .replace(/\n*— PULSE[^\n]*$/m, '')
     .trim()
 
-  // Deduplicate consecutive identical lines (LLM sometimes echoes the headline)
-  const lines = cleanContent.split('\n')
+  // Deduplicate repeated lines (LLM echoes the headline separated by blank lines)
+  // Track all non-empty lines we've seen — skip any repeat
+  const seen = new Set<string>()
   const deduped: string[] = []
-  for (const line of lines) {
-    const trimmed = line.trim()
-    if (trimmed === '' && deduped.length > 0 && deduped[deduped.length - 1].trim() === '') continue
-    if (deduped.length > 0 && trimmed.toLowerCase() === deduped[deduped.length - 1].trim().toLowerCase()) continue
-    deduped.push(line)
+  for (const line of cleanContent.split('\n')) {
+    const key = line.trim().toLowerCase()
+    if (key === '') {
+      // Keep blank lines only if the previous output line wasn't also blank
+      if (deduped.length > 0 && deduped[deduped.length - 1].trim() === '') continue
+      deduped.push(line)
+    } else if (!seen.has(key)) {
+      seen.add(key)
+      deduped.push(line)
+    }
   }
   cleanContent = deduped.join('\n').trim()
 
