@@ -24,6 +24,8 @@ export async function runBeatAgent(agent: AgentConfig): Promise<AgentScanResult>
   let q = db('signals')
     .whereIn('status', ['verified', 'pending'])
     .where('created_at', '>', since)
+    .where('reliability_score', '>=', 0.5)  // Skip unreliable signals
+    .where('source_count', '>=', 2)         // Must have corroboration
     .orderBy('created_at', 'desc')
     .limit(50)
     .select(['id', 'title', 'summary', 'category', 'severity',

@@ -240,9 +240,10 @@ export async function generateContent(
   const hasOpenAI    = !!process.env.OPENAI_API_KEY
   const hasAnthropic = !!process.env.ANTHROPIC_API_KEY
 
-  // No keys at all — template fallback
+  // No keys at all — return empty so callers' quality gates reject it
   if (!hasOpenAI && !hasAnthropic) {
-    return { text: prompt, model: 'template', tokens: 0, durationMs: 0, provider: 'template' }
+    console.warn('[PULSE] No LLM API keys configured — cannot generate content')
+    return { text: '', model: 'template', tokens: 0, durationMs: 0, provider: 'template' }
   }
 
   // Temperature: lower for factual briefs, slightly higher for analysis
@@ -412,6 +413,25 @@ Include source counts and reliability scores in your analysis.`
   // Analysis → Anthropic (deep tier): nuanced, pattern-connecting, editorial
   const result = await generateContent(prompt, 600, 'deep')
 
+  // ── Quality gate: analysis output ───────────────────────────────────────
+  const analysisText = result.text.trim()
+  if (!analysisText || analysisText.length < 100) {
+    console.warn(`[PULSE] Analysis rejected: LLM returned empty/short output for "${topic}"`)
+    return { success: false, error: 'LLM output too short for analysis — skipping' }
+  }
+
+  // Reject if the output is just signal titles echoed back
+  const titleWords = signals.flatMap(s => s.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 3))
+  const titleWordSet = new Set(titleWords)
+  const outputWords = analysisText.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 3)
+  if (titleWordSet.size > 0 && outputWords.length > 0) {
+    const overlap = outputWords.filter(w => titleWordSet.has(w)).length
+    if (overlap / outputWords.length > 0.7) {
+      console.warn(`[PULSE] Analysis rejected: >70% word overlap with signal titles for "${topic}"`)
+      return { success: false, error: 'Analysis too similar to signal headlines — no editorial value' }
+    }
+  }
+
   return publishPost(
     `[ANALYSIS] ${topic}\n\n${result.text}\n\n— PULSE · WorldPulse AI Bureau`,
     ContentType.ANALYSIS,
@@ -507,6 +527,10 @@ ${signalList}`
 
   // Updates use OpenAI (fast) — they're shorter and more time-sensitive
   const result = await generateContent(prompt, 600, 'fast')
+
+  if (!result.text || result.text.trim().length < 50) {
+    return { success: false, error: 'LLM returned empty or insufficient briefing update content' }
+  }
 
   return publishPost(
     `[${label}] ${dateStr}\n\n${result.text}\n\n— PULSE · WorldPulse AI Bureau`,
