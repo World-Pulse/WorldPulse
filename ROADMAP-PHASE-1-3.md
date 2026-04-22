@@ -1,213 +1,179 @@
 # WorldPulse — Phase 1-3 Strategic Roadmap
 
-> "The open-source intelligence layer for a dangerous world."
+> The open-source intelligence layer for a dangerous world.
 
-**Vision:** WorldPulse becomes the platform that intelligence professionals, analysts, journalists, and informed citizens open first thing every morning — because it shows them what they need to know, scored for reliability, correlated across sources, and tailored to their world.
+**Path A** (OSINT Bloomberg) — API-first structured data for analysts, hedge funds, risk teams.
+**Path B** (Intelligence for Everyone) — Compelling reading experience for analysts, journalists, researchers.
+**Strategy:** Build A's infrastructure while wearing B's face. B is growth; A is revenue.
 
-**Strategic sequence:** Build Path A's infrastructure (OSINT Bloomberg — API, data quality, scoring) while wearing Path B's face (Intelligence for Everyone — compelling reading experience, editorial quality).
-
----
-
-## Two Core Personas
-
-### The Informed Individual
-> "Needs trusted reliable information at their fingertips, relevant to the world around them at any moment. The brain is always thinking about what's next out there — WorldPulse fills that gap and brings the world closer."
-
-**Opens WorldPulse because:** They want to understand the world better than their peers. They're tired of algorithmic noise on Twitter and shallow coverage from legacy news. They want intelligence-grade awareness without a security clearance.
-
-**Success signal:** They check WorldPulse before Twitter/X, before Reddit, before any news app. Daily habit.
-
-### The Enterprise Analyst
-> "Needs to know everything they didn't know 5 minutes before they were supposed to know it, and everything that happened while they were sleeping. Entirely tailored to their tasks, their decisions — all in one location at a moment's notice."
-
-**Opens WorldPulse because:** Their morning starts with "what changed overnight?" and WorldPulse answers that question in 60 seconds. Their boss asks "are we exposed to X?" and WorldPulse has already flagged it.
-
-**Success signal:** They can't prepare for a meeting, write a brief, or make a risk decision without checking WorldPulse first.
+**Two personas:** The Informed Individual (daily habit — checks WorldPulse before Twitter) and the Enterprise Analyst (decision support — can't prep for a meeting without it).
 
 ---
 
 ## Phase 1: Nail the Reading Experience (Now → 3 months)
 
-**North star metric:** Daily active users who return 5+ days per week.
-
-**The test:** An analyst opens WorldPulse at 7am. In 90 seconds, do they know what happened overnight, what matters most, and what's developing? If yes, they come back tomorrow.
+**North star:** DAU returning 5+ days/week.
+**The test:** Analyst opens WorldPulse at 7am → knows what happened overnight in 90 seconds → comes back tomorrow.
 
 ### 1.1 — AI Digest Quality (Sprint 1-2, weeks 1-4)
 
-The AI Digest tab is the front door. Right now it's noisy. Fix it.
-
-**Already done (Apr 21):**
-- Dynamic reliability scoring (per-signal variance)
-- Severity recalibration (sports/culture/opinion capped)
-- Corroboration threshold (single-source capped at MEDIUM)
-- Feed quality filter (tiered severity + reliability gates)
-- Category diversity cap (max 2 consecutive, 5 per page)
-- RECOMMENDATIONS section stripping
-- Markdown header stripping
-
-**Still needed:**
-- [ ] **Content deduplication in feed** — Multiple flash briefs about the same event (e.g., 5 fire alerts in Myanmar). Detect when signals reference the same underlying event and show only the highest-quality one, with a "3 related signals" collapse.
-- [ ] **Smart headline generation** — Replace raw coordinate titles ("Active Fire — 24.5°, 94.5°") with meaningful descriptions ("Major wildfire detected in Myanmar-Thailand border region"). Use location reverse-geocoding + category context.
-- [ ] **Editorial voice consistency** — Flash briefs should read like intelligence briefings, not AI-generated summaries. Establish a PULSE style guide: active voice, lead with the event, include location and significance, end with what to watch.
-- [ ] **Source attribution** — Every flash brief should show which sources corroborated the signal. "Based on 3 sources: NASA FIRMS, Myanmar Times, Reuters"
-- [ ] **Time-decay ranking** — Newer signals should rank higher, but a high-severity signal from 2 hours ago should beat a low-severity signal from 5 minutes ago. Implement a time-weighted relevance score.
+- [x] Dynamic reliability scoring (per-signal variance)
+- [x] Severity recalibration (sports/culture/opinion capped at MEDIUM)
+- [x] Corroboration threshold (single-source capped at MEDIUM)
+- [x] Feed quality filter (tiered severity + reliability gates)
+- [x] Category diversity cap (max 2 consecutive, 5 per page)
+- [x] RECOMMENDATIONS section stripping
+- [x] Markdown header stripping
+- [x] Content deduplication in feed (event fingerprinting, keeps highest-reliability signal, shows related count)
+- [x] Smart headline generation (FIRMS reverse-geocoding: "Major wildfire near Shan State, Myanmar" instead of raw coords)
+- [x] Cross-source signal dedup (6h window, title+category fingerprint, prevents duplicate coverage)
+- [x] Extended dedup TTL (1h → 24h to prevent RSS re-crawl duplicates)
+- [ ] Editorial voice consistency — PULSE style guide: active voice, lead with event, include significance, end with what to watch
+- [ ] Source attribution — Show corroborating sources: "Based on 3 sources: NASA FIRMS, Myanmar Times, Reuters"
+- [ ] Time-decay ranking — Time-weighted relevance score (2h-old CRITICAL beats 5m-old LOW)
 
 ### 1.2 — Morning Briefing (Sprint 2-3, weeks 3-6)
 
-The Daily Briefing page should be the single most valuable page on the internet at 7am.
-
-- [ ] **"What happened while you slept" section** — Automatically detect the user's timezone and surface signals that occurred during their sleeping hours (roughly 11pm-7am local). Top 5-10 most significant events.
-- [ ] **Regional focus** — Detect or let user set their region of interest. A DC analyst cares about different signals than a Singapore trader.
-- [ ] **Trend detection** — "Escalating" tags on signals that are part of a developing story (e.g., multiple signals about the same conflict zone over 48 hours). Uses the correlation engine.
-- [ ] **Executive summary** — One paragraph, 3-4 sentences, generated by PULSE: "Overnight, a 6.2 earthquake struck central Turkey with tsunami advisory issued. China-Taiwan tensions elevated after naval exercises. Three new CVEs affecting critical infrastructure published by CISA."
-- [ ] **Scheduled delivery** — Email digest at user's preferred time. Push notification for FLASH-tier signals.
+- [ ] "What happened while you slept" section — Timezone-aware, top 5-10 overnight events
+- [ ] Regional focus — User-set region of interest filters the briefing
+- [ ] Trend detection — "Escalating" tags on developing stories (correlation engine)
+- [ ] Executive summary — One paragraph, 3-4 sentences capturing the overnight picture
+- [ ] Scheduled delivery — Email digest at preferred time, push for FLASH-tier
 
 ### 1.3 — Personalization Layer (Sprint 3-5, weeks 5-10)
 
-The feed should feel like it was curated for you.
-
-- [ ] **Interest profiles** — User selects categories and regions they care about during onboarding. Stored in user preferences table.
-- [ ] **Implicit learning** — Track which signals users click, expand, and bookmark. After 50+ interactions, start weighting the feed toward their demonstrated interests.
-- [ ] **"For You" feed tab** — Personalized signal ranking based on interest profile + implicit behavior. Distinct from the "All" view.
-- [ ] **Alert rules (basic)** — "Notify me when a CRITICAL signal matches [category] in [region]". Simple keyword + category + severity rules. Email + in-app notification.
-- [ ] **Saved searches** — Users can save a filter combination (category + region + severity + keywords) and access it with one click.
+- [x] Interest profiles — Onboarding collects categories + regions, stored in users table
+- [x] Feed personalization — Interest/region-based boosting in AI Digest feed (2h time windows)
+- [ ] Implicit learning — Track clicks, expands, bookmarks; after 50+ interactions, weight feed accordingly
+- [ ] "For You" feed tab — Personalized ranking distinct from "All" view
+- [ ] Alert rules (basic) — "Notify me when CRITICAL + [category] + [region]". Email + in-app
+- [ ] Saved searches — Save filter combo, one-click access
 
 ### 1.4 — Reading Experience Polish (Sprint 4-6, weeks 7-12)
 
-- [ ] **Signal detail page redesign** — Rich context: related signals (from correlation engine), source chain, reliability breakdown, event timeline.
-- [ ] **Mobile-first optimization** — The 7am check happens on a phone. The reading experience must be exceptional on mobile.
-- [ ] **Dark mode refinement** — Current dark theme is functional. Make it beautiful. Think Bloomberg Terminal aesthetics.
-- [ ] **Loading performance** — Feed should render in <1 second. Implement skeleton loading, optimistic updates, and edge caching.
-- [ ] **Offline support** — PWA with service worker. Cache the last-loaded briefing so users can read it on a subway.
+- [ ] Signal detail page redesign — Related signals, source chain, reliability breakdown, event timeline
+- [ ] Mobile-first optimization — Exceptional reading on phone (the 7am use case)
+- [ ] Dark mode refinement — Bloomberg Terminal aesthetics
+- [ ] Loading performance — Feed renders <1s, skeleton loading, edge caching
+- [ ] Offline support — PWA with service worker, cached last briefing
 
 ### 1.5 — Data Quality Foundation (Sprint 1-6, continuous)
 
-Behind the scenes, improve the engine that powers everything.
-
-- [ ] **Geographic validation** — Cross-reference location tags against verified databases. No more "Columbine shooting → Mexico" misclassifications.
-- [ ] **Source reputation scoring** — Track accuracy over time. Sources that are frequently disputed by fact-checker should have their base reliability reduced automatically.
-- [ ] **Duplicate signal detection** — Before insert, check for title similarity (Levenshtein/cosine) against recent signals. Merge instead of creating new.
-- [ ] **FIRMS source_count fix** — source_count should mean "independent sources", not "satellite detections". Normalize across all sources.
-- [ ] **Classification accuracy tracking** — Log when users or the fact-checker dispute a classification. Use disputes to retrain the rule-based fallback patterns.
+- [x] Duplicate signal detection (cross-source event dedup before insert)
+- [ ] Geographic validation — Cross-reference location tags against verified databases
+- [ ] Source reputation scoring — Track accuracy over time, auto-reduce reliability for disputed sources
+- [ ] FIRMS source_count fix — Normalize to mean "independent sources", not "satellite detections"
+- [ ] Classification accuracy tracking — Log disputes, use to retrain rule-based patterns
 
 ---
 
 ## Phase 2: Analyst Toolkit (3-6 months)
 
-**North star metric:** Paid subscribers (Pro tier).
-
-**The test:** An analyst says "I was using Twitter lists + Google Alerts + manual RSS + a spreadsheet. Now I just use WorldPulse." If they'd pay $30/month for that, we're there.
+**North star:** Paid subscribers (Pro tier).
+**The test:** Analyst says "I used Twitter lists + Google Alerts + RSS + a spreadsheet. Now I just use WorldPulse." Worth $30/month.
 
 ### 2.1 — Custom Watchlists
 
-- [ ] **Named watchlists** — "Taiwan Strait", "Cyber Threats to Finance", "East Africa Conflict". Each is a saved filter with custom alert rules.
-- [ ] **Watchlist feed** — Dedicated feed per watchlist showing only matching signals, ordered by relevance.
-- [ ] **Watchlist briefings** — Auto-generated daily summary per watchlist. "Your 'Taiwan Strait' watchlist had 12 new signals today. 2 were HIGH severity."
-- [ ] **Shareable watchlists** — Public or team-shared watchlists with a URL. "Follow the same watchlist as [analyst]."
+- [ ] Named watchlists ("Taiwan Strait", "Cyber Threats to Finance") — saved filter + alert rules
+- [ ] Watchlist feed — Dedicated feed per watchlist, ordered by relevance
+- [ ] Watchlist briefings — Auto daily summary per watchlist
+- [ ] Shareable watchlists — Public/team-shared with URL
 
 ### 2.2 — Advanced Search
 
-- [ ] **Semantic search** — Natural language queries against the signal corpus. "Show me all signals about water scarcity in North Africa since January."
-- [ ] **Faceted filtering** — Filter by date range, category, severity, reliability, region, source, language. Combinable.
-- [ ] **Search history** — Recent searches with one-click re-run.
-- [ ] **Search-to-watchlist** — "Save this search as a watchlist" button.
+- [ ] Semantic search — Natural language queries against signal corpus
+- [ ] Faceted filtering — Date range, category, severity, reliability, region, source, language
+- [ ] Search history — Recent searches with one-click re-run
+- [ ] Search-to-watchlist — "Save this search as a watchlist"
 
 ### 2.3 — Email & Push Intelligence
 
-- [ ] **Daily digest email** — Configurable: time of delivery, categories, severity threshold, regions. Beautiful HTML email with signal cards.
-- [ ] **Weekly intelligence report** — Auto-generated 1-page PDF/email summarizing the week's most significant signals, trends, and developing stories.
-- [ ] **Real-time push alerts** — Mobile push for FLASH-tier signals matching user preferences. Must be < 60 seconds from signal ingestion.
-- [ ] **Slack/Teams integration** — Post signals to a channel. Filter by watchlist.
+- [ ] Daily digest email — Configurable time, categories, severity, regions. Beautiful HTML
+- [ ] Weekly intelligence report — Auto-generated 1-page PDF/email, trends + developing stories
+- [ ] Real-time push alerts — Mobile push for FLASH-tier matching preferences (<60s latency)
+- [ ] Slack/Teams integration — Post signals to channel, filter by watchlist
 
 ### 2.4 — Collaboration & Teams
 
-- [ ] **Team workspaces** — Shared watchlists, shared annotations, shared alert rules.
-- [ ] **Signal annotations** — Analysts can add notes to signals visible to their team. "I spoke with our contact in Ankara — this is confirmed."
-- [ ] **Assignment** — "Flag this signal for [teammate] to review."
+- [ ] Team workspaces — Shared watchlists, annotations, alert rules
+- [ ] Signal annotations — Team-visible notes on signals
+- [ ] Assignment — Flag signal for teammate review
 
 ### 2.5 — Pro Tier Monetization
 
-- [ ] **Free tier** — Full read access to public feed, 3 watchlists, basic alerts.
-- [ ] **Pro tier ($29/month)** — Unlimited watchlists, advanced search, email digests, priority alerts, team features (up to 5 members).
-- [ ] **Enterprise inquiry** — "Contact us" for custom integrations, SLA, API access, SSO.
+- [ ] Free tier — Full read access, 3 watchlists, basic alerts
+- [ ] Pro tier ($29/month) — Unlimited watchlists, advanced search, email digests, team (5 members)
+- [ ] Enterprise inquiry — Contact us for custom integrations, SLA, API, SSO
 
 ---
 
 ## Phase 3: Open the API (6-12 months)
 
-**North star metric:** API customers and revenue per customer.
-
-**The test:** A hedge fund's quant team pipes WorldPulse signal data into their risk model. A newsroom's CMS auto-generates story leads from the API. A government contractor's SOC dashboard shows WorldPulse alerts alongside their own feeds.
+**North star:** API customers and revenue per customer.
+**The test:** Hedge fund pipes signals into risk model. Newsroom CMS generates story leads. SOC dashboard shows WorldPulse alongside their feeds.
 
 ### 3.1 — Public API
 
-- [ ] **RESTful signal API** — Paginated access to signals with full metadata: category, severity, reliability, location, sources, tags, correlation data.
-- [ ] **Webhook alerts** — Push delivery of signals matching filter criteria. Configurable severity, category, region, keywords.
-- [ ] **Streaming endpoint** — WebSocket or SSE for real-time signal delivery.
-- [ ] **Bulk historical data** — Download signal archives by date range. CSV and JSON formats.
-- [ ] **Rate limiting tiers** — Free (100 req/day), Pro (10K req/day), Enterprise (custom).
+- [ ] RESTful signal API — Paginated, full metadata (category, severity, reliability, location, sources, correlation)
+- [ ] Webhook alerts — Push delivery matching filter criteria
+- [ ] Streaming endpoint — WebSocket or SSE for real-time delivery
+- [ ] Bulk historical data — Archives by date range, CSV + JSON
+- [ ] Rate limiting tiers — Free (100/day), Pro (10K/day), Enterprise (custom)
 
 ### 3.2 — API Infrastructure
 
-- [ ] **API key management** — Self-service key creation, rotation, usage dashboards.
-- [ ] **SDKs** — Python and JavaScript/TypeScript SDKs for common integration patterns.
-- [ ] **Documentation** — OpenAPI spec, interactive docs, quickstart guides, integration recipes.
-- [ ] **SLA guarantees** — 99.9% uptime, < 5 second signal delivery latency, data freshness guarantees.
+- [ ] API key management — Self-service creation, rotation, usage dashboards
+- [ ] SDKs — Python + JavaScript/TypeScript
+- [ ] Documentation — OpenAPI spec, interactive docs, quickstart guides
+- [ ] SLA guarantees — 99.9% uptime, <5s signal delivery latency
 
 ### 3.3 — Enterprise Features
 
-- [ ] **SSO/SAML** — Enterprise authentication.
-- [ ] **Audit logging** — Who accessed what, when.
-- [ ] **Custom data retention** — Enterprise customers can specify retention policies.
-- [ ] **Dedicated support** — Named account manager for $50K+ contracts.
-- [ ] **On-premise deployment** — Docker-based deployment for air-gapped environments (government buyers).
+- [ ] SSO/SAML
+- [ ] Audit logging
+- [ ] Custom data retention policies
+- [ ] Dedicated support (named account manager for $50K+ contracts)
+- [ ] On-premise deployment (Docker for air-gapped/government)
 
 ### 3.4 — API Monetization
 
-- [ ] **Developer tier (free)** — 100 signals/day, 1 webhook, community support. Attracts developers and drives adoption.
-- [ ] **Professional ($499/month)** — 50K signals/day, 10 webhooks, email support, historical data access.
-- [ ] **Enterprise ($5K-$50K/month)** — Unlimited signals, custom webhooks, SLA, dedicated support, SSO, bulk data.
+- [ ] Developer tier (free) — 100 signals/day, 1 webhook, community support
+- [ ] Professional ($499/month) — 50K signals/day, 10 webhooks, email support, historical data
+- [ ] Enterprise ($5K-$50K/month) — Unlimited, custom webhooks, SLA, SSO, bulk data
 
 ---
 
 ## Automation & Development Infrastructure
 
-### Private Repo Setup
-- Separate private repository for Phase 1-3 development
-- CI/CD pipeline for automated testing and deployment
-- Branch-per-feature workflow with automated preview environments
-
-### Brain Agent Enhancements
-- Daily codebase health audit (automated)
-- Weekly competitor monitoring (Dataminr, Recorded Future, Flashpoint, Janes, Babel Street)
-- Automated signal quality metrics dashboard
-- Performance regression detection
-- Dependency vulnerability scanning
-
-### Continuous Quality Monitoring
-- Feed quality score (automated daily audit of AI Digest content)
-- Classification accuracy tracking
-- Source health monitoring (already built)
-- User engagement metrics pipeline (PostHog integration)
-- Automated A/B testing framework for feed ranking algorithms
+- [x] Private repo (WorldPulse-v2) for Phase 1-3 development
+- [x] Source health monitoring
+- [x] Brain agent scheduled tasks (daily reflection, weekly competitor watch, health pulse)
+- [ ] CI/CD pipeline for automated testing and deployment
+- [ ] Branch-per-feature workflow with preview environments
+- [ ] Automated signal quality metrics dashboard
+- [ ] Performance regression detection
+- [ ] Dependency vulnerability scanning
+- [ ] Feed quality score (automated daily audit)
+- [ ] User engagement metrics pipeline (PostHog)
+- [ ] A/B testing framework for feed ranking
 
 ---
 
 ## Success Milestones
 
-| Milestone | Target | Timeframe |
-|-----------|--------|-----------|
-| AI Digest shows diverse, high-quality content | No single-category flooding, no garbage signals | Week 2 |
-| Morning briefing is genuinely useful | One paragraph that captures overnight events | Week 4 |
-| First external user returns 5 days in a row | Organic retention without prompting | Week 8 |
-| Personalization delivers relevant signals | User says "how did it know I care about this?" | Week 10 |
-| 100 daily active users | Organic growth from launch channels | Month 3 |
-| Pro tier launches with paying subscribers | $29/month, 3+ watchlists, email digests | Month 5 |
-| First API customer | Structured data access, webhook integration | Month 8 |
-| $1K MRR | Mix of Pro subscribers + API customers | Month 9 |
-| $10K MRR | Enterprise API contracts + growing Pro base | Month 12 |
+| Milestone | Target | Timeframe | Status |
+|-----------|--------|-----------|--------|
+| AI Digest: diverse, high-quality content | No category flooding, no garbage signals | Week 2 | ✅ Done |
+| Morning briefing genuinely useful | One paragraph capturing overnight events | Week 4 | 🔲 |
+| First external user returns 5 days straight | Organic retention | Week 8 | 🔲 |
+| Personalization delivers relevant signals | "How did it know I care about this?" | Week 10 | 🔲 |
+| 100 daily active users | Organic growth from launch channels | Month 3 | 🔲 |
+| Pro tier launches with paying subscribers | $29/month, watchlists, email digests | Month 5 | 🔲 |
+| First API customer | Structured data access, webhooks | Month 8 | 🔲 |
+| $1K MRR | Pro subscribers + API customers | Month 9 | 🔲 |
+| $10K MRR | Enterprise API + growing Pro base | Month 12 | 🔲 |
 
 ---
 
-*Last updated: April 21, 2026*
-*Phase 1 active. Sprint 1 in progress.*
+*Last updated: April 22, 2026*
+*Phase 1 active. Sprint 1 — AI Digest quality + dedup + personalization deployed.*
