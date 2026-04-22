@@ -77,9 +77,14 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
     const limit = Math.min(Number(query.limit) || 20, 50)
 
     // ── Quality-filtered PULSE feed ─────────────────────────────────────────
-    // Flash briefs must be linked to quality signals (high/critical, 2+ sources,
-    // reliability >= 0.6). Daily briefings, analysis, and other editorial content
-    // pass through unfiltered.
+    // Flash briefs pass through a tiered quality gate. Editorial content
+    // (briefings, analysis) is always shown. Category diversity is enforced
+    // post-query to prevent any single category from flooding the feed.
+    //
+    // We over-fetch (3x limit) to allow room for diversity filtering, then
+    // trim to the requested page size.
+    const overFetchLimit = limit * 3
+
     let q = db('posts as p')
       .join('users as u', 'p.author_id', 'u.id')
       .leftJoin('signals as s', 'p.signal_id', 's.id')
@@ -89,21 +94,21 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
         this
           // Editorial content (briefings, analysis) — always show
           .whereIn('p.pulse_content_type', ['daily_briefing', 'analysis', 'social_thread', 'weekly_report', 'syndicated'])
-          // Flash briefs — quality gate based on severity + reliability
-          // Two tiers: multi-source signals at lower reliability, single-source at higher
+          // Flash briefs — tiered quality gate
           .orWhere(function () {
             this.where('p.pulse_content_type', 'flash_brief')
-              .whereIn('s.severity', ['critical', 'high'])
+              .whereNotIn('s.category', ['culture', 'sports', 'other'])
               .where(function () {
-                // Tier 1: multi-source (corroborated) — lower reliability bar
+                // Tier 1: critical/high severity with decent reliability
                 this.where(function () {
-                  this.where('s.source_count', '>=', 2)
+                  this.whereIn('s.severity', ['critical', 'high'])
                     .where('s.reliability_score', '>=', 0.55)
                 })
-                // Tier 2: single-source — must be high reliability + not soft category
+                // Tier 2: medium severity from high-reliability, important sources
                 .orWhere(function () {
-                  this.where('s.reliability_score', '>=', 0.75)
-                    .whereNotIn('s.category', ['culture', 'sports', 'other', 'space'])
+                  this.where('s.severity', 'medium')
+                    .where('s.reliability_score', '>=', 0.75)
+                    .whereIn('s.category', ['conflict', 'geopolitics', 'security', 'disaster', 'health', 'economy', 'elections', 'breaking'])
                 })
               })
           })
@@ -113,14 +118,15 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
               .where(function () {
                 this.whereNull('p.signal_id')  // no signal = editorial
                   .orWhere(function () {
-                    this.whereIn('s.severity', ['critical', 'high'])
+                    this.whereIn('s.severity', ['critical', 'high', 'medium'])
                       .where('s.reliability_score', '>=', 0.65)
+                      .whereNotIn('s.category', ['culture', 'sports', 'other'])
                   })
               })
           })
       })
       .orderBy('p.created_at', 'desc')
-      .limit(limit)
+      .limit(overFetchLimit)
       .select([
         'p.id', 'p.post_type', 'p.content', 'p.media_urls', 'p.media_types',
         'p.source_url', 'p.source_name', 'p.tags', 'p.like_count',
@@ -150,7 +156,37 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
 
     // Enrichment: has the current user liked/bookmarked?
     const userId = (req as any).user?.id
-    const posts = await q
+    const rawPosts = await q
+
+    // ── Category diversity filter ─────────────────────────────────────────
+    // Prevent any single category from flooding the feed. Max 2 consecutive
+    // posts from the same category; max 5 total per category per page.
+    const MAX_CONSECUTIVE = 2
+    const MAX_PER_CATEGORY = 5
+    const categoryCounts: Record<string, number> = {}
+    let lastCategory = ''
+    let consecutiveCount = 0
+    const posts: typeof rawPosts = []
+
+    for (const post of rawPosts) {
+      if (posts.length >= limit) break
+      const cat = (post as any).signal_category ?? 'editorial'
+
+      // Track consecutive
+      if (cat === lastCategory) {
+        consecutiveCount++
+      } else {
+        consecutiveCount = 1
+        lastCategory = cat
+      }
+
+      // Skip if too many consecutive or too many total of this category
+      if (consecutiveCount > MAX_CONSECUTIVE && cat !== 'editorial') continue
+      if ((categoryCounts[cat] ?? 0) >= MAX_PER_CATEGORY && cat !== 'editorial') continue
+
+      categoryCounts[cat] = (categoryCounts[cat] ?? 0) + 1
+      posts.push(post)
+    }
 
     const items = await Promise.all(posts.map(async (post: any) => {
       let hasLiked = false
@@ -191,8 +227,15 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
-      // Strip **RECOMMENDATIONS:** section from fact-check posts
-      displayContent = displayContent.replace(/\n*\*\*RECOMMENDATIONS:?\*\*[\s\S]*$/i, '').trim()
+      // Clean up display content
+      displayContent = displayContent
+        // Strip **RECOMMENDATIONS:** section (developer notes)
+        .replace(/\n*\*\*RECOMMENDATIONS:?\*\*[\s\S]*$/i, '')
+        // Strip markdown headers like "# Summary", "# News Summary", "## Analysis"
+        .replace(/^#{1,3}\s*(News\s+)?Summary\s*\n+/im, '')
+        .replace(/^#{1,3}\s*Analysis\s*\n+/im, '')
+        .replace(/^#{1,3}\s*Intelligence\s+Brief\s*\n+/im, '')
+        .trim()
 
       return {
         id: post.id,
