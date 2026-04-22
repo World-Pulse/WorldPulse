@@ -383,6 +383,110 @@ export async function extractGeo(text: string): Promise<GeoResult> {
   return result
 }
 
+// ─── REVERSE GEOCODING (lat/lng → location name) ────────────────────────────
+// Used by FIRMS and other coordinate-based sources to generate human-readable
+// location names instead of raw coordinates like "24.5°N, 94.5°E".
+
+interface ReverseGeoResult {
+  name:        string   // Human-readable location name
+  countryCode: string | null
+  region:      string | null
+}
+
+/**
+ * Reverse-geocode coordinates into a human-readable place name.
+ * Falls back to Nominatim with Redis caching (24h TTL).
+ *
+ * @returns e.g. { name: "Shan State, Myanmar", countryCode: "MM", region: "Shan State" }
+ */
+export async function reverseGeocode(lat: number, lng: number): Promise<ReverseGeoResult> {
+  // Round to 1 decimal place for cache key (same ~10km grid as FIRMS)
+  const roundLat = Math.round(lat * 10) / 10
+  const roundLng = Math.round(lng * 10) / 10
+  const cacheKey = `revgeo:${roundLat}:${roundLng}`
+
+  const cached = await redis.get(cacheKey)
+  if (cached && cached !== 'null') {
+    return JSON.parse(cached) as ReverseGeoResult
+  }
+
+  // 1. Fast-path: check if coords are near any gazetteer city (within ~1°)
+  for (const [place, coords] of Object.entries(GAZETTEER)) {
+    const dLat = Math.abs(coords.lat - lat)
+    const dLng = Math.abs(coords.lng - lng)
+    if (dLat < 1.5 && dLng < 1.5) {
+      const result: ReverseGeoResult = {
+        name:        coords.region ? `${titleCase(place)}, ${coords.region}` : titleCase(place),
+        countryCode: coords.country,
+        region:      coords.region ?? null,
+      }
+      await redis.setex(cacheKey, 86_400, JSON.stringify(result))
+      return result
+    }
+  }
+
+  // 2. Nominatim reverse geocode
+  await throttleNominatim()
+
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${roundLat}&lon=${roundLng}&format=json&zoom=8&addressdetails=1`
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'WorldPulse/1.0 (world-pulse.io)' },
+      signal:  AbortSignal.timeout(5_000),
+    })
+
+    if (!res.ok) {
+      logger.warn({ status: res.status, lat, lng }, 'Nominatim reverse request failed')
+      await redis.setex(cacheKey, 3600, 'null')
+      return { name: `${roundLat}°N, ${roundLng}°E`, countryCode: null, region: null }
+    }
+
+    const data = await res.json() as {
+      address?: {
+        country_code?: string
+        country?:      string
+        state?:        string
+        county?:       string
+        city?:         string
+        town?:         string
+        village?:      string
+      }
+    }
+
+    const addr = data.address
+    if (!addr) {
+      await redis.setex(cacheKey, 86_400, 'null')
+      return { name: `${roundLat}°N, ${roundLng}°E`, countryCode: null, region: null }
+    }
+
+    // Build a readable name: "State/Region, Country" or "City, Country"
+    const locality = addr.city ?? addr.town ?? addr.village ?? addr.county ?? addr.state ?? ''
+    const region   = addr.state ?? addr.county ?? ''
+    const country  = addr.country ?? ''
+    const cc       = addr.country_code?.toUpperCase() ?? null
+
+    let name: string
+    if (locality && country && locality !== country) {
+      name = region && region !== locality
+        ? `${locality}, ${region}, ${country}`
+        : `${locality}, ${country}`
+    } else if (region && country) {
+      name = `${region}, ${country}`
+    } else {
+      name = country || `${roundLat}°N, ${roundLng}°E`
+    }
+
+    const result: ReverseGeoResult = { name, countryCode: cc, region: region || null }
+    await redis.setex(cacheKey, 86_400, JSON.stringify(result))
+    logger.debug({ lat: roundLat, lng: roundLng, name }, 'Reverse geocoded')
+    return result
+  } catch (err) {
+    logger.warn({ err, lat, lng }, 'Nominatim reverse lookup error')
+    await redis.setex(cacheKey, 3600, 'null')
+    return { name: `${roundLat}°N, ${roundLng}°E`, countryCode: null, region: null }
+  }
+}
+
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 function titleCase(s: string): string {
   return s.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')

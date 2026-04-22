@@ -36,6 +36,19 @@ import {
 } from '../lib/pulse/syndication'
 import { generateSignalSummary } from '../lib/signal-summary'
 
+// ─── Helpers ──────────────────────────────────────────────────────────────
+
+/** Word-level Jaccard similarity between two titles (0-1). */
+function titleWordOverlap(a: string, b: string): number {
+  const wordsA = new Set(a.split(/\s+/).filter(w => w.length > 2))
+  const wordsB = new Set(b.split(/\s+/).filter(w => w.length > 2))
+  if (wordsA.size === 0 || wordsB.size === 0) return 0
+  let intersection = 0
+  for (const w of wordsA) { if (wordsB.has(w)) intersection++ }
+  const union = new Set([...wordsA, ...wordsB]).size
+  return union > 0 ? intersection / union : 0
+}
+
 // ─── Internal auth — requires PULSE_API_KEY env var ───────────────────────
 
 function requirePulseKey(req: FastifyRequest, reply: FastifyReply, done: () => void) {
@@ -139,6 +152,7 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
         's.severity as signal_severity', 's.source_count as signal_source_count',
         's.reliability_score as signal_reliability',
         's.tags as signal_tags', 's.language as signal_language',
+        's.country_code as signal_country',
         // Author
         'u.id as author_id', 'u.handle as author_handle',
         'u.display_name as author_display_name', 'u.avatar_url as author_avatar',
@@ -158,6 +172,151 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
     const userId = (req as any).user?.id
     const rawPosts = await q
 
+    // ── Event deduplication ───────────────────────────────────────────────
+    // Multiple flash briefs can reference the same underlying event (e.g.,
+    // 5 fire alerts in Myanmar, or 3 earthquake reports from different
+    // sources). Group by event fingerprint and keep only the best signal,
+    // annotating it with "N related signals".
+    //
+    // Fingerprint: same category + similar location_name + title overlap
+    // within a 6-hour window.
+    const dedupedPosts: typeof rawPosts = []
+    const eventMap = new Map<string, { best: (typeof rawPosts)[0]; related: number }>()
+
+    for (const post of rawPosts) {
+      const p = post as any
+      // Skip editorial content — never dedup
+      if (!p.signal_id || p.pulse_content_type !== 'flash_brief') {
+        dedupedPosts.push(post)
+        continue
+      }
+
+      const cat = p.signal_category ?? 'other'
+      const loc = (p.location_name ?? '').toLowerCase().trim()
+      const title = (p.signal_title ?? '').toLowerCase()
+
+      // Build a coarse event fingerprint: category + location bucket
+      // For coordinate-based titles (FIRMS), use category + first word of location
+      // For named locations, use category + location
+      const locBucket = loc.replace(/[0-9°.,]+/g, '').trim().split(/\s+/).slice(0, 2).join(' ') || 'unknown'
+      const fingerprint = `${cat}:${locBucket}`
+
+      // Check if we already have a signal in this event bucket within 6 hours
+      const existing = eventMap.get(fingerprint)
+      if (existing) {
+        const existingTime = new Date((existing.best as any).created_at).getTime()
+        const currentTime  = new Date(p.created_at).getTime()
+        const hoursDiff    = Math.abs(existingTime - currentTime) / (1000 * 60 * 60)
+
+        // Also check title similarity — simple word overlap
+        const existingTitle = ((existing.best as any).signal_title ?? '').toLowerCase()
+        const commonWords   = titleWordOverlap(title, existingTitle)
+
+        if (hoursDiff <= 6 && (commonWords >= 0.5 || loc === ((existing.best as any).location_name ?? '').toLowerCase().trim())) {
+          existing.related++
+          // Keep the one with higher reliability, or newer if tied
+          const existingReliability = Number((existing.best as any).signal_reliability ?? 0)
+          const currentReliability  = Number(p.signal_reliability ?? 0)
+          if (currentReliability > existingReliability) {
+            existing.best = post
+          }
+          continue
+        }
+      }
+
+      eventMap.set(fingerprint, { best: post, related: 0 })
+    }
+
+    // Reassemble: editorial posts keep their positions, deduped signals fill in
+    const dedupResults = Array.from(eventMap.values())
+    for (const { best, related } of dedupResults) {
+      ;(best as any)._relatedSignals = related
+      dedupedPosts.push(best)
+    }
+    // Re-sort by created_at desc since we mixed editorial + deduped
+    dedupedPosts.sort((a: any, b: any) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
+
+    // ── Personalization boost ─────────────────────────────────────────────
+    // If the user has interests/regions stored from onboarding, boost
+    // matching signals higher in the feed. Uses a relevance score that
+    // combines time-decay with interest matching, so personal signals
+    // surface earlier without completely overriding recency.
+    if (userId) {
+      try {
+        const user = await db('users').where('id', userId).first('interests', 'regions')
+        if (user) {
+          const interests = new Set<string>(Array.isArray(user.interests) ? user.interests : [])
+          const regions   = new Set<string>(Array.isArray(user.regions) ? user.regions : [])
+
+          if (interests.size > 0 || regions.size > 0) {
+            // Category → interest mapping (signal categories to onboarding interests)
+            const categoryToInterest: Record<string, string> = {
+              conflict: 'conflict', security: 'conflict', terrorism: 'conflict',
+              geopolitics: 'geopolitics', elections: 'geopolitics', governance: 'geopolitics',
+              disaster: 'climate', environment: 'climate', climate: 'climate',
+              health: 'health', pandemic: 'health',
+              technology: 'technology', cyber: 'technology',
+              economy: 'economy', finance: 'economy', trade: 'economy',
+              science: 'science', space: 'science',
+            }
+
+            // Signal country_code → region mapping
+            const countryToRegion: Record<string, string> = {
+              US: 'North America', CA: 'North America', MX: 'North America',
+              BR: 'South America', AR: 'South America', CO: 'South America', CL: 'South America', PE: 'South America',
+              GB: 'Europe', FR: 'Europe', DE: 'Europe', IT: 'Europe', ES: 'Europe', PL: 'Europe', UA: 'Europe', NL: 'Europe', SE: 'Europe', NO: 'Europe',
+              IL: 'Middle East', IR: 'Middle East', SA: 'Middle East', AE: 'Middle East', IQ: 'Middle East', SY: 'Middle East', TR: 'Middle East', LB: 'Middle East', JO: 'Middle East', PS: 'Middle East',
+              NG: 'Africa', ZA: 'Africa', KE: 'Africa', EG: 'Africa', ET: 'Africa', SD: 'Africa', SO: 'Africa', CD: 'Africa', GH: 'Africa', SN: 'Africa',
+              IN: 'South Asia', PK: 'South Asia', BD: 'South Asia', LK: 'South Asia', AF: 'South Asia',
+              CN: 'East Asia', JP: 'East Asia', KR: 'East Asia', KP: 'East Asia', TW: 'East Asia',
+              TH: 'Southeast Asia', VN: 'Southeast Asia', ID: 'Southeast Asia', PH: 'Southeast Asia', MY: 'Southeast Asia', SG: 'Southeast Asia',
+              AU: 'Oceania', NZ: 'Oceania',
+            }
+
+            for (const post of dedupedPosts) {
+              const p = post as any
+              if (p.pulse_content_type !== 'flash_brief') continue
+
+              let boost = 0
+              const cat = p.signal_category ?? ''
+              const mappedInterest = categoryToInterest[cat]
+              if (mappedInterest && interests.has(mappedInterest)) boost += 0.3
+
+              // Region boost — check signal's country code
+              const cc = p.signal_country ?? p.country_code ?? ''
+              const mappedRegion = countryToRegion[cc]
+              if (mappedRegion && regions.has(mappedRegion)) boost += 0.2
+
+              p._personalizationBoost = boost
+            }
+
+            // Stable re-sort: within each 2-hour window, boosted signals come first
+            dedupedPosts.sort((a: any, b: any) => {
+              const timeA = new Date(a.created_at).getTime()
+              const timeB = new Date(b.created_at).getTime()
+              const windowMs = 2 * 60 * 60 * 1000 // 2-hour windows
+              const windowA = Math.floor(timeA / windowMs)
+              const windowB = Math.floor(timeB / windowMs)
+
+              // Different time windows → chronological order
+              if (windowA !== windowB) return timeB - timeA
+
+              // Same time window → boost matching interests
+              const boostA = a._personalizationBoost ?? 0
+              const boostB = b._personalizationBoost ?? 0
+              if (boostA !== boostB) return boostB - boostA
+
+              return timeB - timeA
+            })
+          }
+        }
+      } catch {
+        // Non-fatal — fall back to chronological
+      }
+    }
+
     // ── Category diversity filter ─────────────────────────────────────────
     // Prevent any single category from flooding the feed. Max 2 consecutive
     // posts from the same category; max 5 total per category per page.
@@ -168,7 +327,7 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
     let consecutiveCount = 0
     const posts: typeof rawPosts = []
 
-    for (const post of rawPosts) {
+    for (const post of dedupedPosts) {
       if (posts.length >= limit) break
       const cat = (post as any).signal_category ?? 'editorial'
 
@@ -263,6 +422,7 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
         signalSourceCount: post.signal_source_count,
         signalReliability: post.signal_reliability,
         signalCategory: post.signal_category,
+        relatedSignals: (post as any)._relatedSignals || 0,
         author: {
           id: post.author_id,
           handle: post.author_handle,

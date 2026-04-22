@@ -20,6 +20,7 @@ import { logger as rootLogger } from '../lib/logger'
 import type { SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate } from '../pipeline/insert-signal'
 import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilience'
+import { reverseGeocode } from '../pipeline/geo'
 
 const log = rootLogger.child({ module: 'firms-source' })
 
@@ -202,10 +203,27 @@ export function startFirmsPoller(
         if (seen) continue
 
         const severity = firmsSeverity(cell.frp)
-        const title    = `Active Fire — ${cell.lat.toFixed(1)}°, ${cell.lng.toFixed(1)}°`
+
+        // ── Smart headline: reverse-geocode coordinates to a real place name ──
+        let locationName = `${cell.lat.toFixed(1)}°N, ${cell.lng.toFixed(1)}°E`
+        let countryCode: string | null = null
+        let regionName: string | null = null
+        try {
+          const geo = await reverseGeocode(cell.lat, cell.lng)
+          if (geo.name && !geo.name.includes('°')) {
+            locationName = geo.name
+            countryCode  = geo.countryCode
+            regionName   = geo.region
+          }
+        } catch {
+          // Non-fatal — fall back to coordinates
+        }
+
+        const sizeDesc = cell.frp >= 500 ? 'Major' : cell.frp >= 200 ? 'Large' : cell.frp >= 50 ? 'Active' : 'Minor'
+        const title = `${sizeDesc} wildfire detected near ${locationName}`
 
         const summary = [
-          `NASA FIRMS satellite detected active fire at approximately ${cell.lat.toFixed(1)}°N, ${cell.lng.toFixed(1)}°E.`,
+          `NASA FIRMS satellite detected active fire near ${locationName}.`,
           `Fire Radiative Power: ${cell.frp.toFixed(0)} MW (${cell.count} detection(s) in grid cell).`,
           `Detection time: ${cell.acq_date} ${cell.acq_time} UTC.`,
           'Source: NASA FIRMS / NOAA-20 VIIRS.',
@@ -223,9 +241,9 @@ export function startFirmsPoller(
             source_ids:        [],
             original_urls:     ['https://firms.modaps.eosdis.nasa.gov/map/'],
             location:          db.raw('ST_MakePoint(?, ?)', [cell.lng, cell.lat]),
-            location_name:     `${cell.lat.toFixed(1)}°N, ${cell.lng.toFixed(1)}°E`,
-            country_code:      null,
-            region:            null,
+            location_name:     locationName,
+            country_code:      countryCode,
+            region:            regionName,
             tags:              ['osint', 'firms', 'fire', 'nasa', 'viirs'],
             language:          'en',
             event_time:        cell.acq_date

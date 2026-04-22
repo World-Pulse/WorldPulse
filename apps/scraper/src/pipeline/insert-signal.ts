@@ -27,6 +27,7 @@ import { correlateSignal } from './correlate'
 import type { CorrelationCandidate } from './correlate'
 import { recordSuccess } from '../health'
 import { computeReliabilityScore, maxSeverityForSourceCount } from './reliability-score'
+import { dedup } from './dedup'
 
 // ─── Alert Tier Classification (inlined — canonical in apps/api/src/lib/alert-tier.ts) ──
 const FLASH_RELIABILITY_THRESHOLD = 0.65
@@ -67,13 +68,37 @@ export async function insertAndCorrelate(
   signalData: Record<string, unknown>,
   meta: CorrelationMeta,
 ): Promise<Record<string, unknown>> {
-  // 0a. Dynamic reliability scoring — adds per-signal variance
+  // 0. Extract raw fields used throughout
   const rawSeverity  = String(signalData.severity ?? 'low')
   const rawCategory  = String(signalData.category ?? 'other')
   const sourceCount  = Number(signalData.source_count ?? 1)
   const rawSummary   = String(signalData.summary ?? '')
   const rawTitle     = String(signalData.title ?? '')
   const rawTags      = Array.isArray(signalData.tags) ? signalData.tags as string[] : []
+
+  // 0a. Cross-source event dedup — skip if a very similar signal was already
+  //     inserted within the last 6 hours. This prevents the same earthquake,
+  //     fire, or conflict report from appearing multiple times in the feed
+  //     when covered by different sources.
+  try {
+    const isDupe = await dedup.checkCrossSource(rawTitle, rawCategory)
+    if (isDupe) {
+      logger.debug({ title: rawTitle.slice(0, 80), category: rawCategory }, 'Cross-source duplicate — skipping insert')
+      // Still record source health so the source appears active
+      recordSuccess(
+        meta.sourceId,
+        meta.sourceName ?? meta.sourceId,
+        meta.sourceSlug ?? meta.sourceId,
+        undefined,
+        1,
+      ).catch(() => {})
+      return { id: null, title: rawTitle, _skipped: true } as any
+    }
+  } catch {
+    // Non-fatal — proceed with insert if dedup check fails
+  }
+
+  // 0b. Dynamic reliability scoring — adds per-signal variance
 
   const dynamicScore = computeReliabilityScore({
     baseReliability: Number(signalData.reliability_score ?? 0.5),
@@ -88,7 +113,7 @@ export async function insertAndCorrelate(
   })
   signalData.reliability_score = dynamicScore
 
-  // 0b. Corroboration threshold — cap severity for single-source signals
+  // 0c. Corroboration threshold — cap severity for single-source signals
   const maxSev = maxSeverityForSourceCount(sourceCount, rawCategory)
   const SEVERITY_RANK: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1, info: 0 }
   const MAX_RANK = SEVERITY_RANK[maxSev] ?? 4
