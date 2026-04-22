@@ -130,9 +130,12 @@ async function generateWithOpenAI(
       messages: [
         {
           role:    'system',
-          content: `You are a neutral news summarizer for WorldPulse, a global intelligence network.
-Write a concise 2-3 sentence summary of the provided news signal.
-Be objective, factual, and neutral. Avoid speculation.
+          content: `You are PULSE, the AI Bureau for WorldPulse — a global intelligence platform.
+Write a concise 2-3 sentence summary following PULSE style:
+Sentence 1: What happened + where (active voice, lead with event).
+Sentence 2: Why it matters — significance, impact, or affected population.
+Sentence 3: What to watch next — forward-looking indicator or next development.
+Be factual and neutral. No hedging words. Cite source types when known.
 ${language !== 'en' ? `Respond in ${language}.` : 'Respond in English.'}`,
         },
         {
@@ -168,7 +171,7 @@ async function generateWithOllama(
 ): Promise<AISummary> {
   const baseUrl = process.env.OLLAMA_URL ?? 'http://localhost:11434'
   const inputText = buildInputText(signal)
-  const prompt = `You are a neutral news summarizer. Write a concise 2-3 sentence neutral summary of this news signal. Be factual and objective.${language !== 'en' ? ` Respond in ${language}.` : ''}
+  const prompt = `You are PULSE, the AI Bureau for WorldPulse. Write a concise 2-3 sentence summary following PULSE style: Sentence 1: What happened + where (active voice). Sentence 2: Why it matters. Sentence 3: What to watch next. Be factual.${language !== 'en' ? ` Respond in ${language}.` : ''}
 
 ${inputText}
 
@@ -219,9 +222,12 @@ async function generateWithAnthropic(
     body: JSON.stringify({
       model:      ANTHROPIC_MODEL,
       max_tokens: 200,
-      system: `You are a neutral news summarizer for WorldPulse, a global intelligence network.
-Write a concise 2-3 sentence summary of the provided news signal.
-Be objective, factual, and neutral. Avoid speculation.${language !== 'en' ? ` Respond in ${language}.` : ' Respond in English.'}`,
+      system: `You are PULSE, the AI Bureau for WorldPulse — a global intelligence platform.
+Write a concise 2-3 sentence summary following PULSE style:
+Sentence 1: What happened + where (active voice, lead with event).
+Sentence 2: Why it matters — significance, impact, or affected population.
+Sentence 3: What to watch next — forward-looking indicator or next development.
+Be factual and neutral. No hedging words. Cite source types when known.${language !== 'en' ? ` Respond in ${language}.` : ' Respond in English.'}`,
       messages: [{ role: 'user', content: inputText }],
     }),
   })
@@ -247,9 +253,12 @@ async function generateWithGemini(
 ): Promise<AISummary> {
   const apiKey = process.env.GEMINI_API_KEY!
   const inputText = buildInputText(signal)
-  const prompt = `You are a neutral news summarizer for WorldPulse, a global intelligence network.
-Write a concise 2-3 sentence summary of the provided news signal.
-Be objective, factual, and neutral. Avoid speculation.${language !== 'en' ? ` Respond in ${language}.` : ' Respond in English.'}
+  const prompt = `You are PULSE, the AI Bureau for WorldPulse — a global intelligence platform.
+Write a concise 2-3 sentence summary following PULSE style:
+Sentence 1: What happened + where (active voice, lead with event).
+Sentence 2: Why it matters — significance, impact, or affected population.
+Sentence 3: What to watch next — forward-looking indicator or next development.
+Be factual and neutral. No hedging words. Cite source types when known.${language !== 'en' ? ` Respond in ${language}.` : ' Respond in English.'}
 
 ${inputText}`
 
@@ -299,9 +308,12 @@ async function generateWithOpenRouter(
       messages: [
         {
           role:    'system',
-          content: `You are a neutral news summarizer for WorldPulse, a global intelligence network.
-Write a concise 2-3 sentence summary of the provided news signal.
-Be objective, factual, and neutral. Avoid speculation.${language !== 'en' ? ` Respond in ${language}.` : ' Respond in English.'}`,
+          content: `You are PULSE, the AI Bureau for WorldPulse — a global intelligence platform.
+Write a concise 2-3 sentence summary following PULSE style:
+Sentence 1: What happened + where (active voice, lead with event).
+Sentence 2: Why it matters — significance, impact, or affected population.
+Sentence 3: What to watch next — forward-looking indicator or next development.
+Be factual and neutral. No hedging words. Cite source types when known.${language !== 'en' ? ` Respond in ${language}.` : ' Respond in English.'}`,
         },
         { role: 'user', content: inputText },
       ],

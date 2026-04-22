@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Inbox, FileText, Clock, MapPin, RefreshCw, Share2, Check } from 'lucide-react'
+import { Inbox, FileText, Clock, MapPin, RefreshCw, Share2, Check, Moon, TrendingUp, AlertTriangle, Globe } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,6 +41,33 @@ interface SeverityBreakdown {
   high: number
   medium: number
   low: number
+}
+
+interface MorningBriefingEvent {
+  id: string
+  title: string
+  summary: string | null
+  category: string
+  severity: string
+  reliabilityScore: number
+  sourceCount: number
+  locationName: string | null
+  countryCode: string | null
+  alertTier: string | null
+  createdAt: string
+  isEscalating: boolean
+}
+
+interface MorningBriefing {
+  date: string
+  generatedAt: string
+  timezone: string
+  overnightWindow: { start: string; end: string }
+  executiveSummary: string
+  eventCount: number
+  events: MorningBriefingEvent[]
+  escalatingStories: Array<{ category: string; region: string | null; reason: string | null }>
+  severityBreakdown: { critical: number; high: number; medium: number; low: number }
 }
 
 interface DailyBriefing {
@@ -191,6 +218,125 @@ function BriefingBody({ text }: { text: string }) {
   )
 }
 
+// ─── Morning Briefing Card ───────────────────────────────────────────────────
+
+function MorningBriefingCard({ briefing }: { briefing: MorningBriefing }) {
+  return (
+    <div className="space-y-4 mb-8">
+      {/* Executive Summary Card */}
+      <div className="bg-gradient-to-br from-zinc-900 via-zinc-900 to-indigo-950/30 border border-indigo-500/20 rounded-xl p-6">
+        <div className="flex items-center gap-2 mb-3">
+          <Moon className="w-5 h-5 text-indigo-400" />
+          <h2 className="text-lg font-bold text-zinc-100">What Happened While You Slept</h2>
+          <span className="text-xs text-zinc-500 ml-auto">
+            {briefing.timezone} &middot; {briefing.eventCount} events
+          </span>
+        </div>
+        {briefing.executiveSummary && (
+          <p className="text-sm text-zinc-300 leading-relaxed mb-4">
+            {briefing.executiveSummary}
+          </p>
+        )}
+
+        {/* Severity mini-stats */}
+        <div className="flex gap-3 text-xs">
+          {briefing.severityBreakdown.critical > 0 && (
+            <span className="inline-flex items-center gap-1 bg-red-500/10 text-red-400 border border-red-500/20 rounded-full px-2.5 py-0.5 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+              {briefing.severityBreakdown.critical} Critical
+            </span>
+          )}
+          {briefing.severityBreakdown.high > 0 && (
+            <span className="inline-flex items-center gap-1 bg-orange-500/10 text-orange-400 border border-orange-500/20 rounded-full px-2.5 py-0.5 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+              {briefing.severityBreakdown.high} High
+            </span>
+          )}
+          {briefing.severityBreakdown.medium > 0 && (
+            <span className="inline-flex items-center gap-1 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 rounded-full px-2.5 py-0.5 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
+              {briefing.severityBreakdown.medium} Medium
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Escalating Stories */}
+      {briefing.escalatingStories.length > 0 && (
+        <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <TrendingUp className="w-4 h-4 text-red-400" />
+            <span className="text-xs font-semibold text-red-400 uppercase tracking-wider">Escalating Stories</span>
+          </div>
+          <div className="space-y-1.5">
+            {briefing.escalatingStories.map((story, i) => (
+              <div key={i} className="flex items-center gap-2 text-sm">
+                <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                <span className="text-zinc-300">
+                  <span className="capitalize font-medium text-red-300">{story.category}</span>
+                  {story.region && <span className="text-zinc-500"> in {story.region}</span>}
+                  {story.reason && <span className="text-zinc-500"> — {story.reason}</span>}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Overnight Events */}
+      <div className="space-y-2">
+        <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
+          Overnight Events
+          <span className="bg-zinc-800 text-zinc-400 rounded-full px-2 py-0.5 text-xs font-mono">
+            {briefing.events.length}
+          </span>
+        </h3>
+        {briefing.events.map((event) => (
+          <a
+            key={event.id}
+            href={`/signals/${event.id}`}
+            className="block bg-zinc-900 border border-zinc-800 rounded-xl p-4 hover:border-zinc-600 transition-colors"
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                  <SeverityBadge severity={event.severity} />
+                  {event.isEscalating && (
+                    <span className="inline-flex items-center gap-1 bg-red-500/10 text-red-400 border border-red-500/20 rounded-full px-2 py-0.5 text-xs font-semibold">
+                      <TrendingUp className="w-3 h-3" />
+                      ESCALATING
+                    </span>
+                  )}
+                  {event.sourceCount > 1 && (
+                    <span className="text-xs text-zinc-500 bg-zinc-800 rounded-full px-2 py-0.5">
+                      {event.sourceCount} sources
+                    </span>
+                  )}
+                </div>
+                <h4 className="font-semibold text-zinc-100 leading-snug text-sm">
+                  {event.title}
+                </h4>
+                <div className="flex items-center gap-3 mt-1.5 text-xs text-zinc-500">
+                  {event.locationName && (
+                    <span className="flex items-center gap-1">
+                      <MapPin className="w-3 h-3" />{event.locationName}
+                    </span>
+                  )}
+                  <span>{timeAgo(event.createdAt)}</span>
+                  <span className="capitalize">{event.category}</span>
+                </div>
+              </div>
+              <div className="shrink-0">
+                <ReliabilityDots score={event.reliabilityScore} />
+              </div>
+            </div>
+          </a>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
 function BriefingSkeleton() {
@@ -239,6 +385,7 @@ function StatCard({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function BriefingPage() {
+  const [morningBriefing, setMorningBriefing] = useState<MorningBriefing | null>(null)
   const [pulseBriefing, setPulseBriefing] = useState<PulseBriefing | null>(null)
   const [briefing, setBriefing]   = useState<DailyBriefing | null>(null)
   const [loading, setLoading]     = useState(true)
@@ -252,14 +399,27 @@ export default function BriefingPage() {
     setLoading(true)
     setError(null)
     try {
-      // Fetch PULSE narrative briefing and signal breakdown in parallel
+      // Fetch morning briefing, PULSE narrative, and signal breakdown in parallel
       const params = new URLSearchParams()
       if (category) params.set('category', category)
 
-      const [pulseRes, signalRes] = await Promise.all([
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+
+      const [morningRes, pulseRes, signalRes] = await Promise.all([
+        fetch(`${apiBase}/api/v1/pulse/briefing?tz=${encodeURIComponent(tz)}`).catch(() => null),
         fetch(`${apiBase}/api/v1/pulse/latest?content_type=daily_briefing`).catch(() => null),
         fetch(`${apiBase}/api/v1/briefing/daily?${params.toString()}`),
       ])
+
+      // Parse morning briefing (non-critical)
+      if (morningRes?.ok) {
+        try {
+          const morningJson = await morningRes.json()
+          if (morningJson.success && morningJson.briefing) {
+            setMorningBriefing(morningJson.briefing)
+          }
+        } catch { /* non-critical */ }
+      }
 
       // Parse PULSE narrative (non-critical — page works without it)
       if (pulseRes?.ok) {
@@ -387,6 +547,11 @@ export default function BriefingPage() {
               Try a different date or category, or check back later as new signals are verified.
             </p>
           </div>
+        )}
+
+        {/* ── Morning Briefing — "What happened while you slept" ── */}
+        {morningBriefing && morningBriefing.events.length > 0 && (
+          <MorningBriefingCard briefing={morningBriefing} />
         )}
 
         {/* ── PULSE Narrative Briefing ── */}

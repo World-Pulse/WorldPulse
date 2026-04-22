@@ -28,17 +28,17 @@
 - [x] Smart headline generation (FIRMS reverse-geocoding: "Major wildfire near Shan State, Myanmar" instead of raw coords)
 - [x] Cross-source signal dedup (6h window, title+category fingerprint, prevents duplicate coverage)
 - [x] Extended dedup TTL (1h → 24h to prevent RSS re-crawl duplicates)
-- [ ] Editorial voice consistency — PULSE style guide: active voice, lead with event, include significance, end with what to watch
-- [ ] Source attribution — Show corroborating sources: "Based on 3 sources: NASA FIRMS, Myanmar Times, Reuters"
-- [ ] Time-decay ranking — Time-weighted relevance score (2h-old CRITICAL beats 5m-old LOW)
+- [x] Editorial voice consistency — PULSE style guide: active voice, lead with event, include significance, end with what to watch
+- [x] Source attribution — Show corroborating sources: "Based on 3 sources: NASA FIRMS, Myanmar Times, Reuters"
+- [x] Time-decay ranking — Time-weighted relevance score (severity × exponential decay, 4h half-life)
 
 ### 1.2 — Morning Briefing (Sprint 2-3, weeks 3-6)
 
-- [ ] "What happened while you slept" section — Timezone-aware, top 5-10 overnight events
-- [ ] Regional focus — User-set region of interest filters the briefing
-- [ ] Trend detection — "Escalating" tags on developing stories (correlation engine)
-- [ ] Executive summary — One paragraph, 3-4 sentences capturing the overnight picture
-- [ ] Scheduled delivery — Email digest at preferred time, push for FLASH-tier
+- [x] "What happened while you slept" section — Timezone-aware, top 5-10 overnight events (GET /api/v1/pulse/briefing)
+- [x] Regional focus — User-set region of interest filters the briefing (from onboarding prefs)
+- [x] Trend detection — "Escalating" tags on developing stories (trending.ts: cluster analysis + severity escalation + frequency acceleration)
+- [x] Executive summary — One paragraph, 3-4 sentences capturing the overnight picture (LLM-generated via fast tier)
+- [x] Scheduled delivery — Email digest at preferred time via Resend, FLASH-tier push email for critical signals
 
 ### 1.3 — Personalization Layer (Sprint 3-5, weeks 5-10)
 
@@ -164,7 +164,7 @@
 | Milestone | Target | Timeframe | Status |
 |-----------|--------|-----------|--------|
 | AI Digest: diverse, high-quality content | No category flooding, no garbage signals | Week 2 | ✅ Done |
-| Morning briefing genuinely useful | One paragraph capturing overnight events | Week 4 | 🔲 |
+| Morning briefing genuinely useful | One paragraph capturing overnight events | Week 4 | ✅ Done |
 | First external user returns 5 days straight | Organic retention | Week 8 | 🔲 |
 | Personalization delivers relevant signals | "How did it know I care about this?" | Week 10 | 🔲 |
 | 100 daily active users | Organic growth from launch channels | Month 3 | 🔲 |
@@ -176,4 +176,4 @@
 ---
 
 *Last updated: April 22, 2026*
-*Phase 1 active. Sprint 1 — AI Digest quality + dedup + personalization deployed.*
+*Phase 1 active. Sprints 1-2 complete — AI Digest quality, dedup, personalization, editorial voice, source attribution, time-decay ranking, morning briefing, trend detection, email delivery all deployed.*

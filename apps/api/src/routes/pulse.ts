@@ -35,6 +35,8 @@ import {
   getSyndicatedPosts,
 } from '../lib/pulse/syndication'
 import { generateSignalSummary } from '../lib/signal-summary'
+import { detectTrends, getEscalatingEvents } from '../lib/pulse/trending'
+import { generateContent } from '../lib/pulse/publisher'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
@@ -153,6 +155,8 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
         's.reliability_score as signal_reliability',
         's.tags as signal_tags', 's.language as signal_language',
         's.country_code as signal_country',
+        's.source_ids as signal_source_ids',
+        's.original_urls as signal_original_urls',
         // Author
         'u.id as author_id', 'u.handle as author_handle',
         'u.display_name as author_display_name', 'u.avatar_url as author_avatar',
@@ -317,6 +321,28 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
+    // ── Time-decay ranking ─────────────────────────────────────────────────
+    // Composite relevance score: severity weight × time-decay factor.
+    // A 2h-old CRITICAL beats a 5m-old LOW. Personalization boost stacks.
+    const SEVERITY_WEIGHT: Record<string, number> = {
+      critical: 1.0, high: 0.7, medium: 0.4, low: 0.15, info: 0.05,
+    }
+    const HALF_LIFE_MS = 4 * 60 * 60 * 1000 // 4-hour half-life for decay
+    const now = Date.now()
+
+    for (const post of dedupedPosts) {
+      const p = post as any
+      const sev = p.signal_severity ?? 'low'
+      const sevWeight = SEVERITY_WEIGHT[sev] ?? 0.15
+      const ageMs = now - new Date(p.created_at).getTime()
+      const decay = Math.pow(0.5, ageMs / HALF_LIFE_MS) // exponential decay
+      const boost = p._personalizationBoost ?? 0
+      p._relevanceScore = (sevWeight + boost) * decay
+    }
+
+    // Sort by composite relevance score (highest first)
+    dedupedPosts.sort((a: any, b: any) => (b._relevanceScore ?? 0) - (a._relevanceScore ?? 0))
+
     // ── Category diversity filter ─────────────────────────────────────────
     // Prevent any single category from flooding the feed. Max 2 consecutive
     // posts from the same category; max 5 total per category per page.
@@ -345,6 +371,27 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
 
       categoryCounts[cat] = (categoryCounts[cat] ?? 0) + 1
       posts.push(post)
+    }
+
+    // ── Source attribution: batch-load source names ─────────────────────
+    const allSourceIds = [...new Set(
+      posts.flatMap((p: any) => {
+        const ids = p.signal_source_ids
+        return Array.isArray(ids) ? ids : []
+      })
+    )]
+    const sourcesById = new Map<string, string>()
+    if (allSourceIds.length > 0) {
+      try {
+        const srcRows = await db('sources')
+          .whereRaw('id::text = ANY(?)', [allSourceIds.map(String)])
+          .select(['id', 'name'])
+        for (const s of srcRows) {
+          sourcesById.set(String(s.id), s.name as string)
+        }
+      } catch {
+        // Non-fatal — attribution will fall back to source count
+      }
     }
 
     const items = await Promise.all(posts.map(async (post: any) => {
@@ -423,6 +470,19 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
         signalReliability: post.signal_reliability,
         signalCategory: post.signal_category,
         relatedSignals: (post as any)._relatedSignals || 0,
+        // Source attribution — "Based on 3 sources: Reuters, AP, USGS"
+        sourceAttribution: (() => {
+          const ids = Array.isArray(post.signal_source_ids) ? post.signal_source_ids : []
+          const names = ids.map((id: string) => sourcesById.get(String(id))).filter(Boolean) as string[]
+          const count = post.signal_source_count ?? names.length
+          if (names.length > 0) {
+            const display = names.slice(0, 3).join(', ')
+            const extra = count > 3 ? ` and ${count - 3} more` : ''
+            return `Based on ${count} source${count !== 1 ? 's' : ''}: ${display}${extra}`
+          }
+          if (count > 1) return `Based on ${count} verified sources`
+          return null
+        })(),
         author: {
           id: post.author_id,
           handle: post.author_handle,
@@ -482,6 +542,255 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
     }
 
     return reply.send({ success: true, data: post })
+  })
+
+  /**
+   * GET /api/v1/pulse/briefing
+   * Morning Briefing — "What happened while you slept"
+   * Timezone-aware: returns top overnight events based on user's timezone.
+   *
+   * Query params:
+   *   tz         — IANA timezone (default: America/New_York)
+   *   region     — ISO country code to focus on (optional, from user prefs)
+   *   limit      — max events (default: 10)
+   */
+  app.get('/briefing', { preHandler: [optionalAuth] }, async (req, reply) => {
+    const query = req.query as Record<string, string>
+    const tzName = query.tz || 'America/New_York'
+    const regionFilter = query.region || null
+    const limit = Math.min(Number(query.limit) || 10, 20)
+    const userId = (req as any).user?.id
+
+    // ── Determine "overnight" window based on timezone ──────────────────
+    // Overnight = from 10pm yesterday to 7am today in user's timezone.
+    // We compute these boundaries in UTC for the DB query.
+    const now = new Date()
+    let sleepStartUTC: Date
+    let sleepEndUTC: Date
+
+    try {
+      // Get current time in user's timezone
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: tzName,
+        hour: 'numeric', hour12: false,
+      })
+      const localHour = Number(formatter.format(now))
+
+      // Calculate offset in ms between UTC and user timezone
+      const utcStr = now.toLocaleString('en-US', { timeZone: 'UTC' })
+      const localStr = now.toLocaleString('en-US', { timeZone: tzName })
+      const offsetMs = new Date(utcStr).getTime() - new Date(localStr).getTime()
+
+      // Sleep window: 10pm yesterday to 7am today (local)
+      const todayLocal = new Date(now.getTime() - offsetMs)
+      todayLocal.setHours(7, 0, 0, 0)
+      sleepEndUTC = new Date(todayLocal.getTime() + offsetMs)
+
+      const yesterdayLocal = new Date(todayLocal)
+      yesterdayLocal.setDate(yesterdayLocal.getDate() - 1)
+      yesterdayLocal.setHours(22, 0, 0, 0)
+      sleepStartUTC = new Date(yesterdayLocal.getTime() + offsetMs)
+
+      // If it's before 7am local, the sleep window hasn't ended yet — use last night
+      if (localHour < 7) {
+        sleepEndUTC = now
+      }
+      // If it's after 10pm local, we're in tonight's sleep window — show today's events
+      if (localHour >= 22) {
+        sleepStartUTC = new Date(now.getTime() - 12 * 3600_000) // last 12h
+        sleepEndUTC = now
+      }
+    } catch {
+      // Fallback: last 9 hours
+      sleepStartUTC = new Date(Date.now() - 9 * 3600_000)
+      sleepEndUTC = now
+    }
+
+    // ── Query overnight signals ──────────────────────────────────────────
+    let signalQ = db('signals')
+      .whereIn('status', ['verified', 'pending'])
+      .where('created_at', '>', sleepStartUTC)
+      .where('created_at', '<=', sleepEndUTC)
+      .whereNotIn('category', ['culture', 'sports', 'other'])
+      .where('reliability_score', '>=', 0.5)
+      .orderByRaw(`
+        CASE severity
+          WHEN 'critical' THEN 1
+          WHEN 'high' THEN 2
+          WHEN 'medium' THEN 3
+          WHEN 'low' THEN 4
+          ELSE 5
+        END,
+        reliability_score DESC,
+        source_count DESC
+      `)
+      .limit(limit * 3) // over-fetch for diversity
+      .select([
+        'id', 'title', 'summary', 'category', 'severity',
+        'reliability_score', 'source_count', 'location_name',
+        'country_code', 'region', 'created_at', 'alert_tier',
+        'source_ids', 'tags',
+      ])
+
+    // ── Regional focus — from query param or user preferences ──────────
+    let userRegions: string[] = []
+    if (regionFilter) {
+      signalQ = signalQ.where('country_code', regionFilter)
+    } else if (userId) {
+      try {
+        const user = await db('users').where('id', userId).first('regions', 'interests')
+        if (user?.regions && Array.isArray(user.regions) && user.regions.length > 0) {
+          userRegions = user.regions
+        }
+      } catch { /* non-fatal */ }
+    }
+
+    const signals = await signalQ
+
+    // ── Category diversity: max 3 per category ───────────────────────────
+    const catCount: Record<string, number> = {}
+    const diverseSignals = signals.filter((s: any) => {
+      const cat = s.category ?? 'other'
+      catCount[cat] = (catCount[cat] ?? 0) + 1
+      return catCount[cat]! <= 3
+    }).slice(0, limit)
+
+    // ── Boost user's regions to top ──────────────────────────────────────
+    if (userRegions.length > 0) {
+      const countryToRegion: Record<string, string> = {
+        US: 'North America', CA: 'North America', MX: 'North America',
+        GB: 'Europe', FR: 'Europe', DE: 'Europe', UA: 'Europe',
+        IL: 'Middle East', IR: 'Middle East', SA: 'Middle East',
+        CN: 'East Asia', JP: 'East Asia', KR: 'East Asia', TW: 'East Asia',
+        IN: 'South Asia', PK: 'South Asia',
+        NG: 'Africa', ZA: 'Africa', KE: 'Africa', EG: 'Africa',
+        AU: 'Oceania', NZ: 'Oceania',
+        BR: 'South America', AR: 'South America',
+        TH: 'Southeast Asia', VN: 'Southeast Asia', ID: 'Southeast Asia', PH: 'Southeast Asia',
+      }
+      const regionSet = new Set(userRegions)
+      diverseSignals.sort((a: any, b: any) => {
+        const aMatch = regionSet.has(countryToRegion[a.country_code] ?? '') ? 1 : 0
+        const bMatch = regionSet.has(countryToRegion[b.country_code] ?? '') ? 1 : 0
+        if (aMatch !== bMatch) return bMatch - aMatch
+        return 0 // keep existing severity sort
+      })
+    }
+
+    // ── Trend detection — "Escalating" tags ──────────────────────────────
+    let escalating: Array<{ category: string; region: string | null; reason: string | null }> = []
+    try {
+      const trends = await getEscalatingEvents({ hours: 12 })
+      escalating = trends.map(t => ({
+        category: t.category,
+        region: t.region,
+        reason: t.escalationReason,
+      }))
+    } catch { /* non-fatal */ }
+
+    // Create a set of escalating category:region pairs for tagging
+    const escalatingSet = new Set(
+      escalating.map(e => `${e.category}:${e.region ?? 'global'}`)
+    )
+
+    // ── Executive summary generation ─────────────────────────────────────
+    let executiveSummary = ''
+    if (diverseSignals.length > 0) {
+      const signalList = diverseSignals.slice(0, 8).map((s: any, i: number) =>
+        `${i + 1}. [${(s.severity ?? 'medium').toUpperCase()}] ${s.title} (${s.location_name ?? 'Global'}, ${s.source_count} sources)`
+      ).join('\n')
+
+      const escalatingNote = escalating.length > 0
+        ? `\n\nESCALATING STORIES: ${escalating.map(e => `${e.category} in ${e.region ?? 'global'} — ${e.reason}`).join('; ')}`
+        : ''
+
+      try {
+        const result = await generateContent(
+          `Write a 3-4 sentence executive summary of overnight events for an intelligence analyst arriving at their desk. Be specific and quantitative. Lead with the most significant development. Reference source counts. Note any escalating situations.
+
+Overnight signals (${sleepStartUTC.toISOString()} to ${sleepEndUTC.toISOString()} UTC):
+${signalList}${escalatingNote}
+
+Rules:
+- 3-4 sentences maximum. Dense with information.
+- Sentence 1: The single most important overnight development.
+- Sentence 2-3: Other significant events, grouped by theme.
+- Sentence 4: Any escalating or developing situations to monitor.
+- Active voice. No filler. Every word earns its place.`,
+          300,
+          'fast',
+        )
+        if (result.text && result.text.trim().length > 30) {
+          executiveSummary = result.text.trim()
+        }
+      } catch {
+        // Fallback: build a template summary
+        const topSignal = diverseSignals[0] as any
+        executiveSummary = `The most significant overnight development: ${topSignal.title} (${topSignal.location_name ?? 'Global'}). ${diverseSignals.length} notable events detected across ${Object.keys(catCount).length} categories in the last ${Math.round((sleepEndUTC.getTime() - sleepStartUTC.getTime()) / 3600_000)} hours.`
+      }
+    }
+
+    // ── Format response ──────────────────────────────────────────────────
+    const events = diverseSignals.map((s: any) => {
+      const key = `${s.category}:${s.country_code ?? 'global'}`
+      return {
+        id: s.id,
+        title: s.title,
+        summary: s.summary,
+        category: s.category,
+        severity: s.severity,
+        reliabilityScore: s.reliability_score,
+        sourceCount: s.source_count,
+        locationName: s.location_name,
+        countryCode: s.country_code,
+        region: s.region,
+        alertTier: s.alert_tier,
+        createdAt: s.created_at,
+        isEscalating: escalatingSet.has(key),
+        tags: s.tags,
+      }
+    })
+
+    return reply.send({
+      success: true,
+      briefing: {
+        date: now.toISOString().slice(0, 10),
+        generatedAt: now.toISOString(),
+        timezone: tzName,
+        overnightWindow: {
+          start: sleepStartUTC.toISOString(),
+          end: sleepEndUTC.toISOString(),
+        },
+        executiveSummary,
+        eventCount: events.length,
+        events,
+        escalatingStories: escalating,
+        severityBreakdown: {
+          critical: events.filter((e: any) => e.severity === 'critical').length,
+          high: events.filter((e: any) => e.severity === 'high').length,
+          medium: events.filter((e: any) => e.severity === 'medium').length,
+          low: events.filter((e: any) => e.severity === 'low').length,
+        },
+      },
+    })
+  })
+
+  /**
+   * GET /api/v1/pulse/trending
+   * Returns trending/escalating events from the last N hours.
+   */
+  app.get('/trending', async (req, reply) => {
+    const query = req.query as Record<string, string>
+    const hours = Math.min(Number(query.hours) || 12, 48)
+    const region = query.region || undefined
+    const limit = Math.min(Number(query.limit) || 15, 30)
+
+    const trends = await detectTrends({ hours, region, limit })
+    return reply.send({
+      success: true,
+      data: trends,
+      meta: { hours, region: region ?? 'all', count: trends.length },
+    })
   })
 
   // ══════════════════════════════════════════════════════════════════════════
