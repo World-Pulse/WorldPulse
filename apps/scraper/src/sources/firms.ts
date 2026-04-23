@@ -27,7 +27,7 @@ const log = rootLogger.child({ module: 'firms-source' })
 const FIRMS_API =
   'https://firms.modaps.eosdis.nasa.gov/data/active_fire/noaa-20-viirs-c2/csv/J1_VIIRS_C2_Global_24h.csv'
 
-const MAX_SIGNALS_PER_POLL = 20
+const MAX_SIGNALS_PER_POLL = 10  // Reduced from 20 — prevent fire signal flooding
 
 // ─── TYPES ──────────────────────────────────────────────────────────────────
 interface FirmsRow {
@@ -158,9 +158,11 @@ export function aggregateIntoGridCells(rows: FirmsRow[]): GridCell[] {
 
 // ─── SEVERITY MAPPING ───────────────────────────────────────────────────────
 export function firmsSeverity(frp: number): SignalSeverity {
-  if (frp >= 500) return 'critical'
-  if (frp >= 200) return 'high'
-  if (frp >= 50)  return 'medium'
+  // Raised thresholds to reduce fire signal noise in the feed.
+  // Only truly exceptional fires should surface as CRITICAL/HIGH.
+  if (frp >= 1000) return 'critical'
+  if (frp >= 400)  return 'high'
+  if (frp >= 100)  return 'medium'
   return 'low'
 }
 
@@ -219,7 +221,7 @@ export function startFirmsPoller(
           // Non-fatal — fall back to coordinates
         }
 
-        const sizeDesc = cell.frp >= 500 ? 'Major' : cell.frp >= 200 ? 'Large' : cell.frp >= 50 ? 'Active' : 'Minor'
+        const sizeDesc = cell.frp >= 1000 ? 'Major' : cell.frp >= 400 ? 'Large' : cell.frp >= 100 ? 'Active' : 'Minor'
         const title = `${sizeDesc} wildfire detected near ${locationName}`
 
         const summary = [
@@ -251,8 +253,8 @@ export function startFirmsPoller(
               : new Date(),
           }, { lat: cell.lat, lng: cell.lng, sourceId: 'firms' })
 
-          // Dedup for 3h (data refreshes every ~3 hours)
-          await redis.setex(key, 3 * 3_600, '1')
+          // Dedup for 6h — prevents re-polling same grid cells too quickly
+          await redis.setex(key, 6 * 3_600, '1')
           created++
 
           if (signal && producer) {

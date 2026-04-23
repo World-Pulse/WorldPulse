@@ -72,9 +72,9 @@ const GEO_RADIUS_KM = Number(process.env.CORRELATION_GEO_RADIUS_KM ?? 200)
 /** Minimum correlation score to form a cluster (0-1) */
 const MIN_CORRELATION_SCORE = 0.45
 
-/** Reliability boost per corroborating source (capped at 0.15 total) */
-const CORROBORATION_BOOST = 0.05
-const MAX_CORROBORATION_BOOST = 0.15
+/** Reliability boost per corroborating source (capped at 0.20 total) */
+const CORROBORATION_BOOST = 0.07
+const MAX_CORROBORATION_BOOST = 0.20
 
 /** Redis TTL for correlation data */
 const CORRELATION_TTL = 7 * 24 * 60 * 60 // 7 days

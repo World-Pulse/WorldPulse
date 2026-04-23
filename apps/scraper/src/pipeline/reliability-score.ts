@@ -80,11 +80,18 @@ export function computeReliabilityScore(inputs: ScoreInputs): number {
   }
 
   // ── Single-source penalty for high severity ────────────────────────────
-  // Critical severity with only 1 source is inherently less reliable
+  // Single-source signals are inherently less reliable. Stronger penalties
+  // create visible separation from multi-source corroborated signals.
   if (inputs.sourceCount <= 1) {
-    if (inputs.severity === 'critical') score -= 0.10
-    else if (inputs.severity === 'high') score -= 0.05
+    if (inputs.severity === 'critical') score -= 0.15
+    else if (inputs.severity === 'high') score -= 0.08
+    else if (inputs.severity === 'medium') score -= 0.03
   }
+
+  // ── Multi-source bonus ────────────────────────────────────────────────
+  // Reward corroborated signals so they visibly outrank single-source ones
+  if (inputs.sourceCount >= 3) score += 0.05
+  else if (inputs.sourceCount >= 2) score += 0.02
 
   // ── Jitter: add small random variance (±0.02) to break ties ───────────
   // This prevents the "100 signals with identical 0.65 score" anomaly
@@ -112,7 +119,9 @@ export function maxSeverityForSourceCount(
   ])
 
   if (sourceCount >= 3) return 'critical'
-  if (sourceCount >= 2) return 'critical'
+
+  // 2 sources: allow HIGH, but require 3+ for CRITICAL
+  if (sourceCount >= 2) return 'high'
 
   // Single-source: cap at HIGH for institutional, MEDIUM for everything else
   if (sourceCount <= 1) {

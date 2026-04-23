@@ -110,14 +110,27 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
           // Editorial content (briefings, analysis) — always show
           .whereIn('p.pulse_content_type', ['daily_briefing', 'analysis', 'social_thread', 'weekly_report', 'syndicated'])
           // Flash briefs — tiered quality gate
+          // Corroboration-aware: single-source signals need higher reliability
           .orWhere(function () {
             this.where('p.pulse_content_type', 'flash_brief')
               .whereNotIn('s.category', ['culture', 'sports', 'other'])
               .where(function () {
-                // Tier 1: critical/high severity with decent reliability
+                // Tier 1a: CRITICAL with 2+ sources — corroborated, trusted
                 this.where(function () {
-                  this.whereIn('s.severity', ['critical', 'high'])
+                  this.where('s.severity', 'critical')
                     .where('s.reliability_score', '>=', 0.55)
+                    .where('s.source_count', '>=', 2)
+                })
+                // Tier 1b: CRITICAL single-source — only if high reliability (institutional)
+                .orWhere(function () {
+                  this.where('s.severity', 'critical')
+                    .where('s.reliability_score', '>=', 0.70)
+                    .whereIn('s.category', ['disaster', 'health', 'security', 'conflict'])
+                })
+                // Tier 1c: HIGH with decent reliability
+                .orWhere(function () {
+                  this.where('s.severity', 'high')
+                    .where('s.reliability_score', '>=', 0.60)
                 })
                 // Tier 2: medium severity from high-reliability, important sources
                 .orWhere(function () {
@@ -346,8 +359,12 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
     // ── Category diversity filter ─────────────────────────────────────────
     // Prevent any single category from flooding the feed. Max 2 consecutive
     // posts from the same category; max 5 total per category per page.
+    // Disaster/fire signals get a tighter cap to prevent FIRMS flooding.
     const MAX_CONSECUTIVE = 2
     const MAX_PER_CATEGORY = 5
+    const CATEGORY_CAPS: Record<string, number> = {
+      disaster: 3,  // FIRMS fire signals were flooding the feed
+    }
     const categoryCounts: Record<string, number> = {}
     let lastCategory = ''
     let consecutiveCount = 0
@@ -355,7 +372,8 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
 
     for (const post of dedupedPosts) {
       if (posts.length >= limit) break
-      const cat = (post as any).signal_category ?? 'editorial'
+      const p = post as any
+      const cat = p.signal_category ?? 'editorial'
 
       // Track consecutive
       if (cat === lastCategory) {
@@ -365,9 +383,12 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
         lastCategory = cat
       }
 
+      // Per-category cap (disaster=3, default=5)
+      const catCap = CATEGORY_CAPS[cat] ?? MAX_PER_CATEGORY
+
       // Skip if too many consecutive or too many total of this category
       if (consecutiveCount > MAX_CONSECUTIVE && cat !== 'editorial') continue
-      if ((categoryCounts[cat] ?? 0) >= MAX_PER_CATEGORY && cat !== 'editorial') continue
+      if ((categoryCounts[cat] ?? 0) >= catCap && cat !== 'editorial') continue
 
       categoryCounts[cat] = (categoryCounts[cat] ?? 0) + 1
       posts.push(post)
