@@ -32,6 +32,7 @@ import { enrichSignalWithGemini, geminiEnabled } from './lib/gemini'
 import { extractMediaFromContent } from './pipeline/media-extractor'
 import { startHeartbeat, stopHeartbeat, registerCrashHandlers } from './lib/process-health.js'
 import { runStabilityCheck, recordUnhandledException } from './lib/stability-tracker'
+import { runDelayedRescore } from './pipeline/rescore'
 import { startKafkaLagMonitor } from './lib/kafka-lag-monitor'
 import { checkGlobalCircuitHealth } from './lib/global-circuit-guard'
 
@@ -138,6 +139,23 @@ async function bootstrap() {
 
   // Trending recalculation every 5 min
   setInterval(updateTrending, 5 * 60_000)
+
+  // Delayed corroboration re-scorer — every 30 min, check single-source
+  // signals from 30-120 min ago for newly arrived corroboration
+  setInterval(async () => {
+    try {
+      const result = await runDelayedRescore()
+      if (result.corroborated > 0) {
+        logger.info({
+          checked: result.checked,
+          corroborated: result.corroborated,
+          upgraded: result.upgraded,
+        }, '[RESCORE] Delayed corroboration pass found multi-source signals')
+      }
+    } catch (err) {
+      logger.error({ err }, '[RESCORE] Delayed rescore failed')
+    }
+  }, 30 * 60_000) // 30 minutes
 
   // Health summary log + dead-source detection every 5 min
   setInterval(() => { logHealthSummary().catch(err => logger.error({ err }, 'Health summary failed')) }, 5 * 60_000)
