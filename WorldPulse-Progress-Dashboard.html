@@ -89,16 +89,16 @@
   <h1>WORLDPULSE LAUNCH PROGRESS</h1>
   <div class="subtitle">Real-time status across all workstreams</div>
   <div class="meta">
-    <span>Updated: Apr 20, 2026 — Launch Day Morning</span>
-    <span>Launch: TODAY</span>
+    <span>Updated: Apr 20, 2026 — 9:50 PM ET</span>
+    <span>LAUNCHED</span>
     <span>world-pulse.io</span>
   </div>
 </div>
 
 <!-- COUNTDOWN -->
 <div class="section" style="text-align: center;">
-  <div class="countdown">LAUNCH DAY</div>
-  <div class="countdown-label">WorldPulse is LIVE — world-pulse.io</div>
+  <div class="countdown" style="color: var(--green);">LIVE</div>
+  <div class="countdown-label">WorldPulse launched Apr 20, 2026 — world-pulse.io | @WorldPulse_io</div>
 </div>
 
 <!-- OVERALL PROGRESS -->
@@ -106,20 +106,21 @@
   <h2>Overall Launch Readiness</h2>
   <div class="progress-wrap">
     <div class="progress-bar-bg">
-      <div class="progress-bar-fill" style="width: 94%; background: linear-gradient(90deg, var(--green), var(--accent));">94%</div>
+      <div class="progress-bar-fill" style="width: 97%; background: linear-gradient(90deg, var(--green), var(--accent));">97%</div>
     </div>
     <div class="progress-label">
-      <span>85 of 90 tasks completed</span>
-      <span>5 remaining (0 critical)</span>
+      <span>93 of 96 tasks completed</span>
+      <span>3 remaining (0 critical)</span>
     </div>
   </div>
 
   <div class="kpi-grid">
-    <div class="kpi"><div class="number green">85</div><div class="label">Tasks Done</div></div>
-    <div class="kpi"><div class="number amber">5</div><div class="label">Remaining</div></div>
-    <div class="kpi"><div class="number blue">65,083</div><div class="label">Signals Live</div></div>
-    <div class="kpi"><div class="number purple">300+</div><div class="label">Sources</div></div>
-    <div class="kpi"><div class="number green">178</div><div class="label">Active Feeds</div></div>
+    <div class="kpi"><div class="number green">160</div><div class="label">Tasks Done</div></div>
+    <div class="kpi"><div class="number green">0</div><div class="label">Phase 1 Remaining</div></div>
+    <div class="kpi"><div class="number blue">90,800+</div><div class="label">Signals Live</div></div>
+    <div class="kpi"><div class="number purple">165+</div><div class="label">Sources (RSS+OSINT)</div></div>
+    <div class="kpi"><div class="number green">COMPLETE</div><div class="label">Phase 1 Status</div></div>
+    <div class="kpi"><div class="number amber">NEXT</div><div class="label">Phase 2: Analyst Toolkit</div></div>
   </div>
 </div>
 
@@ -131,9 +132,9 @@
   <div class="ws-card">
     <div class="ws-header">
       <div class="ws-title">Product & Infrastructure</div>
-      <span class="tag tag-green">98% Complete</span>
+      <span class="tag tag-green">100% Complete</span>
     </div>
-    <div class="ws-bar"><div class="ws-bar-fill" style="width: 98%; background: var(--green);"></div></div>
+    <div class="ws-bar"><div class="ws-bar-fill" style="width: 100%; background: var(--green);"></div></div>
     <div class="ws-items">
       <span class="done">&#10003; Emoji removal (all pages)</span> &middot;
       <span class="done">&#10003; Signal detail 500 fix</span> &middot;
@@ -151,6 +152,8 @@
       <span class="done">&#10003; Deploy pipeline stable</span><br>
       <span class="done">&#10003; Scraper status → Operational</span> &middot;
       <span class="done">&#10003; PULSE emoji cleanup</span> &middot;
+      <span class="done">&#10003; Twitter/X auto-publisher deployed</span> &middot;
+      <span class="done">&#10003; @WorldPulse_io authenticated + scheduler live</span><br>
       <span class="pending">&#9679; Cache prime endpoints</span>
     </div>
   </div>
@@ -196,8 +199,11 @@
       <span class="done">&#10003; Reddit r/selfhosted</span> &middot;
       <span class="done">&#10003; Reddit r/geopolitics</span> &middot;
       <span class="done">&#10003; Reddit r/opensource</span> &middot;
-      <span class="done">&#10003; Platform screenshots</span><br>
-      <span class="pending">&#9679; Evening social media blitz (5PM ET)</span> &middot;
+      <span class="done">&#10003; Platform screenshots</span> &middot;
+      <span class="done">&#10003; HN posted</span> &middot;
+      <span class="done">&#10003; X/Twitter thread posted</span> &middot;
+      <span class="done">&#10003; LinkedIn posted</span> &middot;
+      <span class="done">&#10003; Reddit posts attempted (spam-filtered — new account)</span><br>
       <span class="pending">&#9679; Building WorldPulse blog post</span> &middot;
       <span class="pending">&#9679; Demo video (60-90s)</span>
     </div>
@@ -238,8 +244,11 @@
       <span class="done">&#10003; Deploy-bg.ps1 background deploy</span> &middot;
       <span class="done">&#10003; Scraper pipeline stable</span> &middot;
       <span class="done">&#10003; PULSE scheduler (flash briefs 5m, briefings 3x/day, agent scans 2h)</span> &middot;
-      <span class="done">&#10003; PULSE AI Bureau generating content autonomously</span><br>
-      <span class="pending">&#9679; API 5xx alerting</span>
+      <span class="done">&#10003; PULSE AI Bureau generating content autonomously</span> &middot;
+      <span class="done">&#10003; Twitter publisher on 15-min scheduler</span> &middot;
+      <span class="done">&#10003; OAuth 1.0a client verified (GET /2/users/me)</span><br>
+      <span class="pending">&#9679; API 5xx alerting</span> &middot;
+      <span class="pending">&#9679; Top up Anthropic API credits</span>
     </div>
   </div>
 
@@ -260,7 +269,9 @@
       <span class="done">&#10003; Daily Briefing page live</span> &middot;
       <span class="done">&#10003; Social syndication pipeline</span> &middot;
       <span class="done">&#10003; Content queue system</span> &middot;
-      <span class="done">&#10003; Fact-checker agent active</span>
+      <span class="done">&#10003; Fact-checker agent active</span> &middot;
+      <span class="done">&#10003; Twitter auto-publisher (flash briefs, briefings, analysis threads)</span> &middot;
+      <span class="done">&#10003; Tweet formatter (280-char truncation, threading, severity emoji)</span>
     </div>
   </div>
 </div>
@@ -310,28 +321,32 @@
 
 <!-- EVENING PUSH -->
 <div class="section">
-  <h2>Evening Push — 5:00 PM ET</h2>
+  <h2>Launch Day Status — Apr 20</h2>
 
   <ul class="next-actions">
     <li>
-      <div class="pri p0">P0</div>
-      <div><strong>Push all social media content simultaneously (X, LinkedIn, Reddit, HN)</strong><br><span style="color: var(--muted); font-size: 12px;">Coordinated launch blast across all channels at 5:00 PM ET.</span></div>
+      <div class="pri p0" style="background: rgba(34,197,94,0.15); color: var(--green);">&#10003;</div>
+      <div><strong>HN Show post published</strong><br><span style="color: var(--muted); font-size: 12px;">Posted to Hacker News. Monitoring engagement.</span></div>
     </li>
     <li>
-      <div class="pri p0">P0</div>
-      <div><strong>Monitor first-hour engagement metrics</strong><br><span style="color: var(--muted); font-size: 12px;">Track upvotes, stars, signups, and traffic in real time from 5-6 PM.</span></div>
+      <div class="pri p0" style="background: rgba(34,197,94,0.15); color: var(--green);">&#10003;</div>
+      <div><strong>X/Twitter launch thread posted + auto-publisher deployed</strong><br><span style="color: var(--muted); font-size: 12px;">Manual thread posted. PULSE Twitter bot now live — auto-tweets flash briefs, briefings, and analysis to @WorldPulse_io every 15 min.</span></div>
+    </li>
+    <li>
+      <div class="pri p0" style="background: rgba(34,197,94,0.15); color: var(--green);">&#10003;</div>
+      <div><strong>LinkedIn founder post published</strong><br><span style="color: var(--muted); font-size: 12px;">Personal narrative post live on LinkedIn.</span></div>
+    </li>
+    <li>
+      <div class="pri p1" style="background: rgba(245,158,11,0.15); color: var(--accent);">!</div>
+      <div><strong>Reddit posts spam-filtered</strong><br><span style="color: var(--muted); font-size: 12px;">All Reddit posts removed by auto-spam filters (new account). Strategy: build karma organically, message mods for manual approval, use comment-first approach.</span></div>
     </li>
     <li>
       <div class="pri p1">P1</div>
-      <div><strong>Respond to all HN comments within 30 min</strong><br><span style="color: var(--muted); font-size: 12px;">Founder presence in the thread is critical for traction. Technical, honest, concise.</span></div>
-    </li>
-    <li>
-      <div class="pri p1">P1</div>
-      <div><strong>Share to additional subreddits based on reception</strong><br><span style="color: var(--muted); font-size: 12px;">If initial posts gain traction, expand to r/dataisbeautiful, r/cybersecurity, r/netsec.</span></div>
+      <div><strong>Top up Anthropic API credits</strong><br><span style="color: var(--muted); font-size: 12px;">Credits depleted — PULSE using OpenAI fallback. Anthropic credit top-up needed at console.anthropic.com for dual-LLM to resume.</span></div>
     </li>
     <li>
       <div class="pri p2">P2</div>
-      <div><strong>Draft Day 2 follow-up content based on metrics</strong><br><span style="color: var(--muted); font-size: 12px;">Prepare thank-you posts, metrics screenshots, and lessons-learned thread.</span></div>
+      <div><strong>Day 2: Product Hunt launch + follow-up content</strong><br><span style="color: var(--muted); font-size: 12px;">PH listing, traction update thread, press follow-ups based on Day 1 metrics.</span></div>
     </li>
   </ul>
 </div>
@@ -452,7 +467,7 @@
     <div class="kpi"><div class="number amber">25+</div><div class="label">PULSE Posts</div></div>
   </div>
   <div class="highlight">
-    <strong>65,000 signals exceeded — PULSE AI Bureau publishing autonomously.</strong> AI Digest live, Daily Briefings generated with OpenAI fallback. All services operational. Platform is a full-stack AI news agency. Marketing push initiated 6:38 PM.
+    <strong>PHASE 1 COMPLETE.</strong> 90,800+ signals from 165+ sources. All five Phase 1 sections (1.1-1.5) finished: AI Digest quality, morning briefing, personalization (implicit learning + For You feed + alert rules + saved searches), reading experience polish (PWA, Bloomberg dark mode, mobile-first), data quality foundation (geo validation, source reputation, dispute tracking). Corroboration pipeline active with syndication outlets + delayed re-scoring. Ready for Phase 2: Analyst Toolkit.
   </div>
 </div>
 
@@ -476,10 +491,10 @@
     <tr><td style="color: var(--accent);">Apr 20 12:30AM</td><td>Feed 500 fix (likes/bookmarks table names), briefing page rewrite deployed</td></tr>
     <tr><td style="color: var(--accent);">Apr 20 1:00AM</td><td>PULSE generating autonomously — flash briefs, daily briefings, AI synthesis</td></tr>
     <tr><td>Apr 20 7:56AM</td><td>60,970 signals live, AI Digest flowing, platform ready for launch push</td></tr>
-    <tr><td style="color: var(--accent); font-weight: 700;">Apr 20 6:38PM</td><td><strong>65,083 signals. Scraper→Operational, PULSE briefings live (OpenAI fallback), emoji cleanup deployed. Marketing push initiated.</strong></td></tr>
-  </table>
-</div>
-
-</div>
-</body>
-</html>
+    <tr><td>Apr 20 6:38PM</td><td>65,083 signals. Scraper→Operational, PULSE briefings live (OpenAI fallback), emoji cleanup deployed. Marketing push initiated.</td></tr>
+    <tr><td>Apr 23</td><td>Signal quality audit: corroboration gates tightened, FIRMS severity thresholds doubled, 16 new category-diverse sources added</td></tr>
+    <tr><td>Apr 24</td><td>Phase 1.3 complete: implicit learning, For You feed, alert rules, saved searches. 8 new DB tables deployed.</td></tr>
+    <tr><td>Apr 24</td><td>Phase 1.5 complete: geo validation, source reputation scoring, FIRMS source_count fix, classification dispute tracking.</td></tr>
+    <tr><td>Apr 24</td><td>Phase 1.4 complete: EventTimeline, PWA offline support, Bloomberg dark mode polish, mobile-first optimization. 90,800+ signals.</td></tr>
+    <tr><td>Apr 24</td><td><strong>PHASE 1 COMPLETE.</strong> All sections (1.1-1.5) finished. Wire syndication + delayed corroboration re-scorer deployed. 165+ sources active.</td></tr>
+    <tr><td>Apr 20 ~7PM</td><td>HN Show post published, X/Twitter launch thread posted, LinkedIn founde
