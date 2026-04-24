@@ -44,10 +44,10 @@
 
 - [x] Interest profiles — Onboarding collects categories + regions, stored in users table
 - [x] Feed personalization — Interest/region-based boosting in AI Digest feed (2h time windows)
-- [ ] Implicit learning — Track clicks, expands, bookmarks; after 50+ interactions, weight feed accordingly
-- [ ] "For You" feed tab — Personalized ranking distinct from "All" view
-- [ ] Alert rules (basic) — "Notify me when CRITICAL + [category] + [region]". Email + in-app
-- [ ] Saved searches — Save filter combo, one-click access
+- [x] Implicit learning — Track clicks, expands, bookmarks; after 50+ interactions, weight feed accordingly (user_interactions table, computeImplicitWeights engine, fire-and-forget tracking on click/like/bookmark)
+- [x] "For You" feed tab — Personalized ranking distinct from "All" view (GET /api/v1/me/for-you, implicit+explicit interest merge, 48h window, category diversity cap)
+- [x] Alert rules (basic) — "Notify me when CRITICAL + [category] + [region]". Email + in-app (alert_rules + alert_history + notifications tables, CRUD API, alert-matcher engine wired into flash brief publisher, Resend email delivery)
+- [x] Saved searches — Save filter combo, one-click access (saved_searches table, CRUD API with use-count tracking, max 20 per user)
 
 ### 1.4 — Reading Experience Polish (Sprint 4-6, weeks 7-12)
 
@@ -166,7 +166,7 @@
 | AI Digest: diverse, high-quality content | No category flooding, no garbage signals | Week 2 | ✅ Done |
 | Morning briefing genuinely useful | One paragraph capturing overnight events | Week 4 | ✅ Done |
 | First external user returns 5 days straight | Organic retention | Week 8 | 🔲 |
-| Personalization delivers relevant signals | "How did it know I care about this?" | Week 10 | 🔲 |
+| Personalization delivers relevant signals | "How did it know I care about this?" | Week 10 | ✅ Done |
 | 100 daily active users | Organic growth from launch channels | Month 3 | 🔲 |
 | Pro tier launches with paying subscribers | $29/month, watchlists, email digests | Month 5 | 🔲 |
 | First API customer | Structured data access, webhooks | Month 8 | 🔲 |
@@ -176,4 +176,4 @@
 ---
 
 *Last updated: April 22, 2026*
-*Phase 1 active. Sprints 1-2 complete — AI Digest quality, dedup, personalization, editorial voice, source attribution, time-decay ranking, morning briefing, trend detection, email delivery all deployed.*
+*Phase 1 active. Sprints 1-3 complete — AI Digest quality, dedup, personalization, editorial voice, source attribution, time-decay ranking, morning briefing, trend detection, email delivery, implicit learning, For You feed, alert rules, saved searches all deployed. Section 1.3 complete.*

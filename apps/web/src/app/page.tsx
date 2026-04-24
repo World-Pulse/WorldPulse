@@ -8,11 +8,12 @@ import { Composer } from '@/components/composer/Composer'
 import { NewPostsBar } from '@/components/feed/NewPostsBar'
 import { OnboardingModal } from '@/components/OnboardingModal'
 
-type FeedTab    = 'global' | 'following' | 'verified' | 'digest'
+type FeedTab    = 'global' | 'following' | 'verified' | 'digest' | 'for_you'
 type FilterCat  = 'all' | 'breaking' | 'conflict' | 'climate' | 'economy' | 'technology' | 'health'
 
 const TABS: { id: FeedTab; label: string }[] = [
   { id: 'global',    label: 'Global Pulse'    },
+  { id: 'for_you',  label: 'For You'         },
   { id: 'following', label: 'Following'       },
   { id: 'verified',  label: 'Verified'        },
   { id: 'digest',    label: 'AI Digest'       },

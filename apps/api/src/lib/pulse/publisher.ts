@@ -601,7 +601,25 @@ export async function checkAndPublishFlashBriefs(): Promise<number> {
   for (const signal of recentCritical) {
     if (alreadyBriefed.has(signal.id)) continue
     const result = await publishFlashBrief(signal)
-    if (result.success) published++
+    if (result.success) {
+      published++
+      // Check alert rules for matching signals
+      try {
+        const { matchSignalToAlertRules } = await import('../alert-matcher')
+        await matchSignalToAlertRules({
+          id: signal.id,
+          title: signal.title,
+          category: signal.category,
+          severity: signal.severity,
+          country_code: signal.country_code,
+          region: signal.region,
+          tags: signal.tags,
+          reliability_score: signal.reliability_score,
+        })
+      } catch {
+        // Non-fatal — alert matching failure shouldn't block publishing
+      }
+    }
   }
 
   return published

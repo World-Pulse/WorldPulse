@@ -22,6 +22,24 @@ import { Users, Cpu, Radio, Newspaper } from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
+/** Fire-and-forget interaction tracking for implicit learning */
+function trackInteraction(type: string, item: { signalId?: string | null; id: string; event?: { category?: string; severity?: string; countryCode?: string } }) {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
+  if (!token) return
+  fetch(`${API_URL}/api/v1/me/interactions`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      type,
+      signal_id: item.signalId,
+      post_id: item.id,
+      category: item.event?.category,
+      country_code: item.event?.countryCode,
+      severity: item.event?.severity,
+    }),
+  }).catch(() => {}) // Fire-and-forget
+}
+
 // ─── INTERNAL FEED ITEM SHAPE ────────────────────────────────────────────────
 interface FeedItem {
   id: string
@@ -342,6 +360,7 @@ function ActionBar({ item }: { item: FeedItem }) {
     const next = !liked
     setLiked(next)
     setLikes(n => next ? n + 1 : Math.max(0, n - 1))
+    if (next) trackInteraction('click', item)
     try {
       const res = await fetch(`${API_URL}/api/v1/posts/${item.id}/like`, {
         method: 'POST',
@@ -368,6 +387,7 @@ function ActionBar({ item }: { item: FeedItem }) {
 
     const next = !bookmarked
     setBookmarked(next)
+    if (next) trackInteraction('bookmark', item)
     try {
       const res = await fetch(`${API_URL}/api/v1/posts/${item.id}/bookmark`, {
         method: 'POST',
@@ -513,6 +533,15 @@ function FeedEmptyState({ tab }: { tab: string }) {
       />
     )
   }
+  if (tab === 'for_you') {
+    return (
+      <EmptyState
+        icon={<Radio className="w-10 h-10 text-wp-amber" />}
+        headline="Your personalized feed is building"
+        message="Interact with signals — click, expand, and bookmark — and we'll learn what matters to you. After 50 interactions, your For You feed activates."
+      />
+    )
+  }
   if (tab === 'digest') {
     return (
       <EmptyState
@@ -555,6 +584,8 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
       url = `${API_URL}/api/v1/feed/global?${params}`
     } else if (tab === 'digest') {
       url = `${API_URL}/api/v1/pulse/feed?${params}`
+    } else if (tab === 'for_you') {
+      url = `${API_URL}/api/v1/me/for-you?${params}`
     } else {
       url = `${API_URL}/api/v1/feed/signals?${params}`
     }
@@ -628,6 +659,8 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
             // Prevent card navigation when user clicks action buttons or interactive controls
             if ((e.target as HTMLElement).closest('button, input, [data-no-nav]')) {
               e.preventDefault()
+            } else {
+              trackInteraction('click', item)
             }
           }}
         >
