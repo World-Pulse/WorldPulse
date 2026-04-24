@@ -7,7 +7,7 @@
  * Called from the flash brief publisher when new signals arrive.
  */
 
-import { db } from './db'
+import { db } from '../db/postgres'
 import { logger } from './logger'
 
 const log = logger.child({ module: 'alert-matcher' })

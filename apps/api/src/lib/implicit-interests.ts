@@ -12,7 +12,7 @@
  * Used by the "For You" feed tab and personalization boosting.
  */
 
-import { db } from './db'
+import { db } from '../db/postgres'
 
 const MIN_INTERACTIONS = 50
 const RECENCY_WINDOW_DAYS = 7

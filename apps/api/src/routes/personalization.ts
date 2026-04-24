@@ -20,7 +20,7 @@
 
 import type { FastifyPluginAsync } from 'fastify'
 import { authenticate } from '../middleware/auth'
-import { db } from '../lib/db'
+import { db } from '../db/postgres'
 import { recordInteraction, computeImplicitWeights } from '../lib/implicit-interests'
 
 export const registerPersonalizationRoutes: FastifyPluginAsync = async (app) => {
