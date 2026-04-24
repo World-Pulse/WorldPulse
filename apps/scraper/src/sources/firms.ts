@@ -239,7 +239,7 @@ export function startFirmsPoller(
             severity,
             status:            'pending',
             reliability_score: 0.80, // VIIRS satellite detection is reliable
-            source_count:      cell.count,
+            source_count:      1,   // 1 independent source (NASA FIRMS), not satellite detection count
             source_ids:        [],
             original_urls:     ['https://firms.modaps.eosdis.nasa.gov/map/'],
             location:          db.raw('ST_MakePoint(?, ?)', [cell.lng, cell.lat]),

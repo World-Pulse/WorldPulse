@@ -60,10 +60,10 @@
 ### 1.5 — Data Quality Foundation (Sprint 1-6, continuous)
 
 - [x] Duplicate signal detection (cross-source event dedup before insert)
-- [ ] Geographic validation — Cross-reference location tags against verified databases
-- [ ] Source reputation scoring — Track accuracy over time, auto-reduce reliability for disputed sources
-- [ ] FIRMS source_count fix — Normalize to mean "independent sources", not "satellite detections"
-- [ ] Classification accuracy tracking — Log disputes, use to retrain rule-based patterns
+- [x] Geographic validation — Cross-reference location tags against verified databases (geo-validator.ts: country↔coordinate consistency, Null Island detection, ISO code validation, reverse-geocode correction, batch validation every 30min, geo_validation_log table)
+- [x] Source reputation scoring — Track accuracy over time, auto-reduce reliability for disputed sources (source-reputation.ts: rolling 30-day corroboration/dispute rates, auto-adjust reliability ±0.15, recompute every 6h, source_reputation table)
+- [x] FIRMS source_count fix — Normalize to mean "independent sources", not "satellite detections" (source_count=1 always, cell.count moved to metadata only)
+- [x] Classification accuracy tracking — Log disputes, use to retrain rule-based patterns (signal_disputes table, dispute API with auto-resolve at 3+ matching disputes, aggregate stats by type/category/source, /disputes/summary endpoint)
 
 ---
 
@@ -176,4 +176,4 @@
 ---
 
 *Last updated: April 22, 2026*
-*Phase 1 active. Sprints 1-3 complete — AI Digest quality, dedup, personalization, editorial voice, source attribution, time-decay ranking, morning briefing, trend detection, email delivery, implicit learning, For You feed, alert rules, saved searches all deployed. Section 1.3 complete.*
+*Phase 1 active. Sprints 1-5 complete — Sections 1.1, 1.2, 1.3, 1.5 all done. Section 1.4 (Reading Experience Polish) is the final remaining section before Phase 2.*

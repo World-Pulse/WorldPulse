@@ -33,6 +33,8 @@ import { extractMediaFromContent } from './pipeline/media-extractor'
 import { startHeartbeat, stopHeartbeat, registerCrashHandlers } from './lib/process-health.js'
 import { runStabilityCheck, recordUnhandledException } from './lib/stability-tracker'
 import { runDelayedRescore } from './pipeline/rescore'
+import { batchValidateGeo } from './pipeline/geo-validator'
+import { recomputeSourceReputation } from './pipeline/source-reputation'
 import { startKafkaLagMonitor } from './lib/kafka-lag-monitor'
 import { checkGlobalCircuitHealth } from './lib/global-circuit-guard'
 
@@ -156,6 +158,28 @@ async function bootstrap() {
       logger.error({ err }, '[RESCORE] Delayed rescore failed')
     }
   }, 30 * 60_000) // 30 minutes
+
+  // Geographic validation — batch check recent signals every 30 min
+  setInterval(async () => {
+    try {
+      const result = await batchValidateGeo()
+      if (result.issues > 0) {
+        logger.info({ ...result }, '[GEO] Validation batch found issues')
+      }
+    } catch (err) {
+      logger.error({ err }, '[GEO] Batch validation failed')
+    }
+  }, 30 * 60_000) // 30 minutes
+
+  // Source reputation recomputation — every 6 hours
+  setInterval(async () => {
+    try {
+      const result = await recomputeSourceReputation()
+      logger.info({ ...result }, '[REPUTATION] Source reputation recomputed')
+    } catch (err) {
+      logger.error({ err }, '[REPUTATION] Recomputation failed')
+    }
+  }, 6 * 60 * 60_000) // 6 hours
 
   // Health summary log + dead-source detection every 5 min
   setInterval(() => { logHealthSummary().catch(err => logger.error({ err }, 'Health summary failed')) }, 5 * 60_000)

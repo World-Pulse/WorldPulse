@@ -30,6 +30,7 @@ import { registerUploadRoutes } from './routes/uploads'
 import { registerBriefingRoutes } from './routes/briefings'
 import { registerBriefingDailyRoutes } from './routes/briefing'
 import { registerPersonalizationRoutes } from './routes/personalization'
+import { registerDisputeRoutes } from './routes/disputes'
 import { registerCountryRoutes } from './routes/countries'
 import { registerBreakingRoutes } from './routes/breaking'
 import { registerTradeRoutes } from './routes/trade'
@@ -352,6 +353,7 @@ async function bootstrap() {
   await app.register(registerSourcePacksRoutes,     { prefix: '/api/v1/source-packs' })
   await app.register(registerBiasCorrectionsRoutes, { prefix: '/api/v1' })
   await app.register(registerPersonalizationRoutes, { prefix: '/api/v1/me' })
+  await app.register(registerDisputeRoutes, { prefix: '/api/v1' })
 
   // ─── BILLING (Stripe Pro tier) ────────────────────────────
   // @fastify/raw-body is registered globally (global: false, per-route opt-in)
