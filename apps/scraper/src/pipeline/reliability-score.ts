@@ -93,9 +93,17 @@ export function computeReliabilityScore(inputs: ScoreInputs): number {
   if (inputs.sourceCount >= 3) score += 0.05
   else if (inputs.sourceCount >= 2) score += 0.02
 
-  // ── Jitter: add small random variance (±0.02) to break ties ───────────
-  // This prevents the "100 signals with identical 0.65 score" anomaly
-  const jitter = (Math.random() - 0.5) * 0.04  // range: -0.02 to +0.02
+  // ── Content-derived variance ───────────────────────────────────────────
+  // Use deterministic signal properties to create natural score spread,
+  // then add wider jitter to prevent any remaining ties.
+  // Hash-like spread from tag count and summary length indicator
+  const contentSpread = ((inputs.tagCount % 7) * 0.005) +
+    (inputs.hasSummary && inputs.hasLocation ? 0.01 : 0) +
+    (inputs.language !== 'en' ? -0.01 : 0)
+  score += contentSpread
+
+  // Wider jitter (±0.04) to ensure unique scores across concurrent inserts
+  const jitter = (Math.random() - 0.5) * 0.08  // range: -0.04 to +0.04
   score += jitter
 
   // ── Clamp to valid range ──────────────────────────────────────────────

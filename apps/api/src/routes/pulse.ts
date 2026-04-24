@@ -110,29 +110,37 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
           // Editorial content (briefings, analysis) — always show
           .whereIn('p.pulse_content_type', ['daily_briefing', 'analysis', 'social_thread', 'weekly_report', 'syndicated'])
           // Flash briefs — tiered quality gate
-          // Corroboration-aware: single-source signals need higher reliability
+          // Corroboration-aware: multi-source signals get easier passage,
+          // single-source must clear higher bars or be from strategic categories
           .orWhere(function () {
             this.where('p.pulse_content_type', 'flash_brief')
               .whereNotIn('s.category', ['culture', 'sports', 'other'])
               .where(function () {
-                // Tier 1a: CRITICAL with 2+ sources — corroborated, trusted
+                // Tier 1a: CRITICAL with 3+ sources — fully corroborated
                 this.where(function () {
                   this.where('s.severity', 'critical')
                     .where('s.reliability_score', '>=', 0.55)
-                    .where('s.source_count', '>=', 2)
+                    .where('s.source_count', '>=', 3)
                 })
-                // Tier 1b: CRITICAL single-source — only if high reliability (institutional)
+                // Tier 1b: CRITICAL single/dual-source — only institutional categories + high reliability
                 .orWhere(function () {
                   this.where('s.severity', 'critical')
                     .where('s.reliability_score', '>=', 0.70)
                     .whereIn('s.category', ['disaster', 'health', 'security', 'conflict'])
                 })
-                // Tier 1c: HIGH with decent reliability
+                // Tier 2a: HIGH with 2+ sources — corroborated
                 .orWhere(function () {
                   this.where('s.severity', 'high')
-                    .where('s.reliability_score', '>=', 0.60)
+                    .where('s.reliability_score', '>=', 0.55)
+                    .where('s.source_count', '>=', 2)
                 })
-                // Tier 2: medium severity from high-reliability, important sources
+                // Tier 2b: HIGH single-source — only strategic categories + high reliability
+                .orWhere(function () {
+                  this.where('s.severity', 'high')
+                    .where('s.reliability_score', '>=', 0.70)
+                    .whereIn('s.category', ['conflict', 'geopolitics', 'security', 'disaster', 'health', 'breaking'])
+                })
+                // Tier 3: MEDIUM from high-reliability, important sources (unchanged)
                 .orWhere(function () {
                   this.where('s.severity', 'medium')
                     .where('s.reliability_score', '>=', 0.75)
