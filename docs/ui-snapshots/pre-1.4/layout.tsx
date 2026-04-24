@@ -44,12 +44,6 @@ export const metadata: Metadata = {
   title: 'WorldPulse — Global Intelligence Network',
   description: 'Real-time verified signals from every corner of the world. Live map, breaking news, open source.',
   keywords: ['world news', 'breaking news', 'global events', 'open source', 'real-time'],
-  manifest: '/manifest.json',
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'black-translucent',
-    title: 'WorldPulse',
-  },
   openGraph: {
     title: 'WorldPulse — Global Intelligence Network',
     description: 'Real-time verified signals from every corner of the world. Live map, breaking news, open source.',
@@ -84,13 +78,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           function gtag(){dataLayer.push(arguments);}
           gtag('js', new Date());
           gtag('config', 'G-YJXNFP4046');
-        `}
-      </Script>
-      <Script id="sw-register" strategy="afterInteractive">
-        {`
-          if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js').catch(() => {});
-          }
         `}
       </Script>
       <body className={`${inter.variable} ${bebasNeue.variable} ${jetbrainsMono.variable} ${inter.className} bg-wp-bg text-wp-text antialiased`}>

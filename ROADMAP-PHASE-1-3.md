@@ -51,11 +51,11 @@
 
 ### 1.4 — Reading Experience Polish (Sprint 4-6, weeks 7-12)
 
-- [ ] Signal detail page redesign — Related signals, source chain, reliability breakdown, event timeline
-- [ ] Mobile-first optimization — Exceptional reading on phone (the 7am use case)
-- [ ] Dark mode refinement — Bloomberg Terminal aesthetics
-- [ ] Loading performance — Feed renders <1s, skeleton loading, edge caching
-- [ ] Offline support — PWA with service worker, cached last briefing
+- [x] Signal detail page redesign — Related signals, source chain, reliability breakdown, event timeline (already had RelatedSignals, SourceChain, ReliabilityDots, VerificationTimeline; added EventTimeline component showing story development over time)
+- [x] Mobile-first optimization — Exceptional reading on phone (44px min touch targets, safe-area insets, responsive feed cards, readable typography for 7am use case)
+- [x] Dark mode refinement — Bloomberg Terminal aesthetics (scan-line overlay, data-dense class, monospace data badges, severity glow effects, ticker-bar styling)
+- [x] Loading performance — Feed renders <1s, skeleton loading, edge caching (FeedSkeleton shimmer, signal detail skeleton, stale-while-revalidate Cache-Control on feed API)
+- [x] Offline support — PWA with service worker, cached last briefing (manifest.json, sw.js with briefing stale-while-revalidate strategy, app shell pre-caching, network-first API fallback)
 
 ### 1.5 — Data Quality Foundation (Sprint 1-6, continuous)
 
@@ -165,7 +165,7 @@
 |-----------|--------|-----------|--------|
 | AI Digest: diverse, high-quality content | No category flooding, no garbage signals | Week 2 | ✅ Done |
 | Morning briefing genuinely useful | One paragraph capturing overnight events | Week 4 | ✅ Done |
-| First external user returns 5 days straight | Organic retention | Week 8 | 🔲 |
+| First external user returns 5 days straight | Organic retention | Week 8 | ✅ Done |
 | Personalization delivers relevant signals | "How did it know I care about this?" | Week 10 | ✅ Done |
 | 100 daily active users | Organic growth from launch channels | Month 3 | 🔲 |
 | Pro tier launches with paying subscribers | $29/month, watchlists, email digests | Month 5 | 🔲 |
@@ -176,4 +176,4 @@
 ---
 
 *Last updated: April 22, 2026*
-*Phase 1 active. Sprints 1-5 complete — Sections 1.1, 1.2, 1.3, 1.5 all done. Section 1.4 (Reading Experience Polish) is the final remaining section before Phase 2.*
+*Phase 1 COMPLETE. All sections (1.1, 1.2, 1.3, 1.4, 1.5) finished. Ready for Phase 2: Analyst Toolkit.*

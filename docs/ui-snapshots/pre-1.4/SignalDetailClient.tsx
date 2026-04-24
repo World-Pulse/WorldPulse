@@ -24,7 +24,6 @@ import { ViralityBadge } from '@/components/signals/ViralityBadge'
 import { RichMediaEmbed, extractFirstEmbedUrl } from '@/components/RichMediaEmbed'
 import { SignalMedia } from '@/components/signals/SignalMedia'
 import { SourceChain } from '@/components/signals/SourceChain'
-import { EventTimeline } from '@/components/signals/EventTimeline'
 import { TVClips } from '@/components/signals/TVClips'
 import { NewsImages } from '@/components/signals/NewsImages'
 import { PredictionMarkets } from '@/components/signals/PredictionMarkets'
@@ -440,9 +439,6 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
             <div className="overflow-x-auto">
               <VerificationTimeline verifications={signal.verifications} />
             </div>
-
-            {/* Event Timeline — how this story developed over time */}
-            <EventTimeline signalId={signal.id} category={signal.category} />
 
             {/* Source Media — embedded player + source link */}
             {(srcUrl || (signal.media_urls?.length ?? 0) > 0) && (() => {

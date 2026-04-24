@@ -530,6 +530,9 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
       ? items[items.length - 1]?.createdAt
       : null
 
+    // Edge caching — stale-while-revalidate for fast feed loads
+    reply.header('Cache-Control', 'public, max-age=30, stale-while-revalidate=60')
+
     return reply.send({
       success: true,
       items,
