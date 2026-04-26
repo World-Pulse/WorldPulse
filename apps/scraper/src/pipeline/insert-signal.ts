@@ -28,6 +28,7 @@ import type { CorrelationCandidate } from './correlate'
 import { recordSuccess } from '../health'
 import { computeReliabilityScore, maxSeverityForSourceCount } from './reliability-score'
 import { dedup } from './dedup'
+import { processSignalForKnowledgeGraph, extractEntitiesRuleBased, upsertEntityNode } from './entity-graph'
 
 // ─── Alert Tier Classification (inlined — canonical in apps/api/src/lib/alert-tier.ts) ──
 const FLASH_RELIABILITY_THRESHOLD = 0.65
@@ -230,7 +231,36 @@ export async function insertAndCorrelate(
     logger.warn({ err, signalId: signal.id }, 'Breaking alert publish failed (non-fatal)')
   }
 
-  // 4. Pinecone embedding — disabled until PINECONE_API_KEY is set
+  // 4. Knowledge Graph — extract entities and build relationship graph.
+  //    Cost control: rule-based extraction for ALL signals (free, decent quality).
+  //    LLM extraction reserved for high/critical severity only (precision matters).
+  try {
+    const signalSeverity = String(signal.severity ?? 'low')
+    const signalTitle    = String(signal.title ?? '')
+    const signalSummary  = String(signal.summary ?? '')
+    const signalId       = String(signal.id)
+    const signalTime     = signal.created_at instanceof Date
+      ? signal.created_at.toISOString()
+      : String(signal.created_at ?? new Date().toISOString())
+
+    if (signalSeverity === 'high' || signalSeverity === 'critical') {
+      // Full LLM extraction for high-value signals (with rule-based fallback)
+      await processSignalForKnowledgeGraph(signalId, signalTitle, signalSummary, signalTime)
+    } else {
+      // Rule-based extraction only — zero API cost
+      const extraction = extractEntitiesRuleBased(signalTitle, signalSummary)
+      for (const entity of extraction.entities) {
+        await upsertEntityNode(entity, signalId, signalTime)
+      }
+      if (extraction.entities.length > 0) {
+        logger.debug({ signalId, entities: extraction.entities.length }, 'Rule-based entity extraction complete')
+      }
+    }
+  } catch (err) {
+    logger.debug({ err, signalId: signal.id }, 'Knowledge graph processing failed (non-fatal)')
+  }
+
+  // 5. Pinecone embedding — disabled until PINECONE_API_KEY is set
   // The pinecone module is optional; skip entirely when not configured.
 
   return signal

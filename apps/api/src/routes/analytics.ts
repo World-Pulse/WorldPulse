@@ -606,18 +606,147 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
 
     const since = new Date(Date.now() - hours * 3600_000)
 
-    // ── Fetch recent signals with their tags + severity + country ────────────
+    // ═══════════════════════════════════════════════════════════════════════════
+    // STRATEGY: Knowledge Graph first, tag-based fallback
+    //
+    // The entity_nodes table is populated by the scraper pipeline's NER engine
+    // (rule-based for all signals, LLM for high/critical). When it has enough
+    // data, we query it directly — this gives real named entities (people, orgs,
+    // locations) rather than raw tags. If the table is empty or too sparse, we
+    // fall back to the blocklisted tag-counting approach.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Map entity_nodes.type → API entity type for frontend compatibility
+    const KG_TYPE_MAP: Record<string, string> = {
+      person:        'actor',
+      organisation:  'org',
+      location:      'country',
+      event:         'topic',
+      weapon_system: 'topic',
+      legislation:   'topic',
+      commodity:     'topic',
+      technology:    'topic',
+    }
+    // Reverse: API type filter → entity_nodes types
+    const API_TYPE_TO_KG: Record<string, string[]> = {
+      actor:   ['person'],
+      org:     ['organisation'],
+      country: ['location'],
+      topic:   ['event', 'weapon_system', 'legislation', 'commodity', 'technology'],
+    }
+
+    let useKnowledgeGraph = false
+    try {
+      const [{ count: kgCount }] = await db('entity_nodes')
+        .where('last_seen', '>=', since)
+        .count('* as count')
+      useKnowledgeGraph = Number(kgCount) >= 10
+    } catch {
+      // entity_nodes table may not exist yet — fall through to tag-based
+    }
+
+    if (useKnowledgeGraph) {
+      // ── Knowledge Graph path ──────────────────────────────────────────────
+      let query = db('entity_nodes')
+        .select(
+          'canonical_name',
+          'type',
+          'mention_count',
+          'signal_ids',
+          'last_seen',
+          'metadata',
+        )
+        .where('last_seen', '>=', since)
+        .where('mention_count', '>=', 2)
+        .orderBy('mention_count', 'desc')
+        .limit(safeLimit * 3) // overfetch to allow filtering
+
+      // Filter by entity type if requested
+      if (type !== 'all' && API_TYPE_TO_KG[type]) {
+        query = query.whereIn('type', API_TYPE_TO_KG[type])
+      }
+
+      const kgRows = await query
+
+      // For severity/category breakdown, cross-reference signal_ids with signals table.
+      // We batch-fetch the signal metadata for all referenced signals in one query.
+      const allSignalIds = new Set<string>()
+      for (const row of kgRows) {
+        const sids = Array.isArray(row.signal_ids) ? row.signal_ids : []
+        for (const sid of sids.slice(-50)) allSignalIds.add(String(sid)) // cap per entity
+      }
+      const signalMeta = new Map<string, { severity: string; category: string; country_code: string | null }>()
+      if (allSignalIds.size > 0) {
+        const sidArray = [...allSignalIds].slice(0, 500) // cap total lookup
+        const metaRows = await db('signals')
+          .select('id', 'severity', 'category', 'country_code')
+          .whereIn('id', sidArray)
+        for (const m of metaRows) {
+          signalMeta.set(String(m.id), {
+            severity:     String(m.severity || 'info'),
+            category:     String(m.category || ''),
+            country_code: m.country_code ? String(m.country_code) : null,
+          })
+        }
+      }
+
+      const topEntities = kgRows.slice(0, safeLimit).map((row: any) => {
+        const sids = Array.isArray(row.signal_ids) ? row.signal_ids : []
+        const severity = { critical: 0, high: 0, medium: 0, low: 0, info: 0 }
+        const categories: Record<string, number> = {}
+        const countries: Record<string, number> = {}
+
+        for (const sid of sids) {
+          const meta = signalMeta.get(String(sid))
+          if (!meta) continue
+          const sev = meta.severity as keyof typeof severity
+          if (sev in severity) severity[sev]++
+          if (meta.category) categories[meta.category] = (categories[meta.category] ?? 0) + 1
+          if (meta.country_code) countries[meta.country_code] = (countries[meta.country_code] ?? 0) + 1
+        }
+
+        return {
+          entity:     row.canonical_name,
+          type:       KG_TYPE_MAP[row.type] || 'topic',
+          count:      Number(row.mention_count),
+          severity,
+          source:     'knowledge_graph',
+          top_categories: Object.entries(categories)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 3)
+            .map(([name, count]) => ({ name, count })),
+          top_countries: Object.entries(countries)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 5)
+            .map(([code, count]) => ({ code, count })),
+        }
+      })
+
+      const result = {
+        success:     true,
+        window,
+        source:      'knowledge_graph',
+        total_entities_in_window: kgRows.length,
+        unique_entities:          topEntities.length,
+        entities:                 topEntities,
+        generated_at:             new Date().toISOString(),
+      }
+
+      await redis.setex(cacheKey, 300, JSON.stringify(result)).catch(() => {})
+      return reply.send(result)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // FALLBACK: Tag-based entity extraction with system tag blocklist
+    // Used when the knowledge graph hasn't accumulated enough data yet.
+    // ═══════════════════════════════════════════════════════════════════════════
+
     const rows = await db('signals')
       .select('title', 'severity', 'country_code', 'tags', 'category')
       .where('created_at', '>=', since)
       .whereIn('status', ['verified', 'pending'])
       .orderBy('created_at', 'desc')
-      .limit(2000)  // cap raw input to avoid large scans
-
-    // ── Entity extraction ───────────────────────────────────────────────────
-    // We use a simple but effective frequency-based NLP approach:
-    // 1. From tags array (already structured)
-    // 2. From title noun-chunks via a curated entity pattern list
+      .limit(2000)
 
     interface EntityBucket {
       entity:    string
@@ -657,7 +786,36 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
       if (country)  b.countries[country]   = (b.countries[country]  ?? 0) + 1
     }
 
-    // Known country name/code lookup table for title extraction
+    // ── System tag blocklist ─────────────────────────────────────────────────
+    const SYSTEM_TAG_BLOCKLIST = new Set([
+      'osint', 'rss', 'news', 'gdelt', 'firms', 'acled', 'iaea', 'usgs',
+      'safecast', 'reliefweb', 'noaa', 'nws', 'otx', 'ofac', 'who', 'unhcr',
+      'interpol', 'cisa', 'celestrak', 'gpsjam', 'adsb', 'ais', 'comtrade',
+      'alienvault', 'gvp', 'asn', 'viirs', 'nasa',
+      'critical', 'high', 'medium', 'low', 'info',
+      'conflict', 'climate', 'economy', 'technology', 'health', 'elections',
+      'culture', 'humanitarian', 'science', 'security', 'breaking',
+      'geopolitics', 'politics',
+      'trade', 'market', 'alert', 'warning', 'outage', 'fire',
+      'weather', 'seismic', 'earthquake', 'tsunami', 'volcanic', 'volcano',
+      'nuclear', 'radiation', 'power', 'internet', 'connectivity',
+      'aviation', 'incidents', 'maritime', 'distress', 'displacement',
+      'refugee', 'disease-outbreak', 'public-health', 'environmental',
+      'cybersecurity', 'threat', 'sanctions', 'law-enforcement', 'red-notice',
+      'satellite', 'space', 'spaceweather', 'geomagnetic', 'gps', 'jamming',
+      'electronic-warfare', 'infrastructure', 'patent', 'patent-intel',
+      'en',
+    ])
+
+    const SYSTEM_TAG_PATTERNS: RegExp[] = [
+      /^cameo-\d+$/,
+      /^squawk-\d+$/,
+      /^status-\d+$/,
+      /^hs-\d+$/,
+      /^[a-z]{2}$/,
+      /^[a-z]+-[a-z]+-[a-z]+(-[a-z]+)*-rss$/,
+    ]
+
     const COUNTRY_PATTERNS: Array<[RegExp, string]> = [
       [/\brussia\b|\brussian\b/i,          'Russia'      ],
       [/\bukraine\b|\bukrainian\b/i,        'Ukraine'     ],
@@ -683,7 +841,6 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
       [/\bmyanmar\b|\bburma\b/i,            'Myanmar'     ],
     ]
 
-    // Org / actor patterns
     const ORG_PATTERNS: Array<[RegExp, string]> = [
       [/\bnato\b/i,      'NATO'   ],
       [/\bun\b|\bunited nations\b/i, 'UN'],
@@ -710,45 +867,38 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
       const cc   = (row.country_code as string | null) ?? null
       const title = (row.title as string) ?? ''
 
-      // 1. Tags (already structured, highest signal quality)
       const tags = Array.isArray(row.tags) ? row.tags as string[] : []
       for (const tag of tags) {
-        if (typeof tag === 'string' && tag.length >= 2) {
+        if (typeof tag === 'string' && tag.length >= 2 && !SYSTEM_TAG_BLOCKLIST.has(tag) && !SYSTEM_TAG_PATTERNS.some(p => p.test(tag))) {
           bump(tag, 'topic', sev, cat, cc)
         }
       }
 
-      // 2. Country extraction from title
       for (const [pattern, name] of COUNTRY_PATTERNS) {
         if (pattern.test(title)) bump(name, 'country', sev, cat, cc)
       }
 
-      // 3. Org / actor extraction from title
       for (const [pattern, name] of ORG_PATTERNS) {
         if (pattern.test(title)) bump(name, 'org', sev, cat, cc)
       }
 
-      // 4. Country-code field itself (highest-confidence geo signal)
       if (cc && cc.length === 2) bump(cc.toUpperCase(), 'country', sev, cat, cc)
     }
 
-    // ── Filter by requested type ──────────────────────────────────────────────
     let entities = [...entityMap.values()]
     if (type !== 'all') entities = entities.filter(e => e.type === type)
 
-    // ── Sort by count DESC, take top N ───────────────────────────────────────
     entities.sort((a, b) => b.count - a.count)
     const topEntities = entities.slice(0, safeLimit).map(e => ({
       entity:     e.entity,
       type:       e.type,
       count:      e.count,
       severity:   e.severity,
-      // Top 3 categories this entity appears in
+      source:     'tag_extraction',
       top_categories: Object.entries(e.categories)
         .sort(([, a], [, b]) => b - a)
         .slice(0, 3)
         .map(([name, count]) => ({ name, count })),
-      // Top 5 countries this entity co-occurs with
       top_countries: Object.entries(e.countries)
         .sort(([, a], [, b]) => b - a)
         .slice(0, 5)
@@ -758,6 +908,7 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
     const result = {
       success:     true,
       window,
+      source:      'tag_extraction',
       total_signals_analyzed: rows.length,
       unique_entities:        entities.length,
       entities:               topEntities,

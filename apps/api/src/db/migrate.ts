@@ -719,6 +719,41 @@ async function run() {
     ON CONFLICT (slug) DO NOTHING
   `)
 
+  // ── Knowledge Graph: Entity Nodes + Edges ─────────────────────────────────
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS entity_nodes (
+      id               TEXT PRIMARY KEY,
+      type             TEXT NOT NULL,
+      canonical_name   TEXT NOT NULL,
+      aliases          TEXT[] DEFAULT '{}',
+      first_seen       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_seen        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      mention_count    INTEGER NOT NULL DEFAULT 1,
+      signal_ids       TEXT[] DEFAULT '{}',
+      metadata         JSONB DEFAULT '{}'
+    )
+  `)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_entity_nodes_type ON entity_nodes (type)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_entity_nodes_last_seen ON entity_nodes (last_seen DESC)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_entity_nodes_mention_count ON entity_nodes (mention_count DESC)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_entity_nodes_canonical ON entity_nodes (canonical_name)`)
+
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS entity_edges (
+      id                 TEXT PRIMARY KEY,
+      source_entity_id   TEXT NOT NULL REFERENCES entity_nodes(id) ON DELETE CASCADE,
+      target_entity_id   TEXT NOT NULL REFERENCES entity_nodes(id) ON DELETE CASCADE,
+      predicate          TEXT NOT NULL,
+      weight             REAL NOT NULL DEFAULT 0.5,
+      signal_ids         TEXT[] DEFAULT '{}',
+      first_seen         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_seen          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_entity_edges_source ON entity_edges (source_entity_id)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_entity_edges_target ON entity_edges (target_entity_id)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_entity_edges_predicate ON entity_edges (predicate)`)
+
   console.log('✅  Migrations complete.')
 }
 
