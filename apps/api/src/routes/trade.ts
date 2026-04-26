@@ -21,8 +21,10 @@ export interface ComtradeFlow {
   period: string
   reporterCode: number
   reporterDesc: string
+  reporterIso2?: string
   partnerCode: number
   partnerDesc: string
+  partnerIso2?: string
   flowCode: 'M' | 'X'
   cmdCode: string
   cmdDesc: string
@@ -54,6 +56,67 @@ const UI_HS_ALIAS: Record<string, string> = {
   '854231': '8542',
   '100199': '1001',
   '930190': '9301',
+}
+
+// Reverse lookup: country name → M49 code + ISO 2-letter code
+const COUNTRY_NAME_TO_M49: Record<string, { m49: number; iso2: string }> = {
+  'china':          { m49: 156, iso2: 'CN' },
+  'united states':  { m49: 840, iso2: 'US' },
+  'russia':         { m49: 643, iso2: 'RU' },
+  'germany':        { m49: 276, iso2: 'DE' },
+  'india':          { m49: 356, iso2: 'IN' },
+  'japan':          { m49: 392, iso2: 'JP' },
+  'south korea':    { m49: 410, iso2: 'KR' },
+  'saudi arabia':   { m49: 682, iso2: 'SA' },
+  'netherlands':    { m49: 528, iso2: 'NL' },
+  'australia':      { m49:  36, iso2: 'AU' },
+  'canada':         { m49: 124, iso2: 'CA' },
+  'brazil':         { m49:  76, iso2: 'BR' },
+  'uae':            { m49: 784, iso2: 'AE' },
+  'nigeria':        { m49: 566, iso2: 'NG' },
+  'france':         { m49: 250, iso2: 'FR' },
+  'italy':          { m49: 380, iso2: 'IT' },
+  'spain':          { m49: 724, iso2: 'ES' },
+  'united kingdom': { m49: 826, iso2: 'GB' },
+  'turkey':         { m49: 792, iso2: 'TR' },
+  'egypt':          { m49: 818, iso2: 'EG' },
+  'south africa':   { m49: 710, iso2: 'ZA' },
+  'pakistan':        { m49: 586, iso2: 'PK' },
+  'indonesia':      { m49: 360, iso2: 'ID' },
+  'malaysia':       { m49: 458, iso2: 'MY' },
+  'thailand':       { m49: 764, iso2: 'TH' },
+  'vietnam':        { m49: 704, iso2: 'VN' },
+  'mexico':         { m49: 484, iso2: 'MX' },
+  'peru':           { m49: 604, iso2: 'PE' },
+  'chile':          { m49: 152, iso2: 'CL' },
+  'argentina':      { m49:  32, iso2: 'AR' },
+  'poland':         { m49: 616, iso2: 'PL' },
+  'singapore':      { m49: 702, iso2: 'SG' },
+  'taiwan':         { m49: 158, iso2: 'TW' },
+  'iran':           { m49: 364, iso2: 'IR' },
+  'kazakhstan':     { m49: 398, iso2: 'KZ' },
+  'iraq':           { m49: 368, iso2: 'IQ' },
+  'ukraine':        { m49: 804, iso2: 'UA' },
+  'algeria':        { m49:  12, iso2: 'DZ' },
+  'namibia':        { m49: 516, iso2: 'NA' },
+}
+
+// M49 code → ISO 2-letter code
+const M49_TO_ISO2: Record<number, string> = Object.fromEntries(
+  Object.values(COUNTRY_NAME_TO_M49).map(v => [v.m49, v.iso2])
+)
+
+function resolveCountryCode(name: string): number {
+  return COUNTRY_NAME_TO_M49[name.toLowerCase()]?.m49 ?? 0
+}
+
+function resolveIso2(m49: number, name?: string): string {
+  if (m49 && M49_TO_ISO2[m49]) return M49_TO_ISO2[m49]
+  if (name) {
+    const entry = COUNTRY_NAME_TO_M49[name.toLowerCase()]
+    if (entry) return entry.iso2
+  }
+  return ''
 }
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -112,12 +175,17 @@ function signalToFlow(signal: SignalRow): ComtradeFlow | null {
       primaryValue = valueMatch?.[1] ? Number(valueMatch[1].replace(/,/g, '')) : 0
     }
 
+    const rCode = resolveCountryCode(reporterDesc)
+    const pCode = resolveCountryCode(partnerDesc)
+
     return {
       period,
-      reporterCode: 0,
+      reporterCode: rCode,
       reporterDesc,
-      partnerCode:  0,
-      partnerDesc,
+      reporterIso2: resolveIso2(rCode, reporterDesc),
+      partnerCode:  pCode,
+      partnerDesc:  partnerDesc === 'Country' ? 'World' : partnerDesc,
+      partnerIso2:  resolveIso2(pCode, partnerDesc),
       flowCode,
       cmdCode,
       cmdDesc,
@@ -134,35 +202,35 @@ function signalToFlow(signal: SignalRow): ComtradeFlow | null {
 
 const SEED_FLOWS: ComtradeFlow[] = [
   // Oil (HS 2709)
-  { period: '2024', reporterCode: 682, reporterDesc: 'Saudi Arabia',  partnerCode: 156, partnerDesc: 'China',         flowCode: 'X', cmdCode: '2709', cmdDesc: 'Oil/Petroleum (Crude)', primaryValue: 57_400_000_000, netWgt: 0 },
-  { period: '2024', reporterCode: 643, reporterDesc: 'Russia',        partnerCode: 156, partnerDesc: 'China',         flowCode: 'X', cmdCode: '2709', cmdDesc: 'Oil/Petroleum (Crude)', primaryValue: 50_600_000_000, netWgt: 0 },
-  { period: '2024', reporterCode: 124, reporterDesc: 'Canada',        partnerCode: 840, partnerDesc: 'United States', flowCode: 'X', cmdCode: '2709', cmdDesc: 'Oil/Petroleum (Crude)', primaryValue: 87_200_000_000, netWgt: 0 },
-  { period: '2024', reporterCode: 368, reporterDesc: 'Iraq',          partnerCode: 356, partnerDesc: 'India',         flowCode: 'X', cmdCode: '2709', cmdDesc: 'Oil/Petroleum (Crude)', primaryValue: 34_100_000_000, netWgt: 0 },
-  { period: '2024', reporterCode: 784, reporterDesc: 'UAE',           partnerCode: 392, partnerDesc: 'Japan',         flowCode: 'X', cmdCode: '2709', cmdDesc: 'Oil/Petroleum (Crude)', primaryValue: 22_800_000_000, netWgt: 0 },
+  { period: '2024', reporterCode: 682, reporterDesc: 'Saudi Arabia',  reporterIso2: 'SA', partnerCode: 156, partnerDesc: 'China',         partnerIso2: 'CN', flowCode: 'X', cmdCode: '2709', cmdDesc: 'Oil/Petroleum (Crude)', primaryValue: 57_400_000_000, netWgt: 0 },
+  { period: '2024', reporterCode: 643, reporterDesc: 'Russia',        reporterIso2: 'RU', partnerCode: 156, partnerDesc: 'China',         partnerIso2: 'CN', flowCode: 'X', cmdCode: '2709', cmdDesc: 'Oil/Petroleum (Crude)', primaryValue: 50_600_000_000, netWgt: 0 },
+  { period: '2024', reporterCode: 124, reporterDesc: 'Canada',        reporterIso2: 'CA', partnerCode: 840, partnerDesc: 'United States', partnerIso2: 'US', flowCode: 'X', cmdCode: '2709', cmdDesc: 'Oil/Petroleum (Crude)', primaryValue: 87_200_000_000, netWgt: 0 },
+  { period: '2024', reporterCode: 368, reporterDesc: 'Iraq',          reporterIso2: 'IQ', partnerCode: 356, partnerDesc: 'India',         partnerIso2: 'IN', flowCode: 'X', cmdCode: '2709', cmdDesc: 'Oil/Petroleum (Crude)', primaryValue: 34_100_000_000, netWgt: 0 },
+  { period: '2024', reporterCode: 784, reporterDesc: 'UAE',           reporterIso2: 'AE', partnerCode: 392, partnerDesc: 'Japan',         partnerIso2: 'JP', flowCode: 'X', cmdCode: '2709', cmdDesc: 'Oil/Petroleum (Crude)', primaryValue: 22_800_000_000, netWgt: 0 },
   // Uranium (HS 2612)
-  { period: '2024', reporterCode: 398, reporterDesc: 'Kazakhstan',    partnerCode: 156, partnerDesc: 'China',         flowCode: 'X', cmdCode: '2612', cmdDesc: 'Uranium',               primaryValue: 2_100_000_000,  netWgt: 0 },
-  { period: '2024', reporterCode: 124, reporterDesc: 'Canada',        partnerCode: 840, partnerDesc: 'United States', flowCode: 'X', cmdCode: '2612', cmdDesc: 'Uranium',               primaryValue: 1_400_000_000,  netWgt: 0 },
-  { period: '2024', reporterCode: 36,  reporterDesc: 'Australia',     partnerCode: 250, partnerDesc: 'France',        flowCode: 'X', cmdCode: '2612', cmdDesc: 'Uranium',               primaryValue: 890_000_000,    netWgt: 0 },
-  { period: '2024', reporterCode: 643, reporterDesc: 'Russia',        partnerCode: 840, partnerDesc: 'United States', flowCode: 'X', cmdCode: '2612', cmdDesc: 'Uranium',               primaryValue: 710_000_000,    netWgt: 0 },
-  { period: '2024', reporterCode: 516, reporterDesc: 'Namibia',       partnerCode: 156, partnerDesc: 'China',         flowCode: 'X', cmdCode: '2612', cmdDesc: 'Uranium',               primaryValue: 540_000_000,    netWgt: 0 },
+  { period: '2024', reporterCode: 398, reporterDesc: 'Kazakhstan',    reporterIso2: 'KZ', partnerCode: 156, partnerDesc: 'China',         partnerIso2: 'CN', flowCode: 'X', cmdCode: '2612', cmdDesc: 'Uranium',               primaryValue: 2_100_000_000,  netWgt: 0 },
+  { period: '2024', reporterCode: 124, reporterDesc: 'Canada',        reporterIso2: 'CA', partnerCode: 840, partnerDesc: 'United States', partnerIso2: 'US', flowCode: 'X', cmdCode: '2612', cmdDesc: 'Uranium',               primaryValue: 1_400_000_000,  netWgt: 0 },
+  { period: '2024', reporterCode: 36,  reporterDesc: 'Australia',     reporterIso2: 'AU', partnerCode: 250, partnerDesc: 'France',        partnerIso2: 'FR', flowCode: 'X', cmdCode: '2612', cmdDesc: 'Uranium',               primaryValue: 890_000_000,    netWgt: 0 },
+  { period: '2024', reporterCode: 643, reporterDesc: 'Russia',        reporterIso2: 'RU', partnerCode: 840, partnerDesc: 'United States', partnerIso2: 'US', flowCode: 'X', cmdCode: '2612', cmdDesc: 'Uranium',               primaryValue: 710_000_000,    netWgt: 0 },
+  { period: '2024', reporterCode: 516, reporterDesc: 'Namibia',       reporterIso2: 'NA', partnerCode: 156, partnerDesc: 'China',         partnerIso2: 'CN', flowCode: 'X', cmdCode: '2612', cmdDesc: 'Uranium',               primaryValue: 540_000_000,    netWgt: 0 },
   // Semiconductors (HS 8542)
-  { period: '2024', reporterCode: 158, reporterDesc: 'Taiwan',        partnerCode: 156, partnerDesc: 'China',         flowCode: 'X', cmdCode: '8542', cmdDesc: 'Semiconductors',        primaryValue: 68_200_000_000, netWgt: 0 },
-  { period: '2024', reporterCode: 410, reporterDesc: 'South Korea',   partnerCode: 156, partnerDesc: 'China',         flowCode: 'X', cmdCode: '8542', cmdDesc: 'Semiconductors',        primaryValue: 42_700_000_000, netWgt: 0 },
-  { period: '2024', reporterCode: 158, reporterDesc: 'Taiwan',        partnerCode: 840, partnerDesc: 'United States', flowCode: 'X', cmdCode: '8542', cmdDesc: 'Semiconductors',        primaryValue: 31_500_000_000, netWgt: 0 },
-  { period: '2024', reporterCode: 392, reporterDesc: 'Japan',         partnerCode: 156, partnerDesc: 'China',         flowCode: 'X', cmdCode: '8542', cmdDesc: 'Semiconductors',        primaryValue: 18_400_000_000, netWgt: 0 },
-  { period: '2024', reporterCode: 528, reporterDesc: 'Netherlands',   partnerCode: 158, partnerDesc: 'Taiwan',        flowCode: 'X', cmdCode: '8542', cmdDesc: 'Semiconductors',        primaryValue: 12_300_000_000, netWgt: 0 },
+  { period: '2024', reporterCode: 158, reporterDesc: 'Taiwan',        reporterIso2: 'TW', partnerCode: 156, partnerDesc: 'China',         partnerIso2: 'CN', flowCode: 'X', cmdCode: '8542', cmdDesc: 'Semiconductors',        primaryValue: 68_200_000_000, netWgt: 0 },
+  { period: '2024', reporterCode: 410, reporterDesc: 'South Korea',   reporterIso2: 'KR', partnerCode: 156, partnerDesc: 'China',         partnerIso2: 'CN', flowCode: 'X', cmdCode: '8542', cmdDesc: 'Semiconductors',        primaryValue: 42_700_000_000, netWgt: 0 },
+  { period: '2024', reporterCode: 158, reporterDesc: 'Taiwan',        reporterIso2: 'TW', partnerCode: 840, partnerDesc: 'United States', partnerIso2: 'US', flowCode: 'X', cmdCode: '8542', cmdDesc: 'Semiconductors',        primaryValue: 31_500_000_000, netWgt: 0 },
+  { period: '2024', reporterCode: 392, reporterDesc: 'Japan',         reporterIso2: 'JP', partnerCode: 156, partnerDesc: 'China',         partnerIso2: 'CN', flowCode: 'X', cmdCode: '8542', cmdDesc: 'Semiconductors',        primaryValue: 18_400_000_000, netWgt: 0 },
+  { period: '2024', reporterCode: 528, reporterDesc: 'Netherlands',   reporterIso2: 'NL', partnerCode: 158, partnerDesc: 'Taiwan',        partnerIso2: 'TW', flowCode: 'X', cmdCode: '8542', cmdDesc: 'Semiconductors',        primaryValue: 12_300_000_000, netWgt: 0 },
   // Wheat (HS 1001)
-  { period: '2024', reporterCode: 643, reporterDesc: 'Russia',        partnerCode: 818, partnerDesc: 'Egypt',         flowCode: 'X', cmdCode: '1001', cmdDesc: 'Wheat',                 primaryValue: 3_200_000_000,  netWgt: 0 },
-  { period: '2024', reporterCode: 840, reporterDesc: 'United States', partnerCode: 484, partnerDesc: 'Mexico',        flowCode: 'X', cmdCode: '1001', cmdDesc: 'Wheat',                 primaryValue: 2_100_000_000,  netWgt: 0 },
-  { period: '2024', reporterCode: 124, reporterDesc: 'Canada',        partnerCode: 392, partnerDesc: 'Japan',         flowCode: 'X', cmdCode: '1001', cmdDesc: 'Wheat',                 primaryValue: 1_800_000_000,  netWgt: 0 },
-  { period: '2024', reporterCode: 36,  reporterDesc: 'Australia',     partnerCode: 360, partnerDesc: 'Indonesia',     flowCode: 'X', cmdCode: '1001', cmdDesc: 'Wheat',                 primaryValue: 1_500_000_000,  netWgt: 0 },
-  { period: '2024', reporterCode: 250, reporterDesc: 'France',        partnerCode: 12,  partnerDesc: 'Algeria',       flowCode: 'X', cmdCode: '1001', cmdDesc: 'Wheat',                 primaryValue: 1_300_000_000,  netWgt: 0 },
+  { period: '2024', reporterCode: 643, reporterDesc: 'Russia',        reporterIso2: 'RU', partnerCode: 818, partnerDesc: 'Egypt',         partnerIso2: 'EG', flowCode: 'X', cmdCode: '1001', cmdDesc: 'Wheat',                 primaryValue: 3_200_000_000,  netWgt: 0 },
+  { period: '2024', reporterCode: 840, reporterDesc: 'United States', reporterIso2: 'US', partnerCode: 484, partnerDesc: 'Mexico',        partnerIso2: 'MX', flowCode: 'X', cmdCode: '1001', cmdDesc: 'Wheat',                 primaryValue: 2_100_000_000,  netWgt: 0 },
+  { period: '2024', reporterCode: 124, reporterDesc: 'Canada',        reporterIso2: 'CA', partnerCode: 392, partnerDesc: 'Japan',         partnerIso2: 'JP', flowCode: 'X', cmdCode: '1001', cmdDesc: 'Wheat',                 primaryValue: 1_800_000_000,  netWgt: 0 },
+  { period: '2024', reporterCode: 36,  reporterDesc: 'Australia',     reporterIso2: 'AU', partnerCode: 360, partnerDesc: 'Indonesia',     partnerIso2: 'ID', flowCode: 'X', cmdCode: '1001', cmdDesc: 'Wheat',                 primaryValue: 1_500_000_000,  netWgt: 0 },
+  { period: '2024', reporterCode: 250, reporterDesc: 'France',        reporterIso2: 'FR', partnerCode: 12,  partnerDesc: 'Algeria',       partnerIso2: 'DZ', flowCode: 'X', cmdCode: '1001', cmdDesc: 'Wheat',                 primaryValue: 1_300_000_000,  netWgt: 0 },
   // Arms (HS 9301)
-  { period: '2024', reporterCode: 840, reporterDesc: 'United States', partnerCode: 682, partnerDesc: 'Saudi Arabia',  flowCode: 'X', cmdCode: '9301', cmdDesc: 'Military Weapons',      primaryValue: 4_800_000_000,  netWgt: 0 },
-  { period: '2024', reporterCode: 643, reporterDesc: 'Russia',        partnerCode: 356, partnerDesc: 'India',         flowCode: 'X', cmdCode: '9301', cmdDesc: 'Military Weapons',      primaryValue: 3_200_000_000,  netWgt: 0 },
-  { period: '2024', reporterCode: 250, reporterDesc: 'France',        partnerCode: 356, partnerDesc: 'India',         flowCode: 'X', cmdCode: '9301', cmdDesc: 'Military Weapons',      primaryValue: 2_700_000_000,  netWgt: 0 },
-  { period: '2024', reporterCode: 276, reporterDesc: 'Germany',       partnerCode: 804, partnerDesc: 'Ukraine',       flowCode: 'X', cmdCode: '9301', cmdDesc: 'Military Weapons',      primaryValue: 2_100_000_000,  netWgt: 0 },
-  { period: '2024', reporterCode: 156, reporterDesc: 'China',         partnerCode: 586, partnerDesc: 'Pakistan',      flowCode: 'X', cmdCode: '9301', cmdDesc: 'Military Weapons',      primaryValue: 1_600_000_000,  netWgt: 0 },
+  { period: '2024', reporterCode: 840, reporterDesc: 'United States', reporterIso2: 'US', partnerCode: 682, partnerDesc: 'Saudi Arabia',  partnerIso2: 'SA', flowCode: 'X', cmdCode: '9301', cmdDesc: 'Military Weapons',      primaryValue: 4_800_000_000,  netWgt: 0 },
+  { period: '2024', reporterCode: 643, reporterDesc: 'Russia',        reporterIso2: 'RU', partnerCode: 356, partnerDesc: 'India',         partnerIso2: 'IN', flowCode: 'X', cmdCode: '9301', cmdDesc: 'Military Weapons',      primaryValue: 3_200_000_000,  netWgt: 0 },
+  { period: '2024', reporterCode: 250, reporterDesc: 'France',        reporterIso2: 'FR', partnerCode: 356, partnerDesc: 'India',         partnerIso2: 'IN', flowCode: 'X', cmdCode: '9301', cmdDesc: 'Military Weapons',      primaryValue: 2_700_000_000,  netWgt: 0 },
+  { period: '2024', reporterCode: 276, reporterDesc: 'Germany',       reporterIso2: 'DE', partnerCode: 804, partnerDesc: 'Ukraine',       partnerIso2: 'UA', flowCode: 'X', cmdCode: '9301', cmdDesc: 'Military Weapons',      primaryValue: 2_100_000_000,  netWgt: 0 },
+  { period: '2024', reporterCode: 156, reporterDesc: 'China',         reporterIso2: 'CN', partnerCode: 586, partnerDesc: 'Pakistan',      partnerIso2: 'PK', flowCode: 'X', cmdCode: '9301', cmdDesc: 'Military Weapons',      primaryValue: 1_600_000_000,  netWgt: 0 },
 ]
 
 // ─── ROUTE PLUGIN ────────────────────────────────────────────────────────────

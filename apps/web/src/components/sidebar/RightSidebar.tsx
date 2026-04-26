@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, lazy, Suspense } from 'react'
 import Link from 'next/link'
 import { ShieldCheck, BotMessageSquare, ShieldAlert } from 'lucide-react'
-import { TradeSurveillancePanel } from './TradeSurveillancePanel'
+// TradeSurveillancePanel moved to /finance only
 import { TrendingEntities } from '@/components/analytics/TrendingEntities'
 import { SignalCounter } from '@/components/SignalCounter'
 
@@ -354,9 +354,6 @@ export function RightSidebar() {
 
       {/* ─── TRENDING ENTITIES ────────────────────────────── */}
       <TrendingEntities />
-
-      {/* ─── STRATEGIC COMMODITY FLOWS ───────────────────── */}
-      <TradeSurveillancePanel />
 
       {/* ─── WHO TO FOLLOW ────────────────────────────────── */}
       <Widget title="Signals to Follow">

@@ -49,7 +49,11 @@ export const STRATEGIC_COMMODITIES: Record<string, string> = {
   '2601': 'Iron Ore',
   '2701': 'Coal',
   '2844': 'Radioactive Materials',
+  '2612': 'Uranium Ore',
   '8542': 'Semiconductors',
+  '1001': 'Wheat',
+  '9301': 'Military Weapons',
+  '9303': 'Firearms',
   '2602': 'Manganese Ore',
   '2615': 'Niobium/Tantalum Ore',
 }
