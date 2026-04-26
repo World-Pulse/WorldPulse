@@ -8,7 +8,7 @@ import {
   Zap, Globe, Bell, BarChart3, Telescope, LayoutGrid, ClipboardList,
   TrendingUp, Shield, Unplug, Satellite, Lock, Waves, Landmark,
   Wheat, KeyRound, Droplets, Pickaxe, Map, ScrollText, Users, Search,
-  Mic, Video, Radio, Wrench, Settings, Activity,
+  Mic, Video, Radio, Wrench, Settings, Activity, Anchor,
   CircleDot, Swords, LineChart, Leaf, Pill, FlaskConical, Vote, Globe2,
   type LucideProps,
 } from 'lucide-react'
@@ -29,6 +29,7 @@ const NAV_ITEMS = [
   // { href: '/space-weather',   icon: Satellite,  labelKey: 'spaceWeather',    badge: 'NEW', badgeColor: 'cyan'   }, // Hidden — needs more work before launch
   { href: '/cyber-threats',   icon: Lock,       labelKey: 'cyberThreats',    badge: 'NEW', badgeColor: 'red'    },
   { href: '/undersea-cables', icon: Waves,      labelKey: 'underseaCables', badge: 'NEW', badgeColor: 'cyan'   },
+  { href: '/maritime',        icon: Anchor,     labelKey: 'maritime',        badge: 'NEW', badgeColor: 'blue'   },
   { href: '/governance',      icon: Landmark,   labelKey: 'governance',      badge: 'NEW', badgeColor: 'purple' },
   { href: '/food-security',  icon: Wheat,       labelKey: 'foodSecurity',    badge: 'NEW', badgeColor: 'amber'  },
   { href: '/digital-rights', icon: KeyRound,    labelKey: 'digitalRights',   badge: 'NEW', badgeColor: 'amber'  },

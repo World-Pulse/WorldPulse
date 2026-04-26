@@ -124,11 +124,158 @@ export function isValidCoordinate(lat: number, lng: number): boolean {
 
 // ─── Route ────────────────────────────────────────────────────────────────────
 
+// ─── Chokepoint Registry ─────────────────────────────────────────────────────
+
+export const CHOKEPOINTS = [
+  { id: 'suez',          name: 'Suez Canal',              lat: 30.46, lng: 32.34, region: 'Middle East',     dailyTransits: 50,  pctGlobalTrade: 12 },
+  { id: 'panama',        name: 'Panama Canal',            lat:  9.08, lng: -79.68, region: 'Central America', dailyTransits: 36,  pctGlobalTrade: 5 },
+  { id: 'hormuz',        name: 'Strait of Hormuz',        lat: 26.57, lng: 56.25, region: 'Middle East',     dailyTransits: 80,  pctGlobalTrade: 21 },
+  { id: 'malacca',       name: 'Strait of Malacca',       lat:  2.50, lng: 101.50, region: 'Southeast Asia', dailyTransits: 83,  pctGlobalTrade: 25 },
+  { id: 'bab-el-mandeb', name: 'Bab el-Mandeb',           lat: 12.58, lng: 43.32, region: 'Middle East',     dailyTransits: 30,  pctGlobalTrade: 9 },
+  { id: 'dover',         name: 'Strait of Dover',          lat: 51.02, lng:  1.45, region: 'Europe',          dailyTransits: 500, pctGlobalTrade: 7 },
+  { id: 'gibraltar',     name: 'Strait of Gibraltar',      lat: 35.97, lng: -5.60, region: 'Europe',          dailyTransits: 300, pctGlobalTrade: 6 },
+  { id: 'taiwan',        name: 'Taiwan Strait',            lat: 24.50, lng: 119.50, region: 'East Asia',      dailyTransits: 240, pctGlobalTrade: 8 },
+  { id: 'good-hope',     name: 'Cape of Good Hope',        lat: -34.36, lng: 18.47, region: 'Africa',         dailyTransits: 60,  pctGlobalTrade: 4 },
+  { id: 'bosporus',      name: 'Turkish Straits',          lat: 41.12, lng: 29.05, region: 'Europe',          dailyTransits: 120, pctGlobalTrade: 3 },
+  { id: 'lombok',        name: 'Lombok Strait',            lat: -8.47, lng: 115.72, region: 'Southeast Asia', dailyTransits: 40,  pctGlobalTrade: 2 },
+  { id: 'danish-straits', name: 'Danish Straits',          lat: 55.70, lng: 12.60, region: 'Europe',          dailyTransits: 90,  pctGlobalTrade: 3 },
+] as const
+
+// ─── Route ────────────────────────────────────────────────────────────────────
+
 export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
 
   app.addHook('onRoute', (routeOptions) => {
     routeOptions.schema ??= {}
     routeOptions.schema.tags = routeOptions.schema.tags ?? ['maritime']
+  })
+
+  // ── GET /overview ──────────────────────────────────────────────────────────
+  // Summary stats: chokepoints, signal counts, carrier positions, piracy alerts
+
+  app.get('/overview', {
+    preHandler: [authenticate],
+    config: { rateLimit: { max: MARITIME_RATE_LIMIT, timeWindow: '1 minute' } },
+    schema: {
+      tags: ['maritime'],
+      summary: 'Maritime intelligence overview — chokepoints, signal stats, latest alerts',
+    },
+  }, async (_req, reply) => {
+    const cacheKey = 'maritime:overview'
+    const cached = await redis.get(cacheKey)
+    if (cached) return reply.send(JSON.parse(cached))
+
+    // Signal counts for maritime-tagged content (last 7 days)
+    const [signalStats] = await db('signals')
+      .where('status', 'verified')
+      .whereRaw("created_at > now() - interval '7 days'")
+      .whereRaw("(category IN ('military','maritime','economy') AND (tags @> ARRAY['maritime']::text[] OR category = 'military'))")
+      .select(
+        db.raw("count(*) as total_signals"),
+        db.raw("count(*) filter (where severity IN ('critical','high')) as high_severity"),
+        db.raw("count(*) filter (where category = 'military') as military_signals"),
+        db.raw("count(*) filter (where tags @> ARRAY['piracy']::text[]) as piracy_alerts"),
+      ) as [{ total_signals: string; high_severity: string; military_signals: string; piracy_alerts: string }]
+
+    // Recent maritime signals (top 20)
+    const recentSignals = await db('signals')
+      .where('status', 'verified')
+      .whereRaw("created_at > now() - interval '48 hours'")
+      .whereRaw("(category IN ('military','maritime','economy') AND (tags @> ARRAY['maritime']::text[] OR tags @> ARRAY['shipping']::text[] OR tags @> ARRAY['naval']::text[] OR category = 'military'))")
+      .orderBy('created_at', 'desc')
+      .limit(20)
+      .select('id', 'title', 'category', 'severity', 'location_name', 'source_url', 'created_at',
+        db.raw('ST_X(location::geometry) as lng'),
+        db.raw('ST_Y(location::geometry) as lat'),
+      )
+
+    const response = {
+      success: true,
+      data: {
+        chokepoints: CHOKEPOINTS,
+        stats: {
+          total_signals:   Number(signalStats.total_signals),
+          high_severity:   Number(signalStats.high_severity),
+          military_signals: Number(signalStats.military_signals),
+          piracy_alerts:   Number(signalStats.piracy_alerts),
+        },
+        recent_signals: recentSignals.map((r: Record<string, unknown>) => ({
+          id:            r.id,
+          title:         r.title,
+          category:      r.category,
+          severity:      r.severity,
+          location_name: r.location_name ?? null,
+          source_url:    r.source_url ?? null,
+          lat:           r.lat ?? null,
+          lng:           r.lng ?? null,
+          created_at:    r.created_at instanceof Date ? (r.created_at as Date).toISOString() : r.created_at,
+        })),
+      },
+    }
+
+    await redis.setex(cacheKey, MARITIME_CACHE_TTL, JSON.stringify(response))
+    return reply.send(response)
+  })
+
+  // ── GET /signals ───────────────────────────────────────────────────────────
+  // Maritime-filtered signal feed with pagination
+
+  app.get('/signals', {
+    preHandler: [authenticate],
+    config: { rateLimit: { max: MARITIME_RATE_LIMIT, timeWindow: '1 minute' } },
+    schema: {
+      tags: ['maritime'],
+      summary: 'Maritime intelligence signal feed with filters',
+      querystring: {
+        type: 'object',
+        properties: {
+          type:   { type: 'string', enum: ['all', 'piracy', 'naval', 'shipping', 'port', 'sanctions'], default: 'all' },
+          limit:  { type: 'number', default: 30, maximum: 100, minimum: 1 },
+          offset: { type: 'number', default: 0, minimum: 0 },
+        },
+      },
+    },
+  }, async (req, reply) => {
+    const { type = 'all', limit = 30, offset = 0 } = req.query as { type?: string; limit?: number; offset?: number }
+
+    let query = db('signals')
+      .where('status', 'verified')
+      .whereRaw("(category IN ('military','maritime','economy','conflict') AND (tags @> ARRAY['maritime']::text[] OR tags @> ARRAY['shipping']::text[] OR tags @> ARRAY['naval']::text[] OR tags @> ARRAY['piracy']::text[] OR tags @> ARRAY['ports']::text[] OR category = 'military'))")
+      .orderBy('created_at', 'desc')
+      .limit(limit)
+      .offset(offset)
+
+    if (type === 'piracy')     query = query.whereRaw("tags @> ARRAY['piracy']::text[]")
+    if (type === 'naval')      query = query.where('category', 'military')
+    if (type === 'shipping')   query = query.whereRaw("tags @> ARRAY['shipping']::text[]")
+    if (type === 'port')       query = query.whereRaw("tags @> ARRAY['ports']::text[]")
+    if (type === 'sanctions')  query = query.whereRaw("tags @> ARRAY['sanctions']::text[]")
+
+    const rows = await query.select(
+      'id', 'title', 'category', 'severity', 'reliability_score',
+      'location_name', 'source_url', 'created_at',
+      db.raw('ST_X(location::geometry) as lng'),
+      db.raw('ST_Y(location::geometry) as lat'),
+    )
+
+    return reply.send({
+      success: true,
+      data: rows.map((r: Record<string, unknown>) => ({
+        id:               r.id,
+        title:            r.title,
+        category:         r.category,
+        severity:         r.severity,
+        reliability_score: r.reliability_score != null ? Number(r.reliability_score) : null,
+        location_name:    r.location_name ?? null,
+        source_url:       r.source_url ?? null,
+        lat:              r.lat ?? null,
+        lng:              r.lng ?? null,
+        created_at:       r.created_at instanceof Date ? (r.created_at as Date).toISOString() : r.created_at,
+      })),
+      total: rows.length,
+      limit,
+      offset,
+    })
   })
 
   // ── GET /vessels ────────────────────────────────────────────────────────────

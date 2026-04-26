@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
+import { generateDailyBriefing } from '../lib/briefing-generator'
 
 const BRIEFING_CACHE_TTL = 15 * 60 // 15 minutes
 
@@ -254,6 +255,25 @@ export const registerBriefingDailyRoutes: FastifyPluginAsync = async (app) => {
           severity_breakdown: { critical: 0, high: 0, medium: 0, low: 0 },
         },
       })
+    }
+  })
+
+  // ─── GET /api/v1/briefing/structured ────────────────────────────────────────
+  // Returns the AI-generated 7-section structured briefing (with caching).
+  // No auth required — public endpoint.
+  app.get('/structured', {
+    schema: {
+      tags: ['briefing'],
+      summary: 'Get AI-generated structured daily briefing with 7 fixed sections',
+    },
+    config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    try {
+      const briefing = await generateDailyBriefing(24)
+      return reply.send(briefing)
+    } catch (err) {
+      req.log.error({ err }, 'briefing/structured: handler error')
+      return reply.status(500).send({ success: false, error: 'Failed to generate structured briefing' })
     }
   })
 }

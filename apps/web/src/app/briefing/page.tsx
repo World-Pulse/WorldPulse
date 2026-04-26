@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Inbox, FileText, Clock, MapPin, RefreshCw, Share2, Check, Moon, TrendingUp, AlertTriangle, Globe } from 'lucide-react'
+import { Inbox, FileText, Clock, MapPin, RefreshCw, Share2, Check, Moon, TrendingUp, AlertTriangle, Globe, Shield, Anchor, Leaf, Cpu, Eye, BarChart3 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -218,6 +218,102 @@ function BriefingBody({ text }: { text: string }) {
   )
 }
 
+// ─── Structured Sections (7-section fixed briefing) ─────────────────────────
+
+interface StructuredSection {
+  id: string
+  title: string
+  body: string
+  severity: string
+  signal_count: number
+}
+
+interface StructuredBriefing {
+  executive_summary: string
+  sections: StructuredSection[]
+  generated_at: string
+  model: string
+  total_signals: number
+}
+
+const SECTION_ICONS: Record<string, typeof Shield> = {
+  threat_assessment:     Shield,
+  geopolitical_pulse:    Globe,
+  economic_trade:        BarChart3,
+  maritime_intelligence: Anchor,
+  climate_disaster:      Leaf,
+  cyber_tech:            Cpu,
+  what_to_watch:         Eye,
+}
+
+const SECTION_COLORS: Record<string, string> = {
+  threat_assessment:     'text-red-400 border-red-500/30',
+  geopolitical_pulse:    'text-blue-400 border-blue-500/30',
+  economic_trade:        'text-green-400 border-green-500/30',
+  maritime_intelligence: 'text-cyan-400 border-cyan-500/30',
+  climate_disaster:      'text-amber-400 border-amber-500/30',
+  cyber_tech:            'text-purple-400 border-purple-500/30',
+  what_to_watch:         'text-indigo-400 border-indigo-500/30',
+}
+
+function StructuredBriefingCard({ briefing }: { briefing: StructuredBriefing }) {
+  return (
+    <div className="space-y-4 mb-8">
+      {/* Executive Summary */}
+      <div className="bg-gradient-to-br from-zinc-900 via-zinc-900 to-indigo-950/30 border border-indigo-500/20 rounded-xl p-6">
+        <div className="flex items-center gap-2 mb-3">
+          <FileText className="w-5 h-5 text-indigo-400" />
+          <h2 className="text-lg font-bold text-zinc-100">Daily Intelligence Briefing</h2>
+          <span className="text-xs bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-2 py-0.5 rounded-full font-medium">
+            PULSE
+          </span>
+          <span className="text-xs text-zinc-500 ml-auto">
+            {briefing.total_signals.toLocaleString()} signals analyzed
+          </span>
+        </div>
+        <p className="text-sm text-zinc-300 leading-relaxed">{briefing.executive_summary}</p>
+      </div>
+
+      {/* 7 Fixed Sections */}
+      <div className="space-y-3">
+        {briefing.sections.map((section) => {
+          const Icon = SECTION_ICONS[section.id] ?? Eye
+          const colorClass = SECTION_COLORS[section.id] ?? 'text-zinc-400 border-zinc-500/30'
+          const iconColor = colorClass.split(' ')[0] ?? 'text-zinc-400'
+          const borderColor = colorClass.split(' ')[1] ?? 'border-zinc-500/30'
+          return (
+            <div
+              key={section.id}
+              className={`bg-zinc-900 border ${borderColor} rounded-xl p-5`}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <Icon className={`w-4 h-4 ${iconColor}`} />
+                <h3 className={`text-sm font-semibold uppercase tracking-wider ${iconColor}`}>
+                  {section.title}
+                </h3>
+                <div className="flex items-center gap-2 ml-auto">
+                  {section.signal_count > 0 && (
+                    <span className="text-xs text-zinc-500 bg-zinc-800 rounded-full px-2 py-0.5 font-mono">
+                      {section.signal_count} signals
+                    </span>
+                  )}
+                  <span className={`w-2 h-2 rounded-full ${SEVERITY_DOT[section.severity] ?? SEVERITY_DOT.info}`} title={section.severity} />
+                </div>
+              </div>
+              <p className="text-sm text-zinc-300 leading-relaxed">{section.body}</p>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Model + Timestamp */}
+      <div className="text-center text-xs text-zinc-600">
+        Generated {timeAgo(briefing.generated_at)} by PULSE ({briefing.model})
+      </div>
+    </div>
+  )
+}
+
 // ─── Morning Briefing Card ───────────────────────────────────────────────────
 
 function MorningBriefingCard({ briefing }: { briefing: MorningBriefing }) {
@@ -387,6 +483,7 @@ function StatCard({
 export default function BriefingPage() {
   const [morningBriefing, setMorningBriefing] = useState<MorningBriefing | null>(null)
   const [pulseBriefing, setPulseBriefing] = useState<PulseBriefing | null>(null)
+  const [structuredBriefing, setStructuredBriefing] = useState<StructuredBriefing | null>(null)
   const [briefing, setBriefing]   = useState<DailyBriefing | null>(null)
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState<string | null>(null)
@@ -405,10 +502,14 @@ export default function BriefingPage() {
 
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
 
-      const [morningRes, pulseRes, signalRes] = await Promise.all([
+      const token = typeof window !== 'undefined' ? localStorage.getItem('wp_token') : null
+      const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
+
+      const [morningRes, pulseRes, signalRes, structuredRes] = await Promise.all([
         fetch(`${apiBase}/api/v1/pulse/briefing?tz=${encodeURIComponent(tz)}`).catch(() => null),
         fetch(`${apiBase}/api/v1/pulse/latest?content_type=daily_briefing`).catch(() => null),
         fetch(`${apiBase}/api/v1/briefing/daily?${params.toString()}`),
+        fetch(`${apiBase}/api/v1/briefing/structured`, { headers: authHeaders }).catch(() => null),
       ])
 
       // Parse morning briefing (non-critical)
@@ -427,6 +528,22 @@ export default function BriefingPage() {
         if (pulseJson.success && pulseJson.data) {
           setPulseBriefing(pulseJson.data)
         }
+      }
+
+      // Parse structured 7-section briefing (non-critical)
+      if (structuredRes?.ok) {
+        try {
+          const structuredJson = await structuredRes.json()
+          if (structuredJson.sections && structuredJson.sections.length > 0) {
+            setStructuredBriefing({
+              executive_summary: structuredJson.executive_summary ?? '',
+              sections: structuredJson.sections ?? [],
+              generated_at: structuredJson.generated_at ?? new Date().toISOString(),
+              model: structuredJson.model ?? 'unknown',
+              total_signals: structuredJson.total_signals ?? 0,
+            })
+          }
+        } catch { /* non-critical */ }
       }
 
       // Parse signal breakdown
@@ -554,8 +671,11 @@ export default function BriefingPage() {
           <MorningBriefingCard briefing={morningBriefing} />
         )}
 
-        {/* ── PULSE Narrative Briefing ── */}
-        {parsed && parsed.body ? (
+        {/* ── Structured 7-Section Briefing (preferred) ── */}
+        {structuredBriefing ? (
+          <StructuredBriefingCard briefing={structuredBriefing} />
+        ) : parsed && parsed.body ? (
+          /* Fallback: PULSE unstructured narrative */
           <div className="bg-zinc-900 border border-indigo-500/20 rounded-xl p-6 mb-6">
             <div className="flex items-center gap-2 mb-4">
               <FileText className="w-5 h-5 text-indigo-400" />

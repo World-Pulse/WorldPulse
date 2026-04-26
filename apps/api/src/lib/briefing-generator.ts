@@ -62,6 +62,26 @@ export interface GeographicHotspot {
   avg_severity_score: number
 }
 
+/** Fixed section IDs for the 7-section briefing structure */
+export const BRIEFING_SECTION_IDS = [
+  'threat_assessment',
+  'geopolitical_pulse',
+  'economic_trade',
+  'maritime_intelligence',
+  'climate_disaster',
+  'cyber_tech',
+  'what_to_watch',
+] as const
+export type BriefingSectionId = typeof BRIEFING_SECTION_IDS[number]
+
+export interface BriefingSection {
+  id: BriefingSectionId
+  title: string
+  body: string          // 2-6 sentence narrative for this section
+  severity: string      // overall severity for this section: critical|high|medium|low|info
+  signal_count: number  // how many signals informed this section
+}
+
 export interface DailyBriefing {
   id: string
   date: string
@@ -71,10 +91,14 @@ export interface DailyBriefing {
   total_signals: number
   total_clusters: number
   executive_summary: string
+  sections: BriefingSection[]
+  /** @deprecated Use sections instead — kept for backward compat */
   key_developments: BriefingDevelopment[]
   category_breakdown: CategoryBreakdown[]
   geographic_hotspots: GeographicHotspot[]
+  /** @deprecated Use sections[0] (Threat Assessment) */
   threat_assessment: string
+  /** @deprecated Use sections[6] (What to Watch) */
   outlook: string
   top_signals: BriefingSignal[]
 }
@@ -85,6 +109,16 @@ export interface BriefingDevelopment {
   severity: string
   category: string
   signal_count: number
+}
+
+export const SECTION_TITLES: Record<BriefingSectionId, string> = {
+  threat_assessment:     'Threat Assessment',
+  geopolitical_pulse:    'Geopolitical Pulse',
+  economic_trade:        'Economic & Trade',
+  maritime_intelligence: 'Maritime Intelligence',
+  climate_disaster:      'Climate & Disaster',
+  cyber_tech:            'Cyber & Tech',
+  what_to_watch:         'What to Watch',
 }
 
 // ─── Data Collection ─────────────────────────────────────────────────────────
@@ -229,8 +263,8 @@ function buildBriefingPrompt(
     `- ${h.country_code}${h.location_name ? ` (${h.location_name})` : ''}: ${h.signal_count} signals, avg severity: ${h.avg_severity_score}`
   ).join('\n')
 
-  return `You are an intelligence analyst for WorldPulse, an open-source global intelligence network.
-Generate a Daily Intelligence Briefing from the following data collected over the last 24 hours.
+  return `You are PULSE, the senior intelligence analyst for WorldPulse — an open-source global intelligence network.
+Generate a structured Daily Intelligence Briefing from the following data collected over the last 24 hours.
 
 TOTAL SIGNALS PROCESSED: ${totalSignals}
 
@@ -246,9 +280,48 @@ ${categoryList}
 GEOGRAPHIC HOTSPOTS:
 ${hotspotList}
 
+Your briefing MUST follow a FIXED 7-SECTION structure. Every section gets content, even on quiet days (minimum 2 sentences per section). This consistency is critical — readers develop a habit of checking the same structure daily.
+
 Generate a JSON response with EXACTLY this structure (no markdown, pure JSON):
 {
   "executive_summary": "2-3 sentence overview of the global intelligence picture",
+  "sections": {
+    "threat_assessment": {
+      "body": "2-4 sentences. Overall global threat posture: active conflicts, terrorism alerts, military escalations. What keeps the watch floor awake tonight.",
+      "severity": "critical|high|medium|low",
+      "signal_count": number
+    },
+    "geopolitical_pulse": {
+      "body": "2-4 sentences. Diplomatic shifts, elections, sanctions, regime changes, alliance moves, UN/NATO/EU actions.",
+      "severity": "critical|high|medium|low",
+      "signal_count": number
+    },
+    "economic_trade": {
+      "body": "2-4 sentences. Markets, trade disputes, supply chain disruptions, commodity shocks, central bank moves, sanctions impact on commerce.",
+      "severity": "critical|high|medium|low",
+      "signal_count": number
+    },
+    "maritime_intelligence": {
+      "body": "2-4 sentences. Chokepoint status (Suez, Hormuz, Malacca, Bab el-Mandeb), carrier strike group movements, piracy, dark shipping / sanctions evasion, port disruptions. This section is MANDATORY even if few maritime signals exist — use any shipping, naval, or trade signal.",
+      "severity": "critical|high|medium|low",
+      "signal_count": number
+    },
+    "climate_disaster": {
+      "body": "2-4 sentences. Natural disasters, extreme weather, climate policy, environmental crises, wildfire, flood, drought, earthquake alerts.",
+      "severity": "critical|high|medium|low",
+      "signal_count": number
+    },
+    "cyber_tech": {
+      "body": "2-4 sentences. Cyber attacks, data breaches, critical infrastructure threats, AI developments, technology regulation, internet outages.",
+      "severity": "critical|high|medium|low",
+      "signal_count": number
+    },
+    "what_to_watch": {
+      "body": "2-4 sentences. Forward-looking: what situations could escalate in the next 24-72 hours, scheduled events (elections, summits, hearings, launches), developing stories to monitor.",
+      "severity": "medium|low",
+      "signal_count": 0
+    }
+  },
   "key_developments": [
     {
       "headline": "Short headline",
@@ -257,13 +330,15 @@ Generate a JSON response with EXACTLY this structure (no markdown, pure JSON):
       "category": "category name",
       "signal_count": number
     }
-  ],
-  "threat_assessment": "1-2 sentences on overall global threat level and trending direction",
-  "outlook": "1-2 sentences on what to watch in the next 24-48 hours"
+  ]
 }
 
-Include 3-7 key developments, prioritized by severity and impact. Be factual and concise.
-Do NOT include any text outside the JSON object.`
+IMPORTANT RULES:
+- Include 3-7 key_developments prioritized by severity and impact
+- EVERY section must have content (2+ sentences). On quiet days, note the absence of significant activity
+- Maritime Intelligence is mandatory — use ANY available military, shipping, economy, or trade signals
+- Be factual, concise, and analytical. No sensationalism
+- Do NOT include any text outside the JSON object`
 }
 
 async function generateWithLLM(prompt: string): Promise<{ text: string; model: string }> {
@@ -402,7 +477,7 @@ function buildExtractiveBriefing(
   clusters: BriefingCluster[],
   categories: CategoryBreakdown[],
   totalSignals: number,
-): { executive_summary: string; key_developments: BriefingDevelopment[]; threat_assessment: string; outlook: string } {
+): { executive_summary: string; sections: BriefingSection[]; key_developments: BriefingDevelopment[]; threat_assessment: string; outlook: string } {
   const criticalSignals = signals.filter(s => s.severity === 'critical')
   const highSignals = signals.filter(s => s.severity === 'high')
 
@@ -423,7 +498,37 @@ function buildExtractiveBriefing(
 
   const outlook = `Monitor ${topCategory} signals for escalation. ${clusters.length > 0 ? `${clusters.length} active event clusters may develop further.` : 'No cross-source clusters detected — situation appears decentralized.'}`
 
-  return { executive_summary, key_developments, threat_assessment, outlook }
+  // Build 7 fixed sections from extractive data
+  const byCategory = (cats: string[]) => signals.filter(s => cats.includes(s.category))
+  const sectionSeverity = (sigs: BriefingSignal[]) => {
+    if (sigs.some(s => s.severity === 'critical')) return 'critical'
+    if (sigs.some(s => s.severity === 'high')) return 'high'
+    if (sigs.length > 0) return 'medium'
+    return 'low'
+  }
+  const summaryFor = (sigs: BriefingSignal[], fallback: string) => {
+    if (sigs.length === 0) return fallback
+    return sigs.slice(0, 3).map(s => s.title).join('. ') + '.'
+  }
+
+  const conflictSignals = byCategory(['conflict', 'military', 'security'])
+  const geopolSignals = byCategory(['geopolitics', 'elections'])
+  const econSignals = byCategory(['economy', 'finance'])
+  const maritimeSignals = signals.filter(s => s.category === 'military' || s.category === 'maritime' || (s.category === 'economy' && (s.title.toLowerCase().includes('ship') || s.title.toLowerCase().includes('port') || s.title.toLowerCase().includes('maritime'))))
+  const climateSignals = byCategory(['climate', 'disaster', 'weather'])
+  const cyberSignals = byCategory(['technology', 'security'])
+
+  const sections: BriefingSection[] = [
+    { id: 'threat_assessment', title: SECTION_TITLES.threat_assessment, body: threat_assessment + ` ${conflictSignals.length} conflict/military signals detected.`, severity: sectionSeverity(conflictSignals), signal_count: conflictSignals.length },
+    { id: 'geopolitical_pulse', title: SECTION_TITLES.geopolitical_pulse, body: summaryFor(geopolSignals, 'No significant geopolitical developments in this period. Diplomatic channels remain active.'), severity: sectionSeverity(geopolSignals), signal_count: geopolSignals.length },
+    { id: 'economic_trade', title: SECTION_TITLES.economic_trade, body: summaryFor(econSignals, 'Markets and trade flows remain within normal parameters. No major disruptions reported.'), severity: sectionSeverity(econSignals), signal_count: econSignals.length },
+    { id: 'maritime_intelligence', title: SECTION_TITLES.maritime_intelligence, body: summaryFor(maritimeSignals, 'Major chokepoints operating normally. No significant piracy or dark shipping alerts in this period.'), severity: sectionSeverity(maritimeSignals), signal_count: maritimeSignals.length },
+    { id: 'climate_disaster', title: SECTION_TITLES.climate_disaster, body: summaryFor(climateSignals, 'No major natural disasters or extreme weather events in this period. Standard monitoring continues.'), severity: sectionSeverity(climateSignals), signal_count: climateSignals.length },
+    { id: 'cyber_tech', title: SECTION_TITLES.cyber_tech, body: summaryFor(cyberSignals, 'Cyber threat landscape remains at baseline. No major breaches or critical infrastructure incidents reported.'), severity: sectionSeverity(cyberSignals), signal_count: cyberSignals.length },
+    { id: 'what_to_watch', title: SECTION_TITLES.what_to_watch, body: outlook, severity: 'medium', signal_count: 0 },
+  ]
+
+  return { executive_summary, sections, key_developments, threat_assessment, outlook }
 }
 
 // ─── Main Generator ──────────────────────────────────────────────────────────
@@ -455,10 +560,19 @@ export async function generateDailyBriefing(hours: number = 24): Promise<DailyBr
   ])
 
   let executive_summary: string
+  let sections: BriefingSection[]
   let key_developments: BriefingDevelopment[]
   let threat_assessment: string
   let outlook: string
   let model: string
+
+  const emptySections: BriefingSection[] = BRIEFING_SECTION_IDS.map(id => ({
+    id,
+    title: SECTION_TITLES[id],
+    body: 'No data available for this period.',
+    severity: 'low',
+    signal_count: 0,
+  }))
 
   if (signals.length === 0) {
     // No signals to brief on
@@ -471,6 +585,7 @@ export async function generateDailyBriefing(hours: number = 24): Promise<DailyBr
       total_signals: 0,
       total_clusters: 0,
       executive_summary: 'No signals were collected in this period. Systems may be offline or no events occurred.',
+      sections: emptySections,
       key_developments: [],
       category_breakdown: [],
       geographic_hotspots: [],
@@ -494,18 +609,38 @@ export async function generateDailyBriefing(hours: number = 24): Promise<DailyBr
       }
       const parsed = JSON.parse(jsonText) as {
         executive_summary: string
+        sections?: Record<string, { body: string; severity: string; signal_count: number }>
         key_developments: BriefingDevelopment[]
-        threat_assessment: string
-        outlook: string
+        // Legacy fields
+        threat_assessment?: string
+        outlook?: string
       }
       executive_summary = parsed.executive_summary
+
+      // Parse 7-section structure from LLM response
+      if (parsed.sections) {
+        sections = BRIEFING_SECTION_IDS.map(id => ({
+          id,
+          title: SECTION_TITLES[id],
+          body: parsed.sections![id]?.body ?? 'No significant activity in this domain.',
+          severity: parsed.sections![id]?.severity ?? 'low',
+          signal_count: parsed.sections![id]?.signal_count ?? 0,
+        }))
+      } else {
+        // LLM returned old format — build sections from extractive as fallback
+        const extractive = buildExtractiveBriefing(signals, clusters, categories, totalSignals)
+        sections = extractive.sections
+      }
+
       key_developments = parsed.key_developments ?? []
-      threat_assessment = parsed.threat_assessment
-      outlook = parsed.outlook
+      // Backward compat: extract from sections if available
+      threat_assessment = parsed.threat_assessment ?? sections.find(s => s.id === 'threat_assessment')?.body ?? ''
+      outlook = parsed.outlook ?? sections.find(s => s.id === 'what_to_watch')?.body ?? ''
     } catch (parseErr) {
       logger.warn({ parseErr }, 'Failed to parse LLM briefing response, falling back to extractive')
       const extractive = buildExtractiveBriefing(signals, clusters, categories, totalSignals)
       executive_summary = extractive.executive_summary
+      sections = extractive.sections
       key_developments = extractive.key_developments
       threat_assessment = extractive.threat_assessment
       outlook = extractive.outlook
@@ -514,6 +649,7 @@ export async function generateDailyBriefing(hours: number = 24): Promise<DailyBr
   } else {
     const extractive = buildExtractiveBriefing(signals, clusters, categories, totalSignals)
     executive_summary = extractive.executive_summary
+    sections = extractive.sections
     key_developments = extractive.key_developments
     threat_assessment = extractive.threat_assessment
     outlook = extractive.outlook
@@ -529,6 +665,7 @@ export async function generateDailyBriefing(hours: number = 24): Promise<DailyBr
     total_signals: totalSignals,
     total_clusters: clusters.length,
     executive_summary,
+    sections,
     key_developments,
     category_breakdown: categories,
     geographic_hotspots: hotspots,
