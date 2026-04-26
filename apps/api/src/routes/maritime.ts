@@ -166,10 +166,12 @@ export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
     if (cached) return reply.send(JSON.parse(cached))
 
     // Signal counts for maritime-tagged content (last 7 days)
+    // Include both verified and pending — RSS-ingested signals stay pending
+    // because the verification pipeline only runs on article-clustered signals.
     const [signalStats] = await db('signals')
-      .where('status', 'verified')
+      .whereIn('status', ['verified', 'pending'])
       .whereRaw("created_at > now() - interval '7 days'")
-      .whereRaw("(category IN ('military','maritime','economy') AND (tags @> ARRAY['maritime']::text[] OR category = 'military'))")
+      .whereRaw("(category IN ('military','maritime','economy','conflict') AND (tags @> ARRAY['maritime']::text[] OR category = 'military'))")
       .select(
         db.raw("count(*) as total_signals"),
         db.raw("count(*) filter (where severity IN ('critical','high')) as high_severity"),
@@ -179,9 +181,9 @@ export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
 
     // Recent maritime signals (top 20)
     const recentSignals = await db('signals')
-      .where('status', 'verified')
+      .whereIn('status', ['verified', 'pending'])
       .whereRaw("created_at > now() - interval '48 hours'")
-      .whereRaw("(category IN ('military','maritime','economy') AND (tags @> ARRAY['maritime']::text[] OR tags @> ARRAY['shipping']::text[] OR tags @> ARRAY['naval']::text[] OR category = 'military'))")
+      .whereRaw("(category IN ('military','maritime','economy','conflict') AND (tags @> ARRAY['maritime']::text[] OR tags @> ARRAY['shipping']::text[] OR tags @> ARRAY['naval']::text[] OR category = 'military'))")
       .orderBy('created_at', 'desc')
       .limit(20)
       .select('id', 'title', 'category', 'severity', 'location_name', 'source_url', 'created_at',
@@ -239,7 +241,7 @@ export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
     const { type = 'all', limit = 30, offset = 0 } = req.query as { type?: string; limit?: number; offset?: number }
 
     let query = db('signals')
-      .where('status', 'verified')
+      .whereIn('status', ['verified', 'pending'])
       .whereRaw("(category IN ('military','maritime','economy','conflict') AND (tags @> ARRAY['maritime']::text[] OR tags @> ARRAY['shipping']::text[] OR tags @> ARRAY['naval']::text[] OR tags @> ARRAY['piracy']::text[] OR tags @> ARRAY['ports']::text[] OR category = 'military'))")
       .orderBy('created_at', 'desc')
       .limit(limit)
@@ -341,7 +343,7 @@ export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
         db.raw('ST_Y(location::geometry) as lat'),
       )
       .whereIn('category', ['military', 'maritime'])
-      .where('status', 'verified')
+      .whereIn('status', ['verified', 'pending'])
       .whereRaw("created_at > now() - interval '24 hours'")
       .orderBy('created_at', 'desc')
       .limit(200) as Array<{
