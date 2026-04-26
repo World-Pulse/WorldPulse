@@ -144,7 +144,7 @@ export function TrendingEntities() {
         <div className="flex-1 h-px bg-[rgba(255,255,255,0.05)]" />
         {data && (
           <span className="font-mono text-[8px] text-wp-text3 whitespace-nowrap">
-            {data.total_signals_analyzed.toLocaleString()} signals
+            {(data.total_signals_analyzed ?? 0).toLocaleString()} signals
           </span>
         )}
       </div>

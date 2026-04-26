@@ -722,10 +722,17 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
         }
       })
 
+      // Count total signals analyzed for this window (same query the fallback uses)
+      const [{ count: totalSignalsInWindow }] = await db('signals')
+        .where('created_at', '>=', since)
+        .whereIn('status', ['verified', 'pending'])
+        .count('* as count')
+
       const result = {
         success:     true,
         window,
         source:      'knowledge_graph',
+        total_signals_analyzed:   Number(totalSignalsInWindow),
         total_entities_in_window: kgRows.length,
         unique_entities:          topEntities.length,
         entities:                 topEntities,
