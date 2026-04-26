@@ -56,7 +56,7 @@ async function run() {
     CREATE TYPE category AS ENUM (
       'breaking','conflict','geopolitics','climate','health',
       'economy','technology','science','elections','culture',
-      'disaster','security','sports','space','other'
+      'disaster','security','sports','space','politics','other'
     );
   EXCEPTION WHEN duplicate_object THEN NULL; END $$`)
 
