@@ -109,6 +109,10 @@ export default function MaritimePage() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<SignalTab>('all')
   const [signalLoading, setSignalLoading] = useState(false)
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({})
+
+  const toggleSection = (key: string) =>
+    setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }))
 
   const fetchOverview = useCallback(async () => {
     setLoading(true)
@@ -248,7 +252,7 @@ export default function MaritimePage() {
                   Carrier Strike Groups ({carriers.length})
                 </h2>
                 <div className="space-y-3">
-                  {carriers.map(c => (
+                  {(expandedSections['carriers'] ? carriers : carriers.slice(0, 5)).map(c => (
                     <Link key={c.id} href={`/signals/${c.id}`} className="block">
                       <div className="flex items-start justify-between py-2 border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/30 rounded px-1 -mx-1 transition-colors">
                         <div className="flex-1 min-w-0">
@@ -261,6 +265,14 @@ export default function MaritimePage() {
                       </div>
                     </Link>
                   ))}
+                  {carriers.length > 5 && (
+                    <button
+                      onClick={() => toggleSection('carriers')}
+                      className="w-full text-center text-xs text-cyan-400/70 hover:text-cyan-400 py-1.5 transition-colors"
+                    >
+                      {expandedSections['carriers'] ? 'Show less' : `Show all ${carriers.length} carrier groups`}
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -273,7 +285,7 @@ export default function MaritimePage() {
                   Dark Ships Detected ({darkShips.length})
                 </h2>
                 <div className="space-y-3">
-                  {darkShips.slice(0, 10).map(ds => (
+                  {(expandedSections['darkShips'] ? darkShips : darkShips.slice(0, 5)).map(ds => (
                     <Link key={ds.id} href={`/signals/${ds.id}`} className="block">
                       <div className="py-2 border-b border-red-900/20 last:border-0 hover:bg-red-900/10 rounded px-1 -mx-1 transition-colors">
                         <div className="text-sm text-zinc-200 truncate">{ds.title}</div>
@@ -284,6 +296,14 @@ export default function MaritimePage() {
                       </div>
                     </Link>
                   ))}
+                  {darkShips.length > 5 && (
+                    <button
+                      onClick={() => toggleSection('darkShips')}
+                      className="w-full text-center text-xs text-red-400/70 hover:text-red-400 py-1.5 transition-colors"
+                    >
+                      {expandedSections['darkShips'] ? 'Show less' : `Show all ${darkShips.length} dark ships`}
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -296,7 +316,7 @@ export default function MaritimePage() {
                   Vessel Alerts ({regularVessels.length})
                 </h2>
                 <div className="space-y-2">
-                  {regularVessels.slice(0, 8).map(v => (
+                  {(expandedSections['vessels'] ? regularVessels : regularVessels.slice(0, 5)).map(v => (
                     <Link key={v.id} href={`/signals/${v.id}`} className="block">
                       <div className="flex items-start justify-between py-2 border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/30 rounded px-1 -mx-1 transition-colors">
                         <div className="flex-1 min-w-0">
@@ -309,6 +329,14 @@ export default function MaritimePage() {
                       </div>
                     </Link>
                   ))}
+                  {regularVessels.length > 5 && (
+                    <button
+                      onClick={() => toggleSection('vessels')}
+                      className="w-full text-center text-xs text-cyan-400/70 hover:text-cyan-400 py-1.5 transition-colors"
+                    >
+                      {expandedSections['vessels'] ? 'Show less' : `Show all ${regularVessels.length} vessel alerts`}
+                    </button>
+                  )}
                 </div>
               </div>
             )}
