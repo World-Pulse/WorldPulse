@@ -110,6 +110,7 @@ export default function MaritimePage() {
   const [activeTab, setActiveTab] = useState<SignalTab>('all')
   const [signalLoading, setSignalLoading] = useState(false)
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({})
+  const [activeChokepoint, setActiveChokepoint] = useState<Chokepoint | null>(null)
 
   const toggleSection = (key: string) =>
     setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }))
@@ -140,8 +141,8 @@ export default function MaritimePage() {
   useEffect(() => { fetchOverview() }, [fetchOverview])
 
   // Fetch filtered signals when tab changes
-  const fetchFilteredSignals = useCallback(async (tab: SignalTab) => {
-    if (tab === 'all' && overview?.recent_signals) {
+  const fetchFilteredSignals = useCallback(async (tab: SignalTab, chokepoint?: Chokepoint | null) => {
+    if (tab === 'all' && !chokepoint && overview?.recent_signals) {
       setSignals(overview.recent_signals)
       return
     }
@@ -149,7 +150,12 @@ export default function MaritimePage() {
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
       const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
-      const res = await fetch(`${API_BASE}/api/v1/maritime/signals?type=${tab}&limit=30`, { headers })
+      const params = new URLSearchParams({ type: tab, limit: '30' })
+      if (chokepoint) {
+        params.set('near', `${chokepoint.lat},${chokepoint.lng}`)
+        params.set('radius', '500')
+      }
+      const res = await fetch(`${API_BASE}/api/v1/maritime/signals?${params}`, { headers })
       if (res.ok) {
         const json = await res.json()
         setSignals(json.data ?? [])
@@ -161,7 +167,7 @@ export default function MaritimePage() {
     }
   }, [overview])
 
-  useEffect(() => { fetchFilteredSignals(activeTab) }, [activeTab, fetchFilteredSignals])
+  useEffect(() => { fetchFilteredSignals(activeTab, activeChokepoint) }, [activeTab, activeChokepoint, fetchFilteredSignals])
 
   // Separate vessel types
   const carriers = vessels.filter(v => v.type === 'carrier')
@@ -228,18 +234,32 @@ export default function MaritimePage() {
                 <TrendingUp className="w-4 h-4 text-blue-400" />
                 Global Chokepoints
               </h2>
-              <div className="space-y-3">
+              <div className="space-y-1">
                 {(overview?.chokepoints ?? []).map(cp => (
-                  <div key={cp.id} className="flex items-center justify-between py-2 border-b border-zinc-800/50 last:border-0">
-                    <div>
-                      <div className="text-sm text-zinc-200">{cp.name}</div>
+                  <button
+                    key={cp.id}
+                    onClick={() => {
+                      if (activeChokepoint?.id === cp.id) {
+                        setActiveChokepoint(null)
+                      } else {
+                        setActiveChokepoint(cp)
+                      }
+                    }}
+                    className={`w-full flex items-center justify-between py-2 px-2 -mx-2 rounded transition-colors ${
+                      activeChokepoint?.id === cp.id
+                        ? 'bg-blue-500/15 border border-blue-500/30'
+                        : 'border border-transparent hover:bg-zinc-800/50'
+                    }`}
+                  >
+                    <div className="text-left">
+                      <div className={`text-sm ${activeChokepoint?.id === cp.id ? 'text-blue-300' : 'text-zinc-200'}`}>{cp.name}</div>
                       <div className="text-xs text-zinc-500">{cp.region}</div>
                     </div>
                     <div className="text-right">
                       <div className="text-sm font-mono text-blue-400">{cp.pctGlobalTrade}%</div>
                       <div className="text-xs text-zinc-500">{cp.dailyTransits}/day</div>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
@@ -345,6 +365,20 @@ export default function MaritimePage() {
           {/* Right Column: Signal Feed */}
           <div className="lg:col-span-2">
             <div className="bg-zinc-900/60 border border-zinc-800 rounded-lg">
+              {/* Active chokepoint filter banner */}
+              {activeChokepoint && (
+                <div className="flex items-center justify-between px-4 py-2.5 bg-blue-500/10 border-b border-blue-500/20">
+                  <span className="text-xs text-blue-300">
+                    Showing signals near <strong>{activeChokepoint.name}</strong> ({activeChokepoint.region}) — 500 km radius
+                  </span>
+                  <button
+                    onClick={() => setActiveChokepoint(null)}
+                    className="text-xs text-blue-400/70 hover:text-blue-300 ml-3 shrink-0 transition-colors"
+                  >
+                    Clear filter
+                  </button>
+                </div>
+              )}
               {/* Tab Bar */}
               <div className="border-b border-zinc-800 px-4 pt-4 overflow-x-auto">
                 <div className="flex gap-1">

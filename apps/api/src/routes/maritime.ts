@@ -234,11 +234,15 @@ export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
           type:   { type: 'string', enum: ['all', 'piracy', 'naval', 'shipping', 'port', 'sanctions'], default: 'all' },
           limit:  { type: 'number', default: 30, maximum: 100, minimum: 1 },
           offset: { type: 'number', default: 0, minimum: 0 },
+          near:   { type: 'string', description: 'lat,lng — filter signals within radius of this point' },
+          radius: { type: 'number', default: 500, minimum: 50, maximum: 2000, description: 'Radius in km (default 500)' },
         },
       },
     },
   }, async (req, reply) => {
-    const { type = 'all', limit = 30, offset = 0 } = req.query as { type?: string; limit?: number; offset?: number }
+    const { type = 'all', limit = 30, offset = 0, near, radius = 500 } = req.query as {
+      type?: string; limit?: number; offset?: number; near?: string; radius?: number
+    }
 
     let query = db('signals')
       .whereIn('status', ['verified', 'pending'])
@@ -252,6 +256,20 @@ export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
     if (type === 'shipping')   query = query.whereRaw("tags @> ARRAY['shipping']::text[]")
     if (type === 'port')       query = query.whereRaw("tags @> ARRAY['ports']::text[]")
     if (type === 'sanctions')  query = query.whereRaw("tags @> ARRAY['sanctions']::text[]")
+
+    // Geographic proximity filter — filter signals near a chokepoint
+    if (near) {
+      const [latStr, lngStr] = near.split(',')
+      const lat = parseFloat(latStr)
+      const lng = parseFloat(lngStr)
+      if (!isNaN(lat) && !isNaN(lng)) {
+        const radiusMeters = (radius ?? 500) * 1000
+        query = query.whereRaw(
+          'location IS NOT NULL AND ST_DWithin(location::geography, ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography, ?)',
+          [lng, lat, radiusMeters]
+        )
+      }
+    }
 
     const rows = await query.select(
       'id', 'title', 'category', 'severity', 'reliability_score',
