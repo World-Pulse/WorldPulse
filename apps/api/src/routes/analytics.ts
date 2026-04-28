@@ -395,6 +395,27 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
     const top_regions = topRegionRows
       .map(r => ({ name: r.location_name, count: Number(r.count) }))
 
+    // Enrich with statistical baseline context when available
+    let baseline_context: {
+      avg_30d: number
+      stddev_30d: number
+      z_score: number
+      statistically_significant: boolean
+    } | null = null
+
+    try {
+      const { getBaselineStats } = await import('../lib/cortex/baselines')
+      const stats = await getBaselineStats('conflict', 'global', 'all')
+      if (stats) {
+        baseline_context = {
+          avg_30d: stats.avg_30d,
+          stddev_30d: stats.stddev_30d,
+          z_score: stats.z_score_30d,
+          statistically_significant: Math.abs(stats.z_score_30d) >= 2.0,
+        }
+      }
+    } catch { /* baselines not yet available — skip */ }
+
     const result = {
       score,
       level,
@@ -405,6 +426,7 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
       previous_count: previousTotal,
       severity_breakdown: severityCounts,
       top_regions,
+      baseline_context,
       generated_at: new Date().toISOString(),
     }
 
@@ -924,5 +946,253 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
 
     await redis.setex(cacheKey, 300, JSON.stringify(result)).catch(() => {})
     return reply.send(result)
+  })
+
+  // ─── STATISTICAL BASELINES ──────────────────────────────────
+  // GET /api/v1/analytics/baselines
+  // Returns rolling averages, z-scores, and trend for a category × region.
+  app.get('/baselines', {
+    schema: {
+      summary: 'Statistical Baselines',
+      description: 'Rolling 7/30/90-day averages, z-score anomaly detection, and trend for a category × region',
+      querystring: {
+        type: 'object',
+        properties: {
+          category: { type: 'string', default: 'all' },
+          region:   { type: 'string', default: 'global' },
+          severity: { type: 'string', default: 'all' },
+        },
+      },
+    },
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    const { category = 'all', region = 'global', severity = 'all' } = req.query as {
+      category?: string; region?: string; severity?: string
+    }
+
+    const { getBaselineStats } = await import('../lib/cortex/baselines')
+    const stats = await getBaselineStats(category, region, severity)
+
+    if (!stats) {
+      return reply.send({
+        success: true,
+        message: 'Insufficient baseline data — need at least 3 days of history',
+        category, region, severity,
+        stats: null,
+      })
+    }
+
+    return reply.send({
+      success: true,
+      category, region, severity,
+      stats,
+      generated_at: new Date().toISOString(),
+    })
+  })
+
+  // GET /api/v1/analytics/anomalies
+  // Returns recent z-score anomalies.
+  app.get('/anomalies', {
+    schema: {
+      summary: 'Signal Anomalies',
+      description: 'Recent z-score anomalies where signal volume deviates significantly from baseline',
+      querystring: {
+        type: 'object',
+        properties: {
+          days:     { type: 'number', default: 7 },
+          min_z:    { type: 'number', default: 2.0 },
+          category: { type: 'string' },
+        },
+      },
+    },
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    const { days = 7, min_z = 2.0, category } = req.query as {
+      days?: number; min_z?: number; category?: string
+    }
+
+    let query = db('signal_anomalies')
+      .where('date', '>=', db.raw(`CURRENT_DATE - INTERVAL '${Math.min(days, 90)} days'`))
+      .where('z_score', '>=', min_z)
+      .orderBy('z_score', 'desc')
+      .limit(50)
+
+    if (category) {
+      query = query.where('category', category)
+    }
+
+    const anomalies = await query
+
+    return reply.send({
+      success: true,
+      count: anomalies.length,
+      anomalies,
+      generated_at: new Date().toISOString(),
+    })
+  })
+
+  // ─── SEMANTIC SEARCH ─────────────────────────────────────
+  // GET /api/v1/analytics/semantic-search
+  app.get('/semantic-search', {
+    schema: {
+      summary: 'Semantic Search',
+      description: 'Natural language search using vector embeddings',
+      querystring: {
+        type: 'object',
+        properties: {
+          q:        { type: 'string' },
+          category: { type: 'string' },
+          limit:    { type: 'number', default: 20 },
+        },
+        required: ['q'],
+      },
+    },
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    const { q, category, limit = 20 } = req.query as {
+      q: string; category?: string; limit?: number
+    }
+
+    const { semanticSearch } = await import('../lib/cortex/embeddings')
+    const results = await semanticSearch(q, { category, limit: Math.min(limit, 50) })
+
+    return reply.send({
+      success: true,
+      query: q,
+      results,
+      count: results.length,
+    })
+  })
+
+  // GET /api/v1/analytics/embedding-stats
+  app.get('/embedding-stats', {
+    schema: {
+      summary: 'Embedding Coverage Stats',
+      description: 'How many signals have vector embeddings',
+    },
+  }, async (_req, reply) => {
+    const { getEmbeddingStats } = await import('../lib/cortex/embeddings')
+    const stats = await getEmbeddingStats()
+    return reply.send({ success: true, ...stats })
+  })
+
+  // ─── PATTERN DETECTION RESULTS ────────────────────────────
+  // GET /api/v1/analytics/patterns
+  // Returns the latest cross-domain pattern detection results (weekly).
+  app.get('/patterns', {
+    schema: {
+      summary: 'Cross-Domain Patterns',
+      description: 'Latest learned causal chains, geographic hotspots, and cross-cluster bridges from the weekly pattern detection cycle',
+    },
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (_req, reply) => {
+    const cached = await redis.get('cortex:patterns:latest').catch(() => null)
+
+    if (cached) {
+      return reply.send({
+        success: true,
+        ...JSON.parse(cached),
+      })
+    }
+
+    return reply.send({
+      success: true,
+      message: 'No pattern detection results yet — runs weekly Sunday 5am UTC',
+      causal_chains: [],
+      cross_cluster_bridges: [],
+      geographic_hotspots: [],
+    })
+  })
+
+  // POST /api/v1/analytics/patterns/run
+  // Trigger a pattern detection cycle on demand. Admin-only.
+  app.post('/patterns/run', {
+    preHandler: [authenticate],
+    schema: {
+      summary: 'Run Pattern Detection',
+      description: 'Trigger the cross-domain pattern detection cycle on demand (admin use)',
+    },
+  }, async (_req, reply) => {
+    const { runPatternDetectionCycle } = await import('../lib/cortex/pattern-detection')
+    // Run async
+    runPatternDetectionCycle().catch(err => {
+      console.error('[CORTEX] On-demand pattern detection failed:', err)
+    })
+
+    return reply.send({
+      success: true,
+      message: 'Pattern detection started. Results will be cached when complete.',
+    })
+  })
+
+  // ─── CORTEX HEALTH ────────────────────────────────────────
+  // GET /api/v1/analytics/cortex-health
+  // Comprehensive health check of all Cortex subsystems + intelligence quality score.
+  app.get('/cortex-health', {
+    schema: {
+      summary: 'Cortex Health Dashboard',
+      description: 'All Cortex subsystem statuses, intelligence quality score, and pipeline throughput — used by brain agent and admin dashboard',
+    },
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (_req, reply) => {
+    const { getCortexHealth } = await import('../lib/cortex/metrics')
+    const health = await getCortexHealth()
+    return reply.send({ success: true, ...health })
+  })
+
+  // GET /api/v1/analytics/intelligence-score
+  // Just the composite intelligence quality score — lightweight.
+  app.get('/intelligence-score', {
+    schema: {
+      summary: 'Intelligence Quality Score',
+      description: 'Composite 0-100 score measuring how much intelligence vs raw data the Cortex has built',
+    },
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+  }, async (_req, reply) => {
+    const { computeIntelligenceQuality } = await import('../lib/cortex/metrics')
+    const quality = await computeIntelligenceQuality()
+    return reply.send({
+      success: true,
+      score: quality.intelligence_score,
+      breakdown: {
+        corroboration: Math.round(quality.corroboration_rate * 100),
+        reliability: Math.round(quality.avg_reliability * 100),
+        embedding_coverage: Math.round(quality.embedding_coverage),
+        entity_coverage: Math.round(quality.entity_coverage),
+        thread_coverage: Math.round(quality.thread_coverage * 100),
+        baseline_maturity: Math.min(100, Math.round((quality.baseline_days / 30) * 100)),
+        pattern_discovery: quality.causal_chains_discovered + quality.geographic_hotspots + quality.cross_cluster_bridges,
+      },
+      generated_at: new Date().toISOString(),
+    })
+  })
+
+  // POST /api/v1/analytics/baselines/backfill
+  // Trigger a baseline backfill for the last N days. Admin-only.
+  app.post('/baselines/backfill', {
+    preHandler: [authenticate],
+    schema: {
+      summary: 'Backfill Baselines',
+      description: 'Compute baselines for the last N days (admin use)',
+      body: {
+        type: 'object',
+        properties: {
+          days: { type: 'number', default: 30, maximum: 90 },
+        },
+      },
+    },
+  }, async (req, reply) => {
+    const { days = 30 } = (req.body as { days?: number }) ?? {}
+
+    const { backfillBaselines } = await import('../lib/cortex/baselines')
+    // Run async — don't block the response
+    backfillBaselines(Math.min(days, 90)).catch(err => {
+      console.error('[CORTEX] Backfill failed:', err)
+    })
+
+    return reply.send({
+      success: true,
+      message: `Backfill started for last ${Math.min(days, 90)} days. Check server logs for progress.`,
+    })
   })
 }

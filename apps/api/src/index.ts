@@ -41,6 +41,7 @@ import { registerThreatsRoutes }  from './routes/threats'
 import { registerJammingRoutes }  from './routes/jamming'
 import { registerHazardsRoutes }  from './routes/hazards'
 import { registerOutagesRoutes }  from './routes/outages'
+import { registerThreadRoutes }   from './routes/threads'
 import { registerAdminKafkaRoutes } from './routes/admin-kafka'
 import { registerSlopRoutes } from './routes/slop'
 import { registerRssRoutes } from './routes/rss'
@@ -346,6 +347,7 @@ async function bootstrap() {
   await app.register(registerJammingRoutes,       { prefix: '/api/v1/jamming' })
   await app.register(registerHazardsRoutes,       { prefix: '/api/v1/hazards' })
   await app.register(registerOutagesRoutes,       { prefix: '/api/v1/outages' })
+  await app.register(registerThreadRoutes,       { prefix: '/api/v1/threads' })
   await app.register(registerAdminKafkaRoutes,   { prefix: '/api/v1/admin' })
   await app.register(registerSlopRoutes,         { prefix: '/api/v1/slop' })
   await app.register(registerRssRoutes,          { prefix: '/api/v1/rss' })
