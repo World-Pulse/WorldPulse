@@ -232,7 +232,10 @@ export default function MaritimePage() {
               Global Chokepoints
             </h2>
             <div className="space-y-1">
-              {(overview?.chokepoints ?? []).map(cp => (
+              {(expandedSections['chokepoints']
+                ? (overview?.chokepoints ?? [])
+                : (overview?.chokepoints ?? []).slice(0, 6)
+              ).map(cp => (
                 <button
                   key={cp.id}
                   onClick={() => {
@@ -258,6 +261,14 @@ export default function MaritimePage() {
                   </div>
                 </button>
               ))}
+              {(overview?.chokepoints ?? []).length > 6 && (
+                <button
+                  onClick={() => toggleSection('chokepoints')}
+                  className="w-full text-center text-xs text-blue-400/70 hover:text-blue-400 py-1.5 transition-colors"
+                >
+                  {expandedSections['chokepoints'] ? 'Show less' : `Show all ${(overview?.chokepoints ?? []).length} chokepoints`}
+                </button>
+              )}
             </div>
           </div>
 
