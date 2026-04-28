@@ -5,7 +5,7 @@
  * from the last 24 hours, sourced from the signals table.
  *
  * GET /api/v1/maritime/vessels
- *   - category IN ('military', 'maritime') with status='verified'
+ *   - category IN ('military', 'maritime') with status IN ('verified', 'pending')
  *   - Classifies each signal as 'carrier' | 'vessel' | 'dark_ship'
  *   - Redis-cached for 5 minutes (key: 'maritime:vessels')
  *   - Rate limited to 30 req/min
@@ -14,7 +14,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
-import { authenticate } from '../middleware/auth'
+import { optionalAuth } from '../middleware/auth'
 
 // Carrier data inlined here to avoid cross-package import in the API
 export const CARRIER_REGISTRY_ALIASES: Array<{
@@ -154,7 +154,7 @@ export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
   // Summary stats: chokepoints, signal counts, carrier positions, piracy alerts
 
   app.get('/overview', {
-    preHandler: [authenticate],
+    preHandler: [optionalAuth],
     config: { rateLimit: { max: MARITIME_RATE_LIMIT, timeWindow: '1 minute' } },
     schema: {
       tags: ['maritime'],
@@ -223,7 +223,7 @@ export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
   // Maritime-filtered signal feed with pagination
 
   app.get('/signals', {
-    preHandler: [authenticate],
+    preHandler: [optionalAuth],
     config: { rateLimit: { max: MARITIME_RATE_LIMIT, timeWindow: '1 minute' } },
     schema: {
       tags: ['maritime'],
@@ -283,7 +283,7 @@ export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
   // ── GET /vessels ────────────────────────────────────────────────────────────
 
   app.get('/vessels', {
-    preHandler: [authenticate],
+    preHandler: [optionalAuth],
     config: {
       rateLimit: {
         max:        MARITIME_RATE_LIMIT,

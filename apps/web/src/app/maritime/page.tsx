@@ -113,7 +113,7 @@ export default function MaritimePage() {
   const fetchOverview = useCallback(async () => {
     setLoading(true)
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('wp_token') : null
+      const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
       const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
 
       const [overviewRes, vesselsRes] = await Promise.all([
@@ -143,7 +143,7 @@ export default function MaritimePage() {
     }
     setSignalLoading(true)
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('wp_token') : null
+      const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
       const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
       const res = await fetch(`${API_BASE}/api/v1/maritime/signals?type=${tab}&limit=30`, { headers })
       if (res.ok) {

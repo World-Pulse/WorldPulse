@@ -75,7 +75,7 @@ export function BiasCorrectionPanel({ sourceId, currentBiasLabel }: Props) {
   const [successMsg,   setSuccessMsg]  = useState<string | null>(null)
 
   const token = typeof window !== 'undefined'
-    ? (localStorage.getItem('wp_token') ?? localStorage.getItem('auth_token'))
+    ? (localStorage.getItem('wp_access_token') ?? localStorage.getItem('auth_token'))
     : null
 
   const fetchData = useCallback(async () => {

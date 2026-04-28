@@ -502,7 +502,7 @@ export default function BriefingPage() {
 
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
 
-      const token = typeof window !== 'undefined' ? localStorage.getItem('wp_token') : null
+      const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
       const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
 
       const [morningRes, pulseRes, signalRes, structuredRes] = await Promise.all([
