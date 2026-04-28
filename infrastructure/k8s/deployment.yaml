@@ -1,0 +1,320 @@
+---
+# WorldPulse Kubernetes Deployment
+# Production-ready configuration
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: worldpulse
+  labels:
+    app.kubernetes.io/name: worldpulse
+
+---
+# ─── API DEPLOYMENT ────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worldpulse-api
+  namespace: worldpulse
+  labels:
+    app: worldpulse-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: worldpulse-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: worldpulse-api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3001"
+        prometheus.io/path: "/metrics"
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values: [worldpulse-api]
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: api
+        image: ghcr.io/worldpulse/api:latest
+        ports:
+        - containerPort: 3001
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          value: production
+        - name: PORT
+          value: "3001"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: worldpulse-secrets
+              key: DATABASE_URL
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: worldpulse-secrets
+              key: REDIS_URL
+        - name: KAFKA_BROKERS
+          valueFrom:
+            configMapKeyRef:
+              name: worldpulse-config
+              key: KAFKA_BROKERS
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: worldpulse-secrets
+              key: JWT_SECRET
+        - name: MEILI_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: worldpulse-config
+              key: MEILI_HOST
+        - name: MEILI_KEY
+          valueFrom:
+            secretKeyRef:
+              name: worldpulse-secrets
+              key: MEILI_KEY
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worldpulse-api
+  namespace: worldpulse
+spec:
+  selector:
+    app: worldpulse-api
+  ports:
+  - port: 3001
+    targetPort: 3001
+    protocol: TCP
+
+---
+# ─── WEB DEPLOYMENT ────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worldpulse-web
+  namespace: worldpulse
+  labels:
+    app: worldpulse-web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: worldpulse-web
+  template:
+    metadata:
+      labels:
+        app: worldpulse-web
+    spec:
+      containers:
+      - name: web
+        image: ghcr.io/worldpulse/web:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: NEXT_PUBLIC_API_URL
+          valueFrom:
+            configMapKeyRef:
+              name: worldpulse-config
+              key: PUBLIC_API_URL
+        - name: NEXT_PUBLIC_WS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: worldpulse-config
+              key: PUBLIC_WS_URL
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worldpulse-web
+  namespace: worldpulse
+spec:
+  selector:
+    app: worldpulse-web
+  ports:
+  - port: 3000
+    targetPort: 3000
+
+---
+# ─── SCRAPER DEPLOYMENT ────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worldpulse-scraper
+  namespace: worldpulse
+spec:
+  replicas: 2  # Multiple scraper nodes for redundancy
+  selector:
+    matchLabels:
+      app: worldpulse-scraper
+  template:
+    metadata:
+      labels:
+        app: worldpulse-scraper
+    spec:
+      containers:
+      - name: scraper
+        image: ghcr.io/worldpulse/scraper:latest
+        env:
+        - name: NODE_ENV
+          value: production
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: worldpulse-secrets
+              key: DATABASE_URL
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: worldpulse-secrets
+              key: REDIS_URL
+        - name: KAFKA_BROKERS
+          valueFrom:
+            configMapKeyRef:
+              name: worldpulse-config
+              key: KAFKA_BROKERS
+        - name: SCRAPE_INTERVAL_MS
+          value: "30000"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+
+---
+# ─── INGRESS ────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: worldpulse-ingress
+  namespace: worldpulse
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    # WebSocket support
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+spec:
+  tls:
+  - hosts:
+    - worldpulse.io
+    - api.worldpulse.io
+    secretName: worldpulse-tls
+  rules:
+  - host: worldpulse.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: worldpulse-web
+            port:
+              number: 3000
+  - host: api.worldpulse.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: worldpulse-api
+            port:
+              number: 3001
+
+---
+# ─── HORIZONTAL POD AUTOSCALER ─────────────────────────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: worldpulse-api-hpa
+  namespace: worldpulse
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: worldpulse-api
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+---
+# ─── CONFIG MAP ─────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: worldpulse-config
+  namespace: worldpulse
+data:
+  KAFKA_BROKERS: "kafka-0.kafka.worldpulse.svc:9092,kafka-1.kafka.worldpulse.svc:9092"
+  MEILI_HOST: "http://meilisearch.worldpulse.svc:7700"
+  PUBLIC_API_URL: "https://api.worldpulse.io"
+  PUBLIC_WS_URL: "wss://api.worldpulse.io"

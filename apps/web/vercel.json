@@ -1,0 +1,44 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+
+  "buildCommand": "cd ../.. && pnpm turbo run build --filter=@worldpulse/web",
+  "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
+  "outputDirectory": ".next",
+
+  "functions": {
+    "src/app/api/**": {
+      "maxDuration": 30
+    }
+  },
+
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "index, follow" }
+      ]
+    },
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" }
+      ]
+    }
+  ],
+
+  "rewrites": [
+    {
+      "source": "/monitoring-tunnel/:path*",
+      "destination": "https://o0.ingest.sentry.io/:path*"
+    }
+  ],
+
+  "env": {
+    "NEXT_PUBLIC_API_URL": "https://api.world-pulse.io",
+    "NEXT_PUBLIC_WS_URL": "wss://api.world-pulse.io",
+    "NEXT_PUBLIC_APP_URL": "https://world-pulse.io"
+  },
+
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- apps/web/ packages/"
+}

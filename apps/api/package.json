@@ -1,0 +1,52 @@
+{
+  "name": "@worldpulse/api",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "lint": "eslint src",
+    "db:migrate": "knex migrate:latest --knexfile src/db/knexfile.ts",
+    "db:seed": "knex seed:run --knexfile src/db/knexfile.ts",
+    "db:rollback": "knex migrate:rollback --knexfile src/db/knexfile.ts",
+    "search:backfill": "tsx src/scripts/backfill-search.ts",
+    "docs:generate": "tsx src/scripts/generate-openapi.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.0",
+    "fastify-raw-body": "^5.0.0",
+    "@fastify/helmet": "^12.0.0",
+    "@fastify/jwt": "^9.0.0",
+    "@fastify/multipart": "^9.0.0",
+    "@fastify/rate-limit": "^10.0.0",
+    "@fastify/swagger": "^9.7.0",
+    "@fastify/swagger-ui": "^5.2.5",
+    "@fastify/websocket": "^11.0.0",
+    "@worldpulse/types": "workspace:*",
+    "bcryptjs": "^2.4.3",
+    "fastify": "^5.8.3",
+    "graphql": "^16.9.0",
+    "ioredis": "^5.4.0",
+    "mercurius": "^14.1.0",
+    "kafkajs": "^2.2.4",
+    "knex": "^3.1.0",
+    "meilisearch": "^0.44.0",
+    "pg": "^8.12.0",
+    "pino": "^9.4.0",
+    "pino-pretty": "^11.2.0",
+    "sharp": "^0.33.5",
+    "stripe": "^17.7.0",
+    "@sentry/node": "^8.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/pg": "^8.11.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

@@ -1,0 +1,238 @@
+{
+  "nav": {
+    "liveFeed": "ライブフィード",
+    "worldMap": "世界地図",
+    "alerts": "アラート",
+    "analytics": "分析",
+    "explore": "探索",
+    "clusters": "イベントクラスター",
+    "briefing": "デイリーブリーフィング",
+    "finance": "ファイナンス",
+    "countries": "国別インテル",
+    "cameras": "ライブカメラ",
+    "patents": "特許インテル",
+    "communities": "コミュニティ",
+    "mySources": "マイソース",
+    "developers": "Developers",
+    "settings": "設定",
+    "navigate": "ナビゲート",
+    "signalChannels": "シグナルチャンネル",
+    "trendingNow": "今トレンド",
+    "signIn": "サインイン",
+    "joinFree": "無料で参加",
+    "searchSignals": "シグナルを検索…",
+    "tracking": "トラッキング",
+    "signals": "シグナル",
+    "live": "ライブ",
+    "sanctions": "Sanctions",
+    "waterSecurity": "Water Security",
+    "laborRights": "Labor Rights",
+    "claims": "Claims",
+    "audioClaims": "Audio Claims",
+    "videoClaims": "Video Claims"
+  },
+  "channels": {
+    "breakingNews": "速報",
+    "conflictZones": "紛争地域",
+    "markets": "マーケット",
+    "climate": "気候",
+    "health": "健康",
+    "scienceTech": "科学・技術",
+    "politics": "政治",
+    "culture": "文化"
+  },
+  "feed": {
+    "globalPulse": "グローバルパルス",
+    "forYou": "おすすめ",
+    "following": "フォロー中",
+    "verifiedSources": "認証済みソース",
+    "aiDigest": "AIダイジェスト",
+    "loadMore": "シグナルをもっと読む",
+    "noSignals": "シグナルが見つかりません",
+    "nothingHere": "まだ何もありません",
+    "newPosts": "{count}件の新着シグナル — クリックして読み込む",
+    "tabs": {
+      "all": "すべて",
+      "breaking": "速報",
+      "conflict": "紛争",
+      "climate": "気候",
+      "markets": "マーケット",
+      "tech": "テック",
+      "health": "健康"
+    }
+  },
+  "signal": {
+    "impact": "インパクト",
+    "reliability": "信頼性",
+    "liveResults": "ライブ結果",
+    "breaking": "速報",
+    "aiSynthesis": "AI合成",
+    "sources": "ソース",
+    "viewFull": "シグナル全文を見る",
+    "share": "シェア",
+    "bookmark": "ブックマーク",
+    "report": "報告"
+  },
+  "actions": {
+    "submitSignal": "シグナルを送信",
+    "follow": "フォロー",
+    "following": "フォロー中",
+    "like": "いいね",
+    "boost": "ブースト",
+    "share": "シェア",
+    "reply": "返信",
+    "save": "保存",
+    "cancel": "キャンセル",
+    "confirm": "確認",
+    "back": "戻る",
+    "next": "次へ",
+    "submit": "送信",
+    "close": "閉じる",
+    "edit": "編集",
+    "delete": "削除",
+    "learnMore": "詳しく見る"
+  },
+  "auth": {
+    "login": {
+      "title": "WorldPulseにサインイン",
+      "subtitle": "リアルタイムで世界の出来事を追跡",
+      "emailLabel": "メールアドレス",
+      "emailPlaceholder": "you@example.com",
+      "passwordLabel": "パスワード",
+      "passwordPlaceholder": "パスワードを入力",
+      "submitButton": "サインイン",
+      "forgotPassword": "パスワードを忘れた場合",
+      "noAccount": "アカウントをお持ちでない方",
+      "register": "無料で参加",
+      "orContinueWith": "または続ける",
+      "continueWithGitHub": "GitHubで続ける",
+      "continueWithGoogle": "Googleで続ける",
+      "invalidCredentials": "メールまたはパスワードが無効です",
+      "accountSuspended": "アカウントが停止されています"
+    },
+    "register": {
+      "title": "WorldPulseに参加",
+      "subtitle": "世界のオープンインテリジェンスネットワーク",
+      "handleLabel": "ユーザー名",
+      "handlePlaceholder": "yourhandle",
+      "displayNameLabel": "表示名",
+      "displayNamePlaceholder": "あなたの名前",
+      "emailLabel": "メールアドレス",
+      "emailPlaceholder": "you@example.com",
+      "passwordLabel": "パスワード",
+      "passwordPlaceholder": "強力なパスワードを選択",
+      "submitButton": "アカウントを作成",
+      "alreadyAccount": "すでにアカウントをお持ちの方",
+      "signIn": "サインイン",
+      "termsNotice": "参加することで、利用規約とプライバシーポリシーに同意したことになります",
+      "handleTaken": "このユーザー名は既に使用されています",
+      "emailTaken": "このメールアドレスは既に登録されています",
+      "passwordWeak": "パスワードは8文字以上である必要があります"
+    },
+    "forgotPassword": {
+      "title": "パスワードをリセット",
+      "subtitle": "メールにリセットリンクをお送りします",
+      "emailLabel": "メールアドレス",
+      "emailPlaceholder": "you@example.com",
+      "submitButton": "リセットリンクを送信",
+      "backToLogin": "サインインに戻る",
+      "successMessage": "リセットリンクのメールをご確認ください",
+      "notFound": "そのメールアドレスのアカウントが見つかりません"
+    }
+  },
+  "settings": {
+    "title": "設定",
+    "sections": {
+      "account": "アカウント",
+      "notifications": "通知",
+      "appearance": "外観",
+      "language": "言語・地域",
+      "privacy": "プライバシー",
+      "security": "セキュリティ",
+      "about": "概要"
+    },
+    "language": {
+      "title": "言語",
+      "selectLanguage": "言語を選択",
+      "currentLanguage": "現在の言語"
+    },
+    "appearance": {
+      "theme": "テーマ",
+      "dark": "ダーク",
+      "light": "ライト",
+      "system": "システム"
+    },
+    "notifications": {
+      "breakingAlerts": "速報アラート",
+      "alertSubscriptions": "アラート購読",
+      "mentions": "メンション",
+      "replies": "返信",
+      "follows": "新しいフォロワー",
+      "digestEmail": "デイリーダイジェストメール"
+    },
+    "account": {
+      "editProfile": "プロフィールを編集",
+      "changePassword": "パスワードを変更",
+      "deleteAccount": "アカウントを削除",
+      "exportData": "データをエクスポート"
+    }
+  },
+  "errors": {
+    "generic": "問題が発生しました。もう一度お試しください。",
+    "notFound": "ページが見つかりません",
+    "unauthorized": "この操作にはサインインが必要です",
+    "forbidden": "このアクションを実行する権限がありません",
+    "rateLimited": "リクエストが多すぎます。少し待ってからお試しください。",
+    "networkError": "ネットワークエラー。接続をご確認ください。",
+    "serverError": "サーバーエラー。現在対応中です。",
+    "signalNotFound": "シグナルが見つかりません",
+    "userNotFound": "ユーザーが見つかりません"
+  },
+  "composer": {
+    "placeholder": "シグナルまたは投稿をシェア…",
+    "submitSignal": "シグナルを送信",
+    "addLocation": "位置を追加",
+    "addMedia": "メディアを追加",
+    "selectCategory": "カテゴリを選択",
+    "selectSeverity": "重大度を選択",
+    "sourceUrl": "ソースURL（任意）",
+    "characterCount": "{count}/2000"
+  },
+  "empty": {
+    "noSignals": "シグナルが見つかりません",
+    "noSignalsHint": "フィルターを調整するか、後でご確認ください",
+    "nothingHere": "まだ何もありません",
+    "noFollowing": "まだ誰もフォローしていません",
+    "noAlerts": "アラートが設定されていません",
+    "noBookmarks": "ブックマークがありません",
+    "startExploring": "探索を始める"
+  },
+  "sources": {
+    "suggest": {
+      "title": "ソースを提案",
+      "subtitle": "WorldPulseのカバレッジ拡大にご協力ください",
+      "nameLabel": "ソース名",
+      "namePlaceholder": "例：BBC World Service",
+      "urlLabel": "ウェブサイトURL",
+      "urlPlaceholder": "https://example.com",
+      "rssLabel": "RSSフィードURL",
+      "rssPlaceholder": "https://example.com/feed",
+      "categoryLabel": "カテゴリ",
+      "reasonLabel": "なぜ追加すべきか？",
+      "reasonPlaceholder": "このソースのカバレッジ、信頼性、WorldPulseに貢献できる理由を説明してください…",
+      "submitButton": "提案を送信",
+      "successTitle": "ありがとうございます！",
+      "successMessage": "提案が送信されました。すべての提案は48時間以内に確認されます。",
+      "submitAnother": "別の提案を送信"
+    }
+  },
+  "common": {
+    "worldpulse": "WorldPulse",
+    "globalThreatIndex": "グローバル脅威指数",
+    "level": "レベル",
+    "elevated": "上昇",
+    "signalsCount": "{count}件のシグナル",
+    "ago": "前",
+    "live": "ライブ"
+  }
+}

@@ -1,0 +1,232 @@
+{
+  "nav": {
+    "liveFeed": "Feed en vivo",
+    "worldMap": "Mapa mundial",
+    "alerts": "Alertas",
+    "analytics": "Análisis",
+    "explore": "Explorar",
+    "communities": "Comunidades",
+    "mySources": "Mis fuentes",
+    "developers": "Developers",
+    "settings": "Configuración",
+    "navigate": "Navegar",
+    "signalChannels": "Canales de señales",
+    "trendingNow": "Tendencias ahora",
+    "signIn": "Iniciar sesión",
+    "joinFree": "Unirse gratis",
+    "searchSignals": "Buscar señales…",
+    "tracking": "Rastreando",
+    "signals": "señales",
+    "live": "EN VIVO",
+    "sanctions": "Sanctions",
+    "waterSecurity": "Water Security",
+    "laborRights": "Labor Rights",
+    "claims": "Claims",
+    "audioClaims": "Audio Claims",
+    "videoClaims": "Video Claims"
+  },
+  "channels": {
+    "breakingNews": "Noticias de última hora",
+    "conflictZones": "Zonas de conflicto",
+    "markets": "Mercados",
+    "climate": "Clima",
+    "health": "Salud",
+    "scienceTech": "Ciencia y tecnología",
+    "politics": "Política",
+    "culture": "Cultura"
+  },
+  "feed": {
+    "globalPulse": "Pulso global",
+    "forYou": "Para ti",
+    "following": "Siguiendo",
+    "verifiedSources": "Fuentes verificadas",
+    "aiDigest": "Resumen de IA",
+    "loadMore": "Cargar más señales",
+    "noSignals": "No se encontraron señales",
+    "nothingHere": "Nada aquí todavía",
+    "newPosts": "{count} señales nuevas — haz clic para cargar",
+    "tabs": {
+      "all": "Todo",
+      "breaking": "Urgente",
+      "conflict": "Conflicto",
+      "climate": "Clima",
+      "markets": "Mercados",
+      "tech": "Tecnología",
+      "health": "Salud"
+    }
+  },
+  "signal": {
+    "impact": "IMPACTO",
+    "reliability": "Fiabilidad",
+    "liveResults": "RESULTADOS EN VIVO",
+    "breaking": "URGENTE",
+    "aiSynthesis": "SÍNTESIS DE IA",
+    "sources": "Fuentes",
+    "viewFull": "Ver señal completa",
+    "share": "Compartir",
+    "bookmark": "Guardar",
+    "report": "Reportar"
+  },
+  "actions": {
+    "submitSignal": "Enviar señal",
+    "follow": "Seguir",
+    "following": "Siguiendo",
+    "like": "Me gusta",
+    "boost": "Impulsar",
+    "share": "Compartir",
+    "reply": "Responder",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "confirm": "Confirmar",
+    "back": "Atrás",
+    "next": "Siguiente",
+    "submit": "Enviar",
+    "close": "Cerrar",
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "learnMore": "Saber más"
+  },
+  "auth": {
+    "login": {
+      "title": "Iniciar sesión en WorldPulse",
+      "subtitle": "Sigue los eventos globales en tiempo real",
+      "emailLabel": "Correo electrónico",
+      "emailPlaceholder": "tu@ejemplo.com",
+      "passwordLabel": "Contraseña",
+      "passwordPlaceholder": "Tu contraseña",
+      "submitButton": "Iniciar sesión",
+      "forgotPassword": "¿Olvidaste tu contraseña?",
+      "noAccount": "¿No tienes cuenta?",
+      "register": "Únete gratis",
+      "orContinueWith": "O continúa con",
+      "continueWithGitHub": "Continuar con GitHub",
+      "continueWithGoogle": "Continuar con Google",
+      "invalidCredentials": "Correo o contraseña incorrectos",
+      "accountSuspended": "Tu cuenta ha sido suspendida"
+    },
+    "register": {
+      "title": "Únete a WorldPulse",
+      "subtitle": "La red de inteligencia abierta del mundo",
+      "handleLabel": "Nombre de usuario",
+      "handlePlaceholder": "tunombre",
+      "displayNameLabel": "Nombre para mostrar",
+      "displayNamePlaceholder": "Tu nombre",
+      "emailLabel": "Correo electrónico",
+      "emailPlaceholder": "tu@ejemplo.com",
+      "passwordLabel": "Contraseña",
+      "passwordPlaceholder": "Elige una contraseña segura",
+      "submitButton": "Crear cuenta",
+      "alreadyAccount": "¿Ya tienes cuenta?",
+      "signIn": "Iniciar sesión",
+      "termsNotice": "Al unirte, aceptas nuestros Términos de servicio y Política de privacidad",
+      "handleTaken": "Este nombre de usuario ya está en uso",
+      "emailTaken": "Este correo ya está registrado",
+      "passwordWeak": "La contraseña debe tener al menos 8 caracteres"
+    },
+    "forgotPassword": {
+      "title": "Restablecer contraseña",
+      "subtitle": "Te enviaremos un enlace de restablecimiento por correo",
+      "emailLabel": "Correo electrónico",
+      "emailPlaceholder": "tu@ejemplo.com",
+      "submitButton": "Enviar enlace de restablecimiento",
+      "backToLogin": "Volver al inicio de sesión",
+      "successMessage": "Revisa tu correo para el enlace de restablecimiento",
+      "notFound": "No se encontró ninguna cuenta con ese correo"
+    }
+  },
+  "settings": {
+    "title": "Configuración",
+    "sections": {
+      "account": "Cuenta",
+      "notifications": "Notificaciones",
+      "appearance": "Apariencia",
+      "language": "Idioma y región",
+      "privacy": "Privacidad",
+      "security": "Seguridad",
+      "about": "Acerca de"
+    },
+    "language": {
+      "title": "Idioma",
+      "selectLanguage": "Seleccionar idioma",
+      "currentLanguage": "Idioma actual"
+    },
+    "appearance": {
+      "theme": "Tema",
+      "dark": "Oscuro",
+      "light": "Claro",
+      "system": "Sistema"
+    },
+    "notifications": {
+      "breakingAlerts": "Alertas urgentes",
+      "alertSubscriptions": "Suscripciones de alertas",
+      "mentions": "Menciones",
+      "replies": "Respuestas",
+      "follows": "Nuevos seguidores",
+      "digestEmail": "Correo de resumen diario"
+    },
+    "account": {
+      "editProfile": "Editar perfil",
+      "changePassword": "Cambiar contraseña",
+      "deleteAccount": "Eliminar cuenta",
+      "exportData": "Exportar mis datos"
+    }
+  },
+  "errors": {
+    "generic": "Algo salió mal. Por favor, inténtalo de nuevo.",
+    "notFound": "Página no encontrada",
+    "unauthorized": "Debes iniciar sesión para hacer esto",
+    "forbidden": "No tienes permiso para esta acción",
+    "rateLimited": "Demasiadas solicitudes. Por favor, ve más despacio.",
+    "networkError": "Error de red. Comprueba tu conexión.",
+    "serverError": "Error del servidor. Estamos trabajando en ello.",
+    "signalNotFound": "Señal no encontrada",
+    "userNotFound": "Usuario no encontrado"
+  },
+  "composer": {
+    "placeholder": "Comparte una señal o publicación…",
+    "submitSignal": "Enviar señal",
+    "addLocation": "Agregar ubicación",
+    "addMedia": "Agregar medios",
+    "selectCategory": "Seleccionar categoría",
+    "selectSeverity": "Seleccionar gravedad",
+    "sourceUrl": "URL de la fuente (opcional)",
+    "characterCount": "{count}/2000"
+  },
+  "empty": {
+    "noSignals": "No se encontraron señales",
+    "noSignalsHint": "Intenta ajustar tus filtros o vuelve más tarde",
+    "nothingHere": "Nada aquí todavía",
+    "noFollowing": "Aún no sigues a nadie",
+    "noAlerts": "No hay alertas configuradas",
+    "noBookmarks": "No hay marcadores aún",
+    "startExploring": "Empieza a explorar"
+  },
+  "sources": {
+    "suggest": {
+      "title": "Sugerir una fuente",
+      "subtitle": "Ayúdanos a ampliar la cobertura de WorldPulse",
+      "nameLabel": "Nombre de la fuente",
+      "namePlaceholder": "ej. BBC World Service",
+      "urlLabel": "URL del sitio web",
+      "urlPlaceholder": "https://ejemplo.com",
+      "rssLabel": "URL del feed RSS",
+      "rssPlaceholder": "https://ejemplo.com/feed",
+      "categoryLabel": "Categoría",
+      "reasonLabel": "¿Por qué debería añadirse esta fuente?",
+      "reasonPlaceholder": "Describe la cobertura, credibilidad de esta fuente y por qué beneficiaría a WorldPulse…",
+      "submitButton": "Enviar sugerencia",
+      "successTitle": "¡Gracias!",
+      "successMessage": "Tu sugerencia ha sido enviada. Revisamos todas las sugerencias en 48 horas.",
+      "submitAnother": "Enviar otra sugerencia"
+    }
+  },
+  "common": {
+    "worldpulse": "WorldPulse",
+    "globalThreatIndex": "Índice de amenaza global",
+    "level": "Nivel",
+    "elevated": "Elevado",
+    "signalsCount": "{count} señales",
+    "ago": "hace",
+    "live": "En vivo"
+  }
+}

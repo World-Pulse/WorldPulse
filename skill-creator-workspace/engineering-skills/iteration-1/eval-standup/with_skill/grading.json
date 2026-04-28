@@ -1,0 +1,29 @@
+{
+  "eval_id": 1,
+  "eval_name": "standup",
+  "config": "with_skill",
+  "assertions": [
+    {
+      "text": "has_three_sections",
+      "passed": true,
+      "evidence": "Clear sections: 'Yesterday' (lines 3-5), 'Today' (lines 7-9), 'Blockers' (lines 11-12)"
+    },
+    {
+      "text": "summarizes_not_dumps",
+      "passed": true,
+      "evidence": "Total length ~250 characters, concise bullet points without unnecessary details. Efficiently communicates key information"
+    },
+    {
+      "text": "mentions_stripe",
+      "passed": true,
+      "evidence": "Line 8 states 'Integrate Stripe for Pro tier subscription support'"
+    },
+    {
+      "text": "has_date_or_header",
+      "passed": true,
+      "evidence": "Line 1 includes 'Standup — Friday, March 28' header with date"
+    }
+  ],
+  "pass_rate": 1.0,
+  "notes": "Concise, well-structured standup format. Clear date header and all three required sections. Strikes good balance between being informative and brief."
+}

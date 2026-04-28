@@ -1,0 +1,29 @@
+{
+  "eval_id": 1,
+  "eval_name": "standup",
+  "config": "without_skill",
+  "assertions": [
+    {
+      "text": "has_three_sections",
+      "passed": true,
+      "evidence": "Three distinct sections: '## Yesterday' (lines 3-6), '## Today' (lines 8-11), '## Blockers' (line 13)"
+    },
+    {
+      "text": "summarizes_not_dumps",
+      "passed": true,
+      "evidence": "Total length ~400 characters with good conciseness. Bullet points provide context without excessive detail"
+    },
+    {
+      "text": "mentions_stripe",
+      "passed": true,
+      "evidence": "Line 10 mentions 'Stripe Pro Tier Integration: Working on integrating Stripe for the Pro subscription tier'"
+    },
+    {
+      "text": "has_date_or_header",
+      "passed": true,
+      "evidence": "Line 1 title '# Standup Update' serves as header"
+    }
+  ],
+  "pass_rate": 1.0,
+  "notes": "Good standup format with proper markdown headers for each section. Slightly more verbose than with_skill version but still within acceptable conciseness bounds. All requirements met."
+}

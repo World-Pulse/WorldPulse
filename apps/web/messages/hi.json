@@ -1,0 +1,237 @@
+{
+  "nav": {
+    "liveFeed": "लाइव फ़ीड",
+    "worldMap": "विश्व मानचित्र",
+    "alerts": "अलर्ट",
+    "analytics": "विश्लेषण",
+    "explore": "एक्सप्लोर करें",
+    "clusters": "इवेंट क्लस्टर",
+    "briefing": "दैनिक ब्रीफिंग",
+    "finance": "वित्त",
+    "countries": "देश इंटेल",
+    "cameras": "लाइव कैमरा",
+    "patents": "पेटेंट इंटेल",
+    "communities": "समुदाय",
+    "mySources": "मेरे स्रोत",
+    "settings": "सेटिंग्स",
+    "navigate": "नेविगेट",
+    "signalChannels": "सिग्नल चैनल",
+    "trendingNow": "अभी ट्रेंडिंग",
+    "signIn": "साइन इन",
+    "joinFree": "मुफ़्त में जुड़ें",
+    "searchSignals": "सिग्नल खोजें…",
+    "tracking": "ट्रैकिंग",
+    "signals": "सिग्नल",
+    "live": "लाइव",
+    "sanctions": "Sanctions",
+    "waterSecurity": "Water Security",
+    "laborRights": "Labor Rights",
+    "claims": "Claims",
+    "audioClaims": "Audio Claims",
+    "videoClaims": "Video Claims"
+  },
+  "channels": {
+    "breakingNews": "ब्रेकिंग न्यूज़",
+    "conflictZones": "संघर्ष क्षेत्र",
+    "markets": "बाज़ार",
+    "climate": "जलवायु",
+    "health": "स्वास्थ्य",
+    "scienceTech": "विज्ञान और तकनीक",
+    "politics": "राजनीति",
+    "culture": "संस्कृति"
+  },
+  "feed": {
+    "globalPulse": "ग्लोबल पल्स",
+    "forYou": "आपके लिए",
+    "following": "फ़ॉलो किए गए",
+    "verifiedSources": "सत्यापित स्रोत",
+    "aiDigest": "AI डाइजेस्ट",
+    "loadMore": "और सिग्नल लोड करें",
+    "noSignals": "कोई सिग्नल नहीं मिला",
+    "nothingHere": "अभी यहाँ कुछ नहीं है",
+    "newPosts": "{count} नए सिग्नल — लोड करने के लिए क्लिक करें",
+    "tabs": {
+      "all": "सभी",
+      "breaking": "ब्रेकिंग",
+      "conflict": "संघर्ष",
+      "climate": "जलवायु",
+      "markets": "बाज़ार",
+      "tech": "तकनीक",
+      "health": "स्वास्थ्य"
+    }
+  },
+  "signal": {
+    "impact": "प्रभाव",
+    "reliability": "विश्वसनीयता",
+    "liveResults": "लाइव परिणाम",
+    "breaking": "ब्रेकिंग",
+    "aiSynthesis": "AI संश्लेषण",
+    "sources": "स्रोत",
+    "viewFull": "पूरा सिग्नल देखें",
+    "share": "शेयर करें",
+    "bookmark": "बुकमार्क",
+    "report": "रिपोर्ट करें"
+  },
+  "actions": {
+    "submitSignal": "सिग्नल सबमिट करें",
+    "follow": "फ़ॉलो करें",
+    "following": "फ़ॉलो किया",
+    "like": "लाइक",
+    "boost": "बूस्ट",
+    "share": "शेयर",
+    "reply": "जवाब दें",
+    "save": "सेव करें",
+    "cancel": "रद्द करें",
+    "confirm": "पुष्टि करें",
+    "back": "वापस",
+    "next": "अगला",
+    "submit": "सबमिट करें",
+    "close": "बंद करें",
+    "edit": "संपादित करें",
+    "delete": "हटाएं",
+    "learnMore": "और जानें"
+  },
+  "auth": {
+    "login": {
+      "title": "WorldPulse में साइन इन करें",
+      "subtitle": "रियल-टाइम में वैश्विक घटनाओं को ट्रैक करें",
+      "emailLabel": "ईमेल पता",
+      "emailPlaceholder": "you@example.com",
+      "passwordLabel": "पासवर्ड",
+      "passwordPlaceholder": "आपका पासवर्ड",
+      "submitButton": "साइन इन करें",
+      "forgotPassword": "पासवर्ड भूल गए?",
+      "noAccount": "अकाउंट नहीं है?",
+      "register": "मुफ़्त में जुड़ें",
+      "orContinueWith": "या जारी रखें",
+      "continueWithGitHub": "GitHub से जारी रखें",
+      "continueWithGoogle": "Google से जारी रखें",
+      "invalidCredentials": "अमान्य ईमेल या पासवर्ड",
+      "accountSuspended": "आपका अकाउंट निलंबित कर दिया गया है"
+    },
+    "register": {
+      "title": "WorldPulse से जुड़ें",
+      "subtitle": "दुनिया का ओपन इंटेलिजेंस नेटवर्क",
+      "handleLabel": "यूज़रनेम",
+      "handlePlaceholder": "yourhandle",
+      "displayNameLabel": "प्रदर्शन नाम",
+      "displayNamePlaceholder": "आपका नाम",
+      "emailLabel": "ईमेल पता",
+      "emailPlaceholder": "you@example.com",
+      "passwordLabel": "पासवर्ड",
+      "passwordPlaceholder": "एक मज़बूत पासवर्ड चुनें",
+      "submitButton": "अकाउंट बनाएं",
+      "alreadyAccount": "पहले से अकाउंट है?",
+      "signIn": "साइन इन करें",
+      "termsNotice": "जुड़ने पर आप हमारी सेवा शर्तों और गोपनीयता नीति से सहमत होते हैं",
+      "handleTaken": "यह यूज़रनेम पहले से लिया जा चुका है",
+      "emailTaken": "यह ईमेल पहले से रजिस्टर है",
+      "passwordWeak": "पासवर्ड कम से कम 8 अक्षरों का होना चाहिए"
+    },
+    "forgotPassword": {
+      "title": "अपना पासवर्ड रीसेट करें",
+      "subtitle": "हम आपके ईमेल पर एक रीसेट लिंक भेजेंगे",
+      "emailLabel": "ईमेल पता",
+      "emailPlaceholder": "you@example.com",
+      "submitButton": "रीसेट लिंक भेजें",
+      "backToLogin": "साइन इन पर वापस जाएं",
+      "successMessage": "रीसेट लिंक के लिए अपना ईमेल देखें",
+      "notFound": "उस ईमेल से कोई अकाउंट नहीं मिला"
+    }
+  },
+  "settings": {
+    "title": "सेटिंग्स",
+    "sections": {
+      "account": "अकाउंट",
+      "notifications": "सूचनाएं",
+      "appearance": "दिखावट",
+      "language": "भाषा और क्षेत्र",
+      "privacy": "गोपनीयता",
+      "security": "सुरक्षा",
+      "about": "के बारे में"
+    },
+    "language": {
+      "title": "भाषा",
+      "selectLanguage": "भाषा चुनें",
+      "currentLanguage": "वर्तमान भाषा"
+    },
+    "appearance": {
+      "theme": "थीम",
+      "dark": "डार्क",
+      "light": "लाइट",
+      "system": "सिस्टम"
+    },
+    "notifications": {
+      "breakingAlerts": "ब्रेकिंग अलर्ट",
+      "alertSubscriptions": "अलर्ट सदस्यता",
+      "mentions": "मेंशन",
+      "replies": "जवाब",
+      "follows": "नए फ़ॉलोअर",
+      "digestEmail": "दैनिक डाइजेस्ट ईमेल"
+    },
+    "account": {
+      "editProfile": "प्रोफ़ाइल संपादित करें",
+      "changePassword": "पासवर्ड बदलें",
+      "deleteAccount": "अकाउंट हटाएं",
+      "exportData": "मेरा डेटा निर्यात करें"
+    }
+  },
+  "errors": {
+    "generic": "कुछ गलत हो गया। कृपया दोबारा कोशिश करें।",
+    "notFound": "पेज नहीं मिला",
+    "unauthorized": "यह करने के लिए आपको साइन इन होना होगा",
+    "forbidden": "आपके पास इस कार्य की अनुमति नहीं है",
+    "rateLimited": "बहुत अधिक अनुरोध। कृपया धीमे करें।",
+    "networkError": "नेटवर्क त्रुटि। अपना कनेक्शन जांचें।",
+    "serverError": "सर्वर त्रुटि। हम इस पर काम कर रहे हैं।",
+    "signalNotFound": "सिग्नल नहीं मिला",
+    "userNotFound": "उपयोगकर्ता नहीं मिला"
+  },
+  "composer": {
+    "placeholder": "एक सिग्नल या पोस्ट शेयर करें…",
+    "submitSignal": "सिग्नल सबमिट करें",
+    "addLocation": "स्थान जोड़ें",
+    "addMedia": "मीडिया जोड़ें",
+    "selectCategory": "श्रेणी चुनें",
+    "selectSeverity": "गंभीरता चुनें",
+    "sourceUrl": "स्रोत URL (वैकल्पिक)",
+    "characterCount": "{count}/2000"
+  },
+  "empty": {
+    "noSignals": "कोई सिग्नल नहीं मिला",
+    "noSignalsHint": "अपने फ़िल्टर समायोजित करें या बाद में देखें",
+    "nothingHere": "अभी यहाँ कुछ नहीं है",
+    "noFollowing": "आप अभी किसी को फ़ॉलो नहीं कर रहे",
+    "noAlerts": "कोई अलर्ट कॉन्फ़िगर नहीं किए गए",
+    "noBookmarks": "अभी कोई बुकमार्क नहीं",
+    "startExploring": "एक्सप्लोर करना शुरू करें"
+  },
+  "sources": {
+    "suggest": {
+      "title": "एक स्रोत सुझाएं",
+      "subtitle": "WorldPulse की कवरेज बढ़ाने में हमारी मदद करें",
+      "nameLabel": "स्रोत का नाम",
+      "namePlaceholder": "जैसे: BBC World Service",
+      "urlLabel": "वेबसाइट URL",
+      "urlPlaceholder": "https://example.com",
+      "rssLabel": "RSS फ़ीड URL",
+      "rssPlaceholder": "https://example.com/feed",
+      "categoryLabel": "श्रेणी",
+      "reasonLabel": "इसे क्यों जोड़ा जाना चाहिए?",
+      "reasonPlaceholder": "इस स्रोत की कवरेज, विश्वसनीयता और यह WorldPulse को क्यों लाभान्वित करेगा, बताएं…",
+      "submitButton": "सुझाव सबमिट करें",
+      "successTitle": "धन्यवाद!",
+      "successMessage": "आपका सुझाव सबमिट हो गया। हम सभी सुझावों की 48 घंटों के भीतर समीक्षा करते हैं।",
+      "submitAnother": "एक और सुझाव सबमिट करें"
+    }
+  },
+  "common": {
+    "worldpulse": "WorldPulse",
+    "globalThreatIndex": "वैश्विक खतरा सूचकांक",
+    "level": "स्तर",
+    "elevated": "बढ़ा हुआ",
+    "signalsCount": "{count} सिग्नल",
+    "ago": "पहले",
+    "live": "लाइव"
+  }
+}

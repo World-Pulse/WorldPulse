@@ -1,0 +1,348 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── DESIGN TOKENS ──────────────────────────────────────── */
+:root {
+  --wp-bg:          #06070d;
+  --wp-surface:     #0d0f18;
+  --wp-surface2:    #141722;
+  --wp-surface3:    #1b2030;
+  --wp-border:      rgba(255,255,255,0.07);
+  --wp-border-bright: rgba(255,255,255,0.15);
+  --wp-amber:       #f5a623;
+  --wp-amber-dim:   rgba(245,166,35,0.12);
+  --wp-amber-glow:  rgba(245,166,35,0.35);
+  --wp-cyan:        #00d4ff;
+  --wp-cyan-dim:    rgba(0,212,255,0.10);
+  --wp-red:         #ff3b5c;
+  --wp-red-dim:     rgba(255,59,92,0.12);
+  --wp-green:       #00e676;
+  --wp-green-dim:   rgba(0,230,118,0.10);
+  --wp-text:        #e2e6f0;
+  --wp-text-2:      #8892a4;
+  --wp-text-3:      #4a5568;
+  --wp-font-display: var(--font-display, 'Bebas Neue'), sans-serif;
+  --wp-font-mono:   var(--font-mono, 'JetBrains Mono'), monospace;
+}
+
+/* ─── BASE ────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--wp-bg);
+  color: var(--wp-text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ─── NOISE TEXTURE ──────────────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.35;
+}
+
+/* ─── SCROLLBAR ──────────────────────────────────────────── */
+::-webkit-scrollbar         { width: 4px; height: 4px; }
+::-webkit-scrollbar-track   { background: transparent; }
+::-webkit-scrollbar-thumb   { background: var(--wp-border); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--wp-border-bright); }
+
+/* ─── ANIMATIONS ─────────────────────────────────────────── */
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.7); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-down {
+  from { transform: translateY(-100%); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes ticker-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes flash-tag {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}
+
+@keyframes pulse-ring {
+  0%   { width: 8px; height: 8px; opacity: 0.9; }
+  100% { width: 32px; height: 32px; opacity: 0; }
+}
+
+/* ─── UTILITIES ──────────────────────────────────────────── */
+.animate-live-pulse  { animation: live-pulse 1.4s ease-in-out infinite; }
+.animate-fade-in     { animation: fade-in 0.4s ease forwards; }
+.animate-slide-down  { animation: slide-down 0.4s ease forwards; }
+.animate-flash-tag   { animation: flash-tag 2s ease infinite; }
+.animate-ticker      { animation: ticker-scroll 60s linear infinite; }
+
+.text-display { font-family: var(--wp-font-display); letter-spacing: 0.1em; }
+.text-mono    { font-family: var(--wp-font-mono); }
+
+/* Glass surface */
+.glass {
+  background: rgba(13, 15, 24, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* Reliability dots */
+.rel-dots { display: flex; gap: 3px; align-items: center; }
+.rel-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--wp-surface3);
+  transition: background 0.3s;
+}
+.rel-dot.filled  { background: var(--wp-green); }
+.rel-dot.partial { background: var(--wp-amber); }
+
+/* Tag pills */
+.tag-pill {
+  display: inline-flex; align-items: center;
+  padding: 3px 8px; border-radius: 20px;
+  font-size: 11px; font-family: var(--wp-font-mono);
+  cursor: pointer; transition: all 0.2s; text-decoration: none;
+  white-space: nowrap;
+}
+.tag-breaking    { background: rgba(255,59,92,0.12); color: var(--wp-red);   border: 1px solid rgba(255,59,92,0.3); }
+.tag-conflict    { background: rgba(239,68,68,0.10); color: #ef4444;         border: 1px solid rgba(239,68,68,0.3); }
+.tag-climate     { background: rgba(34,197,94,0.10); color: #22c55e;         border: 1px solid rgba(34,197,94,0.3); }
+.tag-economy     { background: var(--wp-amber-dim); color: var(--wp-amber); border: 1px solid rgba(245,166,35,0.3); }
+.tag-technology  { background: var(--wp-cyan-dim);  color: var(--wp-cyan);  border: 1px solid rgba(0,212,255,0.3); }
+.tag-health      { background: rgba(168,85,247,0.1); color: #a855f7;        border: 1px solid rgba(168,85,247,0.3); }
+.tag-science     { background: rgba(59,130,246,0.1); color: #3b82f6;        border: 1px solid rgba(59,130,246,0.3); }
+.tag-elections   { background: rgba(16,185,129,0.1); color: #10b981;        border: 1px solid rgba(16,185,129,0.3); }
+.tag-disaster    { background: rgba(251,146,60,0.1); color: #fb923c;        border: 1px solid rgba(251,146,60,0.3); }
+.tag-geopolitics { background: rgba(99,102,241,0.1); color: #6366f1;        border: 1px solid rgba(99,102,241,0.3); }
+
+/* Source badges */
+.source-badge {
+  font-family: var(--wp-font-mono); font-size: 9px;
+  letter-spacing: 1px; padding: 2px 6px;
+  border-radius: 3px; font-weight: 700;
+}
+.badge-wire      { background: #cc0000; color: #fff; }
+.badge-bbc       { background: #bb1919; color: #fff; }
+.badge-reuters   { background: #ff8000; color: #000; }
+.badge-ap        { background: #cc0000; color: #fff; }
+.badge-ai        { background: var(--wp-cyan-dim); color: var(--wp-cyan); border: 1px solid rgba(0,212,255,0.3); }
+.badge-community { background: var(--wp-amber-dim); color: var(--wp-amber); border: 1px solid rgba(245,166,35,0.3); }
+
+/* Shimmer skeleton */
+@keyframes shimmer {
+  0%   { background-position: -800px 0; }
+  100% { background-position:  800px 0; }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--wp-surface2) 0%,
+    var(--wp-surface3) 40%,
+    var(--wp-surface2) 60%,
+    var(--wp-surface2) 100%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+/* ─── LIGHT MODE ────────────────────────────────────────── */
+html.light {
+  --wp-bg:           #f0f2f5;
+  --wp-surface:      #ffffff;
+  --wp-surface2:     #f5f7fa;
+  --wp-surface3:     #e8ecf2;
+  --wp-border:       rgba(0,0,0,0.08);
+  --wp-border-bright: rgba(0,0,0,0.18);
+  --wp-text:         #111827;
+  --wp-text-2:       #374151;
+  --wp-text-3:       #6b7280;
+}
+
+html.light body { background: var(--wp-bg); color: var(--wp-text); }
+
+html.light .glass {
+  background: rgba(255, 255, 255, 0.94);
+}
+
+html.light body::before { opacity: 0.08; }
+
+html.light .shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--wp-surface2) 0%,
+    var(--wp-surface3) 40%,
+    var(--wp-surface2) 60%,
+    var(--wp-surface2) 100%
+  );
+  background-size: 800px 100%;
+}
+
+/* MapLibre reset */
+.maplibregl-map { font-family: inherit !important; }
+.maplibregl-ctrl-attrib { display: none !important; }
+/* Ensure MapLibre popup is readable on mobile */
+@media (max-width: 640px) {
+  .wp-map-popup .maplibregl-popup-content {
+    max-width: min(280px, calc(100vw - 32px)) !important;
+  }
+}
+
+/* ─── MOBILE UTILITIES ──────────────────────────────── */
+
+/* Hide scrollbar but keep scrollability */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar { display: none; }
+
+/* Drawer slide-in from left */
+@keyframes slide-in-left {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
+}
+.animate-slide-in-left { animation: slide-in-left 0.25s ease-out forwards; }
+
+/* Minimum tap target size */
+@media (pointer: coarse) {
+  button, a, [role="button"] {
+    min-height: 44px;
+  }
+  /* Exception: very small inline elements */
+  .tag-pill, .source-badge { min-height: unset; }
+}
+
+/* Prevent text size adjustment on rotate (iOS) */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+/* Safe-area padding for notched devices */
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+/* Feed card — full width on mobile */
+@media (max-width: 640px) {
+  article[role="article"] { padding-left: 16px; padding-right: 16px; }
+}
+
+/* Prevent CLS for font display: swap */
+.font-display { font-family: var(--font-display, 'Bebas Neue'), sans-serif; }
+.font-mono    { font-family: var(--font-mono, 'JetBrains Mono'), monospace; }
+
+/* ─── MAIN CONTENT BOTTOM PADDING ─────────────────────── */
+/* Safe-area-aware padding for the bottom tab bar on mobile only */
+.main-content-mobile-pb {
+  padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+}
+@media (min-width: 768px) {
+  .main-content-mobile-pb { padding-bottom: 0; }
+}
+
+/* ─── SEARCH MOBILE FULL-SCREEN ────────────────────────── */
+@media (max-width: 767px) {
+  .search-page-wrapper {
+    position: fixed;
+    inset: 52px 0 calc(56px + env(safe-area-inset-bottom, 0px)) 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--wp-bg);
+    z-index: 10;
+  }
+}
+
+/* ─── MAP TOUCH ─────────────────────────────────────────── */
+/* Allow browser to handle pinch-zoom gesture passthrough while MapLibre
+   handles map-specific touch events. The canvas itself uses touchAction:none
+   which is correct, but the container should not block overscroll. */
+.map-outer-container {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* ─── MAP SLIDE-UP PANEL ────────────────────────────────── */
+/* Swipe indicator on mobile bottom sheet */
+.map-panel-drag-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.18);
+  margin: 10px auto 4px;
+  flex-shrink: 0;
+}
+
+/* ─── MOBILE TEXT & CARD UTILITIES ─────────────────────── */
+
+/* Single-line truncation with ellipsis — use on any element */
+.mobile-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Clamp multi-line text to N lines */
+.line-clamp-1 { -webkit-line-clamp: 1; -webkit-box-orient: vertical; display: -webkit-box; overflow: hidden; }
+.line-clamp-2 { -webkit-line-clamp: 2; -webkit-box-orient: vertical; display: -webkit-box; overflow: hidden; }
+.line-clamp-3 { -webkit-line-clamp: 3; -webkit-box-orient: vertical; display: -webkit-box; overflow: hidden; }
+
+/* Card padding that relaxes on small screens */
+.card-pad { padding: 12px; }
+@media (min-width: 640px) {
+  .card-pad { padding: 16px; }
+}
+
+/* Stat card — ensure value text doesn't overflow on 2-col mobile grid */
+@media (max-width: 639px) {
+  .stat-value {
+    font-size: clamp(16px, 4vw, 22px);
+  }
+}
+
+/* Prevent long URLs / handles from breaking card layouts */
+.break-anywhere {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* ─── RTL SUPPORT ───────────────────────────────────────── */
+/* RTL logical property helpers */
+[dir='rtl'] { --direction: rtl; }
+[dir='ltr'] { --direction: ltr; }
+
+/* Flip text alignment for RTL locales */
+[dir='rtl'] .rtl\:text-right { text-align: right; }
+[dir='rtl'] .rtl\:text-left { text-align: left; }
+
+/* ─── CLS FIXES ─────────────────────────────────────────── */
+/* Reserve space for avatar images to prevent layout shift */
+img[data-wp-avatar] {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Prevent overflow on feed cards on tiny screens */
+@media (max-width: 400px) {
+  .feed-card-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@worldpulse/browser-extension",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WorldPulse browser extension for inline signal verification (Chrome MV3 + Firefox MV3)",
+  "scripts": {
+    "build": "tsx build.ts --target=all",
+    "build:chrome": "tsx build.ts --target=chrome",
+    "build:firefox": "tsx build.ts --target=firefox",
+    "dev": "tsx build.ts --target=all --dev",
+    "dev:chrome": "tsx build.ts --target=chrome --dev",
+    "dev:firefox": "tsx build.ts --target=firefox --dev",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "esbuild": "^0.21.5",
+    "tsx": "^4.7.3",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  }
+}

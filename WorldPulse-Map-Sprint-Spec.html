@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WorldPulse — Map Viral Enhancement Sprint & P1 Spec</title>
+<style>
+  :root {
+    --bg: #0a0e17;
+    --bg2: #0f1420;
+    --bg3: #151b2b;
+    --border: rgba(99,115,148,.15);
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --text3: #64748b;
+    --cyan: #22d3ee;
+    --green: #34d399;
+    --amber: #fbbf24;
+    --orange: #f97316;
+    --red: #ef4444;
+    --purple: #a78bfa;
+    --blue: #3b82f6;
+    --pink: #f472b6;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; background: var(--bg); color: var(--text); line-height:1.6; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
+
+  /* Header */
+  .header { text-align: center; margin-bottom: 48px; border-bottom: 1px solid var(--border); padding-bottom: 32px; }
+  .header h1 { font-size: 32px; font-weight: 700; background: linear-gradient(135deg, var(--cyan), var(--blue)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .header .sub { color: var(--text2); font-size: 15px; margin-top: 8px; }
+  .header .dates { display: flex; justify-content: center; gap: 32px; margin-top: 16px; }
+  .header .date-chip { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 8px 16px; font-size: 13px; }
+  .header .date-chip strong { color: var(--cyan); }
+
+  /* Section */
+  .section { margin-bottom: 48px; }
+  .section-title { font-size: 22px; font-weight: 700; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+  .section-title .badge { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; text-transform: uppercase; letter-spacing: .5px; }
+  .badge-viral { background: rgba(239,68,68,.15); color: var(--red); }
+  .badge-p1 { background: rgba(251,191,36,.15); color: var(--amber); }
+  .badge-infra { background: rgba(59,130,246,.15); color: var(--blue); }
+
+  /* Feature Card */
+  .feature { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 28px; margin-bottom: 20px; }
+  .feature:hover { border-color: rgba(34,211,238,.15); }
+  .feature-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+  .feature-name { font-size: 18px; font-weight: 700; }
+  .feature-tag { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
+  .tag-day1 { background: rgba(239,68,68,.12); color: var(--red); }
+  .tag-day2 { background: rgba(249,115,22,.12); color: var(--orange); }
+  .tag-day3 { background: rgba(251,191,36,.12); color: var(--amber); }
+  .tag-day4 { background: rgba(52,211,153,.12); color: var(--green); }
+  .feature-why { color: var(--text2); font-size: 14px; margin-bottom: 16px; font-style: italic; border-left: 3px solid var(--cyan); padding-left: 12px; }
+
+  /* Sub-sections in feature */
+  .sub-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: var(--text3); margin: 16px 0 8px; }
+  .task-list { list-style: none; }
+  .task-list li { padding: 6px 0; font-size: 14px; color: var(--text2); display: flex; align-items: flex-start; gap: 8px; }
+  .task-list li::before { content: '▸'; color: var(--cyan); flex-shrink: 0; margin-top: 1px; }
+  .code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; background: rgba(34,211,238,.08); color: var(--cyan); padding: 2px 6px; border-radius: 4px; }
+
+  /* Estimate bar */
+  .estimate { display: flex; align-items: center; gap: 12px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .estimate-label { font-size: 12px; color: var(--text3); text-transform: uppercase; letter-spacing: .5px; }
+  .estimate-bar { flex: 1; height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+  .estimate-fill { height: 100%; border-radius: 3px; }
+  .estimate-val { font-size: 13px; font-weight: 600; }
+
+  /* Tech block */
+  .tech-block { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin: 12px 0; font-size: 13px; }
+  .tech-block pre { white-space: pre-wrap; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; color: var(--text2); line-height: 1.5; }
+
+  /* API spec */
+  .api-row { display: grid; grid-template-columns: 80px 1fr; gap: 8px; align-items: start; margin: 4px 0; font-size: 13px; }
+  .api-method { font-weight: 700; font-family: monospace; }
+  .api-get { color: var(--green); }
+  .api-post { color: var(--amber); }
+
+  /* Dependency graph */
+  .dep-graph { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+  .dep-node { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-size: 12px; }
+  .dep-arrow { color: var(--text3); font-size: 18px; display: flex; align-items: center; }
+
+  /* Timeline */
+  .timeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 24px 0; }
+  .day-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; text-align: center; }
+  .day-card.active { border-color: var(--cyan); box-shadow: 0 0 20px rgba(34,211,238,.08); }
+  .day-num { font-size: 24px; font-weight: 800; }
+  .day-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .5px; margin: 4px 0 8px; }
+  .day-tasks { font-size: 12px; color: var(--text2); text-align: left; }
+  .day-tasks div { padding: 3px 0; }
+
+  /* Risk table */
+  .risk-table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+  .risk-table th { text-align: left; padding: 8px 12px; background: var(--bg3); color: var(--text3); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+  .risk-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .risk-high { color: var(--red); }
+  .risk-med { color: var(--amber); }
+  .risk-low { color: var(--green); }
+
+  /* Summary stats */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 24px 0; }
+  .stat { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 20px; text-align: center; }
+  .stat-val { font-size: 28px; font-weight: 800; }
+  .stat-label { font-size: 12px; color: var(--text3); margin-top: 4px; }
+
+  /* File tree */
+  .file-tree { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; color: var(--text2); line-height: 2; }
+  .file-tree .dir { color: var(--cyan); }
+  .file-tree .new { color: var(--green); }
+  .file-tree .mod { color: var(--amber); }
+
+  /* Completion banner */
+  .complete-banner { background: linear-gradient(135deg, rgba(34,197,94,.08), rgba(34,211,238,.08)); border: 1px solid rgba(34,197,94,.3); border-radius: 12px; padding: 24px 32px; text-align: center; margin-bottom: 32px; }
+  .complete-banner h2 { font-size: 24px; font-weight: 800; color: var(--green); margin-bottom: 6px; }
+  .complete-banner p { font-size: 14px; color: var(--text2); }
+  .feature.done { border-color: rgba(34,197,94,.25); background: rgba(34,197,94,.03); }
+  .feature.done .feature-name::after { content: ' ✅ SHIPPED'; font-size: 12px; color: var(--green); font-weight: 600; margin-left: 8px; }
+  .tag-shipped { background: rgba(34,197,94,.15) !important; color: var(--green) !important; }
+  .day-card.done { border-color: rgba(34,197,94,.3); background: rgba(34,197,94,.04); }
+  .day-card.done .day-num { color: var(--green) !important; }
+  .day-card.done .day-tasks div::before { content: '✓ '; color: var(--green); }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- HEADER -->
+  <div class="header">
+    <h1>Map Viral Enhancement Sprint & P1 Features</h1>
+    <div class="sub">WorldPulse Launch Sprint — Detailed Technical Breakdown</div>
+    <div class="dates">
+      <div class="date-chip"><strong>Sprint:</strong> Apr 1 – 4, 2026</div>
+      <div class="date-chip"><strong>Gate 1:</strong> Apr 9 (Day 6/14)</div>
+      <div class="date-chip"><strong>Launch:</strong> Apr 7 – 14</div>
+    </div>
+  </div>
+
+  <!-- COMPLETION BANNER -->
+  <div class="complete-banner">
+    <h2>SPRINT COMPLETE — 7/7 SHIPPED</h2>
+    <p>All 4 viral map features + 3 P1 features implemented by the Brain Agent. Next: production deploy verification on world-pulse.io</p>
+  </div>
+
+  <!-- SUMMARY STATS -->
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-val" style="color:var(--green);">4/4</div>
+      <div class="stat-label">Viral Map Features</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val" style="color:var(--green);">3/3</div>
+      <div class="stat-label">P1 Feature Wires</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val" style="color:var(--green);">100%</div>
+      <div class="stat-label">Sprint Complete</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val" style="color:var(--green);">7/7</div>
+      <div class="stat-label">Tickets Done</div>
+    </div>
+  </div>
+
+  <!-- DAY-BY-DAY TIMELINE -->
+  <div class="section">
+    <div class="section-title">Sprint Timeline</div>
+    <div class="timeline">
+      <div class="day-card done">
+        <div class="day-num">01</div>
+        <div class="day-label">Apr 1 · Wed</div>
+        <div class="day-tasks">
+          <div>Wind Particle Engine</div>
+          <div>Particle data pipeline</div>
+          <div>WebGL shader layer</div>
+        </div>
+      </div>
+      <div class="day-card done">
+        <div class="day-num">02</div>
+        <div class="day-label">Apr 2 · Thu</div>
+        <div class="day-tasks">
+          <div>Time Slider UI</div>
+          <div>Historical API endpoint</div>
+          <div>Playback animation loop</div>
+        </div>
+      </div>
+      <div class="day-card done">
+        <div class="day-num">03</div>
+        <div class="day-label">Apr 3 · Fri</div>
+        <div class="day-tasks">
+          <div>Shareable Permalinks</div>
+          <div>Signal Density Heatmaps</div>
+          <div>Share card / OG image</div>
+        </div>
+      </div>
+      <div class="day-card done">
+        <div class="day-num">04</div>
+        <div class="day-label">Apr 4 · Sat</div>
+        <div class="day-tasks">
+          <div>P1: Search → Meilisearch</div>
+          <div>P1: Live Counter + WS</div>
+          <div>P1: Communities demo</div>
+          <div>Integration testing</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- FEATURE 1: WIND PARTICLE FLOW -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-title">
+      Viral Map Features
+      <span class="badge badge-viral">Tier 1 — Launch Differentiators</span>
+    </div>
+
+    <div class="feature done">
+      <div class="feature-head">
+        <div class="feature-name">1. Animated Wind Particle Flow</div>
+        <span class="feature-tag tag-shipped">SHIPPED</span>
+      </div>
+      <div class="feature-why">
+        earth.nullschool.net went viral purely because of this effect. Millions of animated particles flowing across the globe create an instant "whoa" moment that people screenshot and share. This is the single highest-ROI visual enhancement for WorldPulse's launch.
+      </div>
+
+      <div class="sub-title">What It Does</div>
+      <p style="font-size:14px;color:var(--text2);margin-bottom:12px;">
+        Renders thousands of tiny particles flowing across the map surface, driven by real wind velocity data. Particles trace wind currents in real-time, creating hypnotic animated streamlines. Users can toggle the layer on/off and adjust particle density. On the WorldPulse globe, this transforms a static signal map into a living, breathing intelligence surface.
+      </p>
+
+      <div class="sub-title">Technical Architecture</div>
+      <div class="tech-block">
+        <pre>
+┌──────────────────────────────────────────────────────────────┐
+│  Wind Data Pipeline                                          │
+│                                                              │
+│  GFS/NOAA API  ──→  Fastify Cron (6h)  ──→  Redis Cache     │
+│  (GRIB2 JSON)       /api/v1/wind/grid       (wind:grid:*)   │
+│                          │                                    │
+│                          ▼                                    │
+│               UV Grid Texture (256×128)                       │
+│               [u_velocity, v_velocity] per cell              │
+└──────────────────────────────────────────────────────────────┘
+                           │
+                           ▼
+┌──────────────────────────────────────────────────────────────┐
+│  WebGL Particle Renderer (Custom MapLibre Layer)             │
+│                                                              │
+│  1. Particle State Texture (FLOAT32)                         │
+│     - 65,536 particles (256×256 texture)                     │
+│     - Each pixel = [lng, lat, age, speed]                    │
+│                                                              │
+│  2. Update Shader (Fragment)                                 │
+│     - Sample wind UV at particle position                    │
+│     - Advance position: pos += wind_uv * dt * speedFactor   │
+│     - Age particles, respawn when age > maxAge               │
+│     - Random respawn position for dead particles             │
+│                                                              │
+│  3. Render Shader (Vertex + Fragment)                        │
+│     - Project particle lat/lng → screen coords               │
+│     - Trail: render previous N positions as fading line      │
+│     - Color by wind speed (blue → cyan → green → yellow)     │
+│     - Alpha fade based on age                                │
+│                                                              │
+│  4. Fade Framebuffer                                         │
+│     - Composite previous frame at 97% opacity                │
+│     - Creates smooth trail effect without storing history     │
+└──────────────────────────────────────────────────────────────┘</pre>
+      </div>
+
+      <div class="sub-title">Implementation Tasks</div>
+      <ul class="task-list">
+        <li><strong>Wind data endpoint</strong> — New route <span class="code">GET /api/v1/wind/grid</span> that fetches GFS 1° grid from NOAA's JSON API, parses U/V wind vectors, caches in Redis for 6 hours. Returns 256×128 flat array of <span class="code">[u, v]</span> pairs.</li>
+        <li><strong>Cron scheduler</strong> — Background job in Fastify using <span class="code">@fastify/schedule</span> or node-cron to refresh wind grid every 6 hours (matches GFS update cycle). Warm cache on API startup.</li>
+        <li><strong>WebGL custom layer</strong> — Implement <span class="code">maplibregl.CustomLayerInterface</span> with <span class="code">onAdd()</span>, <span class="code">render()</span>, <span class="code">onRemove()</span>. Two-pass rendering: update pass (advance particles via transform feedback or ping-pong textures) + draw pass (render particles as GL_POINTS with trail fade).</li>
+        <li><strong>Particle state management</strong> — Initialize 65,536 particles at random positions. Store state in a Float32 texture (ping-pong between two framebuffers). Each frame: read state → sample wind → write new state → render.</li>
+        <li><strong>Wind texture upload</strong> — Convert grid array to <span class="code">LUMINANCE_ALPHA</span> WebGL texture (U in luminance, V in alpha). Bilinear interpolation in shader gives smooth wind field between grid cells.</li>
+        <li><strong>Trail rendering</strong> — Use a screen-space fade framebuffer. Each frame: draw current particles on top of previous frame faded to 97% opacity. This creates the signature flowing trail effect without storing particle history.</li>
+        <li><strong>UI toggle</strong> — Add "Wind" button to the map layer toolbar (alongside existing Satellite, Heatmap toggles). Slider for particle density (16k / 32k / 65k). Default: ON at 32k particles for first-time visitors.</li>
+        <li><strong>Performance guard</strong> — Detect GPU via <span class="code">WEBGL_debug_renderer_info</span>. Drop to 16k particles on mobile/integrated GPUs. Disable entirely if WebGL2 unavailable. Target: 60fps on M1 MacBook, 30fps on mid-range Android.</li>
+      </ul>
+
+      <div class="sub-title">Files to Create / Modify</div>
+      <div class="file-tree">
+        <span class="new">NEW</span> apps/web/src/components/map/WindParticleLayer.ts<br>
+        <span class="new">NEW</span> apps/web/src/components/map/shaders/wind-update.frag.glsl<br>
+        <span class="new">NEW</span> apps/web/src/components/map/shaders/wind-draw.vert.glsl<br>
+        <span class="new">NEW</span> apps/web/src/components/map/shaders/wind-draw.frag.glsl<br>
+        <span class="new">NEW</span> apps/api/src/routes/wind.ts<br>
+        <span class="mod">MOD</span> apps/web/src/app/map/page.tsx (add layer toggle + integration)<br>
+        <span class="mod">MOD</span> apps/api/src/server.ts (register wind routes + cron)
+      </div>
+
+      <div class="sub-title">API Spec</div>
+      <div class="api-row">
+        <span class="api-method api-get">GET</span>
+        <span><span class="code">/api/v1/wind/grid</span> → <span class="code">{ u: Float32Array, v: Float32Array, width: 256, height: 128, timestamp: ISO, source: "GFS" }</span></span>
+      </div>
+
+      <div class="sub-title">Dependencies</div>
+      <div class="dep-graph">
+        <span class="dep-node">NOAA GFS API</span>
+        <span class="dep-arrow">→</span>
+        <span class="dep-node">Redis Cache</span>
+        <span class="dep-arrow">→</span>
+        <span class="dep-node">Wind Endpoint</span>
+        <span class="dep-arrow">→</span>
+        <span class="dep-node">WebGL Layer</span>
+      </div>
+
+      <div class="sub-title">Risk</div>
+      <table class="risk-table">
+        <tr><th>Risk</th><th>Likelihood</th><th>Mitigation</th></tr>
+        <tr><td>NOAA API rate limits / downtime</td><td class="risk-med">Medium</td><td>Cache aggressively (6h TTL). Bundle a static fallback wind grid for demo mode. Proxy through our API (never expose to client).</td></tr>
+        <tr><td>WebGL performance on low-end devices</td><td class="risk-med">Medium</td><td>GPU detection + adaptive particle count. Disable on WebGL1-only browsers. Progressive enhancement — map works without it.</td></tr>
+        <tr><td>Shader compilation errors on some GPUs</td><td class="risk-low">Low</td><td>Test on Chrome/Firefox/Safari. Use GLSL ES 3.0 with 1.0 fallback. Wrap in try/catch, degrade gracefully.</td></tr>
+      </table>
+
+      <div class="estimate">
+        <span class="estimate-label">Effort</span>
+        <div class="estimate-bar"><div class="estimate-fill" style="width:85%;background:linear-gradient(90deg,var(--red),var(--orange));"></div></div>
+        <span class="estimate-val" style="color:var(--red);">8–10 hrs</span>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ -->
+    <!-- FEATURE 2: TIME SLIDER -->
+    <!-- ═══════════════════════════════════════════════ -->
+    <div class="feature done">
+      <div class="feature-head">
+        <div class="feature-name">2. Time Slider + Historical Playback</div>
+        <span class="feature-tag tag-shipped">SHIPPED</span>
+      </div>
+      <div class="feature-why">
+        Ventusky's timeline scrubber is what keeps users playing with the app for minutes. Letting users "rewind" the map to watch intelligence signals unfold over time turns WorldPulse from a dashboard into a storytelling tool. No competitor in the OSINT space has this. "Watch the Ukraine conflict unfold over the last 7 days" — that's a tweet that writes itself.
+      </div>
+
+      <div class="sub-title">What It Does</div>
+      <p style="font-size:14px;color:var(--text2);margin-bottom:12px;">
+        A draggable timeline bar at the bottom of the map. Users scrub through time (1h, 6h, 24h, 7d, 30d ranges) and see signals appear/disappear on the map as they were published. Play button auto-advances at configurable speed. Signals fade in when they enter the time window and pulse briefly, creating a visual "ripple" effect across the globe.
+      </p>
+
+      <div class="sub-title">Technical Architecture</div>
+      <div class="tech-block">
+        <pre>
+┌──────────────────────────────────────────────────────────────┐
+│  Backend: Historical Signal Bucketing                        │
+│                                                              │
+│  GET /api/v1/signals/map/timeline                            │
+│  ?range=7d&bucket=1h&category=all&bbox=...                   │
+│                                                              │
+│  PostgreSQL Query:                                           │
+│  SELECT                                                      │
+│    date_trunc('hour', created_at) AS bucket,                 │
+│    json_agg(json_build_object(                               │
+│      'id', id, 'lat', ST_Y(location::geometry),              │
+│      'lng', ST_X(location::geometry),                        │
+│      'severity', severity, 'title', title,                   │
+│      'category', category                                    │
+│    )) AS signals                                             │
+│  FROM signals                                                │
+│  WHERE created_at >= NOW() - '7 days'::interval              │
+│    AND status IN ('verified','pending')                      │
+│  GROUP BY bucket ORDER BY bucket                             │
+│                                                              │
+│  Response: { buckets: [ { t: ISO, signals: [...] }, ... ] }  │
+│  Cache: 60s (Redis)                                          │
+└──────────────────────────────────────────────────────────────┘
+                           │
+                           ▼
+┌──────────────────────────────────────────────────────────────┐
+│  Frontend: Timeline Controller                               │
+│                                                              │
+│  ┌─────────────────────────────────────────────┐             │
+│  │  TimeSlider Component                        │             │
+│  │  ├── Range selector (1h/6h/24h/7d/30d)      │             │
+│  │  ├── Draggable scrubber thumb                │             │
+│  │  ├── Bucket histogram (signal density)       │             │
+│  │  ├── Play/Pause + Speed (1x/2x/4x/8x)      │             │
+│  │  └── Current timestamp display               │             │
+│  └─────────────────────────────────────────────┘             │
+│                                                              │
+│  Playback Loop:                                              │
+│  1. Fetch all buckets for selected range (single request)    │
+│  2. On play: advance currentTime by bucket interval          │
+│  3. Filter visible signals: created_at <= currentTime        │
+│  4. Update GeoJSON source with filtered subset               │
+│  5. New signals entering window get 500ms scale-in animation │
+│  6. requestAnimationFrame drives smooth scrubbing            │
+└──────────────────────────────────────────────────────────────┘</pre>
+      </div>
+
+      <div class="sub-title">Implementation Tasks</div>
+      <ul class="task-list">
+        <li><strong>Timeline API endpoint</strong> — <span class="code">GET /api/v1/signals/map/timeline</span> with params: <span class="code">range</span> (1h|6h|24h|7d|30d), <span class="code">bucket</span> (auto-calculated: 5min for 1h, 15min for 6h, 1h for 24h/7d, 6h for 30d), <span class="code">category</span>, <span class="code">bbox</span>. Uses PostGIS <span class="code">date_trunc</span> aggregation. Cache 60s in Redis.</li>
+        <li><strong>TimeSlider component</strong> — New component <span class="code">apps/web/src/components/map/TimeSlider.tsx</span>. Full-width bar fixed at bottom of map. Contains: range tabs, SVG histogram of signal density per bucket, draggable thumb, play/pause/speed controls, formatted timestamp. CSS transitions for smooth scrubbing.</li>
+        <li><strong>Histogram visualization</strong> — SVG bar chart above the scrubber showing signal density per bucket. Bars colored by dominant severity in bucket. Gives users a visual preview of where "interesting" time periods are before scrubbing.</li>
+        <li><strong>Playback engine</strong> — <span class="code">useTimelinePlayback</span> hook. Manages <span class="code">currentTime</span>, <span class="code">isPlaying</span>, <span class="code">speed</span> (1x/2x/4x/8x). Uses <span class="code">requestAnimationFrame</span> to advance time smoothly. Exposes <span class="code">visibleSignals</span> computed from cached bucket data.</li>
+        <li><strong>Map integration</strong> — When timeline is active, replace the live signal source with timeline-filtered signals. Each frame: compute which signals are visible at <span class="code">currentTime</span>, update <span class="code">map.getSource('signals').setData()</span>. Signals entering the window get a 500ms scale-up animation via interpolated <span class="code">circle-radius</span>.</li>
+        <li><strong>Signal entrance animation</strong> — Signals that just "appeared" (within last bucket) render with a brief expanding ring + opacity fade-in. Uses the existing <span class="code">new-highlight</span> layer pattern but triggered by timeline position, not WebSocket.</li>
+        <li><strong>URL state sync</strong> — Add <span class="code">tl</span> (timeline range) and <span class="code">tt</span> (timeline timestamp) to URL params. Restoring a permalink with timeline params opens the map at that exact moment in time.</li>
+        <li><strong>Keyboard shortcuts</strong> — Space = play/pause, Left/Right arrows = step one bucket, Shift+arrows = 10 buckets. Numbers 1-5 = range presets.</li>
+      </ul>
+
+      <div class="sub-title">Files to Create / Modify</div>
+      <div class="file-tree">
+        <span class="new">NEW</span> apps/web/src/components/map/TimeSlider.tsx<br>
+        <span class="new">NEW</span> apps/web/src/hooks/useTimelinePlayback.ts<br>
+        <span class="new">NEW</span> apps/api/src/routes/signals/timeline.ts<br>
+        <span class="mod">MOD</span> apps/web/src/app/map/page.tsx (mount TimeSlider, wire to signal source)<br>
+        <span class="mod">MOD</span> apps/api/src/routes/signals/map.ts (register timeline sub-route)
+      </div>
+
+      <div class="sub-title">API Spec</div>
+      <div class="api-row">
+        <span class="api-method api-get">GET</span>
+        <span><span class="code">/api/v1/signals/map/timeline?range=7d&category=all&bbox=...</span></span>
+      </div>
+      <div style="font-size:13px;color:var(--text2);margin:8px 0;">
+        Response: <span class="code">{ range: "7d", bucket_interval: "1h", buckets: [{ t: "2026-03-25T00:00:00Z", count: 14, signals: [{id, lat, lng, severity, category, title}] }], total_signals: 2847 }</span>
+      </div>
+
+      <div class="sub-title">Risk</div>
+      <table class="risk-table">
+        <tr><th>Risk</th><th>Likelihood</th><th>Mitigation</th></tr>
+        <tr><td>Large payload for 30d range with all signals</td><td class="risk-high">High</td><td>Cap signals per bucket to 50 (most recent). Paginate: load 24h windows on demand as user scrubs. Compress with gzip.</td></tr>
+        <tr><td>Janky animation during fast scrubbing</td><td class="risk-med">Medium</td><td>Debounce GeoJSON updates to 16ms (one per frame). Pre-compute bucket boundaries. Use web worker for signal filtering on large datasets.</td></tr>
+        <tr><td>Conflict with live WebSocket updates</td><td class="risk-low">Low</td><td>When timeline is active, pause WebSocket rendering. Show "LIVE" badge to return to real-time mode. Clear separation of modes.</td></tr>
+      </table>
+
+      <div class="estimate">
+        <span class="estimate-label">Effort</span>
+        <div class="estimate-bar"><div class="estimate-fill" style="width:75%;background:linear-gradient(90deg,var(--orange),var(--amber));"></div></div>
+        <span class="estimate-val" style="color:var(--orange);">6–8 hrs</span>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ -->
+    <!-- FEATURE 3: SHAREABLE PERMALINKS -->
+    <!-- ═══════════════════════════════════════════════ -->
+    <div class="feature done">
+      <div class="feature-head">
+        <div class="feature-name">3. Shareable Map Permalinks + Social Cards</div>
+        <span class="feature-tag tag-shipped">SHIPPED</span>
+      </div>
+      <div class="feature-why">
+        earth.nullschool.net's virality depended on shareable URLs. Every interesting map view needs to be one click away from a Twitter post. Without this, all the visual magic stays trapped on the user's screen. This is the distribution mechanism for everything else we're building.
+      </div>
+
+      <div class="sub-title">What It Does</div>
+      <p style="font-size:14px;color:var(--text2);margin-bottom:12px;">
+        Every map state — position, zoom, active layers, time slider position, selected signal — is encoded into the URL hash. A "Share" button copies the permalink and optionally generates a static screenshot preview card for social media (Open Graph). Pasting a WorldPulse map link on Twitter/Reddit/Slack shows a rich preview with the actual map view.
+      </p>
+
+      <div class="sub-title">Implementation Tasks</div>
+      <ul class="task-list">
+        <li><strong>URL hash encoder/decoder</strong> — Serialize full map state to compact URL: <span class="code">#@lat,lng,z|layers=wind,heat|t=7d:2026-03-28T14:00Z|sig=abc123</span>. Use base62 encoding for coordinates to keep URLs short. Decode on page load to restore exact state.</li>
+        <li><strong>Share button UI</strong> — Floating action button (bottom-right cluster). Click → copies permalink to clipboard with toast confirmation. Long-press/right-click → share menu with Twitter, Reddit, Copy Link, QR Code options.</li>
+        <li><strong>Deep link restoration</strong> — On <span class="code">map/page.tsx</span> mount, parse hash before initializing MapLibre. Set initial viewport, activate layers, restore timeline position, highlight selected signal. All before first render to avoid visual jumps.</li>
+        <li><strong>OG image generation</strong> — Server-side endpoint <span class="code">GET /api/v1/map/og?state=ENCODED_STATE</span> that renders a 1200×630 static map image using MapLibre GL Native (Node.js) or a headless Puppeteer screenshot. Cached in Redis (1h TTL, keyed by state hash).</li>
+        <li><strong>Dynamic meta tags</strong> — Next.js <span class="code">generateMetadata()</span> in map route reads URL params and returns OG tags: title ("WorldPulse — Live Intelligence Map"), description (signal count + top category), image (OG endpoint URL).</li>
+        <li><strong>QR code generator</strong> — Client-side QR code from permalink URL using <span class="code">qrcode</span> npm package. Displayed in share popover for mobile-to-mobile sharing.</li>
+      </ul>
+
+      <div class="sub-title">URL Schema</div>
+      <div class="tech-block">
+        <pre>
+Full URL: https://world-pulse.io/map#@38.9,-77.04,8|l=wind,sig|t=7d:1711641600|s=abc123
+
+Segments:
+  @lat,lng,zoom          Position (required)
+  l=layer1,layer2        Active layers (wind|heat|sat|adsb|naval|cam|risk)
+  t=range:timestamp      Timeline state (optional)
+  s=signalId             Highlighted signal (optional)
+  b=dark|satellite|terrain  Basemap (optional, default=satellite)</pre>
+      </div>
+
+      <div class="sub-title">Files to Create / Modify</div>
+      <div class="file-tree">
+        <span class="new">NEW</span> apps/web/src/lib/map-permalink.ts (encode/decode)<br>
+        <span class="new">NEW</span> apps/web/src/components/map/ShareButton.tsx<br>
+        <span class="new">NEW</span> apps/api/src/routes/map/og.ts (OG image gen)<br>
+        <span class="mod">MOD</span> apps/web/src/app/map/page.tsx (hash sync + deep link restore)<br>
+        <span class="mod">MOD</span> apps/web/src/app/map/layout.tsx (dynamic OG metadata)
+      </div>
+
+      <div class="estimate">
+        <span class="estimate-label">Effort</span>
+        <div class="estimate-bar"><div class="estimate-fill" style="width:50%;background:linear-gradient(90deg,var(--amber),var(--green));"></div></div>
+        <span class="estimate-val" style="color:var(--amber);">4–5 hrs</span>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ -->
+    <!-- FEATURE 4: SIGNAL DENSITY HEATMAPS -->
+    <!-- ═══════════════════════════════════════════════ -->
+    <div class="feature done">
+      <div class="feature-head">
+        <div class="feature-name">4. Signal Density Heatmaps (Enhanced)</div>
+        <span class="feature-tag tag-shipped">SHIPPED</span>
+      </div>
+      <div class="feature-why">
+        The existing heatmap mode is basic — it uses MapLibre's built-in heatmap layer. MarineTraffic's vessel density maps are stunning because they use custom gradient coloring, animated glow pulses on hot zones, and zoom-adaptive kernel sizing. Upgrading our heatmap to this level makes the "intelligence hotspot" concept visually undeniable.
+      </div>
+
+      <div class="sub-title">What It Does</div>
+      <p style="font-size:14px;color:var(--text2);margin-bottom:12px;">
+        Replaces the basic heatmap with a multi-layer density visualization. Hot zones pulse with a subtle animated glow. Color gradient shifts by category (red=conflict, blue=climate, green=health). Zoom-adaptive: at low zoom shows continental heat; at high zoom shows street-level clusters. Severity acts as a weight multiplier — critical signals contribute 4x to heat intensity.
+      </p>
+
+      <div class="sub-title">Implementation Tasks</div>
+      <ul class="task-list">
+        <li><strong>Weighted heatmap layer</strong> — Replace current heatmap with severity-weighted version. Weight mapping: critical=4, high=3, medium=2, low=1, info=0.5. Use MapLibre <span class="code">heatmap-weight</span> property with <span class="code">match</span> expression on severity field.</li>
+        <li><strong>Category-specific color ramps</strong> — Different gradient per category filter: conflict (black→red→orange→white), climate (black→blue→cyan→white), health (black→green→lime→white), economy (black→purple→pink→white), all (black→blue→cyan→yellow→white). Apply via <span class="code">heatmap-color</span> interpolation.</li>
+        <li><strong>Zoom-adaptive radius</strong> — <span class="code">heatmap-radius</span> interpolated from 15px at zoom 2 → 30px at zoom 6 → 50px at zoom 10 → 80px at zoom 14. Creates smooth visual transition from global overview to local detail. Current version is static.</li>
+        <li><strong>Animated glow pulse</strong> — Overlay a second semi-transparent heatmap layer with a pulsing <span class="code">heatmap-opacity</span> (0.3→0.6 sine wave, 3s cycle). Creates the "breathing" hotspot effect. Uses same data source, slightly larger radius.</li>
+        <li><strong>Hotspot labels</strong> — At zoom >5, show floating labels on the densest heat zones: "Kyiv Region — 47 signals" with a severity breakdown mini-bar. Uses the existing <span class="code">/api/v1/signals/map/hotspots</span> endpoint. Labels avoid overlap via collision detection.</li>
+        <li><strong>Smooth transitions</strong> — When toggling heatmap mode, animate opacity from 0→1 over 400ms. When switching categories, cross-fade between color ramps.</li>
+      </ul>
+
+      <div class="sub-title">Files to Create / Modify</div>
+      <div class="file-tree">
+        <span class="new">NEW</span> apps/web/src/components/map/EnhancedHeatmap.ts<br>
+        <span class="new">NEW</span> apps/web/src/components/map/HotspotLabels.tsx<br>
+        <span class="mod">MOD</span> apps/web/src/app/map/page.tsx (replace heatmap layer setup, add labels)
+      </div>
+
+      <div class="estimate">
+        <span class="estimate-label">Effort</span>
+        <div class="estimate-bar"><div class="estimate-fill" style="width:40%;background:linear-gradient(90deg,var(--green),var(--cyan));"></div></div>
+        <span class="estimate-val" style="color:var(--green);">3–4 hrs</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- P1 FEATURES -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-title">
+      P1 Features Complete
+      <span class="badge badge-p1">Day 4 · Apr 4</span>
+    </div>
+
+    <div class="feature done">
+      <div class="feature-head">
+        <div class="feature-name">5. Search → Meilisearch (BAT-8)</div>
+        <span class="feature-tag tag-shipped">SHIPPED</span>
+      </div>
+      <div class="feature-why">
+        Search is the second most-used feature after the map. Currently stubbed. Meilisearch backend is fully deployed — just needs the frontend wired up. Users expect instant search on an intelligence platform.
+      </div>
+
+      <div class="sub-title">Implementation Tasks</div>
+      <ul class="task-list">
+        <li><strong>Wire search input</strong> — Connect <span class="code">apps/web/src/app/search/page.tsx</span> to <span class="code">GET /api/v1/search?q=QUERY&limit=20&offset=0</span>. Debounce input at 300ms. Show loading skeleton during fetch.</li>
+        <li><strong>Result cards</strong> — Render search results as signal cards: title (highlighted match), summary snippet (with match highlighting via <span class="code">&lt;mark&gt;</span>), severity badge, category tag, timestamp, source count. Click → navigate to <span class="code">/signals/[id]</span>.</li>
+        <li><strong>Faceted filters</strong> — Sidebar with category and severity facet counts returned from Meilisearch. Click to filter. Show "X results for 'query'" header with clear button.</li>
+        <li><strong>Empty & error states</strong> — "No signals match your search" with suggested queries. API error → retry button + fallback message. Zero-state shows trending/recent signals.</li>
+        <li><strong>Keyboard navigation</strong> — Up/Down arrows cycle results. Enter opens selected. Esc clears search. Global <span class="code">Cmd+K</span> / <span class="code">Ctrl+K</span> opens search from anywhere.</li>
+        <li><strong>"Search on Map" action</strong> — Button on each result to fly to that signal on the map: <span class="code">/map#@lat,lng,14|s=signalId</span>. Bridges search and map experiences.</li>
+      </ul>
+
+      <div class="sub-title">Files to Modify</div>
+      <div class="file-tree">
+        <span class="mod">MOD</span> apps/web/src/app/search/page.tsx (wire to API, build result UI)<br>
+        <span class="mod">MOD</span> apps/web/src/components/sidebar/LeftSidebar.tsx (Cmd+K handler)<br>
+        <span class="new">NEW</span> apps/web/src/components/search/SearchResultCard.tsx
+      </div>
+
+      <div class="estimate">
+        <span class="estimate-label">Effort</span>
+        <div class="estimate-bar"><div class="estimate-fill" style="width:35%;background:linear-gradient(90deg,var(--green),var(--cyan));"></div></div>
+        <span class="estimate-val" style="color:var(--green);">3–4 hrs</span>
+      </div>
+    </div>
+
+    <div class="feature done">
+      <div class="feature-head">
+        <div class="feature-name">6. Live Signal Counter + WebSocket (BAT-9)</div>
+        <span class="feature-tag tag-shipped">SHIPPED</span>
+      </div>
+      <div class="feature-why">
+        A live-incrementing counter on the dashboard ("12,847 signals tracked") creates urgency and credibility. It shows the platform is alive. The API endpoint exists — it just needs a WebSocket-incrementing frontend widget.
+      </div>
+
+      <div class="sub-title">Implementation Tasks</div>
+      <ul class="task-list">
+        <li><strong>Counter API</strong> — Verify <span class="code">GET /api/v1/signals/count</span> returns <span class="code">{ total: number, last_24h: number, last_hour: number }</span>. Add Redis counter that increments on each <span class="code">signal.new</span> event (avoids COUNT(*) on every request).</li>
+        <li><strong>Counter component</strong> — Animated number counter widget. On mount: fetch initial count. On each <span class="code">signal.new</span> WebSocket event: increment by 1 with a smooth CSS counter animation (number rolls up like an odometer). Use <span class="code">Intl.NumberFormat</span> for locale-aware formatting.</li>
+        <li><strong>Dashboard placement</strong> — Hero stat on the main dashboard: "🌐 12,847 intelligence signals tracked". Secondary stat: "+47 in the last hour". Pulse animation on increment.</li>
+        <li><strong>Map integration</strong> — Small counter badge in map bottom-right: "12,847 signals · 🟢 Live". Increments in sync with the dashboard counter.</li>
+      </ul>
+
+      <div class="sub-title">Files to Create / Modify</div>
+      <div class="file-tree">
+        <span class="new">NEW</span> apps/web/src/components/SignalCounter.tsx<br>
+        <span class="mod">MOD</span> apps/web/src/app/dashboard/page.tsx (mount counter)<br>
+        <span class="mod">MOD</span> apps/web/src/app/map/page.tsx (mount mini counter badge)
+      </div>
+
+      <div class="estimate">
+        <span class="estimate-label">Effort</span>
+        <div class="estimate-bar"><div class="estimate-fill" style="width:25%;background:var(--green);"></div></div>
+        <span class="estimate-val" style="color:var(--green);">2–3 hrs</span>
+      </div>
+    </div>
+
+    <div class="feature done">
+      <div class="feature-head">
+        <div class="feature-name">7. Communities Demo Data (BAT-7)</div>
+        <span class="feature-tag tag-shipped">SHIPPED</span>
+      </div>
+      <div class="feature-why">
+        Communities page is visible in the nav but shows empty state. For launch, it needs to look alive with demo/seed data even if full community features come later. First impressions matter — an empty page kills trust.
+      </div>
+
+      <div class="sub-title">Implementation Tasks</div>
+      <ul class="task-list">
+        <li><strong>Seed data script</strong> — Create <span class="code">scripts/seed-communities.ts</span> that inserts 5-8 demo communities: "OSINT Analysts", "Climate Watchers", "Conflict Monitors", "Maritime Intel", "Tech & Cyber". Each with description, member count (randomized), avatar, recent activity.</li>
+        <li><strong>Community cards</strong> — Grid layout of community cards showing: name, description, member count, signal count, top categories, "Join" button (links to waitlist/signup for Pro). Visual design consistent with signal cards.</li>
+        <li><strong>Activity feed stub</strong> — Each community shows last 5 signals relevant to its category. Pull from existing <span class="code">/api/v1/signals?category=X&limit=5</span>. Makes communities feel alive without new backend work.</li>
+        <li><strong>"Coming Soon" messaging</strong> — Subtle banner: "Communities are in early access. Pro members get early access." CTA drives to pricing/upgrade.</li>
+      </ul>
+
+      <div class="sub-title">Files to Modify</div>
+      <div class="file-tree">
+        <span class="mod">MOD</span> apps/web/src/app/communities/page.tsx<br>
+        <span class="new">NEW</span> scripts/seed-communities.ts
+      </div>
+
+      <div class="estimate">
+        <span class="estimate-label">Effort</span>
+        <div class="estimate-bar"><div class="estimate-fill" style="width:25%;background:var(--green);"></div></div>
+        <span class="estimate-val" style="color:var(--green);">2–3 hrs</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- TOTAL EFFORT & RISK SUMMARY -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-title">Sprint Totals</div>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-val" style="color:var(--cyan);">28–37</div>
+        <div class="stat-label">Total Hours</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val" style="color:var(--green);">14</div>
+        <div class="stat-label">New Files</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val" style="color:var(--amber);">7</div>
+        <div class="stat-label">Modified Files</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val" style="color:var(--purple);">2</div>
+        <div class="stat-label">New API Endpoints</div>
+      </div>
+    </div>
+
+    <table class="risk-table" style="margin-top:20px;">
+      <tr><th>Feature</th><th>Day</th><th>Effort</th><th>Status</th><th>Viral Impact</th></tr>
+      <tr><td>Wind Particle Flow</td><td style="color:var(--green);">Day 1</td><td>8–10h</td><td style="color:var(--green);font-weight:700;">✅ DONE</td><td style="color:var(--red);">★★★★★</td></tr>
+      <tr><td>Time Slider + Playback</td><td style="color:var(--green);">Day 2</td><td>6–8h</td><td style="color:var(--green);font-weight:700;">✅ DONE</td><td style="color:var(--red);">★★★★★</td></tr>
+      <tr><td>Shareable Permalinks</td><td style="color:var(--green);">Day 3 AM</td><td>4–5h</td><td style="color:var(--green);font-weight:700;">✅ DONE</td><td style="color:var(--orange);">★★★★☆</td></tr>
+      <tr><td>Enhanced Heatmaps</td><td style="color:var(--green);">Day 3 PM</td><td>3–4h</td><td style="color:var(--green);font-weight:700;">✅ DONE</td><td style="color:var(--amber);">★★★☆☆</td></tr>
+      <tr><td>Search → Meilisearch</td><td style="color:var(--green);">Day 4</td><td>3–4h</td><td style="color:var(--green);font-weight:700;">✅ DONE</td><td style="color:var(--amber);">★★★☆☆</td></tr>
+      <tr><td>Live Signal Counter</td><td style="color:var(--green);">Day 4</td><td>2–3h</td><td style="color:var(--green);font-weight:700;">✅ DONE</td><td style="color:var(--amber);">★★★☆☆</td></tr>
+      <tr><td>Communities Demo</td><td style="color:var(--green);">Day 4</td><td>2–3h</td><td style="color:var(--green);font-weight:700;">✅ DONE</td><td style="color:var(--text3);">★★☆☆☆</td></tr>
+    </table>
+  </div>
+
+  <!-- CRITICAL PATH -->
+  <div class="section">
+    <div class="section-title">Critical Path & Dependencies</div>
+    <div class="tech-block">
+      <pre>
+Day 1 (Wind Particles)
+  └── No blockers. Self-contained WebGL layer + new API endpoint.
+      Can develop entirely in parallel with everything else.
+      ⚠️ Hardest feature. If it slips, cut particle count and skip trails.
+
+Day 2 (Time Slider)
+  └── Depends on: existing /api/v1/signals/map/points schema
+      New endpoint only (no schema changes). Frontend-heavy.
+      ⚠️ If payload too large, ship with 24h max range and expand post-launch.
+
+Day 3 (Permalinks + Heatmaps)
+  ├── Permalinks: depends on all other features being URL-encodable
+  │   Build last so the schema captures everything.
+  └── Heatmaps: depends on nothing. Pure MapLibre layer config.
+      Both are low-risk, high-polish features.
+
+Day 4 (P1 Features)
+  ├── Search: backend exists, pure frontend wire-up
+  ├── Counter: API exists, WebSocket exists, pure frontend
+  └── Communities: seed data + static cards, no backend deps
+      All three are independent — can be parallelized.
+
+CRITICAL PATH: Wind Particles → Time Slider → Permalinks
+(Heatmaps + P1s are parallel tracks that don't block each other)</pre>
+    </div>
+  </div>
+
+  <!-- DEFINITION OF DONE -->
+  <div class="section">
+    <div class="section-title">Definition of Done (per feature)</div>
+    <ul class="task-list">
+      <li>Feature works on Chrome, Firefox, Safari (desktop + mobile)</li>
+      <li>No console errors or unhandled promise rejections</li>
+      <li>Performance: map stays above 30fps with feature active</li>
+      <li>Mobile responsive: touch-friendly controls, no layout breaks</li>
+      <li>Deployed to world-pulse.io production via <span class="code">docker compose build --no-cache</span></li>
+      <li>URL state preserved: refresh restores exact map state</li>
+      <li>Graceful degradation: feature off doesn't break base map</li>
+      <li>Production error tracking via Sentry (wrap critical paths)</li>
+    </ul>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,12 @@
+-- ─────────────────────────────────────────────────────────────────────────────
+-- SUPERSEDED — DO NOT RUN
+--
+-- Original plan was to convert signals.source_ids from text[] back to uuid[].
+-- Superseded by code-level cast in apps/api/src/routes/signals.ts:
+--
+--   WHERE s2.id::text = ANY(s.source_ids::text[])
+--
+-- Why: the Apr 15 migration_hotfix.sql intentionally changed source_ids to
+-- text[]. Reverting it risks breaking any scraper/ingest code that now writes
+-- text values. The cast in the query is type-safe either way.
+-- ─────────────────────────────────────────────────────────────────────────────

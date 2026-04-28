@@ -1,0 +1,23 @@
+{
+  "eval_id": 1,
+  "eval_name": "standup",
+  "prompt": "Generate a standup from developer notes about a production outage fix and upcoming Stripe/Pinecone work. Should include Yesterday, Today, and Blockers sections.",
+  "assertions": [
+    {
+      "name": "has_three_sections",
+      "description": "Output contains Yesterday, Today, and Blockers sections"
+    },
+    {
+      "name": "summarizes_not_dumps",
+      "description": "Output is reasonably concise (under ~600 characters total)"
+    },
+    {
+      "name": "mentions_stripe",
+      "description": "Today section mentions Stripe or Pro tier"
+    },
+    {
+      "name": "has_date_or_header",
+      "description": "Output has a standup header or date"
+    }
+  ]
+}

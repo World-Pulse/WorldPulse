@@ -1,0 +1,29 @@
+{
+  "eval_id": 0,
+  "eval_name": "code-review",
+  "config": "with_skill",
+  "assertions": [
+    {
+      "text": "flags_hardcoded_secret",
+      "passed": true,
+      "evidence": "Line 13 explicitly mentions 'Hardcoded `x-internal-token` with value `secret123`' and explains the security vulnerability"
+    },
+    {
+      "text": "flags_ip_spoofing",
+      "passed": true,
+      "evidence": "Line 14 addresses '`x-forwarded-for` header used directly as rate limit key without validation' and notes 'Clients can forge `x-forwarded-for` headers to bypass rate limiting'"
+    },
+    {
+      "text": "has_verdict",
+      "passed": true,
+      "evidence": "Line 3 states 'Verdict: 🔴 Request changes' - clear verdict provided"
+    },
+    {
+      "text": "has_structured_output",
+      "passed": true,
+      "evidence": "Output uses structured headers (###, ##), emoji severity markers (🔴 Must Fix, 🟡 Should Fix, 💡 Consider, ✅ What's Good), and organized table format"
+    }
+  ],
+  "pass_rate": 1.0,
+  "notes": "Excellent structured code review with clear severity categorization, evidence-based findings, and actionable recommendations. Uses emoji markers effectively for visual clarity."
+}

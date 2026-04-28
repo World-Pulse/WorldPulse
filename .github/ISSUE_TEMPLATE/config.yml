@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Discussions
+    url: https://github.com/World-Pulse/WorldPulse/discussions
+    about: Ask questions and share ideas
+  - name: Discord
+    url: https://discord.gg/worldpulse
+    about: Chat with the community

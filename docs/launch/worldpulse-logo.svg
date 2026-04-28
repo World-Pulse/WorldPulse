@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a1628"/>
+      <stop offset="100%" style="stop-color:#0d1f3c"/>
+    </linearGradient>
+    <linearGradient id="pulse" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#00d4aa"/>
+      <stop offset="50%" style="stop-color:#00e5b8"/>
+      <stop offset="100%" style="stop-color:#00d4aa"/>
+    </linearGradient>
+    <linearGradient id="globe" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a3a5c"/>
+      <stop offset="100%" style="stop-color:#0f2740"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00e5b8" stop-opacity="0.3"/>
+      <stop offset="100%" style="stop-color:#00d4aa" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="256" fill="url(#bg)"/>
+
+  <!-- Subtle glow behind globe -->
+  <circle cx="256" cy="256" r="160" fill="url(#glow)"/>
+
+  <!-- Globe body -->
+  <circle cx="256" cy="256" r="130" fill="url(#globe)" stroke="#00d4aa" stroke-width="2.5" stroke-opacity="0.4"/>
+
+  <!-- Globe latitude lines -->
+  <ellipse cx="256" cy="256" rx="130" ry="45" fill="none" stroke="#00d4aa" stroke-width="1.2" stroke-opacity="0.2"/>
+  <ellipse cx="256" cy="200" rx="112" ry="35" fill="none" stroke="#00d4aa" stroke-width="1" stroke-opacity="0.15"/>
+  <ellipse cx="256" cy="312" rx="112" ry="35" fill="none" stroke="#00d4aa" stroke-width="1" stroke-opacity="0.15"/>
+
+  <!-- Globe longitude lines -->
+  <ellipse cx="256" cy="256" rx="50" ry="130" fill="none" stroke="#00d4aa" stroke-width="1.2" stroke-opacity="0.2"/>
+  <ellipse cx="256" cy="256" rx="95" ry="130" fill="none" stroke="#00d4aa" stroke-width="1" stroke-opacity="0.15"/>
+
+  <!-- Globe vertical center line -->
+  <line x1="256" y1="126" x2="256" y2="386" stroke="#00d4aa" stroke-width="1" stroke-opacity="0.15"/>
+
+  <!-- Globe horizontal center line -->
+  <line x1="126" y1="256" x2="386" y2="256" stroke="#00d4aa" stroke-width="1" stroke-opacity="0.15"/>
+
+  <!-- Signal dots on globe -->
+  <circle cx="210" cy="220" r="5" fill="#00e5b8" opacity="0.9"/>
+  <circle cx="210" cy="220" r="10" fill="#00e5b8" opacity="0.2"/>
+
+  <circle cx="290" cy="240" r="4" fill="#ff6b6b" opacity="0.9"/>
+  <circle cx="290" cy="240" r="8" fill="#ff6b6b" opacity="0.2"/>
+
+  <circle cx="240" cy="280" r="4.5" fill="#00e5b8" opacity="0.8"/>
+  <circle cx="240" cy="280" r="9" fill="#00e5b8" opacity="0.15"/>
+
+  <circle cx="310" cy="200" r="3.5" fill="#ffd93d" opacity="0.9"/>
+  <circle cx="310" cy="200" r="7" fill="#ffd93d" opacity="0.2"/>
+
+  <circle cx="195" cy="260" r="3" fill="#ff6b6b" opacity="0.7"/>
+  <circle cx="280" cy="300" r="3.5" fill="#00e5b8" opacity="0.7"/>
+  <circle cx="320" cy="270" r="3" fill="#ffd93d" opacity="0.6"/>
+
+  <!-- Pulse/heartbeat line across the globe -->
+  <polyline
+    points="80,256 160,256 185,256 200,220 215,290 230,240 245,270 256,200 267,310 280,245 295,265 310,256 340,256 432,256"
+    fill="none"
+    stroke="url(#pulse)"
+    stroke-width="3.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    opacity="0.95"
+  />
+
+  <!-- Brighter pulse glow -->
+  <polyline
+    points="80,256 160,256 185,256 200,220 215,290 230,240 245,270 256,200 267,310 280,245 295,265 310,256 340,256 432,256"
+    fill="none"
+    stroke="#00e5b8"
+    stroke-width="8"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    opacity="0.15"
+  />
+
+  <!-- WP text at bottom -->
+  <text x="256" y="440" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="52" fill="#ffffff" letter-spacing="8" opacity="0.9">WP</text>
+</svg>
