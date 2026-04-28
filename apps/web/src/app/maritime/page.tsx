@@ -222,47 +222,47 @@ export default function MaritimePage() {
           </div>
         )}
 
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Row 2: Two-column — Chokepoints left, Carrier/Vessel intel right */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-          {/* Left Column: Chokepoints + Vessels */}
-          <div className="lg:col-span-1 space-y-6">
-
-            {/* Chokepoint Monitor */}
-            <div className="bg-zinc-900/60 border border-zinc-800 rounded-lg p-6">
-              <h2 className="text-sm font-semibold text-zinc-400 mb-4 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-blue-400" />
-                Global Chokepoints
-              </h2>
-              <div className="space-y-1">
-                {(overview?.chokepoints ?? []).map(cp => (
-                  <button
-                    key={cp.id}
-                    onClick={() => {
-                      if (activeChokepoint?.id === cp.id) {
-                        setActiveChokepoint(null)
-                      } else {
-                        setActiveChokepoint(cp)
-                      }
-                    }}
-                    className={`w-full flex items-center justify-between py-2 px-2 -mx-2 rounded transition-colors ${
-                      activeChokepoint?.id === cp.id
-                        ? 'bg-blue-500/15 border border-blue-500/30'
-                        : 'border border-transparent hover:bg-zinc-800/50'
-                    }`}
-                  >
-                    <div className="text-left">
-                      <div className={`text-sm ${activeChokepoint?.id === cp.id ? 'text-blue-300' : 'text-zinc-200'}`}>{cp.name}</div>
-                      <div className="text-xs text-zinc-500">{cp.region}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm font-mono text-blue-400">{cp.pctGlobalTrade}%</div>
-                      <div className="text-xs text-zinc-500">{cp.dailyTransits}/day</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
+          {/* Left: Chokepoint Monitor */}
+          <div className="bg-zinc-900/60 border border-zinc-800 rounded-lg p-6">
+            <h2 className="text-sm font-semibold text-zinc-400 mb-4 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-blue-400" />
+              Global Chokepoints
+            </h2>
+            <div className="space-y-1">
+              {(overview?.chokepoints ?? []).map(cp => (
+                <button
+                  key={cp.id}
+                  onClick={() => {
+                    if (activeChokepoint?.id === cp.id) {
+                      setActiveChokepoint(null)
+                    } else {
+                      setActiveChokepoint(cp)
+                    }
+                  }}
+                  className={`w-full flex items-center justify-between py-2 px-2 -mx-2 rounded transition-colors ${
+                    activeChokepoint?.id === cp.id
+                      ? 'bg-blue-500/15 border border-blue-500/30'
+                      : 'border border-transparent hover:bg-zinc-800/50'
+                  }`}
+                >
+                  <div className="text-left">
+                    <div className={`text-sm ${activeChokepoint?.id === cp.id ? 'text-blue-300' : 'text-zinc-200'}`}>{cp.name}</div>
+                    <div className="text-xs text-zinc-500">{cp.region}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-mono text-blue-400">{cp.pctGlobalTrade}%</div>
+                    <div className="text-xs text-zinc-500">{cp.dailyTransits}/day</div>
+                  </div>
+                </button>
+              ))}
             </div>
+          </div>
+
+          {/* Right: Carrier Strike Groups + Vessel Alerts stacked */}
+          <div className="space-y-6">
 
             {/* Carrier Strike Groups */}
             {carriers.length > 0 && (
@@ -328,7 +328,7 @@ export default function MaritimePage() {
               </div>
             )}
 
-            {/* Regular Vessel Alerts */}
+            {/* Vessel Alerts */}
             {regularVessels.length > 0 && (
               <div className="bg-zinc-900/60 border border-zinc-800 rounded-lg p-6">
                 <h2 className="text-sm font-semibold text-zinc-400 mb-4 flex items-center gap-2">
@@ -361,86 +361,88 @@ export default function MaritimePage() {
               </div>
             )}
           </div>
+        </div>
 
-          {/* Right Column: Signal Feed */}
-          <div className="lg:col-span-2">
-            <div className="bg-zinc-900/60 border border-zinc-800 rounded-lg">
-              {/* Active chokepoint filter banner */}
-              {activeChokepoint && (
-                <div className="flex items-center justify-between px-4 py-2.5 bg-blue-500/10 border-b border-blue-500/20">
-                  <span className="text-xs text-blue-300">
-                    Showing signals near <strong>{activeChokepoint.name}</strong> ({activeChokepoint.region}) — 500 km radius
-                  </span>
+        {/* Row 3: Full-width Signal Feed (hero section) */}
+        <div className="bg-zinc-900/60 border border-zinc-800 rounded-lg">
+          {/* Active chokepoint filter banner */}
+          {activeChokepoint && (
+            <div className="flex items-center justify-between px-4 py-2.5 bg-blue-500/10 border-b border-blue-500/20">
+              <span className="text-xs text-blue-300">
+                Showing signals near <strong>{activeChokepoint.name}</strong> ({activeChokepoint.region}) — 500 km radius
+              </span>
+              <button
+                onClick={() => setActiveChokepoint(null)}
+                className="text-xs text-blue-400/70 hover:text-blue-300 ml-3 shrink-0 transition-colors"
+              >
+                Clear filter
+              </button>
+            </div>
+          )}
+
+          {/* Tab Bar */}
+          <div className="border-b border-zinc-800 px-4 pt-4 overflow-x-auto">
+            <div className="flex items-center justify-between">
+              <div className="flex gap-1">
+                {SIGNAL_TABS.map(tab => (
                   <button
-                    onClick={() => setActiveChokepoint(null)}
-                    className="text-xs text-blue-400/70 hover:text-blue-300 ml-3 shrink-0 transition-colors"
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`px-3 py-2 text-xs font-medium rounded-t transition-colors whitespace-nowrap ${
+                      activeTab === tab
+                        ? 'bg-zinc-800 text-white border-b-2 border-blue-400'
+                        : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
+                    }`}
                   >
-                    Clear filter
+                    {TAB_LABELS[tab]}
                   </button>
-                </div>
-              )}
-              {/* Tab Bar */}
-              <div className="border-b border-zinc-800 px-4 pt-4 overflow-x-auto">
-                <div className="flex gap-1">
-                  {SIGNAL_TABS.map(tab => (
-                    <button
-                      key={tab}
-                      onClick={() => setActiveTab(tab)}
-                      className={`px-3 py-2 text-xs font-medium rounded-t transition-colors whitespace-nowrap ${
-                        activeTab === tab
-                          ? 'bg-zinc-800 text-white border-b-2 border-blue-400'
-                          : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
-                      }`}
-                    >
-                      {TAB_LABELS[tab]}
-                    </button>
-                  ))}
-                </div>
+                ))}
               </div>
+              <h2 className="text-sm font-semibold text-zinc-400 hidden sm:block">Maritime Signal Feed</h2>
+            </div>
+          </div>
 
-              {/* Signal List */}
-              <div className="p-4">
-                {(loading || signalLoading) ? (
-                  <div className="space-y-3">
-                    {[...Array(8)].map((_, i) => (
-                      <div key={i} className="animate-pulse flex items-start gap-3">
-                        <div className="w-16 h-5 bg-zinc-800 rounded" />
-                        <div className="flex-1">
-                          <div className="h-4 bg-zinc-800 rounded w-3/4 mb-2" />
-                          <div className="h-3 bg-zinc-800 rounded w-1/2" />
+          {/* Signal List */}
+          <div className="p-4">
+            {(loading || signalLoading) ? (
+              <div className="space-y-3">
+                {[...Array(8)].map((_, i) => (
+                  <div key={i} className="animate-pulse flex items-start gap-3">
+                    <div className="w-16 h-5 bg-zinc-800 rounded" />
+                    <div className="flex-1">
+                      <div className="h-4 bg-zinc-800 rounded w-3/4 mb-2" />
+                      <div className="h-3 bg-zinc-800 rounded w-1/2" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : signals.length === 0 ? (
+              <div className="text-center py-12 text-zinc-500">
+                <Ship className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                <p>No maritime signals in this category yet.</p>
+                <p className="text-xs mt-1">Signals will appear as maritime data sources begin ingesting.</p>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {signals.map(signal => (
+                  <Link key={signal.id} href={`/signals/${signal.id}`} className="block">
+                    <div className="flex items-start gap-3 py-3 px-2 -mx-2 border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/30 rounded transition-colors">
+                      <span className={`shrink-0 mt-0.5 px-1.5 py-0.5 text-xs rounded border font-medium ${SEVERITY_COLORS[signal.severity] ?? SEVERITY_COLORS.info}`}>
+                        {signal.severity?.toUpperCase().slice(0, 4)}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm text-zinc-200 leading-snug">{signal.title}</div>
+                        <div className="flex items-center gap-2 mt-1 text-xs text-zinc-500">
+                          {signal.location_name && <span>{signal.location_name}</span>}
+                          <span>{timeAgo(signal.created_at)}</span>
+                          <span className="text-zinc-600">{signal.category}</span>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                ) : signals.length === 0 ? (
-                  <div className="text-center py-12 text-zinc-500">
-                    <Ship className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                    <p>No maritime signals in this category yet.</p>
-                    <p className="text-xs mt-1">Signals will appear as maritime data sources begin ingesting.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    {signals.map(signal => (
-                      <Link key={signal.id} href={`/signals/${signal.id}`} className="block">
-                        <div className="flex items-start gap-3 py-3 px-2 -mx-2 border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/30 rounded transition-colors">
-                          <span className={`shrink-0 mt-0.5 px-1.5 py-0.5 text-xs rounded border font-medium ${SEVERITY_COLORS[signal.severity] ?? SEVERITY_COLORS.info}`}>
-                            {signal.severity?.toUpperCase().slice(0, 4)}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm text-zinc-200 leading-snug">{signal.title}</div>
-                            <div className="flex items-center gap-2 mt-1 text-xs text-zinc-500">
-                              {signal.location_name && <span>{signal.location_name}</span>}
-                              <span>{timeAgo(signal.created_at)}</span>
-                              <span className="text-zinc-600">{signal.category}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                )}
+                    </div>
+                  </Link>
+                ))}
               </div>
-            </div>
+            )}
           </div>
         </div>
 
