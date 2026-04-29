@@ -404,7 +404,7 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
     } | null = null
 
     try {
-      const { getBaselineStats } = await import('../lib/cortex/baselines')
+      const { getBaselineStats } = await import('../lib/cortex/baselines.js')
       const stats = await getBaselineStats('conflict', 'global', 'all')
       if (stats) {
         baseline_context = {
@@ -970,7 +970,7 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
       category?: string; region?: string; severity?: string
     }
 
-    const { getBaselineStats } = await import('../lib/cortex/baselines')
+    const { getBaselineStats } = await import('../lib/cortex/baselines.js')
     const stats = await getBaselineStats(category, region, severity)
 
     if (!stats) {
@@ -1053,7 +1053,7 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
       q: string; category?: string; limit?: number
     }
 
-    const { semanticSearch } = await import('../lib/cortex/embeddings')
+    const { semanticSearch } = await import('../lib/cortex/embeddings.js')
     const results = await semanticSearch(q, { category, limit: Math.min(limit, 50) })
 
     return reply.send({
@@ -1071,7 +1071,7 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
       description: 'How many signals have vector embeddings',
     },
   }, async (_req, reply) => {
-    const { getEmbeddingStats } = await import('../lib/cortex/embeddings')
+    const { getEmbeddingStats } = await import('../lib/cortex/embeddings.js')
     const stats = await getEmbeddingStats()
     return reply.send({ success: true, ...stats })
   })
@@ -1113,7 +1113,7 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
       description: 'Trigger the cross-domain pattern detection cycle on demand (admin use)',
     },
   }, async (_req, reply) => {
-    const { runPatternDetectionCycle } = await import('../lib/cortex/pattern-detection')
+    const { runPatternDetectionCycle } = await import('../lib/cortex/pattern-detection.js')
     // Run async
     runPatternDetectionCycle().catch(err => {
       console.error('[CORTEX] On-demand pattern detection failed:', err)
@@ -1135,7 +1135,7 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
     },
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
   }, async (_req, reply) => {
-    const { getCortexHealth } = await import('../lib/cortex/metrics')
+    const { getCortexHealth } = await import('../lib/cortex/metrics.js')
     const health = await getCortexHealth()
     return reply.send({ success: true, ...health })
   })
@@ -1149,7 +1149,7 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
     },
     config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
   }, async (_req, reply) => {
-    const { computeIntelligenceQuality } = await import('../lib/cortex/metrics')
+    const { computeIntelligenceQuality } = await import('../lib/cortex/metrics.js')
     const quality = await computeIntelligenceQuality()
     return reply.send({
       success: true,
@@ -1184,7 +1184,7 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
   }, async (req, reply) => {
     const { days = 30 } = (req.body as { days?: number }) ?? {}
 
-    const { backfillBaselines } = await import('../lib/cortex/baselines')
+    const { backfillBaselines } = await import('../lib/cortex/baselines.js')
     // Run async — don't block the response
     backfillBaselines(Math.min(days, 90)).catch(err => {
       console.error('[CORTEX] Backfill failed:', err)

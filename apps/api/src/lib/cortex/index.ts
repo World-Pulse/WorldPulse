@@ -18,12 +18,12 @@
  */
 
 // Re-export all subsystems
-export { computeDailyBaselines, getBaselineStats, detectAnomalies, runNightlyBaselines, backfillBaselines } from './baselines'
-export { runEventThreadsCycle } from './event-threads'
-export { runEntityStrengtheningCycle } from './entity-strengthen'
-export { embedSignal, findSimilarSignals, semanticSearch, checkSemanticDuplicate, backfillEmbeddings, getEmbeddingStats } from './embeddings'
-export { runPatternDetectionCycle, learnCausalChains, detectCrossClusterBridges, detectGeographicHotspots } from './pattern-detection'
-export { getCortexHealth, computeIntelligenceQuality } from './metrics'
+export { computeDailyBaselines, getBaselineStats, detectAnomalies, runNightlyBaselines, backfillBaselines } from './baselines.js'
+export { runEventThreadsCycle } from './event-threads.js'
+export { runEntityStrengtheningCycle } from './entity-strengthen.js'
+export { embedSignal, findSimilarSignals, semanticSearch, checkSemanticDuplicate, backfillEmbeddings, getEmbeddingStats } from './embeddings.js'
+export { runPatternDetectionCycle, learnCausalChains, detectCrossClusterBridges, detectGeographicHotspots } from './pattern-detection.js'
+export { getCortexHealth, computeIntelligenceQuality } from './metrics.js'
 
 // ─── Full Cortex Diagnostic ─────────────────────────────────────────────────
 
@@ -35,7 +35,7 @@ export async function runCortexDiagnostic(): Promise<{
   health: Awaited<ReturnType<typeof import('./metrics').getCortexHealth>>
   summary: string
 }> {
-  const { getCortexHealth } = await import('./metrics')
+  const { getCortexHealth } = await import('./metrics.js')
   const health = await getCortexHealth()
 
   const q = health.intelligence_quality
