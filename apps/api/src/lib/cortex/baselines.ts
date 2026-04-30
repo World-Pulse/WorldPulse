@@ -83,7 +83,7 @@ export async function computeDailyBaselines(
     .select(
       'category',
       'severity',
-      db.raw("COALESCE(NULLIF(TRIM(location_name), ''), 'global') as region"),
+      db.raw("LEFT(COALESCE(NULLIF(TRIM(location_name), ''), 'global'), 200) as region"),
     )
     .count('* as signal_count')
     .avg('reliability_score as avg_reliability')
@@ -91,7 +91,7 @@ export async function computeDailyBaselines(
     .where('created_at', '>=', `${dateStr}T00:00:00Z`)
     .where('created_at', '<', `${nextDateStr}T00:00:00Z`)
     .whereIn('status', ['verified', 'pending'])
-    .groupBy('category', 'severity', db.raw("COALESCE(NULLIF(TRIM(location_name), ''), 'global')"))
+    .groupBy('category', 'severity', db.raw("LEFT(COALESCE(NULLIF(TRIM(location_name), ''), 'global'), 200)"))
 
   if (rows.length === 0) {
     console.log(`[CORTEX] No signals found for ${dateStr}`)
@@ -103,7 +103,7 @@ export async function computeDailyBaselines(
     .select(
       'category',
       db.raw("'all' as severity"),
-      db.raw("COALESCE(NULLIF(TRIM(location_name), ''), 'global') as region"),
+      db.raw("LEFT(COALESCE(NULLIF(TRIM(location_name), ''), 'global'), 200) as region"),
     )
     .count('* as signal_count')
     .avg('reliability_score as avg_reliability')
@@ -111,7 +111,7 @@ export async function computeDailyBaselines(
     .where('created_at', '>=', `${dateStr}T00:00:00Z`)
     .where('created_at', '<', `${nextDateStr}T00:00:00Z`)
     .whereIn('status', ['verified', 'pending'])
-    .groupBy('category', db.raw("COALESCE(NULLIF(TRIM(location_name), ''), 'global')"))
+    .groupBy('category', db.raw("LEFT(COALESCE(NULLIF(TRIM(location_name), ''), 'global'), 200)"))
 
   // Global aggregates (all regions) per category
   const globalRows = await db('signals')
