@@ -194,6 +194,47 @@ canvas#neural{position:absolute;top:0;left:0;width:100%;height:100%;pointer-even
 .d-h{background:#10b981}.d-d{background:#f59e0b}.d-o{background:#ef4444}.d-u{background:#475569}
 .b-h{border-color:#10b981;color:#10b981}.b-d{border-color:#f59e0b;color:#f59e0b}.b-o{border-color:#ef4444;color:#ef4444}
 
+/* ── Event Threads ── */
+.cx-threads{display:flex;flex-direction:column;gap:6px}
+.cx-thread-item{background:#111827;border:1px solid #1e293b;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:10px;transition:border-color .3s}
+.cx-thread-item:hover{border-color:#334155}
+.cx-thread-status{font-size:9px;letter-spacing:1px;padding:2px 8px;border-radius:3px;font-weight:500;flex-shrink:0}
+.cx-thread-status.developing{background:rgba(6,182,212,.12);color:#06b6d4}
+.cx-thread-status.escalating{background:rgba(245,158,11,.12);color:#f59e0b}
+.cx-thread-status.stable{background:rgba(100,116,139,.12);color:#64748b}
+.cx-thread-info{flex:1;min-width:0}
+.cx-thread-title{font-size:12px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cx-thread-meta{font-size:10px;color:#334155;margin-top:2px}
+.cx-thread-count{font-size:14px;font-weight:500;color:#06b6d4;flex-shrink:0;text-align:right;min-width:40px}
+.cx-thread-count-label{font-size:9px;color:#334155}
+.cx-thread-stats{display:flex;gap:16px;margin-bottom:8px;font-size:11px;color:#64748b}
+.cx-thread-stats span{color:#94a3b8;font-weight:500}
+
+/* ── Pattern Detection ── */
+.cx-patterns{display:flex;flex-direction:column;gap:8px}
+.cx-pattern-group-title{font-size:10px;color:#475569;letter-spacing:1px;margin:6px 0 4px;display:flex;align-items:center;gap:6px}
+.cx-pattern-group-title::after{content:'';flex:1;height:1px;background:#1e293b}
+.cx-chain-item{background:#111827;border:1px solid #1e293b;border-radius:8px;padding:10px 14px;transition:border-color .3s}
+.cx-chain-item:hover{border-color:#334155}
+.cx-chain-flow{display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:4px}
+.cx-chain-cause{color:#f59e0b;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cx-chain-arrow{color:#334155;flex-shrink:0;font-size:10px}
+.cx-chain-effect{color:#06b6d4;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cx-chain-meta{display:flex;gap:12px;font-size:10px;color:#334155}
+.cx-chain-confidence{color:#10b981;font-weight:500}
+.cx-hotspot-item{background:#111827;border:1px solid #1e293b;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:10px;transition:border-color .3s}
+.cx-hotspot-item:hover{border-color:#334155}
+.cx-hotspot-region{font-size:12px;color:#94a3b8;flex:1}
+.cx-hotspot-z{font-size:14px;font-weight:500;color:#f59e0b}
+.cx-hotspot-count{font-size:11px;color:#06b6d4;text-align:right;min-width:60px}
+.cx-bridge-item{background:#111827;border:1px solid #1e293b;border-radius:8px;padding:10px 14px;transition:border-color .3s}
+.cx-bridge-item:hover{border-color:#334155}
+.cx-bridge-signal{font-size:12px;color:#94a3b8;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cx-bridge-threads{display:flex;align-items:center;gap:6px;font-size:10px;color:#334155}
+.cx-bridge-thread{color:#6366f1}
+.cx-bridge-tags{margin-top:4px;display:flex;gap:4px;flex-wrap:wrap}
+.cx-bridge-tag{font-size:9px;color:#06b6d4;background:rgba(6,182,212,.1);padding:1px 6px;border-radius:3px}
+
 /* Responsive */
 @media(max-width:600px){
   .cx-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -337,6 +378,19 @@ canvas#neural{position:absolute;top:0;left:0;width:100%;height:100%;pointer-even
   <div id="anomalies"><div class="cx-empty">No anomalies detected</div></div>
 </div>
 
+<!-- Event Threads -->
+<div class="cx-section">
+  <div class="cx-section-title">Event threads <span class="cx-section-count" id="threads-count"></span></div>
+  <div id="thread-stats" class="cx-thread-stats"></div>
+  <div class="cx-threads" id="event-threads"><div class="cx-empty">Loading event threads...</div></div>
+</div>
+
+<!-- Pattern Detection -->
+<div class="cx-section">
+  <div class="cx-section-title">Pattern intelligence <span class="cx-section-count" id="patterns-count"></span></div>
+  <div class="cx-patterns" id="pattern-detection"><div class="cx-empty">Loading pattern data...</div></div>
+</div>
+
 <!-- Pipeline -->
 <div class="cx-section">
   <div class="cx-section-title">Pipeline throughput</div>
@@ -355,10 +409,11 @@ canvas#neural{position:absolute;top:0;left:0;width:100%;height:100%;pointer-even
     <div class="cx-sched-item"><div class="cx-sched-dot" style="background:#06b6d4"></div>Flash briefs — 5m</div>
     <div class="cx-sched-item"><div class="cx-sched-dot" style="background:#06b6d4"></div>Briefings — 7a/1p/7p</div>
     <div class="cx-sched-item"><div class="cx-sched-dot" style="background:#06b6d4"></div>Agent scans — 2h</div>
-    <div class="cx-sched-item"><div class="cx-sched-dot" style="background:#06b6d4"></div>Threads — 30m</div>
+    <div class="cx-sched-item"><div class="cx-sched-dot" style="background:#06b6d4"></div>Threads — 5m</div>
+    <div class="cx-sched-item"><div class="cx-sched-dot" style="background:#06b6d4"></div>Embeddings — on-insert + 30m</div>
     <div class="cx-sched-item"><div class="cx-sched-dot" style="background:#3b82f6"></div>Baselines — 3a UTC</div>
     <div class="cx-sched-item"><div class="cx-sched-dot" style="background:#3b82f6"></div>Entities — 4a UTC</div>
-    <div class="cx-sched-item"><div class="cx-sched-dot" style="background:#8b5cf6"></div>Patterns — Sun 5a</div>
+    <div class="cx-sched-item"><div class="cx-sched-dot" style="background:#8b5cf6"></div>Patterns — 2h</div>
     <div class="cx-sched-item"><div class="cx-sched-dot" style="background:#06b6d4"></div>Twitter — 15m</div>
   </div>
 </div>
@@ -863,11 +918,11 @@ function renderMetrics(b) {
 }
 
 var subsystemFreqs = {
-  'baselines': '3am UTC',
-  'event_threads': '30min',
+  'statistical_baselines': '3am UTC',
+  'event_threads': '5min',
   'entity_graph': '4am UTC',
-  'embeddings': 'on-insert',
-  'pattern_detection': 'Sun 5am',
+  'embeddings': 'on-insert + 30m',
+  'pattern_detection': '2h',
   'metrics': 'on-demand'
 };
 
@@ -969,6 +1024,155 @@ function renderAnomalies(anomalies) {
   }).join('');
 }
 
+// ─── Event Threads ──────────────────────────────────────────
+function renderEventThreads(healthData) {
+  var el = document.getElementById('event-threads');
+  var countEl = document.getElementById('threads-count');
+  var statsEl = document.getElementById('thread-stats');
+
+  var threadSub = (healthData?.subsystems || []).find(function(s) { return s.name === 'event_threads'; });
+  var output = threadSub?.last_output || {};
+
+  // Show stats summary
+  var developing = output.developing || 0;
+  var escalating = output.escalating || 0;
+  var stable = output.stable || 0;
+  var resolved = output.resolved || 0;
+  var total = developing + escalating + stable + resolved;
+
+  if (total === 0 && threadSub?.status === 'offline') {
+    el.innerHTML = '<div class="cx-empty">Event threads initializing — first cycle runs 5 minutes after boot</div>';
+    countEl.textContent = '';
+    statsEl.innerHTML = '';
+    return;
+  }
+
+  countEl.textContent = (developing + escalating) + ' active';
+  statsEl.innerHTML =
+    '<div>Developing: <span>' + developing + '</span></div>' +
+    '<div>Escalating: <span>' + escalating + '</span></div>' +
+    '<div>Stable: <span>' + stable + '</span></div>' +
+    '<div>Resolved: <span>' + resolved + '</span></div>';
+
+  // Fetch top threads from the API
+  fetch(API + '/analytics/event-threads?status=developing,escalating&limit=8').then(function(r) { return r.json(); }).then(function(data) {
+    if (data.success && data.threads && data.threads.length > 0) {
+      el.innerHTML = data.threads.map(function(t) {
+        return '<div class="cx-thread-item">' +
+          '<div class="cx-thread-status ' + t.status + '">' + t.status.toUpperCase() + '</div>' +
+          '<div class="cx-thread-info">' +
+            '<div class="cx-thread-title">' + (t.title || 'Untitled thread') + '</div>' +
+            '<div class="cx-thread-meta">' + (t.category || '') + (t.region ? ' · ' + t.region : '') + (t.country_code ? ' · ' + t.country_code : '') + '</div>' +
+          '</div>' +
+          '<div class="cx-thread-count">' + (t.signal_count || 1) + '<div class="cx-thread-count-label">signals</div></div>' +
+          '</div>';
+      }).join('');
+    } else if (total > 0) {
+      // No API endpoint yet but we have stats from subsystem
+      el.innerHTML = '<div class="cx-empty">' + total + ' threads tracked · API endpoint pending</div>';
+    } else {
+      el.innerHTML = '<div class="cx-empty">No active event threads</div>';
+    }
+  }).catch(function() {
+    if (total > 0) {
+      el.innerHTML = '<div class="cx-empty">' + (developing + escalating) + ' active threads · ' + stable + ' stable · ' + resolved + ' resolved</div>';
+    } else {
+      el.innerHTML = '<div class="cx-empty">Event threads data pending</div>';
+    }
+  });
+}
+
+// ─── Pattern Detection ──────────────────────────────────────
+function renderPatternDetection(healthData) {
+  var el = document.getElementById('pattern-detection');
+  var countEl = document.getElementById('patterns-count');
+
+  var patternSub = (healthData?.subsystems || []).find(function(s) { return s.name === 'pattern_detection'; });
+  var output = patternSub?.last_output || {};
+
+  var chains = output.causal_chains || 0;
+  var hotspots = output.hotspots || 0;
+  var bridges = output.bridges || 0;
+  var total = chains + hotspots + bridges;
+
+  if (total === 0 && patternSub?.status === 'offline') {
+    el.innerHTML = '<div class="cx-empty">Pattern detection initializing — first run 1 minute after boot</div>';
+    countEl.textContent = '';
+    return;
+  }
+
+  countEl.textContent = total + ' patterns';
+
+  // Try fetching the full pattern report from the API (via Redis cache)
+  fetch(API + '/analytics/patterns').then(function(r) { return r.json(); }).then(function(data) {
+    if (!data.success || (!data.causal_chains?.length && !data.geographic_hotspots?.length && !data.cross_cluster_bridges?.length)) {
+      renderPatternSummary(el, chains, hotspots, bridges);
+      return;
+    }
+
+    var html = '';
+
+    // Causal chains
+    if (data.causal_chains && data.causal_chains.length > 0) {
+      html += '<div class="cx-pattern-group-title">CAUSAL CHAINS</div>';
+      html += data.causal_chains.slice(0, 5).map(function(c) {
+        return '<div class="cx-chain-item">' +
+          '<div class="cx-chain-flow">' +
+            '<div class="cx-chain-cause" title="' + c.cause.title + '">' + c.cause.title + '</div>' +
+            '<div class="cx-chain-arrow">→</div>' +
+            '<div class="cx-chain-effect" title="' + c.effect.title + '">' + c.effect.title + '</div>' +
+          '</div>' +
+          '<div class="cx-chain-meta">' +
+            '<span class="cx-chain-confidence">' + Math.round(c.confidence * 100) + '% confidence</span>' +
+            '<span>' + c.link_type.replace(/_/g, ' ') + '</span>' +
+            '<span>' + c.delay_hours + 'h delay</span>' +
+          '</div></div>';
+      }).join('');
+    }
+
+    // Geographic hotspots
+    if (data.geographic_hotspots && data.geographic_hotspots.length > 0) {
+      html += '<div class="cx-pattern-group-title">GEOGRAPHIC HOTSPOTS</div>';
+      html += data.geographic_hotspots.slice(0, 5).map(function(h) {
+        return '<div class="cx-hotspot-item">' +
+          '<div class="cx-hotspot-region">' + h.region + (h.country_code ? ' (' + h.country_code + ')' : '') + ' · ' + h.dominant_category + '</div>' +
+          '<div class="cx-hotspot-z">' + h.z_score.toFixed(1) + 'σ</div>' +
+          '<div class="cx-hotspot-count">' + h.signal_count + ' signals</div>' +
+          '</div>';
+      }).join('');
+    }
+
+    // Cross-cluster bridges
+    if (data.cross_cluster_bridges && data.cross_cluster_bridges.length > 0) {
+      html += '<div class="cx-pattern-group-title">CROSS-CLUSTER BRIDGES</div>';
+      html += data.cross_cluster_bridges.slice(0, 5).map(function(b) {
+        return '<div class="cx-bridge-item">' +
+          '<div class="cx-bridge-signal">' + b.signal_title + '</div>' +
+          '<div class="cx-bridge-threads">' +
+            '<span class="cx-bridge-thread">' + (b.thread_a.title || 'Thread A').substring(0, 40) + '</span>' +
+            ' ↔ ' +
+            '<span class="cx-bridge-thread">' + (b.thread_b.title || 'Thread B').substring(0, 40) + '</span>' +
+          '</div>' +
+          '<div class="cx-bridge-tags">' + b.shared_tags.slice(0, 5).map(function(t) { return '<span class="cx-bridge-tag">' + t + '</span>'; }).join('') + '</div>' +
+          '</div>';
+      }).join('');
+    }
+
+    el.innerHTML = html || '<div class="cx-empty">No patterns detected yet</div>';
+  }).catch(function() {
+    renderPatternSummary(el, chains, hotspots, bridges);
+  });
+}
+
+function renderPatternSummary(el, chains, hotspots, bridges) {
+  if (chains + hotspots + bridges > 0) {
+    el.innerHTML =
+      '<div class="cx-empty">' + chains + ' causal chains · ' + hotspots + ' hotspots · ' + bridges + ' bridges</div>';
+  } else {
+    el.innerHTML = '<div class="cx-empty">Pattern detection accruing data...</div>';
+  }
+}
+
 function setScore(score) {
   var ring = document.getElementById('ring');
   var num = document.getElementById('score-num');
@@ -1031,6 +1235,8 @@ function loadData() {
       renderPipeline(hl.pipeline_stats || {});
       renderQualityDistribution(hl);
       renderGeoCoverage(hl);
+      renderEventThreads(hl);
+      renderPatternDetection(hl);
 
       // Counter
       var total = 0;

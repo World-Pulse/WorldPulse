@@ -1076,9 +1076,47 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ success: true, ...stats })
   })
 
+  // ─── EVENT THREADS ────────────────────────────────────────
+  // GET /api/v1/analytics/event-threads
+  // Returns active event threads with optional status filter.
+  app.get('/event-threads', {
+    schema: {
+      summary: 'Event Threads',
+      description: 'Active event threads grouping related signals into narrative threads',
+      querystring: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', description: 'Comma-separated statuses (developing,escalating,stable,resolved)' },
+          limit: { type: 'number', default: 10 },
+        },
+      },
+    },
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    try {
+      const query = req.query as { status?: string; limit?: number }
+      const statuses = query.status
+        ? query.status.split(',').map(s => s.trim())
+        : ['developing', 'escalating']
+      const limit = Math.min(query.limit || 10, 50)
+
+      const threads = await db('event_threads')
+        .whereIn('status', statuses)
+        .orderBy('last_updated', 'desc')
+        .limit(limit)
+        .select('id', 'title', 'summary', 'category', 'status', 'severity',
+                'region', 'country_code', 'signal_count', 'first_signal_at', 'last_updated')
+
+      return reply.send({ success: true, threads, count: threads.length })
+    } catch (err) {
+      // Table may not exist yet
+      return reply.send({ success: true, threads: [], count: 0, message: 'Event threads table not initialized' })
+    }
+  })
+
   // ─── PATTERN DETECTION RESULTS ────────────────────────────
   // GET /api/v1/analytics/patterns
-  // Returns the latest cross-domain pattern detection results (weekly).
+  // Returns the latest cross-domain pattern detection results.
   app.get('/patterns', {
     schema: {
       summary: 'Cross-Domain Patterns',
@@ -1097,7 +1135,7 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
 
     return reply.send({
       success: true,
-      message: 'No pattern detection results yet — runs weekly Sunday 5am UTC',
+      message: 'No pattern detection results yet — runs every 2 hours',
       causal_chains: [],
       cross_cluster_bridges: [],
       geographic_hotspots: [],

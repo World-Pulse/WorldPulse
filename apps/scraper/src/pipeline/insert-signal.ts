@@ -29,6 +29,7 @@ import { recordSuccess } from '../health'
 import { computeReliabilityScore, maxSeverityForSourceCount } from './reliability-score'
 import { dedup } from './dedup'
 import { processSignalForKnowledgeGraph, extractEntitiesRuleBased, upsertEntityNode } from './entity-graph'
+import { embedSignal } from './embeddings'
 
 // ─── Alert Tier Classification (inlined — canonical in apps/api/src/lib/alert-tier.ts) ──
 const FLASH_RELIABILITY_THRESHOLD = 0.65
@@ -260,8 +261,15 @@ export async function insertAndCorrelate(
     logger.debug({ err, signalId: signal.id }, 'Knowledge graph processing failed (non-fatal)')
   }
 
-  // 5. Pinecone embedding — disabled until PINECONE_API_KEY is set
-  // The pinecone module is optional; skip entirely when not configured.
+  // 5. Vector embedding — async, non-blocking
+  //    Generates embedding for semantic search & similarity matching.
+  //    Uses OpenAI text-embedding-3-small if OPENAI_API_KEY is set, TF-IDF fallback otherwise.
+  try {
+    embedSignal(String(signal.id), String(signal.title ?? ''), String(signal.summary ?? ''))
+      .catch(err => logger.debug({ err, signalId: signal.id }, 'Embedding failed (non-fatal)'))
+  } catch (err) {
+    logger.debug({ err, signalId: signal.id }, 'Embedding setup failed (non-fatal)')
+  }
 
   return signal
 }

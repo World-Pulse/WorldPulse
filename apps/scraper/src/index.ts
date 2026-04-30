@@ -37,6 +37,9 @@ import { batchValidateGeo } from './pipeline/geo-validator'
 import { recomputeSourceReputation } from './pipeline/source-reputation'
 import { startKafkaLagMonitor } from './lib/kafka-lag-monitor'
 import { checkGlobalCircuitHealth } from './lib/global-circuit-guard'
+import { updateEventThreads } from './pipeline/event-threads'
+import { batchEmbedSignals } from './pipeline/embeddings'
+import { detectPatterns } from './pipeline/pattern-detection'
 
 // DB row has extra columns not present in the shared Source interface
 type ScraperSource = Source & {
@@ -194,6 +197,56 @@ async function bootstrap() {
   setInterval(() => {
     runStabilityCheck().catch(err => logger.error({ err }, '[STABILITY] Check failed'))
   }, 60 * 60_000)
+
+  // ── Cortex subsystems ──────────────────────────────────────────────
+
+  // Event threads — group related signals into narrative threads every 5 min
+  setInterval(async () => {
+    try {
+      const result = await updateEventThreads()
+      if (result.processed > 0 || result.statusUpdates > 0) {
+        logger.info({
+          processed: result.processed,
+          matched: result.matched,
+          created: result.created,
+          statusUpdates: result.statusUpdates,
+        }, '[THREADS] Event thread cycle complete')
+      }
+    } catch (err) {
+      logger.error({ err }, '[THREADS] Event thread update failed')
+    }
+  }, 5 * 60_000) // 5 minutes
+
+  // Embedding backfill — generate missing embeddings every 30 min
+  setInterval(async () => {
+    try {
+      const result = await batchEmbedSignals()
+      if (result.processed > 0) {
+        logger.info({
+          processed: result.processed,
+          openai: result.openai,
+          tfidf: result.tfidf,
+          errors: result.errors,
+        }, '[EMBED] Batch embedding complete')
+      }
+    } catch (err) {
+      logger.error({ err }, '[EMBED] Batch embedding failed')
+    }
+  }, 30 * 60_000) // 30 minutes
+
+  // Pattern detection — discover causal chains, hotspots, bridges every 2 hours
+  setInterval(async () => {
+    try {
+      await detectPatterns()
+    } catch (err) {
+      logger.error({ err }, '[PATTERNS] Pattern detection failed')
+    }
+  }, 2 * 60 * 60_000) // 2 hours
+
+  // Run initial pattern detection after a short delay (let threads/embeddings populate first)
+  setTimeout(() => {
+    detectPatterns().catch(err => logger.error({ err }, '[PATTERNS] Initial pattern detection failed'))
+  }, 60_000) // 1 minute after boot
 
   // Kafka consumer group lag monitor — checks every 5 minutes, logs summary + warns on critical lag
   startKafkaLagMonitor()
