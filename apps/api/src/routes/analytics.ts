@@ -1125,6 +1125,104 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
     })
   })
 
+  // ─── SIGNAL VOLUME (daily counts) ──────────────────────────
+  // GET /api/v1/analytics/signal-volume?days=7
+  // Returns daily signal counts for the last N days — powers the HUD sparkline.
+  app.get('/signal-volume', {
+    schema: {
+      summary: 'Signal Volume Over Time',
+      description: 'Daily signal counts for the last N days, used for sparklines and trend charts',
+      querystring: {
+        type: 'object',
+        properties: {
+          days: { type: 'integer', minimum: 1, maximum: 90, default: 7 },
+        },
+      },
+    },
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    const { days = 7 } = req.query as { days?: number }
+    const safeDays = Math.min(90, Math.max(1, Number(days)))
+
+    const cacheKey = `analytics:signal-volume:${safeDays}`
+    const cached = await redis.get(cacheKey).catch(() => null)
+    if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
+
+    const rows = await db.raw(`
+      SELECT
+        DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')::date AS date,
+        COUNT(*) AS count
+      FROM signals
+      WHERE created_at >= NOW() - INTERVAL '${safeDays} days'
+        AND status IN ('verified', 'pending')
+      GROUP BY date
+      ORDER BY date ASC
+    `)
+
+    // Fill in any missing days with zeroes
+    const dayMap = new Map<string, number>()
+    for (const row of rows.rows) {
+      const dateStr = typeof row.date === 'string' ? row.date.slice(0, 10) : new Date(row.date).toISOString().slice(0, 10)
+      dayMap.set(dateStr, Number(row.count))
+    }
+
+    const volume: Array<{ date: string; count: number }> = []
+    for (let i = safeDays - 1; i >= 0; i--) {
+      const d = new Date()
+      d.setUTCDate(d.getUTCDate() - i)
+      const key = d.toISOString().slice(0, 10)
+      volume.push({ date: key, count: dayMap.get(key) ?? 0 })
+    }
+
+    const result = { success: true, days: safeDays, volume, generated_at: new Date().toISOString() }
+    await redis.setex(cacheKey, 300, JSON.stringify(result)).catch(() => {})
+    return reply.send(result)
+  })
+
+  // ─── CATEGORY BREAKDOWN ───────────────────────────────────
+  // GET /api/v1/analytics/category-breakdown?window=24h
+  // Returns signal counts grouped by category — powers the HUD heatmap.
+  app.get('/category-breakdown', {
+    schema: {
+      summary: 'Signal Category Breakdown',
+      description: 'Signal counts grouped by category within a time window',
+      querystring: {
+        type: 'object',
+        properties: {
+          window: { type: 'string', enum: ['1h', '6h', '24h', '7d'], default: '24h' },
+        },
+      },
+    },
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    const { window = '24h' } = req.query as { window?: string }
+
+    const hours = window === '1h' ? 1 : window === '6h' ? 6 : window === '7d' ? 168 : 24
+    const cacheKey = `analytics:category-breakdown:${hours}`
+    const cached = await redis.get(cacheKey).catch(() => null)
+    if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
+
+    const since = new Date(Date.now() - hours * 3600 * 1000).toISOString()
+
+    const rows = await db('signals')
+      .select('category')
+      .count('* as count')
+      .where('created_at', '>=', since)
+      .whereIn('status', ['verified', 'pending'])
+      .whereNotNull('category')
+      .groupBy('category')
+      .orderByRaw('count DESC')
+
+    const categories = (rows as Array<{ category: string; count: string }>).map(r => ({
+      category: r.category,
+      count: Number(r.count),
+    }))
+
+    const result = { success: true, window, categories, generated_at: new Date().toISOString() }
+    await redis.setex(cacheKey, 120, JSON.stringify(result)).catch(() => {})
+    return reply.send(result)
+  })
+
   // ─── CORTEX HEALTH ────────────────────────────────────────
   // GET /api/v1/analytics/cortex-health
   // Comprehensive health check of all Cortex subsystems + intelligence quality score.

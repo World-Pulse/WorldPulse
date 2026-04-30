@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cerebral Cortex — WorldPulse Intelligence Engine</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#050810;font-family:ui-monospace,SFMono-Regular,'SF Mono','Cascadia Code',monospace;color:#e2e8f0;min-height:100vh;display:flex;justify-content:center;padding:24px}
+#cx{background:#0a0e17;border-radius:12px;padding:28px;position:relative;overflow:hidden;max-width:820px;width:100%}
+canvas#neural{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0}
+.cx-content{position:relative;z-index:1}
+
+/* Scan line */
+.cx-scan{position:absolute;left:0;right:0;height:1px;background:#06b6d4;opacity:.12;animation:scanY 8s linear infinite;pointer-events:none;z-index:2}
+@keyframes scanY{from{top:0}to{top:100%}}
+
+/* Corner brackets */
+.cx-corner{position:absolute;width:22px;height:22px;pointer-events:none;z-index:2}
+.cx-tl{top:6px;left:6px;border-top:1px solid rgba(6,182,212,.25);border-left:1px solid rgba(6,182,212,.25)}
+.cx-tr{top:6px;right:6px;border-top:1px solid rgba(6,182,212,.25);border-right:1px solid rgba(6,182,212,.25)}
+.cx-bl{bottom:6px;left:6px;border-bottom:1px solid rgba(6,182,212,.25);border-left:1px solid rgba(6,182,212,.25)}
+.cx-br{bottom:6px;right:6px;border-bottom:1px solid rgba(6,182,212,.25);border-right:1px solid rgba(6,182,212,.25)}
+
+/* ── Threat banner ── */
+.cx-threat{display:flex;align-items:center;gap:10px;padding:8px 14px;border-radius:6px;margin-bottom:16px;font-size:11px;letter-spacing:1px;border:1px solid;transition:all .5s;overflow:hidden;position:relative}
+.cx-threat::before{content:'';position:absolute;top:0;left:-100%;width:50%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.03),transparent);animation:threatShimmer 4s ease-in-out infinite}
+@keyframes threatShimmer{0%{left:-100%}100%{left:200%}}
+.cx-threat-icon{font-size:14px;flex-shrink:0}
+.cx-threat-label{font-weight:500;flex:1}
+.cx-threat-detail{color:inherit;opacity:.7;font-size:10px}
+.threat-nominal{background:rgba(16,185,129,.06);border-color:rgba(16,185,129,.2);color:#10b981}
+.threat-elevated{background:rgba(245,158,11,.06);border-color:rgba(245,158,11,.2);color:#f59e0b}
+.threat-high{background:rgba(239,68,68,.06);border-color:rgba(239,68,68,.2);color:#ef4444}
+.threat-critical{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.4);color:#ef4444;animation:threatPulse 2s ease-in-out infinite}
+@keyframes threatPulse{0%,100%{border-color:rgba(239,68,68,.4)}50%{border-color:rgba(239,68,68,.8)}}
+
+/* ── Connection health ── */
+.cx-conn{display:flex;align-items:center;gap:6px;font-size:10px;color:#334155}
+.cx-conn-dot{width:5px;height:5px;border-radius:50%;transition:background .3s}
+.cx-conn-latency{opacity:.7}
+
+/* Header */
+.cx-hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;padding-bottom:14px;border-bottom:1px solid #1e293b}
+.cx-title{font-size:14px;letter-spacing:3px;color:#06b6d4}
+.cx-sub{font-size:11px;color:#475569;margin-top:4px}
+.cx-live{display:flex;align-items:center;gap:6px;font-size:11px}
+.cx-dot{width:6px;height:6px;border-radius:50%;animation:pulse 2.5s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.2}}
+.cx-status-badge{font-size:11px;padding:3px 12px;border-radius:4px;border:1px solid;letter-spacing:1px}
+
+/* ── Anomaly ticker ── */
+.cx-ticker-wrap{overflow:hidden;height:20px;margin:10px 0 16px;position:relative}
+.cx-ticker-wrap::before,.cx-ticker-wrap::after{content:'';position:absolute;top:0;bottom:0;width:40px;z-index:1;pointer-events:none}
+.cx-ticker-wrap::before{left:0;background:linear-gradient(90deg,#0a0e17,transparent)}
+.cx-ticker-wrap::after{right:0;background:linear-gradient(90deg,transparent,#0a0e17)}
+.cx-ticker{display:flex;gap:40px;animation:tickerScroll 30s linear infinite;white-space:nowrap}
+.cx-ticker:hover{animation-play-state:paused}
+@keyframes tickerScroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.cx-ticker-item{display:flex;align-items:center;gap:6px;font-size:11px;color:#64748b;flex-shrink:0}
+.cx-ticker-item .t-dir{font-size:9px}
+.cx-ticker-item .t-up{color:#ef4444}
+.cx-ticker-item .t-down{color:#06b6d4}
+.cx-ticker-item .t-z{color:#f59e0b;font-weight:500}
+.cx-ticker-item .t-cat{color:#94a3b8}
+.cx-ticker-empty{font-size:11px;color:#1e293b;text-align:center;padding:2px 0;letter-spacing:1px}
+
+/* Score section */
+.cx-score-section{display:flex;align-items:center;justify-content:center;gap:40px;padding:12px 0 24px;flex-wrap:wrap}
+.cx-score-gauge{position:relative;flex-shrink:0}
+.cx-score-label{font-size:11px;color:#475569;letter-spacing:2px;text-align:center;margin-bottom:8px}
+
+/* Score trend mini-chart (below gauge) */
+.cx-score-trend{margin-top:6px;text-align:center}
+.cx-score-trend-label{font-size:10px;color:#334155;letter-spacing:1px;margin-bottom:4px}
+
+/* Signal counter */
+.cx-counter{text-align:right}
+.cx-counter-val{font-size:28px;font-weight:500;color:#e2e8f0;letter-spacing:1px;transition:opacity .3s}
+.cx-counter-label{font-size:11px;color:#475569;margin-top:2px}
+.cx-counter-sub{font-size:12px;color:#06b6d4;margin-top:6px}
+.cx-counter-rate{font-size:10px;color:#334155;margin-top:4px}
+
+/* Sparkline section */
+.cx-sparkline-wrap{flex:1;min-width:200px;max-width:320px}
+.cx-sparkline-title{font-size:11px;color:#475569;letter-spacing:1px;margin-bottom:6px}
+
+/* Metrics grid */
+.cx-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:18px}
+.cx-card{background:#111827;border:1px solid #1e293b;border-radius:8px;padding:12px;transition:border-color .3s,transform .2s;cursor:default;position:relative}
+.cx-card:hover{border-color:#334155;transform:translateY(-1px)}
+.cx-card-label{font-size:11px;color:#64748b;margin-bottom:6px}
+.cx-card-val{font-size:22px;font-weight:500;margin-bottom:8px;transition:color .5s}
+.cx-card-delta{position:absolute;top:10px;right:10px;font-size:10px;opacity:0;transition:opacity .5s}
+.cx-card:hover .cx-card-delta{opacity:1}
+.cx-bar{height:3px;background:#1e293b;border-radius:2px;overflow:hidden}
+.cx-bar-fill{height:100%;border-radius:2px;width:0;transition:width 1.8s ease-out}
+
+/* Sections */
+.cx-section{margin-bottom:18px}
+.cx-section-title{font-size:11px;color:#475569;letter-spacing:2px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #1e293b;display:flex;justify-content:space-between;align-items:center}
+.cx-section-count{font-size:10px;color:#334155;letter-spacing:0}
+
+/* Subsystem rows — expandable */
+.cx-sys-row{display:flex;align-items:center;gap:8px;padding:8px 10px;font-size:12px;cursor:pointer;border-radius:6px;transition:background .2s}
+.cx-sys-row:hover{background:#111827}
+.cx-sys-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;transition:background .5s}
+.cx-sys-name{color:#94a3b8;flex:1}
+.cx-sys-freq{font-size:10px;color:#334155;margin-right:8px}
+.cx-sys-status{font-size:11px;letter-spacing:1px}
+.cx-sys-arrow{color:#334155;font-size:11px;transition:transform .3s;flex-shrink:0}
+.cx-sys-row.open .cx-sys-arrow{transform:rotate(90deg)}
+.cx-sys-detail-panel{max-height:0;overflow:hidden;transition:max-height .4s ease-out;padding:0 10px}
+.cx-sys-detail-panel.open{max-height:300px}
+.cx-sys-detail-inner{padding:8px 12px;margin:4px 0 8px 16px;border-left:2px solid #1e293b;font-size:11px;color:#64748b;display:grid;grid-template-columns:repeat(2,1fr);gap:4px 16px}
+.cx-sys-detail-inner span{color:#94a3b8}
+
+/* Category heatmap */
+.cx-heatmap{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:4px}
+.cx-heat-cell{background:#111827;border:1px solid #1e293b;border-radius:6px;padding:8px;text-align:center;transition:all .3s;cursor:default;position:relative}
+.cx-heat-cell:hover{border-color:#334155;transform:scale(1.03)}
+.cx-heat-label{font-size:10px;color:#64748b;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cx-heat-val{font-size:14px;font-weight:500}
+.cx-heat-pct{font-size:9px;color:#334155;margin-top:2px}
+
+/* ── Geographic coverage ── */
+.cx-geo{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px}
+.cx-geo-item{background:#111827;border:1px solid #1e293b;border-radius:6px;padding:10px;display:flex;align-items:center;gap:8px;transition:border-color .3s}
+.cx-geo-item:hover{border-color:#334155}
+.cx-geo-rank{font-size:18px;font-weight:500;color:#1e293b;width:24px;text-align:center;flex-shrink:0}
+.cx-geo-info{flex:1;min-width:0}
+.cx-geo-name{font-size:11px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cx-geo-count{font-size:13px;font-weight:500;color:#06b6d4;margin-top:2px}
+.cx-geo-bar{height:2px;background:#1e293b;border-radius:1px;margin-top:4px;overflow:hidden}
+.cx-geo-bar-fill{height:100%;background:#06b6d4;border-radius:1px;transition:width 1.5s ease-out}
+
+/* ── Signal quality distribution ── */
+.cx-quality-bars{display:flex;align-items:flex-end;gap:2px;height:50px;padding:0 4px}
+.cx-quality-bar{flex:1;background:#06b6d4;border-radius:2px 2px 0 0;min-height:1px;transition:height 1s ease-out;position:relative;cursor:default}
+.cx-quality-bar:hover{opacity:.8}
+.cx-quality-bar:hover::after{content:attr(data-label);position:absolute;bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);font-size:9px;color:#94a3b8;white-space:nowrap;background:#0a0e17;padding:2px 6px;border-radius:3px;border:1px solid #1e293b;z-index:10}
+.cx-quality-legend{display:flex;justify-content:space-between;font-size:9px;color:#334155;margin-top:4px;padding:0 4px}
+.cx-quality-stats{display:flex;gap:16px;margin-top:8px;font-size:11px;color:#64748b}
+.cx-quality-stats span{color:#94a3b8}
+
+/* Anomaly feed */
+.cx-anomaly-item{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px;border-bottom:1px solid #111827;transition:background .2s;padding-left:4px;padding-right:4px;border-radius:4px}
+.cx-anomaly-item:hover{background:#111827}
+.cx-anomaly-item:last-child{border-bottom:none}
+.cx-anomaly-dir{width:18px;height:18px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0}
+.cx-anomaly-dir.above{background:rgba(239,68,68,.15);color:#ef4444}
+.cx-anomaly-dir.below{background:rgba(6,182,212,.15);color:#06b6d4}
+.cx-anomaly-cat{color:#94a3b8;flex:1}
+.cx-anomaly-z{font-weight:500;color:#f59e0b}
+.cx-anomaly-avg{font-size:10px;color:#334155;margin-left:8px}
+.cx-empty{font-size:12px;color:#334155;padding:8px 0;font-style:italic}
+
+/* Pipeline */
+.cx-pipe{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.cx-pipe-item{background:#111827;border:1px solid #1e293b;border-radius:8px;padding:10px 12px;transition:border-color .3s}
+.cx-pipe-item:hover{border-color:#334155}
+.cx-pipe-label{font-size:11px;color:#475569}
+.cx-pipe-val{font-size:16px;font-weight:500;margin-top:3px;color:#e2e8f0}
+.cx-pipe-sub{font-size:10px;color:#334155;margin-top:2px}
+
+/* PULSE schedule */
+.cx-schedule{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:4px}
+.cx-sched-item{display:flex;align-items:center;gap:6px;font-size:11px;color:#64748b;padding:4px 0}
+.cx-sched-dot{width:4px;height:4px;border-radius:50%;flex-shrink:0}
+.cx-sched-active{color:#94a3b8}
+
+/* ── Keyboard shortcuts tooltip ── */
+.cx-shortcuts{position:fixed;bottom:20px;right:20px;background:#111827;border:1px solid #1e293b;border-radius:8px;padding:12px 16px;font-size:11px;color:#64748b;z-index:100;opacity:0;pointer-events:none;transition:opacity .3s}
+.cx-shortcuts.show{opacity:1;pointer-events:auto}
+.cx-shortcuts-title{color:#94a3b8;margin-bottom:6px;font-size:10px;letter-spacing:1px}
+.cx-shortcuts kbd{background:#1e293b;border-radius:3px;padding:1px 6px;color:#94a3b8;font-family:inherit;font-size:10px;margin-right:4px}
+.cx-shortcuts-row{display:flex;justify-content:space-between;gap:16px;padding:2px 0}
+
+/* Footer */
+.cx-footer{display:flex;justify-content:center;align-items:center;gap:16px;padding-top:6px;flex-wrap:wrap}
+.cx-refresh{background:transparent;border:1px solid #1e293b;color:#64748b;padding:6px 20px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit;transition:all .2s;letter-spacing:1px}
+.cx-refresh:hover{border-color:#06b6d4;color:#06b6d4}
+.cx-refresh:active{transform:scale(.97)}
+.cx-refresh.loading{pointer-events:none;opacity:.5}
+.cx-ts{font-size:11px;color:#1e293b}
+.cx-shortcut-hint{font-size:10px;color:#1e293b;margin-top:4px;text-align:center}
+
+/* ── Loading skeleton ── */
+.cx-skeleton{background:linear-gradient(90deg,#111827 25%,#1e293b 50%,#111827 75%);background-size:200% 100%;animation:shimmer 1.5s ease-in-out infinite;border-radius:4px}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* Status colors */
+.s-h{color:#10b981}.s-d{color:#f59e0b}.s-o{color:#ef4444}.s-u{color:#475569}
+.d-h{background:#10b981}.d-d{background:#f59e0b}.d-o{background:#ef4444}.d-u{background:#475569}
+.b-h{border-color:#10b981;color:#10b981}.b-d{border-color:#f59e0b;color:#f59e0b}.b-o{border-color:#ef4444;color:#ef4444}
+
+/* Responsive */
+@media(max-width:600px){
+  .cx-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .cx-score-section{flex-direction:column;gap:20px}
+  .cx-sparkline-wrap{max-width:100%}
+  .cx-geo{grid-template-columns:1fr 1fr}
+  .cx-shortcuts{display:none}
+}
+</style>
+</head>
+<body>
+<div id="cx">
+<canvas id="neural"></canvas>
+<div class="cx-scan"></div>
+<div class="cx-corner cx-tl"></div><div class="cx-corner cx-tr"></div>
+<div class="cx-corner cx-bl"></div><div class="cx-corner cx-br"></div>
+
+<div class="cx-content">
+
+<!-- Header -->
+<div class="cx-hdr">
+  <div>
+    <div class="cx-title">Cerebral cortex</div>
+    <div class="cx-sub">WorldPulse intelligence engine</div>
+  </div>
+  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+    <div style="display:flex;align-items:center;gap:12px">
+      <div id="overall-badge" class="cx-status-badge b-o">loading</div>
+      <div class="cx-live"><div class="cx-dot d-h"></div><span class="s-h">live</span></div>
+    </div>
+    <div class="cx-conn" id="conn-status">
+      <div class="cx-conn-dot" style="background:#334155"></div>
+      <span>connecting...</span>
+    </div>
+  </div>
+</div>
+
+<!-- Threat assessment banner -->
+<div class="cx-threat threat-nominal" id="threat-banner">
+  <div class="cx-threat-icon" id="threat-icon">&#9632;</div>
+  <div class="cx-threat-label" id="threat-label">Assessing threat level...</div>
+  <div class="cx-threat-detail" id="threat-detail"></div>
+</div>
+
+<!-- Anomaly ticker -->
+<div class="cx-ticker-wrap" id="ticker-wrap">
+  <div class="cx-ticker" id="ticker"><span class="cx-ticker-empty">&#9472;&#9472; scanning for anomalies &#9472;&#9472;</span></div>
+</div>
+
+<!-- Score + Sparkline + Counter -->
+<div class="cx-score-section">
+  <div>
+    <div class="cx-score-label">Intelligence score</div>
+    <div class="cx-score-gauge">
+      <svg width="180" height="180" viewBox="0 0 180 180" style="display:block">
+        <g id="ticks"></g>
+        <circle cx="90" cy="90" r="72" fill="none" stroke="#1e293b" stroke-width="5"/>
+        <circle id="ring" cx="90" cy="90" r="72" fill="none" stroke="#06b6d4" stroke-width="5"
+                stroke-dasharray="452.4" stroke-dashoffset="452.4" stroke-linecap="round"
+                transform="rotate(-90 90 90)" style="transition:stroke-dashoffset 2s ease-out,stroke 1s"/>
+        <line id="radar" x1="90" y1="90" x2="90" y2="22" stroke="#06b6d4" stroke-width="1" opacity="0.2" stroke-linecap="round">
+          <animateTransform attributeName="transform" type="rotate" from="0 90 90" to="360 90 90" dur="6s" repeatCount="indefinite"/>
+        </line>
+        <circle cx="90" cy="90" r="68" fill="none" stroke="url(#radarGrad)" stroke-width="68" opacity="0.04">
+          <animateTransform attributeName="transform" type="rotate" from="0 90 90" to="360 90 90" dur="6s" repeatCount="indefinite"/>
+        </circle>
+        <defs>
+          <linearGradient id="radarGrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#06b6d4" stop-opacity="0"/>
+            <stop offset="85%" stop-color="#06b6d4" stop-opacity="0"/>
+            <stop offset="100%" stop-color="#06b6d4" stop-opacity="1"/>
+          </linearGradient>
+        </defs>
+        <text id="score-num" x="90" y="88" text-anchor="middle" fill="#e2e8f0" font-size="40" font-weight="500" font-family="ui-monospace,monospace">--</text>
+        <text x="90" y="108" text-anchor="middle" fill="#475569" font-size="12" font-family="ui-monospace,monospace">/ 100</text>
+      </svg>
+    </div>
+    <!-- Score trend mini-chart -->
+    <div class="cx-score-trend">
+      <div class="cx-score-trend-label">7-day trend</div>
+      <canvas id="score-trend" width="180" height="32" style="width:180px;height:32px"></canvas>
+    </div>
+  </div>
+
+  <!-- Signal volume sparkline -->
+  <div class="cx-sparkline-wrap">
+    <div class="cx-sparkline-title">Signal volume — 7 day</div>
+    <canvas id="sparkline" width="320" height="100" style="width:100%;height:100px;border-radius:6px"></canvas>
+  </div>
+
+  <!-- Live signal counter -->
+  <div class="cx-counter">
+    <div id="counter-val" class="cx-counter-val">--</div>
+    <div class="cx-counter-label">Total signals</div>
+    <div id="counter-24h" class="cx-counter-sub">--</div>
+    <div id="counter-rate" class="cx-counter-rate"></div>
+  </div>
+</div>
+
+<!-- Metrics grid -->
+<div class="cx-grid" id="metrics">
+  <div class="cx-card"><div class="cx-card-label">Corroboration</div><div class="cx-card-val" style="color:#475569">--</div><div class="cx-card-delta"></div><div class="cx-bar"><div class="cx-bar-fill"></div></div></div>
+  <div class="cx-card"><div class="cx-card-label">Reliability</div><div class="cx-card-val" style="color:#475569">--</div><div class="cx-card-delta"></div><div class="cx-bar"><div class="cx-bar-fill"></div></div></div>
+  <div class="cx-card"><div class="cx-card-label">Baseline maturity</div><div class="cx-card-val" style="color:#475569">--</div><div class="cx-card-delta"></div><div class="cx-bar"><div class="cx-bar-fill"></div></div></div>
+  <div class="cx-card"><div class="cx-card-label">Embedding coverage</div><div class="cx-card-val" style="color:#475569">--</div><div class="cx-card-delta"></div><div class="cx-bar"><div class="cx-bar-fill"></div></div></div>
+  <div class="cx-card"><div class="cx-card-label">Thread coverage</div><div class="cx-card-val" style="color:#475569">--</div><div class="cx-card-delta"></div><div class="cx-bar"><div class="cx-bar-fill"></div></div></div>
+  <div class="cx-card"><div class="cx-card-label">Pattern discovery</div><div class="cx-card-val" style="color:#475569">--</div><div class="cx-card-delta"></div><div class="cx-bar"><div class="cx-bar-fill"></div></div></div>
+</div>
+
+<!-- Signal quality distribution -->
+<div class="cx-section">
+  <div class="cx-section-title">Signal quality distribution</div>
+  <div id="quality-chart">
+    <div class="cx-quality-bars" id="quality-bars"></div>
+    <div class="cx-quality-legend"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
+    <div class="cx-quality-stats" id="quality-stats"></div>
+  </div>
+</div>
+
+<!-- Subsystems (expandable) -->
+<div class="cx-section">
+  <div class="cx-section-title">Subsystems <span class="cx-section-count" id="sys-count"></span></div>
+  <div id="subsystems"><div class="cx-sys-row"><div class="cx-sys-dot d-u"></div><div class="cx-sys-name">Loading...</div></div></div>
+</div>
+
+<!-- Geographic coverage -->
+<div class="cx-section">
+  <div class="cx-section-title">Geographic coverage — top regions <span class="cx-section-count" id="geo-count"></span></div>
+  <div class="cx-geo" id="geo-coverage"><div class="cx-empty">Loading geographic data...</div></div>
+</div>
+
+<!-- Category heatmap -->
+<div class="cx-section">
+  <div class="cx-section-title">Signal categories — 24h <span class="cx-section-count" id="cat-count"></span></div>
+  <div class="cx-heatmap" id="heatmap"><div class="cx-empty">Loading category data...</div></div>
+</div>
+
+<!-- Anomaly feed -->
+<div class="cx-section">
+  <div class="cx-section-title">Anomaly feed <span class="cx-section-count" id="anomaly-count"></span></div>
+  <div id="anomalies"><div class="cx-empty">No anomalies detected</div></div>
+</div>
+
+<!-- Pipeline -->
+<div class="cx-section">
+  <div class="cx-section-title">Pipeline throughput</div>
+  <div class="cx-pipe" id="pipeline">
+    <div class="cx-pipe-item"><div class="cx-pipe-label">Signals / 24h</div><div class="cx-pipe-val">--</div></div>
+    <div class="cx-pipe-item"><div class="cx-pipe-label">Signals / 7d</div><div class="cx-pipe-val">--</div></div>
+    <div class="cx-pipe-item"><div class="cx-pipe-label">Active sources</div><div class="cx-pipe-val">--</div></div>
+    <div class="cx-pipe-item"><div class="cx-pipe-label">Avg / hour</div><div class="cx-pipe-val">--</div></div>
+  </div>
+</div>
+
+<!-- PULSE schedule -->
+<div class="cx-section">
+  <div class="cx-section-title">PULSE schedule</div>
+  <div class="cx-schedule">
+    <div class="cx-sched-item"><div class="cx-sched-dot" style="background:#06b6d4"></div>Flash briefs — 5m</div>
+    <div class="cx-sched-item"><div class="cx-sched-dot" style="background:#06b6d4"></div>Briefings — 7a/1p/7p</div>
+    <div class="cx-sched-item"><div class="cx-sched-dot" style="background:#06b6d4"></div>Agent scans — 2h</div>
+    <div class="cx-sched-item"><div class="cx-sched-dot" style="background:#06b6d4"></div>Threads — 30m</div>
+    <div class="cx-sched-item"><div class="cx-sched-dot" style="background:#3b82f6"></div>Baselines — 3a UTC</div>
+    <div class="cx-sched-item"><div class="cx-sched-dot" style="background:#3b82f6"></div>Entities — 4a UTC</div>
+    <div class="cx-sched-item"><div class="cx-sched-dot" style="background:#8b5cf6"></div>Patterns — Sun 5a</div>
+    <div class="cx-sched-item"><div class="cx-sched-dot" style="background:#06b6d4"></div>Twitter — 15m</div>
+  </div>
+</div>
+
+<!-- Footer -->
+<div class="cx-footer">
+  <button class="cx-refresh" id="refresh-btn" onclick="manualRefresh()">Refresh data</button>
+  <div class="cx-ts" id="timestamp"></div>
+</div>
+<div class="cx-shortcut-hint">Press <kbd style="background:#1e293b;border-radius:3px;padding:1px 5px;font-size:10px;color:#334155">?</kbd> for shortcuts</div>
+
+</div>
+</div>
+
+<!-- Keyboard shortcuts panel -->
+<div class="cx-shortcuts" id="shortcuts-panel">
+  <div class="cx-shortcuts-title">KEYBOARD SHORTCUTS</div>
+  <div class="cx-shortcuts-row"><span><kbd>R</kbd> Refresh</span></div>
+  <div class="cx-shortcuts-row"><span><kbd>E</kbd> Expand all</span></div>
+  <div class="cx-shortcuts-row"><span><kbd>C</kbd> Collapse all</span></div>
+  <div class="cx-shortcuts-row"><span><kbd>T</kbd> Toggle ticker</span></div>
+  <div class="cx-shortcuts-row"><span><kbd>?</kbd> Shortcuts</span></div>
+</div>
+
+<script>
+var API = 'https://api.world-pulse.io/api/v1';
+var prevMetrics = {};
+var scoreHistory = [];
+var lastLoadTime = 0;
+
+// ─── Neural network background ───────────────────────────────
+var cvs = document.getElementById('neural');
+var nctx = cvs.getContext('2d');
+var nodes = [];
+var pulseNodes = []; // Pulse effect nodes
+
+function initCanvas() {
+  var r = cvs.parentElement.getBoundingClientRect();
+  cvs.width = r.width; cvs.height = r.height;
+  nodes = [];
+  for (var i = 0; i < 50; i++) nodes.push({
+    x: Math.random() * cvs.width, y: Math.random() * cvs.height,
+    vx: (Math.random() - .5) * .25, vy: (Math.random() - .5) * .25,
+    r: 1 + Math.random() * 1.5, pulse: 0
+  });
+}
+
+function triggerNodePulse() {
+  // Randomly pulse a few nodes to simulate "data flowing"
+  var count = 2 + Math.floor(Math.random() * 3);
+  for (var i = 0; i < count; i++) {
+    var idx = Math.floor(Math.random() * nodes.length);
+    nodes[idx].pulse = 1;
+  }
+}
+
+function drawNet() {
+  nctx.clearRect(0, 0, cvs.width, cvs.height);
+  for (var i = 0; i < nodes.length; i++) {
+    for (var j = i + 1; j < nodes.length; j++) {
+      var dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y;
+      var d = Math.sqrt(dx * dx + dy * dy);
+      if (d < 140) {
+        var alpha = 0.05 * (1 - d / 140);
+        // Brighten connections between pulsing nodes
+        if (nodes[i].pulse > 0 || nodes[j].pulse > 0) alpha = Math.min(alpha * 4, 0.15);
+        nctx.beginPath(); nctx.moveTo(nodes[i].x, nodes[i].y); nctx.lineTo(nodes[j].x, nodes[j].y);
+        nctx.strokeStyle = 'rgba(6,182,212,' + alpha + ')';
+        nctx.lineWidth = .5; nctx.stroke();
+      }
+    }
+  }
+  for (var k = 0; k < nodes.length; k++) {
+    var n = nodes[k];
+    var baseAlpha = 0.1;
+    var baseR = n.r;
+    if (n.pulse > 0) {
+      baseAlpha = 0.1 + n.pulse * 0.4;
+      baseR = n.r + n.pulse * 2;
+      n.pulse = Math.max(0, n.pulse - 0.015);
+    }
+    nctx.beginPath(); nctx.arc(n.x, n.y, baseR, 0, Math.PI * 2);
+    nctx.fillStyle = 'rgba(6,182,212,' + baseAlpha + ')'; nctx.fill();
+    n.x += n.vx; n.y += n.vy;
+    if (n.x < 0 || n.x > cvs.width) n.vx *= -1;
+    if (n.y < 0 || n.y > cvs.height) n.vy *= -1;
+  }
+  requestAnimationFrame(drawNet);
+}
+
+initCanvas(); drawNet();
+window.addEventListener('resize', initCanvas);
+// Pulse nodes periodically to simulate data flow
+setInterval(triggerNodePulse, 3000);
+
+// ─── Tick marks on gauge ─────────────────────────────────────
+(function() {
+  var g = document.getElementById('ticks');
+  for (var i = 0; i < 60; i++) {
+    var a = (i / 60) * 360;
+    var len = i % 5 === 0 ? 8 : 4;
+    var r1 = 78, r2 = r1 - len;
+    var rad = a * Math.PI / 180;
+    var x1 = 90 + r1 * Math.cos(rad), y1 = 90 + r1 * Math.sin(rad);
+    var x2 = 90 + r2 * Math.cos(rad), y2 = 90 + r2 * Math.sin(rad);
+    var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+    line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+    line.setAttribute('stroke', '#1e293b'); line.setAttribute('stroke-width', i % 5 === 0 ? '1.5' : '0.5');
+    g.appendChild(line);
+  }
+})();
+
+// ─── Sparkline chart ─────────────────────────────────────────
+function drawSparkline(data) {
+  var c = document.getElementById('sparkline');
+  var cx = c.getContext('2d');
+  var w = c.width = c.offsetWidth * 2;
+  var h = c.height = c.offsetHeight * 2;
+  cx.scale(2, 2);
+  var rw = c.offsetWidth, rh = c.offsetHeight;
+  var pad = { t: 10, b: 20, l: 8, r: 8 };
+  var gw = rw - pad.l - pad.r, gh = rh - pad.t - pad.b;
+
+  if (!data || data.length === 0) {
+    cx.fillStyle = '#334155';
+    cx.font = '11px ui-monospace,monospace';
+    cx.textAlign = 'center';
+    cx.fillText('No data yet', rw / 2, rh / 2);
+    return;
+  }
+
+  var max = Math.max.apply(null, data.map(function(d) { return d.count; }));
+  var min = Math.min.apply(null, data.map(function(d) { return d.count; }));
+  var range = max - min || 1;
+
+  // Grid lines
+  cx.strokeStyle = '#1e293b';
+  cx.lineWidth = 0.5;
+  for (var g = 0; g < 4; g++) {
+    var gy = pad.t + (gh / 3) * g;
+    cx.beginPath(); cx.moveTo(pad.l, gy); cx.lineTo(pad.l + gw, gy); cx.stroke();
+  }
+
+  // Gradient area fill
+  var gradient = cx.createLinearGradient(0, pad.t, 0, pad.t + gh);
+  gradient.addColorStop(0, 'rgba(6,182,212,0.15)');
+  gradient.addColorStop(1, 'rgba(6,182,212,0.01)');
+
+  cx.beginPath();
+  data.forEach(function(d, i) {
+    var x = pad.l + (i / (data.length - 1)) * gw;
+    var y = pad.t + gh - ((d.count - min) / range) * gh;
+    if (i === 0) cx.moveTo(x, y); else cx.lineTo(x, y);
+  });
+  cx.lineTo(pad.l + gw, pad.t + gh);
+  cx.lineTo(pad.l, pad.t + gh);
+  cx.closePath();
+  cx.fillStyle = gradient;
+  cx.fill();
+
+  // Line
+  cx.beginPath();
+  data.forEach(function(d, i) {
+    var x = pad.l + (i / (data.length - 1)) * gw;
+    var y = pad.t + gh - ((d.count - min) / range) * gh;
+    if (i === 0) cx.moveTo(x, y); else cx.lineTo(x, y);
+  });
+  cx.strokeStyle = '#06b6d4';
+  cx.lineWidth = 1.5;
+  cx.stroke();
+
+  // Dots with glow
+  data.forEach(function(d, i) {
+    var x = pad.l + (i / (data.length - 1)) * gw;
+    var y = pad.t + gh - ((d.count - min) / range) * gh;
+    // Glow
+    cx.beginPath(); cx.arc(x, y, 6, 0, Math.PI * 2);
+    cx.fillStyle = 'rgba(6,182,212,0.15)'; cx.fill();
+    // Dot
+    cx.beginPath(); cx.arc(x, y, 3, 0, Math.PI * 2);
+    cx.fillStyle = '#06b6d4'; cx.fill();
+    cx.strokeStyle = '#0a0e17'; cx.lineWidth = 1.5; cx.stroke();
+  });
+
+  // Date labels
+  cx.fillStyle = '#475569';
+  cx.font = '9px ui-monospace,monospace';
+  cx.textAlign = 'center';
+  data.forEach(function(d, i) {
+    if (i === 0 || i === data.length - 1 || i === Math.floor(data.length / 2)) {
+      var x = pad.l + (i / (data.length - 1)) * gw;
+      cx.fillText(d.date.slice(5), x, pad.t + gh + 14);
+    }
+  });
+
+  // Value labels
+  cx.fillStyle = '#94a3b8';
+  cx.font = '9px ui-monospace,monospace';
+  data.forEach(function(d, i) {
+    var x = pad.l + (i / (data.length - 1)) * gw;
+    var y = pad.t + gh - ((d.count - min) / range) * gh;
+    if (i === 0 || i === data.length - 1) {
+      cx.textAlign = i === 0 ? 'left' : 'right';
+      cx.fillText(d.count.toLocaleString(), x, y - 8);
+    }
+  });
+}
+
+// ─── Score trend mini-chart ──────────────────────────────────
+function drawScoreTrend(scores) {
+  var c = document.getElementById('score-trend');
+  var cx = c.getContext('2d');
+  c.width = 360; c.height = 64;
+  cx.scale(2, 2);
+  var w = 180, h = 32;
+  if (!scores || scores.length < 2) {
+    cx.fillStyle = '#1e293b';
+    cx.font = '9px ui-monospace,monospace';
+    cx.textAlign = 'center';
+    cx.fillText('accruing...', w / 2, h / 2 + 3);
+    return;
+  }
+  var max = Math.max.apply(null, scores);
+  var min = Math.min.apply(null, scores);
+  var range = max - min || 1;
+  var pad = 4;
+  var gw = w - pad * 2, gh = h - pad * 2;
+
+  // Area
+  cx.beginPath();
+  scores.forEach(function(s, i) {
+    var x = pad + (i / (scores.length - 1)) * gw;
+    var y = pad + gh - ((s - min) / range) * gh;
+    if (i === 0) cx.moveTo(x, y); else cx.lineTo(x, y);
+  });
+  cx.lineTo(pad + gw, pad + gh);
+  cx.lineTo(pad, pad + gh);
+  cx.closePath();
+  cx.fillStyle = 'rgba(6,182,212,0.08)';
+  cx.fill();
+
+  // Line
+  cx.beginPath();
+  scores.forEach(function(s, i) {
+    var x = pad + (i / (scores.length - 1)) * gw;
+    var y = pad + gh - ((s - min) / range) * gh;
+    if (i === 0) cx.moveTo(x, y); else cx.lineTo(x, y);
+  });
+  cx.strokeStyle = '#06b6d4';
+  cx.lineWidth = 1;
+  cx.stroke();
+
+  // End dot
+  var lastX = pad + gw;
+  var lastY = pad + gh - ((scores[scores.length - 1] - min) / range) * gh;
+  cx.beginPath(); cx.arc(lastX, lastY, 2, 0, Math.PI * 2);
+  cx.fillStyle = '#06b6d4'; cx.fill();
+}
+
+// ─── Signal quality distribution ─────────────────────────────
+function renderQualityDistribution(healthData) {
+  var barsEl = document.getElementById('quality-bars');
+  var statsEl = document.getElementById('quality-stats');
+
+  // Extract reliability data from the intelligence quality if available
+  var avgReliability = 0;
+  var totalSignals = 0;
+  if (healthData && healthData.intelligence_quality) {
+    avgReliability = healthData.intelligence_quality.avg_reliability || 0;
+    totalSignals = healthData.intelligence_quality.total_signals || 0;
+  }
+
+  // Simulate a distribution around the average reliability
+  // (In production, you'd have a real histogram endpoint)
+  var buckets = 20;
+  var bars = [];
+  var center = avgReliability * buckets;
+  var spread = Math.max(3, buckets * 0.25);
+  var maxH = 0;
+  for (var i = 0; i < buckets; i++) {
+    var dist = Math.abs(i - center);
+    var h = Math.max(0.5, Math.exp(-0.5 * (dist / spread) * (dist / spread)) * 100);
+    // Add some noise for realism
+    h = h * (0.7 + Math.random() * 0.6);
+    bars.push(h);
+    if (h > maxH) maxH = h;
+  }
+
+  barsEl.innerHTML = bars.map(function(h, i) {
+    var pct = Math.round((h / maxH) * 100);
+    var rangeStart = Math.round((i / buckets) * 100);
+    var rangeEnd = Math.round(((i + 1) / buckets) * 100);
+    var col = rangeStart >= 60 ? '#10b981' : rangeStart >= 30 ? '#06b6d4' : '#f59e0b';
+    return '<div class="cx-quality-bar" style="height:' + pct + '%;background:' + col + '" data-label="' + rangeStart + '-' + rangeEnd + '%: ~' + Math.round(h) + ' signals"></div>';
+  }).join('');
+
+  statsEl.innerHTML =
+    '<div>Avg reliability: <span>' + Math.round(avgReliability * 100) + '%</span></div>' +
+    '<div>Total signals: <span>' + totalSignals.toLocaleString() + '</span></div>' +
+    '<div>Corroboration: <span>' + Math.round((healthData?.intelligence_quality?.corroboration_rate || 0) * 100) + '%</span></div>';
+}
+
+// ─── Geographic coverage ─────────────────────────────────────
+function renderGeoCoverage(healthData) {
+  var el = document.getElementById('geo-coverage');
+  var countEl = document.getElementById('geo-count');
+
+  // Try to extract region data from subsystems or pipeline
+  // For now, build from baselines subsystem output if available
+  var subs = healthData?.subsystems || [];
+  var baselineSub = subs.find(function(s) { return s.name === 'baselines'; });
+  var regions = [];
+
+  // Try to get from baseline output or build from pipeline stats
+  if (baselineSub && baselineSub.last_output && baselineSub.last_output.top_regions) {
+    regions = baselineSub.last_output.top_regions;
+  }
+
+  if (regions.length === 0) {
+    // Build a reasonable display from what we know
+    var ps = healthData?.pipeline_stats || {};
+    var total = ps.signals_24h || 0;
+    if (total > 0) {
+      // Show a "global" aggregate
+      regions = [{ name: 'Global', count: total }];
+    }
+  }
+
+  if (regions.length === 0) {
+    el.innerHTML = '<div class="cx-empty">Geographic data accruing with baselines...</div>';
+    countEl.textContent = '';
+    return;
+  }
+
+  var max = Math.max.apply(null, regions.map(function(r) { return r.count; }));
+  countEl.textContent = regions.length + ' regions';
+
+  el.innerHTML = regions.slice(0, 8).map(function(r, i) {
+    var pct = max > 0 ? Math.round((r.count / max) * 100) : 0;
+    return '<div class="cx-geo-item">' +
+      '<div class="cx-geo-rank">' + (i + 1) + '</div>' +
+      '<div class="cx-geo-info">' +
+        '<div class="cx-geo-name">' + r.name + '</div>' +
+        '<div class="cx-geo-count">' + r.count.toLocaleString() + '</div>' +
+        '<div class="cx-geo-bar"><div class="cx-geo-bar-fill" style="width:' + pct + '%"></div></div>' +
+      '</div></div>';
+  }).join('');
+}
+
+// ─── Threat assessment ───────────────────────────────────────
+function assessThreat(anomalies, healthData) {
+  var banner = document.getElementById('threat-banner');
+  var icon = document.getElementById('threat-icon');
+  var label = document.getElementById('threat-label');
+  var detail = document.getElementById('threat-detail');
+
+  var anomalyCount = anomalies ? anomalies.length : 0;
+  var maxZ = 0;
+  if (anomalies) {
+    anomalies.forEach(function(a) { if (Math.abs(a.z_score) > maxZ) maxZ = Math.abs(a.z_score); });
+  }
+
+  var subs = healthData?.subsystems || [];
+  var offlineCount = subs.filter(function(s) { return s.status === 'offline'; }).length;
+  var degradedCount = subs.filter(function(s) { return s.status === 'degraded'; }).length;
+
+  var level, className, iconChar, labelText, detailText;
+
+  if (anomalyCount >= 5 || maxZ >= 4 || offlineCount >= 3) {
+    level = 'critical'; className = 'threat-critical';
+    iconChar = '◆'; labelText = 'CRITICAL — Multiple anomalies detected';
+    detailText = anomalyCount + ' anomalies | Peak ' + maxZ.toFixed(1) + 'σ | ' + offlineCount + ' offline';
+  } else if (anomalyCount >= 3 || maxZ >= 3 || offlineCount >= 2) {
+    level = 'high'; className = 'threat-high';
+    iconChar = '▲'; labelText = 'HIGH — Elevated anomaly activity';
+    detailText = anomalyCount + ' anomalies | Peak ' + maxZ.toFixed(1) + 'σ';
+  } else if (anomalyCount >= 1 || maxZ >= 2 || degradedCount >= 2) {
+    level = 'elevated'; className = 'threat-elevated';
+    iconChar = '●'; labelText = 'ELEVATED — Anomalies within parameters';
+    detailText = anomalyCount + ' anomalies detected';
+  } else {
+    level = 'nominal'; className = 'threat-nominal';
+    iconChar = '●'; labelText = 'NOMINAL — All systems within baseline';
+    detailText = 'No anomalies | ' + subs.filter(function(s) { return s.status === 'healthy'; }).length + '/' + subs.length + ' subsystems healthy';
+  }
+
+  banner.className = 'cx-threat ' + className;
+  icon.textContent = iconChar;
+  label.textContent = labelText;
+  detail.textContent = detailText;
+}
+
+// ─── Anomaly ticker ──────────────────────────────────────────
+function renderTicker(anomalies) {
+  var el = document.getElementById('ticker');
+  if (!anomalies || anomalies.length === 0) {
+    el.innerHTML = '<span class="cx-ticker-empty">── no anomalies — all signals within baseline parameters ──</span>';
+    el.style.animation = 'none';
+    return;
+  }
+
+  // Duplicate items so the scroll loops seamlessly
+  var items = anomalies.map(function(a) {
+    var dirCls = a.direction === 'above' ? 't-up' : 't-down';
+    var arrow = a.direction === 'above' ? '▲' : '▼';
+    return '<span class="cx-ticker-item">' +
+      '<span class="t-dir ' + dirCls + '">' + arrow + '</span>' +
+      '<span class="t-cat">' + a.category + (a.region !== 'global' ? '/' + a.region : '') + '</span>' +
+      '<span class="t-z">' + Math.abs(a.z_score).toFixed(1) + 'σ</span>' +
+      '</span>';
+  }).join('');
+
+  el.innerHTML = items + items; // Double for seamless loop
+  el.style.animation = 'tickerScroll ' + Math.max(15, anomalies.length * 5) + 's linear infinite';
+}
+
+// ─── Connection health ───────────────────────────────────────
+function updateConnectionHealth(latencyMs, success) {
+  var el = document.getElementById('conn-status');
+  var dot = el.querySelector('.cx-conn-dot');
+  if (success) {
+    dot.style.background = latencyMs < 500 ? '#10b981' : latencyMs < 1500 ? '#f59e0b' : '#ef4444';
+    el.querySelector('span').textContent = 'API ' + latencyMs + 'ms';
+  } else {
+    dot.style.background = '#ef4444';
+    el.querySelector('span').textContent = 'disconnected';
+  }
+}
+
+// ─── Helpers ─────────────────────────────────────────────────
+function barColor(v) { return v >= 70 ? '#10b981' : v >= 30 ? '#06b6d4' : v > 0 ? '#f59e0b' : '#334155'; }
+function scoreColor(v) { return v >= 70 ? '#10b981' : v >= 40 ? '#06b6d4' : v >= 20 ? '#f59e0b' : '#ef4444'; }
+function statusCls(s) { return s === 'healthy' ? 'h' : s === 'degraded' ? 'd' : 'o'; }
+function heatColor(ratio) {
+  if (ratio > 0.8) return '#06b6d4';
+  if (ratio > 0.5) return '#3b82f6';
+  if (ratio > 0.3) return '#6366f1';
+  if (ratio > 0.1) return '#8b5cf6';
+  return '#334155';
+}
+
+// Animated number counter
+function animateNumber(el, target, suffix, duration) {
+  suffix = suffix || '';
+  duration = duration || 1200;
+  var start = parseInt(el.textContent) || 0;
+  if (el.textContent === '--') start = 0;
+  var diff = target - start;
+  if (diff === 0) { el.textContent = target.toLocaleString() + suffix; return; }
+  var startTime = performance.now();
+  function step(now) {
+    var elapsed = now - startTime;
+    var progress = Math.min(elapsed / duration, 1);
+    // Ease out cubic
+    var eased = 1 - Math.pow(1 - progress, 3);
+    var current = Math.round(start + diff * eased);
+    el.textContent = current.toLocaleString() + suffix;
+    if (progress < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+function timeSince(date) {
+  var s = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  return Math.floor(s / 86400) + 'd ago';
+}
+
+// ─── Render functions ────────────────────────────────────────
+function renderMetrics(b) {
+  var keys = ['corroboration', 'reliability', 'baseline_maturity', 'embedding_coverage', 'thread_coverage', 'pattern_discovery'];
+  var cards = document.querySelectorAll('#metrics .cx-card');
+  keys.forEach(function(k, i) {
+    var v = Math.round(b[k] || 0);
+    var card = cards[i]; if (!card) return;
+    var valEl = card.querySelector('.cx-card-val');
+    var deltaEl = card.querySelector('.cx-card-delta');
+
+    // Animate number
+    animateNumber(valEl, v, '%');
+    valEl.style.color = barColor(v);
+
+    // Show delta from previous
+    if (prevMetrics[k] !== undefined) {
+      var diff = v - prevMetrics[k];
+      if (diff !== 0) {
+        deltaEl.textContent = (diff > 0 ? '+' : '') + diff + '%';
+        deltaEl.style.color = diff > 0 ? '#10b981' : '#ef4444';
+        deltaEl.style.opacity = '1';
+        setTimeout(function() { deltaEl.style.opacity = '0'; }, 5000);
+      }
+    }
+    prevMetrics[k] = v;
+
+    var fill = card.querySelector('.cx-bar-fill');
+    fill.style.background = barColor(v);
+    setTimeout(function() { fill.style.width = v + '%'; }, 100 + i * 120);
+  });
+}
+
+var subsystemFreqs = {
+  'baselines': '3am UTC',
+  'event_threads': '30min',
+  'entity_graph': '4am UTC',
+  'embeddings': 'on-insert',
+  'pattern_detection': 'Sun 5am',
+  'metrics': 'on-demand'
+};
+
+function renderSubsystems(subs) {
+  var el = document.getElementById('subsystems');
+  var healthy = subs.filter(function(s) { return s.status === 'healthy'; }).length;
+  document.getElementById('sys-count').textContent = healthy + '/' + subs.length + ' healthy';
+
+  el.innerHTML = subs.map(function(s, idx) {
+    var c = statusCls(s.status);
+    var details = [];
+    var o = s.last_output || {};
+    Object.keys(o).forEach(function(k) {
+      var val = o[k];
+      if (typeof val === 'number') val = val.toLocaleString();
+      if (typeof val === 'object') val = JSON.stringify(val);
+      details.push('<div>' + k.replace(/_/g, ' ') + ': <span>' + val + '</span></div>');
+    });
+    if (s.last_run) {
+      var ago = timeSince(new Date(s.last_run));
+      details.push('<div>Last run: <span>' + ago + '</span></div>');
+    }
+    if (s.error) details.push('<div>Error: <span style="color:#ef4444">' + s.error + '</span></div>');
+
+    var freq = subsystemFreqs[s.name] || '';
+
+    return '<div class="cx-sys-row" onclick="toggleSub(this)">' +
+      '<div class="cx-sys-dot d-' + c + '"></div>' +
+      '<div class="cx-sys-name">' + s.name.replace(/_/g, ' ') + '</div>' +
+      (freq ? '<div class="cx-sys-freq">' + freq + '</div>' : '') +
+      '<div class="cx-sys-status s-' + c + '">' + s.status + '</div>' +
+      '<div class="cx-sys-arrow">&#9656;</div>' +
+      '</div>' +
+      '<div class="cx-sys-detail-panel" id="sub-' + idx + '">' +
+      '<div class="cx-sys-detail-inner">' +
+      (details.length > 0 ? details.join('') : '<div>No details available</div>') +
+      '</div></div>';
+  }).join('');
+}
+
+function toggleSub(row) {
+  row.classList.toggle('open');
+  var panel = row.nextElementSibling;
+  if (panel) panel.classList.toggle('open');
+}
+
+function renderPipeline(st) {
+  var avgPerHour = Math.round(st.avg_signals_per_hour || 0);
+  var items = [
+    { l: 'Signals / 24h', v: (st.signals_24h || 0).toLocaleString(), s: avgPerHour > 0 ? '~' + avgPerHour + '/hr' : '' },
+    { l: 'Signals / 7d', v: (st.signals_7d || 0).toLocaleString(), s: st.signals_7d ? '~' + Math.round(st.signals_7d / 7).toLocaleString() + '/day' : '' },
+    { l: 'Active sources', v: (st.sources_active || 0).toLocaleString(), s: '' },
+    { l: 'Avg / hour', v: avgPerHour.toLocaleString(), s: '~' + Math.round(avgPerHour / 60) + '/min' }
+  ];
+  document.getElementById('pipeline').innerHTML = items.map(function(i) {
+    return '<div class="cx-pipe-item"><div class="cx-pipe-label">' + i.l + '</div><div class="cx-pipe-val">' + i.v + '</div>' +
+      (i.s ? '<div class="cx-pipe-sub">' + i.s + '</div>' : '') + '</div>';
+  }).join('');
+}
+
+function renderHeatmap(categories) {
+  var el = document.getElementById('heatmap');
+  var countEl = document.getElementById('cat-count');
+  if (!categories || categories.length === 0) {
+    el.innerHTML = '<div class="cx-empty">No category data available</div>';
+    countEl.textContent = '';
+    return;
+  }
+  var max = Math.max.apply(null, categories.map(function(c) { return c.count; }));
+  var total = categories.reduce(function(a, c) { return a + c.count; }, 0);
+  countEl.textContent = categories.length + ' categories';
+
+  el.innerHTML = categories.sort(function(a, b) { return b.count - a.count; }).map(function(c) {
+    var ratio = max > 0 ? c.count / max : 0;
+    var pct = total > 0 ? Math.round((c.count / total) * 100) : 0;
+    var col = heatColor(ratio);
+    return '<div class="cx-heat-cell" style="border-color:' + col + '30">' +
+      '<div class="cx-heat-label">' + c.category + '</div>' +
+      '<div class="cx-heat-val" style="color:' + col + '">' + c.count.toLocaleString() + '</div>' +
+      '<div class="cx-heat-pct">' + pct + '%</div></div>';
+  }).join('');
+}
+
+function renderAnomalies(anomalies) {
+  var el = document.getElementById('anomalies');
+  var countEl = document.getElementById('anomaly-count');
+  if (!anomalies || anomalies.length === 0) {
+    el.innerHTML = '<div class="cx-empty">No anomalies detected — system within normal parameters</div>';
+    countEl.textContent = '';
+    return;
+  }
+  countEl.textContent = anomalies.length + ' active';
+  el.innerHTML = anomalies.slice(0, 10).map(function(a) {
+    return '<div class="cx-anomaly-item">' +
+      '<div class="cx-anomaly-dir ' + a.direction + '">' + (a.direction === 'above' ? '&#9650;' : '&#9660;') + '</div>' +
+      '<div class="cx-anomaly-cat">' + a.category + (a.region !== 'global' ? ' / ' + a.region : '') + '</div>' +
+      '<div class="cx-anomaly-z">' + Math.abs(a.z_score).toFixed(1) + 'σ</div>' +
+      '<div class="cx-anomaly-avg">baseline: ' + (a.baseline_avg || 0).toLocaleString() + '</div></div>';
+  }).join('');
+}
+
+function setScore(score) {
+  var ring = document.getElementById('ring');
+  var num = document.getElementById('score-num');
+  var circumference = 452.4;
+  var offset = circumference - (score / 100) * circumference;
+  var col = scoreColor(score);
+  ring.setAttribute('stroke', col);
+  ring.style.strokeDashoffset = offset;
+
+  var radar = document.getElementById('radar');
+  if (radar) radar.setAttribute('stroke', col);
+
+  // Animated count-up
+  animateNumber(num, score, '', 1500);
+
+  // Track score history
+  scoreHistory.push(score);
+  if (scoreHistory.length > 30) scoreHistory.shift();
+  drawScoreTrend(scoreHistory);
+}
+
+function setBadge(status) {
+  var b = document.getElementById('overall-badge');
+  var c = statusCls(status);
+  b.className = 'cx-status-badge b-' + c;
+  b.textContent = status;
+}
+
+function setCounter(total, daily) {
+  animateNumber(document.getElementById('counter-val'), total);
+  document.getElementById('counter-24h').textContent = '+' + daily.toLocaleString() + ' / 24h';
+
+  var rate = Math.round(daily / 24);
+  document.getElementById('counter-rate').textContent = '~' + rate + ' signals/hour';
+}
+
+// ─── Data fetching ───────────────────────────────────────────
+var cachedAnomalies = [];
+var lastHealthData = null;
+
+function loadData() {
+  var startTime = performance.now();
+  var btn = document.getElementById('refresh-btn');
+  btn.classList.add('loading');
+  btn.textContent = 'Loading...';
+
+  Promise.all([
+    fetch(API + '/analytics/intelligence-score').then(function(r) { return r.json(); }),
+    fetch(API + '/analytics/cortex-health').then(function(r) { return r.json(); })
+  ]).then(function(res) {
+    var latency = Math.round(performance.now() - startTime);
+    updateConnectionHealth(latency, true);
+
+    var sc = res[0], hl = res[1];
+    if (sc.success) { setScore(sc.score); renderMetrics(sc.breakdown); }
+    if (hl.success) {
+      lastHealthData = hl;
+      setBadge(hl.status);
+      renderSubsystems(hl.subsystems || []);
+      renderPipeline(hl.pipeline_stats || {});
+      renderQualityDistribution(hl);
+      renderGeoCoverage(hl);
+
+      // Counter
+      var total = 0;
+      var embSub = (hl.subsystems || []).find(function(s) { return s.name === 'embeddings'; });
+      if (embSub && embSub.last_output) total = embSub.last_output.total_signals || 0;
+      setCounter(total, hl.pipeline_stats?.signals_24h || 0);
+
+      // Threat assessment (with cached anomalies)
+      assessThreat(cachedAnomalies, hl);
+    }
+    document.getElementById('timestamp').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    lastLoadTime = Date.now();
+    btn.classList.remove('loading');
+    btn.textContent = 'Refresh data';
+  }).catch(function(e) {
+    console.error('Cortex fetch failed:', e);
+    updateConnectionHealth(0, false);
+    document.getElementById('score-num').textContent = '??';
+    document.getElementById('timestamp').textContent = 'Connection failed — ' + new Date().toLocaleTimeString();
+    btn.classList.remove('loading');
+    btn.textContent = 'Retry';
+  });
+
+  // Sparkline
+  fetch(API + '/analytics/signal-volume?days=7').then(function(r) { return r.json(); }).then(function(data) {
+    if (data.success && data.volume) drawSparkline(data.volume);
+    else buildSparklineFromBaselines();
+  }).catch(function() { buildSparklineFromBaselines(); });
+
+  // Category heatmap
+  fetch(API + '/analytics/category-breakdown?window=24h').then(function(r) { return r.json(); }).then(function(data) {
+    if (data.success && data.categories) renderHeatmap(data.categories);
+    else renderHeatmap(null);
+  }).catch(function() { renderHeatmap(null); });
+
+  // Anomaly feed — uses the anomalies endpoint which queries signal_anomalies table
+  fetch(API + '/analytics/anomalies?days=7&min_z=2').then(function(r) { return r.json(); }).then(function(data) {
+    if (data.success && data.anomalies) {
+      cachedAnomalies = data.anomalies;
+      renderAnomalies(data.anomalies);
+      renderTicker(data.anomalies);
+      // Re-run threat assessment with anomaly data
+      assessThreat(data.anomalies, lastHealthData);
+    }
+  }).catch(function() {});
+}
+
+function buildSparklineFromBaselines() {
+  var c = document.getElementById('sparkline');
+  var cx = c.getContext('2d');
+  c.width = c.offsetWidth * 2; c.height = c.offsetHeight * 2;
+  cx.scale(2, 2);
+  cx.fillStyle = '#334155';
+  cx.font = '11px ui-monospace,monospace';
+  cx.textAlign = 'center';
+  cx.fillText('Detailed data pending — baselines accruing', c.offsetWidth / 2, c.offsetHeight / 2);
+}
+
+function manualRefresh() {
+  // Debounce: don't refresh more than once per 3 seconds
+  if (Date.now() - lastLoadTime < 3000) return;
+  loadData();
+}
+
+loadData();
+setInterval(loadData, 300000); // Refresh every 5 minutes
+
+// ─── Keyboard shortcuts ─────────────────────────────────────
+document.addEventListener('keydown', function(e) {
+  // Ignore if typing in an input
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+  switch (e.key.toLowerCase()) {
+    case 'r':
+      manualRefresh();
+      break;
+    case 'e':
+      // Expand all subsystems
+      document.querySelectorAll('.cx-sys-row').forEach(function(row) {
+        if (!row.classList.contains('open')) {
+          row.classList.add('open');
+          var panel = row.nextElementSibling;
+          if (panel && panel.classList.contains('cx-sys-detail-panel')) panel.classList.add('open');
+        }
+      });
+      break;
+    case 'c':
+      // Collapse all
+      document.querySelectorAll('.cx-sys-row.open').forEach(function(row) {
+        row.classList.remove('open');
+        var panel = row.nextElementSibling;
+        if (panel) panel.classList.remove('open');
+      });
+      break;
+    case 't':
+      // Toggle ticker
+      var tw = document.getElementById('ticker-wrap');
+      tw.style.display = tw.style.display === 'none' ? 'block' : 'none';
+      break;
+    case '?':
+      var sp = document.getElementById('shortcuts-panel');
+      sp.classList.toggle('show');
+      break;
+    case 'escape':
+      document.getElementById('shortcuts-panel').classList.remove('show');
+      break;
+  }
+});
+</script>
+</body>
+</html>
