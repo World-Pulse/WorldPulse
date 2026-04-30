@@ -111,13 +111,16 @@ async function bootstrap() {
     : [
         'https://worldpulse.io',
         'https://www.worldpulse.io',
+        'https://world-pulse.io',
+        'https://www.world-pulse.io',
+        'https://api.world-pulse.io',
         ...(process.env.CORS_ORIGINS ?? '').split(',').filter(Boolean),
       ]
 
   await app.register(cors, {
     origin: (origin, cb) => {
-      // Allow requests with no origin (server-to-server, curl, etc.)
-      if (!origin || allowedOrigins.includes(origin)) {
+      // Allow requests with no origin (server-to-server, curl, mobile apps, local files)
+      if (!origin || origin === 'null' || allowedOrigins.includes(origin)) {
         cb(null, true)
       } else {
         cb(new Error(`CORS: origin '${origin}' not allowed`), false)
