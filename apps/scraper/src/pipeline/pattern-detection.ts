@@ -168,18 +168,18 @@ async function detectCausalChains(): Promise<CausalChain[]> {
           s2.tags as effect_tags,
           EXTRACT(EPOCH FROM (s2.created_at - s1.created_at)) / 3600 as delay_hours
         FROM signals s1
-        JOIN signals s2 ON s2.category = $2
+        JOIN signals s2 ON s2.category = ?
           AND s2.created_at > s1.created_at
           AND s2.created_at <= s1.created_at + INTERVAL '${CAUSAL_WINDOW_HOURS} hours'
           AND s2.id != s1.id
-        WHERE s1.category = $1
+        WHERE s1.category = ?
           AND s1.created_at >= NOW() - INTERVAL '${LOOKBACK_HOURS} hours'
           AND s1.status IN ('verified', 'pending')
           AND s2.status IN ('verified', 'pending')
           AND (s1.country_code = s2.country_code OR s1.region = s2.region)
         ORDER BY s1.created_at DESC
         LIMIT 20
-      `, [causeCategory, effectCategory])
+      `, [effectCategory, causeCategory])
 
       for (const row of result.rows ?? []) {
         // Compute confidence based on multiple factors
@@ -289,14 +289,14 @@ async function detectGeographicHotspots(): Promise<GeographicHotspot[]> {
           FROM signals
           WHERE created_at >= NOW() - INTERVAL '${LOOKBACK_HOURS} hours'
             AND status IN ('verified', 'pending')
-            AND (region = $1 OR country_code = $1)
+            AND (region = ? OR country_code = ?)
           ORDER BY
             CASE severity
               WHEN 'critical' THEN 1 WHEN 'high' THEN 2
               WHEN 'medium' THEN 3 ELSE 4 END,
             created_at DESC
           LIMIT 5
-        `, [region.region])
+        `, [region.region, region.region])
 
         hotspots.push({
           region: region.region ?? region.country_code,
@@ -367,7 +367,7 @@ async function detectCrossClusterBridges(): Promise<CrossClusterBridge[]> {
         FROM event_thread_signals ets
         JOIN signals s ON s.id = ets.signal_id
         CROSS JOIN LATERAL unnest(s.tags) AS unnested_tag
-        WHERE ets.thread_id = ANY($1)
+        WHERE ets.thread_id = ANY(?)
         GROUP BY ets.thread_id
       `, [threadIds.slice(0, 2)])
 
