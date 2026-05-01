@@ -1104,8 +1104,8 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
         .whereIn('status', statuses)
         .orderBy('last_updated', 'desc')
         .limit(limit)
-        .select('id', 'title', 'summary', 'category', 'status', 'severity',
-                'region', 'country_code', 'signal_count', 'first_signal_at', 'last_updated')
+        .select('id', 'title', 'summary', 'category', 'status', 'peak_severity',
+                'region', 'country_code', 'signal_count', 'first_seen', 'last_updated')
 
       return reply.send({ success: true, threads, count: threads.length })
     } catch (err) {

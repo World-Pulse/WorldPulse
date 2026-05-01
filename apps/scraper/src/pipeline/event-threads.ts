@@ -162,8 +162,8 @@ export async function updateEventThreads(): Promise<{
           .update({
             signal_count: db.raw('signal_count + 1'),
             last_updated: new Date(),
-            severity: pickHigherSeverity(
-              (await db('event_threads').where('id', best.thread_id).select('severity').first())?.severity,
+            peak_severity: pickHigherSeverity(
+              (await db('event_threads').where('id', best.thread_id).select('peak_severity').first())?.peak_severity,
               signal.severity
             ),
           })
@@ -172,15 +172,15 @@ export async function updateEventThreads(): Promise<{
       } else {
         // Create new thread from this signal
         const [thread] = await db('event_threads').insert({
-          title: signal.title,
+          title: (signal.title ?? '').substring(0, 300),
           summary: signal.summary?.substring(0, 500),
           category: signal.category,
           status: 'developing',
-          severity: signal.severity ?? 'medium',
+          peak_severity: signal.severity ?? 'low',
           region: signal.region,
           country_code: signal.country_code,
           signal_count: 1,
-          first_signal_at: signal.created_at,
+          first_seen: signal.created_at,
           last_updated: new Date(),
         }).returning('id')
 
