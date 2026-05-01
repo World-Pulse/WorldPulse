@@ -75,16 +75,18 @@ const SEVERITY_RANK: Record<string, number> = {
 // Categories where A frequently precedes B (directional)
 
 const CAUSAL_PAIRS: Array<[string, string, string]> = [
-  ['natural-disaster', 'humanitarian', 'disaster_response'],
+  ['disaster', 'humanitarian', 'disaster_response'],
   ['conflict', 'humanitarian', 'conflict_displacement'],
-  ['political', 'economic', 'policy_impact'],
-  ['economic', 'political', 'economic_pressure'],
-  ['health', 'economic', 'health_economic_impact'],
-  ['environmental', 'health', 'environmental_health'],
+  ['geopolitics', 'economy', 'policy_impact'],
+  ['economy', 'geopolitics', 'economic_pressure'],
+  ['health', 'economy', 'health_economic_impact'],
+  ['climate', 'health', 'environmental_health'],
   ['technology', 'security', 'tech_security_risk'],
   ['conflict', 'security', 'conflict_escalation'],
-  ['natural-disaster', 'economic', 'disaster_economic_impact'],
-  ['political', 'conflict', 'political_instability'],
+  ['disaster', 'economy', 'disaster_economic_impact'],
+  ['geopolitics', 'conflict', 'political_instability'],
+  ['weather', 'disaster', 'weather_disaster_chain'],
+  ['conflict', 'geopolitics', 'conflict_political_fallout'],
 ]
 
 // ─── Core Detection ─────────────────────────────────────────────────────────
