@@ -754,6 +754,9 @@ async function run() {
   await db.raw(`CREATE INDEX IF NOT EXISTS idx_entity_edges_target ON entity_edges (target_entity_id)`)
   await db.raw(`CREATE INDEX IF NOT EXISTS idx_entity_edges_predicate ON entity_edges (predicate)`)
 
+  // Fix: weight column was created as INTEGER in early deploys — must be REAL for decimal weights (0.0–1.0)
+  await db.raw(`ALTER TABLE entity_edges ALTER COLUMN weight TYPE REAL`)
+
   console.log('✅  Migrations complete.')
 }
 
