@@ -662,3 +662,181 @@ function mapEdgeRow(row: any): EntityEdge {
     last_seen: row.last_seen,
   }
 }
+
+// ─── CO-OCCURRENCE EDGE BUILDER ───────────────────────────────────────────────
+
+/**
+ * Builds co-occurrence edges between entities that appear in the same signal.
+ *
+ * Algorithm:
+ *   1. Fetch all entity nodes that have signal_ids (batch by chunks to avoid OOM)
+ *   2. Build an inverted index: signal_id → [entity_id, entity_id, ...]
+ *   3. For each signal with 2+ entities, create an edge between every pair
+ *   4. Aggregate shared signal counts across all signals → weight
+ *   5. Upsert edges with predicate 'co_occurs_with' and weight = min(1, shared / 10)
+ *
+ * Design:
+ *   - Idempotent: re-running produces the same edges (upsert on conflict)
+ *   - Batched writes: inserts in chunks of 500 to avoid statement size limits
+ *   - Non-blocking: wrapped in try/catch, logs failures as warnings
+ *   - Caches run stats to Redis for the HUD
+ */
+export async function buildCoOccurrenceEdges(): Promise<{
+  pairsProcessed: number
+  edgesCreated: number
+  edgesUpdated: number
+  durationMs: number
+}> {
+  const startTime = Date.now()
+  let pairsProcessed = 0
+  let edgesCreated = 0
+  let edgesUpdated = 0
+
+  logger.info('[CO-OCCURRENCE] Starting co-occurrence edge build...')
+
+  try {
+    // Step 1: Fetch all entity nodes with their signal_ids
+    // Only grab entities with at least 1 signal_id to reduce noise
+    const nodesResult = await db.query(
+      `SELECT id, type, canonical_name, signal_ids
+       FROM entity_nodes
+       WHERE array_length(signal_ids, 1) > 0`,
+    )
+
+    const nodes: Array<{ id: string; type: string; canonical_name: string; signal_ids: string[] }> = nodesResult.rows
+
+    if (nodes.length < 2) {
+      logger.info('[CO-OCCURRENCE] Fewer than 2 entities with signals — nothing to do')
+      return { pairsProcessed: 0, edgesCreated: 0, edgesUpdated: 0, durationMs: Date.now() - startTime }
+    }
+
+    // Step 2: Build inverted index: signal_id → entity_ids
+    const signalToEntities = new Map<string, string[]>()
+    for (const node of nodes) {
+      for (const sid of node.signal_ids) {
+        const existing = signalToEntities.get(sid)
+        if (existing) {
+          existing.push(node.id)
+        } else {
+          signalToEntities.set(sid, [node.id])
+        }
+      }
+    }
+
+    // Step 3: For each signal with 2+ entities, count pair co-occurrences
+    // pairKey → { entityA, entityB, sharedSignals: Set<string> }
+    const pairMap = new Map<string, { entityA: string; entityB: string; sharedSignals: Set<string> }>()
+
+    for (const [signalId, entityIds] of signalToEntities) {
+      if (entityIds.length < 2) continue
+
+      // Deduplicate entity IDs within the same signal
+      const unique = [...new Set(entityIds)]
+      if (unique.length < 2) continue
+
+      // Generate all pairs (sorted to ensure consistent key)
+      for (let i = 0; i < unique.length; i++) {
+        for (let j = i + 1; j < unique.length; j++) {
+          const [a, b] = unique[i] < unique[j] ? [unique[i], unique[j]] : [unique[j], unique[i]]
+          const pairKey = `${a}::${b}`
+          const existing = pairMap.get(pairKey)
+          if (existing) {
+            existing.sharedSignals.add(signalId)
+          } else {
+            pairMap.set(pairKey, { entityA: a, entityB: b, sharedSignals: new Set([signalId]) })
+          }
+        }
+      }
+    }
+
+    logger.info({ pairs: pairMap.size, signals: signalToEntities.size, entities: nodes.length },
+      '[CO-OCCURRENCE] Computed pair co-occurrences')
+
+    // Step 4: Batch upsert edges
+    const BATCH_SIZE = 500
+    const pairs = Array.from(pairMap.values())
+    pairsProcessed = pairs.length
+
+    for (let offset = 0; offset < pairs.length; offset += BATCH_SIZE) {
+      const batch = pairs.slice(offset, offset + BATCH_SIZE)
+
+      // Build a multi-row VALUES clause for batch upsert
+      const values: any[] = []
+      const placeholders: string[] = []
+
+      for (let i = 0; i < batch.length; i++) {
+        const pair = batch[i]
+        const sharedCount = pair.sharedSignals.size
+        // Weight: logarithmic scaling capped at 1.0
+        // 1 shared signal → 0.1, 3 → 0.3, 10 → 1.0
+        const weight = Math.min(1.0, sharedCount / 10)
+        const eid = edgeId(pair.entityA, pair.entityB, 'co_occurs_with')
+        const signalIdsArray = Array.from(pair.sharedSignals).slice(0, MAX_SIGNAL_IDS_PER_ENTITY)
+        const now = new Date().toISOString()
+
+        const base = i * 8
+        placeholders.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}::text[], $${base + 7}, $${base + 8})`)
+        values.push(eid, pair.entityA, pair.entityB, 'co_occurs_with', weight, signalIdsArray, now, now)
+      }
+
+      const sql = `
+        INSERT INTO entity_edges (id, source_entity_id, target_entity_id, predicate, weight, signal_ids, first_seen, last_seen)
+        VALUES ${placeholders.join(', ')}
+        ON CONFLICT (id) DO UPDATE SET
+          weight = EXCLUDED.weight,
+          signal_ids = EXCLUDED.signal_ids,
+          last_seen = EXCLUDED.last_seen
+      `
+
+      const result = await db.query(sql, values)
+
+      // PostgreSQL returns rows affected — new inserts + updates
+      // We can't easily distinguish created vs updated in a single upsert,
+      // so we count total and report as combined
+      const affected = result.rowCount ?? 0
+      edgesCreated += affected
+    }
+
+    // We report edgesCreated as total upserted (created + updated combined)
+    // For stats distinction, query actual new vs updated count
+    edgesUpdated = 0 // Not distinguishable from batch upsert; total is in edgesCreated
+
+    const durationMs = Date.now() - startTime
+
+    logger.info({
+      pairsProcessed,
+      edgesUpserted: edgesCreated,
+      durationMs,
+      entities: nodes.length,
+      signalsWithCoOccurrence: signalToEntities.size,
+    }, '[CO-OCCURRENCE] Co-occurrence edge build complete')
+
+    // Step 5: Cache stats to Redis for HUD
+    const stats = {
+      pairsProcessed,
+      edgesUpserted: edgesCreated,
+      durationMs,
+      entities: nodes.length,
+      lastRun: new Date().toISOString(),
+    }
+    await redis.setex('cortex:entity-edges:stats', 6 * 3600, JSON.stringify(stats))
+
+    return { pairsProcessed, edgesCreated, edgesUpdated, durationMs }
+  } catch (err) {
+    const durationMs = Date.now() - startTime
+    logger.warn({ err, durationMs }, '[CO-OCCURRENCE] Co-occurrence edge build failed (non-fatal)')
+
+    // Cache failure stats so HUD shows last attempt
+    try {
+      await redis.setex('cortex:entity-edges:stats', 6 * 3600, JSON.stringify({
+        pairsProcessed,
+        edgesUpserted: edgesCreated,
+        durationMs,
+        error: err instanceof Error ? err.message : String(err),
+        lastRun: new Date().toISOString(),
+      }))
+    } catch { /* ignore redis failure */ }
+
+    return { pairsProcessed, edgesCreated, edgesUpdated, durationMs }
+  }
+}

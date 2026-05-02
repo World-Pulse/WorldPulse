@@ -40,6 +40,7 @@ import { checkGlobalCircuitHealth } from './lib/global-circuit-guard'
 import { updateEventThreads } from './pipeline/event-threads'
 import { batchEmbedSignals } from './pipeline/embeddings'
 import { detectPatterns } from './pipeline/pattern-detection'
+import { buildCoOccurrenceEdges } from './pipeline/entity-graph'
 
 // DB row has extra columns not present in the shared Source interface
 type ScraperSource = Source & {
@@ -247,6 +248,28 @@ async function bootstrap() {
   setTimeout(() => {
     detectPatterns().catch(err => logger.error({ err }, '[PATTERNS] Initial pattern detection failed'))
   }, 60_000) // 1 minute after boot
+
+  // Co-occurrence edge builder — connect entities sharing signals every 4 hours
+  setInterval(async () => {
+    try {
+      const result = await buildCoOccurrenceEdges()
+      if (result.pairsProcessed > 0) {
+        logger.info({
+          pairs: result.pairsProcessed,
+          edges: result.edgesCreated,
+          durationMs: result.durationMs,
+        }, '[CO-OCCURRENCE] Edge build cycle complete')
+      }
+    } catch (err) {
+      logger.error({ err }, '[CO-OCCURRENCE] Edge build failed')
+    }
+  }, 4 * 60 * 60_000) // 4 hours
+
+  // Run initial co-occurrence build after a 2-minute delay (let entity extraction populate first)
+  setTimeout(() => {
+    buildCoOccurrenceEdges().catch(err =>
+      logger.error({ err }, '[CO-OCCURRENCE] Initial edge build failed'))
+  }, 2 * 60_000) // 2 minutes after boot
 
   // Kafka consumer group lag monitor — checks every 5 minutes, logs summary + warns on critical lag
   startKafkaLagMonitor()
