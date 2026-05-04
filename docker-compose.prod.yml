@@ -202,6 +202,10 @@ services:
       OPENAI_API_KEY:     ${OPENAI_API_KEY:-}
       LLM_API_URL:        ${LLM_API_URL:-}
       LLM_MODEL:          ${LLM_MODEL:-gpt-4o-mini}
+      # Optional — Ollama embeddings (runs on host, not in Docker)
+      OLLAMA_HOST:        ${OLLAMA_HOST:-http://host.docker.internal:11434}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - wp_net
     logging: *default-logging

@@ -17,6 +17,7 @@ import { BiasCorrectionPanel } from '@/components/sources/BiasCorrectionPanel'
 import { AISummary } from '@/components/signals/AISummary'
 import { RiskScoreGauge } from '@/components/signals/RiskScoreGauge'
 import { RelatedSignals } from './RelatedSignals'
+import { ConnectionWeb } from './ConnectionWeb'
 import { CIBWarningBadge } from '@/components/signals/CIBWarningBadge'
 import { VerificationTimeline } from '@/components/signals/VerificationTimeline'
 import { VerificationBadge, buildVerificationSummary } from '@/components/signals/VerificationBadge'
@@ -525,6 +526,9 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
                 <RiskScoreGauge score={rs.score} level={rs.level} label={rs.label} size="md" />
               )
             })()}
+
+            {/* Intelligence Web — entity-based connections */}
+            <ConnectionWeb signalId={signal.id} />
 
             {/* Related signals from event cluster */}
             <RelatedSignals signalId={signal.id} />

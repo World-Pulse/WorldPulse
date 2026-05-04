@@ -1503,6 +1503,167 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       count: sorted.length,
     })
   })
+
+  // ─── KNOWLEDGE GRAPH CONNECTIONS ─────────────────────────────────────────
+  // GET /api/v1/signals/:id/connections?limit=8
+  //
+  // Returns signals connected to this one through shared entities in the
+  // knowledge graph. Shows HOW signals are connected (via which entities),
+  // surfacing the invisible web of relationships.
+  app.get('/:id/connections', {
+    preHandler: [optionalAuth],
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    schema: {
+      tags: ['signals'],
+      summary: 'Get knowledge graph connections for a signal',
+      description: 'Finds other signals connected through shared entities (co-occurrence edges).',
+    },
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const { limit = 8 } = req.query as { limit?: number }
+    const safeLimit = Math.min(20, Math.max(1, Number(limit)))
+
+    try {
+      // Step 1: Find all entities linked to this signal
+      const entityResult = await db.raw(`
+        SELECT id, type, canonical_name, mention_count
+        FROM entity_nodes
+        WHERE ? = ANY(signal_ids)
+        ORDER BY mention_count DESC
+        LIMIT 20
+      `, [id])
+
+      const entities = entityResult.rows ?? []
+      if (entities.length === 0) {
+        return reply.send({ success: true, data: { connections: [], entities: [], count: 0 } })
+      }
+
+      const entityIds = entities.map((e: any) => e.id)
+
+      // Step 2: Find co-occurrence edges involving these entities
+      const edgeResult = await db.raw(`
+        SELECT DISTINCT ON (connected_signal)
+          e.source_entity_id,
+          e.target_entity_id,
+          e.weight,
+          e.predicate,
+          src.canonical_name AS source_name,
+          src.type AS source_type,
+          tgt.canonical_name AS target_name,
+          tgt.type AS target_type,
+          unnest(
+            CASE
+              WHEN e.source_entity_id = ANY(?) THEN tgt.signal_ids
+              ELSE src.signal_ids
+            END
+          ) AS connected_signal
+        FROM entity_edges e
+        JOIN entity_nodes src ON src.id = e.source_entity_id
+        JOIN entity_nodes tgt ON tgt.id = e.target_entity_id
+        WHERE (e.source_entity_id = ANY(?) OR e.target_entity_id = ANY(?))
+          AND e.weight >= 0.1
+        ORDER BY connected_signal, e.weight DESC
+      `, [entityIds, entityIds, entityIds])
+
+      // Step 3: Filter out the source signal itself, aggregate by connected signal
+      const connectionMap = new Map<string, {
+        signalId: string
+        entities: Array<{ name: string; type: string }>
+        maxWeight: number
+        edgeCount: number
+      }>()
+
+      for (const row of (edgeResult.rows ?? [])) {
+        const connectedId = row.connected_signal
+        if (connectedId === id) continue
+
+        const entityName = entityIds.includes(row.source_entity_id) ? row.target_name : row.source_name
+        const entityType = entityIds.includes(row.source_entity_id) ? row.target_type : row.source_type
+
+        const existing = connectionMap.get(connectedId)
+        if (existing) {
+          // Add entity if not already present
+          if (!existing.entities.some(e => e.name === entityName)) {
+            existing.entities.push({ name: entityName, type: entityType })
+          }
+          existing.maxWeight = Math.max(existing.maxWeight, row.weight)
+          existing.edgeCount++
+        } else {
+          connectionMap.set(connectedId, {
+            signalId: connectedId,
+            entities: [{ name: entityName, type: entityType }],
+            maxWeight: row.weight,
+            edgeCount: 1,
+          })
+        }
+      }
+
+      // Step 4: Sort by number of shared entities (strongest connections first)
+      const sorted = Array.from(connectionMap.values())
+        .sort((a, b) => b.entities.length - a.entities.length || b.maxWeight - a.maxWeight)
+        .slice(0, safeLimit)
+
+      if (sorted.length === 0) {
+        return reply.send({ success: true, data: { connections: [], entities, count: 0 } })
+      }
+
+      // Step 5: Fetch full signal details for connected signals
+      const connectedIds = sorted.map(c => c.signalId)
+      const signalResult = await db.raw(`
+        SELECT id, title, summary, category, severity, status,
+               reliability_score, location_name, country_code, tags,
+               created_at, alert_tier
+        FROM signals
+        WHERE id = ANY(?)
+      `, [connectedIds])
+
+      const signalMap = new Map<string, any>()
+      for (const s of (signalResult.rows ?? [])) {
+        signalMap.set(s.id, s)
+      }
+
+      const connections = sorted
+        .filter(c => signalMap.has(c.signalId))
+        .map(c => {
+          const s = signalMap.get(c.signalId)!
+          return {
+            id: s.id,
+            title: s.title,
+            summary: s.summary,
+            category: s.category,
+            severity: s.severity,
+            status: s.status,
+            reliabilityScore: s.reliability_score,
+            locationName: s.location_name,
+            countryCode: s.country_code,
+            tags: s.tags ?? [],
+            createdAt: s.created_at ? new Date(s.created_at).toISOString() : null,
+            alertTier: s.alert_tier,
+            // The key differentiator: HOW this signal is connected
+            connectedVia: c.entities.slice(0, 5), // Top 5 connecting entities
+            connectionStrength: c.maxWeight,
+            sharedEntityCount: c.entities.length,
+          }
+        })
+
+      return reply.send({
+        success: true,
+        data: {
+          connections,
+          entities: entities.map((e: any) => ({
+            id: e.id,
+            name: e.canonical_name,
+            type: e.type,
+            mentionCount: e.mention_count,
+          })),
+          count: connections.length,
+        },
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return reply.status(500).send({ success: false, error: message })
+    }
+  })
 }
 
 // ─── GDELT TV CLIPS — exported types + helpers (testable) ────────────────────

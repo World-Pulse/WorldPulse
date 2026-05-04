@@ -159,6 +159,9 @@ services:
       SCRAPE_INTERVAL_MS: 30000
       LOG_LEVEL: debug
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       default:
         aliases:

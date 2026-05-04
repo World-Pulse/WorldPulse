@@ -1,8 +1,10 @@
 /**
  * Embeddings Pipeline — Vector embeddings for semantic search & similarity
  *
- * Primary:  OpenAI text-embedding-3-small (1536 dims, ~$0.02/1M tokens)
- * Fallback: TF-IDF sparse vectors stored as dense 1536-dim approximation
+ * Provider hierarchy (first available wins):
+ *   1. Ollama + nomic-embed-text  (768 dims, free, local, ~50ms/signal)
+ *   2. OpenAI text-embedding-3-small (1536 dims, ~$0.02/1M tokens)
+ *   3. TF-IDF sparse fallback (whatever dim the active provider uses)
  *
  * Two modes:
  *   1. On-insert:  Embed each new signal as it arrives (non-blocking)
@@ -17,18 +19,122 @@ import { logger } from '../lib/logger'
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 
+const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434'
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'nomic-embed-text'
 const OPENAI_MODEL = 'text-embedding-3-small'
-const EMBEDDING_DIM = 1536
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? ''
+
+// Dimension determined by active provider
+const OLLAMA_DIM = 768
+const OPENAI_DIM = 1536
+
 const BATCH_SIZE = 50                     // Signals per batch cycle
 const MAX_TEXT_LENGTH = 8000              // Truncate text to ~2K tokens
 const RATE_LIMIT_DELAY_MS = 200           // Delay between API calls to avoid 429s
 const CACHE_TTL = 3600                    // Cache embedding status for 1 hour
 
+// ─── Provider Detection ────────────────────────────────────────────────────
+
+type EmbeddingProvider = 'ollama' | 'openai' | 'tfidf'
+
+let _detectedProvider: EmbeddingProvider | null = null
+let _activeDim: number = OLLAMA_DIM  // default; updated on first detection
+
+/**
+ * Detect which embedding provider is available.
+ * Caches result after first successful detection.
+ */
+async function detectProvider(): Promise<EmbeddingProvider> {
+  if (_detectedProvider) return _detectedProvider
+
+  // Try Ollama first — cheapest and fastest
+  try {
+    const res = await fetch(`${OLLAMA_HOST}/api/tags`, {
+      signal: AbortSignal.timeout(3000),
+    })
+    if (res.ok) {
+      const data = await res.json() as { models?: Array<{ name: string }> }
+      const models = data.models ?? []
+      const hasModel = models.some(m =>
+        m.name === OLLAMA_MODEL ||
+        m.name === `${OLLAMA_MODEL}:latest` ||
+        m.name.startsWith(`${OLLAMA_MODEL}:`)
+      )
+      if (hasModel) {
+        _detectedProvider = 'ollama'
+        _activeDim = OLLAMA_DIM
+        logger.info({ host: OLLAMA_HOST, model: OLLAMA_MODEL, dim: OLLAMA_DIM }, '[EMBED] Using Ollama provider')
+        return 'ollama'
+      }
+      logger.info({ models: models.map(m => m.name) }, '[EMBED] Ollama running but model not found, checking OpenAI')
+    }
+  } catch {
+    // Ollama not available
+  }
+
+  // Try OpenAI
+  if (OPENAI_API_KEY) {
+    _detectedProvider = 'openai'
+    _activeDim = OPENAI_DIM
+    logger.info({ dim: OPENAI_DIM }, '[EMBED] Using OpenAI provider')
+    return 'openai'
+  }
+
+  // Fallback to TF-IDF
+  _detectedProvider = 'tfidf'
+  _activeDim = OLLAMA_DIM  // Use 768 for TF-IDF too — smaller, faster
+  logger.info({ dim: _activeDim }, '[EMBED] Using TF-IDF fallback (no Ollama or OpenAI available)')
+  return 'tfidf'
+}
+
+function getActiveDim(): number {
+  return _activeDim
+}
+
+// ─── Ollama Client ──────────────────────────────────────────────────────────
+
+interface OllamaEmbeddingResponse {
+  embedding: number[]
+}
+
+/**
+ * Call Ollama embeddings API for a single text.
+ * Returns a 768-dim vector.
+ */
+async function ollamaEmbed(text: string): Promise<number[]> {
+  const response = await fetch(`${OLLAMA_HOST}/api/embeddings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: OLLAMA_MODEL,
+      prompt: text.substring(0, MAX_TEXT_LENGTH),
+    }),
+  })
+
+  if (!response.ok) {
+    const errBody = await response.text().catch(() => '')
+    throw new Error(`Ollama API ${response.status}: ${errBody.substring(0, 200)}`)
+  }
+
+  const json = (await response.json()) as OllamaEmbeddingResponse
+  return json.embedding
+}
+
+/**
+ * Batch embed via Ollama — sequentially since Ollama processes one at a time.
+ * Returns array of 768-dim vectors.
+ */
+async function ollamaEmbedBatch(texts: string[]): Promise<number[][]> {
+  const results: number[][] = []
+  for (const text of texts) {
+    results.push(await ollamaEmbed(text))
+  }
+  return results
+}
+
 // ─── OpenAI Client ──────────────────────────────────────────────────────────
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? ''
-
-interface EmbeddingResponse {
+interface OpenAIEmbeddingResponse {
   data: Array<{ embedding: number[]; index: number }>
   usage: { prompt_tokens: number; total_tokens: number }
 }
@@ -57,7 +163,7 @@ async function openaiEmbed(texts: string[]): Promise<number[][]> {
     throw new Error(`OpenAI API ${response.status}: ${errBody.substring(0, 200)}`)
   }
 
-  const json = (await response.json()) as EmbeddingResponse
+  const json = (await response.json()) as OpenAIEmbeddingResponse
   return json.data
     .sort((a, b) => a.index - b.index)
     .map(d => d.embedding)
@@ -66,12 +172,13 @@ async function openaiEmbed(texts: string[]): Promise<number[][]> {
 // ─── TF-IDF Fallback ────────────────────────────────────────────────────────
 
 /**
- * Simple TF-IDF-based embedding fallback when OpenAI is not available.
+ * Simple TF-IDF-based embedding fallback when no API provider is available.
  * Creates a deterministic sparse-to-dense projection using term hashing.
  * Not as good as neural embeddings but sufficient for basic clustering.
  */
-function tfidfEmbed(text: string): number[] {
-  const vec = new Float64Array(EMBEDDING_DIM)
+function tfidfEmbed(text: string, dim?: number): number[] {
+  const targetDim = dim ?? getActiveDim()
+  const vec = new Float64Array(targetDim)
   const words = text.toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
@@ -93,16 +200,16 @@ function tfidfEmbed(text: string): number[] {
     const hash3 = simpleHash(term + '_3')
 
     const weight = Math.log1p(freq) / Math.log1p(words.length) // normalized TF
-    vec[hash1 % EMBEDDING_DIM] += weight
-    vec[hash2 % EMBEDDING_DIM] -= weight * 0.5
-    vec[hash3 % EMBEDDING_DIM] += weight * 0.3
+    vec[hash1 % targetDim] += weight
+    vec[hash2 % targetDim] -= weight * 0.5
+    vec[hash3 % targetDim] += weight * 0.3
   }
 
   // L2 normalize
   let norm = 0
-  for (let i = 0; i < EMBEDDING_DIM; i++) norm += vec[i] * vec[i]
+  for (let i = 0; i < targetDim; i++) norm += vec[i] * vec[i]
   norm = Math.sqrt(norm) || 1
-  for (let i = 0; i < EMBEDDING_DIM; i++) vec[i] /= norm
+  for (let i = 0; i < targetDim; i++) vec[i] /= norm
 
   return Array.from(vec)
 }
@@ -119,24 +226,27 @@ function simpleHash(str: string): number {
 
 /**
  * Embed a single signal (called on-insert, non-blocking).
- * Tries OpenAI first, falls back to TF-IDF.
+ * Tries providers in order: Ollama → OpenAI → TF-IDF.
  */
 export async function embedSignal(signalId: string, title: string, summary: string): Promise<void> {
   try {
     const text = `${title}\n${summary ?? ''}`.trim()
     if (!text || text.length < 10) return
 
+    const provider = await detectProvider()
     let embedding: number[]
 
-    if (OPENAI_API_KEY) {
-      try {
+    try {
+      if (provider === 'ollama') {
+        embedding = await ollamaEmbed(text)
+      } else if (provider === 'openai') {
         const [vec] = await openaiEmbed([text])
         embedding = vec
-      } catch (err) {
-        logger.debug({ err, signalId }, '[EMBED] OpenAI failed, using TF-IDF fallback')
+      } else {
         embedding = tfidfEmbed(text)
       }
-    } else {
+    } catch (err) {
+      logger.debug({ err, signalId, provider }, '[EMBED] Provider failed, using TF-IDF fallback')
       embedding = tfidfEmbed(text)
     }
 
@@ -157,12 +267,12 @@ export async function embedSignal(signalId: string, title: string, summary: stri
  */
 export async function batchEmbedSignals(): Promise<{
   processed: number
-  openai: number
-  tfidf: number
+  provider: string
   errors: number
 }> {
   const start = Date.now()
-  let processed = 0, openaiCount = 0, tfidfCount = 0, errors = 0
+  let processed = 0, errors = 0
+  const provider = await detectProvider()
 
   try {
     // Find signals without embeddings (prioritize recent, high-reliability)
@@ -179,10 +289,38 @@ export async function batchEmbedSignals(): Promise<{
 
     const signals = missing.rows ?? []
     if (signals.length === 0) {
-      return { processed: 0, openai: 0, tfidf: 0, errors: 0 }
+      return { processed: 0, provider, errors: 0 }
     }
 
-    if (OPENAI_API_KEY) {
+    if (provider === 'ollama') {
+      // Ollama: process one-by-one (model handles one request at a time)
+      for (const signal of signals) {
+        try {
+          const text = `${signal.title}\n${signal.summary ?? ''}`.trim()
+          const embedding = await ollamaEmbed(text)
+          const vectorStr = `[${embedding.join(',')}]`
+          await db.raw(
+            `UPDATE signals SET embedding = ?::vector WHERE id = ? AND embedding IS NULL`,
+            [vectorStr, signal.id]
+          )
+          processed++
+        } catch (err) {
+          // Fall back to TF-IDF for this signal
+          try {
+            const text = `${signal.title}\n${signal.summary ?? ''}`.trim()
+            const embedding = tfidfEmbed(text)
+            const vectorStr = `[${embedding.join(',')}]`
+            await db.raw(
+              `UPDATE signals SET embedding = ?::vector WHERE id = ? AND embedding IS NULL`,
+              [vectorStr, signal.id]
+            )
+            processed++
+          } catch {
+            errors++
+          }
+        }
+      }
+    } else if (provider === 'openai') {
       // Batch OpenAI embeddings (process in groups of 20)
       const chunkSize = 20
       for (let i = 0; i < signals.length; i += chunkSize) {
@@ -191,8 +329,6 @@ export async function batchEmbedSignals(): Promise<{
 
         try {
           const embeddings = await openaiEmbed(texts)
-
-          // Bulk update with pgvector
           for (let j = 0; j < chunk.length; j++) {
             const vectorStr = `[${embeddings[j].join(',')}]`
             await db.raw(
@@ -200,16 +336,12 @@ export async function batchEmbedSignals(): Promise<{
               [vectorStr, chunk[j].id]
             )
             processed++
-            openaiCount++
           }
-
-          // Rate limit delay between chunks
           if (i + chunkSize < signals.length) {
             await sleep(RATE_LIMIT_DELAY_MS)
           }
         } catch (err) {
           logger.warn({ err, chunkStart: i }, '[EMBED] OpenAI batch failed, falling back to TF-IDF for chunk')
-          // Fallback to TF-IDF for this chunk
           for (const signal of chunk) {
             try {
               const text = `${signal.title}\n${signal.summary ?? ''}`.trim()
@@ -220,8 +352,7 @@ export async function batchEmbedSignals(): Promise<{
                 [vectorStr, signal.id]
               )
               processed++
-              tfidfCount++
-            } catch (e) {
+            } catch {
               errors++
             }
           }
@@ -239,17 +370,15 @@ export async function batchEmbedSignals(): Promise<{
             [vectorStr, signal.id]
           )
           processed++
-          tfidfCount++
-        } catch (err) {
+        } catch {
           errors++
         }
       }
     }
 
     const durationMs = Date.now() - start
-    const mode = OPENAI_API_KEY ? 'openai' : 'tfidf'
     logger.info(
-      { processed, openai: openaiCount, tfidf: tfidfCount, errors, durationMs, mode },
+      { processed, errors, durationMs, provider },
       `[EMBED] Batch embedding complete`
     )
 
@@ -265,14 +394,15 @@ export async function batchEmbedSignals(): Promise<{
       coverage_pct: Number(cRow.total) > 0
         ? Math.round((Number(cRow.embedded) / Number(cRow.total)) * 1000) / 10
         : 0,
-      mode,
+      provider,
+      dim: getActiveDim(),
       generated_at: new Date().toISOString(),
     })).catch(() => {})
 
-    return { processed, openai: openaiCount, tfidf: tfidfCount, errors }
+    return { processed, provider, errors }
   } catch (err) {
     logger.error({ err }, '[EMBED] Batch embedding failed')
-    return { processed, openai: openaiCount, tfidf: tfidfCount, errors }
+    return { processed, provider, errors }
   }
 }
 
