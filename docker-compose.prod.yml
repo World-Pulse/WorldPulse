@@ -203,7 +203,7 @@ services:
       LLM_API_URL:        ${LLM_API_URL:-}
       LLM_MODEL:          ${LLM_MODEL:-gpt-4o-mini}
       # Optional — Ollama embeddings (runs on host, not in Docker)
-      OLLAMA_HOST:        ${OLLAMA_HOST:-http://host.docker.internal:11434}
+      OLLAMA_HOST:        ${OLLAMA_HOST:-http://172.19.0.1:11434}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:

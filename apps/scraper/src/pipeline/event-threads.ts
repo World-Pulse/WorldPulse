@@ -70,6 +70,8 @@ export async function updateEventThreads(): Promise<{
     if (signals.length === 0) {
       // Still update thread statuses even if no new signals
       const statusUpdates = await updateThreadStatuses()
+      // Heartbeat — so the health check knows we're alive even when idle
+      await redis.setex('cortex:threads:heartbeat', 600, new Date().toISOString()).catch(() => {})
       return { processed: 0, matched: 0, created: 0, statusUpdates }
     }
 
@@ -213,7 +215,8 @@ export async function updateEventThreads(): Promise<{
       `[THREADS] Event thread cycle complete`
     )
 
-    // Cache latest stats for quick lookups
+    // Heartbeat + cache latest stats for quick lookups
+    await redis.setex('cortex:threads:heartbeat', 600, new Date().toISOString()).catch(() => {})
     await redis.setex('cortex:threads:stats', 300, JSON.stringify({
       processed, matched, created, statusUpdates,
       generated_at: new Date().toISOString(),

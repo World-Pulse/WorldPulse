@@ -120,19 +120,39 @@ async function checkThreadStatus(): Promise<SubsystemStatus> {
       statusMap[r.status] = Number(r.count)
     }
 
+    // Check Redis heartbeat first — the scraper writes this every cycle even when idle
+    const heartbeat = await redis.get('cortex:threads:heartbeat').catch(() => null)
+    let heartbeatAlive = false
+    if (heartbeat) {
+      const heartbeatAge = (Date.now() - new Date(heartbeat).getTime()) / 60000 // minutes
+      heartbeatAlive = heartbeatAge <= 10 // 10 min = 2 missed 5-min cycles
+    }
+
     const latest = await db('event_threads')
       .orderBy('last_updated', 'desc')
       .select('last_updated')
       .first()
 
-    const hoursSince = latest
+    const lastRun = heartbeat ?? latest?.last_updated?.toISOString?.() ?? null
+
+    // Healthy if heartbeat is alive OR a thread was updated in last 2 hours
+    const hoursSinceThread = latest
       ? (Date.now() - new Date(latest.last_updated).getTime()) / 3600000
       : null
 
+    let status: 'healthy' | 'degraded' | 'offline' = 'offline'
+    if (heartbeatAlive) {
+      status = 'healthy'
+    } else if (hoursSinceThread !== null && hoursSinceThread <= 2) {
+      status = 'healthy'
+    } else if (hoursSinceThread !== null || heartbeat) {
+      status = 'degraded'
+    }
+
     return {
       name: 'event_threads',
-      status: hoursSince !== null && hoursSince <= 2 ? 'healthy' : hoursSince !== null ? 'degraded' : 'offline',
-      last_run: latest?.last_updated?.toISOString?.() ?? null,
+      status,
+      last_run: lastRun,
       last_output: statusMap,
       error: null,
     }
