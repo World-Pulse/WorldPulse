@@ -195,23 +195,26 @@ export function startPulseScheduler(): void {
     }
   }, TWITTER_INTERVAL_MS)
 
-  // ── Cortex: nightly baselines ──────────────────────────────────────────
-  // At 3am UTC, compute yesterday's baselines and scan for anomalies.
+  // ── Cortex: nightly baselines + entity strengthening ───────────────────
+  // At 3am UTC: compute yesterday's baselines and scan for anomalies.
+  // At 4am UTC: run entity strengthening (co-occurrence, trends, dedup, importance).
   cortexTimer = setInterval(async () => {
     const hour = new Date().getUTCHours()
-    if (hour !== CORTEX_HOUR_UTC || alreadyPublished('cortex-baselines')) return
 
-    markPublished('cortex-baselines')
-    try {
-      console.log('[CORTEX] Running nightly baselines...')
-      const result = await runNightlyBaselines()
-      console.log(`[CORTEX] Nightly complete: ${result.baselines_stored} baselines, ${result.anomalies_detected} anomalies`)
-    } catch (err) {
-      console.error('[CORTEX] Nightly baselines failed:', err)
-      publishedToday.delete('cortex-baselines')
+    // 3am UTC: baselines
+    if (hour === CORTEX_HOUR_UTC && !alreadyPublished('cortex-baselines')) {
+      markPublished('cortex-baselines')
+      try {
+        console.log('[CORTEX] Running nightly baselines...')
+        const result = await runNightlyBaselines()
+        console.log(`[CORTEX] Nightly complete: ${result.baselines_stored} baselines, ${result.anomalies_detected} anomalies`)
+      } catch (err) {
+        console.error('[CORTEX] Nightly baselines failed:', err)
+        publishedToday.delete('cortex-baselines')
+      }
     }
 
-    // Entity strengthening at 4am UTC
+    // 4am UTC: entity strengthening (was previously unreachable — nested inside 3am guard)
     if (hour === ENTITY_HOUR_UTC && !alreadyPublished('cortex-entities')) {
       markPublished('cortex-entities')
       try {

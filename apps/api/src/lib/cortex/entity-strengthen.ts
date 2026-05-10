@@ -15,6 +15,7 @@
  * @module cortex/entity-strengthen
  */
 
+import { createHash } from 'crypto'
 import { db } from '../../db/postgres'
 import { redis } from '../../db/redis'
 
@@ -25,6 +26,19 @@ const CO_OCCURRENCE_WINDOW_DAYS = 14  // Look at last 2 weeks of signals
 const MAX_SIGNAL_IDS_PER_ENTITY = 200
 const FUZZY_MERGE_MAX_DISTANCE = 2    // Levenshtein distance threshold
 const IMPORTANCE_CACHE_TTL = 3600     // 1 hour
+
+// Titles/prefixes to strip when comparing person entities for dedup
+const TITLE_PREFIXES = [
+  'president', 'prime minister', 'minister', 'deputy minister',
+  'secretary', 'general secretary', 'vice president',
+  'king', 'queen', 'prince', 'princess', 'crown prince',
+  'emperor', 'sultan', 'emir', 'sheikh',
+  'general', 'admiral', 'colonel', 'commander', 'captain',
+  'dr', 'prof', 'professor', 'ambassador', 'senator',
+  'governor', 'mayor', 'chancellor', 'speaker',
+  'chairman', 'chairwoman', 'chairperson', 'ceo', 'cto', 'cfo',
+  'former', 'acting', 'interim', 'chief',
+]
 
 // ─── Co-occurrence Inference ─────────────────────────────────────────────────
 
@@ -217,39 +231,214 @@ export async function updateEntityTrends(): Promise<{ updated: number }> {
 // ─── Fuzzy Entity Merging ────────────────────────────────────────────────────
 
 /**
- * Find and merge duplicate entities with similar names.
- * Uses PostgreSQL similarity() for trigram matching.
+ * Strip title prefixes from a person entity name for comparison.
+ * "Minister Benjamin Netanyahu" → "Benjamin Netanyahu"
+ * "Dr. Jane Smith" → "Jane Smith"
+ */
+function stripTitles(name: string): string {
+  let stripped = name.trim()
+
+  // Remove leading "Mr.", "Mrs.", "Ms.", "Dr." etc.
+  stripped = stripped.replace(/^(mr|mrs|ms|dr|prof)\.?\s+/i, '')
+
+  // Remove multi-word title prefixes (longest match first)
+  const sortedPrefixes = [...TITLE_PREFIXES].sort((a, b) => b.length - a.length)
+  for (const prefix of sortedPrefixes) {
+    const regex = new RegExp(`^${prefix}\\s+`, 'i')
+    if (regex.test(stripped)) {
+      stripped = stripped.replace(regex, '')
+      // Only strip one prefix layer — "Former Prime Minister" → "Prime Minister X" → "X" would over-strip
+      break
+    }
+  }
+
+  // Second pass for stacked titles: "Former Prime Minister"
+  for (const prefix of sortedPrefixes) {
+    const regex = new RegExp(`^${prefix}\\s+`, 'i')
+    if (regex.test(stripped)) {
+      stripped = stripped.replace(regex, '')
+      break
+    }
+  }
+
+  return stripped.trim()
+}
+
+/**
+ * Check if one name contains the other after title stripping.
+ * Returns the shorter name (the one being contained) or null if no containment.
+ */
+function checkContainment(nameA: string, nameB: string, type: string): 'a_contains_b' | 'b_contains_a' | null {
+  const a = type === 'person' ? stripTitles(nameA).toLowerCase() : nameA.toLowerCase()
+  const b = type === 'person' ? stripTitles(nameB).toLowerCase() : nameB.toLowerCase()
+
+  // Require the contained name to be at least 4 chars (avoid matching "US" inside "Russia")
+  if (a.length < 4 || b.length < 4) return null
+
+  // Don't do containment for very short names that happen to appear in longer unrelated ones
+  if (a === b) return null // Exact match after stripping — very high confidence, but handled by trigram
+
+  // Check if stripped names match (e.g. "Netanyahu" vs "Minister Benjamin Netanyahu" → both strip to contain "Netanyahu")
+  // Also check if one is a suffix of the other (last name matching)
+  const aWords = a.split(/\s+/)
+  const bWords = b.split(/\s+/)
+
+  // Last-name match for persons: "Netanyahu" matches "Benjamin Netanyahu"
+  if (type === 'person') {
+    const aLast = aWords[aWords.length - 1]
+    const bLast = bWords[bWords.length - 1]
+
+    if (aLast && bLast && aLast === bLast && aLast.length >= 4) {
+      // Same last name — shorter one is the subset
+      if (aWords.length < bWords.length) return 'b_contains_a'
+      if (bWords.length < aWords.length) return 'a_contains_b'
+    }
+  }
+
+  // General containment: "NATO" inside "NATO Forces" for orgs
+  if (b.includes(a) && a.length >= 4 && b.length > a.length + 2) return 'b_contains_a'
+  if (a.includes(b) && b.length >= 4 && a.length > b.length + 2) return 'a_contains_b'
+
+  return null
+}
+
+/**
+ * Find and merge duplicate entities using multiple strategies:
+ * 1. Trigram similarity (pg_trgm) — catches spelling variations
+ * 2. Containment matching — catches "Netanyahu" vs "Minister Benjamin Netanyahu"
+ * 3. Title-stripped exact match — catches "President Biden" vs "Biden"
  */
 export async function findMergeCandidates(): Promise<Array<{
   entity_a: { id: string; name: string; type: string; count: number }
   entity_b: { id: string; name: string; type: string; count: number }
   similarity: number
+  match_type: 'trigram' | 'containment' | 'title_strip'
 }>> {
-  // Use trigram similarity to find near-duplicates of the same type
-  const candidates = await db.raw(`
-    SELECT
-      a.id as a_id, a.canonical_name as a_name, a.type as a_type, a.mention_count as a_count,
-      b.id as b_id, b.canonical_name as b_name, b.type as b_type, b.mention_count as b_count,
-      similarity(a.canonical_name, b.canonical_name) as sim
-    FROM entity_nodes a
-    JOIN entity_nodes b ON a.type = b.type AND a.id < b.id
-    WHERE similarity(a.canonical_name, b.canonical_name) > 0.7
-      AND a.canonical_name != b.canonical_name
-      AND length(a.canonical_name) >= 3
-    ORDER BY sim DESC
-    LIMIT 50
-  `)
+  const candidates: Array<{
+    entity_a: { id: string; name: string; type: string; count: number }
+    entity_b: { id: string; name: string; type: string; count: number }
+    similarity: number
+    match_type: 'trigram' | 'containment' | 'title_strip'
+  }> = []
 
-  return (candidates.rows ?? []).map((r: any) => ({
-    entity_a: { id: r.a_id, name: r.a_name, type: r.a_type, count: Number(r.a_count) },
-    entity_b: { id: r.b_id, name: r.b_name, type: r.b_type, count: Number(r.b_count) },
-    similarity: Number(r.sim),
-  }))
+  const seen = new Set<string>()
+
+  // Strategy 1: Trigram similarity (existing approach)
+  try {
+    const trigramResults = await db.raw(`
+      SELECT
+        a.id as a_id, a.canonical_name as a_name, a.type as a_type, a.mention_count as a_count,
+        b.id as b_id, b.canonical_name as b_name, b.type as b_type, b.mention_count as b_count,
+        similarity(a.canonical_name, b.canonical_name) as sim
+      FROM entity_nodes a
+      JOIN entity_nodes b ON a.type = b.type AND a.id < b.id
+      WHERE similarity(a.canonical_name, b.canonical_name) > 0.6
+        AND a.canonical_name != b.canonical_name
+        AND length(a.canonical_name) >= 3
+      ORDER BY sim DESC
+      LIMIT 100
+    `)
+
+    for (const r of trigramResults.rows ?? []) {
+      const key = [r.a_id, r.b_id].sort().join('::')
+      if (seen.has(key)) continue
+      seen.add(key)
+      candidates.push({
+        entity_a: { id: r.a_id, name: r.a_name, type: r.a_type, count: Number(r.a_count) },
+        entity_b: { id: r.b_id, name: r.b_name, type: r.b_type, count: Number(r.b_count) },
+        similarity: Number(r.sim),
+        match_type: 'trigram',
+      })
+    }
+  } catch {
+    console.log('[CORTEX] pg_trgm not available — skipping trigram matching')
+  }
+
+  // Strategy 2: Containment + title-strip matching for person entities
+  // Get top person entities by mention count
+  const persons = await db('entity_nodes')
+    .where('type', 'person')
+    .where('mention_count', '>=', 2)
+    .select('id', 'canonical_name', 'type', 'mention_count')
+    .orderBy('mention_count', 'desc')
+    .limit(500)
+
+  for (let i = 0; i < persons.length; i++) {
+    for (let j = i + 1; j < persons.length; j++) {
+      const a = persons[i]
+      const b = persons[j]
+      const key = [a.id, b.id].sort().join('::')
+      if (seen.has(key)) continue
+
+      // Check title-stripped exact match
+      const strippedA = stripTitles(a.canonical_name).toLowerCase()
+      const strippedB = stripTitles(b.canonical_name).toLowerCase()
+
+      if (strippedA === strippedB && strippedA.length >= 4) {
+        seen.add(key)
+        candidates.push({
+          entity_a: { id: a.id, name: a.canonical_name, type: a.type, count: a.mention_count },
+          entity_b: { id: b.id, name: b.canonical_name, type: b.type, count: b.mention_count },
+          similarity: 0.95, // Very high confidence
+          match_type: 'title_strip',
+        })
+        continue
+      }
+
+      // Check containment
+      const containment = checkContainment(a.canonical_name, b.canonical_name, 'person')
+      if (containment) {
+        seen.add(key)
+        candidates.push({
+          entity_a: { id: a.id, name: a.canonical_name, type: a.type, count: a.mention_count },
+          entity_b: { id: b.id, name: b.canonical_name, type: b.type, count: b.mention_count },
+          similarity: 0.88, // High confidence for last-name/containment match
+          match_type: 'containment',
+        })
+      }
+    }
+  }
+
+  // Strategy 3: Containment for organisations (NATO vs NATO Forces, UN vs United Nations)
+  const orgs = await db('entity_nodes')
+    .where('type', 'organisation')
+    .where('mention_count', '>=', 2)
+    .select('id', 'canonical_name', 'type', 'mention_count')
+    .orderBy('mention_count', 'desc')
+    .limit(300)
+
+  for (let i = 0; i < orgs.length; i++) {
+    for (let j = i + 1; j < orgs.length; j++) {
+      const a = orgs[i]
+      const b = orgs[j]
+      const key = [a.id, b.id].sort().join('::')
+      if (seen.has(key)) continue
+
+      const containment = checkContainment(a.canonical_name, b.canonical_name, 'organisation')
+      if (containment) {
+        seen.add(key)
+        candidates.push({
+          entity_a: { id: a.id, name: a.canonical_name, type: a.type, count: a.mention_count },
+          entity_b: { id: b.id, name: b.canonical_name, type: b.type, count: b.mention_count },
+          similarity: 0.82,
+          match_type: 'containment',
+        })
+      }
+    }
+  }
+
+  // Sort by similarity descending
+  candidates.sort((a, b) => b.similarity - a.similarity)
+
+  console.log(`[CORTEX] Found ${candidates.length} merge candidates (${candidates.filter(c => c.match_type === 'trigram').length} trigram, ${candidates.filter(c => c.match_type === 'containment').length} containment, ${candidates.filter(c => c.match_type === 'title_strip').length} title-strip)`)
+
+  return candidates.slice(0, 100) // Cap at 100 per cycle
 }
 
 /**
  * Merge entity B into entity A (A keeps its ID, B's signals move to A).
- * High-confidence merges (similarity > 0.85 + same type) can be auto-merged.
+ * For containment merges, keeps the more complete name (longer) unless
+ * the shorter name has significantly more mentions.
  */
 export async function mergeEntities(keepId: string, mergeId: string): Promise<boolean> {
   const keep = await db('entity_nodes').where('id', keepId).first()
@@ -357,26 +546,57 @@ export async function computeImportanceScores(): Promise<{ scored: number }> {
 
 // ─── Auto-merge high-confidence duplicates ───────────────────────────────────
 
-export async function autoMergeDuplicates(): Promise<{ merged: number }> {
+export async function autoMergeDuplicates(): Promise<{ merged: number; skipped: number }> {
   const candidates = await findMergeCandidates()
   let merged = 0
+  let skipped = 0
 
   for (const c of candidates) {
-    // Only auto-merge very high confidence (>0.85 similarity)
-    if (c.similarity < 0.85) continue
+    // Auto-merge thresholds per match type
+    const threshold =
+      c.match_type === 'title_strip' ? 0.90 :   // "President Biden" + "Biden" — very safe
+      c.match_type === 'containment' ? 0.85 :    // "Netanyahu" + "Benjamin Netanyahu" — safe
+      0.80                                        // trigram — lowered from 0.85 to catch more spelling variants
 
-    // Keep the entity with more mentions
-    const keepId = c.entity_a.count >= c.entity_b.count ? c.entity_a.id : c.entity_b.id
-    const mergeId = keepId === c.entity_a.id ? c.entity_b.id : c.entity_a.id
+    if (c.similarity < threshold) {
+      skipped++
+      continue
+    }
+
+    // For containment merges of persons, keep the more complete (longer) name
+    // unless the shorter name has 5x more mentions (it's the canonical form)
+    let keepId: string, mergeId: string
+
+    if (c.match_type === 'containment' || c.match_type === 'title_strip') {
+      const aLen = c.entity_a.name.length
+      const bLen = c.entity_b.name.length
+
+      if (aLen > bLen && c.entity_b.count < c.entity_a.count * 5) {
+        // A is longer and B doesn't overwhelmingly dominate — keep A
+        keepId = c.entity_a.id
+        mergeId = c.entity_b.id
+      } else if (bLen > aLen && c.entity_a.count < c.entity_b.count * 5) {
+        keepId = c.entity_b.id
+        mergeId = c.entity_a.id
+      } else {
+        // Same length or overwhelming mention count — keep more mentioned
+        keepId = c.entity_a.count >= c.entity_b.count ? c.entity_a.id : c.entity_b.id
+        mergeId = keepId === c.entity_a.id ? c.entity_b.id : c.entity_a.id
+      }
+    } else {
+      // Trigram: keep entity with more mentions
+      keepId = c.entity_a.count >= c.entity_b.count ? c.entity_a.id : c.entity_b.id
+      mergeId = keepId === c.entity_a.id ? c.entity_b.id : c.entity_a.id
+    }
 
     const success = await mergeEntities(keepId, mergeId)
     if (success) merged++
   }
 
   if (merged > 0) {
-    console.log(`[CORTEX] Auto-merged ${merged} duplicate entities`)
+    console.log(`[CORTEX] Auto-merged ${merged} duplicate entities (${skipped} below threshold)`)
   }
-  return { merged }
+  return { merged, skipped }
 }
 
 // ─── Full cycle ──────────────────────────────────────────────────────────────
@@ -392,6 +612,7 @@ export async function runEntityStrengtheningCycle(): Promise<{
   edges_created: number
   trends_updated: number
   entities_merged: number
+  merge_candidates_skipped: number
   entities_scored: number
 }> {
   console.log('[CORTEX] Running entity strengthening cycle...')
@@ -407,6 +628,7 @@ export async function runEntityStrengtheningCycle(): Promise<{
     edges_created: coOccurrence.edges_created,
     trends_updated: trends.updated,
     entities_merged: merges.merged,
+    merge_candidates_skipped: merges.skipped,
     entities_scored: importance.scored,
   }
 }

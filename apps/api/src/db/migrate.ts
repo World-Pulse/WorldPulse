@@ -757,6 +757,49 @@ async function run() {
   // Fix: weight column was created as INTEGER in early deploys — must be REAL for decimal weights (0.0–1.0)
   await db.raw(`ALTER TABLE entity_edges ALTER COLUMN weight TYPE REAL`)
 
+  // ─── Signal Baselines (Phase 1.6.1) ─────────────────────────────────────────
+  // Daily signal counts by category × region × severity for rolling average
+  // and z-score anomaly detection.
+
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS signal_baselines (
+      id                 SERIAL PRIMARY KEY,
+      date               DATE NOT NULL,
+      category           TEXT NOT NULL,
+      region             TEXT NOT NULL DEFAULT 'global',
+      severity           TEXT NOT NULL DEFAULT 'all',
+      signal_count       INTEGER NOT NULL DEFAULT 0,
+      avg_reliability    REAL NOT NULL DEFAULT 0,
+      corroborated_count INTEGER NOT NULL DEFAULT 0,
+      day_of_week        SMALLINT NOT NULL DEFAULT 0,
+      created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(date, category, region, severity)
+    )
+  `)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_signal_baselines_date ON signal_baselines (date)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_signal_baselines_category ON signal_baselines (category)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_signal_baselines_category_region ON signal_baselines (category, region)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_signal_baselines_dow ON signal_baselines (day_of_week)`)
+
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS signal_anomalies (
+      id                 SERIAL PRIMARY KEY,
+      date               DATE NOT NULL,
+      category           TEXT NOT NULL,
+      region             TEXT NOT NULL DEFAULT 'global',
+      current_count      INTEGER NOT NULL,
+      baseline_avg       REAL NOT NULL,
+      baseline_stddev    REAL NOT NULL,
+      z_score            REAL NOT NULL,
+      direction          TEXT NOT NULL DEFAULT 'above',
+      window             TEXT NOT NULL DEFAULT '30d',
+      created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_signal_anomalies_date ON signal_anomalies (date)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_signal_anomalies_category ON signal_anomalies (category)`)
+  await db.raw(`CREATE INDEX IF NOT EXISTS idx_signal_anomalies_z_score ON signal_anomalies (z_score DESC)`)
+
   console.log('✅  Migrations complete.')
 }
 

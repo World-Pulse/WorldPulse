@@ -28,7 +28,7 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? ''
 const OLLAMA_DIM = 768
 const OPENAI_DIM = 1536
 
-const BATCH_SIZE = 50                     // Signals per batch cycle
+const BATCH_SIZE = 200                    // Signals per batch cycle (bumped from 50 to accelerate backfill)
 const MAX_TEXT_LENGTH = 8000              // Truncate text to ~2K tokens
 const RATE_LIMIT_DELAY_MS = 200           // Delay between API calls to avoid 429s
 const CACHE_TTL = 3600                    // Cache embedding status for 1 hour

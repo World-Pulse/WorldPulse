@@ -179,8 +179,8 @@ export async function updateEventThreads(): Promise<{
           category: signal.category,
           status: 'developing',
           peak_severity: signal.severity ?? 'low',
-          region: signal.region,
-          country_code: signal.country_code,
+          region: signal.region?.substring(0, 100),
+          country_code: signal.country_code?.substring(0, 2),
           signal_count: 1,
           first_seen: signal.created_at,
           last_updated: new Date(),
@@ -197,8 +197,8 @@ export async function updateEventThreads(): Promise<{
           id: thread.id,
           title: signal.title,
           category: signal.category,
-          region: signal.region,
-          country_code: signal.country_code,
+          region: signal.region?.substring(0, 100),
+          country_code: signal.country_code?.substring(0, 2),
         })
         threadTags[thread.id] = signalTags
 
