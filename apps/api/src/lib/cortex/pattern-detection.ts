@@ -69,56 +69,106 @@ const PATTERN_CACHE_TTL = 3600
 // ─── Learned Causal Chains ───────────────────────────────────────────────────
 
 /**
- * Analyze correlation data to discover which category pairs actually co-occur
- * within 48h windows, ranked by frequency and confidence.
+ * Discover actual causal relationships between signals by requiring
+ * shared entity overlap — not just "same thread, different category."
+ *
+ * A causal chain requires:
+ *   1. Two signals sharing at least one entity (person, org, country)
+ *   2. Different categories (cross-domain impact)
+ *   3. Temporal ordering (cause precedes effect within 48h)
+ *   4. Both signals have medium+ severity
+ *
+ * Confidence is based on entity overlap count and source corroboration,
+ * not just raw co-occurrence frequency.
  */
 export async function learnCausalChains(
   days: number = 30,
 ): Promise<LearnedCausalChain[]> {
-  console.log('[CORTEX] Learning causal chains from correlation data...')
+  console.log('[CORTEX] Learning entity-linked causal chains...')
 
   const cutoff = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString()
 
-  // Find signal pairs that were correlated (in same event thread or cluster)
-  // and have different categories
+  // Find signal pairs that share entities, have different categories,
+  // and occur within a time window with proper temporal ordering.
   const pairs = await db.raw(`
+    WITH entity_signal_pairs AS (
+      SELECT DISTINCT
+        en.canonical_name as entity_name,
+        unnest(en.signal_ids) as signal_id
+      FROM entity_nodes en
+      WHERE en.mention_count >= 2
+    )
     SELECT
       s1.category as source_cat,
       s2.category as target_cat,
-      COUNT(*) as pair_count,
-      AVG(EXTRACT(EPOCH FROM (s2.published_at - s1.published_at)) / 3600) as avg_delta_hours,
-      json_agg(json_build_object('source_id', s1.id, 'target_id', s2.id) ORDER BY s1.published_at DESC) as examples
-    FROM event_thread_signals ets1
-    JOIN event_thread_signals ets2
-      ON ets1.thread_id = ets2.thread_id
-      AND ets1.signal_id != ets2.signal_id
-    JOIN signals s1 ON ets1.signal_id = s1.id
-    JOIN signals s2 ON ets2.signal_id = s2.id
+      COUNT(DISTINCT esp1.entity_name) as shared_entity_count,
+      COUNT(DISTINCT s1.id || '|' || s2.id) as pair_count,
+      AVG(EXTRACT(EPOCH FROM (s2.created_at - s1.created_at)) / 3600) as avg_delta_hours,
+      array_agg(DISTINCT esp1.entity_name) as shared_entities,
+      json_agg(DISTINCT jsonb_build_object(
+        'source_id', s1.id,
+        'target_id', s2.id,
+        'source_title', LEFT(s1.title, 80),
+        'target_title', LEFT(s2.title, 80),
+        'shared_entity', esp1.entity_name
+      )) as examples
+    FROM entity_signal_pairs esp1
+    JOIN entity_signal_pairs esp2
+      ON esp1.entity_name = esp2.entity_name
+      AND esp1.signal_id != esp2.signal_id
+    JOIN signals s1 ON esp1.signal_id::uuid = s1.id
+    JOIN signals s2 ON esp2.signal_id::uuid = s2.id
     WHERE s1.category != s2.category
-      AND s1.published_at >= ?
-      AND s1.published_at < s2.published_at
-      AND EXTRACT(EPOCH FROM (s2.published_at - s1.published_at)) / 3600 <= ?
+      AND s1.created_at >= ?
+      AND s1.created_at < s2.created_at
+      AND EXTRACT(EPOCH FROM (s2.created_at - s1.created_at)) / 3600 <= ?
+      AND EXTRACT(EPOCH FROM (s2.created_at - s1.created_at)) / 3600 >= 0.5
+      AND s1.severity IN ('critical', 'high', 'medium')
+      AND s2.severity IN ('critical', 'high', 'medium')
+      AND s1.source_count >= 2
     GROUP BY s1.category, s2.category
-    HAVING COUNT(*) >= ?
-    ORDER BY COUNT(*) DESC
-    LIMIT 30
+    HAVING COUNT(DISTINCT s1.id || '|' || s2.id) >= ?
+    ORDER BY COUNT(DISTINCT esp1.entity_name) DESC, COUNT(DISTINCT s1.id || '|' || s2.id) DESC
+    LIMIT 20
   `, [cutoff, CHAIN_WINDOW_HOURS, CHAIN_MIN_OCCURRENCES])
 
-  const chains: LearnedCausalChain[] = (pairs.rows ?? []).map((r: any) => ({
-    source_category: r.source_cat,
-    target_category: r.target_cat,
-    co_occurrence_count: Number(r.pair_count),
-    avg_time_delta_hours: Math.round(Number(r.avg_delta_hours) * 10) / 10,
-    confidence: Math.min(0.9, Number(r.pair_count) / 20), // Normalize to 0-0.9
-    example_signals: (r.examples ?? []).slice(0, 3),
-  }))
+  const chains: LearnedCausalChain[] = (pairs.rows ?? []).map((r: any) => {
+    const entityCount = Number(r.shared_entity_count)
+    const pairCount = Number(r.pair_count)
+    // Confidence based on: entity overlap (primary) + pair frequency (secondary)
+    // More shared entities = stronger causal link; more occurrences = more reliable
+    const confidence = Math.min(0.95,
+      Math.min(0.6, entityCount / 5) +   // up to 0.6 from entity overlap
+      Math.min(0.35, pairCount / 30)      // up to 0.35 from frequency
+    )
 
-  console.log(`[CORTEX] Discovered ${chains.length} causal chains`)
-  for (const chain of chains.slice(0, 5)) {
-    console.log(`  ${chain.source_category} → ${chain.target_category}: ${chain.co_occurrence_count}x (avg ${chain.avg_time_delta_hours}h delta)`)
+    // Deduplicate examples: pick ones with different entity links
+    const exampleMap = new Map<string, any>()
+    for (const ex of (r.examples ?? [])) {
+      const key = `${ex.source_id}|${ex.target_id}`
+      if (!exampleMap.has(key)) exampleMap.set(key, ex)
+    }
+
+    return {
+      source_category: r.source_cat,
+      target_category: r.target_cat,
+      co_occurrence_count: pairCount,
+      avg_time_delta_hours: Math.round(Number(r.avg_delta_hours) * 10) / 10,
+      confidence: Math.round(confidence * 100) / 100,
+      example_signals: [...exampleMap.values()].slice(0, 3),
+      shared_entities: (r.shared_entities ?? []).slice(0, 5),
+    }
+  })
+
+  // Filter out low-confidence noise
+  const meaningful = chains.filter(c => c.confidence >= 0.15)
+
+  console.log(`[CORTEX] Discovered ${meaningful.length} entity-linked causal chains (filtered from ${chains.length})`)
+  for (const chain of meaningful.slice(0, 5)) {
+    console.log(`  ${chain.source_category} → ${chain.target_category}: ${chain.co_occurrence_count} pairs via ${(chain as any).shared_entities?.join(', ')}`)
   }
 
-  return chains
+  return meaningful
 }
 
 // ─── Cross-Cluster Bridging ──────────────────────────────────────────────────

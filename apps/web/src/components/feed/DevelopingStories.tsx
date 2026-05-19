@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -38,7 +39,6 @@ const SEVERITY_COLORS: Record<string, string> = {
 export function DevelopingStories() {
   const [threads, setThreads] = useState<EventThread[]>([])
   const [loading, setLoading] = useState(true)
-  const [expanded, setExpanded] = useState<string | null>(null)
 
   useEffect(() => {
     fetchThreads()
@@ -88,10 +88,10 @@ export function DevelopingStories() {
 
         <div className="space-y-2">
           {display.map(thread => (
-            <div
+            <Link
               key={thread.id}
-              className="rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.02)] p-3 cursor-pointer hover:border-[rgba(255,255,255,0.15)] transition-all"
-              onClick={() => setExpanded(expanded === thread.id ? null : thread.id)}
+              href={`/threads/${thread.id}`}
+              className="block rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.02)] p-3 cursor-pointer hover:border-[rgba(255,255,255,0.15)] hover:bg-[rgba(255,255,255,0.04)] transition-all group"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
@@ -108,7 +108,7 @@ export function DevelopingStories() {
                       </span>
                     )}
                   </div>
-                  <p className="text-[13px] text-wp-text1 line-clamp-2 leading-snug">
+                  <p className="text-[13px] text-wp-text1 line-clamp-2 leading-snug group-hover:text-wp-cyan transition-colors">
                     {thread.title}
                   </p>
                 </div>
@@ -120,27 +120,13 @@ export function DevelopingStories() {
                 </div>
               </div>
 
-              {/* Expanded view */}
-              {expanded === thread.id && thread.summary && (
-                <div className="mt-2 pt-2 border-t border-[rgba(255,255,255,0.07)]">
-                  <p className="text-[12px] text-wp-text2 leading-relaxed">
-                    {thread.summary}
-                  </p>
-                  {thread.related_entities.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {thread.related_entities.slice(0, 5).map((entity, i) => (
-                        <span key={i} className="text-[10px] text-wp-text3 bg-[rgba(255,255,255,0.05)] px-1.5 py-0.5 rounded">
-                          {entity}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  <div className="text-[10px] text-wp-text3 mt-2 font-mono">
-                    Last update: {new Date(thread.last_updated).toRelativeTimeString?.() ?? timeAgo(thread.last_updated)}
-                  </div>
-                </div>
+              {/* Preview — show summary inline */}
+              {thread.summary && (
+                <p className="text-[11px] text-wp-text3 mt-1.5 line-clamp-1 leading-snug">
+                  {thread.summary}
+                </p>
               )}
-            </div>
+            </Link>
           ))}
         </div>
       </div>
