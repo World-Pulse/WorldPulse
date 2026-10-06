@@ -267,6 +267,7 @@ services:
       - ./.certbot/www:/var/www/certbot:ro
       - ./.certbot/conf:/etc/letsencrypt:ro
       - uploads_data:/var/www/uploads:ro
+      - ./logs/public:/var/www/ops:ro
     networks:
       - wp_net
     healthcheck:

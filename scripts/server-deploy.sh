@@ -40,6 +40,7 @@ log()    { echo "[deploy $(date '+%H:%M:%S')] $*"; }
 finish() {  # finish <status> <message>
   echo "$1" > "$STATUS_FILE"
   log "$2"
+  bash scripts/ops-status.sh >/dev/null 2>&1 || true
   echo "DEPLOY_RESULT=$1"
   [ "$1" = "success" ] && exit 0 || exit 1
 }
@@ -50,7 +51,10 @@ log "Deploying ${SHA}"
 
 # ── 1. Disk space guard ──────────────────────────────────────────────────────
 if [ "$(free_gb)" -lt 10 ]; then
-  log "Low disk ($(free_gb)G free) — clearing Docker build cache and unused images"
+  log "Low disk ($(free_gb)G free) — emptying oversized logs, clearing Docker leftovers"
+  find /var/lib/docker/containers -name '*-json.log' -size +500M -exec truncate -s 0 {} \; 2>/dev/null || true
+  docker rm -f wp_clickhouse >/dev/null 2>&1 || true   # unused leftover from early development
+  journalctl --vacuum-size=200M >/dev/null 2>&1 || true
   docker builder prune -af --filter until=24h >/dev/null 2>&1 || true
   docker image prune -af --filter until=72h >/dev/null 2>&1 || true
 fi
@@ -106,6 +110,9 @@ rollback() {
 
 # nginx caches container IPs, so reload it after each swap (avoids 502s)
 reload_nginx() { docker exec wp_nginx nginx -s reload >/dev/null 2>&1 || true; }
+
+# Make sure the supporting services exist and run (recreates any that went missing)
+$COMPOSE up -d --no-recreate postgres redis meilisearch zookeeper kafka
 
 $COMPOSE up -d --no-deps --force-recreate api
 wait_healthy wp_api 180 || rollback "API failed its health check"

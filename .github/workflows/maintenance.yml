@@ -1,0 +1,30 @@
+name: Server maintenance
+
+# Every day the server cleans up after itself, renews the certificate if due,
+# restarts anything that stopped, and publishes /ops-status.json.
+# Uses the same SERVER_HOST / SERVER_SSH_KEY secrets as the deploy.
+on:
+  schedule:
+    - cron: '41 8 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  maintain:
+    if: github.repository == 'World-Pulse/WorldPulse-v2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Run maintenance on the server
+        env:
+          HOST: ${{ secrets.SERVER_HOST }}
+          SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -T 15 -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/deploy_key -o ServerAliveInterval=30 root@"$HOST" \
+            "cd /opt/worldpulse && bash scripts/server-maintenance.sh"
