@@ -25,6 +25,8 @@ interface ServiceCheck {
 interface HealthResponse {
   status: ServiceStatus
   version: string
+  /** Git commit this build was made from (set by scripts/server-deploy.sh). */
+  commit: string
   uptime_s: number
   timestamp: string
   map_signals_with_geo: number
@@ -135,6 +137,7 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
             properties: {
               status:                { type: 'string', enum: ['ok', 'degraded', 'down'] },
               version:               { type: 'string' },
+              commit:                { type: 'string', description: 'Git commit of the running build' },
               uptime_s:              { type: 'number' },
               timestamp:             { type: 'string', format: 'date-time' },
               map_signals_with_geo:    { type: 'number', description: 'Count of geo-located verified signals in last 24h' },
@@ -212,6 +215,7 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
       const body: HealthResponse = {
         status:                overall,
         version:               process.env.npm_package_version ?? '0.1.0',
+        commit:                process.env.GIT_SHA ?? 'unknown',
         uptime_s:              Math.floor(process.uptime()),
         timestamp:             new Date().toISOString(),
         map_signals_with_geo:  mapSignalsWithGeo,

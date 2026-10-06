@@ -28,7 +28,7 @@ exec 9>/var/lock/worldpulse-deploy.lock
 flock -n 9 || { echo "Another deploy is already running — exiting."; exit 1; }
 
 STATUS_FILE="logs/deploy.status"
-SHA="${1:-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)}"
+SHA="${1:-$(git rev-parse --short=7 HEAD 2>/dev/null || echo unknown)}"
 WARNINGS=""
 
 COMPOSE="docker compose -f docker-compose.prod.yml"

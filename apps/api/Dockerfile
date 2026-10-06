@@ -39,6 +39,9 @@ RUN mkdir -p /app/uploads/post-media && chown -R worldpulse:nodejs /app/uploads
 
 USER worldpulse
 EXPOSE 3001
+# Exposed in /health as "commit" so automation can see which build is live
+ARG GIT_SHA=unknown
+ENV GIT_SHA=$GIT_SHA
 ENV NODE_ENV=production
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
   CMD wget -qO- http://127.0.0.1:3001/health || exit 1
