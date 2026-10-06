@@ -59,4 +59,5 @@ worldpulse_autopilot.py
 # Misc
 *.tmp
 coverage/
-.github/workflows/
+# Unused legacy Kubernetes CI template — deploy.yml and watchdog.yml are tracked
+.github/workflows/ci.yml

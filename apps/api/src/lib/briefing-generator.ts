@@ -400,7 +400,7 @@ async function generateWithLLM(prompt: string): Promise<{ text: string; model: s
   const geminiKey = process.env.GEMINI_API_KEY
   if (geminiKey) {
     try {
-      const model = process.env.GEMINI_MODEL ?? 'gemini-2.0-flash'
+      const model = process.env.GEMINI_MODEL ?? 'gemini-3.6-flash' // 2.0-flash shut down 2026-06-01
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
         {

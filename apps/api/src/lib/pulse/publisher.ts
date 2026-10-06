@@ -190,7 +190,9 @@ async function callAnthropic(
       system: systemPrompt,
       messages: [{ role: 'user', content: prompt }],
       max_tokens: maxTokens,
-      temperature,
+      // No temperature: Claude 4.7+ models reject non-default values (400 error).
+      // The old default (claude-sonnet-4-20250514) was retired 2026-06-15; deep-tier
+      // calls failed from then on, falling back to OpenAI only when a key was set.
     }),
   })
 
@@ -255,7 +257,7 @@ export async function generateContent(
       const model = process.env.PULSE_OPENAI_MODEL ?? 'gpt-4o-mini'
       return callOpenAI(prompt, systemPrompt, maxTokens, model, temperature)
     } else {
-      const model = process.env.PULSE_ANTHROPIC_MODEL ?? 'claude-sonnet-4-20250514'
+      const model = process.env.PULSE_ANTHROPIC_MODEL ?? 'claude-sonnet-5-5'
       return callAnthropic(prompt, systemPrompt, maxTokens, model, temperature)
     }
   }
@@ -266,7 +268,7 @@ export async function generateContent(
     return callOpenAI(prompt, systemPrompt, maxTokens, model, temperature)
   }
 
-  const model = process.env.PULSE_ANTHROPIC_MODEL ?? 'claude-sonnet-4-20250514'
+  const model = process.env.PULSE_ANTHROPIC_MODEL ?? 'claude-sonnet-5-5'
   return callAnthropic(prompt, systemPrompt, maxTokens, model, temperature)
 }
 

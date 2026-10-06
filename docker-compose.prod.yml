@@ -252,6 +252,12 @@ services:
     depends_on:
       - web
       - api
+    # Reload every 6h so certificates renewed by the certbot container are
+    # actually picked up (certbot can't signal nginx from its own container).
+    command:
+      - /bin/sh
+      - -c
+      - "while :; do sleep 6h & wait $${!}; nginx -s reload; done & exec nginx -g 'daemon off;'"
     ports:
       - "80:80"
       - "443:443"
@@ -277,8 +283,9 @@ services:
     volumes:
       - ./.certbot/www:/var/www/certbot
       - ./.certbot/conf:/etc/letsencrypt
-    # Checks renewal every 12h; Let's Encrypt only renews when < 30 days remain
-    entrypoint: /bin/sh -c 'trap exit TERM; while :; do certbot renew --quiet --webroot -w /var/www/certbot && nginx -s reload 2>/dev/null || true; sleep 12h & wait $${!}; done'
+    # Checks renewal every 12h; Let's Encrypt only renews when < 30 days remain.
+    # nginx reloads itself every 6h to load renewed certs (see nginx service).
+    entrypoint: /bin/sh -c 'trap exit TERM; while :; do certbot renew --quiet --webroot -w /var/www/certbot || true; sleep 12h & wait $${!}; done'
     logging: *default-logging
 
   # ─── MONITORING ────────────────────────────────────────────────────────────

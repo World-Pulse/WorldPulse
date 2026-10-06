@@ -1,0 +1,84 @@
+name: Deploy to production
+
+# Every push to main deploys automatically.
+# To redeploy by hand: Actions tab → "Deploy to production" → Run workflow.
+#
+# One-time setup (repo Settings → Secrets and variables → Actions):
+#   SERVER_HOST     142.93.71.102
+#   SERVER_SSH_KEY  private key whose public half is in the server's
+#                   /root/.ssh/authorized_keys
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false   # never interrupt a deploy halfway through
+
+jobs:
+  deploy:
+    # Only the repo the server pulls from deploys; the public mirror skips this.
+    if: github.repository == 'World-Pulse/WorldPulse-v2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      HOST: ${{ secrets.SERVER_HOST }}
+    steps:
+      - name: Set up SSH
+        env:
+          SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+        run: |
+          if [ -z "$HOST" ] || [ -z "$SSH_KEY" ]; then
+            echo "::error::Missing SERVER_HOST or SERVER_SSH_KEY secret (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -T 15 -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          echo "SSH=ssh -i $HOME/.ssh/deploy_key -o ServerAliveInterval=30 -o ConnectTimeout=20 root@$HOST" >> "$GITHUB_ENV"
+
+      - name: Update code and start the deploy on the server
+        run: |
+          $SSH bash -s -- "${GITHUB_SHA::7}" <<'REMOTE'
+          set -euo pipefail
+          cd /opt/worldpulse
+          mkdir -p logs
+          # Keep a copy of any hand edits made on the server before syncing
+          if ! git diff --quiet; then
+            git diff > "logs/server-edits-$(date +%Y%m%d_%H%M%S).patch"
+            echo "Saved server-side edits to logs/ before syncing."
+          fi
+          git fetch --quiet origin main
+          git reset --hard --quiet origin/main
+          echo starting > logs/deploy.status
+          # Detached, so a dropped SSH connection can't kill the build
+          setsid nohup bash scripts/server-deploy.sh "$1" > logs/deploy-latest.log 2>&1 < /dev/null &
+          echo "Deploy of $1 started on the server."
+          REMOTE
+
+      - name: Wait for the deploy to finish
+        run: |
+          status="unknown"
+          for i in $(seq 1 100); do   # up to ~50 minutes
+            sleep 30
+            status=$($SSH "cat /opt/worldpulse/logs/deploy.status 2>/dev/null" || echo unreachable)
+            case "$status" in
+              success|success_with_warnings|rolled_back|failed) break ;;
+              *) echo "…still deploying ($status)" ;;
+            esac
+          done
+          echo "──────── server deploy log ────────"
+          $SSH "tail -n 80 /opt/worldpulse/logs/deploy-latest.log" || true
+          echo "──────── result: $status ────────"
+          case "$status" in
+            success)
+              echo "✅ Deployed — all checks passed." ;;
+            success_with_warnings)
+              echo "::error::Deployed, but something needs attention — see the log above."; exit 1 ;;
+            rolled_back)
+              echo "::error::The new version failed its health checks and was rolled back. The site is running the previous version."; exit 1 ;;
+            *)
+              echo "::error::Deploy failed or timed out (status: $status)."; exit 1 ;;
+          esac

@@ -21,7 +21,7 @@ const CACHE_KEY_PREFIX    = 'signal-ai-summary:'
 const MAX_INPUT_CHARS     = 2000           // truncate long bodies before sending to LLM
 const OPENAI_MODEL        = 'gpt-4o-mini'
 const ANTHROPIC_MODEL     = 'claude-haiku-4-5-20251001'
-const GEMINI_MODEL        = 'gemini-2.0-flash'
+const GEMINI_MODEL        = process.env.GEMINI_MODEL ?? 'gemini-3.6-flash' // 2.0-flash shut down 2026-06-01
 const OLLAMA_MODEL        = process.env.OLLAMA_MODEL        ?? 'llama3.2'
 const OPENROUTER_MODEL    = process.env.OPENROUTER_MODEL    ?? 'meta-llama/llama-3.2-3b-instruct:free'
 

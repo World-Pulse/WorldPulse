@@ -1,0 +1,55 @@
+name: Site watchdog
+
+# Checks the live site every 6 hours. If anything is wrong this run fails and
+# GitHub emails you — so an expired certificate or a dead feed can't go
+# unnoticed for months again. Run it by hand from the Actions tab any time.
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  check:
+    if: github.repository == 'World-Pulse/WorldPulse-v2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check site, API, certificates and fresh data
+        run: |
+          problems=""
+          fail() { echo "❌ $1"; problems="$problems"$'\n'"- $1"; }
+
+          # 1. Pages load over HTTPS (curl rejects expired or invalid certificates)
+          for url in https://world-pulse.io/ https://api.world-pulse.io/health; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$url" || true)
+            if [ "$code" = "200" ]; then echo "✅ $url"; else fail "$url returned ${code:-no response}"; fi
+          done
+
+          # 2. Certificates have at least 14 days left
+          for host in world-pulse.io api.world-pulse.io; do
+            end=$(echo | openssl s_client -servername "$host" -connect "$host:443" 2>/dev/null \
+                  | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
+            if [ -z "$end" ]; then fail "couldn't read the certificate for $host"; continue; fi
+            days=$(( ($(date -d "$end" +%s) - $(date +%s)) / 86400 ))
+            if [ "$days" -ge 14 ]; then echo "✅ $host certificate: $days days left"; else fail "$host certificate expires in $days days"; fi
+          done
+
+          # 3. Backend services up, and new signals still arriving
+          health=$(curl -s --max-time 20 https://api.world-pulse.io/health || true)
+          status=$(echo "$health" | jq -r '.status // "unknown"' 2>/dev/null || echo unknown)
+          geo=$(echo "$health" | jq -r '.map_signals_with_geo // empty' 2>/dev/null || true)
+          case "$status" in
+            ok)       echo "✅ API services: ok" ;;
+            degraded) echo "::warning::API reports 'degraded' (a non-critical service is struggling)" ;;
+            *)        fail "API health status is '$status'" ;;
+          esac
+          if [ -n "$geo" ]; then
+            if [ "$geo" -ge 1 ]; then echo "✅ $geo mapped signals in the last 24h"; else fail "no new mapped signals in the last 24h — the scraper may be down"; fi
+          fi
+
+          if [ -n "$problems" ]; then
+            echo
+            echo "Problems found:$problems"
+            exit 1
+          fi
+          echo "All good."
