@@ -41,6 +41,10 @@ export const viewport: Viewport = {
 }
 
 export const metadata: Metadata = {
+  // Base for relative metadata URLs (og:image, twitter:image). Without it Next.js
+  // falls back to http://localhost:3000. `||` (not `??`) so an empty env value
+  // still falls back to the live domain. Same pattern as apps/api alert-email.ts.
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://world-pulse.io'),
   title: 'WorldPulse — Global Intelligence Network',
   description: 'Real-time verified signals from every corner of the world. Live map, breaking news, open source.',
   keywords: ['world news', 'breaking news', 'global events', 'open source', 'real-time'],
