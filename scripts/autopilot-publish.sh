@@ -313,7 +313,10 @@ if [ -n "$TIP" ] && [ "$TIP" != "$START" ]; then
     fi
   fi
 else
-  if [ "$CHECKS" = fail ] && [ -n "$CHECK_FAIL" ]; then
+  if [ ! -f "$OUT/verdict.txt" ]; then
+    note "The shift's results didn't reach the publish job, so nothing was shipped (see the run log)."
+    RESULT="nothing shipped: the shift's results didn't arrive"
+  elif [ "$CHECKS" = fail ] && [ -n "$CHECK_FAIL" ]; then
     RESULT="nothing shipped: $CHECK_FAIL"
   else
     RESULT="no code change"

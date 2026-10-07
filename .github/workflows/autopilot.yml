@@ -186,10 +186,11 @@ jobs:
         if: ${{ !cancelled() && steps.shift.outputs.ready == 'true' }}
         uses: actions/upload-artifact@v7
         with:
-          name: shift-${{ github.run_id }}-${{ github.run_attempt }}
+          name: shift-${{ github.run_id }}
           path: /tmp/shift-out
           retention-days: 7
           if-no-files-found: ignore
+          overwrite: true   # a re-run replaces the earlier attempt's work
 
   publish:
     needs: shift
@@ -219,7 +220,7 @@ jobs:
         continue-on-error: true
         uses: actions/download-artifact@v8
         with:
-          name: shift-${{ github.run_id }}-${{ github.run_attempt }}
+          name: shift-${{ github.run_id }}
           path: /tmp/shift-out
 
       - name: Ship it and save the shift
