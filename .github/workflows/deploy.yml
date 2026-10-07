@@ -38,8 +38,13 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -T 15 -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
           SSH="ssh -i $HOME/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ConnectTimeout=20 root@$HOST"
-          if ! $SSH true; then
-            echo "::error::Could not log in to the server with SERVER_SSH_KEY. Check that the secret holds the current private key and its public half is in /root/.ssh/authorized_keys."
+          # Retry: a busy sshd (bots guessing passwords) can drop new connections
+          for i in 1 2 3 4 5; do
+            if $SSH true 2>/tmp/ssh_err; then ok=1; break; fi
+            echo "SSH attempt $i failed: $(tail -n 1 /tmp/ssh_err)"; sleep $((i * 6))
+          done
+          if [ -z "${ok:-}" ]; then
+            echo "::error::Could not log in to the server: $(tail -n 1 /tmp/ssh_err). If it says 'Permission denied (publickey)', SERVER_SSH_KEY doesn't match /root/.ssh/authorized_keys."
             exit 1
           fi
           echo "SSH=$SSH" >> "$GITHUB_ENV"
