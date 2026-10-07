@@ -22,7 +22,9 @@ name: Autopilot
 #   AUTOPILOT_BUDGET_USD    spending cap per shift in US dollars (default 3)
 #   AUTOPILOT_MAX_TURNS     max Claude steps per shift (default 60)
 #   AUTOPILOT_MODEL         default claude-sonnet-5-5
-#   AUTOPILOT_WORKSPACE_ID  wrkspc_… — only for a key that works across workspaces
+#   AUTOPILOT_WORKSPACE_ID  wrkspc_… — which Claude workspace an organization-wide
+#                           key should bill. Optional: if unset, the autopilot
+#                           looks the workspace up with the key itself.
 #   AUTOPILOT_LIVE_LOG      false = hide Claude's step-by-step log in the run
 # Watch a shift live: Actions tab → Autopilot → the running shift → "Run the shift".
 # Run a shift now: Actions tab → Autopilot → Run workflow.
@@ -65,8 +67,6 @@ jobs:
       TZ: America/New_York
       # Hide the API key and GitHub token from commands Claude runs
       CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1'
-      # Only needed for a key that works across workspaces (Claude Code sends it on every request)
-      ANTHROPIC_CUSTOM_HEADERS: "${{ vars.AUTOPILOT_WORKSPACE_ID && format('anthropic-workspace-id: {0}', vars.AUTOPILOT_WORKSPACE_ID) || '' }}"
     steps:
       - name: Check out the code
         uses: actions/checkout@v6
@@ -119,25 +119,58 @@ jobs:
             echo "This slot's shift already ran; the next one starts at $(date -d "@$((slot_ts + 10800))" '+%-I:%M %p')."
             ready=false
           fi
-          # Make sure Claude answers before starting (a 1-token request)
+          # Make sure Claude answers before starting (a 1-token request). An
+          # organization-wide key has to name a workspace on every request: use
+          # AUTOPILOT_WORKSPACE_ID if set, otherwise look the workspace up with the key.
           api_problem=""
+          ping() {  # ping [workspace-id] → HTTP status; the reply is in /tmp/api-check.json
+            local h=(-H "x-api-key: $KEY" -H "anthropic-version: 2023-06-01" -H "content-type: application/json")
+            [ -n "${1:-}" ] && h+=(-H "anthropic-workspace-id: $1")
+            curl -sS -o /tmp/api-check.json -w '%{http_code}' --max-time 60 "${h[@]}" \
+              -d "$(printf '{"model":"%s","max_tokens":1,"messages":[{"role":"user","content":"ping"}]}' "$MODEL")" \
+              https://api.anthropic.com/v1/messages 2> /dev/null || true
+          }
+          api_error() { python3 -c 'import json; print(json.load(open("/tmp/api-check.json"))["error"]["message"])' 2> /dev/null || true; }
           if [ "$ready" = true ]; then
-            hdr=(-H "x-api-key: $KEY" -H "anthropic-version: 2023-06-01" -H "content-type: application/json")
-            [ -n "$WORKSPACE_ID" ] && hdr+=(-H "anthropic-workspace-id: $WORKSPACE_ID")
-            body=$(printf '{"model":"%s","max_tokens":1,"messages":[{"role":"user","content":"ping"}]}' "$MODEL")
-            code=$(curl -sS -o /tmp/api-check.json -w '%{http_code}' --max-time 60 "${hdr[@]}" \
-                   -d "$body" https://api.anthropic.com/v1/messages 2> /dev/null) || true
-            case "$code" in
-              200) echo "Claude API check passed." ;;
-              400|401|402|403|404)
-                api_problem=$(python3 -c 'import json; print(json.load(open("/tmp/api-check.json"))["error"]["message"])' 2> /dev/null \
-                              | tr -d '\r\n' | cut -c1-240) || true
-                api_problem="${api_problem:-HTTP $code}"
-                echo "::error::The Claude API turned the autopilot away: $api_problem" ;;
-              *)
-                echo "::warning::Claude isn't answering right now (HTTP ${code:-none}); the next hourly run tries this shift again."
-                ready=false ;;
-            esac
+            ws="$WORKSPACE_ID"
+            code=$(ping "$ws")
+            if [ "$code" = 400 ] && [ -z "$ws" ] && [[ "$(api_error)" == *anthropic-workspace-id* ]]; then
+              # Prefer a workspace named for WorldPulse or the autopilot, else Default
+              ws=$(curl -sS --max-time 30 -H "x-api-key: $KEY" -H "anthropic-version: 2023-06-01" \
+                     "https://api.anthropic.com/v1/organizations/workspaces?include_default=true&limit=100" 2> /dev/null \
+                   | python3 -c '
+          import json, re, sys
+          ws = [w for w in (json.load(sys.stdin).get("data") or []) if isinstance(w, dict)
+                and str(w.get("id", "")).startswith("wrkspc_") and not w.get("archived_at")
+                and not re.search(r"claude code", str(w.get("name", "")), re.I)]
+          pick = (next((w for w in ws if re.search(r"worldpulse|world pulse|autopilot", str(w.get("name", "")), re.I)), None)
+                  or next((w for w in ws if str(w.get("name", "")).lower() == "default"), None)
+                  or (ws[0] if ws else None))
+          print(pick["id"] + " " + str(pick.get("name", "")) if pick else "")
+          ' 2> /dev/null) || true
+              if [ -n "$ws" ]; then
+                echo "This key works across workspaces; using workspace '${ws#* }' (${ws%% *})."
+                ws="${ws%% *}"
+                code=$(ping "$ws")
+              else
+                api_problem="This key works across workspaces and its workspace couldn't be looked up: add the GitHub variable AUTOPILOT_WORKSPACE_ID"
+              fi
+            fi
+            if [ -z "$api_problem" ]; then
+              case "$code" in
+                200)
+                  echo "Claude API check passed."
+                  # Claude Code sends this header on every request (the action passes it through)
+                  [ -n "$ws" ] && echo "ANTHROPIC_CUSTOM_HEADERS=anthropic-workspace-id: $ws" >> "$GITHUB_ENV" ;;
+                400|401|402|403|404)
+                  api_problem=$(api_error | tr -d '\r\n' | cut -c1-240) || true
+                  api_problem="${api_problem:-HTTP $code}" ;;
+                *)
+                  echo "::warning::Claude isn't answering right now (HTTP ${code:-none}); the next hourly run tries this shift again."
+                  ready=false ;;
+              esac
+            fi
+            [ -n "$api_problem" ] && echo "::error::The Claude API turned the autopilot away: $api_problem"
             rm -f /tmp/api-check.json
           fi
           {
