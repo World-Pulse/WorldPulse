@@ -47,6 +47,7 @@ finish() {  # finish <status> <message>
 free_gb() { df -BG --output=avail / | tail -1 | tr -dc '0-9'; }
 
 echo running > "$STATUS_FILE"
+bash scripts/ops-status.sh > /dev/null 2>&1 || true   # show "running" on /ops-status.json right away
 log "Deploying ${SHA}"
 
 # ── 1. Disk space guard ──────────────────────────────────────────────────────

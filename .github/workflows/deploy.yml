@@ -1,6 +1,8 @@
 name: Deploy to production
 
-# Every push to main deploys automatically.
+# Every push to main deploys automatically. The cloud autopilot starts it
+# after each shift that ships (with wait=false: it doesn't sit and wait for the
+# server, which saves Actions minutes; the result shows in /ops-status.json).
 # To redeploy by hand: Actions tab → "Deploy to production" → Run workflow.
 #
 # One-time setup (repo Settings → Secrets and variables → Actions):
@@ -11,6 +13,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      wait:
+        description: 'Wait here until the server finishes deploying'
+        type: boolean
+        default: true
 
 concurrency:
   group: deploy-production
@@ -70,15 +77,24 @@ jobs:
             git diff > "logs/server-edits-$(date +%Y%m%d_%H%M%S).patch"
             echo "Saved server-side edits to logs/ before syncing."
           fi
+          # A deploy already running holds this lock: let it finish first
+          if ! flock -n /var/lock/worldpulse-deploy.lock true; then
+            echo "Another deploy is running on the server; waiting for it to finish…"
+            flock -w 2700 /var/lock/worldpulse-deploy.lock true \
+              || { echo "Still busy after 45 minutes; try again later."; exit 1; }
+          fi
           git fetch --quiet origin main
           git reset --hard --quiet origin/main
           echo starting > logs/deploy.status
+          bash scripts/ops-status.sh > /dev/null 2>&1 || true
           # Detached, so a dropped SSH connection can't kill the build
           setsid nohup bash scripts/server-deploy.sh "$1" > logs/deploy-latest.log 2>&1 < /dev/null &
           echo "Deploy of $1 started on the server."
           REMOTE
 
       - name: Wait for the deploy to finish
+        # Skipped when started with wait=false (the autopilot checks the result next shift)
+        if: github.event_name != 'workflow_dispatch' || (inputs.wait != false && inputs.wait != 'false')
         run: |
           status="unknown"
           for i in $(seq 1 100); do   # up to ~50 minutes

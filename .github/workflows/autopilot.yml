@@ -1,0 +1,239 @@
+name: Autopilot
+
+# Orbit, the WorldPulse autopilot, runs here 8 times a day (every 3 hours),
+# whether or not Devon's PC is on.
+#
+#  shift   — Claude picks one item from the plan, makes the change and checks
+#            it. This job can only READ the repo, so nothing it does can reach
+#            GitHub directly. scripts/autopilot-publish.sh then checks the
+#            work (no secrets or protected files, no new TypeScript errors,
+#            website still builds) and hands it to the publish job.
+#  publish — a fresh machine that runs no code from the shift: re-checks the
+#            safety rules itself, ships passing commits to main, starts the
+#            deploy, and saves the report + HQ data to the private
+#            `autopilot-state` branch.
+#
+# Setup: one repository secret, ANTHROPIC_API_KEY
+#   (Settings → Secrets and variables → Actions → New repository secret).
+# Optional controls (same page, "Variables" tab):
+#   AUTOPILOT_PAUSED      true = skip all shifts until changed back
+#   AUTOPILOT_BUDGET_USD  spending cap per shift in US dollars (default 3)
+#   AUTOPILOT_MAX_TURNS   max Claude steps per shift (default 60)
+#   AUTOPILOT_MODEL       default claude-sonnet-5-5
+# Run a shift now: Actions tab → Autopilot → Run workflow.
+on:
+  schedule:
+    # 9 PM, 12 AM, 3 AM, 6 AM, 9 AM, 12 PM, 3 PM, 6 PM New York summer time
+    # (an hour earlier in winter). GitHub cron is UTC.
+    - cron: '7 1,4,7,10,13,16,19,22 * * *'
+  workflow_dispatch:
+    inputs:
+      lane:
+        description: 'Which shift to run'
+        type: choice
+        default: auto
+        options: [auto, World Map, Engineering, Departments, QA review]
+
+concurrency:
+  group: autopilot
+  cancel-in-progress: false
+
+jobs:
+  shift:
+    # Only the private repo, only from main, and not while paused
+    if: github.repository == 'World-Pulse/WorldPulse-v2' && github.ref == 'refs/heads/main' && vars.AUTOPILOT_PAUSED != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    outputs:
+      ready: ${{ steps.shift.outputs.ready }}
+      lane: ${{ steps.shift.outputs.lane }}
+      start_sha: ${{ steps.shift.outputs.start_sha }}
+      stamp: ${{ steps.shift.outputs.stamp }}
+      next: ${{ steps.shift.outputs.next }}
+      claude_outcome: ${{ steps.claude.outcome }}
+    env:
+      TZ: America/New_York
+      # Hide the API key and GitHub token from commands Claude runs
+      CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1'
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 200
+
+      - name: Check out the plan, reports and HQ data
+        continue-on-error: true
+        uses: actions/checkout@v6
+        with:
+          ref: autopilot-state
+          path: .hq
+
+      - name: Work out this shift
+        id: shift
+        env:
+          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          FORCED_LANE: ${{ inputs.lane }}
+        run: |
+          ready=true
+          if [ -z "$KEY" ]; then
+            echo "::warning::The ANTHROPIC_API_KEY secret isn't set yet, so this shift is skipped. Add it under Settings → Secrets and variables → Actions."
+            ready=false
+          fi
+          if [ ! -f .hq/AUTOPILOT.md ]; then
+            echo "::warning::The autopilot-state branch (plan + instructions) isn't on GitHub yet, so this shift is skipped. Devon's PC publishes it within 30 minutes of being on."
+            ready=false
+          fi
+          # The most recent scheduled slot (UTC 1,4,…,22 at :07), so a late start
+          # by GitHub still runs the right lane.
+          h=$((10#$(date -u +%H)))
+          slot=$(( ((h + 23) % 24) / 3 * 3 + 1 ))
+          day=$(date -u +%F)
+          [ "$slot" -gt "$h" ] && day=$(date -u -d "$day -1 day" +%F)
+          slot_ts=$(date -u -d "$day $slot:07" +%s)
+          case $slot in
+            1)        lane="QA review" ;;
+            4|13|22)  lane="World Map" ;;
+            7|16)     lane="Engineering" ;;
+            *)        lane="Departments" ;;
+          esac
+          if [ -n "$FORCED_LANE" ] && [ "$FORCED_LANE" != auto ]; then lane="$FORCED_LANE"; fi
+          {
+            echo "ready=$ready"
+            echo "lane=$lane"
+            echo "start_sha=$(git rev-parse HEAD)"
+            echo "hq_base=$(git -C .hq rev-parse HEAD 2> /dev/null || true)"
+            echo "stamp=$(date +%Y-%m-%d-%H%M)"
+            echo "now=$(date '+%A %B %-d, %Y, %-I:%M %p %Z')"
+            echo "next=$(date -d "@$((slot_ts + 10800))" '+%-I:%M %p')"
+          } >> "$GITHUB_OUTPUT"
+          # .hq is a separate repository; keep it out of the code repo
+          echo ".hq/" >> .git/info/exclude
+          git config --global user.name "WorldPulse Autopilot"
+          git config --global user.email "autopilot@world-pulse.io"
+          echo "Shift: $lane ($(date)) · ready=$ready"
+
+      - uses: actions/setup-node@v6
+        if: steps.shift.outputs.ready == 'true'
+        with:
+          node-version: 20   # same major as the production Docker images
+
+      - name: Install pnpm
+        if: steps.shift.outputs.ready == 'true'
+        run: |
+          npm install -g pnpm@9.12.0 > /dev/null
+          echo "PNPM_STORE=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Restore the package cache
+        if: steps.shift.outputs.ready == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PNPM_STORE }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
+
+      - name: Install dependencies
+        if: steps.shift.outputs.ready == 'true'
+        continue-on-error: true
+        run: |
+          if pnpm install --frozen-lockfile; then
+            echo yes > /tmp/lockfile-in-sync
+          else
+            echo "Lockfile is out of date; installing without it"
+            pnpm install --no-frozen-lockfile
+            git checkout -- pnpm-lock.yaml 2> /dev/null || true
+          fi
+          pnpm --filter @worldpulse/types build || true
+
+      - name: Run the shift
+        id: claude
+        if: steps.shift.outputs.ready == 'true'
+        continue-on-error: true
+        timeout-minutes: 40
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: |
+            You are Orbit, the WorldPulse autopilot, running in GitHub Actions.
+            Shift: ${{ steps.shift.outputs.lane }} · started ${{ steps.shift.outputs.now }} · next shift ${{ steps.shift.outputs.next }}.
+            Read .hq/AUTOPILOT.md and follow it exactly.
+            Write this shift's report to .hq/reports/${{ steps.shift.outputs.stamp }}.md.
+          claude_args: |
+            --model ${{ vars.AUTOPILOT_MODEL || 'claude-sonnet-5-5' }}
+            --max-turns ${{ vars.AUTOPILOT_MAX_TURNS || '60' }}
+            --max-budget-usd ${{ vars.AUTOPILOT_BUDGET_USD || '3' }}
+            --allowedTools "Read,Write,Edit,Glob,Grep,Bash,WebFetch,WebSearch,TodoWrite"
+            --disallowedTools "Bash(git push:*),Bash(gh:*),Bash(curl:*),Bash(wget:*),Bash(ssh:*),Bash(scp:*)"
+
+      - name: Check the work
+        if: ${{ !cancelled() && steps.shift.outputs.ready == 'true' }}
+        timeout-minutes: 30
+        env:
+          START: ${{ steps.shift.outputs.start_sha }}
+          HQ_BASE: ${{ steps.shift.outputs.hq_base }}
+          STAMP: ${{ steps.shift.outputs.stamp }}
+          LANE: ${{ steps.shift.outputs.lane }}
+          SHIFT_OUT: /tmp/shift-out
+        # The checks as they were when the shift started
+        run: |
+          git show "$START:scripts/autopilot-publish.sh" > /tmp/autopilot-publish.sh
+          bash /tmp/autopilot-publish.sh check
+
+      - name: Hand the work to the publish job
+        if: ${{ !cancelled() && steps.shift.outputs.ready == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: shift-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp/shift-out
+          retention-days: 7
+          if-no-files-found: ignore
+
+  publish:
+    needs: shift
+    if: ${{ !cancelled() && needs.shift.outputs.ready == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write   # push to main and to autopilot-state
+      actions: write    # start the deploy workflow
+    env:
+      TZ: America/New_York
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 200
+
+      - name: Check out the plan, reports and HQ data
+        uses: actions/checkout@v6
+        with:
+          ref: autopilot-state
+          path: .hq
+          fetch-depth: 0
+
+      - name: Collect the shift's work
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: shift-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp/shift-out
+
+      - name: Ship it and save the shift
+        env:
+          GH_TOKEN: ${{ github.token }}
+          START: ${{ needs.shift.outputs.start_sha }}
+          STAMP: ${{ needs.shift.outputs.stamp }}
+          LANE: ${{ needs.shift.outputs.lane }}
+          NEXT_SHIFT: ${{ needs.shift.outputs.next }}
+          CLAUDE_OUTCOME: ${{ needs.shift.outputs.claude_outcome }}
+          SHIFT_OUT: /tmp/shift-out
+        # Runs the shipping script as it was when the shift started; no code
+        # from the shift runs here
+        run: |
+          echo ".hq/" >> .git/info/exclude
+          git show "$START:scripts/autopilot-publish.sh" > /tmp/autopilot-publish.sh
+          bash /tmp/autopilot-publish.sh publish

@@ -11,7 +11,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p logs
 exec 9>/var/lock/worldpulse-deploy.lock
-flock -n 9 || { echo "A deploy is running — skipping maintenance this time."; exit 0; }
+flock -w 1800 9 || { echo "A deploy has been running for 30 minutes — skipping maintenance this time."; exit 0; }
 
 COMPOSE="docker compose -f docker-compose.prod.yml"
 if [ ! -f .env ] && [ -f .env.prod ]; then COMPOSE="$COMPOSE --env-file .env.prod"; fi

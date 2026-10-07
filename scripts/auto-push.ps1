@@ -1,9 +1,14 @@
 # ─────────────────────────────────────────────────────────────────────────────
-#  WorldPulse — auto-push (runs on Devon's Windows PC via Task Scheduler)
+#  WorldPulse — sync with GitHub (runs on Devon's Windows PC via Task Scheduler)
 #
-#  Pushes any new commits on main to GitHub, which then deploys them
-#  automatically (.github/workflows/deploy.yml). Does nothing when there is
-#  nothing new, so it's safe to run any time.
+#  Every 30 minutes:
+#   • fetches what the cloud autopilot pushed and fast-forwards this copy of main
+#   • pushes any new local commits to the private repo (which deploys them)
+#   • publishes local-only branches (autopilot-state, wip/*) to the private repo
+#     — never to the public mirror
+#   • keeps the public mirror's main in step with the private repo
+#  Never force-pushes and never deletes anything. If unsaved edits are in the
+#  way it leaves your files alone and tries again next time.
 #
 #  Turn on (one time, in PowerShell):
 #    schtasks /Create /F /SC MINUTE /MO 30 /TN "WorldPulse auto-push" /TR "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File C:\Users\devon\OneDrive\Desktop\worldpulse\scripts\auto-push.ps1"
@@ -20,15 +25,108 @@ Set-Location $repo
 function Write-Log([string]$msg) {
   "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  $msg" | Out-File -FilePath $log -Append -Encoding utf8
 }
+# Run git, return its output as one trimmed string (errors hidden)
+function Get-Git { (& git @args 2>$null | Out-String).Trim() }
+# Run git with the given argument list, copy its output into the log
+function Invoke-GitLogged([string]$label, [string[]]$gitArgs) {
+  & git @gitArgs 2>&1 | ForEach-Object { Write-Log "  ${label}: $_" }
+  return ($LASTEXITCODE -eq 0)
+}
+function Test-Ancestor([string]$older, [string]$newer) {
+  & git merge-base --is-ancestor $older $newer 2>$null
+  return ($LASTEXITCODE -eq 0)
+}
 
-# Only push main, and only when there are new commits
-$branch = (git rev-parse --abbrev-ref HEAD | Out-String).Trim()
-if ($branch -ne 'main') { Write-Log "skipped: on branch '$branch'"; exit 0 }
+# ── 0. Stay out of the way of anything else using git ───────────────────────
+$lock = Join-Path $repo '.git\index.lock'
+if (Test-Path $lock) {
+  $age = (Get-Date) - (Get-Item $lock).LastWriteTime
+  if ($age.TotalMinutes -lt 60) { Write-Log 'skipped: git is busy (index.lock)'; exit 0 }
+  Remove-Item $lock -Force -ErrorAction SilentlyContinue
+  Write-Log 'removed a stale .git\index.lock (over an hour old)'
+}
+foreach ($marker in @('rebase-merge', 'rebase-apply', 'MERGE_HEAD')) {
+  if (Test-Path (Join-Path $repo ".git\$marker")) { Write-Log "skipped: a git $marker is in progress"; exit 0 }
+}
 
-git fetch v2 main --quiet 2>$null
-$ahead = [int]((git rev-list --count v2/main..main | Out-String).Trim())
-if ($ahead -eq 0) { exit 0 }
+# ── 1. Get the latest from the private repo ─────────────────────────────────
+& git fetch v2 --prune --quiet 2>$null
+if ($LASTEXITCODE -ne 0) { Write-Log 'fetch from the private repo failed (offline?)'; exit 0 }
+$current = Get-Git rev-parse --abbrev-ref HEAD
 
-Write-Log "pushing $ahead new commit(s)"
-git push v2 main 2>&1 | ForEach-Object { Write-Log "  v2: $_" }
-git push origin main 2>&1 | ForEach-Object { Write-Log "  origin: $_" }
+# ── 2. Side branches: publish new ones, follow the cloud, push local edits ──
+# Branches published once are remembered, so one deleted on GitHub isn't re-created
+$published = Join-Path $repo '.git\worldpulse-published-branches'
+$known = @()
+if (Test-Path $published) { $known = @(Get-Content $published) }
+$branches = @('autopilot-state') + @(& git for-each-ref --format='%(refname:short)' 'refs/heads/wip/' 2>$null)
+foreach ($b in $branches) {
+  if (-not $b -or $b -eq $current) { continue }
+  $l = Get-Git rev-parse --verify --quiet "refs/heads/$b"
+  if (-not $l) { continue }
+  $r = Get-Git rev-parse --verify --quiet "refs/remotes/v2/$b"
+  if (-not $r) {
+    if ($known -contains $b) { continue }    # deleted on GitHub on purpose
+    Write-Log "publishing branch $b to the private repo"
+    if (Invoke-GitLogged 'v2' @('push', 'v2', "refs/heads/${b}:refs/heads/$b")) { Add-Content -Path $published -Value $b }
+    continue
+  }
+  if ($known -notcontains $b) { Add-Content -Path $published -Value $b; $known += $b }
+  if ($l -eq $r) {
+    continue
+  } elseif (Test-Ancestor $l $r) {
+    & git update-ref "refs/heads/$b" $r $l 2>$null      # catch up with the cloud
+  } elseif (Test-Ancestor $r $l) {
+    Write-Log "pushing local changes on $b"
+    $null = Invoke-GitLogged 'v2' @('push', 'v2', "refs/heads/${b}:refs/heads/$b")
+  } else {
+    # Changed here and on GitHub at the same time: keep the local commits on a
+    # side branch (nothing is lost) and follow GitHub again
+    $aside = "$b-unsynced-$(Get-Date -Format 'yyyyMMdd-HHmm')"
+    & git branch $aside $l 2>$null
+    & git update-ref "refs/heads/$b" $r $l 2>$null
+    Write-Log "branch $b changed both here and on GitHub; local commits kept on '$aside', now following GitHub"
+  }
+}
+
+# ── 3. main: follow the cloud, then push local commits ──────────────────────
+if ($current -ne 'main') { Write-Log "main not synced: this copy is on branch '$current'"; exit 0 }
+if (-not (Get-Git rev-parse --verify --quiet refs/remotes/v2/main)) { exit 0 }
+
+$behind = [int](Get-Git rev-list --count main..v2/main)
+$ahead  = [int](Get-Git rev-list --count v2/main..main)
+if ($behind -gt 0 -and $ahead -eq 0) {
+  if (Invoke-GitLogged 'update' @('merge', '--ff-only', '--quiet', 'v2/main')) {
+    Write-Log "updated main with $behind new commit(s) from GitHub"
+  } else {
+    Write-Log 'could not update main: unsaved edits are in the way; will retry'
+  }
+} elseif ($behind -gt 0 -and $ahead -gt 0) {
+  $dirty = Get-Git status --porcelain --untracked-files=no
+  if ($dirty) {
+    Write-Log 'main has new commits here and on GitHub, but unsaved edits are in the way; will retry'
+  } elseif (Invoke-GitLogged 'rebase' @('rebase', '--quiet', 'v2/main')) {
+    Write-Log "put $ahead local commit(s) on top of $behind new commit(s) from GitHub"
+  } else {
+    & git rebase --abort 2>$null
+    Write-Log 'local commits clash with commits on GitHub; left as is (needs a look)'
+  }
+}
+
+$ahead = [int](Get-Git rev-list --count v2/main..main)
+if ($ahead -gt 0 -and (Test-Ancestor 'v2/main' 'main')) {
+  Write-Log "pushing $ahead new commit(s)"
+  $null = Invoke-GitLogged 'v2' @('push', 'v2', 'main')
+}
+
+# ── 4. Public mirror follows the private repo's main (fast-forward only) ────
+& git fetch origin main --quiet 2>$null
+$pv = Get-Git rev-parse --verify --quiet refs/remotes/v2/main
+$po = Get-Git rev-parse --verify --quiet refs/remotes/origin/main
+if ($pv -and $po -and $pv -ne $po) {
+  if (Test-Ancestor $po $pv) {
+    $null = Invoke-GitLogged 'origin' @('push', 'origin', 'refs/remotes/v2/main:refs/heads/main')
+  } else {
+    Write-Log 'public mirror has commits the private repo lacks; not updating it (needs a look)'
+  }
+}
