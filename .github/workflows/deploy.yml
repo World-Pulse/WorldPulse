@@ -37,7 +37,12 @@ jobs:
           printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -T 15 -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
-          echo "SSH=ssh -i $HOME/.ssh/deploy_key -o ServerAliveInterval=30 -o ConnectTimeout=20 root@$HOST" >> "$GITHUB_ENV"
+          SSH="ssh -i $HOME/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ConnectTimeout=20 root@$HOST"
+          if ! $SSH true; then
+            echo "::error::Could not log in to the server with SERVER_SSH_KEY. Check that the secret holds the current private key and its public half is in /root/.ssh/authorized_keys."
+            exit 1
+          fi
+          echo "SSH=$SSH" >> "$GITHUB_ENV"
 
       - name: Update code and start the deploy on the server
         run: |
