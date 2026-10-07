@@ -18,7 +18,8 @@
 #     failing change on autopilot/failed-<time>. Then saves the report, plan
 #     and HQ data to the autopilot-state branch.
 #
-#  Env: START STAMP LANE NEXT_SHIFT CLAUDE_OUTCOME SHIFT_OUT HQ_BASE GH_TOKEN
+#  Env: START STAMP LANE NEXT_SHIFT SLOT_ID API_PROBLEM CLAUDE_OUTCOME SHIFT_OUT
+#       HQ_BASE GH_TOKEN
 # ─────────────────────────────────────────────────────────────────────────────
 set -uo pipefail
 
@@ -313,7 +314,10 @@ if [ -n "$TIP" ] && [ "$TIP" != "$START" ]; then
     fi
   fi
 else
-  if [ ! -f "$OUT/verdict.txt" ]; then
+  if [ -n "${API_PROBLEM:-}" ]; then
+    note "Claude couldn't start this shift. The Claude API said: ${API_PROBLEM}"
+    RESULT="couldn't start: Claude API problem"
+  elif [ ! -f "$OUT/verdict.txt" ]; then
     note "The shift's results didn't reach the publish job, so nothing was shipped (see the run log)."
     RESULT="nothing shipped: the shift's results didn't arrive"
   elif [ "$CHECKS" = fail ] && [ -n "$CHECK_FAIL" ]; then
@@ -362,7 +366,7 @@ finish() {
   if [ -n "$REPORT" ] && [ -f "$REPORT" ] && [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
     cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
   fi
-  if [ "${CLAUDE_OUTCOME:-}" = failure ] || [ -n "$PARKED" ] || [ -n "$SECRET" ]; then exit 1; fi
+  if [ "${CLAUDE_OUTCOME:-}" = failure ] || [ -n "$PARKED" ] || [ -n "$SECRET" ] || [ -n "${API_PROBLEM:-}" ]; then exit 1; fi
   exit 0
 }
 if [ ! -d .hq/.git ]; then echo "No autopilot-state checkout; nothing to save."; finish; fi
@@ -399,7 +403,7 @@ fi
   printf '%s\n' "$NOTE"
 } >> "$REPORT"
 
-HQ_PROBLEMS=$(BASE_HQ="$BASE_HQ" OPS="$OPS" SITE_CODE="$SITE_CODE" API_STATUS="$API_STATUS" RESULT="$RESULT" \
+HQ_PROBLEMS=$(BASE_HQ="$BASE_HQ" OPS="$OPS" SITE_CODE="$SITE_CODE" API_STATUS="$API_STATUS" RESULT="$RESULT" API_PROBLEM="${API_PROBLEM:-}" \
   LANE="$LANE" STAMP="$STAMP" NEXT_SHIFT="${NEXT_SHIFT:-}" RUN_URL="$RUN_URL" CLAUDE_OUTCOME="${CLAUDE_OUTCOME:-}" python3 - <<'PY'
 import datetime, json, os, subprocess
 
@@ -475,8 +479,23 @@ if ops:
     w, st = words.get(ld, (ld, "warn"))
     put("Last deploy", f"{w} · {commit}", st)
 
+# Devon's inbox: say when Claude can't be reached; clear it once shifts run again
+PREFIX = "Autopilot can't reach Claude"
+inbox = [x for x in d.get("inbox", []) if isinstance(x, dict)]
+problem = (env("API_PROBLEM") or "").strip()
+if problem:
+    if not any(str(x.get("text", "")).startswith(PREFIX) and not x.get("done") for x in inbox):
+        inbox.insert(0, {"text": f"{PREFIX}: {problem[:160]} (fix the key or add credits in the Claude Console)", "done": False})
+elif env("CLAUDE_OUTCOME") in ("success", "failure"):
+    for x in inbox:
+        if str(x.get("text", "")).startswith(PREFIX):
+            x["done"] = True
+d["inbox"] = inbox
+
 result, lane = env("RESULT") or "", env("LANE") or "shift"
-if env("CLAUDE_OUTCOME") == "failure" and not result.startswith("shipped"):
+if problem:
+    text = f"{lane} shift couldn't start: the Claude API turned the key away"
+elif env("CLAUDE_OUTCOME") == "failure" and not result.startswith("shipped"):
     text = f"{lane} shift didn't finish cleanly; details in the report"
 elif result.startswith(("parked", "blocked")):
     text = f"{lane} shift: change held back ({result.split(': ', 1)[-1]})"
@@ -493,6 +512,47 @@ print("; ".join(problems))
 PY
 )
 [ -n "$HQ_PROBLEMS" ] && printf -- '- HQ data: %s, so the previous version was kept\n' "$HQ_PROBLEMS" >> "$REPORT"
+
+# Remember this slot is done, so the hourly catch-up runs don't repeat it
+[ -n "${SLOT_ID:-}" ] && printf '%s\n' "$SLOT_ID" > last-slot
+
+# STATUS.md: a phone-friendly page on GitHub, current after every shift
+REPORT="$REPORT" RUN_URL="$RUN_URL" python3 - <<'PY'
+import json, os
+try:
+    d = json.load(open("hq-data.json", encoding="utf-8-sig"))
+except Exception:
+    d = {}
+def cell(v):
+    return str(v if v is not None else "").replace("|", "/").replace("\n", " ").strip()
+ap = d.get("autopilot") or {}
+last = ap.get("last") or {}
+out = ["# Orbit — WorldPulse autopilot status", ""]
+out.append(f"_Updated {cell(d.get('updated'))} · next shift {cell(ap.get('next'))} (every 3 hours)_")
+out.append("")
+if d.get("headline"):
+    out += [f"**{cell(d['headline'])}**", ""]
+out.append(f"**Last shift:** {cell(last.get('lane'))} — {cell(last.get('result'))} · "
+           f"[report]({os.environ['REPORT']}) · [run log]({os.environ['RUN_URL']})")
+out += ["", "## Production", "", "| | |", "|---|---|"]
+for p in d.get("production") or []:
+    if isinstance(p, dict):
+        mark = {"ok": "OK", "warn": "check", "bad": "PROBLEM"}.get(p.get("state"), "")
+        out.append(f"| {cell(p.get('label'))} | {cell(p.get('value'))}{(' · ' + mark) if mark else ''} |")
+pl = d.get("plan") or {}
+out += ["", f"## Plan: {cell(pl.get('done'))} of {cell(pl.get('total'))} done", "", f"Next up: {cell(pl.get('next'))}"]
+todo = [x for x in d.get("inbox") or [] if isinstance(x, dict) and not x.get("done")]
+out += ["", "## Needs you", ""] + ([f"- [ ] {cell(x.get('text'))}" for x in todo] or ["Nothing right now."])
+out += ["", "## Team", "", "| Bot | Status | Now |", "|---|---|---|"]
+for t in d.get("team") or []:
+    if isinstance(t, dict):
+        out.append(f"| {cell(t.get('name'))} · {cell(t.get('role'))} | {cell(t.get('status'))} | {cell(t.get('now'))} |")
+out += ["", "## Recent activity", ""]
+for x in reversed([x for x in d.get("log") or [] if isinstance(x, dict)][-8:]):
+    out.append(f"- {cell(x.get('time'))} · **{cell(x.get('who'))}** — {cell(x.get('text'))}")
+out += ["", "_Rewritten after every shift. To change priorities, edit PLAN.md._", ""]
+open("STATUS.md", "w", encoding="utf-8").write("\n".join(out))
+PY
 
 # Never store anything that looks like a key, even on the private branch
 SECRET_RE="$SECRET_RE" python3 - <<'PY'

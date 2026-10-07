@@ -18,6 +18,13 @@ if [ ! -f .env ] && [ -f .env.prod ]; then COMPOSE="$COMPOSE --env-file .env.pro
 log() { echo "[maintenance $(date '+%H:%M:%S')] $*"; }
 free_gb() { df -BG --output=avail / | tail -1 | tr -dc '0-9'; }
 
+# Keep /ops-status.json fresh: rewrite it every 5 minutes (idempotent)
+OPS_CRON=/etc/cron.d/worldpulse-ops-status
+OPS_LINE="*/5 * * * * root cd $(pwd) && bash scripts/ops-status.sh > /dev/null 2>&1"
+if [ -d /etc/cron.d ] && [ "$(cat "$OPS_CRON" 2> /dev/null)" != "$OPS_LINE" ]; then
+  printf '%s\n' "$OPS_LINE" > "$OPS_CRON" && chmod 644 "$OPS_CRON"
+fi
+
 log "Disk free before: $(free_gb)G"
 find /var/lib/docker/containers -name '*-json.log' -size +500M -exec truncate -s 0 {} \; 2>/dev/null || true
 docker rm -f wp_clickhouse >/dev/null 2>&1 || true

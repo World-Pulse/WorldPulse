@@ -48,6 +48,12 @@ free_gb() { df -BG --output=avail / | tail -1 | tr -dc '0-9'; }
 
 echo running > "$STATUS_FILE"
 bash scripts/ops-status.sh > /dev/null 2>&1 || true   # show "running" on /ops-status.json right away
+# Keep /ops-status.json fresh: rewrite it every 5 minutes (idempotent)
+OPS_CRON=/etc/cron.d/worldpulse-ops-status
+OPS_LINE="*/5 * * * * root cd $(pwd) && bash scripts/ops-status.sh > /dev/null 2>&1"
+if [ -d /etc/cron.d ] && [ "$(cat "$OPS_CRON" 2> /dev/null)" != "$OPS_LINE" ]; then
+  printf '%s\n' "$OPS_LINE" > "$OPS_CRON" && chmod 644 "$OPS_CRON"
+fi
 log "Deploying ${SHA}"
 
 # ── 1. Disk space guard ──────────────────────────────────────────────────────

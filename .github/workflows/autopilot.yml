@@ -1,7 +1,9 @@
 name: Autopilot
 
-# Orbit, the WorldPulse autopilot, runs here 8 times a day (every 3 hours),
-# whether or not Devon's PC is on.
+# Orbit, the WorldPulse autopilot, runs here 8 times a day (one shift per
+# 3-hour slot), whether or not Devon's PC is on. GitHub sometimes starts
+# scheduled runs late or skips them, so this checks every hour and runs a
+# slot's shift the first time it gets the chance.
 #
 #  shift   — Claude picks one item from the plan, makes the change and checks
 #            it. This job can only READ the repo, so nothing it does can reach
@@ -13,19 +15,23 @@ name: Autopilot
 #            deploy, and saves the report + HQ data to the private
 #            `autopilot-state` branch.
 #
-# Setup: one repository secret, ANTHROPIC_API_KEY
-#   (Settings → Secrets and variables → Actions → New repository secret).
+# Setup: one repository secret, ANTHROPIC_API_KEY — best a key created for one
+#   workspace (Settings → Secrets and variables → Actions).
 # Optional controls (same page, "Variables" tab):
-#   AUTOPILOT_PAUSED      true = skip all shifts until changed back
-#   AUTOPILOT_BUDGET_USD  spending cap per shift in US dollars (default 3)
-#   AUTOPILOT_MAX_TURNS   max Claude steps per shift (default 60)
-#   AUTOPILOT_MODEL       default claude-sonnet-5-5
+#   AUTOPILOT_PAUSED        true = skip all shifts until changed back
+#   AUTOPILOT_BUDGET_USD    spending cap per shift in US dollars (default 3)
+#   AUTOPILOT_MAX_TURNS     max Claude steps per shift (default 60)
+#   AUTOPILOT_MODEL         default claude-sonnet-5-5
+#   AUTOPILOT_WORKSPACE_ID  wrkspc_… — only for a key that works across workspaces
+#   AUTOPILOT_LIVE_LOG      false = hide Claude's step-by-step log in the run
+# Watch a shift live: Actions tab → Autopilot → the running shift → "Run the shift".
 # Run a shift now: Actions tab → Autopilot → Run workflow.
 on:
   schedule:
-    # 9 PM, 12 AM, 3 AM, 6 AM, 9 AM, 12 PM, 3 PM, 6 PM New York summer time
-    # (an hour earlier in winter). GitHub cron is UTC.
-    - cron: '7 1,4,7,10,13,16,19,22 * * *'
+    # Every hour. Slots start at 9 PM, 12 AM, 3 AM, 6 AM, 9 AM, 12 PM, 3 PM and
+    # 6 PM New York summer time (an hour earlier in winter); the other hourly
+    # runs only catch up a slot GitHub skipped, and otherwise stop in seconds.
+    - cron: '7 * * * *'
   workflow_dispatch:
     inputs:
       lane:
@@ -52,11 +58,15 @@ jobs:
       start_sha: ${{ steps.shift.outputs.start_sha }}
       stamp: ${{ steps.shift.outputs.stamp }}
       next: ${{ steps.shift.outputs.next }}
+      slot_id: ${{ steps.shift.outputs.slot_id }}
+      api_problem: ${{ steps.shift.outputs.api_problem }}
       claude_outcome: ${{ steps.claude.outcome }}
     env:
       TZ: America/New_York
       # Hide the API key and GitHub token from commands Claude runs
       CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1'
+      # Only needed for a key that works across workspaces (Claude Code sends it on every request)
+      ANTHROPIC_CUSTOM_HEADERS: "${{ vars.AUTOPILOT_WORKSPACE_ID && format('anthropic-workspace-id: {0}', vars.AUTOPILOT_WORKSPACE_ID) || '' }}"
     steps:
       - name: Check out the code
         uses: actions/checkout@v6
@@ -76,6 +86,9 @@ jobs:
         env:
           KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           FORCED_LANE: ${{ inputs.lane }}
+          EVENT: ${{ github.event_name }}
+          MODEL: ${{ vars.AUTOPILOT_MODEL || 'claude-sonnet-5-5' }}
+          WORKSPACE_ID: ${{ vars.AUTOPILOT_WORKSPACE_ID }}
         run: |
           ready=true
           if [ -z "$KEY" ]; then
@@ -93,6 +106,7 @@ jobs:
           day=$(date -u +%F)
           [ "$slot" -gt "$h" ] && day=$(date -u -d "$day -1 day" +%F)
           slot_ts=$(date -u -d "$day $slot:07" +%s)
+          slot_id=$(date -u -d "@$slot_ts" +%Y-%m-%dT%H)
           case $slot in
             1)        lane="QA review" ;;
             4|13|22)  lane="World Map" ;;
@@ -100,8 +114,36 @@ jobs:
             *)        lane="Departments" ;;
           esac
           if [ -n "$FORCED_LANE" ] && [ "$FORCED_LANE" != auto ]; then lane="$FORCED_LANE"; fi
+          # One shift per slot: the extra hourly runs only catch up a missed slot
+          if [ "$ready" = true ] && [ "$EVENT" = schedule ] && [ "$(cat .hq/last-slot 2> /dev/null)" = "$slot_id" ]; then
+            echo "This slot's shift already ran; the next one starts at $(date -d "@$((slot_ts + 10800))" '+%-I:%M %p')."
+            ready=false
+          fi
+          # Make sure Claude answers before starting (a 1-token request)
+          api_problem=""
+          if [ "$ready" = true ]; then
+            hdr=(-H "x-api-key: $KEY" -H "anthropic-version: 2023-06-01" -H "content-type: application/json")
+            [ -n "$WORKSPACE_ID" ] && hdr+=(-H "anthropic-workspace-id: $WORKSPACE_ID")
+            body=$(printf '{"model":"%s","max_tokens":1,"messages":[{"role":"user","content":"ping"}]}' "$MODEL")
+            code=$(curl -sS -o /tmp/api-check.json -w '%{http_code}' --max-time 60 "${hdr[@]}" \
+                   -d "$body" https://api.anthropic.com/v1/messages 2> /dev/null) || true
+            case "$code" in
+              200) echo "Claude API check passed." ;;
+              400|401|402|403|404)
+                api_problem=$(python3 -c 'import json; print(json.load(open("/tmp/api-check.json"))["error"]["message"])' 2> /dev/null \
+                              | tr -d '\r\n' | cut -c1-240) || true
+                api_problem="${api_problem:-HTTP $code}"
+                echo "::error::The Claude API turned the autopilot away: $api_problem" ;;
+              *)
+                echo "::warning::Claude isn't answering right now (HTTP ${code:-none}); the next hourly run tries this shift again."
+                ready=false ;;
+            esac
+            rm -f /tmp/api-check.json
+          fi
           {
             echo "ready=$ready"
+            echo "slot_id=$slot_id"
+            echo "api_problem=$api_problem"
             echo "lane=$lane"
             echo "start_sha=$(git rev-parse HEAD)"
             echo "hq_base=$(git -C .hq rev-parse HEAD 2> /dev/null || true)"
@@ -149,13 +191,16 @@ jobs:
 
       - name: Run the shift
         id: claude
-        if: steps.shift.outputs.ready == 'true'
+        if: steps.shift.outputs.ready == 'true' && steps.shift.outputs.api_problem == ''
         continue-on-error: true
         timeout-minutes: 40
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          # Step-by-step log while the shift runs, and a readable report after
+          show_full_output: ${{ vars.AUTOPILOT_LIVE_LOG != 'false' }}
+          display_report: 'true'
           prompt: |
             You are Orbit, the WorldPulse autopilot, running in GitHub Actions.
             Shift: ${{ steps.shift.outputs.lane }} · started ${{ steps.shift.outputs.now }} · next shift ${{ steps.shift.outputs.next }}.
@@ -230,6 +275,8 @@ jobs:
           STAMP: ${{ needs.shift.outputs.stamp }}
           LANE: ${{ needs.shift.outputs.lane }}
           NEXT_SHIFT: ${{ needs.shift.outputs.next }}
+          SLOT_ID: ${{ needs.shift.outputs.slot_id }}
+          API_PROBLEM: ${{ needs.shift.outputs.api_problem }}
           CLAUDE_OUTCOME: ${{ needs.shift.outputs.claude_outcome }}
           SHIFT_OUT: /tmp/shift-out
         # Runs the shipping script as it was when the shift started; no code
