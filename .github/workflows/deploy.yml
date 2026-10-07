@@ -34,8 +34,10 @@ jobs:
             exit 1
           fi
           mkdir -p ~/.ssh
-          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^$' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+          # Fingerprint is a public ID (safe to show): compare with  ssh-keygen -lf ~/.ssh/github_deploy.pub  on the server
+          echo "Key fingerprint: $(ssh-keygen -lf ~/.ssh/deploy_key 2>&1)"
           ssh-keyscan -T 15 -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
           SSH="ssh -i $HOME/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ConnectTimeout=20 root@$HOST"
           # Retry: a busy sshd (bots guessing passwords) can drop new connections
