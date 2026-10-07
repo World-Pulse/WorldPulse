@@ -34,7 +34,15 @@ jobs:
             exit 1
           fi
           mkdir -p ~/.ssh
-          printf '%s\n' "$SSH_KEY" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^$' > ~/.ssh/deploy_key
+          # Rebuild the key whatever copy-paste did to it. Accepts the normal key
+          # text (even with joined lines / extra spaces) or a one-line base64 copy.
+          raw=$(printf '%s' "$SSH_KEY" | tr -d '\r')
+          if printf '%s' "$raw" | grep -q 'BEGIN OPENSSH PRIVATE KEY'; then
+            body=$(printf '%s' "$raw" | sed 's/-----BEGIN OPENSSH PRIVATE KEY-----//; s/-----END OPENSSH PRIVATE KEY-----//' | tr -d ' \t\n')
+            { echo '-----BEGIN OPENSSH PRIVATE KEY-----'; printf '%s' "$body" | fold -w 70; echo; echo '-----END OPENSSH PRIVATE KEY-----'; } > ~/.ssh/deploy_key
+          else
+            printf '%s' "$raw" | tr -d ' \t\n' | base64 -d > ~/.ssh/deploy_key
+          fi
           chmod 600 ~/.ssh/deploy_key
           # Fingerprint is a public ID (safe to show): compare with  ssh-keygen -lf ~/.ssh/github_deploy.pub  on the server
           echo "Key fingerprint: $(ssh-keygen -lf ~/.ssh/deploy_key 2>&1)"
