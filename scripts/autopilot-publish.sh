@@ -19,7 +19,7 @@
 #     and HQ data to the autopilot-state branch.
 #
 #  Env: START STAMP LANE NEXT_SHIFT SLOT_ID API_PROBLEM CLAUDE_OUTCOME SHIFT_OUT
-#       HQ_BASE GH_TOKEN
+#       HQ_BASE GH_TOKEN SHIFT_MODE (cloud|local) LOCAL_STAMP
 # ─────────────────────────────────────────────────────────────────────────────
 set -uo pipefail
 
@@ -436,7 +436,11 @@ fi
 {
   printf '\n## Pipeline\n'
   printf -- '- Result: %s\n' "${RESULT:-done}"
-  printf -- '- Shift: %s · Claude step: %s · [run log](%s)' "$LANE" "${CLAUDE_OUTCOME:-unknown}" "$RUN_URL"
+  if [ "${SHIFT_MODE:-}" = local ]; then
+    printf -- '- Shift: %s · done in Claude on Devon'"'"'s PC, checked and shipped here · [run log](%s)' "$LANE" "$RUN_URL"
+  else
+    printf -- '- Shift: %s · Claude step: %s · [run log](%s)' "$LANE" "${CLAUDE_OUTCOME:-unknown}" "$RUN_URL"
+  fi
   printf '%s\n' "$NOTE"
 } >> "$REPORT"
 
@@ -473,6 +477,7 @@ PY
 # One commit per shift on autopilot-state
 git reset -q --soft "$BASE_HQ"
 git add -A
+STATE_OK=1
 if ! git diff --cached --quiet; then
   git commit -qm "Shift $STAMP · $LANE · ${RESULT:-done}"
   saved=""
@@ -488,6 +493,15 @@ if ! git diff --cached --quiet; then
     echo "::warning::autopilot-state changed at the same time; this shift was saved to autopilot/state-$STAMP instead."
   else
     echo "::warning::Couldn't save the shift to autopilot-state."
+    STATE_OK=""
+  fi
+fi
+
+# A shift from Devon's PC is done once it's saved: remove its branches so the next run doesn't redo it
+if [ -n "$STATE_OK" ] && [ "${SHIFT_MODE:-}" = local ] && [[ "${LOCAL_STAMP:-}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{4}$ ]]; then
+  git push -q origin --delete "refs/heads/autopilot/local-hq/$LOCAL_STAMP" 2> /dev/null || true
+  if git ls-remote --exit-code --heads origin "refs/heads/autopilot/local/$LOCAL_STAMP" > /dev/null 2>&1; then
+    git push -q origin --delete "refs/heads/autopilot/local/$LOCAL_STAMP" 2> /dev/null || true
   fi
 fi
 finish

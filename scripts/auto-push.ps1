@@ -7,6 +7,9 @@
 #   • publishes local-only branches (autopilot-state, wip/*) to the private repo
 #     — never to the public mirror
 #   • keeps the public mirror's main in step with the private repo
+#   • sends shifts done here in Claude (autopilot/local/* + autopilot/local-hq/*)
+#     for the cloud to check and ship, and while they run, refreshes
+#     autopilot/pc-online so the cloud leaves its slots to this PC
 #  Never force-pushes and never deletes anything. If unsaved edits are in the
 #  way it leaves your files alone and tries again next time.
 #
@@ -108,6 +111,44 @@ foreach ($b in $branches) {
     & git update-ref "refs/heads/$b" $r $l 2>$null
     Write-Log "branch $b changed both here and on GitHub; local commits kept on '$aside', now following GitHub"
   }
+}
+
+# ── 2b. Shifts done here in Claude: send each one once; the cloud checks and
+#        ships it, then deletes the branches on GitHub ─────────────────────────
+foreach ($hq in @(& git for-each-ref --format='%(refname:short)' 'refs/heads/autopilot/local-hq/' 2>$null)) {
+  if (-not $hq -or $known -contains $hq) { continue }
+  $stamp = $hq.Substring('autopilot/local-hq/'.Length)
+  if ($stamp -notmatch '^\d{4}-\d{2}-\d{2}-\d{4}$') { continue }
+  $refs = @()
+  $code = "refs/heads/autopilot/local/$stamp"
+  if (Get-Git rev-parse --verify --quiet $code) {
+    # Never send changes to GitHub workflows or the autopilot's own files from here
+    $base = Get-Git merge-base $code 'refs/remotes/v2/main'
+    $bad = @(& git diff --name-only $base $code 2>$null | Where-Object { $_ -match '^\.github/|^scripts/autopilot[-_]|\.(ps1|bat|cmd)$' })
+    if (-not $base -or $bad.Count) {
+      Write-Log "not sending the shift done in Claude at ${stamp}: it changes protected files ($($bad -join ', '))"
+      Add-Content -Path $published -Value $hq; $known += $hq; continue
+    }
+    $refs += "${code}:$code"
+  }
+  if (Get-Git rev-parse --verify --quiet "refs/heads/${hq}:.github") {
+    Write-Log "not sending the shift done in Claude at ${stamp}: its desk has a .github folder"
+    Add-Content -Path $published -Value $hq; $known += $hq; continue
+  }
+  $refs += "refs/heads/${hq}:refs/heads/$hq"
+  Write-Log "sending the shift done in Claude at $stamp to GitHub"
+  if (Invoke-GitLogged 'v2' (@('push', 'v2') + $refs)) { Add-Content -Path $published -Value $hq; $known += $hq }
+}
+
+# ── 2c. While shifts run here in Claude, tell the cloud to leave its slots ────
+$active = Join-Path $repo '.git\worldpulse-local-active'
+if ((Test-Path $active) -and ((Get-Date) - (Get-Item $active).LastWriteTime).TotalMinutes -lt 100) {
+  $emptyTree = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
+  $prev = Get-Git rev-parse --verify --quiet 'refs/remotes/v2/autopilot/pc-online'
+  $ctArgs = @('commit-tree', $emptyTree, '-m', "Shifts running in Claude on Devon's PC ($(Get-Date -Format s))")
+  if ($prev) { $ctArgs += @('-p', $prev) }
+  $beat = (& git @ctArgs 2>$null | Out-String).Trim()
+  if ($beat) { $null = Invoke-GitLogged 'v2' @('push', 'v2', "${beat}:refs/heads/autopilot/pc-online") }
 }
 
 # ── 3. main: follow the cloud, then push local commits ──────────────────────

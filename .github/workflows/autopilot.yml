@@ -20,6 +20,13 @@ name: Autopilot
 # to whom) live on main in scripts/autopilot-instructions/; both jobs apply them
 # to the desk at the start of every shift.
 #
+# While Devon's PC is on, shifts also run there in Claude (on his plan). His PC
+# sends each one as two branches, autopilot/local/<stamp> (code) and
+# autopilot/local-hq/<stamp> (report, plan, HQ data); the next hourly run here
+# checks and ships them exactly like a cloud shift, using this file from main.
+# While those shifts run, the PC refreshes autopilot/pc-online and the cloud
+# skips its own slots; it takes over again once the PC goes quiet.
+#
 # Lanes: World Map, Engineering, Departments and a nightly QA review; the
 # Sunday-night slot is the Chief of Staff's weekly planning (plan + brief).
 #
@@ -70,6 +77,8 @@ jobs:
       next: ${{ steps.shift.outputs.next }}
       slot_id: ${{ steps.shift.outputs.slot_id }}
       api_problem: ${{ steps.shift.outputs.api_problem }}
+      mode: ${{ steps.shift.outputs.mode }}
+      local_stamp: ${{ steps.shift.outputs.local_stamp }}
       claude_outcome: ${{ steps.claude.outcome }}
     env:
       TZ: America/New_York
@@ -98,11 +107,7 @@ jobs:
           MODEL: ${{ vars.AUTOPILOT_MODEL || 'claude-sonnet-5-5' }}
           WORKSPACE_ID: ${{ vars.AUTOPILOT_WORKSPACE_ID }}
         run: |
-          ready=true
-          if [ -z "$KEY" ]; then
-            echo "::warning::The ANTHROPIC_API_KEY secret isn't set yet, so this shift is skipped. Add it under Settings → Secrets and variables → Actions."
-            ready=false
-          fi
+          ready=true; mode=cloud; local_stamp=""; local_tip=""; start_sha=$(git rev-parse HEAD)
           if [ ! -f .hq/AUTOPILOT.md ]; then
             echo "::warning::The autopilot-state branch (plan + instructions) isn't on GitHub yet, so this shift is skipped. Devon's PC publishes it within 30 minutes of being on."
             ready=false
@@ -123,15 +128,55 @@ jobs:
             *)        lane="Departments" ;;
           esac
           if [ -n "$FORCED_LANE" ] && [ "$FORCED_LANE" != auto ]; then lane="$FORCED_LANE"; fi
+          # A shift done in Claude on Devon's PC is waiting: check and ship it (oldest first)
+          pending=""
+          if [ "$ready" = true ] && [ "$EVENT" = schedule ]; then
+            pending=$(git ls-remote --heads origin 'refs/heads/autopilot/local-hq/*' 2> /dev/null | cut -f2 \
+                      | sed -n 's#^refs/heads/autopilot/local-hq/\([0-9]\{4\}-[0-9][0-9]-[0-9][0-9]-[0-9]\{4\}\)$#\1#p' | sort | head -n1) || true
+          fi
+          if [ -n "$pending" ]; then
+            mode=local; local_stamp=$pending; slot_id=""
+            if git -C .hq fetch -q --depth=2 origin "refs/heads/autopilot/local-hq/$local_stamp" \
+               && git -C .hq checkout -q --detach FETCH_HEAD; then
+              ll=$(git -C .hq log -1 --format=%s | sed -n 's/^Local shift [0-9-]* · \([A-Za-z &]\{1,40\}\)$/\1/p') || true
+              lane="Local · ${ll:-shift}"
+              if git ls-remote --exit-code --heads origin "refs/heads/autopilot/local/$local_stamp" > /dev/null 2>&1; then
+                if git fetch -q origin "refs/heads/autopilot/local/$local_stamp" && base=$(git merge-base FETCH_HEAD HEAD); then
+                  local_tip=$(git rev-parse FETCH_HEAD); start_sha=$base
+                else
+                  echo "::warning::The commits from Devon's PC ($local_stamp) aren't based on main, so only the report and plan are saved."
+                fi
+              fi
+              echo "Checking and shipping a shift done in Claude on Devon's PC ($local_stamp, $lane)."
+            else
+              echo "::warning::Couldn't fetch the shift $local_stamp from Devon's PC; the next hourly run tries again."
+              ready=false
+            fi
+          fi
+          if [ "$mode" = cloud ] && [ -z "$KEY" ]; then
+            echo "::warning::The ANTHROPIC_API_KEY secret isn't set yet, so this shift is skipped. Add it under Settings → Secrets and variables → Actions."
+            ready=false
+          fi
           # One shift per slot: the extra hourly runs only catch up a missed slot
-          if [ "$ready" = true ] && [ "$EVENT" = schedule ] && [ "$(cat .hq/last-slot 2> /dev/null)" = "$slot_id" ]; then
+          if [ "$ready" = true ] && [ "$mode" = cloud ] && [ "$EVENT" = schedule ] && [ "$(cat .hq/last-slot 2> /dev/null)" = "$slot_id" ]; then
             echo "This slot's shift already ran; the next one starts at $(date -d "@$((slot_ts + 10800))" '+%-I:%M %p')."
             ready=false
+          fi
+          # Shifts are running in Claude on Devon's PC: leave the slot to them
+          if [ "$ready" = true ] && [ "$mode" = cloud ] && [ "$EVENT" = schedule ] \
+             && git fetch -q --depth=1 origin refs/heads/autopilot/pc-online 2> /dev/null; then
+            ct=$(git log -1 --format=%ct FETCH_HEAD 2> /dev/null || true)
+            age=$(( $(date +%s) - ${ct:-0} ))
+            if [ "$age" -lt 6000 ]; then
+              echo "Shifts are running in Claude on Devon's PC (it checked in $((age / 60)) min ago), so the cloud leaves this slot to it and takes over once the PC goes quiet."
+              ready=false
+            fi
           fi
           # Make sure Claude answers before starting (a 1-token request). An
           # organization-wide key has to name a workspace on every request: use
           # AUTOPILOT_WORKSPACE_ID if set, otherwise look the workspace up with the key.
           api_problem=""
+          [ "$mode" = local ] && pinged=skip || pinged=""
           ping() {  # ping [workspace-id] → HTTP status; the reply is in /tmp/api-check.json
             local h=(-H "x-api-key: $KEY" -H "anthropic-version: 2023-06-01" -H "content-type: application/json")
             [ -n "${1:-}" ] && h+=(-H "anthropic-workspace-id: $1")
@@ -140,7 +185,7 @@ jobs:
               https://api.anthropic.com/v1/messages 2> /dev/null || true
           }
           api_error() { python3 -c 'import json; print(json.load(open("/tmp/api-check.json"))["error"]["message"])' 2> /dev/null || true; }
-          if [ "$ready" = true ]; then
+          if [ "$ready" = true ] && [ -z "$pinged" ]; then
             ws="$WORKSPACE_ID"
             code=$(ping "$ws")
             if [ "$code" = 400 ] && [ -z "$ws" ] && [[ "$(api_error)" == *anthropic-workspace-id* ]]; then
@@ -189,6 +234,7 @@ jobs:
           # pipeline keeps. Left uncommitted: it travels with the shift's own edits,
           # and the publish job applies it again.
           hq_base=$(git -C .hq rev-parse HEAD 2> /dev/null || true)
+          [ "$mode" = local ] && hq_base=$(git -C .hq rev-parse HEAD~1 2> /dev/null || true)
           if [ "$ready" = true ]; then
             if migrated=$(cd .hq && python3 "$GITHUB_WORKSPACE/scripts/autopilot_hq.py" migrate "$GITHUB_WORKSPACE/scripts/autopilot-instructions" 2>&1); then
               [ -n "$migrated" ] && echo "Desk updated from main: $migrated"
@@ -202,29 +248,32 @@ jobs:
             echo "slot_id=$slot_id"
             echo "api_problem=$api_problem"
             echo "lane=$lane"
-            echo "start_sha=$(git rev-parse HEAD)"
+            echo "start_sha=$start_sha"
             echo "hq_base=$hq_base"
-            echo "stamp=$(date +%Y-%m-%d-%H%M)"
+            echo "mode=$mode"
+            echo "local_stamp=$local_stamp"
+            echo "local_tip=$local_tip"
+            if [ "$mode" = local ]; then echo "stamp=$local_stamp"; else echo "stamp=$(date +%Y-%m-%d-%H%M)"; fi
             echo "now=$(date '+%A %B %-d, %Y, %-I:%M %p %Z')"
             echo "next=$(date -d "@$((slot_ts + 10800))" '+%-I:%M %p')"
           } >> "$GITHUB_OUTPUT"
           # .hq is a separate repository; keep it out of the code repo
           echo ".hq/" >> .git/info/exclude
-          echo "Shift: $lane ($(date)) · ready=$ready"
+          echo "Shift: $lane ($(date)) · ready=$ready · $mode"
 
       - uses: actions/setup-node@v6
-        if: steps.shift.outputs.ready == 'true'
+        if: steps.shift.outputs.ready == 'true' && (steps.shift.outputs.mode != 'local' || steps.shift.outputs.local_tip != '')
         with:
           node-version: 20   # same major as the production Docker images
 
       - name: Install pnpm
-        if: steps.shift.outputs.ready == 'true'
+        if: steps.shift.outputs.ready == 'true' && (steps.shift.outputs.mode != 'local' || steps.shift.outputs.local_tip != '')
         run: |
           npm install -g pnpm@9.12.0 > /dev/null
           echo "PNPM_STORE=$(pnpm store path --silent)" >> "$GITHUB_ENV"
 
       - name: Restore the package cache
-        if: steps.shift.outputs.ready == 'true'
+        if: steps.shift.outputs.ready == 'true' && (steps.shift.outputs.mode != 'local' || steps.shift.outputs.local_tip != '')
         uses: actions/cache@v4
         with:
           path: ${{ env.PNPM_STORE }}
@@ -232,7 +281,7 @@ jobs:
           restore-keys: pnpm-store-${{ runner.os }}-
 
       - name: Install dependencies
-        if: steps.shift.outputs.ready == 'true'
+        if: steps.shift.outputs.ready == 'true' && (steps.shift.outputs.mode != 'local' || steps.shift.outputs.local_tip != '')
         continue-on-error: true
         run: |
           if pnpm install --frozen-lockfile; then
@@ -246,7 +295,7 @@ jobs:
 
       - name: Run the shift
         id: claude
-        if: steps.shift.outputs.ready == 'true' && steps.shift.outputs.api_problem == ''
+        if: steps.shift.outputs.ready == 'true' && steps.shift.outputs.api_problem == '' && steps.shift.outputs.mode != 'local'
         continue-on-error: true
         timeout-minutes: 40
         uses: anthropics/claude-code-action@v1
@@ -267,6 +316,12 @@ jobs:
             --max-budget-usd ${{ vars.AUTOPILOT_BUDGET_USD || '3' }}
             --allowedTools "Read,Write,Edit,Glob,Grep,Bash,WebFetch,WebSearch,TodoWrite"
             --disallowedTools "Bash(git push:*),Bash(gh:*),Bash(curl:*),Bash(wget:*),Bash(ssh:*),Bash(scp:*)"
+
+      - name: Check out the commits from Devon's PC
+        if: ${{ !cancelled() && steps.shift.outputs.ready == 'true' && steps.shift.outputs.local_tip != '' }}
+        env:
+          TIP: ${{ steps.shift.outputs.local_tip }}
+        run: git checkout -q --detach "$TIP"
 
       - name: Check the work
         if: ${{ !cancelled() && steps.shift.outputs.ready == 'true' }}
@@ -334,6 +389,8 @@ jobs:
           SLOT_ID: ${{ needs.shift.outputs.slot_id }}
           API_PROBLEM: ${{ needs.shift.outputs.api_problem }}
           CLAUDE_OUTCOME: ${{ needs.shift.outputs.claude_outcome }}
+          SHIFT_MODE: ${{ needs.shift.outputs.mode }}
+          LOCAL_STAMP: ${{ needs.shift.outputs.local_stamp }}
           SHIFT_OUT: /tmp/shift-out
         # Runs the shipping script as it was when the shift started; no code
         # from the shift runs here
