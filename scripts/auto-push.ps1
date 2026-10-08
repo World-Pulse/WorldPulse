@@ -10,27 +10,44 @@
 #  Never force-pushes and never deletes anything. If unsaved edits are in the
 #  way it leaves your files alone and tries again next time.
 #
-#  Turn on (one time, in PowerShell):
-#    schtasks /Create /F /SC MINUTE /MO 30 /TN "WorldPulse auto-push" /TR "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File C:\Users\devon\OneDrive\Desktop\worldpulse\scripts\auto-push.ps1"
+#  Turn on, repair, or sync right now: double-click "Sync WorldPulse now.cmd"
+#  in the worldpulse folder (it runs scripts/sync-now.ps1).
 #  Turn off:
 #    schtasks /Delete /TN "WorldPulse auto-push" /F
 #  Log:
 #    %LOCALAPPDATA%\worldpulse-auto-push.log
+#  Last result (read by the HQ sync): .git\worldpulse-sync-status
 # ─────────────────────────────────────────────────────────────────────────────
+param([switch]$Interactive)
 $ErrorActionPreference = 'Continue'
 $repo = Split-Path -Parent $PSScriptRoot
 $log  = Join-Path $env:LOCALAPPDATA 'worldpulse-auto-push.log'
 Set-Location $repo
+if (-not $Interactive) {
+  # Scheduled runs have no window to sign in with: fail fast and log it,
+  # never wait on a hidden prompt (that would block every later run)
+  $env:GIT_TERMINAL_PROMPT = '0'
+  $env:GCM_INTERACTIVE = 'never'
+}
+$script:pushFailed = $false
 
 function Write-Log([string]$msg) {
   "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  $msg" | Out-File -FilePath $log -Append -Encoding utf8
+  if ($Interactive) { Write-Host "  $msg" }
+}
+# One line the HQ sync can read: when this last ran and how it went
+function Set-SyncStatus([string]$state) {
+  $line = "$(Get-Date -Format 'yyyy-MM-ddTHH:mm:sszzz') $state"
+  try { [IO.File]::WriteAllText((Join-Path $repo '.git\worldpulse-sync-status'), $line + "`n") } catch { }
 }
 # Run git, return its output as one trimmed string (errors hidden)
 function Get-Git { (& git @args 2>$null | Out-String).Trim() }
 # Run git with the given argument list, copy its output into the log
 function Invoke-GitLogged([string]$label, [string[]]$gitArgs) {
   & git @gitArgs 2>&1 | ForEach-Object { Write-Log "  ${label}: $_" }
-  return ($LASTEXITCODE -eq 0)
+  $ok = ($LASTEXITCODE -eq 0)
+  if (-not $ok -and $gitArgs[0] -eq 'push') { $script:pushFailed = $true }
+  return $ok
 }
 function Test-Ancestor([string]$older, [string]$newer) {
   & git merge-base --is-ancestor $older $newer 2>$null
@@ -41,17 +58,21 @@ function Test-Ancestor([string]$older, [string]$newer) {
 $lock = Join-Path $repo '.git\index.lock'
 if (Test-Path $lock) {
   $age = (Get-Date) - (Get-Item $lock).LastWriteTime
-  if ($age.TotalMinutes -lt 60) { Write-Log 'skipped: git is busy (index.lock)'; exit 0 }
+  if ($age.TotalMinutes -lt 60) { Write-Log 'skipped: git is busy (index.lock)'; Set-SyncStatus 'busy'; exit 0 }
   Remove-Item $lock -Force -ErrorAction SilentlyContinue
   Write-Log 'removed a stale .git\index.lock (over an hour old)'
 }
 foreach ($marker in @('rebase-merge', 'rebase-apply', 'MERGE_HEAD')) {
-  if (Test-Path (Join-Path $repo ".git\$marker")) { Write-Log "skipped: a git $marker is in progress"; exit 0 }
+  if (Test-Path (Join-Path $repo ".git\$marker")) { Write-Log "skipped: a git $marker is in progress"; Set-SyncStatus "busy-$marker"; exit 0 }
 }
 
 # ── 1. Get the latest from the private repo ─────────────────────────────────
 & git fetch v2 --prune --quiet 2>$null
-if ($LASTEXITCODE -ne 0) { Write-Log 'fetch from the private repo failed (offline?)'; exit 0 }
+if ($LASTEXITCODE -ne 0) {
+  Write-Log 'fetch from the private repo failed (offline, or GitHub needs you to sign in again)'
+  Set-SyncStatus 'fetch-failed'
+  exit 0
+}
 $current = Get-Git rev-parse --abbrev-ref HEAD
 
 # ── 2. Side branches: publish new ones, follow the cloud, push local edits ──
@@ -90,8 +111,8 @@ foreach ($b in $branches) {
 }
 
 # ── 3. main: follow the cloud, then push local commits ──────────────────────
-if ($current -ne 'main') { Write-Log "main not synced: this copy is on branch '$current'"; exit 0 }
-if (-not (Get-Git rev-parse --verify --quiet refs/remotes/v2/main)) { exit 0 }
+if ($current -ne 'main') { Write-Log "main not synced: this copy is on branch '$current'"; Set-SyncStatus "not-on-main $current"; exit 0 }
+if (-not (Get-Git rev-parse --verify --quiet refs/remotes/v2/main)) { Set-SyncStatus 'ok'; exit 0 }
 
 $behind = [int](Get-Git rev-list --count main..v2/main)
 $ahead  = [int](Get-Git rev-list --count v2/main..main)
@@ -130,3 +151,5 @@ if ($pv -and $po -and $pv -ne $po) {
     Write-Log 'public mirror has commits the private repo lacks; not updating it (needs a look)'
   }
 }
+
+if ($script:pushFailed) { Set-SyncStatus 'push-failed' } else { Set-SyncStatus 'ok' }
