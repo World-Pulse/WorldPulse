@@ -36,9 +36,9 @@ API="${AUTOPILOT_API:-https://api.world-pulse.io}"
 
 SECRET_RE='sk-ant-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|[sr]k_live_[0-9A-Za-z]{16,}'
 DANGER_RE='docker[ -]compose[^#]*[[:space:]]down[^#]*(-v([[:space:]]|$)|--volumes)|docker[[:space:]]+volume[[:space:]]+(rm|prune)|system[[:space:]]+prune[^#]*--volumes|drop[[:space:]]+(database|schema|table)|truncate[[:space:]]+table|rm[[:space:]]+-[a-z]*r[a-z]*[[:space:]]+/(opt|srv|var/lib/docker)'
-# Files a shift may never change: workflows, these checks, scripts that run on
+# Files a shift may never change: workflows, these pipeline scripts, scripts that run on
 # Devon's PC, env files, certificates and keys
-PROTECTED_RE='^\.github/workflows/|^scripts/autopilot-publish\.sh$|\.(ps1|bat|cmd)$|^\.certbot/|(^|/)\.env([.][^/]*)?$|\.(pem|key|p12|pfx|jks)$|(^|/)id_(rsa|dsa|ecdsa|ed25519)(\.pub)?$|(^|/)\.git-credentials$'
+PROTECTED_RE='^\.github/workflows/|^scripts/autopilot[-_]|\.(ps1|bat|cmd)$|^\.certbot/|(^|/)\.env([.][^/]*)?$|\.(pem|key|p12|pfx|jks)$|(^|/)id_(rsa|dsa|ecdsa|ed25519)(\.pub)?$|(^|/)\.git-credentials$'
 ENV_TEMPLATE_RE='(^|/)\.env[^/]*\.(example|sample|template)$'
 
 NOTE=""; FAIL=""; SECRET=""; CHANGED=""
@@ -248,6 +248,21 @@ PY
     )
   fi
 
+  # What the shift cost, from Claude Code's own result message (estimated by Claude Code)
+  EXEC_FILE="${EXEC_FILE:-}" python3 - "$OUT/cost.json" <<'PY' 2> /dev/null || true
+import json, os, sys
+out = {}
+try:
+    msgs = json.load(open(os.environ.get("EXEC_FILE") or ""))
+    res = [m for m in msgs if isinstance(m, dict) and m.get("type") == "result"]
+    if res:
+        r = res[-1]
+        out = {"usd": round(float(r.get("total_cost_usd") or 0), 4), "turns": int(r.get("num_turns") or 0),
+               "minutes": round(float(r.get("duration_ms") or 0) / 60000, 1)}
+except Exception:
+    pass
+json.dump(out, open(sys.argv[1], "w"))
+PY
   {
     echo "checks=$([ -z "$FAIL" ] && echo pass || echo fail)"
     echo "has_work=$HAS_WORK"
@@ -265,6 +280,12 @@ SHIPPED=""; PARKED=""; RESULT=""; TIP=""
 SERVER_COMMIT=""; LAST_DEPLOY=""; API_STATUS=""
 git config --global user.name "WorldPulse Autopilot"
 git config --global user.email "autopilot@world-pulse.io"
+# HQ bookkeeping helper, also as it was when the shift started
+git show "$START:scripts/autopilot_hq.py" > /tmp/autopilot_hq.py 2> /dev/null || : > /tmp/autopilot_hq.py
+# Orbit's instructions and the org chart, as they were on main when the shift started
+rm -rf /tmp/ap-src && mkdir -p /tmp/ap-src
+git archive "$START" scripts/autopilot-instructions 2> /dev/null | tar -x -C /tmp/ap-src 2> /dev/null || true
+AP_SRC=/tmp/ap-src/scripts/autopilot-instructions
 
 # What the shift job reported (untrusted: shift code ran before it was written)
 CHECKS=$(sed -n 's/^checks=\(pass\|fail\)$/\1/p' "$OUT/verdict.txt" 2> /dev/null | head -n1)
@@ -384,8 +405,24 @@ if [ -f "$OUT/hq.bundle" ] && git fetch -q "$OUT/hq.bundle" "refs/heads/shift-wo
     note "Plan/HQ edits from this shift clashed with an edit made on GitHub, so the GitHub version was kept."
   fi
 fi
-# Orbit's standing instructions only change when Devon (or Claude in a chat) changes them
-if ! git diff --quiet "$BASE_HQ" -- AUTOPILOT.md README.md 2> /dev/null; then
+# Orbit's standing instructions and the org chart only change on main
+# (scripts/autopilot-instructions): put them back, plus the files the pipeline keeps
+if [ -d "$AP_SRC" ] && [ -s /tmp/autopilot_hq.py ]; then
+  for f in AUTOPILOT.md README.md; do
+    # (the shift changed it: it differs both from main's copy and from the desk it started with)
+    if [ -f "$AP_SRC/$f" ] && [ -n "${W:-}" ] && git cat-file -e "$W:$f" 2> /dev/null \
+       && ! cmp -s "$AP_SRC/$f" <(git show "$W:$f") && ! cmp -s <(git show "$BASE_HQ:$f" 2> /dev/null) <(git show "$W:$f"); then
+      note "The shift edited $f; that edit was undone."
+    fi
+  done
+  if MIGRATED=$(python3 /tmp/autopilot_hq.py migrate "$AP_SRC" 2> /tmp/hq-migrate.err); then
+    [ -n "$MIGRATED" ] && echo "Desk updated from main: $MIGRATED"
+  else
+    git checkout -q -- . 2> /dev/null; git clean -qfd 2> /dev/null      # drop a half-done update
+    git checkout "$BASE_HQ" -- AUTOPILOT.md README.md 2> /dev/null || true
+    note "Couldn't apply the instructions and org chart from main: $(tail -n1 /tmp/hq-migrate.err)"
+  fi
+elif ! git diff --quiet "$BASE_HQ" -- AUTOPILOT.md README.md 2> /dev/null; then
   git checkout "$BASE_HQ" -- AUTOPILOT.md README.md 2> /dev/null || true
   note "The shift edited AUTOPILOT.md or README.md; those edits were undone."
 fi
@@ -403,156 +440,17 @@ fi
   printf '%s\n' "$NOTE"
 } >> "$REPORT"
 
-HQ_PROBLEMS=$(BASE_HQ="$BASE_HQ" OPS="$OPS" SITE_CODE="$SITE_CODE" API_STATUS="$API_STATUS" RESULT="$RESULT" API_PROBLEM="${API_PROBLEM:-}" \
-  LANE="$LANE" STAMP="$STAMP" NEXT_SHIFT="${NEXT_SHIFT:-}" RUN_URL="$RUN_URL" CLAUDE_OUTCOME="${CLAUDE_OUTCOME:-}" python3 - <<'PY'
-import datetime, json, os, subprocess
-
-def parse(text):
-    try:
-        v = json.loads(text)
-        return v if isinstance(v, dict) else None
-    except Exception:
-        return None
-
-env = os.environ.get
-prev = parse(subprocess.run(["git", "show", env("BASE_HQ") + ":hq-data.json"],
-                            capture_output=True, text=True).stdout.lstrip("﻿"))
-cur = parse(open("hq-data.json", encoding="utf-8-sig").read()) if os.path.exists("hq-data.json") else None
-problems = []
-if cur is None:
-    problems.append("hq-data.json was not valid JSON")
-elif prev:
-    ids = lambda d: [t.get("id") if isinstance(t, dict) else None for t in d.get("team", [])]
-    if ids(cur) != ids(prev):
-        problems.append("the team list was changed")
-    if cur.get("departments") != prev.get("departments"):
-        problems.append("the departments were changed")
-    if not problems:  # keep each bot's identity as it was
-        old = {t["id"]: t for t in prev.get("team", [])}
-        for t in cur["team"]:
-            for k in ("name", "kind", "dept", "color", "role"):
-                if k in old[t["id"]]:
-                    t[k] = old[t["id"]][k]
-if problems:
-    cur = prev
-if cur is None:  # nothing valid to build on: leave the file alone
-    print("hq-data.json could not be read, so it was left unchanged")
-    raise SystemExit(0)
-d = cur
-
-now = datetime.datetime.now().astimezone()
-d["updated"] = now.isoformat(timespec="seconds")
-d["autopilot"] = {
-    "next": env("NEXT_SHIFT") or (d.get("autopilot") or {}).get("next", ""),
-    "cadence": "every 3 hours",
-    "where": "cloud",
-    "last": {"stamp": env("STAMP"), "lane": env("LANE"), "result": env("RESULT") or "", "run": env("RUN_URL")},
-}
-
-def put(label, value, state):
-    prod = d.setdefault("production", [])
-    for p in prod:
-        if isinstance(p, dict) and p.get("label") == label:
-            p.update(value=value, state=state)
-            return
-    prod.append({"label": label, "value": value, "state": state})
-
-code = env("SITE_CODE") or ""
-put("Site", "Online" if code == "200" else f"Not loading (HTTP {code or 'no answer'})", "ok" if code == "200" else "bad")
-api = (env("API_STATUS") or "").lower()
-put("API", "Healthy" if api in ("ok", "healthy") else (api or "No answer"), "ok" if api in ("ok", "healthy") else "bad")
-ops = parse(env("OPS") or "") or {}
-if ops:
-    c = ops.get("containers") or {}
-    scraper = str(c.get("wp_scraper", "missing"))
-    put("News intake", "Live" if scraper == "running" else f"Scraper {scraper}", "ok" if scraper == "running" else "bad")
-    days = ops.get("cert_days_left")
-    if isinstance(days, int) and days >= 0:
-        put("Certificate", f"{days} days left", "ok" if days >= 21 else "warn" if days >= 14 else "bad")
-    disk = ops.get("disk_used_pct")
-    if isinstance(disk, int):
-        put("Disk", f"{disk}% used", "ok" if disk < 80 else "warn" if disk < 90 else "bad")
-    ld, commit = str(ops.get("last_deploy") or "none"), str(ops.get("commit") or "?")
-    words = {"success": ("Live", "ok"), "success_with_warnings": ("Live, with warnings", "warn"),
-             "rolled_back": ("Rolled back", "bad"), "failed": ("Failed", "bad"),
-             "running": ("Deploying…", "warn"), "starting": ("Deploying…", "warn")}
-    w, st = words.get(ld, (ld, "warn"))
-    put("Last deploy", f"{w} · {commit}", st)
-
-# Devon's inbox: say when Claude can't be reached; clear it once shifts run again
-PREFIX = "Autopilot can't reach Claude"
-inbox = [x for x in d.get("inbox", []) if isinstance(x, dict)]
-problem = (env("API_PROBLEM") or "").strip()
-if problem:
-    if not any(str(x.get("text", "")).startswith(PREFIX) and not x.get("done") for x in inbox):
-        inbox.insert(0, {"text": f"{PREFIX}: {problem[:160]} (fix the key or add credits in the Claude Console)", "done": False})
-elif env("CLAUDE_OUTCOME") in ("success", "failure"):
-    for x in inbox:
-        if str(x.get("text", "")).startswith(PREFIX):
-            x["done"] = True
-d["inbox"] = inbox
-
-result, lane = env("RESULT") or "", env("LANE") or "shift"
-if problem:
-    text = f"{lane} shift couldn't start: the Claude API turned the key away"
-elif env("CLAUDE_OUTCOME") == "failure" and not result.startswith("shipped"):
-    text = f"{lane} shift didn't finish cleanly; details in the report"
-elif result.startswith(("parked", "blocked")):
-    text = f"{lane} shift: change held back ({result.split(': ', 1)[-1]})"
-else:
-    text = f"{lane} shift: {result or 'done'}"
-log = [x for x in d.get("log", []) if isinstance(x, dict)]
-log.append({"time": now.strftime("%I:%M %p").lstrip("0"), "who": "Orbit", "text": text[:200]})
-d["log"] = log[-12:]
-
-with open("hq-data.json", "w", encoding="utf-8") as fh:
-    json.dump(d, fh, indent=2, ensure_ascii=False)
-    fh.write("\n")
-print("; ".join(problems))
-PY
-)
-[ -n "$HQ_PROBLEMS" ] && printf -- '- HQ data: %s, so the previous version was kept\n' "$HQ_PROBLEMS" >> "$REPORT"
+HQ_PROBLEMS=$(BASE_HQ="$BASE_HQ" AP_SRC="$AP_SRC" OPS="$OPS" SITE_CODE="$SITE_CODE" API_STATUS="$API_STATUS" RESULT="$RESULT" \
+  API_PROBLEM="${API_PROBLEM:-}" LANE="$LANE" STAMP="$STAMP" SLOT_ID="${SLOT_ID:-}" NEXT_SHIFT="${NEXT_SHIFT:-}" \
+  RUN_URL="$RUN_URL" CLAUDE_OUTCOME="${CLAUDE_OUTCOME:-}" SHIPPED="$SHIPPED" COST_FILE="$OUT/cost.json" \
+  python3 /tmp/autopilot_hq.py update 2> /tmp/hq-update.err) || HQ_PROBLEMS="HQ bookkeeping failed: $(tail -n1 /tmp/hq-update.err)"
+[ -n "$HQ_PROBLEMS" ] && printf -- '- HQ data: %s\n' "$HQ_PROBLEMS" >> "$REPORT"
 
 # Remember this slot is done, so the hourly catch-up runs don't repeat it
 [ -n "${SLOT_ID:-}" ] && printf '%s\n' "$SLOT_ID" > last-slot
 
 # STATUS.md: a phone-friendly page on GitHub, current after every shift
-REPORT="$REPORT" RUN_URL="$RUN_URL" python3 - <<'PY'
-import json, os
-try:
-    d = json.load(open("hq-data.json", encoding="utf-8-sig"))
-except Exception:
-    d = {}
-def cell(v):
-    return str(v if v is not None else "").replace("|", "/").replace("\n", " ").strip()
-ap = d.get("autopilot") or {}
-last = ap.get("last") or {}
-out = ["# Orbit — WorldPulse autopilot status", ""]
-out.append(f"_Updated {cell(d.get('updated'))} · next shift {cell(ap.get('next'))} (every 3 hours)_")
-out.append("")
-if d.get("headline"):
-    out += [f"**{cell(d['headline'])}**", ""]
-out.append(f"**Last shift:** {cell(last.get('lane'))} — {cell(last.get('result'))} · "
-           f"[report]({os.environ['REPORT']}) · [run log]({os.environ['RUN_URL']})")
-out += ["", "## Production", "", "| | |", "|---|---|"]
-for p in d.get("production") or []:
-    if isinstance(p, dict):
-        mark = {"ok": "OK", "warn": "check", "bad": "PROBLEM"}.get(p.get("state"), "")
-        out.append(f"| {cell(p.get('label'))} | {cell(p.get('value'))}{(' · ' + mark) if mark else ''} |")
-pl = d.get("plan") or {}
-out += ["", f"## Plan: {cell(pl.get('done'))} of {cell(pl.get('total'))} done", "", f"Next up: {cell(pl.get('next'))}"]
-todo = [x for x in d.get("inbox") or [] if isinstance(x, dict) and not x.get("done")]
-out += ["", "## Needs you", ""] + ([f"- [ ] {cell(x.get('text'))}" for x in todo] or ["Nothing right now."])
-out += ["", "## Team", "", "| Bot | Status | Now |", "|---|---|---|"]
-for t in d.get("team") or []:
-    if isinstance(t, dict):
-        out.append(f"| {cell(t.get('name'))} · {cell(t.get('role'))} | {cell(t.get('status'))} | {cell(t.get('now'))} |")
-out += ["", "## Recent activity", ""]
-for x in reversed([x for x in d.get("log") or [] if isinstance(x, dict)][-8:]):
-    out.append(f"- {cell(x.get('time'))} · **{cell(x.get('who'))}** — {cell(x.get('text'))}")
-out += ["", "_Rewritten after every shift. To change priorities, edit PLAN.md._", ""]
-open("STATUS.md", "w", encoding="utf-8").write("\n".join(out))
-PY
+REPORT="$REPORT" RUN_URL="$RUN_URL" python3 /tmp/autopilot_hq.py status 2> /dev/null || true
 
 # Never store anything that looks like a key, even on the private branch
 SECRET_RE="$SECRET_RE" python3 - <<'PY'

@@ -1,0 +1,329 @@
+{
+  "_about": "WorldPulse org chart: floors, who works where, who heads each floor and who reports to whom. The autopilot applies this to the HQ data at the start of every shift, so change the org here (on main), never in hq-data.json.",
+  "departments": [
+    {
+      "id": "engineering",
+      "name": "Engineering",
+      "floor": 1,
+      "blurb": "Servers, security, AI and the site itself",
+      "head": "atlas"
+    },
+    {
+      "id": "maplab",
+      "name": "Map Lab",
+      "floor": 2,
+      "blurb": "Turning the World Map into the flagship",
+      "head": "cartographer"
+    },
+    {
+      "id": "editorial",
+      "name": "Editorial Desk",
+      "floor": 3,
+      "blurb": "AI Digest quality, briefings and fact-checks",
+      "head": "quill"
+    },
+    {
+      "id": "research",
+      "name": "Research Lab",
+      "floor": 4,
+      "blurb": "Competitors, new sources and coverage gaps",
+      "head": "sage"
+    },
+    {
+      "id": "marketing",
+      "name": "Marketing Studio",
+      "floor": 5,
+      "blurb": "Relaunch, SEO, social and the newsletter",
+      "head": "echo"
+    },
+    {
+      "id": "data",
+      "name": "Data & Quality",
+      "floor": 6,
+      "blurb": "Reliability, duplicates and freshness",
+      "head": "sentinel"
+    },
+    {
+      "id": "product",
+      "name": "Product & Design",
+      "floor": 7,
+      "blurb": "Reading experience, onboarding and usage insights",
+      "head": "lumen"
+    },
+    {
+      "id": "revenue",
+      "name": "Revenue & Partnerships",
+      "floor": 8,
+      "blurb": "Pro plan, paid API access and partners",
+      "head": "mint"
+    },
+    {
+      "id": "community",
+      "name": "Community & Support",
+      "floor": 9,
+      "blurb": "Feedback, help pages and moderation",
+      "head": "harbor"
+    },
+    {
+      "id": "languages",
+      "name": "Languages",
+      "floor": 10,
+      "blurb": "Keeping every translation complete and correct",
+      "head": "babel"
+    },
+    {
+      "id": "exec",
+      "name": "Executive Suite",
+      "floor": 11,
+      "blurb": "Devon, the Chief of Staff and the shift dispatcher: priorities, handoffs and escalations",
+      "head": "lead"
+    }
+  ],
+  "team": [
+    {
+      "id": "lead",
+      "name": "Claude",
+      "kind": "lead",
+      "dept": "exec",
+      "color": "#0284c7",
+      "role": "Chief of Staff · priorities, handoffs & reviews",
+      "head": true,
+      "reports_to": "devon"
+    },
+    {
+      "id": "atlas",
+      "name": "Atlas",
+      "kind": "atlas",
+      "dept": "engineering",
+      "color": "#0d9488",
+      "role": "Head of Engineering · servers & deploys",
+      "head": true,
+      "reports_to": "lead"
+    },
+    {
+      "id": "cipher",
+      "name": "Cipher",
+      "kind": "cipher",
+      "dept": "engineering",
+      "color": "#4f46e5",
+      "role": "Security Engineer",
+      "reports_to": "atlas"
+    },
+    {
+      "id": "synapse",
+      "name": "Synapse",
+      "kind": "synapse",
+      "dept": "engineering",
+      "color": "#db2777",
+      "role": "AI Engineer",
+      "reports_to": "atlas"
+    },
+    {
+      "id": "scout",
+      "name": "Scout",
+      "kind": "scout",
+      "dept": "engineering",
+      "color": "#d97706",
+      "role": "Data Pipeline Engineer",
+      "reports_to": "atlas"
+    },
+    {
+      "id": "forge",
+      "name": "Forge",
+      "kind": "forge",
+      "dept": "engineering",
+      "color": "#dc2626",
+      "role": "Build & Quality Engineer",
+      "reports_to": "atlas"
+    },
+    {
+      "id": "pixel",
+      "name": "Pixel",
+      "kind": "pixel",
+      "dept": "engineering",
+      "color": "#16a34a",
+      "role": "Frontend Engineer",
+      "reports_to": "atlas"
+    },
+    {
+      "id": "orbit",
+      "name": "Orbit",
+      "kind": "orbit",
+      "dept": "exec",
+      "color": "#64748b",
+      "role": "Operations · shift dispatcher",
+      "reports_to": "lead"
+    },
+    {
+      "id": "cartographer",
+      "name": "Cartographer",
+      "kind": "cartographer",
+      "dept": "maplab",
+      "color": "#0284c7",
+      "role": "Head of Map Lab · map engineering",
+      "head": true,
+      "reports_to": "lead"
+    },
+    {
+      "id": "meridian",
+      "name": "Meridian",
+      "kind": "meridian",
+      "dept": "maplab",
+      "color": "#059669",
+      "role": "Geo Data Engineer",
+      "reports_to": "cartographer"
+    },
+    {
+      "id": "quill",
+      "name": "Quill",
+      "kind": "quill",
+      "dept": "editorial",
+      "color": "#7c3aed",
+      "role": "Editor-in-Chief · head of Editorial",
+      "head": true,
+      "reports_to": "lead"
+    },
+    {
+      "id": "ledger",
+      "name": "Ledger",
+      "kind": "ledger",
+      "dept": "editorial",
+      "color": "#475569",
+      "role": "Fact-Checker",
+      "reports_to": "quill"
+    },
+    {
+      "id": "sage",
+      "name": "Sage",
+      "kind": "sage",
+      "dept": "research",
+      "color": "#b45309",
+      "role": "Head of Research · intelligence analysis",
+      "head": true,
+      "reports_to": "lead"
+    },
+    {
+      "id": "compass",
+      "name": "Compass",
+      "kind": "compass",
+      "dept": "research",
+      "color": "#0f766e",
+      "role": "Source Scout",
+      "reports_to": "sage"
+    },
+    {
+      "id": "echo",
+      "name": "Echo",
+      "kind": "echo",
+      "dept": "marketing",
+      "color": "#ea580c",
+      "role": "Head of Marketing · social & newsletter",
+      "head": true,
+      "reports_to": "lead"
+    },
+    {
+      "id": "beacon",
+      "name": "Beacon",
+      "kind": "beacon",
+      "dept": "marketing",
+      "color": "#ca8a04",
+      "role": "SEO & Growth",
+      "reports_to": "echo"
+    },
+    {
+      "id": "sentinel",
+      "name": "Sentinel",
+      "kind": "sentinel",
+      "dept": "data",
+      "color": "#be123c",
+      "role": "Head of Data & Quality · trust & reliability",
+      "head": true,
+      "reports_to": "lead"
+    },
+    {
+      "id": "gauge",
+      "name": "Gauge",
+      "kind": "gauge",
+      "dept": "data",
+      "color": "#4338ca",
+      "role": "Freshness Monitor",
+      "reports_to": "sentinel"
+    },
+    {
+      "id": "lumen",
+      "name": "Lumen",
+      "kind": "lumen",
+      "dept": "product",
+      "color": "#8b5cf6",
+      "role": "Head of Product · design",
+      "head": true,
+      "reports_to": "lead"
+    },
+    {
+      "id": "tally",
+      "name": "Tally",
+      "kind": "tally",
+      "dept": "product",
+      "color": "#0ea5e9",
+      "role": "Product Analyst",
+      "reports_to": "lumen"
+    },
+    {
+      "id": "mint",
+      "name": "Mint",
+      "kind": "mint",
+      "dept": "revenue",
+      "color": "#15803d",
+      "role": "Head of Revenue · pricing & billing",
+      "head": true,
+      "reports_to": "lead"
+    },
+    {
+      "id": "bridge",
+      "name": "Bridge",
+      "kind": "bridge",
+      "dept": "revenue",
+      "color": "#c2410c",
+      "role": "Partnerships",
+      "reports_to": "mint"
+    },
+    {
+      "id": "harbor",
+      "name": "Harbor",
+      "kind": "harbor",
+      "dept": "community",
+      "color": "#0891b2",
+      "role": "Head of Community · support",
+      "head": true,
+      "reports_to": "lead"
+    },
+    {
+      "id": "warden",
+      "name": "Warden",
+      "kind": "warden",
+      "dept": "community",
+      "color": "#334155",
+      "role": "Community Moderator",
+      "reports_to": "harbor"
+    },
+    {
+      "id": "babel",
+      "name": "Babel",
+      "kind": "babel",
+      "dept": "languages",
+      "color": "#9333ea",
+      "role": "Head of Languages · localization",
+      "head": true,
+      "reports_to": "lead"
+    },
+    {
+      "id": "lingo",
+      "name": "Lingo",
+      "kind": "lingo",
+      "dept": "languages",
+      "color": "#e11d48",
+      "role": "Translation QA",
+      "reports_to": "babel"
+    }
+  ]
+}

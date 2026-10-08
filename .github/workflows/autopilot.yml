@@ -12,8 +12,16 @@ name: Autopilot
 #            website still builds) and hands it to the publish job.
 #  publish — a fresh machine that runs no code from the shift: re-checks the
 #            safety rules itself, ships passing commits to main, starts the
-#            deploy, and saves the report + HQ data to the private
+#            deploy, and saves the report, handoffs between floors, the shift
+#            ledger (with what each shift cost) and HQ data to the private
 #            `autopilot-state` branch.
+#
+# Orbit's standing instructions and the org chart (floors, heads, who reports
+# to whom) live on main in scripts/autopilot-instructions/; both jobs apply them
+# to the desk at the start of every shift.
+#
+# Lanes: World Map, Engineering, Departments and a nightly QA review; the
+# Sunday-night slot is the Chief of Staff's weekly planning (plan + brief).
 #
 # Setup: one repository secret, ANTHROPIC_API_KEY — best a key created for one
 #   workspace (Settings → Secrets and variables → Actions).
@@ -40,7 +48,7 @@ on:
         description: 'Which shift to run'
         type: choice
         default: auto
-        options: [auto, World Map, Engineering, Departments, QA review]
+        options: [auto, World Map, Engineering, Departments, QA review, Weekly planning]
 
 concurrency:
   group: autopilot
@@ -108,7 +116,8 @@ jobs:
           slot_ts=$(date -u -d "$day $slot:07" +%s)
           slot_id=$(date -u -d "@$slot_ts" +%Y-%m-%dT%H)
           case $slot in
-            1)        lane="QA review" ;;
+            1)        # Sunday-night slot is the Chief of Staff's weekly planning
+                      if [ "$(date -u -d "@$slot_ts" +%u)" = 1 ]; then lane="Weekly planning"; else lane="QA review"; fi ;;
             4|13|22)  lane="World Map" ;;
             7|16)     lane="Engineering" ;;
             *)        lane="Departments" ;;
@@ -173,21 +182,34 @@ jobs:
             [ -n "$api_problem" ] && echo "::error::The Claude API turned the autopilot away: $api_problem"
             rm -f /tmp/api-check.json
           fi
+          git config --global user.name "WorldPulse Autopilot"
+          git config --global user.email "autopilot@world-pulse.io"
+          # Bring the desk up to date with main before Claude reads it: standing
+          # instructions and org chart (scripts/autopilot-instructions), files the
+          # pipeline keeps. Left uncommitted: it travels with the shift's own edits,
+          # and the publish job applies it again.
+          hq_base=$(git -C .hq rev-parse HEAD 2> /dev/null || true)
+          if [ "$ready" = true ]; then
+            if migrated=$(cd .hq && python3 "$GITHUB_WORKSPACE/scripts/autopilot_hq.py" migrate "$GITHUB_WORKSPACE/scripts/autopilot-instructions" 2>&1); then
+              [ -n "$migrated" ] && echo "Desk updated from main: $migrated"
+            else
+              echo "::warning::Couldn't apply the instructions and org chart from main: $migrated"
+              git -C .hq checkout -q -- . 2> /dev/null || true; git -C .hq clean -qfd 2> /dev/null || true
+            fi
+          fi
           {
             echo "ready=$ready"
             echo "slot_id=$slot_id"
             echo "api_problem=$api_problem"
             echo "lane=$lane"
             echo "start_sha=$(git rev-parse HEAD)"
-            echo "hq_base=$(git -C .hq rev-parse HEAD 2> /dev/null || true)"
+            echo "hq_base=$hq_base"
             echo "stamp=$(date +%Y-%m-%d-%H%M)"
             echo "now=$(date '+%A %B %-d, %Y, %-I:%M %p %Z')"
             echo "next=$(date -d "@$((slot_ts + 10800))" '+%-I:%M %p')"
           } >> "$GITHUB_OUTPUT"
           # .hq is a separate repository; keep it out of the code repo
           echo ".hq/" >> .git/info/exclude
-          git config --global user.name "WorldPulse Autopilot"
-          git config --global user.email "autopilot@world-pulse.io"
           echo "Shift: $lane ($(date)) · ready=$ready"
 
       - uses: actions/setup-node@v6
@@ -252,6 +274,7 @@ jobs:
         env:
           START: ${{ steps.shift.outputs.start_sha }}
           HQ_BASE: ${{ steps.shift.outputs.hq_base }}
+          EXEC_FILE: ${{ steps.claude.outputs.execution_file }}
           STAMP: ${{ steps.shift.outputs.stamp }}
           LANE: ${{ steps.shift.outputs.lane }}
           SHIFT_OUT: /tmp/shift-out
