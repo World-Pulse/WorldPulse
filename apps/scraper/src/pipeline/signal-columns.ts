@@ -62,15 +62,18 @@ export async function backfillRecentPublishedAt(days = 3): Promise<number> {
 }
 
 /**
- * A stable "who reported this" key for correlation: the first stored source id;
- * otherwise the host of the first original URL (www. removed), which is how RSS
- * and OSINT signals are told apart; otherwise the fallback.
+ * A stable "who reported this" key for correlation: the website of the first
+ * original URL (www. removed); otherwise the first stored source id; otherwise
+ * the fallback. The website comes first so that sibling feeds of one outlet
+ * (ABC Australia and ABC Pacific, both abc.net.au) count as one outlet, not two.
  */
 export function sourceKey(sourceIds: unknown, urls: unknown, fallback = ''): string {
+  const firstUrl = Array.isArray(urls) ? urls[0] : urls
+  const host = hostOf(firstUrl)
+  if (host) return host
   const firstId = Array.isArray(sourceIds) ? sourceIds[0] : sourceIds
   if (typeof firstId === 'string' && firstId.trim()) return firstId.trim()
-  const firstUrl = Array.isArray(urls) ? urls[0] : urls
-  return hostOf(firstUrl) || fallback
+  return fallback
 }
 
 /** The website a URL belongs to, lower-case and without www. ('' when it isn't a URL) */

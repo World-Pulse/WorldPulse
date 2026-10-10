@@ -5,14 +5,20 @@ vi.mock('../../lib/postgres', () => ({ db: vi.fn() }))
 import { sourceKey, publishedAtFor, signalsHavePublishedAt } from '../signal-columns'
 
 describe('sourceKey', () => {
-  it('uses the first stored source id when there is one', () => {
-    expect(sourceKey(['0b9f1c2e-uuid', 'other'], ['https://www.bbc.co.uk/news/1'])).toBe('0b9f1c2e-uuid')
-    expect(sourceKey('reuters', null)).toBe('reuters')
-  })
-
-  it('falls back to the host of the first URL, without www.', () => {
+  it('uses the website of the first URL, without www.', () => {
+    expect(sourceKey(['0b9f1c2e-uuid', 'other'], ['https://www.bbc.co.uk/news/1'])).toBe('bbc.co.uk')
     expect(sourceKey([], ['https://www.bbc.co.uk/news/1'])).toBe('bbc.co.uk')
     expect(sourceKey(null, 'https://Earthquake.USGS.gov/event/x')).toBe('earthquake.usgs.gov')
+  })
+
+  it('counts sibling feeds of one outlet as one outlet', () => {
+    expect(sourceKey(['feed-abc-australia'], ['https://www.abc.net.au/news/2026-10-10/a']))
+      .toBe(sourceKey(['feed-abc-pacific'], ['https://abc.net.au/pacific/b']))
+  })
+
+  it('falls back to the first stored source id when there is no URL', () => {
+    expect(sourceKey(['0b9f1c2e-uuid', 'other'], [])).toBe('0b9f1c2e-uuid')
+    expect(sourceKey('reuters', null)).toBe('reuters')
   })
 
   it('gives two articles from the same outlet the same key', () => {

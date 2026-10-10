@@ -33,7 +33,7 @@ import { extractMediaFromContent } from './pipeline/media-extractor'
 import { startHeartbeat, stopHeartbeat, registerCrashHandlers } from './lib/process-health.js'
 import { runStabilityCheck, recordUnhandledException } from './lib/stability-tracker'
 import { runDelayedRescore } from './pipeline/rescore'
-import { signalsHavePublishedAt, publishedAtFor, backfillRecentPublishedAt } from './pipeline/signal-columns'
+import { signalsHavePublishedAt, publishedAtFor, backfillRecentPublishedAt, sourceKey, hostOf } from './pipeline/signal-columns'
 import { fixLocalhostUploadUrls } from './pipeline/repairs'
 import { batchValidateGeo } from './pipeline/geo-validator'
 import { recomputeSourceReputation } from './pipeline/source-reputation'
@@ -635,20 +635,32 @@ async function processArticleGroup(
   const existing = await redis.get(`signal:topic:${topicHash}`)
   
   if (existing) {
-    // Update existing signal with new source
+    // Update existing signal with the outlets it doesn't have yet. An article
+    // from an outlet already on the signal (or a sibling feed of it, same
+    // website) is not another source.
     const signalId = JSON.parse(existing).id
-    const article = articles[0]
-    
-    await db('signals')
-      .where('id', signalId)
-      .update({
-        source_count: db.raw('source_count + ?', [articles.length]),
-        // array_append, not `|| ARRAY[?]::uuid[]`: source_ids is text[] in
-        // production, and text[] || uuid[] made every update fail, so a signal
-        // never gained its later sources
-        source_ids:   db.raw('array_append(source_ids, ?)', [article.sourceId]),
-        last_updated: new Date(),
-      })
+    const held = await db('signals').where('id', signalId).first('source_ids', 'original_urls') as
+      { source_ids?: unknown; original_urls?: unknown } | undefined
+    const counted = new Set([
+      ...(Array.isArray(held?.source_ids) ? held!.source_ids as unknown[] : []).map(String),
+      ...(Array.isArray(held?.original_urls) ? held!.original_urls as unknown[] : []).map(hostOf),
+    ].filter(Boolean))
+    for (const article of articles) {
+      const outlet = hostOf(article.url) || article.sourceId
+      if (!outlet || counted.has(outlet)) continue
+      counted.add(outlet)
+      await db('signals')
+        .where('id', signalId)
+        .update({
+          source_count:  db.raw('source_count + 1'),
+          // array_append, not `|| ARRAY[?]::uuid[]`: source_ids is text[] in
+          // production, and text[] || uuid[] made every update fail, so a signal
+          // never gained its later sources
+          source_ids:    db.raw('array_append(source_ids, ?)', [article.sourceId]),
+          original_urls: db.raw('array_append(original_urls, ?)', [article.url]),
+          last_updated:  new Date(),
+        })
+    }
 
     await db('raw_articles')
       .whereIn('id', articles.map(a => a.articleId))
@@ -672,7 +684,9 @@ async function processArticleGroup(
     return extractGeo(primary.title + ' ' + (primary.body ?? ''))
   })
 
-  const reliability = computeReliability(articles)
+  // One article per outlet: sibling feeds of one website are one source
+  const outlets = [...new Map(articles.map(a => [hostOf(a.url) || a.sourceId, a])).values()]
+  const reliability = computeReliability(outlets)
 
   // Create signal
   const row: Record<string, unknown> = {
@@ -683,7 +697,7 @@ async function processArticleGroup(
     status:           reliability > 0.85 ? 'verified' : 'pending',
     verified_at:      reliability > 0.85 ? new Date() : null,
     reliability_score: reliability,
-    source_count:     articles.length,
+    source_count:     outlets.length,
     source_ids:       articles.map(a => a.sourceId),
     original_urls:    articles.map(a => a.url),
     location:         geo.point ? db.raw(`ST_MakePoint(?, ?)`, [geo.lng, geo.lat]) : null,
@@ -774,7 +788,8 @@ async function processArticleGroup(
       title:            signal.title,
       category:         signal.category,
       severity:         signal.severity,
-      source_id:        primary.sourceId,
+      // Same key the correlation engine derives for stored signals (website first)
+      source_id:        sourceKey([primary.sourceId], [primary.url], primary.sourceId),
       location_name:    signal.location_name ?? null,
       lat:              geo.lat ?? null,
       lng:              geo.lng ?? null,
