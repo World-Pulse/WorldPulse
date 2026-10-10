@@ -4,7 +4,7 @@
 #  Served at https://world-pulse.io/ops-status.json so the autopilot can see
 #  server health without logging in. No logs, keys or user data go in here:
 #  only counts, plus the scraper's most frequent error and warning messages
-#  (digits and links blanked out).
+#  (digits and links blanked out) and its AI settings as yes/no (no keys).
 # ─────────────────────────────────────────────────────────────────────────────
 cd "$(dirname "$0")/.."
 mkdir -p logs/public
@@ -23,6 +23,42 @@ top_msgs() {
   sed -n 's/.*"msg":"\([^"]\{1,70\}\)".*/\1/p' \
     | sed -E 's#https?://[^ ]+#<url>#g; s/[0-9]+/#/g; s/[\\]//g' | sort | uniq -c | sort -rn | head -n 5 \
     | awk '{c=$1; $1=""; sub(/^ /,""); printf "%s{\"msg\":\"%s\",\"count\":%d}", (NR>1?",":""), $0, c}'
+}
+# Why the scraper's AI calls fail (plan 0f). Its AI settings as yes/no plus the
+# model name and the path it calls, and the newest failure reduced to a fixed
+# phrase and HTTP status. Never the raw error text, which can quote part of a key.
+llm_stats() {
+  local cfg key url model kind="none" path="" host last http reason="none"
+  cfg=$(timeout 10 docker exec wp_scraper sh -c \
+        'printf "%s\n%s\n%s\n" "${OPENAI_API_KEY:+yes}" "$LLM_API_URL" "$LLM_MODEL"' 2>/dev/null) || cfg=""
+  key=$(sed -n 1p <<< "$cfg"); url=$(sed -n 2p <<< "$cfg")
+  model=$(sed -n 3p <<< "$cfg" | tr -cd 'A-Za-z0-9._:/-' | cut -c1-60)
+  if [ -n "$url" ]; then
+    host=$(sed -E 's#^[A-Za-z]+://([^/@]*@)?([^/:?\#]+).*#\2#' <<< "$url" | tr 'A-Z' 'a-z')
+    case "$host" in
+      api.openai.com) kind=openai ;;
+      localhost|127.*|10.*|192.168.*|172.1[6-9].*|172.2[0-9].*|172.3[01].*|host.docker.internal|*.internal) kind=local ;;
+      *) kind=other ;;
+    esac
+    # The path the scraper ends up calling (classify.ts adds /chat/completions)
+    path=$(sed -E 's#^[A-Za-z]+://[^/]*##; s#[?\#].*##; s#/+$##' <<< "$url" | tr -cd 'A-Za-z0-9/._-' | cut -c1-60)
+    path="$path/chat/completions"
+  fi
+  last=$(grep '"msg":"LLM classification failed' <<< "$1" | tail -n 1)
+  if [ -n "$last" ]; then
+    http=$(grep -o 'LLM API error: [0-9]\{3\}' <<< "$last" | head -n 1 | grep -o '[0-9]\{3\}$')
+    if   grep -qiE 'incorrect api key|invalid_api_key|invalid.?api.?key|unauthori[sz]ed|authentication' <<< "$last"; then reason="key rejected"
+    elif grep -qiE 'exceeded your current quota|insufficient_quota|billing|credit balance' <<< "$last"; then reason="out of credit"
+    elif grep -qiE 'does not exist|model_not_found|no such model|model .{0,40}not found' <<< "$last"; then reason="model not available"
+    elif grep -qiE 'invalid url|page not found' <<< "$last" || [ "$http" = 404 ]; then reason="wrong address"
+    elif grep -qiE 'rate.?limit' <<< "$last" || [ "$http" = 429 ]; then reason="rate limited"
+    elif grep -qiE 'timeout|timed out|aborted' <<< "$last"; then reason="timed out"
+    elif grep -qiE 'ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ECONNRESET|EHOSTUNREACH|fetch failed|socket' <<< "$last"; then reason="cannot connect"
+    elif grep -qiE 'JSON|Unexpected token|empty content' <<< "$last"; then reason="unreadable reply"
+    else reason="other"; fi
+  fi
+  printf '{"openai_key":%s,"custom_url":"%s","calls":"%s","model":"%s","last_failure":"%s","http":%s}' \
+    "$([ "$key" = yes ] && echo true || echo false)" "$kind" "$path" "$model" "$reason" "${http:-null}"
 }
 pipeline_stats() {
   local q1 q2 db scr errs warns created top topw
@@ -52,11 +88,14 @@ pipeline_stats() {
   topw=$(grep '"level":40' <<< "$scr" | top_msgs)
   printf '{"window":"24h","checked":"%s",' "$(date -Is)"
   printf '"db":%s,' "$( [ -n "$db" ] && printf '[%s]' "$db" || printf 'null')"
-  printf '"scraper_30m":{"errors":%d,"warnings":%d,"signals_created":%d,"top_errors":[%s],"top_warnings":[%s]}}' \
+  printf '"scraper_30m":{"errors":%d,"warnings":%d,"signals_created":%d,"top_errors":[%s],"top_warnings":[%s]},' \
     "${errs:-0}" "${warns:-0}" "${created:-0}" "$top" "$topw"
+  printf '"llm":%s}' "$(llm_stats "$scr")"
 }
 pipe_cache=logs/pipeline-stats.json
-if [ ! -s "$pipe_cache" ] || [ -n "$(find "$pipe_cache" -mmin +29 2>/dev/null)" ]; then
+# Refresh every 30 minutes, or straight away when the cache predates a new field
+if [ ! -s "$pipe_cache" ] || [ -n "$(find "$pipe_cache" -mmin +29 2>/dev/null)" ] \
+   || ! grep -q '"llm"' "$pipe_cache" 2>/dev/null; then
   pipeline_stats > "$pipe_cache.tmp" 2>/dev/null \
     && python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$pipe_cache.tmp" 2>/dev/null \
     && mv "$pipe_cache.tmp" "$pipe_cache"
