@@ -34,7 +34,7 @@ import { startHeartbeat, stopHeartbeat, registerCrashHandlers } from './lib/proc
 import { runStabilityCheck, recordUnhandledException } from './lib/stability-tracker'
 import { runDelayedRescore } from './pipeline/rescore'
 import { signalsHavePublishedAt, publishedAtFor, backfillRecentPublishedAt } from './pipeline/signal-columns'
-import { undoLooseCorroboration } from './pipeline/repairs'
+import { fixLocalhostUploadUrls } from './pipeline/repairs'
 import { batchValidateGeo } from './pipeline/geo-validator'
 import { recomputeSourceReputation } from './pipeline/source-reputation'
 import { startKafkaLagMonitor } from './lib/kafka-lag-monitor'
@@ -142,10 +142,10 @@ async function bootstrap() {
     .then(rows => { if (rows > 0) logger.info({ rows }, 'Filled published_at for recent signals') })
     .catch(err => logger.warn({ err }, 'published_at backfill failed (non-fatal)'))
 
-  // Undo the over-eager corroboration of Oct 10, 2026 (see pipeline/repairs.ts)
-  await undoLooseCorroboration()
-    .then(r => logger.info(r, 'Repair: undid loose corroboration of Oct 10'))
-    .catch(err => logger.warn({ err }, 'Loose-corroboration repair failed (non-fatal)'))
+  // One-off data repairs (bounded and idempotent, see pipeline/repairs.ts)
+  fixLocalhostUploadUrls()
+    .then(posts => { if (posts > 0) logger.info({ posts }, 'Repair: pointed old upload URLs at the public site') })
+    .catch(err => logger.warn({ err }, 'Upload URL repair failed (non-fatal)'))
 
   // Start main scrape loop (works with or without Kafka)
   await scrapeAll()

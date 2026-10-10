@@ -160,6 +160,9 @@ services:
       STRIPE_SECRET_KEY:     ${STRIPE_SECRET_KEY:-}
       STRIPE_PRO_PRICE_ID:   ${STRIPE_PRO_PRICE_ID:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      # Public address of uploaded post media: nginx serves the uploads volume
+      # at https://world-pulse.io/uploads/ (unset, the API wrote localhost URLs)
+      UPLOADS_BASE_URL:  ${UPLOADS_BASE_URL:-https://world-pulse.io}
       # PULSE AI Publisher
       PULSE_ENABLED:     ${PULSE_ENABLED:-false}
       PULSE_API_KEY:     ${PULSE_API_KEY:-}

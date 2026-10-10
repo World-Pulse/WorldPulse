@@ -46,7 +46,8 @@ function generateFilename(mimeType: string): string {
 }
 
 function buildPublicUrl(filename: string): string {
-  const base = process.env.UPLOADS_BASE_URL ?? 'http://localhost:3001'
+  // || not ??: docker compose passes an unset variable as an empty string
+  const base = (process.env.UPLOADS_BASE_URL || 'http://localhost:3001').replace(/\/+$/, '')
   return `${base}/uploads/post-media/${filename}`
 }
 
