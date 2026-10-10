@@ -237,6 +237,7 @@ export async function insertAndCorrelate(
       // Same key the correlation engine derives for stored signals, so two
       // signals only count as independent when they come from different outlets
       source_id:        sourceKey(signal.source_ids, signal.original_urls, meta.sourceId),
+      url:              Array.isArray(signal.original_urls) && typeof signal.original_urls[0] === 'string' ? signal.original_urls[0] : null,
       location_name:    signal.location_name ?? null,
       lat:              meta.lat ?? null,
       lng:              meta.lng ?? null,

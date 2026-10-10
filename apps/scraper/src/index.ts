@@ -790,6 +790,7 @@ async function processArticleGroup(
       severity:         signal.severity,
       // Same key the correlation engine derives for stored signals (website first)
       source_id:        sourceKey([primary.sourceId], [primary.url], primary.sourceId),
+      url:              primary.url ?? null,
       location_name:    signal.location_name ?? null,
       lat:              geo.lat ?? null,
       lng:              geo.lng ?? null,

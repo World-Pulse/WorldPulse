@@ -104,6 +104,7 @@ export async function runDelayedRescore(): Promise<{
       category: signal.category,
       severity: signal.severity,
       source_id: sourceKey(signal.source_id, signal.first_url),
+      url: typeof signal.first_url === 'string' ? signal.first_url : null,
       location_name: signal.location_name,
       lat: signal.lat ? Number(signal.lat) : null,
       lng: signal.lng ? Number(signal.lng) : null,

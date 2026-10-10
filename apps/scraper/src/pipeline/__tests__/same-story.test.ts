@@ -160,6 +160,29 @@ describe('same-story search across the whole window', () => {
   })
 })
 
+describe('same-story groups share their links', () => {
+  beforeEach(() => {
+    h.updates.length = 0
+    h.state.textRows = []
+    h.state.textQueries.length = 0
+  })
+
+  it("gives every member the group's article links", async () => {
+    h.state.recentRows = [row()]
+    await correlateSignal(sig({ url: 'https://www3.nhk.or.jp/news/quake' }))
+    expect(h.updates).toHaveLength(3)
+    const share = h.updates[2]
+    expect(share.ids).toEqual(['sig-a', 'sig-b'])
+    expect(share.data).toHaveProperty('original_urls')
+  })
+
+  it('does not touch links when only one link is known', async () => {
+    h.state.recentRows = [row()]
+    await correlateSignal(sig())  // no url on the new signal
+    expect(h.updates).toHaveLength(2)
+  })
+})
+
 describe('corroborateWithDuplicate', () => {
   const incoming = {
     title: 'Strong magnitude 6.1 earthquake hits off northern Japan coast', category: 'disaster', severity: 'high',

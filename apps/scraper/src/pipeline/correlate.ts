@@ -42,6 +42,8 @@ export interface CorrelationCandidate {
   published_at: string | Date
   reliability_score: number
   tags: string[]
+  /** The signal's first article URL, when known (shared with same-story matches) */
+  url?: string | null
 }
 
 export interface EventCluster {
@@ -292,6 +294,7 @@ function toCandidate(r: Record<string, unknown>): CorrelationCandidate {
     published_at: r.published_at as string,
     reliability_score: r.reliability_score as number,
     tags: Array.isArray(r.tags) ? r.tags as string[] : [],
+    url: typeof r.first_url === 'string' ? r.first_url : null,
   }
 }
 
@@ -635,6 +638,21 @@ async function applyCorroborationBoost(
         status:      'verified',
         verified_at: db.raw('NOW()'),
       })
+
+    // Every member gets the group's article links, so each signal page can
+    // show all the outlets that reported the story ("Reported by N outlets"),
+    // not only its own link
+    const urls = [...new Set(group.map(s => s.url).filter((u): u is string => typeof u === 'string' && u.length > 0))]
+    if (urls.length >= 2) {
+      await db('signals')
+        .whereIn('id', ids)
+        .update({
+          original_urls: db.raw(
+            'original_urls || ARRAY(SELECT u FROM unnest(?::text[]) AS u WHERE u <> ALL(original_urls))',
+            [urls.slice(0, MAX_CLUSTER_SIZE)],
+          ),
+        })
+    }
 
     logger.info({
       signal_id:      signal.id,
