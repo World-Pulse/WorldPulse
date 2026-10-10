@@ -348,7 +348,39 @@ def update():
     if isinstance(ops, dict) and ops:
         c = ops.get("containers") or {}
         sc = str(c.get("wp_scraper", "missing"))
-        put("News intake", "Live" if sc == "running" else f"Scraper {sc}", "ok" if sc == "running" else "bad")
+        # Signal pipeline (counts only; see scripts/ops-status.sh)
+        pl = ops.get("pipeline") if isinstance(ops.get("pipeline"), dict) else {}
+        dbs = pl.get("db") if isinstance(pl.get("db"), list) else []
+        day = dbs[0] if dbs and isinstance(dbs[0], dict) else {}
+        latest = dbs[1] if len(dbs) > 1 and isinstance(dbs[1], dict) else {}
+        created = day.get("created")
+        if sc != "running":
+            put("News intake", f"Scraper {sc}", "bad")
+        elif isinstance(created, int):
+            put("News intake", f"Live · {created:,} signals in 24h", "ok" if created > 0 else "bad")
+        else:
+            put("News intake", "Live", "ok")
+        verified = day.get("verified")
+        if isinstance(verified, int) and isinstance(created, int) and created > 0:
+            age_h = None
+            try:
+                newest = datetime.datetime.fromisoformat(str(latest.get("newest_verified")))
+                age_h = (NOW - newest).total_seconds() / 3600
+            except (TypeError, ValueError):
+                pass
+            text = f"{verified:,} in 24h ({verified / created:.1%})"
+            if age_h is not None:
+                text += " · latest " + (f"{int(age_h * 60)} min ago" if age_h < 1 else f"{age_h:.0f} h ago")
+            put("Verified news", text, "bad" if verified == 0 else "ok" if age_h is not None and age_h < 6 else "warn")
+        llm = pl.get("llm") if isinstance(pl.get("llm"), dict) else {}
+        if llm:
+            fail = str(llm.get("last_failure") or "none")
+            if fail == "none":
+                put("AI classification", "Working", "ok")
+            else:
+                http = llm.get("http")
+                put("AI classification", f"Failing: {fail}" + (f" (HTTP {http})" if http else "")
+                    + " · keyword rules used instead", "bad")
         days = ops.get("cert_days_left")
         if isinstance(days, int) and days >= 0:
             put("Certificate", f"{days} days left", "ok" if days >= 21 else "warn" if days >= 14 else "bad")
@@ -359,7 +391,8 @@ def update():
                  "rolled_back": ("Rolled back", "bad"), "failed": ("Failed", "bad"),
                  "running": ("Deploying…", "warn"), "starting": ("Deploying…", "warn")}
         w, st = words.get(str(ops.get("last_deploy") or "none"), (str(ops.get("last_deploy") or "none"), "warn"))
-        put("Last deploy", f"{w} · {ops.get('commit') or '?'}", st)
+        note = str(ops.get("last_deploy_note") or "").strip()
+        put("Last deploy", f"{w} · {ops.get('commit') or '?'}" + (f": {note[:160]}" if note else ""), st)
 
     # Devon's inbox: say when Claude can't be reached; clear it once shifts run again
     inbox = [x for x in d.get("inbox", []) if isinstance(x, dict)]
