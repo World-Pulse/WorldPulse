@@ -328,6 +328,9 @@ jobs:
           # Step-by-step log while the shift runs, and a readable report after
           show_full_output: ${{ vars.AUTOPILOT_LIVE_LOG != 'false' }}
           display_report: 'true'
+          # Devon doesn't want Co-Authored-By lines in WorldPulse commits;
+          # Claude Code adds one by default (seen on db4c620, Oct 10)
+          settings: '{"includeCoAuthoredBy": false, "attribution": {"commit": "", "pr": ""}}'
           prompt: |
             You are Orbit, the WorldPulse autopilot, running in GitHub Actions.
             Shift: ${{ steps.shift.outputs.lane }} · started ${{ steps.shift.outputs.now }} · next shift ${{ steps.shift.outputs.next }}.
