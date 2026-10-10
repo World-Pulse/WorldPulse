@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import { escapeHtml } from '@/lib/map-utils'
 
 interface Props {
   lat: number
@@ -84,7 +85,7 @@ export function SignalMap({ lat, lng, title, severity }: Props) {
           .setPopup(
             new m.Popup({ offset: 14, closeButton: false, closeOnClick: false })
               .setHTML(
-                `<div style="font:600 12px/1.5 system-ui;color:#e2e6f0;max-width:180px">${title}</div>`,
+                `<div style="font:600 12px/1.5 system-ui;color:#e2e6f0;max-width:180px">${escapeHtml(title)}</div>`,
               ),
           )
           .addTo(map)

@@ -8,6 +8,7 @@
  */
 
 import type { Map as MapLibreMap, MapMouseEvent, Popup as MapLibrePopup } from 'maplibre-gl'
+import { escapeHtml } from '../../lib/map-utils'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -216,11 +217,11 @@ export class ConflictRegionLayer {
     const color = severityColor[p.severity] ?? '#f87171'
 
     const html = `
-      <div style="font:600 12px/1.4 system-ui;color:${color};margin-bottom:4px">${p.name}</div>
-      <div style="font:11px system-ui;color:#9ca3af;margin-bottom:3px">📍 ${p.country}</div>
+      <div style="font:600 12px/1.4 system-ui;color:${color};margin-bottom:4px">${escapeHtml(p.name)}</div>
+      <div style="font:11px system-ui;color:#9ca3af;margin-bottom:3px">📍 ${escapeHtml(p.country)}</div>
       <div style="font:11px monospace;color:#d1d5db">
-        <span style="color:${color};text-transform:uppercase;font-weight:600">${p.severity}</span>
-        ${p.signalCount > 0 ? ` · ${p.signalCount} signals` : ''}
+        <span style="color:${color};text-transform:uppercase;font-weight:600">${escapeHtml(p.severity)}</span>
+        ${p.signalCount > 0 ? ` · ${escapeHtml(p.signalCount)} signals` : ''}
       </div>
     `
 

@@ -33,6 +33,43 @@ export function reliabilityDots(score: number): string {
   return '●'.repeat(n) + '○'.repeat(5 - n)
 }
 
+// ── Safe pop-up HTML ───────────────────────────────────────────────────────────
+// Map pop-ups are HTML strings (MapLibre's Popup.setHTML), and what goes in them
+// comes from scraped headlines and third-party feeds. Every value that came
+// from data must pass through these helpers, or a crafted headline such as
+// `<img src=x onerror=…>` would run script on our domain.
+
+const HTML_ESCAPES: Record<string, string> = {
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+}
+
+/** Escape a value for use as HTML text or inside a quoted attribute. */
+export function escapeHtml(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  return String(value).replace(/[&<>"']/g, c => HTML_ESCAPES[c] ?? c)
+}
+
+/**
+ * The URL if it is an absolute http(s) address, otherwise null. Use it for
+ * every link built from data: it rejects javascript:, data: and other schemes.
+ */
+export function safeHttpUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const s = value.trim()
+  if (!s) return null
+  try {
+    const u = new URL(s)
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : null
+  } catch { return null }
+}
+
+/** A plain CSS colour (#hex, rgb()/hsl() or a colour name), else the fallback. */
+export function safeCssColor(value: unknown, fallback = '#8892a4'): string {
+  if (typeof value !== 'string') return fallback
+  const s = value.trim()
+  return /^(#[0-9a-fA-F]{3,8}|(rgb|hsl)a?\([0-9\s.,%]+\)|[a-zA-Z]{3,20})$/.test(s) ? s : fallback
+}
+
 // ── Geo parsing ───────────────────────────────────────────────────────────────
 
 /**

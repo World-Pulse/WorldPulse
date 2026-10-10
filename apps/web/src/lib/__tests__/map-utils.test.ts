@@ -8,6 +8,9 @@ import {
   extractLatLng,
   prependSignal,
   MAX_SIGNALS,
+  escapeHtml,
+  safeHttpUrl,
+  safeCssColor,
 } from '../map-utils'
 
 // ── timeAgo ───────────────────────────────────────────────────────────────────
@@ -212,5 +215,61 @@ describe('prependSignal', () => {
     const existing = [{ id: 'x' }]
     const result = prependSignal(existing, { id: 'y' })
     expect(result).toHaveLength(2)
+  })
+})
+
+// ── Pop-up HTML safety ────────────────────────────────────────────────────────
+
+describe('escapeHtml', () => {
+  it('neutralises markup in scraped headlines', () => {
+    expect(escapeHtml('<img src=x onerror="alert(1)">'))
+      .toBe('&lt;img src=x onerror=&quot;alert(1)&quot;&gt;')
+  })
+
+  it('escapes ampersands and single quotes', () => {
+    expect(escapeHtml(`Tom & Jerry's`)).toBe('Tom &amp; Jerry&#39;s')
+  })
+
+  it('turns null and undefined into an empty string', () => {
+    expect(escapeHtml(null)).toBe('')
+    expect(escapeHtml(undefined)).toBe('')
+  })
+
+  it('stringifies numbers', () => {
+    expect(escapeHtml(42)).toBe('42')
+  })
+})
+
+describe('safeHttpUrl', () => {
+  it('keeps http and https links', () => {
+    expect(safeHttpUrl('https://example.com/cam?id=1')).toBe('https://example.com/cam?id=1')
+    expect(safeHttpUrl(' http://example.com ')).toBe('http://example.com/')
+  })
+
+  it('rejects script and data links', () => {
+    expect(safeHttpUrl('javascript:alert(1)')).toBeNull()
+    expect(safeHttpUrl('JavaScript:alert(1)')).toBeNull()
+    expect(safeHttpUrl('data:text/html,<script>alert(1)</script>')).toBeNull()
+  })
+
+  it('rejects relative, empty and non-string values', () => {
+    expect(safeHttpUrl('/relative/path')).toBeNull()
+    expect(safeHttpUrl('')).toBeNull()
+    expect(safeHttpUrl(undefined)).toBeNull()
+    expect(safeHttpUrl(123)).toBeNull()
+  })
+})
+
+describe('safeCssColor', () => {
+  it('accepts hex, rgb() and named colours', () => {
+    expect(safeCssColor('#ff3b5c')).toBe('#ff3b5c')
+    expect(safeCssColor('rgba(255, 102, 0, 0.4)')).toBe('rgba(255, 102, 0, 0.4)')
+    expect(safeCssColor('orange')).toBe('orange')
+  })
+
+  it('falls back for anything that could break out of the style attribute', () => {
+    expect(safeCssColor('red;background:url(x)')).toBe('#8892a4')
+    expect(safeCssColor('"><script>')).toBe('#8892a4')
+    expect(safeCssColor(undefined, '#000')).toBe('#000')
   })
 })

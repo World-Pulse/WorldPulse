@@ -19,6 +19,7 @@ import { SignalCounter } from '@/components/SignalCounter'
 import {
   timeAgo, getSourceUrl, getSourceDomain, reliabilityDots,
   parseWKBPoint, extractLatLng, prependSignal, MAX_SIGNALS,
+  escapeHtml, safeHttpUrl, safeCssColor,
 } from '@/lib/map-utils'
 
 const API_URL      = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
@@ -1014,9 +1015,10 @@ function MapView() {
           const listItems = leaves.map((leaf: any) => {
             const p = leaf.properties as SignalProps
             const color = SEV_COLOR[p.severity] ?? '#8892a4'
-            return `<a href="/?signal=${p.id}" style="display:block;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.07);text-decoration:none;color:#e2e6f0;font:13px/1.4 system-ui" title="${p.title}">
+            const title = String(p.title ?? '')
+            return `<a href="/?signal=${encodeURIComponent(String(p.id))}" style="display:block;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.07);text-decoration:none;color:#e2e6f0;font:13px/1.4 system-ui" title="${escapeHtml(title)}">
               <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${color};margin-right:6px;vertical-align:middle;flex-shrink:0"></span>
-              <span style="font-size:12px">${p.title.length > 70 ? p.title.slice(0, 70) + '…' : p.title}</span>
+              <span style="font-size:12px">${escapeHtml(title.length > 70 ? title.slice(0, 70) + '…' : title)}</span>
             </a>`
           }).join('')
 
@@ -1034,7 +1036,7 @@ function MapView() {
             .setLngLat(coords)
             .setHTML(`
               <div style="font:700 11px/1 monospace;color:#8892a4;letter-spacing:1.5px;margin-bottom:8px">
-                ${feat.properties.point_count} SIGNALS · ${(leaves[0]?.properties as SignalProps)?.location_name ?? 'Same location'}
+                ${escapeHtml(feat.properties.point_count)} SIGNALS · ${escapeHtml((leaves[0]?.properties as SignalProps)?.location_name ?? 'Same location')}
               </div>
               <div style="max-height:220px;overflow-y:auto">${listItems}${extra}</div>
             `)
@@ -1068,11 +1070,11 @@ function MapView() {
           })
             .setLngLat(e.lngLat)
             .setHTML(`
-              <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:220px;margin-bottom:6px">${p.title}</div>
+              <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:220px;margin-bottom:6px">${escapeHtml(p.title)}</div>
               <div style="font:600 12px/1 monospace;color:${color};letter-spacing:1.5px;margin-bottom:6px" title="${Math.round(score * 100)}% reliability">${dots}</div>
-              ${srcLabel ? `<div style="font:11px monospace;color:#8892a4;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px">via ${srcLabel}</div>` : ''}
-              <div style="font:11px monospace;color:#5a6477;margin-bottom:8px">${timeAgo(p.created_at)}</div>
-              <a href="/?signal=${p.id}" style="display:inline-flex;align-items:center;gap:5px;font:600 11px/1 system-ui;color:${color};text-decoration:none;border:1px solid ${color}44;border-radius:6px;padding:4px 9px;transition:opacity .15s">
+              ${srcLabel ? `<div style="font:11px monospace;color:#8892a4;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px">via ${escapeHtml(srcLabel)}</div>` : ''}
+              <div style="font:11px monospace;color:#5a6477;margin-bottom:8px">${escapeHtml(timeAgo(p.created_at))}</div>
+              <a href="/?signal=${encodeURIComponent(String(p.id))}" style="display:inline-flex;align-items:center;gap:5px;font:600 11px/1 system-ui;color:${color};text-decoration:none;border:1px solid ${color}44;border-radius:6px;padding:4px 9px;transition:opacity .15s">
                 View Full Signal <span style="font-size:10px">→</span>
               </a>
             `)
@@ -1458,8 +1460,8 @@ function MapView() {
               .setLngLat(e.lngLat)
               .setHTML(`
                 <div style="font:600 12px/1.4 system-ui;color:#93c5fd;margin-bottom:4px">⚓ CARRIER STRIKE GROUP</div>
-                <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:220px;margin-bottom:6px">${p.title}</div>
-                <div style="font:11px monospace;color:#8892a4;margin-bottom:4px">📍 ${p.locationName}</div>
+                <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:220px;margin-bottom:6px">${escapeHtml(p.title)}</div>
+                <div style="font:11px monospace;color:#8892a4;margin-bottom:4px">📍 ${escapeHtml(p.locationName)}</div>
                 <div style="font:10px monospace;color:#5a6477">OSINT-estimated · ${Math.round(p.reliability * 100)}% confidence</div>
               `)
               .addTo(map)
@@ -1568,8 +1570,8 @@ function MapView() {
               .setLngLat(e.lngLat)
               .setHTML(`
                 <div style="font:600 12px/1.4 system-ui;color:#00d4ff;margin-bottom:4px">✈ ADS-B AIRCRAFT</div>
-                <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:240px;margin-bottom:6px">${p.title}</div>
-                <div style="font:10px monospace;color:#5a6477">${ts}</div>
+                <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:240px;margin-bottom:6px">${escapeHtml(p.title)}</div>
+                <div style="font:10px monospace;color:#5a6477">${escapeHtml(ts)}</div>
               `)
               .addTo(currentMap)
           })
@@ -1698,8 +1700,9 @@ function MapView() {
               name: string; country: string; countryCode: string
               embedUrl: string; type: string; isLive: boolean
             }
-            const typeLabel = p.type ? p.type.toUpperCase() : 'WEBCAM'
+            const typeLabel = p.type ? String(p.type).toUpperCase() : 'WEBCAM'
             const liveTag   = p.isLive ? '<span style="color:#34d399;font-size:9px;font-weight:700;letter-spacing:0.05em">● LIVE</span>' : ''
+            const feedUrl   = safeHttpUrl(p.embedUrl)
             const { default: ml } = await import('maplibre-gl')
             if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
             popupRef.current = new ml.Popup({ closeButton: true, closeOnClick: false, offset: 14, className: 'wp-map-popup' })
@@ -1708,12 +1711,12 @@ function MapView() {
                 <div style="font:600 11px/1.4 system-ui;color:#34d399;margin-bottom:4px;display:flex;align-items:center;gap:6px">
                   📹 LIVE WEBCAM ${liveTag}
                 </div>
-                <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:240px;margin-bottom:4px">${p.name}</div>
-                <div style="font:11px system-ui;color:#9aa5b4;margin-bottom:6px">${p.country} · ${typeLabel}</div>
-                <a href="${p.embedUrl}" target="_blank" rel="noopener noreferrer"
+                <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:240px;margin-bottom:4px">${escapeHtml(p.name)}</div>
+                <div style="font:11px system-ui;color:#9aa5b4;margin-bottom:6px">${escapeHtml(p.country)} · ${escapeHtml(typeLabel)}</div>
+                ${feedUrl ? `<a href="${escapeHtml(feedUrl)}" target="_blank" rel="noopener noreferrer"
                    style="display:inline-block;font:11px system-ui;color:#34d399;text-decoration:underline">
                   ↗ Open feed
-                </a>
+                </a>` : ''}
               `)
               .addTo(currentMap)
           })
@@ -1857,8 +1860,8 @@ function MapView() {
               .setLngLat(coords)
               .setHTML(
                 `<div style="font:600 12px/1.4 system-ui;color:#f59e0b;margin-bottom:3px">⚓ VESSEL</div>` +
-                `<div style="font:400 11px/1.4 system-ui;color:#e2e8f0;max-width:200px">${props.title ?? 'Unknown vessel'}</div>` +
-                (props.severity ? `<div style="font:500 10px/1.4 system-ui;color:#94a3b8;margin-top:3px">Severity: ${props.severity}</div>` : '')
+                `<div style="font:400 11px/1.4 system-ui;color:#e2e8f0;max-width:200px">${escapeHtml(props.title ?? 'Unknown vessel')}</div>` +
+                (props.severity ? `<div style="font:500 10px/1.4 system-ui;color:#94a3b8;margin-top:3px">Severity: ${escapeHtml(props.severity)}</div>` : '')
               )
               .addTo(map)
           })
@@ -2015,10 +2018,10 @@ function MapView() {
               .setLngLat(e.lngLat)
               .setHTML(`
                 <div style="font:600 12px/1.4 system-ui;color:#60a5fa;margin-bottom:4px">⚓ CARRIER STRIKE GROUP</div>
-                <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:240px;margin-bottom:6px">${p.title}</div>
-                <div style="font:11px monospace;color:#8892a4;margin-bottom:3px">🚢 Fleet: ${p.fleet}</div>
-                <div style="font:11px monospace;color:#8892a4;margin-bottom:3px">📍 ${p.statusText}</div>
-                <div style="font:10px monospace;color:#5a6477">${new Date(p.createdAt).toLocaleString()}</div>
+                <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:240px;margin-bottom:6px">${escapeHtml(p.title)}</div>
+                <div style="font:11px monospace;color:#8892a4;margin-bottom:3px">🚢 Fleet: ${escapeHtml(p.fleet)}</div>
+                <div style="font:11px monospace;color:#8892a4;margin-bottom:3px">📍 ${escapeHtml(p.statusText)}</div>
+                <div style="font:10px monospace;color:#5a6477">${escapeHtml(new Date(p.createdAt).toLocaleString())}</div>
               `)
               .addTo(map)
           })
@@ -2056,10 +2059,10 @@ function MapView() {
               .setLngLat(e.lngLat)
               .setHTML(`
                 <div style="font:600 12px/1.4 system-ui;color:#fb923c;margin-bottom:4px">🆘 AIS DISTRESS SIGNAL</div>
-                <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:240px;margin-bottom:6px">${p.title}</div>
-                <div style="font:11px monospace;color:#8892a4;margin-bottom:3px">📍 ${p.statusText}</div>
-                <div style="font:11px monospace;color:#f87171;margin-bottom:3px">Severity: ${p.severity}</div>
-                <div style="font:10px monospace;color:#5a6477">${new Date(p.createdAt).toLocaleString()}</div>
+                <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:240px;margin-bottom:6px">${escapeHtml(p.title)}</div>
+                <div style="font:11px monospace;color:#8892a4;margin-bottom:3px">📍 ${escapeHtml(p.statusText)}</div>
+                <div style="font:11px monospace;color:#f87171;margin-bottom:3px">Severity: ${escapeHtml(p.severity)}</div>
+                <div style="font:10px monospace;color:#5a6477">${escapeHtml(new Date(p.createdAt).toLocaleString())}</div>
               `)
               .addTo(map)
           })
@@ -2097,9 +2100,9 @@ function MapView() {
               .setLngLat(e.lngLat)
               .setHTML(`
                 <div style="font:600 12px/1.4 system-ui;color:#c084fc;margin-bottom:4px">⚠️ DARK SHIP DETECTED</div>
-                <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:240px;margin-bottom:6px">${p.title}</div>
-                <div style="font:11px monospace;color:#8892a4;margin-bottom:3px">📍 ${p.statusText}</div>
-                <div style="font:10px monospace;color:#5a6477">${new Date(p.createdAt).toLocaleString()}</div>
+                <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:240px;margin-bottom:6px">${escapeHtml(p.title)}</div>
+                <div style="font:11px monospace;color:#8892a4;margin-bottom:3px">📍 ${escapeHtml(p.statusText)}</div>
+                <div style="font:10px monospace;color:#5a6477">${escapeHtml(new Date(p.createdAt).toLocaleString())}</div>
               `)
               .addTo(map)
           })
@@ -2280,7 +2283,7 @@ function MapView() {
           const color  = typeColor[tt] ?? '#a855f7'
           const ts     = new Date(String(props.created_at ?? '')).toLocaleString()
           const origin = props.origin_country
-            ? `<div style="font:11px monospace;color:#8892a4;margin-bottom:2px">Origin: ${String(props.origin_country)}</div>`
+            ? `<div style="font:11px monospace;color:#8892a4;margin-bottom:2px">Origin: ${escapeHtml(props.origin_country)}</div>`
             : ''
           const { default: ml } = await import('maplibre-gl')
           if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
@@ -2288,10 +2291,10 @@ function MapView() {
             .setLngLat(e.lngLat)
             .setHTML(`
               <div style="font:600 12px/1.4 system-ui;color:${color};margin-bottom:4px">${label}</div>
-              <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:240px;margin-bottom:6px">${String(props.title ?? '')}</div>
-              <div style="font:11px monospace;color:#8892a4;margin-bottom:2px">Severity: ${String(props.severity ?? '')}</div>
+              <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:240px;margin-bottom:6px">${escapeHtml(props.title)}</div>
+              <div style="font:11px monospace;color:#8892a4;margin-bottom:2px">Severity: ${escapeHtml(props.severity)}</div>
               ${origin}
-              <div style="font:10px monospace;color:#5a6477">${ts}</div>
+              <div style="font:10px monospace;color:#5a6477">${escapeHtml(ts)}</div>
             `)
             .addTo(map)
         }
@@ -2496,12 +2499,12 @@ function MapView() {
             .setLngLat(e.lngLat)
             .setHTML(`
               <div style="font:600 12px/1.4 system-ui;color:${color};margin-bottom:4px">${label}</div>
-              <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:260px;margin-bottom:6px">${p.title}</div>
-              <div style="font:11px monospace;color:#8892a4;margin-bottom:2px">Severity: ${p.severity} — Confidence: ${p.confidence}%</div>
-              <div style="font:11px monospace;color:#8892a4;margin-bottom:2px">Affected radius: ~${p.radiusKm} km</div>
-              <div style="font:11px monospace;color:#8892a4;margin-bottom:4px;max-width:260px">Systems: ${p.affectedSystems}</div>
-              <div style="font:10px monospace;color:#5a6477;margin-bottom:2px">Detected: ${ts}</div>
-              <div style="font:10px monospace;color:#5a6477">${p.source}</div>
+              <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:260px;margin-bottom:6px">${escapeHtml(p.title)}</div>
+              <div style="font:11px monospace;color:#8892a4;margin-bottom:2px">Severity: ${escapeHtml(p.severity)} — Confidence: ${escapeHtml(p.confidence)}%</div>
+              <div style="font:11px monospace;color:#8892a4;margin-bottom:2px">Affected radius: ~${escapeHtml(p.radiusKm)} km</div>
+              <div style="font:11px monospace;color:#8892a4;margin-bottom:4px;max-width:260px">Systems: ${escapeHtml(p.affectedSystems)}</div>
+              <div style="font:10px monospace;color:#5a6477;margin-bottom:2px">Detected: ${escapeHtml(ts)}</div>
+              <div style="font:10px monospace;color:#5a6477">${escapeHtml(p.source)}</div>
             `)
             .addTo(map)
         }
@@ -2729,10 +2732,10 @@ function MapView() {
           popupRef.current = new ml.Popup({ closeButton: true, closeOnClick: false, offset: 12, className: 'wp-map-popup' })
             .setLngLat(e.lngLat)
             .setHTML(`
-              <div style="font:600 12px/1.4 system-ui;color:${p.color};margin-bottom:4px">${p.typeLabel}</div>
-              <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:260px;margin-bottom:6px">${p.title}</div>
-              <div style="font:11px monospace;color:#8892a4;margin-bottom:4px">Severity: ${p.severity} — Confidence: ${Math.round(p.reliability_score * 100)}%</div>
-              <div style="font:10px monospace;color:#5a6477">${ago}</div>
+              <div style="font:600 12px/1.4 system-ui;color:${safeCssColor(p.color)};margin-bottom:4px">${escapeHtml(p.typeLabel)}</div>
+              <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:260px;margin-bottom:6px">${escapeHtml(p.title)}</div>
+              <div style="font:11px monospace;color:#8892a4;margin-bottom:4px">Severity: ${escapeHtml(p.severity)} — Confidence: ${Math.round(p.reliability_score * 100)}%</div>
+              <div style="font:10px monospace;color:#5a6477">${escapeHtml(ago)}</div>
             `)
             .addTo(map)
         }
@@ -2967,17 +2970,17 @@ function MapView() {
             })
               .setLngLat(e.lngLat)
               .setHTML(`
-                <div style="font:600 14px/1.4 system-ui;color:#e2e6f0;margin-bottom:6px">${p.wpCountryName}</div>
-                <div style="font:700 28px/1 monospace;color:${riskColor};margin-bottom:4px">${p.wpRiskScore}</div>
-                <div style="font:600 11px monospace;color:${riskColor};letter-spacing:1.5px;margin-bottom:8px">${p.wpRiskLabel.toUpperCase()} RISK</div>
+                <div style="font:600 14px/1.4 system-ui;color:#e2e6f0;margin-bottom:6px">${escapeHtml(p.wpCountryName)}</div>
+                <div style="font:700 28px/1 monospace;color:${riskColor};margin-bottom:4px">${escapeHtml(p.wpRiskScore)}</div>
+                <div style="font:600 11px monospace;color:${riskColor};letter-spacing:1.5px;margin-bottom:8px">${escapeHtml(String(p.wpRiskLabel ?? '').toUpperCase())} RISK</div>
                 <div style="font:11px monospace;color:#8892a4;margin-bottom:2px">
-                  📊 ${p.wpSignalCount} signal${p.wpSignalCount !== 1 ? 's' : ''} (24h)
+                  📊 ${escapeHtml(p.wpSignalCount)} signal${p.wpSignalCount !== 1 ? 's' : ''} (24h)
                 </div>
                 <div style="font:11px monospace;color:#8892a4;margin-bottom:2px">
-                  Trend: ${trendArrow} ${p.wpTrend}
+                  Trend: ${trendArrow} ${escapeHtml(p.wpTrend)}
                 </div>
                 ${p.wpCategories
-                  ? `<div style="font:10px monospace;color:#5a6477;margin-top:4px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.wpCategories}</div>`
+                  ? `<div style="font:10px monospace;color:#5a6477;margin-top:4px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(p.wpCategories)}</div>`
                   : ''}
               `)
               .addTo(map)
