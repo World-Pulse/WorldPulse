@@ -17,8 +17,13 @@ const nextConfig = {
     optimizePackageImports: ['lucide-react', 'maplibre-gl'],
   },
   images: {
+    // Only our own uploads go through the image optimizer (/_next/image).
+    // Allowing every host let anyone make our server fetch and decode any
+    // image on the internet: the route to the 2026 image-optimizer RCE and
+    // SSRF advisories. Post images are served from /uploads/ on these hosts.
     remotePatterns: [
-      { protocol: 'https', hostname: '**' },
+      { protocol: 'https', hostname: 'world-pulse.io', pathname: '/uploads/**' },
+      { protocol: 'https', hostname: 'api.world-pulse.io', pathname: '/uploads/**' },
     ],
   },
   transpilePackages: ['@worldpulse/types', '@worldpulse/ui'],
