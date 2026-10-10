@@ -231,41 +231,55 @@ const COUNTRY_CENTROIDS: Record<string, { lat: number; lng: number; name: string
 
 // ─── COUNTRY CODE PATTERNS ───────────────────────────────────────────────────
 const COUNTRY_PATTERNS: [RegExp, string][] = [
-  [/\bunited states|usa|u\.s\.a?\.?\b/i, 'US'],
-  [/\bunited kingdom|britain|england|scotland|wales\b/i, 'GB'],
-  [/\bchina|chinese\b/i, 'CN'],
-  [/\brussia|russian federation\b/i, 'RU'],
-  [/\bfrance|french\b/i, 'FR'],
-  [/\bgermany|german\b/i, 'DE'],
-  [/\bjapan|japanese\b/i, 'JP'],
-  [/\bindia|indian\b/i, 'IN'],
-  [/\bbrazil|brazilian\b/i, 'BR'],
-  [/\bcanada|canadian\b/i, 'CA'],
-  [/\baustralia|australian\b/i, 'AU'],
-  [/\bisrael|israeli\b/i, 'IL'],
-  [/\biran|iranian\b/i, 'IR'],
-  [/\bnorth korea|dprk\b/i, 'KP'],
-  [/\bsouth korea|south korean\b/i, 'KR'],
-  [/\bpakistan|pakistani\b/i, 'PK'],
-  [/\bafghanistan|afghan\b/i, 'AF'],
-  [/\bsyria|syrian\b/i, 'SY'],
-  [/\biraq|iraqi\b/i, 'IQ'],
-  [/\bsaudi arabia|saudi\b/i, 'SA'],
-  [/\bturkey|turkish\b/i, 'TR'],
-  [/\bukraine|ukrainian\b/i, 'UA'],
-  [/\bmexico|mexican\b/i, 'MX'],
-  [/\bargentina|argentine\b/i, 'AR'],
-  [/\bcolumbia|colombian\b/i, 'CO'],
-  [/\bnigeria|nigerian\b/i, 'NG'],
-  [/\bsouth africa|south african\b/i, 'ZA'],
-  [/\bkenya|kenyan\b/i, 'KE'],
-  [/\bethiopia|ethiopian\b/i, 'ET'],
-  [/\bindonesia|indonesian\b/i, 'ID'],
-  [/\bphilippines|philippine|filipino\b/i, 'PH'],
-  [/\bvietnam|vietnamese\b/i, 'VN'],
-  [/\bthailand|thai\b/i, 'TH'],
-  [/\bmalaysia|malaysian\b/i, 'MY'],
+  // Each alternation is grouped and bounded: /\bindia|indian\b/ used to match
+  // "Indiana", and "usa" matched inside "accusation" and "causal" (pinning
+  // stories to Washington DC). "Colombia" was misspelled "columbia", so
+  // British Columbia and Columbia University counted as Colombia.
+  [/\b(?:united states|usa|u\.s\.a?\.?)(?!\w)/i, 'US'],
+  [/\b(?:united kingdom|britain|(?<!new )england|scotland|(?<!new south )wales)\b/i, 'GB'],
+  [/\b(?:china|chinese)\b/i, 'CN'],
+  [/\b(?:russia|russian federation)\b/i, 'RU'],
+  [/\b(?:france|french)\b/i, 'FR'],
+  [/\b(?:germany|german)\b/i, 'DE'],
+  [/\b(?:japan|japanese)\b/i, 'JP'],
+  [/\b(?:india|indian)\b/i, 'IN'],
+  [/\b(?:brazil|brazilian)\b/i, 'BR'],
+  [/\b(?:canada|canadian)\b/i, 'CA'],
+  [/\b(?:australia|australian)\b/i, 'AU'],
+  [/\b(?:israel|israeli)\b/i, 'IL'],
+  [/\b(?:iran|iranian)\b/i, 'IR'],
+  [/\b(?:north korea|north korean|dprk)\b/i, 'KP'],
+  [/\b(?:south korea|south korean)\b/i, 'KR'],
+  [/\b(?:pakistan|pakistani)\b/i, 'PK'],
+  [/\b(?:afghanistan|afghan)\b/i, 'AF'],
+  [/\b(?:syria|syrian)\b/i, 'SY'],
+  [/\b(?:iraq|iraqi)\b/i, 'IQ'],
+  [/\b(?:saudi arabia|saudi)\b/i, 'SA'],
+  [/\b(?:turkey|turkish|t[uü]rkiye)\b/i, 'TR'],
+  [/\b(?:ukraine|ukrainian)\b/i, 'UA'],
+  [/\b(?:mexico|mexican)\b/i, 'MX'],
+  [/\b(?:argentina|argentine|argentinian)\b/i, 'AR'],
+  [/\b(?:colombia|colombian)\b/i, 'CO'],
+  [/\b(?:nigeria|nigerian)\b/i, 'NG'],
+  [/\b(?:south africa|south african)\b/i, 'ZA'],
+  [/\b(?:kenya|kenyan)\b/i, 'KE'],
+  [/\b(?:ethiopia|ethiopian)\b/i, 'ET'],
+  [/\b(?:indonesia|indonesian)\b/i, 'ID'],
+  [/\b(?:philippines|philippine|filipino)\b/i, 'PH'],
+  [/\b(?:vietnam|vietnamese)\b/i, 'VN'],
+  [/\b(?:thailand|thai)\b/i, 'TH'],
+  [/\b(?:malaysia|malaysian)\b/i, 'MY'],
 ]
+
+/** Countries the text names, in order of first mention (the headline comes first) */
+export function mentionedCountries(text: string): string[] {
+  const hits: Array<{ code: string; index: number }> = []
+  for (const [pattern, code] of COUNTRY_PATTERNS) {
+    const m = pattern.exec(text)
+    if (m) hits.push({ code, index: m.index })
+  }
+  return [...new Set(hits.sort((a, b) => a.index - b.index).map(h => h.code))]
+}
 
 // ─── NOMINATIM LOOKUP ────────────────────────────────────────────────────────
 interface NominatimResult {
@@ -328,6 +342,36 @@ async function nominatimLookup(location: string): Promise<GeoResult | null> {
   }
 }
 
+// ─── PLACE MATCHING ──────────────────────────────────────────────────────────
+// Newspaper names mention a city without the story being about it ("the
+// Washington Post reported..."), so they are blanked out before matching.
+const OUTLET_NAMES = /\b(?:usa today|washington (?:post|times|examiner)|new york (?:times|post|daily news)|los angeles times|chicago tribune|miami herald|houston chronicle|jerusalem post|sydney morning herald|toronto star|london evening standard|manila times)\b/gi
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/** Gazetteer places as whole words, longest names first. Plain substring
+ *  matching pinned "climate" stories to Lima, "comparison" to Paris and
+ *  "promote" to Rome. */
+const GAZETTEER_MATCHERS = Object.entries(GAZETTEER)
+  .sort((a, b) => b[0].length - a[0].length)
+  .map(([place, coords]) => ({ place, coords, re: new RegExp(`\\b${escapeRegExp(place)}\\b`, 'i') }))
+
+/** The gazetteer place mentioned first (the headline comes first); the longer name on a tie */
+export function findGazetteerPlace(text: string): { place: string; coords: typeof GAZETTEER[string] } | null {
+  const clean = text.replace(OUTLET_NAMES, ' ')
+  let best: { place: string; coords: typeof GAZETTEER[string]; index: number } | null = null
+  for (const m of GAZETTEER_MATCHERS) {
+    const hit = m.re.exec(clean)
+    if (hit && (!best || hit.index < best.index)) best = { place: m.place, coords: m.coords, index: hit.index }
+  }
+  return best ? { place: best.place, coords: best.coords } : null
+}
+
+/** At most this many geocoder lookups per text (each one waits about a second) */
+const MAX_NOMINATIM_LOOKUPS = 4
+
 // ─── MAIN EXPORT ─────────────────────────────────────────────────────────────
 export async function extractGeo(text: string): Promise<GeoResult> {
   const lower = text.toLowerCase()
@@ -337,45 +381,48 @@ export async function extractGeo(text: string): Promise<GeoResult> {
   const cached   = await redis.get(cacheKey)
   if (cached) return JSON.parse(cached) as GeoResult
 
-  // 1. Find matches in gazetteer (longest match first = most specific)
-  const entries = Object.entries(GAZETTEER).sort((a, b) => b[0].length - a[0].length)
-  for (const [place, coords] of entries) {
-    if (lower.includes(place)) {
-      const result: GeoResult = {
-        point:       true,
-        lat:         coords.lat,
-        lng:         coords.lng,
-        name:        titleCase(place),
-        countryCode: coords.country,
-        region:      coords.region,
-      }
-      await redis.setex(cacheKey, 3600, JSON.stringify(result))
-      return result
+  // 1. Gazetteer: whole words only, the place mentioned first
+  const found = findGazetteerPlace(lower)
+  if (found) {
+    const result: GeoResult = {
+      point:       true,
+      lat:         found.coords.lat,
+      lng:         found.coords.lng,
+      name:        titleCase(found.place),
+      countryCode: found.coords.country,
+      region:      found.coords.region,
     }
+    await redis.setex(cacheKey, 3600, JSON.stringify(result))
+    return result
   }
 
-  // 2. NER extraction → Nominatim fallback
+  // 2. NER extraction → Nominatim fallback. When the text names countries, a
+  //    hit in some other country is rejected (a Saudi airport was pinned in
+  //    Romania by an ambiguous name).
+  const countries = mentionedCountries(text.replace(OUTLET_NAMES, ' '))
   const candidates = extractCandidateLocations(text)
+  let lookups = 0
   for (const candidate of candidates) {
     // Skip very common English words that match Title Case regex
     if (COMMON_WORDS.has(candidate)) continue
+    if (lookups++ >= MAX_NOMINATIM_LOOKUPS) break
     const geo = await nominatimLookup(candidate)
+    if (geo && countries.length > 0 && geo.countryCode && !countries.includes(geo.countryCode)) continue
     if (geo) {
       await redis.setex(cacheKey, 3600, JSON.stringify(geo))
       return geo
     }
   }
 
-  // 3. Country code detection → use capital as map point
-  for (const [pattern, code] of COUNTRY_PATTERNS) {
-    if (pattern.test(text)) {
-      const capital = COUNTRY_CENTROIDS[code]
-      const result: GeoResult = capital
-        ? { point: true, lat: capital.lat, lng: capital.lng, name: capital.name, countryCode: code }
-        : { point: false, countryCode: code }
-      await redis.setex(cacheKey, 3600, JSON.stringify(result))
-      return result
-    }
+  // 3. Country detection → use the capital as the map point (the country
+  //    mentioned first)
+  for (const code of countries) {
+    const capital = COUNTRY_CENTROIDS[code]
+    const result: GeoResult = capital
+      ? { point: true, lat: capital.lat, lng: capital.lng, name: capital.name, countryCode: code }
+      : { point: false, countryCode: code }
+    await redis.setex(cacheKey, 3600, JSON.stringify(result))
+    return result
   }
 
   const result: GeoResult = { point: false }
