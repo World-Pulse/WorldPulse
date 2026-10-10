@@ -70,7 +70,9 @@ jobs:
   shift:
     # Only the private repo, only from main, and not while paused
     if: github.repository == 'World-Pulse/WorldPulse-v2' && github.ref == 'refs/heads/main' && vars.AUTOPILOT_PAUSED != 'true'
-    runs-on: ubuntu-latest
+    # Ubuntu 22.04: Claude Code's sandbox (bubblewrap) runs there as is; 24.04
+    # blocks the user namespaces it needs
+    runs-on: ubuntu-22.04
     timeout-minutes: 90
     permissions:
       contents: read
@@ -300,14 +302,14 @@ jobs:
           fi
           pnpm --filter @worldpulse/types build || true
 
-      # Claude Code needs bubblewrap to hide the API key and GitHub token from the
-      # commands it runs (CLAUDE_CODE_SUBPROCESS_ENV_SCRUB above); without it the
-      # shift won't start (Oct 10, 2026).
+      # Claude Code's sandbox (bubblewrap + socat) hides the API key and GitHub
+      # token from the commands it runs (CLAUDE_CODE_SUBPROCESS_ENV_SCRUB above);
+      # without it the shift can't start or run commands (Oct 10, 2026).
       - name: Install the sandbox that hides secrets from Claude's commands
         if: steps.shift.outputs.ready == 'true' && steps.shift.outputs.api_problem == '' && steps.shift.outputs.mode != 'local'
         continue-on-error: true
         run: |
-          command -v bwrap > /dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq bubblewrap > /dev/null; }
+          sudo apt-get update -qq && sudo apt-get install -y -qq bubblewrap socat > /dev/null
           if bwrap --ro-bind / / --dev /dev --proc /proc --unshare-all true; then
             echo "bubblewrap works"
           else
