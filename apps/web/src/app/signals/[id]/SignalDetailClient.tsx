@@ -395,6 +395,7 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
             <SourceChain
               sources={signal.sources}
               sourceUrl={signal.originalUrls?.[0] ?? null}
+              originalUrls={signal.originalUrls ?? []}
             />
 
             {/* AI Summary — WorldPulse differentiator vs Ground News Ground Summary */}

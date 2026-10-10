@@ -31,11 +31,32 @@ export function showPrimarySourceCTA(
   return !sources.some(s => s.articleUrl === sourceUrl)
 }
 
+/** One link per outlet (website) among a signal's original URLs, in the order
+ *  they were reported. A verified signal has two or more: the outlets whose
+ *  reports of the same story corroborated it. */
+export function distinctOutlets(urls: readonly string[] | null | undefined): Array<{ host: string; url: string }> {
+  const seen = new Map<string, string>()
+  for (const url of urls ?? []) {
+    let host = ''
+    try {
+      const u = new URL(url)
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') continue
+      host = u.hostname.toLowerCase().replace(/^www\./, '')
+    } catch {
+      continue
+    }
+    if (host && !seen.has(host)) seen.set(host, url)
+  }
+  return [...seen].map(([host, url]) => ({ host, url }))
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 interface Props {
   sources:   Source[]
   sourceUrl?: string | null
+  /** All of the signal's original article URLs (one or more per outlet) */
+  originalUrls?: string[] | null
 }
 
 function SourceDomain({ url }: { url: string }) {
@@ -46,8 +67,9 @@ function SourceDomain({ url }: { url: string }) {
   }
 }
 
-export function SourceChain({ sources, sourceUrl }: Props) {
+export function SourceChain({ sources, sourceUrl, originalUrls }: Props) {
   const mode = computeSourceChainMode(sources, sourceUrl)
+  const outlets = distinctOutlets(originalUrls)
   if (mode === 'hidden') return null
 
   return (
@@ -129,6 +151,28 @@ export function SourceChain({ sources, sourceUrl }: Props) {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Every outlet that reported it — shown once there are two or more */}
+      {outlets.length >= 2 && (
+        <div className="space-y-1.5">
+          <div className="font-mono text-[10px] tracking-widest uppercase text-wp-text3">
+            Reported by {outlets.length} outlets
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {outlets.map(o => (
+              <a
+                key={o.host}
+                href={o.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-mono border border-white/10 text-wp-text2 hover:text-wp-text hover:border-white/20 transition-colors"
+              >
+                {o.host} ↗
+              </a>
+            ))}
+          </div>
         </div>
       )}
 

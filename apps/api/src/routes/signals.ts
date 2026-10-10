@@ -67,6 +67,24 @@ async function flushCachePattern(pattern: string): Promise<void> {
   }
 }
 
+
+/** A signal's known sources (from the sources table) as JSON objects, most trusted first */
+const SOURCES_DATA_SQL = `
+  ARRAY(
+    SELECT row_to_json(src)
+    FROM (
+      SELECT s2.id, s2.slug, s2.name, s2.url, s2.logo_url as "logoUrl", s2.tier,
+             s2.trust_score as "trustScore", ss.article_url as "articleUrl"
+      FROM sources s2
+      LEFT JOIN signal_sources ss ON ss.source_id = s2.id AND ss.signal_id = s.id
+      -- Cast to text on both sides: prod's source_ids was migrated to text[]
+      -- during Apr 15 hotfix, so uuid = text fails without an explicit cast.
+      WHERE s2.id::text = ANY(s.source_ids::text[])
+      ORDER BY s2.trust_score DESC
+    ) src
+  ) as sources_data
+`
+
 export const UpdateSignalSchema = z.object({
   status:            z.enum(['pending', 'verified', 'disputed', 'false', 'retracted']).optional(),
   severity:          z.enum(['critical', 'high', 'medium', 'low', 'info']).optional(),
@@ -131,7 +149,11 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
         's.region', 's.tags', 's.language', 's.view_count', 's.share_count',
         's.post_count', 's.event_time', 's.first_reported', 's.verified_at',
         's.last_updated', 's.last_corroborated_at', 's.created_at', 's.is_breaking', 's.community_flag_count',
+        // Where it came from: the outlets' article links and the known sources
+        // (both were missing from the list, so verified items showed no sources)
+        's.original_urls',
         db.raw('ST_AsGeoJSON(s.location)::json as location_geojson'),
+        db.raw(SOURCES_DATA_SQL),
       ])
       .orderBy('s.created_at', 'desc')
       .limit(Math.min(Number(limit), 100) + 1)
@@ -199,21 +221,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       .select([
         's.*',
         db.raw('ST_AsGeoJSON(s.location)::json as location_geojson'),
-        db.raw(`
-          ARRAY(
-            SELECT row_to_json(src)
-            FROM (
-              SELECT s2.id, s2.slug, s2.name, s2.logo_url as "logoUrl", s2.tier,
-                     s2.trust_score as "trustScore", ss.article_url as "articleUrl"
-              FROM sources s2
-              LEFT JOIN signal_sources ss ON ss.source_id = s2.id AND ss.signal_id = s.id
-              -- Cast to text on both sides: prod's source_ids was migrated to text[]
-              -- during Apr 15 hotfix, so uuid = text fails without an explicit cast.
-              WHERE s2.id::text = ANY(s.source_ids::text[])
-              ORDER BY s2.trust_score DESC
-            ) src
-          ) as sources_data
-        `),
+        db.raw(SOURCES_DATA_SQL),
       ])
       .first()
 
@@ -1757,7 +1765,9 @@ export function formatSignal(row: Record<string, unknown>) {
   const riskScore = computeRiskScore({
     severity:         (row.severity as string) ?? 'low',
     reliabilityScore: (row.reliability_score as number) ?? 0,
-    sourceCount:      (row.sources_data as unknown[] | null)?.length ?? (row.source_count as number) ?? 1,
+    // The larger of the known sources and the stored count: OSINT signals have
+    // no sources rows, but their source_count grows as other outlets corroborate them
+    sourceCount:      Math.max((row.sources_data as unknown[] | null)?.length ?? 0, Number(row.source_count ?? 1) || 1),
     hasLocation:      !!geo?.coordinates,
     category:         (row.category as string) ?? 'general',
     publishedAt:      new Date((row.created_at as Date | string | undefined) ?? Date.now()),

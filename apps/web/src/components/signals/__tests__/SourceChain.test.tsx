@@ -14,6 +14,7 @@ import {
   computeSourceChainMode,
   showPrimarySourceCTA,
   reliabilityBarColor,
+  distinctOutlets,
 } from '../SourceChain'
 import type { Source } from '@worldpulse/types'
 
@@ -116,5 +117,30 @@ describe('reliabilityBarColor', () => {
   it('boundary: exactly 0.8 maps to green, exactly 0.6 maps to amber', () => {
     expect(reliabilityBarColor(0.8)).toBe('#00e676')
     expect(reliabilityBarColor(0.6)).toBe('#f5a623')
+  })
+})
+
+// ─── distinctOutlets ──────────────────────────────────────────────────────────
+
+describe('distinctOutlets', () => {
+  it('keeps one link per website, in the order reported', () => {
+    expect(distinctOutlets([
+      'https://www3.nhk.or.jp/news/quake',
+      'https://www.reuters.com/world/asia/quake',
+      'https://reuters.com/world/asia/quake-update',
+      'https://apnews.com/article/quake',
+    ])).toEqual([
+      { host: 'www3.nhk.or.jp', url: 'https://www3.nhk.or.jp/news/quake' },
+      { host: 'reuters.com',    url: 'https://www.reuters.com/world/asia/quake' },
+      { host: 'apnews.com',     url: 'https://apnews.com/article/quake' },
+    ])
+  })
+
+  it('skips anything that is not an http(s) link', () => {
+    expect(distinctOutlets(['javascript:alert(1)', 'not a url', 'ftp://x.org/a', 'https://bbc.co.uk/n'])).toEqual([
+      { host: 'bbc.co.uk', url: 'https://bbc.co.uk/n' },
+    ])
+    expect(distinctOutlets(null)).toEqual([])
+    expect(distinctOutlets(undefined)).toEqual([])
   })
 })
