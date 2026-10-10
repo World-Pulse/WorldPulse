@@ -92,6 +92,15 @@ pipeline_stats() {
     "${errs:-0}" "${warns:-0}" "${created:-0}" "$top" "$topw"
   printf '"llm":%s}' "$(llm_stats "$scr")"
 }
+# Why the last deploy wasn't clean, from the deploy script's own log lines only
+# (its warnings, or the reason it rolled back or failed); empty when it was clean
+deploy_note() {
+  case "$(cat logs/deploy.status 2>/dev/null)" in
+    success_with_warnings) grep -o 'Deployed [^,]*, but:.*' logs/deploy-latest.log 2>/dev/null | tail -n 1 \
+                             | sed 's/^Deployed [^,]*, but: *//' ;;
+    rolled_back|failed)    grep '^\[deploy ' logs/deploy-latest.log 2>/dev/null | tail -n 1 | sed 's/^\[deploy [0-9:]*\] //' ;;
+  esac | tr -d '"\\' | tr -d '\000-\037' | cut -c1-240
+}
 pipe_cache=logs/pipeline-stats.json
 # Refresh every 30 minutes, or straight away when the cache predates a new field
 if [ ! -s "$pipe_cache" ] || [ -n "$(find "$pipe_cache" -mmin +29 2>/dev/null)" ] \
@@ -107,6 +116,7 @@ pipeline=$(cat "$pipe_cache" 2>/dev/null || true)
   printf '{"updated":"%s",' "$(date -Is)"
   printf '"commit":"%s",' "$(git rev-parse --short=7 HEAD 2>/dev/null || echo unknown)"
   printf '"last_deploy":"%s",' "$(cat logs/deploy.status 2>/dev/null || echo none)"
+  printf '"last_deploy_note":"%s",' "$(deploy_note)"
   printf '"last_maintenance":"%s",' "$(cat logs/maintenance.status 2>/dev/null || echo none)"
   printf '"disk_used_pct":%s,' "$(df --output=pcent / | tail -1 | tr -dc '0-9')"
   printf '"disk_free_gb":%s,' "$(df -BG --output=avail / | tail -1 | tr -dc '0-9')"
