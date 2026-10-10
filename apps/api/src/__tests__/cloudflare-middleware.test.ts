@@ -127,6 +127,7 @@ describe('isValidCfIp', () => {
 describe('buildCfAwareKeyGenerator', () => {
   const makeReq = (overrides: Partial<{
     headers: Record<string, string>
+    user: { id: string }
     ip: string
     isBehindCloudflare: boolean
     cfClientIp: string
@@ -138,9 +139,14 @@ describe('buildCfAwareKeyGenerator', () => {
     ...overrides,
   })
 
-  it('returns user-scoped key when x-user-id header is present', () => {
-    const req = makeReq({ headers: { 'x-user-id': 'user-abc-123' } })
+  it('returns user-scoped key for the authenticated user', () => {
+    const req = makeReq({ user: { id: 'user-abc-123' } })
     expect(buildCfAwareKeyGenerator(req as any)).toBe('user:user-abc-123')
+  })
+
+  it('ignores a spoofed x-user-id header', () => {
+    const req = makeReq({ headers: { 'x-user-id': 'victim' }, ip: '5.6.7.8' })
+    expect(buildCfAwareKeyGenerator(req as any)).toBe('ip:5.6.7.8')
   })
 
   it('returns CF client IP key when behind Cloudflare and CF IP is known', () => {
@@ -153,7 +159,7 @@ describe('buildCfAwareKeyGenerator', () => {
 
   it('user key takes priority over CF IP', () => {
     const req = makeReq({
-      headers: { 'x-user-id': 'user-xyz' },
+      user: { id: 'user-xyz' },
       isBehindCloudflare: true,
       cfClientIp: '203.0.113.42',
     })

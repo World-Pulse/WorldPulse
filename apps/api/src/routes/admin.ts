@@ -284,7 +284,11 @@ export const registerAdminRoutes: FastifyPluginAsync = async (app) => {
   app.get('/llm-status', {
     preHandler: [authenticate],
     config: { rateLimit: { max: 30, timeWindow: 60_000 } },
-  }, async (_req, reply) => {
+  }, async (req, reply) => {
+    if (!req.user || req.user.accountType !== 'admin') {
+      return sendError(reply, 403, 'FORBIDDEN', 'Admin access required')
+    }
+
     interface ProviderInfo {
       id:         string
       label:      string

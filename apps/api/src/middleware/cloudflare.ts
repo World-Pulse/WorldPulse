@@ -167,7 +167,8 @@ export const cloudflareMiddlewarePlugin: FastifyPluginAsync = cloudflarePlugin
 export function buildCfAwareKeyGenerator(
   req: FastifyRequest,
 ): string {
-  const userId = req.headers['x-user-id'] as string | undefined
+  // Only the verified user (set by authenticate) counts; client headers are ignored
+  const userId = (req as { user?: { id?: string } }).user?.id
   if (userId) return `user:${userId}`
   if (req.isBehindCloudflare && req.cfClientIp) return `ip:${req.cfClientIp}`
   return `ip:${req.ip ?? '0.0.0.0'}`
