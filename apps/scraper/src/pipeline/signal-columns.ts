@@ -70,11 +70,15 @@ export function sourceKey(sourceIds: unknown, urls: unknown, fallback = ''): str
   const firstId = Array.isArray(sourceIds) ? sourceIds[0] : sourceIds
   if (typeof firstId === 'string' && firstId.trim()) return firstId.trim()
   const firstUrl = Array.isArray(urls) ? urls[0] : urls
-  if (typeof firstUrl === 'string' && firstUrl) {
-    try {
-      const host = new URL(firstUrl).hostname.toLowerCase().replace(/^www\./, '')
-      if (host) return host
-    } catch { /* not a URL */ }
+  return hostOf(firstUrl) || fallback
+}
+
+/** The website a URL belongs to, lower-case and without www. ('' when it isn't a URL) */
+export function hostOf(url: unknown): string {
+  if (typeof url !== 'string' || !url) return ''
+  try {
+    return new URL(url).hostname.toLowerCase().replace(/^www\./, '')
+  } catch {
+    return ''
   }
-  return fallback
 }

@@ -23,7 +23,7 @@
 import { db } from '../lib/postgres'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
-import { correlateSignal } from './correlate'
+import { correlateSignal, corroborateWithDuplicate } from './correlate'
 import type { CorrelationCandidate } from './correlate'
 import { recordSuccess } from '../health'
 import { computeReliabilityScore, maxSeverityForSourceCount } from './reliability-score'
@@ -31,6 +31,9 @@ import { dedup, checkSemanticDuplicate } from './dedup'
 import { processSignalForKnowledgeGraph, extractEntitiesRuleBased, upsertEntityNode } from './entity-graph'
 import { embedSignal } from './embeddings'
 import { signalsHavePublishedAt, publishedAtFor, sourceKey } from './signal-columns'
+
+/** Signal ids are UUIDs; the dedup store can also hold '1' or 'pending' */
+const SIGNAL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // ─── Alert Tier Classification (inlined — canonical in apps/api/src/lib/alert-tier.ts) ──
 const FLASH_RELIABILITY_THRESHOLD = 0.65
@@ -109,10 +112,26 @@ export async function insertAndCorrelate(
   // 0a. Cross-source event dedup — skip if a very similar signal was already
   //     inserted within the last 6 hours. This prevents the same earthquake,
   //     fire, or conflict report from appearing multiple times in the feed
-  //     when covered by different sources.
+  //     when covered by different sources. A duplicate from another outlet
+  //     still counts as corroboration for the signal that holds the event.
+  let crossSourceKey: string | null = null
   try {
-    const isDupe = await dedup.checkCrossSource(rawTitle, rawCategory)
-    if (isDupe) {
+    const { key, seen } = await dedup.claimCrossSource(rawTitle, rawCategory)
+    crossSourceKey = key
+    if (seen !== null) {
+      if (SIGNAL_ID_RE.test(seen)) {
+        const urls = Array.isArray(signalData.original_urls) ? signalData.original_urls : []
+        corroborateWithDuplicate(seen, {
+          title:        rawTitle,
+          category:     rawCategory,
+          severity:     rawSeverity,
+          source_id:    sourceKey(signalData.source_ids, urls, meta.sourceId),
+          url:          typeof urls[0] === 'string' ? urls[0] : null,
+          lat:          meta.lat ?? null,
+          lng:          meta.lng ?? null,
+          published_at: publishedAtFor(signalData.event_time),
+        }).catch(err => logger.warn({ err, signalId: seen }, 'Duplicate corroboration failed (non-fatal)'))
+      }
       logger.debug({ title: rawTitle.slice(0, 80), category: rawCategory }, 'Cross-source duplicate — skipping insert')
       // Still record source health so the source appears active
       recordSuccess(
@@ -177,6 +196,12 @@ export async function insertAndCorrelate(
 
   // 1. Insert the signal
   const [signal] = await db('signals').insert(signalWithTier).returning('*')
+
+  // Remember which signal holds this event, so later reports of it from other
+  // outlets can corroborate it (see 0a)
+  if (crossSourceKey && signal?.id) {
+    dedup.rememberCrossSource(crossSourceKey, String(signal.id)).catch(() => {})
+  }
 
   // 1a. Record source health so the stability tracker can see this source as active.
   //     Non-blocking — a health tracking failure must never fail signal insertion.

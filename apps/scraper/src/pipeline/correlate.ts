@@ -25,7 +25,7 @@
 import { db } from '../lib/postgres'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
-import { sourceKey } from './signal-columns'
+import { sourceKey, hostOf } from './signal-columns'
 import { createHash } from 'crypto'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -158,14 +158,22 @@ export async function correlateSignal(signal: CorrelationCandidate): Promise<Eve
   try {
     // 1. Fetch recent signals in the temporal window
     const candidates = await fetchRecentSignals(signal)
-    if (candidates.length === 0) return null
 
     // 2. Independent reports of the same story: the only corroboration that
-    //    raises reliability or verifies anything (see isSameStory)
-    const sameStory = candidates.filter(c => isSameStory(signal, c))
+    //    raises reliability or verifies anything (see isSameStory). Looked for
+    //    among the newest signals and, by headline words, the whole window.
+    const wider = await fetchSameStoryCandidates(signal).catch(err => {
+      logger.warn({ err, signal_id: signal.id }, 'Same-story search failed (non-fatal)')
+      return [] as CorrelationCandidate[]
+    })
+    const pool = new Map<string, CorrelationCandidate>()
+    for (const c of [...candidates, ...wider]) pool.set(c.id, c)
+    const sameStory = [...pool.values()].filter(c => isSameStory(signal, c))
     if (sameStory.length > 0) {
       await applyCorroborationBoost(signal, sameStory)
     }
+
+    if (candidates.length === 0) return null
 
     // 3. Score each candidate for correlation (related signals, for display)
     const scored = candidates.map(candidate => ({
@@ -236,8 +244,43 @@ async function fetchRecentSignals(signal: CorrelationCandidate): Promise<Correla
     .limit(200)
 
   const rows = await query
+  return rows.map(toCandidate)
+}
 
-  return rows.map((r: Record<string, unknown>) => ({
+/**
+ * Signals from the whole window whose headlines share words with this one,
+ * best matches first. fetchRecentSignals only returns the 200 newest signals
+ * (about 45 minutes of intake), so most reports of the same story were never
+ * compared. Only used for same-story corroboration, not for clusters.
+ */
+async function fetchSameStoryCandidates(signal: CorrelationCandidate): Promise<CorrelationCandidate[]> {
+  const words = [...new Set((signal.title ?? '').toLowerCase().split(/[^a-z0-9]+/))]
+    .filter(w => w.length >= 4 && !STOP_WORDS.has(w))
+    .slice(0, 12)
+  if (words.length < SAME_STORY_MIN_SHARED) return []
+  const tsquery = words.join(' | ')
+  const since = new Date(Date.now() - TEMPORAL_WINDOW_HOURS * 60 * 60 * 1000)
+
+  const rows = await db('signals')
+    .select(
+      'id', 'title', 'category', 'severity',
+      db.raw('source_ids[1]::text as source_id'),
+      db.raw('original_urls[1] as first_url'),
+      'location_name', 'reliability_score', 'tags',
+      db.raw('COALESCE(event_time, created_at) as published_at'),
+      db.raw('ST_Y(location::geometry) as lat'),
+      db.raw('ST_X(location::geometry) as lng'),
+    )
+    .where('created_at', '>=', since.toISOString())
+    .whereNot('id', signal.id)
+    .whereRaw(`to_tsvector('simple', title) @@ to_tsquery('simple', ?)`, [tsquery])
+    .orderByRaw(`ts_rank(to_tsvector('simple', title), to_tsquery('simple', ?)) DESC`, [tsquery])
+    .limit(50)
+  return rows.map(toCandidate)
+}
+
+function toCandidate(r: Record<string, unknown>): CorrelationCandidate {
+  return {
     id: r.id as string,
     title: r.title as string,
     category: r.category as string,
@@ -249,7 +292,7 @@ async function fetchRecentSignals(signal: CorrelationCandidate): Promise<Correla
     published_at: r.published_at as string,
     reliability_score: r.reliability_score as number,
     tags: Array.isArray(r.tags) ? r.tags as string[] : [],
-  }))
+  }
 }
 
 // ─── CORRELATION SCORING ─────────────────────────────────────────────────────
@@ -604,6 +647,63 @@ async function applyCorroborationBoost(
   } catch (err) {
     logger.warn({ err, signal_id: signal.id }, 'Failed to apply corroboration boost')
   }
+}
+
+/**
+ * A report that was dropped as a duplicate (near-identical headline within 6
+ * hours, see dedup.claimCrossSource) is still evidence when another outlet
+ * published it. If it describes the same story (isSameStory) and its outlet
+ * hasn't been counted yet, credit the existing signal with it: one more
+ * source, a reliability boost, and verified once it qualifies. Returns
+ * whether the signal was credited.
+ */
+export async function corroborateWithDuplicate(
+  existingId: string,
+  incoming: Pick<CorrelationCandidate, 'title' | 'category' | 'severity' | 'source_id' | 'lat' | 'lng' | 'published_at'> & { url: string | null },
+): Promise<boolean> {
+  const row = await db('signals').where('id', existingId).first(
+    'id', 'title', 'category', 'severity', 'source_ids', 'original_urls',
+    db.raw('COALESCE(event_time, created_at) as published_at'),
+    db.raw('ST_Y(location::geometry) as lat'),
+    db.raw('ST_X(location::geometry) as lng'),
+  ) as Record<string, unknown> | undefined
+  if (!row) return false
+
+  // Already counted? Compare with every source id and every website stored on the signal
+  const storedIds = Array.isArray(row.source_ids) ? row.source_ids.map(String) : []
+  const storedUrls = Array.isArray(row.original_urls) ? row.original_urls.map(String) : []
+  const counted = new Set([...storedIds, ...storedUrls.map(hostOf)].filter(Boolean))
+  const incomingHost = hostOf(incoming.url)
+  if (!incoming.source_id || counted.has(incoming.source_id) || (incomingHost && counted.has(incomingHost))) return false
+
+  const existing = toCandidate({ ...row, source_id: storedIds[0] ?? null, first_url: storedUrls[0] ?? null, location_name: null, reliability_score: 0, tags: [] })
+  if (!isSameStory(existing, { ...existing, ...incoming, id: 'incoming' })) return false
+
+  const top = (SEVERITY_ORDER[incoming.severity] ?? 0) > (SEVERITY_ORDER[existing.severity] ?? 0) ? incoming.severity : existing.severity
+  const boost = Math.min(CORROBORATION_BOOST * (top === 'critical' ? 1.15 : top === 'high' ? 1.10 : 1.0), MAX_CORROBORATION_BOOST)
+
+  const update: Record<string, unknown> = {
+    source_count:         db.raw('GREATEST(COALESCE(source_count, 1), 1) + 1'),
+    reliability_score:    db.raw('LEAST(reliability_score + ?, 1.0)', [boost]),
+    last_corroborated_at: db.raw('NOW()'),
+  }
+  if (incoming.url) update.original_urls = db.raw('array_append(COALESCE(original_urls, ARRAY[]::text[]), ?)', [incoming.url])
+  await db('signals').where('id', existingId).update(update)
+
+  const promoted = await db('signals')
+    .where('id', existingId)
+    .where('status', 'pending')
+    .where('source_count', '>=', 2)
+    .where('reliability_score', '>=', 0.65)
+    .update({ status: 'verified', verified_at: db.raw('NOW()') })
+
+  logger.info({
+    signal_id: existingId,
+    outlet:    incoming.source_id,
+    boost:     +boost.toFixed(3),
+    promoted,
+  }, 'Duplicate report from another outlet corroborated a signal')
+  return true
 }
 
 // ─── API: GET CORRELATED SIGNALS ─────────────────────────────────────────────

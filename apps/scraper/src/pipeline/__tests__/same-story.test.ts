@@ -10,14 +10,25 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const h = vi.hoisted(() => {
   const updates: Array<{ ids: string[]; data: Record<string, unknown> }> = []
-  const state = { recentRows: [] as Record<string, unknown>[] }
+  const state = {
+    recentRows: [] as Record<string, unknown>[],   // the 200 newest signals
+    textRows: [] as Record<string, unknown>[],     // headline-word search over the window
+    firstRow: undefined as Record<string, unknown> | undefined,  // .first() lookups
+    textQueries: [] as string[],
+  }
   function builder() {
     let ids: string[] = []
+    let mode: 'rows' | 'text' | 'first' = 'rows'
     const b: Record<string, unknown> = {}
-    for (const m of ['select', 'where', 'whereNot', 'orderBy', 'limit', 'first']) b[m] = () => b
+    for (const m of ['select', 'whereNot', 'orderBy', 'limit']) b[m] = () => b
+    b.where = (col: unknown, val: unknown) => { if (col === 'id' && typeof val === 'string') ids = [val]; return b }
     b.whereIn = (_col: string, list: string[]) => { ids = list; return b }
+    b.whereRaw = (_sql: string, params: string[]) => { mode = 'text'; state.textQueries.push(params[0]); return b }
+    b.orderByRaw = () => b
+    b.first = () => { mode = 'first'; return b }
     b.update = (data: Record<string, unknown>) => { updates.push({ ids, data }); return Promise.resolve(ids.length) }
-    b.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve(state.recentRows).then(res, rej)
+    b.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
+      Promise.resolve(mode === 'first' ? state.firstRow : mode === 'text' ? state.textRows : state.recentRows).then(res, rej)
     return b
   }
   return { updates, state, builder }
@@ -33,7 +44,7 @@ vi.mock('../../lib/redis', () => {
 })
 vi.mock('../../lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }))
 
-import { isSameStory, correlateSignal, type CorrelationCandidate } from '../correlate'
+import { isSameStory, correlateSignal, corroborateWithDuplicate, type CorrelationCandidate } from '../correlate'
 
 const now = new Date('2026-10-10T15:40:00Z')
 
@@ -95,7 +106,11 @@ describe('isSameStory', () => {
 })
 
 describe('correlateSignal corroboration', () => {
-  beforeEach(() => { h.updates.length = 0 })
+  beforeEach(() => {
+    h.updates.length = 0
+    h.state.textRows = []
+    h.state.textQueries.length = 0
+  })
 
   it('does not boost or verify anything for merely related signals', async () => {
     h.state.recentRows = [
@@ -118,5 +133,68 @@ describe('correlateSignal corroboration', () => {
     expect(boost.data.source_count).toBe(2)
     expect(promote.ids).toEqual(['sig-a', 'sig-b'])
     expect(promote.data.status).toBe('verified')
+  })
+})
+
+describe('same-story search across the whole window', () => {
+  beforeEach(() => {
+    h.updates.length = 0
+    h.state.recentRows = []
+    h.state.textRows = []
+    h.state.textQueries.length = 0
+  })
+
+  it('searches by headline words and corroborates a match older than the newest 200 signals', async () => {
+    h.state.textRows = [row({ id: 'sig-old', first_url: 'https://apnews.com/article/quake',
+      published_at: new Date(now.getTime() - 5 * 3600_000).toISOString() })]
+    await correlateSignal(sig())
+    expect(h.state.textQueries[0].split(' | ')).toEqual(
+      expect.arrayContaining(['magnitude', 'earthquake', 'strikes', 'coast', 'northern', 'japan']))
+    expect(h.updates[0].ids).toEqual(['sig-a', 'sig-old'])
+    expect(h.updates[1].data.status).toBe('verified')
+  })
+
+  it('does not search on headlines too short to compare', async () => {
+    await correlateSignal(sig({ title: 'Protest in Delhi' }))
+    expect(h.state.textQueries).toEqual([])
+  })
+})
+
+describe('corroborateWithDuplicate', () => {
+  const incoming = {
+    title: 'Strong magnitude 6.1 earthquake hits off northern Japan coast', category: 'disaster', severity: 'high',
+    source_id: 'reuters.com', url: 'https://www.reuters.com/world/asia/quake', lat: null, lng: null,
+    published_at: now.toISOString(),
+  }
+  beforeEach(() => {
+    h.updates.length = 0
+    h.state.firstRow = {
+      id: 'sig-held', title: 'Magnitude 6.1 earthquake strikes off the coast of northern Japan',
+      category: 'disaster', severity: 'high', source_ids: [], original_urls: ['https://www3.nhk.or.jp/news/quake'],
+      published_at: now.toISOString(), lat: null, lng: null,
+    }
+  })
+
+  it('credits the held signal with a second outlet and verifies it when it qualifies', async () => {
+    expect(await corroborateWithDuplicate('sig-held', incoming)).toBe(true)
+    expect(h.updates).toHaveLength(2)
+    expect(h.updates[0].ids).toEqual(['sig-held'])
+    expect(Object.keys(h.updates[0].data)).toEqual(
+      expect.arrayContaining(['source_count', 'reliability_score', 'last_corroborated_at', 'original_urls']))
+    expect(h.updates[1].data.status).toBe('verified')
+  })
+
+  it('does not count an outlet twice', async () => {
+    expect(await corroborateWithDuplicate('sig-held', { ...incoming, source_id: 'nhk.or.jp', url: 'https://www3.nhk.or.jp/news/other' })).toBe(false)
+    h.state.firstRow = { ...h.state.firstRow!, original_urls: ['https://www3.nhk.or.jp/news/quake', 'https://www.reuters.com/a'] }
+    expect(await corroborateWithDuplicate('sig-held', incoming)).toBe(false)
+    expect(h.updates).toEqual([])
+  })
+
+  it('does not credit a different story or a missing signal', async () => {
+    expect(await corroborateWithDuplicate('sig-held', { ...incoming, title: 'Typhoon forces flight cancellations across southern Japan airports' })).toBe(false)
+    h.state.firstRow = undefined
+    expect(await corroborateWithDuplicate('sig-gone', incoming)).toBe(false)
+    expect(h.updates).toEqual([])
   })
 })

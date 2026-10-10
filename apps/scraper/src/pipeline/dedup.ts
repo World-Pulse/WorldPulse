@@ -54,12 +54,26 @@ export const dedup = {
    * Returns true if a similar event was already seen within 6 hours.
    */
   async checkCrossSource(title: string, category: string): Promise<boolean> {
-    const fingerprint = eventFingerprint(title, category)
-    const key = `dedup:event:${fingerprint}`
-    const exists = await redis.exists(key)
-    if (exists) return true
-    await redis.setex(key, CROSS_SOURCE_TTL, '1')
-    return false
+    return (await this.claimCrossSource(title, category)).seen !== null
+  },
+
+  /**
+   * Cross-source event dedup that remembers which signal holds the event, so
+   * a later report from another outlet can corroborate it instead of being
+   * thrown away. Claims the event when it is new (seen = null); otherwise
+   * returns what is stored: the holding signal's id once rememberCrossSource
+   * has run, or '1' / 'pending' when that isn't known.
+   */
+  async claimCrossSource(title: string, category: string): Promise<{ key: string; seen: string | null }> {
+    const key = `dedup:event:${eventFingerprint(title, category)}`
+    const claimed = await redis.set(key, 'pending', 'EX', CROSS_SOURCE_TTL, 'NX')
+    if (claimed === 'OK') return { key, seen: null }
+    return { key, seen: (await redis.get(key)) ?? '1' }
+  },
+
+  /** Record the signal that holds an event claimed with claimCrossSource (its 6-hour window is kept) */
+  async rememberCrossSource(key: string, signalId: string): Promise<void> {
+    await redis.set(key, signalId, 'KEEPTTL')
   },
 }
 
