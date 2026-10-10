@@ -3,7 +3,10 @@ name: Autopilot
 # Orbit, the WorldPulse autopilot, runs here 8 times a day (one shift per
 # 3-hour slot), whether or not Devon's PC is on. GitHub sometimes starts
 # scheduled runs late or skips them, so this checks every hour and runs a
-# slot's shift the first time it gets the chance.
+# slot's shift the first time it gets the chance. GitHub dropped most of those
+# hourly runs (only 12 started Oct 7-10), so Claude's hourly HQ sync also
+# sends an "autopilot-tick" (repository_dispatch) whenever a slot is due or a
+# shift from chat is waiting; a tick counts exactly like a scheduled run.
 #
 #  shift   — Claude picks one item from the plan, makes the change and checks
 #            it. This job can only READ the repo, so nothing it does can reach
@@ -49,6 +52,8 @@ on:
     # 6 PM New York summer time (an hour earlier in winter); the other hourly
     # runs only catch up a slot GitHub skipped, and otherwise stop in seconds.
     - cron: '7 * * * *'
+  repository_dispatch:
+    types: [autopilot-tick]
   workflow_dispatch:
     inputs:
       lane:
@@ -107,6 +112,8 @@ jobs:
           MODEL: ${{ vars.AUTOPILOT_MODEL || 'claude-sonnet-5-5' }}
           WORKSPACE_ID: ${{ vars.AUTOPILOT_WORKSPACE_ID }}
         run: |
+          # An hourly tick from Claude's scheduler counts as a scheduled run
+          [ "$EVENT" = repository_dispatch ] && EVENT=schedule
           ready=true; mode=cloud; local_stamp=""; local_tip=""; start_sha=$(git rev-parse HEAD)
           if [ ! -f .hq/AUTOPILOT.md ]; then
             echo "::warning::The autopilot-state branch (plan + instructions) isn't on GitHub yet, so this shift is skipped. Devon's PC publishes it within 30 minutes of being on."

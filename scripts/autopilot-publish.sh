@@ -387,12 +387,32 @@ finish() {
   if [ -n "$REPORT" ] && [ -f "$REPORT" ] && [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
     cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
   fi
-  if [ "${CLAUDE_OUTCOME:-}" = failure ] || [ -n "$PARKED" ] || [ -n "$SECRET" ] || [ -n "${API_PROBLEM:-}" ]; then exit 1; fi
+  if [ "${CLAUDE_OUTCOME:-}" = failure ] || [ -n "$PARKED" ] || [ -n "$SECRET" ]; then exit 1; fi
+  # A Claude API problem fails the run (so GitHub emails Devon) the first time
+  # it appears. While the same problem lasts, later runs aren't marked failed
+  # again: it is already on his Needs-you list and in HQ (Devon chose this on
+  # Oct 10, after a week of identical "Run failed" emails).
+  if [ -n "${API_PROBLEM:-}" ]; then
+    if [ "${PREV_RESULT:-}" = "couldn't start: Claude API problem" ]; then
+      echo "::warning::Claude still can't be reached (same problem as the last shift), so this run isn't marked failed again. See Needs you in HQ."
+      exit 0
+    fi
+    exit 1
+  fi
   exit 0
 }
 if [ ! -d .hq/.git ]; then echo "No autopilot-state checkout; nothing to save."; finish; fi
 cd .hq || finish
 BASE_HQ=$(git rev-parse HEAD)
+# The previous shift's result, from the ledger as it was before this shift
+PREV_RESULT=$(git show "$BASE_HQ:ledger.json" 2> /dev/null | python3 -c '
+import json, sys
+try:
+    l = json.load(sys.stdin)
+    print(str(l[-1].get("result", "")) if isinstance(l, list) and l and isinstance(l[-1], dict) else "")
+except Exception:
+    print("")
+' 2> /dev/null || true)
 
 # Bring in what the shift wrote; edits made on GitHub meanwhile win any clash
 if [ -f "$OUT/hq.bundle" ] && git fetch -q "$OUT/hq.bundle" "refs/heads/shift-work:refs/autopilot/hq" 2> /dev/null; then
