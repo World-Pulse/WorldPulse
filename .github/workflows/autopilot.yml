@@ -300,6 +300,20 @@ jobs:
           fi
           pnpm --filter @worldpulse/types build || true
 
+      # Claude Code needs bubblewrap to hide the API key and GitHub token from the
+      # commands it runs (CLAUDE_CODE_SUBPROCESS_ENV_SCRUB above); without it the
+      # shift won't start (Oct 10, 2026).
+      - name: Install the sandbox that hides secrets from Claude's commands
+        if: steps.shift.outputs.ready == 'true' && steps.shift.outputs.api_problem == '' && steps.shift.outputs.mode != 'local'
+        continue-on-error: true
+        run: |
+          command -v bwrap > /dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq bubblewrap > /dev/null; }
+          if bwrap --ro-bind / / --dev /dev --proc /proc --unshare-all true; then
+            echo "bubblewrap works"
+          else
+            echo "::warning::bubblewrap is installed but can't run on this runner, so Claude Code may refuse to start."
+          fi
+
       - name: Run the shift
         id: claude
         if: steps.shift.outputs.ready == 'true' && steps.shift.outputs.api_problem == '' && steps.shift.outputs.mode != 'local'
