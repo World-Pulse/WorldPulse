@@ -83,6 +83,19 @@ const CORRELATION_TTL = 7 * 24 * 60 * 60 // 7 days
 /** Maximum cluster size to prevent runaway merges */
 const MAX_CLUSTER_SIZE = 12
 
+/**
+ * "Same story" test used for corroboration (the only thing that verifies a
+ * signal). Clusters above group *related* signals (same place, same hour,
+ * linked categories); that is fine for "related signals" but it is not
+ * evidence. On Oct 10, 2026 the loose cluster rule verified unrelated
+ * single-source stories within minutes of going live, so verification now
+ * needs two different outlets whose headlines describe the same thing.
+ */
+const SAME_STORY_MIN_WORDS = 5      // headlines need enough content words to compare
+const SAME_STORY_MIN_SHARED = 3     // content words both headlines use
+const SAME_STORY_MIN_JACCARD = 0.4  // shared words / all words of both headlines
+const SAME_STORY_RADIUS_KM = 300    // when both are on the map, they must be near each other
+
 // ─── CAUSAL CHAIN RULES ──────────────────────────────────────────────────────
 // Maps category pairs that have known causal relationships.
 // { trigger → [possible effects] }
@@ -147,7 +160,14 @@ export async function correlateSignal(signal: CorrelationCandidate): Promise<Eve
     const candidates = await fetchRecentSignals(signal)
     if (candidates.length === 0) return null
 
-    // 2. Score each candidate for correlation
+    // 2. Independent reports of the same story: the only corroboration that
+    //    raises reliability or verifies anything (see isSameStory)
+    const sameStory = candidates.filter(c => isSameStory(signal, c))
+    if (sameStory.length > 0) {
+      await applyCorroborationBoost(signal, sameStory)
+    }
+
+    // 3. Score each candidate for correlation (related signals, for display)
     const scored = candidates.map(candidate => ({
       candidate,
       score: computeCorrelationScore(signal, candidate),
@@ -165,16 +185,14 @@ export async function correlateSignal(signal: CorrelationCandidate): Promise<Eve
       topCorrelations.map(s => s.candidate.id)
     )
 
-    // 5. Form or extend cluster
+    // 5. Form or extend cluster (related signals; this never changes reliability
+    //    or status, which only same-story corroboration does, in step 2)
     let cluster: EventCluster
     if (existingClusterId) {
       cluster = await extendCluster(existingClusterId, signal, topCorrelations)
     } else {
       cluster = await createCluster(signal, topCorrelations)
     }
-
-    // 6. Apply reliability boost to corroborated signals
-    await applyCorroborationBoost(cluster)
 
     const durationMs = Date.now() - span.start
     logger.info({
@@ -340,6 +358,28 @@ export function keywordScore(a: CorrelationCandidate, b: CorrelationCandidate): 
   return Math.min(1.0, tagJaccard * 0.5 + wordJaccard * 0.3 + locMatch)
 }
 
+/**
+ * Whether two signals are independent reports of the same story: two different
+ * known outlets, within the time window, near each other when both are on the
+ * map, and headlines that share most of their content words. Short or
+ * templated headlines ("Protest in Jaipur, Rajasthan, India") never qualify:
+ * they don't carry enough of the story to compare.
+ */
+export function isSameStory(a: CorrelationCandidate, b: CorrelationCandidate): boolean {
+  if (!a.source_id || !b.source_id || a.source_id === b.source_id) return false
+  if (temporalScore(a, b) <= 0) return false
+  if (a.lat != null && a.lng != null && b.lat != null && b.lng != null &&
+      haversineKm(a.lat, a.lng, b.lat, b.lng) > SAME_STORY_RADIUS_KM) return false
+
+  const wordsA = extractSignificantWords(a.title ?? '')
+  const wordsB = extractSignificantWords(b.title ?? '')
+  if (wordsA.size < SAME_STORY_MIN_WORDS || wordsB.size < SAME_STORY_MIN_WORDS) return false
+
+  const shared = intersection(wordsA, wordsB).size
+  const jaccard = shared / union(wordsA, wordsB).size
+  return shared >= SAME_STORY_MIN_SHARED && jaccard >= SAME_STORY_MIN_JACCARD
+}
+
 // ─── CORRELATION TYPE DETERMINATION ──────────────────────────────────────────
 
 function determineCorrelationType(
@@ -493,48 +533,60 @@ async function persistCluster(cluster: EventCluster): Promise<void> {
 
 // ─── RELIABILITY BOOST ───────────────────────────────────────────────────────
 
-async function applyCorroborationBoost(cluster: EventCluster): Promise<void> {
-  if (cluster.sources.length < 2) return // Need 2+ unique sources
+/**
+ * Corroboration: a signal and the other outlets' reports of the same story
+ * (see isSameStory) gain reliability and, at 0.65 or above, move from pending
+ * to verified. Only that group is touched, never a whole cluster of related
+ * signals. A signal is boosted only when the number of independent outlets
+ * reporting it grows (tracked in source_count), so repeat matches can't
+ * ratchet its reliability up.
+ */
+async function applyCorroborationBoost(
+  signal: CorrelationCandidate,
+  sameStory: CorrelationCandidate[],
+): Promise<void> {
+  const group = [signal, ...sameStory]
+  const uniqueSources = new Set(group.map(s => s.source_id).filter(Boolean)).size
+  if (uniqueSources < 2) return // Need 2+ independent outlets
 
-  const uniqueSources = cluster.sources.length
-  const categoryCount = cluster.categories.length
-
-  // Base boost per corroborating source
+  // Base boost per corroborating outlet
   let boost = Math.min(
     CORROBORATION_BOOST * (uniqueSources - 1),
     MAX_CORROBORATION_BOOST
   )
 
-  // Cross-category corroboration is much stronger evidence (e.g., earthquake from USGS
-  // + tsunami from NOAA + displacement from UNHCR = extremely high confidence)
-  if (categoryCount >= 3) {
-    boost = Math.min(boost + 0.05, 0.25) // up to +0.25 for 3+ category convergence
-  } else if (categoryCount >= 2) {
-    boost = Math.min(boost + 0.03, 0.20) // up to +0.20 for 2 category convergence
-  }
-
   // Severity multiplier: critical events with multi-source confirmation deserve
-  // stronger boost because false positives at critical severity are very costly
-  const severityMultiplier = cluster.severity === 'critical' ? 1.15
-    : cluster.severity === 'high' ? 1.10
+  // a stronger boost because false positives at critical severity are very costly
+  const topSeverity = group.reduce(
+    (top, s) => ((SEVERITY_ORDER[s.severity] ?? 0) > (SEVERITY_ORDER[top] ?? 0) ? s.severity : top),
+    signal.severity,
+  )
+  const severityMultiplier = topSeverity === 'critical' ? 1.15
+    : topSeverity === 'high' ? 1.10
     : 1.0
   boost = Math.min(boost * severityMultiplier, 0.30) // absolute cap
 
+  const ids = group.map(s => s.id)
   try {
-    // Apply reliability boost
-    await db('signals')
-      .whereIn('id', cluster.signal_ids)
+    // Boost only signals whose count of independent outlets just went up
+    const boosted = await db('signals')
+      .whereIn('id', ids)
+      .where(function () {
+        this.whereNull('source_count').orWhere('source_count', '<', uniqueSources)
+      })
       .update({
-        reliability_score:   db.raw(`LEAST(reliability_score + ?, 1.0)`, [boost]),
+        reliability_score:    db.raw(`LEAST(reliability_score + ?, 1.0)`, [boost]),
+        source_count:         uniqueSources,
         last_corroborated_at: db.raw('NOW()'),
       })
 
-    // Promote pending → verified when corroboration pushes score above threshold.
-    // This is the key mechanism: signals that start as pending (single-source, low trust)
-    // can be promoted to verified purely through independent multi-source corroboration.
+    // Promote pending → verified when corroboration pushes the score above the
+    // threshold: independent outlets reporting the same story is what verifies
+    // a signal that started as pending (single source).
     const promoted = await db('signals')
-      .whereIn('id', cluster.signal_ids)
+      .whereIn('id', ids)
       .where('status', 'pending')
+      .where('source_count', '>=', 2)
       .where('reliability_score', '>=', 0.65) // lower threshold for corroborated signals
       .update({
         status:      'verified',
@@ -542,16 +594,15 @@ async function applyCorroborationBoost(cluster: EventCluster): Promise<void> {
       })
 
     logger.info({
-      cluster_id: cluster.cluster_id,
-      boost:      +boost.toFixed(3),
+      signal_id:      signal.id,
+      matches:        sameStory.map(s => s.id).slice(0, 10),
+      boost:          +boost.toFixed(3),
       unique_sources: uniqueSources,
-      cross_categories: categoryCount,
-      severity: cluster.severity,
+      boosted_count:  boosted,
       promoted_count: promoted,
-    }, 'Applied corroboration boost: %d sources, %d categories, +%.3f reliability',
-       uniqueSources, categoryCount, boost)
+    }, 'Same story from %d outlets', uniqueSources)
   } catch (err) {
-    logger.warn({ err, cluster_id: cluster.cluster_id }, 'Failed to apply corroboration boost')
+    logger.warn({ err, signal_id: signal.id }, 'Failed to apply corroboration boost')
   }
 }
 

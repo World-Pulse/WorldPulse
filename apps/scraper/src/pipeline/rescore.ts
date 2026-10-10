@@ -113,18 +113,15 @@ export async function runDelayedRescore(): Promise<{
     }
 
     try {
-      const cluster = await correlateSignal(candidate)
+      // correlateSignal raises source_count itself when other outlets report
+      // the same story (correlate.ts isSameStory). A cluster of merely related
+      // signals is not corroboration, so its size and sources are not used here.
+      await correlateSignal(candidate)
+      const row = await db('signals').where('id', signal.id).first('source_count') as { source_count?: number } | undefined
+      const newSourceCount = Number(row?.source_count ?? 1)
 
-      if (cluster && cluster.signal_ids.length >= 2) {
+      if (newSourceCount >= 2) {
         corroborated++
-        const newSourceCount = cluster.sources.length
-
-        // Update source_count on all signals in the cluster
-        await db('signals')
-          .whereIn('id', cluster.signal_ids)
-          .update({
-            source_count: newSourceCount,
-          })
 
         // Check if severity can be upgraded now that we have corroboration
         const maxSev = maxSeverityForSourceCount(newSourceCount, signal.category)
@@ -160,7 +157,6 @@ export async function runDelayedRescore(): Promise<{
         log.info({
           signalId: signal.id,
           title: signal.title.slice(0, 80),
-          clusterSize: cluster.signal_ids.length,
           sources: newSourceCount,
         }, 'Delayed corroboration found — signal now multi-source')
       }
