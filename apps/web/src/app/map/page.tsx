@@ -468,8 +468,9 @@ function MapView() {
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
-  const fetchSignals = useCallback(async () => {
-    setLoading(true)
+  // `background` refreshes (the 30s poll) update quietly; only first load and filter changes show the overlay.
+  const fetchSignals = useCallback(async (background = false) => {
+    if (!background) setLoading(true)
     try {
       const p = new URLSearchParams()
       const trEntry = TRANGE.find(t => t.v === timeRange)
@@ -486,16 +487,16 @@ function MapView() {
     } catch (e) {
       console.error('[map] fetch error:', e)
     } finally {
-      setLoading(false)
+      if (!background) setLoading(false)
     }
   }, [category, severity, timeRange])
 
-  useEffect(() => { fetchSignals() }, [fetchSignals])
+  useEffect(() => { fetchSignals(false) }, [fetchSignals])
 
   // ── 30-second auto-refresh ─────────────────────────────────────────────────
 
   useEffect(() => {
-    const id = setInterval(() => { fetchSignals() }, 30_000)
+    const id = setInterval(() => { fetchSignals(true) }, 30_000)
     return () => clearInterval(id)
   }, [fetchSignals])
 
