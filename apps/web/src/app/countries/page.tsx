@@ -243,7 +243,7 @@ function CountryDetailPanel({
                     {detail.recent_signals.map(sig => (
                       <Link
                         key={sig.id}
-                        href={`/?signal=${sig.id}`}
+                        href={`/signals/${encodeURIComponent(sig.id)}`}
                         className="block p-3 bg-wp-s2 border border-[rgba(255,255,255,0.05)] rounded-xl hover:border-[rgba(255,255,255,0.15)] transition-all no-underline"
                       >
                         <div className="flex items-start justify-between gap-2 mb-1">

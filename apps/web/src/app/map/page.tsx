@@ -1016,7 +1016,7 @@ function MapView() {
             const p = leaf.properties as SignalProps
             const color = SEV_COLOR[p.severity] ?? '#8892a4'
             const title = String(p.title ?? '')
-            return `<a href="/?signal=${encodeURIComponent(String(p.id))}" style="display:block;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.07);text-decoration:none;color:#e2e6f0;font:13px/1.4 system-ui" title="${escapeHtml(title)}">
+            return `<a href="/signals/${encodeURIComponent(String(p.id))}" style="display:block;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.07);text-decoration:none;color:#e2e6f0;font:13px/1.4 system-ui" title="${escapeHtml(title)}">
               <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${color};margin-right:6px;vertical-align:middle;flex-shrink:0"></span>
               <span style="font-size:12px">${escapeHtml(title.length > 70 ? title.slice(0, 70) + '…' : title)}</span>
             </a>`
@@ -1074,7 +1074,7 @@ function MapView() {
               <div style="font:600 12px/1 monospace;color:${color};letter-spacing:1.5px;margin-bottom:6px" title="${Math.round(score * 100)}% reliability">${dots}</div>
               ${srcLabel ? `<div style="font:11px monospace;color:#8892a4;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px">via ${escapeHtml(srcLabel)}</div>` : ''}
               <div style="font:11px monospace;color:#5a6477;margin-bottom:8px">${escapeHtml(timeAgo(p.created_at))}</div>
-              <a href="/?signal=${encodeURIComponent(String(p.id))}" style="display:inline-flex;align-items:center;gap:5px;font:600 11px/1 system-ui;color:${color};text-decoration:none;border:1px solid ${color}44;border-radius:6px;padding:4px 9px;transition:opacity .15s">
+              <a href="/signals/${encodeURIComponent(String(p.id))}" style="display:inline-flex;align-items:center;gap:5px;font:600 11px/1 system-ui;color:${color};text-decoration:none;border:1px solid ${color}44;border-radius:6px;padding:4px 9px;transition:opacity .15s">
                 View Full Signal <span style="font-size:10px">→</span>
               </a>
             `)
@@ -3816,7 +3816,7 @@ function MapView() {
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 10L10 2M10 2H5M10 2V7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
                   </a>
                 )}
-                <Link href={`/?signal=${selected.id}`}
+                <Link href={`/signals/${encodeURIComponent(selected.id)}`}
                   className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] text-[13px] text-wp-text2 hover:bg-[rgba(255,255,255,0.07)] hover:text-wp-text transition-all">
                   View Signal
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6H10M10 6L7 3M10 6L7 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
