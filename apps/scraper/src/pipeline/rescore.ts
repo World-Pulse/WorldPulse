@@ -25,6 +25,7 @@ import { redis } from '../lib/redis'
 import { logger as rootLogger } from '../lib/logger'
 import { correlateSignal, type CorrelationCandidate } from './correlate'
 import { maxSeverityForSourceCount } from './reliability-score'
+import { sourceKey } from './signal-columns'
 
 const log = rootLogger.child({ module: 'rescore' })
 
@@ -55,18 +56,21 @@ export async function runDelayedRescore(): Promise<{
     .select(
       'id', 'title', 'category', 'severity',
       db.raw('source_ids[1]::text as source_id'),
-      'location_name', 'reliability_score', 'published_at', 'tags',
+      db.raw('original_urls[1] as first_url'),
+      'location_name', 'reliability_score', 'tags',
+      db.raw('COALESCE(event_time, created_at) as published_at'),
       'source_count',
       db.raw('ST_Y(location::geometry) as lat'),
       db.raw('ST_X(location::geometry) as lng'),
     )
-    .where('published_at', '>=', windowStart.toISOString())
-    .where('published_at', '<=', windowEnd.toISOString())
+    // created_at, not published_at: new rows had no published_at until Oct 2026
+    .where('created_at', '>=', windowStart.toISOString())
+    .where('created_at', '<=', windowEnd.toISOString())
     .where(function () {
       this.where('source_count', '<=', 1).orWhereNull('source_count')
     })
     .whereNull('last_corroborated_at')
-    .orderBy('published_at', 'desc')
+    .orderBy('created_at', 'desc')
     .limit(RESCORE_BATCH_SIZE)
 
   if (candidates.length === 0) {
@@ -99,7 +103,7 @@ export async function runDelayedRescore(): Promise<{
       title: signal.title,
       category: signal.category,
       severity: signal.severity,
-      source_id: signal.source_id ?? '',
+      source_id: sourceKey(signal.source_id, signal.first_url),
       location_name: signal.location_name,
       lat: signal.lat ? Number(signal.lat) : null,
       lng: signal.lng ? Number(signal.lng) : null,

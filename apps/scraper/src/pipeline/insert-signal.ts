@@ -30,6 +30,7 @@ import { computeReliabilityScore, maxSeverityForSourceCount } from './reliabilit
 import { dedup, checkSemanticDuplicate } from './dedup'
 import { processSignalForKnowledgeGraph, extractEntitiesRuleBased, upsertEntityNode } from './entity-graph'
 import { embedSignal } from './embeddings'
+import { signalsHavePublishedAt, publishedAtFor, sourceKey } from './signal-columns'
 
 // ─── Alert Tier Classification (inlined — canonical in apps/api/src/lib/alert-tier.ts) ──
 const FLASH_RELIABILITY_THRESHOLD = 0.65
@@ -167,7 +168,12 @@ export async function insertAndCorrelate(
     rawCategory,
     zScoreBoost,
   )
-  const signalWithTier = { ...signalData, alert_tier: alertTierComputed }
+  const signalWithTier: Record<string, unknown> = { ...signalData, alert_tier: alertTierComputed }
+  // Rows without published_at are invisible to re-scoring, geo validation and
+  // source reputation, which all filter on it (see signal-columns.ts)
+  if (signalWithTier.published_at == null && await signalsHavePublishedAt()) {
+    signalWithTier.published_at = publishedAtFor(signalData.event_time)
+  }
 
   // 1. Insert the signal
   const [signal] = await db('signals').insert(signalWithTier).returning('*')
@@ -203,7 +209,9 @@ export async function insertAndCorrelate(
       title:            String(signal.title ?? ''),
       category:         String(signal.category ?? ''),
       severity:         String(signal.severity ?? 'low'),
-      source_id:        meta.sourceId,
+      // Same key the correlation engine derives for stored signals, so two
+      // signals only count as independent when they come from different outlets
+      source_id:        sourceKey(signal.source_ids, signal.original_urls, meta.sourceId),
       location_name:    signal.location_name ?? null,
       lat:              meta.lat ?? null,
       lng:              meta.lng ?? null,

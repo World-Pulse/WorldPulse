@@ -25,6 +25,7 @@
 import { db } from '../lib/postgres'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
+import { sourceKey } from './signal-columns'
 import { createHash } from 'crypto'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -197,18 +198,23 @@ export async function correlateSignal(signal: CorrelationCandidate): Promise<Eve
 async function fetchRecentSignals(signal: CorrelationCandidate): Promise<CorrelationCandidate[]> {
   const since = new Date(Date.now() - TEMPORAL_WINDOW_HOURS * 60 * 60 * 1000)
 
+  // Window on created_at (always set, indexed). Until Oct 2026 this filtered on
+  // published_at, which no new row had, so no signal ever found a match and
+  // nothing was corroborated or promoted to verified.
   const query = db('signals')
     .select(
       'id', 'title', 'category', 'severity',
       db.raw('source_ids[1]::text as source_id'),
-      'location_name', 'reliability_score', 'published_at', 'tags',
+      db.raw('original_urls[1] as first_url'),
+      'location_name', 'reliability_score', 'tags',
+      db.raw('COALESCE(event_time, created_at) as published_at'),
       // Extract lat/lng from PostGIS geometry so geo scoring actually works
       db.raw('ST_Y(location::geometry) as lat'),
       db.raw('ST_X(location::geometry) as lng'),
     )
-    .where('published_at', '>=', since.toISOString())
+    .where('created_at', '>=', since.toISOString())
     .whereNot('id', signal.id)
-    .orderBy('published_at', 'desc')
+    .orderBy('created_at', 'desc')
     .limit(200)
 
   const rows = await query
@@ -218,7 +224,7 @@ async function fetchRecentSignals(signal: CorrelationCandidate): Promise<Correla
     title: r.title as string,
     category: r.category as string,
     severity: r.severity as string,
-    source_id: (r.source_id as string) ?? '',
+    source_id: sourceKey(r.source_id, r.first_url),
     location_name: r.location_name as string | null,
     lat: typeof r.lat === 'number' ? r.lat : null,
     lng: typeof r.lng === 'number' ? r.lng : null,
@@ -403,7 +409,8 @@ async function createCluster(
     primary_signal_id: primarySignal.id,
     signal_ids: allSignals.map(s => s.id),
     categories: [...new Set(allSignals.map(s => s.category))],
-    sources: [...new Set(allSignals.map(s => s.source_id))],
+    // Only real source keys count: an unknown source is not an independent one
+    sources: [...new Set(allSignals.map(s => s.source_id).filter(Boolean))],
     severity: primarySignal.severity,
     correlation_type: dominantType,
     correlation_score: avgScore,
@@ -439,7 +446,7 @@ async function extendCluster(
 
   // Update categories and sources
   existing.categories = [...new Set([...existing.categories, newSignal.category])]
-  existing.sources = [...new Set([...existing.sources, newSignal.source_id])]
+  existing.sources = [...new Set([...existing.sources, newSignal.source_id].filter(Boolean))]
 
   // Update severity if new signal is higher
   if ((SEVERITY_ORDER[newSignal.severity] ?? 0) > (SEVERITY_ORDER[existing.severity] ?? 0)) {

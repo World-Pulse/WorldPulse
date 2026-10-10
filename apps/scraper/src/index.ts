@@ -33,6 +33,7 @@ import { extractMediaFromContent } from './pipeline/media-extractor'
 import { startHeartbeat, stopHeartbeat, registerCrashHandlers } from './lib/process-health.js'
 import { runStabilityCheck, recordUnhandledException } from './lib/stability-tracker'
 import { runDelayedRescore } from './pipeline/rescore'
+import { signalsHavePublishedAt, publishedAtFor, backfillRecentPublishedAt } from './pipeline/signal-columns'
 import { batchValidateGeo } from './pipeline/geo-validator'
 import { recomputeSourceReputation } from './pipeline/source-reputation'
 import { startKafkaLagMonitor } from './lib/kafka-lag-monitor'
@@ -132,6 +133,13 @@ async function bootstrap() {
   backfillUnprocessed(processArticleGroup).catch(err =>
     logger.warn({ err }, 'Backfill failed (non-fatal)')
   )
+
+  // Signals saved since April 2026 have no published_at, which hides them from
+  // re-scoring, geo validation and source reputation. Fill the last few days;
+  // new rows get it on insert (see pipeline/signal-columns.ts).
+  backfillRecentPublishedAt(3)
+    .then(rows => { if (rows > 0) logger.info({ rows }, 'Filled published_at for recent signals') })
+    .catch(err => logger.warn({ err }, 'published_at backfill failed (non-fatal)'))
 
   // Start main scrape loop (works with or without Kafka)
   await scrapeAll()
@@ -629,7 +637,10 @@ async function processArticleGroup(
       .where('id', signalId)
       .update({
         source_count: db.raw('source_count + ?', [articles.length]),
-        source_ids:   db.raw(`source_ids || ARRAY[?]::uuid[]`, [article.sourceId]),
+        // array_append, not `|| ARRAY[?]::uuid[]`: source_ids is text[] in
+        // production, and text[] || uuid[] made every update fail, so a signal
+        // never gained its later sources
+        source_ids:   db.raw('array_append(source_ids, ?)', [article.sourceId]),
         last_updated: new Date(),
       })
 
@@ -658,25 +669,28 @@ async function processArticleGroup(
   const reliability = computeReliability(articles)
 
   // Create signal
+  const row: Record<string, unknown> = {
+    title:            primary.title,
+    summary:          classification.summary,
+    category:         classification.category,
+    severity:         classification.severity,
+    status:           reliability > 0.85 ? 'verified' : 'pending',
+    verified_at:      reliability > 0.85 ? new Date() : null,
+    reliability_score: reliability,
+    source_count:     articles.length,
+    source_ids:       articles.map(a => a.sourceId),
+    original_urls:    articles.map(a => a.url),
+    location:         geo.point ? db.raw(`ST_MakePoint(?, ?)`, [geo.lng, geo.lat]) : null,
+    location_name:    geo.name,
+    country_code:     geo.countryCode,
+    region:           geo.region,
+    tags:             classification.tags,
+    language:         classification.language ?? 'en',
+    event_time:       primary.publishedAt ? new Date(primary.publishedAt) : null,
+  }
+  if (await signalsHavePublishedAt()) row.published_at = publishedAtFor(primary.publishedAt)
   const [signal] = await db('signals')
-    .insert({
-      title:            primary.title,
-      summary:          classification.summary,
-      category:         classification.category,
-      severity:         classification.severity,
-      status:           reliability > 0.85 ? 'verified' : 'pending',
-      reliability_score: reliability,
-      source_count:     articles.length,
-      source_ids:       articles.map(a => a.sourceId),
-      original_urls:    articles.map(a => a.url),
-      location:         geo.point ? db.raw(`ST_MakePoint(?, ?)`, [geo.lng, geo.lat]) : null,
-      location_name:    geo.name,
-      country_code:     geo.countryCode,
-      region:           geo.region,
-      tags:             classification.tags,
-      language:         classification.language ?? 'en',
-      event_time:       primary.publishedAt ? new Date(primary.publishedAt) : null,
-    })
+    .insert(row)
     .returning('*')
 
   // ── Gemini intelligence enrichment (async, non-blocking) ──
