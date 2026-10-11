@@ -49,12 +49,14 @@ export function ago(iso: string): string {
   return h < 24 ? `${h}h` : `${Math.floor(h / 24)}d`
 }
 
-export function LiveList({ items, total, open, selectedId, onClose, onSelect, onHover }: {
+export function LiveList({ items, total, open, selectedId, freshIds, onClose, onSelect, onHover }: {
   items: LiveListItem[]
   /** Signals in view (the list shows the newest of them) */
   total: number
   open: boolean
   selectedId: string | null
+  /** Signals new since the reader's last visit (marked NEW; plan M8) */
+  freshIds?: Set<string>
   onClose: () => void
   onSelect: (item: LiveListItem) => void
   onHover: (item: LiveListItem | null) => void
@@ -109,6 +111,9 @@ export function LiveList({ items, total, open, selectedId, onClose, onSelect, on
                   <span className="min-w-0 flex-1">
                     <span className="block text-[13px] leading-snug text-wp-text line-clamp-2">{item.title}</span>
                     <span className="mt-1 flex items-center gap-1.5 font-mono text-[10px] text-wp-text3 min-w-0">
+                      {freshIds?.has(item.id) && (
+                        <span className="flex-shrink-0 px-1 rounded bg-[#e0f2fe] text-[#0b1220] font-semibold tracking-[0.5px]">NEW</span>
+                      )}
                       {verified && (
                         <span className="inline-flex items-center gap-0.5 text-wp-green flex-shrink-0">
                           <BadgeCheck size={11} /> Verified

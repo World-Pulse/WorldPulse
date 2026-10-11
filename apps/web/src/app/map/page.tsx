@@ -23,6 +23,9 @@ import { LayersPanel, activeLayerCount, type MapLayerGroup } from '@/components/
 import { MapLegend } from '@/components/map/MapLegend'
 import { LiveList, latestFirst } from '@/components/map/LiveList'
 import { CountryBrief, type CountryRisk } from '@/components/map/CountryBrief'
+import { SinceLastVisit } from '@/components/map/SinceLastVisit'
+import { useLastVisit } from '@/hooks/useLastVisit'
+import { sinceLastVisit, awayLabel } from '@/lib/last-visit'
 import { countryAt, loadCountryShapes, focusBboxOf, type CountryHit } from '@/lib/country-shapes'
 import { signalsInCountry, countryBrief } from '@/lib/country-brief'
 import { ensureMapIcon, MAP_ICON } from '@/lib/map-icons'
@@ -243,6 +246,10 @@ function MapView() {
 
   const [signals,  setSignals]  = useState<MapSignal[]>([])
   const [selected,         setSelected]         = useState<MapSignal | null>(null)
+  // "Since you last looked" (plan M8)
+  const lastVisit = useLastVisit()
+  const [sinceShown,     setSinceShown]     = useState(false)
+  const [sinceDismissed, setSinceDismissed] = useState(false)
   // Country brief (plan M9): the country clicked on the map
   const [country,          setCountry]          = useState<(CountryHit & { risk: CountryRisk | null }) | null>(null)
   const [flagModalSignalId, setFlagModalSignalId] = useState<string | null>(null)
@@ -1232,7 +1239,7 @@ function MapView() {
         //    clicked (plan M9) when nothing else is under the cursor ─────
 
         // Layers that are scenery, not something to click
-        const SCENERY = /^(wp-imagery-|country-select-|country-risk-|enhanced-heatmap|list-hover)/
+        const SCENERY = /^(wp-imagery-|country-select-|country-risk-|enhanced-heatmap|list-hover|since-visit-)/
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const pickCountry = async (e: any) => {
           const base = new Set(baseIdsRef.current ?? [])
@@ -2975,6 +2982,48 @@ function MapView() {
     return () => window.removeEventListener('keydown', onKey)
   }, [country, selected])
 
+  // ── Since you last looked (plan M8): what came in since this reader's last visit
+  const since = useMemo(() => {
+    const hours = TRANGE.find(t => t.v === timeRange)?.hours ?? null
+    const now = Date.now()
+    return sinceLastVisit(signals, lastVisit, hours !== null ? now - hours * 3_600_000 : null, now)
+  }, [signals, lastVisit, timeRange])
+  const freshIds = useMemo(() => new Set(since?.fresh.map(s => s.id) ?? []), [since])
+  // The ones worth a ring: new critical, high or verified signals (hundreds of
+  // rings would say nothing); all of them when there are only a few
+  const ringed = useMemo(() => {
+    const fresh = since?.fresh ?? []
+    const key = fresh.filter(s => s.severity === 'critical' || s.severity === 'high' || s.status === 'verified')
+    return key.length > 0 ? key : fresh.length <= 100 ? fresh : []
+  }, [since])
+
+  // Ring the new ones on the map while "Show" is on
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady) return
+    const SRC = 'since-visit'
+    const fresh = sinceShown && !sinceDismissed ? ringed : []
+    const data = {
+      type: 'FeatureCollection',
+      features: fresh
+        .filter(s => s.lat != null && s.lng != null)
+        .map(s => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [Number(s.lng), Number(s.lat)] }, properties: { id: s.id } })),
+    }
+    try {
+      if (!map.getSource(SRC)) {
+        map.addSource(SRC, { type: 'geojson', data })
+        const before = map.getLayer('cluster-halo') ? 'cluster-halo' : undefined
+        map.addLayer({ id: 'since-visit-glow', type: 'circle', source: SRC,
+          paint: { 'circle-radius': 14, 'circle-color': '#e0f2fe', 'circle-opacity': 0.12, 'circle-blur': 0.8 } }, before)
+        map.addLayer({ id: 'since-visit-ring', type: 'circle', source: SRC,
+          paint: { 'circle-radius': 10, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#e0f2fe', 'circle-stroke-width': 1.5, 'circle-stroke-opacity': 0.9 } }, before)
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(map.getSource(SRC) as any).setData(data)
+      }
+    } catch { /* the style is reloading */ }
+  }, [ringed, sinceShown, sinceDismissed, mapReady])
+
   const countrySignals = useMemo(
     () => country ? signalsInCountry(signals, country.code, country.feature) : [],
     [country, signals],
@@ -3522,6 +3571,7 @@ function MapView() {
           total={visibleCount}
           open={listOpen}
           selectedId={selected?.id ?? null}
+          freshIds={sinceDismissed ? undefined : freshIds}
           onClose={() => { setListOpen(false); hoverOnMap(null) }}
           onSelect={selectFromList}
           onHover={hoverOnMap}
@@ -3784,6 +3834,23 @@ function MapView() {
             createPortal(<FlagModal signalId={flagModalSignalId} onClose={() => setFlagModalSignalId(null)} />, document.body)
           )}
         </div>
+
+        {/* Since you last looked (plan M8) */}
+        {since && since.fresh.length > 0 && !sinceDismissed && lastVisit !== null && !selected && !country && (
+          <SinceLastVisit
+            count={since.fresh.length}
+            more={since.fresh.length >= signals.length && signals.length >= MAX_SIGNALS}
+            serious={since.serious}
+            ringCount={ringed.length}
+            className={listOpen ? 'md:left-[calc(50%+160px)]' : ''}
+            away={awayLabel(lastVisit)}
+            capped={since.capped}
+            windowLabel={TIME_WINDOW_LABEL[timeRange] ?? 'chosen time window'}
+            showing={sinceShown}
+            onToggle={() => setSinceShown(v => !v)}
+            onDismiss={() => { setSinceDismissed(true); setSinceShown(false) }}
+          />
+        )}
 
         {/* Country brief (plan M9): opens on a click on a country; a signal
             chosen from it opens the signal panel, and closing that comes back here */}
