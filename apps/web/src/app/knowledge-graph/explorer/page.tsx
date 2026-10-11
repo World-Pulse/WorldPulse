@@ -8,7 +8,7 @@
  * the merged result as a fully interactive force-directed graph.
  *
  * Features:
- *   - Auto-loads top 50 trending entities + their 1-hop neighborhoods
+ *   - Auto-loads ~45 trending entities (at most 12 places, people asked for separately) and their strongest links
  *   - Full-screen Canvas 2D force simulation (ForceGraph component)
  *   - Entity detail sidebar on node click (name, type, mentions, signals)
  *   - Search bar to find and focus on specific entities
@@ -33,7 +33,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
-import { toTrendingEntities, toGraphStats, focusGraph, type TrendingEntity, type GraphStats } from '@/lib/knowledge-graph-api'
+import { toTrendingEntities, toGraphStats, focusGraph, balanceTrending, isBroadPlace, type TrendingEntity, type GraphStats } from '@/lib/knowledge-graph-api'
 
 const ForceGraph = dynamic(
   () => import('../../../components/knowledge-graph/ForceGraph'),
@@ -106,7 +106,7 @@ const ENTITY_TYPE_CONFIG: Record<string, { color: string; icon: string; label: s
   technology:    { color: '#6366f1', icon: '\u{1F4BB}', label: 'Technology' },
 }
 
-const MAX_TRENDING = 50
+const MAX_TRENDING = 45
 const DEFAULT_DEPTH = 1
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -184,10 +184,17 @@ function useTrendingEntities() {
     let cancelled = false
     async function load() {
       try {
-        const res = await fetch(`${API_BASE}/knowledge-graph/trending?limit=${MAX_TRENDING}&window_hours=168`)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const json = await res.json()
-        if (!cancelled) setData(toTrendingEntities(json))
+        // The most-mentioned entities are mostly places, and people rarely make it in: ask for people too
+        const [all, people] = await Promise.all([
+          fetch(`${API_BASE}/knowledge-graph/trending?limit=60&window_hours=168`),
+          fetch(`${API_BASE}/knowledge-graph/trending?type=person&limit=15&window_hours=168`).catch(() => null),
+        ])
+        if (!all.ok) throw new Error(`HTTP ${all.status}`)
+        const list = toTrendingEntities(await all.json())
+        const extra = people?.ok ? toTrendingEntities(await people.json()) : []
+        // A phone's screen holds about half as many
+        const max = typeof window !== 'undefined' && window.innerWidth < 640 ? 22 : MAX_TRENDING
+        if (!cancelled) setData(balanceTrending([...list, ...extra], max, max < MAX_TRENDING ? 6 : 12))
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load trending')
       } finally {
@@ -308,7 +315,11 @@ export default function KnowledgeGraphExplorerPage() {
 
       if (!cancelled) {
         // The trending entities and their strongest links, not every neighbour of each
-        const focused = focusGraph(trending.map(t => t.id), dedupeNodes(mergedNodes), dedupeEdges(mergedEdges), 3)
+        // Continents and world regions left out: nearly everything links to one
+        const nodes = dedupeNodes(mergedNodes).filter(n => !isBroadPlace(n))
+        const ids = new Set(nodes.map(n => n.id))
+        const edges = dedupeEdges(mergedEdges).filter(e => ids.has(e.source) && ids.has(e.target))
+        const focused = focusGraph(trending.map(t => t.id), nodes, edges, 3)
         setAllNodes(focused.nodes)
         setAllEdges(focused.edges)
         setLoadedEntityIds(loaded)
@@ -461,7 +472,8 @@ export default function KnowledgeGraphExplorerPage() {
   const isLoading = trendingLoading || loadingGraph
 
   return (
-    <div className="relative flex h-screen w-full overflow-hidden bg-gray-950 text-gray-100">
+    // The site's header is 52px (and the phone's tab bar 56px), as on the World Map
+    <div className="relative flex h-[calc(100dvh-52px-56px)] md:h-[calc(100dvh-52px)] w-full overflow-hidden bg-gray-950 text-gray-100">
       {/* ── Main Graph Area ──────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top Bar */}
@@ -472,10 +484,10 @@ export default function KnowledgeGraphExplorerPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
             </a>
-            <h1 className="text-lg font-semibold tracking-tight">
-              Knowledge Graph Explorer
+            <h1 className="text-base sm:text-lg font-semibold tracking-tight whitespace-nowrap">
+              Knowledge Graph<span className="hidden sm:inline"> Explorer</span>
             </h1>
-            <span className="px-2 py-0.5 text-xs font-medium bg-indigo-500/20 text-indigo-300 rounded-full border border-indigo-500/30">
+            <span className="hidden sm:inline-block px-2 py-0.5 text-xs font-medium bg-indigo-500/20 text-indigo-300 rounded-full border border-indigo-500/30">
               INTERACTIVE
             </span>
           </div>
@@ -489,8 +501,8 @@ export default function KnowledgeGraphExplorerPage() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
-              Search entities...
-              <kbd className="ml-2 px-1.5 py-0.5 text-[10px] font-mono bg-gray-800 text-gray-500 rounded border border-gray-700">/</kbd>
+              <span className="hidden sm:inline">Search entities...</span>
+              <kbd className="hidden sm:inline ml-2 px-1.5 py-0.5 text-[10px] font-mono bg-gray-800 text-gray-500 rounded border border-gray-700">/</kbd>
             </button>
 
             {searchOpen && (
@@ -535,7 +547,7 @@ export default function KnowledgeGraphExplorerPage() {
         <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-800/50 bg-gray-950/60 overflow-x-auto">
           <button
             onClick={toggleAllTypes}
-            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+            className={`flex-shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
               typeFilters.size === Object.keys(ENTITY_TYPE_CONFIG).length
                 ? 'bg-white/10 text-white'
                 : 'bg-gray-800 text-gray-500 hover:text-gray-300'
@@ -547,7 +559,7 @@ export default function KnowledgeGraphExplorerPage() {
             <button
               key={type}
               onClick={() => toggleTypeFilter(type)}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+              className={`flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
                 typeFilters.has(type)
                   ? 'text-white'
                   : 'bg-gray-800/50 text-gray-600 hover:text-gray-400'
@@ -581,10 +593,10 @@ export default function KnowledgeGraphExplorerPage() {
           <span>{formatNumber(filteredNodes.length)} nodes</span>
           <span>{formatNumber(filteredEdges.length)} edges</span>
           {graphStats && (
-            <>
+            <span className="hidden sm:inline-flex items-center gap-4">
               <span className="text-gray-700">|</span>
               <span>Global: {formatNumber(graphStats.total_entities)} entities, {formatNumber(graphStats.total_edges)} relationships</span>
-            </>
+            </span>
           )}
           {isLoading && (
             <span className="flex items-center gap-1 text-amber-400">
@@ -619,7 +631,8 @@ export default function KnowledgeGraphExplorerPage() {
               onNodeClick={handleNodeClick as any}
               selectedNodeId={selectedNodeId}
               className="w-full h-full"
-              labelCount={30}
+              labelCount={200}
+              chrome={false}
             />
           )}
         </div>
@@ -752,19 +765,18 @@ export default function KnowledgeGraphExplorerPage() {
         )}
       </div>
 
-      {/* ── Legend Overlay (bottom-left) ──────────────────────────────────── */}
-      <div className="absolute bottom-4 left-4 bg-gray-900/90 border border-gray-800 rounded-xl p-3 backdrop-blur-sm z-10">
-        <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wider mb-2">Legend</div>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-          {Object.entries(ENTITY_TYPE_CONFIG).map(([type, config]) => (
+      {/* ── Legend Overlay (bottom-left): the colours of the types on screen ── */}
+      <div className="absolute bottom-4 left-4 max-w-[calc(100%-2rem)] bg-gray-900/85 border border-gray-800 rounded-xl px-3 py-2 backdrop-blur-sm z-10">
+        <div className="flex flex-wrap gap-x-3 gap-y-1">
+          {Object.entries(ENTITY_TYPE_CONFIG).filter(([type]) => (typeDistribution[type] ?? 0) > 0).map(([type, config]) => (
             <div key={type} className="flex items-center gap-1.5 text-xs text-gray-400">
               <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: config.color }} />
               {config.label}
             </div>
           ))}
         </div>
-        <div className="mt-2 pt-2 border-t border-gray-800 text-[10px] text-gray-600">
-          Scroll to zoom &middot; Drag to pan &middot; Click node to explore &middot; Press / to search
+        <div className="hidden sm:block mt-1.5 text-[10px] text-gray-600">
+          Scroll to zoom &middot; Drag to pan &middot; Click a node to explore &middot; Press / to search
         </div>
       </div>
     </div>

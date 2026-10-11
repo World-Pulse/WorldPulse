@@ -54,3 +54,18 @@ describe('focusGraph', () => {
     expect(out.edges.map(x => `${x.source}-${x.target}`).sort()).toEqual(['A-B', 'A-x1', 'A-x2', 'B-x4'])
   })
 })
+
+describe('balanceTrending', () => {
+  it('keeps trending order, drops continents and duplicates, and caps the places', async () => {
+    const { balanceTrending, isBroadPlace } = await import('../knowledge-graph-api')
+    const e = (id: string, type: string, name = id) => ({ id, type, canonical_name: name })
+    const list = [
+      e('un', 'organisation', 'UN'), e('eu', 'location', 'Europe'), e('d', 'location', 'Delhi'), e('m', 'location', 'Mexico'),
+      e('s', 'location', 'Singapore'), e('t', 'person', 'Bola Tinubu'), e('un', 'organisation', 'UN'), e('x', 'person', 'Xi Jinping'),
+    ]
+    expect(balanceTrending(list, 10, 2).map(x => x.id)).toEqual(['un', 'd', 'm', 't', 'x'])
+    expect(balanceTrending(list, 3, 2).map(x => x.id)).toEqual(['un', 'd', 'm'])
+    expect(isBroadPlace(e('a', 'location', 'Middle East'))).toBe(true)
+    expect(isBroadPlace(e('a', 'organisation', 'Africa'))).toBe(false)
+  })
+})

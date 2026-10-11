@@ -9,7 +9,7 @@ import {
   TrendingUp, Shield, Unplug, Satellite, Lock, Waves, Landmark,
   Wheat, KeyRound, Droplets, Pickaxe, Map, ScrollText, Users, Search,
   Mic, Video, Radio, Wrench, Settings, Activity, Anchor,
-  CircleDot, Swords, LineChart, Leaf, Pill, FlaskConical, Vote, Globe2,
+  CircleDot, Swords, LineChart, Leaf, Pill, FlaskConical, Vote, Globe2, Network,
   type LucideProps,
 } from 'lucide-react'
 
@@ -21,6 +21,7 @@ const NAV_ITEMS = [
   { href: '/alerts',     icon: Bell,          labelKey: 'alerts',      badge: '12',   badgeColor: 'red'   },
   { href: '/analytics',  icon: BarChart3,     labelKey: 'analytics'  },
   { href: '/explore',    icon: Telescope,     labelKey: 'explore'    },
+  { href: '/knowledge-graph/explorer', icon: Network, labelKey: 'knowledgeGraph', badge: 'NEW', badgeColor: 'purple' },
   // { href: '/clusters',   icon: LayoutGrid,    labelKey: 'clusters',   badge: 'NEW', badgeColor: 'blue'   }, // Hidden — needs correlation engine (Aether)
   { href: '/briefing',   icon: ClipboardList, labelKey: 'briefing',   badge: 'NEW', badgeColor: 'indigo' },
   { href: '/finance',    icon: TrendingUp,    labelKey: 'finance',    badge: 'NEW', badgeColor: 'green'  },

@@ -47,6 +47,8 @@ interface ForceGraphProps {
   className?: string
   /** Always label this many of the most-mentioned nodes (others on hover) */
   labelCount?: number
+  /** Its own type filter and hints; off when the page has its own (the explorer) */
+  chrome?: boolean
 }
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -81,12 +83,29 @@ const BG_COLOR = '#030712'
 const TEXT_COLOR = '#e5e7eb'
 const LABEL_BG = 'rgba(17, 24, 39, 0.85)'
 
-const MIN_RADIUS = 8
-const MAX_RADIUS = 32
-const CHARGE_STRENGTH = -200
-const LINK_DISTANCE = 100
-const CENTER_STRENGTH = 0.05
-const DAMPING = 0.92
+const MIN_RADIUS = 6
+const MAX_RADIUS = 26
+/**
+ * The layout is d3's force model, written out: nodes repel each other
+ * (falling off with distance, bigger nodes harder), links pull like springs,
+ * a pull toward the middle keeps the graph on screen, and nodes never overlap.
+ * It cools down and stops, so names hold still to be read; dragging a node
+ * warms it up again. (The first version pulled everything to the middle and
+ * repelled only up close, so it never settled and the nodes piled up.)
+ */
+const CHARGE = -90
+const LINK_DISTANCE = 50
+const LINK_STRENGTH = 0.06
+/** Of each node's speed kept from one frame to the next */
+const VELOCITY_KEEP = 0.6
+/** Cooling per frame: from 1 to the stop in about 300 frames (5 seconds) */
+const ALPHA_DECAY = 0.0228
+const ALPHA_MIN = 0.002
+/** Room between nodes beyond their radii */
+const NODE_GAP = 8
+/** How far out from the middle the graph spreads, as a share of the canvas (links and gaps push a little further) */
+const SPREAD_X = 0.38
+const SPREAD_Y = 0.46
 const MIN_ZOOM = 0.2
 const MAX_ZOOM = 5
 
@@ -110,24 +129,33 @@ interface SimEdge {
   weight: number
 }
 
+interface Simulation {
+  nodes: SimNode[]
+  edges: SimEdge[]
+  /** The layout's temperature: 1 when new, it cools each frame and stops near 0 */
+  alpha: number
+}
+
+const chargeOf = (n: SimNode) => CHARGE * (0.6 + n.radius / 15)
+
 function initSimulation(
   rawNodes: GraphNode[],
   rawEdges: GraphEdge[],
   width: number,
   height: number,
-): { nodes: SimNode[]; edges: SimEdge[] } {
+): Simulation {
   const maxMentions = Math.max(1, ...rawNodes.map(n => n.mention_count))
   const nodeMap = new Map<string, SimNode>()
 
   const nodes: SimNode[] = rawNodes.map((n, i) => {
     const t = (i / Math.max(1, rawNodes.length - 1)) * Math.PI * 2
-    const r = Math.min(width, height) * 0.3
     // Log scale: one entity with thousands of mentions shouldn't shrink all the rest to dots
     const radius = MIN_RADIUS + (Math.log1p(n.mention_count) / Math.log1p(maxMentions)) * (MAX_RADIUS - MIN_RADIUS)
+    const spread = 0.2 + Math.random() * 0.8
     const sim: SimNode = {
       ...n,
-      x: width / 2 + Math.cos(t) * r * (0.5 + Math.random() * 0.5),
-      y: height / 2 + Math.sin(t) * r * (0.5 + Math.random() * 0.5),
+      x: width / 2 + Math.cos(t) * width * SPREAD_X * 0.8 * spread,
+      y: height / 2 + Math.sin(t) * height * SPREAD_Y * 0.8 * spread,
       vx: 0,
       vy: 0,
       fx: null,
@@ -148,70 +176,86 @@ function initSimulation(
       weight: e.weight,
     }))
 
-  return { nodes, edges }
+  return { nodes, edges, alpha: 1 }
 }
 
-function tickSimulation(
-  nodes: SimNode[],
-  edges: SimEdge[],
-  cx: number,
-  cy: number,
-): void {
-  // Charge repulsion (Barnes-Hut simplification: N² but capped at 200 nodes)
+function tickSimulation(sim: Simulation, width: number, height: number): void {
+  const { nodes, edges } = sim
+  const alpha = sim.alpha
+  const cx = width / 2
+  const cy = height / 2
+
+  // Repulsion (d3's many-body force: each pair pushes apart by charge × alpha / distance)
   for (let i = 0; i < nodes.length; i++) {
+    const a = nodes[i]
     for (let j = i + 1; j < nodes.length; j++) {
-      const a = nodes[i]
       const b = nodes[j]
       let dx = b.x - a.x
       let dy = b.y - a.y
-      const dist = Math.sqrt(dx * dx + dy * dy) || 1
-      const force = CHARGE_STRENGTH / (dist * dist)
-      const fx = (dx / dist) * force
-      const fy = (dy / dist) * force
-      a.vx -= fx
-      a.vy -= fy
-      b.vx += fx
-      b.vy += fy
+      let l2 = dx * dx + dy * dy
+      if (l2 < 1) { dx = Math.random() - 0.5; dy = Math.random() - 0.5; l2 = dx * dx + dy * dy + 0.01 }
+      const toA = (chargeOf(b) * alpha) / l2
+      const toB = (chargeOf(a) * alpha) / l2
+      a.vx += dx * toA
+      a.vy += dy * toA
+      b.vx -= dx * toB
+      b.vy -= dy * toB
     }
   }
 
-  // Link spring force
+  // Links: springs toward a rest length that leaves room for both nodes
   for (const edge of edges) {
-    const dx = edge.target.x - edge.source.x
-    const dy = edge.target.y - edge.source.y
-    const dist = Math.sqrt(dx * dx + dy * dy) || 1
-    const force = (dist - LINK_DISTANCE) * 0.01 * edge.weight
-    const fx = (dx / dist) * force
-    const fy = (dy / dist) * force
-    edge.source.vx += fx
-    edge.source.vy += fy
-    edge.target.vx -= fx
-    edge.target.vy -= fy
+    const s = edge.source
+    const t = edge.target
+    let dx = t.x + t.vx - s.x - s.vx
+    let dy = t.y + t.vy - s.y - s.vy
+    const l = Math.sqrt(dx * dx + dy * dy) || 1
+    const k = ((l - (LINK_DISTANCE + s.radius + t.radius)) / l) * alpha * LINK_STRENGTH
+    dx *= k
+    dy *= k
+    t.vx -= dx * 0.5
+    t.vy -= dy * 0.5
+    s.vx += dx * 0.5
+    s.vy += dy * 0.5
   }
 
-  // Center gravity
+  // Toward the middle, as strong as the repulsion of all the nodes at SPREAD_X/SPREAD_Y of the canvas
+  // (so the graph fills a wide screen instead of a circle in its middle)
+  let charge = 0
+  for (const node of nodes) charge += Math.abs(chargeOf(node))
+  const gx = charge / Math.max(1, (width * SPREAD_X) ** 2)
+  const gy = charge / Math.max(1, (height * SPREAD_Y) ** 2)
   for (const node of nodes) {
-    node.vx += (cx - node.x) * CENTER_STRENGTH
-    node.vy += (cy - node.y) * CENTER_STRENGTH
+    node.vx += (cx - node.x) * gx * alpha
+    node.vy += (cy - node.y) * gy * alpha
   }
 
-  // Apply velocities with damping
+  // Move
   for (const node of nodes) {
-    if (node.fx !== null) {
-      node.x = node.fx
-      node.vx = 0
-    } else {
-      node.vx *= DAMPING
-      node.x += node.vx
-    }
-    if (node.fy !== null) {
-      node.y = node.fy
-      node.vy = 0
-    } else {
-      node.vy *= DAMPING
-      node.y += node.vy
+    if (node.fx !== null) { node.x = node.fx; node.vx = 0 } else { node.vx *= VELOCITY_KEEP; node.x += node.vx }
+    if (node.fy !== null) { node.y = node.fy; node.vy = 0 } else { node.vy *= VELOCITY_KEEP; node.y += node.vy }
+  }
+
+  // No overlaps: pairs closer than their radii and a gap are pushed apart
+  for (let i = 0; i < nodes.length; i++) {
+    const a = nodes[i]
+    for (let j = i + 1; j < nodes.length; j++) {
+      const b = nodes[j]
+      const min = a.radius + b.radius + NODE_GAP
+      const dx = b.x - a.x
+      const dy = b.y - a.y
+      const l2 = dx * dx + dy * dy
+      if (l2 >= min * min) continue
+      const l = Math.sqrt(l2) || 0.01
+      const push = ((min - l) / l) * 0.5
+      const aFixed = a.fx !== null
+      const bFixed = b.fx !== null
+      if (!aFixed) { a.x -= dx * push * (bFixed ? 2 : 1); a.y -= dy * push * (bFixed ? 2 : 1) }
+      if (!bFixed) { b.x += dx * push * (aFixed ? 2 : 1); b.y += dy * push * (aFixed ? 2 : 1) }
     }
   }
+
+  sim.alpha = alpha * (1 - ALPHA_DECAY)
 }
 
 // ─── Component ─────────────────────────────────────────────────────────────────
@@ -225,6 +269,7 @@ export default function ForceGraph({
   selectedNodeId,
   className,
   labelCount = 0,
+  chrome = true,
 }: ForceGraphProps) {
   // The names drawn without hovering: the most-mentioned nodes
   const labelled = useMemo(() => new Set(
@@ -234,7 +279,7 @@ export default function ForceGraph({
   labelledRef.current = labelled
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const simRef = useRef<{ nodes: SimNode[]; edges: SimEdge[] } | null>(null)
+  const simRef = useRef<Simulation | null>(null)
   const animRef = useRef<number>(0)
   const [dims, setDims] = useState({ w: propWidth ?? 800, h: propHeight ?? 500 })
   const [hoveredNode, setHoveredNode] = useState<SimNode | null>(null)
@@ -243,6 +288,8 @@ export default function ForceGraph({
   const [isPanning, setIsPanning] = useState(false)
   const [panStart, setPanStart] = useState({ x: 0, y: 0 })
   const [filterTypes, setFilterTypes] = useState<Set<string>>(new Set())
+  /** Where a press on a node started, to tell a click from a drag */
+  const pressRef = useRef<{ x: number; y: number } | null>(null)
 
   // Filtered data
   const filteredNodes = useMemo(() => {
@@ -319,9 +366,11 @@ export default function ForceGraph({
     const draw = () => {
       if (!running) return
 
-      // Tick physics
-      if (simRef.current && simRef.current.nodes.length > 0) {
-        tickSimulation(simRef.current.nodes, simRef.current.edges, dims.w / 2, dims.h / 2)
+      // Tick physics until the layout has cooled (a dragged node keeps it warm)
+      const sim = simRef.current
+      if (sim && sim.nodes.length > 0) {
+        if (sim.nodes.some(n => n.fx !== null)) sim.alpha = Math.max(sim.alpha, 0.3)
+        if (sim.alpha >= ALPHA_MIN) tickSimulation(sim, dims.w, dims.h)
       }
 
       // Clear
@@ -362,8 +411,8 @@ export default function ForceGraph({
         ctx.lineWidth = isHighlighted ? 1.5 + edge.weight : 0.5 + edge.weight * 0.5
         ctx.stroke()
 
-        // Edge label on hover
-        if (isHighlighted) {
+        // What links the two, on hover ("co-occurs with", the only kind so far, says nothing)
+        if (isHighlighted && hoveredNode && edge.predicate !== 'co_occurs_with') {
           const mx = (edge.source.x + edge.target.x) / 2
           const my = (edge.source.y + edge.target.y) / 2
           ctx.font = '10px Inter, system-ui, sans-serif'
@@ -416,23 +465,31 @@ export default function ForceGraph({
             ctx.fillText(icon, node.x, node.y)
           }
         }
+      }
 
-        // Label (always show for selected/hovered, show for larger nodes otherwise)
-        if (isSelected || isHovered || node.radius > 16 || labelledRef.current.has(node.id)) {
-          const label = node.canonical_name
-          ctx.font = `${isSelected || isHovered ? 'bold ' : ''}11px Inter, system-ui, sans-serif`
-          ctx.textAlign = 'center'
-          ctx.textBaseline = 'top'
-
-          const tw = ctx.measureText(label).width
-          const lx = node.x
-          const ly = node.y + node.radius + 4
-
-          ctx.fillStyle = LABEL_BG
-          ctx.fillRect(lx - tw / 2 - 3, ly - 1, tw + 6, 14)
-          ctx.fillStyle = TEXT_COLOR
-          ctx.fillText(label, lx, ly)
-        }
+      // Names, over all the nodes: the selected and hovered ones first, then the
+      // most-mentioned; a name that would overlap one already drawn is skipped
+      const named = nodes
+        .filter(n => n.id === selectedNodeId || n.id === hoveredNode?.id
+          || (labelledRef.current.size > 0 ? labelledRef.current.has(n.id) : n.radius > 16))
+        .sort((a, b) => Number(b.id === hoveredNode?.id || b.id === selectedNodeId) - Number(a.id === hoveredNode?.id || a.id === selectedNodeId)
+          || b.mention_count - a.mention_count)
+      const placed: Array<[number, number, number, number]> = []
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'top'
+      for (const node of named) {
+        const strong = node.id === selectedNodeId || node.id === hoveredNode?.id
+        const label = node.canonical_name
+        ctx.font = `${strong ? 'bold ' : ''}11px Inter, system-ui, sans-serif`
+        const tw = ctx.measureText(label).width
+        const box: [number, number, number, number] = [node.x - tw / 2 - 3, node.y + node.radius + 3, tw + 6, 14]
+        const clash = placed.some(([x, y, w, h]) => box[0] < x + w && x < box[0] + box[2] && box[1] < y + h && y < box[1] + box[3])
+        if (clash && !strong) continue
+        placed.push(box)
+        ctx.fillStyle = LABEL_BG
+        ctx.fillRect(box[0], box[1], box[2], box[3])
+        ctx.fillStyle = TEXT_COLOR
+        ctx.fillText(label, node.x, box[1] + 1)
       }
 
       animRef.current = requestAnimationFrame(draw)
@@ -490,6 +547,7 @@ export default function ForceGraph({
 
       if (hit) {
         setDragNode(hit)
+        pressRef.current = { x: e.clientX, y: e.clientY }
         hit.fx = hit.x
         hit.fy = hit.y
       } else {
@@ -500,10 +558,12 @@ export default function ForceGraph({
     [screenToWorld, hitTest],
   )
 
-  const handleMouseUp = useCallback(() => {
+  const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (dragNode) {
-      // If barely moved, treat as click
-      if (onNodeClick) {
+      // A press that barely moved is a click; a drag only moves the node
+      const press = pressRef.current
+      const moved = press ? Math.hypot(e.clientX - press.x, e.clientY - press.y) : 0
+      if (onNodeClick && moved < 5) {
         onNodeClick(dragNode)
       }
       dragNode.fx = null
@@ -558,7 +618,7 @@ export default function ForceGraph({
   return (
     <div className={`relative ${className ?? ''}`}>
       {/* Toolbar */}
-      <div className="absolute top-3 left-3 z-10 flex flex-wrap gap-2">
+      {chrome && <div className="absolute top-3 left-3 z-10 flex flex-wrap gap-2">
         {presentTypes.map(type => {
           const active = filterTypes.size === 0 || filterTypes.has(type)
           return (
@@ -578,7 +638,7 @@ export default function ForceGraph({
             </button>
           )
         })}
-      </div>
+      </div>}
 
       {/* Zoom controls */}
       <div className="absolute top-3 right-3 z-10 flex flex-col gap-1">
@@ -634,6 +694,7 @@ export default function ForceGraph({
       )}
 
       {/* Legend */}
+{chrome && (
       <div className="absolute bottom-3 left-3 z-10 flex items-center gap-3 text-[10px] text-gray-500">
         <span>Scroll to zoom</span>
         <span>Drag to pan</span>
@@ -642,9 +703,11 @@ export default function ForceGraph({
           {filteredNodes.length} nodes · {filteredEdges.length} edges
         </span>
       </div>
+      )}
 
       {/* Canvas */}
-      <div ref={containerRef} className="w-full" style={{ height: propHeight ?? 500 }}>
+      {/* A given height, or the whole of the parent (the explorer is full-screen) */}
+      <div ref={containerRef} className={propHeight ? 'w-full' : 'w-full h-full min-h-[360px]'} style={propHeight ? { height: propHeight } : undefined}>
         <canvas
           ref={canvasRef}
           width={dims.w}

@@ -94,3 +94,41 @@ export function focusGraph<N extends FocusNode, E extends FocusEdge>(
   const keptEdges = edges.filter(e => keep.has(e.source) && keep.has(e.target) && (core.has(e.source) || core.has(e.target)))
   return { nodes: keptNodes, edges: keptEdges }
 }
+
+/** Continents and world regions: real places, but nearly every story touches one, so they crowd the picture */
+const BROAD_PLACES = new Set([
+  'africa', 'asia', 'europe', 'oceania', 'americas', 'the americas', 'middle east', 'north america', 'south america',
+  'latin america', 'central america', 'caribbean', 'west africa', 'east africa', 'southern africa', 'north africa',
+  'sub-saharan africa', 'south asia', 'southeast asia', 'east asia', 'central asia', 'eastern europe',
+  'western europe', 'west asia', 'asia pacific', 'asia-pacific', 'indo-pacific', 'world', 'global',
+])
+
+/** A continent or world region (see BROAD_PLACES) */
+export function isBroadPlace(e: { type: string; canonical_name: string }): boolean {
+  return e.type === 'location' && BROAD_PLACES.has(e.canonical_name.trim().toLowerCase())
+}
+
+/**
+ * The explorer's first trending entities: in trending order, without
+ * duplicates or continents, and at most `places` places. The graph holds far
+ * more places than anything else, so its 50 most-mentioned entities were
+ * three quarters places and the picture was a map of cities (Oct 11, 2026).
+ */
+export function balanceTrending<T extends { id: string; type: string; canonical_name: string }>(
+  entities: T[], max = 45, places = 12,
+): T[] {
+  const out: T[] = []
+  const seen = new Set<string>()
+  let placeCount = 0
+  for (const e of entities) {
+    if (out.length >= max) break
+    if (seen.has(e.id)) continue
+    if (e.type === 'location') {
+      if (isBroadPlace(e) || placeCount >= places) continue
+      placeCount++
+    }
+    seen.add(e.id)
+    out.push(e)
+  }
+  return out
+}

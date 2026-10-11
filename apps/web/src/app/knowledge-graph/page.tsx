@@ -435,6 +435,7 @@ export default function KnowledgeGraphPage() {
                 if (fullEntity) selectEntity(fullEntity)
               }}
               height={500}
+              labelCount={60}
               className="rounded-xl overflow-hidden"
             />
           </div>
