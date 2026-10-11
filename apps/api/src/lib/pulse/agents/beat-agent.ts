@@ -30,7 +30,7 @@ export async function runBeatAgent(agent: AgentConfig): Promise<AgentScanResult>
     .limit(50)
     .select(['id', 'title', 'summary', 'category', 'severity',
       'reliability_score', 'source_count', 'location_name',
-      'country_code', 'created_at'])
+      'country_code', 'created_at', 'status'])
 
   // Filter by categories if specified
   if (agent.categories.length > 0) {

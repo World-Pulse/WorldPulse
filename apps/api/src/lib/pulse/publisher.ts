@@ -28,6 +28,15 @@ interface SignalSummary {
   region: string | null
   tags: string[] | null
   created_at: Date
+  /** verified, pending … (the digest says which stories are verified) */
+  status?: string
+}
+
+/** How many outlets carry a story, and whether that verified it, as the digest's prompts say it */
+export function outletsLine(s: Pick<SignalSummary, 'status' | 'source_count'>): string {
+  const n = Number(s.source_count) || 1
+  const outlets = `${n} independent outlet${n === 1 ? '' : 's'}`
+  return s.status === 'verified' ? `verified by ${outlets}` : `not yet verified, ${outlets}`
 }
 
 interface PublishResult {
@@ -63,48 +72,63 @@ async function rateLimited(contentType: string): Promise<PublishResult | null> {
 
 // ─── Signal fetchers ────────────────────────────────────────────────────────
 
-/** Get top signals from last N hours, ranked by severity + reliability */
+/** The columns the digest reads of a signal */
+const SUMMARY_COLUMNS = `id, title, summary, category, severity, reliability_score, source_count,
+         location_name, country_code, region, tags, created_at, status`
+
+/**
+ * The top stories of the last N hours, one signal per story (a story's
+ * reports share a story id; the one with the most outlets stands for it),
+ * ranked by severity, then verified first, then by outlets and reliability.
+ * Without the story ids the morning briefing could get the same story many
+ * times over (Oct 11, 2026: 67 outlets reported the Riyadh airport attack).
+ */
 export async function getTopSignals(hours: number, limit = 20): Promise<SignalSummary[]> {
   const since = new Date(Date.now() - hours * 3600_000)
-
-  return db('signals')
-    .whereIn('status', ['verified', 'pending'])
-    .where('created_at', '>', since)
-    .orderByRaw(`
-      CASE severity
-        WHEN 'critical' THEN 1
-        WHEN 'high' THEN 2
-        WHEN 'medium' THEN 3
-        WHEN 'low' THEN 4
-        ELSE 5
-      END,
-      reliability_score DESC,
-      source_count DESC
-    `)
-    .limit(limit)
-    .select([
-      'id', 'title', 'summary', 'category', 'severity',
-      'reliability_score', 'source_count', 'location_name',
-      'country_code', 'region', 'tags', 'created_at',
-    ])
+  const found = await db.raw(
+    `SELECT * FROM (
+       SELECT DISTINCT ON (COALESCE(story_id, id)) ${SUMMARY_COLUMNS}
+         FROM signals
+        WHERE status IN ('verified', 'pending') AND created_at > ?
+        ORDER BY COALESCE(story_id, id), source_count DESC NULLS LAST, reliability_score DESC NULLS LAST
+     ) AS story
+     ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 ELSE 5 END,
+              (status = 'verified') DESC, source_count DESC NULLS LAST, reliability_score DESC NULLS LAST
+     LIMIT ?`,
+    [since, limit],
+  )
+  return ((found as { rows?: SignalSummary[] })?.rows ?? [])
 }
 
-/** Get critical signals from last N minutes (for flash briefs) */
+/**
+ * Critical and high signals of the last N minutes for flash briefs, one per
+ * story, leaving out stories already briefed in the last day: each new
+ * outlet's report of a big story used to be a new flash brief.
+ */
 export async function getCriticalSignals(minutes: number): Promise<SignalSummary[]> {
   const since = new Date(Date.now() - minutes * 60_000)
-
-  return db('signals')
-    .whereIn('status', ['verified', 'pending'])
-    .whereIn('severity', ['critical', 'high'])
-    .where('created_at', '>', since)
-    .where('reliability_score', '>=', 0.7)
-    .orderBy('created_at', 'desc')
-    .limit(5)
-    .select([
-      'id', 'title', 'summary', 'category', 'severity',
-      'reliability_score', 'source_count', 'location_name',
-      'country_code', 'region', 'tags', 'created_at',
-    ])
+  const found = await db.raw(
+    `SELECT * FROM (
+       SELECT DISTINCT ON (COALESCE(s.story_id, s.id)) ${SUMMARY_COLUMNS.replace(/(\w+)/g, 's.$1')}
+         FROM signals AS s
+        WHERE s.status IN ('verified', 'pending')
+          AND s.severity IN ('critical', 'high')
+          AND s.created_at > ?
+          AND s.reliability_score >= 0.7
+          AND NOT EXISTS (
+                SELECT 1
+                  FROM pulse_publish_log AS l
+                  JOIN signals AS b ON b.id = ANY(l.source_signals)
+                 WHERE l.content_type = 'flash_brief'
+                   AND l.published_at > NOW() - INTERVAL '24 hours'
+                   AND COALESCE(b.story_id, b.id) = COALESCE(s.story_id, s.id))
+        ORDER BY COALESCE(s.story_id, s.id), s.source_count DESC NULLS LAST, s.created_at DESC
+     ) AS story
+     ORDER BY created_at DESC
+     LIMIT 5`,
+    [since],
+  )
+  return ((found as { rows?: SignalSummary[] })?.rows ?? [])
 }
 
 // ─── Dual-LLM Content Generation ──────────────────────────────────────────
@@ -317,7 +341,7 @@ export async function publishFlashBrief(signal: SignalSummary): Promise<PublishR
 Signal: ${signal.title}
 ${signal.summary && signal.summary !== 'N/A' ? `Detail: ${signal.summary}` : ''}
 Category: ${signal.category} | Severity: ${signal.severity} | Location: ${signal.location_name ?? 'Unknown'}
-Sources: ${signal.source_count} verified | Reliability: ${signal.reliability_score}
+Outlets: ${outletsLine(signal)} | Reliability: ${signal.reliability_score}
 
 Rules:
 - Start with the key development, NOT by restating the headline verbatim
@@ -371,7 +395,7 @@ Rules:
 /** Generate and publish an analysis post connecting multiple signals */
 export async function publishAnalysis(signals: SignalSummary[], topic: string): Promise<PublishResult> {
   const signalSummaries = signals.map((s, i) =>
-    `${i + 1}. [${s.severity.toUpperCase()}] ${s.title} (${s.location_name ?? 'Global'}, reliability: ${s.reliability_score}, sources: ${s.source_count})`
+    `${i + 1}. [${s.severity.toUpperCase()}] ${s.title} (${s.location_name ?? 'Global'}, reliability: ${s.reliability_score}, ${outletsLine(s)})`
   ).join('\n')
 
   const prompt = `Write an intelligence analysis post (200-400 words) connecting these related signals:
@@ -425,7 +449,7 @@ export async function publishDailyBriefing(): Promise<PublishResult> {
   }
 
   const signalList = signals.map((s, i) =>
-    `${i + 1}. [${s.severity.toUpperCase()}] ${s.title}\n   Location: ${s.location_name ?? 'Global'} | Category: ${s.category} | Sources: ${s.source_count} | Reliability: ${s.reliability_score}\n   Summary: ${s.summary ?? 'N/A'}`
+    `${i + 1}. [${s.severity.toUpperCase()}] ${s.title}\n   Location: ${s.location_name ?? 'Global'} | Category: ${s.category} | ${outletsLine(s)} | Reliability: ${s.reliability_score}\n   Summary: ${s.summary ?? 'N/A'}`
   ).join('\n\n')
 
   const dateStr = new Date().toLocaleDateString('en-US', {
@@ -481,7 +505,7 @@ export async function publishBriefingUpdate(updateType: 'midday' | 'evening'): P
   }
 
   const signalList = signals.map((s, i) =>
-    `${i + 1}. [${s.severity.toUpperCase()}] ${s.title} (${s.location_name ?? 'Global'}, sources: ${s.source_count})\n   ${s.summary ?? 'N/A'}`
+    `${i + 1}. [${s.severity.toUpperCase()}] ${s.title} (${s.location_name ?? 'Global'}, ${outletsLine(s)})\n   ${s.summary ?? 'N/A'}`
   ).join('\n\n')
 
   const dateStr = new Date().toLocaleDateString('en-US', {
