@@ -33,6 +33,7 @@ import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilie
 import { extractArticle, setArticleExtractorRedis } from '../pipeline/article-extractor'
 import { extractGeo }                  from '../pipeline/geo'
 import { classifyContent }             from '../pipeline/classify'
+import { CAMEO_LABEL }                 from '../pipeline/event-titles'
 
 const log = rootLogger.child({ module: 'gdelt-source' })
 
@@ -90,28 +91,8 @@ const CAMEO_CATEGORY: Record<string, Category> = {
   '20': 'conflict',      // Use unconventional mass violence
 }
 
-const CAMEO_LABEL: Record<string, string> = {
-  '01': 'Public statement',
-  '02': 'Appeal',
-  '03': 'Intent to cooperate',
-  '04': 'Consultation',
-  '05': 'Diplomatic cooperation',
-  '06': 'Material cooperation',
-  '07': 'Humanitarian aid',
-  '08': 'Concession',
-  '09': 'Investigation',
-  '10': 'Demand',
-  '11': 'Disapproval',
-  '12': 'Rejection',
-  '13': 'Threat',
-  '14': 'Protest',
-  '15': 'Military show of force',
-  '16': 'Diplomatic reduction',
-  '17': 'Coercion',
-  '18': 'Assault',
-  '19': 'Armed conflict',
-  '20': 'Mass atrocity',
-}
+// CAMEO_LABEL lives in pipeline/event-titles.ts, which also recognises the
+// "<label> in <place>" titles built from it below
 
 // ─── EXPORTED PURE HELPERS (also exercised in tests) ────────────────────────
 

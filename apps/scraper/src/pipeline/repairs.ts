@@ -8,6 +8,7 @@
  */
 
 import { db } from '../lib/postgres'
+import { EVENT_TEMPLATE_SQL } from './event-titles'
 
 /** Where nginx serves uploaded post media (the uploads volume, under /uploads/) */
 const PUBLIC_SITE = 'https://world-pulse.io'
@@ -30,6 +31,33 @@ export async function fixLocalhostUploadUrls(): Promise<number> {
                ORDER BY i)
       WHERE EXISTS (SELECT 1 FROM unnest(media_urls) AS m(u) WHERE u ~ ?)`,
     [LOCAL_UPLOAD_RE, `${PUBLIC_SITE}/uploads/`, LOCAL_UPLOAD_RE],
+  )
+  return Number((result as { rowCount?: number })?.rowCount ?? 0)
+}
+
+/** GDELT's reliability for a single coded event (sources/gdelt.ts) */
+const GDELT_RELIABILITY = 0.65
+
+/**
+ * Undo corroboration between GDELT "<event label> in <place>" signals, whose
+ * titles verified each other on Oct 10, 2026 ("Armed conflict in Washington,
+ * District of Columbia, United States"; see pipeline/event-titles.ts). Each
+ * goes back to pending, one source, its own link only, and at most GDELT's
+ * base reliability. Only signals from the last 7 days, and only those still
+ * marked verified or multi-source, so a later start changes nothing.
+ */
+export async function undoTemplateCorroboration(): Promise<number> {
+  const result = await db.raw(
+    `UPDATE signals
+        SET status = 'pending',
+            source_count = 1,
+            reliability_score = LEAST(reliability_score, ?),
+            original_urls = original_urls[1:1]
+      WHERE tags @> ARRAY['gdelt']::text[]
+        AND created_at > NOW() - INTERVAL '7 days'
+        AND (status = 'verified' OR source_count > 1)
+        AND title ~ ?`,
+    [GDELT_RELIABILITY, EVENT_TEMPLATE_SQL],
   )
   return Number((result as { rowCount?: number })?.rowCount ?? 0)
 }

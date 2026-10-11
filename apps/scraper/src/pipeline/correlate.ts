@@ -27,6 +27,7 @@ import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
 import { sourceKey, hostOf } from './signal-columns'
 import { findGazetteerPlace } from './geo'
+import { isEventTemplateTitle } from './event-titles'
 import { createHash } from 'crypto'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -414,6 +415,9 @@ export function keywordScore(a: CorrelationCandidate, b: CorrelationCandidate): 
  */
 export function isSameStory(a: CorrelationCandidate, b: CorrelationCandidate): boolean {
   if (!a.source_id || !b.source_id || a.source_id === b.source_id) return false
+  // GDELT's "<event label> in <place>" titles name an event type and a place,
+  // not a story ("Armed conflict in Washington, District of Columbia, ...")
+  if (isEventTemplateTitle(a.title) || isEventTemplateTitle(b.title)) return false
   if (temporalScore(a, b) <= 0) return false
   if (a.lat != null && a.lng != null && b.lat != null && b.lng != null &&
       haversineKm(a.lat, a.lng, b.lat, b.lng) > SAME_STORY_RADIUS_KM) return false

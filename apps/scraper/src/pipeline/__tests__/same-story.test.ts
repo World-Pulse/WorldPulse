@@ -267,3 +267,29 @@ describe('confirmMergedArticle', () => {
     expect(h.updates).toEqual([])
   })
 })
+
+describe('GDELT event-label titles', () => {
+  it('recognises "<label> in <place>" titles but not headlines that start the same way', async () => {
+    const { isEventTemplateTitle } = await import('../event-titles')
+    expect(isEventTemplateTitle('Armed conflict in Washington, District of Columbia, United States')).toBe(true)
+    expect(isEventTemplateTitle('Disapproval in White House, District of Columbia, United States')).toBe(true)
+    expect(isEventTemplateTitle('Consultation in Sydney, New South Wales, Australia')).toBe(true)
+    expect(isEventTemplateTitle('Assault in Kyyiv, Kyyiv, Misto, Ukraine')).toBe(true)
+    expect(isEventTemplateTitle('Protest in Bogotá, Bogota, Distrito Capital de Bogotá, Colombia')).toBe(true)
+    expect(isEventTemplateTitle('CAMEO-0841 in Lagos, Lagos, Nigeria')).toBe(true)
+    expect(isEventTemplateTitle('Protest in Paris over pension reform turns violent')).toBe(false)
+    expect(isEventTemplateTitle('Investigation in Texas finds ICE detainee died of neglect')).toBe(false)
+    expect(isEventTemplateTitle('Attack on Riyadh airport leaves 12 dead')).toBe(false)
+    expect(isEventTemplateTitle(null)).toBe(false)
+  })
+})
+
+describe('isSameStory with GDELT event-label titles', () => {
+  it('never matches two "<label> in <place>" titles, even from different outlets', () => {
+    const title = 'Armed conflict in Washington, District of Columbia, United States'
+    expect(isSameStory(
+      sig({ title, source_id: 'aninews.in', category: 'conflict' }),
+      sig({ id: 'b', title, source_id: 'rawstory.com', category: 'conflict' }),
+    )).toBe(false)
+  })
+})
