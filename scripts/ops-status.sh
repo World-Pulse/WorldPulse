@@ -63,8 +63,8 @@ llm_stats() {
 # Claude (Oct 11, 2026): the AI work moved in-house, under a monthly cap the
 # apps count in Redis (apps/scraper/src/lib/claude.ts). Whether each app has a
 # key (yes/no), whether the AI Digest is on, the cap, the spend today and this
-# month in dollars, today's calls by job, and the editor's last pass. No key or
-# password is printed.
+# month in dollars, today's calls by job, the editor's last pass, and the
+# cross-check of verified stories. No key or password is printed.
 claude_stats() {
   local scr_key api_key pulse cap pw out
   scr_key=$(timeout 10 docker exec wp_scraper sh -c 'printf %s "${ANTHROPIC_API_KEY:+yes}"' 2>/dev/null) || scr_key=""
@@ -76,7 +76,9 @@ claude_stats() {
       echo "day=$(redis-cli --raw GET "ai:claude:spend:$1")"
       echo "month=$(redis-cli --raw GET "ai:claude:spend:$2")"
       echo "calls=$(redis-cli --raw HGETALL "ai:claude:calls:$1" | paste -sd " " -)"
-      echo "editor=$(redis-cli --raw GET ai:editor:last)"' sh "$(date -u +%F)" "$(date -u +%Y-%m)" 2>/dev/null) || out=""
+      echo "editor=$(redis-cli --raw GET ai:editor:last)"
+      echo "verify=$(redis-cli --raw HGETALL "ai:verify:counts:$1" | paste -sd " " -)"
+      redis-cli --raw LRANGE ai:verify:recent 0 4 | sed "s/^/doubt=/"' sh "$(date -u +%F)" "$(date -u +%Y-%m)" 2>/dev/null) || out=""
   SCR_KEY="$scr_key" API_KEY_SET="$api_key" PULSE="$pulse" CAP="$cap" OUT="$out" python3 - <<'PY' 2>/dev/null || printf 'null'
 import json, os
 vals = dict(line.split('=', 1) for line in os.environ.get('OUT', '').splitlines() if '=' in line)
@@ -87,6 +89,15 @@ words = vals.get('calls', '').split()
 calls = {words[i]: int(words[i + 1]) for i in range(0, len(words) - 1, 2) if words[i + 1].isdigit()}
 try: editor = json.loads(vals.get('editor') or 'null')
 except ValueError: editor = None
+# Ledger's cross-check of verified stories (pipeline/crosscheck.ts): today's
+# verdicts, and the newest stories Claude doubted (public headlines only)
+words = vals.get('verify', '').split()
+verify = {words[i]: int(words[i + 1]) for i in range(0, len(words) - 1, 2) if words[i + 1].isdigit()}
+doubts = []
+for line in os.environ.get('OUT', '').splitlines():
+    if line.startswith('doubt='):
+        try: doubts.append(json.loads(line[6:]))
+        except ValueError: pass
 try: cap = float(os.environ.get('CAP') or 20)
 except ValueError: cap = 20
 print(json.dumps({
@@ -98,6 +109,8 @@ print(json.dumps({
     'spent_usd_month': usd(vals.get('month')),
     'calls_today': calls,
     'editor_last_pass': editor,
+    'crosscheck_today': verify,
+    'crosscheck_doubts': doubts,
 }, separators=(',', ':')))
 PY
 }
@@ -146,7 +159,7 @@ deploy_note() {
 pipe_cache=logs/pipeline-stats.json
 # Refresh every 30 minutes, or straight away when the cache predates a new field
 if [ ! -s "$pipe_cache" ] || [ -n "$(find "$pipe_cache" -mmin +29 2>/dev/null)" ] \
-   || ! grep -q '"ai_digest_on"' "$pipe_cache" 2>/dev/null; then
+   || ! grep -q '"crosscheck_today"' "$pipe_cache" 2>/dev/null; then
   pipeline_stats > "$pipe_cache.tmp" 2>/dev/null \
     && python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$pipe_cache.tmp" 2>/dev/null \
     && mv "$pipe_cache.tmp" "$pipe_cache"

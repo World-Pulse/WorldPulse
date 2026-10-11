@@ -32,6 +32,7 @@ import { isEventTemplateTitle } from './event-titles'
 import { countIndependentOutlets, isCopyOf } from './independence'
 import { joinStory } from './stories'
 import { liftedSeverity, type SeverityRow } from './severity-lift'
+import { crossCheckLater } from './crosscheck'
 import { createHash } from 'crypto'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -790,6 +791,10 @@ async function applyCorroborationBoost(
         verified_at: db.raw('NOW()'),
       })
 
+    // Ledger's cross-check: Claude reads the reports of a story that just
+    // turned verified and records whether they're one event (pipeline/crosscheck.ts)
+    if (promoted > 0) crossCheckLater(ids)
+
     // With the outlets counted, the single-source severity cap lifts: each
     // report gets the severity its own words earn, up to what the count allows
     const rows = await db('signals').whereIn('id', ids)
@@ -885,6 +890,8 @@ export async function corroborateWithDuplicate(
     .where('reliability_score', '>=', 0.65)
     .update({ status: 'verified', verified_at: db.raw('NOW()') })
 
+  if (promoted > 0) crossCheckLater([existingId], [{ title: incoming.title }])
+
   logger.info({
     signal_id: existingId,
     outlet:    incoming.source_id,
@@ -929,6 +936,8 @@ export async function confirmMergedArticle(
     .where('source_count', '>=', 2)
     .where('reliability_score', '>=', 0.65)
     .update({ status: 'verified', verified_at: db.raw('NOW()') })
+
+  if (promoted > 0) crossCheckLater([signalId], [{ title: incoming.title }])
 
   logger.info({ signal_id: signalId, outlet: incoming.source_id, promoted },
     'Merged article from another outlet confirmed a story')
