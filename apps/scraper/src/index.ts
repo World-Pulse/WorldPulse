@@ -40,6 +40,7 @@ import { runDelayedRescore } from './pipeline/rescore'
 import { signalsHavePublishedAt, publishedAtFor, backfillRecentPublishedAt, sourceKey, hostOf } from './pipeline/signal-columns'
 import { independentReports, isCopyOf } from './pipeline/independence'
 import { ensureStoryIdColumn } from './pipeline/stories'
+import { startEditor } from './pipeline/editor'
 import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames, stripOutletNotes, recategorizeRecentNews, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability } from './pipeline/repairs'
 import { batchValidateGeo } from './pipeline/geo-validator'
 import { recomputeSourceReputation } from './pipeline/source-reputation'
@@ -365,6 +366,9 @@ async function bootstrap() {
 
   // Kafka consumer group lag monitor — checks every 5 minutes, logs summary + warns on critical lag
   startKafkaLagMonitor()
+
+  // The editor: every 15 minutes Claude re-files the newest stories' categories (pipeline/editor.ts)
+  startEditor()
 
   // Record process-level exceptions for the stability tracker's unhandled-exception check.
   // These listeners run alongside any existing crash handlers and are non-fatal.

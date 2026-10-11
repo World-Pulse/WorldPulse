@@ -12,6 +12,7 @@ import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
 import { rateSeverity } from './severity'
 import { categorizeArticle } from './categories'
+import { claudeConfigured } from '../lib/claude'
 
 interface ClassificationResult {
   category:     Category
@@ -35,8 +36,11 @@ export async function classifyContent(
   const cached = await redis.get(cacheKey)
   if (cached) return JSON.parse(cached) as ClassificationResult
 
-  // Try LLM if configured (requires LLM_API_URL or OPENAI_API_KEY)
-  const llmConfigured = !!(process.env.LLM_API_URL || process.env.OPENAI_API_KEY)
+  // Try LLM if configured (requires LLM_API_URL or OPENAI_API_KEY). With a
+  // Claude key, the word rules file each article and the editor pass
+  // (editor.ts) re-files them 50 at a time: in-house, and far cheaper than a
+  // call per article (Oct 11, 2026)
+  const llmConfigured = !claudeConfigured() && !!(process.env.LLM_API_URL || process.env.OPENAI_API_KEY)
   let result: ClassificationResult
   let byLlm = false
   if (llmConfigured) {
