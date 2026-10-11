@@ -66,6 +66,9 @@ import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { Category, SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate } from '../pipeline/insert-signal'
+// Feed items published more than 3 days ago aren't news
+import { MAX_ITEM_AGE_MS, isStaleItem } from '../pipeline/freshness'
+export { MAX_ITEM_AGE_MS, isStaleItem }
 
 const log = rootLogger.child({ module: 'news-rss-source' })
 
@@ -80,21 +83,6 @@ const MAX_ITEMS     = 20                  // max signals per source per poll
 const MAX_FEED_BYTES     = 5 * 1024 * 1024 // a feed bigger than this isn't a feed
 const FAILS_BEFORE_PAUSE = 3               // failed polls in a row before a feed is paused
 const PAUSE_S            = 6 * 3_600       // how long a failing feed is paused
-
-/**
- * Feed items published longer ago than this aren't news. Without the limit, a
- * feed that starts working again posts its whole backlog as new signals: on
- * Oct 11, 2026 CNN's world feed gave 2021–2023 stories, Xinhua's 2017 ones and
- * WHO's 2024 ones, all shown as fresh.
- */
-export const MAX_ITEM_AGE_MS = 3 * 24 * 3_600_000
-
-/** Whether a feed item's publish date is older than MAX_ITEM_AGE_MS (no or unreadable date: no) */
-export function isStaleItem(pubDate: string | null | undefined, now = Date.now()): boolean {
-  if (!pubDate) return false
-  const t = new Date(pubDate).getTime()
-  return Number.isFinite(t) && now - t > MAX_ITEM_AGE_MS
-}
 
 // ─── SOURCE REGISTRY ─────────────────────────────────────────────────────────
 

@@ -17,6 +17,7 @@ import { pushDLQ, drainDLQ } from './lib/dlq'
 import { verifySignal } from './pipeline/verify'
 import { classifyContent } from './pipeline/classify'
 import { extractGeo, geocodePlace, placeFromText } from './pipeline/geo'
+import { isStaleItem } from './pipeline/freshness'
 import { dedup } from './pipeline/dedup'
 import { correlateSignal, confirmMergedArticle } from './pipeline/correlate'
 import type { CorrelationCandidate } from './pipeline/correlate'
@@ -484,6 +485,7 @@ async function scrapeSource(source: ScraperSource): Promise<number> {
   })
 
   let newCount = 0
+  let staleCount = 0
   let feedSuccesses = 0
   let feedErrors = 0
   let totalLatencyMs = 0
@@ -503,6 +505,10 @@ async function scrapeSource(source: ScraperSource): Promise<number> {
         const url = item.link ?? item.guid
         if (!url) continue
 
+        // Published more than 3 days ago: saved (so it's known) but never
+        // turned into a signal, so a feed's backlog doesn't come in as news
+        const stale = isStaleItem(item.pubDate)
+
         // Save raw article
         // Dedup is handled by the DB UNIQUE constraint on url + .onConflict('url').ignore()
         // Redis TTL-based pre-check was too aggressive (7-day TTL blocked all re-crawled RSS items)
@@ -515,12 +521,14 @@ async function scrapeSource(source: ScraperSource): Promise<number> {
             author:       item.creator ?? item['dc:creator'],
             published_at: item.pubDate ? new Date(item.pubDate) : null,
             hash:         dedup.hash(url + (item.title ?? '')),
+            ...(stale ? { processed: true } : {}),
           })
           .onConflict('url')
           .ignore()
           .returning('id')
 
         if (!article) continue
+        if (stale) { staleCount++; continue }
 
         const articlePayload = {
           articleId:   article.id,
@@ -607,6 +615,9 @@ async function scrapeSource(source: ScraperSource): Promise<number> {
 
   if (newCount > 0) {
     logger.debug({ source: source.slug, newCount }, 'Articles scraped')
+  }
+  if (staleCount > 0) {
+    logger.info({ source: source.slug, stale: staleCount }, 'Feed items skipped as old')
   }
 
   return newCount

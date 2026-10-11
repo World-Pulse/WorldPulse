@@ -5,11 +5,15 @@
  *  - The scraper crashed mid-pipeline (e.g. NaN reliability bug)
  *  - Kafka was unavailable and direct mode also failed
  *
- * Called once at scraper startup if unprocessed articles exist.
+ * Called once at scraper startup if unprocessed articles exist. Only articles
+ * from the last 3 days become signals (pipeline/freshness.ts): when the
+ * pipeline came back on Oct 7, 2026, articles saved in May were published as
+ * new signals. Older ones are marked processed without a signal.
  */
 
 import { db } from './lib/postgres'
 import { logger } from './lib/logger'
+import { MAX_ITEM_AGE_MS } from './pipeline/freshness'
 
 type ArticleRow = {
   id: string
@@ -37,8 +41,25 @@ export async function backfillUnprocessed(
     }>
   ) => Promise<void>
 ): Promise<void> {
-  const count = await db('raw_articles').where('processed', false).count('id as n').first()
-  const total = Number(count?.n ?? 0)
+  const cutoff = new Date(Date.now() - MAX_ITEM_AGE_MS)
+
+  // Saved, or published, more than 3 days ago: old news, never a new signal
+  const skipped = await db('raw_articles')
+    .where('processed', false)
+    .where(q => q.where('fetched_at', '<', cutoff).orWhere('published_at', '<', cutoff))
+    .update({ processed: true })
+  if (Number(skipped) > 0) {
+    logger.info({ skipped: Number(skipped) }, 'Backfill: raw articles older than 3 days left out')
+  }
+
+  // The ones to process, listed up front: processing marks a row processed,
+  // so paging through "unprocessed" with an offset skipped every other batch
+  const pending = await db('raw_articles')
+    .where('processed', false)
+    .whereNotNull('title')
+    .orderBy('published_at', 'desc')
+    .pluck('id') as string[]
+  const total = pending.length
 
   if (total === 0) {
     logger.info('Backfill: no unprocessed articles')
@@ -55,8 +76,8 @@ export async function backfillUnprocessed(
   while (offset < total) {
     const rows = await db<ArticleRow>('raw_articles as a')
       .join('sources as s', 's.id', 'a.source_id')
+      .whereIn('a.id', pending.slice(offset, offset + BATCH))
       .where('a.processed', false)
-      .whereNotNull('a.title')
       .select(
         'a.id',
         'a.source_id',
@@ -68,10 +89,8 @@ export async function backfillUnprocessed(
         's.trust_score',
       )
       .orderBy('a.published_at', 'desc')
-      .limit(BATCH)
-      .offset(offset)
 
-    if (rows.length === 0) break
+    if (rows.length === 0) { offset += BATCH; continue }
 
     // Group by a simple topic hash so corroborating articles can merge
     const groups = new Map<string, typeof rows>()
