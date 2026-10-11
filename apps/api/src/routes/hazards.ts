@@ -39,7 +39,17 @@ export const HAZARDS_MAX_HOURS = 720
 export const HAZARDS_DEFAULT_HOURS = 48
 
 /** Hazard source slugs */
-const HAZARD_SOURCES = ['seismic', 'gvp-volcano', 'tsunami-warnings', 'firms']
+export const HAZARD_SOURCES = ['seismic', 'gvp-volcano', 'tsunami-warnings', 'firms']
+
+/** The tags the hazard feeds put on their signals (scraper sources/seismic.ts, gvp-volcano.ts, tsunami-warnings.ts, firms.ts) */
+export const HAZARD_TAGS = ['seismic', 'volcano', 'tsunami', 'firms']
+
+/** Which feed a hazard signal came from, by its tags (one of HAZARD_SOURCES) */
+const HAZARD_SOURCE_SQL = `CASE
+  WHEN 'seismic' = ANY(tags) THEN 'seismic'
+  WHEN 'volcano' = ANY(tags) THEN 'gvp-volcano'
+  WHEN 'tsunami' = ANY(tags) THEN 'tsunami-warnings'
+  ELSE 'firms' END`
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -158,6 +168,10 @@ export const registerHazardsRoutes: FastifyPluginAsync = async (app) => {
     }
 
     // ── DB query ──────────────────────────────────────────────────────────
+    // Hazard signals are found by their tags: signals have no source_id
+    // column (source_ids is a list, empty for these feeds) and not every
+    // install has published_at, so this query failed with a 500 and the
+    // map's Natural hazards layer stayed empty (Oct 11, 2026).
     try {
       const rows = await db('signals')
         .select(
@@ -166,16 +180,16 @@ export const registerHazardsRoutes: FastifyPluginAsync = async (app) => {
           'category',
           'severity',
           'reliability_score',
-          'source_id as source_slug',
-          'published_at',
+          db.raw(HAZARD_SOURCE_SQL + ' AS source_slug'),
+          db.raw('COALESCE(event_time, created_at) AS published_at'),
           db.raw('ST_X(location::geometry) as lng'),
           db.raw('ST_Y(location::geometry) as lat'),
         )
-        .whereIn('source_id', HAZARD_SOURCES)
+        .whereRaw('tags && ?::text[]', [HAZARD_TAGS])
         .whereRaw('location IS NOT NULL')
         .whereRaw('ST_X(location::geometry) IS NOT NULL AND ST_Y(location::geometry) IS NOT NULL')
-        .whereRaw(`published_at > now() - interval '${hours} hours'`)
-        .orderBy('published_at', 'desc')
+        .whereRaw(`created_at > now() - interval '${hours} hours'`)
+        .orderBy('created_at', 'desc')
         .limit(1000) as Array<{
           id:                string
           title:             string

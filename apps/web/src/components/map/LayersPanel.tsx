@@ -8,6 +8,7 @@
  */
 
 import type { ReactNode } from 'react'
+import Link from 'next/link'
 import type { LucideIcon } from 'lucide-react'
 import { X } from 'lucide-react'
 
@@ -25,6 +26,20 @@ export interface MapLayerItem {
   toggle: () => void
   /** Extra settings shown under the row while the layer is on */
   extra?: ReactNode
+  /** The layer can't show anything for this reader (e.g. it needs an account) */
+  note?: { text: string; href?: string; linkText?: string } | null
+}
+
+/**
+ * What to tell the reader under a layer that's on but shows nothing: the
+ * layer's own note (it needs an account, …), or that its feed is empty now.
+ * Before Oct 11, 2026 several layers stayed blank without a word.
+ */
+export function layerNote(item: Pick<MapLayerItem, 'on' | 'loading' | 'count' | 'note'>): { text: string; href?: string; linkText?: string } | null {
+  if (!item.on || item.loading) return null
+  if (item.note) return item.note
+  if (item.count === 0) return { text: 'Nothing to show right now.' }
+  return null
 }
 
 export interface MapLayerGroup {
@@ -54,6 +69,7 @@ function Switch({ on, color }: { on: boolean; color: string }) {
 
 function LayerRow({ item }: { item: MapLayerItem }) {
   const Icon = item.icon
+  const note = layerNote(item)
   return (
     <div>
       <button
@@ -85,6 +101,12 @@ function LayerRow({ item }: { item: MapLayerItem }) {
         </span>
         <Switch on={item.on} color={item.color} />
       </button>
+      {note && (
+        <div className="pl-14 pr-3 pb-2 text-[11px] text-wp-amber">
+          {note.text}
+          {note.href && <> <Link href={note.href} className="underline underline-offset-2 hover:text-wp-text">{note.linkText ?? 'Open'}</Link></>}
+        </div>
+      )}
       {item.on && item.extra && <div className="pl-14 pr-3 pb-2">{item.extra}</div>}
     </div>
   )

@@ -145,6 +145,17 @@ const CAT_ICON: Record<string, string> = {
 }
 const CATS   = ['all', 'conflict', 'climate', 'health', 'economy', 'science', 'disaster']
 const SEVS   = ['all', 'critical', 'high', 'medium', 'low']
+/** The reader's sign-in, for layers that need an account */
+function signedInHeaders(): Record<string, string> {
+  try {
+    const token = typeof window !== 'undefined' ? window.localStorage.getItem('wp_access_token') : null
+    return token ? { Authorization: `Bearer ${token}` } : {}
+  } catch {
+    return {}
+  }
+}
+const SIGN_IN_NOTE = { text: 'This layer needs a free account.', href: '/auth/login', linkText: 'Sign in' }
+
 /** The time window in words, for the country brief */
 const TIME_WINDOW_LABEL: Record<string, string> = {
   '1h': 'last hour', '6h': 'last 6 hours', '24h': 'last 24 hours', '7d': 'last 7 days', all: 'all time',
@@ -305,6 +316,8 @@ function MapView() {
   const [jammingMode,    setJammingMode]    = useState(false)
   const [jammingLoading, setJammingLoading] = useState(false)
   const [jammingCount,   setJammingCount]   = useState(0)
+  // Missile threats and GPS jamming need an account (the API answers 401)
+  const [signInNeeded,   setSignInNeeded]   = useState<{ threats?: boolean; jamming?: boolean }>({})
 
   // ── Natural Hazards layer state ───────────────────────────────────────────────
   const [hazardsMode,    setHazardsMode]    = useState(false)
@@ -2404,7 +2417,8 @@ function MapView() {
 
       setThreatLoading(true)
       try {
-        const res  = await fetch(`${API_URL}/api/v1/threats/missiles`)
+        const res  = await fetch(`${API_URL}/api/v1/threats/missiles`, { headers: signedInHeaders() })
+        setSignInNeeded(n => ({ ...n, threats: res.status === 401 }))
         if (!res.ok) { console.warn(`[map][threats] HTTP ${res.status}`); return }
         const json = await res.json() as {
           success: boolean
@@ -2594,7 +2608,8 @@ function MapView() {
 
       setJammingLoading(true)
       try {
-        const res  = await fetch(`${API_URL}/api/v1/jamming/zones`)
+        const res  = await fetch(`${API_URL}/api/v1/jamming/zones`, { headers: signedInHeaders() })
+        setSignInNeeded(n => ({ ...n, jamming: res.status === 401 }))
         if (!res.ok) { console.warn(`[map][jamming] HTTP ${res.status}`); return }
         const json = await res.json() as {
           success: boolean
@@ -3426,9 +3441,11 @@ function MapView() {
         { key: 'conflict', label: 'Conflict zones', description: 'Fighting, military activity and security incidents, last 72 h', icon: Swords, color: '#ef4444',
           on: conflictMode, loading: conflictLoading, count: conflictCount, toggle: () => setConflictMode(v => !v) },
         { key: 'threats', label: 'Missile & drone threats', description: 'Ballistic, cruise, hypersonic, drone and rocket reports', icon: Crosshair, color: '#f87171',
-          on: threatMode, loading: threatLoading, count: threatCount, toggle: () => setThreatMode(v => !v) },
+          on: threatMode, loading: threatLoading, count: threatCount, toggle: () => setThreatMode(v => !v),
+          note: signInNeeded.threats ? SIGN_IN_NOTE : null },
         { key: 'jamming', label: 'GPS jamming', description: 'Military jamming, spoofing and interference zones', icon: RadioTower, color: '#c084fc',
-          on: jammingMode, loading: jammingLoading, count: jammingCount, toggle: () => setJammingMode(v => !v) },
+          on: jammingMode, loading: jammingLoading, count: jammingCount, toggle: () => setJammingMode(v => !v),
+          note: signInNeeded.jamming ? SIGN_IN_NOTE : null },
         { key: 'naval', label: 'Naval intelligence', description: 'Carriers, ships in distress and ships gone dark', icon: Anchor, color: '#60a5fa',
           on: navalMode, loading: navalLoading, count: navalCount, toggle: () => setNavalMode(v => !v) },
       ],
