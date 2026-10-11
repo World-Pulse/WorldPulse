@@ -38,7 +38,7 @@ export default function HomePage() {
   return (
     <>
     <OnboardingModal />
-    <div className="min-h-[calc(100vh-52px)] md:grid md:grid-cols-[240px_1fr] lg:grid-cols-[240px_1fr_300px]">
+    <div className="min-h-[calc(100vh-52px)] md:grid md:grid-cols-[240px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)_300px]">
 
       {/* LEFT SIDEBAR — tablet+ */}
       <div className="hidden md:block">

@@ -618,6 +618,11 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
                 total:      { type: 'number' },
                 last24h:    { type: 'number' },
                 lastHour:   { type: 'number' },
+                /** Of the last 24 hours' signals: verified by 2+ independent outlets */
+                verified24h:  { type: 'number' },
+                /** Countries and outlets (websites) they came from */
+                countries24h: { type: 'number' },
+                outlets24h:   { type: 'number' },
                 bySeverity: {
                   type: 'object',
                   properties: {
@@ -659,6 +664,17 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       .count('id as count')
       .groupBy('severity')
 
+    // The day's verification and reach, so the home page shows live figures
+    // instead of typed-in ones (plan P7); an outlet is its article's website
+    const dayRow = await db('signals')
+      .whereIn('status', ['verified', 'pending'])
+      .where('created_at', '>', db.raw("NOW() - INTERVAL '24 hours'"))
+      .first(
+        db.raw("count(*) FILTER (WHERE status = 'verified')::int AS verified"),
+        db.raw('count(DISTINCT country_code)::int AS countries'),
+        db.raw("count(DISTINCT lower(regexp_replace(substring(original_urls[1] from ?), ?, '')))::int AS outlets", ['^https?://([^/:?#]+)', '^www\\.']),
+      ) as { verified?: number; countries?: number; outlets?: number } | undefined
+
     const bySeverity: Record<string, number> = {}
     for (const row of severityCounts) {
       bySeverity[row.severity as string] = Number(row.count)
@@ -670,6 +686,9 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
         total:      Number(totalResult?.count ?? 0),
         last24h:    Number(last24hResult?.count ?? 0),
         lastHour:   Number(lastHourResult?.count ?? 0),
+        verified24h:  Number(dayRow?.verified ?? 0),
+        countries24h: Number(dayRow?.countries ?? 0),
+        outlets24h:   Number(dayRow?.outlets ?? 0),
         bySeverity,
       },
     }

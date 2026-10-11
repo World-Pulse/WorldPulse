@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useState, lazy, Suspense } from 'react'
 import Link from 'next/link'
-import { ShieldCheck, BotMessageSquare, ShieldAlert } from 'lucide-react'
+import { ShieldCheck, Hourglass } from 'lucide-react'
 // TradeSurveillancePanel moved to /finance only
 import { TrendingEntities } from '@/components/analytics/TrendingEntities'
 import { SignalCounter } from '@/components/SignalCounter'
 
 import { MarketPulse } from '@/components/MarketPulse'
+import { SEVERITY_COLOR } from '@/lib/map-style'
 
 const SpinningGlobe = lazy(() => import('./SpinningGlobe').then(m => ({ default: m.SpinningGlobe })))
 
@@ -23,30 +24,21 @@ const TYPE_COLORS: Record<string, string> = {
 
 interface LiveSignal { time: string; color: string; text: string; id?: string }
 
-const FOLLOW_SUGGESTIONS = [
-  { initials: 'UN', label: 'UN News', bio: 'Official United Nations news', color: 'from-purple-600 to-purple-900', verified: true },
-  { initials: 'NW', label: 'NASA Watch', bio: 'Space, climate & Earth data', color: 'from-blue-600 to-blue-900', verified: true },
-  { initials: 'IJ', label: 'IJ Reporters', bio: 'Investigative journalism', color: 'from-red-700 to-red-900', verified: false },
-  { initials: 'GC', label: 'GlobalClimate.ai', bio: 'AI climate monitoring', color: 'from-green-600 to-green-900', verified: false },
-]
-
-// Globe hotspots [left%, top%, type]
-const HOTSPOTS: [number, number, 'red'|'amber'|'cyan'|'green'][] = [
-  [72, 55, 'red'],
-  [50, 38, 'amber'],
-  [58, 44, 'red'],
-  [82, 40, 'cyan'],
-  [35, 50, 'green'],
-  [45, 58, 'amber'],
-  [22, 42, 'cyan'],
-]
-
-const HOTSPOT_COLORS = {
-  red:   { ring: 'border-wp-red',   dot: 'bg-wp-red shadow-[0_0_6px_#ff3b5c]' },
-  amber: { ring: 'border-wp-amber', dot: 'bg-wp-amber shadow-[0_0_6px_#f5a623]' },
-  cyan:  { ring: 'border-wp-cyan',  dot: 'bg-wp-cyan shadow-[0_0_6px_#00d4ff]' },
-  green: { ring: 'border-wp-green', dot: 'bg-wp-green shadow-[0_0_6px_#00e676]' },
+/** The day's figures from GET /api/v1/signals/count */
+interface DayCounts {
+  total: number
+  last24h: number
+  verified24h: number
+  countries24h: number
+  outlets24h: number
 }
+
+/** The World Map widget's legend: the map's own severity colours */
+const GLOBE_LEGEND: Array<[string, string]> = [
+  [SEVERITY_COLOR.critical!, 'Critical'],
+  [SEVERITY_COLOR.high!, 'High'],
+  [SEVERITY_COLOR.medium!, 'Medium'],
+]
 
 function now() {
   const d = new Date()
@@ -61,38 +53,12 @@ function formatPulseCount(n: number): string {
 
 export function RightSidebar() {
   const [signals, setSignals]         = useState<LiveSignal[]>([])
-  const [signalTotal, setSignalTotal] = useState<number | null>(null)
+  // Live figures only (Oct 11, 2026: "99.9% uptime", "195 nations", "300+
+  // sources" and "AI fact-check: LIVE" were typed in, and "Cross-source
+  // verified" showed the share not flagged as AI slop: 100%)
+  const [counts, setCounts]           = useState<DayCounts | null>(null)
+  const [hotspotCount, setHotspotCount] = useState<number | null>(null)
   const seenIds = useRef(new Set<string>())
-
-  // Platform Pulse — signals count is live, others are stable facts
-  // Uptime = server uptime (process.uptime resets on every deploy, so use 99.9%)
-  // Nations = 195 recognized countries
-  // Sources = 300+ RSS + OSINT feeds configured in scraper pipeline
-
-  // Source integrity stats
-  const [verifiedPct, setVerifiedPct] = useState<string>('—')
-  const [blockedToday, setBlockedToday] = useState<string>('—')
-
-  useEffect(() => {
-    let mounted = true
-    async function fetchIntegrity() {
-      try {
-        const res = await fetch(`${API_URL}/api/v1/slop/stats`)
-        if (!res.ok) return
-        const json = await res.json()
-        if (!mounted || !json.data) return
-        const { total_signals_analyzed: total, signals_flagged_as_slop: blocked } = json.data
-        if (total > 0) {
-          const cleanPct = Math.round(((total - blocked) / total) * 1000) / 10
-          setVerifiedPct(`${cleanPct}%`)
-        }
-        setBlockedToday(String(blocked ?? 0))
-      } catch { /* silent */ }
-    }
-    fetchIntegrity()
-    const t = setInterval(fetchIntegrity, 120_000)
-    return () => { mounted = false; clearInterval(t) }
-  }, [])
 
   // Market ticker state — now managed by MarketPulse component
 
@@ -130,7 +96,16 @@ export function RightSidebar() {
         const res = await fetch(`${API_URL}/api/v1/signals/count`)
         if (res.ok) {
           const json = await res.json()
-          if (mounted && json.success) setSignalTotal(json.data.total)
+          if (mounted && json.success && json.data) {
+            const d = json.data
+            setCounts({
+              total:        Number(d.total) || 0,
+              last24h:      Number(d.last24h) || 0,
+              verified24h:  Number(d.verified24h) || 0,
+              countries24h: Number(d.countries24h) || 0,
+              outlets24h:   Number(d.outlets24h) || 0,
+            })
+          }
         }
       } catch { /* ignore */ }
     }
@@ -180,22 +155,10 @@ export function RightSidebar() {
           <div className="w-full aspect-square rounded-[10px] overflow-hidden relative mb-2 cursor-pointer group"
             style={{ background: 'radial-gradient(circle at 35% 35%, #0d1a3a, #030812)' }}>
 
-            {/* Spinning MapLibre globe */}
+            {/* The World Map's dark globe with the day's convergence hotspots */}
             <Suspense fallback={<div className="w-full h-full bg-[#030812]" />}>
-              <SpinningGlobe />
+              <SpinningGlobe onHotspots={setHotspotCount} />
             </Suspense>
-
-            {/* Hotspot markers */}
-            {HOTSPOTS.map(([l, t, type], i) => {
-              const c = HOTSPOT_COLORS[type]
-              return (
-                <div key={i} className="absolute -translate-x-1/2 -translate-y-1/2 z-10" style={{ left: `${l}%`, top: `${t}%` }}>
-                  <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 ${c.ring} animate-pulse-ring`}
-                    style={{ animationDelay: `${i * 0.3}s` }} />
-                  <div className={`w-[6px] h-[6px] rounded-full ${c.dot} relative z-10`} />
-                </div>
-              )
-            })}
 
             {/* Hover overlay */}
             <div className="absolute inset-0 flex items-end p-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
@@ -206,15 +169,19 @@ export function RightSidebar() {
           </div>
         </Link>
 
-        {/* Legend */}
-        <div className="grid grid-cols-2 gap-[6px] font-mono text-[10px]">
-          {[['#ff3b5c','Crisis'],['#f5a623','Alert'],['#00d4ff','Event'],['#00e676','Update']].map(([color, label]) => (
-            <div key={label} className="flex items-center gap-[6px] text-wp-text3">
-              <div className="w-[6px] h-[6px] rounded-full flex-shrink-0" style={{ background: color, boxShadow: `0 0 6px ${color}` }} />
+        {/* Legend: what the dots are */}
+        <div className="flex items-center gap-3 font-mono text-[10px] text-wp-text3">
+          {GLOBE_LEGEND.map(([color, label]) => (
+            <span key={label} className="flex items-center gap-[6px]">
+              <span className="w-[6px] h-[6px] rounded-full flex-shrink-0" style={{ background: color, boxShadow: `0 0 6px ${color}` }} />
               {label}
-            </div>
+            </span>
           ))}
         </div>
+        <p className="mt-1.5 font-mono text-[9px] leading-relaxed text-wp-text3">
+          {hotspotCount ? `${hotspotCount} places` : 'Places'} where several kinds of news meet, last 24h
+          <br />© OpenFreeMap · © OpenStreetMap
+        </p>
       </Widget>
 
       {/* ─── BAT-18: LIVE INTELLIGENCE COUNTER (hero) ────── */}
@@ -228,36 +195,41 @@ export function RightSidebar() {
       <Widget title="Platform Pulse">
         <div className="grid grid-cols-2 gap-2">
           {[
-            { value: signalTotal != null ? formatPulseCount(signalTotal) : '—', label: 'Signals',  color: 'text-wp-cyan'  },
-            { value: '99.9%',  label: 'Uptime',   color: 'text-wp-green' },
-            { value: '195',    label: 'Nations',   color: 'text-wp-red'   },
-            { value: '300+',   label: 'Sources',   color: 'text-wp-amber' },
+            { value: counts ? formatPulseCount(counts.total) : null,        label: 'Signals',   color: 'text-wp-cyan',  title: 'Signals on WorldPulse, all time' },
+            { value: counts ? formatPulseCount(counts.last24h) : null,      label: 'Last 24h',  color: 'text-wp-green', title: 'New signals in the last 24 hours' },
+            { value: counts ? String(counts.countries24h) : null,           label: 'Countries', color: 'text-wp-red',   title: 'Countries the last 24 hours\' signals are in' },
+            { value: counts ? formatPulseCount(counts.outlets24h) : null,   label: 'Outlets',   color: 'text-wp-amber', title: 'News websites that reported them, last 24 hours' },
           ].map(stat => (
-            <div key={stat.label} className="bg-wp-s2 rounded-lg p-[10px] text-center">
-              <div className={`font-display text-[22px] leading-none mb-1 ${stat.color}`}>{stat.value}</div>
+            <div key={stat.label} className="bg-wp-s2 rounded-lg p-[10px] text-center" title={stat.title}>
+              {stat.value != null
+                ? <div className={`font-display text-[22px] leading-none mb-1 ${stat.color}`}>{stat.value}</div>
+                : <div className="h-[22px] w-12 mx-auto mb-1 rounded bg-white/5 animate-pulse" aria-hidden="true" />}
               <div className="font-mono text-[8px] tracking-[2px] text-wp-text3 uppercase">{stat.label}</div>
             </div>
           ))}
         </div>
+        <p className="mt-2 font-mono text-[9px] text-wp-text3">Countries and outlets: last 24 hours</p>
       </Widget>
 
       {/* ─── SOURCE INTEGRITY ─────────────────────────────── */}
       <Widget title="Source Integrity">
         <div className="flex items-center gap-2 bg-wp-s2 rounded-lg p-[10px] mb-2">
           <ShieldCheck className="w-4 h-4 text-wp-green flex-shrink-0" />
-          <span className="flex-1 text-[11px] text-wp-text2">Cross-source verified</span>
-          <span className="font-mono text-[12px] font-bold text-wp-green">{verifiedPct}</span>
-        </div>
-        <div className="flex items-center gap-2 bg-wp-s2 rounded-lg p-[10px] mb-2">
-          <BotMessageSquare className="w-4 h-4 text-wp-cyan flex-shrink-0" />
-          <span className="flex-1 text-[11px] text-wp-text2">AI fact-check</span>
-          <span className="font-mono text-[12px] font-bold text-wp-cyan">LIVE</span>
+          <span className="flex-1 text-[11px] text-wp-text2">Verified: two different outlets</span>
+          {counts
+            ? <span className="font-mono text-[12px] font-bold text-wp-green">{counts.verified24h.toLocaleString()}</span>
+            : <span className="h-[12px] w-10 rounded bg-white/5 animate-pulse" aria-hidden="true" />}
         </div>
         <div className="flex items-center gap-2 bg-wp-s2 rounded-lg p-[10px]">
-          <ShieldAlert className="w-4 h-4 text-wp-amber flex-shrink-0" />
-          <span className="flex-1 text-[11px] text-wp-text2">Blocked today</span>
-          <span className="font-mono text-[12px] font-bold text-wp-amber">{blockedToday}</span>
+          <Hourglass className="w-4 h-4 text-wp-amber flex-shrink-0" />
+          <span className="flex-1 text-[11px] text-wp-text2">Waiting for a second outlet</span>
+          {counts
+            ? <span className="font-mono text-[12px] font-bold text-wp-amber">{Math.max(0, counts.last24h - counts.verified24h).toLocaleString()}</span>
+            : <span className="h-[12px] w-10 rounded bg-white/5 animate-pulse" aria-hidden="true" />}
         </div>
+        <p className="mt-2 font-mono text-[9px] leading-relaxed text-wp-text3">
+          Last 24 hours. A signal is verified when a second, different outlet reports the same story.
+        </p>
       </Widget>
 
       {/* ─── MARKET TICKER ────────────────────────────────── */}
@@ -274,7 +246,9 @@ export function RightSidebar() {
           aria-relevant="additions"
         >
           {signals.length === 0 ? (
-            <p className="text-[11px] text-wp-text3 italic">Connecting to signal feed…</p>
+            <div className="space-y-[10px] py-1" aria-hidden="true">
+              {[88, 72, 80].map(w => <div key={w} className="h-[9px] rounded bg-white/5 animate-pulse" style={{ width: `${w}%` }} />)}
+            </div>
           ) : signals.map((sig, i) => (
             <div
               key={sig.id ?? i}
@@ -355,39 +329,15 @@ export function RightSidebar() {
       {/* ─── TRENDING ENTITIES ────────────────────────────── */}
       <TrendingEntities />
 
-      {/* ─── WHO TO FOLLOW ────────────────────────────────── */}
-      <Widget title="Signals to Follow">
-        {FOLLOW_SUGGESTIONS.map(user => (
-          <div key={user.label} className="flex items-center gap-[10px] py-2 border-b border-[rgba(255,255,255,0.05)] last:border-0">
-            <div className={`w-[34px] h-[34px] rounded-full bg-gradient-to-br ${user.color} flex items-center justify-center font-bold text-[12px] text-white flex-shrink-0`}>
-              {user.initials}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-[13px] font-semibold text-wp-text flex items-center gap-1">
-                {user.label}
-                {user.verified && <span className="text-wp-cyan text-[11px]">✓</span>}
-              </div>
-              <div className="text-[11px] text-wp-text3 truncate">{user.bio}</div>
-            </div>
-            <button
-              className="px-3 py-1 rounded-full border border-[rgba(255,255,255,0.15)] text-[11px] font-semibold text-wp-text hover:border-wp-amber hover:text-wp-amber hover:bg-[rgba(245,166,35,0.1)] transition-all flex-shrink-0"
-              aria-label={`Follow ${user.label}`}
-            >
-              Follow
-            </button>
-          </div>
-        ))}
-      </Widget>
-
       {/* Footer */}
       <div className="text-center font-mono text-[9px] text-wp-text3 leading-relaxed pb-2">
         WORLDPULSE v0.1.0-alpha<br/>
         Open Source · MIT License<br/>
-        <a href="#" className="text-wp-amber hover:underline">GitHub</a>
+        <a href="https://github.com/World-Pulse/WorldPulse" target="_blank" rel="noopener noreferrer" className="text-wp-amber hover:underline">GitHub</a>
         {' · '}
-        <a href="#" className="text-wp-amber hover:underline">API Docs</a>
+        <Link href="/developers" className="text-wp-amber hover:underline">API Docs</Link>
         {' · '}
-        <a href="#" className="text-wp-amber hover:underline">Contribute</a>
+        <a href="https://github.com/World-Pulse/WorldPulse" target="_blank" rel="noopener noreferrer" className="text-wp-amber hover:underline">Contribute</a>
       </div>
     </aside>
   )

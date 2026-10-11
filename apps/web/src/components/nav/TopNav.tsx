@@ -216,15 +216,19 @@ export function TopNav() {
             {t('live')}
           </div>
 
-          {/* Signal count — md+ only */}
-          <div
-            className="font-mono text-[11px] text-wp-text2 hidden md:block"
-            aria-live="polite"
-            aria-label={`${t('tracking')} ${signalCount.toLocaleString()} ${t('signals')}`}
-            aria-atomic="true"
-          >
-            {t('tracking')} <span className="text-wp-amber font-bold" aria-hidden="true">{signalCount.toLocaleString()}</span> {t('signals')}
-          </div>
+          {/* Signal count — md+ only; a placeholder until the count arrives (it read "Tracking 0 signals") */}
+          {signalCount > 0 ? (
+            <div
+              className="font-mono text-[11px] text-wp-text2 hidden md:block"
+              aria-live="polite"
+              aria-label={`${t('tracking')} ${signalCount.toLocaleString()} ${t('signals')}`}
+              aria-atomic="true"
+            >
+              {t('tracking')} <span className="text-wp-amber font-bold" aria-hidden="true">{signalCount.toLocaleString()}</span> {t('signals')}
+            </div>
+          ) : (
+            <div className="hidden md:block h-[10px] w-[150px] rounded bg-white/5 animate-pulse" aria-hidden="true" />
+          )}
 
           {/* Search — md+ only */}
           <Link

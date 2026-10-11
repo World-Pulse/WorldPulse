@@ -53,7 +53,7 @@ export default function CategoryPage({ params }: { params: Promise<{ slug: strin
   const apiCategory = SLUG_TO_CATEGORY[slug] ?? slug
 
   return (
-    <div className="grid grid-cols-[240px_1fr_300px] min-h-[calc(100vh-52px)]">
+    <div className="grid grid-cols-[240px_minmax(0,1fr)_300px] min-h-[calc(100vh-52px)]">
       <LeftSidebar />
 
       <div className="border-x border-[rgba(255,255,255,0.07)] bg-wp-bg">
