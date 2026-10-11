@@ -8,11 +8,17 @@
  * 4. LLM fact extraction & contradiction detection
  * 5. Multi-model AI consensus (Claude secondary pass for uncertain signals)
  * 6. Community expert review queue
+ *
+ * Oct 11, 2026 (in-house plan): with a Claude key the AI fact-check runs on
+ * Claude, within the spending cap (lib/claude.ts), and only for stories that
+ * matter: two or more reports to cross-check, or a high or critical one. The
+ * OpenAI check and the Claude second opinion stay for setups with both keys.
  */
 
 import { db } from '../lib/postgres'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
+import { askClaude, claudeConfigured as claudeKeySet } from '../lib/claude'
 import type { SignalStatus } from '@worldpulse/types'
 
 interface ArticleGroup {
@@ -37,7 +43,9 @@ export async function verifySignal(
   signal:   { id: string; severity: string; category: string },
   articles: ArticleGroup[],
 ): Promise<VerificationResult> {
-  const llmConfigured      = !!(process.env.LLM_API_URL || process.env.OPENAI_API_KEY)
+  // With a Claude key the fact-check is Claude's (in-house); OpenAI only without one
+  const claudeFirst        = claudeKeySet()
+  const llmConfigured      = !claudeFirst && !!(process.env.LLM_API_URL || process.env.OPENAI_API_KEY)
   const claudeConfigured   = !!process.env.ANTHROPIC_API_KEY
 
   const checks = await Promise.allSettled([
@@ -46,6 +54,7 @@ export async function verifySignal(
     checkSourceDiversity(articles),
     checkWirePresence(articles),
     ...(llmConfigured ? [checkLLMFactConsistency(signal, articles)] : []),
+    ...(claudeFirst && worthAFactCheck(signal, articles) ? [checkClaudeFactConsistency(signal, articles)] : []),
   ])
 
   const results = checks.map(c => c.status === 'fulfilled' ? c.value : null).filter(Boolean) as CheckResult[]
@@ -77,7 +86,8 @@ export async function verifySignal(
     primaryLLMScore = primaryLLMCheck.score
   }
 
-  if (claudeConfigured && baseScore >= 0.30 && baseScore <= 0.70) {
+  // A second opinion only when another model gave the first (Claude-only setups ask Claude once)
+  if (llmConfigured && claudeConfigured && baseScore >= 0.30 && baseScore <= 0.70) {
     try {
       claudeResult = await checkClaudeConsensus(signal, articles)
 
@@ -360,8 +370,6 @@ async function checkClaudeConsensus(
   signal:   { id: string; severity: string; category: string },
   articles: ArticleGroup[],
 ): Promise<CheckResult> {
-  const anthropicKey = process.env.ANTHROPIC_API_KEY!
-
   const summaries = articles
     .slice(0, 5)
     .map((a, i) => `Source ${i + 1} [trust=${a.sourceTrust.toFixed(2)}]: ${a.title}${a.body ? ' — ' + a.body.slice(0, 200) : ''}`)
@@ -384,31 +392,10 @@ ${summaries}
 
 Are these articles factually consistent? Identify any contradictions or reliability concerns.`
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method:  'POST',
-    headers: {
-      'Content-Type':    'application/json',
-      'x-api-key':       anthropicKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model:      'claude-haiku-4-5-20251001',
-      max_tokens: 256,
-      system:     systemPrompt,
-      messages:   [{ role: 'user', content: userContent }],
-    }),
-    signal: AbortSignal.timeout(15_000),
-  })
-
-  if (!response.ok) {
-    throw new Error(`Claude API error: ${response.status}`)
-  }
-
-  const data = await response.json() as {
-    content: Array<{ type: string; text: string }>
-  }
-  const text = data.content?.find(c => c.type === 'text')?.text
-  if (!text) throw new Error('Claude returned empty response')
+  // Within the spending cap, on Claude's small model (lib/claude.ts)
+  const reply = await askClaude({ purpose: 'factcheck', system: systemPrompt, prompt: userContent, maxTokens: 256, timeoutMs: 15_000 })
+  const text = reply?.text ? jsonIn(reply.text) : null
+  if (!text) throw new Error('Claude gave no answer (no key, the cap, or an error)')
 
   const parsed = JSON.parse(text) as {
     consistent:      boolean
@@ -431,6 +418,61 @@ Are these articles factually consistent? Identify any contradictions or reliabil
     score,
     weight:  0,   // weight handled by the consensus blending in verifySignal
     reasons,
+  }
+}
+
+/** Stories worth an AI fact-check: two or more reports to cross-check, or a high or critical one */
+export function worthAFactCheck(signal: { severity: string }, articles: ArticleGroup[]): boolean {
+  return articles.length >= 2 || signal.severity === 'high' || signal.severity === 'critical'
+}
+
+/** The first JSON object in a reply (Claude may wrap it in a code fence) */
+export function jsonIn(text: string): string | null {
+  const start = text.indexOf('{')
+  const end = text.lastIndexOf('}')
+  return start >= 0 && end > start ? text.slice(start, end + 1) : null
+}
+
+export const FACT_CHECK_SYSTEM = `You are the fact-checker of WorldPulse, a global news service. You get one or more reports of the same story.
+With several reports, check whether they agree on the facts: what happened, where, when, who, and how many.
+With one report, check whether its claims are stated as confirmed facts or are unverified: claims by one side, rumours, an unnamed source.
+Answer with only this JSON:
+{"consistent": true or false, "confidence": how sure you are of that verdict, 0.0 to 1.0, "problems": ["each contradiction or unverified claim, briefly"], "summary": "one sentence"}`
+
+/**
+ * The fact-check on Claude (in-house plan, Oct 11, 2026): Claude's small
+ * model cross-checks the reports (or judges a single report's claims) within
+ * the spending cap. Weighted like the old OpenAI check; without an answer it
+ * counts for nothing and the other checks decide.
+ */
+async function checkClaudeFactConsistency(
+  signal:   { id: string; severity: string; category: string },
+  articles: ArticleGroup[],
+): Promise<CheckResult> {
+  const reports = articles
+    .slice(0, 5)
+    .map((a, i) => `Report ${i + 1} [source trust ${a.sourceTrust.toFixed(2)}]: ${a.title}${a.body ? ' — ' + a.body.replace(/\s+/g, ' ').slice(0, 300) : ''}`)
+    .join('\n')
+  const reply = await askClaude({
+    purpose:   'factcheck',
+    system:    FACT_CHECK_SYSTEM,
+    prompt:    `Category: ${signal.category}, severity: ${signal.severity}\n\n${reports}`,
+    maxTokens: 300,
+    timeoutMs: 20_000,
+  })
+  try {
+    const text = reply?.text ? jsonIn(reply.text) : null
+    if (!text) throw new Error('no answer')
+    const parsed = JSON.parse(text) as { consistent?: boolean; confidence?: number; problems?: string[]; summary?: string }
+    const confidence = Number(parsed.confidence)
+    const sure = Number.isFinite(confidence) ? confidence : 0.5
+    const score = parsed.consistent === true ? Math.max(0.5, Math.min(1, sure)) : Math.max(0, Math.min(0.4, 1 - sure))
+    const reasons = [`[Claude] ${String(parsed.summary ?? '').slice(0, 300)}`]
+    for (const problem of (parsed.problems ?? []).slice(0, 3)) reasons.push(`[Claude] ${String(problem).slice(0, 200)}`)
+    return { type: 'llm_fact_check', score, weight: 0.30, reasons }
+  } catch {
+    if (reply) logger.warn({ signalId: signal.id }, 'Claude fact-check answer unreadable, skipping')
+    return { type: 'llm_fact_check', score: 0.5, weight: 0, reasons: ['AI fact-check unavailable'] }
   }
 }
 

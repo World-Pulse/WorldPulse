@@ -226,6 +226,11 @@ async function bootstrap() {
     .then(t => { if (t.renamed + t.repinned + t.cleared > 0 || t.stopped) logger.info(t, 'Repair: map pins from capitalised words re-checked') })
     .catch(err => logger.warn({ err }, 'Pin re-check repair failed (non-fatal)'))
 
+  // The editor: every 15 minutes Claude re-files the newest stories' categories
+  // (pipeline/editor.ts). Started before the first scrape, which can take many
+  // minutes after a restart
+  startEditor()
+
   // Start main scrape loop (works with or without Kafka)
   await scrapeAll()
   setInterval(scrapeAll, SCRAPE_INTERVAL_MS)
@@ -367,8 +372,6 @@ async function bootstrap() {
   // Kafka consumer group lag monitor — checks every 5 minutes, logs summary + warns on critical lag
   startKafkaLagMonitor()
 
-  // The editor: every 15 minutes Claude re-files the newest stories' categories (pipeline/editor.ts)
-  startEditor()
 
   // Record process-level exceptions for the stability tracker's unhandled-exception check.
   // These listeners run alongside any existing crash handlers and are non-fatal.
