@@ -154,3 +154,19 @@ describe('recheckGeocodedPlaces', () => {
     expect(totals).toEqual({ renamed: 3, repinned: 3, cleared: 3 })  // the mock reports 3 rows per UPDATE
   })
 })
+
+describe('recheckGeocodedPlaces when the geocoder is down', () => {
+  beforeEach(() => { h.raws.length = 0; h.rows = [] })
+
+  it('stops and changes nothing (a failed lookup is not "no such place")', async () => {
+    vi.mocked(db.raw).mockImplementationOnce(async (sql: string, params?: unknown[]) => {
+      h.raws.push({ sql, params: params as unknown[] })
+      return { rows: [{ name: 'doncaster' }, { name: 'trump' }] } as never
+    })
+    const lookup = vi.fn(async () => null)
+    const totals = await recheckGeocodedPlaces(lookup, () => ({ point: false }), 0)
+    expect(totals).toEqual({ renamed: 0, repinned: 0, cleared: 0, stopped: true })
+    expect(lookup).toHaveBeenCalledTimes(1)
+    expect(h.raws.filter(r => /UPDATE/.test(r.sql))).toEqual([])
+  })
+})

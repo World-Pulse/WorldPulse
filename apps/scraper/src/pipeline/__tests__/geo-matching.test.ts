@@ -8,7 +8,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 vi.mock('../../lib/redis', () => ({ redis: { get: vi.fn(async () => null), setex: vi.fn(async () => 'OK') } }))
 vi.mock('../../lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }))
 
-import { extractGeo, findGazetteerPlace, mentionedCountries, acceptGeocoderHit, placeFromText, type NominatimResult } from '../geo'
+import { extractGeo, findGazetteerPlace, mentionedCountries, acceptGeocoderHit, placeFromText, geocodePlace, throttleNominatim, type NominatimResult } from '../geo'
+import { redis } from '../../lib/redis'
 
 describe('findGazetteerPlace', () => {
   it('matches whole words only', () => {
@@ -149,4 +150,31 @@ describe('placeFromText', () => {
     expect(placeFromText('Fighting near El-Fasher continues')?.name).toBe('El Fasher')
     expect(placeFromText('Protest in Port-au-Prince turns violent')?.name).toBe('Port-au-Prince')
   })
+})
+
+describe('geocoder politeness', () => {
+  afterEach(() => { vi.unstubAllGlobals(); vi.mocked(redis.get).mockImplementation(async () => null) })
+
+  it('gives callers arriving together one slot each', async () => {
+    const starts: number[] = []
+    await Promise.all([1, 2, 3].map(async () => { await throttleNominatim(40); starts.push(Date.now()) }))
+    starts.sort((a, b) => a - b)
+    expect(starts[1] - starts[0]).toBeGreaterThanOrEqual(35)
+    expect(starts[2] - starts[1]).toBeGreaterThanOrEqual(35)
+  })
+
+  it('answers null (not "nothing found") when the geocoder refuses, and then pauses', async () => {
+    const fetchMock = vi.fn(async () => ({ ok: false, status: 429, json: async () => [] }))
+    vi.stubGlobal('fetch', fetchMock)
+    vi.mocked(redis.setex).mockClear()
+    expect(await geocodePlace('doncaster')).toBeNull()
+    expect(vi.mocked(redis.setex)).toHaveBeenCalledWith('nominatim:cooldown', 900, '429')
+    expect(vi.mocked(redis.setex).mock.calls.some(c => String(c[0]).startsWith('geocode'))).toBe(false)   // not cached
+
+    // While the pause is on, it doesn't ask at all
+    vi.mocked(redis.get).mockImplementation(async (key: string) => key === 'nominatim:cooldown' ? '429' : null)
+    fetchMock.mockClear()
+    expect(await geocodePlace('erie')).toBeNull()
+    expect(fetchMock).not.toHaveBeenCalled()
+  }, 10_000)
 })

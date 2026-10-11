@@ -165,7 +165,7 @@ async function bootstrap() {
     .catch(err => logger.warn({ err }, 'Stale feed item repair failed (non-fatal)'))
   // Runs in the background for several minutes (one geocoder lookup per old pin name)
   recheckGeocodedPlaces(geocodePlace, placeFromText)
-    .then(t => { if (t.renamed + t.repinned + t.cleared > 0) logger.info(t, 'Repair: map pins from capitalised words re-checked') })
+    .then(t => { if (t.renamed + t.repinned + t.cleared > 0 || t.stopped) logger.info(t, 'Repair: map pins from capitalised words re-checked') })
     .catch(err => logger.warn({ err }, 'Pin re-check repair failed (non-fatal)'))
 
   // Start main scrape loop (works with or without Kafka)

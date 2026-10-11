@@ -134,13 +134,14 @@ const rowCount = (result: unknown) => Number((result as { rowCount?: number })?.
  * geocoder (`fromText`: a known place, else the capital of a country it
  * names), or no pin. Afterwards no lowercase names are left, so a later
  * start changes nothing. Each lookup is followed by a pause, so the live
- * pipeline keeps its share of the geocoder (1 request a second at most).
+ * pipeline keeps its share of the geocoder (1 request a second at most), and
+ * the repair stops at the first lookup the geocoder doesn't answer.
  */
 export async function recheckGeocodedPlaces(
-  lookup: (name: string) => Promise<Place[]>,
+  lookup: (name: string) => Promise<Place[] | null>,
   fromText: (text: string) => Place,
-  pauseMs = 2_000,
-): Promise<{ renamed: number; repinned: number; cleared: number }> {
+  pauseMs = 3_000,
+): Promise<{ renamed: number; repinned: number; cleared: number; stopped?: boolean }> {
   const found = await db.raw(
     `SELECT location_name AS name
        FROM signals
@@ -169,7 +170,13 @@ export async function recheckGeocodedPlaces(
   const recent = `location_name = ? AND created_at > NOW() - INTERVAL '7 days'`
 
   for (const name of names) {
-    const [place] = await lookup(name)
+    const places = await lookup(name)
+    // The geocoder couldn't be asked (refusing, failing, cooling down): that
+    // says nothing about the name, so leave the rest for a later start. (On
+    // Oct 11, 2026 failed lookups were read as "no such place" and some right
+    // pins, like Doncaster's, were removed.)
+    if (places === null) return { ...totals, stopped: true }
+    const [place] = places
     if (place?.point) {
       totals.renamed += await setPlace(recent, [name], place)
     } else {

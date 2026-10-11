@@ -21,16 +21,33 @@ export interface GeoResult {
   region?:      string
 }
 
-// ─── RATE LIMITER (1 req/s for Nominatim) ───────────────────────────────────
-let lastNominatimCall = 0
+// ─── RATE LIMITER (Nominatim allows 1 request a second) ─────────────────────
+// Each caller books the next free slot before it waits, so callers arriving
+// together go one per slot. The old check only noted the time after waiting:
+// callers arriving together (news feeds, GDELT, the scrape loop, the startup
+// pin repair) all waited the same remainder and then fired at once, and on
+// Oct 11, 2026 Nominatim began refusing requests.
+export const NOMINATIM_GAP_MS = 1_100
+let nextNominatimSlot = 0
 
-async function throttleNominatim(): Promise<void> {
-  const now    = Date.now()
-  const waited = now - lastNominatimCall
-  if (waited < 1000) {
-    await new Promise(r => setTimeout(r, 1000 - waited))
-  }
-  lastNominatimCall = Date.now()
+export async function throttleNominatim(gapMs = NOMINATIM_GAP_MS): Promise<void> {
+  const now = Date.now()
+  const start = Math.max(now, nextNominatimSlot)
+  nextNominatimSlot = start + gapMs
+  if (start > now) await new Promise(r => setTimeout(r, start - now))
+}
+
+/** After a refusal (429, 403) or server error, no requests for this long */
+const NOMINATIM_COOLDOWN_S = 15 * 60
+const COOLDOWN_KEY = 'nominatim:cooldown'
+
+async function nominatimCoolingDown(): Promise<boolean> {
+  try { return (await redis.get(COOLDOWN_KEY)) !== null } catch { return false }
+}
+
+async function startNominatimCooldown(status: number): Promise<void> {
+  logger.warn({ status, minutes: NOMINATIM_COOLDOWN_S / 60 }, 'Nominatim refused requests; pausing geocoder lookups')
+  try { await redis.setex(COOLDOWN_KEY, NOMINATIM_COOLDOWN_S, String(status)) } catch { /* best effort */ }
 }
 
 // ─── GAZETTEER (fast-path; ~140 locations) ───────────────────────────────────
@@ -416,14 +433,18 @@ export function acceptGeocoderHit(candidate: string, hit: NominatimResult): bool
 
 /**
  * Places the geocoder knows by this name that pass acceptGeocoderHit, best
- * first (at most 3; often none). Cached for a day.
+ * first (at most 3; often none). Cached for a day. null when the geocoder
+ * couldn't be asked (it refused, failed, or is in its cooldown): that is not
+ * an answer, so nothing is cached and callers must not act on it.
  */
-export async function geocodePlace(location: string): Promise<GeoResult[]> {
-  const cacheKey = `geocode:${location.toLowerCase().replace(/\s+/g, '_')}`
+export async function geocodePlace(location: string): Promise<GeoResult[] | null> {
+  // geocode2: failed lookups were cached as "nothing found" under geocode: (Oct 11, 2026)
+  const cacheKey = `geocode2:${location.toLowerCase().replace(/\s+/g, '_')}`
   const cached   = await redis.get(cacheKey)
   if (cached) {
     try { return JSON.parse(cached) as GeoResult[] } catch { /* look it up again */ }
   }
+  if (await nominatimCoolingDown()) return null
 
   await throttleNominatim()
 
@@ -437,8 +458,8 @@ export async function geocodePlace(location: string): Promise<GeoResult[]> {
 
     if (!res.ok) {
       logger.warn({ status: res.status, location }, 'Nominatim request failed')
-      await redis.setex(cacheKey, 3600, '[]')
-      return []
+      if (res.status === 429 || res.status === 403 || res.status >= 500) await startNominatimCooldown(res.status)
+      return null
     }
 
     const data = await res.json() as NominatimResult[]
@@ -461,8 +482,7 @@ export async function geocodePlace(location: string): Promise<GeoResult[]> {
     return places
   } catch (err) {
     logger.warn({ err, location }, 'Nominatim lookup error')
-    await redis.setex(cacheKey, 3600, '[]')
-    return []
+    return null
   }
 }
 
@@ -559,6 +579,7 @@ export async function extractGeo(text: string): Promise<GeoResult> {
     if (COMMON_WORDS.has(candidate)) continue
     if (lookups++ >= MAX_NOMINATIM_LOOKUPS) break
     const places = await geocodePlace(candidate)
+    if (places === null) break   // the geocoder can't be asked right now
     const geo = countries.length > 0
       ? places.find(p => !p.countryCode || countries.includes(p.countryCode))
       : places[0]
@@ -612,7 +633,8 @@ export async function reverseGeocode(lat: number, lng: number): Promise<ReverseG
     }
   }
 
-  // 2. Nominatim reverse geocode
+  // 2. Nominatim reverse geocode (not while it's refusing requests)
+  if (await nominatimCoolingDown()) return { name: `${roundLat}°N, ${roundLng}°E`, countryCode: null, region: null }
   await throttleNominatim()
 
   try {
@@ -624,6 +646,7 @@ export async function reverseGeocode(lat: number, lng: number): Promise<ReverseG
 
     if (!res.ok) {
       logger.warn({ status: res.status, lat, lng }, 'Nominatim reverse request failed')
+      if (res.status === 429 || res.status === 403 || res.status >= 500) await startNominatimCooldown(res.status)
       await redis.setex(cacheKey, 3600, 'null')
       return { name: `${roundLat}°N, ${roundLng}°E`, countryCode: null, region: null }
     }
