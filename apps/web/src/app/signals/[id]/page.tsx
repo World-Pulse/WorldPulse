@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import type { Signal, Post } from '@worldpulse/types'
 import { SignalDetailClient } from './SignalDetailClient'
 import { displaySummary } from '@/lib/signal-text'
+import { SITE_IMAGE, SITE_NAME, newsArticleJsonLd, jsonLdText, metaDescription } from '@/lib/page-metadata'
 
 const API_BASE = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -68,15 +69,24 @@ export async function generateMetadata(
   const { id } = await params
   const signal = await fetchSignal(id)
   if (!signal) return { title: 'Signal Not Found — WorldPulse' }
-  // (a summary that only repeats the headline, or the old outlet note, isn't a description)
-  const description = displaySummary(signal.summary, signal.title) || signal.title
+  // (a summary that only repeats the headline, or the old outlet note, isn't a
+  // description; search results and share cards show about 160 characters)
+  const description = metaDescription(displaySummary(signal.summary, signal.title) || signal.title)
+  const path = `/signals/${signal.id}`
+  // The page's own address, the site name and a picture: this openGraph
+  // replaces the root layout's whole one, which left story links with no
+  // picture in share previews (plan G2)
   return {
     title:       `${signal.title} — WorldPulse`,
     description,
+    alternates:  { canonical: path },
     openGraph: {
       title:         signal.title,
       description,
       type:          'article',
+      url:           path,
+      siteName:      SITE_NAME,
+      images:        [SITE_IMAGE],
       publishedTime: signal.firstReported ?? undefined,
       modifiedTime:  signal.lastUpdated   ?? undefined,
       tags:          signal.tags,
@@ -85,6 +95,7 @@ export async function generateMetadata(
       card:        'summary_large_image',
       title:       signal.title,
       description,
+      images:      [SITE_IMAGE.url],
     },
   }
 }
@@ -101,12 +112,25 @@ export default async function SignalDetailPage(
     fetchSignalPosts(signal.id),
   ])
 
+  // What search engines read about the story (schema.org NewsArticle, plan G2)
+  const jsonLd = newsArticleJsonLd({
+    id:          signal.id,
+    title:       signal.title,
+    description: metaDescription(displaySummary(signal.summary, signal.title) || signal.title, 300),
+    published:   signal.firstReported ?? signal.createdAt,
+    modified:    signal.lastUpdated,
+    place:       signal.locationName,
+  })
+
   return (
-    <SignalDetailClient
-      signal={signal}
-      related={related}
-      initialPosts={postsData.items}
-      postsTotal={postsData.total}
-    />
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdText(jsonLd) }} />
+      <SignalDetailClient
+        signal={signal}
+        related={related}
+        initialPosts={postsData.items}
+        postsTotal={postsData.total}
+      />
+    </>
   )
 }

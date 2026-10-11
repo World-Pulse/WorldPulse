@@ -29,6 +29,11 @@ const HOST_PATTERN = '^https?://([^/:?#]+)'
 const WWW_PATTERN = '^www\\.'
 /** Seconds a story list is reused */
 const LIST_CACHE_TTL = 120
+/** The sitemap's stories: verified in the last this many days, at most SITEMAP_MAX (a sitemap file holds 50,000) */
+const SITEMAP_DAYS = 7
+const SITEMAP_MAX = 5_000
+const SITEMAP_CACHE_KEY = 'stories:sitemap:v1'
+const SITEMAP_CACHE_TTL = 1_800
 
 const SEVERITIES = ['info', 'low', 'medium', 'high', 'critical']
 
@@ -165,6 +170,39 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
       data: { stories: rankStories(candidates, limit), hours, generatedAt: new Date().toISOString() },
     }
     redis.setex(cacheKey, LIST_CACHE_TTL, JSON.stringify(response)).catch(() => {})
+    return reply.send(response)
+  })
+
+  /**
+   * GET /api/v1/stories/sitemap
+   * The pages search engines should know about (world-pulse.io/sitemap.xml,
+   * plan G2): one address per verified story of the last SITEMAP_DAYS days,
+   * newest first. A story's address is its most reliable verified report with
+   * a real headline (not GDELT's "<event> in <place>"). Reused for 30 minutes.
+   */
+  app.get('/sitemap', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (_req, reply) => {
+    const cached = await redis.get(SITEMAP_CACHE_KEY).catch(() => null)
+    if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
+
+    const storyKey = await signalsHaveStoryIds() ? 'COALESCE(s.story_id, s.id)' : 's.id'
+    const since = new Date(Date.now() - SITEMAP_DAYS * 86_400_000)
+    const result = await db.raw(
+      `SELECT id, updated FROM (
+         SELECT DISTINCT ON (${storyKey}) s.id::text AS id,
+                GREATEST(s.created_at, COALESCE(s.last_updated, s.created_at)) AS updated
+           FROM signals s
+          WHERE s.status = 'verified' AND s.created_at >= ?
+          ORDER BY ${storyKey}, (s.title ~ ?) ASC, s.reliability_score DESC NULLS LAST, s.created_at ASC
+       ) t ORDER BY updated DESC LIMIT ?`,
+      [since, EVENT_TEMPLATE_SQL, SITEMAP_MAX],
+    )
+    const rows = (result as { rows?: Array<{ id: unknown; updated: unknown }> } | undefined)?.rows ?? []
+    const stories = rows.flatMap(r => {
+      const at = new Date(r.updated as string)
+      return UUID_RE.test(String(r.id)) && !Number.isNaN(at.getTime()) ? [{ id: String(r.id), updatedAt: at.toISOString() }] : []
+    })
+    const response = { success: true, data: { stories, days: SITEMAP_DAYS, generatedAt: new Date().toISOString() } }
+    redis.setex(SITEMAP_CACHE_KEY, SITEMAP_CACHE_TTL, JSON.stringify(response)).catch(() => {})
     return reply.send(response)
   })
 

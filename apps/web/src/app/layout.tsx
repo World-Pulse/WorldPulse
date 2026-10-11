@@ -54,11 +54,12 @@ export const metadata: Metadata = {
     statusBarStyle: 'black-translucent',
     title: 'WorldPulse',
   },
+  // No og:url here: every page inherits this, and it made each one claim to be
+  // the home page in share previews (pages set their own, lib/page-metadata.ts)
   openGraph: {
     title: 'WorldPulse — Global Intelligence Network',
     description: 'Real-time verified signals from every corner of the world. Live map, breaking news, open source.',
     type: 'website',
-    url: 'https://world-pulse.io',
     siteName: 'WorldPulse',
     images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'WorldPulse' }],
   },
