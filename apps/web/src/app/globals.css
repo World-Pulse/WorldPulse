@@ -198,7 +198,42 @@ html.light .shimmer {
 
 /* MapLibre reset */
 .maplibregl-map { font-family: inherit !important; }
-.maplibregl-ctrl-attrib { display: none !important; }
+
+/* Map controls: dark glass to match the map (zoom, compass, our own buttons) */
+.maplibregl-ctrl-group {
+  background: rgba(8, 12, 20, 0.82) !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45) !important;
+  backdrop-filter: blur(10px);
+  border-radius: 10px !important;
+  overflow: hidden;
+}
+.maplibregl-ctrl-group button { width: 32px !important; height: 32px !important; }
+.maplibregl-ctrl-group button + button { border-top: 1px solid rgba(255, 255, 255, 0.07) !important; }
+.maplibregl-ctrl-group button:hover { background-color: rgba(255, 255, 255, 0.06) !important; }
+.maplibregl-ctrl-group .maplibregl-ctrl-icon { filter: invert(0.82) brightness(1.1); }
+.wp-map-ctrl {
+  display: flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 10px;
+  background: rgba(8, 12, 20, 0.82); color: #aab6c8;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(10px);
+  transition: color .15s, border-color .15s, background-color .15s;
+}
+.wp-map-ctrl:hover { color: #ffffff; border-color: rgba(0, 212, 255, 0.45); }
+.wp-map-ctrl-on { color: #4dd8ff; border-color: rgba(0, 212, 255, 0.45); }
+
+/* Map credits (required by OpenStreetMap, OpenFreeMap and NASA): small and dark */
+.maplibregl-ctrl-attrib {
+  background: rgba(8, 12, 20, 0.7) !important;
+  color: #7c8ba3 !important;
+  font-size: 10px !important;
+  border-radius: 8px !important;
+}
+.maplibregl-ctrl-attrib a { color: #93a4bb !important; }
+.maplibregl-ctrl-attrib.maplibregl-compact { min-height: 22px; }
+.maplibregl-ctrl-attrib-button { filter: invert(0.85); background-color: transparent !important; }
 /* Ensure MapLibre popup is readable on mobile */
 @media (max-width: 640px) {
   .wp-map-popup .maplibregl-popup-content {

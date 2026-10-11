@@ -24,10 +24,16 @@ function buildCspDirectives(): string {
       'wss://api.world-pulse.io',
       ...(isDev ? ['http://localhost:3001', 'ws://localhost:3001'] : []),
       'https://tile.openstreetmap.org',
+      // The World Map's vector basemap, its fonts and icons (OpenFreeMap)
+      'https://tiles.openfreemap.org',
       'https://server.arcgisonline.com',
       'https://*.maptiler.com',
       'https://fonts.openmaptiles.org',
       'https://gibs.earthdata.nasa.gov',
+      // Map layers that download from elsewhere: satellite positions (SATS)
+      // and country borders for the country risk map (RISK MAP)
+      'https://celestrak.org',
+      'https://d2ad6b4ur7yvpq.cloudfront.net',
       'https://www.googletagmanager.com',
       'https://www.google-analytics.com',
       'https://*.google-analytics.com',

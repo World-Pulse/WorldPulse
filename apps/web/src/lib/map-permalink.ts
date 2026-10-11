@@ -10,10 +10,11 @@
  *   l=...          — Comma-separated active layers (optional)
  *   t=range:ts     — Timeline range + scrubber Unix-s timestamp (optional)
  *   s=id           — Highlighted signal ID (optional)
- *   b=basemap      — Basemap mode: dark | satellite | terrain (optional)
+ *   b=basemap      — Basemap mode: dark (default) | night | satellite; old links' terrain reads as dark
  */
 
-export type BasemapMode = 'satellite' | 'dark' | 'terrain'
+import { toBasemapMode, type BasemapMode } from './map-style'
+export type { BasemapMode }
 
 export type LayerKey =
   | 'wind'
@@ -77,7 +78,7 @@ export function encodePermalink(state: MapPermalinkState): string {
   }
 
   // Basemap (only if non-default)
-  if (state.basemap && state.basemap !== 'satellite') {
+  if (state.basemap && state.basemap !== 'dark') {
     parts.push(`b=${state.basemap}`)
   }
 
@@ -104,7 +105,7 @@ export function decodePermalink(raw: string): MapPermalinkState | null {
   const segments = hash.split('|')
   const result: Partial<MapPermalinkState> = {
     layers: [],
-    basemap: 'satellite',
+    basemap: 'dark',
   }
 
   for (const seg of segments) {
@@ -153,12 +154,10 @@ export function decodePermalink(raw: string): MapPermalinkState | null {
       continue
     }
 
-    // Basemap: b=dark|satellite|terrain
+    // Basemap: b=dark|night|satellite (old links: terrain → dark)
     if (seg.startsWith('b=')) {
-      const bm = seg.slice(2) as BasemapMode
-      if (['satellite', 'dark', 'terrain'].includes(bm)) {
-        result.basemap = bm
-      }
+      const bm = toBasemapMode(seg.slice(2))
+      if (bm) result.basemap = bm
       continue
     }
   }

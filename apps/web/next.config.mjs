@@ -56,6 +56,8 @@ const nextConfig = {
                   ? ['http://localhost:3001', 'ws://localhost:3001']
                   : []),
                 'https://tile.openstreetmap.org',
+                // World Map vector basemap, fonts and icons (OpenFreeMap)
+                'https://tiles.openfreemap.org',
                 'https://server.arcgisonline.com',
                 'https://*.maptiler.com',
                 'https://celestrak.org',

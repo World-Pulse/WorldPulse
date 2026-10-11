@@ -15,6 +15,13 @@ import { EnhancedHeatmap } from '@/components/map/EnhancedHeatmap'
 import { useTimelinePlayback } from '@/hooks/useTimelinePlayback'
 import { parseWindowHash, encodePermalink, type MapPermalinkState, type LayerKey } from '@/lib/map-permalink'
 import { SignalCounter } from '@/components/SignalCounter'
+import { Map as MapIcon, Moon, Satellite, Globe2, LocateFixed } from 'lucide-react'
+import {
+  SEVERITY_COLOR, SEVERITY_BG, SEVERITY_RANK, CLUSTER_COLOR_EXPR, SIGNAL_RADIUS_EXPR, FONT_BOLD,
+  BASEMAP_MODES, BASEMAP_LABEL, ATMOSPHERE,
+  loadBaseStyle, baseLayerIds, addImageryLayers, applyBasemap, toBasemapMode,
+  type BasemapMode,
+} from '@/lib/map-style'
 
 import {
   timeAgo, getSourceUrl, getSourceDomain, reliabilityDots,
@@ -60,9 +67,14 @@ interface SignalProps {
   color: string
 }
 
-type SCIndex = Supercluster<SignalProps>
+/** What each cluster carries: its most severe signal's rank and how many are verified */
+interface ClusterProps {
+  sev: number
+  verified: number
+}
 
-type BasemapMode = 'satellite' | 'dark' | 'terrain'
+type SCIndex = Supercluster<SignalProps, ClusterProps>
+
 type ProjectionMode = 'globe' | 'mercator'
 
 interface AdsbSignal {
@@ -108,20 +120,9 @@ interface AnnotationCard {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const SEV_COLOR: Record<string, string> = {
-  critical: '#ff3b5c',
-  high:     '#f5a623',
-  medium:   '#fbbf24',
-  low:      '#8892a4',
-  info:     '#5a6477',
-}
-const SEV_BG: Record<string, string> = {
-  critical: 'rgba(255,59,92,0.15)',
-  high:     'rgba(245,166,35,0.15)',
-  medium:   'rgba(251,191,36,0.15)',
-  low:      'rgba(136,146,164,0.15)',
-  info:     'rgba(90,100,119,0.15)',
-}
+// One palette for the map, its legend, pop-ups and panels (lib/map-style.ts)
+const SEV_COLOR = SEVERITY_COLOR
+const SEV_BG    = SEVERITY_BG
 const CAT_ICON: Record<string, string> = {
   breaking: '🚨', conflict: '⚔️', geopolitics: '🌐', climate: '🌡️', health: '🏥',
   economy: '📈', technology: '💻', science: '🔬', elections: '🗳️', culture: '🎭',
@@ -156,9 +157,23 @@ function toFeatures(signals: MapSignal[]): Supercluster.PointFeature<SignalProps
         reliability_score: s.reliability_score ?? 0,
         created_at:        s.created_at ?? '',
         original_urls:     JSON.stringify(Array.isArray(s.original_urls) ? s.original_urls : []),
-        color:             SEV_COLOR[s.severity] ?? '#8892a4',
+        color:             SEV_COLOR[s.severity] ?? SEV_COLOR.low,
       },
     }))
+}
+
+/**
+ * The zoom that shows the whole world: on the globe, a sphere filling ~85% of
+ * the shorter side; on the flat map, the world's width. (A world at zoom z is
+ * 512·2^z pixels around; the globe's diameter is that divided by π.)
+ */
+function worldZoom(width: number, height: number, projection: 'globe' | 'mercator' = 'globe'): number {
+  const w = Math.max(width, 200)
+  const h = Math.max(height, 200)
+  const z = projection === 'globe'
+    ? Math.log2((Math.min(w, h) * 0.85 * Math.PI) / 512)
+    : Math.log2(w / 512)
+  return Math.max(0.6, Math.min(3, z))
 }
 
 // ── MapView (inner — uses useSearchParams) ────────────────────────────────────
@@ -294,13 +309,17 @@ function MapView() {
 
   // ── Basemap switcher state ────────────────────────────────────────────────────
   const [basemap, setBasemap] = useState<BasemapMode>(
-    () => (permalinkRef.current?.basemap as BasemapMode) ?? 'satellite'
+    () => toBasemapMode(permalinkRef.current?.basemap) ?? 'dark'
   )
-  const basemapRef = useRef<BasemapMode>('satellite')
+  const basemapRef = useRef<BasemapMode>(basemap)
   useEffect(() => { basemapRef.current = basemap }, [basemap])
+  /** The basemap's own layer ids, known once the map has loaded */
+  const baseIdsRef = useRef<string[] | null>(null)
 
   // ── Globe/Mercator projection state ──────────────────────────────────────────
   const [projection, setProjection] = useState<ProjectionMode>('globe')
+  const projectionRef = useRef<ProjectionMode>(projection)
+  useEffect(() => { projectionRef.current = projection }, [projection])
 
   // ── Projection switcher effect (MapLibre v5+ globe support) ──────────────────
   useEffect(() => {
@@ -309,60 +328,25 @@ function MapView() {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(map as any).setProjection({ type: projection })
+      // The atmosphere only shows around the globe
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (projection === 'globe') (map as any).setSky?.(ATMOSPHERE)
     } catch (e) {
       console.warn('[map] setProjection failed (requires MapLibre v5+):', e)
     }
   }, [projection])
 
   // ── Basemap switcher effect ───────────────────────────────────────────────────
+  // Dark vector map, night lights or satellite: only layer visibility changes,
+  // so signal and overlay layers stay put (lib/map-style.ts)
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.loaded()) return
-
+    if (!map || !baseIdsRef.current) return
     try {
-      if (map.getLayer('basemap')) map.removeLayer('basemap')
-      if (map.getSource('basemap')) map.removeSource('basemap')
-
-      const beforeLayer = map.getLayer('cluster-halo') ? 'cluster-halo' : undefined
-
-      if (basemap === 'satellite') {
-        const tiles = MAPTILER_KEY && MAPTILER_KEY !== 'demo'
-          ? [`https://api.maptiler.com/tiles/satellite/{z}/{x}/{y}.jpg?key=${MAPTILER_KEY}`]
-          : ['https://tile.openstreetmap.org/{z}/{x}/{y}.png']
-        map.addSource('basemap', {
-          type: 'raster', tiles, tileSize: 256,
-          attribution: MAPTILER_KEY ? '© MapTiler' : '© OpenStreetMap',
-        })
-        map.addLayer({ id: 'basemap', type: 'raster' as const, source: 'basemap',
-          paint: { 'raster-opacity': 0.92, 'raster-saturation': 0, 'raster-brightness-min': 0, 'raster-brightness-max': 1 },
-        }, beforeLayer)
-      } else if (basemap === 'terrain') {
-        const tiles = MAPTILER_KEY && MAPTILER_KEY !== 'demo'
-          ? [`https://api.maptiler.com/maps/outdoor/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`]
-          : ['https://tile.openstreetmap.org/{z}/{x}/{y}.png']
-        map.addSource('basemap', {
-          type: 'raster', tiles, tileSize: 256,
-          attribution: MAPTILER_KEY ? '© MapTiler' : '© OpenStreetMap',
-        })
-        map.addLayer({ id: 'basemap', type: 'raster' as const, source: 'basemap',
-          paint: { 'raster-opacity': 0.80, 'raster-saturation': -0.3, 'raster-brightness-min': 0.02, 'raster-brightness-max': 0.7 },
-        }, beforeLayer)
-      } else {
-        // Dark mode — muted OSM
-        map.addSource('basemap', {
-          type: 'raster',
-          tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-          tileSize: 256,
-          attribution: '© OpenStreetMap',
-        })
-        map.addLayer({ id: 'basemap', type: 'raster' as const, source: 'basemap',
-          paint: { 'raster-opacity': 0.35, 'raster-saturation': -0.9, 'raster-brightness-min': 0.05, 'raster-brightness-max': 0.45 },
-        }, beforeLayer)
-      }
+      applyBasemap(map, basemap, baseIdsRef.current)
     } catch (e: unknown) {
       console.warn('[map] basemap switch error:', e)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [basemap])
 
   // ── ADS-B Aircraft layer state ────────────────────────────────────────────────
@@ -509,13 +493,21 @@ function MapView() {
     if (!map || !sc) return
     const src = map.getSource('signals')
     if (!src) return
-    const b    = map.getBounds()
-    const zoom = Math.max(0, Math.min(18, Math.floor(map.getZoom())))
-    const clusters = sc.getClusters(
-      [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
-      zoom,
-    )
+    const zoomNow = map.getZoom()
+    const zoom = Math.max(0, Math.min(18, Math.floor(zoomNow)))
+    // Zoomed out (and on the globe) the view's bounds aren't a usable box: take the whole world
+    let bbox: [number, number, number, number] = [-180, -85, 180, 85]
+    if (zoomNow >= 3) {
+      const b = map.getBounds()
+      bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]
+    }
+    const clusters = sc.getClusters(bbox, zoom)
     src.setData({ type: 'FeatureCollection', features: clusters })
+    // Signals in view: each cluster counts its members
+    setVisibleCount(clusters.reduce((n, f) => {
+      const props = f.properties as { cluster?: boolean; point_count?: number }
+      return n + (props.cluster ? Number(props.point_count ?? 0) : 1)
+    }, 0))
   }, [])
 
   // ── New-signal highlight refresh ──────────────────────────────────────────
@@ -540,21 +532,8 @@ function MapView() {
   // ── Heatmap + visible-signal-count refresh ─────────────────────────────────
 
   const refreshHeatmapAndCount = useCallback(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const map = mapRef.current as any
-    if (!map || !map.loaded()) return
-    const b = map.getBounds()
-    const w = b.getWest()
-    const e = b.getEast()
-    const s = b.getSouth()
-    const n = b.getNorth()
-    const visible = signalsRef.current.filter(sig =>
-      sig.lat != null && sig.lng != null &&
-      sig.lat >= s && sig.lat <= n &&
-      sig.lng >= w && sig.lng <= e
-    )
-    setVisibleCount(visible.length)
-    // BAT-16: heatmap is now a native MapLibre layer — no CSS items needed
+    // Nothing left to do here: the count of signals in view comes from
+    // refreshClusters (what is drawn), and the heatmap is a native layer (BAT-16)
   }, [])
 
   const refreshHeatmapAndCountRef = useRef(refreshHeatmapAndCount)
@@ -572,7 +551,19 @@ function MapView() {
       const { default: SuperclusterLib } = await import('supercluster')
       if (cancelled) return
       const features = toFeatures(signals)
-      const sc: SCIndex = new SuperclusterLib({ radius: 40, maxZoom: 22 })
+      // Clusters remember their most severe signal (their colour) and how many are verified
+      const sc: SCIndex = new SuperclusterLib<SignalProps, ClusterProps>({
+        radius: 44,
+        maxZoom: 22,
+        map: props => ({
+          sev:      SEVERITY_RANK[props.severity] ?? 1,
+          verified: props.status === 'verified' ? 1 : 0,
+        }),
+        reduce: (acc, props) => {
+          acc.sev = Math.max(acc.sev, props.sev)
+          acc.verified += props.verified
+        },
+      })
       sc.load(features)
       scRef.current = sc
       refreshClusters()
@@ -758,36 +749,27 @@ function MapView() {
       if (cancelled) return
 
       const { lat, lng, zoom } = initPosRef.current
+      const hasLinkedView = !!(permalinkRef.current || searchParams.get('z'))
+
+      // The dark vector basemap (OpenFreeMap, recoloured), or a plain fallback
+      // when it doesn't load: then the night-lights imagery is shown instead
+      const base = await loadBaseStyle()
+      if (cancelled || !mapContainer.current) return
+      if (!base.vector && basemapRef.current === 'dark') {
+        basemapRef.current = 'night'
+        setBasemap('night')
+      }
 
       map = new ml.Map({
         container: mapContainer.current!,
-        style: {
-          version: 8,
-          glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
-          sources: {
-            basemap: {
-              type: 'raster',
-              tiles: MAPTILER_KEY && MAPTILER_KEY !== 'demo'
-                ? [`https://api.maptiler.com/tiles/satellite/{z}/{x}/{y}.jpg?key=${MAPTILER_KEY}`]
-                : ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-              tileSize: 256,
-              attribution: MAPTILER_KEY ? '© MapTiler' : '© OpenStreetMap',
-            },
-          },
-          layers: [
-            { id: 'bg',      type: 'background' as const, paint: { 'background-color': '#06070d' } },
-            { id: 'basemap', type: 'raster'     as const, source: 'basemap',
-              paint: { 'raster-opacity': 0.92, 'raster-saturation': 0,
-                'raster-brightness-min': 0, 'raster-brightness-max': 1 } },
-          ],
-        },
+        style: base.style,
         center: [lng, lat],
-        zoom,
-        pitch:   45,
-        bearing: -10,
-        minZoom: 1,
-        maxZoom: 22,
-        attributionControl: false,
+        zoom: hasLinkedView ? zoom : worldZoom(mapContainer.current.clientWidth, mapContainer.current.clientHeight, projectionRef.current),
+        pitch:   0,
+        bearing: 0,
+        minZoom: 0.6,
+        maxZoom: 20,
+        attributionControl: { compact: true },
       })
 
       mapRef.current = map
@@ -801,7 +783,7 @@ function MapView() {
         ;(map as any).setProjection({ type: 'mercator' })
       } catch { /* pre-v5 — ignore */ }
 
-      // Navigation control with 3D pitch visualization
+      // Zoom buttons and compass (styled dark in globals.css)
       map.addControl(new ml.NavigationControl({ visualizePitch: true }), 'top-right')
 
       ro = new ResizeObserver(() => { if (mapRef.current) mapRef.current.resize() })
@@ -813,16 +795,53 @@ function MapView() {
         if (cancelled) return
         map.resize()
 
-        // Switch to globe once the map is fully idle (tiles rendered).
-        // Globe projection cannot be set before the first render completes —
-        // it blocks the MapLibre v5 render pipeline entirely.
-        map.once('idle', () => {
-          if (cancelled) return
+        // Basemap: night lights and satellite imagery sit under the borders and
+        // labels; the chosen one is shown (lib/map-style.ts)
+        baseIdsRef.current = baseLayerIds(base.style)
+        try {
+          addImageryLayers(map, MAPTILER_KEY)
+          applyBasemap(map, basemapRef.current, baseIdsRef.current)
+        } catch (e) { console.warn('[map] basemap setup failed:', e) }
+
+        // While the globe spins by itself, moves don't rewrite the address bar
+        const spinState = { on: false }
+
+        // Switch to the globe after the first render: setting it earlier blocks
+        // the MapLibre v5 render pipeline. The pulse animation keeps the map
+        // busy, so 'idle' may never fire: a timer makes sure it happens.
+        let projected = false
+        const setInitialProjection = () => {
+          if (cancelled || projected) return
+          projected = true
           try {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            ;(map as any).setProjection({ type: 'globe' })
+            ;(map as any).setProjection({ type: projectionRef.current })
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            if (projectionRef.current === 'globe') (map as any).setSky?.(ATMOSPHERE)
           } catch { /* pre-v5 fallback — ignore */ }
-        })
+        }
+        map.once('idle', setInitialProjection)
+        setTimeout(setInitialProjection, 1200)
+
+        // A slow spin of the whole-world globe until someone touches the map
+        // (not on shared links, which open on a chosen place)
+        if (!hasLinkedView && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+          spinState.on = true
+          const stopSpin = () => { spinState.on = false }
+          map.once('mousedown', stopSpin)
+          map.once('touchstart', stopSpin)
+          map.once('wheel', stopSpin)
+          map.once('dragstart', stopSpin)
+          const spin = () => {
+            if (cancelled || !spinState.on) return
+            if (projectionRef.current === 'globe' && map.getZoom() < 3 && !map.isMoving()) {
+              const c = map.getCenter()
+              map.easeTo({ center: [c.lng - 4, c.lat], duration: 1000, easing: (t: number) => t })
+            }
+            setTimeout(spin, 1000)
+          }
+          setTimeout(spin, 2500)
+        }
 
         // ── Sources ───────────────────────────────────────────
 
@@ -837,15 +856,18 @@ function MapView() {
         })
 
         // ── Signal layers ─────────────────────────────────────
+        // Clusters: a dark disc ringed in the colour of their most severe
+        // signal, with a soft halo. Signals: a dot sized and coloured by
+        // severity; verified ones get a white ring.
 
         map.addLayer({
           id: 'cluster-halo', type: 'circle', source: 'signals',
           filter: ['has', 'point_count'],
           paint: {
-            'circle-color': '#f5a623',
-            'circle-radius': ['step', ['get', 'point_count'], 32, 10, 40, 30, 48],
-            'circle-opacity': 0.09,
-            'circle-blur': 0.7,
+            'circle-color': CLUSTER_COLOR_EXPR,
+            'circle-radius': ['interpolate', ['linear'], ['get', 'point_count'], 2, 17, 10, 23, 50, 31, 200, 40],
+            'circle-opacity': 0.16,
+            'circle-blur': 0.75,
           },
         })
 
@@ -853,11 +875,12 @@ function MapView() {
           id: 'clusters', type: 'circle', source: 'signals',
           filter: ['has', 'point_count'],
           paint: {
-            'circle-color': ['step', ['get', 'point_count'], '#f5a623', 10, '#ff5e3a', 30, '#ff3b5c'],
-            'circle-radius': ['step', ['get', 'point_count'], 20, 10, 26, 30, 32],
-            'circle-opacity': 0.95,
-            'circle-stroke-color': 'rgba(255,255,255,0.2)',
-            'circle-stroke-width': 1.5,
+            'circle-color': '#0b1220',
+            'circle-radius': ['interpolate', ['linear'], ['get', 'point_count'], 2, 11, 10, 14, 50, 19, 200, 25],
+            'circle-opacity': 0.9,
+            'circle-stroke-color': CLUSTER_COLOR_EXPR,
+            'circle-stroke-width': 2,
+            'circle-stroke-opacity': 0.95,
           },
         })
 
@@ -866,26 +889,33 @@ function MapView() {
           filter: ['has', 'point_count'],
           layout: {
             'text-field': '{point_count_abbreviated}',
-            'text-font':  ['Open Sans Bold'],
-            'text-size':  12,
+            'text-font':  FONT_BOLD,
+            'text-size':  ['interpolate', ['linear'], ['get', 'point_count'], 2, 10.5, 200, 13],
+            'text-allow-overlap': true,
           },
-          paint: { 'text-color': '#ffffff' },
+          paint: { 'text-color': '#eef3fb' },
         })
 
         map.addLayer({
           id: 'critical-pulse', type: 'circle', source: 'signals',
           filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'severity'], 'critical']],
-          paint: { 'circle-color': '#ff3b5c', 'circle-radius': 16, 'circle-opacity': 0.2, 'circle-blur': 0.5 },
+          paint: {
+            'circle-color': 'rgba(0,0,0,0)',
+            'circle-radius': 10,
+            'circle-stroke-color': SEV_COLOR.critical,
+            'circle-stroke-width': 1.5,
+            'circle-stroke-opacity': 0.5,
+          },
         })
 
         map.addLayer({
           id: 'signal-glow', type: 'circle', source: 'signals',
-          filter: ['!', ['has', 'point_count']],
+          filter: ['all', ['!', ['has', 'point_count']], ['in', ['get', 'severity'], ['literal', ['critical', 'high']]]],
           paint: {
             'circle-color': ['get', 'color'],
-            'circle-radius': 14,
-            'circle-opacity': 0.12,
-            'circle-blur': 1.2,
+            'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 11, 6, 18, 12, 24],
+            'circle-opacity': 0.28,
+            'circle-blur': 1,
           },
         })
 
@@ -894,11 +924,11 @@ function MapView() {
           filter: ['!', ['has', 'point_count']],
           paint: {
             'circle-color': ['get', 'color'],
-            'circle-radius': ['case', ['==', ['get', 'severity'], 'critical'], 9, 7],
-            'circle-opacity': 0.92,
-            'circle-stroke-color': ['get', 'color'],
-            'circle-stroke-width': 2,
-            'circle-stroke-opacity': 0.35,
+            'circle-radius': SIGNAL_RADIUS_EXPR,
+            'circle-opacity': ['match', ['get', 'severity'], 'low', 0.82, 'info', 0.7, 0.96],
+            'circle-stroke-color': ['case', ['==', ['get', 'status'], 'verified'], '#ffffff', '#04060b'],
+            'circle-stroke-width': ['case', ['==', ['get', 'status'], 'verified'], 1.6, 0.8],
+            'circle-stroke-opacity': ['case', ['==', ['get', 'status'], 'verified'], 0.95, 0.85],
           },
         })
 
@@ -910,61 +940,26 @@ function MapView() {
             'circle-color':         'rgba(0,0,0,0)',
             'circle-radius':        18,
             'circle-stroke-color':  '#f5d020',
-            'circle-stroke-width':  2.5,
+            'circle-stroke-width':  2,
             'circle-stroke-opacity': 0.9,
           },
         })
 
-        // ── Sky atmosphere layer ───────────────────────────────
-
-        try {
-          map.addLayer({
-            id:   'sky',
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            type: 'sky' as any,
-            paint: {
-              'sky-type':                     'atmosphere',
-              'sky-atmosphere-sun':           [0.0, 90.0],
-              'sky-atmosphere-sun-intensity': 15,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            } as any,
-          })
-        } catch { /* sky layer unsupported in this MapLibre build — non-fatal */ }
-
-        // ── Apply initial satellite basemap ───────────────────
-
-        ;(() => {
-          try {
-            const satelliteTiles = MAPTILER_KEY && MAPTILER_KEY !== 'demo'
-              ? [`https://api.maptiler.com/tiles/satellite/{z}/{x}/{y}.jpg?key=${MAPTILER_KEY}`]
-              : ['https://tile.openstreetmap.org/{z}/{x}/{y}.png']
-            if (map.getLayer('basemap')) map.removeLayer('basemap')
-            if (map.getSource('basemap')) map.removeSource('basemap')
-            const beforeLayer = map.getLayer('cluster-halo') ? 'cluster-halo' : undefined
-            map.addSource('basemap', {
-              type: 'raster', tiles: satelliteTiles, tileSize: 256,
-              attribution: MAPTILER_KEY ? '© MapTiler' : '© OpenStreetMap',
-            })
-            map.addLayer({ id: 'basemap', type: 'raster' as const, source: 'basemap',
-              paint: { 'raster-opacity': 0.92, 'raster-saturation': 0, 'raster-brightness-min': 0, 'raster-brightness-max': 1 },
-            }, beforeLayer)
-          } catch (e) { console.warn('[map] satellite basemap swap failed:', e) }
-        })()
-
         // ── Animation loop ────────────────────────────────────
 
+        // Critical signals send out a slow ripple; new arrivals get a pulsing gold ring
         let pulseT = 0
         let hlT    = 0
         const animatePulse = () => {
-          pulseT += 0.045
+          pulseT = (pulseT + 0.012) % 1
           hlT    += 0.07
-          const r  = 14 + Math.sin(pulseT) * 7
-          const o  = 0.12 + Math.sin(pulseT) * 0.1
+          const r  = 8 + pulseT * 18
+          const o  = 0.65 * (1 - pulseT)
           const hr = 16 + Math.sin(hlT) * 5
           const ho = 0.65 + Math.sin(hlT) * 0.3
           try {
             map.setPaintProperty('critical-pulse', 'circle-radius',          r)
-            map.setPaintProperty('critical-pulse', 'circle-opacity',         o)
+            map.setPaintProperty('critical-pulse', 'circle-stroke-opacity',  o)
             map.setPaintProperty('new-highlight',  'circle-radius',          hr)
             map.setPaintProperty('new-highlight',  'circle-stroke-opacity',  ho)
           } catch { /* layer removed */ }
@@ -1112,6 +1107,8 @@ function MapView() {
         const onViewChange = () => {
           refreshClusters()
           refreshHeatmapAndCountRef.current()
+          // The idle spin isn't the reader moving the map: leave the address alone
+          if (spinState.on) return
           // BAT-16: track zoom for HotspotLabels threshold
           setMapZoom(parseFloat(map.getZoom().toFixed(1)))
           if (urlTimerRef.current) clearTimeout(urlTimerRef.current)
@@ -1819,7 +1816,7 @@ function MapView() {
             filter: ['has', 'point_count'],
             layout: {
               'text-field':  '{point_count_abbreviated}',
-              'text-font':   ['Open Sans Semibold', 'Arial Unicode MS Bold'],
+              'text-font':   FONT_BOLD,
               'text-size':   11,
             },
             paint: { 'text-color': '#fff' },
@@ -1844,14 +1841,17 @@ function MapView() {
             },
           })
 
-          // Hover popup
-          const popup = new maplibregl.Popup({
+          // Hover popup (maplibre-gl is loaded on demand: there is no global to use)
+          const { default: ml } = await import('maplibre-gl')
+          const popup = new ml.Popup({
             closeButton:  false,
             closeOnClick: false,
             offset:       [0, -10],
+            className:    'wp-map-popup',
           })
 
-          map.on('mouseenter', MARITIME_SHIPS, (e) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          map.on('mouseenter', MARITIME_SHIPS, (e: any) => {
             map.getCanvas().style.cursor = 'pointer'
             const feature = e.features?.[0]
             if (!feature || feature.geometry.type !== 'Point') return
@@ -2726,8 +2726,7 @@ function MapView() {
             reliability_score: number
             color: string
           }
-          const ts = new Date(p.published_at)
-          const ago = timeAgo(ts)
+          const ago = timeAgo(p.published_at)
           const { default: ml } = await import('maplibre-gl')
           if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
           popupRef.current = new ml.Popup({ closeButton: true, closeOnClick: false, offset: 12, className: 'wp-map-popup' })
@@ -3586,7 +3585,7 @@ function MapView() {
         {/* ── Convergence Hotspots Widget ─────────────────────────────── */}
         {/* Shows geographic cells with 3+ distinct signal categories converging */}
         {hotspots.length > 0 && !selected && (
-          <div className="absolute right-4 top-4 z-10 max-w-[220px]">
+          <div className="absolute left-4 top-4 z-10 max-w-[240px]">
             <button
               onClick={() => setHotspotsOpen(o => !o)}
               className="w-full flex items-center gap-2 bg-[rgba(255,59,92,0.12)] border border-[rgba(255,59,92,0.35)] rounded-xl px-3 py-2 backdrop-blur-xl hover:bg-[rgba(255,59,92,0.2)] transition-all"
@@ -3845,42 +3844,42 @@ function MapView() {
           )}
         </div>
 
-        {/* ── Basemap switcher + Reset View controls (top-right below nav) ──── */}
-        <div className="absolute right-2 z-10" style={{ top: 100 }}>
-          <div className="flex flex-col gap-1">
-            {/* Basemap cycle button */}
-            <button
-              onClick={() => setBasemap(b => b === 'satellite' ? 'dark' : b === 'dark' ? 'terrain' : 'satellite')}
-              title={`Basemap: ${basemap} — click to cycle`}
-              className="flex items-center justify-center w-8 h-8 rounded-lg bg-[rgba(6,7,13,0.92)] border border-[rgba(255,255,255,0.12)] text-[11px] font-mono text-wp-text2 hover:text-wp-amber hover:border-wp-amber/50 transition-all backdrop-blur-xl shadow-lg"
-            >
-              {basemap === 'satellite' ? '🛰' : basemap === 'terrain' ? '⛰' : '🌑'}
-            </button>
-            {/* Globe / Flat projection toggle */}
-            <button
-              onClick={() => setProjection(p => p === 'globe' ? 'mercator' : 'globe')}
-              title={`Projection: ${projection} — click to toggle`}
-              className={`flex items-center justify-center w-8 h-8 rounded-lg bg-[rgba(6,7,13,0.92)] border text-[11px] font-mono transition-all backdrop-blur-xl shadow-lg ${
-                projection === 'globe'
-                  ? 'border-[rgba(0,212,255,0.5)] text-[#00d4ff]'
-                  : 'border-[rgba(255,255,255,0.12)] text-wp-text2 hover:text-[#00d4ff] hover:border-[rgba(0,212,255,0.5)]'
-              }`}
-            >
-              {projection === 'globe' ? '🌐' : '🗺'}
-            </button>
-            {/* Reset View button */}
-            <button
-              onClick={() => {
-                const map = mapRef.current
-                if (!map) return
-                map.flyTo({ center: [10, 20], zoom: 2, pitch: 45, bearing: -10, duration: 1000 })
-              }}
-              title="Reset view to top-down"
-              className="flex items-center justify-center w-8 h-8 rounded-lg bg-[rgba(6,7,13,0.92)] border border-[rgba(255,255,255,0.12)] text-[11px] font-mono text-wp-text2 hover:text-[#00d4ff] hover:border-[rgba(0,212,255,0.5)] transition-all backdrop-blur-xl shadow-lg"
-            >
-              ⊙
-            </button>
-          </div>
+        {/* ── Basemap, projection and reset view (top-right, under the zoom buttons) ── */}
+        {/* Below MapLibre's zoom/compass buttons, which are 44px tall each on phones */}
+        <div className="absolute right-[10px] z-10 flex flex-col gap-1.5 top-[152px] md:top-[112px]">
+          {/* Basemap: dark map → night lights → satellite */}
+          <button
+            onClick={() => setBasemap(b => BASEMAP_MODES[(BASEMAP_MODES.indexOf(b) + 1) % BASEMAP_MODES.length])}
+            title={`Basemap: ${BASEMAP_LABEL[basemap]} (click for ${BASEMAP_LABEL[BASEMAP_MODES[(BASEMAP_MODES.indexOf(basemap) + 1) % BASEMAP_MODES.length]]})`}
+            aria-label={`Basemap: ${BASEMAP_LABEL[basemap]}`}
+            className="wp-map-ctrl"
+          >
+            {basemap === 'dark' ? <MapIcon size={15} /> : basemap === 'night' ? <Moon size={15} /> : <Satellite size={15} />}
+          </button>
+          {/* Globe / flat */}
+          <button
+            onClick={() => setProjection(p => p === 'globe' ? 'mercator' : 'globe')}
+            title={projection === 'globe' ? 'Globe view (click for a flat map)' : 'Flat map (click for the globe)'}
+            aria-label={projection === 'globe' ? 'Switch to flat map' : 'Switch to globe'}
+            aria-pressed={projection === 'globe'}
+            className={`wp-map-ctrl ${projection === 'globe' ? 'wp-map-ctrl-on' : ''}`}
+          >
+            <Globe2 size={15} />
+          </button>
+          {/* Whole world, straight down */}
+          <button
+            onClick={() => {
+              const map = mapRef.current
+              if (!map) return
+              const el = map.getContainer()
+              map.flyTo({ center: [10, 20], zoom: worldZoom(el.clientWidth, el.clientHeight, projection), pitch: 0, bearing: 0, duration: 1000 })
+            }}
+            title="Show the whole world"
+            aria-label="Show the whole world"
+            className="wp-map-ctrl"
+          >
+            <LocateFixed size={15} />
+          </button>
         </div>
 
         {/* ── Palantir-style Annotation Cards ───────────────────────────── */}
@@ -4033,7 +4032,6 @@ function MapView() {
         .wp-map-popup .maplibregl-popup-close-button {
           color: #8892a4; font-size: 16px; right: 6px; top: 4px;
         }
-        .maplibregl-ctrl-attrib { display: none !important; }
       `}</style>
     </div>
   )
