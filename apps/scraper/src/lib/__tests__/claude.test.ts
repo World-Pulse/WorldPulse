@@ -26,7 +26,7 @@ vi.mock('../redis', () => {
 })
 vi.mock('../logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }))
 
-import { askClaude, claudeBudgetLeft, costMicros, spendKeys, monthlyCapUsd } from '../claude'
+import { askClaude, claudeBudgetLeft, costMicros, spendKeys, monthlyCapUsd, wellFormed } from '../claude'
 
 const realFetch = globalThis.fetch
 const OCT_11 = new Date('2026-10-11T14:00:00Z')
@@ -38,6 +38,15 @@ describe('costMicros', () => {
     expect(costMicros('claude-sonnet-5-5', 1_000, 1_000)).toBe(12_000)
     // An unknown model is counted at the dearest price
     expect(costMicros('claude-future', 1_000, 1_000)).toBe(12_000)
+  })
+})
+
+describe('wellFormed', () => {
+  it('drops half an emoji (a summary cut short), and keeps whole ones', () => {
+    const half = '🔴'.slice(0, 1)
+    expect(wellFormed(`${half} Trump says`)).toBe(' Trump says')
+    expect(wellFormed(`Riyadh${'🔴'.slice(1)}`)).toBe('Riyadh')
+    expect(wellFormed('🔴 Live: Riyadh')).toBe('🔴 Live: Riyadh')
   })
 })
 
@@ -94,6 +103,14 @@ describe('askClaude', () => {
     expect(body).not.toHaveProperty('temperature')
     expect(h.store.get(spendKeys().day)).toBe('400')
     expect(h.calls.some(c => c[0] === 'hincrby' && c[2] === 'editor')).toBe(true)
+  })
+
+  it('sends no half emoji (the API refuses such a request as invalid JSON)', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test'
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ content: [], usage: {} }), { status: 200 })) as never
+    await askClaude({ purpose: 'editor', system: 's', prompt: `1. Live ${'🔴'.slice(0, 1)}`, maxTokens: 10 })
+    const [, init] = (globalThis.fetch as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls[0]!
+    expect(JSON.parse(String(init.body)).messages[0].content).toBe('1. Live ')
   })
 
   it('gives null on an error reply, spending nothing', async () => {

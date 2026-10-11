@@ -73,6 +73,15 @@ async function recordSpend(purpose: string, micros: number, now = new Date()): P
     .exec()
 }
 
+/**
+ * Text without unpaired UTF-16 surrogates (half an emoji, as a summary cut
+ * at 160 characters can leave), which make the API refuse the whole request
+ * as invalid JSON.
+ */
+export function wellFormed(text: string): string {
+  return text.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '')
+}
+
 export interface ClaudeReply {
   text:         string
   inputTokens:  number
@@ -104,8 +113,8 @@ export async function askClaude(opts: {
       body: JSON.stringify({
         model,
         max_tokens: opts.maxTokens,
-        system:     opts.system,
-        messages:   [{ role: 'user', content: opts.prompt }],
+        system:     wellFormed(opts.system),
+        messages:   [{ role: 'user', content: wellFormed(opts.prompt) }],
       }),
       signal: AbortSignal.timeout(opts.timeoutMs ?? 60_000),
     })

@@ -40,8 +40,8 @@ import { runDelayedRescore } from './pipeline/rescore'
 import { signalsHavePublishedAt, publishedAtFor, backfillRecentPublishedAt, sourceKey, hostOf } from './pipeline/signal-columns'
 import { independentReports, isCopyOf } from './pipeline/independence'
 import { ensureStoryIdColumn } from './pipeline/stories'
-import { startEditor } from './pipeline/editor'
-import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames, stripOutletNotes, recategorizeRecentNews, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability } from './pipeline/repairs'
+import { startEditor, catchUpEditor } from './pipeline/editor'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames, stripOutletNotes, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability } from './pipeline/repairs'
 import { batchValidateGeo } from './pipeline/geo-validator'
 import { recomputeSourceReputation } from './pipeline/source-reputation'
 import { startKafkaLagMonitor } from './lib/kafka-lag-monitor'
@@ -204,11 +204,10 @@ async function bootstrap() {
     .then(() => stripOutletNotes())
     .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: outlet notes ("Source: X (reliability: N%, bias: Y).") taken out of summaries') })
     .catch(err => logger.warn({ err }, 'Outlet note repair failed (non-fatal)'))
-    // Then the categories, which read the cleaned headlines and summaries
-    .then(() => recategorizeRecentNews())
-    .then(rows => { if (rows && rows > 0) logger.info({ rows }, "Repair: news categories by the current rules (attacks as conflict, surgery as health, matches as sports)") })
-    .catch(err => logger.warn({ err }, 'News category repair failed (non-fatal)'))
-    // And, once, the article and GDELT signals filed by classify.ts's old rules
+    // (The RSS category repair, recategorizeRecentNews, no longer runs at every
+    // start: it re-applied the word rules to 3 days of news and so undid what the
+    // editor had re-filed, pipeline/editor.ts.) Once, the article and GDELT
+    // signals filed by classify.ts's old rules
     .then(() => runOnce('repair:article-categories:2026-10-11', recategorizeRecentArticles))
     .then(rows => { if (rows && rows > 0) logger.info({ rows }, 'Repair: article and GDELT categories by the current rules ("who" is no longer the WHO)') })
     .catch(err => logger.warn({ err }, 'Article category repair failed (non-fatal)'))
@@ -230,6 +229,11 @@ async function bootstrap() {
   // (pipeline/editor.ts). Started before the first scrape, which can take many
   // minutes after a restart
   startEditor()
+  // Once, the last 12 hours again: the editor's first passes couldn't read some
+  // replies, and the RSS repair above put back what it had re-filed
+  runOnce('editor:catch-up:2026-10-11', () => catchUpEditor(12))
+    .then(t => { if (t) logger.info(t, 'Editor: the last 12 hours re-read by Claude') })
+    .catch(err => logger.warn({ err }, 'Editor catch-up failed (non-fatal)'))
 
   // Start main scrape loop (works with or without Kafka)
   await scrapeAll()
