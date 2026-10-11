@@ -86,8 +86,9 @@ describe('computeVerificationStatus', () => {
     expect(computeVerificationStatus('verified', 0.9)).toBe('verified')
   })
 
-  it('derives verified from high reliability score', () => {
-    expect(computeVerificationStatus('pending', 0.8)).toBe('verified')
+  it('never calls a pending signal verified, however reliable its source', () => {
+    expect(computeVerificationStatus('pending', 0.8)).toBe('partial')
+    expect(computeVerificationStatus('pending', 0.99)).toBe('partial')
   })
 
   it('derives partial from mid reliability score', () => {

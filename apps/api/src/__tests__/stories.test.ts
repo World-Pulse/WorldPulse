@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const h = vi.hoisted(() => ({ hasColumn: vi.fn(async () => true) }))
 vi.mock('../db/postgres', () => ({ db: { schema: { hasColumn: h.hasColumn }, raw: vi.fn() } }))
 
-import { collapseStories, outletsOf, hostOf, storyKeyOf } from '../lib/stories'
+import { collapseStories, outletsOf, hostOf, storyKeyOf, FEED_POST_ROWS } from '../lib/stories'
 
 const row = (id: string, story_id: string | null, status = 'pending', reliability_score = 0.7) =>
   ({ id, story_id, status, reliability_score })
@@ -36,6 +36,28 @@ describe('collapseStories', () => {
   it('treats a signal without a story as its own story', () => {
     expect(storyKeyOf({ id: 'x', story_id: null })).toBe('x')
     expect(storyKeyOf({ id: 'x', story_id: 'S9' })).toBe('S9')
+  })
+})
+
+describe('collapseStories on feed posts (global feed, plan 12c)', () => {
+  const post = (id: string, signal_id: string | null, story_id: string | null, post_type = 'signal', signal_status = 'pending', signal_reliability = 0.7) =>
+    ({ id, signal_id, story_id, post_type, signal_status, signal_reliability })
+
+  it('groups the automated posts of one story', () => {
+    const rows = [post('p1', 'a', 'S1'), post('p2', 'b', null), post('p3', 'c', 'S1')]
+    const { stories } = collapseStories(rows, 10, FEED_POST_ROWS)
+    expect(stories.map(s => s.key)).toEqual(['S1', 'b'])
+  })
+
+  it("never groups people's posts, even about the same signal", () => {
+    const rows = [post('p1', 'a', 'S1'), post('p2', 'a', 'S1', 'thread'), post('p3', null, null, 'text')]
+    const { stories } = collapseStories(rows, 10, FEED_POST_ROWS)
+    expect(stories.map(s => s.key)).toEqual(['S1', 'post:p2', 'post:p3'])
+  })
+
+  it("shows the post of the story's best signal", () => {
+    const rows = [post('p1', 'a', 'S1', 'signal', 'pending', 0.95), post('p2', 'b', 'S1', 'signal', 'verified', 0.8)]
+    expect(collapseStories(rows, 10, FEED_POST_ROWS).stories[0].row.id).toBe('p2')
   })
 })
 

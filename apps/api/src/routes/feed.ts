@@ -5,7 +5,8 @@ import { authenticate, optionalAuth } from '../middleware/auth'
 import type { Post, Signal, PaginatedResponse } from '@worldpulse/types'
 import { FeedQuerySchema, parseQuery } from '../lib/query-schemas'
 import { sendError } from '../lib/errors'
-import { signalsHaveStoryIds, collapseStories, storyFacts } from '../lib/stories'
+import { signalsHaveStoryIds, collapseStories, storyFacts, FEED_POST_ROWS, OWN_POST_KEY } from '../lib/stories'
+import type { StoryFacts } from '../lib/stories'
 
 const FEED_CACHE_TTL    = 15  // seconds — global feed (per-user aware)
 const SIGNALS_CACHE_TTL = 30  // seconds — signals stream first-page
@@ -20,25 +21,30 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
 
   /**
    * GET /api/v1/feed/global
-   * Main global feed — latest verified signals + high-trust posts
+   * Main global feed — latest verified signals + high-trust posts.
+   * With ?group=story, the automated posts of one story (signals the scraper's
+   * same-story rule linked) become one post, at the position of the story's
+   * newest post, with the story fields the signals feed has. Other posts are
+   * never grouped.
    */
   app.get('/global', { preHandler: [optionalAuth], config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
     const qr = parseQuery(FeedQuerySchema, req.query)
     if (qr.error) return sendError(reply, 400, 'VALIDATION_ERROR', qr.error)
-    const { cursor, category, severity, limit } = qr.data
+    const { cursor, category, severity, limit, group } = qr.data
+    const pageLimit = Math.min(limit, 50)
+    // Until the scraper has added signals.story_id, ?group=story falls back to posts
+    const byStory = group === 'story' && await signalsHaveStoryIds()
 
     // Per-user cache key: authenticated users get their own 15s cache slot
     // (includes liked/boosted/bookmarked enrichment); unauthenticated share one.
     const userSegment = req.user ? `user:${req.user.id}` : 'anon'
-    const cacheKey = `feed:global:${userSegment}:${category ?? 'all'}:${severity ?? 'all'}:${cursor ?? 'start'}`
+    const cacheKey = `feed:global:${userSegment}:${category ?? 'all'}:${severity ?? 'all'}:${cursor ?? 'start'}:${pageLimit}${byStory ? ':story' : ''}`
 
     // Try cache first
     const cached = await redis.get(cacheKey).catch(() => null)
     if (cached) {
       return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
     }
-
-    const pageLimit = Math.min(limit, 50)
 
     let query = db('posts as p')
       .join('users as u', 'p.author_id', 'u.id')
@@ -62,36 +68,76 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
         's.status as signal_status', 's.reliability_score as signal_reliability',
         's.location_name as signal_location', 's.country_code as signal_country',
         's.tags as signal_tags',
+        ...(byStory ? ['s.story_id'] : []),
       ])
-      .limit(pageLimit + 1)
+      // A page of stories needs more posts than a page of posts
+      .limit(byStory ? pageLimit * 3 + 1 : pageLimit + 1)
       .orderBy('p.created_at', 'desc')
-
-    // Cursor-based pagination
-    if (cursor) {
-      const cursorPost = await db('posts').where('id', cursor).first()
-      if (cursorPost) {
-        query = query.where('p.created_at', '<', cursorPost.created_at)
-      }
-    }
 
     // Category filter via signal.
     // Special case: category=breaking shows critical+high severity posts regardless of category,
     // so the Breaking News channel is immediately populated from existing DB data.
-    if (category === 'breaking') {
-      query = query.whereIn('s.severity', ['critical', 'high'])
-    } else if (category && category !== 'all') {
-      query = query.where('s.category', category)
+    const applyFilters = <Q extends { whereIn: Function; where: Function }>(q: Q): Q => {
+      if (category === 'breaking') {
+        q = q.whereIn('s.severity', ['critical', 'high'])
+      } else if (category && category !== 'all') {
+        q = q.where('s.category', category)
+      }
+      if (severity) q = q.where('s.severity', severity) // the schema only lets real severities through
+      return q
     }
+    query = applyFilters(query)
 
-    // Severity filter (the query schema only lets real severities through)
-    if (severity) {
-      query = query.where('s.severity', severity)
+    // Cursor-based pagination
+    let cursorTime: Date | null = null
+    if (cursor) {
+      const cursorPost = await db('posts').where('id', cursor).first()
+      if (cursorPost) {
+        cursorTime = cursorPost.created_at as Date
+        query = query.where('p.created_at', '<', cursorPost.created_at)
+      }
     }
 
     const rows = await query
 
-    const hasMore = rows.length > pageLimit
-    const items = hasMore ? rows.slice(0, pageLimit) : rows
+    let hasMore: boolean
+    let items: Array<Record<string, unknown>>
+    let nextCursor: string | null
+    const storyExtras = new Map<string, Record<string, unknown>>()
+
+    if (byStory) {
+      const batch = rows.slice(0, pageLimit * 3)
+      const { stories, lastIndex, more } = collapseStories(batch as Array<Record<string, unknown>>, pageLimit, FEED_POST_ROWS)
+      let kept = stories
+      const storyKeys = kept.map(st => st.key).filter(k => !k.startsWith(OWN_POST_KEY))
+      // A story with a newer post (matching the same filters) was already on an
+      // earlier page: leave it there
+      if (cursorTime && storyKeys.length > 0) {
+        const earlier = await applyFilters(
+          db('posts as p')
+            .join('signals as s', 'p.signal_id', 's.id')
+            .where('p.deleted_at', null)
+            .whereNull('p.parent_id')
+            .where('p.post_type', 'signal')
+            .where('p.created_at', '>=', cursorTime)
+            .where(function () { this.whereIn('s.story_id', storyKeys).orWhereIn('s.id', storyKeys) })
+            .select(db.raw('COALESCE(s.story_id, s.id)::text AS story_key')),
+        ) as Array<{ story_key: string }>
+        const shown = new Set(earlier.map(r => r.story_key))
+        kept = kept.filter(st => !shown.has(st.key))
+      }
+      const facts = await storyFacts(kept.map(st => st.key).filter(k => !k.startsWith(OWN_POST_KEY)))
+      for (const { key } of kept) {
+        if (!key.startsWith(OWN_POST_KEY)) storyExtras.set(key, storyFieldsOf(key, facts.get(key)))
+      }
+      items = kept.map(st => ({ ...st.row, story_key: st.key }))
+      hasMore = more || rows.length > batch.length
+      nextCursor = hasMore && lastIndex >= 0 ? (batch[lastIndex].id as string) : null
+    } else {
+      hasMore = rows.length > pageLimit
+      items = hasMore ? rows.slice(0, pageLimit) : rows
+      nextCursor = hasMore ? (items[items.length - 1].id as string) : null
+    }
 
     // Enrich with viewer-relative data if authenticated
     let likedIds = new Set<string>()
@@ -99,7 +145,7 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
     let bookmarkedIds = new Set<string>()
 
     if (req.user) {
-      const postIds = items.map(r => r.id)
+      const postIds = items.map(r => r.id as string)
       const [likes, boosts, bookmarks] = await Promise.all([
         db('likes').whereIn('post_id', postIds).where('user_id', req.user.id).select('post_id'),
         db('posts').whereIn('boost_of_id', postIds).where('author_id', req.user.id).select('boost_of_id'),
@@ -110,12 +156,16 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
       bookmarkedIds = new Set(bookmarks.map(b => b.post_id))
     }
 
-    const posts: Post[] = items.map(row => formatPost(row, likedIds, boostedIds, bookmarkedIds))
+    const posts: Post[] = items.map(row => {
+      const post = formatPost(row, likedIds, boostedIds, bookmarkedIds)
+      const extra = byStory ? storyExtras.get(String(row.story_key)) : undefined
+      return extra ? { ...post, ...extra } : post
+    })
 
     const response: PaginatedResponse<Post> = {
       items:   posts,
       total:   posts.length,
-      cursor:  hasMore ? items[items.length - 1].id : null,
+      cursor:  nextCursor,
       hasMore,
     }
 
@@ -291,15 +341,7 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
         kept = kept.filter(st => !shown.has(st.key))
       }
       const facts = await storyFacts(kept.map(st => st.key))
-      for (const { key } of kept) {
-        const f = facts.get(key)
-        storyExtras.set(key, {
-          storyId:         key,
-          storySize:       f?.size ?? 1,
-          storyOutlets:    f?.outlets ?? [],
-          storyVerifiedAt: f?.verifiedAt ? f.verifiedAt.toISOString() : null,
-        })
-      }
+      for (const { key } of kept) storyExtras.set(key, storyFieldsOf(key, facts.get(key)))
       rawItems = kept.map(st => ({ ...st.row, story_key: st.key }))
       hasMore = more || rows.length > batch.length
       nextCursor = hasMore && lastIndex >= 0 ? (batch[lastIndex].id as string) : null
@@ -372,6 +414,19 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
 }
 
 // ─── FORMATTERS ───────────────────────────────────────────────────────────
+
+/** The story fields a grouped feed row carries (plan 12b/12c) */
+function storyFieldsOf(key: string, f: StoryFacts | undefined): Record<string, unknown> {
+  return {
+    storyId:         key,
+    storySize:       f?.size ?? 1,
+    storyOutlets:    f?.outlets ?? [],
+    storyVerifiedAt: f?.verifiedAt ? f.verifiedAt.toISOString() : null,
+    // The story's newest signal: grouped rows sit at this time in the feed
+    storyUpdatedAt:  f?.newest ? f.newest.toISOString() : null,
+  }
+}
+
 function formatPost(
   row: Record<string, unknown>,
   likedIds: Set<string>,

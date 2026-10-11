@@ -18,6 +18,8 @@ import { AlertTierBadge } from '@/components/ui/AlertTierBadge'
 import { BiasIndicator } from '@/components/signals/BiasIndicator'
 import type { BiasLabel } from '@/components/signals/BiasIndicator'
 import { ViralityBadge } from '@/components/signals/ViralityBadge'
+import { StoryOutlets, storyOf } from './StoryOutlets'
+import type { StoryInfo } from './StoryOutlets'
 import { Users, Cpu, Radio, Newspaper } from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
@@ -86,6 +88,10 @@ interface FeedItem {
   verificationStatus?: VerificationStatus
   alertTier?: AlertTier
   sourceBias?: { label: BiasLabel; confidence: 'high' | 'medium' | 'low' }
+  /** One story, all outlets (feed rows from ?group=story, plan 12c) */
+  story?: StoryInfo
+  /** The signal's status (verified, pending, …) */
+  signalStatus?: string
 }
 
 // ─── DATA ADAPTERS ───────────────────────────────────────────────────────────
@@ -141,6 +147,7 @@ function adaptSignal(sig: any): FeedItem {
   const badgeSlugs  = sourceSlugs.slice(0, 4)
   const ageMs       = sig.createdAt ? Date.now() - new Date(sig.createdAt as string).getTime() : Infinity
   const flagCount   = (sig.communityFlagCount ?? 0) as number
+  const story       = storyOf(sig)
 
   return {
     id:       sig.id,
@@ -172,7 +179,9 @@ function adaptSignal(sig: any): FeedItem {
     likes:             sig.viewCount  ?? 0,
     boosts:            sig.shareCount ?? 0,
     replies:           sig.postCount  ?? 0,
-    time:              sig.createdAt ? timeAgo(sig.createdAt) : '?',
+    // A story with several reports sits in the feed at its newest one
+    time:              story && story.size > 1 && story.updatedAt ? timeAgo(story.updatedAt)
+                         : sig.createdAt ? timeAgo(sig.createdAt) : '?',
     reliability:       sig.reliabilityScore ?? null,
     sourceCount:           sig.sourceCount,
     lastUpdated:           sig.lastUpdated ?? undefined,
@@ -182,6 +191,8 @@ function adaptSignal(sig: any): FeedItem {
     riskScore:          sig.riskScore ?? undefined,
     verificationStatus: computeVerificationStatus(sig.status, sig.reliabilityScore),
     alertTier:          sig.alertTier ?? undefined,
+    story,
+    signalStatus:       sig.status ?? undefined,
   }
 }
 
@@ -217,6 +228,13 @@ function adaptPost(post: Post): FeedItem {
   if (post.signal) {
     const s = post.signal
     const impactColor = CATEGORY_COLORS[s.severity] ?? '#f5a623'
+    // Automated signal posts from ?group=story carry their story (plan 12c)
+    const story = storyOf(post)
+    if (story) {
+      base.story = story
+      if (story.size > 1 && story.updatedAt) base.time = timeAgo(story.updatedAt)
+    }
+    base.signalStatus = s.status
     base.severity = s.severity
     base.breaking = s.severity === 'critical'
     base.event = {
@@ -576,6 +594,8 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
     const params = new URLSearchParams()
     if (category && category !== 'all') params.set('category', category)
     if (nextCursor) params.set('cursor', nextCursor)
+    // One card per story: the API folds reports of the same story into one row (plan 12c)
+    if (tab !== 'following' && tab !== 'digest' && tab !== 'for_you') params.set('group', 'story')
 
     let url: string
     if (tab === 'following') {
@@ -724,7 +744,9 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
                   {item.event.location && (
                     <span className="font-mono text-[10px] text-wp-text2">{item.event.location}</span>
                   )}
-                  {item.verificationStatus && item.verificationStatus !== 'unverified' && (
+                  {/* A story card's own badge says whether it's verified; keep DISPUTED visible */}
+                  {item.verificationStatus && item.verificationStatus !== 'unverified'
+                    && (!item.story || item.verificationStatus === 'disputed') && (
                     <VerificationBadge status={item.verificationStatus} size="sm" />
                   )}
                   {item.event.isLive && (
@@ -735,8 +757,24 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
                 {item.event.summary && item.event.summary.trim().toLowerCase() !== item.event.title.trim().toLowerCase() && (
                   <div className="text-[12px] text-wp-text2 leading-[1.5] mb-2">{item.event.summary}</div>
                 )}
-                {/* Source badges + source count */}
-                {(item.event.sources.length > 0 || (item.sourceCount ?? 0) > 0) && (
+                {/* One story, all outlets: badge + the outlets that reported it (plan 12c) */}
+                {item.story && (
+                  <StoryOutlets
+                    story={item.story}
+                    status={item.signalStatus}
+                    extra={(item.sourceCount ?? 0) >= 3 ? (
+                      <ViralityBadge
+                        sourceCount={item.sourceCount ?? 0}
+                        lastCorroboratedAt={item.lastCorroboratedAt}
+                        lastUpdated={item.lastUpdated}
+                        size="sm"
+                        showCount
+                      />
+                    ) : null}
+                  />
+                )}
+                {/* Source badges + source count (rows without story details) */}
+                {!item.story && (item.event.sources.length > 0 || (item.sourceCount ?? 0) > 0) && (
                   <div className="flex items-center gap-1 flex-wrap mb-2">
                     {item.event.sources.map(s => (
                       <span key={s} className={`source-badge ${SOURCE_BADGES[s] ?? SOURCE_BADGES.wp}`}>

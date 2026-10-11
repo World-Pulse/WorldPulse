@@ -25,6 +25,7 @@ import { ViralityBadge } from '@/components/signals/ViralityBadge'
 import { RichMediaEmbed, extractFirstEmbedUrl } from '@/components/RichMediaEmbed'
 import { SignalMedia } from '@/components/signals/SignalMedia'
 import { SourceChain } from '@/components/signals/SourceChain'
+import { StoryMembers } from './StoryMembers'
 import { EventTimeline } from '@/components/signals/EventTimeline'
 import { TVClips } from '@/components/signals/TVClips'
 import { NewsImages } from '@/components/signals/NewsImages'
@@ -397,6 +398,9 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
               sourceUrl={signal.originalUrls?.[0] ?? null}
               originalUrls={signal.originalUrls ?? []}
             />
+
+            {/* Also reported by — the other reports of this story (plan 12c) */}
+            <StoryMembers signalId={signal.id} />
 
             {/* AI Summary — WorldPulse differentiator vs Ground News Ground Summary */}
             <AISummary

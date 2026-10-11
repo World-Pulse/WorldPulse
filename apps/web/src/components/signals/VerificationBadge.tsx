@@ -64,6 +64,9 @@ export function computeVerificationStatusFromLog(
 /**
  * Derive VerificationStatus from the signal-level status field + reliabilityScore.
  * Used for feed list items where full verification_log isn't available.
+ * Only a verified signal (two or more independent outlets) is 'verified': a
+ * single report from a reliable source is at most 'partial', so a feed card
+ * never says VERIFIED for a story only one outlet has reported.
  */
 export function computeVerificationStatus(
   signalStatus: string | undefined | null,
@@ -74,7 +77,6 @@ export function computeVerificationStatus(
   if (s === 'verified') return 'verified'
 
   const r = reliabilityScore ?? 0
-  if (r >= 0.75) return 'verified'
   if (r >= 0.40) return 'partial'
   return 'unverified'
 }
