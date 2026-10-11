@@ -707,7 +707,8 @@ export async function reverseGeocode(lat: number, lng: number): Promise<ReverseG
   // Round to 1 decimal place for cache key (same ~10km grid as FIRMS)
   const roundLat = Math.round(lat * 10) / 10
   const roundLng = Math.round(lng * 10) / 10
-  const cacheKey = `revgeo:${roundLat}:${roundLng}`
+  // "en": names asked for in English since Oct 11, 2026 (the older entries are in the local language)
+  const cacheKey = `revgeo:en:${roundLat}:${roundLng}`
 
   const cached = await redis.get(cacheKey)
   if (cached && cached !== 'null') {
@@ -734,7 +735,8 @@ export async function reverseGeocode(lat: number, lng: number): Promise<ReverseG
   await throttleNominatim()
 
   try {
-    const url = `https://nominatim.openstreetmap.org/reverse?lat=${roundLat}&lon=${roundLng}&format=json&zoom=8&addressdetails=1`
+    // In English: without it, names came in the local script ("near 内蒙古自治区 ᠥᠪᠥᠷ …" in the ticker)
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${roundLat}&lon=${roundLng}&format=json&zoom=8&addressdetails=1&accept-language=en`
     const res = await fetch(url, {
       headers: { 'User-Agent': 'WorldPulse/1.0 (world-pulse.io)' },
       signal:  AbortSignal.timeout(5_000),

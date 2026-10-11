@@ -151,3 +151,13 @@ describe('repinNewsHomePins', () => {
     expect(totals).toEqual({ moved: 4, cleared: 1, retitled: 1 })
   })
 })
+
+describe('isObituary (Oct 11, 2026)', () => {
+  it('skips death notices from obituaries sections and Legacy.com', async () => {
+    const { isObituary } = await import('../news-rss')
+    expect(isObituary({ title: 'Frank J. Mauro', link: 'https://www.dailygazette.com/obituaries/frank-j-mauro/article_21d788cc.html' })).toBe(true)
+    expect(isObituary({ title: 'Jane Doe', link: 'https://www.legacy.com/us/obituaries/name/jane-doe' })).toBe(true)
+    expect(isObituary({ title: 'Obituary: a pioneer of jazz', link: 'https://example.com/arts/123' })).toBe(true)
+    expect(isObituary({ title: 'Ex-president dies at 90', link: 'https://example.com/world/ex-president-dies' })).toBe(false)
+  })
+})

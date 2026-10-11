@@ -2420,6 +2420,13 @@ export function inferGeo(
 
 // ─── SIGNAL CREATION ──────────────────────────────────────────────────────────
 
+/** An obituary: from an obituaries section (or Legacy.com), or titled as one */
+export function isObituary(item: Pick<FeedItem, 'title' | 'link'>): boolean {
+  return /\/(?:obituaries|obituary|obits?)\//i.test(item.link ?? '')
+    || /(?:^|\.)legacy\.com\//i.test((item.link ?? '').replace(/^https?:\/\//, ''))
+    || /^\s*(?:obituary|obituaries|obit)\b/i.test(item.title ?? '')
+}
+
 async function processItem(
   db:       Knex,
   redis:    Redis,
@@ -2437,6 +2444,13 @@ async function processItem(
   if (isStaleItem(item.pubDate)) {
     await redis.setex(key, DEDUP_TTL_S, '1')
     return 'stale'
+  }
+
+  // Death notices from a local paper's obituaries section aren't world news
+  // (Oct 11, 2026: "Frank J. Mauro", pinned in New York as health/high)
+  if (isObituary(item)) {
+    await redis.setex(key, DEDUP_TTL_S, '1')
+    return 'none'
   }
 
   // GDACS alerts: severity from the alert level, a readable earthquake headline
