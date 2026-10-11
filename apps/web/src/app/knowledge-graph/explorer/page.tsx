@@ -33,6 +33,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
+import { toTrendingEntities, toGraphStats, type TrendingEntity, type GraphStats } from '@/lib/knowledge-graph-api'
 
 const ForceGraph = dynamic(
   () => import('../../../components/knowledge-graph/ForceGraph'),
@@ -74,21 +75,6 @@ interface EntityEdge {
   last_seen: string
 }
 
-interface TrendingEntity {
-  id: string
-  type: string
-  canonical_name: string
-  mention_count: number
-  spike_score: number
-  recent_signal_count: number
-}
-
-interface GraphStats {
-  total_entities: number
-  total_edges: number
-  entities_by_type: Record<string, number>
-  edges_by_predicate: Record<string, number>
-}
 
 interface GraphNode {
   id: string
@@ -167,6 +153,7 @@ function toGraphEdge(edge: EntityEdge): GraphEdge {
 }
 
 function formatNumber(n: number): string {
+  if (!Number.isFinite(n)) return '—'
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
   if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K'
   return n.toLocaleString()
@@ -200,7 +187,7 @@ function useTrendingEntities() {
         const res = await fetch(`${API_BASE}/knowledge-graph/trending?limit=${MAX_TRENDING}&window_hours=168`)
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const json = await res.json()
-        if (!cancelled) setData(json.data ?? json.entities ?? json ?? [])
+        if (!cancelled) setData(toTrendingEntities(json))
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load trending')
       } finally {
@@ -224,7 +211,7 @@ function useGraphStats() {
         const res = await fetch(`${API_BASE}/knowledge-graph/stats`)
         if (!res.ok) return
         const json = await res.json()
-        if (!cancelled) setStats(json.data ?? json)
+        if (!cancelled) setStats(toGraphStats(json))
       } catch { /* non-critical */ }
     }
     load()
@@ -354,7 +341,8 @@ export default function KnowledgeGraphExplorerPage() {
       const res = await fetch(`${API_BASE}/knowledge-graph/entities/${node.id}`)
       if (res.ok) {
         const json = await res.json()
-        setSelectedEntity(json.data ?? json)
+        // GET /entities/:id answers { entity, recent_signals }
+        setSelectedEntity(json.data ?? json.entity ?? json)
       }
     } catch { /* non-critical */ }
 
