@@ -107,7 +107,7 @@ interface GraphEdge {
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1'
+const API_BASE = `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/api/v1`
 
 const ENTITY_TYPE_CONFIG: Record<string, { color: string; icon: string; label: string }> = {
   person:        { color: '#3b82f6', icon: '\u{1F464}', label: 'People' },

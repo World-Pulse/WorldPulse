@@ -161,7 +161,8 @@ export function TVClips({ signalId }: Props) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api/v1'
+    // NEXT_PUBLIC_API_URL is the API's origin (https://api.world-pulse.io); routes live under /api/v1
+    const API_BASE = `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/api/v1`
     fetch(`${API_BASE}/signals/${encodeURIComponent(signalId)}/tv-clips`)
       .then(r => r.ok ? r.json() : null)
       .then((data: TVClipsResponse | null) => {

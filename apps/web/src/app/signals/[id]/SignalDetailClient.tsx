@@ -200,9 +200,13 @@ function AISlopBadge({ signalId }: { signalId: string }) {
   const [isSlop, setIsSlop] = useState<boolean | null>(null)
 
   useEffect(() => {
-    const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api/v1'
+    // Admin-only endpoint: it needs the signed-in user's token (cookies aren't used)
+    let token: string | null = null
+    try { token = localStorage.getItem('wp_access_token') } catch { /* storage blocked */ }
+    if (!token) return
+    const API_BASE = `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/api/v1`
     fetch(`${API_BASE}/signals/${encodeURIComponent(signalId)}/slop-score`, {
-      credentials: 'include',
+      headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => r.ok ? r.json() : null)
       .then((data: { isSlop?: boolean } | null) => {
@@ -239,7 +243,7 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
   const [cibResult, setCibResult] = useState<CIBStatus | null>(null)
 
   useEffect(() => {
-    const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api/v1'
+    const API_BASE = `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/api/v1`
     fetch(`${API_BASE}/signals/${encodeURIComponent(signal.id)}/cib-check`)
       .then(r => r.ok ? r.json() : null)
       .then((data: { success?: boolean; data?: CIBStatus } | null) => {
