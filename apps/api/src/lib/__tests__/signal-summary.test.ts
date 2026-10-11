@@ -2,13 +2,21 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { SignalSummaryInput } from '../signal-summary'
 
 // ─── Mock Redis ───────────────────────────────────────────────────────────────
-vi.mock('../../db/redis', () => ({
-  redis: {
-    get:   vi.fn(),
-    setex: vi.fn(),
-    del:   vi.fn(),
-  },
-}))
+vi.mock('../../db/redis', () => {
+  // The Claude spending cap (lib/claude.ts) reads and counts in Redis too
+  const chain: Record<string, unknown> = {}
+  for (const op of ['incrby', 'expire', 'hincrby']) chain[op] = () => chain
+  chain.exec = async () => []
+  return {
+    redis: {
+      get:   vi.fn(),
+      setex: vi.fn(),
+      del:   vi.fn(),
+      mget:  vi.fn(async () => [null, null]),
+      multi: vi.fn(() => chain),
+    },
+  }
+})
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const makeSample = (overrides: Partial<SignalSummaryInput> = {}): SignalSummaryInput => ({

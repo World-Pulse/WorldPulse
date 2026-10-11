@@ -62,12 +62,14 @@ llm_stats() {
 }
 # Claude (Oct 11, 2026): the AI work moved in-house, under a monthly cap the
 # apps count in Redis (apps/scraper/src/lib/claude.ts). Whether each app has a
-# key (yes/no), the cap, the spend today and this month in dollars, today's
-# calls by job, and the editor's last pass. No key or password is printed.
+# key (yes/no), whether the AI Digest is on, the cap, the spend today and this
+# month in dollars, today's calls by job, and the editor's last pass. No key or
+# password is printed.
 claude_stats() {
-  local scr_key api_key cap pw out
+  local scr_key api_key pulse cap pw out
   scr_key=$(timeout 10 docker exec wp_scraper sh -c 'printf %s "${ANTHROPIC_API_KEY:+yes}"' 2>/dev/null) || scr_key=""
   api_key=$(timeout 10 docker exec wp_api sh -c 'printf %s "${ANTHROPIC_API_KEY:+yes}"' 2>/dev/null) || api_key=""
+  pulse=$(timeout 10 docker exec wp_api sh -c 'printf %s "$PULSE_ENABLED"' 2>/dev/null | tr -cd 'a-z0-9') || pulse=""
   cap=$(timeout 10 docker exec wp_scraper sh -c 'printf %s "${AI_MONTHLY_CAP_USD:-20}"' 2>/dev/null | tr -cd '0-9.') || cap=""
   pw=$(timeout 10 docker exec wp_scraper sh -c 'printf %s "$REDIS_URL"' 2>/dev/null | sed -nE 's#^redis://:([^@]*)@.*#\1#p') || pw=""
   out=$(timeout 15 docker exec -e REDISCLI_AUTH="$pw" wp_redis sh -c '
@@ -75,7 +77,7 @@ claude_stats() {
       echo "month=$(redis-cli --raw GET "ai:claude:spend:$2")"
       echo "calls=$(redis-cli --raw HGETALL "ai:claude:calls:$1" | paste -sd " " -)"
       echo "editor=$(redis-cli --raw GET ai:editor:last)"' sh "$(date -u +%F)" "$(date -u +%Y-%m)" 2>/dev/null) || out=""
-  SCR_KEY="$scr_key" API_KEY_SET="$api_key" CAP="$cap" OUT="$out" python3 - <<'PY' 2>/dev/null || printf 'null'
+  SCR_KEY="$scr_key" API_KEY_SET="$api_key" PULSE="$pulse" CAP="$cap" OUT="$out" python3 - <<'PY' 2>/dev/null || printf 'null'
 import json, os
 vals = dict(line.split('=', 1) for line in os.environ.get('OUT', '').splitlines() if '=' in line)
 def usd(v):
@@ -90,6 +92,7 @@ except ValueError: cap = 20
 print(json.dumps({
     'key_scraper': os.environ.get('SCR_KEY') == 'yes',
     'key_api': os.environ.get('API_KEY_SET') == 'yes',
+    'ai_digest_on': os.environ.get('PULSE') in ('true', '1'),
     'cap_usd_month': cap,
     'spent_usd_today': usd(vals.get('day')),
     'spent_usd_month': usd(vals.get('month')),
@@ -143,7 +146,7 @@ deploy_note() {
 pipe_cache=logs/pipeline-stats.json
 # Refresh every 30 minutes, or straight away when the cache predates a new field
 if [ ! -s "$pipe_cache" ] || [ -n "$(find "$pipe_cache" -mmin +29 2>/dev/null)" ] \
-   || ! grep -q '"claude"' "$pipe_cache" 2>/dev/null; then
+   || ! grep -q '"ai_digest_on"' "$pipe_cache" 2>/dev/null; then
   pipeline_stats > "$pipe_cache.tmp" 2>/dev/null \
     && python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$pipe_cache.tmp" 2>/dev/null \
     && mv "$pipe_cache.tmp" "$pipe_cache"

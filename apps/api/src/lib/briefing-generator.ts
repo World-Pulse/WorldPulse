@@ -15,6 +15,7 @@
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 import { logger } from './logger'
+import { askClaude, CLAUDE_SMALL } from './claude'
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 const BRIEFING_CACHE_TTL  = 60 * 60 * 4   // 4 hours
@@ -342,32 +343,16 @@ IMPORTANT RULES:
 }
 
 async function generateWithLLM(prompt: string): Promise<{ text: string; model: string }> {
-  // Priority 1: Anthropic
-  const anthropicKey = process.env.ANTHROPIC_API_KEY
-  if (anthropicKey) {
-    try {
-      const model = process.env.ANTHROPIC_MODEL ?? 'claude-haiku-4-5-20251001'
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': anthropicKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: 2000,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-      })
-      if (res.ok) {
-        const data = await res.json() as { content: Array<{ text: string }> }
-        const anthropicText = data.content[0]?.text
-        if (anthropicText) return { text: anthropicText, model: 'anthropic' }
-      }
-    } catch (err) {
-      logger.warn({ err }, 'Briefing: Anthropic call failed, trying next provider')
-    }
+  // Priority 1: Claude, within the spending cap shared with the scraper (lib/claude.ts)
+  if (process.env.ANTHROPIC_API_KEY) {
+    const reply = await askClaude({
+      purpose:   'briefing',
+      model:     process.env.ANTHROPIC_MODEL || CLAUDE_SMALL,
+      maxTokens: 2000,
+      prompt,
+    })
+    if (reply?.text) return { text: reply.text, model: 'anthropic' }
+    logger.warn('Briefing: Claude gave no answer (the spending cap or an error), trying next provider')
   }
 
   // Priority 2: OpenAI

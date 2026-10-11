@@ -7,6 +7,7 @@
  * 3. Publishes as posts authored by @pulse
  * 4. Logs everything to pulse_publish_log
  */
+import { askClaude, CLAUDE_SMALL, CLAUDE_WRITER } from '../claude'
 import { db } from '../../db/postgres'
 import { redis } from '../../db/redis'
 import { PULSE_USER_ID, ContentType, RATE_LIMITS, EDITORIAL_SYSTEM_PROMPT } from './constants'
@@ -53,6 +54,11 @@ async function checkRateLimit(contentType: string): Promise<boolean> {
     .count('id as count')
 
   return Number(row?.count ?? 0) < limit.max
+}
+
+/** No AI call for a piece the rate limit would refuse anyway (it used to write first, then drop it) */
+async function rateLimited(contentType: string): Promise<PublishResult | null> {
+  return (await checkRateLimit(contentType)) ? null : { success: false, error: `Rate limit exceeded for ${contentType}` }
 }
 
 // ─── Signal fetchers ────────────────────────────────────────────────────────
@@ -105,6 +111,8 @@ export async function getCriticalSignals(minutes: number): Promise<SignalSummary
 //
 // Strategy: split workload across OpenAI and Anthropic to balance token usage.
 //
+//   (Oct 11, 2026: with a Claude key, Claude writes every piece, within the
+//   spending cap; see generateContent. The split below applies without one.)
 //   OpenAI (gpt-4o-mini)  → fast, cheap tasks: flash briefs, syndication summaries,
 //                           fact-check requests, social thread drafts
 //   Anthropic (Claude)    → deep, nuanced tasks: daily briefings, analysis posts,
@@ -171,57 +179,27 @@ async function callOpenAI(
   }
 }
 
-/** Call Anthropic Messages API */
+/**
+ * Call Claude within the spending cap (lib/claude.ts). Without an answer (the
+ * cap, an error) the text is empty and callers' quality gates reject it: no
+ * fallback to another paid provider (Oct 11, 2026, in-house plan).
+ */
 async function callAnthropic(
   prompt: string,
   systemPrompt: string,
   maxTokens: number,
   model: string,
-  temperature: number,
 ): Promise<GenerationResult> {
   const t0 = Date.now()
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': process.env.ANTHROPIC_API_KEY!,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: maxTokens,
-      // No temperature: Claude 4.7+ models reject non-default values (400 error).
-      // The old default (claude-sonnet-4-20250514) was retired 2026-06-15; deep-tier
-      // calls failed from then on, falling back to OpenAI only when a key was set.
-    }),
-  })
-
-  const data = await res.json() as {
-    content?: Array<{ text: string }>
-    usage?: { input_tokens: number; output_tokens: number }
-    model?: string
-    error?: { type: string; message: string }
-    type?: string
-  }
-
-  if (!res.ok || data.error) {
-    const errMsg = data.error?.message ?? `HTTP ${res.status}`
-    console.error(`[PULSE] Anthropic API error: ${errMsg} (model: ${model})`)
-    // Fall through to OpenAI if available
-    if (process.env.OPENAI_API_KEY) {
-      console.log('[PULSE] Falling back to OpenAI after Anthropic failure')
-      const fallbackModel = process.env.PULSE_OPENAI_MODEL ?? 'gpt-4o-mini'
-      return callOpenAI(prompt, systemPrompt, maxTokens, fallbackModel, temperature)
-    }
+  const reply = await askClaude({ purpose: 'digest', system: systemPrompt, prompt, maxTokens, model })
+  if (!reply || !reply.text) {
+    console.error(`[PULSE] Claude gave no answer (no key, the spending cap or an error; model: ${model})`)
     return { text: '', model, tokens: 0, durationMs: Date.now() - t0, provider: 'anthropic' }
   }
-
   return {
-    text: data.content?.[0]?.text ?? '',
-    model: data.model ?? model,
-    tokens: (data.usage?.input_tokens ?? 0) + (data.usage?.output_tokens ?? 0),
+    text: reply.text,
+    model: reply.model,
+    tokens: reply.inputTokens + reply.outputTokens,
     durationMs: Date.now() - t0,
     provider: 'anthropic',
   }
@@ -253,25 +231,14 @@ export async function generateContent(
   // Temperature: lower for factual briefs, slightly higher for analysis
   const temperature = tier === 'fast' ? 0.2 : 0.35
 
-  // Both keys available — route by tier
-  if (hasOpenAI && hasAnthropic) {
-    if (tier === 'fast') {
-      const model = process.env.PULSE_OPENAI_MODEL ?? 'gpt-4o-mini'
-      return callOpenAI(prompt, systemPrompt, maxTokens, model, temperature)
-    } else {
-      const model = process.env.PULSE_ANTHROPIC_MODEL ?? 'claude-sonnet-5-5'
-      return callAnthropic(prompt, systemPrompt, maxTokens, model, temperature)
-    }
+  // In-house (Oct 11, 2026): with a Claude key every piece is Claude's, within
+  // the spending cap: short pieces on the small model, analysis and briefings
+  // on the writer (PULSE_ANTHROPIC_MODEL, Sonnet 5.5). OpenAI only without one.
+  if (hasAnthropic) {
+    return callAnthropic(prompt, systemPrompt, maxTokens, tier === 'fast' ? CLAUDE_SMALL : CLAUDE_WRITER)
   }
-
-  // Only one key — use whichever is available
-  if (hasOpenAI) {
-    const model = process.env.PULSE_OPENAI_MODEL ?? 'gpt-4o-mini'
-    return callOpenAI(prompt, systemPrompt, maxTokens, model, temperature)
-  }
-
-  const model = process.env.PULSE_ANTHROPIC_MODEL ?? 'claude-sonnet-5-5'
-  return callAnthropic(prompt, systemPrompt, maxTokens, model, temperature)
+  const model = process.env.PULSE_OPENAI_MODEL ?? 'gpt-4o-mini'
+  return callOpenAI(prompt, systemPrompt, maxTokens, model, temperature)
 }
 
 // ─── Publishing ─────────────────────────────────────────────────────────────
@@ -361,6 +328,8 @@ Rules:
 - Your output must be DIFFERENT from the signal title — add value or don't publish`
 
   // Flash briefs → OpenAI (fast tier): quick, cheap, high-volume
+  const limited = await rateLimited(ContentType.FLASH_BRIEF)
+  if (limited) return limited
   const result = await generateContent(prompt, 200, 'fast')
 
   // ── Quality gate: LLM output ────────────────────────────────────────────
@@ -415,6 +384,8 @@ Structure: Context → Development → Impact → Assessment → What to Watch.
 Include source counts and reliability scores in your analysis.`
 
   // Analysis → Anthropic (deep tier): nuanced, pattern-connecting, editorial
+  const limited = await rateLimited(ContentType.ANALYSIS)
+  if (limited) return limited
   const result = await generateContent(prompt, 600, 'deep')
 
   // ── Quality gate: analysis output ───────────────────────────────────────
@@ -480,6 +451,8 @@ Signals to analyze:
 ${signalList}`
 
   // Daily briefing → Anthropic (deep tier): long-form, editorial, connecting patterns
+  const limited = await rateLimited(ContentType.DAILY_BRIEFING)
+  if (limited) return limited
   const result = await generateContent(prompt, 2000, 'deep')
 
   if (!result.text || result.text.trim().length < 50) {
@@ -530,6 +503,8 @@ Signals:
 ${signalList}`
 
   // Updates use OpenAI (fast) — they're shorter and more time-sensitive
+  const limited = await rateLimited(ContentType.DAILY_BRIEFING)
+  if (limited) return limited
   const result = await generateContent(prompt, 600, 'fast')
 
   if (!result.text || result.text.trim().length < 50) {

@@ -3,7 +3,7 @@
  *
  * Strategy (priority order, first available key wins):
  *   1. Check Redis cache (TTL 24h) — return if hit
- *   2. If ANTHROPIC_API_KEY set → call Anthropic claude-haiku-4-5-20251001
+ *   2. If ANTHROPIC_API_KEY set → call Claude's small model (lib/claude.ts, within the spending cap)
  *   3. Else if OPENAI_API_KEY set → call OpenAI gpt-4o-mini
  *   4. Else if GEMINI_API_KEY set → call Google Gemini 2.0 Flash
  *   5. Else if OPENROUTER_API_KEY set → call OpenRouter (configurable model)
@@ -14,13 +14,13 @@
  */
 
 import { redis } from '../db/redis'
+import { askClaude } from './claude'
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 const SUMMARY_CACHE_TTL   = 60 * 60 * 24  // 24 hours in seconds
 const CACHE_KEY_PREFIX    = 'signal-ai-summary:'
 const MAX_INPUT_CHARS     = 2000           // truncate long bodies before sending to LLM
 const OPENAI_MODEL        = 'gpt-4o-mini'
-const ANTHROPIC_MODEL     = 'claude-haiku-4-5-20251001'
 
 /**
  * Every provider's instructions end with this. Summaries added roles the text
@@ -212,43 +212,26 @@ Summary:`
 }
 
 // ─── Anthropic (Claude) ───────────────────────────────────────────────────────
+// Claude's small model within the spending cap shared with the scraper
+// (lib/claude.ts, Oct 11, 2026); without an answer the extractive summary stands
 async function generateWithAnthropic(
   signal: SignalSummaryInput,
   language: string,
 ): Promise<AISummary> {
-  const apiKey = process.env.ANTHROPIC_API_KEY!
   const inputText = buildInputText(signal)
-
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method:  'POST',
-    headers: {
-      'Content-Type':      'application/json',
-      'x-api-key':         apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model:      ANTHROPIC_MODEL,
-      max_tokens: 200,
-      system: `You are PULSE, the AI Bureau for WorldPulse — a global intelligence platform.
+  const reply = await askClaude({
+    purpose:   'summary',
+    maxTokens: 200,
+    system: `You are PULSE, the AI Bureau for WorldPulse — a global intelligence platform.
 Write a concise 2-3 sentence summary following PULSE style:
 Sentence 1: What happened + where (active voice, lead with event).
 Sentence 2: Why it matters — significance, impact, or affected population.
 Sentence 3: What to watch next — forward-looking indicator or next development.
 Be factual and neutral. No hedging words. Cite source types when known. ${FACT_RULES}${language !== 'en' ? ` Respond in ${language}.` : ' Respond in English.'}`,
-      messages: [{ role: 'user', content: inputText }],
-    }),
+    prompt: inputText,
   })
-
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Anthropic API error ${res.status}: ${err}`)
-  }
-
-  const json = await res.json() as {
-    content: Array<{ type: string; text: string }>
-  }
-  const text = json.content.find(c => c.type === 'text')?.text?.trim()
-  if (!text) throw new Error('Anthropic returned empty response')
+  const text = reply?.text?.trim()
+  if (!text) throw new Error('Claude gave no answer (no key, the spending cap or an error)')
 
   return { text, model: 'anthropic', generatedAt: new Date().toISOString() }
 }

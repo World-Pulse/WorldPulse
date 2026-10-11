@@ -163,11 +163,14 @@ services:
       # Public address of uploaded post media: nginx serves the uploads volume
       # at https://world-pulse.io/uploads/ (unset, the API wrote localhost URLs)
       UPLOADS_BASE_URL:  ${UPLOADS_BASE_URL:-https://world-pulse.io}
-      # PULSE AI Publisher
-      PULSE_ENABLED:     ${PULSE_ENABLED:-false}
+      # PULSE AI Publisher (the AI Digest). On since Oct 11, 2026: it writes on
+      # Claude within AI_MONTHLY_CAP_USD, shared with the scraper (lib/claude.ts).
+      # Auto-posting to X needs TWITTER_API_KEY, which isn't passed here.
+      PULSE_ENABLED:     ${PULSE_ENABLED:-true}
       PULSE_API_KEY:     ${PULSE_API_KEY:-}
       OPENAI_API_KEY:    ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_MONTHLY_CAP_USD: ${AI_MONTHLY_CAP_USD:-20}
     volumes:
       - uploads_data:/app/uploads
     networks:

@@ -15,6 +15,7 @@
  * @module cortex/event-threads
  */
 
+import { askClaude } from '../claude'
 import { db } from '../../db/postgres'
 import { redis } from '../../db/redis'
 
@@ -422,32 +423,10 @@ Keep it under 100 words. No bullet points. No speculation.`
  * Tries Anthropic Claude first (via API), falls back to OpenAI.
  */
 async function callLLMForSummary(prompt: string): Promise<string | null> {
-  // Try Anthropic first
-  const anthropicKey = process.env.ANTHROPIC_API_KEY
-  if (anthropicKey) {
-    try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'x-api-key': anthropicKey,
-          'anthropic-version': '2023-06-01',
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 200,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-      })
-
-      if (response.ok) {
-        const data = await response.json() as any
-        const text = data.content?.[0]?.text
-        if (text) return text.trim()
-      }
-    } catch (err) {
-      console.warn('[CORTEX] Anthropic summary failed, trying OpenAI:', err)
-    }
+  // Claude first, within the spending cap shared with the scraper (lib/claude.ts)
+  if (process.env.ANTHROPIC_API_KEY) {
+    const reply = await askClaude({ purpose: 'threads', maxTokens: 200, prompt })
+    if (reply?.text) return reply.text.trim()
   }
 
   // Fallback to OpenAI
