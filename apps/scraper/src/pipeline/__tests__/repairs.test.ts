@@ -23,7 +23,7 @@ vi.mock('../../lib/postgres', () => {
   }
 })
 
-import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces } from '../repairs'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities } from '../repairs'
 import { db } from '../../lib/postgres'
 import { EVENT_TEMPLATE_SQL } from '../event-titles'
 
@@ -168,5 +168,28 @@ describe('recheckGeocodedPlaces when the geocoder is down', () => {
     expect(totals).toEqual({ renamed: 0, repinned: 0, cleared: 0, stopped: true })
     expect(lookup).toHaveBeenCalledTimes(1)
     expect(h.raws.filter(r => /UPDATE/.test(r.sql))).toEqual([])
+  })
+})
+
+describe('decodeStoredEntities', () => {
+  beforeEach(() => { h.raws.length = 0; h.updates.length = 0 })
+
+  it('decodes HTML codes in recent titles, summaries and links, and skips rows with nothing to change', async () => {
+    vi.mocked(db.raw).mockImplementationOnce(async (sql: string, params?: unknown[]) => {
+      h.raws.push({ sql, params: params as unknown[] })
+      return { rows: [
+        { id: 'a', title: 'Who Are You? &#8211; Analysis', summary: null, original_urls: ['https://x.y/a'] },
+        { id: 'b', title: 'Quake MMI&gt;=VII', summary: 'ok', original_urls: ['https://www.gdacs.org/r?e=EQ&amp;id=1'] },
+        { id: 'c', title: 'Only &#60;brackets&#62;', summary: null, original_urls: [] },
+      ] } as never
+    })
+    expect(await decodeStoredEntities()).toBe(2)
+    const [{ sql }] = h.raws
+    expect(sql).toMatch(/INTERVAL '7 days'/)
+    expect(sql).toMatch(/LIKE '%&amp;%'/)
+    expect(h.updates.map(u => u.data)).toEqual([
+      { title: 'Who Are You? – Analysis', summary: null },
+      { title: 'Quake MMI&gt;=VII', summary: 'ok', original_urls: ['https://www.gdacs.org/r?e=EQ&id=1'] },
+    ])
   })
 })

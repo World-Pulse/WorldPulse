@@ -68,7 +68,9 @@ import type { Category, SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate } from '../pipeline/insert-signal'
 // Feed items published more than 3 days ago aren't news
 import { MAX_ITEM_AGE_MS, isStaleItem } from '../pipeline/freshness'
-export { MAX_ITEM_AGE_MS, isStaleItem }
+// Feeds send "&#x27;" and "&amp;" in titles and summaries
+import { decodeEntities } from '../pipeline/text'
+export { MAX_ITEM_AGE_MS, isStaleItem, decodeEntities }
 
 const log = rootLogger.child({ module: 'news-rss-source' })
 
@@ -2292,18 +2294,6 @@ export function parseFeedItems(xml: string): FeedItem[] {
   return items.slice(0, MAX_ITEMS)
 }
 
-/** Feeds send "&#x27;" and "&amp;" in titles and summaries; show the characters.
- *  Angle brackets stay encoded so decoded text can never become markup. */
-export function decodeEntities(text: string): string {
-  const named: Record<string, string> = { amp: '&', quot: '"', apos: "'", nbsp: ' ' }
-  return text.replace(/&(?:#x([0-9a-f]+)|#(\d+)|([a-z]+));/gi, (whole, hex, dec, name) => {
-    const code = hex ? parseInt(hex, 16) : dec ? parseInt(dec, 10) : NaN
-    if (!Number.isNaN(code)) {
-      return code > 0 && code <= 0x10ffff && code !== 60 && code !== 62 ? String.fromCodePoint(code) : whole
-    }
-    return named[String(name).toLowerCase()] ?? whole
-  })
-}
 
 // ─── DEDUP ────────────────────────────────────────────────────────────────────
 

@@ -18,6 +18,7 @@ import { verifySignal } from './pipeline/verify'
 import { classifyContent } from './pipeline/classify'
 import { extractGeo, geocodePlace, placeFromText } from './pipeline/geo'
 import { isStaleItem } from './pipeline/freshness'
+import { decodeEntities, cleanUrl } from './pipeline/text'
 import { dedup } from './pipeline/dedup'
 import { correlateSignal, confirmMergedArticle } from './pipeline/correlate'
 import type { CorrelationCandidate } from './pipeline/correlate'
@@ -37,7 +38,7 @@ import { runDelayedRescore } from './pipeline/rescore'
 import { signalsHavePublishedAt, publishedAtFor, backfillRecentPublishedAt, sourceKey, hostOf } from './pipeline/signal-columns'
 import { independentReports, isCopyOf } from './pipeline/independence'
 import { ensureStoryIdColumn } from './pipeline/stories'
-import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces } from './pipeline/repairs'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities } from './pipeline/repairs'
 import { batchValidateGeo } from './pipeline/geo-validator'
 import { recomputeSourceReputation } from './pipeline/source-reputation'
 import { startKafkaLagMonitor } from './lib/kafka-lag-monitor'
@@ -163,6 +164,9 @@ async function bootstrap() {
   retractStaleFeedItems()
     .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: old stories from feed backlogs taken out of the feed') })
     .catch(err => logger.warn({ err }, 'Stale feed item repair failed (non-fatal)'))
+  decodeStoredEntities()
+    .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: HTML codes in recent headlines and links decoded') })
+    .catch(err => logger.warn({ err }, 'HTML code repair failed (non-fatal)'))
   // Runs in the background for several minutes (one geocoder lookup per old pin name)
   recheckGeocodedPlaces(geocodePlace, placeFromText)
     .then(t => { if (t.renamed + t.repinned + t.cleared > 0 || t.stopped) logger.info(t, 'Repair: map pins from capitalised words re-checked') })
@@ -694,7 +698,7 @@ async function processArticleGroup(
           // production, and text[] || uuid[] made every update fail, so a signal
           // never gained its later sources
           source_ids:    db.raw('array_append(source_ids, ?)', [article.sourceId]),
-          original_urls: db.raw('array_append(original_urls, ?)', [article.url]),
+          original_urls: db.raw('array_append(original_urls, ?)', [cleanUrl(article.url)]),
           last_updated:  new Date(),
         })
       if (copy) continue
@@ -740,8 +744,8 @@ async function processArticleGroup(
 
   // Create signal
   const row: Record<string, unknown> = {
-    title:            primary.title,
-    summary:          classification.summary,
+    title:            decodeEntities(primary.title),
+    summary:          typeof classification.summary === 'string' ? decodeEntities(classification.summary) : classification.summary,
     category:         classification.category,
     severity:         classification.severity,
     status:           reliability > 0.85 ? 'verified' : 'pending',
@@ -749,7 +753,7 @@ async function processArticleGroup(
     reliability_score: reliability,
     source_count:     outlets.length,
     source_ids:       articles.map(a => a.sourceId),
-    original_urls:    articles.map(a => a.url),
+    original_urls:    articles.map(a => cleanUrl(a.url)),
     location:         geo.point ? db.raw(`ST_MakePoint(?, ?)`, [geo.lng, geo.lat]) : null,
     location_name:    geo.name,
     country_code:     geo.countryCode,

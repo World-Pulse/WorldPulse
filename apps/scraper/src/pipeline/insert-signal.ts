@@ -31,6 +31,7 @@ import { dedup, checkSemanticDuplicate } from './dedup'
 import { processSignalForKnowledgeGraph, extractEntitiesRuleBased, upsertEntityNode } from './entity-graph'
 import { embedSignal } from './embeddings'
 import { signalsHavePublishedAt, publishedAtFor, sourceKey } from './signal-columns'
+import { decodeEntities, cleanUrl } from './text'
 
 /** Signal ids are UUIDs; the dedup store can also hold '1' or 'pending' */
 const SIGNAL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -97,10 +98,29 @@ export interface CorrelationMeta {
  * @param meta - Lat/lng and sourceId for correlation scoring
  * @returns The inserted signal row (with id)
  */
+
+/**
+ * A signal's title and summary without HTML codes, and its links with "&"
+ * for "&amp;". Changes the row in place (insertAndCorrelate has always
+ * updated the caller's row, e.g. its reliability score) and returns it.
+ */
+export function cleanSignalText(row: Record<string, unknown>): Record<string, unknown> {
+  if (typeof row.title === 'string') row.title = decodeEntities(row.title)
+  if (typeof row.summary === 'string') row.summary = decodeEntities(row.summary)
+  if (Array.isArray(row.original_urls)) {
+    row.original_urls = row.original_urls.map(u => (typeof u === 'string' ? cleanUrl(u) : u))
+  }
+  return row
+}
+
 export async function insertAndCorrelate(
-  signalData: Record<string, unknown>,
+  incoming: Record<string, unknown>,
   meta: CorrelationMeta,
 ): Promise<Record<string, unknown>> {
+  // Every source's signal comes through here: HTML codes in the title and
+  // summary become characters, and "&amp;" in links becomes "&"
+  const signalData = cleanSignalText(incoming)
+
   // 0. Extract raw fields used throughout
   const rawSeverity  = String(signalData.severity ?? 'low')
   const rawCategory  = String(signalData.category ?? 'other')

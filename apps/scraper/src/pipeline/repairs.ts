@@ -11,6 +11,7 @@ import { db } from '../lib/postgres'
 import { EVENT_TEMPLATE_SQL } from './event-titles'
 import { countIndependentOutlets } from './independence'
 import { hostOf } from './signal-columns'
+import { decodeEntities, cleanUrl, ENCODED_TEXT_RE } from './text'
 
 /** Where nginx serves uploaded post media (the uploads volume, under /uploads/) */
 const PUBLIC_SITE = 'https://world-pulse.io'
@@ -195,3 +196,41 @@ export async function recheckGeocodedPlaces(
   }
   return totals
 }
+
+/** Rows decoded per start (the rest on later starts) */
+const MAX_ENCODED_ROWS = 5000
+
+/**
+ * Signals from the last 7 days whose title or summary still shows HTML codes
+ * ("isn&#x27;t", "&#8211;"), or whose links have "&amp;" for "&" (GDACS):
+ * about 5% of the day's headlines on Oct 11, 2026, before insert-signal.ts
+ * cleaned new ones. Decoded in place; decoded rows no longer match, so a
+ * later start changes nothing.
+ */
+export async function decodeStoredEntities(): Promise<number> {
+  const found = await db.raw(
+    `SELECT id, title, summary, original_urls
+       FROM signals
+      WHERE created_at > NOW() - INTERVAL '7 days'
+        AND (title ~* ? OR summary ~* ? OR array_to_string(original_urls, ' ') LIKE '%&amp;%')
+      LIMIT ${MAX_ENCODED_ROWS}`,
+    [ENCODED_TEXT_SQL, ENCODED_TEXT_SQL],
+  )
+  const rows = ((found as { rows?: Array<{ id: string; title: string | null; summary: string | null; original_urls: unknown }> })?.rows ?? [])
+  let changed = 0
+  for (const row of rows) {
+    const title = typeof row.title === 'string' ? decodeEntities(row.title) : row.title
+    const summary = typeof row.summary === 'string' ? decodeEntities(row.summary) : row.summary
+    const urls = Array.isArray(row.original_urls) ? row.original_urls.map(u => (typeof u === 'string' ? cleanUrl(u) : u)) : null
+    const sameUrls = urls === null || urls.every((u, i) => u === (row.original_urls as unknown[])[i])
+    if (title === row.title && summary === row.summary && sameUrls) continue
+    await db('signals').where('id', row.id).update({
+      title, summary, ...(urls && !sameUrls ? { original_urls: urls } : {}),
+    })
+    changed++
+  }
+  return changed
+}
+
+/** ENCODED_TEXT_RE for Postgres (~* is already case-insensitive) */
+const ENCODED_TEXT_SQL = ENCODED_TEXT_RE.source
