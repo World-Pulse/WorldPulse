@@ -736,35 +736,52 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
           severity:  { type: 'string' },
           hours:     { type: 'number', default: 24 },
           bbox:      { type: 'string', description: 'Bounding box filter: minLng,minLat,maxLng,maxLat' },
+          limit:     { type: 'number', default: 500, maximum: 3000, description: 'How many points (up to 3,000)' },
+          lean:      { type: 'string', description: '1 = lighter points (no summary, first link only), critical, high and verified first' },
         },
       },
     },
   }, async (req, reply) => {
     const qr = parseQuery(MapPointsQuerySchema, req.query)
     if (qr.error) return sendError(reply, 400, 'VALIDATION_ERROR', qr.error)
-    const { category, severity, hours, bbox } = qr.data
+    const { category, severity, hours, bbox, limit, lean } = qr.data
 
     const safeHours = hours
     const bboxKey   = bbox ? `:${bbox}` : ''
 
     // Cache map points — these are expensive PostGIS queries
-    const cacheKey = `signals:map:${category ?? 'all'}:${severity ?? 'all'}:${safeHours}${bboxKey}`
+    const cacheKey = `signals:map:${category ?? 'all'}:${severity ?? 'all'}:${safeHours}${bboxKey}:${limit}${lean ? ':lean' : ''}`
     const cached = await redis.get(cacheKey).catch(() => null)
     if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
 
+    // Lean points are what the World Map loads: up to 3,000 of them, without
+    // the summary (fetched when a signal is opened) and with the first link
+    // only. With 500 newest-first points, "24 hours" showed about 3 hours
+    // (Oct 11, 2026); now every critical, high and verified signal in the
+    // window comes first, then the newest of the rest.
     let query = db('signals')
       .whereNotNull('location')
       .whereIn('status', ['verified', 'pending'])
       .where('created_at', '>', db.raw(`NOW() - INTERVAL '${safeHours} hours'`))
-      .select([
-        'id', 'title', 'summary', 'category', 'severity', 'status',
-        'location_name', 'country_code', 'reliability_score', 'created_at',
-        'original_urls', 'is_breaking', 'community_flag_count',
-        db.raw('ST_X(location::geometry) as lng'),
-        db.raw('ST_Y(location::geometry) as lat'),
-      ])
-      .orderBy('created_at', 'desc')
-      .limit(500)
+      .select(lean
+        ? [
+            'id', 'title', 'category', 'severity', 'status',
+            'location_name', 'country_code', 'reliability_score', 'created_at',
+            db.raw('original_urls[1:1] AS original_urls'), 'is_breaking', 'community_flag_count',
+            db.raw('ST_X(location::geometry) as lng'),
+            db.raw('ST_Y(location::geometry) as lat'),
+          ]
+        : [
+            'id', 'title', 'summary', 'category', 'severity', 'status',
+            'location_name', 'country_code', 'reliability_score', 'created_at',
+            'original_urls', 'is_breaking', 'community_flag_count',
+            db.raw('ST_X(location::geometry) as lng'),
+            db.raw('ST_Y(location::geometry) as lat'),
+          ])
+    if (lean) {
+      query = query.orderByRaw(`CASE WHEN severity IN ('critical', 'high') OR status = 'verified' THEN 0 ELSE 1 END`)
+    }
+    query = query.orderBy('created_at', 'desc').limit(limit)
 
     if (category && category !== 'all') query = query.where('category', category)
     if (severity) query = query.where('severity', severity)

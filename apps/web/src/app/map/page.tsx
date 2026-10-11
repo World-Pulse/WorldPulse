@@ -51,7 +51,8 @@ const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY ?? ''
 interface MapSignal {
   id: string
   title: string
-  summary: string | null
+  /** Not in the map's lean points: fetched when the signal is opened (undefined until then) */
+  summary?: string | null
   lat: number
   lng: number
   severity: string
@@ -546,6 +547,10 @@ function MapView() {
       const trEntry = TRANGE.find(t => t.v === timeRange)
       const h = trEntry?.hours ?? 168   // 'all' → max window the API supports (7d)
       p.set('hours', String(h))
+      // Up to 3,000 light points: every critical, high and verified signal in
+      // the window, then the newest (500 newest-first covered ~3 of 24 hours)
+      p.set('limit', String(MAX_SIGNALS))
+      p.set('lean', '1')
       if (category !== 'all') p.set('category', category)
       if (severity !== 'all') p.set('severity', severity)
       const res  = await fetch(`${API_URL}/api/v1/signals/map/points?${p}`)
@@ -563,12 +568,34 @@ function MapView() {
 
   useEffect(() => { fetchSignals(false) }, [fetchSignals])
 
-  // ── 30-second auto-refresh ─────────────────────────────────────────────────
+  // ── Auto-refresh every minute while the page is in view ──────────────────
+  // (live arrivals come over the WebSocket; this catches anything it missed)
 
   useEffect(() => {
-    const id = setInterval(() => { fetchSignals(true) }, 30_000)
+    const id = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+      fetchSignals(true)
+    }, 60_000)
     return () => clearInterval(id)
   }, [fetchSignals])
+
+  // Lean map points carry no summary: fetch it when a signal is opened
+  useEffect(() => {
+    if (!selected || selected.summary !== undefined) return
+    const id = selected.id
+    let cancelled = false
+    const fill = (summary: string | null, urls?: string[] | null) => {
+      if (cancelled) return
+      const known = signalsRef.current.find(s => s.id === id)
+      if (known) { known.summary = summary; if (urls?.length) known.original_urls = urls }
+      setSelected(prev => prev && prev.id === id ? { ...prev, summary, ...(urls?.length ? { original_urls: urls } : {}) } : prev)
+    }
+    fetch(`${API_URL}/api/v1/signals/${encodeURIComponent(id)}`)
+      .then(res => (res.ok ? res.json() : null))
+      .then((json: { data?: { summary?: string | null; originalUrls?: string[] | null } } | null) => fill(json?.data?.summary ?? null, json?.data?.originalUrls))
+      .catch(() => fill(null))
+    return () => { cancelled = true }
+  }, [selected])
 
   // ── Viewport cluster refresh ───────────────────────────────────────────────
 

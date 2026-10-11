@@ -113,7 +113,8 @@ export function extractLatLng(raw: Record<string, unknown>): { lng: number; lat:
 
 // ── Signal-cap helper ──────────────────────────────────────────────────────────
 
-export const MAX_SIGNALS = 500
+/** Points the World Map holds (the API serves up to 3,000; plan M15) */
+export const MAX_SIGNALS = 3000
 
 /**
  * Prepend a new signal to the list, deduplicating by id and capping at MAX_SIGNALS.

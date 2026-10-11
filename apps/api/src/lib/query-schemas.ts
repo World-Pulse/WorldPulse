@@ -119,6 +119,10 @@ export const MapPointsQuerySchema = z.object({
   severity: z.enum(SEVERITY_VALUES).optional(),
   hours:    intParam(24, 1, 168),  // cap at 1 week
   bbox:     z.string().max(80).optional(),
+  /** How many points (the World Map asks for up to 3,000) */
+  limit:    intParam(500, 1, 3000),
+  /** Lighter points for the map (no summary, first link only), critical, high and verified ones first */
+  lean:     z.union([z.string(), z.boolean()]).optional().transform(v => v === true || v === '1' || v === 'true'),
 })
 
 export type MapPointsQuery = z.infer<typeof MapPointsQuerySchema>
