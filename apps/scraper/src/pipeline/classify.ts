@@ -10,6 +10,7 @@
 import type { Category, SignalSeverity } from '@worldpulse/types'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
+import { rateSeverity } from './severity'
 
 interface ClassificationResult {
   category:     Category
@@ -191,7 +192,8 @@ function ruleBasedClassify(title: string, body: string | null): ClassificationRe
   const text = `${title} ${body ?? ''}`.toLowerCase()
 
   const category = detectCategory(text)
-  const severity  = detectSeverity(text, category)
+  // Counts the dead and injured and weighs the kind of event (pipeline/severity.ts, plan 0u)
+  const severity  = rateSeverity(title, body, category)
   const tags      = extractTags(text)
   const language  = detectLanguage(title)
 
@@ -246,20 +248,6 @@ function detectCategory(text: string): Category {
   }
 
   return 'other'
-}
-
-function detectSeverity(text: string, category: Category): SignalSeverity {
-  const critical = /\b(mass casualt|nuclear|chemical weapon|catastrophic|collapse|emergency declared|massacre)\b/
-  const high     = /\b(killed\s+\d|deaths?\s+toll|major\s+(?:attack|earthquake|flood|explosion)|significant\s+casualt|breaking|urgent|alert)\b/
-  const medium   = /\b(injured|damage|concern|warning|developing|troops|military|missile|sanctions)\b/
-
-  if (critical.test(text)) return 'critical'
-  if (high.test(text)) return 'high'
-  if (medium.test(text)) return 'medium'
-  // Breaking news defaults to high; disaster/conflict only bump to medium, not high
-  if (category === 'breaking') return 'high'
-  if (['disaster', 'conflict'].includes(category)) return 'medium'
-  return 'low'
 }
 
 function extractTags(text: string): string[] {

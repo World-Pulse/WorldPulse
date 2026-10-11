@@ -71,6 +71,7 @@ import { MAX_ITEM_AGE_MS, isStaleItem } from '../pipeline/freshness'
 // Feeds send "&#x27;" and "&amp;" in titles and summaries
 import { decodeEntities } from '../pipeline/text'
 import { placeFromText } from '../pipeline/geo'
+import { rateSeverity } from '../pipeline/severity'
 import { gdacsAlertLevel, gdacsSeverity, gdacsTags, tidyGdacsTitle } from './gdacs'
 export { MAX_ITEM_AGE_MS, isStaleItem, decodeEntities }
 
@@ -2099,26 +2100,9 @@ function toCategory(s: string): Category {
  * Heuristically derive signal severity from article title + description.
  * Errs on the side of 'medium' to avoid alarm fatigue.
  */
-export function detectNewsSeverity(title: string, description: string): SignalSeverity {
-  const text = `${title} ${description}`.toLowerCase()
-
-  // Critical: mass-casualty, nuclear, genocide, war declaration, pandemic
-  if (
-    /\b(mass\s+casualt|nuclear\s+(?:strike|attack|war|explosion)|genocide|war\s+declared|pandemic\s+declared|catastrophic|world\s+war|chemical\s+weapon|biological\s+weapon|dirty\s+bomb)\b/i.test(text)
-  ) return 'critical'
-
-  // High: confirmed deaths, large explosions, major crisis
-  if (
-    /\b(kills?|killed|dead|deaths|bombings?|missile\s+strikes?|air\s+strikes?|earthquakes?|tsunamis?|hurricanes?|invasion|coups?|emergency\s+declared|terror\s+attacks?|assassination|refugee\s+crisis|famine|outbreaks?)\b/i.test(text)
-  ) return 'high'
-
-  // Medium: conflict/tension, significant events (plurals too: "sanctions",
-  // "protests" and "elections" didn't match before)
-  if (
-    /\b(arrested|sanctions?|protests?|crisis|clash(?:es)?|conflicts?|fighting|forces|offensive|troops|ceasefire|elections?|summits?|verdicts?|breaking)\b/i.test(text)
-  ) return 'medium'
-
-  return 'low'
+export function detectNewsSeverity(title: string, description: string, category?: Category | null): SignalSeverity {
+  // Counts the dead and injured and weighs the kind of event (pipeline/severity.ts, plan 0u)
+  return rateSeverity(title, (description ?? '').replace(/<[^>]+>/g, ' '), category)
 }
 
 // ─── CATEGORY DETECTION ───────────────────────────────────────────────────────
@@ -2459,8 +2443,8 @@ async function processItem(
   const alert       = source.id === 'gdacs' ? gdacsAlertLevel(item.title, item.alertLevel) : null
   const gdacs       = source.id === 'gdacs' ? tidyGdacsTitle(decodeEntities(item.title)) : null
   const title       = (gdacs?.title ?? decodeEntities(item.title)).slice(0, 500) || `${source.name} — news item`
-  const severity    = alert ? gdacsSeverity(alert) : detectNewsSeverity(item.title, item.description)
   const category    = detectNewsCategory(item.title, item.description, source.category)
+  const severity    = alert ? gdacsSeverity(alert) : detectNewsSeverity(decodeEntities(item.title), item.description, category)
   const found       = inferGeo(item.title, item.description, source, item.point)
   const geo         = gdacs?.place && !found.locationName ? { ...found, locationName: gdacs.place } : found
 

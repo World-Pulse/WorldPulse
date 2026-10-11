@@ -313,7 +313,8 @@ describe('news headline keywords', () => {
     expect(detectNewsSeverity('EU agrees new sanctions on Iran', '')).toBe('medium')
     expect(detectNewsSeverity('Opposition wins regional elections', '')).toBe('medium')
     expect(detectNewsSeverity('Protests spread across the capital', '')).toBe('medium')
-    expect(detectNewsSeverity('Two earthquakes shake the island', '')).toBe('high')
+    expect(detectNewsSeverity('Two earthquakes shake the island', '')).toBe('medium')   // a quake of unknown strength (plan 0u)
+    expect(detectNewsSeverity('Two strong earthquakes shake the island', '')).toBe('high')
   })
 
   it('files SpaceX and NASA launches under space but not people named Moon', () => {
