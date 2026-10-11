@@ -164,6 +164,11 @@ export function TimeSlider({
     const handler = (e: KeyboardEvent) => {
       // Don't capture if user is typing in an input
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return
+      if (e.target instanceof HTMLElement && e.target.isContentEditable) return
+      // Browser shortcuts (Ctrl/Cmd+1 switches tab, Alt+Left goes back) are not ours
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      // Space on a focused button presses that button; it must not also play/pause
+      if (e.key === ' ' && e.target instanceof HTMLElement && e.target.closest('button, a, summary, [role="menuitem"]')) return
 
       switch (e.key) {
         case ' ':
@@ -209,6 +214,12 @@ export function TimeSlider({
       <div
         ref={histogramRef}
         className="relative h-[40px] cursor-pointer select-none"
+        role="slider"
+        aria-label="Timeline position"
+        aria-valuemin={0}
+        aria-valuemax={Math.max(0, buckets.length - 1)}
+        aria-valuenow={currentIndex}
+        aria-valuetext={currentTime ? formatTimestamp(currentTime, range) : undefined}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
@@ -257,6 +268,7 @@ export function TimeSlider({
         {/* Close button */}
         <button
           onClick={onClose}
+          aria-label="Close timeline"
           title="Close timeline (Esc)"
           className="flex items-center justify-center w-6 h-6 rounded text-wp-text3 hover:text-wp-text hover:bg-[rgba(255,255,255,0.08)] transition-all text-[14px]"
         >
@@ -267,6 +279,7 @@ export function TimeSlider({
         <button
           onClick={onTogglePlay}
           disabled={loading || buckets.length === 0}
+          aria-label={isPlaying ? 'Pause' : 'Play'}
           title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
           className={`flex items-center justify-center w-7 h-7 rounded border transition-all
             ${isPlaying
@@ -294,6 +307,8 @@ export function TimeSlider({
             <button
               key={s}
               onClick={() => onSpeedChange(s)}
+              aria-label={`Speed ${s}x`}
+              aria-pressed={speed === s}
               className={`px-1.5 py-0.5 text-[9px] font-mono transition-all
                 ${speed === s
                   ? 'bg-[rgba(255,255,255,0.12)] text-wp-text'
@@ -310,6 +325,7 @@ export function TimeSlider({
             <button
               key={r.value}
               onClick={() => onRangeChange(r.value)}
+              aria-pressed={range === r.value}
               className={`px-2 py-0.5 text-[9px] font-mono transition-all
                 ${range === r.value
                   ? 'bg-[rgba(0,212,255,0.15)] text-[#00d4ff] border-[rgba(0,212,255,0.3)]'
