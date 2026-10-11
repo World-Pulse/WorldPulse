@@ -169,6 +169,14 @@ describe('runEditorPass', () => {
     expect(stats).toMatchObject({ read: 2, changed: 1, unparsed: 1, replySample: 'Here are the categories:\n1 security\n2 farming' })
   })
 
+  it('asks once more when a reply has nothing to read (empty, cut short)', async () => {
+    h.rows = [{ id: 'a', title: 'Guardians beat White Sox to punch ticket to ALCS', summary: null, category: 'geopolitics', severity: 'low', source_count: 1, created_at: at(30) }]
+    h.replies.push({ text: '', costMicros: 40 }, { text: '1 sports', costMicros: 40 })
+    const stats = await runEditorPass(NOW)
+    expect(vi.mocked(askClaude)).toHaveBeenCalledTimes(2)
+    expect(stats).toMatchObject({ read: 1, changed: 1, unparsed: 0, costMicros: 80 })
+  })
+
   it('stops at a failed update, says why, and retries those stories next time', async () => {
     h.rows = [{ id: 'a', title: 'Strike hits port', summary: null, category: 'other', severity: 'low', source_count: 1, created_at: at(30) }]
     h.replies.push({ text: '1 conflict', costMicros: 100 })

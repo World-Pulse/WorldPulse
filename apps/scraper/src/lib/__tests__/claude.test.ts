@@ -26,7 +26,7 @@ vi.mock('../redis', () => {
 })
 vi.mock('../logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }))
 
-import { askClaude, claudeBudgetLeft, costMicros, spendKeys, monthlyCapUsd, wellFormed } from '../claude'
+import { askClaude, claudeBudgetLeft, costMicros, spendKeys, monthlyCapUsd, wellFormed, thinkingOff } from '../claude'
 
 const realFetch = globalThis.fetch
 const OCT_11 = new Date('2026-10-11T14:00:00Z')
@@ -111,6 +111,43 @@ describe('askClaude', () => {
     await askClaude({ purpose: 'editor', system: 's', prompt: `1. Live ${'🔴'.slice(0, 1)}`, maxTokens: 10 })
     const [, init] = (globalThis.fetch as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls[0]!
     expect(JSON.parse(String(init.body)).messages[0].content).toBe('1. Live ')
+  })
+
+  it('turns thinking off: it counts toward max_tokens and left replies empty', async () => {
+    expect(thinkingOff('claude-haiku-5-5')).toEqual({ type: 'disabled' })
+    expect(thinkingOff('claude-sonnet-5-5')).toEqual({ type: 'between_tools' })
+    expect(thinkingOff('claude-haiku-4-5-20251001')).toBeUndefined()
+    process.env.ANTHROPIC_API_KEY = 'test'
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+      content: [{ type: 'text', text: '1 conflict' }], usage: { input_tokens: 10, output_tokens: 3 }, stop_reason: 'end_turn',
+    }), { status: 200 })) as never
+    const reply = await askClaude({ purpose: 'editor', system: 's', prompt: 'p', maxTokens: 50 })
+    expect(reply).toMatchObject({ text: '1 conflict', stopReason: 'end_turn' })
+    const [, init] = (globalThis.fetch as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls[0]!
+    expect(JSON.parse(String(init.body))).toMatchObject({ thinking: { type: 'disabled' }, max_tokens: 50 })
+  })
+
+  it('asks again with the default thinking when a model refuses the setting', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test'
+    const replies = [
+      new Response(JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message: 'thinking.type: disabled is not supported' } }), { status: 400 }),
+      new Response(JSON.stringify({ content: [{ type: 'thinking' }, { type: 'text', text: '1 sports' }], usage: { input_tokens: 10, output_tokens: 300 } }), { status: 200 }),
+    ]
+    globalThis.fetch = vi.fn(async () => replies.shift()!) as never
+    const reply = await askClaude({ purpose: 'editor', system: 's', prompt: 'p', maxTokens: 50 })
+    expect(reply?.text).toBe('1 sports')
+    const calls = (globalThis.fetch as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls
+    const second = JSON.parse(String(calls[1]![1].body))
+    expect(second).not.toHaveProperty('thinking')
+    expect(second.max_tokens).toBe(50 + 2_048)
+  })
+
+  it('gives no text for a refusal', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test'
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+      content: [{ type: 'text', text: 'I can’t help with that.' }], usage: { input_tokens: 10, output_tokens: 8 }, stop_reason: 'refusal',
+    }), { status: 200 })) as never
+    expect(await askClaude({ purpose: 'factcheck', system: 's', prompt: 'p', maxTokens: 50 })).toMatchObject({ text: '', stopReason: 'refusal' })
   })
 
   it('gives null on an error reply, spending nothing', async () => {

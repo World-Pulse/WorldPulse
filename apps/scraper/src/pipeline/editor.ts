@@ -226,21 +226,27 @@ export async function runEditorPass(now = new Date(), lookbackMs = LOOKBACK_MS):
       const batch = rows.slice(i, i + BATCH)
       // (the stories of a batch that couldn't be filed are retried next pass)
       const retryFrom = new Date(batch[0]!.created_at).getTime() - 1
-      const reply = await askClaude({
+      const ask = () => askClaude({
         purpose:   'editor',
         system:    EDITOR_SYSTEM,
         prompt:    editorPrompt(batch),
         maxTokens: 16 * batch.length + 50,
       })
+      let reply = await ask()
       if (!reply) { stats.stopped = true; stats.error = 'no answer from Claude (the cap, or an error)'; doneUntil = Math.min(doneUntil, retryFrom); break }
+      stats.costMicros += reply.costMicros
+      let filed = parseEditorReply(reply.text, batch.length)
+      if (filed.size === 0) {
+        // A reply with nothing to read (empty, cut short): once more, then move on
+        const again = await ask()
+        if (again) { stats.costMicros += again.costMicros; reply = again; filed = parseEditorReply(again.text, batch.length) }
+      }
       stats.batches++
       stats.read += batch.length
-      stats.costMicros += reply.costMicros
 
-      const filed = parseEditorReply(reply.text, batch.length)
       if (filed.size < batch.length) {
         stats.unparsed += batch.length - filed.size
-        stats.replySample ??= reply.text.slice(0, 200)
+        stats.replySample ??= `${reply.stopReason && reply.stopReason !== 'end_turn' ? `[${reply.stopReason}] ` : ''}${reply.text.slice(0, 200)}`
       }
       const changes: Array<{ id: string; category: string; severity: string }> = []
       batch.forEach((row, k) => {

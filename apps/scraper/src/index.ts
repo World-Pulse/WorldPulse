@@ -229,11 +229,11 @@ async function bootstrap() {
   // (pipeline/editor.ts). Started before the first scrape, which can take many
   // minutes after a restart
   startEditor()
-  // Once, the last 12 hours again: the editor's first passes couldn't read some
-  // replies, and the RSS repair above put back what it had re-filed. (The first
-  // catch-up, key "editor:catch-up:2026-10-11", read 2,800 stories in calls of
-  // 50 but changed few; this one reads 25 a call.)
-  runOnce('editor:catch-up:2026-10-11b', () => catchUpEditor(12))
+  // Once, the last 12 hours again: most of the editor's calls so far came back
+  // empty (Claude's thinking used up the reply's token limit, lib/claude.ts
+  // thinkingOff), and the RSS repair above put back what it had re-filed. (The
+  // catch-ups "editor:catch-up:2026-10-11" and "…-11b" ran before that fix.)
+  runOnce('editor:catch-up:2026-10-11c', () => catchUpEditor(12))
     .then(t => { if (t) logger.info(t, 'Editor: the last 12 hours re-read by Claude') })
     .catch(err => logger.warn({ err }, 'Editor catch-up failed (non-fatal)'))
 

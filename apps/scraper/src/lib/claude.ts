@@ -87,6 +87,22 @@ export interface ClaudeReply {
   inputTokens:  number
   outputTokens: number
   costMicros:   number
+  /** Why the reply ended: "end_turn", "max_tokens" (cut short), "refusal" … */
+  stopReason?:  string
+}
+
+/**
+ * Thinking off for these short jobs. Claude's 5.5 models think by default,
+ * and thinking tokens count toward max_tokens, so a small limit can end the
+ * reply before any text: on Oct 11, 2026 most of the editor's calls came back
+ * empty that way. Haiku 5.5 turns it off with "disabled" (allowed at its
+ * default effort, medium); Sonnet 5.5's lowest setting is "between_tools".
+ * Older models don't think unless asked.
+ */
+export function thinkingOff(model: string): { type: string } | undefined {
+  if (/^claude-haiku-5/.test(model)) return { type: 'disabled' }
+  if (/^claude-sonnet-5/.test(model)) return { type: 'between_tools' }
+  return undefined
 }
 
 /**
@@ -105,34 +121,53 @@ export async function askClaude(opts: {
   if (!key) return null
   if (!(await claudeBudgetLeft().catch(() => false))) return null
   const model = opts.model ?? CLAUDE_SMALL
+  const post = (body: Record<string, unknown>) => fetch('https://api.anthropic.com/v1/messages', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+    body:    JSON.stringify(body),
+    signal:  AbortSignal.timeout(opts.timeoutMs ?? 60_000),
+  })
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-      // No temperature: newer Claude models refuse non-default values
-      body: JSON.stringify({
-        model,
-        max_tokens: opts.maxTokens,
-        system:     wellFormed(opts.system),
-        messages:   [{ role: 'user', content: wellFormed(opts.prompt) }],
-      }),
-      signal: AbortSignal.timeout(opts.timeoutMs ?? 60_000),
-    })
+    // No temperature: newer Claude models refuse non-default values
+    const request = {
+      model,
+      max_tokens: opts.maxTokens,
+      system:     wellFormed(opts.system),
+      messages:   [{ role: 'user', content: wellFormed(opts.prompt) }],
+    }
+    const thinking = thinkingOff(model)
+    let res = await post(thinking ? { ...request, thinking } : request)
+    if (!res.ok && thinking && res.status === 400) {
+      // A model that won't take that setting: ask again with its default
+      // thinking, and room for it on top of the answer
+      const body = await res.text().catch(() => '')
+      if (!/thinking/i.test(body)) {
+        logger.warn({ status: res.status, purpose: opts.purpose, model, body: body.slice(0, 300) }, 'Claude call failed')
+        return null
+      }
+      logger.warn({ purpose: opts.purpose, model, body: body.slice(0, 200) }, 'Claude: thinking setting refused, asking with the default')
+      res = await post({ ...request, max_tokens: opts.maxTokens + 2_048 })
+    }
     if (!res.ok) {
       const body = await res.text().catch(() => '')
       logger.warn({ status: res.status, purpose: opts.purpose, model, body: body.slice(0, 300) }, 'Claude call failed')
       return null
     }
     const json = await res.json() as {
-      content?: Array<{ type: string; text?: string }>
-      usage?:   { input_tokens?: number; output_tokens?: number }
+      content?:     Array<{ type: string; text?: string }>
+      usage?:       { input_tokens?: number; output_tokens?: number }
+      stop_reason?: string
     }
     const inputTokens  = json.usage?.input_tokens ?? 0
     const outputTokens = json.usage?.output_tokens ?? 0
     const micros = costMicros(model, inputTokens, outputTokens)
     await recordSpend(opts.purpose, micros).catch(err => logger.warn({ err }, 'Claude spend not recorded'))
+    // (by type: a reply can start with thinking blocks)
     const text = (json.content ?? []).filter(c => c.type === 'text').map(c => c.text ?? '').join('').trim()
-    return { text, inputTokens, outputTokens, costMicros: micros }
+    if (!text || json.stop_reason === 'refusal') {
+      logger.warn({ purpose: opts.purpose, model, stopReason: json.stop_reason, outputTokens }, 'Claude: reply without text')
+    }
+    return { text: json.stop_reason === 'refusal' ? '' : text, inputTokens, outputTokens, costMicros: micros, stopReason: json.stop_reason }
   } catch (err) {
     logger.warn({ err, purpose: opts.purpose, model }, 'Claude call failed')
     return null
