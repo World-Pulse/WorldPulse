@@ -217,6 +217,9 @@ services:
       # Optional — data sources that only run with a key or an approved app name
       OTX_API_KEY:        ${OTX_API_KEY:-}
       RELIEFWEB_APPNAME:  ${RELIEFWEB_APPNAME:-}
+      ACLED_API_KEY:      ${ACLED_API_KEY:-}
+      ACLED_API_EMAIL:    ${ACLED_API_EMAIL:-}
+      AIS_STREAM_API_KEY: ${AIS_STREAM_API_KEY:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
