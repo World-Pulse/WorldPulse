@@ -17,6 +17,7 @@ import { z } from 'zod'
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 import { hashKey } from '../lib/api-keys'
+import { maxKeyTier } from '../lib/key-tier'
 import { slopDetector } from '../lib/slop-detector'
 import { KNOWN_AI_CONTENT_FARMS } from '../lib/ai-content-farms'
 import { sendError } from '../lib/errors'
@@ -79,8 +80,10 @@ async function authenticateApiKey(req: FastifyRequest, reply: FastifyReply): Pro
 }
 
 async function requireProTier(req: FastifyRequest, reply: FastifyReply): Promise<void> {
-  const tier = req.apiKeyCtx?.tier
-  if (tier !== 'pro' && tier !== 'enterprise') {
+  const ctx = req.apiKeyCtx
+  // The key's own tier isn't enough: until Oct 11, 2026 anyone could create a
+  // "pro" key, and a key outlives its owner's subscription (lib/key-tier.ts)
+  if (!ctx || (ctx.tier !== 'pro' && ctx.tier !== 'enterprise') || await maxKeyTier(ctx.userId) === 'free') {
     sendError(reply, 403, 'FORBIDDEN', 'Batch slop detection requires a Pro or Enterprise API key')
   }
 }

@@ -4,6 +4,7 @@ import crypto from 'crypto'
 import { db } from '../db/postgres'
 import { authenticate } from '../middleware/auth'
 import { generateApiKey, TIER_LIMITS } from '../lib/api-keys'
+import { maxKeyTier, tierAbove } from '../lib/key-tier'
 import { sendError } from '../lib/errors'
 
 const CreateKeySchema = z.object({
@@ -42,6 +43,14 @@ export const registerDeveloperRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const { name, tier } = body.data
+    // The account decides the tier, not the request (plan G0, Oct 11, 2026):
+    // anyone could ask for an "enterprise" key until then
+    const max = await maxKeyTier(req.user.id, req.user.accountType)
+    if (tierAbove(tier, max)) {
+      return sendError(reply, 403, 'FORBIDDEN', tier === 'enterprise'
+        ? 'Enterprise API keys are issued by the WorldPulse team.'
+        : 'Pro API keys come with WorldPulse Pro: see world-pulse.io/pricing.')
+    }
     // Zod already validated tier is one of the three known keys
     const limits = TIER_LIMITS[tier] ?? { rpm: 60, rpd: 1_000 }
     const { key, hash } = generateApiKey()
