@@ -5,7 +5,7 @@
  * inside the part of the world on screen, beside the map — a column on
  * desktop, a sheet on phones. Hovering an item lights up its dot; clicking
  * flies there and opens the signal's panel. Like Liveuamap's News Live list,
- * with WorldPulse's verified mark on each item.
+ * with WorldPulse's verified mark and how many outlets carried the story.
  */
 
 import { X, BadgeCheck } from 'lucide-react'
@@ -19,6 +19,21 @@ export interface LiveListItem {
   location_name: string | null
   created_at: string
   original_urls: string | string[] | null
+}
+
+/** A listed signal's story: its reports, the outlets that carried it, and whether it's verified */
+export interface StoryOutlets { size: number; outlets: number; verified?: boolean }
+
+/**
+ * The badge text: "Verified · 12 outlets", "Verified", "3 outlets" or
+ * nothing. A report of a verified story says Verified, as the story's page
+ * and the home page do.
+ */
+export function storyBadge(signalVerified: boolean, story: StoryOutlets | undefined): string {
+  const verified = signalVerified || story?.verified === true
+  const outlets = story && story.outlets >= 2 ? `${story.outlets} outlets` : ''
+  if (verified) return outlets ? `Verified · ${outlets}` : 'Verified'
+  return outlets
 }
 
 /** The website a signal's first article is on ("" when there's none) */
@@ -49,7 +64,7 @@ export function ago(iso: string): string {
   return h < 24 ? `${h}h` : `${Math.floor(h / 24)}d`
 }
 
-export function LiveList({ items, total, open, selectedId, freshIds, onClose, onSelect, onHover }: {
+export function LiveList({ items, total, open, selectedId, freshIds, stories, onClose, onSelect, onHover }: {
   items: LiveListItem[]
   /** Signals in view (the list shows the newest of them) */
   total: number
@@ -57,6 +72,8 @@ export function LiveList({ items, total, open, selectedId, freshIds, onClose, on
   selectedId: string | null
   /** Signals new since the reader's last visit (marked NEW; plan M8) */
   freshIds?: Set<string>
+  /** Each signal's story, when known: "Verified · 12 outlets" */
+  stories?: Map<string, StoryOutlets>
   onClose: () => void
   onSelect: (item: LiveListItem) => void
   onHover: (item: LiveListItem | null) => void
@@ -91,6 +108,9 @@ export function LiveList({ items, total, open, selectedId, freshIds, onClose, on
             const color = SEVERITY_COLOR[item.severity] ?? SEVERITY_COLOR.low
             const outlet = outletOf(item.original_urls)
             const verified = item.status === 'verified'
+            const story = stories?.get(item.id)
+            const badge = storyBadge(verified, story)
+            const storyVerified = verified || story?.verified === true
             return (
               <li key={item.id}>
                 <button
@@ -114,9 +134,9 @@ export function LiveList({ items, total, open, selectedId, freshIds, onClose, on
                       {freshIds?.has(item.id) && (
                         <span className="flex-shrink-0 px-1 rounded bg-[#e0f2fe] text-[#0b1220] font-semibold tracking-[0.5px]">NEW</span>
                       )}
-                      {verified && (
-                        <span className="inline-flex items-center gap-0.5 text-wp-green flex-shrink-0">
-                          <BadgeCheck size={11} /> Verified
+                      {badge && (
+                        <span className={`inline-flex items-center gap-0.5 flex-shrink-0 ${storyVerified ? 'text-wp-green' : 'text-wp-cyan'}`}>
+                          {storyVerified && <BadgeCheck size={11} />} {badge}
                         </span>
                       )}
                       {item.location_name && <span className="truncate">{item.location_name}</span>}

@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 import { LayersPanel, activeLayerCount, type MapLayerGroup } from '@/components/map/LayersPanel'
 import { MapLegend } from '@/components/map/MapLegend'
-import { LiveList, latestFirst } from '@/components/map/LiveList'
+import { LiveList, latestFirst, type StoryOutlets } from '@/components/map/LiveList'
 import { CountryBrief, type CountryRisk } from '@/components/map/CountryBrief'
 import { SinceLastVisit } from '@/components/map/SinceLastVisit'
 import { useLastVisit } from '@/hooks/useLastVisit'
@@ -461,6 +461,37 @@ function MapView() {
   const inViewKeyRef = useRef('')
   const listOpenRef  = useRef(listOpen)
   useEffect(() => { listOpenRef.current = listOpen }, [listOpen])
+
+  // How many outlets carried each listed signal's story ("Verified · 12 outlets"),
+  // asked for the signals in the list (GET /api/v1/stories/outlets), again after 5 min
+  const [storyOutlets, setStoryOutlets] = useState<Map<string, StoryOutlets>>(() => new Map())
+  const storyOutletsAskedRef = useRef(new Map<string, number>())
+  useEffect(() => {
+    if (!listOpen || inView.length === 0) return
+    const timer = setTimeout(() => {
+      const now = Date.now()
+      const ids = inView.map(s => s.id)
+        .filter(id => now - (storyOutletsAskedRef.current.get(id) ?? 0) > 5 * 60_000)
+        .slice(0, 60)
+      if (ids.length === 0) return
+      for (const id of ids) storyOutletsAskedRef.current.set(id, now)
+      fetch(`${API_URL}/api/v1/stories/outlets?ids=${ids.join(',')}`)
+        .then(res => (res.ok ? res.json() : null))
+        .then((json: { data?: { stories?: Record<string, { size?: unknown; outlets?: unknown; verified?: unknown }> } } | null) => {
+          const got = json?.data?.stories
+          if (!got) return
+          setStoryOutlets(prev => {
+            const next = new Map(prev)
+            for (const [id, v] of Object.entries(got)) {
+              next.set(id, { size: Number(v.size) || 1, outlets: Number(v.outlets) || 0, verified: v.verified === true })
+            }
+            return next
+          })
+        })
+        .catch(() => { /* the list shows without the counts */ })
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [inView, listOpen])
   useEffect(() => { if (window.innerWidth >= 1280) setListOpen(true) }, [])
   // On desktop the list covers the map's left 320px: centre the map in the rest
   useEffect(() => {
@@ -3869,6 +3900,7 @@ function MapView() {
           open={listOpen}
           selectedId={selected?.id ?? null}
           freshIds={sinceDismissed ? undefined : freshIds}
+          stories={storyOutlets}
           onClose={() => { setListOpen(false); hoverOnMap(null) }}
           onSelect={selectFromList}
           onHover={hoverOnMap}

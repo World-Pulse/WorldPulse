@@ -22,6 +22,11 @@ const FIRST_REPORTS = 10
 
 /** Stories looked at per list request: the ones most recently reported */
 const MAX_CANDIDATES = 600
+/** Signals one /stories/outlets request may ask about (the map's list shows 60) */
+const MAX_OUTLET_IDS = 60
+/** An article link's website, for Postgres (bound as values: a "?" in knex's SQL is a placeholder) */
+const HOST_PATTERN = '^https?://([^/:?#]+)'
+const WWW_PATTERN = '^www\\.'
 /** Seconds a story list is reused */
 const LIST_CACHE_TTL = 120
 
@@ -161,6 +166,54 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
     }
     redis.setex(cacheKey, LIST_CACHE_TTL, JSON.stringify(response)).catch(() => {})
     return reply.send(response)
+  })
+
+  /**
+   * GET /api/v1/stories/outlets?ids=<signal ids, comma-separated, up to 60>
+   * For each signal: its story, how many reports the story has and how many
+   * outlets carried it (counted as /stories/:id counts them: the websites in
+   * every report's links) and whether it is verified, so a list of signals —
+   * the World Map's "Latest in view" — can say "Verified · 12 outlets".
+   * Unknown ids are left out.
+   */
+  app.get('/outlets', { preHandler: [optionalAuth], config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const raw = String((req.query as { ids?: unknown } | undefined)?.ids ?? '')
+    const ids = [...new Set(raw.split(',').map(v => v.trim()).filter(v => UUID_RE.test(v)))].slice(0, MAX_OUTLET_IDS)
+    if (ids.length === 0) return reply.send({ success: true, data: { stories: {} } })
+
+    const hasStories = await signalsHaveStoryIds()
+    const storyKey = hasStories ? 'COALESCE(s.story_id, s.id)' : 's.id'
+    const inStory = hasStories ? '(m.story_id = a.story_key OR m.id = a.story_key)' : 'm.id = a.story_key'
+    const result = await db.raw(
+      `WITH asked AS (
+         SELECT s.id, ${storyKey} AS story_key FROM signals s WHERE s.id = ANY(?::uuid[])
+       )
+       SELECT a.id::text AS id, a.story_key::text AS story_id, f.size, f.verified, o.outlets
+         FROM asked a
+         CROSS JOIN LATERAL (
+           SELECT count(*)::int AS size, bool_or(m.status = 'verified') AS verified
+             FROM signals m
+            WHERE ${inStory} AND m.status IN ('verified', 'pending')
+         ) f
+         CROSS JOIN LATERAL (
+           SELECT count(DISTINCT lower(regexp_replace(substring(link.url from ?), ?, '')))::int AS outlets
+             FROM signals m CROSS JOIN LATERAL unnest(m.original_urls) AS link(url)
+            WHERE ${inStory} AND m.status IN ('verified', 'pending')
+         ) o`,
+      [ids, HOST_PATTERN, WWW_PATTERN],
+    ) as { rows?: Array<{ id: string; story_id: string; size: unknown; verified: unknown; outlets: unknown }> } | undefined
+
+    // (verified: any of the story's reports is, as the story page and the home page say)
+    const stories: Record<string, { storyId: string; size: number; outlets: number; verified: boolean }> = {}
+    for (const r of result?.rows ?? []) {
+      stories[String(r.id)] = {
+        storyId:  String(r.story_id),
+        size:     Number(r.size) || 1,
+        outlets:  Number(r.outlets) || 0,
+        verified: r.verified === true,
+      }
+    }
+    return reply.send({ success: true, data: { stories } })
   })
 
   /**

@@ -2,7 +2,7 @@
  * "Latest in view" beside the map (plan M14): ordering and outlet names.
  */
 import { describe, it, expect } from 'vitest'
-import { latestFirst, outletOf } from '../LiveList'
+import { latestFirst, outletOf, storyBadge } from '../LiveList'
 
 describe('latestFirst', () => {
   it('puts the newest first and stops at the limit', () => {
@@ -32,5 +32,23 @@ describe('outletOf', () => {
     expect(outletOf(null)).toBe('')
     expect(outletOf([])).toBe('')
     expect(outletOf('not json')).toBe('')
+  })
+})
+
+describe('storyBadge', () => {
+  it('says how many outlets carried the story, with the verified mark when it is', () => {
+    expect(storyBadge(true, { size: 33, outlets: 12 })).toBe('Verified · 12 outlets')
+    expect(storyBadge(false, { size: 4, outlets: 3 })).toBe('3 outlets')
+  })
+
+  it("marks a report of a verified story verified, as the story's page does", () => {
+    expect(storyBadge(false, { size: 6, outlets: 7, verified: true })).toBe('Verified · 7 outlets')
+  })
+
+  it('says nothing about one outlet, or before the counts arrive', () => {
+    expect(storyBadge(true, { size: 1, outlets: 1 })).toBe('Verified')
+    expect(storyBadge(true, undefined)).toBe('Verified')
+    expect(storyBadge(false, { size: 1, outlets: 1 })).toBe('')
+    expect(storyBadge(false, undefined)).toBe('')
   })
 })

@@ -94,3 +94,25 @@ describe('GET /api/v1/stories/:id', () => {
     expect((await get('not-a-uuid')).statusCode).toBe(400)
   })
 })
+
+describe('GET /api/v1/stories/outlets', () => {
+  it("answers each signal's story size and outlets, counted like the story page", async () => {
+    h.rows = [{ id: SIGNAL, story_id: STORY, size: 33, outlets: 12, verified: true }]
+    const res = await get(`outlets?ids=${SIGNAL},not-an-id,${SIGNAL}`)
+    expect(res.statusCode).toBe(200)
+    expect(res.json().data.stories).toEqual({ [SIGNAL]: { storyId: STORY, size: 33, outlets: 12, verified: true } })
+    // only well-formed ids, once each, as one array value
+    expect(h.bindings[0]).toEqual([SIGNAL])
+    expect(h.bindings.slice(1)).toEqual(['^https?://([^/:?#]+)', '^www\\.'])
+    expect(h.sql).toMatch(/unnest\(m\.original_urls\)/)
+    expect(h.sql).toMatch(/m\.story_id = a\.story_key OR m\.id = a\.story_key/)
+    expect(h.sql).toMatch(/bool_or\(m\.status = 'verified'\)/)
+  })
+
+  it('answers an empty list without asking the database', async () => {
+    h.sql = ''
+    const res = await get('outlets?ids=nope')
+    expect(res.json().data.stories).toEqual({})
+    expect(h.sql).toBe('')
+  })
+})
