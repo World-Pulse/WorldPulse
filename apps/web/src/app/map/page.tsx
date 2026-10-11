@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useRef, useState, useCallback, Suspense } from 'react'
+import React, { useEffect, useRef, useState, useCallback, useMemo, Suspense } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
@@ -22,6 +22,9 @@ import {
 import { LayersPanel, activeLayerCount, type MapLayerGroup } from '@/components/map/LayersPanel'
 import { MapLegend } from '@/components/map/MapLegend'
 import { LiveList, latestFirst } from '@/components/map/LiveList'
+import { CountryBrief, type CountryRisk } from '@/components/map/CountryBrief'
+import { countryAt, loadCountryShapes, focusBboxOf, type CountryHit } from '@/lib/country-shapes'
+import { signalsInCountry, countryBrief } from '@/lib/country-brief'
 import { ensureMapIcon, MAP_ICON } from '@/lib/map-icons'
 import {
   SEVERITY_COLOR, SEVERITY_BG, SEVERITY_RANK, CLUSTER_COLOR_EXPR, SIGNAL_RADIUS_EXPR, FONT_BOLD,
@@ -137,6 +140,10 @@ const CAT_ICON: Record<string, string> = {
 }
 const CATS   = ['all', 'conflict', 'climate', 'health', 'economy', 'science', 'disaster']
 const SEVS   = ['all', 'critical', 'high', 'medium', 'low']
+/** The time window in words, for the country brief */
+const TIME_WINDOW_LABEL: Record<string, string> = {
+  '1h': 'last hour', '6h': 'last 6 hours', '24h': 'last 24 hours', '7d': 'last 7 days', all: 'all time',
+}
 const TRANGE = [
   { v: '1h',  l: '1H',  hours: 1 },
   { v: '6h',  l: '6H',  hours: 6 },
@@ -236,6 +243,8 @@ function MapView() {
 
   const [signals,  setSignals]  = useState<MapSignal[]>([])
   const [selected,         setSelected]         = useState<MapSignal | null>(null)
+  // Country brief (plan M9): the country clicked on the map
+  const [country,          setCountry]          = useState<(CountryHit & { risk: CountryRisk | null }) | null>(null)
   const [flagModalSignalId, setFlagModalSignalId] = useState<string | null>(null)
   const [loading,  setLoading]  = useState(true)
   const [category,    setCategory]    = useState(() => searchParams.get('cat') ?? 'all')
@@ -1215,15 +1224,39 @@ function MapView() {
           const coords = feat.geometry.coordinates as [number, number]
           const sig = signalsRef.current.find(s => s.id === p.id) ?? null
           setSelected(sig)
+          setCountry(null)
           map.flyTo({ center: coords, zoom: Math.max(map.getZoom(), 5), speed: 1.2, duration: 700 })
         })
 
-        // ── Background click: deselect ────────────────────────
+        // ── Background click: deselect, and open the brief of the country
+        //    clicked (plan M9) when nothing else is under the cursor ─────
 
-        map.on('click', () => {
+        // Layers that are scenery, not something to click
+        const SCENERY = /^(wp-imagery-|country-select-|country-risk-|enhanced-heatmap|list-hover)/
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const pickCountry = async (e: any) => {
+          const base = new Set(baseIdsRef.current ?? [])
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const under = map.queryRenderedFeatures(e.point) as any[]
+          if (under.some(f => !base.has(f.layer?.id) && !SCENERY.test(f.layer?.id ?? ''))) return
+          const risk = under.find(f => f.layer?.id === 'country-risk-fill')?.properties
+          try {
+            const hit = await countryAt(e.lngLat.lng, e.lngLat.lat)
+            setCountry(hit ? {
+              ...hit,
+              risk: risk?.wpHasData ? { score: Number(risk.wpRiskScore), label: String(risk.wpRiskLabel), trend: String(risk.wpTrend ?? '') } : null,
+            } : null)
+          } catch {
+            // The outlines didn't load: no brief this time
+          }
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        map.on('click', (e: any) => {
           if (pinClicked) { pinClicked = false; return }
           if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
           setSelected(null)
+          void pickCountry(e)
         })
 
         // ── Viewport change: re-cluster + persist URL ─────────
@@ -2906,6 +2939,58 @@ function MapView() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hazardsMode, mapReady])
 
+  // ── Country brief: outline the chosen country (plan M9) ─────────────────────
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady) return
+    const SRC = 'country-select'
+    const data = { type: 'FeatureCollection', features: country ? [country.feature] : [] }
+    try {
+      if (!map.getSource(SRC)) {
+        map.addSource(SRC, { type: 'geojson', data })
+        // Under the signal clusters and pins
+        const before = map.getLayer('cluster-halo') ? 'cluster-halo' : undefined
+        map.addLayer({ id: 'country-select-fill', type: 'fill', source: SRC,
+          paint: { 'fill-color': '#f5a623', 'fill-opacity': 0.07 } }, before)
+        map.addLayer({ id: 'country-select-glow', type: 'line', source: SRC,
+          paint: { 'line-color': '#f5a623', 'line-width': 6, 'line-opacity': 0.22, 'line-blur': 4 } }, before)
+        map.addLayer({ id: 'country-select-line', type: 'line', source: SRC,
+          paint: { 'line-color': '#f5a623', 'line-width': 1.4, 'line-opacity': 0.9 } }, before)
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(map.getSource(SRC) as any).setData(data)
+      }
+    } catch { /* the style is reloading; the next change draws it */ }
+  }, [country, mapReady])
+
+  // Escape closes the country brief (the signal panel first, if it's open)
+  useEffect(() => {
+    if (!country) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (selected) setSelected(null)
+      else setCountry(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [country, selected])
+
+  const countrySignals = useMemo(
+    () => country ? signalsInCountry(signals, country.code, country.feature) : [],
+    [country, signals],
+  )
+  const brief = useMemo(() => countryBrief(countrySignals), [countrySignals])
+  const zoomToCountry = () => {
+    const map = mapRef.current
+    if (!map || !country) return
+    const [w, s, e, n] = focusBboxOf(country.feature)
+    const desktop = typeof window !== 'undefined' && window.innerWidth >= 768
+    map.fitBounds([[w, s], [e, n]], {
+      padding: desktop ? { top: 60, bottom: 60, left: 60, right: 400 } : { top: 40, bottom: Math.round(window.innerHeight * 0.5), left: 30, right: 30 },
+      maxZoom: 6, duration: 1000,
+    })
+  }
+
   // ── Country Risk Choropleth layer ────────────────────────────────────────────
   //
   // Fetches /api/v1/countries?window=24h&limit=200 for live risk scores and
@@ -2943,14 +3028,14 @@ function MapView() {
       setCountryRiskLoading(true)
       try {
         // Fetch risk API + country GeoJSON in parallel
-        const [riskRes, geoRes] = await Promise.all([
+        // Natural Earth 110m admin-0 outlines (~600 KB), shared with the country brief
+        const [riskRes, shapes] = await Promise.all([
           fetch(`${API_URL}/api/v1/countries?window=24h&limit=200`),
-          // Natural Earth 110m admin-0 GeoJSON — ~400 KB, ISO_A2 property
-          fetch('https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_110m_admin_0_countries.geojson'),
+          loadCountryShapes().catch(() => null),
         ])
 
-        if (!riskRes.ok || !geoRes.ok) {
-          console.warn('[map] Country risk fetch failed', riskRes.status, geoRes.status)
+        if (!riskRes.ok || !shapes) {
+          console.warn('[map] Country risk fetch failed', riskRes.status, shapes ? 'outlines ok' : 'outlines failed')
           return
         }
 
@@ -2968,7 +3053,7 @@ function MapView() {
         }
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const geoJson = await geoRes.json() as { type: string; features: any[] }
+        const geoJson = shapes as unknown as { type: string; features: any[] }
 
         // Build lookup: ISO-2 code → risk entry
         const byCode = new Map<string, (typeof riskJson.countries)[0]>()
@@ -3055,54 +3140,8 @@ function MapView() {
           map.on('mouseenter', CR_FILL, () => { map.getCanvas().style.cursor = 'pointer' })
           map.on('mouseleave', CR_FILL, () => { map.getCanvas().style.cursor = '' })
 
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          map.on('click', CR_FILL, async (e: any) => {
-            const feat = e.features?.[0]
-            if (!feat) return
-            const p = feat.properties as {
-              wpCountryName: string
-              wpHasData:     boolean
-              wpRiskLabel:   string
-              wpRiskScore:   number
-              wpSignalCount: number
-              wpTrend:       string
-              wpCategories:  string
-            }
-            if (!p.wpHasData) return
-
-            const riskColor =
-              p.wpRiskScore >= 80 ? '#ff3b5c'
-              : p.wpRiskScore >= 60 ? '#f97316'
-              : p.wpRiskScore >= 40 ? '#fbbf24'
-              : p.wpRiskScore >= 20 ? '#3b82f6'
-              : '#6b7280'
-
-            const trendArrow =
-              p.wpTrend === 'rising'  ? '⬆' :
-              p.wpTrend === 'falling' ? '⬇' : '➡'
-
-            const { default: ml } = await import('maplibre-gl')
-            if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
-            popupRef.current = new ml.Popup({
-              closeButton: true, closeOnClick: false, offset: 12, className: 'wp-map-popup',
-            })
-              .setLngLat(e.lngLat)
-              .setHTML(`
-                <div style="font:600 14px/1.4 system-ui;color:#e2e6f0;margin-bottom:6px">${escapeHtml(p.wpCountryName)}</div>
-                <div style="font:700 28px/1 monospace;color:${riskColor};margin-bottom:4px">${escapeHtml(p.wpRiskScore)}</div>
-                <div style="font:600 11px monospace;color:${riskColor};letter-spacing:1.5px;margin-bottom:8px">${escapeHtml(String(p.wpRiskLabel ?? '').toUpperCase())} RISK</div>
-                <div style="font:11px monospace;color:#8892a4;margin-bottom:2px">
-                  📊 ${escapeHtml(p.wpSignalCount)} signal${p.wpSignalCount !== 1 ? 's' : ''} (24h)
-                </div>
-                <div style="font:11px monospace;color:#8892a4;margin-bottom:2px">
-                  Trend: ${trendArrow} ${escapeHtml(p.wpTrend)}
-                </div>
-                ${p.wpCategories
-                  ? `<div style="font:10px monospace;color:#5a6477;margin-top:4px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(p.wpCategories)}</div>`
-                  : ''}
-              `)
-              .addTo(map)
-          })
+          // A click on a country opens its brief (with this layer's risk score);
+          // see the background click handler. This layer has no pop-up of its own.
         }
       } catch (e) {
         console.warn('[map] Country risk choropleth error:', e)
@@ -3598,7 +3637,7 @@ function MapView() {
         )}
 
         {/* Legend: severities, verified ring, groups, and the layers that are on */}
-        <div className={`absolute z-10 transition-all duration-300 ${listOpen ? 'left-4 md:left-[336px]' : 'left-4'} ${selected ? 'hidden md:block md:bottom-6' : 'bottom-6'}`}>
+        <div className={`absolute z-10 transition-all duration-300 ${listOpen ? 'left-4 md:left-[336px]' : 'left-4'} ${selected || country ? 'hidden md:block md:bottom-6' : 'bottom-6'}`}>
           <MapLegend counts={sevCounts} groups={layerGroups} />
         </div>
 
@@ -3746,6 +3785,21 @@ function MapView() {
           )}
         </div>
 
+        {/* Country brief (plan M9): opens on a click on a country; a signal
+            chosen from it opens the signal panel, and closing that comes back here */}
+        {country && !selected && (
+          <CountryBrief
+            country={country}
+            brief={brief}
+            windowLabel={TIME_WINDOW_LABEL[timeRange] ?? 'chosen time window'}
+            risk={country.risk}
+            categoryIcon={CAT_ICON}
+            onClose={() => setCountry(null)}
+            onSelect={selectFromList}
+            onZoom={zoomToCountry}
+          />
+        )}
+
         {/* ── Basemap, projection and reset view (top-right, under the zoom buttons) ── */}
         {/* Below MapLibre's zoom/compass buttons, which are 44px tall each on phones */}
         <div className="absolute right-[10px] z-10 flex flex-col gap-1.5 top-[152px] md:top-[112px]">
@@ -3870,7 +3924,8 @@ function MapView() {
         )}
 
         {/* Share Button — floating bottom-right (BAT-15) */}
-        <ShareButton getState={getPermalinkState} />
+        {/* Beside the side panel when one is open (on phones the sheet covers it) */}
+        <ShareButton getState={getPermalinkState} className={selected || country ? 'hidden md:flex md:right-[352px]' : ''} />
 
         {/* Timeline Slider (BAT-14) */}
         {timelineActive && (

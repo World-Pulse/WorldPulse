@@ -39,7 +39,8 @@ export function latestFirst<T extends { created_at: string }>(items: T[], max = 
     .slice(0, max)
 }
 
-function ago(iso: string): string {
+/** "now", "5m", "3h", "2d" */
+export function ago(iso: string): string {
   const m = Math.floor((Date.now() - Date.parse(iso)) / 60_000)
   if (!Number.isFinite(m)) return ''
   if (m < 1) return 'now'

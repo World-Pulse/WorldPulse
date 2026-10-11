@@ -52,6 +52,7 @@ export function MapLegend({ counts, groups, className = '' }: {
             <span className="w-3 h-3 rounded-full border-2 bg-[#0b1220]" style={{ borderColor: SEVERITY_COLOR.high }} />
             <span className="font-mono text-[10px] text-wp-text2">Group · most serious</span>
           </div>
+          <div className="pt-1 border-t border-white/[0.06] font-mono text-[9px] text-wp-text3">Click a country for its brief</div>
           {activeLayers.length > 0 && (
             <div className="pt-1 border-t border-white/[0.06] space-y-1.5">
               {activeLayers.map(l => (
