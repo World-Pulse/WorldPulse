@@ -30,6 +30,7 @@ import { EventTimeline } from '@/components/signals/EventTimeline'
 import { TVClips } from '@/components/signals/TVClips'
 import { NewsImages } from '@/components/signals/NewsImages'
 import { PredictionMarkets } from '@/components/signals/PredictionMarkets'
+import { displaySummary, isStateMedia, STATE_MEDIA_NOTE } from '@/lib/signal-text'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -260,6 +261,7 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
   const isBreaking  = signal.isBreaking === true && ageMs < 30 * 60_000
   const flagCount   = signal.communityFlagCount ?? 0
   const isContested = signal.status === 'disputed' || flagCount >= 3
+  const summaryText = displaySummary(signal.summary, signal.title)
 
   return (
     <div className="min-h-screen bg-wp-bg text-wp-text">
@@ -363,14 +365,17 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
               )}
             </div>
 
-            {/* Summary */}
-            {signal.summary && (
+            {/* Summary (without the outlet note RSS used to add, and not a repeat of the headline) */}
+            {summaryText && (
               <p
                 className="text-[15px] text-wp-text2 leading-[1.7] border-l-2 pl-4"
                 style={{ borderColor: `${color}66` }}
               >
-                {signal.summary}
+                {summaryText}
               </p>
+            )}
+            {isStateMedia(signal.tags) && (
+              <p className="font-mono text-[11px] text-wp-amber">⚠ {STATE_MEDIA_NOTE}</p>
             )}
 
             {/* Body */}

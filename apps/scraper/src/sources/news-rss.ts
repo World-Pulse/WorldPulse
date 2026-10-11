@@ -69,7 +69,7 @@ import { insertAndCorrelate } from '../pipeline/insert-signal'
 // Feed items published more than 3 days ago aren't news
 import { MAX_ITEM_AGE_MS, isStaleItem } from '../pipeline/freshness'
 // Feeds send "&#x27;" and "&amp;" in titles and summaries
-import { decodeEntities, cleanSummary } from '../pipeline/text'
+import { decodeEntities, cleanSummary, repeatsTitle } from '../pipeline/text'
 import { placeFromText } from '../pipeline/geo'
 import { rateSeverity } from '../pipeline/severity'
 import { gdacsAlertLevel, gdacsSeverity, gdacsTags, tidyGdacsTitle } from './gdacs'
@@ -2465,15 +2465,14 @@ async function processItem(
   const pubDate  = item.pubDate ? new Date(item.pubDate) : new Date()
   const eventTime = isNaN(pubDate.getTime()) ? new Date() : pubDate
 
-  const summary = [
-    item.description
-      ? cleanSummary(decodeEntities(item.description.replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ')).slice(0, 600) || `${title}.`
-      : `${title}.`,
-    `Source: ${source.name} (reliability: ${(source.reliability * 100).toFixed(0)}%, bias: ${source.biasLabel}).`,
-    source.biasLabel === 'state-media'
-      ? `⚠️ This outlet is state-controlled and may reflect official government positions.`
-      : '',
-  ].filter(Boolean).join(' ')
+  // The article's own words, or none when they only repeat the headline. The
+  // outlet, its reliability and bias are on the signal (its source and the
+  // state-media tag), not in the summary: until Oct 11, 2026 a note there
+  // ("Source: X (reliability: 76%, bias: center).") read as the story's score.
+  const description = item.description
+    ? cleanSummary(decodeEntities(item.description.replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ')).slice(0, 600)
+    : ''
+  const summary = repeatsTitle(description, title) ? null : description
 
   const tags = [
     'news', 'rss', source.id, source.countryCode.toLowerCase(),

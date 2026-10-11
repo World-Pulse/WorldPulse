@@ -72,3 +72,47 @@ describe('cleanSummary (feed footers, Oct 11, 2026)', () => {
     expect(cleanSummary(story)).toBe(story)
   })
 })
+
+describe('summaryWithoutNotes (the outlet note, Oct 11, 2026)', () => {
+  it('takes out the note RSS added, and the state-media sentence', async () => {
+    const { summaryWithoutNotes } = await import('../text')
+    expect(summaryWithoutNotes('Talks resumed in Geneva on Sunday. Source: Middle East Eye (reliability: 74%, bias: center-left).', 'Talks resume'))
+      .toBe('Talks resumed in Geneva on Sunday.')
+    expect(summaryWithoutNotes('Moscow says the drones were downed. Source: TASS (reliability: 45%, bias: state-media). ⚠️ This outlet is state-controlled and may reflect official government positions.', 'Drones downed'))
+      .toBe('Moscow says the drones were downed.')
+    // an outlet name with brackets of its own
+    expect(summaryWithoutNotes('Floods closed schools. Source: New Straits Times (Malaysia) (reliability: 75%, bias: center).', 'Floods'))
+      .toBe('Floods closed schools.')
+  })
+
+  it('stores nothing when all that is left repeats the headline', async () => {
+    const { summaryWithoutNotes } = await import('../text')
+    const title = 'Yemen’s Houthis renew warning over Saudi airports after deadly Riyadh attack'
+    expect(summaryWithoutNotes(`${title}. Source: Investing.com News (reliability: 76%, bias: center).`, title)).toBeNull()
+    expect(summaryWithoutNotes(`"${title}"`, title)).toBeNull()
+    expect(summaryWithoutNotes('Source: The Block (reliability: 75%, bias: center).', title)).toBeNull()
+    expect(summaryWithoutNotes(null, title)).toBeNull()
+  })
+
+  it('leaves a real summary alone, footers aside', async () => {
+    const { summaryWithoutNotes } = await import('../text')
+    const story = 'The source said talks would resume (reliability of the claim unclear). More soon.'
+    expect(summaryWithoutNotes(story, 'Talks')).toBe(story)
+    expect(summaryWithoutNotes('Roads cut across the north. Continue reading', 'Floods')).toBe('Roads cut across the north.')
+  })
+
+  it('cleans every source at insert, and the stored form is null for a title repeat', () => {
+    const row = { title: 'Quake hits Peru', summary: 'Quake hits Peru. Source: Reuters (reliability: 90%, bias: center).' }
+    expect(cleanSignalText(row).summary).toBeNull()
+  })
+})
+
+describe('repeatsTitle', () => {
+  it('ignores case, spaces, quotes and end punctuation', async () => {
+    const { repeatsTitle } = await import('../text')
+    expect(repeatsTitle('Quake hits  Peru.', 'quake hits Peru')).toBe(true)
+    expect(repeatsTitle('“Quake hits Peru”', 'Quake hits Peru')).toBe(true)
+    expect(repeatsTitle('', 'Quake hits Peru')).toBe(true)
+    expect(repeatsTitle('Quake hits Peru, killing 3.', 'Quake hits Peru')).toBe(false)
+  })
+})

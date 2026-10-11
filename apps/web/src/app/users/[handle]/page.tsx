@@ -8,6 +8,7 @@ import type { User } from '@worldpulse/types'
 import { EmptyState } from '@/components/EmptyState'
 import { UserCircle } from 'lucide-react'
 import { useToast } from '@/components/Toast'
+import { displaySummary } from '@/lib/signal-text'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -186,9 +187,9 @@ function SignalCard({ signal }: { signal: SignalItem }) {
           {signal.title}
         </h3>
 
-        {signal.summary && (
+        {displaySummary(signal.summary, signal.title) && (
           <p className="text-[13px] text-wp-text2 leading-relaxed mb-3 line-clamp-2">
-            {signal.summary}
+            {displaySummary(signal.summary, signal.title)}
           </p>
         )}
 

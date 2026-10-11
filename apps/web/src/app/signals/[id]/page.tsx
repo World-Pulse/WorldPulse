@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import type { Signal, Post } from '@worldpulse/types'
 import { SignalDetailClient } from './SignalDetailClient'
+import { displaySummary } from '@/lib/signal-text'
 
 const API_BASE = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -67,12 +68,14 @@ export async function generateMetadata(
   const { id } = await params
   const signal = await fetchSignal(id)
   if (!signal) return { title: 'Signal Not Found — WorldPulse' }
+  // (a summary that only repeats the headline, or the old outlet note, isn't a description)
+  const description = displaySummary(signal.summary, signal.title) || signal.title
   return {
     title:       `${signal.title} — WorldPulse`,
-    description: signal.summary ?? signal.title,
+    description,
     openGraph: {
       title:         signal.title,
-      description:   signal.summary ?? signal.title,
+      description,
       type:          'article',
       publishedTime: signal.firstReported ?? undefined,
       modifiedTime:  signal.lastUpdated   ?? undefined,
@@ -81,7 +84,7 @@ export async function generateMetadata(
     twitter: {
       card:        'summary_large_image',
       title:       signal.title,
-      description: signal.summary ?? signal.title,
+      description,
     },
   }
 }

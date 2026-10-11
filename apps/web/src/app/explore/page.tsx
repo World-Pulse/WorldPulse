@@ -7,6 +7,7 @@ import {
   Siren, Swords, LineChart, Thermometer, Hospital, Laptop,
   Landmark, Drama, MapPin, Map as MapIcon,
 } from 'lucide-react'
+import { displaySummary } from '@/lib/signal-text'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -156,8 +157,8 @@ export default function ExplorePage() {
                   )}
                 </div>
                 <div className="text-[13px] font-semibold text-wp-text leading-snug line-clamp-2">{sig.title}</div>
-                {sig.summary && (
-                  <div className="text-[12px] text-wp-text3 mt-1 line-clamp-1">{sig.summary}</div>
+                {displaySummary(sig.summary, sig.title) && (
+                  <div className="text-[12px] text-wp-text3 mt-1 line-clamp-1">{displaySummary(sig.summary, sig.title)}</div>
                 )}
               </div>
               <div className="flex flex-col items-end gap-1 flex-shrink-0">

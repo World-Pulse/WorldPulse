@@ -69,3 +69,47 @@ export function cleanSummary(text: string): string {
 
 /** Text with a feed footer worth removing (for the repair) */
 export const FEED_FOOTER_SQL = '(appeared first on|read more\\s*:\\s*https?://)'
+
+/**
+ * The note the RSS reader added to every summary until Oct 11, 2026 —
+ * "Source: Middle East Eye (reliability: 74%, bias: center-left)." and, for
+ * state-run outlets, "⚠️ This outlet is state-controlled and may reflect
+ * official government positions." It was in 277 of the 500 newest summaries
+ * (and all that 238 of them said besides the headline). It read as the
+ * story's reliability ("76%" beside a 100% score) and went into the AI
+ * summaries' input; the outlet and its state-media tag are on the signal.
+ */
+const OUTLET_NOTES: RegExp[] = [
+  /\s*\bSource: [^\n]{1,160}? \(reliability: \d{1,3}%, bias: [\w -]{1,40}\)\.?/g,
+  /\s*⚠️?\s*This outlet is state-controlled and may reflect official government positions\.?/g,
+]
+
+/** Summaries that still carry the note (a Postgres ~ pattern, for the repair) */
+export const OUTLET_NOTE_SQL = 'Source: .{1,160} \\(reliability: [0-9]{1,3}%, bias: '
+
+/** Text to compare with a headline: lower case, single spaces, no punctuation or quotes at either end */
+function comparable(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s"'“”‘’«»([-]+/u, '')
+    .replace(/[\s"'“”‘’«»)\].,:;!?…-]+$/u, '')
+}
+
+/** Whether a summary says nothing but the headline ("Title." under "Title") */
+export function repeatsTitle(summary: string, title: string): boolean {
+  const s = comparable(summary)
+  return s === '' || s === comparable(title)
+}
+
+/**
+ * A summary as it should be stored: without the outlet note and feed footers,
+ * or null when nothing but the headline is left.
+ */
+export function summaryWithoutNotes(summary: string | null | undefined, title: string): string | null {
+  if (typeof summary !== 'string') return null
+  let out = summary
+  for (const re of OUTLET_NOTES) out = out.replace(re, '')
+  out = cleanSummary(out)
+  return repeatsTitle(out, title) ? null : out
+}

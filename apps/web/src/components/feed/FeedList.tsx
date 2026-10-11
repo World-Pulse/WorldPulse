@@ -21,6 +21,7 @@ import { ViralityBadge } from '@/components/signals/ViralityBadge'
 import { StoryOutlets, storyOf } from './StoryOutlets'
 import type { StoryInfo } from './StoryOutlets'
 import { Users, Cpu, Radio, Newspaper } from 'lucide-react'
+import { displaySummary, isStateMedia, STATE_MEDIA_NOTE } from '@/lib/signal-text'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -169,7 +170,7 @@ function adaptSignal(sig: any): FeedItem {
         .filter(Boolean).join(' · '),
       location: sig.locationName ? `📍 ${sig.locationName}` : '',
       title:    sig.title,
-      summary:  sig.summary ?? '',
+      summary:  displaySummary(sig.summary, sig.title),
       sources:  badgeSlugs,
       impact,
       impactColor,
@@ -241,7 +242,7 @@ function adaptPost(post: Post): FeedItem {
       category: s.category?.toUpperCase() ?? 'SIGNAL',
       location: s.locationName ? `📍 ${s.locationName}` : '',
       title:    s.title,
-      summary:  s.summary ?? '',
+      summary:  displaySummary(s.summary, s.title),
       sources:  [],
       impact:   Math.round((s.reliabilityScore ?? 0.5) * 100),
       impactColor,
@@ -743,6 +744,12 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
                   <span className="font-mono text-[9px] tracking-[2px] text-wp-text3 uppercase">{item.event.category}</span>
                   {item.event.location && (
                     <span className="font-mono text-[10px] text-wp-text2">{item.event.location}</span>
+                  )}
+                  {isStateMedia(item.tags) && (
+                    <span title={STATE_MEDIA_NOTE}
+                      className="font-mono text-[9px] tracking-[1px] uppercase px-1.5 py-[1px] rounded border border-wp-amber/40 text-wp-amber">
+                      State media
+                    </span>
                   )}
                   {/* A story card's own badge says whether it's verified; keep DISPUTED visible */}
                   {item.verificationStatus && item.verificationStatus !== 'unverified'

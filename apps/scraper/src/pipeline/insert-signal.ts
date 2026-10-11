@@ -31,7 +31,7 @@ import { dedup, checkSemanticDuplicate } from './dedup'
 import { processSignalForKnowledgeGraph, extractEntitiesRuleBased, upsertEntityNode } from './entity-graph'
 import { embedSignal } from './embeddings'
 import { signalsHavePublishedAt, publishedAtFor, sourceKey } from './signal-columns'
-import { decodeEntities, cleanUrl, cleanTitle, cleanSummary } from './text'
+import { decodeEntities, cleanUrl, cleanTitle, summaryWithoutNotes } from './text'
 
 /** Signal ids are UUIDs; the dedup store can also hold '1' or 'pending' */
 const SIGNAL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -101,13 +101,17 @@ export interface CorrelationMeta {
 
 /**
  * A signal's title and summary without HTML codes (and the summary without
- * feed footers), and its links with "&" for "&amp;". Changes the row in place (insertAndCorrelate has always
+ * feed footers or the outlet note), and its links with "&" for "&amp;". Changes the row in place (insertAndCorrelate has always
  * updated the caller's row, e.g. its reliability score) and returns it.
  */
 export function cleanSignalText(row: Record<string, unknown>): Record<string, unknown> {
   if (typeof row.title === 'string') row.title = cleanTitle(row.title)
-  // Feed footers ("The post … appeared first on …", "Read More: <link>") aren't the story
-  if (typeof row.summary === 'string') row.summary = cleanSummary(decodeEntities(row.summary)) || row.summary
+  // Feed footers ("The post … appeared first on …", "Read More: <link>"), the
+  // outlet note RSS used to add, and a summary that only repeats the headline
+  // aren't the story (a summary with nothing else left is stored as null)
+  if (typeof row.summary === 'string') {
+    row.summary = summaryWithoutNotes(decodeEntities(row.summary), typeof row.title === 'string' ? row.title : '')
+  }
   if (Array.isArray(row.original_urls)) {
     row.original_urls = row.original_urls.map(u => (typeof u === 'string' ? cleanUrl(u) : u))
   }

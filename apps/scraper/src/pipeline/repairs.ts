@@ -11,7 +11,7 @@ import { db } from '../lib/postgres'
 import { EVENT_TEMPLATE_SQL } from './event-titles'
 import { countIndependentOutlets } from './independence'
 import { hostOf } from './signal-columns'
-import { decodeEntities, cleanUrl, cleanTitle, ENCODED_TEXT_RE, cleanSummary, FEED_FOOTER_SQL } from './text'
+import { decodeEntities, cleanUrl, cleanTitle, ENCODED_TEXT_RE, cleanSummary, FEED_FOOTER_SQL, OUTLET_NOTE_SQL, summaryWithoutNotes } from './text'
 import { liftedSeverity, type SeverityRow } from './severity-lift'
 import { tidyGeoName } from '../sources/gdelt'
 
@@ -282,6 +282,37 @@ export async function stripFeedFooters(): Promise<number> {
     fixed++
   }
   return fixed
+}
+
+/**
+ * Summaries of the last 3 days with the outlet note the RSS reader added
+ * ("Source: X (reliability: 76%, bias: center).", text.ts), as
+ * summaryWithoutNotes writes them now: the note gone, and null where only the
+ * headline was left (about half of a day's RSS signals). Cleaned rows no
+ * longer match, so a later start finds nothing to do.
+ */
+export async function stripOutletNotes(): Promise<number> {
+  const rows = await db('signals')
+    .where('created_at', '>', db.raw("NOW() - INTERVAL '3 days'"))
+    .whereRaw('summary ~ ?', [OUTLET_NOTE_SQL])
+    .select('id', 'title', 'summary')
+    .limit(30000) as Array<{ id: string; title: string | null; summary: string | null }>
+  const changed: Array<{ id: string; summary: string | null }> = []
+  for (const row of rows) {
+    const clean = summaryWithoutNotes(row.summary, row.title ?? '')
+    if (clean !== row.summary) changed.push({ id: row.id, summary: clean })
+  }
+  // 500 rows a statement
+  for (let i = 0; i < changed.length; i += 500) {
+    const batch = changed.slice(i, i + 500)
+    await db.raw(
+      `UPDATE signals AS s SET summary = v.summary
+         FROM (VALUES ${batch.map(() => '(?::uuid, ?::text)').join(', ')}) AS v(id, summary)
+        WHERE s.id = v.id`,
+      batch.flatMap(r => [r.id, r.summary]),
+    )
+  }
+  return changed.length
 }
 
 /**

@@ -48,6 +48,7 @@ import {
   escapeHtml, safeHttpUrl, safeCssColor,
 } from '@/lib/map-utils'
 import { declutter, type ScreenPoint } from '@/lib/map-declutter'
+import { displaySummary } from '@/lib/signal-text'
 
 const API_URL      = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 const WS_URL       = process.env.NEXT_PUBLIC_WS_URL  ?? API_URL.replace(/^http/, 'ws')
@@ -4039,9 +4040,9 @@ function MapView() {
                   </div>
                 ) : null}
                 <div className="text-[15px] font-semibold text-wp-text leading-[1.5]">{selected.title}</div>
-                {selected.summary && (
+                {displaySummary(selected.summary, selected.title) && (
                   <p className="text-[13px] text-wp-text2 leading-[1.65] border-l-2 pl-3" style={{ borderColor: sevColor + '55' }}>
-                    {selected.summary}
+                    {displaySummary(selected.summary, selected.title)}
                   </p>
                 )}
                 <div className="space-y-2">

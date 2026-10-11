@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { Inbox, FileText, Clock, MapPin, RefreshCw, Share2, Check, Moon, TrendingUp, AlertTriangle, Globe, Shield, Anchor, Leaf, Cpu, Eye, BarChart3 } from 'lucide-react'
+import { displaySummary } from '@/lib/signal-text'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -800,9 +801,9 @@ export default function BriefingPage() {
                             {signal.title}
                           </h3>
                           {/* Summary */}
-                          {signal.summary && (
+                          {displaySummary(signal.summary, signal.title) && (
                             <p className="text-sm text-zinc-400 mt-1.5 leading-relaxed line-clamp-2">
-                              {signal.summary}
+                              {displaySummary(signal.summary, signal.title)}
                             </p>
                           )}
                           {/* Meta */}

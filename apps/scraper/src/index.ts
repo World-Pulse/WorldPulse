@@ -40,7 +40,7 @@ import { runDelayedRescore } from './pipeline/rescore'
 import { signalsHavePublishedAt, publishedAtFor, backfillRecentPublishedAt, sourceKey, hostOf } from './pipeline/signal-columns'
 import { independentReports, isCopyOf } from './pipeline/independence'
 import { ensureStoryIdColumn } from './pipeline/stories'
-import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames } from './pipeline/repairs'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames, stripOutletNotes } from './pipeline/repairs'
 import { batchValidateGeo } from './pipeline/geo-validator'
 import { recomputeSourceReputation } from './pipeline/source-reputation'
 import { startKafkaLagMonitor } from './lib/kafka-lag-monitor'
@@ -166,7 +166,7 @@ async function bootstrap() {
   retractStaleFeedItems()
     .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: old stories from feed backlogs taken out of the feed') })
     .catch(err => logger.warn({ err }, 'Stale feed item repair failed (non-fatal)'))
-  decodeStoredEntities()
+  const decoding = decodeStoredEntities()
     .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: HTML codes in recent headlines and links decoded') })
     .catch(err => logger.warn({ err }, 'HTML code repair failed (non-fatal)'))
     // After the decoding: this one rewrites GDACS headlines too, and must not race it
@@ -176,9 +176,14 @@ async function bootstrap() {
   tidyGdeltPlaceNames()
     .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: GDELT place names without "?" and repeats') })
     .catch(err => logger.warn({ err }, 'GDELT place name repair failed (non-fatal)'))
-  stripFeedFooters()
+  const footers = stripFeedFooters()
     .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: feed footers ("The post … appeared first on …") taken out of summaries') })
     .catch(err => logger.warn({ err }, 'Feed footer repair failed (non-fatal)'))
+  // Summaries again, after the two repairs above that rewrite them too
+  Promise.all([decoding, footers])
+    .then(() => stripOutletNotes())
+    .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: outlet notes ("Source: X (reliability: N%, bias: Y).") taken out of summaries') })
+    .catch(err => logger.warn({ err }, 'Outlet note repair failed (non-fatal)'))
   liftCappedSeverities()
     .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: corroborated stories got the severity their words earn (single-source cap lifted)') })
     .catch(err => logger.warn({ err }, 'Severity lift repair failed (non-fatal)'))
