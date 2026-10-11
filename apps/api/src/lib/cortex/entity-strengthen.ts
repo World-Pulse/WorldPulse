@@ -722,6 +722,7 @@ export async function inferCausalRelationships(): Promise<{ edges_created: numbe
  */
 export async function runEntityStrengtheningCycle(): Promise<{
   edges_created: number
+  causal_edges_created: number
   trends_updated: number
   entities_merged: number
   merge_candidates_skipped: number

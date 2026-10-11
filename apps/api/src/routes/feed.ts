@@ -83,8 +83,8 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
       query = query.where('s.category', category)
     }
 
-    // Severity filter
-    if (severity && severity !== 'all') {
+    // Severity filter (the query schema only lets real severities through)
+    if (severity) {
       query = query.where('s.severity', severity)
     }
 
@@ -209,7 +209,7 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
   app.get('/signals', { preHandler: [optionalAuth], config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
     const qr2 = parseQuery(FeedQuerySchema, req.query)
     if (qr2.error) return sendError(reply, 400, 'VALIDATION_ERROR', qr2.error)
-    const { cursor, category, severity, country, limit, group } = qr2.data!
+    const { cursor, category, severity, country, limit, group } = qr2.data
 
     const pageLimit = Math.min(limit, 50)
     // Until the scraper has added signals.story_id, ?group=story falls back to signals
@@ -445,6 +445,7 @@ function formatPost(
       firstReported:    '',
       verifiedAt:       null,
       lastUpdated:      '',
+      lastCorroboratedAt: null,
       createdAt:        '',
     } : null,
     isEdited:      (row.is_edited as boolean) ?? false,

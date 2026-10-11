@@ -190,6 +190,10 @@ export const registerWindRoutes: FastifyPluginAsync = async (app: FastifyInstanc
             source:    { type: 'string' },
           },
         },
+        500: {
+          type: 'object',
+          properties: { error: { type: 'string' } },
+        },
       },
     },
   }, async (_req, reply) => {
@@ -199,7 +203,7 @@ export const registerWindRoutes: FastifyPluginAsync = async (app: FastifyInstanc
       return grid
     } catch (err) {
       logger.error({ err }, 'Wind grid endpoint error')
-      reply.status(500).send({ error: 'Failed to fetch wind data' })
+      return reply.status(500).send({ error: 'Failed to fetch wind data' })
     }
   })
 }

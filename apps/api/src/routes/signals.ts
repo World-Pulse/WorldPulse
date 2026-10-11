@@ -160,7 +160,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
 
     if (status) query = query.where('s.status', status)
     if (category && category !== 'all') query = query.where('s.category', category)
-    if (severity && severity !== 'all') query = query.where('s.severity', severity)
+    if (severity) query = query.where('s.severity', severity)
     if (country) query = query.where('s.country_code', country.toUpperCase())
 
     if (bbox) {
@@ -476,7 +476,8 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
 
     // Publish real-time GraphQL subscription event (fire-and-forget)
     try {
-      const pubsub = (app.graphql as unknown as { pubsub?: { publish(args: { topic: string; payload: unknown }): Promise<void> } }).pubsub
+      // GraphQL is switched off for now (src/graphql/index.ts), so app.graphql is usually absent
+      const pubsub = (app as unknown as { graphql?: { pubsub?: { publish(args: { topic: string; payload: unknown }): Promise<void> } } }).graphql?.pubsub
       if (pubsub) {
         pubsub.publish({ topic: 'SIGNAL_UPDATED', payload: { signalUpdated: formatSignal(signal) } }).catch(() => {})
       }
@@ -766,7 +767,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       .limit(500)
 
     if (category && category !== 'all') query = query.where('category', category)
-    if (severity && severity !== 'all') query = query.where('severity', severity)
+    if (severity) query = query.where('severity', severity)
 
     // Bounding-box spatial filter (Gate 2: map validation hardening)
     if (bbox) {

@@ -943,7 +943,7 @@ Rules:
     }
 
     const result = await registerSocialPost(body)
-    return reply.status(result.skipped ? 200 : 201).send({ success: true, ...result })
+    return reply.status(result.skipped ? 200 : 201).send(result)
   })
 
   /**

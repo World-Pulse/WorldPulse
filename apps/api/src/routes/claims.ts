@@ -335,7 +335,7 @@ export const registerClaimsRoutes: FastifyPluginAsync = async (fastify) => {
   }, async (request, reply) => {
     const parsed = ClaimExtractSchema.safeParse(request.params)
     if (!parsed.success) {
-      return sendError(reply, 400, 'Invalid signal ID', parsed.error.flatten())
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid signal ID')
     }
 
     const { signalId } = parsed.data
@@ -358,7 +358,7 @@ export const registerClaimsRoutes: FastifyPluginAsync = async (fastify) => {
       .first()
 
     if (!signal) {
-      return sendError(reply, 404, 'Signal not found')
+      return sendError(reply, 404, 'NOT_FOUND', 'Signal not found')
     }
 
     // Get source info for cross-ref exclusion
@@ -427,7 +427,7 @@ export const registerClaimsRoutes: FastifyPluginAsync = async (fastify) => {
   }, async (request, reply) => {
     const parsed = ClaimSearchSchema.safeParse(request.query)
     if (!parsed.success) {
-      return sendError(reply, 400, 'Invalid query parameters', parsed.error.flatten())
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid query parameters')
     }
 
     const { status, type, limit, offset } = parsed.data
@@ -568,4 +568,14 @@ export const registerClaimsRoutes: FastifyPluginAsync = async (fastify) => {
       claimTypesSupported: ['factual', 'statistical', 'attribution', 'causal', 'predictive'],
       verificationEngine: {
         version: '2.0.0',
-        method: isPineco
+        method: isPineconeEnabled() ? 'semantic' : 'keyword',
+      },
+    }
+
+    try {
+      await redis.set(cacheKey, JSON.stringify(stats), 'EX', 300) // 5 min cache
+    } catch { /* non-fatal */ }
+
+    return reply.send(stats)
+  })
+}

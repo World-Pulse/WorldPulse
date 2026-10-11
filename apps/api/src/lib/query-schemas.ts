@@ -261,6 +261,10 @@ export function parseBboxParam(
 /**
  * Parse query params and return typed data, or null with an error string.
  *
+ * The error is typed "field: message" (never empty), so `if (result.error)`
+ * narrows `result.data` to the parsed query; a plain string could be "" and
+ * wouldn't narrow.
+ *
  * @example
  * const result = parseQuery(FeedQuerySchema, req.query)
  * if (result.error) return sendError(reply, 400, 'VALIDATION_ERROR', result.error)
@@ -269,7 +273,7 @@ export function parseBboxParam(
 export function parseQuery<T extends z.ZodTypeAny>(
   schema: T,
   raw: unknown,
-): { data: z.infer<T>; error: null } | { data: null; error: string } {
+): { data: z.infer<T>; error: null } | { data: null; error: `${string}: ${string}` } {
   const result = schema.safeParse(raw)
   if (!result.success) {
     const issue = result.error.issues[0]

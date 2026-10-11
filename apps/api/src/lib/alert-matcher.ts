@@ -149,7 +149,7 @@ async function dispatchAlert(rule: AlertRule, signal: SignalForMatching): Promis
       const user = await db('users').where('id', rule.user_id).first('email')
       if (user?.email) {
         // Import dynamically to avoid circular deps
-        const { sendAlertEmail } = await import('./pulse/alert-email')
+        const { sendAlertEmail } = await import('./pulse/alert-email.js')
         await sendAlertEmail({
           to: user.email,
           ruleName: rule.name,

@@ -24,6 +24,8 @@ interface SignalSummary {
   source_count: number
   location_name: string | null
   country_code: string | null
+  region: string | null
+  tags: string[] | null
   created_at: Date
 }
 
@@ -77,7 +79,7 @@ export async function getTopSignals(hours: number, limit = 20): Promise<SignalSu
     .select([
       'id', 'title', 'summary', 'category', 'severity',
       'reliability_score', 'source_count', 'location_name',
-      'country_code', 'created_at',
+      'country_code', 'region', 'tags', 'created_at',
     ])
 }
 
@@ -95,7 +97,7 @@ export async function getCriticalSignals(minutes: number): Promise<SignalSummary
     .select([
       'id', 'title', 'summary', 'category', 'severity',
       'reliability_score', 'source_count', 'location_name',
-      'country_code', 'created_at',
+      'country_code', 'region', 'tags', 'created_at',
     ])
 }
 
@@ -607,16 +609,16 @@ export async function checkAndPublishFlashBriefs(): Promise<number> {
       published++
       // Check alert rules for matching signals
       try {
-        const { matchSignalToAlertRules } = await import('../alert-matcher')
+        const { matchSignalToAlertRules } = await import('../alert-matcher.js')
         await matchSignalToAlertRules({
           id: signal.id,
           title: signal.title,
           category: signal.category,
           severity: signal.severity,
-          country_code: signal.country_code,
-          region: signal.region,
-          tags: signal.tags,
-          reliability_score: signal.reliability_score,
+          country_code: signal.country_code ?? undefined,
+          region: signal.region ?? undefined,
+          tags: signal.tags ?? [],
+          reliability_score: Number(signal.reliability_score),
         })
       } catch {
         // Non-fatal — alert matching failure shouldn't block publishing

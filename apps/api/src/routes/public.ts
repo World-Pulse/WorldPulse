@@ -85,12 +85,12 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
       ])
 
     if (category && category !== 'all') query = query.where('category', category)
-    if (severity && severity !== 'all') query = query.where('severity', severity)
+    if (severity) query = query.where('severity', severity)
 
     // ── Count query (same filters, no pagination) ─────────────
     let countQuery = db('signals').where('status', 'verified')
     if (category && category !== 'all') countQuery = countQuery.where('category', category)
-    if (severity && severity !== 'all') countQuery = countQuery.where('severity', severity)
+    if (severity) countQuery = countQuery.where('severity', severity)
 
     const [rows, countRows] = await Promise.all([
       query,

@@ -24,6 +24,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { db }    from '../db/postgres'
 import { redis } from '../db/redis'
 import { sendError } from '../lib/errors'
+import type { PointFeatureCollection } from '../lib/geojson'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -470,7 +471,7 @@ export function computeSummary(countries: LaborRightsCountry[]): LaborRightsSumm
   }
 }
 
-export function toGeoJSON(countries: LaborRightsCountry[]): GeoJSON.FeatureCollection {
+export function toGeoJSON(countries: LaborRightsCountry[]): PointFeatureCollection {
   return {
     type: 'FeatureCollection',
     features: countries
@@ -479,7 +480,7 @@ export function toGeoJSON(countries: LaborRightsCountry[]): GeoJSON.FeatureColle
         const [lat, lng] = COORDS[c.code] as [number, number]
         return {
           type: 'Feature' as const,
-          geometry: { type: 'Point' as const, coordinates: [lng, lat] },
+          geometry: { type: 'Point' as const, coordinates: [lng, lat] as [number, number] },
           properties: {
             code: c.code,
             name: c.name,
@@ -536,7 +537,7 @@ const laborRightsPlugin: FastifyPluginAsync = async (app) => {
 
       return reply.send(response)
     } catch (err) {
-      return sendError(reply, 500, 'LABOR_RIGHTS_LIST_ERROR', (err as Error).message)
+      return sendError(reply, 500, 'INTERNAL_ERROR', (err as Error).message)
     }
   })
 
@@ -554,7 +555,7 @@ const laborRightsPlugin: FastifyPluginAsync = async (app) => {
 
       const country = LABOR_RIGHTS_REGISTRY.find(c => c.code === upper)
       if (!country) {
-        return sendError(reply, 404, 'COUNTRY_NOT_FOUND', `Country code ${upper} not found`)
+        return sendError(reply, 404, 'NOT_FOUND', `Country code ${upper} not found`)
       }
 
       // Fetch recent signals from DB
@@ -581,7 +582,7 @@ const laborRightsPlugin: FastifyPluginAsync = async (app) => {
 
       return reply.send(response)
     } catch (err) {
-      return sendError(reply, 500, 'LABOR_RIGHTS_DETAIL_ERROR', (err as Error).message)
+      return sendError(reply, 500, 'INTERNAL_ERROR', (err as Error).message)
     }
   })
 
@@ -601,7 +602,7 @@ const laborRightsPlugin: FastifyPluginAsync = async (app) => {
 
       return reply.send(response)
     } catch (err) {
-      return sendError(reply, 500, 'LABOR_RIGHTS_SUMMARY_ERROR', (err as Error).message)
+      return sendError(reply, 500, 'INTERNAL_ERROR', (err as Error).message)
     }
   })
 
@@ -621,7 +622,7 @@ const laborRightsPlugin: FastifyPluginAsync = async (app) => {
 
       return reply.send(response)
     } catch (err) {
-      return sendError(reply, 500, 'LABOR_RIGHTS_MAP_ERROR', (err as Error).message)
+      return sendError(reply, 500, 'INTERNAL_ERROR', (err as Error).message)
     }
   })
 }

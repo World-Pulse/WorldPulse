@@ -184,15 +184,15 @@ export const registerMapOgRoutes: FastifyPluginAsync = async (app) => {
     // Parse state
     const state = rawState ? decodeState(rawState) : {}
 
-    // Fetch live signal count from DB
+    // How many signals we hold: Postgres's own estimate, which is instant
+    // (an exact count(*) scans the whole table on every uncached image). The
+    // old query used another library's syntax and always showed 0.
     let signalCount = 0
     try {
-      const row = await db
-        .selectFrom('signals as s')
-        .select(({ fn }) => [fn.count<number>('s.id').as('n')])
-        .where('s.status', '!=', 'deleted')
-        .executeTakeFirst()
-      signalCount = Number(row?.n ?? 0)
+      const result = await db.raw(
+        `SELECT GREATEST(reltuples, 0)::bigint AS n FROM pg_class WHERE oid = 'signals'::regclass`,
+      ) as { rows?: Array<{ n: string | number }> }
+      signalCount = Number(result.rows?.[0]?.n ?? 0)
     } catch {
       // Non-fatal — use 0
     }

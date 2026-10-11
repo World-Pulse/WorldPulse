@@ -333,6 +333,7 @@ class AlertDispatcher {
         firstReported:    typeof payload['created_at'] === 'string' ? payload['created_at'] : new Date().toISOString(),
         verifiedAt:       null,
         lastUpdated:      new Date().toISOString(),
+        lastCorroboratedAt: null,
         createdAt:        typeof payload['created_at'] === 'string' ? payload['created_at'] : new Date().toISOString(),
       }
 

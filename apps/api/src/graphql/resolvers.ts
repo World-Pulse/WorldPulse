@@ -228,7 +228,7 @@ export const resolvers = {
       }
 
       // For each cluster, fetch minimal signal data
-      const formatted = []
+      const formatted: Array<Record<string, unknown>> = []
       for (const c of clusters) {
         const sids = c.signal_ids as string[] ?? []
         const signalRows = sids.length > 0

@@ -49,6 +49,7 @@ function rowToSignal(row: Record<string, unknown>): Signal {
     firstReported:    row.first_reported as string,
     verifiedAt:       row.verified_at as string | null,
     lastUpdated:      row.last_updated as string,
+    lastCorroboratedAt: (row.last_corroborated_at as string | null | undefined) ?? null,
     createdAt:        row.created_at as string,
   }
 }

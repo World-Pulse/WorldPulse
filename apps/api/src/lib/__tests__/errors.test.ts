@@ -66,6 +66,7 @@ describe('sendError', () => {
     const codes: ErrorCode[] = [
       'BAD_REQUEST', 'VALIDATION_ERROR', 'UNAUTHORIZED', 'FORBIDDEN',
       'NOT_FOUND', 'CONFLICT', 'RATE_LIMITED', 'INTERNAL_ERROR', 'SERVICE_UNAVAILABLE',
+      'UPSTREAM_ERROR',
     ]
     for (const code of codes) {
       const reply = makeMockReply()

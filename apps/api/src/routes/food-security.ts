@@ -24,6 +24,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { db }    from '../db/postgres'
 import { redis } from '../db/redis'
 import { sendError } from '../lib/errors'
+import type { PointFeature, PointFeatureCollection } from '../lib/geojson'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -454,7 +455,7 @@ export function computeSummary(regions: FoodSecurityRegion[]): FoodSecuritySumma
   }
 }
 
-export function toGeoJSON(regions: FoodSecurityRegion[]): GeoJSON.FeatureCollection {
+export function toGeoJSON(regions: FoodSecurityRegion[]): PointFeatureCollection {
   // Country centroid coordinates (approximate)
   const centroids: Record<string, [number, number]> = {
     ET: [9.1, 40.5], SO: [5.2, 46.2], SD: [15.5, 32.5], SS: [7.9, 29.9],
@@ -473,13 +474,13 @@ export function toGeoJSON(regions: FoodSecurityRegion[]): GeoJSON.FeatureCollect
     MX: [23.6, -102.6], FR: [46.2, 2.2], DE: [51.2, 10.5],
   }
 
-  const features: GeoJSON.Feature[] = regions
+  const features: PointFeature[] = regions
     .filter(r => centroids[r.code])
     .map(r => ({
       type: 'Feature' as const,
       geometry: {
         type: 'Point' as const,
-        coordinates: [centroids[r.code]![1], centroids[r.code]![0]],
+        coordinates: [centroids[r.code]![1], centroids[r.code]![0]] as [number, number],
       },
       properties: {
         code: r.code,
@@ -544,7 +545,7 @@ const foodSecurityPlugin: FastifyPluginAsync = async (app) => {
       reply.header('X-Cache', 'MISS')
       return result
     } catch (err) {
-      return sendError(reply, 500, 'FOOD_SECURITY_LIST_ERROR', 'Failed to fetch food security regions')
+      return sendError(reply, 500, 'INTERNAL_ERROR', 'Failed to fetch food security regions')
     }
   })
 
@@ -563,7 +564,7 @@ const foodSecurityPlugin: FastifyPluginAsync = async (app) => {
 
       const region = FOOD_SECURITY_REGISTRY.find(r => r.code === upperCode)
       if (!region) {
-        return sendError(reply, 404, 'REGION_NOT_FOUND', `No food security data for region code: ${upperCode}`)
+        return sendError(reply, 404, 'NOT_FOUND', `No food security data for region code: ${upperCode}`)
       }
 
       // Fetch recent signals from DB
@@ -584,7 +585,7 @@ const foodSecurityPlugin: FastifyPluginAsync = async (app) => {
       reply.header('X-Cache', 'MISS')
       return result
     } catch (err) {
-      return sendError(reply, 500, 'FOOD_SECURITY_DETAIL_ERROR', 'Failed to fetch region detail')
+      return sendError(reply, 500, 'INTERNAL_ERROR', 'Failed to fetch region detail')
     }
   })
 
@@ -603,7 +604,7 @@ const foodSecurityPlugin: FastifyPluginAsync = async (app) => {
       reply.header('X-Cache', 'MISS')
       return result
     } catch (err) {
-      return sendError(reply, 500, 'FOOD_SECURITY_SUMMARY_ERROR', 'Failed to compute food security summary')
+      return sendError(reply, 500, 'INTERNAL_ERROR', 'Failed to compute food security summary')
     }
   })
 
@@ -622,7 +623,7 @@ const foodSecurityPlugin: FastifyPluginAsync = async (app) => {
       reply.header('X-Cache', 'MISS')
       return result
     } catch (err) {
-      return sendError(reply, 500, 'FOOD_SECURITY_MAP_ERROR', 'Failed to generate food security map data')
+      return sendError(reply, 500, 'INTERNAL_ERROR', 'Failed to generate food security map data')
     }
   })
 }

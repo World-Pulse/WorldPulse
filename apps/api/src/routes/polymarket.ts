@@ -158,7 +158,7 @@ export async function fetchPolymarketMarkets(
     throw new Error(`Gamma API responded ${res.status}: ${res.statusText}`)
   }
 
-  const events: GammaEvent[] = await res.json()
+  const events = await res.json() as GammaEvent[]
 
   // Flatten events → markets, take first market per event (most liquid)
   const markets: PolymarketMarket[] = []
@@ -313,7 +313,7 @@ export const registerPolymarketRoutes: FastifyPluginAsync = async (app) => {
         return sendError(reply, 502, 'UPSTREAM_ERROR', `Gamma API responded ${res.status}`)
       }
 
-      const raw: GammaMarket = await res.json()
+      const raw = await res.json() as GammaMarket
       const market = normaliseMarket(raw, raw.slug ?? conditionId)
 
       try {

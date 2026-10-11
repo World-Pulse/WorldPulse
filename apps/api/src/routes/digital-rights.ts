@@ -508,17 +508,7 @@ export const COUNTRY_REGISTRY: DigitalRightsCountry[] = [
     top_threats: ['targeted surveillance', 'content filtering'],
     population_m: 9.5, related_signals: 0
   },
-  {
-    code: 'ET2', name: 'Ethiopia', region: 'Sub-Saharan Africa',  // placeholder — removed below to keep unique codes
-    rights_status: 'not_free',
-    indicators: { internet_freedom_score: 18, surveillance_score: 72, censorship_level: 4, data_protection_score: 15, digital_access_index: 22 },
-    trend: 'declining', trend_detail: 'Duplicate removed',
-    top_threats: [],
-    population_m: 0, related_signals: 0
-  },
 ]
-  // filter out any placeholder duplicates
-  .filter(c => c.code !== 'ET2')
 
 // ─── Helper Functions ─────────────────────────────────────────────────────────
 

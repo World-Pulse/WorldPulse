@@ -151,49 +151,57 @@ export const registerAdminDigestRoutes: FastifyPluginAsync = async (app) => {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1_000)
     const now          = new Date()
 
-    // Fetch top 30 verified signals from the last 7 days
+    // Fetch top 30 verified signals from the last 7 days. (signals has a
+    // status column, not "verified", and no "sources" column: the old query
+    // failed on every send.)
     const rawSignals = await db('signals')
-      .where('verified', true)
-      .where('published_at', '>', sevenDaysAgo)
+      .where('status', 'verified')
+      .where('created_at', '>', sevenDaysAgo)
       .orderBy('reliability_score', 'desc')
       .orderByRaw(`CASE severity WHEN 'critical' THEN 5 WHEN 'high' THEN 4 WHEN 'medium' THEN 3 WHEN 'low' THEN 2 ELSE 1 END DESC`)
       .limit(30)
       .select([
         'id', 'title', 'summary', 'body', 'category', 'severity', 'status',
-        'reliability_score', 'source_count', 'location', 'location_name',
-        'country_code', 'region', 'tags', 'sources', 'original_urls',
+        'reliability_score', 'source_count', 'location_name',
+        'country_code', 'region', 'tags', 'original_urls',
         'language', 'view_count', 'share_count', 'post_count',
         'event_time', 'first_reported', 'verified_at', 'last_updated',
-        'created_at', 'is_breaking',
+        'last_corroborated_at', 'created_at', 'is_breaking',
       ])
 
-    // Map snake_case DB rows to camelCase Signal objects
+    const iso = (v: unknown): string | null =>
+      v instanceof Date ? v.toISOString() : typeof v === 'string' ? v : null
+
+    // Map snake_case DB rows to camelCase Signal objects (the email uses the
+    // headline, category, severity, place and reliability)
     const signals: Signal[] = rawSignals.map((r: Record<string, unknown>) => ({
       id:               r.id as string,
       title:            r.title as string,
       summary:          r.summary as string | null,
       body:             r.body as string | null,
-      category:         r.category as string,
+      category:         r.category as Signal['category'],
       severity:         r.severity as SignalSeverity,
       status:           r.status as Signal['status'],
       reliabilityScore: Number(r.reliability_score),
+      alertTier:        'ROUTINE' as const,
       sourceCount:      Number(r.source_count ?? 0),
-      location:         r.location as Signal['location'],
+      location:         null,
       locationName:     r.location_name as string | null,
       countryCode:      r.country_code as string | null,
       region:           r.region as string | null,
       tags:             (r.tags as string[]) ?? [],
-      sources:          (r.sources as Signal['sources']) ?? [],
+      sources:          [],
       originalUrls:     (r.original_urls as string[]) ?? [],
       language:         (r.language as string) ?? 'en',
       viewCount:        Number(r.view_count ?? 0),
       shareCount:       Number(r.share_count ?? 0),
       postCount:        Number(r.post_count ?? 0),
-      eventTime:        r.event_time as string | null,
-      firstReported:    r.first_reported as string,
-      verifiedAt:       r.verified_at as string | null,
-      lastUpdated:      r.last_updated as string,
-      createdAt:        r.created_at as string,
+      eventTime:        iso(r.event_time),
+      firstReported:    iso(r.first_reported) ?? '',
+      verifiedAt:       iso(r.verified_at),
+      lastUpdated:      iso(r.last_updated) ?? '',
+      lastCorroboratedAt: iso(r.last_corroborated_at),
+      createdAt:        iso(r.created_at) ?? '',
       isBreaking:       Boolean(r.is_breaking),
     }))
 

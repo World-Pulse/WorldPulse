@@ -585,6 +585,7 @@ export async function runEventThreadsCycle(): Promise<{
   stabilized: number
   resolved: number
   summarized: number
+  chokepoints_linked: number
 }> {
   const promotion = await promoteClusterToThreads()
   const lifecycle = await updateThreadLifecycles()

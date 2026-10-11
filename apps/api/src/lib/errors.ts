@@ -24,6 +24,8 @@ export type ErrorCode =
   | 'RATE_LIMITED'
   | 'INTERNAL_ERROR'
   | 'SERVICE_UNAVAILABLE'
+  /** 502: a service we call (Polymarket, …) failed */
+  | 'UPSTREAM_ERROR'
 
 // ─── Canonical Error Response Shape ─────────────────────────────────────────
 

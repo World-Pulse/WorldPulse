@@ -167,6 +167,8 @@ export const registerPatentRoutes: FastifyPluginAsync = async (app) => {
             generated_at: { type: 'string' },
           },
         },
+        // The empty dashboard sent when the database query fails
+        500: { type: 'object', additionalProperties: true },
       },
     },
     handler: async (req, reply) => {

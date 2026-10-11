@@ -164,7 +164,7 @@ export const registerEntityRoutes: FastifyPluginAsync = async (app) => {
       .offset(offset)
 
     // Compute co-appearing entities for each signal
-    const timelineEntries = []
+    const timelineEntries: Array<Record<string, unknown>> = []
 
     for (const signal of signals) {
       // Find other entities that also reference this signal

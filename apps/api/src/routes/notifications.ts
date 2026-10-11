@@ -57,6 +57,7 @@ function makeTestSignal(): Signal {
     firstReported:    new Date().toISOString(),
     verifiedAt:       new Date().toISOString(),
     lastUpdated:      new Date().toISOString(),
+    lastCorroboratedAt: null,
     createdAt:        new Date().toISOString(),
     isBreaking:       true,
   }
