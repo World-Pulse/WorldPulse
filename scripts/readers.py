@@ -26,6 +26,12 @@ else the website that sent them (x.com, linkedin.com, google…), else
 link-preview fetchers of X, LinkedIn, Telegram and others (a proxy for
 shares).
 
+For HQ's cause-and-effect timeline and morning summary (Oct 11, 2026): the
+hour (UTC) each visitor arrived, by channel, for today and yesterday
+("hourly"), and which post or email brought them ("posts"): links in HQ's
+ready-to-post drafts and the email briefing carry utm_campaign (hq,
+briefing, weekly) and utm_content (the story's first 8 characters).
+
 Usage: readers.py <state file>   (prints one JSON object)
 """
 
@@ -134,6 +140,16 @@ def channel(query, ref):
     return 'other sites'
 
 
+def post_key(query):
+    """'hq:83b746ee' for a link from an HQ post draft or an email briefing, else None"""
+    q = parse_qs(query)
+    campaign = (q.get('utm_campaign') or [''])[0].strip().lower()
+    content = (q.get('utm_content') or [''])[0].strip().lower()
+    if campaign not in ('hq', 'briefing', 'weekly') or not re.fullmatch(r'[0-9a-f]{8}', content):
+        return None
+    return f'{campaign}:{content}'
+
+
 def ref_site(ref):
     host = (urlsplit(ref).hostname or '').lower()
     return (host[4:] if host.startswith('www.') else host)[:60]
@@ -155,6 +171,7 @@ def by_count(counts, top=None):
 def summary(d):
     """The day's totals, counting only visitors whose browser ran the page"""
     channels, pages, sites, views, people, unconfirmed = {}, {}, {}, 0, 0, 0
+    hours, posts = {}, {}
     for v in d['visitors'].values():
         if not isinstance(v, dict) or not v.get('p'):
             continue
@@ -162,15 +179,29 @@ def summary(d):
             unconfirmed += 1
             continue
         people += 1
-        add(channels, v.get('c') or 'direct')
+        ch = v.get('c') or 'direct'
+        add(channels, ch)
         if v.get('s'):
             add(sites, v['s'])
+        if v.get('h'):
+            add(hours.setdefault(v['h'], {}), ch)
+        if v.get('k'):
+            add(posts, v['k'])
         for kind, n in v['p'].items():
             add(pages, kind, n)
             views += n
     return {'day': d['day'], 'visitors': people, 'views': views, 'channels': by_count(channels),
             'sites': by_count(sites, 8), 'pages': by_count(pages), 'crawlers': by_count(d['crawlers']),
-            'unconfirmed': unconfirmed}
+            'unconfirmed': unconfirmed, 'hours': dict(sorted(hours.items())), 'posts': by_count(posts, 20)}
+
+
+def hourly(*days):
+    """[{"t": "2026-10-11T19", "n": {channel: people}}] for the given day summaries, oldest first"""
+    out = []
+    for d in days:
+        if isinstance(d, dict) and isinstance(d.get('hours'), dict):
+            out += [{'t': f"{d['day']}T{h}", 'n': n} for h, n in sorted(d['hours'].items())]
+    return out
 
 
 def load(path, now):
@@ -235,6 +266,10 @@ def count(st, lines):
             v['c'] = channel(query, m['ref'])
             if v['c'] == 'other sites':
                 v['s'] = ref_site(m['ref'])
+            v['h'] = ts[11:13]   # the hour (UTC) they arrived
+            k = post_key(query)
+            if k:
+                v['k'] = k
         add(v['p'], page_kind(path))
     return newest
 
@@ -265,9 +300,12 @@ def main():
         json.dump(st, fh, separators=(',', ':'))
     os.replace(tmp, path)
     out = summary(st['today'])
+    yesterday = st['history'][-1] if st['history'] else None
+    out['hourly'] = hourly(yesterday, out)
+    del out['hours']
     out['updated'] = now.isoformat(timespec='seconds')
     out['log_read'] = ok
-    out['history'] = [{k: h.get(k) for k in ('day', 'visitors', 'views', 'channels')} for h in st['history'][-14:]]
+    out['history'] = [{k: h.get(k) for k in ('day', 'visitors', 'views', 'channels', 'posts')} for h in st['history'][-14:]]
     print(json.dumps(out, separators=(',', ':')))
 
 
