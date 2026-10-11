@@ -11,7 +11,7 @@ import { db } from '../lib/postgres'
 import { EVENT_TEMPLATE_SQL } from './event-titles'
 import { countIndependentOutlets } from './independence'
 import { hostOf } from './signal-columns'
-import { decodeEntities, cleanUrl, cleanTitle, ENCODED_TEXT_RE, FEED_FOOTER_SQL, OUTLET_NOTE_SQL, summaryWithoutNotes, feedText, HTML_TAG_RE } from './text'
+import { decodeEntities, cleanUrl, cleanTitle, ENCODED_TEXT_RE, FEED_FOOTER_SQL, OUTLET_NOTE_SQL, OUTLET_SUFFIX_SQL, summaryWithoutNotes, feedText, HTML_TAG_RE, withoutOutletName } from './text'
 import { liftedSeverity, type SeverityRow } from './severity-lift'
 import { tidyGeoName } from '../sources/gdelt'
 import { NEWS_SOURCE_REGISTRY, detectNewsCategory, isShoppingItem } from '../sources/news-rss'
@@ -382,6 +382,39 @@ export async function stripOutletNotes(): Promise<number> {
          FROM (VALUES ${batch.map(() => '(?::uuid, ?::text)').join(', ')}) AS v(id, summary)
         WHERE s.id = v.id`,
       batch.flatMap(r => [r.id, r.summary]),
+    )
+  }
+  return changed.length
+}
+
+/**
+ * Headlines of the last 3 days without the outlet's name their page title
+ * ended with ("… - The Korea Times", "… | Mint"), as intake writes them now
+ * (text.ts withoutOutletName, Oct 11, 2026: 138 of 2,600 recent stories).
+ * Reads what intake read (the headline and the first link), so it can run at
+ * every start: a cleaned headline no longer changes.
+ */
+export async function stripOutletNames(): Promise<number> {
+  const rows = await db('signals')
+    .where('created_at', '>', db.raw("NOW() - INTERVAL '3 days'"))
+    .whereRaw('title ~ ?', [OUTLET_SUFFIX_SQL])
+    .select('id', 'title', 'original_urls')
+    .limit(30000) as Array<{ id: string; title: string | null; original_urls: unknown }>
+  const changed: Array<{ id: string; title: string }> = []
+  for (const row of rows) {
+    if (typeof row.title !== 'string') continue
+    const urls = Array.isArray(row.original_urls) ? row.original_urls : []
+    const title = withoutOutletName(row.title, typeof urls[0] === 'string' ? urls[0] : null)
+    if (title !== row.title) changed.push({ id: row.id, title })
+  }
+  // 500 rows a statement
+  for (let i = 0; i < changed.length; i += 500) {
+    const batch = changed.slice(i, i + 500)
+    await db.raw(
+      `UPDATE signals AS s SET title = v.title
+         FROM (VALUES ${batch.map(() => '(?::uuid, ?::text)').join(', ')}) AS v(id, title)
+        WHERE s.id = v.id`,
+      batch.flatMap(r => [r.id, r.title]),
     )
   }
   return changed.length

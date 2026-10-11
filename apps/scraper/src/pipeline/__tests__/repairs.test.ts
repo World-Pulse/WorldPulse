@@ -23,7 +23,7 @@ vi.mock('../../lib/postgres', () => {
   }
 })
 
-import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability } from '../repairs'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability, stripOutletNames } from '../repairs'
 import { db } from '../../lib/postgres'
 import { EVENT_TEMPLATE_SQL } from '../event-titles'
 
@@ -243,6 +243,23 @@ describe('retractShoppingItems', () => {
     expect(h.updates).toHaveLength(1)
     expect(h.updates[0]!.ids).toEqual(['a', 'c'])
     expect(h.updates[0]!.data.status).toBe('retracted')
+    h.rows = []
+  })
+})
+
+describe('stripOutletNames', () => {
+  beforeEach(() => { h.raws.length = 0 })
+
+  it("takes the outlet's name off recent headlines, and leaves other endings", async () => {
+    h.rows = [
+      { id: 'a', title: "S Korea's Lee calls for calm after Riyadh attack - The Korea Times", original_urls: ['https://www.koreatimes.co.kr/www/nation/2026/10/x.html'] },
+      { id: 'b', title: 'Russian diesel imports beneficial to Americans — Treasury Secretary', original_urls: ['https://tass.com/economy/1'] },
+      { id: 'c', title: 'IIT Kanpur alumnus raises funds for a startup | Mint', original_urls: ['https://www.livemint.com/news/x'] },
+    ]
+    expect(await stripOutletNames()).toBe(2)
+    const { sql, params } = h.raws.find(r => /^\s*UPDATE/.test(r.sql))!
+    expect(sql).toMatch(/UPDATE signals AS s SET title = v\.title/)
+    expect(params).toEqual(['a', "S Korea's Lee calls for calm after Riyadh attack", 'c', 'IIT Kanpur alumnus raises funds for a startup'])
     h.rows = []
   })
 })

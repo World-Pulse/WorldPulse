@@ -20,7 +20,7 @@ import { verifySignal } from './pipeline/verify'
 import { classifyContent } from './pipeline/classify'
 import { extractGeo, geocodePlace, placeFromText } from './pipeline/geo'
 import { isStaleItem } from './pipeline/freshness'
-import { decodeEntities, cleanUrl } from './pipeline/text'
+import { decodeEntities, cleanUrl, withoutOutletName } from './pipeline/text'
 import { dedup } from './pipeline/dedup'
 import { correlateSignal, confirmMergedArticle, RELIABILITY_CEILING } from './pipeline/correlate'
 import type { CorrelationCandidate } from './pipeline/correlate'
@@ -41,7 +41,7 @@ import { signalsHavePublishedAt, publishedAtFor, backfillRecentPublishedAt, sour
 import { independentReports, isCopyOf } from './pipeline/independence'
 import { ensureStoryIdColumn } from './pipeline/stories'
 import { startEditor, catchUpEditor } from './pipeline/editor'
-import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames, stripOutletNotes, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability } from './pipeline/repairs'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames, stripOutletNotes, stripOutletNames, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability } from './pipeline/repairs'
 import { batchValidateGeo } from './pipeline/geo-validator'
 import { recomputeSourceReputation } from './pipeline/source-reputation'
 import { startKafkaLagMonitor } from './lib/kafka-lag-monitor'
@@ -187,7 +187,12 @@ async function bootstrap() {
   const decoding = decodeStoredEntities()
     .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: HTML codes in recent headlines and links decoded') })
     .catch(err => logger.warn({ err }, 'HTML code repair failed (non-fatal)'))
-    // After the decoding: this one rewrites GDACS headlines too, and must not race it
+  // Headlines, one repair after another: they rewrite the same ones
+  decoding
+    .then(() => stripOutletNames())
+    .then(rows => { if (rows && rows > 0) logger.info({ rows }, 'Repair: outlet names off the end of recent headlines ("… - The Korea Times")') })
+    .catch(err => logger.warn({ err }, 'Outlet name repair failed (non-fatal)'))
+    // This one rewrites GDACS headlines too
     .then(() => repinNewsHomePins(db))
     .then(t => { if (t && t.moved + t.cleared + t.retitled > 0) logger.info(t, "Repair: news pins at an outlet's office moved to the story's place") })
     .catch(err => logger.warn({ err }, 'News pin repair failed (non-fatal)'))
@@ -810,7 +815,7 @@ async function processArticleGroup(
 
   // Create signal
   const row: Record<string, unknown> = {
-    title:            decodeEntities(primary.title),
+    title:            withoutOutletName(decodeEntities(primary.title), primary.url),
     summary:          typeof classification.summary === 'string' ? decodeEntities(classification.summary) : classification.summary,
     category:         classification.category,
     severity:         classification.severity,

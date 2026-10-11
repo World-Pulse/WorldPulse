@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { decodeEntities, cleanUrl, cleanTitle, ENCODED_TEXT_RE } from '../text'
+import { decodeEntities, cleanUrl, cleanTitle, ENCODED_TEXT_RE, withoutOutletName, OUTLET_SUFFIX_SQL } from '../text'
 import { cleanSignalText } from '../insert-signal'
 
 describe('decodeEntities', () => {
@@ -167,5 +167,35 @@ describe('cleanSummary (pitches, Oct 11, 2026)', () => {
     const { cleanSummary } = await import('../text')
     const story = 'Voters were asked to get our attention on the economy; the podcast host disagreed.'
     expect(cleanSummary(story)).toBe(story)
+  })
+})
+
+describe('withoutOutletName (Oct 11, 2026)', () => {
+  it("takes off the outlet's name when it matches the article's website", () => {
+    expect(withoutOutletName("Rotting food and a foul stench haunt a Honolulu restaurant - The Garden Island", 'https://www.thegardenisland.com/2026/10/11/x/'))
+      .toBe('Rotting food and a foul stench haunt a Honolulu restaurant')
+    expect(withoutOutletName('IIT Kanpur alumnus unable to find job in US for two years | Mint', 'https://www.livemint.com/news/x')).toBe('IIT Kanpur alumnus unable to find job in US for two years')
+    expect(withoutOutletName('Afghan refugees face deportation from Pakistan - Khaama Press', 'https://www.khaama.com/x')).toBe('Afghan refugees face deportation from Pakistan')
+    expect(withoutOutletName('Police chief named in Louisiana town – Daily Grenada And Caribbean News', 'https://grenadachronicle.com/x')).toBe('Police chief named in Louisiana town')
+  })
+
+  it("keeps an ending that isn't the outlet", () => {
+    expect(withoutOutletName('Russian diesel imports beneficial to Americans — Treasury Secretary', 'https://tass.com/economy/1')).toBe('Russian diesel imports beneficial to Americans — Treasury Secretary')
+    expect(withoutOutletName('Woman seriously hurt in three-vehicle crash on major UK motorway - man arrested', 'https://www.express.co.uk/news/x')).toBe('Woman seriously hurt in three-vehicle crash on major UK motorway - man arrested')
+    // a common word alone doesn't tie the ending to the website
+    expect(withoutOutletName('Markets slide as oil jumps after strike - Daily update', 'https://www.dailymail.co.uk/x')).toBe('Markets slide as oil jumps after strike - Daily update')
+    // too short a headline before the dash, no link, or a long ending
+    expect(withoutOutletName('M 6.2 - 79 km SSE of Panguna, Papua New Guinea', 'https://earthquake.usgs.gov/x')).toBe('M 6.2 - 79 km SSE of Panguna, Papua New Guinea')
+    expect(withoutOutletName('Strike hits port as talks stall - Reuters', null)).toBe('Strike hits port as talks stall - Reuters')
+  })
+
+  it('finds the headlines worth reading again (the repair)', () => {
+    expect(new RegExp(OUTLET_SUFFIX_SQL).test('Strike hits port - The Korea Times')).toBe(true)
+    expect(new RegExp(OUTLET_SUFFIX_SQL).test('Strike hits port')).toBe(false)
+  })
+
+  it('is applied to every signal at intake, by its first link', () => {
+    const row = cleanSignalText({ title: 'Hurricane Simon nears western Mexico | Focus Taiwan', original_urls: ['https://focustaiwan.tw/news/x'] })
+    expect(row.title).toBe('Hurricane Simon nears western Mexico')
   })
 })

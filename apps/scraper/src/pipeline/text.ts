@@ -66,6 +66,46 @@ export function cleanTitle(title: string): string {
   return stripTags(decodeEntities(title)).replace(/\s{2,}/g, ' ').trim()
 }
 
+/** A website's address as one word, without "www." ("https://www.livemint.com/x" → "livemintcom") */
+function siteWord(url: string | null | undefined): string {
+  try {
+    return new URL(url ?? '').hostname.toLowerCase().replace(/^(?:www|m|amp|edition)\./, '').replace(/[^a-z0-9]/g, '')
+  } catch {
+    return ''
+  }
+}
+
+/** Words too common to tie a headline's last part to a website by themselves */
+const COMMON_SITE_WORDS = new Set([
+  'news', 'times', 'daily', 'post', 'world', 'online', 'today', 'live', 'update', 'updates', 'report',
+  'video', 'videos', 'photos', 'latest', 'first', 'media', 'press', 'journal', 'star', 'mail', 'express',
+  'global', 'national', 'local', 'city', 'state', 'government', 'people', 'life', 'health', 'business',
+  'sport', 'sports', 'tech', 'money', 'more', 'says', 'with', 'from', 'this', 'that', 'what', 'over',
+])
+
+/** The separator before an outlet's name in a page title: " - ", " – ", " — ", " | " */
+export const OUTLET_SUFFIX_SQL = '\\s[-–—|]\\s[^-–—|]{2,60}$'
+
+/**
+ * A headline without the outlet's name its page title ends with ("… - The
+ * Korea Times", "… | Mint"), when that name matches the article's website.
+ * GDELT takes headlines from the article page's title, which usually carries
+ * it (Oct 11, 2026: 169 of 2,600 recent stories). A last part that isn't the
+ * outlet ("… — Treasury Secretary", "… - man arrested") stays.
+ */
+export function withoutOutletName(title: string, url: string | null | undefined): string {
+  const site = siteWord(url)
+  if (!site) return title
+  const m = /^(.{20,}?)\s+[-–—|]\s+([^-–—|]{2,60})$/u.exec(title.trim())
+  if (!m) return title
+  const name = m[2]!.trim()
+  if (name.split(/\s+/).length > 7) return title
+  const whole = name.toLowerCase().replace(/^the\s+/, '').replace(/[^a-z0-9]/g, '')
+  const named = (whole.length >= 3 && site.includes(whole))
+    || name.toLowerCase().split(/[^a-z0-9]+/).some(w => w.length >= 4 && !COMMON_SITE_WORDS.has(w) && site.includes(w))
+  return named ? m[1]!.trim() : title
+}
+
 /** A link with "&amp;" written out as "&" (GDACS report links didn't open) */
 export function cleanUrl(url: string): string {
   return url.replace(/&amp;/gi, '&')
