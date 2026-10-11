@@ -12,6 +12,13 @@ random daily key plus their address and browser; the key and the hashes are
 thrown away when the day ends (UTC), leaving only the day's totals. Like
 Plausible's counting: no cookies, no addresses stored.
 
+Many bots call themselves a browser. A visitor only counts once their browser
+also ran the page: it loaded the site's scripts (/_next/static/) or called
+the API (api.world-pulse.io), as every page does and almost no bot does.
+Page views from browser names that never did are reported as "unconfirmed".
+Requests for things only attackers look for (/wp-login.php, /.env…) never
+count.
+
 A visitor's channel is where their first page view of the day came from:
 the link's utm_source if it has one (our posts and Share buttons add it),
 else the website that sent them (x.com, linkedin.com, google…), else
@@ -35,6 +42,9 @@ from urllib.parse import parse_qs, urlsplit
 HISTORY_DAYS = 30
 CONTAINER = os.environ.get('READERS_CONTAINER', 'wp_nginx')
 SITE_HOST = 'world-pulse.io'
+SITE_HOSTS = (SITE_HOST, 'www.' + SITE_HOST)
+API_HOST = 'api.' + SITE_HOST
+STATE_VERSION = 2
 
 # docker logs --timestamps: "<RFC3339Nano> <nginx line>"; nginx's "main" format
 LINE = re.compile(
@@ -47,6 +57,10 @@ NOT_PAGE = re.compile(
     r'^/(?:api|_next|ws|uploads|health|ops-status\.json|socket\.io|\.well-known|embed|fonts|icons|images|static)(?:/|$|\?)'
     r'|^/[^?]*\.(?:js|mjs|css|map|png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|json|xml|txt|webmanifest)(?:\?|$)'
     r'|/(?:opengraph|twitter)-image(?:\?|$)')
+# Paths only scanners ask for (they get the profile page, a 200, so they would count)
+PROBE = re.compile(
+    r'(?:^|/)(?:wp-|wordpress|xmlrpc|cgi-bin|phpmyadmin|pma\b|vendor/|boaform|hnap1|owa/|autodiscover|actuator|solr|geoserver|cdn-cgi|\.[a-z])'
+    r'|\.(?:php\d?|aspx?|jsp|cgi|env|git|sql|bak|old|zip|tar|gz|rar|7z|ini|ya?ml|conf|log|sh|pl|py|rb)(?:[?/]|$)', re.I)
 
 CRAWLERS = [
     ('google', re.compile(r'googlebot|google-inspectiontool|googleother|adsbot-google|storebot-google|google-extended', re.I)),
@@ -59,7 +73,7 @@ CRAWLERS = [
 OTHER_BOT = re.compile(
     r'bot\b|bot/|crawl|spider|slurp|preview|headless|lighthouse|pagespeed|python|curl|wget|go-http|java/|okhttp|axios|node-fetch'
     r'|httpclient|libwww|scrapy|monitor|uptime|pingdom|statuscake|semrush|ahrefs|mj12|dotbot|petalbot|yandex|baiduspider'
-    r'|seznam|sogou|censys|zgrab|masscan|nmap|nuclei|expanse|^-?$', re.I)
+    r'|seznam|sogou|censys|zgrab|masscan|nmap|nuclei|expanse|undici|^node|^-?$', re.I)
 
 CHANNEL_SITES = [
     ('x', re.compile(r'(^|\.)(t\.co|x\.com|twitter\.com)$')),
@@ -120,18 +134,43 @@ def channel(query, ref):
     return 'other sites'
 
 
+def ref_site(ref):
+    host = (urlsplit(ref).hostname or '').lower()
+    return (host[4:] if host.startswith('www.') else host)[:60]
+
+
 def empty_day(day):
-    return {'day': day, 'salt': secrets.token_hex(16), 'visitors': {}, 'views': 0,
-            'pages': {}, 'crawlers': {}}
+    # visitors: hash -> {"c": channel, "s": sending website, "js": ran the page, "p": {page kind: views}}
+    return {'day': day, 'salt': secrets.token_hex(16), 'visitors': {}, 'crawlers': {}}
+
+
+def add(counts, key, n=1):
+    counts[key] = counts.get(key, 0) + n
+
+
+def by_count(counts, top=None):
+    return dict(sorted(counts.items(), key=lambda kv: -kv[1])[:top])
 
 
 def summary(d):
-    channels = {}
-    for ch in d['visitors'].values():
-        channels[ch] = channels.get(ch, 0) + 1
-    return {'day': d['day'], 'visitors': len(d['visitors']), 'views': d['views'],
-            'channels': dict(sorted(channels.items(), key=lambda kv: -kv[1])),
-            'pages': d['pages'], 'crawlers': d['crawlers']}
+    """The day's totals, counting only visitors whose browser ran the page"""
+    channels, pages, sites, views, people, unconfirmed = {}, {}, {}, 0, 0, 0
+    for v in d['visitors'].values():
+        if not isinstance(v, dict) or not v.get('p'):
+            continue
+        if not v.get('js'):
+            unconfirmed += 1
+            continue
+        people += 1
+        add(channels, v.get('c') or 'direct')
+        if v.get('s'):
+            add(sites, v['s'])
+        for kind, n in v['p'].items():
+            add(pages, kind, n)
+            views += n
+    return {'day': d['day'], 'visitors': people, 'views': views, 'channels': by_count(channels),
+            'sites': by_count(sites, 8), 'pages': by_count(pages), 'crawlers': by_count(d['crawlers']),
+            'unconfirmed': unconfirmed}
 
 
 def load(path, now):
@@ -139,10 +178,14 @@ def load(path, now):
         with open(path, encoding='utf-8') as fh:
             st = json.load(fh)
         if isinstance(st.get('today'), dict) and isinstance(st.get('history'), list):
+            if st.get('v') != STATE_VERSION:
+                # Counted the old way (no check that the page ran): count today again from midnight UTC
+                st.update(v=STATE_VERSION, today=empty_day(now.strftime('%Y-%m-%d')), since=now.strftime('%Y-%m-%dT00:00:00.000000000Z'))
             return st
     except (OSError, ValueError):
         pass
-    return {'since': (now - timedelta(hours=24)).strftime('%Y-%m-%dT%H:%M:%S.%fZ'), 'today': empty_day(now.strftime('%Y-%m-%d')), 'history': []}
+    return {'v': STATE_VERSION, 'since': (now - timedelta(hours=24)).strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
+            'today': empty_day(now.strftime('%Y-%m-%d')), 'history': []}
 
 
 def count(st, lines):
@@ -161,15 +204,6 @@ def count(st, lines):
         if ts_key(ts) <= last:
             continue
         newest = ts
-        if m['method'] != 'GET' or m['status'] not in ('200', '304'):
-            continue
-        h = HOST.search(m['rest'])
-        if h and h.group(1).lower() not in (SITE_HOST, 'www.' + SITE_HOST):
-            continue
-        parts = urlsplit(m['target'])
-        path, query = parts.path or '/', parts.query
-        if NOT_PAGE.search(m['target']) or '_rsc=' in query:
-            continue
         day = ts[:10]
         today = st['today']
         if day > today['day']:
@@ -177,16 +211,31 @@ def count(st, lines):
             today = st['today'] = empty_day(day)
         elif day < today['day']:
             continue   # an older line (clock or ordering): ignore
-        bot = crawler_kind(m['ua'])
+        h = HOST.search(m['rest'])
+        host = h.group(1).lower() if h else None   # lines from before nginx logged the host have none
+        parts = urlsplit(m['target'])
+        path, query = parts.path or '/', parts.query
+        ua = m['ua']
+        page = (m['method'] == 'GET' and m['status'] in ('200', '304') and (host is None or host in SITE_HOSTS)
+                and not NOT_PAGE.search(m['target']) and not PROBE.search(path) and '_rsc=' not in query)
+        bot = crawler_kind(ua)
         if bot:
-            today['crawlers'][bot] = today['crawlers'].get(bot, 0) + 1
+            if page:
+                add(today['crawlers'], bot)
             continue
-        today['views'] += 1
-        kind = page_kind(path)
-        today['pages'][kind] = today['pages'].get(kind, 0) + 1
-        who = hashlib.sha256(f"{today['salt']}|{m['ip']}|{m['ua']}".encode()).hexdigest()[:16]
-        if who not in today['visitors']:
-            today['visitors'][who] = channel(query, m['ref'])
+        who = hashlib.sha256(f"{today['salt']}|{m['ip']}|{ua}".encode()).hexdigest()[:16]
+        # The browser ran the page: it fetched the site's scripts or called the API
+        if host == API_HOST or path.startswith('/_next/static/') or (host is None and path.startswith('/api/')):
+            today['visitors'].setdefault(who, {'p': {}})['js'] = True
+            continue
+        if not page:
+            continue
+        v = today['visitors'].setdefault(who, {'p': {}})
+        if 'c' not in v:
+            v['c'] = channel(query, m['ref'])
+            if v['c'] == 'other sites':
+                v['s'] = ref_site(m['ref'])
+        add(v['p'], page_kind(path))
     return newest
 
 
@@ -218,7 +267,7 @@ def main():
     out = summary(st['today'])
     out['updated'] = now.isoformat(timespec='seconds')
     out['log_read'] = ok
-    out['history'] = [{k: h[k] for k in ('day', 'visitors', 'views', 'channels')} for h in st['history'][-14:]]
+    out['history'] = [{k: h.get(k) for k in ('day', 'visitors', 'views', 'channels')} for h in st['history'][-14:]]
     print(json.dumps(out, separators=(',', ':')))
 
 
