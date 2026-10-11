@@ -22,7 +22,7 @@ import { extractGeo, geocodePlace, placeFromText } from './pipeline/geo'
 import { isStaleItem } from './pipeline/freshness'
 import { decodeEntities, cleanUrl } from './pipeline/text'
 import { dedup } from './pipeline/dedup'
-import { correlateSignal, confirmMergedArticle } from './pipeline/correlate'
+import { correlateSignal, confirmMergedArticle, RELIABILITY_CEILING } from './pipeline/correlate'
 import type { CorrelationCandidate } from './pipeline/correlate'
 import { computeTrending } from './pipeline/trending'
 import { backfillUnprocessed } from './backfill'
@@ -40,7 +40,7 @@ import { runDelayedRescore } from './pipeline/rescore'
 import { signalsHavePublishedAt, publishedAtFor, backfillRecentPublishedAt, sourceKey, hostOf } from './pipeline/signal-columns'
 import { independentReports, isCopyOf } from './pipeline/independence'
 import { ensureStoryIdColumn } from './pipeline/stories'
-import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames, stripOutletNotes, recategorizeRecentNews, recategorizeRecentArticles, retractShoppingItems } from './pipeline/repairs'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames, stripOutletNotes, recategorizeRecentNews, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability } from './pipeline/repairs'
 import { batchValidateGeo } from './pipeline/geo-validator'
 import { recomputeSourceReputation } from './pipeline/source-reputation'
 import { startKafkaLagMonitor } from './lib/kafka-lag-monitor'
@@ -211,6 +211,9 @@ async function bootstrap() {
     .then(() => runOnce('repair:article-categories:2026-10-11', recategorizeRecentArticles))
     .then(rows => { if (rows && rows > 0) logger.info({ rows }, 'Repair: article and GDELT categories by the current rules ("who" is no longer the WHO)') })
     .catch(err => logger.warn({ err }, 'Article category repair failed (non-fatal)'))
+  recalibrateFlatReliability()
+    .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: corroborated stories at a flat 100% reliability rescored by their outlets') })
+    .catch(err => logger.warn({ err }, 'Reliability repair failed (non-fatal)'))
   liftCappedSeverities()
     .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: corroborated stories got the severity their words earn (single-source cap lifted)') })
     .catch(err => logger.warn({ err }, 'Severity lift repair failed (non-fatal)'))
@@ -875,13 +878,15 @@ async function processArticleGroup(
     return verifySignal(signal, outlets)
   })
   if (verificationResult.status !== signal.status) {
+    // (a score from every check passing is 1.0: no story shows 100%)
+    const score = Math.min(verificationResult.score, RELIABILITY_CEILING)
     await db('signals').where('id', signal.id).update({
       status:            verificationResult.status,
-      reliability_score: verificationResult.score,
+      reliability_score: score,
       verified_at:       verificationResult.status === 'verified' ? new Date() : null,
     })
     signal.status = verificationResult.status
-    signal.reliability_score = verificationResult.score
+    signal.reliability_score = score
   }
 
   // ── Cross-source event correlation (async, non-blocking) ──

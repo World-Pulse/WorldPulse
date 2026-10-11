@@ -16,7 +16,8 @@
  * When signals are correlated:
  *   - They are grouped into an event_cluster with a shared cluster_id
  *   - The highest-severity signal becomes the "primary" signal
- *   - Reliability scores get a corroboration boost (+0.05 per corroborating source)
+ *   - Reports of the same story from independent outlets gain reliability
+ *     (each new outlet closes part of the gap to 0.98, see RELIABILITY_CEILING)
  *   - A correlated_signals array is stored in Redis for fast retrieval
  *
  * @module pipeline/correlate
@@ -80,9 +81,31 @@ const GEO_RADIUS_KM = Number(process.env.CORRELATION_GEO_RADIUS_KM ?? 200)
 /** Minimum correlation score to form a cluster (0-1) */
 const MIN_CORRELATION_SCORE = 0.45
 
-/** Reliability boost per corroborating source (capped at 0.20 total) */
-const CORROBORATION_BOOST = 0.07
-const MAX_CORROBORATION_BOOST = 0.20
+/**
+ * Reliability as independent outlets confirm a story (Oct 11, 2026). Each new
+ * outlet closes part of the gap to a ceiling below certainty: from n to m
+ * outlets, r' = C − (C − r) × K^(m − n), so the score is the same whatever
+ * order the outlets come in, each outlet adds less than the one before, and
+ * no story shows 100%. It used to add 0.07 per outlet (more for high and
+ * critical stories) up to 1.0: 252 of 574 verified stories showed a flat 100%.
+ */
+export const RELIABILITY_CEILING = 0.98
+const OUTLET_GAP_KEPT = 0.6
+
+/** A score after `added` more independent outlets (never lowered: one already at the ceiling stays) */
+export function corroboratedReliability(score: number, added: number): number {
+  if (added <= 0 || score >= RELIABILITY_CEILING) return score
+  return RELIABILITY_CEILING - (RELIABILITY_CEILING - score) * OUTLET_GAP_KEPT ** added
+}
+
+/** corroboratedReliability as an update of reliability_score; `added` is SQL for the outlets added */
+function corroboratedReliabilitySql(added: string, bindings: unknown[] = []) {
+  return db.raw(
+    `CASE WHEN reliability_score >= ? THEN reliability_score
+          ELSE ? - (? - reliability_score) * POWER(?, GREATEST(${added}, 0)) END`,
+    [RELIABILITY_CEILING, RELIABILITY_CEILING, RELIABILITY_CEILING, OUTLET_GAP_KEPT, ...bindings],
+  )
+}
 
 /** Redis TTL for correlation data */
 const CORRELATION_TTL = 7 * 24 * 60 * 60 // 7 days
@@ -739,23 +762,6 @@ async function applyCorroborationBoost(
   const uniqueSources = countIndependentOutlets(group)
   if (uniqueSources < 2) return // Need 2+ independent outlets
 
-  // Base boost per corroborating outlet
-  let boost = Math.min(
-    CORROBORATION_BOOST * (uniqueSources - 1),
-    MAX_CORROBORATION_BOOST
-  )
-
-  // Severity multiplier: critical events with multi-source confirmation deserve
-  // a stronger boost because false positives at critical severity are very costly
-  const topSeverity = group.reduce(
-    (top, s) => ((SEVERITY_ORDER[s.severity] ?? 0) > (SEVERITY_ORDER[top] ?? 0) ? s.severity : top),
-    signal.severity,
-  )
-  const severityMultiplier = topSeverity === 'critical' ? 1.15
-    : topSeverity === 'high' ? 1.10
-    : 1.0
-  boost = Math.min(boost * severityMultiplier, 0.30) // absolute cap
-
   const ids = group.map(s => s.id)
   try {
     // Boost only signals whose count of independent outlets just went up
@@ -765,7 +771,8 @@ async function applyCorroborationBoost(
         this.whereNull('source_count').orWhere('source_count', '<', uniqueSources)
       })
       .update({
-        reliability_score:    db.raw(`LEAST(reliability_score + ?, 1.0)`, [boost]),
+        // The outlets it gained: from its stored count (old value) to uniqueSources
+        reliability_score:    corroboratedReliabilitySql('? - COALESCE(source_count, 1)', [uniqueSources]),
         source_count:         uniqueSources,
         last_corroborated_at: db.raw('NOW()'),
       })
@@ -819,7 +826,6 @@ async function applyCorroborationBoost(
     logger.info({
       signal_id:      signal.id,
       matches:        sameStory.map(s => s.id).slice(0, 10),
-      boost:          +boost.toFixed(3),
       unique_sources: uniqueSources,
       boosted_count:  boosted,
       promoted_count: promoted,
@@ -864,12 +870,9 @@ export async function corroborateWithDuplicate(
   const existing = toCandidate({ ...row, source_id: storedIds[0] ?? null, first_url: storedUrls[0] ?? null, location_name: null, reliability_score: 0, tags: [] })
   if (!isSameStory(existing, { ...existing, ...incoming, id: 'incoming' })) return false
 
-  const top = (SEVERITY_ORDER[incoming.severity] ?? 0) > (SEVERITY_ORDER[existing.severity] ?? 0) ? incoming.severity : existing.severity
-  const boost = Math.min(CORROBORATION_BOOST * (top === 'critical' ? 1.15 : top === 'high' ? 1.10 : 1.0), MAX_CORROBORATION_BOOST)
-
   const update: Record<string, unknown> = {
     source_count:         db.raw('GREATEST(COALESCE(source_count, 1), 1) + 1'),
-    reliability_score:    db.raw('LEAST(reliability_score + ?, 1.0)', [boost]),
+    reliability_score:    corroboratedReliabilitySql('1'),
     last_corroborated_at: db.raw('NOW()'),
   }
   if (incoming.url) update.original_urls = db.raw('array_append(COALESCE(original_urls, ARRAY[]::text[]), ?)', [incoming.url])
@@ -885,7 +888,6 @@ export async function corroborateWithDuplicate(
   logger.info({
     signal_id: existingId,
     outlet:    incoming.source_id,
-    boost:     +boost.toFixed(3),
     promoted,
   }, 'Duplicate report from another outlet corroborated a signal')
   return true
@@ -917,9 +919,8 @@ export async function confirmMergedArticle(
   const article: CorrelationCandidate = { ...held, ...incoming, id: 'incoming', lat: null, lng: null }
   if (!isSameStory(held, article) || namesDiffer(held.title, article.title)) return false
 
-  const boost = Math.min(CORROBORATION_BOOST * (held.severity === 'critical' ? 1.15 : held.severity === 'high' ? 1.10 : 1.0), MAX_CORROBORATION_BOOST)
   await db('signals').where('id', signalId).update({
-    reliability_score:    db.raw('LEAST(reliability_score + ?, 1.0)', [boost]),
+    reliability_score:    corroboratedReliabilitySql('1'),
     last_corroborated_at: db.raw('NOW()'),
   })
   const promoted = await db('signals')
@@ -929,7 +930,7 @@ export async function confirmMergedArticle(
     .where('reliability_score', '>=', 0.65)
     .update({ status: 'verified', verified_at: db.raw('NOW()') })
 
-  logger.info({ signal_id: signalId, outlet: incoming.source_id, boost: +boost.toFixed(3), promoted },
+  logger.info({ signal_id: signalId, outlet: incoming.source_id, promoted },
     'Merged article from another outlet confirmed a story')
   return true
 }

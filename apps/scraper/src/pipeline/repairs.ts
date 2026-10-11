@@ -16,6 +16,7 @@ import { liftedSeverity, type SeverityRow } from './severity-lift'
 import { tidyGeoName } from '../sources/gdelt'
 import { NEWS_SOURCE_REGISTRY, detectNewsCategory, isShoppingItem } from '../sources/news-rss'
 import { categorizeArticle, categorizeText } from './categories'
+import { corroboratedReliability, RELIABILITY_CEILING } from './correlate'
 
 /** Where nginx serves uploaded post media (the uploads volume, under /uploads/) */
 const PUBLIC_SITE = 'https://world-pulse.io'
@@ -115,6 +116,46 @@ export async function retractStaleFeedItems(): Promise<number> {
         AND event_time < created_at - INTERVAL '3 days'`,
   )
   return Number((result as { rowCount?: number })?.rowCount ?? 0)
+}
+
+/**
+ * Reliability of the last 3 days' corroborated stories that reached the old
+ * cap (correlate.ts added 0.07 per outlet up to 1.0: 252 of 574 verified
+ * stories showed 100%), as correlate.ts scores them now: the report's
+ * starting score (its RSS outlet's own, GDELT's 0.65, else 0.7) with each
+ * further outlet closing part of the gap to 0.98. Only lowers, and lowered
+ * rows no longer match, so a later start changes nothing. OSINT feeds keep
+ * their own scores (USGS and the like start at 0.99).
+ */
+export async function recalibrateFlatReliability(): Promise<number> {
+  const rows = await db('signals')
+    .where('created_at', '>', db.raw("NOW() - INTERVAL '3 days'"))
+    .where('source_count', '>=', 2)
+    .where('reliability_score', '>', RELIABILITY_CEILING)
+    .whereRaw("(NOT (tags @> ARRAY['osint']::text[]) OR tags @> ARRAY['gdelt']::text[])")
+    .select('id', 'tags', 'source_count', 'reliability_score')
+    .limit(10000) as Array<{ id: string; tags: string[] | null; source_count: number | null; reliability_score: number | string }>
+  const sources = new Map(NEWS_SOURCE_REGISTRY.map(src => [src.id, src]))
+  const changed: Array<{ id: string; score: number }> = []
+  for (const row of rows) {
+    const tags = row.tags ?? []
+    const base = tags.includes('gdelt') ? 0.65
+      : tags.includes('rss') ? (tags.map(t => sources.get(t)).find(Boolean)?.reliability ?? 0.8)
+      : 0.7
+    const score = Math.round(corroboratedReliability(base, (Number(row.source_count) || 1) - 1) * 1000) / 1000
+    if (score < Number(row.reliability_score)) changed.push({ id: row.id, score })
+  }
+  // 500 rows a statement
+  for (let i = 0; i < changed.length; i += 500) {
+    const batch = changed.slice(i, i + 500)
+    await db.raw(
+      `UPDATE signals AS s SET reliability_score = v.score
+         FROM (VALUES ${batch.map(() => '(?::uuid, ?::numeric)').join(', ')}) AS v(id, score)
+        WHERE s.id = v.id`,
+      batch.flatMap(r => [r.id, r.score]),
+    )
+  }
+  return changed.length
 }
 
 /**

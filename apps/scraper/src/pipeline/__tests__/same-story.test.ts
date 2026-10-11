@@ -48,7 +48,7 @@ vi.mock('../../lib/redis', () => {
 })
 vi.mock('../../lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }))
 
-import { isSameStory, correlateSignal, corroborateWithDuplicate, confirmMergedArticle, namesDiffer, type CorrelationCandidate } from '../correlate'
+import { isSameStory, correlateSignal, corroborateWithDuplicate, confirmMergedArticle, namesDiffer, corroboratedReliability, RELIABILITY_CEILING, type CorrelationCandidate } from '../correlate'
 
 const now = new Date('2026-10-10T15:40:00Z')
 
@@ -135,6 +135,9 @@ describe('correlateSignal corroboration', () => {
     const [boost, promote] = h.updates
     expect(boost.ids).toEqual(['sig-a', 'sig-b'])
     expect(boost.data.source_count).toBe(2)
+    // Reliability by the outlets each report gained, toward 0.98 (not +0.07 up to 1.0)
+    const sql = String((boost.data.reliability_score as { sql: string }).sql)
+    expect(sql).toMatch(/POWER\(\?, GREATEST\(\? - COALESCE\(source_count, 1\), 0\)\)/)
     expect(promote.ids).toEqual(['sig-a', 'sig-b'])
     expect(promote.data.status).toBe('verified')
   })
@@ -384,5 +387,23 @@ describe('rewordings of one event (Oct 11, 2026)', () => {
       at('Israeli strikes kill five in Gaza', 'dawn.com'),
       at('Diplomatic reduction in Gaza, Israel (general), Israel', 'aa.com.tr'),
     )).toBe(false)
+  })
+})
+
+describe('corroboratedReliability (Oct 11, 2026: 252 of 574 verified stories showed a flat 100%)', () => {
+  it('rises less with each outlet and never reaches 100%', () => {
+    expect(corroboratedReliability(0.85, 1)).toBeCloseTo(0.902, 3)  // 2 outlets
+    expect(corroboratedReliability(0.85, 4)).toBeCloseTo(0.963, 3)  // 5 outlets
+    expect(corroboratedReliability(0.65, 1)).toBeCloseTo(0.782, 3)  // GDELT, 2 outlets
+    expect(corroboratedReliability(0.85, 50)).toBeLessThan(RELIABILITY_CEILING)
+  })
+
+  it('gives the same score whatever order the outlets arrive in', () => {
+    expect(corroboratedReliability(corroboratedReliability(0.65, 1), 2)).toBeCloseTo(corroboratedReliability(0.65, 3), 10)
+  })
+
+  it('never lowers a score', () => {
+    expect(corroboratedReliability(0.99, 2)).toBe(0.99)  // a USGS report starts at 0.99
+    expect(corroboratedReliability(0.7, 0)).toBe(0.7)
   })
 })

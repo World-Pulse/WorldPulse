@@ -23,7 +23,7 @@ vi.mock('../../lib/postgres', () => {
   }
 })
 
-import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, recategorizeRecentArticles, retractShoppingItems } from '../repairs'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability } from '../repairs'
 import { db } from '../../lib/postgres'
 import { EVENT_TEMPLATE_SQL } from '../event-titles'
 
@@ -243,6 +243,29 @@ describe('retractShoppingItems', () => {
     expect(h.updates).toHaveLength(1)
     expect(h.updates[0]!.ids).toEqual(['a', 'c'])
     expect(h.updates[0]!.data.status).toBe('retracted')
+    h.rows = []
+  })
+})
+
+describe('recalibrateFlatReliability', () => {
+  beforeEach(() => { h.raws.length = 0 })
+
+  it("rescores stories at a flat 100% by their outlets, from the report's own start", async () => {
+    h.rows = [
+      { id: 'a', tags: ['news', 'rss', 'bbc-world'], source_count: 3, reliability_score: '1.000' },
+      { id: 'b', tags: ['osint', 'gdelt', 'cameo-19'], source_count: 2, reliability_score: '1.000' },
+      { id: 'c', tags: [], source_count: 2, reliability_score: '0.990' },
+    ]
+    expect(await recalibrateFlatReliability()).toBe(3)
+    const update = h.raws.find(r => /UPDATE/.test(r.sql))
+    expect(update!.sql).toMatch(/UPDATE signals AS s SET reliability_score = v\.score/)
+    const params = update!.params as Array<string | number>
+    expect(params.filter((_, i) => i % 2 === 0)).toEqual(['a', 'b', 'c'])
+    const scores = params.filter((_, i) => i % 2 === 1) as number[]
+    expect(scores[1]).toBe(0.782)       // GDELT's 0.65 with a second outlet
+    expect(scores[2]).toBe(0.812)       // an article group's 0.7 with a second outlet
+    expect(scores[0]).toBeGreaterThan(0.9)
+    expect(scores[0]).toBeLessThan(0.98)
     h.rows = []
   })
 })
