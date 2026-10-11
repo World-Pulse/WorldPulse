@@ -14,8 +14,12 @@ import HotspotLabels from '@/components/map/HotspotLabels'
 import { EnhancedHeatmap } from '@/components/map/EnhancedHeatmap'
 import { useTimelinePlayback } from '@/hooks/useTimelinePlayback'
 import { parseWindowHash, encodePermalink, type MapPermalinkState, type LayerKey } from '@/lib/map-permalink'
-import { SignalCounter } from '@/components/SignalCounter'
-import { Map as MapIcon, Moon, Satellite, Globe2, LocateFixed } from 'lucide-react'
+import {
+  Map as MapIcon, Moon, Satellite, Globe2, LocateFixed, Layers as LayersIcon,
+  Flame, History, Swords, Crosshair, RadioTower, Anchor, Plane, Ship, Activity, ShieldAlert, Video,
+} from 'lucide-react'
+import { LayersPanel, activeLayerCount, type MapLayerGroup } from '@/components/map/LayersPanel'
+import { MapLegend } from '@/components/map/MapLegend'
 import {
   SEVERITY_COLOR, SEVERITY_BG, SEVERITY_RANK, CLUSTER_COLOR_EXPR, SIGNAL_RADIUS_EXPR, FONT_BOLD,
   BASEMAP_MODES, BASEMAP_LABEL, ATMOSPHERE,
@@ -379,6 +383,7 @@ function MapView() {
   }
   const [hotspots,     setHotspots]     = useState<Hotspot[]>([])
   const [hotspotsOpen, setHotspotsOpen] = useState(false)
+  const [layersOpen,   setLayersOpen]   = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -1039,7 +1044,9 @@ function MapView() {
             .addTo(map)
         })
 
-        // ── Signal click: popup + side panel ──────────────────
+        // ── Signal click: the side panel (bottom sheet on phones) ─────
+        // One place for the details: it used to open a pop-up, the panel and an
+        // annotation card for the same signal at once.
 
         let pinClicked = false
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1051,47 +1058,10 @@ function MapView() {
 
           if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
 
-          const srcUrl   = getSourceUrl(p.original_urls)
-          const srcLabel = srcUrl ? getSourceDomain(srcUrl) : (p.location_name ?? null)
-          const score    = Number(p.reliability_score) || 0
-          const dots     = reliabilityDots(score)
-          const color    = SEV_COLOR[p.severity] ?? '#8892a4'
-          const coords   = feat.geometry.coordinates as [number, number]
-
-          popupRef.current = new ml.Popup({
-            closeButton: true,
-            closeOnClick: false,
-            offset: 14,
-            className: 'wp-map-popup',
-          })
-            .setLngLat(e.lngLat)
-            .setHTML(`
-              <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:220px;margin-bottom:6px">${escapeHtml(p.title)}</div>
-              <div style="font:600 12px/1 monospace;color:${color};letter-spacing:1.5px;margin-bottom:6px" title="${Math.round(score * 100)}% reliability">${dots}</div>
-              ${srcLabel ? `<div style="font:11px monospace;color:#8892a4;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px">via ${escapeHtml(srcLabel)}</div>` : ''}
-              <div style="font:11px monospace;color:#5a6477;margin-bottom:8px">${escapeHtml(timeAgo(p.created_at))}</div>
-              <a href="/signals/${encodeURIComponent(String(p.id))}" style="display:inline-flex;align-items:center;gap:5px;font:600 11px/1 system-ui;color:${color};text-decoration:none;border:1px solid ${color}44;border-radius:6px;padding:4px 9px;transition:opacity .15s">
-                View Full Signal <span style="font-size:10px">→</span>
-              </a>
-            `)
-            .addTo(map)
-
+          const coords = feat.geometry.coordinates as [number, number]
           const sig = signalsRef.current.find(s => s.id === p.id) ?? null
           setSelected(sig)
           map.flyTo({ center: coords, zoom: Math.max(map.getZoom(), 5), speed: 1.2, duration: 700 })
-
-          // Push Palantir-style annotation card
-          if (sig) {
-            const newCards = new Map(annotationCardsRef.current)
-            newCards.set(sig.id, { signal: sig, lat: Number(sig.lat), lng: Number(sig.lng) })
-            // Max 5 cards — evict oldest when 6th added
-            if (newCards.size > 5) {
-              const firstKey = newCards.keys().next().value as string
-              newCards.delete(firstKey)
-            }
-            annotationCardsRef.current = newCards
-            setAnnotationCards(new Map(newCards))
-          }
         })
 
         // ── Background click: deselect ────────────────────────
@@ -3173,405 +3143,171 @@ function MapView() {
   const sevBg    = selected ? (SEV_BG[selected.severity]    ?? 'rgba(136,146,164,0.15)') : ''
   const srcUrl   = selected ? getSourceUrl(selected.original_urls) : null
 
+  // ── Layers (one panel, grouped by theme; plan M11) ─────────────────────────
+  // WIND and SATS aren't offered until they show real data (M6): the wind
+  // layer can't draw on MapLibre v5 and the satellite positions are rough
+  // guesses. CARRIERS is covered by Naval intelligence.
+  const layerGroups: MapLayerGroup[] = [
+    {
+      title: 'Signals',
+      items: [
+        { key: 'heat', label: 'Heatmap', description: 'Where signals are concentrated', icon: Flame, color: '#ff7a3d',
+          on: heatmapMode, toggle: () => setHeatmapMode(v => !v) },
+        { key: 'timeline', label: 'Replay', description: 'Play back how the last hours unfolded', icon: History, color: '#a78bfa',
+          on: timelineActive, loading: timeline.loading, count: timeline.data?.total_signals ?? null,
+          toggle: () => setTimelineActive(v => !v) },
+      ],
+    },
+    {
+      title: 'Security',
+      items: [
+        { key: 'conflict', label: 'Conflict zones', description: 'Fighting, military activity and security incidents, last 72 h', icon: Swords, color: '#ef4444',
+          on: conflictMode, loading: conflictLoading, count: conflictCount, toggle: () => setConflictMode(v => !v) },
+        { key: 'threats', label: 'Missile & drone threats', description: 'Ballistic, cruise, hypersonic, drone and rocket reports', icon: Crosshair, color: '#f87171',
+          on: threatMode, loading: threatLoading, count: threatCount, toggle: () => setThreatMode(v => !v) },
+        { key: 'jamming', label: 'GPS jamming', description: 'Military jamming, spoofing and interference zones', icon: RadioTower, color: '#c084fc',
+          on: jammingMode, loading: jammingLoading, count: jammingCount, toggle: () => setJammingMode(v => !v) },
+        { key: 'naval', label: 'Naval intelligence', description: 'Carriers, ships in distress and ships gone dark', icon: Anchor, color: '#60a5fa',
+          on: navalMode, loading: navalLoading, count: navalCount, toggle: () => setNavalMode(v => !v) },
+      ],
+    },
+    {
+      title: 'Movement',
+      items: [
+        { key: 'aircraft', label: 'Aircraft', description: 'Aviation alerts from ADS-B, last 2 h', icon: Plane, color: '#22d3ee',
+          on: showAircraft, count: adsbSignals.length, toggle: () => setShowAircraft(v => !v) },
+        { key: 'ships', label: 'Ships', description: 'Maritime reports from AIS, last 4 h', icon: Ship, color: '#f59e0b',
+          on: showShips, count: shipCount, toggle: () => setShowShips(v => !v) },
+      ],
+    },
+    {
+      title: 'Earth & context',
+      items: [
+        { key: 'hazards', label: 'Natural hazards', description: 'Earthquakes, volcanoes, tsunamis and wildfires, last 48 h', icon: Activity, color: '#fb923c',
+          on: hazardsMode, loading: hazardsLoading, count: hazardsCount, toggle: () => setHazardsMode(v => !v) },
+        { key: 'risk', label: 'Country risk', description: 'Countries shaded by today’s signal activity', icon: ShieldAlert, color: '#fbbf24',
+          on: countryRiskMode, loading: countryRiskLoading, count: countryRiskCount, toggle: () => setCountryRiskMode(v => !v) },
+        { key: 'nasa', label: 'Daily satellite photo', description: 'NASA MODIS image of the chosen day (clouds included)', icon: Satellite, color: '#34d399',
+          on: satelliteMode, toggle: () => setSatelliteMode(v => !v),
+          extra: (
+            <input
+              type="date"
+              value={gibsDate}
+              min="2000-02-24"
+              max={(() => { const d = new Date(); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10) })()}
+              onChange={e => { if (e.target.value) setGibsDate(e.target.value) }}
+              aria-label="Satellite photo date"
+              className="bg-black/30 border border-white/10 text-wp-text2 text-[11px] font-mono rounded-md px-2 py-1 outline-none focus:border-[rgba(52,211,153,0.6)]"
+            />
+          ) },
+        { key: 'cams', label: 'Live cameras', description: 'Public traffic, weather and city webcams', icon: Video, color: '#2dd4bf',
+          on: showCameras, count: cameraCount, toggle: () => setShowCameras(v => !v) },
+      ],
+    },
+  ]
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="h-[calc(100dvh-52px-56px)] md:h-[calc(100dvh-52px)] flex flex-col bg-wp-bg">
 
-      {/* Toolbar */}
-      <div className="border-b border-[rgba(255,255,255,0.07)] bg-[rgba(6,7,13,0.92)] backdrop-blur-xl z-10">
-        <div className="flex items-center gap-2 px-4 py-2">
-          <span className="font-display text-[13px] tracking-[2.5px] text-wp-text font-bold flex-shrink-0">LIVE MAP</span>
-          <div className="w-px h-4 bg-[rgba(255,255,255,0.1)] flex-shrink-0 hidden sm:block" />
+      {/* Toolbar: topic, severity and time on the left; live status and Layers on the right */}
+      <div className="relative z-20 border-b border-white/[0.07] bg-[rgba(6,8,14,0.94)] backdrop-blur-xl">
+        <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 h-12">
+          <h1 className="hidden sm:block font-display text-[13px] tracking-[2.5px] text-wp-text font-bold flex-shrink-0">LIVE MAP</h1>
 
-          {/* Scrollable filter strip */}
-          <div className="flex-1 overflow-x-auto scrollbar-none">
-            <div className="flex items-center gap-1 min-w-max">
-              {/* Category filter */}
-              {CATS.map(cat => (
-                <button key={cat} onClick={() => setCategory(cat)}
-                  className={`px-[9px] py-[5px] sm:py-[3px] rounded-full border text-[10px] font-mono uppercase transition-all whitespace-nowrap min-h-[32px]
-                    ${category === cat
-                      ? 'border-wp-amber text-wp-amber bg-[rgba(245,166,35,0.12)]'
-                      : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}`}>
-                  {cat}
-                </button>
-              ))}
+          <div className="flex-1 min-w-0 overflow-x-auto scrollbar-none">
+            <div className="flex items-center gap-2 min-w-max">
+              {/* Topic */}
+              <label htmlFor="map-topic" className="sr-only">Topic</label>
+              <select
+                id="map-topic"
+                value={category}
+                onChange={e => setCategory(e.target.value)}
+                className="wp-map-select"
+              >
+                {CATS.map(cat => (
+                  <option key={cat} value={cat}>{cat === 'all' ? 'All topics' : cat[0].toUpperCase() + cat.slice(1)}</option>
+                ))}
+              </select>
 
-              <div className="w-px h-4 bg-[rgba(255,255,255,0.06)] flex-shrink-0 mx-1" />
-
-              {/* Severity filter */}
-              {SEVS.map(sev => {
-                const active = severity === sev
-                const color  = sev !== 'all' ? SEV_COLOR[sev] : undefined
-                const bg     = sev !== 'all' ? SEV_BG[sev]    : undefined
-                return (
-                  <button key={sev} onClick={() => setSeverity(sev)}
-                    className={`px-[9px] py-[5px] sm:py-[3px] rounded-full border text-[10px] font-mono capitalize transition-all whitespace-nowrap min-h-[32px]
-                      ${active && sev === 'all'
-                        ? 'border-wp-amber text-wp-amber bg-[rgba(245,166,35,0.1)]'
-                        : !active
-                          ? 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'
-                          : ''}`}
-                    style={active && color ? { borderColor: color, color, background: bg } : {}}>
-                    {sev}
+              {/* Severity */}
+              <div className="wp-seg" role="group" aria-label="Severity">
+                {SEVS.map(sev => (
+                  <button
+                    key={sev}
+                    type="button"
+                    onClick={() => setSeverity(sev)}
+                    aria-pressed={severity === sev}
+                    className={`wp-seg-btn ${severity === sev ? 'wp-seg-on' : ''}`}
+                  >
+                    {sev !== 'all' && (
+                      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: SEV_COLOR[sev] }} />
+                    )}
+                    {sev === 'all' ? 'All' : sev[0].toUpperCase() + sev.slice(1)}
                   </button>
-                )
-              })}
+                ))}
+              </div>
 
-              <div className="w-px h-4 bg-[rgba(255,255,255,0.06)] flex-shrink-0 mx-1" />
+              {/* Time window ("ALL" was the same 7 days as 7D) */}
+              <div className="wp-seg" role="group" aria-label="Time window">
+                {TRANGE.filter(t => t.v !== 'all').map(opt => (
+                  <button
+                    key={opt.v}
+                    type="button"
+                    onClick={() => setTimeRange(opt.v)}
+                    aria-pressed={timeRange === opt.v || (opt.v === '7d' && timeRange === 'all')}
+                    className={`wp-seg-btn ${timeRange === opt.v || (opt.v === '7d' && timeRange === 'all') ? 'wp-seg-on' : ''}`}
+                  >
+                    {opt.l}
+                  </button>
+                ))}
+              </div>
 
-              {/* Time range */}
-              {TRANGE.map(opt => (
-                <button key={opt.v} onClick={() => setTimeRange(opt.v)}
-                  className={`px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
-                    ${timeRange === opt.v
-                      ? 'border-wp-amber text-wp-amber bg-[rgba(245,166,35,0.1)]'
-                      : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.15)]'}`}>
-                  {opt.l}
-                </button>
-              ))}
-
-              <div className="w-px h-4 bg-[rgba(255,255,255,0.06)] flex-shrink-0 mx-1" />
-
-              {/* NASA GIBS Satellite imagery toggle */}
-              <button
-                onClick={() => setSatelliteMode(v => !v)}
-                title={satelliteMode ? `NASA MODIS Terra satellite imagery — ${gibsDate}` : 'Toggle NASA GIBS satellite imagery'}
-                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
-                  ${satelliteMode
-                    ? 'border-[rgba(0,230,118,0.6)] text-wp-green bg-[rgba(0,230,118,0.1)]'
-                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}`}>
-                🛰 SAT
-              </button>
-              {satelliteMode && (
-                <input
-                  type="date"
-                  value={gibsDate}
-                  min="2000-02-24"
-                  max={(() => { const d = new Date(); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10) })()}
-                  onChange={e => { if (e.target.value) setGibsDate(e.target.value) }}
-                  title="Select imagery date (NASA MODIS Terra, ~1 day delay)"
-                  className="bg-black/30 border border-[rgba(0,230,118,0.3)] text-wp-green text-[10px] font-mono rounded px-2 py-[4px] min-h-[32px] outline-none focus:border-[rgba(0,230,118,0.6)] transition-colors cursor-pointer"
-                />
-              )}
-
-              {/* CelesTrak satellite tracking toggle */}
-              <button
-                onClick={() => setSatTrackingMode(v => !v)}
-                disabled={satTrackingLoading}
-                title={satTrackingMode ? `CelesTrak: ${satCount} satellites displayed` : 'Toggle CelesTrak satellite tracking'}
-                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
-                  ${satTrackingMode
-                    ? 'border-[rgba(59,130,246,0.6)] text-[#93c5fd] bg-[rgba(59,130,246,0.1)]'
-                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}
-                  ${satTrackingLoading ? 'opacity-60 cursor-wait' : ''}`}>
-                {satTrackingLoading
-                  ? <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                  : '🛰️'}
-                {' '}SATS
-                {satTrackingMode && satCount > 0 && (
-                  <span className="ml-1 px-1 py-px bg-[rgba(59,130,246,0.25)] rounded text-[9px]">{satCount}</span>
-                )}
-              </button>
-
-              {/* SAT/SATS error toast */}
               {(satError || gibsError) && (
-                <span className="text-[9px] text-red-400 font-mono px-2 py-1 bg-red-500/10 rounded border border-red-500/20 animate-pulse">
-                  ⚠ {satError || gibsError}
+                <span className="text-[10px] text-red-300 font-mono px-2 py-1 bg-red-500/10 rounded border border-red-500/20">
+                  {satError || gibsError}
                 </span>
               )}
-
-              {/* Carrier Strike Group toggle */}
-              <button
-                onClick={() => setCarrierMode(v => !v)}
-                disabled={carrierLoading}
-                title={carrierMode ? 'Hide carrier strike group positions' : 'Toggle US Navy carrier strike group tracker (OSINT-estimated)'}
-                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
-                  ${carrierMode
-                    ? 'border-[rgba(30,58,95,0.9)] text-[#4a90d9] bg-[rgba(30,58,95,0.35)]'
-                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}
-                  ${carrierLoading ? 'opacity-60 cursor-wait' : ''}`}>
-                {carrierLoading
-                  ? <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                  : '⚓'}
-                {' '}CARRIERS
-              </button>
-
-              {/* Missile / Drone Threat Intelligence toggle */}
-              <button
-                onClick={() => setThreatMode(v => !v)}
-                disabled={threatLoading}
-                title={threatMode ? `Threats: ${threatCount} active — hypersonic (purple), ballistic (red), cruise (orange), drone (amber), rocket (coral)` : 'Toggle missile/drone threat intelligence layer'}
-                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
-                  ${threatMode
-                    ? 'border-[rgba(255,34,34,0.6)] text-[#fca5a5] bg-[rgba(255,34,34,0.1)]'
-                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}
-                  ${threatLoading ? 'opacity-60 cursor-wait' : ''}`}>
-                {threatLoading
-                  ? <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                  : '🎯'}
-                {' '}THREATS
-                {threatMode && threatCount > 0 && (
-                  <span className="ml-1 px-1 py-px bg-[rgba(255,34,34,0.25)] rounded text-[9px]">{threatCount}</span>
-                )}
-              </button>
-
-              {/* GPS/GNSS Jamming Intelligence toggle */}
-              <button
-                onClick={() => setJammingMode(v => !v)}
-                disabled={jammingLoading}
-                title={jammingMode
-                  ? `RF Jamming: ${jammingCount} active zones — military (red), spoofing (purple), civilian (amber)`
-                  : 'Toggle GPS/GNSS jamming intelligence layer (military EW, spoofing, civilian interference)'}
-                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
-                  ${jammingMode
-                    ? 'border-[rgba(239,68,68,0.6)] text-[#fca5a5] bg-[rgba(239,68,68,0.1)]'
-                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}
-                  ${jammingLoading ? 'opacity-60 cursor-wait' : ''}`}>
-                {jammingLoading
-                  ? <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                  : '📡'}
-                {' '}RF JAMMING
-                {jammingMode && jammingCount > 0 && (
-                  <span className="ml-1 px-1 py-px bg-[rgba(239,68,68,0.25)] rounded text-[9px]">{jammingCount}</span>
-                )}
-              </button>
-
-              {/* Natural Hazards toggle */}
-              <button
-                onClick={() => setHazardsMode(v => !v)}
-                disabled={hazardsLoading}
-                title={hazardsMode
-                  ? `Natural Hazards: ${hazardsCount} active — earthquake (amber), fire (red), volcano (purple), tsunami (cyan)`
-                  : 'Toggle natural hazards layer (seismic, volcanic, tsunami, wildfire)'}
-                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
-                  ${hazardsMode
-                    ? 'border-[rgba(124,58,237,0.6)] text-[#d8b4fe] bg-[rgba(124,58,237,0.1)]'
-                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}
-                  ${hazardsLoading ? 'opacity-60 cursor-wait' : ''}`}>
-                {hazardsLoading
-                  ? <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                  : '🌋'}
-                {' '}NATURAL HAZARDS
-                {hazardsMode && hazardsCount > 0 && (
-                  <span className="ml-1 px-1 py-px bg-[rgba(124,58,237,0.25)] rounded text-[9px]">{hazardsCount}</span>
-                )}
-              </button>
-
-              {/* Country Risk Choropleth toggle */}
-              <button
-                onClick={() => setCountryRiskMode(v => !v)}
-                disabled={countryRiskLoading}
-                title={countryRiskMode
-                  ? `Country risk: ${countryRiskCount} countries — critical (red), high (orange), elevated (yellow), moderate (blue)`
-                  : 'Toggle country risk choropleth (live risk scores from signal activity)'}
-                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
-                  ${countryRiskMode
-                    ? 'border-[rgba(251,191,36,0.6)] text-[#fde68a] bg-[rgba(251,191,36,0.1)]'
-                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}
-                  ${countryRiskLoading ? 'opacity-60 cursor-wait' : ''}`}>
-                {countryRiskLoading
-                  ? <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                  : '🌡'}
-                {' '}RISK MAP
-                {countryRiskMode && countryRiskCount > 0 && (
-                  <span className="ml-1 px-1 py-px bg-[rgba(251,191,36,0.25)] rounded text-[9px]">{countryRiskCount}</span>
-                )}
-              </button>
-
-              {/* Heatmap density toggle */}
-              <button
-                onClick={() => setHeatmapMode(v => !v)}
-                title={heatmapMode ? 'Hide density heatmap' : 'Show signal density heatmap'}
-                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
-                  ${heatmapMode
-                    ? 'border-[rgba(255,100,30,0.6)] text-[#fdba74] bg-[rgba(255,100,30,0.1)]'
-                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}`}>
-                <svg width="11" height="11" viewBox="0 0 12 12" fill="currentColor" className="flex-shrink-0">
-                  <circle cx="6" cy="6" r="5" opacity="0.5"/>
-                  <circle cx="6" cy="6" r="3" opacity="0.7"/>
-                  <circle cx="6" cy="6" r="1.5"/>
-                </svg>
-                {' '}HEATMAP
-              </button>
-
-              {/* Wind Particle Flow toggle (BAT-13) */}
-              <button
-                onClick={() => setWindMode(v => !v)}
-                disabled={windLoading}
-                title={windMode
-                  ? `Wind Flow: ${windDensity} particles — speed-colored blue→cyan→green→yellow`
-                  : 'Toggle animated wind particle flow layer (earth.nullschool.net-style)'}
-                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
-                  ${windMode
-                    ? 'border-[rgba(0,200,200,0.6)] text-[#67e8f9] bg-[rgba(0,200,200,0.1)]'
-                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}
-                  ${windLoading ? 'opacity-60 cursor-wait' : ''}`}>
-                {windLoading
-                  ? <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                  : '💨'}
-                {' '}WIND
-              </button>
-              {windMode && (
-                <select
-                  value={windDensity}
-                  onChange={e => setWindDensity(e.target.value as '16k' | '32k' | '65k')}
-                  title="Wind particle density (higher = more particles, more GPU usage)"
-                  className="bg-black/30 border border-[rgba(0,200,200,0.3)] text-[#67e8f9] text-[10px] font-mono rounded px-1.5 py-[4px] min-h-[32px] outline-none focus:border-[rgba(0,200,200,0.6)] transition-colors cursor-pointer">
-                  <option value="16k">16K</option>
-                  <option value="32k">32K</option>
-                  <option value="65k">65K</option>
-                </select>
-              )}
-
-              {/* Timeline Playback toggle (BAT-14) */}
-              <button
-                onClick={() => setTimelineActive(v => !v)}
-                disabled={timeline.loading}
-                title={timelineActive
-                  ? `Timeline: ${timelineRange} — ${timeline.data?.total_signals ?? 0} signals, ${timeline.isPlaying ? 'playing' : 'paused'}`
-                  : 'Toggle historical signal playback timeline'}
-                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
-                  ${timelineActive
-                    ? 'border-[rgba(168,85,247,0.6)] text-[#c084fc] bg-[rgba(168,85,247,0.1)]'
-                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}
-                  ${timeline.loading ? 'opacity-60 cursor-wait' : ''}`}>
-                {timeline.loading
-                  ? <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                  : '⏱'}
-                {' '}TIMELINE
-                {timelineActive && timeline.data && (
-                  <span className="ml-1 px-1 py-px bg-[rgba(168,85,247,0.25)] rounded text-[9px]">{timeline.data.total_signals}</span>
-                )}
-              </button>
-
-              {/* ADS-B Aircraft toggle */}
-              <button
-                onClick={() => setShowAircraft(v => !v)}
-                title={showAircraft
-                  ? `ADS-B: ${adsbSignals.length} aircraft shown (aviation signals, 2h window)`
-                  : 'Toggle ADS-B live aircraft layer'}
-                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
-                  ${showAircraft
-                    ? 'border-[rgba(0,212,255,0.6)] text-[#00d4ff] bg-[rgba(0,212,255,0.1)]'
-                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}`}>
-                ✈ AIRCRAFT
-                {showAircraft && adsbSignals.length > 0 && (
-                  <span className="ml-1 px-1 py-px bg-[rgba(0,212,255,0.2)] rounded text-[9px]">{adsbSignals.length}</span>
-                )}
-              </button>
-
-              {/* Maritime AIS ship tracking toggle */}
-              <button
-                onClick={() => setShowShips(v => !v)}
-                title={showShips
-                  ? `AIS Ships: ${shipCount} vessels (maritime signals, 4h window)`
-                  : 'Toggle AIS civilian ship tracking layer (maritime signals, 4h window)'}
-                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
-                  ${showShips
-                    ? 'border-[rgba(245,158,11,0.6)] text-[#f59e0b] bg-[rgba(245,158,11,0.1)]'
-                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}`}>
-                ⚓ SHIPS
-                {showShips && shipCount > 0 && (
-                  <span className="ml-1 px-1 py-px bg-[rgba(245,158,11,0.2)] rounded text-[9px]">{shipCount}</span>
-                )}
-              </button>
-
-              {/* Live Webcam / IP Camera toggle */}
-              <button
-                onClick={() => setShowCameras(v => !v)}
-                title={showCameras
-                  ? `Live Webcams: ${cameraCount} feeds — traffic, weather, city, nature cameras`
-                  : 'Toggle live webcam layer (public IP cameras worldwide)'}
-                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
-                  ${showCameras
-                    ? 'border-[rgba(52,211,153,0.6)] text-[#34d399] bg-[rgba(52,211,153,0.1)]'
-                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}`}>
-                📹 LIVE CAMS
-                {showCameras && cameraCount > 0 && (
-                  <span className="ml-1 px-1 py-px bg-[rgba(52,211,153,0.2)] rounded text-[9px]">{cameraCount}</span>
-                )}
-              </button>
-
-              {/* Naval Intelligence toggle */}
-            <button
-                onClick={() => setNavalMode(v => !v)}
-                disabled={navalLoading}
-                title={navalMode ? `Naval Intel: ${navalCount} vessels — carriers, AIS distress, dark ships` : 'Toggle Naval Intelligence layer (carriers + AIS distress + dark ships)'}
-                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
-                  ${navalMode
-                    ? 'border-[rgba(30,144,255,0.6)] text-[#60a5fa] bg-[rgba(30,144,255,0.1)]'
-                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}
-                  ${navalLoading ? 'opacity-60 cursor-wait' : ''}`}>
-                {navalLoading
-                  ? <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                  : '🌊'}
-                {' '}NAVAL INTEL
-                {navalMode && navalCount > 0 && (
-                  <span className="ml-1 px-1 py-px bg-[rgba(30,144,255,0.25)] rounded text-[9px]">{navalCount}</span>
-                )}
-              </button>
-
-              {/* Conflict Zone Overlay toggle (BAT-17) */}
-              <button
-                onClick={() => setConflictMode(v => !v)}
-                disabled={conflictLoading}
-                title={conflictMode
-                  ? `Conflict Zones: ${conflictCount} signals — active front lines, military activity, security incidents`
-                  : 'Toggle conflict zone overlay (conflict/military/security signals + geofenced regions, 72h window)'}
-                className={`flex items-center gap-1 px-2.5 py-[5px] sm:py-[3px] rounded border text-[10px] font-mono transition-all whitespace-nowrap min-h-[32px]
-                  ${conflictMode
-                    ? 'border-[rgba(239,68,68,0.6)] text-[#fca5a5] bg-[rgba(239,68,68,0.1)]'
-                    : 'border-[rgba(255,255,255,0.06)] text-wp-text3 hover:border-[rgba(255,255,255,0.2)]'}
-                  ${conflictLoading ? 'opacity-60 cursor-wait' : ''}`}>
-                {conflictLoading
-                  ? <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                  : '⚔️'}
-                {' '}CONFLICT
-                {conflictMode && conflictCount > 0 && (
-                  <span className="ml-1 px-1 py-px bg-[rgba(239,68,68,0.25)] rounded text-[9px]">{conflictCount}</span>
-                )}
-              </button>
             </div>
           </div>
 
-          {/* Visible signal count badge (cyan) */}
+          {/* Live status: connection, signals in view, new arrivals */}
           <div
-            title={`${visibleCount} signals visible in current viewport`}
-            className="hidden sm:flex items-center gap-1 font-mono text-[10px] text-[#00d4ff] border border-[rgba(0,212,255,0.35)] bg-[rgba(0,212,255,0.07)] rounded-lg px-2 py-[4px] flex-shrink-0 whitespace-nowrap"
+            className="flex items-center gap-2 flex-shrink-0 font-mono text-[10px] text-wp-text2"
+            title={wsOnline ? 'Live: new signals appear as they arrive' : 'Reconnecting… the map still refreshes every 30 seconds'}
           >
-            {visibleCount} SIGNALS
+            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${wsOnline ? 'bg-wp-green animate-live-pulse' : 'bg-wp-amber'}`} />
+            <span className="hidden md:inline tabular-nums">{visibleCount.toLocaleString('en-US')} in view</span>
+            {wsNewCount > 0 && <span className="text-wp-green tabular-nums">+{wsNewCount}</span>}
           </div>
 
-          {/* BAT-18: Global signal counter badge — live total with odometer animation */}
-          <SignalCounter
-            mode="badge"
-            externalNewCount={wsNewCount}
-            className="hidden sm:flex"
-          />
-
-          {/* WS status dot (viewport count) */}
-          <div className="flex items-center gap-1.5 font-mono text-[10px] text-wp-text2 border border-[rgba(255,255,255,0.07)] rounded-lg px-2 sm:px-2.5 py-[4px] flex-shrink-0">
-            <span
-              title={wsOnline ? 'Live feed connected' : 'Reconnecting…'}
-              className={`w-[5px] h-[5px] rounded-full animate-live-pulse flex-shrink-0 ${wsOnline ? 'bg-wp-green' : 'bg-wp-red'}`}
-            />
-            <span className="hidden sm:inline">{signals.length} view</span>
-            {wsNewCount > 0 && (
-              <span
-                title={`${wsNewCount} new signal${wsNewCount !== 1 ? 's' : ''} received live`}
-                className="px-1 py-px bg-[rgba(0,230,118,0.2)] border border-[rgba(0,230,118,0.35)] text-wp-green rounded text-[9px]"
-              >
-                +{wsNewCount}
+          {/* Layers */}
+          <button
+            type="button"
+            onClick={() => setLayersOpen(o => !o)}
+            aria-expanded={layersOpen}
+            aria-haspopup="dialog"
+            className={`flex items-center gap-1.5 flex-shrink-0 h-8 px-2.5 rounded-lg border text-[12px] font-medium transition-colors
+              ${layersOpen || activeLayerCount(layerGroups) > 0
+                ? 'border-[rgba(0,212,255,0.45)] text-[#4dd8ff] bg-[rgba(0,212,255,0.08)]'
+                : 'border-white/10 text-wp-text2 hover:text-wp-text hover:border-white/20'}`}
+          >
+            <LayersIcon size={15} />
+            <span className="hidden sm:inline">Layers</span>
+            {activeLayerCount(layerGroups) > 0 && (
+              <span className="min-w-[16px] h-4 px-1 rounded-full bg-[#4dd8ff] text-[#04121a] text-[10px] font-bold leading-4 text-center">
+                {activeLayerCount(layerGroups)}
               </span>
             )}
-          </div>
+          </button>
         </div>
       </div>
 
       {/* Map area */}
       <div className="flex-1 relative overflow-hidden">
+        {/* Outside the toolbar on purpose: its backdrop blur would trap the phone sheet */}
+        <LayersPanel groups={layerGroups} open={layersOpen} onClose={() => setLayersOpen(false)} />
         <div ref={mapContainer} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', touchAction: 'none' }} />
 
         {/* BAT-16: Hotspot labels overlay — floating labels for dense signal zones at zoom > 5 */}
@@ -3682,23 +3418,9 @@ function MapView() {
           </div>
         )}
 
-        <div className={`absolute left-4 z-10 pointer-events-none transition-all duration-300 ${selected ? 'bottom-[72%] md:bottom-6' : 'bottom-6'}`}>
-          <div className="bg-[rgba(6,7,13,0.88)] border border-[rgba(255,255,255,0.09)] rounded-xl p-3 backdrop-blur-xl">
-            <div className="font-mono text-[9px] tracking-[2px] text-wp-text3 uppercase mb-2">Severity</div>
-            <div className="space-y-1.5">
-              {Object.entries(SEV_COLOR).map(([sev, color]) => (
-                <div key={sev} className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full" style={{ background: color, boxShadow: `0 0 5px ${color}` }} />
-                    <span className="font-mono text-[10px] text-wp-text2 capitalize">{sev}</span>
-                  </div>
-                  {sevCounts[sev] != null && (
-                    <span className="font-mono text-[10px] text-wp-text3">{sevCounts[sev]}</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
+        {/* Legend: severities, verified ring, groups, and the layers that are on */}
+        <div className={`absolute left-4 z-10 transition-all duration-300 ${selected ? 'hidden md:block md:bottom-6' : 'bottom-6'}`}>
+          <MapLegend counts={sevCounts} groups={layerGroups} />
         </div>
 
         {/* Signal detail panel — bottom sheet on mobile, side panel on desktop */}
