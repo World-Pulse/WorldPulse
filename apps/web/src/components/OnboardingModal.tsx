@@ -195,7 +195,7 @@ export function OnboardingModal() {
 
         {/* Trust signal */}
         <p className="text-center text-[11px] text-wp-text3 mt-4">
-          Free forever · No ads · Open source
+          Free to use · No ads · Open source
         </p>
       </div>
     </div>

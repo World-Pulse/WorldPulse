@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { ShieldCheck, TrendingUp, TrendingDown, ArrowRight } from 'lucide-react'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -463,9 +464,10 @@ export default function DigitalRightsPage() {
           <p className="text-sm text-zinc-300 mb-2">
             Deep digital rights analysis, real-time shutdown alerts, and OSINT-enriched surveillance signals for Pro members.
           </p>
-          <button className="inline-block px-4 py-2 bg-cyan-600 hover:bg-cyan-500 rounded-lg text-sm font-medium text-white transition-colors">
+          {/* Was a button that did nothing (plan G14) */}
+          <Link href="/pricing" className="inline-block px-4 py-2 bg-cyan-600 hover:bg-cyan-500 rounded-lg text-sm font-medium text-white transition-colors">
             Upgrade to Pro
-          </button>
+          </Link>
         </div>
 
         {/* Attribution */}

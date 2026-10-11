@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { Wheat, TrendingUp, TrendingDown, ArrowRight } from 'lucide-react'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -393,9 +394,10 @@ export default function FoodSecurityPage() {
           Get real-time IPC phase change alerts, commodity price notifications, and custom
           food security dashboards. Integrate with FAO and WFP data feeds via API.
         </p>
-        <button className="bg-amber-600 hover:bg-amber-500 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors">
+        {/* Was a button that did nothing (plan G14) */}
+        <Link href="/pricing" className="inline-block bg-amber-600 hover:bg-amber-500 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors">
           Upgrade to Pro
-        </button>
+        </Link>
       </div>
 
       {/* Data Sources */}

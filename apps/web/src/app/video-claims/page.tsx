@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { Video } from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
@@ -423,9 +424,10 @@ export default function VideoClaimsPage() {
             Unlock real-time video monitoring, automated debate fact-checking, speaker
             identification, and full transcript search across all 25+ channels.
           </p>
-          <button className="rounded-lg bg-purple-600 hover:bg-purple-500 px-6 py-2 text-sm font-semibold transition-colors">
+          {/* Was a button that did nothing (plan G14) */}
+          <Link href="/pricing" className="inline-block rounded-lg bg-purple-600 hover:bg-purple-500 px-6 py-2 text-sm font-semibold transition-colors">
             Upgrade to Pro
-          </button>
+          </Link>
         </div>
       </div>
     </div>
