@@ -14,7 +14,6 @@ import { checkAndPublishFlashBriefs, publishDailyBriefing, publishBriefingUpdate
 import { runAgentBeatScan } from './agents/coordinator'
 import { runTwitterPublisher } from './agents/twitter-publisher'
 import { getAgent } from './agents/registry'
-import { dispatchMorningBriefings } from './morning-email'
 import { runNightlyBaselines } from '../cortex/baselines'
 import { runEventThreadsCycle } from '../cortex/event-threads'
 import { runEntityStrengtheningCycle } from '../cortex/entity-strengthen'
@@ -103,15 +102,8 @@ export function startPulseScheduler(): void {
   briefingTimer = setInterval(async () => {
     const hour = new Date().getUTCHours()
 
-    // Scheduled email delivery — check every minute if any subscriber is due
-    try {
-      const emailsSent = await dispatchMorningBriefings()
-      if (emailsSent > 0) {
-        console.log(`[PULSE] Dispatched ${emailsSent} morning briefing email(s)`)
-      }
-    } catch (err) {
-      console.error('[PULSE] Morning briefing email dispatch failed:', err)
-    }
+    // The morning briefing email is sent by lib/briefing-email.ts (plan G4),
+    // whether or not PULSE is on.
 
     // Morning briefing — full daily briefing via Anthropic (deep)
     if (hour === MORNING_HOUR_UTC && !alreadyPublished('morning')) {

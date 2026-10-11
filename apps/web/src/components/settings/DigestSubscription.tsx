@@ -12,6 +12,9 @@ type MinSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info'
 
 interface DigestStatus {
   subscribed:   boolean
+  /** Signed up, waiting for the owner to confirm from the inbox */
+  pending?:     boolean
+  email?:       string
   frequency?:   Frequency
   categories?:  string[]
   min_severity?: MinSeverity
@@ -20,18 +23,27 @@ interface DigestStatus {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
+// The categories stories are filed under (environment, energy and transport,
+// listed before, don't exist, so choosing them matched nothing)
 const ALL_CATEGORIES = [
   'conflict',
+  'geopolitics',
   'disaster',
-  'politics',
-  'economy',
+  'climate',
   'health',
+  'economy',
   'technology',
-  'environment',
+  'science',
   'security',
-  'energy',
-  'transport',
+  'elections',
+  'space',
 ]
+
+/** The signed-in reader's token: the API only shows and changes your own subscription (plan G4) */
+function authHeaders(): Record<string, string> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
 
 const SEVERITY_OPTIONS: { value: MinSeverity; label: string }[] = [
   { value: 'critical', label: 'Critical only' },
@@ -60,7 +72,7 @@ export default function DigestSubscription({ defaultEmail = '' }: Props) {
   const { toast } = useToast()
 
   const [email,       setEmail]       = useState(defaultEmail)
-  const [frequency,   setFrequency]   = useState<Frequency>('weekly')
+  const [frequency,   setFrequency]   = useState<Frequency>('daily')
   const [categories,  setCategories]  = useState<string[]>([])
   const [minSeverity, setMinSeverity] = useState<MinSeverity>('medium')
   const [status,      setStatus]      = useState<DigestStatus | null>(null)
@@ -69,19 +81,20 @@ export default function DigestSubscription({ defaultEmail = '' }: Props) {
 
   // ── Check subscription status ────────────────────────────────────────────
 
-  const checkStatus = useCallback(async (emailToCheck: string) => {
-    if (!emailToCheck || !emailToCheck.includes('@')) return
+  // Your own subscription (by account), not a lookup of whatever address is typed
+  const checkStatus = useCallback(async () => {
+    const headers = authHeaders()
+    if (!headers.Authorization) return
     setChecking(true)
     try {
-      const res = await fetch(
-        `${API_URL}/api/v1/digest/status?email=${encodeURIComponent(emailToCheck)}`,
-      )
+      const res = await fetch(`${API_URL}/api/v1/digest/status`, { headers })
       if (!res.ok) return
       const data = await res.json() as { success: boolean; data: DigestStatus }
       if (data.success) {
         setStatus(data.data)
-        if (data.data.subscribed) {
-          setFrequency(data.data.frequency ?? 'weekly')
+        if (data.data.email) setEmail(data.data.email)
+        if (data.data.subscribed || data.data.pending) {
+          setFrequency(data.data.frequency ?? 'daily')
           setCategories(data.data.categories ?? [])
           setMinSeverity(data.data.min_severity ?? 'medium')
         }
@@ -94,10 +107,8 @@ export default function DigestSubscription({ defaultEmail = '' }: Props) {
   }, [])
 
   useEffect(() => {
-    if (defaultEmail) {
-      void checkStatus(defaultEmail)
-    }
-  }, [defaultEmail, checkStatus])
+    void checkStatus()
+  }, [checkStatus])
 
   // ── Subscribe ────────────────────────────────────────────────────────────
 
@@ -111,19 +122,20 @@ export default function DigestSubscription({ defaultEmail = '' }: Props) {
     try {
       const res = await fetch(`${API_URL}/api/v1/digest/subscribe`, {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
           email,
           frequency,
           categories,
           min_severity: minSeverity,
+          source:       '/settings',
         }),
       })
       const data = await res.json() as { success: boolean; message?: string; error?: string }
       if (data.success) {
-        toast(data.message ?? 'Subscribed to digest!', 'success')
-        setStatus({ subscribed: true, frequency, categories, min_severity: minSeverity })
+        // Nothing is sent until the address's owner confirms from their inbox
+        toast(data.message ?? 'Check your inbox to confirm', 'success')
+        setStatus(prev => prev?.subscribed ? prev : { subscribed: false, pending: true, frequency, categories, min_severity: minSeverity })
       } else {
         toast(data.error ?? 'Failed to subscribe', 'error')
       }
@@ -141,8 +153,7 @@ export default function DigestSubscription({ defaultEmail = '' }: Props) {
     try {
       const res = await fetch(`${API_URL}/api/v1/digest/unsubscribe`, {
         method:  'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        headers: authHeaders(),
       })
       const data = await res.json() as { success: boolean; message?: string; error?: string }
       if (data.success) {
@@ -193,7 +204,7 @@ export default function DigestSubscription({ defaultEmail = '' }: Props) {
           }`}
         >
           <span className={`w-1.5 h-1.5 rounded-full ${isSubscribed ? 'bg-wp-green' : 'bg-wp-text3'}`} />
-          {isSubscribed ? `Active — ${status.frequency ?? 'weekly'}` : 'Not subscribed'}
+          {isSubscribed ? `Active — ${status.frequency ?? 'daily'}` : status.pending ? 'Waiting for you to confirm from your inbox' : 'Not subscribed'}
         </div>
       )}
 
@@ -207,7 +218,6 @@ export default function DigestSubscription({ defaultEmail = '' }: Props) {
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              onBlur={() => { void checkStatus(email) }}
               placeholder="you@example.com"
               className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-[13px] text-wp-text placeholder:text-wp-text3 focus:outline-none focus:border-wp-amber/50 transition-colors"
               required

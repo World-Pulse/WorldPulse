@@ -2,7 +2,7 @@
  * digest.test.ts
  * Tests for the weekly/daily email digest system — lib/email-digest.ts + routes/digest.ts
  *
- * Coverage (20 tests):
+ * Coverage:
  *  - buildDigestHtml: returns non-empty HTML string
  *  - buildDigestHtml: includes signal titles in output
  *  - buildDigestHtml: includes period dates in output
@@ -12,16 +12,7 @@
  *  - filterBySeverity: filters correctly (medium min keeps medium/high/critical)
  *  - filterBySeverity: critical min keeps only critical
  *  - sendDigestEmail: returns early (no-op) when RESEND_API_KEY not set
- *  - POST /digest/subscribe: 201 on valid email
- *  - POST /digest/subscribe: 200 on re-subscribe (idempotent upsert)
- *  - POST /digest/subscribe: 400 on invalid email
- *  - POST /digest/subscribe: 400 on invalid frequency
- *  - DELETE /digest/unsubscribe: 200 on active subscription
- *  - DELETE /digest/unsubscribe: 404 on unknown email
- *  - DELETE /digest/unsubscribe: 400 on missing email
- *  - GET /digest/status: returns subscribed=true for active subscription
- *  - GET /digest/status: returns subscribed=false for unknown email
- *  - GET /digest/status: 400 when email param missing
+ *  - (subscribe, confirm, unsubscribe and status: digest-routes.test.ts)
  *  - POST /admin/digest/send: 401 when not authenticated as admin
  */
 
@@ -199,182 +190,9 @@ describe('email-digest — sendDigestEmail', () => {
   })
 })
 
-describe('POST /api/v1/digest/subscribe', () => {
-  beforeEach(() => {
-    mockDb['digest_subscriptions'] = []
-  })
-
-  it('201 on valid email subscription', async () => {
-    const { registerDigestRoutes } = await import('../routes/digest')
-    const Fastify = (await import('fastify')).default
-    const app = Fastify()
-    await app.register(registerDigestRoutes, { prefix: '/api/v1/digest' })
-
-    const res = await app.inject({
-      method: 'POST',
-      url:    '/api/v1/digest/subscribe',
-      payload: { email: 'user@example.com', frequency: 'weekly' },
-    })
-
-    expect(res.statusCode).toBe(201)
-    expect(JSON.parse(res.body).success).toBe(true)
-  })
-
-  it('200 on re-subscribe (idempotent upsert)', async () => {
-    mockDb['digest_subscriptions'] = [
-      { id: 'sub-1', email: 'existing@example.com', is_active: true, frequency: 'weekly' },
-    ]
-
-    const { registerDigestRoutes } = await import('../routes/digest')
-    const Fastify = (await import('fastify')).default
-    const app = Fastify()
-    await app.register(registerDigestRoutes, { prefix: '/api/v1/digest' })
-
-    const res = await app.inject({
-      method: 'POST',
-      url:    '/api/v1/digest/subscribe',
-      payload: { email: 'existing@example.com', frequency: 'daily' },
-    })
-
-    expect(res.statusCode).toBe(200)
-    expect(JSON.parse(res.body).success).toBe(true)
-  })
-
-  it('400 on invalid email', async () => {
-    const { registerDigestRoutes } = await import('../routes/digest')
-    const Fastify = (await import('fastify')).default
-    const app = Fastify()
-    await app.register(registerDigestRoutes, { prefix: '/api/v1/digest' })
-
-    const res = await app.inject({
-      method: 'POST',
-      url:    '/api/v1/digest/subscribe',
-      payload: { email: 'not-an-email' },
-    })
-
-    expect(res.statusCode).toBe(400)
-  })
-
-  it('400 on invalid frequency value', async () => {
-    const { registerDigestRoutes } = await import('../routes/digest')
-    const Fastify = (await import('fastify')).default
-    const app = Fastify()
-    await app.register(registerDigestRoutes, { prefix: '/api/v1/digest' })
-
-    const res = await app.inject({
-      method: 'POST',
-      url:    '/api/v1/digest/subscribe',
-      payload: { email: 'user@example.com', frequency: 'monthly' },
-    })
-
-    expect(res.statusCode).toBe(400)
-  })
-})
-
-describe('DELETE /api/v1/digest/unsubscribe', () => {
-  beforeEach(() => {
-    mockDb['digest_subscriptions'] = [
-      { id: 'sub-1', email: 'active@example.com', is_active: true },
-    ]
-  })
-
-  it('200 on active subscription', async () => {
-    const { registerDigestRoutes } = await import('../routes/digest')
-    const Fastify = (await import('fastify')).default
-    const app = Fastify()
-    await app.register(registerDigestRoutes, { prefix: '/api/v1/digest' })
-
-    const res = await app.inject({
-      method: 'DELETE',
-      url:    '/api/v1/digest/unsubscribe?email=active@example.com',
-    })
-
-    expect(res.statusCode).toBe(200)
-    expect(JSON.parse(res.body).success).toBe(true)
-  })
-
-  it('404 on unknown email', async () => {
-    const { registerDigestRoutes } = await import('../routes/digest')
-    const Fastify = (await import('fastify')).default
-    const app = Fastify()
-    await app.register(registerDigestRoutes, { prefix: '/api/v1/digest' })
-
-    const res = await app.inject({
-      method: 'DELETE',
-      url:    '/api/v1/digest/unsubscribe?email=nobody@example.com',
-    })
-
-    expect(res.statusCode).toBe(404)
-  })
-
-  it('400 on missing email', async () => {
-    const { registerDigestRoutes } = await import('../routes/digest')
-    const Fastify = (await import('fastify')).default
-    const app = Fastify()
-    await app.register(registerDigestRoutes, { prefix: '/api/v1/digest' })
-
-    const res = await app.inject({
-      method: 'DELETE',
-      url:    '/api/v1/digest/unsubscribe',
-    })
-
-    expect(res.statusCode).toBe(400)
-  })
-})
-
-describe('GET /api/v1/digest/status', () => {
-  beforeEach(() => {
-    mockDb['digest_subscriptions'] = [
-      { id: 'sub-1', email: 'subscriber@example.com', is_active: true, frequency: 'weekly', categories: [], min_severity: 'medium', created_at: new Date().toISOString() },
-    ]
-  })
-
-  it('returns subscribed=true for active subscription', async () => {
-    const { registerDigestRoutes } = await import('../routes/digest')
-    const Fastify = (await import('fastify')).default
-    const app = Fastify()
-    await app.register(registerDigestRoutes, { prefix: '/api/v1/digest' })
-
-    const res = await app.inject({
-      method: 'GET',
-      url:    '/api/v1/digest/status?email=subscriber@example.com',
-    })
-
-    expect(res.statusCode).toBe(200)
-    const body = JSON.parse(res.body)
-    expect(body.subscribed).toBe(true)
-    expect(body.frequency).toBe('weekly')
-  })
-
-  it('returns subscribed=false for unknown email', async () => {
-    const { registerDigestRoutes } = await import('../routes/digest')
-    const Fastify = (await import('fastify')).default
-    const app = Fastify()
-    await app.register(registerDigestRoutes, { prefix: '/api/v1/digest' })
-
-    const res = await app.inject({
-      method: 'GET',
-      url:    '/api/v1/digest/status?email=unknown@example.com',
-    })
-
-    expect(res.statusCode).toBe(200)
-    expect(JSON.parse(res.body).subscribed).toBe(false)
-  })
-
-  it('400 when email param missing', async () => {
-    const { registerDigestRoutes } = await import('../routes/digest')
-    const Fastify = (await import('fastify')).default
-    const app = Fastify()
-    await app.register(registerDigestRoutes, { prefix: '/api/v1/digest' })
-
-    const res = await app.inject({
-      method: 'GET',
-      url:    '/api/v1/digest/status',
-    })
-
-    expect(res.statusCode).toBe(400)
-  })
-})
+// The public subscription routes (sign-up, confirm, unsubscribe, status)
+// changed with the email briefing (plan G4, Oct 11, 2026): see
+// digest-routes.test.ts.
 
 describe('POST /api/v1/admin/digest/send', () => {
   it('401 when not authenticated as admin', async () => {

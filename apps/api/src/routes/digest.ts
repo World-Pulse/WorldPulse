@@ -1,23 +1,62 @@
-import type { FastifyPluginAsync } from 'fastify'
+import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 import { db } from '../db/postgres'
 import { optionalAuth, authenticate } from '../middleware/auth'
 import { sendDigestEmail, filterBySeverity } from '../lib/email-digest'
 import { sendError } from '../lib/errors'
+import { EMAIL_CONFIGURED } from '../lib/email'
+import {
+  normalizeEmail, verifyEmailToken, subscribersReady, linksConfigured, SITE_URL,
+} from '../lib/subscribers'
+import { sendConfirmEmail } from '../lib/briefing-email'
 import type { Signal, SignalSeverity } from '@worldpulse/types'
+
+/**
+ * The email briefing's subscriptions (plan G4, Oct 11, 2026).
+ *
+ * Anyone can sign up with an address; nothing is sent to it until its owner
+ * taps the link in the confirmation email. Confirm and unsubscribe links are
+ * signed (lib/subscribers.ts), so no one can sign up or remove an address
+ * that isn't theirs. Before this, GET /status?email= showed anyone's
+ * settings and DELETE /unsubscribe removed anyone's subscription by address.
+ */
 
 // ─── Validation schemas ────────────────────────────────────────────────────
 
 const SubscribeSchema = z.object({
-  email:        z.string().email(),
-  frequency:    z.enum(['daily', 'weekly']).default('weekly'),
-  categories:   z.array(z.string()).max(20).default([]),
-  min_severity: z.enum(['critical', 'high', 'medium', 'low', 'info']).default('medium'),
+  email:        z.string().trim().max(254).email(),
+  frequency:    z.enum(['daily', 'weekly']).default('daily'),
+  categories:   z.array(z.string().max(40)).max(20).default([]),
+  min_severity: z.enum(['critical', 'high', 'medium', 'low', 'info']).default('info'),
+  /** The page the reader signed up on */
+  source:       z.string().max(200).optional(),
 })
 
-const UnsubscribeSchema = z.object({
-  email: z.string().email(),
+const LinkQuerySchema = z.object({
+  e: z.string().max(254),
+  t: z.string().max(64),
 })
+
+/** What a subscribe request always answers (it never says whether an address was already on the list) */
+const CHECK_INBOX = 'Check your inbox and tap the link to confirm (it can take a minute, and may land in Promotions). Already subscribed? You’re all set.'
+
+/** The signed-in reader's account address, if any */
+async function accountEmail(req: FastifyRequest): Promise<{ userId: string; email: string | null } | null> {
+  const id = (req.user as { id?: string } | undefined)?.id
+  if (!id) return null
+  const row = await db('users').where('id', id).first(['email']).catch(() => null) as { email?: string | null } | null | undefined
+  return { userId: id, email: row?.email ? normalizeEmail(row.email) : null }
+}
+
+/** The signed-in reader's subscription (linked to the account, or at its address) */
+async function ownSubscription(req: FastifyRequest) {
+  const me = await accountEmail(req)
+  if (!me) return null
+  return db('digest_subscriptions')
+    .where(q => { q.where('user_id', me.userId); if (me.email) q.orWhere('email', me.email) })
+    .orderBy('is_active', 'desc')
+    .first()
+}
 
 // ─── Plugin ────────────────────────────────────────────────────────────────
 
@@ -28,99 +67,129 @@ export const registerDigestRoutes: FastifyPluginAsync = async (app) => {
     routeOptions.schema.tags = routeOptions.schema.tags ?? ['digest']
   })
 
-  // ── POST /api/v1/digest/subscribe ─────────────────────────────────────────
-  // No auth required for email-only subscriptions.
-  // If the user is authenticated the subscription is linked to their account.
-  app.post('/subscribe', { preHandler: [optionalAuth] }, async (req, reply) => {
-    const parsed = SubscribeSchema.safeParse(req.body)
-    if (!parsed.success) {
-      return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid input')
-    }
+  // One-click unsubscribe (RFC 8058) posts a form body: accept it here
+  if (!app.hasContentTypeParser('application/x-www-form-urlencoded')) {
+    app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => done(null, body))
+  }
 
-    const { email, frequency, categories, min_severity } = parsed.data
-    const userId = (req.user as { id?: string } | undefined)?.id ?? null
-
-    // Upsert: if a (possibly inactive) row exists for this email, reactivate it.
-    const existing = await db('digest_subscriptions')
-      .where('email', email)
-      .first()
-
-    if (existing) {
-      await db('digest_subscriptions')
-        .where('email', email)
-        .update({
-          frequency,
-          categories,
-          min_severity,
-          is_active:  true,
-          updated_at: db.fn.now(),
-          ...(userId && !existing.user_id ? { user_id: userId } : {}),
-        })
-
-      return reply.send({ success: true, message: 'Subscription updated' })
-    }
-
-    await db('digest_subscriptions').insert({
-      user_id:      userId,
-      email,
-      frequency,
-      categories,
-      min_severity,
-      is_active:    true,
+  // ── GET /api/v1/digest/config ─────────────────────────────────────────────
+  // Whether the sign-up box should show: email can be sent and stored.
+  app.get('/config', async (_req, reply) => {
+    return reply.header('Cache-Control', 'public, max-age=300').send({
+      success: true,
+      data: { enabled: EMAIL_CONFIGURED && subscribersReady() && linksConfigured(), sendsAt: '7:00 AM New York time' },
     })
-
-    return reply.status(201).send({ success: true, message: 'Subscribed to digest' })
   })
 
-  // ── DELETE /api/v1/digest/unsubscribe ─────────────────────────────────────
-  // Accepts body { email } or query ?email=X
-  app.delete('/unsubscribe', async (req, reply) => {
-    const rawEmail =
-      (req.query as Record<string, string>).email ??
-      (req.body as Record<string, unknown> | undefined)?.email
-
-    const parsed = UnsubscribeSchema.safeParse({ email: rawEmail })
+  // ── POST /api/v1/digest/subscribe ─────────────────────────────────────────
+  // No account needed. A new address (or one that left) gets a confirmation
+  // email; the briefing starts once its owner confirms.
+  app.post('/subscribe', {
+    preHandler: [optionalAuth],
+    config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    const parsed = SubscribeSchema.safeParse(req.body)
     if (!parsed.success) {
-      return sendError(reply, 400, 'VALIDATION_ERROR', 'Valid email required')
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Please enter a valid email address')
+    }
+    if (!EMAIL_CONFIGURED || !subscribersReady() || !linksConfigured()) {
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The email briefing isn’t open yet')
     }
 
-    const { email } = parsed.data
+    const { frequency, categories, min_severity, source } = parsed.data
+    const email = normalizeEmail(parsed.data.email)
+    const userId = (req.user as { id?: string } | undefined)?.id ?? null
 
+    const existing = await db('digest_subscriptions').where('email', email).orderBy('is_active', 'desc').first()
+    if (existing && existing.is_active && existing.confirmed_at) {
+      // Already receiving it: the same answer as a new address, so a stranger
+      // can't learn who is on the list
+      return reply.status(201).send({ success: true, message: CHECK_INBOX })
+    }
+    if (existing) {
+      await db('digest_subscriptions').where('id', existing.id).update({
+        frequency, categories, min_severity,
+        is_active: true, confirmed_at: null, updated_at: db.fn.now(),
+        ...(source ? { source } : {}),
+        ...(userId && !existing.user_id ? { user_id: userId } : {}),
+      })
+    } else {
+      await db('digest_subscriptions').insert({
+        user_id: userId, email, frequency, categories, min_severity,
+        is_active: true, confirmed_at: null, source: source ?? null,
+      })
+    }
+
+    const sent = await sendConfirmEmail(email)
+    if (!sent) {
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'We couldn’t send the confirmation email just now. Please try again later.')
+    }
+    return reply.status(201).send({ success: true, message: CHECK_INBOX })
+  })
+
+  // ── GET /api/v1/digest/confirm?e=&t= ──────────────────────────────────────
+  // The link in the confirmation email. Back to the site either way.
+  app.get('/confirm', async (req, reply) => {
+    const q = LinkQuerySchema.safeParse(req.query)
+    const email = q.success ? normalizeEmail(q.data.e) : ''
+    if (!q.success || !verifyEmailToken(email, 'confirm', q.data.t) || !subscribersReady()) {
+      return reply.redirect(`${SITE_URL}/briefing?subscribed=invalid`, 302)
+    }
     const updated = await db('digest_subscriptions')
       .where('email', email)
       .where('is_active', true)
-      .update({ is_active: false, updated_at: db.fn.now() })
-
-    if (updated === 0) {
-      return sendError(reply, 404, 'NOT_FOUND', 'Subscription not found')
-    }
-
-    return reply.send({ success: true, message: 'Unsubscribed from digest' })
+      .update({ confirmed_at: db.fn.now(), updated_at: db.fn.now() })
+    return reply.redirect(`${SITE_URL}/briefing?subscribed=${updated > 0 ? '1' : 'invalid'}`, 302)
   })
 
-  // ── GET /api/v1/digest/status?email=X ────────────────────────────────────
-  app.get('/status', async (req, reply) => {
-    const email = (req.query as Record<string, string>).email
-
-    if (!email || typeof email !== 'string') {
-      return sendError(reply, 400, 'VALIDATION_ERROR', 'email query parameter required')
-    }
-
-    const sub = await db('digest_subscriptions')
+  // ── GET|POST /api/v1/digest/unsubscribe?e=&t= ─────────────────────────────
+  // The link in every briefing (GET, back to the site) and the mail app's
+  // one-click unsubscribe (POST, RFC 8058).
+  const unsubscribeByLink = async (req: FastifyRequest): Promise<boolean> => {
+    const q = LinkQuerySchema.safeParse(req.query)
+    if (!q.success) return false
+    const email = normalizeEmail(q.data.e)
+    if (!verifyEmailToken(email, 'unsubscribe', q.data.t) || !subscribersReady()) return false
+    await db('digest_subscriptions')
       .where('email', email)
-      .first([
-        'id', 'email', 'frequency', 'categories',
-        'min_severity', 'is_active', 'last_sent_at', 'created_at',
-      ])
+      .where('is_active', true)
+      .update({ is_active: false, updated_at: db.fn.now() })
+    return true
+  }
+  app.get('/unsubscribe', async (req, reply) => {
+    const ok = await unsubscribeByLink(req)
+    return reply.redirect(`${SITE_URL}/briefing?unsubscribed=${ok ? '1' : 'invalid'}`, 302)
+  })
+  app.post('/unsubscribe', async (req, reply) => {
+    const ok = await unsubscribeByLink(req)
+    if (!ok) return sendError(reply, 400, 'VALIDATION_ERROR', 'This unsubscribe link isn’t valid')
+    return reply.send({ success: true, message: 'Unsubscribed' })
+  })
 
+  // ── DELETE /api/v1/digest/unsubscribe ─────────────────────────────────────
+  // From Settings: the signed-in reader's own subscription only.
+  app.delete('/unsubscribe', { preHandler: [authenticate] }, async (req, reply) => {
+    const sub = await ownSubscription(req)
+    if (!sub || !sub.is_active) {
+      return sendError(reply, 404, 'NOT_FOUND', 'Subscription not found')
+    }
+    await db('digest_subscriptions').where('id', sub.id).update({ is_active: false, updated_at: db.fn.now() })
+    return reply.send({ success: true, message: 'Unsubscribed from the briefing' })
+  })
+
+  // ── GET /api/v1/digest/status ─────────────────────────────────────────────
+  // The signed-in reader's own subscription (no lookups of other addresses).
+  app.get('/status', { preHandler: [authenticate] }, async (req, reply) => {
+    const sub = await ownSubscription(req)
     if (!sub) {
       return reply.send({ success: true, data: { subscribed: false } })
     }
-
     return reply.send({
       success: true,
       data: {
-        subscribed:   sub.is_active,
+        subscribed:   Boolean(sub.is_active && sub.confirmed_at),
+        pending:      Boolean(sub.is_active && !sub.confirmed_at),
+        email:        sub.email,
         frequency:    sub.frequency,
         categories:   sub.categories,
         min_severity: sub.min_severity,
@@ -206,7 +275,8 @@ export const registerAdminDigestRoutes: FastifyPluginAsync = async (app) => {
     }))
 
     // Fetch all active subscriptions
-    const subscriptions = await db('digest_subscriptions').where('is_active', true)
+    // Confirmed subscribers only (an address gets nothing until its owner confirms)
+    const subscriptions = await db('digest_subscriptions').where('is_active', true).whereNotNull('confirmed_at')
 
     const period = { from: sevenDaysAgo, to: now }
     let sent = 0

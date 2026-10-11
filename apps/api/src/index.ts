@@ -88,6 +88,8 @@ import { startSearchConsumer, stopSearchConsumer } from './lib/search-consumer'
 import { initClickHouse } from './lib/search-analytics'
 import { startDispatcher, stopDispatcher } from './lib/alert-dispatcher'
 import { startPulseScheduler, stopPulseScheduler } from './lib/pulse/scheduler'
+import { ensureSubscribersTable } from './lib/subscribers'
+import { startBriefingEmails, stopBriefingEmails } from './lib/briefing-email'
 
 const app = Fastify({
   logger: {
@@ -457,9 +459,18 @@ async function bootstrap() {
   // and daily briefing (7am ET).
   startPulseScheduler()
 
+  // ─── EMAIL BRIEFING (plan G4) ─────────────────────────────
+  // Creates the subscribers table if missing (Devon approved, Oct 11, 2026),
+  // then checks every minute whether the 7 AM briefing is due. Sends nothing
+  // without RESEND_API_KEY.
+  ensureSubscribersTable()
+    .then(ok => { if (ok) startBriefingEmails() })
+    .catch(err => logger.warn({ err }, 'Email briefing failed to start'))
+
   // ─── GRACEFUL SHUTDOWN ────────────────────────────────────
   const shutdown = async () => {
     stopPulseScheduler()
+    stopBriefingEmails()
     stopDispatcher()
     await Promise.allSettled([
       stopSearchConsumer(),

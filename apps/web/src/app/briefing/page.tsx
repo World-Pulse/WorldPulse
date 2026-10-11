@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Inbox, FileText, Clock, MapPin, RefreshCw, Share2, Check, Moon, TrendingUp, AlertTriangle, Globe, Shield, Anchor, Leaf, Cpu, Eye, BarChart3 } from 'lucide-react'
 import { displaySummary } from '@/lib/signal-text'
+import { BriefingSignup } from '@/components/briefing/BriefingSignup'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -645,6 +646,12 @@ export default function BriefingPage() {
           </div>
         </div>
 
+        {/* The 7 AM email briefing (plan G4). The old box at the bottom sent
+            visitors to a settings page that needs an account, and promised
+            07:00 UTC emails nothing sent. This one shows once email can be
+            sent, and answers the confirm and unsubscribe links. */}
+        <BriefingSignup source="/briefing" className="mb-6" />
+
         {/* ── Error ── */}
         {error && (
           <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl p-4 mb-6">
@@ -835,21 +842,6 @@ export default function BriefingPage() {
               </section>
             ))}
 
-            {/* Subscribe CTA */}
-            <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div>
-                <h3 className="font-semibold text-indigo-300">Get the daily briefing in your inbox</h3>
-                <p className="text-sm text-zinc-400 mt-0.5">
-                  AI-verified intelligence delivered every morning at 07:00 UTC.
-                </p>
-              </div>
-              <a
-                href="/settings#notifications"
-                className="shrink-0 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-              >
-                Subscribe
-              </a>
-            </div>
 
             {/* Footer */}
             <p className="text-center text-xs text-zinc-600 pt-2 border-t border-zinc-800">

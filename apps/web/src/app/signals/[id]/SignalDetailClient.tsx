@@ -6,6 +6,7 @@ import Link from 'next/link'
 import type { Signal, Post, CrossCheckStatus } from '@worldpulse/types'
 import type { SignalDetail } from './page'
 import { DiscussionThread } from './DiscussionThread'
+import { BriefingSignup } from '@/components/briefing/BriefingSignup'
 
 const SignalMap = dynamic(
   () => import('./SignalMap').then(m => ({ default: m.SignalMap })),
@@ -492,6 +493,9 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
                 </div>
               )
             })()}
+
+            {/* The 7 AM email briefing (plan G4; shows once email can be sent) */}
+            <BriefingSignup source="/signals" compact />
 
             {/* Discussion thread */}
             <div className="pt-2">

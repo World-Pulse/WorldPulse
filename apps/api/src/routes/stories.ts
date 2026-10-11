@@ -13,7 +13,7 @@ import { optionalAuth } from '../middleware/auth'
 import { sendError } from '../lib/errors'
 import { parseQuery, StoryListQuerySchema } from '../lib/query-schemas'
 import { signalsHaveStoryIds, hostOf } from '../lib/stories'
-import { rankStories, textArray, EVENT_TEMPLATE_SQL, type StoryCandidate } from '../lib/story-list'
+import { rankStories, textArray, EVENT_TEMPLATE_SQL, type StoryCandidate, type ListedStory } from '../lib/story-list'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MAX_SIGNALS = 50
@@ -120,6 +120,37 @@ export function storyListSql(hasStoryIds: boolean): string {
       LEFT JOIN links l2 ON l2.story_key = f.story_key`
 }
 
+/**
+ * The stories most outlets reported in the last `hours`, ranked as
+ * GET /api/v1/stories ranks them (also the email briefing's stories, plan G4).
+ */
+export async function topStories(hours: number, limit: number): Promise<ListedStory[]> {
+  const since = new Date(Date.now() - hours * 3_600_000)
+  const result = await db.raw(storyListSql(await signalsHaveStoryIds()), [since, EVENT_TEMPLATE_SQL])
+  const rows = (result as { rows?: Array<Record<string, unknown>> } | undefined)?.rows ?? []
+
+  const candidates: StoryCandidate[] = []
+  for (const r of rows) {
+    const updatedAt = new Date(r.newest as string)
+    const firstSeenAt = new Date(r.first_seen as string)
+    if (Number.isNaN(updatedAt.getTime()) || Number.isNaN(firstSeenAt.getTime()) || !r.lead_id) continue
+    candidates.push({
+      key:         String(r.story_key),
+      leadId:      String(r.lead_id),
+      title:       typeof r.title === 'string' ? r.title : '',
+      category:    typeof r.category === 'string' ? r.category : null,
+      place:       typeof r.place === 'string' && r.place.trim() !== '' ? r.place.trim() : null,
+      severity:    SEVERITIES[Number(r.sev_rank) - 1] ?? 'info',
+      size:        Number(r.size) || 1,
+      urls:        textArray(r.urls),
+      firstSeenAt,
+      updatedAt,
+      verifiedAt:  r.verified_at ? new Date(r.verified_at as string) : null,
+    })
+  }
+  return rankStories(candidates, limit)
+}
+
 export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
   app.addHook('onRoute', (routeOptions) => {
     routeOptions.schema ??= {}
@@ -141,33 +172,9 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
     const cached = await redis.get(cacheKey).catch(() => null)
     if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
 
-    const since = new Date(Date.now() - hours * 3_600_000)
-    const result = await db.raw(storyListSql(await signalsHaveStoryIds()), [since, EVENT_TEMPLATE_SQL])
-    const rows = (result as { rows?: Array<Record<string, unknown>> } | undefined)?.rows ?? []
-
-    const candidates: StoryCandidate[] = []
-    for (const r of rows) {
-      const updatedAt = new Date(r.newest as string)
-      const firstSeenAt = new Date(r.first_seen as string)
-      if (Number.isNaN(updatedAt.getTime()) || Number.isNaN(firstSeenAt.getTime()) || !r.lead_id) continue
-      candidates.push({
-        key:         String(r.story_key),
-        leadId:      String(r.lead_id),
-        title:       typeof r.title === 'string' ? r.title : '',
-        category:    typeof r.category === 'string' ? r.category : null,
-        place:       typeof r.place === 'string' && r.place.trim() !== '' ? r.place.trim() : null,
-        severity:    SEVERITIES[Number(r.sev_rank) - 1] ?? 'info',
-        size:        Number(r.size) || 1,
-        urls:        textArray(r.urls),
-        firstSeenAt,
-        updatedAt,
-        verifiedAt:  r.verified_at ? new Date(r.verified_at as string) : null,
-      })
-    }
-
     const response = {
       success: true,
-      data: { stories: rankStories(candidates, limit), hours, generatedAt: new Date().toISOString() },
+      data: { stories: await topStories(hours, limit), hours, generatedAt: new Date().toISOString() },
     }
     redis.setex(cacheKey, LIST_CACHE_TTL, JSON.stringify(response)).catch(() => {})
     return reply.send(response)
