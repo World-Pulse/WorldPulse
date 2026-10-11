@@ -18,6 +18,7 @@ import { parseWindowHash, encodePermalink, type MapPermalinkState, type LayerKey
 import {
   Map as MapIcon, Moon, Satellite, Globe2, LocateFixed, Layers as LayersIcon,
   Flame, History, Swords, Crosshair, RadioTower, Anchor, Plane, Ship, Activity, ShieldAlert, Video, List as ListIcon,
+  SunMoon, Compass,
 } from 'lucide-react'
 import { LayersPanel, activeLayerCount, type MapLayerGroup } from '@/components/map/LayersPanel'
 import { MapLegend } from '@/components/map/MapLegend'
@@ -30,6 +31,8 @@ import { countryAt, loadCountryShapes, focusBboxOf, type CountryHit } from '@/li
 import { signalsInCountry, countryBrief } from '@/lib/country-brief'
 import { toHotspot, hotspotPlace, type Hotspot } from '@/lib/hotspots'
 import { ensureMapIcon, MAP_ICON } from '@/lib/map-icons'
+import { dayNightFeatures, subsolarPoint } from '@/lib/daynight'
+import { MAP_REGIONS } from '@/lib/map-regions'
 import {
   SEVERITY_COLOR, SEVERITY_BG, SEVERITY_RANK, CLUSTER_COLOR_EXPR, SIGNAL_RADIUS_EXPR, FONT_BOLD,
   BASEMAP_MODES, BASEMAP_LABEL, ATMOSPHERE,
@@ -46,6 +49,8 @@ import {
 const API_URL      = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 const WS_URL       = process.env.NEXT_PUBLIC_WS_URL  ?? API_URL.replace(/^http/, 'ws')
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY ?? ''
+/** localStorage: '0' when the reader turned day and night off */
+const DAYNIGHT_KEY = 'wp_map_daynight'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -411,6 +416,19 @@ function MapView() {
   const [layersOpen,   setLayersOpen]   = useState(false)
   /** The map has loaded: overlay layers switched on earlier (e.g. by a shared link) can draw now */
   const [mapReady,     setMapReady]     = useState(false)
+  // Day and night (M18): on unless this reader turned it off (kept in this browser only)
+  const [dayNight, setDayNight] = useState(true)
+  useEffect(() => {
+    try { if (localStorage.getItem(DAYNIGHT_KEY) === '0') setDayNight(false) } catch { /* storage blocked */ }
+  }, [])
+  const toggleDayNight = useCallback(() => {
+    setDayNight(on => {
+      try { localStorage.setItem(DAYNIGHT_KEY, on ? '0' : '1') } catch { /* storage blocked */ }
+      return !on
+    })
+  }, [])
+  // Region shortcuts (M18)
+  const [regionsOpen, setRegionsOpen] = useState(false)
   // "Latest in view" list beside the map (M14): open by default on wide screens
   const [listOpen,     setListOpen]     = useState(false)
   const [inView,       setInView]       = useState<MapSignal[]>([])
@@ -2980,6 +2998,81 @@ function MapView() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hazardsMode, mapReady])
 
+  // ── Day and night (M18): the night side shaded, redrawn every 5 minutes ─────
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady) return
+    const SRC = 'daynight'
+    const LAYERS = ['daynight-day', 'daynight-shade', 'daynight-edge']
+    const draw = () => {
+      if (document.visibilityState === 'hidden') return
+      const now = new Date()
+      const data = dayNightFeatures(now)
+      // The soft edge sits on the day side of the line: right of it (going east)
+      // when the north pole is dark, left of it when the south pole is
+      const daySide = subsolarPoint(now).lat < 0 ? 1 : -1
+      try {
+        if (!map.getSource(SRC)) {
+          map.addSource(SRC, { type: 'geojson', data })
+          // Over the land and sea, under the map's labels and every signal layer
+          const layers: Array<{ id: string; type: string }> = map.getStyle()?.layers ?? []
+          const before = layers.find(l => l.type === 'symbol')?.id ?? (map.getLayer('cluster-halo') ? 'cluster-halo' : undefined)
+          // A touch of daylight on the sunlit side, the night side darker (the
+          // dark basemap alone left too little to darken)
+          map.addLayer({ id: 'daynight-day', type: 'fill', source: SRC, filter: ['==', ['get', 'part'], 'day'],
+            paint: { 'fill-color': '#9db8e8', 'fill-opacity': 0.07, 'fill-antialias': false } }, before)
+          map.addLayer({ id: 'daynight-shade', type: 'fill', source: SRC, filter: ['==', ['get', 'part'], 'night'],
+            paint: { 'fill-color': '#000208', 'fill-opacity': 0.45, 'fill-antialias': false } }, before)
+          map.addLayer({ id: 'daynight-edge', type: 'line', source: SRC, filter: ['==', ['get', 'part'], 'edge'],
+            layout: { 'line-join': 'round' },
+            paint: {
+              'line-color': '#000208', 'line-opacity': 0.4,
+              'line-width': ['interpolate', ['linear'], ['zoom'], 0, 28, 4, 44],
+              'line-blur': ['interpolate', ['linear'], ['zoom'], 0, 28, 4, 44],
+              'line-offset': ['interpolate', ['linear'], ['zoom'], 0, 14 * daySide, 4, 22 * daySide],
+            } }, before)
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ;(map.getSource(SRC) as any).setData(data)
+          map.setPaintProperty('daynight-edge', 'line-offset', ['interpolate', ['linear'], ['zoom'], 0, 14 * daySide, 4, 22 * daySide])
+        }
+      } catch { /* the style is reloading; the next redraw adds it */ }
+    }
+    if (dayNight) draw()
+    for (const id of LAYERS) {
+      try { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', dayNight ? 'visible' : 'none') } catch { /* gone */ }
+    }
+    if (!dayNight) return
+    const timer = setInterval(draw, 5 * 60_000)
+    const onVisible = () => { if (document.visibilityState === 'visible') draw() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible) }
+  }, [dayNight, mapReady])
+
+  // Region shortcuts (M18): close the menu on Escape or a click elsewhere
+  useEffect(() => {
+    if (!regionsOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setRegionsOpen(false) }
+    const onDown = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement | null)?.closest?.('[data-regions]')) setRegionsOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('mousedown', onDown)
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('mousedown', onDown) }
+  }, [regionsOpen])
+
+  const flyToRegion = (bounds: [[number, number], [number, number]]) => {
+    const map = mapRef.current
+    if (!map) return
+    setRegionsOpen(false)
+    const desktop = typeof window !== 'undefined' && window.innerWidth >= 768
+    map.fitBounds(bounds, {
+      // Clear of the "Latest in view" list (320 px) when it's open beside the map
+      padding: desktop ? { top: 70, bottom: 70, left: listOpen ? 360 : 70, right: 70 } : { top: 110, bottom: 140, left: 20, right: 20 },
+      duration: 1200,
+    })
+  }
+
   // ── Country brief: outline the chosen country (plan M9) ─────────────────────
   useEffect(() => {
     const map = mapRef.current
@@ -3481,6 +3574,8 @@ function MapView() {
           ) },
         { key: 'cams', label: 'Live cameras', description: 'Public traffic, weather and city webcams', icon: Video, color: '#2dd4bf',
           on: showCameras, count: cameraCount, toggle: () => setShowCameras(v => !v) },
+        { key: 'daynight', label: 'Day and night', description: 'Where it is night right now, updated every 5 minutes', icon: SunMoon, color: '#94a3b8',
+          on: dayNight, toggle: toggleDayNight },
       ],
     },
   ]
@@ -3939,6 +4034,31 @@ function MapView() {
           >
             <LocateFixed size={15} />
           </button>
+          {/* Jump to a region (M18) */}
+          <div className="relative" data-regions>
+            <button
+              onClick={() => setRegionsOpen(v => !v)}
+              title="Go to a region"
+              aria-label="Go to a region"
+              aria-haspopup="menu"
+              aria-expanded={regionsOpen}
+              className={`wp-map-ctrl ${regionsOpen ? 'wp-map-ctrl-on' : ''}`}
+            >
+              <Compass size={15} />
+            </button>
+            {regionsOpen && (
+              <div role="menu" aria-label="Regions"
+                className="absolute right-[40px] top-0 w-[220px] rounded-xl border border-white/10 bg-[rgba(8,11,20,0.94)] backdrop-blur-md shadow-2xl py-1.5">
+                <div className="px-3 pt-1 pb-1.5 text-[10px] font-mono uppercase tracking-[1.2px] text-wp-text3">Go to</div>
+                {MAP_REGIONS.map(region => (
+                  <button key={region.key} role="menuitem" onClick={() => flyToRegion(region.bounds)}
+                    className="w-full text-left px-3 py-2 text-[13px] text-wp-text hover:bg-white/[0.06] focus:bg-white/[0.06] focus:outline-none">
+                    {region.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* ── Palantir-style Annotation Cards ───────────────────────────── */}
