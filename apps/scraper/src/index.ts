@@ -40,7 +40,7 @@ import { runDelayedRescore } from './pipeline/rescore'
 import { signalsHavePublishedAt, publishedAtFor, backfillRecentPublishedAt, sourceKey, hostOf } from './pipeline/signal-columns'
 import { independentReports, isCopyOf } from './pipeline/independence'
 import { ensureStoryIdColumn } from './pipeline/stories'
-import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters } from './pipeline/repairs'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames } from './pipeline/repairs'
 import { batchValidateGeo } from './pipeline/geo-validator'
 import { recomputeSourceReputation } from './pipeline/source-reputation'
 import { startKafkaLagMonitor } from './lib/kafka-lag-monitor'
@@ -173,6 +173,9 @@ async function bootstrap() {
     .then(() => repinNewsHomePins(db))
     .then(t => { if (t && t.moved + t.cleared + t.retitled > 0) logger.info(t, "Repair: news pins at an outlet's office moved to the story's place") })
     .catch(err => logger.warn({ err }, 'News pin repair failed (non-fatal)'))
+  tidyGdeltPlaceNames()
+    .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: GDELT place names without "?" and repeats') })
+    .catch(err => logger.warn({ err }, 'GDELT place name repair failed (non-fatal)'))
   stripFeedFooters()
     .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: feed footers ("The post … appeared first on …") taken out of summaries') })
     .catch(err => logger.warn({ err }, 'Feed footer repair failed (non-fatal)'))

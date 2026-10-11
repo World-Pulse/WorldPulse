@@ -292,3 +292,14 @@ describe('parseLastUpdateUrl', () => {
     expect(parseLastUpdateUrl(text)).toBe('http://data.gdeltproject.org/gdeltv2/X.export.CSV.zip')
   })
 })
+
+describe('tidyGeoName (Oct 11, 2026)', () => {
+  it('leaves out parts with lost letters and repeated parts', async () => {
+    const { tidyGeoName } = await import('../sources/gdelt')
+    expect(tidyGeoName('Riyadh, Ar Riya?, Saudi Arabia')).toBe('Riyadh, Saudi Arabia')
+    expect(tidyGeoName('Afrin, ?alab, Syria')).toBe('Afrin, Syria')
+    expect(tidyGeoName('Karnataka, Karnataka, India')).toBe('Karnataka, India')
+    expect(tidyGeoName('Washington, District of Columbia, United States')).toBe('Washington, District of Columbia, United States')
+    expect(tidyGeoName('')).toBe('')
+  })
+})

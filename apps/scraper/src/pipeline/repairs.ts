@@ -13,6 +13,7 @@ import { countIndependentOutlets } from './independence'
 import { hostOf } from './signal-columns'
 import { decodeEntities, cleanUrl, cleanTitle, ENCODED_TEXT_RE, cleanSummary, FEED_FOOTER_SQL } from './text'
 import { liftedSeverity, type SeverityRow } from './severity-lift'
+import { tidyGeoName } from '../sources/gdelt'
 
 /** Where nginx serves uploaded post media (the uploads volume, under /uploads/) */
 const PUBLIC_SITE = 'https://world-pulse.io'
@@ -278,6 +279,40 @@ export async function stripFeedFooters(): Promise<number> {
     const clean = cleanSummary(row.summary)
     if (clean === row.summary || clean.length === 0) continue
     await db('signals').where('id', row.id).update({ summary: clean })
+    fixed++
+  }
+  return fixed
+}
+
+/**
+ * GDELT place names of the last 3 days with lost letters ("Ar Riya?") or a
+ * state named twice ("Karnataka, Karnataka, India"), in the place and in
+ * the "<event> in <place>" headline, read as gdelt.ts tidyGeoName writes
+ * them now. Tidied rows no longer match, so a later start finds nothing to do.
+ */
+export async function tidyGdeltPlaceNames(): Promise<number> {
+  const rows = await db('signals')
+    .where('created_at', '>', db.raw("NOW() - INTERVAL '3 days'"))
+    .whereRaw("tags @> ARRAY['gdelt']::text[]")
+    .where(function () {
+      // (bound values: a literal ? in knex's raw SQL is read as a placeholder)
+      this.whereRaw('title LIKE ?', ['%?%']).orWhereRaw('location_name LIKE ?', ['%?%'])
+        .orWhereRaw('location_name ~ ?', ['^([^,]+), \\1(,|$)'])
+    })
+    .select('id', 'title', 'location_name')
+    .limit(5000) as Array<{ id: string; title: string; location_name: string | null }>
+  let fixed = 0
+  for (const row of rows) {
+    const update: { title?: string; location_name?: string } = {}
+    const place = row.location_name ? tidyGeoName(row.location_name) : null
+    if (place && place !== row.location_name) update.location_name = place
+    const m = /^(.+?) in (.+)$/.exec(row.title)
+    if (m) {
+      const tidy = tidyGeoName(m[2]!)
+      if (tidy && tidy !== m[2]) update.title = `${m[1]} in ${tidy}`
+    }
+    if (Object.keys(update).length === 0) continue
+    await db('signals').where('id', row.id).update(update)
     fixed++
   }
   return fixed

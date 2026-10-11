@@ -157,6 +157,22 @@ export interface GdeltRow {
 }
 
 /**
+ * A GDELT place name as people read it: GDELT writes letters it can't encode
+ * as "?" ("Riyadh, Ar Riya?, Saudi Arabia", "Afrin, ?alab, Syria") and often
+ * names a state twice ("Karnataka, Karnataka, India"). Parts with a "?" and
+ * repeated parts are left out: "Riyadh, Saudi Arabia", "Karnataka, India".
+ */
+export function tidyGeoName(name: string): string {
+  const parts: string[] = []
+  for (const raw of name.split(',')) {
+    const part = raw.trim()
+    if (!part || part.includes('?') || parts.some(p => p.toLowerCase() === part.toLowerCase())) continue
+    parts.push(part)
+  }
+  return parts.join(', ')
+}
+
+/**
  * Parse one tab-separated GDELT event row.
  * Returns null for rows with too few columns or missing required fields
  * (GlobalEventID or SOURCEURL), so callers can skip them gracefully.
@@ -180,7 +196,7 @@ export function parseTsvRow(line: string): GdeltRow | null {
     eventCode:     cols[COL.EVENTCODE]?.trim()             ?? '',
     eventRootCode: cols[COL.EVENTROOTCODE]?.trim()         ?? '',
     goldstein:     parseFloat(cols[COL.GOLDSTEINSCALE] ?? '') || 0,
-    geoName:       cols[COL.ACTIONGEO_FULLNAME]?.trim()    ?? '',
+    geoName:       tidyGeoName(cols[COL.ACTIONGEO_FULLNAME]?.trim() ?? ''),
     countryCode:   cols[COL.ACTIONGEO_COUNTRYCODE]?.trim() ?? '',
     lat:           !isNaN(latVal) ? latVal : null,
     lng:           !isNaN(lngVal) ? lngVal : null,
