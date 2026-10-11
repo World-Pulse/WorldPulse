@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { ChevronDown, Swords, Landmark, Vote, HeartPulse, TriangleAlert, CloudLightning, TrendingUp, Zap, Newspaper } from 'lucide-react'
+import { ChevronDown, Swords, Landmark, Vote, HeartPulse, TriangleAlert, CloudLightning, TrendingUp, Trophy, Zap, Newspaper } from 'lucide-react'
 import { SEVERITY_COLOR } from '@/lib/map-style'
 import type { MapLayerGroup } from './LayersPanel'
 
@@ -23,6 +23,7 @@ const KINDS = [
   { Icon: TriangleAlert,  label: 'Disaster' },
   { Icon: CloudLightning, label: 'Weather' },
   { Icon: TrendingUp,     label: 'Economy' },
+  { Icon: Trophy,         label: 'Sports' },
   { Icon: Zap,            label: 'Breaking' },
   { Icon: Newspaper,      label: 'Other news' },
 ] as const

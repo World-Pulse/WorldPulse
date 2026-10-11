@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { displaySummary, isStateMedia } from '../signal-text'
+import { displaySummary, isStateMedia, outletSite } from '../signal-text'
 
 const TITLE = 'Yemen’s Houthis renew warning over Saudi airports after deadly Riyadh attack'
 
@@ -36,5 +36,24 @@ describe('isStateMedia', () => {
     expect(isStateMedia(['news', 'rss', 'state-media'])).toBe(true)
     expect(isStateMedia(['news'])).toBe(false)
     expect(isStateMedia(undefined)).toBe(false)
+  })
+})
+
+describe('displaySummary (HTML a feed sent encoded, Oct 11, 2026)', () => {
+  it('shows text, not codes', () => {
+    expect(displaySummary('&lt;p>Information Minister Attaullah Tarar on Sunday alleged a nexus.&lt;/p>', 'Info minister alleges nexus'))
+      .toBe('Information Minister Attaullah Tarar on Sunday alleged a nexus.')
+    expect(displaySummary("Yemen's ministry raises alarm over supplies in Taiz &lt;div class=\"field field-field-text\"", 'Supplies run low in Taiz'))
+      .toBe("Yemen's ministry raises alarm over supplies in Taiz")
+  })
+})
+
+describe('outletSite', () => {
+  it("names the website of a signal's first link", () => {
+    expect(outletSite(['https://www.theguardian.com/world/2026/oct/11/story'])).toBe('theguardian.com')
+    expect(outletSite(['https://bworldonline.com/corporate/2026/10/11/786052/x/'])).toBe('bworldonline.com')
+    expect(outletSite([])).toBe('')
+    expect(outletSite(null)).toBe('')
+    expect(outletSite(['not a link'])).toBe('')
   })
 })

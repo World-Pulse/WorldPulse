@@ -16,6 +16,7 @@ describe('categoryGlyph', () => {
     expect(categoryGlyph('disaster')).toBe('triangle-alert')
     expect(categoryGlyph('Economy')).toBe('trending-up')
     expect(categoryGlyph('breaking')).toBe('zap')
+    expect(categoryGlyph('sports')).toBe('trophy')
   })
 
   it('draws anything else as general news', () => {

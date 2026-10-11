@@ -16,6 +16,14 @@ const OUTLET_NOTES: RegExp[] = [
   /\s*⚠️?\s*This outlet is state-controlled and may reflect official government positions\.?/g,
 ]
 
+/**
+ * HTML a feed sent encoded ("&lt;p>Get our &lt;a href=…"), shown as codes in
+ * 119 of 3,211 summaries on Oct 11, 2026; the scraper stores plain text since
+ * (text.ts feedText, plus a 3-day repair). A tag cut off at the end too.
+ */
+const TAG = /(?:<|&lt;)\/?[a-z][^<>]*?(?:>|&gt;)/gi
+const CUT_TAG = /(?:<|&lt;)\/?[a-z][^<>]*$/i
+
 /** Text to compare with a headline: lower case, single spaces, no punctuation or quotes at either end */
 function comparable(text: string): string {
   return text
@@ -33,10 +41,21 @@ export function displaySummary(summary: string | null | undefined, title: string
   if (typeof summary !== 'string') return ''
   let text = summary
   for (const re of OUTLET_NOTES) text = text.replace(re, '')
-  text = text.replace(/\s+/g, ' ').trim()
+  text = text.replace(TAG, ' ').replace(CUT_TAG, '').replace(/\s+/g, ' ').trim()
   const plain = comparable(text)
   if (plain === '' || (typeof title === 'string' && plain === comparable(title))) return ''
   return text
+}
+
+/**
+ * The website of a signal's first link ("theguardian.com"), or "" without
+ * one: the outlet's name where a signal has no source record (news feeds and
+ * GDELT, Oct 11, 2026: their cards didn't say who reported them).
+ */
+export function outletSite(urls: unknown): string {
+  const first = Array.isArray(urls) ? urls.find((u): u is string => typeof u === 'string' && u.length > 0) : undefined
+  if (!first) return ''
+  try { return new URL(first).hostname.replace(/^www\./, '') } catch { return '' }
 }
 
 /** Whether a signal comes from a state-run outlet (the scraper tags it 'state-media') */

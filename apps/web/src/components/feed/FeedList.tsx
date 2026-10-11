@@ -21,7 +21,7 @@ import { ViralityBadge } from '@/components/signals/ViralityBadge'
 import { StoryOutlets, storyOf } from './StoryOutlets'
 import type { StoryInfo } from './StoryOutlets'
 import { Users, Cpu, Radio, Newspaper } from 'lucide-react'
-import { displaySummary, isStateMedia, STATE_MEDIA_NOTE } from '@/lib/signal-text'
+import { displaySummary, isStateMedia, STATE_MEDIA_NOTE, outletSite } from '@/lib/signal-text'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -59,6 +59,8 @@ interface FeedItem {
     title: string
     summary: string
     sources: string[]
+    /** The outlet's website, for a signal without source badges */
+    site?: string
     impact: number
     impactColor: string
     isLive?: boolean
@@ -172,6 +174,7 @@ function adaptSignal(sig: any): FeedItem {
       title:    sig.title,
       summary:  displaySummary(sig.summary, sig.title),
       sources:  badgeSlugs,
+      site:     badgeSlugs.length === 0 ? outletSite(sig.originalUrls) : '',
       impact,
       impactColor,
     },
@@ -197,15 +200,23 @@ function adaptSignal(sig: any): FeedItem {
   }
 }
 
+/** The account that posts each signal to the feed ("WorldPulse AI Digest" in the database) */
+const SIGNAL_POSTER = 'worldpulse_ai'
+
 function adaptPost(post: Post): FeedItem {
   const initial = (post.author.displayName || post.author.handle).charAt(0).toUpperCase()
+  // Its posts are outlets' reports, not an AI's digest: the card said "WorldPulse
+  // AI Digest" on every story in the feed (Oct 11, 2026)
+  const automated = post.author.handle === SIGNAL_POSTER && !!post.signal
   const base: FeedItem = {
     id:       post.id,
     signalId: post.signalId ?? null,
     type:     post.postType === 'signal' ? 'signal' : 'post',
     author: {
       initials: initial,
-      name:     post.author.displayName,
+      name:     automated
+        ? (post.signal?.locationName ? `WorldPulse · ${post.signal.locationName}` : 'WorldPulse Signal')
+        : post.author.displayName,
       handle:   '@' + post.author.handle,
       verified: post.author.verified,
       color:    'from-violet-600 to-purple-900',
@@ -782,14 +793,17 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
                     ) : null}
                   />
                 )}
-                {/* Source badges + source count (rows without story details) */}
-                {!item.story && (item.event.sources.length > 0 || (item.sourceCount ?? 0) > 0) && (
+                {/* Source badges, or the outlet's website, + source count (rows without story details) */}
+                {!item.story && (item.event.sources.length > 0 || item.event.site || (item.sourceCount ?? 0) > 0) && (
                   <div className="flex items-center gap-1 flex-wrap mb-2">
                     {item.event.sources.map(s => (
                       <span key={s} className={`source-badge ${SOURCE_BADGES[s] ?? SOURCE_BADGES.wp}`}>
                         {SOURCE_LABELS[s] ?? s.toUpperCase()}
                       </span>
                     ))}
+                    {item.event.site && (
+                      <span className="font-mono text-[10px] text-wp-text3">via {item.event.site}</span>
+                    )}
                     {/* Virality badge — shows spreading velocity + corroboration depth */}
                     {(item.sourceCount ?? 0) >= 3 && (
                       <ViralityBadge
