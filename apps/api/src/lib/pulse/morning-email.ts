@@ -14,8 +14,9 @@ import { redis } from '../../db/redis'
 import { logger } from '../logger'
 import { EMAIL_CONFIGURED } from '../email'
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY ?? ''
-const FROM_ADDRESS   = process.env.EMAIL_FROM_ADDRESS ?? 'PULSE <pulse@world-pulse.io>'
+// `||`: compose passes an unset variable as "" (which `??` would keep: an empty From)
+const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
+const FROM_ADDRESS   = process.env.EMAIL_FROM_ADDRESS || 'PULSE <pulse@world-pulse.io>'
 const RESEND_API_URL = 'https://api.resend.com/emails'
 
 // ─── Types ──────────────────────────────────────────────────────────────────

@@ -6,9 +6,10 @@ import { logger } from './logger'
 // Same Resend API pattern as email.ts.
 // Set RESEND_API_KEY in your .env to enable digest email dispatch.
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY    ?? ''
-const FROM_ADDRESS   = process.env.EMAIL_FROM_ADDRESS ?? 'WorldPulse Digest <digest@world-pulse.io>'
-const REPLY_TO       = process.env.EMAIL_REPLY_TO     ?? ''
+// `||`: compose passes an unset variable as "" (which `??` would keep: an empty From)
+const RESEND_API_KEY = process.env.RESEND_API_KEY    || ''
+const FROM_ADDRESS   = process.env.EMAIL_FROM_ADDRESS || 'WorldPulse Digest <digest@world-pulse.io>'
+const REPLY_TO       = process.env.EMAIL_REPLY_TO     || ''
 const RESEND_API_URL = 'https://api.resend.com/emails'
 
 export const DIGEST_EMAIL_CONFIGURED: boolean = RESEND_API_KEY !== ''

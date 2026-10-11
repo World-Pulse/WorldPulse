@@ -341,7 +341,7 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
       },
     },
   }, async (req, reply) => {
-    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000'
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000'
     const errorRedirect = `${frontendUrl}/auth/login?error=oauth_failed`
 
     const { code, state, error } = req.query as { code?: string; state?: string; error?: string }

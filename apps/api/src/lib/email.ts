@@ -12,9 +12,10 @@ import { logger } from './logger'
 //   EMAIL_FROM_ADDRESS  — From address (default: WorldPulse Alerts <alerts@world-pulse.io>)
 //   EMAIL_REPLY_TO      — Reply-to address (optional)
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY    ?? ''
-const FROM_ADDRESS   = process.env.EMAIL_FROM_ADDRESS ?? 'WorldPulse Alerts <alerts@world-pulse.io>'
-const REPLY_TO       = process.env.EMAIL_REPLY_TO     ?? ''
+// `||`: compose passes an unset variable as "" (which `??` would keep: an empty From)
+const RESEND_API_KEY = process.env.RESEND_API_KEY    || ''
+const FROM_ADDRESS   = process.env.EMAIL_FROM_ADDRESS || 'WorldPulse Alerts <alerts@world-pulse.io>'
+const REPLY_TO       = process.env.EMAIL_REPLY_TO     || ''
 const RESEND_API_URL = 'https://api.resend.com/emails'
 
 /** True when RESEND_API_KEY is configured and email dispatch is enabled. */

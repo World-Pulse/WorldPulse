@@ -148,9 +148,16 @@ services:
       SMTP_USER:        ${SMTP_USER:-}
       SMTP_PASS:        ${SMTP_PASS:-}
       EMAIL_FROM:       ${EMAIL_FROM:-noreply@world-pulse.io}
+      # Email through Resend (plan G4): every email the API sends reads these;
+      # without RESEND_API_KEY nothing is sent
+      RESEND_API_KEY:     ${RESEND_API_KEY:-}
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-}
+      EMAIL_REPLY_TO:     ${EMAIL_REPLY_TO:-}
       # Optional — OAuth
       GITHUB_CLIENT_ID:     ${GITHUB_CLIENT_ID:-}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      GITHUB_REDIRECT_URI:  ${GITHUB_REDIRECT_URI:-https://api.world-pulse.io/api/v1/auth/github/callback}
+      FRONTEND_URL:         ${FRONTEND_URL:-https://world-pulse.io}
       GOOGLE_CLIENT_ID:     ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       # Optional — Web Push
