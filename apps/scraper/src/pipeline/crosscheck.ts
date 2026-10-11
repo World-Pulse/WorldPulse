@@ -7,10 +7,11 @@
  * reports and says whether they describe the same event, and whether they
  * agree on its main facts.
  *
- * For now it only records its verdicts (shadow mode): today's counts by
- * verdict, and the newest doubtful ones, which ops-status shows. Once a day's
- * verdicts have been read, a "different event" verdict can hold a story back
- * from verified. Calls stay within the Claude spending cap (lib/claude.ts),
+ * It records its verdicts: today's counts and the newest doubtful ones in
+ * ops-status, and on each report's page a line in the verification timeline
+ * ("the outlets differ: …" when they disagree on facts). It doesn't change a
+ * story's status yet: once a day's verdicts have been read, a "different
+ * event" verdict can hold a story back from verified. Calls stay within the Claude spending cap (lib/claude.ts),
  * about a thousand a day at a few hundredths of a cent each.
  */
 
@@ -92,7 +93,39 @@ export async function crossCheckVerification(
   }
   await multi.exec()
   if (read && read.verdict !== 'same') logger.info({ storyId: storyIds[0], verdict: read.verdict, note: read.note }, 'Cross-check: a verified story Claude doubts')
+  if (read) await logOnSignalPages(storyIds, read).catch(err => logger.warn({ err }, 'Cross-check not logged on the signal pages'))
   return read?.verdict ?? null
+}
+
+/** What a verdict shows in a signal page's verification timeline (verification_log) */
+export function timelineEntry(read: { verdict: CrossCheckVerdict; note: string }): { result: string; confidence: number; notes: string } | null {
+  if (read.verdict === 'same') return { result: 'confirmed', confidence: 0.9, notes: `[Claude] ${read.note}` }
+  if (read.verdict === 'conflicting') return { result: 'warning', confidence: 0.6, notes: `[Claude] The outlets differ: ${read.note}` }
+  // "Different event" contradicts the story's Verified badge: it shows once it can hold a story back
+  return null
+}
+
+/**
+ * The verdict in the verification timeline of each report's page, once per
+ * report: a story is checked again when a new outlet's report turns
+ * verified, and only the reports not logged in the last 6 hours get a line.
+ */
+async function logOnSignalPages(storyIds: string[], read: { verdict: CrossCheckVerdict; note: string }): Promise<void> {
+  const entry = timelineEntry(read)
+  if (!entry) return
+  const fresh: string[] = []
+  for (const id of new Set(storyIds)) {
+    if (await redis.set(`ai:verify:logged:${id}`, '1', 'EX', 6 * 3_600, 'NX') === 'OK') fresh.push(id)
+  }
+  if (fresh.length === 0) return
+  // (only the table's first columns: the later ones come from a migration production may not have run)
+  await db('verification_log').insert(fresh.map(id => ({
+    signal_id:  id,
+    check_type: 'cross_check',
+    result:     entry.result,
+    confidence: entry.confidence,
+    notes:      entry.notes,
+  })))
 }
 
 /** Fire and forget: a failed cross-check never holds up the pipeline */

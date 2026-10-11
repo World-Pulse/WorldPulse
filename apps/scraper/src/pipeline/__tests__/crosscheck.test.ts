@@ -11,9 +11,16 @@ const h = vi.hoisted(() => ({
   reply: null as string | null,
   ops: [] as Array<[string, ...unknown[]]>,
   asked: [] as Array<{ purpose: string; prompt: string }>,
+  logged: [] as Array<Record<string, unknown>>,
+  keys: new Set<string>(),
 }))
 
-vi.mock('../../lib/postgres', () => ({ db: { raw: vi.fn(async () => ({ rows: h.rows })) } }))
+vi.mock('../../lib/postgres', () => ({
+  db: Object.assign(
+    vi.fn((table: string) => ({ insert: vi.fn(async (rows: Array<Record<string, unknown>>) => { if (table === 'verification_log') h.logged.push(...rows) }) })),
+    { raw: vi.fn(async () => ({ rows: h.rows })) },
+  ),
+}))
 vi.mock('../../lib/redis', () => {
   const multi = () => {
     const chain: Record<string, unknown> = {}
@@ -21,7 +28,8 @@ vi.mock('../../lib/redis', () => {
     chain.exec = async () => []
     return chain
   }
-  return { redis: { multi } }
+  const set = vi.fn(async (key: string, ..._rest: unknown[]) => { if (h.keys.has(key)) return null; h.keys.add(key); return 'OK' })
+  return { redis: { multi, set } }
 })
 vi.mock('../../lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }))
 vi.mock('../../lib/claude', () => ({
@@ -32,7 +40,7 @@ vi.mock('../../lib/claude', () => ({
   }),
 }))
 
-import { crossCheckPrompt, readVerdict, crossCheckVerification } from '../crosscheck'
+import { crossCheckPrompt, readVerdict, crossCheckVerification, timelineEntry } from '../crosscheck'
 
 const NOW = new Date('2026-10-11T16:40:00Z')
 
@@ -53,7 +61,7 @@ describe('crossCheckPrompt and readVerdict', () => {
 })
 
 describe('crossCheckVerification', () => {
-  beforeEach(() => { h.ops.length = 0; h.asked.length = 0 })
+  beforeEach(() => { h.ops.length = 0; h.asked.length = 0; h.logged.length = 0; h.keys.clear() })
 
   it('counts a same-event verdict and keeps no example', async () => {
     h.rows = [{ title: 'Strike hits Riyadh airport', summary: null }, { title: 'Riyadh airport struck again', summary: null }]
@@ -80,5 +88,28 @@ describe('crossCheckVerification', () => {
     h.reply = 'Hard to say.'
     expect(await crossCheckVerification(['a', 'b'], [], NOW)).toBeNull()
     expect(h.ops).toContainEqual(['hincrby', 'ai:verify:counts:2026-10-11', 'unread', 1])
+  })
+})
+
+describe("the verdict on each report's page", () => {
+  beforeEach(() => { h.ops.length = 0; h.asked.length = 0; h.logged.length = 0; h.keys.clear() })
+
+  it('writes a line in each report\'s verification timeline, once per report', async () => {
+    h.rows = [{ title: 'Strike hits Riyadh airport', summary: null }, { title: 'Riyadh airport struck again', summary: null }]
+    h.reply = '{"same_event": true, "agree": false, "note": "13 dead in one report, 12 in the other."}'
+    await crossCheckVerification(['a', 'b'], [], NOW)
+    expect(h.logged).toEqual([
+      { signal_id: 'a', check_type: 'cross_check', result: 'warning', confidence: 0.6, notes: '[Claude] The outlets differ: 13 dead in one report, 12 in the other.' },
+      { signal_id: 'b', check_type: 'cross_check', result: 'warning', confidence: 0.6, notes: '[Claude] The outlets differ: 13 dead in one report, 12 in the other.' },
+    ])
+    // a new outlet's report joins: only it gets a line
+    h.reply = '{"same_event": true, "agree": true, "note": "All describe the same strike."}'
+    await crossCheckVerification(['a', 'b', 'c'], [], NOW)
+    expect(h.logged.slice(2).map(r => [r.signal_id, r.result])).toEqual([['c', 'confirmed']])
+  })
+
+  it('shows no "different event" line while it can\'t hold a story back', () => {
+    expect(timelineEntry({ verdict: 'different', note: 'Two floods.' })).toBeNull()
+    expect(timelineEntry({ verdict: 'same', note: 'Same flood.' })).toEqual({ result: 'confirmed', confidence: 0.9, notes: '[Claude] Same flood.' })
   })
 })
