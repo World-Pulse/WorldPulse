@@ -27,7 +27,7 @@ export interface CountryRisk {
 }
 
 export function CountryBrief<T extends BriefListItem>({
-  country, brief, windowLabel, risk, categoryIcon, onClose, onSelect, onZoom,
+  country, brief, windowLabel, risk, categoryIcon, onClose, onSelect, onZoom, connections = [], onPickCountry,
 }: {
   country: { code: string | null; name: string }
   brief: CountryBriefData<T>
@@ -39,6 +39,9 @@ export function CountryBrief<T extends BriefListItem>({
   onClose: () => void
   onSelect: (item: T) => void
   onZoom: () => void
+  /** Countries this one's news is tied to (drawn as arcs on the map) */
+  connections?: Array<{ code: string; name: string; count: number }>
+  onPickCountry?: (code: string) => void
 }) {
   const flag = flagEmoji(country.code)
   const serious = brief.bySeverity.critical + brief.bySeverity.high
@@ -132,6 +135,28 @@ export function CountryBrief<T extends BriefListItem>({
                   ))}
                 </div>
               </div>
+
+              {/* Connections (M13): the countries its news is tied to, drawn as arcs */}
+              {connections.length > 0 && (
+                <div>
+                  <div className="font-mono text-[9px] tracking-[2px] uppercase text-wp-text3 mb-2">In the news with</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {connections.map(c => (
+                      <button
+                        key={c.code}
+                        type="button"
+                        onClick={() => onPickCountry?.(c.code)}
+                        title={`${c.count} signals tie ${country.name} and ${c.name} · open ${c.name}`}
+                        className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[rgba(34,211,238,0.07)] border border-[rgba(34,211,238,0.25)] text-[11px] text-cyan-100 hover:bg-[rgba(34,211,238,0.14)] transition-colors"
+                      >
+                        <span aria-hidden="true">{flagEmoji(c.code)}</span>
+                        <span>{c.name}</span>
+                        <span className="font-mono text-cyan-300/70 tabular-nums">{c.count}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Latest */}
               <div>

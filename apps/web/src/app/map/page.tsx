@@ -27,7 +27,8 @@ import { CountryBrief, type CountryRisk } from '@/components/map/CountryBrief'
 import { SinceLastVisit } from '@/components/map/SinceLastVisit'
 import { useLastVisit } from '@/hooks/useLastVisit'
 import { sinceLastVisit, awayLabel } from '@/lib/last-visit'
-import { countryAt, loadCountryShapes, focusBboxOf, type CountryHit } from '@/lib/country-shapes'
+import { countryAt, loadCountryShapes, focusBboxOf, findCountry, countryCodeOf, countryNameOf, type CountryHit, type CountryFeature } from '@/lib/country-shapes'
+import { countryConnections, countryCentre, connectionFeatures, fitZoom, arcDegrees, type Connection } from '@/lib/country-connections'
 import { signalsInCountry, countryBrief } from '@/lib/country-brief'
 import { toHotspot, hotspotPlace, type Hotspot } from '@/lib/hotspots'
 import { ensureMapIcon, MAP_ICON } from '@/lib/map-icons'
@@ -3063,6 +3064,17 @@ function MapView() {
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('mousedown', onDown) }
   }, [regionsOpen])
 
+  /**
+   * Left padding for fitting places beside the Latest list. MapLibre adds a
+   * fit's padding to the map's own, and the map is already padded 320 px
+   * while the list is open (so it centres beside it); counting the list again
+   * pushed regions into the right half of the screen.
+   */
+  const clearOfList = (margin: number) => {
+    const own = mapRef.current?.getPadding?.()?.left ?? 0
+    return Math.max(margin, (listOpen ? 320 : 0) + margin - own)
+  }
+
   const flyToRegion = (bounds: [[number, number], [number, number]]) => {
     const map = mapRef.current
     if (!map) return
@@ -3070,7 +3082,7 @@ function MapView() {
     const desktop = typeof window !== 'undefined' && window.innerWidth >= 768
     map.fitBounds(bounds, {
       // Clear of the "Latest in view" list (320 px) when it's open beside the map
-      padding: desktop ? { top: 70, bottom: 70, left: listOpen ? 360 : 70, right: 70 } : { top: 110, bottom: 140, left: 20, right: 20 },
+      padding: desktop ? { top: 70, bottom: 70, left: clearOfList(70), right: 70 } : { top: 110, bottom: 140, left: 20, right: 20 },
       duration: 1200,
     })
   }
@@ -3098,6 +3110,121 @@ function MapView() {
       }
     } catch { /* the style is reloading; the next change draws it */ }
   }, [country, mapReady])
+
+  // ── Connections (M13): arcs to the countries the chosen country's news is tied to
+  const [connections, setConnections] = useState<Array<Connection & { centre: [number, number] }>>([])
+  /** The country the camera last framed, so live updates don't move the map again */
+  const framedFor = useRef<string | null>(null)
+
+  /**
+   * Bring the chosen country and the countries it's tied to into the open part
+   * of the map, beside the brief and clear of the Latest list (desktop; on
+   * phones the brief is a sheet over the map). Never zooms in. With no ties,
+   * the map only moves if the country is hidden behind a panel.
+   */
+  const frameCountry = (feature: CountryFeature, others: Array<[number, number]>) => {
+    const map = mapRef.current
+    if (!map || typeof window === 'undefined' || window.innerWidth < 768) return
+    const from = countryCentre(feature)
+    const { width, height } = map.getContainer().getBoundingClientRect()
+    // The open part of the map, in its own pixels: right of the Latest list, left of the brief (340 px)
+    const box = { left: (listOpen ? 320 : 0) + 60, right: width - 340 - 60, top: 60, bottom: height - 50 }
+    if (others.length === 0) {
+      const p = map.project(from)
+      const c = map.getCenter()
+      const inView = p.x > box.left && p.x < box.right && p.y > box.top && p.y < box.bottom
+        && (projection !== 'globe' || arcDegrees([c.lng, c.lat], from) < 70)
+      if (inView) return
+    }
+    // Room around the far dots for their names
+    const halfW = (box.right - box.left) / 2 - 50
+    const halfH = (box.bottom - box.top) / 2 - 30
+    if (halfW < 80 || halfH < 80) return
+    const zoom = Math.max(1.6, Math.min(map.getZoom(), fitZoom(from, others, halfW, halfH, projection)))
+    // The map centres in what its padding leaves (the list's 320 px when it's open); move to the box's middle
+    const pad = map.getPadding()
+    const centreX = pad.left + (width - pad.left - pad.right) / 2
+    const centreY = pad.top + (height - pad.top - pad.bottom) / 2
+    try {
+      map.easeTo({
+        center: from, zoom, duration: 900,
+        offset: [(box.left + box.right) / 2 - centreX, (box.top + box.bottom) / 2 - centreY],
+      })
+    } catch { /* the map is busy; leave it where it is */ }
+  }
+
+  useEffect(() => {
+    if (!country?.code) { setConnections([]); framedFor.current = null; return }
+    let cancelled = false
+    const code = country.code
+    const feature = country.feature
+    loadCountryShapes().then(shapes => {
+      if (cancelled) return
+      const byCode = new Map<string, CountryFeature>()
+      for (const f of shapes.features) {
+        const c = countryCodeOf(f.properties)
+        if (c && !byCode.has(c)) byCode.set(c, f)
+      }
+      const countryOf = (lng: number, lat: number) => findCountry(shapes, lng, lat)?.code ?? null
+      const links = countryConnections(signals, code, feature, countryOf)
+        .flatMap(c => { const f = byCode.get(c.code); return f ? [{ ...c, centre: countryCentre(f) }] : [] })
+      setConnections(links)
+      // Once per opened brief, not on every live update
+      if (framedFor.current !== code) {
+        framedFor.current = code
+        frameCountry(feature, links.map(l => l.centre))
+      }
+    }).catch(() => { if (!cancelled) setConnections([]) })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [country, signals])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady) return
+    const SRC = 'country-links'
+    const data = country ? connectionFeatures(countryCentre(country.feature), connections) : { type: 'FeatureCollection', features: [] }
+    try {
+      if (!map.getSource(SRC)) {
+        // lineMetrics: the arcs fade from the chosen country's amber to cyan
+        map.addSource(SRC, { type: 'geojson', data, lineMetrics: true })
+        // Arcs and dots under the clusters; names on top, so the clusters' numbers don't hide them
+        const before = map.getLayer('cluster-halo') ? 'cluster-halo' : undefined
+        const kind = (k: string) => ['==', ['get', 'kind'], k]
+        const name = { 'text-field': ['get', 'label'], 'text-font': FONT_BOLD, 'text-size': 11, 'text-allow-overlap': false }
+        const namePaint = { 'text-color': '#cffafe', 'text-halo-color': 'rgba(6,7,13,0.9)', 'text-halo-width': 1.4 }
+        map.addLayer({ id: 'country-links-glow', type: 'line', source: SRC, filter: kind('arc'),
+          layout: { 'line-cap': 'round' },
+          paint: { 'line-color': '#f5a623', 'line-width': 8, 'line-blur': 5, 'line-opacity': 0.22 } }, before)
+        map.addLayer({ id: 'country-links-line', type: 'line', source: SRC, filter: kind('arc'),
+          layout: { 'line-cap': 'round' },
+          paint: {
+            'line-width': ['interpolate', ['linear'], ['get', 'count'], 2, 1.8, 20, 4.2],
+            'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, '#f5a623', 1, '#22d3ee'],
+            'line-opacity': 0.9,
+          } }, before)
+        map.addLayer({ id: 'country-links-dot', type: 'circle', source: SRC, filter: kind('end'),
+          paint: { 'circle-radius': 4, 'circle-color': '#22d3ee', 'circle-stroke-color': '#06070d', 'circle-stroke-width': 1.5 } }, before)
+        map.addLayer({ id: 'country-links-label', type: 'symbol', source: SRC, filter: kind('end'),
+          layout: { ...name, 'text-offset': [0, 1.1], 'text-anchor': 'top' }, paint: namePaint })
+        // A country over the horizon: its name beside the arc, on the side you see
+        map.addLayer({ id: 'country-links-far', type: 'symbol', source: SRC, filter: kind('far'),
+          layout: { ...name, 'text-anchor': 'left', 'text-offset': [0.7, 0] }, paint: namePaint })
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(map.getSource(SRC) as any).setData(data)
+      }
+    } catch { /* the style is reloading */ }
+  }, [connections, country, mapReady])
+
+  /** Open another country's brief from the connections list */
+  const openCountry = useCallback(async (code: string) => {
+    try {
+      const shapes = await loadCountryShapes()
+      const feature = shapes.features.find(f => countryCodeOf(f.properties) === code)
+      if (feature) setCountry({ code, name: countryNameOf(feature.properties), feature, risk: null })
+    } catch { /* outlines unavailable */ }
+  }, [])
 
   // Escape closes the country brief (the signal panel first, if it's open)
   useEffect(() => {
@@ -3164,7 +3291,8 @@ function MapView() {
     const [w, s, e, n] = focusBboxOf(country.feature)
     const desktop = typeof window !== 'undefined' && window.innerWidth >= 768
     map.fitBounds([[w, s], [e, n]], {
-      padding: desktop ? { top: 60, bottom: 60, left: 60, right: 400 } : { top: 40, bottom: Math.round(window.innerHeight * 0.5), left: 30, right: 30 },
+      // Clear of the brief, and of the Latest list (the map's own padding keeps clear of it when it's open)
+      padding: desktop ? { top: 60, bottom: 60, left: clearOfList(60), right: 400 } : { top: 40, bottom: Math.round(window.innerHeight * 0.5), left: 30, right: 30 },
       maxZoom: 6, duration: 1000,
     })
   }
@@ -3997,6 +4125,8 @@ function MapView() {
             onClose={() => setCountry(null)}
             onSelect={selectFromList}
             onZoom={zoomToCountry}
+            connections={connections}
+            onPickCountry={openCountry}
           />
         )}
 
