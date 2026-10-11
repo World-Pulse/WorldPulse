@@ -331,10 +331,6 @@ function MapView() {
   const [satError,           setSatError]           = useState<string | null>(null)
   const [gibsError,          setGibsError]          = useState<string | null>(null)
 
-  // ── Carrier Strike Group tracking state ────────────────────────────────────
-  const [carrierMode,    setCarrierMode]    = useState(false)
-  const [carrierLoading, setCarrierLoading] = useState(false)
-
   // ── Naval Intelligence layer state ──────────────────────────────────────────
   const [navalMode,    setNavalMode]    = useState(false)
   const [navalLoading, setNavalLoading] = useState(false)
@@ -372,12 +368,6 @@ function MapView() {
   const [conflictCount,   setConflictCount]   = useState(0)
   const conflictLayerRef  = useRef<import('@/components/map/ConflictZoneOverlay').ConflictZoneOverlay | null>(null)
   const conflictRegionRef = useRef<import('@/components/map/ConflictRegions').ConflictRegionLayer | null>(null)
-
-  // ── Wind Particle Flow layer state ─────────────────────────────────────────────
-  const [windMode,    setWindMode]    = useState(false)
-  const [windLoading, setWindLoading] = useState(false)
-  const [windDensity, setWindDensity] = useState<'16k' | '32k' | '65k'>('32k')
-  const windLayerRef = useRef<import('@/components/map/WindParticleLayer').WindParticleLayer | null>(null)
 
   // ── Timeline Playback state (BAT-14) ────────────────────────────────────────────
   // A shared link's Replay is switched on after the first render (see the M10 effect)
@@ -537,11 +527,9 @@ function MapView() {
   useEffect(() => { hmRef.current  = heatmapMode }, [heatmapMode])
 
   // ── Permalink state refs (BAT-15) — kept current for hash encoder ────────────
-  const windModeRef       = useRef(windMode)
   const timelineActiveRef = useRef(timelineActive)
   const timelineRangeRef  = useRef(timelineRange)
   const selectedRef       = useRef(selected)
-  useEffect(() => { windModeRef.current       = windMode       }, [windMode])
   useEffect(() => { timelineActiveRef.current = timelineActive }, [timelineActive])
   useEffect(() => { timelineRangeRef.current  = timelineRange  }, [timelineRange])
   useEffect(() => { selectedRef.current       = selected       }, [selected])
@@ -578,7 +566,7 @@ function MapView() {
   }, [getPermalinkState])
 
   // Re-write hash whenever layer toggles or selected signal changes (BAT-15)
-  useEffect(() => { updateHash() }, [windMode, timelineActive, timelineRange, basemap, selected?.id, updateHash])
+  useEffect(() => { updateHash() }, [timelineActive, timelineRange, basemap, selected?.id, updateHash])
 
   // Share links carry every layer that's on, and open with them on (M10)
   useEffect(() => {
@@ -1662,151 +1650,6 @@ function MapView() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [satTrackingMode])
-
-  // ── Carrier Strike Group layer ─────────────────────────────────────────────
-
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
-
-    const CSG_SOURCE = 'csg-carriers'
-    const CSG_LAYER  = 'csg-carrier-points'
-    const CSG_POPUP  = 'csg-carrier-cursor'
-
-    const removeLayer = () => {
-      try {
-        // Remove event listeners added for this layer
-        map.off('click',      CSG_LAYER)
-        map.off('mouseenter', CSG_LAYER)
-        map.off('mouseleave', CSG_LAYER)
-        if (map.getLayer(CSG_LAYER))  map.removeLayer(CSG_LAYER)
-        if (map.getSource(CSG_SOURCE)) map.removeSource(CSG_SOURCE)
-      } catch { /* ignore */ }
-    }
-
-    const applyLayer = async () => {
-      if (!carrierMode) {
-        removeLayer()
-        return
-      }
-
-      setCarrierLoading(true)
-      try {
-        // Fetch recent military signals (all severities) and filter for carrier content
-        const res  = await fetch(
-          `${API_URL}/api/v1/signals?category=military&limit=100`,
-        )
-        if (!res.ok) { console.warn(`[map][carriers] HTTP ${res.status}`); return }
-        const json = await res.json() as { success: boolean; data: {
-          items: Array<{
-            id:            string
-            title:         string
-            summary:       string | null
-            location:      { lng: number; lat: number } | null
-            locationName:  string | null
-            severity:      string
-            reliabilityScore: number
-            createdAt:     string
-          }>
-          cursor: string | null
-          hasMore: boolean
-        } }
-
-        const items = json.data?.items ?? []
-
-        // Filter for carrier-related signals and those with positions
-        const CARRIER_KEYWORDS = [
-          'cvn-', 'carrier strike', 'uss gerald', 'uss george washington',
-          'uss harry', 'uss theodore', 'uss abraham', 'uss carl vinson',
-          'uss eisenhower', 'uss nimitz', 'uss stennis', 'uss ronald reagan',
-          'uss george h', 'carrier group', 'strike group',
-        ]
-
-        const carrierSignals = items.filter(s => {
-          const text = `${s.title} ${s.summary ?? ''}`.toLowerCase()
-          return CARRIER_KEYWORDS.some(kw => text.includes(kw))
-        })
-        console.info(`[map][carriers] fetched=${items.length}, matched=${carrierSignals.length}`)
-
-        // API returns location as { lng, lat } object from formatSignal
-        const features = carrierSignals
-          .filter(s => s.location != null && isFinite(s.location.lat) && isFinite(s.location.lng))
-          .map(s => ({
-            type:       'Feature' as const,
-            geometry:   { type: 'Point' as const, coordinates: [s.location!.lng, s.location!.lat] },
-            properties: {
-              id:           s.id,
-              title:        s.title,
-              locationName: s.locationName ?? 'Unknown position',
-              reliability:  s.reliabilityScore,
-              createdAt:    s.createdAt,
-            },
-          }))
-
-        if (!map.getSource(CSG_SOURCE)) {
-          map.addSource(CSG_SOURCE, {
-            type: 'geojson',
-            data: { type: 'FeatureCollection', features },
-          })
-        } else {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ;(map.getSource(CSG_SOURCE) as any).setData({ type: 'FeatureCollection', features })
-        }
-
-        if (!map.getLayer(CSG_LAYER)) {
-          map.addLayer({
-            id:     CSG_LAYER,
-            type:   'circle',
-            source: CSG_SOURCE,
-            paint:  {
-              'circle-color':         '#1e3a5f',
-              'circle-radius':        8,
-              'circle-opacity':       0.9,
-              'circle-stroke-color':  '#4a90d9',
-              'circle-stroke-width':  2,
-              'circle-stroke-opacity': 0.8,
-            },
-          })
-
-          // Cursor
-          map.on('mouseenter', CSG_LAYER, () => { map.getCanvas().style.cursor = 'pointer' })
-          map.on('mouseleave', CSG_LAYER, () => { map.getCanvas().style.cursor = '' })
-
-          // Popup on click
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          map.on('click', CSG_LAYER, async (e: any) => {
-            const feat = e.features?.[0]
-            if (!feat) return
-            const p = feat.properties as {
-              title: string; locationName: string; reliability: number; createdAt: string
-            }
-            const { default: ml } = await import('maplibre-gl')
-            if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
-            popupRef.current = new ml.Popup({ closeButton: true, closeOnClick: false, offset: 12, className: 'wp-map-popup' })
-              .setLngLat(e.lngLat)
-              .setHTML(`
-                <div style="font:600 12px/1.4 system-ui;color:#93c5fd;margin-bottom:4px">⚓ CARRIER STRIKE GROUP</div>
-                <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:220px;margin-bottom:6px">${escapeHtml(p.title)}</div>
-                <div style="font:11px monospace;color:#8892a4;margin-bottom:4px">📍 ${escapeHtml(p.locationName)}</div>
-                <div style="font:10px monospace;color:#5a6477">OSINT-estimated · ${Math.round(p.reliability * 100)}% confidence</div>
-              `)
-              .addTo(map)
-          })
-        }
-      } catch (e) {
-        console.warn('[map] CSG layer error:', e)
-      } finally {
-        setCarrierLoading(false)
-      }
-    }
-
-    if (map.isStyleLoaded()) {
-      void applyLayer()
-    } else {
-      map.once('idle', () => { void applyLayer() })
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [carrierMode, mapReady])
 
   // ── ADS-B Live Aircraft layer ──────────────────────────────────────────────
 
@@ -3578,72 +3421,6 @@ function MapView() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [countryRiskMode, mapReady])
-
-  // ── Wind Particle Flow layer (WebGL custom layer, BAT-13) ────────────────────
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
-
-    const WIND_LAYER_ID = 'wind-particles'
-
-    async function applyWindLayer() {
-      if (!windMode) {
-        // Remove layer
-        try {
-          if (map.getLayer(WIND_LAYER_ID)) map.removeLayer(WIND_LAYER_ID)
-        } catch { /* ignore */ }
-        windLayerRef.current = null
-        return
-      }
-
-      setWindLoading(true)
-      try {
-        // Dynamic import to avoid loading WebGL code until needed
-        const { WindParticleLayer, detectOptimalDensity } = await import('@/components/map/WindParticleLayer')
-
-        // Auto-detect optimal density on first use
-        const detectedDensity = detectOptimalDensity()
-        setWindDensity(detectedDensity)
-
-        const layer = new WindParticleLayer({
-          density: detectedDensity,
-          speedFactor: 0.25,
-          opacity: 0.97,
-          apiUrl: API_URL,
-        })
-
-        windLayerRef.current = layer
-
-        // Remove existing if somehow already present
-        if (map.getLayer(WIND_LAYER_ID)) map.removeLayer(WIND_LAYER_ID)
-
-        // Add as custom layer (above basemap, below signal pins)
-        const beforeLayer = map.getLayer('cluster-halo') ? 'cluster-halo' : undefined
-        map.addLayer(layer as unknown as maplibregl.LayerSpecification, beforeLayer)
-      } catch (err) {
-        console.error('[map] Wind particle layer error:', err)
-      } finally {
-        setWindLoading(false)
-      }
-    }
-
-    applyWindLayer()
-
-    return () => {
-      try {
-        if (map.getLayer(WIND_LAYER_ID)) map.removeLayer(WIND_LAYER_ID)
-      } catch { /* ignore */ }
-      windLayerRef.current = null
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [windMode])
-
-  // Wind density change handler
-  useEffect(() => {
-    if (windLayerRef.current) {
-      windLayerRef.current.setDensity(windDensity)
-    }
-  }, [windDensity])
 
   // ── Timeline Playback data fetch + map integration (BAT-14) ─────────────────
   useEffect(() => {
