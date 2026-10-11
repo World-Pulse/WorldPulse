@@ -13,6 +13,7 @@
  * @module pipeline/embeddings
  */
 
+import { openaiPaused, noteOpenAIFailure } from '../lib/openai-credit'
 import { db } from '../lib/postgres'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
@@ -145,6 +146,7 @@ interface OpenAIEmbeddingResponse {
  */
 async function openaiEmbed(texts: string[]): Promise<number[][]> {
   if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not set')
+  if (openaiPaused()) throw new Error('OpenAI paused: out of credit')
 
   const response = await fetch('https://api.openai.com/v1/embeddings', {
     method: 'POST',
@@ -160,6 +162,7 @@ async function openaiEmbed(texts: string[]): Promise<number[][]> {
 
   if (!response.ok) {
     const errBody = await response.text().catch(() => '')
+    noteOpenAIFailure(response.status, errBody)
     throw new Error(`OpenAI API ${response.status}: ${errBody.substring(0, 200)}`)
   }
 
@@ -272,7 +275,9 @@ export async function batchEmbedSignals(): Promise<{
 }> {
   const start = Date.now()
   let processed = 0, errors = 0
-  const provider = await detectProvider()
+  const detected = await detectProvider()
+  // OpenAI out of credit: straight to TF-IDF, without a failed call and a warning per chunk
+  const provider = detected === 'openai' && openaiPaused() ? 'tfidf' : detected
 
   try {
     // Find signals without embeddings (prioritize recent, high-reliability)

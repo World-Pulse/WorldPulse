@@ -21,6 +21,7 @@
  * @module pipeline/entity-graph
  */
 
+import { openaiPaused, noteOpenAIFailure } from '../lib/openai-credit'
 import { pgPool as db } from '../lib/postgres'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
@@ -195,7 +196,8 @@ export async function extractEntitiesLLM(
   const cached = await redis.get(cacheKey)
   if (cached) return JSON.parse(cached) as ExtractionResult
 
-  if (!LLM_CONFIGURED) {
+  // (OpenAI out of credit, with no Gemini key: the rules, without a failed call each time)
+  if (!LLM_CONFIGURED || (!process.env.GEMINI_API_KEY && openaiPaused())) {
     return extractEntitiesRuleBased(title, body)
   }
 
@@ -279,7 +281,10 @@ async function callOpenAIExtraction(prompt: string): Promise<ExtractionResult> {
       response_format: { type: 'json_object' },
     }),
   })
-  if (!res.ok) throw new Error(`OpenAI API error: ${res.status}`)
+  if (!res.ok) {
+    noteOpenAIFailure(res.status, await res.text().catch(() => ''))
+    throw new Error(`OpenAI API error: ${res.status}`)
+  }
   const data: any = await res.json()
   const text = data?.choices?.[0]?.message?.content ?? '{}'
   return parseExtractionJSON(text)
