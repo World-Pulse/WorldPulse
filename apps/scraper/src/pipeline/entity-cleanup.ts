@@ -15,6 +15,7 @@
 import { pgPool as db } from '../lib/postgres'
 import { entityId, type EntityType } from './entity-graph'
 import { cleanStoredEntity } from './entity-rules'
+import { placesInText } from './geo'
 
 interface NodeRow {
   id: string
@@ -42,6 +43,23 @@ export interface EntityCleanup {
   renamed: number
 }
 
+/** Unknown places with fewer mentions than this are dropped; more, and they're kept as they are */
+const KEEP_UNKNOWN_PLACE = 20
+
+/**
+ * A stored place against the places the rules know: one known place inside
+ * the name becomes that place ("France Consultation" and "United Kingdom
+ * Public", from GDELT's event labels, become France and United Kingdom);
+ * an unknown name is kept only if it was mentioned often (Topeka, Kerala),
+ * since the old rule stored any capitalised words after "in".
+ */
+export function refinePlace(name: string, mentions: number): { type: string; name: string } | null {
+  const places = placesInText(name)
+  if (places.length === 1) return { type: 'location', name: places[0]! }
+  if (places.length === 0 && mentions < KEEP_UNKNOWN_PLACE) return null
+  return { type: 'location', name }
+}
+
 /** The plan for the stored entities: what to write and what to delete */
 export function planEntityCleanup(rows: NodeRow[]): {
   upserts: Array<{ id: string; type: string; name: string; members: NodeRow[] }>
@@ -52,7 +70,8 @@ export function planEntityCleanup(rows: NodeRow[]): {
   const deletes: string[] = []
   const totals: EntityCleanup = { merged: 0, removed: 0, retyped: 0, renamed: 0 }
   for (const row of rows) {
-    const cleaned = cleanStoredEntity(row.type, row.canonical_name)
+    let cleaned = cleanStoredEntity(row.type, row.canonical_name)
+    if (cleaned?.type === 'location') cleaned = refinePlace(cleaned.name, Number(row.mention_count) || 0)
     if (!cleaned) { deletes.push(row.id); totals.removed++; continue }
     const id = entityId(cleaned.type as EntityType, cleaned.name)
     const group = groups.get(id) ?? { id, type: cleaned.type, name: cleaned.name, members: [] }

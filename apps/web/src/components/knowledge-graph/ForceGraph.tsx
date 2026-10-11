@@ -45,6 +45,8 @@ interface ForceGraphProps {
   onNodeClick?: (node: GraphNode) => void
   selectedNodeId?: string | null
   className?: string
+  /** Always label this many of the most-mentioned nodes (others on hover) */
+  labelCount?: number
 }
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -120,7 +122,8 @@ function initSimulation(
   const nodes: SimNode[] = rawNodes.map((n, i) => {
     const t = (i / Math.max(1, rawNodes.length - 1)) * Math.PI * 2
     const r = Math.min(width, height) * 0.3
-    const radius = MIN_RADIUS + ((n.mention_count / maxMentions) * (MAX_RADIUS - MIN_RADIUS))
+    // Log scale: one entity with thousands of mentions shouldn't shrink all the rest to dots
+    const radius = MIN_RADIUS + (Math.log1p(n.mention_count) / Math.log1p(maxMentions)) * (MAX_RADIUS - MIN_RADIUS)
     const sim: SimNode = {
       ...n,
       x: width / 2 + Math.cos(t) * r * (0.5 + Math.random() * 0.5),
@@ -221,7 +224,14 @@ export default function ForceGraph({
   onNodeClick,
   selectedNodeId,
   className,
+  labelCount = 0,
 }: ForceGraphProps) {
+  // The names drawn without hovering: the most-mentioned nodes
+  const labelled = useMemo(() => new Set(
+    [...rawNodes].sort((a, b) => b.mention_count - a.mention_count).slice(0, labelCount).map(n => n.id),
+  ), [rawNodes, labelCount])
+  const labelledRef = useRef(labelled)
+  labelledRef.current = labelled
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const simRef = useRef<{ nodes: SimNode[]; edges: SimEdge[] } | null>(null)
@@ -408,7 +418,7 @@ export default function ForceGraph({
         }
 
         // Label (always show for selected/hovered, show for larger nodes otherwise)
-        if (isSelected || isHovered || node.radius > 16) {
+        if (isSelected || isHovered || node.radius > 16 || labelledRef.current.has(node.id)) {
           const label = node.canonical_name
           ctx.font = `${isSelected || isHovered ? 'bold ' : ''}11px Inter, system-ui, sans-serif`
           ctx.textAlign = 'center'

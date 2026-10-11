@@ -10,7 +10,7 @@ vi.mock('../../lib/redis', () => ({ redis: { get: vi.fn(async () => null), setex
 vi.mock('../../lib/postgres', () => ({ pgPool: { query: vi.fn() }, db: vi.fn() }))
 
 import { extractEntitiesByRules, cleanStoredEntity, canonicalPerson } from '../entity-rules'
-import { planEntityCleanup } from '../entity-cleanup'
+import { planEntityCleanup, refinePlace } from '../entity-cleanup'
 import { entityId } from '../entity-graph'
 
 const names = (title: string, body: string | null = null, type?: string) =>
@@ -109,5 +109,15 @@ describe('planEntityCleanup', () => {
     const clean = [row('person', 'Donald Trump', 1671), row('commodity', 'Petroleum products', 1927), row('location', 'Panama', 5)]
     expect(planEntityCleanup(clean).upserts).toHaveLength(0)
     expect(planEntityCleanup(clean).deletes).toHaveLength(0)
+  })
+})
+
+describe('refinePlace', () => {
+  it('folds a known place out of GDELT label junk, drops rare unknown names, keeps common ones', () => {
+    expect(refinePlace('France Consultation', 300)).toEqual({ type: 'location', name: 'France' })
+    expect(refinePlace('United Kingdom Public', 40)).toEqual({ type: 'location', name: 'United Kingdom' })
+    expect(refinePlace('Pleasant Valley Road', 3)).toBeNull()
+    expect(refinePlace('Topeka', 157)).toEqual({ type: 'location', name: 'Topeka' })
+    expect(refinePlace('Panama', 5)).toEqual({ type: 'location', name: 'Panama' })
   })
 })

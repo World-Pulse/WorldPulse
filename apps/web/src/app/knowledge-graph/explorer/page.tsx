@@ -33,7 +33,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
-import { toTrendingEntities, toGraphStats, type TrendingEntity, type GraphStats } from '@/lib/knowledge-graph-api'
+import { toTrendingEntities, toGraphStats, focusGraph, type TrendingEntity, type GraphStats } from '@/lib/knowledge-graph-api'
 
 const ForceGraph = dynamic(
   () => import('../../../components/knowledge-graph/ForceGraph'),
@@ -307,8 +307,10 @@ export default function KnowledgeGraphExplorerPage() {
       }
 
       if (!cancelled) {
-        setAllNodes(dedupeNodes(mergedNodes))
-        setAllEdges(dedupeEdges(mergedEdges))
+        // The trending entities and their strongest links, not every neighbour of each
+        const focused = focusGraph(trending.map(t => t.id), dedupeNodes(mergedNodes), dedupeEdges(mergedEdges), 3)
+        setAllNodes(focused.nodes)
+        setAllEdges(focused.edges)
         setLoadedEntityIds(loaded)
         setLoadingGraph(false)
       }
@@ -617,6 +619,7 @@ export default function KnowledgeGraphExplorerPage() {
               onNodeClick={handleNodeClick as any}
               selectedNodeId={selectedNodeId}
               className="w-full h-full"
+              labelCount={30}
             />
           )}
         </div>

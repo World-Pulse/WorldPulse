@@ -65,3 +65,32 @@ export function toGraphStats(json: unknown): GraphStats {
     edges_by_predicate: counts(edges.by_predicate ?? s.edges_by_predicate),
   }
 }
+
+interface FocusNode { id: string; mention_count: number }
+interface FocusEdge { source: string; target: string; weight: number }
+
+/**
+ * The explorer's first view: the trending entities, each with its few
+ * strongest links, and the links among them. Merging every trending
+ * entity's whole neighbourhood drew some 1,500 unlabelled dots (Oct 11, 2026).
+ */
+export function focusGraph<N extends FocusNode, E extends FocusEdge>(
+  coreIds: string[],
+  nodes: N[],
+  edges: E[],
+  perEntity = 3,
+): { nodes: N[]; edges: E[] } {
+  const core = new Set(coreIds)
+  const keep = new Set(coreIds)
+  for (const id of coreIds) {
+    edges
+      .filter(e => e.source === id || e.target === id)
+      .sort((a, b) => b.weight - a.weight)
+      .slice(0, perEntity)
+      .forEach(e => keep.add(e.source === id ? e.target : e.source))
+  }
+  const byId = new Map(nodes.map(n => [n.id, n]))
+  const keptNodes = [...keep].map(id => byId.get(id)).filter((n): n is N => n !== undefined)
+  const keptEdges = edges.filter(e => keep.has(e.source) && keep.has(e.target) && (core.has(e.source) || core.has(e.target)))
+  return { nodes: keptNodes, edges: keptEdges }
+}

@@ -40,3 +40,17 @@ describe('toGraphStats', () => {
     expect(toGraphStats(undefined)).toEqual({ total_entities: 0, total_edges: 0, entities_by_type: {}, edges_by_predicate: {} })
   })
 })
+
+describe('focusGraph', () => {
+  it('keeps the trending entities, their strongest links, and links among them', async () => {
+    const { focusGraph } = await import('../knowledge-graph-api')
+    const n = (id: string) => ({ id, mention_count: 1 })
+    const e = (source: string, target: string, weight: number) => ({ source, target, weight })
+    const nodes = ['A', 'B', 'x1', 'x2', 'x3', 'x4', 'far'].map(n)
+    const edges = [e('A', 'x1', 0.9), e('A', 'x2', 0.8), e('A', 'x3', 0.1), e('A', 'B', 0.5), e('B', 'x4', 0.7), e('x4', 'far', 1), e('x1', 'x2', 0.3)]
+    const out = focusGraph(['A', 'B'], nodes, edges, 2)
+    expect(out.nodes.map(x => x.id).sort()).toEqual(['A', 'B', 'x1', 'x2', 'x4'])
+    // links touching a trending entity only; x1–x2 and x4–far are left out
+    expect(out.edges.map(x => `${x.source}-${x.target}`).sort()).toEqual(['A-B', 'A-x1', 'A-x2', 'B-x4'])
+  })
+})
