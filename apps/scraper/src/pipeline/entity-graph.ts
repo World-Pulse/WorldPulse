@@ -25,6 +25,7 @@ import { pgPool as db } from '../lib/postgres'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
 import { createHash } from 'crypto'
+import { extractEntitiesByRules, cleanStoredEntity } from './entity-rules'
 
 // ─── TYPES ─────────────────────────────────────────────────────────────────────
 
@@ -163,6 +164,10 @@ export function resolveCanonicalName(name: string, type: EntityType): string {
   }
   if (type === 'organisation') {
     return ORG_ALIASES[lower] ?? name.trim()
+  }
+  if (type === 'person') {
+    // Without titles, well-known people by their usual name (entity-rules.ts)
+    return cleanStoredEntity('person', name)?.name ?? name.trim()
   }
   return name.trim()
 }
@@ -316,57 +321,16 @@ function validateEntityType(type: string): EntityType {
 
 // ─── RULE-BASED FALLBACK EXTRACTION ────────────────────────────────────────────
 
-// Regex patterns for common entity types
-const PERSON_PATTERN = /(?:President|PM|Minister|Gen\.|Gen |Admiral|Secretary|Chief|Director|Ambassador|Dr\.|Prof\.) [A-Z][a-z]+ [A-Z][a-z]+/g
-const ORG_PATTERN = /(?:NATO|UN|EU|WHO|IMF|IAEA|OPCW|ICRC|WTO|ASEAN|AU|BRICS|G7|G20|OPEC|UNHCR|UNICEF|FAO|ILO|UNCTAD)/g
-const LOCATION_PATTERN = /(?:in|from|near|across) ([A-Z][a-z]+(?:\s[A-Z][a-z]+){0,2})/g
-const WEAPON_PATTERN = /(?:ICBM|SLBM|IRBM|SAM|MANPAD|HIMARS|ATACMS|S-[34]00|Patriot|Iron Dome|THAAD|F-(?:16|22|35)|Su-\d{2}|MiG-\d{2}|Iskander|Kalibr|Tomahawk)/g
-const TECH_PATTERN = /(?:blockchain|cryptocurrency|Bitcoin|Ethereum|quantum computing|5G|6G|CBDC|LLM|GPT|CRISPR|fusion reactor|semiconductor|microchip)/gi
-
+/**
+ * Entities without the LLM: places from the gazetteer and country list,
+ * people without their titles, organisations as whole words, commodities,
+ * weapons and technologies (rules in entity-rules.ts, plan item 0s).
+ */
 export function extractEntitiesRuleBased(
   title: string,
   body: string | null,
 ): ExtractionResult {
-  const text = `${title} ${body ?? ''}`
-  const entities: ExtractedEntity[] = []
-  const seen = new Set<string>()
-
-  const addEntity = (name: string, type: EntityType, salience: number) => {
-    const key = `${type}:${name.toLowerCase()}`
-    if (!seen.has(key)) {
-      seen.add(key)
-      entities.push({ name, type, salience })
-    }
-  }
-
-  // People
-  for (const match of text.matchAll(PERSON_PATTERN)) {
-    addEntity(match[0].trim(), 'person', 0.7)
-  }
-
-  // Organisations
-  for (const match of text.matchAll(ORG_PATTERN)) {
-    addEntity(match[0], 'organisation', 0.6)
-  }
-
-  // Locations (from prepositions)
-  for (const match of text.matchAll(LOCATION_PATTERN)) {
-    if (match[1] && match[1].length > 2) {
-      addEntity(match[1], 'location', 0.5)
-    }
-  }
-
-  // Weapon systems
-  for (const match of text.matchAll(WEAPON_PATTERN)) {
-    addEntity(match[0], 'weapon_system', 0.8)
-  }
-
-  // Technology
-  for (const match of text.matchAll(TECH_PATTERN)) {
-    addEntity(match[0], 'technology', 0.5)
-  }
-
-  return { entities: entities.slice(0, 10), relationships: [] }
+  return { entities: extractEntitiesByRules(title, body), relationships: [] }
 }
 
 // ─── GRAPH PERSISTENCE ─────────────────────────────────────────────────────────

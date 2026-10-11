@@ -566,6 +566,41 @@ function countryPoint(countries: string[]): GeoResult {
 }
 
 /**
+ * Every place the text names, in order of first mention: gazetteer places
+ * (by their usual names) and countries (by name), each once, at most `max`.
+ * Used by the Knowledge Graph's rule-based extraction (pipeline/entity-rules.ts).
+ */
+export function placesInText(text: string, max = 6): string[] {
+  const clean = text.replace(OUTLET_NAMES, ' ')
+  const lower = clean.toLowerCase()
+  const hits: Array<{ name: string; index: number; end: number }> = []
+  // Longest names first, so "West Virginia" keeps "Virginia" from counting again
+  for (const m of GAZETTEER_MATCHERS) {
+    const re = new RegExp(m.re.source, 'gi')
+    for (const hit of lower.matchAll(re)) {
+      const index = hit.index ?? 0
+      const end = index + hit[0].length
+      if (hits.some(h => index < h.end && end > h.index)) continue
+      hits.push({ name: m.coords.name ?? titleCase(m.place), index, end })
+    }
+  }
+  for (const [pattern, code] of COUNTRY_MATCHERS) {
+    const hit = pattern.exec(clean)
+    if (!hit) continue
+    const index = hit.index
+    const end = index + hit[0].length
+    if (hits.some(h => index < h.end && end > h.index)) continue
+    hits.push({ name: countryNameOf(code) ?? code, index, end })
+  }
+  const names: string[] = []
+  for (const h of hits.sort((a, b) => a.index - b.index)) {
+    if (!names.includes(h.name)) names.push(h.name)
+    if (names.length >= max) break
+  }
+  return names
+}
+
+/**
  * A place for the text without asking the geocoder: a gazetteer place, else
  * the capital of the first country it names, else none.
  */

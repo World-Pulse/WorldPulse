@@ -10,6 +10,7 @@ import { Kafka, Producer, Consumer } from 'kafkajs'
 import { redis } from './lib/redis'
 import { db } from './lib/postgres'
 import { repinNewsHomePins } from './sources/news-rss'
+import { cleanEntityGraph } from './pipeline/entity-cleanup'
 import { logger } from './lib/logger'
 import { withRetry, RetryExhaustedError } from './lib/retry'
 import { isCircuitOpen, getCircuitState, acquireProbeSlot, cbSuccess, cbFailure, CircuitStatus } from './lib/circuit-breaker'
@@ -172,6 +173,9 @@ async function bootstrap() {
     .then(() => repinNewsHomePins(db))
     .then(t => { if (t && t.moved + t.cleared + t.retitled > 0) logger.info(t, "Repair: news pins at an outlet's office moved to the story's place") })
     .catch(err => logger.warn({ err }, 'News pin repair failed (non-fatal)'))
+  cleanEntityGraph()
+    .then(t => { if (t.merged + t.removed + t.retyped + t.renamed > 0) logger.info(t, 'Repair: Knowledge Graph entities cleaned (titles dropped, duplicates merged, junk removed)') })
+    .catch(err => logger.warn({ err }, 'Knowledge Graph clean-up failed (non-fatal)'))
   // Runs in the background for several minutes (one geocoder lookup per old pin name)
   recheckGeocodedPlaces(geocodePlace, placeFromText)
     .then(t => { if (t.renamed + t.repinned + t.cleared > 0 || t.stopped) logger.info(t, 'Repair: map pins from capitalised words re-checked') })
