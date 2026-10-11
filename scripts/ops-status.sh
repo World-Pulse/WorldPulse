@@ -124,7 +124,10 @@ pipeline_stats() {
         'multi_source', count(*) FILTER (WHERE source_count >= 2),
         'reliability_over_085', count(*) FILTER (WHERE reliability_score > 0.85),
         'avg_reliability', round(avg(reliability_score)::numeric, 3),
-        'newest_signal', max(created_at))
+        'newest_signal', max(created_at),
+        'outlets', (SELECT count(DISTINCT lower(substring(u from '^https?://(?:www[.])?([^/:?#]+)')))
+                      FROM signals s2, unnest(s2.original_urls) AS u
+                     WHERE s2.created_at > now() - interval '24 hours'))
       FROM signals WHERE created_at > now() - interval '24 hours'"
   q2="SELECT json_build_object(
         'verified_any_age', count(*) FILTER (WHERE verified_at > now() - interval '24 hours'),
@@ -145,7 +148,10 @@ pipeline_stats() {
   printf '"scraper_30m":{"errors":%d,"warnings":%d,"signals_created":%d,"top_errors":[%s],"top_warnings":[%s]},' \
     "${errs:-0}" "${warns:-0}" "${created:-0}" "$top" "$topw"
   printf '"llm":%s,' "$(llm_stats "$scr")"
-  printf '"claude":%s}' "$(claude_stats)"
+  printf '"claude":%s,' "$(claude_stats)"
+  # Readers of world-pulse.io today and where they came from (plan G1): counts
+  # only, from nginx's log; scripts/readers.py says how (no addresses kept)
+  printf '"readers":%s}' "$(timeout 90 python3 scripts/readers.py logs/readers-state.json 2>/dev/null || printf 'null')"
 }
 # Why the last deploy wasn't clean, from the deploy script's own log lines only
 # (its warnings, or the reason it rolled back or failed); empty when it was clean
@@ -159,7 +165,7 @@ deploy_note() {
 pipe_cache=logs/pipeline-stats.json
 # Refresh every 30 minutes, or straight away when the cache predates a new field
 if [ ! -s "$pipe_cache" ] || [ -n "$(find "$pipe_cache" -mmin +29 2>/dev/null)" ] \
-   || ! grep -q '"crosscheck_today"' "$pipe_cache" 2>/dev/null; then
+   || ! grep -q '"readers"' "$pipe_cache" 2>/dev/null; then
   pipeline_stats > "$pipe_cache.tmp" 2>/dev/null \
     && python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$pipe_cache.tmp" 2>/dev/null \
     && mv "$pipe_cache.tmp" "$pipe_cache"
