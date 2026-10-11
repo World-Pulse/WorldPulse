@@ -3872,7 +3872,7 @@ function MapView() {
         </div>
 
         {/* Since you last looked (plan M8) */}
-        {since && since.fresh.length > 0 && !sinceDismissed && lastVisit !== null && !selected && !country && (
+        {since && since.fresh.length > 0 && !sinceDismissed && lastVisit !== null && !selected && !country && !hotspotsOpen && (
           <SinceLastVisit
             count={since.fresh.length}
             more={since.fresh.length >= signals.length && signals.length >= MAX_SIGNALS}

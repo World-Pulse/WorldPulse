@@ -30,7 +30,8 @@ export function SinceLastVisit({
   className?: string
 }) {
   return (
-    <div role="status" className={`absolute left-1/2 -translate-x-1/2 top-[62px] md:top-3 z-20 max-w-[calc(100%-120px)] md:max-w-[calc(100%-24px)] ${className}`}>
+    // Phones: above the legend and Share button, clear of the Convergences list at the top
+    <div role="status" className={`absolute left-1/2 -translate-x-1/2 bottom-[108px] md:bottom-auto md:top-3 z-20 max-w-[calc(100%-32px)] md:max-w-[calc(100%-24px)] ${className}`}>
       <div className="flex items-center gap-2 rounded-full border border-white/10 bg-[rgba(8,12,20,0.92)] backdrop-blur-xl shadow-[0_8px_30px_rgba(0,0,0,0.45)] pl-3 pr-1.5 py-1.5">
         <span className="w-2 h-2 rounded-full flex-shrink-0 bg-[#e0f2fe] shadow-[0_0_8px_#e0f2fe]" aria-hidden="true" />
         <span className="text-[12px] text-wp-text whitespace-nowrap truncate">
