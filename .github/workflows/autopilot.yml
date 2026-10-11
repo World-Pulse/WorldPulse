@@ -48,10 +48,12 @@ name: Autopilot
 # Run a shift now: Actions tab → Autopilot → Run workflow.
 on:
   schedule:
-    # Every hour. Slots start at 9 PM, 12 AM, 3 AM, 6 AM, 9 AM, 12 PM, 3 PM and
-    # 6 PM New York summer time (an hour earlier in winter); the other hourly
-    # runs only catch up a slot GitHub skipped, and otherwise stop in seconds.
-    - cron: '7 * * * *'
+    # At each slot: 9 PM, 12 AM, 3 AM, 6 AM, 9 AM, 12 PM, 3 PM and 6 PM New
+    # York summer time (an hour earlier in winter). Claude's hourly HQ sync
+    # sends an autopilot-tick when a slot is due or a chat shift is waiting, so
+    # it catches up any slot GitHub skips; hourly runs here only cost Actions
+    # minutes (about 16 wasted runs a day, Oct 2026).
+    - cron: '7 1,4,7,10,13,16,19,22 * * *'
   repository_dispatch:
     types: [autopilot-tick]
   workflow_dispatch:
