@@ -36,6 +36,7 @@ import { dayNightFeatures, subsolarPoint } from '@/lib/daynight'
 import { MAP_REGIONS } from '@/lib/map-regions'
 import {
   SEVERITY_COLOR, SEVERITY_BG, SEVERITY_RANK, CLUSTER_COLOR_EXPR, SIGNAL_RADIUS_EXPR, FONT_BOLD,
+  CLUSTER_RING_EXPR, CLUSTER_HALO_EXPR, CLUSTER_TEXT_EXPR,
   BASEMAP_MODES, BASEMAP_LABEL, ATMOSPHERE,
   loadBaseStyle, baseLayerIds, addImageryLayers, applyBasemap, toBasemapMode,
   type BasemapMode,
@@ -46,6 +47,7 @@ import {
   parseWKBPoint, extractLatLng, prependSignal, MAX_SIGNALS,
   escapeHtml, safeHttpUrl, safeCssColor,
 } from '@/lib/map-utils'
+import { declutter, type ScreenPoint } from '@/lib/map-declutter'
 
 const API_URL      = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 const WS_URL       = process.env.NEXT_PUBLIC_WS_URL  ?? API_URL.replace(/^http/, 'ws')
@@ -210,6 +212,28 @@ function worldZoom(width: number, height: number, projection: 'globe' | 'mercato
     ? Math.log2((Math.min(w, h) * 0.85 * Math.PI) / 512)
     : Math.log2(w / 512)
   return Math.max(0.6, Math.min(3, z))
+}
+
+/**
+ * Where a place is drawn on the map's canvas, or null when it isn't (the far
+ * side of the globe, or off screen), for the de-cluttering of cluster rings
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function screenPlacer(map: any): (lngLat: [number, number]) => ScreenPoint | null {
+  const canvas = map.getCanvas?.()
+  const w = canvas?.clientWidth ?? 0
+  const h = canvas?.clientHeight ?? 0
+  const transform = map.transform
+  return ([lng, lat]) => {
+    try {
+      if (transform?.isLocationOccluded?.({ lng, lat })) return null
+      const p = map.project([lng, lat])
+      if (!(p.x > -40 && p.y > -40 && p.x < w + 40 && p.y < h + 40)) return null
+      return { x: p.x, y: p.y }
+    } catch {
+      return null
+    }
+  }
 }
 
 // ── MapView (inner — uses useSearchParams) ────────────────────────────────────
@@ -638,7 +662,8 @@ function MapView() {
       const b = map.getBounds()
       bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]
     }
-    const clusters = sc.getClusters(bbox, zoom)
+    // Rings that would sit on each other on screen join the bigger one (lib/map-declutter.ts)
+    const clusters = declutter(sc.getClusters(bbox, zoom), screenPlacer(map), zoomNow)
     src.setData({ type: 'FeatureCollection', features: clusters })
     hasCriticalRef.current = clusters.some(f => {
       const props = f.properties as { cluster?: boolean; severity?: string }
@@ -1068,7 +1093,7 @@ function MapView() {
           filter: ['has', 'point_count'],
           paint: {
             'circle-color': CLUSTER_COLOR_EXPR,
-            'circle-radius': ['interpolate', ['linear'], ['get', 'point_count'], 2, 17, 10, 23, 50, 31, 200, 40],
+            'circle-radius': CLUSTER_HALO_EXPR,
             'circle-opacity': 0.16,
             'circle-blur': 0.75,
           },
@@ -1079,7 +1104,8 @@ function MapView() {
           filter: ['has', 'point_count'],
           paint: {
             'circle-color': '#0b1220',
-            'circle-radius': ['interpolate', ['linear'], ['get', 'point_count'], 2, 11, 10, 14, 50, 19, 200, 25],
+            // Smaller on the zoomed-out globe; the de-cluttering reads the same sizes
+            'circle-radius': CLUSTER_RING_EXPR,
             'circle-opacity': 0.9,
             'circle-stroke-color': CLUSTER_COLOR_EXPR,
             'circle-stroke-width': 2,
@@ -1093,7 +1119,7 @@ function MapView() {
           layout: {
             'text-field': '{point_count_abbreviated}',
             'text-font':  FONT_BOLD,
-            'text-size':  ['interpolate', ['linear'], ['get', 'point_count'], 2, 10.5, 200, 13],
+            'text-size':  CLUSTER_TEXT_EXPR,
             'text-allow-overlap': true,
           },
           paint: { 'text-color': '#eef3fb' },
@@ -1218,8 +1244,17 @@ function MapView() {
 
           const clusterId    = feat.properties.cluster_id as number
           const coords       = feat.geometry.coordinates as [number, number]
-          const expansionZ   = sc.getClusterExpansionZoom(clusterId)
           const currentZ     = map.getZoom()
+
+          // Rings joined on screen (lib/map-declutter.ts): zoom in until they part
+          if (feat.properties.joined) {
+            const hasId = clusterId != null && Number.isFinite(Number(clusterId))
+            const splitZ = hasId ? sc.getClusterExpansionZoom(Number(clusterId)) : 0
+            map.flyTo({ center: coords, zoom: Math.min(map.getMaxZoom(), Math.max(currentZ + 1.5, splitZ)), duration: 600 })
+            return
+          }
+
+          const expansionZ   = sc.getClusterExpansionZoom(clusterId)
 
           // If we can meaningfully zoom in — do it
           if (expansionZ > currentZ + 0.3) {

@@ -75,13 +75,74 @@ export const CLUSTER_COLOR_EXPR: Json = [
   SEVERITY_COLOR.info,
 ]
 
+// ─── Sizes ───────────────────────────────────────────────────────────────────
+// The map draws dots and cluster rings from these tables, and the de-cluttering
+// (lib/map-declutter.ts) reads the same ones to know how much room each takes.
+
+type Stops = Array<[number, number]>
+
+/** MapLibre's linear 'interpolate' through [x, y] stops, held flat past the ends */
+export function interpolateStops(stops: Stops, x: number): number {
+  if (stops.length === 0) return 0
+  if (!(x > stops[0]![0])) return stops[0]![1]
+  for (let i = 1; i < stops.length; i++) {
+    const [x1, y1] = stops[i]!
+    if (x <= x1) {
+      const [x0, y0] = stops[i - 1]!
+      return y0 + ((y1 - y0) * (x - x0)) / (x1 - x0)
+    }
+  }
+  return stops[stops.length - 1]![1]
+}
+
+/** A signal's dot radius (px) by severity, at zoom stops */
+const DOT_RADIUS: Array<[zoom: number, radius: Record<'critical' | 'high' | 'medium' | 'other', number>]> = [
+  [1,  { critical: 5,   high: 4.2, medium: 3.4, other: 2.8 }],
+  [5,  { critical: 7.5, high: 6.5, medium: 5.5, other: 4.6 }],
+  [10, { critical: 10,  high: 9,   medium: 8,   other: 7 }],
+]
+
+const dotKey = (severity: unknown): 'critical' | 'high' | 'medium' | 'other' =>
+  severity === 'critical' || severity === 'high' || severity === 'medium' ? severity : 'other'
+
 /** MapLibre expression: a signal's dot size by severity, growing with zoom */
 export const SIGNAL_RADIUS_EXPR: Json = [
   'interpolate', ['linear'], ['zoom'],
-  1,  ['match', ['get', 'severity'], 'critical', 5,  'high', 4.2, 'medium', 3.4, 2.8],
-  5,  ['match', ['get', 'severity'], 'critical', 7.5, 'high', 6.5, 'medium', 5.5, 4.6],
-  10, ['match', ['get', 'severity'], 'critical', 10, 'high', 9,   'medium', 8,   7],
+  ...DOT_RADIUS.flatMap(([zoom, r]) => [zoom, ['match', ['get', 'severity'], 'critical', r.critical, 'high', r.high, 'medium', r.medium, r.other]]),
 ]
+
+/** A signal's dot radius in px, as SIGNAL_RADIUS_EXPR draws it */
+export function dotRadius(severity: unknown, zoom: number): number {
+  const key = dotKey(severity)
+  return interpolateStops(DOT_RADIUS.map(([z, r]) => [z, r[key]] as [number, number]), zoom)
+}
+
+/**
+ * Cluster sizes by member count: the ring, its soft halo and the number. They
+ * are smaller on the zoomed-out globe (a phone's whole world is ~300 px wide,
+ * and full-size rings covered most of it) and full size from zoom 3.5.
+ */
+const CLUSTER_SIZE: Array<[zoom: number, sizes: { ring: Stops; halo: Stops; text: Stops }]> = [
+  [1,   { ring: [[2, 8], [10, 10], [50, 13.5], [200, 17]], halo: [[2, 12], [10, 16], [50, 22], [200, 28]], text: [[2, 9.5], [200, 11.5]] }],
+  [3.5, { ring: [[2, 11], [10, 14], [50, 19], [200, 25]],  halo: [[2, 17], [10, 23], [50, 31], [200, 40]], text: [[2, 10.5], [200, 13]] }],
+]
+
+function clusterExpr(part: 'ring' | 'halo' | 'text'): Json {
+  return [
+    'interpolate', ['linear'], ['zoom'],
+    ...CLUSTER_SIZE.flatMap(([zoom, sizes]) => [zoom, ['interpolate', ['linear'], ['get', 'point_count'], ...sizes[part].flat()]]),
+  ]
+}
+
+/** MapLibre expressions for a cluster's ring radius, halo radius and number size */
+export const CLUSTER_RING_EXPR: Json = clusterExpr('ring')
+export const CLUSTER_HALO_EXPR: Json = clusterExpr('halo')
+export const CLUSTER_TEXT_EXPR: Json = clusterExpr('text')
+
+/** A cluster ring's radius in px for `count` signals, as CLUSTER_RING_EXPR draws it */
+export function ringRadius(count: number, zoom: number): number {
+  return interpolateStops(CLUSTER_SIZE.map(([z, sizes]) => [z, interpolateStops(sizes.ring, count)] as [number, number]), zoom)
+}
 
 // ─── Basemap ─────────────────────────────────────────────────────────────────
 
