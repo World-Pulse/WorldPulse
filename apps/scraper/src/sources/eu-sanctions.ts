@@ -1,14 +1,15 @@
 /**
  * EU CFSP Sanctions Signal Source
  *
- * Polls the European Union Consolidated Financial Sanctions List (CFSP)
- * via the EU Sanctions Map API for newly listed/updated sanctioned entities.
- * Creates WorldPulse signals for EU sanctions events affecting global
- * trade, diplomacy, and security.
+ * Reports each amendment of an EU sanctions regime (new listings, extensions,
+ * changed measures), read from the EU Sanctions Map: every regime carries the
+ * date of its latest amendment (`amendment`, unix seconds). A regime amended in
+ * the last 7 days becomes one signal per amendment.
  *
- * API: https://www.sanctionsmap.eu/api/v1/regime
- * Backup: https://webgate.ec.europa.eu/fsd/fsf/public/files/xmlFullSanctionsList_1_1/content
- * Free, no API key required. European Commission public data.
+ * API: https://www.sanctionsmap.eu/api/v1/regime (public, no key; ~55 regimes)
+ * Until Oct 2026 this read `programme_name`/`programme` (not fields of this API;
+ * `programme` is a list), so every poll failed, and it would have re-posted the
+ * same regimes as news every 14 days rather than reporting changes.
  *
  * Reliability: 0.96 (EU Council is the authoritative source for EU sanctions;
  *   CFSP designations are legally binding across all EU member states)
@@ -29,9 +30,9 @@ import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilie
 const log = rootLogger.child({ module: 'eu-sanctions-source' })
 
 const EU_SANCTIONS_URL = 'https://www.sanctionsmap.eu/api/v1/regime?lang=en'
-const EU_SANCTIONS_FALLBACK_URL = 'https://data.europa.eu/api/hub/search/datasets/consolidated-list-of-persons-groups-and-entities-subject-to-eu-financial-sanctions'
 const RELIABILITY = 0.96
-const DEDUP_TTL_S = 14 * 86_400 // 14-day dedup (sanctions are persistent)
+const DEDUP_TTL_S = 30 * 86_400 // one signal per amendment
+const MAX_AGE_DAYS = 7
 const POLL_INTERVAL_MS = Number(process.env.EU_SANCTIONS_INTERVAL_MS) || 60 * 60_000 // 60 min (EU updates less frequently)
 
 // ─── SEVERITY MAPPING ───────────────────────────────────────────────────────
@@ -107,19 +108,58 @@ export function inferEuSanctionsLocation(
 
 // ─── POLLER ─────────────────────────────────────────────────────────────────
 
+/** A regime as the EU Sanctions Map API returns it (only the fields used) */
 interface EuRegime {
-  id?: number
-  programme?: string
-  programme_name?: string
-  url?: string
-  description?: string
-  adoption_date?: string
-  last_updated?: string
+  id?: unknown
+  specification?: unknown
+  notes?: unknown
+  amendment?: unknown
+  country?: { data?: unknown } | null
 }
 
-async function fetchEuSanctions(): Promise<EuRegime[]> {
+export interface EuAmendment {
+  id: number
+  /** e.g. "Restrictive measures in view of the situation in Nicaragua" */
+  name: string
+  /** The regime's country (or countries), "" for thematic regimes */
+  country: string
+  amendedAt: Date
+  /** Unix seconds as the API gives it, part of the dedup key */
+  amendment: number
+  notes: string
+  url: string
+}
+
+/** Regimes amended in the last `days` days, newest first */
+export function recentEuAmendments(regimes: unknown, now: number = Date.now(), days: number = MAX_AGE_DAYS): EuAmendment[] {
+  if (!Array.isArray(regimes)) return []
+  const cutoff = now - days * 86_400_000
+  const out: EuAmendment[] = []
+  for (const r of regimes as EuRegime[]) {
+    if (!r || typeof r.id !== 'number' || typeof r.specification !== 'string' || !r.specification.trim()) continue
+    if (typeof r.amendment !== 'number') continue
+    const at = r.amendment * 1000
+    if (at <= cutoff || at > now + 86_400_000) continue
+    const data = r.country?.data
+    const countries = (Array.isArray(data) ? data : data ? [data] : [])
+      .map(c => (c && typeof c === 'object' && typeof (c as { title?: unknown }).title === 'string') ? (c as { title: string }).title : '')
+      .filter(Boolean)
+    out.push({
+      id: r.id,
+      name: r.specification.replace(/\s+/g, ' ').trim(),
+      country: countries.join(', '),
+      amendedAt: new Date(at),
+      amendment: r.amendment,
+      notes: typeof r.notes === 'string' ? r.notes.replace(/\s+/g, ' ').trim() : '',
+      url: `https://www.sanctionsmap.eu/#/main/details/${r.id}`,
+    })
+  }
+  return out.sort((a, b) => b.amendedAt.getTime() - a.amendedAt.getTime())
+}
+
+async function fetchEuRegimes(): Promise<unknown> {
   try {
-    const data = await fetchWithResilience(
+    const body = await fetchWithResilience(
       'eu-sanctions',
       'EU Sanctions',
       EU_SANCTIONS_URL,
@@ -129,14 +169,13 @@ async function fetchEuSanctions(): Promise<EuRegime[]> {
             Accept: 'application/json',
             'User-Agent': 'WorldPulse-OSINT/1.0 (open-source intelligence aggregator)',
           },
-          signal: AbortSignal.timeout(30_000),
+          signal: AbortSignal.timeout(60_000), // ~400 KB
         })
         if (!res.ok) throw Object.assign(new Error(`EU Sanctions: HTTP ${res.status}`), { statusCode: res.status })
         return res.json() as Promise<unknown>
       },
     )
-    // API may return { data: [...] } or [...] depending on version
-    return (Array.isArray(data) ? data : ((data as Record<string, unknown>)?.['data'] ?? (data as Record<string, unknown>)?.['regimes'] ?? [])) as EuRegime[]
+    return Array.isArray(body) ? body : (body as { data?: unknown } | null)?.data
   } catch (err) {
     if (err instanceof CircuitOpenError) return []
     log.error({ err }, 'Failed to fetch EU sanctions data')
@@ -150,45 +189,35 @@ async function pollEuSanctions(
   producer?: Producer | null,
 ): Promise<void> {
   try {
-    log.debug('Polling EU CFSP sanctions regimes…')
+    log.debug('Polling EU sanctions regimes for amendments…')
 
-    const regimes = await fetchEuSanctions()
-    if (regimes.length === 0) {
-      log.debug('No EU sanctions regimes returned')
-      return
-    }
-
+    const amendments = recentEuAmendments(await fetchEuRegimes())
     let inserted = 0
 
-    for (const regime of regimes.slice(0, 20)) {
-      const name = regime.programme_name || regime.programme || 'Unknown Regime'
-      const desc = regime.description || ''
-      const regimeId = regime.id ?? name.slice(0, 50)
-      const dedupKey = `osint:eu-sanctions:${regimeId}`
+    for (const a of amendments) {
+      const dedupKey = `osint:eu-sanctions:${a.id}:${a.amendment}`
+      if (await redis.get(dedupKey)) continue
 
-      // Skip if recently seen
-      const seen = await redis.get(dedupKey)
-      if (seen) continue
-
-      const severity = euSanctionsSeverity(name, desc)
-      const { lat, lon } = inferEuSanctionsLocation(name)
+      const severity = euSanctionsSeverity(a.name, a.notes)
+      const { lat, lon } = inferEuSanctionsLocation(`${a.name} ${a.country}`)
+      const day = a.amendedAt.toLocaleDateString('en-GB', { timeZone: 'Europe/Brussels', day: 'numeric', month: 'long', year: 'numeric' })
 
       const signalData = {
-        title: `EU Sanctions: ${name}`,
-        summary: desc.slice(0, 500) || `European Union CFSP sanctions regime: ${name}`,
-        original_urls: [regime.url || `https://www.sanctionsmap.eu/#/main/details/${regimeId}`],
+        title: `EU sanctions amended: ${a.name}`.slice(0, 300),
+        summary: `The EU amended its sanctions regime "${a.name}"${a.country ? ` (${a.country})` : ''} on ${day}. ${a.notes}`.trim().slice(0, 800),
+        original_urls: [a.url],
         source_ids: [],
         category: 'security',
         severity,
         status: 'pending',
         reliability_score: RELIABILITY,
         location: db.raw('ST_MakePoint(?, ?)', [lon, lat]),
-        location_name: name,
+        location_name: a.country || 'European Union',
         country_code: null,
         region: null,
         tags: ['osint', 'sanctions', 'eu', 'security'],
         language: 'en',
-        event_time: new Date(),
+        event_time: a.amendedAt,
         source_count: 1,
       }
 
@@ -205,11 +234,11 @@ async function pollEuSanctions(
         await redis.set(dedupKey, '1', 'EX', DEDUP_TTL_S)
         inserted++
       } catch (err) {
-        log.error({ err, regimeId }, 'Failed to insert EU sanctions signal')
+        log.error({ err, regimeId: a.id }, 'Failed to insert EU sanctions signal')
       }
     }
 
-    log.info({ inserted, total: regimes.length }, 'EU CFSP sanctions poll complete')
+    log.info({ inserted, amended: amendments.length }, 'EU sanctions poll complete')
   } catch (err) {
     log.error({ err }, 'EU sanctions poll failed')
   }

@@ -75,7 +75,6 @@ import { startNwsAlertsPoller } from './nws-alerts'
 import { startOtxPoller, otxEnabled } from './otx-threats'
 import { startGvpVolcanoPoller } from './gvp-volcano'
 import { startEuSanctionsPoller } from './eu-sanctions'
-import { startAviationIncidentPoller } from './aviation-incidents'
 import { startTsunamiWarningPoller } from './tsunami-warnings'
 import { startInterpolNoticesPoller } from './interpol-notices'
 import { startComtradePoller } from './comtrade'
@@ -237,12 +236,6 @@ export function startOsintPollers(
   }
 
   try {
-    cleanups.push(startAviationIncidentPoller(db, redis, producer))
-  } catch (err) {
-    logger.error({ err }, 'Failed to start Aviation Safety Incident poller')
-  }
-
-  try {
     cleanups.push(startTsunamiWarningPoller(db, redis, producer))
   } catch (err) {
     logger.error({ err }, 'Failed to start Tsunami Warning poller')
@@ -266,6 +259,8 @@ export function startOsintPollers(
   //   unhcr-displacement  api.unhcr.org has no /situations endpoint (HTTP 404)
   //   uspto-patents       PatentsView's API paused on March 20, 2026 while it
   //                       moves to the USPTO Open Data Portal (needs a key)
+  //   aviation-incidents  aviation-safety.net answers every feed request with a
+  //                       Cloudflare browser check (HTTP 403)
 
   // ── Global News RSS (25 international outlets) ──────────────────────────
   try {
@@ -301,7 +296,6 @@ export function startOsintPollers(
     ['nws-alerts',         'NWS Severe Weather',             'nws-alerts'],
     ['gvp-volcano',        'GVP/USGS Volcano',               'gvp-volcano'],
     ['eu-sanctions',       'EU CFSP Sanctions',              'eu-sanctions'],
-    ['aviation-incidents', 'Aviation Safety Incidents',      'aviation-incidents'],
     ['tsunami-warnings',   'NOAA Tsunami Warnings',          'tsunami-warnings'],
     ['interpol-notices',   'Interpol Red Notices',           'interpol-notices'],
     ['comtrade',           'UN Comtrade Commodity Flows',    'comtrade'],

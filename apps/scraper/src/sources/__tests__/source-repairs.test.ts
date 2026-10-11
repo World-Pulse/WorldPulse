@@ -14,6 +14,7 @@ import { parseOfacRecentActions, sanctionsSeverity } from '../ofac-sanctions'
 import { volcanoLevel, volcanoLevelChanges, describeLevelChange, type ElevatedVolcano } from '../gvp-volcano'
 import { fetchUrl, noteFeedFailure, feedPaused, clearFeedFailures, detectNewsSeverity, detectNewsCategory } from '../news-rss'
 import { otxEnabled } from '../otx-threats'
+import { recentEuAmendments } from '../eu-sanctions'
 import { iso3Centroid } from '../../pipeline/country-centroids'
 
 // ─── ReliefWeb ──────────────────────────────────────────────────────────────
@@ -319,6 +320,45 @@ describe('news headline keywords', () => {
     expect(detectNewsCategory('NASA astronauts return from the space station', '', 'technology')).toBe('space')
     expect(detectNewsCategory('Former president Moon Jae-in meets envoy', '', 'geopolitics')).toBe('geopolitics')
     expect(detectNewsCategory('Mars Inc. raises chocolate prices', '', 'economy')).toBe('economy')
+  })
+})
+
+// ─── EU sanctions ───────────────────────────────────────────────────────────
+
+describe('recentEuAmendments', () => {
+  const now = Date.UTC(2026, 9, 11, 2, 0) // Oct 11, 2026 02:00 UTC
+  const regimes = [
+    { id: 48, specification: 'Restrictive measures in view of the situation in Nicaragua', notes: 'Adopted  in 2019.',
+      amendment: Date.UTC(2026, 9, 8, 22) / 1000, country: { data: { code: 'NI', title: 'Nicaragua' } }, programme: [{}] },
+    { id: 56, specification: "Restrictive measures in view of Iran's military support to Russia's war of aggression against Ukraine",
+      amendment: Date.UTC(2026, 9, 7, 22) / 1000, country: { data: { code: 'IR', title: 'Iran' } } },
+    { id: 1, specification: 'Restrictive measures imposed with respect to the Taliban',
+      amendment: Date.UTC(2024, 8, 12, 22) / 1000, country: { data: { code: 'AF', title: 'Afghanistan' } } },
+    { id: 46, specification: 'Restrictive measures against the proliferation and use of chemical weapons',
+      amendment: Date.UTC(2026, 9, 5, 22) / 1000, country: { data: [] } },
+    { id: 'x', specification: 'bad id', amendment: Date.UTC(2026, 9, 9) / 1000 },
+    { id: 99, specification: 'No amendment date' },
+  ]
+
+  it('keeps only regimes amended in the last 7 days, newest first', () => {
+    expect(recentEuAmendments(regimes, now).map(a => a.id)).toEqual([48, 56, 46])
+  })
+
+  it('reads the name, country, date, notes and the map link', () => {
+    const [nicaragua] = recentEuAmendments(regimes, now)
+    expect(nicaragua).toMatchObject({
+      name: 'Restrictive measures in view of the situation in Nicaragua',
+      country: 'Nicaragua',
+      notes: 'Adopted in 2019.',
+      url: 'https://www.sanctionsmap.eu/#/main/details/48',
+    })
+    expect(nicaragua.amendedAt.toISOString()).toBe('2026-10-08T22:00:00.000Z')
+  })
+
+  it('leaves the country empty for thematic regimes and survives junk', () => {
+    expect(recentEuAmendments(regimes, now).find(a => a.id === 46)?.country).toBe('')
+    expect(recentEuAmendments(null, now)).toEqual([])
+    expect(recentEuAmendments({ data: [] }, now)).toEqual([])
   })
 })
 
