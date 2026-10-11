@@ -15,6 +15,8 @@ import {
   decodeEntities,
   parseFeedItems,
   newsRedisKey,
+  isStaleItem,
+  MAX_ITEM_AGE_MS,
 } from '../news-rss'
 
 // ─── REGISTRY INTEGRITY ───────────────────────────────────────────────────────
@@ -409,5 +411,33 @@ describe('news text fixes', () => {
   it('decodes HTML entities but never produces angle brackets', () => {
     expect(decodeEntities('Abbas&#x27;s plan &amp; more &quot;x&quot;')).toBe('Abbas\'s plan & more "x"')
     expect(decodeEntities('&lt;b&gt; &#60;i&#62;')).toBe('&lt;b&gt; &#60;i&#62;')
+  })
+})
+
+// ─── OLD ITEMS ────────────────────────────────────────────────────────────────
+
+describe('isStaleItem', () => {
+  const now = Date.parse('2026-10-11T03:20:00Z')
+
+  it('skips stories published years ago (a feed posting its backlog)', () => {
+    expect(isStaleItem('Fri, 10 Dec 2021 18:58:28 GMT', now)).toBe(true)  // CNN world, Oct 11
+    expect(isStaleItem('2017-03-30T08:00:00Z', now)).toBe(true)           // Xinhua
+  })
+
+  it('keeps today\'s and yesterday\'s stories', () => {
+    expect(isStaleItem('Sat, 11 Oct 2026 02:00:00 GMT', now)).toBe(false)
+    expect(isStaleItem('Fri, 10 Oct 2026 01:00:00 +0000', now)).toBe(false)
+  })
+
+  it('draws the line at three days', () => {
+    expect(MAX_ITEM_AGE_MS).toBe(3 * 24 * 3_600_000)
+    expect(isStaleItem(new Date(now - MAX_ITEM_AGE_MS + 60_000).toUTCString(), now)).toBe(false)
+    expect(isStaleItem(new Date(now - MAX_ITEM_AGE_MS - 60_000).toUTCString(), now)).toBe(true)
+  })
+
+  it('keeps items without a readable date (they get the time we first saw them)', () => {
+    expect(isStaleItem('', now)).toBe(false)
+    expect(isStaleItem(undefined, now)).toBe(false)
+    expect(isStaleItem('not a date', now)).toBe(false)
   })
 })

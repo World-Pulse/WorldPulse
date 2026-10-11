@@ -69,13 +69,32 @@ import { insertAndCorrelate } from '../pipeline/insert-signal'
 
 const log = rootLogger.child({ module: 'news-rss-source' })
 
-const DEDUP_TTL_S   = 24 * 3_600          // 24 hours
+// Longer than MAX_ITEM_AGE_MS, so an item is never processed twice while it's
+// young enough to be news. With 24 hours, an item still in its feed a day later
+// could come back as a new signal (the title check in insert-signal.ts only
+// looks back 6 hours).
+const DEDUP_TTL_S   = 4 * 24 * 3_600      // 4 days
 const POLL_INTERVAL = 30 * 60_000         // 30 minutes between full cycles
 const SOURCE_DELAY  = 5_000               // 5 s stagger between sources
 const MAX_ITEMS     = 20                  // max signals per source per poll
 const MAX_FEED_BYTES     = 5 * 1024 * 1024 // a feed bigger than this isn't a feed
 const FAILS_BEFORE_PAUSE = 3               // failed polls in a row before a feed is paused
 const PAUSE_S            = 6 * 3_600       // how long a failing feed is paused
+
+/**
+ * Feed items published longer ago than this aren't news. Without the limit, a
+ * feed that starts working again posts its whole backlog as new signals: on
+ * Oct 11, 2026 CNN's world feed gave 2021–2023 stories, Xinhua's 2017 ones and
+ * WHO's 2024 ones, all shown as fresh.
+ */
+export const MAX_ITEM_AGE_MS = 3 * 24 * 3_600_000
+
+/** Whether a feed item's publish date is older than MAX_ITEM_AGE_MS (no or unreadable date: no) */
+export function isStaleItem(pubDate: string | null | undefined, now = Date.now()): boolean {
+  if (!pubDate) return false
+  const t = new Date(pubDate).getTime()
+  return Number.isFinite(t) && now - t > MAX_ITEM_AGE_MS
+}
 
 // ─── SOURCE REGISTRY ─────────────────────────────────────────────────────────
 
@@ -2389,12 +2408,18 @@ async function processItem(
   producer: Producer | null | undefined,
   source:   NewsSource,
   item:     FeedItem,
-): Promise<boolean> {
-  if (!item.title && !item.link) return false
+): Promise<'created' | 'stale' | 'none'> {
+  if (!item.title && !item.link) return 'none'
 
   const key  = newsRedisKey(source.id, item.link || item.title)
   const seen = await redis.get(key)
-  if (seen) return false
+  if (seen) return 'none'
+
+  // An old story the feed still lists (or a backlog): remember it, don't post it
+  if (isStaleItem(item.pubDate)) {
+    await redis.setex(key, DEDUP_TTL_S, '1')
+    return 'stale'
+  }
 
   const title       = decodeEntities(item.title).slice(0, 500) || `${source.name} — news item`
   const severity    = detectNewsSeverity(item.title, item.description)
@@ -2457,11 +2482,11 @@ async function processItem(
       }).catch(() => {})
     }
 
-    return true
+    return 'created'
   } catch (err) {
     // Expected for dedup constraint violations
     log.debug({ err, sourceId: source.id, title }, 'news-rss signal skipped (likely duplicate)')
-    return false
+    return 'none'
   }
 }
 
@@ -2548,9 +2573,15 @@ async function pollSource(
   await clearFeedFailures(redis, source.id)
 
   let created = 0
+  let stale = 0
   for (const item of items) {
-    const ok = await processItem(db, redis, producer, source, item)
-    if (ok) created++
+    const result = await processItem(db, redis, producer, source, item)
+    if (result === 'created') created++
+    else if (result === 'stale') stale++
+  }
+  if (stale > 0) {
+    // Logged once per item (they're remembered): a feed that only lists old stories shows up here
+    sourceLog.info({ stale, total: items.length }, 'News feed items skipped as old')
   }
 
   if (created > 0) {

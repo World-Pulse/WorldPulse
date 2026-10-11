@@ -23,7 +23,7 @@ vi.mock('../../lib/postgres', () => {
   }
 })
 
-import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications } from '../repairs'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems } from '../repairs'
 import { EVENT_TEMPLATE_SQL } from '../event-titles'
 
 describe('fixLocalhostUploadUrls', () => {
@@ -94,5 +94,20 @@ describe('undoCopyVerifications', () => {
     h.rows = []
     expect(await undoCopyVerifications()).toBe(0)
     expect(h.updates).toEqual([])
+  })
+})
+
+describe('retractStaleFeedItems', () => {
+  beforeEach(() => { h.raws.length = 0 })
+
+  it('takes recent news-feed signals about long-published stories out of the feed, findably', async () => {
+    expect(await retractStaleFeedItems()).toBe(3)
+    const [{ sql }] = h.raws
+    expect(sql).toMatch(/SET status = 'retracted'/)
+    expect(sql).toMatch(/array_append\(tags, 'stale-feed-item'\)/)
+    expect(sql).toMatch(/tags @> ARRAY\['news', 'rss'\]/)
+    expect(sql).toMatch(/status = 'pending'/) // verified stories are left alone; a re-run changes nothing
+    expect(sql).toMatch(/event_time < created_at - INTERVAL '3 days'/)
+    expect(sql).toMatch(/created_at > NOW\(\) - INTERVAL '3 days'/)
   })
 })

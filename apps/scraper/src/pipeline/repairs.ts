@@ -88,3 +88,26 @@ export async function undoCopyVerifications(): Promise<number> {
   if (ids.length === 0) return 0
   return db('signals').whereIn('id', ids).update({ status: 'pending', verified_at: null, source_count: 1 })
 }
+
+/**
+ * News-feed signals from the last 3 days about stories published more than
+ * 3 days before we saw them: backlogs of feeds that started working again on
+ * Oct 10–11, 2026 (CNN world from 2021–2023, Xinhua from 2017, WHO from 2024,
+ * …), shown as fresh news. news-rss now skips such items (MAX_ITEM_AGE_MS).
+ * They become 'retracted' (feeds show verified and pending only) and get the
+ * tag stale-feed-item, so they can be found and put back. Only pending rows
+ * are touched, so a later start changes nothing.
+ */
+export async function retractStaleFeedItems(): Promise<number> {
+  const result = await db.raw(
+    `UPDATE signals
+        SET status = 'retracted',
+            tags = array_append(tags, 'stale-feed-item')
+      WHERE tags @> ARRAY['news', 'rss']::text[]
+        AND status = 'pending'
+        AND created_at > NOW() - INTERVAL '3 days'
+        AND event_time IS NOT NULL
+        AND event_time < created_at - INTERVAL '3 days'`,
+  )
+  return Number((result as { rowCount?: number })?.rowCount ?? 0)
+}

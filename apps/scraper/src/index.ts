@@ -36,7 +36,7 @@ import { runDelayedRescore } from './pipeline/rescore'
 import { signalsHavePublishedAt, publishedAtFor, backfillRecentPublishedAt, sourceKey, hostOf } from './pipeline/signal-columns'
 import { independentReports, isCopyOf } from './pipeline/independence'
 import { ensureStoryIdColumn } from './pipeline/stories'
-import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications } from './pipeline/repairs'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems } from './pipeline/repairs'
 import { batchValidateGeo } from './pipeline/geo-validator'
 import { recomputeSourceReputation } from './pipeline/source-reputation'
 import { startKafkaLagMonitor } from './lib/kafka-lag-monitor'
@@ -159,6 +159,9 @@ async function bootstrap() {
   undoCopyVerifications()
     .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: stories verified only by copies of one article back to pending') })
     .catch(err => logger.warn({ err }, 'Copy-verification repair failed (non-fatal)'))
+  retractStaleFeedItems()
+    .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: old stories from feed backlogs taken out of the feed') })
+    .catch(err => logger.warn({ err }, 'Stale feed item repair failed (non-fatal)'))
 
   // Start main scrape loop (works with or without Kafka)
   await scrapeAll()
