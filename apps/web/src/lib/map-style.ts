@@ -111,6 +111,12 @@ export const SIGNAL_RADIUS_EXPR: Json = [
   ...DOT_RADIUS.flatMap(([zoom, r]) => [zoom, ['match', ['get', 'severity'], 'critical', r.critical, 'high', r.high, 'medium', r.medium, r.other]]),
 ]
 
+/** From this zoom a single signal is drawn as an icon of its kind (lib/map-signal-icons.ts) */
+export const SIGNAL_ICON_ZOOM = 4.5
+/** The icon's scale (26 px drawn at 0.85) and so its radius on screen, px */
+export const SIGNAL_ICON_SCALE = 0.85
+export const SIGNAL_ICON_RADIUS = 11
+
 /** A signal's dot radius in px, as SIGNAL_RADIUS_EXPR draws it */
 export function dotRadius(severity: unknown, zoom: number): number {
   const key = dotKey(severity)

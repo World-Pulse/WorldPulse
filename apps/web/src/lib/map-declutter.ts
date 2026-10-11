@@ -13,7 +13,7 @@
  * off screen) are left as they are. Zooming in pulls them apart again.
  */
 
-import { SEVERITY_RANK, ringRadius, dotRadius } from './map-style'
+import { SEVERITY_RANK, ringRadius, dotRadius, SIGNAL_ICON_ZOOM, SIGNAL_ICON_RADIUS } from './map-style'
 
 export interface ScreenPoint { x: number; y: number }
 
@@ -50,7 +50,9 @@ interface Item {
 }
 
 function radiusOf(item: Item, zoom: number): number {
-  return item.cluster ? ringRadius(item.count, zoom) + RING_STROKE : dotRadius(item.severity, zoom) + DOT_STROKE
+  if (item.cluster) return ringRadius(item.count, zoom) + RING_STROKE
+  // Zoomed in, a single signal is an icon of its kind, not a dot
+  return zoom >= SIGNAL_ICON_ZOOM ? SIGNAL_ICON_RADIUS : dotRadius(item.severity, zoom) + DOT_STROKE
 }
 
 const bigger = (a: Item, b: Item): number => b.count - a.count || b.sev - a.sev || a.index - b.index

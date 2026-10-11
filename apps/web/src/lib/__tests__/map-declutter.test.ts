@@ -128,4 +128,10 @@ describe('declutter', () => {
     expect(declutter([cluster(0, 0, 50), cluster(31, 0, 50)], onScreen, 1)).toHaveLength(2)
     expect(declutter([cluster(0, 0, 50), cluster(31, 0, 50)], onScreen, Z)).toHaveLength(1)
   })
+
+  it('gives single signals the icon\'s room once they are icons (zoom 4.5 and in)', () => {
+    // two dots 14 px apart: fine as dots at zoom 3.5, overlapping as 22 px icons at zoom 6
+    expect(declutter([dot(0, 0), dot(14, 0)], onScreen, Z)).toHaveLength(2)
+    expect(declutter([dot(0, 0), dot(14, 0)], onScreen, 6)).toHaveLength(1)
+  })
 })

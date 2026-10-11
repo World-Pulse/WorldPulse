@@ -37,6 +37,7 @@ import { MAP_REGIONS } from '@/lib/map-regions'
 import {
   SEVERITY_COLOR, SEVERITY_BG, SEVERITY_RANK, CLUSTER_COLOR_EXPR, SIGNAL_RADIUS_EXPR, FONT_BOLD,
   CLUSTER_RING_EXPR, CLUSTER_HALO_EXPR, CLUSTER_TEXT_EXPR,
+  SIGNAL_ICON_ZOOM, SIGNAL_ICON_SCALE,
   BASEMAP_MODES, BASEMAP_LABEL, ATMOSPHERE,
   loadBaseStyle, baseLayerIds, addImageryLayers, applyBasemap, toBasemapMode,
   type BasemapMode,
@@ -49,6 +50,7 @@ import {
 } from '@/lib/map-utils'
 import { declutter, type ScreenPoint } from '@/lib/map-declutter'
 import { displaySummary } from '@/lib/signal-text'
+import { categoryGlyph, parseSignalIconId, drawSignalIcon, SIGNAL_ICON_EXPR, SIGNAL_ICON_RATIO } from '@/lib/map-signal-icons'
 
 const API_URL      = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 const WS_URL       = process.env.NEXT_PUBLIC_WS_URL  ?? API_URL.replace(/^http/, 'ws')
@@ -89,6 +91,8 @@ interface SignalProps {
   created_at: string
   original_urls: string  // always JSON-stringified array
   color: string
+  /** The kind-of-event icon's glyph (lib/map-signal-icons.ts) */
+  glyph: string
 }
 
 /** What each cluster carries: its most severe signal's rank and how many are verified */
@@ -197,6 +201,7 @@ function toFeatures(signals: MapSignal[]): Supercluster.PointFeature<SignalProps
         created_at:        s.created_at ?? '',
         original_urls:     JSON.stringify(Array.isArray(s.original_urls) ? s.original_urls : []),
         color:             SEV_COLOR[s.severity] ?? SEV_COLOR.low,
+        glyph:             categoryGlyph(s.category),
       },
     }))
 }
@@ -1039,9 +1044,19 @@ function MapView() {
 
       map.on('error', (e: unknown) => { console.error('[maplibre]', e) })
 
+      // Signal icons are drawn the first time the map asks for one (lib/map-signal-icons.ts)
+      map.on('styleimagemissing', (e: { id: string }) => {
+        const want = parseSignalIconId(e.id)
+        if (!want || map.hasImage(e.id)) return
+        const img = drawSignalIcon(want.glyph, want.severity, want.verified)
+        if (img) map.addImage(e.id, img, { pixelRatio: SIGNAL_ICON_RATIO })
+      })
+
       map.on('load', () => {
         if (cancelled) return
         map.resize()
+        // (a shared link can open zoomed in: the legend reads the zoom)
+        setMapZoom(parseFloat(map.getZoom().toFixed(1)))
 
         // If the "Latest in view" list is already open, centre the map beside it
         if (listOpenRef.current && window.innerWidth >= 768) {
@@ -1182,6 +1197,8 @@ function MapView() {
 
         map.addLayer({
           id: 'signal-points', type: 'circle', source: 'signals',
+          // Dots on the whole world; zoomed in, icons of each signal's kind (below)
+          maxzoom: SIGNAL_ICON_ZOOM,
           filter: ['!', ['has', 'point_count']],
           paint: {
             'circle-color': ['get', 'color'],
@@ -1190,6 +1207,23 @@ function MapView() {
             'circle-stroke-color': ['case', ['==', ['get', 'status'], 'verified'], '#ffffff', '#04060b'],
             'circle-stroke-width': ['case', ['==', ['get', 'status'], 'verified'], 1.6, 0.8],
             'circle-stroke-opacity': ['case', ['==', ['get', 'status'], 'verified'], 0.95, 0.85],
+          },
+        })
+
+        // Zoomed in, each signal is an icon of its kind (conflict, politics,
+        // elections, health, disaster…) ringed in its severity, white-ringed
+        // when verified; the images are drawn when first asked for
+        map.addLayer({
+          id: 'signal-icons', type: 'symbol', source: 'signals',
+          minzoom: SIGNAL_ICON_ZOOM,
+          filter: ['!', ['has', 'point_count']],
+          layout: {
+            'icon-image': SIGNAL_ICON_EXPR,
+            'icon-size': SIGNAL_ICON_SCALE,
+            'icon-allow-overlap': true,
+            'icon-ignore-placement': true,
+            // the most serious on top
+            'symbol-sort-key': ['match', ['get', 'severity'], 'critical', 4, 'high', 3, 'medium', 2, 1],
           },
         })
 
@@ -1257,6 +1291,8 @@ function MapView() {
         const cursorOff = () => { map.getCanvas().style.cursor = '' }
         map.on('mouseenter', 'signal-points', cursorOn)
         map.on('mouseleave', 'signal-points', cursorOff)
+        map.on('mouseenter', 'signal-icons',  cursorOn)
+        map.on('mouseleave', 'signal-icons',  cursorOff)
         map.on('mouseenter', 'clusters',      cursorOn)
         map.on('mouseleave', 'clusters',      cursorOff)
 
@@ -1338,7 +1374,7 @@ function MapView() {
 
         let pinClicked = false
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        map.on('click', 'signal-points', (e: any) => {
+        const onSignalClick = (e: any) => {
           pinClicked = true
           const feat = e.features?.[0]
           const p = feat?.properties as SignalProps | undefined
@@ -1351,7 +1387,9 @@ function MapView() {
           setSelected(sig)
           setCountry(null)
           map.flyTo({ center: coords, zoom: Math.max(map.getZoom(), 5), speed: 1.2, duration: 700 })
-        })
+        }
+        map.on('click', 'signal-points', onSignalClick)
+        map.on('click', 'signal-icons',  onSignalClick)
 
         // ── Background click: deselect, and open the brief of the country
         //    clicked (plan M9) when nothing else is under the cursor ─────
@@ -4017,7 +4055,7 @@ function MapView() {
 
         {/* Legend: severities, verified ring, groups, and the layers that are on */}
         <div className={`absolute z-10 transition-all duration-300 ${listOpen ? 'left-4 md:left-[336px]' : 'left-4'} ${selected || country ? 'hidden md:block md:bottom-6' : 'bottom-6'}`}>
-          <MapLegend counts={sevCounts} groups={layerGroups} />
+          <MapLegend counts={sevCounts} groups={layerGroups} showKinds={mapZoom >= SIGNAL_ICON_ZOOM} />
         </div>
 
         {/* Signal detail panel — bottom sheet on mobile, side panel on desktop */}
