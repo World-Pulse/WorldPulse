@@ -44,7 +44,7 @@ vi.mock('../../lib/redis', () => {
 })
 vi.mock('../../lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }))
 
-import { isSameStory, correlateSignal, corroborateWithDuplicate, type CorrelationCandidate } from '../correlate'
+import { isSameStory, correlateSignal, corroborateWithDuplicate, confirmMergedArticle, namesDiffer, type CorrelationCandidate } from '../correlate'
 
 const now = new Date('2026-10-10T15:40:00Z')
 
@@ -218,6 +218,52 @@ describe('corroborateWithDuplicate', () => {
     expect(await corroborateWithDuplicate('sig-held', { ...incoming, title: 'Typhoon forces flight cancellations across southern Japan airports' })).toBe(false)
     h.state.firstRow = undefined
     expect(await corroborateWithDuplicate('sig-gone', incoming)).toBe(false)
+    expect(h.updates).toEqual([])
+  })
+})
+
+describe('different places and names are different stories', () => {
+  it('rejects headlines that name different known places', () => {
+    expect(isSameStory(
+      sig({ title: 'Explosion hits Kherson market, killing five people' }),
+      sig({ id: 'b', source_id: 'bbc.co.uk', title: 'Explosion hits Kyiv market, killing five people' }),
+    )).toBe(false)
+  })
+
+  it('namesDiffer: a name each headline has that the other lacks', () => {
+    expect(namesDiffer('Russia launches massive drone attack on Kyiv', 'Russia launches massive drone attack on Odesa')).toBe(true)
+    expect(namesDiffer('Russia Launches Massive Drone Attack On Kyiv', 'Russia Launches Massive Drone Attack On Odesa')).toBe(true)
+    expect(namesDiffer('Christa Pike discharged from hospital and returned to prison',
+      'Tennessee execution survivor Christa Pike released from hospital')).toBe(false)
+    expect(namesDiffer('Strikes hit Al-Shifa hospital in Gaza', 'Israeli strikes hit Al-Shifa hospital, Gaza officials say')).toBe(false)
+    expect(namesDiffer('Massive Drone Attack Hits Kyiv Overnight', 'Massive drone attack hits Kyiv overnight, officials say')).toBe(false)
+    expect(namesDiffer('Talks resume as Iran\u2019s envoy meets Oman mediators', "Iran's envoy meets Oman mediators as talks resume")).toBe(false)
+  })
+})
+
+describe('confirmMergedArticle', () => {
+  beforeEach(() => {
+    h.updates.length = 0
+    h.state.firstRow = {
+      id: 'sig-held', title: 'Russia launches massive drone attack on Kyiv overnight, officials say',
+      category: 'conflict', severity: 'high', source_ids: ['feed-1'], original_urls: ['https://www.reuters.com/a', 'https://apnews.com/b'],
+      published_at: now.toISOString(), lat: null, lng: null,
+    }
+  })
+
+  it('confirms the same story from a new outlet and verifies it when it qualifies', async () => {
+    expect(await confirmMergedArticle('sig-held', {
+      title: 'Russia launches massive drone attack on Kyiv overnight', source_id: 'apnews.com', published_at: now,
+    })).toBe(true)
+    expect(h.updates).toHaveLength(2)
+    expect(Object.keys(h.updates[0].data)).toEqual(['reliability_score', 'last_corroborated_at'])
+    expect(h.updates[1].data.status).toBe('verified')
+  })
+
+  it('does not confirm a topic-hash collision about another city', async () => {
+    expect(await confirmMergedArticle('sig-held', {
+      title: 'Russia launches massive drone attack on Odesa overnight, officials say', source_id: 'apnews.com', published_at: now,
+    })).toBe(false)
     expect(h.updates).toEqual([])
   })
 })

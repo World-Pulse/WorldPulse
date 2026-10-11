@@ -26,6 +26,7 @@ import { db } from '../lib/postgres'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
 import { sourceKey, hostOf } from './signal-columns'
+import { findGazetteerPlace } from './geo'
 import { createHash } from 'crypto'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -423,7 +424,37 @@ export function isSameStory(a: CorrelationCandidate, b: CorrelationCandidate): b
 
   const shared = intersection(wordsA, wordsB).size
   const jaccard = shared / union(wordsA, wordsB).size
-  return shared >= SAME_STORY_MIN_SHARED && jaccard >= SAME_STORY_MIN_JACCARD
+  if (shared < SAME_STORY_MIN_SHARED || jaccard < SAME_STORY_MIN_JACCARD) return false
+
+  // Headlines that name different known places are different events, however
+  // alike the rest is ("Explosion hits Kherson" / "Explosion hits Kyiv")
+  const placeA = findGazetteerPlace(a.title ?? '')
+  const placeB = findGazetteerPlace(b.title ?? '')
+  if (placeA && placeB && placeA.place !== placeB.place) return false
+  return true
+}
+
+/**
+ * Whether each headline names someone or somewhere the other doesn't: a
+ * capitalised word (not the first word) missing from the other headline.
+ * Two stories that share a headline template but differ in that name
+ * ("Russia launches drone attack on Kyiv" / "... on Odesa") collide on the
+ * scraper's topic hash, so merged articles must pass this too.
+ */
+export function namesDiffer(a: string, b: string): boolean {
+  const tidy = (t: string) => t.replace(/[\u2018\u2019]/g, "'")
+  const names = (t: string) => new Set(
+    tidy(t).split(/\s+/).slice(1)
+      .flatMap(w => w.replace(/'s\b/g, '').split(/[^\p{L}\p{N}]+/u))
+      .filter(w => /^\p{Lu}/u.test(w) && w.length > 1)
+      .map(w => w.toLowerCase()),
+  )
+  const words = (t: string) => new Set(tidy(t).toLowerCase().replace(/'s\b/g, '').split(/[^\p{L}\p{N}]+/u).filter(Boolean))
+  const [na, nb] = [names(a), names(b)]
+  const [wa, wb] = [words(a), words(b)]
+  const onlyA = [...na].some(n => !wb.has(n))
+  const onlyB = [...nb].some(n => !wa.has(n))
+  return onlyA && onlyB
 }
 
 // ─── CORRELATION TYPE DETERMINATION ──────────────────────────────────────────
@@ -721,6 +752,49 @@ export async function corroborateWithDuplicate(
     boost:     +boost.toFixed(3),
     promoted,
   }, 'Duplicate report from another outlet corroborated a signal')
+  return true
+}
+
+/**
+ * A later article from a new outlet joined a story through the scraper's
+ * topic hash (processArticleGroup) and was already counted as a source. The
+ * topic hash only compares the first five long words, so this checks the
+ * article really is the same story (isSameStory, and no name only one of the
+ * headlines has) before the story gains reliability and, once it qualifies,
+ * verified. Returns whether it confirmed the story.
+ */
+export async function confirmMergedArticle(
+  signalId: string,
+  incoming: Pick<CorrelationCandidate, 'title' | 'source_id' | 'published_at'>,
+): Promise<boolean> {
+  const row = await db('signals').where('id', signalId).first(
+    'id', 'title', 'category', 'severity', 'source_ids', 'original_urls',
+    db.raw('COALESCE(event_time, created_at) as published_at'),
+    db.raw('ST_Y(location::geometry) as lat'),
+    db.raw('ST_X(location::geometry) as lng'),
+  ) as Record<string, unknown> | undefined
+  if (!row) return false
+
+  const storedIds = Array.isArray(row.source_ids) ? row.source_ids.map(String) : []
+  const storedUrls = Array.isArray(row.original_urls) ? row.original_urls.map(String) : []
+  const held = toCandidate({ ...row, source_id: storedIds[0] ?? null, first_url: storedUrls[0] ?? null, location_name: null, reliability_score: 0, tags: [] })
+  const article: CorrelationCandidate = { ...held, ...incoming, id: 'incoming', lat: null, lng: null }
+  if (!isSameStory(held, article) || namesDiffer(held.title, article.title)) return false
+
+  const boost = Math.min(CORROBORATION_BOOST * (held.severity === 'critical' ? 1.15 : held.severity === 'high' ? 1.10 : 1.0), MAX_CORROBORATION_BOOST)
+  await db('signals').where('id', signalId).update({
+    reliability_score:    db.raw('LEAST(reliability_score + ?, 1.0)', [boost]),
+    last_corroborated_at: db.raw('NOW()'),
+  })
+  const promoted = await db('signals')
+    .where('id', signalId)
+    .where('status', 'pending')
+    .where('source_count', '>=', 2)
+    .where('reliability_score', '>=', 0.65)
+    .update({ status: 'verified', verified_at: db.raw('NOW()') })
+
+  logger.info({ signal_id: signalId, outlet: incoming.source_id, boost: +boost.toFixed(3), promoted },
+    'Merged article from another outlet confirmed a story')
   return true
 }
 

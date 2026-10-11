@@ -18,7 +18,7 @@ import { verifySignal } from './pipeline/verify'
 import { classifyContent } from './pipeline/classify'
 import { extractGeo } from './pipeline/geo'
 import { dedup } from './pipeline/dedup'
-import { correlateSignal } from './pipeline/correlate'
+import { correlateSignal, confirmMergedArticle } from './pipeline/correlate'
 import type { CorrelationCandidate } from './pipeline/correlate'
 import { computeTrending } from './pipeline/trending'
 import { backfillUnprocessed } from './backfill'
@@ -660,6 +660,13 @@ async function processArticleGroup(
           original_urls: db.raw('array_append(original_urls, ?)', [article.url]),
           last_updated:  new Date(),
         })
+      // A new outlet with the same story can verify it (it never did before,
+      // so multi-outlet news stories stayed pending)
+      await confirmMergedArticle(signalId, {
+        title:        article.title,
+        source_id:    outlet,
+        published_at: article.publishedAt ? new Date(article.publishedAt) : new Date(),
+      }).catch(err => logger.warn({ err, signalId }, 'Merged-article check failed (non-fatal)'))
     }
 
     await db('raw_articles')
