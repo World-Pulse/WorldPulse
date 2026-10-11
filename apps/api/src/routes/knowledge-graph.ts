@@ -104,6 +104,28 @@ function clamp(val: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, val))
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * The signal ids entity rows point at (each keeps its last 100), well-formed
+ * and lowercase. entity_nodes.signal_ids is text[] while signals.id is a
+ * uuid, so they're compared as uuid[] in queries (a uuid = text comparison
+ * fails, which left every entity's "recent signals" empty).
+ */
+export function signalIdsOf(rows: Array<{ signal_ids?: string[] | null }>): string[] {
+  return [...new Set(rows.flatMap(r => r.signal_ids ?? []).filter(id => UUID_RE.test(id)).map(id => id.toLowerCase()))]
+}
+
+/**
+ * How unusual an entity's mentions in the window are: mentions in the window
+ * against what its long-run daily average predicts for a window that long
+ * (at least 1). 1 = normal, 3 = three times the usual.
+ */
+export function spikeRatio(recentMentions: number, dailyAvg: number, windowHours: number): number {
+  const expected = Math.max(1, dailyAvg * (windowHours / 24))
+  return Math.round((recentMentions / expected) * 10) / 10
+}
+
 // ─── ROUTE PLUGIN ──────────────────────────────────────────────────────────────
 
 const knowledgeGraphRoutes: FastifyPluginAsync = async (app) => {
@@ -383,8 +405,7 @@ const knowledgeGraphRoutes: FastifyPluginAsync = async (app) => {
     const where = conditions.join(' AND ')
     const result = await db.raw(
       `SELECT *,
-              GREATEST(1, mention_count / GREATEST(1, EXTRACT(EPOCH FROM (NOW() - first_seen)) / 86400)) as daily_avg,
-              mention_count as recent_mentions
+              mention_count / GREATEST(1, EXTRACT(EPOCH FROM (NOW() - first_seen)) / 86400) as daily_avg
        FROM entity_nodes
        WHERE ${where}
        ORDER BY mention_count DESC, last_seen DESC
@@ -392,15 +413,32 @@ const knowledgeGraphRoutes: FastifyPluginAsync = async (app) => {
       params,
     )
 
-    const trending = result.rows.map((row: any) => ({
-      entity: mapNodeRow(row),
-      daily_avg: Number(row.daily_avg) || 1,
-      recent_mentions: Number(row.recent_mentions) || 0,
-      spike_ratio: Number(row.recent_mentions) / Math.max(1, Number(row.daily_avg)),
-    }))
+    // Mentions inside the window: the entity's recent signal references that
+    // are that new. (This used to count every mention ever and divide by the
+    // daily average, so the "spike" was just the entity's age in days.)
+    const ids = signalIdsOf(result.rows)
+    const recent = new Set<string>()
+    if (ids.length > 0) {
+      const fresh = await db.raw(
+        `SELECT id::text AS id FROM signals WHERE id = ANY(?::uuid[]) AND created_at >= ?`,
+        [ids, windowStart],
+      )
+      for (const row of fresh.rows as Array<{ id: string }>) recent.add(row.id)
+    }
 
-    // Sort by spike ratio
-    trending.sort((a: any, b: any) => b.spike_ratio - a.spike_ratio)
+    const trending = result.rows.map((row: any) => {
+      const dailyAvg = Number(row.daily_avg) || 0
+      const recentMentions = signalIdsOf([row]).filter(id => recent.has(id)).length
+      return {
+        entity: mapNodeRow(row),
+        daily_avg: Math.round(dailyAvg * 100) / 100,
+        recent_mentions: recentMentions,
+        spike_ratio: spikeRatio(recentMentions, dailyAvg, windowHours),
+      }
+    })
+
+    // Most unusual first; ties by mentions in the window
+    trending.sort((a: any, b: any) => b.spike_ratio - a.spike_ratio || b.recent_mentions - a.recent_mentions)
 
     const response = { trending, window_hours: windowHours, generated_at: new Date().toISOString() }
     await redis.setex(cacheKey, 120, JSON.stringify(response))
@@ -456,15 +494,18 @@ const knowledgeGraphRoutes: FastifyPluginAsync = async (app) => {
 
 async function getEntitySignals(entityId: string, limit: number): Promise<any[]> {
   try {
+    const node = await db.raw(`SELECT signal_ids FROM entity_nodes WHERE id = ?`, [entityId])
+    const ids = signalIdsOf(node.rows)
+    if (ids.length === 0) return []
+    // (signals has no source_id column, and published_at only on some installs)
     const result = await db.raw(
-      `SELECT s.id, s.title, s.category, s.severity, s.published_at, s.source_id
+      `SELECT s.id, s.title, s.category, s.severity, s.status, s.location_name,
+              s.created_at AS published_at
        FROM signals s
-       WHERE s.id = ANY(
-         SELECT unnest(signal_ids) FROM entity_nodes WHERE id = ?
-       )
-       ORDER BY s.published_at DESC
+       WHERE s.id = ANY(?::uuid[])
+       ORDER BY s.created_at DESC
        LIMIT ?`,
-      [entityId, limit],
+      [ids, limit],
     )
     return result.rows
   } catch {
