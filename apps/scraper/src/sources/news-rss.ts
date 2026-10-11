@@ -69,7 +69,7 @@ import { insertAndCorrelate } from '../pipeline/insert-signal'
 // Feed items published more than 3 days ago aren't news
 import { MAX_ITEM_AGE_MS, isStaleItem } from '../pipeline/freshness'
 // Feeds send "&#x27;" and "&amp;" in titles and summaries
-import { decodeEntities, cleanSummary, repeatsTitle } from '../pipeline/text'
+import { decodeEntities, cleanSummary, repeatsTitle, feedText, clipText } from '../pipeline/text'
 import { placeFromText } from '../pipeline/geo'
 import { rateSeverity } from '../pipeline/severity'
 import { categorizeText } from '../pipeline/categories'
@@ -2419,6 +2419,19 @@ export function inferGeo(
 
 // ─── SIGNAL CREATION ──────────────────────────────────────────────────────────
 
+/**
+ * A shopping page, not news: coupon and promo codes, gift guides, product
+ * galleries (Oct 11, 2026: Wired's feed sent "eBay Coupons: 20% Off in
+ * October 2026" and "Best Lego Gifts for Brick Builders").
+ */
+export function isShoppingItem(item: Pick<FeedItem, 'title' | 'link'>): boolean {
+  const title = item.title ?? ''
+  const link  = (item.link ?? '').replace(/^https?:\/\/[^/]+/i, '')
+  return /\b(?:promo|coupon|discount)\s+codes?\b|\bgift\s+guides?\b|\bcoupons\b.*\b(?:off|codes?|deals?)\b/i.test(title)
+    || /\/(?:gallery|coupons?|deals|shopping|gift-guides?)\//i.test(link)
+    || /(?:promo-codes?|coupon-codes?|discount-codes?|gifts-for)/i.test(link)
+}
+
 /** An obituary: from an obituaries section (or Legacy.com), or titled as one */
 export function isObituary(item: Pick<FeedItem, 'title' | 'link'>): boolean {
   return /\/(?:obituaries|obituary|obits?)\//i.test(item.link ?? '')
@@ -2451,14 +2464,22 @@ async function processItem(
     await redis.setex(key, DEDUP_TTL_S, '1')
     return 'none'
   }
+  if (isShoppingItem(item)) {
+    await redis.setex(key, DEDUP_TTL_S, '1')
+    return 'none'
+  }
+
+  // The description as plain text: feeds send HTML, some of it encoded
+  // ("&lt;p&gt;"), and its links and attributes aren't the story's words
+  const text        = item.description ? feedText(item.description) : ''
 
   // GDACS alerts: severity from the alert level, a readable earthquake headline
   const alert       = source.id === 'gdacs' ? gdacsAlertLevel(item.title, item.alertLevel) : null
   const gdacs       = source.id === 'gdacs' ? tidyGdacsTitle(decodeEntities(item.title)) : null
   const title       = (gdacs?.title ?? decodeEntities(item.title)).slice(0, 500) || `${source.name} — news item`
-  const category    = detectNewsCategory(item.title, item.description, source.category)
-  const severity    = alert ? gdacsSeverity(alert) : detectNewsSeverity(decodeEntities(item.title), item.description, category)
-  const found       = inferGeo(item.title, item.description, source, item.point)
+  const category    = detectNewsCategory(item.title, text, source.category)
+  const severity    = alert ? gdacsSeverity(alert) : detectNewsSeverity(decodeEntities(item.title), text, category)
+  const found       = inferGeo(item.title, text, source, item.point)
   const geo         = gdacs?.place && !found.locationName ? { ...found, locationName: gdacs.place } : found
 
   const pubDate  = item.pubDate ? new Date(item.pubDate) : new Date()
@@ -2468,9 +2489,7 @@ async function processItem(
   // outlet, its reliability and bias are on the signal (its source and the
   // state-media tag), not in the summary: until Oct 11, 2026 a note there
   // ("Source: X (reliability: 76%, bias: center).") read as the story's score.
-  const description = item.description
-    ? cleanSummary(decodeEntities(item.description.replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ')).slice(0, 600)
-    : ''
+  const description = text ? clipText(cleanSummary(text), 600) : ''
   const summary = repeatsTitle(description, title) ? null : description
 
   const tags = [

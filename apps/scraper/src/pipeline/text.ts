@@ -34,6 +34,33 @@ export function stripTags(text: string): string {
   return text.replace(/(?:<|&lt;)\/?[a-z][^<>]*?(?:>|&gt;)/gi, '')
 }
 
+const BLOCK_TAG = /(?:<|&lt;)\/?(?:p|br|hr|li|ul|ol|div|h[1-6]|blockquote|table|tr|td|th|figure|figcaption|section|article|header|footer)\b[^<>]*?(?:>|&gt;)/gi
+const ANY_TAG = /(?:<|&lt;)\/?[a-z][^<>]*?(?:>|&gt;)/gi
+/** A tag cut off where a description was clipped ('… &lt;div class="field') */
+const CUT_TAG = /(?:<|&lt;)\/?[a-z][^<>]*$/i
+
+/** Whether text has HTML tags, written out or encoded */
+export const HTML_TAG_RE = /(?:<|&lt;)\/?[a-z][^<>]*?(?:>|&gt;)/i
+
+/**
+ * Feed HTML as plain text: tags gone, also when the feed sent its HTML
+ * encoded ("&lt;p&gt;": 119 of 3,211 recent summaries showed the codes on
+ * Oct 11, 2026, from Dawn, Middle East Eye, The Straits Times, The Guardian
+ * and Al-Monitor), paragraphs and list items kept apart, codes decoded.
+ */
+export function feedText(html: string): string {
+  const strip = (t: string) => t.replace(BLOCK_TAG, ' ').replace(ANY_TAG, '').replace(CUT_TAG, '')
+  return strip(decodeEntities(strip(html))).replace(/\s+/g, ' ').trim()
+}
+
+/** Text cut to at most `max` characters at a word, ending in "…" when cut */
+export function clipText(text: string, max: number): string {
+  if (text.length <= max) return text
+  const cut = text.slice(0, max - 1)
+  const space = cut.lastIndexOf(' ')
+  return `${(space > max / 2 ? cut.slice(0, space) : cut).replace(/[\s,;:–—-]+$/u, '')}…`
+}
+
 /** A headline as it should read: codes decoded, tags gone */
 export function cleanTitle(title: string): string {
   return stripTags(decodeEntities(title)).replace(/\s{2,}/g, ' ').trim()
@@ -48,16 +75,21 @@ export function cleanUrl(url: string): string {
 export const ENCODED_TEXT_RE = /&(?:#x[0-9a-f]+|#\d+|amp|quot|apos|nbsp|gt|lt|rsquo|lsquo|rdquo|ldquo|ndash|mdash|hellip);|<\/?[a-z][^<>]*>/i
 
 /**
- * Feed footers that aren't part of the story (Oct 11, 2026: 11 of the 100
- * newest summaries): WordPress's "The post <title> appeared first on <site>.",
- * "Read More: <link>", a trailing "Continue reading" or "Read more", and
- * "[…]" (shown as "…").
+ * Feed footers and pitches that aren't part of the story (Oct 11, 2026: 11 of
+ * the 100 newest summaries): WordPress's "The post <title> appeared first on
+ * <site>.", "Read More: <link>", a trailing "Continue reading" or "Read more",
+ * "[…]" (shown as "…"), The Guardian's "Get our breaking news email, free app
+ * or daily news podcast", newsletter and subscription pitches, and Middle
+ * East Eye's "Submitted by" left at the end.
  */
 const FEED_FOOTERS: Array<[RegExp, string]> = [
   [/\s*\bThe post\s.{1,400}?\sappeared first on\s[^.\n]{1,120}\.?/gi, ''],
   [/\s*\bRead more\s*:\s*https?:\/\/\S+/gi, ''],
   [/\s*\b(?:Continue reading|Read more)(?:\s*(?:\.\.\.|…|»|→))?\s*$/i, ''],
   [/\s*\[(?:…|\.\.\.|&hellip;|&#8230;)\]/g, '…'],
+  [/\s*\bGet our [^.]{0,100}?\b(?:emails?|newsletters?)\b[^.]{0,80}?\bpodcast\b\.?/gi, ''],
+  [/\s*\bSubscribe (?:to [^.]{0,80}?\bnewsletter|now)\b[^.]*\.?/gi, ''],
+  [/\s*\bSubmitted by\b[^.]{0,80}$/i, ''],
 ]
 
 /** A feed's description without its footers (see FEED_FOOTERS) */
@@ -67,8 +99,8 @@ export function cleanSummary(text: string): string {
   return out.replace(/\s{2,}/g, ' ').trim()
 }
 
-/** Text with a feed footer worth removing (for the repair) */
-export const FEED_FOOTER_SQL = '(appeared first on|read more\\s*:\\s*https?://)'
+/** Text with a feed footer or HTML worth removing (for the repair; ~* is case-insensitive) */
+export const FEED_FOOTER_SQL = '(appeared first on|read more\\s*:\\s*https?://|&lt;/?[a-z]|<[a-z/]|get our .{1,120}podcast|subscribe (to|now)|submitted by)'
 
 /**
  * The note the RSS reader added to every summary until Oct 11, 2026 —

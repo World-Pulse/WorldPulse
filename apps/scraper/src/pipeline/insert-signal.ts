@@ -31,7 +31,7 @@ import { dedup, checkSemanticDuplicate } from './dedup'
 import { processSignalForKnowledgeGraph, extractEntitiesRuleBased, upsertEntityNode } from './entity-graph'
 import { embedSignal } from './embeddings'
 import { signalsHavePublishedAt, publishedAtFor, sourceKey } from './signal-columns'
-import { decodeEntities, cleanUrl, cleanTitle, summaryWithoutNotes } from './text'
+import { decodeEntities, cleanUrl, cleanTitle, summaryWithoutNotes, feedText, HTML_TAG_RE } from './text'
 
 /** Signal ids are UUIDs; the dedup store can also hold '1' or 'pending' */
 const SIGNAL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -110,7 +110,9 @@ export function cleanSignalText(row: Record<string, unknown>): Record<string, un
   // outlet note RSS used to add, and a summary that only repeats the headline
   // aren't the story (a summary with nothing else left is stored as null)
   if (typeof row.summary === 'string') {
-    row.summary = summaryWithoutNotes(decodeEntities(row.summary), typeof row.title === 'string' ? row.title : '')
+    // HTML a source sent, written out or encoded ("&lt;p&gt;"), as plain text
+    const text = HTML_TAG_RE.test(row.summary) ? feedText(row.summary) : decodeEntities(row.summary)
+    row.summary = summaryWithoutNotes(text, typeof row.title === 'string' ? row.title : '')
   }
   if (Array.isArray(row.original_urls)) {
     row.original_urls = row.original_urls.map(u => (typeof u === 'string' ? cleanUrl(u) : u))

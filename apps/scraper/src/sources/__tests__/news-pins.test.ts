@@ -161,3 +161,20 @@ describe('isObituary (Oct 11, 2026)', () => {
     expect(isObituary({ title: 'Ex-president dies at 90', link: 'https://example.com/world/ex-president-dies' })).toBe(false)
   })
 })
+
+describe('isShoppingItem (Oct 11, 2026)', () => {
+  it("skips Wired's coupon codes, gift guides and product galleries", async () => {
+    const { isShoppingItem } = await import('../news-rss')
+    expect(isShoppingItem({ title: 'eBay Coupons: 20% Off in October 2026', link: 'https://www.wired.com/story/ebay-coupon-code/' })).toBe(true)
+    expect(isShoppingItem({ title: 'LG Promo Codes and Coupons for October 2026', link: 'https://www.wired.com/story/lg-promo-code/' })).toBe(true)
+    expect(isShoppingItem({ title: 'Best Lego Gifts for Brick Builders (2026)', link: 'https://www.wired.com/gallery/gifts-for-lego-lovers/' })).toBe(true)
+    expect(isShoppingItem({ title: '13 Best Gifts for Every Traveler Should Have (2026)', link: 'https://www.wired.com/story/best-gifts-for-travelers/' })).toBe(true)
+  })
+
+  it('keeps news that mentions coupons or gifts', async () => {
+    const { isShoppingItem } = await import('../news-rss')
+    expect(isShoppingItem({ title: 'Government hands out food coupons to flood victims', link: 'https://example.com/world/food-coupons-floods' })).toBe(false)
+    expect(isShoppingItem({ title: 'AI Is Getting Really Good at Messing With Cybercriminals', link: 'https://www.wired.com/story/ai-is-getting-really-good-at-messing-with-cybercriminals/' })).toBe(false)
+    expect(isShoppingItem({ title: 'Bond coupon rates climb as yields rise', link: 'https://example.com/markets/bonds' })).toBe(false)
+  })
+})

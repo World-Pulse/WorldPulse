@@ -11,10 +11,10 @@ import { db } from '../lib/postgres'
 import { EVENT_TEMPLATE_SQL } from './event-titles'
 import { countIndependentOutlets } from './independence'
 import { hostOf } from './signal-columns'
-import { decodeEntities, cleanUrl, cleanTitle, ENCODED_TEXT_RE, cleanSummary, FEED_FOOTER_SQL, OUTLET_NOTE_SQL, summaryWithoutNotes } from './text'
+import { decodeEntities, cleanUrl, cleanTitle, ENCODED_TEXT_RE, FEED_FOOTER_SQL, OUTLET_NOTE_SQL, summaryWithoutNotes, feedText, HTML_TAG_RE } from './text'
 import { liftedSeverity, type SeverityRow } from './severity-lift'
 import { tidyGeoName } from '../sources/gdelt'
-import { NEWS_SOURCE_REGISTRY, detectNewsCategory } from '../sources/news-rss'
+import { NEWS_SOURCE_REGISTRY, detectNewsCategory, isShoppingItem } from '../sources/news-rss'
 import { categorizeArticle, categorizeText } from './categories'
 
 /** Where nginx serves uploaded post media (the uploads volume, under /uploads/) */
@@ -115,6 +115,30 @@ export async function retractStaleFeedItems(): Promise<number> {
         AND event_time < created_at - INTERVAL '3 days'`,
   )
   return Number((result as { rowCount?: number })?.rowCount ?? 0)
+}
+
+/**
+ * Shopping pages saved as news in the last 3 days (Wired's coupon codes and
+ * gift guides; news-rss.ts isShoppingItem skips them now). Like stale feed
+ * items they become 'retracted' with a tag, shopping-item, so they can be
+ * found and put back. Only pending rows, so a later start changes nothing.
+ */
+export async function retractShoppingItems(): Promise<number> {
+  const rows = await db('signals')
+    .where('created_at', '>', db.raw("NOW() - INTERVAL '3 days'"))
+    .where('status', 'pending')
+    .whereRaw("tags @> ARRAY['news', 'rss']::text[]")
+    .select('id', 'title', 'original_urls')
+    .limit(30000) as Array<{ id: string; title: string | null; original_urls: string[] | null }>
+  const ids = rows
+    .filter(r => isShoppingItem({ title: r.title ?? '', link: r.original_urls?.[0] ?? '' }))
+    .map(r => r.id)
+  if (ids.length === 0) return 0
+  await db('signals').whereIn('id', ids).update({
+    status: 'retracted',
+    tags:   db.raw("array_append(tags, 'shopping-item')"),
+  })
+  return ids.length
 }
 
 /** Pin names the old geocoder rule wrote: the bare word(s) in lowercase */
@@ -265,21 +289,26 @@ export async function liftCappedSeverities(): Promise<number> {
 }
 
 /**
- * Summaries of the last 3 days that end in a feed's footer ("The post …
- * appeared first on …", "Read More: <link>") lose it (text.ts cleanSummary).
- * Cleaned rows no longer match, so a later start finds nothing to do.
+ * Summaries of the last 3 days with a feed's footer or pitch ("The post …
+ * appeared first on …", "Read More: <link>", "Get our breaking news email,
+ * free app or daily news podcast"), or with HTML the feed sent encoded
+ * ("&lt;p&gt;", shown as codes: 119 of 3,211 recent summaries on Oct 11,
+ * 2026), as text.ts writes them now: plain text without them, and null where
+ * only the headline is left. Cleaned rows no longer match, so a later start
+ * finds nothing to do.
  */
 export async function stripFeedFooters(): Promise<number> {
   const rows = await db('signals')
     .where('created_at', '>', db.raw("NOW() - INTERVAL '3 days'"))
     .whereRaw('summary ~* ?', [FEED_FOOTER_SQL])
-    .select('id', 'summary')
-    .limit(5000) as Array<{ id: string; summary: string | null }>
+    .select('id', 'title', 'summary')
+    .limit(5000) as Array<{ id: string; title: string | null; summary: string | null }>
   let fixed = 0
   for (const row of rows) {
     if (!row.summary) continue
-    const clean = cleanSummary(row.summary)
-    if (clean === row.summary || clean.length === 0) continue
+    const text = HTML_TAG_RE.test(row.summary) ? feedText(row.summary) : row.summary
+    const clean = summaryWithoutNotes(text, row.title ?? '')
+    if (clean === row.summary) continue
     await db('signals').where('id', row.id).update({ summary: clean })
     fixed++
   }

@@ -116,3 +116,56 @@ describe('repeatsTitle', () => {
     expect(repeatsTitle('Quake hits Peru, killing 3.', 'Quake hits Peru')).toBe(false)
   })
 })
+
+describe('feedText (feed HTML as plain text, Oct 11, 2026)', () => {
+  it('takes out tags the feed sent encoded, keeping paragraphs apart', async () => {
+    const { feedText } = await import('../text')
+    // The Guardian: a standfirst, a sign-up list, then the story
+    expect(feedText('Family and friends say he brought joy&lt;/p&gt;&lt;ul&gt;&lt;li&gt;&lt;p&gt;Get our &lt;a href="https://www.theguardian.com/email-newsletters?CMP=cvau_sfl"&gt;breaking news email&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;An Australian trekker was found'))
+      .toBe('Family and friends say he brought joy Get our breaking news email An Australian trekker was found')
+    // Stored after the old cleaning: ">" decoded, "&lt;" kept
+    expect(feedText('&lt;p>With the advantage of hindsight, one can study history.&lt;/p> &lt;blockquote class="blockquote-level-1"> &lt;p>History repeats itself.&lt;/p>'))
+      .toBe('With the advantage of hindsight, one can study history. History repeats itself.')
+  })
+
+  it('takes out written-out tags and decodes the codes', async () => {
+    const { feedText } = await import('../text')
+    expect(feedText('<p>Osaka <i>danjiri</i> float festival &amp; parade</p><p>It&#8217;s back</p>')).toBe('Osaka danjiri float festival & parade It’s back')
+  })
+
+  it('drops a tag cut off where a description was clipped', async () => {
+    const { feedText } = await import('../text')
+    expect(feedText("Yemen's Health Ministry raises alarm over supplies in Taiz &lt;div class=\"field field-field-text\"")).toBe("Yemen's Health Ministry raises alarm over supplies in Taiz")
+  })
+
+  it('leaves plain text and comparisons alone', async () => {
+    const { feedText } = await import('../text')
+    expect(feedText('Inflation fell below 3% as rates < 5% held')).toBe('Inflation fell below 3% as rates < 5% held')
+  })
+})
+
+describe('clipText', () => {
+  it('cuts at a word and says so', async () => {
+    const { clipText } = await import('../text')
+    expect(clipText('short', 600)).toBe('short')
+    expect(clipText('Senior military commander says Iran will continue to strike vessels', 40)).toBe('Senior military commander says Iran…')
+  })
+})
+
+describe('cleanSummary (pitches, Oct 11, 2026)', () => {
+  it("takes out The Guardian's sign-up line, newsletter pitches and a trailing byline", async () => {
+    const { cleanSummary } = await import('../text')
+    expect(cleanSummary("Family and friends remember him. Get our breaking news email, free app or daily news podcast An Australian trekker was found dead."))
+      .toBe('Family and friends remember him. An Australian trekker was found dead.')
+    expect(cleanSummary('The Pentagon updated its database.Subscribe to The Post Most newsletter for the most important stories.'))
+      .toBe('The Pentagon updated its database.')
+    expect(cleanSummary('Subscribe now with a one-month trial for only $1, then enjoy the first year at an exclusi')).toBe('')
+    expect(cleanSummary("Former US official says Israeli demands made a deal 'impossible' Submitted by")).toBe("Former US official says Israeli demands made a deal 'impossible'")
+  })
+
+  it('leaves a story that mentions them alone', async () => {
+    const { cleanSummary } = await import('../text')
+    const story = 'Voters were asked to get our attention on the economy; the podcast host disagreed.'
+    expect(cleanSummary(story)).toBe(story)
+  })
+})

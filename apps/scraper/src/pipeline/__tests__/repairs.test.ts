@@ -10,7 +10,7 @@ vi.mock('../../lib/postgres', () => {
   function builder() {
     let ids: string[] = []
     const b: Record<string, unknown> = {}
-    for (const m of ['select', 'where', 'whereRaw']) b[m] = () => b
+    for (const m of ['select', 'where', 'whereRaw', 'limit']) b[m] = () => b
     b.whereIn = (_c: string, list: string[]) => { ids = list; return b }
     b.update = (data: Record<string, unknown>) => { h.updates.push({ ids, data }); return Promise.resolve(ids.length) }
     b.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve(h.rows).then(res, rej)
@@ -23,7 +23,7 @@ vi.mock('../../lib/postgres', () => {
   }
 })
 
-import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, recategorizeRecentArticles } from '../repairs'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, recategorizeRecentArticles, retractShoppingItems } from '../repairs'
 import { db } from '../../lib/postgres'
 import { EVENT_TEMPLATE_SQL } from '../event-titles'
 
@@ -227,5 +227,22 @@ describe('recategorizeRecentArticles', () => {
       'c', 'health', 'low',
       'd', 'culture', 'medium',  // culture stops at medium
     ])
+  })
+})
+
+describe('retractShoppingItems', () => {
+  beforeEach(() => { h.updates.length = 0; h.raws.length = 0 })
+
+  it('takes recent shopping pages out of the feed, tagged so they can be found', async () => {
+    h.rows = [
+      { id: 'a', title: 'eBay Coupons: 20% Off in October 2026', original_urls: ['https://www.wired.com/story/ebay-coupon-code/'] },
+      { id: 'b', title: 'AI Is Getting Really Good at Messing With Cybercriminals', original_urls: ['https://www.wired.com/story/ai-cybercriminals/'] },
+      { id: 'c', title: 'Best Lego Gifts for Brick Builders (2026)', original_urls: ['https://www.wired.com/gallery/gifts-for-lego-lovers/'] },
+    ]
+    expect(await retractShoppingItems()).toBe(2)
+    expect(h.updates).toHaveLength(1)
+    expect(h.updates[0]!.ids).toEqual(['a', 'c'])
+    expect(h.updates[0]!.data.status).toBe('retracted')
+    h.rows = []
   })
 })
