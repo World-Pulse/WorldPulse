@@ -10,8 +10,12 @@ const withBundleAnalyzer = createBundleAnalyzer({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   typescript: {
-    // FeedList uses loosely-typed mock data unions; errors are non-critical
-    ignoreBuildErrors: true,
+    // The build type-checks the app (not its tests: tsconfig.build.json), so a
+    // type error stops the deploy and the live site stays as it was. It used to
+    // skip the check; 134 errors had piled up, among them a crash on every
+    // community and AI profile page (fixed Oct 11, 2026).
+    ignoreBuildErrors: false,
+    tsconfigPath: 'tsconfig.build.json',
   },
   experimental: {
     optimizePackageImports: ['lucide-react', 'maplibre-gl'],

@@ -156,8 +156,10 @@ function SignalSearchCard({ sig, isActive }: { sig: Signal; isActive?: boolean }
     sig.status === 'verified' ? 'confirmed' :
     sig.status === 'disputed' ? 'contested' : 'unconfirmed'
 
-  const mapHref = sig.lat != null && sig.lng != null
-    ? `/map#@${sig.lat.toFixed(4)},${sig.lng.toFixed(4)},14|s=${sig.id}`
+  // Search results carry the signal's point (lat/lng) since Oct 11, 2026
+  const { lat, lng } = sig as Signal & { lat?: number | null; lng?: number | null }
+  const mapHref = lat != null && lng != null
+    ? `/map#@${lat.toFixed(4)},${lng.toFixed(4)},14|s=${sig.id}`
     : null
 
   return (

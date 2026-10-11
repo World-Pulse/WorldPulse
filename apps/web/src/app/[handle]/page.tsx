@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
-import { UserCircle, Radio, Landmark, BadgeCheck, FlaskConical } from 'lucide-react'
+import { UserCircle, Radio, Landmark, BadgeCheck, FlaskConical, Bot } from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -24,12 +24,15 @@ interface UserProfile {
   isFollowing:    boolean
 }
 
+// Icons only: an emoji here was rendered as a tag name ('🤖'), which crashed the
+// page for every AI and community account (the default type) until Oct 11, 2026
 const ACCOUNT_TYPE_ICONS: Record<string, typeof Landmark> = {
   official:   Landmark,
   journalist: BadgeCheck,
   expert:     FlaskConical,
-  ai:         '🤖',
-  community:  '👤',
+  ai:         Bot,
+  bot:        Bot,
+  community:  UserCircle,
 }
 
 export default function ProfilePage() {

@@ -27,6 +27,26 @@ async function withMeiliTimeout<T>(
 
 // ─── Query param schemas ──────────────────────────────────────────────────────
 
+
+/** Adds lat/lng to signal results (in place) from their stored points; a failure leaves them without */
+async function addSignalPoints(signals: Array<Record<string, unknown>> | undefined): Promise<void> {
+  const ids = (signals ?? []).map(sig => String(sig.id ?? '')).filter(Boolean)
+  if (ids.length === 0) return
+  try {
+    const rows = await db('signals')
+      .select('id', db.raw('ST_Y(location::geometry) AS lat'), db.raw('ST_X(location::geometry) AS lng'))
+      .whereIn('id', ids)
+      .whereNotNull('location') as Array<{ id: unknown; lat: unknown; lng: unknown }>
+    const byId = new Map(rows.map(r => [String(r.id), r]))
+    for (const sig of signals ?? []) {
+      const point = byId.get(String(sig.id))
+      const lat = Number(point?.lat)
+      const lng = Number(point?.lng)
+      if (point && Number.isFinite(lat) && Number.isFinite(lng)) { sig.lat = lat; sig.lng = lng }
+    }
+  } catch { /* results without map links */ }
+}
+
 export const SearchQuerySchema = z.object({
   q:           z.string().trim().min(2, 'Query must be at least 2 characters').max(500),
   type:        z.enum(['all', 'signals', 'posts', 'users', 'tags']).default('all'),
@@ -282,6 +302,10 @@ export const registerSearchRoutes: FastifyPluginAsync = async (app) => {
     }
 
     await Promise.allSettled(searchPromises)
+
+    // Each signal's point, for the result's "View on map" link: the search
+    // index doesn't keep coordinates, so the link never showed
+    await addSignalPoints(results.signals as Array<Record<string, unknown>> | undefined)
 
     const totalResults = Object.values(results).reduce((s, a) => s + a.length, 0)
 

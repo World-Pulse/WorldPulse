@@ -7,7 +7,7 @@
  * hover popups.
  */
 
-import type { Map as MapLibreMap, MapMouseEvent, Popup as MapLibrePopup } from 'maplibre-gl'
+import type { Map as MapLibreMap, MapLayerMouseEvent, Popup as MapLibrePopup } from 'maplibre-gl'
 import { escapeHtml } from '../../lib/map-utils'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -198,7 +198,8 @@ export class ConflictRegionLayer {
 
   // ── Hover popup ──────────────────────────────────────────────────────────
 
-  private _onMouseEnter = (e: MapMouseEvent): void => {
+  // A layer event: it carries the features under the pointer
+  private _onMouseEnter = (e: MapLayerMouseEvent): void => {
     this.map.getCanvas().style.cursor = 'pointer'
     const feat = e.features?.[0]
     if (!feat) return

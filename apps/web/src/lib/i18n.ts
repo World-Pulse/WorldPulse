@@ -38,10 +38,11 @@ export const RTL_LOCALES: SupportedLocale[] = ['ar']
 /** Static map of all locale messages (bundled at build time, no async needed) */
 const ALL_MESSAGES: Record<SupportedLocale, Messages> = {
   en: messagesEn,
-  fr: messagesFr,
-  es: messagesEs,
-  de: messagesDe,
-  pt: messagesPt,
+  // The other languages lack some English keys; the translator falls back to English for those
+  fr: messagesFr as unknown as Messages,
+  es: messagesEs as unknown as Messages,
+  de: messagesDe as unknown as Messages,
+  pt: messagesPt as unknown as Messages,
   ar: messagesAr as unknown as Messages,
   zh: messagesZh as unknown as Messages,
   ja: messagesJa as unknown as Messages,
