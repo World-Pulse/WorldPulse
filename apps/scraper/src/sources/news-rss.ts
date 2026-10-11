@@ -2112,35 +2112,64 @@ export function detectNewsSeverity(title: string, description: string, category?
  * Allows a geopolitics outlet (e.g. BBC) to generate a 'health' signal
  * if the article is about a disease outbreak.
  */
+/**
+ * Rule-based categories (used while the AI classifier is unavailable). The
+ * headline is read first, and the description only when the headline says
+ * nothing: casualty reports quote a "health ministry", and Gaza strikes came
+ * out as health. Each rule is tried in order; the source's own category is
+ * the fallback.
+ * Oct 11, 2026 (reading audit, H-0011): a Houthi attack on Riyadh airport was
+ * filed as finance (its outlet's category: "attack" wasn't a conflict word),
+ * the Pope's surgery as geopolitics, and a Premier League match as
+ * geopolitics. Added: sports, more health and conflict words, and cyber
+ * attacks checked before conflict's "attack".
+ */
+const SPORTS_RE = /\b(premier\s+league|champions\s+league|europa\s+league|la\s+liga|serie\s+a|bundesliga|ligue\s+1|world\s+cup|euro\s+20\d\d|olympics?|olympic\s+games|paralympics?|fifa|uefa|nba|nfl|nhl|mlb|pga|lpga|grand\s+prix|formula\s+(?:1|one)|wimbledon|french\s+open|australian\s+open|ryder\s+cup|super\s+bowl|test\s+match|ipl|t20|rugby|cricket|tennis|marathon|ufc|athletics|footballer|goalkeeper|midfielder|head\s+coach|transfer\s+window|hat-trick|player\s+of\s+the\s+year)\b|\bvs\.?\b.{1,60}\blive\b/
+const HEALTH_RE = /\b(pandemic|outbreak|virus|disease|epidemic|vaccines?|world\s+health\s+organi[sz]ation|health\s+(?:emergency|system|crisis|care)|healthcare|mental\s+health|pathogen|mpox|ebola|flu|covid|surgery|cancer|tumou?r|diagnos(?:ed|is)|heart\s+attack|panic\s+attack|nhs)\b/
+const DISASTER_RE = /\b(earthquake|tsunami|hurricane|typhoon|cyclone|wildfire|flood|eruption|volcano|tornado|blizzard|drought|disaster)\b/
+// "Campaign" alone is as often military or advertising
+const ELECTIONS_RE = /\b(elections?|votes?|voting|ballots?|democracy|referendum|polls?|candidates?|(?:election|presidential|political)\s+campaigns?|campaign\s+trail|campaigning|inauguration)\b/
+const ECONOMY_RE = /\b(stock\s+market|recession|inflation|gdp|central\s+bank|interest\s+rate|economy|trade\s+war|tariff|sanction|oil\s+price|crypto)\b/
+// Space before technology, which also names SpaceX and NASA. No bare "moon"
+// ("Moon Jae-in", "Ban Ki-moon") or "mars" (the chocolate company)
+const SPACE_RE = /\b(space\s+launch|rockets?|satellites?|iss|international\s+space\s+station|lunar|moon\s+(?:landing|mission|base)|(?:to|on)\s+mars|mars\s+(?:rover|mission|landing)|nasa|esa|spacex|boeing\s+starliner|astronauts?)\b/
+const TECH_RE = /\b(ai\s+|artificial\s+intelligence|cybersecurity|hack|data\s+breach|tech\s+giant|silicon\s+valley|openai)\b/
+const CLIMATE_RE = /\b(climate\s+change|global\s+warming|carbon|emissions|cop[0-9]+|fossil\s+fuel|renewable\s+energy|deforestation)\b/
+// Before conflict, whose words include "attack"
+const CYBER_RE = /\b(cyber\s*-?attacks?|ransomware|malware)\b/
+// A zoo's tiger or a shark "attacks" and "kills" too: not conflict
+const ANIMAL_RE = /\b(tigers?|sharks?|bears?|lions?|crocodiles?|alligators?|snakes?|dogs?|wildlife\s+park|zoo)\b/
+// (an animal's or a heart's attack isn't one)
+const CONFLICT_RE = /\b(war|invasion|airstrikes?|air\s+strikes?|(?:israeli|russian|ukrainian|houthi|us|u\.s\.|drone|missile|military|deadly)\s+strikes?|strikes?\s+(?:on|kill|hit|target)|missiles?|troops|military|casualties|conflict|nato|ceasefire|bombing|bombs?|killed|shelling|(?<!(?:tiger|shark|dog|bear|lion|crocodile|snake|animal|heart|panic)\s)(?:attacks?|attacked)|drones?|shooting|shot\s+dead|gunm[ae]n|militants?|rebels?|insurgents?|clashes|artillery|explosions?|blasts?|hostages?|houthis?|hamas|hezbollah|taliban|isis|al-shabaab|frontline|massacre|siege|warplanes?|soldiers?)\b/
+const SECURITY_RE = /\b(espionage|spy|intelligence|terror)\b/
+
+const CATEGORY_RULES: Array<[RegExp, Category]> = [
+  [SPORTS_RE, 'sports'],
+  [HEALTH_RE, 'health'],
+  [DISASTER_RE, 'disaster'],
+  [ELECTIONS_RE, 'elections'],
+  [ECONOMY_RE, 'economy'],
+  [SPACE_RE, 'space'],
+  [TECH_RE, 'technology'],
+  [CLIMATE_RE, 'climate'],
+  [CYBER_RE, 'security'],
+  [ANIMAL_RE, 'other'],
+  [CONFLICT_RE, 'conflict'],
+  [SECURITY_RE, 'security'],
+]
+
+function categoryByRules(text: string): Category | null {
+  const lower = text.toLowerCase()
+  for (const [re, category] of CATEGORY_RULES) if (re.test(lower)) return category
+  return null
+}
+
 export function detectNewsCategory(
   title:           string,
   description:     string,
   sourceDefault:   Category,
 ): Category {
-  const text = `${title} ${description}`.toLowerCase()
-
-  if (/\b(pandemic|outbreak|virus|disease|epidemic|vaccine|world\s+health\s+organi[sz]ation|health\s+emergency|pathogen|mpox|ebola|flu|covid)\b/.test(text))
-    return toCategory('health')
-  if (/\b(earthquake|tsunami|hurricane|typhoon|cyclone|wildfire|flood|eruption|volcano|tornado|blizzard|drought|disaster)\b/.test(text))
-    return toCategory('disaster')
-  if (/\b(elections?|votes?|voting|ballots?|democracy|referendum|polls?|candidates?|campaigns?|inauguration)\b/.test(text))
-    return toCategory('elections')
-  if (/\b(stock\s+market|recession|inflation|gdp|central\s+bank|interest\s+rate|economy|trade\s+war|tariff|sanction|oil\s+price|crypto)\b/.test(text))
-    return toCategory('economy')
-  // Space before technology, which also names SpaceX and NASA. No bare "moon"
-  // ("Moon Jae-in", "Ban Ki-moon") or "mars" (the chocolate company)
-  if (/\b(space\s+launch|rockets?|satellites?|iss|international\s+space\s+station|lunar|moon\s+(?:landing|mission|base)|(?:to|on)\s+mars|mars\s+(?:rover|mission|landing)|nasa|esa|spacex|boeing\s+starliner|astronauts?)\b/.test(text))
-    return toCategory('space')
-  if (/\b(ai\s+|artificial\s+intelligence|cybersecurity|hack|data\s+breach|tech\s+giant|silicon\s+valley|openai)\b/.test(text))
-    return toCategory('technology')
-  if (/\b(climate\s+change|global\s+warming|carbon|emissions|cop[0-9]+|fossil\s+fuel|renewable\s+energy|deforestation)\b/.test(text))
-    return toCategory('climate')
-  if (/\b(war|invasion|airstrike|missile|troops|military|casualties|conflict|nato|ceasefire|bombing|killed|shelling)\b/.test(text))
-    return toCategory('conflict')
-  if (/\b(cyber\s+attack|ransomware|malware|espionage|spy|intelligence|terror)\b/.test(text))
-    return toCategory('security')
-
-  return sourceDefault
+  return categoryByRules(title) ?? categoryByRules(`${title} ${description}`) ?? sourceDefault
 }
 
 // ─── HTTP HELPER ──────────────────────────────────────────────────────────────

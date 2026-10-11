@@ -220,6 +220,27 @@ describe('detectNewsCategory', () => {
   it('returns sourceDefault when no keyword matches', () => {
     expect(detectNewsCategory('Leaders meet in Vienna for trade talks', '', geopoliticsSource)).toBe('geopolitics')
   })
+
+  // Oct 11, 2026 (reading audit, H-0011)
+  it('files attacks as conflict, whatever the outlet usually covers', () => {
+    expect(detectNewsCategory('Yemen’s Houthis renew warning over Saudi airports after deadly Riyadh attack', '', 'finance')).toBe('conflict')
+    expect(detectNewsCategory('Russia’s Yandex says data centre shut down after drone attack', '', geopoliticsSource)).toBe('conflict')
+  })
+
+  it('files surgery as health, and matches as sports', () => {
+    expect(detectNewsCategory('Pope Leo XIV to undergo surgery to remove lung nodule', '', geopoliticsSource)).toBe('health')
+    expect(detectNewsCategory('Liverpool vs Man City live: Premier League', '', geopoliticsSource)).toBe('sports')
+  })
+
+  it('reads the headline before the description (casualty reports quote health ministries)', () => {
+    expect(detectNewsCategory('Israeli strikes kill five in Gaza', 'Gaza health ministry says five were killed', geopoliticsSource)).toBe('conflict')
+  })
+
+  it("doesn't call a cyber attack, a heart attack or a tiger's attack conflict", () => {
+    expect(detectNewsCategory('Cyber attack shuts airline check-in systems', '', geopoliticsSource)).toBe('security')
+    expect(detectNewsCategory('Senator recovering after heart attack', '', geopoliticsSource)).toBe('health')
+    expect(detectNewsCategory('Man dies after tiger attack at UK zoo', '', geopoliticsSource)).toBe('other')
+  })
 })
 
 // ─── GEO INFERENCE ───────────────────────────────────────────────────────────

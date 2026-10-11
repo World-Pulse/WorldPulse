@@ -14,6 +14,7 @@ import { hostOf } from './signal-columns'
 import { decodeEntities, cleanUrl, cleanTitle, ENCODED_TEXT_RE, cleanSummary, FEED_FOOTER_SQL, OUTLET_NOTE_SQL, summaryWithoutNotes } from './text'
 import { liftedSeverity, type SeverityRow } from './severity-lift'
 import { tidyGeoName } from '../sources/gdelt'
+import { NEWS_SOURCE_REGISTRY, detectNewsCategory } from '../sources/news-rss'
 
 /** Where nginx serves uploaded post media (the uploads volume, under /uploads/) */
 const PUBLIC_SITE = 'https://world-pulse.io'
@@ -310,6 +311,48 @@ export async function stripOutletNotes(): Promise<number> {
          FROM (VALUES ${batch.map(() => '(?::uuid, ?::text)').join(', ')}) AS v(id, summary)
         WHERE s.id = v.id`,
       batch.flatMap(r => [r.id, r.summary]),
+    )
+  }
+  return changed.length
+}
+
+/**
+ * News categories of the last 3 days, as the RSS reader's rules give them
+ * now (news-rss.ts detectNewsCategory, Oct 11, 2026): the Houthi attack on
+ * Riyadh airport had been filed as finance and the Pope's surgery as
+ * geopolitics, and since the World Map draws each signal's kind, a wrong
+ * category showed the wrong icon. Only RSS signals (their source's own
+ * category is the fallback); a second start finds nothing to change.
+ */
+/** The category values the signals table takes */
+const STORED_CATEGORIES = new Set([
+  'breaking', 'conflict', 'geopolitics', 'climate', 'health', 'economy', 'technology', 'science',
+  'elections', 'culture', 'disaster', 'security', 'sports', 'space', 'finance', 'other',
+])
+
+export async function recategorizeRecentNews(): Promise<number> {
+  const rows = await db('signals')
+    .where('created_at', '>', db.raw("NOW() - INTERVAL '3 days'"))
+    .whereRaw("tags @> ARRAY['rss']::text[]")
+    .select('id', 'title', 'summary', 'category', 'tags')
+    .limit(30000) as Array<{ id: string; title: string; summary: string | null; category: string; tags: string[] | null }>
+  const sources = new Map(NEWS_SOURCE_REGISTRY.map(src => [src.id, src]))
+  const changed: Array<{ id: string; category: string }> = []
+  for (const row of rows) {
+    const source = (row.tags ?? []).map(t => sources.get(t)).find(Boolean)
+    if (!source) continue
+    const category = detectNewsCategory(row.title ?? '', row.summary ?? '', source.category)
+    // (a few sources default to names the database's category list lacks, like "military")
+    if (category !== row.category && STORED_CATEGORIES.has(category)) changed.push({ id: row.id, category })
+  }
+  // 500 rows a statement
+  for (let i = 0; i < changed.length; i += 500) {
+    const batch = changed.slice(i, i + 500)
+    await db.raw(
+      `UPDATE signals AS s SET category = v.category::category
+         FROM (VALUES ${batch.map(() => '(?::uuid, ?::text)').join(', ')}) AS v(id, category)
+        WHERE s.id = v.id`,
+      batch.flatMap(r => [r.id, r.category]),
     )
   }
   return changed.length

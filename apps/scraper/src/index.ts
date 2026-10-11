@@ -40,7 +40,7 @@ import { runDelayedRescore } from './pipeline/rescore'
 import { signalsHavePublishedAt, publishedAtFor, backfillRecentPublishedAt, sourceKey, hostOf } from './pipeline/signal-columns'
 import { independentReports, isCopyOf } from './pipeline/independence'
 import { ensureStoryIdColumn } from './pipeline/stories'
-import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames, stripOutletNotes } from './pipeline/repairs'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames, stripOutletNotes, recategorizeRecentNews } from './pipeline/repairs'
 import { batchValidateGeo } from './pipeline/geo-validator'
 import { recomputeSourceReputation } from './pipeline/source-reputation'
 import { startKafkaLagMonitor } from './lib/kafka-lag-monitor'
@@ -184,6 +184,10 @@ async function bootstrap() {
     .then(() => stripOutletNotes())
     .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: outlet notes ("Source: X (reliability: N%, bias: Y).") taken out of summaries') })
     .catch(err => logger.warn({ err }, 'Outlet note repair failed (non-fatal)'))
+    // Then the categories, which read the cleaned headlines and summaries
+    .then(() => recategorizeRecentNews())
+    .then(rows => { if (rows && rows > 0) logger.info({ rows }, "Repair: news categories by the current rules (attacks as conflict, surgery as health, matches as sports)") })
+    .catch(err => logger.warn({ err }, 'News category repair failed (non-fatal)'))
   liftCappedSeverities()
     .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: corroborated stories got the severity their words earn (single-source cap lifted)') })
     .catch(err => logger.warn({ err }, 'Severity lift repair failed (non-fatal)'))
