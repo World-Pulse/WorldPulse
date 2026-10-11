@@ -3,7 +3,7 @@ import type { Metadata } from 'next'
 import type { Signal, Post } from '@worldpulse/types'
 import { SignalDetailClient } from './SignalDetailClient'
 import { displaySummary } from '@/lib/signal-text'
-import { SITE_IMAGE, SITE_NAME, newsArticleJsonLd, jsonLdText, metaDescription } from '@/lib/page-metadata'
+import { SITE_NAME, SITE_URL, newsArticleJsonLd, jsonLdText, metaDescription } from '@/lib/page-metadata'
 
 const API_BASE = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -73,9 +73,9 @@ export async function generateMetadata(
   // description; search results and share cards show about 160 characters)
   const description = metaDescription(displaySummary(signal.summary, signal.title) || signal.title)
   const path = `/signals/${signal.id}`
-  // The page's own address, the site name and a picture: this openGraph
-  // replaces the root layout's whole one, which left story links with no
-  // picture in share previews (plan G2)
+  // The page's own address and the site name: this openGraph replaces the
+  // root layout's whole one. The picture is the story's own card
+  // (opengraph-image.tsx and twitter-image.tsx next to this page, plan G3)
   return {
     title:       `${signal.title} — WorldPulse`,
     description,
@@ -86,7 +86,6 @@ export async function generateMetadata(
       type:          'article',
       url:           path,
       siteName:      SITE_NAME,
-      images:        [SITE_IMAGE],
       publishedTime: signal.firstReported ?? undefined,
       modifiedTime:  signal.lastUpdated   ?? undefined,
       tags:          signal.tags,
@@ -95,7 +94,6 @@ export async function generateMetadata(
       card:        'summary_large_image',
       title:       signal.title,
       description,
-      images:      [SITE_IMAGE.url],
     },
   }
 }
@@ -120,6 +118,7 @@ export default async function SignalDetailPage(
     published:   signal.firstReported ?? signal.createdAt,
     modified:    signal.lastUpdated,
     place:       signal.locationName,
+    image:       `${SITE_URL}/signals/${signal.id}/opengraph-image`,
   })
 
   return (

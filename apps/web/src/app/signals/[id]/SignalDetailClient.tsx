@@ -30,6 +30,7 @@ import { EventTimeline } from '@/components/signals/EventTimeline'
 import { TVClips } from '@/components/signals/TVClips'
 import { NewsImages } from '@/components/signals/NewsImages'
 import { PredictionMarkets } from '@/components/signals/PredictionMarkets'
+import { ShareMenu } from '@/components/signals/ShareMenu'
 import { displaySummary, isStateMedia, STATE_MEDIA_NOTE } from '@/lib/signal-text'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -136,54 +137,6 @@ function ReliabilityScore({ signal }: { signal: SignalDetail }) {
         </div>
       </div>
     </div>
-  )
-}
-
-// Share button — copies current URL to clipboard
-function ShareButton() {
-  const [copied, setCopied] = useState(false)
-
-  async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(window.location.href)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // fallback: select a hidden input
-      const input = document.createElement('input')
-      input.value = window.location.href
-      document.body.appendChild(input)
-      input.select()
-      document.execCommand('copy')
-      document.body.removeChild(input)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-  }
-
-  return (
-    <button
-      onClick={handleCopy}
-      className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-full border border-white/10 font-mono text-[10px] text-wp-text3 hover:border-white/20 hover:text-wp-text2 transition-all min-h-[44px]"
-      aria-label="Copy link to this signal"
-    >
-      {copied ? (
-        <>
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#00e676" strokeWidth="2.5">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-          <span style={{ color: '#00e676' }}>Copied</span>
-        </>
-      ) : (
-        <>
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-          </svg>
-          Share
-        </>
-      )}
-    </button>
   )
 }
 
@@ -308,7 +261,7 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
               </svg>
               Flag
             </button>
-            <ShareButton />
+            <ShareMenu title={signal.title} />
           </div>
         </div>
         {flagOpen && <FlagModal signalId={signal.id} onClose={() => setFlagOpen(false)} />}
