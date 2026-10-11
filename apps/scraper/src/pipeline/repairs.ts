@@ -9,6 +9,8 @@
 
 import { db } from '../lib/postgres'
 import { EVENT_TEMPLATE_SQL } from './event-titles'
+import { countIndependentOutlets } from './independence'
+import { hostOf } from './signal-columns'
 
 /** Where nginx serves uploaded post media (the uploads volume, under /uploads/) */
 const PUBLIC_SITE = 'https://world-pulse.io'
@@ -60,4 +62,29 @@ export async function undoTemplateCorroboration(): Promise<number> {
     [GDELT_RELIABILITY, EVENT_TEMPLATE_SQL],
   )
   return Number((result as { rowCount?: number })?.rowCount ?? 0)
+}
+
+/**
+ * Verified signals from the last 3 days whose links are all copies of one
+ * article on different websites (sister stations, syndication sites: the same
+ * address slug), which no longer counts as independent corroboration (see
+ * pipeline/independence.ts), go back to pending with one source. Only rows
+ * still verified with 2+ links are read, so a later start changes nothing.
+ */
+export async function undoCopyVerifications(): Promise<number> {
+  const rows = await db('signals')
+    .select('id', 'original_urls')
+    .where('status', 'verified')
+    .whereRaw(`created_at > NOW() - INTERVAL '3 days'`)
+    .whereRaw('cardinality(original_urls) >= 2') as Array<{ id: string; original_urls: unknown }>
+  const ids = rows
+    .filter(r => {
+      const urls = Array.isArray(r.original_urls) ? r.original_urls.map(String) : []
+      const byHost = new Map(urls.map(u => [hostOf(u), u] as const))
+      if (byHost.size < 2) return false // one website: verified some other way, leave it
+      return countIndependentOutlets([...byHost].map(([host, url]) => ({ source_id: host, url }))) < 2
+    })
+    .map(r => r.id)
+  if (ids.length === 0) return 0
+  return db('signals').whereIn('id', ids).update({ status: 'pending', verified_at: null, source_count: 1 })
 }

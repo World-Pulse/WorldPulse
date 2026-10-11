@@ -28,6 +28,7 @@ import { logger } from '../lib/logger'
 import { sourceKey, hostOf } from './signal-columns'
 import { findGazetteerPlace } from './geo'
 import { isEventTemplateTitle } from './event-titles'
+import { countIndependentOutlets, isCopyOf } from './independence'
 import { createHash } from 'crypto'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -627,7 +628,9 @@ async function applyCorroborationBoost(
   sameStory: CorrelationCandidate[],
 ): Promise<void> {
   const group = [signal, ...sameStory]
-  const uniqueSources = new Set(group.map(s => s.source_id).filter(Boolean)).size
+  // Copies of one article on sister sites, or a wire headline reprinted word
+  // for word, are one outlet (pipeline/independence.ts)
+  const uniqueSources = countIndependentOutlets(group)
   if (uniqueSources < 2) return // Need 2+ independent outlets
 
   // Base boost per corroborating outlet
@@ -728,6 +731,9 @@ export async function corroborateWithDuplicate(
   const counted = new Set([...storedIds, ...storedUrls.map(hostOf)].filter(Boolean))
   const incomingHost = hostOf(incoming.url)
   if (!incoming.source_id || counted.has(incoming.source_id) || (incomingHost && counted.has(incomingHost))) return false
+  // A copy of the held report (same article slug, or the same headline word for
+  // word) is the same reporting on another website, not independent evidence
+  if (isCopyOf({ url: incoming.url, title: incoming.title }, { urls: storedUrls, title: typeof row.title === 'string' ? row.title : null })) return false
 
   const existing = toCandidate({ ...row, source_id: storedIds[0] ?? null, first_url: storedUrls[0] ?? null, location_name: null, reliability_score: 0, tags: [] })
   if (!isSameStory(existing, { ...existing, ...incoming, id: 'incoming' })) return false

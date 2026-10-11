@@ -293,3 +293,37 @@ describe('isSameStory with GDELT event-label titles', () => {
     )).toBe(false)
   })
 })
+
+describe('only independent outlets corroborate', () => {
+  beforeEach(() => {
+    h.updates.length = 0
+    h.state.textRows = []
+    h.state.textQueries.length = 0
+  })
+
+  it('does not boost a story carried only as copies of one wire headline', async () => {
+    const t = 'Magnitude 6.1 earthquake strikes off the coast of northern Japan'
+    h.state.recentRows = [row({ title: t, first_url: 'https://www.dw.com/en/quake/a-1' })]
+    await correlateSignal(sig({ title: t, source_id: 'channelnewsasia.com', url: 'https://www.channelnewsasia.com/asia/quake-2' }))
+    expect(h.updates).toEqual([])
+  })
+
+  it('does not boost sister sites publishing the same article', async () => {
+    h.state.recentRows = [row({ first_url: 'https://foxrochester.com/news/nation-world/strong-earthquake-hits-off-northern-japan-coast' })]
+    await correlateSignal(sig({ source_id: 'cbs12.com', url: 'https://cbs12.com/news/world/strong-earthquake-hits-off-northern-japan-coast' }))
+    expect(h.updates).toEqual([])
+  })
+
+  it('does not credit a held signal with a word-for-word copy from another site', async () => {
+    h.state.firstRow = {
+      id: 'sig-held', title: 'Magnitude 6.1 earthquake strikes off the coast of northern Japan',
+      category: 'disaster', severity: 'high', source_ids: [], original_urls: ['https://www3.nhk.or.jp/news/quake'],
+      published_at: now.toISOString(), lat: null, lng: null,
+    }
+    expect(await corroborateWithDuplicate('sig-held', {
+      title: 'Magnitude 6.1 Earthquake Strikes Off the Coast of Northern Japan', category: 'disaster', severity: 'high',
+      source_id: 'dw.com', url: 'https://www.dw.com/en/quake/a-1', lat: null, lng: null, published_at: now.toISOString(),
+    })).toBe(false)
+    expect(h.updates).toEqual([])
+  })
+})

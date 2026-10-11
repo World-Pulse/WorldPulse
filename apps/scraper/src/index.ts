@@ -34,7 +34,8 @@ import { startHeartbeat, stopHeartbeat, registerCrashHandlers } from './lib/proc
 import { runStabilityCheck, recordUnhandledException } from './lib/stability-tracker'
 import { runDelayedRescore } from './pipeline/rescore'
 import { signalsHavePublishedAt, publishedAtFor, backfillRecentPublishedAt, sourceKey, hostOf } from './pipeline/signal-columns'
-import { fixLocalhostUploadUrls, undoTemplateCorroboration } from './pipeline/repairs'
+import { independentReports, isCopyOf } from './pipeline/independence'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications } from './pipeline/repairs'
 import { batchValidateGeo } from './pipeline/geo-validator'
 import { recomputeSourceReputation } from './pipeline/source-reputation'
 import { startKafkaLagMonitor } from './lib/kafka-lag-monitor'
@@ -149,6 +150,9 @@ async function bootstrap() {
   undoTemplateCorroboration()
     .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: GDELT event-label signals back to pending') })
     .catch(err => logger.warn({ err }, 'GDELT template repair failed (non-fatal)'))
+  undoCopyVerifications()
+    .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: stories verified only by copies of one article back to pending') })
+    .catch(err => logger.warn({ err }, 'Copy-verification repair failed (non-fatal)'))
 
   // Start main scrape loop (works with or without Kafka)
   await scrapeAll()
@@ -642,20 +646,26 @@ async function processArticleGroup(
     // from an outlet already on the signal (or a sibling feed of it, same
     // website) is not another source.
     const signalId = JSON.parse(existing).id
-    const held = await db('signals').where('id', signalId).first('source_ids', 'original_urls') as
-      { source_ids?: unknown; original_urls?: unknown } | undefined
+    const held = await db('signals').where('id', signalId).first('title', 'source_ids', 'original_urls') as
+      { title?: unknown; source_ids?: unknown; original_urls?: unknown } | undefined
+    const heldUrls = (Array.isArray(held?.original_urls) ? held!.original_urls as unknown[] : []).map(String)
+    const heldTitle = typeof held?.title === 'string' ? held.title : null
     const counted = new Set([
       ...(Array.isArray(held?.source_ids) ? held!.source_ids as unknown[] : []).map(String),
-      ...(Array.isArray(held?.original_urls) ? held!.original_urls as unknown[] : []).map(hostOf),
+      ...heldUrls.map(hostOf),
     ].filter(Boolean))
     for (const article of articles) {
       const outlet = hostOf(article.url) || article.sourceId
       if (!outlet || counted.has(outlet)) continue
       counted.add(outlet)
+      // A copy (same article slug, or the same headline word for word) is listed
+      // with the story but isn't another independent source
+      const copy = isCopyOf({ url: article.url, title: article.title }, { urls: heldUrls, title: heldTitle })
+      heldUrls.push(article.url)
       await db('signals')
         .where('id', signalId)
         .update({
-          source_count:  db.raw('source_count + 1'),
+          ...(copy ? {} : { source_count: db.raw('source_count + 1') }),
           // array_append, not `|| ARRAY[?]::uuid[]`: source_ids is text[] in
           // production, and text[] || uuid[] made every update fail, so a signal
           // never gained its later sources
@@ -663,6 +673,7 @@ async function processArticleGroup(
           original_urls: db.raw('array_append(original_urls, ?)', [article.url]),
           last_updated:  new Date(),
         })
+      if (copy) continue
       // A new outlet with the same story can verify it (it never did before,
       // so multi-outlet news stories stayed pending)
       await confirmMergedArticle(signalId, {
@@ -694,8 +705,13 @@ async function processArticleGroup(
     return extractGeo(primary.title + ' ' + (primary.body ?? ''))
   })
 
-  // One article per outlet: sibling feeds of one website are one source
-  const outlets = [...new Map(articles.map(a => [hostOf(a.url) || a.sourceId, a])).values()]
+  // One article per independent outlet: sibling feeds of one website are one
+  // source, and so are copies of one article on other sites (same slug, or a
+  // wire headline reprinted word for word; see pipeline/independence.ts)
+  const outlets = independentReports(
+    [...new Map(articles.map(a => [hostOf(a.url) || a.sourceId, a])).values()],
+    a => ({ source_id: hostOf(a.url) || a.sourceId, url: a.url, title: a.title }),
+  )
   const reliability = computeReliability(outlets)
 
   // Create signal
@@ -778,7 +794,7 @@ async function processArticleGroup(
   const verificationResult = await startSpan('pipeline.verify', async (span) => {
     span.attributes['signal.id']       = String(signal.id)
     span.attributes['articles.count']  = articles.length
-    return verifySignal(signal, articles)
+    return verifySignal(signal, outlets)
   })
   if (verificationResult.status !== signal.status) {
     await db('signals').where('id', signal.id).update({

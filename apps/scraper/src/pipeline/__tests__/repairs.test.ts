@@ -1,14 +1,29 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const h = vi.hoisted(() => ({ raws: [] as Array<{ sql: string; params?: unknown[] }> }))
-
-vi.mock('../../lib/postgres', () => ({
-  db: Object.assign(vi.fn(), {
-    raw: vi.fn(async (sql: string, params?: unknown[]) => { h.raws.push({ sql, params }); return { rowCount: 3 } }),
-  }),
+const h = vi.hoisted(() => ({
+  raws: [] as Array<{ sql: string; params?: unknown[] }>,
+  rows: [] as Array<Record<string, unknown>>,
+  updates: [] as Array<{ ids: string[]; data: Record<string, unknown> }>,
 }))
 
-import { fixLocalhostUploadUrls, undoTemplateCorroboration } from '../repairs'
+vi.mock('../../lib/postgres', () => {
+  function builder() {
+    let ids: string[] = []
+    const b: Record<string, unknown> = {}
+    for (const m of ['select', 'where', 'whereRaw']) b[m] = () => b
+    b.whereIn = (_c: string, list: string[]) => { ids = list; return b }
+    b.update = (data: Record<string, unknown>) => { h.updates.push({ ids, data }); return Promise.resolve(ids.length) }
+    b.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve(h.rows).then(res, rej)
+    return b
+  }
+  return {
+    db: Object.assign(vi.fn(() => builder()), {
+      raw: vi.fn(async (sql: string, params?: unknown[]) => { h.raws.push({ sql, params }); return { rowCount: 3 } }),
+    }),
+  }
+})
+
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications } from '../repairs'
 import { EVENT_TEMPLATE_SQL } from '../event-titles'
 
 describe('fixLocalhostUploadUrls', () => {
@@ -55,5 +70,29 @@ describe('undoTemplateCorroboration', () => {
     expect(js.test('Protest')).toBe(true)
     expect(js.test('Protest in Paris over pension reform turns violent')).toBe(false)
     expect(js.test('At least 12 dead in Riyadh airport attack')).toBe(false)
+  })
+})
+
+describe('undoCopyVerifications', () => {
+  beforeEach(() => { h.updates.length = 0 })
+
+  it('puts back to pending only stories whose links are copies of one article', async () => {
+    h.rows = [
+      { id: 'sinclair', original_urls: [
+        'https://foxsanantonio.com/newsletter-daily/metro-healths-baby-buggy-walk-and-health-expo-spotlights-infant-mortality',
+        'https://news4sanantonio.com/news/local/metro-healths-baby-buggy-walk-and-health-expo-spotlights-infant-mortality'] },
+      { id: 'independent', original_urls: [
+        'https://www.aljazeera.com/news/2026/10/10/riyadh-airport-attack-kills-twelve',
+        'https://www.npr.org/2026/10/10/nx-s1-1/saudi-airport-attack'] },
+      { id: 'one-site', original_urls: ['https://www.bbc.com/news/a', 'https://www.bbc.com/news/b'] },
+    ]
+    expect(await undoCopyVerifications()).toBe(1)
+    expect(h.updates).toEqual([{ ids: ['sinclair'], data: { status: 'pending', verified_at: null, source_count: 1 } }])
+  })
+
+  it('changes nothing when every story has independent outlets', async () => {
+    h.rows = []
+    expect(await undoCopyVerifications()).toBe(0)
+    expect(h.updates).toEqual([])
   })
 })
