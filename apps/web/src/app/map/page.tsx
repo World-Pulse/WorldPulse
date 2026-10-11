@@ -1289,7 +1289,9 @@ function MapView() {
         //    clicked (plan M9) when nothing else is under the cursor ─────
 
         // Layers that are scenery, not something to click
-        const SCENERY = /^(wp-imagery-|country-select-|country-risk-|enhanced-heatmap|list-hover|since-visit-)/
+        // Shading and outlines over the land: a click through them still picks the country
+        // (the day/night polygons cover the whole globe, so leaving them out blocked every brief)
+        const SCENERY = /^(wp-imagery-|country-select-|country-risk-|enhanced-heatmap|list-hover|since-visit-|daynight-|country-links-)/
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const pickCountry = async (e: any) => {
           const base = new Set(baseIdsRef.current ?? [])
