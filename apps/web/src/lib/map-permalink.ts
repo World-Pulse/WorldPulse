@@ -30,6 +30,7 @@ export type LayerKey =
   | 'hazards'
   | 'sat'
   | 'country-risk'
+  | 'conflict'
 
 export interface MapPermalinkState {
   /** Center latitude */

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef, useState, useCallback, Suspense } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import type Supercluster from 'supercluster'
@@ -21,6 +22,7 @@ import {
 import { LayersPanel, activeLayerCount, type MapLayerGroup } from '@/components/map/LayersPanel'
 import { MapLegend } from '@/components/map/MapLegend'
 import { LiveList, latestFirst } from '@/components/map/LiveList'
+import { ensureMapIcon, MAP_ICON } from '@/lib/map-icons'
 import {
   SEVERITY_COLOR, SEVERITY_BG, SEVERITY_RANK, CLUSTER_COLOR_EXPR, SIGNAL_RADIUS_EXPR, FONT_BOLD,
   BASEMAP_MODES, BASEMAP_LABEL, ATMOSPHERE,
@@ -194,6 +196,10 @@ function MapView() {
   const scRef        = useRef<SCIndex | null>(null)
   const signalsRef   = useRef<MapSignal[]>([])
   const animFrameRef = useRef<number | null>(null)
+  /** While nothing pulses, the animation checks once a second instead of every frame (M3) */
+  const animIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** Whether a critical signal is drawn on its own (it pulses) */
+  const hasCriticalRef = useRef(false)
 
   // WS
   const wsRef              = useRef<WebSocket | null>(null)
@@ -215,6 +221,8 @@ function MapView() {
     typeof window !== 'undefined' ? parseWindowHash() : null
   )
   const hashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** A shared link's selected signal, opened once the signals have loaded (M10) */
+  const pendingSignalRef = useRef<string | null>(permalinkRef.current?.signalId ?? null)
 
   // Initial map position from URL params — read once at mount
   // If a permalink hash is present, it takes priority over query params.
@@ -304,18 +312,15 @@ function MapView() {
   const windLayerRef = useRef<import('@/components/map/WindParticleLayer').WindParticleLayer | null>(null)
 
   // ── Timeline Playback state (BAT-14) ────────────────────────────────────────────
-  const [timelineActive, setTimelineActive] = useState(
-    () => !!(permalinkRef.current?.timelineRange)
-  )
-  const [timelineRange, setTimelineRange] = useState(
-    () => permalinkRef.current?.timelineRange ?? '24h'
-  )
+  // A shared link's Replay is switched on after the first render (see the M10 effect)
+  const [timelineActive, setTimelineActive] = useState(false)
+  const [timelineRange, setTimelineRange] = useState('24h')
   const timeline = useTimelinePlayback()
 
   // ── Basemap switcher state ────────────────────────────────────────────────────
-  const [basemap, setBasemap] = useState<BasemapMode>(
-    () => toBasemapMode(permalinkRef.current?.basemap) ?? 'dark'
-  )
+  // Starts dark on the server and the client alike (the server can't see the #hash); a
+  // shared link's basemap is applied right after (below), before the map loads
+  const [basemap, setBasemap] = useState<BasemapMode>('dark')
   const basemapRef = useRef<BasemapMode>(basemap)
   useEffect(() => { basemapRef.current = basemap }, [basemap])
   /** The basemap's own layer ids, known once the map has loaded */
@@ -385,6 +390,8 @@ function MapView() {
   const [hotspots,     setHotspots]     = useState<Hotspot[]>([])
   const [hotspotsOpen, setHotspotsOpen] = useState(false)
   const [layersOpen,   setLayersOpen]   = useState(false)
+  /** The map has loaded: overlay layers switched on earlier (e.g. by a shared link) can draw now */
+  const [mapReady,     setMapReady]     = useState(false)
   // "Latest in view" list beside the map (M14): open by default on wide screens
   const [listOpen,     setListOpen]     = useState(false)
   const [inView,       setInView]       = useState<MapSignal[]>([])
@@ -436,15 +443,15 @@ function MapView() {
   useEffect(() => { timelineRangeRef.current  = timelineRange  }, [timelineRange])
   useEffect(() => { selectedRef.current       = selected       }, [selected])
 
+  /** Every layer that's on, for share links (M10) */
+  const activeLayerKeysRef = useRef<LayerKey[]>([])
+
   /** Collect current map state for permalink encoding. */
   const getPermalinkState = useCallback((): MapPermalinkState => {
     const map = mapRef.current
     const center = map?.getCenter?.() ?? { lat: 20, lng: 10 }
     const zoom   = map?.getZoom?.()   ?? 2
-    const layers: LayerKey[] = []
-    if (windModeRef.current)       layers.push('wind')
-    if (hmRef.current)             layers.push('heat')
-    if (timelineActiveRef.current) layers.push('timeline')
+    const layers: LayerKey[] = [...activeLayerKeysRef.current]
     return {
       lat:           Number(center.lat.toFixed(4)),
       lng:           Number(center.lng.toFixed(4)),
@@ -458,7 +465,7 @@ function MapView() {
 
   /** Write permalink hash to window.location (debounced, 500ms). */
   const updateHash = useCallback(() => {
-    if (typeof window === 'undefined') return
+    if (typeof window === 'undefined' || !mapRef.current) return
     if (hashTimerRef.current) clearTimeout(hashTimerRef.current)
     hashTimerRef.current = setTimeout(() => {
       const state = getPermalinkState()
@@ -469,6 +476,49 @@ function MapView() {
 
   // Re-write hash whenever layer toggles or selected signal changes (BAT-15)
   useEffect(() => { updateHash() }, [windMode, timelineActive, timelineRange, basemap, selected?.id, updateHash])
+
+  // Share links carry every layer that's on, and open with them on (M10)
+  useEffect(() => {
+    const on: Array<[boolean, LayerKey]> = [
+      [heatmapMode, 'heat'], [timelineActive, 'timeline'], [showAircraft, 'adsb'], [showShips, 'ships'],
+      [showCameras, 'cameras'], [navalMode, 'naval'], [threatMode, 'threats'], [jammingMode, 'jamming'],
+      [hazardsMode, 'hazards'], [satelliteMode, 'sat'], [countryRiskMode, 'country-risk'], [conflictMode, 'conflict'],
+    ]
+    activeLayerKeysRef.current = on.filter(([isOn]) => isOn).map(([, key]) => key)
+    updateHash()
+  }, [heatmapMode, timelineActive, showAircraft, showShips, showCameras, navalMode, threatMode, jammingMode,
+      hazardsMode, satelliteMode, countryRiskMode, conflictMode, updateHash])
+
+  // A shared link opens with its layers and basemap (M10). Applied after the first
+  // render: the server can't see the #hash, so doing it in useState broke hydration
+  useEffect(() => {
+    const link = permalinkRef.current
+    if (!link) return
+    const bm = toBasemapMode(link.basemap)
+    if (bm) { basemapRef.current = bm; setBasemap(bm) }
+    const has = (key: LayerKey) => link.layers?.includes(key) ?? false
+    if (has('heat'))         setHeatmapMode(true)
+    if (has('adsb'))         setShowAircraft(true)
+    if (has('ships'))        setShowShips(true)
+    if (has('cameras'))      setShowCameras(true)
+    if (has('naval'))        setNavalMode(true)
+    if (has('threats'))      setThreatMode(true)
+    if (has('jamming'))      setJammingMode(true)
+    if (has('hazards'))      setHazardsMode(true)
+    if (has('sat'))          setSatelliteMode(true)
+    if (has('country-risk')) setCountryRiskMode(true)
+    if (has('conflict'))     setConflictMode(true)
+    if (link.timelineRange) { setTimelineRange(link.timelineRange); setTimelineActive(true) }
+  }, [])
+
+  // A shared link's signal opens once it's among the loaded ones (M10)
+  useEffect(() => {
+    const id = pendingSignalRef.current
+    if (!id || signals.length === 0) return
+    const sig = signals.find(x => x.id === id)
+    pendingSignalRef.current = null
+    if (sig) setSelected(sig)
+  }, [signals])
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
@@ -523,6 +573,10 @@ function MapView() {
     }
     const clusters = sc.getClusters(bbox, zoom)
     src.setData({ type: 'FeatureCollection', features: clusters })
+    hasCriticalRef.current = clusters.some(f => {
+      const props = f.properties as { cluster?: boolean; severity?: string }
+      return !props.cluster && props.severity === 'critical'
+    })
     // Signals in view: each cluster counts its members
     setVisibleCount(clusters.reduce((n, f) => {
       const props = f.properties as { cluster?: boolean; point_count?: number }
@@ -586,6 +640,8 @@ function MapView() {
   // ── Rebuild Supercluster when signals change ───────────────────────────────
 
   useEffect(() => {
+    // While Replay runs it owns the map's points; closing it brings the live ones back
+    if (timelineActive) return
     let cancelled = false
     ;(async () => {
       const { default: SuperclusterLib } = await import('supercluster')
@@ -607,9 +663,11 @@ function MapView() {
       sc.load(features)
       scRef.current = sc
       refreshClusters()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(mapRef.current as any)?.getSource?.('signals-raw')?.setData({ type: 'FeatureCollection', features })
     })()
     return () => { cancelled = true }
-  }, [signals, refreshClusters])
+  }, [signals, refreshClusters, timelineActive])
 
   // Refresh heatmap / visible count whenever signals change
   useEffect(() => { refreshHeatmapAndCountRef.current() }, [signals])
@@ -627,7 +685,7 @@ function MapView() {
       hm.hide()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [heatmapMode])
+  }, [heatmapMode, mapReady])
 
   // BAT-16: cross-fade colour ramp when category filter changes
   useEffect(() => {
@@ -814,6 +872,32 @@ function MapView() {
 
       mapRef.current = map
 
+      // Layer listeners: MapLibre's off(type, layerId) without the listener
+      // removes nothing, so switching a layer off and on again stacked up
+      // duplicate click and hover handlers (several pop-ups per click). Keep
+      // track of them, and let off(type, layerId) remove them all.
+      const layerListeners = new Map<string, Array<(...args: unknown[]) => void>>()
+      const originalOn  = map.on.bind(map)
+      const originalOff = map.off.bind(map)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      map.on = (type: string, target: any, listener?: any) => {
+        if (typeof target === 'string' && typeof listener === 'function') {
+          const key = `${type}|${target}`
+          layerListeners.set(key, [...(layerListeners.get(key) ?? []), listener])
+        }
+        return listener === undefined ? originalOn(type, target) : originalOn(type, target, listener)
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      map.off = (type: string, target: any, listener?: any) => {
+        if (typeof target === 'string' && listener === undefined) {
+          const key = `${type}|${target}`
+          for (const fn of layerListeners.get(key) ?? []) originalOff(type, target, fn)
+          layerListeners.delete(key)
+          return map
+        }
+        return listener === undefined ? originalOff(type, target) : originalOff(type, target, listener)
+      }
+
       // MapLibre v5 workaround: explicitly setting mercator projection right
       // after creation kicks the render pipeline out of a stuck state where
       // isStyleLoaded + areTilesLoaded are true but the 'load' event never
@@ -898,6 +982,13 @@ function MapView() {
         map.addSource('highlights', {
           type: 'geojson',
           data: { type: 'FeatureCollection', features: [] },
+        })
+
+        // Every signal, unclustered: the heatmap reads this (reading the
+        // clustered source, it saw almost nothing when zoomed out)
+        map.addSource('signals-raw', {
+          type: 'geojson',
+          data: { type: 'FeatureCollection', features: toFeatures(signalsRef.current) },
         })
 
         // ── Signal layers ─────────────────────────────────────
@@ -1007,9 +1098,16 @@ function MapView() {
 
         // Critical signals send out a slow ripple; new arrivals get a pulsing gold ring
         // Redrawn about 15 times a second (not every frame): the motion looks the
-        // same but the map repaints a quarter as often.
+        // same but the map repaints a quarter as often. With nothing to pulse it
+        // only looks again once a second.
         let lastTickMs = 0
         const animatePulse = (now: number) => {
+          if (!hasCriticalRef.current && newSignalIdsRef.current.size === 0) {
+            animIdleTimerRef.current = setTimeout(() => {
+              animFrameRef.current = requestAnimationFrame(animatePulse)
+            }, 1000)
+            return
+          }
           animFrameRef.current = requestAnimationFrame(animatePulse)
           if (now - lastTickMs < 66) return
           lastTickMs = now
@@ -1148,7 +1246,8 @@ function MapView() {
             if (cat !== 'all') url += `&cat=${cat}`
             if (tr  !== '24h') url += `&tr=${tr}`
             if (hm)            url += `&hm=1`
-            routerRef.current.replace(url, { scroll: false })
+            // Update the address without a Next.js navigation (M7), keeping the #share hash
+            window.history.replaceState(window.history.state, '', url + window.location.hash)
           }, 500)
           // Also update the URL hash for permalink sharing (BAT-15)
           updateHash()
@@ -1159,7 +1258,7 @@ function MapView() {
 
         // Re-project annotation card connector lines after map pans/zooms
         map.on('moveend', () => {
-          if (annotationCardsRef.current.size > 0) setMapMoveCount(c => c + 1)
+          setMapMoveCount(c => c + 1) // hotspot labels re-position on every move
         })
 
         // Seed from already-fetched signals (if any)
@@ -1171,12 +1270,16 @@ function MapView() {
         if (hmRef.current) {
           enhancedHeatmapRef.current.show(catRef.current)
         }
+
+        // Overlay layers that were switched on before the map loaded draw now
+        setMapReady(true)
       })
     })()
 
     return () => {
       cancelled = true
       if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null }
+      if (animIdleTimerRef.current) { clearTimeout(animIdleTimerRef.current); animIdleTimerRef.current = null }
       if (urlTimerRef.current)  { clearTimeout(urlTimerRef.current);           urlTimerRef.current  = null }
       if (ro) ro.disconnect()
       if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
@@ -1242,7 +1345,7 @@ function MapView() {
       map.once('idle', applyLayer)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [satelliteMode, gibsDate])
+  }, [satelliteMode, gibsDate, mapReady])
 
   // ── CelesTrak satellite tracking layer ─────────────────────────────────────
 
@@ -1504,7 +1607,7 @@ function MapView() {
       map.once('idle', () => { void applyLayer() })
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [carrierMode])
+  }, [carrierMode, mapReady])
 
   // ── ADS-B Live Aircraft layer ──────────────────────────────────────────────
 
@@ -1549,7 +1652,9 @@ function MapView() {
           }))
 
         const currentMap = mapRef.current
-        if (!currentMap || !currentMap.loaded()) return
+        // (loaded() stays false while tiles load, e.g. as the globe turns)
+        if (!currentMap || !currentMap.isStyleLoaded()) return
+        await ensureMapIcon(currentMap, MAP_ICON.plane)
 
         if (!currentMap.getSource(ADSB_SOURCE)) {
           currentMap.addSource(ADSB_SOURCE, {
@@ -1566,16 +1671,12 @@ function MapView() {
             id:     ADSB_LAYER,
             type:   'symbol',
             source: ADSB_SOURCE,
+            // An icon: the map font has no ✈ (it drew nothing)
             layout: {
-              'text-field':           '✈',
-              'text-size':            16,
-              'text-allow-overlap':   true,
-              'text-ignore-placement': true,
-            },
-            paint: {
-              'text-color':      '#00d4ff',
-              'text-halo-color': 'rgba(0,0,0,0.7)',
-              'text-halo-width': 1,
+              'icon-image':            MAP_ICON.plane.id,
+              'icon-size':             ['interpolate', ['linear'], ['zoom'], 2, 0.75, 8, 1],
+              'icon-allow-overlap':    true,
+              'icon-ignore-placement': true,
             },
           })
 
@@ -1627,7 +1728,7 @@ function MapView() {
       if (intervalId) clearInterval(intervalId)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showAircraft])
+  }, [showAircraft, mapReady])
 
   // ── Live Webcam / IP Camera map layer ─────────────────────────────────────────
 
@@ -1684,7 +1785,8 @@ function MapView() {
           }))
 
         const currentMap = mapRef.current
-        if (!currentMap || !currentMap.loaded()) return
+        if (!currentMap || !currentMap.isStyleLoaded()) return
+        await ensureMapIcon(currentMap, MAP_ICON.camera)
 
         if (!currentMap.getSource(CAM_SOURCE)) {
           currentMap.addSource(CAM_SOURCE, {
@@ -1701,15 +1803,12 @@ function MapView() {
             id:     CAM_LAYER,
             type:   'symbol',
             source: CAM_SOURCE,
+            // An icon: the map font has no 📹 (it drew nothing)
             layout: {
-              'text-field':            '📹',
-              'text-size':             15,
-              'text-allow-overlap':    true,
-              'text-ignore-placement': true,
-            },
-            paint: {
-              'text-halo-color': 'rgba(0,0,0,0.75)',
-              'text-halo-width': 1.5,
+              'icon-image':            MAP_ICON.camera.id,
+              'icon-size':             ['interpolate', ['linear'], ['zoom'], 2, 0.75, 8, 1],
+              'icon-allow-overlap':    true,
+              'icon-ignore-placement': true,
             },
           })
 
@@ -1772,7 +1871,7 @@ function MapView() {
       if (intervalId) clearInterval(intervalId)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showCameras])
+  }, [showCameras, mapReady])
 
   // ── Maritime AIS ship tracking layer (civilian vessels, GeoJSON, clustered) ────
 
@@ -1848,22 +1947,18 @@ function MapView() {
             paint: { 'text-color': '#fff' },
           })
 
-          // Individual ship symbols (⚓ Unicode)
+          // Individual ships: an icon (the map font has no ⚓, so it drew nothing)
+          await ensureMapIcon(map, MAP_ICON.ship)
           map.addLayer({
             id:     MARITIME_SHIPS,
             type:   'symbol',
             source: MARITIME_SOURCE,
             filter: ['!', ['has', 'point_count']],
             layout: {
-              'text-field':             '⚓',
-              'text-size':              16,
-              'text-allow-overlap':     false,
-              'text-ignore-placement':  false,
-            },
-            paint: {
-              'text-color': '#f59e0b',
-              'text-halo-color': 'rgba(0,0,0,0.7)',
-              'text-halo-width': 1.5,
+              'icon-image':            MAP_ICON.ship.id,
+              'icon-size':             ['interpolate', ['linear'], ['zoom'], 2, 0.75, 8, 1],
+              'icon-allow-overlap':    false,
+              'icon-ignore-placement': false,
             },
           })
 
@@ -1925,7 +2020,7 @@ function MapView() {
       if (intervalId) clearInterval(intervalId)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showShips])
+  }, [showShips, mapReady])
 
   // ── Naval Intelligence layer (carriers + AIS distress + dark ships) ────────
 
@@ -2156,7 +2251,7 @@ function MapView() {
       if (refreshTimer) clearInterval(refreshTimer)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navalMode])
+  }, [navalMode, mapReady])
 
   // ── Conflict Zone Overlay (BAT-17) ─────────────────────────────────────────
   useEffect(() => {
@@ -2174,9 +2269,8 @@ function MapView() {
 
       setConflictLoading(true)
       try {
-        const [{ ConflictZoneOverlay }, { ConflictRegionLayer }, res] = await Promise.all([
+        const [{ ConflictZoneOverlay }, res] = await Promise.all([
           import('@/components/map/ConflictZoneOverlay'),
-          import('@/components/map/ConflictRegions'),
           fetch(`${API_URL}/api/v1/signals/map/conflict-zones`),
         ])
 
@@ -2191,11 +2285,9 @@ function MapView() {
         conflictLayerRef.current.show(geojson as Parameters<typeof conflictLayerRef.current.show>[0])
         setConflictCount(geojson.features.length)
 
-        // Init region polygons
-        if (!conflictRegionRef.current) {
-          conflictRegionRef.current = new ConflictRegionLayer(map)
-        }
-        conflictRegionRef.current.addToMap()
+        // The fixed conflict-region boxes (ConflictRegions.ts) are no longer
+        // drawn: 20 hand-drawn rectangles that always reported 0 signals, and
+        // looked like warped sheets on the globe. The signals above are real.
       } catch (err) {
         console.error('[ConflictZone] fetch error', err)
       } finally {
@@ -2218,7 +2310,7 @@ function MapView() {
       if (refreshTimer) clearInterval(refreshTimer)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conflictMode])
+  }, [conflictMode, mapReady])
 
   // ── Missile/Drone Threat Intelligence layer ─────────────────────────────────
   useEffect(() => {
@@ -2408,7 +2500,7 @@ function MapView() {
       if (refreshTimer) clearInterval(refreshTimer)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [threatMode])
+  }, [threatMode, mapReady])
 
   // ── GPS/GNSS Jamming Intelligence layer ──────────────────────────────────────
   useEffect(() => {
@@ -2618,7 +2710,7 @@ function MapView() {
       if (refreshTimer) clearInterval(refreshTimer)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jammingMode])
+  }, [jammingMode, mapReady])
 
   // ── Natural Hazards layer (seismic, volcano, tsunami, wildfire) ────────────
   useEffect(() => {
@@ -2812,7 +2904,7 @@ function MapView() {
       if (refreshTimer) clearInterval(refreshTimer)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hazardsMode])
+  }, [hazardsMode, mapReady])
 
   // ── Country Risk Choropleth layer ────────────────────────────────────────────
   //
@@ -3034,7 +3126,7 @@ function MapView() {
       if (refreshTimer) clearInterval(refreshTimer)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [countryRiskMode])
+  }, [countryRiskMode, mapReady])
 
   // ── Wind Particle Flow layer (WebGL custom layer, BAT-13) ────────────────────
   useEffect(() => {
@@ -3125,7 +3217,7 @@ function MapView() {
       lng: s.lng,
       severity: s.severity,
       category: s.category,
-      status: 'verified',
+      status: '', // unknown here: don't draw a verified ring
       location_name: null,
       country_code: null,
       reliability_score: 0.7,
@@ -3134,28 +3226,14 @@ function MapView() {
       is_breaking: s.is_breaking,
     }))
 
-    // Update the Supercluster index with timeline signals
-    const features = toFeatures(timelineSignals)
+    // Load the replayed signals into the cluster index and redraw (the old code
+    // wrote to a 'signals-cluster' source that doesn't exist, so nothing moved)
     const Sc = scRef.current
     if (Sc) {
+      const features = toFeatures(timelineSignals)
       Sc.load(features)
-      // Trigger a re-render of clusters
-      if (map.getSource?.('signals-cluster')) {
-        const bounds = map.getBounds()
-        const zoom = Math.floor(map.getZoom())
-        if (bounds) {
-          const clusters = Sc.getClusters(
-            [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()],
-            zoom,
-          )
-          try {
-            map.getSource('signals-cluster').setData({
-              type: 'FeatureCollection',
-              features: clusters,
-            })
-          } catch { /* source may not exist yet */ }
-        }
-      }
+      refreshClusters()
+      map.getSource?.('signals-raw')?.setData({ type: 'FeatureCollection', features })
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timelineActive, timeline.visibleSignals, timeline.currentTime])
@@ -3186,7 +3264,8 @@ function MapView() {
     if (heatmapMode)            url += `&hm=1`
     if (timelineActive)         url += `&tl=${timelineRange}`
     if (timelineActive && timeline.currentTime) url += `&tt=${encodeURIComponent(timeline.currentTime)}`
-    routerRef.current.replace(url, { scroll: false })
+    // Without a Next.js navigation (M7), keeping the #share hash
+    window.history.replaceState(window.history.state, '', url + window.location.hash)
   }, [category, timeRange, heatmapMode])
 
   // ── Derived state ──────────────────────────────────────────────────────────
@@ -3662,7 +3741,8 @@ function MapView() {
             </>
           )}
           {flagModalSignalId && (
-            <FlagModal signalId={flagModalSignalId} onClose={() => setFlagModalSignalId(null)} />
+            // Rendered on <body>: inside the sliding panel (it has a transform) the dialog was trapped in 340px
+            createPortal(<FlagModal signalId={flagModalSignalId} onClose={() => setFlagModalSignalId(null)} />, document.body)
           )}
         </div>
 

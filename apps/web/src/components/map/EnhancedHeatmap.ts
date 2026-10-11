@@ -17,7 +17,11 @@ import type { Map as MapLibreMap } from 'maplibre-gl'
 
 export const HEATMAP_LAYER_ID = 'enhanced-heatmap'
 export const GLOW_LAYER_ID    = 'enhanced-heatmap-glow'
-const SOURCE_ID               = 'signals'        // existing Supercluster GeoJSON source
+// Every signal, unclustered (map page adds it). The clustered 'signals' source
+// held mostly cluster centroids when zoomed out, which the filter below drops.
+const SOURCE_ID               = 'signals-raw'
+/** Drawn under the signal clusters and pins, not on top of them */
+const BEFORE_LAYER            = 'cluster-halo'
 
 /** Only process individual signal points — exclude Supercluster centroids. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -226,7 +230,7 @@ export class EnhancedHeatmap {
           'heatmap-opacity':    0.78,
         },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any)
+      } as any, m.getLayer(BEFORE_LAYER) ? BEFORE_LAYER : undefined)
     }
 
     // ── Glow overlay layer (wider, lower base opacity, animated) ─────────────
@@ -245,7 +249,7 @@ export class EnhancedHeatmap {
           'heatmap-opacity':    0.35,  // base; RAF will oscillate 0.3→0.6
         },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any)
+      } as any, m.getLayer(BEFORE_LAYER) ? BEFORE_LAYER : undefined)
     }
   }
 
