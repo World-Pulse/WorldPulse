@@ -230,8 +230,10 @@ async function bootstrap() {
   // minutes after a restart
   startEditor()
   // Once, the last 12 hours again: the editor's first passes couldn't read some
-  // replies, and the RSS repair above put back what it had re-filed
-  runOnce('editor:catch-up:2026-10-11', () => catchUpEditor(12))
+  // replies, and the RSS repair above put back what it had re-filed. (The first
+  // catch-up, key "editor:catch-up:2026-10-11", read 2,800 stories in calls of
+  // 50 but changed few; this one reads 25 a call.)
+  runOnce('editor:catch-up:2026-10-11b', () => catchUpEditor(12))
     .then(t => { if (t) logger.info(t, 'Editor: the last 12 hours re-read by Claude') })
     .catch(err => logger.warn({ err }, 'Editor catch-up failed (non-fatal)'))
 

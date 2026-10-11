@@ -1,5 +1,5 @@
 /**
- * The editor: Claude re-reads the newest stories, 50 headlines at a time, and
+ * The editor: Claude re-reads the newest stories, 25 headlines at a time, and
  * files each under its category (Oct 11, 2026, Devon's in-house plan).
  *
  * The word rules (categories.ts) file every story at intake, instantly and
@@ -24,7 +24,11 @@ import { maxSeverityForSourceCount } from './reliability-score'
 import { repeatsTitle } from './text'
 
 export const EDITOR_INTERVAL_MS = 15 * 60_000
-const BATCH = 50
+/**
+ * Stories a call. 25: of the 57 calls of 50 in the first catch-up (Oct 11,
+ * 2026), few changed any story, while passes of about 30 changed half of theirs
+ */
+const BATCH = 25
 const MAX_PER_PASS = 300
 /** How far back a pass looks without a mark, or with an old one */
 const LOOKBACK_MS = 60 * 60_000
@@ -85,28 +89,30 @@ const isCategory = (word: string | undefined): word is string => !!word && Objec
 /**
  * The editor's answer as {story number → category}, keeping only known
  * categories. Reads "7 conflict" as asked, and the forms a reply drifts to:
- * "7. **conflict**", "| 7 | conflict |", "Story 7: conflict", the headline
- * repeated before the category ("7. Strike hits port → conflict"), or bare
- * categories in order without numbers.
+ * "7. **conflict**", "| 7 | conflict |", "Story 7: conflict", "(7) conflict",
+ * JSON ("7": "conflict"), several on one line ("1 conflict, 2 sports"), the
+ * headline repeated before the category ("7. Strike hits port → conflict"),
+ * or bare categories in order without numbers.
  */
 export function parseEditorReply(text: string, count: number): Map<number, string> {
   const filed = new Map<number, string>()
+  const file = (n: number, category: string | undefined) => {
+    if (n >= 1 && n <= count && !filed.has(n) && isCategory(category)) filed.set(n, category)
+  }
   const lines = text.split('\n').map(line => line.replace(/[*_`#|>•]/g, ' ').trim()).filter(Boolean)
+  // A line per story: the category right after the number, or else the last one on the line
   for (const line of lines) {
     const m = /^(?:story\s*)?(\d{1,3})\b\s*[.):\-–—]?\s*(.*)$/i.exec(line)
     if (!m) continue
-    const n = Number(m[1])
-    if (n < 1 || n > count || filed.has(n)) continue
     const words = m[2]!.toLowerCase().match(/[a-z]+/g) ?? []
-    // The category right after the number, or else the last one on the line (after a repeated headline)
-    const category = isCategory(words[0]) ? words[0] : [...words].reverse().find(isCategory)
-    if (category) filed.set(n, category)
+    file(Number(m[1]), isCategory(words[0]) ? words[0] : [...words].reverse().find(isCategory))
   }
-  if (filed.size === 0 && lines.length === count) {
-    lines.forEach((line, i) => {
-      const word = line.toLowerCase().match(/^[a-z]+/)?.[0]
-      if (isCategory(word)) filed.set(i + 1, word)
-    })
+  // Number and category pairs anywhere: JSON, brackets, several on a line
+  for (const m of text.matchAll(/(\d{1,3})[^a-z0-9\n]{0,6}?([a-z]+)/gi)) file(Number(m[1]), m[2]!.toLowerCase())
+  // Bare categories in order
+  if (filed.size === 0) {
+    const words = text.toLowerCase().split(/[\n,;]+/).map(w => w.replace(/[^a-z]/g, '')).filter(Boolean)
+    if (words.length === count && words.every(isCategory)) words.forEach((w, i) => file(i + 1, w))
   }
   return filed
 }
@@ -272,16 +278,27 @@ export async function runEditorPass(now = new Date(), lookbackMs = LOOKBACK_MS):
 
     await redis.set(MARK_KEY, String(doneUntil), 'EX', 7 * 86_400)
     if (refiled.length > 0) await redis.set(FILED_KEY, JSON.stringify(refiled), 'EX', 2 * 86_400)
-    await redis.set(STATS_KEY, JSON.stringify({
-      at:    now.toISOString(),
-      since: since.toISOString(),
-      until: new Date(doneUntil).toISOString(),
-      ...stats,
-    }), 'EX', 2 * 86_400)
+    // The last 12 passes in brief (a catch-up runs several in a row), newest first
+    const window = { at: now.toISOString(), since: since.toISOString(), until: new Date(doneUntil).toISOString() }
+    let history: unknown[] = []
+    try { history = (JSON.parse(await redis.get(STATS_KEY) ?? '{}') as { history?: unknown[] }).history ?? [] } catch { history = [] }
+    const brief = {
+      ...window, read: stats.read, changed: stats.changed, written: stats.written, unparsed: stats.unparsed,
+      held: stats.held, undone: stats.undone, ...(stats.error ? { error: stats.error } : {}),
+    }
+    await redis.set(STATS_KEY, JSON.stringify({ ...window, ...stats, history: [brief, ...history].slice(0, 12) }), 'EX', 2 * 86_400)
     return stats
   } finally {
     await redis.del(LOCK_KEY).catch(() => {})
   }
+}
+
+/** A pass in the scraper's log: what it did, and anything that went wrong */
+function reportPass(s: EditorPassStats): void {
+  if (s.read > 0 || s.stopped) logger.info(s, 'Editor pass: stories re-filed by Claude')
+  if (s.undone > 0) logger.warn({ undone: s.undone, held: s.held, examples: s.undoneExamples }, 'Editor: stories it re-filed were changed back')
+  if (s.written < s.changed) logger.warn({ changed: s.changed, written: s.written }, 'Editor: some changes were not written')
+  if (s.unparsed > 0) logger.warn({ unparsed: s.unparsed, read: s.read, sample: s.replySample }, "Editor: Claude's reply missed some stories")
 }
 
 /**
@@ -299,6 +316,7 @@ export async function catchUpEditor(hours: number, now = new Date()): Promise<{ 
   await redis.set(MARK_KEY, String(now.getTime() - lookbackMs), 'EX', 7 * 86_400)
   for (let i = 0; i < 25; i++) {
     const pass = await runEditorPass(new Date(), lookbackMs)
+    reportPass(pass)
     total.passes++
     total.read += pass.read
     total.changed += pass.changed
@@ -317,12 +335,7 @@ export function startEditor(): void {
   }
   const run = () => {
     runEditorPass()
-      .then(s => {
-        if (s.read > 0 || s.stopped) logger.info(s, 'Editor pass: stories re-filed by Claude')
-        if (s.undone > 0) logger.warn({ undone: s.undone, held: s.held, examples: s.undoneExamples }, 'Editor: stories it re-filed were changed back')
-        if (s.written < s.changed) logger.warn({ changed: s.changed, written: s.written }, 'Editor: some changes were not written')
-        if (s.unparsed > 0) logger.warn({ unparsed: s.unparsed, read: s.read, sample: s.replySample }, "Editor: Claude's reply missed some stories")
-      })
+      .then(reportPass)
       .catch(err => logger.warn({ err }, 'Editor pass failed (non-fatal)'))
   }
   setTimeout(run, 2 * 60_000)

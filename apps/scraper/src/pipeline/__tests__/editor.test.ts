@@ -75,8 +75,15 @@ describe('editorPrompt and parseEditorReply', () => {
     // markdown, a table, "Story n:", the headline repeated before the category
     expect([...parseEditorReply('1. **culture**\n| 2 | sports |\nStory 3: security\n4. New York bids farewell to Calypso King Mighty Sparrow → culture\n5. Election 2026: candidates outline priorities - elections', 5)])
       .toEqual([[1, 'culture'], [2, 'sports'], [3, 'security'], [4, 'culture'], [5, 'elections']])
-    // bare categories in order
+    // JSON, brackets, several on one line
+    expect([...parseEditorReply('{"1": "culture", "2": "Sports"}', 2)]).toEqual([[1, 'culture'], [2, 'sports']])
+    expect([...parseEditorReply('(1) culture\n[2] sports', 2)]).toEqual([[1, 'culture'], [2, 'sports']])
+    expect([...parseEditorReply('1 culture, 2 sports, 3 conflict', 3)]).toEqual([[1, 'culture'], [2, 'sports'], [3, 'conflict']])
+    // bare categories in order, a line each or in a list
     expect([...parseEditorReply('culture\nsports', 2)]).toEqual([[1, 'culture'], [2, 'sports']])
+    expect([...parseEditorReply('culture, sports', 2)]).toEqual([[1, 'culture'], [2, 'sports']])
+    // a number inside a repeated headline isn't a story number
+    expect([...parseEditorReply('1. 109 migrants die off Djibouti → disaster', 1)]).toEqual([[1, 'disaster']])
     // never an Object property name
     expect(parseEditorReply('1 constructor\n2 toString', 2).size).toBe(0)
   })
@@ -174,13 +181,13 @@ describe('runEditorPass', () => {
 
   it('stops when Claude gives nothing (the cap, an error) and retries those stories next time', async () => {
     h.rows = Array.from({ length: 60 }, (_, i) => ({ id: `s${i}`, title: `Story ${i}`, summary: null, category: 'other', severity: 'low', source_count: 1, created_at: at(59 - i * 0.5) }))
-    h.replies.push({ text: Array.from({ length: 50 }, (_, i) => `${i + 1} other`).join('\n'), costMicros: 300 })
-    // the second batch gets null
+    h.replies.push({ text: Array.from({ length: 25 }, (_, i) => `${i + 1} other`).join('\n'), costMicros: 300 })
+    // the second batch (of 25) gets null
     const stats = await runEditorPass(NOW)
     expect(stats.batches).toBe(1)
     expect(stats.stopped).toBe(true)
     // the mark sits just before the first story of the failed batch
-    expect(Number(h.redis.get('ai:editor:since'))).toBe(new Date(h.rows[50]!.created_at as string).getTime() - 1)
+    expect(Number(h.redis.get('ai:editor:since'))).toBe(new Date(h.rows[25]!.created_at as string).getTime() - 1)
   })
 
   it("doesn't run twice at once", async () => {
@@ -205,11 +212,15 @@ describe('catchUpEditor', () => {
   it('reads the last hours again, 300 stories a pass, until it has caught up', async () => {
     // 400 stories over the last 10 hours, all "other"
     h.rows = Array.from({ length: 400 }, (_, i) => ({ id: `s${i}`, title: `Story ${i}`, summary: null, category: 'other', severity: 'low', source_count: 1, created_at: at(600 - i * 1.5) }))
-    for (let b = 0; b < 8; b++) h.replies.push({ text: Array.from({ length: 50 }, (_, i) => `${i + 1} other`).join('\n'), costMicros: 300 })
+    for (let b = 0; b < 16; b++) h.replies.push({ text: Array.from({ length: 25 }, (_, i) => `${i + 1} other`).join('\n'), costMicros: 150 })
     h.redis.set('ai:editor:lock', '1')   // left by a stopped process
     const total = await catchUpEditor(12)
     expect(total).toEqual({ passes: 2, read: 400, changed: 0, stopped: false })
-    expect(vi.mocked(askClaude)).toHaveBeenCalledTimes(8)
+    expect(vi.mocked(askClaude)).toHaveBeenCalledTimes(16)   // 25 stories a call
     expect(Number(h.redis.get('ai:editor:since'))).toBe(NOW.getTime() - 60_000)
+    // each pass in brief, newest first
+    const history = JSON.parse(h.redis.get('ai:editor:last')!).history as Array<{ read: number; since: string }>
+    expect(history.map(p => p.read)).toEqual([100, 300])
+    expect(history[1]!.since).toBe(new Date(NOW.getTime() - 12 * 3_600_000).toISOString())
   })
 })
