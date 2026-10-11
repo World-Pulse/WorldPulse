@@ -207,6 +207,9 @@ services:
       LLM_MODEL:          ${LLM_MODEL:-gpt-4o-mini}
       # Optional — Ollama embeddings (runs on host, not in Docker)
       OLLAMA_HOST:        ${OLLAMA_HOST:-http://172.19.0.1:11434}
+      # Optional — data sources that only run with a key or an approved app name
+      OTX_API_KEY:        ${OTX_API_KEY:-}
+      RELIEFWEB_APPNAME:  ${RELIEFWEB_APPNAME:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:

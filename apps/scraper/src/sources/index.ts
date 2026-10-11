@@ -72,16 +72,13 @@ import { startCisaKevPoller } from './cisa-kev'
 import { startOfacSanctionsPoller } from './ofac-sanctions'
 import { startReliefWebPoller } from './reliefweb'
 import { startNwsAlertsPoller } from './nws-alerts'
-import { startOtxPoller } from './otx-threats'
+import { startOtxPoller, otxEnabled } from './otx-threats'
 import { startGvpVolcanoPoller } from './gvp-volcano'
 import { startEuSanctionsPoller } from './eu-sanctions'
-import { startPowerOutagePoller } from './power-outage'
 import { startAviationIncidentPoller } from './aviation-incidents'
-import { startUnhcrDisplacementPoller } from './unhcr-displacement'
 import { startTsunamiWarningPoller } from './tsunami-warnings'
 import { startInterpolNoticesPoller } from './interpol-notices'
 import { startComtradePoller } from './comtrade'
-import { startPatentsPoller } from './patents'
 import { startNewsRssPoller, NEWS_SOURCE_REGISTRY } from './news-rss'
 
 export type OsintCleanupFn = () => void
@@ -240,21 +237,9 @@ export function startOsintPollers(
   }
 
   try {
-    cleanups.push(startPowerOutagePoller(db, redis, producer))
-  } catch (err) {
-    logger.error({ err }, 'Failed to start Power Grid Outage poller')
-  }
-
-  try {
     cleanups.push(startAviationIncidentPoller(db, redis, producer))
   } catch (err) {
     logger.error({ err }, 'Failed to start Aviation Safety Incident poller')
-  }
-
-  try {
-    cleanups.push(startUnhcrDisplacementPoller(db, redis, producer))
-  } catch (err) {
-    logger.error({ err }, 'Failed to start UNHCR Displacement poller')
   }
 
   try {
@@ -275,11 +260,12 @@ export function startOsintPollers(
     logger.error({ err }, 'Failed to start UN Comtrade commodity flows poller')
   }
 
-  try {
-    cleanups.push(startPatentsPoller(db, redis, producer))
-  } catch (err) {
-    logger.error({ err }, 'Failed to start USPTO PatentsView defense patent poller')
-  }
+  // Switched off (October 2026) because their APIs no longer answer; the code
+  // stays so they can come back once there is a working source:
+  //   power-outage        PowerOutage.us's JSON needs a paid key now (HTTP 401)
+  //   unhcr-displacement  api.unhcr.org has no /situations endpoint (HTTP 404)
+  //   uspto-patents       PatentsView's API paused on March 20, 2026 while it
+  //                       moves to the USPTO Open Data Portal (needs a key)
 
   // ── Global News RSS (25 international outlets) ──────────────────────────
   try {
@@ -313,16 +299,14 @@ export function startOsintPollers(
     ['ofac-sanctions',     'OFAC Sanctions',                 'ofac-sanctions'],
     ['reliefweb',          'UN ReliefWeb',                   'reliefweb'],
     ['nws-alerts',         'NWS Severe Weather',             'nws-alerts'],
-    ['otx-threats',        'AlienVault OTX',                 'otx-threats'],
     ['gvp-volcano',        'GVP/USGS Volcano',               'gvp-volcano'],
     ['eu-sanctions',       'EU CFSP Sanctions',              'eu-sanctions'],
-    ['power-outage',       'Power Grid Outages',             'power-outage'],
     ['aviation-incidents', 'Aviation Safety Incidents',      'aviation-incidents'],
-    ['unhcr-displacement', 'UNHCR Displacement',             'unhcr-displacement'],
     ['tsunami-warnings',   'NOAA Tsunami Warnings',          'tsunami-warnings'],
     ['interpol-notices',   'Interpol Red Notices',           'interpol-notices'],
     ['comtrade',           'UN Comtrade Commodity Flows',    'comtrade'],
-    ['uspto-patents',      'USPTO PatentsView',              'patents'],
+    // OTX only runs with an API key, so it is only watched with one
+    ...(otxEnabled() ? [['otx-threats', 'AlienVault OTX', 'otx-threats'] as [string, string, string]] : []),
   ]
 
   // Register all 25 news RSS sources from the registry dynamically

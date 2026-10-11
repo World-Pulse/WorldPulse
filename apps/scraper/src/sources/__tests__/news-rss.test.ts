@@ -5,6 +5,7 @@
  * category override, geo inference, dedup key generation, and poller lifecycle.
  */
 
+import { describe, it, expect } from 'vitest'
 import {
   NEWS_SOURCE_REGISTRY,
   type NewsSource,
@@ -61,8 +62,8 @@ describe('NEWS_SOURCE_REGISTRY', () => {
     }
   })
 
-  it('tier-1 sources (Reuters, BBC, AP, NHK) have reliability >= 0.88', () => {
-    const tier1Ids = ['reuters-world', 'bbc-world', 'ap-news', 'nhk-world']
+  it('tier-1 sources (BBC, NHK, NPR, DW, UN News) have reliability >= 0.88', () => {
+    const tier1Ids = ['bbc-world', 'nhk-world', 'npr-news', 'dw-world', 'un-news']
     for (const id of tier1Ids) {
       const src = NEWS_SOURCE_REGISTRY.find(s => s.id === id)
       expect(src).toBeDefined()
@@ -100,11 +101,12 @@ describe('NEWS_SOURCE_REGISTRY', () => {
     }
   })
 
-  it('includes 10 new sources added in cycle 8', () => {
+  it('includes the sources added in cycle 8', () => {
     const cycle8Ids = [
-      'le-monde', 'der-spiegel-intl', 'el-pais-eng', 'the-wire-india',
+      'le-monde', 'der-spiegel-intl', 'el-pais-eng',
       'daily-maverick', 'nikkei-asia', 'arab-news', 'allafrica',
       'folha-sao-paulo', 'the-conversation',
+      // the-wire-india was removed in October 2026: its feed address serves the website
     ]
     for (const id of cycle8Ids) {
       const src = NEWS_SOURCE_REGISTRY.find(s => s.id === id)
@@ -112,12 +114,13 @@ describe('NEWS_SOURCE_REGISTRY', () => {
     }
   })
 
-  it('includes 15 new sources added in cycle 9', () => {
+  it('includes the sources added in cycle 9', () => {
     const cycle9Ids = [
       'euractiv', 'moscow-times', 'taipei-times', 'the-hindu-national',
-      'dawn-pakistan', 'premium-times-nigeria', 'bangkok-post', 'jakarta-post',
+      'dawn-pakistan', 'premium-times-nigeria', 'bangkok-post',
       'al-monitor', 'eu-observer', 'africanews', 'rferl',
-      'caixin-global', 'asia-times', 'channel-news-asia',
+      'asia-times', 'channel-news-asia',
+      // jakarta-post and caixin-global were removed in October 2026: their feeds are gone (404)
     ]
     for (const id of cycle9Ids) {
       const src = NEWS_SOURCE_REGISTRY.find(s => s.id === id)

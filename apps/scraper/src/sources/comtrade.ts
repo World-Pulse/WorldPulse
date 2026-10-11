@@ -18,9 +18,13 @@
  *   medium   — other strategic commodities >$100M
  *   low      — smaller flows of strategic interest
  *
- * Dedup: osint:comtrade:{reporterCode}:{partnerCode}:{cmdCode}:{period} @ 7-day TTL
+ * Dedup: osint:comtrade:{reporterCode}:{partnerCode}:{cmdCode}:{period} @ 400-day TTL
+ *   (the data is annual, so each flow is reported once, not again every week)
  *
- * Poll interval: 60 minutes (COMTRADE_INTERVAL_MS env var, default 3600000)
+ * Poll interval: daily (COMTRADE_INTERVAL_MS env var, default 86400000). The
+ *   figures change about once a year; hourly polling asked for the same numbers
+ *   24 times a day, and the public preview API refused many of those requests
+ *   (14 in half an hour on Oct 10, 2026).
  */
 
 import type { Knex } from 'knex'
@@ -34,7 +38,7 @@ const log = rootLogger.child({ module: 'comtrade-source' })
 
 const COMTRADE_BASE_URL = 'https://comtradeapi.un.org/public/v1/preview/C/A/HS'
 const RELIABILITY       = 0.91
-const DEDUP_TTL_S       = 7 * 86_400    // 7-day dedup
+const DEDUP_TTL_S       = 400 * 86_400  // annual figures: one signal per flow per year
 const MIN_VALUE_USD     = 10_000_000    // $10M minimum — suppress noise
 
 // ─── STRATEGIC COMMODITY CODES (HS) ─────────────────────────────────────────
@@ -217,7 +221,7 @@ export function startComtradePoller(
   redis:     Redis,
   producer?: Producer | null,
 ): () => void {
-  const INTERVAL_MS = Number(process.env.COMTRADE_INTERVAL_MS ?? 3_600_000)
+  const INTERVAL_MS = Number(process.env.COMTRADE_INTERVAL_MS ?? 86_400_000)
 
   /** Most recent year with reliable Comtrade coverage (2-year reporting lag). */
   function getRecentPeriod(): string {
@@ -241,8 +245,7 @@ export function startComtradePoller(
     })
 
     if (!res.ok) {
-      log.warn({ status: res.status, reporterCode }, 'Comtrade API non-OK')
-      return 0
+      throw Object.assign(new Error(`Comtrade: HTTP ${res.status}`), { statusCode: res.status })
     }
 
     const body = await res.json() as ComtradeResponse
@@ -329,16 +332,28 @@ export function startComtradePoller(
       log.debug('Polling UN Comtrade strategic commodity flows...')
       const period = getRecentPeriod()
       let totalCreated = 0
+      // HTTP status -> how many reporters got it; logged once per poll
+      const refused: Record<number, number> = {}
 
       for (const reporterCode of STRATEGIC_REPORTERS) {
         try {
           const n = await pollReporter(reporterCode, period)
           totalCreated += n
-          // Brief pause between reporter requests — polite to the public endpoint
-          await new Promise<void>(resolve => setTimeout(resolve, 500))
         } catch (err) {
-          log.warn({ err, reporterCode }, 'Comtrade reporter poll error (skipping)')
+          const status = (err as { statusCode?: unknown }).statusCode
+          if (typeof status !== 'number') {
+            log.warn({ err, reporterCode }, 'Comtrade reporter poll error (skipping)')
+          } else {
+            refused[status] = (refused[status] ?? 0) + 1
+            if (status === 429) break // rate limited: the rest would be refused too
+          }
         }
+        // Brief pause between reporter requests — polite to the public endpoint
+        await new Promise<void>(resolve => setTimeout(resolve, 1_000))
+      }
+
+      if (Object.keys(refused).length > 0) {
+        log.warn({ refused, reporters: STRATEGIC_REPORTERS.length }, 'Comtrade API refused some requests')
       }
 
       if (totalCreated > 0) {

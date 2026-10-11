@@ -1,39 +1,39 @@
 /**
  * WorldPulse Global News RSS Adapter
  *
- * Ingests 125+ international news RSS feeds and creates WorldPulse signals from
+ * Ingests 130+ international news RSS feeds and creates WorldPulse signals from
  * breaking/world news items. Provides editorial-sourced signal coverage to
  * complement the OSINT/sensor feeds already in the pipeline.
  *
  * Tier 1 — Wire services & flagship broadcasters:
- *   BBC World, Reuters, AP News, NHK World, NPR, Deutsche Welle, UN News
+ *   BBC World, NHK World, NPR, Deutsche Welle, UN News
+ *   (Reuters and AP closed their public RSS feeds, so they aren't polled)
  * Tier 2 — Strong independent international outlets:
  *   Al Jazeera, The Guardian, France24, Euronews, Japan Times, Straits Times,
  *   The Hindu, SCMP, VOA, Kyiv Independent, Middle East Eye, Haaretz,
  *   Times of India, Sydney Morning Herald, DW Africa, The East African
  * Tier 2b — Regional & emerging-market outlets:
- *   Le Monde, Der Spiegel Intl, El País (EN), The Wire India, Daily Maverick,
+ *   Le Monde, Der Spiegel Intl, El País (EN), Daily Maverick,
  *   Nikkei Asia, Arab News, AllAfrica, Folha de S.Paulo, The Conversation,
  *   EURACTIV, Moscow Times, Taipei Times, Dawn Pakistan, Premium Times Nigeria,
- *   Bangkok Post, Jakarta Post, Al-Monitor, EUobserver, Africanews, RFE/RL,
- *   Caixin Global, Asia Times, Channel NewsAsia
+ *   Bangkok Post, Al-Monitor, EUobserver, Africanews, RFE/RL,
+ *   Asia Times, Channel NewsAsia
  * Tier 3 — State-controlled media (lower reliability, flagged):
  *   Xinhua (EN), TASS (EN)
  * Tier 4 — Financial intelligence:
- *   Reuters Business, Bloomberg Markets, FT, MarketWatch, CoinDesk,
+ *   Bloomberg Markets, FT, MarketWatch, CoinDesk,
  *   The Block, ECB, Federal Reserve
  * Tier 4b — Premium finance (expanded):
  *   Barron's, CNBC Markets, CNN Business, TheStreet, Investing.com,
- *   WSJ Markets, Forbes Money, Bloomberg Businessweek, Reuters Markets Wire
+ *   WSJ Markets, Forbes Business
  * Tier 5 — Expanded regional & specialist coverage (50 new feeds, cycle 10):
  *   Africa: Nation Africa (KE), The Punch (NG), BusinessDay (NG),
  *     The Africa Report, Ahram Online (EG), Mail & Guardian (ZA),
  *     Vanguard (NG), Daily Trust (NG), The Reporter Ethiopia,
  *     Graphic Online (GH)
  *   SE Asia business: NST Malaysia, Philippine Daily Inquirer, VnExpress Intl,
- *     Myanmar Now, Vietnam News
- *   LatAm investigative: Animal Político (MX), Agência Pública (BR),
- *     El Faro (SV), CIPER Chile, La Silla Vacía (CO)
+ *     Myanmar Now
+ *   LatAm investigative: Agência Pública (BR), CIPER Chile, La Silla Vacía (CO)
  *   Pacific: RNZ Pacific, Islands Business (FJ), ABC Pacific, RNZ National
  *   Climate/energy: Carbon Brief, Climate Home News, Renewable Energy World,
  *     OilPrice.com, Solar Power World, pv magazine, IEA News
@@ -42,18 +42,24 @@
  *   Defense/security: War on the Rocks, Bellingcat, Lawfare, Breaking Defense,
  *     Just Security
  *   Other: Balkan Insight, OCCRP, The Irrawaddy, The Diplomat, Eurasia Review,
- *     The News Lens Intl, WION, The Arab Weekly, Georgia Today
+ *     The Arab Weekly, Georgia Today
  *
  * Reliability scores reflect editorial independence, fact-check track records,
- * and MBFC/NewsGuard ratings. State-controlled outlets (Xinhua, TASS,
- * Vietnam News) are tagged "state-media" and assigned lower reliability.
+ * and MBFC/NewsGuard ratings. State-controlled outlets (Xinhua, TASS) are
+ * tagged "state-media" and assigned lower reliability.
  *
- * Polling: staggered 30-min intervals (sources polled sequentially, 5 s apart)
+ * Polling: staggered 30-min intervals (sources polled sequentially, 5 s apart).
+ * A feed that fails 3 polls in a row is paused for 6 hours at a time (sites
+ * that block us, or move their feed, aren't asked again every 30 minutes).
  * Dedup: Redis key with 24-hour TTL per article URL
+ *
+ * Feeds checked October 2026: 20 dead ones moved to their new addresses, and 20
+ * that no longer exist were removed (Reuters and AP among them).
  */
 
 import https from 'node:https'
 import http  from 'node:http'
+import zlib  from 'node:zlib'
 import type { Knex }     from 'knex'
 import type Redis        from 'ioredis'
 import type { Producer } from 'kafkajs'
@@ -67,6 +73,9 @@ const DEDUP_TTL_S   = 24 * 3_600          // 24 hours
 const POLL_INTERVAL = 30 * 60_000         // 30 minutes between full cycles
 const SOURCE_DELAY  = 5_000               // 5 s stagger between sources
 const MAX_ITEMS     = 20                  // max signals per source per poll
+const MAX_FEED_BYTES     = 5 * 1024 * 1024 // a feed bigger than this isn't a feed
+const FAILS_BEFORE_PAUSE = 3               // failed polls in a row before a feed is paused
+const PAUSE_S            = 6 * 3_600       // how long a failing feed is paused
 
 // ─── SOURCE REGISTRY ─────────────────────────────────────────────────────────
 
@@ -113,34 +122,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     language:        'en',
   },
   {
-    id:              'reuters-world',
-    name:            'Reuters World News',
-    feedUrl:         'https://feeds.reuters.com/reuters/worldNews',
-    category:        'geopolitics',
-    biasLabel:       'center',
-    reliability:     0.95,
-    countryCode:     'GB',
-    defaultLat:      51.50,
-    defaultLng:      -0.12,
-    defaultLocation: 'London, United Kingdom',
-    extraTags:       ['reuters', 'wire-service'],
-    language:        'en',
-  },
-  {
-    id:              'ap-news',
-    name:            'AP News — Top Headlines',
-    feedUrl:         'https://feeds.apnews.com/rss/apf-topnews',
-    category:        'breaking',
-    biasLabel:       'center',
-    reliability:     0.94,
-    countryCode:     'US',
-    defaultLat:      40.71,
-    defaultLng:      -74.01,
-    defaultLocation: 'New York, United States',
-    extraTags:       ['ap', 'wire-service'],
-    language:        'en',
-  },
-  {
     id:              'nhk-world',
     name:            'NHK World News',
     feedUrl:         'https://www3.nhk.or.jp/rss/news/cat0.xml',
@@ -184,8 +165,8 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   },
   {
     id:              'un-news',
-    name:            'UN News — Top Stories',
-    feedUrl:         'https://news.un.org/feed/subscribe/en/news/topic/top-stories/feed/rss.xml',
+    name:            'UN News',
+    feedUrl:         'https://news.un.org/feed/subscribe/en/news/all/rss.xml',
     category:        'geopolitics',
     biasLabel:       'center',
     reliability:     0.90,
@@ -270,7 +251,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   {
     id:              'straits-times',
     name:            'The Straits Times',
-    feedUrl:         'https://www.straitstimes.com/global/rss.xml',
+    feedUrl:         'https://www.straitstimes.com/news/world/rss.xml',
     category:        'geopolitics',
     biasLabel:       'center',
     reliability:     0.81,
@@ -284,7 +265,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   {
     id:              'the-hindu',
     name:            'The Hindu — International',
-    feedUrl:         'https://www.thehindu.com/news/international/rssfeed/?id=526517',
+    feedUrl:         'https://www.thehindu.com/news/international/feeder/default.rss',
     category:        'geopolitics',
     biasLabel:       'center-left',
     reliability:     0.82,
@@ -326,7 +307,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   {
     id:              'kyiv-independent',
     name:            'Kyiv Independent',
-    feedUrl:         'https://kyivindependent.com/rss',
+    feedUrl:         'https://kyivindependent.com/news-archive/rss/',
     category:        'conflict',
     biasLabel:       'center',
     reliability:     0.79,
@@ -354,7 +335,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   {
     id:              'haaretz',
     name:            'Haaretz English',
-    feedUrl:         'https://www.haaretz.com/srv/haaretz-en.xml',
+    feedUrl:         'https://www.haaretz.com/srv/haaretz-latest-headlines',
     category:        'geopolitics',
     biasLabel:       'center-left',
     reliability:     0.79,
@@ -410,7 +391,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   {
     id:              'east-african',
     name:            'The East African',
-    feedUrl:         'https://www.theeastafrican.co.ke/tea/rss',
+    feedUrl:         'https://www.theeastafrican.co.ke/rss.xml',
     category:        'geopolitics',
     biasLabel:       'center',
     reliability:     0.76,
@@ -465,23 +446,9 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     language:        'en',
   },
   {
-    id:              'the-wire-india',
-    name:            'The Wire — India',
-    feedUrl:         'https://thewire.in/rss',
-    category:        'geopolitics',
-    biasLabel:       'center-left',
-    reliability:     0.80,
-    countryCode:     'IN',
-    defaultLat:      28.61,
-    defaultLng:      77.21,
-    defaultLocation: 'New Delhi, India',
-    extraTags:       ['the-wire', 'india', 'south-asia'],
-    language:        'en',
-  },
-  {
     id:              'daily-maverick',
     name:            'Daily Maverick',
-    feedUrl:         'https://www.dailymaverick.co.za/rss/world/',
+    feedUrl:         'https://www.dailymaverick.co.za/rss/',
     category:        'geopolitics',
     biasLabel:       'center',
     reliability:     0.82,
@@ -523,7 +490,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   {
     id:              'allafrica',
     name:            'AllAfrica',
-    feedUrl:         'https://allafrica.com/tools/headlines/rdf/latest/2000.rdf',
+    feedUrl:         'https://allafrica.com/tools/headlines/rdf/latest/headlines.rdf',
     category:        'geopolitics',
     biasLabel:       'center',
     reliability:     0.72,
@@ -662,20 +629,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     language:        'en',
   },
   {
-    id:              'jakarta-post',
-    name:            'The Jakarta Post',
-    feedUrl:         'https://www.thejakartapost.com/news.rss',
-    category:        'geopolitics',
-    biasLabel:       'center',
-    reliability:     0.77,
-    countryCode:     'ID',
-    defaultLat:      -6.21,
-    defaultLng:      106.85,
-    defaultLocation: 'Jakarta, Indonesia',
-    extraTags:       ['jakarta-post', 'indonesia', 'southeast-asia'],
-    language:        'en',
-  },
-  {
     id:              'al-monitor',
     name:            'Al-Monitor',
     feedUrl:         'https://www.al-monitor.com/rss',
@@ -692,7 +645,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   {
     id:              'eu-observer',
     name:            'EUobserver',
-    feedUrl:         'https://euobserver.com/feed.rss',
+    feedUrl:         'https://euobserver.com/feed/',
     category:        'geopolitics',
     biasLabel:       'center',
     reliability:     0.83,
@@ -706,7 +659,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   {
     id:              'africanews',
     name:            'Africanews',
-    feedUrl:         'https://www.africanews.com/rss/',
+    feedUrl:         'https://www.africanews.com/feed/',
     category:        'geopolitics',
     biasLabel:       'center',
     reliability:     0.74,
@@ -720,7 +673,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   {
     id:              'rferl',
     name:            'Radio Free Europe / Radio Liberty',
-    feedUrl:         'https://www.rferl.org/api/zrqosovruqos/rss',
+    feedUrl:         'https://www.rferl.org/rss/',
     category:        'geopolitics',
     biasLabel:       'center',
     reliability:     0.82,
@@ -729,20 +682,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLng:      14.43,
     defaultLocation: 'Prague, Czech Republic',
     extraTags:       ['rferl', 'radio-free-europe', 'eastern-europe', 'independent-media'],
-    language:        'en',
-  },
-  {
-    id:              'caixin-global',
-    name:            'Caixin Global',
-    feedUrl:         'https://www.caixinglobal.com/rss/index.xml',
-    category:        'economy',
-    biasLabel:       'center',
-    reliability:     0.79,
-    countryCode:     'CN',
-    defaultLat:      39.91,
-    defaultLng:      116.39,
-    defaultLocation: 'Beijing, China',
-    extraTags:       ['caixin', 'china', 'economy', 'business', 'east-asia'],
     language:        'en',
   },
   {
@@ -803,20 +742,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     language:        'en',
   },
   // ── Tier 4 — Financial Intelligence ─────────────────────────────────────
-  {
-    id:              'reuters-markets',
-    name:            'Reuters Business',
-    feedUrl:         'https://feeds.reuters.com/reuters/businessNews',
-    category:        'finance',
-    biasLabel:       'center',
-    reliability:     0.90,
-    countryCode:     'GB',
-    defaultLat:      51.50,
-    defaultLng:      -0.12,
-    defaultLocation: 'London, United Kingdom',
-    extraTags:       ['reuters', 'markets', 'finance', 'business'],
-    language:        'en',
-  },
   {
     id:              'bloomberg-markets',
     name:            'Bloomberg Markets',
@@ -1002,8 +927,8 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   },
   {
     id:              'forbes-money',
-    name:            'Forbes Money',
-    feedUrl:         'https://www.forbes.com/money/feed/',
+    name:            'Forbes Business',
+    feedUrl:         'https://www.forbes.com/business/feed/',
     category:        'finance',
     biasLabel:       'center-right',
     reliability:     0.80,
@@ -1012,34 +937,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLng:      -74.00,
     defaultLocation: 'Jersey City, NJ, United States',
     extraTags:       ['forbes', 'money', 'finance', 'personal-finance', 'investing'],
-    language:        'en',
-  },
-  {
-    id:              'bloomberg-businessweek',
-    name:            'Bloomberg Businessweek',
-    feedUrl:         'https://feeds.bloomberg.com/businessweek/news.rss',
-    category:        'finance',
-    biasLabel:       'center',
-    reliability:     0.87,
-    countryCode:     'US',
-    defaultLat:      40.71,
-    defaultLng:      -74.01,
-    defaultLocation: 'New York, United States',
-    extraTags:       ['bloomberg', 'businessweek', 'finance', 'business', 'economy'],
-    language:        'en',
-  },
-  {
-    id:              'reuters-markets-wire',
-    name:            'Reuters Markets Wire',
-    feedUrl:         'https://feeds.reuters.com/reuters/companyNews',
-    category:        'finance',
-    biasLabel:       'center',
-    reliability:     0.90,
-    countryCode:     'GB',
-    defaultLat:      51.50,
-    defaultLng:      -0.12,
-    defaultLocation: 'London, United Kingdom',
-    extraTags:       ['reuters', 'markets', 'corporate', 'earnings', 'finance'],
     language:        'en',
   },
   // ── Tier 5 — African Regional Outlets ───────────────────────────────────
@@ -1116,7 +1013,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   {
     id:              'mail-guardian-za',
     name:            'Mail & Guardian (South Africa)',
-    feedUrl:         'https://mg.co.za/feed/',
+    feedUrl:         'https://mg.co.za/rss/',
     category:        'geopolitics',
     biasLabel:       'center-left',
     reliability:     0.80,
@@ -1158,7 +1055,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   {
     id:              'ethiopia-reporter',
     name:            'The Reporter Ethiopia',
-    feedUrl:         'https://www.thereporterethiopia.com/rss',
+    feedUrl:         'https://www.thereporterethiopia.com/feed/',
     category:        'geopolitics',
     biasLabel:       'center',
     reliability:     0.72,
@@ -1172,7 +1069,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   {
     id:              'graphic-online-gh',
     name:            'Graphic Online (Ghana)',
-    feedUrl:         'https://www.graphic.com.gh/rss',
+    feedUrl:         'https://www.graphic.com.gh/news.feed?type=rss',
     category:        'geopolitics',
     biasLabel:       'center',
     reliability:     0.73,
@@ -1187,7 +1084,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   {
     id:              'nst-malaysia',
     name:            'New Straits Times (Malaysia)',
-    feedUrl:         'https://www.nst.com.my/rss/news',
+    feedUrl:         'https://www.nst.com.my/feed',
     category:        'geopolitics',
     biasLabel:       'center',
     reliability:     0.75,
@@ -1240,35 +1137,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['myanmar-now', 'myanmar', 'southeast-asia', 'independent-media'],
     language:        'en',
   },
-  {
-    id:              'vietnam-news-vna',
-    name:            'Vietnam News (VNA)',
-    feedUrl:         'https://vietnamnews.vn/rss/',
-    category:        'geopolitics',
-    biasLabel:       'state-media',
-    reliability:     0.55,
-    countryCode:     'VN',
-    defaultLat:      21.03,
-    defaultLng:      105.85,
-    defaultLocation: 'Hanoi, Vietnam',
-    extraTags:       ['vietnam-news', 'vietnam', 'southeast-asia', 'state-media'],
-    language:        'en',
-  },
   // ── Tier 5 — Latin American Investigative Journalism ─────────────────────
-  {
-    id:              'animal-politico',
-    name:            'Animal Político (Mexico)',
-    feedUrl:         'https://www.animalpolitico.com/feed/',
-    category:        'geopolitics',
-    biasLabel:       'center-left',
-    reliability:     0.82,
-    countryCode:     'MX',
-    defaultLat:      19.43,
-    defaultLng:      -99.13,
-    defaultLocation: 'Mexico City, Mexico',
-    extraTags:       ['animal-politico', 'mexico', 'latin-america', 'investigative'],
-    language:        'es',
-  },
   {
     id:              'agencia-publica',
     name:            'Agência Pública (Brazil)',
@@ -1282,20 +1151,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLocation: 'São Paulo, Brazil',
     extraTags:       ['agencia-publica', 'brazil', 'latin-america', 'investigative'],
     language:        'pt',
-  },
-  {
-    id:              'el-faro',
-    name:            'El Faro (El Salvador)',
-    feedUrl:         'https://elfaro.net/es/rss',
-    category:        'geopolitics',
-    biasLabel:       'center-left',
-    reliability:     0.83,
-    countryCode:     'SV',
-    defaultLat:      13.69,
-    defaultLng:      -89.22,
-    defaultLocation: 'San Salvador, El Salvador',
-    extraTags:       ['el-faro', 'el-salvador', 'central-america', 'latin-america', 'investigative'],
-    language:        'es',
   },
   {
     id:              'ciper-chile',
@@ -1641,7 +1496,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   {
     id:              'occrp-news',
     name:            'OCCRP — Organized Crime and Corruption',
-    feedUrl:         'https://www.occrp.org/en/feed.rss',
+    feedUrl:         'https://www.occrp.org/en/feed',
     category:        'security',
     biasLabel:       'center',
     reliability:     0.88,
@@ -1692,34 +1547,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLng:      45.00,
     defaultLocation: 'Eurasia',
     extraTags:       ['eurasia-review', 'eurasia', 'central-asia', 'geopolitics', 'analysis'],
-    language:        'en',
-  },
-  {
-    id:              'the-news-lens-intl',
-    name:            'The News Lens International',
-    feedUrl:         'https://international.thenewslens.com/feed',
-    category:        'geopolitics',
-    biasLabel:       'center',
-    reliability:     0.77,
-    countryCode:     'TW',
-    defaultLat:      25.03,
-    defaultLng:      121.57,
-    defaultLocation: 'Taipei, Taiwan',
-    extraTags:       ['news-lens', 'taiwan', 'east-asia', 'asia-pacific'],
-    language:        'en',
-  },
-  {
-    id:              'wion-news',
-    name:            'WION News (India)',
-    feedUrl:         'https://www.wionews.com/feeds/',
-    category:        'geopolitics',
-    biasLabel:       'center-right',
-    reliability:     0.71,
-    countryCode:     'IN',
-    defaultLat:      28.61,
-    defaultLng:      77.21,
-    defaultLocation: 'New Delhi, India',
-    extraTags:       ['wion', 'india', 'south-asia', 'international'],
     language:        'en',
   },
   {
@@ -1809,20 +1636,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     language:        'en',
   },
   {
-    id:              'tradewinds-news',
-    name:            'TradeWinds',
-    feedUrl:         'https://www.tradewindsnews.com/rss',
-    category:        'economy',
-    biasLabel:       'center',
-    reliability:     0.83,
-    countryCode:     'NO',
-    defaultLat:      59.91,
-    defaultLng:      10.75,
-    defaultLocation: 'Oslo, Norway',
-    extraTags:       ['maritime', 'shipping', 'offshore', 'lng', 'tanker', 'container', 'trade'],
-    language:        'en',
-  },
-  {
     id:              'seatrade-maritime',
     name:            'Seatrade Maritime News',
     feedUrl:         'https://www.seatrade-maritime.com/rss.xml',
@@ -1836,49 +1649,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['maritime', 'shipping', 'cruise', 'ports', 'offshore', 'regulations'],
     language:        'en',
   },
-  {
-    id:              'safety4sea',
-    name:            'SAFETY4SEA',
-    feedUrl:         'https://safety4sea.com/feed/',
-    category:        'economy',
-    biasLabel:       'center',
-    reliability:     0.77,
-    countryCode:     'GR',
-    defaultLat:      37.94,
-    defaultLng:      23.65,
-    defaultLocation: 'Piraeus, Greece',
-    extraTags:       ['maritime', 'shipping', 'safety', 'environment', 'regulations', 'piracy'],
-    language:        'en',
-  },
-  {
-    id:              'imo-news',
-    name:            'International Maritime Organization',
-    feedUrl:         'https://www.imo.org/en/MediaCentre/Pages/WhatsNew.aspx/RSS',
-    category:        'economy',
-    biasLabel:       'center',
-    reliability:     0.93,
-    countryCode:     'GB',
-    defaultLat:      51.49,
-    defaultLng:      -0.12,
-    defaultLocation: 'London, United Kingdom',
-    extraTags:       ['maritime', 'imo', 'regulations', 'institutional', 'shipping', 'safety', 'environment'],
-    language:        'en',
-  },
   // ── Maritime: Piracy & Security ────────────────────────────────────────────
-  {
-    id:              'icc-imb-piracy',
-    name:            'ICC IMB Piracy Reporting Centre',
-    feedUrl:         'https://www.icc-ccs.org/index.php/piracy-reporting-centre?format=feed&type=rss',
-    category:        'conflict',
-    biasLabel:       'center',
-    reliability:     0.91,
-    countryCode:     'GB',
-    defaultLat:      51.51,
-    defaultLng:      -0.11,
-    defaultLocation: 'London, United Kingdom',
-    extraTags:       ['maritime', 'piracy', 'security', 'armed-robbery', 'hijacking', 'gulf-of-guinea', 'strait-of-malacca'],
-    language:        'en',
-  },
   {
     id:              'maritime-global-security',
     name:            'Maritime Global Security',
@@ -1954,7 +1725,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   {
     id:              'freightwaves',
     name:            'FreightWaves',
-    feedUrl:         'https://www.freightwaves.com/news/rss.xml',
+    feedUrl:         'https://www.freightwaves.com/feed',
     category:        'economy',
     biasLabel:       'center',
     reliability:     0.79,
@@ -1968,8 +1739,8 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   // ── Maritime: Sanctions & Compliance ───────────────────────────────────────
   {
     id:              'windward-intelligence',
-    name:            'Windward Maritime AI Blog',
-    feedUrl:         'https://windward.ai/blog/feed/',
+    name:            'Windward Maritime AI',
+    feedUrl:         'https://windward.ai/feed/',
     category:        'economy',
     biasLabel:       'center',
     reliability:     0.76,
@@ -2009,20 +1780,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLng:      -71.06,
     defaultLocation: 'Boston, United States',
     extraTags:       ['stat', 'health', 'medicine', 'pharma', 'biotech'],
-    language:        'en',
-  },
-  {
-    id:              'cidrap',
-    name:            'CIDRAP News',
-    feedUrl:         'https://www.cidrap.umn.edu/news/rss.xml',
-    category:        'health',
-    biasLabel:       'center',
-    reliability:     0.90,
-    countryCode:     'US',
-    defaultLat:      44.97,
-    defaultLng:      -93.23,
-    defaultLocation: 'Minneapolis, United States',
-    extraTags:       ['cidrap', 'infectious-disease', 'pandemic', 'epidemiology'],
     language:        'en',
   },
   {
@@ -2166,20 +1923,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     language:        'en',
   },
   {
-    id:              'election-guide',
-    name:            'IFES Election Guide',
-    feedUrl:         'https://www.electionguide.org/feed/',
-    category:        'elections',
-    biasLabel:       'center',
-    reliability:     0.88,
-    countryCode:     'US',
-    defaultLat:      38.90,
-    defaultLng:      -77.04,
-    defaultLocation: 'Washington, United States',
-    extraTags:       ['ifes', 'elections', 'democracy', 'voting', 'governance'],
-    language:        'en',
-  },
-  {
     id:              'cdc-outbreaks',
     name:            'CDC Outbreak Updates',
     feedUrl:         'https://tools.cdc.gov/podcasts/feed.asp?feedid=183',
@@ -2243,8 +1986,8 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   },
   {
     id:              'yahoo-news-world',
-    name:            'Yahoo News World',
-    feedUrl:         'https://news.yahoo.com/rss/world',
+    name:            'Yahoo News — Top Stories',
+    feedUrl:         'https://news.yahoo.com/rss',
     category:        'breaking',
     biasLabel:       'center',
     reliability:     0.78,
@@ -2253,20 +1996,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLng:      -122.08,
     defaultLocation: 'Sunnyvale, United States',
     extraTags:       ['yahoo-news', 'wire-syndication', 'ap-reuters', 'breaking'],
-    language:        'en',
-  },
-  {
-    id:              'usa-today-world',
-    name:            'USA Today World',
-    feedUrl:         'https://rssfeeds.usatoday.com/UsatodaycomWorld-TopStories',
-    category:        'breaking',
-    biasLabel:       'center',
-    reliability:     0.82,
-    countryCode:     'US',
-    defaultLat:      38.90,
-    defaultLng:      -77.02,
-    defaultLocation: 'McLean, United States',
-    extraTags:       ['usa-today', 'wire-syndication', 'ap-reuters', 'breaking'],
     language:        'en',
   },
   {
@@ -2369,12 +2098,13 @@ export function detectNewsSeverity(title: string, description: string): SignalSe
 
   // High: confirmed deaths, large explosions, major crisis
   if (
-    /\b(killed|dead|deaths|bombing|missile\s+strike|air\s+strike|earthquake|tsunami|hurricane|invasion|coup|emergency\s+declared|terror\s+attack|assassination|refugee\s+crisis|famine|outbreak)\b/i.test(text)
+    /\b(killed|dead|deaths|bombings?|missile\s+strikes?|air\s+strikes?|earthquakes?|tsunamis?|hurricanes?|invasion|coups?|emergency\s+declared|terror\s+attacks?|assassination|refugee\s+crisis|famine|outbreaks?)\b/i.test(text)
   ) return 'high'
 
-  // Medium: conflict/tension, significant events
+  // Medium: conflict/tension, significant events (plurals too: "sanctions",
+  // "protests" and "elections" didn't match before)
   if (
-    /\b(arrested|sanction|protest|crisis|clash|conflict|fighting|forces|offensive|troops|ceasefire|election|summit|verdict|breaking)\b/i.test(text)
+    /\b(arrested|sanctions?|protests?|crisis|clash(?:es)?|conflicts?|fighting|forces|offensive|troops|ceasefire|elections?|summits?|verdicts?|breaking)\b/i.test(text)
   ) return 'medium'
 
   return 'low'
@@ -2402,14 +2132,16 @@ export function detectNewsCategory(
     return toCategory('elections')
   if (/\b(stock\s+market|recession|inflation|gdp|central\s+bank|interest\s+rate|economy|trade\s+war|tariff|sanction|oil\s+price|crypto)\b/.test(text))
     return toCategory('economy')
-  if (/\b(ai\s+|artificial\s+intelligence|cybersecurity|hack|data\s+breach|tech\s+giant|silicon\s+valley|openai|spacex|nasa)\b/.test(text))
+  // Space before technology, which also names SpaceX and NASA. No bare "moon"
+  // ("Moon Jae-in", "Ban Ki-moon") or "mars" (the chocolate company)
+  if (/\b(space\s+launch|rockets?|satellites?|iss|international\s+space\s+station|lunar|moon\s+(?:landing|mission|base)|(?:to|on)\s+mars|mars\s+(?:rover|mission|landing)|nasa|esa|spacex|boeing\s+starliner|astronauts?)\b/.test(text))
+    return toCategory('space')
+  if (/\b(ai\s+|artificial\s+intelligence|cybersecurity|hack|data\s+breach|tech\s+giant|silicon\s+valley|openai)\b/.test(text))
     return toCategory('technology')
   if (/\b(climate\s+change|global\s+warming|carbon|emissions|cop[0-9]+|fossil\s+fuel|renewable\s+energy|deforestation)\b/.test(text))
     return toCategory('climate')
   if (/\b(war|invasion|airstrike|missile|troops|military|casualties|conflict|nato|ceasefire|bombing|killed|shelling)\b/.test(text))
     return toCategory('conflict')
-  if (/\b(space\s+launch|rocket|satellite|iss|moon|mars|nasa|esa|spacex|boeing\s+starliner|astronaut)\b/.test(text))
-    return toCategory('space')
   if (/\b(cyber\s+attack|ransomware|malware|espionage|spy|intelligence|terror)\b/.test(text))
     return toCategory('security')
 
@@ -2419,8 +2151,11 @@ export function detectNewsCategory(
 // ─── HTTP HELPER ──────────────────────────────────────────────────────────────
 
 /**
- * Fetch a URL using node http/https, following one redirect.
- * Sets a 20-second timeout and identifies as WorldPulse.
+ * Fetch a URL using node http/https, following up to 3 redirects.
+ * Sets a 20-second timeout and identifies as WorldPulse. Decodes gzip, deflate
+ * and brotli bodies: some servers compress whatever the client asks for, and
+ * undecoded the feed reads as binary with no items (The Independent, Middle
+ * East Eye).
  */
 export function fetchUrl(url: string, redirectCount = 0): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -2435,17 +2170,25 @@ export function fetchUrl(url: string, redirectCount = 0): Promise<string> {
     const req = client.get(url, {
       timeout: 20_000,
       headers: {
-        'User-Agent': 'WorldPulse/1.0 (open-source global intelligence; https://worldpulse.io)',
-        'Accept':     'application/rss+xml, application/xml, application/atom+xml, text/xml, */*',
+        'User-Agent':      'WorldPulse/1.0 (open-source global intelligence; https://worldpulse.io)',
+        'Accept':          'application/rss+xml, application/xml, application/atom+xml, text/xml, */*',
+        'Accept-Encoding': 'gzip, deflate, br',
       },
     }, (res) => {
-      // Follow redirects (301/302/307/308)
+      // Follow redirects; the new address may be relative ("/feed/")
       if (
-        [301, 302, 307, 308].includes(res.statusCode ?? 0) &&
+        [301, 302, 303, 307, 308].includes(res.statusCode ?? 0) &&
         res.headers.location
       ) {
         res.resume()
-        fetchUrl(res.headers.location, redirectCount + 1).then(resolve, reject)
+        let next: string
+        try {
+          next = new URL(res.headers.location, url).toString()
+        } catch {
+          reject(new Error(`Bad redirect from ${url}`))
+          return
+        }
+        fetchUrl(next, redirectCount + 1).then(resolve, reject)
         return
       }
 
@@ -2455,11 +2198,26 @@ export function fetchUrl(url: string, redirectCount = 0): Promise<string> {
         return
       }
 
-      let body = ''
-      res.setEncoding('utf8')
-      res.on('data', (chunk: string) => { body += chunk })
-      res.on('end',  () => resolve(body))
-      res.on('error', reject)
+      const encoding = String(res.headers['content-encoding'] ?? '').toLowerCase()
+      const body: NodeJS.ReadableStream =
+        encoding.includes('br')      ? res.pipe(zlib.createBrotliDecompress()) :
+        encoding.includes('gzip')    ? res.pipe(zlib.createGunzip()) :
+        encoding.includes('deflate') ? res.pipe(zlib.createInflate()) :
+        res
+
+      const chunks: Buffer[] = []
+      let size = 0
+      body.on('data', (chunk: Buffer) => {
+        size += chunk.length
+        if (size > MAX_FEED_BYTES) {
+          req.destroy()
+          reject(new Error(`Response over ${MAX_FEED_BYTES} bytes from ${url}`))
+          return
+        }
+        chunks.push(chunk)
+      })
+      body.on('end',   () => resolve(Buffer.concat(chunks).toString('utf8')))
+      body.on('error', reject)
     })
 
     req.on('error',   reject)
@@ -2684,6 +2442,52 @@ async function processItem(
   }
 }
 
+// ─── FEED FAILURES ───────────────────────────────────────────────────────────
+
+const failKey  = (sourceId: string) => `news-rss:fail:${sourceId}`
+const pauseKey = (sourceId: string) => `news-rss:pause:${sourceId}`
+
+export async function feedPaused(redis: Redis, sourceId: string): Promise<boolean> {
+  try {
+    return (await redis.exists(pauseKey(sourceId))) > 0
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Count a failed poll. After FAILS_BEFORE_PAUSE in a row the feed is paused for
+ * PAUSE_S, then tried once per pause until it works again. Every failure logs
+ * the same message, so the pipeline stats can count them across feeds.
+ */
+export async function noteFeedFailure(
+  redis:     Redis,
+  source:    Pick<NewsSource, 'id' | 'feedUrl'>,
+  sourceLog: Pick<typeof log, 'warn'>,
+  reason:    string,
+): Promise<void> {
+  try {
+    const fails = await redis.incr(failKey(source.id))
+    await redis.expire(failKey(source.id), 7 * 86_400)
+    if (fails >= FAILS_BEFORE_PAUSE) {
+      await redis.set(pauseKey(source.id), '1', 'EX', PAUSE_S)
+      sourceLog.warn({ reason, fails, feedUrl: source.feedUrl }, 'News feed paused after repeated failures')
+    } else {
+      sourceLog.warn({ reason, fails, feedUrl: source.feedUrl }, 'News feed fetch failed')
+    }
+  } catch {
+    sourceLog.warn({ reason, feedUrl: source.feedUrl }, 'News feed fetch failed')
+  }
+}
+
+export async function clearFeedFailures(redis: Redis, sourceId: string): Promise<void> {
+  try {
+    await redis.del(failKey(sourceId))
+  } catch {
+    // best effort
+  }
+}
+
 // ─── POLL ONE SOURCE ─────────────────────────────────────────────────────────
 
 async function pollSource(
@@ -2692,27 +2496,33 @@ async function pollSource(
   producer: Producer | null | undefined,
   source:   NewsSource,
 ): Promise<void> {
-  const sourceLog = log.child({ sourceId: source.id })
+  const sourceLog = log.child({ sourceId: source.id, feed: source.name })
+  if (await feedPaused(redis, source.id)) {
+    sourceLog.debug(`${source.name}: paused after repeated failures`)
+    return
+  }
   sourceLog.debug(`Polling ${source.name}...`)
 
   let xml: string
   try {
     xml = await fetchUrl(source.feedUrl)
   } catch (err) {
-    sourceLog.warn({ err }, `${source.name}: fetch failed`)
+    await noteFeedFailure(redis, source, sourceLog, err instanceof Error ? err.message : String(err))
     return
   }
 
   if (!xml || xml.length < 50) {
-    sourceLog.warn(`${source.name}: empty response`)
+    await noteFeedFailure(redis, source, sourceLog, 'empty response')
     return
   }
 
   const items = parseFeedItems(xml)
   if (items.length === 0) {
-    sourceLog.debug(`${source.name}: no items parsed`)
+    // A page that isn't a feed (moved feed, bot check) parses to nothing
+    await noteFeedFailure(redis, source, sourceLog, 'no items in the response')
     return
   }
+  await clearFeedFailures(redis, source.id)
 
   let created = 0
   for (const item of items) {
@@ -2757,7 +2567,9 @@ export function startNewsRssPoller(
 
     for (const source of NEWS_SOURCE_REGISTRY) {
       if (stopped) break
-      await pollSource(db, redis, producer, source)
+      await pollSource(db, redis, producer, source).catch(err =>
+        log.warn({ err, sourceId: source.id }, 'News feed poll error'),
+      )
       // Stagger requests to be a good citizen with upstream RSS servers
       if (!stopped) {
         await new Promise<void>(resolve => setTimeout(resolve, SOURCE_DELAY))

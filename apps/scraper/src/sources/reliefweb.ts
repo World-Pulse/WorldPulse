@@ -1,36 +1,44 @@
 /**
  * UN ReliefWeb Humanitarian Crisis Signal Source
  *
- * Polls the UN OCHA ReliefWeb API for active disasters and humanitarian
- * crises worldwide. Creates WorldPulse signals for natural disasters,
- * complex emergencies, epidemics, and humanitarian access disruptions.
+ * Reads ReliefWeb's disasters feed (UN OCHA) for natural disasters, epidemics
+ * and complex emergencies worldwide, one WorldPulse signal per disaster.
  *
- * API: https://api.reliefweb.int/v1/disasters
- * Docs: https://apidoc.rwlabs.org/
- * Free, no API key required, public humanitarian data.
+ * The API v1 this used was switched off in 2026 (HTTP 410), and v2 only
+ * answers apps whose appname ReliefWeb has approved (HTTP 403). So:
+ *   - with RELIEFWEB_APPNAME set (request one at https://apidoc.reliefweb.int),
+ *     it reads https://api.reliefweb.int/v2/disasters;
+ *   - without it, it reads the RSS feed https://reliefweb.int/disasters/rss.xml.
+ *     ReliefWeb's firewall (AWS WAF) answers some clients with an empty
+ *     "challenge" (HTTP 202) instead of the feed; that counts as a failure
+ *     with a clear message, not as an empty feed.
+ * Both carry what a signal needs: the title, the disaster page, the date, the
+ * affected countries and the GLIDE number, whose first two letters give the
+ * disaster type and last three the country.
  *
  * Reliability: 0.94 (UN OCHA is the authoritative coordinator for
  *   global humanitarian response; ReliefWeb is the #1 humanitarian
  *   information portal serving 300K+ aid workers worldwide)
- * Category: humanitarian
- *
- * Unique to WorldPulse — no competitor (Crucix, Shadowbroker, Ground News)
- * tracks UN humanitarian disasters as intelligence signals.
+ * Category: disaster (epidemics: health)
  */
 
 import type { Knex } from 'knex'
 import type Redis from 'ioredis'
 import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
-import type { SignalSeverity } from '@worldpulse/types'
+import type { Category, SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate } from '../pipeline/insert-signal'
+import { iso3Centroid } from '../pipeline/country-centroids'
 import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilience'
 
 const log = rootLogger.child({ module: 'reliefweb-source' })
 
-const RELIEFWEB_API = 'https://api.reliefweb.int/v1/disasters'
+const RELIEFWEB_RSS = 'https://reliefweb.int/disasters/rss.xml'
+const RELIEFWEB_API = 'https://api.reliefweb.int/v2/disasters'
+const USER_AGENT = 'WorldPulse/1.0 (OSINT intelligence network; https://world-pulse.io)'
 const RELIABILITY = 0.94
-const DEDUP_TTL_S = 7 * 86_400 // 7-day dedup
+const DEDUP_TTL_S = 180 * 86_400 // one signal per disaster
+const MAX_AGE_DAYS = Number(process.env.RELIEFWEB_MAX_AGE_DAYS) || 60 // skip disasters that started long ago
 const POLL_INTERVAL_MS = Number(process.env.RELIEFWEB_INTERVAL_MS) || 30 * 60_000 // 30 min
 
 // ─── SEVERITY MAPPING ───────────────────────────────────────────────────────
@@ -86,70 +94,193 @@ export function extractDisasterLocation(
     }
   }
 
-  // Fallback: infer from country name/ISO3
-  return inferCountryCenter(countries[0]?.name ?? '', countries[0]?.iso3 ?? '')
+  // Fallback: the centre of the first country
+  return iso3Centroid(countries[0]?.iso3)
 }
 
-/** Country centroid lookup for common humanitarian crisis locations */
-const COUNTRY_CENTROIDS: Record<string, { lat: number; lon: number }> = {
-  AFG: { lat: 33.94, lon: 67.71 },
-  SYR: { lat: 34.80, lon: 38.99 },
-  YEM: { lat: 15.55, lon: 48.52 },
-  SDN: { lat: 12.86, lon: 30.22 },
-  SSD: { lat: 6.88, lon: 31.31 },
-  COD: { lat: -4.04, lon: 21.76 },
-  MMR: { lat: 21.91, lon: 95.96 },
-  ETH: { lat: 9.14, lon: 40.49 },
-  SOM: { lat: 5.15, lon: 46.20 },
-  HTI: { lat: 18.97, lon: -72.29 },
-  UKR: { lat: 48.38, lon: 31.17 },
-  PSE: { lat: 31.95, lon: 35.23 },
-  NGA: { lat: 9.08, lon: 7.49 },
-  MOZ: { lat: -18.67, lon: 35.53 },
-  BGD: { lat: 23.68, lon: 90.36 },
-  PAK: { lat: 30.38, lon: 69.35 },
-  TUR: { lat: 38.96, lon: 35.24 },
-  LBY: { lat: 26.34, lon: 17.23 },
-  IRQ: { lat: 33.22, lon: 43.68 },
-  MLI: { lat: 17.57, lon: -4.00 },
-  BFA: { lat: 12.37, lon: -1.52 },
-  NER: { lat: 17.61, lon: 8.08 },
-  TCD: { lat: 15.45, lon: 18.73 },
-  CMR: { lat: 7.37, lon: 12.35 },
-  CAF: { lat: 6.61, lon: 20.94 },
-  LBN: { lat: 33.85, lon: 35.86 },
-  PHL: { lat: 12.88, lon: 121.77 },
-  IDN: { lat: -0.79, lon: 113.92 },
-  NPL: { lat: 28.39, lon: 84.12 },
-  IND: { lat: 20.59, lon: 78.96 },
-  CHN: { lat: 35.86, lon: 104.20 },
-  BRA: { lat: -14.24, lon: -51.93 },
-  MEX: { lat: 23.63, lon: -102.55 },
-  CHL: { lat: -35.68, lon: -71.54 },
-  JPN: { lat: 36.20, lon: 138.25 },
+// ─── FEED PARSING ───────────────────────────────────────────────────────────
+
+/** GLIDE event types: the first two letters of a GLIDE number (glidenumber.net) */
+export const GLIDE_TYPES: Record<string, string> = {
+  AC: 'Technological Disaster', AV: 'Snow Avalanche', CE: 'Complex Emergency', CW: 'Cold Wave',
+  DR: 'Drought', EC: 'Extratropical Cyclone', EP: 'Epidemic', EQ: 'Earthquake',
+  ET: 'Extreme Temperature', FA: 'Famine', FF: 'Flash Flood', FL: 'Flood', FR: 'Fire',
+  HT: 'Heat Wave', IN: 'Insect Infestation', LS: 'Land Slide', MS: 'Mud Slide', OT: 'Other',
+  SL: 'Slide', SS: 'Storm Surge', ST: 'Severe Local Storm', TC: 'Tropical Cyclone',
+  TO: 'Tornado', TS: 'Tsunami', VO: 'Volcano', VW: 'Violent Wind', WF: 'Wild Fire', WV: 'Wave/Surge',
 }
 
-function inferCountryCenter(name: string, iso3: string): { lat: number; lon: number } | null {
-  if (iso3 && COUNTRY_CENTROIDS[iso3.toUpperCase()]) {
-    return COUNTRY_CENTROIDS[iso3.toUpperCase()]
+/** WorldPulse category for a GLIDE type: epidemics are health news, everything else a disaster */
+export function reliefWebCategory(glideType: string | null): Category {
+  return glideType === 'EP' ? 'health' : 'disaster'
+}
+
+export interface ReliefWebItem {
+  /** Last part of the disaster page's address, e.g. "fl-2026-000181-ner" */
+  slug: string
+  /** ReliefWeb's name for it, e.g. "Niger: Floods - Sep 2026" */
+  title: string
+  url: string
+  publishedAt: Date | null
+  /** GLIDE number, e.g. "FL-2026-000181-NER" */
+  glide: string | null
+  /** Two-letter GLIDE type, e.g. "FL" */
+  typeCode: string | null
+  typeName: string
+  /** Primary country's ISO alpha-3 code, from the GLIDE number */
+  iso3: string | null
+  countries: string[]
+  summary: string
+}
+
+const GLIDE_RE = /\b([A-Z]{2})-(\d{4})-(\d{6})-([A-Z]{3})\b/
+
+function codePoint(n: number): string {
+  return Number.isInteger(n) && n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : ''
+}
+
+/** Decode one layer of XML/HTML character references (&amp; last, so "&amp;lt;" stays "&lt;") */
+function decodeEntities(text: string): string {
+  return text
+    .replace(/&#(\d+);/g, (_, n: string) => codePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n: string) => codePoint(parseInt(n, 16)))
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+}
+
+function tagText(block: string, tag: string): string {
+  const m = block.match(new RegExp(`<${tag}[^>]*>(?:<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>|([\\s\\S]*?))</${tag}>`))
+  return (m?.[1] ?? m?.[2] ?? '').trim()
+}
+
+function htmlToText(html: string): string {
+  return decodeEntities(
+    html
+      .replace(/<div class="tag[^"]*">[\s\S]*?<\/div>/g, ' ') // the "Affected country" and "Glide" labels
+      .replace(/<\/p>|<br\s*\/?>/gi, '\n')
+      .replace(/<\/?(?:a|b|i|em|strong|span)\b[^>]*>/gi, '') // inline tags: no gap, "(OCHA, 8 Sep)"
+      .replace(/<[^>]+>/g, ' '),
+  )
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\s*\n\s*/g, '\n')
+    .trim()
+}
+
+/** Disasters in ReliefWeb's RSS feed (https://reliefweb.int/disasters/rss.xml) */
+export function parseReliefWebRss(xml: string): ReliefWebItem[] {
+  const items: ReliefWebItem[] = []
+  for (const m of xml.matchAll(/<item>([\s\S]*?)<\/item>/g)) {
+    const block = m[1]
+    const title = decodeEntities(tagText(block, 'title'))
+    const url = decodeEntities(tagText(block, 'link'))
+    if (!title || !/^https?:\/\//.test(url)) continue
+
+    const slug = url.replace(/\/+$/, '').split('/').pop() ?? url
+    // The description is HTML inside the XML, so it is encoded twice
+    const descriptionHtml = decodeEntities(tagText(block, 'description'))
+    const categories = [...block.matchAll(/<category[^>]*>([\s\S]*?)<\/category>/g)]
+      .map(c => decodeEntities(c[1].trim()))
+      .filter(Boolean)
+    const glideMatch = categories.map(c => c.match(GLIDE_RE)).find(Boolean) ?? descriptionHtml.match(GLIDE_RE)
+    const typeCode = glideMatch?.[1] ?? null
+    // ReliefWeb names a disaster "Country: Event - Mon YYYY"
+    const named = title.match(/:\s*(.+?)\s+-\s+[A-Z][a-z]{2} \d{4}$/)
+    const published = new Date(tagText(block, 'pubDate'))
+
+    items.push({
+      slug,
+      title,
+      url,
+      publishedAt: isNaN(published.getTime()) ? null : published,
+      glide: glideMatch?.[0] ?? null,
+      typeCode,
+      typeName: (typeCode && GLIDE_TYPES[typeCode]) || named?.[1] || 'Disaster',
+      iso3: glideMatch?.[4] ?? null,
+      countries: categories.filter(c => !GLIDE_RE.test(c)),
+      summary: htmlToText(descriptionHtml),
+    })
   }
-  return null
+  return items
 }
 
-// ─── API RESPONSE TYPES ─────────────────────────────────────────────────────
-
-interface ReliefWebDisaster {
-  id: number
-  fields: {
-    name: string
+/** A disaster as API v2 returns it */
+export interface ReliefWebApiDisaster {
+  id: number | string
+  fields?: {
+    name?: string
     description?: string
-    status: string
-    date?: { created?: string }
-    type?: Array<{ name: string; code: string }>
-    country?: Array<{ iso3?: string; name?: string; location?: { lat?: number; lon?: number } }>
-    primary_country?: { iso3?: string; name?: string; location?: { lat?: number; lon?: number } }
     glide?: string
+    url?: string
+    url_alias?: string
+    date?: { created?: string; event?: string }
+    type?: Array<{ name?: string; code?: string }>
+    country?: Array<{ name?: string; iso3?: string }>
+    primary_country?: { name?: string; iso3?: string }
   }
+}
+
+/** The same shape the RSS parser gives, from an API v2 disaster */
+export function apiDisasterToItem(d: ReliefWebApiDisaster): ReliefWebItem | null {
+  const f = d.fields
+  if (!f?.name) return null
+  const glideMatch = f.glide?.match(GLIDE_RE) ?? null
+  const typeCode = glideMatch?.[1] ?? f.type?.[0]?.code?.toUpperCase() ?? null
+  const url = f.url_alias || f.url || `https://reliefweb.int/disaster/${d.id}`
+  const published = new Date(f.date?.event ?? f.date?.created ?? '')
+  return {
+    slug: url.replace(/\/+$/, '').split('/').pop() || String(d.id),
+    title: f.name,
+    url,
+    publishedAt: isNaN(published.getTime()) ? null : published,
+    glide: glideMatch?.[0] ?? null,
+    typeCode,
+    typeName: (typeCode && GLIDE_TYPES[typeCode]) || f.type?.[0]?.name || 'Disaster',
+    iso3: f.primary_country?.iso3?.toUpperCase() ?? glideMatch?.[4] ?? f.country?.[0]?.iso3?.toUpperCase() ?? null,
+    countries: (f.country ?? []).map(c => c.name ?? '').filter(Boolean),
+    summary: htmlToText(f.description ?? ''),
+  }
+}
+
+/** Error for a response that isn't the data: no retries, and the message says why */
+function blocked(message: string): Error {
+  return Object.assign(new Error(message), { statusCode: 403 })
+}
+
+async function fetchFromApi(appname: string): Promise<ReliefWebItem[]> {
+  const params = new URLSearchParams({ appname, preset: 'latest', limit: '30' })
+  for (const field of ['name', 'description', 'glide', 'url', 'url_alias', 'date', 'type', 'country', 'primary_country']) {
+    params.append('fields[include][]', field)
+  }
+  const url = `${RELIEFWEB_API}?${params}`
+  const body = await fetchWithResilience('reliefweb', 'ReliefWeb', RELIEFWEB_API, async () => {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': USER_AGENT, 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(30_000),
+    })
+    if (res.status === 403) throw blocked('ReliefWeb API: the appname in RELIEFWEB_APPNAME is not approved (HTTP 403)')
+    if (!res.ok) throw Object.assign(new Error(`ReliefWeb API: HTTP ${res.status}`), { statusCode: res.status })
+    return res.json() as Promise<{ data?: ReliefWebApiDisaster[] }>
+  })
+  return (body.data ?? []).map(apiDisasterToItem).filter((d): d is ReliefWebItem => d !== null)
+}
+
+async function fetchFromRss(): Promise<ReliefWebItem[]> {
+  const xml = await fetchWithResilience('reliefweb', 'ReliefWeb', RELIEFWEB_RSS, async () => {
+    const res = await fetch(RELIEFWEB_RSS, {
+      headers: { 'User-Agent': USER_AGENT, 'Accept': 'application/rss+xml, application/xml;q=0.9, */*;q=0.8' },
+      signal: AbortSignal.timeout(30_000),
+    })
+    if (res.status === 202 || res.headers.get('x-amzn-waf-action')) {
+      throw blocked('ReliefWeb RSS: its firewall answered with a browser check (HTTP 202) instead of the feed; set RELIEFWEB_APPNAME to use the API')
+    }
+    if (!res.ok) throw Object.assign(new Error(`ReliefWeb RSS: HTTP ${res.status}`), { statusCode: res.status })
+    return res.text()
+  })
+  return parseReliefWebRss(xml)
 }
 
 // ─── POLLER ─────────────────────────────────────────────────────────────────
@@ -163,91 +294,61 @@ export function startReliefWebPoller(
 
   async function poll(): Promise<void> {
     try {
-      log.info('Polling UN ReliefWeb disasters API')
+      const appname = process.env.RELIEFWEB_APPNAME?.trim()
+      log.info({ via: appname ? 'api' : 'rss' }, 'Polling UN ReliefWeb disasters')
 
-      // Fetch recent disasters updated in the last 30 days
-      const params = new URLSearchParams({
-        'appname': 'worldpulse-osint',
-        'preset': 'latest',
-        'limit': '20',
-        'fields[include][]': 'name,description,status,date,type,country,primary_country,glide',
-        'sort[]': 'date.created:desc',
-      })
-
-      const fetchUrl = `${RELIEFWEB_API}?${params}`
-      let data: { data?: ReliefWebDisaster[] }
+      let all: ReliefWebItem[]
       try {
-        data = await fetchWithResilience(
-          'reliefweb',
-          'ReliefWeb',
-          fetchUrl,
-          async () => {
-            const res = await fetch(fetchUrl, {
-              headers: {
-                'User-Agent': 'WorldPulse/1.0 (OSINT intelligence network)',
-                'Accept': 'application/json',
-              },
-              signal: AbortSignal.timeout(30_000),
-            })
-            if (!res.ok) throw Object.assign(new Error(`ReliefWeb: HTTP ${res.status}`), { statusCode: res.status })
-            return res.json() as Promise<{ data?: ReliefWebDisaster[] }>
-          },
-        )
+        all = appname ? await fetchFromApi(appname) : await fetchFromRss()
       } catch (err) {
         if (err instanceof CircuitOpenError) return
         throw err
       }
-      const disasters = data.data ?? []
 
+      const cutoff = Date.now() - MAX_AGE_DAYS * 86_400_000
+      const disasters = all.filter(d => !d.publishedAt || d.publishedAt.getTime() >= cutoff)
       if (disasters.length === 0) {
-        log.debug('No disasters returned from ReliefWeb')
+        log.debug('No recent disasters in the ReliefWeb feed')
         return
       }
-
-      log.info({ count: disasters.length }, 'ReliefWeb disasters fetched')
 
       let inserted = 0
 
       for (const disaster of disasters) {
-        const { fields } = disaster
-        if (!fields?.name) continue
+        const dedupKey = `osint:reliefweb:${disaster.slug}`
+        if (await redis.get(dedupKey)) continue
 
-        const dedupKey = `osint:reliefweb:${disaster.id}`
-        const exists = await redis.get(dedupKey)
-        if (exists) continue
-
-        const countries = fields.country ?? (fields.primary_country ? [fields.primary_country] : [])
-        const typeName = fields.type?.[0]?.name ?? 'unknown'
-        const severity = disasterSeverity(
-          fields.name,
-          typeName,
-          fields.status,
-          countries.length,
-        )
-        const location = extractDisasterLocation(countries)
-        const countryNames = countries.map(c => c.name).filter(Boolean).join(', ')
+        const severity = disasterSeverity(disaster.title, disaster.typeName, 'ongoing', disaster.countries.length)
+        const location = iso3Centroid(disaster.iso3)
+        const where = disaster.countries.join(', ')
+        const typeTag = disaster.typeName.toLowerCase().replace(/[^a-z0-9]+/g, '-')
 
         const signalData = {
-          title: `UN Crisis: ${fields.name.slice(0, 200)}`,
-          summary: (fields.description ?? `${typeName} affecting ${countryNames || 'multiple regions'}. Status: ${fields.status}.`).slice(0, 2000),
-          original_urls: [`https://reliefweb.int/disaster/${disaster.id}`],
+          title: `UN Crisis: ${disaster.title}`.slice(0, 500),
+          summary: (disaster.summary || `${disaster.typeName} affecting ${where || 'several countries'}.`).slice(0, 2000),
+          original_urls: [disaster.url],
           source_ids: [],
-          category: 'humanitarian' as const,
+          category: reliefWebCategory(disaster.typeCode),
           severity,
           status: 'pending',
           reliability_score: RELIABILITY,
           location: location ? db.raw('ST_MakePoint(?, ?)', [location.lon, location.lat]) : null,
-          location_name: countryNames || 'Multiple regions',
+          location_name: where || 'Several countries',
           country_code: null,
           region: null,
-          tags: ['osint', 'humanitarian', 'reliefweb', 'un', typeName?.toLowerCase()].filter(Boolean),
+          tags: ['osint', 'humanitarian', 'reliefweb', 'un', typeTag, ...(disaster.glide ? [disaster.glide.toLowerCase()] : [])],
           language: 'en',
-          event_time: fields.date?.created ? new Date(fields.date.created) : new Date(),
+          event_time: disaster.publishedAt ?? new Date(),
           source_count: 1,
         }
 
-        await insertAndCorrelate(signalData, { lat: location?.lat ?? null, lng: location?.lon ?? null, sourceId: 'reliefweb' })
-        await redis.set(dedupKey, '1', 'EX', DEDUP_TTL_S)
+        try {
+          await insertAndCorrelate(signalData, { lat: location?.lat ?? null, lng: location?.lon ?? null, sourceId: 'reliefweb' })
+          await redis.set(dedupKey, '1', 'EX', DEDUP_TTL_S)
+        } catch (err) {
+          log.warn({ err, disaster: disaster.slug }, 'Failed to ingest ReliefWeb disaster')
+          continue
+        }
 
         if (producer) {
           try {
@@ -264,7 +365,7 @@ export function startReliefWebPoller(
       }
 
       if (inserted > 0) {
-        log.info({ inserted }, 'New ReliefWeb humanitarian signals created')
+        log.info({ inserted }, 'New ReliefWeb disaster signals created')
       }
     } catch (err) {
       log.error({ err }, 'ReliefWeb poll error')

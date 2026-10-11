@@ -1,21 +1,22 @@
 /**
- * Smithsonian Global Volcanism Program (GVP) Volcanic Activity Source
+ * USGS Volcano Alert Signal Source
  *
- * Polls the Smithsonian GVP weekly volcanic activity reports and
- * USGS Volcano Hazards Program alerts for active eruptions and
- * elevated volcanic unrest worldwide.
+ * Reports US volcanoes (Alaska, Cascades, Hawaii, Yellowstone, the Northern
+ * Mariana Islands) whose USGS alert level is above normal, once each time a
+ * volcano's alert level or aviation color code changes.
  *
- * API: https://volcano.si.edu/volcanolist_holocene.cfm (RSS)
- * Backup: https://volcanoes.usgs.gov/vhp/api/volcanoAlerts (JSON)
- * Free, no API key required.
+ * API: https://volcanoes.usgs.gov/hans-public/api/volcano/getElevatedVolcanoes
+ * (USGS Hazard Notification System, public JSON, no key). Each volcano links
+ * to its latest notice, whose JSON gives the volcano's coordinates and a
+ * one-line synopsis. The older /hans2/api/volcanoAlerts address is gone (404).
+ * Volcano numbers (vnum) are the Smithsonian Global Volcanism Program's.
  *
- * Reliability: 0.93 (Smithsonian Institution is the world's most
- *   comprehensive volcanic activity database; USGS VHP is the
- *   authoritative US volcanic hazard assessment agency)
- * Category: science
+ * Reliability: 0.93 (USGS VHP is the authoritative US volcanic hazard
+ *   assessment agency)
+ * Category: disaster
  *
  * Complements USGS seismic + NASA FIRMS fire feeds with volcanic
- * eruption intelligence. No competitor tracks volcanic activity.
+ * eruption intelligence.
  */
 
 import type { Knex } from 'knex'
@@ -28,9 +29,13 @@ import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilie
 
 const log = rootLogger.child({ module: 'gvp-volcano-source' })
 
-const USGS_VOLCANO_URL = 'https://volcanoes.usgs.gov/hans2/api/volcanoAlerts'
+const USGS_ORIGIN = 'https://volcanoes.usgs.gov/'
+const USGS_ELEVATED_URL = 'https://volcanoes.usgs.gov/hans-public/api/volcano/getElevatedVolcanoes'
 const RELIABILITY = 0.93
-const DEDUP_TTL_S = 7 * 86_400 // 7-day dedup
+/** Hash of vnum -> "WATCH/ORANGE": the level last reported for each elevated volcano */
+const LEVELS_KEY = 'osint:gvp:levels'
+const LEVELS_TTL_S = 60 * 86_400
+const USER_AGENT = 'WorldPulse/1.0 (https://world-pulse.io)'
 const POLL_INTERVAL_MS = Number(process.env.GVP_INTERVAL_MS) || 30 * 60_000 // 30 min
 
 // ─── SEVERITY MAPPING ───────────────────────────────────────────────────────
@@ -124,6 +129,36 @@ const VOLCANO_COORDS: Record<string, { lat: number; lon: number }> = {
   'white island':     { lat: -37.52, lon: 177.18 },
   'tongariro':        { lat: -39.13, lon: 175.64 },
   'nyiragongo':       { lat: -1.52, lon: 29.25 },
+  // More USGS-monitored volcanoes, for when a notice's own coordinates can't be read
+  'spurr':            { lat: 61.30, lon: -152.25 },
+  'iliamna':          { lat: 60.03, lon: -153.09 },
+  'katmai':           { lat: 58.27, lon: -154.96 },
+  'trident':          { lat: 58.24, lon: -155.10 },
+  'aniakchak':        { lat: 56.88, lon: -158.17 },
+  'veniaminof':       { lat: 56.17, lon: -159.38 },
+  'westdahl':         { lat: 54.52, lon: -164.65 },
+  'akutan':           { lat: 54.13, lon: -165.99 },
+  'makushin':         { lat: 53.89, lon: -166.92 },
+  'bogoslof':         { lat: 53.93, lon: -168.03 },
+  'okmok':            { lat: 53.43, lon: -168.13 },
+  'korovin':          { lat: 52.38, lon: -174.15 },
+  'kanaga':           { lat: 51.92, lon: -177.16 },
+  'takawangha':       { lat: 51.87, lon: -178.01 },
+  'tanaga':           { lat: 51.88, lon: -178.14 },
+  'gareloi':          { lat: 51.79, lon: -178.79 },
+  'little sitkin':    { lat: 51.95, lon: 178.54 },
+  'edgecumbe':        { lat: 57.05, lon: -135.75 },
+  'hualalai':         { lat: 19.69, lon: -155.87 },
+  'mount adams':      { lat: 46.20, lon: -121.49 },
+  'glacier peak':     { lat: 48.11, lon: -121.11 },
+  'three sisters':    { lat: 44.10, lon: -121.77 },
+  'newberry':         { lat: 43.72, lon: -121.23 },
+  'crater lake':      { lat: 42.94, lon: -122.11 },
+  'lassen':           { lat: 40.49, lon: -121.50 },
+  'long valley':      { lat: 37.70, lon: -118.87 },
+  'ahyi':             { lat: 20.42, lon: 145.03 },
+  'anatahan':         { lat: 16.35, lon: 145.67 },
+  'pagan':            { lat: 18.13, lon: 145.80 },
 }
 
 /**
@@ -149,16 +184,74 @@ export function lookupVolcanoCoords(
 
 // ─── POLLER ─────────────────────────────────────────────────────────────────
 
-interface UsgsVolcanoAlert {
-  volcanoName: string
-  alertLevel: string
-  aviationColorCode: string
-  observatoryCode: string
-  activity: string
-  sent: string
-  latitude?: number
-  longitude?: number
-  volcanoId?: number
+/** One entry of getElevatedVolcanoes */
+export interface ElevatedVolcano {
+  volcano_name: string
+  vnum: string
+  obs_fullname?: string
+  obs_abbr?: string
+  alert_level: string
+  color_code: string
+  sent_utc?: string
+  sent_unixtime?: number
+  notice_url?: string
+  notice_data?: string
+}
+
+/** One volcano's part of a notice (getNotice) */
+interface NoticeSection {
+  vnum?: string | number
+  lat?: number
+  lng?: number
+  synopsis?: string
+  region?: string
+}
+
+/** "WATCH/ORANGE" */
+export function volcanoLevel(v: Pick<ElevatedVolcano, 'alert_level' | 'color_code'>): string {
+  return `${(v.alert_level ?? '').toUpperCase()}/${(v.color_code ?? '').toUpperCase()}`
+}
+
+/** Elevated volcanoes whose level differs from the one last reported (or that weren't elevated before) */
+export function volcanoLevelChanges(
+  current: ElevatedVolcano[],
+  previous: Record<string, string>,
+): ElevatedVolcano[] {
+  return current.filter(v => v.vnum && previous[v.vnum] !== volcanoLevel(v))
+}
+
+const ALERT_RANK: Record<string, number> = { NORMAL: 0, UNASSIGNED: 0, ADVISORY: 1, WATCH: 2, WARNING: 3 }
+const COLOR_RANK: Record<string, number> = { GREEN: 0, YELLOW: 1, ORANGE: 2, RED: 3 }
+
+/** One sentence on how the level moved, e.g. "Raised from ADVISORY/YELLOW to WATCH/ORANGE." */
+export function describeLevelChange(previous: string | undefined, current: string): string {
+  if (!previous) return `Alert level is above normal: ${current}.`
+  const [prevAlert, prevColor] = previous.split('/')
+  const [alert, color] = current.split('/')
+  const diff = ((ALERT_RANK[alert] ?? 0) - (ALERT_RANK[prevAlert] ?? 0)) ||
+    ((COLOR_RANK[color] ?? 0) - (COLOR_RANK[prevColor] ?? 0))
+  const verb = diff > 0 ? 'Raised' : diff < 0 ? 'Lowered' : 'Changed'
+  return `${verb} from ${previous} to ${current}.`
+}
+
+function sentAt(v: ElevatedVolcano): Date {
+  if (typeof v.sent_unixtime === 'number' && v.sent_unixtime > 0) return new Date(v.sent_unixtime * 1000)
+  const parsed = v.sent_utc ? new Date(`${v.sent_utc.replace(' ', 'T')}Z`) : null
+  return parsed && !isNaN(parsed.getTime()) ? parsed : new Date()
+}
+
+async function fetchNoticeSections(url: string): Promise<NoticeSection[]> {
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
+      signal: AbortSignal.timeout(20_000),
+    })
+    if (!res.ok) return []
+    const body = await res.json() as { notice_sections?: unknown }
+    return Array.isArray(body.notice_sections) ? body.notice_sections as NoticeSection[] : []
+  } catch {
+    return []
+  }
 }
 
 async function pollVolcanoAlerts(
@@ -167,22 +260,19 @@ async function pollVolcanoAlerts(
   producer?: Producer | null,
 ): Promise<void> {
   try {
-    let alerts: UsgsVolcanoAlert[]
+    let volcanoes: ElevatedVolcano[]
     try {
-      alerts = await fetchWithResilience(
+      volcanoes = await fetchWithResilience(
         'gvp-volcano',
-        'GVP Volcano',
-        USGS_VOLCANO_URL,
+        'USGS Volcano',
+        USGS_ELEVATED_URL,
         async () => {
-          const res = await fetch(USGS_VOLCANO_URL, {
-            headers: {
-              'User-Agent': 'WorldPulse/1.0 (https://world-pulse.io)',
-              Accept: 'application/json',
-            },
+          const res = await fetch(USGS_ELEVATED_URL, {
+            headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
             signal: AbortSignal.timeout(30_000),
           })
-          if (!res.ok) throw Object.assign(new Error(`GVP Volcano: HTTP ${res.status}`), { statusCode: res.status })
-          return res.json() as Promise<UsgsVolcanoAlert[]>
+          if (!res.ok) throw Object.assign(new Error(`USGS Volcano: HTTP ${res.status}`), { statusCode: res.status })
+          return res.json() as Promise<ElevatedVolcano[]>
         },
       )
     } catch (err) {
@@ -190,50 +280,55 @@ async function pollVolcanoAlerts(
       throw err
     }
 
-    if (!Array.isArray(alerts) || !alerts.length) {
-      log.debug('No active USGS volcano alerts')
+    if (!Array.isArray(volcanoes)) {
+      log.warn('Unexpected response from the USGS elevated volcano list')
       return
     }
 
-    // Filter to non-NORMAL alerts (only elevated activity)
-    const elevated = alerts.filter(
-      a => a.alertLevel && a.alertLevel.toUpperCase() !== 'NORMAL' && a.alertLevel.toUpperCase() !== 'UNASSIGNED',
+    const elevated = volcanoes.filter(v =>
+      v.vnum && v.volcano_name && (ALERT_RANK[(v.alert_level ?? '').toUpperCase()] ?? 1) > 0,
     )
+    const previous = await redis.hgetall(LEVELS_KEY)
+    // Keep the last reported level of volcanoes that are still elevated; ones
+    // that went back to normal drop out, so a later rise is reported again
+    const next: Record<string, string> = {}
+    for (const v of elevated) if (previous[v.vnum]) next[v.vnum] = previous[v.vnum]
 
+    const notices = new Map<string, Promise<NoticeSection[]>>()
     let ingested = 0
 
-    for (const alert of elevated.slice(0, 15)) {
-      const dedupKey = `osint:gvp:${alert.volcanoName.toLowerCase().replace(/\s+/g, '-')}:${alert.alertLevel}`
-      const seen = await redis.get(dedupKey)
-      if (seen) continue
-
-      const severity = volcanoSeverity(alert.alertLevel, alert.aviationColorCode)
-      const location = lookupVolcanoCoords(
-        alert.volcanoName,
-        alert.latitude,
-        alert.longitude,
-      )
-
-      const colorLabel = alert.aviationColorCode
-        ? ` | Aviation: ${alert.aviationColorCode}`
-        : ''
+    for (const v of volcanoLevelChanges(elevated, previous).slice(0, 15)) {
+      const level = volcanoLevel(v)
+      const noticeData = v.notice_data?.startsWith(USGS_ORIGIN) ? v.notice_data : null
+      if (noticeData && !notices.has(noticeData)) notices.set(noticeData, fetchNoticeSections(noticeData))
+      const sections = noticeData ? await notices.get(noticeData)! : []
+      const section = sections.find(s => String(s.vnum ?? '') === v.vnum)
+      const location = lookupVolcanoCoords(v.volcano_name, section?.lat ?? null, section?.lng ?? null)
+      const synopsis = (section?.synopsis ?? '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+      const colorLabel = v.color_code ? ` | Aviation: ${v.color_code.toUpperCase()}` : ''
 
       const signalData = {
-        title: `Volcanic Alert — ${alert.volcanoName}: ${alert.alertLevel}${colorLabel}`.slice(0, 500),
-        summary: `${(alert.activity ?? '').slice(0, 500)}\n\nObservatory: ${alert.observatoryCode ?? 'Unknown'}\nAlert Level: ${alert.alertLevel}\nAviation Color Code: ${alert.aviationColorCode ?? 'N/A'}`,
-        original_urls: [`https://volcanoes.usgs.gov/hans2/view/notice/${alert.volcanoId ?? ''}`],
+        title: `Volcanic Alert — ${v.volcano_name}: ${v.alert_level.toUpperCase()}${colorLabel}`.slice(0, 500),
+        summary: [
+          synopsis,
+          describeLevelChange(previous[v.vnum], level),
+          `Observatory: ${v.obs_fullname ?? 'USGS'}`,
+          `Alert Level: ${v.alert_level.toUpperCase()}`,
+          `Aviation Color Code: ${v.color_code ? v.color_code.toUpperCase() : 'N/A'}`,
+        ].filter(Boolean).join('\n').slice(0, 2000),
+        original_urls: [v.notice_url?.startsWith(USGS_ORIGIN) ? v.notice_url : 'https://volcanoes.usgs.gov/hans-public/'],
         source_ids: [],
         category: 'disaster',
-        severity,
+        severity: volcanoSeverity(v.alert_level, v.color_code),
         status: 'pending',
         reliability_score: RELIABILITY,
         location: location ? db.raw('ST_MakePoint(?, ?)', [location.lon, location.lat]) : null,
-        location_name: alert.volcanoName,
-        country_code: null,
+        location_name: section?.region ? `${v.volcano_name}, ${section.region}` : v.volcano_name,
+        country_code: 'US',
         region: null,
-        tags: ['osint', 'volcano', 'volcanic', 'usgs', 'gvp'],
+        tags: ['osint', 'volcano', 'volcanic', 'usgs', ...(v.obs_abbr ? [v.obs_abbr.toLowerCase()] : [])],
         language: 'en',
-        event_time: alert.sent ? new Date(alert.sent) : new Date(),
+        event_time: sentAt(v),
         source_count: 1,
       }
 
@@ -247,12 +342,16 @@ async function pollVolcanoAlerts(
           })
         }
 
-        await redis.set(dedupKey, '1', 'EX', DEDUP_TTL_S)
+        next[v.vnum] = level
         ingested++
       } catch (err) {
-        log.warn({ err, volcano: alert.volcanoName }, 'Failed to ingest volcano alert')
+        log.warn({ err, volcano: v.volcano_name }, 'Failed to ingest volcano alert')
       }
     }
+
+    const save = redis.multi().del(LEVELS_KEY)
+    if (Object.keys(next).length > 0) save.hset(LEVELS_KEY, next).expire(LEVELS_KEY, LEVELS_TTL_S)
+    await save.exec()
 
     if (ingested > 0) {
       log.info({ ingested, elevated: elevated.length }, 'Volcano alerts ingested')
@@ -267,7 +366,7 @@ export function startGvpVolcanoPoller(
   redis: Redis,
   producer?: Producer | null,
 ): () => void {
-  log.info('Starting GVP/USGS volcano alert poller (30-min interval)')
+  log.info('Starting USGS volcano alert poller (30-min interval)')
   pollVolcanoAlerts(db, redis, producer)
 
   const timer = setInterval(() => pollVolcanoAlerts(db, redis, producer), POLL_INTERVAL_MS)

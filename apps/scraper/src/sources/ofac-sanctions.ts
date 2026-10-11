@@ -1,21 +1,19 @@
 /**
- * OFAC Sanctions List Signal Source
+ * OFAC Sanctions Signal Source
  *
- * Polls the US Treasury OFAC Specially Designated Nationals (SDN) list
- * RSS feed for newly added sanctions designations. Creates WorldPulse
- * signals for geopolitical sanctions events that affect global trade,
- * finance, and security.
+ * Reads the US Treasury OFAC "Recent Actions" list for new sanctions
+ * designations, removals and general licenses, and creates WorldPulse signals
+ * for these geopolitical events that affect global trade, finance and security.
  *
- * Feed: https://ofac.treasury.gov/recent-actions (RSS/Atom feed)
- * Backup: https://ofac.treasury.gov/system/files/126/sdn.csv (full SDN CSV)
- * Free, no API key required.
+ * Page: https://ofac.treasury.gov/recent-actions (public, no key)
+ * OFAC retired its RSS feed on January 31, 2025 (it now answers 404), so this
+ * reads the first page of the list: each action links to
+ * /recent-actions/YYYYMMDD (plus _N when there are several that day), with
+ * its date and category underneath.
  *
  * Reliability: 0.97 (US Treasury is the authoritative source for sanctions;
  *   SDN list entries are legally binding designations)
  * Category: security
- *
- * Unique to WorldPulse — no competitor (Crucix, Shadowbroker, Ground News)
- * tracks sanctions designations as intelligence signals.
  */
 
 import type { Knex } from 'knex'
@@ -28,10 +26,11 @@ import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilie
 
 const log = rootLogger.child({ module: 'ofac-sanctions-source' })
 
-const OFAC_RECENT_URL = 'https://ofac.treasury.gov/recent-actions/rss.xml'
-const OFAC_FALLBACK_URL = 'https://ofac.treasury.gov/recent-actions'
+const OFAC_ORIGIN = 'https://ofac.treasury.gov'
+const OFAC_RECENT_ACTIONS_URL = `${OFAC_ORIGIN}/recent-actions`
 const RELIABILITY = 0.97
 const DEDUP_TTL_S = 14 * 86_400 // 14-day dedup (sanctions are persistent)
+const MAX_AGE_DAYS = 7
 const POLL_INTERVAL_MS = Number(process.env.OFAC_INTERVAL_MS) || 30 * 60_000 // 30 min
 
 // ─── SEVERITY MAPPING ───────────────────────────────────────────────────────
@@ -50,6 +49,13 @@ export function sanctionsSeverity(
   programRef: string,
 ): SignalSeverity {
   const combined = `${title} ${description} ${programRef}`
+
+  // Low: purely administrative actions (general licenses, FAQs, settlements)
+  // even when they name a big programme ("Issuance of Russia-related General License")
+  if (!/designation|addition/i.test(title) &&
+      /general licen[cs]e|frequently asked|\bfaqs?\b|settlement|guidance|advisory|interpretive|regulation/i.test(title)) {
+    return 'low'
+  }
 
   // Critical: major nation-state sanctions, terrorism, WMD, or cyber
   if (CRITICAL_PROGRAMS.test(combined)) return 'critical'
@@ -99,39 +105,76 @@ export function inferSanctionsRegion(text: string): { lat: number; lon: number }
   return { lat: 38.89, lon: -77.04 }
 }
 
-// ─── XML PARSING HELPERS ────────────────────────────────────────────────────
+// ─── PAGE PARSING ───────────────────────────────────────────────────────────
 
-interface RssItem {
+export interface OfacAction {
+  /** e.g. "/recent-actions/20261009_33" */
+  path: string
+  url: string
   title: string
-  description: string
-  link: string
-  pubDate: string
-  guid: string
+  /** The day OFAC lists the action under (noon UTC, since the page gives no time) */
+  date: Date | null
+  /** e.g. "Sanctions List Updates", "General Licenses" */
+  category: string
 }
 
-function extractTag(xml: string, tag: string): string {
-  const re = new RegExp(`<${tag}[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]></${tag}>|<${tag}[^>]*>([\\s\\S]*?)</${tag}>`)
-  const m = xml.match(re)
-  return (m?.[1] ?? m?.[2] ?? '').trim()
+function codePoint(n: number): string {
+  return Number.isInteger(n) && n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : ''
 }
 
-function parseRssItems(xml: string): RssItem[] {
-  const items: RssItem[] = []
-  const itemRegex = /<item>([\s\S]*?)<\/item>/g
-  let match: RegExpExecArray | null
+function htmlText(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, '')
+    .replace(/&#(\d+);/g, (_, n: string) => codePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n: string) => codePoint(parseInt(n, 16)))
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
 
-  while ((match = itemRegex.exec(xml)) !== null) {
-    const block = match[1]
-    items.push({
-      title: extractTag(block, 'title'),
-      description: extractTag(block, 'description'),
-      link: extractTag(block, 'link'),
-      pubDate: extractTag(block, 'pubDate'),
-      guid: extractTag(block, 'guid') || extractTag(block, 'link'),
+const MONTHS: Record<string, number> = {
+  january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
+  july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
+}
+
+/** The actions listed on an OFAC Recent Actions page, newest first, one per link */
+export function parseOfacRecentActions(html: string): OfacAction[] {
+  const links = [...html.matchAll(
+    /<a\s[^>]*href="((?:https:\/\/ofac\.treasury\.gov)?\/recent-actions\/(\d{4})(\d{2})(\d{2})(?:_\d+)?)"[^>]*>([\s\S]*?)<\/a>/g,
+  )]
+  const actions: OfacAction[] = []
+  const seen = new Set<string>()
+
+  links.forEach((m, i) => {
+    const path = m[1].replace(OFAC_ORIGIN, '')
+    const title = htmlText(m[5])
+    if (!title || seen.has(path)) return
+    seen.add(path)
+
+    // The date and category sit between this link and the next action's link
+    const after = html.slice((m.index ?? 0) + m[0].length, links[i + 1]?.index ?? html.length).slice(0, 2_000)
+    const shown = after.match(/\b([A-Z][a-z]+) (\d{1,2}), (\d{4})\b/)
+    const month = shown ? MONTHS[shown[1].toLowerCase()] : undefined
+    const date = shown && month !== undefined
+      ? new Date(Date.UTC(Number(shown[3]), month, Number(shown[2]), 12))
+      : new Date(Date.UTC(Number(m[2]), Number(m[3]) - 1, Number(m[4]), 12))
+    const category = after.match(/<a\s[^>]*href="\/recent-actions\/[a-z][a-z0-9-]*"[^>]*>([\s\S]*?)<\/a>/)
+
+    actions.push({
+      path,
+      url: `${OFAC_ORIGIN}${path}`,
+      title,
+      date: isNaN(date.getTime()) ? null : date,
+      category: category ? htmlText(category[1]) : '',
     })
-  }
+  })
 
-  return items
+  return actions
 }
 
 // ─── POLLER ─────────────────────────────────────────────────────────────────
@@ -147,15 +190,18 @@ export function startOfacSanctionsPoller(
     try {
       log.info('Polling OFAC sanctions recent actions')
 
-      let xml: string
+      let html: string
       try {
-        xml = await fetchWithResilience(
+        html = await fetchWithResilience(
           'ofac-sanctions',
           'OFAC Sanctions',
-          OFAC_RECENT_URL,
+          OFAC_RECENT_ACTIONS_URL,
           async () => {
-            const res = await fetch(OFAC_RECENT_URL, {
-              headers: { 'User-Agent': 'WorldPulse/1.0 (OSINT intelligence network)' },
+            const res = await fetch(OFAC_RECENT_ACTIONS_URL, {
+              headers: {
+                'User-Agent': 'WorldPulse/1.0 (OSINT intelligence network; https://world-pulse.io)',
+                'Accept': 'text/html,application/xhtml+xml',
+              },
               signal: AbortSignal.timeout(30_000),
             })
             if (!res.ok) throw Object.assign(new Error(`OFAC Sanctions: HTTP ${res.status}`), { statusCode: res.status })
@@ -166,36 +212,33 @@ export function startOfacSanctionsPoller(
         if (err instanceof CircuitOpenError) return
         throw err
       }
-      const items = parseRssItems(xml)
 
-      if (items.length === 0) {
-        log.debug('No items in OFAC RSS feed')
+      const actions = parseOfacRecentActions(html)
+      if (actions.length === 0) {
+        // The page loaded but nothing parsed: OFAC changed its layout
+        log.warn('No actions found on the OFAC Recent Actions page')
         return
       }
 
-      // Filter to last 7 days
-      const cutoff = Date.now() - 7 * 86_400_000
-      const recent = items.filter(item => {
-        const d = new Date(item.pubDate)
-        return !isNaN(d.getTime()) && d.getTime() > cutoff
-      })
+      const cutoff = Date.now() - MAX_AGE_DAYS * 86_400_000
+      const recent = actions.filter(a => a.date && a.date.getTime() > cutoff)
 
-      log.info({ total: items.length, recent: recent.length }, 'OFAC items fetched')
+      log.info({ total: actions.length, recent: recent.length }, 'OFAC items fetched')
 
       let inserted = 0
 
-      for (const item of recent) {
-        const dedupKey = `osint:ofac:${item.guid.replace(/[^a-zA-Z0-9-]/g, '_').slice(0, 100)}`
-        const exists = await redis.get(dedupKey)
-        if (exists) continue
+      for (const action of recent) {
+        const dedupKey = `osint:ofac:${action.path.replace(/[^a-zA-Z0-9-]/g, '_').slice(0, 100)}`
+        if (await redis.get(dedupKey)) continue
 
-        const severity = sanctionsSeverity(item.title, item.description, item.title)
-        const location = inferSanctionsRegion(`${item.title} ${item.description}`)
+        const severity = sanctionsSeverity(action.title, '', action.category)
+        const location = inferSanctionsRegion(action.title)
+        const day = action.date!.toISOString().slice(0, 10)
 
         const signalData = {
-          title: `OFAC Sanctions: ${item.title.slice(0, 200)}`,
-          summary: item.description.slice(0, 2000) || item.title,
-          original_urls: [item.link],
+          title: `OFAC Sanctions: ${action.title.slice(0, 200)}`,
+          summary: `${action.title}. ${action.category ? `${action.category}. ` : ''}Published by the US Treasury's Office of Foreign Assets Control on ${day}.`.slice(0, 2000),
+          original_urls: [action.url],
           source_ids: [],
           category: 'security' as const,
           severity,
@@ -207,12 +250,17 @@ export function startOfacSanctionsPoller(
           region: null,
           tags: ['osint', 'sanctions', 'ofac', 'security'],
           language: 'en',
-          event_time: new Date(item.pubDate),
+          event_time: action.date!,
           source_count: 1,
         }
 
-        await insertAndCorrelate(signalData, { lat: location?.lat ?? null, lng: location?.lon ?? null, sourceId: 'ofac-sanctions' })
-        await redis.set(dedupKey, '1', 'EX', DEDUP_TTL_S)
+        try {
+          await insertAndCorrelate(signalData, { lat: location?.lat ?? null, lng: location?.lon ?? null, sourceId: 'ofac-sanctions' })
+          await redis.set(dedupKey, '1', 'EX', DEDUP_TTL_S)
+        } catch (err) {
+          log.warn({ err, action: action.path }, 'Failed to ingest OFAC action')
+          continue
+        }
 
         if (producer) {
           try {

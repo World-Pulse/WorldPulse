@@ -6,9 +6,9 @@
  * Creates WorldPulse signals for new malware campaigns, APT activity,
  * vulnerability exploits, phishing campaigns, and cyber-attacks.
  *
- * API: https://otx.alienvault.com/api/v1/pulses/subscribed (with key)
- * Fallback: https://otx.alienvault.com/api/v1/pulses/activity (public)
- * Free tier: 10,000 requests/day with API key, public feed available.
+ * API: https://otx.alienvault.com/api/v1/pulses/activity
+ * Needs a free API key (OTX_API_KEY): without one OTX answers
+ * "Authentication required" (HTTP 403), so the poller stays off.
  *
  * Reliability: 0.82 (community-contributed threat intel; top-rated pulses
  *   are from verified security researchers, but quality varies)
@@ -238,11 +238,20 @@ async function pollOtxPulses(
   }
 }
 
+/** OTX answers "Authentication required" (HTTP 403) without a key, so the poller only runs with one */
+export function otxEnabled(): boolean {
+  return Boolean(process.env.OTX_API_KEY?.trim())
+}
+
 export function startOtxPoller(
   db: Knex,
   redis: Redis,
   producer?: Producer | null,
 ): () => void {
+  if (!otxEnabled()) {
+    log.info('AlienVault OTX poller off: set OTX_API_KEY (a free key from otx.alienvault.com) to turn it on')
+    return () => {}
+  }
   log.info('Starting AlienVault OTX threat pulse poller (30-min interval)')
   pollOtxPulses(db, redis, producer)
 
