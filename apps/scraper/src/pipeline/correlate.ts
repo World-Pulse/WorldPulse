@@ -26,7 +26,7 @@ import { db } from '../lib/postgres'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
 import { sourceKey, hostOf } from './signal-columns'
-import { findGazetteerPlace } from './geo'
+import { findGazetteerPlace, splitPlaces } from './geo'
 import { isEventTemplateTitle } from './event-titles'
 import { countIndependentOutlets, isCopyOf } from './independence'
 import { joinStory } from './stories'
@@ -97,7 +97,7 @@ const MAX_CLUSTER_SIZE = 12
  * single-source stories within minutes of going live, so verification now
  * needs two different outlets whose headlines describe the same thing.
  */
-const SAME_STORY_MIN_WORDS = 5      // headlines need enough content words to compare
+const SAME_STORY_MIN_WORDS = 4      // headlines need enough content words to compare (a place counts once, as its country)
 const SAME_STORY_MIN_SHARED = 3     // content words both headlines use
 const SAME_STORY_MIN_JACCARD = 0.4  // shared words / all words of both headlines
 const SAME_STORY_RADIUS_KM = 300    // when both are on the map, they must be near each other
@@ -260,11 +260,14 @@ async function fetchRecentSignals(signal: CorrelationCandidate): Promise<Correla
  * compared. Only used for same-story corroboration, not for clusters.
  */
 async function fetchSameStoryCandidates(signal: CorrelationCandidate): Promise<CorrelationCandidate[]> {
-  const words = [...new Set((signal.title ?? '').toLowerCase().split(/[^a-z0-9]+/))]
-    .filter(w => w.length >= 4 && !STOP_WORDS.has(w))
+  // Each word by its stem, as a prefix ("attack:*" finds "attacks" and "attacked"; isSameStory compares stems)
+  const words = [...new Set((signal.title ?? '').toLowerCase().split(/[^a-z0-9]+/)
+    .filter(w => w.length >= 4 && !STOP_WORDS.has(w) && !HEADLINE_FILLER.has(w))
+    .map(w => stemWord(w))
+    .filter(w => w.length >= 4))]
     .slice(0, 12)
   if (words.length < SAME_STORY_MIN_SHARED) return []
-  const tsquery = words.join(' | ')
+  const tsquery = words.map(w => `${w}:*`).join(' | ')
   const since = new Date(Date.now() - TEMPORAL_WINDOW_HOURS * 60 * 60 * 1000)
 
   const rows = await db('signals')
@@ -408,6 +411,94 @@ export function keywordScore(a: CorrelationCandidate, b: CorrelationCandidate): 
   return Math.min(1.0, tagJaccard * 0.5 + wordJaccard * 0.3 + locMatch)
 }
 
+/** Counts in words: "a dozen killed" and "12 killed" say the same */
+const COUNT_WORDS: Record<string, string> = {
+  one: '1', two: '2', three: '3', four: '4', five: '5', six: '6', seven: '7', eight: '8', nine: '9', ten: '10',
+  eleven: '11', twelve: '12', dozen: '12', thirteen: '13', fifteen: '15', twenty: '20', thirty: '30', forty: '40',
+  fifty: '50', hundred: '100',
+}
+
+/**
+ * Headline words that say nothing about which story it is: everyday verbs
+ * ("Trump gets..."), "Watch:" and "latest", who said it ("..., governor
+ * says", "officials say") and prepositions ("against", "among"). Without
+ * these, "Russian attack on Ukraine's Zaporizhzhia kills seven, governor
+ * says" and "Ukrainian attack on Bryansk Region kills one civilian — governor"
+ * passed for one story.
+ */
+const HEADLINE_FILLER = new Set([
+  'get', 'gets', 'got', 'getting', 'make', 'makes', 'made', 'take', 'takes', 'took', 'call', 'calls', 'called',
+  'amid', 'latest', 'live', 'news', 'watch', 'video', 'videos', 'photos', 'how', 'why', 'what', 'who', 'where',
+  'here', 'now', 'today', 'yesterday', 'week', 'day', 'year', 'years', 'say', 'tell', 'tells', 'told',
+  'governor', 'official', 'officials', 'authorities', 'spokesman', 'spokeswoman', 'spokesperson', 'media',
+  'source', 'sources', 'report', 'claims', 'claim',
+  'against', 'about', 'across', 'around', 'toward', 'towards', 'despite', 'among', 'between', 'within',
+  'under', 'off', 'onto', 'upon', 'via', 'per', 'near', 'behind', 'beyond', 'until', 'since',
+])
+
+/**
+ * Kinds of events and their usual actors, as stemWord leaves them: two
+ * headlines that share only these and a country may be two events of one war.
+ */
+const EVENT_WORDS = new Set([
+  'attack', 'kill', 'strik', 'struck', 'protes', 'dead', 'death', 'die', 'died', 'injur', 'wound', 'war', 'clash',
+  'fight', 'bomb', 'missil', 'dron', 'shoot', 'shot', 'shell', 'raid', 'explos', 'blast', 'crash', 'fir', 'flood',
+  'storm', 'earthq', 'quak', 'arrest', 'detain', 'detent', 'polic', 'milita', 'troop', 'forc', 'soldi', 'civili',
+  'lead', 'govern', 'presid', 'minist', 'peopl', 'russia', 'countr', 'nation', 'state',
+])
+
+/** A shared word that singles out a story: a name, a thing, a count of 3 or more; not a country or kind of event */
+function isParticular(word: string): boolean {
+  if (word.startsWith('@')) return false
+  if (word.startsWith('#')) return Number(word.slice(1)) >= 3
+  return !EVENT_WORDS.has(word)
+}
+
+/** Endings dropped so a word's forms compare equal, tried in order (one per word) */
+const ENDINGS = ['ings', 'ing', 'ied', 'ies', 'ers', 'ed', 'es', 'er', 's', 'e', 'y']
+
+/** One form for a word's variants: "attacks"/"attacked" → "attack", "injuries"/"injured" → "injur" */
+export function stemWord(word: string): string {
+  let w = word
+  for (const end of ENDINGS) {
+    if (w.endsWith(end) && w.length - end.length >= 3) { w = w.slice(0, -end.length); break }
+  }
+  // "Arabian"/"Arabia", "Ukrainian"/"Ukraine": the first six letters carry the word
+  return w.slice(0, 6)
+}
+
+const storyWordCache = new Map<string, Set<string>>()
+
+/**
+ * What a headline says, for telling whether two are the same story: its
+ * content words in one form each, its numbers marked "#12" (in digits or
+ * words, years too) and the countries it is about, marked "@SA", in
+ * place of the place names (a city counts for its country, once).
+ * Rewordings of one event then share most of these: "12 killed, 309 injured
+ * in Riyadh Airport attack" and "A dozen killed in Saudi Arabian airport
+ * attack" share #12, kill, airport, attack and @SA, where their plain words
+ * shared 3 of 9.
+ */
+export function storyWords(title: string): Set<string> {
+  const known = storyWordCache.get(title)
+  if (known) return known
+  const words = new Set<string>()
+  // Places count once each, as their country: "Riyadh" and "Saudi Arabian" both become @SA
+  const { countries, rest } = splitPlaces(title)
+  const text = rest.toLowerCase().replace(/(\d),(?=\d{3}\b)/g, '$1')
+  for (const raw of text.replace(/[^a-z0-9\s-]/g, ' ').split(/[\s-]+/)) {
+    if (!raw) continue
+    if (/^\d+$/.test(raw)) { words.add(`#${Number(raw)}`); continue }
+    if (COUNT_WORDS[raw]) { words.add(`#${COUNT_WORDS[raw]}`); continue }
+    if (raw.length < 3 || STOP_WORDS.has(raw) || HEADLINE_FILLER.has(raw)) continue
+    words.add(stemWord(raw))
+  }
+  for (const code of countries) words.add(`@${code}`)
+  if (storyWordCache.size >= 5000) storyWordCache.clear()
+  storyWordCache.set(title, words)
+  return words
+}
+
 /**
  * Whether two signals are independent reports of the same story: two different
  * known outlets, within the time window, near each other when both are on the
@@ -424,13 +515,26 @@ export function isSameStory(a: CorrelationCandidate, b: CorrelationCandidate): b
   if (a.lat != null && a.lng != null && b.lat != null && b.lng != null &&
       haversineKm(a.lat, a.lng, b.lat, b.lng) > SAME_STORY_RADIUS_KM) return false
 
-  const wordsA = extractSignificantWords(a.title ?? '')
-  const wordsB = extractSignificantWords(b.title ?? '')
+  const wordsA = storyWords(a.title ?? '')
+  const wordsB = storyWords(b.title ?? '')
   if (wordsA.size < SAME_STORY_MIN_WORDS || wordsB.size < SAME_STORY_MIN_WORDS) return false
 
-  const shared = intersection(wordsA, wordsB).size
-  const jaccard = shared / union(wordsA, wordsB).size
+  // A count both give is shared evidence; a count only one gives says nothing
+  // against (early and later tolls, "Hurricane Simon strengthens" / "... into Category 4")
+  let shared = 0
+  let all = 0
+  for (const w of wordsA) {
+    const both = wordsB.has(w)
+    if (both) shared++
+    if (both || !w.startsWith('#')) all++
+  }
+  for (const w of wordsB) if (!wordsA.has(w) && !w.startsWith('#')) all++
+  const jaccard = shared / Math.max(1, all)
   if (shared < SAME_STORY_MIN_SHARED || jaccard < SAME_STORY_MIN_JACCARD) return false
+  // ...and something particular in common: a name, a thing or a count, not just
+  // the kind of event and the country ("Russian attack kills seven in Ukraine's
+  // Zaporizhzhia" and "Russian attacks kill 24 across Ukraine" share only that)
+  if (![...wordsA].some(w => wordsB.has(w) && isParticular(w))) return false
 
   // Headlines that name different known places are different events, however
   // alike the rest is ("Explosion hits Kherson" / "Explosion hits Kyiv")

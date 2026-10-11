@@ -162,8 +162,9 @@ describe('same-story search across the whole window', () => {
     h.state.textRows = [row({ id: 'sig-old', first_url: 'https://apnews.com/article/quake',
       published_at: new Date(now.getTime() - 5 * 3600_000).toISOString() })]
     await correlateSignal(sig())
+    // by word stems, as prefixes ("strik:*" finds "strike", "strikes" and "striking")
     expect(h.state.textQueries[0].split(' | ')).toEqual(
-      expect.arrayContaining(['magnitude', 'earthquake', 'strikes', 'coast', 'northern', 'japan']))
+      expect.arrayContaining(['magnit:*', 'earthq:*', 'strik:*', 'coast:*', 'northe:*', 'japan:*']))
     expect(h.updates[0].ids).toEqual(['sig-a', 'sig-old'])
     expect(h.updates[1].data.status).toBe('verified')
   })
@@ -339,5 +340,49 @@ describe('only independent outlets corroborate', () => {
       source_id: 'dw.com', url: 'https://www.dw.com/en/quake/a-1', lat: null, lng: null, published_at: now.toISOString(),
     })).toBe(false)
     expect(h.updates).toEqual([])
+  })
+})
+
+describe('rewordings of one event (Oct 11, 2026)', () => {
+  const at = (title: string, source_id: string, over: Partial<CorrelationCandidate> = {}) =>
+    sig({ id: source_id, title, source_id, ...over })
+
+  it('are one story: counts in words or digits, a city or its country, word forms', async () => {
+    const { storyWords, stemWord } = await import('../correlate')
+    expect(['attacks', 'attacked', 'attacking'].map(stemWord)).toEqual(['attack', 'attack', 'attack'])
+    expect(['injured', 'injuries', 'injury'].map(stemWord)).toEqual(['injur', 'injur', 'injur'])
+    // "Saudi" becomes @SA ("Arabian" stays a word); "a dozen" is #12
+    expect([...storyWords('A dozen killed in Saudi Arabian airport attack')].sort())
+      .toEqual(['#12', '@SA', 'airpor', 'arabia', 'attack', 'kill'])
+    expect(isSameStory(
+      at('12 killed, 309 injured in Riyadh Airport attack', 'vanguardngr.com'),
+      at('A dozen killed in Saudi Arabian airport attack', 'smh.com.au'),
+    )).toBe(true)
+    // a count only one gives doesn't count against
+    expect(isSameStory(
+      at('Hurricane Simon strengthens as it nears western Mexico', 'rte.ie'),
+      at('Hurricane Simon strengthens into Category 4 storm as it takes aim at Mexico', 'cbsnews.com'),
+    )).toBe(true)
+  })
+
+  it('are not stretched to two events of one war, or to opposite statements', () => {
+    // the kind of event and the country, nothing particular
+    expect(isSameStory(
+      at("Russian attack on Ukraine's Zaporizhzhia kills seven, governor says", 'thehindu.com'),
+      at('Russian attacks kill at least 24, injure 47 across Ukraine as rescue operations continue in Zaporizhzhia', 'kyivindependent.com'),
+    )).toBe(false)
+    expect(isSameStory(
+      at("Russian attack on Ukraine's Zaporizhzhia kills seven, governor says", 'thehindu.com'),
+      at('Ukrainian attack on Bryansk Region kills one civilian, injures two others — governor', 'tass.com'),
+    )).toBe(false)
+    expect(isSameStory(
+      at('Ethiopia tells UN it is acting in self-defense against Eritrea', 'abcnews.com'),
+      at("Eritrea urges UN to act against Ethiopia's 'declaration of war'", 'standardmedia.co.ke'),
+    )).toBe(false)
+    // a place named twice still counts once
+    expect(isSameStory(
+      at('Israeli strikes kill five in Gaza', 'dawn.com'),
+      at('Diplomatic reduction in Gaza, Israel (general), Israel', 'aa.com.tr'),
+    )).toBe(false)
   })
 })

@@ -565,6 +565,43 @@ function countryPoint(countries: string[]): GeoResult {
     : { point: false, countryCode: code }
 }
 
+const GAZETTEER_SCAN = GAZETTEER_MATCHERS.map(m => ({ coords: m.coords, re: new RegExp(m.re.source, 'gi') }))
+const COUNTRY_SCAN = COUNTRY_MATCHERS.map(([pattern, code]) => ({ code, re: new RegExp(pattern.source, `${pattern.flags.replace('g', '')}g`) }))
+
+/**
+ * The countries a text is about (those it names, and those its gazetteer
+ * places are in: "Riyadh" and "Saudi Arabian" both say SA), and the text
+ * with those names blanked out. For comparing headlines (correlate.ts
+ * storyWords), where a place should count once, as its country.
+ */
+export function splitPlaces(text: string): { countries: string[]; rest: string } {
+  const clean = text.replace(OUTLET_NAMES, ' ')
+  const spans: Array<[number, number]> = []
+  const codes = new Set<string>()
+  const take = (index: number, length: number): boolean => {
+    const end = index + length
+    if (length === 0 || spans.some(([a, b]) => index < b && end > a)) return false
+    spans.push([index, end])
+    return true
+  }
+  // Longest gazetteer names first ("West Virginia" before "Virginia"), then countries
+  for (const m of GAZETTEER_SCAN) {
+    m.re.lastIndex = 0
+    for (const hit of clean.matchAll(m.re)) {
+      if (take(hit.index ?? 0, hit[0].length) && m.coords.country) codes.add(m.coords.country)
+    }
+  }
+  for (const m of COUNTRY_SCAN) {
+    m.re.lastIndex = 0
+    for (const hit of clean.matchAll(m.re)) {
+      if (take(hit.index ?? 0, hit[0].length)) codes.add(m.code)
+    }
+  }
+  let rest = clean
+  for (const [a, b] of spans) rest = rest.slice(0, a) + ' '.repeat(b - a) + rest.slice(b)
+  return { countries: [...codes], rest }
+}
+
 /**
  * Every place the text names, in order of first mention: gazetteer places
  * (by their usual names) and countries (by name), each once, at most `max`.
