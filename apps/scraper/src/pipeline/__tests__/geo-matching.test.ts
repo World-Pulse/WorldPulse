@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 vi.mock('../../lib/redis', () => ({ redis: { get: vi.fn(async () => null), setex: vi.fn(async () => 'OK') } }))
 vi.mock('../../lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }))
 
-import { extractGeo, findGazetteerPlace, mentionedCountries } from '../geo'
+import { extractGeo, findGazetteerPlace, mentionedCountries, acceptGeocoderHit, placeFromText, type NominatimResult } from '../geo'
 
 describe('findGazetteerPlace', () => {
   it('matches whole words only', () => {
@@ -52,12 +52,17 @@ describe('extractGeo', () => {
   })
   afterEach(() => { vi.unstubAllGlobals() })
 
-  const nominatim = (country: string, lat = 45.9, lon = 24.9) => ({
-    ok: true, json: async () => [{ lat: String(lat), lon: String(lon), display_name: 'x', address: { country_code: country } }],
+  // A notable city by default; tests override the kind of place and its importance
+  const hit = (name: string, country: string, extra: Partial<NominatimResult> = {}, lat = 45.9, lon = 24.9): NominatimResult => ({
+    lat: String(lat), lon: String(lon), display_name: name, name, addresstype: 'city', importance: 0.6,
+    address: { country_code: country }, ...extra,
+  })
+  const nominatim = (country: string, lat = 45.9, lon = 24.9, name = 'Okinawa Prefecture', extra: Partial<NominatimResult> = {}) => ({
+    ok: true, json: async () => [hit(name, country, { addresstype: 'province', importance: 0.69, ...extra }, lat, lon)],
   })
 
   it('rejects a geocoder hit in a country the text does not mention', async () => {
-    fetchMock.mockResolvedValue(nominatim('ro'))  // an ambiguous name resolved to Romania
+    fetchMock.mockResolvedValue(nominatim('ro', 45.9, 24.9, 'Khamis'))  // an ambiguous name resolved to Romania
     const geo = await extractGeo('Abha airport near Khamis closed after Saudi air defences intercept a drone')
     expect(geo.countryCode).toBe('SA')
     expect(geo.name).not.toBe('Abha')
@@ -70,10 +75,78 @@ describe('extractGeo', () => {
     expect(geo.lat).toBeCloseTo(26.2)
   }, 15_000)
 
+  it('does not pin a story to a hamlet that shares a word of its headline', async () => {
+    // "Trump" is a US hamlet; before Oct 11, 2026 the story got the pin "trump"
+    fetchMock.mockResolvedValue({ ok: true, json: async () => [hit('Trump', 'us', { addresstype: 'hamlet', importance: 0.33 })] })
+    const geo = await extractGeo('US opens antitrust probe into TV networks halting Trump coverage')
+    expect(geo.point).toBe(false)
+    expect(geo.name).toBeUndefined()
+  }, 15_000)
+
+  it('names a geocoded place properly, and takes a later answer in the country the text names', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => [
+        hit('Erie', 'us', { importance: 0.59 }, 42.13, -80.08),            // Erie, Pennsylvania
+        hit('Erie', 'ca', { addresstype: 'town', importance: 0.52 }, 42.9, -79.9),
+      ],
+    })
+    const geo = await extractGeo('Shooting leaves 9 dead in Erie as Canadian officials offer help')
+    expect(geo.name).toBe('Erie')          // not "erie"
+    expect(geo.countryCode).toBe('CA')     // the text names Canada, not the US
+    expect(geo.lat).toBeCloseTo(42.9)
+  }, 15_000)
+
   it('does not pin a climate story to Lima', async () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => [] })
     const geo = await extractGeo('Climate pledges fall short as emissions keep rising')
     expect(geo.name).not.toBe('Lima')
     expect(geo.countryCode).toBeUndefined()
   }, 15_000)
+})
+
+describe('acceptGeocoderHit', () => {
+  const hit = (name: string, addresstype: string, importance: number, namedetails?: Record<string, string>): NominatimResult => ({
+    lat: '0', lon: '0', display_name: name, name, addresstype, importance, namedetails,
+  })
+
+  it('turns down words that only name hamlets, villages, stations and shops (real answers, Oct 11, 2026)', () => {
+    expect(acceptGeocoderHit('trump', hit('Trump', 'hamlet', 0.332))).toBe(false)
+    expect(acceptGeocoderHit('gravel', hit('Gravel', 'hamlet', 0.133))).toBe(false)
+    expect(acceptGeocoderHit('nishiyama', hit('Nishiyama', 'railway', 0.342))).toBe(false)
+    expect(acceptGeocoderHit('energy', hit('Energy', 'village', 0.454))).toBe(false)
+    expect(acceptGeocoderHit('apple', hit('Apple Store', 'shop', 0.705))).toBe(false)
+    expect(acceptGeocoderHit('police', hit('Police', 'municipality', 0.512))).toBe(false)
+    expect(acceptGeocoderHit('hurricane', hit('Hurricane', 'town', 0.405))).toBe(false)
+  })
+
+  it('turns down a place the geocoder found under another name', () => {
+    expect(acceptGeocoderHit('meta', hit('Metz', 'city', 0.694, { name: 'Metz' }))).toBe(false)
+  })
+
+  it('takes notable cities, regions and countries, by any of their names', () => {
+    expect(acceptGeocoderHit('doncaster', hit('Doncaster', 'city', 0.581))).toBe(true)
+    expect(acceptGeocoderHit('kherson', hit('Kherson Oblast', 'state', 0.633))).toBe(true)
+    expect(acceptGeocoderHit('pokrovsk', hit('Pokrovsk', 'town', 0.536))).toBe(true)
+    expect(acceptGeocoderHit('el fasher', hit('Al-Fashir', 'city', 0.435, { 'name:en': 'Al-Fashir', alt_name: 'Tendelti;El-Fashir', 'alt_name:en': 'El Fasher' }))).toBe(true)
+    expect(acceptGeocoderHit('britain', hit('Great Britain', 'island', 0.749, { alt_name: 'Britain' }))).toBe(true)
+    expect(acceptGeocoderHit('port-au-prince', hit('Port-au-Prince Arrondissement', 'city', 0.627))).toBe(true)
+  })
+
+  it('needs the whole word, not part of one', () => {
+    expect(acceptGeocoderHit('kher', hit('Kherson Oblast', 'state', 0.633))).toBe(false)
+  })
+})
+
+describe('placeFromText', () => {
+  it('uses a known place, else the capital of a named country, else nothing', () => {
+    expect(placeFromText('Strikes reported in Rafah overnight')).toMatchObject({ point: true, name: 'Rafah', countryCode: 'PS' })
+    expect(placeFromText('Talks with Japanese officials stall')).toMatchObject({ point: true, name: 'Tokyo', countryCode: 'JP' })
+    expect(placeFromText('Gravel cycling championship crowns a new winner')).toEqual({ point: false })
+  })
+
+  it('shows gazetteer places by their usual spelling', () => {
+    expect(placeFromText('Fighting near El-Fasher continues')?.name).toBe('El Fasher')
+    expect(placeFromText('Protest in Port-au-Prince turns violent')?.name).toBe('Port-au-Prince')
+  })
 })

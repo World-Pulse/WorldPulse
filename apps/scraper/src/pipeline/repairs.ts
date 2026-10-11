@@ -111,3 +111,80 @@ export async function retractStaleFeedItems(): Promise<number> {
   )
   return Number((result as { rowCount?: number })?.rowCount ?? 0)
 }
+
+/** Pin names the old geocoder rule wrote: the bare word(s) in lowercase */
+const OLD_GEOCODER_NAME_RE = "^[a-z]+([ '-][a-z]+){0,2}$"
+
+/** Names re-checked per start (most used first); the rest wait for the next start */
+const MAX_PLACE_NAMES = 300
+
+type Place = { point: boolean; lat?: number; lng?: number; name?: string; countryCode?: string; region?: string }
+
+const rowCount = (result: unknown) => Number((result as { rowCount?: number })?.rowCount ?? 0)
+
+/**
+ * Until Oct 11, 2026 any capitalised word the geocoder knew became a map pin,
+ * named by the word in lowercase: "trump" (a US hamlet), "anthropic" (housing
+ * in Afghanistan), "energy" (a village in Illinois), besides right ones like
+ * "doncaster". Gazetteer, feed and sensor places are capitalised, so a
+ * lowercase name marks one of those pins. Each such name from the last 7 days
+ * is looked up again with today's rules (`lookup`, geo.ts geocodePlace): a
+ * notable place of that name keeps the pin under its proper name; otherwise
+ * each signal gets the place its own title and summary give without the
+ * geocoder (`fromText`: a known place, else the capital of a country it
+ * names), or no pin. Afterwards no lowercase names are left, so a later
+ * start changes nothing. Each lookup is followed by a pause, so the live
+ * pipeline keeps its share of the geocoder (1 request a second at most).
+ */
+export async function recheckGeocodedPlaces(
+  lookup: (name: string) => Promise<Place[]>,
+  fromText: (text: string) => Place,
+  pauseMs = 2_000,
+): Promise<{ renamed: number; repinned: number; cleared: number }> {
+  const found = await db.raw(
+    `SELECT location_name AS name
+       FROM signals
+      WHERE created_at > NOW() - INTERVAL '7 days'
+        AND location_name ~ ?
+      GROUP BY location_name
+      ORDER BY COUNT(*) DESC
+      LIMIT ${MAX_PLACE_NAMES}`,
+    [OLD_GEOCODER_NAME_RE],
+  )
+  const names = ((found as { rows?: Array<{ name: string }> })?.rows ?? []).map(r => r.name)
+  const totals = { renamed: 0, repinned: 0, cleared: 0 }
+
+  const setPlace = async (where: string, whereArgs: unknown[], place: Place | null) => {
+    if (place?.point && place.lat != null && place.lng != null) {
+      return rowCount(await db.raw(
+        `UPDATE signals SET location_name = ?, location = ST_MakePoint(?, ?), country_code = ?, region = ? WHERE ${where}`,
+        [place.name ?? null, place.lng, place.lat, place.countryCode ?? null, place.region ?? null, ...whereArgs],
+      ))
+    }
+    return rowCount(await db.raw(
+      `UPDATE signals SET location_name = NULL, location = NULL, country_code = ?, region = NULL WHERE ${where}`,
+      [place?.countryCode ?? null, ...whereArgs],
+    ))
+  }
+  const recent = `location_name = ? AND created_at > NOW() - INTERVAL '7 days'`
+
+  for (const name of names) {
+    const [place] = await lookup(name)
+    if (place?.point) {
+      totals.renamed += await setPlace(recent, [name], place)
+    } else {
+      const rows = await db('signals')
+        .select('id', 'title', 'summary')
+        .whereRaw(recent, [name]) as Array<{ id: string; title: string | null; summary: string | null }>
+      for (const row of rows) {
+        // (not the "Source: <outlet>" line a summary may end with: "Kyiv Independent" isn't Kyiv)
+        const own = fromText(`${row.title ?? ''} ${(row.summary ?? '').replace(/\s*Source:[\s\S]*$/, '')}`)
+        const changed = await setPlace('id = ?', [row.id], own)
+        if (own.point) totals.repinned += changed
+        else totals.cleared += changed
+      }
+    }
+    if (pauseMs > 0) await new Promise(r => setTimeout(r, pauseMs))
+  }
+  return totals
+}

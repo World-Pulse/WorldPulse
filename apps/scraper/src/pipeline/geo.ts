@@ -12,7 +12,7 @@
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
 
-interface GeoResult {
+export interface GeoResult {
   point:        boolean
   lat?:         number
   lng?:         number
@@ -34,7 +34,7 @@ async function throttleNominatim(): Promise<void> {
 }
 
 // ─── GAZETTEER (fast-path; ~140 locations) ───────────────────────────────────
-const GAZETTEER: Record<string, { lat: number; lng: number; country: string; region?: string }> = {
+const GAZETTEER: Record<string, { lat: number; lng: number; country: string; region?: string; name?: string }> = {
   'manila':           { lat: 14.5995, lng: 120.9842, country: 'PH', region: 'Metro Manila' },
   'philippines':      { lat: 12.8797, lng: 121.7740, country: 'PH' },
   'tokyo':            { lat: 35.6762, lng: 139.6503, country: 'JP', region: 'Kanto' },
@@ -45,7 +45,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'moscow':           { lat: 55.7558, lng: 37.6173, country: 'RU' },
   'saint petersburg': { lat: 59.9343, lng: 30.3351, country: 'RU' },
   'kyiv':             { lat: 50.4501, lng: 30.5234, country: 'UA' },
-  'kiev':             { lat: 50.4501, lng: 30.5234, country: 'UA' },
+  'kiev':             { lat: 50.4501, lng: 30.5234, country: 'UA', name: 'Kyiv' },
   'ukraine':          { lat: 48.3794, lng: 31.1656, country: 'UA' },
   'kherson':          { lat: 46.6354, lng: 32.6169, country: 'UA' },
   'zaporizhzhia':     { lat: 47.8388, lng: 35.1396, country: 'UA' },
@@ -140,6 +140,73 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'santiago':         { lat: -33.4489, lng: -70.6693, country: 'CL' },
   'arctic':           { lat: 90.0000, lng: 0.0000, country: 'INT', region: 'Arctic' },
   'antarctic':        { lat: -90.0000, lng: 0.0000, country: 'INT', region: 'Antarctic' },
+  // Places often in the news whose names the geocoder gets wrong or misses:
+  // its first answer for "Rafah" is a Syrian village, for "Darfur" a US
+  // village, for "Donbas" a road in North Macedonia, for "Dnipro" the river.
+  'rafah':            { lat: 31.2969, lng: 34.2455, country: 'PS' },
+  'khan younis':      { lat: 31.3462, lng: 34.3060, country: 'PS' },
+  'jenin':            { lat: 32.4610, lng: 35.3027, country: 'PS' },
+  'nablus':           { lat: 32.2211, lng: 35.2544, country: 'PS' },
+  'ramallah':         { lat: 31.9038, lng: 35.2034, country: 'PS' },
+  'hebron':           { lat: 31.5326, lng: 35.0998, country: 'PS' },
+  'darfur':           { lat: 13.0000, lng: 24.5000, country: 'SD', region: 'Darfur' },
+  'el fasher':        { lat: 13.6290, lng: 25.3494, country: 'SD', region: 'Darfur' },
+  'el-fasher':        { lat: 13.6290, lng: 25.3494, country: 'SD', region: 'Darfur', name: 'El Fasher' },
+  'port sudan':       { lat: 19.6158, lng: 37.2164, country: 'SD' },
+  'kharkiv':          { lat: 49.9935, lng: 36.2304, country: 'UA' },
+  'odesa':            { lat: 46.4825, lng: 30.7233, country: 'UA' },
+  'lviv':             { lat: 49.8397, lng: 24.0297, country: 'UA' },
+  'dnipro':           { lat: 48.4647, lng: 35.0462, country: 'UA' },
+  'bakhmut':          { lat: 48.5947, lng: 38.0004, country: 'UA' },
+  'pokrovsk':         { lat: 48.2829, lng: 37.1810, country: 'UA' },
+  'donetsk':          { lat: 48.0159, lng: 37.8028, country: 'UA' },
+  'luhansk':          { lat: 48.5740, lng: 39.3078, country: 'UA' },
+  'donbas':           { lat: 48.3000, lng: 38.3000, country: 'UA', region: 'Donbas' },
+  'donbass':          { lat: 48.3000, lng: 38.3000, country: 'UA', region: 'Donbas', name: 'Donbas' },
+  'crimea':           { lat: 45.0000, lng: 34.1000, country: 'UA', region: 'Crimea' },
+  'sevastopol':       { lat: 44.6166, lng: 33.5254, country: 'UA', region: 'Crimea' },
+  'belgorod':         { lat: 50.5997, lng: 36.5983, country: 'RU' },
+  'kursk':            { lat: 51.7304, lng: 36.1926, country: 'RU' },
+  'idlib':            { lat: 35.9306, lng: 36.6339, country: 'SY' },
+  'homs':             { lat: 34.7324, lng: 36.7137, country: 'SY' },
+  'latakia':          { lat: 35.5317, lng: 35.7901, country: 'SY' },
+  'raqqa':            { lat: 35.9594, lng: 39.0079, country: 'SY' },
+  'sanaa':            { lat: 15.3694, lng: 44.1910, country: 'YE' },
+  "sana'a":           { lat: 15.3694, lng: 44.1910, country: 'YE', name: 'Sanaa' },
+  'hodeidah':         { lat: 14.7978, lng: 42.9545, country: 'YE' },
+  'erbil':            { lat: 36.1911, lng: 44.0092, country: 'IQ' },
+  'basra':            { lat: 30.5085, lng: 47.7804, country: 'IQ' },
+  'kirkuk':           { lat: 35.4681, lng: 44.3922, country: 'IQ' },
+  'bukavu':           { lat: -2.5083, lng: 28.8608, country: 'CD' },
+  'kampala':          { lat: 0.3476,  lng: 32.5825, country: 'UG' },
+  'kigali':           { lat: -1.9441, lng: 30.0619, country: 'RW' },
+  'maiduguri':        { lat: 11.8333, lng: 13.1500, country: 'NG' },
+  'bamako':           { lat: 12.6392, lng: -8.0029, country: 'ML' },
+  'niamey':           { lat: 13.5116, lng: 2.1254,  country: 'NE' },
+  'ouagadougou':      { lat: 12.3714, lng: -1.5197, country: 'BF' },
+  "n'djamena":        { lat: 12.1348, lng: 15.0557, country: 'TD', name: "N'Djamena" },
+  'tigray':           { lat: 14.0323, lng: 38.3166, country: 'ET', region: 'Tigray' },
+  'mekelle':          { lat: 13.4967, lng: 39.4753, country: 'ET', region: 'Tigray' },
+  'benghazi':         { lat: 32.1167, lng: 20.0667, country: 'LY' },
+  'misrata':          { lat: 32.3754, lng: 15.0925, country: 'LY' },
+  'srinagar':         { lat: 34.0837, lng: 74.7973, country: 'IN' },
+  'quetta':           { lat: 30.1798, lng: 66.9750, country: 'PK' },
+  'peshawar':         { lat: 34.0151, lng: 71.5249, country: 'PK' },
+  'herat':            { lat: 34.3529, lng: 62.2040, country: 'AF' },
+  'kandahar':         { lat: 31.6289, lng: 65.7372, country: 'AF' },
+  'yangon':           { lat: 16.8409, lng: 96.1735, country: 'MM' },
+  'naypyidaw':        { lat: 19.7633, lng: 96.0785, country: 'MM' },
+  'taipei':           { lat: 25.0330, lng: 121.5654, country: 'TW' },
+  'caracas':          { lat: 10.4806, lng: -66.9036, country: 'VE' },
+  'havana':           { lat: 23.1136, lng: -82.3666, country: 'CU' },
+  'port-au-prince':   { lat: 18.5944, lng: -72.3074, country: 'HT', name: 'Port-au-Prince' },
+  'tbilisi':          { lat: 41.7151, lng: 44.8271, country: 'GE' },
+  'yerevan':          { lat: 40.1792, lng: 44.4991, country: 'AM' },
+  'baku':             { lat: 40.4093, lng: 49.8671, country: 'AZ' },
+  'minsk':            { lat: 53.9006, lng: 27.5590, country: 'BY' },
+  'chisinau':         { lat: 47.0105, lng: 28.8638, country: 'MD' },
+  'belgrade':         { lat: 44.7866, lng: 20.4489, country: 'RS' },
+  'culiacan':         { lat: 24.8091, lng: -107.3940, country: 'MX', region: 'Sinaloa' },
 }
 
 // ─── NER PATTERNS ────────────────────────────────────────────────────────────
@@ -282,10 +349,18 @@ export function mentionedCountries(text: string): string[] {
 }
 
 // ─── NOMINATIM LOOKUP ────────────────────────────────────────────────────────
-interface NominatimResult {
-  lat:        string
-  lon:        string
+export interface NominatimResult {
+  lat:          string
+  lon:          string
   display_name: string
+  /** The place's name (in English, as requested) */
+  name?:        string
+  /** What kind of place it is: city, town, village, state, country, road, shop… */
+  addresstype?: string
+  /** 0–1, from how much Wikipedia links to it */
+  importance?:  number
+  /** Every name the place has (namedetails=1): alt_name, official_name, … */
+  namedetails?: Record<string, string>
   address?: {
     country_code?: string
     state?:        string
@@ -293,18 +368,68 @@ interface NominatimResult {
   }
 }
 
-async function nominatimLookup(location: string): Promise<GeoResult | null> {
-  // Check Redis cache first (24h TTL for Nominatim results)
-  const cacheKey = `nominatim:${location.toLowerCase().replace(/\s+/g, '_')}`
+/**
+ * The kinds of place a geocoder answer may be, with the importance each needs.
+ * The geocoder has an answer for almost any word, so before Oct 11, 2026 any
+ * capitalised word became a map pin: "Trump" (a US hamlet), "Gravel" (a
+ * French hamlet), "Nishiyama" (a railway station), "Anthropic" (housing in
+ * Afghanistan), "Energy" (a village in Illinois). Only notable cities,
+ * regions and countries are taken now; villages, hamlets, roads, shops and
+ * stations never are.
+ */
+const GEOCODER_PLACE_TYPES: Record<string, number> = {
+  country: 0.45, state: 0.45, province: 0.45, region: 0.45, island: 0.45, archipelago: 0.45,
+  peninsula: 0.5, state_district: 0.5,
+  city: 0.4,
+  town: 0.5,
+  municipality: 0.55,   // "Police" is a municipality in Czechia (0.51)
+}
+
+/** The namedetails keys that hold a name people use for the place */
+const NAME_KEYS = /^(?:name|name:en|int_name|alt_name|alt_name:en|official_name|official_name:en|short_name|short_name:en|loc_name)$/
+
+/** Lowercase, accents and punctuation removed ("Port-au-Prince" → "port au prince") */
+function normalizePlaceName(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+/**
+ * Whether a geocoder answer is a notable place called what the text said.
+ * The name check catches answers the geocoder found under some other name
+ * ("Meta" → Metz); a place's full name may add a word ("Kherson" → Kherson
+ * Oblast, "Britain" → Great Britain).
+ */
+export function acceptGeocoderHit(candidate: string, hit: NominatimResult): boolean {
+  const min = GEOCODER_PLACE_TYPES[hit.addresstype ?? '']
+  if (min === undefined || (hit.importance ?? 0) < min) return false
+  const wanted = normalizePlaceName(candidate)
+  if (!wanted) return false
+  const names = [
+    hit.name ?? '',
+    ...Object.entries(hit.namedetails ?? {}).filter(([key]) => NAME_KEYS.test(key)).flatMap(([, value]) => value.split(';')),
+  ]
+  return names.some(name => {
+    const have = normalizePlaceName(name)
+    return have !== '' && ` ${have} `.includes(` ${wanted} `)
+  })
+}
+
+/**
+ * Places the geocoder knows by this name that pass acceptGeocoderHit, best
+ * first (at most 3; often none). Cached for a day.
+ */
+export async function geocodePlace(location: string): Promise<GeoResult[]> {
+  const cacheKey = `geocode:${location.toLowerCase().replace(/\s+/g, '_')}`
   const cached   = await redis.get(cacheKey)
   if (cached) {
-    return cached === 'null' ? null : JSON.parse(cached) as GeoResult
+    try { return JSON.parse(cached) as GeoResult[] } catch { /* look it up again */ }
   }
 
   await throttleNominatim()
 
   try {
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(location)}&format=json&limit=1&addressdetails=1`
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(location)}`
+      + '&format=json&limit=3&addressdetails=1&namedetails=1&accept-language=en'
     const res = await fetch(url, {
       headers: { 'User-Agent': 'WorldPulse/1.0 (world-pulse.io)' },
       signal:  AbortSignal.timeout(5_000),
@@ -312,33 +437,32 @@ async function nominatimLookup(location: string): Promise<GeoResult | null> {
 
     if (!res.ok) {
       logger.warn({ status: res.status, location }, 'Nominatim request failed')
-      await redis.setex(cacheKey, 3600, 'null')
-      return null
+      await redis.setex(cacheKey, 3600, '[]')
+      return []
     }
 
     const data = await res.json() as NominatimResult[]
-    if (!data.length) {
-      await redis.setex(cacheKey, 86_400, 'null')
-      return null
-    }
+    const places: GeoResult[] = data
+      .filter(hit => acceptGeocoderHit(location, hit))
+      .map(hit => ({
+        point:       true,
+        lat:         parseFloat(hit.lat),
+        lng:         parseFloat(hit.lon),
+        name:        hit.name || titleCase(location),
+        countryCode: hit.address?.country_code?.toUpperCase(),
+        region:      hit.address?.state ?? hit.address?.county,
+      }))
+      .filter(place => Number.isFinite(place.lat) && Number.isFinite(place.lng))
 
-    const hit = data[0]
-    const result: GeoResult = {
-      point:       true,
-      lat:         parseFloat(hit.lat),
-      lng:         parseFloat(hit.lon),
-      name:        location,
-      countryCode: hit.address?.country_code?.toUpperCase(),
-      region:      hit.address?.state ?? hit.address?.county,
+    await redis.setex(cacheKey, 86_400, JSON.stringify(places))
+    if (data.length > 0 && places.length === 0) {
+      logger.debug({ location, type: data[0].addresstype, importance: data[0].importance }, 'Nominatim: no notable place of that name')
     }
-
-    await redis.setex(cacheKey, 86_400, JSON.stringify(result))
-    logger.debug({ location, lat: result.lat, lng: result.lng }, 'Nominatim geocoded')
-    return result
+    return places
   } catch (err) {
     logger.warn({ err, location }, 'Nominatim lookup error')
-    await redis.setex(cacheKey, 3600, 'null')
-    return null
+    await redis.setex(cacheKey, 3600, '[]')
+    return []
   }
 }
 
@@ -372,33 +496,61 @@ export function findGazetteerPlace(text: string): { place: string; coords: typeo
 /** At most this many geocoder lookups per text (each one waits about a second) */
 const MAX_NOMINATIM_LOOKUPS = 4
 
+/** The gazetteer place the text names first, as a map point */
+function gazetteerPoint(text: string): GeoResult | null {
+  const found = findGazetteerPlace(text.toLowerCase())
+  return found
+    ? {
+        point:       true,
+        lat:         found.coords.lat,
+        lng:         found.coords.lng,
+        name:        found.coords.name ?? titleCase(found.place),
+        countryCode: found.coords.country,
+        region:      found.coords.region,
+      }
+    : null
+}
+
+/** The first named country, pinned at its capital (or without a pin if we have no capital for it) */
+function countryPoint(countries: string[]): GeoResult {
+  const code = countries[0]
+  if (!code) return { point: false }
+  const capital = COUNTRY_CENTROIDS[code]
+  return capital
+    ? { point: true, lat: capital.lat, lng: capital.lng, name: capital.name, countryCode: code }
+    : { point: false, countryCode: code }
+}
+
+/**
+ * A place for the text without asking the geocoder: a gazetteer place, else
+ * the capital of the first country it names, else none.
+ */
+export function placeFromText(text: string): GeoResult {
+  return gazetteerPoint(text) ?? countryPoint(mentionedCountries(text.replace(OUTLET_NAMES, ' ')))
+}
+
 // ─── MAIN EXPORT ─────────────────────────────────────────────────────────────
 export async function extractGeo(text: string): Promise<GeoResult> {
   const lower = text.toLowerCase()
 
-  // Cache by text fingerprint (1h TTL)
-  const cacheKey = `geo:${hashText(lower)}`
+  // Cache by text fingerprint (1h TTL; geo2: since the Oct 11, 2026 geocoder rules)
+  const cacheKey = `geo2:${hashText(lower)}`
   const cached   = await redis.get(cacheKey)
   if (cached) return JSON.parse(cached) as GeoResult
 
-  // 1. Gazetteer: whole words only, the place mentioned first
-  const found = findGazetteerPlace(lower)
-  if (found) {
-    const result: GeoResult = {
-      point:       true,
-      lat:         found.coords.lat,
-      lng:         found.coords.lng,
-      name:        titleCase(found.place),
-      countryCode: found.coords.country,
-      region:      found.coords.region,
-    }
+  const remember = async (result: GeoResult): Promise<GeoResult> => {
     await redis.setex(cacheKey, 3600, JSON.stringify(result))
     return result
   }
 
-  // 2. NER extraction → Nominatim fallback. When the text names countries, a
-  //    hit in some other country is rejected (a Saudi airport was pinned in
-  //    Romania by an ambiguous name).
+  // 1. Gazetteer: whole words only, the place mentioned first
+  const fromGazetteer = gazetteerPoint(lower)
+  if (fromGazetteer) return remember(fromGazetteer)
+
+  // 2. NER extraction → Nominatim fallback (notable places only, see
+  //    acceptGeocoderHit). When the text names countries, the place must be
+  //    in one of them (a Saudi airport was pinned in Romania by an ambiguous
+  //    name).
   const countries = mentionedCountries(text.replace(OUTLET_NAMES, ' '))
   const candidates = extractCandidateLocations(text)
   let lookups = 0
@@ -406,28 +558,16 @@ export async function extractGeo(text: string): Promise<GeoResult> {
     // Skip very common English words that match Title Case regex
     if (COMMON_WORDS.has(candidate)) continue
     if (lookups++ >= MAX_NOMINATIM_LOOKUPS) break
-    const geo = await nominatimLookup(candidate)
-    if (geo && countries.length > 0 && geo.countryCode && !countries.includes(geo.countryCode)) continue
-    if (geo) {
-      await redis.setex(cacheKey, 3600, JSON.stringify(geo))
-      return geo
-    }
+    const places = await geocodePlace(candidate)
+    const geo = countries.length > 0
+      ? places.find(p => !p.countryCode || countries.includes(p.countryCode))
+      : places[0]
+    if (geo) return remember(geo)
   }
 
   // 3. Country detection → use the capital as the map point (the country
   //    mentioned first)
-  for (const code of countries) {
-    const capital = COUNTRY_CENTROIDS[code]
-    const result: GeoResult = capital
-      ? { point: true, lat: capital.lat, lng: capital.lng, name: capital.name, countryCode: code }
-      : { point: false, countryCode: code }
-    await redis.setex(cacheKey, 3600, JSON.stringify(result))
-    return result
-  }
-
-  const result: GeoResult = { point: false }
-  await redis.setex(cacheKey, 3600, JSON.stringify(result))
-  return result
+  return remember(countryPoint(countries))
 }
 
 // ─── REVERSE GEOCODING (lat/lng → location name) ────────────────────────────

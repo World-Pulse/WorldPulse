@@ -16,7 +16,7 @@ import { acquireRateLimit } from './lib/rate-limiter'
 import { pushDLQ, drainDLQ } from './lib/dlq'
 import { verifySignal } from './pipeline/verify'
 import { classifyContent } from './pipeline/classify'
-import { extractGeo } from './pipeline/geo'
+import { extractGeo, geocodePlace, placeFromText } from './pipeline/geo'
 import { dedup } from './pipeline/dedup'
 import { correlateSignal, confirmMergedArticle } from './pipeline/correlate'
 import type { CorrelationCandidate } from './pipeline/correlate'
@@ -36,7 +36,7 @@ import { runDelayedRescore } from './pipeline/rescore'
 import { signalsHavePublishedAt, publishedAtFor, backfillRecentPublishedAt, sourceKey, hostOf } from './pipeline/signal-columns'
 import { independentReports, isCopyOf } from './pipeline/independence'
 import { ensureStoryIdColumn } from './pipeline/stories'
-import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems } from './pipeline/repairs'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces } from './pipeline/repairs'
 import { batchValidateGeo } from './pipeline/geo-validator'
 import { recomputeSourceReputation } from './pipeline/source-reputation'
 import { startKafkaLagMonitor } from './lib/kafka-lag-monitor'
@@ -162,6 +162,10 @@ async function bootstrap() {
   retractStaleFeedItems()
     .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: old stories from feed backlogs taken out of the feed') })
     .catch(err => logger.warn({ err }, 'Stale feed item repair failed (non-fatal)'))
+  // Runs in the background for several minutes (one geocoder lookup per old pin name)
+  recheckGeocodedPlaces(geocodePlace, placeFromText)
+    .then(t => { if (t.renamed + t.repinned + t.cleared > 0) logger.info(t, 'Repair: map pins from capitalised words re-checked') })
+    .catch(err => logger.warn({ err }, 'Pin re-check repair failed (non-fatal)'))
 
   // Start main scrape loop (works with or without Kafka)
   await scrapeAll()

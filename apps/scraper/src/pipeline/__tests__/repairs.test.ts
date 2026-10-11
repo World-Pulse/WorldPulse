@@ -23,7 +23,8 @@ vi.mock('../../lib/postgres', () => {
   }
 })
 
-import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems } from '../repairs'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces } from '../repairs'
+import { db } from '../../lib/postgres'
 import { EVENT_TEMPLATE_SQL } from '../event-titles'
 
 describe('fixLocalhostUploadUrls', () => {
@@ -109,5 +110,47 @@ describe('retractStaleFeedItems', () => {
     expect(sql).toMatch(/status = 'pending'/) // verified stories are left alone; a re-run changes nothing
     expect(sql).toMatch(/event_time < created_at - INTERVAL '3 days'/)
     expect(sql).toMatch(/created_at > NOW\(\) - INTERVAL '3 days'/)
+  })
+})
+
+describe('recheckGeocodedPlaces', () => {
+  beforeEach(() => { h.raws.length = 0; h.rows = [] })
+
+  it('renames real places, re-pins the rest from their own text, and clears what is left', async () => {
+    // The lowercase pin names from the last 7 days
+    vi.mocked(db.raw).mockImplementationOnce(async (sql: string, params?: unknown[]) => {
+      h.raws.push({ sql, params: params as unknown[] })
+      return { rows: [{ name: 'doncaster' }, { name: 'trump' }] } as never
+    })
+    // Signals pinned "trump": one names a country, one names no place at all
+    h.rows = [
+      { id: 's1', title: 'Trump jokes supporters would clap for anything', summary: 'Remarks at a rally. Source: Kyiv Independent' },
+      { id: 's2', title: 'US and Japanese leaders discuss Trump tariffs', summary: null },
+    ]
+    const lookup = vi.fn(async (name: string) => name === 'doncaster'
+      ? [{ point: true, lat: 53.52, lng: -1.13, name: 'Doncaster', countryCode: 'GB', region: 'England' }]
+      : [])
+    const fromText = vi.fn((text: string) => /japanese/i.test(text)
+      ? { point: true, lat: 35.68, lng: 139.65, name: 'Tokyo', countryCode: 'JP' }
+      : { point: false })
+
+    const totals = await recheckGeocodedPlaces(lookup, fromText, 0)
+
+    const [select, rename, clear, repin] = h.raws
+    expect(select.sql).toMatch(/location_name ~ \?/)
+    expect(select.sql).toMatch(/INTERVAL '7 days'/)
+    expect(new RegExp(String(select.params?.[0])).test('gamma delta')).toBe(true)
+    expect(new RegExp(String(select.params?.[0])).test('Tehran, Iran')).toBe(false)     // proper names are left alone
+    expect(new RegExp(String(select.params?.[0])).test('10 km NE of pahala')).toBe(false)
+
+    expect(rename.sql).toMatch(/SET location_name = \?, location = ST_MakePoint/)
+    expect(rename.params).toEqual(['Doncaster', -1.13, 53.52, 'GB', 'England', 'doncaster'])
+
+    expect(clear.sql).toMatch(/SET location_name = NULL, location = NULL/)
+    expect(clear.params).toEqual([null, 's1'])
+    expect(fromText.mock.calls[0][0]).not.toMatch(/Kyiv/)          // the outlet line is not a place
+
+    expect(repin.params).toEqual(['Tokyo', 139.65, 35.68, 'JP', null, 's2'])
+    expect(totals).toEqual({ renamed: 3, repinned: 3, cleared: 3 })  // the mock reports 3 rows per UPDATE
   })
 })
