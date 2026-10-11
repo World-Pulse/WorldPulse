@@ -40,7 +40,7 @@ import { runDelayedRescore } from './pipeline/rescore'
 import { signalsHavePublishedAt, publishedAtFor, backfillRecentPublishedAt, sourceKey, hostOf } from './pipeline/signal-columns'
 import { independentReports, isCopyOf } from './pipeline/independence'
 import { ensureStoryIdColumn } from './pipeline/stories'
-import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities } from './pipeline/repairs'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities } from './pipeline/repairs'
 import { batchValidateGeo } from './pipeline/geo-validator'
 import { recomputeSourceReputation } from './pipeline/source-reputation'
 import { startKafkaLagMonitor } from './lib/kafka-lag-monitor'
@@ -173,6 +173,9 @@ async function bootstrap() {
     .then(() => repinNewsHomePins(db))
     .then(t => { if (t && t.moved + t.cleared + t.retitled > 0) logger.info(t, "Repair: news pins at an outlet's office moved to the story's place") })
     .catch(err => logger.warn({ err }, 'News pin repair failed (non-fatal)'))
+  liftCappedSeverities()
+    .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: corroborated stories got the severity their words earn (single-source cap lifted)') })
+    .catch(err => logger.warn({ err }, 'Severity lift repair failed (non-fatal)'))
   cleanEntityGraph()
     .then(t => { if (t.merged + t.removed + t.retyped + t.renamed > 0) logger.info(t, 'Repair: Knowledge Graph entities cleaned (titles dropped, duplicates merged, junk removed)') })
     .catch(err => logger.warn({ err }, 'Knowledge Graph clean-up failed (non-fatal)'))

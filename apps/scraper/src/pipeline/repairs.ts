@@ -12,6 +12,7 @@ import { EVENT_TEMPLATE_SQL } from './event-titles'
 import { countIndependentOutlets } from './independence'
 import { hostOf } from './signal-columns'
 import { decodeEntities, cleanUrl, cleanTitle, ENCODED_TEXT_RE } from './text'
+import { liftedSeverity, type SeverityRow } from './severity-lift'
 
 /** Where nginx serves uploaded post media (the uploads volume, under /uploads/) */
 const PUBLIC_SITE = 'https://world-pulse.io'
@@ -234,3 +235,29 @@ export async function decodeStoredEntities(): Promise<number> {
 
 /** ENCODED_TEXT_RE for Postgres (~* is already case-insensitive) */
 const ENCODED_TEXT_SQL = ENCODED_TEXT_RE.source
+
+/**
+ * Reports corroborated before Oct 11, 2026 kept the single-source severity
+ * cap (severity-lift.ts): the Riyadh airport attack, 25 outlets, was medium.
+ * Signals of the last 3 days with 2+ outlets get the severity their words
+ * earn, up to what their count allows. Only raises, so a later start finds
+ * nothing to do.
+ */
+export async function liftCappedSeverities(): Promise<number> {
+  const rows = await db('signals')
+    .where('created_at', '>', db.raw("NOW() - INTERVAL '3 days'"))
+    .where('source_count', '>=', 2)
+    .whereIn('status', ['verified', 'pending'])
+    .whereIn('severity', ['info', 'low', 'medium', 'high'])
+    .select('id', 'title', 'summary', 'category', 'severity', 'source_count')
+    .limit(5000) as Array<SeverityRow & { source_count: number }>
+  let raised = 0
+  for (const row of rows) {
+    const severity = liftedSeverity(row, Number(row.source_count) || 1)
+    if (!severity) continue
+    await db('signals').where('id', row.id).update({ severity })
+    raised++
+  }
+  return raised
+}
+

@@ -24,7 +24,7 @@ import { db } from '../lib/postgres'
 import { redis } from '../lib/redis'
 import { logger as rootLogger } from '../lib/logger'
 import { correlateSignal, type CorrelationCandidate } from './correlate'
-import { maxSeverityForSourceCount } from './reliability-score'
+import { liftedSeverity } from './severity-lift'
 import { sourceKey } from './signal-columns'
 
 const log = rootLogger.child({ module: 'rescore' })
@@ -124,35 +124,22 @@ export async function runDelayedRescore(): Promise<{
       if (newSourceCount >= 2) {
         corroborated++
 
-        // Check if severity can be upgraded now that we have corroboration
-        const maxSev = maxSeverityForSourceCount(newSourceCount, signal.category)
-        const SEVERITY_RANK: Record<string, number> = {
-          critical: 4, high: 3, medium: 2, low: 1, info: 0,
-        }
-        const currentRank = SEVERITY_RANK[signal.severity] ?? 1
-        const maxRank = SEVERITY_RANK[maxSev] ?? 4
-
-        // If severity was previously capped and now qualifies for upgrade,
-        // check if the original signal content warranted higher severity
-        if (currentRank < maxRank && newSourceCount >= 2) {
-          // Upgrade medium → high for corroborated signals in strategic categories
-          const strategicCategories = new Set([
-            'conflict', 'geopolitics', 'security', 'disaster',
-            'health', 'breaking', 'economy',
-          ])
-          if (signal.severity === 'medium' && strategicCategories.has(signal.category)) {
-            await db('signals')
-              .where('id', signal.id)
-              .update({ severity: 'high' })
-            upgraded++
-            log.info({
-              signalId: signal.id,
-              title: signal.title.slice(0, 80),
-              oldSeverity: signal.severity,
-              newSeverity: 'high',
-              sourceCount: newSourceCount,
-            }, 'Severity upgraded after delayed corroboration')
-          }
+        // The severity its words earn now that the single-source cap lifts
+        // (severity-lift.ts). This used to raise any "strategic" medium story
+        // to high for being corroborated, whatever it said.
+        const lifted = liftedSeverity({
+          id: signal.id, title: signal.title, summary: null, category: signal.category, severity: signal.severity,
+        }, newSourceCount)
+        if (lifted) {
+          await db('signals').where('id', signal.id).update({ severity: lifted })
+          upgraded++
+          log.info({
+            signalId: signal.id,
+            title: signal.title.slice(0, 80),
+            oldSeverity: signal.severity,
+            newSeverity: lifted,
+            sourceCount: newSourceCount,
+          }, 'Severity upgraded after delayed corroboration')
         }
 
         log.info({

@@ -30,6 +30,7 @@ import { findGazetteerPlace, splitPlaces } from './geo'
 import { isEventTemplateTitle } from './event-titles'
 import { countIndependentOutlets, isCopyOf } from './independence'
 import { joinStory } from './stories'
+import { liftedSeverity, type SeverityRow } from './severity-lift'
 import { createHash } from 'crypto'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -782,6 +783,18 @@ async function applyCorroborationBoost(
         verified_at: db.raw('NOW()'),
       })
 
+    // With the outlets counted, the single-source severity cap lifts: each
+    // report gets the severity its own words earn, up to what the count allows
+    const rows = await db('signals').whereIn('id', ids)
+      .select('id', 'title', 'summary', 'category', 'severity') as SeverityRow[]
+    let raised = 0
+    for (const row of rows) {
+      const severity = liftedSeverity(row, uniqueSources)
+      if (!severity) continue
+      await db('signals').where('id', row.id).update({ severity })
+      raised++
+    }
+
     // Every member gets the group's article links, so each signal page can
     // show all the outlets that reported the story ("Reported by N outlets"),
     // not only its own link
@@ -810,6 +823,7 @@ async function applyCorroborationBoost(
       unique_sources: uniqueSources,
       boosted_count:  boosted,
       promoted_count: promoted,
+      severity_raised: raised,
       joined_story:   joined,
     }, 'Same story from %d outlets', uniqueSources)
   } catch (err) {
