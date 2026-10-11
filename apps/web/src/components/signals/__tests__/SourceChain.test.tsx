@@ -15,6 +15,7 @@ import {
   showPrimarySourceCTA,
   reliabilityBarColor,
   distinctOutlets,
+  outletsHeading,
 } from '../SourceChain'
 import type { Source } from '@worldpulse/types'
 
@@ -142,5 +143,17 @@ describe('distinctOutlets', () => {
     ])
     expect(distinctOutlets(null)).toEqual([])
     expect(distinctOutlets(undefined)).toEqual([])
+  })
+})
+
+describe('outletsHeading', () => {
+  it("says when the report's links are only some of the story's outlets", () => {
+    expect(outletsHeading(16, 55)).toBe("This report links 16 of the story's 55 outlets")
+  })
+
+  it('says "Reported by" when the report has them all, or the story is unknown', () => {
+    expect(outletsHeading(5, 5)).toBe('Reported by 5 outlets')
+    expect(outletsHeading(5, null)).toBe('Reported by 5 outlets')
+    expect(outletsHeading(5, undefined)).toBe('Reported by 5 outlets')
   })
 })

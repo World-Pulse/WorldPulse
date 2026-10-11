@@ -50,6 +50,17 @@ export function distinctOutlets(urls: readonly string[] | null | undefined): Arr
   return [...seen].map(([host, url]) => ({ host, url }))
 }
 
+/**
+ * The outlet list's heading. A report's links are some of its story's
+ * outlets; when the story has more, say so (the page showed "Reported by 16
+ * outlets" beside a story of 55, reading audit P9).
+ */
+export function outletsHeading(count: number, storyOutlets?: number | null): string {
+  return storyOutlets && storyOutlets > count
+    ? `This report links ${count} of the story's ${storyOutlets} outlets`
+    : `Reported by ${count} outlets`
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -57,6 +68,8 @@ interface Props {
   sourceUrl?: string | null
   /** All of the signal's original article URLs (one or more per outlet) */
   originalUrls?: string[] | null
+  /** Outlets that carried the whole story, when known */
+  storyOutlets?: number | null
 }
 
 function SourceDomain({ url }: { url: string }) {
@@ -67,7 +80,7 @@ function SourceDomain({ url }: { url: string }) {
   }
 }
 
-export function SourceChain({ sources, sourceUrl, originalUrls }: Props) {
+export function SourceChain({ sources, sourceUrl, originalUrls, storyOutlets }: Props) {
   const mode = computeSourceChainMode(sources, sourceUrl)
   const outlets = distinctOutlets(originalUrls)
   if (mode === 'hidden') return null
@@ -158,7 +171,7 @@ export function SourceChain({ sources, sourceUrl, originalUrls }: Props) {
       {outlets.length >= 2 && (
         <div className="space-y-1.5">
           <div className="font-mono text-[10px] tracking-widest uppercase text-wp-text3">
-            Reported by {outlets.length} outlets
+            {outletsHeading(outlets.length, storyOutlets)}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             {outlets.map(o => (

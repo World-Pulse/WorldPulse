@@ -24,7 +24,7 @@ import { VerificationBadge, buildVerificationSummary } from '@/components/signal
 import { ViralityBadge } from '@/components/signals/ViralityBadge'
 import { RichMediaEmbed, extractFirstEmbedUrl } from '@/components/RichMediaEmbed'
 import { SignalMedia } from '@/components/signals/SignalMedia'
-import { SourceChain } from '@/components/signals/SourceChain'
+import { SourceChain, distinctOutlets } from '@/components/signals/SourceChain'
 import { StoryMembers } from './StoryMembers'
 import { EventTimeline } from '@/components/signals/EventTimeline'
 import { TVClips } from '@/components/signals/TVClips'
@@ -263,6 +263,27 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
   const isContested = signal.status === 'disputed' || flagCount >= 3
   const summaryText = displaySummary(signal.summary, signal.title)
 
+  // One outlet number for the page (reading audit P9): the outlets that carried
+  // this report's story, as the home page and the story timeline count them.
+  // Until it's known (or if the API can't say), this report's own outlets.
+  const [storyOutlets, setStoryOutlets] = useState<number | null>(null)
+  const [storyAsked, setStoryAsked] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    const API_BASE = `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/api/v1`
+    fetch(`${API_BASE}/stories/outlets?ids=${encodeURIComponent(signal.id)}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then((json: { data?: { stories?: Record<string, { outlets?: unknown }> } } | null) => {
+        const n = Number(json?.data?.stories?.[signal.id]?.outlets)
+        if (!cancelled && Number.isFinite(n) && n > 0) setStoryOutlets(n)
+      })
+      .catch(() => { /* this report's own outlets stand in */ })
+      .finally(() => { if (!cancelled) setStoryAsked(true) })
+    return () => { cancelled = true }
+  }, [signal.id])
+  const ownOutlets = distinctOutlets(signal.originalUrls ?? []).length
+  const outletCount = Math.max(storyOutlets ?? 0, ownOutlets)
+
   return (
     <div className="min-h-screen bg-wp-bg text-wp-text">
       <div className="max-w-4xl mx-auto px-4 py-8">
@@ -357,10 +378,10 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
                 </>
               )}
               <span>🕐 {timeAgo(signal.firstReported)}</span>
-              {signal.sourceCount > 0 && (
+              {storyAsked && outletCount > 0 && (
                 <>
                   <span>·</span>
-                  <span>{signal.sourceCount} source{signal.sourceCount !== 1 ? 's' : ''}</span>
+                  <span>{outletCount} outlet{outletCount !== 1 ? 's' : ''}</span>
                 </>
               )}
             </div>
@@ -406,6 +427,7 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
               sources={signal.sources}
               sourceUrl={signal.originalUrls?.[0] ?? null}
               originalUrls={signal.originalUrls ?? []}
+              storyOutlets={storyOutlets}
             />
 
             {/* Also reported by — the other reports of this story (plan 12c) */}
