@@ -35,7 +35,11 @@ const h = vi.hoisted(() => {
 })
 
 vi.mock('../../lib/postgres', () => {
-  const db = Object.assign(vi.fn(() => h.builder()), { raw: vi.fn((sql: string) => ({ sql })) })
+  const raw = vi.fn((sql: string) => ({ sql }))
+  const db = Object.assign(vi.fn(() => h.builder()), {
+    raw,
+    transaction: vi.fn(async (fn: (trx: { raw: typeof raw }) => Promise<void>) => fn({ raw })),
+  })
   return { db }
 })
 vi.mock('../../lib/redis', () => {
@@ -133,6 +137,16 @@ describe('correlateSignal corroboration', () => {
     expect(boost.data.source_count).toBe(2)
     expect(promote.ids).toEqual(['sig-a', 'sig-b'])
     expect(promote.data.status).toBe('verified')
+  })
+
+  it('puts the signal and its same-story report into one story', async () => {
+    const { db } = await import('../../lib/postgres')
+    const raw = db.raw as unknown as { mock: { calls: unknown[][] } }
+    raw.mock.calls.length = 0
+    h.state.recentRows = [row()]
+    await correlateSignal(sig())
+    const join = raw.mock.calls.find(c => String(c[0]).includes('UPDATE signals SET story_id'))
+    expect(join?.[1]).toEqual([['sig-a', 'sig-b'], ['sig-a', 'sig-b']])
   })
 })
 

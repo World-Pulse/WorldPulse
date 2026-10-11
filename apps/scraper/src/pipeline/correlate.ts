@@ -29,6 +29,7 @@ import { sourceKey, hostOf } from './signal-columns'
 import { findGazetteerPlace } from './geo'
 import { isEventTemplateTitle } from './event-titles'
 import { countIndependentOutlets, isCopyOf } from './independence'
+import { joinStory } from './stories'
 import { createHash } from 'crypto'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -692,6 +693,12 @@ async function applyCorroborationBoost(
         })
     }
 
+    // One story id for the group, so the feed can show it as one story
+    const joined = await joinStory(ids).catch(err => {
+      logger.warn({ err, signal_id: signal.id }, 'Failed to join signals into one story')
+      return 0
+    })
+
     logger.info({
       signal_id:      signal.id,
       matches:        sameStory.map(s => s.id).slice(0, 10),
@@ -699,6 +706,7 @@ async function applyCorroborationBoost(
       unique_sources: uniqueSources,
       boosted_count:  boosted,
       promoted_count: promoted,
+      joined_story:   joined,
     }, 'Same story from %d outlets', uniqueSources)
   } catch (err) {
     logger.warn({ err, signal_id: signal.id }, 'Failed to apply corroboration boost')

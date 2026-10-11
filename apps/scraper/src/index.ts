@@ -35,6 +35,7 @@ import { runStabilityCheck, recordUnhandledException } from './lib/stability-tra
 import { runDelayedRescore } from './pipeline/rescore'
 import { signalsHavePublishedAt, publishedAtFor, backfillRecentPublishedAt, sourceKey, hostOf } from './pipeline/signal-columns'
 import { independentReports, isCopyOf } from './pipeline/independence'
+import { ensureStoryIdColumn } from './pipeline/stories'
 import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications } from './pipeline/repairs'
 import { batchValidateGeo } from './pipeline/geo-validator'
 import { recomputeSourceReputation } from './pipeline/source-reputation'
@@ -142,6 +143,11 @@ async function bootstrap() {
   backfillRecentPublishedAt(3)
     .then(rows => { if (rows > 0) logger.info({ rows }, 'Filled published_at for recent signals') })
     .catch(err => logger.warn({ err }, 'published_at backfill failed (non-fatal)'))
+
+  // signals.story_id groups same-story signals for the feed (pipeline/stories.ts)
+  ensureStoryIdColumn()
+    .then(ok => { if (ok) logger.info('signals.story_id ready') })
+    .catch(() => {})
 
   // One-off data repairs (bounded and idempotent, see pipeline/repairs.ts)
   fixLocalhostUploadUrls()
