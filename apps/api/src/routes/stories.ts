@@ -17,6 +17,8 @@ import { rankStories, textArray, EVENT_TEMPLATE_SQL, type StoryCandidate } from 
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MAX_SIGNALS = 50
+/** Of those, the story's first reports; the rest are its latest */
+const FIRST_REPORTS = 10
 
 /** Stories looked at per list request: the ones most recently reported */
 const MAX_CANDIDATES = 600
@@ -177,29 +179,46 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
       if (row?.story_id) storyId = String(row.story_id)
     }
 
-    const members = await db('signals')
-      .whereIn('status', ['verified', 'pending'])
-      .where(function () {
-        if (hasStories) this.where('story_id', storyId).orWhere('id', storyId)
-        else this.where('id', storyId)
-      })
-      .orderBy('created_at', 'asc')
-      .limit(MAX_SIGNALS)
-      .select([
-        'id', 'title', 'status', 'severity', 'category', 'reliability_score',
-        'original_urls', 'location_name', 'created_at', 'verified_at',
-      ]) as Array<Record<string, unknown>>
+    // A big story (the Riyadh airport attack had 80+ reports) is its start and
+    // its latest reports, plus the one asked for; size and outlets count them all.
+    // (A literal ? in knex's raw SQL is written \\?, or it takes it for a value.)
+    const scope = hasStories ? '(story_id = ? OR id = ?)' : 'id = ?'
+    const scopeParams = hasStories ? [storyId, storyId] : [storyId]
+    const result = await db.raw(
+      `WITH m AS (
+         SELECT id, title, status, severity, category, reliability_score, original_urls, location_name,
+                created_at, verified_at,
+                row_number() OVER (ORDER BY created_at ASC, id ASC)   AS position,
+                row_number() OVER (ORDER BY created_at DESC, id DESC) AS from_end,
+                count(*) OVER ()                                       AS total,
+                min(verified_at) OVER ()                               AS first_verified
+           FROM signals
+          WHERE status IN ('verified', 'pending') AND ${scope}
+       )
+       SELECT m.*,
+              (SELECT count(DISTINCT lower(regexp_replace(substring(s.original_urls[1] from '^https\\?://([^/:\\?#]+)'), '^www\\.', '')))
+                 FROM signals s
+                WHERE s.status IN ('verified', 'pending') AND ${scope.replace(/story_id|\bid\b/g, c => `s.${c}`)}) AS outlets
+         FROM m
+        WHERE position <= ? OR from_end <= ? OR id::text = ?
+        ORDER BY created_at ASC, id ASC`,
+      [...scopeParams, ...scopeParams, FIRST_REPORTS, MAX_SIGNALS - FIRST_REPORTS, id],
+    ) as { rows: Array<Record<string, unknown>> }
+    const members = result.rows
     if (members.length === 0) return sendError(reply, 404, 'NOT_FOUND', 'Story not found')
 
     const iso = (v: unknown): string | null => (v ? new Date(v as string).toISOString() : null)
-    const verifiedTimes = members.map(m => iso(m.verified_at)).filter((t): t is string => t !== null).sort()
+    const total = Number(members[0]!.total) || members.length
+    const outlets = Number(members[0]!.outlets) || 0
 
     return reply.send({
       success: true,
       data: {
         storyId,
-        size: members.length,
-        verifiedAt: verifiedTimes[0] ?? null,
+        /** Reports in the story (more than `signals` holds when it's big) */
+        size: total,
+        outlets,
+        verifiedAt: iso(members[0]!.first_verified),
         signals: members.map(m => {
           // A signal's own article comes first; the story's other links follow it
           const urls = Array.isArray(m.original_urls) ? (m.original_urls as unknown[]).map(String) : []
@@ -215,6 +234,8 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
             locationName:     m.location_name ?? null,
             createdAt:        iso(m.created_at),
             verifiedAt:       iso(m.verified_at),
+            /** 1 for the first report; gaps show where reports were left out */
+            position:         Number(m.position) || null,
           }
         }),
       },
