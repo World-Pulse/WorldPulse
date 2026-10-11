@@ -11,6 +11,7 @@
 
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
+import { MORE_COUNTRIES, ABBREVIATED_COUNTRIES, US_STATES, countryNameOf } from './world-countries'
 
 export interface GeoResult {
   point:        boolean
@@ -312,6 +313,8 @@ const COUNTRY_CENTROIDS: Record<string, { lat: number; lng: number; name: string
   CZ: { lat: 50.0755, lng: 14.4378,  name: 'Prague' },
   HU: { lat: 47.4979, lng: 19.0402,  name: 'Budapest' },
 }
+// Every other country (world-countries.ts); the capitals above stay as they are
+for (const entry of MORE_COUNTRIES) COUNTRY_CENTROIDS[entry.code] ??= { lat: entry.lat, lng: entry.lng, name: entry.capital }
 
 // ─── COUNTRY CODE PATTERNS ───────────────────────────────────────────────────
 const COUNTRY_PATTERNS: [RegExp, string][] = [
@@ -341,7 +344,7 @@ const COUNTRY_PATTERNS: [RegExp, string][] = [
   [/\b(?:saudi arabia|saudi)\b/i, 'SA'],
   [/\b(?:turkey|turkish|t[uü]rkiye)\b/i, 'TR'],
   [/\b(?:ukraine|ukrainian)\b/i, 'UA'],
-  [/\b(?:mexico|mexican)\b/i, 'MX'],
+  [/\b(?:(?<!new )mexico|mexican)\b/i, 'MX'],
   [/\b(?:argentina|argentine|argentinian)\b/i, 'AR'],
   [/\b(?:colombia|colombian)\b/i, 'CO'],
   [/\b(?:nigeria|nigerian)\b/i, 'NG'],
@@ -353,12 +356,26 @@ const COUNTRY_PATTERNS: [RegExp, string][] = [
   [/\b(?:vietnam|vietnamese)\b/i, 'VN'],
   [/\b(?:thailand|thai)\b/i, 'TH'],
   [/\b(?:malaysia|malaysian)\b/i, 'MY'],
+  // …and every other country (world-countries.ts: "Panama", "Vanuatu", "Slovenia" named no country before Oct 11, 2026)
+  ...MORE_COUNTRIES.map((entry): [RegExp, string] => [entry.pattern, entry.code]),
+  ...ABBREVIATED_COUNTRIES,
 ]
+
+/**
+ * The patterns with plural people-words too ("Afghans", "Israelis",
+ * "Ukrainians" named no country). Not for Turkey ("turkeys"), Chile ("chiles")
+ * or Guinea ("the 2,000 Guineas").
+ */
+const NO_PLURAL = new Set(['TR', 'CL', 'GN'])
+const COUNTRY_MATCHERS: [RegExp, string][] = COUNTRY_PATTERNS.map(([pattern, code]) =>
+  NO_PLURAL.has(code) || !pattern.source.endsWith(')\\b')
+    ? [pattern, code]
+    : [new RegExp(`${pattern.source.slice(0, -2)}s?\\b`, pattern.flags), code])
 
 /** Countries the text names, in order of first mention (the headline comes first) */
 export function mentionedCountries(text: string): string[] {
   const hits: Array<{ code: string; index: number }> = []
-  for (const [pattern, code] of COUNTRY_PATTERNS) {
+  for (const [pattern, code] of COUNTRY_MATCHERS) {
     const m = pattern.exec(text)
     if (m) hits.push({ code, index: m.index })
   }
@@ -498,6 +515,9 @@ function escapeRegExp(s: string): string {
 /** Gazetteer places as whole words, longest names first. Plain substring
  *  matching pinned "climate" stories to Lima, "comparison" to Paris and
  *  "promote" to Rome. */
+// US states (world-countries.ts); a place already in the gazetteer keeps its entry
+for (const [place, entry] of Object.entries(US_STATES)) GAZETTEER[place] ??= entry
+
 const GAZETTEER_MATCHERS = Object.entries(GAZETTEER)
   .sort((a, b) => b[0].length - a[0].length)
   .map(([place, coords]) => ({ place, coords, re: new RegExp(`\\b${escapeRegExp(place)}\\b`, 'i') }))
@@ -531,13 +551,17 @@ function gazetteerPoint(text: string): GeoResult | null {
     : null
 }
 
-/** The first named country, pinned at its capital (or without a pin if we have no capital for it) */
+/**
+ * The first named country, pinned at its capital (or without a pin if we have
+ * no capital for it). It's named as the country ("Panama", not "Panama City"):
+ * the story is about the country, not its capital.
+ */
 function countryPoint(countries: string[]): GeoResult {
   const code = countries[0]
   if (!code) return { point: false }
   const capital = COUNTRY_CENTROIDS[code]
   return capital
-    ? { point: true, lat: capital.lat, lng: capital.lng, name: capital.name, countryCode: code }
+    ? { point: true, lat: capital.lat, lng: capital.lng, name: countryNameOf(code) ?? capital.name, countryCode: code }
     : { point: false, countryCode: code }
 }
 

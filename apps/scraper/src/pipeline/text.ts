@@ -6,19 +6,37 @@
  * Qassem? &#8211; Analysis") and GDACS links didn't open.
  */
 
-/** HTML codes as characters. Angle brackets stay encoded, so decoded text can never become markup. */
+const NAMED_CODES: Record<string, number> = {
+  amp: 38, quot: 34, apos: 39, nbsp: 32, gt: 62, lt: 60,
+  rsquo: 0x2019, lsquo: 0x2018, rdquo: 0x201d, ldquo: 0x201c, ndash: 0x2013, mdash: 0x2014, hellip: 0x2026,
+}
+
+/**
+ * HTML codes as characters. ">" is decoded ("MMI&gt;=VII" in GDACS titles):
+ * on its own it can't start markup. "<" stays encoded when a letter, "/", "!"
+ * or "?" follows it, so decoded text can never become a tag.
+ */
 export function decodeEntities(text: string): string {
-  const named: Record<string, string> = {
-    amp: '&', quot: '"', apos: "'", nbsp: ' ',
-    rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“', ndash: '–', mdash: '—', hellip: '…',
-  }
-  return text.replace(/&(?:#x([0-9a-f]+)|#(\d+)|([a-z]+));/gi, (whole, hex, dec, name) => {
-    const code = hex ? parseInt(hex, 16) : dec ? parseInt(dec, 10) : NaN
-    if (!Number.isNaN(code)) {
-      return code > 0 && code <= 0x10ffff && code !== 60 && code !== 62 ? String.fromCodePoint(code) : whole
-    }
-    return named[String(name).toLowerCase()] ?? whole
+  return text.replace(/&(?:#x([0-9a-f]+)|#(\d+)|([a-z]+));/gi, (whole: string, hex: string | undefined, dec: string | undefined, name: string | undefined, offset: number, full: string) => {
+    const code = hex ? parseInt(hex, 16) : dec ? parseInt(dec, 10) : NAMED_CODES[String(name).toLowerCase()] ?? NaN
+    if (Number.isNaN(code) || code <= 0 || code > 0x10ffff) return whole
+    if (code === 60 && /^[a-z/!?]/i.test(full.slice(offset + whole.length))) return whole
+    return String.fromCodePoint(code)
   })
+}
+
+/**
+ * Text without HTML tags, written out or still encoded ("Osaka <i>danjiri</i>
+ * float festival" → "Osaka danjiri float festival"); a title showed the tags
+ * on Oct 11, 2026.
+ */
+export function stripTags(text: string): string {
+  return text.replace(/(?:<|&lt;)\/?[a-z][^<>]*?(?:>|&gt;)/gi, '')
+}
+
+/** A headline as it should read: codes decoded, tags gone */
+export function cleanTitle(title: string): string {
+  return stripTags(decodeEntities(title)).replace(/\s{2,}/g, ' ').trim()
 }
 
 /** A link with "&amp;" written out as "&" (GDACS report links didn't open) */
@@ -26,5 +44,5 @@ export function cleanUrl(url: string): string {
   return url.replace(/&amp;/gi, '&')
 }
 
-/** Text that still has HTML codes worth decoding (for the repair) */
-export const ENCODED_TEXT_RE = /&(?:#x[0-9a-f]+|#\d+|amp|quot|apos|nbsp|rsquo|lsquo|rdquo|ldquo|ndash|mdash|hellip);/i
+/** Text that still has HTML codes worth decoding, or tags (for the repair) */
+export const ENCODED_TEXT_RE = /&(?:#x[0-9a-f]+|#\d+|amp|quot|apos|nbsp|gt|lt|rsquo|lsquo|rdquo|ldquo|ndash|mdash|hellip);|<\/?[a-z][^<>]*>/i

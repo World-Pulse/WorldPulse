@@ -80,8 +80,8 @@ describe('extractGeo', () => {
     // "Trump" is a US hamlet; before Oct 11, 2026 the story got the pin "trump"
     fetchMock.mockResolvedValue({ ok: true, json: async () => [hit('Trump', 'us', { addresstype: 'hamlet', importance: 0.33 })] })
     const geo = await extractGeo('US opens antitrust probe into TV networks halting Trump coverage')
-    expect(geo.point).toBe(false)
-    expect(geo.name).toBeUndefined()
+    expect(geo.name).not.toBe('Trump')
+    expect(geo).toMatchObject({ name: 'United States', countryCode: 'US' })   // "US" in capitals names the country
   }, 15_000)
 
   it('names a geocoded place properly, and takes a later answer in the country the text names', async () => {
@@ -140,10 +140,34 @@ describe('acceptGeocoderHit', () => {
 })
 
 describe('placeFromText', () => {
-  it('uses a known place, else the capital of a named country, else nothing', () => {
+  it('uses a known place, else a named country (pinned at its capital), else nothing', () => {
     expect(placeFromText('Strikes reported in Rafah overnight')).toMatchObject({ point: true, name: 'Rafah', countryCode: 'PS' })
-    expect(placeFromText('Talks with Japanese officials stall')).toMatchObject({ point: true, name: 'Tokyo', countryCode: 'JP' })
+    expect(placeFromText('Talks with Japanese officials stall')).toMatchObject({ point: true, name: 'Japan', lat: 35.6762, countryCode: 'JP' })
     expect(placeFromText('Gravel cycling championship crowns a new winner')).toEqual({ point: false })
+  })
+
+  it('knows every country, not just 34 (Oct 11, 2026: GDACS quakes in Panama were pinned to Ispra, Italy)', () => {
+    expect(placeFromText('Panama struck by 2 powerful earthquakes, U.S. Geological Survey says'))
+      .toMatchObject({ point: true, name: 'Panama', countryCode: 'PA' })
+    expect(placeFromText('Traumatised Panamanians begin recovery from 7.7-magnitude earthquake')).toMatchObject({ countryCode: 'PA' })
+    expect(placeFromText('Green flood alert in Slovenia')).toMatchObject({ name: 'Slovenia', countryCode: 'SI' })
+    expect(placeFromText('Orange earthquake in Vanuatu')).toMatchObject({ name: 'Vanuatu', countryCode: 'VU' })
+  })
+
+  it('knows plural people-words ("Afghans", "Israelis"), but not "turkeys"', () => {
+    expect(placeFromText('Afghans desperate to escape poverty').countryCode).toBe('AF')
+    expect(placeFromText('Israelis protest in Tel Aviv').countryCode).toBe('IL')
+    expect(placeFromText('Ukrainians return home').countryCode).toBe('UA')
+    expect(placeFromText('Farmers raise fewer turkeys this year').countryCode).toBeUndefined()
+  })
+
+  it("doesn't take names and other places for countries", () => {
+    expect(placeFromText('Michael Jordan buys a team').countryCode).toBeUndefined()
+    expect(placeFromText('Oil spill in the Niger Delta').countryCode).not.toBe('NE')
+    expect(placeFromText('Guinea pigs escape from a pet shop').countryCode).toBeUndefined()
+    expect(placeFromText('Floods in Papua New Guinea').countryCode).toBe('PG')
+    expect(placeFromText('Fighting in the Democratic Republic of the Congo').countryCode).toBe('CD')
+    expect(placeFromText('Clashes in South Sudan').countryCode).toBe('SS')
   })
 
   it('shows gazetteer places by their usual spelling', () => {

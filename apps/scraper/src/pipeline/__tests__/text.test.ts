@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { decodeEntities, cleanUrl, ENCODED_TEXT_RE } from '../text'
+import { decodeEntities, cleanUrl, cleanTitle, ENCODED_TEXT_RE } from '../text'
 import { cleanSignalText } from '../insert-signal'
 
 describe('decodeEntities', () => {
@@ -11,9 +11,20 @@ describe('decodeEntities', () => {
     expect(decodeEntities('We&rsquo;re reading &hellip;')).toBe('We’re reading …')
   })
 
-  it('leaves angle brackets encoded, so text never becomes markup', () => {
-    expect(decodeEntities('MMI&gt;=VII &lt;script&gt;')).toBe('MMI&gt;=VII &lt;script&gt;')
-    expect(decodeEntities('&#60;b&#62;')).toBe('&#60;b&#62;')
+  it('decodes ">", but never a "<" that could open a tag', () => {
+    expect(decodeEntities('in MMI&gt;=VII')).toBe('in MMI>=VII')
+    expect(decodeEntities('x &lt; 5 and &lt;= 7')).toBe('x < 5 and <= 7')
+    expect(decodeEntities('&lt;script&gt;alert(1)&lt;/script&gt;')).toBe('&lt;script>alert(1)&lt;/script>')
+    expect(decodeEntities('&#60;b&#62; &#x3c;!-- &lt;?xml')).toBe('&#60;b> &#x3c;!-- &lt;?xml')
+  })
+})
+
+describe('cleanTitle', () => {
+  it('drops tags, written out or encoded', () => {
+    expect(cleanTitle('Two die and 16 hurt in Osaka <i>danjiri</i> float festival accidents'))
+      .toBe('Two die and 16 hurt in Osaka danjiri float festival accidents')
+    expect(cleanTitle('A &lt;b&gt;bold&lt;/b&gt; claim')).toBe('A bold claim')
+    expect(cleanTitle('Rates 3 &lt; 4 &amp; falling')).toBe('Rates 3 < 4 & falling')
   })
 })
 
@@ -27,6 +38,8 @@ describe('ENCODED_TEXT_RE', () => {
   it('spots text that still has codes', () => {
     expect(ENCODED_TEXT_RE.test('isn&#x27;t')).toBe(true)
     expect(ENCODED_TEXT_RE.test('AT&T earnings')).toBe(false)
+    expect(ENCODED_TEXT_RE.test('in MMI&gt;=VII')).toBe(true)
+    expect(ENCODED_TEXT_RE.test('Osaka <i>danjiri</i>')).toBe(true)
   })
 })
 

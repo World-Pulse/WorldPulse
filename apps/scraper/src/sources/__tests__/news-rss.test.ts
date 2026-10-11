@@ -235,12 +235,16 @@ describe('inferGeo', () => {
 
   it('infers Gaza from description', () => {
     const geo = inferGeo('Middle East', 'Hamas fighters in Gaza launch rockets', bbcSource)
-    expect(geo.locationName.toLowerCase()).toContain('gaza')
+    expect(geo.locationName?.toLowerCase()).toContain('gaza')
   })
 
   it('infers China from Xi Jinping mention', () => {
-    const geo = inferGeo('Xi Jinping warns Taiwan over independence push', '', bbcSource)
+    const geo = inferGeo('Xi Jinping meets business leaders', '', bbcSource)
     expect(geo.countryCode).toBe('CN')
+  })
+
+  it('prefers the place a headline names to a leader it names', () => {
+    expect(inferGeo('Xi Jinping warns Taiwan over independence push', '', bbcSource).countryCode).toBe('TW')
   })
 
   it('infers US from White House mention', () => {
@@ -248,11 +252,15 @@ describe('inferGeo', () => {
     expect(geo.countryCode).toBe('US')
   })
 
-  it('falls back to source defaults when no geo keyword found', () => {
-    const geo = inferGeo('Global leaders discuss AI governance', '', bbcSource)
-    expect(geo.lat).toBe(bbcSource.defaultLat)
-    expect(geo.lng).toBe(bbcSource.defaultLng)
-    expect(geo.locationName).toBe(bbcSource.defaultLocation)
+  it("gives an international outlet's story without a place no pin (not the outlet's office)", () => {
+    expect(inferGeo('Global leaders discuss AI governance', '', bbcSource))
+      .toEqual({ lat: null, lng: null, locationName: null, countryCode: null })
+  })
+
+  it("pins a national outlet's story without a place at the outlet's home", () => {
+    const punch = NEWS_SOURCE_REGISTRY.find(s => s.id === 'punch-nigeria')!
+    const geo = inferGeo('Tinubu will deliver more prosperity if re-elected — First Lady', '', punch)
+    expect(geo.countryCode).toBe('NG')
   })
 
   it('Kyiv Independent defaults to Ukraine', () => {
@@ -401,16 +409,16 @@ describe('news text fixes', () => {
 
   it('pins places only at the start of a word', () => {
     const src = NEWS_SOURCE_REGISTRY[0]
-    expect(inferGeo('Tirana hosts summit', '', src).countryCode).toBe(src.countryCode)
-    expect(inferGeo('The Dukes of Hazzard return', '', src).countryCode).toBe(src.countryCode)
+    expect(inferGeo('Tirana hosts summit', '', src).countryCode).not.toBe('IR')
+    expect(inferGeo('The Dukes of Hazzard return', '', src).countryCode).toBeNull()
     expect(inferGeo('Iranian envoy arrives', '', src).countryCode).toBe('IR')
     expect(inferGeo('Palestinian president speaks', '', src).countryCode).toBe('PS')
     expect(inferGeo('UK inflation falls', '', src).countryCode).toBe('GB')
   })
 
-  it('decodes HTML entities but never produces angle brackets', () => {
+  it('decodes HTML entities but never produces a tag', () => {
     expect(decodeEntities('Abbas&#x27;s plan &amp; more &quot;x&quot;')).toBe('Abbas\'s plan & more "x"')
-    expect(decodeEntities('&lt;b&gt; &#60;i&#62;')).toBe('&lt;b&gt; &#60;i&#62;')
+    expect(decodeEntities('&lt;b&gt; &#60;i&#62;')).toBe('&lt;b> &#60;i>')
   })
 })
 

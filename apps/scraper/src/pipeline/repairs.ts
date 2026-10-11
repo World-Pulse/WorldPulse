@@ -11,7 +11,7 @@ import { db } from '../lib/postgres'
 import { EVENT_TEMPLATE_SQL } from './event-titles'
 import { countIndependentOutlets } from './independence'
 import { hostOf } from './signal-columns'
-import { decodeEntities, cleanUrl, ENCODED_TEXT_RE } from './text'
+import { decodeEntities, cleanUrl, cleanTitle, ENCODED_TEXT_RE } from './text'
 
 /** Where nginx serves uploaded post media (the uploads volume, under /uploads/) */
 const PUBLIC_SITE = 'https://world-pulse.io'
@@ -219,7 +219,7 @@ export async function decodeStoredEntities(): Promise<number> {
   const rows = ((found as { rows?: Array<{ id: string; title: string | null; summary: string | null; original_urls: unknown }> })?.rows ?? [])
   let changed = 0
   for (const row of rows) {
-    const title = typeof row.title === 'string' ? decodeEntities(row.title) : row.title
+    const title = typeof row.title === 'string' ? cleanTitle(row.title) : row.title
     const summary = typeof row.summary === 'string' ? decodeEntities(row.summary) : row.summary
     const urls = Array.isArray(row.original_urls) ? row.original_urls.map(u => (typeof u === 'string' ? cleanUrl(u) : u)) : null
     const sameUrls = urls === null || urls.every((u, i) => u === (row.original_urls as unknown[])[i])

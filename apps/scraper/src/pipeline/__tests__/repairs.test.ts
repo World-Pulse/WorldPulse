@@ -180,16 +180,18 @@ describe('decodeStoredEntities', () => {
       return { rows: [
         { id: 'a', title: 'Who Are You? &#8211; Analysis', summary: null, original_urls: ['https://x.y/a'] },
         { id: 'b', title: 'Quake MMI&gt;=VII', summary: 'ok', original_urls: ['https://www.gdacs.org/r?e=EQ&amp;id=1'] },
-        { id: 'c', title: 'Only &#60;brackets&#62;', summary: null, original_urls: [] },
+        { id: 'c', title: 'Osaka <i>danjiri</i> float festival', summary: null, original_urls: [] },
+        { id: 'd', title: 'Nothing to change &lt;script', summary: null, original_urls: [] },
       ] } as never
     })
-    expect(await decodeStoredEntities()).toBe(2)
+    expect(await decodeStoredEntities()).toBe(3)
     const [{ sql }] = h.raws
     expect(sql).toMatch(/INTERVAL '7 days'/)
     expect(sql).toMatch(/LIKE '%&amp;%'/)
     expect(h.updates.map(u => u.data)).toEqual([
       { title: 'Who Are You? – Analysis', summary: null },
-      { title: 'Quake MMI&gt;=VII', summary: 'ok', original_urls: ['https://www.gdacs.org/r?e=EQ&id=1'] },
+      { title: 'Quake MMI>=VII', summary: 'ok', original_urls: ['https://www.gdacs.org/r?e=EQ&id=1'] },
+      { title: 'Osaka danjiri float festival', summary: null },
     ])
   })
 })

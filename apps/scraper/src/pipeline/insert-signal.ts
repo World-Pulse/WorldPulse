@@ -31,7 +31,7 @@ import { dedup, checkSemanticDuplicate } from './dedup'
 import { processSignalForKnowledgeGraph, extractEntitiesRuleBased, upsertEntityNode } from './entity-graph'
 import { embedSignal } from './embeddings'
 import { signalsHavePublishedAt, publishedAtFor, sourceKey } from './signal-columns'
-import { decodeEntities, cleanUrl } from './text'
+import { decodeEntities, cleanUrl, cleanTitle } from './text'
 
 /** Signal ids are UUIDs; the dedup store can also hold '1' or 'pending' */
 const SIGNAL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -105,7 +105,7 @@ export interface CorrelationMeta {
  * updated the caller's row, e.g. its reliability score) and returns it.
  */
 export function cleanSignalText(row: Record<string, unknown>): Record<string, unknown> {
-  if (typeof row.title === 'string') row.title = decodeEntities(row.title)
+  if (typeof row.title === 'string') row.title = cleanTitle(row.title)
   if (typeof row.summary === 'string') row.summary = decodeEntities(row.summary)
   if (Array.isArray(row.original_urls)) {
     row.original_urls = row.original_urls.map(u => (typeof u === 'string' ? cleanUrl(u) : u))

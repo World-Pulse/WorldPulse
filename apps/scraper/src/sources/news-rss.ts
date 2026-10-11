@@ -70,6 +70,8 @@ import { insertAndCorrelate } from '../pipeline/insert-signal'
 import { MAX_ITEM_AGE_MS, isStaleItem } from '../pipeline/freshness'
 // Feeds send "&#x27;" and "&amp;" in titles and summaries
 import { decodeEntities } from '../pipeline/text'
+import { placeFromText } from '../pipeline/geo'
+import { gdacsAlertLevel, gdacsSeverity, gdacsTags, tidyGdacsTitle } from './gdacs'
 export { MAX_ITEM_AGE_MS, isStaleItem, decodeEntities }
 
 const log = rootLogger.child({ module: 'news-rss-source' })
@@ -2244,6 +2246,19 @@ export interface FeedItem {
   link:        string
   pubDate:     string
   description: string
+  /** The item's own point, when the feed gives one (GeoRSS or W3C geo tags; GDACS does) */
+  point?:      { lat: number; lng: number } | null
+  /** GDACS's alert level (Red, Orange, Green) */
+  alertLevel?: string
+}
+
+/** An item's point from <georss:point>lat lng</georss:point> or <geo:lat>/<geo:long>, or null */
+export function feedPoint(block: string): { lat: number; lng: number } | null {
+  const georss = /<georss:point[^>]*>\s*(-?[\d.]+)[\s,]+(-?[\d.]+)\s*<\/georss:point>/i.exec(block)
+  const lat = Number(georss ? georss[1] : /<geo:lat[^>]*>\s*(-?[\d.]+)\s*<\/geo:lat>/i.exec(block)?.[1])
+  const lng = Number(georss ? georss[2] : /<geo:long[^>]*>\s*(-?[\d.]+)\s*<\/geo:long>/i.exec(block)?.[1])
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180 || (lat === 0 && lng === 0)) return null
+  return { lat, lng }
 }
 
 /**
@@ -2288,6 +2303,8 @@ export function parseFeedItems(xml: string): FeedItem[] {
       link:        link.replace(/^https?:\/\/feedproxy\.google\.com\/~r\//i, 'https://'),
       pubDate:     extract(['pubDate', 'published', 'updated', 'dc:date']),
       description: extract(['description', 'summary', 'content', 'content:encoded']),
+      point:       feedPoint(block),
+      alertLevel:  extract(['gdacs:alertlevel']) || undefined,
     })
   }
 
@@ -2351,31 +2368,70 @@ function hintMatches(text: string, keyword: string): boolean {
   return new RegExp(`(?<![a-z0-9])${escaped}${end}`).test(text)
 }
 
+/**
+ * National outlets whose stories are mostly about their own country: a story
+ * that names no place is pinned at the outlet's home. Every other outlet's
+ * story without a place gets no pin: until Oct 11, 2026 all of them fell back
+ * to the outlet's office, so ABC Australia's US stories sat in Sydney,
+ * Investing.com's stock trades in Limassol, CNA's Panama earthquake coverage
+ * in Singapore and GDACS's alerts in Ispra, Italy (about 1 in 5 map points).
+ */
+export const HOME_PIN_SOURCES = new Set([
+  'kyiv-independent', 'haaretz', 'times-of-india', 'the-hindu-national', 'japan-times', 'daily-maverick',
+  'arab-news', 'folha-sao-paulo', 'moscow-times', 'taipei-times', 'dawn-pakistan', 'premium-times-nigeria',
+  'bangkok-post', 'nation-africa-ke', 'punch-nigeria', 'businessday-ng', 'ahram-online', 'mail-guardian-za',
+  'vanguard-ng', 'daily-trust-ng', 'ethiopia-reporter', 'graphic-online-gh', 'nst-malaysia',
+  'philippine-inquirer', 'vnexpress-intl', 'myanmar-now', 'irrawaddy', 'agencia-publica', 'ciper-chile',
+  'la-silla-vacia', 'rnz-national', 'georgia-today', 'ecb-press', 'fed-press',
+])
+
+export interface InferredGeo {
+  lat: number | null
+  lng: number | null
+  locationName: string | null
+  countryCode: string | null
+}
+
+function fromHints(text: string): InferredGeo | null {
+  const lower = text.toLowerCase()
+  for (const { keywords, geo } of GEO_HINTS) {
+    if (keywords.some(kw => hintMatches(lower, kw))) {
+      return { lat: geo.lat, lng: geo.lng, locationName: geo.name, countryCode: geo.code ?? null }
+    }
+  }
+  return null
+}
+
+function fromPlace(text: string): InferredGeo | null {
+  const place = placeFromText(text)
+  return place.point && place.lat !== undefined && place.lng !== undefined
+    ? { lat: place.lat, lng: place.lng, locationName: place.name ?? null, countryCode: place.countryCode ?? null }
+    : null
+}
+
+/**
+ * Where a news story is: the feed's own point for it (GDACS gives each
+ * alert's coordinates), else a place its headline names (any city in the
+ * gazetteer or any country, by its capital), else a leader or institution
+ * it names ("Kremlin", "Modi"), else the same in its summary, else the
+ * outlet's home for national outlets (HOME_PIN_SOURCES), else no pin.
+ */
 export function inferGeo(
   title:       string,
   description: string,
   source:      NewsSource,
-): { lat: number; lng: number; locationName: string; countryCode: string | null } {
-  const text = `${title} ${description}`.toLowerCase()
-
-  for (const { keywords, geo } of GEO_HINTS) {
-    if (keywords.some(kw => hintMatches(text, kw))) {
-      return {
-        lat:          geo.lat,
-        lng:          geo.lng,
-        locationName: geo.name,
-        countryCode:  geo.code ?? null,
-      }
-    }
+  point?:      { lat: number; lng: number } | null,
+): InferredGeo {
+  if (point) {
+    const named = fromPlace(title)
+    return { lat: point.lat, lng: point.lng, locationName: named?.locationName ?? null, countryCode: named?.countryCode ?? null }
   }
-
-  // Fall back to outlet's editorial home
-  return {
-    lat:          source.defaultLat,
-    lng:          source.defaultLng,
-    locationName: source.defaultLocation,
-    countryCode:  source.countryCode,
+  const found = fromPlace(title) ?? fromHints(title) ?? fromPlace(description) ?? fromHints(description)
+  if (found) return found
+  if (HOME_PIN_SOURCES.has(source.id)) {
+    return { lat: source.defaultLat, lng: source.defaultLng, locationName: source.defaultLocation, countryCode: source.countryCode }
   }
+  return { lat: null, lng: null, locationName: null, countryCode: null }
 }
 
 // ─── SIGNAL CREATION ──────────────────────────────────────────────────────────
@@ -2399,10 +2455,14 @@ async function processItem(
     return 'stale'
   }
 
-  const title       = decodeEntities(item.title).slice(0, 500) || `${source.name} — news item`
-  const severity    = detectNewsSeverity(item.title, item.description)
+  // GDACS alerts: severity from the alert level, a readable earthquake headline
+  const alert       = source.id === 'gdacs' ? gdacsAlertLevel(item.title, item.alertLevel) : null
+  const gdacs       = source.id === 'gdacs' ? tidyGdacsTitle(decodeEntities(item.title)) : null
+  const title       = (gdacs?.title ?? decodeEntities(item.title)).slice(0, 500) || `${source.name} — news item`
+  const severity    = alert ? gdacsSeverity(alert) : detectNewsSeverity(item.title, item.description)
   const category    = detectNewsCategory(item.title, item.description, source.category)
-  const geo         = inferGeo(item.title, item.description, source)
+  const found       = inferGeo(item.title, item.description, source, item.point)
+  const geo         = gdacs?.place && !found.locationName ? { ...found, locationName: gdacs.place } : found
 
   const pubDate  = item.pubDate ? new Date(item.pubDate) : new Date()
   const eventTime = isNaN(pubDate.getTime()) ? new Date() : pubDate
@@ -2420,7 +2480,7 @@ async function processItem(
   const tags = [
     'news', 'rss', source.id, source.countryCode.toLowerCase(),
     category, severity,
-    ...source.extraTags,
+    ...(source.id === 'gdacs' ? gdacsTags(item.title) : source.extraTags),
     ...(source.biasLabel === 'state-media' ? ['state-media'] : []),
   ]
 
@@ -2435,7 +2495,7 @@ async function processItem(
       source_count:      1,
       source_ids:        [],
       original_urls:     item.link ? [item.link] : [],
-      location:          db.raw('ST_MakePoint(?, ?)', [geo.lng, geo.lat]),
+      location:          geo.lat !== null && geo.lng !== null ? db.raw('ST_MakePoint(?, ?)', [geo.lng, geo.lat]) : null,
       location_name:     geo.locationName,
       country_code:      geo.countryCode ?? null,
       region:            null,
@@ -2466,6 +2526,59 @@ async function processItem(
     log.debug({ err, sourceId: source.id, title }, 'news-rss signal skipped (likely duplicate)')
     return 'none'
   }
+}
+
+// ─── REPAIR: PINS AT AN OUTLET'S OFFICE ──────────────────────────────────────
+
+/**
+ * Re-pins the past week's RSS signals that sit at their outlet's home
+ * (Oct 11, 2026; see HOME_PIN_SOURCES): at the place the headline or summary
+ * names, else at the home for national outlets, else no pin. GDACS alerts
+ * also get their alert level's severity and a readable earthquake headline.
+ * Bounded (5,000 rows) and idempotent: a row is changed only when the answer
+ * differs, and a moved row no longer sits at a home.
+ */
+export async function repinNewsHomePins(db: Knex): Promise<{ moved: number; cleared: number; retitled: number }> {
+  const homes = [...new Set(NEWS_SOURCE_REGISTRY.map(src => src.defaultLocation))]
+  const found = await db.raw(
+    `SELECT id, title, summary, tags, location_name, severity::text AS severity
+       FROM signals
+      WHERE created_at > NOW() - INTERVAL '7 days'
+        AND tags @> ARRAY['rss']::text[]
+        AND location_name = ANY(?::text[])
+      ORDER BY created_at DESC
+      LIMIT 5000`,
+    [homes],
+  )
+  const rows = ((found as { rows?: Array<{ id: string; title: string | null; summary: string | null; tags: unknown; location_name: string; severity: string }> })?.rows ?? [])
+  const byId = new Map(NEWS_SOURCE_REGISTRY.map(src => [src.id, src]))
+  const totals = { moved: 0, cleared: 0, retitled: 0 }
+  for (const row of rows) {
+    const tags = Array.isArray(row.tags) ? row.tags.map(String) : []
+    const source = tags.map(t => byId.get(t)).find((src): src is NewsSource => src !== undefined)
+    if (!source || row.location_name !== source.defaultLocation || typeof row.title !== 'string') continue
+
+    const summary = (row.summary ?? '').split(/\s+Source: /)[0] ?? ''
+    const changes: Record<string, unknown> = {}
+    if (source.id === 'gdacs') {
+      const tidy = tidyGdacsTitle(decodeEntities(row.title))
+      if (tidy.title !== row.title) changes.title = tidy.title
+      const level = gdacsAlertLevel(row.title)
+      if (level && gdacsSeverity(level) !== row.severity) changes.severity = gdacsSeverity(level)
+    }
+    const geo = inferGeo(row.title, summary, source)
+    const atHome = geo.lat === source.defaultLat && geo.lng === source.defaultLng && geo.locationName === row.location_name
+    if (!atHome) {
+      changes.location      = geo.lat !== null && geo.lng !== null ? db.raw('ST_MakePoint(?, ?)', [geo.lng, geo.lat]) : null
+      changes.location_name = geo.locationName
+      changes.country_code  = geo.countryCode
+    }
+    if (Object.keys(changes).length === 0) continue
+    await db('signals').where('id', row.id).update(changes)
+    if (!atHome) { if (geo.lat === null) totals.cleared++; else totals.moved++ }
+    if (changes.title) totals.retitled++
+  }
+  return totals
 }
 
 // ─── FEED FAILURES ───────────────────────────────────────────────────────────
