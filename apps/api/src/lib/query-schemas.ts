@@ -160,6 +160,14 @@ export const HotspotsQuerySchema = z.object({
 
 export type HotspotsQuery = z.infer<typeof HotspotsQuerySchema>
 
+/** GET /api/v1/stories: stories reported in the last `hours`, at most `limit` */
+export const StoryListQuerySchema = z.object({
+  hours: intParam(12, 1, 72),
+  limit: intParam(6, 1, 20),
+})
+
+export type StoryListQuery = z.infer<typeof StoryListQuerySchema>
+
 // ─── Community sort enum ──────────────────────────────────────────────────────
 
 export const COMMUNITY_SORT_VALUES = ['members', 'posts', 'trending', 'newest'] as const

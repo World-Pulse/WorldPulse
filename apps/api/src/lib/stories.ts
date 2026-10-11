@@ -147,9 +147,9 @@ export async function storyFacts(keys: string[]): Promise<Map<string, StoryFacts
             count(DISTINCT s.id)::int AS size,
             min(s.verified_at) AS verified_at,
             max(s.created_at) AS newest,
-            array_remove(array_agg(DISTINCT u.url), NULL) AS urls
+            array_remove(array_agg(u.url ORDER BY s.created_at, u.ord), NULL) AS urls
        FROM signals s
-       LEFT JOIN LATERAL unnest(s.original_urls) AS u(url) ON true
+       LEFT JOIN LATERAL unnest(s.original_urls) WITH ORDINALITY AS u(url, ord) ON true
       WHERE s.story_id = ANY(?::uuid[]) OR s.id = ANY(?::uuid[])
       GROUP BY 1`,
     [unique, unique],

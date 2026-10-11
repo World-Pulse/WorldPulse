@@ -2,162 +2,125 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import {
+  toDevelopingStories, sinceLabel, outletBadge, namedOutlets, LOUD_SEVERITIES,
+  type DevelopingStory,
+} from '@/lib/developing-stories'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
-interface EventThread {
-  id: string
-  title: string
-  summary: string | null
-  category: string
-  region: string | null
-  status: 'developing' | 'escalating' | 'stable' | 'resolved'
-  peak_severity: string
-  signal_count: number
-  severity_trajectory: Array<{ timestamp: string; avg_severity_rank: number; signal_count: number }>
-  last_updated: string
-  related_entities: string[]
-}
+/** Stories shown (on phones, fewer), and the hours they must have been reported in */
+const SHOWN = 5
+const PHONE_SHOWN = 3
+const WINDOW_HOURS = 12
+const REFRESH_MS = 5 * 60_000
 
-const STATUS_COLORS: Record<string, string> = {
-  escalating: 'text-red-400 bg-red-400/10 border-red-400/30',
-  developing: 'text-amber-400 bg-amber-400/10 border-amber-400/30',
-  stable:     'text-blue-400 bg-blue-400/10 border-blue-400/30',
-}
-
-const SEVERITY_COLORS: Record<string, string> = {
-  critical: 'text-red-400',
-  high:     'text-orange-400',
-  medium:   'text-yellow-400',
-  low:      'text-green-400',
+const SEVERITY_TEXT: Record<string, string> = {
+  critical: 'text-wp-red',
+  high:     'text-wp-amber',
 }
 
 /**
- * Developing Stories panel for the homepage.
- * Shows active event threads — escalating stories first.
+ * Developing Stories on the home page: the stories most outlets are reporting
+ * in the last 12 hours, ranked by how many outlets and how serious, freshest
+ * first among equals; each opens its signal page, which lists every outlet.
  */
 export function DevelopingStories() {
-  const [threads, setThreads] = useState<EventThread[]>([])
-  const [loading, setLoading] = useState(true)
+  const [stories, setStories] = useState<DevelopingStory[]>([])
+  const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
-    fetchThreads()
-    // Refresh every 5 minutes
-    const timer = setInterval(fetchThreads, 5 * 60 * 1000)
-    return () => clearInterval(timer)
+    let cancelled = false
+    async function load() {
+      if (document.visibilityState === 'hidden') return
+      try {
+        const res = await fetch(`${API_URL}/api/v1/stories?hours=${WINDOW_HOURS}&limit=${SHOWN}`)
+        if (!res.ok) return
+        const list = toDevelopingStories(await res.json())
+        if (!cancelled) { setStories(list); setNow(Date.now()) }
+      } catch {
+        // the home page shouldn't break if the stories API is down
+      }
+    }
+    load()
+    const timer = setInterval(load, REFRESH_MS)
+    return () => { cancelled = true; clearInterval(timer) }
   }, [])
 
-  async function fetchThreads() {
-    try {
-      const res = await fetch(`${API_URL}/api/v1/threads?limit=8`)
-      if (!res.ok) return
-      const data = await res.json()
-      setThreads(data.threads ?? [])
-    } catch {
-      // silently fail — homepage shouldn't break if threads API is down
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (loading) return null
-  if (threads.length === 0) return null
-
-  const escalating = threads.filter(t => t.status === 'escalating')
-  const developing = threads.filter(t => t.status === 'developing')
-  const display = [...escalating, ...developing].slice(0, 6)
-
-  if (display.length === 0) return null
+  if (stories.length === 0) return null
+  const [lead, ...rest] = stories
 
   return (
-    <div className="border-b border-[rgba(255,255,255,0.07)] bg-[rgba(0,0,0,0.2)]">
+    <section aria-labelledby="developing-stories" className="border-b border-[rgba(255,255,255,0.07)] bg-[rgba(0,0,0,0.2)]">
       <div className="px-4 py-3">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-2.5">
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
-            <h2 className="text-[13px] font-semibold text-wp-text1 tracking-wide uppercase">
+            <span className="w-2 h-2 rounded-full bg-wp-red animate-pulse" aria-hidden />
+            <h2 id="developing-stories" className="text-[13px] font-semibold text-wp-text tracking-wide uppercase">
               Developing Stories
             </h2>
           </div>
-          <span className="text-[11px] text-wp-text3 font-mono">
-            {escalating.length > 0
-              ? `${escalating.length} escalating`
-              : `${display.length} active`}
-          </span>
+          <span className="text-[11px] text-wp-text2 font-mono">most reported · {WINDOW_HOURS}h</span>
         </div>
 
-        <div className="space-y-2">
-          {display.map(thread => (
-            <Link
-              key={thread.id}
-              href={`/threads/${thread.id}`}
-              className="block rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.02)] p-3 cursor-pointer hover:border-[rgba(255,255,255,0.15)] hover:bg-[rgba(255,255,255,0.04)] transition-all group"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${STATUS_COLORS[thread.status] ?? STATUS_COLORS.developing}`}>
-                      {thread.status.toUpperCase()}
-                    </span>
-                    <span className={`text-[10px] font-mono ${SEVERITY_COLORS[thread.peak_severity] ?? 'text-wp-text3'}`}>
-                      {thread.peak_severity}
-                    </span>
-                    {thread.region && (
-                      <span className="text-[10px] text-wp-text3 font-mono truncate">
-                        {thread.region}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[13px] text-wp-text1 line-clamp-2 leading-snug group-hover:text-wp-cyan transition-colors">
-                    {thread.title}
-                  </p>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  <div className="text-[11px] text-wp-cyan font-mono">
-                    {thread.signal_count} signals
-                  </div>
-                  <TrendIndicator trajectory={thread.severity_trajectory} />
-                </div>
-              </div>
-
-              {/* Preview — show summary inline */}
-              {thread.summary && (
-                <p className="text-[11px] text-wp-text3 mt-1.5 line-clamp-1 leading-snug">
-                  {thread.summary}
-                </p>
-              )}
-            </Link>
+        <ol className="space-y-2">
+          <li><StoryRow story={lead!} now={now} lead /></li>
+          {rest.map((story, i) => (
+            // phones show the first three, so the feed starts on the first screen
+            <li key={story.id} className={i >= PHONE_SHOWN - 1 ? 'hidden sm:block' : undefined}>
+              <StoryRow story={story} now={now} />
+            </li>
           ))}
-        </div>
+        </ol>
       </div>
-    </div>
+    </section>
   )
 }
 
-function TrendIndicator({ trajectory }: { trajectory: EventThread['severity_trajectory'] }) {
-  if (trajectory.length < 2) return null
-
-  const recent = trajectory[trajectory.length - 1]!
-  const prev = trajectory[trajectory.length - 2]!
-  const trend = recent.avg_severity_rank > prev.avg_severity_rank
-    ? '↑' : recent.avg_severity_rank < prev.avg_severity_rank
-    ? '↓' : '→'
-  const color = trend === '↑' ? 'text-red-400' : trend === '↓' ? 'text-green-400' : 'text-wp-text3'
-
+function StoryRow({ story, now, lead = false }: { story: DevelopingStory; now: number; lead?: boolean }) {
+  const badge = outletBadge(story)
+  const { names, more } = namedOutlets(story, lead ? 4 : 3)
+  const updated = sinceLabel(story.updatedAt, now)
+  const since = sinceLabel(story.firstSeenAt, now)
   return (
-    <span className={`text-[11px] font-mono ${color}`}>
-      {trend}
-    </span>
-  )
-}
+    <Link
+      href={`/signals/${story.leadId}`}
+      className={`block rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.02)] ${lead ? 'p-3.5' : 'px-3 py-2.5'} hover:border-[rgba(255,255,255,0.15)] hover:bg-[rgba(255,255,255,0.04)] transition-all group`}
+      data-story-id={story.id}
+    >
+      <div className="flex items-center gap-2 mb-1 min-w-0">
+        <span
+          className={`flex-shrink-0 inline-flex items-center px-2 py-[2px] rounded-full font-mono text-[10px] tracking-[0.3px] ${
+            badge.verified
+              ? 'bg-[rgba(0,230,118,0.12)] text-wp-green border border-[rgba(0,230,118,0.35)]'
+              : 'bg-[rgba(0,212,255,0.10)] text-wp-cyan border border-[rgba(0,212,255,0.3)]'
+          }`}
+        >
+          {badge.label}
+        </span>
+        {LOUD_SEVERITIES.has(story.severity) && (
+          <span className={`flex-shrink-0 font-mono text-[10px] uppercase tracking-[0.5px] ${SEVERITY_TEXT[story.severity] ?? ''}`}>
+            {story.severity}
+          </span>
+        )}
+        {story.place && (
+          <span className="text-[11px] text-wp-text2 truncate">{story.place}</span>
+        )}
+        {updated && (
+          <span className="ml-auto flex-shrink-0 pl-1 font-mono text-[10px] text-wp-text2" title={since ? `First reported ${since}` : undefined}>
+            {updated}
+          </span>
+        )}
+      </div>
 
-function timeAgo(dateStr: string): string {
-  const now = Date.now()
-  const then = new Date(dateStr).getTime()
-  const diff = now - then
-  const hours = Math.floor(diff / 3600000)
-  if (hours < 1) return 'just now'
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
+      <p className={`${lead ? 'text-[15px] font-semibold' : 'text-[13px]'} text-wp-text leading-snug line-clamp-2 group-hover:text-wp-cyan transition-colors`}>
+        {story.title}
+      </p>
+
+      <p className="mt-1 text-[11px] text-wp-text2 font-mono truncate" title={story.outlets.join(', ')}>
+        {names.join(' · ')}
+        {more > 0 && <> +{more} more</>}
+      </p>
+    </Link>
+  )
 }
