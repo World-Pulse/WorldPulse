@@ -11,6 +11,8 @@ interface ReliabilityDotsProps {
   communityFlagCount?: number
   /** Show "Reliability" label to the left */
   label?: boolean
+  /** Classes for the "Reliability" word (e.g. hide it on phones, where the row is tight) */
+  labelClassName?: string
   /** Dot size variant */
   size?: 'sm' | 'md'
 }
@@ -69,6 +71,7 @@ export function ReliabilityDots({
   aiVerified,
   communityFlagCount,
   label = false,
+  labelClassName,
   size = 'sm',
 }: ReliabilityDotsProps) {
   const s5      = Math.max(0, Math.min(5, score * 5))
@@ -101,7 +104,7 @@ export function ReliabilityDots({
 
   return (
     <div className="relative group/rdots inline-flex items-center gap-1 font-mono text-[10px] text-wp-text3">
-      {label && <span>Reliability</span>}
+      {label && <span className={labelClassName}>Reliability</span>}
       <div className="flex gap-[2px]">
         {Array(filled).fill(0).map((_, i) => (
           <div key={`f${i}`} className={`${dotClass} bg-wp-green`} />

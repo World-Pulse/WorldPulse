@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { LeftSidebar } from '@/components/sidebar/LeftSidebar'
 import { RightSidebar } from '@/components/sidebar/RightSidebar'
 import { FeedList } from '@/components/feed/FeedList'
@@ -34,6 +34,11 @@ export default function HomePage() {
   const [activeTab,    setActiveTab]    = useState<FeedTab>('global')
   const [activeFilter, setActiveFilter] = useState<FilterCat>('all')
   const [newCount,     setNewCount]     = useState(0)
+  // The post box is for signed-in readers; for everyone else it only pushed the news down
+  const [signedIn,     setSignedIn]     = useState(false)
+  useEffect(() => {
+    try { setSignedIn(Boolean(localStorage.getItem('wp_access_token'))) } catch { /* private mode */ }
+  }, [])
 
   return (
     <>
@@ -108,8 +113,8 @@ export default function HomePage() {
         {/* Developing Stories — escalating/developing event threads */}
         <DevelopingStories />
 
-        {/* Composer */}
-        <Composer />
+        {/* Composer (signed-in readers) */}
+        {signedIn && <Composer />}
 
         {/* New posts notification */}
         {newCount > 0 && (

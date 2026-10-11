@@ -28,10 +28,13 @@ interface LiveSignal { time: string; color: string; text: string; id?: string }
 interface DayCounts {
   total: number
   last24h: number
-  verified24h: number
-  countries24h: number
-  outlets24h: number
+  /** null while the API doesn't send it (shown as a placeholder, never as 0) */
+  verified24h: number | null
+  countries24h: number | null
+  outlets24h: number | null
 }
+
+const countOrNull = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
 
 /** The World Map widget's legend: the map's own severity colours */
 const GLOBE_LEGEND: Array<[string, string]> = [
@@ -101,9 +104,9 @@ export function RightSidebar() {
             setCounts({
               total:        Number(d.total) || 0,
               last24h:      Number(d.last24h) || 0,
-              verified24h:  Number(d.verified24h) || 0,
-              countries24h: Number(d.countries24h) || 0,
-              outlets24h:   Number(d.outlets24h) || 0,
+              verified24h:  countOrNull(d.verified24h),
+              countries24h: countOrNull(d.countries24h),
+              outlets24h:   countOrNull(d.outlets24h),
             })
           }
         }
@@ -197,8 +200,8 @@ export function RightSidebar() {
           {[
             { value: counts ? formatPulseCount(counts.total) : null,        label: 'Signals',   color: 'text-wp-cyan',  title: 'Signals on WorldPulse, all time' },
             { value: counts ? formatPulseCount(counts.last24h) : null,      label: 'Last 24h',  color: 'text-wp-green', title: 'New signals in the last 24 hours' },
-            { value: counts ? String(counts.countries24h) : null,           label: 'Countries', color: 'text-wp-red',   title: 'Countries the last 24 hours\' signals are in' },
-            { value: counts ? formatPulseCount(counts.outlets24h) : null,   label: 'Outlets',   color: 'text-wp-amber', title: 'News websites that reported them, last 24 hours' },
+            { value: counts?.countries24h != null ? String(counts.countries24h) : null,          label: 'Countries', color: 'text-wp-red',   title: 'Countries the last 24 hours\' signals are in' },
+            { value: counts?.outlets24h != null ? formatPulseCount(counts.outlets24h) : null,   label: 'Outlets',   color: 'text-wp-amber', title: 'News websites that reported them, last 24 hours' },
           ].map(stat => (
             <div key={stat.label} className="bg-wp-s2 rounded-lg p-[10px] text-center" title={stat.title}>
               {stat.value != null
@@ -216,14 +219,14 @@ export function RightSidebar() {
         <div className="flex items-center gap-2 bg-wp-s2 rounded-lg p-[10px] mb-2">
           <ShieldCheck className="w-4 h-4 text-wp-green flex-shrink-0" />
           <span className="flex-1 text-[11px] text-wp-text2">Verified: two different outlets</span>
-          {counts
+          {counts?.verified24h != null
             ? <span className="font-mono text-[12px] font-bold text-wp-green">{counts.verified24h.toLocaleString()}</span>
             : <span className="h-[12px] w-10 rounded bg-white/5 animate-pulse" aria-hidden="true" />}
         </div>
         <div className="flex items-center gap-2 bg-wp-s2 rounded-lg p-[10px]">
           <Hourglass className="w-4 h-4 text-wp-amber flex-shrink-0" />
           <span className="flex-1 text-[11px] text-wp-text2">Waiting for a second outlet</span>
-          {counts
+          {counts?.verified24h != null
             ? <span className="font-mono text-[12px] font-bold text-wp-amber">{Math.max(0, counts.last24h - counts.verified24h).toLocaleString()}</span>
             : <span className="h-[12px] w-10 rounded bg-white/5 animate-pulse" aria-hidden="true" />}
         </div>

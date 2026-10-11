@@ -15,32 +15,34 @@ import {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
+// "NEW" on the newest few only: on Oct 11, 2026, 18 of 25 items carried it (and
+// Alerts a fixed "12"), so it told the reader nothing
 const NAV_ITEMS = [
   { href: '/',           icon: Zap,           labelKey: 'liveFeed' },
   { href: '/map',        icon: Globe,         labelKey: 'worldMap',    badge: 'LIVE', badgeColor: 'amber' },
-  { href: '/alerts',     icon: Bell,          labelKey: 'alerts',      badge: '12',   badgeColor: 'red'   },
+  { href: '/alerts',     icon: Bell,          labelKey: 'alerts' },
   { href: '/analytics',  icon: BarChart3,     labelKey: 'analytics'  },
   { href: '/explore',    icon: Telescope,     labelKey: 'explore'    },
   { href: '/knowledge-graph/explorer', icon: Network, labelKey: 'knowledgeGraph', badge: 'NEW', badgeColor: 'purple' },
   // { href: '/clusters',   icon: LayoutGrid,    labelKey: 'clusters',   badge: 'NEW', badgeColor: 'blue'   }, // Hidden — needs correlation engine (Aether)
   { href: '/briefing',   icon: ClipboardList, labelKey: 'briefing',   badge: 'NEW', badgeColor: 'indigo' },
-  { href: '/finance',    icon: TrendingUp,    labelKey: 'finance',    badge: 'NEW', badgeColor: 'green'  },
-  { href: '/maritime',        icon: Anchor,     labelKey: 'maritime',        badge: 'NEW', badgeColor: 'blue'   },
-  { href: '/sanctions',        icon: Shield,    labelKey: 'sanctions',       badge: 'NEW', badgeColor: 'amber'  },
+  { href: '/finance',    icon: TrendingUp,    labelKey: 'finance' },
+  { href: '/maritime',        icon: Anchor,     labelKey: 'maritime' },
+  { href: '/sanctions',        icon: Shield,    labelKey: 'sanctions' },
   // { href: '/internet-outages', icon: Unplug,    labelKey: 'internetOutages', badge: 'NEW', badgeColor: 'cyan'   }, // Hidden — IODA source (ioda.caida.org) is down
   // { href: '/space-weather',   icon: Satellite,  labelKey: 'spaceWeather',    badge: 'NEW', badgeColor: 'cyan'   }, // Hidden — needs more work before launch
-  { href: '/cyber-threats',   icon: Lock,       labelKey: 'cyberThreats',    badge: 'NEW', badgeColor: 'red'    },
-  { href: '/undersea-cables', icon: Waves,      labelKey: 'underseaCables', badge: 'NEW', badgeColor: 'cyan'   },
-  { href: '/governance',      icon: Landmark,   labelKey: 'governance',      badge: 'NEW', badgeColor: 'purple' },
-  { href: '/food-security',  icon: Wheat,       labelKey: 'foodSecurity',    badge: 'NEW', badgeColor: 'amber'  },
-  { href: '/digital-rights', icon: KeyRound,    labelKey: 'digitalRights',   badge: 'NEW', badgeColor: 'amber'  },
-  { href: '/water-security', icon: Droplets,    labelKey: 'waterSecurity',   badge: 'NEW', badgeColor: 'amber'  },
-  { href: '/labor-rights',  icon: Pickaxe,      labelKey: 'laborRights',    badge: 'NEW', badgeColor: 'amber'  },
-  { href: '/countries',  icon: Map,            labelKey: 'countries',  badge: 'NEW',  badgeColor: 'blue'  },
+  { href: '/cyber-threats',   icon: Lock,       labelKey: 'cyberThreats' },
+  { href: '/undersea-cables', icon: Waves,      labelKey: 'underseaCables' },
+  { href: '/governance',      icon: Landmark,   labelKey: 'governance' },
+  { href: '/food-security',  icon: Wheat,       labelKey: 'foodSecurity' },
+  { href: '/digital-rights', icon: KeyRound,    labelKey: 'digitalRights' },
+  { href: '/water-security', icon: Droplets,    labelKey: 'waterSecurity' },
+  { href: '/labor-rights',  icon: Pickaxe,      labelKey: 'laborRights' },
+  { href: '/countries',  icon: Map,            labelKey: 'countries' },
   // { href: '/cameras',    icon: Camera,      labelKey: 'cameras',    badge: 'LIVE', badgeColor: 'red'   }, // Hidden pre-launch: EarthCam hotlink-blocks snapshots; needs backend image proxy
-  { href: '/patents',    icon: ScrollText,    labelKey: 'patents',    badge: 'NEW',  badgeColor: 'cyan'  },
+  { href: '/patents',    icon: ScrollText,    labelKey: 'patents' },
   { href: '/communities',icon: Users,         labelKey: 'communities' },
-  { href: '/claims',     icon: Search,        labelKey: 'claims',     badge: 'NEW', badgeColor: 'amber'  },
+  { href: '/claims',     icon: Search,        labelKey: 'claims' },
   // { href: '/audio-claims', icon: Mic,         labelKey: 'audioClaims', badge: 'NEW', badgeColor: 'red'   }, // Hidden — pipeline not wired up yet (no podcast claims are collected)
   // { href: '/video-claims', icon: Video,       labelKey: 'videoClaims', badge: 'NEW', badgeColor: 'red'   }, // Hidden — pipeline not wired up yet
   { href: '/sources',    icon: Radio,         labelKey: 'mySources'  },
@@ -240,15 +242,11 @@ export function LeftSidebar() {
               {'badge' in item && item.badge && (
                 <span
                   className={`ml-auto rtl:ml-0 rtl:mr-auto font-mono text-[9px] px-[6px] py-0.5 rounded-full font-bold
-                    ${item.badgeColor === 'red'
+                    ${String(item.badgeColor) === 'red'
                       ? 'bg-wp-red text-white'
                       : 'bg-wp-amber text-black'
                     }`}
-                  aria-label={
-                    item.badge === 'LIVE'
-                      ? 'Live'
-                      : `${item.badge} unread notifications`
-                  }
+                  aria-label={item.badge === 'LIVE' ? 'Live' : 'New'}
                 >
                   {item.badge}
                 </span>

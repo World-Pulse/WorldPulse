@@ -422,7 +422,7 @@ function ActionBar({ item }: { item: FeedItem }) {
   return (
     <div className="flex items-center gap-0 mt-2" role="group" aria-label="Post actions">
       <button
-        className="flex items-center gap-[5px] px-3 py-[6px] rounded-full text-[12px] text-wp-text3 hover:text-wp-amber hover:bg-[rgba(245,166,35,0.1)] transition-all"
+        className="flex items-center gap-[5px] px-2 sm:px-3 py-[6px] rounded-full text-[12px] text-wp-text3 hover:text-wp-amber hover:bg-[rgba(245,166,35,0.1)] transition-all"
         aria-label={`Reply — ${formatCount(item.replies)} replies`}
       >
         <span aria-hidden="true">💬</span> {formatCount(item.replies)}
@@ -431,7 +431,7 @@ function ActionBar({ item }: { item: FeedItem }) {
         onClick={toggleBoost}
         aria-label={`Boost — ${formatCount(boosts)} boosts`}
         aria-pressed={boosted}
-        className={`flex items-center gap-[5px] px-3 py-[6px] rounded-full text-[12px] transition-all
+        className={`flex items-center gap-[5px] px-2 sm:px-3 py-[6px] rounded-full text-[12px] transition-all
           ${boosted ? 'text-wp-green' : 'text-wp-text3 hover:text-wp-green hover:bg-[rgba(0,230,118,0.1)]'}`}
       >
         <span aria-hidden="true">🔁</span> {formatCount(boosts)}
@@ -440,7 +440,7 @@ function ActionBar({ item }: { item: FeedItem }) {
         onClick={toggleLike}
         aria-label={liked ? `Unlike — ${formatCount(likes)} likes` : `Like — ${formatCount(likes)} likes`}
         aria-pressed={liked}
-        className={`flex items-center gap-[5px] px-3 py-[6px] rounded-full text-[12px] transition-all
+        className={`flex items-center gap-[5px] px-2 sm:px-3 py-[6px] rounded-full text-[12px] transition-all
           ${liked ? 'text-wp-red' : 'text-wp-text3 hover:text-wp-red hover:bg-[rgba(255,59,92,0.1)]'}`}
       >
         <span aria-hidden="true">❤️</span> {formatCount(likes)}
@@ -449,7 +449,7 @@ function ActionBar({ item }: { item: FeedItem }) {
         onClick={toggleBookmark}
         aria-label={bookmarked ? 'Remove bookmark' : 'Bookmark signal'}
         aria-pressed={bookmarked}
-        className={`flex items-center gap-[5px] px-3 py-[6px] rounded-full text-[12px] transition-all
+        className={`flex items-center gap-[5px] px-2 sm:px-3 py-[6px] rounded-full text-[12px] transition-all
           ${bookmarked ? 'text-wp-amber' : 'text-wp-text3 hover:text-wp-amber hover:bg-[rgba(245,166,35,0.1)]'}`}
       >
         <span aria-hidden="true">{bookmarked ? '🔖' : '🔖'}</span>
@@ -471,7 +471,7 @@ function ActionBar({ item }: { item: FeedItem }) {
             }
           }
         }}
-        className="flex items-center gap-[5px] px-3 py-[6px] rounded-full text-[12px] text-wp-text3 hover:text-wp-amber hover:bg-[rgba(245,166,35,0.1)] transition-all"
+        className="flex items-center gap-[5px] px-2 sm:px-3 py-[6px] rounded-full text-[12px] text-wp-text3 hover:text-wp-amber hover:bg-[rgba(245,166,35,0.1)] transition-all"
         aria-label="Share post"
       >
         <span aria-hidden="true">📤</span>
@@ -479,7 +479,7 @@ function ActionBar({ item }: { item: FeedItem }) {
       {item.type === 'signal' && (
         <button
           onClick={() => setFlagModalOpen(true)}
-          className="flex items-center gap-[5px] px-3 py-[6px] rounded-full text-[12px] text-wp-text3 hover:text-wp-red hover:bg-[rgba(255,59,92,0.08)] transition-all"
+          className="flex items-center gap-[5px] px-2 sm:px-3 py-[6px] rounded-full text-[12px] text-wp-text3 hover:text-wp-red hover:bg-[rgba(255,59,92,0.08)] transition-all"
           aria-label="Flag signal"
           title="Flag this signal"
         >
@@ -493,6 +493,8 @@ function ActionBar({ item }: { item: FeedItem }) {
           <ReliabilityDots
             score={item.reliability}
             label
+            // (the word would push the row past a phone's width)
+            labelClassName="hidden sm:inline"
             sourceCount={item.sourceCount}
             crossCheckStatus={item.crossCheckStatus}
             communityFlagCount={item.communityFlagCount}

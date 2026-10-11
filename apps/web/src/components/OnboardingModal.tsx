@@ -16,12 +16,12 @@ const STEPS: Step[] = [
   {
     icon: '📡',
     title: 'Real-time verified signals',
-    body: 'WorldPulse aggregates breaking events from 40+ wire services, government agencies, and open-source feeds — verified and scored before they reach your feed.',
+    body: 'WorldPulse gathers breaking events from news outlets, government agencies and open-source feeds. Each is scored for reliability, and marked verified once a second, independent outlet reports the same story.',
   },
   {
     icon: '🔬',
     title: 'Reliability scoring',
-    body: 'Every signal gets a live cross-check score. We show you how many sources confirmed an event, flag disputed claims, and surface community corrections in real time.',
+    body: 'Every signal shows how many outlets reported it and when it turned verified, and a story page lists each outlet. Disputed claims are flagged, and readers can flag mistakes.',
   },
   {
     icon: '🌍',
@@ -41,15 +41,19 @@ export function OnboardingModal() {
   const [exiting, setExiting] = useState(false)
   const router = useRouter()
 
-  // Show once per browser session unless user has seen it before
+  // Once per browser, when a new reader first scrolls: opening 0.8 s after the
+  // page loaded, it covered the news they came for (reading audit, Oct 11, 2026)
   useEffect(() => {
     try {
-      if (!localStorage.getItem(ONBOARDING_KEY)) {
-        // Small delay so the page renders first
-        const t = setTimeout(() => setOpen(true), 800)
-        return () => clearTimeout(t)
-      }
-    } catch { /* SSR / private browsing */ }
+      if (localStorage.getItem(ONBOARDING_KEY)) return
+    } catch { return /* SSR / private browsing */ }
+    const onScroll = () => {
+      if (window.scrollY < 200) return
+      window.removeEventListener('scroll', onScroll)
+      setOpen(true)
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
   // ESC to close

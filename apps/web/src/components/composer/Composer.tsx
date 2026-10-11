@@ -23,6 +23,8 @@ export function Composer() {
   const { toast } = useToast()
   const [content,    setContent]    = useState('')
   const [focused,    setFocused]    = useState(false)
+  // One line until the reader starts a post (it pushed the news down the first screen)
+  const [expanded,   setExpanded]   = useState(false)
   const [showPoll,   setShowPoll]   = useState(false)
   const [poll,       setPoll]       = useState<PollDraft>(EMPTY_POLL)
   const [submitting, setSubmitting] = useState(false)
@@ -155,6 +157,7 @@ export function Composer() {
       setShowPoll(false)
       setPoll(EMPTY_POLL)
       setMedia([])
+      setExpanded(false)
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto'
       }
@@ -187,14 +190,14 @@ export function Composer() {
           ref={textareaRef}
           value={content}
           onChange={handleInput}
-          onFocus={() => setFocused(true)}
+          onFocus={() => { setFocused(true); setExpanded(true) }}
           onBlur={() => setFocused(false)}
           placeholder="Share a signal, observation, or insight with the world..."
-          rows={2}
+          rows={expanded ? 2 : 1}
           aria-label="Post content"
           aria-multiline="true"
           aria-required="true"
-          className="w-full bg-transparent border-none outline-none text-wp-text font-body text-[15px] resize-none leading-[1.6] placeholder-wp-text3 caret-wp-amber min-h-[48px]"
+          className={`w-full bg-transparent border-none outline-none text-wp-text font-body text-[15px] resize-none leading-[1.6] placeholder-wp-text3 caret-wp-amber ${expanded ? 'min-h-[48px]' : 'min-h-[24px]'}`}
         />
 
         {/* Poll creator */}
@@ -261,6 +264,7 @@ export function Composer() {
           onChange={e => e.target.files && addFiles(e.target.files, 'video')}
         />
 
+        {expanded && (
         <div className={`flex items-center gap-2 pt-2 border-t border-[rgba(255,255,255,0.05)] mt-1 transition-opacity ${focused || content || showPoll ? 'opacity-100' : 'opacity-60'}`}>
           {/* Poll toggle button */}
           <button
@@ -299,28 +303,6 @@ export function Composer() {
             🎬
           </button>
 
-          {/* Other action icons */}
-          {['📍', '🔗', '📡'].map(icon => (
-            <button
-              key={icon}
-              type="button"
-              aria-label={
-                icon === '📍' ? 'Add location' :
-                icon === '🔗' ? 'Add link' :
-                'Add source'
-              }
-              className="text-wp-amber text-[16px] px-[6px] py-1 rounded-lg opacity-70 hover:opacity-100 hover:bg-[rgba(245,166,35,0.1)] transition-all"
-            >
-              {icon}
-            </button>
-          ))}
-
-          {/* Verification indicator */}
-          <div className="flex items-center gap-1 ml-2 font-mono text-[10px] text-wp-text3">
-            <span className="w-[6px] h-[6px] rounded-full bg-wp-green" aria-hidden="true" />
-            Source verification ON
-          </div>
-
           {/* Char count + submit */}
           <div className="ml-auto flex items-center gap-3">
             {uploading && (
@@ -347,6 +329,7 @@ export function Composer() {
             </button>
           </div>
         </div>
+        )}
       </div>
     </div>
   )
