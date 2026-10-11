@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { afterSignIn, authHref, nextFromLocation } from '@/lib/auth-next'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -20,6 +21,9 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  // The page to return to (?next=, plan G13), read once the page is in the browser
+  const [next, setNext] = useState<string | null>(null)
+  useEffect(() => { setNext(nextFromLocation()) }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -51,7 +55,7 @@ export default function LoginPage() {
         newValue: JSON.stringify(data.data.user),
       }))
 
-      router.push(data.data.user.onboarded ? '/' : '/onboarding')
+      router.push(afterSignIn(!!data.data.user.onboarded, nextFromLocation()))
       router.refresh()
     } catch {
       setError('Unable to connect. Please try again.')
@@ -136,7 +140,7 @@ export default function LoginPage() {
 
         <p className="text-center mt-4 text-[13px] text-wp-text2">
           No account?{' '}
-          <Link href="/auth/register" className="text-wp-amber hover:underline">
+          <Link href={authHref('register', next)} className="text-wp-amber hover:underline">
             Join free
           </Link>
         </p>

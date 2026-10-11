@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import type { AuthUser } from '@worldpulse/types'
+import { nextFromLocation } from '@/lib/auth-next'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -82,7 +83,7 @@ export default function OnboardingPage() {
     }
     const u = JSON.parse(stored) as AuthUser
     if (u.onboarded) {
-      router.replace('/')
+      router.replace(nextFromLocation() ?? '/')
       return
     }
     setReady(true)
@@ -143,7 +144,8 @@ export default function OnboardingPage() {
       window.dispatchEvent(new StorageEvent('storage', { key: 'wp_user', newValue: JSON.stringify(u) }))
     }
 
-    router.push('/')
+    // Back to the page the reader signed up from (?next=, plan G13)
+    router.push(nextFromLocation() ?? '/')
   }, [completing, selectedInterests, selectedRegions, following, router])
 
   const toggleInterest = (id: string) =>

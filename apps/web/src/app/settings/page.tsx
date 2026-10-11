@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useTheme } from '@/components/providers'
 import { useToast } from '@/components/Toast'
 import DigestSubscription from '@/components/settings/DigestSubscription'
+import { authHref } from '@/lib/auth-next'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -123,7 +124,7 @@ export default function SettingsPage() {
   // Load user + saved prefs on mount
   useEffect(() => {
     const token = localStorage.getItem('wp_access_token')
-    if (!token) { router.push('/auth/login'); return }
+    if (!token) { router.push(authHref('login', '/settings')); return }
 
     // Restore notification prefs from localStorage
     try {

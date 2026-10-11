@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import type { AuthUser } from '@worldpulse/types'
+import { authHref } from '@/lib/auth-next'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -43,7 +44,7 @@ export default function EditProfilePage() {
     async function load() {
       const token = localStorage.getItem('wp_access_token')
       if (!token) {
-        router.replace('/auth/login')
+        router.replace(authHref('login', '/users/me'))
         return
       }
 
@@ -53,13 +54,13 @@ export default function EditProfilePage() {
         })
 
         if (res.status === 401) {
-          router.replace('/auth/login')
+          router.replace(authHref('login', '/users/me'))
           return
         }
 
         const data = await res.json() as { success: boolean; data: AuthUser }
         if (!data.success) {
-          router.replace('/auth/login')
+          router.replace(authHref('login', '/users/me'))
           return
         }
 
@@ -73,7 +74,7 @@ export default function EditProfilePage() {
           website:     u.website     ?? '',
         })
       } catch {
-        router.replace('/auth/login')
+        router.replace(authHref('login', '/users/me'))
       } finally {
         setLoading(false)
       }
@@ -96,7 +97,7 @@ export default function EditProfilePage() {
     setSuccess(false)
 
     const token = localStorage.getItem('wp_access_token')
-    if (!token) { router.replace('/auth/login'); return }
+    if (!token) { router.replace(authHref('login', '/users/me')); return }
 
     try {
       const res = await fetch(`${API_URL}/api/v1/users/me`, {

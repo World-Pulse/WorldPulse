@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { UserCircle } from 'lucide-react'
 import { useToast } from '@/components/Toast'
 import { displaySummary } from '@/lib/signal-text'
+import { authHref } from '@/lib/auth-next'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -333,7 +334,7 @@ export default function UserProfilePage() {
   // ── Follow / unfollow ─────────────────────────────────────────────────────
   const toggleFollow = async () => {
     const token = localStorage.getItem('wp_access_token')
-    if (!token) { router.push('/auth/login'); return }
+    if (!token) { router.push(authHref('login', window.location.pathname)); return }
     setFollowBusy(true)
     const next = !following
     setFollowing(next)

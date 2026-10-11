@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useTranslations } from '@/lib/i18n'
+import { authHref } from '@/lib/auth-next'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { useTheme } from '@/components/providers'
 import {
@@ -297,13 +298,13 @@ export function TopNav() {
           ) : (
             <>
               <Link
-                href="/auth/login"
+                href={authHref('login', pathname)}
                 className="hidden sm:flex px-3 py-[7px] rounded-lg border border-[rgba(255,255,255,0.15)] bg-transparent text-wp-text2 text-[13px] font-medium hover:border-wp-amber hover:text-wp-amber transition-all"
               >
                 {t('signIn')}
               </Link>
               <Link
-                href="/auth/register"
+                href={authHref('register', pathname)}
                 className="px-3 py-[7px] rounded-lg bg-wp-amber text-black text-[12px] sm:text-[13px] font-bold hover:bg-[#ffb84d] transition-all"
               >
                 {t('joinFree')}
@@ -391,13 +392,13 @@ export function TopNav() {
             ) : (
               <div className="px-4 pb-5 pt-4 border-t border-[rgba(255,255,255,0.07)] space-y-2 flex-shrink-0">
                 <Link
-                  href="/auth/login"
+                  href={authHref('login', pathname)}
                   className="flex items-center justify-center py-3 rounded-xl border border-[rgba(255,255,255,0.15)] text-wp-text2 text-[14px] font-medium hover:border-wp-amber hover:text-wp-amber transition-all"
                 >
                   Sign In
                 </Link>
                 <Link
-                  href="/auth/register"
+                  href={authHref('register', pathname)}
                   className="flex items-center justify-center py-3 rounded-xl bg-wp-amber text-black text-[14px] font-bold hover:bg-[#ffb84d] transition-all"
                 >
                   Join Free

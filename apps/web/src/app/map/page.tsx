@@ -51,6 +51,7 @@ import {
 import { declutter, type ScreenPoint } from '@/lib/map-declutter'
 import { displaySummary } from '@/lib/signal-text'
 import { categoryGlyph, parseSignalIconId, drawSignalIcon, SIGNAL_ICON_EXPR, SIGNAL_ICON_RATIO } from '@/lib/map-signal-icons'
+import { authHref } from '@/lib/auth-next'
 
 const API_URL      = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 const WS_URL       = process.env.NEXT_PUBLIC_WS_URL  ?? API_URL.replace(/^http/, 'ws')
@@ -167,7 +168,7 @@ function signedInHeaders(): Record<string, string> {
     return {}
   }
 }
-const SIGN_IN_NOTE = { text: 'This layer needs a free account.', href: '/auth/login', linkText: 'Sign in' }
+const SIGN_IN_NOTE = { text: 'This layer needs a free account.', href: authHref('login', '/map'), linkText: 'Sign in' }
 
 /** The time window in words, for the country brief */
 const TIME_WINDOW_LABEL: Record<string, string> = {

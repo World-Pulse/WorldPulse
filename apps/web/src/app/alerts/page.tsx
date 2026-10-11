@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Bell, Inbox } from 'lucide-react'
+import { authHref } from '@/lib/auth-next'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -173,10 +174,10 @@ export default function AlertsPage() {
               <div className="text-[16px] font-semibold text-wp-text mb-2">Sign in to see your alerts</div>
               <p className="text-[13px] text-wp-text3 mb-5">Get notified about breaking signals matching your interests</p>
               <div className="flex gap-3 justify-center">
-                <Link href="/auth/login" className="px-5 py-2 rounded-lg border border-[rgba(255,255,255,0.15)] text-[13px] text-wp-text2 hover:border-wp-amber hover:text-wp-amber transition-all">
+                <Link href={authHref('login', '/alerts')} className="px-5 py-2 rounded-lg border border-[rgba(255,255,255,0.15)] text-[13px] text-wp-text2 hover:border-wp-amber hover:text-wp-amber transition-all">
                   Sign In
                 </Link>
-                <Link href="/auth/register" className="px-5 py-2 rounded-lg bg-wp-amber text-black text-[13px] font-bold hover:bg-[#ffb84d] transition-all">
+                <Link href={authHref('register', '/alerts')} className="px-5 py-2 rounded-lg bg-wp-amber text-black text-[13px] font-bold hover:bg-[#ffb84d] transition-all">
                   Join Free
                 </Link>
               </div>

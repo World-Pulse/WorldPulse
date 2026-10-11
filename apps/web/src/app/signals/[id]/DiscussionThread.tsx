@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import type { Post } from '@worldpulse/types'
+import { authHref } from '@/lib/auth-next'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -398,13 +399,13 @@ export function DiscussionThread({ initialPosts, signalId, totalCount }: Props) 
           <p className="text-[12px] text-wp-text3 mb-3">Sign in to join the discussion</p>
           <div className="flex justify-center gap-2">
             <Link
-              href="/auth/login"
+              href={authHref('login', `/signals/${signalId}`)}
               className="px-4 py-1.5 rounded-lg text-[12px] font-semibold bg-white/[0.08] hover:bg-white/[0.12] text-wp-text transition-all"
             >
               Sign in
             </Link>
             <Link
-              href="/auth/register"
+              href={authHref('register', `/signals/${signalId}`)}
               className="px-4 py-1.5 rounded-lg text-[12px] font-semibold bg-wp-green/10 hover:bg-wp-green/20 text-wp-green border border-wp-green/20 transition-all"
             >
               Join free

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { authHref } from '@/lib/auth-next'
 import {
   Radio, Newspaper, Search, Zap, Shield, KeyRound, Key,
   Globe, Bot, MapPin, Unlock, type LucideIcon,
@@ -855,7 +856,7 @@ export default function DevelopersPage() {
                 ))}
               </ul>
               <Link
-                href="/auth/register"
+                href={authHref('register', '/developers')}
                 className="block w-full text-center rounded-lg border border-[rgba(255,255,255,0.15)] bg-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.08)] text-wp-text font-semibold py-2.5 text-[14px] transition-colors"
               >
                 Get Started — Free
