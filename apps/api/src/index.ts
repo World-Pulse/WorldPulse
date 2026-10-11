@@ -10,6 +10,7 @@ import rawBody from 'fastify-raw-body'
 import { redis } from './db/redis'
 import { db } from './db/postgres'
 import { registerFeedRoutes } from './routes/feed'
+import { registerStoryRoutes } from './routes/stories'
 import { registerAuthRoutes } from './routes/auth'
 import { registerPostRoutes } from './routes/posts'
 import { registerSignalRoutes } from './routes/signals'
@@ -322,6 +323,7 @@ async function bootstrap() {
   // ─── ROUTES ──────────────────────────────────────────────
   await app.register(registerAuthRoutes,   { prefix: '/api/v1/auth' })
   await app.register(registerFeedRoutes,   { prefix: '/api/v1/feed' })
+  await app.register(registerStoryRoutes,  { prefix: '/api/v1/stories' })
   await app.register(registerPostRoutes,   { prefix: '/api/v1/posts' })
   await app.register(registerSignalRoutes, { prefix: '/api/v1/signals' })
   await app.register(registerTimelineRoutes, { prefix: '/api/v1/signals' })

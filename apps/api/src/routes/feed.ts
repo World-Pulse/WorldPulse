@@ -5,6 +5,7 @@ import { authenticate, optionalAuth } from '../middleware/auth'
 import type { Post, Signal, PaginatedResponse } from '@worldpulse/types'
 import { FeedQuerySchema, parseQuery } from '../lib/query-schemas'
 import { sendError } from '../lib/errors'
+import { signalsHaveStoryIds, collapseStories, storyFacts } from '../lib/stories'
 
 const FEED_CACHE_TTL    = 15  // seconds — global feed (per-user aware)
 const SIGNALS_CACHE_TTL = 30  // seconds — signals stream first-page
@@ -200,19 +201,24 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
 
   /**
    * GET /api/v1/feed/signals
-   * Breaking signals / events stream
+   * Breaking signals / events stream.
+   * With ?group=story, one row per story (signals the scraper's same-story rule
+   * linked), at the position of its newest signal, showing its best member and
+   * adding storyId, storySize, storyOutlets and storyVerifiedAt.
    */
   app.get('/signals', { preHandler: [optionalAuth], config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
     const qr2 = parseQuery(FeedQuerySchema, req.query)
     if (qr2.error) return sendError(reply, 400, 'VALIDATION_ERROR', qr2.error)
-    const { cursor, category, severity, country, limit } = qr2.data
+    const { cursor, category, severity, country, limit, group } = qr2.data!
 
     const pageLimit = Math.min(limit, 50)
+    // Until the scraper has added signals.story_id, ?group=story falls back to signals
+    const byStory = group === 'story' && await signalsHaveStoryIds()
 
     // Cache first-page (no cursor) for unauthenticated requests.
     // Key includes all filter params so different filter combos stay isolated.
     const isFirstPage = !cursor
-    const cacheKey = `feed:signals:${category ?? 'all'}:${severity ?? 'all'}:${country ?? 'all'}:${pageLimit}`
+    const cacheKey = `feed:signals:${category ?? 'all'}:${severity ?? 'all'}:${country ?? 'all'}:${pageLimit}${byStory ? ':story' : ''}`
     if (!req.user && isFirstPage) {
       const cached = await redis.get(cacheKey).catch(() => null)
       if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
@@ -229,29 +235,78 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
         's.view_count', 's.share_count', 's.post_count',
         's.event_time', 's.first_reported', 's.verified_at', 's.last_updated', 's.last_corroborated_at', 's.created_at',
         db.raw(`ST_AsGeoJSON(s.location)::json as location_geojson`),
+        ...(byStory ? ['s.story_id'] : []),
       ])
       .orderBy('s.created_at', 'desc')
-      .limit(pageLimit + 1)
+      // A page of stories needs more signals than a page of signals
+      .limit(byStory ? pageLimit * 3 + 1 : pageLimit + 1)
 
     // Special case: category=breaking shows critical+high severity signals across ALL categories.
     // This populates the Breaking News channel immediately from existing DB data,
     // regardless of what category the scraper assigned. New signals will also get
     // category='breaking' from the updated classifier when they match breaking keywords.
-    if (category === 'breaking') {
-      query = query.whereIn('s.severity', ['critical', 'high'])
-    } else if (category && category !== 'all') {
-      query = query.where('s.category', category)
+    const applyFilters = <Q extends { whereIn: Function; where: Function }>(q: Q, alias = 's.'): Q => {
+      if (category === 'breaking') {
+        q = q.whereIn(`${alias}severity`, ['critical', 'high'])
+      } else if (category && category !== 'all') {
+        q = q.where(`${alias}category`, category)
+      }
+      if (severity) q = q.where(`${alias}severity`, severity) // the schema only allows real severities
+      if (country) q = q.where(`${alias}country_code`, country.toUpperCase())
+      return q
     }
-    if (severity && severity !== 'all') query = query.where('s.severity', severity)
-    if (country) query = query.where('s.country_code', country.toUpperCase())
+    query = applyFilters(query)
+    let cursorTime: Date | null = null
     if (cursor) {
       const cur = await db('signals').where('id', cursor).first('created_at')
-      if (cur) query = query.where('s.created_at', '<', cur.created_at)
+      if (cur) {
+        cursorTime = cur.created_at as Date
+        query = query.where('s.created_at', '<', cur.created_at)
+      }
     }
 
     const rows = await query
-    const hasMore = rows.length > pageLimit
-    const rawItems = hasMore ? rows.slice(0, pageLimit) : rows
+    let hasMore: boolean
+    let rawItems: Array<Record<string, unknown>>
+    let nextCursor: string | null = null
+    const storyExtras = new Map<string, Record<string, unknown>>()
+
+    if (byStory) {
+      const batch = rows.slice(0, pageLimit * 3)
+      const { stories, lastIndex, more } = collapseStories(batch, pageLimit)
+      let kept = stories
+      // A story with newer signals (matching the same filters) was already on an
+      // earlier page: leave it there
+      if (cursorTime && kept.length > 0) {
+        const keys = kept.map(st => st.key)
+        const earlier = await applyFilters(
+          db('signals')
+            .whereIn('status', ['verified', 'pending'])
+            .where('created_at', '>=', cursorTime)
+            .where(function () { this.whereIn('story_id', keys).orWhereIn('id', keys) })
+            .select(db.raw('COALESCE(story_id, id)::text AS story_key')),
+          '',
+        ) as Array<{ story_key: string }>
+        const shown = new Set(earlier.map(r => r.story_key))
+        kept = kept.filter(st => !shown.has(st.key))
+      }
+      const facts = await storyFacts(kept.map(st => st.key))
+      for (const { key } of kept) {
+        const f = facts.get(key)
+        storyExtras.set(key, {
+          storyId:         key,
+          storySize:       f?.size ?? 1,
+          storyOutlets:    f?.outlets ?? [],
+          storyVerifiedAt: f?.verifiedAt ? f.verifiedAt.toISOString() : null,
+        })
+      }
+      rawItems = kept.map(st => ({ ...st.row, story_key: st.key }))
+      hasMore = more || rows.length > batch.length
+      nextCursor = hasMore && lastIndex >= 0 ? (batch[lastIndex].id as string) : null
+    } else {
+      hasMore = rows.length > pageLimit
+      rawItems = hasMore ? rows.slice(0, pageLimit) : rows
+    }
 
     // ── Deduplicate by topic fingerprint ──────────────────────────────────────
     // Multiple scraper runs can create near-identical signals for the same event
@@ -299,9 +354,12 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
     }))
 
     const response = {
-      items:   enrichedItems.map(formatSignal),
+      items:   enrichedItems.map(r => {
+        const extra = byStory ? storyExtras.get(String((r as Record<string, unknown>).story_key)) : undefined
+        return extra ? { ...formatSignal(r), ...extra } : formatSignal(r)
+      }),
       total:   enrichedItems.length,
-      cursor:  hasMore ? items[items.length - 1].id : null,
+      cursor:  byStory ? nextCursor : (hasMore ? items[items.length - 1].id : null),
       hasMore,
     }
 

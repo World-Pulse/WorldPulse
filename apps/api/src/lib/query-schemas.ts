@@ -72,6 +72,7 @@ export const FeedQuerySchema = z.object({
   severity: z.enum(SEVERITY_VALUES).optional(),
   country:  z.string().trim().max(3).optional(),   // ISO 3166-1 alpha-2/3
   limit:    intParam(20, 1, 100),
+  group:    z.enum(['story']).optional(),           // one row per story (plan 12b)
 })
 
 export type FeedQuery = z.infer<typeof FeedQuerySchema>
