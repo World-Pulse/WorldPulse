@@ -4,10 +4,10 @@ import { NextResponse } from 'next/server'
  * GET /embed/widget.js
  *
  * Serves the self-contained embed script that third-party sites include with:
- *   <script src="https://worldpulse.io/embed/widget.js" data-theme="dark" data-limit="5"></script>
+ *   <script src="https://world-pulse.io/embed/widget.js" data-theme="dark" data-limit="5"></script>
  *
  * Supports:
- *   data-origin     override base URL for self-hosted deployments  default: https://worldpulse.io
+ *   data-origin     override base URL for self-hosted deployments  default: https://world-pulse.io
  *   data-theme      "dark" | "light"                               default: "dark"
  *   data-limit      1–20 (number of signals to show)               default: 5
  *   data-category   all | breaking | conflict | geopolitics …      default: "all"
@@ -20,7 +20,7 @@ export async function GET() {
 (function () {
   'use strict';
 
-  var DEFAULT_ORIGIN = 'https://worldpulse.io';
+  var DEFAULT_ORIGIN = 'https://world-pulse.io';
 
   function getCurrentScript() {
     if (document.currentScript) return document.currentScript;

@@ -207,7 +207,7 @@ const NAV_ITEMS = [
 // ─── Code examples ────────────────────────────────────────────────────────────
 
 const PUBLIC_SIGNALS_EXAMPLES: CodeExample = {
-  curl: `curl "https://api.worldpulse.io/api/v1/public/signals?category=conflict&severity=critical&limit=10" \\
+  curl: `curl "https://api.world-pulse.io/api/v1/public/signals?category=conflict&severity=critical&limit=10" \\
   -H "Accept: application/json"`,
 
   typescript: `const res = await fetch(
@@ -229,7 +229,7 @@ interface Signal {
   python: `import httpx
 
 resp = httpx.get(
-    "https://api.worldpulse.io/api/v1/public/signals",
+    "https://api.world-pulse.io/api/v1/public/signals",
     params={"category": "conflict", "severity": "critical", "limit": 10},
 )
 resp.raise_for_status()
@@ -237,7 +237,7 @@ data = resp.json()  # {"success": True, "data": [...], "total": 42, ...}`,
 }
 
 const FEED_SIGNALS_EXAMPLES: CodeExample = {
-  curl: `curl "https://api.worldpulse.io/api/v1/feed/signals" \\
+  curl: `curl "https://api.world-pulse.io/api/v1/feed/signals" \\
   -H "Authorization: Bearer wp_live_xxxxxxxxxxxx" \\
   -H "Accept: application/json"`,
 
@@ -250,14 +250,14 @@ const { data } = await res.json()`,
   python: `import httpx
 
 resp = httpx.get(
-    "https://api.worldpulse.io/api/v1/feed/signals",
+    "https://api.world-pulse.io/api/v1/feed/signals",
     headers={"Authorization": f"Bearer {api_key}"},
 )
 data = resp.json()`,
 }
 
 const SIGNAL_DETAIL_EXAMPLES: CodeExample = {
-  curl: `curl "https://api.worldpulse.io/api/v1/signals/sig_abc123" \\
+  curl: `curl "https://api.world-pulse.io/api/v1/signals/sig_abc123" \\
   -H "Authorization: Bearer wp_live_xxxxxxxxxxxx"`,
 
   typescript: `const res = await fetch(
@@ -267,13 +267,13 @@ const SIGNAL_DETAIL_EXAMPLES: CodeExample = {
 const { data: signal } = await res.json()`,
 
   python: `resp = httpx.get(
-    "https://api.worldpulse.io/api/v1/signals/sig_abc123",
+    "https://api.world-pulse.io/api/v1/signals/sig_abc123",
     headers={"Authorization": f"Bearer {api_key}"},
 )`,
 }
 
 const SEARCH_EXAMPLES: CodeExample = {
-  curl: `curl "https://api.worldpulse.io/api/v1/search?q=ukraine+energy+infrastructure" \\
+  curl: `curl "https://api.world-pulse.io/api/v1/search?q=ukraine+energy+infrastructure" \\
   -H "Authorization: Bearer wp_live_xxxxxxxxxxxx"`,
 
   typescript: `const params = new URLSearchParams({ q: 'ukraine energy infrastructure' })
@@ -284,14 +284,14 @@ const res = await fetch(
 const { data } = await res.json()`,
 
   python: `resp = httpx.get(
-    "https://api.worldpulse.io/api/v1/search",
+    "https://api.world-pulse.io/api/v1/search",
     params={"q": "ukraine energy infrastructure"},
     headers={"Authorization": f"Bearer {api_key}"},
 )`,
 }
 
 const WEBHOOK_EXAMPLES: CodeExample = {
-  curl: `curl -X POST "https://api.worldpulse.io/api/v1/developer/webhooks" \\
+  curl: `curl -X POST "https://api.world-pulse.io/api/v1/developer/webhooks" \\
   -H "Authorization: Bearer wp_live_xxxxxxxxxxxx" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -321,7 +321,7 @@ const WEBHOOK_EXAMPLES: CodeExample = {
 const { id } = await res.json()`,
 
   python: `resp = httpx.post(
-    "https://api.worldpulse.io/api/v1/developer/webhooks",
+    "https://api.world-pulse.io/api/v1/developer/webhooks",
     headers={"Authorization": f"Bearer {api_key}"},
     json={
         "url": "https://your-server.com/webhook",
@@ -334,11 +334,11 @@ webhook_id = resp.json()["id"]`,
 
 const WEBSOCKET_EXAMPLES: CodeExample = {
   curl: `# WebSocket connections require a WS client. Use wscat:
-npx wscat -c "wss://api.worldpulse.io/ws" \\
+npx wscat -c "wss://api.world-pulse.io/ws" \\
   --header "Authorization: Bearer wp_live_xxxxxxxxxxxx"`,
 
   typescript: `const ws = new WebSocket(
-  \`wss://api.worldpulse.io/ws?token=\${apiKey}\`
+  \`wss://api.world-pulse.io/ws?token=\${apiKey}\`
 )
 
 ws.onopen = () => {
@@ -357,7 +357,7 @@ ws.onmessage = (event) => {
   python: `import asyncio, json, websockets
 
 async def stream():
-    uri = f"wss://api.worldpulse.io/ws?token={api_key}"
+    uri = f"wss://api.world-pulse.io/ws?token={api_key}"
     async with websockets.connect(uri) as ws:
         await ws.send(json.dumps({
             "type": "subscribe",
@@ -381,7 +381,7 @@ export default function ApiDocsPage() {
     if (el) el.scrollIntoView({ behavior: 'smooth' })
   }
 
-  const baseUrl = `${process.env.NEXT_PUBLIC_API_URL ?? 'https://api.worldpulse.io'}/api/v1`
+  const baseUrl = `${process.env.NEXT_PUBLIC_API_URL || 'https://api.world-pulse.io'}/api/v1`
 
   return (
     <div className="min-h-screen bg-zinc-950">
@@ -816,7 +816,7 @@ export default function ApiDocsPage() {
               border border-cyan-500/20">
               <MethodBadge method="WS" />
               <code className="text-[13px] font-mono text-zinc-200">
-                wss://api.worldpulse.io/ws
+                wss://api.world-pulse.io/ws
               </code>
             </div>
 

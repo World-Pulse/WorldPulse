@@ -18,7 +18,7 @@
     {
       "matches": ["https://*/*", "http://*/*"],
       "exclude_matches": [
-        "https://worldpulse.io/*",
+        "https://world-pulse.io/*",
         "http://localhost:3000/*",
         "http://localhost:3001/*"
       ],

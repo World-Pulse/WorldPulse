@@ -257,7 +257,7 @@ class NotificationService {
           color,
           blocks,
           footer:     'WorldPulse Intelligence Network',
-          footer_icon: 'https://worldpulse.io/favicon.ico',
+          footer_icon: 'https://world-pulse.io/og-image.png',
           ts:         Math.floor(new Date(signal.createdAt).getTime() / 1000).toString(),
         },
       ],

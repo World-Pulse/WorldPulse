@@ -19,6 +19,14 @@ interface EmbedSignal {
 
 type Theme = 'dark' | 'light'
 
+// The widget reads the public embed feed on the API host (plan G5, Oct 11,
+// 2026). It used to ask the site itself for /api/v1/signals, which the site
+// doesn't serve, so every embedded widget said "Unable to load signals". It
+// also took the feed's address from the page link, which let anyone show
+// their own headlines under the WorldPulse name; that option is gone.
+const SITE_URL = 'https://world-pulse.io'
+const EMBED_FEED = `${process.env.NEXT_PUBLIC_API_URL || 'https://api.world-pulse.io'}/api/v1/embed/signals`
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const SEVERITY_COLOR: Record<string, string> = {
@@ -69,25 +77,22 @@ export default function EmbedPage() {
     theme: Theme
     limit: number
     category: string
-    apiBase: string
-  }>({ theme: 'dark', limit: 5, category: 'all', apiBase: '' })
+  }>({ theme: 'dark', limit: 5, category: 'all' })
 
   useEffect(() => {
     const sp         = new URLSearchParams(window.location.search)
     const theme      = (sp.get('theme') === 'light' ? 'light' : 'dark') as Theme
     const limit      = Math.min(Math.max(parseInt(sp.get('limit') ?? '5', 10) || 5, 1), 20)
     const category   = sp.get('category') ?? 'all'
-    const apiBase    = sp.get('apiBase') ?? ''
-    setParams({ theme, limit, category, apiBase })
+    setParams({ theme, limit, category })
     setReady(true)
   }, [])
 
   const fetchSignals = useCallback(async () => {
     try {
-      const qs   = new URLSearchParams({ limit: String(params.limit), status: 'verified' })
+      const qs   = new URLSearchParams({ limit: String(params.limit) })
       if (params.category && params.category !== 'all') qs.set('category', params.category)
-      const base = params.apiBase || '/api/v1'
-      const res  = await fetch(`${base}/signals?${qs.toString()}`, {
+      const res  = await fetch(`${EMBED_FEED}?${qs.toString()}`, {
         headers: { Accept: 'application/json' },
         cache: 'no-store',
       })
@@ -100,7 +105,7 @@ export default function EmbedPage() {
     } finally {
       setLoading(false)
     }
-  }, [params.limit, params.category, params.apiBase])
+  }, [params.limit, params.category])
 
   // Initial fetch + 30s polling — wait until URL params are hydrated
   useEffect(() => {
@@ -151,7 +156,7 @@ export default function EmbedPage() {
         flexShrink:     0,
       }}>
         <a
-          href="https://worldpulse.io"
+          href={SITE_URL}
           target="_blank"
           rel="noopener noreferrer"
           style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}
@@ -186,7 +191,7 @@ export default function EmbedPage() {
         {signals.map((sig) => (
           <a
             key={sig.id}
-            href={`https://worldpulse.io/signals/${sig.id}`}
+            href={`${SITE_URL}/signals/${sig.id}`}
             target="_blank"
             rel="noopener noreferrer"
             style={{
@@ -256,7 +261,7 @@ export default function EmbedPage() {
           Refreshes every 30s
         </span>
         <a
-          href="https://worldpulse.io"
+          href={SITE_URL}
           target="_blank"
           rel="noopener noreferrer"
           style={{ color: css.link, fontSize: 10, textDecoration: 'none' }}

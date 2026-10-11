@@ -436,7 +436,7 @@ async function retryDlqBatch(): Promise<void> {
 
   const parser = new Parser({
     timeout: 15_000,
-    headers: { 'User-Agent': 'WorldPulse/0.1 (open-source; https://worldpulse.io)' },
+    headers: { 'User-Agent': 'WorldPulse/0.1 (open-source; https://world-pulse.io)' },
   })
 
   for (const item of items) {
@@ -555,7 +555,7 @@ async function scrapeSource(source: ScraperSource): Promise<number> {
 
   const parser = new Parser({
     timeout:   15_000,
-    headers:   { 'User-Agent': 'WorldPulse/0.1 (open-source; https://worldpulse.io)' },
+    headers:   { 'User-Agent': 'WorldPulse/0.1 (open-source; https://world-pulse.io)' },
     customFields: { item: ['media:content', 'content:encoded', 'dc:creator'] },
   })
 

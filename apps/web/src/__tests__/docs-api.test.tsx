@@ -71,7 +71,7 @@ describe('ApiDocsPage', () => {
     expect(wsSection).toBeTruthy()
     const sectionText = wsSection!.textContent ?? ''
     expect(sectionText).toContain('WebSocket')
-    expect(sectionText).toContain('wss://api.worldpulse.io/ws')
+    expect(sectionText).toContain('wss://api.world-pulse.io/ws')
   })
 
   it('9. contains Get API Key link pointing to /settings', () => {

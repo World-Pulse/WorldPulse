@@ -19,7 +19,7 @@ if (!DATABASE_URL) {
 }
 
 const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org'
-const USER_AGENT = 'WorldPulse/1.0 (geocode-backfill; contact: admin@worldpulse.io)'
+const USER_AGENT = 'WorldPulse/1.0 (geocode-backfill; contact: contact@world-pulse.io)'
 const BATCH_SIZE = 100
 const RATE_LIMIT_MS = 1100 // slightly over 1s per Nominatim ToS
 

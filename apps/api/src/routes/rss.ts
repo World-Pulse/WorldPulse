@@ -9,8 +9,9 @@ import { sendError } from '../lib/errors'
 const RSS_CACHE_TTL = 120 // seconds
 const DEFAULT_LIMIT = 50
 const MAX_LIMIT = 200
-const SITE_URL = process.env.SITE_URL ?? 'https://worldpulse.io'
-const API_URL = process.env.API_URL ?? 'https://api.worldpulse.io'
+// `||`: compose passes an unset variable as "" (feeds linked to worldpulse.io, not ours, until Oct 11, 2026)
+const SITE_URL = process.env.SITE_URL || 'https://world-pulse.io'
+const API_URL = process.env.API_URL || 'https://api.world-pulse.io'
 
 const VALID_CATEGORIES = [
   'conflict', 'climate', 'politics', 'health', 'technology', 'economics',

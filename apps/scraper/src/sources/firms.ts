@@ -54,7 +54,7 @@ function httpsGet(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const req = https.get(url, {
       timeout: 30_000,  // CSV can be large
-      headers: { 'User-Agent': 'WorldPulse/0.1 (open-source; https://worldpulse.io)' },
+      headers: { 'User-Agent': 'WorldPulse/0.1 (open-source; https://world-pulse.io)' },
     }, (res) => {
       let data = ''
       res.setEncoding('utf8')

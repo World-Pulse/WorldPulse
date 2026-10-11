@@ -26,7 +26,7 @@ import {
 const CACHE_TTL     = 60   // seconds
 const SIGNAL_LIMIT  = 50
 const RATE_LIMIT    = 60   // req/min
-const SITE_URL      = process.env.SITE_URL ?? 'https://worldpulse.io'
+const SITE_URL      = process.env.SITE_URL || 'https://world-pulse.io'
 
 const VALID_CATEGORIES = new Set([
   'conflict', 'climate', 'politics', 'health', 'technology', 'economics',

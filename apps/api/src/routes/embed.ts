@@ -94,7 +94,7 @@ export const registerEmbedRoutes: FastifyPluginAsync = async (app) => {
       country_code:      r.country_code,
       reliability_score: r.reliability_score,
       created_at:        r.created_at.toISOString(),
-      url:               `https://worldpulse.io/signals/${r.id}`,
+      url:               `https://world-pulse.io/signals/${r.id}`,
     }))
 
     const payload = JSON.stringify({ signals, total: signals.length })

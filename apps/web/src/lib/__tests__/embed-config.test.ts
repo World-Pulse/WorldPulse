@@ -6,7 +6,7 @@ import {
   EMBED_DEFAULTS,
 } from '../embed-config'
 
-const ORIGIN = 'https://worldpulse.io'
+const ORIGIN = 'https://world-pulse.io'
 
 describe('buildEmbedUrl', () => {
   it('builds URL with defaults', () => {

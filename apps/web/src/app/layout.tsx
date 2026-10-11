@@ -8,6 +8,7 @@ import { BottomTabBar } from '@/components/nav/BottomTabBar'
 // import { BreakingAlertBanner } from '@/components/alerts/BreakingAlertBanner'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { CommandPaletteProvider, CommandPalette } from '@/components/CommandPalette'
+import { HideOnEmbed } from '@/components/nav/HideOnEmbed'
 import { LocaleAttributes } from '@/components/locale/LocaleAttributes'
 
 const inter = Inter({
@@ -110,16 +111,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Providers>
             {/* CommandPaletteProvider registers the ⌘K/Ctrl+K global shortcut */}
             <CommandPaletteProvider>
-              <CommandPalette />
+              <HideOnEmbed><CommandPalette /></HideOnEmbed>
               {/* <BreakingAlertBanner /> */}
-              <TopNav />
+              <HideOnEmbed><TopNav /></HideOnEmbed>
               <main
                 id="main-content"
                 className="pt-[52px] min-h-screen main-content-mobile-pb"
               >
                 <ErrorBoundary>{children}</ErrorBoundary>
               </main>
-              <BottomTabBar />
+              <HideOnEmbed><BottomTabBar /></HideOnEmbed>
             </CommandPaletteProvider>
           </Providers>
       </body>

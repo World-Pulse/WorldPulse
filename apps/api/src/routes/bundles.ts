@@ -16,7 +16,7 @@ import {
 
 const BUNDLE_CACHE_TTL = 60  // seconds
 const BUNDLE_CACHE_KEY = 'bundle:current'
-const SITE_URL         = process.env.SITE_URL ?? 'https://worldpulse.io'
+const SITE_URL         = process.env.SITE_URL || 'https://world-pulse.io'
 
 // ─── Signing key ─────────────────────────────────────────────────────────────
 
@@ -287,7 +287,7 @@ export const registerBundleRoutes: FastifyPluginAsync = async (app) => {
         crv: 'Ed25519',
         x:   rawBytes.toString('base64url'),
       },
-      docs_url: 'https://worldpulse.io/developer/bundles',
+      docs_url: 'https://world-pulse.io/developer/bundles',
     })
   })
 }

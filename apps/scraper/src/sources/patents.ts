@@ -314,7 +314,7 @@ export function startPatentsPoller(
         method:  'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent':   'WorldPulse/1.0 (OSINT intelligence network; https://worldpulse.io)',
+          'User-Agent':   'WorldPulse/1.0 (OSINT intelligence network; https://world-pulse.io)',
           'Accept':       'application/json',
         },
         body:   JSON.stringify(requestBody),

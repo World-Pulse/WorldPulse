@@ -52,7 +52,7 @@ function CopyButton({ text }: { text: string }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function EmbedConfiguratorPage() {
-  const [origin, setOrigin] = useState('https://worldpulse.io')
+  const [origin, setOrigin] = useState('https://world-pulse.io')
   const [config, setConfig] = useState<EmbedConfig>(EMBED_DEFAULTS)
   const [tab, setTab] = useState<CodeTab>('iframe')
   const [previewKey, setPreviewKey] = useState(0)

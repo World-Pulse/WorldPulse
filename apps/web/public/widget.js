@@ -6,7 +6,7 @@
  *
  * Usage:
  *   <script
- *     src="https://worldpulse.io/widget.js"
+ *     src="https://world-pulse.io/widget.js"
  *     data-theme="dark"
  *     data-limit="5"
  *     data-category="breaking"
@@ -23,7 +23,7 @@
  *                   security                                   default: "all"
  *   data-width      iframe pixel width or "100%"              default: 360
  *   data-height     iframe pixel height                       default: 500
- *   data-origin     override base URL (for self-hosting)      default: https://worldpulse.io
+ *   data-origin     override base URL (for self-hosting)      default: https://world-pulse.io
  */
 ;(function () {
   'use strict'
@@ -39,7 +39,7 @@
   if (!script) return
 
   // Read configuration from data attributes
-  var origin   = script.getAttribute('data-origin')   || 'https://worldpulse.io'
+  var origin   = script.getAttribute('data-origin')   || 'https://world-pulse.io'
   var theme    = script.getAttribute('data-theme')    || 'dark'
   var limitRaw = parseInt(script.getAttribute('data-limit') || '5', 10)
   var limit    = isNaN(limitRaw) ? 5 : Math.min(Math.max(limitRaw, 1), 20)

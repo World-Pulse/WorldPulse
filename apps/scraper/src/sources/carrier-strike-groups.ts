@@ -241,7 +241,7 @@ function httpsGet(url: string): Promise<string> {
     const req = https.get(url, {
       timeout: 20_000,
       headers: {
-        'User-Agent': 'WorldPulse/0.1 (open-source; https://worldpulse.io)',
+        'User-Agent': 'WorldPulse/0.1 (open-source; https://world-pulse.io)',
         'Accept':     'application/rss+xml, application/xml, text/xml',
       },
     }, (res) => {

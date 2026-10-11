@@ -116,7 +116,7 @@ export function startAcledPoller(
           async () => {
             const res = await fetch(url, {
               headers: {
-                'User-Agent': 'WorldPulse/0.1 (open-source; https://worldpulse.io)',
+                'User-Agent': 'WorldPulse/0.1 (open-source; https://world-pulse.io)',
                 'Accept':     'application/json',
               },
               signal: AbortSignal.timeout(30_000),

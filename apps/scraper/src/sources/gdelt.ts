@@ -246,7 +246,7 @@ async function unzipFirstEntry(buf: Buffer): Promise<Buffer> {
 
 async function fetchText(url: string): Promise<string> {
   const res = await fetch(url, {
-    headers: { 'User-Agent': 'WorldPulse/0.1 (open-source; https://worldpulse.io)' },
+    headers: { 'User-Agent': 'WorldPulse/0.1 (open-source; https://world-pulse.io)' },
     signal: AbortSignal.timeout(15_000),
   })
   if (!res.ok) throw new Error(`GDELT: HTTP ${res.status} fetching ${url}`)
@@ -255,7 +255,7 @@ async function fetchText(url: string): Promise<string> {
 
 async function fetchBinary(url: string): Promise<Buffer> {
   const res = await fetch(url, {
-    headers: { 'User-Agent': 'WorldPulse/0.1 (open-source; https://worldpulse.io)' },
+    headers: { 'User-Agent': 'WorldPulse/0.1 (open-source; https://world-pulse.io)' },
     signal: AbortSignal.timeout(60_000),
   })
   if (!res.ok) throw new Error(`GDELT: HTTP ${res.status} fetching ${url}`)

@@ -58,7 +58,7 @@ function createOverlay(signals: SignalSummary[], selectionRect: DOMRect): void {
   overlay.setAttribute('role', 'tooltip');
   overlay.setAttribute('aria-live', 'polite');
 
-  const apiBase = 'https://worldpulse.io';
+  const apiBase = 'https://world-pulse.io';
 
   overlay.innerHTML = `
     <div class="wp-header">

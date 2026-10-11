@@ -66,7 +66,7 @@ async function generate(): Promise<void> {
         version: '1.0.0',
         contact: {
           name: 'WorldPulse',
-          url: 'https://worldpulse.io',
+          url: 'https://world-pulse.io',
         },
         license: {
           name: 'MIT',
@@ -74,7 +74,7 @@ async function generate(): Promise<void> {
         },
       },
       servers: [
-        { url: 'https://api.worldpulse.io', description: 'Production' },
+        { url: 'https://api.world-pulse.io', description: 'Production' },
         { url: 'http://localhost:3001',      description: 'Local development' },
       ],
       tags: [

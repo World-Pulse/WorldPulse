@@ -7,22 +7,17 @@ export const metadata: Metadata = {
 }
 
 /**
- * Minimal layout for the embed iframe — no TopNav, no BottomTabBar, no global chrome.
- * Designed to render cleanly inside third-party iframes at any size ≥ 300×400px.
+ * Layout for the embed iframe. The site's own layout supplies <html> and
+ * <body>; this one used to add a second pair inside them, which made React
+ * throw the widget away when the page loaded (plan G5, Oct 11, 2026). The
+ * header and tab bar stay out through HideOnEmbed in the site layout, and
+ * the widget fills the frame, at any size from 300×400px.
  */
 export default function EmbedLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <head>
-        <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <style>{`
-          *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-          html, body { width: 100%; height: 100%; overflow: hidden; }
-          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-        `}</style>
-      </head>
-      <body>{children}</body>
-    </html>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 2147483000, overflow: 'hidden' }}>
+      <style>{'html, body { height: 100%; overflow: hidden; }'}</style>
+      {children}
+    </div>
   )
 }

@@ -58,7 +58,7 @@ function httpsGet(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const req = https.get(url, {
       timeout: 20_000,
-      headers: { 'User-Agent': 'WorldPulse/0.1 (open-source; https://worldpulse.io)' },
+      headers: { 'User-Agent': 'WorldPulse/0.1 (open-source; https://world-pulse.io)' },
     }, (res) => {
       // OpenSky returns 429 when rate limited
       if (res.statusCode === 429) {

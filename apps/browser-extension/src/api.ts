@@ -1,6 +1,8 @@
 import type { ExtensionSettings, SignalSummary, SignalStatus, SignalSeverity } from './types';
 
-export const DEFAULT_API_URL = 'https://worldpulse.io';
+export const DEFAULT_API_URL = 'https://api.world-pulse.io';
+/** The website, for links to a signal's page (the API lives on api.world-pulse.io) */
+export const SITE_URL = 'https://world-pulse.io';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapToSummary(item: Record<string, any>, base: string): SignalSummary {
@@ -13,7 +15,7 @@ function mapToSummary(item: Record<string, any>, base: string): SignalSummary {
     sourceCount: typeof item.sourceCount === 'number' ? item.sourceCount : 0,
     category: String(item.category ?? 'other'),
     firstReported: String(item.firstReported ?? item.createdAt ?? ''),
-    url: `${base}/signals/${item.id}`,
+    url: `${SITE_URL}/signals/${item.id}`,
   };
 }
 

@@ -38,7 +38,7 @@ const FAQ_ITEMS = [
   },
   {
     q: 'Do you offer refunds?',
-    a: 'We offer a full refund within 7 days of your first charge if you\'re not satisfied. Contact support@worldpulse.io with your account email and we\'ll process it within 2 business days.',
+    a: 'We offer a full refund within 7 days of your first charge if you\'re not satisfied. Contact support@world-pulse.io with your account email and we\'ll process it within 2 business days.',
   },
   {
     q: 'Is there a free trial?',
@@ -315,7 +315,7 @@ export default function PricingPage() {
             <p className="font-semibold text-wp-text">7-day money-back guarantee</p>
             <p className="text-sm text-wp-text/60 mt-1">
               Not satisfied within the first 7 days? Email{' '}
-              <span className="text-wp-cyan">support@worldpulse.io</span>{' '}
+              <span className="text-wp-cyan">support@world-pulse.io</span>{' '}
               and we'll issue a full refund — no questions asked.
             </p>
           </div>
@@ -336,7 +336,7 @@ export default function PricingPage() {
         <p className="text-center text-sm text-wp-text/40 mt-8">
           Have more questions?{' '}
           <a
-            href="mailto:support@worldpulse.io"
+            href="mailto:support@world-pulse.io"
             className="text-wp-cyan hover:underline"
           >
             Contact us

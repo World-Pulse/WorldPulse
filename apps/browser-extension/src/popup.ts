@@ -62,7 +62,7 @@ async function init(): Promise<void> {
     await send({
       type: 'SAVE_SETTINGS',
       payload: {
-        apiUrl: apiUrlInput.value.trim() || 'https://worldpulse.io',
+        apiUrl: apiUrlInput.value.trim() || 'https://api.world-pulse.io',
         apiKey: apiKeyInput.value.trim() || undefined,
         enabled: enabledInput.checked,
         showOnSelect: showOnSelectInput.checked,

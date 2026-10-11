@@ -7,7 +7,7 @@ import type {
 import { searchSignals } from './api';
 
 const DEFAULT_SETTINGS: ExtensionSettings = {
-  apiUrl: 'https://worldpulse.io',
+  apiUrl: 'https://api.world-pulse.io',
   apiKey: undefined,
   enabled: true,
   showOnSelect: true,

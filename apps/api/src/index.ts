@@ -124,8 +124,6 @@ async function bootstrap() {
         ...(process.env.CORS_ORIGINS ?? '').split(',').filter(Boolean),
       ]
     : [
-        'https://worldpulse.io',
-        'https://www.worldpulse.io',
         'https://world-pulse.io',
         'https://www.world-pulse.io',
         'https://api.world-pulse.io',
@@ -255,7 +253,7 @@ async function bootstrap() {
         version: '1.0.0',
         contact: {
           name: 'WorldPulse',
-          url: 'https://worldpulse.io',
+          url: 'https://world-pulse.io',
         },
         license: {
           name: 'MIT',
@@ -263,7 +261,7 @@ async function bootstrap() {
         },
       },
       servers: [
-        { url: 'https://api.worldpulse.io', description: 'Production' },
+        { url: 'https://api.world-pulse.io', description: 'Production' },
         { url: 'http://localhost:3001', description: 'Local development' },
       ],
       tags: [

@@ -48,8 +48,8 @@ export default function SignalDetailScreen() {
     if (!signal) return
     await Share.share({
       title: signal.title,
-      message: `${signal.title}\n\nVia WorldPulse: https://worldpulse.io/signal/${id}`,
-      url: `https://worldpulse.io/signal/${id}`,
+      message: `${signal.title}\n\nVia WorldPulse: https://world-pulse.io/signals/${id}`,
+      url: `https://world-pulse.io/signals/${id}`,
     })
   }
 

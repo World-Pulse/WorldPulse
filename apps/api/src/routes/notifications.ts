@@ -48,7 +48,7 @@ function makeTestSignal(): Signal {
     region:           null,
     tags:             ['test'],
     sources:          [],
-    originalUrls:     ['https://worldpulse.io'],
+    originalUrls:     ['https://world-pulse.io'],
     language:         'en',
     viewCount:        0,
     shareCount:       0,

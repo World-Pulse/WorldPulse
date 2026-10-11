@@ -82,7 +82,7 @@ export function startCisaKevPoller(
           async () => {
             const res = await fetch(KEV_FEED_URL, {
               headers: {
-                'User-Agent': 'WorldPulse/0.1 (open-source; https://worldpulse.io)',
+                'User-Agent': 'WorldPulse/0.1 (open-source; https://world-pulse.io)',
                 'Accept':     'application/json',
               },
               signal: AbortSignal.timeout(30_000),

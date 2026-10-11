@@ -2164,7 +2164,7 @@ export function fetchUrl(url: string, redirectCount = 0): Promise<string> {
     const req = client.get(url, {
       timeout: 20_000,
       headers: {
-        'User-Agent':      'WorldPulse/1.0 (open-source global intelligence; https://worldpulse.io)',
+        'User-Agent':      'WorldPulse/1.0 (open-source global intelligence; https://world-pulse.io)',
         'Accept':          'application/rss+xml, application/xml, application/atom+xml, text/xml, */*',
         'Accept-Encoding': 'gzip, deflate, br',
       },

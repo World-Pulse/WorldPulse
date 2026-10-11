@@ -415,7 +415,7 @@ export default function AIInfrastructurePage() {
           <p className="text-xs text-gray-500">
             Data compiled from public disclosures, satellite imagery, and regulatory filings.
             Updated periodically. For corrections, contact{' '}
-            <a href="mailto:intel@worldpulse.io" className="text-violet-400 hover:text-violet-300">intel@worldpulse.io</a>.
+            <a href="mailto:support@world-pulse.io" className="text-violet-400 hover:text-violet-300">support@world-pulse.io</a>.
           </p>
           <div className="flex justify-center gap-4 mt-2">
             <Link href="/map" className="text-xs text-violet-400 hover:text-violet-300">View on Map</Link>

@@ -238,7 +238,7 @@ export function startComtradePoller(
 
     const res = await fetch(url.toString(), {
       headers: {
-        'User-Agent': 'WorldPulse/1.0 (OSINT intelligence network; https://worldpulse.io)',
+        'User-Agent': 'WorldPulse/1.0 (OSINT intelligence network; https://world-pulse.io)',
         'Accept':     'application/json',
       },
       signal: AbortSignal.timeout(30_000),
