@@ -15,6 +15,7 @@ import { decodeEntities, cleanUrl, cleanTitle, ENCODED_TEXT_RE, cleanSummary, FE
 import { liftedSeverity, type SeverityRow } from './severity-lift'
 import { tidyGeoName } from '../sources/gdelt'
 import { NEWS_SOURCE_REGISTRY, detectNewsCategory } from '../sources/news-rss'
+import { categorizeArticle, categorizeText } from './categories'
 
 /** Where nginx serves uploaded post media (the uploads volume, under /uploads/) */
 const PUBLIC_SITE = 'https://world-pulse.io'
@@ -316,6 +317,12 @@ export async function stripOutletNotes(): Promise<number> {
   return changed.length
 }
 
+/** The category values the signals table takes */
+const STORED_CATEGORIES = new Set([
+  'breaking', 'conflict', 'geopolitics', 'climate', 'health', 'economy', 'technology', 'science',
+  'elections', 'culture', 'disaster', 'security', 'sports', 'space', 'finance', 'other',
+])
+
 /**
  * News categories of the last 3 days, as the RSS reader's rules give them
  * now (news-rss.ts detectNewsCategory, Oct 11, 2026): the Houthi attack on
@@ -324,12 +331,6 @@ export async function stripOutletNotes(): Promise<number> {
  * category showed the wrong icon. Only RSS signals (their source's own
  * category is the fallback); a second start finds nothing to change.
  */
-/** The category values the signals table takes */
-const STORED_CATEGORIES = new Set([
-  'breaking', 'conflict', 'geopolitics', 'climate', 'health', 'economy', 'technology', 'science',
-  'elections', 'culture', 'disaster', 'security', 'sports', 'space', 'finance', 'other',
-])
-
 export async function recategorizeRecentNews(): Promise<number> {
   const rows = await db('signals')
     .where('created_at', '>', db.raw("NOW() - INTERVAL '3 days'"))
@@ -353,6 +354,68 @@ export async function recategorizeRecentNews(): Promise<number> {
          FROM (VALUES ${batch.map(() => '(?::uuid, ?::text)').join(', ')}) AS v(id, category)
         WHERE s.id = v.id`,
       batch.flatMap(r => [r.id, r.category]),
+    )
+  }
+  return changed.length
+}
+
+const SEVERITY_RANK: Record<string, number> = { info: 0, low: 1, medium: 2, high: 3, critical: 4 }
+/** Categories classify.ts caps at medium (and "other" at low) */
+const CAPPED_AT_MEDIUM = new Set(['culture', 'sports', 'science', 'space'])
+
+/**
+ * Categories of article signals saved before `before` in the last 3 days
+ * (article groups from the sources table, and GDELT events with a real
+ * headline), as classify.ts files them now (categories.ts, Oct 11, 2026).
+ * The old rules read the pronoun "who" as the WHO and any "alert" in a long
+ * article as breaking news: 213 of 1,185 recent GDELT events were health,
+ * among them a novelist and a footballer's transfer talks. Only the headline
+ * (and a summary, usually the headline again) is stored, so that's what's
+ * read; a high or critical story whose headline names no category is left
+ * as it is. Severity follows the category as classify.ts caps it: at most
+ * low for "other", at most medium for culture, sports, science and space,
+ * otherwise what the words earn up to what the outlet count allows (never
+ * lowered). index.ts runs this once: later signals were filed with the
+ * article's opening too, which a headline-only reading would overrule.
+ */
+export async function recategorizeRecentArticles(before: Date): Promise<number> {
+  const found = await db.raw(
+    `SELECT id, title, summary, category::text AS category, severity::text AS severity, source_count
+       FROM signals
+      WHERE created_at > NOW() - INTERVAL '3 days'
+        AND created_at < ?
+        AND NOT (tags @> ARRAY['rss']::text[])
+        AND (tags @> ARRAY['gdelt']::text[] OR NOT (tags @> ARRAY['osint']::text[]))
+        AND title !~ ?
+      LIMIT 30000`,
+    [before.toISOString(), EVENT_TEMPLATE_SQL],
+  )
+  const rows = ((found as { rows?: Array<SeverityRow & { source_count: number | null }> })?.rows ?? [])
+  const changed: Array<{ id: string; category: string; severity: string }> = []
+  for (const row of rows) {
+    const title = row.title ?? ''
+    const category = categorizeArticle(title, row.summary)
+    if (category === row.category || !STORED_CATEGORIES.has(category)) continue
+    const current = SEVERITY_RANK[row.severity] ?? 0
+    // A headline that names no kind of event doesn't overrule a serious story
+    if (categorizeText(title, row.summary ?? '') === null && current >= SEVERITY_RANK.high!) continue
+    let severity = row.severity
+    if (category === 'other') {
+      if (current > SEVERITY_RANK.low!) severity = 'low'
+    } else {
+      severity = liftedSeverity({ ...row, category }, Number(row.source_count) || 1) ?? row.severity
+      if (CAPPED_AT_MEDIUM.has(category) && (SEVERITY_RANK[severity] ?? 0) > SEVERITY_RANK.medium!) severity = 'medium'
+    }
+    changed.push({ id: row.id, category, severity })
+  }
+  // 500 rows a statement
+  for (let i = 0; i < changed.length; i += 500) {
+    const batch = changed.slice(i, i + 500)
+    await db.raw(
+      `UPDATE signals AS s SET category = v.category::category, severity = v.severity::signal_severity
+         FROM (VALUES ${batch.map(() => '(?::uuid, ?::text, ?::text)').join(', ')}) AS v(id, category, severity)
+        WHERE s.id = v.id`,
+      batch.flatMap(r => [r.id, r.category, r.severity]),
     )
   }
   return changed.length

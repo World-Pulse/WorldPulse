@@ -11,6 +11,7 @@ import type { Category, SignalSeverity } from '@worldpulse/types'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
 import { rateSeverity } from './severity'
+import { categorizeArticle } from './categories'
 
 interface ClassificationResult {
   category:     Category
@@ -28,7 +29,8 @@ export async function classifyContent(
   title: string,
   body:  string | null,
 ): Promise<ClassificationResult> {
-  // Cache check
+  // Cache check (AI results only: the word rules are cheap, and a cached
+  // rule result would stand in for the AI's for an hour once it's back)
   const cacheKey = `classify:${hashText(title)}`
   const cached = await redis.get(cacheKey)
   if (cached) return JSON.parse(cached) as ClassificationResult
@@ -36,9 +38,11 @@ export async function classifyContent(
   // Try LLM if configured (requires LLM_API_URL or OPENAI_API_KEY)
   const llmConfigured = !!(process.env.LLM_API_URL || process.env.OPENAI_API_KEY)
   let result: ClassificationResult
+  let byLlm = false
   if (llmConfigured) {
     try {
       result = await llmClassify(title, body)
+      byLlm = true
     } catch (err) {
       logger.warn({ err }, 'LLM classification failed, falling back to rule-based')
       result = ruleBasedClassify(title, body)
@@ -52,7 +56,7 @@ export async function classifyContent(
   // classified as CRITICAL or HIGH — cap them at MEDIUM.
   result = recalibrateSeverity(result)
 
-  await redis.setex(cacheKey, 3600, JSON.stringify(result))
+  if (byLlm) await redis.setex(cacheKey, 3600, JSON.stringify(result))
   return result
 }
 
@@ -191,7 +195,10 @@ SUMMARY RULES:
 function ruleBasedClassify(title: string, body: string | null): ClassificationResult {
   const text = `${title} ${body ?? ''}`.toLowerCase()
 
-  const category = detectCategory(text)
+  // The headline, then the article's opening (pipeline/categories.ts, shared
+  // with the RSS reader); politics, urgent wording or "other" when neither
+  // says (Oct 11, 2026: the old rules here read the pronoun "who" as the WHO)
+  const category = categorizeArticle(title, body)
   // Counts the dead and injured and weighs the kind of event (pipeline/severity.ts, plan 0u)
   const severity  = rateSeverity(title, body, category)
   const tags      = extractTags(text)
@@ -206,48 +213,6 @@ function ruleBasedClassify(title: string, body: string | null): ClassificationRe
     isBreaking: severity === 'critical' || severity === 'high',
     topics:     tags.slice(0, 2),
   }
-}
-
-function detectCategory(text: string): Category {
-  // NOTE: order matters — more specific rules first.
-  // 'breaking' is checked first so urgent/critical articles are categorised correctly
-  // rather than falling through to a more generic bucket.
-  const rules: [RegExp, Category][] = [
-    // ── Breaking / urgent news ──────────────────────────────────────────────
-    [/\b(breaking|urgent|just in|alert|developing story|emergency|evacuation order|state of emergency|major incident)\b/, 'breaking'],
-    // ── Disasters ───────────────────────────────────────────────────────────
-    [/\b(earthquake|tsunami|hurricane|typhoon|flood|wildfire|eruption|tornado|avalanche|landslide|cyclone|blizzard|drought)\b/, 'disaster'],
-    // ── Armed conflict (must indicate ACTIVE violence, not just military mention) ──
-    [/\b(war\b|attack(?:ed|s)?|killed|airstrike|missile strike|bomb(?:ing|ed)|gunfire|shelling|offensive\b|frontline|casualt(?:y|ies)|armed clash|combat|insurgent|firefight)\b/, 'conflict'],
-    // ── Security / military (non-violent military, defense, intelligence) ────────
-    [/\b(military exercise|defense polic|arms (?:deal|sale|trade)|naval deployment|intelligence|espionage|surveillance|defense budget|troops deploy|military aid)\b/, 'security'],
-    // ── Elections & politics ─────────────────────────────────────────────────
-    [/\b(election|vote|ballot|campaign|president|prime minister|parliament|congress|referendum|polling)\b/, 'elections'],
-    // ── Climate & environment ────────────────────────────────────────────────
-    [/\b(climate|emissions|temperature|arctic|glacier|carbon|warming|sea level|deforestation|biodiversity|coral reef)\b/, 'climate'],
-    // ── Health & medicine ────────────────────────────────────────────────────
-    [/\b(outbreak|virus|disease|pandemic|vaccine|hospital|health|who|cdc|pathogen|epidemic|public health|mortality|infection)\b/, 'health'],
-    // ── Markets & economy ────────────────────────────────────────────────────
-    [/\b(stock|market|economy|gdp|inflation|federal reserve|interest rate|trade|sanctions|currency|recession|debt|fiscal|imf)\b/, 'economy'],
-    // ── Cybersecurity ────────────────────────────────────────────────────────
-    [/\b(cyber|hack|ransomware|data breach|phishing|malware|vulnerability|exploit|zero.day|cve|infosec)\b/, 'security'],
-    // ── Technology & AI ──────────────────────────────────────────────────────
-    [/\b(ai|artificial intelligence|tech|startup|silicon valley|semiconductor|quantum|robotics|autonomous|neural)\b/, 'technology'],
-    // ── Space & astronomy ────────────────────────────────────────────────────
-    [/\b(space|nasa|rocket|satellite|mars|moon|astronaut|orbit|launch|iss|spacex|esa|asteroid|telescope)\b/, 'space'],
-    // ── Science & research ───────────────────────────────────────────────────
-    [/\b(research|study|discovery|experiment|scientists|university|published|peer.reviewed|clinical trial|genome|physics|chemistry)\b/, 'science'],
-    // ── Geopolitics & diplomacy ───────────────────────────────────────────────
-    [/\b(sanctions|diplomat|treaty|nato|un|security council|foreign minister|geopolit|alliance|bilateral|multilateral)\b/, 'geopolitics'],
-    // ── Culture, arts & society ───────────────────────────────────────────────
-    [/\b(culture|film|music|art|award|festival|celebrity|sports|football|soccer|olympics|world cup|nba|nfl|cricket|tennis|religion|protest|movement|activism)\b/, 'culture'],
-  ]
-
-  for (const [regex, cat] of rules) {
-    if (regex.test(text)) return cat
-  }
-
-  return 'other'
 }
 
 function extractTags(text: string): string[] {

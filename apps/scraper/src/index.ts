@@ -40,7 +40,7 @@ import { runDelayedRescore } from './pipeline/rescore'
 import { signalsHavePublishedAt, publishedAtFor, backfillRecentPublishedAt, sourceKey, hostOf } from './pipeline/signal-columns'
 import { independentReports, isCopyOf } from './pipeline/independence'
 import { ensureStoryIdColumn } from './pipeline/stories'
-import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames, stripOutletNotes, recategorizeRecentNews } from './pipeline/repairs'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames, stripOutletNotes, recategorizeRecentNews, recategorizeRecentArticles } from './pipeline/repairs'
 import { batchValidateGeo } from './pipeline/geo-validator'
 import { recomputeSourceReputation } from './pipeline/source-reputation'
 import { startKafkaLagMonitor } from './lib/kafka-lag-monitor'
@@ -90,6 +90,20 @@ let verifyConsumer: Consumer | null = null
 let kafkaReady = false
 let stopOsintPollers: OsintCleanupFn | null = null
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null
+
+/**
+ * A repair that must run only once, across restarts: the time of its first
+ * attempt is kept as its cutoff (a retry after a failed run covers the same
+ * signals), and a done mark stops later starts. Null when already done.
+ */
+async function runOnce<T>(key: string, job: (cutoff: Date) => Promise<T>): Promise<T | null> {
+  if (await redis.get(`${key}:done`)) return null
+  await redis.set(`${key}:cutoff`, new Date().toISOString(), 'EX', 30 * 86_400, 'NX')
+  const stamp = await redis.get(`${key}:cutoff`)
+  const result = await job(stamp ? new Date(stamp) : new Date())
+  await redis.set(`${key}:done`, new Date().toISOString(), 'EX', 30 * 86_400)
+  return result
+}
 
 async function connectKafka(): Promise<boolean> {
   try {
@@ -188,6 +202,10 @@ async function bootstrap() {
     .then(() => recategorizeRecentNews())
     .then(rows => { if (rows && rows > 0) logger.info({ rows }, "Repair: news categories by the current rules (attacks as conflict, surgery as health, matches as sports)") })
     .catch(err => logger.warn({ err }, 'News category repair failed (non-fatal)'))
+    // And, once, the article and GDELT signals filed by classify.ts's old rules
+    .then(() => runOnce('repair:article-categories:2026-10-11', recategorizeRecentArticles))
+    .then(rows => { if (rows && rows > 0) logger.info({ rows }, 'Repair: article and GDELT categories by the current rules ("who" is no longer the WHO)') })
+    .catch(err => logger.warn({ err }, 'Article category repair failed (non-fatal)'))
   liftCappedSeverities()
     .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: corroborated stories got the severity their words earn (single-source cap lifted)') })
     .catch(err => logger.warn({ err }, 'Severity lift repair failed (non-fatal)'))

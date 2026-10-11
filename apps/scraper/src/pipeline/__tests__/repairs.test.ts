@@ -23,7 +23,7 @@ vi.mock('../../lib/postgres', () => {
   }
 })
 
-import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities } from '../repairs'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, recategorizeRecentArticles } from '../repairs'
 import { db } from '../../lib/postgres'
 import { EVENT_TEMPLATE_SQL } from '../event-titles'
 
@@ -192,6 +192,40 @@ describe('decodeStoredEntities', () => {
       { title: 'Who Are You? – Analysis', summary: null },
       { title: 'Quake MMI>=VII', summary: 'ok', original_urls: ['https://www.gdacs.org/r?e=EQ&id=1'] },
       { title: 'Osaka danjiri float festival', summary: null },
+    ])
+  })
+})
+
+describe('recategorizeRecentArticles', () => {
+  beforeEach(() => { h.raws.length = 0 })
+
+  it("files article and GDELT signals by the current rules, with the severity their category allows", async () => {
+    vi.mocked(db.raw).mockImplementationOnce(async (sql: string, params?: unknown[]) => {
+      h.raws.push({ sql, params: params as unknown[] })
+      return { rows: [
+        // The old rules read "who" as the WHO
+        { id: 'a', title: "Judi Dench says she 'loathes' being called a 'national treasure'", summary: null, category: 'health', severity: 'medium', source_count: 1 },
+        { id: 'b', title: 'Migrant shipwreck off Djibouti kills 109, leaves more than 116 missing', summary: null, category: 'breaking', severity: 'medium', source_count: 1 },
+        { id: 'c', title: 'Pope Leo XIV to undergo surgery to remove lump on lung', summary: null, category: 'other', severity: 'low', source_count: 3 },
+        { id: 'd', title: "Dan Stevens' Best Horror Movie Is a Slasher Surprise", summary: null, category: 'breaking', severity: 'high', source_count: 1 },
+        // A serious story whose headline names no kind of event is left alone
+        { id: 'e', title: 'Latest news bulletin | October 11th, 2026 – Morning', summary: null, category: 'breaking', severity: 'high', source_count: 1 },
+        // Already right
+        { id: 'f', title: 'Russia strikes Kyiv with drones overnight', summary: null, category: 'conflict', severity: 'medium', source_count: 1 },
+      ] } as never
+    })
+    expect(await recategorizeRecentArticles(new Date('2026-10-11T14:00:00Z'))).toBe(4)
+    const [select, update] = h.raws
+    expect(select!.sql).toMatch(/created_at < \?/)
+    expect(select!.sql).toMatch(/NOT \(tags @> ARRAY\['rss'\]/) // the RSS reader's own repair covers those
+    expect(select!.sql).toMatch(/tags @> ARRAY\['gdelt'\]::text\[\] OR NOT \(tags @> ARRAY\['osint'\]/)
+    expect(select!.params).toEqual(['2026-10-11T14:00:00.000Z', EVENT_TEMPLATE_SQL])
+    expect(update!.sql).toMatch(/SET category = v\.category::category, severity = v\.severity::signal_severity/)
+    expect(update!.params).toEqual([
+      'a', 'other', 'low',
+      'b', 'disaster', 'high',   // 109 dead, one outlet: a disaster may be high
+      'c', 'health', 'low',
+      'd', 'culture', 'medium',  // culture stops at medium
     ])
   })
 })
