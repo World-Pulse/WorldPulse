@@ -76,5 +76,16 @@ export function namedOutlets(story: Pick<DevelopingStory, 'outlets' | 'outletCou
   return { names, more: Math.max(0, story.outletCount - names.length) }
 }
 
+/**
+ * The outlets line's hover text: the names the API sent (at most 12) and how
+ * many more there are, so it doesn't read as the full list. The story's page
+ * lists them all.
+ */
+export function outletsTitle(story: Pick<DevelopingStory, 'outlets' | 'outletCount'>): string {
+  const more = story.outletCount - story.outlets.length
+  const names = story.outlets.join(', ')
+  return more > 0 ? `${names} and ${more} more (all on the story's page)` : names
+}
+
 /** Severities worth a label on the row (medium and low are the norm) */
 export const LOUD_SEVERITIES = new Set(['critical', 'high'])

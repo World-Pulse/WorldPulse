@@ -33,6 +33,8 @@ export interface StoryDetail {
   size: number
   /** Outlets that reported it, all of them */
   outlets?: number
+  /** Their websites, A to Z (an outlet whose article was merged into another report included) */
+  outletNames?: string[]
   verifiedAt: string | null
   signals: StoryMember[]
 }
@@ -74,6 +76,7 @@ export function StoryMembers({ signalId }: { signalId: string }) {
   const [story, setStory] = useState<StoryDetail | null>(null)
   const [seenAt, setSeenAt] = useState<number | null>(null)
   const [expanded, setExpanded] = useState(false)
+  const [showOutlets, setShowOutlets] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -97,7 +100,10 @@ export function StoryMembers({ signalId }: { signalId: string }) {
   const firstAt = entries.find(e => e.kind === 'report')?.at ?? 0
   // The whole story's counts (the API sends the start and the latest of a big one)
   const totalReports = Math.max(reports, story.size || 0)
-  const totalOutlets = Math.max(outlets, story.outlets || 0)
+  // Every outlet that carried it, so the count can be checked against the names
+  const outletNames = Array.isArray(story.outletNames) ? story.outletNames.filter(n => typeof n === 'string' && n !== '') : []
+  const totalOutlets = Math.max(outlets, story.outlets || 0, outletNames.length)
+  const outletWord = `${totalOutlets} ${totalOutlets === 1 ? 'outlet' : 'outlets'}`
   // Long stories: the start and the latest, the middle behind "Show all"
   const folds = expanded ? new Map<number, number>() : foldTimeline(entries, HEAD, TAIL)
 
@@ -105,7 +111,13 @@ export function StoryMembers({ signalId }: { signalId: string }) {
     <section className="p-4 rounded-xl border border-white/10 bg-white/[0.02] space-y-3" aria-label="Story timeline">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <span className="font-mono text-[10px] tracking-widest uppercase text-wp-text3">
-          Story timeline · {totalReports} reports · {totalOutlets} {totalOutlets === 1 ? 'outlet' : 'outlets'}
+          Story timeline · {totalReports} reports ·{' '}
+          {outletNames.length > 0 ? (
+            <button type="button" onClick={() => setShowOutlets(v => !v)} aria-expanded={showOutlets}
+              className="uppercase tracking-widest underline decoration-dotted underline-offset-2 hover:text-wp-text2 transition-colors">
+              {outletWord} {showOutlets ? '▴' : '▾'}
+            </button>
+          ) : outletWord}
         </span>
         {newCount > 0 && (
           <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[rgba(245,166,35,0.12)] text-wp-amber">
@@ -116,6 +128,12 @@ export function StoryMembers({ signalId }: { signalId: string }) {
           <span className="ml-auto font-mono text-[10px] text-wp-green">✓ Verified {timeAgo(story.verifiedAt)}</span>
         )}
       </div>
+
+      {showOutlets && outletNames.length > 0 && (
+        <p className="font-mono text-[11px] leading-relaxed text-wp-text2 break-words" aria-label="Outlets that carried this story">
+          {outletNames.join(' · ')}
+        </p>
+      )}
 
       <ol className="relative ml-1.5 border-l border-white/10">
         {entries.map((e, i) => {

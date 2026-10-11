@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { toDevelopingStories, sinceLabel, outletBadge, namedOutlets } from '../developing-stories'
+import { toDevelopingStories, sinceLabel, outletBadge, namedOutlets, outletsTitle } from '../developing-stories'
 
 const NOW = Date.parse('2026-10-11T07:00:00Z')
 
@@ -45,5 +45,10 @@ describe('row text', () => {
   it('names a few outlets and counts the rest from the full total', () => {
     expect(namedOutlets(story)).toEqual({ names: ['aljazeera.com', 'bbc.co.uk', 'apnews.com'], more: 11 })
     expect(namedOutlets({ outlets: ['a.com', 'b.com'], outletCount: 2 })).toEqual({ names: ['a.com', 'b.com'], more: 0 })
+  })
+
+  it("says on hover that the names aren't all of them (the API sends at most 12)", () => {
+    expect(outletsTitle({ outlets: ['a.com', 'b.com'], outletCount: 55 })).toBe("a.com, b.com and 53 more (all on the story's page)")
+    expect(outletsTitle({ outlets: ['a.com', 'b.com'], outletCount: 2 })).toBe('a.com, b.com')
   })
 })

@@ -181,6 +181,11 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
 
     // A big story (the Riyadh airport attack had 80+ reports) is its start and
     // its latest reports, plus the one asked for; size and outlets count them all.
+    // Outlets are the websites in every report's links, as the story list
+    // counts them: an outlet whose article was merged into another report (a
+    // duplicate) has no report of its own but carried the story. Until Oct 11
+    // this counted each report's first link only, so the signal page said 51
+    // outlets where the home page said 55.
     // (A literal ? in knex's raw SQL is written \\?, or it takes it for a value.)
     const scope = hasStories ? '(story_id = ? OR id = ?)' : 'id = ?'
     const scopeParams = hasStories ? [storyId, storyId] : [storyId]
@@ -194,11 +199,16 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
                 min(verified_at) OVER ()                               AS first_verified
            FROM signals
           WHERE status IN ('verified', 'pending') AND ${scope}
+       ),
+       hosts AS (
+         SELECT DISTINCT lower(regexp_replace(substring(link.url from '^https\\?://([^/:\\?#]+)'), '^www\\.', '')) AS host
+           FROM signals s
+           CROSS JOIN LATERAL unnest(s.original_urls) AS link(url)
+          WHERE s.status IN ('verified', 'pending') AND ${scope.replace(/story_id|\bid\b/g, c => `s.${c}`)}
        )
        SELECT m.*,
-              (SELECT count(DISTINCT lower(regexp_replace(substring(s.original_urls[1] from '^https\\?://([^/:\\?#]+)'), '^www\\.', '')))
-                 FROM signals s
-                WHERE s.status IN ('verified', 'pending') AND ${scope.replace(/story_id|\bid\b/g, c => `s.${c}`)}) AS outlets
+              (SELECT count(*) FROM hosts WHERE host <> '')                   AS outlets,
+              (SELECT array_agg(host ORDER BY host) FROM hosts WHERE host <> '') AS outlet_names
          FROM m
         WHERE position <= ? OR from_end <= ? OR id::text = ?
         ORDER BY created_at ASC, id ASC`,
@@ -209,7 +219,8 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
 
     const iso = (v: unknown): string | null => (v ? new Date(v as string).toISOString() : null)
     const total = Number(members[0]!.total) || members.length
-    const outlets = Number(members[0]!.outlets) || 0
+    const outletNames = textArray(members[0]!.outlet_names)
+    const outlets = Math.max(Number(members[0]!.outlets) || 0, outletNames.length)
 
     return reply.send({
       success: true,
@@ -217,7 +228,10 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
         storyId,
         /** Reports in the story (more than `signals` holds when it's big) */
         size: total,
+        /** Websites that carried it, from every report's links */
         outlets,
+        /** Those websites, A to Z */
+        outletNames,
         verifiedAt: iso(members[0]!.first_verified),
         signals: members.map(m => {
           // A signal's own article comes first; the story's other links follow it

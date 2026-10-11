@@ -186,7 +186,8 @@ export function rankStories(candidates: StoryCandidate[], limit: number, now = D
   const scored: Array<{ story: ListedStory; score: number }> = []
   for (const c of candidates) {
     if (!c.title || looksLikeEventTemplate(c.title)) continue
-    const outlets = outletsOf(c.urls, 100)
+    // (every outlet, so the count matches the story's page: GET /stories/:id)
+    const outlets = outletsOf(c.urls, 1000)
     if (outlets.length < 2) continue
     scored.push({
       score: storyScore(outlets.length, c.severity, c.updatedAt, now),

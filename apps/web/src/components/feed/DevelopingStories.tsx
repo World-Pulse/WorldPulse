@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import {
-  toDevelopingStories, sinceLabel, outletBadge, namedOutlets, LOUD_SEVERITIES,
+  toDevelopingStories, sinceLabel, outletBadge, namedOutlets, outletsTitle, LOUD_SEVERITIES,
   type DevelopingStory,
 } from '@/lib/developing-stories'
 
@@ -60,7 +60,10 @@ export function DevelopingStories() {
               Developing Stories
             </h2>
           </div>
-          <span className="text-[11px] text-wp-text2 font-mono">most reported · {WINDOW_HOURS}h</span>
+          {/* A story here was reported in the last 12 hours; it may have started earlier */}
+          <span className="text-[11px] text-wp-text2 font-mono">
+            <span className="hidden sm:inline">most reported · </span>updated in the last {WINDOW_HOURS}h
+          </span>
         </div>
 
         <ol className="space-y-2">
@@ -117,7 +120,7 @@ function StoryRow({ story, now, lead = false }: { story: DevelopingStory; now: n
         {story.title}
       </p>
 
-      <p className="mt-1 text-[11px] text-wp-text2 font-mono truncate" title={story.outlets.join(', ')}>
+      <p className="mt-1 text-[11px] text-wp-text2 font-mono truncate" title={outletsTitle(story)}>
         {names.join(' · ')}
         {more > 0 && <> +{more} more</>}
       </p>
