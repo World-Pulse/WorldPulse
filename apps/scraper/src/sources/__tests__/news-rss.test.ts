@@ -12,6 +12,7 @@ import {
   detectNewsSeverity,
   detectNewsCategory,
   inferGeo,
+  decodeEntities,
   parseFeedItems,
   newsRedisKey,
 } from '../news-rss'
@@ -383,5 +384,30 @@ describe('newsRedisKey', () => {
     expect(key).not.toContain('?')
     expect(key).not.toContain('&')
     expect(key).not.toContain('#')
+  })
+})
+
+describe('news text fixes', () => {
+  it('does not read the word "who" as the World Health Organization', () => {
+    expect(detectNewsCategory('Abbas postpones elections', 'Those who watched say little changed', 'geopolitics')).toBe('elections')
+    expect(detectNewsCategory('World Health Organization warns of risks', '', 'geopolitics')).toBe('health')
+  })
+
+  it('rates "kills" headlines high', () => {
+    expect(detectNewsSeverity('Russian attack on Zaporizhzhia kills seven', '')).toBe('high')
+  })
+
+  it('pins places only at the start of a word', () => {
+    const src = NEWS_SOURCE_REGISTRY[0]
+    expect(inferGeo('Tirana hosts summit', '', src).countryCode).toBe(src.countryCode)
+    expect(inferGeo('The Dukes of Hazzard return', '', src).countryCode).toBe(src.countryCode)
+    expect(inferGeo('Iranian envoy arrives', '', src).countryCode).toBe('IR')
+    expect(inferGeo('Palestinian president speaks', '', src).countryCode).toBe('PS')
+    expect(inferGeo('UK inflation falls', '', src).countryCode).toBe('GB')
+  })
+
+  it('decodes HTML entities but never produces angle brackets', () => {
+    expect(decodeEntities('Abbas&#x27;s plan &amp; more &quot;x&quot;')).toBe('Abbas\'s plan & more "x"')
+    expect(decodeEntities('&lt;b&gt; &#60;i&#62;')).toBe('&lt;b&gt; &#60;i&#62;')
   })
 })

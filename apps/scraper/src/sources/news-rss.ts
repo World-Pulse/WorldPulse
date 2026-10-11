@@ -2098,7 +2098,7 @@ export function detectNewsSeverity(title: string, description: string): SignalSe
 
   // High: confirmed deaths, large explosions, major crisis
   if (
-    /\b(killed|dead|deaths|bombings?|missile\s+strikes?|air\s+strikes?|earthquakes?|tsunamis?|hurricanes?|invasion|coups?|emergency\s+declared|terror\s+attacks?|assassination|refugee\s+crisis|famine|outbreaks?)\b/i.test(text)
+    /\b(kills?|killed|dead|deaths|bombings?|missile\s+strikes?|air\s+strikes?|earthquakes?|tsunamis?|hurricanes?|invasion|coups?|emergency\s+declared|terror\s+attacks?|assassination|refugee\s+crisis|famine|outbreaks?)\b/i.test(text)
   ) return 'high'
 
   // Medium: conflict/tension, significant events (plurals too: "sanctions",
@@ -2124,11 +2124,11 @@ export function detectNewsCategory(
 ): Category {
   const text = `${title} ${description}`.toLowerCase()
 
-  if (/\b(pandemic|outbreak|virus|disease|epidemic|vaccine|who|health\s+emergency|pathogen|mpox|ebola|flu|covid)\b/.test(text))
+  if (/\b(pandemic|outbreak|virus|disease|epidemic|vaccine|world\s+health\s+organi[sz]ation|health\s+emergency|pathogen|mpox|ebola|flu|covid)\b/.test(text))
     return toCategory('health')
   if (/\b(earthquake|tsunami|hurricane|typhoon|cyclone|wildfire|flood|eruption|volcano|tornado|blizzard|drought|disaster)\b/.test(text))
     return toCategory('disaster')
-  if (/\b(election|vote|voting|ballot|democracy|referendum|poll|candidate|campaign|inauguration)\b/.test(text))
+  if (/\b(elections?|votes?|voting|ballots?|democracy|referendum|polls?|candidates?|campaigns?|inauguration)\b/.test(text))
     return toCategory('elections')
   if (/\b(stock\s+market|recession|inflation|gdp|central\s+bank|interest\s+rate|economy|trade\s+war|tariff|sanction|oil\s+price|crypto)\b/.test(text))
     return toCategory('economy')
@@ -2285,6 +2285,19 @@ export function parseFeedItems(xml: string): FeedItem[] {
   return items.slice(0, MAX_ITEMS)
 }
 
+/** Feeds send "&#x27;" and "&amp;" in titles and summaries; show the characters.
+ *  Angle brackets stay encoded so decoded text can never become markup. */
+export function decodeEntities(text: string): string {
+  const named: Record<string, string> = { amp: '&', quot: '"', apos: "'", nbsp: ' ' }
+  return text.replace(/&(?:#x([0-9a-f]+)|#(\d+)|([a-z]+));/gi, (whole, hex, dec, name) => {
+    const code = hex ? parseInt(hex, 16) : dec ? parseInt(dec, 10) : NaN
+    if (!Number.isNaN(code)) {
+      return code > 0 && code <= 0x10ffff && code !== 60 && code !== 62 ? String.fromCodePoint(code) : whole
+    }
+    return named[String(name).toLowerCase()] ?? whole
+  })
+}
+
 // ─── DEDUP ────────────────────────────────────────────────────────────────────
 
 export function newsRedisKey(sourceId: string, articleUrl: string): string {
@@ -2330,6 +2343,17 @@ const GEO_HINTS: Array<{ keywords: string[]; geo: GeoHint }> = [
   { keywords: ['mexico', 'mexico city', 'pemex'],                     geo: { lat: 19.43,  lng: -99.13,  name: 'Mexico City, Mexico', code: 'MX' } },
 ]
 
+/**
+ * A hint matches at the start of a word, so "iran" no longer pins "Tirana".
+ * Short hints ("uk", "abe", "idf") must also end the word, or they pin "Dukes"
+ * and "label"; longer ones may be prefixes ("palestin" for Palestinian).
+ */
+function hintMatches(text: string, keyword: string): boolean {
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const end = keyword.length <= 3 ? '(?![a-z0-9])' : ''
+  return new RegExp(`(?<![a-z0-9])${escaped}${end}`).test(text)
+}
+
 export function inferGeo(
   title:       string,
   description: string,
@@ -2338,7 +2362,7 @@ export function inferGeo(
   const text = `${title} ${description}`.toLowerCase()
 
   for (const { keywords, geo } of GEO_HINTS) {
-    if (keywords.some(kw => text.includes(kw))) {
+    if (keywords.some(kw => hintMatches(text, kw))) {
       return {
         lat:          geo.lat,
         lng:          geo.lng,
@@ -2372,8 +2396,7 @@ async function processItem(
   const seen = await redis.get(key)
   if (seen) return false
 
-  const title       = item.title.slice(0, 500) || `${source.name} — news item`
-  const fullText    = `${item.title} ${item.description}`
+  const title       = decodeEntities(item.title).slice(0, 500) || `${source.name} — news item`
   const severity    = detectNewsSeverity(item.title, item.description)
   const category    = detectNewsCategory(item.title, item.description, source.category)
   const geo         = inferGeo(item.title, item.description, source)
@@ -2383,7 +2406,7 @@ async function processItem(
 
   const summary = [
     item.description
-      ? item.description.replace(/<[^>]+>/g, '').trim().slice(0, 600)
+      ? decodeEntities(item.description.replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim().slice(0, 600)
       : `${title}.`,
     `Source: ${source.name} (reliability: ${(source.reliability * 100).toFixed(0)}%, bias: ${source.biasLabel}).`,
     source.biasLabel === 'state-media'
