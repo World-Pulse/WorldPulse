@@ -166,7 +166,8 @@ export function tidyGeoName(name: string): string {
   const parts: string[] = []
   for (const raw of name.split(',')) {
     const part = raw.trim()
-    if (!part || part.includes('?') || parts.some(p => p.toLowerCase() === part.toLowerCase())) continue
+    // GDELT writes letters it can't encode as "?", and some arrive as "\uFFFD"
+    if (!part || /[?\uFFFD]/.test(part) || parts.some(p => p.toLowerCase() === part.toLowerCase())) continue
     parts.push(part)
   }
   return parts.join(', ')

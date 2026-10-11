@@ -328,6 +328,7 @@ export async function tidyGdeltPlaceNames(): Promise<number> {
     .where(function () {
       // (bound values: a literal ? in knex's raw SQL is read as a placeholder)
       this.whereRaw('title LIKE ?', ['%?%']).orWhereRaw('location_name LIKE ?', ['%?%'])
+        .orWhereRaw('title LIKE ?', ['%\uFFFD%']).orWhereRaw('location_name LIKE ?', ['%\uFFFD%'])
         .orWhereRaw('location_name ~ ?', ['^([^,]+), \\1(,|$)'])
     })
     .select('id', 'title', 'location_name')

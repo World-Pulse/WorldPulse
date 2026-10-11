@@ -449,3 +449,23 @@ describe('isStaleItem', () => {
     expect(isStaleItem('not a date', now)).toBe(false)
   })
 })
+
+describe('decodeFeed (Oct 11, 2026)', () => {
+  it('reads a feed in the character set its XML prolog declares', async () => {
+    const { decodeFeed } = await import('../news-rss')
+    const xml = '<?xml version="1.0" encoding="ISO-8859-1" ?><rss><title>Argentina cara amea\u00e7a planos</title></rss>'
+    expect(decodeFeed(Buffer.from(xml, 'latin1'), 'text/xml')).toContain('amea\u00e7a')
+  })
+
+  it("prefers the header's charset, and reads UTF-8 by default", async () => {
+    const { decodeFeed } = await import('../news-rss')
+    expect(decodeFeed(Buffer.from('<rss>S\u00e3o Paulo</rss>', 'latin1'), 'text/xml; charset=ISO-8859-1')).toBe('<rss>S\u00e3o Paulo</rss>')
+    expect(decodeFeed(Buffer.from('<rss>S\u00e3o Paulo</rss>', 'utf8'), 'application/rss+xml')).toBe('<rss>S\u00e3o Paulo</rss>')
+    expect(decodeFeed(Buffer.from('\uFEFF<?xml version="1.0" encoding="utf-8"?><rss>\u00e7</rss>', 'utf8'))).toContain('\u00e7')
+  })
+
+  it('falls back to UTF-8 for a character set it does not know', async () => {
+    const { decodeFeed } = await import('../news-rss')
+    expect(decodeFeed(Buffer.from('<?xml version="1.0" encoding="x-unknown-9"?><rss>\u00e7</rss>', 'utf8'))).toContain('\u00e7')
+  })
+})

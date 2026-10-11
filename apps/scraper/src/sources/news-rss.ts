@@ -2146,6 +2146,26 @@ export function detectNewsCategory(
 // ─── HTTP HELPER ──────────────────────────────────────────────────────────────
 
 /**
+ * A feed's text in the character set it declares: the Content-Type header's
+ * charset, else the XML prolog's encoding="…", else UTF-8. Folha de S.Paulo's
+ * feed is ISO-8859-1 (said only in its prolog); read as UTF-8, its accented
+ * letters were lost ("ameaça" became "amea\uFFFDa" on the map, Oct 11, 2026).
+ */
+export function decodeFeed(buf: Buffer, contentType = ''): string {
+  const fromHeader = /charset\s*=\s*["']?([\w.:-]+)/i.exec(contentType)?.[1]
+  const head = buf.subarray(0, 256).toString('latin1')
+  // (a UTF-8 byte-order mark reads as "\u00EF\u00BB\u00BF" in latin1)
+  const fromProlog = /^(?:\u00EF\u00BB\u00BF)?\s*<\?xml[^>]*?\bencoding\s*=\s*["']([\w.:-]+)["']/i.exec(head)?.[1]
+  const label = (fromHeader ?? fromProlog ?? 'utf-8').toLowerCase()
+  if (label === 'utf-8' || label === 'utf8') return buf.toString('utf8')
+  try {
+    return new TextDecoder(label).decode(buf)
+  } catch {
+    return buf.toString('utf8')   // a label Node doesn't know
+  }
+}
+
+/**
  * Fetch a URL using node http/https, following up to 3 redirects.
  * Sets a 20-second timeout and identifies as WorldPulse. Decodes gzip, deflate
  * and brotli bodies: some servers compress whatever the client asks for, and
@@ -2211,7 +2231,7 @@ export function fetchUrl(url: string, redirectCount = 0): Promise<string> {
         }
         chunks.push(chunk)
       })
-      body.on('end',   () => resolve(Buffer.concat(chunks).toString('utf8')))
+      body.on('end',   () => resolve(decodeFeed(Buffer.concat(chunks), String(res.headers['content-type'] ?? ''))))
       body.on('error', reject)
     })
 
