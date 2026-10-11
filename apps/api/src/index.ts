@@ -1,4 +1,5 @@
-import Fastify from 'fastify'
+import Fastify, { type FastifyError } from 'fastify'
+import { errorReply } from './lib/error-reply'
 import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
 import jwt from '@fastify/jwt'
@@ -79,7 +80,7 @@ import { cloudflareMiddlewarePlugin, buildCfAwareKeyGenerator } from './middlewa
 import { registerHealthRoutes } from './routes/health'
 import { registerStatusRoutes } from './routes/status'
 import { logger } from './lib/logger'
-import { initSentry, flushSentry } from './lib/sentry'
+import { initSentry, flushSentry, captureException } from './lib/sentry'
 import { setupSearchIndexes } from './lib/search'
 import { runStartupBackfill, syncRecentSignalsOnStartup } from './lib/search-backfill'
 import { connectSearchProducer, disconnectSearchProducer } from './lib/search-events'
@@ -96,6 +97,17 @@ const app = Fastify({
       : undefined,
   },
   trustProxy: true,
+})
+
+// A failed request's answer (lib/error-reply.ts): an unexpected error says
+// nothing about its internals, and is logged and sent to Sentry when set up
+app.setErrorHandler((err: FastifyError, req, reply) => {
+  const { status, internal, body } = errorReply(err)
+  if (internal) {
+    req.log.error({ err }, 'Request failed')
+    captureException(err, { url: req.url, method: req.method })
+  }
+  return reply.status(status).send(body)
 })
 
 async function bootstrap() {

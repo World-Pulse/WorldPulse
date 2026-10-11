@@ -910,8 +910,10 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     const otherIds = cluster.signal_ids.filter(sid => sid !== id)
     const signals = otherIds.length > 0
       ? await db('signals')
+          // signals keep their sources in source_ids (there is no source_id column:
+          // asking for one made this a 500 for every clustered signal)
           .select('id', 'title', 'summary', 'category', 'severity',
-                  'reliability_score', 'location_name', 'source_id', 'created_at')
+                  'reliability_score', 'location_name', db.raw('source_ids[1]::text AS source_id'), 'created_at')
           .whereIn('id', otherIds)
           .limit(20)
       : []
