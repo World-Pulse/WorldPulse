@@ -196,8 +196,12 @@ export class ConflictZoneOverlay {
   private _startPulseAnimation(): void {
     this._startMs = performance.now()
 
+    let last = 0
     const tick = (now: number): void => {
       if (!this._active) return
+      this._rafId = requestAnimationFrame(tick)
+      if (now - last < 66) return   // ~15 redraws a second is plenty for a slow pulse
+      last = now
       const elapsed = ((now - this._startMs) % 2000) / 2000   // 0 → 1 per 2 s cycle
       const radius  = 14 + elapsed * 16                        // 14 → 30
       const opacity = 0.3 * (1 - elapsed)                      // 0.3 → 0.0
@@ -207,7 +211,6 @@ export class ConflictZoneOverlay {
           this.map.setPaintProperty(CONFLICT_PULSE_ID, 'circle-opacity', opacity)
         }
       } catch { /* map transitioning */ }
-      this._rafId = requestAnimationFrame(tick)
     }
 
     this._rafId = requestAnimationFrame(tick)

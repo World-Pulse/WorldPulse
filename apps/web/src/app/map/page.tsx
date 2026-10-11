@@ -1006,11 +1006,15 @@ function MapView() {
         // ── Animation loop ────────────────────────────────────
 
         // Critical signals send out a slow ripple; new arrivals get a pulsing gold ring
-        let pulseT = 0
-        let hlT    = 0
-        const animatePulse = () => {
-          pulseT = (pulseT + 0.012) % 1
-          hlT    += 0.07
+        // Redrawn about 15 times a second (not every frame): the motion looks the
+        // same but the map repaints a quarter as often.
+        let lastTickMs = 0
+        const animatePulse = (now: number) => {
+          animFrameRef.current = requestAnimationFrame(animatePulse)
+          if (now - lastTickMs < 66) return
+          lastTickMs = now
+          const pulseT = (now % 4000) / 4000      // one ripple every 4 s
+          const hlT    = (now / 1000) * 4.2       // gold ring breathes ~every 1.5 s
           const r  = 8 + pulseT * 18
           const o  = 0.65 * (1 - pulseT)
           const hr = 16 + Math.sin(hlT) * 5
@@ -1021,7 +1025,6 @@ function MapView() {
             map.setPaintProperty('new-highlight',  'circle-radius',          hr)
             map.setPaintProperty('new-highlight',  'circle-stroke-opacity',  ho)
           } catch { /* layer removed */ }
-          animFrameRef.current = requestAnimationFrame(animatePulse)
         }
         animFrameRef.current = requestAnimationFrame(animatePulse)
 

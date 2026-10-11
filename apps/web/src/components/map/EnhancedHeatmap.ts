@@ -264,8 +264,12 @@ export class EnhancedHeatmap {
   private _startGlowAnimation(): void {
     this._startMs = performance.now()
 
+    let last = 0
     const tick = (now: number) => {
       if (!this._active) return
+      this._rafId = requestAnimationFrame(tick)
+      if (now - last < 66) return   // ~15 redraws a second is plenty for a slow glow
+      last = now
       const elapsed = (now - this._startMs) / 3000          // normalised 0→1 per cycle
       const opacity = 0.3 + 0.3 * Math.sin(elapsed * 2 * Math.PI)  // 0.3 … 0.6
       try {
@@ -273,7 +277,6 @@ export class EnhancedHeatmap {
           this.map.setPaintProperty(GLOW_LAYER_ID, 'heatmap-opacity', opacity)
         }
       } catch { /* benign — map transitioning */ }
-      this._rafId = requestAnimationFrame(tick)
     }
 
     this._rafId = requestAnimationFrame(tick)
