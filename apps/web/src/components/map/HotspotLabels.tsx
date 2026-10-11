@@ -26,6 +26,7 @@ import type { Map as MapLibreMap } from 'maplibre-gl'
 export interface HotspotForLabel {
   centerLat:      number
   centerLng:      number
+  place?:         string | null
   signalCount:    number
   categoryCount:  number
   categories:     string[]
@@ -76,6 +77,7 @@ function categoryEmoji(categories: string[]): string {
 }
 
 function shortLocation(hs: HotspotForLabel): string {
+  if (hs.place) return hs.place.split(',')[0].trim()
   // Best effort: grab location name from first sample title if it contains
   // a dash-separated location like "Ukraine — Shelling..."
   const title = hs.sampleTitles[0] ?? ''

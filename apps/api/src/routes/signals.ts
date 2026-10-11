@@ -85,6 +85,18 @@ const SOURCES_DATA_SQL = `
   ) as sources_data
 `
 
+/**
+ * A Postgres array as strings, whether node-pg parsed it (text[]) or not
+ * (arrays of enum types come back as one string: "{conflict,health}").
+ */
+export function pgTextArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String)
+  if (typeof value !== 'string') return []
+  const inner = value.trim().replace(/^\{|\}$/g, '')
+  if (!inner) return []
+  return inner.split(',').map(v => v.trim().replace(/^"(.*)"$/, '$1')).filter(Boolean)
+}
+
 export const UpdateSignalSchema = z.object({
   status:            z.enum(['pending', 'verified', 'disputed', 'false', 'retracted']).optional(),
   severity:          z.enum(['critical', 'high', 'medium', 'low', 'info']).optional(),
@@ -1067,28 +1079,47 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       try { return reply.send(JSON.parse(cached)) } catch { /* fallthrough */ }
     }
 
-    // Use validated integers — safe for template literal interpolation
+    // Use validated integers — safe for template literal interpolation.
+    // Only medium-or-worse signals count towards a convergence, and cells are
+    // ranked by how serious they are: by plain counts the top cells were the
+    // capitals where country-level stories are pinned (London, Delhi, Beijing:
+    // 16 "domains" of everyday news each, all "low"). Before Oct 11, 2026 the
+    // categories also came back as one string ("{conflict,health}", an enum
+    // array node-pg doesn't parse), which crashed the map's list; the centre
+    // was the cell's south-west-most point, and MAX(severity) followed the
+    // enum's order, not seriousness.
     const result = await db.raw<{ rows: Array<Record<string, unknown>> }>(`
+      WITH s AS (
+        SELECT
+          ST_Y(location::geometry) AS lat,
+          ST_X(location::geometry) AS lng,
+          category::text           AS category,
+          CASE severity::text WHEN 'critical' THEN 5 WHEN 'high' THEN 4 WHEN 'medium' THEN 3 WHEN 'low' THEN 2 ELSE 1 END AS sev_rank,
+          reliability_score, created_at, title, id, location_name
+        FROM signals
+        WHERE location IS NOT NULL
+          AND created_at > NOW() - INTERVAL '${hours} hours'
+          AND status IN ('verified', 'pending')
+      )
       SELECT
-        ROUND(ST_Y(location::geometry)::numeric, 0)::integer  AS cell_lat,
-        ROUND(ST_X(location::geometry)::numeric, 0)::integer  AS cell_lng,
-        COUNT(*)::integer                                      AS signal_count,
-        COUNT(DISTINCT category)::integer                      AS category_count,
-        ARRAY_AGG(DISTINCT category)                           AS categories,
-        MAX(severity)                                          AS max_severity,
-        ROUND(AVG(reliability_score)::numeric, 3)              AS avg_reliability,
-        MAX(created_at)                                        AS latest_signal_at,
-        MIN(ROUND(ST_Y(location::geometry)::numeric, 4))       AS center_lat,
-        MIN(ROUND(ST_X(location::geometry)::numeric, 4))       AS center_lng,
-        (ARRAY_AGG(title ORDER BY created_at DESC))[1:3]       AS sample_titles,
-        (ARRAY_AGG(id    ORDER BY created_at DESC))[1:3]       AS sample_ids
-      FROM signals
-      WHERE location IS NOT NULL
-        AND created_at > NOW() - INTERVAL '${hours} hours'
-        AND status IN ('verified', 'pending')
+        ROUND(lat::numeric, 0)::integer                                        AS cell_lat,
+        ROUND(lng::numeric, 0)::integer                                        AS cell_lng,
+        COUNT(*)::integer                                                      AS signal_count,
+        (COUNT(DISTINCT category) FILTER (WHERE sev_rank >= 3))::integer       AS category_count,
+        ARRAY_AGG(DISTINCT category) FILTER (WHERE sev_rank >= 3)              AS categories,
+        (ARRAY['info', 'low', 'medium', 'high', 'critical'])[MAX(sev_rank)]    AS max_severity,
+        ROUND(AVG(reliability_score)::numeric, 3)                              AS avg_reliability,
+        MAX(created_at)                                                        AS latest_signal_at,
+        ROUND(AVG(lat)::numeric, 4)                                            AS center_lat,
+        ROUND(AVG(lng)::numeric, 4)                                            AS center_lng,
+        MODE() WITHIN GROUP (ORDER BY location_name)                           AS place,
+        (ARRAY_AGG(title ORDER BY sev_rank DESC, created_at DESC))[1:3]        AS sample_titles,
+        (ARRAY_AGG(id::text ORDER BY sev_rank DESC, created_at DESC))[1:3]     AS sample_ids,
+        SUM(CASE sev_rank WHEN 5 THEN 8 WHEN 4 THEN 4 WHEN 3 THEN 1 ELSE 0 END) AS weight
+      FROM s
       GROUP BY cell_lat, cell_lng
-      HAVING COUNT(DISTINCT category) >= ${minCat}
-      ORDER BY COUNT(DISTINCT category) DESC, COUNT(*) DESC
+      HAVING COUNT(DISTINCT category) FILTER (WHERE sev_rank >= 3) >= ${minCat}
+      ORDER BY weight DESC, category_count DESC, signal_count DESC
       LIMIT ${limit}
     `)
 
@@ -1097,14 +1128,15 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       cellLng:         r.cell_lng,
       centerLat:       parseFloat(String(r.center_lat ?? r.cell_lat)),
       centerLng:       parseFloat(String(r.center_lng ?? r.cell_lng)),
+      place:           typeof r.place === 'string' && r.place ? r.place : null,
       signalCount:     Number(r.signal_count),
       categoryCount:   Number(r.category_count),
-      categories:      r.categories as string[],
+      categories:      pgTextArray(r.categories),
       maxSeverity:     r.max_severity as string,
       avgReliability:  parseFloat(String(r.avg_reliability ?? '0')),
       latestSignalAt:  r.latest_signal_at ? (r.latest_signal_at as Date).toISOString() : null,
-      sampleTitles:    (r.sample_titles as string[] | null) ?? [],
-      sampleIds:       (r.sample_ids   as string[] | null) ?? [],
+      sampleTitles:    pgTextArray(r.sample_titles),
+      sampleIds:       pgTextArray(r.sample_ids),
     }))
 
     const payload = { success: true, data: { hotspots, hours, minCategoryCount: minCat, generatedAt: new Date().toISOString() } }

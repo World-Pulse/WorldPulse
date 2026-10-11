@@ -28,6 +28,7 @@ import { useLastVisit } from '@/hooks/useLastVisit'
 import { sinceLastVisit, awayLabel } from '@/lib/last-visit'
 import { countryAt, loadCountryShapes, focusBboxOf, type CountryHit } from '@/lib/country-shapes'
 import { signalsInCountry, countryBrief } from '@/lib/country-brief'
+import { toHotspot, hotspotPlace, type Hotspot } from '@/lib/hotspots'
 import { ensureMapIcon, MAP_ICON } from '@/lib/map-icons'
 import {
   SEVERITY_COLOR, SEVERITY_BG, SEVERITY_RANK, CLUSTER_COLOR_EXPR, SIGNAL_RADIUS_EXPR, FONT_BOLD,
@@ -392,18 +393,6 @@ function MapView() {
   const [mapMoveCount, setMapMoveCount] = useState(0)
 
   // ── Geographic Convergence Hotspots state ──────────────────────────────────
-  interface Hotspot {
-    centerLat:      number
-    centerLng:      number
-    signalCount:    number
-    categoryCount:  number
-    categories:     string[]
-    maxSeverity:    string
-    avgReliability: number
-    latestSignalAt: string | null
-    sampleTitles:   string[]
-    sampleIds:      string[]
-  }
   const [hotspots,     setHotspots]     = useState<Hotspot[]>([])
   const [hotspotsOpen, setHotspotsOpen] = useState(false)
   const [layersOpen,   setLayersOpen]   = useState(false)
@@ -428,10 +417,13 @@ function MapView() {
     let mounted = true
     async function fetchHotspots() {
       try {
-        const res  = await fetch(`${API_URL}/api/v1/signals/map/hotspots?hours=168&min_categories=2&limit=25`)
+        // The last 24 hours, as the list says (it asked for 7 days)
+        const res  = await fetch(`${API_URL}/api/v1/signals/map/hotspots?hours=24&min_categories=2&limit=25`)
         if (!res.ok) return
-        const json = await res.json() as { success: boolean; data: { hotspots: Hotspot[] } }
-        if (mounted && json.success) setHotspots(json.data.hotspots)
+        const json = await res.json() as { success: boolean; data?: { hotspots?: unknown[] } }
+        if (mounted && json.success) {
+          setHotspots((json.data?.hotspots ?? []).map(toHotspot).filter((h): h is Hotspot => h !== null))
+        }
       } catch { /* silent — non-critical widget */ }
     }
     fetchHotspots()
@@ -3656,8 +3648,8 @@ function MapView() {
                             {hs.categoryCount} domains · {hs.signalCount} signals
                           </span>
                         </div>
-                        <div className="font-mono text-[9px] text-wp-text3 mb-0.5">
-                          {hs.centerLat.toFixed(1)}°, {hs.centerLng.toFixed(1)}°
+                        <div className="font-mono text-[9px] text-wp-text3 mb-0.5 truncate">
+                          {hotspotPlace(hs)}
                         </div>
                         <div className="flex gap-1 flex-wrap">
                           {hs.categories.slice(0, 4).map(cat => (
