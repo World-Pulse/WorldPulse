@@ -22,6 +22,7 @@ import { StoryOutlets, storyOf } from './StoryOutlets'
 import type { StoryInfo } from './StoryOutlets'
 import { Users, Cpu, Radio, Newspaper } from 'lucide-react'
 import { displaySummary, isStateMedia, STATE_MEDIA_NOTE, outletSite } from '@/lib/signal-text'
+import { freshDigest, lastDigestUpdate, updatedAgo } from './digest'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -95,6 +96,8 @@ interface FeedItem {
   story?: StoryInfo
   /** The signal's status (verified, pending, …) */
   signalStatus?: string
+  /** When an AI Digest item was published */
+  createdAt?: string
 }
 
 // ─── DATA ADAPTERS ───────────────────────────────────────────────────────────
@@ -313,7 +316,7 @@ function adaptPulseItem(item: any): FeedItem {
       handle:   '@' + (item.author?.handle ?? 'pulse'),
       verified: item.author?.verified ?? true,
       color:    'from-cyan-600 to-blue-900',
-      badge,
+      // (no author badge: the kind of piece shows once, as the source badge)
     },
     content:  cleanContent,
     tags:     item.tags ?? [],
@@ -326,6 +329,7 @@ function adaptPulseItem(item: any): FeedItem {
     hasBoosted:   false,
     hasBookmarked: item.hasBookmarked ?? false,
     time:     timeAgo(item.createdAt),
+    createdAt: item.createdAt,
     reliability: item.reliabilityScore ?? null,
     sourceBadge: badge,
   }
@@ -578,8 +582,8 @@ function FeedEmptyState({ tab }: { tab: string }) {
     return (
       <EmptyState
         icon={<Cpu className="w-10 h-10 text-wp-cyan" />}
-        headline="PULSE is warming up"
-        message="The AI Bureau is preparing its first briefings. Flash briefs, daily briefings, and analysis posts will appear here."
+        headline="No new briefings yet"
+        message="The AI Bureau writes flash briefs on breaking stories, a morning briefing and analyses through the day. They appear here as they're published."
       />
     )
   }
@@ -636,7 +640,7 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
       // feed/following returns { items, cursor, hasMore }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rawItems: any[] = data.items ?? []
-      const mapped: FeedItem[] = rawItems.map(item => {
+      let mapped: FeedItem[] = rawItems.map(item => {
         // PULSE feed returns pre-formatted items with type: 'ai_digest'
         if (item.type === 'ai_digest') {
           return adaptPulseItem(item)
@@ -648,13 +652,21 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
         return adaptPost(item as Post)
       })
 
+      let more: boolean = data.hasMore ?? false
+      // The AI Digest without months-old briefings, and no paging on into them (P5)
+      if (tab === 'digest') {
+        const { fresh, droppedOld } = freshDigest(mapped)
+        mapped = fresh
+        if (droppedOld) more = false
+      }
+
       if (nextCursor) {
         setItems(prev => [...prev, ...mapped])
       } else {
         setItems(mapped)
       }
       setCursor(data.cursor ?? null)
-      setHasMore(data.hasMore ?? false)
+      setHasMore(more)
     } catch (err) {
       console.error('[FeedList] fetch failed:', err)
       if (!nextCursor) {
@@ -679,9 +691,19 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
 
   if (loading) return <FeedSkeleton />
   if (items.length === 0) return <FeedEmptyState tab={tab} />
+  const digestUpdated = tab === 'digest' ? lastDigestUpdate(items) : null
 
   return (
     <div>
+      {digestUpdated && (
+        <p className="flex items-center gap-2 px-5 py-2 border-b border-[rgba(255,255,255,0.05)] font-mono text-[11px] text-wp-text3">
+          <Cpu className="w-3.5 h-3.5 text-wp-cyan flex-shrink-0" aria-hidden="true" />
+          <span>
+            AI Bureau · last update{' '}
+            <time dateTime={digestUpdated} title={new Date(digestUpdated).toLocaleString()}>{updatedAgo(digestUpdated)}</time>
+          </span>
+        </p>
+      )}
       {items.map(item => {
         const href = item.type === 'signal' && item.signalId ? `/signals/${item.signalId}` : `/posts/${item.id}`
         return (
