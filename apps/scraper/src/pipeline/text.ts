@@ -46,3 +46,26 @@ export function cleanUrl(url: string): string {
 
 /** Text that still has HTML codes worth decoding, or tags (for the repair) */
 export const ENCODED_TEXT_RE = /&(?:#x[0-9a-f]+|#\d+|amp|quot|apos|nbsp|gt|lt|rsquo|lsquo|rdquo|ldquo|ndash|mdash|hellip);|<\/?[a-z][^<>]*>/i
+
+/**
+ * Feed footers that aren't part of the story (Oct 11, 2026: 11 of the 100
+ * newest summaries): WordPress's "The post <title> appeared first on <site>.",
+ * "Read More: <link>", a trailing "Continue reading" or "Read more", and
+ * "[…]" (shown as "…").
+ */
+const FEED_FOOTERS: Array<[RegExp, string]> = [
+  [/\s*\bThe post\s.{1,400}?\sappeared first on\s[^.\n]{1,120}\.?/gi, ''],
+  [/\s*\bRead more\s*:\s*https?:\/\/\S+/gi, ''],
+  [/\s*\b(?:Continue reading|Read more)(?:\s*(?:\.\.\.|…|»|→))?\s*$/i, ''],
+  [/\s*\[(?:…|\.\.\.|&hellip;|&#8230;)\]/g, '…'],
+]
+
+/** A feed's description without its footers (see FEED_FOOTERS) */
+export function cleanSummary(text: string): string {
+  let out = text
+  for (const [re, by] of FEED_FOOTERS) out = out.replace(re, by)
+  return out.replace(/\s{2,}/g, ' ').trim()
+}
+
+/** Text with a feed footer worth removing (for the repair) */
+export const FEED_FOOTER_SQL = '(appeared first on|read more\\s*:\\s*https?://)'

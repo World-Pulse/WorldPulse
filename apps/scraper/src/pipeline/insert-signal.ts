@@ -31,7 +31,7 @@ import { dedup, checkSemanticDuplicate } from './dedup'
 import { processSignalForKnowledgeGraph, extractEntitiesRuleBased, upsertEntityNode } from './entity-graph'
 import { embedSignal } from './embeddings'
 import { signalsHavePublishedAt, publishedAtFor, sourceKey } from './signal-columns'
-import { decodeEntities, cleanUrl, cleanTitle } from './text'
+import { decodeEntities, cleanUrl, cleanTitle, cleanSummary } from './text'
 
 /** Signal ids are UUIDs; the dedup store can also hold '1' or 'pending' */
 const SIGNAL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -100,13 +100,14 @@ export interface CorrelationMeta {
  */
 
 /**
- * A signal's title and summary without HTML codes, and its links with "&"
- * for "&amp;". Changes the row in place (insertAndCorrelate has always
+ * A signal's title and summary without HTML codes (and the summary without
+ * feed footers), and its links with "&" for "&amp;". Changes the row in place (insertAndCorrelate has always
  * updated the caller's row, e.g. its reliability score) and returns it.
  */
 export function cleanSignalText(row: Record<string, unknown>): Record<string, unknown> {
   if (typeof row.title === 'string') row.title = cleanTitle(row.title)
-  if (typeof row.summary === 'string') row.summary = decodeEntities(row.summary)
+  // Feed footers ("The post … appeared first on …", "Read More: <link>") aren't the story
+  if (typeof row.summary === 'string') row.summary = cleanSummary(decodeEntities(row.summary)) || row.summary
   if (Array.isArray(row.original_urls)) {
     row.original_urls = row.original_urls.map(u => (typeof u === 'string' ? cleanUrl(u) : u))
   }

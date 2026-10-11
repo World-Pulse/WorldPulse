@@ -54,3 +54,21 @@ describe('cleanSignalText', () => {
     expect(cleanSignalText({ title: 'Plain', summary: null })).toEqual({ title: 'Plain', summary: null })
   })
 })
+
+describe('cleanSummary (feed footers, Oct 11, 2026)', () => {
+  it('takes out WordPress footers, "Read More" links and "[…]"', async () => {
+    const { cleanSummary } = await import('../text')
+    expect(cleanSummary('At least 12 people have been killed. The post 12 killed, 309 injured in Riyadh Airport attack appeared first on Vanguard News. Source: Vanguard News (Nigeria).'))
+      .toBe('At least 12 people have been killed. Source: Vanguard News (Nigeria).')
+    expect(cleanSummary('SERAP has sued the CBN. Read More: https://punchng.com/serap-sues-cbn/ Source: The Punch.'))
+      .toBe('SERAP has sued the CBN. Source: The Punch.')
+    expect(cleanSummary('Talks resumed in Geneva on Sunday [&#8230;]')).toBe('Talks resumed in Geneva on Sunday…')
+    expect(cleanSummary('Flooding cut roads across the north. Continue reading')).toBe('Flooding cut roads across the north.')
+  })
+
+  it('leaves the story alone', async () => {
+    const { cleanSummary } = await import('../text')
+    const story = 'The post office in Kyiv reopened; read more about the repairs in our live blog.'
+    expect(cleanSummary(story)).toBe(story)
+  })
+})

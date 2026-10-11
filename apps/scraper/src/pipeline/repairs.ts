@@ -11,7 +11,7 @@ import { db } from '../lib/postgres'
 import { EVENT_TEMPLATE_SQL } from './event-titles'
 import { countIndependentOutlets } from './independence'
 import { hostOf } from './signal-columns'
-import { decodeEntities, cleanUrl, cleanTitle, ENCODED_TEXT_RE } from './text'
+import { decodeEntities, cleanUrl, cleanTitle, ENCODED_TEXT_RE, cleanSummary, FEED_FOOTER_SQL } from './text'
 import { liftedSeverity, type SeverityRow } from './severity-lift'
 
 /** Where nginx serves uploaded post media (the uploads volume, under /uploads/) */
@@ -259,5 +259,27 @@ export async function liftCappedSeverities(): Promise<number> {
     raised++
   }
   return raised
+}
+
+/**
+ * Summaries of the last 3 days that end in a feed's footer ("The post …
+ * appeared first on …", "Read More: <link>") lose it (text.ts cleanSummary).
+ * Cleaned rows no longer match, so a later start finds nothing to do.
+ */
+export async function stripFeedFooters(): Promise<number> {
+  const rows = await db('signals')
+    .where('created_at', '>', db.raw("NOW() - INTERVAL '3 days'"))
+    .whereRaw('summary ~* ?', [FEED_FOOTER_SQL])
+    .select('id', 'summary')
+    .limit(5000) as Array<{ id: string; summary: string | null }>
+  let fixed = 0
+  for (const row of rows) {
+    if (!row.summary) continue
+    const clean = cleanSummary(row.summary)
+    if (clean === row.summary || clean.length === 0) continue
+    await db('signals').where('id', row.id).update({ summary: clean })
+    fixed++
+  }
+  return fixed
 }
 

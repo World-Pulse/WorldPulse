@@ -69,7 +69,7 @@ import { insertAndCorrelate } from '../pipeline/insert-signal'
 // Feed items published more than 3 days ago aren't news
 import { MAX_ITEM_AGE_MS, isStaleItem } from '../pipeline/freshness'
 // Feeds send "&#x27;" and "&amp;" in titles and summaries
-import { decodeEntities } from '../pipeline/text'
+import { decodeEntities, cleanSummary } from '../pipeline/text'
 import { placeFromText } from '../pipeline/geo'
 import { rateSeverity } from '../pipeline/severity'
 import { gdacsAlertLevel, gdacsSeverity, gdacsTags, tidyGdacsTitle } from './gdacs'
@@ -2453,7 +2453,7 @@ async function processItem(
 
   const summary = [
     item.description
-      ? decodeEntities(item.description.replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim().slice(0, 600)
+      ? cleanSummary(decodeEntities(item.description.replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ')).slice(0, 600) || `${title}.`
       : `${title}.`,
     `Source: ${source.name} (reliability: ${(source.reliability * 100).toFixed(0)}%, bias: ${source.biasLabel}).`,
     source.biasLabel === 'state-media'
