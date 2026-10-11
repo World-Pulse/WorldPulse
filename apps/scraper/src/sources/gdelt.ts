@@ -354,10 +354,14 @@ export function startGdeltPoller(
         // ── Fetch real article content for AI enrichment ────────────────
         const article = await extractArticle(row.sourceUrl)
 
-        // Use article title if available, fall back to CAMEO label
-        const title = article?.title
-          ? article.title.slice(0, 500)
-          : `${rootLabel}${locPart}`.slice(0, 500)
+        // No article, no signal (Oct 11, 2026): the fallback title, the
+        // event label and place ("Consultation in Moscow, Moskva, Russia"),
+        // says what kind of event GDELT coded where, not what happened. 156
+        // of 1,185 recent GDELT signals were such titles, on the map and in
+        // its Latest list; GDELT's coding of the event is often wrong too
+        // (a TV listing coded as "Fight").
+        if (!article?.title) { skipped++; continue }
+        const title = article.title.slice(0, 500)
 
         // ── AI classification from article content (upgrades category + summary) ──
         let category: Category = cameoCat
@@ -366,7 +370,7 @@ export function startGdeltPoller(
         let tags: string[] = ['osint', 'gdelt', `cameo-${row.eventRootCode}`]
         let language = 'en'
 
-        if (article?.body) {
+        if (article.body) {
           try {
             const classified = await classifyContent(title, article.body)
             category = classified.category
@@ -379,8 +383,8 @@ export function startGdeltPoller(
             summary = article.excerpt || `${rootLabel}${locPart}`.slice(0, 300)
           }
         } else {
-          // No article fetched — fall back to CAMEO-derived summary (better than raw codes)
-          summary = `${rootLabel}${locPart}. Goldstein intensity: ${row.goldstein}.`
+          // A headline without text: its excerpt, else the event label and place
+          summary = article.excerpt || `${rootLabel}${locPart}`.slice(0, 300)
         }
 
         // ── Smart geolocation: prefer article-derived location over ActionGeo ──
@@ -390,22 +394,20 @@ export function startGdeltPoller(
         let signalCC   = row.countryCode || null
         let signalRegion: string | null = null
 
-        if (article) {
-          // Use title + body to detect real event location
-          const geoText = `${title} ${article.body?.slice(0, 500) ?? ''}`
-          try {
-            const geo = await extractGeo(geoText)
-            if (geo.point && geo.lat != null && geo.lng != null) {
-              signalLat    = geo.lat
-              signalLng    = geo.lng
-              signalLoc    = geo.name ?? signalLoc
-              signalCC     = geo.countryCode ?? signalCC
-              signalRegion = geo.region ?? null
-              log.debug({ oldGeo: row.geoName, newGeo: geo.name }, 'GDELT: overrode ActionGeo with article-derived location')
-            }
-          } catch {
-            // Geo extraction failed — keep ActionGeo as fallback
+        // Use title + body to detect real event location
+        const geoText = `${title} ${article.body?.slice(0, 500) ?? ''}`
+        try {
+          const geo = await extractGeo(geoText)
+          if (geo.point && geo.lat != null && geo.lng != null) {
+            signalLat    = geo.lat
+            signalLng    = geo.lng
+            signalLoc    = geo.name ?? signalLoc
+            signalCC     = geo.countryCode ?? signalCC
+            signalRegion = geo.region ?? null
+            log.debug({ oldGeo: row.geoName, newGeo: geo.name }, 'GDELT: overrode ActionGeo with article-derived location')
           }
+        } catch {
+          // Geo extraction failed — keep ActionGeo as fallback
         }
 
         try {

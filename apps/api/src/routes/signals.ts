@@ -20,6 +20,7 @@ import {
   HistoryQuerySchema,
   HotspotsQuerySchema,
 } from '../lib/query-schemas'
+import { EVENT_TEMPLATE_SQL } from '../lib/story-list'
 
 // ─── Bbox Validation Helper ───────────────────────────────────────────────────
 /**
@@ -794,6 +795,12 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       .whereNotNull('location')
       .whereIn('status', ['verified', 'pending'])
       .where('created_at', '>', db.raw(`NOW() - INTERVAL '${safeHours} hours'`))
+      // GDELT events saved without their article have the event label and
+      // place for a title ("Consultation in Moscow, Moskva, Russia"): what
+      // kind of event was coded where, not what happened. Not on the map
+      // (6% of its newest 500 points, Oct 11, 2026); the scraper no longer
+      // saves them.
+      .whereRaw("NOT (tags @> ARRAY['gdelt']::text[] AND title ~ ?)", [EVENT_TEMPLATE_SQL])
       .select(lean
         ? [
             'id', 'title', 'category', 'severity', 'status',

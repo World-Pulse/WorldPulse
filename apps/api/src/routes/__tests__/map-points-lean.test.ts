@@ -68,6 +68,16 @@ describe('GET /api/v1/signals/map/points', () => {
     expect(h.calls.find(c => c.method === 'limit')?.args[0]).toBe(500)
   })
 
+  it("leaves out GDELT events titled only with the event label and place (\"Consultation in Moscow\")", async () => {
+    await (await app()).inject({ method: 'GET', url: '/api/v1/signals/map/points?hours=24&limit=3000&lean=1' })
+    const raw = h.calls.find(c => c.method === 'whereRaw' && /gdelt/.test(String(c.args[0])))
+    expect(String(raw?.args[0])).toBe("NOT (tags @> ARRAY['gdelt']::text[] AND title ~ ?)")
+    const re = new RegExp(String((raw?.args[1] as string[])[0]))
+    expect(re.test('Consultation in Moscow, Moskva, Russia')).toBe(true)
+    expect(re.test('Armed conflict in Khartoum, Sudan')).toBe(true)
+    expect(re.test('Riyadh airport attacked again, evacuated as explosions rock Saudi capital')).toBe(false)
+  })
+
   it('refuses more than 3,000', async () => {
     const res = await (await app()).inject({ method: 'GET', url: '/api/v1/signals/map/points?limit=5000&lean=1' })
     expect(res.statusCode).toBe(400)
