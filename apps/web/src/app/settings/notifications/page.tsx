@@ -3,6 +3,9 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 
+// The API is on its own host: "/api/v1/..." on the website's host is a 404
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://api.world-pulse.io'
+
 const SEVERITY_OPTIONS = ['critical', 'high', 'medium', 'low'] as const
 type MinSeverity = typeof SEVERITY_OPTIONS[number]
 
@@ -46,7 +49,7 @@ export default function NotificationsSettingsPage() {
     const token = localStorage.getItem('wp_access_token')
     if (!token) { setLoading(false); return }
 
-    fetch('/api/v1/notifications/settings', {
+    fetch(`${API_URL}/api/v1/notifications/settings`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => r.json())
@@ -60,7 +63,7 @@ export default function NotificationsSettingsPage() {
     if (!token) { showToast('Not authenticated', 'error'); return }
     setSaving(true)
     try {
-      const r = await fetch('/api/v1/notifications/settings', {
+      const r = await fetch(`${API_URL}/api/v1/notifications/settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(settings),
@@ -79,7 +82,7 @@ export default function NotificationsSettingsPage() {
     if (!token) { showToast('Not authenticated', 'error'); return }
     setTesting(true)
     try {
-      const r = await fetch('/api/v1/notifications/test', {
+      const r = await fetch(`${API_URL}/api/v1/notifications/test`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       })

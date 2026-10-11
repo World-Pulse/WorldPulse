@@ -2,6 +2,17 @@
 
 import { useState } from 'react'
 
+// The API is on its own host: "/api/v1/..." on the website's host is a 404
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://api.world-pulse.io'
+
+/** The summary as plain text: without the "**PULSE Summary:**" heading some carry, or markdown stars */
+export function plainSummary(text: string): string {
+  return text
+    .replace(/^\s*\**\s*PULSE Summary\s*:?\s*\**\s*:?\s*/i, '')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .trim()
+}
+
 interface AISummaryData {
   text:        string
   model:       'anthropic' | 'openai' | 'gemini' | 'openrouter' | 'ollama' | 'extractive'
@@ -57,7 +68,7 @@ export function AISummary({ signalId, aiSummary: initialSummary, isAdmin }: AISu
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/v1/signals/${signalId}/summary`)
+      const res = await fetch(`${API_URL}/api/v1/signals/${signalId}/summary`)
       if (!res.ok) throw new Error('Failed to load summary')
       const data = await res.json() as { success: boolean; data: { aiSummary: AISummaryData } }
       setSummary(data.data.aiSummary)
@@ -72,7 +83,7 @@ export function AISummary({ signalId, aiSummary: initialSummary, isAdmin }: AISu
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/v1/signals/${signalId}/summary?refresh=true`)
+      const res = await fetch(`${API_URL}/api/v1/signals/${signalId}/summary?refresh=true`)
       if (!res.ok) throw new Error('Failed to refresh summary')
       const data = await res.json() as { success: boolean; data: { aiSummary: AISummaryData } }
       setSummary(data.data.aiSummary)
@@ -125,7 +136,7 @@ export function AISummary({ signalId, aiSummary: initialSummary, isAdmin }: AISu
           {summary && !loading && (
             <>
               <p className="text-sm leading-relaxed text-gray-700 dark:text-gray-300">
-                {summary.text}
+                {plainSummary(summary.text)}
               </p>
               <div className="mt-2 flex items-center justify-between">
                 <span className="text-[11px] text-gray-400 dark:text-gray-500">

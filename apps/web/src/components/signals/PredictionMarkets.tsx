@@ -1,6 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { relevantMarkets } from '@/lib/market-relevance'
+
+// The API is on its own host: "/api/v1/..." on the website's host is a 404
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://api.world-pulse.io'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -226,11 +230,12 @@ export function PredictionMarkets({ signalId, category, title }: PredictionMarke
       ...(keywords ? { query: keywords } : {}),
     })
 
-    fetch(`/api/v1/polymarket/markets?${params.toString()}`)
+    fetch(`${API_URL}/api/v1/polymarket/markets?${params.toString()}`)
       .then(r => r.json() as Promise<PredictionMarketsResponse>)
       .then(json => {
         if (json.success) {
-          setMarkets(json.data.markets)
+          // Only markets about something the headline names (the search answers loosely)
+          setMarkets(relevantMarkets(json.data.markets ?? [], title))
         } else {
           setError('No prediction data')
         }

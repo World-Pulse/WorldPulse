@@ -421,7 +421,8 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
             {/* Tags */}
             {signal.tags.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
-                {signal.tags.map(tag => (
+                {/* A feed can tag a signal twice with one word ("the-hindu"): each tag once */}
+                {[...new Set(signal.tags)].map(tag => (
                   <Link
                     key={tag}
                     href={`/search?q=${encodeURIComponent(tag)}&type=tags`}

@@ -3,6 +3,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { PollData } from '@worldpulse/types'
 
+// The API is on its own host: "/api/v1/..." on the website's host is a 404
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://api.world-pulse.io'
+
 interface PollOption {
   text:  string
   votes: number
@@ -61,7 +64,7 @@ export function PollDisplay({ poll, pollId, postId }: PollDisplayProps) {
   const fetchPoll = useCallback(async () => {
     if (!pollId) return
     try {
-      const res = await fetch(`/api/v1/polls/${pollId}`, { credentials: 'include' })
+      const res = await fetch(`${API_URL}/api/v1/polls/${pollId}`, { credentials: 'include' })
       if (!res.ok) return
       const data = await res.json() as { success: boolean; data: PollInfo }
       if (data.success) setState(data.data)
@@ -87,7 +90,7 @@ export function PollDisplay({ poll, pollId, postId }: PollDisplayProps) {
     })
 
     try {
-      const res = await fetch(`/api/v1/polls/${pollId}/vote`, {
+      const res = await fetch(`${API_URL}/api/v1/polls/${pollId}/vote`, {
         method:      'POST',
         credentials: 'include',
         headers:     { 'Content-Type': 'application/json' },

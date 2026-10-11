@@ -21,6 +21,13 @@ const CACHE_KEY_PREFIX    = 'signal-ai-summary:'
 const MAX_INPUT_CHARS     = 2000           // truncate long bodies before sending to LLM
 const OPENAI_MODEL        = 'gpt-4o-mini'
 const ANTHROPIC_MODEL     = 'claude-haiku-4-5-20251001'
+
+/**
+ * Every provider's instructions end with this. Summaries added roles the text
+ * didn't give ("Former U.S. presidential candidate Donald Trump", Oct 11,
+ * 2026) and started with a markdown heading ("**PULSE Summary:**").
+ */
+const FACT_RULES = 'Use only facts the text states: add no titles, roles or background about people, places or events that it does not give. Write plain sentences: no heading, no markdown.'
 const GEMINI_MODEL        = process.env.GEMINI_MODEL ?? 'gemini-3.6-flash' // 2.0-flash shut down 2026-06-01
 const OLLAMA_MODEL        = process.env.OLLAMA_MODEL        ?? 'llama3.2'
 const OPENROUTER_MODEL    = process.env.OPENROUTER_MODEL    ?? 'meta-llama/llama-3.2-3b-instruct:free'
@@ -135,7 +142,7 @@ Write a concise 2-3 sentence summary following PULSE style:
 Sentence 1: What happened + where (active voice, lead with event).
 Sentence 2: Why it matters — significance, impact, or affected population.
 Sentence 3: What to watch next — forward-looking indicator or next development.
-Be factual and neutral. No hedging words. Cite source types when known.
+Be factual and neutral. No hedging words. Cite source types when known. ${FACT_RULES}
 ${language !== 'en' ? `Respond in ${language}.` : 'Respond in English.'}`,
         },
         {
@@ -171,7 +178,7 @@ async function generateWithOllama(
 ): Promise<AISummary> {
   const baseUrl = process.env.OLLAMA_URL ?? 'http://localhost:11434'
   const inputText = buildInputText(signal)
-  const prompt = `You are PULSE, the AI Bureau for WorldPulse. Write a concise 2-3 sentence summary following PULSE style: Sentence 1: What happened + where (active voice). Sentence 2: Why it matters. Sentence 3: What to watch next. Be factual.${language !== 'en' ? ` Respond in ${language}.` : ''}
+  const prompt = `You are PULSE, the AI Bureau for WorldPulse. Write a concise 2-3 sentence summary following PULSE style: Sentence 1: What happened + where (active voice). Sentence 2: Why it matters. Sentence 3: What to watch next. Be factual. ${FACT_RULES}${language !== 'en' ? ` Respond in ${language}.` : ''}
 
 ${inputText}
 
@@ -227,7 +234,7 @@ Write a concise 2-3 sentence summary following PULSE style:
 Sentence 1: What happened + where (active voice, lead with event).
 Sentence 2: Why it matters — significance, impact, or affected population.
 Sentence 3: What to watch next — forward-looking indicator or next development.
-Be factual and neutral. No hedging words. Cite source types when known.${language !== 'en' ? ` Respond in ${language}.` : ' Respond in English.'}`,
+Be factual and neutral. No hedging words. Cite source types when known. ${FACT_RULES}${language !== 'en' ? ` Respond in ${language}.` : ' Respond in English.'}`,
       messages: [{ role: 'user', content: inputText }],
     }),
   })
@@ -258,7 +265,7 @@ Write a concise 2-3 sentence summary following PULSE style:
 Sentence 1: What happened + where (active voice, lead with event).
 Sentence 2: Why it matters — significance, impact, or affected population.
 Sentence 3: What to watch next — forward-looking indicator or next development.
-Be factual and neutral. No hedging words. Cite source types when known.${language !== 'en' ? ` Respond in ${language}.` : ' Respond in English.'}
+Be factual and neutral. No hedging words. Cite source types when known. ${FACT_RULES}${language !== 'en' ? ` Respond in ${language}.` : ' Respond in English.'}
 
 ${inputText}`
 
@@ -313,7 +320,7 @@ Write a concise 2-3 sentence summary following PULSE style:
 Sentence 1: What happened + where (active voice, lead with event).
 Sentence 2: Why it matters — significance, impact, or affected population.
 Sentence 3: What to watch next — forward-looking indicator or next development.
-Be factual and neutral. No hedging words. Cite source types when known.${language !== 'en' ? ` Respond in ${language}.` : ' Respond in English.'}`,
+Be factual and neutral. No hedging words. Cite source types when known. ${FACT_RULES}${language !== 'en' ? ` Respond in ${language}.` : ' Respond in English.'}`,
         },
         { role: 'user', content: inputText },
       ],
