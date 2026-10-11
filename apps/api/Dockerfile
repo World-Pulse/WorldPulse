@@ -20,7 +20,9 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json ./
 COPY packages/types/ packages/types/
 COPY apps/api/ apps/api/
 RUN pnpm --filter @worldpulse/types build
-RUN pnpm --filter @worldpulse/api build || true
+# A TypeScript error now stops the build (the deploy then leaves the live API
+# untouched) instead of shipping silently; the type check is clean since 0c4178d
+RUN pnpm --filter @worldpulse/api build
 # Create a self-contained deployment: resolves workspace symlinks into real copies
 RUN pnpm deploy --filter @worldpulse/api --prod /prod/api
 
