@@ -16,10 +16,11 @@ import { useTimelinePlayback } from '@/hooks/useTimelinePlayback'
 import { parseWindowHash, encodePermalink, type MapPermalinkState, type LayerKey } from '@/lib/map-permalink'
 import {
   Map as MapIcon, Moon, Satellite, Globe2, LocateFixed, Layers as LayersIcon,
-  Flame, History, Swords, Crosshair, RadioTower, Anchor, Plane, Ship, Activity, ShieldAlert, Video,
+  Flame, History, Swords, Crosshair, RadioTower, Anchor, Plane, Ship, Activity, ShieldAlert, Video, List as ListIcon,
 } from 'lucide-react'
 import { LayersPanel, activeLayerCount, type MapLayerGroup } from '@/components/map/LayersPanel'
 import { MapLegend } from '@/components/map/MapLegend'
+import { LiveList, latestFirst } from '@/components/map/LiveList'
 import {
   SEVERITY_COLOR, SEVERITY_BG, SEVERITY_RANK, CLUSTER_COLOR_EXPR, SIGNAL_RADIUS_EXPR, FONT_BOLD,
   BASEMAP_MODES, BASEMAP_LABEL, ATMOSPHERE,
@@ -384,6 +385,20 @@ function MapView() {
   const [hotspots,     setHotspots]     = useState<Hotspot[]>([])
   const [hotspotsOpen, setHotspotsOpen] = useState(false)
   const [layersOpen,   setLayersOpen]   = useState(false)
+  // "Latest in view" list beside the map (M14): open by default on wide screens
+  const [listOpen,     setListOpen]     = useState(false)
+  const [inView,       setInView]       = useState<MapSignal[]>([])
+  const inViewKeyRef = useRef('')
+  const listOpenRef  = useRef(listOpen)
+  useEffect(() => { listOpenRef.current = listOpen }, [listOpen])
+  useEffect(() => { if (window.innerWidth >= 1280) setListOpen(true) }, [])
+  // On desktop the list covers the map's left 320px: centre the map in the rest
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || typeof window === 'undefined') return
+    const left = listOpen && window.innerWidth >= 768 ? 320 : 0
+    try { map.easeTo({ padding: { left, right: 0, top: 0, bottom: 0 }, duration: 400 }) } catch { /* map not ready */ }
+  }, [listOpen])
 
   useEffect(() => {
     let mounted = true
@@ -513,6 +528,26 @@ function MapView() {
       const props = f.properties as { cluster?: boolean; point_count?: number }
       return n + (props.cluster ? Number(props.point_count ?? 0) : 1)
     }, 0))
+    // The "Latest in view" list: the newest signals inside the same box
+    const [w, s, e, n] = bbox
+    // (the same headline from two feeds of one outlet shows once)
+    const seenTitles = new Set<string>()
+    const visible = latestFirst(signalsRef.current.filter(sig => {
+      const lat = Number(sig.lat), lng = Number(sig.lng)
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false
+      const inLng = w <= e ? lng >= w && lng <= e : lng >= w || lng <= e
+      return lat >= s && lat <= n && inLng
+    }), 200).filter(sig => {
+      const t = String(sig.title ?? '').trim().toLowerCase()
+      if (seenTitles.has(t)) return false
+      seenTitles.add(t)
+      return true
+    }).slice(0, 60)
+    const key = visible.map(v => v.id).join(',')
+    if (key !== inViewKeyRef.current) {
+      inViewKeyRef.current = key
+      setInView(visible)
+    }
   }, [])
 
   // ── New-signal highlight refresh ──────────────────────────────────────────
@@ -800,6 +835,11 @@ function MapView() {
         if (cancelled) return
         map.resize()
 
+        // If the "Latest in view" list is already open, centre the map beside it
+        if (listOpenRef.current && window.innerWidth >= 768) {
+          try { map.setPadding({ left: 320, right: 0, top: 0, bottom: 0 }) } catch { /* older MapLibre */ }
+        }
+
         // Basemap: night lights and satellite imagery sit under the borders and
         // labels; the chosen one is shown (lib/map-style.ts)
         baseIdsRef.current = baseLayerIds(base.style)
@@ -934,6 +974,19 @@ function MapView() {
             'circle-stroke-color': ['case', ['==', ['get', 'status'], 'verified'], '#ffffff', '#04060b'],
             'circle-stroke-width': ['case', ['==', ['get', 'status'], 'verified'], 1.6, 0.8],
             'circle-stroke-opacity': ['case', ['==', ['get', 'status'], 'verified'], 0.95, 0.85],
+          },
+        })
+
+        // ── The signal under the pointer in the "Latest in view" list ───
+        map.addSource('list-hover', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+        map.addLayer({
+          id: 'list-hover-ring', type: 'circle', source: 'list-hover',
+          paint: {
+            'circle-color': 'rgba(255,255,255,0.08)',
+            'circle-radius': 15,
+            'circle-stroke-color': '#ffffff',
+            'circle-stroke-width': 2,
+            'circle-stroke-opacity': 0.95,
           },
         })
 
@@ -3143,6 +3196,26 @@ function MapView() {
   const sevBg    = selected ? (SEV_BG[selected.severity]    ?? 'rgba(136,146,164,0.15)') : ''
   const srcUrl   = selected ? getSourceUrl(selected.original_urls) : null
 
+  // ── "Latest in view" list (M14) ───────────────────────────────────────────
+  const hoverOnMap = (item: { id: string } | null) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const src = mapRef.current?.getSource?.('list-hover') as any
+    if (!src) return
+    const sig = item ? signalsRef.current.find(x => x.id === item.id) : null
+    src.setData({
+      type: 'FeatureCollection',
+      features: sig ? [{ type: 'Feature', geometry: { type: 'Point', coordinates: [Number(sig.lng), Number(sig.lat)] }, properties: {} }] : [],
+    })
+  }
+  const selectFromList = (item: { id: string }) => {
+    const sig = signalsRef.current.find(x => x.id === item.id)
+    if (!sig) return
+    setSelected(sig)
+    if (typeof window !== 'undefined' && window.innerWidth < 768) setListOpen(false)
+    const map = mapRef.current
+    if (map) map.flyTo({ center: [Number(sig.lng), Number(sig.lat)], zoom: Math.max(map.getZoom(), 5), speed: 1.2, duration: 800 })
+  }
+
   // ── Layers (one panel, grouped by theme; plan M11) ─────────────────────────
   // WIND and SATS aren't offered until they show real data (M6): the wind
   // layer can't draw on MapLibre v5 and the satellite positions are rough
@@ -3282,6 +3355,21 @@ function MapView() {
             {wsNewCount > 0 && <span className="text-wp-green tabular-nums">+{wsNewCount}</span>}
           </div>
 
+          {/* Latest in view */}
+          <button
+            type="button"
+            onClick={() => setListOpen(o => !o)}
+            aria-expanded={listOpen}
+            aria-label="Latest signals in view"
+            className={`flex items-center gap-1.5 flex-shrink-0 h-8 px-2.5 rounded-lg border text-[12px] font-medium transition-colors
+              ${listOpen
+                ? 'border-[rgba(0,212,255,0.45)] text-[#4dd8ff] bg-[rgba(0,212,255,0.08)]'
+                : 'border-white/10 text-wp-text2 hover:text-wp-text hover:border-white/20'}`}
+          >
+            <ListIcon size={15} />
+            <span className="hidden sm:inline">Latest</span>
+          </button>
+
           {/* Layers */}
           <button
             type="button"
@@ -3308,6 +3396,15 @@ function MapView() {
       <div className="flex-1 relative overflow-hidden">
         {/* Outside the toolbar on purpose: its backdrop blur would trap the phone sheet */}
         <LayersPanel groups={layerGroups} open={layersOpen} onClose={() => setLayersOpen(false)} />
+        <LiveList
+          items={inView}
+          total={visibleCount}
+          open={listOpen}
+          selectedId={selected?.id ?? null}
+          onClose={() => { setListOpen(false); hoverOnMap(null) }}
+          onSelect={selectFromList}
+          onHover={hoverOnMap}
+        />
         <div ref={mapContainer} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', touchAction: 'none' }} />
 
         {/* BAT-16: Hotspot labels overlay — floating labels for dense signal zones at zoom > 5 */}
@@ -3321,7 +3418,7 @@ function MapView() {
         {/* ── Convergence Hotspots Widget ─────────────────────────────── */}
         {/* Shows geographic cells with 3+ distinct signal categories converging */}
         {hotspots.length > 0 && !selected && (
-          <div className="absolute left-4 top-4 z-10 max-w-[240px]">
+          <div className={`absolute top-4 z-10 max-w-[240px] transition-all ${listOpen ? 'left-4 md:left-[336px]' : 'left-4'}`}>
             <button
               onClick={() => setHotspotsOpen(o => !o)}
               className="w-full flex items-center gap-2 bg-[rgba(255,59,92,0.12)] border border-[rgba(255,59,92,0.35)] rounded-xl px-3 py-2 backdrop-blur-xl hover:bg-[rgba(255,59,92,0.2)] transition-all"
@@ -3394,7 +3491,7 @@ function MapView() {
         {/* Legend — hidden on mobile when panel is open to avoid overlap */}
         {/* Country risk legend — shown when choropleth is active */}
         {countryRiskMode && (
-          <div className={`absolute left-4 z-10 pointer-events-none transition-all duration-300 ${selected ? 'bottom-[calc(72%+108px)] md:bottom-[108px]' : 'bottom-[108px]'}`}>
+          <div className={`absolute z-10 pointer-events-none transition-all duration-300 ${listOpen ? 'left-4 md:left-[336px]' : 'left-4'} ${selected ? 'bottom-[calc(72%+108px)] md:bottom-[108px]' : 'bottom-[108px]'}`}>
             <div className="bg-[rgba(6,7,13,0.88)] border border-[rgba(255,255,255,0.09)] rounded-xl p-3 backdrop-blur-xl">
               <div className="font-mono text-[9px] tracking-[2px] text-wp-text3 uppercase mb-2">Country Risk</div>
               <div className="space-y-1.5">
@@ -3419,7 +3516,7 @@ function MapView() {
         )}
 
         {/* Legend: severities, verified ring, groups, and the layers that are on */}
-        <div className={`absolute left-4 z-10 transition-all duration-300 ${selected ? 'hidden md:block md:bottom-6' : 'bottom-6'}`}>
+        <div className={`absolute z-10 transition-all duration-300 ${listOpen ? 'left-4 md:left-[336px]' : 'left-4'} ${selected ? 'hidden md:block md:bottom-6' : 'bottom-6'}`}>
           <MapLegend counts={sevCounts} groups={layerGroups} />
         </div>
 
