@@ -1,6 +1,12 @@
 // ─── Geopolitical Risk Score ──────────────────────────────────────────────────
-// Composite 0-100 risk score derived from severity, reliability, corroboration,
-// and recency. Competes with WorldMonitor strategic risk scoring feature.
+// 0-100 risk score from severity, reliability, corroboration and recency.
+// Competes with WorldMonitor strategic risk scoring feature.
+//
+// Severity picks the band, so the level always matches the signal's severity
+// badge; how well the signal is confirmed (reliability, outlets) and how fresh
+// it is place the score within the band. Oct 11, 2026: the score was the sum
+// of the four factors, so a medium story with four fresh outlets showed
+// "Critical Risk · 78" beside its MEDIUM badge.
 
 export interface RiskScoreInput {
   severity: string          // "critical"|"high"|"medium"|"low"|"info"
@@ -24,7 +30,16 @@ export interface RiskScoreResult {
   label: string                 // e.g. "High Risk · 72"
 }
 
-// Severity weights (0-40)
+/** Each severity's part of the 0-100 scale (info sits low in "low") */
+const SEVERITY_BANDS: Record<string, [number, number]> = {
+  critical: [75, 100],
+  high:     [50, 74],
+  medium:   [25, 49],
+  low:      [0, 24],
+  info:     [0, 12],
+}
+
+// Severity weights (0-40), reported as a factor
 const SEVERITY_SCORES: Record<string, number> = {
   critical: 40,
   high:     30,
@@ -57,9 +72,10 @@ export function computeRiskScore(input: RiskScoreInput): RiskScoreResult {
     ageH <= 168 ? 4  :  // 7 days
     1
 
-  // ── Sum + clamp ───────────────────────────────────────────────────────────
-  const raw   = severityScore + reliabilityScore + corroborationScore + recencyScore
-  const score = Math.min(100, Math.max(0, Math.round(raw)))
+  // ── Severity's band, placed by confirmation and freshness (0-60) ──────────
+  const [low, high] = SEVERITY_BANDS[input.severity] ?? SEVERITY_BANDS.low!
+  const confidence  = (reliabilityScore + corroborationScore + recencyScore) / 60
+  const score = Math.min(100, Math.max(0, Math.round(low + confidence * (high - low))))
 
   // ── Level thresholds ──────────────────────────────────────────────────────
   const level: RiskScoreResult['level'] =

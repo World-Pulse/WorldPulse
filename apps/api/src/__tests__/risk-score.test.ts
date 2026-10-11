@@ -125,12 +125,20 @@ describe('computeRiskScore', () => {
     expect(computeRiskScore({ ...fixed, publishedAt: daysAgo(30)   }).factors.recencyScore).toBe(1)
   })
 
-  it('factor sum equals score (before clamp at 100)', () => {
-    const result = computeRiskScore({ ...BASE, severity: 'medium', reliabilityScore: 0.5, sourceCount: 2 })
-    const sum = result.factors.severityScore + result.factors.reliabilityScore
-      + result.factors.corroborationScore + result.factors.recencyScore
-    // Score is clamped, but for normal inputs the sum should equal score
-    expect(result.score).toBe(Math.min(100, Math.max(0, Math.round(sum))))
+  it("the level matches the severity; confirmation and freshness place the score in its band", () => {
+    // Was "Critical Risk · 78" beside a MEDIUM badge (Oct 11, 2026)
+    const medium = computeRiskScore({ ...BASE, severity: 'medium', reliabilityScore: 1, sourceCount: 4, publishedAt: minsAgo(10) })
+    expect(medium.level).toBe('medium')
+    expect(medium.score).toBe(49)
+    expect(medium.label).toBe('Medium Risk · 49')
+    // A critical report stays critical, low in its band while unconfirmed
+    const unconfirmed = computeRiskScore({ ...BASE, severity: 'critical', reliabilityScore: 0, sourceCount: 1, publishedAt: daysAgo(30) })
+    expect(unconfirmed.level).toBe('critical')
+    expect(unconfirmed.score).toBe(78) // 75 + (0 + 5 + 1) / 60 of 25
+    // (13 + 10 + 12) / 60 of the way from 50 to 74
+    const high = computeRiskScore({ ...BASE, severity: 'high', reliabilityScore: 0.5, sourceCount: 2, publishedAt: hoursAgo(3) })
+    expect(high.score).toBe(64)
+    expect(high.level).toBe('high')
   })
 
   it('reliability 1.0 → factor 25, 0.0 → factor 0', () => {
