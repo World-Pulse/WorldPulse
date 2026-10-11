@@ -68,14 +68,14 @@ export async function crossCheckVerification(
   now = new Date(),
 ): Promise<CrossCheckVerdict | null> {
   if (!claudeConfigured()) return null
+  // The report that just turned verified (the first id), and the story's oldest ones
   const found = await db.raw(
-    'SELECT id, title, summary FROM signals WHERE id = ANY(?::uuid[]) ORDER BY created_at ASC LIMIT 4',
-    [[...new Set(storyIds)]],
+    'SELECT id, title, summary FROM signals WHERE id = ANY(?::uuid[]) ORDER BY (id = ?::uuid) DESC, created_at ASC LIMIT 4',
+    [[...new Set(storyIds)], storyIds[0]],
   )
-  const reports: CrossCheckReport[] = [
-    ...((found as { rows?: Array<{ title: string; summary: string | null }> })?.rows ?? []),
-    ...extra,
-  ].filter(r => typeof r.title === 'string' && r.title.trim())
+  const saved = ((found as { rows?: Array<{ id: string; title: string; summary: string | null }> })?.rows ?? [])
+    .filter(r => typeof r.title === 'string' && r.title.trim())
+  const reports: CrossCheckReport[] = [...saved, ...extra.filter(r => typeof r.title === 'string' && r.title.trim())]
   if (reports.length < 2) return null
 
   const reply = await askClaude({ purpose: 'crosscheck', system: CROSSCHECK_SYSTEM, prompt: crossCheckPrompt(reports), maxTokens: 150, timeoutMs: 20_000 })
@@ -93,7 +93,8 @@ export async function crossCheckVerification(
   }
   await multi.exec()
   if (read && read.verdict !== 'same') logger.info({ storyId: storyIds[0], verdict: read.verdict, note: read.note }, 'Cross-check: a verified story Claude doubts')
-  if (read) await logOnSignalPages(storyIds, read).catch(err => logger.warn({ err }, 'Cross-check not logged on the signal pages'))
+  // (only on the pages of the reports Claude read)
+  if (read) await logOnSignalPages(saved.map(r => r.id), read).catch(err => logger.warn({ err }, 'Cross-check not logged on the signal pages'))
   return read?.verdict ?? null
 }
 
@@ -114,7 +115,7 @@ async function logOnSignalPages(storyIds: string[], read: { verdict: CrossCheckV
   const entry = timelineEntry(read)
   if (!entry) return
   const fresh: string[] = []
-  for (const id of new Set(storyIds)) {
+  for (const id of new Set(storyIds.filter(Boolean))) {
     if (await redis.set(`ai:verify:logged:${id}`, '1', 'EX', 6 * 3_600, 'NX') === 'OK') fresh.push(id)
   }
   if (fresh.length === 0) return

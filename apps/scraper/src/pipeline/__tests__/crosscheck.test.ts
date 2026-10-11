@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const h = vi.hoisted(() => ({
-  rows: [] as Array<{ title: string; summary: string | null }>,
+  rows: [] as Array<{ id?: string; title: string; summary: string | null }>,
   reply: null as string | null,
   ops: [] as Array<[string, ...unknown[]]>,
   asked: [] as Array<{ purpose: string; prompt: string }>,
@@ -95,7 +95,7 @@ describe("the verdict on each report's page", () => {
   beforeEach(() => { h.ops.length = 0; h.asked.length = 0; h.logged.length = 0; h.keys.clear() })
 
   it('writes a line in each report\'s verification timeline, once per report', async () => {
-    h.rows = [{ title: 'Strike hits Riyadh airport', summary: null }, { title: 'Riyadh airport struck again', summary: null }]
+    h.rows = [{ id: 'a', title: 'Strike hits Riyadh airport', summary: null }, { id: 'b', title: 'Riyadh airport struck again', summary: null }]
     h.reply = '{"same_event": true, "agree": false, "note": "13 dead in one report, 12 in the other."}'
     await crossCheckVerification(['a', 'b'], [], NOW)
     expect(h.logged).toEqual([
@@ -103,9 +103,17 @@ describe("the verdict on each report's page", () => {
       { signal_id: 'b', check_type: 'cross_check', result: 'warning', confidence: 0.6, notes: '[Claude] The outlets differ: 13 dead in one report, 12 in the other.' },
     ])
     // a new outlet's report joins: only it gets a line
+    h.rows = [{ id: 'c', title: 'Riyadh airport hit a second day', summary: null }, { id: 'a', title: 'Strike hits Riyadh airport', summary: null }]
     h.reply = '{"same_event": true, "agree": true, "note": "All describe the same strike."}'
-    await crossCheckVerification(['a', 'b', 'c'], [], NOW)
+    await crossCheckVerification(['c', 'a', 'b'], [], NOW)
     expect(h.logged.slice(2).map(r => [r.signal_id, r.result])).toEqual([['c', 'confirmed']])
+  })
+
+  it('reads the report that just turned verified first, and writes only on the pages it read', async () => {
+    h.rows = [{ id: 'new', title: 'Indian dies after Riyadh airport attack', summary: null }, { id: 'old1', title: 'Strike hits Riyadh airport', summary: null }]
+    h.reply = '{"same_event": true, "agree": true, "note": "Same attack."}'
+    await crossCheckVerification(['new', 'old1', 'old2', 'old3', 'old4', 'old5'], [], NOW)
+    expect(h.logged.map(r => r.signal_id)).toEqual(['new', 'old1'])
   })
 
   it('shows no "different event" line while it can\'t hold a story back', () => {
