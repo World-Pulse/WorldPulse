@@ -65,3 +65,26 @@ export function isStateMedia(tags: unknown): boolean {
 
 /** What the state-media badge says when you point at it */
 export const STATE_MEDIA_NOTE = 'A state-run outlet: it may reflect official government positions.'
+
+const words = (text: string): string[] => text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []
+
+/**
+ * The tags a story page shows: each once, and only those the story's own
+ * words use ("climate-change" when the text says "climate change"). Feeds tag
+ * every signal with words about themselves (#rss, #fr, #france24, #europe),
+ * and the scraper adds the category and severity the badges already show, so
+ * on Oct 12, 2026 a boat wreck off Djibouti read #france #europe. Two-letter
+ * tags are left out ("us" would match "told us").
+ */
+export function storyTags(tags: unknown, text: string): string[] {
+  if (!Array.isArray(tags)) return []
+  const said = new Set(words(text))
+  const shown = new Set<string>()
+  for (const tag of tags) {
+    if (typeof tag !== 'string' || tag === 'state-media') continue
+    const parts = words(tag)
+    if (parts.join('').length < 3 || !parts.every(p => said.has(p))) continue
+    shown.add(tag)
+  }
+  return [...shown]
+}

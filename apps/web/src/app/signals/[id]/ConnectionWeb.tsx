@@ -210,6 +210,9 @@ export function ConnectionWeb({ signalId }: ConnectionWebProps) {
   if (!loading && !error && connections.length === 0 && entities.length === 0 && !isOpen) {
     return null
   }
+  // An extra, not the story: if it can't load, leave it out rather than show a
+  // red "Failed to fetch" / "HTTP 429" box to a reader (Oct 12, 2026)
+  if (error) return null
 
   return (
     <div className="space-y-2">

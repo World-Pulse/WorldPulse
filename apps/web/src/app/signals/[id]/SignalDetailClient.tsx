@@ -17,7 +17,6 @@ import { ReliabilityDots } from '@/components/signals/ReliabilityDots'
 import { BiasCorrectionPanel } from '@/components/sources/BiasCorrectionPanel'
 import { AISummary } from '@/components/signals/AISummary'
 import { RiskScoreGauge } from '@/components/signals/RiskScoreGauge'
-import { RelatedSignals } from './RelatedSignals'
 import { ConnectionWeb } from './ConnectionWeb'
 import { CIBWarningBadge } from '@/components/signals/CIBWarningBadge'
 import { VerificationTimeline } from '@/components/signals/VerificationTimeline'
@@ -27,12 +26,9 @@ import { RichMediaEmbed, extractFirstEmbedUrl } from '@/components/RichMediaEmbe
 import { SignalMedia } from '@/components/signals/SignalMedia'
 import { SourceChain, distinctOutlets } from '@/components/signals/SourceChain'
 import { StoryMembers } from './StoryMembers'
-import { EventTimeline } from '@/components/signals/EventTimeline'
-import { TVClips } from '@/components/signals/TVClips'
-import { NewsImages } from '@/components/signals/NewsImages'
 import { PredictionMarkets } from '@/components/signals/PredictionMarkets'
 import { ShareMenu } from '@/components/signals/ShareMenu'
-import { displaySummary, isStateMedia, STATE_MEDIA_NOTE } from '@/lib/signal-text'
+import { displaySummary, isStateMedia, STATE_MEDIA_NOTE, storyTags } from '@/lib/signal-text'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -216,6 +212,7 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
   const flagCount   = signal.communityFlagCount ?? 0
   const isContested = signal.status === 'disputed' || flagCount >= 3
   const summaryText = displaySummary(signal.summary, signal.title)
+  const tags        = storyTags(signal.tags, `${signal.title} ${summaryText ?? ''}`)
 
   // One outlet number for the page (reading audit P9): the outlets that carried
   // this report's story, as the home page and the story timeline count them.
@@ -244,10 +241,11 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
 
         {/* Breadcrumb + share */}
         <div className="flex items-center justify-between gap-2 mb-6">
+          {/* Links are 44px tall on phones (tap targets): their text is centred so it lines up with the slashes */}
           <nav className="flex items-center gap-2 font-mono text-[11px] text-wp-text3 min-w-0 flex-1" aria-label="Breadcrumb">
-            <Link href="/" className="hover:text-wp-text transition-colors flex-shrink-0">Home</Link>
+            <Link href="/" className="inline-flex items-center hover:text-wp-text transition-colors flex-shrink-0">Home</Link>
             <span className="flex-shrink-0">/</span>
-            <Link href="/map" className="hover:text-wp-text transition-colors flex-shrink-0">Map</Link>
+            <Link href="/map" className="inline-flex items-center hover:text-wp-text transition-colors flex-shrink-0">Map</Link>
             <span className="flex-shrink-0">/</span>
             <span className="text-wp-text2 truncate max-w-[120px] sm:max-w-[200px]">{signal.title}</span>
           </nav>
@@ -370,11 +368,11 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
               title={signal.title}
             />
 
-            {/* GDELT TV News clips — counters GDELT's own TV News Visual Explorer (Mar 2026) */}
-            <TVClips signalId={signal.id} />
-
-            {/* GDELT visual news imagery — related article images via GDELT DOC API (counters GDELT Summary) */}
-            <NewsImages signalId={signal.id} />
+            {/* TV clips and news images left the page Oct 12, 2026 (plan 0p): GDELT's TV
+                API returns nothing without a station, and its image search allows one
+                request per 5 s for the whole server, so both always came back empty. Each
+                showed a grey placeholder on the first screen for ~5 s, then vanished and
+                the page jumped, and every visit spent GDELT requests the scraper needs. */}
 
             {/* Source chain — all sources with trust scores and article links */}
             <SourceChain
@@ -399,11 +397,12 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
             {/* CIB Warning Badge — coordinated narrative detection */}
             {cibResult && <CIBWarningBadge cibStatus={cibResult} />}
 
-            {/* Tags */}
-            {signal.tags.length > 0 && (
+            {/* Tags: only those the story's own words use. The rest describe the feed
+                (#rss, #fr, #france24) or repeat the badges (#disaster, #critical), and put
+                #france #europe on a boat wreck off Djibouti. */}
+            {tags.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
-                {/* A feed can tag a signal twice with one word ("the-hindu"): each tag once */}
-                {[...new Set(signal.tags)].map(tag => (
+                {tags.map(tag => (
                   <Link
                     key={tag}
                     href={`/search?q=${encodeURIComponent(tag)}&type=tags`}
@@ -433,8 +432,11 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
               <VerificationTimeline verifications={signal.verifications} />
             </div>
 
-            {/* Event Timeline — how this story developed over time */}
-            <EventTimeline signalId={signal.id} category={signal.category} />
+            {/* "Event timeline" left the page Oct 12, 2026: it listed the signal's
+                correlation cluster, which joins anything that arrived in the same hour in
+                "linked" categories (a Djibouti boat wreck with a Brussels climate march and
+                the economics Nobel), and every row read "Invalid Date". The story timeline
+                above (StoryMembers) shows how the story developed, from its own reports. */}
 
             {/* Source Media — embedded player + source link */}
             {(srcUrl || (signal.media_urls?.length ?? 0) > 0) && (() => {
@@ -521,11 +523,11 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
               )
             })()}
 
-            {/* Intelligence Web — entity-based connections */}
+            {/* Intelligence Web — recent stories naming the same people, places and organisations */}
             <ConnectionWeb signalId={signal.id} />
 
-            {/* Related signals from event cluster */}
-            <RelatedSignals signalId={signal.id} />
+            {/* (The "Related signals" panel read the same correlation cluster as the old
+                event timeline, so it went with it.) */}
 
             {/* Sources list with trust scores */}
             {signal.sources.length > 0 && (

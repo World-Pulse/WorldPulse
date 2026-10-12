@@ -68,45 +68,6 @@ function ResultBadge({ result }: { result: string }) {
   )
 }
 
-// ─── Aggregate score bar ──────────────────────────────────────────────────────
-
-function AggregateScoreBar({ verifications }: { verifications: Verification[] }) {
-  if (verifications.length === 0) return null
-
-  // Weighted average of confidence scores, penalising refuted results
-  const total = verifications.reduce((sum, v) => {
-    const c = Math.max(0, Math.min(1, v.confidence))
-    const result = v.result.toLowerCase()
-    if (RESULT_COLOR[result] === RESULT_COLOR['refuted']) return sum - c * 0.5
-    return sum + c
-  }, 0)
-  const score = Math.max(0, Math.min(1, total / verifications.length))
-  const pct   = Math.round(score * 100)
-  const color = score >= 0.7 ? '#00e676' : score >= 0.4 ? '#f5a623' : '#ff3b5c'
-
-  return (
-    <div className="mb-4 p-3 rounded-lg border border-white/[0.07] bg-white/[0.02]">
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="font-mono text-[10px] text-wp-text3 uppercase tracking-wider">
-          Aggregate reliability
-        </span>
-        <span className="font-mono text-[13px] font-bold" style={{ color }}>
-          {pct}%
-        </span>
-      </div>
-      <div className="h-1.5 bg-white/[0.07] rounded-full overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all"
-          style={{ width: `${pct}%`, background: color }}
-        />
-      </div>
-      <p className="font-mono text-[9px] text-wp-text3 mt-1">
-        Based on {verifications.length} check{verifications.length !== 1 ? 's' : ''}
-      </p>
-    </div>
-  )
-}
-
 // ─── Main component ───────────────────────────────────────────────────────────
 
 interface Props {
@@ -131,8 +92,9 @@ export function VerificationTimeline({ verifications }: Props) {
         )}
       </div>
 
-      {/* Aggregate score bar */}
-      <AggregateScoreBar verifications={verifications} />
+      {/* (No "aggregate reliability" bar since Oct 12, 2026: an average of the checks'
+          confidence, it disagreed with the reliability score beside it, 90% next to 97%.
+          Each check shows its own confidence below.) */}
 
       {/* Empty state */}
       {verifications.length === 0 && (

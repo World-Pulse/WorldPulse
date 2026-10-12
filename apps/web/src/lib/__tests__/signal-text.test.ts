@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { displaySummary, isStateMedia, outletSite } from '../signal-text'
+import { displaySummary, isStateMedia, outletSite, storyTags } from '../signal-text'
 
 const TITLE = 'Yemen’s Houthis renew warning over Saudi airports after deadly Riyadh attack'
 
@@ -55,5 +55,23 @@ describe('outletSite', () => {
     expect(outletSite([])).toBe('')
     expect(outletSite(null)).toBe('')
     expect(outletSite(['not a link'])).toBe('')
+  })
+})
+
+describe('storyTags', () => {
+  const text = 'At least 139 migrants die in boat wreck between Djibouti and Yemen. The International Organization for Migration said most were Ethiopian.'
+
+  it("drops tags about the feed and the badges, keeps the story's own words (Oct 12, 2026)", () => {
+    expect(storyTags(['news', 'rss', 'france24', 'fr', 'disaster', 'critical', 'france', 'europe'], text)).toEqual([])
+    expect(storyTags(['yemen', 'Djibouti', 'migration', 'yemen'], text)).toEqual(['yemen', 'Djibouti', 'migration'])
+  })
+
+  it('matches a several-word tag only when the text says every word', () => {
+    expect(storyTags(['climate-change', 'climate_summit'], 'Leaders discuss climate change in Belem')).toEqual(['climate-change'])
+  })
+
+  it('leaves out two-letter tags, the state-media marker and anything that is not text', () => {
+    expect(storyTags(['us', 'un', 'state-media', 42, null], 'The UN told us the state media story')).toEqual([])
+    expect(storyTags(null, text)).toEqual([])
   })
 })

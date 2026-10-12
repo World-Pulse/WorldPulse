@@ -356,7 +356,7 @@ export function DiscussionThread({ initialPosts, signalId, totalCount }: Props) 
     setPosts(prev => [...prev, newPost])
   }
 
-  const liveTotal  = totalCount + (posts.length - initialPosts.length)
+  const liveTotal  = (Number.isFinite(totalCount) ? totalCount : initialPosts.length) + (posts.length - initialPosts.length)
   const sorted     = sort === 'top'
     ? [...posts].sort((a, b) => (b.likeCount + b.boostCount) - (a.likeCount + a.boostCount))
     : posts

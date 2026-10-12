@@ -70,9 +70,13 @@ async function fetchSignalPosts(id: string): Promise<{ items: Post[]; total: num
     if (!res.ok) return { items: [], total: 0 }
     const json = await res.json() as {
       success: boolean
-      data?: { items: Post[]; total: number }
+      data?: { items?: Post[]; total?: number }
     }
-    return json.success ? (json.data ?? { items: [], total: 0 }) : { items: [], total: 0 }
+    const items = json.success && Array.isArray(json.data?.items) ? json.data.items : []
+    // The API pages with a cursor and sends no total: the heading read
+    // "Discussion (NaN)" (Oct 12, 2026). Count what arrived instead.
+    const total = typeof json.data?.total === 'number' ? json.data.total : items.length
+    return { items, total }
   } catch {
     return { items: [], total: 0 }
   }

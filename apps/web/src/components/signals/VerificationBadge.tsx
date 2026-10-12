@@ -192,14 +192,8 @@ export function VerificationBadge({ status, summary, size = 'sm', className = ''
         {cfg.icon}
       </span>
       <span>{cfg.label}</span>
-      {summary && summary.total_checks > 0 && size === 'md' && (
-        <span
-          className="ml-0.5 opacity-60"
-          aria-label={`${summary.confirmed_checks} of ${summary.total_checks} checks passed`}
-        >
-          {summary.confirmed_checks}/{summary.total_checks}
-        </span>
-      )}
+      {/* The check count ("1/1") is in the tooltip only: on the badge it read as a
+          score, and the verification log lists the checks (Oct 12, 2026) */}
     </span>
   )
 }
