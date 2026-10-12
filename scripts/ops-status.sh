@@ -142,18 +142,26 @@ PY
 # Where the disk goes: Docker's totals (images, containers, volumes, build
 # cache) with what could be cleared, each data volume, and the log folders, in
 # MB. Sizes only; nothing is read from inside the files. From 80% full, also
-# the biggest folders and files two levels down (Oct 12: Docker's totals
-# explained half of what was used).
+# the biggest folders and files up to four levels down (Oct 12: Docker's
+# totals explained half of what was used; /usr/share held 33 GB), and the
+# models Ollama keeps (it runs on the host for the scraper's embeddings).
 disk_stats() {
-  local sysdf vols logs used big=""
+  local sysdf vols logs used big="" ollama""
   sysdf=$(timeout 60 docker system df --format '{{.Type}}|{{.Size}}|{{.Reclaimable}}' 2>/dev/null) || sysdf=""
   vols=$(timeout 60 du -sm /var/lib/docker/volumes/*/_data 2>/dev/null) || vols=""
   logs=$(timeout 30 du -sm /var/log logs 2>/dev/null) || logs=""
   used=$(df --output=pcent / 2>/dev/null | tail -1 | tr -dc '0-9')
   if [ "${used:-0}" -ge 80 ]; then
-    big=$(timeout 150 nice -n 19 du -xam --max-depth=2 / 2>/dev/null | sort -rn | head -n 25) || big=""
+    big=$(timeout 150 nice -n 19 du -xam --max-depth=4 / 2>/dev/null | sort -rn | head -n 30) || big=""
   fi
-  SYSDF="$sysdf" VOLS="$vols" LOGS="$logs" BIG="$big" python3 - <<'PY' 2>/dev/null || printf 'null'
+  ollama=$(python3 -c '
+import sys, urllib.request
+for host in ("127.0.0.1", "172.19.0.1"):
+    try:
+        print(urllib.request.urlopen("http://%s:11434/api/tags" % host, timeout=5).read().decode()); sys.exit(0)
+    except Exception:
+        pass' 2>/dev/null) || ollama=""
+  SYSDF="$sysdf" VOLS="$vols" LOGS="$logs" BIG="$big" OLLAMA="$ollama" python3 - <<'PY' 2>/dev/null || printf 'null'
 import json, os, re
 UNITS = {'B': 1e-6, 'kB': 1e-3, 'KB': 1e-3, 'MB': 1, 'GB': 1e3, 'TB': 1e6}
 def mb(text):
@@ -178,10 +186,16 @@ for line in os.environ.get('LOGS', '').splitlines():
 folders = {}
 for line in os.environ.get('BIG', '').splitlines():
     m = re.match(r'(\d+)\s+(/[^\s]*)$', line.strip())
-    if m and m.group(2) != '/' and len(folders) < 12:
-        folders[m.group(2)[:60]] = int(m.group(1))
+    if m and m.group(2) != '/' and len(folders) < 16:
+        folders[m.group(2)[:80]] = int(m.group(1))
+models = {}
+try:
+    for mdl in (json.loads(os.environ.get('OLLAMA') or '{}').get('models') or [])[:20]:
+        models[str(mdl.get('name', '?'))[:60]] = round((mdl.get('size') or 0) / 1e6)
+except (ValueError, AttributeError):
+    models = {}
 print(json.dumps({'docker': docker, 'volumes_mb': dict(sorted(volumes.items(), key=lambda kv: -kv[1])[:12]),
-                  'logs_mb': logs, 'folders_mb': folders}, separators=(',', ':')))
+                  'logs_mb': logs, 'folders_mb': folders, 'ollama_models_mb': models}, separators=(',', ':')))
 PY
 }
 pipeline_stats() {
@@ -236,7 +250,7 @@ deploy_note() {
 pipe_cache=logs/pipeline-stats.json
 # Refresh every 30 minutes, or straight away when the cache predates a new field
 if [ ! -s "$pipe_cache" ] || [ -n "$(find "$pipe_cache" -mmin +29 2>/dev/null)" ] \
-   || ! grep -q '"folders_mb"' "$pipe_cache" 2>/dev/null; then
+   || ! grep -q '"ollama_models_mb"' "$pipe_cache" 2>/dev/null; then
   pipeline_stats > "$pipe_cache.tmp" 2>/dev/null \
     && python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$pipe_cache.tmp" 2>/dev/null \
     && mv "$pipe_cache.tmp" "$pipe_cache"
