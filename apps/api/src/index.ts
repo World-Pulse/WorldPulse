@@ -76,7 +76,8 @@ import { registerGraphQL } from './graphql'
 import { metricsPlugin } from './middleware/metrics'
 import { requestLoggerPlugin } from './middleware/request-logger'
 import { securityPlugin } from './middleware/security'
-import { cloudflareMiddlewarePlugin, buildCfAwareKeyGenerator } from './middleware/cloudflare'
+import { cloudflareMiddlewarePlugin } from './middleware/cloudflare'
+import { rateLimitOptions } from './lib/rate-limit-options'
 import { registerHealthRoutes } from './routes/health'
 import { registerStatusRoutes } from './routes/status'
 import { logger } from './lib/logger'
@@ -202,17 +203,8 @@ async function bootstrap() {
   // can read req.cfClientIp and req.isBehindCloudflare reliably.
   await app.register(cloudflareMiddlewarePlugin)
 
-  await app.register(rateLimit, {
-    max: 200,
-    timeWindow: '1 minute',
-    redis,
-    keyGenerator: buildCfAwareKeyGenerator,
-    errorResponseBuilder: () => ({
-      success: false,
-      error: 'Too many requests. Slow down.',
-      code: 'RATE_LIMITED',
-    }),
-  })
+  // Served even when Redis can't count a request (lib/rate-limit-options.ts)
+  await app.register(rateLimit, rateLimitOptions(redis))
 
   await app.register(websocket)
   await app.register(metricsPlugin)

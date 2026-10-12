@@ -10,12 +10,13 @@ import { CARD_SIZE, StoryCard, cardFonts, storyCardText, type CardOutlets, type 
 const API_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'https://api.world-pulse.io'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-async function getJson<T>(path: string): Promise<T | null> {
+/** The answer and its HTTP status (0 when the API couldn't be reached) */
+async function getJson<T>(path: string): Promise<{ status: number; body: T | null }> {
   try {
     const res = await fetch(`${API_URL}${path}`, { next: { revalidate: 600 }, signal: AbortSignal.timeout(8_000) })
-    return res.ok ? await res.json() as T : null
+    return { status: res.status, body: res.ok ? await res.json() as T : null }
   } catch {
-    return null
+    return { status: 0, body: null }
   }
 }
 
@@ -27,8 +28,12 @@ export async function storyCardImage(id: string): Promise<ImageResponse> {
       getJson<{ data?: CardStory }>(`/api/v1/signals/${id}`),
       getJson<{ data?: { stories?: Record<string, CardOutlets> } }>(`/api/v1/stories/outlets?ids=${id}`),
     ])
-    story = s?.data?.title ? s.data : null
-    outlets = o?.data?.stories?.[id] ?? null
+    // The API didn't answer (down, overloaded): fail rather than draw the
+    // plain card, which X, LinkedIn and the image cache would keep for a story
+    // that exists (Oct 12, 2026). A story that doesn't exist gets the plain card.
+    if (!s.body && s.status !== 404 && s.status !== 400) throw new Error('Story card: the API did not answer')
+    story = s.body?.data?.title ? s.body.data : null
+    outlets = o.body?.data?.stories?.[id] ?? null
   }
   const fonts = await cardFonts()
   return new ImageResponse(<StoryCard text={story ? storyCardText(story, outlets) : null} />, {

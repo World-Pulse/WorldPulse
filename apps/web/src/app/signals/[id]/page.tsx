@@ -19,16 +19,31 @@ export interface SignalDetail extends Signal {
   verifications: Verification[]
 }
 
-async function fetchSignal(id: string): Promise<SignalDetail | null> {
+/**
+ * The API couldn't answer for a story (down, overloaded or rate limited).
+ * Not the same as a story that doesn't exist: on Oct 12, 2026, while the
+ * server's disk was full, every story page said "Signal Not Found" and was
+ * marked noindex, and link previews kept that.
+ */
+class StoryUnavailableError extends Error {
+  constructor() {
+    super('The story could not be loaded: the API did not answer')
+    this.name = 'StoryUnavailableError'
+  }
+}
+
+/** The story, 'missing' (the API says there's no such story) or 'unavailable' */
+async function fetchSignal(id: string): Promise<SignalDetail | 'missing' | 'unavailable'> {
   try {
     const res = await fetch(`${API_BASE}/api/v1/signals/${id}`, {
       next: { revalidate: 30 },
     })
-    if (!res.ok) return null
+    if (res.status === 404 || res.status === 400) return 'missing'
+    if (!res.ok) return 'unavailable'
     const json = await res.json() as { success: boolean; data?: SignalDetail }
-    return json.success ? (json.data ?? null) : null
+    return json.success && json.data ? json.data : 'missing'
   } catch {
-    return null
+    return 'unavailable'
   }
 }
 
@@ -68,7 +83,11 @@ export async function generateMetadata(
 ): Promise<Metadata> {
   const { id } = await params
   const signal = await fetchSignal(id)
-  if (!signal) return { title: 'Signal Not Found — WorldPulse' }
+  // Link previews (X, LinkedIn, Slack…) and Bing wait for this before the page
+  // is sent, so an outage reaches them as an error to retry later rather
+  // than as a card for a missing story
+  if (signal === 'unavailable') throw new StoryUnavailableError()
+  if (signal === 'missing') return { title: 'Signal Not Found — WorldPulse', robots: { index: false } }
   // (a summary that only repeats the headline, or the old outlet note, isn't a
   // description; search results and share cards show about 160 characters)
   const description = metaDescription(displaySummary(signal.summary, signal.title) || signal.title)
@@ -103,7 +122,9 @@ export default async function SignalDetailPage(
 ) {
   const { id } = await params
   const signal = await fetchSignal(id)
-  if (!signal) notFound()
+  if (signal === 'missing') notFound()
+  // error.tsx says the story is briefly unavailable and offers to try again
+  if (signal === 'unavailable') throw new StoryUnavailableError()
 
   const [related, postsData] = await Promise.all([
     fetchRelated(signal.category, signal.id),
