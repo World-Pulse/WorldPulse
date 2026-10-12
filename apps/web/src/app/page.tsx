@@ -122,7 +122,8 @@ export default function HomePage() {
         )}
 
         {/* Feed items */}
-        <FeedList tab={activeTab} category={activeFilter} />
+        {/* the email briefing sign-up sits after the 4th story (plan G4; shown once email can be sent) */}
+        <FeedList tab={activeTab} category={activeFilter} signupAfter={4} />
       </div>
 
       {/* RIGHT SIDEBAR — desktop only */}

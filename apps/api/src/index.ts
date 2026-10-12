@@ -91,6 +91,7 @@ import { startDispatcher, stopDispatcher } from './lib/alert-dispatcher'
 import { startPulseScheduler, stopPulseScheduler } from './lib/pulse/scheduler'
 import { ensureSubscribersTable } from './lib/subscribers'
 import { startBriefingEmails, stopBriefingEmails } from './lib/briefing-email'
+import { startSocialPosters, stopSocialPosters } from './lib/social-posters'
 
 const app = Fastify({
   logger: {
@@ -459,10 +460,14 @@ async function bootstrap() {
     .then(ok => { if (ok) startBriefingEmails() })
     .catch(err => logger.warn({ err }, 'Email briefing failed to start'))
 
+  // Telegram and Bluesky posts (plan G10): off until their keys are on the server
+  startSocialPosters()
+
   // ─── GRACEFUL SHUTDOWN ────────────────────────────────────
   const shutdown = async () => {
     stopPulseScheduler()
     stopBriefingEmails()
+    stopSocialPosters()
     stopDispatcher()
     await Promise.allSettled([
       stopSearchConsumer(),

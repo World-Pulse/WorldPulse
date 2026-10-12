@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Fragment } from 'react'
 import Link from 'next/link'
 import type { Post, PollData } from '@worldpulse/types'
 import { PollDisplay } from './PollDisplay'
@@ -23,6 +23,7 @@ import type { StoryInfo } from './StoryOutlets'
 import { Users, Cpu, Radio, Newspaper } from 'lucide-react'
 import { displaySummary, isStateMedia, STATE_MEDIA_NOTE, outletSite } from '@/lib/signal-text'
 import { freshDigest, lastDigestUpdate, updatedAgo } from './digest'
+import { BriefingSignup } from '@/components/briefing/BriefingSignup'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -598,7 +599,8 @@ function FeedEmptyState({ tab }: { tab: string }) {
 }
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
-export function FeedList({ tab, category }: { tab: string; category: string }) {
+/** signupAfter: show the email briefing sign-up after this many cards (the home page; hidden until email can be sent) */
+export function FeedList({ tab, category, signupAfter }: { tab: string; category: string; signupAfter?: number }) {
   const [items, setItems]     = useState<FeedItem[]>([])
   const [loading, setLoading] = useState(true)
   const [cursor, setCursor]   = useState<string | null>(null)
@@ -704,11 +706,11 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
           </span>
         </p>
       )}
-      {items.map(item => {
+      {items.map((item, index) => {
         const href = item.type === 'signal' && item.signalId ? `/signals/${item.signalId}` : `/posts/${item.id}`
         return (
+        <Fragment key={item.id}>
         <Link
-          key={item.id}
           href={href}
           className="block"
           onClick={(e) => {
@@ -912,6 +914,10 @@ export function FeedList({ tab, category }: { tab: string; category: string }) {
           </div>
         </article>
         </Link>
+        {signupAfter !== undefined && index === signupAfter - 1 && (
+          <BriefingSignup source="/home" compact className="mx-4 my-3" />
+        )}
+        </Fragment>
         )
       })}
 

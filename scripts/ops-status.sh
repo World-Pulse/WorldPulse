@@ -104,7 +104,8 @@ claude_stats() {
       echo "editor=$(redis-cli --raw GET ai:editor:last)"
       echo "verify=$(redis-cli --raw HGETALL "ai:verify:counts:$1" | paste -sd " " -)"
       redis-cli --raw LRANGE ai:verify:recent 0 4 | sed "s/^/doubt=/"
-      redis-cli --raw LRANGE ai:verify:different 0 29 | sed "s/^/different=/"' sh "$(date -u +%F)" "$(date -u +%Y-%m)" 2>/dev/null) || out=""
+      redis-cli --raw LRANGE ai:verify:different 0 29 | sed "s/^/different=/"
+      echo "social=$(redis-cli --raw GET social:status)"' sh "$(date -u +%F)" "$(date -u +%Y-%m)" 2>/dev/null) || out=""
   SCR_KEY="$scr_key" API_KEY_SET="$api_key" PULSE="$pulse" CAP="$cap" OUT="$out" python3 - <<'PY' 2>/dev/null || printf 'null'
 import json, os
 vals = dict(line.split('=', 1) for line in os.environ.get('OUT', '').splitlines() if '=' in line)
@@ -125,6 +126,8 @@ for line in os.environ.get('OUT', '').splitlines():
         if line.startswith(prefix):
             try: into.append(json.loads(line[len(prefix):]))
             except ValueError: pass
+try: social = json.loads(vals.get('social') or 'null')
+except ValueError: social = None
 try: cap = float(os.environ.get('CAP') or 20)
 except ValueError: cap = 20
 print(json.dumps({
@@ -140,6 +143,8 @@ print(json.dumps({
     'crosscheck_doubts': doubts,
     # The newest "different event" verdicts (30), read before they may hold a story at pending
     'crosscheck_different': different,
+    # Automatic Telegram and Bluesky posts (plan G10): last post, posts today, last error per channel
+    'social': social,
 }, separators=(',', ':')))
 PY
 }

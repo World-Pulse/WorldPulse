@@ -154,6 +154,11 @@ services:
       # Sent from the subdomain verified in Resend (news.world-pulse.io), replies to support@
       EMAIL_FROM_ADDRESS: "${EMAIL_FROM_ADDRESS:-WorldPulse <briefing@news.world-pulse.io>}"
       EMAIL_REPLY_TO:     ${EMAIL_REPLY_TO:-support@world-pulse.io}
+      # Automatic posts to Telegram and Bluesky (plan G10, lib/social-posters.ts): each is off until its keys are set
+      TELEGRAM_BOT_TOKEN:   ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHANNEL:     ${TELEGRAM_CHANNEL:-}
+      BLUESKY_HANDLE:       ${BLUESKY_HANDLE:-}
+      BLUESKY_APP_PASSWORD: ${BLUESKY_APP_PASSWORD:-}
       # Optional — OAuth
       GITHUB_CLIENT_ID:     ${GITHUB_CLIENT_ID:-}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
