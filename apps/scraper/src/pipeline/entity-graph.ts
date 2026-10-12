@@ -25,6 +25,7 @@ import { openaiPaused, noteOpenAIFailure } from '../lib/openai-credit'
 import { pgPool as db } from '../lib/postgres'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
+import { LLM_MODEL, GEMINI_MODEL } from '../lib/llm-models'
 import { createHash } from 'crypto'
 import { extractEntitiesByRules, cleanStoredEntity } from './entity-rules'
 
@@ -242,7 +243,7 @@ Return ONLY valid JSON, no markdown fences.`
 
 async function callGeminiExtraction(prompt: string): Promise<ExtractionResult> {
   const key = process.env.GEMINI_API_KEY!
-  const model = process.env.GEMINI_MODEL ?? 'gemini-3.6-flash' // 2.0-flash shut down 2026-06-01
+  const model = GEMINI_MODEL
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
     {
@@ -274,7 +275,7 @@ async function callOpenAIExtraction(prompt: string): Promise<ExtractionResult> {
       Authorization: `Bearer ${key}`,
     },
     body: JSON.stringify({
-      model: process.env.LLM_MODEL ?? 'gpt-4o-mini',
+      model: LLM_MODEL,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.1,
       max_tokens: 1024,

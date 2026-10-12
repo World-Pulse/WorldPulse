@@ -8,6 +8,7 @@
  * 4. Logs everything to pulse_publish_log
  */
 import { askClaude, CLAUDE_SMALL, CLAUDE_WRITER } from '../claude'
+import { PULSE_OPENAI_MODEL } from '../llm-models'
 import { db } from '../../db/postgres'
 import { redis } from '../../db/redis'
 import { PULSE_USER_ID, ContentType, RATE_LIMITS, EDITORIAL_SYSTEM_PROMPT } from './constants'
@@ -289,7 +290,7 @@ export async function generateContent(
   if (hasAnthropic) {
     return callAnthropic(prompt, systemPrompt, maxTokens, tier === 'fast' ? CLAUDE_SMALL : CLAUDE_WRITER)
   }
-  const model = process.env.PULSE_OPENAI_MODEL ?? 'gpt-4o-mini'
+  const model = PULSE_OPENAI_MODEL
   return callOpenAI(prompt, systemPrompt, maxTokens, model, temperature)
 }
 

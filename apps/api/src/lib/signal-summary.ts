@@ -15,12 +15,12 @@
 
 import { redis } from '../db/redis'
 import { askClaude } from './claude'
+import { OPENAI_CHAT_MODEL, GEMINI_MODEL } from './llm-models'
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 const SUMMARY_CACHE_TTL   = 60 * 60 * 24  // 24 hours in seconds
 const CACHE_KEY_PREFIX    = 'signal-ai-summary:'
 const MAX_INPUT_CHARS     = 2000           // truncate long bodies before sending to LLM
-const OPENAI_MODEL        = 'gpt-4o-mini'
 
 /**
  * Every provider's instructions end with this. Summaries added roles the text
@@ -28,7 +28,6 @@ const OPENAI_MODEL        = 'gpt-4o-mini'
  * 2026) and started with a markdown heading ("**PULSE Summary:**").
  */
 const FACT_RULES = 'Use only facts the text states: add no titles, roles or background about people, places or events that it does not give. Write plain sentences: no heading, no markdown.'
-const GEMINI_MODEL        = process.env.GEMINI_MODEL ?? 'gemini-3.6-flash' // 2.0-flash shut down 2026-06-01
 const OLLAMA_MODEL        = process.env.OLLAMA_MODEL        ?? 'llama3.2'
 const OPENROUTER_MODEL    = process.env.OPENROUTER_MODEL    ?? 'meta-llama/llama-3.2-3b-instruct:free'
 
@@ -132,7 +131,7 @@ async function generateWithOpenAI(
       'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model:      OPENAI_MODEL,
+      model:      OPENAI_CHAT_MODEL,
       max_tokens: 150,
       messages: [
         {

@@ -19,6 +19,7 @@ import { db } from '../lib/postgres'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
 import { askClaude, claudeConfigured as claudeKeySet } from '../lib/claude'
+import { LLM_MODEL } from '../lib/llm-models'
 import type { SignalStatus } from '@worldpulse/types'
 
 interface ArticleGroup {
@@ -271,7 +272,7 @@ async function checkLLMFactConsistency(
 ): Promise<CheckResult> {
   const llmApiUrl = process.env.LLM_API_URL
   const openaiKey = process.env.OPENAI_API_KEY
-  const model     = process.env.LLM_MODEL ?? 'gpt-4o-mini'
+  const model     = LLM_MODEL
 
   const summaries = articles
     .slice(0, 5)

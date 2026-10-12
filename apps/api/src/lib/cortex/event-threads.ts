@@ -16,6 +16,7 @@
  */
 
 import { askClaude } from '../claude'
+import { OPENAI_CHAT_MODEL } from '../llm-models'
 import { db } from '../../db/postgres'
 import { redis } from '../../db/redis'
 
@@ -440,7 +441,7 @@ async function callLLMForSummary(prompt: string): Promise<string | null> {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
+          model: OPENAI_CHAT_MODEL,
           max_tokens: 200,
           messages: [{ role: 'user', content: prompt }],
         }),

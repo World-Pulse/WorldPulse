@@ -15,6 +15,7 @@
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 import { logger } from './logger'
+import { OPENAI_CHAT_MODEL, GEMINI_MODEL } from './llm-models'
 import { askClaude, CLAUDE_SMALL } from './claude'
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -366,7 +367,7 @@ async function generateWithLLM(prompt: string): Promise<{ text: string; model: s
           'Authorization': `Bearer ${openaiKey}`,
         },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
+          model: OPENAI_CHAT_MODEL,
           max_tokens: 2000,
           messages: [{ role: 'user', content: prompt }],
         }),
@@ -385,7 +386,7 @@ async function generateWithLLM(prompt: string): Promise<{ text: string; model: s
   const geminiKey = process.env.GEMINI_API_KEY
   if (geminiKey) {
     try {
-      const model = process.env.GEMINI_MODEL ?? 'gemini-3.6-flash' // 2.0-flash shut down 2026-06-01
+      const model = GEMINI_MODEL
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
         {

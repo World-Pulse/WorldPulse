@@ -5,6 +5,8 @@ import { authenticate } from '../middleware/auth'
 import { getSecurityMetrics } from '../lib/security'
 import { runFullReindex } from '../lib/search-backfill'
 import { sendError } from '../lib/errors'
+import { CLAUDE_SMALL } from '../lib/claude'
+import { OPENAI_CHAT_MODEL, GEMINI_MODEL } from '../lib/llm-models'
 
 // ─── Stability keys (mirror apps/scraper/src/lib/stability-tracker.ts) ───────
 const STABILITY_KEYS = {
@@ -301,21 +303,21 @@ export const registerAdminRoutes: FastifyPluginAsync = async (app) => {
       {
         id:         'anthropic',
         label:      'Claude (Anthropic)',
-        model:      process.env.ANTHROPIC_MODEL ?? 'claude-haiku-4-5-20251001',
+        model:      process.env.ANTHROPIC_MODEL || CLAUDE_SMALL,
         configured: !!process.env.ANTHROPIC_API_KEY,
         active:     false,
       },
       {
         id:         'openai',
         label:      'GPT-4o mini',
-        model:      process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
+        model:      OPENAI_CHAT_MODEL,
         configured: !!process.env.OPENAI_API_KEY,
         active:     false,
       },
       {
         id:         'gemini',
         label:      'Gemini Flash',
-        model:      process.env.GEMINI_MODEL ?? 'gemini-2.0-flash',
+        model:      GEMINI_MODEL,
         configured: !!process.env.GEMINI_API_KEY,
         active:     false,
       },

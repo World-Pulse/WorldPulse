@@ -13,6 +13,7 @@ import { logger } from '../lib/logger'
 import { rateSeverity } from './severity'
 import { categorizeArticle } from './categories'
 import { claudeConfigured } from '../lib/claude'
+import { LLM_MODEL } from '../lib/llm-models'
 
 interface ClassificationResult {
   category:     Category
@@ -109,7 +110,7 @@ function recalibrateSeverity(result: ClassificationResult): ClassificationResult
 async function llmClassify(title: string, body: string | null): Promise<ClassificationResult> {
   const llmApiUrl   = process.env.LLM_API_URL
   const openaiKey   = process.env.OPENAI_API_KEY
-  const model       = process.env.LLM_MODEL ?? 'gpt-4o-mini'
+  const model       = LLM_MODEL
 
   // Neither LLM source configured — skip to rule-based
   if (!llmApiUrl && !openaiKey) {
