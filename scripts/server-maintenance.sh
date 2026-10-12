@@ -26,7 +26,7 @@ if [ -d /etc/cron.d ] && [ "$(cat "$OPS_CRON" 2> /dev/null)" != "$OPS_LINE" ]; t
 fi
 
 log "Disk free before: $(free_gb)G"
-find /var/lib/docker/containers -name '*-json.log' -size +500M -exec truncate -s 0 {} \; 2>/dev/null || true
+find /var/lib/docker/containers -name '*-json.log' -size +100M -exec truncate -s 0 {} \; 2>/dev/null || true
 docker rm -f wp_clickhouse >/dev/null 2>&1 || true
 docker image prune -f >/dev/null 2>&1 || true
 docker builder prune -f --filter until=72h >/dev/null 2>&1 || true
@@ -35,6 +35,13 @@ if [ "$(free_gb)" -lt 10 ]; then
   log "Low disk ($(free_gb)G free) — clearing unused build cache and old images"
   docker builder prune -af --filter until=24h >/dev/null 2>&1 || true
   docker image prune -af --filter until=72h >/dev/null 2>&1 || true
+  # Still under 5 GB: drop every image no running container uses, and package caches (never volumes)
+  if [ "$(free_gb)" -lt 5 ]; then
+    log "Still low ($(free_gb)G free) — removing all unused images and package caches"
+    docker image prune -af >/dev/null 2>&1 || true
+    docker builder prune -af >/dev/null 2>&1 || true
+    apt-get clean >/dev/null 2>&1 || true
+  fi
 fi
 journalctl --vacuum-size=200M >/dev/null 2>&1 || true
 find logs -maxdepth 1 -name 'deploy_*.log' -mtime +30 -delete 2>/dev/null || true
