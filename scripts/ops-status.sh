@@ -103,7 +103,8 @@ claude_stats() {
       echo "calls=$(redis-cli --raw HGETALL "ai:claude:calls:$1" | paste -sd " " -)"
       echo "editor=$(redis-cli --raw GET ai:editor:last)"
       echo "verify=$(redis-cli --raw HGETALL "ai:verify:counts:$1" | paste -sd " " -)"
-      redis-cli --raw LRANGE ai:verify:recent 0 4 | sed "s/^/doubt=/"' sh "$(date -u +%F)" "$(date -u +%Y-%m)" 2>/dev/null) || out=""
+      redis-cli --raw LRANGE ai:verify:recent 0 4 | sed "s/^/doubt=/"
+      redis-cli --raw LRANGE ai:verify:different 0 29 | sed "s/^/different=/"' sh "$(date -u +%F)" "$(date -u +%Y-%m)" 2>/dev/null) || out=""
   SCR_KEY="$scr_key" API_KEY_SET="$api_key" PULSE="$pulse" CAP="$cap" OUT="$out" python3 - <<'PY' 2>/dev/null || printf 'null'
 import json, os
 vals = dict(line.split('=', 1) for line in os.environ.get('OUT', '').splitlines() if '=' in line)
@@ -118,11 +119,12 @@ except ValueError: editor = None
 # verdicts, and the newest stories Claude doubted (public headlines only)
 words = vals.get('verify', '').split()
 verify = {words[i]: int(words[i + 1]) for i in range(0, len(words) - 1, 2) if words[i + 1].isdigit()}
-doubts = []
+doubts, different = [], []
 for line in os.environ.get('OUT', '').splitlines():
-    if line.startswith('doubt='):
-        try: doubts.append(json.loads(line[6:]))
-        except ValueError: pass
+    for prefix, into in (('doubt=', doubts), ('different=', different)):
+        if line.startswith(prefix):
+            try: into.append(json.loads(line[len(prefix):]))
+            except ValueError: pass
 try: cap = float(os.environ.get('CAP') or 20)
 except ValueError: cap = 20
 print(json.dumps({
@@ -136,6 +138,8 @@ print(json.dumps({
     'editor_last_pass': editor,
     'crosscheck_today': verify,
     'crosscheck_doubts': doubts,
+    # The newest "different event" verdicts (30), read before they may hold a story at pending
+    'crosscheck_different': different,
 }, separators=(',', ':')))
 PY
 }

@@ -43,6 +43,34 @@ interface PublishResult {
   success: boolean
   postId?: string
   error?: string
+  /** Nothing to do: this piece is already out today (the scheduler stops trying) */
+  alreadyPublished?: boolean
+}
+
+// ─── Briefing slots ─────────────────────────────────────────────────────────
+// The morning briefing, the mid-day update and the evening wrap each publish
+// once a day. They used to share one daily_briefing limit (1 per 24 h), so the
+// mid-day update blocked that evening's wrap and the next morning's briefing
+// (Oct 11–12, 2026). Morning rows carry no updateType in their metadata.
+
+export type BriefingSlot = 'morning' | 'midday' | 'evening'
+const SLOT_WINDOW_HOURS = 20
+
+/** True when this slot's piece hasn't gone out in the last 20 hours */
+export async function briefingSlotFree(slot: BriefingSlot): Promise<boolean> {
+  const since = new Date(Date.now() - SLOT_WINDOW_HOURS * 3600_000)
+  const [row] = await db('pulse_publish_log')
+    .where('content_type', ContentType.DAILY_BRIEFING)
+    .where('published_at', '>', since)
+    .whereRaw(`coalesce(metadata->>'updateType', 'morning') = ?`, [slot])
+    .count('id as count')
+  return Number(row?.count ?? 0) === 0
+}
+
+async function slotTaken(slot: BriefingSlot): Promise<PublishResult | null> {
+  return (await briefingSlotFree(slot))
+    ? null
+    : { success: false, alreadyPublished: true, error: `The ${slot} briefing is already out today` }
 }
 
 interface BriefingSection {
@@ -475,6 +503,8 @@ Signals to analyze:
 ${signalList}`
 
   // Daily briefing → Anthropic (deep tier): long-form, editorial, connecting patterns
+  const taken = await slotTaken('morning')
+  if (taken) return taken
   const limited = await rateLimited(ContentType.DAILY_BRIEFING)
   if (limited) return limited
   const result = await generateContent(prompt, 2000, 'deep')
@@ -526,7 +556,9 @@ You have ${signals.length} new signals since the morning briefing. Write a conci
 Signals:
 ${signalList}`
 
-  // Updates use OpenAI (fast) — they're shorter and more time-sensitive
+  // Updates use the fast tier — they're shorter and more time-sensitive
+  const taken = await slotTaken(updateType)
+  if (taken) return taken
   const limited = await rateLimited(ContentType.DAILY_BRIEFING)
   if (limited) return limited
   const result = await generateContent(prompt, 600, 'fast')

@@ -21,7 +21,7 @@ export type ContentType = (typeof ContentType)[keyof typeof ContentType]
 export const RATE_LIMITS: Record<string, { max: number; windowHours: number }> = {
   flash_brief:     { max: 6,  windowHours: 1  },
   analysis:        { max: 8,  windowHours: 24 },
-  daily_briefing:  { max: 1,  windowHours: 24 },
+  daily_briefing:  { max: 3,  windowHours: 24 },  // morning, mid-day, evening: once each (publisher.ts briefingSlotFree)
   social_thread:   { max: 4,  windowHours: 24 },
   weekly_report:   { max: 1,  windowHours: 168 },
   syndicated:      { max: 20, windowHours: 24 },

@@ -56,6 +56,9 @@ export function readVerdict(text: string): { verdict: CrossCheckVerdict; note: s
 
 const COUNTS_KEY = (now: Date) => `ai:verify:counts:${now.toISOString().slice(0, 10)}`
 const RECENT_KEY = 'ai:verify:recent'
+/** The newest "different event" verdicts alone (30), so a day of them can be
+ * read before they may hold a story at pending (ops-status crosscheck_different) */
+const DIFFERENT_KEY = 'ai:verify:different'
 
 /**
  * Cross-check a story that just turned verified: its signals (by id) and any
@@ -83,13 +86,15 @@ export async function crossCheckVerification(
   const key = COUNTS_KEY(now)
   const multi = redis.multi().hincrby(key, read ? read.verdict : 'unread', 1).expire(key, 40 * 86_400)
   if (read && read.verdict !== 'same') {
-    multi.lpush(RECENT_KEY, JSON.stringify({
+    const entry = JSON.stringify({
       at:      now.toISOString(),
       id:      storyIds[0],
       verdict: read.verdict,
       note:    read.note,
       titles:  reports.slice(0, 2).map(r => r.title.slice(0, 90)),
-    })).ltrim(RECENT_KEY, 0, 19).expire(RECENT_KEY, 7 * 86_400)
+    })
+    multi.lpush(RECENT_KEY, entry).ltrim(RECENT_KEY, 0, 19).expire(RECENT_KEY, 7 * 86_400)
+    if (read.verdict === 'different') multi.lpush(DIFFERENT_KEY, entry).ltrim(DIFFERENT_KEY, 0, 29).expire(DIFFERENT_KEY, 7 * 86_400)
   }
   await multi.exec()
   if (read && read.verdict !== 'same') logger.info({ storyId: storyIds[0], verdict: read.verdict, note: read.note }, 'Cross-check: a verified story Claude doubts')

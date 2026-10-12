@@ -78,6 +78,17 @@ describe('crossCheckVerification', () => {
     expect(await crossCheckVerification(['a'], [{ title: 'Two killed in Kozhikode road crash' }], NOW)).toBe('different')
     const pushed = h.ops.find(op => op[0] === 'lpush')!
     expect(JSON.parse(String(pushed[2]))).toMatchObject({ id: 'a', verdict: 'different', titles: ['Two killed in Kozhikode gas leak', 'Two killed in Kozhikode road crash'] })
+    // "different event" verdicts are also kept on their own list (the newest 30), to be read before they may hold a story
+    const lists = h.ops.filter(op => op[0] === 'lpush').map(op => op[1])
+    expect(lists).toEqual(['ai:verify:recent', 'ai:verify:different'])
+    expect(h.ops).toContainEqual(['ltrim', 'ai:verify:different', 0, 29])
+  })
+
+  it('keeps a conflicting verdict among the doubts but not on the "different" list', async () => {
+    h.rows = [{ title: 'Strike hits Riyadh airport', summary: null }, { title: 'Riyadh airport struck again', summary: null }]
+    h.reply = '{"same_event": true, "agree": false, "note": "13 dead in one, 12 in the other."}'
+    expect(await crossCheckVerification(['a', 'b'], [], NOW)).toBe('conflicting')
+    expect(h.ops.filter(op => op[0] === 'lpush').map(op => op[1])).toEqual(['ai:verify:recent'])
   })
 
   it('asks nothing about a single report, and counts an unreadable answer', async () => {

@@ -3,14 +3,14 @@
  *
  * Schedule (all times UTC, ET equivalents in parentheses):
  *   Every 5 min  — Flash brief check (auto-publish critical signals)
- *   11:00 UTC    — Morning briefing (7am ET)
- *   17:00 UTC    — Mid-day update  (1pm ET)
- *   23:00 UTC    — Evening wrap     (7pm ET)
+ *   11:00 UTC    — Morning briefing (7am ET; caught up until 15:59 UTC if missed)
+ *   17:00 UTC    — Mid-day update  (1pm ET; until 19:59 UTC)
+ *   23:00 UTC    — Evening wrap     (7pm ET; until 23:59 UTC)
  *   Every 2 hrs  — Agent beat scan (agents identify trends in their domains)
  *
  * Gated by PULSE_ENABLED env var.
  */
-import { checkAndPublishFlashBriefs, publishDailyBriefing, publishBriefingUpdate } from './publisher'
+import { checkAndPublishFlashBriefs, publishDailyBriefing, publishBriefingUpdate, type BriefingSlot } from './publisher'
 import { runAgentBeatScan } from './agents/coordinator'
 import { runTwitterPublisher } from './agents/twitter-publisher'
 import { getAgent } from './agents/registry'
@@ -75,6 +75,59 @@ function isPulseEnabled(): boolean {
   return process.env.PULSE_ENABLED === 'true' || process.env.PULSE_ENABLED === '1'
 }
 
+/**
+ * Each briefing is written once a day within its window (UTC hours,
+ * inclusive): it starts at the window's first hour, and a start that was
+ * missed (the API down or restarting at 7 AM ET, Oct 12, 2026) is caught up
+ * later in the window. A failed attempt is retried after 15 minutes, not
+ * every minute. "Already out today" (the database says so, which survives
+ * restarts) ends the day's tries.
+ */
+export const BRIEFING_SLOTS: ReadonlyArray<{ slot: BriefingSlot; from: number; to: number }> = [
+  { slot: 'morning', from: MORNING_HOUR_UTC, to: MORNING_HOUR_UTC + 4 },   // 7–11 AM ET (EDT)
+  { slot: 'midday',  from: MIDDAY_HOUR_UTC,  to: MIDDAY_HOUR_UTC + 2 },    // 1–3 PM ET
+  { slot: 'evening', from: EVENING_HOUR_UTC, to: EVENING_HOUR_UTC },       // 7–8 PM ET
+]
+const BRIEFING_RETRY_MS = 15 * 60_000
+const briefingRetryAt = new Map<BriefingSlot, number>()
+
+function publishSlot(slot: BriefingSlot) {
+  return slot === 'morning' ? publishDailyBriefing() : publishBriefingUpdate(slot)
+}
+
+/** One pass of the briefing schedule (every minute; exported for tests) */
+export async function checkBriefings(now: Date = new Date()): Promise<void> {
+  const hour = now.getUTCHours()
+  for (const { slot, from, to } of BRIEFING_SLOTS) {
+    if (hour < from || hour > to) continue
+    if (alreadyPublished(slot) || (briefingRetryAt.get(slot) ?? 0) > now.getTime()) continue
+    markPublished(slot)
+    try {
+      console.log(`[PULSE] Publishing the ${slot} briefing...`)
+      const result = await publishSlot(slot)
+      if (result.success) {
+        console.log(`[PULSE] ${slot} briefing published: ${result.postId}`)
+      } else if (result.alreadyPublished) {
+        console.log(`[PULSE] ${result.error}`)   // done for today
+      } else {
+        console.error(`[PULSE] ${slot} briefing failed: ${result.error}; trying again in 15 minutes`)
+        publishedToday.delete(slot)
+        briefingRetryAt.set(slot, now.getTime() + BRIEFING_RETRY_MS)
+      }
+    } catch (err) {
+      console.error(`[PULSE] ${slot} briefing error; trying again in 15 minutes:`, err)
+      publishedToday.delete(slot)
+      briefingRetryAt.set(slot, now.getTime() + BRIEFING_RETRY_MS)
+    }
+  }
+}
+
+/** For tests: forget today's attempts */
+export function resetBriefingState(): void {
+  publishedToday.clear()
+  briefingRetryAt.clear()
+}
+
 /** Start the PULSE scheduler */
 export function startPulseScheduler(): void {
   if (isRunning) return
@@ -99,66 +152,9 @@ export function startPulseScheduler(): void {
   }, FLASH_INTERVAL_MS)
 
   // ── Briefing schedule checker ──────────────────────────────────────────
-  briefingTimer = setInterval(async () => {
-    const hour = new Date().getUTCHours()
-
-    // The morning briefing email is sent by lib/briefing-email.ts (plan G4),
-    // whether or not PULSE is on.
-
-    // Morning briefing — full daily briefing via Anthropic (deep)
-    if (hour === MORNING_HOUR_UTC && !alreadyPublished('morning')) {
-      markPublished('morning')
-      try {
-        console.log('[PULSE] Publishing morning briefing (deep/Anthropic)...')
-        const result = await publishDailyBriefing()
-        if (result.success) {
-          console.log(`[PULSE] Morning briefing published: ${result.postId}`)
-        } else {
-          console.error(`[PULSE] Morning briefing failed: ${result.error}`)
-          publishedToday.delete('morning') // retry next minute
-        }
-      } catch (err) {
-        console.error('[PULSE] Morning briefing error:', err)
-        publishedToday.delete('morning')
-      }
-    }
-
-    // Mid-day update — shorter, via OpenAI (fast)
-    if (hour === MIDDAY_HOUR_UTC && !alreadyPublished('midday')) {
-      markPublished('midday')
-      try {
-        console.log('[PULSE] Publishing mid-day update (fast/OpenAI)...')
-        const result = await publishBriefingUpdate('midday')
-        if (result.success) {
-          console.log(`[PULSE] Mid-day update published: ${result.postId}`)
-        } else {
-          console.error(`[PULSE] Mid-day update failed: ${result.error}`)
-          publishedToday.delete('midday')
-        }
-      } catch (err) {
-        console.error('[PULSE] Mid-day update error:', err)
-        publishedToday.delete('midday')
-      }
-    }
-
-    // Evening wrap — shorter, via OpenAI (fast)
-    if (hour === EVENING_HOUR_UTC && !alreadyPublished('evening')) {
-      markPublished('evening')
-      try {
-        console.log('[PULSE] Publishing evening wrap (fast/OpenAI)...')
-        const result = await publishBriefingUpdate('evening')
-        if (result.success) {
-          console.log(`[PULSE] Evening wrap published: ${result.postId}`)
-        } else {
-          console.error(`[PULSE] Evening wrap failed: ${result.error}`)
-          publishedToday.delete('evening')
-        }
-      } catch (err) {
-        console.error('[PULSE] Evening wrap error:', err)
-        publishedToday.delete('evening')
-      }
-    }
-  }, BRIEFING_CHECK_MS)
+  // The morning briefing email is sent by lib/briefing-email.ts (plan G4),
+  // whether or not PULSE is on.
+  briefingTimer = setInterval(() => { void checkBriefings() }, BRIEFING_CHECK_MS)
 
   // ── Agent beat scan ────────────────────────────────────────────────────
   // Every 2 hours, agents scan their beats for trends worth covering.
