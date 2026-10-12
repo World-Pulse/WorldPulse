@@ -141,13 +141,19 @@ PY
 }
 # Where the disk goes: Docker's totals (images, containers, volumes, build
 # cache) with what could be cleared, each data volume, and the log folders, in
-# MB. Sizes only; nothing is read from inside the files.
+# MB. Sizes only; nothing is read from inside the files. From 80% full, also
+# the biggest folders and files two levels down (Oct 12: Docker's totals
+# explained half of what was used).
 disk_stats() {
-  local sysdf vols logs
+  local sysdf vols logs used big=""
   sysdf=$(timeout 60 docker system df --format '{{.Type}}|{{.Size}}|{{.Reclaimable}}' 2>/dev/null) || sysdf=""
   vols=$(timeout 60 du -sm /var/lib/docker/volumes/*/_data 2>/dev/null) || vols=""
   logs=$(timeout 30 du -sm /var/log logs 2>/dev/null) || logs=""
-  SYSDF="$sysdf" VOLS="$vols" LOGS="$logs" python3 - <<'PY' 2>/dev/null || printf 'null'
+  used=$(df --output=pcent / 2>/dev/null | tail -1 | tr -dc '0-9')
+  if [ "${used:-0}" -ge 80 ]; then
+    big=$(timeout 150 nice -n 19 du -xam --max-depth=2 / 2>/dev/null | sort -rn | head -n 25) || big=""
+  fi
+  SYSDF="$sysdf" VOLS="$vols" LOGS="$logs" BIG="$big" python3 - <<'PY' 2>/dev/null || printf 'null'
 import json, os, re
 UNITS = {'B': 1e-6, 'kB': 1e-3, 'KB': 1e-3, 'MB': 1, 'GB': 1e3, 'TB': 1e6}
 def mb(text):
@@ -169,8 +175,13 @@ for line in os.environ.get('LOGS', '').splitlines():
     m = re.match(r'(\d+)\s+(\S+)$', line.strip())
     if m:
         logs['system' if m.group(2) == '/var/log' else 'worldpulse'] = int(m.group(1))
+folders = {}
+for line in os.environ.get('BIG', '').splitlines():
+    m = re.match(r'(\d+)\s+(/[^\s]*)$', line.strip())
+    if m and m.group(2) != '/' and len(folders) < 12:
+        folders[m.group(2)[:60]] = int(m.group(1))
 print(json.dumps({'docker': docker, 'volumes_mb': dict(sorted(volumes.items(), key=lambda kv: -kv[1])[:12]),
-                  'logs_mb': logs}, separators=(',', ':')))
+                  'logs_mb': logs, 'folders_mb': folders}, separators=(',', ':')))
 PY
 }
 pipeline_stats() {
@@ -225,7 +236,7 @@ deploy_note() {
 pipe_cache=logs/pipeline-stats.json
 # Refresh every 30 minutes, or straight away when the cache predates a new field
 if [ ! -s "$pipe_cache" ] || [ -n "$(find "$pipe_cache" -mmin +29 2>/dev/null)" ] \
-   || ! grep -q '"disk"' "$pipe_cache" 2>/dev/null; then
+   || ! grep -q '"folders_mb"' "$pipe_cache" 2>/dev/null; then
   pipeline_stats > "$pipe_cache.tmp" 2>/dev/null \
     && python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$pipe_cache.tmp" 2>/dev/null \
     && mv "$pipe_cache.tmp" "$pipe_cache"
@@ -241,6 +252,7 @@ pipeline=$(cat "$pipe_cache" 2>/dev/null || true)
   printf '"last_maintenance":"%s",' "$(cat logs/maintenance.status 2>/dev/null || echo none)"
   printf '"disk_used_pct":%s,' "$(df --output=pcent / | tail -1 | tr -dc '0-9')"
   printf '"disk_free_gb":%s,' "$(df -BG --output=avail / | tail -1 | tr -dc '0-9')"
+  printf '"disk_free_mb":%s,' "$(df -BM --output=avail / | tail -1 | tr -dc '0-9')"
   printf '"disk_guard_last":"%s",' "$(tail -n 1 logs/disk-guard.log 2>/dev/null | tr -cd 'A-Za-z0-9 :+>.?-' | cut -c1-80)"
   printf '"cert_days_left":%s,' "$days"
   printf '"containers":{%s},' "$containers"
