@@ -30,6 +30,12 @@ find /var/lib/docker/containers -name '*-json.log' -size +500M -exec truncate -s
 docker rm -f wp_clickhouse >/dev/null 2>&1 || true
 docker image prune -f >/dev/null 2>&1 || true
 docker builder prune -f --filter until=72h >/dev/null 2>&1 || true
+# Under 10 GB free: also clear unused build cache and images (never volumes), as a deploy does
+if [ "$(free_gb)" -lt 10 ]; then
+  log "Low disk ($(free_gb)G free) — clearing unused build cache and old images"
+  docker builder prune -af --filter until=24h >/dev/null 2>&1 || true
+  docker image prune -af --filter until=72h >/dev/null 2>&1 || true
+fi
 journalctl --vacuum-size=200M >/dev/null 2>&1 || true
 find logs -maxdepth 1 -name 'deploy_*.log' -mtime +30 -delete 2>/dev/null || true
 log "Disk free after: $(free_gb)G"
