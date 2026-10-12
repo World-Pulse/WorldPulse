@@ -8,6 +8,31 @@
 # ─────────────────────────────────────────────────────────────────────────────
 cd "$(dirname "$0")/.."
 mkdir -p logs/public
+
+# ── Disk guard (Oct 12, 2026) ───────────────────────────────────────────────
+# The disk filled overnight: the database stopped, the API answered 500, and
+# every deploy failed while fetching code, before its own clean-up could run.
+# This runs every 5 minutes from cron: under 3 GB free it clears what is safe
+# to clear: oversized Docker logs, old journal, all build cache and untagged
+# images. Never volumes (the data), never tagged images (:previous is the
+# rollback). Skipped while a deploy or maintenance holds the lock.
+disk_guard() {
+  local before after
+  before=$(df -BM --output=avail / 2>/dev/null | tail -1 | tr -dc '0-9')
+  [ -n "$before" ] && [ "$before" -lt 3072 ] || return 0
+  exec 8>/var/lock/worldpulse-deploy.lock || return 0
+  if flock -n 8; then
+    find /var/lib/docker/containers -name '*-json.log' -size +100M -exec truncate -s 0 {} \; 2>/dev/null || true
+    journalctl --vacuum-size=200M >/dev/null 2>&1 || true
+    timeout 300 docker builder prune -af >/dev/null 2>&1 || true
+    timeout 300 docker image prune -f >/dev/null 2>&1 || true
+    after=$(df -BM --output=avail / 2>/dev/null | tail -1 | tr -dc '0-9')
+    echo "$(date -Is) ${before:-?}M free -> ${after:-?}M" >> logs/disk-guard.log 2>/dev/null || true
+  fi
+  exec 8>&-
+}
+disk_guard
+
 days=-1
 end=$(openssl x509 -enddate -noout -in .certbot/conf/live/world-pulse.io/fullchain.pem 2>/dev/null | cut -d= -f2)
 [ -n "$end" ] && days=$(( ($(date -d "$end" +%s) - $(date +%s)) / 86400 ))
@@ -114,6 +139,40 @@ print(json.dumps({
 }, separators=(',', ':')))
 PY
 }
+# Where the disk goes: Docker's totals (images, containers, volumes, build
+# cache) with what could be cleared, each data volume, and the log folders, in
+# MB. Sizes only; nothing is read from inside the files.
+disk_stats() {
+  local sysdf vols logs
+  sysdf=$(timeout 60 docker system df --format '{{.Type}}|{{.Size}}|{{.Reclaimable}}' 2>/dev/null) || sysdf=""
+  vols=$(timeout 60 du -sm /var/lib/docker/volumes/*/_data 2>/dev/null) || vols=""
+  logs=$(timeout 30 du -sm /var/log logs 2>/dev/null) || logs=""
+  SYSDF="$sysdf" VOLS="$vols" LOGS="$logs" python3 - <<'PY' 2>/dev/null || printf 'null'
+import json, os, re
+UNITS = {'B': 1e-6, 'kB': 1e-3, 'KB': 1e-3, 'MB': 1, 'GB': 1e3, 'TB': 1e6}
+def mb(text):
+    m = re.match(r'\s*([\d.]+)\s*([kKMGT]?B)', text or '')
+    return round(float(m.group(1)) * UNITS[m.group(2)]) if m else None
+docker = {}
+for line in os.environ.get('SYSDF', '').splitlines():
+    parts = line.split('|')
+    if len(parts) == 3:
+        key = re.sub(r'[^a-z]+', '_', parts[0].strip().lower()).strip('_')
+        docker[key] = {'mb': mb(parts[1]), 'clearable_mb': mb(parts[2])}
+volumes = {}
+for line in os.environ.get('VOLS', '').splitlines():
+    m = re.match(r'(\d+)\s+/var/lib/docker/volumes/([^/]+)/_data$', line.strip())
+    if m:
+        volumes[re.sub(r'^worldpulse[-_]', '', m.group(2))[:40]] = int(m.group(1))
+logs = {}
+for line in os.environ.get('LOGS', '').splitlines():
+    m = re.match(r'(\d+)\s+(\S+)$', line.strip())
+    if m:
+        logs['system' if m.group(2) == '/var/log' else 'worldpulse'] = int(m.group(1))
+print(json.dumps({'docker': docker, 'volumes_mb': dict(sorted(volumes.items(), key=lambda kv: -kv[1])[:12]),
+                  'logs_mb': logs}, separators=(',', ':')))
+PY
+}
 pipeline_stats() {
   local q1 q2 db scr errs warns created top topw
   q1="SELECT json_build_object(
@@ -149,6 +208,7 @@ pipeline_stats() {
     "${errs:-0}" "${warns:-0}" "${created:-0}" "$top" "$topw"
   printf '"llm":%s,' "$(llm_stats "$scr")"
   printf '"claude":%s,' "$(claude_stats)"
+  printf '"disk":%s,' "$(disk_stats)"
   # Readers of world-pulse.io today and where they came from (plan G1): counts
   # only, from nginx's log; scripts/readers.py says how (no addresses kept)
   printf '"readers":%s}' "$(timeout 90 python3 scripts/readers.py logs/readers-state.json 2>/dev/null || printf 'null')"
@@ -165,7 +225,7 @@ deploy_note() {
 pipe_cache=logs/pipeline-stats.json
 # Refresh every 30 minutes, or straight away when the cache predates a new field
 if [ ! -s "$pipe_cache" ] || [ -n "$(find "$pipe_cache" -mmin +29 2>/dev/null)" ] \
-   || ! grep -q '"readers"' "$pipe_cache" 2>/dev/null; then
+   || ! grep -q '"disk"' "$pipe_cache" 2>/dev/null; then
   pipeline_stats > "$pipe_cache.tmp" 2>/dev/null \
     && python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$pipe_cache.tmp" 2>/dev/null \
     && mv "$pipe_cache.tmp" "$pipe_cache"
@@ -181,6 +241,7 @@ pipeline=$(cat "$pipe_cache" 2>/dev/null || true)
   printf '"last_maintenance":"%s",' "$(cat logs/maintenance.status 2>/dev/null || echo none)"
   printf '"disk_used_pct":%s,' "$(df --output=pcent / | tail -1 | tr -dc '0-9')"
   printf '"disk_free_gb":%s,' "$(df -BG --output=avail / | tail -1 | tr -dc '0-9')"
+  printf '"disk_guard_last":"%s",' "$(tail -n 1 logs/disk-guard.log 2>/dev/null | tr -cd 'A-Za-z0-9 :+>.?-' | cut -c1-80)"
   printf '"cert_days_left":%s,' "$days"
   printf '"containers":{%s},' "$containers"
   printf '"pipeline":%s}\n' "$pipeline"

@@ -176,7 +176,12 @@ done
 
 # ── 7. Clean up so the disk doesn't fill up again ───────────────────────────
 docker image prune -f >/dev/null 2>&1 || true
-docker builder prune -f --filter until=72h >/dev/null 2>&1 || true
+# Keep at most 8 GB of build cache, least recently used first. Keeping all of
+# the last 72 hours filled the disk after ~80 deploys in a day (Oct 11-12).
+# --max-used-space is Docker 28+, --keep-storage older; else the old rule.
+docker builder prune -af --max-used-space 8gb >/dev/null 2>&1 \
+  || docker builder prune -af --keep-storage 8gb >/dev/null 2>&1 \
+  || docker builder prune -f --filter until=72h >/dev/null 2>&1 || true
 log "Disk free after deploy: $(free_gb)G"
 
 if [ -n "$WARNINGS" ]; then
