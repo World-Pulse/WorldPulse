@@ -22,6 +22,15 @@ describe('shareLinks', () => {
     expect(new URL(links[1]!.href).searchParams.get('url')).toContain('utm_source=linkedin')
   })
 
+  it('tags each kind of page with its own campaign', () => {
+    const story = new URL(new URL(shareLinks(URL_, 'A story')[0]!.href).searchParams.get('url')!)
+    expect(story.searchParams.get('utm_campaign')).toBe('story')
+    const entity = new URL(new URL(shareLinks('https://world-pulse.io/entities/houthis-a84d671cb97c1d91', 'Houthis', 'entity')[0]!.href).searchParams.get('url')!)
+    expect(entity.searchParams.get('utm_campaign')).toBe('entity')
+    expect(entity.searchParams.get('utm_source')).toBe('x')
+    expect(shareLinks(URL_, 'Houthis', 'entity')[3]!.href).toContain(encodeURIComponent('utm_campaign=entity'))
+  })
+
   it('replaces tags already on the address', () => {
     expect(withUtm(`${URL_}?utm_source=old`, 'telegram')).toBe(`${URL_}?utm_source=telegram&utm_medium=share&utm_campaign=story`)
   })

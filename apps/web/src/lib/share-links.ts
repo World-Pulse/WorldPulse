@@ -21,15 +21,19 @@ export function withUtm(url: string, source: string, campaign = 'story'): string
   return u.toString()
 }
 
-/** One link per network, each opening that network's own post box */
-export function shareLinks(url: string, title: string): ShareLink[] {
+/**
+ * One link per network, each opening that network's own post box. `campaign`
+ * names the kind of page in the utm tags: story, entity (Oct 13, 2026), entities.
+ */
+export function shareLinks(url: string, title: string, campaign = 'story'): ShareLink[] {
   const t = title.replace(/\s+/g, ' ').trim()
   const q = encodeURIComponent
+  const tagged = (source: string) => withUtm(url, source, campaign)
   return [
-    { network: 'x', label: 'X', href: `https://x.com/intent/post?text=${q(t)}&url=${q(withUtm(url, 'x'))}&via=${X_HANDLE}` },
-    { network: 'linkedin', label: 'LinkedIn', href: `https://www.linkedin.com/sharing/share-offsite/?url=${q(withUtm(url, 'linkedin'))}` },
-    { network: 'telegram', label: 'Telegram', href: `https://t.me/share/url?url=${q(withUtm(url, 'telegram'))}&text=${q(t)}` },
-    { network: 'bluesky', label: 'Bluesky', href: `https://bsky.app/intent/compose?text=${q(`${t} ${withUtm(url, 'bluesky')}`)}` },
-    { network: 'whatsapp', label: 'WhatsApp', href: `https://wa.me/?text=${q(`${t} ${withUtm(url, 'whatsapp')}`)}` },
+    { network: 'x', label: 'X', href: `https://x.com/intent/post?text=${q(t)}&url=${q(tagged('x'))}&via=${X_HANDLE}` },
+    { network: 'linkedin', label: 'LinkedIn', href: `https://www.linkedin.com/sharing/share-offsite/?url=${q(tagged('linkedin'))}` },
+    { network: 'telegram', label: 'Telegram', href: `https://t.me/share/url?url=${q(tagged('telegram'))}&text=${q(t)}` },
+    { network: 'bluesky', label: 'Bluesky', href: `https://bsky.app/intent/compose?text=${q(`${t} ${tagged('bluesky')}`)}` },
+    { network: 'whatsapp', label: 'WhatsApp', href: `https://wa.me/?text=${q(`${t} ${tagged('whatsapp')}`)}` },
   ]
 }

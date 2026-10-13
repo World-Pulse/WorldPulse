@@ -4,6 +4,7 @@ import type { Metadata } from 'next'
 import { SITE_NAME, SITE_URL, jsonLdText, metaDescription } from '@/lib/page-metadata'
 import { entityIdFromSlug, entityPath, entityTypeIcon, entityTypeLabel } from '@/lib/entity-links'
 import { BriefingSignup } from '@/components/briefing/BriefingSignup'
+import { ShareMenu } from '@/components/signals/ShareMenu'
 import { ConnectionWhy } from './ConnectionWhy'
 import { ActivityBars } from './ActivityBars'
 import { cachedFetch } from '@/lib/server-fetch'
@@ -157,8 +158,12 @@ export default async function EntityPage({ params }: { params: Promise<{ slug: s
         </nav>
 
         <header className="space-y-2">
-          <div className="font-mono text-[10px] tracking-widest uppercase text-wp-text3">
-            <span aria-hidden="true">{entityTypeIcon(entity.type)}</span> {entityTypeLabel(entity.type)}
+          <div className="flex items-center justify-between gap-3">
+            <div className="font-mono text-[10px] tracking-widest uppercase text-wp-text3">
+              <span aria-hidden="true">{entityTypeIcon(entity.type)}</span> {entityTypeLabel(entity.type)}
+            </div>
+            {/* readers can pass the page on; its picture carries the counts (Oct 13, 2026) */}
+            <ShareMenu title={`${entity.name}: the latest verified news, on WorldPulse`} campaign="entity" label={`Share the page on ${entity.name}`} />
           </div>
           <h1 className="text-[26px] sm:text-[32px] font-bold leading-tight text-wp-text [text-wrap:balance]">{entity.name}</h1>
           <p className="text-[15px] text-wp-text2 leading-relaxed">
