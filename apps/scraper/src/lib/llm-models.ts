@@ -8,3 +8,8 @@
 export const LLM_MODEL = process.env.LLM_MODEL || 'gpt-4o-mini'
 /** Google Gemini model (2.0-flash shut down 2026-06-01) */
 export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash'
+/**
+ * OpenAI embedding model. Stored vectors (pgvector, Pinecone) are 1536
+ * dimensions: only switch to a model that returns the same size, or re-embed.
+ */
+export const OPENAI_EMBEDDING_MODEL = process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small'

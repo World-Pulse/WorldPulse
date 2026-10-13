@@ -15,6 +15,7 @@
 
 import { db } from '../../db/postgres'
 import { redis } from '../../db/redis'
+import { OPENAI_EMBEDDING_MODEL } from '../llm-models'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -25,7 +26,7 @@ interface EmbeddingResult {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const EMBEDDING_MODEL = 'text-embedding-3-small'
+const EMBEDDING_MODEL = OPENAI_EMBEDDING_MODEL
 const EMBEDDING_DIMS = 1536
 const SEMANTIC_DEDUP_THRESHOLD = 0.92   // Cosine similarity above this = same event
 const SEMANTIC_DEDUP_WINDOW_HOURS = 6

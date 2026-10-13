@@ -17,12 +17,13 @@ import { openaiPaused, noteOpenAIFailure } from '../lib/openai-credit'
 import { db } from '../lib/postgres'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
+import { OPENAI_EMBEDDING_MODEL } from '../lib/llm-models'
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 
 const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434'
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'nomic-embed-text'
-const OPENAI_MODEL = 'text-embedding-3-small'
+const OPENAI_MODEL = OPENAI_EMBEDDING_MODEL
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? ''
 
 // Dimension determined by active provider

@@ -10,6 +10,7 @@
 
 import { createHash } from 'crypto'
 import { redis } from './redis'
+import { OPENAI_EMBEDDING_MODEL } from './llm-models'
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -18,7 +19,7 @@ const PINECONE_INDEX   = process.env.PINECONE_INDEX ?? 'worldpulse-signals'
 const PINECONE_HOST    = process.env.PINECONE_HOST  ?? '' // e.g. https://worldpulse-signals-xxxx.svc.pinecone.io
 
 const OPENAI_API_KEY       = process.env.OPENAI_API_KEY
-const EMBEDDING_MODEL      = 'text-embedding-3-small'
+const EMBEDDING_MODEL      = OPENAI_EMBEDDING_MODEL
 const EMBEDDING_DIMENSIONS = 1536
 const EMBED_CACHE_TTL      = 60 * 60 * 24  // 24h in seconds
 
