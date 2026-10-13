@@ -305,7 +305,10 @@ function MapView() {
   const [flagModalSignalId, setFlagModalSignalId] = useState<string | null>(null)
   const [loading,  setLoading]  = useState(true)
   const [category,    setCategory]    = useState(() => searchParams.get('cat') ?? 'all')
-  const [severity,    setSeverity]    = useState('all')
+  const [severity,    setSeverity]    = useState(() => {
+    const v = searchParams.get('sev')
+    return v && (SEVS as readonly string[]).includes(v) ? v : 'all'
+  })
   const [timeRange,   setTimeRange]   = useState(() => searchParams.get('tr')  ?? '24h')
   const [wsOnline,    setWsOnline]    = useState(false)
   const [heatmapMode, setHeatmapMode] = useState(() => searchParams.get('hm') === '1')
@@ -1427,10 +1430,12 @@ function MapView() {
             const c   = map.getCenter()
             const z   = map.getZoom()
             const cat = catRef.current
+            const sev = sevRef.current
             const tr  = trRef.current
             const hm  = hmRef.current
             let url = `?z=${z.toFixed(2)}&lat=${c.lat.toFixed(4)}&lng=${c.lng.toFixed(4)}`
             if (cat !== 'all') url += `&cat=${cat}`
+            if (sev !== 'all') url += `&sev=${sev}`
             if (tr  !== '24h') url += `&tr=${tr}`
             if (hm)            url += `&hm=1`
             // Update the address without a Next.js navigation (M7), keeping the #share hash
@@ -3488,13 +3493,14 @@ function MapView() {
     if (c == null || z == null) return
     let url = `?z=${parseFloat(z).toFixed(2)}&lat=${parseFloat(c.lat).toFixed(4)}&lng=${parseFloat(c.lng).toFixed(4)}`
     if (category    !== 'all')  url += `&cat=${category}`
+    if (severity    !== 'all')  url += `&sev=${severity}`
     if (timeRange   !== '24h')  url += `&tr=${timeRange}`
     if (heatmapMode)            url += `&hm=1`
     if (timelineActive)         url += `&tl=${timelineRange}`
     if (timelineActive && timeline.currentTime) url += `&tt=${encodeURIComponent(timeline.currentTime)}`
     // Without a Next.js navigation (M7), keeping the #share hash
     window.history.replaceState(window.history.state, '', url + window.location.hash)
-  }, [category, timeRange, heatmapMode])
+  }, [category, severity, timeRange, heatmapMode])
 
   // ── Derived state ──────────────────────────────────────────────────────────
 
