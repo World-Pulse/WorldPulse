@@ -45,7 +45,8 @@ export interface TrendingEvent {
 
 const TREND_WINDOW_HOURS = 12   // Look back 12h for clustering
 const MIN_SIGNALS_FOR_TREND = 3 // At least 3 signals to qualify
-const ESCALATION_THRESHOLD = 5  // 5+ signals = "Escalating"
+/** Reports in the window's second half for a subject to count as growing */
+const ESCALATION_MIN_RECENT = 5
 const CACHE_TTL = 5 * 60        // Cache trends for 5 minutes
 const CACHE_KEY = 'pulse:trending'
 
@@ -76,6 +77,9 @@ export async function detectTrends(options?: {
   } catch { /* non-fatal */ }
 
   const since = new Date(Date.now() - hours * 3600_000)
+  // The window's second half, compared with its first to tell growth from volume
+  const halfHours = hours / 2
+  const midpoint = new Date(Date.now() - halfHours * 3600_000)
 
   // Query signal clusters: group by category + country_code
   let q = db('signals')
@@ -90,6 +94,7 @@ export async function detectTrends(options?: {
       'category',
       'country_code',
       db.raw('count(*) as signal_count'),
+      db.raw('count(*) FILTER (WHERE created_at > ?) as recent_count', [midpoint]),
       db.raw('max(severity) as peak_severity'),
       db.raw('min(created_at) as first_seen'),
       db.raw('max(created_at) as last_seen'),
@@ -111,13 +116,11 @@ export async function detectTrends(options?: {
     const ids = Array.isArray(cluster.signal_ids) ? cluster.signal_ids : []
     const peakSev = findPeakSeverity(String(cluster.peak_severity ?? 'low'))
 
-    // Check for severity escalation within the window
-    const escalationInfo = await checkEscalation(
-      ids.slice(0, 10).map(String),
-      String(cluster.category),
-    )
-
-    const isEscalating = signalCount >= ESCALATION_THRESHOLD || escalationInfo.isEscalating
+    // Growing, or turning more severe (escalation(), below)
+    const recentCount = Number(cluster.recent_count) || 0
+    const severer = await turningMoreSevere(ids.slice(0, 10).map(String))
+    const escalationInfo = escalation(recentCount, signalCount - recentCount, halfHours, severer)
+    const isEscalating = escalationInfo.isEscalating
 
     // Compute trend score
     const recencyMs = Date.now() - new Date(cluster.last_seen).getTime()
@@ -133,9 +136,7 @@ export async function detectTrends(options?: {
       signalCount,
       peakSeverity: peakSev,
       isEscalating,
-      escalationReason: isEscalating
-        ? escalationInfo.reason ?? `${signalCount} signals in ${hours}h`
-        : null,
+      escalationReason: escalationInfo.reason,
       signalIds: ids.slice(0, 5).map(String),
       firstSeen: new Date(cluster.first_seen).toISOString(),
       lastSeen: new Date(cluster.last_seen).toISOString(),
@@ -175,54 +176,45 @@ function findPeakSeverity(dbMax: string): string {
 }
 
 /**
- * Check if a set of signals shows severity escalation over time.
- * Returns true if later signals are more severe than earlier ones.
+ * Whether a subject (a category in a country) is escalating, and why, for
+ * the morning briefing's "Escalating" list and its event tags (Oct 13, 2026).
+ * It used to be "5 or more reports in 12 hours", which made every busy
+ * subject escalating ("Security in US: 189 signals in 12h", 20 entries a
+ * morning), or a check of the gaps between its 10 newest reports. Now it
+ * means growing: at least 5 reports in the window's second half and at least
+ * twice as many as in its first; or reports turning more severe.
  */
-async function checkEscalation(
-  signalIds: string[],
-  category: string,
-): Promise<{ isEscalating: boolean; reason: string | null }> {
-  if (signalIds.length < 3) return { isEscalating: false, reason: null }
+export function escalation(
+  recent: number,
+  earlier: number,
+  halfHours: number,
+  severer: boolean,
+): { isEscalating: boolean; reason: string | null } {
+  const hours = Number.isInteger(halfHours) ? String(halfHours) : halfHours.toFixed(1)
+  if (recent >= ESCALATION_MIN_RECENT && recent >= 2 * earlier) {
+    return {
+      isEscalating: true,
+      reason: `${recent} reports in the last ${hours} hours, ${earlier === 0 ? 'none before' : `up from ${earlier}`}`,
+    }
+  }
+  if (severer && recent >= 3) return { isEscalating: true, reason: 'Reports turning more severe' }
+  return { isEscalating: false, reason: null }
+}
 
+/** Whether the later of these reports are more severe than the earlier ones */
+async function turningMoreSevere(signalIds: string[]): Promise<boolean> {
+  if (signalIds.length < 3) return false
   try {
     const signals = await db('signals')
       .whereIn('id', signalIds)
       .orderBy('created_at', 'asc')
       .select(['severity', 'created_at'])
-
-    if (signals.length < 3) return { isEscalating: false, reason: null }
-
+    if (signals.length < 3) return false
     // Compare first half vs second half severity
     const mid = Math.floor(signals.length / 2)
-    const firstHalf = signals.slice(0, mid)
-    const secondHalf = signals.slice(mid)
-
-    const avgFirst = firstHalf.reduce((s, r) => s + (SEVERITY_RANK[r.severity] ?? 1), 0) / firstHalf.length
-    const avgSecond = secondHalf.reduce((s, r) => s + (SEVERITY_RANK[r.severity] ?? 1), 0) / secondHalf.length
-
-    if (avgSecond > avgFirst + 0.5) {
-      return {
-        isEscalating: true,
-        reason: `Severity escalating in ${category}: recent signals more severe than earlier reports`,
-      }
-    }
-
-    // Check for acceleration (signals arriving faster)
-    if (signals.length >= 4) {
-      const times = signals.map(s => new Date(s.created_at).getTime())
-      const firstGap = times[mid - 1]! - times[0]!
-      const secondGap = times[times.length - 1]! - times[mid]!
-
-      if (secondHalf.length >= firstHalf.length && secondGap < firstGap * 0.6) {
-        return {
-          isEscalating: true,
-          reason: `Signal frequency accelerating in ${category}`,
-        }
-      }
-    }
+    const avg = (rows: Array<{ severity: string }>) => rows.reduce((n, r) => n + (SEVERITY_RANK[r.severity] ?? 1), 0) / rows.length
+    return avg(signals.slice(mid)) > avg(signals.slice(0, mid)) + 0.5
   } catch {
-    // Non-fatal
+    return false
   }
-
-  return { isEscalating: false, reason: null }
 }

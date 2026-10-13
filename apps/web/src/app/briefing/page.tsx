@@ -135,6 +135,15 @@ function ReliabilityDots({ score }: { score: number }) {
   )
 }
 
+/** "SA" → "Saudi Arabia"; the code itself when it isn't a country the browser knows */
+function countryName(code: string): string {
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'region' }).of(code.toUpperCase()) ?? code
+  } catch {
+    return code
+  }
+}
+
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime()
   const mins = Math.floor(diff / 60_000)
@@ -359,20 +368,22 @@ function MorningBriefingCard({ briefing }: { briefing: MorningBriefing }) {
         </div>
       </div>
 
-      {/* Escalating Stories */}
+      {/* Escalating: subjects growing or turning more severe in the last 12
+          hours, at most 5 (the API's rule since Oct 13, 2026; it listed every
+          busy subject before, 20 a morning) */}
       {briefing.escalatingStories.length > 0 && (
         <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-2">
             <TrendingUp className="w-4 h-4 text-red-400" />
-            <span className="text-xs font-semibold text-red-400 uppercase tracking-wider">Escalating Stories</span>
+            <span className="text-xs font-semibold text-red-400 uppercase tracking-wider">Escalating</span>
           </div>
           <div className="space-y-1.5">
-            {briefing.escalatingStories.map((story, i) => (
-              <div key={i} className="flex items-center gap-2 text-sm">
-                <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                <span className="text-zinc-300">
+            {briefing.escalatingStories.slice(0, 5).map((story, i) => (
+              <div key={i} className="flex items-start gap-2 text-sm">
+                <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
+                <span className="text-zinc-300 min-w-0">
                   <span className="capitalize font-medium text-red-300">{story.category}</span>
-                  {story.region && <span className="text-zinc-500"> in {story.region}</span>}
+                  <span className="text-zinc-400"> · {story.region ? countryName(story.region) : 'worldwide'}</span>
                   {story.reason && <span className="text-zinc-500"> — {story.reason}</span>}
                 </span>
               </div>
