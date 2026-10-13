@@ -192,6 +192,7 @@ describe('briefing-generator', () => {
       expect(result.top_signals.map(s => s.id)).toEqual(['1', '3'])
       expect(result.top_signals[0]).not.toHaveProperty('story_key')
       expect(result.total_signals).toBe(4)
+      expect(result.total_stories).toBe(4) // (the stand-in answers every count with 4)
     })
 
     it('caps hours at 72 when larger value passed', async () => {

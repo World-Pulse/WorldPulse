@@ -37,6 +37,7 @@ export const registerBriefingRoutes: FastifyPluginAsync = async (app) => {
                 model: { type: 'string' },
                 period_hours: { type: 'integer' },
                 total_signals: { type: 'integer' },
+                total_stories: { type: 'integer' },
                 total_clusters: { type: 'integer' },
                 executive_summary: { type: 'string' },
                 key_developments: {
@@ -96,6 +97,7 @@ export const registerBriefingRoutes: FastifyPluginAsync = async (app) => {
                   date: { type: 'string' },
                   generated_at: { type: 'string' },
                   total_signals: { type: 'integer' },
+                  total_stories: { type: 'integer' },
                   total_clusters: { type: 'integer' },
                   model: { type: 'string' },
                 },

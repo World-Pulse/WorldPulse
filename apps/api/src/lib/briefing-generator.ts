@@ -92,6 +92,9 @@ export interface DailyBriefing {
   model: string
   period_hours: number
   total_signals: number
+  /** Stories in the period: reports of one event share a story (Oct 13, 2026) */
+  total_stories: number
+  /** Correlation clusters (cluster:* keys): 0 since the story grouping replaced them */
   total_clusters: number
   executive_summary: string
   sections: BriefingSection[]
@@ -172,6 +175,17 @@ async function getTotalSignalCount(hours: number): Promise<number> {
   const result = await db('signals')
     .where('created_at', '>=', since)
     .count('id as count')
+    .first() as { count: string | number } | undefined
+  return Number(result?.count ?? 0)
+}
+
+/** Stories reported in the last `hours`: each story once, however many outlets */
+async function getTotalStoryCount(hours: number): Promise<number> {
+  const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString()
+  const key = await signalsHaveStoryIds() ? 'COALESCE(story_id, id)' : 'id'
+  const result = await db('signals')
+    .where('created_at', '>=', since)
+    .select(db.raw(`count(DISTINCT ${key})::int AS count`))
     .first() as { count: string | number } | undefined
   return Number(result?.count ?? 0)
 }
@@ -560,9 +574,10 @@ export async function generateDailyBriefing(hours: number = 24): Promise<DailyBr
   logger.info({ dateKey, hours }, 'Generating fresh daily briefing')
 
   // Collect intelligence data in parallel
-  const [signals, totalSignals, categories, hotspots, clusters] = await Promise.all([
+  const [signals, totalSignals, totalStories, categories, hotspots, clusters] = await Promise.all([
     getTopSignals(hours),
     getTotalSignalCount(hours),
+    getTotalStoryCount(hours),
     getCategoryBreakdown(hours),
     getGeographicHotspots(hours),
     getRecentClusters(),
@@ -592,6 +607,7 @@ export async function generateDailyBriefing(hours: number = 24): Promise<DailyBr
       model: 'none',
       period_hours: hours,
       total_signals: 0,
+      total_stories: 0,
       total_clusters: 0,
       executive_summary: 'No signals were collected in this period. Systems may be offline or no events occurred.',
       sections: emptySections,
@@ -672,6 +688,7 @@ export async function generateDailyBriefing(hours: number = 24): Promise<DailyBr
     model,
     period_hours: hours,
     total_signals: totalSignals,
+    total_stories: totalStories,
     total_clusters: clusters.length,
     executive_summary,
     sections,
@@ -692,6 +709,7 @@ export async function generateDailyBriefing(hours: number = 24): Promise<DailyBr
       date: briefing.date,
       generated_at: briefing.generated_at,
       total_signals: briefing.total_signals,
+      total_stories: briefing.total_stories,
       total_clusters: briefing.total_clusters,
       model: briefing.model,
     }))
@@ -716,6 +734,8 @@ export async function getBriefingHistory(): Promise<Array<{
   date: string
   generated_at: string
   total_signals: number
+  /** (briefings from before Oct 13, 2026 don't have it) */
+  total_stories?: number
   total_clusters: number
   model: string
 }>> {

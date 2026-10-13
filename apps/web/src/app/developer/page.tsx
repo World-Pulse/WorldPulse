@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -54,9 +55,16 @@ export default function DeveloperPage() {
   // Revoke state
   const [revoking, setRevoking] = useState<string | null>(null)
 
-  const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
+  // The reader's sign-in, read after the first render (the server's render
+  // has none): undefined until then, null when signed out. Signed out, the
+  // page asked for keys anyway and showed the API's 401 in red (Oct 13, 2026)
+  const [token, setToken] = useState<string | null | undefined>(undefined)
+  useEffect(() => {
+    try { setToken(localStorage.getItem('wp_access_token')) } catch { setToken(null) }
+  }, [])
 
   const fetchKeys = useCallback(async () => {
+    if (!token) return
     setLoading(true)
     setError('')
     try {
@@ -73,7 +81,10 @@ export default function DeveloperPage() {
     }
   }, [token])
 
-  useEffect(() => { fetchKeys() }, [fetchKeys])
+  useEffect(() => {
+    if (token) fetchKeys()
+    else if (token === null) setLoading(false)
+  }, [token, fetchKeys])
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -178,23 +189,40 @@ export default function DeveloperPage() {
       <div className="glass border border-[rgba(255,255,255,0.07)] rounded-xl overflow-hidden mb-4">
         <div className="flex items-center justify-between px-5 py-4 border-b border-[rgba(255,255,255,0.06)]">
           <h2 className="text-[14px] font-semibold text-wp-text">Your API Keys</h2>
-          <button
-            onClick={() => setModalOpen(true)}
-            className="bg-wp-amber text-black font-bold text-[13px] px-4 py-1.5 rounded-lg hover:bg-[#ffb84d] transition-colors"
-          >
-            + Create New Key
-          </button>
+          {token === null ? (
+            <Link
+              href="/auth/register"
+              className="bg-wp-amber text-black font-bold text-[13px] px-4 py-1.5 rounded-lg hover:bg-[#ffb84d] transition-colors no-underline"
+            >
+              Create a free account
+            </Link>
+          ) : (
+            <button
+              onClick={() => setModalOpen(true)}
+              disabled={!token}
+              className="bg-wp-amber text-black font-bold text-[13px] px-4 py-1.5 rounded-lg hover:bg-[#ffb84d] transition-colors disabled:opacity-50"
+            >
+              + Create New Key
+            </button>
+          )}
         </div>
+
+        {token === null && (
+          <div className="px-5 py-10 text-center text-[13px] text-wp-text2">
+            <Link href="/auth/login" className="text-wp-amber hover:underline">Sign in</Link> to create and manage your API keys.
+            The free tier is 1,000 requests a day.
+          </div>
+        )}
 
         {loading && (
           <div className="px-5 py-8 text-center text-[13px] text-wp-text2">Loading…</div>
         )}
 
-        {!loading && error && (
+        {token !== null && !loading && error && (
           <div className="px-5 py-6 text-center text-[13px] text-wp-red">{error}</div>
         )}
 
-        {!loading && !error && keys.length === 0 && (
+        {token !== null && !loading && !error && keys.length === 0 && (
           <div className="px-5 py-10 text-center text-[13px] text-wp-text2">
             No API keys yet. Create one to get started.
           </div>

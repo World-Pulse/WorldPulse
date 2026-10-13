@@ -48,6 +48,8 @@ interface DailyBriefing {
   model:              string
   period_hours:       number
   total_signals:      number
+  /** stories in the period (each story once, however many outlets); from Oct 13, 2026 */
+  total_stories?:     number
   total_clusters:     number
   executive_summary:  string
   key_developments:   BriefingDevelopment[]
@@ -63,6 +65,7 @@ interface BriefingHistoryItem {
   date:           string
   generated_at:   string
   total_signals:  number
+  total_stories?: number
   total_clusters: number
   model:          string
 }
@@ -355,7 +358,7 @@ function HistorySidebar({ items, activeId, onSelect }: {
           >
             <p className="font-medium">{fmtDate(h.date)}</p>
             <p className="font-mono text-[10px] text-wp-text3 mt-0.5">
-              {h.total_signals} signals · {h.total_clusters} clusters
+              {h.total_signals} reports{h.total_stories != null ? ` · ${h.total_stories} stories` : ''}
             </p>
           </button>
         ))}
@@ -370,12 +373,14 @@ function BriefingStats({ briefing }: { briefing: DailyBriefing }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
       <div className="glass border border-[rgba(255,255,255,0.07)] rounded-xl p-4 text-center">
-        <p className="font-mono text-[10px] tracking-widest uppercase text-wp-text3 mb-1">Signals</p>
-        <p className="font-mono text-[24px] font-bold text-wp-text">{briefing.total_signals}</p>
+        <p className="font-mono text-[10px] tracking-widest uppercase text-wp-text3 mb-1">Reports</p>
+        <p className="font-mono text-[24px] font-bold text-wp-text">{briefing.total_signals.toLocaleString('en-US')}</p>
       </div>
+      {/* Stories, not "clusters": the correlation clusters it counted are gone
+          (always 0); reports of one event share a story (Oct 13, 2026) */}
       <div className="glass border border-[rgba(255,255,255,0.07)] rounded-xl p-4 text-center">
-        <p className="font-mono text-[10px] tracking-widest uppercase text-wp-text3 mb-1">Clusters</p>
-        <p className="font-mono text-[24px] font-bold text-wp-text">{briefing.total_clusters}</p>
+        <p className="font-mono text-[10px] tracking-widest uppercase text-wp-text3 mb-1">Stories</p>
+        <p className="font-mono text-[24px] font-bold text-wp-text">{briefing.total_stories != null ? briefing.total_stories.toLocaleString('en-US') : '—'}</p>
       </div>
       <div className="glass border border-[rgba(255,255,255,0.07)] rounded-xl p-4 text-center">
         <p className="font-mono text-[10px] tracking-widest uppercase text-wp-text3 mb-1">Period</p>

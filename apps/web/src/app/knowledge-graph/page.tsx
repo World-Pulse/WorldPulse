@@ -230,6 +230,13 @@ export default function KnowledgeGraphPage() {
             Open Full Graph Explorer
             <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-white/20 rounded">NEW</span>
           </a>
+          {/* the people, places and organizations named most this week (Oct 13, 2026) */}
+          <Link
+            href="/entities"
+            className="inline-flex items-center gap-2 mt-4 ml-0 sm:ml-3 px-4 py-2 rounded-lg border border-indigo-500/40 text-indigo-200 text-sm font-medium hover:bg-indigo-500/10 transition-colors"
+          >
+            Who&apos;s in the news this week →
+          </Link>
         </div>
       </section>
 
@@ -240,7 +247,11 @@ export default function KnowledgeGraphPage() {
             <StatCard label="Total Entities" value={stats.entities.total.toLocaleString()} />
             <StatCard label="Total Mentions" value={stats.entities.total_mentions.toLocaleString()} />
             <StatCard label="Relationships" value={stats.edges.total.toLocaleString()} />
-            <StatCard label="Avg Edge Weight" value={stats.edges.avg_weight} />
+            {/* (was "Avg Edge Weight", a number that meant nothing to a reader) */}
+            <Link href="/entities" className="block rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4 hover:bg-indigo-500/10 transition-colors">
+              <div className="text-sm text-gray-400">In the news</div>
+              <div className="text-2xl font-bold text-indigo-200 mt-1">This week →</div>
+            </Link>
           </div>
         )}
 
@@ -507,7 +518,8 @@ export default function KnowledgeGraphPage() {
         </div>
 
         {/* Predicate Breakdown */}
-        {stats && Object.keys(stats.edges.by_predicate).length > 0 && (
+        {/* (only when there is more than one kind: today every link is "named together") */}
+        {stats && Object.keys(stats.edges.by_predicate).length > 1 && (
           <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-6">
             <h2 className="text-lg font-semibold mb-4">Relationship Types</h2>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

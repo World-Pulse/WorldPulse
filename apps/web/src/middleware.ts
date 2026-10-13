@@ -78,7 +78,10 @@ export function middleware(req: NextRequest): NextResponse {
     // localhost origins are only included in development (same guard as main CSP).
     const embedCsp = [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      // Google Analytics as on the rest of the site: the root layout loads it
+      // on every page, and this policy blocked it here (an error in every
+      // embedding site's console; embeds went uncounted). Oct 13, 2026
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com",
       "style-src 'self' 'unsafe-inline'",
       "font-src 'self' data:",
       "img-src 'self' data: https:",
@@ -86,6 +89,10 @@ export function middleware(req: NextRequest): NextResponse {
         "connect-src 'self'",
         'https://api.world-pulse.io',
         'wss://api.world-pulse.io',
+        'https://www.googletagmanager.com',
+        'https://www.google-analytics.com',
+        'https://*.google-analytics.com',
+        'https://*.analytics.google.com',
         ...(isDev ? ['http://localhost:3001', 'ws://localhost:3001'] : []),
       ].join(' '),
       "frame-ancestors *",
