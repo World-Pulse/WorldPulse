@@ -31,7 +31,9 @@ const mockDb = vi.fn(() => ({
 
 ;(mockDb as Record<string, unknown>).raw = mockRaw
 
-vi.mock('../db/postgres', () => ({ db: mockDb }))
+// Getters, because the module under test is imported (imports are hoisted)
+// before these consts exist: reading them in the factory threw (Oct 13, 2026)
+vi.mock('../db/postgres', () => ({ get db() { return mockDb } }))
 
 const mockRedisGet = vi.fn()
 const mockRedisSetex = vi.fn()
@@ -41,13 +43,15 @@ const mockRedisLtrim = vi.fn()
 const mockRedisLrange = vi.fn().mockResolvedValue([])
 
 vi.mock('../db/redis', () => ({
-  redis: {
-    get: mockRedisGet,
-    setex: mockRedisSetex,
-    scan: mockRedisScan,
-    lpush: mockRedisLpush,
-    ltrim: mockRedisLtrim,
-    lrange: mockRedisLrange,
+  get redis() {
+    return {
+      get: mockRedisGet,
+      setex: mockRedisSetex,
+      scan: mockRedisScan,
+      lpush: mockRedisLpush,
+      ltrim: mockRedisLtrim,
+      lrange: mockRedisLrange,
+    }
   },
 }))
 
@@ -61,7 +65,22 @@ vi.mock('../lib/logger', () => ({
 
 // ─── Import after mocks ──────────────────────────────────────────────────────
 
-import { generateDailyBriefing, getBriefingHistory } from '../lib/briefing-generator'
+import { generateDailyBriefing, getBriefingHistory, onePerStory } from '../lib/briefing-generator'
+
+/**
+ * A query-builder stand-in: every builder method returns the builder, and a
+ * query ends in `limit` (rows) or `first` (the count row). The count query
+ * ends in .first() now, which the old per-test chains didn't have (Oct 13, 2026).
+ */
+function queryOf(rows: unknown[], count = 0) {
+  const q: Record<string, unknown> = {}
+  for (const m of ['select', 'where', 'andWhere', 'whereIn', 'whereNotNull', 'whereRaw', 'orderByRaw', 'orderBy', 'groupBy', 'groupByRaw', 'count', 'countDistinct', 'avg']) {
+    q[m] = vi.fn(() => q)
+  }
+  q.limit = vi.fn().mockResolvedValue(rows)
+  q.first = vi.fn().mockResolvedValue({ count })
+  return q
+}
 
 describe('briefing-generator', () => {
   beforeEach(() => {
@@ -103,25 +122,7 @@ describe('briefing-generator', () => {
     it('returns empty briefing when no signals exist', async () => {
       // All queries return empty
       mockLimit.mockResolvedValue([])
-      // Mock the count query chain
-      const mockCountChain = {
-        where: vi.fn().mockReturnValue({
-          count: vi.fn().mockResolvedValue([{ count: 0 }]),
-        }),
-      }
-      mockDb.mockImplementation(() => ({
-        select: vi.fn().mockReturnThis(),
-        where: vi.fn().mockReturnThis(),
-        whereIn: vi.fn().mockReturnThis(),
-        whereNotNull: vi.fn().mockReturnThis(),
-        orderByRaw: vi.fn().mockReturnThis(),
-        orderBy: vi.fn().mockReturnThis(),
-        groupBy: vi.fn().mockReturnThis(),
-        count: vi.fn().mockReturnValue(mockCountChain),
-        countDistinct: vi.fn().mockReturnThis(),
-        avg: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockResolvedValue([]),
-      }))
+      mockDb.mockImplementation(() => queryOf([]))
 
       const result = await generateDailyBriefing(24)
       expect(result.total_signals).toBe(0)
@@ -162,29 +163,7 @@ describe('briefing-generator', () => {
         },
       ]
 
-      // Setup mock chain for different query types
-      let callCount = 0
-      mockDb.mockImplementation(() => {
-        callCount++
-        const chain = {
-          select: vi.fn().mockReturnThis(),
-          where: vi.fn().mockReturnThis(),
-          whereIn: vi.fn().mockReturnThis(),
-          whereNotNull: vi.fn().mockReturnThis(),
-          orderByRaw: vi.fn().mockReturnThis(),
-          orderBy: vi.fn().mockReturnThis(),
-          groupBy: vi.fn().mockReturnThis(),
-          count: vi.fn().mockReturnValue({
-            where: vi.fn().mockReturnValue({
-              count: vi.fn().mockResolvedValue([{ count: 42 }]),
-            }),
-          }),
-          countDistinct: vi.fn().mockReturnThis(),
-          avg: vi.fn().mockReturnThis(),
-          limit: vi.fn().mockResolvedValue(mockSignals),
-        }
-        return chain
-      })
+      mockDb.mockImplementation(() => queryOf(mockSignals, 42))
 
       const result = await generateDailyBriefing(24)
       expect(result.model).toBe('extractive')
@@ -192,53 +171,65 @@ describe('briefing-generator', () => {
       expect(result.key_developments.length).toBeGreaterThan(0)
     })
 
+    it('briefs each story once, however many outlets reported it', async () => {
+      delete process.env.ANTHROPIC_API_KEY
+      delete process.env.OPENAI_API_KEY
+      delete process.env.GEMINI_API_KEY
+      delete process.env.OPENROUTER_API_KEY
+      delete process.env.OLLAMA_URL
+      const report = (id: string, story: string, title: string) => ({
+        id, story_key: story, title, category: 'conflict', severity: 'high', reliability_score: 0.9,
+        location_name: 'Yemen', country_code: 'YE', source_domain: 'example.org', created_at: new Date().toISOString(),
+      })
+      mockDb.mockImplementation(() => queryOf([
+        report('1', 'story-a', 'Houthis fire missiles at shipping'),
+        report('2', 'story-a', 'Houthi missiles target Red Sea ships'),
+        report('3', 'story-b', 'Ceasefire talks resume in Muscat'),
+        report('4', 'story-a', 'Red Sea shipping attacked again'),
+      ], 4))
+
+      const result = await generateDailyBriefing(24)
+      expect(result.top_signals.map(s => s.id)).toEqual(['1', '3'])
+      expect(result.top_signals[0]).not.toHaveProperty('story_key')
+      expect(result.total_signals).toBe(4)
+    })
+
     it('caps hours at 72 when larger value passed', async () => {
       mockLimit.mockResolvedValue([])
-      mockDb.mockImplementation(() => ({
-        select: vi.fn().mockReturnThis(),
-        where: vi.fn().mockReturnThis(),
-        whereIn: vi.fn().mockReturnThis(),
-        whereNotNull: vi.fn().mockReturnThis(),
-        orderByRaw: vi.fn().mockReturnThis(),
-        orderBy: vi.fn().mockReturnThis(),
-        groupBy: vi.fn().mockReturnThis(),
-        count: vi.fn().mockReturnValue({
-          where: vi.fn().mockReturnValue({
-            count: vi.fn().mockResolvedValue([{ count: 0 }]),
-          }),
-        }),
-        countDistinct: vi.fn().mockReturnThis(),
-        avg: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockResolvedValue([]),
-      }))
+      mockDb.mockImplementation(() => queryOf([]))
 
       const result = await generateDailyBriefing(24)
       expect(result.period_hours).toBe(24)
     })
 
     it('includes correct date in briefing id', async () => {
-      mockDb.mockImplementation(() => ({
-        select: vi.fn().mockReturnThis(),
-        where: vi.fn().mockReturnThis(),
-        whereIn: vi.fn().mockReturnThis(),
-        whereNotNull: vi.fn().mockReturnThis(),
-        orderByRaw: vi.fn().mockReturnThis(),
-        orderBy: vi.fn().mockReturnThis(),
-        groupBy: vi.fn().mockReturnThis(),
-        count: vi.fn().mockReturnValue({
-          where: vi.fn().mockReturnValue({
-            count: vi.fn().mockResolvedValue([{ count: 0 }]),
-          }),
-        }),
-        countDistinct: vi.fn().mockReturnThis(),
-        avg: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockResolvedValue([]),
-      }))
+      mockDb.mockImplementation(() => queryOf([]))
 
       const result = await generateDailyBriefing(24)
       const today = new Date().toISOString().slice(0, 10)
       expect(result.id).toContain(today)
       expect(result.date).toBe(today)
+    })
+  })
+
+  describe('onePerStory', () => {
+    it('keeps the first report of each story, in order, without its story key', () => {
+      const rows = [
+        { id: 'a1', story_key: 'A', title: 'first of A' },
+        { id: 'b1', story_key: 'B', title: 'first of B' },
+        { id: 'a2', story_key: 'A', title: 'second of A' },
+        { id: 'c1', title: 'no story key: its own story' },
+        { id: 'c1', title: 'same id again' },
+      ]
+      expect(onePerStory(rows)).toEqual([
+        { id: 'a1', title: 'first of A' },
+        { id: 'b1', title: 'first of B' },
+        { id: 'c1', title: 'no story key: its own story' },
+      ])
+    })
+
+    it('returns nothing for nothing', () => {
+      expect(onePerStory([])).toEqual([])
     })
   })
 

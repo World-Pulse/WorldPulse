@@ -11,7 +11,12 @@
  * - Key country presence (3)
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+
+// No database or Redis here: the functions tested don't use them, and opening
+// a real connection ended the run when none was configured
+vi.mock('../../db/postgres', () => ({ db: Object.assign(vi.fn(), { raw: vi.fn() }) }))
+vi.mock('../../db/redis', () => ({ redis: { get: vi.fn(), setex: vi.fn() } }))
 import {
   FOOD_SECURITY_REGISTRY,
   LIST_CACHE_TTL,

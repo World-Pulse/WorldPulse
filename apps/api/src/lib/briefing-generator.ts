@@ -17,6 +17,7 @@ import { redis } from '../db/redis'
 import { logger } from './logger'
 import { OPENAI_CHAT_MODEL, GEMINI_MODEL } from './llm-models'
 import { askClaude, CLAUDE_SMALL } from './claude'
+import { signalsHaveStoryIds } from './stories'
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 const BRIEFING_CACHE_TTL  = 60 * 60 * 4   // 4 hours
@@ -127,12 +128,16 @@ export const SECTION_TITLES: Record<BriefingSectionId, string> = {
 
 async function getTopSignals(hours: number): Promise<BriefingSignal[]> {
   const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString()
+  // One report per story: the Djibouti wreck took four of the five "key
+  // developments" (Oct 13, 2026). Reports of a story share story_id.
+  const storyKey = await signalsHaveStoryIds() ? 'COALESCE(story_id, id)::text' : 'id::text'
   // (signals has no source_domain column: the outlet is its first link's
   // website. Asking for one failed every briefing, Oct 13, 2026)
   const rows = await db('signals')
     .select('id', 'title', 'category', 'severity', 'reliability_score',
             'location_name', 'country_code', 'created_at',
-            db.raw('substring(original_urls[1] from ?) AS source_domain', ['^https?://(?:www[.])?([^/:?#]+)']))
+            db.raw('substring(original_urls[1] from ?) AS source_domain', ['^https?://(?:www[.])?([^/:?#]+)']),
+            db.raw(`${storyKey} AS story_key`))
     .where('created_at', '>=', since)
     .whereIn('severity', ['critical', 'high', 'medium'])
     .where('reliability_score', '>=', 0.5)
@@ -145,8 +150,21 @@ async function getTopSignals(hours: number): Promise<BriefingSignal[]> {
       END DESC,
       reliability_score DESC
     `)
-    .limit(MAX_SIGNALS_FOR_LLM)
-  return rows as BriefingSignal[]
+    .limit(MAX_SIGNALS_FOR_LLM * 4) as Array<BriefingSignal & { story_key?: string }>
+  return onePerStory(rows).slice(0, MAX_SIGNALS_FOR_LLM)
+}
+
+/** The first report of each story, in order (exported for tests) */
+export function onePerStory<T extends { story_key?: string; id: string }>(rows: T[]): Array<Omit<T, 'story_key'>> {
+  const seen = new Set<string>()
+  const out: Array<Omit<T, 'story_key'>> = []
+  for (const { story_key, ...row } of rows) {
+    const key = story_key ?? row.id
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(row)
+  }
+  return out
 }
 
 async function getTotalSignalCount(hours: number): Promise<number> {

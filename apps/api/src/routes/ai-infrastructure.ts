@@ -18,6 +18,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { db }    from '../db/postgres'
 import { redis } from '../db/redis'
 import { sendError } from '../lib/errors'
+import { placeCounts, countFor } from '../lib/place-counts'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -271,21 +272,14 @@ export const registerAIInfrastructureRoutes: FastifyPluginAsync = async (app) =>
 
       const datacenters = filterDatacenters({ region, country, status, operator, limit })
 
-      // Enrich with related signal counts from DB
-      const enriched: AIDatacenter[] = []
-      for (const dc of datacenters) {
-        let related_signals = 0
-        try {
-          const rows = await db('signals')
-            .where('location_name', 'ilike', `%${dc.city.split(',')[0]?.trim() ?? dc.city}%`)
-            .andWhere('created_at', '>', db.raw("NOW() - INTERVAL '30 days'"))
-            .count('id as count')
-          related_signals = parseInt(String((rows[0] as { count: string | number } | undefined)?.count ?? 0), 10)
-        } catch {
-          // DB may not be available in tests — default to 0
-        }
-        enriched.push({ ...dc, related_signals })
-      }
+      // Enrich with related signal counts from DB: reports naming the city in
+      // the last 30 days, one grouped count for all of them (lib/place-counts.ts;
+      // the DB may not be available in tests — then 0)
+      const counts = await placeCounts({ days: 30 }).catch(() => null)
+      const enriched: AIDatacenter[] = datacenters.map(dc => ({
+        ...dc,
+        related_signals: counts ? countFor(counts, dc.city.split(',')[0]?.trim() ?? dc.city) : 0,
+      }))
 
       const body = {
         success: true,

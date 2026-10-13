@@ -5,6 +5,14 @@
  * and GeoJSON map point generation.
  */
 
+// (vitest's globals are off in this package: without this import the file never ran)
+import { describe, test, expect, vi } from 'vitest'
+
+// No database or Redis here: the functions tested don't use them, and opening
+// a real connection ended the run when none was configured
+vi.mock('../../db/postgres', () => ({ db: Object.assign(vi.fn(), { raw: vi.fn() }) }))
+vi.mock('../../db/redis', () => ({ redis: { get: vi.fn(), setex: vi.fn() } }))
+
 import {
   AI_DATACENTERS,
   LIST_CACHE_TTL,

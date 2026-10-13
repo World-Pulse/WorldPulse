@@ -25,6 +25,7 @@ import { db }    from '../db/postgres'
 import { redis } from '../db/redis'
 import { sendError } from '../lib/errors'
 import type { PointFeature, PointFeatureCollection } from '../lib/geojson'
+import { placeCounts, countFor } from '../lib/place-counts'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -527,18 +528,9 @@ const foodSecurityPlugin: FastifyPluginAsync = async (app) => {
       const paged = regions.slice(offset, offset + limit)
 
       // Enrich with DB signal counts
-      const enriched = await Promise.all(paged.map(async (r) => {
-        try {
-          const countRows = await db('signals')
-            .where('location_name', 'ilike', `%${r.name}%`)
-            .whereRaw("category IN ('health', 'climate', 'disaster', 'economy')")
-            .count('id as count')
-          const count = (countRows[0] as { count: string | number } | undefined)?.count ?? 0
-          return { ...r, related_signals: Number(count) }
-        } catch {
-          return r
-        }
-      }))
+      // (one grouped count for every region: lib/place-counts.ts)
+      const counts = await placeCounts({ categories: ['health', 'climate', 'disaster', 'economy'] }).catch(() => null)
+      const enriched = paged.map(r => (counts ? { ...r, related_signals: countFor(counts, r.name) } : r))
 
       const result = { success: true, data: enriched, total: regions.length, limit, offset }
       await redis.setex(cacheKey, LIST_CACHE_TTL, JSON.stringify(result)).catch(() => {})
