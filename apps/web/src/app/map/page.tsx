@@ -44,7 +44,7 @@ import {
 } from '@/lib/map-style'
 
 import {
-  timeAgo, getSourceUrl, getSourceDomain, reliabilityDots,
+  timeAgo, getSourceUrl, getSourceDomain,
   parseWKBPoint, extractLatLng, prependSignal, MAX_SIGNALS,
   escapeHtml, safeHttpUrl, safeCssColor,
 } from '@/lib/map-utils'
@@ -139,12 +139,6 @@ interface HazardPoint {
   source_slug: string
   published_at: string
   reliability_score: number
-}
-
-interface AnnotationCard {
-  signal: MapSignal
-  lat: number
-  lng: number
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -428,11 +422,7 @@ function MapView() {
   const [showCameras, setShowCameras] = useState(false)
   const [cameraCount, setCameraCount] = useState(0)
 
-  // ── Annotation cards (Palantir-style intelligence overlays) ───────────────────
-  const [annotationCards, setAnnotationCards] = useState<Map<string, AnnotationCard>>(new Map())
-  const annotationCardsRef = useRef<Map<string, AnnotationCard>>(new Map())
-  useEffect(() => { annotationCardsRef.current = annotationCards }, [annotationCards])
-  // Incremented on map moveend to re-project connector lines
+  // Incremented on map moveend so hotspot labels re-position
   const [mapMoveCount, setMapMoveCount] = useState(0)
 
   // ── Geographic Convergence Hotspots state ──────────────────────────────────
@@ -1361,8 +1351,7 @@ function MapView() {
         })
 
         // ── Signal click: the side panel (bottom sheet on phones) ─────
-        // One place for the details: it used to open a pop-up, the panel and an
-        // annotation card for the same signal at once.
+        // One place for the details: it used to open a pop-up, the panel and a card.
 
         let pinClicked = false
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1448,9 +1437,9 @@ function MapView() {
         map.on('moveend', onViewChange)
         map.on('zoomend', onViewChange)
 
-        // Re-project annotation card connector lines after map pans/zooms
+        // Hotspot labels re-position after map pans/zooms
         map.on('moveend', () => {
-          setMapMoveCount(c => c + 1) // hotspot labels re-position on every move
+          setMapMoveCount(c => c + 1)
         })
 
         // Seed from already-fetched signals (if any)
@@ -4082,91 +4071,6 @@ function MapView() {
             )}
           </div>
         </div>
-
-        {/* ── Palantir-style Annotation Cards ───────────────────────────── */}
-        {annotationCards.size > 0 && (
-          <div className="absolute inset-0 pointer-events-none z-10" aria-label="Signal annotation cards">
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 flex flex-col gap-2 pointer-events-auto max-w-[320px] w-full">
-              {Array.from(annotationCards.values()).map(({ signal: sig }) => {
-                const color  = SEV_COLOR[sig.severity]  ?? '#8892a4'
-                const bg     = SEV_BG[sig.severity]     ?? 'rgba(136,146,164,0.15)'
-                const icon   = CAT_ICON[sig.category]   ?? '🌍'
-                const score  = Math.round((sig.reliability_score ?? 0) * 100)
-                const dots   = reliabilityDots(sig.reliability_score ?? 0)
-                const srcUrl = getSourceUrl(sig.original_urls)
-                const srcDomain = srcUrl ? getSourceDomain(srcUrl) : null
-
-                return (
-                  <div
-                    key={sig.id}
-                    style={{
-                      background:  'rgba(6,7,13,0.93)',
-                      border:      `1px solid ${color}55`,
-                      borderLeft:  `3px solid ${color}`,
-                      borderRadius: 12,
-                      backdropFilter: 'blur(16px)',
-                      boxShadow:   `0 4px 24px rgba(0,0,0,0.6), 0 0 12px ${color}22`,
-                    }}
-                    className="p-3"
-                  >
-                    {/* Card header */}
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span
-                          className="font-mono text-[9px] tracking-[1.5px] uppercase px-1.5 py-0.5 rounded"
-                          style={{ color, background: bg, border: `1px solid ${color}44` }}
-                        >
-                          {icon} {sig.category}
-                        </span>
-                        <span
-                          className="font-mono text-[9px] tracking-[1.5px] uppercase px-1.5 py-0.5 rounded"
-                          style={{ color, background: bg, border: `1px solid ${color}33` }}
-                        >
-                          {sig.severity}
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => {
-                          setAnnotationCards(prev => {
-                            const next = new Map(prev)
-                            next.delete(sig.id)
-                            return next
-                          })
-                        }}
-                        className="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded text-wp-text3 hover:text-wp-text hover:bg-[rgba(255,255,255,0.08)] transition-all text-[14px] leading-none"
-                        aria-label="Dismiss"
-                      >
-                        ×
-                      </button>
-                    </div>
-
-                    {/* Title */}
-                    <div className="text-[12px] font-semibold text-wp-text leading-snug mb-2 line-clamp-2">
-                      {sig.title}
-                    </div>
-
-                    {/* Footer */}
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-[10px]" style={{ color }} title={`${score}% reliability`}>
-                          {dots}
-                        </span>
-                        <span className="font-mono text-[9px] text-wp-text3">
-                          {timeAgo(sig.created_at)}
-                        </span>
-                      </div>
-                      {srcDomain && (
-                        <span className="font-mono text-[9px] text-wp-text3 truncate max-w-[90px]">
-                          via {srcDomain}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
 
         {/* Share Button — floating bottom-right (BAT-15) */}
         {/* Beside the side panel when one is open (on phones the sheet covers it) */}
