@@ -17,12 +17,23 @@ function query() {
 const dbFn = vi.fn((table: string) => { calls.push(['table', [table]]); return query() })
 vi.mock('../../db/postgres', () => ({ get db() { return dbFn } }))
 
+// Redis, shared by the API's processes (lib/swr-cache.ts)
+const redisStore = new Map<string, string>()
+const redisMock = {
+  get: vi.fn(async (k: string) => redisStore.get(k) ?? null),
+  setex: vi.fn(async (k: string, _ttl: number, v: string) => { redisStore.set(k, v); return 'OK' }),
+  set: vi.fn(async (k: string, v: string) => { if (redisStore.has(k)) return null; redisStore.set(k, v); return 'OK' }),
+  del: vi.fn(async (k: string) => { redisStore.delete(k); return 1 }),
+}
+vi.mock('../../db/redis', () => ({ get redis() { return redisMock } }))
+
 import { placeCounts, countFor, clearPlaceCounts, type PlaceCounts } from '../place-counts'
 
 beforeEach(() => {
   calls.length = 0
   dbFn.mockClear()
   clearPlaceCounts()
+  redisStore.clear()
   rows = [
     { location_name: 'Khartoum, Sudan', n: '12' },
     { location_name: 'Sudan', n: 30 },
@@ -60,6 +71,13 @@ describe('placeCounts', () => {
     expect(dbFn).toHaveBeenCalledTimes(1)
     await placeCounts({ categories: ['health'] })
     expect(dbFn).toHaveBeenCalledTimes(2)
+  })
+
+  it("uses another process's counts from Redis without asking the database", async () => {
+    await placeCounts({ days: 30 })
+    clearPlaceCounts() // a different process: nothing in its memory
+    await placeCounts({ days: 30 })
+    expect(dbFn).toHaveBeenCalledTimes(1)
   })
 
   it('treats a count that is not a number as 0', async () => {

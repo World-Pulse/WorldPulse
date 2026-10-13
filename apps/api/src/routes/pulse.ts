@@ -15,8 +15,8 @@
  */
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify'
 import { db } from '../db/postgres'
-import { redis } from '../db/redis'
 import { signalsHaveStoryIds, storyKeyOf } from '../lib/stories'
+import { staleWhileRevalidate } from '../lib/swr-cache'
 import { optionalAuth } from '../middleware/auth'
 import { sendError } from '../lib/errors'
 import { PULSE_USER_ID, ContentType } from '../lib/pulse/constants'
@@ -75,6 +75,8 @@ function requirePulseKey(req: FastifyRequest, reply: FastifyReply, done: () => v
 
 /** Seconds one overnight briefing is reused for everyone in a timezone */
 const BRIEFING_CACHE_TTL = 15 * 60
+/** Seconds after that it is still shown while the next is made */
+const BRIEFING_STALE_TTL = 2 * 60 * 60
 
 /** At most this many subjects in the briefing's "Escalating" list */
 const MAX_ESCALATING = 5
@@ -828,21 +830,20 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
       sleepEndUTC = now
     }
 
-    // ── One answer per timezone for 15 minutes ───────────────────────────
+    // ── One answer per timezone, made at most every 15 minutes ───────────
     // It asks Claude for its summary, and every page view of /briefing did,
-    // spending the daily cap other PULSE work needs (Oct 13, 2026). A
-    // signed-in reader's regions only reorder the events (below).
-    const bucket = Math.floor(now.getTime() / (BRIEFING_CACHE_TTL * 1000))
-    const cacheKey = `pulse:briefing:v2:${knownTz ? tzName.slice(0, 64) : 'default'}:${regionFilter?.slice(0, 8) ?? 'all'}:${limit}:${bucket}`
-    let base: OvernightBriefing | null = null
-    try {
-      const hit = await redis.get(cacheKey)
-      if (hit) base = JSON.parse(hit) as OvernightBriefing
-    } catch { /* not cached */ }
-    if (!base) {
-      base = await overnightBriefing({ start: sleepStartUTC, end: sleepEndUTC }, limit, regionFilter, now)
-      redis.setex(cacheKey, BRIEFING_CACHE_TTL, JSON.stringify(base)).catch(() => {})
-    }
+    // spending the daily cap other PULSE work needs (Oct 13, 2026). Served
+    // at once even when older, while the next is made in the background:
+    // the first visitor after each 15 minutes waited 18 s for Claude
+    // (lib/swr-cache.ts). A signed-in reader's regions only reorder the
+    // events (below).
+    const cacheKey = `pulse:briefing:v3:${knownTz ? tzName.slice(0, 64) : 'default'}:${regionFilter?.slice(0, 8) ?? 'all'}:${limit}`
+    const window = { start: sleepStartUTC, end: sleepEndUTC }
+    const base = await staleWhileRevalidate(
+      cacheKey,
+      { freshSeconds: BRIEFING_CACHE_TTL, staleSeconds: BRIEFING_STALE_TTL },
+      () => overnightBriefing(window, limit, regionFilter, new Date()),
+    )
 
     // ── Regional focus — from user preferences ───────────────────────────
     let userRegions: string[] = []
