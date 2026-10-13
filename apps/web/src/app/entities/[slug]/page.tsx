@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound, permanentRedirect } from 'next/navigation'
 import type { Metadata } from 'next'
-import { SITE_NAME, SITE_URL, jsonLdText, metaDescription, pageMetadata } from '@/lib/page-metadata'
+import { SITE_NAME, SITE_URL, jsonLdText, metaDescription } from '@/lib/page-metadata'
 import { entityIdFromSlug, entityPath, entityTypeIcon, entityTypeLabel } from '@/lib/entity-links'
 import { BriefingSignup } from '@/components/briefing/BriefingSignup'
 import { ConnectionWhy } from './ConnectionWhy'
@@ -97,8 +97,16 @@ export async function generateMetadata(
     `${entity.name} in the news: ${plural(activity.last7d, 'report')} in the last 7 days across the outlets WorldPulse follows`
     + (lead ? `. Top story: ${lead.title}${lead.verifiedAt ? ` (verified, ${lead.outletCount} outlets)` : ''}.` : '.'),
   )
+  // The picture is the entity's own card (opengraph-image.tsx and
+  // twitter-image.tsx next to this page), so no image here
+  const path = entityPath(entity.id, entity.name)
+  const title = `${entity.name}: latest verified news and connections`
   return {
-    ...pageMetadata({ path: entityPath(entity.id, entity.name), title: `${entity.name}: latest verified news and connections`, description }),
+    title: `${title} — ${SITE_NAME}`,
+    description,
+    alternates: { canonical: path },
+    openGraph: { title, description, type: 'website', url: path, siteName: SITE_NAME },
+    twitter: { card: 'summary_large_image', title, description },
     ...(worthIndexing(profile) ? {} : { robots: { index: false, follow: true } }),
   }
 }

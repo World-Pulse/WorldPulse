@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { EmptyState } from '@/components/EmptyState'
+import { entityPath, entityTypeIcon, entityTypeLabel } from '@/lib/entity-links'
 import { ReliabilityDots } from '@/components/signals/ReliabilityDots'
 import { Globe, Landmark, MapPin, Map as MapIcon } from 'lucide-react'
 import { FlagModal } from '@/components/signals/FlagModal'
@@ -320,6 +322,8 @@ export default function SearchPage() {
   const [entitiesTotal, setEntitiesTotal]       = useState(0)
   const [entitiesLoading, setEntitiesLoading]   = useState(false)
   const [entitiesError, setEntitiesError]       = useState<string | null>(null)
+  // People, places and organisations from WorldPulse's own knowledge graph, each with its page
+  const [graphEntities, setGraphEntities]       = useState<Array<{ id: string; name: string; type: string }>>([])
 
   const search = useCallback(async (
     q: string,
@@ -388,6 +392,20 @@ export default function SearchPage() {
     }
   }, [])
 
+  // ─── Knowledge graph entities (Oct 13, 2026) ─────────────
+  const searchGraphEntities = useCallback(async (q: string) => {
+    if (!q.trim() || q.trim().length < 2) { setGraphEntities([]); return }
+    try {
+      const res = await fetch(`${API_URL}/api/v1/knowledge-graph/entities?search=${encodeURIComponent(q.trim())}&limit=6&min_mentions=3&lean=1`)
+      const data = await res.json() as { data?: Array<{ id: string; canonical_name: string; type: string }> }
+      setGraphEntities(res.ok && Array.isArray(data.data)
+        ? data.data.filter(e => e.id && e.canonical_name).map(e => ({ id: e.id, name: e.canonical_name, type: e.type }))
+        : [])
+    } catch {
+      setGraphEntities([])
+    }
+  }, [])
+
   const fetchAutocomplete = useCallback(async (q: string) => {
     if (!q || q.length < 2) { setAutocomplete(null); return }
     try {
@@ -416,6 +434,7 @@ export default function SearchPage() {
     // Entity search runs in parallel for 'entities' tab or 'all' tab
     if (t === 'entities' || t === 'all') {
       searchSanctionedEntities(q)
+      void searchGraphEntities(q)
     }
     if (t !== 'entities') {
       search(q, t, f, pg)
@@ -479,6 +498,7 @@ export default function SearchPage() {
   useEffect(() => {
     const q = searchParams.get('q')
     if (q) {
+      if (type === 'entities' || type === 'all') void searchGraphEntities(q)
       if (type === 'entities') {
         searchSanctionedEntities(q)
       } else {
@@ -848,6 +868,26 @@ export default function SearchPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* People, places and organisations: their own pages (/entities/...) */}
+      {(type === 'all' || type === 'entities') && graphEntities.length > 0 && (
+        <section aria-label="People, places and organisations" className="mb-6">
+          <SectionHeader label="People, places & organisations" count={graphEntities.length} />
+          <div className="flex flex-wrap gap-2">
+            {graphEntities.map(e => (
+              <Link
+                key={e.id}
+                href={entityPath(e.id, e.name)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[rgba(255,255,255,0.1)] bg-[rgba(255,255,255,0.03)] text-[13px] text-wp-text hover:border-wp-amber/50 hover:text-wp-amber transition-colors"
+              >
+                <span aria-hidden="true">{entityTypeIcon(e.type)}</span>
+                {e.name}
+                <span className="font-mono text-[10px] text-wp-text3">{entityTypeLabel(e.type)}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
       )}
 
       {/* Results */}

@@ -188,7 +188,10 @@ const knowledgeGraphRoutes: FastifyPluginAsync = async (app) => {
     }
 
     // Cache key
-    const cacheKey = `kg:api:entities:${search ?? ''}:${type ?? ''}:${sort}:${order}:${limit}:${offset}:${minMentions}`
+    // lean=1: without signal_ids (a search box doesn't need the thousands of
+    // report ids a big entity like the UN carries)
+    const lean = q.lean === '1' || q.lean === 'true'
+    const cacheKey = `kg:api:entities:${search ?? ''}:${type ?? ''}:${sort}:${order}:${limit}:${offset}:${minMentions}${lean ? ':lean' : ''}`
     const cached = await redis.get(cacheKey)
     if (cached) {
       reply.header('X-Cache', 'HIT')
@@ -217,8 +220,9 @@ const knowledgeGraphRoutes: FastifyPluginAsync = async (app) => {
     const total = parseInt(countResult.rows[0]?.total ?? '0', 10)
 
     const dataParams = [...params, limit, offset]
+    const columns = lean ? 'id, type, canonical_name, aliases, first_seen, last_seen, mention_count, metadata' : '*'
     const dataResult = await db.raw(
-      `SELECT * FROM entity_nodes WHERE ${where}
+      `SELECT ${columns} FROM entity_nodes WHERE ${where}
        ORDER BY ${sort} ${order}
        LIMIT ? OFFSET ?`,
       dataParams,
@@ -442,8 +446,10 @@ const knowledgeGraphRoutes: FastifyPluginAsync = async (app) => {
       })
     }
 
-    // Cache trending results (short TTL — 2 min)
-    const cacheKey = `kg:api:trending:${type ?? 'all'}:${windowHours}:${limit}`
+    // Cache trending results (short TTL — 2 min). lean=1: entities without
+    // their signal_ids (the home page's "In the news" row needs names, not ids)
+    const lean = q.lean === '1' || q.lean === 'true'
+    const cacheKey = `kg:api:trending:${type ?? 'all'}:${windowHours}:${limit}${lean ? ':lean' : ''}`
     const cached = await redis.get(cacheKey)
     if (cached) {
       reply.header('X-Cache', 'HIT')
@@ -483,7 +489,7 @@ const knowledgeGraphRoutes: FastifyPluginAsync = async (app) => {
       const row = byId.get(t.id)
       if (!row) return []
       return [{
-        entity: mapNodeRow(row),
+        entity: lean ? { ...mapNodeRow(row), signal_ids: [] } : mapNodeRow(row),
         recent_mentions: t.recent,
         previous_mentions: t.previous,
         // (the window before, per day; kept for API users of the old field)

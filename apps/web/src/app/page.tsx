@@ -7,6 +7,7 @@ import { FeedList } from '@/components/feed/FeedList'
 import { Composer } from '@/components/composer/Composer'
 import { NewPostsBar } from '@/components/feed/NewPostsBar'
 import { DevelopingStories } from '@/components/feed/DevelopingStories'
+import { InTheNews } from '@/components/feed/InTheNews'
 import { OnboardingModal } from '@/components/OnboardingModal'
 
 type FeedTab    = 'global' | 'following' | 'verified' | 'digest' | 'for_you'
@@ -112,6 +113,9 @@ export default function HomePage() {
 
         {/* Developing Stories — escalating/developing event threads */}
         <DevelopingStories />
+
+        {/* In the news: the people, places and organisations named most, each with its page */}
+        <InTheNews />
 
         {/* Composer (signed-in readers) */}
         {signedIn && <Composer />}

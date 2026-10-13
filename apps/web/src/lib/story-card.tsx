@@ -15,7 +15,7 @@ import { join } from 'node:path'
 
 export const CARD_SIZE = { width: 1200, height: 630 }
 
-const COLOR = {
+export const COLOR = {
   bg: '#06070d', text: '#e2e6f0', text2: '#8892a4', amber: '#f5a623', green: '#00e676', grid: 'rgba(255,255,255,0.055)',
 }
 const SEVERITY_COLOR: Record<string, string> = {
@@ -47,7 +47,7 @@ export interface CardText {
 }
 
 /** A headline cut to at most `max` characters, at a word */
-function clip(text: string, max: number): string {
+export function clip(text: string, max: number): string {
   const t = text.replace(/\s+/g, ' ').trim()
   if (t.length <= max) return t
   const cut = t.slice(0, max - 1)
@@ -116,7 +116,7 @@ export function cardFonts(): Promise<CardFont[]> {
   return fontsOnce
 }
 
-function Pill({ color, children }: { color: string; children: string }) {
+export function Pill({ color, children }: { color: string; children: string }) {
   return (
     <div style={{ display: 'flex', padding: '8px 18px', borderRadius: 999, border: `2px solid ${color}`, color, fontSize: 22, fontWeight: 700, letterSpacing: 2 }}>
       {children}
@@ -125,7 +125,7 @@ function Pill({ color, children }: { color: string; children: string }) {
 }
 
 /** The WorldPulse rings (as on og-image.png) */
-function Rings() {
+export function Rings() {
   return (
     <div style={{ display: 'flex', position: 'relative', width: 44, height: 44 }}>
       {[44, 30, 16].map(d => (
