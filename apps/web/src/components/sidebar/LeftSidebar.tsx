@@ -9,7 +9,7 @@ import {
   TrendingUp, Shield, Unplug, Satellite, Lock, Waves, Landmark,
   Wheat, KeyRound, Droplets, Pickaxe, Map, ScrollText, Users, Search,
   Mic, Video, Radio, Wrench, Settings, Activity, Anchor,
-  CircleDot, Swords, LineChart, Leaf, Pill, FlaskConical, Vote, Globe2, Network,
+  CircleDot, Swords, LineChart, Leaf, Pill, FlaskConical, Vote, Globe2, Network, Newspaper,
   type LucideProps,
 } from 'lucide-react'
 
@@ -24,6 +24,7 @@ const NAV_ITEMS = [
   { href: '/analytics',  icon: BarChart3,     labelKey: 'analytics'  },
   { href: '/explore',    icon: Telescope,     labelKey: 'explore'    },
   { href: '/knowledge-graph/explorer', icon: Network, labelKey: 'knowledgeGraph', badge: 'NEW', badgeColor: 'purple' },
+  { href: '/entities',   icon: Newspaper,     labelKey: 'inTheNews',  badge: 'NEW', badgeColor: 'purple' }, // who's in the news: the entity pages' index (Oct 13, 2026)
   // { href: '/clusters',   icon: LayoutGrid,    labelKey: 'clusters',   badge: 'NEW', badgeColor: 'blue'   }, // Hidden — needs correlation engine (Aether)
   { href: '/briefing',   icon: ClipboardList, labelKey: 'briefing',   badge: 'NEW', badgeColor: 'indigo' },
   { href: '/finance',    icon: TrendingUp,    labelKey: 'finance' },

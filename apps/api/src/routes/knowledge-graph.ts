@@ -14,6 +14,7 @@
  *   GET /api/v1/knowledge-graph/edges              — List/filter relationships
  *   GET /api/v1/knowledge-graph/trending           — Trending entities (spike detection)
  *   GET /api/v1/knowledge-graph/stats              — Graph statistics
+ *   GET /api/v1/knowledge-graph/directory          — Who's in the news: most named in 7 days, by kind
  *
  * @module routes/knowledge-graph
  */
@@ -22,6 +23,7 @@ import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify'
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 import { entityProfile, sharedStories } from '../lib/entity-profile'
+import { entityDirectory } from '../lib/entity-directory'
 
 // ─── TYPES ─────────────────────────────────────────────────────────────────────
 
@@ -538,6 +540,15 @@ const knowledgeGraphRoutes: FastifyPluginAsync = async (app) => {
     const response = { success: true, data: { entities, generatedAt: new Date().toISOString() } }
     redis.setex(cacheKey, 3600, JSON.stringify(response)).catch(() => {})
     return reply.send(response)
+  })
+
+  // ── GET /directory ────────────────────────────────────────────────────
+  // world-pulse.io/entities: the people, places and organisations named in
+  // the most reports in the last 7 days (lib/entity-directory.ts). Kept 30
+  // min, so it has the API-wide limit only: the website's server renders the
+  // page from one address, and a tighter limit would fail it on a busy day.
+  app.get('/directory', async (_req: FastifyRequest, reply: FastifyReply) => {
+    return reply.send({ success: true, data: await entityDirectory() })
   })
 
   // ── GET /stats ────────────────────────────────────────────────────────

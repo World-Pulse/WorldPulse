@@ -152,7 +152,7 @@ export default async function EntityPage({ params }: { params: Promise<{ slug: s
         <nav className="flex items-center gap-2 font-mono text-[11px] text-wp-text3 min-w-0" aria-label="Breadcrumb">
           <Link href="/" className="inline-flex items-center hover:text-wp-text transition-colors flex-shrink-0">Home</Link>
           <span className="flex-shrink-0">/</span>
-          <Link href="/knowledge-graph" className="inline-flex items-center hover:text-wp-text transition-colors flex-shrink-0">Knowledge Graph</Link>
+          <Link href="/entities" className="inline-flex items-center hover:text-wp-text transition-colors flex-shrink-0">In the news</Link>
           <span className="flex-shrink-0">/</span>
           <span className="text-wp-text2 truncate">{entity.name}</span>
         </nav>

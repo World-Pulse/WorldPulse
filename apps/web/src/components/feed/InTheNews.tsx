@@ -6,6 +6,7 @@
  * first (GET /api/v1/knowledge-graph/trending), each opening its entity page.
  * One scrollable row under Developing Stories. Its height is kept while it
  * loads so the feed below doesn't jump; if it can't load, the row goes away.
+ * The heading opens the whole list (/entities).
  */
 
 import { useEffect, useState } from 'react'
@@ -42,7 +43,8 @@ export function InTheNews() {
     <section aria-labelledby="in-the-news" className="border-b border-[rgba(255,255,255,0.07)] min-h-[52px]">
       <div className="flex items-center gap-3 px-4 py-2 overflow-x-auto scrollbar-none">
         <h2 id="in-the-news" className="flex-shrink-0 font-mono text-[10px] tracking-widest uppercase text-wp-text3">
-          In the news
+          {/* the whole list: world-pulse.io/entities */}
+          <Link href="/entities" className="inline-flex items-center min-h-[32px] hover:text-wp-amber transition-colors">In the news →</Link>
         </h2>
         {(items ?? []).map(t => (
           <Link
