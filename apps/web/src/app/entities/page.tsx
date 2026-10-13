@@ -4,6 +4,7 @@ import { SITE_NAME, SITE_URL, jsonLdText, metaDescription } from '@/lib/page-met
 import { entityPath, entityTypeIcon } from '@/lib/entity-links'
 import { fetchDirectory, weekRange, type DirectoryEntity, type EntityDirectory } from '@/lib/entity-directory'
 import { BriefingSignup } from '@/components/briefing/BriefingSignup'
+import { cachedFetch } from '@/lib/server-fetch'
 
 /**
  * world-pulse.io/entities: who's in the news (Oct 13, 2026). The people,
@@ -32,10 +33,7 @@ class DirectoryUnavailableError extends Error {
 
 async function fetchRising(): Promise<Rising[]> {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/knowledge-graph/trending?limit=10&window_hours=24&lean=1`, {
-      next: { revalidate: 120 },
-      signal: AbortSignal.timeout(8_000),
-    })
+    const res = await cachedFetch(`${API_BASE}/api/v1/knowledge-graph/trending?limit=10&window_hours=24&lean=1`, 120_000, 8_000)
     if (!res.ok) return []
     const json = await res.json() as { trending?: Rising[] }
     return (json.trending ?? []).filter(t => t.entity?.id && t.entity.canonical_name)

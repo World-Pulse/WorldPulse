@@ -6,6 +6,7 @@
 
 import { ImageResponse } from 'next/og'
 import { CARD_SIZE, StoryCard, cardFonts, storyCardText, type CardOutlets, type CardStory } from './story-card'
+import { cachedFetch } from './server-fetch'
 
 const API_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'https://api.world-pulse.io'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -13,7 +14,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 /** The answer and its HTTP status (0 when the API couldn't be reached) */
 async function getJson<T>(path: string): Promise<{ status: number; body: T | null }> {
   try {
-    const res = await fetch(`${API_URL}${path}`, { next: { revalidate: 600 }, signal: AbortSignal.timeout(8_000) })
+    const res = await cachedFetch(`${API_URL}${path}`, 120_000, 8_000)
     return { status: res.status, body: res.ok ? await res.json() as T : null }
   } catch {
     return { status: 0, body: null }

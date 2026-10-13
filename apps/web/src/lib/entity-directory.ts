@@ -5,6 +5,8 @@
  * Read by world-pulse.io/entities and its share picture.
  */
 
+import { cachedFetch } from './server-fetch'
+
 const API_BASE = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'https://api.world-pulse.io'
 
 export interface DirectoryEntity {
@@ -33,10 +35,7 @@ export interface EntityDirectory {
 /** The directory, or null when the API didn't answer (the page then fails rather than show an empty list) */
 export async function fetchDirectory(): Promise<EntityDirectory | null> {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/knowledge-graph/directory`, {
-      next: { revalidate: 600 },
-      signal: AbortSignal.timeout(10_000),
-    })
+    const res = await cachedFetch(`${API_BASE}/api/v1/knowledge-graph/directory`, 300_000)
     if (!res.ok) return null
     const json = await res.json() as { success?: boolean; data?: EntityDirectory }
     return json.success && json.data && Array.isArray(json.data.groups) ? json.data : null

@@ -6,6 +6,7 @@ import { entityIdFromSlug, entityPath, entityTypeIcon, entityTypeLabel } from '@
 import { BriefingSignup } from '@/components/briefing/BriefingSignup'
 import { ConnectionWhy } from './ConnectionWhy'
 import { ActivityBars } from './ActivityBars'
+import { cachedFetch } from '@/lib/server-fetch'
 
 /**
  * world-pulse.io/entities/<name>-<id>: one person, place or organisation from
@@ -48,9 +49,7 @@ class EntityUnavailableError extends Error {
 
 async function fetchProfile(id: string): Promise<Profile | 'missing' | 'unavailable'> {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/knowledge-graph/entities/${encodeURIComponent(id)}/profile`, {
-      next: { revalidate: 300 },
-    })
+    const res = await cachedFetch(`${API_BASE}/api/v1/knowledge-graph/entities/${encodeURIComponent(id)}/profile`, 120_000)
     if (res.status === 404) return 'missing'
     if (!res.ok) return 'unavailable'
     const json = await res.json() as { success?: boolean; data?: Profile }

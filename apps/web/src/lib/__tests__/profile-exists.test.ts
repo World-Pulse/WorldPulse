@@ -4,8 +4,10 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { handleOf, profileStatus } from '../profile-exists'
+import { clearServerFetchCache } from '../server-fetch'
 
-afterEach(() => { vi.unstubAllGlobals() })
+// (the API's answers are kept a few minutes, lib/server-fetch.ts: forget them between cases)
+afterEach(() => { vi.unstubAllGlobals(); clearServerFetchCache() })
 
 describe('handleOf', () => {
   it('reads handles as sign-up allows them, with or without @', () => {
@@ -30,9 +32,18 @@ describe('profileStatus', () => {
     expect(await profileStatus('nobody_here')).toBe('missing')
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 200 })))
     expect(await profileStatus('devon_g')).toBe('exists')
+    clearServerFetchCache()
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 503 })))
     expect(await profileStatus('devon_g')).toBe('unknown')
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('down') }))
     expect(await profileStatus('devon_g')).toBe('unknown')
+  })
+
+  it('asks the API once for a handle seen in the last few minutes', async () => {
+    const fetch = vi.fn(async () => new Response('{}', { status: 200 }))
+    vi.stubGlobal('fetch', fetch)
+    expect(await profileStatus('devon_g')).toBe('exists')
+    expect(await profileStatus('devon_g')).toBe('exists')
+    expect(fetch).toHaveBeenCalledTimes(1)
   })
 })

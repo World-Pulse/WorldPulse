@@ -8,6 +8,7 @@ import { ImageResponse } from 'next/og'
 import { CARD_SIZE, StoryCard, cardFonts } from './story-card'
 import { EntityCard, entityCardText, type CardProfile } from './entity-card'
 import { entityIdFromSlug } from './entity-links'
+import { cachedFetch } from './server-fetch'
 
 const API_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'https://api.world-pulse.io'
 
@@ -17,10 +18,7 @@ export async function entityCardImage(slug: string): Promise<ImageResponse> {
   if (id) {
     let status = 0
     try {
-      const res = await fetch(`${API_URL}/api/v1/knowledge-graph/entities/${encodeURIComponent(id)}/profile`, {
-        next: { revalidate: 600 },
-        signal: AbortSignal.timeout(8_000),
-      })
+      const res = await cachedFetch(`${API_URL}/api/v1/knowledge-graph/entities/${encodeURIComponent(id)}/profile`, 120_000, 8_000)
       status = res.status
       if (res.ok) profile = ((await res.json()) as { data?: CardProfile }).data ?? null
     } catch { /* status stays 0 */ }

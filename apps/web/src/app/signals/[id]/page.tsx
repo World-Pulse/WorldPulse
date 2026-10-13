@@ -4,6 +4,7 @@ import type { Signal, Post } from '@worldpulse/types'
 import { SignalDetailClient } from './SignalDetailClient'
 import { displaySummary } from '@/lib/signal-text'
 import { SITE_NAME, SITE_URL, newsArticleJsonLd, jsonLdText, metaDescription } from '@/lib/page-metadata'
+import { cachedFetch } from '@/lib/server-fetch'
 
 const API_BASE = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -35,9 +36,8 @@ class StoryUnavailableError extends Error {
 /** The story, 'missing' (the API says there's no such story) or 'unavailable' */
 async function fetchSignal(id: string): Promise<SignalDetail | 'missing' | 'unavailable'> {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/signals/${id}`, {
-      next: { revalidate: 30 },
-    })
+    // (kept 30 s in this process: every view used to call the API, lib/server-fetch.ts)
+    const res = await cachedFetch(`${API_BASE}/api/v1/signals/${id}`, 30_000)
     if (res.status === 404 || res.status === 400) return 'missing'
     if (!res.ok) return 'unavailable'
     const json = await res.json() as { success: boolean; data?: SignalDetail }
@@ -49,10 +49,7 @@ async function fetchSignal(id: string): Promise<SignalDetail | 'missing' | 'unav
 
 async function fetchRelated(category: string, excludeId: string): Promise<Signal[]> {
   try {
-    const res = await fetch(
-      `${API_BASE}/api/v1/signals?category=${category}&limit=6&status=verified`,
-      { next: { revalidate: 60 } },
-    )
+    const res = await cachedFetch(`${API_BASE}/api/v1/signals?category=${encodeURIComponent(category)}&limit=6&status=verified`, 60_000)
     if (!res.ok) return []
     const json = await res.json() as { data?: { items: Signal[] } }
     return (json.data?.items ?? []).filter(s => s.id !== excludeId).slice(0, 5)
@@ -63,10 +60,7 @@ async function fetchRelated(category: string, excludeId: string): Promise<Signal
 
 async function fetchSignalPosts(id: string): Promise<{ items: Post[]; total: number }> {
   try {
-    const res = await fetch(
-      `${API_BASE}/api/v1/signals/${id}/posts?limit=20&sort=recent`,
-      { next: { revalidate: 10 } },
-    )
+    const res = await cachedFetch(`${API_BASE}/api/v1/signals/${id}/posts?limit=20&sort=recent`, 10_000)
     if (!res.ok) return { items: [], total: 0 }
     const json = await res.json() as {
       success: boolean

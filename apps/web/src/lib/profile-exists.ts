@@ -6,6 +6,8 @@
  * account. If the API can't say (down, slow), the page still renders.
  */
 
+import { cachedFetch } from './server-fetch'
+
 const API_BASE = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
 /** Handles as sign-up allows them (apps/api/src/routes/auth.ts) */
@@ -22,10 +24,7 @@ export async function profileStatus(segment: string): Promise<'exists' | 'missin
   const handle = handleOf(segment)
   if (!handle) return 'missing'
   try {
-    const res = await fetch(`${API_BASE}/api/v1/users/${encodeURIComponent(handle.toLowerCase())}`, {
-      next: { revalidate: 300 },
-      signal: AbortSignal.timeout(5_000),
-    })
+    const res = await cachedFetch(`${API_BASE}/api/v1/users/${encodeURIComponent(handle.toLowerCase())}`, 60_000, 5_000)
     if (res.status === 404) return 'missing'
     return res.ok ? 'exists' : 'unknown'
   } catch {
