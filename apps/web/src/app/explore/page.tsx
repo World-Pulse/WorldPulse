@@ -68,8 +68,10 @@ export default function ExplorePage() {
         setSignals(sigRes.value.items.slice(0, 10))
       }
       if (srcRes.status === 'fulfilled') {
-        const items = srcRes.value.data?.items ?? srcRes.value.items ?? []
-        setSources(items.slice(0, 8))
+        // GET /sources answers database rows: trust_score is a string ("0.990").
+        // Read as trustScore it was undefined, and every source said "NaN% trust"
+        const items = (srcRes.value.data?.items ?? srcRes.value.items ?? []) as Array<Source & { trust_score?: unknown }>
+        setSources(items.slice(0, 8).map(s => ({ ...s, trustScore: Number(s.trustScore ?? s.trust_score) })))
       }
       if (trendRes.status === 'fulfilled' && trendRes.value.items) {
         setTrending(trendRes.value.items.slice(0, 8))
@@ -215,7 +217,7 @@ export default function ExplorePage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-[12px] font-semibold text-wp-text truncate">{src.name}</div>
-                      <div className="font-mono text-[10px] text-wp-text3">{src.tier} · {Math.round(src.trustScore * 100)}% trust</div>
+                      <div className="font-mono text-[10px] text-wp-text3">{src.tier}{Number.isFinite(src.trustScore) ? ` · ${Math.round(src.trustScore * 100)}% trust` : ''}</div>
                     </div>
                   </div>
                 ))}

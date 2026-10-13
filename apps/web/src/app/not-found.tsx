@@ -11,8 +11,8 @@ export default function NotFound() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
       <h1 className="text-6xl font-bold text-wp-amber mb-4">404</h1>
-      <p className="text-xl text-wp-text-muted mb-8">
-        This signal couldn&apos;t be found.
+      <p className="text-xl text-wp-text2 mb-8">
+        This page doesn&apos;t exist, or it has moved.
       </p>
       <Link
         href="/"

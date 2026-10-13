@@ -80,7 +80,8 @@ const nextConfig = {
               // MapLibre GL JS requires Web Workers + blob: for tile decoding
               "worker-src 'self' blob:",
               "child-src 'self' blob:",
-              "frame-src 'none'",
+              // (same as src/middleware.ts: our embed widget, the /cameras players)
+              "frame-src 'self' https://embed.windy.com https://www.earthcam.com",
               "object-src 'none'",
               "base-uri 'self'",
             ].join('; '),

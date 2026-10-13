@@ -10,6 +10,9 @@ import type { NextRequest } from 'next/server'
 // this was the same class of leak fixed in next.config.mjs (Cycle 27).
 const isDev = process.env.NODE_ENV !== 'production'
 
+/** Sites whose players /cameras shows in frames (GET /api/v1/cameras embedUrl hosts) */
+const FRAME_SOURCES = 'https://embed.windy.com https://www.earthcam.com'
+
 function buildCspDirectives(): string {
   return [
     "default-src 'self'",
@@ -41,7 +44,9 @@ function buildCspDirectives(): string {
     ].join(' '),
     "media-src 'self' blob:",
     "worker-src 'self' blob:",
-    "frame-src 'none'",
+    // Our own embed widget (its preview on /developer/embed) and the live
+    // camera players on /cameras (Windy, EarthCam); 'none' blanked both
+    `frame-src 'self' ${FRAME_SOURCES}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",

@@ -127,9 +127,12 @@ export const SECTION_TITLES: Record<BriefingSectionId, string> = {
 
 async function getTopSignals(hours: number): Promise<BriefingSignal[]> {
   const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString()
+  // (signals has no source_domain column: the outlet is its first link's
+  // website. Asking for one failed every briefing, Oct 13, 2026)
   const rows = await db('signals')
     .select('id', 'title', 'category', 'severity', 'reliability_score',
-            'location_name', 'country_code', 'source_domain', 'created_at')
+            'location_name', 'country_code', 'created_at',
+            db.raw('substring(original_urls[1] from ?) AS source_domain', ['^https?://(?:www[.])?([^/:?#]+)']))
     .where('created_at', '>=', since)
     .whereIn('severity', ['critical', 'high', 'medium'])
     .where('reliability_score', '>=', 0.5)
@@ -158,10 +161,12 @@ async function getTotalSignalCount(hours: number): Promise<number> {
 async function getCategoryBreakdown(hours: number): Promise<CategoryBreakdown[]> {
   const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString()
   const rows = await db('signals')
+    // (count(distinct CASE … END as x) and avg(CASE … END as x) put the alias
+    // inside the parentheses, which isn't SQL: every briefing failed with it)
     .select('category')
     .count('id as count')
-    .countDistinct(db.raw("CASE WHEN severity = 'critical' THEN id END as critical_count"))
-    .countDistinct(db.raw("CASE WHEN severity = 'high' THEN id END as high_count"))
+    .select(db.raw("count(*) FILTER (WHERE severity = 'critical')::int AS critical_count"))
+    .select(db.raw("count(*) FILTER (WHERE severity = 'high')::int AS high_count"))
     .where('created_at', '>=', since)
     .groupBy('category')
     .orderBy('count', 'desc')
@@ -179,14 +184,14 @@ async function getGeographicHotspots(hours: number): Promise<GeographicHotspot[]
   const rows = await db('signals')
     .select('country_code', 'location_name')
     .count('id as signal_count')
-    .avg(db.raw(`
-      CASE severity
+    .select(db.raw(`
+      avg(CASE severity
         WHEN 'critical' THEN 5
         WHEN 'high' THEN 4
         WHEN 'medium' THEN 3
         WHEN 'low' THEN 2
         ELSE 1
-      END as avg_severity_score
+      END) AS avg_severity_score
     `))
     .where('created_at', '>=', since)
     .whereNotNull('country_code')

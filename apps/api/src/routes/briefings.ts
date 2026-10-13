@@ -67,7 +67,12 @@ export const registerBriefingRoutes: FastifyPluginAsync = async (app) => {
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
   }, async (req) => {
     const { hours = 24 } = req.query as { hours?: number }
-    const briefing = await generateDailyBriefing(Math.min(hours, 72))
+    // 24, 48 or 72 hours: each length is its own cached, AI-written briefing,
+    // so any other number is rounded up (a request per hour value would each
+    // cost a model call)
+    const asked = Number(hours) || 24
+    const period = [24, 48, 72].find(h => h >= asked) ?? 72
+    const briefing = await generateDailyBriefing(period)
     return { success: true, data: briefing }
   })
 

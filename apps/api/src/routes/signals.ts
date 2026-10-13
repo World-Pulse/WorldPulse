@@ -23,6 +23,8 @@ import {
 } from '../lib/query-schemas'
 import { EVENT_TEMPLATE_SQL } from '../lib/story-list'
 
+const SIGNAL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 // ─── Bbox Validation Helper ───────────────────────────────────────────────────
 /**
  * Validates a bbox query string ("minLng,minLat,maxLng,maxLat") and returns
@@ -222,6 +224,9 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
   }, async (req, reply) => {
     const { id } = req.params as { id: string }
+    // Not a signal id at all (a cut-off link, a guess): no such signal. Postgres
+    // rejected it as a uuid and the page answered 500 (Oct 13, 2026)
+    if (!SIGNAL_ID_RE.test(id)) return sendError(reply, 404, 'NOT_FOUND', 'Signal not found')
 
     // Try cache for unauthenticated requests
     const cacheKey = `signals:detail:${id}`
