@@ -350,8 +350,8 @@ export default function PricingPage() {
           Ready to get started?
         </h2>
         <p className="text-wp-text/60 mb-6 text-sm">
-          Join thousands of analysts, journalists, and developers using WorldPulse
-          to track real-time global signals.
+          Built for analysts, journalists and developers who need to know what&apos;s
+          verified, as it happens.
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Link

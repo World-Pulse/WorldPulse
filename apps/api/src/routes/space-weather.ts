@@ -44,6 +44,9 @@ const SW_MAX_LIMIT         = 200
 /** Source slugs for space weather data */
 const SW_SOURCES           = ['spaceweather', 'celestrak']
 
+/** Which feed a report came from: the scraper tags CelesTrak reports 'celestrak', NOAA's 'spaceweather' */
+const SOURCE_SLUG_SQL = "CASE WHEN 'celestrak' = ANY(tags) THEN 'celestrak' ELSE 'spaceweather' END as source_slug"
+
 /** Redis cache key for recent events */
 const CACHE_KEY_RECENT     = 'space-weather:recent'
 
@@ -143,22 +146,26 @@ export const registerSpaceWeatherRoutes: FastifyPluginAsync = async (app) => {
 
     // ── DB query ─────────────────────────────────────────────────────────────
     try {
+      // signals has no source_id column (sources are source_ids, empty for these
+      // feeds) and published_at only on some installs: the scraper tags NOAA and
+      // CelesTrak reports and keeps the issue time in event_time. Asking for the
+      // missing columns made both endpoints answer 500 (found Oct 13, 2026).
       let query = db('signals')
         .select(
           'id',
           'title',
           'summary',
           'severity',
-          'source_url',
+          db.raw('original_urls[1] as source_url'),
           'reliability_score',
-          'published_at',
-          'source_id as source_slug',
+          db.raw('COALESCE(event_time, created_at) as published_at'),
+          db.raw(SOURCE_SLUG_SQL),
           db.raw('ST_X(location::geometry) as lng'),
           db.raw('ST_Y(location::geometry) as lat'),
         )
-        .whereIn('source_id', SW_SOURCES)
-        .whereRaw(`published_at > now() - interval '${hours} hours'`)
-        .orderBy('published_at', 'desc')
+        .whereRaw('tags && ?::text[]', [SW_SOURCES])
+        .whereRaw('COALESCE(event_time, created_at) > now() - make_interval(hours => ?)', [Math.max(1, Math.round(hours))])
+        .orderByRaw('COALESCE(event_time, created_at) DESC')
         .limit(limit)
 
       if (minSeverity) {
@@ -225,11 +232,14 @@ export const registerSpaceWeatherRoutes: FastifyPluginAsync = async (app) => {
 
     // ── DB query ─────────────────────────────────────────────────────────────
     try {
+      // (tags and event_time, as in /recent above)
       const rows = await db('signals')
-        .select('id', 'title', 'severity', 'source_id', 'published_at')
-        .whereIn('source_id', SW_SOURCES)
-        .whereRaw("published_at > now() - interval '24 hours'")
-        .orderBy('published_at', 'desc')
+        .select('id', 'title', 'severity',
+                db.raw(SOURCE_SLUG_SQL.replace('source_slug', 'source_id')),
+                db.raw('COALESCE(event_time, created_at) as published_at'))
+        .whereRaw('tags && ?::text[]', [SW_SOURCES])
+        .whereRaw("COALESCE(event_time, created_at) > now() - interval '24 hours'")
+        .orderByRaw('COALESCE(event_time, created_at) DESC')
         .limit(500) as Array<{
           id:           string
           title:        string

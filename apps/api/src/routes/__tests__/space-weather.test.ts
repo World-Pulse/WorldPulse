@@ -16,17 +16,18 @@ import { redis } from '../../db/redis'
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
+// db is a function (the query builder) with db.raw on it, as knex is
 vi.mock('../../db/postgres', () => ({
-  db: vi.fn(() => ({
+  db: Object.assign(vi.fn(() => ({
     select:      vi.fn().mockReturnThis(),
     where:       vi.fn().mockReturnThis(),
     whereIn:     vi.fn().mockReturnThis(),
     whereRaw:    vi.fn().mockReturnThis(),
     whereNotNull: vi.fn().mockReturnThis(),
     orderBy:     vi.fn().mockReturnThis(),
+    orderByRaw:  vi.fn().mockReturnThis(),
     limit:       vi.fn().mockResolvedValue([]),
-    raw:         vi.fn((s: string) => s),
-  })),
+  })), { raw: vi.fn((s: string) => s) }),
 }))
 
 vi.mock('../../db/redis', () => ({

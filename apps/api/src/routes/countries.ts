@@ -252,7 +252,11 @@ export const registerCountryRoutes: FastifyPluginAsync = async (app) => {
           ELSE ${SEVERITY_WEIGHT.info}
         END) as risk_sum`),
       )
-      .groupBy('country_code', 'category', db.raw('CASE WHEN created_at >= ? THEN \'current\' ELSE \'prev\' END', [since30d]))
+      // Grouped by the period column's position: Postgres can't tell that the
+      // GROUP BY's own copy of the CASE (with its own parameter) is the same
+      // expression, so this failed with "created_at must appear in the GROUP BY
+      // clause" and the rankings answered 500 (found Oct 13, 2026)
+      .groupByRaw('country_code, category, 3')
 
     // Group rows by country + period
     const byCountry: Record<string, { current: SignalRow[]; prev: SignalRow[] }> = {}
@@ -355,7 +359,8 @@ export const registerCountryRoutes: FastifyPluginAsync = async (app) => {
           ELSE ${SEVERITY_WEIGHT.info}
         END) as risk_sum`),
       )
-      .groupBy('category', db.raw('CASE WHEN created_at >= ? THEN \'current\' ELSE \'prev\' END', [since30d]))
+      // (by position: see the rankings query above)
+      .groupByRaw('category, 2')
 
     const currentRows: SignalRow[] = []
     const prevRows:    SignalRow[] = []

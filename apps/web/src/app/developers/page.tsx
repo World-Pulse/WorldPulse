@@ -53,7 +53,7 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
     endpoints: [
       {
         method: 'GET', path: '/api/v1/public/signals',
-        description: 'List the latest verified signals from 50K+ sources worldwide.',
+        description: 'List the latest verified signals from the 1,000+ outlets WorldPulse reads each day.',
         auth: false, rateLimit: '60 req/min per IP',
         params: [
           { name: 'category', type: 'string', description: 'Filter by category (conflict, climate, health, economy, etc.)', required: false },
@@ -572,7 +572,7 @@ export default function DevelopersPage() {
             WORLDPULSE DEVELOPER API
           </h1>
           <p className="text-[15px] sm:text-[17px] text-wp-text3 max-w-2xl leading-relaxed mb-8">
-            Access real-time global intelligence from 50,000+ sources. Verified signals, reliability scores,
+            Access real-time global intelligence from 1,000+ outlets a day. Verified signals, reliability scores,
             geolocation data, and AI-powered briefings — all through a simple REST API.
             Free for open-source projects.
           </p>
@@ -701,7 +701,8 @@ export default function DevelopersPage() {
           <h2 className="text-xl font-display text-wp-text1 tracking-wide mb-6">WHY WORLDPULSE API</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {([
-              { icon: Globe, title: '50K+ Sources', desc: 'Wire services, OSINT feeds, GDELT, government databases, and community reports — all deduplicated and verified.' },
+              // ("50K+ sources" until Oct 13, 2026; ops-status counts about 1,000 outlets a day)
+              { icon: Globe, title: '1,000+ Outlets a Day', desc: 'Wire services, OSINT feeds, GDELT, government databases, and community reports — deduplicated, with every report checked against the others.' },
               { icon: Bot, title: 'AI Verification', desc: 'Multi-stage reliability scoring with transparent audit trails. Every score is explainable.' },
               { icon: MapPin, title: 'Geolocation', desc: 'PostGIS-powered spatial queries. Bounding box filters, hotspot detection, and convergence analysis.' },
               { icon: Zap, title: 'Real-Time', desc: 'WebSocket streaming for live signal updates. New events hit your app within seconds.' },

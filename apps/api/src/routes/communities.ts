@@ -5,6 +5,16 @@ import { z } from 'zod'
 import { sendError } from '../lib/errors'
 import { parseQuery, CommunityListQuerySchema, CommunityMembersQuerySchema } from '../lib/query-schemas'
 
+/**
+ * Members and posts counted, not read from the stored columns. The list asked
+ * for a communities.is_demo column no migration creates, so it answered 500
+ * (found Oct 13, 2026); and the launch seed (migrations/20260401000007) writes
+ * made-up totals ("4,821 members") into member_count and post_count. Readers
+ * see real numbers.
+ */
+const LIVE_MEMBERS = '(SELECT count(*) FROM community_members m WHERE m.community_id = c.id)::int AS member_count'
+const LIVE_POSTS = '(SELECT count(*) FROM posts p WHERE p.pinned_in_community_id = c.id AND p.deleted_at IS NULL)::int AS post_count'
+
 const CreateCommunitySchema = z.object({
   slug:        z.string().min(2).max(100).regex(/^[a-z0-9-]+$/),
   name:        z.string().min(2).max(255),
@@ -50,12 +60,10 @@ export const registerCommunityRoutes: FastifyPluginAsync = async (app) => {
     // Build query — exclude demo/seeded communities from public listing
     let query = db('communities as c')
       .where('c.public', true)
-      .where(function() {
-        this.whereNull('c.is_demo').orWhere('c.is_demo', false)
-      })
       .select([
         'c.id', 'c.slug', 'c.name', 'c.description', 'c.avatar_url',
-        'c.banner_url', 'c.categories', 'c.member_count', 'c.post_count',
+        'c.banner_url', 'c.categories',
+        db.raw(LIVE_MEMBERS), db.raw(LIVE_POSTS),
         'c.created_at', 'c.created_by',
       ])
 
@@ -69,9 +77,9 @@ export const registerCommunityRoutes: FastifyPluginAsync = async (app) => {
 
     // Sort
     if (sort === 'members') {
-      query = query.orderBy('c.member_count', 'desc')
+      query = query.orderBy('member_count', 'desc')
     } else if (sort === 'posts') {
-      query = query.orderBy('c.post_count', 'desc')
+      query = query.orderBy('post_count', 'desc')
     } else if (sort === 'newest') {
       query = query.orderBy('c.created_at', 'desc')
     } else if (sort === 'trending') {
@@ -91,16 +99,13 @@ export const registerCommunityRoutes: FastifyPluginAsync = async (app) => {
           'c.id', 'rp.cid'
         )
         .where('c.public', true)
-        .where(function() {
-          this.whereNull('c.is_demo').orWhere('c.is_demo', false)
-        })
         .select([
           'c.id', 'c.slug', 'c.name', 'c.description', 'c.avatar_url',
-          'c.banner_url', 'c.categories', 'c.member_count', 'c.post_count',
+          'c.banner_url', 'c.categories', db.raw(LIVE_MEMBERS), db.raw(LIVE_POSTS),
           'c.created_at', 'c.created_by',
           db.raw('COALESCE(rp.recent_posts, 0) as recent_posts'),
         ])
-        .orderByRaw('COALESCE(rp.recent_posts, 0) DESC, c.member_count DESC')
+        .orderByRaw('COALESCE(rp.recent_posts, 0) DESC, member_count DESC')
     }
 
     const communities = await query.limit(pageLimit)
@@ -175,7 +180,9 @@ export const registerCommunityRoutes: FastifyPluginAsync = async (app) => {
     const { slug } = req.params as { slug: string }
     const viewerId = req.user?.id
 
-    const community = await db('communities').where('slug', slug).first()
+    // (counted, like the list: see LIVE_MEMBERS)
+    const community = await db('communities as c').where('c.slug', slug)
+      .select('c.*', db.raw(LIVE_MEMBERS), db.raw(LIVE_POSTS)).first()
     if (!community) return sendError(reply, 404, 'NOT_FOUND', 'Community not found')
 
     let viewerRole: MemberRole | null = null
