@@ -15,7 +15,9 @@
  *   A cron runs every WATCHDOG_INTERVAL_MS (4 minutes by default). For each
  *   registered source, if its `last_seen` in Redis is older than STALE_THRESHOLD_MS,
  *   the watchdog writes a recordPollHeartbeat() — signalling "this source is alive
- *   and polling; it just had nothing new to report this cycle."
+ *   and polling; it just had nothing new to report this cycle." Sources whose
+ *   last poll failed (circuit-breaker failure count > 0) get no heartbeat, so
+ *   a broken source goes stale instead of looking alive.
  *
  * This approach:
  *   - Requires zero changes to individual source files
@@ -63,6 +65,8 @@ export interface OsintWatchdog {
 }
 
 const HEALTH_KEY = (sourceId: string): string => `scraper:health:${sourceId}`
+/** Circuit-breaker hash written by fetchWithResilience (lib/circuit-breaker.ts). */
+const CIRCUIT_KEY = (sourceId: string): string => `scraper:cb:${sourceId}`
 
 export function createOsintWatchdog(redis: Redis): OsintWatchdog {
   const registry = new Map<string, OsintSourceEntry>()
@@ -83,6 +87,14 @@ export function createOsintWatchdog(redis: Redis): OsintWatchdog {
         const ageMs       = now - lastSeenMs
 
         if (ageMs >= HEARTBEAT_THRESHOLD_MS) {
+          // A source whose last poll failed is not "alive but quiet": the circuit
+          // breaker keeps a consecutive-failure count that a success clears.
+          const failuresRaw = await redis.hget(CIRCUIT_KEY(entry.sourceId), 'failures')
+          const failures    = parseInt(failuresRaw || '0', 10) || 0
+          if (failures > 0) {
+            log.debug({ sourceId: entry.sourceId, failures }, 'OSINT watchdog: last poll failed, no heartbeat')
+            return
+          }
           await recordPollHeartbeat(entry.sourceId, entry.sourceName, entry.sourceSlug)
           log.debug(
             { sourceId: entry.sourceId, ageMs: Math.round(ageMs / 1000) + 's' },

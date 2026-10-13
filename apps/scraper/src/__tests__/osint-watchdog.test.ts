@@ -14,6 +14,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 const mockHget     = vi.fn()
+// Circuit-breaker failure count per source id (scraper:cb:<id>); absent = no failures
+const circuitFailures = new Map<string, string>()
 const mockHset     = vi.fn()
 const mockSadd     = vi.fn()
 const mockExec     = vi.fn().mockResolvedValue(null)
@@ -24,7 +26,10 @@ const mockPipeline = vi.fn(() => ({
 }))
 
 const mockRedis = {
-  hget:     (...args: unknown[]) => mockHget(...args),
+  hget:     (key: string, field: string) =>
+    key.startsWith('scraper:cb:')
+      ? Promise.resolve(circuitFailures.get(key.slice('scraper:cb:'.length)) ?? null)
+      : mockHget(key, field),
   pipeline: () => mockPipeline(),
 } as unknown as import('ioredis').default
 
@@ -171,6 +176,49 @@ describe('OsintWatchdog — heartbeat logic', () => {
 
     expect(recordPollHeartbeatMock).toHaveBeenCalledTimes(1)
     expect(recordPollHeartbeatMock).toHaveBeenCalledWith('seismic', 'USGS Seismic', 'seismic')
+
+    stop()
+    vi.useRealTimers()
+  })
+})
+
+describe('OsintWatchdog — failing sources', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    circuitFailures.clear()
+  })
+
+  it('does NOT fire heartbeat when the source\'s last poll failed', async () => {
+    mockHget.mockResolvedValue(agoIso(10 * MIN))
+    circuitFailures.set(SOURCE.id, '3')
+
+    const watchdog = createOsintWatchdog(mockRedis)
+    watchdog.register(SOURCE.id, SOURCE.name, SOURCE.slug)
+
+    vi.useFakeTimers()
+    const stop = watchdog.start()
+    await vi.advanceTimersByTimeAsync(4 * MIN + 100)
+
+    expect(recordPollHeartbeatMock).not.toHaveBeenCalled()
+
+    stop()
+    vi.useRealTimers()
+  })
+
+  it('still heartbeats the healthy source next to a failing one', async () => {
+    mockHget.mockResolvedValue(agoIso(10 * MIN))
+    circuitFailures.set('seismic', '5')
+
+    const watchdog = createOsintWatchdog(mockRedis)
+    watchdog.register('seismic',    'USGS Seismic', 'seismic')
+    watchdog.register('nws-alerts', 'NWS Alerts',   'nws-alerts')
+
+    vi.useFakeTimers()
+    const stop = watchdog.start()
+    await vi.advanceTimersByTimeAsync(4 * MIN + 100)
+
+    expect(recordPollHeartbeatMock).toHaveBeenCalledTimes(1)
+    expect(recordPollHeartbeatMock).toHaveBeenCalledWith('nws-alerts', 'NWS Alerts', 'nws-alerts')
 
     stop()
     vi.useRealTimers()
