@@ -40,7 +40,7 @@ vi.mock('../../lib/claude', () => ({
   }),
 }))
 
-import { crossCheckPrompt, readVerdict, crossCheckVerification, timelineEntry } from '../crosscheck'
+import { crossCheckPrompt, readVerdict, crossCheckVerification, timelineEntry, CROSSCHECK_SYSTEM, CROSSCHECK_PROMPT_VERSION } from '../crosscheck'
 
 const NOW = new Date('2026-10-11T16:40:00Z')
 
@@ -57,6 +57,36 @@ describe('crossCheckPrompt and readVerdict', () => {
     expect(readVerdict('```json\n{"same_event": true, "agree": false, "note": "109 dead vs 62 dead."}\n```')?.verdict).toBe('conflicting')
     expect(readVerdict('{"same_event": false, "agree": false, "note": "Two different strikes."}')?.verdict).toBe('different')
     expect(readVerdict('They seem to match.')).toBeNull()
+  })
+})
+
+describe('what Claude is asked (version 2, Oct 13, 2026)', () => {
+  it('compares the report that just verified the story with the ones it had', () => {
+    expect(CROSSCHECK_SYSTEM).toContain('Report 1 is the report that just verified this story')
+  })
+
+  it('says what is still one event, and what is a separate one', () => {
+    // version 1 called these different events: one IMF release, a toll that rose, a live blog and its recap, an explainer, one column
+    for (const same of ['updated figures', 'figures from one announcement or release', 'a live blog and a recap of the same day', 'an explainer or analysis of it', 'the same article or column under another headline']) {
+      expect(CROSSCHECK_SYSTEM).toContain(same)
+    }
+    for (const separate of ['another incident of the same kind', 'other people doing a similar thing', 'a roundup, digest or photo gallery naming no specific event']) {
+      expect(CROSSCHECK_SYSTEM).toContain(separate)
+    }
+  })
+
+  it('does not count a later development as disagreement', () => {
+    expect(CROSSCHECK_SYSTEM).toContain('A later report adding news or updated figures is not disagreement')
+  })
+
+  it('keeps every headline it read with a verdict worth reading', async () => {
+    h.ops.length = 0
+    h.rows = [{ title: 'Police arrest six suspected robbers in Oyo', summary: null }, { title: 'Kano police recover three stolen vehicles', summary: null }, { title: 'Kano police arrest four suspects', summary: null }]
+    h.reply = '{"same_event": false, "agree": false, "note": "Arrests in two different states."}'
+    await crossCheckVerification(['a', 'b', 'c'], [], NOW)
+    const entry = JSON.parse(String(h.ops.find(op => op[0] === 'lpush')![2]))
+    expect(entry.titles).toHaveLength(3)
+    expect(entry.prompt).toBe(2)
   })
 })
 
@@ -77,7 +107,7 @@ describe('crossCheckVerification', () => {
     h.reply = '{"same_event": false, "agree": false, "note": "A gas leak and a road crash."}'
     expect(await crossCheckVerification(['a'], [{ title: 'Two killed in Kozhikode road crash' }], NOW)).toBe('different')
     const pushed = h.ops.find(op => op[0] === 'lpush')!
-    expect(JSON.parse(String(pushed[2]))).toMatchObject({ id: 'a', verdict: 'different', titles: ['Two killed in Kozhikode gas leak', 'Two killed in Kozhikode road crash'] })
+    expect(JSON.parse(String(pushed[2]))).toMatchObject({ id: 'a', verdict: 'different', titles: ['Two killed in Kozhikode gas leak', 'Two killed in Kozhikode road crash'], prompt: CROSSCHECK_PROMPT_VERSION })
     // "different event" verdicts are also kept on their own list (the newest 30), to be read before they may hold a story
     const lists = h.ops.filter(op => op[0] === 'lpush').map(op => op[1])
     expect(lists).toEqual(['ai:verify:recent', 'ai:verify:different'])

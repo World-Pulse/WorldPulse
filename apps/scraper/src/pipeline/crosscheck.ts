@@ -21,9 +21,23 @@ import { logger } from '../lib/logger'
 import { askClaude, claudeConfigured } from '../lib/claude'
 import { jsonIn } from './verify'
 
-export const CROSSCHECK_SYSTEM = `You check the verification of WorldPulse, a global news service. A story is verified when independent outlets report it, and these reports were matched as one story by the words of their headlines. Read them and say:
-- same_event: whether they report the same event (not just the same topic, place or people)
-- agree: whether they agree on its main facts (what happened, where, when, who, how many); differences in detail or wording are fine
+/**
+ * What Claude is asked (version 2, Oct 13, 2026). Version 1 asked whether
+ * the reports were "the same event" and nothing more: of its 30 newest
+ * "different event" verdicts, about 14 were one event told differently (the
+ * IMF's world and country forecasts from one release, a death toll and a
+ * later one, a live blog and the day's recap, an explainer, one column under
+ * two headlines), and a later development counted as disagreement ("the
+ * outlets differ": arrested, then released). Too many to let a verdict hold
+ * a story back, so the question now says what counts, and compares the
+ * report that just verified the story with the ones it already had.
+ */
+export const CROSSCHECK_PROMPT_VERSION = 2
+
+export const CROSSCHECK_SYSTEM = `You check the verification of WorldPulse, a global news service. A story turns verified when a second independent outlet reports it. Report 1 is the report that just verified this story; the others are reports the story already had. They were matched as one story by the words of their headlines, which can join reports that only share words.
+Say:
+- same_event: true when Report 1 reports the same news event as the other reports (or most of them). Reports of one event often differ, and that is still the same event: other angles or detail; updated figures (a death toll that rose, a release that followed an arrest); reactions and follow-ups within days (a vow to respond, further strikes in the same campaign); figures from one announcement or release (a forecast's world and country numbers); a live blog and a recap of the same day; an explainer or analysis of it; the same article or column under another headline. false only when Report 1 describes a separate occurrence: another incident of the same kind (arrests in another city, another earthquake, a raid on another town), other people doing a similar thing (another country's minister at the same meeting), a roundup, digest or photo gallery naming no specific event, or a topic in common and nothing more.
+- agree: false only when the reports state facts about the event that can't both be true at once (where it happened, who did it, a figure for the same moment). A later report adding news or updated figures is not disagreement.
 Answer with only this JSON: {"same_event": true or false, "agree": true or false, "note": "one short sentence"}`
 
 export type CrossCheckVerdict = 'same' | 'conflicting' | 'different'
@@ -91,7 +105,9 @@ export async function crossCheckVerification(
       id:      storyIds[0],
       verdict: read.verdict,
       note:    read.note,
-      titles:  reports.slice(0, 2).map(r => r.title.slice(0, 90)),
+      // every headline Claude read (Report 1 first), so a reader can judge the verdict
+      titles:  reports.slice(0, 4).map(r => r.title.slice(0, 90)),
+      prompt:  CROSSCHECK_PROMPT_VERSION,
     })
     multi.lpush(RECENT_KEY, entry).ltrim(RECENT_KEY, 0, 19).expire(RECENT_KEY, 7 * 86_400)
     if (read.verdict === 'different') multi.lpush(DIFFERENT_KEY, entry).ltrim(DIFFERENT_KEY, 0, 29).expire(DIFFERENT_KEY, 7 * 86_400)
