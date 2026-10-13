@@ -25,7 +25,7 @@ vi.mock('../../db/redis', () => ({
   redis: { get: vi.fn(async () => null), setex: vi.fn(async () => 'OK') },
 }))
 
-import knowledgeGraphRoutes, { signalIdsOf, spikeRatio } from '../knowledge-graph'
+import knowledgeGraphRoutes, { signalIdsOf, trendScores } from '../knowledge-graph'
 
 const S1 = '6f1c2a3b-0000-4000-8000-000000000001'
 const S2 = '6f1c2a3b-0000-4000-8000-000000000002'
@@ -50,33 +50,48 @@ describe('signalIdsOf', () => {
   })
 })
 
-describe('spikeRatio', () => {
-  it('compares mentions in the window with the usual rate for a window that long', () => {
-    expect(spikeRatio(30, 1, 168)).toBe(4.3)   // 30 this week, usually 7
-    expect(spikeRatio(7, 1, 168)).toBe(1)      // a normal week
-    expect(spikeRatio(2, 0.1, 24)).toBe(2)     // expectation never below 1
+describe('trendScores', () => {
+  it("compares each entity's reports with the window before, scaled by the whole graph's growth", () => {
+    const out = trendScores([
+      { id: 'us', recent: 340, previous: 300 },     // a big, steady entity
+      { id: 'djibouti', recent: 40, previous: 3 },  // a sudden story
+      { id: 'quiet', recent: 0, previous: 9 },      // nothing now: left out
+      { id: 'newcomer', recent: 6, previous: 0 },
+    ])
+    expect(out.map(t => t.id)).toEqual(['us', 'djibouti', 'newcomer'])
+    // the graph grew 386/312 ≈ 1.24x, so the steady entity is about flat
+    expect(out[0]!.change).toBe(0.9)
+    expect(out[1]!.change).toBeGreaterThan(5)
+    expect(out[2]).toMatchObject({ change: null, isNew: true })
+  })
+
+  it("doesn't call everything a spike after a quiet day in the pipeline", () => {
+    // Every entity doubled because the day before had an outage
+    const out = trendScores([{ id: 'a', recent: 20, previous: 10 }, { id: 'b', recent: 40, previous: 20 }])
+    for (const t of out) expect(t.change!).toBeGreaterThanOrEqual(0.9), expect(t.change!).toBeLessThanOrEqual(1.1)   // about flat, not 2x
   })
 })
 
 describe('GET /api/v1/knowledge-graph/trending', () => {
   beforeEach(() => { h.raws.length = 0; h.answers.length = 0 })
 
-  it('ranks by mentions inside the window, not by how long an entity has existed', async () => {
+  it('ranks by reports in the window against the window before, from the reports\' own times', async () => {
     h.answers.push(
-      // Candidates: an old, steady entity and a new one with a burst
+      // Reports per entity: in the window and in the 24 hours before it
+      { rows: [{ id: 'a1', recent: 30, previous: 30 }, { id: 'b2', recent: 12, previous: 0 }, { id: 'c3', recent: 0, previous: 4 }] },
+      // The entities themselves
       { rows: [node('a1', 'Steady Org', 5000, [S1], 25), node('b2', 'Sudden Person', 40, [S2, S3], 0.2)] },
-      // Which of their signals are inside the window
-      { rows: [{ id: S2 }, { id: S3.toLowerCase() }] },
     )
     const res = await (await app()).inject({ method: 'GET', url: '/api/v1/knowledge-graph/trending?window_hours=24' })
     expect(res.statusCode).toBe(200)
-    const body = res.json() as { trending: Array<{ entity: { canonical_name: string }; recent_mentions: number; spike_ratio: number }> }
+    const body = res.json() as { trending: Array<{ entity: { canonical_name: string }; recent_mentions: number; previous_mentions: number; spike_ratio: number | null; is_new: boolean }> }
     expect(body.trending.map(t => t.entity.canonical_name)).toEqual(['Sudden Person', 'Steady Org'])
-    expect(body.trending[0]).toMatchObject({ recent_mentions: 2, spike_ratio: 2 })
-    expect(body.trending[1]).toMatchObject({ recent_mentions: 0, spike_ratio: 0 })
-    // signal ids are text in entity rows: compared as uuid[]
-    expect(h.raws[1].sql).toMatch(/id = ANY\(\?::uuid\[\]\)/)
-    expect(h.raws[1].params?.[0]).toEqual([S1, S2, S3.toLowerCase()])
+    expect(body.trending[0]).toMatchObject({ recent_mentions: 12, previous_mentions: 0, spike_ratio: null, is_new: true })
+    expect(body.trending[1]).toMatchObject({ recent_mentions: 30, previous_mentions: 30, is_new: false })
+    // counted from the reports' times, text ids matched in lowercase
+    expect(h.raws[0].sql).toMatch(/JOIN signals s ON s.id::text = lower\(u.sid\)/)
+    expect(h.raws[0].sql).not.toMatch(/first_seen/)
+    expect(h.raws[1].params?.[0]).toEqual(['b2', 'a1'])
   })
 })
 

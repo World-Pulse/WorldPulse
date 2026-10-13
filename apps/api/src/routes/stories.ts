@@ -51,16 +51,19 @@ const MEMBER_COLUMNS = `s.id, s.title, s.category::text AS category, s.status::t
  * A story is the signals sharing story_id, or a signal no story has claimed
  * whose links come from at least two addresses.
  */
-export function storyListSql(hasStoryIds: boolean): string {
+export function storyListSql(hasStoryIds: boolean, scope: 'recent' | 'signals' = 'recent'): string {
+  // scope 'signals': only the stories of the signals in an extra first binding
+  // (uuid[]), e.g. the reports that name one entity (lib/entity-profile.ts)
+  const only = scope === 'signals' ? 'id = ANY(?::uuid[]) AND ' : ''
   const active = hasStoryIds
     ? `SELECT COALESCE(story_id, id) AS story_key
          FROM signals
-        WHERE created_at >= ? AND status IN ('verified', 'pending')
+        WHERE ${only}created_at >= ? AND status IN ('verified', 'pending')
           AND (story_id IS NOT NULL OR cardinality(original_urls) >= 2)
         GROUP BY 1`
     : `SELECT id AS story_key
          FROM signals
-        WHERE created_at >= ? AND status IN ('verified', 'pending')
+        WHERE ${only}created_at >= ? AND status IN ('verified', 'pending')
           AND cardinality(original_urls) >= 2
         GROUP BY 1`
   const members = hasStoryIds
@@ -127,8 +130,24 @@ export function storyListSql(hasStoryIds: boolean): string {
 export async function topStories(hours: number, limit: number): Promise<ListedStory[]> {
   const since = new Date(Date.now() - hours * 3_600_000)
   const result = await db.raw(storyListSql(await signalsHaveStoryIds()), [since, EVENT_TEMPLATE_SQL])
-  const rows = (result as { rows?: Array<Record<string, unknown>> } | undefined)?.rows ?? []
+  return rankStories(candidatesOf(result), limit)
+}
 
+/**
+ * The stories that the given signals belong to, reported in the last
+ * `hours`, ranked as topStories ranks them (two outlets or more, real
+ * headlines, each event once). For an entity's page: the stories that name it.
+ */
+export async function storiesOfSignals(signalIds: string[], hours: number, limit: number): Promise<ListedStory[]> {
+  const ids = [...new Set(signalIds.filter(id => UUID_RE.test(id)).map(id => id.toLowerCase()))]
+  if (ids.length === 0) return []
+  const since = new Date(Date.now() - hours * 3_600_000)
+  const result = await db.raw(storyListSql(await signalsHaveStoryIds(), 'signals'), [ids, since, EVENT_TEMPLATE_SQL])
+  return rankStories(candidatesOf(result), limit)
+}
+
+function candidatesOf(result: unknown): StoryCandidate[] {
+  const rows = (result as { rows?: Array<Record<string, unknown>> } | undefined)?.rows ?? []
   const candidates: StoryCandidate[] = []
   for (const r of rows) {
     const updatedAt = new Date(r.newest as string)
@@ -148,7 +167,7 @@ export async function topStories(hours: number, limit: number): Promise<ListedSt
       verifiedAt:  r.verified_at ? new Date(r.verified_at as string) : null,
     })
   }
-  return rankStories(candidates, limit)
+  return candidates
 }
 
 export const registerStoryRoutes: FastifyPluginAsync = async (app) => {

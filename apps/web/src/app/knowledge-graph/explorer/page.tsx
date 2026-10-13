@@ -34,6 +34,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { toTrendingEntities, toGraphStats, focusGraph, balanceTrending, isBroadPlace, type TrendingEntity, type GraphStats } from '@/lib/knowledge-graph-api'
+import { entityPath } from '@/lib/entity-links'
 
 const ForceGraph = dynamic(
   () => import('../../../components/knowledge-graph/ForceGraph'),
@@ -739,11 +740,12 @@ export default function KnowledgeGraphExplorerPage() {
 
             {/* Actions */}
             <div className="space-y-2">
+              {/* The entity's own page: stories, activity, connections (Oct 13, 2026) */}
               <a
-                href={`/knowledge-graph?entity=${selectedEntity.id}`}
+                href={entityPath(selectedEntity.id, selectedEntity.canonical_name)}
                 className="block w-full text-center px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-500 transition-colors"
               >
-                View Full Entity Detail
+                Open {selectedEntity.canonical_name}&apos;s page
               </a>
               <button
                 onClick={async () => {

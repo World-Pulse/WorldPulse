@@ -38,7 +38,7 @@ export interface Connection {
   createdAt: string | null
   alertTier: string | null
   /** The entities this signal shares with the one on the page, most-mentioned first */
-  connectedVia: Array<{ name: string; type: string }>
+  connectedVia: Array<{ id: string; name: string; type: string }>
   /** Share of the page signal's entities this one names (0–1) */
   connectionStrength: number
   sharedEntityCount: number
@@ -70,9 +70,10 @@ export async function signalConnections(id: string, limit: number): Promise<{ co
   const rows = rowsOf(await db.raw(`
     SELECT s.id, s.title, s.summary, s.category, s.severity, s.status,
            s.reliability_score, s.location_name, s.country_code, s.tags,
-           s.created_at, s.alert_tier, m.names, m.types, m.shared
+           s.created_at, s.alert_tier, m.ids, m.names, m.types, m.shared
       FROM (
         SELECT sid,
+               array_agg(n.id ORDER BY n.mention_count DESC) AS ids,
                array_agg(n.canonical_name ORDER BY n.mention_count DESC) AS names,
                array_agg(n.type ORDER BY n.mention_count DESC) AS types,
                count(*)::int AS shared
@@ -95,6 +96,7 @@ export async function signalConnections(id: string, limit: number): Promise<{ co
   ]))
 
   const connections = rows.map((s): Connection => {
+    const ids = Array.isArray(s.ids) ? s.ids.map(String) : []
     const names = Array.isArray(s.names) ? s.names.map(String) : []
     const types = Array.isArray(s.types) ? s.types.map(String) : []
     const shared = Number(s.shared) || names.length
@@ -111,7 +113,7 @@ export async function signalConnections(id: string, limit: number): Promise<{ co
       tags: Array.isArray(s.tags) ? s.tags.map(String) : [],
       createdAt: s.created_at ? new Date(s.created_at as string | Date).toISOString() : null,
       alertTier: (s.alert_tier as string | null) ?? null,
-      connectedVia: names.slice(0, 5).map((name, i) => ({ name, type: types[i] ?? 'other' })),
+      connectedVia: names.slice(0, 5).map((name, i) => ({ id: ids[i] ?? '', name, type: types[i] ?? 'other' })),
       connectionStrength: Math.min(1, shared / entities.length),
       sharedEntityCount: shared,
     }

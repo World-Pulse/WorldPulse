@@ -21,6 +21,7 @@
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify'
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
+import { entityProfile, sharedStories } from '../lib/entity-profile'
 
 // ─── TYPES ─────────────────────────────────────────────────────────────────────
 
@@ -105,6 +106,8 @@ function clamp(val: number, min: number, max: number): number {
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+/** Entity ids are short hashes (entity-graph.ts entityId); anything else is not one */
+const ENTITY_ID_RE = /^[A-Za-z0-9_-]{4,64}$/
 
 /**
  * The signal ids entity rows point at (each keeps its last 100), well-formed
@@ -117,13 +120,41 @@ export function signalIdsOf(rows: Array<{ signal_ids?: string[] | null }>): stri
 }
 
 /**
- * How unusual an entity's mentions in the window are: mentions in the window
- * against what its long-run daily average predicts for a window that long
- * (at least 1). 1 = normal, 3 = three times the usual.
+ * Trending, as a reader means it: named in more reports than just before.
+ * Each entity's reports in the window (default 24 hours) against the same
+ * length just before it, from the reports' own times. Both are scaled by how
+ * many reports the whole graph got in each window, so a quiet stretch in the
+ * pipeline (Oct 12, 2026: the disk filled overnight and nothing came in for
+ * ten hours) doesn't make everything look like it's spiking afterwards.
+ *
+ * Until Oct 13 this compared the window with mention_count / days since
+ * first_seen. Entity extraction was down from April to October, so
+ * mention_count had barely grown and the United States showed a "32.8x spike".
+ *
+ * change: how many times more than before (null with fewer than 3 reports
+ * before: too few to compare); isNew: none before and 5 or more now. Ranked
+ * by reports now × change (kept between 0.2 and 5), so a big story and a
+ * sudden newcomer can both lead.
  */
-export function spikeRatio(recentMentions: number, dailyAvg: number, windowHours: number): number {
-  const expected = Math.max(1, dailyAvg * (windowHours / 24))
-  return Math.round((recentMentions / expected) * 10) / 10
+export interface TrendCount { id: string; recent: number; previous: number }
+export interface TrendScore extends TrendCount { change: number | null; isNew: boolean; score: number }
+
+export function trendScores(counts: TrendCount[]): TrendScore[] {
+  const totalRecent = counts.reduce((n, c) => n + c.recent, 0)
+  const totalPrevious = counts.reduce((n, c) => n + c.previous, 0)
+  const graphGrowth = (totalRecent + 1) / (totalPrevious + 1)
+  return counts
+    .filter(c => c.recent > 0)
+    .map(c => {
+      const relative = ((c.recent + 2) / (c.previous + 2)) / graphGrowth
+      return {
+        ...c,
+        change: c.previous >= 3 ? Math.round(relative * 10) / 10 : null,
+        isNew: c.previous === 0 && c.recent >= 5,
+        score: c.recent * Math.min(5, Math.max(0.2, relative)),
+      }
+    })
+    .sort((a, b) => b.score - a.score || b.recent - a.recent || a.id.localeCompare(b.id))
 }
 
 // ─── ROUTE PLUGIN ──────────────────────────────────────────────────────────────
@@ -227,6 +258,33 @@ const knowledgeGraphRoutes: FastifyPluginAsync = async (app) => {
 
     await redis.setex(`kg:node:${id}`, 600, JSON.stringify(entity))
     return reply.send({ entity, recent_signals: signals })
+  })
+
+  // ── GET /entities/:id/profile ─────────────────────────────────────────
+  // The entity's page (world-pulse.io/entities/...): activity, stories naming
+  // it, newest reports, and who it is named with (lib/entity-profile.ts)
+  app.get('/entities/:id/profile', {
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id } = req.params as { id: string }
+    if (!ENTITY_ID_RE.test(id)) return reply.status(404).send({ error: 'Entity not found' })
+    const profile = await entityProfile(id)
+    if (!profile) return reply.status(404).send({ error: 'Entity not found' })
+    return reply.send({ success: true, data: profile })
+  })
+
+  // ── GET /entities/:id/with/:other ─────────────────────────────────────
+  // Why two entities are connected: the stories naming both (last 30 days)
+  app.get('/entities/:id/with/:other', {
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id, other } = req.params as { id: string; other: string }
+    if (!ENTITY_ID_RE.test(id) || !ENTITY_ID_RE.test(other) || id === other) {
+      return reply.status(404).send({ error: 'Entity not found' })
+    }
+    const shared = await sharedStories(id, other)
+    if (!shared) return reply.status(404).send({ error: 'Entity not found' })
+    return reply.send({ success: true, data: shared })
   })
 
   // ── GET /entities/:id/graph ───────────────────────────────────────────
@@ -392,57 +450,87 @@ const knowledgeGraphRoutes: FastifyPluginAsync = async (app) => {
       return reply.send(JSON.parse(cached))
     }
 
-    const windowStart = new Date(Date.now() - windowHours * 3600 * 1000).toISOString()
+    const now = Date.now()
+    const windowStart = new Date(now - windowHours * 3600 * 1000).toISOString()
+    const previousStart = new Date(now - 2 * windowHours * 3600 * 1000).toISOString()
 
-    const conditions: string[] = ['last_seen >= ?', 'mention_count >= 2']
-    const params: any[] = [windowStart]
-    if (type) {
-      conditions.push('type = ?')
-      params.push(type)
-    }
-    params.push(limit)
-
-    const where = conditions.join(' AND ')
-    const result = await db.raw(
-      `SELECT *,
-              mention_count / GREATEST(1, EXTRACT(EPOCH FROM (NOW() - first_seen)) / 86400) as daily_avg
-       FROM entity_nodes
-       WHERE ${where}
-       ORDER BY mention_count DESC, last_seen DESC
-       LIMIT ?`,
-      params,
+    // Reports naming each entity seen in the window: in the window, and in the
+    // same length before it (signal ids are text in entity rows)
+    const countParams: unknown[] = [windowStart, windowStart, windowStart]
+    if (type) countParams.push(type)
+    countParams.push(previousStart)
+    const countResult = await db.raw(
+      `SELECT n.id,
+              count(*) FILTER (WHERE s.created_at >= ?)::int AS recent,
+              count(*) FILTER (WHERE s.created_at <  ?)::int AS previous
+         FROM entity_nodes n
+         CROSS JOIN LATERAL unnest(n.signal_ids) AS u(sid)
+         JOIN signals s ON s.id::text = lower(u.sid)
+        WHERE n.last_seen >= ? AND n.mention_count >= 2${type ? ' AND n.type = ?' : ''}
+          AND s.created_at >= ?
+        GROUP BY n.id`,
+      countParams,
     )
+    const scores = trendScores(((countResult.rows ?? []) as Array<Record<string, unknown>>).map(r => ({
+      id: String(r.id), recent: Number(r.recent) || 0, previous: Number(r.previous) || 0,
+    }))).slice(0, limit)
 
-    // Mentions inside the window: the entity's recent signal references that
-    // are that new. (This used to count every mention ever and divide by the
-    // daily average, so the "spike" was just the entity's age in days.)
-    const ids = signalIdsOf(result.rows)
-    const recent = new Set<string>()
-    if (ids.length > 0) {
-      const fresh = await db.raw(
-        `SELECT id::text AS id FROM signals WHERE id = ANY(?::uuid[]) AND created_at >= ?`,
-        [ids, windowStart],
-      )
-      for (const row of fresh.rows as Array<{ id: string }>) recent.add(row.id)
-    }
-
-    const trending = result.rows.map((row: any) => {
-      const dailyAvg = Number(row.daily_avg) || 0
-      const recentMentions = signalIdsOf([row]).filter(id => recent.has(id)).length
-      return {
+    const rows = scores.length > 0
+      ? (await db.raw(`SELECT * FROM entity_nodes WHERE id = ANY(?)`, [scores.map(t => t.id)])).rows ?? []
+      : []
+    const byId = new Map((rows as any[]).map(r => [String(r.id), r]))
+    const trending = scores.flatMap(t => {
+      const row = byId.get(t.id)
+      if (!row) return []
+      return [{
         entity: mapNodeRow(row),
-        daily_avg: Math.round(dailyAvg * 100) / 100,
-        recent_mentions: recentMentions,
-        spike_ratio: spikeRatio(recentMentions, dailyAvg, windowHours),
-      }
+        recent_mentions: t.recent,
+        previous_mentions: t.previous,
+        // (the window before, per day; kept for API users of the old field)
+        daily_avg: Math.round((t.previous * 24 / windowHours) * 100) / 100,
+        spike_ratio: t.change,
+        is_new: t.isNew,
+      }]
     })
-
-    // Most unusual first; ties by mentions in the window
-    trending.sort((a: any, b: any) => b.spike_ratio - a.spike_ratio || b.recent_mentions - a.recent_mentions)
 
     const response = { trending, window_hours: windowHours, generated_at: new Date().toISOString() }
     await redis.setex(cacheKey, 120, JSON.stringify(response))
     reply.header('X-Cache', 'MISS')
+    return reply.send(response)
+  })
+
+  // ── GET /sitemap ──────────────────────────────────────────────────────
+  // The entity pages worth a search engine's time (world-pulse.io/sitemap.xml):
+  // entities named in 3+ reports in the last 14 days, most named first, at
+  // most 1,000. Kept for an hour.
+  app.get('/sitemap', {
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (_req: FastifyRequest, reply: FastifyReply) => {
+    const cacheKey = 'kg:api:sitemap:v1'
+    const cached = await redis.get(cacheKey).catch(() => null)
+    if (cached) return reply.header('X-Cache', 'HIT').send(JSON.parse(cached))
+    const since = new Date(Date.now() - 14 * 86_400_000).toISOString()
+    const result = await db.raw(
+      `SELECT n.id, n.canonical_name AS name, max(s.created_at) AS last_report, count(*)::int AS reports
+         FROM entity_nodes n
+         CROSS JOIN LATERAL unnest(n.signal_ids) AS u(sid)
+         JOIN signals s ON s.id::text = lower(u.sid)
+        WHERE n.last_seen >= ? AND s.created_at >= ?
+        GROUP BY n.id, n.canonical_name
+       HAVING count(*) >= 3
+        ORDER BY reports DESC, n.id
+        LIMIT 1000`,
+      [since, since],
+    )
+    const entities = ((result.rows ?? []) as Array<Record<string, unknown>>).flatMap(r => {
+      const last = new Date(r.last_report as string)
+      const name = String(r.name ?? '').trim()
+      return name && !Number.isNaN(last.getTime())
+        ? [{ id: String(r.id), name, lastReport: last.toISOString(), reports: Number(r.reports) || 0 }]
+        : []
+    })
+    const response = { success: true, data: { entities, generatedAt: new Date().toISOString() } }
+    redis.setex(cacheKey, 3600, JSON.stringify(response)).catch(() => {})
     return reply.send(response)
   })
 

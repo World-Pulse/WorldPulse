@@ -76,6 +76,16 @@ describe('sitemap.xml', () => {
     expect(entries.at(-1)).toMatchObject({ url: 'https://world-pulse.io/signals/s1', lastModified: new Date('2026-10-11T18:00:00.000Z') })
   })
 
+  it('lists a page per entity the knowledge graph names often (Oct 13, 2026)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(
+      url.includes('/knowledge-graph/sitemap')
+        ? { success: true, data: { entities: [{ id: 'a84d671cb97c1d91', name: 'Houthis', lastReport: '2026-10-12T20:00:00.000Z', reports: 216 }] } }
+        : { success: true, data: { stories: [] } },
+    ))))
+    const entries = await sitemap()
+    expect(entries.at(-1)).toMatchObject({ url: 'https://world-pulse.io/entities/houthis-a84d671cb97c1d91', lastModified: new Date('2026-10-12T20:00:00.000Z') })
+  })
+
   it('still lists the main pages when the API is down', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('ECONNREFUSED') }))
     const entries = await sitemap()

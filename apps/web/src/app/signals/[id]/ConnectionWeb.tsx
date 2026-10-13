@@ -2,10 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { entityPath } from '@/lib/entity-links'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ConnectingEntity {
+  id?: string
   name: string
   type: string
 }
@@ -258,6 +260,21 @@ export function ConnectionWeb({ signalId }: ConnectionWebProps) {
       {/* Expanded content */}
       {isOpen && (
         <div className="space-y-3">
+          {/* Each entity has its own page (/entities/<name>-<id>, Oct 13, 2026) */}
+          {entities.length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="font-mono text-[9px] uppercase tracking-widest text-wp-text3 mr-1">Pages</span>
+              {entities.slice(0, 6).map(e => (
+                <Link
+                  key={e.id}
+                  href={entityPath(e.id, e.name)}
+                  className="inline-flex items-center gap-1 text-[11px] text-wp-text2 hover:text-wp-amber bg-white/[0.05] px-2 py-1 rounded transition-colors"
+                >
+                  <span aria-hidden="true">{ENTITY_TYPE_ICON[e.type] ?? ''}</span>{e.name}
+                </Link>
+              ))}
+            </div>
+          )}
           {loading && connections.length === 0 ? (
             <ConnectionSkeleton />
           ) : error ? (

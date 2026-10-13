@@ -17,6 +17,8 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic'
+import Link from 'next/link'
+import { entityPath } from '@/lib/entity-links'
 
 const ForceGraph = dynamic(
   () => import('../../components/knowledge-graph/ForceGraph'),
@@ -53,8 +55,11 @@ interface EntityEdge {
 
 interface TrendingEntity {
   entity: EntityNode
-  spike_ratio: number
+  /** Reports in the window against the window before (null: too few before to compare) */
+  spike_ratio: number | null
   recent_mentions: number
+  previous_mentions?: number
+  is_new?: boolean
   daily_avg: number
 }
 
@@ -179,6 +184,15 @@ export default function KnowledgeGraphPage() {
     setEntityNeighbors(graph?.nodes?.filter(n => n.id !== entity.id) ?? [])
     setEntityEdges(graph?.edges ?? [])
   }, [])
+
+  // /knowledge-graph?entity=<id> (from an entity's page or the explorer) opens that entity
+  useEffect(() => {
+    let id: string | null = null
+    try { id = new URLSearchParams(window.location.search).get('entity') } catch { /* no address */ }
+    if (!id || !/^[A-Za-z0-9_-]{4,64}$/.test(id)) return
+    void fetchJSON<{ entity: EntityNode }>(`/api/v1/knowledge-graph/entities/${encodeURIComponent(id)}`)
+      .then(d => { if (d?.entity) void selectEntity(d.entity) })
+  }, [selectEntity])
 
   // Format relative time
   const relTime = (iso: string) => {
@@ -324,13 +338,19 @@ export default function KnowledgeGraphPage() {
           <div className="rounded-xl border border-indigo-500/30 bg-gray-900/50 p-6">
             <div className="flex items-center gap-3 mb-4">
               <span className="text-2xl">{ENTITY_TYPE_ICONS[selectedEntity.type]}</span>
-              <div>
+              <div className="flex-1 min-w-0">
                 <h2 className="text-xl font-bold">{selectedEntity.canonical_name}</h2>
                 <p className="text-sm text-gray-400">
                   {selectedEntity.type.replace('_', ' ')} · {selectedEntity.mention_count} mentions ·
                   First seen {relTime(selectedEntity.first_seen)} · Last seen {relTime(selectedEntity.last_seen)}
                 </p>
               </div>
+              <Link
+                href={entityPath(selectedEntity.id, selectedEntity.canonical_name)}
+                className="inline-flex items-center flex-shrink-0 rounded-lg border border-indigo-500/40 px-3 py-2 text-sm font-medium text-indigo-300 hover:bg-indigo-500/10 transition"
+              >
+                Open page →
+              </Link>
             </div>
 
             {/* Relationship Edges */}
@@ -469,12 +489,16 @@ export default function KnowledgeGraphPage() {
                     </span>
                   </div>
                   <div className="text-right text-sm">
-                    <div className="text-gray-300">{item.entity.mention_count} mentions</div>
-                    {item.spike_ratio > 1.5 && (
+                    {/* Reports in the last 24 hours, and how that compares with the
+                        24 before (the API scales both by the whole graph's volume) */}
+                    <div className="text-gray-300">{item.recent_mentions} report{item.recent_mentions === 1 ? '' : 's'} in 24h</div>
+                    {item.is_new ? (
+                      <div className="text-amber-400 text-xs font-semibold">New</div>
+                    ) : item.spike_ratio != null && item.spike_ratio >= 1.5 ? (
                       <div className="text-red-400 text-xs font-semibold">
-                        {'\u{2191}'} {item.spike_ratio.toFixed(1)}x spike
+                        {'\u{2191}'} {item.spike_ratio.toFixed(1)}× the 24h before
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 </button>
               ))}

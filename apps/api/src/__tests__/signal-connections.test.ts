@@ -45,7 +45,7 @@ describe('signalConnections', () => {
       id: '33333333-3333-3333-3333-333333333333', title: 'Houthis fire missiles from Yemen as Ethiopia closes border',
       summary: null, category: 'conflict', severity: 'high', status: 'pending', reliability_score: '0.6',
       location_name: 'Yemen', country_code: 'YE', tags: null, created_at: new Date('2026-10-10T12:00:00Z'), alert_tier: null,
-      names: ['Yemen', 'Ethiopia'], types: ['location', 'location'], shared: 2,
+      ids: ['e_yemen', 'e_ethiopia'], names: ['Yemen', 'Ethiopia'], types: ['location', 'location'], shared: 2,
     }]]
     const r = await signalConnections(PAGE, 8)
 
@@ -61,7 +61,7 @@ describe('signalConnections', () => {
       reliabilityScore: 0.6,
       tags: [],
       createdAt: '2026-10-10T12:00:00.000Z',
-      connectedVia: [{ name: 'Yemen', type: 'location' }, { name: 'Ethiopia', type: 'location' }],
+      connectedVia: [{ id: 'e_yemen', name: 'Yemen', type: 'location' }, { id: 'e_ethiopia', name: 'Ethiopia', type: 'location' }],
       sharedEntityCount: 2,
       connectionStrength: 2 / 3,
     })])
