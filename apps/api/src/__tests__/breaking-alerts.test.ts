@@ -16,7 +16,8 @@ const mockRedis = {
   publish: vi.fn(),
 }
 
-vi.mock('../db/redis', () => ({ redis: mockRedis }))
+// (a getter: the module under test is imported, hoisted, before this file's consts exist; reading one in the factory threw and none of these tests ran. Oct 13, 2026)
+vi.mock('../db/redis', () => ({ get redis() { return mockRedis } }))
 vi.mock('../db/postgres', () => ({ db: vi.fn() }))
 vi.mock('../lib/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() },

@@ -26,8 +26,9 @@ const mockRedis = {
   setex: vi.fn().mockResolvedValue('OK'),
 }
 
+// (a getter: the module under test is imported, hoisted, before this file's consts exist; reading one in the factory threw and none of these tests ran. Oct 13, 2026)
 vi.mock('../../db/redis', () => ({
-  redis: mockRedis,
+  get redis() { return mockRedis },
 }))
 
 // Default mock rows returned by db('signals').select(...)
@@ -99,7 +100,9 @@ vi.mock('../../db/postgres', () => ({
 import { db } from '../../db/postgres'
 import { redis } from '../../db/redis'
 
-const mockDb   = db as unknown as ReturnType<typeof vi.fn>
+// (db is the Proxy above: its calls go to mockDbFn, which is what the tests set up)
+void db
+const mockDb   = mockDbFn
 const mockR    = redis as typeof mockRedis
 
 // ─── App factory ─────────────────────────────────────────────────────────────

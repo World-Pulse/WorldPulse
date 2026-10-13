@@ -23,7 +23,8 @@ const mockRedis = {
   get:   vi.fn().mockResolvedValue(null),
   setex: vi.fn().mockResolvedValue('OK'),
 }
-vi.mock('../../db/redis', () => ({ redis: mockRedis }))
+// (a getter: the module under test is imported, hoisted, before this file's consts exist; reading one in the factory threw and none of these tests ran. Oct 13, 2026)
+vi.mock('../../db/redis', () => ({ get redis() { return mockRedis } }))
 
 // Mock rows returned from db.raw()
 const MOCK_MARITIME_ROWS = [
@@ -59,11 +60,12 @@ const MOCK_MARITIME_ROWS = [
 const mockDb = {
   raw: vi.fn().mockResolvedValue({ rows: MOCK_MARITIME_ROWS }),
 }
-vi.mock('../../db/postgres', () => ({ db: mockDb }))
+vi.mock('../../db/postgres', () => ({ get db() { return mockDb } }))
 
 // Stub auth middleware (not used for this public-ish endpoint)
 vi.mock('../../middleware/auth', () => ({
   authenticate: (_req: unknown, _rep: unknown, done: () => void) => done(),
+  optionalAuth: (_req: unknown, _rep: unknown, done: () => void) => done(),
 }))
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

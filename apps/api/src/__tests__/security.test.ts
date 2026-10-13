@@ -21,7 +21,8 @@ const mockRedis = {
   keys: vi.fn().mockResolvedValue([]),
 }
 
-vi.mock('../db/redis', () => ({ redis: mockRedis }))
+// (a getter: the module under test is imported, hoisted, before this file's consts exist; reading one in the factory threw and none of these tests ran. Oct 13, 2026)
+vi.mock('../db/redis', () => ({ get redis() { return mockRedis } }))
 vi.mock('../lib/logger', () => ({
   logger: {
     warn: vi.fn(),

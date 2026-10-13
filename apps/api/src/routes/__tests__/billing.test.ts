@@ -34,7 +34,10 @@ vi.mock('../../db/redis', () => ({
 }))
 
 // Mock Stripe lib — default: not configured (stripe = null)
-const mockStripeInstance = {
+// (vi.hoisted: the mock factory below runs before this file's consts exist,
+// because imports are hoisted; reading a plain const there threw and none of
+// these tests ran. Oct 13, 2026)
+const mockStripeInstance = vi.hoisted(() => ({
   customers: {
     create: vi.fn().mockResolvedValue({ id: 'cus_test123', email: 'user@example.com' }),
   },
@@ -49,7 +52,7 @@ const mockStripeInstance = {
   webhooks: {
     constructEvent: vi.fn(),
   },
-}
+}))
 
 vi.mock('../../lib/stripe', () => ({
   getStripe:      vi.fn().mockReturnValue(mockStripeInstance),
