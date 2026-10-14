@@ -8,10 +8,14 @@
  *               success → CLOSED, failure → OPEN (with doubled backoff)
  *
  * Redis keys (hash):  scraper:cb:{sourceId}
- *   failures      — consecutive failure count
- *   open_until    — epoch ms; when non-zero and > now, circuit is OPEN
- *   open_count    — how many times this source has been opened (for backoff)
- *   probe_taken   — "1" when a half-open probe slot has been reserved
+ *   failures       — consecutive failure count
+ *   open_until     — epoch ms; when non-zero and > now, circuit is OPEN
+ *   open_count     — how many times this source has been opened (for backoff)
+ *   probe_taken    — "1" when a half-open probe slot has been reserved
+ *   last_failed_at — ISO time of the newest failure (Oct 14, 2026: /ops-status.json
+ *                    lists the sources failing now, and a source switched off
+ *                    kept its old count, so it looked broken forever). A count
+ *                    below the threshold is kept 7 days after its newest failure.
  *
  * Backoff schedule (doubles each successive open, max 2 h):
  *   1st open: 10 min → 2nd: 20 min → 3rd: 40 min → 4th+: 120 min
@@ -25,6 +29,8 @@ const FAILURE_THRESHOLD     = DEFAULT_RESILIENCE_CONFIG.failureThreshold
 const BASE_OPEN_DURATION_MS = DEFAULT_RESILIENCE_CONFIG.baseOpenMs
 const MAX_OPEN_DURATION_MS  = DEFAULT_RESILIENCE_CONFIG.maxOpenMs
 const EXPIRE_BUFFER_S = 120
+/** How long a failure count below the threshold is kept after the newest failure */
+const FAILURES_KEPT_S = 7 * 86_400
 
 /** Subset of SourceResilienceConfig that affects circuit-breaker behaviour. */
 export type CircuitBreakerConfig = Pick<
@@ -141,9 +147,10 @@ export async function cbFailure(
     const expireSec    = Math.ceil(durationMs / 1_000) + EXPIRE_BUFFER_S
 
     await redis.hset(key,
-      'failures',   String(state.failures + 1),
-      'open_until', String(openUntil),
-      'open_count', String(newOpenCount),
+      'failures',       String(state.failures + 1),
+      'open_until',     String(openUntil),
+      'open_count',     String(newOpenCount),
+      'last_failed_at', new Date().toISOString(),
     )
     await redis.hdel(key, 'probe_taken')
     await redis.expire(key, expireSec)
@@ -156,6 +163,7 @@ export async function cbFailure(
   }
 
   const failures = await redis.hincrby(key, 'failures', 1)
+  await redis.hset(key, 'last_failed_at', new Date().toISOString())
 
   if (failures >= threshold) {
     const openCount  = (state.openCount ?? 0) + 1
@@ -173,5 +181,7 @@ export async function cbFailure(
       { sourceId, sourceName, failures, openCount, durationMs, openUntilIso: new Date(openUntil).toISOString() },
       'Circuit breaker OPEN — source paused',
     )
+  } else {
+    await redis.expire(key, FAILURES_KEPT_S)
   }
 }

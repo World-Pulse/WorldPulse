@@ -196,3 +196,38 @@ describe('DLQ retry worker invariants via helper mocks', () => {
     expect(highAttemptItem.attempts).toBeGreaterThanOrEqual(20)
   })
 })
+
+// ─── When a source last failed (Oct 14, 2026) ────────────────────────────────
+describe('circuit breaker — when a source last failed', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const lastFailedSet = () => redisMock.hset.mock.calls.some(c => c.includes('last_failed_at'))
+
+  it('notes the time of each failure and keeps a count below the threshold for 7 days', async () => {
+    redisMock.hgetall.mockResolvedValue({})
+    redisMock.hincrby.mockResolvedValue(2)
+    const { cbFailure } = await import('../circuit-breaker.js')
+    await cbFailure('source-F', 'Failing Feed')
+    expect(lastFailedSet()).toBe(true)
+    expect(redisMock.expire).toHaveBeenCalledWith('scraper:cb:source-F', 7 * 86_400)
+  })
+
+  it('pauses at the threshold for the backoff, not 7 days', async () => {
+    redisMock.hgetall.mockResolvedValue({})
+    redisMock.hincrby.mockResolvedValue(5)
+    const { cbFailure } = await import('../circuit-breaker.js')
+    await cbFailure('source-G', 'Failing Feed')
+    expect(lastFailedSet()).toBe(true)
+    expect(redisMock.hset.mock.calls.some(c => c.includes('open_until'))).toBe(true)
+    expect(redisMock.expire).toHaveBeenCalledWith('scraper:cb:source-G', 10 * 60 + 120)
+    expect(redisMock.expire).not.toHaveBeenCalledWith('scraper:cb:source-G', 7 * 86_400)
+  })
+
+  it('notes the time when a probe fails too', async () => {
+    redisMock.hgetall.mockResolvedValue({ open_until: String(Date.now() - 1_000), failures: '5', open_count: '1' })
+    const { cbFailure } = await import('../circuit-breaker.js')
+    await cbFailure('source-H', 'Failing Feed')
+    expect(lastFailedSet()).toBe(true)
+    expect(redisMock.hincrby).not.toHaveBeenCalled()
+  })
+})

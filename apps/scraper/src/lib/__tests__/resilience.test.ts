@@ -217,7 +217,8 @@ describe('circuit breaker', () => {
     redisMock.hincrby.mockResolvedValue(3)
     const { cbFailure } = await import('../circuit-breaker.js')
     await cbFailure('src-5', 'Test Source')
-    expect(redisMock.hset).not.toHaveBeenCalled()
+    // (it notes when it failed, Oct 14, 2026, but sets no open_until)
+    expect(redisMock.hset.mock.calls.some(c => c.includes('open_until'))).toBe(false)
   })
 
   it('getCircuitState returns CLOSED when no open_until', async () => {

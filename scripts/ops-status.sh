@@ -181,6 +181,10 @@ PY
 # breaker's count of failures in a row, scraper:cb:<id>), whether it is paused
 # and until when, when it last worked (scraper:health:<id>), and why its newest
 # failure happened as a fixed phrase (from the dead-letter list, scraper:dlq).
+# Listed: paused now, or failed in the last 48 hours (last_failed_at); older
+# counts belong to sources no longer polled and are only counted ("stale").
+# Also the news poller's feeds (news-rss.ts keeps its own count of failed
+# polls in a row, news-rss:fail:<id>, and pauses a feed after 3).
 # Names, counts and times only: no addresses, no error text.
 source_stats() {
   local pw out
@@ -189,12 +193,16 @@ source_stats() {
       echo "tracked=$(redis-cli --raw SCARD scraper:health:index)"
       redis-cli --raw --scan --pattern "scraper:cb:*" | head -n 400 | while read -r k; do
         id=${k#scraper:cb:}
-        printf "cb=%s\t%s\t%s\n" "$id" "$(redis-cli --raw HMGET "$k" failures open_until open_count | paste -s -)" \
+        printf "cb=%s\t%s\t%s\n" "$id" "$(redis-cli --raw HMGET "$k" failures open_until open_count last_failed_at | paste -s -)" \
           "$(redis-cli --raw HMGET "scraper:health:$id" source_name source_slug last_seen | paste -s -)"
+      done
+      redis-cli --raw --scan --pattern "news-rss:fail:*" | head -n 400 | while read -r k; do
+        id=${k#news-rss:fail:}
+        printf "feed=%s\t%s\t%s\n" "$id" "$(redis-cli --raw GET "$k")" "$(redis-cli --raw EXISTS "news-rss:pause:$id")"
       done
       redis-cli --raw LRANGE scraper:dlq 0 299 | sed "s/^/dlq=/"' 2>/dev/null) || out=""
   OUT="$out" python3 - <<'PY' 2>/dev/null || printf 'null'
-import json, os, re, time
+import calendar, json, os, re, time
 lines = os.environ.get('OUT', '').splitlines()
 now_ms = time.time() * 1000
 def num(v):
@@ -221,28 +229,43 @@ for line in lines:
         except ValueError: continue
         sid = str(d.get('sourceId') or '')
         if sid and sid not in newest: newest[sid] = d
-tracked, failing = 0, []
+def ms_of(text):
+    # an ISO time in UTC ("2026-10-14T13:55:00.123Z") as epoch ms; 0 if none
+    try: return calendar.timegm(time.strptime(text[:19], '%Y-%m-%dT%H:%M:%S')) * 1000
+    except (TypeError, ValueError): return 0
+tracked, failing, stale, feeds = 0, [], 0, []
 for line in lines:
     if line.startswith('tracked='):
         tracked = num(line[8:])
     elif line.startswith('cb='):
-        sid, failures, open_until, open_count, name, slug, last_seen = (line[3:].split('\t') + [''] * 7)[:7]
+        sid, failures, open_until, open_count, failed_at, name, slug, last_seen = (line[3:].split('\t') + [''] * 8)[:8]
         if num(failures) < 1: continue
-        d = newest.get(sid) or {}
         until = num(open_until)
+        if until <= now_ms and now_ms - ms_of(failed_at) > 48 * 3600 * 1000:
+            stale += 1
+            continue
+        d = newest.get(sid) or {}
         failing.append({
             'name': (name or str(d.get('sourceName') or '') or sid)[:80],
             'slug': (slug or sid)[:60],
             'failures': num(failures),
             'paused_until': iso(until) if until > now_ms else None,
             'times_paused': num(open_count),
+            'last_failed': failed_at[:24] or None,
             'last_worked': last_seen or None,
             'why': why(str(d.get('error') or '')),
         })
+    elif line.startswith('feed='):
+        fid, fails, paused = (line[5:].split('\t') + [''] * 3)[:3]
+        if num(fails) >= 1:
+            feeds.append({'id': fid[:60], 'fails': num(fails), 'paused': paused.strip() == '1'})
 failing.sort(key=lambda s: (-s['failures'], s['name'].lower()))
+feeds.sort(key=lambda f: (-f['fails'], f['id']))
 print(json.dumps({'tracked': tracked, 'failing': len(failing),
                   'paused': sum(1 for s in failing if s['paused_until']),
-                  'list': failing[:40]}, separators=(',', ':')))
+                  'stale': stale, 'list': failing[:40],
+                  'news_feeds': {'failing': len(feeds), 'paused': sum(1 for f in feeds if f['paused']),
+                                 'list': feeds[:40]}}, separators=(',', ':')))
 PY
 }
 # Where the disk goes: Docker's totals (images, containers, volumes, build
