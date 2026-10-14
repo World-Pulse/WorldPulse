@@ -66,7 +66,8 @@ describe('NEWS_SOURCE_REGISTRY', () => {
   })
 
   it('tier-1 sources (BBC, NHK, NPR, DW, UN News) have reliability >= 0.88', () => {
-    const tier1Ids = ['bbc-world', 'nhk-world', 'npr-news', 'dw-world', 'un-news']
+    // nhk-world was removed Oct 14, 2026: its feed was Japanese and two months old
+    const tier1Ids = ['bbc-world', 'npr-news', 'dw-world', 'un-news']
     for (const id of tier1Ids) {
       const src = NEWS_SOURCE_REGISTRY.find(s => s.id === id)
       expect(src).toBeDefined()
@@ -117,9 +118,31 @@ describe('NEWS_SOURCE_REGISTRY', () => {
     }
   })
 
+  it('includes the sources added Oct 14, 2026 (replacements for dead feeds)', () => {
+    for (const id of ['upi-top', 'ansa-en', 'yonhap-en', 'yonhap-nk', 'nyt-world', 'wsj-world', 'civil-ge',
+      'standard-ke', 'egypt-independent', 'defense-news', 'mercopress']) {
+      expect(NEWS_SOURCE_REGISTRY.find(s => s.id === id)).toBeDefined()
+    }
+  })
+
+  it('has no feed that is gone or answers only bot checks (removed Oct 14, 2026)', () => {
+    for (const id of ['euractiv', 'thestreet-markets', 'barrons-markets', 'nation-africa-ke', 'ahram-online', 'iea-news',
+      'lawfare-blog', 'arab-weekly', 'maritime-global-security', 'port-technology', 'iiss-blog', 'naval-news',
+      'georgia-today', 'islands-business', 'nhk-world', 'xinhua-en', 'cnn-markets', 'cnn-world', 'who-news', 'nature-news']) {
+      expect(NEWS_SOURCE_REGISTRY.find(s => s.id === id)).toBeUndefined()
+    }
+  })
+
+  it('files every feed under a real category (USNI\'s "military" filed its stories as other)', () => {
+    const valid = ['breaking', 'conflict', 'geopolitics', 'climate', 'health', 'economy', 'technology', 'science',
+      'elections', 'culture', 'disaster', 'security', 'sports', 'space', 'finance', 'other']
+    for (const src of NEWS_SOURCE_REGISTRY) expect(valid).toContain(src.category)
+  })
+
   it('includes the sources added in cycle 9', () => {
     const cycle9Ids = [
-      'euractiv', 'moscow-times', 'taipei-times', 'the-hindu-national',
+      // euractiv was removed Oct 14, 2026: every request gets a bot check (403)
+      'moscow-times', 'taipei-times', 'the-hindu-national',
       'dawn-pakistan', 'premium-times-nigeria', 'bangkok-post',
       'al-monitor', 'eu-observer', 'africanews', 'rferl',
       'asia-times', 'channel-news-asia',
@@ -294,6 +317,22 @@ describe('inferGeo', () => {
 // ─── RSS / ATOM PARSING ───────────────────────────────────────────────────────
 
 describe('parseFeedItems', () => {
+  it('reads a CDATA section wrapped in whitespace (OC Media, Oct 14, 2026: every title came out empty)', () => {
+    const xml = `<rss><channel><item>
+\t\t<title>
+\t\t\t<![CDATA[ MP from Armenia’s ruling party denied entry to Russia ]]>
+\t\t</title>
+\t\t<description>
+\t\t\t<![CDATA[ Lusine Badalyan claims authorities declined to give a reason. ]]>
+\t\t</description>
+\t\t<link>https://oc-media.org/mp-denied-entry/</link>
+\t</item></channel></rss>`
+    const [item] = parseFeedItems(xml)
+    expect(item?.title).toBe('MP from Armenia’s ruling party denied entry to Russia')
+    expect(item?.description).toBe('Lusine Badalyan claims authorities declined to give a reason.')
+    expect(item?.link).toBe('https://oc-media.org/mp-denied-entry/')
+  })
+
   const RSS_FIXTURE = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
   <channel>

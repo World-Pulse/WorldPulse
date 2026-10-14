@@ -65,6 +65,16 @@ const DLQ_RETRY_INTERVAL_MS = Number(process.env.DLQ_RETRY_INTERVAL_MS ?? 5 * 60
 const DLQ_RETRY_BATCH_SIZE  = Number(process.env.DLQ_RETRY_BATCH_SIZE  ?? 10)
 /** Discard DLQ items that have been retried this many times in total. */
 const DLQ_MAX_ATTEMPTS      = 20
+/**
+ * What this poller asks feeds for. rss-parser's own Accept is only
+ * application/rss+xml, and a server may refuse anything narrower than what it
+ * serves (GDACS answered 406 from Apr 20, 2026 until its copy here was switched
+ * off on Oct 14). The same kinds news-rss.ts asks for.
+ */
+const FEED_HEADERS = {
+  'User-Agent': 'WorldPulse/0.1 (open-source; https://world-pulse.io)',
+  'Accept':     'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.9, */*;q=0.8',
+}
 
 // Tier priority: lower index = higher priority (processed first)
 const TIER_PRIORITY: Record<string, number> = {
@@ -436,7 +446,7 @@ async function retryDlqBatch(): Promise<void> {
 
   const parser = new Parser({
     timeout: 15_000,
-    headers: { 'User-Agent': 'WorldPulse/0.1 (open-source; https://world-pulse.io)' },
+    headers: FEED_HEADERS,
   })
 
   for (const item of items) {
@@ -555,7 +565,7 @@ async function scrapeSource(source: ScraperSource): Promise<number> {
 
   const parser = new Parser({
     timeout:   15_000,
-    headers:   { 'User-Agent': 'WorldPulse/0.1 (open-source; https://world-pulse.io)' },
+    headers:   FEED_HEADERS,
     customFields: { item: ['media:content', 'content:encoded', 'dc:creator'] },
   })
 

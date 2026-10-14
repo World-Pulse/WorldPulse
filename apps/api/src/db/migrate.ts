@@ -571,14 +571,8 @@ async function run() {
   `)
 
   // ── Fix broken RSS feeds — runs on every deploy, safe to re-run ──────────
-  // AP: apnews.com/rss returns 404; correct sub-domain is feeds.apnews.com
-  await db.raw(`
-    UPDATE sources
-    SET rss_feeds = '{https://feeds.apnews.com/rss/apf-topnews,https://feeds.apnews.com/rss/apf-intlnews}',
-        last_scraped = NULL,
-        scrape_interval = 600
-    WHERE slug = 'ap-news'
-  `)
+  // (AP closed its public feeds: feeds.apnews.com no longer resolves. It is
+  // switched off with the other dead feeds after the second seed below.)
   // Reuters: feeds.reuters.com is unreachable (domain decommissioned) — clear RSS so scraper skips it
   await db.raw(`
     UPDATE sources
@@ -717,6 +711,23 @@ async function run() {
       ('un-news',        'UN News',                 'https://news.un.org',            'wire',     0.95, 'en', 'XX', '{geopolitics,health,disaster}',    '{https://news.un.org/feed/subscribe/en/news/all/rss.xml}',                               900),
       ('swissinfo',      'SWI swissinfo.ch',        'https://swissinfo.ch',           'national', 0.87, 'en', 'CH', '{geopolitics,economy,culture}',    '{https://www.swissinfo.ch/eng/rss/Top_News_English}',                                    1200)
     ON CONFLICT (slug) DO NOTHING
+  `)
+
+  // ── Feeds that no longer answer, switched off (Devon's OK, Oct 14, 2026) ──
+  // /ops-status.json's list of failing sources (pipeline.sources) showed these
+  // failing every poll, some for months. No news is lost: AP closed its public
+  // feeds (the address no longer resolves); swissinfo.ch answers 410 Gone and
+  // TRT World 404 for every feed address; EMSC's feed now redirects to its
+  // mobile site (earthquakes come from USGS, seismic.ts). The others come in
+  // through better paths: GDACS (406 to this poller since Apr 20; read by
+  // news-rss.ts with its alert levels, gdacs.ts), ReliefWeb (reliefweb.ts),
+  // and VOA, RFE/RL and Dawn, whose addresses here died (news-rss.ts polls
+  // their current ones). Replacements are added to news-rss.ts. Runs on every
+  // deploy; to bring one back, give it a working feed and take it out of here.
+  await db.raw(`
+    UPDATE sources SET active = false, updated_at = NOW()
+    WHERE active AND slug IN ('ap-news', 'swissinfo', 'trt-world', 'emsc-quakes',
+                              'gdacs', 'reliefweb', 'voa-news', 'rferl', 'dawn-pk')
   `)
 
   // ── Knowledge Graph: Entity Nodes + Edges ─────────────────────────────────
