@@ -4114,8 +4114,8 @@ function MapView() {
               <div className="bg-[rgba(6,7,13,0.92)] border border-[rgba(255,255,255,0.09)] rounded-2xl backdrop-blur-xl shadow-2xl max-w-[300px]">
                 <EmptyState
                   icon="🗺️"
-                  headline="No signals in this area"
-                  message={`No ${category !== 'all' ? category : ''} signals found in the selected time range.`}
+                  headline="No signals match these filters"
+                  message={`No ${severity !== 'all' ? severity + ' ' : ''}${category !== 'all' ? category + ' ' : ''}signals in the last ${TRANGE.find(t => t.v === timeRange)?.l ?? '24H'}.`}
                   cta={{ label: 'Reset filters', onClick: () => { setCategory('all'); setSeverity('all'); setTimeRange('24h') } }}
                   compact
                 />
