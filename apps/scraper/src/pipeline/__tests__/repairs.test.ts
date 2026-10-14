@@ -23,7 +23,7 @@ vi.mock('../../lib/postgres', () => {
   }
 })
 
-import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability, stripOutletNames } from '../repairs'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability, stripOutletNames, switchOffRetiredSources, RETIRED_SOURCE_SLUGS } from '../repairs'
 import { db } from '../../lib/postgres'
 import { EVENT_TEMPLATE_SQL } from '../event-titles'
 
@@ -284,5 +284,24 @@ describe('recalibrateFlatReliability', () => {
     expect(scores[0]).toBeGreaterThan(0.9)
     expect(scores[0]).toBeLessThan(0.98)
     h.rows = []
+  })
+})
+
+describe('switchOffRetiredSources', () => {
+  beforeEach(() => { h.updates.length = 0; vi.mocked(db).mockClear() })
+
+  it('switches off the 9 database feeds that no longer answer, and only those', async () => {
+    expect(await switchOffRetiredSources()).toBe(9)
+    expect(db).toHaveBeenCalledWith('sources')
+    const [{ ids, data }] = h.updates
+    expect(ids).toEqual(['ap-news', 'swissinfo', 'trt-world', 'emsc-quakes', 'gdacs', 'reliefweb', 'voa-news', 'rferl', 'dawn-pk'])
+    expect(data.active).toBe(false)
+    expect(data.updated_at).toBeInstanceOf(Date)
+  })
+
+  it('keeps sources that still answer, and the adapters, off the list', () => {
+    for (const slug of ['bbc-world', 'reuters-world', 'aljazeera', 'cbc-news', 'un-news', 'acled', 'ioda']) {
+      expect(RETIRED_SOURCE_SLUGS).not.toContain(slug)
+    }
   })
 })

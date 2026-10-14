@@ -559,3 +559,29 @@ export async function tidyGdeltPlaceNames(): Promise<number> {
   return fixed
 }
 
+
+/**
+ * The database feeds that no longer answer, switched off (Devon's OK, Oct 14,
+ * 2026; plan Q4). Every poll of each one failed, some for months: AP closed its
+ * public feeds (the address no longer resolves), swissinfo.ch answers 410 Gone
+ * and TRT World 404, EMSC's feed redirects to its mobile site, GDACS refused
+ * this poller (406), ReliefWeb's firewall blocks the server, and the VOA,
+ * RFE/RL and Dawn addresses died. No news is lost: the news poller
+ * (news-rss.ts) and the adapters (gdacs.ts, reliefweb.ts, seismic.ts) read
+ * their current addresses.
+ *
+ * 737bdfe put this in apps/api/src/db/migrate.ts, but the automatic deploy
+ * (scripts/server-deploy.sh) never runs that file, so it didn't take effect.
+ * This runs at every start. To bring one back, give it a working feed and take
+ * it off this list.
+ */
+export const RETIRED_SOURCE_SLUGS = [
+  'ap-news', 'swissinfo', 'trt-world', 'emsc-quakes', 'gdacs', 'reliefweb', 'voa-news', 'rferl', 'dawn-pk',
+]
+
+export async function switchOffRetiredSources(): Promise<number> {
+  return db('sources')
+    .where('active', true)
+    .whereIn('slug', RETIRED_SOURCE_SLUGS)
+    .update({ active: false, updated_at: new Date() })
+}

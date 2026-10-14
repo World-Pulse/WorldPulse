@@ -41,7 +41,7 @@ import { signalsHavePublishedAt, publishedAtFor, backfillRecentPublishedAt, sour
 import { independentReports, isCopyOf } from './pipeline/independence'
 import { ensureStoryIdColumn } from './pipeline/stories'
 import { startEditor, catchUpEditor } from './pipeline/editor'
-import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames, stripOutletNotes, stripOutletNames, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability } from './pipeline/repairs'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames, stripOutletNotes, stripOutletNames, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability, switchOffRetiredSources } from './pipeline/repairs'
 import { batchValidateGeo } from './pipeline/geo-validator'
 import { recomputeSourceReputation } from './pipeline/source-reputation'
 import { startKafkaLagMonitor } from './lib/kafka-lag-monitor'
@@ -251,6 +251,11 @@ async function bootstrap() {
   runOnce('editor:catch-up:2026-10-11c', () => catchUpEditor(12))
     .then(t => { if (t) logger.info(t, 'Editor: the last 12 hours re-read by Claude') })
     .catch(err => logger.warn({ err }, 'Editor catch-up failed (non-fatal)'))
+
+  // Before the first scrape: the database feeds that no longer answer stay off
+  await switchOffRetiredSources()
+    .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: database feeds that no longer answer switched off') })
+    .catch(err => logger.warn({ err }, 'Switching off dead database feeds failed (non-fatal)'))
 
   // Start main scrape loop (works with or without Kafka)
   await scrapeAll()

@@ -1,7 +1,12 @@
 /**
  * WorldPulse database migration runner.
- * Called by deploy.sh as: node dist/db/migrate.js
  * Idempotent — safe to run on both fresh and existing databases.
+ *
+ * Not run on deploy: the old deploy.sh ran `node dist/db/migrate.js`, but the
+ * automatic deploy (scripts/server-deploy.sh) doesn't (found Oct 14, 2026: the
+ * sources switch-off below never took effect). A data change that must reach
+ * production goes in the scraper's start-up repairs
+ * (apps/scraper/src/pipeline/repairs.ts), which run on every deploy.
  */
 import Knex from 'knex'
 
@@ -722,8 +727,9 @@ async function run() {
   // through better paths: GDACS (406 to this poller since Apr 20; read by
   // news-rss.ts with its alert levels, gdacs.ts), ReliefWeb (reliefweb.ts),
   // and VOA, RFE/RL and Dawn, whose addresses here died (news-rss.ts polls
-  // their current ones). Replacements are added to news-rss.ts. Runs on every
-  // deploy; to bring one back, give it a working feed and take it out of here.
+  // their current ones). Replacements are added to news-rss.ts. This file
+  // doesn't run on deploy: the scraper switches these off at every start
+  // (pipeline/repairs.ts, RETIRED_SOURCE_SLUGS).
   await db.raw(`
     UPDATE sources SET active = false, updated_at = NOW()
     WHERE active AND slug IN ('ap-news', 'swissinfo', 'trt-world', 'emsc-quakes',
