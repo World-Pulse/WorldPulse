@@ -78,6 +78,16 @@ describe('cachedFetch', () => {
     expect(await (await cachedFetch('https://api.test/x', 10_000)).json()).toEqual({ url: 'https://api.test/x' })
     expect(await (await cachedFetch('https://api.test/y', 10_000)).json()).toEqual({ url: 'https://api.test/y' })
   })
+
+  it('answers "no content" without a body, kept or not (it used to throw)', async () => {
+    fetchMock.mockImplementation(async () => new Response(null, { status: 204 }))
+    const first = await cachedFetch('https://api.test/empty', 10_000)
+    const again = await cachedFetch('https://api.test/empty', 10_000)
+    expect(first.status).toBe(204)
+    expect(again.status).toBe(204)
+    expect(await again.text()).toBe('')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('cachedFetch size limits', () => {

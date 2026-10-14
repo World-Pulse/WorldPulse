@@ -12,7 +12,7 @@ const h = vi.hoisted(() => ({
 vi.mock('../redis', () => {
   const multi = () => {
     const chain: Record<string, unknown> = {}
-    for (const op of ['incrby', 'expire', 'hincrby']) {
+    for (const op of ['incrby', 'expire', 'hincrby', 'hset', 'hsetnx', 'hdel']) {
       chain[op] = (...args: unknown[]) => {
         h.calls.push([op, ...args])
         if (op === 'incrby') h.store.set(String(args[0]), String(Number(h.store.get(String(args[0])) ?? 0) + Number(args[1])))
@@ -26,7 +26,7 @@ vi.mock('../redis', () => {
 })
 vi.mock('../logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }))
 
-import { askClaude, claudeBudgetLeft, costMicros, spendKeys, monthlyCapUsd, wellFormed, thinkingOff } from '../claude'
+import { askClaude, claudeBudgetLeft, costMicros, spendKeys, monthlyCapUsd, wellFormed, thinkingOff, failureReason, HEALTH_KEY } from '../claude'
 
 const realFetch = globalThis.fetch
 const OCT_11 = new Date('2026-10-11T14:00:00Z')
@@ -155,5 +155,57 @@ describe('askClaude', () => {
     globalThis.fetch = vi.fn(async () => new Response('overloaded', { status: 529 })) as never
     expect(await askClaude({ purpose: 'editor', system: 's', prompt: 'p', maxTokens: 10 })).toBeNull()
     expect(h.store.size).toBe(0)
+  })
+  it('records why calls fail, and since when, until one works (Oct 14: the spend limit)', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test'
+    const limit = JSON.stringify({ type: 'error', error: { type: 'invalid_request_error',
+      message: 'You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC.' } })
+    globalThis.fetch = vi.fn(async () => new Response(limit, { status: 400 })) as never
+    expect(await askClaude({ purpose: 'editor', system: 's', prompt: 'p', maxTokens: 10 })).toBeNull()
+    const failed = h.calls.find(c => c[0] === 'hset' && c[1] === HEALTH_KEY && c[2] === 'error_at')!
+    expect(JSON.parse(String(failed[5]))).toEqual({ app: 'scraper', purpose: 'editor', model: 'claude-haiku-5-5', status: 400, reason: 'spend limit reached' })
+    expect(h.calls).toContainEqual(['hsetnx', HEALTH_KEY, 'failing_since', failed[3]])
+    expect(h.calls).toContainEqual(['hincrby', HEALTH_KEY, 'failing_calls', 1])
+    expect(h.calls.some(c => c[0] === 'hdel')).toBe(false)
+
+    h.calls.length = 0
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+      content: [{ type: 'text', text: '1 conflict' }], usage: { input_tokens: 10, output_tokens: 3 },
+    }), { status: 200 })) as never
+    expect(await askClaude({ purpose: 'editor', system: 's', prompt: 'p', maxTokens: 10 })).not.toBeNull()
+    expect(h.calls.some(c => c[0] === 'hset' && c[1] === HEALTH_KEY && c[2] === 'ok_at')).toBe(true)
+    expect(h.calls).toContainEqual(['hdel', HEALTH_KEY, 'failing_since', 'failing_calls'])
+  })
+
+  it('records a call that never got an answer', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test'
+    globalThis.fetch = vi.fn(async () => { throw new TypeError('fetch failed', { cause: new Error('connect ECONNREFUSED') }) }) as never
+    expect(await askClaude({ purpose: 'crosscheck', system: 's', prompt: 'p', maxTokens: 10 })).toBeNull()
+    const failed = h.calls.find(c => c[0] === 'hset' && c[2] === 'error_at')!
+    expect(JSON.parse(String(failed[5]))).toMatchObject({ purpose: 'crosscheck', status: null, reason: 'cannot connect' })
+  })
+})
+
+describe('failureReason', () => {
+  it('names the spend limit and the credit balance from the reply', () => {
+    expect(failureReason(400, '{"error":{"message":"You have reached your specified workspace API usage limits."}}')).toBe('spend limit reached')
+    expect(failureReason(400, '{"error":{"message":"Your credit balance is too low to access the Anthropic API."}}')).toBe('out of credit')
+  })
+
+  it('names the rest by status', () => {
+    expect(failureReason(401)).toBe('key rejected')
+    expect(failureReason(403)).toBe('not allowed')
+    expect(failureReason(404)).toBe('model not found')
+    expect(failureReason(429)).toBe('rate limited')
+    expect(failureReason(529)).toBe('overloaded')
+    expect(failureReason(500)).toBe('server error')
+    expect(failureReason(400, '{"error":{"message":"max_tokens: too large"}}')).toBe('request refused')
+  })
+
+  it('names a call that never got an answer', () => {
+    expect(failureReason(null, '', new DOMException('The operation was aborted due to timeout', 'TimeoutError'))).toBe('timed out')
+    expect(failureReason(null, '', new TypeError('fetch failed'))).toBe('cannot connect')
+    expect(failureReason(null, '', new SyntaxError('Unexpected token < in JSON'))).toBe('unreadable reply')
+    expect(failureReason(null, '', new Error('something else'))).toBe('other')
   })
 })

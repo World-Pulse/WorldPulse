@@ -46,6 +46,7 @@ vi.mock('../../lib/redis', () => ({
 vi.mock('../../lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }))
 vi.mock('../../lib/claude', () => ({
   claudeConfigured: () => true,
+  whyNoAnswer: () => 'spend limit reached',
   askClaude: vi.fn(async () => {
     const next = h.replies.shift()
     return next === undefined ? null : next && { ...next, inputTokens: 0, outputTokens: 0 }
@@ -194,6 +195,7 @@ describe('runEditorPass', () => {
     const stats = await runEditorPass(NOW)
     expect(stats.batches).toBe(1)
     expect(stats.stopped).toBe(true)
+    expect(stats.error).toBe('no answer from Claude (spend limit reached)')
     // the mark sits just before the first story of the failed batch
     expect(Number(h.redis.get('ai:editor:since'))).toBe(new Date(h.rows[25]!.created_at as string).getTime() - 1)
   })

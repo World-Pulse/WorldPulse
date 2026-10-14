@@ -47,7 +47,11 @@ function remember(url: string, entry: Kept): void {
 
 const keepable = (status: number) => (status >= 200 && status < 300) || status === 404
 
-const asResponse = (k: Kept) => new Response(k.body, { status: k.status, headers: { 'content-type': k.type } })
+/** Statuses an answer can't have a body with: new Response('', { status: 204 }) throws */
+const NO_BODY = new Set([101, 103, 204, 205, 304])
+
+const asResponse = (k: Kept) =>
+  new Response(NO_BODY.has(k.status) ? null : k.body, { status: k.status, headers: { 'content-type': k.type } })
 
 /**
  * fetch(url) for a GET whose answer may be reused for `ttlMs` milliseconds.

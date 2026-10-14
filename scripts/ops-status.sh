@@ -85,22 +85,32 @@ llm_stats() {
   printf '{"openai_key":%s,"custom_url":"%s","calls":"%s","model":"%s","last_failure":"%s","http":%s}' \
     "$([ "$key" = yes ] && echo true || echo false)" "$kind" "$path" "$model" "$reason" "${http:-null}"
 }
+# The Redis password, from the scraper's REDIS_URL (passed to redis-cli in its
+# environment, never printed)
+redis_pw() {
+  timeout 10 docker exec wp_scraper sh -c 'printf %s "$REDIS_URL"' 2>/dev/null | sed -nE 's#^redis://:([^@]*)@.*#\1#p'
+}
 # Claude (Oct 11, 2026): the AI work moved in-house, under a monthly cap the
 # apps count in Redis (apps/scraper/src/lib/claude.ts). Whether each app has a
 # key (yes/no), whether the AI Digest is on, the cap, the spend today and this
 # month in dollars, today's calls by job, the editor's last pass, and the
 # cross-check of verified stories. No key or password is printed.
+# Oct 14, 2026: and whether Claude is answering (ai:claude:health): when a call
+# last worked, the newest failure as a fixed phrase (the API spend limit
+# stopped every call for six hours that night, unseen here), and while calls
+# keep failing, since when and how many.
 claude_stats() {
   local scr_key api_key pulse cap pw out
   scr_key=$(timeout 10 docker exec wp_scraper sh -c 'printf %s "${ANTHROPIC_API_KEY:+yes}"' 2>/dev/null) || scr_key=""
   api_key=$(timeout 10 docker exec wp_api sh -c 'printf %s "${ANTHROPIC_API_KEY:+yes}"' 2>/dev/null) || api_key=""
   pulse=$(timeout 10 docker exec wp_api sh -c 'printf %s "$PULSE_ENABLED"' 2>/dev/null | tr -cd 'a-z0-9') || pulse=""
   cap=$(timeout 10 docker exec wp_scraper sh -c 'printf %s "${AI_MONTHLY_CAP_USD:-20}"' 2>/dev/null | tr -cd '0-9.') || cap=""
-  pw=$(timeout 10 docker exec wp_scraper sh -c 'printf %s "$REDIS_URL"' 2>/dev/null | sed -nE 's#^redis://:([^@]*)@.*#\1#p') || pw=""
+  pw=$(redis_pw) || pw=""
   out=$(timeout 15 docker exec -e REDISCLI_AUTH="$pw" wp_redis sh -c '
       echo "day=$(redis-cli --raw GET "ai:claude:spend:$1")"
       echo "month=$(redis-cli --raw GET "ai:claude:spend:$2")"
       echo "calls=$(redis-cli --raw HGETALL "ai:claude:calls:$1" | paste -sd " " -)"
+      echo "health=$(redis-cli --raw HGETALL ai:claude:health | paste -s -)"
       echo "editor=$(redis-cli --raw GET ai:editor:last)"
       echo "verify=$(redis-cli --raw HGETALL "ai:verify:counts:$1" | paste -sd " " -)"
       redis-cli --raw LRANGE ai:verify:recent 0 4 | sed "s/^/doubt=/"
@@ -130,6 +140,17 @@ try: social = json.loads(vals.get('social') or 'null')
 except ValueError: social = None
 try: cap = float(os.environ.get('CAP') or 20)
 except ValueError: cap = 20
+# Whether Claude is answering: field, value, field, value … separated by tabs
+words = vals.get('health', '').split('\t')
+health = dict(zip(words[0::2], words[1::2])) if len(words) > 1 else {}
+try: last_error = json.loads(health.get('error') or 'null')
+except ValueError: last_error = None
+if isinstance(last_error, dict):
+    last_error = {'at': health.get('error_at'), **{k: last_error.get(k) for k in ('app', 'purpose', 'model', 'status', 'reason')}}
+else:
+    last_error = None
+try: failing_calls = int(health.get('failing_calls') or 0)
+except ValueError: failing_calls = 0
 print(json.dumps({
     'key_scraper': os.environ.get('SCR_KEY') == 'yes',
     'key_api': os.environ.get('API_KEY_SET') == 'yes',
@@ -138,6 +159,12 @@ print(json.dumps({
     'spent_usd_today': usd(vals.get('day')),
     'spent_usd_month': usd(vals.get('month')),
     'calls_today': calls,
+    # When a call last worked; the newest failure (app, job, model, HTTP status,
+    # why); and, while calls keep failing, since when and how many (else null, 0)
+    'last_ok': health.get('ok_at'),
+    'last_error': last_error,
+    'failing_since': health.get('failing_since'),
+    'failing_calls': failing_calls,
     'editor_last_pass': editor,
     'crosscheck_today': verify,
     'crosscheck_doubts': doubts,
@@ -146,6 +173,76 @@ print(json.dumps({
     # Automatic Telegram and Bluesky posts (plan G10): last post, posts today, last error per channel
     'social': social,
 }, separators=(',', ':')))
+PY
+}
+# Sources failing now, by name (plan 0m, Oct 14, 2026). A source whose every
+# poll failed looked alive; the watchdog stopped vouching for those (9017fe9),
+# and this names them: each source whose newest polls failed (the circuit
+# breaker's count of failures in a row, scraper:cb:<id>), whether it is paused
+# and until when, when it last worked (scraper:health:<id>), and why its newest
+# failure happened as a fixed phrase (from the dead-letter list, scraper:dlq).
+# Names, counts and times only: no addresses, no error text.
+source_stats() {
+  local pw out
+  pw=$(redis_pw) || pw=""
+  out=$(timeout 40 docker exec -e REDISCLI_AUTH="$pw" wp_redis sh -c '
+      echo "tracked=$(redis-cli --raw SCARD scraper:health:index)"
+      redis-cli --raw --scan --pattern "scraper:cb:*" | head -n 400 | while read -r k; do
+        id=${k#scraper:cb:}
+        printf "cb=%s\t%s\t%s\n" "$id" "$(redis-cli --raw HMGET "$k" failures open_until open_count | paste -s -)" \
+          "$(redis-cli --raw HMGET "scraper:health:$id" source_name source_slug last_seen | paste -s -)"
+      done
+      redis-cli --raw LRANGE scraper:dlq 0 299 | sed "s/^/dlq=/"' 2>/dev/null) || out=""
+  OUT="$out" python3 - <<'PY' 2>/dev/null || printf 'null'
+import json, os, re, time
+lines = os.environ.get('OUT', '').splitlines()
+now_ms = time.time() * 1000
+def num(v):
+    try: return int(v)
+    except (TypeError, ValueError): return 0
+def iso(ms):
+    return time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(ms / 1000)) if ms > 0 else None
+# Why a fetch failed, as a fixed phrase (never the error's own text)
+def why(err):
+    if not err: return None
+    m = re.search(r'(?:HTTP|status(?: code)?|returned|response)\D{0,3}([1-5]\d\d)\b', err, re.I)
+    if m: return 'rate limited' if m.group(1) == '429' else 'HTTP ' + m.group(1)
+    if re.search(r'timeout|timed out|abort', err, re.I): return 'timed out'
+    if re.search(r'certificate|CERT_|SSL|TLS', err): return 'certificate problem'
+    if re.search(r'ENOTFOUND|EAI_AGAIN', err): return 'address not found'
+    if re.search(r'ECONNREFUSED|ECONNRESET|EHOSTUNREACH|socket|fetch failed|network', err, re.I): return 'cannot connect'
+    if re.search(r'rate.?limit|too many', err, re.I): return 'rate limited'
+    if re.search(r'parse|XML|JSON|Unexpected|Non-whitespace|Unclosed|Attribute|not a feed|Invalid', err, re.I): return 'unreadable answer'
+    return 'other'
+newest = {}
+for line in lines:
+    if line.startswith('dlq='):
+        try: d = json.loads(line[4:])
+        except ValueError: continue
+        sid = str(d.get('sourceId') or '')
+        if sid and sid not in newest: newest[sid] = d
+tracked, failing = 0, []
+for line in lines:
+    if line.startswith('tracked='):
+        tracked = num(line[8:])
+    elif line.startswith('cb='):
+        sid, failures, open_until, open_count, name, slug, last_seen = (line[3:].split('\t') + [''] * 7)[:7]
+        if num(failures) < 1: continue
+        d = newest.get(sid) or {}
+        until = num(open_until)
+        failing.append({
+            'name': (name or str(d.get('sourceName') or '') or sid)[:80],
+            'slug': (slug or sid)[:60],
+            'failures': num(failures),
+            'paused_until': iso(until) if until > now_ms else None,
+            'times_paused': num(open_count),
+            'last_worked': last_seen or None,
+            'why': why(str(d.get('error') or '')),
+        })
+failing.sort(key=lambda s: (-s['failures'], s['name'].lower()))
+print(json.dumps({'tracked': tracked, 'failing': len(failing),
+                  'paused': sum(1 for s in failing if s['paused_until']),
+                  'list': failing[:40]}, separators=(',', ':')))
 PY
 }
 # Where the disk goes: Docker's totals (images, containers, volumes, build
@@ -242,6 +339,7 @@ pipeline_stats() {
     "${errs:-0}" "${warns:-0}" "${created:-0}" "$top" "$topw"
   printf '"llm":%s,' "$(llm_stats "$scr")"
   printf '"claude":%s,' "$(claude_stats)"
+  printf '"sources":%s,' "$(source_stats)"
   printf '"disk":%s,' "$(disk_stats)"
   # Readers of world-pulse.io today and where they came from (plan G1): counts
   # only, from nginx's log; scripts/readers.py says how (no addresses kept)
@@ -259,7 +357,7 @@ deploy_note() {
 pipe_cache=logs/pipeline-stats.json
 # Refresh every 30 minutes, or straight away when the cache predates a new field
 if [ ! -s "$pipe_cache" ] || [ -n "$(find "$pipe_cache" -mmin +29 2>/dev/null)" ] \
-   || ! grep -q '"ollama_models_mb"' "$pipe_cache" 2>/dev/null; then
+   || ! grep -q '"sources":' "$pipe_cache" 2>/dev/null; then
   pipeline_stats > "$pipe_cache.tmp" 2>/dev/null \
     && python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$pipe_cache.tmp" 2>/dev/null \
     && mv "$pipe_cache.tmp" "$pipe_cache"

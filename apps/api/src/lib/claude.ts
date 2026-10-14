@@ -61,12 +61,57 @@ export async function claudeBudgetLeft(now = new Date()): Promise<boolean> {
 
 const KEEP_S = 40 * 86_400
 
+/**
+ * Whether Claude is answering (Oct 14, 2026: the organization's API spend
+ * limit was reached at 3:34 AM ET, every call failed for six hours, and the
+ * editor could only say "no answer from Claude (the cap, or an error)"). One
+ * Redis hash, shared with the scraper (as in its lib/claude.ts): when a call
+ * last worked (ok_at); the newest failure (error_at, and error: which app and
+ * job, the HTTP status and why, as a fixed phrase, never the error's own
+ * text); and while calls keep failing, since when (failing_since) and how many
+ * (failing_calls). A call that works clears those two. /ops-status.json shows
+ * it under pipeline.claude.
+ */
+export const HEALTH_KEY = 'ai:claude:health'
+
+/** Why a call failed, in a few fixed words (what /ops-status.json shows) */
+export function failureReason(status: number | null, body = '', err?: unknown): string {
+  // The Console's spend limit: "You have reached your specified API usage limits"
+  if (/usage limits?\b/i.test(body)) return 'spend limit reached'
+  if (/credit balance/i.test(body)) return 'out of credit'
+  if (status === 401) return 'key rejected'
+  if (status === 403) return 'not allowed'
+  if (status === 404) return 'model not found'
+  if (status === 413) return 'request too large'
+  if (status === 429) return 'rate limited'
+  if (status === 529 || /overloaded/i.test(body)) return 'overloaded'
+  if (status !== null && status >= 500) return 'server error'
+  if (status !== null) return 'request refused'
+  if (err instanceof SyntaxError) return 'unreadable reply'
+  const what = err instanceof Error ? `${err.name} ${err.message} ${String(err.cause ?? '')}` : String(err ?? '')
+  if (/timeout|timed out|abort/i.test(what)) return 'timed out'
+  if (/ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ECONNRESET|EHOSTUNREACH|fetch failed|socket/i.test(what)) return 'cannot connect'
+  return 'other'
+}
+
+async function recordFailure(purpose: string, model: string, status: number | null, reason: string, now = new Date()): Promise<void> {
+  const at = now.toISOString()
+  await redis.multi()
+    .hset(HEALTH_KEY, 'error_at', at, 'error', JSON.stringify({ app: 'api', purpose, model, status, reason }))
+    .hsetnx(HEALTH_KEY, 'failing_since', at)
+    .hincrby(HEALTH_KEY, 'failing_calls', 1)
+    .expire(HEALTH_KEY, KEEP_S)
+    .exec()
+}
+
 async function recordSpend(purpose: string, micros: number, now = new Date()): Promise<void> {
   const keys = spendKeys(now)
   await redis.multi()
     .incrby(keys.day, micros).expire(keys.day, KEEP_S)
     .incrby(keys.month, micros).expire(keys.month, KEEP_S)
     .hincrby(keys.calls, purpose, 1).expire(keys.calls, KEEP_S)
+    // A call that worked: Claude is answering again
+    .hset(HEALTH_KEY, 'ok_at', now.toISOString()).hdel(HEALTH_KEY, 'failing_since', 'failing_calls').expire(HEALTH_KEY, KEEP_S)
     .exec()
 }
 
@@ -145,6 +190,7 @@ export async function askClaude(opts: {
       const body = await res.text().catch(() => '')
       if (!/thinking/i.test(body)) {
         logger.warn({ status: res.status, purpose: opts.purpose, model, body: body.slice(0, 300) }, 'Claude call failed')
+        await recordFailure(opts.purpose, model, res.status, failureReason(res.status, body)).catch(() => {})
         return null
       }
       logger.warn({ purpose: opts.purpose, model, body: body.slice(0, 200) }, 'Claude: thinking setting refused, asking with the default')
@@ -153,6 +199,7 @@ export async function askClaude(opts: {
     if (!res.ok) {
       const body = await res.text().catch(() => '')
       logger.warn({ status: res.status, purpose: opts.purpose, model, body: body.slice(0, 300) }, 'Claude call failed')
+      await recordFailure(opts.purpose, model, res.status, failureReason(res.status, body)).catch(() => {})
       return null
     }
     const json = await res.json() as {
@@ -172,6 +219,7 @@ export async function askClaude(opts: {
     return { text: json.stop_reason === 'refusal' ? '' : text, model, inputTokens, outputTokens, costMicros: micros, stopReason: json.stop_reason }
   } catch (err) {
     logger.warn({ err, purpose: opts.purpose, model }, 'Claude call failed')
+    await recordFailure(opts.purpose, model, null, failureReason(null, '', err)).catch(() => {})
     return null
   }
 }

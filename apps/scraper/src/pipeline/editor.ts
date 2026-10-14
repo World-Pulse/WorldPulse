@@ -17,7 +17,7 @@ import type { SignalSeverity } from '@worldpulse/types'
 import { db } from '../lib/postgres'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
-import { askClaude, claudeConfigured } from '../lib/claude'
+import { askClaude, claudeConfigured, whyNoAnswer } from '../lib/claude'
 import { EVENT_TEMPLATE_SQL } from './event-titles'
 import { rateSeverity } from './severity'
 import { maxSeverityForSourceCount } from './reliability-score'
@@ -233,7 +233,7 @@ export async function runEditorPass(now = new Date(), lookbackMs = LOOKBACK_MS):
         maxTokens: 16 * batch.length + 50,
       })
       let reply = await ask()
-      if (!reply) { stats.stopped = true; stats.error = 'no answer from Claude (the cap, or an error)'; doneUntil = Math.min(doneUntil, retryFrom); break }
+      if (!reply) { stats.stopped = true; stats.error = `no answer from Claude (${whyNoAnswer() ?? 'the cap, or an error'})`; doneUntil = Math.min(doneUntil, retryFrom); break }
       stats.costMicros += reply.costMicros
       let filed = parseEditorReply(reply.text, batch.length)
       if (filed.size === 0) {

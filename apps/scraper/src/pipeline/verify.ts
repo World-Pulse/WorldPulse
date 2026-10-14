@@ -18,7 +18,7 @@
 import { db } from '../lib/postgres'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
-import { askClaude, claudeConfigured as claudeKeySet } from '../lib/claude'
+import { askClaude, claudeConfigured as claudeKeySet, whyNoAnswer } from '../lib/claude'
 import { LLM_MODEL } from '../lib/llm-models'
 import type { SignalStatus } from '@worldpulse/types'
 
@@ -396,7 +396,7 @@ Are these articles factually consistent? Identify any contradictions or reliabil
   // Within the spending cap, on Claude's small model (lib/claude.ts)
   const reply = await askClaude({ purpose: 'factcheck', system: systemPrompt, prompt: userContent, maxTokens: 256, timeoutMs: 15_000 })
   const text = reply?.text ? jsonIn(reply.text) : null
-  if (!text) throw new Error('Claude gave no answer (no key, the cap, or an error)')
+  if (!text) throw new Error(reply ? 'Claude gave nothing readable' : `Claude gave no answer (${whyNoAnswer() ?? 'no key, the cap, or an error'})`)
 
   const parsed = JSON.parse(text) as {
     consistent:      boolean

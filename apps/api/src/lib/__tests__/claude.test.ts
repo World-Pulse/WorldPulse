@@ -5,19 +5,20 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-const h = vi.hoisted(() => ({ store: new Map<string, string>() }))
+const h = vi.hoisted(() => ({ store: new Map<string, string>(), health: [] as unknown[][] }))
 
 vi.mock('../../db/redis', () => {
   const chain: Record<string, unknown> = {}
   chain.incrby = (key: string, by: number) => { h.store.set(key, String(Number(h.store.get(key) ?? 0) + by)); return chain }
   chain.expire = () => chain
-  chain.hincrby = () => chain
+  chain.hincrby = (...args: unknown[]) => { h.health.push(['hincrby', ...args]); return chain }
+  for (const op of ['hset', 'hsetnx', 'hdel']) chain[op] = (...args: unknown[]) => { h.health.push([op, ...args]); return chain }
   chain.exec = async () => []
   return { redis: { mget: vi.fn(async (...keys: string[]) => keys.map(k => h.store.get(k) ?? null)), multi: () => chain } }
 })
 vi.mock('../logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }))
 
-import { askClaude, claudeBudgetLeft, costMicros, spendKeys, wellFormed, thinkingOff } from '../claude'
+import { askClaude, claudeBudgetLeft, costMicros, spendKeys, wellFormed, thinkingOff, failureReason, HEALTH_KEY } from '../claude'
 
 const realFetch = globalThis.fetch
 
@@ -86,5 +87,24 @@ describe('the shared cap', () => {
     const body = JSON.parse(String(init.body))
     expect([body.system, body.messages[0].content]).toEqual(['Brief ', 'Riyadh '])
     expect(wellFormed('🔴 Live')).toBe('🔴 Live')
+  })
+
+  it('records why a call failed under the API\'s name, and clears it when one works', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test'
+    h.health.length = 0
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ type: 'error', error: {
+      message: 'You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC.' } }), { status: 400 })) as never
+    expect(await askClaude({ purpose: 'summary', prompt: 'p', maxTokens: 10 })).toBeNull()
+    const failed = h.health.find(c => c[0] === 'hset' && c[2] === 'error_at')!
+    expect(failed[1]).toBe(HEALTH_KEY)
+    expect(JSON.parse(String(failed[5]))).toMatchObject({ app: 'api', purpose: 'summary', status: 400, reason: 'spend limit reached' })
+    expect(h.health).toContainEqual(['hincrby', HEALTH_KEY, 'failing_calls', 1])
+
+    h.health.length = 0
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+      content: [{ type: 'text', text: 'Summary.' }], usage: { input_tokens: 10, output_tokens: 3 } }), { status: 200 })) as never
+    expect(await askClaude({ purpose: 'summary', prompt: 'p', maxTokens: 10 })).not.toBeNull()
+    expect(h.health).toContainEqual(['hdel', HEALTH_KEY, 'failing_since', 'failing_calls'])
+    expect(failureReason(429)).toBe('rate limited')
   })
 })
