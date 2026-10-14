@@ -22,23 +22,36 @@ import { askClaude, claudeConfigured } from '../lib/claude'
 import { jsonIn } from './verify'
 
 /**
- * What Claude is asked (version 2, Oct 13, 2026). Version 1 asked whether
- * the reports were "the same event" and nothing more: of its 30 newest
- * "different event" verdicts, about 14 were one event told differently (the
- * IMF's world and country forecasts from one release, a death toll and a
- * later one, a live blog and the day's recap, an explainer, one column under
- * two headlines), and a later development counted as disagreement ("the
- * outlets differ": arrested, then released). Too many to let a verdict hold
- * a story back, so the question now says what counts, and compares the
- * report that just verified the story with the ones it already had.
+ * What Claude is asked (version 3, Oct 14, 2026).
+ *
+ * Version 1 asked whether the reports were "the same event" and nothing
+ * more: of its 30 newest "different event" verdicts, about 14 were one event
+ * told differently (the IMF's world and country forecasts from one release, a
+ * death toll and a later one, a live blog and the day's recap, an explainer,
+ * one column under two headlines), and a later development counted as
+ * disagreement ("the outlets differ": arrested, then released).
+ *
+ * Version 2 (Oct 13) said what counts, and compared the report that just
+ * verified the story with the ones it already had. Of its 25 "different
+ * event" verdicts, the ones about stories the grouping joined wrongly were
+ * right (two campaign councils, two football matches, unrelated companies at
+ * one conference), but it went wrong three ways: a roundup or live blog that
+ * includes Report 1's event (a missile story inside a markets roundup, a
+ * tanker attack inside a four-alert roundup); one off-topic report in a group
+ * whose others match, where its one answer said the whole story differed;
+ * and two figures from one release (OPEC's 2026 and 2027 forecasts).
+ *
+ * Version 3 asks report by report, and the code decides: "different" only
+ * when no other report covers Report 1's event, "conflicting" only from the
+ * reports that do.
  */
-export const CROSSCHECK_PROMPT_VERSION = 2
+export const CROSSCHECK_PROMPT_VERSION = 3
 
 export const CROSSCHECK_SYSTEM = `You check the verification of WorldPulse, a global news service. A story turns verified when a second independent outlet reports it. Report 1 is the report that just verified this story; the others are reports the story already had. They were matched as one story by the words of their headlines, which can join reports that only share words.
-Say:
-- same_event: true when Report 1 reports the same news event as the other reports (or most of them). Reports of one event often differ, and that is still the same event: other angles or detail; updated figures (a death toll that rose, a release that followed an arrest); reactions and follow-ups within days (a vow to respond, further strikes in the same campaign); figures from one announcement or release (a forecast's world and country numbers); a live blog and a recap of the same day; an explainer or analysis of it; the same article or column under another headline. false only when Report 1 describes a separate occurrence: another incident of the same kind (arrests in another city, another earthquake, a raid on another town), other people doing a similar thing (another country's minister at the same meeting), a roundup, digest or photo gallery naming no specific event, or a topic in common and nothing more.
-- agree: false only when the reports state facts about the event that can't both be true at once (where it happened, who did it, a figure for the same moment). A later report adding news or updated figures is not disagreement.
-Answer with only this JSON: {"same_event": true or false, "agree": true or false, "note": "one short sentence"}`
+For each other report, answer on its own:
+- same_event: true when it covers Report 1's news event (or one of Report 1's events, when Report 1 is itself a roundup). Reports of one event often differ, and that is still the same event: other angles or detail; updated figures (a death toll that rose, a release that followed an arrest); reactions and follow-ups within days (a vow to respond, further strikes in the same campaign); other figures from the same announcement, release, report or meeting (a forecast's figures for two years, a country's and the world's numbers); a live blog, a recap, an explainer or analysis of it; a roundup, digest or briefing that includes it among other items; the same article or column under another headline. false only when it describes a separate occurrence: another incident of the same kind (arrests in another city, another earthquake, a raid on another town), other people doing a similar thing (another country's minister at the same meeting), a gallery or digest naming no specific event, or a topic in common and nothing more.
+- agree: false only when it states facts about the same event that can't both be true with Report 1's (where it happened, who did it, a figure for the same moment). A later report adding news or updated figures is not disagreement.
+Answer with only this JSON, one entry per other report, in order: {"reports": [{"report": 2, "same_event": true or false, "agree": true or false}], "note": "one short sentence"}`
 
 export type CrossCheckVerdict = 'same' | 'conflicting' | 'different'
 
@@ -54,15 +67,43 @@ export function crossCheckPrompt(reports: CrossCheckReport[]): string {
   }).join('\n')
 }
 
-/** Claude's answer as a verdict, or null when it can't be read */
-export function readVerdict(text: string): { verdict: CrossCheckVerdict; note: string } | null {
+export interface CrossCheckRead {
+  verdict: CrossCheckVerdict
+  note:    string
+  /** Version 3: whether each other report (Report 2 on) covers Report 1's event */
+  matches?: boolean[]
+}
+
+interface ReportAnswer { report?: unknown; same_event?: unknown; agree?: unknown }
+
+/**
+ * Claude's answer as a verdict, or null when it can't be read. Version 3
+ * answers report by report, and the verdict is worked out here: "different"
+ * only when no other report covers Report 1's event (one off-topic report in
+ * a group whose others match doesn't make the story different), and
+ * "conflicting" only when a report that covers it disagrees. A single
+ * same_event/agree answer (version 2) is still read.
+ */
+export function readVerdict(text: string): CrossCheckRead | null {
   const json = jsonIn(text)
   if (!json) return null
   try {
-    const parsed = JSON.parse(json) as { same_event?: unknown; agree?: unknown; note?: unknown }
+    const parsed = JSON.parse(json) as { reports?: unknown; same_event?: unknown; agree?: unknown; note?: unknown }
+    const note = String(parsed.note ?? '').slice(0, 200)
+    if (Array.isArray(parsed.reports)) {
+      const answers = (parsed.reports as ReportAnswer[])
+        .filter(a => !!a && typeof a.same_event === 'boolean')
+        .sort((a, b) => (Number(a.report) || 0) - (Number(b.report) || 0))
+      if (answers.length === 0) return null
+      const matches = answers.map(a => a.same_event === true)
+      const verdict: CrossCheckVerdict = !matches.some(Boolean) ? 'different'
+        : answers.some(a => a.same_event === true && a.agree === false) ? 'conflicting'
+        : 'same'
+      return { verdict, note, matches }
+    }
     if (typeof parsed.same_event !== 'boolean') return null
     const verdict: CrossCheckVerdict = !parsed.same_event ? 'different' : parsed.agree === false ? 'conflicting' : 'same'
-    return { verdict, note: String(parsed.note ?? '').slice(0, 200) }
+    return { verdict, note }
   } catch {
     return null
   }
@@ -95,7 +136,8 @@ export async function crossCheckVerification(
   const reports: CrossCheckReport[] = [...saved, ...extra.filter(r => typeof r.title === 'string' && r.title.trim())]
   if (reports.length < 2) return null
 
-  const reply = await askClaude({ purpose: 'crosscheck', system: CROSSCHECK_SYSTEM, prompt: crossCheckPrompt(reports), maxTokens: 150, timeoutMs: 20_000 })
+  // (an answer per report: room for three of them and the note)
+  const reply = await askClaude({ purpose: 'crosscheck', system: CROSSCHECK_SYSTEM, prompt: crossCheckPrompt(reports), maxTokens: 220, timeoutMs: 20_000 })
   const read = reply ? readVerdict(reply.text) : null
   const key = COUNTS_KEY(now)
   const multi = redis.multi().hincrby(key, read ? read.verdict : 'unread', 1).expire(key, 40 * 86_400)
@@ -107,6 +149,8 @@ export async function crossCheckVerification(
       note:    read.note,
       // every headline Claude read (Report 1 first), so a reader can judge the verdict
       titles:  reports.slice(0, 4).map(r => r.title.slice(0, 90)),
+      // version 3: whether each of Report 2 on covers Report 1's event
+      ...(read.matches ? { matches: read.matches } : {}),
       prompt:  CROSSCHECK_PROMPT_VERSION,
     })
     multi.lpush(RECENT_KEY, entry).ltrim(RECENT_KEY, 0, 19).expire(RECENT_KEY, 7 * 86_400)

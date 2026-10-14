@@ -52,7 +52,7 @@ describe('crossCheckPrompt and readVerdict', () => {
     ])).toBe('Report 1: Children among 109 dead after boat capsizes off Djibouti, UN says\nReport 2: Djibouti shipwreck kills at least 109 — The boat sank on Saturday with about 200 migrants on board.')
   })
 
-  it('reads the verdict, fenced or not', () => {
+  it('reads a single answer (version 2), fenced or not', () => {
     expect(readVerdict('{"same_event": true, "agree": true, "note": "Both report the shipwreck."}')).toEqual({ verdict: 'same', note: 'Both report the shipwreck.' })
     expect(readVerdict('```json\n{"same_event": true, "agree": false, "note": "109 dead vs 62 dead."}\n```')?.verdict).toBe('conflicting')
     expect(readVerdict('{"same_event": false, "agree": false, "note": "Two different strikes."}')?.verdict).toBe('different')
@@ -60,17 +60,41 @@ describe('crossCheckPrompt and readVerdict', () => {
   })
 })
 
-describe('what Claude is asked (version 2, Oct 13, 2026)', () => {
-  it('compares the report that just verified the story with the ones it had', () => {
+describe('report by report (version 3, Oct 14, 2026)', () => {
+  it('calls a story different only when no other report covers Report 1\'s event', () => {
+    // the diesel-deal story with one off-topic report: version 2 called the whole story different
+    expect(readVerdict('{"reports": [{"report": 2, "same_event": false, "agree": true}, {"report": 3, "same_event": true, "agree": true}, {"report": 4, "same_event": true, "agree": true}], "note": "Report 2 is about a settlement claim."}'))
+      .toEqual({ verdict: 'same', note: 'Report 2 is about a settlement claim.', matches: [false, true, true] })
+    expect(readVerdict('{"reports": [{"report": 2, "same_event": false, "agree": true}], "note": "Two different matches."}')?.verdict).toBe('different')
+  })
+
+  it('counts disagreement only from the reports that cover the event', () => {
+    expect(readVerdict('{"reports": [{"report": 2, "same_event": false, "agree": false}, {"report": 3, "same_event": true, "agree": true}], "note": "x"}')?.verdict).toBe('same')
+    expect(readVerdict('{"reports": [{"report": 2, "same_event": true, "agree": false}, {"report": 3, "same_event": true, "agree": true}], "note": "13 dead vs 12."}')?.verdict).toBe('conflicting')
+  })
+
+  it('puts the answers in report order and skips ones it can\'t read', () => {
+    expect(readVerdict('{"reports": [{"report": 3, "same_event": true}, {"report": 2, "same_event": false}, {"report": 4}], "note": ""}')?.matches).toEqual([false, true])
+    expect(readVerdict('{"reports": [], "note": "nothing"}')).toBeNull()
+  })
+})
+
+describe('what Claude is asked (version 3, Oct 14, 2026)', () => {
+  it('compares the report that just verified the story with the ones it had, one by one', () => {
     expect(CROSSCHECK_SYSTEM).toContain('Report 1 is the report that just verified this story')
+    expect(CROSSCHECK_SYSTEM).toContain('For each other report, answer on its own')
+    expect(CROSSCHECK_SYSTEM).toContain('"reports": [{"report": 2')
+    expect(CROSSCHECK_PROMPT_VERSION).toBe(3)
   })
 
   it('says what is still one event, and what is a separate one', () => {
-    // version 1 called these different events: one IMF release, a toll that rose, a live blog and its recap, an explainer, one column
-    for (const same of ['updated figures', 'figures from one announcement or release', 'a live blog and a recap of the same day', 'an explainer or analysis of it', 'the same article or column under another headline']) {
+    // version 1 called these different events: one IMF release, a toll that rose, a live blog and its recap, an explainer, one column;
+    // version 2: a roundup that includes the event, two years of one OPEC forecast
+    for (const same of ['updated figures', 'other figures from the same announcement, release, report or meeting', 'a live blog, a recap, an explainer or analysis of it',
+      'a roundup, digest or briefing that includes it among other items', 'the same article or column under another headline', 'when Report 1 is itself a roundup']) {
       expect(CROSSCHECK_SYSTEM).toContain(same)
     }
-    for (const separate of ['another incident of the same kind', 'other people doing a similar thing', 'a roundup, digest or photo gallery naming no specific event']) {
+    for (const separate of ['another incident of the same kind', 'other people doing a similar thing', 'a gallery or digest naming no specific event']) {
       expect(CROSSCHECK_SYSTEM).toContain(separate)
     }
   })
@@ -82,11 +106,12 @@ describe('what Claude is asked (version 2, Oct 13, 2026)', () => {
   it('keeps every headline it read with a verdict worth reading', async () => {
     h.ops.length = 0
     h.rows = [{ title: 'Police arrest six suspected robbers in Oyo', summary: null }, { title: 'Kano police recover three stolen vehicles', summary: null }, { title: 'Kano police arrest four suspects', summary: null }]
-    h.reply = '{"same_event": false, "agree": false, "note": "Arrests in two different states."}'
+    h.reply = '{"reports": [{"report": 2, "same_event": false, "agree": true}, {"report": 3, "same_event": false, "agree": true}], "note": "Arrests in two different states."}'
     await crossCheckVerification(['a', 'b', 'c'], [], NOW)
     const entry = JSON.parse(String(h.ops.find(op => op[0] === 'lpush')![2]))
     expect(entry.titles).toHaveLength(3)
-    expect(entry.prompt).toBe(2)
+    expect(entry.matches).toEqual([false, false])
+    expect(entry.prompt).toBe(3)
   })
 })
 
