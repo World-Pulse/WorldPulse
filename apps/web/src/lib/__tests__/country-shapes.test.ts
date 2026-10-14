@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
 import {
   pointInRing, featureContains, countryCodeOf, countryNameOf, flagEmoji, findCountry, focusBboxOf,
-  type CountryFeature, type CountryCollection,
+  COUNTRY_SHAPES_URL, type CountryFeature, type CountryCollection,
 } from '../country-shapes'
 
 const square = (w: number, s: number, e: number, n: number) => [[w, s], [e, s], [e, n], [w, n], [w, s]]
@@ -65,5 +66,37 @@ describe('focusBboxOf', () => {
     const mainland = [[-125, 25], [-67, 25], [-67, 49], [-90, 49.5], [-125, 49], [-125, 25]]
     const us = country({}, { type: 'MultiPolygon', coordinates: [[mainland], [square(172, 52, 180, 53)], [square(-180, 51, -170, 52)]] })
     expect(focusBboxOf(us)).toEqual([-125, 25, -67, 49.5])
+  })
+})
+
+describe('the borders file on our own site (plan M23)', () => {
+  const file = new URL(`../../../public${COUNTRY_SHAPES_URL}`, import.meta.url)
+  const shapes = JSON.parse(readFileSync(file, 'utf8')) as CountryCollection
+
+  it('is served from our own site, not a third party', () => {
+    expect(COUNTRY_SHAPES_URL).toMatch(/^\/geo\/[\w.-]+\.geojson$/)
+  })
+
+  it('holds every country, each with a shape, a name and (nearly all) a code', () => {
+    expect(shapes.type).toBe('FeatureCollection')
+    expect(shapes.features.length).toBe(177)
+    for (const f of shapes.features) {
+      expect(['Polygon', 'MultiPolygon']).toContain(f.geometry?.type)
+      expect(countryNameOf(f.properties)).not.toBe('Unknown')
+    }
+    const missing = shapes.features.filter(f => !countryCodeOf(f.properties)).map(f => countryNameOf(f.properties))
+    expect(missing.length).toBeLessThanOrEqual(2)
+  })
+
+  it('finds the country of well-known places', () => {
+    const at = (lng: number, lat: number) => findCountry(shapes, lng, lat)
+    expect(at(2.35, 48.86)?.code).toBe('FR')       // Paris
+    expect(at(30.52, 50.45)?.code).toBe('UA')      // Kyiv
+    expect(at(-74.0, 40.75)?.code).toBe('US')      // New York
+    expect(at(21.17, 42.67)?.code).toBe('XK')      // Pristina
+    expect(at(36.82, -1.29)?.code).toBe('KE')      // Nairobi
+    expect(at(151.2, -33.87)?.code).toBe('AU')     // Sydney
+    expect(at(31.13, -26.32)).toMatchObject({ code: 'SZ', name: 'Eswatini' })
+    expect(at(-30, 30)).toBeNull()                 // the Atlantic
   })
 })

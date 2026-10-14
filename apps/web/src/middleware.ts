@@ -33,10 +33,9 @@ function buildCspDirectives(): string {
       'https://*.maptiler.com',
       'https://fonts.openmaptiles.org',
       'https://gibs.earthdata.nasa.gov',
-      // Map layers that download from elsewhere: satellite positions (SATS)
-      // and country borders for the country risk map (RISK MAP)
+      // Map layers that download from elsewhere: satellite positions (SATS).
+      // Country borders come from our own site (/geo/, plan M23)
       'https://celestrak.org',
-      'https://d2ad6b4ur7yvpq.cloudfront.net',
       'https://www.googletagmanager.com',
       'https://www.google-analytics.com',
       'https://*.google-analytics.com',

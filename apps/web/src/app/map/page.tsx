@@ -3317,8 +3317,8 @@ function MapView() {
           ...geoJson,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           features: geoJson.features.map((f: any) => {
-            // Natural Earth 110m uses ISO_A2 (some edge cases use '-99' for disputed)
-            const iso2 = String(f.properties?.ISO_A2 ?? f.properties?.iso_a2 ?? '').toUpperCase()
+            // The brief's code for the same shape (Natural Earth gives Kosovo no ISO code: XK)
+            const iso2 = countryCodeOf(f.properties) ?? ''
             const risk = byCode.get(iso2)
             return {
               ...f,
@@ -3332,7 +3332,7 @@ function MapView() {
                 wpSignalCount: risk?.signal_count ?? 0,
                 wpTrend:       risk?.trend        ?? 'stable',
                 wpCategories:  risk?.categories?.join(', ') ?? '',
-                wpCountryName: risk?.name ?? f.properties?.NAME ?? f.properties?.ADMIN ?? iso2,
+                wpCountryName: risk?.name ?? countryNameOf(f.properties),
               },
             }
           }),

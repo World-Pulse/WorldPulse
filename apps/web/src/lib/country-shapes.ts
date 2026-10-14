@@ -1,12 +1,19 @@
 /**
- * Country outlines for the World Map (Natural Earth 1:110m, ~600 KB, loaded
- * once when first needed): which country a click landed in, its outline for
- * the highlight, and its code and name. The country-risk layer uses the same
- * file.
+ * Country outlines for the World Map (Natural Earth 1:110m, loaded once when
+ * first needed): which country a click landed in, its outline for the
+ * highlight, and its code and name. The country-risk layer uses the same file.
+ *
+ * Served from our own site (plan M23, Oct 14, 2026): it came from a third
+ * party's CloudFront address, and if that went away, clicking a country would
+ * stop working. public/geo/ne_110m_admin_0_countries.v1.geojson is Natural
+ * Earth 3.3.0 (public domain) as that address served it, keeping only the
+ * properties read here (iso_a2, adm0_a3, name, admin, name_long) and
+ * coordinates to 5 decimals (about a metre): 245 KB instead of 600 KB, and the
+ * same country for every point checked but a few within metres of a border.
+ * A changed file gets a new name (v2), since browsers keep it for a week.
  */
 
-export const COUNTRY_SHAPES_URL =
-  'https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_110m_admin_0_countries.geojson'
+export const COUNTRY_SHAPES_URL = '/geo/ne_110m_admin_0_countries.v1.geojson'
 
 type Position = number[]
 type Ring = Position[]

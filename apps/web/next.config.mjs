@@ -42,7 +42,7 @@ const nextConfig = {
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(self)' },
-          // Allow map tile sources and country GeoJSON CDN used by the live map
+          // Allow the map tile sources used by the live map (country borders are our own, /geo/)
           {
             key: 'Content-Security-Policy',
             value: [
@@ -66,8 +66,6 @@ const nextConfig = {
                 'https://*.maptiler.com',
                 'https://celestrak.org',
                 'https://gibs.earthdata.nasa.gov',
-                // Natural Earth country boundary GeoJSON for country risk choropleth
-                'https://d2ad6b4ur7yvpq.cloudfront.net',
                 // Sentry error reporting (*.ingest.sentry.io for any org)
                 'https://*.ingest.sentry.io',
                 'https://*.ingest.us.sentry.io',
@@ -87,6 +85,13 @@ const nextConfig = {
             ].join('; '),
           },
         ],
+      },
+      {
+        // The World Map's country borders (lib/country-shapes.ts): kept a week
+        // by browsers instead of asked again on every map visit. A changed
+        // file gets a new name.
+        source: '/geo/:file*',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=604800' }],
       },
     ]
   },
