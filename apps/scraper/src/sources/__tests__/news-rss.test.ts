@@ -108,9 +108,10 @@ describe('NEWS_SOURCE_REGISTRY', () => {
   it('includes the sources added in cycle 8', () => {
     const cycle8Ids = [
       'le-monde', 'der-spiegel-intl', 'el-pais-eng',
-      'daily-maverick', 'nikkei-asia', 'arab-news', 'allafrica',
+      'daily-maverick', 'nikkei-asia', 'allafrica',
       'folha-sao-paulo', 'the-conversation',
-      // the-wire-india was removed in October 2026: its feed address serves the website
+      // the-wire-india was removed in October 2026: its feed address serves the website;
+      // arab-news on Oct 14, 2026: it turned away every poll from our server
     ]
     for (const id of cycle8Ids) {
       const src = NEWS_SOURCE_REGISTRY.find(s => s.id === id)
@@ -133,6 +134,23 @@ describe('NEWS_SOURCE_REGISTRY', () => {
     }
   })
 
+  it('replaces the feeds that turn our server away (Oct 14, 2026, 2 PM)', () => {
+    for (const id of ['arab-news', 'bangkok-post', 'africa-report', 'ethiopia-reporter']) {
+      expect(NEWS_SOURCE_REGISTRY.find(s => s.id === id)).toBeUndefined()
+    }
+    for (const id of ['gulf-news', 'saudi-gazette', 'thaiger', 'fana-en', 'scroll-in', 'foreign-policy', 'meduza-en',
+      'rest-of-world', 'sciencealert', 'the-register', 'folha-en']) {
+      expect(NEWS_SOURCE_REGISTRY.find(s => s.id === id)).toBeDefined()
+    }
+    // A state broadcaster is labelled as one
+    expect(NEWS_SOURCE_REGISTRY.find(s => s.id === 'fana-en')?.biasLabel).toBe('state-media')
+  })
+
+  it('lists every feed once', () => {
+    const ids = NEWS_SOURCE_REGISTRY.map(s => s.id)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
   it('files every feed under a real category (USNI\'s "military" filed its stories as other)', () => {
     const valid = ['breaking', 'conflict', 'geopolitics', 'climate', 'health', 'economy', 'technology', 'science',
       'elections', 'culture', 'disaster', 'security', 'sports', 'space', 'finance', 'other']
@@ -143,7 +161,8 @@ describe('NEWS_SOURCE_REGISTRY', () => {
     const cycle9Ids = [
       // euractiv was removed Oct 14, 2026: every request gets a bot check (403)
       'moscow-times', 'taipei-times', 'the-hindu-national',
-      'dawn-pakistan', 'premium-times-nigeria', 'bangkok-post',
+      'dawn-pakistan', 'premium-times-nigeria',
+      // bangkok-post was removed Oct 14, 2026: it turned away every poll from our server
       'al-monitor', 'eu-observer', 'africanews', 'rferl',
       'asia-times', 'channel-news-asia',
       // jakarta-post and caixin-global were removed in October 2026: their feeds are gone (404)
