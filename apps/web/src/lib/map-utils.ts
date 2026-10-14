@@ -122,3 +122,32 @@ export const MAX_SIGNALS = 3000
 export function prependSignal<T extends { id: string }>(existing: T[], incoming: T): T[] {
   return [incoming, ...existing.filter(s => s.id !== incoming.id)].slice(0, MAX_SIGNALS)
 }
+
+// ── Layer event handlers ───────────────────────────────────────────────────────
+// map.off(type, layerId) without the original function removes nothing, so every
+// on/off cycle of a layer used to stack another set of handlers (duplicate
+// pop-ups). These two keep the functions so they can be removed again.
+
+type LayerEvents = {
+  on(type: any, layerId: string, listener: any): unknown
+  off(type: any, layerId: string, listener: any): unknown
+}
+
+const layerHandlers = new WeakMap<object, Map<string, Array<[string, unknown]>>>()
+
+export function onLayer(map: LayerEvents, type: string, layerId: string, listener: (e: any) => void): void {
+  let byLayer = layerHandlers.get(map)
+  if (!byLayer) { byLayer = new Map(); layerHandlers.set(map, byLayer) }
+  const list = byLayer.get(layerId) || []
+  list.push([type, listener])
+  byLayer.set(layerId, list)
+  map.on(type, layerId, listener)
+}
+
+export function offLayer(map: LayerEvents, layerId: string): void {
+  const byLayer = layerHandlers.get(map)
+  const list = byLayer?.get(layerId)
+  if (!byLayer || !list) return
+  for (const [type, listener] of list) map.off(type, layerId, listener)
+  byLayer.delete(layerId)
+}

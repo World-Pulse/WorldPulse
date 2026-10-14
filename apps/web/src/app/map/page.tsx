@@ -47,7 +47,7 @@ import {
 import {
   timeAgo, getSourceUrl, getSourceDomain,
   parseWKBPoint, extractLatLng, prependSignal, MAX_SIGNALS,
-  escapeHtml, safeHttpUrl, safeCssColor,
+  escapeHtml, safeHttpUrl, safeCssColor, onLayer, offLayer,
 } from '@/lib/map-utils'
 import { declutter, type ScreenPoint } from '@/lib/map-declutter'
 import { displaySummary } from '@/lib/signal-text'
@@ -1660,9 +1660,7 @@ function MapView() {
 
     const removeLayer = () => {
       try {
-        map.off('click',      ADSB_LAYER)
-        map.off('mouseenter', ADSB_LAYER)
-        map.off('mouseleave', ADSB_LAYER)
+        offLayer(map, ADSB_LAYER)
         if (map.getLayer(ADSB_LAYER))   map.removeLayer(ADSB_LAYER)
         if (map.getSource(ADSB_SOURCE)) map.removeSource(ADSB_SOURCE)
       } catch { /* ignore */ }
@@ -1781,9 +1779,7 @@ function MapView() {
 
     const removeLayer = () => {
       try {
-        map.off('click',      CAM_LAYER)
-        map.off('mouseenter', CAM_LAYER)
-        map.off('mouseleave', CAM_LAYER)
+        offLayer(map, CAM_LAYER)
         if (map.getLayer(CAM_LAYER))   map.removeLayer(CAM_LAYER)
         if (map.getSource(CAM_SOURCE)) map.removeSource(CAM_SOURCE)
       } catch { /* ignore */ }
@@ -1927,9 +1923,7 @@ function MapView() {
 
     const removeLayer = () => {
       try {
-        map.off('click',      MARITIME_SHIPS)
-        map.off('mouseenter', MARITIME_SHIPS)
-        map.off('mouseleave', MARITIME_SHIPS)
+        offLayer(map, MARITIME_SHIPS)
         for (const layer of [MARITIME_SHIPS, MARITIME_CLUSTER_COUNT, MARITIME_CLUSTERS]) {
           if (map.getLayer(layer)) map.removeLayer(layer)
         }
@@ -2012,7 +2006,7 @@ function MapView() {
           })
 
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          map.on('mouseenter', MARITIME_SHIPS, (e: any) => {
+          onLayer(map, 'mouseenter', MARITIME_SHIPS, (e: any) => {
             map.getCanvas().style.cursor = 'pointer'
             const feature = e.features?.[0]
             if (!feature || feature.geometry.type !== 'Point') return
@@ -2028,7 +2022,7 @@ function MapView() {
               .addTo(map)
           })
 
-          map.on('mouseleave', MARITIME_SHIPS, () => {
+          onLayer(map, 'mouseleave', MARITIME_SHIPS, () => {
             map.getCanvas().style.cursor = ''
             popup.remove()
           })
@@ -2075,15 +2069,9 @@ function MapView() {
 
     const removeLayer = () => {
       try {
-        map.off('click',      NAVAL_CARRIER_LAYER)
-        map.off('mouseenter', NAVAL_CARRIER_LAYER)
-        map.off('mouseleave', NAVAL_CARRIER_LAYER)
-        map.off('click',      NAVAL_DISTRESS_LAYER)
-        map.off('mouseenter', NAVAL_DISTRESS_LAYER)
-        map.off('mouseleave', NAVAL_DISTRESS_LAYER)
-        map.off('click',      NAVAL_DARK_LAYER)
-        map.off('mouseenter', NAVAL_DARK_LAYER)
-        map.off('mouseleave', NAVAL_DARK_LAYER)
+        offLayer(map, NAVAL_CARRIER_LAYER)
+        offLayer(map, NAVAL_DISTRESS_LAYER)
+        offLayer(map, NAVAL_DARK_LAYER)
         if (map.getLayer(NAVAL_CARRIER_LAYER))  map.removeLayer(NAVAL_CARRIER_LAYER)
         if (map.getLayer(NAVAL_DISTRESS_LAYER)) map.removeLayer(NAVAL_DISTRESS_LAYER)
         if (map.getLayer(NAVAL_DARK_LAYER))     map.removeLayer(NAVAL_DARK_LAYER)
@@ -2164,11 +2152,11 @@ function MapView() {
             },
           })
 
-          map.on('mouseenter', NAVAL_CARRIER_LAYER, () => { map.getCanvas().style.cursor = 'pointer' })
-          map.on('mouseleave', NAVAL_CARRIER_LAYER, () => { map.getCanvas().style.cursor = '' })
+          onLayer(map, 'mouseenter', NAVAL_CARRIER_LAYER, () => { map.getCanvas().style.cursor = 'pointer' })
+          onLayer(map, 'mouseleave', NAVAL_CARRIER_LAYER, () => { map.getCanvas().style.cursor = '' })
 
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          map.on('click', NAVAL_CARRIER_LAYER, async (e: any) => {
+          onLayer(map, 'click', NAVAL_CARRIER_LAYER, async (e: any) => {
             const feat = e.features?.[0]
             if (!feat) return
             const p = feat.properties as {
@@ -2205,11 +2193,11 @@ function MapView() {
             },
           })
 
-          map.on('mouseenter', NAVAL_DISTRESS_LAYER, () => { map.getCanvas().style.cursor = 'pointer' })
-          map.on('mouseleave', NAVAL_DISTRESS_LAYER, () => { map.getCanvas().style.cursor = '' })
+          onLayer(map, 'mouseenter', NAVAL_DISTRESS_LAYER, () => { map.getCanvas().style.cursor = 'pointer' })
+          onLayer(map, 'mouseleave', NAVAL_DISTRESS_LAYER, () => { map.getCanvas().style.cursor = '' })
 
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          map.on('click', NAVAL_DISTRESS_LAYER, async (e: any) => {
+          onLayer(map, 'click', NAVAL_DISTRESS_LAYER, async (e: any) => {
             const feat = e.features?.[0]
             if (!feat) return
             const p = feat.properties as {
@@ -2246,11 +2234,11 @@ function MapView() {
             },
           })
 
-          map.on('mouseenter', NAVAL_DARK_LAYER, () => { map.getCanvas().style.cursor = 'pointer' })
-          map.on('mouseleave', NAVAL_DARK_LAYER, () => { map.getCanvas().style.cursor = '' })
+          onLayer(map, 'mouseenter', NAVAL_DARK_LAYER, () => { map.getCanvas().style.cursor = 'pointer' })
+          onLayer(map, 'mouseleave', NAVAL_DARK_LAYER, () => { map.getCanvas().style.cursor = '' })
 
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          map.on('click', NAVAL_DARK_LAYER, async (e: any) => {
+          onLayer(map, 'click', NAVAL_DARK_LAYER, async (e: any) => {
             const feat = e.features?.[0]
             if (!feat) return
             const p = feat.properties as {
@@ -2367,9 +2355,7 @@ function MapView() {
     const removeThreatLayers = () => {
       try {
         for (const layer of [THREAT_BALLISTIC, THREAT_DRONE_L, THREAT_OTHER]) {
-          map.off('click',      layer)
-          map.off('mouseenter', layer)
-          map.off('mouseleave', layer)
+          offLayer(map, layer)
           if (map.getLayer(layer)) map.removeLayer(layer)
         }
         if (map.getSource(THREAT_SOURCE)) map.removeSource(THREAT_SOURCE)
@@ -2460,9 +2446,9 @@ function MapView() {
         }
 
         const hookLayer = (layerId: string) => {
-          map.on('mouseenter', layerId, () => { map.getCanvas().style.cursor = 'pointer' })
-          map.on('mouseleave', layerId, () => { map.getCanvas().style.cursor = '' })
-          map.on('click', layerId, makeThreatPopup)
+          onLayer(map, 'mouseenter', layerId, () => { map.getCanvas().style.cursor = 'pointer' })
+          onLayer(map, 'mouseleave', layerId, () => { map.getCanvas().style.cursor = '' })
+          onLayer(map, 'click', layerId, makeThreatPopup)
         }
 
         // ── threats-ballistic: red-600 #dc2626, radius 8, pulse via stroke ─────
@@ -2558,9 +2544,7 @@ function MapView() {
     const removeJammingLayers = () => {
       try {
         for (const layer of [JAMMING_MIL_LAYER, JAMMING_SPF_LAYER, JAMMING_CIV_LAYER]) {
-          map.off('click',      layer)
-          map.off('mouseenter', layer)
-          map.off('mouseleave', layer)
+          offLayer(map, layer)
           if (map.getLayer(layer)) map.removeLayer(layer)
         }
         if (map.getSource(JAMMING_SOURCE)) map.removeSource(JAMMING_SOURCE)
@@ -2671,9 +2655,9 @@ function MapView() {
         }
 
         const hookJammingLayer = (layerId: string) => {
-          map.on('mouseenter', layerId, () => { map.getCanvas().style.cursor = 'pointer' })
-          map.on('mouseleave', layerId, () => { map.getCanvas().style.cursor = '' })
-          map.on('click', layerId, makeJammingPopup)
+          onLayer(map, 'mouseenter', layerId, () => { map.getCanvas().style.cursor = 'pointer' })
+          onLayer(map, 'mouseleave', layerId, () => { map.getCanvas().style.cursor = '' })
+          onLayer(map, 'click', layerId, makeJammingPopup)
         }
 
         // ── Military jamming layer — red circles with heat-zone glow ──────────
@@ -2766,9 +2750,7 @@ function MapView() {
 
     const removeHazardsLayers = () => {
       try {
-        map.off('click',      HAZARDS_LAYER)
-        map.off('mouseenter', HAZARDS_LAYER)
-        map.off('mouseleave', HAZARDS_LAYER)
+        offLayer(map, HAZARDS_LAYER)
         if (map.getLayer(HAZARDS_LAYER)) map.removeLayer(HAZARDS_LAYER)
         if (map.getSource(HAZARDS_SOURCE)) map.removeSource(HAZARDS_SOURCE)
       } catch { /* ignore */ }
@@ -2901,9 +2883,9 @@ function MapView() {
         }
 
         const hookHazardsLayer = () => {
-          map.on('mouseenter', HAZARDS_LAYER, () => { map.getCanvas().style.cursor = 'pointer' })
-          map.on('mouseleave', HAZARDS_LAYER, () => { map.getCanvas().style.cursor = '' })
-          map.on('click', HAZARDS_LAYER, makeHazardsPopup)
+          onLayer(map, 'mouseenter', HAZARDS_LAYER, () => { map.getCanvas().style.cursor = 'pointer' })
+          onLayer(map, 'mouseleave', HAZARDS_LAYER, () => { map.getCanvas().style.cursor = '' })
+          onLayer(map, 'click', HAZARDS_LAYER, makeHazardsPopup)
         }
 
         // ── Hazard circles layer ──────────────────────────────────────────────
@@ -3262,9 +3244,7 @@ function MapView() {
 
     const removeLayer = () => {
       try {
-        map.off('click',      CR_FILL)
-        map.off('mouseenter', CR_FILL)
-        map.off('mouseleave', CR_FILL)
+        offLayer(map, CR_FILL)
         if (map.getLayer(CR_LINE))   map.removeLayer(CR_LINE)
         if (map.getLayer(CR_FILL))   map.removeLayer(CR_FILL)
         if (map.getSource(CR_SOURCE)) map.removeSource(CR_SOURCE)
@@ -3390,8 +3370,8 @@ function MapView() {
             },
           }, beforeLayer)
 
-          map.on('mouseenter', CR_FILL, () => { map.getCanvas().style.cursor = 'pointer' })
-          map.on('mouseleave', CR_FILL, () => { map.getCanvas().style.cursor = '' })
+          onLayer(map, 'mouseenter', CR_FILL, () => { map.getCanvas().style.cursor = 'pointer' })
+          onLayer(map, 'mouseleave', CR_FILL, () => { map.getCanvas().style.cursor = '' })
 
           // A click on a country opens its brief (with this layer's risk score);
           // see the background click handler. This layer has no pop-up of its own.

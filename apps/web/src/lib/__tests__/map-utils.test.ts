@@ -9,6 +9,8 @@ import {
   prependSignal,
   MAX_SIGNALS,
   escapeHtml,
+  onLayer,
+  offLayer,
   safeHttpUrl,
   safeCssColor,
 } from '../map-utils'
@@ -271,5 +273,37 @@ describe('safeCssColor', () => {
     expect(safeCssColor('red;background:url(x)')).toBe('#8892a4')
     expect(safeCssColor('"><script>')).toBe('#8892a4')
     expect(safeCssColor(undefined, '#000')).toBe('#000')
+  })
+})
+
+describe('onLayer / offLayer', () => {
+  function fakeMap() {
+    const handlers: Array<[string, string, unknown]> = []
+    return {
+      handlers,
+      on: (t: string, l: string, fn: unknown) => { handlers.push([t, l, fn]) },
+      off: (t: string, l: string, fn: unknown) => {
+        const i = handlers.findIndex(h => h[0] === t && h[1] === l && h[2] === fn)
+        if (i >= 0) handlers.splice(i, 1)
+      },
+    }
+  }
+
+  it('removes every handler a layer registered, so toggling does not stack them', () => {
+    const map = fakeMap()
+    for (let i = 0; i < 3; i++) {
+      onLayer(map, 'click', 'ships', () => {})
+      onLayer(map, 'mouseenter', 'ships', () => {})
+      offLayer(map, 'ships')
+    }
+    expect(map.handlers).toHaveLength(0)
+  })
+
+  it('leaves other layers alone', () => {
+    const map = fakeMap()
+    onLayer(map, 'click', 'ships', () => {})
+    onLayer(map, 'click', 'hazards', () => {})
+    offLayer(map, 'ships')
+    expect(map.handlers.map(h => h[1])).toEqual(['hazards'])
   })
 })
