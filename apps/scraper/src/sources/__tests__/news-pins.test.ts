@@ -38,6 +38,18 @@ describe('inferGeo', () => {
       .toEqual({ lat: -17.5, lng: 168.1, locationName: 'Vanuatu', countryCode: 'VU' })
   })
 
+  it('reads a hint at the start of a word, but not inside another word (Oct 14, 2026)', () => {
+    // a Le Monde reader survey ("... vous amènent-ils à modifier vos projets ?") was pinned on New Delhi: "modifier" read as Modi
+    expect(inferGeo('Qu’avez-vous prévu pour les vacances de la Toussaint ?',
+      'Le contexte économique et social ou la situation internationale vous amènent-ils à modifier vos projets ? Racontez-nous.', source('le-monde')).lat).toBeNull()
+    expect(inferGeo('Parish council approves the new budget', '', source('abc-news')).lat).toBeNull()
+    expect(inferGeo('Trumpet player wins award', '', source('abc-news')).lat).toBeNull()
+    // the hints still read the words they're meant for
+    expect(inferGeo('Modi meets Gulf leaders', '', source('abc-news')).countryCode).toBe('IN')
+    expect(inferGeo('Indian army on alert', '', source('abc-news')).countryCode).toBe('IN')
+    expect(inferGeo('Parisian police clear a camp', '', source('abc-news')).locationName).toMatch(/Paris/)
+  })
+
   it('only national outlets fall back to their home', () => {
     expect(HOME_PIN_SOURCES.has('punch-nigeria')).toBe(true)
     expect(HOME_PIN_SOURCES.has('gdacs')).toBe(false)

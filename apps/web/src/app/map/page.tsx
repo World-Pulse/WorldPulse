@@ -31,6 +31,7 @@ import { countryAt, loadCountryShapes, focusBboxOf, findCountry, countryCodeOf, 
 import { countryConnections, countryCentre, connectionFeatures, fitZoom, arcDegrees, type Connection } from '@/lib/country-connections'
 import { signalsInCountry, countryBrief } from '@/lib/country-brief'
 import { toHotspot, hotspotPlace, type Hotspot } from '@/lib/hotspots'
+import { isMapNews, mapPointsFor } from '@/lib/map-news'
 import { ensureMapIcon, MAP_ICON } from '@/lib/map-icons'
 import { dayNightFeatures, subsolarPoint } from '@/lib/daynight'
 import { MAP_REGIONS } from '@/lib/map-regions'
@@ -623,8 +624,10 @@ function MapView() {
       const res  = await fetch(`${API_URL}/api/v1/signals/map/points?${p}`)
       const data = await res.json() as { success: boolean; data: MapSignal[] }
       if (data.success && Array.isArray(data.data)) {
-        signalsRef.current = data.data
-        setSignals(data.data)
+        // "All topics" shows news: low-severity other, culture and sports only under their topic (M27)
+        const points = mapPointsFor(data.data, category)
+        signalsRef.current = points
+        setSignals(points)
       }
     } catch (e) {
       console.error('[map] fetch error:', e)
@@ -858,6 +861,7 @@ function MapView() {
             const activeCat = catRef.current
             const activeSev = sevRef.current
             if (activeCat !== 'all' && newSig.category !== activeCat) return
+            if (activeCat === 'all' && !isMapNews(newSig)) return
             if (activeSev !== 'all' && newSig.severity !== activeSev) return
 
             // Prepend; evict oldest if over cap

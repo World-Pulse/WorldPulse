@@ -2607,10 +2607,22 @@ const GEO_HINTS: Array<{ keywords: string[]; geo: GeoHint }> = [
  * Short hints ("uk", "abe", "idf") must also end the word, or they pin "Dukes"
  * and "label"; longer ones may be prefixes ("palestin" for Palestinian).
  */
+/**
+ * Words that start like a place hint but aren't one. A hint matches the start
+ * of a word ("Indian" is India, "Parisian" Paris), so "modifier" was Modi: on
+ * Oct 14, 2026 a Le Monde reader survey asking who would modify their holiday
+ * plans was pinned on New Delhi. "Parish" isn't Paris, "Indiana" isn't India.
+ */
+const NOT_A_HINT = /^(?:modif|modic|modish|indiana|parish|trumpet|turkeys|chinatown)/
+
 function hintMatches(text: string, keyword: string): boolean {
   const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const end = keyword.length <= 3 ? '(?![a-z0-9])' : ''
-  return new RegExp(`(?<![a-z0-9])${escaped}${end}`).test(text)
+  // (the whole word the hint starts, to rule out the words above)
+  for (const m of text.matchAll(new RegExp(`(?<![a-z0-9])${escaped}${end}[a-z0-9]*`, 'g'))) {
+    if (!NOT_A_HINT.test(m[0])) return true
+  }
+  return false
 }
 
 /**
