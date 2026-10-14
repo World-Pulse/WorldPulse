@@ -280,18 +280,18 @@ describe('computeCorrelationScore', () => {
     expect(score).toBeLessThan(0.3)
   })
 
-  it('uses adjusted weights when no geo data available', () => {
+  it('uses adjusted weights when no geo data but a shared headline word', () => {
     const now = new Date()
     const a = makeSignal({
       category: 'conflict',
-      title: 'Armed conflict escalation',
+      title: 'Cholera outbreak follows armed conflict escalation',
       tags: ['conflict'],
       lat: null, lng: null,
       published_at: now.toISOString(),
     })
     const b = makeSignal({
       category: 'humanitarian',
-      title: 'Humanitarian displacement crisis',
+      title: 'Cholera displacement crisis deepens',
       tags: ['displacement'],
       lat: null, lng: null,
       published_at: new Date(now.getTime() + 60 * 60 * 1000).toISOString(),
@@ -299,6 +299,19 @@ describe('computeCorrelationScore', () => {
     const score = computeCorrelationScore(a, b)
     // Should still detect causal chain without geo
     expect(score).toBeGreaterThan(0.3)
+  })
+
+  it('scores 0 for same-hour signals with no place or headline word in common', () => {
+    const now = new Date()
+    const a = makeSignal({
+      category: 'conflict', title: 'Boat capsizes off Djibouti coast', tags: [],
+      lat: null, lng: null, source_id: 'a', published_at: now.toISOString(),
+    })
+    const b = makeSignal({
+      category: 'conflict', title: 'Climate march fills Brussels streets', tags: [],
+      lat: null, lng: null, source_id: 'b', published_at: now.toISOString(),
+    })
+    expect(computeCorrelationScore(a, b)).toBe(0)
   })
 
   it('same-category different-source scores moderately', () => {

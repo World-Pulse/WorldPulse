@@ -350,6 +350,11 @@ export function computeCorrelationScore(
   const causal   = causalScore(a, b)
   const keyword  = keywordScore(a, b)
 
+  // Same hour and linked categories alone are not a connection: a boat wreck
+  // in Djibouti and a climate march in Brussels would pass (0.7). Two signals
+  // need a nearby place or a shared particular headline word.
+  if (geo === 0 && !sharesSubject(a, b)) return 0
+
   // If no geographic data, redistribute weight
   if (a.lat == null || b.lat == null) {
     // No geo: temporal 0.35, causal 0.35, keyword 0.30
@@ -434,6 +439,15 @@ export function keywordScore(a: CorrelationCandidate, b: CorrelationCandidate): 
     a.location_name.toLowerCase() === b.location_name.toLowerCase()) ? 0.3 : 0
 
   return Math.min(1.0, tagJaccard * 0.5 + wordJaccard * 0.3 + locMatch)
+}
+
+/** A shared headline word that singles out the story (a name, a thing, a count of 3 or more); tags are too generic ("conflict") */
+function sharesSubject(a: CorrelationCandidate, b: CorrelationCandidate): boolean {
+  const wordsB = storyWords(b.title)
+  for (const w of storyWords(a.title)) {
+    if (wordsB.has(w) && isParticular(w)) return true
+  }
+  return false
 }
 
 /** Counts in words: "a dozen killed" and "12 killed" say the same */
