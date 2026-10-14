@@ -2920,6 +2920,36 @@ export async function clearFeedFailures(redis: Redis, sourceId: string): Promise
   }
 }
 
+/**
+ * Forget the failure counts and pauses of feeds that are no longer in the
+ * registry. A removed feed is never polled again, so its count would sit in
+ * ops-status.json's failing list for a week (Oct 14, 2026: 17 of the 21 feeds
+ * listed there had been taken out). Runs when the poller starts, which is every
+ * deploy. Returns how many feeds it forgot.
+ */
+export async function forgetRemovedFeeds(redis: Redis, keep: Iterable<string>): Promise<number> {
+  const live = new Set(keep)
+  const gone = new Set<string>()
+  try {
+    for (const prefix of ['news-rss:fail:', 'news-rss:pause:']) {
+      let cursor = '0'
+      do {
+        const [next, keys] = await redis.scan(cursor, 'MATCH', `${prefix}*`, 'COUNT', 200)
+        cursor = next
+        for (const key of keys) {
+          const id = key.slice(prefix.length)
+          if (live.has(id)) continue
+          await redis.del(key)
+          gone.add(id)
+        }
+      } while (cursor !== '0')
+    }
+  } catch {
+    // best effort: a count also expires a week after its feed's last failure
+  }
+  return gone.size
+}
+
 // ─── POLL ONE SOURCE ─────────────────────────────────────────────────────────
 
 async function pollSource(
@@ -3018,6 +3048,11 @@ export function startNewsRssPoller(
       log.debug('📰 News RSS: poll cycle complete')
     }
   }
+
+  // Feeds taken out of the registry stop counting as failing
+  void forgetRemovedFeeds(redis, NEWS_SOURCE_REGISTRY.map(s => s.id)).then(n => {
+    if (n > 0) log.info({ feeds: n }, 'News RSS: forgot the failure counts of feeds no longer listed')
+  })
 
   // Kick off immediately
   void runCycle()

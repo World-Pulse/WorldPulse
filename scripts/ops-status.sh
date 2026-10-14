@@ -185,12 +185,18 @@ PY
 # counts belong to sources no longer polled and are only counted ("stale").
 # Also the news poller's feeds (news-rss.ts keeps its own count of failed
 # polls in a row, news-rss:fail:<id>, and pauses a feed after 3).
+# Sources switched off in the database (sources.active, Oct 14: 9 dead feeds)
+# are never polled again: they are left out of "tracked" and the failing list
+# and only counted ("switched_off").
 # Names, counts and times only: no addresses, no error text.
 source_stats() {
-  local pw out
+  local pw out off
   pw=$(redis_pw) || pw=""
+  off=$(timeout 15 docker exec wp_postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAq -c "$1"' sh \
+        "SELECT id FROM sources WHERE NOT active" 2>/dev/null | tr -cd '0-9a-f\n-') || off=""
   out=$(timeout 40 docker exec -e REDISCLI_AUTH="$pw" wp_redis sh -c '
       echo "tracked=$(redis-cli --raw SCARD scraper:health:index)"
+      redis-cli --raw SMEMBERS scraper:health:index | head -n 2000 | sed "s/^/member=/"
       redis-cli --raw --scan --pattern "scraper:cb:*" | head -n 400 | while read -r k; do
         id=${k#scraper:cb:}
         printf "cb=%s\t%s\t%s\n" "$id" "$(redis-cli --raw HMGET "$k" failures open_until open_count last_failed_at | paste -s -)" \
@@ -201,9 +207,10 @@ source_stats() {
         printf "feed=%s\t%s\t%s\n" "$id" "$(redis-cli --raw GET "$k")" "$(redis-cli --raw EXISTS "news-rss:pause:$id")"
       done
       redis-cli --raw LRANGE scraper:dlq 0 299 | sed "s/^/dlq=/"' 2>/dev/null) || out=""
-  OUT="$out" python3 - <<'PY' 2>/dev/null || printf 'null'
+  OUT="$out" OFF="$off" python3 - <<'PY' 2>/dev/null || printf 'null'
 import calendar, json, os, re, time
 lines = os.environ.get('OUT', '').splitlines()
+off = set(os.environ.get('OFF', '').split())
 now_ms = time.time() * 1000
 def num(v):
     try: return int(v)
@@ -233,13 +240,15 @@ def ms_of(text):
     # an ISO time in UTC ("2026-10-14T13:55:00.123Z") as epoch ms; 0 if none
     try: return calendar.timegm(time.strptime(text[:19], '%Y-%m-%dT%H:%M:%S')) * 1000
     except (TypeError, ValueError): return 0
-tracked, failing, stale, feeds = 0, [], 0, []
+tracked, failing, stale, feeds, members = 0, [], 0, [], set()
 for line in lines:
     if line.startswith('tracked='):
         tracked = num(line[8:])
+    elif line.startswith('member='):
+        members.add(line[7:])
     elif line.startswith('cb='):
         sid, failures, open_until, open_count, failed_at, name, slug, last_seen = (line[3:].split('\t') + [''] * 8)[:8]
-        if num(failures) < 1: continue
+        if num(failures) < 1 or sid in off: continue
         until = num(open_until)
         if until <= now_ms and now_ms - ms_of(failed_at) > 48 * 3600 * 1000:
             stale += 1
@@ -261,9 +270,11 @@ for line in lines:
             feeds.append({'id': fid[:60], 'fails': num(fails), 'paused': paused.strip() == '1'})
 failing.sort(key=lambda s: (-s['failures'], s['name'].lower()))
 feeds.sort(key=lambda f: (-f['fails'], f['id']))
+if members:
+    tracked = len(members - off)
 print(json.dumps({'tracked': tracked, 'failing': len(failing),
                   'paused': sum(1 for s in failing if s['paused_until']),
-                  'stale': stale, 'list': failing[:40],
+                  'stale': stale, 'switched_off': len(off), 'list': failing[:40],
                   'news_feeds': {'failing': len(feeds), 'paused': sum(1 for f in feeds if f['paused']),
                                  'list': feeds[:40]}}, separators=(',', ':')))
 PY
@@ -380,7 +391,7 @@ deploy_note() {
 pipe_cache=logs/pipeline-stats.json
 # Refresh every 30 minutes, or straight away when the cache predates a new field
 if [ ! -s "$pipe_cache" ] || [ -n "$(find "$pipe_cache" -mmin +29 2>/dev/null)" ] \
-   || ! grep -q '"sources":' "$pipe_cache" 2>/dev/null; then
+   || ! grep -q '"switched_off":' "$pipe_cache" 2>/dev/null; then
   pipeline_stats > "$pipe_cache.tmp" 2>/dev/null \
     && python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$pipe_cache.tmp" 2>/dev/null \
     && mv "$pipe_cache.tmp" "$pipe_cache"

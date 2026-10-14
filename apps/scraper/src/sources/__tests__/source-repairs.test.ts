@@ -12,7 +12,7 @@ import type Redis from 'ioredis'
 import { parseReliefWebRss, reliefWebCategory, disasterSeverity, apiDisasterToItem } from '../reliefweb'
 import { parseOfacRecentActions, sanctionsSeverity } from '../ofac-sanctions'
 import { volcanoLevel, volcanoLevelChanges, describeLevelChange, type ElevatedVolcano } from '../gvp-volcano'
-import { fetchUrl, noteFeedFailure, feedPaused, clearFeedFailures, detectNewsSeverity, detectNewsCategory } from '../news-rss'
+import { fetchUrl, noteFeedFailure, feedPaused, clearFeedFailures, forgetRemovedFeeds, detectNewsSeverity, detectNewsCategory } from '../news-rss'
 import { otxEnabled } from '../otx-threats'
 import { recentEuAmendments } from '../eu-sanctions'
 import { iso3Centroid } from '../../pipeline/country-centroids'
@@ -269,6 +269,7 @@ describe('fetchUrl', () => {
 
 function fakeRedis() {
   const store = new Map<string, string>()
+  const scans = new Map<string, string[]>()
   return {
     store,
     async incr(key: string) { const n = Number(store.get(key) ?? 0) + 1; store.set(key, String(n)); return n },
@@ -276,6 +277,13 @@ function fakeRedis() {
     async set(key: string, value: string) { store.set(key, value); return 'OK' },
     async exists(key: string) { return store.has(key) ? 1 : 0 },
     async del(key: string) { return store.delete(key) ? 1 : 0 },
+    // Two keys a page, from the keys there when the scan began (as SCAN promises)
+    async scan(cursor: string, _match: string, pattern: string) {
+      const prefix = pattern.replace(/\*$/, '')
+      if (cursor === '0') scans.set(prefix, [...store.keys()].filter(k => k.startsWith(prefix)).sort())
+      const all = scans.get(prefix) ?? [], at = Number(cursor)
+      return [at + 2 >= all.length ? '0' : String(at + 2), all.slice(at, at + 2)] as [string, string[]]
+    },
   }
 }
 
@@ -305,6 +313,30 @@ describe('news feed failure pause', () => {
     await clearFeedFailures(r, source.id)
     await noteFeedFailure(r, source, { warn }, 'timeout')
     expect(await feedPaused(r, source.id)).toBe(false)
+  })
+
+  it('forgets the counts and pauses of feeds taken out of the registry', async () => {
+    const redis = fakeRedis()
+    const warn = vi.fn()
+    const r = redis as unknown as Redis
+    for (const id of ['kept-feed', 'removed-a', 'removed-b']) {
+      for (let i = 0; i < 3; i++) await noteFeedFailure(r, { id, feedUrl: 'https://example.com/rss' }, { warn }, 'HTTP 403')
+    }
+    await redis.set('news-rss:item:removed-a:123', '1')   // other keys stay
+    expect(await forgetRemovedFeeds(r, ['kept-feed', 'never-failed'])).toBe(2)
+    expect([...redis.store.keys()].sort()).toEqual([
+      'news-rss:fail:kept-feed', 'news-rss:item:removed-a:123', 'news-rss:pause:kept-feed',
+    ])
+    expect(await feedPaused(r, 'kept-feed')).toBe(true)
+    expect(await feedPaused(r, 'removed-a')).toBe(false)
+  })
+
+  it('changes nothing when Redis cannot list its keys', async () => {
+    const redis = fakeRedis()
+    await redis.set('news-rss:fail:gone', '4')
+    const r = { ...redis, scan: async () => { throw new Error('connection lost') } } as unknown as Redis
+    expect(await forgetRemovedFeeds(r, [])).toBe(0)
+    expect(redis.store.has('news-rss:fail:gone')).toBe(true)
   })
 })
 
