@@ -455,13 +455,13 @@ const knowledgeGraphRoutes: FastifyPluginAsync = async (app) => {
     }
 
     // lean=1: entities without their signal_ids (the home page's "In the news"
-    // row needs names, not ids). Kept and served at once; after 5 minutes one
+    // row needs names, not ids). Kept and served at once; after 15 minutes one
     // process remakes it in the background (lib/swr-cache.ts): the counts took
-    // over 5 seconds by Oct 15, 2026, and every request answered 500
+    // over 5 seconds by Oct 15, 2026 (17 s), and every request answered 500
     const lean = q.lean === '1' || q.lean === 'true'
     const response = await staleWhileRevalidate(
       `kg:api:trending:v2:${type ?? 'all'}:${windowHours}:${limit}${lean ? ':lean' : ''}`,
-      { freshSeconds: 300, staleSeconds: 6 * 3600, lockSeconds: 2 * KG_QUERY_SECONDS },
+      { freshSeconds: 900, staleSeconds: 6 * 3600, lockSeconds: 2 * KG_QUERY_SECONDS },
       () => longQuery(KG_QUERY_SECONDS, trx => trendingEntities(trx, type, windowHours, limit, lean)),
     )
     return reply.send(response)

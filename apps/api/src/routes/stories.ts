@@ -28,8 +28,12 @@ const MAX_OUTLET_IDS = 60
 /** An article link's website, for Postgres (bound as values: a "?" in knex's SQL is a placeholder) */
 const HOST_PATTERN = '^https?://([^/:?#]+)'
 const WWW_PATTERN = '^www\\.'
-/** Seconds a story list is reused; then it is served while one process remakes it (lib/swr-cache.ts) */
-const LIST_CACHE_TTL = 120
+/**
+ * Seconds a story list is reused; then it is served while one process remakes
+ * it (lib/swr-cache.ts). A day's list took 20 s to make on Oct 15, 2026, so
+ * remaking it every 2 minutes kept the database busy a sixth of the time
+ */
+const LIST_CACHE_TTL = 600
 /** Seconds a kept list may still be served when remaking it fails */
 const LIST_KEEP_SECONDS = 6 * 3_600
 /**

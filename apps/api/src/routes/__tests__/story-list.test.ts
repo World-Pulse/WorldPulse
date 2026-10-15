@@ -203,8 +203,8 @@ describe('GET /api/v1/stories', () => {
     expect(h.sql).toMatch(/LIMIT 600/)
     // its own time limit (over a day of reports it passed the pool's 5 seconds, Oct 15, 2026)
     expect(h.limits).toEqual(["SET LOCAL statement_timeout = '60s'"])
-    // kept 2 minutes, then served for up to 6 hours more while one process remakes it
-    expect(h.setex).toHaveBeenCalledWith('stories:list:v2:12:5', 120 + 6 * 3_600, expect.any(String))
+    // kept 10 minutes, then served for up to 6 hours more while one process remakes it
+    expect(h.setex).toHaveBeenCalledWith('stories:list:v2:12:5', 600 + 6 * 3_600, expect.any(String))
     const kept = JSON.parse(String((h.setex.mock.calls[0] as unknown[])[2]))
     expect(typeof kept.at).toBe('number')
     expect(kept.value.data.stories[0].id).toBe('s-riyadh')
