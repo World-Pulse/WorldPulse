@@ -9,10 +9,17 @@
  *
  * It records its verdicts: today's counts and the newest doubtful ones in
  * ops-status, and on each report's page a line in the verification timeline
- * ("the outlets differ: …" when they disagree on facts). It doesn't change a
- * story's status yet: once a day's verdicts have been read, a "different
- * event" verdict can hold a story back from verified. Calls stay within the Claude spending cap (lib/claude.ts),
- * about a thousand a day at a few hundredths of a cent each.
+ * ("the outlets differ: …" when they disagree on facts). Calls stay within
+ * the Claude spending cap (lib/claude.ts), about a thousand a day at a few
+ * hundredths of a cent each.
+ *
+ * The gate (plan D6, Oct 15, 2026): a "different event" verdict puts the
+ * reports this verification promoted back to pending, with a line on their
+ * pages, and ops-status counts them ("held"). Read first: of the 30 newest
+ * version-3 "different event" verdicts on Oct 15, 28 were right (the bar was
+ * 25). The two wrong ones: one analysis republished under another headline,
+ * and a documentary's announcement and its trailer. When Claude gives no
+ * answer, nothing is held: the story stays verified, as before.
  */
 
 import { db } from '../lib/postgres'
@@ -118,12 +125,14 @@ const DIFFERENT_KEY = 'ai:verify:different'
 /**
  * Cross-check a story that just turned verified: its signals (by id) and any
  * report that isn't saved as a signal (an article merged into it). Records
- * the verdict; never changes the story. Null when nothing was asked.
+ * the verdict, and on a "different event" verdict puts the reports this
+ * verification promoted (`promoted`) back to pending. Null when nothing was asked.
  */
 export async function crossCheckVerification(
   storyIds: string[],
   extra: CrossCheckReport[] = [],
   now = new Date(),
+  promoted: string[] = [],
 ): Promise<CrossCheckVerdict | null> {
   if (!claudeConfigured()) return null
   // The report that just turned verified (the first id), and the story's oldest ones
@@ -158,17 +167,43 @@ export async function crossCheckVerification(
   }
   await multi.exec()
   if (read && read.verdict !== 'same') logger.info({ storyId: storyIds[0], verdict: read.verdict, note: read.note }, 'Cross-check: a verified story Claude doubts')
-  // (only on the pages of the reports Claude read)
-  if (read) await logOnSignalPages(saved.map(r => r.id), read).catch(err => logger.warn({ err }, 'Cross-check not logged on the signal pages'))
+  // The gate: no other report covers this event, so what this verification promoted goes back to pending
+  const held = read?.verdict === 'different' ? await holdAtPending(promoted, now) : []
+  // (only on the pages of the reports Claude read; "different" only on the ones it held)
+  const pages = read?.verdict === 'different' ? held : saved.map(r => r.id)
+  if (read) await logOnSignalPages(pages, read).catch(err => logger.warn({ err }, 'Cross-check not logged on the signal pages'))
   return read?.verdict ?? null
 }
 
+/**
+ * Put back to pending the reports a verification promoted, when no other
+ * report covers their event. Only ones still verified (nothing else has
+ * changed them since); their outlets and reliability stay as counted, and a
+ * later report that turns them verified again is cross-checked again.
+ * Returns the ids it held.
+ */
+async function holdAtPending(ids: string[], now: Date): Promise<string[]> {
+  const unique = [...new Set(ids.filter(Boolean))]
+  if (unique.length === 0) return []
+  const rows = await db('signals')
+    .whereIn('id', unique)
+    .where('status', 'verified')
+    .update({ status: 'pending', verified_at: null })
+    .returning('id') as Array<{ id: string }>
+  const held = rows.map(r => r.id)
+  if (held.length > 0) {
+    await redis.hincrby(COUNTS_KEY(now), 'held', held.length)
+    logger.info({ held }, 'Cross-check: held at pending (the other reports are a different event)')
+  }
+  return held
+}
+
 /** What a verdict shows in a signal page's verification timeline (verification_log) */
-export function timelineEntry(read: { verdict: CrossCheckVerdict; note: string }): { result: string; confidence: number; notes: string } | null {
+export function timelineEntry(read: { verdict: CrossCheckVerdict; note: string }): { result: string; confidence: number; notes: string } {
   if (read.verdict === 'same') return { result: 'confirmed', confidence: 0.9, notes: `[Claude] ${read.note}` }
   if (read.verdict === 'conflicting') return { result: 'warning', confidence: 0.6, notes: `[Claude] The outlets differ: ${read.note}` }
-  // "Different event" contradicts the story's Verified badge: it shows once it can hold a story back
-  return null
+  // Only on the reports the gate held back
+  return { result: 'pending', confidence: 0.3, notes: `[Claude] Back to pending: the other outlets reported a different event. ${read.note}` }
 }
 
 /**
@@ -178,7 +213,6 @@ export function timelineEntry(read: { verdict: CrossCheckVerdict; note: string }
  */
 async function logOnSignalPages(storyIds: string[], read: { verdict: CrossCheckVerdict; note: string }): Promise<void> {
   const entry = timelineEntry(read)
-  if (!entry) return
   const fresh: string[] = []
   for (const id of new Set(storyIds.filter(Boolean))) {
     if (await redis.set(`ai:verify:logged:${id}`, '1', 'EX', 6 * 3_600, 'NX') === 'OK') fresh.push(id)
@@ -194,7 +228,10 @@ async function logOnSignalPages(storyIds: string[], read: { verdict: CrossCheckV
   })))
 }
 
-/** Fire and forget: a failed cross-check never holds up the pipeline */
-export function crossCheckLater(storyIds: string[], extra: CrossCheckReport[] = []): void {
-  crossCheckVerification(storyIds, extra).catch(err => logger.warn({ err }, 'Cross-check failed (non-fatal)'))
+/**
+ * Fire and forget: a failed cross-check never holds up the pipeline.
+ * `promoted`: the reports this verification turned verified (the ones the gate may hold back).
+ */
+export function crossCheckLater(storyIds: string[], extra: CrossCheckReport[] = [], promoted: string[] = []): void {
+  crossCheckVerification(storyIds, extra, new Date(), promoted).catch(err => logger.warn({ err }, 'Cross-check failed (non-fatal)'))
 }

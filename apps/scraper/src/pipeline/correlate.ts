@@ -804,10 +804,12 @@ async function applyCorroborationBoost(
         status:      'verified',
         verified_at: db.raw('NOW()'),
       })
+      .returning('id') as Array<{ id: string }>
 
     // Ledger's cross-check: Claude reads the reports of a story that just
-    // turned verified and records whether they're one event (pipeline/crosscheck.ts)
-    if (promoted > 0) crossCheckLater(ids)
+    // turned verified and records whether they're one event; when they aren't,
+    // the ones promoted here go back to pending (pipeline/crosscheck.ts)
+    if (promoted.length > 0) crossCheckLater(ids, [], promoted.map(r => r.id))
 
     // With the outlets counted, the single-source severity cap lifts: each
     // report gets the severity its own words earn, up to what the count allows
@@ -847,7 +849,7 @@ async function applyCorroborationBoost(
       matches:        sameStory.map(s => s.id).slice(0, 10),
       unique_sources: uniqueSources,
       boosted_count:  boosted,
-      promoted_count: promoted,
+      promoted_count: promoted.length,
       severity_raised: raised,
       joined_story:   joined,
     }, 'Same story from %d outlets', uniqueSources)
@@ -904,7 +906,7 @@ export async function corroborateWithDuplicate(
     .where('reliability_score', '>=', 0.65)
     .update({ status: 'verified', verified_at: db.raw('NOW()') })
 
-  if (promoted > 0) crossCheckLater([existingId], [{ title: incoming.title }])
+  if (promoted > 0) crossCheckLater([existingId], [{ title: incoming.title }], [existingId])
 
   logger.info({
     signal_id: existingId,
@@ -951,7 +953,7 @@ export async function confirmMergedArticle(
     .where('reliability_score', '>=', 0.65)
     .update({ status: 'verified', verified_at: db.raw('NOW()') })
 
-  if (promoted > 0) crossCheckLater([signalId], [{ title: incoming.title }])
+  if (promoted > 0) crossCheckLater([signalId], [{ title: incoming.title }], [signalId])
 
   logger.info({ signal_id: signalId, outlet: incoming.source_id, promoted },
     'Merged article from another outlet confirmed a story')

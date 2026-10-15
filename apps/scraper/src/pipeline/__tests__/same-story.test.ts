@@ -26,12 +26,16 @@ const h = vi.hoisted(() => {
     b.whereRaw = (_sql: string, params: string[]) => { mode = 'text'; state.textQueries.push(params[0]); return b }
     b.orderByRaw = () => b
     b.first = () => { mode = 'first'; return b }
-    b.update = (data: Record<string, unknown>) => { updates.push({ ids, data }); return Promise.resolve(ids.length) }
+    // (a count, or with .returning('id') the rows: the promotion returns the ids it turned verified)
+    b.update = (data: Record<string, unknown>) => {
+      updates.push({ ids, data })
+      return Object.assign(Promise.resolve(ids.length), { returning: () => Promise.resolve(ids.map(id => ({ id }))) })
+    }
     b.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
       Promise.resolve(mode === 'first' ? state.firstRow : mode === 'text' ? state.textRows : state.recentRows).then(res, rej)
     return b
   }
-  return { updates, state, builder }
+  return { updates, state, builder, crossCheck: vi.fn() }
 })
 
 vi.mock('../../lib/postgres', () => {
@@ -47,6 +51,8 @@ vi.mock('../../lib/redis', () => {
   return { redis: { get: vi.fn(async () => null), pipeline: () => pipe } }
 })
 vi.mock('../../lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }))
+// Ledger's cross-check gets the reports a verification promoted, the ones its gate may hold back (plan D6)
+vi.mock('../crosscheck', () => ({ crossCheckLater: (...args: unknown[]) => h.crossCheck(...args) }))
 
 import { isSameStory, correlateSignal, corroborateWithDuplicate, confirmMergedArticle, namesDiffer, corroboratedReliability, RELIABILITY_CEILING, type CorrelationCandidate } from '../correlate'
 
@@ -140,6 +146,8 @@ describe('correlateSignal corroboration', () => {
     expect(sql).toMatch(/POWER\(\?, GREATEST\(\? - COALESCE\(source_count, 1\), 0\)\)/)
     expect(promote.ids).toEqual(['sig-a', 'sig-b'])
     expect(promote.data.status).toBe('verified')
+    // the cross-check reads both, and may hold back the ones this promotion verified
+    expect(h.crossCheck).toHaveBeenLastCalledWith(['sig-a', 'sig-b'], [], ['sig-a', 'sig-b'])
   })
 
   it('puts the signal and its same-story report into one story', async () => {
@@ -223,6 +231,7 @@ describe('corroborateWithDuplicate', () => {
     expect(Object.keys(h.updates[0].data)).toEqual(
       expect.arrayContaining(['source_count', 'reliability_score', 'last_corroborated_at', 'original_urls']))
     expect(h.updates[1].data.status).toBe('verified')
+    expect(h.crossCheck).toHaveBeenLastCalledWith(['sig-held'], [{ title: incoming.title }], ['sig-held'])
   })
 
   it('does not count an outlet twice', async () => {

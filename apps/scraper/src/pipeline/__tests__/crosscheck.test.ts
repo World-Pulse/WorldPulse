@@ -1,7 +1,8 @@
 /**
  * Ledger's cross-check of verifications (pipeline/crosscheck.ts, Oct 11, 2026):
  * Claude reads the reports of a story that just turned verified and records
- * whether they're one event. Shadow mode: it never changes the story.
+ * whether they're one event. Since Oct 15 (plan D6), a "different event"
+ * verdict puts the reports that verification promoted back to pending.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -13,11 +14,24 @@ const h = vi.hoisted(() => ({
   asked: [] as Array<{ purpose: string; prompt: string }>,
   logged: [] as Array<Record<string, unknown>>,
   keys: new Set<string>(),
+  /** the gate's updates of signals, and which signals are verified now */
+  updates: [] as Array<{ ids: string[]; data: Record<string, unknown> }>,
+  verified: new Set<string>(),
 }))
 
 vi.mock('../../lib/postgres', () => ({
   db: Object.assign(
-    vi.fn((table: string) => ({ insert: vi.fn(async (rows: Array<Record<string, unknown>>) => { if (table === 'verification_log') h.logged.push(...rows) }) })),
+    vi.fn((table: string) => {
+      if (table === 'verification_log') return { insert: vi.fn(async (rows: Array<Record<string, unknown>>) => { h.logged.push(...rows) }) }
+      // signals: the gate's whereIn → where('status', 'verified') → update → returning
+      let ids: string[] = []
+      const q: Record<string, unknown> = {}
+      q.whereIn = (_col: string, list: string[]) => { ids = list; return q }
+      q.where = () => q
+      q.update = (data: Record<string, unknown>) => { h.updates.push({ ids, data }); return q }
+      q.returning = async () => ids.filter(id => h.verified.has(id)).map(id => ({ id }))
+      return q
+    }),
     { raw: vi.fn(async () => ({ rows: h.rows })) },
   ),
 }))
@@ -29,7 +43,8 @@ vi.mock('../../lib/redis', () => {
     return chain
   }
   const set = vi.fn(async (key: string, ..._rest: unknown[]) => { if (h.keys.has(key)) return null; h.keys.add(key); return 'OK' })
-  return { redis: { multi, set } }
+  const hincrby = vi.fn(async (...args: unknown[]) => { h.ops.push(['hincrby', ...args]); return 1 })
+  return { redis: { multi, set, hincrby } }
 })
 vi.mock('../../lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }))
 vi.mock('../../lib/claude', () => ({
@@ -182,8 +197,72 @@ describe("the verdict on each report's page", () => {
     expect(h.logged.map(r => r.signal_id)).toEqual(['new', 'old1'])
   })
 
-  it('shows no "different event" line while it can\'t hold a story back', () => {
-    expect(timelineEntry({ verdict: 'different', note: 'Two floods.' })).toBeNull()
+  it('says on a held report\'s page why it is pending again', () => {
+    expect(timelineEntry({ verdict: 'different', note: 'Two floods.' }))
+      .toEqual({ result: 'pending', confidence: 0.3, notes: '[Claude] Back to pending: the other outlets reported a different event. Two floods.' })
     expect(timelineEntry({ verdict: 'same', note: 'Same flood.' })).toEqual({ result: 'confirmed', confidence: 0.9, notes: '[Claude] Same flood.' })
+  })
+})
+
+describe('the gate (plan D6, Oct 15, 2026)', () => {
+  beforeEach(() => { h.ops.length = 0; h.asked.length = 0; h.logged.length = 0; h.keys.clear(); h.updates.length = 0; h.verified.clear() })
+
+  const DIFFERENT = '{"reports": [{"report": 2, "same_event": false, "agree": true}], "note": "A photo gallery naming no event, and a briefing."}'
+
+  it('puts the reports this verification promoted back to pending on a "different event" verdict', async () => {
+    // two daily features joined by the date in their headlines (Oct 15, 2026)
+    h.rows = [{ id: 'pix', title: 'Pix of the Day, 15 October, 2026 - Across the world', summary: null }, { id: 'news9', title: "News@9: Today's top headlines - October 15, 2026", summary: null }]
+    h.verified = new Set(['pix', 'news9'])
+    h.reply = DIFFERENT
+    expect(await crossCheckVerification(['pix', 'news9'], [], NOW, ['pix', 'news9'])).toBe('different')
+    expect(h.updates).toEqual([{ ids: ['pix', 'news9'], data: { status: 'pending', verified_at: null } }])
+    expect(h.ops).toContainEqual(['hincrby', 'ai:verify:counts:2026-10-11', 'held', 2])
+    expect(h.logged.map(r => [r.signal_id, r.result])).toEqual([['pix', 'pending'], ['news9', 'pending']])
+  })
+
+  it('holds a story an article merged into, by its own id', async () => {
+    h.rows = [{ id: 'held', title: 'Two killed in Kozhikode gas leak', summary: null }]
+    h.verified = new Set(['held'])
+    h.reply = '{"reports": [{"report": 2, "same_event": false, "agree": true}], "note": "A gas leak and a road crash."}'
+    await crossCheckVerification(['held'], [{ title: 'Two killed in Kozhikode road crash' }], NOW, ['held'])
+    expect(h.updates.map(u => u.ids)).toEqual([['held']])
+  })
+
+  it('holds back only what this verification promoted, and only while it is still verified', async () => {
+    // the older report was verified before (by other outlets): it keeps its badge and gets no line
+    h.rows = [{ id: 'new', title: 'Saudi-led coalition says it intercepted and destroyed missile over Medina', summary: null }, { id: 'old', title: 'Saudi-led coalition intercepts Houthi missile launched towards Riyadh', summary: null }]
+    h.verified = new Set(['new', 'old'])
+    h.reply = DIFFERENT
+    await crossCheckVerification(['new', 'old'], [], NOW, ['new'])
+    expect(h.updates.map(u => u.ids)).toEqual([['new']])
+    expect(h.logged.map(r => r.signal_id)).toEqual(['new'])
+    // promoted, but something already changed it back: nothing held, nothing counted
+    h.updates.length = 0; h.ops.length = 0; h.logged.length = 0; h.keys.clear()
+    h.verified = new Set()
+    await crossCheckVerification(['new', 'old'], [], NOW, ['new'])
+    expect(h.ops.some(op => op[2] === 'held')).toBe(false)
+    expect(h.logged).toEqual([])
+  })
+
+  it('changes nothing on a same or conflicting verdict, or when Claude gives no answer', async () => {
+    h.rows = [{ id: 'a', title: 'Strike hits Riyadh airport', summary: null }, { id: 'b', title: 'Riyadh airport struck again', summary: null }]
+    h.verified = new Set(['a', 'b'])
+    for (const reply of ['{"reports": [{"report": 2, "same_event": true, "agree": true}], "note": "Same attack."}',
+      '{"reports": [{"report": 2, "same_event": true, "agree": false}], "note": "13 dead vs 12."}', null, 'Hard to say.']) {
+      h.reply = reply
+      h.keys.clear()
+      await crossCheckVerification(['a', 'b'], [], NOW, ['a', 'b'])
+    }
+    expect(h.updates).toEqual([])
+    expect(h.ops.some(op => op[2] === 'held')).toBe(false)
+  })
+
+  it('holds nothing when the verification promoted nothing (the older callers)', async () => {
+    h.rows = [{ id: 'a', title: 'Two killed in Kozhikode gas leak', summary: null }, { id: 'b', title: 'Two killed in Kozhikode road crash', summary: null }]
+    h.verified = new Set(['a', 'b'])
+    h.reply = DIFFERENT
+    expect(await crossCheckVerification(['a', 'b'], [], NOW)).toBe('different')
+    expect(h.updates).toEqual([])
+    expect(h.logged).toEqual([])
   })
 })
