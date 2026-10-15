@@ -11,11 +11,11 @@ import Fastify from 'fastify'
 
 const h = vi.hoisted(() => ({
   calls: [] as Array<{ method: string; args: unknown[] }>,
-  kept: null as string | null,
+  kept: {} as Record<string, string>,
 }))
 
 vi.mock('../../db/redis', () => ({ redis: {
-  get: vi.fn(async () => h.kept),
+  get: vi.fn(async (key: string) => h.kept[key] ?? null),
   setex: vi.fn(async () => 'OK'),
   set: vi.fn(async () => 'OK'),
   del: vi.fn(async () => 1),
@@ -59,7 +59,7 @@ vi.mock('../../db/postgres', () => {
 import { registerSignalRoutes } from '../signals'
 
 describe('GET /api/v1/signals/count', () => {
-  beforeEach(() => { h.calls.length = 0; h.kept = null })
+  beforeEach(() => { h.calls.length = 0; h.kept = {} })
 
   it("adds the last 24 hours' verified signals, countries and outlets", async () => {
     const server = Fastify({ logger: false })
@@ -80,22 +80,25 @@ describe('GET /api/v1/signals/count', () => {
     expect(raws[2]?.bindings).toEqual(['^https?://([^/:?#]+)', '^www\\.'])
   })
 
-  it('counts with a longer time limit than the 5-second default, inside one transaction', async () => {
+  it('counts with longer time limits than the 5-second default, each inside its transaction', async () => {
     const server = Fastify({ logger: false })
     await server.register(registerSignalRoutes, { prefix: '/api/v1/signals' })
     const res = await server.inject({ method: 'GET', url: '/api/v1/signals/count' })
     expect(res.statusCode).toBe(200)
-    const first = h.calls.find(c => c.method === 'raw')
-    expect(String(first?.args[0])).toMatch(/SET LOCAL statement_timeout = '60s'/)
+    const limits = h.calls.filter(c => c.method === 'raw' && /SET LOCAL statement_timeout/.test(String(c.args[0])))
+      .map(c => String(c.args[0]).match(/'(\d+)s'/)?.[1])
+    // the whole-table counts (about 50 s) and the day's figures
+    expect(limits.sort()).toEqual(['180', '60'])
   })
 
   it('serves the kept counts at once, without counting again', async () => {
-    h.kept = JSON.stringify({ at: Date.now(), value: { success: true, data: { total: 9, last24h: 1, lastHour: 0, verified24h: 1, countries24h: 1, outlets24h: 1, bySeverity: {} } } })
+    h.kept['signals:count:all:v1'] = JSON.stringify({ at: Date.now(), value: { total: 9, bySeverity: { high: 2 } } })
+    h.kept['signals:count:day:v1'] = JSON.stringify({ at: Date.now(), value: { last24h: 1, lastHour: 0, verified24h: 1, countries24h: 1, outlets24h: 1 } })
     const server = Fastify({ logger: false })
     await server.register(registerSignalRoutes, { prefix: '/api/v1/signals' })
     const res = await server.inject({ method: 'GET', url: '/api/v1/signals/count' })
     expect(res.statusCode).toBe(200)
-    expect(res.json().data.total).toBe(9)
+    expect(res.json().data).toMatchObject({ total: 9, last24h: 1, verified24h: 1, bySeverity: { high: 2 } })
     expect(h.calls.length).toBe(0)
   })
 })

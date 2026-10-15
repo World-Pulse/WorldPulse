@@ -648,26 +648,45 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     },
     config: { rateLimit: { max: 120, timeWindow: '1 minute' } },
   }, async (_req, reply) => {
-    // Kept in Redis and served at once; counted again in the background at
-    // most once a minute (lib/swr-cache.ts). Oct 15, 2026: counting the whole
-    // table took longer than the 5-second statement limit, so every call
-    // answered 500 after 5.5 s and the top bar's counter, the home page's
-    // figures and the map's share card had nothing to show.
-    const response = await staleWhileRevalidate('signals:count:v2',
-      { freshSeconds: 60, staleSeconds: 6 * 3600, lockSeconds: 120 }, countSignals)
-    return reply.send(response)
+    // Kept in Redis and served at once, counted again in the background
+    // (lib/swr-cache.ts). Oct 15, 2026: counting the whole table took longer
+    // than the 5-second statement limit, so every call answered 500 after
+    // 5.5 s and the top bar's counter, the home page's figures and the map's
+    // share card had nothing to show. The whole-table counts take about 50 s,
+    // so they are made every 30 minutes; the day's figures every minute.
+    const [all, day] = await Promise.all([
+      staleWhileRevalidate('signals:count:all:v1', { freshSeconds: 1800, staleSeconds: 24 * 3600, lockSeconds: 300 }, countAllSignals),
+      staleWhileRevalidate('signals:count:day:v1', { freshSeconds: 60, staleSeconds: 6 * 3600, lockSeconds: 120 }, countDaySignals),
+    ])
+    return reply.send({ success: true, data: { total: all.total, ...day, bySeverity: all.bySeverity } })
   })
 
-  async function countSignals() {
+  /** Every verified or pending signal, and by severity: whole-table counts (about 50 s in Oct 2026) */
+  async function countAllSignals(): Promise<{ total: number; bySeverity: Record<string, number> }> {
     return db.transaction(async (trx) => {
-      // Off the request path (above), so the counts may take longer than the
-      // pool's 5-second limit; SET LOCAL ends with this transaction
-      await trx.raw("SET LOCAL statement_timeout = '60s'")
-
+      // Off the request path (above), so it may take longer than the pool's
+      // 5-second limit; SET LOCAL ends with this transaction
+      await trx.raw("SET LOCAL statement_timeout = '180s'")
       const [totalResult] = await trx('signals')
         .whereIn('status', ['verified', 'pending'])
         .count('id as count')
+      const severityCounts = await trx('signals')
+        .whereIn('status', ['verified', 'pending'])
+        .select('severity')
+        .count('id as count')
+        .groupBy('severity')
+      const bySeverity: Record<string, number> = {}
+      for (const row of severityCounts) {
+        bySeverity[row.severity as string] = Number(row.count)
+      }
+      return { total: Number(totalResult?.count ?? 0), bySeverity }
+    })
+  }
 
+  /** The last day's and hour's signals, and the day's verification and reach (plan P7) */
+  async function countDaySignals() {
+    return db.transaction(async (trx) => {
+      await trx.raw("SET LOCAL statement_timeout = '60s'")
       const [last24hResult] = await trx('signals')
         .whereIn('status', ['verified', 'pending'])
         .where('created_at', '>', trx.raw("NOW() - INTERVAL '24 hours'"))
@@ -677,12 +696,6 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
         .whereIn('status', ['verified', 'pending'])
         .where('created_at', '>', trx.raw("NOW() - INTERVAL '1 hour'"))
         .count('id as count')
-
-      const severityCounts = await trx('signals')
-        .whereIn('status', ['verified', 'pending'])
-        .select('severity')
-        .count('id as count')
-        .groupBy('severity')
 
       // The day's verification and reach, so the home page shows live figures
       // instead of typed-in ones (plan P7); an outlet is its article's website
@@ -695,22 +708,12 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
           trx.raw("count(DISTINCT lower(regexp_replace(substring(original_urls[1] from ?), ?, '')))::int AS outlets", ['^https?://([^/:?#]+)', '^www\\.']),
         ) as { verified?: number; countries?: number; outlets?: number } | undefined
 
-      const bySeverity: Record<string, number> = {}
-      for (const row of severityCounts) {
-        bySeverity[row.severity as string] = Number(row.count)
-      }
-
       return {
-        success: true,
-        data: {
-          total:      Number(totalResult?.count ?? 0),
-          last24h:    Number(last24hResult?.count ?? 0),
-          lastHour:   Number(lastHourResult?.count ?? 0),
-          verified24h:  Number(dayRow?.verified ?? 0),
-          countries24h: Number(dayRow?.countries ?? 0),
-          outlets24h:   Number(dayRow?.outlets ?? 0),
-          bySeverity,
-        },
+        last24h:      Number(last24hResult?.count ?? 0),
+        lastHour:     Number(lastHourResult?.count ?? 0),
+        verified24h:  Number(dayRow?.verified ?? 0),
+        countries24h: Number(dayRow?.countries ?? 0),
+        outlets24h:   Number(dayRow?.outlets ?? 0),
       }
     })
   }
