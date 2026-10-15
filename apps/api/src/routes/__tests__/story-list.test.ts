@@ -14,23 +14,30 @@ const h = vi.hoisted(() => ({
   rows: [] as Array<Record<string, unknown>>,
   setex: vi.fn(async () => 'OK'),
   get: vi.fn(async () => null as string | null),
+  /** statement time limits set for one transaction (lib/long-query.ts) */
+  limits: [] as string[],
 }))
 
-vi.mock('../../db/redis', () => ({ redis: { get: h.get, setex: h.setex } }))
+vi.mock('../../db/redis', () => ({ redis: { get: h.get, setex: h.setex, set: vi.fn(async () => 'OK'), del: vi.fn(async () => 1) } }))
 vi.mock('../../middleware/auth', () => ({
   authenticate: (_req: unknown, _rep: unknown, done: () => void) => done(),
   optionalAuth: (_req: unknown, _rep: unknown, done: () => void) => done(),
 }))
-vi.mock('../../db/postgres', () => ({
-  db: Object.assign(vi.fn(), {
-    schema: { hasColumn: vi.fn(async () => true) },
-    raw: vi.fn(async (sql: string, bindings: unknown[]) => {
-      h.sql = sql
-      h.bindings = bindings
-      return { rows: h.rows }
+vi.mock('../../db/postgres', () => {
+  const raw = vi.fn(async (sql: string, bindings: unknown[]) => {
+    if (/^SET LOCAL statement_timeout/.test(sql)) { h.limits.push(sql); return { rows: [] } }
+    h.sql = sql
+    h.bindings = bindings
+    return { rows: h.rows }
+  })
+  return {
+    db: Object.assign(vi.fn(), {
+      schema: { hasColumn: vi.fn(async () => true) },
+      raw,
+      transaction: vi.fn(async (fn: (trx: { raw: typeof raw }) => unknown) => fn({ raw })),
     }),
-  }),
-}))
+  }
+})
 
 import { registerStoryRoutes } from '../stories'
 import {
@@ -158,6 +165,7 @@ describe('GET /api/v1/stories', () => {
   beforeEach(() => {
     h.get.mockResolvedValue(null)
     h.setex.mockClear()
+    h.limits.length = 0
     h.rows = [
       {
         story_key: 's-riyadh', size: 33, first_seen: '2026-10-10T20:00:00Z', newest: new Date(Date.now() - 600_000).toISOString(),
@@ -193,15 +201,23 @@ describe('GET /api/v1/stories', () => {
     expect(h.sql).toMatch(/s\.story_id IS NULL/)                         // and single signals with several outlets
     expect(h.sql).toMatch(/cardinality\(original_urls\) >= 2/)
     expect(h.sql).toMatch(/LIMIT 600/)
-    expect(h.setex).toHaveBeenCalledWith('stories:list:12:5', 120, expect.any(String))
+    // its own time limit (over a day of reports it passed the pool's 5 seconds, Oct 15, 2026)
+    expect(h.limits).toEqual(["SET LOCAL statement_timeout = '60s'"])
+    // kept 2 minutes, then served for up to 6 hours more while one process remakes it
+    expect(h.setex).toHaveBeenCalledWith('stories:list:v2:12:5', 120 + 6 * 3_600, expect.any(String))
+    const kept = JSON.parse(String((h.setex.mock.calls[0] as unknown[])[2]))
+    expect(typeof kept.at).toBe('number')
+    expect(kept.value.data.stories[0].id).toBe('s-riyadh')
   })
 
-  it('answers from the cache when it can', async () => {
-    h.get.mockResolvedValueOnce(JSON.stringify({ success: true, data: { stories: [], hours: 12 } }))
+  it('answers from what is kept when it can', async () => {
+    h.sql = ''
+    h.get.mockResolvedValueOnce(JSON.stringify({ at: Date.now(), value: { success: true, data: { stories: [], hours: 12 } } }))
     const app = Fastify({ logger: false })
     await app.register(registerStoryRoutes, { prefix: '/api/v1/stories' })
     const res = await app.inject({ method: 'GET', url: '/api/v1/stories' })
-    expect(res.headers['x-cache-hit']).toBe('true')
+    expect(res.json()).toEqual({ success: true, data: { stories: [], hours: 12 } })
+    expect(h.sql).toBe('')
   })
 
   it('refuses a window over 72 hours', async () => {
@@ -238,6 +254,6 @@ describe('GET /api/v1/stories/sitemap', () => {
     expect(Date.now() - (h.bindings[0] as Date).getTime()).toBeCloseTo(7 * 86_400_000, -4)
     expect(String(h.bindings[1])).toMatch(/^\^\(Public statement\|/)             // real headlines first
     expect(h.bindings[2]).toBe(5_000)
-    expect(h.setex).toHaveBeenCalledWith('stories:sitemap:v1', 1_800, expect.any(String))
+    expect(h.setex).toHaveBeenCalledWith('stories:sitemap:v2', 1_800 + 86_400, expect.any(String))
   })
 })

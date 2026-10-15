@@ -2,11 +2,13 @@
  * Who's in the news (Oct 13, 2026): the people, places and organisations
  * named in the most reports in the last 7 days, for world-pulse.io/entities,
  * the index of the entity pages (lib/entity-profile.ts). One pass over the
- * last 14 days of reports naming each entity, kept for 30 minutes.
+ * last 14 days of reports naming each entity, kept for 30 minutes and then
+ * remade in the background while the kept one is served (lib/swr-cache.ts):
+ * the pass took over 5 seconds by Oct 15, 2026, and /entities answered 500.
  */
 
-import { db } from '../db/postgres'
-import { redis } from '../db/redis'
+import { staleWhileRevalidate } from './swr-cache'
+import { longQuery } from './long-query'
 
 export interface DirectoryEntity {
   id: string
@@ -37,8 +39,10 @@ export const PER_GROUP = 30
 /** Reports in 7 days to be listed at all (as the sitemap: a page worth reading) */
 export const MIN_REPORTS = 3
 
-const CACHE_KEY = 'kg:api:directory:v1'
+const CACHE_KEY = 'kg:api:directory:v2'
 const CACHE_TTL = 1_800
+/** Seconds the pass may take (off the request path) */
+const QUERY_SECONDS = 120
 
 const GROUPS: Array<{ key: DirectoryGroup['key']; label: string; types: string[] | null }> = [
   { key: 'people', label: 'People', types: ['person'] },
@@ -65,17 +69,18 @@ export function directoryGroups(rows: Array<Omit<DirectoryEntity, 'change'>>, pe
   }))
 }
 
-/** The directory, from the cache when it's there */
-export async function entityDirectory(): Promise<EntityDirectory> {
-  const cached = await redis.get(CACHE_KEY).catch(() => null)
-  if (cached) return JSON.parse(cached) as EntityDirectory
+/** The directory: the kept one at once, remade in the background every 30 minutes */
+export function entityDirectory(): Promise<EntityDirectory> {
+  return staleWhileRevalidate(CACHE_KEY, { freshSeconds: CACHE_TTL, staleSeconds: 24 * 3_600, lockSeconds: 2 * QUERY_SECONDS }, makeDirectory)
+}
 
+async function makeDirectory(): Promise<EntityDirectory> {
   const now = Date.now()
   const day = new Date(now - 86_400_000).toISOString()
   const week = new Date(now - 7 * 86_400_000).toISOString()
   const fortnight = new Date(now - 14 * 86_400_000).toISOString()
   // (signal ids are text in entity rows, as in GET /trending and /sitemap)
-  const result = await db.raw(
+  const result = await longQuery(QUERY_SECONDS, trx => trx.raw(
     `SELECT n.id, n.type, n.canonical_name AS name,
             count(*) FILTER (WHERE s.created_at >= ?)::int AS last24h,
             count(*) FILTER (WHERE s.created_at >= ?)::int AS last7d,
@@ -87,7 +92,7 @@ export async function entityDirectory(): Promise<EntityDirectory> {
       GROUP BY n.id, n.type, n.canonical_name
      HAVING count(*) FILTER (WHERE s.created_at >= ?) >= ?`,
     [day, week, week, week, fortnight, week, MIN_REPORTS],
-  )
+  ))
   const rows = ((result.rows ?? []) as Array<Record<string, unknown>>).map(r => ({
     id: String(r.id),
     type: String(r.type ?? ''),
@@ -96,11 +101,9 @@ export async function entityDirectory(): Promise<EntityDirectory> {
     last7d: Number(r.last7d) || 0,
     previous7d: Number(r.previous7d) || 0,
   }))
-  const directory: EntityDirectory = {
+  return {
     groups: directoryGroups(rows),
     total: rows.filter(r => r.last7d >= MIN_REPORTS).length,
     generatedAt: new Date(now).toISOString(),
   }
-  redis.setex(CACHE_KEY, CACHE_TTL, JSON.stringify(directory)).catch(() => {})
-  return directory
 }

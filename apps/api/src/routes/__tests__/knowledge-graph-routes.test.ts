@@ -10,19 +10,27 @@ import Fastify from 'fastify'
 const h = vi.hoisted(() => ({
   raws: [] as Array<{ sql: string; params?: unknown[] }>,
   answers: [] as Array<{ rows: unknown[] }>,
+  /** statement time limits set for one transaction (lib/long-query.ts) */
+  limits: [] as string[],
+  kept: new Map<string, string>(),
 }))
 
-vi.mock('../../db/postgres', () => ({
-  db: Object.assign(vi.fn(), {
-    raw: vi.fn(async (sql: string, params?: unknown[]) => {
-      h.raws.push({ sql, params })
-      return h.answers.shift() ?? { rows: [] }
-    }),
-  }),
-}))
+vi.mock('../../db/postgres', () => {
+  const raw = vi.fn(async (sql: string, params?: unknown[]) => {
+    if (/^SET LOCAL statement_timeout/.test(sql)) { h.limits.push(sql); return { rows: [] } }
+    h.raws.push({ sql, params })
+    return h.answers.shift() ?? { rows: [] }
+  })
+  return { db: Object.assign(vi.fn(), { raw, transaction: vi.fn(async (fn: (trx: { raw: typeof raw }) => unknown) => fn({ raw })) }) }
+})
 
 vi.mock('../../db/redis', () => ({
-  redis: { get: vi.fn(async () => null), setex: vi.fn(async () => 'OK') },
+  redis: {
+    get: vi.fn(async (k: string) => h.kept.get(k) ?? null),
+    setex: vi.fn(async (k: string, _ttl: number, v: string) => { h.kept.set(k, v); return 'OK' }),
+    set: vi.fn(async () => 'OK'),
+    del: vi.fn(async () => 1),
+  },
 }))
 
 import knowledgeGraphRoutes, { signalIdsOf, trendScores } from '../knowledge-graph'
@@ -73,7 +81,7 @@ describe('trendScores', () => {
 })
 
 describe('GET /api/v1/knowledge-graph/trending', () => {
-  beforeEach(() => { h.raws.length = 0; h.answers.length = 0 })
+  beforeEach(() => { h.raws.length = 0; h.answers.length = 0; h.limits.length = 0; h.kept.clear() })
 
   it('ranks by reports in the window against the window before, from the reports\' own times', async () => {
     h.answers.push(
@@ -92,6 +100,33 @@ describe('GET /api/v1/knowledge-graph/trending', () => {
     expect(h.raws[0].sql).toMatch(/JOIN signals s ON s.id::text = lower\(u.sid\)/)
     expect(h.raws[0].sql).not.toMatch(/first_seen/)
     expect(h.raws[1].params?.[0]).toEqual(['b2', 'a1'])
+  })
+
+  it('may take a minute, and is kept and served from Redis after that (Oct 15, 2026: it passed 5 s)', async () => {
+    h.answers.push({ rows: [{ id: 'b2', recent: 12, previous: 0 }] }, { rows: [node('b2', 'Sudden Person', 40, [S2], 0.2)] })
+    const server = await app()
+    const first = await server.inject({ method: 'GET', url: '/api/v1/knowledge-graph/trending?limit=10&window_hours=24&lean=1' })
+    expect(h.limits).toEqual(["SET LOCAL statement_timeout = '60s'"])
+    expect([...h.kept.keys()]).toEqual(['kg:api:trending:v2:all:24:10:lean'])
+    // the next request is answered from what was kept, without asking the database
+    h.raws.length = 0
+    const again = await server.inject({ method: 'GET', url: '/api/v1/knowledge-graph/trending?limit=10&window_hours=24&lean=1' })
+    expect(h.raws).toEqual([])
+    expect(again.json()).toEqual(first.json())
+    expect(again.json().trending[0].entity.signal_ids).toEqual([])   // lean: names, not ids
+  })
+})
+
+describe('GET /api/v1/knowledge-graph/sitemap', () => {
+  beforeEach(() => { h.raws.length = 0; h.answers.length = 0; h.limits.length = 0; h.kept.clear() })
+
+  it('lists entities named in 3+ reports, kept and remade with its own time limit', async () => {
+    h.answers.push({ rows: [{ id: 'a1', name: ' Steady Org ', last_report: '2026-10-15T10:00:00Z', reports: 40 }, { id: 'x', name: '', last_report: '2026-10-15T10:00:00Z', reports: 9 }] })
+    const res = await (await app()).inject({ method: 'GET', url: '/api/v1/knowledge-graph/sitemap' })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().data.entities).toEqual([{ id: 'a1', name: 'Steady Org', lastReport: '2026-10-15T10:00:00.000Z', reports: 40 }])
+    expect(h.limits).toEqual(["SET LOCAL statement_timeout = '60s'"])
+    expect([...h.kept.keys()]).toEqual(['kg:api:sitemap:v2'])
   })
 })
 

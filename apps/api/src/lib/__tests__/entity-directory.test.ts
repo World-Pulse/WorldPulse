@@ -1,9 +1,25 @@
 import { describe, it, expect, vi } from 'vitest'
 
-vi.mock('../../db/postgres', () => ({ db: Object.assign(vi.fn(), { raw: vi.fn() }) }))
-vi.mock('../../db/redis', () => ({ redis: { get: vi.fn(), setex: vi.fn() } }))
+const h = vi.hoisted(() => ({ limits: [] as string[], queries: 0, kept: new Map<string, string>() }))
 
-import { directoryGroups, MIN_REPORTS } from '../entity-directory'
+vi.mock('../../db/postgres', () => {
+  const raw = vi.fn(async (sql: string) => {
+    if (/^SET LOCAL statement_timeout/.test(sql)) { h.limits.push(sql); return { rows: [] } }
+    h.queries++
+    return { rows: [{ id: 'p1', type: 'person', name: 'Donald Trump', last24h: 80, last7d: 496, previous7d: 0 }] }
+  })
+  return { db: Object.assign(vi.fn(), { raw, transaction: vi.fn(async (fn: (trx: { raw: typeof raw }) => unknown) => fn({ raw })) }) }
+})
+vi.mock('../../db/redis', () => ({
+  redis: {
+    get: vi.fn(async (k: string) => h.kept.get(k) ?? null),
+    setex: vi.fn(async (k: string, _ttl: number, v: string) => { h.kept.set(k, v); return 'OK' }),
+    set: vi.fn(async () => 'OK'),
+    del: vi.fn(async () => 1),
+  },
+}))
+
+import { directoryGroups, entityDirectory, MIN_REPORTS } from '../entity-directory'
 
 const row = (id: string, type: string, name: string, last7d: number, last24h = 0, previous7d = 0) =>
   ({ id, type, name, last7d, last24h, previous7d })
@@ -55,5 +71,17 @@ describe('directoryGroups', () => {
 
   it('trims names', () => {
     expect(directoryGroups([row('a', 'person', '  Ana Brnabić ', 5)])[0].entities[0].name).toBe('Ana Brnabić')
+  })
+})
+
+describe('entityDirectory (Oct 15, 2026: its pass took over 5 s and /entities answered 500)', () => {
+  it('gives the pass two minutes, keeps the directory, and serves the kept one', async () => {
+    const first = await entityDirectory()
+    expect(first.groups[0].entities.map(e => e.name)).toEqual(['Donald Trump'])
+    expect(h.limits).toEqual(["SET LOCAL statement_timeout = '120s'"])
+    expect([...h.kept.keys()]).toEqual(['kg:api:directory:v2'])
+    const again = await entityDirectory()
+    expect(h.queries).toBe(1)
+    expect(again).toEqual(first)
   })
 })

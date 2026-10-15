@@ -8,12 +8,13 @@
 
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
-import { redis } from '../db/redis'
 import { optionalAuth } from '../middleware/auth'
 import { sendError } from '../lib/errors'
 import { parseQuery, StoryListQuerySchema } from '../lib/query-schemas'
 import { signalsHaveStoryIds, hostOf } from '../lib/stories'
 import { rankStories, textArray, EVENT_TEMPLATE_SQL, type StoryCandidate, type ListedStory } from '../lib/story-list'
+import { staleWhileRevalidate } from '../lib/swr-cache'
+import { longQuery } from '../lib/long-query'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MAX_SIGNALS = 50
@@ -27,12 +28,20 @@ const MAX_OUTLET_IDS = 60
 /** An article link's website, for Postgres (bound as values: a "?" in knex's SQL is a placeholder) */
 const HOST_PATTERN = '^https?://([^/:?#]+)'
 const WWW_PATTERN = '^www\\.'
-/** Seconds a story list is reused */
+/** Seconds a story list is reused; then it is served while one process remakes it (lib/swr-cache.ts) */
 const LIST_CACHE_TTL = 120
+/** Seconds a kept list may still be served when remaking it fails */
+const LIST_KEEP_SECONDS = 6 * 3_600
+/**
+ * Seconds the list's query may take (lib/long-query.ts): over a day of
+ * reports it took about 5.5 s on Oct 15, 2026, past the pool's 5, and every
+ * request answered 500 (Developing Stories, HQ's drafts)
+ */
+const LIST_QUERY_SECONDS = 60
 /** The sitemap's stories: verified in the last this many days, at most SITEMAP_MAX (a sitemap file holds 50,000) */
 const SITEMAP_DAYS = 7
 const SITEMAP_MAX = 5_000
-const SITEMAP_CACHE_KEY = 'stories:sitemap:v1'
+const SITEMAP_CACHE_KEY = 'stories:sitemap:v2'
 const SITEMAP_CACHE_TTL = 1_800
 
 const SEVERITIES = ['info', 'low', 'medium', 'high', 'critical']
@@ -129,7 +138,8 @@ export function storyListSql(hasStoryIds: boolean, scope: 'recent' | 'signals' =
  */
 export async function topStories(hours: number, limit: number): Promise<ListedStory[]> {
   const since = new Date(Date.now() - hours * 3_600_000)
-  const result = await db.raw(storyListSql(await signalsHaveStoryIds()), [since, EVENT_TEMPLATE_SQL])
+  const sql = storyListSql(await signalsHaveStoryIds())
+  const result = await longQuery(LIST_QUERY_SECONDS, trx => trx.raw(sql, [since, EVENT_TEMPLATE_SQL]))
   return rankStories(candidatesOf(result), limit)
 }
 
@@ -187,15 +197,15 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
     if (qr.error) return sendError(reply, 400, 'VALIDATION_ERROR', qr.error)
     const { hours, limit } = qr.data
 
-    const cacheKey = `stories:list:${hours}:${limit}`
-    const cached = await redis.get(cacheKey).catch(() => null)
-    if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
-
-    const response = {
-      success: true,
-      data: { stories: await topStories(hours, limit), hours, generatedAt: new Date().toISOString() },
-    }
-    redis.setex(cacheKey, LIST_CACHE_TTL, JSON.stringify(response)).catch(() => {})
+    // The kept list at once; when it is 2 minutes old, one process remakes it in the background
+    const response = await staleWhileRevalidate(
+      `stories:list:v2:${hours}:${limit}`,
+      { freshSeconds: LIST_CACHE_TTL, staleSeconds: LIST_KEEP_SECONDS, lockSeconds: LIST_QUERY_SECONDS * 2 },
+      async () => ({
+        success: true,
+        data: { stories: await topStories(hours, limit), hours, generatedAt: new Date().toISOString() },
+      }),
+    )
     return reply.send(response)
   })
 
@@ -207,12 +217,19 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
    * a real headline (not GDELT's "<event> in <place>"). Reused for 30 minutes.
    */
   app.get('/sitemap', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (_req, reply) => {
-    const cached = await redis.get(SITEMAP_CACHE_KEY).catch(() => null)
-    if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
+    const response = await staleWhileRevalidate(
+      SITEMAP_CACHE_KEY,
+      { freshSeconds: SITEMAP_CACHE_TTL, staleSeconds: 24 * 3_600, lockSeconds: 2 * LIST_QUERY_SECONDS },
+      storySitemap,
+    )
+    return reply.send(response)
+  })
 
+  /** A week of verified stories (3 s on Oct 15, 2026, and growing): its own time limit, off the request path */
+  async function storySitemap() {
     const storyKey = await signalsHaveStoryIds() ? 'COALESCE(s.story_id, s.id)' : 's.id'
     const since = new Date(Date.now() - SITEMAP_DAYS * 86_400_000)
-    const result = await db.raw(
+    const result = await longQuery(LIST_QUERY_SECONDS, trx => trx.raw(
       `SELECT id, updated FROM (
          SELECT DISTINCT ON (${storyKey}) s.id::text AS id,
                 GREATEST(s.created_at, COALESCE(s.last_updated, s.created_at)) AS updated
@@ -221,16 +238,14 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
           ORDER BY ${storyKey}, (s.title ~ ?) ASC, s.reliability_score DESC NULLS LAST, s.created_at ASC
        ) t ORDER BY updated DESC LIMIT ?`,
       [since, EVENT_TEMPLATE_SQL, SITEMAP_MAX],
-    )
+    ))
     const rows = (result as { rows?: Array<{ id: unknown; updated: unknown }> } | undefined)?.rows ?? []
     const stories = rows.flatMap(r => {
       const at = new Date(r.updated as string)
       return UUID_RE.test(String(r.id)) && !Number.isNaN(at.getTime()) ? [{ id: String(r.id), updatedAt: at.toISOString() }] : []
     })
-    const response = { success: true, data: { stories, days: SITEMAP_DAYS, generatedAt: new Date().toISOString() } }
-    redis.setex(SITEMAP_CACHE_KEY, SITEMAP_CACHE_TTL, JSON.stringify(response)).catch(() => {})
-    return reply.send(response)
-  })
+    return { success: true, data: { stories, days: SITEMAP_DAYS, generatedAt: new Date().toISOString() } }
+  }
 
   /**
    * GET /api/v1/stories/outlets?ids=<signal ids, comma-separated, up to 60>

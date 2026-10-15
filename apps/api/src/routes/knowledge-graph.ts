@@ -20,10 +20,16 @@
  */
 
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify'
+import type { Knex } from 'knex'
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 import { entityProfile, sharedStories } from '../lib/entity-profile'
 import { entityDirectory } from '../lib/entity-directory'
+import { staleWhileRevalidate } from '../lib/swr-cache'
+import { longQuery } from '../lib/long-query'
+
+/** Seconds the trending and sitemap passes may take: kept, and remade off the request path (lib/long-query.ts) */
+const KG_QUERY_SECONDS = 60
 
 // ─── TYPES ─────────────────────────────────────────────────────────────────────
 
@@ -448,16 +454,21 @@ const knowledgeGraphRoutes: FastifyPluginAsync = async (app) => {
       })
     }
 
-    // Cache trending results (short TTL — 2 min). lean=1: entities without
-    // their signal_ids (the home page's "In the news" row needs names, not ids)
+    // lean=1: entities without their signal_ids (the home page's "In the news"
+    // row needs names, not ids). Kept and served at once; after 5 minutes one
+    // process remakes it in the background (lib/swr-cache.ts): the counts took
+    // over 5 seconds by Oct 15, 2026, and every request answered 500
     const lean = q.lean === '1' || q.lean === 'true'
-    const cacheKey = `kg:api:trending:${type ?? 'all'}:${windowHours}:${limit}${lean ? ':lean' : ''}`
-    const cached = await redis.get(cacheKey)
-    if (cached) {
-      reply.header('X-Cache', 'HIT')
-      return reply.send(JSON.parse(cached))
-    }
+    const response = await staleWhileRevalidate(
+      `kg:api:trending:v2:${type ?? 'all'}:${windowHours}:${limit}${lean ? ':lean' : ''}`,
+      { freshSeconds: 300, staleSeconds: 6 * 3600, lockSeconds: 2 * KG_QUERY_SECONDS },
+      () => longQuery(KG_QUERY_SECONDS, trx => trendingEntities(trx, type, windowHours, limit, lean)),
+    )
+    return reply.send(response)
+  })
 
+  /** Entities named more in the window than in the one before it, with their nodes */
+  async function trendingEntities(trx: Knex.Transaction, type: EntityType | undefined, windowHours: number, limit: number, lean: boolean) {
     const now = Date.now()
     const windowStart = new Date(now - windowHours * 3600 * 1000).toISOString()
     const previousStart = new Date(now - 2 * windowHours * 3600 * 1000).toISOString()
@@ -467,7 +478,7 @@ const knowledgeGraphRoutes: FastifyPluginAsync = async (app) => {
     const countParams: unknown[] = [windowStart, windowStart, windowStart]
     if (type) countParams.push(type)
     countParams.push(previousStart)
-    const countResult = await db.raw(
+    const countResult = await trx.raw(
       `SELECT n.id,
               count(*) FILTER (WHERE s.created_at >= ?)::int AS recent,
               count(*) FILTER (WHERE s.created_at <  ?)::int AS previous
@@ -484,7 +495,7 @@ const knowledgeGraphRoutes: FastifyPluginAsync = async (app) => {
     }))).slice(0, limit)
 
     const rows = scores.length > 0
-      ? (await db.raw(`SELECT * FROM entity_nodes WHERE id = ANY(?)`, [scores.map(t => t.id)])).rows ?? []
+      ? (await trx.raw(`SELECT * FROM entity_nodes WHERE id = ANY(?)`, [scores.map(t => t.id)])).rows ?? []
       : []
     const byId = new Map((rows as any[]).map(r => [String(r.id), r]))
     const trending = scores.flatMap(t => {
@@ -501,11 +512,8 @@ const knowledgeGraphRoutes: FastifyPluginAsync = async (app) => {
       }]
     })
 
-    const response = { trending, window_hours: windowHours, generated_at: new Date().toISOString() }
-    await redis.setex(cacheKey, 120, JSON.stringify(response))
-    reply.header('X-Cache', 'MISS')
-    return reply.send(response)
-  })
+    return { trending, window_hours: windowHours, generated_at: new Date().toISOString() }
+  }
 
   // ── GET /sitemap ──────────────────────────────────────────────────────
   // The entity pages worth a search engine's time (world-pulse.io/sitemap.xml):
@@ -514,11 +522,16 @@ const knowledgeGraphRoutes: FastifyPluginAsync = async (app) => {
   app.get('/sitemap', {
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
   }, async (_req: FastifyRequest, reply: FastifyReply) => {
-    const cacheKey = 'kg:api:sitemap:v1'
-    const cached = await redis.get(cacheKey).catch(() => null)
-    if (cached) return reply.header('X-Cache', 'HIT').send(JSON.parse(cached))
+    // Kept and remade in the background (over 5 seconds by Oct 15, 2026)
+    const response = await staleWhileRevalidate('kg:api:sitemap:v2', { freshSeconds: 3600, staleSeconds: 24 * 3600, lockSeconds: 2 * KG_QUERY_SECONDS },
+      () => longQuery(KG_QUERY_SECONDS, entitySitemap))
+    return reply.send(response)
+  })
+
+  /** Entities named in 3+ reports in 14 days, most named first */
+  async function entitySitemap(trx: Knex.Transaction) {
     const since = new Date(Date.now() - 14 * 86_400_000).toISOString()
-    const result = await db.raw(
+    const result = await trx.raw(
       `SELECT n.id, n.canonical_name AS name, max(s.created_at) AS last_report, count(*)::int AS reports
          FROM entity_nodes n
          CROSS JOIN LATERAL unnest(n.signal_ids) AS u(sid)
@@ -537,10 +550,8 @@ const knowledgeGraphRoutes: FastifyPluginAsync = async (app) => {
         ? [{ id: String(r.id), name, lastReport: last.toISOString(), reports: Number(r.reports) || 0 }]
         : []
     })
-    const response = { success: true, data: { entities, generatedAt: new Date().toISOString() } }
-    redis.setex(cacheKey, 3600, JSON.stringify(response)).catch(() => {})
-    return reply.send(response)
-  })
+    return { success: true, data: { entities, generatedAt: new Date().toISOString() } }
+  }
 
   // ── GET /directory ────────────────────────────────────────────────────
   // world-pulse.io/entities: the people, places and organisations named in
