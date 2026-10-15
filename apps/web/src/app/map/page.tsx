@@ -811,6 +811,16 @@ function MapView() {
 
   useEffect(() => {
     let unmounted = false
+    // A burst of arrivals redraws the map once a second, not once per signal
+    // (each redraw rebuilds the cluster index over up to 3,000 points)
+    let flushTimer: ReturnType<typeof setTimeout> | null = null
+    function flushSignals() {
+      if (flushTimer) return
+      flushTimer = setTimeout(() => {
+        flushTimer = null
+        if (!unmounted) setSignals([...signalsRef.current])
+      }, 1000)
+    }
 
     function connectWS() {
       const ws = new WebSocket(`${WS_URL}/ws`)
@@ -865,7 +875,7 @@ function MapView() {
 
             // Prepend; evict oldest if over cap
             signalsRef.current = prependSignal(signalsRef.current, newSig)
-            setSignals([...signalsRef.current])
+            flushSignals()
             setWsNewCount(n => n + 1)
 
             // Highlight for 3 s
@@ -911,7 +921,7 @@ function MapView() {
               updated,
               ...signalsRef.current.slice(idx + 1),
             ]
-            setSignals([...signalsRef.current])
+            flushSignals()
             return
           }
 
@@ -934,6 +944,7 @@ function MapView() {
 
     return () => {
       unmounted = true
+      if (flushTimer) clearTimeout(flushTimer)
       if (wsReconnectRef.current) clearTimeout(wsReconnectRef.current)
       if (wsRef.current) {
         wsRef.current.onclose = null   // prevent auto-reconnect on intentional unmount
