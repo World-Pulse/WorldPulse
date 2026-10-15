@@ -285,8 +285,9 @@ async function fetchRecentSignals(signal: CorrelationCandidate): Promise<Correla
  * compared. Only used for same-story corroboration, not for clusters.
  */
 async function fetchSameStoryCandidates(signal: CorrelationCandidate): Promise<CorrelationCandidate[]> {
-  // Each word by its stem, as a prefix ("attack:*" finds "attacks" and "attacked"; isSameStory compares stems)
-  const words = [...new Set((signal.title ?? '').toLowerCase().split(/[^a-z0-9]+/)
+  // Each word by its stem, as a prefix ("attack:*" finds "attacks" and "attacked"; isSameStory compares stems).
+  // Not its date: "october:*" and "2026:*" would find every daily feature
+  const words = [...new Set(takeDates(signal.title ?? '').text.toLowerCase().split(/[^a-z0-9]+/)
     .filter(w => w.length >= 4 && !STOP_WORDS.has(w) && !HEADLINE_FILLER.has(w))
     .map(w => stemWord(w))
     .filter(w => w.length >= 4))]
@@ -469,6 +470,7 @@ const HEADLINE_FILLER = new Set([
   'get', 'gets', 'got', 'getting', 'make', 'makes', 'made', 'take', 'takes', 'took', 'call', 'calls', 'called',
   'amid', 'latest', 'live', 'news', 'watch', 'video', 'videos', 'photos', 'how', 'why', 'what', 'who', 'where',
   'here', 'now', 'today', 'yesterday', 'week', 'day', 'year', 'years', 'say', 'tell', 'tells', 'told',
+  'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday', 'tonight',
   'governor', 'official', 'officials', 'authorities', 'spokesman', 'spokeswoman', 'spokesperson', 'media',
   'source', 'sources', 'report', 'claims', 'claim',
   'against', 'about', 'across', 'around', 'toward', 'towards', 'despite', 'among', 'between', 'within',
@@ -486,11 +488,56 @@ const EVENT_WORDS = new Set([
   'lead', 'govern', 'presid', 'minist', 'peopl', 'russia', 'countr', 'nation', 'state',
 ])
 
-/** A shared word that singles out a story: a name, a thing, a count of 3 or more; not a country or kind of event */
+/** A shared word that singles out a story: a name, a thing, a count of 3 or more; not a country, a date or a kind of event */
 function isParticular(word: string): boolean {
-  if (word.startsWith('@')) return false
+  if (word.startsWith('@') || word.startsWith('~')) return false
   if (word.startsWith('#')) return Number(word.slice(1)) >= 3
   return !EVENT_WORDS.has(word)
+}
+
+/**
+ * Dates in a headline, each as one word, "~10-15" (month-day, or as written
+ * for 10/15/2026). Daily features carry the day's date in their headlines
+ * ("Pix of the Day, 15 October, 2026", "Daily Cartoon, October 15, 2026",
+ * "Morning Digest: October 15, 2026"), and its day and year counted as two
+ * shared counts, which single out a story: photo galleries, cartoons, digests
+ * and Wordle hints turned verified together (10 of the 30 "different event"
+ * cross-check verdicts read on Oct 15, 2026). A date still counts as one
+ * shared word, never as what singles a story out.
+ */
+const MONTH_NUMBER: Record<string, number> = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 }
+const MONTH_NAME = '(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?![a-z])\\.?'
+const YEAR_AFTER = '(?:,?\\s*(?:19|20)\\d{2}(?!\\d))?'
+const monthNumber = (name: string) => /^\d+$/.test(name) ? Number(name) : MONTH_NUMBER[name.slice(0, 3).toLowerCase()]
+/** Each form of date and the word it becomes (g: the match, then its groups) */
+const DATE_FORMS: Array<{ re: RegExp; word: (g: string[]) => string }> = [
+  // 15 October, 2026 · 14th October 2026 · 15 Oct
+  { re: new RegExp(`(?<![\\d.,/])\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?${MONTH_NAME}${YEAR_AFTER}`, 'gi'), word: g => `~${monthNumber(g[2]!)}-${Number(g[1])}` },
+  // October 15, 2026 · October 15th · Sept. 17
+  { re: new RegExp(`\\b${MONTH_NAME}\\s+(\\d{1,2})(?:st|nd|rd|th)?(?![\\d.,]\\d)\\b${YEAR_AFTER}`, 'gi'), word: g => `~${monthNumber(g[1]!)}-${Number(g[2])}` },
+  // October 2026
+  { re: new RegExp(`\\b${MONTH_NAME},?\\s+((?:19|20)\\d{2})(?!\\d)`, 'gi'), word: g => `~${monthNumber(g[1]!)}/${g[2]}` },
+  // 2026-10-15
+  { re: /\b(?:19|20)\d{2}-(\d{1,2})-(\d{1,2})\b/g, word: g => `~${Number(g[1])}-${Number(g[2])}` },
+  // 10/15/2026 · 15.10.2026, as written (which comes first differs by country)
+  { re: /\b(\d{1,2})[/.](\d{1,2})[/.](?:(?:19|20)\d{2}|\d{2})\b/g, word: g => `~${Number(g[1])}-${Number(g[2])}` },
+]
+
+/** A headline without its dates, and the dates as words ("~10-15") */
+export function takeDates(title: string): { text: string; dates: string[] } {
+  const dates: string[] = []
+  let text = title
+  for (const { re, word } of DATE_FORMS) {
+    text = text.replace(re, (...args: unknown[]) => {
+      // (the match and its groups; then the offset and the whole string)
+      const g = args.slice(0, -2).map(a => String(a ?? ''))
+      // "Protesters march 3 miles", "prices may 2x": in lower case these are verbs, not months
+      if (/\b(?:march|may)\b/.test(g[0]!)) return g[0]!
+      dates.push(word(g))
+      return ' '
+    })
+  }
+  return { text, dates }
 }
 
 /** Endings dropped so a word's forms compare equal, tried in order (one per word) */
@@ -524,7 +571,10 @@ export function storyWords(title: string): Set<string> {
   const words = new Set<string>()
   // Places count once each, as their country: "Riyadh" and "Saudi Arabian" both become @SA
   const { countries, rest } = splitPlaces(title)
-  const text = rest.toLowerCase().replace(/(\d),(?=\d{3}\b)/g, '$1')
+  // A date is one word ("~10-15"), not a day and a year counted as two numbers
+  const { text: undated, dates } = takeDates(rest)
+  for (const date of dates) words.add(date)
+  const text = undated.toLowerCase().replace(/(\d),(?=\d{3}\b)/g, '$1')
   for (const raw of text.replace(/[^a-z0-9\s-]/g, ' ').split(/[\s-]+/)) {
     if (!raw) continue
     if (/^\d+$/.test(raw)) { words.add(`#${Number(raw)}`); continue }

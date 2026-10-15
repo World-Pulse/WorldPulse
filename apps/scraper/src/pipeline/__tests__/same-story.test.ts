@@ -54,7 +54,7 @@ vi.mock('../../lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), err
 // Ledger's cross-check gets the reports a verification promoted, the ones its gate may hold back (plan D6)
 vi.mock('../crosscheck', () => ({ crossCheckLater: (...args: unknown[]) => h.crossCheck(...args) }))
 
-import { isSameStory, correlateSignal, corroborateWithDuplicate, confirmMergedArticle, namesDiffer, corroboratedReliability, RELIABILITY_CEILING, type CorrelationCandidate } from '../correlate'
+import { isSameStory, correlateSignal, corroborateWithDuplicate, confirmMergedArticle, namesDiffer, corroboratedReliability, RELIABILITY_CEILING, storyWords, takeDates, type CorrelationCandidate } from '../correlate'
 
 const now = new Date('2026-10-10T15:40:00Z')
 
@@ -414,5 +414,47 @@ describe('corroboratedReliability (Oct 11, 2026: 252 of 574 verified stories sho
   it('never lowers a score', () => {
     expect(corroboratedReliability(0.99, 2)).toBe(0.99)  // a USGS report starts at 0.99
     expect(corroboratedReliability(0.7, 0)).toBe(0.7)
+  })
+})
+
+describe('dates in headlines (Oct 15, 2026: 10 of 30 "different event" verdicts were daily features)', () => {
+  const other = (title: string) => sig({ id: 'b', source_id: 'bbc.co.uk', title })
+
+  it('reads a date as one word, in the usual forms', () => {
+    expect(takeDates('Pix of the Day, 15 October, 2026 - Across the world').dates).toEqual(['~10-15'])
+    expect(takeDates("News@9: Today's top headlines - October 15, 2026").dates).toEqual(['~10-15'])
+    expect(takeDates('Latest news bulletin | October 15th, 2026 – Morning').dates).toEqual(['~10-15'])
+    expect(takeDates('Morning Edition: 14th October 2026').dates).toEqual(['~10-14'])
+    expect(takeDates('Horizons Middle East & Africa 10/15/2026 (Video)').dates).toEqual(['~10-15'])
+    expect(takeDates('Fed decision due Sept. 17').dates).toEqual(['~9-17'])
+    expect(takeDates('Jobs report for October 2026 beats forecasts').dates).toEqual(['~10/2026'])
+    expect(takeDates('Update 2026-10-15').dates).toEqual(['~10-15'])
+  })
+
+  it('leaves counts, and "march" and "may" as verbs, alone', () => {
+    expect(takeDates('Ukraine war, day 1,330: key events').dates).toEqual([])
+    expect(takeDates('Protesters march 3 miles to parliament').dates).toEqual([])
+    expect(takeDates('Thousands march in Paris').dates).toEqual([])
+    expect(storyWords('Protesters march 3 miles to parliament').has('#3')).toBe(true)
+  })
+
+  it("doesn't count the day and the year as numbers that single out a story", () => {
+    const words = storyWords('Pix of the Day, 15 October, 2026 - Across the world')
+    expect([...words].sort()).toEqual(['pix', 'world', '~10-15'])
+  })
+
+  it('no longer joins daily features by their date', () => {
+    for (const [a, b] of [
+      ["News@9: Today's top headlines - October 15, 2026", 'Pix of the Day, 15 October, 2026 - Across the world'],
+      ['Daily Cartoon, October 15, 2026', 'Cartoon for October 15, 2026'],
+      ['Thursday, 15 October 2026', "Today's Wordle #1944: Hints, Clues And Answer For Thursday October 15"],
+      ['Latest news bulletin | October 15th, 2026 – Morning', 'The Hindu Morning Digest: October 15, 2026'],
+      ['Current price of oil as of October 15, 2026', 'Africa: All of Africa Today - October 15, 2026'],
+      ['Cartoon for October 15, 2026', 'World in pictures this week, October 15, 2026'],
+    ]) expect(isSameStory(sig({ title: a }), other(b))).toBe(false)
+  })
+
+  it('still joins one story whose headlines share a date and more', () => {
+    expect(isSameStory(sig({ title: 'Fed holds interest rates steady at September 17 meeting' }), other('Federal Reserve holds interest rates steady on Sept. 17'))).toBe(true)
   })
 })
