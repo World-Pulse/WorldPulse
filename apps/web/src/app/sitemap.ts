@@ -7,7 +7,9 @@ import { entityPath } from '@/lib/entity-links'
  * page per verified story of the last 7 days (GET /api/v1/stories/sitemap,
  * which the API keeps for 30 minutes), and since Oct 13 a page per person,
  * place or organisation named in 3+ reports in the last 14 days
- * (GET /api/v1/knowledge-graph/sitemap, kept for an hour). Built when asked, so it is never older
+ * (GET /api/v1/knowledge-graph/sitemap, kept for an hour), and since Oct 15 a
+ * page per country with verified stories in the last 7 days (GET
+ * /api/v1/countries, plan G15). Built when asked, so it is never older
  * than the API's copy; if the API can't answer, the main pages still go out.
  */
 export const dynamic = 'force-dynamic'
@@ -53,12 +55,29 @@ async function namedEntities(): Promise<SitemapEntity[]> {
   }
 }
 
+interface SitemapCountry { code: string; latest_signal_at?: string | null }
+
+async function activeCountries(): Promise<SitemapCountry[]> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/countries?window=7d&limit=200`, { cache: 'no-store', signal: AbortSignal.timeout(10_000) })
+    if (!res.ok) return []
+    const json = await res.json() as { countries?: SitemapCountry[] }
+    return Array.isArray(json.countries) ? json.countries.filter(c => c && typeof c.code === 'string' && /^[A-Za-z]{2}$/.test(c.code)) : []
+  } catch {
+    return []
+  }
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date()
-  const [stories, entities] = await Promise.all([verifiedStories(), namedEntities()])
+  const [stories, entities, countries] = await Promise.all([verifiedStories(), namedEntities(), activeCountries()])
   return [
     ...PAGES.map(p => ({ url: `${SITE_URL}${p.path === '/' ? '' : p.path}`, lastModified: now, changeFrequency: p.changeFrequency, priority: p.priority })),
     ...stories.map(s => ({ url: `${SITE_URL}/signals/${s.id}`, lastModified: new Date(s.updatedAt), changeFrequency: 'hourly' as const, priority: 0.6 })),
+    ...countries.map(c => {
+      const latest = c.latest_signal_at ? new Date(c.latest_signal_at) : now
+      return { url: `${SITE_URL}/countries/${c.code.toUpperCase()}`, lastModified: Number.isNaN(latest.getTime()) ? now : latest, changeFrequency: 'daily' as const, priority: 0.6 }
+    }),
     ...entities.map(e => ({ url: `${SITE_URL}${entityPath(e.id, e.name)}`, lastModified: new Date(e.lastReport), changeFrequency: 'daily' as const, priority: 0.5 })),
   ]
 }
