@@ -50,3 +50,18 @@ describe('afterSignIn', () => {
     expect(afterSignIn(false, null)).toBe('/onboarding')
   })
 })
+
+describe('authHref with a source', () => {
+  it('tags the link with where the reader started', () => {
+    expect(authHref('register', '/map', 'map-layer')).toBe('/auth/register?next=%2Fmap&utm_source=map-layer')
+  })
+  it('keeps a map view with its layer in next', () => {
+    const href = authHref('register', '/map#@20.0000,0.0000,2.00|l=threats', 'map-layer')
+    const q = new URLSearchParams(href.split('?')[1])
+    expect(q.get('next')).toBe('/map#@20.0000,0.0000,2.00|l=threats')
+    expect(q.get('utm_source')).toBe('map-layer')
+  })
+  it('works with only a source', () => {
+    expect(authHref('register', null, 'x')).toBe('/auth/register?utm_source=x')
+  })
+})

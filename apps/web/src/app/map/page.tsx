@@ -163,7 +163,6 @@ function signedInHeaders(): Record<string, string> {
     return {}
   }
 }
-const SIGN_IN_NOTE = { text: 'This layer needs a free account.', href: authHref('login', '/map'), linkText: 'Sign in' }
 
 /** The time window in words, for the country brief */
 const TIME_WINDOW_LABEL: Record<string, string> = {
@@ -3509,6 +3508,18 @@ function MapView() {
   // WIND and SATS aren't offered until they show real data (M6): the wind
   // layer can't draw on MapLibre v5 and the satellite positions are rough
   // guesses. CARRIERS is covered by Naval intelligence.
+  /** What a signed-out reader sees under a layer that needs an account: Sign up · Sign in, both back to the map with the layer on */
+  const signInNote = (layer: LayerKey) => {
+    const view  = getPermalinkState()
+    const back  = `/map#${encodePermalink({ ...view, layers: Array.from(new Set([...view.layers, layer])) })}`
+    return {
+      text:      'Free to use with an account: sign up to see this layer.',
+      href:      authHref('register', back, 'map-layer'),
+      linkText:  'Sign up',
+      href2:     authHref('login', back),
+      linkText2: 'Sign in',
+    }
+  }
   const layerGroups: MapLayerGroup[] = [
     {
       title: 'Signals',
@@ -3527,10 +3538,10 @@ function MapView() {
           on: conflictMode, loading: conflictLoading, count: conflictCount, toggle: () => setConflictMode(v => !v) },
         { key: 'threats', label: 'Missile & drone threats', description: 'Ballistic, cruise, hypersonic, drone and rocket reports', icon: Crosshair, color: '#f87171',
           on: threatMode, loading: threatLoading, count: threatCount, toggle: () => setThreatMode(v => !v),
-          note: signInNeeded.threats ? SIGN_IN_NOTE : null },
+          note: signInNeeded.threats ? signInNote('threats') : null },
         { key: 'jamming', label: 'GPS jamming', description: 'Military jamming, spoofing and interference zones', icon: RadioTower, color: '#c084fc',
           on: jammingMode, loading: jammingLoading, count: jammingCount, toggle: () => setJammingMode(v => !v),
-          note: signInNeeded.jamming ? SIGN_IN_NOTE : null },
+          note: signInNeeded.jamming ? signInNote('jamming') : null },
         { key: 'naval', label: 'Naval intelligence', description: 'Carriers, ships in distress and ships gone dark', icon: Anchor, color: '#60a5fa',
           on: navalMode, loading: navalLoading, count: navalCount, toggle: () => setNavalMode(v => !v) },
       ],

@@ -27,10 +27,18 @@ export function nextFromLocation(): string | null {
   return safeNext(new URLSearchParams(window.location.search).get('next'))
 }
 
-/** A sign-in or sign-up link that brings the reader back to `next` */
-export function authHref(kind: 'login' | 'register', next?: string | null): string {
+/**
+ * A sign-in or sign-up link that brings the reader back to `next`. `source`
+ * tags where the reader started (utm_source), so sign-ups can be counted by
+ * starting point.
+ */
+export function authHref(kind: 'login' | 'register', next?: string | null, source?: string): string {
   const n = safeNext(next ?? null)
-  return n && n !== '/' ? `/auth/${kind}?next=${encodeURIComponent(n)}` : `/auth/${kind}`
+  const params = new URLSearchParams()
+  if (n && n !== '/') params.set('next', n)
+  if (source) params.set('utm_source', source)
+  const q = params.toString()
+  return q ? `/auth/${kind}?${q}` : `/auth/${kind}`
 }
 
 /** Where to go once signed in: new accounts through onboarding first, then `next` */

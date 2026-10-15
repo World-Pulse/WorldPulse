@@ -27,15 +27,18 @@ export interface MapLayerItem {
   /** Extra settings shown under the row while the layer is on */
   extra?: ReactNode
   /** The layer can't show anything for this reader (e.g. it needs an account) */
-  note?: { text: string; href?: string; linkText?: string } | null
+  note?: LayerNote | null
 }
+
+/** A line under a layer: text, and up to two links (e.g. Sign up · Sign in) */
+export interface LayerNote { text: string; href?: string; linkText?: string; href2?: string; linkText2?: string }
 
 /**
  * What to tell the reader under a layer that's on but shows nothing: the
  * layer's own note (it needs an account, …), or that its feed is empty now.
  * Before Oct 11, 2026 several layers stayed blank without a word.
  */
-export function layerNote(item: Pick<MapLayerItem, 'on' | 'loading' | 'count' | 'note'>): { text: string; href?: string; linkText?: string } | null {
+export function layerNote(item: Pick<MapLayerItem, 'on' | 'loading' | 'count' | 'note'>): LayerNote | null {
   if (!item.on || item.loading) return null
   if (item.note) return item.note
   if (item.count === 0) return { text: 'Nothing to show right now.' }
@@ -105,6 +108,7 @@ function LayerRow({ item }: { item: MapLayerItem }) {
         <div className="pl-14 pr-3 pb-2 text-[11px] text-wp-amber">
           {note.text}
           {note.href && <> <Link href={note.href} className="underline underline-offset-2 hover:text-wp-text">{note.linkText ?? 'Open'}</Link></>}
+          {note.href2 && <> · <Link href={note.href2} className="underline underline-offset-2 hover:text-wp-text">{note.linkText2 ?? 'Open'}</Link></>}
         </div>
       )}
       {item.on && item.extra && <div className="pl-14 pr-3 pb-2">{item.extra}</div>}
