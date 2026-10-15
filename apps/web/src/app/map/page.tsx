@@ -1718,11 +1718,11 @@ function MapView() {
             },
           })
 
-          currentMap.on('mouseenter', ADSB_LAYER, () => { currentMap.getCanvas().style.cursor = 'pointer' })
-          currentMap.on('mouseleave', ADSB_LAYER, () => { currentMap.getCanvas().style.cursor = '' })
+          onLayer(currentMap, 'mouseenter', ADSB_LAYER, () => { currentMap.getCanvas().style.cursor = 'pointer' })
+          onLayer(currentMap, 'mouseleave', ADSB_LAYER, () => { currentMap.getCanvas().style.cursor = '' })
 
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          currentMap.on('click', ADSB_LAYER, async (e: any) => {
+          onLayer(currentMap, 'click', ADSB_LAYER, async (e: any) => {
             const feat = e.features?.[0]
             if (!feat) return
             const p = feat.properties as { title: string; published_at: string }
@@ -1848,11 +1848,11 @@ function MapView() {
             },
           })
 
-          currentMap.on('mouseenter', CAM_LAYER, () => { currentMap.getCanvas().style.cursor = 'pointer' })
-          currentMap.on('mouseleave', CAM_LAYER, () => { currentMap.getCanvas().style.cursor = '' })
+          onLayer(currentMap, 'mouseenter', CAM_LAYER, () => { currentMap.getCanvas().style.cursor = 'pointer' })
+          onLayer(currentMap, 'mouseleave', CAM_LAYER, () => { currentMap.getCanvas().style.cursor = '' })
 
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          currentMap.on('click', CAM_LAYER, async (e: any) => {
+          onLayer(currentMap, 'click', CAM_LAYER, async (e: any) => {
             const feat = e.features?.[0]
             if (!feat) return
             const p = feat.properties as {
