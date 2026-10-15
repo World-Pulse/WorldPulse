@@ -11,9 +11,15 @@ import Fastify from 'fastify'
 
 const h = vi.hoisted(() => ({
   calls: [] as Array<{ method: string; args: unknown[] }>,
+  kept: null as string | null,
 }))
 
-vi.mock('../../db/redis', () => ({ redis: { get: vi.fn(async () => null), setex: vi.fn(async () => 'OK') } }))
+vi.mock('../../db/redis', () => ({ redis: {
+  get: vi.fn(async () => h.kept),
+  setex: vi.fn(async () => 'OK'),
+  set: vi.fn(async () => 'OK'),
+  del: vi.fn(async () => 1),
+} }))
 vi.mock('../../middleware/auth', () => ({
   authenticate: (_req: unknown, _rep: unknown, done: () => void) => done(),
   optionalAuth: (_req: unknown, _rep: unknown, done: () => void) => done(),
@@ -38,8 +44,14 @@ vi.mock('../../db/postgres', () => {
     }
     return b
   }
+  const raw = vi.fn((sql: string, bindings?: unknown[]) => {
+    h.calls.push({ method: 'raw', args: [sql] })
+    return Object.assign(Promise.resolve(), { toString: () => sql, sql, bindings })
+  })
   const db = Object.assign(vi.fn(() => builder()), {
-    raw: vi.fn((sql: string, bindings?: unknown[]) => ({ toString: () => sql, sql, bindings })),
+    raw,
+    // The counts run in one transaction with their own time limit
+    transaction: vi.fn(async (fn: (trx: unknown) => unknown) => fn(Object.assign(vi.fn(() => builder()), { raw }))),
   })
   return { db }
 })
@@ -47,7 +59,7 @@ vi.mock('../../db/postgres', () => {
 import { registerSignalRoutes } from '../signals'
 
 describe('GET /api/v1/signals/count', () => {
-  beforeEach(() => { h.calls.length = 0 })
+  beforeEach(() => { h.calls.length = 0; h.kept = null })
 
   it("adds the last 24 hours' verified signals, countries and outlets", async () => {
     const server = Fastify({ logger: false })
@@ -66,5 +78,24 @@ describe('GET /api/v1/signals/count', () => {
     expect(raws.map(r => r.sql).join(' ')).toMatch(/FILTER \(WHERE status = 'verified'\).*count\(DISTINCT country_code\).*original_urls\[1\]/)
     // the address pattern goes to Postgres as a value (a "?" in knex's SQL is a placeholder)
     expect(raws[2]?.bindings).toEqual(['^https?://([^/:?#]+)', '^www\\.'])
+  })
+
+  it('counts with a longer time limit than the 5-second default, inside one transaction', async () => {
+    const server = Fastify({ logger: false })
+    await server.register(registerSignalRoutes, { prefix: '/api/v1/signals' })
+    const res = await server.inject({ method: 'GET', url: '/api/v1/signals/count' })
+    expect(res.statusCode).toBe(200)
+    const first = h.calls.find(c => c.method === 'raw')
+    expect(String(first?.args[0])).toMatch(/SET LOCAL statement_timeout = '60s'/)
+  })
+
+  it('serves the kept counts at once, without counting again', async () => {
+    h.kept = JSON.stringify({ at: Date.now(), value: { success: true, data: { total: 9, last24h: 1, lastHour: 0, verified24h: 1, countries24h: 1, outlets24h: 1, bySeverity: {} } } })
+    const server = Fastify({ logger: false })
+    await server.register(registerSignalRoutes, { prefix: '/api/v1/signals' })
+    const res = await server.inject({ method: 'GET', url: '/api/v1/signals/count' })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().data.total).toBe(9)
+    expect(h.calls.length).toBe(0)
   })
 })

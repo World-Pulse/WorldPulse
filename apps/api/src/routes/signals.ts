@@ -22,6 +22,7 @@ import {
   HotspotsQuerySchema,
 } from '../lib/query-schemas'
 import { EVENT_TEMPLATE_SQL } from '../lib/story-list'
+import { staleWhileRevalidate } from '../lib/swr-cache'
 
 const SIGNAL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -647,64 +648,72 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     },
     config: { rateLimit: { max: 120, timeWindow: '1 minute' } },
   }, async (_req, reply) => {
-    const cacheKey = 'signals:count'
-    const cached = await redis.get(cacheKey).catch(() => null)
-    if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
-
-    const [totalResult] = await db('signals')
-      .whereIn('status', ['verified', 'pending'])
-      .count('id as count')
-
-    const [last24hResult] = await db('signals')
-      .whereIn('status', ['verified', 'pending'])
-      .where('created_at', '>', db.raw("NOW() - INTERVAL '24 hours'"))
-      .count('id as count')
-
-    const [lastHourResult] = await db('signals')
-      .whereIn('status', ['verified', 'pending'])
-      .where('created_at', '>', db.raw("NOW() - INTERVAL '1 hour'"))
-      .count('id as count')
-
-    const severityCounts = await db('signals')
-      .whereIn('status', ['verified', 'pending'])
-      .select('severity')
-      .count('id as count')
-      .groupBy('severity')
-
-    // The day's verification and reach, so the home page shows live figures
-    // instead of typed-in ones (plan P7); an outlet is its article's website
-    const dayRow = await db('signals')
-      .whereIn('status', ['verified', 'pending'])
-      .where('created_at', '>', db.raw("NOW() - INTERVAL '24 hours'"))
-      .first(
-        db.raw("count(*) FILTER (WHERE status = 'verified')::int AS verified"),
-        db.raw('count(DISTINCT country_code)::int AS countries'),
-        db.raw("count(DISTINCT lower(regexp_replace(substring(original_urls[1] from ?), ?, '')))::int AS outlets", ['^https?://([^/:?#]+)', '^www\\.']),
-      ) as { verified?: number; countries?: number; outlets?: number } | undefined
-
-    const bySeverity: Record<string, number> = {}
-    for (const row of severityCounts) {
-      bySeverity[row.severity as string] = Number(row.count)
-    }
-
-    const response = {
-      success: true,
-      data: {
-        total:      Number(totalResult?.count ?? 0),
-        last24h:    Number(last24hResult?.count ?? 0),
-        lastHour:   Number(lastHourResult?.count ?? 0),
-        verified24h:  Number(dayRow?.verified ?? 0),
-        countries24h: Number(dayRow?.countries ?? 0),
-        outlets24h:   Number(dayRow?.outlets ?? 0),
-        bySeverity,
-      },
-    }
-
-    // Cache for 15 seconds — short TTL for near-real-time accuracy
-    redis.setex(cacheKey, 15, JSON.stringify(response)).catch(() => {})
-
+    // Kept in Redis and served at once; counted again in the background at
+    // most once a minute (lib/swr-cache.ts). Oct 15, 2026: counting the whole
+    // table took longer than the 5-second statement limit, so every call
+    // answered 500 after 5.5 s and the top bar's counter, the home page's
+    // figures and the map's share card had nothing to show.
+    const response = await staleWhileRevalidate('signals:count:v2',
+      { freshSeconds: 60, staleSeconds: 6 * 3600, lockSeconds: 120 }, countSignals)
     return reply.send(response)
   })
+
+  async function countSignals() {
+    return db.transaction(async (trx) => {
+      // Off the request path (above), so the counts may take longer than the
+      // pool's 5-second limit; SET LOCAL ends with this transaction
+      await trx.raw("SET LOCAL statement_timeout = '60s'")
+
+      const [totalResult] = await trx('signals')
+        .whereIn('status', ['verified', 'pending'])
+        .count('id as count')
+
+      const [last24hResult] = await trx('signals')
+        .whereIn('status', ['verified', 'pending'])
+        .where('created_at', '>', trx.raw("NOW() - INTERVAL '24 hours'"))
+        .count('id as count')
+
+      const [lastHourResult] = await trx('signals')
+        .whereIn('status', ['verified', 'pending'])
+        .where('created_at', '>', trx.raw("NOW() - INTERVAL '1 hour'"))
+        .count('id as count')
+
+      const severityCounts = await trx('signals')
+        .whereIn('status', ['verified', 'pending'])
+        .select('severity')
+        .count('id as count')
+        .groupBy('severity')
+
+      // The day's verification and reach, so the home page shows live figures
+      // instead of typed-in ones (plan P7); an outlet is its article's website
+      const dayRow = await trx('signals')
+        .whereIn('status', ['verified', 'pending'])
+        .where('created_at', '>', trx.raw("NOW() - INTERVAL '24 hours'"))
+        .first(
+          trx.raw("count(*) FILTER (WHERE status = 'verified')::int AS verified"),
+          trx.raw('count(DISTINCT country_code)::int AS countries'),
+          trx.raw("count(DISTINCT lower(regexp_replace(substring(original_urls[1] from ?), ?, '')))::int AS outlets", ['^https?://([^/:?#]+)', '^www\\.']),
+        ) as { verified?: number; countries?: number; outlets?: number } | undefined
+
+      const bySeverity: Record<string, number> = {}
+      for (const row of severityCounts) {
+        bySeverity[row.severity as string] = Number(row.count)
+      }
+
+      return {
+        success: true,
+        data: {
+          total:      Number(totalResult?.count ?? 0),
+          last24h:    Number(last24hResult?.count ?? 0),
+          lastHour:   Number(lastHourResult?.count ?? 0),
+          verified24h:  Number(dayRow?.verified ?? 0),
+          countries24h: Number(dayRow?.countries ?? 0),
+          outlets24h:   Number(dayRow?.outlets ?? 0),
+          bySeverity,
+        },
+      }
+    })
+  }
 
   // ─── RECENT HEADLINES ─────────────────────────────────────
   // Returns latest breaking/high-severity signals for the news ticker
