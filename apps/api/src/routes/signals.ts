@@ -23,6 +23,8 @@ import {
 } from '../lib/query-schemas'
 import { EVENT_TEMPLATE_SQL } from '../lib/story-list'
 import { staleWhileRevalidate } from '../lib/swr-cache'
+import { longQuery } from '../lib/long-query'
+import type { Knex } from 'knex'
 
 const SIGNAL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -50,6 +52,8 @@ function parseBbox(raw: string): { coords: [number, number, number, number] } | 
 
 // ─── Cache TTLs ───────────────────────────────────────────────────────────────
 const MAP_CACHE_TTL    = 45  // seconds — map points (expensive PostGIS queries)
+const MAP_KEEP_SECONDS = 15 * 60 // map points older than MAP_CACHE_TTL are still served this long while the next is made
+const MAP_QUERY_SECONDS = 30 // the map points query's own time limit, off the request path (lib/long-query.ts)
 const DETAIL_CACHE_TTL = 60  // seconds — signal detail (view count incremented async)
 const LIST_CACHE_TTL   = 30  // seconds — paginated list for unauthenticated users
 const CIB_CACHE_TTL    = 300 // seconds — CIB check result (5 minutes)
@@ -799,17 +803,56 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     const safeHours = hours
     const bboxKey   = bbox ? `:${bbox}` : ''
 
-    // Cache map points — these are expensive PostGIS queries
-    const cacheKey = `signals:map:${category ?? 'all'}:${severity ?? 'all'}:${safeHours}${bboxKey}:${limit}${lean ? ':lean' : ''}`
-    const cached = await redis.get(cacheKey).catch(() => null)
-    if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
+    // Bounding-box spatial filter (Gate 2: map validation hardening), checked before anything is kept
+    let box: [number, number, number, number] | null = null
+    if (bbox) {
+      const parsed = parseBbox(bbox)
+      if ('error' in parsed) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', parsed.error)
+      }
+      box = parsed.coords
+    }
 
+    // The World Map's first load ran this query while the visitor waited: 4.6 s on Oct 16, 2026,
+    // against the pool's 5-second statement limit. Past it the map answers 500 with nothing kept,
+    // so every visitor runs it again. The points are kept and served at once; once MAP_CACHE_TTL
+    // old, one process makes the next in the background with its own time limit.
+    const response = await staleWhileRevalidate(
+      `signals:map:v2:${category ?? 'all'}:${severity ?? 'all'}:${safeHours}${bboxKey}:${limit}${lean ? ':lean' : ''}`,
+      { freshSeconds: MAP_CACHE_TTL, staleSeconds: MAP_KEEP_SECONDS, lockSeconds: 2 * MAP_QUERY_SECONDS },
+      async () => {
+        const points = await longQuery(MAP_QUERY_SECONDS, trx => mapPointsQuery(trx, { category, severity, hours: safeHours, box, limit, lean }))
+        return {
+          success:   true,
+          data:      points,
+          meta: {
+            total:        points.length,
+            hours:        safeHours,
+            bbox:         bbox ?? null,
+            generated_at: new Date().toISOString(),
+          },
+        }
+      },
+    )
+
+    // Log warning if geo coverage is low (< 10 signals in last 24h)
+    if (safeHours <= 24 && !bbox && !category && response.meta.total < 10) {
+      req.log?.warn({ map_geo_count: response.meta.total }, '[MAP HEALTH] Low geo signal count in last 24h — check scraper location enrichment')
+    }
+
+    return reply.send(response)
+  })
+
+  /** The map's points: geo-located verified and pending signals in the window, with the newest or the most important first */
+  function mapPointsQuery(q: Knex | Knex.Transaction, o: { category?: string; severity?: string; hours: number; box: [number, number, number, number] | null; limit: number; lean?: boolean }) {
+    const { category, severity, box, limit, lean } = o
+    const safeHours = o.hours
     // Lean points are what the World Map loads: up to 3,000 of them, without
     // the summary (fetched when a signal is opened) and with the first link
     // only. With 500 newest-first points, "24 hours" showed about 3 hours
     // (Oct 11, 2026); now every critical, high and verified signal in the
     // window comes first, then the newest of the rest.
-    let query = db('signals')
+    let query = q('signals')
       .whereNotNull('location')
       .whereIn('status', ['verified', 'pending'])
       .where('created_at', '>', db.raw(`NOW() - INTERVAL '${safeHours} hours'`))
@@ -842,45 +885,16 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     if (category && category !== 'all') query = query.where('category', category)
     if (severity) query = query.where('severity', severity)
 
-    // Bounding-box spatial filter (Gate 2: map validation hardening)
-    if (bbox) {
-      const parsed = parseBbox(bbox)
-      if ('error' in parsed) {
-        return sendError(reply, 400, 'VALIDATION_ERROR', parsed.error)
-      }
-      const [minLng, minLat, maxLng, maxLat] = parsed.coords
+    if (box) {
+      const [minLng, minLat, maxLng, maxLat] = box
       query = query.whereRaw(
         'ST_Within(location::geometry, ST_MakeEnvelope(?, ?, ?, ?, 4326))',
         [minLng, minLat, maxLng, maxLat],
       )
     }
 
-    const points = await query
-
-    // Count how many signals have geo data for health monitoring
-    const geoCount = points.length
-
-    const response = {
-      success:   true,
-      data:      points,
-      meta: {
-        total:        geoCount,
-        hours:        safeHours,
-        bbox:         bbox ?? null,
-        generated_at: new Date().toISOString(),
-      },
-    }
-
-    // Cache the expensive PostGIS query result
-    redis.setex(cacheKey, MAP_CACHE_TTL, JSON.stringify(response)).catch(() => {})
-
-    // Log warning if geo coverage is low (< 10 signals in last 24h)
-    if (safeHours <= 24 && !bbox && !category && geoCount < 10) {
-      req.log?.warn({ map_geo_count: geoCount }, '[MAP HEALTH] Low geo signal count in last 24h — check scraper location enrichment')
-    }
-
-    return reply.send(response)
-  })
+    return query as unknown as Promise<Array<Record<string, unknown>>>
+  }
 
   // ─── MAP HEALTH SUMMARY ───────────────────────────────────
   // Returns count of verified signals with geo in last 24h (for health monitoring)
