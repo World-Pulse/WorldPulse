@@ -35,6 +35,7 @@ import { isMapNews, mapPointsFor } from '@/lib/map-news'
 import { ensureMapIcon, MAP_ICON } from '@/lib/map-icons'
 import { dayNightFeatures, subsolarPoint } from '@/lib/daynight'
 import { MAP_REGIONS } from '@/lib/map-regions'
+import { SavedViews } from '@/components/map/SavedViews'
 import {
   SEVERITY_COLOR, SEVERITY_BG, SEVERITY_RANK, CLUSTER_COLOR_EXPR, SIGNAL_RADIUS_EXPR, FONT_BOLD,
   CLUSTER_RING_EXPR, CLUSTER_HALO_EXPR, CLUSTER_TEXT_EXPR,
@@ -4112,6 +4113,8 @@ function MapView() {
               </div>
             )}
           </div>
+          {/* Saved views (C10) */}
+          <SavedViews />
         </div>
 
         {/* Share Button — floating bottom-right (BAT-15) */}
