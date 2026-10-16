@@ -3908,7 +3908,7 @@ function MapView() {
                   <span className="text-wp-text3">·</span>
                   <span className="font-mono text-[10px] text-wp-text3 uppercase">{CAT_ICON[selected.category] ?? ''} {selected.category}</span>
                 </div>
-                <button onClick={() => setSelected(null)}
+                <button onClick={() => setSelected(null)} aria-label="Close signal details"
                   className="w-7 h-7 flex items-center justify-center rounded-lg text-wp-text3 hover:text-wp-text hover:bg-[rgba(255,255,255,0.06)] transition-all text-[18px] leading-none">×</button>
               </div>
 
@@ -3994,12 +3994,6 @@ function MapView() {
                   View Signal
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6H10M10 6L7 3M10 6L7 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
                 </Link>
-                <button
-                  onClick={() => toast('Signal bookmarked — saved to your collection', 'success')}
-                  className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)] text-[13px] text-wp-text3 hover:text-wp-amber hover:border-wp-amber hover:bg-[rgba(245,166,35,0.05)] transition-all"
-                >
-                  🔖 Bookmark Signal
-                </button>
                 <button
                   onClick={() => setFlagModalSignalId(selected.id)}
                   className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-[rgba(255,255,255,0.01)] border border-[rgba(255,255,255,0.05)] text-[13px] text-wp-text3 hover:text-wp-red hover:border-wp-red/30 hover:bg-[rgba(255,59,92,0.05)] transition-all"
