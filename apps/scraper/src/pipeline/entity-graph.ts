@@ -21,11 +21,10 @@
  * @module pipeline/entity-graph
  */
 
-import { openaiPaused, noteOpenAIFailure } from '../lib/openai-credit'
 import { pgPool as db } from '../lib/postgres'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
-import { LLM_MODEL, GEMINI_MODEL } from '../lib/llm-models'
+import { GEMINI_MODEL, llmApiUrl, llmHeaders, llmModel, selfHostedLlmConfigured } from '../lib/llm-models'
 import { createHash } from 'crypto'
 import { extractEntitiesByRules, cleanStoredEntity } from './entity-rules'
 
@@ -183,11 +182,10 @@ function titleCase(s: string): string {
 
 // ─── LLM-BASED EXTRACTION ─────────────────────────────────────────────────────
 
-const LLM_CONFIGURED = !!(
-  process.env.LLM_API_URL ||
-  process.env.OPENAI_API_KEY ||
-  process.env.GEMINI_API_KEY
-)
+/** An AI model can extract entities: Gemini, or a self-hosted server (lib/llm-models.ts) */
+function llmConfigured(): boolean {
+  return !!process.env.GEMINI_API_KEY || selfHostedLlmConfigured()
+}
 
 export async function extractEntitiesLLM(
   title: string,
@@ -197,8 +195,8 @@ export async function extractEntitiesLLM(
   const cached = await redis.get(cacheKey)
   if (cached) return JSON.parse(cached) as ExtractionResult
 
-  // (OpenAI out of credit, with no Gemini key: the rules, without a failed call each time)
-  if (!LLM_CONFIGURED || (!process.env.GEMINI_API_KEY && openaiPaused())) {
+  // No model set up: the rules (in-house, free)
+  if (!llmConfigured()) {
     return extractEntitiesRuleBased(title, body)
   }
 
@@ -228,10 +226,10 @@ Content: ${(body ?? '').slice(0, 2000)}
 Return ONLY valid JSON, no markdown fences.`
 
   try {
-    // Try Gemini first (cheapest), fall back to OpenAI
+    // Gemini when it has a key, otherwise the self-hosted server
     const result = process.env.GEMINI_API_KEY
       ? await callGeminiExtraction(prompt)
-      : await callOpenAIExtraction(prompt)
+      : await callSelfHostedExtraction(prompt)
 
     await redis.setex(cacheKey, ENTITY_CACHE_TTL, JSON.stringify(result))
     return result
@@ -265,27 +263,20 @@ async function callGeminiExtraction(prompt: string): Promise<ExtractionResult> {
   return parseExtractionJSON(text)
 }
 
-async function callOpenAIExtraction(prompt: string): Promise<ExtractionResult> {
-  const key = process.env.OPENAI_API_KEY!
-  const baseUrl = process.env.LLM_API_URL ?? 'https://api.openai.com/v1'
-  const res = await fetch(`${baseUrl}/chat/completions`, {
+async function callSelfHostedExtraction(prompt: string): Promise<ExtractionResult> {
+  const res = await fetch(`${llmApiUrl()}/chat/completions`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${key}`,
-    },
+    headers: llmHeaders(),
     body: JSON.stringify({
-      model: LLM_MODEL,
+      model: llmModel(),
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.1,
       max_tokens: 1024,
       response_format: { type: 'json_object' },
     }),
+    signal: AbortSignal.timeout(20_000),
   })
-  if (!res.ok) {
-    noteOpenAIFailure(res.status, await res.text().catch(() => ''))
-    throw new Error(`OpenAI API error: ${res.status}`)
-  }
+  if (!res.ok) throw new Error(`LLM API error: ${res.status}`)
   const data: any = await res.json()
   const text = data?.choices?.[0]?.message?.content ?? '{}'
   return parseExtractionJSON(text)

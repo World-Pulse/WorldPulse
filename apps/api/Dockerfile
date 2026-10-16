@@ -38,6 +38,8 @@ COPY --from=builder --chown=worldpulse:nodejs /prod/api/dist ./dist
 COPY --from=builder --chown=worldpulse:nodejs /prod/api/node_modules ./node_modules
 COPY --from=builder --chown=worldpulse:nodejs /prod/api/package.json .
 RUN mkdir -p /app/uploads/post-media && chown -R worldpulse:nodejs /app/uploads
+# The in-house fingerprint model (a volume shared with the scraper)
+RUN mkdir -p /app/models && chown worldpulse:nodejs /app/models
 
 USER worldpulse
 EXPOSE 3001

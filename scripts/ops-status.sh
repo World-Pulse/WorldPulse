@@ -338,6 +338,38 @@ print(json.dumps({'docker': docker, 'volumes_mb': dict(sorted(volumes.items(), k
                   'logs_mb': logs, 'folders_mb': folders, 'ollama_models_mb': models}, separators=(',', ':')))
 PY
 }
+# In-house text fingerprints (apps/scraper/src/pipeline/fingerprints.ts): how
+# many of the last 24 hours' reports have one, how far back the archive is
+# done, and the backfill's last run as the scraper recorded it (counts and a
+# short error only)
+fingerprint_stats() {
+  local q db pw run
+  q="SELECT json_build_object(
+        'last_24h', (SELECT count(*) FROM signal_fingerprints WHERE created_at > now() - interval '24 hours'),
+        'total',    (SELECT count(*) FROM signal_fingerprints),
+        'oldest',   (SELECT min(created_at) FROM signal_fingerprints))"
+  db=$(timeout 20 docker exec wp_postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAq -c "$1"' sh "$q" 2>/dev/null \
+       | tr -d '\r' | grep '^{' | head -n 1) || db=""
+  pw=$(redis_pw)
+  run=$(timeout 10 docker exec -e REDISCLI_AUTH="$pw" wp_redis redis-cli --raw GET fingerprints:stats 2>/dev/null | head -c 4000) || run=""
+  python3 - "$db" "$run" <<'PY' 2>/dev/null || printf 'null'
+import json, sys
+def load(s):
+    try:
+        return json.loads(s) if s.strip() else None
+    except Exception:
+        return None
+db, run = load(sys.argv[1]), load(sys.argv[2])
+out = dict(db or {})
+if run:
+    ms = run.get('model_status') or {}
+    out['last_run'] = {k: run.get(k) for k in ('at', 'recent', 'older', 'history_done', 'ms')}
+    out['model_ready'] = bool(ms.get('ready'))
+    err = run.get('error') or ms.get('error')
+    out['error'] = str(err)[:120] if err else None
+print(json.dumps(out, separators=(',', ':')))
+PY
+}
 pipeline_stats() {
   local q1 q2 db scr errs warns created top topw
   q1="SELECT json_build_object(
@@ -372,6 +404,7 @@ pipeline_stats() {
   printf '"scraper_30m":{"errors":%d,"warnings":%d,"signals_created":%d,"top_errors":[%s],"top_warnings":[%s]},' \
     "${errs:-0}" "${warns:-0}" "${created:-0}" "$top" "$topw"
   printf '"llm":%s,' "$(llm_stats "$scr")"
+  printf '"fingerprints":%s,' "$(fingerprint_stats)"
   printf '"claude":%s,' "$(claude_stats)"
   printf '"sources":%s,' "$(source_stats)"
   printf '"disk":%s,' "$(disk_stats)"
@@ -391,7 +424,7 @@ deploy_note() {
 pipe_cache=logs/pipeline-stats.json
 # Refresh every 30 minutes, or straight away when the cache predates a new field
 if [ ! -s "$pipe_cache" ] || [ -n "$(find "$pipe_cache" -mmin +29 2>/dev/null)" ] \
-   || ! grep -q '"switched_off":' "$pipe_cache" 2>/dev/null; then
+   || ! grep -q '"fingerprints":' "$pipe_cache" 2>/dev/null; then
   pipeline_stats > "$pipe_cache.tmp" 2>/dev/null \
     && python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$pipe_cache.tmp" 2>/dev/null \
     && mv "$pipe_cache.tmp" "$pipe_cache"

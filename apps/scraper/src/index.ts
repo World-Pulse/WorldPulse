@@ -47,7 +47,7 @@ import { recomputeSourceReputation } from './pipeline/source-reputation'
 import { startKafkaLagMonitor } from './lib/kafka-lag-monitor'
 import { checkGlobalCircuitHealth } from './lib/global-circuit-guard'
 import { updateEventThreads } from './pipeline/event-threads'
-import { batchEmbedSignals } from './pipeline/embeddings'
+import { backfillFingerprints, ensureFingerprintTable } from './pipeline/fingerprints'
 import { detectPatterns } from './pipeline/pattern-detection'
 import { buildCoOccurrenceEdges } from './pipeline/entity-graph'
 
@@ -342,22 +342,12 @@ async function bootstrap() {
     }
   }, 5 * 60_000) // 5 minutes
 
-  // Embedding backfill — generate missing embeddings every 30 min
-  setInterval(async () => {
-    try {
-      const result = await batchEmbedSignals()
-      if (result.processed > 0) {
-        logger.info({
-          processed: result.processed,
-          openai: result.openai,
-          tfidf: result.tfidf,
-          errors: result.errors,
-        }, '[EMBED] Batch embedding complete')
-      }
-    } catch (err) {
-      logger.error({ err }, '[EMBED] Batch embedding failed')
-    }
-  }, 30 * 60_000) // 30 minutes
+  // In-house fingerprints: the table at start, then every 10 min the reports
+  // that missed theirs and 2,000 older ones (pipeline/fingerprints.ts; it logs
+  // its own results and never throws)
+  void ensureFingerprintTable()
+  setTimeout(() => { void backfillFingerprints() }, 2 * 60_000)
+  setInterval(() => { void backfillFingerprints() }, 10 * 60_000)
 
   // Pattern detection — discover causal chains, hotspots, bridges every 2 hours
   setInterval(async () => {
@@ -368,7 +358,7 @@ async function bootstrap() {
     }
   }, 2 * 60 * 60_000) // 2 hours
 
-  // Run initial pattern detection after a short delay (let threads/embeddings populate first)
+  // Run initial pattern detection after a short delay (let threads populate first)
   setTimeout(() => {
     detectPatterns().catch(err => logger.error({ err }, '[PATTERNS] Initial pattern detection failed'))
   }, 60_000) // 1 minute after boot

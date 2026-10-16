@@ -56,10 +56,9 @@ vi.mock('../../lib/search-events', () => ({
   publishSignalDelete: vi.fn(),
 }))
 
-vi.mock('../../lib/pinecone', () => ({
-  generateEmbedding:  vi.fn(),
-  querySimilar:       vi.fn().mockResolvedValue([]),
-  isPineconeEnabled:  vi.fn().mockReturnValue(false),
+vi.mock('../../lib/fingerprint-search', () => ({
+  similarReports:  vi.fn().mockResolvedValue([]),
+  searchByMeaning: vi.fn().mockResolvedValue(null),
 }))
 
 vi.mock('../../lib/signal-summary', () => ({

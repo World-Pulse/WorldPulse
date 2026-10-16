@@ -23,6 +23,9 @@ RUN pnpm deploy --filter @worldpulse/scraper --prod /prod/scraper
 FROM node:20-alpine AS runner
 WORKDIR /app
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 scraper
+# The in-house fingerprint model is kept here (a volume shared with the API;
+# the volume takes this folder's owner when it is first created)
+RUN mkdir -p /app/models && chown scraper:nodejs /app/models
 ARG BUILD_TIME
 RUN echo "Build: $BUILD_TIME"
 COPY --from=builder --chown=scraper:nodejs /prod/scraper/dist ./dist

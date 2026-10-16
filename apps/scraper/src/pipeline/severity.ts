@@ -1,7 +1,7 @@
 /**
  * How serious a story is, without the LLM (plan item 0u). Used by the RSS
  * reader and by the classifier's rule-based fallback, which rate every signal
- * while OpenAI is out of credit.
+ * that the AI steps don't.
  *
  * The old rules looked for single words: any "dead" or "killed" made a story
  * high (a flood report saying "0 deaths" too), "alert" or "breaking" made it

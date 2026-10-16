@@ -4,18 +4,18 @@
  * Strategy (priority order, first available key wins):
  *   1. Check Redis cache (TTL 24h) — return if hit
  *   2. If ANTHROPIC_API_KEY set → call Claude's small model (lib/claude.ts, within the spending cap)
- *   3. Else if OPENAI_API_KEY set → call OpenAI gpt-4o-mini
- *   4. Else if GEMINI_API_KEY set → call Google Gemini 2.0 Flash
- *   5. Else if OPENROUTER_API_KEY set → call OpenRouter (configurable model)
- *   6. Else if OLLAMA_URL set  → call Ollama (llama3.2 or configured model)
- *   7. Fallback                → extractive summary from title + summary + body
+ *   3. Else if GEMINI_API_KEY set → call Google Gemini Flash
+ *   4. Else if OPENROUTER_API_KEY set → call OpenRouter (configurable model)
+ *   5. Else if OLLAMA_URL set  → call Ollama (llama3.2 or configured model)
+ *   6. Fallback                → extractive summary from title + summary + body
+ * (No OpenAI since Oct 16, 2026.)
  *
  * No extra npm packages — uses native fetch (Node 18+).
  */
 
 import { redis } from '../db/redis'
 import { askClaude } from './claude'
-import { OPENAI_CHAT_MODEL, GEMINI_MODEL } from './llm-models'
+import { GEMINI_MODEL } from './llm-models'
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 const SUMMARY_CACHE_TTL   = 60 * 60 * 24  // 24 hours in seconds
@@ -45,7 +45,7 @@ export interface SignalSummaryInput {
 
 export interface AISummary {
   text:        string
-  model:       'anthropic' | 'openai' | 'gemini' | 'openrouter' | 'ollama' | 'extractive'
+  model:       'anthropic' | 'gemini' | 'openrouter' | 'ollama' | 'extractive'
   generatedAt: string
 }
 
@@ -112,60 +112,6 @@ function buildExtractiveSummary(signal: SignalSummaryInput): AISummary {
   return {
     text,
     model:       'extractive',
-    generatedAt: new Date().toISOString(),
-  }
-}
-
-// ─── OpenAI ──────────────────────────────────────────────────────────────────
-async function generateWithOpenAI(
-  signal: SignalSummaryInput,
-  language: string,
-): Promise<AISummary> {
-  const apiKey = process.env.OPENAI_API_KEY!
-  const inputText = buildInputText(signal)
-
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method:  'POST',
-    headers: {
-      'Content-Type':  'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model:      OPENAI_CHAT_MODEL,
-      max_tokens: 150,
-      messages: [
-        {
-          role:    'system',
-          content: `You are PULSE, the AI Bureau for WorldPulse — a global intelligence platform.
-Write a concise 2-3 sentence summary following PULSE style:
-Sentence 1: What happened + where (active voice, lead with event).
-Sentence 2: Why it matters — significance, impact, or affected population.
-Sentence 3: What to watch next — forward-looking indicator or next development.
-Be factual and neutral. No hedging words. Cite source types when known. ${FACT_RULES}
-${language !== 'en' ? `Respond in ${language}.` : 'Respond in English.'}`,
-        },
-        {
-          role:    'user',
-          content: inputText,
-        },
-      ],
-    }),
-  })
-
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`OpenAI API error ${res.status}: ${err}`)
-  }
-
-  const json = await res.json() as {
-    choices: Array<{ message: { content: string } }>
-  }
-  const text = json.choices[0]?.message?.content?.trim()
-  if (!text) throw new Error('OpenAI returned empty response')
-
-  return {
-    text,
-    model:       'openai',
     generatedAt: new Date().toISOString(),
   }
 }
@@ -354,8 +300,6 @@ export async function generateSignalSummary(
   try {
     if (process.env.ANTHROPIC_API_KEY) {
       summary = await generateWithAnthropic(signal, language)
-    } else if (process.env.OPENAI_API_KEY) {
-      summary = await generateWithOpenAI(signal, language)
     } else if (process.env.GEMINI_API_KEY) {
       summary = await generateWithGemini(signal, language)
     } else if (process.env.OPENROUTER_API_KEY) {

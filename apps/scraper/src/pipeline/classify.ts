@@ -13,7 +13,7 @@ import { logger } from '../lib/logger'
 import { rateSeverity } from './severity'
 import { categorizeArticle } from './categories'
 import { claudeConfigured } from '../lib/claude'
-import { LLM_MODEL } from '../lib/llm-models'
+import { llmApiUrl, llmHeaders, llmModel, selfHostedLlmConfigured } from '../lib/llm-models'
 
 interface ClassificationResult {
   category:     Category
@@ -37,11 +37,11 @@ export async function classifyContent(
   const cached = await redis.get(cacheKey)
   if (cached) return JSON.parse(cached) as ClassificationResult
 
-  // Try LLM if configured (requires LLM_API_URL or OPENAI_API_KEY). With a
-  // Claude key, the word rules file each article and the editor pass
+  // With a Claude key, the word rules file each article and the editor pass
   // (editor.ts) re-files them 50 at a time: in-house, and far cheaper than a
-  // call per article (Oct 11, 2026)
-  const llmConfigured = !claudeConfigured() && !!(process.env.LLM_API_URL || process.env.OPENAI_API_KEY)
+  // call per article (Oct 11, 2026). Without one, a self-hosted model server
+  // can do it (LLM_API_URL + LLM_MODEL, lib/llm-models.ts)
+  const llmConfigured = !claudeConfigured() && selfHostedLlmConfigured()
   let result: ClassificationResult
   let byLlm = false
   if (llmConfigured) {
@@ -108,12 +108,11 @@ function recalibrateSeverity(result: ClassificationResult): ClassificationResult
 }
 
 async function llmClassify(title: string, body: string | null): Promise<ClassificationResult> {
-  const llmApiUrl   = process.env.LLM_API_URL
-  const openaiKey   = process.env.OPENAI_API_KEY
-  const model       = LLM_MODEL
+  const baseUrl = llmApiUrl()
+  const model   = llmModel()
 
-  // Neither LLM source configured — skip to rule-based
-  if (!llmApiUrl && !openaiKey) {
+  // No self-hosted model server — skip to rule-based
+  if (!baseUrl || !model) {
     throw new Error('No LLM configured')
   }
 
@@ -159,18 +158,10 @@ SUMMARY RULES:
 
   const userContent = `Title: ${title}\nBody: ${body ? body.slice(0, 1500) : 'N/A'}`
 
-  // OpenAI-compatible chat completions API (works for OpenAI and custom LLM_API_URL)
-  const endpoint = llmApiUrl
-    ? `${llmApiUrl.replace(/\/$/, '')}/chat/completions`
-    : 'https://api.openai.com/v1/chat/completions'
-
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  const apiKey = openaiKey ?? process.env.LLM_API_KEY
-  if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
-
-  const response = await fetch(endpoint, {
+  // The common chat-completions format, on the self-hosted server
+  const response = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
-    headers,
+    headers: llmHeaders(),
     body: JSON.stringify({
       model,
       messages: [

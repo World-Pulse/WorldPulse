@@ -27,9 +27,9 @@ import { correlateSignal, corroborateWithDuplicate } from './correlate'
 import type { CorrelationCandidate } from './correlate'
 import { recordSuccess } from '../health'
 import { computeReliabilityScore, maxSeverityForSourceCount } from './reliability-score'
-import { dedup, checkSemanticDuplicate } from './dedup'
+import { dedup } from './dedup'
 import { processSignalForKnowledgeGraph, extractEntitiesRuleBased, upsertEntityNode } from './entity-graph'
-import { embedSignal } from './embeddings'
+import { fingerprintSignal } from './fingerprints'
 import { signalsHavePublishedAt, publishedAtFor, sourceKey } from './signal-columns'
 import { decodeEntities, cleanUrl, cleanTitle, summaryWithoutNotes, feedText, HTML_TAG_RE, withoutOutletName } from './text'
 
@@ -244,20 +244,6 @@ export async function insertAndCorrelate(
 
   // 2. Run cross-source correlation (non-blocking — errors are non-fatal)
   try {
-    // Fetch embedding if it exists (may have been set by on-insert embedding)
-    let embedding: number[] | null = null
-    try {
-      const embRow = await db.raw(
-        'SELECT embedding::text FROM signals WHERE id = ? AND embedding IS NOT NULL',
-        [signal.id],
-      )
-      if (embRow.rows?.[0]?.embedding) {
-        // pgvector format: "[0.1,0.2,...]" → number[]
-        const raw = embRow.rows[0].embedding as string
-        embedding = JSON.parse(raw.replace(/^\[/, '[').replace(/\]$/, ']'))
-      }
-    } catch { /* non-fatal — correlate without semantic scoring */ }
-
     const candidate: CorrelationCandidate = {
       id:               String(signal.id),
       title:            String(signal.title ?? ''),
@@ -273,7 +259,6 @@ export async function insertAndCorrelate(
       published_at:     signal.event_time ?? signal.created_at ?? new Date(),
       reliability_score: Number(signal.reliability_score ?? 0.5),
       tags:             Array.isArray(signal.tags) ? signal.tags : [],
-      embedding,
     }
 
     const cluster = await correlateSignal(candidate)
@@ -369,23 +354,12 @@ export async function insertAndCorrelate(
     logger.debug({ err, signalId: signal.id }, 'Knowledge graph processing failed (non-fatal)')
   }
 
-  // 5. Vector embedding — async, non-blocking
-  //    Generates embedding for semantic search & similarity matching.
-  //    After embedding succeeds, run semantic dedup to detect near-identical signals.
-  try {
-    embedSignal(String(signal.id), String(signal.title ?? ''), String(signal.summary ?? ''))
-      .then(async (embedded) => {
-        if (!embedded) return
-        // 5a. Semantic dedup — flag near-duplicates (cosine > 0.92 within 12h)
-        const originalId = await checkSemanticDuplicate(String(signal.id))
-        if (originalId) {
-          logger.info({ signalId: signal.id, originalId }, 'Signal flagged as semantic duplicate')
-        }
-      })
-      .catch(err => logger.debug({ err, signalId: signal.id }, 'Embedding/dedup failed (non-fatal)'))
-  } catch (err) {
-    logger.debug({ err, signalId: signal.id }, 'Embedding setup failed (non-fatal)')
-  }
+  // 5. Fingerprint (in-house, for similar reports and search by meaning) —
+  //    non-blocking; never fails the insert
+  void fingerprintSignal(
+    String(signal.id), String(signal.title ?? ''), signal.summary == null ? null : String(signal.summary),
+    signal.created_at instanceof Date ? signal.created_at : String(signal.created_at ?? new Date().toISOString()),
+  )
 
   return signal
 }

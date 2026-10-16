@@ -3,7 +3,7 @@ import { db } from '../db/postgres'
 import { signalConnections } from '../lib/signal-connections'
 import { redis } from '../db/redis'
 import { optionalAuth, authenticate } from '../middleware/auth'
-import { generateEmbedding, querySimilar, isPineconeEnabled } from '../lib/pinecone'
+import { similarReports } from '../lib/fingerprint-search'
 import { indexSignal, removeSignal } from '../lib/search'
 import { publishSignalUpsert, publishSignalDelete } from '../lib/search-events'
 import { generateSignalSummary, refreshSignalSummary } from '../lib/signal-summary'
@@ -1524,50 +1524,30 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     return reply.send(response)
   })
 
-  // ─── SIMILAR SIGNALS (Pinecone semantic) ─────────────────────────────────
+  // ─── SIMILAR SIGNALS (in-house fingerprints) ─────────────────────────────
   // GET /api/v1/signals/:id/similar?limit=5
   //
-  // Fetches the signal's title+summary, generates an embedding, and queries
-  // Pinecone for the topK most similar vectors. Falls back gracefully when
-  // Pinecone or OpenAI is not configured.
+  // The reports closest in meaning to this one, from three weeks either side
+  // of it, by the in-house fingerprints (lib/fingerprint-search.ts). Empty
+  // while this report has no fingerprint yet.
   app.get('/:id/similar', {
     preHandler: [optionalAuth],
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     schema: {
       tags: ['signals'],
       summary: 'Get semantically similar signals',
-      description: 'Uses Pinecone vector search to find signals semantically similar to the given signal.',
+      description: 'Signals closest in meaning to this one (from three weeks either side of it), by WorldPulse\'s own text fingerprints.',
     },
   }, async (req, reply) => {
     const { id } = req.params as { id: string }
     const { limit = 5 } = req.query as { limit?: number }
-    const safeLimit = Math.min(20, Math.max(1, Number(limit)))
+    const safeLimit = Math.min(20, Math.max(1, Number(limit) || 5))
 
-    if (!isPineconeEnabled()) {
-      return reply.send({ success: true, similar: [], count: 0 })
-    }
-
-    // Fetch the signal to build the embedding text
-    const signal = await db('signals')
-      .select('id', 'title', 'summary', 'category')
-      .where('id', id)
-      .first()
-      .catch(() => null)
-
-    if (!signal) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
       return sendError(reply, 404, 'NOT_FOUND', 'Signal not found')
     }
 
-    const text = [signal.title, signal.summary].filter(Boolean).join('. ')
-    const embedding = await generateEmbedding(text)
-    if (!embedding) {
-      return reply.send({ success: true, similar: [], count: 0 })
-    }
-
-    // Query Pinecone — topK + 1 so we can exclude the source signal itself
-    const matches = await querySimilar(embedding, safeLimit + 1)
-    const filtered = matches.filter(m => String(m.id) !== String(id)).slice(0, safeLimit)
-
+    const filtered = await similarReports(id, safeLimit)
     if (filtered.length === 0) {
       return reply.send({ success: true, similar: [], count: 0 })
     }

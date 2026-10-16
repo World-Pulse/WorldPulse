@@ -8,7 +8,6 @@
  * 4. Logs everything to pulse_publish_log
  */
 import { askClaude, CLAUDE_SMALL, CLAUDE_WRITER } from '../claude'
-import { PULSE_OPENAI_MODEL } from '../llm-models'
 import { db } from '../../db/postgres'
 import { redis } from '../../db/redis'
 import { PULSE_USER_ID, ContentType, RATE_LIMITS, EDITORIAL_SYSTEM_PROMPT } from './constants'
@@ -161,19 +160,12 @@ export async function getCriticalSignals(minutes: number): Promise<SignalSummary
   return ((found as { rows?: SignalSummary[] })?.rows ?? [])
 }
 
-// ─── Dual-LLM Content Generation ──────────────────────────────────────────
+// ─── Content generation ─────────────────────────────────────────────────────
 //
-// Strategy: split workload across OpenAI and Anthropic to balance token usage.
-//
-//   (Oct 11, 2026: with a Claude key, Claude writes every piece, within the
-//   spending cap; see generateContent. The split below applies without one.)
-//   OpenAI (gpt-4o-mini)  → fast, cheap tasks: flash briefs, syndication summaries,
-//                           fact-check requests, social thread drafts
-//   Anthropic (Claude)    → deep, nuanced tasks: daily briefings, analysis posts,
-//                           editorial reviews, weekly reports
-//
-// If only one key is configured, all tasks go to that provider.
-// If neither key exists, falls back to template-based generation.
+// Claude writes every piece (in-house since Oct 11, 2026), within the spending
+// cap: short pieces on the small model, analysis and briefings on the writer.
+// Without a Claude key, or without an answer, the text is empty and callers'
+// quality gates reject it. No OpenAI since Oct 16, 2026.
 
 type LLMTier = 'fast' | 'deep'
 
@@ -182,55 +174,7 @@ interface GenerationResult {
   model: string
   tokens: number
   durationMs: number
-  provider: 'openai' | 'anthropic' | 'template'
-}
-
-/** Call OpenAI chat completions */
-async function callOpenAI(
-  prompt: string,
-  systemPrompt: string,
-  maxTokens: number,
-  model: string,
-  temperature: number,
-): Promise<GenerationResult> {
-  const t0 = Date.now()
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: prompt },
-      ],
-      max_tokens: maxTokens,
-      temperature,
-    }),
-  })
-
-  const data = await res.json() as {
-    choices?: Array<{ message: { content: string } }>
-    usage?: { total_tokens: number }
-    model?: string
-    error?: { message: string; type: string }
-  }
-
-  if (!res.ok || data.error) {
-    const errMsg = data.error?.message ?? `HTTP ${res.status}`
-    console.error(`[PULSE] OpenAI API error: ${errMsg} (model: ${model})`)
-    return { text: '', model, tokens: 0, durationMs: Date.now() - t0, provider: 'openai' }
-  }
-
-  return {
-    text: data.choices?.[0]?.message?.content ?? '',
-    model: data.model ?? model,
-    tokens: data.usage?.total_tokens ?? 0,
-    durationMs: Date.now() - t0,
-    provider: 'openai',
-  }
+  provider: 'anthropic' | 'template'
 }
 
 /**
@@ -260,9 +204,9 @@ async function callAnthropic(
 }
 
 /**
- * Generate content using the dual-LLM strategy.
+ * Generate content with Claude.
  *
- * @param tier - 'fast' routes to OpenAI (cheap, quick), 'deep' routes to Anthropic (nuanced)
+ * @param tier - 'fast' uses the small model (quick, cheap), 'deep' the writer (nuanced)
  * @param prompt - The user prompt
  * @param systemPrompt - Override system prompt (defaults to EDITORIAL_SYSTEM_PROMPT)
  * @param maxTokens - Max generation tokens
@@ -273,26 +217,15 @@ export async function generateContent(
   tier: LLMTier = 'fast',
   systemPrompt: string = EDITORIAL_SYSTEM_PROMPT,
 ): Promise<GenerationResult> {
-  const hasOpenAI    = !!process.env.OPENAI_API_KEY
-  const hasAnthropic = !!process.env.ANTHROPIC_API_KEY
-
-  // No keys at all — return empty so callers' quality gates reject it
-  if (!hasOpenAI && !hasAnthropic) {
-    console.warn('[PULSE] No LLM API keys configured — cannot generate content')
+  // No key — return empty so callers' quality gates reject it
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.warn('[PULSE] No Claude key configured — cannot generate content')
     return { text: '', model: 'template', tokens: 0, durationMs: 0, provider: 'template' }
   }
 
-  // Temperature: lower for factual briefs, slightly higher for analysis
-  const temperature = tier === 'fast' ? 0.2 : 0.35
-
-  // In-house (Oct 11, 2026): with a Claude key every piece is Claude's, within
-  // the spending cap: short pieces on the small model, analysis and briefings
-  // on the writer (PULSE_ANTHROPIC_MODEL, Sonnet 5.5). OpenAI only without one.
-  if (hasAnthropic) {
-    return callAnthropic(prompt, systemPrompt, maxTokens, tier === 'fast' ? CLAUDE_SMALL : CLAUDE_WRITER)
-  }
-  const model = PULSE_OPENAI_MODEL
-  return callOpenAI(prompt, systemPrompt, maxTokens, model, temperature)
+  // Short pieces on the small model, analysis and briefings on the writer
+  // (PULSE_ANTHROPIC_MODEL, Sonnet 5.5), within the spending cap
+  return callAnthropic(prompt, systemPrompt, maxTokens, tier === 'fast' ? CLAUDE_SMALL : CLAUDE_WRITER)
 }
 
 // ─── Publishing ─────────────────────────────────────────────────────────────
@@ -381,7 +314,7 @@ Rules:
 - Keep it under 280 characters if possible (tweet-sized)
 - Your output must be DIFFERENT from the signal title — add value or don't publish`
 
-  // Flash briefs → OpenAI (fast tier): quick, cheap, high-volume
+  // Flash briefs: the fast tier (quick, cheap, high-volume)
   const limited = await rateLimited(ContentType.FLASH_BRIEF)
   if (limited) return limited
   const result = await generateContent(prompt, 200, 'fast')

@@ -7,7 +7,7 @@ import { logSearchQuery } from '../lib/search-analytics'
 import { searchEntities } from '../lib/opensanctions'
 import { sanitizeString } from '../utils/sanitize'
 import { recordSearchLatency, maybeLogPercentiles } from '../lib/search-latency'
-import { generateEmbedding, querySimilar, isPineconeEnabled } from '../lib/pinecone'
+import { searchByMeaning } from '../lib/fingerprint-search'
 import { sendError } from '../lib/errors'
 
 /** Wrap a Meilisearch promise with a 150ms timeout.
@@ -445,9 +445,9 @@ export const registerSearchRoutes: FastifyPluginAsync = async (app) => {
   // ─── SEMANTIC SEARCH ─────────────────────────────────────────────────────
   // GET /api/v1/search/semantic?q=...&limit=10&category=...
   //
-  // Generates an OpenAI embedding for q, queries Pinecone for similar signal
-  // vectors, then fetches matching signal rows from PostgreSQL.
-  // Falls back gracefully when Pinecone is not configured.
+  // Search by meaning: the question's in-house fingerprint against every
+  // report's (lib/fingerprint-search.ts), then the matching rows from
+  // PostgreSQL. Answers semantic: false while the model isn't available.
   app.get('/semantic', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = z.object({
       q:        z.string().trim().min(2, 'Query must be at least 2 characters').max(500),
@@ -462,28 +462,16 @@ export const registerSearchRoutes: FastifyPluginAsync = async (app) => {
     const { q: rawQ, limit, category } = parsed.data
     const q = sanitizeString(rawQ)
 
-    if (!isPineconeEnabled()) {
-      return reply.send({
-        success:  true,
-        results:  [],
-        semantic: false,
-        partial:  false,
-        message:  'Semantic search not configured',
-      })
-    }
-
-    const embedding = await generateEmbedding(q)
-    if (!embedding) {
+    const matches = await searchByMeaning(q, { limit, category })
+    if (matches === null) {
       return reply.send({
         success:  true,
         results:  [],
         semantic: false,
         partial:  true,
-        message:  'Embedding generation unavailable',
+        message:  'Semantic search is starting up; try again in a few minutes',
       })
     }
-
-    const matches = await querySimilar(embedding, limit, category ? { category } : undefined)
     if (matches.length === 0) {
       return reply.send({ success: true, results: [], semantic: true, partial: false })
     }
@@ -498,7 +486,7 @@ export const registerSearchRoutes: FastifyPluginAsync = async (app) => {
       .whereIn('id', ids)
       .catch(() => [] as Record<string, unknown>[])
 
-    // Re-order by Pinecone score
+    // In order of closeness in meaning
     const scoreMap = new Map(matches.map(m => [String(m.id), m.score]))
     const sorted = (signals as Record<string, unknown>[])
       .slice()

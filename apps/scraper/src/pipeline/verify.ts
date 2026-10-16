@@ -11,15 +11,16 @@
  *
  * Oct 11, 2026 (in-house plan): with a Claude key the AI fact-check runs on
  * Claude, within the spending cap (lib/claude.ts), and only for stories that
- * matter: two or more reports to cross-check, or a high or critical one. The
- * OpenAI check and the Claude second opinion stay for setups with both keys.
+ * matter: two or more reports to cross-check, or a high or critical one.
+ * Without a Claude key, a self-hosted model server can run the AI check
+ * instead (lib/llm-models.ts); no OpenAI account is used (Oct 16, 2026).
  */
 
 import { db } from '../lib/postgres'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
 import { askClaude, claudeConfigured as claudeKeySet, whyNoAnswer } from '../lib/claude'
-import { LLM_MODEL } from '../lib/llm-models'
+import { llmApiUrl, llmHeaders, llmModel, selfHostedLlmConfigured } from '../lib/llm-models'
 import type { SignalStatus } from '@worldpulse/types'
 
 interface ArticleGroup {
@@ -44,9 +45,10 @@ export async function verifySignal(
   signal:   { id: string; severity: string; category: string },
   articles: ArticleGroup[],
 ): Promise<VerificationResult> {
-  // With a Claude key the fact-check is Claude's (in-house); OpenAI only without one
+  // With a Claude key the fact-check is Claude's (in-house); a self-hosted model
+  // server only without one (lib/llm-models.ts)
   const claudeFirst        = claudeKeySet()
-  const llmConfigured      = !claudeFirst && !!(process.env.LLM_API_URL || process.env.OPENAI_API_KEY)
+  const llmConfigured      = !claudeFirst && selfHostedLlmConfigured()
   const claudeConfigured   = !!process.env.ANTHROPIC_API_KEY
 
   const checks = await Promise.allSettled([
@@ -270,9 +272,8 @@ async function checkLLMFactConsistency(
   signal:   { id: string; severity: string; category: string },
   articles: ArticleGroup[],
 ): Promise<CheckResult> {
-  const llmApiUrl = process.env.LLM_API_URL
-  const openaiKey = process.env.OPENAI_API_KEY
-  const model     = LLM_MODEL
+  const baseUrl = llmApiUrl()
+  const model   = llmModel()
 
   const summaries = articles
     .slice(0, 5)
@@ -296,18 +297,10 @@ ${summaries}
 
 Are these articles factually consistent? Detect any contradictions.`
 
-  const endpoint = llmApiUrl
-    ? `${llmApiUrl.replace(/\/$/, '')}/chat/completions`
-    : 'https://api.openai.com/v1/chat/completions'
-
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  const apiKey = openaiKey ?? process.env.LLM_API_KEY
-  if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
-
   try {
-    const response = await fetch(endpoint, {
+    const response = await fetch(`${baseUrl}/chat/completions`, {
       method:  'POST',
-      headers,
+      headers: llmHeaders(),
       body: JSON.stringify({
         model,
         messages: [

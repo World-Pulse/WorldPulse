@@ -54,7 +54,7 @@ describe('generateSignalSummary', () => {
   it('returns cached summary when Redis hit', async () => {
     const cached = {
       text:        'Cached AI summary text.',
-      model:       'openai' as const,
+      model:       'anthropic' as const,
       generatedAt: '2026-03-22T00:00:00Z',
     }
     redis.get.mockResolvedValueOnce(JSON.stringify(cached))
@@ -119,7 +119,7 @@ describe('generateSignalSummary', () => {
   })
 
   it('returns extractive fallback (no cache) when LLM fails', async () => {
-    process.env.OPENAI_API_KEY = 'sk-test-invalid'
+    process.env.GEMINI_API_KEY = 'gemini-test-invalid'
     redis.get.mockResolvedValueOnce(null)
     // Mock fetch to simulate LLM failure
     global.fetch = vi.fn().mockRejectedValueOnce(new Error('Network error'))
@@ -131,7 +131,7 @@ describe('generateSignalSummary', () => {
     // Should NOT cache when LLM fails (allow retry)
     expect(redis.setex).not.toHaveBeenCalled()
 
-    delete process.env.OPENAI_API_KEY
+    delete process.env.GEMINI_API_KEY
   })
 
   it('invalidateSummaryCache deletes the Redis key', async () => {
@@ -225,9 +225,9 @@ describe('generateSignalSummary', () => {
     delete process.env.OPENROUTER_API_KEY
   })
 
-  it('Anthropic takes priority over OpenAI when both keys set', async () => {
+  it('Anthropic takes priority over Gemini when both keys set', async () => {
     process.env.ANTHROPIC_API_KEY = 'sk-ant-test'
-    process.env.OPENAI_API_KEY    = 'sk-openai-test'
+    process.env.GEMINI_API_KEY    = 'gemini-test'
     redis.get.mockResolvedValueOnce(null)
     redis.setex.mockResolvedValueOnce('OK')
 
@@ -246,6 +246,20 @@ describe('generateSignalSummary', () => {
     expect(fetchCall[0]).toContain('anthropic.com')
 
     delete process.env.ANTHROPIC_API_KEY
+    delete process.env.GEMINI_API_KEY
+  })
+
+  it('never calls OpenAI, even when an OpenAI key is set', async () => {
+    process.env.OPENAI_API_KEY = 'unused-key'
+    redis.get.mockResolvedValueOnce(null)
+    global.fetch = vi.fn()
+
+    const { generateSignalSummary } = await import('../signal-summary')
+    const result = await generateSignalSummary(makeSample())
+
+    expect(result.model).toBe('extractive')
+    expect(global.fetch).not.toHaveBeenCalled()
+
     delete process.env.OPENAI_API_KEY
   })
 })

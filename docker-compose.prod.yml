@@ -181,11 +181,14 @@ services:
       # Auto-posting to X needs TWITTER_API_KEY, which isn't passed here.
       PULSE_ENABLED:     ${PULSE_ENABLED:-true}
       PULSE_API_KEY:     ${PULSE_API_KEY:-}
-      OPENAI_API_KEY:    ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       AI_MONTHLY_CAP_USD: ${AI_MONTHLY_CAP_USD:-20}
+      # In-house text fingerprints (lib/fingerprint.ts): the model, downloaded
+      # once from Hugging Face and shared with the scraper. No OpenAI (Oct 16, 2026).
+      FINGERPRINT_DIR:   /app/models
     volumes:
       - uploads_data:/app/uploads
+      - models_data:/app/models
     networks:
       - wp_net
     healthcheck:
@@ -217,22 +220,21 @@ services:
       KAFKA_BROKERS:      kafka:29092
       SCRAPE_INTERVAL_MS: ${SCRAPE_INTERVAL_MS:-30000}
       LOG_LEVEL:          info
-      # Optional — LLM classification
-      OPENAI_API_KEY:     ${OPENAI_API_KEY:-}
-      LLM_API_URL:        ${LLM_API_URL:-}
-      LLM_MODEL:          ${LLM_MODEL:-gpt-4o-mini}
       # Claude: the editor pass that re-files categories, and fact-checks, within
       # a monthly cap shared with the API (apps/scraper/src/lib/claude.ts)
       ANTHROPIC_API_KEY:  ${ANTHROPIC_API_KEY:-}
       AI_MONTHLY_CAP_USD: ${AI_MONTHLY_CAP_USD:-20}
-      # Optional — Ollama embeddings (runs on host, not in Docker)
-      OLLAMA_HOST:        ${OLLAMA_HOST:-http://172.19.0.1:11434}
+      # In-house text fingerprints for every report (pipeline/fingerprints.ts);
+      # the model folder is shared with the API. No OpenAI (Oct 16, 2026).
+      FINGERPRINT_DIR:    /app/models
       # Optional — data sources that only run with a key or an approved app name
       OTX_API_KEY:        ${OTX_API_KEY:-}
       RELIEFWEB_APPNAME:  ${RELIEFWEB_APPNAME:-}
       ACLED_API_KEY:      ${ACLED_API_KEY:-}
       ACLED_API_EMAIL:    ${ACLED_API_EMAIL:-}
       AIS_STREAM_API_KEY: ${AIS_STREAM_API_KEY:-}
+    volumes:
+      - models_data:/app/models
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -368,3 +370,5 @@ volumes:
   prometheus_data:
   grafana_data:
   uploads_data:
+  # The in-house fingerprint model (16 MB), so it is downloaded once, not per deploy
+  models_data:

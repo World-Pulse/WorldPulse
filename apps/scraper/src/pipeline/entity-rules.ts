@@ -1,7 +1,7 @@
 /**
  * Rule-based entity extraction for the Knowledge Graph (plan item 0s), used
- * for every signal below high severity and whenever the LLM can't be asked
- * (all of them while OpenAI is out of credit).
+ * for every signal below high severity and whenever no AI model is set up for
+ * it (all of them on WorldPulse itself: no OpenAI since Oct 2026).
  *
  * The first rules (Oct 2026) made 21,100 of 23,079 entities "locations":
  * any capitalised words after "in" or "from" ("April", "Petroleum Products",

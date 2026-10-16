@@ -499,7 +499,6 @@ export default function AdminPage() {
               {llmStatus.providers.map((p) => {
                 const PROVIDER_STYLE: Record<string, { icon: string; color: string; bg: string }> = {
                   anthropic:  { icon: '🟠', color: '#f97316', bg: 'rgba(249,115,22,0.12)' },
-                  openai:     { icon: '🟢', color: '#22c55e', bg: 'rgba(34,197,94,0.12)'  },
                   gemini:     { icon: '🔵', color: '#3b82f6', bg: 'rgba(59,130,246,0.12)' },
                   openrouter: { icon: '🟣', color: '#a855f7', bg: 'rgba(168,85,247,0.12)' },
                   ollama:     { icon: '🏠', color: '#06b6d4', bg: 'rgba(6,182,212,0.12)'  },
@@ -540,7 +539,7 @@ export default function AdminPage() {
                 )
               })}
               <p className="text-[11px] font-mono text-wp-text3 mt-3 pt-3 border-t border-[rgba(255,255,255,0.05)]">
-                Priority chain: Anthropic → OpenAI → Gemini → OpenRouter → Ollama → Extractive
+                Priority chain: Anthropic → Gemini → OpenRouter → Ollama → Extractive
               </p>
             </div>
           ) : llmError ? (

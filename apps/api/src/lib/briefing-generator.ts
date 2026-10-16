@@ -15,7 +15,7 @@
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 import { logger } from './logger'
-import { OPENAI_CHAT_MODEL, GEMINI_MODEL } from './llm-models'
+import { GEMINI_MODEL } from './llm-models'
 import { askClaude, CLAUDE_SMALL } from './claude'
 import { signalsHaveStoryIds } from './stories'
 
@@ -393,33 +393,7 @@ async function generateWithLLM(prompt: string): Promise<{ text: string; model: s
     logger.warn('Briefing: Claude gave no answer (the spending cap or an error), trying next provider')
   }
 
-  // Priority 2: OpenAI
-  const openaiKey = process.env.OPENAI_API_KEY
-  if (openaiKey) {
-    try {
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${openaiKey}`,
-        },
-        body: JSON.stringify({
-          model: OPENAI_CHAT_MODEL,
-          max_tokens: 2000,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-      })
-      if (res.ok) {
-        const data = await res.json() as { choices: Array<{ message: { content: string } }> }
-        const openaiText = data.choices[0]?.message.content
-        if (openaiText) return { text: openaiText, model: 'openai' }
-      }
-    } catch (err) {
-      logger.warn({ err }, 'Briefing: OpenAI call failed, trying next provider')
-    }
-  }
-
-  // Priority 3: Gemini
+  // Priority 2: Gemini
   const geminiKey = process.env.GEMINI_API_KEY
   if (geminiKey) {
     try {
@@ -445,7 +419,7 @@ async function generateWithLLM(prompt: string): Promise<{ text: string; model: s
     }
   }
 
-  // Priority 4: OpenRouter
+  // Priority 3: OpenRouter
   const openrouterKey = process.env.OPENROUTER_API_KEY
   if (openrouterKey) {
     try {
@@ -472,7 +446,7 @@ async function generateWithLLM(prompt: string): Promise<{ text: string; model: s
     }
   }
 
-  // Priority 5: Ollama
+  // Priority 4: Ollama
   const ollamaUrl = process.env.OLLAMA_URL
   if (ollamaUrl) {
     try {

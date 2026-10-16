@@ -55,6 +55,8 @@ if [ -d /etc/cron.d ] && [ "$(cat "$OPS_CRON" 2> /dev/null)" != "$OPS_LINE" ]; t
   printf '%s\n' "$OPS_LINE" > "$OPS_CRON" && chmod 644 "$OPS_CRON"
 fi
 log "Deploying ${SHA}"
+# Which repository this copy follows (owner/name only; anything before an "@" is left out)
+log "Code from $(git remote get-url origin 2>/dev/null | sed -E 's#^[a-z]+://([^@/]*@)?##; s#^git@##; s#[.]git$##; s#^[^/:]*[/:]##' | tr -cd 'A-Za-z0-9._/-' | cut -c1-80)"
 
 # ── 1. Disk space guard ──────────────────────────────────────────────────────
 if [ "$(free_gb)" -lt 10 ]; then

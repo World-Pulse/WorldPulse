@@ -61,3 +61,5 @@ worldpulse_autopilot.py
 coverage/
 # Unused legacy Kubernetes CI template — deploy.yml and watchdog.yml are tracked
 .github/workflows/ci.yml
+# The in-house fingerprint model, when the API or scraper runs locally (lib/fingerprint.ts)
+.cache/

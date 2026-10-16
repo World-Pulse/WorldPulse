@@ -4,7 +4,8 @@ import { redis } from '../db/redis'
 import { optionalAuth } from '../middleware/auth'
 import { z } from 'zod'
 import { sendError } from '../lib/errors'
-import { generateEmbedding, querySimilar, isPineconeEnabled } from '../lib/pinecone'
+import { fingerprint, fingerprintStatus, similarity } from '../lib/fingerprint'
+import { searchByMeaning } from '../lib/fingerprint-search'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -113,8 +114,12 @@ function extractClaims(text: string): Array<{ text: string; type: ExtractedClaim
 
 // ─── Semantic similarity helpers ─────────────────────────────────────────────
 
+// On the in-house fingerprints (lib/fingerprint.ts) same-story reports score
+// around 0.58 and unrelated ones under 0.4
 const SEMANTIC_SIMILARITY_THRESHOLD = 0.75  // above this = agrees
 const SEMANTIC_CONTRADICTION_THRESHOLD = 0.40 // below this = potential disagree
+/** A report counts as about the claim from this closeness in meaning */
+const SEMANTIC_RELEVANT = 0.45
 
 /** Contradiction keywords that, combined with low similarity, signal disagreement */
 const CONTRADICTION_SIGNALS = [
@@ -125,12 +130,12 @@ const CONTRADICTION_SIGNALS = [
 
 /**
  * Determines if a corroborating signal's snippet agrees or disagrees with a claim.
- * Uses Pinecone semantic similarity when available, falls back to keyword heuristics.
+ * Uses the in-house fingerprints when available, falls back to keyword heuristics.
  */
 async function determineAgreement(
   claimText: string,
   snippet: string | null,
-  claimEmbedding: number[] | null,
+  claimEmbedding: Float32Array | null,
 ): Promise<{ agrees: boolean; semanticScore: number | null }> {
   if (!snippet) return { agrees: true, semanticScore: null }
 
@@ -138,15 +143,12 @@ async function determineAgreement(
   const hasContradiction = CONTRADICTION_SIGNALS.some(sig => snippetLower.includes(sig))
 
   // If we have embeddings, use semantic similarity for fine-grained agreement
-  if (claimEmbedding && isPineconeEnabled()) {
+  if (claimEmbedding) {
     try {
-      const snippetEmbedding = await generateEmbedding(snippet)
+      const snippetEmbedding = await fingerprint(snippet)
       if (snippetEmbedding) {
-        // Cosine similarity between claim and snippet embeddings
-        const dotProduct = claimEmbedding.reduce((sum, val, i) => sum + val * snippetEmbedding[i]!, 0)
-        const magA = Math.sqrt(claimEmbedding.reduce((sum, val) => sum + val * val, 0))
-        const magB = Math.sqrt(snippetEmbedding.reduce((sum, val) => sum + val * val, 0))
-        const cosineSim = magA > 0 && magB > 0 ? dotProduct / (magA * magB) : 0
+        // Closeness in meaning of claim and snippet (fingerprints have length 1)
+        const cosineSim = similarity(claimEmbedding, snippetEmbedding)
 
         // High similarity + contradiction keywords = disagrees (semantically related but contradicting)
         if (hasContradiction && cosineSim > SEMANTIC_CONTRADICTION_THRESHOLD) {
@@ -174,26 +176,22 @@ async function crossReferenceClaim(
   claimText: string,
   signalSourceSlug: string | null,
 ): Promise<{ score: number; status: ExtractedClaim['status']; sources: VerificationSource[]; method: string }> {
-  // Attempt semantic search via Pinecone first, then fall back to full-text
+  // Reports close in meaning (in-house fingerprints), together with full-text
   let semanticSignalIds: string[] = []
-  let claimEmbedding: number[] | null = null
+  let claimEmbedding: Float32Array | null = null
   let method = 'full-text'
 
-  if (isPineconeEnabled()) {
-    try {
-      claimEmbedding = await generateEmbedding(claimText)
-      if (claimEmbedding) {
-        const similar = await querySimilar(claimEmbedding, 15)
-        semanticSignalIds = similar
-          .filter(r => r.score >= 0.6) // only semantically relevant signals
-          .map(r => r.id)
-        if (semanticSignalIds.length > 0) {
-          method = 'semantic+full-text'
-        }
+  try {
+    claimEmbedding = await fingerprint(claimText)
+    if (claimEmbedding) {
+      const similar = await searchByMeaning(claimText, { limit: 15, minScore: SEMANTIC_RELEVANT })
+      semanticSignalIds = (similar ?? []).map(r => r.id)
+      if (semanticSignalIds.length > 0) {
+        method = 'semantic+full-text'
       }
-    } catch {
-      // Semantic search failed — continue with full-text only
     }
+  } catch {
+    // Semantic search failed — continue with full-text only
   }
 
   // Full-text keyword search
@@ -568,7 +566,7 @@ export const registerClaimsRoutes: FastifyPluginAsync = async (fastify) => {
       claimTypesSupported: ['factual', 'statistical', 'attribution', 'causal', 'predictive'],
       verificationEngine: {
         version: '2.0.0',
-        method: isPineconeEnabled() ? 'semantic' : 'keyword',
+        method: fingerprintStatus().ready ? 'semantic' : 'keyword',
       },
     }
 

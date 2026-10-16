@@ -40,7 +40,7 @@ vi.mock('../lib/search',          () => ({ indexSignal: vi.fn(), removeSignal: v
 vi.mock('../lib/search-events',   () => ({ publishSignalUpsert: vi.fn(), publishSignalDelete: vi.fn() }))
 vi.mock('../lib/signal-summary',  () => ({ generateSignalSummary: vi.fn(), refreshSignalSummary: vi.fn() }))
 vi.mock('../lib/slop-detector',   () => ({ slopDetector: { scoreSignal: vi.fn() } }))
-vi.mock('../lib/pinecone',        () => ({ generateEmbedding: vi.fn(), querySimilar: vi.fn(), isPineconeEnabled: vi.fn(() => false) }))
+vi.mock('../lib/fingerprint-search', () => ({ similarReports: vi.fn(async () => []), searchByMeaning: vi.fn(async () => null) }))
 vi.mock('../lib/risk-score',      () => ({ computeRiskScore: vi.fn(() => ({ score: 0, level: 'low', label: 'Low' })) }))
 vi.mock('../lib/cib-detection',   () => ({ detectCIB: vi.fn() }))
 vi.mock('../lib/source-bias',     () => ({ getSourceBias: vi.fn(), extractDomain: vi.fn() }))
