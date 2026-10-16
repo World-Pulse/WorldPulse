@@ -46,9 +46,8 @@ import { batchValidateGeo } from './pipeline/geo-validator'
 import { recomputeSourceReputation } from './pipeline/source-reputation'
 import { startKafkaLagMonitor } from './lib/kafka-lag-monitor'
 import { checkGlobalCircuitHealth } from './lib/global-circuit-guard'
-import { updateEventThreads } from './pipeline/event-threads'
 import { backfillFingerprints, ensureFingerprintTable } from './pipeline/fingerprints'
-import { detectPatterns } from './pipeline/pattern-detection'
+import { loadEngine } from './engine-loader'
 import { buildCoOccurrenceEdges } from './pipeline/entity-graph'
 
 // DB row has extra columns not present in the shared Source interface
@@ -323,24 +322,9 @@ async function bootstrap() {
     runStabilityCheck().catch(err => logger.error({ err }, '[STABILITY] Check failed'))
   }, 60 * 60_000)
 
-  // ── Cortex subsystems ──────────────────────────────────────────────
-
-  // Event threads — group related signals into narrative threads every 5 min
-  setInterval(async () => {
-    try {
-      const result = await updateEventThreads()
-      if (result.processed > 0 || result.statusUpdates > 0) {
-        logger.info({
-          processed: result.processed,
-          matched: result.matched,
-          created: result.created,
-          statusUpdates: result.statusUpdates,
-        }, '[THREADS] Event thread cycle complete')
-      }
-    } catch (err) {
-      logger.error({ err }, '[THREADS] Event thread update failed')
-    }
-  }, 5 * 60_000) // 5 minutes
+  // ── The hosted build's engine: its own jobs (event threads, pattern
+  //    detection; src/engine-loader.ts, none in the open-source edition) ──
+  void loadEngine().then(engine => engine?.startJobs())
 
   // In-house fingerprints: the table at start, then every 10 min the reports
   // that missed theirs and 2,000 older ones (pipeline/fingerprints.ts; it logs
@@ -348,20 +332,6 @@ async function bootstrap() {
   void ensureFingerprintTable()
   setTimeout(() => { void backfillFingerprints() }, 2 * 60_000)
   setInterval(() => { void backfillFingerprints() }, 10 * 60_000)
-
-  // Pattern detection — discover causal chains, hotspots, bridges every 2 hours
-  setInterval(async () => {
-    try {
-      await detectPatterns()
-    } catch (err) {
-      logger.error({ err }, '[PATTERNS] Pattern detection failed')
-    }
-  }, 2 * 60 * 60_000) // 2 hours
-
-  // Run initial pattern detection after a short delay (let threads populate first)
-  setTimeout(() => {
-    detectPatterns().catch(err => logger.error({ err }, '[PATTERNS] Initial pattern detection failed'))
-  }, 60_000) // 1 minute after boot
 
   // Co-occurrence edge builder — connect entities sharing signals every 4 hours
   setInterval(async () => {

@@ -66,11 +66,12 @@ function computeAlertTier(
 
 /**
  * Check if the signal's category is currently experiencing anomalous volume
- * by reading cached z-score from cortex baselines (Redis).
+ * by reading the cached z-score of its 30-day baseline (Redis; kept by the
+ * hosted build's engine, so never set in the open-source edition).
  */
 async function checkZScoreBoost(category: string): Promise<boolean> {
   try {
-    const cached = await redis.get(`cortex:baseline:${category}:global:all`)
+    const cached = await redis.get(`engine:baseline:${category}:global:all`)
     if (!cached) return false
     const stats = JSON.parse(cached)
     // Boost if 7-day z-score ≥ 2.0 (anomalous surge)

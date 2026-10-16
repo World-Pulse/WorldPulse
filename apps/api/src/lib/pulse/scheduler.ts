@@ -14,40 +14,23 @@ import { checkAndPublishFlashBriefs, publishDailyBriefing, publishBriefingUpdate
 import { runAgentBeatScan } from './agents/coordinator'
 import { runTwitterPublisher } from './agents/twitter-publisher'
 import { getAgent } from './agents/registry'
-import { runNightlyBaselines } from '../cortex/baselines'
-import { runEventThreadsCycle } from '../cortex/event-threads'
-import { runEntityStrengtheningCycle } from '../cortex/entity-strengthen'
-import { runPatternDetectionCycle } from '../cortex/pattern-detection'
-import { computeFeedQuality } from '../cortex/feed-quality'
-import { syncClustersToPostgres } from '../cortex/correlation-store'
-import { generatePatternAlerts } from '../cortex/pattern-alerts'
-import { publishWeeklySynthesis } from '../cortex/weekly-synthesis'
+import { loadEngine } from '../engine-loader'
 
 let flashTimer: ReturnType<typeof setInterval> | null = null
 let briefingTimer: ReturnType<typeof setInterval> | null = null
 let agentTimer: ReturnType<typeof setInterval> | null = null
 let twitterTimer: ReturnType<typeof setInterval> | null = null
-let cortexTimer: ReturnType<typeof setInterval> | null = null
-let threadTimer: ReturnType<typeof setInterval> | null = null
-let patternTimer: ReturnType<typeof setInterval> | null = null
 let isRunning = false
 
 const FLASH_INTERVAL_MS   = 5 * 60 * 1000   // 5 minutes
 const BRIEFING_CHECK_MS   = 60 * 1000        // check every minute
 const AGENT_SCAN_MS       = 2 * 60 * 60_000  // 2 hours
 const TWITTER_INTERVAL_MS = 15 * 60 * 1000   // 15 minutes — check for new content to tweet
-const CORTEX_CHECK_MS     = 60 * 1000        // check every minute (gated by hour)
-const THREAD_CYCLE_MS     = 30 * 60 * 1000   // 30 minutes — event thread promotion
 
 // UTC hours for briefing schedule (EDT: subtract 4)
 const MORNING_HOUR_UTC = 11   // 7am ET
 const MIDDAY_HOUR_UTC  = 17   // 1pm ET
 const EVENING_HOUR_UTC = 23   // 7pm ET
-const CORTEX_HOUR_UTC  = 3    // 3am UTC — nightly baseline computation
-const ENTITY_HOUR_UTC  = 4    // 4am UTC — nightly entity strengthening
-const FEED_QUALITY_HOUR_UTC = 5  // 5am UTC — daily feed quality scoring
-const PATTERN_HOUR_UTC = 5    // 5am UTC Sunday — weekly pattern detection (runs after feed quality)
-const SYNTHESIS_HOUR_UTC = 6  // 6am UTC Sunday — weekly intelligence synthesis (after patterns)
 
 // Track what we've published today to avoid duplicates
 const publishedToday = new Map<string, string>() // key → date string
@@ -137,7 +120,7 @@ export function startPulseScheduler(): void {
   }
 
   isRunning = true
-  console.log('[PULSE] Scheduler started — flash briefs (5m), briefings (7am/1pm/7pm ET), agent scans (2h), twitter (15m), cortex baselines (3am UTC), threads (30m)')
+  console.log('[PULSE] Scheduler started — flash briefs (5m), briefings (7am/1pm/7pm ET), agent scans (2h), twitter (15m)')
 
   // ── Flash brief checker ────────────────────────────────────────────────
   flashTimer = setInterval(async () => {
@@ -189,111 +172,9 @@ export function startPulseScheduler(): void {
     }
   }, TWITTER_INTERVAL_MS)
 
-  // ── Cortex: nightly baselines + entity strengthening ───────────────────
-  // At 3am UTC: compute yesterday's baselines and scan for anomalies.
-  // At 4am UTC: run entity strengthening (co-occurrence, trends, dedup, importance).
-  cortexTimer = setInterval(async () => {
-    const hour = new Date().getUTCHours()
-
-    // 3am UTC: baselines
-    if (hour === CORTEX_HOUR_UTC && !alreadyPublished('cortex-baselines')) {
-      markPublished('cortex-baselines')
-      try {
-        console.log('[CORTEX] Running nightly baselines...')
-        const result = await runNightlyBaselines()
-        console.log(`[CORTEX] Nightly complete: ${result.baselines_stored} baselines, ${result.anomalies_detected} anomalies`)
-      } catch (err) {
-        console.error('[CORTEX] Nightly baselines failed:', err)
-        publishedToday.delete('cortex-baselines')
-      }
-    }
-
-    // 4am UTC: entity strengthening (was previously unreachable — nested inside 3am guard)
-    if (hour === ENTITY_HOUR_UTC && !alreadyPublished('cortex-entities')) {
-      markPublished('cortex-entities')
-      try {
-        console.log('[CORTEX] Running entity strengthening...')
-        const result = await runEntityStrengtheningCycle()
-        console.log(`[CORTEX] Entity strengthening: ${result.edges_created} edges, ${result.trends_updated} trends, ${result.entities_merged} merges, ${result.entities_scored} scored`)
-      } catch (err) {
-        console.error('[CORTEX] Entity strengthening failed:', err)
-        publishedToday.delete('cortex-entities')
-      }
-    }
-
-    // 5am UTC: daily feed quality scoring
-    if (hour === FEED_QUALITY_HOUR_UTC && !alreadyPublished('cortex-feed-quality')) {
-      markPublished('cortex-feed-quality')
-      try {
-        console.log('[CORTEX] Running feed quality scoring...')
-        const result = await computeFeedQuality()
-        console.log(`[CORTEX] Feed quality: ${result.sources_scored} sources scored, avg ${result.avg_quality}/100`)
-      } catch (err) {
-        console.error('[CORTEX] Feed quality scoring failed:', err)
-        publishedToday.delete('cortex-feed-quality')
-      }
-    }
-  }, CORTEX_CHECK_MS)
-
-  // ── Event threads: cluster → thread promotion ──────────────────────────
-  // Every 30 minutes, promote qualifying Redis clusters to persistent threads.
-  threadTimer = setInterval(async () => {
-    try {
-      const result = await runEventThreadsCycle()
-      if (result.promoted + result.updated + result.merged + (result.summarized ?? 0) > 0) {
-        console.log(`[CORTEX] Threads: ${result.promoted} new, ${result.updated} updated, ${result.merged} merged, ${result.stabilized} stabilized, ${result.resolved} resolved, ${result.summarized ?? 0} summarized`)
-      }
-
-      // Sync correlation clusters to PostgreSQL alongside thread promotion
-      await syncClustersToPostgres().catch(err => {
-        console.error('[CORTEX] Cluster sync failed:', err)
-      })
-    } catch (err) {
-      console.error('[CORTEX] Event threads cycle failed:', err)
-    }
-  }, THREAD_CYCLE_MS)
-
-  // ── Cross-domain pattern detection (weekly, Sunday 5am UTC) ───────────
-  patternTimer = setInterval(async () => {
-    const now = new Date()
-    if (now.getUTCDay() !== 0 || now.getUTCHours() !== PATTERN_HOUR_UTC) return
-    if (alreadyPublished('cortex-patterns')) return
-
-    markPublished('cortex-patterns')
-    try {
-      console.log('[CORTEX] Running weekly pattern detection...')
-      const result = await runPatternDetectionCycle()
-      console.log(`[CORTEX] Pattern detection: ${result.causal_chains} chains, ${result.bridges} bridges, ${result.hotspots} hotspots, ${result.temporal_sequences} sequences`)
-
-      // Generate PULSE posts from significant patterns
-      try {
-        const alerts = await generatePatternAlerts()
-        if (alerts.alerts_published > 0) {
-          console.log(`[CORTEX] Pattern alerts: ${alerts.alerts_published} posts published`)
-        }
-      } catch (alertErr) {
-        console.error('[CORTEX] Pattern alerts failed:', alertErr)
-      }
-    } catch (err) {
-      console.error('[CORTEX] Pattern detection failed:', err)
-      publishedToday.delete('cortex-patterns')
-    }
-
-    // 6am UTC Sunday: weekly intelligence synthesis
-    if (now.getUTCDay() === 0 && now.getUTCHours() === SYNTHESIS_HOUR_UTC && !alreadyPublished('cortex-synthesis')) {
-      markPublished('cortex-synthesis')
-      try {
-        console.log('[CORTEX] Publishing weekly intelligence synthesis...')
-        const result = await publishWeeklySynthesis()
-        if (result.success) {
-          console.log(`[CORTEX] Weekly synthesis published: ${result.postId}`)
-        }
-      } catch (err) {
-        console.error('[CORTEX] Weekly synthesis failed:', err)
-        publishedToday.delete('cortex-synthesis')
-      }
-    }
-  }, CORTEX_CHECK_MS)
+  // ── The hosted build's engine: its own scheduled jobs (lib/engine-loader.ts;
+  //    none in the open-source edition)
+  void loadEngine().then(engine => engine?.startJobs())
 }
 
 /** Stop the PULSE scheduler */
@@ -302,9 +183,7 @@ export function stopPulseScheduler(): void {
   if (briefingTimer) { clearInterval(briefingTimer); briefingTimer = null }
   if (agentTimer)    { clearInterval(agentTimer);    agentTimer = null }
   if (twitterTimer)  { clearInterval(twitterTimer);  twitterTimer = null }
-  if (cortexTimer)   { clearInterval(cortexTimer);   cortexTimer = null }
-  if (threadTimer)   { clearInterval(threadTimer);   threadTimer = null }
-  if (patternTimer)  { clearInterval(patternTimer);  patternTimer = null }
+  void loadEngine().then(engine => engine?.stopJobs())
   isRunning = false
   console.log('[PULSE] Scheduler stopped')
 }

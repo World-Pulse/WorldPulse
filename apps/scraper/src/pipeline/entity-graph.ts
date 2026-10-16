@@ -780,7 +780,7 @@ export async function buildCoOccurrenceEdges(): Promise<{
       entities: nodes.length,
       lastRun: new Date().toISOString(),
     }
-    await redis.setex('cortex:entity-edges:stats', 6 * 3600, JSON.stringify(stats))
+    await redis.setex('kg:entity-edges:stats', 6 * 3600, JSON.stringify(stats))
 
     return { pairsProcessed, edgesCreated, edgesUpdated, durationMs }
   } catch (err) {
@@ -789,7 +789,7 @@ export async function buildCoOccurrenceEdges(): Promise<{
 
     // Cache failure stats so HUD shows last attempt
     try {
-      await redis.setex('cortex:entity-edges:stats', 6 * 3600, JSON.stringify({
+      await redis.setex('kg:entity-edges:stats', 6 * 3600, JSON.stringify({
         pairsProcessed,
         edgesUpserted: edgesCreated,
         durationMs,

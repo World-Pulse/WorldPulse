@@ -58,6 +58,24 @@ log "Deploying ${SHA}"
 # Which repository this copy follows (owner/name only; anything before an "@" is left out)
 log "Code from $(git remote get-url origin 2>/dev/null | sed -E 's#^[a-z]+://([^@/]*@)?##; s#^git@##; s#[.]git$##; s#^[^/:]*[/:]##' | tr -cd 'A-Za-z0-9._/-' | cut -c1-80)"
 
+# ── 0. The engine (the hosted build only) ───────────────────────────────────
+# main is the open-source edition (mirrored publicly). The hosted build adds
+# the engine's files from this repository's private branch "engine" before
+# building; the next deploy's reset to main takes them away again. A copy
+# without that branch (a self-hosted one) builds the open-source edition.
+git ls-remote --exit-code --heads origin engine >/dev/null 2>&1; engine_rc=$?
+if [ "$engine_rc" -eq 0 ]; then
+  git fetch --quiet origin +refs/heads/engine:refs/remotes/origin/engine \
+    || finish failed "Couldn't fetch the engine — the live site was not touched."
+  git checkout refs/remotes/origin/engine -- . \
+    || finish failed "Couldn't add the engine's files — the live site was not touched."
+  log "Engine $(git rev-parse --short=7 refs/remotes/origin/engine) added"
+elif [ "$engine_rc" -eq 2 ]; then
+  log "No engine branch: building the open-source edition"
+else
+  finish failed "Couldn't reach the repository to fetch the engine — the live site was not touched."
+fi
+
 # ── 1. Disk space guard ──────────────────────────────────────────────────────
 if [ "$(free_gb)" -lt 10 ]; then
   log "Low disk ($(free_gb)G free) — emptying oversized logs, clearing Docker leftovers"

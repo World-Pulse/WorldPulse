@@ -63,3 +63,8 @@ coverage/
 .github/workflows/ci.yml
 # The in-house fingerprint model, when the API or scraper runs locally (lib/fingerprint.ts)
 .cache/
+# The hosted build's engine: added on the server from the private branch
+# "engine" before building (scripts/server-deploy.sh); never part of main
+apps/api/src/lib/engine/
+apps/scraper/src/engine/
+.engine/

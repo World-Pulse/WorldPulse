@@ -19,6 +19,7 @@ import { registerSearchRoutes } from './routes/search'
 import { registerUserRoutes } from './routes/users'
 import { registerAlertRoutes } from './routes/alerts'
 import { registerAnalyticsRoutes } from './routes/analytics'
+import { loadEngine } from './lib/engine-loader'
 import { registerCommunityRoutes } from './routes/communities'
 import { registerPollRoutes } from './routes/polls'
 import { registerSourceRoutes } from './routes/sources'
@@ -337,6 +338,10 @@ async function bootstrap() {
   await app.register(registerUserRoutes,   { prefix: '/api/v1/users' })
   await app.register(registerAlertRoutes,     { prefix: '/api/v1/alerts' })
   await app.register(registerAnalyticsRoutes,  { prefix: '/api/v1/analytics' })
+  // The hosted build's engine adds its own pages under the same prefix
+  // (lib/engine-loader.ts; none in the open-source edition)
+  const engine = await loadEngine()
+  if (engine) await app.register(async (scope) => { await engine.registerRoutes(scope) }, { prefix: '/api/v1/analytics' })
   await app.register(registerCommunityRoutes,  { prefix: '/api/v1/communities' })
   await app.register(registerPollRoutes,       { prefix: '/api/v1/polls' })
   await app.register(registerSourceRoutes,     { prefix: '/api/v1/sources' })

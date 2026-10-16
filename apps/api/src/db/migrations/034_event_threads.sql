@@ -1,8 +1,14 @@
--- 034: Cortex Subsystems — Event Threads, Embeddings (pgvector), Pattern Detection
--- Required extensions: pgvector (vector), pg_trgm (already installed)
+-- 034: Event threads (related reports grouped into one developing story)
+--
+-- Already applied on the hosted database. For a new install: apply this file
+-- by hand, like the other .sql files here (they are not run on deploy). The
+-- public /api/v1/threads pages read these tables.
+--
+-- Until Oct 16, 2026 this file also added signals.embedding (OpenAI vectors).
+-- Nothing uses that column any more: the in-house text fingerprints live in
+-- signal_fingerprints, which the scraper creates itself on start
+-- (apps/scraper/src/pipeline/fingerprints.ts).
 
--- ─── Event Threads ─────────────────────────────────────────────────────────
--- Groups related signals into evolving narrative threads
 CREATE TABLE IF NOT EXISTS event_threads (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title           TEXT NOT NULL,
@@ -34,21 +40,3 @@ CREATE TABLE IF NOT EXISTS event_thread_signals (
 
 CREATE INDEX IF NOT EXISTS idx_ets_thread_id ON event_thread_signals(thread_id);
 CREATE INDEX IF NOT EXISTS idx_ets_signal_id ON event_thread_signals(signal_id);
-
--- ─── Embeddings ────────────────────────────────────────────────────────────
--- Add vector column to signals for semantic search & similarity
--- Using 1536 dimensions for OpenAI text-embedding-3-small
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'signals' AND column_name = 'embedding'
-  ) THEN
-    ALTER TABLE signals ADD COLUMN embedding vector(1536);
-  END IF;
-END $$;
-
--- HNSW index for fast approximate nearest-neighbor queries
-CREATE INDEX IF NOT EXISTS idx_signals_embedding ON signals
-  USING hnsw (embedding vector_cosine_ops)
-  WITH (m = 16, ef_construction = 64);

@@ -21,7 +21,6 @@
 | Entity nodes | 12,087 |
 | Co-occurrence edges | 8,514 |
 | Embedded signals | 55,213 (27% coverage, backfilling ~100/hr) |
-| Cortex subsystems | 4/5 healthy (embeddings "degraded" — backfill only) |
 | Corroboration rate | 90% |
 | Reliability score | 74% |
 | Signal quality gates | 2+ sources for HIGH, 3+ for CRITICAL |
@@ -45,107 +44,9 @@
 
 ---
 
-## Phase 1.6: Cerebral Cortex — Intelligence Maturation ✅ COMPLETE
+## Phase 1.6: Analysis engine ✅ COMPLETE
 
-**North star:** The system gets smarter every day without human intervention.
-**The test:** Analyst sees an insight WorldPulse surfaced that they couldn't have found manually — a cross-domain pattern, an entity connection, or an anomaly against baseline that no single source reported.
-
-**Why now:** With 200K+ signals and 24 days of continuous ingestion, WorldPulse has enough data density to build real baselines and detect genuine anomalies.
-
-### 1.6.1 — Statistical Baselines ✅ COMPLETE
-
-Store rolling signal statistics so the system knows what "normal" looks like and can identify genuine deviations.
-
-- [x] Daily baseline table — signal_baselines table with category × region × severity × day_of_week, computed nightly at 3am UTC
-- [x] Rolling averages — 7-day, 30-day, and 90-day moving averages per category × region
-- [x] Z-score anomaly detection — Flags when current window exceeds 2σ above/below 30-day baseline; results stored in signal_anomalies table
-- [x] Seasonality awareness — Day-of-week adjustment via per-DOW averages
-- [x] Baseline API endpoint — GET /api/v1/analytics/baselines?category=&region=&severity= + POST backfill
-- [x] Nightly scheduler — 3am UTC via cortex timer, with dedup guard and error recovery
-- [x] Backfill utility — POST /api/v1/analytics/baselines/backfill for seeding historical data
-- [x] Wire into escalation index — Z-score boost on alert_tier when category has ≥2σ anomalous volume (ROUTINE→PRIORITY, PRIORITY→FLASH)
-- [ ] Baseline backfill on prod — Run initial 30-day backfill to seed historical data once tables are deployed
-
-### 1.6.2 — Persistent Event Threads ✅ COMPLETE
-
-Durable PostgreSQL event threads that track developing stories over weeks.
-
-- [x] Event threads table — event_threads (id, title, category, region, first_seen, last_updated, signal_count, peak_severity, status)
-- [x] Signal-to-thread mapping — event_thread_signals junction table with relevance scores
-- [x] Thread lifecycle — developing → escalating (≥5 signals) → stable (12h quiet) → resolved (7 days). Runs every 5 minutes.
-- [x] Multi-factor matching — Tag overlap (≥2 shared), category match, geographic match, title similarity (pg_trgm trigram at 0.35 threshold)
-- [x] Redis heartbeat — Health check distinguishes "idle" from "crashed" via `cortex:threads:heartbeat` TTL key
-- [x] Cortex HUD integration — Shows healthy/degraded/offline status with last-run timing
-- [x] Country code overflow fix — varchar(2) → varchar(10) + code-side truncation for "INT" country codes
-- [x] Thread summaries — LLM-generated narrative arc per thread (Claude/OpenAI, runs every 30min with thread cycle)
-- [x] Frontend: Developing Stories section — DevelopingStories component on homepage showing escalating/developing threads with severity trajectory
-- [x] Chokepoint → thread linking — Haversine-based linking of signals near chokepoints to threads, stored in related_entities
-- [x] Severity trajectory tracking — JSONB array of {timestamp, avg_severity_rank, signal_count} snapshots, populated on every cluster update
-- [x] Thread API — GET /api/v1/threads (active threads, filterable), GET /api/v1/threads/:id (full thread with timeline), GET /api/v1/threads/active/summary
-
-### 1.6.3 — Entity Relationship Strengthening ✅ COMPLETE
-
-Knowledge graph with 12,087+ entity nodes and 8,514+ co-occurrence edges.
-
-- [x] Entity extraction pipeline — Rule-based NER for all signals (person, organisation, location, event, weapon_system, legislation, commodity, technology)
-- [x] LLM extraction for high/critical signals — Gemini → OpenAI fallback for high-severity entity extraction
-- [x] Co-occurrence relationship inference — Auto-created edges when entities co-occur in signals
-- [x] Batch co-occurrence job — entity_edges table with weight (REAL type) and signal_ids
-- [x] Trending entities endpoint — /api/v1/analytics/trending-entities with knowledge_graph/tag_extraction source indicator
-- [x] Signal detail entity display — Knowledge graph connections surfaced on signal detail pages
-- [x] Entity merging / dedup — 3-strategy fuzzy match: trigram (pg_trgm >0.6), containment (last-name matching), title-strip (President Biden → Biden). Auto-merge high-confidence, threshold per strategy.
-- [x] Temporal entity graph — first_seen, last_seen, mention_count on entity_nodes; updateEntityTrends() computes rising/stable/falling with 7d vs 7d comparison
-- [x] Entity importance scoring — Weighted degree centrality normalized 0-1, stored in metadata.importance_score
-- [x] Entity timeline API — GET /api/v1/entities/:id/timeline + GET /api/v1/entities/:id (detail with edges and metadata)
-- [x] Relationship inference from causal chains — inferCausalRelationships() creates 'causal_inference' edges between entities in causally-connected thread signals
-
-### 1.6.4 — Semantic Similarity ✅ COMPLETE
-
-Meaning-based signal correlation using Ollama nomic-embed-text (768-dim vectors, CPU).
-
-- [x] Embedding pipeline — Ollama nomic-embed-text generates 768-dim embeddings on signal insert
-- [x] Vector storage — pgvector extension in PostgreSQL, permanent in custom postgres Dockerfile
-- [x] Embedding backfill — Running at batch size 200, accelerating toward full coverage
-- [x] Docker networking — OLLAMA_HOST set to 172.19.0.1:11434 gateway IP, iptables rule persisted across reboots
-- [x] Speed up backfill — Batch size increased from 50 to 200 per cycle (4x acceleration)
-- [x] Semantic correlation — 5-factor scoring in correlate.ts: temporal + geo + causal + keyword + **semantic** (0.35 weight). Uses pgvector cosine distance for pre-filtered candidate fetch
-- [x] Semantic dedup — Post-insert dedup: cosine >0.92 within 12h window flags duplicate_of, boosts original's source_count
-- [x] Similar signals endpoint — GET /api/v1/signals/:id/similar (pgvector primary, Pinecone fallback)
-- [x] Semantic search — GET /api/v1/analytics/semantic-search?q=... (natural language → embedding → vector search)
-
-### 1.6.5 — Cross-Domain Pattern Detection ✅ COMPLETE
-
-Discover emergent patterns the hardcoded causal chain rules don't cover.
-
-- [x] Learned causal chains — SQL co-occurrence analysis within 48h windows (50 chains discovered)
-- [x] Cross-cluster bridging — Shared entities between threads via entity_nodes (bridges discovered)
-- [x] Geographic hotspot detection — PostGIS grid-based density with anomaly scores (13 hotspots)
-- [x] Temporal sequence mining — 2-gram and 3-gram category sequence extraction from event threads, with interval consistency scoring (predictive_value metric)
-- [x] Pattern alerts — Auto-generate PULSE analysis posts for causal chains, hotspots, and cross-cluster bridges (max 3/cycle, 7-day dedup)
-- [x] Weekly intelligence synthesis — Automated Sunday 6am UTC report combining signals, threads, anomalies, entities, patterns, feed quality. Published as PULSE post + cached for API access
-
-### 1.6.6 — Cerebral Cortex Infrastructure ✅ COMPLETE
-
-- [x] Cortex health dashboard — Cerebral Cortex HUD showing all 5 subsystem statuses in real-time
-- [x] Intelligence quality scoring — Intelligence score (62/100), corroboration rate (90%), reliability (74%)
-- [x] Signal processing pipeline metrics — Source health monitoring, heartbeat patterns, Redis-cached stats
-- [x] Brain agent integration — Scheduled tasks: daily reflection 8am, weekly competitor watch Monday 9am, 6h health pulse
-- [x] Signal quality gates — Multi-source requirements for HIGH/CRITICAL severity, FIRMS flooding controls, reliability jitter
-- [x] Feed quality scoring — Per-source quality metrics (reliability, freshness, corroboration, volume consistency, recency), composite 0-100 score, trend detection, nightly at 5am UTC
-- [x] Feed quality API — GET /api/v1/analytics/feed-quality + POST /api/v1/analytics/feed-quality/compute
-- [x] LLM thread summaries — Auto-generated 2-3 sentence summaries for active threads (Anthropic Claude primary, OpenAI fallback)
-- [x] Migrate correlation clusters from Redis to PostgreSQL (Redis remains hot cache, Postgres is durable store)
-
-### Phase 1.6 — Remaining Priority Items
-
-All core Cerebral Cortex subsystems are now operational. Remaining items before Phase 2:
-
-1. ~~**Entity deduplication**~~ ✅ Fuzzy matching with Levenshtein distance + co-occurrence merging implemented in entity strengthening cycle.
-2. ~~**Speed up embedding backfill**~~ ✅ Batch size increased, backfill running at ~100/hr.
-3. ~~**Statistical baselines**~~ ✅ Nightly baseline computation (3am UTC), z-score anomaly detection, z-score boost wired into alert tier escalation.
-4. ~~**Commodity flows cleanup**~~ ✅ Queued fixes applied, removed from homepage.
-5. ~~**Event thread frontend**~~ ✅ Developing Stories component on homepage with severity trajectory, expandable summaries, signal counts.
-6. **Twitter/X agent activation** — PULSE auto-publisher built and wired, waiting for developer.x.com API keys (blocked on external credential).
+The hosted WorldPulse adds an analysis engine (baselines and anomalies, story threads, cross-domain patterns, quality measures) that is not part of the open-source edition. The open-source code runs without it: `apps/api/src/lib/engine-loader.ts` and `apps/scraper/src/engine-loader.ts` load it only when its files are present.
 
 ---
 
@@ -336,4 +237,4 @@ Evolve the commodity flows panel from static annual data into a real-time trade 
 ---
 
 *Last updated: May 9, 2026*
-*Phase 1 COMPLETE. Phase 1.6 (Cerebral Cortex) COMPLETE — all subsystems operational: statistical baselines, event threads, entity graph, embeddings, pattern detection, weekly synthesis, correlation clusters, z-score escalation, Developing Stories frontend. 203,338 signals from 207 sources. Intelligence score 62/100. Ready for Phase 2.*
+*Phase 1 COMPLETE. Phase 1.6 (analysis engine, hosted edition) COMPLETE. 203,338 signals from 207 sources. Intelligence score 62/100. Ready for Phase 2.*
