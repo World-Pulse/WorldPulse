@@ -2,12 +2,14 @@ import { describe, it, expect, vi } from 'vitest'
 
 vi.mock('../../lib/postgres', () => ({ db: { raw: vi.fn() } }))
 
-import { buildEntityLinks, type EntityHit } from '../entity-links'
+import { buildEntityLinks, sameEvent, type EntityHit } from '../entity-links'
 
 let n = 0
+// each story its own words, so no two read as one event told twice
+const TITLES: Record<string, string> = { A: 'Ankara talks resume quietly', B: 'Bogota floods spread widely', C: 'Cairo prices climb sharply' }
 const hit = (story: string, eid: string, name: string, over: Partial<EntityHit> = {}): EntityHit => ({
   eid, name, type: 'person', sid: `${story}-s${n++}`, story,
-  title: `headline of ${story}`, category: 'conflict', created_at: '2026-10-15T10:00:00Z',
+  title: TITLES[story] ?? `Story${story} unique${story}words here${story}`, category: 'conflict', created_at: '2026-10-15T10:00:00Z',
   location_name: null, country_code: null, severity: 'high', source_count: 1, ...over,
 })
 
@@ -54,6 +56,20 @@ describe('buildEntityLinks', () => {
     expect(chains[0]!.delay_hours).toBe(12)
     expect(chains[0]!.shared_entities).toContain('IRGC')
     expect(buildEntityLinks(hits, { causalPairs: [['security', 'conflict', 'x']] }).chains).toHaveLength(0)
+  })
+
+  it('skips one event told by two outlets', () => {
+    const t1 = 'DR Congo: Kabila’s move towards M23 raises questions over the peace deal'
+    const t2 = "DR Congo: Kabila's move towards M23 rebels raises questions"
+    const hits = [
+      hit('A', 'k', 'Joseph Kabila', { title: t1 }), hit('A', 'm', 'M23', { type: 'organisation', title: t1 }),
+      hit('B', 'k', 'Joseph Kabila', { title: t2 }), hit('B', 'm', 'M23', { type: 'organisation', title: t2 }),
+    ]
+    const r = buildEntityLinks(hits)
+    expect(r.links).toHaveLength(0)
+    expect(r.duplicates).toBe(1)
+    expect(sameEvent(t1, t2)).toBe(true)
+    expect(sameEvent('Houthis strike Aden palace', 'Saudi coalition hits Houthi fuel sites')).toBe(false)
   })
 
   it('reads a story as one, with its best-reported headline', () => {

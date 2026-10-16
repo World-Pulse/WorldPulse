@@ -161,8 +161,8 @@ const STOP = new Set(('about after again against amid among around because been 
 
 function wordsOf(t: string): Map<string, boolean> {
   const out = new Map<string, boolean>()
-  for (const w of String(t || '').match(/[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'-]+/g) ?? []) {
-    const lw = w.toLowerCase().replace(/^['-]+|['-]+$/g, '')
+  for (const w of String(t || '').replace(/[‘’]/g, "'").match(/[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'-]+/g) ?? []) {
+    const lw = w.toLowerCase().replace(/'s$/, '').replace(/^['-]+|['-]+$/g, '')
     if (lw.length < 4 || STOP.has(lw)) continue
     const isName = /^[A-ZÀ-Ý]/.test(w)
     out.set(lw, (out.get(lw) ?? false) || isName)
@@ -181,25 +181,46 @@ export function sharedSubject(a: string, b: string): string[] | null {
   return shared.length >= 2 || names.length >= 1 ? shared : null
 }
 
-/** How many of the engine's claimed links share a subject or named entities */
+/**
+ * Two outlets' headlines for one event: most of the shorter headline's words
+ * are in the other. Linking them says nothing new (they are one story).
+ */
+export function sameEvent(a: string, b: string): boolean {
+  const wa = wordsOf(a), wb = wordsOf(b)
+  if (wa.size === 0 || wb.size === 0) return false
+  let shared = 0
+  for (const w of wa.keys()) if (wb.has(w)) shared++
+  return shared / Math.min(wa.size, wb.size) >= 0.6
+}
+
+/**
+ * How many of the engine's claimed links hold up: they share a subject or
+ * named entities, and aren't one event told twice (`duplicates`).
+ */
 export function sensibleLinks(report: {
   causal_chains?: Array<{ cause?: { title?: string }; effect?: { title?: string }; shared_entities?: string[] }>
   cross_cluster_bridges?: Array<{ signal_title?: string; thread_a?: { title?: string }; thread_b?: { title?: string }; shared_entities?: string[] }>
-  entity_links?: unknown[]
-} | null): { sensible: number; total: number } {
-  if (!report) return { sensible: 0, total: 0 }
+  entity_links?: Array<{ a?: { title?: string }; b?: { title?: string } } | null | undefined>
+} | null): { sensible: number; total: number; duplicates: number } {
+  if (!report) return { sensible: 0, total: 0, duplicates: 0 }
   const chains = report.causal_chains ?? []
   const bridges = report.cross_cluster_bridges ?? []
-  let sensible = 0
+  const entityLinks = Array.isArray(report.entity_links) ? report.entity_links : []
+  let sensible = 0, duplicates = 0
   for (const c of chains) {
-    if ((c.shared_entities?.length ?? 0) > 0 || sharedSubject(c.cause?.title ?? '', c.effect?.title ?? '')) sensible++
+    const a = c.cause?.title ?? '', b = c.effect?.title ?? ''
+    if (sameEvent(a, b)) { duplicates++; continue }
+    if ((c.shared_entities?.length ?? 0) > 0 || sharedSubject(a, b)) sensible++
   }
   for (const b of bridges) {
     if ((b.shared_entities?.length ?? 0) > 0) { sensible++; continue }
     if (sharedSubject(b.signal_title ?? '', b.thread_a?.title ?? '') && sharedSubject(b.signal_title ?? '', b.thread_b?.title ?? '')) sensible++
   }
-  const entityLinks = Array.isArray(report.entity_links) ? report.entity_links.length : 0
-  return { sensible: sensible + entityLinks, total: chains.length + bridges.length + entityLinks }
+  for (const l of entityLinks) {
+    if (sameEvent(l?.a?.title ?? '', l?.b?.title ?? '')) duplicates++
+    else sensible++
+  }
+  return { sensible, total: chains.length + bridges.length + entityLinks.length, duplicates }
 }
 
 // ─── The score ───────────────────────────────────────────────────────────────
@@ -219,8 +240,10 @@ export interface ScoreInputs {
   threadCoverage: number | null
   /** days of baselines (30+ is mature) */
   baselineDays: number
-  /** links that share a subject or named entities */
+  /** links that hold up (share a subject or named entities, not one event told twice) */
   sensibleLinks: number
+  /** every link the engine claims (chains, bridges, entity links) */
+  linksClaimed: number
 }
 
 /**
@@ -243,7 +266,12 @@ export function honestScore(i: ScoreInputs): { score: number; parts: ScorePart[]
     i.entityCoverage == null ? null : i.entityCoverage / 100, 15, i.entityCoverage)
   add('threads', 'Reports in story threads', i.threadCoverage, 10, i.threadCoverage)
   add('baselines', 'Baselines (30+ days)', Math.min(1, i.baselineDays / 30), 10, i.baselineDays)
-  add('patterns', 'Links that share a subject', Math.min(1, i.sensibleLinks / 20), 15, i.sensibleLinks)
+  // the share of claimed links that hold up, with full marks only from 10 of them on
+  // (a count alone rewarded volume: 39 links, half of them one event told twice, got 15 of 15)
+  const claimed = Number(i.linksClaimed) || 0
+  add('patterns', 'Claimed links that hold up',
+    claimed > 0 ? (i.sensibleLinks / claimed) * Math.min(1, i.sensibleLinks / 10) : null, 15,
+    claimed > 0 ? (100 * i.sensibleLinks) / claimed : null)
   const got = parts.reduce((a, p) => a + p.got, 0)
   const max = parts.reduce((a, p) => a + p.max, 0)
   return { score: max > 0 ? Math.round((got / max) * 100) : 0, parts, left_out }

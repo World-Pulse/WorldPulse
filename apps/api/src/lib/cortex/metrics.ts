@@ -83,6 +83,8 @@ export interface IntelligenceQuality {
   cross_cluster_bridges: number
   entity_links: number
   sensible_links: number
+  links_claimed: number
+  link_duplicates: number
 
   // Composite score (0-100)
   intelligence_score: number
@@ -383,6 +385,7 @@ export async function computeIntelligenceQuality(q: Q = db): Promise<Intelligenc
     threadCoverage,
     baselineDays: Number(baselines?.baseline_days ?? 0),
     sensibleLinks: links.sensible,
+    linksClaimed: links.total,
   })
 
   return {
@@ -412,6 +415,8 @@ export async function computeIntelligenceQuality(q: Q = db): Promise<Intelligenc
     cross_cluster_bridges: patternReport?.cross_cluster_bridges?.length ?? 0,
     entity_links: patternReport?.entity_links?.length ?? 0,
     sensible_links: links.sensible,
+    links_claimed: links.total,
+    link_duplicates: links.duplicates,
 
     intelligence_score: scored.score,
     score_parts: scored.parts,

@@ -71,8 +71,33 @@ export interface LinkOptions {
 
 const NAMED_TYPES = new Set(['person', 'organisation', 'organization', 'org', 'group', 'company'])
 
+const STOP = new Set(('about after again against amid among around because been before being below between both could does doing down during each from further have having here into itself just more most much near news once only other over said says same should since some such than that their them then there these they this those through under until upon very were what when where which while will with would your year years week today latest live update report reports first last make makes made take takes call calls called might told tell tells').split(/\s+/))
+
+function headlineWords(t: string): Set<string> {
+  const out = new Set<string>()
+  for (const w of String(t || '').replace(/[‘’]/g, "'").match(/[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'-]+/g) ?? []) {
+    const lw = w.toLowerCase().replace(/'s$/, '').replace(/^['-]+|['-]+$/g, '')
+    if (lw.length >= 4 && !STOP.has(lw)) out.add(lw)
+  }
+  return out
+}
+
+/**
+ * Two outlets' headlines for one event ("Kabila's move towards M23 raises
+ * questions" / "Kabila's move towards M23 rebels raises questions"): most of
+ * the shorter headline's words are in the other. They share every entity, so
+ * without this check they top the list as the strongest "link".
+ */
+export function sameEvent(a: string, b: string): boolean {
+  const wa = headlineWords(a), wb = headlineWords(b)
+  if (wa.size === 0 || wb.size === 0) return false
+  let shared = 0
+  for (const w of wa) if (wb.has(w)) shared++
+  return shared / Math.min(wa.size, wb.size) >= 0.6
+}
+
 /** Link stories that share specific entities; and the subset that reads as cause → effect */
-export function buildEntityLinks(hits: EntityHit[], opts: LinkOptions = {}): { links: EntityLink[]; chains: EntityChain[]; stories: number; entities: number } {
+export function buildEntityLinks(hits: EntityHit[], opts: LinkOptions = {}): { links: EntityLink[]; chains: EntityChain[]; stories: number; entities: number; duplicates: number } {
   const maxStories = opts.maxStories ?? 25
   const maxLinks = opts.maxLinks ?? 20
   const maxChains = opts.maxChains ?? 50
@@ -130,10 +155,12 @@ export function buildEntityLinks(hits: EntityHit[], opts: LinkOptions = {}): { l
   }
 
   const links: EntityLink[] = []
+  let duplicates = 0
   for (const p of pairs.values()) {
     const solo = p.ents.length === 1 && (df.get(p.ents[0]!) ?? 0) === 2 && NAMED_TYPES.has(entName.get(p.ents[0]!)?.type ?? '')
     if (p.ents.length < 2 && !solo) continue
     const A = stories.get(p.a)!.end, B = stories.get(p.b)!.end
+    if (sameEvent(A.title, B.title)) { duplicates++; continue }
     const [first, second] = A.at <= B.at ? [A, B] : [B, A]
     links.push({
       a: first, b: second,
@@ -168,7 +195,7 @@ export function buildEntityLinks(hits: EntityHit[], opts: LinkOptions = {}): { l
   }
   chains.sort((x, y) => y.confidence - x.confidence)
 
-  return { links: links.slice(0, maxLinks), chains: chains.slice(0, maxChains), stories: stories.size, entities: df.size }
+  return { links: links.slice(0, maxLinks), chains: chains.slice(0, maxChains), stories: stories.size, entities: df.size, duplicates }
 }
 
 /**

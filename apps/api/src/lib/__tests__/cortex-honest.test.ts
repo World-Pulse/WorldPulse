@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   fairZ, zeroFilledStats, fairAnomalies, liveSpikes, liveMinCount,
-  sharedSubject, sensibleLinks, honestScore,
+  sharedSubject, sameEvent, sensibleLinks, honestScore,
 } from '../cortex/honest'
 
 describe('fairZ', () => {
@@ -90,17 +90,33 @@ describe('sensibleLinks', () => {
       cross_cluster_bridges: [{ signal_title: 'x', thread_a: { title: 'y' }, thread_b: { title: 'z' } }],
       entity_links: [{}, {}],
     })
-    expect(r).toEqual({ sensible: 4, total: 6 })
+    expect(r).toEqual({ sensible: 4, total: 6, duplicates: 0 })
   })
   it('handles no report', () => {
-    expect(sensibleLinks(null)).toEqual({ sensible: 0, total: 0 })
+    expect(sensibleLinks(null)).toEqual({ sensible: 0, total: 0, duplicates: 0 })
+  })
+  it('does not count one event told twice', () => {
+    const twice = { a: { title: 'DR Congo: Kabila’s move towards M23 raises questions over the peace deal' }, b: { title: "DR Congo: Kabila's move towards M23 rebels raises questions" } }
+    const real = { a: { title: 'IN BRIEF: Lukashenko comments on preparations for war to avoid it' }, b: { title: 'Lukashenko denies Belarus breached Latvian border as experts claim intelligence operation' } }
+    expect(sensibleLinks({ entity_links: [twice, real] })).toEqual({ sensible: 1, total: 2, duplicates: 1 })
+    expect(sensibleLinks({ causal_chains: [{ cause: twice.a, effect: twice.b, shared_entities: ['Joseph Kabila'] }] })).toEqual({ sensible: 0, total: 1, duplicates: 1 })
+  })
+})
+
+describe('sameEvent', () => {
+  it('spots two outlets’ headlines for one event', () => {
+    expect(sameEvent('Diri counters Donald Duke, says Lagos-Calabar coastal highway will go on', 'Gov Diri: Donald Duke wrong on Lagos-Calabar coastal highway')).toBe(true)
+  })
+  it('keeps different events apart', () => {
+    expect(sameEvent('Pope Leo diagnosed with cancer as doctors remove part of lung', "Pope 'wants to make the trip to Latin America'")).toBe(false)
+    expect(sameEvent('', 'anything at all')).toBe(false)
   })
 })
 
 describe('honestScore', () => {
   const base = {
     multiSourceRate: 0.089, avgReliability: 0.77, embeddingCoverage: 66.9,
-    entityCoverage: 40, threadCoverage: 0.5, baselineDays: 52, sensibleLinks: 4,
+    entityCoverage: 40, threadCoverage: 0.5, baselineDays: 52, sensibleLinks: 4, linksClaimed: 6,
   }
   it('scores honest parts out of 100', () => {
     const s = honestScore(base)
@@ -117,5 +133,16 @@ describe('honestScore', () => {
     // the swing that read 74 → 64: one part flipping between full and 0
     expect(honestScore({ ...base, threadCoverage: 1 }).score - zero.score).toBeGreaterThan(5)
     expect(Math.abs(missing.score - honestScore({ ...base }).score)).toBeLessThan(5)
+  })
+  it('scores links by the share that hold up, not by how many there are', () => {
+    const part = (o: Partial<typeof base>) => honestScore({ ...base, ...o }).parts.find(p => p.key === 'patterns')
+    // 39 links of which 20 hold up scored 15 of 15 by count; by share it is about half
+    expect(part({ sensibleLinks: 20, linksClaimed: 39 })!.got).toBeCloseTo(7.7, 1)
+    expect(part({ sensibleLinks: 0, linksClaimed: 74 })!.got).toBe(0)
+    expect(part({ sensibleLinks: 12, linksClaimed: 12 })!.got).toBe(15)
+    // a few perfect links don't get full marks
+    expect(part({ sensibleLinks: 3, linksClaimed: 3 })!.got).toBe(4.5)
+    // no links claimed (the pattern pass hasn't run): left out, not 0
+    expect(honestScore({ ...base, sensibleLinks: 0, linksClaimed: 0 }).left_out).toContain('Claimed links that hold up')
   })
 })
