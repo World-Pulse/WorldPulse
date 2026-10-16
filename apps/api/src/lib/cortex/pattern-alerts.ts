@@ -52,7 +52,8 @@ interface PatternReport {
  * most significant findings.
  */
 export async function generatePatternAlerts(): Promise<{ alerts_published: number }> {
-  const cached = await redis.get('cortex:patterns:latest').catch(() => null)
+  // the weekly pass's report (learned chains with counts), not the scraper's 2-hourly one
+  const cached = await redis.get('cortex:patterns:weekly').catch(() => null)
   if (!cached) {
     console.log('[CORTEX] No pattern report found — skipping alerts')
     return { alerts_published: 0 }

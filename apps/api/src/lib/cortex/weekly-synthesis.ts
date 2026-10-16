@@ -129,7 +129,8 @@ export async function generateWeeklySynthesis(): Promise<WeeklySynthesis> {
     .limit(10)
 
   // 5. Pattern detection results
-  const patternReport = await redis.get('cortex:patterns:latest').catch(() => null)
+  const patternReport = await redis.get('cortex:patterns:weekly').catch(() => null)
+    ?? await redis.get('cortex:patterns:latest').catch(() => null)
   let patternStats = { causal_chains: 0, hotspots: 0, bridges: 0, sequences: 0 }
   if (patternReport) {
     const parsed = JSON.parse(patternReport)

@@ -65,6 +65,8 @@ const HOTSPOT_MIN_CATEGORIES = 2
 const HOTSPOT_MIN_SIGNALS = 5
 const BRIDGE_MIN_SHARED_ENTITIES = 2
 const PATTERN_CACHE_TTL = 3600
+/** Where the weekly pass keeps its report (pattern alerts and the weekly synthesis read it) */
+export const WEEKLY_PATTERNS_KEY = 'cortex:patterns:weekly'
 
 // ─── Learned Causal Chains ───────────────────────────────────────────────────
 
@@ -474,7 +476,11 @@ export async function runPatternDetectionCycle(): Promise<{
     temporal_sequences: sequences,
   }
 
-  await redis.setex('cortex:patterns:latest', 7 * 24 * 3600, JSON.stringify(report)).catch(() => {})
+  // Its own key (Oct 15, 2026): the weekly report has a different shape (learned
+  // category chains, temporal sequences) and used to overwrite the scraper's
+  // 2-hourly report in cortex:patterns:latest, which the HUD, the metrics and the
+  // /analytics/patterns route read, until the scraper's next run.
+  await redis.setex(WEEKLY_PATTERNS_KEY, 8 * 24 * 3600, JSON.stringify(report)).catch(() => {})
 
   console.log(`[CORTEX] Pattern detection complete: ${chains.length} chains, ${bridges.length} bridges, ${hotspots.length} hotspots, ${sequences.length} sequences`)
 

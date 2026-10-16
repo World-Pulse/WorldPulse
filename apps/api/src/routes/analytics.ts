@@ -1012,16 +1012,31 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
     }
 
     let query = db('signal_anomalies')
-      .where('date', '>=', db.raw(`CURRENT_DATE - INTERVAL '${Math.min(days, 90)} days'`))
+      .where('date', '>=', db.raw(`CURRENT_DATE - INTERVAL '${Math.min(Math.max(1, Number(days) || 7), 90)} days'`))
       .where('z_score', '>=', min_z)
       .orderBy('z_score', 'desc')
-      .limit(50)
+      .limit(200)
 
     if (category) {
       query = query.where('category', category)
     }
 
-    const anomalies = await query
+    const rows = await query
+
+    // One alarm per day, category and place (a restart in the 3 AM hour used to
+    // write a day's alarms twice), each with its fair z: how far above normal
+    // once small numbers get a fair spread (honest.ts)
+    const { fairZ } = await import('../lib/cortex/honest.js')
+    const seen = new Set<string>()
+    const anomalies: Array<Record<string, unknown>> = []
+    for (const a of rows as any[]) {
+      const day = a.date instanceof Date ? a.date.toISOString().slice(0, 10) : String(a.date).slice(0, 10)
+      const key = `${day}|${a.category}|${a.region}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      anomalies.push({ ...a, fair_z: Math.round(fairZ(Number(a.current_count), Number(a.baseline_avg), Number(a.baseline_stddev)) * 100) / 100 })
+      if (anomalies.length >= 50) break
+    }
 
     return reply.send({
       success: true,
@@ -1029,6 +1044,27 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
       anomalies,
       generated_at: new Date().toISOString(),
     })
+  })
+
+  // GET /api/v1/analytics/anomalies/live?hours=6
+  // Same-day spikes: the last few hours against the same hours of the clock on
+  // the 7 days before, by category × place and category worldwide (Oct 15, 2026).
+  app.get('/anomalies/live', {
+    schema: {
+      summary: 'Same-day Spikes',
+      description: 'Spikes in the last 3, 6, 12 or 24 hours against the same hours on the 7 days before, with the headlines behind each',
+      querystring: {
+        type: 'object',
+        properties: {
+          hours: { type: 'integer', enum: [3, 6, 12, 24], default: 6 },
+        },
+      },
+    },
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    const { getLiveSpikes, liveHours } = await import('../lib/cortex/live-spikes.js')
+    const report = await getLiveSpikes(liveHours((req.query as { hours?: number }).hours))
+    return reply.send(report)
   })
 
   // ─── SEMANTIC SEARCH ─────────────────────────────────────
@@ -1285,8 +1321,10 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
     },
     config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
   }, async (_req, reply) => {
-    const { computeIntelligenceQuality } = await import('../lib/cortex/metrics.js')
-    const quality = await computeIntelligenceQuality()
+    // the kept measures (remade every 10 minutes in the background): this used to
+    // run every query on each request and fail or lose a part at the 5-second limit
+    const { getIntelligenceQuality } = await import('../lib/cortex/metrics.js')
+    const quality = await getIntelligenceQuality()
     return reply.send({
       success: true,
       score: quality.intelligence_score,
@@ -1294,11 +1332,14 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
         corroboration: Math.round(quality.corroboration_rate * 100),
         reliability: Math.round(quality.avg_reliability * 100),
         embedding_coverage: Math.round(quality.embedding_coverage),
-        entity_coverage: Math.round(quality.entity_coverage),
-        thread_coverage: Math.round(quality.thread_coverage * 100),
+        entity_coverage: quality.entity_coverage == null ? null : Math.round(quality.entity_coverage),
+        thread_coverage: quality.thread_coverage == null ? null : Math.round(quality.thread_coverage * 100),
         baseline_maturity: Math.min(100, Math.round((quality.baseline_days / 30) * 100)),
-        pattern_discovery: quality.causal_chains_discovered + quality.geographic_hotspots + quality.cross_cluster_bridges,
+        pattern_discovery: quality.sensible_links,
       },
+      parts: quality.score_parts,
+      left_out: quality.left_out,
+      computed_at: quality.computed_at,
       generated_at: new Date().toISOString(),
     })
   })

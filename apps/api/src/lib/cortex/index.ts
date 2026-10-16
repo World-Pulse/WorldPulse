@@ -27,7 +27,7 @@ export { runPatternDetectionCycle, learnCausalChains, detectCrossClusterBridges,
 export { generatePatternAlerts } from './pattern-alerts.js'
 export { generateWeeklySynthesis, publishWeeklySynthesis } from './weekly-synthesis.js'
 export { syncClustersToPostgres, getCluster, getRecentClusters, getClusterStats } from './correlation-store.js'
-export { getCortexHealth, computeIntelligenceQuality } from './metrics.js'
+export { getCortexHealth, computeIntelligenceQuality, getIntelligenceQuality } from './metrics.js'
 export { computeFeedQuality, getSourceQualityScores, getFeedQualitySummary } from './feed-quality.js'
 
 // ─── Full Cortex Diagnostic ─────────────────────────────────────────────────
@@ -54,11 +54,11 @@ export async function runCortexDiagnostic(): Promise<{
     `Intelligence Score: ${q.intelligence_score}/100`,
     `Pipeline: ${health.pipeline_stats.signals_24h} signals/24h from ${health.pipeline_stats.sources_active} sources`,
     `Corroboration: ${Math.round(q.corroboration_rate * 100)}% | Reliability: ${Math.round(q.avg_reliability * 100)}%`,
-    `Entities: ${q.total_entities} (${q.entities_with_edges} with edges, ${Math.round(q.entity_coverage)}% coverage)`,
+    `Entities: ${q.total_entities} (${q.entities_with_edges} with edges, ${q.entity_coverage == null ? 'coverage not measured' : Math.round(q.entity_coverage) + '% coverage'})`,
     `Embeddings: ${Math.round(q.embedding_coverage)}% coverage`,
-    `Threads: ${q.active_threads} active (${q.signals_in_threads} signals)`,
+    `Threads: ${q.active_threads} active (${q.signals_in_threads} signals${q.thread_coverage == null ? '' : ', ' + Math.round(q.thread_coverage * 100) + '% of 30 days'})`,
     `Baselines: ${q.baseline_days} days | Anomalies (7d): ${q.anomalies_last_7d}`,
-    `Patterns: ${q.causal_chains_discovered} chains, ${q.geographic_hotspots} hotspots, ${q.cross_cluster_bridges} bridges`,
+    `Patterns: ${q.causal_chains_discovered} chains, ${q.geographic_hotspots} hotspots, ${q.cross_cluster_bridges} bridges, ${q.entity_links} entity links (${q.sensible_links} share a subject)`,
     ...(feedQuality ? [
       `Feed Quality: ${feedQuality.avg_quality}/100 avg across ${feedQuality.total_sources} sources (${feedQuality.sources_above_70} good, ${feedQuality.sources_below_30} poor, ${feedQuality.declining_count} declining)`,
     ] : []),

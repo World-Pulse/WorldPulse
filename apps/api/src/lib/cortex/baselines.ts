@@ -11,6 +11,8 @@
 
 import { db } from '../../db/postgres'
 import { redis } from '../../db/redis'
+import { longQuery } from '../long-query'
+import { fairAnomalies } from './honest'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -52,7 +54,6 @@ export interface BaselineStats {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const ANOMALY_Z_THRESHOLD = 2.0       // Flag when ≥ 2σ above/below
 const BASELINE_CACHE_TTL  = 3600      // 1 hour cache
 const BASELINE_CACHE_PREFIX = 'cortex:baseline:'
 
@@ -241,8 +242,18 @@ export async function getBaselineStats(
 // ─── Anomaly detection ───────────────────────────────────────────────────────
 
 /**
- * Scan all category × region combinations for z-score anomalies.
+ * Scan all category × region combinations for alarms that hold up.
  * Runs after daily baseline computation.
+ *
+ * Oct 15, 2026 (honest alarms, see honest.ts):
+ *   - the 30 days before count the days a place had no reports as 0 (they were
+ *     left out, which made a small place's normal look steadier than it was);
+ *   - the spread never drops below √usual, and an alarm needs 5+ reports and a
+ *     place seen on 3+ of those days, so 5 reports against 1.4 a day is no
+ *     longer a "6.6σ" alarm;
+ *   - one grouped query instead of one query per place, in its own transaction
+ *     with a longer time limit;
+ *   - a day's alarms are written once (a restart in the 3 AM hour wrote them twice).
  */
 export async function detectAnomalies(
   targetDate?: Date,
@@ -252,69 +263,60 @@ export async function detectAnomalies(
 
   console.log(`[CORTEX] Scanning for anomalies on ${dateStr}...`)
 
-  // Get today's baselines
-  const todayRows = await db('signal_baselines')
-    .where('date', dateStr)
-    .where('severity', 'all')     // Check at the aggregate level
-    .select('category', 'region', 'signal_count')
+  const { rows, historyDays, existing } = await longQuery(120, async (trx) => {
+    const r = await trx.raw(`
+      WITH today AS (
+        SELECT category, region, signal_count
+        FROM signal_baselines
+        WHERE date = ?::date AND severity = 'all'
+      ),
+      hist AS (
+        SELECT category, region, array_agg(signal_count ORDER BY date) AS counts
+        FROM signal_baselines
+        WHERE severity = 'all'
+          AND date < ?::date
+          AND date >= ?::date - INTERVAL '30 days'
+        GROUP BY category, region
+      )
+      SELECT t.category, t.region, t.signal_count, COALESCE(h.counts, '{}') AS counts
+      FROM today t
+      LEFT JOIN hist h ON h.category = t.category AND h.region = t.region
+    `, [dateStr, dateStr, dateStr])
+    const d = await trx.raw(`
+      SELECT COUNT(DISTINCT date) AS days FROM signal_baselines
+      WHERE date < ?::date AND date >= ?::date - INTERVAL '30 days'
+    `, [dateStr, dateStr])
+    const e = await trx('signal_anomalies').where('date', dateStr).select('category', 'region')
+    return { rows: r.rows ?? [], historyDays: Number(d.rows?.[0]?.days ?? 0), existing: e as Array<{ category: string; region: string }> }
+  })
 
-  const anomalies: AnomalyDetection[] = []
+  if (historyDays < 5) {
+    console.log(`[CORTEX] Only ${historyDays} days of baselines before ${dateStr}; no alarms yet`)
+    return []
+  }
 
-  for (const row of todayRows as any[]) {
-    // Compare against 30-day rolling baseline
-    const histRows = await db('signal_baselines')
-      .where('category', row.category)
-      .where('region', row.region)
-      .where('severity', 'all')
-      .where('date', '<', dateStr)
-      .where('date', '>=', db.raw(`'${dateStr}'::date - INTERVAL '30 days'`))
-      .select('signal_count')
+  const anomalies: AnomalyDetection[] = fairAnomalies(
+    (rows as any[]).map(r => ({
+      category: r.category,
+      region: r.region,
+      current: Number(r.signal_count),
+      history: (Array.isArray(r.counts) ? r.counts : []).map((c: unknown) => Number(c)),
+    })),
+    historyDays,
+  )
 
-    if (histRows.length < 5) continue // Need minimum history
-
-    const histCounts = (histRows as any[]).map(r => Number(r.signal_count))
-    const avg = mean(histCounts)
-    const std = stddev(histCounts)
-
-    if (std === 0) continue // No variance = no anomalies
-
-    const current = Number(row.signal_count)
-    const zScore = (current - avg) / std
-
-    if (Math.abs(zScore) >= ANOMALY_Z_THRESHOLD) {
-      const anomaly: AnomalyDetection = {
-        category: row.category,
-        region: row.region,
-        current_count: current,
-        baseline_avg: round2(avg),
-        baseline_stddev: round2(std),
-        z_score: round2(zScore),
-        direction: zScore > 0 ? 'above' : 'below',
-        window: '30d',
-      }
-      anomalies.push(anomaly)
-
-      // Persist to anomalies table
-      await db('signal_anomalies')
-        .insert({
-          date: dateStr,
-          category: row.category,
-          region: row.region,
-          current_count: current,
-          baseline_avg: round2(avg),
-          baseline_stddev: round2(std),
-          z_score: round2(zScore),
-          direction: zScore > 0 ? 'above' : 'below',
-          window: '30d',
-        })
-        .onConflict()
-        .ignore()
-    }
+  const seen = new Set(existing.map(e => `${e.category}\u0000${e.region}`))
+  const fresh = anomalies.filter(a => !seen.has(`${a.category}\u0000${a.region}`))
+  if (fresh.length > 0) {
+    await db('signal_anomalies')
+      .insert(fresh.map(a => ({ date: dateStr, ...a })))
+      .onConflict()
+      .ignore()
   }
 
   if (anomalies.length > 0) {
-    console.log(`[CORTEX] Detected ${anomalies.length} anomalies:`)
-    for (const a of anomalies) {
+    console.log(`[CORTEX] ${anomalies.length} alarms hold up for ${dateStr} (${fresh.length} new):`)
+    for (const a of anomalies.slice(0, 15)) {
       console.log(`  ${a.category}/${a.region}: ${a.current_count} signals (${a.z_score}σ ${a.direction} 30d baseline of ${a.baseline_avg})`)
     }
   } else {

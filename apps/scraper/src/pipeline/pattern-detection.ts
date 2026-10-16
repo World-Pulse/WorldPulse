@@ -2,10 +2,14 @@
  * Pattern Detection — Discovers recurring patterns, causal chains,
  * geographic hotspots, and cross-cluster bridges from signal data.
  *
- * Three detection modes:
- *   1. Causal chains — sequences of signals that suggest cause → effect
- *   2. Geographic hotspots — regions with anomalously high activity
- *   3. Cross-cluster bridges — signals connecting otherwise separate event threads
+ * Detection modes:
+ *   1. Entity links — stories that name the same specific people, places and
+ *      organisations (Oct 15, 2026; pipeline/entity-links.ts)
+ *   2. Causal chains — entity links whose categories read as cause → effect, in
+ *      time order. They used to link any two reports in related categories from
+ *      the same country within 48 hours, so nearly all were coincidence.
+ *   3. Geographic hotspots — regions with anomalously high activity
+ *   4. Cross-cluster bridges — signals connecting otherwise separate event threads
  *
  * Runs every 2 hours. Results cached to Redis for the Cortex HUD.
  *
@@ -15,11 +19,13 @@
 import { db } from '../lib/postgres'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
+import { buildEntityLinks, loadEntityHits, type EntityLink } from './entity-links'
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 
 const LOOKBACK_HOURS = 168          // 7 days of signal data
 const CAUSAL_WINDOW_HOURS = 48      // Max gap between cause → effect
+const ENTITY_WINDOW_HOURS = 72      // Stories linked by shared entities: the last 3 days
 const HOTSPOT_MIN_SIGNALS = 5       // Minimum signals in a region to qualify
 const HOTSPOT_STDDEV_THRESHOLD = 2  // Std devs above mean to flag as hotspot
 const BRIDGE_MIN_SHARED_TAGS = 1    // Min shared tags between thread signals
@@ -33,8 +39,9 @@ export interface CausalChain {
   cause: { signal_id: string; title: string; category: string; created_at: string }
   effect: { signal_id: string; title: string; category: string; created_at: string }
   confidence: number    // 0-1
-  link_type: string     // e.g. "category_sequence", "tag_overlap", "geo_proximity"
+  link_type: string     // e.g. "conflict_escalation" (the category pair)
   delay_hours: number
+  shared_entities?: string[]
 }
 
 export interface GeographicHotspot {
@@ -58,6 +65,7 @@ export interface CrossClusterBridge {
 
 export interface PatternReport {
   causal_chains: CausalChain[]
+  entity_links: EntityLink[]
   geographic_hotspots: GeographicHotspot[]
   cross_cluster_bridges: CrossClusterBridge[]
   generated_at: string
@@ -107,15 +115,17 @@ export async function detectPatterns(): Promise<PatternReport> {
     `)
     signalsAnalyzed = Number(countResult.rows?.[0]?.count ?? 0)
 
-    // Run all three detectors in parallel
-    const [causalChains, hotspots, bridges] = await Promise.all([
-      detectCausalChains(),
+    // Entity links first (chains come from them), the other two detectors alongside
+    const [linked, hotspots, bridges] = await Promise.all([
+      detectEntityLinks(),
       detectGeographicHotspots(),
       detectCrossClusterBridges(),
     ])
+    const causalChains = linked.chains
 
     const report: PatternReport = {
       causal_chains: causalChains,
+      entity_links: linked.links,
       geographic_hotspots: hotspots,
       cross_cluster_bridges: bridges,
       generated_at: new Date().toISOString(),
@@ -129,6 +139,8 @@ export async function detectPatterns(): Promise<PatternReport> {
     const durationMs = Date.now() - start
     logger.info({
       chains: causalChains.length,
+      entityLinks: linked.links.length,
+      linkedStories: linked.stories,
       hotspots: hotspots.length,
       bridges: bridges.length,
       signalsAnalyzed,
@@ -140,6 +152,7 @@ export async function detectPatterns(): Promise<PatternReport> {
     logger.error({ err }, '[PATTERNS] Pattern detection failed')
     return {
       causal_chains: [],
+      entity_links: [],
       geographic_hotspots: [],
       cross_cluster_bridges: [],
       generated_at: new Date().toISOString(),
@@ -149,95 +162,21 @@ export async function detectPatterns(): Promise<PatternReport> {
   }
 }
 
-// ─── Causal Chain Detection ─────────────────────────────────────────────────
+// ─── Entity Links and Causal Chains ─────────────────────────────────────────
 
 /**
- * Detect cause → effect relationships between signals.
- * Uses known causal category pairs + geographic/tag proximity.
+ * Stories linked by the entities they share, and the links that read as
+ * cause → effect (a known category pair, in time order, within the window).
+ * Nothing, rather than a timing-only guess, when the entity graph can't be read.
  */
-async function detectCausalChains(): Promise<CausalChain[]> {
-  const chains: CausalChain[] = []
-
+async function detectEntityLinks(): Promise<{ links: EntityLink[]; chains: CausalChain[]; stories: number }> {
   try {
-    for (const [causeCategory, effectCategory, linkType] of CAUSAL_PAIRS) {
-      const result = await db.raw(`
-        SELECT
-          s1.id as cause_id, s1.title as cause_title, s1.category as cause_cat,
-          s1.created_at as cause_time, s1.country_code as cause_country,
-          s1.tags as cause_tags,
-          s2.id as effect_id, s2.title as effect_title, s2.category as effect_cat,
-          s2.created_at as effect_time, s2.country_code as effect_country,
-          s2.tags as effect_tags,
-          EXTRACT(EPOCH FROM (s2.created_at - s1.created_at)) / 3600 as delay_hours
-        FROM signals s1
-        JOIN signals s2 ON s2.category = ?
-          AND s2.created_at > s1.created_at
-          AND s2.created_at <= s1.created_at + INTERVAL '${CAUSAL_WINDOW_HOURS} hours'
-          AND s2.id != s1.id
-        WHERE s1.category = ?
-          AND s1.created_at >= NOW() - INTERVAL '${LOOKBACK_HOURS} hours'
-          AND s1.status IN ('verified', 'pending')
-          AND s2.status IN ('verified', 'pending')
-          AND (s1.country_code = s2.country_code OR s1.region = s2.region)
-        ORDER BY s1.created_at DESC
-        LIMIT 20
-      `, [effectCategory, causeCategory])
-
-      for (const row of result.rows ?? []) {
-        // Compute confidence based on multiple factors
-        const causeTags = row.cause_tags ?? []
-        const effectTags = row.effect_tags ?? []
-        const tagOverlap = causeTags.filter((t: string) => effectTags.includes(t)).length
-        const geoMatch = row.cause_country === row.effect_country ? 0.2 : 0
-
-        const confidence = Math.min(1,
-          0.3 +                                      // Base: known causal pair
-          geoMatch +                                  // Geographic proximity
-          Math.min(0.3, tagOverlap * 0.1) +          // Tag overlap
-          (row.delay_hours < 12 ? 0.1 : 0) +         // Temporal proximity bonus
-          0                                            // Future: embedding similarity
-        )
-
-        if (confidence >= 0.4) {
-          chains.push({
-            id: `${row.cause_id}_${row.effect_id}`,
-            cause: {
-              signal_id: row.cause_id,
-              title: row.cause_title,
-              category: row.cause_cat,
-              created_at: row.cause_time?.toISOString?.() ?? row.cause_time,
-            },
-            effect: {
-              signal_id: row.effect_id,
-              title: row.effect_title,
-              category: row.effect_cat,
-              created_at: row.effect_time?.toISOString?.() ?? row.effect_time,
-            },
-            confidence: Math.round(confidence * 1000) / 1000,
-            link_type: linkType,
-            delay_hours: Math.round(Number(row.delay_hours) * 10) / 10,
-          })
-        }
-      }
-    }
-
-    // Deduplicate — keep highest confidence per cause-effect pair
-    const deduped = new Map<string, CausalChain>()
-    for (const chain of chains) {
-      const key = `${chain.cause.signal_id}:${chain.effect.signal_id}`
-      const existing = deduped.get(key)
-      if (!existing || chain.confidence > existing.confidence) {
-        deduped.set(key, chain)
-      }
-    }
-
-    return Array.from(deduped.values())
-      .sort((a, b) => b.confidence - a.confidence)
-      .slice(0, 50)
-
+    const hits = await loadEntityHits(ENTITY_WINDOW_HOURS)
+    const built = buildEntityLinks(hits, { causalPairs: CAUSAL_PAIRS, chainWindowHours: CAUSAL_WINDOW_HOURS })
+    return { links: built.links, chains: built.chains, stories: built.stories }
   } catch (err) {
-    logger.warn({ err }, '[PATTERNS] Causal chain detection failed')
-    return []
+    logger.warn({ err }, '[PATTERNS] Entity link detection failed')
+    return { links: [], chains: [], stories: 0 }
   }
 }
 
