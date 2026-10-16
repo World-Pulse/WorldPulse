@@ -263,6 +263,8 @@ function MapView() {
   const highlightTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
   const [wsNewCount, setWsNewCount] = useState(0)
+  // Live arrivals since the reader last pressed "show" (newest first, capped)
+  const arrivalIdsRef = useRef<string[]>([])
 
   // URL update debounce
   const urlTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -736,6 +738,30 @@ function MapView() {
     src.setData({ type: 'FeatureCollection', features })
   }, [])
 
+  // "N new" pill: ring this session's live arrivals for 8 s and fly to the newest
+  const showNewArrivals = useCallback(() => {
+    const map = mapRef.current
+    const ids = arrivalIdsRef.current
+    arrivalIdsRef.current = []
+    setWsNewCount(0)
+    if (!map || ids.length === 0) return
+    const byId = new Map(signalsRef.current.map(s => [s.id, s]))
+    for (const id of ids) {
+      if (!byId.has(id)) continue
+      newSignalIdsRef.current.add(id)
+      const prev = highlightTimersRef.current.get(id)
+      if (prev) clearTimeout(prev)
+      highlightTimersRef.current.set(id, setTimeout(() => {
+        newSignalIdsRef.current.delete(id)
+        highlightTimersRef.current.delete(id)
+        refreshHighlightsRef.current()
+      }, 8000))
+    }
+    refreshHighlightsRef.current()
+    const newest = ids.map(id => byId.get(id)).find(s => s && s.lat != null && s.lng != null)
+    if (newest) map.flyTo({ center: [Number(newest.lng), Number(newest.lat)], zoom: Math.max(map.getZoom(), 4), speed: 1.2, duration: 800 })
+  }, [])
+
   // ── Heatmap + visible-signal-count refresh ─────────────────────────────────
 
   const refreshHeatmapAndCount = useCallback(() => {
@@ -877,6 +903,7 @@ function MapView() {
             signalsRef.current = prependSignal(signalsRef.current, newSig)
             flushSignals()
             setWsNewCount(n => n + 1)
+            arrivalIdsRef.current = [newSig.id, ...arrivalIdsRef.current].slice(0, 50)
 
             // Highlight for 3 s
             newSignalIdsRef.current.add(newSig.id)
@@ -3667,7 +3694,16 @@ function MapView() {
           >
             <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${wsOnline ? 'bg-wp-green animate-live-pulse' : 'bg-wp-amber'}`} />
             <span className="hidden md:inline tabular-nums">{visibleCount.toLocaleString('en-US')} in view</span>
-            {wsNewCount > 0 && <span className="text-wp-green tabular-nums">+{wsNewCount}</span>}
+            {wsNewCount > 0 && (
+              <button
+                type="button"
+                onClick={showNewArrivals}
+                aria-label={`Show ${wsNewCount} new signals on the map`}
+                className="text-wp-green tabular-nums underline decoration-dotted underline-offset-2 hover:text-white"
+              >
+                +{wsNewCount} new · show
+              </button>
+            )}
           </div>
 
           {/* Latest in view */}
