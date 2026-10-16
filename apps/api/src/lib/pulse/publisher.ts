@@ -13,6 +13,7 @@ import { db } from '../../db/postgres'
 import { redis } from '../../db/redis'
 import { PULSE_USER_ID, ContentType, RATE_LIMITS, EDITORIAL_SYSTEM_PROMPT } from './constants'
 import { broadcast } from '../../ws/handler'
+import { bodyProblem, flashBriefProblem } from './quality-gates'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -412,6 +413,13 @@ Rules:
     }
   }
 
+  // Standards section 6: banned filler, leftovers, length cap and a source line
+  const problem = flashBriefProblem(outputText)
+  if (problem) {
+    console.warn(`[PULSE] Flash brief rejected: ${problem} for "${signal.title}"`)
+    return { success: false, error: `Flash brief refused: ${problem}` }
+  }
+
   return publishPost(
     `[FLASH BRIEF]\n\n${result.text}\n\n— PULSE · WorldPulse AI Bureau`,
     ContentType.FLASH_BRIEF,
@@ -458,6 +466,12 @@ Include source counts and reliability scores in your analysis.`
       console.warn(`[PULSE] Analysis rejected: >70% word overlap with signal titles for "${topic}"`)
       return { success: false, error: 'Analysis too similar to signal headlines — no editorial value' }
     }
+  }
+
+  const analysisProblem = bodyProblem(analysisText)
+  if (analysisProblem) {
+    console.warn(`[PULSE] Analysis rejected: ${analysisProblem} for "${topic}"`)
+    return { success: false, error: `Analysis refused: ${analysisProblem}` }
   }
 
   return publishPost(
