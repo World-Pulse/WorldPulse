@@ -61,7 +61,7 @@ export async function generateMetadata(
   if (!country) return { title: 'Country Intelligence — WorldPulse', robots: { index: false } }
 
   const lead = country.stories[0]?.title
-  return pageMetadata({
+  const meta = pageMetadata({
     path: `/countries/${upper}`,
     title: `${country.name} news today: verified stories`,
     description: metaDescription(
@@ -70,6 +70,13 @@ export async function generateMetadata(
       200,
     ),
   })
+  // The picture is the country's own card (opengraph-image.tsx and
+  // twitter-image.tsx next to this layout), so not the site's default one
+  return {
+    ...meta,
+    openGraph: { ...meta.openGraph, images: undefined },
+    twitter: { ...meta.twitter, images: undefined },
+  }
 }
 
 export default async function Layout(
