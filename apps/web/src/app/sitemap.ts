@@ -55,14 +55,22 @@ async function namedEntities(): Promise<SitemapEntity[]> {
   }
 }
 
-interface SitemapCountry { code: string; latest_signal_at?: string | null }
+interface SitemapCountry { code: string; name?: string; latest_signal_at?: string | null }
+
+/** Codes the API counts signals under that are not a country of their own: UK repeats GB, ZZ and the rest are placeholders */
+const NOT_A_COUNTRY = new Set(['UK', 'ZZ', 'EU', 'UN'])
+/** A real country: a two-letter code the API knows by name (it falls back to the code itself for strays like PO, SF, EI) */
+function isListedCountry(c: SitemapCountry): boolean {
+  const code = c.code.toUpperCase()
+  return !NOT_A_COUNTRY.has(code) && typeof c.name === 'string' && c.name.length > 0 && c.name.toUpperCase() !== code
+}
 
 async function activeCountries(): Promise<SitemapCountry[]> {
   try {
     const res = await fetch(`${API_URL}/api/v1/countries?window=7d&limit=200`, { cache: 'no-store', signal: AbortSignal.timeout(10_000) })
     if (!res.ok) return []
     const json = await res.json() as { countries?: SitemapCountry[] }
-    return Array.isArray(json.countries) ? json.countries.filter(c => c && typeof c.code === 'string' && /^[A-Za-z]{2}$/.test(c.code)) : []
+    return Array.isArray(json.countries) ? json.countries.filter(c => c && typeof c.code === 'string' && /^[A-Za-z]{2}$/.test(c.code) && isListedCountry(c)) : []
   } catch {
     return []
   }
