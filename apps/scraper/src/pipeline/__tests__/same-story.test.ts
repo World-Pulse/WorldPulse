@@ -54,7 +54,7 @@ vi.mock('../../lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), err
 // Ledger's cross-check gets the reports a verification promoted, the ones its gate may hold back (plan D6)
 vi.mock('../crosscheck', () => ({ crossCheckLater: (...args: unknown[]) => h.crossCheck(...args) }))
 
-import { isSameStory, correlateSignal, corroborateWithDuplicate, confirmMergedArticle, namesDiffer, corroboratedReliability, RELIABILITY_CEILING, storyWords, takeDates, type CorrelationCandidate } from '../correlate'
+import { isSameStory, correlateSignal, corroborateWithDuplicate, confirmMergedArticle, namesDiffer, corroboratedReliability, RELIABILITY_CEILING, storyWords, takeDates, countryLevelPlace, type CorrelationCandidate } from '../correlate'
 
 const now = new Date('2026-10-10T15:40:00Z')
 
@@ -456,5 +456,64 @@ describe('dates in headlines (Oct 15, 2026: 10 of 30 "different event" verdicts 
 
   it('still joins one story whose headlines share a date and more', () => {
     expect(isSameStory(sig({ title: 'Fed holds interest rates steady at September 17 meeting' }), other('Federal Reserve holds interest rates steady on Sept. 17'))).toBe(true)
+  })
+})
+
+describe('map points (Oct 16, 2026: of 180 pairs turned down for distance alone and read by hand, 166 were one story)', () => {
+  const at = (title: string, source_id: string, over: Partial<CorrelationCandidate> = {}) =>
+    sig({ id: source_id, title, source_id, category: 'sports', ...over })
+
+  it("joins one story whose reports are pinned to an outlet's home city or a misread place", () => {
+    // Madrid (named as the country) and Barcelona, 505 km apart
+    expect(isSameStory(
+      at('Spain punished by FIFA for Islamophobic chants in Egypt friendly', 'channelnewsasia.com', { location_name: 'Spain', lat: 40.4168, lng: -3.7038 }),
+      at('Spain punished by FIFA for Islamophobic chants during Egypt friendly', 'aljazeera.com', { location_name: 'Barcelona', lat: 41.3874, lng: 2.1686 }),
+    )).toBe(true)
+    // Nigerian papers pinned at Lagos and Abuja, 530 km apart
+    expect(isSameStory(
+      at('Soldiers kill two terrorists, recover four AK-47 rifles in Sokoto', 'punchng.com', { category: 'conflict', location_name: 'Lagos, Nigeria', lat: 6.5244, lng: 3.3792 }),
+      at('Troops gun down terrorists, recover AK-47 rifles in Sokoto', 'dailytrust.com', { category: 'conflict', location_name: 'Abuja, Nigeria', lat: 9.0765, lng: 7.3986 }),
+    )).toBe(true)
+  })
+
+  it('keeps two events tied to a spot apart when both are pinned far apart and no headline names the place', () => {
+    expect(isSameStory(
+      at('Flash floods kill 12 as monsoon rains lash the city', 'dawn.com', { category: 'disaster', location_name: 'Karachi', lat: 24.86, lng: 67.01 }),
+      at('Flash floods kill 12 after monsoon rains lash city', 'aljazeera.com', { category: 'disaster', location_name: 'Dhaka', lat: 23.81, lng: 90.41 }),
+    )).toBe(false)
+  })
+
+  it('goes by the headlines when both name the place, or when a point is only the country', () => {
+    expect(isSameStory(
+      at('Flash floods in Karachi kill 12 as monsoon rains lash the city', 'dawn.com', { category: 'disaster', location_name: 'Karachi', lat: 24.86, lng: 67.01 }),
+      at('Karachi flash floods kill 12 after monsoon rains', 'aljazeera.com', { category: 'disaster', location_name: 'Doha', lat: 25.29, lng: 51.53 }),
+    )).toBe(true)
+    // Canada, pinned at Ottawa, 2,800 km from Calgary
+    expect(isSameStory(
+      at('3 dead, 16 injured in fiery bus crash in Calgary, Canada', 'upi.com', { category: 'disaster', location_name: 'Canada', lat: 45.4215, lng: -75.6972 }),
+      at('Three dead, at least 16 injured in Calgary bus collision and fire', 'discoverairdrie.com', { category: 'disaster', location_name: 'Calgary', lat: 51.0447, lng: -114.0719 }),
+    )).toBe(true)
+  })
+
+  it('tells a point that is only a country from a real place', () => {
+    for (const name of ['Spain', 'United Kingdom', 'DR Congo', 'Canada']) expect(countryLevelPlace(name)).toBe(true)
+    for (const name of ['Lagos, Nigeria', 'Barcelona', '76 km NE of Ozernovskiy, Russia', 'Rivers State', null, '']) expect(countryLevelPlace(name)).toBe(false)
+  })
+})
+
+describe('ordinals (Oct 16, 2026)', () => {
+  const at = (title: string, source_id: string) => sig({ id: source_id, title, source_id, category: 'health' })
+
+  it('reads "third" and "3rd" as one word, and two different ones as two occurrences', () => {
+    expect(storyWords('Youths clash with police for a 3rd day in Albania’s anti-government protests').has('%3')).toBe(true)
+    expect(isSameStory(
+      at('Youths clash with police for a 3rd day in Albania’s anti-government protests', 'aljazeera.com'),
+      at('Clashes break out for a third day in Albania as anti-govt protests swell', 'euronews.com'),
+    )).toBe(true)
+    expect(isSameStory(at('Kenya confirms second Ebola case', 'allafrica.com'), at('Kenya confirms third Ebola case', 'nation.africa'))).toBe(false)
+    expect(isSameStory(
+      at('Kenya confirms first Ebola case imported from Congo after patient dies in Nairobi', 'reuters.com'),
+      at('Kenya confirms third Ebola case, a relative of the first patient who died', 'nation.africa'),
+    )).toBe(false)
   })
 })

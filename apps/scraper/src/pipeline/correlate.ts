@@ -125,7 +125,14 @@ const MAX_CLUSTER_SIZE = 12
 const SAME_STORY_MIN_WORDS = 4      // headlines need enough content words to compare (a place counts once, as its country)
 const SAME_STORY_MIN_SHARED = 3     // content words both headlines use
 const SAME_STORY_MIN_JACCARD = 0.4  // shared words / all words of both headlines
-const SAME_STORY_RADIUS_KM = 300    // when both are on the map, they must be near each other
+const SAME_STORY_RADIUS_KM = 300    // reports of an event tied to a spot must be near each other (see farApartEvents)
+
+/**
+ * Kinds of story whose map point is where the event happened (an earthquake,
+ * a storm, a crash), so two reports far apart are two events. For other
+ * stories a report's point is a place it mentions, or its outlet's home city.
+ */
+const PLACE_BOUND_CATEGORIES = new Set(['disaster', 'weather', 'climate'])
 
 // ─── CAUSAL CHAIN RULES ──────────────────────────────────────────────────────
 // Maps category pairs that have known causal relationships.
@@ -488,9 +495,17 @@ const EVENT_WORDS = new Set([
   'lead', 'govern', 'presid', 'minist', 'peopl', 'russia', 'countr', 'nation', 'state',
 ])
 
-/** A shared word that singles out a story: a name, a thing, a count of 3 or more; not a country, a date or a kind of event */
+/**
+ * Ordinals, marked "%3": "Kenya confirms second Ebola case" and "... third
+ * Ebola case" are two occurrences, not one story told twice (Oct 16, 2026).
+ */
+const ORDINAL_WORDS: Record<string, number> = {
+  first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10,
+}
+
+/** A shared word that singles out a story: a name, a thing, a count of 3 or more; not a country, a date, an ordinal or a kind of event */
 function isParticular(word: string): boolean {
-  if (word.startsWith('@') || word.startsWith('~')) return false
+  if (word.startsWith('@') || word.startsWith('~') || word.startsWith('%')) return false
   if (word.startsWith('#')) return Number(word.slice(1)) >= 3
   return !EVENT_WORDS.has(word)
 }
@@ -558,7 +573,8 @@ const storyWordCache = new Map<string, Set<string>>()
 /**
  * What a headline says, for telling whether two are the same story: its
  * content words in one form each, its numbers marked "#12" (in digits or
- * words, years too) and the countries it is about, marked "@SA", in
+ * words, years too), its ordinals marked "%3" ("third", "3rd") and the
+ * countries it is about, marked "@SA", in
  * place of the place names (a city counts for its country, once).
  * Rewordings of one event then share most of these: "12 killed, 309 injured
  * in Riyadh Airport attack" and "A dozen killed in Saudi Arabian airport
@@ -579,6 +595,8 @@ export function storyWords(title: string): Set<string> {
     if (!raw) continue
     if (/^\d+$/.test(raw)) { words.add(`#${Number(raw)}`); continue }
     if (COUNT_WORDS[raw]) { words.add(`#${COUNT_WORDS[raw]}`); continue }
+    const nth = /^(\d+)(?:st|nd|rd|th)$/.exec(raw)?.[1] ?? ORDINAL_WORDS[raw]
+    if (nth !== undefined) { words.add(`%${Number(nth)}`); continue }
     if (raw.length < 3 || STOP_WORDS.has(raw) || HEADLINE_FILLER.has(raw)) continue
     words.add(stemWord(raw))
   }
@@ -590,10 +608,11 @@ export function storyWords(title: string): Set<string> {
 
 /**
  * Whether two signals are independent reports of the same story: two different
- * known outlets, within the time window, near each other when both are on the
- * map, and headlines that share most of their content words. Short or
- * templated headlines ("Protest in Jaipur, Rajasthan, India") never qualify:
- * they don't carry enough of the story to compare.
+ * known outlets, within the time window, headlines that share most of their
+ * content words and name no different places, and, for an event tied to a
+ * spot, near each other on the map (farApartEvents). Short or templated
+ * headlines ("Protest in Jaipur, Rajasthan, India") never qualify: they don't
+ * carry enough of the story to compare.
  */
 export function isSameStory(a: CorrelationCandidate, b: CorrelationCandidate): boolean {
   if (!a.source_id || !b.source_id || a.source_id === b.source_id) return false
@@ -601,8 +620,6 @@ export function isSameStory(a: CorrelationCandidate, b: CorrelationCandidate): b
   // not a story ("Armed conflict in Washington, District of Columbia, ...")
   if (isEventTemplateTitle(a.title) || isEventTemplateTitle(b.title)) return false
   if (temporalScore(a, b) <= 0) return false
-  if (a.lat != null && a.lng != null && b.lat != null && b.lng != null &&
-      haversineKm(a.lat, a.lng, b.lat, b.lng) > SAME_STORY_RADIUS_KM) return false
 
   const wordsA = storyWords(a.title ?? '')
   const wordsB = storyWords(b.title ?? '')
@@ -624,13 +641,51 @@ export function isSameStory(a: CorrelationCandidate, b: CorrelationCandidate): b
   // the kind of event and the country ("Russian attack kills seven in Ukraine's
   // Zaporizhzhia" and "Russian attacks kill 24 across Ukraine" share only that)
   if (![...wordsA].some(w => wordsB.has(w) && isParticular(w))) return false
+  // Headlines whose first ordinals differ tell of two occurrences ("Kenya
+  // confirms second Ebola case" / "... third Ebola case")
+  const nthA = [...wordsA].find(w => w.startsWith('%'))
+  const nthB = [...wordsB].find(w => w.startsWith('%'))
+  if (nthA && nthB && nthA !== nthB) return false
 
   // Headlines that name different known places are different events, however
   // alike the rest is ("Explosion hits Kherson" / "Explosion hits Kyiv")
   const placeA = findGazetteerPlace(a.title ?? '')
   const placeB = findGazetteerPlace(b.title ?? '')
   if (placeA && placeB && placeA.place !== placeB.place) return false
+  if (farApartEvents(a, b, !!placeA && placeA.place === placeB?.place)) return false
   return true
+}
+
+/**
+ * Whether two reports of an event tied to a spot (PLACE_BOUND_CATEGORIES: an
+ * earthquake off Aomori and one off Fukuoka) are too far apart on the map to
+ * be one event. Only when both are pinned to more than a country and their
+ * headlines don't name the same place: a report's map point is often its
+ * outlet's home city (Lagos or Abuja for Nigerian papers, Chennai or New
+ * Delhi for Indian ones) or a word read as a place ("French side" as French
+ * Guiana, "Knowledge Centre" as Centre-Val de Loire). Until Oct 16, 2026 every
+ * pair of reports more than 300 km apart was turned down: in 30 hours of
+ * reports that was the only reason 566 pairs from independent outlets were
+ * turned down, and of 180 of them read by hand, 166 (92%) were one story told
+ * by two outlets. Ledger's cross-check still reads every story this verifies.
+ */
+export function farApartEvents(a: CorrelationCandidate, b: CorrelationCandidate, sameNamedPlace = false): boolean {
+  if (sameNamedPlace) return false
+  if (!PLACE_BOUND_CATEGORIES.has(a.category) && !PLACE_BOUND_CATEGORIES.has(b.category)) return false
+  if (a.lat == null || a.lng == null || b.lat == null || b.lng == null) return false
+  if (countryLevelPlace(a.location_name) || countryLevelPlace(b.location_name)) return false
+  return haversineKm(a.lat, a.lng, b.lat, b.lng) > SAME_STORY_RADIUS_KM
+}
+
+/**
+ * Whether a report's place is only a country ("Spain", "United Kingdom",
+ * "DR Congo"), pinned at its capital: such a point says nothing about where
+ * in the country the story happened
+ */
+export function countryLevelPlace(name: string | null | undefined): boolean {
+  if (!name || findGazetteerPlace(name)) return false
+  const { countries, rest } = splitPlaces(name)
+  return countries.length > 0 && !/\p{L}/u.test(rest.replace(/\b(?:and|the|of)\b/gi, ''))
 }
 
 /**
