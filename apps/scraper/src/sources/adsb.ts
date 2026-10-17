@@ -1,14 +1,23 @@
 /**
  * ADS-B / Aircraft Tracking Signal Source
  *
- * Polls the OpenSky Network anonymous API every 5 minutes for aircraft
- * transmitting emergency squawk codes. Creates WorldPulse signals for:
+ * Polls the OpenSky Network's anonymous API for aircraft transmitting
+ * emergency squawk codes. Creates WorldPulse signals for:
  *   - 7700: General emergency
  *   - 7600: Radio failure
  *   - 7500: Hijacking
  *
- * OpenSky Network: https://opensky-network.org/api/states/all
- * Free, anonymous access (no auth required). Returns up to 400 random aircraft.
+ * OpenSky Network: https://opensky-network.org/api/states/all (every aircraft
+ * it sees). Free, anonymous access (no account).
+ *
+ * How often (Oct 17, 2026): OpenSky gives anonymous users 400 credits a day
+ * per IP address, and one worldwide /states/all costs 4. Polling every 5
+ * minutes (1,152 credits a day) used up the server's allowance by mid-morning
+ * UTC, so this source, and every other OpenSky request from the server,
+ * got 429 for the rest of the day. Now: one poll every 20 minutes (72 a day,
+ * 288 credits, leaving room for other requests from the server), and after a
+ * 429 no poll until OpenSky's own retry time (X-Rate-Limit-Retry-After-Seconds).
+ * https://openskynetwork.github.io/opensky-api/rest.html (limitations)
  *
  * Counters Shadowbroker's ADS-B flight tracking advantage.
  */
@@ -53,6 +62,33 @@ interface OpenSkyResponse {
   states: Array<Array<string | number | boolean | null>>
 }
 
+// ─── POLLING BUDGET ────────────────────────────────────────────────────────
+export const ADSB_DEFAULT_INTERVAL_MS = 20 * 60_000
+/** Faster than this would spend more than the anonymous daily allowance alone */
+export const ADSB_MIN_INTERVAL_MS = 5 * 60_000
+
+/** The poll interval: ADSB_INTERVAL_MS when it is a number of at least 5 minutes, else 20 minutes */
+export function adsbIntervalMs(raw: string | undefined = process.env.ADSB_INTERVAL_MS): number {
+  const n = Number(raw)
+  return Number.isFinite(n) && n >= ADSB_MIN_INTERVAL_MS ? n : ADSB_DEFAULT_INTERVAL_MS
+}
+
+/**
+ * How long to wait after OpenSky answers 429 (its daily allowance is used up):
+ * its own X-Rate-Limit-Retry-After-Seconds when given, else an hour; never more than a day.
+ */
+export function pauseAfter429Ms(retryAfterHeader: string | string[] | undefined): number {
+  const raw = Array.isArray(retryAfterHeader) ? retryAfterHeader[0] : retryAfterHeader
+  const s = Number(raw)
+  const secs = Number.isFinite(s) && s > 0 ? s : 3600
+  return Math.min(secs, 86_400) * 1000
+}
+
+/** OpenSky's 429: the allowance is used up; retryAfterMs says when to try again */
+class RateLimited extends Error {
+  constructor(readonly retryAfterMs: number) { super('OpenSky rate limited (429)') }
+}
+
 // ─── HTTP HELPER ───────────────────────────────────────────────────────────
 function httpsGet(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -60,9 +96,9 @@ function httpsGet(url: string): Promise<string> {
       timeout: 20_000,
       headers: { 'User-Agent': 'WorldPulse/0.1 (open-source; https://world-pulse.io)' },
     }, (res) => {
-      // OpenSky returns 429 when rate limited
+      // OpenSky returns 429 when the day's credits are used up, and says when to come back
       if (res.statusCode === 429) {
-        reject(new Error('OpenSky rate limited (429)'))
+        reject(new RateLimited(pauseAfter429Ms(res.headers['x-rate-limit-retry-after-seconds'])))
         res.resume()
         return
       }
@@ -91,9 +127,11 @@ export function startAdsbPoller(
   redis: Redis,
   producer?: Producer | null,
 ): () => void {
-  const INTERVAL_MS = Number(process.env.ADSB_INTERVAL_MS ?? 5 * 60_000) // 5 min default
+  const INTERVAL_MS = adsbIntervalMs()
+  let quietUntil = 0   // after a 429: no poll before this time (ms)
 
   async function poll(): Promise<void> {
+    if (Date.now() < quietUntil) return
     try {
       log.debug('Polling OpenSky ADS-B...')
       const raw = await httpsGet(OPENSKY_API)
@@ -185,6 +223,11 @@ export function startAdsbPoller(
         log.debug({ total: data.states.length, emergencies: emergencies.length }, 'ADS-B poll complete (no new emergencies)')
       }
     } catch (err) {
+      if (err instanceof RateLimited) {
+        quietUntil = Date.now() + err.retryAfterMs
+        log.info({ resumeAt: new Date(quietUntil).toISOString() }, 'ADS-B: OpenSky allowance used up (429); pausing until it refills')
+        return
+      }
       log.warn({ err }, 'ADS-B poll error (non-fatal)')
     }
   }
