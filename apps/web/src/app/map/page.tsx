@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 import { LayersPanel, activeLayerCount, type MapLayerGroup } from '@/components/map/LayersPanel'
 import { MapLegend } from '@/components/map/MapLegend'
-import { LiveList, latestFirst, type StoryOutlets } from '@/components/map/LiveList'
+import { LiveList, latestFirst, storyBadge, type StoryOutlets } from '@/components/map/LiveList'
 import { CountryBrief, type CountryRisk } from '@/components/map/CountryBrief'
 import { SinceLastVisit } from '@/components/map/SinceLastVisit'
 import { useLastVisit } from '@/hooks/useLastVisit'
@@ -458,32 +458,36 @@ function MapView() {
   // asked for the signals in the list (GET /api/v1/stories/outlets), again after 5 min
   const [storyOutlets, setStoryOutlets] = useState<Map<string, StoryOutlets>>(() => new Map())
   const storyOutletsAskedRef = useRef(new Map<string, number>())
+  const askStoryOutlets = useCallback((wanted: string[]) => {
+    const now = Date.now()
+    const ids = wanted
+      .filter(id => now - (storyOutletsAskedRef.current.get(id) ?? 0) > 5 * 60_000)
+      .slice(0, 60)
+    if (ids.length === 0) return
+    for (const id of ids) storyOutletsAskedRef.current.set(id, now)
+    fetch(`${API_URL}/api/v1/stories/outlets?ids=${ids.join(',')}`)
+      .then(res => (res.ok ? res.json() : null))
+      .then((json: { data?: { stories?: Record<string, { size?: unknown; outlets?: unknown; verified?: unknown }> } } | null) => {
+        const got = json?.data?.stories
+        if (!got) return
+        setStoryOutlets(prev => {
+          const next = new Map(prev)
+          for (const [id, v] of Object.entries(got)) {
+            next.set(id, { size: Number(v.size) || 1, outlets: Number(v.outlets) || 0, verified: v.verified === true })
+          }
+          return next
+        })
+      })
+      .catch(() => { /* the list shows without the counts */ })
+  }, [])
   useEffect(() => {
     if (!listOpen || inView.length === 0) return
-    const timer = setTimeout(() => {
-      const now = Date.now()
-      const ids = inView.map(s => s.id)
-        .filter(id => now - (storyOutletsAskedRef.current.get(id) ?? 0) > 5 * 60_000)
-        .slice(0, 60)
-      if (ids.length === 0) return
-      for (const id of ids) storyOutletsAskedRef.current.set(id, now)
-      fetch(`${API_URL}/api/v1/stories/outlets?ids=${ids.join(',')}`)
-        .then(res => (res.ok ? res.json() : null))
-        .then((json: { data?: { stories?: Record<string, { size?: unknown; outlets?: unknown; verified?: unknown }> } } | null) => {
-          const got = json?.data?.stories
-          if (!got) return
-          setStoryOutlets(prev => {
-            const next = new Map(prev)
-            for (const [id, v] of Object.entries(got)) {
-              next.set(id, { size: Number(v.size) || 1, outlets: Number(v.outlets) || 0, verified: v.verified === true })
-            }
-            return next
-          })
-        })
-        .catch(() => { /* the list shows without the counts */ })
-    }, 400)
+    const timer = setTimeout(() => askStoryOutlets(inView.map(s => s.id)), 400)
     return () => clearTimeout(timer)
-  }, [inView, listOpen])
+  }, [inView, listOpen, askStoryOutlets])
+  // The open signal panel shows the same count, even when the list is closed (phones)
+  const selectedId = selected?.id
+  useEffect(() => { if (selectedId) askStoryOutlets([selectedId]) }, [selectedId, askStoryOutlets])
   useEffect(() => { if (window.innerWidth >= 1280) setListOpen(true) }, [])
   // On desktop the list covers the map's left 320px: centre the map in the rest
   useEffect(() => {
@@ -3949,6 +3953,14 @@ function MapView() {
                       </>
                     )}
                   </div>
+                  {(() => {
+                    const badge = storyBadge(selected.status === 'verified', storyOutlets.get(selected.id))
+                    return badge ? (
+                      <div className="font-mono text-[11px] text-wp-text3">
+                        <span aria-hidden="true">📰</span> {badge}
+                      </div>
+                    ) : null
+                  })()}
                 </div>
 
                 <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
