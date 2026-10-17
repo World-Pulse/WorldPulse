@@ -13,7 +13,9 @@ import { TimeSlider } from '@/components/map/TimeSlider'
 import { ShareButton } from '@/components/map/ShareButton'
 import HotspotLabels from '@/components/map/HotspotLabels'
 import { EnhancedHeatmap } from '@/components/map/EnhancedHeatmap'
+import { PlayOverlay } from '@/components/map/PlayOverlay'
 import { useTimelinePlayback } from '@/hooks/useTimelinePlayback'
+import { parsePlayParam, playStepMs, captionAt, playTimeLabel } from '@/lib/map-play'
 import { parseWindowHash, encodePermalink, type MapPermalinkState, type LayerKey } from '@/lib/map-permalink'
 import {
   Map as MapIcon, Moon, Satellite, Globe2, LocateFixed, Layers as LayersIcon,
@@ -371,9 +373,25 @@ function MapView() {
 
   // ── Timeline Playback state (BAT-14) ────────────────────────────────────────────
   // A shared link's Replay is switched on after the first render (see the M10 effect)
-  const [timelineActive, setTimelineActive] = useState(false)
-  const [timelineRange, setTimelineRange] = useState('24h')
-  const timeline = useTimelinePlayback()
+  // /map?play=24h (G9): Replay plays once, alone on the screen, for a screen recording
+  const [playRange] = useState(() => parsePlayParam(searchParams.get('play')))
+  const playMode = playRange !== null
+  const playVertical = playMode && searchParams.get('frame') === 'vertical'
+  const [playStep, setPlayStep] = useState<number | undefined>(undefined)
+  const playStartedRef = useRef(false)
+  const [timelineActive, setTimelineActive] = useState(playMode)
+  const [timelineRange, setTimelineRange] = useState(playRange ?? '24h')
+  const timeline = useTimelinePlayback(playStep)
+
+  // Once the day has loaded: pace it to about a minute, then start
+  useEffect(() => {
+    if (!playMode || playStartedRef.current || timeline.loading || !timeline.data) return
+    if (timeline.data.buckets.length === 0) return
+    playStartedRef.current = true
+    setPlayStep(playStepMs(timeline.data.buckets.length))
+    timeline.togglePlay()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playMode, timeline.loading, timeline.data])
 
   // ── Basemap switcher state ────────────────────────────────────────────────────
   // Starts dark on the server and the client alike (the server can't see the #hash); a
@@ -3467,7 +3485,7 @@ function MapView() {
       lng: s.lng,
       severity: s.severity,
       category: s.category,
-      status: '', // unknown here: don't draw a verified ring
+      status: s.status ?? '', // unknown from an older API: no verified ring
       location_name: null,
       country_code: null,
       reliability_score: 0.7,
@@ -3631,10 +3649,13 @@ function MapView() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="h-[calc(100dvh-52px-56px)] md:h-[calc(100dvh-52px)] flex flex-col bg-wp-bg">
+    <div className={playMode
+      // Covers the site's header and tab bar; a vertical frame is a 9:16 column with black bars
+      ? `fixed top-0 bottom-0 z-[70] flex flex-col bg-wp-bg ${playVertical ? 'left-1/2 -translate-x-1/2 aspect-[9/16] max-w-full shadow-[0_0_0_100vmax_#000]' : 'inset-x-0'}`
+      : 'h-[calc(100dvh-52px-56px)] md:h-[calc(100dvh-52px)] flex flex-col bg-wp-bg'}>
 
       {/* Toolbar: topic, severity and time on the left; live status and Layers on the right */}
-      <div className="relative z-20 border-b border-white/[0.07] bg-[rgba(6,8,14,0.94)] backdrop-blur-xl">
+      {!playMode && <div className="relative z-20 border-b border-white/[0.07] bg-[rgba(6,8,14,0.94)] backdrop-blur-xl">
         <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 h-12">
           <h1 className="hidden sm:block font-display text-[13px] tracking-[2.5px] text-wp-text font-bold flex-shrink-0">LIVE MAP</h1>
 
@@ -3748,13 +3769,13 @@ function MapView() {
             )}
           </button>
         </div>
-      </div>
+      </div>}
 
       {/* Map area */}
       <div className="flex-1 relative overflow-hidden">
         {/* Outside the toolbar on purpose: its backdrop blur would trap the phone sheet */}
-        <LayersPanel groups={layerGroups} open={layersOpen} onClose={() => setLayersOpen(false)} />
-        <LiveList
+        {!playMode && <LayersPanel groups={layerGroups} open={layersOpen} onClose={() => setLayersOpen(false)} />}
+        {!playMode && <LiveList
           items={inView}
           total={visibleCount}
           open={listOpen}
@@ -3764,7 +3785,7 @@ function MapView() {
           onClose={() => { setListOpen(false); hoverOnMap(null) }}
           onSelect={selectFromList}
           onHover={hoverOnMap}
-        />
+        />}
         <div ref={mapContainer} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', touchAction: 'none' }} />
 
         {/* BAT-16: Hotspot labels overlay — floating labels for dense signal zones at zoom > 5 */}
@@ -3777,7 +3798,7 @@ function MapView() {
 
         {/* ── Convergence Hotspots Widget ─────────────────────────────── */}
         {/* Shows geographic cells with 3+ distinct signal categories converging */}
-        {hotspots.length > 0 && !selected && (
+        {hotspots.length > 0 && !selected && !playMode && (
           <div className={`absolute top-4 z-10 max-w-[240px] transition-all ${listOpen ? 'left-4 md:left-[336px]' : 'left-4'}`}>
             <button
               onClick={() => setHotspotsOpen(o => !o)}
@@ -3876,9 +3897,9 @@ function MapView() {
         )}
 
         {/* Legend: severities, verified ring, groups, and the layers that are on */}
-        <div className={`absolute z-10 transition-all duration-300 ${listOpen ? 'left-4 md:left-[336px]' : 'left-4'} ${selected || country ? 'hidden md:block md:bottom-6' : 'bottom-6'}`}>
+        {!playMode && <div className={`absolute z-10 transition-all duration-300 ${listOpen ? 'left-4 md:left-[336px]' : 'left-4'} ${selected || country ? 'hidden md:block md:bottom-6' : 'bottom-6'}`}>
           <MapLegend counts={sevCounts} groups={layerGroups} showKinds={mapZoom >= SIGNAL_ICON_ZOOM} />
-        </div>
+        </div>}
 
         {/* Signal detail panel — bottom sheet on mobile, side panel on desktop */}
         {/* Mobile backdrop */}
@@ -4027,7 +4048,7 @@ function MapView() {
         </div>
 
         {/* Since you last looked (plan M8) */}
-        {since && since.fresh.length > 0 && !sinceDismissed && lastVisit !== null && !selected && !country && !hotspotsOpen && (
+        {!playMode && since && since.fresh.length > 0 && !sinceDismissed && lastVisit !== null && !selected && !country && !hotspotsOpen && (
           <SinceLastVisit
             count={since.fresh.length}
             more={since.fresh.length >= signals.length && signals.length >= MAX_SIGNALS}
@@ -4062,7 +4083,7 @@ function MapView() {
 
         {/* ── Basemap, projection and reset view (top-right, under the zoom buttons) ── */}
         {/* Below MapLibre's zoom/compass buttons, which are 44px tall each on phones */}
-        <div className="absolute right-[10px] z-10 flex flex-col gap-1.5 top-[152px] md:top-[112px]">
+        {!playMode && <div className="absolute right-[10px] z-10 flex flex-col gap-1.5 top-[152px] md:top-[112px]">
           {/* Basemap: dark map → night lights → satellite */}
           <button
             onClick={() => setBasemap(b => BASEMAP_MODES[(BASEMAP_MODES.indexOf(b) + 1) % BASEMAP_MODES.length])}
@@ -4123,14 +4144,26 @@ function MapView() {
           </div>
           {/* Saved views (C10) */}
           <SavedViews />
-        </div>
+        </div>}
 
         {/* Share Button — floating bottom-right (BAT-15) */}
         {/* Beside the side panel when one is open (on phones the sheet covers it) */}
-        <ShareButton getState={getPermalinkState} className={selected || country ? 'hidden md:flex md:right-[352px]' : ''} />
+        {!playMode && <ShareButton getState={getPermalinkState} className={selected || country ? 'hidden md:flex md:right-[352px]' : ''} />}
+
+        {/* Play mode (G9): captions and the mark instead of the controls */}
+        {playMode && (
+          <PlayOverlay
+            caption={captionAt(timeline.data?.buckets ?? [], timeline.currentIndex)}
+            timeLabel={playTimeLabel(timeline.currentTime)}
+            progress={timeline.data && timeline.data.buckets.length > 1 ? timeline.currentIndex / (timeline.data.buckets.length - 1) : 0}
+            finished={playStartedRef.current && !timeline.isPlaying && !!timeline.data && timeline.currentIndex >= timeline.data.buckets.length - 1}
+            signalCount={timeline.data?.total_signals ?? 0}
+            windowLabel={`LAST ${timelineRange.toUpperCase()}`}
+          />
+        )}
 
         {/* Timeline Slider (BAT-14) */}
-        {timelineActive && (
+        {timelineActive && !playMode && (
           <TimeSlider
             buckets={timeline.data?.buckets ?? []}
             currentIndex={timeline.currentIndex}
@@ -4178,6 +4211,8 @@ function MapView() {
         )}
       </div>
 
+      {/* Zoom buttons off in play mode; the map's attribution stays (licence) */}
+      {playMode && <style>{'.maplibregl-ctrl-top-right { display: none; }'}</style>}
       <style>{`
         .wp-map-popup .maplibregl-popup-content {
           background: rgba(6,7,13,0.97);

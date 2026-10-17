@@ -15,6 +15,7 @@ export interface TimelineBucket {
     category: string
     title: string
     is_breaking: boolean
+    status?: string
   }>
 }
 
@@ -75,7 +76,8 @@ const BASE_INTERVAL_MS = 800
 
 // ─── Hook ───────────────────────────────────────────────────────────────────────
 
-export function useTimelinePlayback(): TimelinePlaybackState & TimelinePlaybackActions {
+/** stepMs: fixed time between steps (play mode); without it the speed picks the pace */
+export function useTimelinePlayback(stepMs?: number): TimelinePlaybackState & TimelinePlaybackActions {
   const [data, setData] = useState<TimelineData | null>(null)
   const [loading, setLoading] = useState(false)
   const [currentIndex, setCurrentIndex] = useState(0)
@@ -89,12 +91,14 @@ export function useTimelinePlayback(): TimelinePlaybackState & TimelinePlaybackA
   const indexRef = useRef(currentIndex)
   const speedRef = useRef(speed)
   const playingRef = useRef(isPlaying)
+  const stepMsRef = useRef(stepMs)
 
   // Keep refs in sync
   useEffect(() => { dataRef.current = data }, [data])
   useEffect(() => { indexRef.current = currentIndex }, [currentIndex])
   useEffect(() => { speedRef.current = speed }, [speed])
   useEffect(() => { playingRef.current = isPlaying }, [isPlaying])
+  useEffect(() => { stepMsRef.current = stepMs }, [stepMs])
 
   // ── Computed: visible signals ──────────────────────────────
   // Show all signals from buckets up to and including currentIndex
@@ -116,7 +120,7 @@ export function useTimelinePlayback(): TimelinePlaybackState & TimelinePlaybackA
   const tick = useCallback((timestamp: number) => {
     if (!playingRef.current || !dataRef.current) return
 
-    const interval = BASE_INTERVAL_MS / speedRef.current
+    const interval = stepMsRef.current || BASE_INTERVAL_MS / speedRef.current
     if (timestamp - lastTickRef.current >= interval) {
       lastTickRef.current = timestamp
       const maxIndex = dataRef.current.buckets.length - 1

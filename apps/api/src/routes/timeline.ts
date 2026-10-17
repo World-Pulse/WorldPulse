@@ -176,6 +176,7 @@ export const registerTimelineRoutes: FastifyPluginAsync = async (app) => {
         category: string
         title: string
         is_breaking: boolean
+        status: string
       }>
     }>()
 
@@ -196,6 +197,7 @@ export const registerTimelineRoutes: FastifyPluginAsync = async (app) => {
           category:    row.category as string,
           title:       row.title as string,
           is_breaking: Boolean(row.is_breaking),
+          status:      row.status as string,
         })
       }
     }
