@@ -594,8 +594,9 @@ export function storyWords(title: string): Set<string> {
   for (const raw of text.replace(/[^a-z0-9\s-]/g, ' ').split(/[\s-]+/)) {
     if (!raw) continue
     if (/^\d+$/.test(raw)) { words.add(`#${Number(raw)}`); continue }
-    if (COUNT_WORDS[raw]) { words.add(`#${COUNT_WORDS[raw]}`); continue }
-    const nth = /^(\d+)(?:st|nd|rd|th)$/.exec(raw)?.[1] ?? ORDINAL_WORDS[raw]
+    // Own keys only: "constructor" is not a number
+    if (Object.hasOwn(COUNT_WORDS, raw)) { words.add(`#${COUNT_WORDS[raw]}`); continue }
+    const nth = /^(\d+)(?:st|nd|rd|th)$/.exec(raw)?.[1] ?? (Object.hasOwn(ORDINAL_WORDS, raw) ? ORDINAL_WORDS[raw] : undefined)
     if (nth !== undefined) { words.add(`%${Number(nth)}`); continue }
     if (raw.length < 3 || STOP_WORDS.has(raw) || HEADLINE_FILLER.has(raw)) continue
     words.add(stemWord(raw))

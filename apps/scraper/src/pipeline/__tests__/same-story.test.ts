@@ -516,4 +516,8 @@ describe('ordinals (Oct 16, 2026)', () => {
       at('Kenya confirms third Ebola case, a relative of the first patient who died', 'nation.africa'),
     )).toBe(false)
   })
+
+  it('does not read words like "constructor" as numbers or ordinals', () => {
+    expect([...storyWords('Constructor wins big contract in Leeds')].some(w => /^[#%]/.test(w))).toBe(false)
+  })
 })
