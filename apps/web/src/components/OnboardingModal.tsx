@@ -46,6 +46,8 @@ export function OnboardingModal() {
   useEffect(() => {
     try {
       if (localStorage.getItem(ONBOARDING_KEY)) return
+      // A signed-in reader doesn't need "Join Free" (storage cleared, new device)
+      if (localStorage.getItem('wp_access_token')) return
     } catch { return /* SSR / private browsing */ }
     const onScroll = () => {
       if (window.scrollY < 200) return
@@ -195,7 +197,10 @@ export function OnboardingModal() {
 
         {/* Trust signal */}
         <p className="text-center text-[11px] text-wp-text3 mt-4">
-          Free to use · No ads · Open source
+          Free to use · No ads · Open source ·{' '}
+          <Link href="/help" onClick={dismiss} className="underline hover:text-wp-text2">
+            Help &amp; FAQ
+          </Link>
         </p>
       </div>
     </div>
