@@ -17,7 +17,40 @@ import {
   newsRedisKey,
   isStaleItem,
   MAX_ITEM_AGE_MS,
+  feedFailureWhy,
 } from '../news-rss'
+
+// ─── WHY A FEED FAILS (Oct 17, 2026) ──────────────────────────────────────────
+
+describe('feedFailureWhy', () => {
+  it('names why a poll failed in a fixed phrase, never the address', () => {
+    expect(feedFailureWhy('HTTP 403 from https://thethaiger.com/feed')).toBe('turned away (403)')
+    expect(feedFailureWhy('HTTP 429 from https://example.com/rss')).toBe('turned away (429)')
+    expect(feedFailureWhy('HTTP 404 from https://www3.nhk.or.jp/nhkworld/en/news/feeds/')).toBe('feed gone (404)')
+    expect(feedFailureWhy('HTTP 503 from https://example.com/rss')).toBe('answered 503')
+    expect(feedFailureWhy('Timeout fetching https://www.cbc.ca/webfeed/rss/rss-topstories')).toBe('timed out')
+    expect(feedFailureWhy('getaddrinfo ENOTFOUND api.acleddata.com')).toBe('address not found')
+    expect(feedFailureWhy('read ECONNRESET')).toBe('connection cut')
+    expect(feedFailureWhy('connect ECONNREFUSED 1.2.3.4:443')).toBe('connection refused')
+    expect(feedFailureWhy('certificate has expired')).toBe('certificate problem')
+    expect(feedFailureWhy('no items in the response')).toBe('not a feed (bot check or moved)')
+    expect(feedFailureWhy('empty response')).toBe('empty answer')
+    expect(feedFailureWhy('Too many redirects')).toBe('redirect problem')
+    expect(feedFailureWhy('Response over 5242880 bytes from https://example.com/feed')).toBe('too large')
+    expect(feedFailureWhy('something odd')).toBe('other error')
+  })
+
+  it('reads the reason, not the address (a feed address can hold words like "tls")', () => {
+    expect(feedFailureWhy('Timeout fetching https://tls-news.example.com/cert/feed')).toBe('timed out')
+    expect(feedFailureWhy('Bad redirect from https://ssl.example.com/rss')).toBe('redirect problem')
+  })
+
+  it('stays short enough for HQ (40 characters)', () => {
+    for (const r of ['no items in the response', 'HTTP 403 from x', 'Timeout fetching x', 'whatever']) {
+      expect(feedFailureWhy(r).length).toBeLessThanOrEqual(40)
+    }
+  })
+})
 
 // ─── REGISTRY INTEGRITY ───────────────────────────────────────────────────────
 
@@ -138,12 +171,24 @@ describe('NEWS_SOURCE_REGISTRY', () => {
     for (const id of ['arab-news', 'bangkok-post', 'africa-report', 'ethiopia-reporter']) {
       expect(NEWS_SOURCE_REGISTRY.find(s => s.id === id)).toBeUndefined()
     }
-    for (const id of ['gulf-news', 'saudi-gazette', 'thaiger', 'fana-en', 'scroll-in', 'foreign-policy', 'meduza-en',
+    // thaiger was removed Oct 17, 2026: it failed every poll from our server too
+    for (const id of ['gulf-news', 'saudi-gazette', 'fana-en', 'scroll-in', 'foreign-policy', 'meduza-en',
       'rest-of-world', 'sciencealert', 'the-register', 'folha-en']) {
       expect(NEWS_SOURCE_REGISTRY.find(s => s.id === id)).toBeDefined()
     }
     // A state broadcaster is labelled as one
     expect(NEWS_SOURCE_REGISTRY.find(s => s.id === 'fana-en')?.biasLabel).toBe('state-media')
+  })
+
+  it('drops the feeds that never answered our server and covers Canada (Oct 17, 2026)', () => {
+    for (const id of ['anadolu-en', 'new-arab', 'thaiger', 'reliefweb-updates']) {
+      expect(NEWS_SOURCE_REGISTRY.find(s => s.id === id)).toBeUndefined()
+    }
+    const canada = NEWS_SOURCE_REGISTRY.filter(s => s.countryCode === 'CA').map(s => s.id)
+    expect(canada).toEqual(expect.arrayContaining(['globe-and-mail-ca', 'global-news-ca', 'national-post']))
+    // Thailand and Turkey keep an outlet each
+    expect(NEWS_SOURCE_REGISTRY.some(s => s.countryCode === 'TH')).toBe(true)
+    expect(NEWS_SOURCE_REGISTRY.some(s => s.countryCode === 'TR')).toBe(true)
   })
 
   it('lists every feed once', () => {

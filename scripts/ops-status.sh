@@ -204,7 +204,8 @@ source_stats() {
       done
       redis-cli --raw --scan --pattern "news-rss:fail:*" | head -n 400 | while read -r k; do
         id=${k#news-rss:fail:}
-        printf "feed=%s\t%s\t%s\n" "$id" "$(redis-cli --raw GET "$k")" "$(redis-cli --raw EXISTS "news-rss:pause:$id")"
+        printf "feed=%s\t%s\t%s\t%s\n" "$id" "$(redis-cli --raw GET "$k")" "$(redis-cli --raw EXISTS "news-rss:pause:$id")" \
+          "$(redis-cli --raw GET "news-rss:why:$id")"
       done
       redis-cli --raw LRANGE scraper:dlq 0 299 | sed "s/^/dlq=/"' 2>/dev/null) || out=""
   OUT="$out" OFF="$off" python3 - <<'PY' 2>/dev/null || printf 'null'
@@ -265,9 +266,11 @@ for line in lines:
             'why': why(str(d.get('error') or '')),
         })
     elif line.startswith('feed='):
-        fid, fails, paused = (line[5:].split('\t') + [''] * 3)[:3]
+        fid, fails, paused, why = (line[5:].split('\t') + [''] * 4)[:4]
         if num(fails) >= 1:
-            feeds.append({'id': fid[:60], 'fails': num(fails), 'paused': paused.strip() == '1'})
+            # why: the scraper's fixed phrase for the newest failure (news-rss.ts feedFailureWhy, Oct 17, 2026)
+            why = re.sub(r'[^a-z0-9 ()]', '', why.strip().lower())[:40] or None
+            feeds.append({'id': fid[:60], 'fails': num(fails), 'paused': paused.strip() == '1', 'why': why})
 failing.sort(key=lambda s: (-s['failures'], s['name'].lower()))
 feeds.sort(key=lambda f: (-f['fails'], f['id']))
 if members:

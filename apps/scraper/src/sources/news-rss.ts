@@ -68,6 +68,14 @@
  * end of the registry. Failing feeds show in /ops-status.json (pipeline.sources.
  * news_feeds), and a feed that only lists old stories logs "News feed items
  * skipped as old".
+ *
+ * Oct 17, 2026: four feeds that had failed every poll from our server since
+ * they were added were removed (Anadolu, The New Arab, The Thaiger, and
+ * ReliefWeb's updates feed, whose firewall answers our server with a browser
+ * check; ReliefWeb's disasters keep coming through reliefweb.ts). They answer
+ * from elsewhere, so the block is on our server's side of the internet. Each
+ * failing feed now records why its newest poll failed, as a fixed phrase
+ * (feedFailureWhy), so /ops-status.json and HQ say why it fails.
  */
 
 import https from 'node:https'
@@ -1529,20 +1537,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     language:        'en',
   },
   {
-    id:              'reliefweb-updates',
-    name:            'ReliefWeb Updates',
-    feedUrl:         'https://reliefweb.int/updates/rss.xml',
-    category:        'disaster',
-    biasLabel:       'center',
-    reliability:     0.91,
-    countryCode:     'US',
-    defaultLat:      40.75,
-    defaultLng:      -73.97,
-    defaultLocation: 'New York, United States',
-    extraTags:       ['reliefweb', 'humanitarian', 'disaster', 'un', 'crisis'],
-    language:        'en',
-  },
-  {
     id:              'gdacs',
     name:            'GDACS Alerts',
     feedUrl:         'https://www.gdacs.org/xml/rss.xml',
@@ -1822,20 +1816,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     language:        'en',
   },
   {
-    id:              'anadolu-en',
-    name:            'Anadolu Agency (English)',
-    feedUrl:         'https://www.aa.com.tr/en/rss/default?cat=guncel',
-    category:        'geopolitics',
-    biasLabel:       'state-media',
-    reliability:     0.55,
-    countryCode:     'TR',
-    defaultLat:      39.93,
-    defaultLng:      32.86,
-    defaultLocation: 'Ankara, Türkiye',
-    extraTags:       ['anadolu', 'wire', 'turkey', 'state-media'],
-    language:        'en',
-  },
-  {
     id:              'antara-en',
     name:            'Antara News (English)',
     feedUrl:         'https://en.antaranews.com/rss/news.xml',
@@ -2045,20 +2025,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLng:      -0.13,
     defaultLocation: 'London, United Kingdom',
     extraTags:       ['saudi-arabia', 'gulf', 'middle-east', 'pan-arab'],
-    language:        'en',
-  },
-  {
-    id:              'new-arab',
-    name:            'The New Arab',
-    feedUrl:         'https://www.newarab.com/rss',
-    category:        'geopolitics',
-    biasLabel:       'center-left',
-    reliability:     0.72,
-    countryCode:     'GB',
-    defaultLat:      51.51,
-    defaultLng:      -0.13,
-    defaultLocation: 'London, United Kingdom',
-    extraTags:       ['middle-east', 'pan-arab'],
     language:        'en',
   },
   {
@@ -2320,20 +2286,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     language:        'en',
   },
   {
-    id:              'thaiger',
-    name:            'The Thaiger',
-    feedUrl:         'https://thethaiger.com/feed',
-    category:        'geopolitics',
-    biasLabel:       'center',
-    reliability:     0.70,
-    countryCode:     'TH',
-    defaultLat:      13.76,
-    defaultLng:      100.50,
-    defaultLocation: 'Bangkok, Thailand',
-    extraTags:       ['thailand', 'southeast-asia'],
-    language:        'en',
-  },
-  {
     id:              'fana-en',
     name:            'Fana Broadcasting (English)',
     feedUrl:         'https://www.fanamc.com/english/feed/',
@@ -2444,6 +2396,54 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLng:      -46.63,
     defaultLocation: 'São Paulo, Brazil',
     extraTags:       ['folha', 'brazil', 'latin-america'],
+    language:        'en',
+  },
+  // ── Added Oct 17, 2026 (Devon: look into the failing sources) ──────────────
+  // Canada had no working outlet: CBC's network turns away every client that
+  // isn't a web browser, so its feed never answered our server (the database
+  // source cbc-news is retired, pipeline/repairs.ts). Three Canadian outlets
+  // that answered a feed reader with fresh items that day; two of them reporting
+  // one Canadian story also lets it reach "2+ outlets".
+  {
+    id:              'globe-and-mail-ca',
+    name:            'The Globe and Mail (Canada)',
+    feedUrl:         'https://www.theglobeandmail.com/arc/outboundfeeds/rss/category/canada/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.86,
+    countryCode:     'CA',
+    defaultLat:      43.65,
+    defaultLng:      -79.38,
+    defaultLocation: 'Toronto, Canada',
+    extraTags:       ['globe-and-mail', 'canada', 'north-america'],
+    language:        'en',
+  },
+  {
+    id:              'global-news-ca',
+    name:            'Global News',
+    feedUrl:         'https://globalnews.ca/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.82,
+    countryCode:     'CA',
+    defaultLat:      43.65,
+    defaultLng:      -79.38,
+    defaultLocation: 'Toronto, Canada',
+    extraTags:       ['global-news', 'canada', 'north-america'],
+    language:        'en',
+  },
+  {
+    id:              'national-post',
+    name:            'National Post',
+    feedUrl:         'https://nationalpost.com/feed',
+    category:        'geopolitics',
+    biasLabel:       'center-right',
+    reliability:     0.80,
+    countryCode:     'CA',
+    defaultLat:      43.65,
+    defaultLng:      -79.38,
+    defaultLocation: 'Toronto, Canada',
+    extraTags:       ['national-post', 'canada', 'north-america'],
     language:        'en',
   },
 ]
@@ -2748,7 +2748,7 @@ export const HOME_PIN_SOURCES = new Set([
   'ansa-en', 'yonhap-en', 'antara-en', 'japan-today', 'thelocal-ch', 'hurriyet-dn', 'egypt-independent',
   'mada-masr', 'the-national-uae', 'standard-ke', 'capitalfm-ke', 'civil-ge', 'ukrainska-pravda',
   'khaosod-en', 'mexico-news-daily', 'ba-times',
-  'gulf-news', 'saudi-gazette', 'thaiger', 'fana-en', 'scroll-in', 'meduza-en', 'folha-en',
+  'gulf-news', 'saudi-gazette', 'fana-en', 'scroll-in', 'meduza-en', 'folha-en',
 ])
 
 export interface InferredGeo {
@@ -2983,6 +2983,31 @@ export async function repinNewsHomePins(db: Knex): Promise<{ moved: number; clea
 
 const failKey  = (sourceId: string) => `news-rss:fail:${sourceId}`
 const pauseKey = (sourceId: string) => `news-rss:pause:${sourceId}`
+const whyKey   = (sourceId: string) => `news-rss:why:${sourceId}`
+
+/**
+ * Why a poll failed, as a fixed phrase for /ops-status.json and HQ (Oct 17,
+ * 2026: the failing list said only "news feed", so nobody could tell a site
+ * that turns our server away from a feed that moved). Never the raw error,
+ * which carries the address.
+ */
+export function feedFailureWhy(reason: string): string {
+  const r = reason.replace(/https?:\/\/\S+/g, '').toLowerCase()   // the address could match a word below
+  const status = /\bhttp (\d{3})\b/.exec(r)?.[1]
+  if (status === '401' || status === '403' || status === '429') return `turned away (${status})`
+  if (status === '404' || status === '410') return `feed gone (${status})`
+  if (status) return `answered ${status}`
+  if (r.includes('timeout') || r.includes('timed out') || r.includes('etimedout')) return 'timed out'
+  if (r.includes('enotfound') || r.includes('eai_again')) return 'address not found'
+  if (r.includes('econnreset') || r.includes('socket hang up') || r.includes('epipe')) return 'connection cut'
+  if (r.includes('econnrefused')) return 'connection refused'
+  if (r.includes('cert') || r.includes('ssl') || r.includes('tls')) return 'certificate problem'
+  if (r.includes('no items')) return 'not a feed (bot check or moved)'
+  if (r.includes('empty response')) return 'empty answer'
+  if (r.includes('redirect')) return 'redirect problem'
+  if (r.includes('over ') && r.includes('bytes')) return 'too large'
+  return 'other error'
+}
 
 export async function feedPaused(redis: Redis, sourceId: string): Promise<boolean> {
   try {
@@ -3006,6 +3031,7 @@ export async function noteFeedFailure(
   try {
     const fails = await redis.incr(failKey(source.id))
     await redis.expire(failKey(source.id), 7 * 86_400)
+    await redis.set(whyKey(source.id), feedFailureWhy(reason), 'EX', 7 * 86_400)
     if (fails >= FAILS_BEFORE_PAUSE) {
       await redis.set(pauseKey(source.id), '1', 'EX', PAUSE_S)
       sourceLog.warn({ reason, fails, feedUrl: source.feedUrl }, 'News feed paused after repeated failures')
@@ -3019,7 +3045,7 @@ export async function noteFeedFailure(
 
 export async function clearFeedFailures(redis: Redis, sourceId: string): Promise<void> {
   try {
-    await redis.del(failKey(sourceId))
+    await redis.del(failKey(sourceId), whyKey(sourceId))
   } catch {
     // best effort
   }
@@ -3036,7 +3062,7 @@ export async function forgetRemovedFeeds(redis: Redis, keep: Iterable<string>): 
   const live = new Set(keep)
   const gone = new Set<string>()
   try {
-    for (const prefix of ['news-rss:fail:', 'news-rss:pause:']) {
+    for (const prefix of ['news-rss:fail:', 'news-rss:pause:', 'news-rss:why:']) {
       let cursor = '0'
       do {
         const [next, keys] = await redis.scan(cursor, 'MATCH', `${prefix}*`, 'COUNT', 200)

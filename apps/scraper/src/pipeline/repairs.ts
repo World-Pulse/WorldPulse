@@ -574,9 +574,17 @@ export async function tidyGdeltPlaceNames(): Promise<number> {
  * (scripts/server-deploy.sh) never runs that file, so it didn't take effect.
  * This runs at every start. To bring one back, give it a working feed and take
  * it off this list.
+ *
+ * Oct 17, 2026 (Devon: look into the failing sources): CBC News and NHK World
+ * had never once answered our server (every poll timed out; paused 8 and 6
+ * times). CBC's network turns away every client that isn't a web browser, and
+ * NHK World's feed address is gone (404) and turns feed readers away too.
+ * Canada now comes from The Globe and Mail, Global News and the National Post,
+ * Japan from The Japan Times, Japan Today and Nikkei Asia (news-rss.ts).
  */
 export const RETIRED_SOURCE_SLUGS = [
   'ap-news', 'swissinfo', 'trt-world', 'emsc-quakes', 'gdacs', 'reliefweb', 'voa-news', 'rferl', 'dawn-pk',
+  'cbc-news', 'nhk-world',
 ]
 
 export async function switchOffRetiredSources(): Promise<number> {

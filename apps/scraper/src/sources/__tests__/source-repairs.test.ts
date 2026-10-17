@@ -276,7 +276,8 @@ function fakeRedis() {
     async expire() { return 1 },
     async set(key: string, value: string) { store.set(key, value); return 'OK' },
     async exists(key: string) { return store.has(key) ? 1 : 0 },
-    async del(key: string) { return store.delete(key) ? 1 : 0 },
+    async del(...keys: string[]) { return keys.filter(k => store.delete(k)).length },
+    async get(key: string) { return store.get(key) ?? null },
     // Two keys a page, from the keys there when the scan began (as SCAN promises)
     async scan(cursor: string, _match: string, pattern: string) {
       const prefix = pattern.replace(/\*$/, '')
@@ -304,6 +305,19 @@ describe('news feed failure pause', () => {
     ])
   })
 
+  it('keeps why the newest poll failed, as a fixed phrase, until the feed works again (Oct 17, 2026)', async () => {
+    const redis = fakeRedis()
+    const warn = vi.fn()
+    const r = redis as unknown as Redis
+    await noteFeedFailure(r, source, { warn }, 'Timeout fetching https://example.com/rss')
+    expect(await redis.get('news-rss:why:test-feed')).toBe('timed out')
+    await noteFeedFailure(r, source, { warn }, 'HTTP 403 from https://example.com/rss')
+    expect(await redis.get('news-rss:why:test-feed')).toBe('turned away (403)')
+    await clearFeedFailures(r, source.id)
+    expect(await redis.get('news-rss:why:test-feed')).toBeNull()
+    expect(await redis.get('news-rss:fail:test-feed')).toBeNull()
+  })
+
   it('starts counting again after a success', async () => {
     const redis = fakeRedis()
     const warn = vi.fn()
@@ -325,7 +339,7 @@ describe('news feed failure pause', () => {
     await redis.set('news-rss:item:removed-a:123', '1')   // other keys stay
     expect(await forgetRemovedFeeds(r, ['kept-feed', 'never-failed'])).toBe(2)
     expect([...redis.store.keys()].sort()).toEqual([
-      'news-rss:fail:kept-feed', 'news-rss:item:removed-a:123', 'news-rss:pause:kept-feed',
+      'news-rss:fail:kept-feed', 'news-rss:item:removed-a:123', 'news-rss:pause:kept-feed', 'news-rss:why:kept-feed',
     ])
     expect(await feedPaused(r, 'kept-feed')).toBe(true)
     expect(await feedPaused(r, 'removed-a')).toBe(false)

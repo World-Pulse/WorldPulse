@@ -290,17 +290,23 @@ describe('recalibrateFlatReliability', () => {
 describe('switchOffRetiredSources', () => {
   beforeEach(() => { h.updates.length = 0; vi.mocked(db).mockClear() })
 
-  it('switches off the 9 database feeds that no longer answer, and only those', async () => {
-    expect(await switchOffRetiredSources()).toBe(9)
+  it('switches off the 11 database feeds that no longer answer, and only those', async () => {
+    expect(await switchOffRetiredSources()).toBe(11)
     expect(db).toHaveBeenCalledWith('sources')
     const [{ ids, data }] = h.updates
-    expect(ids).toEqual(['ap-news', 'swissinfo', 'trt-world', 'emsc-quakes', 'gdacs', 'reliefweb', 'voa-news', 'rferl', 'dawn-pk'])
+    expect(ids).toEqual(['ap-news', 'swissinfo', 'trt-world', 'emsc-quakes', 'gdacs', 'reliefweb', 'voa-news', 'rferl', 'dawn-pk',
+      'cbc-news', 'nhk-world'])
     expect(data.active).toBe(false)
     expect(data.updated_at).toBeInstanceOf(Date)
   })
 
+  it('retires CBC News and NHK World, which never answered our server (Oct 17, 2026)', () => {
+    expect(RETIRED_SOURCE_SLUGS).toContain('cbc-news')
+    expect(RETIRED_SOURCE_SLUGS).toContain('nhk-world')
+  })
+
   it('keeps sources that still answer, and the adapters, off the list', () => {
-    for (const slug of ['bbc-world', 'reuters-world', 'aljazeera', 'cbc-news', 'un-news', 'acled', 'ioda']) {
+    for (const slug of ['bbc-world', 'reuters-world', 'aljazeera', 'un-news', 'acled', 'ioda', 'japan-times']) {
       expect(RETIRED_SOURCE_SLUGS).not.toContain(slug)
     }
   })
