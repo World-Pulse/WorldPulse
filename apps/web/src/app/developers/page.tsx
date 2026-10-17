@@ -202,18 +202,13 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
     description: 'RSS, Atom, JSON Feed, and OPML for integrating WorldPulse into any reader.',
     endpoints: [
       {
-        method: 'GET', path: '/api/v1/rss/feed.xml',
-        description: 'RSS 2.0 feed of latest signals.',
+        method: 'GET', path: '/api/v1/rss/signals.xml',
+        description: 'Atom 1.0 feed of the latest verified stories, one item per story.',
         auth: false,
       },
       {
-        method: 'GET', path: '/api/v1/rss/atom.xml',
-        description: 'Atom 1.0 feed of latest signals.',
-        auth: false,
-      },
-      {
-        method: 'GET', path: '/api/v1/rss/feed.json',
-        description: 'JSON Feed 1.1 — machine-readable signal feed.',
+        method: 'GET', path: '/api/v1/rss/signals.json',
+        description: 'JSON Feed 1.1 of the latest verified stories — machine-readable.',
         auth: false,
       },
       {

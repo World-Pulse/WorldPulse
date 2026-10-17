@@ -102,7 +102,7 @@ describe('RSS Feed Routes', () => {
       const signal = makeSignal({ title: 'Breaking: Fire & Explosion <Alert> "Critical"' })
       // The escapeXml function should handle &, <, >, "
       const escaped = escapeXmlDirect(signal.title as string)
-      expect(escaped).not.toContain('&')
+      expect(escaped).not.toMatch(/&(?!amp;|lt;|gt;|quot;|apos;)/)
       expect(escaped).toContain('&amp;')
       expect(escaped).toContain('&lt;')
       expect(escaped).toContain('&gt;')

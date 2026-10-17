@@ -3,6 +3,7 @@ import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 import { logger } from '../lib/logger'
 import { sendError } from '../lib/errors'
+import { signalsHaveStoryIds } from '../lib/stories'
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -50,7 +51,7 @@ function signalToAtomEntry(signal: SignalRow): string {
   const updated = signal.updated_at
     ? new Date(signal.updated_at).toISOString()
     : published
-  const link = `${SITE_URL}/signals/${signal.id}`
+  const link = `${SITE_URL}/signals/${signal.id}?utm_source=rss`
   const reliability = signal.reliability_score != null
     ? ` | Reliability: ${(signal.reliability_score * 100).toFixed(0)}%`
     : ''
@@ -81,7 +82,7 @@ function signalToAtomEntry(signal: SignalRow): string {
 }
 
 function signalToJsonItem(signal: SignalRow): Record<string, unknown> {
-  const link = `${SITE_URL}/signals/${signal.id}`
+  const link = `${SITE_URL}/signals/${signal.id}?utm_source=rss`
   return {
     id: `urn:worldpulse:signal:${signal.id}`,
     url: link,
@@ -108,32 +109,47 @@ function signalToJsonItem(signal: SignalRow): Record<string, unknown> {
   }
 }
 
+/**
+ * The newest verified stories, one row per story. The table has no source_url
+ * or updated_at column (the feeds answered 500 on both until Oct 17, 2026):
+ * the first original link and last_updated stand in. A story is the signals
+ * sharing a story_id; its row is the most reliable report, and its id is the
+ * story's id, so the link opens the story's page.
+ */
 async function fetchSignals(opts: {
   category?: string
   severity?: string
   minReliability?: number
   limit: number
 }): Promise<SignalRow[]> {
-  let query = db('signals')
-    .select(
-      'id', 'title', 'summary', 'category', 'severity',
-      'reliability_score', 'location_name', 'country_code',
-      'source_url', 'source_count', 'created_at', 'updated_at',
-    )
-    .orderBy('created_at', 'desc')
-    .limit(opts.limit)
+  const key = (await signalsHaveStoryIds()) ? 'COALESCE(story_id, id)' : 'id'
+  const where = [`status = 'verified'`, `created_at > NOW() - INTERVAL '14 days'`]
+  const params: Array<string | number> = []
+  if (opts.category) { where.push('category = ?'); params.push(opts.category) }
+  if (opts.severity) { where.push('severity = ?'); params.push(opts.severity) }
+  if (opts.minReliability != null) { where.push('reliability_score >= ?'); params.push(opts.minReliability) }
+  params.push(opts.limit)
 
-  if (opts.category) {
-    query = query.where('category', opts.category)
-  }
-  if (opts.severity) {
-    query = query.where('severity', opts.severity)
-  }
-  if (opts.minReliability != null) {
-    query = query.where('reliability_score', '>=', opts.minReliability)
-  }
-
-  return query as unknown as Promise<SignalRow[]>
+  const result = await db.raw(
+    `SELECT * FROM (
+       SELECT DISTINCT ON (${key})
+              ${key}::text AS id, title, summary, category::text AS category, severity::text AS severity,
+              reliability_score, location_name, country_code, original_urls[1] AS source_url,
+              source_count, created_at, last_updated AS updated_at
+         FROM signals
+        WHERE ${where.join(' AND ')}
+        ORDER BY ${key}, reliability_score DESC, created_at DESC
+     ) stories
+     ORDER BY created_at DESC
+     LIMIT ?`,
+    params,
+  )
+  const rows = (result as { rows?: Array<Record<string, unknown>> }).rows ?? []
+  return rows.map(r => ({
+    ...r,
+    // DECIMAL columns come back from pg as strings
+    reliability_score: r.reliability_score == null ? null : Number(r.reliability_score),
+  })) as unknown as SignalRow[]
 }
 
 function buildAtomFeed(signals: SignalRow[], opts: { title: string; selfUrl: string }): string {
