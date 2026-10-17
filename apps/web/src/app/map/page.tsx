@@ -1287,9 +1287,11 @@ function MapView() {
         // Redrawn about 15 times a second (not every frame): the motion looks the
         // same but the map repaints a quarter as often. With nothing to pulse it
         // only looks again once a second.
+        // Readers who asked their device for less motion keep the rings, still.
+        const reduceMotion = !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
         let lastTickMs = 0
         const animatePulse = (now: number) => {
-          if (!hasCriticalRef.current && newSignalIdsRef.current.size === 0) {
+          if (reduceMotion || (!hasCriticalRef.current && newSignalIdsRef.current.size === 0)) {
             animIdleTimerRef.current = setTimeout(() => {
               animFrameRef.current = requestAnimationFrame(animatePulse)
             }, 1000)
