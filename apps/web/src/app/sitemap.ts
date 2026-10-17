@@ -25,6 +25,7 @@ const PAGES: Array<{ path: string; changeFrequency: 'always' | 'hourly' | 'daily
   { path: '/claims', changeFrequency: 'hourly', priority: 0.6 },
   { path: '/developers', changeFrequency: 'weekly', priority: 0.6 },
   { path: '/pricing', changeFrequency: 'monthly', priority: 0.5 },
+  { path: '/help', changeFrequency: 'monthly', priority: 0.4 },
   { path: '/knowledge-graph', changeFrequency: 'hourly', priority: 0.6 },
   { path: '/entities', changeFrequency: 'hourly', priority: 0.7 },
 ]
