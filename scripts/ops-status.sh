@@ -392,7 +392,22 @@ pipeline_stats() {
         'verified_any_age', count(*) FILTER (WHERE verified_at > now() - interval '24 hours'),
         'newest_verified',  max(verified_at))
       FROM signals WHERE status = 'verified'"
-  db=$(timeout 25 docker exec wp_postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAq -c "$1" -c "$2"' sh "$q1" "$q2" 2>/dev/null \
+  # Verified stories a day (HQ's headline number, Devon Oct 17): a story counts
+  # once, on the UTC day its first report reached verified, however many outlets
+  # carry it; the last 14 days and the last 24 hours
+  q3="WITH s AS (
+          SELECT min(coalesce(verified_at, created_at)) AS first_at
+            FROM signals WHERE status = 'verified'
+           GROUP BY coalesce(story_id, id))
+      SELECT json_build_object(
+        'stories_verified_24h', (SELECT count(*) FROM s WHERE first_at > now() - interval '24 hours'),
+        'stories_verified_days', (
+          SELECT json_agg(json_build_object('day', d, 'stories', n) ORDER BY d)
+            FROM (SELECT to_char(first_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS d, count(*) AS n
+                    FROM s
+                   WHERE first_at >= (date_trunc('day', now() AT TIME ZONE 'UTC') - interval '13 days') AT TIME ZONE 'UTC'
+                   GROUP BY 1) t))"
+  db=$(timeout 25 docker exec wp_postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAq -c "$1" -c "$2" -c "$3"' sh "$q1" "$q2" "$q3" 2>/dev/null \
        | tr -d '\r' | grep '^{' | paste -sd ',' -) || db=""
   # Scraper log lines from the last 30 minutes, counted by level; the most
   # frequent error and warning messages, digits blanked out (our own log text only)
