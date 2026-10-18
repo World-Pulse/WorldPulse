@@ -10,6 +10,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { CommandPaletteProvider, CommandPalette } from '@/components/CommandPalette'
 import { HideOnEmbed } from '@/components/nav/HideOnEmbed'
 import { LocaleAttributes } from '@/components/locale/LocaleAttributes'
+import { X_HANDLE } from '@/lib/share-links'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -66,6 +67,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
+    site: `@${X_HANDLE}`,
     title: 'WorldPulse — Global Intelligence Network',
     description: 'Real-time verified signals from every corner of the world.',
     images: ['/og-image.png'],

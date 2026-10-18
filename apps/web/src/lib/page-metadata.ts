@@ -51,7 +51,7 @@ export function pageMetadata({ path, title, description, image = SITE_IMAGE, typ
     description,
     alternates: { canonical: path },
     openGraph: { title: full, description, url: path, siteName: SITE_NAME, type, images: [image] },
-    twitter: { card: 'summary_large_image', title: full, description, images: [image.url] },
+    twitter: { card: 'summary_large_image', site: '@WorldPulse_io', title: full, description, images: [image.url] },
   }
 }
 

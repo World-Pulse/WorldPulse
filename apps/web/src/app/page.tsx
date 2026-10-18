@@ -1,140 +1,95 @@
-'use client'
+import type { Metadata } from 'next'
+import Link from 'next/link'
+import { HomeFeed } from '@/components/home/HomeFeed'
+import { SITE_URL, metaDescription } from '@/lib/page-metadata'
+import { X_HANDLE } from '@/lib/share-links'
+import { cachedFetch } from '@/lib/server-fetch'
 
-import { useState, useEffect } from 'react'
-import { LeftSidebar } from '@/components/sidebar/LeftSidebar'
-import { RightSidebar } from '@/components/sidebar/RightSidebar'
-import { FeedList } from '@/components/feed/FeedList'
-import { Composer } from '@/components/composer/Composer'
-import { NewPostsBar } from '@/components/feed/NewPostsBar'
-import { DevelopingStories } from '@/components/feed/DevelopingStories'
-import { InTheNews } from '@/components/feed/InTheNews'
-import { OnboardingModal } from '@/components/OnboardingModal'
+// The feed is a client component, so the home page's HTML used to carry no
+// stories, no structured data and no feed address: a crawler saw an empty
+// front page. This server page renders the stories most outlets report as
+// plain links (visually hidden, as on country pages), adds Organization and
+// WebSite data and points to the Atom feed (plan G16 slice 2, Oct 18, 2026).
 
-type FeedTab    = 'global' | 'following' | 'verified' | 'digest' | 'for_you'
-type FilterCat  = 'all' | 'breaking' | 'conflict' | 'climate' | 'economy' | 'technology' | 'health'
+const API_BASE = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+const FEED_URL = 'https://api.world-pulse.io/api/v1/rss/signals.xml'
 
-const TABS: { id: FeedTab; label: string }[] = [
-  { id: 'global',    label: 'Global Pulse'    },
-  { id: 'for_you',  label: 'For You'         },
-  { id: 'following', label: 'Following'       },
-  { id: 'verified',  label: 'Verified'        },
-  { id: 'digest',    label: 'AI Digest'       },
+export const metadata: Metadata = {
+  alternates: {
+    canonical: `${SITE_URL}/`,
+    types: { 'application/atom+xml': [{ url: FEED_URL, title: 'WorldPulse — verified stories' }] },
+  },
+}
+
+interface HomeStory { id: string; title: string; outletCount: number }
+
+/** The stories most outlets reported in the last day; empty when the API doesn't answer */
+async function fetchStories(): Promise<HomeStory[]> {
+  try {
+    const res = await cachedFetch(`${API_BASE}/api/v1/stories?hours=24&limit=12`, 120_000)
+    if (!res.ok) return []
+    const json = await res.json() as { data?: { stories?: Array<{ id?: string; leadId?: string; title?: string; outletCount?: number }> } }
+    const list = Array.isArray(json.data?.stories) ? json.data.stories : []
+    const out: HomeStory[] = []
+    for (const s of list) {
+      const id = s.leadId || s.id
+      if (typeof id !== 'string' || typeof s.title !== 'string' || !s.title) continue
+      out.push({ id, title: s.title, outletCount: Number(s.outletCount) || 0 })
+    }
+    return out
+  } catch {
+    return []
+  }
+}
+
+const DESCRIPTION = metaDescription(
+  'Real-time verified signals from every corner of the world: a live map, breaking news from independent outlets with reliability scores, and open source.',
+)
+
+const STRUCTURED_DATA = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: 'WorldPulse',
+    url: SITE_URL,
+    logo: `${SITE_URL}/og-image.png`,
+    description: DESCRIPTION,
+    sameAs: [`https://x.com/${X_HANDLE}`, 'https://github.com/World-Pulse/WorldPulse-v2'],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: 'WorldPulse',
+    url: SITE_URL,
+    description: DESCRIPTION,
+  },
 ]
 
-const FILTERS: { id: FilterCat; label: string }[] = [
-  { id: 'all',        label: 'All'      },
-  { id: 'breaking',   label: 'Breaking' },
-  { id: 'conflict',   label: 'Conflict' },
-  { id: 'climate',    label: 'Climate'  },
-  { id: 'economy',    label: 'Markets'  },
-  { id: 'technology', label: 'Tech'     },
-  { id: 'health',     label: 'Health'   },
-]
-
-export default function HomePage() {
-  const [activeTab,    setActiveTab]    = useState<FeedTab>('global')
-  const [activeFilter, setActiveFilter] = useState<FilterCat>('all')
-  const [newCount,     setNewCount]     = useState(0)
-  // The post box is for signed-in readers; for everyone else it only pushed the news down
-  const [signedIn,     setSignedIn]     = useState(false)
-  useEffect(() => {
-    try { setSignedIn(Boolean(localStorage.getItem('wp_access_token'))) } catch { /* private mode */ }
-  }, [])
-
+export default async function HomePage() {
+  const stories = await fetchStories()
   return (
     <>
-    <OnboardingModal />
-    <div className="min-h-[calc(100vh-52px)] md:grid md:grid-cols-[240px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)_300px]">
-
-      {/* LEFT SIDEBAR — tablet+ */}
-      <div className="hidden md:block">
-        <LeftSidebar />
-      </div>
-
-      {/* MAIN FEED */}
-      <div className="border-x border-[rgba(255,255,255,0.07)] bg-wp-bg">
-
-        {/* Feed header — sticky */}
-        <div className="sticky top-[52px] glass border-b border-[rgba(255,255,255,0.07)] z-50">
-
-          {/* Tabs row */}
-          <div className="flex items-center justify-between px-4 py-0 overflow-x-auto scrollbar-none">
-            <div className="flex gap-0 flex-shrink-0">
-              {TABS.map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`px-3 sm:px-4 py-[10px] text-[12px] sm:text-[13px] font-medium border-b-2 transition-all whitespace-nowrap
-                    ${activeTab === tab.id
-                      ? 'text-wp-amber border-wp-amber'
-                      : 'text-wp-text3 border-transparent hover:text-wp-text2'
-                    }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Category filters — sm+, scrollable */}
-            <div className="hidden sm:flex items-center gap-[6px] pl-2 overflow-x-auto scrollbar-none flex-shrink-0 py-3">
-              {FILTERS.map(f => (
-                <button
-                  key={f.id}
-                  onClick={() => setActiveFilter(f.id)}
-                  className={`px-[10px] py-1 rounded-full border text-[11px] font-mono transition-all whitespace-nowrap flex-shrink-0
-                    ${activeFilter === f.id
-                      ? 'border-wp-cyan text-wp-cyan bg-[rgba(0,212,255,0.1)]'
-                      : 'border-[rgba(255,255,255,0.07)] text-wp-text3 hover:border-[rgba(255,255,255,0.15)] hover:text-wp-text2'
-                    }`}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Filters row — mobile only, scrollable */}
-          <div className="flex sm:hidden overflow-x-auto scrollbar-none gap-[6px] px-4 pb-2">
-            {FILTERS.map(f => (
-              <button
-                key={f.id}
-                onClick={() => setActiveFilter(f.id)}
-                className={`px-[10px] py-1 rounded-full border text-[11px] font-mono transition-all whitespace-nowrap flex-shrink-0
-                  ${activeFilter === f.id
-                    ? 'border-wp-cyan text-wp-cyan bg-[rgba(0,212,255,0.1)]'
-                    : 'border-[rgba(255,255,255,0.07)] text-wp-text3 hover:border-[rgba(255,255,255,0.15)] hover:text-wp-text2'
-                  }`}
-              >
-                {f.label}
-              </button>
+      <script
+        type="application/ld+json"
+        // Fixed data from this file; "<" escaped so nothing can close the tag
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED_DATA).replace(/</g, '\\u003c') }}
+      />
+      <HomeFeed />
+      {stories.length > 0 && (
+        // The stories most outlets report, as plain links for search engines
+        // and readers without JavaScript; kept out of the visual layout
+        <nav aria-label="Top verified stories today" className="sr-only">
+          <h2>Top stories today, reported by independent outlets</h2>
+          <ul>
+            {stories.map(s => (
+              <li key={s.id}>
+                <Link href={`/signals/${s.id}`}>{s.title}</Link>
+                {s.outletCount > 1 ? ` (${s.outletCount} outlets)` : ''}
+              </li>
             ))}
-          </div>
-        </div>
-
-        {/* Developing Stories — escalating/developing event threads */}
-        <DevelopingStories />
-
-        {/* In the news: the people, places and organisations named most, each with its page */}
-        <InTheNews />
-
-        {/* Composer (signed-in readers) */}
-        {signedIn && <Composer />}
-
-        {/* New posts notification */}
-        {newCount > 0 && (
-          <NewPostsBar count={newCount} onLoad={() => setNewCount(0)} />
-        )}
-
-        {/* Feed items */}
-        {/* the email briefing sign-up sits after the 4th story (plan G4; shown once email can be sent) */}
-        <FeedList tab={activeTab} category={activeFilter} signupAfter={4} />
-      </div>
-
-      {/* RIGHT SIDEBAR — desktop only */}
-      <div className="hidden lg:block">
-        <RightSidebar />
-      </div>
-    </div>
+          </ul>
+        </nav>
+      )}
     </>
   )
 }
