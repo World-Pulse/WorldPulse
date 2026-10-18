@@ -36,7 +36,11 @@ const nextConfig = {
   async headers() {
     return [
       {
-        source: '/(.*)',
+        // Everything except /embed/*: those pages are made to be framed by
+        // other sites, and src/middleware.ts gives them their own headers
+        // (a second X-Frame-Options: DENY or CSP from here would win and
+        // leave the embedded map blank on every other site; plan G17)
+        source: '/((?!embed(?:/|$)).*)',
         headers: [
           { key: 'X-Frame-Options', value: 'DENY' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
