@@ -40,6 +40,7 @@ import { MAP_REGIONS } from '@/lib/map-regions'
 import { SITE_URL as SITE_ORIGIN } from '@/lib/page-metadata'
 import { embedBackLink, embedMapCode, regionView, type MapEmbedView } from '@/lib/map-embed'
 import { SavedViews } from '@/components/map/SavedViews'
+import { SignalConnections } from '@/components/map/SignalConnections'
 import {
   SEVERITY_COLOR, SEVERITY_BG, SEVERITY_RANK, CLUSTER_COLOR_EXPR, SIGNAL_RADIUS_EXPR, FONT_BOLD,
   CLUSTER_RING_EXPR, CLUSTER_HALO_EXPR, CLUSTER_TEXT_EXPR,
@@ -4038,6 +4039,13 @@ function MapView({ embed = false }: { embed?: boolean }) {
                   <div className="w-1.5 h-1.5 rounded-full" style={{ background: sevColor }} />
                   {selected.severity.charAt(0).toUpperCase() + selected.severity.slice(1)} severity
                 </div>
+
+                <SignalConnections
+                  signalId={selected.id}
+                  apiUrl={API_URL}
+                  onMap={id => signalsRef.current.some(x => x.id === id)}
+                  onOpen={id => selectFromList({ id })}
+                />
               </div>
 
               <div className="px-5 py-4 border-t border-[rgba(255,255,255,0.07)] space-y-2"
