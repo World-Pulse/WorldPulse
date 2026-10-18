@@ -22,7 +22,10 @@ count.
 A visitor's channel is where their first page view of the day came from:
 the link's utm_source if it has one (our posts and Share buttons add it),
 else the website that sent them (x.com, linkedin.com, google…), else
-"direct". Bots are counted apart: search engines, AI assistants, and the
+"direct". Our own addresses never count as a website that sent people
+(Oct 18, 2026): world-pulse.io, world-pulse.app (same server) and bare IP
+addresses, such as the server's own when the site is opened by its
+number. Bots are counted apart: search engines, AI assistants, and the
 link-preview fetchers of X, LinkedIn, Telegram and others (a proxy for
 shares). Since Oct 18, 2026 (Devon: "We're getting a lot of visits by bots,
 break this down for me") each bot is also named, from the name it gives
@@ -54,6 +57,8 @@ CONTAINER = os.environ.get('READERS_CONTAINER', 'wp_nginx')
 SITE_HOST = 'world-pulse.io'
 SITE_HOSTS = (SITE_HOST, 'www.' + SITE_HOST)
 API_HOST = 'api.' + SITE_HOST
+OWN_SITES = (SITE_HOST, 'world-pulse.app')   # world-pulse.app points at the same server
+IP_ADDRESS = re.compile(r'^\d{1,3}(?:\.\d{1,3}){3}$|^[0-9a-f]*:[0-9a-f:.]*$')
 STATE_VERSION = 2
 
 # docker logs --timestamps: "<RFC3339Nano> <nginx line>"; nginx's "main" format
@@ -195,6 +200,15 @@ def top_bots(day, top=15):
     return sorted(rows, key=lambda r: -r['n'])[:top]
 
 
+def own_site(host):
+    """One of our own addresses (world-pulse.io, world-pulse.app or a subdomain of either), or a bare IP
+    address (the server's own, when someone opened the site by its number): not a website that sent people"""
+    host = (host or '').lower()
+    if host.startswith('www.'):
+        host = host[4:]
+    return not host or bool(IP_ADDRESS.match(host)) or any(host == s or host.endswith('.' + s) for s in OWN_SITES)
+
+
 def channel(query, ref):
     """Where a visit came from: utm_source first, then the sending website"""
     src = (parse_qs(query).get('utm_source') or [''])[0].strip().lower()
@@ -205,7 +219,7 @@ def channel(query, ref):
     host = (urlsplit(ref).hostname or '').lower()
     if host.startswith('www.'):
         host = host[4:]
-    if not host or host == SITE_HOST or host.endswith('.' + SITE_HOST):
+    if own_site(host):
         return 'direct'   # came back from one of our own pages
     for name, pattern in CHANNEL_SITES:
         if pattern.search(host):
@@ -253,10 +267,12 @@ def summary(d):
             unconfirmed += 1
             continue
         people += 1
-        ch = v.get('c') or 'direct'
+        ch, site = v.get('c') or 'direct', v.get('s')
+        if site and own_site(site):
+            ch, site = 'direct', None   # counted as a website before own_site (Oct 18)
         add(channels, ch)
-        if v.get('s'):
-            add(sites, v['s'])
+        if site:
+            add(sites, site)
         if v.get('h'):
             add(hours.setdefault(v['h'], {}), ch)
         if v.get('k'):
