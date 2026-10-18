@@ -24,7 +24,11 @@ the link's utm_source if it has one (our posts and Share buttons add it),
 else the website that sent them (x.com, linkedin.com, google…), else
 "direct". Bots are counted apart: search engines, AI assistants, and the
 link-preview fetchers of X, LinkedIn, Telegram and others (a proxy for
-shares).
+shares). Since Oct 18, 2026 (Devon: "We're getting a lot of visits by bots,
+break this down for me") each bot is also named, from the name it gives
+itself in its user agent (AhrefsBot, python-requests, HeadlessChrome…), with
+the parts of the site bots read ("bots", "bot_pages"). Bots only: nothing
+about people changes.
 
 For HQ's cause-and-effect timeline and morning summary (Oct 11, 2026): the
 hour (UTC) each visitor arrived, by channel, for today and yesterday
@@ -81,6 +85,21 @@ OTHER_BOT = re.compile(
     r'|httpclient|libwww|scrapy|monitor|uptime|pingdom|statuscake|semrush|ahrefs|mj12|dotbot|petalbot|yandex|baiduspider'
     r'|seznam|sogou|censys|zgrab|masscan|nmap|nuclei|expanse|undici|^node|^-?$', re.I)
 
+# A bot's name: the word it calls itself ("AhrefsBot/7.0" -> AhrefsBot), else the tool it was made
+# with (python-requests, curl, HeadlessChrome…), else what follows "compatible;", else its first word
+BOT_TOKEN = re.compile(r'([A-Za-z][\w.\-]*?(?:bot|crawler|spider|slurp))(?=[\s/;)+,(]|$)', re.I)
+BOT_TOOLS = ('HeadlessChrome', 'Chrome-Lighthouse', 'Lighthouse', 'PageSpeed', 'python-requests', 'python-httpx', 'aiohttp',
+             'Python-urllib', 'curl', 'Wget', 'Go-http-client', 'okhttp', 'axios', 'node-fetch', 'undici', 'libwww-perl',
+             'Scrapy', 'UptimeRobot', 'Pingdom', 'StatusCake', 'facebookexternalhit', 'WhatsApp', 'Bluesky', 'Cardyb',
+             'Embedly', 'Iframely', 'Censys', 'zgrab', 'masscan', 'Nmap', 'Nuclei', 'Expanse', 'ChatGPT-User', 'OAI-SearchBot',
+             'Claude-User', 'Claude-SearchBot', 'Perplexity-User', 'meta-externalagent', 'DuckAssistBot',
+             'Google-InspectionTool', 'GoogleOther', 'Google-Extended', 'BingPreview', 'Java')
+COMPATIBLE = re.compile(r'compatible;\s*([A-Za-z][\w.\-]*)', re.I)
+FIRST_WORD = re.compile(r'^([A-Za-z][\w.\-]*)')
+MAX_BOT_NAMES = 60       # a day's distinct names kept; the rest are counted as "(other names)"
+MAX_BOT_SECTIONS = 30
+SECTION = re.compile(r'^/([a-z][a-z-]{0,23})(?:/|$)')
+
 CHANNEL_SITES = [
     ('x', re.compile(r'(^|\.)(t\.co|x\.com|twitter\.com)$')),
     ('linkedin', re.compile(r'(^|\.)(linkedin\.com|lnkd\.in)$')),
@@ -122,6 +141,60 @@ def crawler_kind(ua):
     return 'other' if OTHER_BOT.search(ua.strip()) else None
 
 
+def bot_name(ua):
+    """A short name for a bot from its user agent (bots only)"""
+    ua = ua.strip()
+    if not ua or ua == '-':
+        return '(no name)'
+    m = BOT_TOKEN.search(ua)
+    if m:
+        return m.group(1)[:40]
+    low = ua.lower()
+    for tool in BOT_TOOLS:
+        if tool.lower() in low:
+            return tool
+    m = COMPATIBLE.search(ua)
+    if m:
+        return m.group(1)[:40]
+    m = FIRST_WORD.match(ua)
+    if m and m.group(1).lower() != 'mozilla':
+        return m.group(1)[:40]
+    kw = OTHER_BOT.search(ua)
+    return 'browser-like: ' + kw.group(0).lower() if kw else '(other names)'
+
+
+def bot_section(path):
+    """Which part of the site a bot read: the page kinds people get, plus the site's sections"""
+    kind = page_kind(path)
+    if kind != 'other':
+        return kind
+    m = SECTION.match(path.lower())
+    return m.group(1) if m else 'other'
+
+
+def note_bot(day, ua, kind, path):
+    """Counts one bot page view by name and by the part of the site it read"""
+    names = day.setdefault('bots', {})
+    name = bot_name(ua)
+    key = name.lower()
+    if key not in names and len(names) >= MAX_BOT_NAMES:
+        name, key = '(other names)', '(other names)'
+    entry = names.setdefault(key, [name, kind, 0])
+    entry[2] += 1
+    pages = day.setdefault('bot_pages', {})
+    section = bot_section(path)
+    if section not in pages and len(pages) >= MAX_BOT_SECTIONS:
+        section = 'other'
+    add(pages, section)
+
+
+def top_bots(day, top=15):
+    """[{"name", "kind", "n"}], the most active first"""
+    rows = [{'name': v[0], 'kind': v[1], 'n': v[2]} for v in (day.get('bots') or {}).values()
+            if isinstance(v, list) and len(v) == 3]
+    return sorted(rows, key=lambda r: -r['n'])[:top]
+
+
 def channel(query, ref):
     """Where a visit came from: utm_source first, then the sending website"""
     src = (parse_qs(query).get('utm_source') or [''])[0].strip().lower()
@@ -157,7 +230,8 @@ def ref_site(ref):
 
 def empty_day(day):
     # visitors: hash -> {"c": channel, "s": sending website, "js": ran the page, "p": {page kind: views}}
-    return {'day': day, 'salt': secrets.token_hex(16), 'visitors': {}, 'crawlers': {}}
+    return {'day': day, 'salt': secrets.token_hex(16), 'visitors': {}, 'crawlers': {}, 'bots': {}, 'bot_pages': {},
+            'bots_since': f'{day}T00:00:00Z'}
 
 
 def add(counts, key, n=1):
@@ -192,6 +266,7 @@ def summary(d):
             views += n
     return {'day': d['day'], 'visitors': people, 'views': views, 'channels': by_count(channels),
             'sites': by_count(sites, 8), 'pages': by_count(pages), 'crawlers': by_count(d['crawlers']),
+            'bots': top_bots(d), 'bot_pages': by_count(d.get('bot_pages') or {}, 12), 'bots_since': d.get('bots_since'),
             'unconfirmed': unconfirmed, 'hours': dict(sorted(hours.items())), 'posts': by_count(posts, 20)}
 
 
@@ -219,6 +294,60 @@ def load(path, now):
             'today': empty_day(now.strftime('%Y-%m-%d')), 'history': []}
 
 
+def request_of(m):
+    """(host, path, query, whether it is a page view of the site) for a parsed log line"""
+    h = HOST.search(m['rest'])
+    host = h.group(1).lower() if h else None   # lines from before nginx logged the host have none
+    parts = urlsplit(m['target'])
+    path, query = parts.path or '/', parts.query
+    page = (m['method'] == 'GET' and m['status'] in ('200', '304') and (host is None or host in SITE_HOSTS)
+            and not NOT_PAGE.search(m['target']) and not PROBE.search(path) and '_rsc=' not in query)
+    return host, path, query, page
+
+
+def backfill_bots(st, read_log):
+    """
+    Names the bots of the lines earlier runs already counted today, once, when
+    the state comes from before bots had names. read_log(since, until) returns
+    the log's lines or None. If the log can't be read, names start from now.
+    """
+    today = st['today']
+    if 'bots' in today:
+        return
+    today['bots'], today['bot_pages'] = {}, {}
+    until = st.get('since') or ''
+    today['bots_since'] = until or None
+    if not until.startswith(today['day']):
+        return
+    lines = read_log(f"{today['day']}T00:00:00Z", until)
+    if lines is None:
+        return
+    limit = ts_key(until)
+    for raw in lines:
+        m = LINE.match(raw.rstrip('\n'))
+        if not m or m['ts'][:10] != today['day'] or ts_key(m['ts']) > limit:
+            continue
+        _, path, _, page = request_of(m)
+        bot = crawler_kind(m['ua'])
+        if bot and page:
+            note_bot(today, m['ua'], bot, path)
+    today['bots_since'] = f"{today['day']}T00:00:00Z"
+
+
+def docker_log(since, until=None, timeout=60):
+    """The nginx container's log lines since a time (and before one), or None if it can't be read"""
+    cmd = ['docker', 'logs', '--timestamps', '--since', since] + (['--until', until] if until else []) + [CONTAINER]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, errors='replace', timeout=timeout)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    lines = (proc.stdout + proc.stderr).splitlines()
+    lines.sort(key=lambda l: ts_key(l.split(' ', 1)[0]))   # stdout and stderr interleave
+    return lines
+
+
 def count(st, lines):
     """
     Adds log lines (oldest first) to the state and returns the newest
@@ -242,17 +371,13 @@ def count(st, lines):
             today = st['today'] = empty_day(day)
         elif day < today['day']:
             continue   # an older line (clock or ordering): ignore
-        h = HOST.search(m['rest'])
-        host = h.group(1).lower() if h else None   # lines from before nginx logged the host have none
-        parts = urlsplit(m['target'])
-        path, query = parts.path or '/', parts.query
+        host, path, query, page = request_of(m)
         ua = m['ua']
-        page = (m['method'] == 'GET' and m['status'] in ('200', '304') and (host is None or host in SITE_HOSTS)
-                and not NOT_PAGE.search(m['target']) and not PROBE.search(path) and '_rsc=' not in query)
         bot = crawler_kind(ua)
         if bot:
             if page:
                 add(today['crawlers'], bot)
+                note_bot(today, ua, bot, path)
             continue
         who = hashlib.sha256(f"{today['salt']}|{m['ip']}|{ua}".encode()).hexdigest()[:16]
         # The browser ran the page: it fetched the site's scripts or called the API
@@ -284,15 +409,10 @@ def main():
         st['history'] = (st['history'] + [summary(st['today'])])[-HISTORY_DAYS:]
         st['today'] = empty_day(now.strftime('%Y-%m-%d'))
     since = st.get('since') or (now - timedelta(hours=24)).strftime('%Y-%m-%dT%H:%M:%S.%fZ')
-    try:
-        proc = subprocess.run(['docker', 'logs', '--timestamps', '--since', since, CONTAINER],
-                              capture_output=True, text=True, errors='replace', timeout=60)
-        lines = (proc.stdout + proc.stderr).splitlines()
-        lines.sort(key=lambda l: ts_key(l.split(' ', 1)[0]))   # stdout and stderr interleave
-        ok = proc.returncode == 0
-    except (OSError, subprocess.SubprocessError):
-        lines, ok = [], False
-    newest = count(st, lines)
+    backfill_bots(st, lambda a, b: docker_log(a, b, timeout=25))
+    lines = docker_log(since)
+    ok = lines is not None
+    newest = count(st, lines or [])
     if newest:
         st['since'] = newest
     tmp = path + '.tmp'
@@ -305,7 +425,7 @@ def main():
     del out['hours']
     out['updated'] = now.isoformat(timespec='seconds')
     out['log_read'] = ok
-    out['history'] = [{k: h.get(k) for k in ('day', 'visitors', 'views', 'channels', 'posts')} for h in st['history'][-14:]]
+    out['history'] = [{k: h.get(k) for k in ('day', 'visitors', 'views', 'channels', 'posts', 'crawlers')} for h in st['history'][-14:]]
     print(json.dumps(out, separators=(',', ':')))
 
 
