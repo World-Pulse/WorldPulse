@@ -237,7 +237,7 @@ describe('GET /api/v1/stories/sitemap', () => {
 
   it('lists one page per verified story of the last 7 days, newest first', async () => {
     h.rows = [
-      { id: '0b2c3d4e-0000-4000-8000-000000000001', updated: '2026-10-11T18:00:00Z' },
+      { id: '0b2c3d4e-0000-4000-8000-000000000001', title: 'Flood hits city', published: '2026-10-11T16:00:00Z', updated: '2026-10-11T18:00:00Z' },
       { id: 'not-a-uuid', updated: '2026-10-11T17:00:00Z' },
       { id: '0b2c3d4e-0000-4000-8000-000000000002', updated: 'garbage' },
     ]
@@ -247,13 +247,13 @@ describe('GET /api/v1/stories/sitemap', () => {
     expect(res.statusCode).toBe(200)
     expect(res.json().data).toMatchObject({
       days: 7,
-      stories: [{ id: '0b2c3d4e-0000-4000-8000-000000000001', updatedAt: '2026-10-11T18:00:00.000Z' }],
+      stories: [{ id: '0b2c3d4e-0000-4000-8000-000000000001', title: 'Flood hits city', publishedAt: '2026-10-11T16:00:00.000Z', updatedAt: '2026-10-11T18:00:00.000Z' }],
     })
     expect(h.sql).toMatch(/s\.status = 'verified'/)
     expect(h.sql).toMatch(/DISTINCT ON \(COALESCE\(s\.story_id, s\.id\)\)/)      // one page per story
     expect(Date.now() - (h.bindings[0] as Date).getTime()).toBeCloseTo(7 * 86_400_000, -4)
     expect(String(h.bindings[1])).toMatch(/^\^\(Public statement\|/)             // real headlines first
     expect(h.bindings[2]).toBe(5_000)
-    expect(h.setex).toHaveBeenCalledWith('stories:sitemap:v2', 1_800 + 86_400, expect.any(String))
+    expect(h.setex).toHaveBeenCalledWith('stories:sitemap:v3', 1_800 + 86_400, expect.any(String))
   })
 })

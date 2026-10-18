@@ -45,7 +45,7 @@ const LIST_QUERY_SECONDS = 60
 /** The sitemap's stories: verified in the last this many days, at most SITEMAP_MAX (a sitemap file holds 50,000) */
 const SITEMAP_DAYS = 7
 const SITEMAP_MAX = 5_000
-const SITEMAP_CACHE_KEY = 'stories:sitemap:v2'
+const SITEMAP_CACHE_KEY = 'stories:sitemap:v3'
 const SITEMAP_CACHE_TTL = 1_800
 
 const SEVERITIES = ['info', 'low', 'medium', 'high', 'critical']
@@ -234,8 +234,8 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
     const storyKey = await signalsHaveStoryIds() ? 'COALESCE(s.story_id, s.id)' : 's.id'
     const since = new Date(Date.now() - SITEMAP_DAYS * 86_400_000)
     const result = await longQuery(LIST_QUERY_SECONDS, trx => trx.raw(
-      `SELECT id, updated FROM (
-         SELECT DISTINCT ON (${storyKey}) s.id::text AS id,
+      `SELECT id, title, published, updated FROM (
+         SELECT DISTINCT ON (${storyKey}) s.id::text AS id, s.title, s.created_at AS published,
                 GREATEST(s.created_at, COALESCE(s.last_updated, s.created_at)) AS updated
            FROM signals s
           WHERE s.status = 'verified' AND s.created_at >= ?
@@ -243,10 +243,18 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
        ) t ORDER BY updated DESC LIMIT ?`,
       [since, EVENT_TEMPLATE_SQL, SITEMAP_MAX],
     ))
-    const rows = (result as { rows?: Array<{ id: unknown; updated: unknown }> } | undefined)?.rows ?? []
+    const rows = (result as { rows?: Array<{ id: unknown; title: unknown; published: unknown; updated: unknown }> } | undefined)?.rows ?? []
     const stories = rows.flatMap(r => {
       const at = new Date(r.updated as string)
-      return UUID_RE.test(String(r.id)) && !Number.isNaN(at.getTime()) ? [{ id: String(r.id), updatedAt: at.toISOString() }] : []
+      const published = new Date(r.published as string)
+      if (!UUID_RE.test(String(r.id)) || Number.isNaN(at.getTime())) return []
+      // title and publishedAt serve the news sitemap (world-pulse.io/news-sitemap.xml, plan G16)
+      return [{
+        id: String(r.id),
+        title: typeof r.title === 'string' ? r.title : '',
+        publishedAt: (Number.isNaN(published.getTime()) ? at : published).toISOString(),
+        updatedAt: at.toISOString(),
+      }]
     })
     return { success: true, data: { stories, days: SITEMAP_DAYS, generatedAt: new Date().toISOString() } }
   }
