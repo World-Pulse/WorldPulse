@@ -37,6 +37,8 @@ import { isMapNews, mapPointsFor } from '@/lib/map-news'
 import { ensureMapIcon, MAP_ICON } from '@/lib/map-icons'
 import { dayNightFeatures, subsolarPoint } from '@/lib/daynight'
 import { MAP_REGIONS } from '@/lib/map-regions'
+import { SITE_URL as SITE_ORIGIN } from '@/lib/page-metadata'
+import { embedBackLink, embedMapCode, regionView, type MapEmbedView } from '@/lib/map-embed'
 import { SavedViews } from '@/components/map/SavedViews'
 import {
   SEVERITY_COLOR, SEVERITY_BG, SEVERITY_RANK, CLUSTER_COLOR_EXPR, SIGNAL_RADIUS_EXPR, FONT_BOLD,
@@ -242,7 +244,7 @@ function screenPlacer(map: any): (lngLat: [number, number]) => ScreenPoint | nul
 
 // ── MapView (inner — uses useSearchParams) ────────────────────────────────────
 
-function MapView() {
+function MapView({ embed = false }: { embed?: boolean }) {
   const router       = useRouter()
   const searchParams = useSearchParams()
 
@@ -283,12 +285,15 @@ function MapView() {
   /** A shared link's selected signal, opened once the signals have loaded (M10) */
   const pendingSignalRef = useRef<string | null>(permalinkRef.current?.signalId ?? null)
 
+  // The embedded map (/embed/map, G17) can open on a region: ?region=europe
+  const embedRegion = embed && !searchParams.get('z') ? regionView(searchParams.get('region')) : null
+
   // Initial map position from URL params — read once at mount
   // If a permalink hash is present, it takes priority over query params.
   const initPosRef = useRef({
-    lat:  permalinkRef.current?.lat  ?? Number(searchParams.get('lat') ?? '20'),
-    lng:  permalinkRef.current?.lng  ?? Number(searchParams.get('lng') ?? '10'),
-    zoom: permalinkRef.current?.zoom ?? Number(searchParams.get('z')   ?? '2'),
+    lat:  permalinkRef.current?.lat  ?? Number(searchParams.get('lat') ?? embedRegion?.lat ?? '20'),
+    lng:  permalinkRef.current?.lng  ?? Number(searchParams.get('lng') ?? embedRegion?.lng ?? '10'),
+    zoom: permalinkRef.current?.zoom ?? Number(searchParams.get('z')   ?? embedRegion?.z   ?? '2'),
   })
 
   const { toast } = useToast()
@@ -376,6 +381,8 @@ function MapView() {
   // /map?play=24h (G9): Replay plays once, alone on the screen, for a screen recording
   const [playRange] = useState(() => parsePlayParam(searchParams.get('play')))
   const playMode = playRange !== null
+  // An embedded map shows the map alone: no toolbar, panels or lists (G17)
+  const bare = playMode || embed
   const playVertical = playMode && searchParams.get('frame') === 'vertical'
   const [playStep, setPlayStep] = useState<number | undefined>(undefined)
   const playStartedRef = useRef(false)
@@ -572,6 +579,18 @@ function MapView() {
     }
   }, [])
 
+  /** The topic, severity, window and view on screen, for the embed code and the embed's link back (G17) */
+  const getEmbedView = useCallback((): MapEmbedView => {
+    const map = mapRef.current
+    const center = map?.getCenter?.()
+    return {
+      cat: category,
+      sev: severity,
+      tr:  timeRange,
+      ...(center ? { lat: center.lat, lng: center.lng, z: map.getZoom() } : {}),
+    }
+  }, [category, severity, timeRange])
+
   /** Write permalink hash to window.location (debounced, 500ms). */
   const updateHash = useCallback(() => {
     if (typeof window === 'undefined' || !mapRef.current) return
@@ -626,7 +645,7 @@ function MapView() {
     if (!id || signals.length === 0) return
     const sig = signals.find(x => x.id === id)
     pendingSignalRef.current = null
-    if (sig) setSelected(sig)
+    if (sig && !embed) setSelected(sig)
   }, [signals])
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
@@ -1022,7 +1041,7 @@ function MapView() {
       if (cancelled) return
 
       const { lat, lng, zoom } = initPosRef.current
-      const hasLinkedView = !!(permalinkRef.current || searchParams.get('z'))
+      const hasLinkedView = !!(permalinkRef.current || searchParams.get('z') || embedRegion)
 
       // The dark vector basemap (OpenFreeMap, recoloured), or a plain fallback
       // when it doesn't load: then the night-lights imagery is shown instead
@@ -1431,6 +1450,11 @@ function MapView() {
 
           const coords = feat.geometry.coordinates as [number, number]
           const sig = signalsRef.current.find(s => s.id === p.id) ?? null
+          // An embedded map has no panel: the story opens on WorldPulse, in a new tab (G17)
+          if (embed) {
+            window.open(`${window.location.origin}/signals/${p.id}?utm_source=embed&utm_campaign=map`, '_blank', 'noopener')
+            return
+          }
           setSelected(sig)
           setCountry(null)
           map.flyTo({ center: coords, zoom: Math.max(map.getZoom(), 5), speed: 1.2, duration: 700 })
@@ -1468,7 +1492,7 @@ function MapView() {
           if (pinClicked) { pinClicked = false; return }
           if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
           setSelected(null)
-          void pickCountry(e)
+          if (!embed) void pickCountry(e)
         })
 
         // ── Viewport change: re-cluster + persist URL ─────────
@@ -3652,10 +3676,12 @@ function MapView() {
     <div className={playMode
       // Covers the site's header and tab bar; a vertical frame is a 9:16 column with black bars
       ? `fixed top-0 bottom-0 z-[70] flex flex-col bg-wp-bg ${playVertical ? 'left-1/2 -translate-x-1/2 aspect-[9/16] max-w-full shadow-[0_0_0_100vmax_#000]' : 'inset-x-0'}`
-      : 'h-[calc(100dvh-52px-56px)] md:h-[calc(100dvh-52px)] flex flex-col bg-wp-bg'}>
+      : embed
+        ? 'absolute inset-0 flex flex-col bg-wp-bg'
+        : 'h-[calc(100dvh-52px-56px)] md:h-[calc(100dvh-52px)] flex flex-col bg-wp-bg'}>
 
       {/* Toolbar: topic, severity and time on the left; live status and Layers on the right */}
-      {!playMode && <div className="relative z-20 border-b border-white/[0.07] bg-[rgba(6,8,14,0.94)] backdrop-blur-xl">
+      {!bare && <div className="relative z-20 border-b border-white/[0.07] bg-[rgba(6,8,14,0.94)] backdrop-blur-xl">
         <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 h-12">
           <h1 className="hidden sm:block font-display text-[13px] tracking-[2.5px] text-wp-text font-bold flex-shrink-0">LIVE MAP</h1>
 
@@ -3774,8 +3800,8 @@ function MapView() {
       {/* Map area */}
       <div className="flex-1 relative overflow-hidden">
         {/* Outside the toolbar on purpose: its backdrop blur would trap the phone sheet */}
-        {!playMode && <LayersPanel groups={layerGroups} open={layersOpen} onClose={() => setLayersOpen(false)} />}
-        {!playMode && <LiveList
+        {!bare && <LayersPanel groups={layerGroups} open={layersOpen} onClose={() => setLayersOpen(false)} />}
+        {!bare && <LiveList
           items={inView}
           total={visibleCount}
           open={listOpen}
@@ -3798,7 +3824,7 @@ function MapView() {
 
         {/* ── Convergence Hotspots Widget ─────────────────────────────── */}
         {/* Shows geographic cells with 3+ distinct signal categories converging */}
-        {hotspots.length > 0 && !selected && !playMode && (
+        {hotspots.length > 0 && !selected && !bare && (
           <div className={`absolute top-4 z-10 max-w-[240px] transition-all ${listOpen ? 'left-4 md:left-[336px]' : 'left-4'}`}>
             <button
               onClick={() => setHotspotsOpen(o => !o)}
@@ -3897,7 +3923,7 @@ function MapView() {
         )}
 
         {/* Legend: severities, verified ring, groups, and the layers that are on */}
-        {!playMode && <div className={`absolute z-10 transition-all duration-300 ${listOpen ? 'left-4 md:left-[336px]' : 'left-4'} ${selected || country ? 'hidden md:block md:bottom-6' : 'bottom-6'}`}>
+        {!bare && <div className={`absolute z-10 transition-all duration-300 ${listOpen ? 'left-4 md:left-[336px]' : 'left-4'} ${selected || country ? 'hidden md:block md:bottom-6' : 'bottom-6'}`}>
           <MapLegend counts={sevCounts} groups={layerGroups} showKinds={mapZoom >= SIGNAL_ICON_ZOOM} />
         </div>}
 
@@ -4048,7 +4074,7 @@ function MapView() {
         </div>
 
         {/* Since you last looked (plan M8) */}
-        {!playMode && since && since.fresh.length > 0 && !sinceDismissed && lastVisit !== null && !selected && !country && !hotspotsOpen && (
+        {!bare && since && since.fresh.length > 0 && !sinceDismissed && lastVisit !== null && !selected && !country && !hotspotsOpen && (
           <SinceLastVisit
             count={since.fresh.length}
             more={since.fresh.length >= signals.length && signals.length >= MAX_SIGNALS}
@@ -4083,7 +4109,7 @@ function MapView() {
 
         {/* ── Basemap, projection and reset view (top-right, under the zoom buttons) ── */}
         {/* Below MapLibre's zoom/compass buttons, which are 44px tall each on phones */}
-        {!playMode && <div className="absolute right-[10px] z-10 flex flex-col gap-1.5 top-[152px] md:top-[112px]">
+        {!bare && <div className="absolute right-[10px] z-10 flex flex-col gap-1.5 top-[152px] md:top-[112px]">
           {/* Basemap: dark map → night lights → satellite */}
           <button
             onClick={() => setBasemap(b => BASEMAP_MODES[(BASEMAP_MODES.indexOf(b) + 1) % BASEMAP_MODES.length])}
@@ -4148,7 +4174,21 @@ function MapView() {
 
         {/* Share Button — floating bottom-right (BAT-15) */}
         {/* Beside the side panel when one is open (on phones the sheet covers it) */}
-        {!playMode && <ShareButton getState={getPermalinkState} className={selected || country ? 'hidden md:flex md:right-[352px]' : ''} />}
+        {!bare && <ShareButton getState={getPermalinkState} getEmbedCode={() => embedMapCode(window.location.origin, getEmbedView())} className={selected || country ? 'hidden md:flex md:right-[352px]' : ''} />}
+
+        {/* The embedded map (G17): a link to the full map at this view; every copy is a way back */}
+        {embed && (
+          <a
+            href={embedBackLink(SITE_ORIGIN, { cat: category, sev: severity, tr: timeRange })}
+            onClick={e => { e.currentTarget.href = embedBackLink(SITE_ORIGIN, getEmbedView()) }}
+            target="_blank"
+            rel="noopener"
+            className="absolute bottom-2 left-2 z-10 flex items-center gap-1.5 rounded-lg border border-white/15 bg-[rgba(6,7,13,0.85)] px-2.5 py-1.5 font-mono text-[11px] text-wp-text2 backdrop-blur-xl hover:text-white"
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-[#22c55e]" aria-hidden="true" />
+            Live map · WorldPulse
+          </a>
+        )}
 
         {/* Play mode (G9): captions and the mark instead of the controls */}
         {playMode && (
@@ -4163,7 +4203,7 @@ function MapView() {
         )}
 
         {/* Timeline Slider (BAT-14) */}
-        {timelineActive && !playMode && (
+        {timelineActive && !bare && (
           <TimeSlider
             buckets={timeline.data?.buckets ?? []}
             currentIndex={timeline.currentIndex}
@@ -4250,10 +4290,10 @@ function MapFallback() {
   )
 }
 
-export default function MapPage() {
+export default function MapPage({ embed = false }: { embed?: boolean }) {
   return (
     <Suspense fallback={<MapFallback />}>
-      <MapView />
+      <MapView embed={embed} />
     </Suspense>
   )
 }

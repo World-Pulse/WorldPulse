@@ -15,6 +15,8 @@ import { buildShareUrl, type MapPermalinkState } from '@/lib/map-permalink'
 interface ShareButtonProps {
   /** Current map state to encode into the permalink. */
   getState: () => MapPermalinkState
+  /** The iframe code for the current view; adds "Embed this map" to the menu (G17) */
+  getEmbedCode?: () => string
   /** Optional: position override. Defaults to bottom-right. */
   className?: string
 }
@@ -46,12 +48,14 @@ async function generateQrSvg(url: string): Promise<string> {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function ShareButton({ getState, className = '' }: ShareButtonProps) {
+export function ShareButton({ getState, getEmbedCode, className = '' }: ShareButtonProps) {
   const [open,     setOpen]     = useState(false)
   const [copied,   setCopied]   = useState(false)
   const [qrSvg,    setQrSvg]    = useState<string | null>(null)
   const [qrOpen,   setQrOpen]   = useState(false)
   const [shareUrl, setShareUrl] = useState('')
+  const [embedCode, setEmbedCode] = useState<string | null>(null)
+  const [embedCopied, setEmbedCopied] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   // Close menu when clicking outside
@@ -112,6 +116,20 @@ export function ShareButton({ getState, className = '' }: ShareButtonProps) {
     setOpen(false)
   }, [shareUrl, buildUrl])
 
+  const handleEmbed = useCallback(() => {
+    setEmbedCode(code => (code === null && getEmbedCode ? getEmbedCode() : null))
+    setEmbedCopied(false)
+  }, [getEmbedCode])
+
+  const handleCopyEmbed = useCallback(async () => {
+    if (!embedCode) return
+    try {
+      await navigator.clipboard.writeText(embedCode)
+      setEmbedCopied(true)
+      setTimeout(() => setEmbedCopied(false), 2000)
+    } catch { /* the code is shown to select by hand */ }
+  }, [embedCode])
+
   const handleShowQr = useCallback(async () => {
     const url = shareUrl || buildUrl()
     if (!qrSvg) {
@@ -135,6 +153,29 @@ export function ShareButton({ getState, className = '' }: ShareButtonProps) {
             style={{ width: 160, height: 160 }}
             dangerouslySetInnerHTML={{ __html: qrSvg }}
           />
+        </div>
+      )}
+
+      {/* Embed code (G17) */}
+      {embedCode !== null && (
+        <div className="w-[280px] max-w-[calc(100vw-24px)] bg-[rgba(6,7,13,0.97)] border border-[rgba(255,255,255,0.12)] rounded-xl p-3 shadow-2xl backdrop-blur-xl">
+          <div className="font-mono text-[10px] text-wp-text3 tracking-widest mb-2">EMBED THIS MAP</div>
+          <textarea
+            readOnly
+            value={embedCode}
+            rows={5}
+            aria-label="Embed code"
+            onFocus={e => e.currentTarget.select()}
+            className="w-full resize-none rounded-lg bg-black/40 border border-white/10 p-2 font-mono text-[10px] text-wp-text2"
+          />
+          <button
+            type="button"
+            onClick={handleCopyEmbed}
+            className="mt-2 w-full rounded-lg border border-white/12 px-3 py-1.5 font-mono text-[11px] text-wp-text2 hover:text-white"
+          >
+            {embedCopied ? 'Copied!' : 'Copy code'}
+          </button>
+          <div className="mt-2 text-[10px] text-wp-text3">Paste it into a page: it shows this topic, severity and time window, live.</div>
         </div>
       )}
 
@@ -168,6 +209,16 @@ export function ShareButton({ getState, className = '' }: ShareButtonProps) {
             <span className="text-[14px]">🔴</span>
             <span>Share on Reddit</span>
           </button>
+
+          {getEmbedCode && (
+            <button
+              onClick={handleEmbed}
+              className="flex items-center gap-2.5 w-full px-3 py-2.5 text-left text-[12px] text-wp-text2 hover:bg-[rgba(255,255,255,0.05)] transition-colors"
+            >
+              <span className="text-[14px]">&lt;/&gt;</span>
+              <span>{embedCode !== null ? 'Hide embed code' : 'Embed this map'}</span>
+            </button>
+          )}
 
           <button
             onClick={handleShowQr}
