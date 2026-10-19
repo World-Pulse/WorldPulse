@@ -4,9 +4,9 @@
  * Test suite for the Maritime AIS signals map overlay endpoint:
  *   GET /api/v1/signals/map/maritime
  *
- * The endpoint returns a GeoJSON FeatureCollection of maritime-category
- * signals from the last 4 hours for the civilian AIS ship-tracking layer.
- * Redis is used for 120s caching.
+ * The endpoint returns a GeoJSON FeatureCollection of the last 72 hours'
+ * ship, port and strait stories, found by their headlines (the map's Ships
+ * layer; lib/sea-headlines.ts). Redis is used for 120s caching.
  *
  * All DB and Redis calls are mocked so the suite runs in CI without
  * a real database or cache.
@@ -16,6 +16,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import Fastify from 'fastify'
 import type { FastifyInstance } from 'fastify'
 import { registerSignalRoutes } from '../signals'
+import { MARITIME_HEADLINE, NOT_AT_SEA, ROAD_TANKER, TANKER_AT_SEA, TANKER_HEADLINE } from '../../lib/sea-headlines'
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -155,7 +156,7 @@ describe('GET /api/v1/signals/map/maritime', () => {
     mockRedis.get.mockResolvedValue(null)
     await app.inject({ method: 'GET', url: '/api/v1/signals/map/maritime' })
     expect(mockRedis.setex).toHaveBeenCalledWith(
-      'signals:map:maritime',
+      'signals:map:maritime:v2',
       120,
       expect.any(String),
     )
@@ -207,19 +208,21 @@ describe('GET /api/v1/signals/map/maritime', () => {
     expect(body.features).toHaveLength(0)
   })
 
-  // ── 11. DB SQL targets 'maritime' category ─────────────────────────────────
-  it('queries DB with maritime category filter', async () => {
+  // ── 11. DB SQL finds the stories by headline ──────────────────────────────
+  it('queries by headline: ship news, tankers only when they are ships, without phrases not about the sea', async () => {
     await app.inject({ method: 'GET', url: '/api/v1/signals/map/maritime' })
     expect(mockDb.raw).toHaveBeenCalledWith(
-      expect.stringContaining("category = 'maritime'"),
+      expect.stringContaining('(title ~* ? OR (title ~* ? AND title ~* ? AND title !~* ?))'),
+      [MARITIME_HEADLINE, TANKER_HEADLINE, TANKER_AT_SEA, ROAD_TANKER, NOT_AT_SEA],
     )
   })
 
-  // ── 12. DB SQL targets 4-hour interval ────────────────────────────────────
-  it('queries DB with 4-hour time window', async () => {
+  // ── 12. DB SQL targets the last 72 hours ──────────────────────────────────
+  it('queries DB with a 72-hour time window', async () => {
     await app.inject({ method: 'GET', url: '/api/v1/signals/map/maritime' })
     expect(mockDb.raw).toHaveBeenCalledWith(
-      expect.stringContaining('4 hours'),
+      expect.stringContaining('72 hours'),
+      expect.any(Array),
     )
   })
 
@@ -242,6 +245,15 @@ describe('GET /api/v1/signals/map/maritime', () => {
     await app.inject({ method: 'GET', url: '/api/v1/signals/map/maritime' })
     expect(mockDb.raw).toHaveBeenCalledWith(
       expect.stringContaining('LIMIT 500'),
+      expect.any(Array),
     )
+  })
+
+  // ── 16. The same headline twice shows once ────────────────────────────────
+  it('shows a headline once, the newest (rows come newest first)', async () => {
+    mockDb.raw.mockResolvedValue({ rows: [MOCK_MARITIME_ROWS[0], { ...MOCK_MARITIME_ROWS[0], id: 'mar-1b' }, MOCK_MARITIME_ROWS[1]] })
+    const res  = await app.inject({ method: 'GET', url: '/api/v1/signals/map/maritime' })
+    const body = res.json<{ features: Array<{ properties: { id: string } }> }>()
+    expect(body.features.map(f => f.properties.id)).toEqual(['mar-1', 'mar-2'])
   })
 })

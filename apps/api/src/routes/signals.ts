@@ -24,6 +24,7 @@ import {
 import { EVENT_TEMPLATE_SQL } from '../lib/story-list'
 import { staleWhileRevalidate } from '../lib/swr-cache'
 import { longQuery } from '../lib/long-query'
+import { MARITIME_HEADLINE, NOT_AT_SEA, ROAD_TANKER, TANKER_AT_SEA, TANKER_HEADLINE, firstOfEach, headlineKey } from '../lib/sea-headlines'
 import type { Knex } from 'knex'
 
 const SIGNAL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -127,7 +128,7 @@ export const FlagSignalSchema = z.object({
  * expression, case-insensitive with ~*; \m and \M are word edges). "Port"
  * alone is left out: it is also Port Harcourt, Port-au-Prince and "report".
  */
-export const MARITIME_HEADLINE = '\\m(ships?|vessels?|tankers?|supertankers?|freighters?|cargo ships?|container ships?|bulk carriers?|seaports?|ports? of|ports? in|harbou?rs?|straits?|shipping|maritime|navy|navies|naval|warships?|destroyers?|frigates?|submarines?|aircraft carriers?|coast ?guard|ferry|ferries|piracy|pirates|seafarers?|oil spill|shipwreck|capsized|mariners?)\\M'
+export { MARITIME_HEADLINE }
 
 export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
 
@@ -1266,7 +1267,10 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
   // 3 days' stories about ships, ports, straits and navies, by their headline
   // in any category but sport and culture. (There is no live ship-position
   // feed: the free ones are regional or need a licence for commercial use.)
-  // A GeoJSON FeatureCollection, cached 120 s.
+  // A GeoJSON FeatureCollection, cached 120 s. Later that day: a tanker counts
+  // only when it's a ship (not a road fuel or water tanker), a few phrases that
+  // aren't about the sea are left out, and a headline shows once
+  // (lib/sea-headlines.ts).
   app.get('/map/maritime', {
     schema: {
       tags: ['signals'],
@@ -1291,13 +1295,13 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
         AND ST_Y(location::geometry) != 0
         AND ST_X(location::geometry) != 0
         AND category::text NOT IN ('sports', 'culture', 'entertainment')
-        AND title ~* ?
+        AND (title ~* ? OR (title ~* ? AND title ~* ? AND title !~* ?))
+        AND title !~* ?
       ORDER BY created_at DESC
       LIMIT 500
-    `, [MARITIME_HEADLINE])
+    `, [MARITIME_HEADLINE, TANKER_HEADLINE, TANKER_AT_SEA, ROAD_TANKER, NOT_AT_SEA])
 
-    const features = result.rows
-      .filter(r => r.lat != null && r.lng != null)
+    const features = firstOfEach(result.rows.filter(r => r.lat != null && r.lng != null), r => headlineKey(String(r.title ?? '')))
       .map(r => ({
         type: 'Feature' as const,
         geometry: {

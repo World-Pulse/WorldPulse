@@ -15,6 +15,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 import { optionalAuth } from '../middleware/auth'
+import { NAVAL_SHIP_NAME, NOT_AT_SEA, firstOfEach, headlineKey } from '../lib/sea-headlines'
 
 // Carrier data inlined here to avoid cross-package import in the API
 export const CARRIER_REGISTRY_ALIASES: Array<{
@@ -49,9 +50,10 @@ export const MARITIME_CACHE_KEY = 'maritime:vessels'
 
 /**
  * A headline about navies and warships, or a named carrier (PostgreSQL, ~*):
- * the Naval intelligence layer's stories (Oct 19, 2026)
+ * the Naval intelligence layer's stories (Oct 19, 2026). USS, HMS and INS are
+ * matched case-sensitively instead (NAVAL_SHIP_NAME): here "break-ins" was INS.
  */
-export const NAVAL_HEADLINE = '\\m(navy|navies|naval|warships?|destroyers?|frigates?|corvettes?|submarines?|aircraft carriers?|carrier strike group|amphibious assault ship|USS|HMS|INS|dark (ship|vessel)s?|AIS (off|gap)|transponder (off|disabled)|' +
+export const NAVAL_HEADLINE = '\\m(navy|navies|naval|warships?|destroyers?|frigates?|corvettes?|submarines?|aircraft carriers?|carrier strike group|amphibious assault ship|dark (ship|vessel)s?|AIS (off|gap)|transponder (off|disabled)|' +
   CARRIER_REGISTRY_ALIASES.map(c => c.name.replace(/[.]/g, '\\.')).join('|') + ')\\M'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -377,7 +379,8 @@ export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
       )
       // Oct 19, 2026: by headline (categories "military" and "maritime" are
       // no longer used, so this found nothing), over 3 days
-      .whereRaw('title ~* ?', [NAVAL_HEADLINE])
+      .whereRaw('(title ~* ? OR title ~ ?)', [NAVAL_HEADLINE, NAVAL_SHIP_NAME])
+      .whereRaw('title !~* ?', [NOT_AT_SEA])
       .whereRaw("category::text NOT IN ('sports', 'culture', 'entertainment')")
       .whereIn('status', ['verified', 'pending'])
       .whereRaw("created_at > now() - interval '72 hours'")
@@ -394,8 +397,10 @@ export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
         lng:           number | null
       }>
 
-    const vessels: MaritimeVessel[] = rows
-      .filter(row => row.lat != null && row.lng != null && isValidCoordinate(row.lat!, row.lng!))
+    // the same report at the same place (a carrier tracker repeats its reports
+    // every few hours) shows once: the newest
+    const placed = rows.filter(row => row.lat != null && row.lng != null && isValidCoordinate(row.lat!, row.lng!))
+    const vessels: MaritimeVessel[] = firstOfEach(placed, row => `${headlineKey(row.title)}|${Number(row.lat).toFixed(1)}|${Number(row.lng).toFixed(1)}`)
       .map(row => ({
         id:          row.id,
         title:       row.title,

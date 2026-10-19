@@ -1,4 +1,9 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+
+// The route module opens the database when it loads, and a failed connection
+// ended the test run with process.exit(1); these tests only check its functions
+vi.mock('../db/postgres', () => ({ db: {} }))
+vi.mock('../db/redis', () => ({ redis: {} }))
 
 import {
   MARITIME_CACHE_TTL,
@@ -199,22 +204,40 @@ describe('CARRIER_REGISTRY_ALIASES', () => {
 
 // ─── Oct 19, 2026: ship and naval stories found by their headlines ─────────────
 import { NAVAL_HEADLINE } from '../routes/maritime'
-import { MARITIME_HEADLINE } from '../routes/signals'
+import { MARITIME_HEADLINE, NAVAL_SHIP_NAME, NOT_AT_SEA, ROAD_TANKER, TANKER_AT_SEA, TANKER_HEADLINE, firstOfEach, headlineKey } from '../lib/sea-headlines'
 
 /** PostgreSQL's word edges (\m, \M) as JavaScript's \b, for a check of the patterns */
-const asJs = (pg: string) => new RegExp(pg.replace(/\\m/g, '\\b').replace(/\\M/g, '\\b'), 'i')
+const asJs = (pg: string, flags = 'i') => new RegExp(pg.replace(/\\m/g, '\\b').replace(/\\M/g, '\\b'), flags)
+
+/** The Ships layer's filter, as GET /signals/map/maritime runs it */
+const shipNews = (t: string) => !asJs(NOT_AT_SEA).test(t) &&
+  (asJs(MARITIME_HEADLINE).test(t) || (asJs(TANKER_HEADLINE).test(t) && asJs(TANKER_AT_SEA).test(t) && !asJs(ROAD_TANKER).test(t)))
+/** The Naval intelligence layer's, as GET /maritime/vessels runs it (ship names case-sensitive) */
+const navalNews = (t: string) => !asJs(NOT_AT_SEA).test(t) && (asJs(NAVAL_HEADLINE).test(t) || asJs(NAVAL_SHIP_NAME, '').test(t))
 
 describe('headline patterns (the categories "maritime" and "military" are no longer used)', () => {
   it('ship news: ships, tankers, ferries, straits, ports; not reports, supporters or Port Harcourt', () => {
-    const re = asJs(MARITIME_HEADLINE)
-    for (const t of ['Tanker attacked in the Red Sea', 'Ferry capsizes off Bali', 'US Navy destroyer in the Taiwan Strait', 'Ukraine hits port in Primorsk', 'Shipping rates jump']) expect(re.test(t)).toBe(true)
-    for (const t of ['Report: support for strike grows', 'Port Harcourt traffic jam', 'Southampton sign striker']) expect(re.test(t)).toBe(false)
+    for (const t of ['Tanker attacked in the Red Sea', 'Ferry capsizes off Bali', 'US Navy destroyer in the Taiwan Strait', 'Ukraine hits port in Primorsk', 'Shipping rates jump']) expect(shipNews(t)).toBe(true)
+    for (const t of ['Report: support for strike grows', 'Port Harcourt traffic jam', 'Southampton sign striker']) expect(shipNews(t)).toBe(false)
   })
 
-  it('naval news: navies, warships, named carriers', () => {
-    const re = asJs(NAVAL_HEADLINE)
-    for (const t of ['USS Gerald R. Ford leaves Norfolk', 'Chinese warships near Taiwan', 'Royal Navy frigate shadows Russian submarine', 'Dark ship spotted near Hormuz']) expect(re.test(t)).toBe(true)
-    for (const t of ['Navigation app update', 'Insurance rates rise']) expect(re.test(t)).toBe(false)
+  it('a tanker is a ship only when the headline makes it one: not a road fuel or water tanker', () => {
+    for (const t of ['Oil tanker on fire after hitting mine in Hormuz', 'France seizes fifth Russian shadow tanker', 'VLCC Tanker Rates Retreated Last Week', "Gunmen fire on tanker off Yemen's coast"]) expect(shipNews(t)).toBe(true)
+    for (const t of ['Tanker explosion claims two lives under Otedola Bridge', 'Malawi: 287 Fuel Tankers Expected in Malawi This Week', 'Water tanker rates go up again', 'Tanker crushes five Oyo residents']) expect(shipNews(t)).toBe(false)
+  })
+
+  it('leaves out phrases that are not about the sea', () => {
+    for (const t of ['Team discovers key pathway in heart lymphatic vessel development', 'Flagship GPU will continue shipping', 'MMAG disposes a freighter aircraft', "Smoke across Auckland's Upper Harbour Motorway", "Officer killed before UTSA's game against Navy", '2027: DLA gov’ship candidates endorse Tinubu']) expect(shipNews(t)).toBe(false)
+  })
+
+  it('naval news: navies, warships, named carriers; not break-ins or a retired officer', () => {
+    for (const t of ['USS Gerald R. Ford leaves Norfolk', 'Chinese warships near Taiwan', 'Royal Navy frigate shadows Russian submarine', 'Dark ship spotted near Hormuz', 'INS Trishul arrives in Lisbon']) expect(navalNews(t)).toBe(true)
+    for (const t of ['Navigation app update', 'Insurance rates rise', 'Three teens charged after string of business break-ins', 'Retired Navy commodore files for congress']) expect(navalNews(t)).toBe(false)
+  })
+
+  it('the same headline shows once (the first, the newest)', () => {
+    const rows = [{ id: 1, t: 'Iran says two tankers catch fire' }, { id: 2, t: 'IRAN says two tankers catch fire!' }, { id: 3, t: 'Taiwan drives away 16 ships' }]
+    expect(firstOfEach(rows, r => headlineKey(r.t)).map(r => r.id)).toEqual([1, 3])
   })
 
   it('a named carrier is a carrier whatever its category', () => {
