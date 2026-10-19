@@ -55,7 +55,7 @@ import {
 import {
   timeAgo, getSourceUrl, getSourceDomain,
   parseWKBPoint, extractLatLng, prependSignal, MAX_SIGNALS,
-  escapeHtml, safeHttpUrl, safeCssColor, onLayer, offLayer,
+  escapeHtml, safeHttpUrl, safeCssColor, onLayer, offLayer, styleUsable, whenStyleUsable,
 } from '@/lib/map-utils'
 import { declutter, type ScreenPoint } from '@/lib/map-declutter'
 import { displaySummary } from '@/lib/signal-text'
@@ -404,7 +404,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
   // ── Projection switcher effect (MapLibre v5+ globe support) ──────────────────
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.isStyleLoaded()) return
+    if (!map || !styleUsable(map)) return
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(map as any).setProjection({ type: projection })
@@ -1604,11 +1604,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
     }
 
     // Apply immediately if map is loaded, otherwise wait for the load event
-    if (map.isStyleLoaded()) {
-      applyLayer()
-    } else {
-      map.once('idle', applyLayer)
-    }
+    whenStyleUsable(map, () => { applyLayer() })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [satelliteMode, gibsDate, mapReady])
 
@@ -1721,11 +1717,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
       }
     }
 
-    if (map.isStyleLoaded()) {
-      void applyLayer()
-    } else {
-      map.once('idle', () => { void applyLayer() })
-    }
+    whenStyleUsable(map, () => { void applyLayer() })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [satTrackingMode])
 
@@ -1778,7 +1770,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
 
         const currentMap = mapRef.current
         // (loaded() stays false while tiles load, e.g. as the globe turns)
-        if (!currentMap || !currentMap.isStyleLoaded()) return
+        if (!currentMap || !styleUsable(currentMap)) return
         await Promise.all([MAP_ICON.plane, MAP_ICON.planeMil, MAP_ICON.planeSos].map(icon => ensureMapIcon(currentMap, icon)))
 
         if (!currentMap.getSource(ADSB_SOURCE)) {
@@ -1844,11 +1836,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
         return
       }
 
-      if (map.isStyleLoaded()) {
-        void fetchAndUpdate()
-      } else {
-        map.once('idle', () => { void fetchAndUpdate() })
-      }
+      whenStyleUsable(map, () => { void fetchAndUpdate() })
 
       // (the server reads adsb.lol at most every 3 minutes)
       intervalId = setInterval(() => { void fetchAndUpdate() }, 2 * 60_000)
@@ -1917,7 +1905,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
           }))
 
         const currentMap = mapRef.current
-        if (!currentMap || !currentMap.isStyleLoaded()) return
+        if (!currentMap || !styleUsable(currentMap)) return
         await ensureMapIcon(currentMap, MAP_ICON.camera)
 
         const existing = currentMap.getSource(CAM_SOURCE)
@@ -2026,11 +2014,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
         return
       }
 
-      if (map.isStyleLoaded()) {
-        void fetchAndUpdate()
-      } else {
-        map.once('idle', () => { void fetchAndUpdate() })
-      }
+      whenStyleUsable(map, () => { void fetchAndUpdate() })
 
       // The list changes rarely (the server reads the sources every 6 hours)
       intervalId = setInterval(() => { void fetchAndUpdate() }, 30 * 60_000)
@@ -2175,11 +2159,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
         return
       }
 
-      if (map.isStyleLoaded()) {
-        void fetchAndUpdate()
-      } else {
-        map.once('idle', () => { void fetchAndUpdate() })
-      }
+      whenStyleUsable(map, () => { void fetchAndUpdate() })
 
       intervalId = setInterval(() => { void fetchAndUpdate() }, 120_000)
     }
@@ -2400,11 +2380,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
       }
     }
 
-    if (map.isStyleLoaded()) {
-      void applyLayer()
-    } else {
-      map.once('idle', () => { void applyLayer() })
-    }
+    whenStyleUsable(map, () => { void applyLayer() })
 
     // Auto-refresh every 10 minutes when navalMode is active
     if (navalMode) {
@@ -2459,11 +2435,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
       }
     }
 
-    if (map.isStyleLoaded()) {
-      void applyLayer()
-    } else {
-      map.once('idle', () => { void applyLayer() })
-    }
+    whenStyleUsable(map, () => { void applyLayer() })
 
     // Auto-refresh every 3 minutes when active
     if (conflictMode) {
@@ -2648,11 +2620,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
       }
     }
 
-    if (map.isStyleLoaded()) {
-      void applyLayer()
-    } else {
-      map.once('idle', () => { void applyLayer() })
-    }
+    whenStyleUsable(map, () => { void applyLayer() })
 
     // Auto-refresh every 5 minutes when threatMode is active (more volatile than naval)
     if (threatMode) {
@@ -2857,11 +2825,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
       }
     }
 
-    if (map.isStyleLoaded()) {
-      void applyLayer()
-    } else {
-      map.once('idle', () => { void applyLayer() })
-    }
+    whenStyleUsable(map, () => { void applyLayer() })
 
     // Auto-refresh every 5 minutes when jammingMode is active
     if (jammingMode) {
@@ -3049,11 +3013,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
       }
     }
 
-    if (map.isStyleLoaded()) {
-      void applyLayer()
-    } else {
-      map.once('idle', () => { void applyLayer() })
-    }
+    whenStyleUsable(map, () => { void applyLayer() })
 
     // Auto-refresh every 10 minutes when hazardsMode is active
     if (hazardsMode) {
@@ -3519,11 +3479,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
       }
     }
 
-    if (map.isStyleLoaded()) {
-      void applyLayer()
-    } else {
-      map.once('idle', () => { void applyLayer() })
-    }
+    whenStyleUsable(map, () => { void applyLayer() })
 
     // Auto-refresh every 10 minutes when active
     let refreshTimer: ReturnType<typeof setInterval> | null = null

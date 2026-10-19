@@ -151,3 +151,33 @@ export function offLayer(map: LayerEvents, layerId: string): void {
   for (const [type, listener] of list) map.off(type, layerId, listener)
   byLayer.delete(layerId)
 }
+
+// ── When layers can be added (Oct 19, 2026) ───────────────────────────────────
+// map.isStyleLoaded() is false while any tile is still loading (MapLibre's
+// Style.loaded() waits for every tile), and the 'idle' event can be a long time
+// coming while the globe turns or rings pulse: layers turned on during that time
+// (or opened from a shared link) stayed blank until their next refresh, minutes
+// later. Layers can be added as soon as the style itself has loaded.
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function styleUsable(map: any): boolean {
+  try {
+    if (!map?.style) return false
+    if (typeof map.style._loaded === 'boolean') return map.style._loaded
+    return !!map.getStyle?.()
+  } catch {
+    return false
+  }
+}
+
+/** Runs fn as soon as layers can be added (at once when they can) */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function whenStyleUsable(map: any, fn: () => void): void {
+  if (styleUsable(map)) { fn(); return }
+  const onData = () => {
+    if (!styleUsable(map)) return
+    map.off('styledata', onData)
+    fn()
+  }
+  map.on('styledata', onData)
+}
