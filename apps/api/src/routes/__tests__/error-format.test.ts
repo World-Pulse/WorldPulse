@@ -64,6 +64,8 @@ vi.mock('../../lib/fingerprint-search', () => ({
 vi.mock('../../lib/signal-summary', () => ({
   generateSignalSummary: vi.fn(),
   refreshSignalSummary:  vi.fn(),
+  readSignalSummary:     vi.fn(),
+  cachedSignalSummary:   vi.fn(),
 }))
 
 vi.mock('../../lib/slop-detector', () => ({

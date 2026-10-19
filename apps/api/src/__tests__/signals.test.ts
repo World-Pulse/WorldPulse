@@ -30,7 +30,7 @@ vi.mock('../db/redis', () => ({
 vi.mock('../middleware/auth',       () => ({ optionalAuth: vi.fn(), authenticate: vi.fn() }))
 vi.mock('../lib/search',            () => ({ indexSignal: vi.fn(), removeSignal: vi.fn() }))
 vi.mock('../lib/search-events',     () => ({ publishSignalUpsert: vi.fn(), publishSignalDelete: vi.fn() }))
-vi.mock('../lib/signal-summary',    () => ({ generateSignalSummary: vi.fn(), refreshSignalSummary: vi.fn() }))
+vi.mock('../lib/signal-summary',    () => ({ generateSignalSummary: vi.fn(), refreshSignalSummary: vi.fn(), readSignalSummary: vi.fn(), cachedSignalSummary: vi.fn() }))
 vi.mock('../lib/slop-detector',     () => ({ slopDetector: vi.fn() }))
 
 const { redis } = await import('../db/redis')

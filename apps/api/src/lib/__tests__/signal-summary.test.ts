@@ -5,7 +5,7 @@ import type { SignalSummaryInput } from '../signal-summary'
 vi.mock('../../db/redis', () => {
   // The Claude spending cap (lib/claude.ts) reads and counts in Redis too
   const chain: Record<string, unknown> = {}
-  for (const op of ['incrby', 'expire', 'hincrby']) chain[op] = () => chain
+  for (const op of ['incrby', 'expire', 'hincrby', 'hset', 'hdel']) chain[op] = () => chain
   chain.exec = async () => []
   return {
     redis: {
@@ -14,6 +14,9 @@ vi.mock('../../db/redis', () => {
       del:   vi.fn(),
       mget:  vi.fn(async () => [null, null]),
       multi: vi.fn(() => chain),
+      // the day's summary count (Oct 19, 2026)
+      incr:   vi.fn(async () => 1),
+      expire: vi.fn(async () => 1),
     },
   }
 })
@@ -79,8 +82,8 @@ describe('generateSignalSummary', () => {
     expect(result.text).toBeTruthy()
     expect(result.text.length).toBeGreaterThan(10)
     expect(result.generatedAt).toBeTruthy()
-    // Should cache extractive result
-    expect(redis.setex).toHaveBeenCalledOnce()
+    // An extractive summary is never kept: it would stand in for the AI one (Oct 19, 2026)
+    expect(redis.setex).not.toHaveBeenCalled()
   })
 
   it('extractive fallback uses existing summary field when present', async () => {
@@ -263,3 +266,77 @@ describe('generateSignalSummary', () => {
     delete process.env.OPENAI_API_KEY
   })
 })
+
+// ─── Oct 19, 2026: a page view never asks an AI ──────────────────────────────
+describe('readSignalSummary and the day\'s limit', () => {
+  let redis: { get: ReturnType<typeof vi.fn>; setex: ReturnType<typeof vi.fn>; incr: ReturnType<typeof vi.fn> }
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    delete process.env.GEMINI_API_KEY
+    delete process.env.OPENROUTER_API_KEY
+    delete process.env.OLLAMA_URL
+    delete process.env.SUMMARY_DAILY_LIMIT
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-test'
+    const redisMod = await import('../../db/redis')
+    redis = redisMod.redis as unknown as typeof redis
+    global.fetch = vi.fn()
+  })
+
+  afterEach(() => {
+    delete process.env.ANTHROPIC_API_KEY
+    vi.restoreAllMocks()
+  })
+
+  it('a page with no summary written gets the outlet\'s own text, and no AI is asked', async () => {
+    redis.get.mockResolvedValueOnce(null)
+    const { readSignalSummary } = await import('../signal-summary')
+    const result = await readSignalSummary(makeSample())
+    expect(result.model).toBe('extractive')
+    expect(result.text).toContain('earthquake struck')
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(redis.setex).not.toHaveBeenCalled()
+    expect(redis.incr).not.toHaveBeenCalled()
+  })
+
+  it('a page with a summary written gets it', async () => {
+    const kept = { text: 'Kept AI summary.', model: 'anthropic', generatedAt: '2026-10-19T10:00:00Z' }
+    redis.get.mockResolvedValueOnce(JSON.stringify(kept))
+    const { readSignalSummary } = await import('../signal-summary')
+    expect(await readSignalSummary(makeSample())).toEqual(kept)
+    expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it('past the day\'s limit no AI is asked, and nothing is kept', async () => {
+    process.env.SUMMARY_DAILY_LIMIT = '400'
+    redis.get.mockResolvedValueOnce(null)
+    redis.incr.mockResolvedValueOnce(401)
+    const { generateSignalSummary } = await import('../signal-summary')
+    const result = await generateSignalSummary(makeSample())
+    expect(result.model).toBe('extractive')
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(redis.setex).not.toHaveBeenCalled()
+  })
+
+  it('when Redis can\'t count, no AI is asked', async () => {
+    redis.get.mockResolvedValueOnce(null)
+    redis.incr.mockRejectedValueOnce(new Error('redis down'))
+    const { generateSignalSummary } = await import('../signal-summary')
+    expect((await generateSignalSummary(makeSample())).model).toBe('extractive')
+    expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it('an AI summary is kept 30 days', async () => {
+    redis.get.mockResolvedValueOnce(null)
+    ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ content: [{ type: 'text', text: 'Anthropic generated summary.' }] }),
+    } as unknown as Response)
+    const { generateSignalSummary, SUMMARY_CACHE_TTL } = await import('../signal-summary')
+    const result = await generateSignalSummary(makeSample())
+    expect(result.model).toBe('anthropic')
+    expect(SUMMARY_CACHE_TTL).toBe(30 * 86_400)
+    expect(redis.setex).toHaveBeenCalledWith('signal-ai-summary:sig-001', 30 * 86_400, expect.any(String))
+  })
+})
+

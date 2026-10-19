@@ -90,6 +90,7 @@ import { startSearchConsumer, stopSearchConsumer } from './lib/search-consumer'
 import { initClickHouse } from './lib/search-analytics'
 import { startDispatcher, stopDispatcher } from './lib/alert-dispatcher'
 import { startPulseScheduler, stopPulseScheduler } from './lib/pulse/scheduler'
+import { startSummaryPass, stopSummaryPass } from './lib/summary-pass'
 import { ensureSubscribersTable } from './lib/subscribers'
 import { startBriefingEmails, stopBriefingEmails } from './lib/briefing-email'
 import { startSocialPosters, stopSocialPosters } from './lib/social-posters'
@@ -457,6 +458,11 @@ async function bootstrap() {
   // and daily briefing (7am ET).
   startPulseScheduler()
 
+  // ─── STORY SUMMARIES (Oct 19, 2026) ──────────────────────
+  // Written in the background for verified stories, never because a page was
+  // opened (bots spent the day's AI allowance by reading pages)
+  startSummaryPass()
+
   // ─── EMAIL BRIEFING (plan G4) ─────────────────────────────
   // Creates the subscribers table if missing (Devon approved, Oct 11, 2026),
   // then checks every minute whether the 7 AM briefing is due. Sends nothing
@@ -471,6 +477,7 @@ async function bootstrap() {
   // ─── GRACEFUL SHUTDOWN ────────────────────────────────────
   const shutdown = async () => {
     stopPulseScheduler()
+    stopSummaryPass()
     stopBriefingEmails()
     stopSocialPosters()
     stopDispatcher()

@@ -6,7 +6,7 @@ import { optionalAuth, authenticate } from '../middleware/auth'
 import { similarReports } from '../lib/fingerprint-search'
 import { indexSignal, removeSignal } from '../lib/search'
 import { publishSignalUpsert, publishSignalDelete } from '../lib/search-events'
-import { generateSignalSummary, refreshSignalSummary } from '../lib/signal-summary'
+import { readSignalSummary, refreshSignalSummary } from '../lib/signal-summary'
 import { slopDetector } from '../lib/slop-detector'
 import { computeRiskScore } from '../lib/risk-score'
 import { detectCIB } from '../lib/cib-detection'
@@ -290,8 +290,10 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       ? await getSourceBias(extractDomain(primarySourceUrl)).catch(() => null)
       : null
 
-    // Generate AI summary async (non-blocking for response cache, fire-and-get)
-    const aiSummary = await generateSignalSummary({
+    // The summary already written, or the outlet's own: opening a page never
+    // asks an AI (bots spent the day's AI allowance this way, Oct 19, 2026);
+    // summaries are written by the background pass (lib/summary-pass.ts)
+    const aiSummary = await readSignalSummary({
       id:       signal.id as string,
       title:    signal.title as string,
       summary:  signal.summary as string | null,
@@ -336,7 +338,8 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
 
     if (!signal) return sendError(reply, 404, 'NOT_FOUND', 'Signal not found')
 
-    const fn = refresh === 'true' && req.user ? refreshSignalSummary : generateSignalSummary
+    // An admin's refresh writes a new one; anyone else gets what's already written (no AI call)
+    const fn = refresh === 'true' && req.user?.accountType === 'admin' ? refreshSignalSummary : readSignalSummary
 
     const aiSummary = await fn({
       id:       signal.id as string,

@@ -36,7 +36,7 @@ import {
   batchRegisterSocialPosts,
   getSyndicatedPosts,
 } from '../lib/pulse/syndication'
-import { generateSignalSummary } from '../lib/signal-summary'
+import { cachedSignalSummary } from '../lib/signal-summary'
 import { detectTrends, getEscalatingEvents } from '../lib/pulse/trending'
 import { generateContent } from '../lib/pulse/publisher'
 
@@ -627,20 +627,12 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
       // (from signal-summary.ts) as the display content instead of the raw
       // headline echo. The AI summary is the good-quality 2-3 sentence
       // summary visible on each signal's detail page.
+      // (only a summary already written: loading the feed never asks an AI, Oct 19, 2026)
       let displayContent = post.content
       if (post.signal_id && post.signal_title && post.pulse_content_type === 'flash_brief') {
         try {
-          const aiSummary = await generateSignalSummary({
-            id:       post.signal_id,
-            title:    post.signal_title,
-            summary:  post.signal_summary,
-            body:     post.signal_body,
-            category: post.signal_category ?? 'other',
-            severity: post.signal_severity ?? 'medium',
-            tags:     post.signal_tags ?? [],
-            language: post.signal_language ?? 'en',
-          })
-          if (aiSummary.text && aiSummary.text.length > 30) {
+          const aiSummary = await cachedSignalSummary(String(post.signal_id))
+          if (aiSummary && aiSummary.model !== 'extractive' && aiSummary.text && aiSummary.text.length > 30) {
             displayContent = `${post.signal_title}\n\n${aiSummary.text}`
           }
         } catch {

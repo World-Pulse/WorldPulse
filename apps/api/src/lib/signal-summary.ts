@@ -10,16 +10,33 @@
  *   6. Fallback                → extractive summary from title + summary + body
  * (No OpenAI since Oct 16, 2026.)
  *
+ * Oct 19, 2026 (Devon: "fix: opening a page will no longer make the site ask
+ * Claude"): a page view never asks an AI. Bots opened 6,615 story pages by noon
+ * that day, and each page without a summary asked Claude for one: 3,750 calls
+ * spent the whole day's AI allowance by 8:38 AM, after which 198 stories
+ * turned verified without the cross-check and the editor stopped. Now pages
+ * show a summary already written (readSignalSummary) or the outlet's own
+ * (extractive), and summaries are written only by the background pass
+ * (lib/summary-pass.ts): verified stories, newest first, once each, kept 30
+ * days, at most SUMMARY_DAILY_LIMIT a day.
+ *
  * No extra npm packages — uses native fetch (Node 18+).
  */
 
 import { redis } from '../db/redis'
-import { askClaude } from './claude'
+import { askClaude, claudeBudgetLeft } from './claude'
 import { GEMINI_MODEL } from './llm-models'
 
 // ─── Config ──────────────────────────────────────────────────────────────────
-const SUMMARY_CACHE_TTL   = 60 * 60 * 24  // 24 hours in seconds
-const CACHE_KEY_PREFIX    = 'signal-ai-summary:'
+/** An AI summary is kept 30 days: a story's text doesn't change (was 24 hours) */
+export const SUMMARY_CACHE_TTL = 60 * 60 * 24 * 30
+export const CACHE_KEY_PREFIX  = 'signal-ai-summary:'
+/** AI summaries a day (about 250 stories turn verified a day); a few cents of the allowance */
+export function summaryDailyLimit(): number {
+  const n = Number(process.env.SUMMARY_DAILY_LIMIT)
+  return Number.isFinite(n) && n >= 0 ? n : 400
+}
+const COUNT_KEY = (now: Date) => `signal-ai-summary:count:${now.toISOString().slice(0, 10)}`
 const MAX_INPUT_CHARS     = 2000           // truncate long bodies before sending to LLM
 
 /**
@@ -283,9 +300,53 @@ function buildInputText(signal: SignalSummaryInput): string {
 }
 
 // ─── Main public API ──────────────────────────────────────────────────────────
+
+/** The AI summary already written for a story, if any (never asks an AI) */
+export async function cachedSignalSummary(signalId: string): Promise<AISummary | null> {
+  return getCached(signalId)
+}
+
 /**
- * Generate (or return cached) AI summary for a signal.
- * Never throws — falls back to extractive summary on any LLM failure.
+ * What a page shows: the summary already written, else the outlet's own text
+ * (extractive). Never asks an AI, so opening pages costs nothing (Oct 19, 2026).
+ */
+export async function readSignalSummary(signal: SignalSummaryInput): Promise<AISummary> {
+  return (await getCached(signal.id)) ?? buildExtractiveSummary(signal)
+}
+
+/** One of the day's AI summaries, if any are left (none when Redis can't count) */
+export async function takeSummarySlot(now = new Date()): Promise<boolean> {
+  try {
+    const key = COUNT_KEY(now)
+    const n = await redis.incr(key)
+    if (n === 1) await redis.expire(key, 2 * 86_400)
+    return n <= summaryDailyLimit()
+  } catch {
+    return false
+  }
+}
+
+function llmConfigured(): boolean {
+  return !!(process.env.ANTHROPIC_API_KEY || process.env.GEMINI_API_KEY || process.env.OPENROUTER_API_KEY || process.env.OLLAMA_URL)
+}
+
+/** Whether an AI summary can be written now: an AI is set up, the day's limit isn't reached, nor Claude's spending cap */
+export async function summaryAllowed(now = new Date()): Promise<boolean> {
+  if (!llmConfigured()) return false
+  try {
+    if (Number((await redis.get(COUNT_KEY(now))) ?? 0) >= summaryDailyLimit()) return false
+  } catch {
+    return false
+  }
+  if (process.env.ANTHROPIC_API_KEY) return claudeBudgetLeft(now).catch(() => false)
+  return true
+}
+
+/**
+ * Write (or return the kept) AI summary for a story: for the background pass
+ * and an admin's refresh, never for a page view. Never throws: without an AI,
+ * past the day's limit or on any failure it returns the extractive summary,
+ * not kept, so the story can be summarized later.
  */
 export async function generateSignalSummary(
   signal: SignalSummaryInput,
@@ -293,6 +354,11 @@ export async function generateSignalSummary(
   // 1. Cache hit
   const cached = await getCached(signal.id)
   if (cached) return cached
+
+  // (Claude's cap is checked before a slot is taken, so a capped day doesn't use up the slots)
+  if (!llmConfigured()) return buildExtractiveSummary(signal)
+  if (process.env.ANTHROPIC_API_KEY && !(await claudeBudgetLeft().catch(() => false))) return buildExtractiveSummary(signal)
+  if (!(await takeSummarySlot())) return buildExtractiveSummary(signal)
 
   const language = signal.language ?? 'en'
   let summary: AISummary
@@ -304,10 +370,8 @@ export async function generateSignalSummary(
       summary = await generateWithGemini(signal, language)
     } else if (process.env.OPENROUTER_API_KEY) {
       summary = await generateWithOpenRouter(signal, language)
-    } else if (process.env.OLLAMA_URL) {
-      summary = await generateWithOllama(signal, language)
     } else {
-      summary = buildExtractiveSummary(signal)
+      summary = await generateWithOllama(signal, language)
     }
   } catch (err) {
     // LLM failed — use extractive fallback and do NOT cache (allow retry)
@@ -315,13 +379,13 @@ export async function generateSignalSummary(
     return buildExtractiveSummary(signal)
   }
 
-  // Cache successful LLM or extractive result
+  // Keep the AI summary (an extractive one is never kept: it would stand in for the AI one)
   await setCached(signal.id, summary)
   return summary
 }
 
 /**
- * Regenerate summary (bypass cache). Useful for admin refresh.
+ * Regenerate summary (bypass cache). For an admin's refresh only.
  */
 export async function refreshSignalSummary(
   signal: SignalSummaryInput,

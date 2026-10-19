@@ -40,7 +40,7 @@ vi.mock('../middleware/auth', () => ({
 
 vi.mock('../lib/search',          () => ({ indexSignal: vi.fn(), removeSignal: vi.fn() }))
 vi.mock('../lib/search-events',   () => ({ publishSignalUpsert: vi.fn(), publishSignalDelete: vi.fn() }))
-vi.mock('../lib/signal-summary',  () => ({ generateSignalSummary: vi.fn(), refreshSignalSummary: vi.fn() }))
+vi.mock('../lib/signal-summary',  () => ({ generateSignalSummary: vi.fn(), refreshSignalSummary: vi.fn(), readSignalSummary: vi.fn(), cachedSignalSummary: vi.fn() }))
 vi.mock('../lib/slop-detector',   () => ({ slopDetector: { scoreSignal: vi.fn() } }))
 vi.mock('../lib/fingerprint-search', () => ({ similarReports: vi.fn(async () => []), searchByMeaning: vi.fn(async () => null) }))
 vi.mock('../lib/risk-score',      () => ({ computeRiskScore: vi.fn(() => ({ score: 0, level: 'low', label: 'Low' })) }))
