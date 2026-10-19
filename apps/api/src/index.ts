@@ -38,6 +38,7 @@ import { registerCountryRoutes } from './routes/countries'
 import { registerBreakingRoutes } from './routes/breaking'
 import { registerTradeRoutes } from './routes/trade'
 import { registerCameraRoutes } from './routes/cameras'
+import { registerAircraftRoutes } from './routes/aircraft'
 import { registerPatentRoutes } from './routes/patents'
 import { registerMaritimeRoutes } from './routes/maritime'
 import { registerThreatsRoutes }  from './routes/threats'
@@ -359,6 +360,7 @@ async function bootstrap() {
   await app.register(registerBreakingRoutes,    { prefix: '/api/v1/breaking' })
   await app.register(registerTradeRoutes,       { prefix: '/api/v1/trade' })
   await app.register(registerCameraRoutes,      { prefix: '/api/v1/cameras' })
+  await app.register(registerAircraftRoutes,    { prefix: '/api/v1/aircraft' })
   await app.register(registerPatentRoutes,      { prefix: '/api/v1/patents' })
   await app.register(registerMaritimeRoutes,    { prefix: '/api/v1/maritime' })
   await app.register(registerThreatsRoutes,     { prefix: '/api/v1/threats' })

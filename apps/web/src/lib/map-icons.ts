@@ -21,6 +21,9 @@ export type MapIconGlyph = keyof typeof GLYPHS
 /** The image ids the layers use */
 export const MAP_ICON = {
   plane:  { id: 'wp-icon-plane',  glyph: 'plane',  color: '#22d3ee' },
+  /** Live aircraft (Oct 19, 2026): military amber, an emergency squawk red */
+  planeMil: { id: 'wp-icon-plane-mil', glyph: 'plane', color: '#f59e0b' },
+  planeSos: { id: 'wp-icon-plane-sos', glyph: 'plane', color: '#ef4444' },
   ship:   { id: 'wp-icon-ship',   glyph: 'ship',   color: '#f59e0b' },
   camera: { id: 'wp-icon-camera', glyph: 'camera', color: '#2dd4bf' },
 } as const

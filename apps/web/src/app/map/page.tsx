@@ -36,6 +36,7 @@ import { toHotspot, hotspotPlace, type Hotspot } from '@/lib/hotspots'
 import { isMapNews, mapPointsFor } from '@/lib/map-news'
 import { ensureMapIcon, MAP_ICON } from '@/lib/map-icons'
 import { cameraPopupHtml, startCameraPicture, type CameraFeed } from '@/lib/map-cameras'
+import { aircraftPopupHtml, planeRotation, type AircraftSnapshot } from '@/lib/map-aircraft'
 import { dayNightFeatures, subsolarPoint } from '@/lib/daynight'
 import { MAP_REGIONS } from '@/lib/map-regions'
 import { SITE_URL as SITE_ORIGIN } from '@/lib/page-metadata'
@@ -114,14 +115,6 @@ type SCIndex = Supercluster<SignalProps, ClusterProps>
 
 type ProjectionMode = 'globe' | 'mercator'
 
-interface AdsbSignal {
-  id: string
-  title: string
-  lat: number
-  lng: number
-  reliability_score: number
-  published_at: string | null
-}
 
 
 interface HazardPoint {
@@ -438,7 +431,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
 
   // ── ADS-B Aircraft layer state ────────────────────────────────────────────────
   const [showAircraft, setShowAircraft] = useState(false)
-  const [adsbSignals, setAdsbSignals] = useState<AdsbSignal[]>([])
+  const [aircraftCount, setAircraftCount] = useState(0)
 
   // ── Live Webcam / IP Camera layer state ───────────────────────────────────────
   const [showCameras, setShowCameras] = useState(false)
@@ -1739,6 +1732,8 @@ function MapView({ embed = false }: { embed?: boolean }) {
   // ── ADS-B Live Aircraft layer ──────────────────────────────────────────────
 
   useEffect(() => {
+    // Live aircraft (Oct 19, 2026): military aircraft and emergency squawks
+    // from GET /api/v1/aircraft/live (adsb.lol, ODbL), each turned to its heading
     const map = mapRef.current
     if (!map) return
 
@@ -1754,32 +1749,37 @@ function MapView({ embed = false }: { embed?: boolean }) {
     }
 
     let intervalId: ReturnType<typeof setInterval> | null = null
+    let asOf: string | null = null
 
     const fetchAndUpdate = async () => {
       try {
-        const res  = await fetch(`${API_URL}/api/v1/signals/map/adsb`)
-        if (!res.ok) { console.warn(`[map][adsb] HTTP ${res.status}`); return }
-        const json = await res.json() as { success: boolean; data: AdsbSignal[] }
-        if (!json.success || !Array.isArray(json.data)) return
+        const res  = await fetch(`${API_URL}/api/v1/aircraft/live`)
+        if (!res.ok) { console.warn(`[map][aircraft] HTTP ${res.status}`); return }
+        const snap = await res.json() as AircraftSnapshot
+        if (!Array.isArray(snap.aircraft)) return
+        asOf = snap.at
 
-        setAdsbSignals(json.data)
+        setAircraftCount(snap.aircraft.length)
 
-        const features = json.data
+        const features = snap.aircraft
           .filter(a => isFinite(a.lat) && isFinite(a.lng))
           .map(a => ({
             type:       'Feature' as const,
             geometry:   { type: 'Point' as const, coordinates: [a.lng, a.lat] },
             properties: {
-              id:           a.id,
-              title:        a.title,
-              published_at: a.published_at ?? '',
+              ...a,
+              alt:    a.alt == null ? '' : String(a.alt),
+              icon:   a.emergency ? MAP_ICON.planeSos.id : a.military ? MAP_ICON.planeMil.id : MAP_ICON.plane.id,
+              rotate: planeRotation(a.track),
+              // emergencies drawn on top
+              rank:   a.emergency ? 2 : a.military ? 1 : 0,
             },
           }))
 
         const currentMap = mapRef.current
         // (loaded() stays false while tiles load, e.g. as the globe turns)
         if (!currentMap || !currentMap.isStyleLoaded()) return
-        await ensureMapIcon(currentMap, MAP_ICON.plane)
+        await Promise.all([MAP_ICON.plane, MAP_ICON.planeMil, MAP_ICON.planeSos].map(icon => ensureMapIcon(currentMap, icon)))
 
         if (!currentMap.getSource(ADSB_SOURCE)) {
           currentMap.addSource(ADSB_SOURCE, {
@@ -1796,12 +1796,14 @@ function MapView({ embed = false }: { embed?: boolean }) {
             id:     ADSB_LAYER,
             type:   'symbol',
             source: ADSB_SOURCE,
-            // An icon: the map font has no ✈ (it drew nothing)
             layout: {
-              'icon-image':            MAP_ICON.plane.id,
-              'icon-size':             ['interpolate', ['linear'], ['zoom'], 2, 0.75, 8, 1],
-              'icon-allow-overlap':    true,
-              'icon-ignore-placement': true,
+              'icon-image':              ['get', 'icon'],
+              'icon-rotate':             ['get', 'rotate'],
+              'icon-rotation-alignment': 'map',
+              'icon-size':               ['interpolate', ['linear'], ['zoom'], 1, 0.55, 5, 0.75, 9, 1],
+              'icon-allow-overlap':      true,
+              'icon-ignore-placement':   true,
+              'symbol-sort-key':         ['get', 'rank'],
             },
           })
 
@@ -1812,29 +1814,33 @@ function MapView({ embed = false }: { embed?: boolean }) {
           onLayer(currentMap, 'click', ADSB_LAYER, async (e: any) => {
             const feat = e.features?.[0]
             if (!feat) return
-            const p = feat.properties as { title: string; published_at: string }
-            const ts = p.published_at ? timeAgo(p.published_at) : 'unknown'
+            // (map feature properties arrive as strings, numbers and booleans; null ones are dropped)
+            const p = feat.properties as Record<string, unknown>
+            const str = (k: string) => (typeof p[k] === 'string' && p[k] !== '' ? String(p[k]) : null)
+            const num = (k: string) => (typeof p[k] === 'number' ? Number(p[k]) : null)
+            const altRaw = str('alt')
             const { default: ml } = await import('maplibre-gl')
             if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
             popupRef.current = new ml.Popup({ closeButton: true, closeOnClick: false, offset: 14, className: 'wp-map-popup' })
-              .setLngLat(e.lngLat)
-              .setHTML(`
-                <div style="font:600 12px/1.4 system-ui;color:#00d4ff;margin-bottom:4px">✈ ADS-B AIRCRAFT</div>
-                <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:240px;margin-bottom:6px">${escapeHtml(p.title)}</div>
-                <div style="font:10px monospace;color:#5a6477">${escapeHtml(ts)}</div>
-              `)
+              .setLngLat(feat.geometry.coordinates)
+              .setHTML(aircraftPopupHtml({
+                hex: String(p.hex ?? ''), callsign: str('callsign'), reg: str('reg'), type: str('type'), desc: str('desc'),
+                operator: str('operator'), alt: altRaw === 'ground' ? 'ground' : altRaw ? Number(altRaw) : null,
+                speed: num('speed'), track: num('track'), squawk: str('squawk'), emergency: str('emergency'),
+                military: p.military === true,
+              }, asOf))
               .addTo(currentMap)
           })
         }
       } catch (err) {
-        console.warn('[map] ADS-B layer error:', err)
+        console.warn('[map] Aircraft layer error:', err)
       }
     }
 
     const applyLayer = () => {
       if (!showAircraft) {
         removeLayer()
-        setAdsbSignals([])
+        setAircraftCount(0)
         return
       }
 
@@ -1844,7 +1850,8 @@ function MapView({ embed = false }: { embed?: boolean }) {
         map.once('idle', () => { void fetchAndUpdate() })
       }
 
-      intervalId = setInterval(() => { void fetchAndUpdate() }, 60_000)
+      // (the server reads adsb.lol at most every 3 minutes)
+      intervalId = setInterval(() => { void fetchAndUpdate() }, 2 * 60_000)
     }
 
     applyLayer()
@@ -3679,8 +3686,8 @@ function MapView({ embed = false }: { embed?: boolean }) {
     {
       title: 'Movement',
       items: [
-        { key: 'aircraft', label: 'Aircraft', description: 'Aviation alerts from ADS-B, last 2 h', icon: Plane, color: '#22d3ee',
-          on: showAircraft, count: adsbSignals.length, toggle: () => setShowAircraft(v => !v) },
+        { key: 'aircraft', label: 'Aircraft', description: 'Military aircraft and emergency squawks now (ADS-B: adsb.lol)', icon: Plane, color: '#22d3ee',
+          on: showAircraft, count: aircraftCount, toggle: () => setShowAircraft(v => !v) },
         { key: 'ships', label: 'Ships', description: 'Maritime reports from AIS, last 4 h', icon: Ship, color: '#f59e0b',
           on: showShips, count: shipCount, toggle: () => setShowShips(v => !v) },
       ],
