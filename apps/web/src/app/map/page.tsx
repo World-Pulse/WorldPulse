@@ -35,6 +35,7 @@ import { signalsInCountry, countryBrief } from '@/lib/country-brief'
 import { toHotspot, hotspotPlace, type Hotspot } from '@/lib/hotspots'
 import { isMapNews, mapPointsFor } from '@/lib/map-news'
 import { ensureMapIcon, MAP_ICON } from '@/lib/map-icons'
+import { cameraPopupHtml, startCameraPicture, type CameraFeed } from '@/lib/map-cameras'
 import { dayNightFeatures, subsolarPoint } from '@/lib/daynight'
 import { MAP_REGIONS } from '@/lib/map-regions'
 import { SITE_URL as SITE_ORIGIN } from '@/lib/page-metadata'
@@ -122,19 +123,6 @@ interface AdsbSignal {
   published_at: string | null
 }
 
-interface CameraFeed {
-  id:          string
-  name:        string
-  region:      string
-  country:     string
-  countryCode: string
-  lat:         number
-  lng:         number
-  embedUrl:    string
-  snapshotUrl: string | null
-  type:        'traffic' | 'weather' | 'city' | 'nature'
-  isLive:      boolean
-}
 
 interface HazardPoint {
   id: string
@@ -1855,35 +1843,37 @@ function MapView({ embed = false }: { embed?: boolean }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showAircraft, mapReady])
 
-  // ── Live Webcam / IP Camera map layer ─────────────────────────────────────────
+  // ── Live cameras (Oct 19, 2026) ──────────────────────────────────────────────
+  // Every camera from GET /api/v1/cameras (London, New York, Los Angeles, the
+  // Bay Area, Finland, Hong Kong, New Zealand), grouped by place until zoomed
+  // in; a camera's popup shows its current picture, refreshed every minute.
 
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
 
-    const CAM_SOURCE = 'cameras-layer'
-    const CAM_LAYER  = 'cameras-symbols'
+    const CAM_SOURCE   = 'cameras-layer'
+    const CAM_CLUSTERS = 'cameras-clusters'
+    const CAM_COUNT    = 'cameras-cluster-count'
+    const CAM_LAYER    = 'cameras-symbols'
+    let stopPicture: (() => void) | null = null
 
     const removeLayer = () => {
       try {
         offLayer(map, CAM_LAYER)
-        if (map.getLayer(CAM_LAYER))   map.removeLayer(CAM_LAYER)
+        offLayer(map, CAM_CLUSTERS)
+        for (const layer of [CAM_LAYER, CAM_COUNT, CAM_CLUSTERS]) {
+          if (map.getLayer(layer)) map.removeLayer(layer)
+        }
         if (map.getSource(CAM_SOURCE)) map.removeSource(CAM_SOURCE)
       } catch { /* ignore */ }
     }
 
     let intervalId: ReturnType<typeof setInterval> | null = null
 
-    const TYPE_COLOR: Record<string, string> = {
-      traffic: '#f59e0b',
-      weather: '#60a5fa',
-      city:    '#a78bfa',
-      nature:  '#34d399',
-    }
-
     const fetchAndUpdate = async () => {
       try {
-        const res  = await fetch(`${API_URL}/api/v1/cameras?region=global&limit=50`)
+        const res  = await fetch(`${API_URL}/api/v1/cameras?region=global&limit=6000`)
         if (!res.ok) { console.warn(`[map][cameras] HTTP ${res.status}`); return }
         const json = await res.json() as { cameras: CameraFeed[]; total: number }
         if (!Array.isArray(json.cameras)) return
@@ -1891,19 +1881,19 @@ function MapView({ embed = false }: { embed?: boolean }) {
         setCameraCount(json.cameras.length)
 
         const features = json.cameras
-          .filter(c => isFinite(c.lat) && isFinite(c.lng))
+          .filter(c => isFinite(c.lat) && isFinite(c.lng) && typeof c.snapshotUrl === 'string')
           .map(c => ({
             type:       'Feature' as const,
             geometry:   { type: 'Point' as const, coordinates: [c.lng, c.lat] },
             properties: {
               id:          c.id,
               name:        c.name,
+              city:        c.city ?? '',
               country:     c.country,
-              countryCode: c.countryCode,
-              embedUrl:    c.embedUrl,
               type:        c.type,
-              isLive:      c.isLive,
-              color:       TYPE_COLOR[c.type] ?? '#34d399',
+              sourceName:  c.sourceName ?? '',
+              embedUrl:    c.embedUrl,
+              snapshotUrl: c.snapshotUrl,
             },
           }))
 
@@ -1911,69 +1901,107 @@ function MapView({ embed = false }: { embed?: boolean }) {
         if (!currentMap || !currentMap.isStyleLoaded()) return
         await ensureMapIcon(currentMap, MAP_ICON.camera)
 
-        if (!currentMap.getSource(CAM_SOURCE)) {
-          currentMap.addSource(CAM_SOURCE, {
-            type: 'geojson',
-            data: { type: 'FeatureCollection', features },
-          })
-        } else {
+        const existing = currentMap.getSource(CAM_SOURCE)
+        if (existing) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ;(currentMap.getSource(CAM_SOURCE) as any).setData({ type: 'FeatureCollection', features })
+          ;(existing as any).setData({ type: 'FeatureCollection', features })
+          return
+        }
+        currentMap.addSource(CAM_SOURCE, {
+          type:           'geojson',
+          data:           { type: 'FeatureCollection', features },
+          cluster:        true,
+          clusterMaxZoom: 11,
+          clusterRadius:  42,
+        })
+
+        // A place's cameras as one teal disc with the count, until zoomed in
+        currentMap.addLayer({
+          id:     CAM_CLUSTERS,
+          type:   'circle',
+          source: CAM_SOURCE,
+          filter: ['has', 'point_count'],
+          paint:  {
+            'circle-color':        'rgba(13,148,136,0.88)',
+            'circle-radius':       ['step', ['get', 'point_count'], 11, 25, 14, 150, 18, 600, 22],
+            'circle-stroke-width': 2,
+            'circle-stroke-color': 'rgba(45,212,191,0.55)',
+          },
+        })
+        currentMap.addLayer({
+          id:     CAM_COUNT,
+          type:   'symbol',
+          source: CAM_SOURCE,
+          filter: ['has', 'point_count'],
+          layout: {
+            'text-field':            '{point_count_abbreviated}',
+            'text-font':             FONT_BOLD,
+            'text-size':             10,
+            'text-allow-overlap':    true,
+            'text-ignore-placement': true,
+          },
+          paint: { 'text-color': '#ecfeff' },
+        })
+        // One camera: an icon (the map font has no 📹, it drew nothing)
+        currentMap.addLayer({
+          id:     CAM_LAYER,
+          type:   'symbol',
+          source: CAM_SOURCE,
+          filter: ['!', ['has', 'point_count']],
+          layout: {
+            'icon-image':            MAP_ICON.camera.id,
+            'icon-size':             ['interpolate', ['linear'], ['zoom'], 4, 0.7, 10, 1],
+            'icon-allow-overlap':    true,
+            'icon-ignore-placement': true,
+          },
+        })
+
+        for (const layer of [CAM_CLUSTERS, CAM_LAYER]) {
+          onLayer(currentMap, 'mouseenter', layer, () => { currentMap.getCanvas().style.cursor = 'pointer' })
+          onLayer(currentMap, 'mouseleave', layer, () => { currentMap.getCanvas().style.cursor = '' })
         }
 
-        if (!currentMap.getLayer(CAM_LAYER)) {
-          currentMap.addLayer({
-            id:     CAM_LAYER,
-            type:   'symbol',
-            source: CAM_SOURCE,
-            // An icon: the map font has no 📹 (it drew nothing)
-            layout: {
-              'icon-image':            MAP_ICON.camera.id,
-              'icon-size':             ['interpolate', ['linear'], ['zoom'], 2, 0.75, 8, 1],
-              'icon-allow-overlap':    true,
-              'icon-ignore-placement': true,
-            },
-          })
-
-          onLayer(currentMap, 'mouseenter', CAM_LAYER, () => { currentMap.getCanvas().style.cursor = 'pointer' })
-          onLayer(currentMap, 'mouseleave', CAM_LAYER, () => { currentMap.getCanvas().style.cursor = '' })
-
+        // A place's cameras: zoom in until they separate
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        onLayer(currentMap, 'click', CAM_CLUSTERS, async (e: any) => {
+          const feat = e.features?.[0]
+          if (!feat) return
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          onLayer(currentMap, 'click', CAM_LAYER, async (e: any) => {
-            const feat = e.features?.[0]
-            if (!feat) return
-            const p = feat.properties as {
-              name: string; country: string; countryCode: string
-              embedUrl: string; type: string; isLive: boolean
-            }
-            const typeLabel = p.type ? String(p.type).toUpperCase() : 'WEBCAM'
-            const liveTag   = p.isLive ? '<span style="color:#34d399;font-size:9px;font-weight:700;letter-spacing:0.05em">● LIVE</span>' : ''
-            const feedUrl   = safeHttpUrl(p.embedUrl)
-            const { default: ml } = await import('maplibre-gl')
-            if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
-            popupRef.current = new ml.Popup({ closeButton: true, closeOnClick: false, offset: 14, className: 'wp-map-popup' })
-              .setLngLat(e.lngLat)
-              .setHTML(`
-                <div style="font:600 11px/1.4 system-ui;color:#34d399;margin-bottom:4px;display:flex;align-items:center;gap:6px">
-                  📹 LIVE WEBCAM ${liveTag}
-                </div>
-                <div style="font:600 13px/1.5 system-ui;color:#e2e6f0;max-width:240px;margin-bottom:4px">${escapeHtml(p.name)}</div>
-                <div style="font:11px system-ui;color:#9aa5b4;margin-bottom:6px">${escapeHtml(p.country)} · ${escapeHtml(typeLabel)}</div>
-                ${feedUrl ? `<a href="${escapeHtml(feedUrl)}" target="_blank" rel="noopener noreferrer"
-                   style="display:inline-block;font:11px system-ui;color:#34d399;text-decoration:underline">
-                  ↗ Open feed
-                </a>` : ''}
-              `)
-              .addTo(currentMap)
-          })
-        }
+          const src = currentMap.getSource(CAM_SOURCE) as any
+          try {
+            const zoom = await src.getClusterExpansionZoom(feat.properties.cluster_id)
+            currentMap.easeTo({ center: feat.geometry.coordinates, zoom: Math.min(zoom + 0.5, 14), duration: 700 })
+          } catch { /* the source changed under the click */ }
+        })
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        onLayer(currentMap, 'click', CAM_LAYER, async (e: any) => {
+          const feat = e.features?.[0]
+          if (!feat) return
+          const p = feat.properties as {
+            name: string; city: string; country: string; type: string
+            sourceName: string; embedUrl: string; snapshotUrl: string
+          }
+          const { default: ml } = await import('maplibre-gl')
+          if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
+          stopPicture?.()
+          const popup = new ml.Popup({ closeButton: true, closeOnClick: false, offset: 14, maxWidth: '320px', className: 'wp-map-popup' })
+            .setLngLat(feat.geometry.coordinates)
+            .setHTML(cameraPopupHtml(p))
+            .addTo(currentMap)
+          popupRef.current = popup
+          stopPicture = startCameraPicture(popup.getElement(), p.snapshotUrl)
+          popup.on('close', () => { stopPicture?.(); stopPicture = null })
+        })
       } catch (err) {
-        console.warn('[map] Live webcam layer error:', err)
+        console.warn('[map] Live camera layer error:', err)
       }
     }
 
     const applyLayer = () => {
       if (!showCameras) {
+        stopPicture?.()
+        stopPicture = null
         removeLayer()
         setCameraCount(0)
         return
@@ -1985,13 +2013,15 @@ function MapView({ embed = false }: { embed?: boolean }) {
         map.once('idle', () => { void fetchAndUpdate() })
       }
 
-      intervalId = setInterval(() => { void fetchAndUpdate() }, 90_000)
+      // The list changes rarely (the server reads the sources every 6 hours)
+      intervalId = setInterval(() => { void fetchAndUpdate() }, 30 * 60_000)
     }
 
     applyLayer()
 
     return () => {
       if (intervalId) clearInterval(intervalId)
+      stopPicture?.()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showCameras, mapReady])
@@ -3663,7 +3693,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
               className="bg-black/30 border border-white/10 text-wp-text2 text-[11px] font-mono rounded-md px-2 py-1 outline-none focus:border-[rgba(52,211,153,0.6)]"
             />
           ) },
-        { key: 'cams', label: 'Live cameras', description: 'Public traffic, weather and city webcams', icon: Video, color: '#2dd4bf',
+        { key: 'cams', label: 'Live cameras', description: 'Live road cameras: London, New York, California, Finland, Hong Kong, New Zealand', icon: Video, color: '#2dd4bf',
           on: showCameras, count: cameraCount, toggle: () => setShowCameras(v => !v) },
         { key: 'daynight', label: 'Day and night', description: 'Where it is night right now, updated every 5 minutes', icon: SunMoon, color: '#94a3b8',
           on: dayNight, toggle: toggleDayNight },
