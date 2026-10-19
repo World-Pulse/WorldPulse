@@ -16,7 +16,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import Fastify from 'fastify'
 import type { FastifyInstance } from 'fastify'
 import { registerSignalRoutes } from '../signals'
-import { MARITIME_HEADLINE, NOT_AT_SEA, ROAD_TANKER, TANKER_AT_SEA, TANKER_HEADLINE } from '../../lib/sea-headlines'
+import { MARITIME_CANDIDATE } from '../../lib/sea-headlines'
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -208,13 +208,20 @@ describe('GET /api/v1/signals/map/maritime', () => {
     expect(body.features).toHaveLength(0)
   })
 
-  // ── 11. DB SQL finds the stories by headline ──────────────────────────────
-  it('queries by headline: ship news, tankers only when they are ships, without phrases not about the sea', async () => {
+  // ── 11. DB SQL finds the candidates with ONE headline pattern ─────────────
+  it('asks the database with one headline pattern (more took past its 5-second limit)', async () => {
     await app.inject({ method: 'GET', url: '/api/v1/signals/map/maritime' })
-    expect(mockDb.raw).toHaveBeenCalledWith(
-      expect.stringContaining('(title ~* ? OR (title ~* ? AND title ~* ? AND title !~* ?))'),
-      [MARITIME_HEADLINE, TANKER_HEADLINE, TANKER_AT_SEA, ROAD_TANKER, NOT_AT_SEA],
-    )
+    expect(mockDb.raw).toHaveBeenCalledWith(expect.stringContaining('AND title ~* ?'), [MARITIME_CANDIDATE])
+    const sql = String(mockDb.raw.mock.calls[0][0])
+    expect(sql.match(/~\*/g)).toHaveLength(1)
+  })
+
+  // ── 11b. The finer checks run on the candidates ───────────────────────────
+  it('leaves out a road tanker the database found', async () => {
+    mockDb.raw.mockResolvedValue({ rows: [...MOCK_MARITIME_ROWS, { ...MOCK_MARITIME_ROWS[0], id: 'road-1', title: 'Tanker explosion claims two lives under Otedola Bridge' }] })
+    const res  = await app.inject({ method: 'GET', url: '/api/v1/signals/map/maritime' })
+    const ids  = res.json<{ features: Array<{ properties: { id: string } }> }>().features.map(f => f.properties.id)
+    expect(ids).toEqual(['mar-1', 'mar-2', 'mar-3'])
   })
 
   // ── 12. DB SQL targets the last 72 hours ──────────────────────────────────

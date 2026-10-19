@@ -1,6 +1,6 @@
 /**
  * Which headlines are about the sea, for the map's Ships and Naval
- * intelligence layers (PostgreSQL patterns, used with ~* and !~*).
+ * intelligence layers.
  *
  * Oct 19, 2026, after the layers' first hours live: "tanker" alone brought in
  * road fuel tankers (Lagos's Otedola Bridge, Edo's Oluku market, Oyo, Malawi)
@@ -10,17 +10,25 @@
  * "gov'ship", Auckland's Upper Harbour Motorway, a game against Navy). Now a
  * tanker counts only with a word that makes it a ship, and those phrases are
  * left out.
+ *
+ * The database only finds the candidates, with ONE pattern per story
+ * (MARITIME_CANDIDATE): checking every story of the last 3 days against
+ * several patterns took past the database's 5-second limit, and both layers
+ * answered 500 (3:22 PM). The finer checks (isShipHeadline) run here, on the
+ * few hundred candidates.
  */
 
-/**
- * Ship, port, strait and navy headlines: the Ships layer (in any category but
- * sport and culture). "tanker" isn't here: see TANKER_HEADLINE.
- */
-export const MARITIME_HEADLINE = '\\m(ships?|vessels?|supertankers?|freighters?|cargo ships?|container ships?|bulk carriers?|seaports?|ports? of|ports? in|harbou?rs?|straits?|hormuz|bab el-mandeb|bab al-mandab|suez canal|panama canal|shipping|maritime|navy|navies|naval|warships?|destroyers?|frigates?|submarines?|aircraft carriers?|coast ?guard|ferry|ferries|piracy|pirates|seafarers?|oil spill|shipwreck|capsized|mariners?)\\M'
+const SEA_WORDS = 'ships?|vessels?|supertankers?|freighters?|cargo ships?|container ships?|bulk carriers?|seaports?|ports? of|ports? in|harbou?rs?|straits?|hormuz|bab el-mandeb|suez canal|panama canal|shipping|maritime|navy|navies|naval|warships?|destroyers?|frigates?|submarines?|aircraft carriers?|coast ?guard|ferry|ferries|piracy|pirates|seafarers?|oil spill|shipwreck|capsized|mariners?'
+
+/** Ship, port, strait and navy words (PostgreSQL, ~*): "tanker" isn't here, see TANKER_HEADLINE */
+export const MARITIME_HEADLINE = `\\m(${SEA_WORDS})\\M`
+
+/** What the database looks for (one pattern, so the query stays fast): the sea words or "tanker" */
+export const MARITIME_CANDIDATE = `\\m(tankers?|${SEA_WORDS})\\M`
 
 /**
  * A warship's name: USS, HMS, INS, HMAS or HMCS before a capital, matched
- * case-sensitively (with ~), so "break-ins" isn't the Indian Navy
+ * case-sensitively, so "break-ins" isn't the Indian Navy
  */
 export const NAVAL_SHIP_NAME = '\\m(USS|HMS|INS|HMAS|HMCS) [A-Z]'
 
@@ -44,6 +52,29 @@ export const NOT_AT_SEA = [
   '\\m(against|vs\\.?|versus|beats?|defeats?) navy\\M',         // Navy, the team
   '\\m(ex-|former |retired )(naval|navy)\\M',                   // a person, not a navy
 ].join('|')
+
+/** A PostgreSQL pattern (word edges \m and \M) as a JavaScript RegExp (\b) */
+export function pgToJs(pattern: string, flags = 'i'): RegExp {
+  return new RegExp(pattern.replace(/\\m/g, '\\b').replace(/\\M/g, '\\b'), flags)
+}
+
+const SEA = pgToJs(MARITIME_HEADLINE)
+const TANKER = pgToJs(TANKER_HEADLINE)
+const TANKER_SHIP = pgToJs(TANKER_AT_SEA)
+const ROAD = pgToJs(ROAD_TANKER)
+const NOT_SEA = pgToJs(NOT_AT_SEA)
+
+/** Not one of the phrases that aren't about the sea (both layers) */
+export function notOffSea(title: string): boolean {
+  return !NOT_SEA.test(title)
+}
+
+/** Ship news, for the Ships layer (on the database's candidates) */
+export function isShipHeadline(title: string): boolean {
+  if (!notOffSea(title)) return false
+  if (SEA.test(title)) return true
+  return TANKER.test(title) && TANKER_SHIP.test(title) && !ROAD.test(title)
+}
 
 /** A headline as a key, so the same story from another source, or a tracker's repeated report, shows once */
 export function headlineKey(title: string): string {

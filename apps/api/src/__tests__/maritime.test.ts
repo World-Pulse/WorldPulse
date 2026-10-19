@@ -203,17 +203,12 @@ describe('CARRIER_REGISTRY_ALIASES', () => {
 })
 
 // ─── Oct 19, 2026: ship and naval stories found by their headlines ─────────────
-import { NAVAL_HEADLINE } from '../routes/maritime'
-import { MARITIME_HEADLINE, NAVAL_SHIP_NAME, NOT_AT_SEA, ROAD_TANKER, TANKER_AT_SEA, TANKER_HEADLINE, firstOfEach, headlineKey } from '../lib/sea-headlines'
+import { NAVAL_CANDIDATE, isNavalHeadline } from '../routes/maritime'
+import { MARITIME_CANDIDATE, firstOfEach, headlineKey, isShipHeadline, pgToJs } from '../lib/sea-headlines'
 
-/** PostgreSQL's word edges (\m, \M) as JavaScript's \b, for a check of the patterns */
-const asJs = (pg: string, flags = 'i') => new RegExp(pg.replace(/\\m/g, '\\b').replace(/\\M/g, '\\b'), flags)
-
-/** The Ships layer's filter, as GET /signals/map/maritime runs it */
-const shipNews = (t: string) => !asJs(NOT_AT_SEA).test(t) &&
-  (asJs(MARITIME_HEADLINE).test(t) || (asJs(TANKER_HEADLINE).test(t) && asJs(TANKER_AT_SEA).test(t) && !asJs(ROAD_TANKER).test(t)))
-/** The Naval intelligence layer's, as GET /maritime/vessels runs it (ship names case-sensitive) */
-const navalNews = (t: string) => !asJs(NOT_AT_SEA).test(t) && (asJs(NAVAL_HEADLINE).test(t) || asJs(NAVAL_SHIP_NAME, '').test(t))
+/** The two layers' filters as their routes run them: the database's one pattern, then the finer checks */
+const shipNews = (t: string) => pgToJs(MARITIME_CANDIDATE).test(t) && isShipHeadline(t)
+const navalNews = (t: string) => pgToJs(NAVAL_CANDIDATE).test(t) && isNavalHeadline(t)
 
 describe('headline patterns (the categories "maritime" and "military" are no longer used)', () => {
   it('ship news: ships, tankers, ferries, straits, ports; not reports, supporters or Port Harcourt', () => {

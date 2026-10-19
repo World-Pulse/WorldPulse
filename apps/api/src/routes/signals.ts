@@ -24,7 +24,7 @@ import {
 import { EVENT_TEMPLATE_SQL } from '../lib/story-list'
 import { staleWhileRevalidate } from '../lib/swr-cache'
 import { longQuery } from '../lib/long-query'
-import { MARITIME_HEADLINE, NOT_AT_SEA, ROAD_TANKER, TANKER_AT_SEA, TANKER_HEADLINE, firstOfEach, headlineKey } from '../lib/sea-headlines'
+import { MARITIME_CANDIDATE, MARITIME_HEADLINE, firstOfEach, headlineKey, isShipHeadline } from '../lib/sea-headlines'
 import type { Knex } from 'knex'
 
 const SIGNAL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -1295,13 +1295,14 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
         AND ST_Y(location::geometry) != 0
         AND ST_X(location::geometry) != 0
         AND category::text NOT IN ('sports', 'culture', 'entertainment')
-        AND (title ~* ? OR (title ~* ? AND title ~* ? AND title !~* ?))
-        AND title !~* ?
+        AND title ~* ?
       ORDER BY created_at DESC
       LIMIT 500
-    `, [MARITIME_HEADLINE, TANKER_HEADLINE, TANKER_AT_SEA, ROAD_TANKER, NOT_AT_SEA])
+    `, [MARITIME_CANDIDATE])
 
-    const features = firstOfEach(result.rows.filter(r => r.lat != null && r.lng != null), r => headlineKey(String(r.title ?? '')))
+    // one pattern in the database (more took past its 5-second limit), the finer checks here
+    const ships = result.rows.filter(r => r.lat != null && r.lng != null && isShipHeadline(String(r.title ?? '')))
+    const features = firstOfEach(ships, r => headlineKey(String(r.title ?? '')))
       .map(r => ({
         type: 'Feature' as const,
         geometry: {
