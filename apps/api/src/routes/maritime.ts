@@ -378,7 +378,7 @@ export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
       // Oct 19, 2026: by headline (categories "military" and "maritime" are
       // no longer used, so this found nothing), over 3 days
       .whereRaw('title ~* ?', [NAVAL_HEADLINE])
-      .whereNotIn('category', ['sports', 'culture', 'entertainment'])
+      .whereRaw("category::text NOT IN ('sports', 'culture', 'entertainment')")
       .whereIn('status', ['verified', 'pending'])
       .whereRaw("created_at > now() - interval '72 hours'")
       .orderBy('created_at', 'desc')

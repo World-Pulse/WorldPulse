@@ -1290,7 +1290,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
         AND location IS NOT NULL
         AND ST_Y(location::geometry) != 0
         AND ST_X(location::geometry) != 0
-        AND category NOT IN ('sports', 'culture', 'entertainment')
+        AND category::text NOT IN ('sports', 'culture', 'entertainment')
         AND title ~* ?
       ORDER BY created_at DESC
       LIMIT 500
