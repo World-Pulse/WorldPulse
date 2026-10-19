@@ -5,6 +5,8 @@ import { SignalDetailClient } from './SignalDetailClient'
 import { displaySummary } from '@/lib/signal-text'
 import { SITE_NAME, SITE_URL, newsArticleJsonLd, jsonLdText, metaDescription } from '@/lib/page-metadata'
 import { cachedFetch } from '@/lib/server-fetch'
+import Link from 'next/link'
+import { countryLink, entityLinks, type StoryLink } from '@/lib/story-links'
 
 const API_BASE = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -53,6 +55,18 @@ async function fetchRelated(category: string, excludeId: string): Promise<Signal
     if (!res.ok) return []
     const json = await res.json() as { data?: { items: Signal[] } }
     return (json.data?.items ?? []).filter(s => s.id !== excludeId).slice(0, 5)
+  } catch {
+    return []
+  }
+}
+
+/** The people, places and organisations the story names (an extra: [] when the API can't say) */
+async function fetchEntityLinks(id: string): Promise<StoryLink[]> {
+  try {
+    const res = await cachedFetch(`${API_BASE}/api/v1/signals/${encodeURIComponent(id)}/connections?limit=1`, 120_000)
+    if (!res.ok) return []
+    const json = await res.json() as { success?: boolean; data?: { entities?: Array<{ id?: unknown; name?: unknown }> } }
+    return json.success ? entityLinks(json.data?.entities) : []
   } catch {
     return []
   }
@@ -124,10 +138,12 @@ export default async function SignalDetailPage(
   // error.tsx says the story is briefly unavailable and offers to try again
   if (signal === 'unavailable') throw new StoryUnavailableError()
 
-  const [related, postsData] = await Promise.all([
+  const [related, postsData, entities] = await Promise.all([
     fetchRelated(signal.category, signal.id),
     fetchSignalPosts(signal.id),
+    fetchEntityLinks(signal.id),
   ])
+  const country = countryLink(signal.countryCode)
 
   // What search engines read about the story (schema.org NewsArticle, plan G2)
   const jsonLd = newsArticleJsonLd({
@@ -149,6 +165,21 @@ export default async function SignalDetailPage(
         initialPosts={postsData.items}
         postsTotal={postsData.total}
       />
+      {(country || entities.length > 0) && (
+        <nav aria-label="About this story" className="mx-auto max-w-5xl px-4 pb-8 text-[12px] text-wp-text3 flex flex-wrap items-center gap-x-3 gap-y-1">
+          {country && (
+            <span>Country: <Link href={country.href} className="text-wp-text2 hover:text-wp-amber">{country.label}</Link></span>
+          )}
+          {entities.length > 0 && (
+            <span className="flex flex-wrap items-center gap-x-2">
+              In this story:
+              {entities.map(e => (
+                <Link key={e.href} href={e.href} className="text-wp-text2 hover:text-wp-amber">{e.label}</Link>
+              ))}
+            </span>
+          )}
+        </nav>
+      )}
     </>
   )
 }
