@@ -196,15 +196,20 @@ function toFeatures(signals: MapSignal[]): Supercluster.PointFeature<SignalProps
 }
 
 /**
- * The zoom that shows the whole world: on the globe, a sphere filling ~85% of
+ * The zoom that shows the whole world: on the globe, a sphere filling most of
  * the shorter side; on the flat map, the world's width. (A world at zoom z is
  * 512·2^z pixels around; the globe's diameter is that divided by π.)
+ * Oct 19, 2026 (Map Lab review, Devon: "it's a big visual appeal"): on a wide
+ * screen the globe filled only about two thirds of the height (MapLibre draws
+ * it about 0.86 of this size beside the list); it now asks for the full height,
+ * so it fills about 86%. On a phone (the width is shorter) it keeps 85%.
  */
 function worldZoom(width: number, height: number, projection: 'globe' | 'mercator' = 'globe'): number {
   const w = Math.max(width, 200)
   const h = Math.max(height, 200)
+  const share = w > h ? 1 : 0.85
   const z = projection === 'globe'
-    ? Math.log2((Math.min(w, h) * 0.85 * Math.PI) / 512)
+    ? Math.log2((Math.min(w, h) * share * Math.PI) / 512)
     : Math.log2(w / 512)
   return Math.max(0.6, Math.min(3, z))
 }
@@ -1109,6 +1114,12 @@ function MapView({ embed = false }: { embed?: boolean }) {
       map.on('load', () => {
         if (cancelled) return
         map.resize()
+        // The page around the map is laid out by now: open the world at the
+        // size that fits it (the container was still shorter when the map was made)
+        if (!hasLinkedView) {
+          const canvas = map.getCanvas()
+          try { map.jumpTo({ zoom: worldZoom(canvas.clientWidth, canvas.clientHeight, projectionRef.current) }) } catch { /* keep the first zoom */ }
+        }
         // (a shared link can open zoomed in: the legend reads the zoom)
         setMapZoom(parseFloat(map.getZoom().toFixed(1)))
 
@@ -1570,7 +1581,8 @@ function MapView({ embed = false }: { embed?: boolean }) {
           if (!map.getSource(GIBS_SOURCE)) {
             map.addSource(GIBS_SOURCE, {
               type:        'raster',
-              tiles:       [`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/${gibsDate}/GoogleMapsCompatible/{z}/{y}/{x}.jpg`],
+              // (MODIS's tile set is GoogleMapsCompatible_Level9: plain "GoogleMapsCompatible" got 400 for every tile, Oct 19, 2026)
+              tiles:       [`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/${gibsDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`],
               tileSize:    256,
               maxzoom:     9,
               attribution: 'Imagery courtesy <a href="https://earthdata.nasa.gov/eosdis/science-system-description/eosdis-components/gibs" target="_blank">NASA GIBS</a> / MODIS Terra',

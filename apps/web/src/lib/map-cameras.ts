@@ -53,7 +53,7 @@ export function cameraPopupHtml(p: CameraPopupProps): string {
   const credit = p.sourceName ? `Camera: ${escapeHtml(p.sourceName)}` : 'Camera source'
   return `
     <div class="wp-cam" style="width:min(300px,70vw)">
-      <div style="display:flex;align-items:center;gap:6px;font:700 10px/1 system-ui;letter-spacing:.08em;color:#2dd4bf;margin-bottom:7px">
+      <div style="display:flex;align-items:center;gap:6px;font:700 10px/1 system-ui;letter-spacing:.08em;color:#2dd4bf;margin-bottom:7px;padding-right:20px">
         <span style="width:7px;height:7px;border-radius:50%;background:#2dd4bf;box-shadow:0 0 0 3px rgba(45,212,191,.22)"></span>
         LIVE CAMERA
         <span class="wp-cam-age" style="margin-left:auto;font:500 10px/1 system-ui;letter-spacing:0;color:#9aa5b4"></span>
