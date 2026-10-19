@@ -196,3 +196,29 @@ describe('CARRIER_REGISTRY_ALIASES', () => {
     expect(new Set(hulls).size).toBe(hulls.length)
   })
 })
+
+// ─── Oct 19, 2026: ship and naval stories found by their headlines ─────────────
+import { NAVAL_HEADLINE } from '../routes/maritime'
+import { MARITIME_HEADLINE } from '../routes/signals'
+
+/** PostgreSQL's word edges (\m, \M) as JavaScript's \b, for a check of the patterns */
+const asJs = (pg: string) => new RegExp(pg.replace(/\\m/g, '\\b').replace(/\\M/g, '\\b'), 'i')
+
+describe('headline patterns (the categories "maritime" and "military" are no longer used)', () => {
+  it('ship news: ships, tankers, ferries, straits, ports; not reports, supporters or Port Harcourt', () => {
+    const re = asJs(MARITIME_HEADLINE)
+    for (const t of ['Tanker attacked in the Red Sea', 'Ferry capsizes off Bali', 'US Navy destroyer in the Taiwan Strait', 'Ukraine hits port in Primorsk', 'Shipping rates jump']) expect(re.test(t)).toBe(true)
+    for (const t of ['Report: support for strike grows', 'Port Harcourt traffic jam', 'Southampton sign striker']) expect(re.test(t)).toBe(false)
+  })
+
+  it('naval news: navies, warships, named carriers', () => {
+    const re = asJs(NAVAL_HEADLINE)
+    for (const t of ['USS Gerald R. Ford leaves Norfolk', 'Chinese warships near Taiwan', 'Royal Navy frigate shadows Russian submarine', 'Dark ship spotted near Hormuz']) expect(re.test(t)).toBe(true)
+    for (const t of ['Navigation app update', 'Insurance rates rise']) expect(re.test(t)).toBe(false)
+  })
+
+  it('a named carrier is a carrier whatever its category', () => {
+    expect(classifyVesselType('USS Nimitz heads to the Gulf', 'conflict', true)).toBe('carrier')
+    expect(classifyVesselType('USS Nimitz heads to the Gulf', 'conflict')).toBe('vessel')
+  })
+})

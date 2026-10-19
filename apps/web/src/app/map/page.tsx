@@ -2116,35 +2116,30 @@ function MapView({ embed = false }: { embed?: boolean }) {
             },
           })
 
-          // Hover popup (maplibre-gl is loaded on demand: there is no global to use)
+          // A click opens the story (Oct 19, 2026: the layer is ship, port and strait news)
           const { default: ml } = await import('maplibre-gl')
-          const popup = new ml.Popup({
-            closeButton:  false,
-            closeOnClick: false,
-            offset:       [0, -10],
-            className:    'wp-map-popup',
-          })
+
+          onLayer(map, 'mouseenter', MARITIME_SHIPS, () => { map.getCanvas().style.cursor = 'pointer' })
+          onLayer(map, 'mouseleave', MARITIME_SHIPS, () => { map.getCanvas().style.cursor = '' })
 
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          onLayer(map, 'mouseenter', MARITIME_SHIPS, (e: any) => {
-            map.getCanvas().style.cursor = 'pointer'
+          onLayer(map, 'click', MARITIME_SHIPS, (e: any) => {
             const feature = e.features?.[0]
             if (!feature || feature.geometry.type !== 'Point') return
             const coords = feature.geometry.coordinates as [number, number]
-            const props  = feature.properties as { title?: string; severity?: string; published_at?: string }
-            popup
+            const props  = feature.properties as { id?: string; title?: string; severity?: string; place?: string; published_at?: string }
+            const sevColor = SEVERITY_COLOR[(props.severity ?? 'low') as keyof typeof SEVERITY_COLOR] ?? '#94a3b8'
+            const meta = [props.place, props.published_at ? timeAgo(props.published_at) : ''].filter(Boolean).join(' · ')
+            if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
+            popupRef.current = new ml.Popup({ closeButton: true, closeOnClick: true, offset: 12, className: 'wp-map-popup' })
               .setLngLat(coords)
               .setHTML(
-                `<div style="font:600 12px/1.4 system-ui;color:#f59e0b;margin-bottom:3px">⚓ VESSEL</div>` +
-                `<div style="font:400 11px/1.4 system-ui;color:#e2e8f0;max-width:200px">${escapeHtml(props.title ?? 'Unknown vessel')}</div>` +
-                (props.severity ? `<div style="font:500 10px/1.4 system-ui;color:#94a3b8;margin-top:3px">Severity: ${escapeHtml(props.severity)}</div>` : '')
+                `<div style="font:700 10px/1 system-ui;letter-spacing:.08em;color:#f59e0b;margin-bottom:6px;padding-right:20px">⚓ SHIPS &amp; SEA · <span style="color:${safeCssColor(sevColor)}">${escapeHtml((props.severity ?? 'low').toUpperCase())}</span></div>` +
+                `<div style="font:600 13px/1.4 system-ui;color:#e2e8f0;max-width:260px">${escapeHtml(props.title ?? '')}</div>` +
+                (meta ? `<div style="font:11px/1.4 system-ui;color:#94a3b8;margin-top:3px">${escapeHtml(meta)}</div>` : '') +
+                (props.id ? `<a href="/signals/${encodeURIComponent(String(props.id))}" style="display:inline-block;margin-top:6px;font:11px system-ui;color:#f59e0b;text-decoration:underline">Read the story</a>` : '')
               )
               .addTo(map)
-          })
-
-          onLayer(map, 'mouseleave', MARITIME_SHIPS, () => {
-            map.getCanvas().style.cursor = ''
-            popup.remove()
           })
         }
       } catch (err) {
@@ -3635,7 +3630,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
         { key: 'jamming', label: 'GPS jamming', description: 'Military jamming, spoofing and interference zones', icon: RadioTower, color: '#c084fc',
           on: jammingMode, loading: jammingLoading, count: jammingCount, toggle: () => setJammingMode(v => !v),
           note: signInNeeded.jamming ? signInNote('jamming') : null },
-        { key: 'naval', label: 'Naval intelligence', description: 'Carriers, ships in distress and ships gone dark', icon: Anchor, color: '#60a5fa',
+        { key: 'naval', label: 'Naval intelligence', description: 'Navies, warships and carriers in the news, last 3 days', icon: Anchor, color: '#60a5fa',
           on: navalMode, loading: navalLoading, count: navalCount, toggle: () => setNavalMode(v => !v) },
       ],
     },
@@ -3644,7 +3639,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
       items: [
         { key: 'aircraft', label: 'Aircraft', description: 'Military aircraft and emergency squawks now (ADS-B: adsb.lol)', icon: Plane, color: '#22d3ee',
           on: showAircraft, count: aircraftCount, toggle: () => setShowAircraft(v => !v) },
-        { key: 'ships', label: 'Ships', description: 'Maritime reports from AIS, last 4 h', icon: Ship, color: '#f59e0b',
+        { key: 'ships', label: 'Ships', description: 'Ship, port and strait news, last 3 days', icon: Ship, color: '#f59e0b',
           on: showShips, count: shipCount, toggle: () => setShowShips(v => !v) },
       ],
     },

@@ -122,6 +122,13 @@ export const FlagSignalSchema = z.object({
   notes:  z.string().max(500).optional(),
 })
 
+/**
+ * A headline about ships, ports, straits or navies (PostgreSQL regular
+ * expression, case-insensitive with ~*; \m and \M are word edges). "Port"
+ * alone is left out: it is also Port Harcourt, Port-au-Prince and "report".
+ */
+export const MARITIME_HEADLINE = '\\m(ships?|vessels?|tankers?|supertankers?|freighters?|cargo ships?|container ships?|bulk carriers?|seaports?|ports? of|ports? in|harbou?rs?|straits?|shipping|maritime|navy|navies|naval|warships?|destroyers?|frigates?|submarines?|aircraft carriers?|coast ?guard|ferry|ferries|piracy|pirates|seafarers?|oil spill|shipwreck|capsized|mariners?)\\M'
+
 export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
 
   // Auto-tag all routes in this plugin
@@ -1250,40 +1257,44 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     return reply.send(payload)
   })
 
-  // ─── MARITIME AIS SIGNALS MAP ─────────────────────────────────────────────────
+  // ─── MARITIME NEWS MAP (the map's Ships layer) ───────────────────────────────
   // GET /api/v1/signals/map/maritime
   //
-  // Returns maritime-category signals from the last 4 hours as a GeoJSON
-  // FeatureCollection for the civilian AIS ship-tracking map overlay.
-  // Signals are filtered to those with a valid location (non-null, non-zero coords).
-  // Results are Redis-cached for 120 s (matches client poll interval).
+  // Oct 19, 2026 (Map Lab review; Devon: "Ship and Aircraft data do not
+  // populate"): this asked for stories in category "maritime", which the
+  // classifier stopped using in April, so the layer stayed empty. Now: the last
+  // 3 days' stories about ships, ports, straits and navies, by their headline
+  // in any category but sport and culture. (There is no live ship-position
+  // feed: the free ones are regional or need a licence for commercial use.)
+  // A GeoJSON FeatureCollection, cached 120 s.
   app.get('/map/maritime', {
     schema: {
       tags: ['signals'],
-      summary: 'Maritime AIS signals for map overlay (GeoJSON)',
-      description: 'Returns maritime signals from the last 4 hours as a GeoJSON FeatureCollection for the civilian AIS ship-tracking layer.',
+      summary: 'Ship, port and strait news for the map (GeoJSON)',
+      description: 'The last 3 days of stories about ships, ports, straits and navies (by headline), with a place, as a GeoJSON FeatureCollection.',
     },
   }, async (_req, reply) => {
-    const cacheKey = 'signals:map:maritime'
+    const cacheKey = 'signals:map:maritime:v2'
     const cached = await redis.get(cacheKey).catch(() => null)
     if (cached) {
       try { return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached)) } catch { /* fallthrough */ }
     }
 
     const result = await db.raw<{ rows: Array<Record<string, unknown>> }>(`
-      SELECT id, title, reliability_score, severity,
+      SELECT id, title, reliability_score, severity, category, location_name,
         created_at AS published_at,
         ST_Y(location::geometry) AS lat,
         ST_X(location::geometry) AS lng
       FROM signals
-      WHERE category = 'maritime'
+      WHERE created_at > NOW() - INTERVAL '72 hours'
         AND location IS NOT NULL
         AND ST_Y(location::geometry) != 0
         AND ST_X(location::geometry) != 0
-        AND created_at > NOW() - INTERVAL '168 hours'
+        AND category NOT IN ('sports', 'culture', 'entertainment')
+        AND title ~* ?
       ORDER BY created_at DESC
       LIMIT 500
-    `)
+    `, [MARITIME_HEADLINE])
 
     const features = result.rows
       .filter(r => r.lat != null && r.lng != null)
@@ -1297,6 +1308,8 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
           id:                String(r.id),
           title:             String(r.title ?? ''),
           severity:          String(r.severity ?? 'low'),
+          category:          String(r.category ?? ''),
+          place:             r.location_name ? String(r.location_name) : '',
           reliability_score: parseFloat(String(r.reliability_score ?? 0)),
           published_at:      r.published_at
             ? (r.published_at as Date).toISOString()

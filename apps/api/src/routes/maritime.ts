@@ -47,6 +47,13 @@ export const MARITIME_RATE_LIMIT = 30
 /** Redis key for the maritime vessels cache */
 export const MARITIME_CACHE_KEY = 'maritime:vessels'
 
+/**
+ * A headline about navies and warships, or a named carrier (PostgreSQL, ~*):
+ * the Naval intelligence layer's stories (Oct 19, 2026)
+ */
+export const NAVAL_HEADLINE = '\\m(navy|navies|naval|warships?|destroyers?|frigates?|corvettes?|submarines?|aircraft carriers?|carrier strike group|amphibious assault ship|USS|HMS|INS|dark (ship|vessel)s?|AIS (off|gap)|transponder (off|disabled)|' +
+  CARRIER_REGISTRY_ALIASES.map(c => c.name.replace(/[.]/g, '\\.')).join('|') + ')\\M'
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type VesselType = 'carrier' | 'vessel' | 'dark_ship'
@@ -66,22 +73,37 @@ export interface MaritimeVessel {
 // ─── Helpers (exported for unit tests) ───────────────────────────────────────
 
 /**
+ * The carrier a headline names, if any (Oct 19, 2026). Aliases used to match
+ * anywhere in the text, so "TR" matched "patrol" and "destroyer", "GW" and
+ * "Ford" matched inside other words, and every naval story became a carrier.
+ * Now an alias counts only as a whole word (the two- and three-letter ones in
+ * capitals), and only in a headline that says carrier, USS or a hull number.
+ */
+const CARRIER_CONTEXT = /\b(carriers?|USS|CVN[- ]?\d{2})\b/i
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+export function carrierIn(title: string): (typeof CARRIER_REGISTRY_ALIASES)[number] | null {
+  if (!CARRIER_CONTEXT.test(title)) return null
+  for (const entry of CARRIER_REGISTRY_ALIASES) {
+    for (const alias of [entry.hull, entry.name.replace(/^USS /, ''), ...entry.aliases]) {
+      const re = new RegExp(`(^|[^A-Za-z0-9])${escapeRe(alias)}($|[^A-Za-z0-9])`, alias.length <= 3 ? '' : 'i')
+      if (re.test(title)) return entry
+    }
+  }
+  return null
+}
+
+/**
  * Classify a signal as a carrier, generic vessel, or dark ship based on title
  * and category. Military signals with carrier aliases → 'carrier'.
  * Maritime signals with dark ship keywords → 'dark_ship'.
  * Everything else → 'vessel'.
  */
-export function classifyVesselType(title: string, category: string): VesselType {
+export function classifyVesselType(title: string, category: string, anyCategory = false): VesselType {
   const lower = title.toLowerCase()
 
-  if (category === 'military') {
-    for (const entry of CARRIER_REGISTRY_ALIASES) {
-      if (lower.includes(entry.hull.toLowerCase())) return 'carrier'
-      for (const alias of entry.aliases) {
-        if (lower.includes(alias.toLowerCase())) return 'carrier'
-      }
-    }
-  }
+  // (anyCategory: the naval stories are found by their headlines, Oct 19, 2026)
+  if ((category === 'military' || anyCategory) && carrierIn(title)) return 'carrier'
 
   const DARK_SHIP_KEYWORDS = [
     'dark ship', 'ais off', 'ais gap', 'transponder off',
@@ -97,14 +119,7 @@ export function classifyVesselType(title: string, category: string): VesselType 
  * Returns null if no carrier match found.
  */
 export function parseFleetFromTitle(title: string): string | null {
-  const lower = title.toLowerCase()
-  for (const entry of CARRIER_REGISTRY_ALIASES) {
-    if (lower.includes(entry.hull.toLowerCase())) return entry.fleet
-    for (const alias of entry.aliases) {
-      if (lower.includes(alias.toLowerCase())) return entry.fleet
-    }
-  }
-  return null
+  return carrierIn(title)?.fleet ?? null
 }
 
 /**
@@ -360,9 +375,12 @@ export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
         db.raw('ST_X(location::geometry) as lng'),
         db.raw('ST_Y(location::geometry) as lat'),
       )
-      .whereIn('category', ['military', 'maritime'])
+      // Oct 19, 2026: by headline (categories "military" and "maritime" are
+      // no longer used, so this found nothing), over 3 days
+      .whereRaw('title ~* ?', [NAVAL_HEADLINE])
+      .whereNotIn('category', ['sports', 'culture', 'entertainment'])
       .whereIn('status', ['verified', 'pending'])
-      .whereRaw("created_at > now() - interval '24 hours'")
+      .whereRaw("created_at > now() - interval '72 hours'")
       .orderBy('created_at', 'desc')
       .limit(200) as Array<{
         id:            string
@@ -383,7 +401,7 @@ export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
         title:       row.title,
         lat:         row.lat!,
         lng:         row.lng!,
-        type:        classifyVesselType(row.title, row.category),
+        type:        classifyVesselType(row.title, row.category, true),
         fleet:       parseFleetFromTitle(row.title),
         status_text: row.location_name ?? 'Unknown position',
         severity:    row.severity,
