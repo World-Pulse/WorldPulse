@@ -60,7 +60,12 @@ const MOCK_MARITIME_ROWS = [
 
 const mockDb = {
   raw: vi.fn().mockResolvedValue({ rows: MOCK_MARITIME_ROWS }),
+  // longQuery (lib/long-query.ts) runs the query in a transaction with its own time limit
+  transaction: vi.fn(async (run: (trx: unknown) => Promise<unknown>) => run({ raw: (...args: unknown[]) => mockDb.raw(...args) })),
 }
+
+/** What lib/swr-cache.ts keeps in Redis: the value and when it was made */
+const kept = (payload: string) => JSON.stringify({ at: Date.now(), value: JSON.parse(payload) })
 vi.mock('../../db/postgres', () => ({ get db() { return mockDb } }))
 
 // Stub auth middleware (not used for this public-ish endpoint)
@@ -156,8 +161,8 @@ describe('GET /api/v1/signals/map/maritime', () => {
     mockRedis.get.mockResolvedValue(null)
     await app.inject({ method: 'GET', url: '/api/v1/signals/map/maritime' })
     expect(mockRedis.setex).toHaveBeenCalledWith(
-      'signals:map:maritime:v2',
-      120,
+      'signals:map:maritime:v3',
+      120 + 6 * 3600,
       expect.any(String),
     )
   })
@@ -174,11 +179,11 @@ describe('GET /api/v1/signals/map/maritime', () => {
         },
       ],
     })
-    mockRedis.get.mockResolvedValue(cachedPayload)
+    mockRedis.get.mockResolvedValue(kept(cachedPayload))
     const res = await app.inject({ method: 'GET', url: '/api/v1/signals/map/maritime' })
     expect(res.statusCode).toBe(200)
     expect(mockDb.raw).not.toHaveBeenCalled()
-    expect(res.headers['x-cache-hit']).toBe('true')
+    expect(mockDb.transaction).not.toHaveBeenCalled()
   })
 
   // ── 9. Cache hit — correct feature count ──────────────────────────────────
@@ -193,7 +198,7 @@ describe('GET /api/v1/signals/map/maritime', () => {
         },
       ],
     })
-    mockRedis.get.mockResolvedValue(cachedPayload)
+    mockRedis.get.mockResolvedValue(kept(cachedPayload))
     const res  = await app.inject({ method: 'GET', url: '/api/v1/signals/map/maritime' })
     const body = res.json<{ features: unknown[] }>()
     expect(body.features).toHaveLength(1)
@@ -212,7 +217,7 @@ describe('GET /api/v1/signals/map/maritime', () => {
   it('asks the database with one headline pattern (more took past its 5-second limit)', async () => {
     await app.inject({ method: 'GET', url: '/api/v1/signals/map/maritime' })
     expect(mockDb.raw).toHaveBeenCalledWith(expect.stringContaining('AND title ~* ?'), [MARITIME_CANDIDATE])
-    const sql = String(mockDb.raw.mock.calls[0][0])
+    const sql = String(mockDb.raw.mock.calls.find(c => String(c[0]).includes('FROM signals'))?.[0])
     expect(sql.match(/~\*/g)).toHaveLength(1)
   })
 
@@ -234,10 +239,10 @@ describe('GET /api/v1/signals/map/maritime', () => {
   })
 
   // ── 13. Cache TTL is 120 seconds ──────────────────────────────────────────
-  it('sets Redis cache TTL to 120 seconds', async () => {
+  it('keeps the result 2 minutes fresh, and up to 6 hours more while the next is made', async () => {
     await app.inject({ method: 'GET', url: '/api/v1/signals/map/maritime' })
     const call = mockRedis.setex.mock.calls[0] as [string, number, string]
-    expect(call[1]).toBe(120)
+    expect(call[1]).toBe(120 + 6 * 3600)
   })
 
   // ── 14. Redis error is swallowed — response still succeeds ────────────────

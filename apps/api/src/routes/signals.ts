@@ -1278,56 +1278,56 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       description: 'The last 3 days of stories about ships, ports, straits and navies (by headline), with a place, as a GeoJSON FeatureCollection.',
     },
   }, async (_req, reply) => {
-    const cacheKey = 'signals:map:maritime:v2'
-    const cached = await redis.get(cacheKey).catch(() => null)
-    if (cached) {
-      try { return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached)) } catch { /* fallthrough */ }
-    }
+    // This reads every story of the last 3 days and runs near the pool's 5-second limit: past it
+    // from 3:22 PM on Oct 19, so the layer answered 500 every time. Kept in Redis and served at
+    // once (as the map's points are); once 2 minutes old, one process makes the next in the
+    // background with its own time limit (lib/long-query.ts).
+    const payload = await staleWhileRevalidate(
+      'signals:map:maritime:v3',
+      { freshSeconds: 120, staleSeconds: 6 * 3600, lockSeconds: 2 * MAP_QUERY_SECONDS },
+      async () => {
+        const result = await longQuery(MAP_QUERY_SECONDS, trx => trx.raw<{ rows: Array<Record<string, unknown>> }>(`
+          SELECT id, title, reliability_score, severity, category, location_name,
+            created_at AS published_at,
+            ST_Y(location::geometry) AS lat,
+            ST_X(location::geometry) AS lng
+          FROM signals
+          WHERE created_at > NOW() - INTERVAL '72 hours'
+            AND location IS NOT NULL
+            AND ST_Y(location::geometry) != 0
+            AND ST_X(location::geometry) != 0
+            AND category::text NOT IN ('sports', 'culture', 'entertainment')
+            AND title ~* ?
+          ORDER BY created_at DESC
+          LIMIT 500
+        `, [MARITIME_CANDIDATE]))
 
-    const result = await db.raw<{ rows: Array<Record<string, unknown>> }>(`
-      SELECT id, title, reliability_score, severity, category, location_name,
-        created_at AS published_at,
-        ST_Y(location::geometry) AS lat,
-        ST_X(location::geometry) AS lng
-      FROM signals
-      WHERE created_at > NOW() - INTERVAL '72 hours'
-        AND location IS NOT NULL
-        AND ST_Y(location::geometry) != 0
-        AND ST_X(location::geometry) != 0
-        AND category::text NOT IN ('sports', 'culture', 'entertainment')
-        AND title ~* ?
-      ORDER BY created_at DESC
-      LIMIT 500
-    `, [MARITIME_CANDIDATE])
+        // one pattern in the database (more cost too much there), the finer checks here
+        const ships = result.rows.filter(r => r.lat != null && r.lng != null && isShipHeadline(String(r.title ?? '')))
+        const features = firstOfEach(ships, r => headlineKey(String(r.title ?? '')))
+          .map(r => ({
+            type: 'Feature' as const,
+            geometry: {
+              type: 'Point' as const,
+              coordinates: [parseFloat(String(r.lng)), parseFloat(String(r.lat))],
+            },
+            properties: {
+              id:                String(r.id),
+              title:             String(r.title ?? ''),
+              severity:          String(r.severity ?? 'low'),
+              category:          String(r.category ?? ''),
+              place:             r.location_name ? String(r.location_name) : '',
+              reliability_score: parseFloat(String(r.reliability_score ?? 0)),
+              published_at:      r.published_at
+                ? (r.published_at as Date).toISOString()
+                : null,
+            },
+          }))
 
-    // one pattern in the database (more took past its 5-second limit), the finer checks here
-    const ships = result.rows.filter(r => r.lat != null && r.lng != null && isShipHeadline(String(r.title ?? '')))
-    const features = firstOfEach(ships, r => headlineKey(String(r.title ?? '')))
-      .map(r => ({
-        type: 'Feature' as const,
-        geometry: {
-          type: 'Point' as const,
-          coordinates: [parseFloat(String(r.lng)), parseFloat(String(r.lat))],
-        },
-        properties: {
-          id:                String(r.id),
-          title:             String(r.title ?? ''),
-          severity:          String(r.severity ?? 'low'),
-          category:          String(r.category ?? ''),
-          place:             r.location_name ? String(r.location_name) : '',
-          reliability_score: parseFloat(String(r.reliability_score ?? 0)),
-          published_at:      r.published_at
-            ? (r.published_at as Date).toISOString()
-            : null,
-        },
-      }))
+        return { type: 'FeatureCollection' as const, features }
 
-    const payload = {
-      type: 'FeatureCollection' as const,
-      features,
-    }
-
-    redis.setex(cacheKey, 120, JSON.stringify(payload)).catch(() => {})
+      },
+    )
     return reply.send(payload)
   })
 

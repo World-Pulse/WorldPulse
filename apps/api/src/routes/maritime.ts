@@ -16,6 +16,11 @@ import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 import { optionalAuth } from '../middleware/auth'
 import { NAVAL_SHIP_NAME, firstOfEach, headlineKey, notOffSea, pgToJs } from '../lib/sea-headlines'
+import { longQuery } from '../lib/long-query'
+import { staleWhileRevalidate } from '../lib/swr-cache'
+
+/** The Naval intelligence query's own time limit, off the request path (lib/long-query.ts) */
+const VESSELS_QUERY_SECONDS = 30
 
 // Carrier data inlined here to avoid cross-package import in the API
 export const CARRIER_REGISTRY_ALIASES: Array<{
@@ -374,66 +379,69 @@ export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
       },
     },
   }, async (_req, reply) => {
-    // ── Cache check ──────────────────────────────────────────────────────────
-    const cached = await redis.get(MARITIME_CACHE_KEY)
-    if (cached) {
-      const vessels = JSON.parse(cached) as MaritimeVessel[]
-      return reply.send({ success: true, cached: true, data: vessels })
-    }
+    // This reads every story of the last 3 days and runs near the pool's 5-second limit (past it
+    // from 3:22 PM on Oct 19: 500 every time). Kept in Redis and served at once; once 5 minutes
+    // old, one process makes the next in the background with its own time limit.
+    let made = false
+    const vessels = await staleWhileRevalidate(
+      `${MARITIME_CACHE_KEY}:v2`,
+      { freshSeconds: MARITIME_CACHE_TTL, staleSeconds: 6 * 3600, lockSeconds: 2 * VESSELS_QUERY_SECONDS },
+      async (): Promise<MaritimeVessel[]> => {
+        made = true
 
-    // ── DB query ─────────────────────────────────────────────────────────────
-    const rows = await db('signals')
-      .select(
-        'id',
-        'title',
-        'category',
-        'severity',
-        'status',
-        'location_name',
-        'created_at',
-        db.raw('ST_X(location::geometry) as lng'),
-        db.raw('ST_Y(location::geometry) as lat'),
-      )
-      // Oct 19, 2026: by headline (categories "military" and "maritime" are
-      // no longer used, so this found nothing), over 3 days
-      .whereRaw('title ~* ?', [NAVAL_CANDIDATE])
-      .whereRaw("category::text NOT IN ('sports', 'culture', 'entertainment')")
-      .whereIn('status', ['verified', 'pending'])
-      .whereRaw("created_at > now() - interval '72 hours'")
-      .orderBy('created_at', 'desc')
-      .limit(200) as Array<{
-        id:            string
-        title:         string
-        category:      string
-        severity:      string
-        status:        string
-        location_name: string | null
-        created_at:    string
-        lat:           number | null
-        lng:           number | null
-      }>
+        // ── DB query ─────────────────────────────────────────────────────────────
+        const rows = await longQuery(VESSELS_QUERY_SECONDS, trx => trx('signals')
+          .select(
+            'id',
+            'title',
+            'category',
+            'severity',
+            'status',
+            'location_name',
+            'created_at',
+            db.raw('ST_X(location::geometry) as lng'),
+            db.raw('ST_Y(location::geometry) as lat'),
+          )
+          // Oct 19, 2026: by headline (categories "military" and "maritime" are
+          // no longer used, so this found nothing), over 3 days
+          .whereRaw('title ~* ?', [NAVAL_CANDIDATE])
+          .whereRaw("category::text NOT IN ('sports', 'culture', 'entertainment')")
+          .whereIn('status', ['verified', 'pending'])
+          .whereRaw("created_at > now() - interval '72 hours'")
+          .orderBy('created_at', 'desc')
+          .limit(200)) as Array<{
+            id:            string
+            title:         string
+            category:      string
+            severity:      string
+            status:        string
+            location_name: string | null
+            created_at:    string
+            lat:           number | null
+            lng:           number | null
+          }>
 
-    // the same report at the same place (a carrier tracker repeats its reports
-    // every few hours) shows once: the newest
-    const placed = rows.filter(row => row.lat != null && row.lng != null && isValidCoordinate(row.lat!, row.lng!) && isNavalHeadline(String(row.title ?? '')))
-    const vessels: MaritimeVessel[] = firstOfEach(placed, row => `${headlineKey(row.title)}|${Number(row.lat).toFixed(1)}|${Number(row.lng).toFixed(1)}`)
-      .map(row => ({
-        id:          row.id,
-        title:       row.title,
-        lat:         row.lat!,
-        lng:         row.lng!,
-        type:        classifyVesselType(row.title, row.category, true),
-        fleet:       parseFleetFromTitle(row.title),
-        status_text: row.location_name ?? 'Unknown position',
-        severity:    row.severity,
-        created_at:  typeof row.created_at === 'string'
-          ? row.created_at
-          : (row.created_at as Date).toISOString(),
-      }))
+        // the same report at the same place (a carrier tracker repeats its reports
+        // every few hours) shows once: the newest
+        const placed = rows.filter(row => row.lat != null && row.lng != null && isValidCoordinate(row.lat!, row.lng!) && isNavalHeadline(String(row.title ?? '')))
+        const list: MaritimeVessel[] = firstOfEach(placed, row => `${headlineKey(row.title)}|${Number(row.lat).toFixed(1)}|${Number(row.lng).toFixed(1)}`)
+          .map(row => ({
+            id:          row.id,
+            title:       row.title,
+            lat:         row.lat!,
+            lng:         row.lng!,
+            type:        classifyVesselType(row.title, row.category, true),
+            fleet:       parseFleetFromTitle(row.title),
+            status_text: row.location_name ?? 'Unknown position',
+            severity:    row.severity,
+            created_at:  typeof row.created_at === 'string'
+              ? row.created_at
+              : (row.created_at as Date).toISOString(),
+          }))
+        return list
+      },
+    )
 
-    // ── Cache and respond ────────────────────────────────────────────────────
-    await redis.setex(MARITIME_CACHE_KEY, MARITIME_CACHE_TTL, JSON.stringify(vessels))
-
-    return reply.send({ success: true, cached: false, data: vessels })
+    return reply.send({ success: true, cached: !made, data: vessels })
   })
 }
