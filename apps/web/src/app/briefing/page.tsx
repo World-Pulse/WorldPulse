@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { Inbox, FileText, Clock, MapPin, RefreshCw, Share2, Check, Moon, TrendingUp, AlertTriangle, Globe, Shield, Anchor, Leaf, Cpu, Eye, BarChart3 } from 'lucide-react'
 import { displaySummary } from '@/lib/signal-text'
 import { BriefingSignup } from '@/components/briefing/BriefingSignup'
+import { FollowBox } from '@/components/FollowBox'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -662,6 +663,7 @@ export default function BriefingPage() {
             07:00 UTC emails nothing sent. This one shows once email can be
             sent, and answers the confirm and unsubscribe links. */}
         <BriefingSignup source="/briefing" className="mb-6" />
+        <FollowBox className="mb-6" />
 
         {/* ── Error ── */}
         {error && (

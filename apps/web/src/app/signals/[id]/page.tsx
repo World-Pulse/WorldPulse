@@ -6,6 +6,7 @@ import { displaySummary } from '@/lib/signal-text'
 import { SITE_NAME, SITE_URL, newsArticleJsonLd, jsonLdText, metaDescription } from '@/lib/page-metadata'
 import { cachedFetch } from '@/lib/server-fetch'
 import Link from 'next/link'
+import { FollowBox } from '@/components/FollowBox'
 import { countryLink, entityLinks, type StoryLink } from '@/lib/story-links'
 
 const API_BASE = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
@@ -180,6 +181,7 @@ export default async function SignalDetailPage(
           )}
         </nav>
       )}
+      <FollowBox className="mx-auto max-w-5xl px-4 pb-8" />
     </>
   )
 }
