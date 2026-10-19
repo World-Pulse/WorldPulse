@@ -41,3 +41,30 @@ export function entityLinks(
   }
   return links
 }
+
+/**
+ * "Related" on a story page (Oct 19, 2026, plan G18): stories from the same
+ * country first, then the same topic. A story appears once, the story itself
+ * never, and at most `max` are kept.
+ */
+export function rankRelated<T extends { id: string; category?: string }>(
+  currentId: string,
+  category: string,
+  sameCountry: T[],
+  sameTopic: T[],
+  max = 5,
+): T[] {
+  // within a country, the same topic comes first (the sort is stable)
+  const country = sameCountry.map((s, i) => ({ s, i }))
+    .sort((a, b) => Number(b.s.category === category) - Number(a.s.category === category) || a.i - b.i)
+    .map(x => x.s)
+  const seen = new Set<string>([currentId])
+  const out: T[] = []
+  for (const s of [...country, ...sameTopic]) {
+    if (seen.has(s.id)) continue
+    seen.add(s.id)
+    out.push(s)
+    if (out.length >= max) break
+  }
+  return out
+}

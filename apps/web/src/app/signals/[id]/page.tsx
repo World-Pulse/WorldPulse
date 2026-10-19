@@ -7,7 +7,7 @@ import { SITE_NAME, SITE_URL, newsArticleJsonLd, jsonLdText, metaDescription } f
 import { cachedFetch } from '@/lib/server-fetch'
 import Link from 'next/link'
 import { FollowBox } from '@/components/FollowBox'
-import { countryLink, entityLinks, type StoryLink } from '@/lib/story-links'
+import { countryLink, entityLinks, rankRelated, type StoryLink } from '@/lib/story-links'
 
 const API_BASE = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -50,15 +50,25 @@ async function fetchSignal(id: string): Promise<SignalDetail | 'missing' | 'unav
   }
 }
 
-async function fetchRelated(category: string, excludeId: string): Promise<Signal[]> {
+async function fetchRelatedList(query: string): Promise<Signal[]> {
   try {
-    const res = await cachedFetch(`${API_BASE}/api/v1/signals?category=${encodeURIComponent(category)}&limit=6&status=verified`, 60_000)
+    const res = await cachedFetch(`${API_BASE}/api/v1/signals?${query}&limit=8&status=verified`, 60_000)
     if (!res.ok) return []
     const json = await res.json() as { data?: { items: Signal[] } }
-    return (json.data?.items ?? []).filter(s => s.id !== excludeId).slice(0, 5)
+    return json.data?.items ?? []
   } catch {
     return []
   }
+}
+
+/** Up to 5 other verified stories: the same country first, then the same topic */
+async function fetchRelated(category: string, countryCode: string | null | undefined, excludeId: string): Promise<Signal[]> {
+  const code = countryLink(countryCode) ? String(countryCode).toUpperCase() : null
+  const [sameCountry, sameTopic] = await Promise.all([
+    code ? fetchRelatedList(`country=${code}`) : Promise.resolve([] as Signal[]),
+    fetchRelatedList(`category=${encodeURIComponent(category)}`),
+  ])
+  return rankRelated(excludeId, category, sameCountry, sameTopic)
 }
 
 /** The people, places and organisations the story names (an extra: [] when the API can't say) */
@@ -140,7 +150,7 @@ export default async function SignalDetailPage(
   if (signal === 'unavailable') throw new StoryUnavailableError()
 
   const [related, postsData, entities] = await Promise.all([
-    fetchRelated(signal.category, signal.id),
+    fetchRelated(signal.category, signal.countryCode, signal.id),
     fetchSignalPosts(signal.id),
     fetchEntityLinks(signal.id),
   ])
