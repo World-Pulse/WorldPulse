@@ -1329,19 +1329,23 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
   // ─── CONFLICT ZONE SIGNALS MAP ───────────────────────────────────────────────
   // GET /api/v1/signals/map/conflict-zones
   //
-  // Returns conflict/military/security-category signals from the last 72 hours
+  // Returns conflict/military-category signals from the last 72 hours
   // as a GeoJSON FeatureCollection for the conflict zone map overlay.
   // Signals are filtered to those with valid coordinates (non-null, non-zero).
   // Results are Redis-cached for 90 s.
+  // Oct 19, 2026 (Map Lab review): it read 7 days (its note said 72 hours),
+  // only the newest 300, and "security" too, which is mostly crime (a fake
+  // alcohol factory raid). Now 72 hours of conflict and military, up to 1,500,
+  // so the map can draw the zones as a glow.
   app.get('/map/conflict-zones', {
     schema: {
       tags: ['signals'],
       summary: 'Conflict zone signals for map overlay (GeoJSON)',
-      description: 'Returns conflict, military, and security signals from the last 72 hours as a GeoJSON FeatureCollection for the conflict zone map layer.',
+      description: 'Returns conflict and military signals from the last 72 hours (up to 1,500) as a GeoJSON FeatureCollection for the conflict zone map layer.',
     },
     config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
   }, async (_req, reply) => {
-    const cacheKey = 'signals:map:conflict-zones'
+    const cacheKey = 'signals:map:conflict-zones:v2'
     const cached = await redis.get(cacheKey).catch(() => null)
     if (cached) {
       try { return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached)) } catch { /* fallthrough */ }
@@ -1353,15 +1357,15 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
         ST_Y(location::geometry) AS lat,
         ST_X(location::geometry) AS lng
       FROM signals
-      WHERE category IN ('conflict', 'military', 'security')
+      WHERE category IN ('conflict', 'military')
         AND location IS NOT NULL
         AND ST_Y(location::geometry) IS NOT NULL
         AND ST_X(location::geometry) IS NOT NULL
         AND ST_Y(location::geometry) != 0
         AND ST_X(location::geometry) != 0
-        AND created_at > NOW() - INTERVAL '168 hours'
+        AND created_at > NOW() - INTERVAL '72 hours'
       ORDER BY created_at DESC
-      LIMIT 300
+      LIMIT 1500
     `)
 
     const features = result.rows.map(r => ({

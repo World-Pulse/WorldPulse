@@ -3622,7 +3622,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
     {
       title: 'Security',
       items: [
-        { key: 'conflict', label: 'Conflict zones', description: 'Fighting, military activity and security incidents, last 72 h', icon: Swords, color: '#ef4444',
+        { key: 'conflict', label: 'Conflict zones', description: 'Where the fighting is, last 72 h: a glow by severity, stories when zoomed in', icon: Swords, color: '#ef4444',
           on: conflictMode, loading: conflictLoading, count: conflictCount, toggle: () => setConflictMode(v => !v) },
         { key: 'threats', label: 'Missile & drone threats', description: 'Ballistic, cruise, hypersonic, drone and rocket reports', icon: Crosshair, color: '#f87171',
           on: threatMode, loading: threatLoading, count: threatCount, toggle: () => setThreatMode(v => !v),
