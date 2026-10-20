@@ -152,36 +152,33 @@ describe('checkSearch', () => {
 })
 
 // ─── checkScraper ─────────────────────────────────────────────────────────────
+// Oct 20, 2026: it goes by the newest report's age, not the 14-day stability
+// clock (which said "outage" while reports arrived every minute)
 describe('checkScraper', () => {
-  it('returns operational when stability key reports healthy', async () => {
-    ;(redis.get as ReturnType<typeof vi.fn>).mockResolvedValue(
-      JSON.stringify({ status: 'healthy', message: 'All sources running' }),
-    )
-    const result = await checkScraper()
-    expect(result.status).toBe('operational')
+  const NOW = new Date('2026-10-20T18:30:00Z')
+  const newest = (iso: string | null) =>
+    (db.raw as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ rows: [{ newest: iso }] })
+
+  it('is operational while reports keep arriving, whatever the stability clock says', async () => {
+    ;(redis.get as ReturnType<typeof vi.fn>).mockResolvedValue('failed')
+    newest('2026-10-20T18:26:00Z')
+    expect(await checkScraper(NOW)).toMatchObject({ status: 'operational', message: 'Newest report 4 min ago' })
+    newest('2026-10-20T18:29:45Z')
+    expect((await checkScraper(NOW)).message).toBe('Newest report under a minute ago')
   })
 
-  it('returns degraded when stability key reports degraded', async () => {
-    ;(redis.get as ReturnType<typeof vi.fn>).mockResolvedValue(
-      JSON.stringify({ status: 'degraded', message: '3 sources failing' }),
-    )
-    const result = await checkScraper()
-    expect(result.status).toBe('degraded')
-    expect(result.message).toBe('3 sources failing')
+  it('is degraded after 15 minutes without a report, and an outage after two hours', async () => {
+    newest('2026-10-20T18:00:00Z')
+    expect(await checkScraper(NOW)).toMatchObject({ status: 'degraded', message: 'No new report for 30 min' })
+    newest('2026-10-20T14:00:00Z')
+    expect(await checkScraper(NOW)).toMatchObject({ status: 'outage', message: 'No new report for 5 h' })
+    newest(null)
+    expect(await checkScraper(NOW)).toMatchObject({ status: 'outage', message: 'No reports yet' })
   })
 
-  it('returns degraded when no stability key and no health keys', async () => {
-    ;(redis.get  as ReturnType<typeof vi.fn>).mockResolvedValue(null)
-    ;(redis.keys as ReturnType<typeof vi.fn>).mockResolvedValue([])
-    const result = await checkScraper()
-    expect(result.status).toBe('degraded')
-  })
-
-  it('returns operational when stability key absent but health keys found', async () => {
-    ;(redis.get  as ReturnType<typeof vi.fn>).mockResolvedValue(null)
-    ;(redis.keys as ReturnType<typeof vi.fn>).mockResolvedValue(['scraper:health:gdelt', 'scraper:health:who'])
-    const result = await checkScraper()
-    expect(result.status).toBe('operational')
+  it('is degraded when the database cannot say', async () => {
+    ;(db.raw as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Connection refused'))
+    expect(await checkScraper(NOW)).toMatchObject({ status: 'degraded', message: 'Connection refused' })
   })
 })
 

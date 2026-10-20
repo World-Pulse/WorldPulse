@@ -104,38 +104,34 @@ export async function checkSearch(): Promise<ServiceCheck> {
   }
 }
 
-export async function checkScraper(): Promise<ServiceCheck> {
+/** The newest report is this fresh: reports are arriving */
+export const FRESH_MINUTES = 15
+/** No new report for longer than this: an outage */
+export const STALE_MINUTES = 120
+
+/**
+ * Whether reports are coming in (Oct 20, 2026). This read the scraper's
+ * 14-day stability clock (scraper:stability:status), which says "failed" for
+ * an hour after any hour with a restart or an unhandled error and "degraded"
+ * until 336 clean hours in a row, so the status page said "outage" all
+ * afternoon while reports arrived every minute. It now goes by the newest
+ * report's age, which is what readers see: within FRESH_MINUTES operational,
+ * within STALE_MINUTES degraded, else an outage. (created_at is indexed.)
+ */
+export async function checkScraper(now: Date = new Date()): Promise<ServiceCheck> {
   const t0 = Date.now()
   try {
-    // Primary: read scraper stability status key (plain string: 'stable' | 'degraded' | 'failed')
-    const stability = await redis.get('scraper:stability:status')
-    if (stability) {
-      const latency_ms = Date.now() - t0
-      const status: ServiceStatus =
-        stability === 'stable'   ? 'operational' :
-        stability === 'degraded' ? 'degraded'    : 'outage'
-      return { status, latency_ms, ...(stability !== 'stable' ? { message: `Scraper status: ${stability}` } : {}) }
-    }
-
-    // Fallback 1: check scraper health keys
-    const keys = await redis.keys('scraper:health:*')
-    if (keys.length > 0) {
-      return { status: 'operational', latency_ms: Date.now() - t0 }
-    }
-
-    // Fallback 2: check actual signal ingest recency — if signals arrived
-    // in the last 2 hours, the pipeline is working even if Redis keys are missing
-    const recentSignal = await db('signals')
-      .where('created_at', '>', new Date(Date.now() - 2 * 60 * 60 * 1000))
-      .select(db.raw('1'))
-      .first()
-
+    const result = await db.raw('SELECT max(created_at) AS newest FROM signals') as { rows?: Array<{ newest?: string | Date | null }> }
     const latency_ms = Date.now() - t0
-    if (recentSignal) {
-      return { status: 'operational', latency_ms, message: 'Ingest active (signals arriving)' }
+    const raw = result.rows?.[0]?.newest
+    const newest = raw ? new Date(raw) : null
+    if (!newest || Number.isNaN(newest.getTime())) return { status: 'outage', latency_ms, message: 'No reports yet' }
+    const minutes = Math.max(0, Math.floor((now.getTime() - newest.getTime()) / 60_000))
+    if (minutes <= FRESH_MINUTES) {
+      return { status: 'operational', latency_ms, message: minutes < 1 ? 'Newest report under a minute ago' : `Newest report ${minutes} min ago` }
     }
-
-    return { status: 'degraded', latency_ms, message: 'No recent signal ingest detected' }
+    if (minutes <= STALE_MINUTES) return { status: 'degraded', latency_ms, message: `No new report for ${minutes} min` }
+    return { status: 'outage', latency_ms, message: `No new report for ${Math.round(minutes / 60)} h` }
   } catch (err) {
     return {
       status:     'degraded',
