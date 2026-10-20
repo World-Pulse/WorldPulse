@@ -27,6 +27,8 @@ vi.mock('../lib/logger', () => ({
   logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), info: vi.fn() },
 }))
 
+import { matchesFilters } from '../lib/webhooks'
+
 // ─── HMAC signature tests ────────────────────────────────────────────────────
 
 describe('Webhook HMAC signatures', () => {
@@ -95,18 +97,6 @@ describe('Webhook HMAC signatures', () => {
 // ─── Filter matching tests ────────────────────────────────────────────────────
 
 describe('Webhook filter matching', () => {
-  // Inline version of matchesFilters for unit testing
-  function matchesFilters(
-    filters: { category?: string; severity?: string; country_code?: string },
-    payload: { category?: string; severity?: string; country_code?: string },
-  ): boolean {
-    if (!filters || Object.keys(filters).length === 0) return true
-    if (filters.category     && payload.category     !== filters.category)     return false
-    if (filters.severity     && payload.severity     !== filters.severity)     return false
-    if (filters.country_code && payload.country_code !== filters.country_code) return false
-    return true
-  }
-
   it('empty filters match any payload', () => {
     expect(matchesFilters({}, { category: 'conflict', severity: 'high', country_code: 'UA' })).toBe(true)
   })
@@ -124,6 +114,17 @@ describe('Webhook filter matching', () => {
   it('country_code filter matches exact country', () => {
     expect(matchesFilters({ country_code: 'UA' }, { country_code: 'UA' })).toBe(true)
     expect(matchesFilters({ country_code: 'UA' }, { country_code: 'RU' })).toBe(false)
+  })
+
+  it("matches a breaking alert's country, which it names countryCode (Oct 20, 2026)", () => {
+    // until then every alert.breaking delivery was kept from a webhook with a country filter
+    const alert = { alertId: 'a1', signalId: 's1', title: 'Strike', severity: 'critical', category: 'conflict', countryCode: 'UA' }
+    expect(matchesFilters({ country_code: 'UA' }, alert)).toBe(true)
+    expect(matchesFilters({ country_code: 'RU' }, alert)).toBe(false)
+    expect(matchesFilters({ country_code: 'UA', severity: 'critical' }, alert)).toBe(true)
+    // whatever the case, and an alert without a country never matches a country filter
+    expect(matchesFilters({ country_code: 'ua' }, { country_code: 'UA' })).toBe(true)
+    expect(matchesFilters({ country_code: 'UA' }, { title: 'Strike', countryCode: '' })).toBe(false)
   })
 
   it('multiple filters — all must match', () => {

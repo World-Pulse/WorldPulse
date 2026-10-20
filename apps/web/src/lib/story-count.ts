@@ -18,16 +18,26 @@ export interface StoryOutletCounts {
   outletsAll: number
   /** When its first report came in (ISO), when known */
   firstReportAt: string | null
+  /** Whether any of its reports is verified, when the API says */
+  verified?: boolean
+  /** The story's id (its first report's, or the story id its reports share), when the API says */
+  storyId?: string
 }
 
 /** One story's counts from GET /api/v1/stories/outlets, or null when it gives none */
 export function storyCountsOf(v: unknown): StoryOutletCounts | null {
-  const o = (v ?? {}) as { outlets?: unknown; outletsAll?: unknown; firstReportAt?: unknown }
+  const o = (v ?? {}) as { outlets?: unknown; outletsAll?: unknown; firstReportAt?: unknown; verified?: unknown; storyId?: unknown }
   const outlets = Number(o.outlets)
   if (!Number.isFinite(outlets) || outlets <= 0) return null
   const all = Number(o.outletsAll)
   const first = typeof o.firstReportAt === 'string' && Number.isFinite(Date.parse(o.firstReportAt)) ? o.firstReportAt : null
-  return { outlets, outletsAll: Number.isFinite(all) && all > outlets ? all : outlets, firstReportAt: first }
+  return {
+    outlets,
+    outletsAll: Number.isFinite(all) && all > outlets ? all : outlets,
+    firstReportAt: first,
+    ...(typeof o.verified === 'boolean' ? { verified: o.verified } : {}),
+    ...(typeof o.storyId === 'string' && o.storyId ? { storyId: o.storyId } : {}),
+  }
 }
 
 /** "Oct 10" (in UTC, so the server's page and the browser's agree) */
@@ -40,11 +50,4 @@ export function sinceText(outlets: number, outletsAll: number, firstReportAt: st
   if (!(outletsAll > outlets)) return ''
   const day = firstReportAt && Number.isFinite(Date.parse(firstReportAt)) ? storyDay(firstReportAt) : null
   return `${outletsAll} since ${day ?? 'it began'}`
-}
-
-/** "48 outlets", or for a story that has run longer "48 outlets in its last 2 days · 143 since Oct 10" */
-export function storyCountText(outlets: number, outletsAll: number, firstReportAt: string | null | undefined): string {
-  const n = `${outlets} outlet${outlets === 1 ? '' : 's'}`
-  const since = sinceText(outlets, outletsAll, firstReportAt)
-  return since ? `${n} in its last ${STORY_COUNT_DAYS} days · ${since}` : n
 }

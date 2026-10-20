@@ -194,8 +194,8 @@ export const WEBHOOK_BODY_FIELDS = [
 export const WEBHOOK_FILTERS = [
   { name: 'category',     type: 'string', description: 'One category, e.g. conflict' },
   { name: 'severity',     type: 'string', description: 'Exactly this severity, one of critical, high, medium, low, info (high does not include critical)' },
-  // lib/webhooks.ts compares it with the data's country_code, which an alert doesn't have
-  { name: 'country_code', type: 'string', description: 'A two-letter ISO 3166-1 code, e.g. UA. Only signal.new data has country_code (an alert names its country as countryCode), so with this filter set no alert.breaking delivery is sent' },
+  // lib/webhooks.ts compares it with the data's country: country_code in signal.new, countryCode in alert.breaking
+  { name: 'country_code', type: 'string', description: 'A two-letter ISO 3166-1 code, e.g. UA: the country of a signal.new (country_code) or an alert.breaking (countryCode). An alert without a country is not sent to a webhook with this filter' },
 ]
 
 /** What lib/webhooks.ts sends with each delivery */

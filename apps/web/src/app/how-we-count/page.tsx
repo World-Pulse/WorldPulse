@@ -11,7 +11,7 @@ export const metadata: Metadata = pageMetadata({
   description: 'What “Verified · N outlets” means on WorldPulse: how a story gets its outlet count, what is not counted twice, and what the count cannot tell you.',
 })
 
-const STEPS: Array<{ h: string; p: React.ReactNode }> = [
+const STEPS: Array<{ id?: string; h: string; p: React.ReactNode }> = [
   {
     h: 'An outlet is a website',
     p: 'Every report keeps the link to the original article. The outlets of a story are the different websites in those links (a leading “www.” is ignored). Twelve articles on one website are one outlet.',
@@ -27,6 +27,11 @@ const STEPS: Array<{ h: string; p: React.ReactNode }> = [
   {
     h: 'What is not counted twice',
     p: 'A report from a source we already hold for the story. A second website that only copied the article (the same article slug, or the same headline word for word). An article merged into another report still counts as its website: it carried the story.',
+  },
+  {
+    id: 'score',
+    h: 'The reliability score',
+    p: 'Every report gets a score from 0 to 100%. It starts from the outlet’s rating in WorldPulse’s list of sources (most outlets are rated between 70% and 90%, state-run outlets between 45% and 60%), moved a few points by the report itself, for example: a summary and a place add a little; a state-run outlet on conflict, politics, elections or security loses 10 points; a single report marked high or critical loses up to 15; and a little random spread keeps two reports from tying. Each further independent outlet that reports the story closes 40% of the gap to 98%: a report at 80% goes to 87% with a second outlet and to 92% with a third. No story reaches 100%. AI checks and reader flags don’t change the score; an AI check can send a story back to pending when its outlets describe different events.',
   },
   {
     h: 'When a story becomes Verified',
@@ -50,7 +55,7 @@ export default function HowWeCountPage() {
         </p>
         <ol className="space-y-6">
           {STEPS.map((s, i) => (
-            <li key={s.h}>
+            <li key={s.h} id={s.id}>
               <h2 className="text-base font-semibold text-wp-text">{i + 1}. {s.h}</h2>
               <p className="text-sm text-wp-text2 mt-1 leading-relaxed">{s.p}</p>
             </li>

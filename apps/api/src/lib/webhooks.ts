@@ -62,15 +62,26 @@ function sign(secret: string, timestamp: number, body: string): string {
 // ─── Filter matching ─────────────────────────────────────────────────────────
 
 /**
+ * The data's country: a new signal (signal.new) names it country_code, a
+ * breaking alert (alert.breaking, lib/breaking-alerts.ts) countryCode. Until
+ * Oct 20, 2026 only country_code was read, so a webhook with a country filter
+ * never got an alert.
+ */
+function countryOf(payload: SignalPayload): string | undefined {
+  const code = payload.country_code ?? payload.countryCode
+  return typeof code === 'string' && code !== '' ? code.toUpperCase() : undefined
+}
+
+/**
  * Returns true if the signal payload matches the webhook's configured filters.
  * An empty/missing filter means "match everything".
  */
-function matchesFilters(filters: WebhookRow['filters'], payload: SignalPayload): boolean {
+export function matchesFilters(filters: WebhookRow['filters'], payload: SignalPayload): boolean {
   if (!filters || Object.keys(filters).length === 0) return true
 
   if (filters.category && payload.category !== filters.category) return false
   if (filters.severity && payload.severity !== filters.severity) return false
-  if (filters.country_code && payload.country_code !== filters.country_code) return false
+  if (filters.country_code && countryOf(payload) !== filters.country_code.toUpperCase()) return false
 
   return true
 }

@@ -19,7 +19,8 @@ import { redis } from '../../db/redis'
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 vi.mock('../../db/postgres', () => ({
-  db: vi.fn(() => ({
+  // (db.raw on the function itself: the routes call db.raw while building a query)
+  db: Object.assign(vi.fn(() => ({
     select:     vi.fn().mockReturnThis(),
     where:      vi.fn().mockReturnThis(),
     whereIn:    vi.fn().mockReturnThis(),
@@ -30,7 +31,7 @@ vi.mock('../../db/postgres', () => ({
     orderByRaw: vi.fn().mockReturnThis(),
     limit:      vi.fn().mockResolvedValue([]),
     raw:        vi.fn((s: string) => s),
-  })),
+  })), { raw: vi.fn((s: string) => s) }),
 }))
 
 vi.mock('../../db/redis', () => ({
@@ -54,6 +55,29 @@ describe('Outages API', () => {
     await app.close()
   })
 
+  // ── Which reports ─────────────────────────────────────────────────────────
+
+  it("reads the reports the scraper tags 'ioda', by the columns signals has (Oct 20, 2026)", async () => {
+    // signals has no source_id or source_url column: every query failed, and the error read as "no outages"
+    vi.mocked(redis.get).mockResolvedValueOnce(null)
+    await app.inject({ method: 'GET', url: '/api/v1/outages/recent?hours=24' })
+    const builder = vi.mocked(db).mock.results.at(-1)!.value as Record<string, ReturnType<typeof vi.fn>>
+    expect(builder.where!.mock.calls).toEqual([])
+    expect(builder.whereRaw!.mock.calls).toEqual([
+      ['? = ANY(tags)', ['ioda']],
+      ['COALESCE(event_time, created_at) > now() - make_interval(hours => ?)', [24]],
+    ])
+    const selected = builder.select!.mock.calls[0]!.map(String)
+    expect(selected).not.toContain('source_url')
+    expect(selected).not.toContain('published_at')
+    expect(selected).toContain('original_urls[1] as source_url')
+
+    await app.inject({ method: 'GET', url: '/api/v1/outages/summary' })
+    const summary = vi.mocked(db).mock.results.at(-1)!.value as Record<string, ReturnType<typeof vi.fn>>
+    expect(summary.where!.mock.calls).toEqual([])
+    expect(summary.whereRaw!.mock.calls[0]).toEqual(['? = ANY(tags)', ['ioda']])
+  })
+
   // ── GET /recent ───────────────────────────────────────────────────────────
 
   describe('GET /recent', () => {
@@ -70,7 +94,7 @@ describe('Outages API', () => {
       expect(res.statusCode).toBe(400)
       const json = JSON.parse(res.payload) as { success: boolean; code: string }
       expect(json.success).toBe(false)
-      expect(json.code).toBe('INVALID_HOURS')
+      expect(json.code).toBe('VALIDATION_ERROR')
     })
 
     it('Test 3: rejects hours > 720', async () => {
@@ -78,15 +102,14 @@ describe('Outages API', () => {
       expect(res.statusCode).toBe(400)
       const json = JSON.parse(res.payload) as { success: boolean; code: string }
       expect(json.success).toBe(false)
-      expect(json.code).toBe('INVALID_HOURS')
+      expect(json.code).toBe('VALIDATION_ERROR')
     })
 
     it('Test 4: rejects non-numeric hours', async () => {
+      // (Fastify's own query check answers this one, in its own body)
       const res = await app.inject({ method: 'GET', url: '/api/v1/outages/recent?hours=xyz' })
       expect(res.statusCode).toBe(400)
-      const json = JSON.parse(res.payload) as { success: boolean; code: string }
-      expect(json.success).toBe(false)
-      expect(json.code).toBe('INVALID_HOURS')
+      expect(res.payload).toMatch(/hours/)
     })
 
     it('Test 5: rejects limit > 200', async () => {
@@ -94,7 +117,7 @@ describe('Outages API', () => {
       expect(res.statusCode).toBe(400)
       const json = JSON.parse(res.payload) as { success: boolean; code: string }
       expect(json.success).toBe(false)
-      expect(json.code).toBe('INVALID_LIMIT')
+      expect(json.code).toBe('VALIDATION_ERROR')
     })
 
     it('Test 6: accepts valid hours=24', async () => {

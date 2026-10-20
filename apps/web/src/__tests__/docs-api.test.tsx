@@ -368,12 +368,13 @@ describe('webhooks (apps/api/src/routes/developer.ts, lib/webhooks.ts, ws/handle
     for (const code of Object.values(WEBHOOK_EXAMPLES)) expect(code).not.toMatch(/"severity":\s*\[|severity: \[/)
     expect(webhooks).toContain('if (filters.severity && payload.severity !== filters.severity) return false')
     expect(WEBHOOK_FILTERS.find(f => f.name === 'severity')?.description).toMatch(/^Exactly this severity/)
-    // an alert's data names its country countryCode, so a country_code filter keeps every alert out
-    expect(webhooks).toContain('if (filters.country_code && payload.country_code !== filters.country_code) return false')
+    // an alert's data names its country countryCode, a new signal's country_code: the filter reads both (Oct 20, 2026)
+    expect(webhooks).toContain('const code = payload.country_code ?? payload.countryCode')
+    expect(webhooks).toContain('if (filters.country_code && countryOf(payload) !== filters.country_code.toUpperCase()) return false')
     const alert = api('lib/breaking-alerts.ts').match(/export interface BreakingAlert \{([^}]*)\}/)?.[1] ?? ''
     expect(alert).toMatch(/\bcountryCode\?: string/)
     expect(alert).not.toContain('country_code')
-    expect(WEBHOOK_FILTERS.find(f => f.name === 'country_code')?.description).toContain('with this filter set no alert.breaking delivery is sent')
+    expect(WEBHOOK_FILTERS.find(f => f.name === 'country_code')?.description).toContain('an alert.breaking (countryCode)')
   })
 
   it('names the headers and the signature lib/webhooks.ts sends', () => {

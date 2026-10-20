@@ -28,7 +28,8 @@ const SUMMARY_CACHE_TTL         = 300          // 5 min cache for summary
 const OUTAGES_RATE_LIMIT        = 60
 const OUTAGES_DEFAULT_HOURS     = 48
 const OUTAGES_MAX_HOURS         = 720
-const IODA_SOURCE_ID            = 'ioda'
+/** The scraper tags each IODA report 'ioda' (apps/scraper/src/sources/ioda.ts) */
+const IODA_TAG                  = 'ioda'
 const CACHE_KEY_RECENT          = 'outages:recent'
 const CACHE_KEY_SUMMARY         = 'outages:summary'
 
@@ -119,16 +120,23 @@ export const registerOutagesRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
+      // signals has no source_id or source_url column, and published_at only on
+      // some installs: the scraper tags IODA reports and keeps the alert's time
+      // in event_time. Asking for the missing columns failed every query, and
+      // the error was answered as "no outages" (found Oct 20, 2026; the space
+      // weather endpoints had the same fault until Oct 13).
       let query = db('signals')
         .select(
-          'id', 'title', 'summary', 'severity', 'location_name', 'source_url',
-          'reliability_score', 'published_at',
+          'id', 'title', 'summary', 'severity', 'location_name', 'country_code',
+          db.raw('original_urls[1] as source_url'),
+          'reliability_score',
+          db.raw('COALESCE(event_time, created_at) as published_at'),
           db.raw('ST_X(location::geometry) as lng'),
           db.raw('ST_Y(location::geometry) as lat'),
         )
-        .where('source_id', IODA_SOURCE_ID)
-        .whereRaw(`published_at > now() - interval '${hours} hours'`)
-        .orderBy('published_at', 'desc')
+        .whereRaw('? = ANY(tags)', [IODA_TAG])
+        .whereRaw('COALESCE(event_time, created_at) > now() - make_interval(hours => ?)', [Math.max(1, Math.round(hours))])
+        .orderByRaw('COALESCE(event_time, created_at) DESC')
         .limit(limit)
 
       if (minSeverity) {
@@ -139,7 +147,7 @@ export const registerOutagesRoutes: FastifyPluginAsync = async (app) => {
 
       const rows = await query as Array<{
         id: string; title: string; summary: string; severity: string
-        location_name: string | null; source_url: string | null
+        location_name: string | null; country_code?: string | null; source_url: string | null
         reliability_score: number; published_at: string | Date
         lat: number | null; lng: number | null
       }>
@@ -150,7 +158,7 @@ export const registerOutagesRoutes: FastifyPluginAsync = async (app) => {
         summary:           r.summary ?? '',
         severity:          r.severity,
         location_name:     r.location_name ?? 'Unknown region',
-        country_code:      extractCountryCode(r.location_name ?? ''),
+        country_code:      r.country_code || extractCountryCode(r.location_name ?? ''),
         lat:               typeof r.lat === 'number' && isFinite(r.lat) ? r.lat : null,
         lng:               typeof r.lng === 'number' && isFinite(r.lng) ? r.lng : null,
         published_at:      typeof r.published_at === 'string' ? r.published_at : (r.published_at as Date).toISOString(),
@@ -197,11 +205,11 @@ export const registerOutagesRoutes: FastifyPluginAsync = async (app) => {
             END as worst_severity
           `),
           db.raw('count(*) as event_count'),
-          db.raw('max(published_at) as latest_at'),
+          db.raw('max(COALESCE(event_time, created_at)) as latest_at'),
         )
-        .where('source_id', IODA_SOURCE_ID)
+        .whereRaw('? = ANY(tags)', [IODA_TAG])
         .whereNotNull('location_name')
-        .whereRaw("published_at > now() - interval '24 hours'")
+        .whereRaw("COALESCE(event_time, created_at) > now() - interval '24 hours'")
         .groupBy('location_name')
         .orderByRaw(`
           CASE

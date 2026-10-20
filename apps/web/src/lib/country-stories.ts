@@ -16,21 +16,25 @@ export async function fetchCountryStories(code: string): Promise<CountryStory[] 
     const res = await cachedFetch(`${API_BASE}/api/v1/stories?country=${code.toUpperCase()}&hours=${COUNTRY_STORIES.hours}&limit=${COUNTRY_STORIES.limit}`, 120_000, 8_000)
     if (!res.ok) return null
     const json = await res.json() as { data?: { stories?: unknown[] } }
-    const stories = Array.isArray(json.data?.stories) ? json.data.stories : []
-    return stories.flatMap(raw => {
-      const s = raw as Partial<CountryStory>
-      return typeof s.id === 'string' && typeof s.leadId === 'string' && typeof s.title === 'string' && s.title
-        ? [{
-            id: s.id, leadId: s.leadId, title: s.title,
-            place: typeof s.place === 'string' ? s.place : null,
-            category: typeof s.category === 'string' ? s.category : null,
-            severity: typeof s.severity === 'string' ? s.severity : 'info',
-            outletCount: Number(s.outletCount) || 0,
-            verifiedAt: typeof s.verifiedAt === 'string' ? s.verifiedAt : null,
-          }]
-        : []
-    })
+    return storiesOf(json.data?.stories)
   } catch {
     return null
   }
+}
+
+/** The stories of a GET /api/v1/stories answer, leaving out any without an id, lead or headline */
+export function storiesOf(list: unknown): CountryStory[] {
+  return (Array.isArray(list) ? list : []).flatMap(raw => {
+    const s = (raw ?? {}) as Partial<CountryStory>
+    return typeof s.id === 'string' && typeof s.leadId === 'string' && typeof s.title === 'string' && s.title
+      ? [{
+          id: s.id, leadId: s.leadId, title: s.title,
+          place: typeof s.place === 'string' ? s.place : null,
+          category: typeof s.category === 'string' ? s.category : null,
+          severity: typeof s.severity === 'string' ? s.severity : 'info',
+          outletCount: Number(s.outletCount) || 0,
+          verifiedAt: typeof s.verifiedAt === 'string' ? s.verifiedAt : null,
+        }]
+      : []
+  })
 }

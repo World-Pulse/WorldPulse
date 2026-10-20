@@ -7,7 +7,10 @@ import { SITE_NAME, SITE_URL, newsArticleJsonLd, jsonLdText, metaDescription } f
 import { cachedFetch } from '@/lib/server-fetch'
 import Link from 'next/link'
 import { FollowBox } from '@/components/FollowBox'
-import { countryLink, entityLinks, rankRelated, weekLink, type StoryLink } from '@/lib/story-links'
+import { countryLink, entityLinks, weekLink, type StoryLink } from '@/lib/story-links'
+import { fetchCountryStories } from '@/lib/country-stories'
+import { fetchTopStories, rankRelatedStories } from '@/lib/related-stories'
+import type { CountryStory } from '@/components/countries/CountryTopStories'
 import { fetchStoryOutletCounts } from '@/lib/story-outlets'
 
 const API_BASE = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
@@ -51,25 +54,14 @@ async function fetchSignal(id: string): Promise<SignalDetail | 'missing' | 'unav
   }
 }
 
-async function fetchRelatedList(query: string): Promise<Signal[]> {
-  try {
-    const res = await cachedFetch(`${API_BASE}/api/v1/signals?${query}&limit=8&status=verified`, 60_000)
-    if (!res.ok) return []
-    const json = await res.json() as { data?: { items: Signal[] } }
-    return json.data?.items ?? []
-  } catch {
-    return []
-  }
-}
-
-/** Up to 5 other verified stories: the same country first, then the same topic */
-async function fetchRelated(category: string, countryCode: string | null | undefined, excludeId: string): Promise<Signal[]> {
+/** What "Related" picks from: the country's top stories and the day's most-reported (lib/related-stories.ts) */
+async function fetchRelatedLists(countryCode: string | null | undefined): Promise<{ country: CountryStory[]; top: CountryStory[] }> {
   const code = countryLink(countryCode) ? String(countryCode).toUpperCase() : null
-  const [sameCountry, sameTopic] = await Promise.all([
-    code ? fetchRelatedList(`country=${code}`) : Promise.resolve([] as Signal[]),
-    fetchRelatedList(`category=${encodeURIComponent(category)}`),
+  const [country, top] = await Promise.all([
+    code ? fetchCountryStories(code) : Promise.resolve(null),
+    fetchTopStories(),
   ])
-  return rankRelated(excludeId, category, sameCountry, sameTopic)
+  return { country: country ?? [], top }
 }
 
 /**
@@ -155,12 +147,17 @@ export default async function SignalDetailPage(
   // error.tsx says the story is briefly unavailable and offers to try again
   if (signal === 'unavailable') throw new StoryUnavailableError()
 
-  const [related, postsData, entities, storyCounts] = await Promise.all([
-    fetchRelated(signal.category, signal.countryCode, signal.id),
+  const [relatedLists, postsData, entities, storyCounts] = await Promise.all([
+    fetchRelatedLists(signal.countryCode),
     fetchSignalPosts(signal.id),
     fetchEntityLinks(signal.id),
     fetchStoryOutletCounts(signal.id),
   ])
+  const related = rankRelatedStories(
+    { storyId: storyCounts?.storyId, signalId: signal.id, category: signal.category },
+    relatedLists.country,
+    relatedLists.top,
+  )
   const country = countryLink(signal.countryCode)
   const week = weekLink(signal.firstReported ?? signal.createdAt)
 

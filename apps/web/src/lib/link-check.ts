@@ -6,8 +6,8 @@
  * says is worked out here, so it can be tested without a browser.
  */
 
-import { countLine, outletsLine } from '@/lib/embed-card'
-import { sinceText, STORY_COUNT_DAYS } from '@/lib/story-count'
+import { outletsLine } from '@/lib/embed-card'
+import { howSure } from '@/lib/how-sure'
 
 export const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || 'https://api.world-pulse.io').replace(/\/+$/, '')
 
@@ -70,22 +70,18 @@ export function checkView(answer: LinkAnswer): CheckView {
   const own = answer.report?.outlet ?? null
   const ownCounted = own !== null && (names.length === 0 || names.includes(own))
   const named = [...(own && ownCounted ? [own] : []), ...names.filter(n => n !== own)].slice(0, 3)
-  const since = sinceText(outlets, outletsAll, answer.story?.firstReportAt)
-  const verdict = verified
-    ? 'Two or more outlets reported this story and its reliability score reached 65%, so WorldPulse marks it verified. That means more than one outlet says so, not that it is proven true.'
-    : outletsAll > 1
-      ? `${outletsAll} outlets reported this story, but it isn’t verified yet: its reliability score is under 65%.`
-      : 'Only one outlet so far: treat it as unconfirmed. That doesn’t make it false; it may be new, or an exclusive.'
+  // the same words as the story's page (lib/how-sure.ts)
+  const sure = howSure({ verified, outlets, outletsAll, firstReportAt: answer.story?.firstReportAt })
   const id = answer.report?.id ?? ''
   return {
     kind: 'found',
     title: (answer.report?.title ?? '').trim() || 'This article',
     outlet: own,
-    count: countLine({ outlets, verified }),
-    since: since ? `in its last ${STORY_COUNT_DAYS} days · ${since}` : '',
+    count: sure.count,
+    since: sure.since,
     verified,
     outlets: outletsLine({ outlets, named }),
-    verdict,
+    verdict: sure.verdict,
     href: `/signals/${encodeURIComponent(id)}?utm_source=check&utm_medium=web&utm_campaign=link-check`,
   }
 }

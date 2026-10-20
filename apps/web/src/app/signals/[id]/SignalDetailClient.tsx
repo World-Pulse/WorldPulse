@@ -13,7 +13,7 @@ const SignalMap = dynamic(
   { ssr: false, loading: () => <div className="h-[200px] bg-wp-s2 rounded-xl animate-pulse" /> },
 )
 import { FlagModal } from '@/components/signals/FlagModal'
-import { ReliabilityDots } from '@/components/signals/ReliabilityDots'
+import { ReliabilityDots, scoreBand } from '@/components/signals/ReliabilityDots'
 import { BiasCorrectionPanel } from '@/components/sources/BiasCorrectionPanel'
 import { AISummary } from '@/components/signals/AISummary'
 import { RiskScoreGauge } from '@/components/signals/RiskScoreGauge'
@@ -29,7 +29,10 @@ import { StoryMembers } from './StoryMembers'
 import { PredictionMarkets } from '@/components/signals/PredictionMarkets'
 import { ShareMenu } from '@/components/signals/ShareMenu'
 import { displaySummary, isStateMedia, STATE_MEDIA_NOTE, storyTags } from '@/lib/signal-text'
-import { storyCountsOf, storyCountText, type StoryOutletCounts } from '@/lib/story-count'
+import { storyCountsOf, type StoryOutletCounts } from '@/lib/story-count'
+import { howSure } from '@/lib/how-sure'
+import { HowSureBlock } from '@/components/signals/HowSureBlock'
+import { outletLine, type CountryStory } from '@/components/countries/CountryTopStories'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -70,20 +73,22 @@ function timeAgo(d: string | null | undefined): string {
 
 // VerificationRow replaced by VerificationTimeline component (P2-4b)
 
-function RelatedCard({ signal }: { signal: Signal }) {
-  const color = SEV_COLOR[signal.severity] ?? '#8892a4'
+// One other story, with its outlet count (lib/related-stories.ts). No time:
+// the server's HTML and the browser's must match.
+function RelatedCard({ story }: { story: CountryStory }) {
+  const color = SEV_COLOR[story.severity] ?? '#8892a4'
   return (
     <Link
-      href={`/signals/${signal.id}`}
+      href={`/signals/${story.leadId}`}
       className="block p-3 rounded-xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05] transition-all group"
     >
       <div className="flex items-center gap-1.5 mb-1.5">
         <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: color }} />
-        <span className="font-mono text-[9px] uppercase tracking-widest" style={{ color }}>{signal.severity}</span>
-        <span className="font-mono text-[9px] text-wp-text3 ml-auto">{timeAgo(signal.firstReported)}</span>
+        <span className="font-mono text-[9px] uppercase tracking-widest" style={{ color }}>{story.severity}</span>
+        <span className={`font-mono text-[9px] ml-auto ${story.verifiedAt ? 'text-wp-green' : 'text-wp-text3'}`}>{outletLine(story)}</span>
       </div>
       <p className="text-[12px] text-wp-text2 group-hover:text-wp-text leading-[1.5] line-clamp-2 transition-colors">
-        {signal.title}
+        {story.title}
       </p>
     </Link>
   )
@@ -93,6 +98,7 @@ function RelatedCard({ signal }: { signal: Signal }) {
 function ReliabilityScore({ signal }: { signal: SignalDetail }) {
   const score = signal.reliabilityScore ?? 0
   const hasAI = signal.verifications.some(v => v.check_type.toLowerCase().includes('ai'))
+  const band = scoreBand(score)
   const crossCheckStatus: CrossCheckStatus =
     signal.status === 'verified' ? 'confirmed' :
     signal.status === 'disputed' ? 'contested' : 'unconfirmed'
@@ -105,12 +111,14 @@ function ReliabilityScore({ signal }: { signal: SignalDetail }) {
         <ReliabilityDots
           score={score}
           size="md"
+          placement="below"
           sourceCount={signal.sourceCount}
           crossCheckStatus={crossCheckStatus}
           aiVerified={hasAI}
           communityFlagCount={signal.communityFlagCount}
         />
-        <span className="font-mono text-[18px] font-bold text-wp-green">
+        {/* coloured by its band (it was green whatever the number) */}
+        <span className="font-mono text-[18px] font-bold" style={{ color: band.color }}>
           {Math.round(score * 100)}%
         </span>
       </div>
@@ -118,10 +126,17 @@ function ReliabilityScore({ signal }: { signal: SignalDetail }) {
       {/* Progress bar */}
       <div className="h-1.5 bg-white/[0.07] rounded-full overflow-hidden">
         <div
-          className="h-full rounded-full bg-gradient-to-r from-[#00e676] to-[#00c853] transition-all"
-          style={{ width: `${Math.round(score * 100)}%` }}
+          className="h-full rounded-full transition-all"
+          style={{ width: `${Math.round(score * 100)}%`, backgroundColor: band.color }}
         />
       </div>
+
+      {/* The band in words, and where the score is explained (phones have no hover) */}
+      <p className="font-mono text-[10px] text-wp-text3">
+        <span style={{ color: band.color }}>{band.label}</span>
+        {' · '}
+        <Link href="/how-we-count#score" className="text-wp-amber hover:underline">How we score this</Link>
+      </p>
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-2 pt-1 font-mono text-[10px] text-wp-text3">
@@ -142,7 +157,8 @@ function ReliabilityScore({ signal }: { signal: SignalDetail }) {
 
 interface Props {
   signal:       SignalDetail
-  related:      Signal[]
+  /** Other stories, one row each (lib/related-stories.ts) */
+  related:      CountryStory[]
   initialPosts: Post[]
   postsTotal:   number
   /** Outlets that carried this report's story, from the server (null: the API couldn't say) */
@@ -245,6 +261,13 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal, 
   const outletCount = storyCounts ? storyCounts.outlets : ownOutlets
   // since it began: this report's own outlets are among them, however old it is
   const outletsAll = Math.max(storyCounts?.outletsAll ?? 0, ownOutlets, outletCount)
+  // What the count means (plan P2, step 1): the story is verified when any of its reports is
+  const sure = howSure({
+    verified: storyCounts?.verified === true || signal.status === 'verified',
+    outlets: outletCount,
+    outletsAll,
+    firstReportAt: storyCounts?.firstReportAt,
+  })
 
   return (
     <div className="min-h-screen bg-wp-bg text-wp-text">
@@ -344,7 +367,7 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal, 
               {storyAsked && outletCount > 0 && (
                 <>
                   <span>·</span>
-                  <span>{storyCountText(outletCount, outletsAll, storyCounts?.firstReportAt)}</span>
+                  <span>{outletCount} outlet{outletCount !== 1 ? 's' : ''}</span>
                 </>
               )}
             </div>
@@ -361,6 +384,9 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal, 
             {isStateMedia(signal.tags) && (
               <p className="font-mono text-[11px] text-wp-amber">⚠ {STATE_MEDIA_NOTE}</p>
             )}
+
+            {/* How sure are we: the story's count and what it means (P2, step 1) */}
+            {storyAsked && outletCount > 0 && <HowSureBlock sure={sure} />}
 
             {/* Body */}
             {signal.body && (
@@ -611,7 +637,7 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal, 
             {related.length > 0 && (
               <div className="space-y-2">
                 <div className="font-mono text-[10px] tracking-widest uppercase text-wp-text3 px-1">Related</div>
-                {related.map(s => <RelatedCard key={s.id} signal={s} />)}
+                {related.map(s => <RelatedCard key={s.id} story={s} />)}
               </div>
             )}
           </div>

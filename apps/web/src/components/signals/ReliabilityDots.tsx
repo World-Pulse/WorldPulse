@@ -15,54 +15,74 @@ interface ReliabilityDotsProps {
   labelClassName?: string
   /** Dot size variant */
   size?: 'sm' | 'md'
+  /** Where the explainer opens: above the dots (default) or below them, near the top of a page */
+  placement?: 'above' | 'below'
 }
 
-// ── Scoring tier definitions (5-dot system) ───────────────────────────────────
-const SCORE_TIERS = [
+// ── Score bands (5-dot system) ────────────────────────────────────────────────
+// What the score is, as the scraper computes it (checked Oct 20, 2026, H-0025:
+// apps/scraper/src/pipeline/reliability-score.ts and correlate.ts). The bands
+// said "Fully Verified: multi-source confirmed, AI-verified, cross-checked"
+// for any score of 80% or more, so one report from a highly rated outlet read
+// as fully verified; and the factors named AI checks and reader flags, which
+// don't move the score. Verified is a separate rule (two or more independent
+// outlets and at least 65%).
+export const SCORE_TIERS = [
   {
     dots: 5,
     range: '80–100%',
-    label: 'Fully Verified',
+    label: 'Very high',
     color: '#00e676',
-    desc: 'Multi-source confirmed, AI-verified, cross-checked',
+    desc: 'A highly rated outlet, or several independent outlets',
   },
   {
     dots: 4,
     range: '60–79%',
-    label: 'High Confidence',
+    label: 'High',
     color: '#00c85a',
-    desc: 'Multiple independent sources, no contradictions',
+    desc: 'One well-rated outlet so far',
   },
   {
     dots: 3,
     range: '40–59%',
     label: 'Moderate',
     color: '#f5a623',
-    desc: 'Single vetted source, partial cross-check',
+    desc: 'A lower-rated or state-run outlet, or one report of something serious',
   },
   {
     dots: 2,
     range: '20–39%',
-    label: 'Low Confidence',
+    label: 'Low',
     color: '#fbbf24',
-    desc: 'Unverified or community-flagged content',
+    desc: 'A low-rated outlet on a serious or sensitive story',
   },
   {
     dots: 1,
     range: '0–19%',
-    label: 'Unverified',
+    label: 'Very low',
     color: '#ff3b5c',
-    desc: 'No corroboration; treat as unconfirmed',
+    desc: 'Treat it as unconfirmed',
   },
 ] as const
 
-// ── Score factor descriptions ─────────────────────────────────────────────────
-const SCORE_FACTORS = [
-  { icon: '◎', label: 'Source reputation', desc: 'Publisher tier & track record' },
-  { icon: '⇄', label: 'Cross-check', desc: 'Agreement across independent sources' },
-  { icon: '◈', label: 'AI verification', desc: 'Automated fact & geo validation' },
-  { icon: '⚑', label: 'Community flags', desc: 'Reader-reported inaccuracies' },
+// ── What moves the score ──────────────────────────────────────────────────────
+export const SCORE_FACTORS = [
+  { icon: '◎', label: 'Outlet rating', desc: 'The outlet’s rating in WorldPulse’s list of sources starts the score' },
+  { icon: '⇄', label: 'Independent outlets', desc: 'Each further outlet that reports the story closes 40% of the gap to 98%' },
+  { icon: '±', label: 'Report details', desc: 'A few points either way: a summary and a place add a little; state-run outlets on conflict, politics or security, and single reports marked high or critical, lose some; a little random spread keeps reports from tying' },
 ] as const
+
+/** The band a score (0–1) falls in */
+export function scoreBand(score: number): (typeof SCORE_TIERS)[number] {
+  const pct = Math.round(Math.max(0, Math.min(1, Number(score) || 0)) * 100)
+  return SCORE_TIERS.find(t => pct >= parseInt(t.range)) ?? SCORE_TIERS[4]
+}
+
+/** Under the factors: what isn't in the score, and what verified means */
+export const SCORE_NOTE = 'Not in the score: AI checks and reader flags. Verified is separate: two or more independent outlets and a score of at least 65%.'
+
+/** The status row's words */
+const STATUS_WORD: Record<string, string> = { confirmed: 'verified', contested: 'disputed', unconfirmed: 'not yet verified' }
 
 export function ReliabilityDots({
   score,
@@ -73,6 +93,7 @@ export function ReliabilityDots({
   label = false,
   labelClassName,
   size = 'sm',
+  placement = 'above',
 }: ReliabilityDotsProps) {
   const s5      = Math.max(0, Math.min(5, score * 5))
   const filled  = Math.floor(s5)
@@ -100,7 +121,7 @@ export function ReliabilityDots({
     '#ff3b5c'
 
   /** Active tier for this signal's current score */
-  const activeTier = SCORE_TIERS.find(t => pct >= parseInt(t.range)) ?? SCORE_TIERS[4]
+  const activeTier = scoreBand(score)
 
   return (
     <div className="relative group/rdots inline-flex items-center gap-1 font-mono text-[10px] text-wp-text3">
@@ -119,7 +140,7 @@ export function ReliabilityDots({
 
       {/* Tooltip — shown on hover */}
       <div
-        className="absolute bottom-full right-0 mb-2 z-50 w-[260px] rounded-xl border border-white/[0.10] bg-[#0d1117] shadow-xl pointer-events-none opacity-0 group-hover/rdots:opacity-100 transition-opacity duration-150 overflow-hidden"
+        className={`absolute ${placement === 'below' ? 'top-full mt-2' : 'bottom-full mb-2'} right-0 z-50 w-[260px] rounded-xl border border-white/[0.10] bg-[#0d1117] shadow-xl pointer-events-none opacity-0 group-hover/rdots:opacity-100 transition-opacity duration-150 overflow-hidden`}
         role="tooltip"
         aria-label={`Reliability score: ${pct}% — ${activeTier.label}`}
       >
@@ -151,23 +172,23 @@ export function ReliabilityDots({
           <div className="px-3 pb-2 space-y-1.5 text-[11px] border-b border-white/[0.06]">
             {sourceCount != null && (
               <div className="flex items-center justify-between">
-                <span className="text-wp-text3">Sources verified</span>
+                <span className="text-wp-text3">Independent outlets</span>
                 <span className="font-mono text-wp-text2">{sourceCount}</span>
               </div>
             )}
             {crossCheckStatus != null && (
               <div className="flex items-center justify-between">
-                <span className="text-wp-text3">Cross-check</span>
-                <span className="font-mono capitalize" style={{ color: crossColor }}>
-                  {crossCheckStatus}
+                <span className="text-wp-text3">Status</span>
+                <span className="font-mono" style={{ color: crossColor }}>
+                  {STATUS_WORD[crossCheckStatus] ?? crossCheckStatus}
                 </span>
               </div>
             )}
             {aiVerified != null && (
               <div className="flex items-center justify-between">
-                <span className="text-wp-text3">AI verified</span>
+                <span className="text-wp-text3">AI check</span>
                 <span className="font-mono" style={{ color: aiVerified ? '#00e676' : '#8892a4' }}>
-                  {aiVerified ? 'yes' : 'no'}
+                  {aiVerified ? 'done' : 'none yet'}
                 </span>
               </div>
             )}
@@ -188,7 +209,7 @@ export function ReliabilityDots({
         {/* ── 5-dot tier explainer ── */}
         <div className="px-3 py-2.5 border-b border-white/[0.06]">
           <p className="font-mono text-[9px] tracking-widest uppercase text-wp-text3 mb-2">
-            Score tiers
+            Score bands
           </p>
           <div className="space-y-1.5">
             {SCORE_TIERS.map(tier => {
@@ -235,9 +256,9 @@ export function ReliabilityDots({
         {/* ── Scoring factors ── */}
         <div className="px-3 py-2.5">
           <p className="font-mono text-[9px] tracking-widest uppercase text-wp-text3 mb-2">
-            What affects the score
+            What moves the score
           </p>
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+          <div className="space-y-1.5">
             {SCORE_FACTORS.map(f => (
               <div key={f.label} className="flex items-start gap-1.5">
                 <span className="text-[10px] text-wp-text3 mt-px leading-none shrink-0">
@@ -254,6 +275,7 @@ export function ReliabilityDots({
               </div>
             ))}
           </div>
+          <p className="text-[9px] text-wp-text3 leading-tight mt-2">{SCORE_NOTE}</p>
         </div>
       </div>
     </div>

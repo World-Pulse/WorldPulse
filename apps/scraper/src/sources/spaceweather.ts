@@ -82,10 +82,29 @@ export function isRelevantAlert(alert: NoaaAlert, now: Date): boolean {
 }
 
 // ─── ALERT TITLE EXTRACTION ─────────────────────────────────────────────────
-// Use the first non-empty line of the alert message as the title.
+// NOAA's messages open with three header lines ("Space Weather Message Code:
+// WATA20", "Serial Number: 1132", "Issue Time: 2026 Oct 20 1912 UTC"), then
+// the line that says what happened ("WATCH: Geomagnetic Storm Category G1
+// Predicted"). The title took the first line, so every report was called
+// "Space Weather Message Code: WATA20" (Oct 2026). Now: that line, as
+// "Space weather watch: Geomagnetic Storm Category G1 Predicted".
+const HEADER_LINE = /^(Space Weather Message Code|Serial Number|Issue Time)\s*:/i
+const KIND_LINE = /^(CANCEL\s+)?(EXTENDED\s+|CONTINUED\s+)?(WATCH|WARNING|ALERT|SUMMARY)\s*:\s*(.+)$/i
+
 export function extractAlertTitle(message: string): string {
   const lines = message.split('\n').map(l => l.trim()).filter(Boolean)
-  return lines[0] ?? 'Space Weather Alert'
+  for (const line of lines) {
+    const m = KIND_LINE.exec(line)
+    if (!m) continue
+    const kind = `${(m[2] ?? '').trim().toLowerCase()} ${m[3]!.toLowerCase()}`.trim()
+    return `Space weather ${kind}${m[1] ? ' cancelled' : ''}: ${m[4]!.trim()}`
+  }
+  return lines.find(l => !HEADER_LINE.test(l)) ?? 'Space weather alert'
+}
+
+/** The message without its three header lines, for the report's summary */
+export function alertSummary(message: string, max = 300): string {
+  return message.split('\n').map(l => l.trim()).filter(l => l && !HEADER_LINE.test(l)).join('\n').slice(0, max)
 }
 
 // ─── DEDUP KEY ──────────────────────────────────────────────────────────────
@@ -142,7 +161,7 @@ export function startSpaceWeatherPoller(
 
         const severity = spaceWeatherSeverity(alert.message)
         const title    = extractAlertTitle(alert.message).slice(0, 500)
-        const body     = alert.message.slice(0, 300)
+        const body     = alertSummary(alert.message)
 
         const issued = new Date(alert.issue_datetime.replace(' ', 'T') + 'Z')
 

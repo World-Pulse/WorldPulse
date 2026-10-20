@@ -17,7 +17,7 @@ describe('fetchStoryOutletCounts', () => {
 
   it("returns the story's outlet count", async () => {
     h.fetch.mockResolvedValue(answer({ success: true, data: { stories: { [ID]: { storyId: 's', size: 313, outlets: 87, verified: true } } } }))
-    expect(await fetchStoryOutletCounts(ID)).toEqual({ outlets: 87, outletsAll: 87, firstReportAt: null })
+    expect(await fetchStoryOutletCounts(ID)).toEqual({ outlets: 87, outletsAll: 87, firstReportAt: null, verified: true, storyId: 's' })
     expect(h.fetch.mock.calls[0]![0]).toMatch(new RegExp(`/api/v1/stories/outlets\\?ids=${ID}$`))
   })
 
