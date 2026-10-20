@@ -249,61 +249,61 @@ export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
       summary: 'Maritime intelligence overview — chokepoints, signal stats, latest alerts',
     },
   }, async (_req, reply) => {
-    const cacheKey = 'maritime:overview'
-    const cached = await redis.get(cacheKey)
-    if (cached) return reply.send(JSON.parse(cached))
+    // Oct 20, 2026: a week of sea counts passed the pool's 5 seconds and the Maritime page's overview
+    // answered 500; it is made under a longer limit and served while one process remakes it
+    const response = await staleWhileRevalidate('maritime:overview:v2', { freshSeconds: MARITIME_CACHE_TTL, staleSeconds: 6 * 3_600, lockSeconds: 60 }, () =>
+      longQuery(25, async (trx) => {
+        // Signal counts for maritime-tagged content (last 7 days)
+        // Include both verified and pending — RSS-ingested signals stay pending
+        // because the verification pipeline only runs on article-clustered signals.
+        const [signalStats] = await trx('signals')
+          .whereIn('status', ['verified', 'pending'])
+          .whereRaw("created_at > now() - interval '7 days'")
+          .whereRaw("(category IN ('military','maritime','economy','conflict') AND (tags @> ARRAY['maritime']::text[] OR category = 'military'))")
+          .select(
+            trx.raw("count(*) as total_signals"),
+            trx.raw("count(*) filter (where severity IN ('critical','high')) as high_severity"),
+            trx.raw("count(*) filter (where category = 'military') as military_signals"),
+            trx.raw("count(*) filter (where tags @> ARRAY['piracy']::text[]) as piracy_alerts"),
+          ) as [{ total_signals: string; high_severity: string; military_signals: string; piracy_alerts: string }]
 
-    // Signal counts for maritime-tagged content (last 7 days)
-    // Include both verified and pending — RSS-ingested signals stay pending
-    // because the verification pipeline only runs on article-clustered signals.
-    const [signalStats] = await db('signals')
-      .whereIn('status', ['verified', 'pending'])
-      .whereRaw("created_at > now() - interval '7 days'")
-      .whereRaw("(category IN ('military','maritime','economy','conflict') AND (tags @> ARRAY['maritime']::text[] OR category = 'military'))")
-      .select(
-        db.raw("count(*) as total_signals"),
-        db.raw("count(*) filter (where severity IN ('critical','high')) as high_severity"),
-        db.raw("count(*) filter (where category = 'military') as military_signals"),
-        db.raw("count(*) filter (where tags @> ARRAY['piracy']::text[]) as piracy_alerts"),
-      ) as [{ total_signals: string; high_severity: string; military_signals: string; piracy_alerts: string }]
+        // Recent maritime signals (top 20)
+        const recentSignals = await trx('signals')
+          .whereIn('status', ['verified', 'pending'])
+          .whereRaw("created_at > now() - interval '48 hours'")
+          .whereRaw("(category IN ('military','maritime','economy','conflict') AND (tags @> ARRAY['maritime']::text[] OR tags @> ARRAY['shipping']::text[] OR tags @> ARRAY['naval']::text[] OR category = 'military'))")
+          .orderBy('created_at', 'desc')
+          .limit(SEA_LIST_READ)
+          .select('id', 'title', 'category', 'severity', 'location_name', 'source_url', 'created_at',
+            trx.raw('ST_X(location::geometry) as lng'),
+            trx.raw('ST_Y(location::geometry) as lat'),
+          )
 
-    // Recent maritime signals (top 20)
-    const recentSignals = await db('signals')
-      .whereIn('status', ['verified', 'pending'])
-      .whereRaw("created_at > now() - interval '48 hours'")
-      .whereRaw("(category IN ('military','maritime','economy','conflict') AND (tags @> ARRAY['maritime']::text[] OR tags @> ARRAY['shipping']::text[] OR tags @> ARRAY['naval']::text[] OR category = 'military'))")
-      .orderBy('created_at', 'desc')
-      .limit(SEA_LIST_READ)
-      .select('id', 'title', 'category', 'severity', 'location_name', 'source_url', 'created_at',
-        db.raw('ST_X(location::geometry) as lng'),
-        db.raw('ST_Y(location::geometry) as lat'),
-      )
-
-    const response = {
-      success: true,
-      data: {
-        chokepoints: CHOKEPOINTS,
-        stats: {
-          total_signals:   Number(signalStats.total_signals),
-          high_severity:   Number(signalStats.high_severity),
-          military_signals: Number(signalStats.military_signals),
-          piracy_alerts:   Number(signalStats.piracy_alerts),
-        },
-        recent_signals: recentSignals.filter((r: Record<string, unknown>) => isSeaHeadline(String(r.title ?? ''))).slice(0, 20).map((r: Record<string, unknown>) => ({
-          id:            r.id,
-          title:         r.title,
-          category:      r.category,
-          severity:      r.severity,
-          location_name: r.location_name ?? null,
-          source_url:    r.source_url ?? null,
-          lat:           r.lat ?? null,
-          lng:           r.lng ?? null,
-          created_at:    r.created_at instanceof Date ? (r.created_at as Date).toISOString() : r.created_at,
-        })),
-      },
-    }
-
-    await redis.setex(cacheKey, MARITIME_CACHE_TTL, JSON.stringify(response))
+        const made = {
+          success: true,
+          data: {
+            chokepoints: CHOKEPOINTS,
+            stats: {
+              total_signals:   Number(signalStats.total_signals),
+              high_severity:   Number(signalStats.high_severity),
+              military_signals: Number(signalStats.military_signals),
+              piracy_alerts:   Number(signalStats.piracy_alerts),
+            },
+            recent_signals: recentSignals.filter((r: Record<string, unknown>) => isSeaHeadline(String(r.title ?? ''))).slice(0, 20).map((r: Record<string, unknown>) => ({
+              id:            r.id,
+              title:         r.title,
+              category:      r.category,
+              severity:      r.severity,
+              location_name: r.location_name ?? null,
+              source_url:    r.source_url ?? null,
+              lat:           r.lat ?? null,
+              lng:           r.lng ?? null,
+              created_at:    r.created_at instanceof Date ? (r.created_at as Date).toISOString() : r.created_at,
+            })),
+          },
+        }
+        return made
+      }))
     return reply.send(response)
   })
 

@@ -3,9 +3,19 @@ import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 import { sendError } from '../lib/errors'
 import { parseQuery, CountryIndexQuerySchema, CountryDetailQuerySchema } from '../lib/query-schemas'
+import { longQuery } from '../lib/long-query'
+import { staleWhileRevalidate } from '../lib/swr-cache'
 
 const COUNTRY_LIST_TTL   = 300  // 5 min — list is heavy (all countries aggregated)
 const COUNTRY_DETAIL_TTL = 120  // 2 min — per-country detail
+/**
+ * The list answered 500 on Oct 20, 2026 (a week of verified stories grouped by
+ * country passed the pool's 5 seconds), and with it /countries and the
+ * sitemap's country pages. It is now made under its own longer limit and kept
+ * in Redis: fresh for COUNTRY_LIST_TTL, then served while one process remakes
+ * it, for up to 6 hours.
+ */
+const COUNTRY_LIST_SECONDS = 25
 
 // ISO 3166-1 alpha-2 → full country name
 const COUNTRY_NAMES: Record<string, string> = {
@@ -418,79 +428,78 @@ export const registerCountryRoutes: FastifyPluginAsync = async (app) => {
     if (qr.error) return sendError(reply, 400, 'VALIDATION_ERROR', qr.error)
     const { window, limit, category } = qr.data
 
-    const cacheKey = `countries:index:${window}:${limit}:${category ?? 'all'}`
-    const cached = await redis.get(cacheKey).catch(() => null)
-    if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
+    const cacheKey = `countries:index:v2:${window}:${limit}:${category ?? 'all'}`
+    const result = await staleWhileRevalidate(cacheKey, { freshSeconds: COUNTRY_LIST_TTL, staleSeconds: 6 * 3_600, lockSeconds: 2 * COUNTRY_LIST_SECONDS }, () =>
+      longQuery(COUNTRY_LIST_SECONDS, async (trx) => {
 
-    const windowHours = window === '30d' ? 720 : window === '7d' ? 168 : window === '48h' ? 48 : 24
-    const since = new Date(Date.now() - windowHours * 3600 * 1000).toISOString()
+        const windowHours = window === '30d' ? 720 : window === '7d' ? 168 : window === '48h' ? 48 : 24
+        const since = new Date(Date.now() - windowHours * 3600 * 1000).toISOString()
 
-    let query = db('signals')
-      .whereNotNull('country_code')
-      .where('status', 'verified')
-      .where('created_at', '>=', since)
+        let query = trx('signals')
+          .whereNotNull('country_code')
+          .where('status', 'verified')
+          .where('created_at', '>=', since)
 
-    if (category) {
-      query = query.where('category', category)
-    }
+        if (category) {
+          query = query.where('category', category)
+        }
 
-    const rows = await query
-      .select(
-        'country_code',
-        db.raw('COUNT(*) as signal_count'),
-        db.raw(`SUM(CASE
-          WHEN severity = 'critical' THEN ${SEVERITY_WEIGHT.critical}
-          WHEN severity = 'high'     THEN ${SEVERITY_WEIGHT.high}
-          WHEN severity = 'medium'   THEN ${SEVERITY_WEIGHT.medium}
-          WHEN severity = 'low'      THEN ${SEVERITY_WEIGHT.low}
-          ELSE ${SEVERITY_WEIGHT.info}
-        END) as raw_score`),
-        db.raw(`MAX(CASE
-          WHEN severity = 'critical' THEN 4
-          WHEN severity = 'high'     THEN 3
-          WHEN severity = 'medium'   THEN 2
-          WHEN severity = 'low'      THEN 1
-          ELSE 0
-        END) as max_severity_rank`),
-        db.raw(`json_agg(DISTINCT category) FILTER (WHERE category IS NOT NULL) as categories`),
-        db.raw(`MAX(created_at) as latest_signal_at`),
-        db.raw(`AVG(reliability_score) as avg_reliability`),
-        db.raw(`COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '6 hours') as recent_6h`)
-      )
-      .groupBy('country_code')
-      .orderByRaw('raw_score DESC')
-      .limit(Number(limit))
+        const rows = await query
+          .select(
+            'country_code',
+            trx.raw('COUNT(*) as signal_count'),
+            trx.raw(`SUM(CASE
+              WHEN severity = 'critical' THEN ${SEVERITY_WEIGHT.critical}
+              WHEN severity = 'high'     THEN ${SEVERITY_WEIGHT.high}
+              WHEN severity = 'medium'   THEN ${SEVERITY_WEIGHT.medium}
+              WHEN severity = 'low'      THEN ${SEVERITY_WEIGHT.low}
+              ELSE ${SEVERITY_WEIGHT.info}
+            END) as raw_score`),
+            trx.raw(`MAX(CASE
+              WHEN severity = 'critical' THEN 4
+              WHEN severity = 'high'     THEN 3
+              WHEN severity = 'medium'   THEN 2
+              WHEN severity = 'low'      THEN 1
+              ELSE 0
+            END) as max_severity_rank`),
+            trx.raw(`json_agg(DISTINCT category) FILTER (WHERE category IS NOT NULL) as categories`),
+            trx.raw(`MAX(created_at) as latest_signal_at`),
+            trx.raw(`AVG(reliability_score) as avg_reliability`),
+            trx.raw(`COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '6 hours') as recent_6h`)
+          )
+          .groupBy('country_code')
+          .orderByRaw('raw_score DESC')
+          .limit(Number(limit))
 
-    // Normalize risk scores to 0–100 scale
-    const maxRaw = rows.length > 0 ? Number(rows[0].raw_score ?? 1) : 1
-    const minRaw = rows.length > 0 ? Number(rows[rows.length - 1]?.raw_score ?? 0) : 0
-    const range = maxRaw - minRaw || 1
+        // Normalize risk scores to 0–100 scale
+        const maxRaw = rows.length > 0 ? Number(rows[0].raw_score ?? 1) : 1
+        const minRaw = rows.length > 0 ? Number(rows[rows.length - 1]?.raw_score ?? 0) : 0
+        const range = maxRaw - minRaw || 1
 
-    const countries = rows.map((row: Record<string, unknown>) => {
-      const rawScore = Number(row.raw_score ?? 0)
-      const normalizedScore = Math.round(((rawScore - minRaw) / range) * 85 + 10) // 10–95 range
-      const band = riskBand(normalizedScore)
-      const recent6h = Number(row.recent_6h ?? 0)
-      const totalCount = Number(row.signal_count ?? 0)
-      const trend = recent6h > totalCount * 0.5 ? 'rising' : recent6h > totalCount * 0.25 ? 'stable' : 'falling'
+        const countries = rows.map((row: Record<string, unknown>) => {
+          const rawScore = Number(row.raw_score ?? 0)
+          const normalizedScore = Math.round(((rawScore - minRaw) / range) * 85 + 10) // 10–95 range
+          const band = riskBand(normalizedScore)
+          const recent6h = Number(row.recent_6h ?? 0)
+          const totalCount = Number(row.signal_count ?? 0)
+          const trend = recent6h > totalCount * 0.5 ? 'rising' : recent6h > totalCount * 0.25 ? 'stable' : 'falling'
 
-      return {
-        code:          row.country_code as string,
-        name:          COUNTRY_NAMES[row.country_code as string] ?? (row.country_code as string),
-        risk_score:    normalizedScore,
-        risk_label:    band.label,
-        risk_color:    band.color,
-        signal_count:  totalCount,
-        recent_6h:     recent6h,
-        trend,
-        categories:    (row.categories as string[] | null) ?? [],
-        avg_reliability: row.avg_reliability != null ? Math.round(Number(row.avg_reliability) * 100) / 100 : null,
-        latest_signal_at: row.latest_signal_at,
-      }
-    })
-
-    const result = { window, total: countries.length, countries, generated_at: new Date().toISOString() }
-    await redis.setex(cacheKey, COUNTRY_LIST_TTL, JSON.stringify(result)).catch(() => {})
+          return {
+            code:          row.country_code as string,
+            name:          COUNTRY_NAMES[row.country_code as string] ?? (row.country_code as string),
+            risk_score:    normalizedScore,
+            risk_label:    band.label,
+            risk_color:    band.color,
+            signal_count:  totalCount,
+            recent_6h:     recent6h,
+            trend,
+            categories:    (row.categories as string[] | null) ?? [],
+            avg_reliability: row.avg_reliability != null ? Math.round(Number(row.avg_reliability) * 100) / 100 : null,
+            latest_signal_at: row.latest_signal_at,
+          }
+        })
+        return { window, total: countries.length, countries, generated_at: new Date().toISOString() }
+      }))
     return reply.send(result)
   })
 

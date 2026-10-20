@@ -1,9 +1,18 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
+import { longQuery } from '../lib/long-query'
+import { staleWhileRevalidate } from '../lib/swr-cache'
 
 const PATENTS_CACHE_TTL    = 300  // 5 min cache
 const TIMELINE_CACHE_TTL   = 600  // 10 min cache
+/**
+ * The dashboard answered 500 on Oct 20, 2026: its four reads of 30 days of
+ * reports (patents are found by tag or by "patent" in the headline, which no
+ * index covers) passed the pool's 5 seconds. It is now made under its own
+ * longer limit and served while one process remakes it, for up to 6 hours.
+ */
+const PATENTS_QUERY_SECONDS = 25
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -179,145 +188,142 @@ export const registerPatentRoutes: FastifyPluginAsync = async (app) => {
         severity?: string
       }
 
-      const cacheKey = `patents:dashboard:${window}:${severity ?? 'all'}:${limit}`
-      const cached = await redis.get(cacheKey)
-      if (cached) {
-        return reply.send(JSON.parse(cached))
-      }
+      const cacheKey = `patents:dashboard:v2:${window}:${severity ?? 'all'}:${limit}`
+      const result = await staleWhileRevalidate(cacheKey, { freshSeconds: PATENTS_CACHE_TTL, staleSeconds: 6 * 3_600, lockSeconds: 2 * PATENTS_QUERY_SECONDS }, () =>
+        longQuery(PATENTS_QUERY_SECONDS, async (q) => {
+          // Parse window to interval
+          const windowHours = window === '7d' ? 168
+            : window === '14d' ? 336
+            : window === '90d' ? 2160
+            : 720 // 30d default
 
-      // Parse window to interval
-      const windowHours = window === '7d' ? 168
-        : window === '14d' ? 336
-        : window === '90d' ? 2160
-        : 720 // 30d default
+          const since = new Date(Date.now() - windowHours * 3600_000).toISOString()
 
-      const since = new Date(Date.now() - windowHours * 3600_000).toISOString()
-
-      // Base query builder — patent signals matched by tags or title
-      const baseWhere = (qb: ReturnType<typeof db>) => {
-        qb.where('created_at', '>=', since)
-          .where(function (this: ReturnType<typeof db>) {
-            this.whereRaw("tags @> ARRAY['patent']::text[]")
-              .orWhere('title', 'like', '%Patent%')
-              .orWhere('title', 'like', '%patent%')
-          })
-        if (severity) {
-          qb.where('severity', severity)
-        }
-      }
-
-      // 1. Total count
-      const countRows = await db('signals').where(baseWhere).count('id as count')
-      const total = Number((countRows[0] as { count: string | number } | undefined)?.count ?? 0)
-
-      // 2. Severity distribution
-      const sevRows = await db('signals')
-        .where(baseWhere)
-        .select('severity')
-        .count('id as count')
-        .groupBy('severity')
-        .orderByRaw(`CASE severity
-          WHEN 'critical' THEN 1
-          WHEN 'high' THEN 2
-          WHEN 'medium' THEN 3
-          WHEN 'low' THEN 4
-          ELSE 5 END`)
-
-      const severityDistribution: SeverityDist[] = sevRows.map((r: Record<string, unknown>) => ({
-        severity: String(r.severity ?? 'unknown'),
-        count:    Number(r.count ?? 0),
-      }))
-
-      // 3. Recent patent signals
-      const patentRows = await db('signals')
-        .where(baseWhere)
-        .select(
-          'id', 'title', 'summary', 'severity', 'category',
-          'reliability_score', 'source_count', 'created_at',
-          'location_name', 'country_code',
-        )
-        .orderBy('created_at', 'desc')
-        .limit(Math.min(limit, 200))
-
-      const recentPatents: PatentSignal[] = patentRows.map((r: Record<string, unknown>) => ({
-        id:               String(r.id ?? ''),
-        title:            String(r.title ?? ''),
-        summary:          r.summary != null ? String(r.summary) : null,
-        severity:         String(r.severity ?? 'low'),
-        category:         String(r.category ?? 'technology'),
-        reliability_score: r.reliability_score != null ? Number(r.reliability_score) : null,
-        source_count:     r.source_count != null ? Number(r.source_count) : null,
-        created_at:       String(r.created_at ?? ''),
-        location_name:    r.location_name != null ? String(r.location_name) : null,
-        country_code:     r.country_code != null ? String(r.country_code) : null,
-      }))
-
-      // 4. CPC category breakdown — extract CPC code from title patterns
-      const cpcBreakdown: CpcBreakdown[] = []
-      const cpcCounts: Record<string, { count: number; maxSev: string }> = {}
-      for (const p of recentPatents) {
-        for (const [code, label] of Object.entries(CPC_LABELS)) {
-          if (p.title.includes(code) || p.title.toLowerCase().includes(label.toLowerCase())) {
-            if (!cpcCounts[code]) cpcCounts[code] = { count: 0, maxSev: 'low' }
-            cpcCounts[code].count++
-            cpcCounts[code].maxSev = maxSeverity(cpcCounts[code].maxSev, p.severity)
-            break // one CPC per patent for breakdown
+          // Base query builder — patent signals matched by tags or title
+          const baseWhere = (qb: ReturnType<typeof db>) => {
+            qb.where('created_at', '>=', since)
+              .where(function (this: ReturnType<typeof db>) {
+                this.whereRaw("tags @> ARRAY['patent']::text[]")
+                  .orWhere('title', 'like', '%Patent%')
+                  .orWhere('title', 'like', '%patent%')
+              })
+            if (severity) {
+              qb.where('severity', severity)
+            }
           }
-        }
-      }
-      for (const [code, { count, maxSev }] of Object.entries(cpcCounts)) {
-        cpcBreakdown.push({
-          cpc_group:    code,
-          label:        CPC_LABELS[code] ?? code,
-          count,
-          max_severity: maxSev,
-        })
-      }
-      cpcBreakdown.sort((a, b) => b.count - a.count)
 
-      // 5. Top assignees — extract from title (format: "Assignee: Title" or " — Assignee")
-      const assigneeCounts: Record<string, { count: number; latestSev: string }> = {}
-      for (const p of recentPatents) {
-        // Try to extract assignee from common patent title patterns
-        const assigneeMatch = p.title.match(/^([A-Z][A-Za-z &.-]+?)(?:\s*[:\u2014\u2013-]\s)/)
-          ?? p.title.match(/(?:by|from|assigned to)\s+([A-Z][A-Za-z &.-]+)/i)
-        if (assigneeMatch?.[1]) {
-          const assignee = assigneeMatch[1].trim()
-          if (!assigneeCounts[assignee]) assigneeCounts[assignee] = { count: 0, latestSev: 'low' }
-          assigneeCounts[assignee].count++
-          assigneeCounts[assignee].latestSev = maxSeverity(assigneeCounts[assignee].latestSev, p.severity)
-        }
-      }
-      const topAssignees: AssigneeRow[] = Object.entries(assigneeCounts)
-        .map(([assignee, { count, latestSev }]) => ({ assignee, count, latest_severity: latestSev }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 15)
+          // 1. Total count
+          const countRows = await q('signals').where(baseWhere).count('id as count')
+          const total = Number((countRows[0] as { count: string | number } | undefined)?.count ?? 0)
 
-      // 6. Timeline — daily counts
-      const timelineRows = await db('signals')
-        .where(baseWhere)
-        .select(db.raw("DATE(created_at) as day"))
-        .count('id as count')
-        .groupByRaw("DATE(created_at)")
-        .orderBy('day', 'asc')
+          // 2. Severity distribution
+          const sevRows = await q('signals')
+            .where(baseWhere)
+            .select('severity')
+            .count('id as count')
+            .groupBy('severity')
+            .orderByRaw(`CASE severity
+              WHEN 'critical' THEN 1
+              WHEN 'high' THEN 2
+              WHEN 'medium' THEN 3
+              WHEN 'low' THEN 4
+              ELSE 5 END`)
 
-      const timeline: TimelinePoint[] = timelineRows.map((r: Record<string, unknown>) => ({
-        day:   String(r.day ?? ''),
-        count: Number(r.count ?? 0),
-      }))
+          const severityDistribution: SeverityDist[] = sevRows.map((r: Record<string, unknown>) => ({
+            severity: String(r.severity ?? 'unknown'),
+            count:    Number(r.count ?? 0),
+          }))
 
-      const result = {
-        window,
-        total_patents: total,
-        severity_distribution: severityDistribution,
-        cpc_breakdown:   cpcBreakdown,
-        top_assignees:   topAssignees,
-        timeline,
-        recent_patents:  recentPatents,
-        generated_at:    new Date().toISOString(),
-      }
+          // 3. Recent patent signals
+          const patentRows = await q('signals')
+            .where(baseWhere)
+            .select(
+              'id', 'title', 'summary', 'severity', 'category',
+              'reliability_score', 'source_count', 'created_at',
+              'location_name', 'country_code',
+            )
+            .orderBy('created_at', 'desc')
+            .limit(Math.min(limit, 200))
 
-      await redis.setex(cacheKey, PATENTS_CACHE_TTL, JSON.stringify(result))
+          const recentPatents: PatentSignal[] = patentRows.map((r: Record<string, unknown>) => ({
+            id:               String(r.id ?? ''),
+            title:            String(r.title ?? ''),
+            summary:          r.summary != null ? String(r.summary) : null,
+            severity:         String(r.severity ?? 'low'),
+            category:         String(r.category ?? 'technology'),
+            reliability_score: r.reliability_score != null ? Number(r.reliability_score) : null,
+            source_count:     r.source_count != null ? Number(r.source_count) : null,
+            created_at:       String(r.created_at ?? ''),
+            location_name:    r.location_name != null ? String(r.location_name) : null,
+            country_code:     r.country_code != null ? String(r.country_code) : null,
+          }))
+
+          // 4. CPC category breakdown — extract CPC code from title patterns
+          const cpcBreakdown: CpcBreakdown[] = []
+          const cpcCounts: Record<string, { count: number; maxSev: string }> = {}
+          for (const p of recentPatents) {
+            for (const [code, label] of Object.entries(CPC_LABELS)) {
+              if (p.title.includes(code) || p.title.toLowerCase().includes(label.toLowerCase())) {
+                if (!cpcCounts[code]) cpcCounts[code] = { count: 0, maxSev: 'low' }
+                cpcCounts[code].count++
+                cpcCounts[code].maxSev = maxSeverity(cpcCounts[code].maxSev, p.severity)
+                break // one CPC per patent for breakdown
+              }
+            }
+          }
+          for (const [code, { count, maxSev }] of Object.entries(cpcCounts)) {
+            cpcBreakdown.push({
+              cpc_group:    code,
+              label:        CPC_LABELS[code] ?? code,
+              count,
+              max_severity: maxSev,
+            })
+          }
+          cpcBreakdown.sort((a, b) => b.count - a.count)
+
+          // 5. Top assignees — extract from title (format: "Assignee: Title" or " — Assignee")
+          const assigneeCounts: Record<string, { count: number; latestSev: string }> = {}
+          for (const p of recentPatents) {
+            // Try to extract assignee from common patent title patterns
+            const assigneeMatch = p.title.match(/^([A-Z][A-Za-z &.-]+?)(?:\s*[:\u2014\u2013-]\s)/)
+              ?? p.title.match(/(?:by|from|assigned to)\s+([A-Z][A-Za-z &.-]+)/i)
+            if (assigneeMatch?.[1]) {
+              const assignee = assigneeMatch[1].trim()
+              if (!assigneeCounts[assignee]) assigneeCounts[assignee] = { count: 0, latestSev: 'low' }
+              assigneeCounts[assignee].count++
+              assigneeCounts[assignee].latestSev = maxSeverity(assigneeCounts[assignee].latestSev, p.severity)
+            }
+          }
+          const topAssignees: AssigneeRow[] = Object.entries(assigneeCounts)
+            .map(([assignee, { count, latestSev }]) => ({ assignee, count, latest_severity: latestSev }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 15)
+
+          // 6. Timeline — daily counts
+          const timelineRows = await q('signals')
+            .where(baseWhere)
+            .select(q.raw("DATE(created_at) as day"))
+            .count('id as count')
+            .groupByRaw("DATE(created_at)")
+            .orderBy('day', 'asc')
+
+          const timeline: TimelinePoint[] = timelineRows.map((r: Record<string, unknown>) => ({
+            day:   String(r.day ?? ''),
+            count: Number(r.count ?? 0),
+          }))
+
+          const made = {
+            window,
+            total_patents: total,
+            severity_distribution: severityDistribution,
+            cpc_breakdown:   cpcBreakdown,
+            top_assignees:   topAssignees,
+            timeline,
+            recent_patents:  recentPatents,
+            generated_at:    new Date().toISOString(),
+          }
+          return made
+        }))
       return reply.send(result)
       } catch (err) {
         req.log.error({ err }, 'patents: handler error')
