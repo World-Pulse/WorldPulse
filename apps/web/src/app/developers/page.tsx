@@ -10,6 +10,15 @@ import {
   type Lang, type Endpoint,
 } from './api-reference'
 
+/** The MCP server's tools (apps/api/src/routes/mcp.ts) */
+const MCP_TOOLS = [
+  { name: 'top_stories', what: 'The stories the most outlets carry in the last 1 to 72 hours, optionally one country\'s' },
+  { name: 'story', what: 'One story with every outlet and its reports, from a story or report id' },
+  { name: 'search_reports', what: 'Reports about a subject, found by meaning' },
+  { name: 'week', what: 'WorldPulse Week: a week\'s top stories and its busiest countries' },
+]
+const MCP_CURSOR = '{"mcpServers":{"worldpulse":{"url":"https://api.world-pulse.io/mcp"}}}'
+
 /* ──────────────────────────────────────────────────────────────────────── *
  *  WorldPulse Developer Portal                                            *
  *  Showcases the public API, code examples, and integration guides.       *
@@ -493,6 +502,34 @@ export default function DevelopersPage() {
                 <code className="text-wp-cyan font-mono min-w-[160px]">ping</code>
                 <span className="text-wp-text3">The server&apos;s heartbeat: answer it with a pong</span>
               </div>
+            </div>
+          </div>
+        </section>
+
+        {/* MCP (plan 15, Oct 20, 2026): apps/api/src/routes/mcp.ts */}
+        <section id="mcp" className="mb-16">
+          <h2 className="text-xl font-display text-wp-text1 tracking-wide mb-6">AI ASSISTANTS (MCP)</h2>
+          <div className="p-5 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.02)]">
+            <p className="text-[13px] text-wp-text3 mb-4 leading-relaxed">
+              AI assistants can ask WorldPulse directly. Its MCP server (MCP is the protocol assistants such as Claude use to call
+              outside tools) is at <code className="text-wp-cyan font-mono">https://api.world-pulse.io/mcp</code>: no sign-up, no key,
+              read-only. Every answer gives the outlet count, whether the story is verified and its world-pulse.io link, as text and as
+              structured data. It allows 60 requests a minute per address, and each tool call counts as a call to the route it asks.
+            </p>
+            <p className="text-[12px] font-mono text-wp-text3 uppercase tracking-wider mb-2">Tools</p>
+            <div className="space-y-1 text-[13px] mb-5">
+              {MCP_TOOLS.map(t => (
+                <div key={t.name} className="flex gap-3">
+                  <code className="text-wp-cyan font-mono min-w-[160px]">{t.name}</code>
+                  <span className="text-wp-text3">{t.what}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[12px] font-mono text-wp-text3 uppercase tracking-wider mb-2">Connect</p>
+            <div className="space-y-2 text-[13px] text-wp-text3">
+              <p>Claude: add it as a custom connector (Settings, Connectors) with the address above.</p>
+              <p>Claude Code: <code className="text-wp-cyan font-mono break-all">claude mcp add --transport http worldpulse https://api.world-pulse.io/mcp</code></p>
+              <p>Cursor, in <code className="text-wp-cyan font-mono">.cursor/mcp.json</code>: <code className="text-wp-cyan font-mono break-all">{MCP_CURSOR}</code></p>
             </div>
           </div>
         </section>

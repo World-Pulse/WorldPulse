@@ -22,6 +22,7 @@ WorldPulse reads news outlets' feeds and open data, groups the reports of one ev
 - **Country pages and a daily briefing** of the verified stories (the briefings are written by an AI model from the verified reports)
 - **Feeds and an open API** — Atom and JSON feeds of verified stories; the public API endpoints need no key
 - **Live updates** over WebSocket
+- **For AI assistants** — an MCP server (the protocol assistants such as Claude use to call outside tools) that needs no key
 - **Sources** — news outlets' own feeds plus open data such as GDELT, USGS (earthquakes) and GDACS (disaster alerts); the full list is at [world-pulse.io/sources](https://world-pulse.io/sources)
 
 ---
@@ -121,6 +122,8 @@ Every report passes through the same steps: its place and category are read, rep
 
 Public endpoints need no API key. Endpoints, examples and limits: [world-pulse.io/developers](https://world-pulse.io/developers).
 
+AI assistants can query WorldPulse through its MCP server at `https://api.world-pulse.io/mcp` (no key): see [world-pulse.io/developers#mcp](https://world-pulse.io/developers#mcp).
+
 ---
 
 ## API Reference
@@ -137,6 +140,15 @@ GET  /signals/map/points           Located reports for the map
 GET  /search?q=...                 Search
 GET  /rss/signals.xml              Atom feed of verified reports (also /rss/signals.json)
 ```
+
+### MCP (AI assistants)
+
+```
+POST https://api.world-pulse.io/mcp     Streamable HTTP, JSON-RPC; no key
+Tools: top_stories, story, search_reports, week
+```
+
+Claude Code: `claude mcp add --transport http worldpulse https://api.world-pulse.io/mcp`
 
 ### WebSocket
 
