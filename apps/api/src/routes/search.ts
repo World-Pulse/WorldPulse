@@ -9,6 +9,8 @@ import { sanitizeString } from '../utils/sanitize'
 import { recordSearchLatency, maybeLogPercentiles } from '../lib/search-latency'
 import { searchByMeaning } from '../lib/fingerprint-search'
 import { sendError } from '../lib/errors'
+import { staleWhileRevalidate } from '../lib/swr-cache'
+import { longQuery } from '../lib/long-query'
 
 /** Wrap a Meilisearch promise with a 150ms timeout.
  *  Resolves with { result, partial: false } on success,
@@ -24,6 +26,53 @@ async function withMeiliTimeout<T>(
     ),
   ])
 }
+
+/**
+ * The tags of the last 7 days' reports, most used first, for autocomplete
+ * (plan V3g, Oct 20, 2026). Autocomplete matched tags by turning every
+ * report's tags into text and scanning the whole table (ILIKE '%q%') while
+ * the caller waited: it took 5.4 s, past the database's 5-second limit, and
+ * then returned no tags; and when it did answer it gave any tag of a matching
+ * report, not tags that match. Now the list is read off the request path,
+ * kept an hour and served up to a day old (empty until the first one is made).
+ */
+const TAG_LIST_SWR = { freshSeconds: 3_600, staleSeconds: 86_400, lockSeconds: 120 }
+const TAG_LIST_SIZE = 3_000
+
+export interface CountedTag { tag: string; n: number }
+
+async function recentTags(): Promise<CountedTag[]> {
+  return staleWhileRevalidate('search:tags:v1', TAG_LIST_SWR, async () => {
+    const result = await longQuery(30, trx => trx.raw(
+      `SELECT tag, count(*)::int AS n
+         FROM signals, unnest(tags) AS tag
+        WHERE created_at >= now() - interval '7 days'
+        GROUP BY tag ORDER BY n DESC LIMIT ?`,
+      [TAG_LIST_SIZE],
+    )) as { rows?: Array<{ tag?: unknown; n?: unknown }> }
+    return (result.rows ?? [])
+      .filter((r): r is { tag: string; n: unknown } => typeof r.tag === 'string' && r.tag.length > 0 && r.tag.length <= 60)
+      .map(r => ({ tag: r.tag, n: Number(r.n) || 0 }))
+  }, async () => [])
+}
+
+/** Tags that start with the query first, then tags that contain it, each most used first */
+export function matchTags(tags: CountedTag[], q: string, limit = 5): string[] {
+  const needle = q.trim().toLowerCase()
+  if (!needle) return []
+  const starts: string[] = []
+  const contains: string[] = []
+  for (const { tag } of tags) {
+    const t = tag.toLowerCase()
+    if (t.startsWith(needle)) starts.push(tag)
+    else if (contains.length < limit && t.includes(needle)) contains.push(tag)
+    if (starts.length >= limit) break
+  }
+  return [...starts, ...contains].slice(0, limit)
+}
+
+/** Autocomplete's own wait for Meilisearch: type-ahead must answer quickly */
+const AUTOCOMPLETE_MEILI_MS = 1_000
 
 // ─── Query param schemas ──────────────────────────────────────────────────────
 
@@ -416,28 +465,23 @@ export const registerSearchRoutes: FastifyPluginAsync = async (app) => {
     if (q.length < 1) return reply.send({ success: true, data: [] })
 
     const [signals, users, tags] = await Promise.allSettled([
-      meili.index('signals').search(q, {
+      withMeiliTimeout(meili.index('signals').search(q, {
         limit: 3,
         attributesToRetrieve: ['id', 'title', 'category'],
-      }),
-      meili.index('users').search(q, {
+      }), AUTOCOMPLETE_MEILI_MS),
+      withMeiliTimeout(meili.index('users').search(q, {
         limit: 3,
         attributesToRetrieve: ['id', 'handle', 'displayName', 'avatarUrl', 'verified'],
-      }),
-      db.raw<{ rows: { tag: string }[] }>(
-        `SELECT DISTINCT unnest(tags) as tag FROM signals WHERE array_to_string(tags, ' ') ILIKE ? LIMIT 5`,
-        [`%${q}%`],
-      ),
+      }), AUTOCOMPLETE_MEILI_MS),
+      recentTags(),
     ])
 
     return reply.send({
       success: true,
       data: {
-        signals: signals.status === 'fulfilled' ? signals.value.hits : [],
-        users:   users.status   === 'fulfilled' ? users.value.hits   : [],
-        tags:    tags.status    === 'fulfilled'
-          ? tags.value.rows.map(r => r.tag)
-          : [],
+        signals: signals.status === 'fulfilled' ? signals.value.result?.hits ?? [] : [],
+        users:   users.status   === 'fulfilled' ? users.value.result?.hits ?? []   : [],
+        tags:    tags.status    === 'fulfilled' ? matchTags(tags.value, q) : [],
       },
     })
   })
