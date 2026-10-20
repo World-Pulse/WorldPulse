@@ -13,7 +13,8 @@ vi.mock('../lib/stories', () => ({ signalsHaveStoryIds: vi.fn(async () => true) 
 vi.mock('../lib/long-query', () => ({ longQuery: vi.fn() }))
 vi.mock('../lib/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } }))
 
-import { mentionIds, dailySeries, ACTIVITY_DAYS, connectionsOf, entityProfile, CONNECTION_REPORTS, CONNECTION_SECONDS } from '../lib/entity-profile'
+import { mentionIds, dailySeries, ACTIVITY_DAYS, connectionsOf, entityProfile, buildProfile, CONNECTION_REPORTS, CONNECTION_SECONDS, QUICK, FULL, PROFILE_TTL } from '../lib/entity-profile'
+import { redis } from '../db/redis'
 import { db } from '../db/postgres'
 import { longQuery } from '../lib/long-query'
 import { logger } from '../lib/logger'
@@ -52,14 +53,17 @@ describe('"named with" (Oct 20, 2026: /entities/anwar-ibrahim-… answered 500)'
     expect(params).toEqual([ids, since, CONNECTION_REPORTS, 'anwar', 12])
   })
 
-  it('gives an empty list instead of failing the page when the query times out', async () => {
+  it('gives up (null) instead of failing the page when the query times out', async () => {
     vi.mocked(longQuery).mockRejectedValueOnce(new Error('canceling statement due to statement timeout'))
-    expect(await connectionsOf('anwar', ids, since)).toEqual([])
+    expect(await connectionsOf('anwar', ids, since)).toBeNull()
     expect(logger.warn).toHaveBeenCalled()
   })
 
-  it("gives up before the website's 10-second wait, so a first view shows the page without the list", () => {
+  it("a first view's slow parts give up before the website's 10-second wait; the background remake may take longer", () => {
     expect(CONNECTION_SECONDS).toBeLessThan(10)
+    expect(Math.max(QUICK.stories, QUICK.connections)).toBeLessThan(9)
+    expect(FULL.stories).toBeGreaterThan(QUICK.stories)
+    expect(FULL.connections).toBeGreaterThan(QUICK.connections)
   })
 
   it('asks nothing for an entity without reports', async () => {
@@ -76,11 +80,29 @@ describe('"named with" (Oct 20, 2026: /entities/anwar-ibrahim-… answered 500)'
       if (/to_char\(created_at/.test(sql)) return { rows: [{ day: '2026-10-20', n: 2, last24: 2, prev24: 0, last7: 2 }] }
       return { rows: [] }
     }) as never)
-    vi.mocked(longQuery).mockRejectedValueOnce(new Error('canceling statement due to statement timeout'))
+    // stories answer (storiesOfSignals is mocked); "named with" runs on the transaction and times out
+    vi.mocked(longQuery).mockImplementation((async (_s: number, run: (trx: unknown) => Promise<unknown>) => run({ raw: async () => { throw new Error('canceling statement due to statement timeout') } })) as never)
+    vi.mocked(redis.setex).mockClear()
     const profile = await entityProfile('e503847e4ee3f485')
     expect(profile?.entity.name).toBe('Anwar Ibrahim')
     expect(profile?.activity.last24h).toBe(2)
     expect(profile?.connections).toEqual([])
+    // a first view with a part cut off is kept as already due, so the full profile is made in the background
+    const kept = JSON.parse(String(vi.mocked(redis.setex).mock.calls[0]?.[2]))
+    expect(kept.value.entity.name).toBe('Anwar Ibrahim')
+    expect(kept.at).toBeLessThan(Date.now() - PROFILE_TTL * 1000)
+    vi.mocked(longQuery).mockReset()
+  })
+
+  it('a quick profile with nothing cut off is kept as fresh', async () => {
+    vi.mocked(longQuery).mockImplementation((async (_s: number, run: (trx: unknown) => Promise<unknown>) => run({ raw: async () => ({ rows: [] }) })) as never)
+    vi.mocked(redis.setex).mockClear()
+    const { partial } = await buildProfile('e503847e4ee3f485', QUICK)
+    expect(partial).toBe(false)
+    await entityProfile('e503847e4ee3f485')
+    const kept = JSON.parse(String(vi.mocked(redis.setex).mock.calls[0]?.[2]))
+    expect(kept.at).toBeGreaterThan(Date.now() - 5_000)
+    vi.mocked(longQuery).mockReset()
   })
 })
 

@@ -7,6 +7,7 @@
  */
 
 import type { FastifyPluginAsync } from 'fastify'
+import type { Knex } from 'knex'
 import { db } from '../db/postgres'
 import { optionalAuth } from '../middleware/auth'
 import { sendError } from '../lib/errors'
@@ -152,11 +153,12 @@ export async function topStories(hours: number, limit: number): Promise<ListedSt
  * `hours`, ranked as topStories ranks them (two outlets or more, real
  * headlines, each event once). For an entity's page: the stories that name it.
  */
-export async function storiesOfSignals(signalIds: string[], hours: number, limit: number): Promise<ListedStory[]> {
+/** `q`: the connection to read on (the pool's, or a longQuery transaction with its own time limit) */
+export async function storiesOfSignals(signalIds: string[], hours: number, limit: number, q: Knex | Knex.Transaction = db): Promise<ListedStory[]> {
   const ids = [...new Set(signalIds.filter(id => UUID_RE.test(id)).map(id => id.toLowerCase()))]
   if (ids.length === 0) return []
   const since = new Date(Date.now() - hours * 3_600_000)
-  const result = await db.raw(storyListSql(await signalsHaveStoryIds(), 'signals'), [ids, since, EVENT_TEMPLATE_SQL])
+  const result = await q.raw(storyListSql(await signalsHaveStoryIds(), 'signals'), [ids, since, EVENT_TEMPLATE_SQL])
   return rankStories(candidatesOf(result), limit)
 }
 

@@ -21,13 +21,18 @@
  * no new tables. Each answer is fresh for 10 minutes and then served while
  * one process remakes it (lib/swr-cache.ts), for up to 6 hours.
  *
- * Oct 20, 2026: /entities/anwar-ibrahim-… and /entities/african-union-…
- * answered 500. Their "named with" list compares every entity in the graph
- * with the entity's own reports (entity_nodes.signal_ids has no index), and as
- * the graph grew that passed the pool's 5 seconds. That list now reads the
- * entity's newest 100 reports of the 30 days and only entities seen since
- * then, under its own 7-second limit (lib/long-query.ts); if it still fails,
- * the page shows everything else.
+ * Oct 20, 2026: the busiest entities' pages answered 500 (Anwar Ibrahim, the
+ * African Union, then Iran, Russia, Ukraine, the United States and Donald
+ * Trump). Two parts passed the pool's 5 seconds as the data grew: the "named
+ * with" list, which compares every entity in the graph with the entity's own
+ * reports (entity_nodes.signal_ids has no index), and the stories list, whose
+ * biggest stories have hundreds of reports. Each now runs under its own limit
+ * (lib/long-query.ts) and gives up without failing the page:
+ *   - a first view (nothing kept yet) gets a quick profile, its slow parts
+ *     cut off in time for the website's 10-second wait (lib/server-fetch.ts);
+ *     when anything was cut off it is kept as already due, so the full one is
+ *     made at once in the background;
+ *   - the full profile, made in the background, may take its time.
  */
 
 import { db } from '../db/postgres'
@@ -50,11 +55,15 @@ const CONNECTIONS_SHOWN = 12
 /** "Named with" reads at most this many of the entity's newest reports (its cost grows with them) */
 export const CONNECTION_REPORTS = 100
 /**
- * …and may take this long (the pool's limit is 5 seconds). The website gives
- * the whole profile 10 seconds (lib/server-fetch.ts), so on a first view the
- * list gives up in time for the page to show without it, instead of failing.
+ * How long the two slow parts may take (the pool's limit is 5 seconds). QUICK
+ * is a first view's: both run side by side and give up in time for the
+ * website's 10-second wait. FULL is the background remake's.
  */
-export const CONNECTION_SECONDS = 7
+export const QUICK = { stories: 6, connections: 6 } as const
+export const FULL = { stories: 25, connections: 20 } as const
+export type Limits = { readonly stories: number; readonly connections: number }
+/** (kept for the tests and the "named with" default) */
+export const CONNECTION_SECONDS = QUICK.connections
 /** A profile is served while one process remakes it for this long after its 10 minutes */
 const PROFILE_STALE_S = 6 * 3_600
 
@@ -150,10 +159,10 @@ async function latestReports(ids: string[], skipStories: Set<string> = new Set()
  * be a little before the report reached us). On a timeout or any failure, an
  * empty list: the rest of the page still shows.
  */
-export async function connectionsOf(id: string, ids: string[], since: Date): Promise<Row[]> {
+export async function connectionsOf(id: string, ids: string[], since: Date, seconds: number = CONNECTION_SECONDS): Promise<Row[] | null> {
   if (ids.length === 0) return []
   try {
-    return rowsOf(await longQuery(CONNECTION_SECONDS, trx => trx.raw(`
+    return rowsOf(await longQuery(seconds, trx => trx.raw(`
       WITH mine AS (
         SELECT id::text AS sid, created_at
           FROM signals
@@ -173,73 +182,102 @@ export async function connectionsOf(id: string, ids: string[], since: Date): Pro
        LIMIT ?
     `, [ids, since, CONNECTION_REPORTS, id, CONNECTIONS_SHOWN])))
   } catch (err) {
-    logger.warn({ err, entity: id, reports: ids.length }, 'Entity profile: "named with" list failed, page shown without it')
-    return []
+    logger.warn({ err, entity: id, reports: ids.length, seconds }, 'Entity profile: "named with" list gave up, page shown without it')
+    return null
   }
 }
 
+/** The stories naming it under its own limit; null when it gave up */
+async function storiesOf(id: string, ids: string[], seconds: number): Promise<ListedStory[] | null> {
+  if (ids.length === 0) return []
+  try {
+    return await longQuery(seconds, trx => storiesOfSignals(ids, STORY_DAYS * 24, STORIES_SHOWN, trx))
+  } catch (err) {
+    logger.warn({ err, entity: id, reports: ids.length, seconds }, 'Entity profile: stories list gave up, page shown without it')
+    return null
+  }
+}
+
+const profileKey = (id: string) => `kg:profile:v3:${id}`
+const PROFILE_SWR = { freshSeconds: PROFILE_TTL, staleSeconds: PROFILE_STALE_S, lockSeconds: 2 * FULL.stories }
+
 /** Everything the entity's page shows, or null when there is no such entity */
 export async function entityProfile(id: string): Promise<EntityProfile | null> {
-  return staleWhileRevalidate(`kg:profile:v2:${id}`, { freshSeconds: PROFILE_TTL, staleSeconds: PROFILE_STALE_S, lockSeconds: 60 }, async () => {
-    const row = rowsOf(await db.raw(`
-      SELECT id, type, canonical_name, first_seen, last_seen, signal_ids
-        FROM entity_nodes WHERE id = ?
-    `, [id]))[0]
-    if (!row) return null
-    const name = String(row.canonical_name ?? '').trim()
-    const ids = mentionIds(row.signal_ids)
-    const now = Date.now()
-    const since = new Date(now - ACTIVITY_DAYS * DAY_MS)
+  const key = profileKey(id)
+  const kept = await redis.get(key).catch(() => null)
+  if (kept) return staleWhileRevalidate(key, PROFILE_SWR, async () => (await buildProfile(id, FULL)).profile)
+  // A first view: the quick profile now. When a slow part was cut off it is
+  // kept as already due, so the full one is made at once in the background.
+  const { profile, partial } = await buildProfile(id, QUICK)
+  const at = partial ? Date.now() - (PROFILE_TTL + 1) * 1000 : Date.now()
+  await redis.setex(key, PROFILE_TTL + PROFILE_STALE_S, JSON.stringify({ at, value: profile })).catch(() => {})
+  if (partial) void staleWhileRevalidate(key, PROFILE_SWR, async () => (await buildProfile(id, FULL)).profile).catch(() => {})
+  return profile
+}
 
-    // The stories naming it, then its newest reports outside those stories
-    const storiesAndLatest = async (): Promise<[ListedStory[], EntityProfile['latest']]> => {
-      const stories = await storiesOfSignals(ids, STORY_DAYS * 24, STORIES_SHOWN)
-      return [stories, await latestReports(ids, new Set(stories.map(st => st.id)))]
-    }
-    const [activityRows, [stories, latest], connectionRows] = ids.length === 0
-      ? [[], [[], []], []] as [Row[], [ListedStory[], EntityProfile['latest']], Row[]]
-      : await Promise.all([
-          db.raw(`
-            SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
-                   count(*)::int AS n,
-                   count(*) FILTER (WHERE created_at >= now() - interval '24 hours')::int AS last24,
-                   count(*) FILTER (WHERE created_at >= now() - interval '48 hours'
-                                      AND created_at <  now() - interval '24 hours')::int AS prev24,
-                   count(*) FILTER (WHERE created_at >= now() - interval '7 days')::int AS last7
-              FROM signals
-             WHERE id = ANY(?::uuid[]) AND created_at >= ?
-             GROUP BY 1
-          `, [ids, since]).then(rowsOf),
-          storiesAndLatest(),
-          connectionsOf(id, ids, since),
-        ])
+/** The profile, with each slow part under `limits`; `partial` when one of them gave up */
+export async function buildProfile(id: string, limits: Limits): Promise<{ profile: EntityProfile | null; partial: boolean }> {
+  const row = rowsOf(await db.raw(`
+    SELECT id, type, canonical_name, first_seen, last_seen, signal_ids
+      FROM entity_nodes WHERE id = ?
+  `, [id]))[0]
+  if (!row) return { profile: null, partial: false }
+  const name = String(row.canonical_name ?? '').trim()
+  const ids = mentionIds(row.signal_ids)
+  const now = Date.now()
+  const since = new Date(now - ACTIVITY_DAYS * DAY_MS)
 
-    const perDay = new Map<string, number>()
-    let last24h = 0, previous24h = 0, last7d = 0
-    for (const r of activityRows) {
-      perDay.set(String(r.day), Number(r.n) || 0)
-      last24h += Number(r.last24) || 0
-      previous24h += Number(r.prev24) || 0
-      last7d += Number(r.last7) || 0
-    }
+  // The stories naming it, then its newest reports outside those stories
+  const storiesAndLatest = async (): Promise<[ListedStory[] | null, EntityProfile['latest']]> => {
+    const stories = await storiesOf(id, ids, limits.stories)
+    return [stories, await latestReports(ids, new Set((stories ?? []).map(st => st.id)))]
+  }
+  const [activityRows, [storiesFound, latest], connectionsFound] = ids.length === 0
+    ? [[], [[], []], []] as [Row[], [ListedStory[] | null, EntityProfile['latest']], Row[] | null]
+    : await Promise.all([
+        db.raw(`
+          SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
+                 count(*)::int AS n,
+                 count(*) FILTER (WHERE created_at >= now() - interval '24 hours')::int AS last24,
+                 count(*) FILTER (WHERE created_at >= now() - interval '48 hours'
+                                    AND created_at <  now() - interval '24 hours')::int AS prev24,
+                 count(*) FILTER (WHERE created_at >= now() - interval '7 days')::int AS last7
+            FROM signals
+           WHERE id = ANY(?::uuid[]) AND created_at >= ?
+           GROUP BY 1
+        `, [ids, since]).then(rowsOf),
+        storiesAndLatest(),
+        connectionsOf(id, ids, since, limits.connections),
+      ])
+  const partial = storiesFound === null || connectionsFound === null
+  const stories = storiesFound ?? []
+  const connectionRows = connectionsFound ?? []
 
-    const profile: EntityProfile = {
-      entity: {
-        id: String(row.id),
-        type: String(row.type ?? 'other'),
-        name,
-        firstSeen: iso(row.first_seen),
-        lastSeen: iso(row.last_seen),
-      },
-      activity: { last24h, previous24h, last7d, daily: dailySeries(perDay, now) },
-      stories,
-      latest,
-      connections: connectionRows.map(r => ({
-        id: String(r.id), type: String(r.type ?? 'other'), name: String(r.name ?? ''), shared: Number(r.shared) || 0,
-      })).filter(c => c.name !== ''),
-    }
-    return profile
-  })
+  const perDay = new Map<string, number>()
+  let last24h = 0, previous24h = 0, last7d = 0
+  for (const r of activityRows) {
+    perDay.set(String(r.day), Number(r.n) || 0)
+    last24h += Number(r.last24) || 0
+    previous24h += Number(r.prev24) || 0
+    last7d += Number(r.last7) || 0
+  }
+
+  const profile: EntityProfile = {
+    entity: {
+      id: String(row.id),
+      type: String(row.type ?? 'other'),
+      name,
+      firstSeen: iso(row.first_seen),
+      lastSeen: iso(row.last_seen),
+    },
+    activity: { last24h, previous24h, last7d, daily: dailySeries(perDay, now) },
+    stories,
+    latest,
+    connections: connectionRows.map(r => ({
+      id: String(r.id), type: String(r.type ?? 'other'), name: String(r.name ?? ''), shared: Number(r.shared) || 0,
+    })).filter(c => c.name !== ''),
+  }
+  return { profile, partial }
 }
 
 /** The stories naming both entities (last 30 days), or null when either is unknown */
@@ -250,7 +288,7 @@ export async function sharedStories(id: string, other: string): Promise<{ storie
     if (rows.length < 2) return null
     const sets = rows.map(r => new Set(mentionIds(r.signal_ids)))
     const both = [...sets[0]!].filter(s => sets[1]!.has(s))
-    const stories = await storiesOfSignals(both, ACTIVITY_DAYS * 24, 8)
+    const stories = await longQuery(QUICK.stories + 3, trx => storiesOfSignals(both, ACTIVITY_DAYS * 24, 8, trx))
     const latest = await latestReports(both, new Set(stories.map(st => st.id)))
     return { stories, latest }
   })
