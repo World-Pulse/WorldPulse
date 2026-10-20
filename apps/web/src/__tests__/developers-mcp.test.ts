@@ -15,6 +15,11 @@ describe('the developer page on the MCP server', () => {
     expect(page).toContain('id="mcp"')
   })
 
+  it("gives Claude's own steps (support.claude.com: Customize, Connectors, Add custom connector)", () => {
+    expect(page).toContain('Customize, Connectors, &ldquo;+ Add&rdquo;, &ldquo;Add custom connector&rdquo;')
+    expect(page).not.toContain('(Settings, Connectors)')
+  })
+
   it("lists exactly the server's tools", () => {
     const served = [...server.matchAll(/^\s{4}name: '([a-z_]+)',$/gm)].map(m => m[1]).sort()
     const listed = [...page.matchAll(/\{ name: '([a-z_]+)', what:/g)].map(m => m[1]).sort()

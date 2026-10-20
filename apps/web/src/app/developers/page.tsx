@@ -527,7 +527,7 @@ export default function DevelopersPage() {
             </div>
             <p className="text-[12px] font-mono text-wp-text3 uppercase tracking-wider mb-2">Connect</p>
             <div className="space-y-2 text-[13px] text-wp-text3">
-              <p>Claude: add it as a custom connector (Settings, Connectors) with the address above.</p>
+              <p>Claude: Customize, Connectors, &ldquo;+ Add&rdquo;, &ldquo;Add custom connector&rdquo;; paste the address above and choose no sign-in. Then turn WorldPulse on in a chat (&ldquo;+&rdquo;, Connectors). Free accounts can add one custom connector.</p>
               <p>Claude Code: <code className="text-wp-cyan font-mono break-all">claude mcp add --transport http worldpulse https://api.world-pulse.io/mcp</code></p>
               <p>Cursor, in <code className="text-wp-cyan font-mono">.cursor/mcp.json</code>: <code className="text-wp-cyan font-mono break-all">{MCP_CURSOR}</code></p>
             </div>
