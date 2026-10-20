@@ -4,6 +4,9 @@ import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 import { authenticate } from '../middleware/auth'
 import { loadEngine } from '../lib/engine-loader'
+import { internalCallHeaders } from '../lib/internal-call'
+import { rateLimitKey } from '../lib/rate-limit-options'
+import { trendingEntityRows, KG_TYPE_FOR_API, type KgTrendingItem } from '../lib/trending-entities'
 
 const THREAT_INDEX_TTL      = 120  // 2 min cache
 const MARKETS_CACHE_TTL     = 300  // 5 min cache — respects Yahoo Finance rate limits
@@ -651,13 +654,6 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
       commodity:     'topic',
       technology:    'topic',
     }
-    // Reverse: API type filter → entity_nodes types
-    const API_TYPE_TO_KG: Record<string, string[]> = {
-      actor:   ['person'],
-      org:     ['organisation'],
-      country: ['location'],
-      topic:   ['event', 'weapon_system', 'legislation', 'commodity', 'technology'],
-    }
 
     let useKnowledgeGraph = false
     try {
@@ -671,100 +667,98 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
 
     if (useKnowledgeGraph) {
       // ── Knowledge Graph path ──────────────────────────────────────────────
-      let query = db('entity_nodes')
-        .select(
-          'canonical_name',
-          'type',
-          'mention_count',
-          'signal_ids',
-          'last_seen',
-          'metadata',
-        )
-        .where('last_seen', '>=', since)
-        .where('mention_count', '>=', 2)
-        .orderBy('mention_count', 'desc')
-        .limit(safeLimit * 3) // overfetch to allow filtering
+      // The entities named in the most reports inside the window, counted in
+      // the window: GET /knowledge-graph/trending, kept in Redis and remade in
+      // the background (lib/trending-entities.ts). Until Oct 20, 2026 this
+      // listed the entities seen in the window by their all-time count, so the
+      // home page's "24h" box showed UN with 7,212 while about 8,100 reports
+      // came in that day.
+      const kgType = KG_TYPE_FOR_API[type]
+      let trending: KgTrendingItem[] = []
+      try {
+        const res = await app.inject({
+          method: 'GET',
+          url: `/api/v1/knowledge-graph/trending?window_hours=${hours}&limit=${Math.min(100, safeLimit * 3)}&lean=1${kgType ? `&type=${kgType}` : ''}`,
+          headers: internalCallHeaders(rateLimitKey(req)),
+        })
+        if (res.statusCode === 200) trending = (res.json() as { trending?: KgTrendingItem[] }).trending ?? []
+      } catch { /* the tag-based count below */ }
 
-      // Filter by entity type if requested
-      if (type !== 'all' && API_TYPE_TO_KG[type]) {
-        query = query.whereIn('type', API_TYPE_TO_KG[type])
-      }
-
-      const kgRows = await query
-
-      // For severity/category breakdown, cross-reference signal_ids with signals table.
-      // We batch-fetch the signal metadata for all referenced signals in one query.
-      const allSignalIds = new Set<string>()
-      for (const row of kgRows) {
-        const sids = Array.isArray(row.signal_ids) ? row.signal_ids : []
-        for (const sid of sids.slice(-50)) allSignalIds.add(String(sid)) // cap per entity
-      }
-      const signalMeta = new Map<string, { severity: string; category: string; country_code: string | null }>()
-      if (allSignalIds.size > 0) {
-        const sidArray = [...allSignalIds].slice(0, 500) // cap total lookup
-        const metaRows = await db('signals')
-          .select('id', 'severity', 'category', 'country_code')
-          .whereIn('id', sidArray)
-        for (const m of metaRows) {
-          signalMeta.set(String(m.id), {
-            severity:     String(m.severity || 'info'),
-            category:     String(m.category || ''),
-            country_code: m.country_code ? String(m.country_code) : null,
-          })
+      const wanted = trendingEntityRows(trending, type, safeLimit)
+      if (wanted.length > 0) {
+        // Severity, categories and countries from each entity's newest reports in the window
+        const nodes = await db('entity_nodes').select('id', 'signal_ids').whereIn('id', wanted.map(w => w.id))
+        const idsOf = new Map<string, string[]>()
+        const allSignalIds = new Set<string>()
+        for (const n of nodes) {
+          const sids = (Array.isArray(n.signal_ids) ? n.signal_ids : []).slice(-50).map((x: unknown) => String(x))
+          idsOf.set(String(n.id), sids)
+          for (const sid of sids) allSignalIds.add(sid)
         }
-      }
-
-      const topEntities = kgRows.slice(0, safeLimit).map((row: any) => {
-        const sids = Array.isArray(row.signal_ids) ? row.signal_ids : []
-        const severity = { critical: 0, high: 0, medium: 0, low: 0, info: 0 }
-        const categories: Record<string, number> = {}
-        const countries: Record<string, number> = {}
-
-        for (const sid of sids) {
-          const meta = signalMeta.get(String(sid))
-          if (!meta) continue
-          const sev = meta.severity as keyof typeof severity
-          if (sev in severity) severity[sev]++
-          if (meta.category) categories[meta.category] = (categories[meta.category] ?? 0) + 1
-          if (meta.country_code) countries[meta.country_code] = (countries[meta.country_code] ?? 0) + 1
+        const signalMeta = new Map<string, { severity: string; category: string; country_code: string | null }>()
+        if (allSignalIds.size > 0) {
+          const metaRows = await db('signals')
+            .select('id', 'severity', 'category', 'country_code')
+            .whereIn('id', [...allSignalIds].slice(0, 500))
+            .where('created_at', '>=', since)
+          for (const m of metaRows) {
+            signalMeta.set(String(m.id), {
+              severity:     String(m.severity || 'info'),
+              category:     String(m.category || ''),
+              country_code: m.country_code ? String(m.country_code) : null,
+            })
+          }
         }
 
-        return {
-          entity:     row.canonical_name,
-          type:       KG_TYPE_MAP[row.type] || 'topic',
-          count:      Number(row.mention_count),
-          severity,
-          source:     'knowledge_graph',
-          top_categories: Object.entries(categories)
-            .sort(([, a], [, b]) => b - a)
-            .slice(0, 3)
-            .map(([name, count]) => ({ name, count })),
-          top_countries: Object.entries(countries)
-            .sort(([, a], [, b]) => b - a)
-            .slice(0, 5)
-            .map(([code, count]) => ({ code, count })),
+        const topEntities = wanted.map(w => {
+          const severity = { critical: 0, high: 0, medium: 0, low: 0, info: 0 }
+          const categories: Record<string, number> = {}
+          const countries: Record<string, number> = {}
+          for (const sid of idsOf.get(w.id) ?? []) {
+            const meta = signalMeta.get(sid)
+            if (!meta) continue
+            const sev = meta.severity as keyof typeof severity
+            if (sev in severity) severity[sev]++
+            if (meta.category) categories[meta.category] = (categories[meta.category] ?? 0) + 1
+            if (meta.country_code) countries[meta.country_code] = (countries[meta.country_code] ?? 0) + 1
+          }
+          return {
+            entity:     w.name,
+            type:       KG_TYPE_MAP[w.kgType] || 'topic',
+            count:      w.count,
+            severity,
+            source:     'knowledge_graph',
+            top_categories: Object.entries(categories)
+              .sort(([, a], [, b]) => b - a)
+              .slice(0, 3)
+              .map(([name, count]) => ({ name, count })),
+            top_countries: Object.entries(countries)
+              .sort(([, a], [, b]) => b - a)
+              .slice(0, 5)
+              .map(([code, count]) => ({ code, count })),
+          }
+        })
+
+        // Count total signals analyzed for this window (same query the fallback uses)
+        const [{ count: totalSignalsInWindow }] = await db('signals')
+          .where('created_at', '>=', since)
+          .whereIn('status', ['verified', 'pending'])
+          .count('* as count')
+
+        const result = {
+          success:     true,
+          window,
+          source:      'knowledge_graph',
+          total_signals_analyzed:   Number(totalSignalsInWindow),
+          total_entities_in_window: trending.length,
+          unique_entities:          topEntities.length,
+          entities:                 topEntities,
+          generated_at:             new Date().toISOString(),
         }
-      })
 
-      // Count total signals analyzed for this window (same query the fallback uses)
-      const [{ count: totalSignalsInWindow }] = await db('signals')
-        .where('created_at', '>=', since)
-        .whereIn('status', ['verified', 'pending'])
-        .count('* as count')
-
-      const result = {
-        success:     true,
-        window,
-        source:      'knowledge_graph',
-        total_signals_analyzed:   Number(totalSignalsInWindow),
-        total_entities_in_window: kgRows.length,
-        unique_entities:          topEntities.length,
-        entities:                 topEntities,
-        generated_at:             new Date().toISOString(),
+        await redis.setex(cacheKey, 300, JSON.stringify(result)).catch(() => {})
+        return reply.send(result)
       }
-
-      await redis.setex(cacheKey, 300, JSON.stringify(result)).catch(() => {})
-      return reply.send(result)
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
