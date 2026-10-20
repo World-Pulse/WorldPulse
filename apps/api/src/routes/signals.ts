@@ -26,6 +26,7 @@ import { staleWhileRevalidate } from '../lib/swr-cache'
 import { longQuery } from '../lib/long-query'
 import { MARITIME_CANDIDATE, MARITIME_HEADLINE, firstOfEach, headlineKey, isShipHeadline } from '../lib/sea-headlines'
 import type { Knex } from 'knex'
+import { BAD_CURSOR, isUuid } from '../lib/cursor'
 
 const SIGNAL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -150,7 +151,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
           severity: { type: 'string', enum: ['critical', 'high', 'medium', 'low', 'info'] },
           country:  { type: 'string', description: 'ISO 3166-1 alpha-2 country code' },
           status:   { type: 'string', enum: ['pending', 'verified', 'disputed', 'false', 'retracted'], default: 'verified' },
-          cursor:   { type: 'string', description: 'Pagination cursor (ISO timestamp)' },
+          cursor:   { type: 'string', description: "Pagination cursor: the previous page's cursor (a signal id)" },
           limit:    { type: 'number', default: 20, maximum: 100 },
           bbox:     { type: 'string', description: 'Bounding box: minLng,minLat,maxLng,maxLat' },
         },
@@ -162,6 +163,8 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     const qr = parseQuery(SignalListQuerySchema, req.query)
     if (qr.error) return sendError(reply, 400, 'VALIDATION_ERROR', qr.error)
     const { category, severity, country, status, cursor, limit, bbox } = qr.data
+    // a cursor is the previous page's (a signal id); anything else answered 500 from the database (Oct 19, 2026)
+    if (cursor && !isUuid(cursor)) return sendError(reply, 400, 'VALIDATION_ERROR', BAD_CURSOR)
 
     // Cache unauthenticated list requests (no cursor-based pages beyond first)
     const isFirstPage = !cursor
@@ -205,6 +208,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     }
 
     if (cursor) {
+      if (!isUuid(cursor)) return sendError(reply, 400, 'VALIDATION_ERROR', BAD_CURSOR)
       const cur = await db('signals').where('id', cursor).first('created_at')
       if (cur) query = query.where('s.created_at', '<', cur.created_at)
     }
@@ -426,6 +430,8 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       cursor?: string; limit?: number; sort?: 'recent' | 'top'
     }
 
+    if (!isUuid(id)) return sendError(reply, 404, 'NOT_FOUND', 'Signal not found')
+
     const signal = await db('signals').where('id', id).first('id')
     if (!signal) return sendError(reply, 404, 'NOT_FOUND', 'Signal not found')
 
@@ -450,6 +456,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     } else {
       query = query.orderBy('p.created_at', 'desc')
       if (cursor) {
+        if (!isUuid(cursor)) return sendError(reply, 400, 'VALIDATION_ERROR', BAD_CURSOR)
         const cur = await db('posts').where('id', cursor).first('created_at')
         if (cur) query = query.where('p.created_at', '<', cur.created_at)
       }
@@ -558,6 +565,8 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       return sendError(reply, 400, 'VALIDATION_ERROR', flagBody.error.issues[0]?.message ?? 'Invalid flag reason')
     }
     const { reason, notes } = flagBody.data
+
+    if (!isUuid(id)) return sendError(reply, 404, 'NOT_FOUND', 'Signal not found')
 
     const signal = await db('signals').where('id', id).first('id')
     if (!signal) return sendError(reply, 404, 'NOT_FOUND', 'Signal not found')

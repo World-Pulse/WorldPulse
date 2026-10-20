@@ -9,6 +9,7 @@ import type { AlertSettings } from '../lib/alert-dispatcher'
 import { sendAlertEmail } from '../lib/email'
 import type { Signal } from '@worldpulse/types'
 import { sendError } from '../lib/errors'
+import { BAD_CURSOR, isUuid } from '../lib/cursor'
 
 // ─── Alert Settings Schemas ───────────────────────────────────────────────
 
@@ -153,6 +154,7 @@ export const registerNotificationRoutes: FastifyPluginAsync = async (app) => {
       ])
 
     if (cursor) {
+      if (!isUuid(cursor)) return sendError(reply, 400, 'VALIDATION_ERROR', BAD_CURSOR)
       const cur = await db('notifications').where('id', cursor).first('created_at')
       if (cur) query = query.where('n.created_at', '<', cur.created_at)
     }

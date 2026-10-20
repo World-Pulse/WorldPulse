@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { indexPost, removePost } from '../lib/search'
 import { publishPostCreated, publishPostDeleted } from '../lib/search-events'
 import { sendError } from '../lib/errors'
+import { BAD_CURSOR, isUuid } from '../lib/cursor'
 
 // Simple script-based language detector — no external dependency needed.
 // Covers the languages most likely to appear in news posts.
@@ -218,6 +219,7 @@ export const registerPostRoutes: FastifyPluginAsync = async (app) => {
       .limit(Math.min(Number(limit), 50) + 1)
 
     if (cursor) {
+      if (!isUuid(cursor)) return sendError(reply, 400, 'VALIDATION_ERROR', BAD_CURSOR)
       const cur = await db('posts').where('id', cursor).first()
       if (cur) query = query.where('p.created_at', '>', cur.created_at)
     }

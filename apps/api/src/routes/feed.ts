@@ -7,6 +7,7 @@ import { FeedQuerySchema, parseQuery } from '../lib/query-schemas'
 import { sendError } from '../lib/errors'
 import { signalsHaveStoryIds, collapseStories, storyFacts, FEED_POST_ROWS, OWN_POST_KEY } from '../lib/stories'
 import type { StoryFacts } from '../lib/stories'
+import { BAD_CURSOR, isUuid } from '../lib/cursor'
 
 const FEED_CACHE_TTL    = 15  // seconds — global feed (per-user aware)
 const SIGNALS_CACHE_TTL = 30  // seconds — signals stream first-page
@@ -91,6 +92,7 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
     // Cursor-based pagination
     let cursorTime: Date | null = null
     if (cursor) {
+      if (!isUuid(cursor)) return sendError(reply, 400, 'VALIDATION_ERROR', BAD_CURSOR)
       const cursorPost = await db('posts').where('id', cursor).first()
       if (cursorPost) {
         cursorTime = cursorPost.created_at as Date
@@ -210,6 +212,7 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
       .limit(Math.min(Number(limit), 50) + 1)
 
     if (cursor) {
+      if (!isUuid(cursor)) return sendError(reply, 400, 'VALIDATION_ERROR', BAD_CURSOR)
       const cursorPost = await db('posts').where('id', cursor).first()
       if (cursorPost) query = query.where('p.created_at', '<', cursorPost.created_at)
     }
@@ -308,6 +311,7 @@ export const registerFeedRoutes: FastifyPluginAsync = async (app) => {
     query = applyFilters(query)
     let cursorTime: Date | null = null
     if (cursor) {
+      if (!isUuid(cursor)) return sendError(reply, 400, 'VALIDATION_ERROR', BAD_CURSOR)
       const cur = await db('signals').where('id', cursor).first('created_at')
       if (cur) {
         cursorTime = cur.created_at as Date

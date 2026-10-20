@@ -5,6 +5,7 @@ import { redis } from '../db/redis'
 import { indexUser } from '../lib/search'
 import { z } from 'zod'
 import { sendError } from '../lib/errors'
+import { BAD_CURSOR, isUuid } from '../lib/cursor'
 
 export const OnboardingSchema = z.object({
   interests:     z.array(z.string().max(50)).max(50).default([]),
@@ -178,6 +179,7 @@ export const registerUserRoutes: FastifyPluginAsync = async (app) => {
 
     if (type) query = query.where('p.post_type', type)
     if (cursor) {
+      if (!isUuid(cursor)) return sendError(reply, 400, 'VALIDATION_ERROR', BAD_CURSOR)
       const cur = await db('posts').where('id', cursor).first('created_at')
       if (cur) query = query.where('p.created_at', '<', cur.created_at)
     }
@@ -213,6 +215,7 @@ export const registerUserRoutes: FastifyPluginAsync = async (app) => {
 
     if (unreadOnly === 'true') query = query.where('n.read', false)
     if (cursor) {
+      if (!isUuid(cursor)) return sendError(reply, 400, 'VALIDATION_ERROR', BAD_CURSOR)
       const cur = await db('notifications').where('id', cursor).first('created_at')
       if (cur) query = query.where('n.created_at', '<', cur.created_at)
     }
@@ -273,6 +276,7 @@ export const registerUserRoutes: FastifyPluginAsync = async (app) => {
       .limit(pageLimit + 1)
 
     if (cursor) {
+      if (!isUuid(cursor)) return sendError(reply, 400, 'VALIDATION_ERROR', BAD_CURSOR)
       const cur = await db('signals').where('id', cursor).first('created_at')
       if (cur) query = query.where('s.created_at', '<', cur.created_at)
     }
