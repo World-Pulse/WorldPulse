@@ -37,7 +37,7 @@ A story is "verified" when two or more outlets (websites) report it and its reli
 
 ## For AI assistants (MCP)
 
-An MCP server at ${API_URL}/mcp (Streamable HTTP, POST JSON-RPC; no sign-in and no key) answers with the outlet count, whether a story is verified and its world-pulse.io link. Tools: top_stories (the stories the most outlets carry in the last 1 to 72 hours, optionally one country's), story (one story with every outlet and its reports), search_reports (reports by meaning) and week (WorldPulse Week).
+An MCP server at ${API_URL}/mcp (Streamable HTTP, POST JSON-RPC; no sign-in and no key) answers with the outlet count, whether a story is verified and its world-pulse.io link. Tools: top_stories (the stories the most outlets carry in the last 1 to 72 hours, optionally one country's), story (one story with every outlet and its reports), search_reports (reports by meaning), week (WorldPulse Week) and check_link (an article's address: how many outlets reported its story, among the articles collected in the last two weeks).
 
 ## Citing
 

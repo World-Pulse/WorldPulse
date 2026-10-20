@@ -9,7 +9,7 @@ import {
   TrendingUp, Shield, Unplug, Satellite, Lock, Waves, Landmark,
   Wheat, KeyRound, Droplets, Pickaxe, Map, ScrollText, Users, Search,
   Mic, Video, Radio, Wrench, Settings, Activity, Anchor, CalendarDays,
-  CircleDot, Swords, LineChart, Leaf, Pill, FlaskConical, Vote, Globe2, Network, Newspaper,
+  CircleDot, Swords, LineChart, Leaf, Pill, FlaskConical, Vote, Globe2, Network, Newspaper, Link2,
   type LucideProps,
 } from 'lucide-react'
 
@@ -28,6 +28,7 @@ const NAV_ITEMS = [
   // { href: '/clusters',   icon: LayoutGrid,    labelKey: 'clusters',   badge: 'NEW', badgeColor: 'blue'   }, // Hidden — needs correlation engine (Aether)
   { href: '/briefing',   icon: ClipboardList, labelKey: 'briefing',   badge: 'NEW', badgeColor: 'indigo' },
   { href: '/week',       icon: CalendarDays,  labelKey: 'week',       badge: 'NEW', badgeColor: 'indigo' }, // the week's top stories (plan G11, Oct 20, 2026)
+  { href: '/check',      icon: Link2,          labelKey: 'checkLink',  badge: 'NEW', badgeColor: 'indigo' }, // paste a link, get the count (Oct 20, 2026)
   { href: '/finance',    icon: TrendingUp,    labelKey: 'finance' },
   { href: '/maritime',        icon: Anchor,     labelKey: 'maritime' },
   { href: '/sanctions',        icon: Shield,    labelKey: 'sanctions' },

@@ -20,6 +20,9 @@ import { isoWeekOf, parseWeek, weekBounds, weekName, previousWeek, type IsoWeek 
 import { logger } from '../lib/logger'
 import { entityDirectory } from '../lib/entity-directory'
 import { COUNTRY_NAMES } from './countries'
+import { findReport, MAX_LINK_LENGTH } from '../lib/link-check'
+import { internalCallHeaders } from '../lib/internal-call'
+import { rateLimitKey } from '../lib/rate-limit-options'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MAX_SIGNALS = 50
@@ -438,6 +441,59 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
    * the World Map's "Latest in view" — can say "Verified · 12 outlets".
    * Unknown ids are left out.
    */
+  // GET /api/v1/stories/by-link?url=<a news article's address>: the story the
+  // article belongs to, with how many outlets reported it and which ones, among
+  // the articles WorldPulse has collected ("paste a link, get the count",
+  // version 1, Oct 20, 2026; lib/link-check.ts). The link itself is never fetched.
+  app.get('/by-link', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const { url } = req.query as { url?: unknown }
+    if (typeof url !== 'string' || !url.trim()) return sendError(reply, 400, 'VALIDATION_ERROR', 'url: paste the address of a news article')
+    if (url.length > MAX_LINK_LENGTH) return sendError(reply, 400, 'VALIDATION_ERROR', `url: at most ${MAX_LINK_LENGTH} characters`)
+
+    const found = await findReport(url)
+    if (found.status !== 'found') return reply.send({ success: true, data: { found: false, reason: found.status } })
+
+    // The story, exactly as GET /stories/:id answers it, counted as this client's own call
+    const res = await app.inject({ method: 'GET', url: `/api/v1/stories/${found.reportId}`, headers: internalCallHeaders(rateLimitKey(req)) })
+    if (res.statusCode === 429) return sendError(reply, 429, 'RATE_LIMITED', 'Too many requests; try again in a minute')
+    if (res.statusCode === 404) return reply.send({ success: true, data: { found: false, reason: 'not_seen' } })
+    if (res.statusCode !== 200) return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The story could not be loaded just now; try again in a minute')
+    const story = (res.json() as { data?: Record<string, unknown> }).data ?? {}
+    const reports = Array.isArray(story.signals) ? story.signals as Array<Record<string, unknown>> : []
+    const report = reports.find(r => r.id === found.reportId) ?? reports[0] ?? {}
+    const times = reports.map(r => (typeof r.createdAt === 'string' ? r.createdAt : '')).filter(Boolean).sort()
+    return reply.send({
+      success: true,
+      data: {
+        found: true,
+        /** How it was found: the news readers' article claim, or a report's links */
+        via: found.via,
+        report: {
+          id: found.reportId,
+          title: report.title ?? null,
+          outlet: report.outlet ?? null,
+          url: report.url ?? null,
+          status: report.status ?? null,
+          createdAt: report.createdAt ?? null,
+        },
+        story: {
+          id: story.storyId ?? found.reportId,
+          /** Websites that carried it */
+          outlets: Number(story.outlets) || 0,
+          /** Those websites, A to Z */
+          outletNames: Array.isArray(story.outletNames) ? story.outletNames : [],
+          verified: typeof story.verifiedAt === 'string',
+          verifiedAt: story.verifiedAt ?? null,
+          /** Reports in the story */
+          size: Number(story.size) || reports.length,
+          firstReportAt: times[0] ?? null,
+          latestReportAt: times[times.length - 1] ?? null,
+        },
+        link: `${(process.env.SITE_URL || 'https://world-pulse.io').replace(/\/+$/, '')}/signals/${found.reportId}`,
+      },
+    })
+  })
+
   app.get('/outlets', { preHandler: [optionalAuth], config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
     const raw = String((req.query as { ids?: unknown } | undefined)?.ids ?? '')
     const ids = [...new Set(raw.split(',').map(v => v.trim()).filter(v => UUID_RE.test(v)))].slice(0, MAX_OUTLET_IDS)

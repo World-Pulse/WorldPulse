@@ -42,6 +42,13 @@ describe('articleKey', () => {
     ]) expect(articleKey(same)).toBe(k)
   })
 
+  it("is the hash the API's link checker makes too (apps/api/src/lib/link-check.ts)", async () => {
+    const { createHash } = await import('node:crypto')
+    const sha = (t: string) => createHash('sha256').update(t).digest('hex').slice(0, 32)
+    expect(articleKey(BBC)).toBe(sha('bbc.com/news/articles/c4g9xk2v7lzo'))
+    expect(articleKey('https://example.org/story.php?lang=en&id=12&utm_medium=rss')).toBe(sha('example.org/story.php?id=12&lang=en'))
+  })
+
   it('keeps parameters that tell articles apart, in any order', () => {
     expect(articleKey('https://example.org/story.php?id=12&lang=en')).toBe(articleKey('https://example.org/story.php?lang=en&id=12&utm_medium=rss'))
     expect(articleKey('https://example.org/story.php?id=12')).not.toBe(articleKey('https://example.org/story.php?id=13'))

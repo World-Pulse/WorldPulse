@@ -145,7 +145,7 @@ GET  /rss/signals.xml              Atom feed of verified reports (also /rss/sign
 
 ```
 POST https://api.world-pulse.io/mcp     Streamable HTTP, JSON-RPC; no key
-Tools: top_stories, story, search_reports, week
+Tools: top_stories, story, search_reports, week, check_link (paste an article's address: how many outlets reported its story)
 ```
 
 Claude Code: `claude mcp add --transport http worldpulse https://api.world-pulse.io/mcp`

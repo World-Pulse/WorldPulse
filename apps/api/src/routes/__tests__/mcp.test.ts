@@ -1,6 +1,6 @@
 /**
  * WorldPulse's MCP server (routes/mcp.ts, plan 15, Oct 20, 2026): JSON-RPC
- * over one POST, the four read-only tools asking the API's own routes, and
+ * over one POST, the five read-only tools asking the API's own routes, and
  * those inner calls counted as the client who asked.
  */
 import { describe, it, expect, beforeEach } from 'vitest'
@@ -45,6 +45,31 @@ async function build(): Promise<FastifyInstance> {
       },
     }
   })
+  app.get('/api/v1/stories/by-link', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    const url = (req.query as { url?: string }).url ?? ''
+    if (url.includes('aljazeera.com/a')) {
+      return {
+        success: true,
+        data: {
+          found: true, via: 'claim', link: `https://world-pulse.io/signals/${STORY.leadId}`,
+          report: { id: STORY.leadId, title: STORY.title, outlet: 'aljazeera.com', url: 'https://www.aljazeera.com/a', status: 'verified', createdAt: '2026-10-20T08:00:00.000Z' },
+          story: { id: STORY.id, outlets: 2, outletNames: ['aljazeera.com', 'bbc.co.uk'], verified: true, verifiedAt: STORY.verifiedAt, size: 2 },
+        },
+      }
+    }
+    if (url.includes('lonely.example')) {
+      return {
+        success: true,
+        data: {
+          found: true, via: 'links', link: 'https://world-pulse.io/signals/55555555-5555-4555-8555-555555555555',
+          report: { id: '55555555-5555-4555-8555-555555555555', title: 'Local strike', outlet: 'lonely.example' },
+          story: { id: '55555555-5555-4555-8555-555555555555', outlets: 1, outletNames: ['lonely.example'], verified: false, verifiedAt: null, size: 1 },
+        },
+      }
+    }
+    return { success: true, data: { found: false, reason: url.endsWith('.com/') ? 'not_an_article' : 'not_seen' } }
+  })
   app.get('/api/v1/search/semantic', async (req) => {
     asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
     return { success: true, semantic: true, results: [{ id: STORY.leadId, title: STORY.title, status: 'verified', locationName: 'Doha', createdAt: '2026-10-20T08:00:00.000Z', category: 'conflict', score: 0.61 }] }
@@ -79,10 +104,10 @@ describe('MCP server', () => {
     expect((await rpc(app, { jsonrpc: '2.0', id: 3, method: 'ping' })).json()).toEqual({ jsonrpc: '2.0', id: 3, result: {} })
   })
 
-  it('lists four read-only tools with their input schemas', async () => {
+  it('lists five read-only tools with their input schemas', async () => {
     const app = await build()
     const { tools } = (await rpc(app, { jsonrpc: '2.0', id: 4, method: 'tools/list' })).json().result
-    expect(tools.map((t: { name: string }) => t.name)).toEqual(['top_stories', 'story', 'search_reports', 'week'])
+    expect(tools.map((t: { name: string }) => t.name)).toEqual(['top_stories', 'story', 'search_reports', 'week', 'check_link'])
     for (const t of tools) {
       expect(t.inputSchema.type).toBe('object')
       expect(t.annotations.readOnlyHint).toBe(true)
@@ -124,6 +149,24 @@ describe('MCP server', () => {
     expect(future).toMatchObject({ isError: true })
     const preparing = await call(app, 'week', { week: '2026-W30' })
     expect(preparing).toMatchObject({ isError: true, content: [{ text: 'This week is being put together; try again in a couple of minutes' }] })
+  })
+
+  it('check_link says how many outlets reported an article\'s story, or why it can\'t (Oct 20, 2026)', async () => {
+    const app = await build()
+    const r = await call(app, 'check_link', { url: 'https://www.aljazeera.com/a' })
+    expect(asked[0]).toEqual({ url: '/api/v1/stories/by-link?url=https%3A%2F%2Fwww.aljazeera.com%2Fa', client: 'ip:127.0.0.1' })
+    expect(r.isError).toBe(false)
+    expect(r.content[0].text).toContain('Ceasefire talks resume in Doha (aljazeera.com)')
+    expect(r.content[0].text).toContain('Verified · 2 outlets · aljazeera.com, bbc.co.uk')
+    expect(r.structuredContent).toMatchObject({ found: true, story: { outlets: 2, verified: true } })
+    const one = await call(app, 'check_link', { url: 'https://lonely.example/strike' })
+    expect(one.content[0].text).toContain('Only one outlet so far: treat it as unconfirmed')
+    const unseen = await call(app, 'check_link', { url: 'https://example.org/unseen' })
+    expect(unseen).toMatchObject({ isError: false, structuredContent: { found: false, reason: 'not_seen' } })
+    expect(unseen.content[0].text).toMatch(/has not collected this article/)
+    const front = await call(app, 'check_link', { url: 'https://www.aljazeera.com/' })
+    expect(front.content[0].text).toMatch(/not the address of an article/)
+    expect((await call(app, 'check_link', {})).isError).toBe(true)
   })
 
   it('answers an unknown tool and an unknown method with JSON-RPC errors, and a batch with a list', async () => {

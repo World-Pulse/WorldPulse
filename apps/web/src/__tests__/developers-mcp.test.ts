@@ -23,7 +23,7 @@ describe('the developer page on the MCP server', () => {
   it("lists exactly the server's tools", () => {
     const served = [...server.matchAll(/^\s{4}name: '([a-z_]+)',$/gm)].map(m => m[1]).sort()
     const listed = [...page.matchAll(/\{ name: '([a-z_]+)', what:/g)].map(m => m[1]).sort()
-    expect(served).toEqual(['search_reports', 'story', 'top_stories', 'week'])
+    expect(served).toEqual(['check_link', 'search_reports', 'story', 'top_stories', 'week'])
     expect(listed).toEqual(served)
   })
 })

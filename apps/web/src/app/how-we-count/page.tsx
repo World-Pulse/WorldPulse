@@ -57,6 +57,9 @@ export default function HowWeCountPage() {
           {LIMITS.map(l => <li key={l}>{l}</li>)}
         </ul>
         <p className="text-sm text-wp-text2 mt-8 leading-relaxed">
+          Got a link someone shared? <Link href="/check" className="text-wp-amber underline">Check how many outlets reported it</Link>.
+        </p>
+        <p className="text-sm text-wp-text2 mt-3 leading-relaxed">
           See today’s <Link href="/briefing" className="text-wp-amber underline">verified stories</Link>, the{' '}
           <Link href="/map" className="text-wp-amber underline">live map</Link>, or the <Link href="/help" className="text-wp-amber underline">Help &amp; FAQ</Link>.
         </p>

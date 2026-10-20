@@ -29,6 +29,8 @@ const PAGES: Array<{ path: string; changeFrequency: 'always' | 'hourly' | 'daily
   { path: '/pricing', changeFrequency: 'monthly', priority: 0.5 },
   { path: '/help', changeFrequency: 'monthly', priority: 0.4 },
   { path: '/how-we-count', changeFrequency: 'monthly', priority: 0.5 },
+  // "Has more than one newsroom reported this?": paste a link, get the count (Oct 20, 2026)
+  { path: '/check', changeFrequency: 'monthly', priority: 0.6 },
   { path: '/knowledge-graph', changeFrequency: 'hourly', priority: 0.6 },
   { path: '/entities', changeFrequency: 'hourly', priority: 0.7 },
   // The index and topic pages, each with its own title since H-0023 (Oct 20, 2026)

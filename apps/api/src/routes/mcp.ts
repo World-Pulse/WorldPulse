@@ -31,7 +31,7 @@ const SERVER_INFO = { name: 'worldpulse', title: 'WorldPulse', version: '1.0.0' 
 const INSTRUCTIONS = [
   'WorldPulse groups news reports of one event into one story and counts the outlets (websites) that report it.',
   'A story is "verified" when two or more outlets report it and its reliability score reaches 65%; verified means more than one outlet says so, not proven true (https://world-pulse.io/how-we-count).',
-  'Cite stories with their world-pulse.io links. Start with top_stories; open one with story; find reports on a subject with search_reports; a week at a glance with week.',
+  'Cite stories with their world-pulse.io links. Start with top_stories; open one with story; find reports on a subject with search_reports; a week at a glance with week; how many outlets reported an article someone shared with check_link.',
 ].join(' ')
 
 interface ToolResult { text: string; data: Record<string, unknown> }
@@ -223,6 +223,53 @@ export const TOOLS: Tool[] = [
         d.countries?.length ? `\nBusiest countries (verified stories): ${d.countries.map(c => `${c.name} ${c.stories}`).join(', ')}` : '',
       ].join('\n').trim()
       return { text, data: { week: d.week ?? week ?? null, underWay: Boolean(d.underWay), url: page, stories: stories.map(storyOut), countries: d.countries ?? [] } }
+    },
+  },
+  {
+    name: 'check_link',
+    title: 'Check a link',
+    description: 'Paste a news article\'s address: the WorldPulse story it belongs to, how many outlets (websites) reported that story, which ones, and whether it is verified. Only articles WorldPulse has collected in the last two weeks; the link itself is never fetched. "Only one outlet so far" means unconfirmed, not false.',
+    inputSchema: {
+      type: 'object',
+      properties: { url: { type: 'string', minLength: 4, maxLength: 2048, description: 'The article\'s address, e.g. https://www.bbc.com/news/articles/c4g9xk2v7lzo' } },
+      required: ['url'],
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const url = strArg(args, 'url', { required: true, max: 2048 })!
+      const { status, body } = await ask(asker, `/api/v1/stories/by-link?url=${encodeURIComponent(url)}`)
+      if (status === 400) throw new ToolError(String((body as { error?: unknown }).error ?? 'url must be the address of a news article'))
+      if (status !== 200) throw new Error(`by-link answered ${status}`)
+      const d = (body.data ?? {}) as {
+        found?: boolean; reason?: string; link?: string
+        report?: { id?: string; title?: string; outlet?: string; url?: string; createdAt?: string }
+        story?: { id?: string; outlets?: number; outletNames?: string[]; verified?: boolean; verifiedAt?: string | null; size?: number }
+      }
+      if (!d.found) {
+        const why = d.reason === 'not_an_article'
+          ? 'That is not the address of an article (a front page, or not a web address).'
+          : d.reason === 'pending'
+            ? 'WorldPulse is adding this article right now; ask again in a minute.'
+            : 'WorldPulse has not collected this article: it may be too new, from a site WorldPulse does not read, or older than two weeks.'
+        return { text: why, data: { found: false, reason: d.reason ?? 'not_seen' } }
+      }
+      const outlets = Number(d.story?.outlets) || 0
+      const names = d.story?.outletNames ?? []
+      const proof = d.story?.verified
+        ? `Verified · ${outlets} outlets`
+        : outlets <= 1 ? 'Only one outlet so far: treat it as unconfirmed' : `${outlets} outlets so far (not verified)`
+      const text = [
+        `${d.report?.title ?? 'This article'}${d.report?.outlet ? ` (${d.report.outlet})` : ''}`,
+        `${proof}${names.length ? ` · ${names.slice(0, 10).join(', ')}${names.length > 10 ? ', …' : ''}` : ''}`,
+        `${d.link ?? signalLink(d.report?.id)} (story id ${d.story?.id ?? '?'})`,
+      ].join('\n')
+      return {
+        text,
+        data: {
+          found: true, url: d.link ?? signalLink(d.report?.id), report: d.report ?? null,
+          story: { id: d.story?.id ?? null, outlets, outletNames: names, verified: Boolean(d.story?.verified), verifiedAt: d.story?.verifiedAt ?? null, size: d.story?.size ?? null },
+        },
+      }
     },
   },
 ]

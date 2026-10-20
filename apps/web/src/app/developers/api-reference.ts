@@ -1,5 +1,5 @@
 import {
-  Radio, Newspaper, Search, Zap, Shield, KeyRound, Key, type LucideIcon,
+  Radio, Newspaper, Search, Zap, Shield, KeyRound, Key, Layers, type LucideIcon,
 } from 'lucide-react'
 
 /* ──────────────────────────────────────────────────────────────────────── *
@@ -156,6 +156,48 @@ export const ENDPOINT_GROUPS: EndpointGroup[] = [
         access: 'none',
         params: [
           { name: 'q', type: 'string', description: 'Partial search query', required: true },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'Stories',
+    icon: Layers,
+    description: 'Each event once, with how many outlets (websites) reported it and which ones — no authentication required.',
+    endpoints: [
+      {
+        method: 'GET', path: '/api/v1/stories',
+        description: 'The stories the most outlets are reporting, each event once, ranked by outlets, severity and how recent.',
+        access: 'none',
+        rateLimit: '60 req/min',
+        params: [
+          { name: 'hours', type: 'number', description: 'How many hours back (1-72, default 12)', required: false },
+          { name: 'limit', type: 'number', description: 'How many stories (1-20, default 6)', required: false },
+          { name: 'country', type: 'string', description: 'One country\'s stories: an ISO 3166-1 alpha-2 code such as NG', required: false },
+        ],
+      },
+      {
+        method: 'GET', path: '/api/v1/stories/:id',
+        description: 'One story, from a story or report id: every outlet (website) that carried it, when it turned verified, and its reports.',
+        access: 'none',
+        rateLimit: '60 req/min',
+      },
+      {
+        method: 'GET', path: '/api/v1/stories/week',
+        description: '"WorldPulse Week": a week\'s top stories ranked by independent outlets, and the countries with the most verified stories.',
+        access: 'none',
+        rateLimit: '30 req/min',
+        params: [
+          { name: 'week', type: 'string', description: 'An ISO week such as 2026-W42 (default: the week under way)', required: false },
+        ],
+      },
+      {
+        method: 'GET', path: '/api/v1/stories/by-link',
+        description: 'Paste a news article\'s address: the story it belongs to, how many outlets reported it and which. Only articles WorldPulse has collected in the last two weeks; the link itself is never fetched.',
+        access: 'none',
+        rateLimit: '30 req/min',
+        params: [
+          { name: 'url', type: 'string', description: 'The article\'s address', required: true },
         ],
       },
     ],

@@ -16,6 +16,7 @@ const MCP_TOOLS = [
   { name: 'story', what: 'One story with every outlet and its reports, from a story or report id' },
   { name: 'search_reports', what: 'Reports about a subject, found by meaning' },
   { name: 'week', what: 'WorldPulse Week: a week\'s top stories and its busiest countries' },
+  { name: 'check_link', what: 'An article\'s address: how many outlets reported its story, and which' },
 ]
 const MCP_CURSOR = '{"mcpServers":{"worldpulse":{"url":"https://api.world-pulse.io/mcp"}}}'
 
