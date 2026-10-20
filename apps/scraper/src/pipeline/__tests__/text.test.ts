@@ -212,3 +212,36 @@ describe('withoutOutletName (Oct 11, 2026)', () => {
     expect(row.title).toBe('Hurricane Simon nears western Mexico')
   })
 })
+
+describe('summaries and story posts that repeat the headline (H-0024, Oct 20, 2026)', () => {
+  const title = 'Sudan army drones hit mourners and fuel market killing more than 200 people, monitors say'
+
+  it('saysMore: not the headline again, nor its first 150 characters, nor nothing', async () => {
+    const { saysMore } = await import('../text')
+    expect(saysMore(title, title)).toBe(false)
+    expect(saysMore(`${title}.`, title)).toBe(false)
+    expect(saysMore(title.slice(0, 60), title)).toBe(false)   // the word rules' summary, cut
+    expect(saysMore('', title)).toBe(false)
+    expect(saysMore(null, title)).toBe(false)
+    expect(saysMore('The strikes hit a funeral in El Fasher and a market in Kutum on Sunday.', title)).toBe(true)
+  })
+
+  it("articleSummary: the classifier's when it says more, else the article's opening from its feed, else none", async () => {
+    const { articleSummary } = await import('../text')
+    expect(articleSummary('Drone strikes killed mourners in El Fasher.', null, title)).toBe('Drone strikes killed mourners in El Fasher.')
+    expect(articleSummary(title.slice(0, 150), '<p>The strikes hit a funeral in El Fasher &amp; a market in Kutum.</p><p>The post Sudan appeared first on Example News.</p>', title))
+      .toBe('The strikes hit a funeral in El Fasher & a market in Kutum.')
+    expect(articleSummary(title.slice(0, 150), title, title)).toBeNull()
+    expect(articleSummary(title.slice(0, 150), '   ', title)).toBeNull()
+    expect(articleSummary(title.slice(0, 150), null, title)).toBeNull()
+    expect(articleSummary(null, 'x '.repeat(500), title)!.length).toBeLessThanOrEqual(600)
+  })
+
+  it('storyPostText: the headline once, and the summary only when it says more', async () => {
+    const { storyPostText } = await import('../text')
+    expect(storyPostText(title, title.slice(0, 150))).toBe(title)
+    expect(storyPostText(title, null)).toBe(title)
+    expect(storyPostText(title, 'The strikes hit a funeral.')).toBe(`${title}\n\nThe strikes hit a funeral.`)
+    expect(storyPostText('x'.repeat(300), 'y'.repeat(3000))).toHaveLength(2000)
+  })
+})

@@ -11,7 +11,7 @@ import { db } from '../lib/postgres'
 import { EVENT_TEMPLATE_SQL } from './event-titles'
 import { countIndependentOutlets } from './independence'
 import { hostOf } from './signal-columns'
-import { decodeEntities, cleanUrl, cleanTitle, ENCODED_TEXT_RE, FEED_FOOTER_SQL, OUTLET_NOTE_SQL, OUTLET_SUFFIX_SQL, summaryWithoutNotes, feedText, HTML_TAG_RE, withoutOutletName } from './text'
+import { decodeEntities, cleanUrl, cleanTitle, ENCODED_TEXT_RE, FEED_FOOTER_SQL, OUTLET_NOTE_SQL, OUTLET_SUFFIX_SQL, summaryWithoutNotes, feedText, HTML_TAG_RE, withoutOutletName, saysMore, articleSummary, storyPostText } from './text'
 import { liftedSeverity, type SeverityRow } from './severity-lift'
 import { tidyGeoName } from '../sources/gdelt'
 import { NEWS_SOURCE_REGISTRY, detectNewsCategory, isShoppingItem } from '../sources/news-rss'
@@ -387,6 +387,90 @@ export async function stripOutletNotes(): Promise<number> {
     )
   }
   return changed.length
+}
+
+/** Rows a statement for the VALUES updates below */
+const UPDATE_BATCH = 500
+
+/**
+ * The last 3 days' reports whose summary only repeats the headline, and the
+ * story posts that show it twice (H-0024, Oct 20, 2026): the older news
+ * reader stored the word rules' summary, the headline's first 150
+ * characters (12 of the 100 newest reports), and its post read
+ * "<headline>\n\n<headline>" (48 of the 50 newest in Global Pulse). Each
+ * report gets what intake writes now (text.ts articleSummary): the
+ * article's opening from its feed (raw_articles, by the report's links),
+ * else no summary; each such post, the headline once, or with the new
+ * summary. A fixed row no longer matches, so a later start finds nothing to
+ * do.
+ */
+export async function repairHeadlineSummaries(): Promise<{ summaries: number; posts: number }> {
+  // Summaries no longer than their headline: the ones that can only repeat it
+  const found = await db.raw(
+    `SELECT id, title, summary, original_urls
+       FROM signals
+      WHERE created_at > NOW() - INTERVAL '3 days'
+        AND summary IS NOT NULL
+        AND length(summary) <= length(title) + 3
+      LIMIT 20000`,
+  ) as { rows?: Array<{ id: string; title: string | null; summary: string; original_urls: unknown }> }
+  const repeats = (found.rows ?? []).filter(r => typeof r.title === 'string' && !saysMore(r.summary, r.title))
+
+  // Each article's text from its feed, by the report's links (raw_articles.url is unique)
+  const linksOf = (r: { original_urls: unknown }) => (Array.isArray(r.original_urls) ? r.original_urls : []).filter((u): u is string => typeof u === 'string')
+  const links = [...new Set(repeats.flatMap(linksOf))]
+  const bodies = new Map<string, string>()
+  for (let i = 0; i < links.length; i += UPDATE_BATCH) {
+    const got = await db.raw(
+      'SELECT url, body FROM raw_articles WHERE url = ANY(?::text[]) AND body IS NOT NULL',
+      [links.slice(i, i + UPDATE_BATCH)],
+    ) as { rows?: Array<{ url: string; body: string }> }
+    for (const a of got.rows ?? []) bodies.set(a.url, a.body)
+  }
+
+  const fixed = repeats.map(r => {
+    const body = linksOf(r).map(u => bodies.get(u)).find(b => typeof b === 'string') ?? null
+    return { id: r.id, summary: articleSummary(null, body, r.title as string) }
+  })
+  for (let i = 0; i < fixed.length; i += UPDATE_BATCH) {
+    const batch = fixed.slice(i, i + UPDATE_BATCH)
+    await db.raw(
+      `UPDATE signals AS s SET summary = v.summary
+         FROM (VALUES ${batch.map(() => '(?::uuid, ?::text)').join(', ')}) AS v(id, summary)
+        WHERE s.id = v.id`,
+      batch.flatMap(r => [r.id, r.summary]),
+    )
+  }
+
+  // Story posts that show their headline twice, rewritten from their report as it reads now
+  const posts = await db.raw(
+    `SELECT p.id, p.content, s.summary
+       FROM posts p
+       JOIN signals s ON s.id = p.signal_id
+      WHERE p.post_type = 'signal'
+        AND p.created_at > NOW() - INTERVAL '3 days'
+        AND strpos(p.content, E'\n\n') > 0
+      LIMIT 20000`,
+  ) as { rows?: Array<{ id: string; content: string; summary: string | null }> }
+  const rewritten: Array<{ id: string; content: string }> = []
+  for (const p of posts.rows ?? []) {
+    const cut = p.content.indexOf('\n\n')
+    const headline = p.content.slice(0, cut)
+    // Only the automated "<headline>\n\n<summary>" posts whose summary says nothing more
+    if (saysMore(p.content.slice(cut + 2), headline)) continue
+    const content = storyPostText(headline, p.summary)
+    if (content !== p.content) rewritten.push({ id: p.id, content })
+  }
+  for (let i = 0; i < rewritten.length; i += UPDATE_BATCH) {
+    const batch = rewritten.slice(i, i + UPDATE_BATCH)
+    await db.raw(
+      `UPDATE posts AS p SET content = v.content
+         FROM (VALUES ${batch.map(() => '(?::uuid, ?::text)').join(', ')}) AS v(id, content)
+        WHERE p.id = v.id`,
+      batch.flatMap(r => [r.id, r.content]),
+    )
+  }
+  return { summaries: fixed.length, posts: rewritten.length }
 }
 
 /**

@@ -20,7 +20,7 @@ import { verifySignal } from './pipeline/verify'
 import { classifyContent } from './pipeline/classify'
 import { extractGeo, geocodePlace, placeFromText } from './pipeline/geo'
 import { isStaleItem } from './pipeline/freshness'
-import { decodeEntities, cleanUrl, withoutOutletName } from './pipeline/text'
+import { decodeEntities, cleanUrl, withoutOutletName, articleSummary, storyPostText } from './pipeline/text'
 import { dedup } from './pipeline/dedup'
 import { correlateSignal, confirmMergedArticle, RELIABILITY_CEILING } from './pipeline/correlate'
 import type { CorrelationCandidate } from './pipeline/correlate'
@@ -42,7 +42,7 @@ import { signalsHavePublishedAt, publishedAtFor, backfillRecentPublishedAt, sour
 import { independentReports, isCopyOf } from './pipeline/independence'
 import { ensureStoryIdColumn } from './pipeline/stories'
 import { startEditor, catchUpEditor } from './pipeline/editor'
-import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames, fixGdeltFipsCountries, stripOutletNotes, stripOutletNames, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability, switchOffRetiredSources } from './pipeline/repairs'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames, fixGdeltFipsCountries, stripOutletNotes, stripOutletNames, repairHeadlineSummaries, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability, switchOffRetiredSources } from './pipeline/repairs'
 import { batchValidateGeo } from './pipeline/geo-validator'
 import { recomputeSourceReputation } from './pipeline/source-reputation'
 import { startKafkaLagMonitor } from './lib/kafka-lag-monitor'
@@ -222,6 +222,10 @@ async function bootstrap() {
     .then(() => stripOutletNotes())
     .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: outlet notes ("Source: X (reliability: N%, bias: Y).") taken out of summaries') })
     .catch(err => logger.warn({ err }, 'Outlet note repair failed (non-fatal)'))
+    // Summaries that only repeat the headline, and story posts that show it twice (H-0024)
+    .then(() => repairHeadlineSummaries())
+    .then(t => { if (t && t.summaries + t.posts > 0) logger.info(t, "Repair: summaries that only repeated the headline, and story posts that showed it twice") })
+    .catch(err => logger.warn({ err }, 'Headline summary repair failed (non-fatal)'))
     // (The RSS category repair, recategorizeRecentNews, no longer runs at every
     // start: it re-applied the word rules to 3 days of news and so undid what the
     // editor had re-filed, pipeline/editor.ts.) Once, the article and GDELT
@@ -811,9 +815,13 @@ async function storeArticleGroup(topicHash: string, articles: RawArticle[], held
   const reliability = computeReliability(outlets)
 
   // Create signal
+  const title = withoutOutletName(decodeEntities(primary.title), primary.url)
   const row: Record<string, unknown> = {
-    title:            withoutOutletName(decodeEntities(primary.title), primary.url),
-    summary:          typeof classification.summary === 'string' ? decodeEntities(classification.summary) : classification.summary,
+    title,
+    // The classifier's summary when it says more than the headline, else the
+    // article's opening from its feed, else none (H-0024: the word rules'
+    // summary is the headline again)
+    summary:          articleSummary(classification.summary, primary.body, title),
     category:         classification.category,
     severity:         classification.severity,
     status:           reliability > 0.85 ? 'verified' : 'pending',
@@ -949,9 +957,8 @@ async function storeArticleGroup(topicHash: string, articles: RawArticle[], held
       .first('id')
 
     if (botUser) {
-      const content = signal.summary
-        ? `${signal.title}\n\n${signal.summary}`.slice(0, 2000)
-        : signal.title.slice(0, 2000)
+      // The headline, and the summary only when it says more (H-0024)
+      const content = storyPostText(String(signal.title ?? ''), signal.summary)
 
       const sourceName = await db('sources').where('id', primary.sourceId).first('name')
 

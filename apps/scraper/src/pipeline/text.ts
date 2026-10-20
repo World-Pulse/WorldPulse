@@ -190,3 +190,41 @@ export function summaryWithoutNotes(summary: string | null | undefined, title: s
   out = cleanSummary(out)
   return repeatsTitle(out, title) ? null : out
 }
+
+/**
+ * Whether a summary says more than its headline: not empty, not the headline
+ * again, and not just its beginning (the word rules in classify.ts give the
+ * headline's first 150 characters as the summary)
+ */
+export function saysMore(summary: string | null | undefined, title: string): summary is string {
+  if (typeof summary !== 'string') return false
+  const s = comparable(summary)
+  if (s === '') return false
+  const t = comparable(title)
+  return s !== t && !t.startsWith(s)
+}
+
+/**
+ * The older news reader's summary for a report (H-0024, Oct 20, 2026): the
+ * classifier's when it says more than the headline (the word rules only
+ * repeat it, which until now was stored, so 12 of the 100 newest reports
+ * showed their headline twice), else the article's opening from its feed,
+ * cleaned as the newer reader cleans it (sources/news-rss.ts), else none.
+ */
+export function articleSummary(classified: string | null | undefined, body: string | null | undefined, title: string): string | null {
+  const ai = typeof classified === 'string' ? decodeEntities(classified).trim() : null
+  if (saysMore(ai, title)) return ai
+  if (typeof body !== 'string' || !body.trim()) return null
+  const text = HTML_TAG_RE.test(body) ? feedText(body) : decodeEntities(body)
+  const clean = summaryWithoutNotes(clipText(cleanSummary(text), 600), title)
+  return saysMore(clean, title) ? clean : null
+}
+
+/**
+ * A story post's text (the automated posts in Global Pulse): the headline,
+ * and the summary only when it says more. 48 of the 50 newest read
+ * "<headline>\n\n<headline>" (H-0024).
+ */
+export function storyPostText(title: string, summary: string | null | undefined): string {
+  return (saysMore(summary, title) ? `${title}\n\n${summary}` : title).slice(0, 2000)
+}
