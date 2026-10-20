@@ -2737,6 +2737,26 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['iraq', 'kurdistan', 'middle-east'],
     language:        'en',
   },
+  // ── Added Oct 20, 2026 (R2a) ─────────────────────────────────────────────
+  // The Council of the EU's press releases: sanctions listings, Council
+  // decisions and conclusions, first-hand. Its dates are in <a10:updated>
+  // (parseFeedItems), and its media advisories and accreditation notices
+  // are left out (isPressNotice). Answered the server's own request with 20
+  // items that day.
+  {
+    id:              'eu-council',
+    name:            'Council of the EU',
+    feedUrl:         'https://www.consilium.europa.eu/en/rss/pressreleases.ashx',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.92,
+    countryCode:     'BE',
+    defaultLat:      50.84,
+    defaultLng:      4.38,
+    defaultLocation: 'Brussels, Belgium',
+    extraTags:       ['council-of-the-eu', 'eu', 'europe', 'institutional'],
+    language:        'en',
+  },
 ]
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────
@@ -2941,7 +2961,8 @@ export function parseFeedItems(xml: string): FeedItem[] {
     items.push({
       title:       extract(['title']),
       link:        link.replace(/^https?:\/\/feedproxy\.google\.com\/~r\//i, 'https://'),
-      pubDate:     extract(['pubDate', 'published', 'updated', 'dc:date']),
+      // (the Council of the EU's feed dates its items in Atom's <a10:updated>)
+      pubDate:     extract(['pubDate', 'published', 'updated', 'dc:date', 'a10:updated']),
       description: extract(['description', 'summary', 'content', 'content:encoded']),
       point:       feedPoint(block),
       alertLevel:  extract(['gdacs:alertlevel']) || undefined,
@@ -3043,6 +3064,7 @@ export const HOME_PIN_SOURCES = new Set([
   // Oct 20, 2026
   'boe-news', 'ec-press-corner', 'studio-tamani', 'tico-times',
   'radio-dabanga', 'post-courier-pg', 'vanuatu-daily-post', 'economynext-lk', 'amu-tv', 'shafaq-iraq',
+  'eu-council',
 ])
 
 export interface InferredGeo {
@@ -3109,6 +3131,19 @@ export function isShoppingItem(item: Pick<FeedItem, 'title' | 'link'>): boolean 
     || /(?:promo-codes?|coupon-codes?|discount-codes?|gifts-for)/i.test(link)
 }
 
+/**
+ * A press office's notice, not news: media advisories, accreditation,
+ * schedules and agendas, press briefing announcements (Oct 20, 2026: the
+ * Council of the EU's feed sends "Media advisory - Accreditation for the
+ * Special European Council" and "Weekly schedule of President António Costa"
+ * beside its decisions)
+ */
+export function isPressNotice(item: Pick<FeedItem, 'title'>): boolean {
+  const title = item.title ?? ''
+  return /^\s*(?:media advisory|press briefing|forward look|weekly schedule|agenda highlights|background brief|provisional agenda)\b/i.test(title)
+    || /\baccreditation (?:is )?(?:now )?open\b|\baccreditation requirements\b|\b(?:one-year|annual) (?:press )?badge\b/i.test(title)
+}
+
 /** An obituary: from an obituaries section (or Legacy.com), or titled as one */
 export function isObituary(item: Pick<FeedItem, 'title' | 'link'>): boolean {
   return /\/(?:obituaries|obituary|obits?)\//i.test(item.link ?? '')
@@ -3141,7 +3176,7 @@ async function processItem(
     await redis.setex(key, DEDUP_TTL_S, '1')
     return 'none'
   }
-  if (isShoppingItem(item)) {
+  if (isShoppingItem(item) || isPressNotice(item)) {
     await redis.setex(key, DEDUP_TTL_S, '1')
     return 'none'
   }

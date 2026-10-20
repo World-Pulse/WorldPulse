@@ -19,6 +19,7 @@ import {
   isStaleItem,
   MAX_ITEM_AGE_MS,
   feedFailureWhy,
+  isPressNotice,
 } from '../news-rss'
 
 // ─── WHY A FEED FAILS (Oct 17, 2026) ──────────────────────────────────────────
@@ -402,6 +403,49 @@ describe('inferGeo', () => {
 })
 
 // ─── RSS / ATOM PARSING ───────────────────────────────────────────────────────
+
+describe('the Council of the EU (plan R2a, Oct 20, 2026)', () => {
+  // Two of the 20 items its feed sent on Oct 20, 2026, as sent
+  const council = `<?xml version="1.0" encoding="utf-8"?><rss xmlns:a10="http://www.w3.org/2005/Atom" version="2.0"><channel><title>Council of the EU</title><link>https://www.consilium.europa.eu/</link><description /><language>en</language><item><guid isPermaLink="false">151450</guid><link>https://www.consilium.europa.eu/en/press/press-releases/2026/10/19/european-peace-facility-council-adopts-assistance-measure-to-support-defence-capacities-of-nigeria/</link><title>European Peace Facility: Council adopts assistance measure to support defence capacities of Nigeria</title><description>The Council has adopted the first bilateral assistance measure under the European Peace Facility, worth €20 million, to support the Nigerian armed forces.</description><a10:updated>2026-10-19T13:40:00Z</a10:updated><category>Security &amp; defence</category></item><item><guid isPermaLink="false">150485</guid><link>https://www.consilium.europa.eu/en/press/press-releases/2026/10/19/media-advisory-accreditation-for-the-special-european-council-26-and-27-november-2026/</link><title>Media advisory - Accreditation for the Special European Council, 26 and 27 November 2026</title><description>The Special European Council will take place on 26 and 27 November 2026 in the Europa building in Brussels.</description><a10:updated>2026-10-19T14:45:00Z</a10:updated></item></channel></rss>`
+
+  it("reads each item's date from <a10:updated>, so the 3-day age rule applies", () => {
+    const items = parseFeedItems(council)
+    expect(items).toHaveLength(2)
+    expect(items[0]).toMatchObject({
+      title: 'European Peace Facility: Council adopts assistance measure to support defence capacities of Nigeria',
+      link: 'https://www.consilium.europa.eu/en/press/press-releases/2026/10/19/european-peace-facility-council-adopts-assistance-measure-to-support-defence-capacities-of-nigeria/',
+      pubDate: '2026-10-19T13:40:00Z',
+    })
+    expect(isStaleItem(items[0]!.pubDate, new Date('2026-10-20T12:00:00Z').getTime())).toBe(false)
+    expect(isStaleItem(items[0]!.pubDate, new Date('2026-10-25T12:00:00Z').getTime())).toBe(true)
+  })
+
+  it('leaves out its media advisories, accreditation notices, schedules and briefing announcements', () => {
+    for (const title of [
+      'Media advisory - Accreditation for the Special European Council, 26 and 27 November 2026',
+      'One-year badge 2026 - accreditation is open',
+      'Forward look: 19 October - 1 November 2026',
+      'Weekly schedule of President António Costa',
+      'Press briefing - Employment, Social Policy, Health and Consumer Affairs Council (Employment and social policy) of 19 October 2026',
+    ]) expect(isPressNotice({ title })).toBe(true)
+    for (const title of [
+      'European Peace Facility: Council adopts assistance measure to support defence capacities of Nigeria',
+      'Closing loopholes: Council lists individuals and entities for circumventing EU sanctions',
+      'European Council conclusions, 15 and 16 October 2026',
+      'Remarks by President António Costa at the press conference following the European Council meeting of 15-16 October 2026',
+      'University loses accreditation for the medical school after inspection',
+      'Press freedom groups condemn arrest of reporters',
+    ]) expect(isPressNotice({ title })).toBe(false)
+  })
+
+  it('is polled once, filed under geopolitics, and pinned in Brussels when its headline names no place', () => {
+    const src = NEWS_SOURCE_REGISTRY.filter(s => s.id === 'eu-council')
+    expect(src).toHaveLength(1)
+    expect(src[0]).toMatchObject({ category: 'geopolitics', countryCode: 'BE', defaultLocation: 'Brussels, Belgium' })
+    expect(NEWS_SOURCE_REGISTRY.filter(s => new URL(s.feedUrl).hostname === 'www.consilium.europa.eu')).toHaveLength(1)
+    expect(HOME_PIN_SOURCES.has('eu-council')).toBe(true)
+  })
+})
 
 describe('parseFeedItems', () => {
   it('reads a CDATA section wrapped in whitespace (OC Media, Oct 14, 2026: every title came out empty)', () => {
