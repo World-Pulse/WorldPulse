@@ -178,10 +178,18 @@ else
 fi
 
 # ── 6. Public checks through nginx, with real certificate validation ────────
+# Up to 5 tries, 3 s apart: a recreated nginx can take a few seconds to listen
+# (Oct 20, 2026: the deploy that first recreated it reported "https://world-pulse.io/
+# returned 000" while the site answered a minute later).
 check() {  # check <host> <path>
-  local code
-  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 \
-    --resolve "$1:443:127.0.0.1" "https://$1$2" || true)
+  local code tries=0
+  while :; do
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 \
+      --resolve "$1:443:127.0.0.1" "https://$1$2" || true)
+    tries=$((tries + 1))
+    if [ "$code" = "200" ] || [ "$tries" -ge 5 ]; then break; fi
+    sleep 3
+  done
   if [ "$code" = "200" ]; then
     log "OK   https://$1$2"
   else
