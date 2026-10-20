@@ -140,7 +140,8 @@ const CAT_ICON: Record<string, string> = {
   economy: '📈', technology: '💻', science: '🔬', elections: '🗳️', culture: '🎭',
   disaster: '🌊', security: '🔒', sports: '⚽', space: '🚀', other: '🌍',
 }
-const CATS   = ['all', 'conflict', 'climate', 'health', 'economy', 'science', 'disaster']
+// The topics the map's points actually carry, biggest first (geopolitics, security and elections were missing)
+const CATS   = ['all', 'geopolitics', 'conflict', 'security', 'elections', 'economy', 'health', 'disaster', 'climate', 'technology', 'science', 'space']
 const SEVS   = ['all', 'critical', 'high', 'medium', 'low']
 /** The reader's sign-in, for layers that need an account */
 function signedInHeaders(): Record<string, string> {
