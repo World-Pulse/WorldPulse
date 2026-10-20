@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useTranslations } from '@/lib/i18n'
 import { useState, useEffect, type ElementType } from 'react'
+import { trendingRows, TRENDING_SHOWN, type TrendingRow, type TrendingAnswer } from '@/lib/trending-entities'
+import { entityTypeIcon } from '@/lib/entity-links'
 import {
   Zap, Globe, Bell, BarChart3, Telescope, LayoutGrid, ClipboardList,
   TrendingUp, Shield, Unplug, Satellite, Lock, Waves, Landmark,
@@ -75,40 +77,6 @@ const CHANNELS = [
   { href: '/c/culture',    icon: Globe2,       labelKey: 'culture',        color: 'text-pink-400' },
 ] as const
 
-// Fallback trending topics shown before real data loads
-const TRENDING_FALLBACK = [
-  { tag: '#WorldPulse',   count: '—',  momentum: 'steady',  sparkHeights: [8, 10, 12, 10, 12] },
-  { tag: '#Breaking',     count: '—',  momentum: 'rising',  sparkHeights: [5, 8, 11, 14, 17] },
-  { tag: '#Climate',      count: '—',  momentum: 'steady',  sparkHeights: [12, 14, 11, 13, 14] },
-  { tag: '#GlobalEvents', count: '—',  momentum: 'rising',  sparkHeights: [8, 10, 12, 15, 16] },
-  { tag: '#OSINT',        count: '—',  momentum: 'surging', sparkHeights: [4, 7, 10, 14, 18] },
-]
-
-const MOMENTUM_LABEL: Record<string, string> = {
-  surging: 'Surging',
-  rising:  '↑ Rising',
-  steady:  '→ Steady',
-  cooling: '↓ Cooling',
-}
-
-// Map channel slugs to API category params for live count fetch
-const CHANNEL_CATEGORIES: Record<string, string> = {
-  breaking:   'breaking',
-  conflict:   'conflict',
-  markets:    'economy',
-  climate:    'climate',
-  health:     'health',
-  technology: 'technology',
-  politics:   'elections',
-  culture:    'culture',
-}
-
-function formatCount(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1000)      return `${(n / 1000).toFixed(1)}K`
-  return String(n)
-}
-
 export function LeftSidebar() {
   const pathname = usePathname()
   const router   = useRouter()
@@ -116,10 +84,8 @@ export function LeftSidebar() {
   const tChannels = useTranslations('channels')
   const tCommon = useTranslations('common')
 
-  // Live signal counts per channel (fetched once on mount, refreshes every 2 min)
-  const [channelCounts, setChannelCounts] = useState<Record<string, number>>({})
-  // Real trending topics from API
-  const [trending, setTrending] = useState(TRENDING_FALLBACK)
+  // Who's in the news (lib/trending-entities.ts): null while loading, [] if it can't load
+  const [trending, setTrending] = useState<TrendingRow[] | null>(null)
   // Live Global Threat Index
   const [threatLevel, setThreatLevel] = useState<{ level: number; label: string; color: string } | null>(null)
 
@@ -146,46 +112,19 @@ export function LeftSidebar() {
         }
       } catch { /* keep static fallback */ }
 
-      try {
-        // Fetch channel counts in parallel (one request per channel)
-        const slugs = Object.keys(CHANNEL_CATEGORIES)
-        const countResults = await Promise.allSettled(
-          slugs.map(async (slug) => {
-            const cat = CHANNEL_CATEGORIES[slug]
-            const res = await fetch(`${API_URL}/api/v1/feed/signals?category=${cat}&limit=1`, { cache: 'no-store' })
-            if (!res.ok) throw new Error(`HTTP ${res.status}`)
-            const data: { total?: number; items?: unknown[] } = await res.json()
-            return { slug, count: data.total ?? (data.items?.length ?? 0) }
-          })
-        )
-        const counts: Record<string, number> = {}
-        for (const result of countResults) {
-          if (result.status === 'fulfilled') {
-            counts[result.value.slug] = result.value.count
-          }
-        }
-        setChannelCounts(counts)
-      } catch {
-        // Silently fail — counts are decorative
-      }
+      // (The channels' counts were taken out on Oct 20, 2026: each came from a feed page's
+      // item count, so every channel said "1", and each visit asked for 8 of them every
+      // 2 minutes.)
 
       try {
-        // Fetch real trending topics
-        const res = await fetch(`${API_URL}/api/v1/feed/trending?window=1h`, { cache: 'no-store' })
-        if (res.ok) {
-          const data: { items?: Array<{ topic: string; score: number; window: string }> } = await res.json()
-          if (data.items && data.items.length > 0) {
-            const mapped = data.items.slice(0, 5).map((t, i) => ({
-              tag: `#${t.topic.replace(/\s+/g, '')}`,
-              count: formatCount(Math.round(t.score)),
-              momentum: i === 0 ? 'surging' : i <= 2 ? 'rising' : 'steady',
-              sparkHeights: [4 + i, 7 + i, 10 - i, 14 - i, 16 - i].map(h => Math.max(2, Math.min(20, h))),
-            }))
-            setTrending(mapped)
-          }
-        }
+        // Who's in the news: the most-named people, places and organisations of 24 hours
+        // (twice as many asked for, since rows without a name or count are skipped;
+        // a failed refresh keeps the rows already shown)
+        const res = await fetch(`${API_URL}/api/v1/knowledge-graph/trending?limit=${TRENDING_SHOWN * 2}&window_hours=24&lean=1`)
+        const rows = res.ok ? trendingRows(await res.json() as TrendingAnswer) : null
+        setTrending(prev => rows ?? prev ?? [])
       } catch {
-        // Keep fallback
+        setTrending(prev => prev ?? [])
       }
     }
 
@@ -279,8 +218,6 @@ export function LeftSidebar() {
           {tNav('signalChannels')}
         </div>
         {CHANNELS.map(ch => {
-          const slug = ch.href.replace('/c/', '')
-          const count = channelCounts[slug]
           const isActive = pathname === ch.href
           return (
             <Link
@@ -298,49 +235,41 @@ export function LeftSidebar() {
               )}
               <ch.icon className={`w-4 h-4 flex-shrink-0 ${ch.color}`} aria-hidden="true" />
               <span>{tChannels(ch.labelKey)}</span>
-              {count != null && count > 0 && (
-                <span className="ml-auto font-mono text-[9px] text-wp-text3 flex-shrink-0" aria-label={`${count} signals`}>
-                  {formatCount(count)}
-                </span>
-              )}
             </Link>
           )
         })}
       </nav>
 
-      {/* Trending */}
-      <div className="px-4 mb-6">
-        <div className="font-mono text-[9px] tracking-[2px] text-wp-text3 uppercase mb-2 px-1">
-          {tNav('trendingNow')}
-        </div>
-        {trending.map((topic, i) => (
-          <div
-            key={topic.tag}
-            className="flex items-start gap-[10px] px-3 py-2 rounded-lg hover:bg-wp-s2 cursor-pointer transition-all mb-0.5"
-          >
-            <span className="font-mono text-[11px] text-wp-text3 w-[18px] flex-shrink-0 pt-0.5">#{i + 1}</span>
-            <div className="flex-1 min-w-0">
-              <div className="text-[13px] font-semibold text-wp-text truncate">{topic.tag}</div>
-              <div className="font-mono text-[10px] text-wp-text3 mt-0.5">
-                {topic.count} signals · {MOMENTUM_LABEL[topic.momentum]}
-              </div>
-            </div>
-            <div className="flex items-end gap-0.5 h-5 flex-shrink-0">
-              {topic.sparkHeights.map((h, j) => (
-                <div
-                  key={j}
-                  className={`w-[3px] rounded-sm transition-all ${
-                    j >= topic.sparkHeights.length - 2
-                      ? 'bg-wp-amber'
-                      : 'bg-[rgba(245,166,35,0.2)]'
-                  }`}
-                  style={{ height: `${h}px` }}
-                />
-              ))}
-            </div>
+      {/* Trending: who's in the news, real counts (lib/trending-entities.ts); hidden if it can't load */}
+      {(trending === null || trending.length > 0) && (
+        <div className="px-4 mb-6">
+          <div className="font-mono text-[9px] tracking-[2px] text-wp-text3 uppercase mb-2 px-1">
+            {tNav('trendingNow')}
           </div>
-        ))}
-      </div>
+          {trending === null
+            ? Array.from({ length: 3 }, (_, i) => (
+                <div key={i} className="h-[46px] mx-3 mb-0.5 rounded-lg bg-wp-s2/40" aria-hidden="true" />
+              ))
+            : trending.map((row, i) => (
+                <Link
+                  key={row.href}
+                  href={row.href}
+                  className="flex items-start gap-[10px] px-3 py-2 rounded-lg hover:bg-wp-s2 transition-all mb-0.5 no-underline"
+                >
+                  <span className="font-mono text-[11px] text-wp-text3 w-[18px] flex-shrink-0 pt-0.5">#{i + 1}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-semibold text-wp-text truncate">
+                      <span aria-hidden="true" className="mr-1">{entityTypeIcon(row.type)}</span>{row.name}
+                    </div>
+                    <div className="font-mono text-[10px] text-wp-text3 mt-0.5">
+                      {row.count}
+                      {row.rise && <span className={row.rise === 'NEW' ? 'text-wp-amber' : 'text-wp-red'}> · {row.rise}</span>}
+                    </div>
+                  </div>
+                </Link>
+              ))}
+        </div>
+      )}
     </aside>
   )
 }

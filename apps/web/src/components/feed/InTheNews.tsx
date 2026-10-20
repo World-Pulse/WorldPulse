@@ -31,7 +31,8 @@ export function InTheNews() {
     fetch(`${API_URL}/api/v1/knowledge-graph/trending?limit=${SHOWN}&window_hours=24&lean=1`)
       .then(r => (r.ok ? r.json() : null))
       .then((d: { trending?: Trending[] } | null) => {
-        if (!cancelled) setItems(Array.isArray(d?.trending) ? d.trending.filter(t => t.entity?.id && t.entity.canonical_name) : [])
+        // people, places and organisations: trade figures also name goods ("Petroleum products", "Wheat")
+        if (!cancelled) setItems(Array.isArray(d?.trending) ? d.trending.filter(t => t.entity?.id && t.entity.canonical_name && t.entity.type !== 'commodity') : [])
       })
       .catch(() => { if (!cancelled) setItems([]) })
     return () => { cancelled = true }
