@@ -1,6 +1,17 @@
+import type { FastifyRequest } from 'fastify'
 import type { RateLimitPluginOptions } from '@fastify/rate-limit'
 import type Redis from 'ioredis'
 import { buildCfAwareKeyGenerator } from '../middleware/cloudflare'
+import { internalCallClient } from './internal-call'
+
+/**
+ * Whose budget a request counts in: the signed-in user's or the client
+ * address's, or, for a call the API makes to itself on a client's behalf
+ * (an MCP tool asking a public route), that client's (lib/internal-call.ts).
+ */
+export function rateLimitKey(req: FastifyRequest): string {
+  return internalCallClient(req.headers as Record<string, unknown>) ?? buildCfAwareKeyGenerator(req)
+}
 
 /**
  * The API-wide rate limit: 200 requests a minute per signed-in user or per
@@ -23,7 +34,7 @@ export function rateLimitOptions(redis: Redis): RateLimitPluginOptions {
     timeWindow:  '1 minute',
     redis,
     skipOnError: true,
-    keyGenerator: buildCfAwareKeyGenerator,
+    keyGenerator: rateLimitKey,
     errorResponseBuilder: (_req, context) => ({
       statusCode: context.statusCode,   // 429, or 403 once a client is banned
       code:       'RATE_LIMITED',

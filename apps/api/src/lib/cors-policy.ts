@@ -45,9 +45,16 @@ const EXPOSED = ['x-ratelimit-limit', 'x-ratelimit-remaining', 'x-ratelimit-rese
 
 const READ_METHODS = new Set(['GET', 'HEAD'])
 
+/** The MCP server (routes/mcp.ts): read-only too, but its questions come by POST */
+const MCP_PATH = '/mcp'
+
 /** Whether a request is one of the public reads (a preflight counts when it asks for GET or HEAD) */
 export function isPublicRead(method: string, url: string, preflightMethod?: string): boolean {
   const path = url.split('?')[0] ?? ''
+  if (path === MCP_PATH || path === `${MCP_PATH}/`) {
+    const m = method.toUpperCase()
+    return m === 'POST' || (m === 'OPTIONS' && (preflightMethod ?? '').toUpperCase() === 'POST')
+  }
   const onPath = PUBLIC_READ_PREFIXES.some(p => (p.endsWith('/') ? path.startsWith(p) : path === p || path.startsWith(`${p}/`)))
   if (!onPath) return false
   const m = method.toUpperCase()
@@ -63,7 +70,8 @@ export function corsDecision(
   if (!origin || origin === 'null' || allowedOrigins.includes(origin)) return { origin: true, credentials: true }
   const asked = req.headers['access-control-request-method']
   if (isPublicRead(req.method, req.url, typeof asked === 'string' ? asked : undefined)) {
-    return { origin: '*', credentials: false, methods: ['GET', 'HEAD', 'OPTIONS'], exposedHeaders: EXPOSED, maxAge: 86_400 }
+    const mcp = (req.url.split('?')[0] ?? '').replace(/\/$/, '') === MCP_PATH
+    return { origin: '*', credentials: false, methods: mcp ? ['POST', 'OPTIONS'] : ['GET', 'HEAD', 'OPTIONS'], exposedHeaders: EXPOSED, maxAge: 86_400 }
   }
   return { origin: false }
 }

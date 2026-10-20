@@ -73,6 +73,7 @@ import laborRightsPlugin                 from './routes/labor-rights'
 import { registerMapOgRoutes }           from './routes/map/og'
 import { registerClaimsRoutes }          from './routes/claims'
 import { registerPulseRoutes }           from './routes/pulse'
+import { registerMcpRoutes }             from './routes/mcp'
 import { registerWSHandler, startRedisSubscriber } from './ws/handler'
 import { registerGraphQL } from './graphql'
 import { metricsPlugin } from './middleware/metrics'
@@ -414,6 +415,8 @@ async function bootstrap() {
 
   // ─── PULSE AI PUBLISHER ──────────────────────────────────
   await app.register(registerPulseRoutes,             { prefix: '/api/v1/pulse' })
+  // WorldPulse for AI assistants: an MCP server (routes/mcp.ts, plan 15)
+  await app.register(registerMcpRoutes,               { prefix: '/mcp' })
 
   // ─── GRAPHQL ─────────────────────────────────────────────
   await registerGraphQL(app)

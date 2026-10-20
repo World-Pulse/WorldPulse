@@ -25,6 +25,13 @@ describe('isPublicRead', () => {
     expect(isPublicRead('GET', '/api/v1/signalsx')).toBe(false)
     expect(isPublicRead('GET', '/api/v1/admin/users')).toBe(false)
   })
+  it('covers the MCP server, whose questions come by POST, and only it', () => {
+    expect(isPublicRead('POST', '/mcp')).toBe(true)
+    expect(isPublicRead('OPTIONS', '/mcp', 'POST')).toBe(true)
+    expect(isPublicRead('GET', '/mcp')).toBe(false)
+    expect(isPublicRead('POST', '/mcpx')).toBe(false)
+    expect(isPublicRead('POST', '/api/v1/public/signals')).toBe(false)
+  })
 })
 
 describe('corsDecision', () => {
@@ -52,6 +59,7 @@ describe('the API with this policy', () => {
     await app.register(cors, { delegator: (r, cb) => cb(null, corsDecision(r, OWN)) })
     app.get('/api/v1/public/signals', async () => ({ success: true }))
     app.get('/api/v1/feed/following', async () => ({ success: true }))
+    app.post('/mcp', async () => ({ jsonrpc: '2.0', id: 1, result: {} }))
     return app
   }
 
@@ -84,5 +92,16 @@ describe('the API with this policy', () => {
     const res = await app.inject({ method: 'GET', url: '/api/v1/feed/following', headers: { origin: 'https://world-pulse.io' } })
     expect(res.headers['access-control-allow-origin']).toBe('https://world-pulse.io')
     expect(res.headers['access-control-allow-credentials']).toBe('true')
+  })
+
+  it("answers another website's preflight for the MCP server, with the headers it asks for", async () => {
+    const app = await build()
+    const res = await app.inject({ method: 'OPTIONS', url: '/mcp', headers: { origin: 'https://example.com', 'access-control-request-method': 'POST', 'access-control-request-headers': 'content-type, mcp-protocol-version' } })
+    expect(res.statusCode).toBe(204)
+    expect(res.headers['access-control-allow-origin']).toBe('*')
+    expect(String(res.headers['access-control-allow-methods'])).toMatch(/POST/)
+    expect(String(res.headers['access-control-allow-headers'])).toMatch(/mcp-protocol-version/)
+    const post = await app.inject({ method: 'POST', url: '/mcp', headers: { origin: 'https://example.com', 'content-type': 'application/json' }, payload: '{}' })
+    expect(post.headers['access-control-allow-origin']).toBe('*')
   })
 })
