@@ -19,6 +19,11 @@ Page views from browser names that never did are reported as "unconfirmed".
 Requests for things only attackers look for (/wp-login.php, /.env…) never
 count.
 
+Views per visitor (plan G18, Oct 20, 2026): the day's page views, overall
+and by the channel that brought each visitor ("channel_views" and
+"channel_views_per_visitor"), so the report can say whether readers from X,
+search or a post read a second story. Counts only.
+
 A visitor's channel is where their first page view of the day came from:
 the link's utm_source if it has one (our posts and Share buttons add it),
 else the website that sent them (x.com, linkedin.com, google…), else
@@ -256,10 +261,18 @@ def by_count(counts, top=None):
     return dict(sorted(counts.items(), key=lambda kv: -kv[1])[:top])
 
 
+def per_visitor(views, people):
+    """Page views per visitor, to two decimals (0 when nobody came)"""
+    return round(views / people, 2) if people else 0
+
+
 def summary(d):
     """The day's totals, counting only visitors whose browser ran the page"""
     channels, pages, sites, views, people, unconfirmed = {}, {}, {}, 0, 0, 0
     hours, posts = {}, {}
+    # Page views by the channel that brought each visitor (plan G18 (3), Oct 20, 2026):
+    # whether readers who came from X, search or a post read a second story
+    channel_views = {}
     for v in d['visitors'].values():
         if not isinstance(v, dict) or not v.get('p'):
             continue
@@ -279,8 +292,12 @@ def summary(d):
             add(posts, v['k'])
         for kind, n in v['p'].items():
             add(pages, kind, n)
+            add(channel_views, ch, n)
             views += n
     return {'day': d['day'], 'visitors': people, 'views': views, 'channels': by_count(channels),
+            'channel_views': by_count(channel_views),
+            'views_per_visitor': per_visitor(views, people),
+            'channel_views_per_visitor': {ch: per_visitor(channel_views.get(ch, 0), n) for ch, n in by_count(channels).items()},
             'sites': by_count(sites, 8), 'pages': by_count(pages), 'crawlers': by_count(d['crawlers']),
             'bots': top_bots(d), 'bot_pages': by_count(d.get('bot_pages') or {}, 12), 'bots_since': d.get('bots_since'),
             'unconfirmed': unconfirmed, 'hours': dict(sorted(hours.items())), 'posts': by_count(posts, 20)}
@@ -441,7 +458,7 @@ def main():
     del out['hours']
     out['updated'] = now.isoformat(timespec='seconds')
     out['log_read'] = ok
-    out['history'] = [{k: h.get(k) for k in ('day', 'visitors', 'views', 'channels', 'posts', 'crawlers')} for h in st['history'][-14:]]
+    out['history'] = [{k: h.get(k) for k in ('day', 'visitors', 'views', 'channels', 'channel_views', 'views_per_visitor', 'posts', 'crawlers')} for h in st['history'][-14:]]
     print(json.dumps(out, separators=(',', ':')))
 
 
