@@ -1,7 +1,7 @@
 import { scoreOf } from '../lib/score'
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
-import { signalConnections } from '../lib/signal-connections'
+import { connectionsAnswer } from '../lib/signal-connections'
 import { redis } from '../db/redis'
 import { optionalAuth, authenticate } from '../middleware/auth'
 import { similarReports } from '../lib/fingerprint-search'
@@ -1642,28 +1642,27 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
   //
   // Returns signals connected to this one through shared entities in the
   // knowledge graph. Shows HOW signals are connected (via which entities),
-  // surfacing the invisible web of relationships.
+  // surfacing the invisible web of relationships. ?only=entities answers the
+  // entities alone (the story page's "In this story" links, Oct 20, 2026).
+  // Each answer is kept 10 minutes, then served for 6 hours while remade.
   app.get('/:id/connections', {
     preHandler: [optionalAuth],
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     schema: {
       tags: ['signals'],
       summary: 'Get knowledge graph connections for a signal',
-      description: 'Signals from the last 14 days that name the same people, places or organisations, other reports of the same story left out.',
+      description: 'Signals from the last 14 days that name the same people, places or organisations, other reports of the same story left out. With only=entities, the people, places and organisations the signal names, without the connections.',
     },
   }, async (req, reply) => {
     const { id } = req.params as { id: string }
-    const { limit = 8 } = req.query as { limit?: number }
+    const { limit = 8, only } = req.query as { limit?: number; only?: string }
     const safeLimit = Math.min(20, Math.max(1, Number(limit) || 8))
+    if (!isUuid(id)) return sendError(reply, 404, 'NOT_FOUND', 'Signal not found')
 
     try {
       // Signals naming this one's own people, places and organisations, from the
       // last two weeks, not other reports of its story (lib/signal-connections.ts)
-      const { connections, entities } = await signalConnections(id, safeLimit)
-      return reply.send({
-        success: true,
-        data: { connections, entities, count: connections.length },
-      })
+      return reply.send({ success: true, data: await connectionsAnswer(id, safeLimit, only) })
     } catch (err) {
       req.log.error({ err, signalId: id }, 'signal connections failed')
       return reply.status(500).send({ success: false, error: 'Could not load connections' })

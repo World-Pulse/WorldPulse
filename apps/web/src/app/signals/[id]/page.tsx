@@ -7,7 +7,7 @@ import { SITE_NAME, SITE_URL, newsArticleJsonLd, jsonLdText, metaDescription } f
 import { cachedFetch } from '@/lib/server-fetch'
 import Link from 'next/link'
 import { FollowBox } from '@/components/FollowBox'
-import { countryLink, entityLinks, rankRelated, type StoryLink } from '@/lib/story-links'
+import { countryLink, entityLinks, rankRelated, weekLink, type StoryLink } from '@/lib/story-links'
 import { fetchStoryOutlets } from '@/lib/story-outlets'
 
 const API_BASE = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
@@ -72,10 +72,15 @@ async function fetchRelated(category: string, countryCode: string | null | undef
   return rankRelated(excludeId, category, sameCountry, sameTopic)
 }
 
-/** The people, places and organisations the story names (an extra: [] when the API can't say) */
+/**
+ * The people, places and organisations the story names (an extra: [] when the
+ * API can't say). Asked without the connections search since Oct 20, 2026:
+ * that search answered 500 for the biggest stories, so their pages had no
+ * "In this story" links (G21).
+ */
 async function fetchEntityLinks(id: string): Promise<StoryLink[]> {
   try {
-    const res = await cachedFetch(`${API_BASE}/api/v1/signals/${encodeURIComponent(id)}/connections?limit=1`, 120_000)
+    const res = await cachedFetch(`${API_BASE}/api/v1/signals/${encodeURIComponent(id)}/connections?only=entities`, 120_000)
     if (!res.ok) return []
     const json = await res.json() as { success?: boolean; data?: { entities?: Array<{ id?: unknown; name?: unknown }> } }
     return json.success ? entityLinks(json.data?.entities) : []
@@ -157,6 +162,7 @@ export default async function SignalDetailPage(
     fetchStoryOutlets(signal.id),
   ])
   const country = countryLink(signal.countryCode)
+  const week = weekLink(signal.firstReported ?? signal.createdAt)
 
   // What search engines read about the story (schema.org NewsArticle, plan G2)
   const jsonLd = newsArticleJsonLd({
@@ -179,7 +185,7 @@ export default async function SignalDetailPage(
         postsTotal={postsData.total}
         initialStoryOutlets={storyOutlets}
       />
-      {(country || entities.length > 0) && (
+      {(country || entities.length > 0 || week) && (
         <nav aria-label="About this story" className="mx-auto max-w-5xl px-4 pb-8 text-[12px] text-wp-text3 flex flex-wrap items-center gap-x-3 gap-y-1">
           {country && (
             <span>Country: <Link href={country.href} className="text-wp-text2 hover:text-wp-amber">{country.label}</Link></span>
@@ -191,6 +197,9 @@ export default async function SignalDetailPage(
                 <Link key={e.href} href={e.href} className="text-wp-text2 hover:text-wp-amber">{e.label}</Link>
               ))}
             </span>
+          )}
+          {week && (
+            <span>WorldPulse Week: <Link href={week.href} className="text-wp-text2 hover:text-wp-amber">{week.label}</Link></span>
           )}
         </nav>
       )}

@@ -6,6 +6,7 @@
  */
 import { entityPath } from '@/lib/entity-links'
 import { countryLabel } from '@/lib/country-connections'
+import { isoWeekName, weekSpan, weekStart } from '@/lib/week'
 
 export interface StoryLink {
   href:  string
@@ -22,6 +23,23 @@ export function countryLink(code: string | null | undefined): StoryLink | null {
   if (!code || !/^[A-Za-z]{2}$/.test(code)) return null
   const upper = code.toUpperCase()
   return { href: `/countries/${upper}`, label: countryLabel(upper) || upper }
+}
+
+/**
+ * The "WorldPulse Week" a story's first report fell in (G21, Oct 20, 2026):
+ * /week while that week is under way, /week/<YYYY>-W<ww> once it has ended.
+ * Story pages linked to no week, so search engines reached the weeks only
+ * from the sitemap.
+ */
+export function weekLink(at: string | null | undefined, now: Date = new Date()): StoryLink | null {
+  if (!at) return null
+  const when = new Date(at)
+  if (Number.isNaN(when.getTime()) || when.getTime() > now.getTime() + 60_000) return null
+  const name = isoWeekName(when)
+  const start = weekStart(name)
+  if (!start) return null
+  if (name === isoWeekName(now)) return { href: '/week', label: `this week (${weekSpan(start)})` }
+  return { href: `/week/${name}`, label: weekSpan(start) }
 }
 
 /** Up to `max` entity pages, one per entity, skipping entries without an id or name */
