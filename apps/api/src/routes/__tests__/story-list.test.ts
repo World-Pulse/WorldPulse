@@ -223,6 +223,24 @@ describe('GET /api/v1/stories', () => {
     expect(h.sql).toBe('')
   })
 
+  it("lists one country's stories, kept apart from the others (plan 14, Oct 20, 2026)", async () => {
+    const app = Fastify({ logger: false })
+    await app.register(registerStoryRoutes, { prefix: '/api/v1/stories' })
+    const res = await app.inject({ method: 'GET', url: '/api/v1/stories?hours=72&limit=8&country=sa' })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().data).toMatchObject({ hours: 72, country: 'SA' })
+    expect(h.sql).toMatch(/WHERE country_code = \? AND created_at >= \?/)
+    expect(h.bindings[0]).toBe('SA')
+    expect(h.bindings[1]).toBeInstanceOf(Date)
+    expect(h.setex).toHaveBeenCalledWith('stories:list:v2:SA:72:8', expect.any(Number), expect.any(String))
+  })
+
+  it('refuses a country that is not a two-letter code', async () => {
+    const app = Fastify({ logger: false })
+    await app.register(registerStoryRoutes, { prefix: '/api/v1/stories' })
+    expect((await app.inject({ method: 'GET', url: '/api/v1/stories?country=SAU' })).statusCode).toBe(400)
+  })
+
   it('refuses a window over 72 hours', async () => {
     const app = Fastify({ logger: false })
     await app.register(registerStoryRoutes, { prefix: '/api/v1/stories' })
