@@ -43,7 +43,7 @@ async function fetchStories(): Promise<HomeStory[]> {
 }
 
 const DESCRIPTION = metaDescription(
-  'Real-time verified signals from every corner of the world: a live map, breaking news from independent outlets with reliability scores, and open source.',
+  "World news with how many independent outlets reported each story, and which ones. Live map, the week's top stories, open data and a free API.",
 )
 
 const STRUCTURED_DATA = [

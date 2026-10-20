@@ -1,7 +1,7 @@
 {
-  "name": "WorldPulse — Global Intelligence Network",
+  "name": "WorldPulse",
   "short_name": "WorldPulse",
-  "description": "Real-time verified intelligence signals from every corner of the world.",
+  "description": "World news with how many independent outlets reported each story, and which ones.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#06070d",

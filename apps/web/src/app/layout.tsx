@@ -47,8 +47,10 @@ export const metadata: Metadata = {
   // falls back to http://localhost:3000. `||` (not `??`) so an empty env value
   // still falls back to the live domain. Same pattern as apps/api alert-email.ts.
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://world-pulse.io'),
-  title: 'WorldPulse — Global Intelligence Network',
-  description: 'Real-time verified signals from every corner of the world. Live map, breaking news, open source.',
+  // What WorldPulse is, said the way people search (Devon, Oct 20, 2026: it was
+  // "Global Intelligence Network", which put it among the dashboards)
+  title: 'WorldPulse — How many newsrooms reported each world story',
+  description: "World news with how many independent outlets reported each story, and which ones. Live map, the week's top stories, open data and a free API.",
   keywords: ['world news', 'breaking news', 'global events', 'open source', 'real-time'],
   manifest: '/manifest.json',
   appleWebApp: {
@@ -59,8 +61,8 @@ export const metadata: Metadata = {
   // No og:url here: every page inherits this, and it made each one claim to be
   // the home page in share previews (pages set their own, lib/page-metadata.ts)
   openGraph: {
-    title: 'WorldPulse — Global Intelligence Network',
-    description: 'Real-time verified signals from every corner of the world. Live map, breaking news, open source.',
+    title: 'WorldPulse — How many newsrooms reported each world story',
+    description: "World news with how many independent outlets reported each story, and which ones. Live map, the week's top stories, open data and a free API.",
     type: 'website',
     siteName: 'WorldPulse',
     images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'WorldPulse' }],
@@ -68,8 +70,8 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     site: `@${X_HANDLE}`,
-    title: 'WorldPulse — Global Intelligence Network',
-    description: 'Real-time verified signals from every corner of the world.',
+    title: 'WorldPulse — How many newsrooms reported each world story',
+    description: "World news with how many independent outlets reported each story, and which ones. Live map, the week's top stories, open data and a free API.",
     images: ['/og-image.png'],
   },
 }

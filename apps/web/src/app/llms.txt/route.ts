@@ -10,7 +10,7 @@ const API_URL = 'https://api.world-pulse.io'
 
 const TEXT = `# WorldPulse
 
-> WorldPulse is an open-source global intelligence network. It collects news and open-source signals from outlets, wire services, government and institutional feeds worldwide, scores how reliable each report is, and shows them in a live feed, AI digests and a live world map.
+> WorldPulse shows how many independent newsrooms reported each world story, and which ones. It is open source. It collects news and open-source signals from outlets, wire services, government and institutional feeds worldwide, groups the reports of each event into one story, scores how reliable each report is, and shows them in a live feed, a weekly list of top stories, AI digests and a live world map.
 
 A story is "verified" when two or more outlets (websites) report it and its reliability score reaches 65%. Reports from the same outlet, or copies of one article, do not count twice. An AI check then looks for contradictions on facts such as where, who and how many. Verified means "more than one outlet says so", not "proven true". Every report keeps a link to the original source.
 

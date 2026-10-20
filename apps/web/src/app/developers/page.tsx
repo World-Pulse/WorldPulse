@@ -212,8 +212,8 @@ export default function DevelopersPage() {
             WORLDPULSE DEVELOPER API
           </h1>
           <p className="text-[15px] sm:text-[17px] text-wp-text3 max-w-2xl leading-relaxed mb-8">
-            Access real-time global intelligence from 1,000+ outlets a day. Verified signals, reliability scores,
-            geolocation data, and AI-powered briefings — all through a simple REST API.
+            World stories with how many independent outlets reported each, from 1,000+ outlets a day: verified
+            stories, reliability scores, places and AI briefings, through a simple REST API and an MCP server.
             The code is open source under the{' '}
             <a href={LICENSE_URL} target="_blank" rel="noopener noreferrer" className="text-wp-cyan hover:underline">MIT license</a>.
           </p>
