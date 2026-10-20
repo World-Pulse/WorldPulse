@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useTranslations } from '@/lib/i18n'
 import { authHref } from '@/lib/auth-next'
-import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { useTheme } from '@/components/providers'
 import {
   Zap, Globe, Bell, BarChart3, Telescope, Users, Radio,
@@ -252,10 +251,9 @@ export function TopNav() {
             {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
 
-          {/* Language switcher — sm+ only */}
-          <div className="hidden sm:block">
-            <LanguageSwitcher />
-          </div>
+          {/* The language menu is off until other languages have pages of their own
+              (H-0021, Oct 20, 2026): it sent readers to /fr, /de, /ar…, which don't
+              exist, so every choice but English showed "page not found" */}
 
           {/* Auth controls */}
           {user ? (
