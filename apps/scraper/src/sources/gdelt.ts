@@ -34,6 +34,7 @@ import { extractArticle, setArticleExtractorRedis } from '../pipeline/article-ex
 import { extractGeo }                  from '../pipeline/geo'
 import { classifyContent }             from '../pipeline/classify'
 import { CAMEO_LABEL }                 from '../pipeline/event-titles'
+import { isoFromFips }                 from '../pipeline/fips-countries'
 
 const log = rootLogger.child({ module: 'gdelt-source' })
 
@@ -149,6 +150,7 @@ export interface GdeltRow {
   eventRootCode: string
   goldstein:     number
   geoName:       string
+  /** ISO 3166-1 alpha-2 (converted from GDELT's FIPS 10-4 code), or '' */
   countryCode:   string
   lat:           number | null
   lng:           number | null
@@ -198,7 +200,8 @@ export function parseTsvRow(line: string): GdeltRow | null {
     eventRootCode: cols[COL.EVENTROOTCODE]?.trim()         ?? '',
     goldstein:     parseFloat(cols[COL.GOLDSTEINSCALE] ?? '') || 0,
     geoName:       tidyGeoName(cols[COL.ACTIONGEO_FULLNAME]?.trim() ?? ''),
-    countryCode:   cols[COL.ACTIONGEO_COUNTRYCODE]?.trim() ?? '',
+    // GDELT writes FIPS 10-4 codes (Nigeria NI, Ireland EI, Austria AU): stored as ISO
+    countryCode:   isoFromFips(cols[COL.ACTIONGEO_COUNTRYCODE]) ?? '',
     lat:           !isNaN(latVal) ? latVal : null,
     lng:           !isNaN(lngVal) ? lngVal : null,
     dateAdded:     cols[COL.DATEADDED]?.trim()             ?? '',

@@ -41,7 +41,7 @@ import { signalsHavePublishedAt, publishedAtFor, backfillRecentPublishedAt, sour
 import { independentReports, isCopyOf } from './pipeline/independence'
 import { ensureStoryIdColumn } from './pipeline/stories'
 import { startEditor, catchUpEditor } from './pipeline/editor'
-import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames, stripOutletNotes, stripOutletNames, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability, switchOffRetiredSources } from './pipeline/repairs'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames, fixGdeltFipsCountries, stripOutletNotes, stripOutletNames, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability, switchOffRetiredSources } from './pipeline/repairs'
 import { batchValidateGeo } from './pipeline/geo-validator'
 import { recomputeSourceReputation } from './pipeline/source-reputation'
 import { startKafkaLagMonitor } from './lib/kafka-lag-monitor'
@@ -208,6 +208,9 @@ async function bootstrap() {
   tidyGdeltPlaceNames()
     .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: GDELT place names without "?" and repeats') })
     .catch(err => logger.warn({ err }, 'GDELT place name repair failed (non-fatal)'))
+  fixGdeltFipsCountries()
+    .then(rows => { if (rows > 0) logger.info({ rows }, "Repair: GDELT stories' FIPS country codes made ISO (Nigeria NI → NG, Ireland EI → IE)") })
+    .catch(err => logger.warn({ err }, 'GDELT country code repair failed (non-fatal)'))
   // After the decoding, which rewrites the same summaries
   const footers = decoding
     .then(() => stripFeedFooters())

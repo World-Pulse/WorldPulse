@@ -23,7 +23,7 @@ vi.mock('../../lib/postgres', () => {
   }
 })
 
-import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability, stripOutletNames, switchOffRetiredSources, RETIRED_SOURCE_SLUGS } from '../repairs'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability, stripOutletNames, switchOffRetiredSources, RETIRED_SOURCE_SLUGS, fixGdeltFipsCountries } from '../repairs'
 import { db } from '../../lib/postgres'
 import { EVENT_TEMPLATE_SQL } from '../event-titles'
 
@@ -309,5 +309,36 @@ describe('switchOffRetiredSources', () => {
     for (const slug of ['bbc-world', 'reuters-world', 'aljazeera', 'un-news', 'acled', 'ioda', 'japan-times']) {
       expect(RETIRED_SOURCE_SLUGS).not.toContain(slug)
     }
+  })
+})
+
+describe('fixGdeltFipsCountries (Oct 20, 2026, H-0022)', () => {
+  beforeEach(() => { h.updates.length = 0; vi.mocked(db).mockClear() })
+
+  it("gives GDELT stories the ISO code of the country their place names, and leaves the rest", async () => {
+    h.rows = [
+      { id: 'lagos', country_code: 'NI', location_name: 'Gwagwalada, Abuja Federal Capital Territory, Nigeria' },
+      { id: 'managua', country_code: 'NI', location_name: 'Managua, Nicaragua' },   // the article's own place: ISO already
+      { id: 'dublin', country_code: 'EI', location_name: 'Dublin, Ireland' },
+      { id: 'kano', country_code: 'NI', location_name: 'Kano State, Kano, Nigeria' },
+      { id: 'sydney', country_code: 'AU', location_name: 'Sydney, New South Wales, Australia' },
+      { id: 'vienna', country_code: 'AU', location_name: 'Vienna, Wien, Austria' },
+      { id: 'nowhere', country_code: 'EI', location_name: null },
+    ]
+    expect(await fixGdeltFipsCountries()).toBe(4)
+    expect(db).toHaveBeenCalledWith('signals')
+    expect(h.updates).toEqual([
+      { ids: ['lagos', 'kano'], data: { country_code: 'NG' } },
+      { ids: ['dublin'], data: { country_code: 'IE' } },
+      { ids: ['vienna'], data: { country_code: 'AT' } },
+    ])
+    h.rows = []
+  })
+
+  it('changes nothing when every row is right already (a later start)', async () => {
+    h.rows = [{ id: 'abuja', country_code: 'NG', location_name: 'Abuja, Nigeria' }]
+    expect(await fixGdeltFipsCountries()).toBe(0)
+    expect(h.updates).toEqual([])
+    h.rows = []
   })
 })

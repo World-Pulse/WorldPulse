@@ -17,6 +17,8 @@ import { tidyGeoName } from '../sources/gdelt'
 import { NEWS_SOURCE_REGISTRY, detectNewsCategory, isShoppingItem } from '../sources/news-rss'
 import { categorizeArticle, categorizeText } from './categories'
 import { corroboratedReliability, RELIABILITY_CEILING } from './correlate'
+import { FIPS_TO_ISO, isoForStoredFips } from './fips-countries'
+import { countryNameOf } from './world-countries'
 
 /** Where nginx serves uploaded post media (the uploads volume, under /uploads/) */
 const PUBLIC_SITE = 'https://world-pulse.io'
@@ -559,6 +561,40 @@ export async function tidyGdeltPlaceNames(): Promise<number> {
   return fixed
 }
 
+
+/** GDELT codes that mean a different country in ISO (Nigeria's NI is Nicaragua's ISO code) */
+const FIPS_ONLY_CODES = Object.entries(FIPS_TO_ISO).filter(([fips, [iso]]) => fips !== iso).map(([fips]) => fips)
+
+/**
+ * GDELT stories of the last 30 days stored with GDELT's FIPS 10-4 country code
+ * instead of the ISO one (Oct 20, 2026; handoff H-0022): Nigerian stories had
+ * NI, Nicaragua's code, and Irish ones EI, no country at all, so they showed on
+ * the wrong country page or none. gdelt.ts converts the code now
+ * (fips-countries.ts). A row is changed only when its place name ends with the
+ * country the FIPS code means ("Lagos, Nigeria" with NI becomes NG); a place
+ * found in the article's own text keeps its ISO code ("Managua, Nicaragua"
+ * with NI). Changed rows no longer match, so a later start changes nothing.
+ */
+export async function fixGdeltFipsCountries(): Promise<number> {
+  const rows = await db('signals')
+    .where('created_at', '>', db.raw("NOW() - INTERVAL '30 days'"))
+    .whereRaw("tags @> ARRAY['gdelt']::text[]")
+    .whereIn('country_code', FIPS_ONLY_CODES)
+    .select('id', 'country_code', 'location_name')
+    .limit(20_000) as Array<{ id: string; country_code: string | null; location_name: string | null }>
+  const byCountry = new Map<string, string[]>()
+  for (const row of rows) {
+    const iso = isoForStoredFips(row.country_code, row.location_name, countryNameOf)
+    if (iso) byCountry.set(iso, [...(byCountry.get(iso) ?? []), row.id])
+  }
+  let fixed = 0
+  for (const [iso, ids] of byCountry) {
+    for (let i = 0; i < ids.length; i += 500) {
+      fixed += Number(await db('signals').whereIn('id', ids.slice(i, i + 500)).update({ country_code: iso })) || 0
+    }
+  }
+  return fixed
+}
 
 /**
  * The database feeds that no longer answer, switched off (Devon's OK, Oct 14,

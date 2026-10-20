@@ -57,11 +57,24 @@ describe('parseTsvRow', () => {
     expect(row!.eventRootCode).toBe('19')
     expect(row!.goldstein).toBe(-7.5)
     expect(row!.geoName).toBe('Kyiv, Kiev Oblast, Ukraine')
-    expect(row!.countryCode).toBe('UP')
+    expect(row!.countryCode).toBe('UA') // GDELT's FIPS 'UP', stored as ISO
     expect(row!.lat).toBeCloseTo(50.45)
     expect(row!.lng).toBeCloseTo(30.52)
     expect(row!.dateAdded).toBe('20260326143000')
     expect(row!.sourceUrl).toBe('https://example.com/conflict-news')
+  })
+
+  it("stores GDELT's FIPS 10-4 country codes as ISO ones (Oct 20, 2026, H-0022)", () => {
+    const cc = (code: string) => parseTsvRow(makeRow({ 53: code }))!.countryCode
+    expect(cc('NI')).toBe('NG') // Nigeria, not Nicaragua
+    expect(cc('EI')).toBe('IE') // Ireland
+    expect(cc('AU')).toBe('AT') // Austria, not Australia
+    expect(cc('AS')).toBe('AU') // Australia
+    expect(cc('GM')).toBe('DE') // Germany, not Gambia
+    expect(cc('IS')).toBe('IL') // Israel, not Iceland
+    expect(cc('US')).toBe('US')
+    expect(cc('OS')).toBe('')   // GDELT's oceans: no country rather than a wrong one
+    expect(cc('')).toBe('')
   })
 
   it('returns null for a row with too few columns', () => {
