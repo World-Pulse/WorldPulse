@@ -182,6 +182,17 @@ export async function topStories(hours: number, limit: number, country?: string)
 }
 
 /**
+ * The stories reported between `from` and `to` (a day, a week), the biggest
+ * first, with only that window's own reports counted and no fading with age,
+ * as a finished week ranks them (GET /stories/week; a past day's briefing)
+ */
+export async function storiesBetween(from: Date, to: Date, limit: number): Promise<ListedStory[]> {
+  const hasStoryIds = await signalsHaveStoryIds()
+  const result = await longQuery(LIST_QUERY_SECONDS, trx => trx.raw(storyListSql(hasStoryIds, 'week'), [from, to, EVENT_TEMPLATE_SQL]))
+  return rankStories(candidatesOf(result), limit, to.getTime(), { decay: false })
+}
+
+/**
  * The stories that the given signals belong to, reported in the last
  * `hours`, ranked as topStories ranks them (two outlets or more, real
  * headlines, each event once). For an entity's page: the stories that name it.

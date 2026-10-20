@@ -27,6 +27,9 @@ interface BriefingSignal {
   category: string
   published_at: string
   source_count: number
+  /** How many outlets (websites) reported the story (GET /briefing/daily lists stories since Oct 20, 2026) */
+  outlet_count?: number
+  verified?: boolean
 }
 
 interface BriefingSection {
@@ -810,9 +813,9 @@ export default function BriefingPage() {
                           {/* Badges */}
                           <div className="flex items-center gap-2 flex-wrap mb-2">
                             <SeverityBadge severity={signal.severity} />
-                            {signal.source_count > 1 && (
-                              <span className="text-xs text-zinc-500 bg-zinc-800 rounded-full px-2 py-0.5">
-                                {signal.source_count} sources
+                            {(signal.outlet_count ?? signal.source_count) > 1 && (
+                              <span className={`text-xs rounded-full px-2 py-0.5 ${signal.verified ? 'text-green-400 bg-green-500/10' : 'text-zinc-400 bg-zinc-800'}`}>
+                                {signal.verified ? 'Verified · ' : ''}{(signal.outlet_count ?? signal.source_count).toLocaleString('en-US')} outlets
                               </span>
                             )}
                           </div>

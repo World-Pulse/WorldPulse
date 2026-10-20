@@ -1,23 +1,106 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
-import { redis } from '../db/redis'
 import { generateDailyBriefing } from '../lib/briefing-generator'
+import { staleWhileRevalidate, type SwrOptions } from '../lib/swr-cache'
+import type { ListedStory } from '../lib/story-list'
+import { topStories, storiesBetween } from './stories'
 
-const BRIEFING_CACHE_TTL = 15 * 60 // 15 minutes
+/** The last 24 hours: kept 10 minutes, then served for 6 hours while remade */
+const TODAY_KEEP: SwrOptions = { freshSeconds: 600, staleSeconds: 6 * 3_600, lockSeconds: 120 }
+/** A past day hardly changes: kept 6 hours, then served for a week while remade */
+const PAST_DAY_KEEP: SwrOptions = { freshSeconds: 6 * 3_600, staleSeconds: 7 * 86_400, lockSeconds: 120 }
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+/** Stories shown, and ranked before the category filter */
+const SHOWN = 20
+const RANKED = 80
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+/** A real day (2026-10-20, not 2026-13-45) */
+function validDate(d: string): boolean {
+  if (!DATE_RE.test(d)) return false
+  const t = new Date(`${d}T00:00:00.000Z`)
+  return !Number.isNaN(t.getTime()) && t.toISOString().slice(0, 10) === d
+}
 
-interface BriefingSignalRow {
-  id: string
-  title: string
-  summary: string | null
-  severity: string
-  reliability_score: string | number
-  location_name: string | null
-  country_code: string | null
-  category: string
-  published_at: Date | string
-  source_count: string | number
+type Lead = { summary: string | null; reliability_score: number; country_code: string | null }
+
+/**
+ * The briefing's stories (Daily Briefing upgrade, plan 9, Oct 20, 2026): the
+ * day's stories two or more outlets reported, each event once, ranked as the
+ * home page ranks them (outlets, severity, how recent; a past day by outlets
+ * and severity only), each with its lead report's summary, score and country.
+ * It listed the 20 most severe single reports instead: the same story
+ * several times (two of Sudan's drone strike reports on Oct 20), reports one
+ * outlet carried with a 33% reliability, and an outlet count of 0 for most,
+ * from a column the news readers leave empty. News only (editorial
+ * standards): low-severity culture, sports and "other" are left out.
+ */
+async function briefingDay(date: string | undefined): Promise<{ stories: ListedStory[]; leads: Record<string, Lead> }> {
+  const ranked = date
+    ? await storiesBetween(new Date(`${date}T00:00:00.000Z`), new Date(`${date}T23:59:59.999Z`), RANKED)
+    : await topStories(24, RANKED)
+  const stories = ranked.filter(s => !(['culture', 'sports', 'other'].includes(s.category ?? 'other') && ['low', 'info'].includes(s.severity)))
+  const rows = stories.length
+    ? await db('signals').whereIn('id', stories.map(s => s.leadId)).select('id', 'summary', 'reliability_score', 'country_code') as
+      Array<{ id: string; summary: string | null; reliability_score: string | number | null; country_code: string | null }>
+    : []
+  const leads: Record<string, Lead> = {}
+  for (const r of rows) leads[String(r.id)] = { summary: r.summary ?? null, reliability_score: Number(r.reliability_score ?? 0), country_code: r.country_code ?? null }
+  return { stories, leads }
+}
+
+/** The response for one category (or all): the first 20 stories, grouped by category */
+export function briefingResponse(targetDate: string, day: { stories: ListedStory[]; leads: Record<string, Lead> }, category: string | null) {
+  const stories = day.stories.filter(s => !category || s.category === category).slice(0, SHOWN)
+  const sectionMap = new Map<string, Array<Record<string, unknown>>>()
+  for (const s of stories) {
+    const l = day.leads[s.leadId]
+    const cat = s.category ?? 'other'
+    if (!sectionMap.has(cat)) sectionMap.set(cat, [])
+    sectionMap.get(cat)!.push({
+      id:                s.leadId,
+      story_id:          s.id,
+      title:             s.title,
+      summary:           l?.summary ?? null,
+      severity:          s.severity,
+      reliability_score: l?.reliability_score ?? 0,
+      location_name:     s.place,
+      country_code:      l?.country_code ?? null,
+      category:          cat,
+      published_at:      s.firstSeenAt,
+      updated_at:        s.updatedAt,
+      // how many outlets (websites) reported the story; source_count is kept for older readers of this API
+      source_count:      s.outletCount,
+      outlet_count:      s.outletCount,
+      outlets:           s.outlets,
+      verified:          Boolean(s.verifiedAt),
+    })
+  }
+  const sections = [...sectionMap.entries()].map(([cat, signals]) => ({ category: cat, signals }))
+
+  const locationCounts = new Map<string, number>()
+  for (const s of stories) if (s.place) locationCounts.set(s.place, (locationCounts.get(s.place) ?? 0) + 1)
+  const top_locations = [...locationCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([location_name, count]) => ({ location_name, count }))
+
+  const severity_breakdown = { critical: 0, high: 0, medium: 0, low: 0 }
+  for (const s of stories) {
+    const sev = s.severity as keyof typeof severity_breakdown
+    if (sev in severity_breakdown) severity_breakdown[sev]++
+  }
+
+  return {
+    success: true,
+    data: {
+      date:           targetDate,
+      generated_at:   new Date().toISOString(),
+      headline_count: stories.length,
+      sections,
+      top_locations,
+      severity_breakdown,
+    },
+  }
 }
 
 // ─── Route Plugin ─────────────────────────────────────────────────────────────
@@ -31,16 +114,17 @@ export const registerBriefingDailyRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // ─── GET /api/v1/briefing/daily ──────────────────────────────────────────────
-  // Returns structured top-20 signals from the last 24h (or specified date),
-  // grouped by category. Cached in Redis for 15 minutes. Public, no auth.
+  // The day's top 20 stories (two outlets or more, each event once) from the
+  // last 24h (or the specified date), grouped by category. Kept 10 minutes
+  // (a past day 6 hours). Public, no auth.
   app.get('/daily', {
     schema: {
       summary: 'Get structured daily intelligence briefing',
       description: [
-        'Returns the top 20 signals from the last 24 hours (or the specified date),',
-        'ordered by severity then reliability score.',
-        'Results are grouped by category and cached for 15 minutes.',
-        'No authentication required.',
+        'Returns the top 20 stories from the last 24 hours (or the specified date):',
+        'each event once, reported by two or more outlets, ranked by outlets, severity and how recent,',
+        'each with its lead report, its outlet count and whether it is verified.',
+        'Grouped by category. Kept 10 minutes. No authentication required.',
       ].join(' '),
       querystring: {
         type: 'object',
@@ -50,6 +134,10 @@ export const registerBriefingDailyRoutes: FastifyPluginAsync = async (app) => {
         },
       },
       response: {
+        400: {
+          type: 'object',
+          properties: { success: { type: 'boolean' }, code: { type: 'string' }, error: { type: 'string' } },
+        },
         200: {
           type: 'object',
           properties: {
@@ -80,7 +168,12 @@ export const registerBriefingDailyRoutes: FastifyPluginAsync = async (app) => {
                             country_code:      { type: ['string', 'null'] },
                             category:          { type: 'string' },
                             published_at:      { type: 'string' },
-                            source_count:      { type: 'integer' },
+                            updated_at:        { type: 'string' },
+                            story_id:          { type: 'string' },
+                            source_count:      { type: 'integer', description: 'Outlets (websites) that reported the story, as outlet_count' },
+                            outlet_count:      { type: 'integer' },
+                            outlets:           { type: 'array', items: { type: 'string' } },
+                            verified:          { type: 'boolean' },
                           },
                         },
                       },
@@ -124,124 +217,17 @@ export const registerBriefingDailyRoutes: FastifyPluginAsync = async (app) => {
   }, async (req, reply) => {
     try {
     const { date, category } = req.query as { date?: string; category?: string }
-
-    // Determine date window
+    if (date !== undefined && !validDate(date)) {
+      return reply.code(400).send({ success: false, code: 'VALIDATION_ERROR', error: 'date must be a day such as 2026-10-20' })
+    }
     const targetDate = date ?? new Date().toISOString().slice(0, 10)
-    const categoryKey = category ?? 'all'
-    const cacheKey = `briefing:${targetDate}:${categoryKey}`
+    const wanted = category && category !== 'all' ? category : null
 
-    // Return cached result if available
-    const cached = await redis.get(cacheKey).catch(() => null)
-    if (cached) {
-      return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
-    }
-
-    // Build time range: full day if date supplied, last 24h otherwise
-    let fromDate: Date
-    let toDate: Date
-    if (date) {
-      fromDate = new Date(`${date}T00:00:00.000Z`)
-      toDate   = new Date(`${date}T23:59:59.999Z`)
-    } else {
-      toDate   = new Date()
-      fromDate = new Date(toDate.getTime() - 24 * 60 * 60 * 1000)
-    }
-
-    // ── Query top 20 signals ordered by severity then reliability ─────────────
-    let query = db('signals')
-      .select([
-        'id',
-        'title',
-        'summary',
-        'severity',
-        'reliability_score',
-        'location_name',
-        'country_code',
-        'category',
-        db.raw('created_at AS published_at'),
-        db.raw('COALESCE(cardinality(source_ids), 0) AS source_count'),
-        db.raw(`
-          CASE severity
-            WHEN 'critical' THEN 4
-            WHEN 'high'     THEN 3
-            WHEN 'medium'   THEN 2
-            WHEN 'low'      THEN 1
-            ELSE 0
-          END AS severity_rank
-        `),
-      ])
-      .where('created_at', '>=', fromDate)
-      .where('created_at', '<=', toDate)
-      .orderByRaw('severity_rank DESC, reliability_score DESC')
-      .limit(20)
-
-    if (category && category !== 'all') {
-      query = query.where('category', category)
-    }
-
-    const rows = (await query) as BriefingSignalRow[]
-
-    // ── Group by category into sections ───────────────────────────────────────
-    const sectionMap = new Map<string, BriefingSignalRow[]>()
-    for (const row of rows) {
-      const cat = row.category
-      if (!sectionMap.has(cat)) sectionMap.set(cat, [])
-      sectionMap.get(cat)?.push(row)
-    }
-
-    const sections = Array.from(sectionMap.entries()).map(([cat, sigs]) => ({
-      category: cat,
-      signals:  sigs.map((s) => ({
-        id:                s.id,
-        title:             s.title,
-        summary:           s.summary ?? null,
-        severity:          s.severity,
-        reliability_score: Number(s.reliability_score),
-        location_name:     s.location_name ?? null,
-        country_code:      s.country_code ?? null,
-        category:          s.category,
-        published_at:      s.published_at instanceof Date
-          ? s.published_at.toISOString()
-          : String(s.published_at),
-        source_count:      Number(s.source_count),
-      })),
-    }))
-
-    // ── Top locations (up to 5) ────────────────────────────────────────────────
-    const locationCounts = new Map<string, number>()
-    for (const row of rows) {
-      if (row.location_name) {
-        locationCounts.set(row.location_name, (locationCounts.get(row.location_name) ?? 0) + 1)
-      }
-    }
-    const top_locations = Array.from(locationCounts.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([location_name, count]) => ({ location_name, count }))
-
-    // ── Severity breakdown ────────────────────────────────────────────────────
-    const severity_breakdown = { critical: 0, high: 0, medium: 0, low: 0 }
-    for (const row of rows) {
-      const sev = row.severity as keyof typeof severity_breakdown
-      if (sev in severity_breakdown) severity_breakdown[sev]++
-    }
-
-    const response = {
-      success: true,
-      data: {
-        date:           targetDate,
-        generated_at:   new Date().toISOString(),
-        headline_count: rows.length,
-        sections,
-        top_locations,
-        severity_breakdown,
-      },
-    }
-
-    // Cache for 15 minutes (non-blocking)
-    redis.setex(cacheKey, BRIEFING_CACHE_TTL, JSON.stringify(response)).catch(() => {})
-
-    return reply.send(response)
+    // The day's stories (a story is every outlet's report of one event), kept
+    // per day, 10 minutes for the last 24 hours, and served while one process
+    // remakes them; a category is picked from them, so it costs nothing more
+    const day = await staleWhileRevalidate(`briefing:daily:v2:${date ?? '24h'}`, date ? PAST_DAY_KEEP : TODAY_KEEP, () => briefingDay(date))
+    return reply.send(briefingResponse(targetDate, day, wanted))
     } catch (err) {
       req.log.error({ err }, 'briefing/daily: handler error')
       return reply.send({
