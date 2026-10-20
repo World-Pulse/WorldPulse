@@ -196,6 +196,41 @@ export const CHOKEPOINTS = [
 
 // ─── Route ────────────────────────────────────────────────────────────────────
 
+// ─── Live ships (aisstream.io) ─────────────────────────────────────────────────
+
+/** The fleet the scraper writes every 30 s (apps/scraper/src/sources/ais.ts) */
+export const AIS_LIVE_KEY = 'ais:live:v1'
+
+export type ShipKind = 'tanker' | 'cargo' | 'passenger' | 'fishing' | 'military' | 'other'
+
+/** What a ship is, from its AIS type code (80s tanker, 70s cargo, 60s passenger, 30 fishing, 35 military, 55 law enforcement) */
+export function shipKind(type: number | null | undefined): ShipKind {
+  if (type == null) return 'other'
+  if (type >= 80 && type <= 89) return 'tanker'
+  if (type >= 70 && type <= 79) return 'cargo'
+  if (type >= 60 && type <= 69) return 'passenger'
+  if (type === 30) return 'fishing'
+  if (type === 35 || type === 55) return 'military'
+  return 'other'
+}
+
+interface LiveShipRow { mmsi: string; name: string | null; lat: number; lon: number; sog: number | null; cog: number | null; heading: number | null; nav: number | null; type: number | null; dest: string | null; area: string; at: number }
+
+/** The fleet as GeoJSON for the map (positions rounded to about 100 m) */
+export function liveShipsGeoJson(snap: { ships?: LiveShipRow[] } | null) {
+  const ships = Array.isArray(snap?.ships) ? snap!.ships : []
+  return ships
+    .filter(s => Number.isFinite(s.lat) && Number.isFinite(s.lon))
+    .map(s => ({
+      type: 'Feature' as const,
+      geometry: { type: 'Point' as const, coordinates: [Math.round(s.lon * 1e3) / 1e3, Math.round(s.lat * 1e3) / 1e3] },
+      properties: {
+        mmsi: s.mmsi, name: s.name, kind: shipKind(s.type), sog: s.sog, cog: s.cog, heading: s.heading,
+        nav: s.nav, dest: s.dest, area: s.area, seen: new Date(s.at).toISOString(),
+      },
+    }))
+}
+
 export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
 
   app.addHook('onRoute', (routeOptions) => {
@@ -460,5 +495,33 @@ export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
     )
 
     return reply.send({ success: true, cached: !made, data: vessels })
+  })
+
+  // ── GET /api/v1/maritime/live ── ships in the main straits right now (AIS) ──
+  app.get('/live', {
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+    schema: {
+      tags: ['maritime'],
+      summary: 'Live ships in the main straits and canals (AIS, via aisstream.io)',
+      description: 'Each ship heard in the last 30 minutes in the straits and canals WorldPulse watches (Hormuz, Bab el-Mandeb, Suez, Malacca and Singapore, Taiwan, the Bosporus, the western Black Sea, Kerch, Gibraltar, Dover, Panama), as GeoJSON, with how many per area. available is false when no live feed is running.',
+    },
+  }, async (_req, reply) => {
+    let snap: { at?: string; connected?: boolean; areas?: unknown[]; ships?: LiveShipRow[] } | null = null
+    try {
+      const raw = await redis.get(AIS_LIVE_KEY)
+      if (raw) snap = JSON.parse(raw)
+    } catch { /* no fleet kept */ }
+    const features = liveShipsGeoJson(snap)
+    void reply.header('Cache-Control', 'public, max-age=30')
+    return reply.send({
+      success:   true,
+      available: !!snap,
+      connected: snap?.connected ?? false,
+      at:        snap?.at ?? null,
+      source:    'aisstream.io',
+      areas:     Array.isArray(snap?.areas) ? snap!.areas : [],
+      type:      'FeatureCollection',
+      features,
+    })
   })
 }

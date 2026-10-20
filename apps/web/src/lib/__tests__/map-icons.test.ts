@@ -16,7 +16,7 @@ describe('iconSvg', () => {
 
   it('has an icon for each emoji the layers used to draw', () => {
     // (planeMil and planeSos: the live aircraft's military and emergency colours, Oct 19, 2026)
-    expect(Object.keys(MAP_ICON).sort()).toEqual(['camera', 'plane', 'planeMil', 'planeSos', 'ship'])
+    expect(Object.keys(MAP_ICON).sort()).toEqual(['camera', 'plane', 'planeMil', 'planeSos', 'ship', 'shipCargo', 'shipMilitary', 'shipOther', 'shipPassenger', 'shipTanker'])
     for (const icon of Object.values(MAP_ICON)) expect(icon.id.startsWith('wp-icon-')).toBe(true)
   })
 })

@@ -14,6 +14,8 @@ const GLYPHS = {
   plane: '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>',
   ship: '<path d="M12 10.189V14"/><path d="M12 2v3"/><path d="M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6"/><path d="M19.38 20A11.6 11.6 0 0 0 21 14l-8.188-3.639a2 2 0 0 0-1.624 0L3 14a11.6 11.6 0 0 0 2.81 7.76"/><path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1s1.2 1 2.5 1c2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/>',
   camera: '<path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/>',
+  /** Lucide navigation-2: an arrow pointing up (north), turned to a live ship's heading */
+  arrow: '<polygon points="12 2 19 21 12 17 5 21 12 2"/>',
 } as const
 
 export type MapIconGlyph = keyof typeof GLYPHS
@@ -26,6 +28,12 @@ export const MAP_ICON = {
   planeSos: { id: 'wp-icon-plane-sos', glyph: 'plane', color: '#ef4444' },
   ship:   { id: 'wp-icon-ship',   glyph: 'ship',   color: '#f59e0b' },
   camera: { id: 'wp-icon-camera', glyph: 'camera', color: '#2dd4bf' },
+  /** Live ships (AIS, Oct 19, 2026), an arrow turned to the heading: tankers red, cargo green, passenger blue, navies and coast guards amber, the rest grey */
+  shipTanker:    { id: 'wp-icon-ship-tanker',    glyph: 'arrow', color: '#ef4444' },
+  shipCargo:     { id: 'wp-icon-ship-cargo',     glyph: 'arrow', color: '#22c55e' },
+  shipPassenger: { id: 'wp-icon-ship-passenger', glyph: 'arrow', color: '#3b82f6' },
+  shipMilitary:  { id: 'wp-icon-ship-military',  glyph: 'arrow', color: '#f59e0b' },
+  shipOther:     { id: 'wp-icon-ship-other',     glyph: 'arrow', color: '#cbd5e1' },
 } as const
 
 const SIZE = 28   // css pixels

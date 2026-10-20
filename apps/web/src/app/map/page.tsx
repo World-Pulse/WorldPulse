@@ -37,6 +37,7 @@ import { isMapNews, mapPointsFor } from '@/lib/map-news'
 import { ensureMapIcon, MAP_ICON } from '@/lib/map-icons'
 import { cameraPopupHtml, startCameraPicture, type CameraFeed } from '@/lib/map-cameras'
 import { aircraftPopupHtml, planeRotation, type AircraftSnapshot } from '@/lib/map-aircraft'
+import { liveShipIconId, liveShipPopupHtml, shipRotation, type LiveShipProps, type ShipKind } from '@/lib/map-ships-live'
 import { dayNightFeatures, subsolarPoint } from '@/lib/daynight'
 import { MAP_REGIONS } from '@/lib/map-regions'
 import { SITE_URL as SITE_ORIGIN } from '@/lib/page-metadata'
@@ -333,6 +334,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
   // ── Maritime AIS ship tracking layer state ───────────────────────────────────
   const [showShips,    setShowShips]    = useState(false)
   const [shipCount,    setShipCount]    = useState(0)
+  const [liveShipCount, setLiveShipCount] = useState(0)
 
   // ── Missile/Drone Threat layer state ────────────────────────────────────────
   const [threatMode,    setThreatMode]    = useState(false)
@@ -2167,6 +2169,92 @@ function MapView({ embed = false }: { embed?: boolean }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showShips, mapReady])
 
+  // ── Live ships (AIS) ───────────────────────────────────────────────────────
+  // Oct 19, 2026 (PLAN M39): ships in the main straits and canals right now,
+  // from GET /api/v1/maritime/live (aisstream.io), an arrow turned to each
+  // ship's heading and coloured by what it is; part of the Ships layer.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    const LIVE_SOURCE = 'ais-live'
+    const LIVE_LAYER  = 'ais-live-ships'
+    let intervalId: ReturnType<typeof setInterval> | null = null
+
+    const removeLayer = () => {
+      try {
+        offLayer(map, LIVE_LAYER)
+        if (map.getLayer(LIVE_LAYER))   map.removeLayer(LIVE_LAYER)
+        if (map.getSource(LIVE_SOURCE)) map.removeSource(LIVE_SOURCE)
+      } catch { /* ignore */ }
+    }
+
+    const fetchAndUpdate = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/v1/maritime/live`)
+        if (!res.ok) return
+        const live = await res.json() as { features?: Array<{ type: 'Feature'; geometry: { type: 'Point'; coordinates: [number, number] }; properties: LiveShipProps }> }
+        const features = (live.features ?? []).map(f => ({
+          ...f,
+          properties: { ...f.properties, icon: liveShipIconId(f.properties.kind), rotate: shipRotation(f.properties.heading, f.properties.cog) },
+        }))
+        setLiveShipCount(features.length)
+
+        const currentMap = mapRef.current
+        if (!currentMap || !styleUsable(currentMap)) return
+        await Promise.all([MAP_ICON.shipTanker, MAP_ICON.shipCargo, MAP_ICON.shipPassenger, MAP_ICON.shipMilitary, MAP_ICON.shipOther].map(icon => ensureMapIcon(currentMap, icon)))
+        const data = { type: 'FeatureCollection' as const, features }
+        const src = currentMap.getSource(LIVE_SOURCE)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (src) { (src as any).setData(data); return }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        currentMap.addSource(LIVE_SOURCE, { type: 'geojson', data: data as any })
+        currentMap.addLayer({
+          id:     LIVE_LAYER,
+          type:   'symbol',
+          source: LIVE_SOURCE,
+          layout: {
+            'icon-image':              ['get', 'icon'],
+            'icon-rotate':             ['get', 'rotate'],
+            'icon-rotation-alignment': 'map',
+            'icon-size':               ['interpolate', ['linear'], ['zoom'], 2, 0.3, 5, 0.42, 8, 0.6, 11, 0.8],
+            'icon-allow-overlap':      true,
+            'icon-ignore-placement':   true,
+          },
+        })
+        onLayer(currentMap, 'mouseenter', LIVE_LAYER, () => { currentMap.getCanvas().style.cursor = 'pointer' })
+        onLayer(currentMap, 'mouseleave', LIVE_LAYER, () => { currentMap.getCanvas().style.cursor = '' })
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        onLayer(currentMap, 'click', LIVE_LAYER, async (e: any) => {
+          const feat = e.features?.[0]
+          if (!feat) return
+          // (map feature properties arrive as strings, numbers and booleans; null ones are dropped)
+          const p = feat.properties as Record<string, unknown>
+          const str = (k: string) => (typeof p[k] === 'string' && p[k] !== '' ? String(p[k]) : null)
+          const num = (k: string) => (typeof p[k] === 'number' ? Number(p[k]) : null)
+          const { default: ml } = await import('maplibre-gl')
+          if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
+          popupRef.current = new ml.Popup({ closeButton: true, closeOnClick: true, offset: 12, className: 'wp-map-popup' })
+            .setLngLat(feat.geometry.coordinates)
+            .setHTML(liveShipPopupHtml({
+              mmsi: String(p.mmsi ?? ''), name: str('name'), kind: (str('kind') ?? 'other') as ShipKind,
+              sog: num('sog'), cog: num('cog'), heading: num('heading'), nav: num('nav'),
+              dest: str('dest'), area: str('area'), seen: str('seen'),
+            }))
+            .addTo(currentMap)
+        })
+      } catch (err) {
+        console.warn('[map] Live ships error:', err)
+      }
+    }
+
+    if (!showShips) { removeLayer(); setLiveShipCount(0); return }
+    whenStyleUsable(map, () => { void fetchAndUpdate() })
+    intervalId = setInterval(() => { void fetchAndUpdate() }, 60_000)
+    return () => { if (intervalId) clearInterval(intervalId) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showShips, mapReady])
+
   // ── Naval Intelligence layer (carriers + AIS distress + dark ships) ────────
 
   useEffect(() => {
@@ -3639,8 +3727,8 @@ function MapView({ embed = false }: { embed?: boolean }) {
       items: [
         { key: 'aircraft', label: 'Aircraft', description: 'Military aircraft and emergency squawks now (ADS-B: adsb.lol)', icon: Plane, color: '#22d3ee',
           on: showAircraft, count: aircraftCount, toggle: () => setShowAircraft(v => !v) },
-        { key: 'ships', label: 'Ships', description: 'Ship, port and strait news, last 3 days', icon: Ship, color: '#f59e0b',
-          on: showShips, count: shipCount, toggle: () => setShowShips(v => !v) },
+        { key: 'ships', label: 'Ships', description: 'Live ships in 12 straits and canals (AIS: aisstream.io; arrows: tankers red, cargo green, passenger blue, navies amber), and ship, port and strait news (last 3 days)', icon: Ship, color: '#f59e0b',
+          on: showShips, count: shipCount + liveShipCount, toggle: () => setShowShips(v => !v) },
       ],
     },
     {
