@@ -93,6 +93,7 @@ import { startDispatcher, stopDispatcher } from './lib/alert-dispatcher'
 import { startPulseScheduler, stopPulseScheduler } from './lib/pulse/scheduler'
 import { startSummaryPass, stopSummaryPass } from './lib/summary-pass'
 import { ensureSubscribersTable } from './lib/subscribers'
+import { ensureEntitySignalsIndex } from './lib/entity-index'
 import { startBriefingEmails, stopBriefingEmails } from './lib/briefing-email'
 import { startSocialPosters, stopSocialPosters } from './lib/social-posters'
 
@@ -475,6 +476,13 @@ async function bootstrap() {
 
   // Telegram and Bluesky posts (plan G10): off until their keys are on the server
   startSocialPosters()
+
+  // ─── ENTITY PAGES: an index on the reports each entity is named in ──
+  // (Devon's OK, Oct 20, 2026): built once, in the background, without
+  // stopping the scraper's writes; later starts find it and do nothing
+  ensureEntitySignalsIndex()
+    .then(r => { if (r !== 'ready') logger.info({ result: r }, 'Entity report index') })
+    .catch(() => {})
 
   // ─── GRACEFUL SHUTDOWN ────────────────────────────────────
   const shutdown = async () => {
