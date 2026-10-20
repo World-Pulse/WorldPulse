@@ -43,6 +43,17 @@ describe('checkView', () => {
     expect(one.kind === 'found' && one.verdict).toMatch(/^Only one outlet so far: treat it as unconfirmed/)
   })
 
+  it("a story that has run longer: its last two days' count, and since it began (Oct 20, 2026)", () => {
+    const v = checkView(found({ outlets: 48, outletsAll: 143, firstReportAt: '2026-10-10T15:00:00.000Z' }))
+    expect(v).toMatchObject({ count: '✓ Verified · 48 outlets', since: 'in its last 2 days · 143 since Oct 10', outlets: 'bbc.com, abc.net.au, cnn.com and 45 more' })
+    expect(checkView(found({}))).toMatchObject({ since: '' })
+    // an old article: the verdict goes by everyone since it began, and its own
+    // outlet isn't named among the last two days' when it isn't one of them
+    const old = checkView(found({ outlets: 1, outletNames: ['cnn.com'], outletsAll: 5, verified: false, verifiedAt: null }))
+    expect(old).toMatchObject({ count: '1 outlet', since: 'in its last 2 days · 5 since it began', outlets: 'Only cnn.com so far' })
+    expect(old.kind === 'found' && old.verdict).toMatch(/^5 outlets reported this story, but it isn’t verified yet/)
+  })
+
   it('says why there is nothing to show', () => {
     expect(checkView({ found: false, reason: 'not_seen' })).toEqual({ kind: 'missing', message: expect.stringMatching(/hasn’t collected this article/) })
     expect(checkView({ found: false, reason: 'pending' })).toEqual({ kind: 'missing', message: expect.stringMatching(/adding this article right now/) })

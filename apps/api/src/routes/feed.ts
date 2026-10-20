@@ -426,6 +426,9 @@ function storyFieldsOf(key: string, f: StoryFacts | undefined): Record<string, u
     storyId:         key,
     storySize:       f?.size ?? 1,
     storyOutlets:    f?.outlets ?? [],
+    // (the names stop at 12; the counts don't: its last two days, and since it began)
+    storyOutletCount:    f?.outletCount ?? (f?.outlets.length ?? 0),
+    storyOutletCountAll: f?.outletCountAll ?? (f?.outlets.length ?? 0),
     storyVerifiedAt: f?.verifiedAt ? f.verifiedAt.toISOString() : null,
     // The story's newest signal: grouped rows sit at this time in the feed
     storyUpdatedAt:  f?.newest ? f.newest.toISOString() : null,

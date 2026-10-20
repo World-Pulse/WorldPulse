@@ -81,6 +81,23 @@ describe('GET /api/v1/stories/:id', () => {
     expect(h.bindings).toEqual([STORY, STORY, STORY, STORY, 10, 40, SIGNAL])
   })
 
+  it("counts the outlets of the story's last two days, and gives its whole life's count beside them (Oct 20, 2026)", async () => {
+    h.rows = [
+      member({ outlets: 4, outlet_names: ['c.com', 'd.com', 'e.com', 'f.com'], outlets_all: 143, first_at: '2026-10-10T15:00:00Z', newest: '2026-10-20T18:00:00Z' }),
+    ]
+    const data = (await get(SIGNAL)).json().data
+    expect(data).toMatchObject({
+      outlets: 4, outletNames: ['c.com', 'd.com', 'e.com', 'f.com'], outletsAll: 143, countedHours: 48,
+      firstReportAt: '2026-10-10T15:00:00.000Z', latestReportAt: '2026-10-20T18:00:00.000Z',
+    })
+    // a website counts when one of its links came in the 48 hours up to the newest report
+    expect(h.sql).toMatch(/bool_or\(l\.created_at >= n\.t - INTERVAL '48 hours'\) AS recent/)
+    expect(h.sql).toMatch(/SELECT count\(\*\) FROM hosts WHERE recent/)
+    // and never fewer since it began than in its last two days
+    h.rows = [member({ outlets: 5, outlets_all: null })]
+    expect((await get(SIGNAL)).json().data.outletsAll).toBe(5)
+  })
+
   it("reads Postgres's text form of the names, and never counts fewer than it names", async () => {
     h.rows = [member({ outlets: null, outlet_names: '{aljazeera.com,apnews.com}' })]
     const data = (await get(SIGNAL)).json().data
@@ -97,13 +114,18 @@ describe('GET /api/v1/stories/:id', () => {
 
 describe('GET /api/v1/stories/outlets', () => {
   it("answers each signal's story size and outlets, counted like the story page", async () => {
-    h.rows = [{ id: SIGNAL, story_id: STORY, size: 33, outlets: 12, verified: true }]
+    h.rows = [{ id: SIGNAL, story_id: STORY, size: 33, outlets: 12, outlets_all: 40, first_at: new Date('2026-10-10T15:00:00Z'), verified: true }]
     const res = await get(`outlets?ids=${SIGNAL},not-an-id,${SIGNAL}`)
     expect(res.statusCode).toBe(200)
-    expect(res.json().data.stories).toEqual({ [SIGNAL]: { storyId: STORY, size: 33, outlets: 12, verified: true } })
+    expect(res.json().data.stories).toEqual({ [SIGNAL]: { storyId: STORY, size: 33, outlets: 12, outletsAll: 40, firstReportAt: '2026-10-10T15:00:00.000Z', verified: true } })
+    // a story whose first report the database didn't give
+    h.rows = [{ id: SIGNAL, story_id: STORY, size: 1, outlets: 2, outlets_all: 2, verified: false }]
+    expect((await get(`outlets?ids=${SIGNAL}`)).json().data.stories[SIGNAL].firstReportAt).toBeNull()
     // only well-formed ids, once each, as one array value
     expect(h.bindings[0]).toEqual([SIGNAL])
-    expect(h.bindings.slice(1)).toEqual(['^https?://([^/:?#]+)', '^www\\.'])
+    expect(h.bindings.slice(1)).toEqual(['^https?://([^/:?#]+)', '^www\\.', '^https?://([^/:?#]+)', '^www\\.'])
+    // the count covers the story's last two days (lib/story-window.ts), and outlets_all its whole life
+    expect(h.sql).toMatch(/FILTER \(WHERE m\.created_at >= f\.newest - INTERVAL '48 hours'\)/)
     expect(h.sql).toMatch(/unnest\(m\.original_urls\)/)
     expect(h.sql).toMatch(/m\.story_id = a\.story_key OR m\.id = a\.story_key/)
     expect(h.sql).toMatch(/bool_or\(m\.status = 'verified'\)/)

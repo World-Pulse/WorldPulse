@@ -162,6 +162,20 @@ describe('rankStories', () => {
     expect(stories[0]!.outlets).toHaveLength(12)
     expect(stories[0]!.outletCount).toBe(20)
   })
+
+  it("counts a story's last two days, gives its whole life's count beside them, and needs two outlets in those days (Oct 20, 2026)", () => {
+    const urls = (hosts: string[]) => hosts.map(h => `https://${h}/a`)
+    const stories = rankStories([
+      // a 10-day storyline: six outlets in all, four in its last two days
+      candidate({ key: 'houthi', title: 'Death toll from Houthi attack on Yemen training camp rises to 73',
+        outlets: ['a.com', 'b.com', 'c.com', 'd.com', 'e.com', 'f.com'], recentUrls: urls(['c.com', 'd.com', 'e.com', 'f.com']) }),
+      // five outlets once, only one in its last two days: not listed
+      candidate({ key: 'faded', title: 'Ceasefire talks resume in the capital after a week of strikes',
+        outlets: ['a.com', 'b.com', 'c.com', 'd.com', 'e.com'], recentUrls: urls(['a.com']) }),
+    ], 6, NOW)
+    expect(stories.map(s => s.id)).toEqual(['houthi'])
+    expect(stories[0]).toMatchObject({ outletCount: 4, outletCountAll: 6, outlets: ['c.com', 'd.com', 'e.com', 'f.com'] })
+  })
 })
 
 describe('GET /api/v1/stories', () => {
@@ -204,6 +218,8 @@ describe('GET /api/v1/stories', () => {
     expect(h.sql).toMatch(/s\.story_id IS NULL/)                         // and single signals with several outlets
     expect(h.sql).toMatch(/cardinality\(original_urls\) >= 2/)
     expect(h.sql).toMatch(/LIMIT 600/)
+    // outlets of each story's last two days (lib/story-window.ts) beside all of its links
+    expect(h.sql).toMatch(/FILTER \(WHERE m\.created_at >= f\.newest - INTERVAL '48 hours'\) AS recent_urls/)
     // its own time limit (over a day of reports it passed the pool's 5 seconds, Oct 15, 2026)
     expect(h.limits).toEqual(["SET LOCAL statement_timeout = '60s'"])
     // kept 10 minutes, then served for up to 6 hours more while one process remakes it
@@ -318,6 +334,7 @@ describe('GET /api/v1/stories/week', () => {
     expect(storySql.sql).toMatch(/win AS \(SELECT \?::timestamptz AS lo, \?::timestamptz AS hi\)/) // the week only
     expect(storySql.sql).toMatch(/AND s\.created_at >= \(SELECT lo FROM win\) AND s\.created_at < \(SELECT hi FROM win\)/) // and only its own reports counted
     expect(storySql.sql).toMatch(/ORDER BY count\(\*\) DESC/)                     // the biggest stories, not the newest
+    expect(storySql.sql).toMatch(/FILTER \(WHERE TRUE\) AS recent_urls/)              // a week counts all of its own reports
     expect((storySql.bindings[0] as Date).toISOString()).toBe('2026-10-12T00:00:00.000Z')
     expect((storySql.bindings[1] as Date).toISOString()).toBe('2026-10-19T00:00:00.000Z')
     expect(h.calls.some(c => /count\(DISTINCT COALESCE\(story_id, id\)\)/.test(c.sql) && /status = 'verified'/.test(c.sql))).toBe(true)

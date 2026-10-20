@@ -89,6 +89,7 @@ export function LinkChecker() {
               >
                 {state.view.count}
               </span>
+              {state.view.since && <span className="font-mono text-[11px] text-wp-text3">{state.view.since}</span>}
               {state.view.outlets && <span className="text-[12px] text-wp-text3">{state.view.outlets}</span>}
             </div>
             <p className="mt-3 text-[13px] text-wp-text2 leading-relaxed">{state.view.verdict}</p>

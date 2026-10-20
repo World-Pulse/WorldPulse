@@ -7,6 +7,7 @@
  */
 
 import { countLine, outletsLine } from '@/lib/embed-card'
+import { sinceText, STORY_COUNT_DAYS } from '@/lib/story-count'
 
 export const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || 'https://api.world-pulse.io').replace(/\/+$/, '')
 
@@ -16,7 +17,18 @@ export interface LinkAnswer {
   reason?: 'not_seen' | 'pending' | 'not_an_article' | string
   link?: string
   report?: { id?: string; title?: string | null; outlet?: string | null; url?: string | null; createdAt?: string | null }
-  story?: { id?: string; outlets?: number; outletNames?: string[]; verified?: boolean; verifiedAt?: string | null; size?: number }
+  story?: {
+    id?: string
+    /** Websites that carried it in its last two days, and their names (lib/story-count.ts) */
+    outlets?: number
+    outletNames?: string[]
+    /** Websites that carried it since it began, and when that was */
+    outletsAll?: number
+    firstReportAt?: string | null
+    verified?: boolean
+    verifiedAt?: string | null
+    size?: number
+  }
 }
 
 export type CheckView =
@@ -25,6 +37,8 @@ export type CheckView =
       title: string
       outlet: string | null
       count: string
+      /** "in its last 2 days · 143 since Oct 10" for a story that has run longer, else '' */
+      since: string
       verified: boolean
       outlets: string
       verdict: string
@@ -46,16 +60,21 @@ const MISSING: Record<string, string> = {
 /** What the page shows for an answer */
 export function checkView(answer: LinkAnswer): CheckView {
   if (!answer.found) return { kind: 'missing', message: MISSING[answer.reason ?? 'not_seen'] ?? MISSING.not_seen! }
+  // The story's count covers its last two days; the verdict goes by everyone
+  // who has reported it since it began (an old article's outlets included)
   const outlets = Math.max(Number(answer.story?.outlets) || 0, 1)
+  const outletsAll = Math.max(Number(answer.story?.outletsAll) || 0, outlets)
   const verified = Boolean(answer.story?.verified)
   const names = (answer.story?.outletNames ?? []).filter(n => typeof n === 'string' && n)
-  // this report's own outlet first, then the rest A to Z
+  // this report's own outlet first (when it's among the counted), then the rest A to Z
   const own = answer.report?.outlet ?? null
-  const named = [...(own ? [own] : []), ...names.filter(n => n !== own)].slice(0, 3)
+  const ownCounted = own !== null && (names.length === 0 || names.includes(own))
+  const named = [...(own && ownCounted ? [own] : []), ...names.filter(n => n !== own)].slice(0, 3)
+  const since = sinceText(outlets, outletsAll, answer.story?.firstReportAt)
   const verdict = verified
     ? 'Two or more outlets reported this story and its reliability score reached 65%, so WorldPulse marks it verified. That means more than one outlet says so, not that it is proven true.'
-    : outlets > 1
-      ? `${outlets} outlets reported this story, but it isn’t verified yet: its reliability score is under 65%.`
+    : outletsAll > 1
+      ? `${outletsAll} outlets reported this story, but it isn’t verified yet: its reliability score is under 65%.`
       : 'Only one outlet so far: treat it as unconfirmed. That doesn’t make it false; it may be new, or an exclusive.'
   const id = answer.report?.id ?? ''
   return {
@@ -63,6 +82,7 @@ export function checkView(answer: LinkAnswer): CheckView {
     title: (answer.report?.title ?? '').trim() || 'This article',
     outlet: own,
     count: countLine({ outlets, verified }),
+    since: since ? `in its last ${STORY_COUNT_DAYS} days · ${since}` : '',
     verified,
     outlets: outletsLine({ outlets, named }),
     verdict,

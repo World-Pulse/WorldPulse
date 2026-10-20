@@ -23,6 +23,7 @@ import { COUNTRY_NAMES } from './countries'
 import { findReport, MAX_LINK_LENGTH } from '../lib/link-check'
 import { internalCallHeaders } from '../lib/internal-call'
 import { rateLimitKey } from '../lib/rate-limit-options'
+import { inCountedWindow, STORY_COUNT_HOURS } from '../lib/story-window'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MAX_SIGNALS = 50
@@ -147,8 +148,14 @@ export function storyListSql(hasStoryIds: boolean, scope: 'recent' | 'signals' |
        GROUP BY story_key
     ),
     links AS (
-      SELECT m.story_key, array_agg(u.url ORDER BY m.reliability_score DESC NULLS LAST, m.created_at, u.ord) AS urls
+      -- recent_urls: the members of the story's counted window (its last two
+      -- days, lib/story-window.ts); a week counts its own reports
+      SELECT m.story_key,
+             array_agg(u.url ORDER BY m.reliability_score DESC NULLS LAST, m.created_at, u.ord) AS urls,
+             array_agg(u.url ORDER BY m.reliability_score DESC NULLS LAST, m.created_at, u.ord)
+               FILTER (WHERE ${week ? 'TRUE' : inCountedWindow('m.created_at', 'f.newest')}) AS recent_urls
         FROM members m
+        JOIN facts f ON f.story_key = m.story_key
         CROSS JOIN LATERAL unnest(m.original_urls) WITH ORDINALITY AS u(url, ord)
        WHERE u.url IS NOT NULL
        GROUP BY m.story_key
@@ -165,7 +172,8 @@ export function storyListSql(hasStoryIds: boolean, scope: 'recent' | 'signals' |
                 m.created_at DESC
     )
     SELECT f.story_key::text AS story_key, f.size, f.first_seen, f.newest, f.verified_at,
-           f.sev_rank, f.place, f.category, COALESCE(l2.urls, '{}') AS urls, l.lead_id, l.title
+           f.sev_rank, f.place, f.category, COALESCE(l2.urls, '{}') AS urls,
+           COALESCE(l2.recent_urls, '{}') AS recent_urls, l.lead_id, l.title
       FROM facts f
       JOIN leads l ON l.story_key = f.story_key
       LEFT JOIN links l2 ON l2.story_key = f.story_key`
@@ -225,6 +233,7 @@ function candidatesOf(result: unknown): StoryCandidate[] {
       severity:    SEVERITIES[Number(r.sev_rank) - 1] ?? 'info',
       size:        Number(r.size) || 1,
       urls:        textArray(r.urls),
+      recentUrls:  textArray(r.recent_urls),
       firstSeenAt,
       updatedAt,
       verifiedAt:  r.verified_at ? new Date(r.verified_at as string) : null,
@@ -437,7 +446,8 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
    * GET /api/v1/stories/outlets?ids=<signal ids, comma-separated, up to 60>
    * For each signal: its story, how many reports the story has and how many
    * outlets carried it (counted as /stories/:id counts them: the websites in
-   * every report's links) and whether it is verified, so a list of signals —
+   * the links of its last two days' reports, and outletsAll since it began)
+   * and whether it is verified, so a list of signals —
    * the World Map's "Latest in view" — can say "Verified · 12 outlets".
    * Unknown ids are left out.
    */
@@ -478,16 +488,18 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
         },
         story: {
           id: story.storyId ?? found.reportId,
-          /** Websites that carried it */
+          /** Websites that carried it in its last two days (lib/story-window.ts) */
           outlets: Number(story.outlets) || 0,
           /** Those websites, A to Z */
           outletNames: Array.isArray(story.outletNames) ? story.outletNames : [],
+          /** Websites that carried it since it began */
+          outletsAll: Number(story.outletsAll) || Number(story.outlets) || 0,
           verified: typeof story.verifiedAt === 'string',
           verifiedAt: story.verifiedAt ?? null,
           /** Reports in the story */
           size: Number(story.size) || reports.length,
-          firstReportAt: times[0] ?? null,
-          latestReportAt: times[times.length - 1] ?? null,
+          firstReportAt: story.firstReportAt ?? times[0] ?? null,
+          latestReportAt: story.latestReportAt ?? times[times.length - 1] ?? null,
         },
         link: `${(process.env.SITE_URL || 'https://world-pulse.io').replace(/\/+$/, '')}/signals/${found.reportId}`,
       },
@@ -506,29 +518,39 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
       `WITH asked AS (
          SELECT s.id, ${storyKey} AS story_key FROM signals s WHERE s.id = ANY(?::uuid[])
        )
-       SELECT a.id::text AS id, a.story_key::text AS story_id, f.size, f.verified, o.outlets
+       SELECT a.id::text AS id, a.story_key::text AS story_id, f.size, f.verified, f.first_at, o.outlets, o.outlets_all
          FROM asked a
          CROSS JOIN LATERAL (
-           SELECT count(*)::int AS size, bool_or(m.status = 'verified') AS verified
+           SELECT count(*)::int AS size, bool_or(m.status = 'verified') AS verified,
+                  min(m.created_at) AS first_at, max(m.created_at) AS newest
              FROM signals m
             WHERE ${inStory} AND m.status IN ('verified', 'pending')
          ) f
          CROSS JOIN LATERAL (
-           SELECT count(DISTINCT lower(regexp_replace(substring(link.url from ?), ?, '')))::int AS outlets
+           -- the story's last two days, as /stories/:id counts them (lib/story-window.ts)
+           SELECT count(DISTINCT lower(regexp_replace(substring(link.url from ?), ?, '')))
+                    FILTER (WHERE ${inCountedWindow('m.created_at', 'f.newest')})::int AS outlets,
+                  count(DISTINCT lower(regexp_replace(substring(link.url from ?), ?, '')))::int AS outlets_all
              FROM signals m CROSS JOIN LATERAL unnest(m.original_urls) AS link(url)
             WHERE ${inStory} AND m.status IN ('verified', 'pending')
          ) o`,
-      [ids, HOST_PATTERN, WWW_PATTERN],
-    ) as { rows?: Array<{ id: string; story_id: string; size: unknown; verified: unknown; outlets: unknown }> } | undefined
+      [ids, HOST_PATTERN, WWW_PATTERN, HOST_PATTERN, WWW_PATTERN],
+    ) as { rows?: Array<{ id: string; story_id: string; size: unknown; verified: unknown; first_at?: unknown; outlets: unknown; outlets_all: unknown }> } | undefined
 
     // (verified: any of the story's reports is, as the story page and the home page say)
-    const stories: Record<string, { storyId: string; size: number; outlets: number; verified: boolean }> = {}
+    const stories: Record<string, { storyId: string; size: number; outlets: number; outletsAll: number; firstReportAt: string | null; verified: boolean }> = {}
     for (const r of result?.rows ?? []) {
+      const outlets = Number(r.outlets) || 0
+      const firstAt = r.first_at ? new Date(r.first_at as string | Date) : null
       stories[String(r.id)] = {
-        storyId:  String(r.story_id),
-        size:     Number(r.size) || 1,
-        outlets:  Number(r.outlets) || 0,
-        verified: r.verified === true,
+        storyId:    String(r.story_id),
+        size:       Number(r.size) || 1,
+        /** in the story's last two days (lib/story-window.ts) */
+        outlets,
+        /** since its first report ("· 143 since Oct 10") */
+        outletsAll: Math.max(Number(r.outlets_all) || 0, outlets),
+        firstReportAt: firstAt && Number.isFinite(firstAt.getTime()) ? firstAt.toISOString() : null,
+        verified:   r.verified === true,
       }
     }
     return reply.send({ success: true, data: { stories } })
@@ -567,19 +589,31 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
                 row_number() OVER (ORDER BY created_at ASC, id ASC)   AS position,
                 row_number() OVER (ORDER BY created_at DESC, id DESC) AS from_end,
                 count(*) OVER ()                                       AS total,
-                min(verified_at) OVER ()                               AS first_verified
+                min(verified_at) OVER ()                               AS first_verified,
+                min(created_at) OVER ()                                AS first_at,
+                max(created_at) OVER ()                                AS newest
            FROM signals
           WHERE status IN ('verified', 'pending') AND ${scope}
        ),
-       hosts AS (
-         SELECT DISTINCT lower(regexp_replace(substring(link.url from '^https\\?://([^/:\\?#]+)'), '^www\\.', '')) AS host
+       links AS (
+         SELECT lower(regexp_replace(substring(link.url from '^https\\?://([^/:\\?#]+)'), '^www\\.', '')) AS host, s.created_at
            FROM signals s
            CROSS JOIN LATERAL unnest(s.original_urls) AS link(url)
           WHERE s.status IN ('verified', 'pending') AND ${scope.replace(/story_id|\bid\b/g, c => `s.${c}`)}
+       ),
+       newest AS (SELECT max(created_at) AS t FROM m),
+       -- each website once; recent: it carried the story in its last two days (lib/story-window.ts)
+       hosts AS (
+         SELECT l.host, bool_or(${inCountedWindow('l.created_at', 'n.t')}) AS recent
+           FROM links l CROSS JOIN newest n
+          WHERE l.host <> ''
+          GROUP BY l.host
        )
        SELECT m.*,
-              (SELECT count(*) FROM hosts WHERE host <> '')                   AS outlets,
-              (SELECT array_agg(host ORDER BY host) FROM hosts WHERE host <> '') AS outlet_names
+              (SELECT count(*) FROM hosts WHERE recent)                         AS outlets,
+              (SELECT array_agg(host ORDER BY host) FROM hosts WHERE recent)    AS outlet_names,
+              (SELECT count(*) FROM hosts)                                      AS outlets_all,
+              (SELECT array_agg(host ORDER BY host) FROM hosts)                 AS outlet_names_all
          FROM m
         WHERE position <= ? OR from_end <= ? OR id::text = ?
         ORDER BY created_at ASC, id ASC`,
@@ -592,6 +626,8 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
     const total = Number(members[0]!.total) || members.length
     const outletNames = textArray(members[0]!.outlet_names)
     const outlets = Math.max(Number(members[0]!.outlets) || 0, outletNames.length)
+    const outletNamesAll = textArray(members[0]!.outlet_names_all)
+    const outletsAll = Math.max(Number(members[0]!.outlets_all) || 0, outlets, outletNamesAll.length)
 
     return reply.send({
       success: true,
@@ -599,10 +635,17 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
         storyId,
         /** Reports in the story (more than `signals` holds when it's big) */
         size: total,
-        /** Websites that carried it, from every report's links */
+        /** Websites that carried it in its last two days, from every report's links (lib/story-window.ts) */
         outlets,
         /** Those websites, A to Z */
         outletNames,
+        /** Websites that carried it since it began, and their names, A to Z */
+        outletsAll,
+        outletNamesAll: outletNamesAll.length > 0 ? outletNamesAll : outletNames,
+        /** The hours the count covers, up to the story's newest report */
+        countedHours: STORY_COUNT_HOURS,
+        firstReportAt: iso(members[0]!.first_at),
+        latestReportAt: iso(members[0]!.newest),
         verifiedAt: iso(members[0]!.first_verified),
         signals: members.map(m => {
           // A signal's own article comes first; the story's other links follow it

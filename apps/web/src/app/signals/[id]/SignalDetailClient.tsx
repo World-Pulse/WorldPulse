@@ -29,6 +29,7 @@ import { StoryMembers } from './StoryMembers'
 import { PredictionMarkets } from '@/components/signals/PredictionMarkets'
 import { ShareMenu } from '@/components/signals/ShareMenu'
 import { displaySummary, isStateMedia, STATE_MEDIA_NOTE, storyTags } from '@/lib/signal-text'
+import { storyCountsOf, storyCountText, type StoryOutletCounts } from '@/lib/story-count'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -145,7 +146,7 @@ interface Props {
   initialPosts: Post[]
   postsTotal:   number
   /** Outlets that carried this report's story, from the server (null: the API couldn't say) */
-  initialStoryOutlets?: number | null
+  initialStoryCounts?: StoryOutletCounts | null
 }
 
 // ─── AI Slop Badge ────────────────────────────────────────────────────────────
@@ -188,7 +189,7 @@ interface CIBStatus {
   label: string
 }
 
-export function SignalDetailClient({ signal, related, initialPosts, postsTotal, initialStoryOutlets = null }: Props) {
+export function SignalDetailClient({ signal, related, initialPosts, postsTotal, initialStoryCounts = null }: Props) {
   const color      = SEV_COLOR[signal.severity] ?? '#8892a4'
   const bg         = SEV_BG[signal.severity]    ?? 'rgba(136,146,164,0.12)'
   const srcUrl     = signal.originalUrls?.[0] ?? null
@@ -221,25 +222,29 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal, 
   // Until it's known (or if the API can't say), this report's own outlets.
   // The server asks first, so the page's first HTML (what search engines and
   // link previews read) has the story's count: it showed this report's own 9
-  // outlets for a story of 87 (Oct 20, 2026), until the browser had asked
-  const [storyOutlets, setStoryOutlets] = useState<number | null>(initialStoryOutlets)
-  const [storyAsked, setStoryAsked] = useState(initialStoryOutlets !== null)
+  // outlets for a story of 87 (Oct 20, 2026), until the browser had asked.
+  // The count covers the story's last two days; one that has run longer also
+  // says how many have reported it since it began (lib/story-count.ts)
+  const [storyCounts, setStoryCounts] = useState<StoryOutletCounts | null>(initialStoryCounts)
+  const [storyAsked, setStoryAsked] = useState(initialStoryCounts !== null)
   useEffect(() => {
-    if (initialStoryOutlets !== null) return
+    if (initialStoryCounts !== null) return
     let cancelled = false
     const API_BASE = `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/api/v1`
     fetch(`${API_BASE}/stories/outlets?ids=${encodeURIComponent(signal.id)}`)
       .then(r => (r.ok ? r.json() : null))
-      .then((json: { data?: { stories?: Record<string, { outlets?: unknown }> } } | null) => {
-        const n = Number(json?.data?.stories?.[signal.id]?.outlets)
-        if (!cancelled && Number.isFinite(n) && n > 0) setStoryOutlets(n)
+      .then((json: { data?: { stories?: Record<string, unknown> } } | null) => {
+        const counts = storyCountsOf(json?.data?.stories?.[signal.id])
+        if (!cancelled && counts) setStoryCounts(counts)
       })
       .catch(() => { /* this report's own outlets stand in */ })
       .finally(() => { if (!cancelled) setStoryAsked(true) })
     return () => { cancelled = true }
-  }, [signal.id, initialStoryOutlets])
+  }, [signal.id, initialStoryCounts])
   const ownOutlets = distinctOutlets(signal.originalUrls ?? []).length
-  const outletCount = Math.max(storyOutlets ?? 0, ownOutlets)
+  const outletCount = storyCounts ? storyCounts.outlets : ownOutlets
+  // since it began: this report's own outlets are among them, however old it is
+  const outletsAll = Math.max(storyCounts?.outletsAll ?? 0, ownOutlets, outletCount)
 
   return (
     <div className="min-h-screen bg-wp-bg text-wp-text">
@@ -339,7 +344,7 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal, 
               {storyAsked && outletCount > 0 && (
                 <>
                   <span>·</span>
-                  <span>{outletCount} outlet{outletCount !== 1 ? 's' : ''}</span>
+                  <span>{storyCountText(outletCount, outletsAll, storyCounts?.firstReportAt)}</span>
                 </>
               )}
             </div>
@@ -385,7 +390,7 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal, 
               sources={signal.sources}
               sourceUrl={signal.originalUrls?.[0] ?? null}
               originalUrls={signal.originalUrls ?? []}
-              storyOutlets={storyOutlets}
+              storyOutlets={storyCounts ? outletsAll : null}
             />
 
             {/* Also reported by — the other reports of this story (plan 12c) */}

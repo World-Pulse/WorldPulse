@@ -7,6 +7,7 @@
  */
 
 import { db } from '../db/postgres'
+import { inCountedWindow } from './story-window'
 
 /** How long a "the column isn't there yet" answer is trusted before checking again */
 const RECHECK_MS = 5 * 60_000
@@ -129,35 +130,53 @@ export function outletsOf(urls: unknown[], max = 12): string[] {
 export interface StoryFacts {
   /** Signals in the story */
   size: number
-  /** Websites that reported it, from every member's links */
+  /** Websites that reported it in its last two days, from those members' links (at most 12 named) */
   outlets: string[]
+  /** How many websites reported it in its last two days (lib/story-window.ts) */
+  outletCount: number
+  /** How many websites reported it since it began */
+  outletCountAll: number
   /** When the story first turned verified */
   verifiedAt: Date | null
   /** Its newest signal */
   newest: Date | null
 }
 
-/** Size, outlets and first verification for each story key, over all of its signals */
+/**
+ * Size, outlets and first verification for each story key: outlets of its
+ * last two days (lib/story-window.ts), and since it began
+ */
 export async function storyFacts(keys: string[]): Promise<Map<string, StoryFacts>> {
   const facts = new Map<string, StoryFacts>()
   const unique = [...new Set(keys.filter(Boolean))]
   if (unique.length === 0) return facts
   const result = await db.raw(
-    `SELECT COALESCE(s.story_id, s.id)::text AS story_key,
+    `WITH s AS (
+       SELECT COALESCE(story_id, id) AS story_key, id, created_at, verified_at, original_urls
+         FROM signals
+        WHERE story_id = ANY(?::uuid[]) OR id = ANY(?::uuid[])
+     ),
+     n AS (SELECT story_key, max(created_at) AS newest FROM s GROUP BY story_key)
+     SELECT s.story_key::text AS story_key,
             count(DISTINCT s.id)::int AS size,
             min(s.verified_at) AS verified_at,
-            max(s.created_at) AS newest,
-            array_remove(array_agg(u.url ORDER BY s.created_at, u.ord), NULL) AS urls
-       FROM signals s
+            n.newest,
+            array_remove(array_agg(u.url ORDER BY s.created_at, u.ord), NULL) AS urls,
+            array_remove(array_agg(u.url ORDER BY s.created_at, u.ord) FILTER (WHERE ${inCountedWindow('s.created_at', 'n.newest')}), NULL) AS recent_urls
+       FROM s
+       JOIN n ON n.story_key = s.story_key
        LEFT JOIN LATERAL unnest(s.original_urls) WITH ORDINALITY AS u(url, ord) ON true
-      WHERE s.story_id = ANY(?::uuid[]) OR s.id = ANY(?::uuid[])
-      GROUP BY 1`,
+      GROUP BY s.story_key, n.newest`,
     [unique, unique],
   )
   for (const r of (result as { rows?: Array<Record<string, unknown>> }).rows ?? []) {
+    const all = outletsOf(Array.isArray(r.urls) ? r.urls : [], 10_000)
+    const recent = outletsOf(Array.isArray(r.recent_urls) ? r.recent_urls : (Array.isArray(r.urls) ? r.urls : []), 10_000)
     facts.set(String(r.story_key), {
       size: Number(r.size) || 1,
-      outlets: outletsOf(Array.isArray(r.urls) ? r.urls : []),
+      outlets: recent.slice(0, 12),
+      outletCount: recent.length,
+      outletCountAll: Math.max(all.length, recent.length),
       verifiedAt: r.verified_at ? new Date(r.verified_at as string) : null,
       newest: r.newest ? new Date(r.newest as string) : null,
     })

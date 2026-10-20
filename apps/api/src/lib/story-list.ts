@@ -27,6 +27,12 @@ export interface StoryCandidate {
   size: number
   /** Every member's article links */
   urls: string[]
+  /**
+   * The links of the members reported in the story's counted window (its last
+   * STORY_COUNT_HOURS, lib/story-window.ts); all of them for a week's page.
+   * Missing: every link counts
+   */
+  recentUrls?: string[]
   firstSeenAt: Date
   /** Its newest signal */
   updatedAt: Date
@@ -44,8 +50,10 @@ export interface ListedStory {
   size: number
   /** Websites that reported it, at most OUTLETS_LISTED, those of its most reliable signals first */
   outlets: string[]
-  /** How many websites reported it */
+  /** How many websites reported it in its last two days (lib/story-window.ts) */
   outletCount: number
+  /** How many websites reported it since it began */
+  outletCountAll: number
   firstSeenAt: string
   updatedAt: string
   verifiedAt: string | null
@@ -190,9 +198,11 @@ export function rankStories(candidates: StoryCandidate[], limit: number, now = D
   const scored: Array<{ story: ListedStory; score: number }> = []
   for (const c of candidates) {
     if (!c.title || looksLikeEventTemplate(c.title)) continue
-    // (every outlet, so the count matches the story's page: GET /stories/:id)
-    const outlets = outletsOf(c.urls, 1000)
+    // (every outlet of the story's last two days, so the count matches the
+    // story's page, GET /stories/:id; lib/story-window.ts)
+    const outlets = outletsOf(c.recentUrls && c.recentUrls.length > 0 ? c.recentUrls : c.urls, 1000)
     if (outlets.length < 2) continue
+    const outletCountAll = Math.max(outletsOf(c.urls, 1000).length, outlets.length)
     scored.push({
       score: storyScore(outlets.length, c.severity, opts.decay === false ? new Date(now) : c.updatedAt, now),
       story: {
@@ -205,6 +215,7 @@ export function rankStories(candidates: StoryCandidate[], limit: number, now = D
         size:        c.size,
         outlets:     outlets.slice(0, OUTLETS_LISTED),
         outletCount: outlets.length,
+        outletCountAll,
         firstSeenAt: c.firstSeenAt.toISOString(),
         updatedAt:   c.updatedAt.toISOString(),
         verifiedAt:  c.verifiedAt ? c.verifiedAt.toISOString() : null,

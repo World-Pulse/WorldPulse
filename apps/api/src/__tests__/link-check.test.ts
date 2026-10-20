@@ -157,7 +157,7 @@ describe('GET /api/v1/stories/by-link', () => {
         url: 'https://www.bbc.com/news/articles/c4g9xk2v7lzo', status: 'verified', createdAt: '2026-10-20T16:13:00.000Z',
       },
       story: {
-        id: STORY, outlets: 2, outletNames: ['abc.net.au', 'bbc.com'], verified: true, verifiedAt: '2026-10-20T16:40:00.000Z',
+        id: STORY, outlets: 2, outletNames: ['abc.net.au', 'bbc.com'], outletsAll: 2, verified: true, verifiedAt: '2026-10-20T16:40:00.000Z',
         size: 1, firstReportAt: '2026-10-20T16:13:00.000Z', latestReportAt: '2026-10-20T16:13:00.000Z',
       },
       link: `https://world-pulse.io/signals/${SIGNAL}`,

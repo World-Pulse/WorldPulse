@@ -21,6 +21,10 @@ const STEPS: Array<{ h: string; p: React.ReactNode }> = [
     p: 'Reports of one event are grouped into one story by their headline wording, place and time. The count belongs to the story, not to a single report, so “Verified · 12 outlets” means twelve websites carried that story.',
   },
   {
+    h: 'The count covers the story’s last two days',
+    p: 'A story can run for days, and related reports keep joining it. So the number shown with a story counts the websites that reported it in the two days up to its latest report. A story that has run longer also shows how many have reported it since it began, as in “48 outlets in its last 2 days · 143 since Oct 10”. A week’s page counts that week’s reports.',
+  },
+  {
     h: 'What is not counted twice',
     p: 'A report from a source we already hold for the story. A second website that only copied the article (the same article slug, or the same headline word for word). An article merged into another report still counts as its website: it carried the story.',
   },

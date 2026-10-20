@@ -29,7 +29,7 @@ export const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'] as c
 const SERVER_INFO = { name: 'worldpulse', title: 'WorldPulse', version: '1.0.0' }
 
 const INSTRUCTIONS = [
-  'WorldPulse groups news reports of one event into one story and counts the outlets (websites) that report it.',
+  'WorldPulse groups news reports of one event into one story and counts the outlets (websites) that report it. A story\'s count covers its last two days; a story that has run longer also gives how many outlets have reported it since it began.',
   'A story is "verified" when two or more outlets report it and its reliability score reaches 65%; verified means more than one outlet says so, not proven true (https://world-pulse.io/how-we-count).',
   'Cite stories with their world-pulse.io links. Start with top_stories; open one with story; find reports on a subject with search_reports; a week at a glance with week; how many outlets reported an article someone shared with check_link.',
 ].join(' ')
@@ -84,11 +84,20 @@ const signalLink = (id: unknown) => `${SITE}/signals/${String(id)}`
 
 interface ListedStory {
   id: string; leadId: string; title: string; place: string | null; category: string | null; severity: string
-  outletCount: number; outlets?: string[]; verifiedAt: string | null; updatedAt?: string; firstSeenAt?: string
+  outletCount: number; outletCountAll?: number; outlets?: string[]; verifiedAt: string | null; updatedAt?: string; firstSeenAt?: string
+}
+
+/** " · 143 since Oct 10" for a story that has run longer than its counted two days */
+function sinceNote(count: number, all: number | undefined, firstSeenAt: string | null | undefined): string {
+  if (!all || all <= count || !firstSeenAt) return ''
+  const d = new Date(firstSeenAt)
+  if (Number.isNaN(d.getTime())) return ''
+  return ` · ${all} since ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}`
 }
 
 function storyLine(s: ListedStory, i: number): string {
-  const proof = s.verifiedAt ? `Verified · ${s.outletCount} outlets` : `${s.outletCount} outlets so far (not verified)`
+  const proof = (s.verifiedAt ? `Verified · ${s.outletCount} outlets` : `${s.outletCount} outlets so far (not verified)`)
+    + sinceNote(s.outletCount, s.outletCountAll, s.firstSeenAt)
   const where = [s.place, s.category, s.severity].filter(Boolean).join(', ')
   const names = s.outlets?.length ? ` · ${s.outlets.slice(0, 5).join(', ')}${s.outlets.length > 5 ? ', …' : ''}` : ''
   return `${i + 1}. ${s.title}\n   ${proof}${where ? ` · ${where}` : ''}${names}\n   ${signalLink(s.leadId)} (story id ${s.id})`
@@ -96,7 +105,7 @@ function storyLine(s: ListedStory, i: number): string {
 
 const storyOut = (s: ListedStory) => ({
   id: s.id, title: s.title, url: signalLink(s.leadId), leadReportId: s.leadId, place: s.place, category: s.category,
-  severity: s.severity, outlets: s.outletCount, outletNames: s.outlets ?? [], verified: Boolean(s.verifiedAt),
+  severity: s.severity, outlets: s.outletCount, outletsAll: s.outletCountAll ?? s.outletCount, outletNames: s.outlets ?? [], verified: Boolean(s.verifiedAt),
   verifiedAt: s.verifiedAt, firstSeenAt: s.firstSeenAt ?? null, updatedAt: s.updatedAt ?? null,
 })
 
@@ -142,7 +151,7 @@ export const TOOLS: Tool[] = [
       if (status === 404) throw new ToolError('No story or report with that id')
       if (status !== 200) throw new Error(`story answered ${status}`)
       const d = (body.data ?? {}) as {
-        storyId?: string; size?: number; outlets?: number; outletNames?: string[]; verifiedAt?: string | null
+        storyId?: string; size?: number; outlets?: number; outletsAll?: number; firstReportAt?: string | null; outletNames?: string[]; verifiedAt?: string | null
         signals?: Array<{ id: string; title: string; status: string; outlet: string; url: string | null; createdAt: string | null; locationName: string | null }>
       }
       const reports = d.signals ?? []
@@ -150,7 +159,7 @@ export const TOOLS: Tool[] = [
       const lines = reports.map(r => `- ${r.createdAt ? r.createdAt.slice(0, 16).replace('T', ' ') + ' UTC' : ''} · ${r.outlet || 'unknown outlet'} · ${r.title}${r.url ? `\n  ${r.url}` : ''}`)
       const text = [
         first?.title ?? 'Story',
-        `${d.verifiedAt ? `Verified ${d.verifiedAt.slice(0, 16).replace('T', ' ')} UTC` : 'Not verified yet'} · ${d.outlets ?? 0} outlets · ${d.size ?? reports.length} reports`,
+        `${d.verifiedAt ? `Verified ${d.verifiedAt.slice(0, 16).replace('T', ' ')} UTC` : 'Not verified yet'} · ${d.outlets ?? 0} outlets in its last two days${sinceNote(d.outlets ?? 0, d.outletsAll, d.firstReportAt)} · ${d.size ?? reports.length} reports`,
         ...(d.outletNames?.length ? [`Outlets: ${d.outletNames.join(', ')}`] : []),
         `Page: ${signalLink(first?.id ?? id)}`,
         '',

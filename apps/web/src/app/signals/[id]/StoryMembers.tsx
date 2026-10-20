@@ -12,6 +12,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { storyTimeline, foldTimeline, clockLabel, sinceFirst } from '@/lib/story-timeline'
+import { STORY_COUNT_DAYS } from '@/lib/story-count'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -31,12 +32,34 @@ export interface StoryDetail {
   storyId: string
   /** Reports in the story; a big story's middle is left out of `signals` */
   size: number
-  /** Outlets that reported it, all of them */
+  /** Outlets that reported it in its last two days (lib/story-count.ts; all of them before Oct 20, 2026) */
   outlets?: number
   /** Their websites, A to Z (an outlet whose article was merged into another report included) */
   outletNames?: string[]
+  /** Outlets that have reported it since it began, and their websites */
+  outletsAll?: number
+  outletNamesAll?: string[]
+  /** When its first and newest reports came in */
+  firstReportAt?: string | null
+  latestReportAt?: string | null
   verifiedAt: string | null
   signals: StoryMember[]
+}
+
+/**
+ * The timeline's outlets: it shows the story's whole life, so every outlet
+ * since it began, with the names to check the count against; and how many
+ * reported it in its last two days, the story's count elsewhere, when that's
+ * fewer ("143 outlets · 48 in its last 2 days"). An older API's answer has
+ * only `outlets` and `outletNames`, which were the whole life's.
+ */
+export function timelineOutlets(story: StoryDetail, shownOutlets: number): { total: number; names: string[]; recent: number | null } {
+  const clean = (v: unknown): string[] => (Array.isArray(v) ? v.filter((n): n is string => typeof n === 'string' && n !== '') : [])
+  const hasAll = typeof story.outletsAll === 'number'
+  const names = clean(hasAll ? story.outletNamesAll ?? story.outletNames : story.outletNames)
+  const total = Math.max(shownOutlets, story.outletsAll ?? 0, story.outlets ?? 0, names.length)
+  const recent = hasAll && typeof story.outlets === 'number' && story.outlets > 0 && story.outlets < total ? story.outlets : null
+  return { total, names, recent }
 }
 
 /** The story's other reports, oldest first (the current signal left out) */
@@ -100,9 +123,8 @@ export function StoryMembers({ signalId }: { signalId: string }) {
   const firstAt = entries.find(e => e.kind === 'report')?.at ?? 0
   // The whole story's counts (the API sends the start and the latest of a big one)
   const totalReports = Math.max(reports, story.size || 0)
-  // Every outlet that carried it, so the count can be checked against the names
-  const outletNames = Array.isArray(story.outletNames) ? story.outletNames.filter(n => typeof n === 'string' && n !== '') : []
-  const totalOutlets = Math.max(outlets, story.outlets || 0, outletNames.length)
+  // Every outlet that carried it since it began, so the count can be checked against the names
+  const { total: totalOutlets, names: outletNames, recent: recentOutlets } = timelineOutlets(story, outlets)
   const outletWord = `${totalOutlets} ${totalOutlets === 1 ? 'outlet' : 'outlets'}`
   // Long stories: the start and the latest, the middle behind "Show all"
   const folds = expanded ? new Map<number, number>() : foldTimeline(entries, HEAD, TAIL)
@@ -118,6 +140,7 @@ export function StoryMembers({ signalId }: { signalId: string }) {
               {outletWord} {showOutlets ? '▴' : '▾'}
             </button>
           ) : outletWord}
+          {recentOutlets !== null && ` · ${recentOutlets} in its last ${STORY_COUNT_DAYS} days`}
         </span>
         {newCount > 0 && (
           <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[rgba(245,166,35,0.12)] text-wp-amber">
