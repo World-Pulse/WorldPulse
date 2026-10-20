@@ -1,15 +1,17 @@
 import type { FastifyPluginAsync } from 'fastify'
-import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 import { logger } from '../lib/logger'
 import { sendError } from '../lib/errors'
 import { signalsHaveStoryIds } from '../lib/stories'
+import { staleWhileRevalidate } from '../lib/swr-cache'
+import { longQuery } from '../lib/long-query'
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
 const RSS_CACHE_TTL = 120 // seconds
 const DEFAULT_LIMIT = 50
 const MAX_LIMIT = 200
+const QUERY_SECONDS = 25
 // `||`: compose passes an unset variable as "" (feeds linked to worldpulse.io, not ours, until Oct 11, 2026)
 const SITE_URL = process.env.SITE_URL || 'https://world-pulse.io'
 const API_URL = process.env.API_URL || 'https://api.world-pulse.io'
@@ -122,6 +124,22 @@ async function fetchSignals(opts: {
   minReliability?: number
   limit: number
 }): Promise<SignalRow[]> {
+  const cacheKey = `rss:rows:${opts.category ?? 'all'}:${opts.severity ?? 'all'}:${opts.minReliability ?? '0'}:${opts.limit}`
+  return staleWhileRevalidate(cacheKey, { freshSeconds: RSS_CACHE_TTL, staleSeconds: 6 * 3_600, lockSeconds: 2 * QUERY_SECONDS }, () => queryStories(opts))
+}
+
+/**
+ * The feeds answered 500 on Oct 20, 2026 (G16 slice 1 was live, the home page
+ * and /llms.txt link to them): sorting 14 days of whole rows for DISTINCT ON
+ * is the slow part, so the stories are picked from narrow rows (ids only) and
+ * only the picked rows are read in full, under a longer limit than the pool's 5 s.
+ */
+async function queryStories(opts: {
+  category?: string
+  severity?: string
+  minReliability?: number
+  limit: number
+}): Promise<SignalRow[]> {
   const key = (await signalsHaveStoryIds()) ? 'COALESCE(story_id, id)' : 'id'
   const where = [`status = 'verified'`, `created_at > NOW() - INTERVAL '14 days'`]
   const params: Array<string | number> = []
@@ -130,20 +148,21 @@ async function fetchSignals(opts: {
   if (opts.minReliability != null) { where.push('reliability_score >= ?'); params.push(opts.minReliability) }
   params.push(opts.limit)
 
-  const result = await db.raw(
-    `SELECT * FROM (
-       SELECT DISTINCT ON (${key})
-              ${key}::text AS id, title, summary, category::text AS category, severity::text AS severity,
-              reliability_score, location_name, country_code, original_urls[1] AS source_url,
-              source_count, created_at, last_updated AS updated_at
-         FROM signals
-        WHERE ${where.join(' AND ')}
-        ORDER BY ${key}, reliability_score DESC, created_at DESC
-     ) stories
-     ORDER BY created_at DESC
-     LIMIT ?`,
+  const result = await longQuery(QUERY_SECONDS, trx => trx.raw(
+    `SELECT picked.story::text AS id, s.title, s.summary, s.category::text AS category, s.severity::text AS severity,
+            s.reliability_score, s.location_name, s.country_code, s.original_urls[1] AS source_url,
+            s.source_count, s.created_at, s.last_updated AS updated_at
+       FROM (
+         SELECT DISTINCT ON (${key}) id AS pick, ${key} AS story
+           FROM signals
+          WHERE ${where.join(' AND ')}
+          ORDER BY ${key}, reliability_score DESC, created_at DESC
+       ) picked
+       JOIN signals s ON s.id = picked.pick
+      ORDER BY s.created_at DESC
+      LIMIT ?`,
     params,
-  )
+  ))
   const rows = (result as { rows?: Array<Record<string, unknown>> }).rows ?? []
   return rows.map(r => ({
     ...r,
