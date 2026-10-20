@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   NEWS_SOURCE_REGISTRY,
+  HOME_PIN_SOURCES,
   type NewsSource,
   detectNewsSeverity,
   detectNewsCategory,
@@ -69,6 +70,16 @@ describe('NEWS_SOURCE_REGISTRY', () => {
     for (const src of NEWS_SOURCE_REGISTRY) {
       expect(src.feedUrl).toMatch(/^https?:\/\//)
     }
+  })
+
+  it('carries the official and regional feeds added Oct 20, 2026 (plan R2), pinning only the one-country ones at home', () => {
+    const ids = new Set(NEWS_SOURCE_REGISTRY.map(s => s.id))
+    for (const id of ['un-press', 'ec-press-corner', 'uk-fcdo', 'boe-news', 'icc-news', 'icrc-news', 'radio-tamazuj', 'studio-tamani', 'times-central-asia', 'tico-times']) {
+      expect(ids.has(id)).toBe(true)
+    }
+    for (const id of ['boe-news', 'ec-press-corner', 'studio-tamani', 'tico-times']) expect(HOME_PIN_SOURCES.has(id)).toBe(true)
+    // stories from these range over many countries
+    for (const id of ['un-press', 'uk-fcdo', 'icc-news', 'icrc-news', 'radio-tamazuj', 'times-central-asia']) expect(HOME_PIN_SOURCES.has(id)).toBe(false)
   })
 
   it('all source IDs are unique', () => {

@@ -1,7 +1,7 @@
 /**
  * WorldPulse Global News RSS Adapter
  *
- * Ingests about 150 international news RSS feeds and creates WorldPulse signals from
+ * Ingests about 170 international news RSS feeds and creates WorldPulse signals from
  * breaking/world news items. Provides editorial-sourced signal coverage to
  * complement the OSINT/sensor feeds already in the pipeline.
  *
@@ -76,6 +76,16 @@
  * from elsewhere, so the block is on our server's side of the internet. Each
  * failing feed now records why its newest poll failed, as a fixed phrase
  * (feedFailureWhy), so /ops-status.json and HQ say why it fails.
+ *
+ * Oct 20, 2026 (plan R2): 10 more, each answering the server's own request
+ * with fresh items that day: six first-hand official sources (the UN's
+ * meeting record, the European Commission, the UK foreign ministry, the Bank
+ * of England, the International Criminal Court, the Red Cross) and four
+ * outlets for regions with none or few (Sudan and South Sudan, Mali and the
+ * Sahel, Central Asia, Central America). Several of them allow only personal
+ * or non-commercial use of their pages: like every feed here, only the
+ * headline, at most 600 characters of the feed's own text and the link are
+ * kept, and readers are sent to the original.
  */
 
 import https from 'node:https'
@@ -2446,6 +2456,152 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['national-post', 'canada', 'north-america'],
     language:        'en',
   },
+  // ── Added Oct 20, 2026 (R2: official sources and thin regions) ────────────
+  // Each answered the server's own request (WorldPulse User-Agent and headers)
+  // with fresh items that day. Official: the UN's meeting record, the European
+  // Commission, the UK foreign ministry, the Bank of England, the ICC, the ICRC.
+  // Regions with no outlet before: Sudan and South Sudan, the Sahel (Mali),
+  // Central America. Central Asia had only Eurasianet and RFE/RL.
+  {
+    id:              'un-press',
+    name:            'UN Meetings Coverage and Press Releases',
+    feedUrl:         'https://press.un.org/en/rss.xml',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.92,
+    countryCode:     'US',
+    defaultLat:      40.75,
+    defaultLng:      -73.97,
+    defaultLocation: 'New York, United Nations',
+    extraTags:       ['un', 'united-nations', 'security-council', 'general-assembly', 'institutional'],
+    language:        'en',
+  },
+  {
+    id:              'ec-press-corner',
+    name:            'European Commission Press Corner',
+    feedUrl:         'https://ec.europa.eu/commission/presscorner/api/rss?language=en',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.92,
+    countryCode:     'BE',
+    defaultLat:      50.84,
+    defaultLng:      4.38,
+    defaultLocation: 'Brussels, Belgium',
+    extraTags:       ['european-commission', 'eu', 'europe', 'institutional'],
+    language:        'en',
+  },
+  {
+    id:              'uk-fcdo',
+    name:            'UK Foreign, Commonwealth & Development Office',
+    feedUrl:         'https://www.gov.uk/search/news-and-communications.atom?organisations%5B%5D=foreign-commonwealth-development-office',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.88,
+    countryCode:     'GB',
+    defaultLat:      51.50,
+    defaultLng:      -0.13,
+    defaultLocation: 'London, United Kingdom',
+    extraTags:       ['fcdo', 'uk-government', 'foreign-ministry', 'diplomacy', 'institutional'],
+    language:        'en',
+  },
+  {
+    id:              'boe-news',
+    name:            'Bank of England News',
+    feedUrl:         'https://www.bankofengland.co.uk/rss/news',
+    category:        'finance',
+    biasLabel:       'center',
+    reliability:     0.95,
+    countryCode:     'GB',
+    defaultLat:      51.51,
+    defaultLng:      -0.09,
+    defaultLocation: 'London, United Kingdom',
+    extraTags:       ['boe', 'bank-of-england', 'central-bank', 'monetary-policy', 'finance'],
+    language:        'en',
+  },
+  {
+    id:              'icc-news',
+    name:            'International Criminal Court',
+    feedUrl:         'https://www.icc-cpi.int/rss/news/all',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.93,
+    countryCode:     'NL',
+    defaultLat:      52.11,
+    defaultLng:      4.32,
+    defaultLocation: 'The Hague, Netherlands',
+    extraTags:       ['icc', 'international-court', 'war-crimes', 'justice', 'institutional'],
+    language:        'en',
+  },
+  {
+    id:              'icrc-news',
+    name:            'International Committee of the Red Cross',
+    feedUrl:         'https://www.icrc.org/en/rss/news',
+    category:        'conflict',
+    biasLabel:       'center',
+    reliability:     0.90,
+    countryCode:     'CH',
+    defaultLat:      46.23,
+    defaultLng:      6.14,
+    defaultLocation: 'Geneva, Switzerland',
+    extraTags:       ['icrc', 'red-cross', 'humanitarian', 'institutional'],
+    language:        'en',
+  },
+  {
+    id:              'radio-tamazuj',
+    name:            'Radio Tamazuj',
+    feedUrl:         'https://www.radiotamazuj.org/en/feed',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.80,
+    countryCode:     'SS',
+    defaultLat:      4.85,
+    defaultLng:      31.58,
+    defaultLocation: 'Juba, South Sudan',
+    extraTags:       ['south-sudan', 'sudan', 'east-africa', 'africa', 'independent-media'],
+    language:        'en',
+  },
+  {
+    id:              'studio-tamani',
+    name:            'Studio Tamani (Mali)',
+    feedUrl:         'https://www.studiotamani.org/feed',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.80,
+    countryCode:     'ML',
+    defaultLat:      12.64,
+    defaultLng:      -8.00,
+    defaultLocation: 'Bamako, Mali',
+    extraTags:       ['mali', 'sahel', 'west-africa', 'africa', 'independent-media'],
+    language:        'fr',
+  },
+  {
+    id:              'times-central-asia',
+    name:            'The Times of Central Asia',
+    feedUrl:         'https://timesca.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.78,
+    countryCode:     'US',
+    defaultLat:      40.71,
+    defaultLng:      -74.01,
+    defaultLocation: 'New York, United States',
+    extraTags:       ['central-asia', 'eurasia', 'independent-media'],
+    language:        'en',
+  },
+  {
+    id:              'tico-times',
+    name:            'The Tico Times (Costa Rica)',
+    feedUrl:         'https://ticotimes.net/feed',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.76,
+    countryCode:     'CR',
+    defaultLat:      9.93,
+    defaultLng:      -84.08,
+    defaultLocation: 'San José, Costa Rica',
+    extraTags:       ['costa-rica', 'central-america', 'latin-america'],
+    language:        'en',
+  },
 ]
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────
@@ -2749,6 +2905,8 @@ export const HOME_PIN_SOURCES = new Set([
   'mada-masr', 'the-national-uae', 'standard-ke', 'capitalfm-ke', 'civil-ge', 'ukrainska-pravda',
   'khaosod-en', 'mexico-news-daily', 'ba-times',
   'gulf-news', 'saudi-gazette', 'fana-en', 'scroll-in', 'meduza-en', 'folha-en',
+  // Oct 20, 2026
+  'boe-news', 'ec-press-corner', 'studio-tamani', 'tico-times',
 ])
 
 export interface InferredGeo {
