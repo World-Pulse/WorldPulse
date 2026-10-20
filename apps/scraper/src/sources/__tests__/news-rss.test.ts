@@ -204,6 +204,14 @@ describe('NEWS_SOURCE_REGISTRY', () => {
     expect(NEWS_SOURCE_REGISTRY.find(s => s.id === 'fana-en')?.biasLabel).toBe('state-media')
   })
 
+  it('drops the feeds that turned our server away on their first reads (Oct 20, 2026)', () => {
+    // Hespress English and TalCual answered the server 403 (they had answered the search's requests)
+    for (const id of ['hespress-en', 'talcual-ve']) {
+      expect(NEWS_SOURCE_REGISTRY.find(s => s.id === id)).toBeUndefined()
+      expect(HOME_PIN_SOURCES.has(id)).toBe(false)
+    }
+  })
+
   it('drops the feeds that never answered our server and covers Canada (Oct 17, 2026)', () => {
     for (const id of ['anadolu-en', 'new-arab', 'thaiger', 'reliefweb-updates']) {
       expect(NEWS_SOURCE_REGISTRY.find(s => s.id === id)).toBeUndefined()

@@ -135,6 +135,12 @@ const FEED_FOOTERS: Array<[RegExp, string]> = [
   [/\s*\bSubmitted by\b[^.]{0,80}$/i, ''],
   // A WordPress membership plugin's paywall line (Post-Courier ends every summary with it, Oct 20, 2026)
   [/\s*\bTo access this post, you must purchase\b[^.]{0,600}\./gi, ''],
+  // WordPress's "appeared first on" in French, Spanish and Portuguese (Oct 20, 2026: the round-3 feeds)
+  [/\s*\bL[’']article\s.{1,400}?\sest apparu en premier sur\s[^.\n]{1,120}\.?/gi, ''],
+  [/\s*\bLa entrada\s.{1,400}?\sse public[oó] primero en\s[^.\n]{1,120}\.?/gi, ''],
+  [/\s*\bO post\s.{1,400}?\sapareceu primeiro em\s[^.\n]{1,120}\.?/gi, ''],
+  // Radio Ndeke Luka's language switch (French, Sango) at the start of its summaries
+  [/^\s*Fr\s*:\s*Sa\s*:\s*/i, ''],
 ]
 
 /** A feed's description without its footers (see FEED_FOOTERS) */

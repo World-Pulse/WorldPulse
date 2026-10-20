@@ -28,11 +28,11 @@ describe('the score bands and factors', () => {
     expect(correlate).toContain('const OUTLET_GAP_KEPT = 0.6')
     expect(correlate).toMatch(/\.where\('source_count', '>=', 2\)\s*\n\s*\.where\('reliability_score', '>=', 0\.65\)/)
     expect(SCORE_FACTORS.find(f => f.label === 'Independent outlets')?.desc).toContain('closes 40% of the gap to 98%')
-    // the start: the outlet's rating, a few points either way, and a small random spread
+    // the start: the outlet's rating and a few points either way, with no random spread (Devon, Oct 20, 2026)
     const start = read('reliability-score.ts')
     expect(start).toContain('let score = inputs.baseReliability')
-    expect(start).toContain('Math.random()')
-    expect(SCORE_FACTORS.find(f => f.label === 'Report details')?.desc).toContain('random spread')
+    expect(start).not.toContain('Math.random')
+    expect(JSON.stringify(SCORE_FACTORS)).not.toMatch(/random/i)
     // the AI checks and flags don't write the score
     for (const f of ['crosscheck.ts', 'verify.ts']) expect(read(f)).not.toMatch(/reliability_score\s*[:=]/)
   })

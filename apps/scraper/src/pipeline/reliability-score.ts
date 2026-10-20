@@ -1,16 +1,19 @@
 /**
- * Dynamic Reliability Scoring
- *
- * Adds per-signal variance to the base source reliability score.
- * Without this, every signal from the same source gets an identical score,
- * which creates score anomalies detected by the fact-checker.
+ * A report's reliability score when it is saved.
  *
  * Scoring factors:
- *   1. Base source reliability (0.0–1.0) — the starting point
- *   2. Content completeness bonus — signals with summary, location, tags score higher
- *   3. Severity–category alignment penalty — CRITICAL sports/culture signals get docked
- *   4. Source type bonus — institutional/government sources trusted more
- *   5. Small random jitter — breaks exact ties between signals from same source
+ *   1. The outlet's rating (0.0–1.0), from its source definition: the starting point
+ *   2. Completeness: a summary, a place and tags add a little; no tags take a little
+ *   3. Severity–category mismatch: CRITICAL or HIGH sports/culture reports lose some
+ *   4. State-run outlets: 10 points off on conflict, geopolitics, elections or security, 3 otherwise
+ *   5. One outlet so far: medium, high and critical reports lose some (more outlets: a small bonus)
+ *
+ * The same report always gets the same score. Until Oct 20, 2026 a random
+ * spread of up to ±4 points (and a "spread" from the tag count and language)
+ * was added so that reports from one outlet never tied; it made the score
+ * noisy and could tip a story near the 65% verified line either way (Devon:
+ * "fix this and remove it"). Ties are fine: the same outlet with the same
+ * evidence earns the same score.
  *
  * The corroboration boost in correlate.ts handles multi-source signals separately.
  *
@@ -36,7 +39,7 @@ export interface ScoreInputs {
   isStateMedia?: boolean
   /** How many sources contributed to this signal at insert time */
   sourceCount: number
-  /** Detected language — non-English content with English-only source is suspicious */
+  /** Detected language (no longer moves the score: it was part of the removed spread) */
   language?: string
 }
 
@@ -92,19 +95,6 @@ export function computeReliabilityScore(inputs: ScoreInputs): number {
   // Reward corroborated signals so they visibly outrank single-source ones
   if (inputs.sourceCount >= 3) score += 0.05
   else if (inputs.sourceCount >= 2) score += 0.02
-
-  // ── Content-derived variance ───────────────────────────────────────────
-  // Use deterministic signal properties to create natural score spread,
-  // then add wider jitter to prevent any remaining ties.
-  // Hash-like spread from tag count and summary length indicator
-  const contentSpread = ((inputs.tagCount % 7) * 0.005) +
-    (inputs.hasSummary && inputs.hasLocation ? 0.01 : 0) +
-    (inputs.language !== 'en' ? -0.01 : 0)
-  score += contentSpread
-
-  // Wider jitter (±0.04) to ensure unique scores across concurrent inserts
-  const jitter = (Math.random() - 0.5) * 0.08  // range: -0.04 to +0.04
-  score += jitter
 
   // ── Clamp to valid range ──────────────────────────────────────────────
   return Math.round(Math.max(0.05, Math.min(0.99, score)) * 1000) / 1000

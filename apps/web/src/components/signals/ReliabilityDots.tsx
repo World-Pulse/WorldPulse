@@ -69,7 +69,7 @@ export const SCORE_TIERS = [
 export const SCORE_FACTORS = [
   { icon: '◎', label: 'Outlet rating', desc: 'The outlet’s rating in WorldPulse’s list of sources starts the score' },
   { icon: '⇄', label: 'Independent outlets', desc: 'Each further outlet that reports the story closes 40% of the gap to 98%' },
-  { icon: '±', label: 'Report details', desc: 'A few points either way: a summary and a place add a little; state-run outlets on conflict, politics or security, and single reports marked high or critical, lose some; a little random spread keeps reports from tying' },
+  { icon: '±', label: 'Report details', desc: 'A few points either way: a summary and a place add a little; state-run outlets on conflict, politics or security, and single reports marked high or critical, lose some' },
 ] as const
 
 /** The band a score (0–1) falls in */

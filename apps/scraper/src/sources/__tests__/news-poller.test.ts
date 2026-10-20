@@ -7,7 +7,7 @@ import { describe, it, expect, vi } from 'vitest'
 
 vi.mock('../../lib/redis', () => ({ redis: {} }))
 
-const { sourceDelay, oneCycleAtATime, NEWS_SOURCE_REGISTRY } = await import('../news-rss')
+const { sourceDelay, oneCycleAtATime, cycleStart, NEWS_SOURCE_REGISTRY } = await import('../news-rss')
 
 describe('sourceDelay', () => {
   it('keeps 5 s while the list is small, then shortens so the pauses take at most 22.5 of the 30 minutes', () => {
@@ -48,5 +48,25 @@ describe('oneCycleAtATime', () => {
     await expect(cycle()).rejects.toThrow('boom')
     await cycle()
     expect(run).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('cycleStart', () => {
+  // Every deploy restarts the scraper; a cycle started again at the top, so on
+  // Oct 20, 2026 the reader never got past the first 211 feeds
+  const ids = ['a', 'b', 'c', 'd']
+  const now = Date.parse('2026-10-20T21:30:00Z')
+
+  it('carries on from the feed a restart interrupted, keeping the cycle\'s start', () => {
+    const startedAt = now - 20 * 60_000
+    expect(cycleStart({ startedAt, nextId: 'c' }, ids, now)).toEqual({ index: 2, startedAt })
+  })
+
+  it('starts at the top when nothing is saved, the cycle is over an hour old, or its feed is gone', () => {
+    expect(cycleStart(null, ids, now)).toEqual({ index: 0, startedAt: now })
+    expect(cycleStart({ startedAt: now - 61 * 60_000, nextId: 'c' }, ids, now)).toEqual({ index: 0, startedAt: now })
+    expect(cycleStart({ startedAt: now - 60_000, nextId: 'removed' }, ids, now)).toEqual({ index: 0, startedAt: now })
+    expect(cycleStart({ startedAt: Number.NaN, nextId: 'c' } as never, ids, now)).toEqual({ index: 0, startedAt: now })
+    expect(cycleStart({ startedAt: now - 60_000, nextId: 'a' }, ids, now)).toEqual({ index: 0, startedAt: now })
   })
 })

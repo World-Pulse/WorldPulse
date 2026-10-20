@@ -105,14 +105,15 @@ export const MORE_COUNTRIES: CountryEntry[] = [
   c('CD', 'DR Congo', /\b(?:democratic republic of (?:the )?congo|dr congo|drc|congolese|(?<!republic of the )congo(?![-\s]brazzaville))\b/i, 'Kinshasa', -4.44, 15.27),
   c('CI', "Côte d'Ivoire", /\b(?:ivory coast|c[oô]te d['’]ivoire|ivorian)\b/i, 'Abidjan', 5.36, -4.01),
   c('DJ', 'Djibouti', /\bdjibouti\b/i, 'Djibouti', 11.59, 43.15),
-  c('GQ', 'Equatorial Guinea', /\bequatorial guinea\b/i, 'Malabo', 3.75, 8.78),
+  // (Spanish "Guinea Ecuatorial" too: it read as Guinea, Oct 20, 2026)
+  c('GQ', 'Equatorial Guinea', /\bequatorial guinea\b|\bguinea ecuatorial\b/i, 'Malabo', 3.75, 8.78),
   c('ER', 'Eritrea', /\b(?:eritrea|eritrean)\b/i, 'Asmara', 15.32, 38.93),
   c('SZ', 'Eswatini', /\b(?:eswatini|swaziland)\b/i, 'Mbabane', -26.31, 31.14),
   c('GA', 'Gabon', /\b(?:gabon|gabonese)\b/i, 'Libreville', 0.39, 9.45),
   c('GM', 'Gambia', /\b(?:gambia|gambian)\b/i, 'Banjul', 13.45, -16.58),
   c('GH', 'Ghana', /\b(?:ghana|ghanaian)\b/i, 'Accra', 5.60, -0.19),
   c('GW', 'Guinea-Bissau', /\bguinea[-\s]bissau\b/i, 'Bissau', 11.86, -15.60),
-  c('GN', 'Guinea', /\b(?:(?<!(?:new|equatorial|papua) )guinea(?![-\s](?:bissau|pigs?)\b)|guinean)\b/i, 'Conakry', 9.64, -13.58),
+  c('GN', 'Guinea', /\b(?:(?<!(?:new|equatorial|papua) )guinea(?![-\s](?:bissau|pigs?|ecuatorial)\b)|guinean)\b/i, 'Conakry', 9.64, -13.58),
   c('LS', 'Lesotho', /\blesotho\b/i, 'Maseru', -29.31, 27.48),
   c('LR', 'Liberia', /\b(?:liberia|liberian)\b/i, 'Monrovia', 6.30, -10.80),
   c('MG', 'Madagascar', /\b(?:madagascar|malagasy)\b/i, 'Antananarivo', -18.88, 47.51),
@@ -124,7 +125,9 @@ export const MORE_COUNTRIES: CountryEntry[] = [
   c('NA', 'Namibia', /\b(?:namibia|namibian)\b/i, 'Windhoek', -22.56, 17.08),
   c('NE', 'Niger', /\b(?:niger(?![\s-](?:delta|state|river)\b)|nigerien)\b/i, 'Niamey', 13.51, 2.11),
   c('RW', 'Rwanda', /\b(?:rwanda|rwandan)\b/i, 'Kigali', -1.94, 30.06),
-  c('ST', 'São Tomé and Príncipe', /\bs[aã]o tom[eé]\b/i, 'São Tomé', 0.34, 6.73),
+  // (no \b after "é": without the u flag \b doesn't count it as a letter, so
+  // "São Tomé" with its accent never matched until Oct 20, 2026)
+  c('ST', 'São Tomé and Príncipe', /\bs[aã]o tom[eé](?![a-zà-ÿ])/i, 'São Tomé', 0.34, 6.73),
   c('SN', 'Senegal', /\b(?:senegal|senegalese)\b/i, 'Dakar', 14.72, -17.47),
   c('SC', 'Seychelles', /\bseychelles\b/i, 'Victoria', -4.62, 55.45),
   c('SL', 'Sierra Leone', /\bsierra leone(?:an)?\b/i, 'Freetown', 8.48, -13.23),
