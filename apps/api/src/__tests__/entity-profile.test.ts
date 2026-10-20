@@ -13,7 +13,7 @@ vi.mock('../lib/stories', () => ({ signalsHaveStoryIds: vi.fn(async () => true) 
 vi.mock('../lib/long-query', () => ({ longQuery: vi.fn() }))
 vi.mock('../lib/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } }))
 
-import { mentionIds, dailySeries, ACTIVITY_DAYS, connectionsOf, entityProfile, buildProfile, CONNECTION_REPORTS, CONNECTION_SECONDS, QUICK, FULL, PROFILE_TTL } from '../lib/entity-profile'
+import { mentionIds, dailySeries, ACTIVITY_DAYS, connectionsOf, entityProfile, buildProfile, CONNECTION_REPORTS, CONNECTION_SECONDS, QUICK, FULL, PROFILE_TTL, MAX_FULL_BUILDS } from '../lib/entity-profile'
 import { redis } from '../db/redis'
 import { db } from '../db/postgres'
 import { longQuery } from '../lib/long-query'
@@ -113,6 +113,11 @@ describe('"named with" (Oct 20, 2026: /entities/anwar-ibrahim-… answered 500)'
     expect(seconds.length).toBe(4)
     expect(Math.max(...seconds)).toBeLessThan(9)
     vi.mocked(longQuery).mockReset()
+  })
+
+  it("runs at most MAX_FULL_BUILDS full remakes at once, so crawlers can't tie up the pool", async () => {
+    expect(MAX_FULL_BUILDS).toBeGreaterThanOrEqual(1)
+    expect(MAX_FULL_BUILDS).toBeLessThanOrEqual(4)
   })
 
   it('a quick profile with nothing cut off is kept as fresh', async () => {

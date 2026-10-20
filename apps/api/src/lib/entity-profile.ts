@@ -216,17 +216,38 @@ function storiesOf(id: string, ids: string[], seconds: number): Promise<ListedSt
 const profileKey = (id: string) => `kg:profile:v3:${id}`
 const PROFILE_SWR = { freshSeconds: PROFILE_TTL, staleSeconds: PROFILE_STALE_S, lockSeconds: 2 * FULL.stories }
 
+/**
+ * Full remakes run in the background, at most this many at once in this
+ * process: each holds up to four of the pool's connections for up to 25 s,
+ * and a crawler reading many entity pages would otherwise start one per page
+ * and tie up the pool. Past the limit a remake is skipped; the kept profile
+ * is served, and the next view after it is due tries again.
+ */
+export const MAX_FULL_BUILDS = 2
+let fullBuilds = 0
+
+/** The full profile, made in the background (throws, so nothing is stored, when MAX_FULL_BUILDS are running) */
+async function fullProfile(id: string): Promise<EntityProfile | null> {
+  if (fullBuilds >= MAX_FULL_BUILDS) throw new Error('full profile remakes busy')
+  fullBuilds++
+  try {
+    return (await buildProfile(id, FULL)).profile
+  } finally {
+    fullBuilds--
+  }
+}
+
 /** Everything the entity's page shows, or null when there is no such entity */
 export async function entityProfile(id: string): Promise<EntityProfile | null> {
   const key = profileKey(id)
   const kept = await redis.get(key).catch(() => null)
-  if (kept) return staleWhileRevalidate(key, PROFILE_SWR, async () => (await buildProfile(id, FULL)).profile)
+  if (kept) return staleWhileRevalidate(key, PROFILE_SWR, () => fullProfile(id))
   // A first view: the quick profile now. When a slow part was cut off it is
   // kept as already due, so the full one is made at once in the background.
   const { profile, partial } = await buildProfile(id, QUICK)
   const at = partial ? Date.now() - (PROFILE_TTL + 1) * 1000 : Date.now()
   await redis.setex(key, PROFILE_TTL + PROFILE_STALE_S, JSON.stringify({ at, value: profile })).catch(() => {})
-  if (partial) void staleWhileRevalidate(key, PROFILE_SWR, async () => (await buildProfile(id, FULL)).profile).catch(() => {})
+  if (partial) void staleWhileRevalidate(key, PROFILE_SWR, () => fullProfile(id)).catch(() => {})
   return profile
 }
 
