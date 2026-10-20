@@ -39,3 +39,27 @@ describe('country names', () => {
     expect(placeFromText('Guinea elects a president').countryCode).toBe('GN')
   })
 })
+
+describe('places the round-4 search found missing (Oct 20, 2026)', () => {
+  it('reads French "Comores" and its islands as Comoros', () => {
+    expect(placeFromText('Les Comores accueillent un sommet régional').countryCode).toBe('KM')
+    expect(placeFromText('Coupures d’électricité à Anjouan').countryCode).toBe('KM')
+    expect(placeFromText('Le gouvernement comorien annonce un plan').countryCode).toBe('KM')
+    expect(placeFromText('Arrestations à Moroni').countryCode).toBe('KM')
+  })
+
+  it('places Somaliland and Hargeisa in Somalia, at Hargeisa', () => {
+    const p = placeFromText('Somaliland president meets envoy')
+    expect(p.countryCode).toBe('SO')
+    expect(p.lat).toBeCloseTo(9.56, 1)
+    expect(placeFromText('Floods hit Hargeisa').countryCode).toBe('SO')
+    expect(placeFromText('Somalia: Mogadishu market reopens').lat).toBeCloseTo(2.05, 1)
+  })
+
+  it('does not read "US$" as the United States', () => {
+    expect(placeFromText('Trauma Centre sues CIMAS for US$1 million').countryCode).toBeUndefined()
+    expect(placeFromText('Zimbabwe mine raises US $40m').countryCode).toBe('ZW')
+    expect(placeFromText('US imposes new tariffs').countryCode).toBe('US')
+    expect(placeFromText('Talks between the US and Iran resume').countryCode).toBe('US')
+  })
+})

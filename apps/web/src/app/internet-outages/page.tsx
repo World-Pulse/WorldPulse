@@ -324,20 +324,21 @@ export default function InternetOutagesPage() {
             About this data
           </h3>
           <p className="text-xs text-wp-text3 leading-relaxed">
-            Internet outage data is sourced from{' '}
+            Outage reports come from{' '}
             <a
-              href="https://ioda.caida.org"
+              href="https://ioda.inetintel.cc.gatech.edu"
               target="_blank"
               rel="noopener noreferrer"
               className="text-wp-text2 hover:text-white underline"
             >
               IODA (Internet Outage Detection and Analysis)
             </a>
-            {' '}by Georgia Tech / CAIDA, which uses BGP route monitoring, active
-            probing, and Internet background radiation telescope signals to detect
-            connectivity disruptions. Signals are updated every 10 minutes with
-            a reliability score of 0.87. Events are particularly relevant for
-            tracking internet shutdowns used during protests, elections, and conflicts.
+            {' '}at Georgia Tech, which watches every country&apos;s internet. WorldPulse
+            checks it every 10 minutes and makes a report when a country&apos;s routing
+            data (BGP) or active probing drops with an IODA outage score of 1,000 or
+            more, at most one report per country every 6 hours. Each report links to
+            IODA&apos;s page for the country. They are particularly relevant for
+            tracking internet shutdowns during protests, elections and conflicts.
           </p>
         </section>
 

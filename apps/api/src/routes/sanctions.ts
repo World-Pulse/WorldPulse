@@ -5,7 +5,10 @@
  *   - Returns top 20 high-priority sanctioned entities (mix of Persons, Organizations, Vessels)
  *   - Fetches known high-profile entities from OpenSanctions in parallel
  *   - Deduplicates by entity ID, sorts by threat level
- *   - Redis-cached for 10 minutes (key: 'sanctions:featured')
+ *   - Redis-cached for an hour (key: 'sanctions:featured'); the fixed fallback
+ *     list (lib/sanctions-seed.ts) for 10 minutes, and the answer says live: false,
+ *     so /sanctions can say searching is offline instead of showing the fixed list
+ *     as OpenSanctions' data (plan P16: OpenSanctions answers 401 without a key)
  *   - Rate limited to 30 req/min
  *   - No auth required
  */
@@ -28,6 +31,14 @@ const CACHE_TTL = 3600
 
 /** Redis key for the featured sanctions cache */
 const CACHE_KEY = 'sanctions:featured'
+
+/** The fixed fallback list is kept 10 minutes, so a key put on the server shows within 10 minutes */
+const SEED_CACHE_TTL = 600
+
+/** True when the list is OpenSanctions' own answer, not the fixed fallback (whose ids start wp-seed-) */
+export function isLiveList(entities: Array<{ id: string }>): boolean {
+  return entities.length > 0 && !entities.some(e => String(e.id).startsWith('wp-seed-'))
+}
 
 /** Rate limit for sanctions endpoints: requests per minute */
 const RATE_LIMIT = 30
@@ -158,6 +169,7 @@ export const registerSanctionsRoutes: FastifyPluginAsync = async (app) => {
           properties: {
             success: { type: 'boolean' },
             cached:  { type: 'boolean' },
+            live:    { type: 'boolean' },
             data: {
               type: 'array',
               items: {
@@ -187,7 +199,8 @@ export const registerSanctionsRoutes: FastifyPluginAsync = async (app) => {
     try {
       const cached = await redis.get(CACHE_KEY)
       if (cached) {
-        return reply.send({ success: true, cached: true, data: JSON.parse(cached) as FeaturedEntity[] })
+        const data = JSON.parse(cached) as FeaturedEntity[]
+        return reply.send({ success: true, cached: true, live: isLiveList(data), data })
       }
     } catch { /* Redis miss — proceed */ }
 
@@ -195,8 +208,9 @@ export const registerSanctionsRoutes: FastifyPluginAsync = async (app) => {
     const entities = await fetchFeaturedEntities()
 
     // ── Cache result ───────────────────────────────────────
-    redis.setex(CACHE_KEY, CACHE_TTL, JSON.stringify(entities)).catch(() => {})
+    const live = isLiveList(entities)
+    redis.setex(CACHE_KEY, live ? CACHE_TTL : SEED_CACHE_TTL, JSON.stringify(entities)).catch(() => {})
 
-    return reply.send({ success: true, cached: false, data: entities })
+    return reply.send({ success: true, cached: false, live, data: entities })
   })
 }

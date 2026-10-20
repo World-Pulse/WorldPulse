@@ -100,7 +100,8 @@ export const MORE_COUNTRIES: CountryEntry[] = [
   c('CM', 'Cameroon', /\b(?:cameroon|cameroonian)\b/i, 'Yaoundé', 3.85, 11.50),
   c('CF', 'Central African Republic', /\bcentral african republic\b/i, 'Bangui', 4.39, 18.56),
   c('TD', 'Chad', /\b(?:chadian|in chad|n['’]djamena)\b/i, "N'Djamena", 12.13, 15.06),
-  c('KM', 'Comoros', /\bcomoros\b/i, 'Moroni', -11.70, 43.26),
+  // French "Comores" and the islands too (round 4, Oct 20, 2026: 15 of HZK-Presse's 20 items found no place)
+  c('KM', 'Comoros', /\b(?:comoros|comores|comorian|comorien(?:ne)?|anjouan|moh[eé]li)\b/i, 'Moroni', -11.70, 43.26),
   c('CG', 'Republic of the Congo', /\b(?:(?<!democratic )republic of the congo|congo[-\s]brazzaville|brazzaville)\b/i, 'Brazzaville', -4.27, 15.28),
   c('CD', 'DR Congo', /\b(?:democratic republic of (?:the )?congo|dr congo|drc|congolese|(?<!republic of the )congo(?![-\s]brazzaville))\b/i, 'Kinshasa', -4.44, 15.27),
   c('CI', "Côte d'Ivoire", /\b(?:ivory coast|c[oô]te d['’]ivoire|ivorian)\b/i, 'Abidjan', 5.36, -4.01),
@@ -230,7 +231,8 @@ export function countryNameOf(code: string | null | undefined): string | undefin
  * lowercase words are too common to count.
  */
 export const ABBREVIATED_COUNTRIES: Array<[RegExp, string]> = [
-  [/\bUS\b/, 'US'],
+  // Not "US$" or "US $": Zimbabwe prices things in US dollars, so its stories went to the US (round 4, Oct 20, 2026)
+  [/\bUS\b(?!\s?\$)/, 'US'],
   [/\bUK\b/, 'GB'],
 ]
 

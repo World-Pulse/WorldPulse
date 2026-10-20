@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { EmptyState } from '@/components/EmptyState'
 import { entityPath, entityTypeIcon, entityTypeLabel } from '@/lib/entity-links'
+import { openSanctionsSearchUrl, sanctionsSearchOffline, SANCTIONS_OFFLINE_NOTE } from '@/lib/sanctions-search'
 import { ReliabilityDots } from '@/components/signals/ReliabilityDots'
 import { Globe, Landmark, MapPin, Map as MapIcon } from 'lucide-react'
 import { FlagModal } from '@/components/signals/FlagModal'
@@ -372,6 +373,8 @@ export default function SearchPage() {
     setEntitiesError(null)
     try {
       const res  = await fetch(`${API_URL}/api/v1/search/entities?q=${encodeURIComponent(q.trim())}&limit=10`)
+      // Searching offline (OpenSanctions needs a key, plan P16): a note and a link, not the API's error text
+      if (sanctionsSearchOffline(res.status)) { setEntitiesError(SANCTIONS_OFFLINE_NOTE); setEntities([]); setEntitiesTotal(0); return }
       const data = await res.json() as {
         success: boolean
         data: { entities: OSEntity[]; total: number }
@@ -551,7 +554,9 @@ export default function SearchPage() {
   const allTags    = results.tags    as Array<{ tag: string; count: number }> ?? []
 
   const hasResults    = allSignals.length + allPosts.length + allUsers.length + allTags.length > 0
-                      || (type === 'entities' && (entities.length > 0 || entitiesLoading))
+                      // The Entities tab draws its own loading, offline, empty and result states (they sat
+                      // behind this, so a search with no sanctions match, or offline, showed a blank page)
+                      || (type === 'entities' && query.trim().length >= 2)
   const activeFilters = !filtersEmpty(filters)
   const hasPrevPage   = page > 0
   const hasNextPage   = hasResults && (type !== 'all') && (type !== 'entities') && (
@@ -1004,8 +1009,11 @@ export default function SearchPage() {
                 </div>
               )}
               {entitiesError && !entitiesLoading && (
-                <div className="bg-[rgba(255,59,92,0.05)] border border-[rgba(255,59,92,0.2)] rounded-xl p-4 text-[13px] text-wp-red">
-                  ⚠ {entitiesError}
+                <div className="bg-wp-surface border border-[rgba(255,255,255,0.07)] rounded-xl p-4 text-[13px] text-wp-text2">
+                  {entitiesError}{' '}
+                  <a href={openSanctionsSearchUrl(query)} target="_blank" rel="noopener noreferrer" className="text-wp-cyan hover:underline whitespace-nowrap">
+                    Search &ldquo;{query.trim()}&rdquo; on OpenSanctions ↗
+                  </a>
                 </div>
               )}
               {!entitiesLoading && !entitiesError && entities.length > 0 && (
@@ -1112,7 +1120,7 @@ export default function SearchPage() {
             <span className="px-2 py-0.5 rounded bg-[rgba(255,59,92,0.08)] border border-[rgba(255,59,92,0.2)] text-wp-red font-mono text-[10px]">NEW</span>
             <span>
               <button onClick={() => { setType('entities') }} className="text-wp-cyan hover:underline">Entities tab</button>
-              {' '}— search 100+ global sanctions lists (OFAC, UN, EU, Interpol)
+              {' '}— people, places and organizations named in the news, and sanctions lists
             </span>
           </div>
           <div className="flex flex-wrap justify-center gap-2">

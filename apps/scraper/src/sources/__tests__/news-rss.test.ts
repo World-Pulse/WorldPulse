@@ -212,6 +212,14 @@ describe('NEWS_SOURCE_REGISTRY', () => {
     }
   })
 
+  it("drops the feeds our server can't read, round 4's clean-up (Oct 20, 2026)", () => {
+    // Radio Taiwan International and The Post (Lesotho) answered the server 403; Prothom Alo English's feed is empty
+    for (const id of ['rti-en', 'the-post-ls', 'prothom-alo-en']) {
+      expect(NEWS_SOURCE_REGISTRY.find(s => s.id === id)).toBeUndefined()
+      expect(HOME_PIN_SOURCES.has(id)).toBe(false)
+    }
+  })
+
   it('drops the feeds that never answered our server and covers Canada (Oct 17, 2026)', () => {
     for (const id of ['anadolu-en', 'new-arab', 'thaiger', 'reliefweb-updates']) {
       expect(NEWS_SOURCE_REGISTRY.find(s => s.id === id)).toBeUndefined()

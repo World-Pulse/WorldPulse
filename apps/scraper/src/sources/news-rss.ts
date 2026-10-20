@@ -1,7 +1,7 @@
 /**
  * WorldPulse Global News RSS Adapter
  *
- * Ingests about 405 international news RSS feeds and creates WorldPulse signals from
+ * Ingests about 475 international news RSS feeds and creates WorldPulse signals from
  * breaking/world news items. Provides editorial-sourced signal coverage to
  * complement the OSINT/sensor feeds already in the pipeline.
  *
@@ -132,6 +132,46 @@ const CYCLE_SHARE = 0.75
 export function sourceDelay(sources: number): number {
   if (sources <= 0) return SOURCE_DELAY
   return Math.max(SOURCE_DELAY_MIN, Math.min(SOURCE_DELAY, Math.floor((POLL_INTERVAL * CYCLE_SHARE) / sources)))
+}
+
+/** A whole poll cycle should end in this, a little under its 30 minutes, so the next one starts on time */
+export const CYCLE_BUDGET = Math.round(POLL_INTERVAL * 0.9)
+/** The shortest pause between two feeds (each is on its own host) */
+export const SOURCE_PAUSE_MIN = 250
+
+/**
+ * The pause before the next feed (Oct 20, 2026, 405 feeds): what is left of the
+ * cycle's budget, shared by the feeds still to read, less the time reading one
+ * takes (the average so far), between SOURCE_PAUSE_MIN and SOURCE_DELAY. The
+ * reader reads READ_AT_ONCE feeds a round, so it passes rounds and a round's time.
+ * Reading a feed takes about 3 seconds as well, so the fixed pause
+ * (sourceDelay(405) = 3.3 s) made a pass take 44 minutes, longer than its 30:
+ * every other start was skipped and each feed was read once an hour (the
+ * 7:05 PM audit: the reader reached the 389th feed 42 minutes after it started).
+ */
+export function cyclePause(feedsLeft: number, msLeft: number, avgReadMs: number): number {
+  if (feedsLeft <= 0) return 0
+  const share = msLeft / feedsLeft - Math.max(0, Number.isFinite(avgReadMs) ? avgReadMs : 0)
+  if (!Number.isFinite(share)) return SOURCE_PAUSE_MIN
+  return Math.max(SOURCE_PAUSE_MIN, Math.min(SOURCE_DELAY, Math.floor(share)))
+}
+
+/**
+ * Feeds read at once (Oct 20, 2026, 475 feeds). Reading one takes about 3
+ * seconds, so one after another the reads alone took 25 of the cycle's 30
+ * minutes, with no room for slow answers or more feeds. Two at a time (each
+ * feed is on its own host) a round takes about as long as its slower read, and
+ * a pass has room to grow well past 500. The geocoder books its own slots
+ * (throttleNominatim), so two readers never ask it at once.
+ */
+export const READ_AT_ONCE = 2
+
+/** The cycle's rounds from startAt: [first, end) index ranges of READ_AT_ONCE feeds (the last may be shorter) */
+export function readRounds(total: number, startAt: number, size = READ_AT_ONCE): Array<[number, number]> {
+  const step = Math.max(1, Math.floor(size))
+  const rounds: Array<[number, number]> = []
+  for (let i = Math.max(0, startAt); i < total; i += step) rounds.push([i, Math.min(total, i + step)])
+  return rounds
 }
 
 /**
@@ -3797,21 +3837,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['bhutan', 'south-asia', 'public-broadcaster'],
     language:        'en',
   },
-  // English edition of Bangladesh's largest daily (its terms name RSS feeds as a way to read it)
-  {
-    id:              'prothom-alo-en',
-    name:            'Prothom Alo English (Bangladesh)',
-    feedUrl:         'https://en.prothomalo.com/stories.rss',
-    category:        'geopolitics',
-    biasLabel:       'center',
-    reliability:     0.80,
-    countryCode:     'BD',
-    defaultLat:      23.81,
-    defaultLng:      90.41,
-    defaultLocation: 'Dhaka, Bangladesh',
-    extraTags:       ['bangladesh', 'south-asia'],
-    language:        'en',
-  },
   // Ulaanbaatar news site, English edition
   {
     id:              'news-mn-en',
@@ -4731,21 +4756,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['myanmar', 'southeast-asia', 'independent-media', 'exile-media'],
     language:        'en',
   },
-  // Taiwan's national broadcaster, English service; its terms bar commercial use and reproduction without permission (we keep headline, summary and link)
-  {
-    id:              'rti-en',
-    name:            'Radio Taiwan International (English)',
-    feedUrl:         'https://www.rti.org.tw/en/rss',
-    category:        'geopolitics',
-    biasLabel:       'center',
-    reliability:     0.78,
-    countryCode:     'TW',
-    defaultLat:      25.03,
-    defaultLng:      121.57,
-    defaultLocation: 'Taipei, Taiwan',
-    extraTags:       ['taiwan', 'east-asia', 'asia-pacific', 'public-broadcaster'],
-    language:        'en',
-  },
   // Hong Kong's public broadcaster, run as a government department (its news desk writes from an rthk.gov.hk address), hence state media under 0.6; its local news feed
   {
     id:              'rthk-en',
@@ -5346,21 +5356,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLng:      31.14,
     defaultLocation: 'Mbabane, Eswatini',
     extraTags:       ['eswatini', 'southern-africa', 'africa'],
-    language:        'en',
-  },
-  // Lesotho newspaper site
-  {
-    id:              'the-post-ls',
-    name:            'The Post (Lesotho)',
-    feedUrl:         'https://www.thepost.co.ls/feed/',
-    category:        'geopolitics',
-    biasLabel:       'center',
-    reliability:     0.68,
-    countryCode:     'LS',
-    defaultLat:      -29.31,
-    defaultLng:      27.48,
-    defaultLocation: 'Maseru, Lesotho',
-    extraTags:       ['lesotho', 'southern-africa', 'africa'],
     language:        'en',
   },
   // English edition of Togo's business news site; first outlet for Togo
@@ -6208,6 +6203,1107 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['vanuatu', 'pacific', 'oceania', 'public-broadcaster'],
     language:        'en',
   },
+  // ── Added Oct 20, 2026 (Q5: toward 500 feeds, round 4) ──────────────────────
+  // 73 more from a fourth round of seven regional searches, aimed at the
+  // countries that had no outlet or only one; checked the same way (the
+  // server's own request, the reader's own parser, terms read where the site
+  // links them), and each answered the server-style request within 10 seconds.
+  // Spanish, Portuguese and French feeds get no home pin.
+  // English edition of Euronews Albania, a Tirana news channel and site; Albania's first outlet
+  {
+    id:              'euronews-albania',
+    name:            'Euronews Albania (English)',
+    feedUrl:         'https://euronews.al/en/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.72,
+    countryCode:     'AL',
+    defaultLat:      41.33,
+    defaultLng:      19.82,
+    defaultLocation: 'Tirana, Albania',
+    extraTags:       ['albania', 'balkans', 'europe'],
+    language:        'en',
+  },
+  // independent Belarusian newsroom (formerly Reform.by), working from Warsaw in exile since 2021; based abroad, so no home pin
+  {
+    id:              'reform-news-by',
+    name:            'Reform.news (Belarus, English)',
+    feedUrl:         'https://reform.news/en/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.74,
+    countryCode:     'BY',
+    defaultLat:      53.9,
+    defaultLng:      27.57,
+    defaultLocation: 'Minsk, Belarus',
+    extraTags:       ['belarus', 'eastern-europe', 'europe', 'independent-media', 'exile-media'],
+    language:        'en',
+  },
+  // Irish technology, science and start-up news site (online since 2001); most unplaced items are global tech stories, so no home pin
+  {
+    id:              'silicon-republic',
+    name:            'Silicon Republic (Ireland)',
+    feedUrl:         'https://www.siliconrepublic.com/feed/',
+    category:        'technology',
+    biasLabel:       'center',
+    reliability:     0.76,
+    countryCode:     'IE',
+    defaultLat:      53.35,
+    defaultLng:      -6.26,
+    defaultLocation: 'Dublin, Ireland',
+    extraTags:       ['ireland', 'technology', 'science', 'business', 'europe'],
+    language:        'en',
+  },
+  // the only English-language radio station based in Monaco, in its own words (site run by Global); covers Monaco and the French Riviera, so no home pin; a few celebrity items
+  {
+    id:              'riviera-radio-mc',
+    name:            'Riviera Radio (Monaco)',
+    feedUrl:         'https://www.rivieraradio.mc/feed/latest-news/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.66,
+    countryCode:     'MC',
+    defaultLat:      43.73,
+    defaultLng:      7.42,
+    defaultLocation: 'Monaco, Monaco',
+    extraTags:       ['monaco', 'france', 'riviera', 'europe'],
+    language:        'en',
+  },
+  // Warsaw defence and security news site (Defence24 Sp. z o.o.), English edition; mostly international coverage, so no home pin
+  {
+    id:              'defence24-en',
+    name:            'Defence24 (English)',
+    feedUrl:         'https://defence24.com/_rss',
+    category:        'security',
+    biasLabel:       'center',
+    reliability:     0.72,
+    countryCode:     'PL',
+    defaultLat:      52.23,
+    defaultLng:      21.01,
+    defaultLocation: 'Warsaw, Poland',
+    extraTags:       ['poland', 'defence', 'security', 'nato', 'europe'],
+    language:        'en',
+  },
+  // Madrid news site on Spanish politics, diplomacy and business (Expat Express SL), English edition
+  {
+    id:              'diplomat-in-spain',
+    name:            'The Diplomat in Spain',
+    feedUrl:         'https://thediplomatinspain.com/en/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.70,
+    countryCode:     'ES',
+    defaultLat:      40.42,
+    defaultLng:      -3.7,
+    defaultLocation: 'Madrid, Spain',
+    extraTags:       ['spain', 'southern-europe', 'europe', 'diplomacy'],
+    language:        'en',
+  },
+  // English service of Ziarul Financiar, Romania's business daily
+  {
+    id:              'zf-english-ro',
+    name:            'ZF English (Ziarul Financiar)',
+    feedUrl:         'https://www.zfenglish.com/rss/',
+    category:        'economy',
+    biasLabel:       'center',
+    reliability:     0.78,
+    countryCode:     'RO',
+    defaultLat:      44.43,
+    defaultLng:      26.1,
+    defaultLocation: 'Bucharest, Romania',
+    extraTags:       ['romania', 'eastern-europe', 'europe', 'business'],
+    language:        'en',
+  },
+  // English site of the Amman news site Ammon News, which calls itself an alternative media outlet (its Jordan News section feed; JO on 5 of its 8 placed items); many items are translations from the Arabic site
+  {
+    id:              'ammon-news-en',
+    name:            'Ammon News (English)',
+    feedUrl:         'https://en.ammonnews.net/rss.php?type=news&id=2',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.68,
+    countryCode:     'JO',
+    defaultLat:      31.95,
+    defaultLng:      35.93,
+    defaultLocation: 'Amman, Jordan',
+    extraTags:       ['jordan', 'levant', 'middle-east'],
+    language:        'en',
+  },
+  // news service on Turkmenistan with an editorial presence there (administrative office in Pakistan); close to the official line, hence 0.52; about half its items are Russian versions, which fail the language check
+  {
+    id:              'news-central-asia-tm',
+    name:            'News Central Asia (nCa)',
+    feedUrl:         'https://feeds.feedburner.com/NewsCentralAsia',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.52,
+    countryCode:     'TM',
+    defaultLat:      37.96,
+    defaultLng:      58.33,
+    defaultLocation: 'Ashgabat, Turkmenistan',
+    extraTags:       ['turkmenistan', 'central-asia', 'asia'],
+    language:        'en',
+  },
+  // English edition of Tengrinews, by its own account Kazakhstan's No. 1 news site (founded 2010; KZ on 8 of its 10 placed items); some lifestyle items, and independent reporting in Kazakhstan is restricted, hence 0.64
+  {
+    id:              'tengrinews-en',
+    name:            'Tengrinews (English)',
+    feedUrl:         'https://en.tengrinews.kz/news.rss',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.64,
+    countryCode:     'KZ',
+    defaultLat:      51.17,
+    defaultLng:      71.45,
+    defaultLocation: 'Astana, Kazakhstan',
+    extraTags:       ['kazakhstan', 'central-asia', 'asia'],
+    language:        'en',
+  },
+  // private Tashkent news site (Gazeta News LLC), English edition; UZ on 14 of its 18 placed items
+  {
+    id:              'gazeta-uz-en',
+    name:            'Gazeta.uz (English)',
+    feedUrl:         'https://www.gazeta.uz/en/rss/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.72,
+    countryCode:     'UZ',
+    defaultLat:      41.3,
+    defaultLng:      69.24,
+    defaultLocation: 'Tashkent, Uzbekistan',
+    extraTags:       ['uzbekistan', 'central-asia', 'asia'],
+    language:        'en',
+  },
+  // English edition of Israel's business daily (its All News feed); IL on 11 of its 13 placed items
+  {
+    id:              'globes-en',
+    name:            'Globes (English)',
+    feedUrl:         'https://en.globes.co.il/webservice/rss/rssfeeder.asmx/FeederNode?iID=1725',
+    category:        'economy',
+    biasLabel:       'center',
+    reliability:     0.80,
+    countryCode:     'IL',
+    defaultLat:      31.77,
+    defaultLng:      35.21,
+    defaultLocation: 'Jerusalem, IL',
+    extraTags:       ['israel', 'middle-east', 'business', 'technology'],
+    language:        'en',
+  },
+  // Macau Portuguese-language newspaper (Praia Grande Edições); one batch per edition; in Portuguese, so no home pin
+  {
+    id:              'ponto-final-mo',
+    name:            'Ponto Final (Macau)',
+    feedUrl:         'https://pontofinal-macau.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.74,
+    countryCode:     'MO',
+    defaultLat:      22.2,
+    defaultLng:      113.54,
+    defaultLocation: 'Macau, Macau',
+    extraTags:       ['macau', 'china', 'east-asia', 'portuguese'],
+    language:        'pt',
+  },
+  // Macau Portuguese-language newspaper (Tribuna de Macau); one batch per edition; in Portuguese, so no home pin
+  {
+    id:              'jtm-macau',
+    name:            'Jornal Tribuna de Macau',
+    feedUrl:         'https://jtm.com.mo/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.72,
+    countryCode:     'MO',
+    defaultLat:      22.2,
+    defaultLng:      113.54,
+    defaultLocation: 'Macau, Macau',
+    extraTags:       ['macau', 'china', 'east-asia', 'portuguese'],
+    language:        'pt',
+  },
+  // Shanghai English-language site on Chinese society, state-owned; about one item a day
+  {
+    id:              'sixth-tone',
+    name:            'Sixth Tone (China)',
+    feedUrl:         'https://api.sixthtone.com/cont/output/rssApi',
+    category:        'geopolitics',
+    biasLabel:       'state-media',
+    reliability:     0.58,
+    countryCode:     'CN',
+    defaultLat:      39.9,
+    defaultLng:      116.41,
+    defaultLocation: 'Beijing, CN',
+    extraTags:       ['china', 'east-asia', 'state-media'],
+    language:        'en',
+  },
+  // English service of Taiwan's Central News Agency (its FeedBurner feed)
+  {
+    id:              'focus-taiwan',
+    name:            'Focus Taiwan (CNA English)',
+    feedUrl:         'https://feeds.feedburner.com/rsscna/engnews/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.82,
+    countryCode:     'TW',
+    defaultLat:      25.03,
+    defaultLng:      121.57,
+    defaultLocation: 'Taipei, Taiwan',
+    extraTags:       ['taiwan', 'east-asia', 'asia-pacific', 'wire'],
+    language:        'en',
+  },
+  // Taiwan online magazine founded by students and activists after the 2014 Sunflower Movement; about one item a day
+  {
+    id:              'new-bloom',
+    name:            'New Bloom (Taiwan)',
+    feedUrl:         'https://newbloommag.net/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center-left',
+    reliability:     0.68,
+    countryCode:     'TW',
+    defaultLat:      25.03,
+    defaultLng:      121.57,
+    defaultLocation: 'Taipei, Taiwan',
+    extraTags:       ['taiwan', 'east-asia', 'asia-pacific', 'independent-media'],
+    language:        'en',
+  },
+  // Phnom Penh business news site; much corporate and event news
+  {
+    id:              'cambodia-investment-review',
+    name:            'Cambodia Investment Review',
+    feedUrl:         'https://cambodiainvestmentreview.com/feed/',
+    category:        'economy',
+    biasLabel:       'center',
+    reliability:     0.60,
+    countryCode:     'KH',
+    defaultLat:      11.56,
+    defaultLng:      104.92,
+    defaultLocation: 'Phnom Penh, Cambodia',
+    extraTags:       ['cambodia', 'southeast-asia', 'business'],
+    language:        'en',
+  },
+  // English-language Bali news site, tourism-heavy; local, so no home pin
+  {
+    id:              'bali-times',
+    name:            'The Bali Times',
+    feedUrl:         'https://thebalitimes.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.62,
+    countryCode:     'ID',
+    defaultLat:      -6.21,
+    defaultLng:      106.85,
+    defaultLocation: 'Jakarta, ID',
+    extraTags:       ['indonesia', 'bali', 'southeast-asia'],
+    language:        'en',
+  },
+  // English edition of the Nepali news portal Khabarhub
+  {
+    id:              'khabarhub-en',
+    name:            'Khabarhub English (Nepal)',
+    feedUrl:         'https://english.khabarhub.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.66,
+    countryCode:     'NP',
+    defaultLat:      27.72,
+    defaultLng:      85.32,
+    defaultLocation: 'Kathmandu, Nepal',
+    extraTags:       ['nepal', 'south-asia'],
+    language:        'en',
+  },
+  // Malaysian online news site (Mkini Dotcom), its English news feed; home pin kept because the place-finder knows few Malaysian places
+  {
+    id:              'malaysiakini-en',
+    name:            'Malaysiakini (English)',
+    feedUrl:         'https://www.malaysiakini.com/en/rss/news.rss',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.80,
+    countryCode:     'MY',
+    defaultLat:      3.14,
+    defaultLng:      101.69,
+    defaultLocation: 'Kuala Lumpur, Malaysia',
+    extraTags:       ['malaysia', 'southeast-asia', 'independent-media'],
+    language:        'en',
+  },
+  // English site of the Vietnam News Agency (VNA)
+  {
+    id:              'vietnamplus-en',
+    name:            'VietnamPlus (English)',
+    feedUrl:         'https://en.vietnamplus.vn/rss/home.rss',
+    category:        'geopolitics',
+    biasLabel:       'state-media',
+    reliability:     0.55,
+    countryCode:     'VN',
+    defaultLat:      21.03,
+    defaultLng:      105.85,
+    defaultLocation: 'Hanoi, Vietnam',
+    extraTags:       ['vietnam', 'southeast-asia', 'state-media'],
+    language:        'en',
+  },
+  // Fiji TV's newsroom (Suva; the country's first commercial TV station, 1994); about 10 stories a day; 6 of 10 were sport or business releases on Oct 20
+  {
+    id:              'fiji-one-news',
+    name:            'Fiji One News',
+    feedUrl:         'https://fijionenews.com.fj/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.70,
+    countryCode:     'FJ',
+    defaultLat:      -18.14,
+    defaultLng:      178.44,
+    defaultLocation: 'Suva, Fiji',
+    extraTags:       ['fiji', 'pacific', 'oceania', 'broadcaster'],
+    language:        'en',
+  },
+  // Noumea daily (the site's own Drupal feed, rss.xml; NOT the FeedBurner feed its pages advertise, which carries spam); its legal notice forbids reproducing or using its articles in any form; French, so no home pin
+  {
+    id:              'les-nouvelles-caledoniennes',
+    name:            'Les Nouvelles Calédoniennes',
+    feedUrl:         'https://www.lnc.nc/rss.xml',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.72,
+    countryCode:     'NC',
+    defaultLat:      -22.27,
+    defaultLng:      166.44,
+    defaultLocation: 'Nouméa, New Caledonia',
+    extraTags:       ['new-caledonia', 'pacific', 'oceania', 'french-language'],
+    language:        'fr',
+  },
+  // Honiara daily newspaper (its local-news stories, bylined); about 10 a day
+  {
+    id:              'island-sun-sb',
+    name:            'Island Sun (Solomon Islands)',
+    feedUrl:         'https://theislandsun.com.sb/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.68,
+    countryCode:     'SB',
+    defaultLat:      -9.43,
+    defaultLng:      159.95,
+    defaultLocation: 'Honiara, Solomon Islands',
+    extraTags:       ['solomon-islands', 'pacific', 'oceania'],
+    language:        'en',
+  },
+  // non-profit investigative newsroom in Honiara; 2 to 5 stories a day
+  {
+    id:              'in-depth-solomons',
+    name:            'In-depth Solomons',
+    feedUrl:         'https://indepthsolomons.com.sb/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.74,
+    countryCode:     'SB',
+    defaultLat:      -9.43,
+    defaultLng:      159.95,
+    defaultLocation: 'Honiara, Solomon Islands',
+    extraTags:       ['solomon-islands', 'pacific', 'oceania', 'independent-media', 'investigative'],
+    language:        'en',
+  },
+  // the Dominica Prime Minister's Office press room (Roseau); government statements, so labelled state media (0.50); Dominica's private outlets turned the container away or are stale; about one item a day
+  {
+    id:              'opm-pressroom-dm',
+    name:            'OPM Press Room (Dominica)',
+    feedUrl:         'https://pressroomopm.gov.dm/feed/',
+    category:        'geopolitics',
+    biasLabel:       'state-media',
+    reliability:     0.50,
+    countryCode:     'DM',
+    defaultLat:      15.3,
+    defaultLng:      -61.39,
+    defaultLocation: 'Roseau, Dominica',
+    extraTags:       ['dominica', 'caribbean', 'state-media'],
+    language:        'en',
+  },
+  // Lima business daily (Grupo El Comercio); its terms forbid reproduction without permission (no robot clause); Spanish, so no home pin
+  {
+    id:              'gestion-pe',
+    name:            'Gestión (Peru)',
+    feedUrl:         'https://gestion.pe/arc/outboundfeeds/rss/?outputType=xml',
+    category:        'economy',
+    biasLabel:       'center-right',
+    reliability:     0.78,
+    countryCode:     'PE',
+    defaultLat:      -12.05,
+    defaultLng:      -77.04,
+    defaultLocation: 'Lima, Peru',
+    extraTags:       ['peru', 'south-america', 'latin-america', 'business'],
+    language:        'es',
+  },
+  // independent digital outlet in Arequipa covering Peru's regions; many items are video reports; Spanish, so no home pin
+  {
+    id:              'el-buho-pe',
+    name:            'El Búho (Peru)',
+    feedUrl:         'https://elbuho.pe/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.68,
+    countryCode:     'PE',
+    defaultLat:      -16.41,
+    defaultLng:      -71.54,
+    defaultLocation: 'Arequipa, Peru',
+    extraTags:       ['peru', 'south-america', 'latin-america', 'independent-media'],
+    language:        'es',
+  },
+  // San Juan news radio (1320 AM) and site; Spanish, so no home pin
+  {
+    id:              'radio-isla-pr',
+    name:            'Radio Isla (Puerto Rico)',
+    feedUrl:         'https://radioisla.tv/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.68,
+    countryCode:     'PR',
+    defaultLat:      18.47,
+    defaultLng:      -66.11,
+    defaultLocation: 'San Juan, Puerto Rico',
+    extraTags:       ['puerto-rico', 'caribbean', 'latin-america'],
+    language:        'es',
+  },
+  // independent San Salvador digital daily; no terms page (footer: all rights reserved); Spanish, so no home pin
+  {
+    id:              'contrapunto-sv',
+    name:            'ContraPunto (El Salvador)',
+    feedUrl:         'https://www.contrapunto.com.sv/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center-left',
+    reliability:     0.70,
+    countryCode:     'SV',
+    defaultLat:      13.69,
+    defaultLng:      -89.22,
+    defaultLocation: 'San Salvador, El Salvador',
+    extraTags:       ['el-salvador', 'central-america', 'latin-america', 'independent-media'],
+    language:        'es',
+  },
+  // the Jesuit UCA university's news radio (San Salvador); its terms allow reproduction with credit, for personal, non-commercial use; Spanish, so no home pin
+  {
+    id:              'ysuca-sv',
+    name:            'YSUCA (El Salvador)',
+    feedUrl:         'https://ysuca.org.sv/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center-left',
+    reliability:     0.76,
+    countryCode:     'SV',
+    defaultLat:      13.69,
+    defaultLng:      -89.22,
+    defaultLocation: 'San Salvador, El Salvador',
+    extraTags:       ['el-salvador', 'central-america', 'latin-america', 'independent-media'],
+    language:        'es',
+  },
+  // English-language news site in Panama City; about 9 items a day
+  {
+    id:              'newsroom-panama',
+    name:            'Newsroom Panama',
+    feedUrl:         'https://newsroompanama.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.66,
+    countryCode:     'PA',
+    defaultLat:      8.98,
+    defaultLng:      -79.52,
+    defaultLocation: 'Panama City, Panama',
+    extraTags:       ['panama', 'central-america', 'latin-america'],
+    language:        'en',
+  },
+  // not-for-profit English-language news site on Colombia (Medellín); about one item a day
+  {
+    id:              'colombia-reports',
+    name:            'Colombia Reports',
+    feedUrl:         'https://colombiareports.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.72,
+    countryCode:     'CO',
+    defaultLat:      4.71,
+    defaultLng:      -74.07,
+    defaultLocation: 'Bogotá, Colombia',
+    extraTags:       ['colombia', 'south-america', 'latin-america', 'independent-media'],
+    language:        'en',
+  },
+  // Santo Domingo daily; no terms page (footer: all rights reserved); Spanish, so no home pin
+  {
+    id:              'el-dia-do',
+    name:            'El Día (Dominican Republic)',
+    feedUrl:         'https://eldia.com.do/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.70,
+    countryCode:     'DO',
+    defaultLat:      18.49,
+    defaultLng:      -69.93,
+    defaultLocation: 'Santo Domingo, Dominican Republic',
+    extraTags:       ['dominican-republic', 'caribbean', 'latin-america'],
+    language:        'es',
+  },
+  // Universidad Rafael Landívar's investigative outlet (Guatemala City); Creative Commons licence; about two items a day; Spanish, so no home pin
+  {
+    id:              'plaza-publica-gt',
+    name:            'Plaza Pública (Guatemala)',
+    feedUrl:         'https://plazapublica.com.gt/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center-left',
+    reliability:     0.80,
+    countryCode:     'GT',
+    defaultLat:      14.63,
+    defaultLng:      -90.51,
+    defaultLocation: 'Guatemala City, Guatemala',
+    extraTags:       ['guatemala', 'central-america', 'latin-america', 'investigative'],
+    language:        'es',
+  },
+  // Jesuit-run radio in El Progreso; about one item a day, with many editorials; Spanish, so no home pin
+  {
+    id:              'radio-progreso-hn',
+    name:            'Radio Progreso (Honduras)',
+    feedUrl:         'https://www.radioprogresohn.net/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center-left',
+    reliability:     0.72,
+    countryCode:     'HN',
+    defaultLat:      14.07,
+    defaultLng:      -87.19,
+    defaultLocation: 'Tegucigalpa, Honduras',
+    extraTags:       ['honduras', 'central-america', 'latin-america', 'rights'],
+    language:        'es',
+  },
+  // Port-au-Prince news site; no terms page (footer: all rights reserved); French, so no home pin
+  {
+    id:              'vant-bef-info-ht',
+    name:            'Vant Bèf Info (Haiti)',
+    feedUrl:         'https://vantbefinfo.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.66,
+    countryCode:     'HT',
+    defaultLat:      18.54,
+    defaultLng:      -72.34,
+    defaultLocation: 'Port-au-Prince, Haiti',
+    extraTags:       ['haiti', 'caribbean', 'latin-america'],
+    language:        'fr',
+  },
+  // Nicaraguan newsroom working in exile; also covers the region; Spanish, so no home pin
+  {
+    id:              'nicaragua-investiga',
+    name:            'Nicaragua Investiga',
+    feedUrl:         'https://nicaraguainvestiga.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.70,
+    countryCode:     'NI',
+    defaultLat:      12.11,
+    defaultLng:      -86.24,
+    defaultLocation: 'Managua, Nicaragua',
+    extraTags:       ['nicaragua', 'central-america', 'latin-america', 'exile-media'],
+    language:        'es',
+  },
+  // independent Caracas news site focused on rights and politics; Spanish, so no home pin
+  {
+    id:              'runrunes-ve',
+    name:            'Runrunes (Venezuela)',
+    feedUrl:         'https://runrun.es/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.76,
+    countryCode:     'VE',
+    defaultLat:      10.49,
+    defaultLng:      -66.88,
+    defaultLocation: 'Caracas, Venezuela',
+    extraTags:       ['venezuela', 'south-america', 'latin-america', 'independent-media'],
+    language:        'es',
+  },
+  // La Paz daily, founded 1904; privacy page only; Spanish, so no home pin
+  {
+    id:              'el-diario-bo',
+    name:            'El Diario (Bolivia)',
+    feedUrl:         'https://www.eldiario.net/portal/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.72,
+    countryCode:     'BO',
+    defaultLat:      -16.5,
+    defaultLng:      -68.15,
+    defaultLocation: 'La Paz, Bolivia',
+    extraTags:       ['bolivia', 'south-america', 'latin-america'],
+    language:        'es',
+  },
+  // Nassau TV news (Cable 12); some rewritten foreign stories; round 3's saved answer
+  {
+    id:              'our-news-bs',
+    name:            'Our News (Bahamas)',
+    feedUrl:         'https://ournews.bs/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.68,
+    countryCode:     'BS',
+    defaultLat:      25.05,
+    defaultLng:      -77.35,
+    defaultLocation: 'Nassau, Bahamas',
+    extraTags:       ['bahamas', 'caribbean'],
+    language:        'en',
+  },
+  // English edition of the Casablanca news site Le360 (Web News), its politics section; headlines only, no summaries; follows the official line on the Sahara, hence 0.62
+  {
+    id:              'le360-en',
+    name:            'Le360 (English, politics)',
+    feedUrl:         'https://en.le360.ma/arc/outboundfeeds/rss/category/politics/?outputType=xml',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.62,
+    countryCode:     'MA',
+    defaultLat:      34.02,
+    defaultLng:      -6.84,
+    defaultLocation: 'Rabat, Morocco',
+    extraTags:       ['morocco', 'maghreb', 'north-africa', 'africa'],
+    language:        'en',
+  },
+  // Casablanca news portal (Web Stratégie) on Morocco and Moroccans abroad; much on Spain, Ceuta and migration
+  {
+    id:              'yabiladi',
+    name:            'Yabiladi (Morocco)',
+    feedUrl:         'https://www.yabiladi.com/rss/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.68,
+    countryCode:     'MA',
+    defaultLat:      34.02,
+    defaultLng:      -6.84,
+    defaultLocation: 'Rabat, Morocco',
+    extraTags:       ['morocco', 'maghreb', 'north-africa', 'africa'],
+    language:        'fr',
+  },
+  // English edition of the Libyan news site Al Marsad ('Libyan Daily Comprehensive', its footer); short reports on Libya only, often posted in batches
+  {
+    id:              'almarsad-en',
+    name:            'Al Marsad (English, Libya)',
+    feedUrl:         'https://en.almarsad.co/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.62,
+    countryCode:     'LY',
+    defaultLat:      32.89,
+    defaultLng:      13.19,
+    defaultLocation: 'Tripoli, Libya',
+    extraTags:       ['libya', 'north-africa', 'africa'],
+    language:        'en',
+  },
+  // Tunis news magazine founded in 1979; its about page recounts seizures and trials for its independent line
+  {
+    id:              'realites-tn',
+    name:            'Réalités (Tunisia)',
+    feedUrl:         'https://realites.com.tn/fr/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.74,
+    countryCode:     'TN',
+    defaultLat:      36.81,
+    defaultLng:      10.18,
+    defaultLocation: 'Tunis, Tunisia',
+    extraTags:       ['tunisia', 'maghreb', 'north-africa', 'africa'],
+    language:        'fr',
+  },
+  // Nouakchott independent weekly (round 3's saved answer); headlines only, about 1.5 items a day
+  {
+    id:              'le-calame',
+    name:            'Le Calame (Mauritania)',
+    feedUrl:         'https://lecalame.info/?q=rss.xml',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.72,
+    countryCode:     'MR',
+    defaultLat:      18.08,
+    defaultLng:      -15.98,
+    defaultLocation: 'Nouakchott, Mauritania',
+    extraTags:       ['mauritania', 'sahel', 'west-africa', 'africa', 'independent-media'],
+    language:        'fr',
+  },
+  // Conakry news site founded in 2013 (its footer); Guinea news plus some regional and world news
+  {
+    id:              'guineematin',
+    name:            'Guinéematin (Guinea)',
+    feedUrl:         'https://guineematin.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.68,
+    countryCode:     'GN',
+    defaultLat:      9.64,
+    defaultLng:      -13.58,
+    defaultLocation: 'Conakry, Guinea',
+    extraTags:       ['guinea', 'west-africa', 'africa'],
+    language:        'fr',
+  },
+  // Monrovia daily; posts its edition in one morning batch
+  {
+    id:              'analyst-liberia',
+    name:            'The Analyst (Liberia)',
+    feedUrl:         'https://analystliberiaonline.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.68,
+    countryCode:     'LR',
+    defaultLat:      6.3,
+    defaultLng:      -10.8,
+    defaultLocation: 'Monrovia, Liberia',
+    extraTags:       ['liberia', 'west-africa', 'africa'],
+    language:        'en',
+  },
+  // Abidjan daily founded in 2003; its site lists a Journalism Trust Initiative certification and an AI charter
+  {
+    id:              'lintelligent-dabidjan',
+    name:            'L\'Intelligent d\'Abidjan (Côte d\'Ivoire)',
+    feedUrl:         'https://www.lintelligentdabidjan.info/news/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.72,
+    countryCode:     'CI',
+    defaultLat:      5.36,
+    defaultLng:      -4.01,
+    defaultLocation: 'Abidjan, Côte d\'Ivoire',
+    extraTags:       ['cote-divoire', 'west-africa', 'africa'],
+    language:        'fr',
+  },
+  // Niger's state news agency under the military government; picked only because no independent Niger feed passed (ActuNiger politics 100 h old, Le Sahel 148 h)
+  {
+    id:              'anp-niger',
+    name:            'ANP (Agence Nigérienne de Presse)',
+    feedUrl:         'https://anp.ne/feed/',
+    category:        'geopolitics',
+    biasLabel:       'state-media',
+    reliability:     0.45,
+    countryCode:     'NE',
+    defaultLat:      13.51,
+    defaultLng:      2.11,
+    defaultLocation: 'Niamey, Niger',
+    extraTags:       ['niger', 'sahel', 'west-africa', 'africa', 'state-media'],
+    language:        'fr',
+  },
+  // Tunis online daily that calls itself editorially and economically independent; mostly national news
+  {
+    id:              'webdo-tn',
+    name:            'Webdo (Tunisia)',
+    feedUrl:         'https://www.webdo.tn/fr/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.68,
+    countryCode:     'TN',
+    defaultLat:      36.81,
+    defaultLng:      10.18,
+    defaultLocation: 'Tunis, Tunisia',
+    extraTags:       ['tunisia', 'maghreb', 'north-africa', 'africa'],
+    language:        'fr',
+  },
+  // Conakry news site; local courts, unions and public companies
+  {
+    id:              'mosaique-guinee',
+    name:            'Mosaïque Guinée',
+    feedUrl:         'https://mosaiqueguinee.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.64,
+    countryCode:     'GN',
+    defaultLat:      9.64,
+    defaultLng:      -13.58,
+    defaultLocation: 'Conakry, Guinea',
+    extraTags:       ['guinea', 'west-africa', 'africa'],
+    language:        'fr',
+  },
+  // Dakar online daily; about 20 items in 5 hours
+  {
+    id:              'pressafrik',
+    name:            'PressAfrik (Senegal)',
+    feedUrl:         'https://www.pressafrik.com/xml/syndication.rss',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.66,
+    countryCode:     'SN',
+    defaultLat:      14.72,
+    defaultLng:      -17.47,
+    defaultLocation: 'Dakar, Senegal',
+    extraTags:       ['senegal', 'west-africa', 'africa'],
+    language:        'fr',
+  },
+  // news site of Media General (MG Digital Media, Accra; its footer); national politics, courts and economy, about 20 items in 6 hours
+  {
+    id:              '3news-gh',
+    name:            '3News (Ghana)',
+    feedUrl:         'https://3news.com/feed.xml',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.74,
+    countryCode:     'GH',
+    defaultLat:      5.6,
+    defaultLng:      -0.19,
+    defaultLocation: 'Accra, Ghana',
+    extraTags:       ['ghana', 'west-africa', 'africa'],
+    language:        'en',
+  },
+  // independent English-language Egyptian news site (ES Media Network FZ LLC, its about page; round 2's saved answer); slow, 9 items in 56 hours
+  {
+    id:              'egyptian-streets',
+    name:            'Egyptian Streets',
+    feedUrl:         'https://egyptianstreets.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.74,
+    countryCode:     'EG',
+    defaultLat:      30.04,
+    defaultLng:      31.24,
+    defaultLocation: 'Cairo, Egypt',
+    extraTags:       ['egypt', 'north-africa', 'middle-east', 'africa', 'independent-media'],
+    language:        'en',
+  },
+  // Maseru newspaper and news site (Newsday Media); a few local stories a day
+  {
+    id:              'newsday-ls',
+    name:            'Newsday (Lesotho)',
+    feedUrl:         'https://newsdayonline.co.ls/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.70,
+    countryCode:     'LS',
+    defaultLat:      -29.31,
+    defaultLng:      27.48,
+    defaultLocation: 'Maseru, Lesotho',
+    extraTags:       ['lesotho', 'southern-africa', 'africa'],
+    language:        'en',
+  },
+  // Maseru news site (Barumuoa Communications); about one or two stories a day
+  {
+    id:              'the-reporter-ls',
+    name:            'The Reporter (Lesotho)',
+    feedUrl:         'https://www.thereporter.co.ls/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.66,
+    countryCode:     'LS',
+    defaultLat:      -29.31,
+    defaultLng:      27.48,
+    defaultLocation: 'Maseru, Lesotho',
+    extraTags:       ['lesotho', 'southern-africa', 'africa'],
+    language:        'en',
+  },
+  // Maseru weekly; most items arrive with Sunday's edition
+  {
+    id:              'sunday-express-ls',
+    name:            'Sunday Express (Lesotho)',
+    feedUrl:         'https://sundayexpress.co.ls/?feed=rss2',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.68,
+    countryCode:     'LS',
+    defaultLat:      -29.31,
+    defaultLng:      27.48,
+    defaultLocation: 'Maseru, Lesotho',
+    extraTags:       ['lesotho', 'southern-africa', 'africa'],
+    language:        'en',
+  },
+  // Spanish-language investigative site on Equatorial Guinea, run from Spain; critical of the government; about one item a day
+  {
+    id:              'diario-rombe-gq',
+    name:            'Diario Rombe (Equatorial Guinea)',
+    feedUrl:         'https://diariorombe.es/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.62,
+    countryCode:     'GQ',
+    defaultLat:      3.75,
+    defaultLng:      8.78,
+    defaultLocation: 'Malabo, Equatorial Guinea',
+    extraTags:       ['equatorial-guinea', 'central-africa', 'africa', 'exile-media', 'investigative'],
+    language:        'es',
+  },
+  // Luanda news site in Portuguese; about ten items a day
+  {
+    id:              'correio-da-kianda-ao',
+    name:            'Correio da Kianda (Angola)',
+    feedUrl:         'https://correiokianda.info/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.66,
+    countryCode:     'AO',
+    defaultLat:      -8.84,
+    defaultLng:      13.23,
+    defaultLocation: 'Luanda, Angola',
+    extraTags:       ['angola', 'southern-africa', 'africa'],
+    language:        'pt',
+  },
+  // Bangui news site in French; posts in batches; carries the odd notice (a UNDP tender)
+  {
+    id:              'oubangui-medias-cf',
+    name:            'Oubangui Médias (Central African Republic)',
+    feedUrl:         'https://oubanguimedias.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.58,
+    countryCode:     'CF',
+    defaultLat:      4.39,
+    defaultLng:      18.56,
+    defaultLocation: 'Bangui, Central African Republic',
+    extraTags:       ['central-african-republic', 'central-africa', 'africa'],
+    language:        'fr',
+  },
+  // Comorian news agency site in French (Blogger); news plus some opinion
+  {
+    id:              'habari-za-comores-km',
+    name:            'HZK-Presse / Habari za Comores',
+    feedUrl:         'https://www.habarizacomores.com/feeds/posts/default?alt=rss',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.60,
+    countryCode:     'KM',
+    defaultLat:      -11.7,
+    defaultLng:      43.26,
+    defaultLocation: 'Moroni, Comoros',
+    extraTags:       ['comoros', 'indian-ocean', 'africa'],
+    language:        'fr',
+  },
+  // English service of the Darfur 24 Media Network; reports the war from Darfur and Kordofan; Darfur-focused and its base isn't stated, so no home pin
+  {
+    id:              'darfur24-sd',
+    name:            'Darfur24 (Sudan)',
+    feedUrl:         'https://darfur24.com/en/feed/',
+    category:        'conflict',
+    biasLabel:       'center',
+    reliability:     0.72,
+    countryCode:     'SD',
+    defaultLat:      15.5,
+    defaultLng:      32.56,
+    defaultLocation: 'Khartoum, Sudan',
+    extraTags:       ['sudan', 'darfur', 'east-africa', 'africa', 'independent-media'],
+    language:        'en',
+  },
+  // Hargeisa English-language news site covering Somaliland and Somalia; frames Somaliland as independent; no home pin (Somalia's home point is Mogadishu)
+  {
+    id:              'somaliland-standard',
+    name:            'Somaliland Standard',
+    feedUrl:         'https://somalilandstandard.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.60,
+    countryCode:     'SO',
+    defaultLat:      2.05,
+    defaultLng:      45.32,
+    defaultLocation: 'Mogadishu, Somalia',
+    extraTags:       ['somalia', 'somaliland', 'horn-of-africa', 'africa'],
+    language:        'en',
+  },
+  // English-language Somali news and analysis site (much opinion); its base isn't stated, so no home pin
+  {
+    id:              'wardheer-news-so',
+    name:            'WardheerNews (Somalia)',
+    feedUrl:         'https://wardheernews.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.62,
+    countryCode:     'SO',
+    defaultLat:      2.05,
+    defaultLng:      45.32,
+    defaultLocation: 'Mogadishu, Somalia',
+    extraTags:       ['somalia', 'horn-of-africa', 'africa'],
+    language:        'en',
+  },
+  // Tanzania business and investment news; slow (about one item a day); its operator is registered in Victoria, Seychelles, so no home pin
+  {
+    id:              'tanzaniainvest-tz',
+    name:            'TanzaniaInvest',
+    feedUrl:         'https://www.tanzaniainvest.com/feed',
+    category:        'economy',
+    biasLabel:       'center',
+    reliability:     0.60,
+    countryCode:     'TZ',
+    defaultLat:      -6.16,
+    defaultLng:      35.75,
+    defaultLocation: 'Dodoma, Tanzania',
+    extraTags:       ['tanzania', 'east-africa', 'africa', 'business'],
+    language:        'en',
+  },
+  // Lusaka business news site
+  {
+    id:              'zambian-business-times',
+    name:            'Zambian Business Times',
+    feedUrl:         'https://zambianbusinesstimes.com/feed/',
+    category:        'economy',
+    biasLabel:       'center',
+    reliability:     0.66,
+    countryCode:     'ZM',
+    defaultLat:      -15.39,
+    defaultLng:      28.32,
+    defaultLocation: 'Lusaka, Zambia',
+    extraTags:       ['zambia', 'southern-africa', 'africa', 'business'],
+    language:        'en',
+  },
+  // the UN-backed national radio (MONUSCO and Fondation Hirondelle), French; its feedburner feed (its own feed is weeks stale)
+  {
+    id:              'radio-okapi-cd',
+    name:            'Radio Okapi (DR Congo)',
+    feedUrl:         'https://feeds.feedburner.com/radiookapi/actu?format=xml',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.84,
+    countryCode:     'CD',
+    defaultLat:      -4.44,
+    defaultLng:      15.27,
+    defaultLocation: 'Kinshasa, DR Congo',
+    extraTags:       ['dr-congo', 'great-lakes', 'central-africa', 'africa', 'public-service'],
+    language:        'fr',
+  },
+  // Addis Ababa business weekly; a few items a day
+  {
+    id:              'capital-ethiopia',
+    name:            'Capital (Ethiopia)',
+    feedUrl:         'https://capitalethiopia.com/feed/',
+    category:        'economy',
+    biasLabel:       'center',
+    reliability:     0.72,
+    countryCode:     'ET',
+    defaultLat:      9.03,
+    defaultLng:      38.75,
+    defaultLocation: 'Addis Ababa, Ethiopia',
+    extraTags:       ['ethiopia', 'horn-of-africa', 'africa', 'business'],
+    language:        'en',
+  },
+  // Harare investigative news site; about one item a day
+  {
+    id:              'newshawks-zw',
+    name:            'The NewsHawks (Zimbabwe)',
+    feedUrl:         'https://thenewshawks.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.74,
+    countryCode:     'ZW',
+    defaultLat:      -17.83,
+    defaultLng:      31.05,
+    defaultLocation: 'Harare, Zimbabwe',
+    extraTags:       ['zimbabwe', 'southern-africa', 'africa', 'investigative'],
+    language:        'en',
+  },
+  // Maputo daily (SOICO group) in Portuguese
+  {
+    id:              'o-pais-mz',
+    name:            'O País (Mozambique)',
+    feedUrl:         'https://opais.co.mz/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.68,
+    countryCode:     'MZ',
+    defaultLat:      -25.97,
+    defaultLng:      32.57,
+    defaultLocation: 'Maputo, Mozambique',
+    extraTags:       ['mozambique', 'southern-africa', 'africa'],
+    language:        'pt',
+  },
+  // South Africa's public broadcaster; about ten items a day
+  {
+    id:              'sabc-news',
+    name:            'SABC News (South Africa)',
+    feedUrl:         'https://www.sabcnews.com/sabcnews/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.80,
+    countryCode:     'ZA',
+    defaultLat:      -25.75,
+    defaultLng:      28.23,
+    defaultLocation: 'Pretoria, ZA',
+    extraTags:       ['south-africa', 'southern-africa', 'africa', 'public-broadcaster'],
+    language:        'en',
+  },
 ]
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────
@@ -6538,22 +7634,31 @@ export const HOME_PIN_SOURCES = new Set([
   'mimi-mefo-info', 'myjoyonline-gh', 'naharnet', 'hong-kong-free-press', 'camboja-news',
   'businessworld-ph', 'kaniva-tonga', 'korea-herald', 'onlinekhabar-en', 'laotian-times',
   'prachatai-en', 'sibc-sb', 'solomon-times', 'talamua-ws', 'tatoli-en', 'tuoi-tre-news',
-  'gma-news-nation', 'bbs-bhutan', 'prothom-alo-en', 'news-mn-en', 'island-times-pw',
+  'gma-news-nation', 'bbs-bhutan', 'news-mn-en', 'island-times-pw',
   'cook-islands-news', 'malay-mail', 'friday-times-pk', 'the-nation-pk', 'corporate-maldives',
   'caracas-chronicles', 'dominican-today', 'jamaica-observer', 'tribune-242', 'amandala-bz',
   'st-lucia-times', 'kaieteur-news', 'nation-news-bb', 'trinidad-express',
   // Oct 20, 2026 (Q5, round 2)
   'serbian-monitor', 'business-review-ro', 'wanted-in-rome', 'budapest-times', 'tasr-en',
-  'iceland-review', 'reykjavik-grapevine', 'newswire-lk', 'rti-en', 'rthk-en', 'japan-forward',
+  'iceland-review', 'reykjavik-grapevine', 'newswire-lk', 'rthk-en', 'japan-forward',
   '1news-nz', 'guam-pdn', 'now-grenada', 'iwitness-news-vc', 'bernews-bm', 'cayman-news-service',
   'cnc3-tt', 'zambia-monitor', 'cite-zw', '263chat-zw', 'sunday-standard-bw', 'botswana-gazette',
-  'daily-news-tz', 'zitamar-mz', 'times-of-eswatini', 'the-post-ls', 'togo-first',
+  'daily-news-tz', 'zitamar-mz', 'times-of-eswatini', 'togo-first',
   'cameroon-news-agency', 'yemen-monitor', 'pnn-english',
   // Oct 20, 2026 (Q5, round 3)
   'kerr-fatou-gm', 'sierraloaded-sl', 'libya-review', 'kt-press-rw', 'windhoek-observer',
   'hetq-am', 'evn-report', 'tdh-turkmenistan', 'monaco-life', 'newsbook-mt',
   'gulf-times-qatar', 'times-kuwait', 'iraq-business-news', 'antigua-news',
   'eyewitness-news-bs', '7news-belize', 'demerara-waves', 'jamaica-gleaner', 'vbtc-vu',
+  // Oct 20/21, 2026 (Q5, round 4)
+  'euronews-albania', 'diplomat-in-spain', 'zf-english-ro', 'ammon-news-en',
+  'news-central-asia-tm', 'tengrinews-en', 'gazeta-uz-en', 'globes-en', 'sixth-tone',
+  'focus-taiwan', 'new-bloom', 'cambodia-investment-review', 'khabarhub-en', 'malaysiakini-en',
+  'vietnamplus-en', 'fiji-one-news', 'island-sun-sb', 'in-depth-solomons', 'opm-pressroom-dm',
+  'newsroom-panama', 'colombia-reports', 'our-news-bs', 'le360-en', 'almarsad-en',
+  'analyst-liberia', '3news-gh', 'egyptian-streets', 'newsday-ls', 'the-reporter-ls',
+  'sunday-express-ls', 'zambian-business-times', 'capital-ethiopia', 'newshawks-zw',
+  'sabc-news',
 ])
 
 export interface InferredGeo {
@@ -6960,8 +8065,9 @@ async function pollSource(
 /**
  * Start the global news RSS poller.
  *
- * Polls all registered news outlets every 30 minutes in staggered sequence
- * (5 s between sources) to distribute load. Returns a cleanup function.
+ * Polls all registered news outlets every 30 minutes, READ_AT_ONCE at a
+ * time, with a pause between rounds paced so a whole pass ends within
+ * CYCLE_BUDGET (cyclePause). Returns a cleanup function.
  */
 export function startNewsRssPoller(
   db:       Knex,
@@ -6974,8 +8080,8 @@ export function startNewsRssPoller(
   const delay = sourceDelay(NEWS_SOURCE_REGISTRY.length)
 
   /**
-   * Run a full poll cycle across all sources.
-   * Each source is polled sequentially with `delay` ms between them.
+   * Run a full poll cycle across all sources, READ_AT_ONCE at a time, paced to
+   * end within CYCLE_BUDGET of the cycle's start (cyclePause).
    */
   async function pollAll(): Promise<void> {
     if (stopped) return
@@ -6988,29 +8094,38 @@ export function startNewsRssPoller(
       saved = raw ? JSON.parse(raw) as CyclePlace : null
     } catch { saved = null }
     const { index: startAt, startedAt } = cycleStart(saved, NEWS_SOURCE_REGISTRY.map(s => s.id), Date.now())
+    // A cycle carried on after a restart keeps its own start, so it still ends on time
+    const budgetEnd = startedAt + CYCLE_BUDGET
 
     log.info(
-      { sources: NEWS_SOURCE_REGISTRY.length, staggerMs: delay, ...(startAt > 0 ? { resumeAt: startAt } : {}) },
+      { sources: NEWS_SOURCE_REGISTRY.length, maxPauseMs: delay, budgetMin: CYCLE_BUDGET / 60_000, ...(startAt > 0 ? { resumeAt: startAt } : {}) },
       startAt > 0 ? '📰 News RSS: carrying on with the poll cycle a restart interrupted' : '📰 News RSS: starting poll cycle',
     )
 
-    for (let i = startAt; i < NEWS_SOURCE_REGISTRY.length; i++) {
-      const source = NEWS_SOURCE_REGISTRY[i]!
+    let roundMs = 0, read = 0
+    const rounds = readRounds(NEWS_SOURCE_REGISTRY.length, startAt)
+    for (let r = 0; r < rounds.length; r++) {
       if (stopped) break
-      // Where the cycle is, before the poll: a restart during it reads this feed again rather than skipping it
-      await redis.set(CYCLE_KEY, JSON.stringify({ startedAt, nextId: source.id }), 'EX', CYCLE_RESUME_MS / 1000).catch(() => {})
-      await pollSource(db, redis, producer, source).catch(err =>
+      const [from, to] = rounds[r]!
+      const batch = NEWS_SOURCE_REGISTRY.slice(from, to)
+      // Where the cycle is, before the round: a restart during it reads these feeds again rather than skipping them
+      await redis.set(CYCLE_KEY, JSON.stringify({ startedAt, nextId: batch[0]!.id }), 'EX', CYCLE_RESUME_MS / 1000).catch(() => {})
+      const t0 = Date.now()
+      await Promise.all(batch.map(source => pollSource(db, redis, producer, source).catch(err =>
         log.warn({ err, sourceId: source.id }, 'News feed poll error'),
-      )
-      // Stagger requests to be a good citizen with upstream RSS servers
+      )))
+      roundMs += Date.now() - t0; read += batch.length
+      // A pause between rounds, shorter when the cycle runs behind (each feed is on its own host)
       if (!stopped) {
-        await new Promise<void>(resolve => setTimeout(resolve, delay))
+        const pause = Math.min(delay, cyclePause(rounds.length - r - 1, budgetEnd - Date.now(), roundMs / (r + 1)))
+        await new Promise<void>(resolve => setTimeout(resolve, pause))
       }
     }
 
     if (!stopped) {
       await redis.del(CYCLE_KEY).catch(() => {})
-      log.info({ minutes: Math.round((Date.now() - started) / 6_000) / 10 }, '📰 News RSS: poll cycle complete')
+      const done = Math.ceil(read / READ_AT_ONCE)
+      log.info({ minutes: Math.round((Date.now() - started) / 6_000) / 10, feeds: read, atOnce: READ_AT_ONCE, avgRoundMs: done ? Math.round(roundMs / done) : null }, '📰 News RSS: poll cycle complete')
     }
   }
 

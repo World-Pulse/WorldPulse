@@ -143,6 +143,11 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'tripoli':          { lat: 32.8872, lng: 13.1913, country: 'LY' },
   'khartoum':         { lat: 15.5007, lng: 32.5599, country: 'SD' },
   'mogadishu':        { lat: 2.0469, lng: 45.3182, country: 'SO' },
+  // "Somaliland" didn't match /\bsomali\b/, so 4 of Somaliland Standard's 10 items had no place (round 4, Oct 20, 2026);
+  // pinned at Hargeisa, its capital, not Mogadishu, 850 km away
+  'somaliland':       { lat: 9.5600, lng: 44.0650, country: 'SO', name: 'Somaliland' },
+  'hargeisa':         { lat: 9.5600, lng: 44.0650, country: 'SO' },
+  'moroni':           { lat: -11.7022, lng: 43.2551, country: 'KM' },
   'kyoto':            { lat: 35.0116, lng: 135.7681, country: 'JP' },
   'sydney':           { lat: -33.8688, lng: 151.2093, country: 'AU' },
   'melbourne':        { lat: -37.8136, lng: 144.9631, country: 'AU' },
@@ -315,6 +320,15 @@ const COUNTRY_CENTROIDS: Record<string, { lat: number; lng: number; name: string
 }
 // Every other country (world-countries.ts); the capitals above stay as they are
 for (const entry of MORE_COUNTRIES) COUNTRY_CENTROIDS[entry.code] ??= { lat: entry.lat, lng: entry.lng, name: entry.capital }
+
+/**
+ * Where a country's reports are pinned: its capital, as for a story that names
+ * the country; null for a code we have no capital for.
+ */
+export function countryPin(code: string | null | undefined): { lat: number; lng: number } | null {
+  const capital = COUNTRY_CENTROIDS[(code ?? '').trim().toUpperCase()]
+  return capital ? { lat: capital.lat, lng: capital.lng } : null
+}
 
 // ─── COUNTRY CODE PATTERNS ───────────────────────────────────────────────────
 const COUNTRY_PATTERNS: [RegExp, string][] = [

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
+import { entitiesOf, openSanctionsSearchUrl, sanctionsSearchOffline, SANCTIONS_OFFLINE_NOTE } from '@/lib/sanctions-search'
 // Inline SVG icons to avoid lucide-react dependency
 // (size sets width and height, as lucide-react's icons do: it used to be passed to <svg> and ignored)
 type SvgIconProps = Omit<React.SVGProps<SVGSVGElement>, 'ref'> & { size?: number }
@@ -252,6 +253,9 @@ export default function SanctionsPage() {
   const [loadingSearch, setLoadingSearch] = useState(false)
   const [loadingFeatured, setLoadingFeatured] = useState(true)
   const [searchError, setSearchError] = useState<string | null>(null)
+  // Searching is offline while OpenSanctions has no key from us (plan P16): the
+  // featured list is then the fixed fallback (live: false) or a search answers 503
+  const [offline, setOffline] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Load featured entities on mount ────────────────────────────────────────
@@ -260,8 +264,10 @@ export default function SanctionsPage() {
       try {
         const res = await fetch(`${API_URL}/api/v1/sanctions/featured`, { cache: 'no-store' })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const json: { data: FeaturedEntity[] } = await res.json()
-        setFeatured(json.data)
+        const json: { data: FeaturedEntity[]; live?: boolean } = await res.json()
+        // The fixed fallback list isn't OpenSanctions' data (and its entries have no page there): not shown
+        if (json.live === false) setOffline(true)
+        else setFeatured(Array.isArray(json.data) ? json.data : [])
       } catch {
         // Non-fatal — page still functional via search
       } finally {
@@ -284,9 +290,10 @@ export default function SanctionsPage() {
       const params = new URLSearchParams({ q, limit: '20' })
       if (s !== 'All') params.set('schema', s)
       const res = await fetch(`${API_URL}/api/v1/search/entities?${params.toString()}`, { cache: 'no-store' })
+      if (sanctionsSearchOffline(res.status)) { setOffline(true); setSearch([]); return }
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const json: { entities: EntityResult[] } = await res.json()
-      setSearch(json.entities)
+      // The API answers { success, data: { entities } } (this read json.entities, always empty)
+      setSearch(entitiesOf<EntityResult>(await res.json()))
     } catch {
       setSearchError('Search failed — please try again.')
     } finally {
@@ -323,28 +330,19 @@ export default function SanctionsPage() {
                 Sanctions &amp; Watchlist Intelligence
               </h1>
               <p className="text-[13px] text-[#8b949e] mt-0.5">
-                Search 100+ global sanctions lists — OFAC SDN, EU FSF, UN Security Council, Interpol, and more
+                People, companies and vessels on sanctions lists such as OFAC&rsquo;s, the EU&rsquo;s and the UN Security Council&rsquo;s, searched through OpenSanctions
               </p>
             </div>
           </div>
-
-          {/* Stats bar */}
-          <div className="flex flex-wrap gap-4 mt-4">
-            {[
-              '100+ sanctions lists',
-              'Real-time OFAC + EU monitoring',
-              '300k+ entities',
-            ].map(stat => (
-              <div
-                key={stat}
-                className="flex items-center gap-1.5 font-mono text-[11px] text-[#8b949e]"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-[#f5a623]" />
-                {stat}
-              </div>
-            ))}
-          </div>
         </div>
+
+        {/* ── Searching offline: say so, and hand the reader to OpenSanctions' own search ── */}
+        {offline && (
+          <div className="mb-6 rounded-xl border border-[rgba(245,166,35,0.3)] bg-[rgba(245,166,35,0.06)] p-4 text-[13px] leading-relaxed text-[#c9d1d9]">
+            <p>{SANCTIONS_OFFLINE_NOTE}</p>
+            <p className="mt-1.5 text-[#8b949e]">Until it is, you can search their site directly: type a name below and follow the link.</p>
+          </div>
+        )}
 
         {/* ── Search section ────────────────────────────────────────────────── */}
         <div className="mb-6">
@@ -364,7 +362,7 @@ export default function SanctionsPage() {
           </div>
 
           {/* Schema filter pills */}
-          <div className="flex flex-wrap gap-2">
+          <div className={offline ? 'hidden' : 'flex flex-wrap gap-2'}>
             {SCHEMA_FILTERS.map(s => (
               <button
                 key={s}
@@ -381,8 +379,21 @@ export default function SanctionsPage() {
           </div>
         </div>
 
+        {/* ── Offline: the reader's query on OpenSanctions' own site ─────────── */}
+        {offline && (
+          <a
+            href={openSanctionsSearchUrl(query)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[rgba(255,255,255,0.12)] bg-[#161b22] px-3.5 py-2 text-[13px] text-white hover:border-[rgba(245,166,35,0.5)] hover:text-[#f5a623] transition-colors"
+          >
+            {isSearching ? <>Search &ldquo;{query.trim()}&rdquo; on OpenSanctions</> : <>Open OpenSanctions&rsquo; search</>}
+            <ExternalLink size={12} />
+          </a>
+        )}
+
         {/* ── Search results ─────────────────────────────────────────────────── */}
-        {isSearching && (
+        {isSearching && !offline && (
           <section className="mb-10">
             <div className="font-mono text-[11px] tracking-[2px] text-[#8b949e] uppercase mb-4">
               Search Results
@@ -435,7 +446,7 @@ export default function SanctionsPage() {
         )}
 
         {/* ── Featured section (shown when search is empty) ─────────────────── */}
-        {!isSearching && (
+        {!isSearching && !offline && (
           <section>
             <div className="flex items-center justify-between mb-4">
               <div className="font-mono text-[11px] tracking-[2px] text-[#8b949e] uppercase">

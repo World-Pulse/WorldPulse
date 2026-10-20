@@ -16,7 +16,8 @@ import { datasetLabel, entityThreatLevel } from '../lib/opensanctions'
 vi.mock('../db/redis', () => ({
   redis: {
     get:   vi.fn(),
-    setex: vi.fn(),
+    // setex returns a promise, as ioredis's does (searchEntities calls .catch on it)
+    setex: vi.fn(() => Promise.resolve('OK')),
   },
 }))
 
@@ -207,5 +208,71 @@ describe('searchEntities() — Redis cache', () => {
 
     const callUrl = mockFetch.mock.calls[0]?.[0] as string
     expect(callUrl).toContain('limit=20')
+  })
+})
+
+// ─── 6. The key, and a pause after OpenSanctions refuses us (plan P16, Oct 20, 2026) ───
+describe('searchEntities(): the key and the refusal pause', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    const { resetSanctionsRefusal } = await import('../lib/opensanctions')
+    resetSanctionsRefusal()
+    delete process.env['OPENSANCTIONS_API_KEY']
+  })
+
+  it('sends OPENSANCTIONS_API_KEY as "Authorization: ApiKey <key>", and nothing without one', async () => {
+    const { redis } = await import('../db/redis')
+    const { searchEntities } = await import('../lib/opensanctions')
+    const ok = { ok: true, json: async () => ({ results: [], total: 0, limit: 10, offset: 0 }) }
+
+    vi.mocked(redis.get).mockResolvedValue(null)
+    mockFetch.mockResolvedValueOnce(ok)
+    await searchEntities('no key')
+    const plain = (mockFetch.mock.calls[0]?.[1] as { headers: Record<string, string> }).headers
+    expect(plain['Authorization']).toBeUndefined()
+
+    process.env['OPENSANCTIONS_API_KEY'] = '  test-key-123  '
+    mockFetch.mockResolvedValueOnce(ok)
+    await searchEntities('with key')
+    const keyed = (mockFetch.mock.calls[1]?.[1] as { headers: Record<string, string> }).headers
+    expect(keyed['Authorization']).toBe('ApiKey test-key-123')
+  })
+
+  it('after a 401 no call goes out for 10 minutes: the same error comes back at once', async () => {
+    const { redis } = await import('../db/redis')
+    const { searchEntities, sanctionsSearchRefused, REFUSED_PAUSE_MS } = await import('../lib/opensanctions')
+    vi.mocked(redis.get).mockResolvedValue(null)
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 401, statusText: 'Unauthorized' })
+
+    await expect(searchEntities('first')).rejects.toThrow('OpenSanctions API error: 401 Unauthorized')
+    expect(sanctionsSearchRefused()).toBe(true)
+    await expect(searchEntities('second')).rejects.toThrow('OpenSanctions API error: 401 Unauthorized')
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(REFUSED_PAUSE_MS).toBe(10 * 60 * 1000)
+    expect(sanctionsSearchRefused(Date.now() + REFUSED_PAUSE_MS + 1)).toBe(false)
+  })
+
+  it('other failures (a 502) don\'t pause: the next call asks again', async () => {
+    const { redis } = await import('../db/redis')
+    const { searchEntities, sanctionsSearchRefused } = await import('../lib/opensanctions')
+    vi.mocked(redis.get).mockResolvedValue(null)
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 502, statusText: 'Bad Gateway' })
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ results: [], total: 0, limit: 10, offset: 0 }) })
+
+    await expect(searchEntities('a')).rejects.toThrow('502')
+    expect(sanctionsSearchRefused()).toBe(false)
+    await expect(searchEntities('b')).resolves.toEqual({ entities: [], total: 0 })
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+  })
+})
+
+// ─── 7. /sanctions/featured says when its list is the fixed fallback ─────────
+describe('isLiveList()', () => {
+  it('is false for the fixed fallback list (ids wp-seed-…) and for an empty list', async () => {
+    const { isLiveList } = await import('../routes/sanctions')
+    const { FEATURED_SEED } = await import('../lib/sanctions-seed')
+    expect(isLiveList(FEATURED_SEED)).toBe(false)
+    expect(isLiveList([])).toBe(false)
+    expect(isLiveList([{ id: 'Q7747' }, { id: 'NK-abc' }])).toBe(true)
   })
 })

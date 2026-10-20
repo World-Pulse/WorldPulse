@@ -8,7 +8,8 @@
  *   GET /api/v1/outages/recent   — recent internet outage events (last N hours)
  *   GET /api/v1/outages/summary  — country-level connectivity summary (active outages)
  *
- * IODA source: Georgia Tech IODA API (api.ioda.caida.org)
+ * IODA source: Georgia Tech's IODA API (api.ioda.inetintel.cc.gatech.edu; the
+ * scraper's sources/ioda.ts)
  * Reliability: 0.87 (BGP + active probing + telescope signals)
  *
  * Counters OpenClaw's internet outage monitoring feature (terminal-only) with

@@ -5,7 +5,11 @@
  * sanctioned persons, companies, vessels, and other entities across 100+ global
  * sanctions lists (OFAC SDN, EU FSF, UN SC, UK HMT, Interpol, World Bank, etc.).
  *
- * Free public API — no API key required for reasonable usage.
+ * OpenSanctions asks for an API key (without one it answers 401 Unauthorized,
+ * checked Oct 20, 2026): set OPENSANCTIONS_API_KEY on the server and every call
+ * sends it as "Authorization: ApiKey <key>" (opensanctions.org/docs/api/authentication).
+ * After a 401 or 403 no call goes out for 10 minutes: the callers get the same
+ * error at once, and the pages say searching is offline (plan P16).
  * Set OPENSANCTIONS_URL env var to point at a self-hosted Yente instance if needed.
  *
  * Unique WorldPulse feature: combines live OSINT signal feeds (OFAC + EU sanctions
@@ -19,6 +23,25 @@ const OPENSANCTIONS_BASE = (
 ).replace(/\/$/, '')
 
 const CACHE_TTL_S = 300 // 5 minutes — sanctions lists update daily, not real-time
+
+/** After OpenSanctions refuses us (401/403: no key, or a key it doesn't accept), wait this long before asking again */
+export const REFUSED_PAUSE_MS = 10 * 60 * 1000
+let refused: { until: number; message: string } | null = null
+
+/** The key, read at call time so a restart with a new key needs nothing else */
+function apiKey(): string {
+  return (process.env['OPENSANCTIONS_API_KEY'] || '').trim()
+}
+
+/** True while OpenSanctions has refused us in the last 10 minutes: searching is offline */
+export function sanctionsSearchRefused(now = Date.now()): boolean {
+  return refused !== null && now < refused.until
+}
+
+/** For tests: forget a refusal */
+export function resetSanctionsRefusal(): void {
+  refused = null
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -81,6 +104,9 @@ export async function searchEntities(
     }
   } catch { /* Redis miss — proceed */ }
 
+  // ── Refused a moment ago: don't ask again yet ────────────
+  if (refused && Date.now() < refused.until) throw new Error(refused.message)
+
   // ── Fetch from OpenSanctions ─────────────────────────────
   const params = new URLSearchParams({
     q,
@@ -89,17 +115,24 @@ export async function searchEntities(
   })
   if (schema) params.set('schema', schema)
 
+  const headers: Record<string, string> = {
+    'User-Agent': 'WorldPulse/1.0 (+https://world-pulse.io; open-source OSINT platform)',
+    Accept:       'application/json',
+  }
+  const key = apiKey()
+  if (key) headers['Authorization'] = `ApiKey ${key}`
+
   const res = await fetch(`${OPENSANCTIONS_BASE}/search/default?${params}`, {
-    headers: {
-      'User-Agent': 'WorldPulse/1.0 (+https://world-pulse.io; open-source OSINT platform)',
-      Accept:       'application/json',
-    },
+    headers,
     signal: AbortSignal.timeout(8_000),
   })
 
   if (!res.ok) {
-    throw new Error(`OpenSanctions API error: ${res.status} ${res.statusText}`)
+    const message = `OpenSanctions API error: ${res.status} ${res.statusText}`
+    if (res.status === 401 || res.status === 403) refused = { until: Date.now() + REFUSED_PAUSE_MS, message }
+    throw new Error(message)
   }
+  refused = null
 
   const data = await res.json() as OSSearchResponse
 
