@@ -50,9 +50,10 @@ const AuthUserSchema = {
 const AuthTokensSchema = {
   type: 'object',
   properties: {
-    accessToken:  { type: 'string', description: 'Short-lived JWT (15 min)' },
-    refreshToken: { type: 'string', description: 'Rotation token (30 days, stored in Redis)' },
-    expiresIn:    { type: 'number', description: 'Access token lifetime in seconds' },
+    // (it said "Short-lived JWT (15 min)": issueTokens signs it for 24 hours, plan V3i)
+    accessToken:  { type: 'string', description: 'Sign-in token (a JWT), good for 24 hours: send it as Authorization: Bearer <accessToken>' },
+    refreshToken: { type: 'string', description: 'Send it to POST /api/v1/auth/refresh for a new pair; good for 30 days, and only once' },
+    expiresIn:    { type: 'number', description: 'Sign-in token lifetime in seconds (86400)' },
   },
 }
 

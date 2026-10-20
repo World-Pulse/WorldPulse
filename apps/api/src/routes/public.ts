@@ -72,7 +72,8 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
       querystring: {
         type: 'object',
         properties: {
-          category: { type: 'string', description: 'Filter by category (e.g. conflict, climate, politics)' },
+          // (its example "politics" is no category: that answered 400, plan V3i)
+          category: { type: 'string', description: 'One of the names GET /api/v1/public/categories lists (e.g. conflict, climate, economy), or all' },
           severity: { type: 'string', enum: ['critical', 'high', 'medium', 'low', 'info'] },
           limit:    { type: 'number', default: 50, maximum: 100, minimum: 1 },
           offset:   { type: 'number', default: 0, minimum: 0 },

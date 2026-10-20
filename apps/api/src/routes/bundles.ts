@@ -287,7 +287,9 @@ export const registerBundleRoutes: FastifyPluginAsync = async (app) => {
         crv: 'Ed25519',
         x:   rawBytes.toString('base64url'),
       },
-      docs_url: 'https://world-pulse.io/developer/bundles',
+      // The developer page, which lists the bundle endpoints (plan V3i: this
+      // pointed at /developer/bundles, a page the site has never had)
+      docs_url: `${SITE_URL}/developers`,
     })
   })
 }

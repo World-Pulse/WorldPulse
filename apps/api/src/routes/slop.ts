@@ -225,7 +225,8 @@ export const registerSlopRoutes: FastifyPluginAsync = async (app) => {
   app.get('/farms', {
     schema: {
       summary:     'List known AI content farm domains (public, open-source)',
-      description: 'WorldPulse open-source blocklist of AI-generated content farm domains. Seeded from NewsGuard public reports, CCDH research, and community contributions. Updated monthly.',
+      // (it said "Updated monthly": the list is lib/ai-content-farms.ts, last changed in March 2026, plan V3i)
+      description: 'WorldPulse open-source blocklist of AI-generated content farm domains, seeded from NewsGuard public reports, CCDH research and community contributions. The list is part of the API\'s code and changes when the code does: GET /api/v1/slop/stats gives its last update.',
       querystring: {
         type:       'object',
         properties: {
@@ -498,7 +499,7 @@ export const registerSlopRoutes: FastifyPluginAsync = async (app) => {
     preHandler: [authenticateApiKey, requireProTier],
     schema: {
       summary:     'Batch check up to 20 URLs for AI slop (Pro+ tier)',
-      description: 'Check multiple URLs in a single request. Each item can include optional title/content/author for higher accuracy. Requires a Pro or Enterprise API key.',
+      description: 'Check multiple URLs in a single request. Each item can include optional title/content/author for higher accuracy. Requires a Pro or Enterprise API key whose account is still on a paid plan; any other key gets 403.',
       body: {
         type:       'object',
         required:   ['items'],

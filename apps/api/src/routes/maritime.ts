@@ -401,7 +401,9 @@ export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
     },
     schema: {
       tags:    ['maritime'],
-      summary: 'Carrier strike group positions and AIS distress vessel signals (24-hour window)',
+      // (it said "Carrier strike group positions and AIS distress vessel signals
+      // (24-hour window)": these are news reports over 72 hours, plan V3i)
+      summary: 'Naval news with a place: the last 3 days\' reports about warships and carrier groups (news reports, not live ship positions)',
       response: {
         200: {
           type: 'object',

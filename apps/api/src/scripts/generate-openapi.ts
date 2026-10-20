@@ -4,11 +4,13 @@
  * Usage:
  *   pnpm --filter @worldpulse/api docs:generate
  *
- * This script bootstraps the full Fastify app (without listening on a port),
- * waits for the swagger plugin to collect all route schemas, then writes the
- * OpenAPI spec to disk.  It is safe to run in CI — no external services are
- * required because all DB/Redis/Kafka connections are initiated lazily after
- * app.listen(), which we never call here.
+ * This script registers the route files below (16 of them, not the whole
+ * app) with the same docs options as the API's /api/docs (lib/api-docs.ts),
+ * waits for the swagger plugin to collect their schemas, then writes the
+ * OpenAPI spec to disk without listening on a port. The running API's
+ * /api/docs lists the routes of every route file (plan V3i). The database
+ * must answer: importing the route files connects to it (db/postgres.ts
+ * stops the process when it can't).
  */
 import path from 'node:path'
 import fs from 'node:fs'
@@ -17,6 +19,7 @@ import cors from '@fastify/cors'
 import jwt from '@fastify/jwt'
 import rateLimit from '@fastify/rate-limit'
 import swagger from '@fastify/swagger'
+import { openapiOptions }             from '../lib/api-docs'
 import { registerFeedRoutes }         from '../routes/feed'
 import { registerAuthRoutes }         from '../routes/auth'
 import { registerPostRoutes }         from '../routes/posts'
@@ -47,71 +50,9 @@ async function generate(): Promise<void> {
   })
   await app.register(rateLimit, { max: 200, timeWindow: '1 minute' })
 
-  await app.register(swagger, {
-    openapi: {
-      openapi: '3.1.0',
-      info: {
-        title: 'WorldPulse API',
-        description: [
-          'Real-time global intelligence network.',
-          '',
-          '## Authentication',
-          'Most endpoints require a Bearer JWT. Obtain tokens via `POST /api/v1/auth/login`.',
-          'Pass the access token as `Authorization: Bearer <token>`.',
-          '',
-          '## Rate Limits',
-          'Default: 200 req/min per user. Auth endpoints: 5 req/min.',
-          'Rate-limit headers are included in every response.',
-        ].join('\n'),
-        version: '1.0.0',
-        contact: {
-          name: 'WorldPulse',
-          url: 'https://world-pulse.io',
-        },
-        license: {
-          name: 'MIT',
-          url: 'https://opensource.org/licenses/MIT',
-        },
-      },
-      servers: [
-        { url: 'https://api.world-pulse.io', description: 'Production' },
-        { url: 'http://localhost:3001',      description: 'Local development' },
-      ],
-      tags: [
-        { name: 'auth',          description: 'Authentication & session management' },
-        { name: 'feed',          description: 'Global feed, following feed, trending' },
-        { name: 'signals',       description: 'Verified world events / breaking signals' },
-        { name: 'posts',         description: 'User-generated content & threads' },
-        { name: 'search',        description: 'Full-text search & autocomplete' },
-        { name: 'users',         description: 'User profiles, follows, notifications' },
-        { name: 'communities',   description: 'Topic communities' },
-        { name: 'polls',         description: 'Polls attached to posts' },
-        { name: 'sources',       description: 'News sources & trust tiers' },
-        { name: 'alerts',        description: 'User alert subscriptions' },
-        { name: 'analytics',     description: 'Personal engagement analytics' },
-        { name: 'notifications', description: 'Push notification device tokens' },
-        { name: 'uploads',       description: 'Media uploads' },
-        { name: 'developer',     description: 'Developer API keys' },
-        { name: 'embed',         description: 'Public embeddable widgets' },
-        { name: 'admin',         description: 'Admin-only operations' },
-      ],
-      components: {
-        securitySchemes: {
-          bearerAuth: {
-            type: 'http' as const,
-            scheme: 'bearer',
-            bearerFormat: 'JWT',
-            description: 'JWT access token from POST /api/v1/auth/login',
-          },
-        },
-      },
-    },
-    hideUntagged: false,
-    refResolver: {
-      buildLocalReference: (json, _baseUri, _fragment, _i) =>
-        (json.$id as string | undefined) ?? `model-${_i}`,
-    },
-  })
+  // The options the API's /api/docs uses (lib/api-docs.ts): what each
+  // operation needs and its own limit, without the admin routes
+  await app.register(swagger, openapiOptions())
 
   // ─── ROUTES ──────────────────────────────────────────────
   await app.register(registerAuthRoutes,        { prefix: '/api/v1/auth' })

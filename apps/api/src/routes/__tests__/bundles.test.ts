@@ -8,7 +8,15 @@
  *         CORS headers, metadata, schema version, and public key formats.
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+import Fastify from 'fastify'
+
+// The route file itself, for GET /public-key (no database or Redis call there)
+vi.mock('../../db/postgres', () => ({ db: vi.fn() }))
+vi.mock('../../db/redis', () => ({ redis: { get: vi.fn(), setex: vi.fn() } }))
+import { registerBundleRoutes } from '../bundles'
 
 // ─── Constants (mirroring bundles.ts) ────────────────────────────────────────
 
@@ -291,9 +299,19 @@ describe('Public Key Export Formats', () => {
     expect(jwk).toHaveProperty('x')
   })
 
-  it('docs_url points to developer documentation', () => {
-    const response = { docs_url: 'https://worldpulse.io/developer/bundles' }
-    expect(response.docs_url).toContain('developer/bundles')
+  it('docs_url points to the developer page, a page the website has (plan V3i)', async () => {
+    // It was https://world-pulse.io/developer/bundles, which the site has never had
+    const app = Fastify({ logger: false })
+    await app.register(registerBundleRoutes, { prefix: '/api/v1/bundles' })
+    const res = await app.inject({ method: 'GET', url: '/api/v1/bundles/public-key' })
+    await app.close()
+    expect(res.statusCode).toBe(200)
+    const docsUrl = new URL((res.json() as { docs_url: string }).docs_url)
+    expect(docsUrl.pathname).toBe('/developers')
+    if (!process.env.SITE_URL) expect(docsUrl.origin).toBe('https://world-pulse.io')
+    const webApp = join(__dirname, '..', '..', '..', '..', 'web', 'src', 'app')
+    expect(existsSync(join(webApp, 'developers', 'page.tsx'))).toBe(true)
+    expect(existsSync(join(webApp, 'developer', 'bundles'))).toBe(false)
   })
 
   it('both base64url and JWK formats are provided', () => {

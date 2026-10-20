@@ -1652,6 +1652,14 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       tags: ['signals'],
       summary: 'Get knowledge graph connections for a signal',
       description: 'Signals from the last 14 days that name the same people, places or organisations, other reports of the same story left out. With only=entities, the people, places and organisations the signal names, without the connections.',
+      // Listed for the docs (plan V3i); no type or rule, so no request is refused that wasn't before
+      querystring: {
+        type: 'object',
+        properties: {
+          only:  { description: 'entities: only the people, places and organisations the signal names (connections is then empty); any other value is ignored' },
+          limit: { description: 'How many connections, 1 to 20 (default 8)' },
+        },
+      },
     },
   }, async (req, reply) => {
     const { id } = req.params as { id: string }

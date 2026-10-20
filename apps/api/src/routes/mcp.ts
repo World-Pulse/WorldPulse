@@ -318,9 +318,32 @@ export async function handleMessage(m: unknown, asker: Asker): Promise<Record<st
   }
 }
 
+/**
+ * How the interactive docs (/api/docs, lib/api-docs.ts) list this route:
+ * public, like the other open routes (plan V3i). The body schema only
+ * describes the message and gives "Try it out" an example: it sets no type
+ * or rule, so it accepts every body the handler took before. The tools are
+ * named from TOOLS, so a new tool is listed without anyone editing this.
+ */
+const TOOL_NAMES = TOOLS.map(t => t.name)
+const POST_DOCS = {
+  tags: ['mcp'],
+  summary: 'MCP server for AI assistants (JSON-RPC 2.0)',
+  description: [
+    'WorldPulse for AI assistants such as Claude: the Model Context Protocol over HTTP. Read-only and open: no sign-in or key.',
+    'Each POST carries one JSON-RPC 2.0 message or a batch of up to 20 (64 KB at most) and gets JSON back; a notification gets 202 with no body. There are no sessions and no event stream (GET and DELETE answer 405).',
+    `Its tools: ${TOOL_NAMES.slice(0, -1).join(', ')} and ${TOOL_NAMES[TOOL_NAMES.length - 1]}. Each asks the API's own public routes, and those calls count against your limits on those routes too.`,
+    `How to connect an assistant: ${SITE}/developers#mcp`,
+  ].join('\n\n'),
+  body: {
+    description: 'One JSON-RPC 2.0 message (initialize, tools/list, tools/call, ping), or an array of up to 20',
+    examples: [{ jsonrpc: '2.0', id: 1, method: 'tools/list' }],
+  },
+}
+
 export const registerMcpRoutes: FastifyPluginAsync = async (app) => {
   app.post('/', {
-    schema: { hide: true },
+    schema: POST_DOCS,
     bodyLimit: 64 * 1024,
     config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
   }, async (req, reply) => {

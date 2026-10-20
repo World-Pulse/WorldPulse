@@ -100,6 +100,7 @@ import { corsDecision } from './lib/cors-policy'
 import { TRUSTED_PROXIES } from './lib/client-address'
 import { startBriefingEmails, stopBriefingEmails } from './lib/briefing-email'
 import { startSocialPosters, stopSocialPosters } from './lib/social-posters'
+import { openapiOptions } from './lib/api-docs'
 
 const app = Fastify({
   logger: {
@@ -233,83 +234,10 @@ async function bootstrap() {
   })
 
   // ─── SWAGGER / OPENAPI ───────────────────────────────────
-  await app.register(swagger, {
-    openapi: {
-      openapi: '3.1.0',
-      info: {
-        title: 'WorldPulse API',
-        description: [
-          'Real-time global intelligence network.',
-          '',
-          '## Authentication',
-          'Most endpoints require a Bearer JWT. Obtain tokens via `POST /api/v1/auth/login`.',
-          'Pass the access token as `Authorization: Bearer <token>`.',
-          '',
-          '## Rate Limits',
-          'Default: 200 req/min per user. Auth endpoints: 5 req/min.',
-          'Rate-limit headers are included in every response.',
-        ].join('\n'),
-        version: '1.0.0',
-        contact: {
-          name: 'WorldPulse',
-          url: 'https://world-pulse.io',
-        },
-        license: {
-          name: 'MIT',
-          url: 'https://opensource.org/licenses/MIT',
-        },
-      },
-      servers: [
-        { url: 'https://api.world-pulse.io', description: 'Production' },
-        { url: 'http://localhost:3001', description: 'Local development' },
-      ],
-      tags: [
-        { name: 'auth',          description: 'Authentication & session management' },
-        { name: 'feed',          description: 'Global feed, following feed, trending' },
-        { name: 'signals',       description: 'Verified world events / breaking signals' },
-        { name: 'posts',         description: 'User-generated content & threads' },
-        { name: 'search',        description: 'Full-text search & autocomplete' },
-        { name: 'users',         description: 'User profiles, follows, notifications' },
-        { name: 'communities',   description: 'Topic communities' },
-        { name: 'polls',         description: 'Polls attached to posts' },
-        { name: 'sources',       description: 'News sources & trust tiers' },
-        { name: 'alerts',        description: 'User alert subscriptions' },
-        { name: 'analytics',     description: 'Personal engagement analytics' },
-        { name: 'notifications', description: 'Push notification device tokens' },
-        { name: 'uploads',       description: 'Media uploads' },
-        { name: 'developer',     description: 'Developer API keys' },
-        { name: 'embed',         description: 'Public embeddable widgets' },
-        { name: 'admin',         description: 'Admin-only operations' },
-        { name: 'stix',          description: 'STIX 2.1 threat intelligence export' },
-        { name: 'briefings',     description: 'AI-powered daily intelligence briefings' },
-        { name: 'breaking-alerts', description: 'Real-time breaking news alert banners' },
-        { name: 'cameras',         description: 'Live public CCTV/webcam feeds by region' },
-        { name: 'maritime',        description: 'Naval intelligence — carrier strike groups and AIS vessel tracking' },
-        { name: 'threats',         description: 'Missile and drone threat intelligence — ballistic, cruise, hypersonic, rocket, UAV' },
-        { name: 'jamming',         description: 'GPS/GNSS jamming intelligence — military EW, spoofing, civilian interference zones' },
-        { name: 'rss',             description: 'RSS/Atom, JSON Feed, and OPML syndication feeds for signal distribution' },
-        { name: 'bundles',         description: 'Ed25519-signed verified source packs for AI agent pipelines' },
-        { name: 'digest',          description: 'Weekly/daily email digest subscriptions' },
-        { name: 'finance',         description: 'Financial intelligence — market signals, central bank alerts, crypto, sanctions' },
-      ],
-      components: {
-        securitySchemes: {
-          bearerAuth: {
-            type: 'http' as const,
-            scheme: 'bearer',
-            bearerFormat: 'JWT',
-            description: 'JWT access token from POST /api/v1/auth/login',
-          },
-        },
-      },
-    },
-    // Strip internal/runtime fields from the spec
-    hideUntagged: false,
-    refResolver: {
-      buildLocalReference: (json, _baseUri, _fragment, _i) =>
-        (json.$id as string | undefined) ?? `model-${_i}`,
-    },
-  })
+  // What each operation needs (sign-in token, API key or nothing) comes from
+  // the route's own checks, and the admin and other internal routes are left
+  // out (lib/api-docs.ts, plan V3i)
+  await app.register(swagger, openapiOptions())
 
   await app.register(swaggerUI, {
     routePrefix: '/api/docs',

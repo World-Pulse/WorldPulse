@@ -2,16 +2,21 @@
 
 import { useState, useCallback } from 'react'
 import Link from 'next/link'
+import {
+  API_ORIGIN, INTERACTIVE_DOCS_URL, KEY_PREFIX, API_KEY_HEADER, SIGN_IN_REQUIRED, BAD_TOKEN,
+  API_KEY_ENDPOINTS, SIGN_IN_ENDPOINTS, KEY_TIERS,
+  DEFAULT_PER_MINUTE, ROUTE_LIMITS, KEY_RECORDED_LIMITS, RATE_LIMIT_HEADERS,
+  PUBLIC_SIGNALS_PARAMS, OTHER_OPEN_ENDPOINTS, PUBLIC_SIGNALS_RESPONSE,
+  MCP_URL, MCP_TOOLS, MCP_GUIDE, MCP_EXAMPLE,
+  WEBHOOK_ENDPOINTS, MAX_WEBHOOKS, WEBHOOK_EVENTS, WEBHOOK_BODY_FIELDS, WEBHOOK_FILTERS,
+  WEBHOOK_HEADERS, WEBHOOK_DELIVERY,
+  WS_URL, WS_EVENTS, WS_CLIENT_MESSAGES,
+  PUBLIC_SIGNALS_EXAMPLES, WEBHOOK_EXAMPLES, WEBHOOK_VERIFY_EXAMPLES, WEBSOCKET_EXAMPLES,
+  type Tab, type CodeExample, type EndpointInfo,
+} from './reference'
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type Tab = 'curl' | 'typescript' | 'python'
-
-interface CodeExample {
-  curl: string
-  typescript: string
-  python: string
-}
+// The page's facts (paths, headers, limits, examples) are in ./reference.ts,
+// checked against apps/api by src/__tests__/docs-api.test.tsx (plan V3i)
 
 // ─── Copy button ─────────────────────────────────────────────────────────────
 
@@ -56,14 +61,12 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
 
 // ─── Tabbed code example ─────────────────────────────────────────────────────
 
-function TabbedCodeExample({ examples }: { examples: CodeExample }) {
-  const [tab, setTab] = useState<Tab>('curl')
+const TAB_LABELS: Record<Tab, string> = { curl: 'cURL', typescript: 'TypeScript', python: 'Python' }
 
-  const tabs: { id: Tab; label: string }[] = [
-    { id: 'curl', label: 'cURL' },
-    { id: 'typescript', label: 'TypeScript' },
-    { id: 'python', label: 'Python' },
-  ]
+function TabbedCodeExample({ examples }: { examples: CodeExample }) {
+  const tabs = (Object.keys(TAB_LABELS) as Tab[]).filter(t => examples[t] !== undefined)
+  const [tab, setTab] = useState<Tab>(tabs[0] ?? 'curl')
+  const code = examples[tab] ?? ''
 
   return (
     <div className="rounded-lg overflow-hidden border border-zinc-800">
@@ -71,26 +74,26 @@ function TabbedCodeExample({ examples }: { examples: CodeExample }) {
       <div className="flex bg-zinc-900 border-b border-zinc-800">
         {tabs.map((t) => (
           <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
+            key={t}
+            onClick={() => setTab(t)}
             className={`px-4 py-2 text-[12px] font-mono transition-all
-              ${tab === t.id
+              ${tab === t
                 ? 'text-amber-400 border-b-2 border-amber-500 bg-zinc-950'
                 : 'text-zinc-500 hover:text-zinc-300'
               }`}
           >
-            {t.label}
+            {TAB_LABELS[t]}
           </button>
         ))}
       </div>
       {/* Code */}
       <div className="relative">
-        <CopyButton text={examples[tab]} />
+        <CopyButton text={code} />
         <pre
           className="bg-zinc-950 p-4 overflow-x-auto text-[12.5px] leading-relaxed
             font-mono text-zinc-300 pr-16 min-h-[120px]"
         >
-          <code>{examples[tab].trim()}</code>
+          <code>{code.trim()}</code>
         </pre>
       </div>
     </div>
@@ -123,6 +126,14 @@ function Section({
   )
 }
 
+function SubHeading({ children }: { children: React.ReactNode }) {
+  return <h3 className="text-[13px] font-semibold text-zinc-300 mb-3">{children}</h3>
+}
+
+function InlineCode({ children }: { children: React.ReactNode }) {
+  return <code className="font-mono text-amber-400 text-[12px]">{children}</code>
+}
+
 // ─── Method badge ─────────────────────────────────────────────────────────────
 
 function MethodBadge({ method }: { method: 'GET' | 'POST' | 'DELETE' | 'WS' }) {
@@ -144,22 +155,22 @@ function MethodBadge({ method }: { method: 'GET' | 'POST' | 'DELETE' | 'WS' }) {
 
 // ─── Endpoint header ─────────────────────────────────────────────────────────
 
-function EndpointRow({
-  method,
-  path,
-  description,
-}: {
-  method: 'GET' | 'POST' | 'DELETE' | 'WS'
-  path: string
-  description: string
-}) {
+function EndpointRow({ method, path, description }: EndpointInfo) {
   return (
     <div className="flex items-start gap-3 py-3 border-b border-zinc-800/60 last:border-0">
       <MethodBadge method={method} />
       <div>
-        <code className="text-[13px] font-mono text-zinc-200">{path}</code>
+        <code className="text-[13px] font-mono text-zinc-200">{`${method} ${path}`}</code>
         <p className="text-[12px] text-zinc-500 mt-0.5">{description}</p>
       </div>
+    </div>
+  )
+}
+
+function EndpointList({ endpoints }: { endpoints: EndpointInfo[] }) {
+  return (
+    <div className="rounded-lg border border-zinc-800 px-4">
+      {endpoints.map(ep => <EndpointRow key={`${ep.method} ${ep.path}`} {...ep} />)}
     </div>
   )
 }
@@ -179,17 +190,52 @@ function ParamRow({
 }) {
   return (
     <tr className="border-b border-zinc-800/50">
-      <td className="py-2.5 pr-4">
+      <td className="py-2.5 px-3">
         <code className="text-[12.5px] font-mono text-amber-400">{name}</code>
         {required && (
           <span className="ml-1.5 text-[10px] text-red-400 font-medium">required</span>
         )}
       </td>
-      <td className="py-2.5 pr-4">
+      <td className="py-2.5 px-3">
         <code className="text-[12px] text-zinc-400">{type}</code>
       </td>
-      <td className="py-2.5 text-[12px] text-zinc-500">{description}</td>
+      <td className="py-2.5 px-3 text-[12px] text-zinc-500">{description}</td>
     </tr>
+  )
+}
+
+function ParamTable({ first, rows }: {
+  first: string
+  rows: { name: string; type: string; required?: boolean; description: string }[]
+}) {
+  return (
+    <div className="overflow-x-auto rounded-lg border border-zinc-800">
+      <table className="w-full text-[13px]">
+        <thead>
+          <tr className="bg-zinc-900 border-b border-zinc-800">
+            <th className="text-left px-3 py-2 text-zinc-500 font-medium">{first}</th>
+            <th className="text-left px-3 py-2 text-zinc-500 font-medium">Type</th>
+            <th className="text-left px-3 py-2 text-zinc-500 font-medium">Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(r => <ParamRow key={r.name} {...r} />)}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function NameList({ items }: { items: { name: string; description: string }[] }) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+      {items.map(i => (
+        <div key={i.name} className="p-3 rounded-lg bg-zinc-900/50 border border-zinc-800">
+          <code className="text-[12px] font-mono text-amber-400 break-all">{i.name}</code>
+          <p className="text-[12px] text-zinc-500 mt-0.5">{i.description}</p>
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -198,177 +244,11 @@ function ParamRow({
 const NAV_ITEMS = [
   { id: 'authentication', label: 'Authentication' },
   { id: 'rate-limits', label: 'Rate Limits' },
-  { id: 'public-endpoints', label: 'Public Endpoints' },
-  { id: 'authenticated-endpoints', label: 'Authenticated Endpoints' },
+  { id: 'public-endpoints', label: 'Open Endpoints' },
+  { id: 'mcp', label: 'AI Assistants (MCP)' },
   { id: 'webhooks', label: 'Webhooks' },
   { id: 'websocket', label: 'WebSocket' },
 ]
-
-// ─── Code examples ────────────────────────────────────────────────────────────
-
-const PUBLIC_SIGNALS_EXAMPLES: CodeExample = {
-  curl: `curl "https://api.world-pulse.io/api/v1/public/signals?category=conflict&severity=critical&limit=10" \\
-  -H "Accept: application/json"`,
-
-  typescript: `const res = await fetch(
-  \`\${process.env.NEXT_PUBLIC_API_URL}/api/v1/public/signals?category=conflict&limit=10\`
-)
-const { data, total } = await res.json()
-
-interface Signal {
-  id: string
-  title: string
-  category: string
-  severity: 'low' | 'medium' | 'high' | 'critical'
-  reliability_score: number
-  location_name: string
-  published_at: string
-  source_url: string
-}`,
-
-  python: `import httpx
-
-resp = httpx.get(
-    "https://api.world-pulse.io/api/v1/public/signals",
-    params={"category": "conflict", "severity": "critical", "limit": 10},
-)
-resp.raise_for_status()
-data = resp.json()  # {"success": True, "data": [...], "total": 42, ...}`,
-}
-
-const FEED_SIGNALS_EXAMPLES: CodeExample = {
-  curl: `curl "https://api.world-pulse.io/api/v1/feed/signals" \\
-  -H "Authorization: Bearer wp_live_xxxxxxxxxxxx" \\
-  -H "Accept: application/json"`,
-
-  typescript: `const res = await fetch(
-  \`\${process.env.NEXT_PUBLIC_API_URL}/api/v1/feed/signals\`,
-  { headers: { Authorization: \`Bearer \${apiKey}\` } }
-)
-const { data } = await res.json()`,
-
-  python: `import httpx
-
-resp = httpx.get(
-    "https://api.world-pulse.io/api/v1/feed/signals",
-    headers={"Authorization": f"Bearer {api_key}"},
-)
-data = resp.json()`,
-}
-
-const SIGNAL_DETAIL_EXAMPLES: CodeExample = {
-  curl: `curl "https://api.world-pulse.io/api/v1/signals/sig_abc123" \\
-  -H "Authorization: Bearer wp_live_xxxxxxxxxxxx"`,
-
-  typescript: `const res = await fetch(
-  \`\${process.env.NEXT_PUBLIC_API_URL}/api/v1/signals/sig_abc123\`,
-  { headers: { Authorization: \`Bearer \${apiKey}\` } }
-)
-const { data: signal } = await res.json()`,
-
-  python: `resp = httpx.get(
-    "https://api.world-pulse.io/api/v1/signals/sig_abc123",
-    headers={"Authorization": f"Bearer {api_key}"},
-)`,
-}
-
-const SEARCH_EXAMPLES: CodeExample = {
-  curl: `curl "https://api.world-pulse.io/api/v1/search?q=ukraine+energy+infrastructure" \\
-  -H "Authorization: Bearer wp_live_xxxxxxxxxxxx"`,
-
-  typescript: `const params = new URLSearchParams({ q: 'ukraine energy infrastructure' })
-const res = await fetch(
-  \`\${process.env.NEXT_PUBLIC_API_URL}/api/v1/search?\${params}\`,
-  { headers: { Authorization: \`Bearer \${apiKey}\` } }
-)
-const { data } = await res.json()`,
-
-  python: `resp = httpx.get(
-    "https://api.world-pulse.io/api/v1/search",
-    params={"q": "ukraine energy infrastructure"},
-    headers={"Authorization": f"Bearer {api_key}"},
-)`,
-}
-
-const WEBHOOK_EXAMPLES: CodeExample = {
-  curl: `curl -X POST "https://api.world-pulse.io/api/v1/developer/webhooks" \\
-  -H "Authorization: Bearer wp_live_xxxxxxxxxxxx" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "url": "https://your-server.com/webhook",
-    "events": ["signal.new", "alert.breaking"],
-    "filters": {
-      "severity": ["critical", "high"],
-      "category": ["conflict", "climate"]
-    }
-  }'`,
-
-  typescript: `const res = await fetch(
-  \`\${process.env.NEXT_PUBLIC_API_URL}/api/v1/developer/webhooks\`,
-  {
-    method: 'POST',
-    headers: {
-      Authorization: \`Bearer \${apiKey}\`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      url: 'https://your-server.com/webhook',
-      events: ['signal.new', 'alert.breaking'],
-      filters: { severity: ['critical', 'high'] },
-    }),
-  }
-)
-const { id } = await res.json()`,
-
-  python: `resp = httpx.post(
-    "https://api.world-pulse.io/api/v1/developer/webhooks",
-    headers={"Authorization": f"Bearer {api_key}"},
-    json={
-        "url": "https://your-server.com/webhook",
-        "events": ["signal.new", "alert.breaking"],
-        "filters": {"severity": ["critical", "high"]},
-    },
-)
-webhook_id = resp.json()["id"]`,
-}
-
-const WEBSOCKET_EXAMPLES: CodeExample = {
-  curl: `# WebSocket connections require a WS client. Use wscat:
-npx wscat -c "wss://api.world-pulse.io/ws" \\
-  --header "Authorization: Bearer wp_live_xxxxxxxxxxxx"`,
-
-  typescript: `const ws = new WebSocket(
-  \`wss://api.world-pulse.io/ws?token=\${apiKey}\`
-)
-
-ws.onopen = () => {
-  ws.send(JSON.stringify({
-    type: 'subscribe',
-    channels: ['signals:global', 'alerts:breaking'],
-    filters: { severity: ['critical', 'high'] },
-  }))
-}
-
-ws.onmessage = (event) => {
-  const { type, data } = JSON.parse(event.data)
-  if (type === 'signal.new') console.log('New signal:', data)
-}`,
-
-  python: `import asyncio, json, websockets
-
-async def stream():
-    uri = f"wss://api.world-pulse.io/ws?token={api_key}"
-    async with websockets.connect(uri) as ws:
-        await ws.send(json.dumps({
-            "type": "subscribe",
-            "channels": ["signals:global", "alerts:breaking"],
-        }))
-        async for message in ws:
-            event = json.loads(message)
-            print(event["type"], event.get("data", {}).get("title"))
-
-asyncio.run(stream())`,
-}
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
@@ -381,7 +261,7 @@ export default function ApiDocsPage() {
     if (el) el.scrollIntoView({ behavior: 'smooth' })
   }
 
-  const baseUrl = `${process.env.NEXT_PUBLIC_API_URL || 'https://api.world-pulse.io'}/api/v1`
+  const baseUrl = `${process.env.NEXT_PUBLIC_API_URL || API_ORIGIN}/api/v1`
 
   return (
     <div className="min-h-screen bg-zinc-950">
@@ -393,23 +273,39 @@ export default function ApiDocsPage() {
               uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded">
               v1
             </span>
-            <span className="text-zinc-600 text-[12px] font-mono">stable</span>
           </div>
           <h1 className="text-4xl md:text-5xl font-bold text-zinc-100 mb-3 tracking-tight">
             WorldPulse Developer API
           </h1>
           <p className="text-lg text-zinc-400 max-w-2xl mb-8">
-            Real-time global intelligence signals, semantic search, and live streaming —
-            all from a single REST + WebSocket API.
+            Sign-in tokens and API keys, rate limits, the MCP server, webhooks and the WebSocket
+            stream, as the API handles them. Every endpoint, with what it needs and its own limit, is
+            in the{' '}
+            <a href={INTERACTIVE_DOCS_URL} className="text-amber-400 hover:text-amber-300 underline underline-offset-2">
+              interactive docs
+            </a>. The{' '}
+            <Link href="/developers" className="text-amber-400 hover:text-amber-300 underline underline-offset-2">
+              developer page
+            </Link>{' '}
+            has guides and examples.
           </p>
           <div className="flex flex-wrap items-center gap-4">
             <Link
-              href="/settings"
+              href="/developer"
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium
                 bg-amber-500 text-zinc-950 hover:bg-amber-400 transition-colors text-[14px]"
             >
               Get API Key
             </Link>
+            <a
+              href={INTERACTIVE_DOCS_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium
+                border border-zinc-700 text-zinc-300 hover:border-amber-500/50 transition-colors text-[14px]"
+            >
+              Interactive docs
+            </a>
             <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg
               bg-zinc-900 border border-zinc-800 font-mono text-[12px] text-zinc-400">
               <span className="text-zinc-600">Base URL</span>
@@ -445,15 +341,22 @@ export default function ApiDocsPage() {
                 </li>
               ))}
             </ul>
-            <div className="mt-8 pt-6 border-t border-zinc-800">
+            <div className="mt-8 pt-6 border-t border-zinc-800 space-y-2">
               <Link
-                href="/settings"
+                href="/developer"
                 className="block text-center px-3 py-2 rounded-lg text-[12px] font-medium
                   bg-amber-500/10 text-amber-400 border border-amber-500/20
                   hover:bg-amber-500/20 transition-colors"
               >
                 Get API Key →
               </Link>
+              <a
+                href={INTERACTIVE_DOCS_URL}
+                className="block text-center px-3 py-2 rounded-lg text-[12px] font-medium
+                  text-zinc-400 border border-zinc-800 hover:text-zinc-200 transition-colors"
+              >
+                All endpoints →
+              </a>
             </div>
           </nav>
         </aside>
@@ -464,67 +367,91 @@ export default function ApiDocsPage() {
           {/* ── Authentication ───────────────────────────────────────── */}
           <Section id="authentication" title="Authentication">
             <p className="text-[13px] text-zinc-400 mb-6">
-              WorldPulse uses bearer token authentication. Include your API key in the{' '}
-              <code className="font-mono text-amber-400 text-[12px]">Authorization</code> header
-              on every authenticated request.
+              Most endpoints are open: no sign-in or key needed. The others take one of two
+              credentials, and neither works in place of the other.
             </p>
 
-            <CodeBlock
-              language="http"
-              code={`Authorization: Bearer wp_live_xxxxxxxxxxxx`}
-            />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="p-4 rounded-lg bg-zinc-900/50 border border-zinc-800">
+                <h3 className="text-[14px] font-semibold text-zinc-200 mb-2">Sign-in token</h3>
+                <p className="text-[12px] text-zinc-500 mb-3">
+                  From any free account: <InlineCode>POST /api/v1/auth/login</InlineCode> answers it
+                  as <InlineCode>data.accessToken</InlineCode>. It lasts 24 hours. For a new one, send
+                  the answer&apos;s <InlineCode>data.refreshToken</InlineCode> to{' '}
+                  <InlineCode>POST /api/v1/auth/refresh</InlineCode> (a refresh token lasts 30 days and
+                  works once).
+                </p>
+                <CodeBlock language="http" code="Authorization: Bearer <accessToken>" />
+                <p className="text-[12px] text-zinc-500 mt-3">
+                  Without a token, an endpoint that needs one answers 401{' '}
+                  <InlineCode>{SIGN_IN_REQUIRED}</InlineCode>. With an invalid or expired one, it
+                  answers 401 <InlineCode>{BAD_TOKEN}</InlineCode>. (<InlineCode>GET /api/v1/auth/me</InlineCode>{' '}
+                  answers just <InlineCode>Unauthorized</InlineCode>.)
+                </p>
+              </div>
+              <div className="p-4 rounded-lg bg-zinc-900/50 border border-zinc-800">
+                <h3 className="text-[14px] font-semibold text-zinc-200 mb-2">API key</h3>
+                <p className="text-[12px] text-zinc-500 mb-3">
+                  Made on the <Link href="/developer" className="text-amber-400 hover:text-amber-300">API keys page</Link> and
+                  shown once. Every key starts with <InlineCode>{KEY_PREFIX}</InlineCode>, whatever its tier.{' '}
+                  <InlineCode>{`Authorization: Bearer ${KEY_PREFIX}…`}</InlineCode> works too.
+                </p>
+                <CodeBlock language="http" code={`${API_KEY_HEADER}: ${KEY_PREFIX}xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`} />
+                <p className="text-[12px] text-zinc-500 mt-3">
+                  Without a valid key, an endpoint that takes one answers 401.
+                </p>
+              </div>
+            </div>
 
-            <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {[
-                {
-                  tier: 'Free',
-                  prefix: 'wp_free_',
-                  description: 'Public data access, rate-limited.',
-                  colour: 'border-zinc-700',
-                  badge: 'text-zinc-400 bg-zinc-800',
-                },
-                {
-                  tier: 'Pro',
-                  prefix: 'wp_live_',
-                  description: 'Full signal feed, search, and webhooks.',
-                  colour: 'border-amber-500/40',
-                  badge: 'text-amber-400 bg-amber-500/10',
-                },
-                {
-                  tier: 'Enterprise',
-                  prefix: 'wp_ent_',
-                  description: 'Unlimited access + dedicated support.',
-                  colour: 'border-cyan-500/40',
-                  badge: 'text-cyan-400 bg-cyan-500/10',
-                },
-              ].map((t) => (
-                <div
-                  key={t.tier}
-                  className={`p-4 rounded-lg bg-zinc-900/50 border ${t.colour}`}
-                >
-                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded ${t.badge}`}>
-                    {t.tier}
-                  </span>
-                  <code className="block mt-2 mb-1 text-[12px] font-mono text-zinc-400">
-                    {t.prefix}•••
-                  </code>
-                  <p className="text-[12px] text-zinc-500">{t.description}</p>
-                </div>
-              ))}
+            <div className="mt-6">
+              <SubHeading>Endpoints that take an API key</SubHeading>
+              <EndpointList endpoints={API_KEY_ENDPOINTS} />
+            </div>
+
+            <div className="mt-6">
+              <SubHeading>Some of the endpoints that take a sign-in token</SubHeading>
+              <EndpointList endpoints={SIGN_IN_ENDPOINTS} />
+              <p className="mt-2 text-[12px] text-zinc-500">
+                The <a href={INTERACTIVE_DOCS_URL} className="text-amber-400 hover:text-amber-300">interactive docs</a> mark
+                every endpoint that needs one.
+              </p>
+            </div>
+
+            <div className="mt-6">
+              <SubHeading>API key tiers</SubHeading>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {KEY_TIERS.map((t) => (
+                  <div key={t.tier} className="p-4 rounded-lg bg-zinc-900/50 border border-zinc-800">
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded text-zinc-300 bg-zinc-800">
+                      {t.tier}
+                    </span>
+                    <code className="block mt-2 mb-1 text-[12px] font-mono text-zinc-400">
+                      {KEY_PREFIX}•••
+                    </code>
+                    <p className="text-[12px] text-zinc-500">{t.who}. {t.opens}.</p>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="mt-4 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 text-[12px] text-amber-300/80">
-              <strong className="font-semibold">Note:</strong> Never expose API keys in client-side
-              code or public repositories. Use environment variables on your server.
+              <strong className="font-semibold">Note:</strong> Never expose API keys or sign-in tokens in
+              client-side code or public repositories. Use environment variables on your server.
             </div>
           </Section>
 
           {/* ── Rate Limits ─────────────────────────────────────────────── */}
           <Section id="rate-limits" title="Rate Limits">
+            <p className="text-[13px] text-zinc-400 mb-3">
+              Requests are counted per client address, whatever credential they carry. Endpoints
+              without a limit of their own share one budget: {DEFAULT_PER_MINUTE} requests a minute.
+              Many endpoints have a limit of their own, counted for that endpoint alone. Here are some;
+              the <a href={INTERACTIVE_DOCS_URL} className="text-amber-400 hover:text-amber-300">interactive docs</a> give
+              each endpoint&apos;s own limit.
+            </p>
             <p className="text-[13px] text-zinc-400 mb-6">
-              Rate limits are enforced per API key. Exceeding them returns a{' '}
-              <code className="font-mono text-amber-400 text-[12px]">429 Too Many Requests</code>{' '}
-              response with a{' '}
+              Past a limit the API answers <InlineCode>429 Too Many Requests</InlineCode> with the code{' '}
+              <InlineCode>RATE_LIMITED</InlineCode> and a{' '}
               <code className="font-mono text-zinc-300 text-[12px]">Retry-After</code> header.
             </p>
 
@@ -532,336 +459,207 @@ export default function ApiDocsPage() {
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="bg-zinc-900 border-b border-zinc-800">
-                    <th className="text-left px-4 py-3 text-zinc-400 font-medium">Plan</th>
+                    <th className="text-left px-4 py-3 text-zinc-400 font-medium">Endpoint</th>
                     <th className="text-left px-4 py-3 text-zinc-400 font-medium">Requests / min</th>
-                    <th className="text-left px-4 py-3 text-zinc-400 font-medium">Requests / day</th>
-                    <th className="text-left px-4 py-3 text-zinc-400 font-medium">WebSocket streams</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="border-b border-zinc-800/60">
-                    <td className="px-4 py-3 text-zinc-300 font-medium">Free</td>
-                    <td className="px-4 py-3 font-mono text-zinc-400">60</td>
-                    <td className="px-4 py-3 font-mono text-zinc-400">1,000</td>
-                    <td className="px-4 py-3 text-zinc-500">—</td>
-                  </tr>
-                  <tr className="border-b border-zinc-800/60">
-                    <td className="px-4 py-3 text-amber-400 font-medium">Pro</td>
-                    <td className="px-4 py-3 font-mono text-zinc-400">300</td>
-                    <td className="px-4 py-3 font-mono text-zinc-400">10,000</td>
-                    <td className="px-4 py-3 text-zinc-400">5 concurrent</td>
-                  </tr>
+                  {ROUTE_LIMITS.map(r => (
+                    <tr key={`${r.method} ${r.path}`} className="border-b border-zinc-800/60">
+                      <td className="px-4 py-2.5 font-mono text-[12px] text-zinc-300">{`${r.method} ${r.path}`}</td>
+                      <td className="px-4 py-2.5 font-mono text-zinc-400">{r.perMinute}</td>
+                    </tr>
+                  ))}
                   <tr>
-                    <td className="px-4 py-3 text-cyan-400 font-medium">Enterprise</td>
-                    <td className="px-4 py-3 font-mono text-zinc-400">Unlimited</td>
-                    <td className="px-4 py-3 font-mono text-zinc-400">Unlimited</td>
-                    <td className="px-4 py-3 text-zinc-400">Unlimited</td>
+                    <td className="px-4 py-2.5 text-zinc-300">Every endpoint without a limit of its own (one budget, shared)</td>
+                    <td className="px-4 py-2.5 font-mono text-zinc-400">{DEFAULT_PER_MINUTE}</td>
                   </tr>
                 </tbody>
               </table>
             </div>
 
+            <p className="mt-4 text-[12px] text-zinc-500">
+              An API key also records its tier&apos;s limits ({KEY_RECORDED_LIMITS.map(l =>
+                `${l.tier}: ${l.perMinute.toLocaleString('en-US')} a minute and ${l.perDay.toLocaleString('en-US')} a day`).join('; ')}),
+              which <InlineCode>GET /api/v1/developer/keys</InlineCode> shows, but requests aren&apos;t
+              counted against them yet: the per-address limits above apply to every request.
+            </p>
+
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {[
-                { header: 'X-RateLimit-Limit', desc: 'Max requests allowed in the current window' },
-                { header: 'X-RateLimit-Remaining', desc: 'Requests remaining in this window' },
-                { header: 'X-RateLimit-Reset', desc: 'Unix timestamp when the window resets' },
-                { header: 'Retry-After', desc: 'Seconds to wait before retrying (429 only)' },
-              ].map((h) => (
+              {RATE_LIMIT_HEADERS.map((h) => (
                 <div key={h.header} className="p-3 rounded-lg bg-zinc-900/50 border border-zinc-800">
                   <code className="text-[12px] font-mono text-amber-400">{h.header}</code>
-                  <p className="text-[12px] text-zinc-500 mt-0.5">{h.desc}</p>
+                  <p className="text-[12px] text-zinc-500 mt-0.5">{h.description}</p>
                 </div>
               ))}
             </div>
           </Section>
 
-          {/* ── Public Endpoints ─────────────────────────────────────────── */}
-          <Section id="public-endpoints" title="Public Endpoints">
+          {/* ── Open Endpoints ───────────────────────────────────────────── */}
+          <Section id="public-endpoints" title="Open Endpoints">
+            <p className="text-[13px] text-zinc-400 mb-3">
+              These need no sign-in or key. CORS only limits web pages: a server or an app can call
+              any endpoint, but a web page on another site can read only these from the visitor&apos;s
+              browser: the reads (GET) under <InlineCode>/api/v1/public</InlineCode>, <InlineCode>/signals</InlineCode>,{' '}
+              <InlineCode>/stories</InlineCode>, <InlineCode>/countries</InlineCode>,{' '}
+              <InlineCode>/search</InlineCode> and <InlineCode>/rss</InlineCode>, the global and trending
+              feeds, the WebSocket and the MCP server.
+            </p>
             <p className="text-[13px] text-zinc-400 mb-6">
-              Public endpoints require no authentication and are suitable for embedding
-              WorldPulse data in public-facing applications. Cached responses include an{' '}
-              <code className="font-mono text-amber-400 text-[12px]">X-Cache-Hit: true</code> header.
+              <InlineCode>/public/signals</InlineCode> answers from its 30-second cache carry{' '}
+              <InlineCode>X-Cache-Hit: true</InlineCode>.
             </p>
 
             {/* GET /public/signals */}
             <div className="mb-8">
               <EndpointRow
                 method="GET"
-                path="GET /public/signals"
-                description="Paginated list of recent verified signals, publicly accessible."
+                path="/api/v1/public/signals"
+                description="Verified signals, newest first. reliability_score is a number from 0 to 1; total counts every match, an estimate while total_exact is false."
               />
 
               <div className="mt-5">
-                <h3 className="text-[13px] font-semibold text-zinc-300 mb-3">Query Parameters</h3>
-                <div className="overflow-x-auto rounded-lg border border-zinc-800">
-                  <table className="w-full text-[13px]">
-                    <thead>
-                      <tr className="bg-zinc-900 border-b border-zinc-800">
-                        <th className="text-left px-3 py-2 text-zinc-500 font-medium">Parameter</th>
-                        <th className="text-left px-3 py-2 text-zinc-500 font-medium">Type</th>
-                        <th className="text-left px-3 py-2 text-zinc-500 font-medium">Description</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <ParamRow name="category" type="string" description="Filter by category: conflict, climate, economy, health, technology" />
-                      <ParamRow name="severity" type="string" description="Filter by severity: low, medium, high, critical" />
-                      <ParamRow name="limit" type="integer" description="Number of results (default: 20, max: 100)" />
-                      <ParamRow name="offset" type="integer" description="Pagination offset (default: 0)" />
-                    </tbody>
-                  </table>
-                </div>
+                <SubHeading>Query Parameters</SubHeading>
+                <ParamTable first="Parameter" rows={PUBLIC_SIGNALS_PARAMS} />
               </div>
 
               <div className="mt-5">
-                <h3 className="text-[13px] font-semibold text-zinc-300 mb-3">Response Shape</h3>
-                <CodeBlock
-                  language="json"
-                  code={`{
-  "success": true,
-  "data": [
-    {
-      "id": "sig_abc123",
-      "title": "Flooding reported across southern regions",
-      "category": "climate",
-      "severity": "high",
-      "reliability_score": 0.87,
-      "location_name": "Bangladesh",
-      "published_at": "2026-03-30T14:22:00Z",
-      "source_url": "https://reuters.com/..."
-    }
-  ],
-  "total": 284,
-  "limit": 20,
-  "offset": 0
-}`}
-                />
-                <p className="mt-2 text-[12px] text-zinc-500">
-                  When served from Redis cache: response includes{' '}
-                  <code className="font-mono text-amber-400">X-Cache-Hit: true</code> header.
-                </p>
+                <SubHeading>Response Shape</SubHeading>
+                <CodeBlock language="json" code={PUBLIC_SIGNALS_RESPONSE} />
               </div>
 
               <div className="mt-5">
-                <h3 className="text-[13px] font-semibold text-zinc-300 mb-3">Code Examples</h3>
+                <SubHeading>Code Examples</SubHeading>
                 <TabbedCodeExample examples={PUBLIC_SIGNALS_EXAMPLES} />
               </div>
             </div>
+
+            <div>
+              <SubHeading>Also open</SubHeading>
+              <EndpointList endpoints={OTHER_OPEN_ENDPOINTS} />
+            </div>
           </Section>
 
-          {/* ── Authenticated Endpoints ──────────────────────────────────── */}
-          <Section id="authenticated-endpoints" title="Authenticated Endpoints">
-            <p className="text-[13px] text-zinc-400 mb-6">
-              These endpoints require a valid API key in the{' '}
-              <code className="font-mono text-amber-400 text-[12px]">Authorization</code> header.
-              Pro and Enterprise keys unlock the full signal feed with enrichment data.
+          {/* ── MCP server (apps/api/src/routes/mcp.ts) ─────────────────── */}
+          <Section id="mcp" title="AI Assistants (MCP)">
+            <p className="text-[13px] text-zinc-400 mb-4">
+              An MCP server (Model Context Protocol) lets AI assistants such as Claude ask WorldPulse.
+              It is open like the endpoints above: no sign-in or key, and it only reads. It is not
+              under <InlineCode>/api/v1</InlineCode>.
             </p>
 
-            {/* GET /feed/signals */}
-            <div className="mb-8 pb-8 border-b border-zinc-800/50">
-              <EndpointRow
-                method="GET"
-                path="GET /feed/signals"
-                description="Authenticated live signal feed with enrichment metadata."
-              />
-              <p className="mt-3 text-[12px] text-zinc-500">
-                Returns the same shape as{' '}
-                <code className="font-mono text-amber-400">/public/signals</code> with additional
-                fields: <code className="font-mono text-zinc-400">enrichment</code>,{' '}
-                <code className="font-mono text-zinc-400">related_signals</code>,{' '}
-                <code className="font-mono text-zinc-400">reliability_breakdown</code>.
-                For real-time delivery, use the{' '}
-                <button
-                  onClick={() => scrollToSection('websocket')}
-                  className="text-amber-400 hover:text-amber-300 underline underline-offset-2"
-                >
-                  WebSocket API
-                </button>.
-              </p>
-              <div className="mt-4">
-                <TabbedCodeExample examples={FEED_SIGNALS_EXAMPLES} />
-              </div>
+            <div className="flex items-center gap-3 p-3 mb-4 rounded-lg bg-zinc-900/60 border border-zinc-800">
+              <MethodBadge method="POST" />
+              <code className="text-[13px] font-mono text-zinc-200 break-all">{MCP_URL}</code>
             </div>
 
-            {/* GET /signals/:id */}
-            <div className="mb-8 pb-8 border-b border-zinc-800/50">
-              <EndpointRow
-                method="GET"
-                path="GET /signals/:id"
-                description="Single signal with full enrichment, related signals, and source metadata."
-              />
-              <div className="mt-4">
-                <TabbedCodeExample examples={SIGNAL_DETAIL_EXAMPLES} />
-              </div>
-            </div>
+            <p className="text-[12px] text-zinc-500 mb-4">
+              Each POST carries one JSON-RPC 2.0 message, or a batch of up to 20. Its tools:{' '}
+              {MCP_TOOLS.map((t, i) => (
+                <span key={t}>{i > 0 && (i === MCP_TOOLS.length - 1 ? ' and ' : ', ')}<InlineCode>{t}</InlineCode></span>
+              ))}. Each tool asks the API&apos;s own open endpoints (the top stories, one story, search by
+              meaning, the week, and the story of a news link), and those calls count against your limits
+              on them too. How to connect Claude, Claude Code or Cursor is on the{' '}
+              <Link href={MCP_GUIDE} className="text-amber-400 hover:text-amber-300">developer page</Link>.
+            </p>
 
-            {/* GET /search */}
-            <div className="mb-2">
-              <EndpointRow
-                method="GET"
-                path="GET /search?q="
-                description="Semantic + keyword hybrid search across all verified signals."
-              />
-              <div className="mt-4 overflow-x-auto rounded-lg border border-zinc-800">
-                <table className="w-full text-[13px]">
-                  <thead>
-                    <tr className="bg-zinc-900 border-b border-zinc-800">
-                      <th className="text-left px-3 py-2 text-zinc-500 font-medium">Parameter</th>
-                      <th className="text-left px-3 py-2 text-zinc-500 font-medium">Type</th>
-                      <th className="text-left px-3 py-2 text-zinc-500 font-medium">Description</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <ParamRow name="q" type="string" required description="Search query (semantic + keyword)" />
-                    <ParamRow name="category" type="string" description="Narrow results to a category" />
-                    <ParamRow name="limit" type="integer" description="Results per page (default: 20, max: 50)" />
-                  </tbody>
-                </table>
-              </div>
-              <div className="mt-4">
-                <TabbedCodeExample examples={SEARCH_EXAMPLES} />
-              </div>
-            </div>
+            <CodeBlock language="bash" code={MCP_EXAMPLE} />
           </Section>
 
           {/* ── Webhooks ──────────────────────────────────────────────────── */}
           <Section id="webhooks" title="Webhooks">
             <p className="text-[13px] text-zinc-400 mb-6">
-              Register a webhook URL to receive real-time push notifications when signals
-              match your filters. WorldPulse signs each delivery with an{' '}
-              <code className="font-mono text-amber-400 text-[12px]">X-WP-Signature</code> header
-              (HMAC-SHA256 of the raw body).
+              Register a URL and WorldPulse POSTs to it when a new signal is saved or a breaking
+              alert fires. Webhooks are managed with a sign-in token (not an API key), up to{' '}
+              {MAX_WEBHOOKS} active per account (registering one more answers 429). Each delivery is
+              signed with the webhook&apos;s secret in the <InlineCode>X-WorldPulse-Signature</InlineCode> header.
             </p>
 
-            <EndpointRow
-              method="POST"
-              path="POST /developer/webhooks"
-              description="Register a new webhook endpoint."
-            />
+            <EndpointList endpoints={WEBHOOK_ENDPOINTS} />
 
             <div className="mt-5">
-              <h3 className="text-[13px] font-semibold text-zinc-300 mb-3">Supported Events</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                {[
-                  { event: 'signal.new', desc: 'A new signal is ingested and verified' },
-                  { event: 'signal.updated', desc: 'Reliability score or category changes' },
-                  { event: 'alert.breaking', desc: 'Critical severity signal detected' },
-                ].map((e) => (
-                  <div
-                    key={e.event}
-                    className="p-3 rounded-lg bg-zinc-900/50 border border-zinc-800"
-                  >
-                    <code className="text-[12px] font-mono text-amber-400">{e.event}</code>
-                    <p className="text-[11px] text-zinc-500 mt-1">{e.desc}</p>
-                  </div>
-                ))}
-              </div>
+              <SubHeading>Registering</SubHeading>
+              <ParamTable first="Field" rows={WEBHOOK_BODY_FIELDS} />
             </div>
 
             <div className="mt-5">
-              <h3 className="text-[13px] font-semibold text-zinc-300 mb-3">Filters</h3>
-              <div className="overflow-x-auto rounded-lg border border-zinc-800">
-                <table className="w-full text-[13px]">
-                  <thead>
-                    <tr className="bg-zinc-900 border-b border-zinc-800">
-                      <th className="text-left px-3 py-2 text-zinc-500 font-medium">Field</th>
-                      <th className="text-left px-3 py-2 text-zinc-500 font-medium">Type</th>
-                      <th className="text-left px-3 py-2 text-zinc-500 font-medium">Description</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <ParamRow name="category" type="string[]" description="Only deliver events for these categories" />
-                    <ParamRow name="severity" type="string[]" description="Only deliver events matching severity levels" />
-                    <ParamRow name="country_code" type="string[]" description="ISO 3166-1 alpha-2 country codes to filter by location" />
-                  </tbody>
-                </table>
-              </div>
+              <SubHeading>Events</SubHeading>
+              <NameList items={WEBHOOK_EVENTS.map(e => ({ name: e.event, description: e.description }))} />
+              <p className="mt-2 text-[12px] text-zinc-500">
+                <InlineCode>signal.updated</InlineCode> is accepted when registering, but nothing sends it yet.
+              </p>
             </div>
 
             <div className="mt-5">
-              <h3 className="text-[13px] font-semibold text-zinc-300 mb-3">Code Examples</h3>
+              <SubHeading>Filters</SubHeading>
+              <ParamTable first="Field" rows={WEBHOOK_FILTERS} />
+              <p className="mt-2 text-[12px] text-zinc-500">
+                A delivery is sent only when the event&apos;s data matches every filter you set.
+              </p>
+            </div>
+
+            <div className="mt-5">
+              <SubHeading>Code Examples</SubHeading>
               <TabbedCodeExample examples={WEBHOOK_EXAMPLES} />
             </div>
 
             <div className="mt-5">
-              <h3 className="text-[13px] font-semibold text-zinc-300 mb-3">Payload Shape</h3>
-              <CodeBlock
-                language="json"
-                code={`{
-  "event": "signal.new",
-  "timestamp": "2026-03-30T14:22:00Z",
-  "data": {
-    "id": "sig_abc123",
-    "title": "Flooding reported across southern regions",
-    "category": "climate",
-    "severity": "high",
-    "reliability_score": 0.87,
-    "location_name": "Bangladesh",
-    "published_at": "2026-03-30T14:22:00Z"
-  }
-}`}
-              />
+              <SubHeading>Each delivery</SubHeading>
+              <p className="text-[12px] text-zinc-500 mb-3">
+                A POST with a JSON body: the event and its data (for <InlineCode>alert.breaking</InlineCode>,
+                the alert: alertId, signalId, title, severity, category, locationName, countryCode,
+                sourceUrl, timestamp, expiresAt). WorldPulse waits up to 10 seconds for your server
+                and doesn&apos;t retry; the deliveries endpoint shows how each one went.
+              </p>
+              <NameList items={WEBHOOK_HEADERS.map(h => ({ name: h.header, description: h.description }))} />
+              <div className="mt-3">
+                <CodeBlock language="json" code={WEBHOOK_DELIVERY} />
+              </div>
+            </div>
+
+            <div className="mt-5">
+              <SubHeading>Checking the signature</SubHeading>
+              <TabbedCodeExample examples={WEBHOOK_VERIFY_EXAMPLES} />
             </div>
           </Section>
 
           {/* ── WebSocket ────────────────────────────────────────────────── */}
           <Section id="websocket" title="WebSocket">
             <p className="text-[13px] text-zinc-400 mb-4">
-              Subscribe to a live stream of signals without polling. The WebSocket endpoint
-              pushes events as they are ingested and verified — typically within 2–5 seconds
-              of source publication.
+              A live stream of new signals and alerts without polling. No sign-in needed (API keys
+              aren&apos;t read here). Messages are JSON:{' '}
+              <InlineCode>{'{ event, data, timestamp, id }'}</InlineCode>; the server&apos;s pings carry
+              only <InlineCode>event</InlineCode> and <InlineCode>data</InlineCode>. The server doesn&apos;t
+              reconnect for you: when the connection closes, open a new one after a short wait.
             </p>
 
             <div className="flex items-center gap-3 p-3 mb-6 rounded-lg bg-zinc-900/60
               border border-cyan-500/20">
               <MethodBadge method="WS" />
-              <code className="text-[13px] font-mono text-zinc-200">
-                wss://api.world-pulse.io/ws
-              </code>
+              <code className="text-[13px] font-mono text-zinc-200">{WS_URL}</code>
             </div>
 
             <div className="mt-5">
-              <h3 className="text-[13px] font-semibold text-zinc-300 mb-3">Available Channels</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {[
-                  { channel: 'signals:global', desc: 'All verified signals worldwide' },
-                  { channel: 'signals:breaking', desc: 'Critical severity signals only' },
-                  { channel: 'alerts:breaking', desc: 'Breaking alert notifications' },
-                  { channel: 'signals:{category}', desc: 'Category-scoped stream (e.g. signals:conflict)' },
-                ].map((c) => (
-                  <div key={c.channel} className="p-3 rounded-lg bg-zinc-900/50 border border-zinc-800">
-                    <code className="text-[12px] font-mono text-cyan-400">{c.channel}</code>
-                    <p className="text-[11px] text-zinc-500 mt-1">{c.desc}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="mt-5">
-              <h3 className="text-[13px] font-semibold text-zinc-300 mb-3">Message Types</h3>
+              <SubHeading>Events</SubHeading>
               <div className="space-y-2">
-                {[
-                  { type: 'subscribe', dir: 'Client → Server', desc: 'Subscribe to one or more channels' },
-                  { type: 'unsubscribe', dir: 'Client → Server', desc: 'Unsubscribe from channels' },
-                  { type: 'ping', dir: 'Client → Server', desc: 'Keepalive ping (server responds with pong)' },
-                  { type: 'signal.new', dir: 'Server → Client', desc: 'New signal ingested' },
-                  { type: 'signal.updated', dir: 'Server → Client', desc: 'Signal reliability or metadata changed' },
-                  { type: 'alert.breaking', dir: 'Server → Client', desc: 'Breaking alert triggered' },
-                ].map((m) => (
-                  <div key={m.type} className="flex items-center gap-3 px-3 py-2
+                {WS_EVENTS.map((m) => (
+                  <div key={m.event} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 px-3 py-2
                     rounded bg-zinc-900/40 border border-zinc-800/60">
-                    <code className="text-[12px] font-mono text-amber-400 w-28 flex-shrink-0">
-                      {m.type}
-                    </code>
-                    <span className="text-[11px] text-zinc-600 w-32 flex-shrink-0">{m.dir}</span>
-                    <span className="text-[12px] text-zinc-400">{m.desc}</span>
+                    <code className="text-[12px] font-mono text-amber-400 sm:w-32 flex-shrink-0">{m.event}</code>
+                    <span className="text-[12px] text-zinc-400 flex-1">{m.description}</span>
+                    <span className="text-[11px] text-zinc-600 sm:w-56 flex-shrink-0">{m.reaches}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             <div className="mt-5">
-              <h3 className="text-[13px] font-semibold text-zinc-300 mb-3">Code Examples</h3>
+              <SubHeading>What you can send</SubHeading>
+              <NameList items={WS_CLIENT_MESSAGES.map(m => ({ name: m.message, description: m.description }))} />
+            </div>
+
+            <div className="mt-5">
+              <SubHeading>Code Examples</SubHeading>
               <TabbedCodeExample examples={WEBSOCKET_EXAMPLES} />
             </div>
           </Section>
@@ -872,10 +670,11 @@ export default function ApiDocsPage() {
               Ready to start building?
             </h3>
             <p className="text-[13px] text-zinc-400 mb-5">
-              Generate your API key and start querying live global intelligence signals in minutes.
+              The open endpoints work right away. Make an API key for the STIX export and the
+              content-farm checks.
             </p>
             <Link
-              href="/settings"
+              href="/developer"
               className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg font-semibold
                 bg-amber-500 text-zinc-950 hover:bg-amber-400 transition-colors"
             >
