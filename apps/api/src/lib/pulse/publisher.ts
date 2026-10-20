@@ -111,6 +111,9 @@ const SUMMARY_COLUMNS = `id, title, summary, category, severity, reliability_sco
  * ranked by severity, then verified first, then by outlets and reliability.
  * Without the story ids the morning briefing could get the same story many
  * times over (Oct 11, 2026: 67 outlets reported the Riyadh airport attack).
+ * News only (editorial standards, check 5): low-severity culture, sports and
+ * "other" are left out, as the map leaves them out of "All topics", so a quiet
+ * day's briefing is never filled out with a book list or a match report.
  */
 export async function getTopSignals(hours: number, limit = 20): Promise<SignalSummary[]> {
   const since = new Date(Date.now() - hours * 3600_000)
@@ -119,6 +122,7 @@ export async function getTopSignals(hours: number, limit = 20): Promise<SignalSu
        SELECT DISTINCT ON (COALESCE(story_id, id)) ${SUMMARY_COLUMNS}
          FROM signals
         WHERE status IN ('verified', 'pending') AND created_at > ?
+          AND NOT (category::text IN ('other', 'culture', 'sports') AND COALESCE(severity::text, 'low') IN ('low', 'info'))
         ORDER BY COALESCE(story_id, id), source_count DESC NULLS LAST, reliability_score DESC NULLS LAST
      ) AS story
      ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 ELSE 5 END,

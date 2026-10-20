@@ -27,6 +27,11 @@ describe('the stories the digest reads', () => {
     expect(params![1]).toBe(30)
   })
 
+  it('reads news only: no low-severity culture, sports or "other" (editorial standards, check 5)', async () => {
+    await getTopSignals(24, 30)
+    expect(h.raws[0]!.sql).toMatch(/AND NOT \(category::text IN \('other', 'culture', 'sports'\) AND COALESCE\(severity::text, 'low'\) IN \('low', 'info'\)\)/)
+  })
+
   it('briefs a story once a day, not once per outlet', async () => {
     await getCriticalSignals(15)
     const { sql } = h.raws[0]!
