@@ -8,9 +8,9 @@ const PATENTS_CACHE_TTL    = 300  // 5 min cache
 const TIMELINE_CACHE_TTL   = 600  // 10 min cache
 /**
  * The dashboard answered 500 on Oct 20, 2026: its four reads of 30 days of
- * reports (patents are found by tag or by "patent" in the headline, which no
- * index covers) passed the pool's 5 seconds. It is now made under its own
- * longer limit and served while one process remakes it, for up to 6 hours.
+ * reports passed the pool's 5 seconds. They now find patents by their tag
+ * only (the tags have an index), under their own longer limit, and the
+ * dashboard is served while one process remakes it, for up to 6 hours.
  */
 const PATENTS_QUERY_SECONDS = 25
 
@@ -199,14 +199,13 @@ export const registerPatentRoutes: FastifyPluginAsync = async (app) => {
 
           const since = new Date(Date.now() - windowHours * 3600_000).toISOString()
 
-          // Base query builder — patent signals matched by tags or title
+          // Base query builder — patent signals, by their tag. (Until Oct 20, 2026
+          // also any headline with "patent" in it: news about patents, not
+          // filings, and no index covers it, so each of the four reads scanned
+          // the month and the dashboard passed even a 25-second limit.)
           const baseWhere = (qb: ReturnType<typeof db>) => {
             qb.where('created_at', '>=', since)
-              .where(function (this: ReturnType<typeof db>) {
-                this.whereRaw("tags @> ARRAY['patent']::text[]")
-                  .orWhere('title', 'like', '%Patent%')
-                  .orWhere('title', 'like', '%patent%')
-              })
+              .whereRaw("tags @> ARRAY['patent']::text[]")
             if (severity) {
               qb.where('severity', severity)
             }
