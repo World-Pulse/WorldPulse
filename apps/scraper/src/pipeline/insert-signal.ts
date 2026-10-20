@@ -90,6 +90,13 @@ export interface CorrelationMeta {
   sourceName?: string
   /** URL-safe source slug for health tracking (defaults to sourceId) */
   sourceSlug?: string
+  /**
+   * The news article this signal is, for news readers only: one stored
+   * report per article address, whichever reader gets to it first (H-0014;
+   * dedup.claimArticle). Not for sensor or alert sources, whose many events
+   * can share one page.
+   */
+  articleUrl?: string | null
 }
 
 /**
@@ -139,6 +146,27 @@ export async function insertAndCorrelate(
   const rawTitle     = String(signalData.title ?? '')
   const rawTags      = Array.isArray(signalData.tags) ? signalData.tags as string[] : []
 
+  // 0. One report per news article (H-0014): the other news reader
+  //    (processArticleGroup in index.ts) may be storing this same article, or
+  //    hold it already. Then nothing is stored: it's the same article from
+  //    the same website, not another outlet.
+  let articleClaim: { key: string; seen: string | null } | null = null
+  if (meta.articleUrl) {
+    articleClaim = await dedup.claimArticle(meta.articleUrl).catch(() => null)
+    if (articleClaim && articleClaim.seen !== null) {
+      logger.debug({ title: rawTitle.slice(0, 80), heldBy: articleClaim.seen }, 'Article already stored by the other news reader — skipping insert')
+      recordSuccess(meta.sourceId, meta.sourceName ?? meta.sourceId, meta.sourceSlug ?? meta.sourceId, undefined, 1).catch(() => {})
+      return { id: null, title: rawTitle, _skipped: true } as any
+    }
+  }
+  /** Who holds the claimed article in the end: a report's id, or nobody (the claim is let go) */
+  const settleArticle = async (heldBy: string | null): Promise<void> => {
+    if (!articleClaim) return
+    const claim = articleClaim
+    articleClaim = null
+    await (heldBy ? dedup.rememberArticle(claim.key, heldBy) : dedup.releaseArticle(claim.key)).catch(() => {})
+  }
+
   // 0a. Cross-source event dedup — skip if a very similar signal was already
   //     inserted within the last 6 hours. This prevents the same earthquake,
   //     fire, or conflict report from appearing multiple times in the feed
@@ -149,9 +177,11 @@ export async function insertAndCorrelate(
     const { key, seen } = await dedup.claimCrossSource(rawTitle, rawCategory)
     crossSourceKey = key
     if (seen !== null) {
+      // The held signal takes this article's link when the article corroborates it
+      let corroborated = false
       if (SIGNAL_ID_RE.test(seen)) {
         const urls = Array.isArray(signalData.original_urls) ? signalData.original_urls : []
-        corroborateWithDuplicate(seen, {
+        corroborated = await corroborateWithDuplicate(seen, {
           title:        rawTitle,
           category:     rawCategory,
           severity:     rawSeverity,
@@ -160,8 +190,10 @@ export async function insertAndCorrelate(
           lat:          meta.lat ?? null,
           lng:          meta.lng ?? null,
           published_at: publishedAtFor(signalData.event_time),
-        }).catch(err => logger.warn({ err, signalId: seen }, 'Duplicate corroboration failed (non-fatal)'))
+        }).catch(err => { logger.warn({ err, signalId: seen }, 'Duplicate corroboration failed (non-fatal)'); return false })
       }
+      // so that signal holds the article; otherwise the other reader may still store it
+      await settleArticle(corroborated ? seen : null)
       logger.debug({ title: rawTitle.slice(0, 80), category: rawCategory }, 'Cross-source duplicate — skipping insert')
       // Still record source health so the source appears active
       recordSuccess(
@@ -225,13 +257,20 @@ export async function insertAndCorrelate(
   }
 
   // 1. Insert the signal
-  const [signal] = await db('signals').insert(signalWithTier).returning('*')
+  let signal: Record<string, any>
+  try {
+    ;[signal] = await db('signals').insert(signalWithTier).returning('*')
+  } catch (err) {
+    await settleArticle(null)
+    throw err
+  }
 
   // Remember which signal holds this event, so later reports of it from other
-  // outlets can corroborate it (see 0a)
+  // outlets can corroborate it (see 0a), and this article (see 0)
   if (crossSourceKey && signal?.id) {
     dedup.rememberCrossSource(crossSourceKey, String(signal.id)).catch(() => {})
   }
+  await settleArticle(signal?.id ? String(signal.id) : null)
 
   // 1a. Record source health so the stability tracker can see this source as active.
   //     Non-blocking — a health tracking failure must never fail signal insertion.

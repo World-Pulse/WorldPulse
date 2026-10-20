@@ -3194,11 +3194,12 @@ async function processItem(
       tags,
       language:          source.language,
       event_time:        eventTime,
-    }, { lat: geo.lat, lng: geo.lng, sourceId: source.id })
+    }, { lat: geo.lat, lng: geo.lng, sourceId: source.id, articleUrl: item.link || null })
 
     await redis.setex(key, DEDUP_TTL_S, '1')
 
-    if (signal && producer) {
+    // (a skipped duplicate has no id: nothing to announce)
+    if (signal?.id && producer) {
       await producer.send({
         topic:    'signals.verified',
         messages: [{

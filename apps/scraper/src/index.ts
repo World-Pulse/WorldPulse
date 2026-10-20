@@ -26,6 +26,7 @@ import { correlateSignal, confirmMergedArticle, RELIABILITY_CEILING } from './pi
 import type { CorrelationCandidate } from './pipeline/correlate'
 import { computeTrending } from './pipeline/trending'
 import { backfillUnprocessed } from './backfill'
+import { claimArticleGroup, type ArticleClaims } from './pipeline/article-claims'
 import { recordSuccess, recordFailure, recordCycleThroughput, logHealthSummary, detectDeadSources } from './health'
 import { createSemaphore } from './lib/concurrency'
 import { startSpan, startRootSpan } from './lib/tracer'
@@ -702,27 +703,45 @@ async function startVerificationConsumer() {
   })
 }
 
-async function processArticleGroup(
-  topicHash: string,
-  articles: Array<{
-    articleId: string
-    sourceId:  string
-    url:       string
-    title:     string
-    body:      string
-    publishedAt: string
-    sourceTier:  string
-    sourceTrust: number
-  }>
-) {
-  // Check if we already have a signal for this topic
-  const existing = await redis.get(`signal:topic:${topicHash}`)
-  
+interface RawArticle {
+  articleId: string
+  sourceId:  string
+  url:       string
+  title:     string
+  body:      string
+  publishedAt: string
+  sourceTier:  string
+  sourceTrust: number
+}
+
+async function processArticleGroup(topicHash: string, group: RawArticle[]) {
+  // One report per article address, whichever news reader gets to it first
+  // (H-0014): the newer reader, sources/news-rss.ts, reads some of the same
+  // feeds. An article it is storing right now is left out (and stays
+  // unprocessed, so the next start's backfill joins it to that report); one
+  // it holds already brings the group to its report.
+  const { articles, claims, heldBy } = await claimArticleGroup(group)
+  if (articles.length === 0) return
+  try {
+    await storeArticleGroup(topicHash, articles, heldBy, claims)
+  } finally {
+    await claims.release().catch(() => {})   // nothing stored: the other reader may store them
+  }
+}
+
+async function storeArticleGroup(topicHash: string, articles: RawArticle[], heldBy: string | null, claims: ArticleClaims) {
+  // Check if we already have a signal for this topic, or one that holds one of these articles
+  const topicHeld = await redis.get(`signal:topic:${topicHash}`)
+  const existing = heldBy ? JSON.stringify({ id: heldBy }) : topicHeld
+
   if (existing) {
     // Update existing signal with the outlets it doesn't have yet. An article
     // from an outlet already on the signal (or a sibling feed of it, same
     // website) is not another source.
     const signalId = JSON.parse(existing).id
+    await claims.keep(String(signalId)).catch(() => {})
+    // Later articles on this topic join that report too
+    if (heldBy && !topicHeld) await redis.set(`signal:topic:${topicHash}`, existing, 'EX', 86400, 'NX').catch(() => {})
     const held = await db('signals').where('id', signalId).first('title', 'source_ids', 'original_urls') as
       { title?: unknown; source_ids?: unknown; original_urls?: unknown } | undefined
     const heldUrls = (Array.isArray(held?.original_urls) ? held!.original_urls as unknown[] : []).map(String)
@@ -815,6 +834,8 @@ async function processArticleGroup(
   const [signal] = await db('signals')
     .insert(row)
     .returning('*')
+  // This report holds these articles now: the other reader won't store them again
+  await claims.keep(String(signal.id)).catch(() => {})
 
   // ── Gemini intelligence enrichment (async, non-blocking) ──
   if (geminiEnabled) {
