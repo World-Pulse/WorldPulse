@@ -25,8 +25,8 @@
  * answered 500. Their "named with" list compares every entity in the graph
  * with the entity's own reports (entity_nodes.signal_ids has no index), and as
  * the graph grew that passed the pool's 5 seconds. That list now reads the
- * entity's newest 300 reports of the 30 days and only entities seen since
- * then, under its own 12-second limit (lib/long-query.ts); if it still fails,
+ * entity's newest 100 reports of the 30 days and only entities seen since
+ * then, under its own 7-second limit (lib/long-query.ts); if it still fails,
  * the page shows everything else.
  */
 
@@ -47,10 +47,14 @@ export const STORY_DAYS = 14
 const STORIES_SHOWN = 10
 const LATEST_SHOWN = 8
 const CONNECTIONS_SHOWN = 12
-/** "Named with" reads at most this many of the entity's newest reports */
-export const CONNECTION_REPORTS = 300
-/** …and may take this long (the pool's limit is 5 seconds) */
-export const CONNECTION_SECONDS = 12
+/** "Named with" reads at most this many of the entity's newest reports (its cost grows with them) */
+export const CONNECTION_REPORTS = 100
+/**
+ * …and may take this long (the pool's limit is 5 seconds). The website gives
+ * the whole profile 10 seconds (lib/server-fetch.ts), so on a first view the
+ * list gives up in time for the page to show without it, instead of failing.
+ */
+export const CONNECTION_SECONDS = 7
 /** A profile is served while one process remakes it for this long after its 10 minutes */
 const PROFILE_STALE_S = 6 * 3_600
 

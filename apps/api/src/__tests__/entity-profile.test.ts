@@ -58,6 +58,10 @@ describe('"named with" (Oct 20, 2026: /entities/anwar-ibrahim-… answered 500)'
     expect(logger.warn).toHaveBeenCalled()
   })
 
+  it("gives up before the website's 10-second wait, so a first view shows the page without the list", () => {
+    expect(CONNECTION_SECONDS).toBeLessThan(10)
+  })
+
   it('asks nothing for an entity without reports', async () => {
     vi.mocked(longQuery).mockClear()
     expect(await connectionsOf('anwar', [], since)).toEqual([])
