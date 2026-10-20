@@ -14,9 +14,10 @@ import { sendError } from '../lib/errors'
 import { parseQuery, StoryListQuerySchema } from '../lib/query-schemas'
 import { signalsHaveStoryIds, hostOf } from '../lib/stories'
 import { rankStories, textArray, EVENT_TEMPLATE_SQL, type StoryCandidate, type ListedStory } from '../lib/story-list'
-import { staleWhileRevalidate } from '../lib/swr-cache'
+import { staleWhileRevalidate, keptAge, remakeNow, type SwrOptions } from '../lib/swr-cache'
 import { longQuery } from '../lib/long-query'
-import { isoWeekOf, parseWeek, weekBounds, weekName, type IsoWeek } from '../lib/week'
+import { isoWeekOf, parseWeek, weekBounds, weekName, previousWeek, type IsoWeek } from '../lib/week'
+import { logger } from '../lib/logger'
 import { entityDirectory } from '../lib/entity-directory'
 import { COUNTRY_NAMES } from './countries'
 
@@ -57,6 +58,19 @@ const SEVERITIES = ['info', 'low', 'medium', 'high', 'critical']
 const WEEK_STORIES = 15
 const WEEK_COUNTRIES = 12
 const WEEK_PEOPLE = 10
+/** The week under way: kept 15 minutes, then served for a day while one process remakes it */
+const CURRENT_WEEK_KEEP: SwrOptions = { freshSeconds: 900, staleSeconds: 24 * 3_600, lockSeconds: 2 * LIST_QUERY_SECONDS }
+/**
+ * A finished week hardly changes: kept a day, then served for 30 days while
+ * remade. Making one takes up to a minute (2026-W41: 42 s on Oct 20, 2026,
+ * when its page answered 500 after 20 s), so it is made in the background
+ * (warmWeeks), never while a visitor waits
+ */
+const FINISHED_WEEK_KEEP: SwrOptions = { freshSeconds: 24 * 3_600, staleSeconds: 30 * 86_400, lockSeconds: 2 * LIST_QUERY_SECONDS }
+/** The finished weeks kept made: the ones the website's sitemap lists */
+const WARM_FINISHED_WEEKS = 4
+/** How often warmWeeks looks (each look costs a Redis read per week when all are fresh) */
+const WARM_WEEKS_MS = 30 * 60_000
 
 const MEMBER_COLUMNS = `s.id, s.title, s.category::text AS category, s.status::text AS status,
          CASE s.severity::text WHEN 'critical' THEN 5 WHEN 'high' THEN 4 WHEN 'medium' THEN 3 WHEN 'low' THEN 2 ELSE 1 END AS sev_rank,
@@ -205,6 +219,104 @@ function candidatesOf(result: unknown): StoryCandidate[] {
   return candidates
 }
 
+export async function weekDigest(week: IsoWeek, underWay: boolean) {
+  const { start, end } = weekBounds(week)
+  const until = underWay ? new Date() : end
+  const hasStoryIds = await signalsHaveStoryIds()
+  const storyKey = hasStoryIds ? 'COALESCE(story_id, id)' : 'id'
+  const [stories, countryResult, directory] = await Promise.all([
+    longQuery(LIST_QUERY_SECONDS, trx => trx.raw(storyListSql(hasStoryIds, 'week'), [start, until, EVENT_TEMPLATE_SQL]))
+      .then(r => rankStories(candidatesOf(r), WEEK_STORIES, until.getTime(), { decay: false })),
+    longQuery(LIST_QUERY_SECONDS, trx => trx.raw(
+      `SELECT country_code AS code, count(DISTINCT ${storyKey})::int AS stories
+         FROM signals
+        WHERE status = 'verified' AND created_at >= ? AND created_at < ? AND country_code ~ '^[A-Z]{2}$'
+        GROUP BY 1 ORDER BY 2 DESC LIMIT ?`,
+      [start, until, WEEK_COUNTRIES + 4],
+    )),
+    underWay ? entityDirectory().catch(() => null) : Promise.resolve(null),
+  ])
+  const countryRows = ((countryResult as { rows?: Array<{ code: string; stories: number }> } | undefined)?.rows ?? [])
+  const countries = countryRows
+    .filter(r => r.code !== 'UK' && COUNTRY_NAMES[r.code])
+    .slice(0, WEEK_COUNTRIES)
+    .map(r => ({ code: r.code, name: COUNTRY_NAMES[r.code]!, stories: Number(r.stories) || 0 }))
+  const people = directory
+    ? (directory.groups.find(g => g.key === 'people')?.entities ?? []).slice(0, WEEK_PEOPLE).map(e => ({ id: e.id, name: e.name, reports: e.last7d }))
+    : null
+  return {
+    week: weekName(week),
+    start: start.toISOString(),
+    end: end.toISOString(),
+    underWay,
+    stories,
+    countries,
+    people,
+    generatedAt: new Date().toISOString(),
+  }
+}
+
+/** Where a week's digest is kept; the week under way is kept apart from the finished week it becomes */
+export function weekCacheKey(week: IsoWeek, underWay: boolean): string {
+  return `stories:week:v2:${weekName(week)}${underWay ? ':so-far' : ''}`
+}
+
+/**
+ * A week's digest as kept (GET /stories/week): the week under way, made
+ * while the caller waits if nothing is kept; a finished week, null while it
+ * is made in the background
+ */
+export async function keptWeek(week: IsoWeek, underWay: boolean): Promise<{ success: true; data: Awaited<ReturnType<typeof weekDigest>> } | null> {
+  const make = async () => ({ success: true as const, data: await weekDigest(week, underWay) })
+  return underWay
+    ? staleWhileRevalidate(weekCacheKey(week, true), CURRENT_WEEK_KEEP, make)
+    : staleWhileRevalidate<{ success: true; data: Awaited<ReturnType<typeof weekDigest>> } | null>(weekCacheKey(week, false), FINISHED_WEEK_KEEP, make, async () => null)
+}
+
+/**
+ * Keeps the week under way and the last 4 finished weeks (the ones the
+ * sitemap lists) made, one at a time, so no visitor or search engine waits
+ * for one: each is made again once it is no longer fresh. Returns the weeks
+ * it made.
+ */
+export async function warmWeeks(now = new Date()): Promise<string[]> {
+  const current = isoWeekOf(now)
+  const weeks: Array<{ week: IsoWeek; underWay: boolean }> = [{ week: current, underWay: true }]
+  let w = current
+  for (let i = 0; i < WARM_FINISHED_WEEKS; i++) { w = previousWeek(w); weeks.push({ week: w, underWay: false }) }
+  const made: string[] = []
+  for (const { week, underWay } of weeks) {
+    const key = weekCacheKey(week, underWay)
+    const keep = underWay ? CURRENT_WEEK_KEEP : FINISHED_WEEK_KEEP
+    const age = await keptAge(key)
+    if (age !== null && age < keep.freshSeconds) continue
+    const ok = await remakeNow(key, keep, async () => ({ success: true as const, data: await weekDigest(week, underWay) }))
+      .catch(err => { logger.warn({ err, week: weekName(week) }, 'Week digest could not be made (it is tried again later)'); return false })
+    if (ok) made.push(weekName(week))
+  }
+  return made
+}
+
+let warmTimer: ReturnType<typeof setInterval> | null = null
+
+/** warmWeeks a minute after start, then every 30 minutes */
+export function startWeekWarmer(): void {
+  if (warmTimer) return
+  const run = () => {
+    void warmWeeks()
+      .then(made => { if (made.length) logger.info({ weeks: made }, 'WorldPulse Week digests made') })
+      .catch(() => {})
+  }
+  setTimeout(run, 60_000).unref?.()
+  warmTimer = setInterval(run, WARM_WEEKS_MS)
+  warmTimer.unref?.()
+}
+
+export function stopWeekWarmer(): void {
+  if (warmTimer) clearInterval(warmTimer)
+  warmTimer = null
+}
+
 export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
   app.addHook('onRoute', (routeOptions) => {
     routeOptions.schema ??= {}
@@ -268,50 +380,14 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
     if (!week) return sendError(reply, 400, 'VALIDATION_ERROR', 'week must be an ISO week like 2026-W43')
     if (weekBounds(week).start.getTime() > now.getTime()) return sendError(reply, 404, 'NOT_FOUND', 'That week has not started yet')
     const underWay = weekName(week) === weekName(current)
-    const response = await staleWhileRevalidate(
-      `stories:week:v1:${weekName(week)}`,
-      { freshSeconds: underWay ? 900 : 6 * 3_600, staleSeconds: 24 * 3_600, lockSeconds: 2 * LIST_QUERY_SECONDS },
-      async () => ({ success: true, data: await weekDigest(week, underWay) }),
-    )
+    const response = await keptWeek(week, underWay)
+    if (!response) {
+      // A finished week nobody has asked for yet: being made in the background
+      reply.header('retry-after', '120')
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'This week is being put together; try again in a couple of minutes')
+    }
     return reply.send(response)
   })
-
-  async function weekDigest(week: IsoWeek, underWay: boolean) {
-    const { start, end } = weekBounds(week)
-    const until = underWay ? new Date() : end
-    const hasStoryIds = await signalsHaveStoryIds()
-    const storyKey = hasStoryIds ? 'COALESCE(story_id, id)' : 'id'
-    const [stories, countryResult, directory] = await Promise.all([
-      longQuery(LIST_QUERY_SECONDS, trx => trx.raw(storyListSql(hasStoryIds, 'week'), [start, until, EVENT_TEMPLATE_SQL]))
-        .then(r => rankStories(candidatesOf(r), WEEK_STORIES, until.getTime(), { decay: false })),
-      longQuery(LIST_QUERY_SECONDS, trx => trx.raw(
-        `SELECT country_code AS code, count(DISTINCT ${storyKey})::int AS stories
-           FROM signals
-          WHERE status = 'verified' AND created_at >= ? AND created_at < ? AND country_code ~ '^[A-Z]{2}$'
-          GROUP BY 1 ORDER BY 2 DESC LIMIT ?`,
-        [start, until, WEEK_COUNTRIES + 4],
-      )),
-      underWay ? entityDirectory().catch(() => null) : Promise.resolve(null),
-    ])
-    const countryRows = ((countryResult as { rows?: Array<{ code: string; stories: number }> } | undefined)?.rows ?? [])
-    const countries = countryRows
-      .filter(r => r.code !== 'UK' && COUNTRY_NAMES[r.code])
-      .slice(0, WEEK_COUNTRIES)
-      .map(r => ({ code: r.code, name: COUNTRY_NAMES[r.code]!, stories: Number(r.stories) || 0 }))
-    const people = directory
-      ? (directory.groups.find(g => g.key === 'people')?.entities ?? []).slice(0, WEEK_PEOPLE).map(e => ({ id: e.id, name: e.name, reports: e.last7d }))
-      : null
-    return {
-      week: weekName(week),
-      start: start.toISOString(),
-      end: end.toISOString(),
-      underWay,
-      stories,
-      countries,
-      people,
-      generatedAt: new Date().toISOString(),
-    }
-  }
 
   /** A week of verified stories (3 s on Oct 15, 2026, and growing): its own time limit, off the request path */
   async function storySitemap() {

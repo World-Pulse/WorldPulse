@@ -28,6 +28,7 @@ async function build(): Promise<FastifyInstance> {
   app.get('/api/v1/stories/week', async (req, reply) => {
     asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
     if ((req.query as { week?: string }).week === '2099-W10') return reply.code(404).send({ success: false, code: 'NOT_FOUND', error: 'That week has not started yet' })
+    if ((req.query as { week?: string }).week === '2026-W30') return reply.code(503).send({ success: false, code: 'SERVICE_UNAVAILABLE', error: 'This week is being put together; try again in a couple of minutes' })
     return { success: true, data: { week: '2026-W43', underWay: true, stories: [STORY], countries: [{ code: 'QA', name: 'Qatar', stories: 31 }] } }
   })
   app.get('/api/v1/stories/:id', async (req, reply) => {
@@ -121,6 +122,8 @@ describe('MCP server', () => {
     expect(w.content[0].text).toContain('Qatar 31')
     const future = await call(app, 'week', { week: '2099-W10' })
     expect(future).toMatchObject({ isError: true })
+    const preparing = await call(app, 'week', { week: '2026-W30' })
+    expect(preparing).toMatchObject({ isError: true, content: [{ text: 'This week is being put together; try again in a couple of minutes' }] })
   })
 
   it('answers an unknown tool and an unknown method with JSON-RPC errors, and a batch with a list', async () => {

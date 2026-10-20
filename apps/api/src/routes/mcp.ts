@@ -210,6 +210,8 @@ export const TOOLS: Tool[] = [
       const week = strArg(args, 'week', { pattern: /^\d{4}-W\d{2}$/, hint: 'must be an ISO week such as 2026-W42' })
       const { status, body } = await ask(asker, `/api/v1/stories/week${week ? `?week=${week}` : ''}`)
       if (status === 400 || status === 404) throw new ToolError(String((body as { error?: unknown }).error ?? 'No such week'))
+      // a finished week nobody had asked for: being made in the background
+      if (status === 503) throw new ToolError(String((body as { error?: unknown }).error ?? 'This week is being put together; try again in a couple of minutes'))
       if (status !== 200) throw new Error(`week answered ${status}`)
       const d = (body.data ?? {}) as { week?: string; underWay?: boolean; stories?: ListedStory[]; countries?: Array<{ code: string; name: string; stories: number }> }
       const stories = d.stories ?? []

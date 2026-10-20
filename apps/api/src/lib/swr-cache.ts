@@ -37,6 +37,35 @@ async function remakeInBackground<T>(key: string, opts: SwrOptions, make: () => 
 }
 
 /**
+ * Make and keep the value now, waiting for it, unless another process is
+ * making it (for jobs that keep values made ahead of visitors, such as
+ * stories.ts warmWeeks): whether this call made it
+ */
+export async function remakeNow<T>(key: string, opts: SwrOptions, make: () => Promise<T>): Promise<boolean> {
+  const lock = `${key}:refreshing`
+  const mine = await redis.set(lock, '1', 'EX', opts.lockSeconds ?? 120, 'NX').catch(() => null)
+  if (mine !== 'OK') return false
+  try {
+    await store(key, await make(), opts)
+    return true
+  } finally {
+    await redis.del(lock).catch(() => {})
+  }
+}
+
+/** How many seconds ago the kept value was made, or null when nothing is kept (or Redis can't say) */
+export async function keptAge(key: string): Promise<number | null> {
+  try {
+    const raw = await redis.get(key)
+    if (!raw) return null
+    const kept = JSON.parse(raw) as Kept<unknown>
+    return typeof kept.at === 'number' ? (Date.now() - kept.at) / 1000 : null
+  } catch {
+    return null
+  }
+}
+
+/**
  * `cold` (Oct 20, 2026): with nothing kept, answers at once (an estimate, say)
  * while one process makes the value in the background, instead of the caller
  * waiting for it.

@@ -11,7 +11,7 @@ import rawBody from 'fastify-raw-body'
 import { redis } from './db/redis'
 import { db } from './db/postgres'
 import { registerFeedRoutes } from './routes/feed'
-import { registerStoryRoutes } from './routes/stories'
+import { registerStoryRoutes, startWeekWarmer, stopWeekWarmer } from './routes/stories'
 import { registerAuthRoutes } from './routes/auth'
 import { registerPostRoutes } from './routes/posts'
 import { registerSignalRoutes } from './routes/signals'
@@ -468,6 +468,11 @@ async function bootstrap() {
   // opened (bots spent the day's AI allowance by reading pages)
   startSummaryPass()
 
+  // ─── WORLDPULSE WEEK (plan G11) ───────────────────────────
+  // The week under way and the last 4 finished weeks made ahead of visitors:
+  // a finished week takes up to a minute to make
+  startWeekWarmer()
+
   // ─── EMAIL BRIEFING (plan G4) ─────────────────────────────
   // Creates the subscribers table if missing (Devon approved, Oct 11, 2026),
   // then checks every minute whether the 7 AM briefing is due. Sends nothing
@@ -496,6 +501,7 @@ async function bootstrap() {
   const shutdown = async () => {
     stopPulseScheduler()
     stopSummaryPass()
+    stopWeekWarmer()
     stopBriefingEmails()
     stopSocialPosters()
     stopDispatcher()

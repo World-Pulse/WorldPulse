@@ -42,7 +42,7 @@ vi.mock('../../db/postgres', () => {
   }
 })
 
-import { registerStoryRoutes } from '../stories'
+import { registerStoryRoutes, warmWeeks } from '../stories'
 import {
   rankStories, sameEvent, storyScore, looksLikeEventTemplate, tidyHeadline, textArray, headlineWords,
   type StoryCandidate,
@@ -298,6 +298,15 @@ describe('GET /api/v1/stories/week', () => {
   it("lists a finished week's top stories by outlets, and its busiest countries", async () => {
     const app = Fastify({ logger: false })
     await app.register(registerStoryRoutes, { prefix: '/api/v1/stories' })
+    // nothing kept: answered at once while the week is made in the background (it took 42 s live)
+    const first = await app.inject({ method: 'GET', url: '/api/v1/stories/week?week=2026-W42' })
+    expect(first.statusCode).toBe(503)
+    expect(first.headers['retry-after']).toBe('120')
+    for (let i = 0; i < 20 && h.setex.mock.calls.length === 0; i++) await new Promise(r => setTimeout(r, 0))
+    // a finished week is kept a day, then served for 30 days while it is remade
+    expect(h.setex).toHaveBeenCalledWith('stories:week:v2:2026-W42', 24 * 3_600 + 30 * 86_400, expect.any(String))
+    const kept = (h.setex.mock.calls[0] as unknown as [string, number, string])[2]
+    h.get.mockResolvedValue(kept)
     const res = await app.inject({ method: 'GET', url: '/api/v1/stories/week?week=2026-W42' })
     expect(res.statusCode).toBe(200)
     const d = res.json().data
@@ -312,8 +321,15 @@ describe('GET /api/v1/stories/week', () => {
     expect((storySql.bindings[0] as Date).toISOString()).toBe('2026-10-12T00:00:00.000Z')
     expect((storySql.bindings[1] as Date).toISOString()).toBe('2026-10-19T00:00:00.000Z')
     expect(h.calls.some(c => /count\(DISTINCT COALESCE\(story_id, id\)\)/.test(c.sql) && /status = 'verified'/.test(c.sql))).toBe(true)
-    // a finished week is kept 6 hours, then served while it is remade
-    expect(h.setex).toHaveBeenCalledWith('stories:week:v1:2026-W42', 6 * 3_600 + 24 * 3_600, expect.any(String))
+  })
+
+  it('makes the week under way while the caller waits, kept apart from the finished week it becomes', async () => {
+    const app = Fastify({ logger: false })
+    await app.register(registerStoryRoutes, { prefix: '/api/v1/stories' })
+    const res = await app.inject({ method: 'GET', url: '/api/v1/stories/week' })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().data.underWay).toBe(true)
+    expect(h.setex).toHaveBeenCalledWith(expect.stringMatching(/^stories:week:v2:\d{4}-W\d{2}:so-far$/), 900 + 24 * 3_600, expect.any(String))
   })
 
   it('refuses a week name that is not an ISO week, and a week not begun', async () => {
@@ -321,6 +337,33 @@ describe('GET /api/v1/stories/week', () => {
     await app.register(registerStoryRoutes, { prefix: '/api/v1/stories' })
     expect((await app.inject({ method: 'GET', url: '/api/v1/stories/week?week=2026-43' })).statusCode).toBe(400)
     expect((await app.inject({ method: 'GET', url: '/api/v1/stories/week?week=2099-W10' })).statusCode).toBe(404)
+  })
+})
+
+describe('warmWeeks (WorldPulse Week made ahead of visitors)', () => {
+  beforeEach(() => {
+    h.setex.mockClear()
+    h.calls.length = 0
+    h.rows = []
+  })
+
+  it('makes the week under way and the last 4 finished weeks, one at a time, when nothing is kept', async () => {
+    h.get.mockResolvedValue(null)
+    const made = await warmWeeks(new Date('2026-10-20T15:00:00Z'))
+    expect(made).toEqual(['2026-W43', '2026-W42', '2026-W41', '2026-W40', '2026-W39'])
+    // (the week under way also keeps the entity directory it reads)
+    expect(h.setex.mock.calls.map(c => (c as unknown as [string])[0]).filter(k => k.startsWith('stories:week:'))).toEqual([
+      'stories:week:v2:2026-W43:so-far', 'stories:week:v2:2026-W42', 'stories:week:v2:2026-W41', 'stories:week:v2:2026-W40', 'stories:week:v2:2026-W39',
+    ])
+  })
+
+  it('makes nothing while every week is fresh, and a finished week again once a day has passed', async () => {
+    const fresh = JSON.stringify({ at: Date.now() - 60_000, value: { success: true, data: {} } })
+    const dayOld = JSON.stringify({ at: Date.now() - 25 * 3_600_000, value: { success: true, data: {} } })
+    h.get.mockImplementation(async (k: string) => (k === 'stories:week:v2:2026-W41' ? dayOld : fresh))
+    expect(await warmWeeks(new Date('2026-10-20T15:00:00Z'))).toEqual(['2026-W41'])
+    h.get.mockImplementation(async () => fresh)
+    expect(await warmWeeks(new Date('2026-10-20T15:00:00Z'))).toEqual([])
   })
 })
 
