@@ -341,6 +341,11 @@ export function RightSidebar() {
         <Link href="/developers" className="text-wp-amber hover:underline">API Docs</Link>
         {' · '}
         <a href="https://github.com/World-Pulse/WorldPulse" target="_blank" rel="noopener noreferrer" className="text-wp-amber hover:underline">Contribute</a>
+        <br/>
+        {/* plan C2 (Oct 20, 2026): the help page and how outlets are counted, from every page */}
+        <Link href="/help" className="text-wp-amber hover:underline">Help &amp; FAQ</Link>
+        {' · '}
+        <Link href="/how-we-count" className="text-wp-amber hover:underline">How We Count</Link>
       </div>
     </aside>
   )
