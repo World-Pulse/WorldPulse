@@ -81,7 +81,13 @@ describe('"named with" (Oct 20, 2026: /entities/anwar-ibrahim-… answered 500)'
       return { rows: [] }
     }) as never)
     // stories answer (storiesOfSignals is mocked); "named with" runs on the transaction and times out
-    vi.mocked(longQuery).mockImplementation((async (_s: number, run: (trx: unknown) => Promise<unknown>) => run({ raw: async () => { throw new Error('canceling statement due to statement timeout') } })) as never)
+    vi.mocked(longQuery).mockImplementation((async (_s: number, run: (trx: unknown) => Promise<unknown>) => run({
+      raw: async (sql: string) => {
+        if (/WITH mine AS/.test(sql)) throw new Error('canceling statement due to statement timeout')
+        if (/to_char\(created_at/.test(sql)) return { rows: [{ day: '2026-10-20', n: 2, last24: 2, prev24: 0, last7: 2 }] }
+        return { rows: [] }
+      },
+    })) as never)
     vi.mocked(redis.setex).mockClear()
     const profile = await entityProfile('e503847e4ee3f485')
     expect(profile?.entity.name).toBe('Anwar Ibrahim')
@@ -91,6 +97,21 @@ describe('"named with" (Oct 20, 2026: /entities/anwar-ibrahim-… answered 500)'
     const kept = JSON.parse(String(vi.mocked(redis.setex).mock.calls[0]?.[2]))
     expect(kept.value.entity.name).toBe('Anwar Ibrahim')
     expect(kept.at).toBeLessThan(Date.now() - PROFILE_TTL * 1000)
+    vi.mocked(longQuery).mockReset()
+  })
+
+  it('every part runs side by side under the limit, and a part that gives up leaves the rest of the page', async () => {
+    const seconds: number[] = []
+    vi.mocked(longQuery).mockImplementation((async (s0: number, run: (trx: unknown) => Promise<unknown>) => {
+      seconds.push(s0)
+      return run({ raw: async (sql: string) => { if (/to_char\(created_at/.test(sql)) throw new Error('timeout'); return { rows: [] } } })
+    }) as never)
+    const { profile, partial } = await buildProfile('e503847e4ee3f485', QUICK)
+    expect(partial).toBe(true)
+    expect(profile?.activity.last7d).toBe(0)
+    expect(profile?.entity.name).toBe('Anwar Ibrahim')
+    expect(seconds.length).toBe(4)
+    expect(Math.max(...seconds)).toBeLessThan(9)
     vi.mocked(longQuery).mockReset()
   })
 

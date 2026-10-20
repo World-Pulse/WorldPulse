@@ -35,6 +35,7 @@
  *   - the full profile, made in the background, may take its time.
  */
 
+import type { Knex } from 'knex'
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 import { logger } from './logger'
@@ -125,9 +126,14 @@ async function cached<T>(key: string, build: () => Promise<T>): Promise<T> {
 
 /** The newest reports among `ids`, leaving out those of the stories already listed (`skipStories`: story keys) */
 async function latestReports(ids: string[], skipStories: Set<string> = new Set()): Promise<EntityProfile['latest']> {
+  return latestOf(await latestRows(ids), skipStories)
+}
+
+/** The newest reports among `ids` (with their story), read on `q` */
+async function latestRows(ids: string[], q: Knex | Knex.Transaction = db): Promise<Row[]> {
   if (ids.length === 0) return []
   const storyKey = await signalsHaveStoryIds() ? 'COALESCE(story_id, id)::text' : 'id::text'
-  const rows = rowsOf(await db.raw(`
+  return rowsOf(await q.raw(`
     SELECT id::text AS id, ${storyKey} AS story_key, title, category::text AS category, severity::text AS severity,
            location_name, status::text AS status, created_at
       FROM signals
@@ -135,6 +141,10 @@ async function latestReports(ids: string[], skipStories: Set<string> = new Set()
      ORDER BY created_at DESC
      LIMIT ?
   `, [ids, LATEST_SHOWN + 12]))
+}
+
+/** Those rows as the page lists them, leaving out the reports of the stories already listed */
+function latestOf(rows: Row[], skipStories: Set<string> = new Set()): EntityProfile['latest'] {
   return rows.flatMap(r => {
     const createdAt = iso(r.created_at)
     if (!createdAt || typeof r.title !== 'string' || r.title.trim() === '') return []
@@ -187,15 +197,20 @@ export async function connectionsOf(id: string, ids: string[], since: Date, seco
   }
 }
 
-/** The stories naming it under its own limit; null when it gave up */
-async function storiesOf(id: string, ids: string[], seconds: number): Promise<ListedStory[] | null> {
-  if (ids.length === 0) return []
+/** One part of the profile under its own limit; null when it gave up (the page shows without it) */
+async function timed<T>(id: string, what: string, seconds: number, run: (trx: Knex.Transaction) => Promise<T>): Promise<T | null> {
   try {
-    return await longQuery(seconds, trx => storiesOfSignals(ids, STORY_DAYS * 24, STORIES_SHOWN, trx))
+    return await longQuery(seconds, run)
   } catch (err) {
-    logger.warn({ err, entity: id, reports: ids.length, seconds }, 'Entity profile: stories list gave up, page shown without it')
+    logger.warn({ err, entity: id, seconds }, `Entity profile: ${what} gave up, page shown without it`)
     return null
   }
+}
+
+/** The stories naming it under its own limit; null when it gave up */
+function storiesOf(id: string, ids: string[], seconds: number): Promise<ListedStory[] | null> {
+  if (ids.length === 0) return Promise.resolve([])
+  return timed(id, 'stories list', seconds, trx => storiesOfSignals(ids, STORY_DAYS * 24, STORIES_SHOWN, trx))
 }
 
 const profileKey = (id: string) => `kg:profile:v3:${id}`
@@ -227,30 +242,32 @@ export async function buildProfile(id: string, limits: Limits): Promise<{ profil
   const now = Date.now()
   const since = new Date(now - ACTIVITY_DAYS * DAY_MS)
 
-  // The stories naming it, then its newest reports outside those stories
-  const storiesAndLatest = async (): Promise<[ListedStory[] | null, EntityProfile['latest']]> => {
-    const stories = await storiesOf(id, ids, limits.stories)
-    return [stories, await latestReports(ids, new Set((stories ?? []).map(st => st.id)))]
-  }
-  const [activityRows, [storiesFound, latest], connectionsFound] = ids.length === 0
-    ? [[], [[], []], []] as [Row[], [ListedStory[] | null, EntityProfile['latest']], Row[] | null]
+  // Every part side by side, each under its own limit, so a first view
+  // answers within the slowest one (Oct 20: Iran's first view still answered
+  // 500 once, its activity read cold on the pool's 5 seconds)
+  const ACTIVITY_SQL = `
+    SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
+           count(*)::int AS n,
+           count(*) FILTER (WHERE created_at >= now() - interval '24 hours')::int AS last24,
+           count(*) FILTER (WHERE created_at >= now() - interval '48 hours'
+                              AND created_at <  now() - interval '24 hours')::int AS prev24,
+           count(*) FILTER (WHERE created_at >= now() - interval '7 days')::int AS last7
+      FROM signals
+     WHERE id = ANY(?::uuid[]) AND created_at >= ?
+     GROUP BY 1
+  `
+  const [activityFound, storiesFound, latestFound, connectionsFound] = ids.length === 0
+    ? [[], [], [], []] as [Row[] | null, ListedStory[] | null, Row[] | null, Row[] | null]
     : await Promise.all([
-        db.raw(`
-          SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
-                 count(*)::int AS n,
-                 count(*) FILTER (WHERE created_at >= now() - interval '24 hours')::int AS last24,
-                 count(*) FILTER (WHERE created_at >= now() - interval '48 hours'
-                                    AND created_at <  now() - interval '24 hours')::int AS prev24,
-                 count(*) FILTER (WHERE created_at >= now() - interval '7 days')::int AS last7
-            FROM signals
-           WHERE id = ANY(?::uuid[]) AND created_at >= ?
-           GROUP BY 1
-        `, [ids, since]).then(rowsOf),
-        storiesAndLatest(),
+        timed(id, 'activity', limits.stories, trx => trx.raw(ACTIVITY_SQL, [ids, since]).then(rowsOf)),
+        storiesOf(id, ids, limits.stories),
+        timed(id, 'newest reports', limits.stories, trx => latestRows(ids, trx)),
         connectionsOf(id, ids, since, limits.connections),
       ])
-  const partial = storiesFound === null || connectionsFound === null
+  const partial = activityFound === null || storiesFound === null || latestFound === null || connectionsFound === null
+  const activityRows = activityFound ?? []
   const stories = storiesFound ?? []
+  const latest = latestOf(latestFound ?? [], new Set(stories.map(st => st.id)))
   const connectionRows = connectionsFound ?? []
 
   const perDay = new Map<string, number>()
