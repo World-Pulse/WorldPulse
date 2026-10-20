@@ -203,7 +203,7 @@ describe('CARRIER_REGISTRY_ALIASES', () => {
 })
 
 // ─── Oct 19, 2026: ship and naval stories found by their headlines ─────────────
-import { NAVAL_CANDIDATE, isNavalHeadline } from '../routes/maritime'
+import { NAVAL_CANDIDATE, isNavalHeadline, isSeaHeadline } from '../routes/maritime'
 import { MARITIME_CANDIDATE, firstOfEach, headlineKey, isShipHeadline, pgToJs } from '../lib/sea-headlines'
 
 /** The two layers' filters as their routes run them: the database's one pattern, then the finer checks */
@@ -238,5 +238,14 @@ describe('headline patterns (the categories "maritime" and "military" are no lon
   it('a named carrier is a carrier whatever its category', () => {
     expect(classifyVesselType('USS Nimitz heads to the Gulf', 'conflict', true)).toBe('carrier')
     expect(classifyVesselType('USS Nimitz heads to the Gulf', 'conflict')).toBe('vessel')
+  })
+})
+
+describe('the Maritime page lists (isSeaHeadline)', () => {
+  it('drops road freight and trucking stories the tag filter let through', () => {
+    for (const t of ['Failed CDL exams, $3,000 payments and Bluetooth cheating scheme lead to federal charges', 'Freight Fraud Gets More Strategic Heading Into Peak Season']) expect(isSeaHeadline(t)).toBe(false)
+  })
+  it('keeps ship and naval news', () => {
+    for (const t of ['U.S. to Allow Dark-Fleet Tankers to Shed Sanctions, Wright Says', 'US Navy destroyer in the Taiwan Strait', 'Houthis attack cargo ship in the Red Sea']) expect(isSeaHeadline(t)).toBe(true)
   })
 })

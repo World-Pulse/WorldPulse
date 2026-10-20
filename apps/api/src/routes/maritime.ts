@@ -15,7 +15,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 import { optionalAuth } from '../middleware/auth'
-import { NAVAL_SHIP_NAME, firstOfEach, headlineKey, notOffSea, pgToJs } from '../lib/sea-headlines'
+import { NAVAL_SHIP_NAME, firstOfEach, headlineKey, isShipHeadline, notOffSea, pgToJs } from '../lib/sea-headlines'
 import { longQuery } from '../lib/long-query'
 import { staleWhileRevalidate } from '../lib/swr-cache'
 
@@ -77,6 +77,20 @@ const SHIP_NAME_JS = pgToJs(NAVAL_SHIP_NAME, '')
 export function isNavalHeadline(title: string): boolean {
   return notOffSea(title) && (NAVAL_JS.test(title) || SHIP_NAME_JS.test(title))
 }
+
+/**
+ * Sea news for the Maritime page's lists. Their tag filter (shipping, ports,
+ * or any military story) let road-freight and trucking stories through ("Failed
+ * CDL exams ...", "Freight Fraud Gets More Strategic ..." led the page on
+ * Oct 19, 2026), so the rows it finds are checked by headline, as the map's
+ * Ships and Naval intelligence layers are.
+ */
+export function isSeaHeadline(title: string): boolean {
+  return isShipHeadline(title) || isNavalHeadline(title)
+}
+
+/** The newest rows the lists read before the headline check (the check drops some) */
+export const SEA_LIST_READ = 400
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -224,7 +238,7 @@ export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
       .whereRaw("created_at > now() - interval '48 hours'")
       .whereRaw("(category IN ('military','maritime','economy','conflict') AND (tags @> ARRAY['maritime']::text[] OR tags @> ARRAY['shipping']::text[] OR tags @> ARRAY['naval']::text[] OR category = 'military'))")
       .orderBy('created_at', 'desc')
-      .limit(20)
+      .limit(SEA_LIST_READ)
       .select('id', 'title', 'category', 'severity', 'location_name', 'source_url', 'created_at',
         db.raw('ST_X(location::geometry) as lng'),
         db.raw('ST_Y(location::geometry) as lat'),
@@ -240,7 +254,7 @@ export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
           military_signals: Number(signalStats.military_signals),
           piracy_alerts:   Number(signalStats.piracy_alerts),
         },
-        recent_signals: recentSignals.map((r: Record<string, unknown>) => ({
+        recent_signals: recentSignals.filter((r: Record<string, unknown>) => isSeaHeadline(String(r.title ?? ''))).slice(0, 20).map((r: Record<string, unknown>) => ({
           id:            r.id,
           title:         r.title,
           category:      r.category,
@@ -286,9 +300,9 @@ export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
     let query = db('signals')
       .whereIn('status', ['verified', 'pending'])
       .whereRaw("(category IN ('military','maritime','economy','conflict') AND (tags @> ARRAY['maritime']::text[] OR tags @> ARRAY['shipping']::text[] OR tags @> ARRAY['naval']::text[] OR tags @> ARRAY['piracy']::text[] OR tags @> ARRAY['ports']::text[] OR category = 'military'))")
+      .whereRaw("created_at > now() - interval '7 days'")
       .orderBy('created_at', 'desc')
-      .limit(limit)
-      .offset(offset)
+      .limit(SEA_LIST_READ)
 
     if (type === 'piracy')     query = query.whereRaw("tags @> ARRAY['piracy']::text[]")
     if (type === 'naval')      query = query.where('category', 'military')
@@ -310,12 +324,15 @@ export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    const rows = await query.select(
+    const read = await query.select(
       'id', 'title', 'category', 'severity', 'reliability_score',
       'location_name', 'source_url', 'created_at',
       db.raw('ST_X(location::geometry) as lng'),
       db.raw('ST_Y(location::geometry) as lat'),
     )
+    const rows = read
+      .filter((r: Record<string, unknown>) => (type === 'naval' ? isNavalHeadline : isSeaHeadline)(String(r.title ?? '')))
+      .slice(offset, offset + limit)
 
     return reply.send({
       success: true,
