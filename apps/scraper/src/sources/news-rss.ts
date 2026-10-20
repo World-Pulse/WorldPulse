@@ -118,7 +118,36 @@ const log = rootLogger.child({ module: 'news-rss-source' })
 // looks back 6 hours).
 const DEDUP_TTL_S   = 4 * 24 * 3_600      // 4 days
 const POLL_INTERVAL = 30 * 60_000         // 30 minutes between full cycles
-const SOURCE_DELAY  = 5_000               // 5 s stagger between sources
+const SOURCE_DELAY  = 5_000               // 5 s stagger between sources, while the list is small
+const SOURCE_DELAY_MIN = 1_000            // never closer than 1 s
+/** The cycle's pauses take at most this share of POLL_INTERVAL */
+const CYCLE_SHARE = 0.75
+
+/**
+ * The pause between two feeds (Oct 20, 2026, growing to 300 feeds): 5 s while
+ * the list is small, shorter as it grows, so that a whole cycle still fits in
+ * its 30 minutes. At 5 s each, 300 feeds' pauses alone took 25 minutes, and
+ * with the fetching and storing a cycle ran past the next one's start.
+ */
+export function sourceDelay(sources: number): number {
+  if (sources <= 0) return SOURCE_DELAY
+  return Math.max(SOURCE_DELAY_MIN, Math.min(SOURCE_DELAY, Math.floor((POLL_INTERVAL * CYCLE_SHARE) / sources)))
+}
+
+/**
+ * One poll cycle at a time (Oct 20, 2026): the timer starts a cycle every 30
+ * minutes, and one that hadn't finished ran on beside the next, so each feed
+ * was asked twice as often. A cycle that is still running when the timer
+ * fires lets that start go by. Returns the function the timer calls.
+ */
+export function oneCycleAtATime(run: () => Promise<void>, onSkip?: () => void): () => Promise<void> {
+  let running = false
+  return async () => {
+    if (running) { onSkip?.(); return }
+    running = true
+    try { await run() } finally { running = false }
+  }
+}
 const MAX_ITEMS     = 20                  // max signals per source per poll
 const MAX_FEED_BYTES     = 5 * 1024 * 1024 // a feed bigger than this isn't a feed
 const FAILS_BEFORE_PAUSE = 3               // failed polls in a row before a feed is paused
@@ -3482,15 +3511,18 @@ export function startNewsRssPoller(
   let stopped = false
   let timer: ReturnType<typeof setInterval> | null = null
 
+  const delay = sourceDelay(NEWS_SOURCE_REGISTRY.length)
+
   /**
    * Run a full poll cycle across all sources.
-   * Each source is polled sequentially with SOURCE_DELAY ms between them.
+   * Each source is polled sequentially with `delay` ms between them.
    */
-  async function runCycle(): Promise<void> {
+  async function pollAll(): Promise<void> {
     if (stopped) return
+    const started = Date.now()
 
     log.info(
-      { sources: NEWS_SOURCE_REGISTRY.length },
+      { sources: NEWS_SOURCE_REGISTRY.length, staggerMs: delay },
       '📰 News RSS: starting poll cycle',
     )
 
@@ -3501,14 +3533,18 @@ export function startNewsRssPoller(
       )
       // Stagger requests to be a good citizen with upstream RSS servers
       if (!stopped) {
-        await new Promise<void>(resolve => setTimeout(resolve, SOURCE_DELAY))
+        await new Promise<void>(resolve => setTimeout(resolve, delay))
       }
     }
 
     if (!stopped) {
-      log.debug('📰 News RSS: poll cycle complete')
+      log.info({ minutes: Math.round((Date.now() - started) / 6_000) / 10 }, '📰 News RSS: poll cycle complete')
     }
   }
+
+  const runCycle = oneCycleAtATime(pollAll, () =>
+    log.warn('📰 News RSS: the last poll cycle is still running; this start is skipped'),
+  )
 
   // Feeds taken out of the registry stop counting as failing
   void forgetRemovedFeeds(redis, NEWS_SOURCE_REGISTRY.map(s => s.id)).then(n => {
@@ -3525,7 +3561,7 @@ export function startNewsRssPoller(
     {
       sourceCount:     NEWS_SOURCE_REGISTRY.length,
       pollIntervalMin: POLL_INTERVAL / 60_000,
-      staggerSec:      SOURCE_DELAY / 1000,
+      staggerSec:      delay / 1000,
     },
     `📰 News RSS poller started — ${NEWS_SOURCE_REGISTRY.length} international outlets`,
   )
