@@ -231,7 +231,7 @@ export function RightSidebar() {
             : <span className="h-[12px] w-10 rounded bg-white/5 animate-pulse" aria-hidden="true" />}
         </div>
         <p className="mt-2 font-mono text-[9px] leading-relaxed text-wp-text3">
-          Last 24 hours. A signal is verified when a second, different outlet reports the same story.
+          Last 24 hours. A story is verified when two or more outlets report it and its reliability score reaches 65%.
         </p>
       </Widget>
 

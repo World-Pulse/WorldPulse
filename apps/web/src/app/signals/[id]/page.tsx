@@ -8,6 +8,7 @@ import { cachedFetch } from '@/lib/server-fetch'
 import Link from 'next/link'
 import { FollowBox } from '@/components/FollowBox'
 import { countryLink, entityLinks, rankRelated, type StoryLink } from '@/lib/story-links'
+import { fetchStoryOutlets } from '@/lib/story-outlets'
 
 const API_BASE = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -149,10 +150,11 @@ export default async function SignalDetailPage(
   // error.tsx says the story is briefly unavailable and offers to try again
   if (signal === 'unavailable') throw new StoryUnavailableError()
 
-  const [related, postsData, entities] = await Promise.all([
+  const [related, postsData, entities, storyOutlets] = await Promise.all([
     fetchRelated(signal.category, signal.countryCode, signal.id),
     fetchSignalPosts(signal.id),
     fetchEntityLinks(signal.id),
+    fetchStoryOutlets(signal.id),
   ])
   const country = countryLink(signal.countryCode)
 
@@ -175,6 +177,7 @@ export default async function SignalDetailPage(
         related={related}
         initialPosts={postsData.items}
         postsTotal={postsData.total}
+        initialStoryOutlets={storyOutlets}
       />
       {(country || entities.length > 0) && (
         <nav aria-label="About this story" className="mx-auto max-w-5xl px-4 pb-8 text-[12px] text-wp-text3 flex flex-wrap items-center gap-x-3 gap-y-1">

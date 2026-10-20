@@ -32,7 +32,8 @@ describe('WeekView', () => {
     const html = renderToStaticMarkup(<WeekView data={finished} />)
     expect(html.indexOf('Ceasefire talks resume in Doha')).toBeLessThan(html.indexOf('Typhoon makes landfall in Luzon'))
     expect(html).toContain('href="/signals/sig-1"')
-    expect(html).toContain('14 outlets · Doha, Qatar · conflict')
+    // the week's own reports: a story's page, counting every report, can show more
+    expect(html).toContain('14 outlets that week · Doha, Qatar · conflict')
     expect(html).toContain('href="/countries/QA"')
     expect(html).not.toContain('Who is in the news')
   })

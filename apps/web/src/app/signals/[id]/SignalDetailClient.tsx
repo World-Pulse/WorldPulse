@@ -144,6 +144,8 @@ interface Props {
   related:      Signal[]
   initialPosts: Post[]
   postsTotal:   number
+  /** Outlets that carried this report's story, from the server (null: the API couldn't say) */
+  initialStoryOutlets?: number | null
 }
 
 // ─── AI Slop Badge ────────────────────────────────────────────────────────────
@@ -186,7 +188,7 @@ interface CIBStatus {
   label: string
 }
 
-export function SignalDetailClient({ signal, related, initialPosts, postsTotal }: Props) {
+export function SignalDetailClient({ signal, related, initialPosts, postsTotal, initialStoryOutlets = null }: Props) {
   const color      = SEV_COLOR[signal.severity] ?? '#8892a4'
   const bg         = SEV_BG[signal.severity]    ?? 'rgba(136,146,164,0.12)'
   const srcUrl     = signal.originalUrls?.[0] ?? null
@@ -217,9 +219,13 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
   // One outlet number for the page (reading audit P9): the outlets that carried
   // this report's story, as the home page and the story timeline count them.
   // Until it's known (or if the API can't say), this report's own outlets.
-  const [storyOutlets, setStoryOutlets] = useState<number | null>(null)
-  const [storyAsked, setStoryAsked] = useState(false)
+  // The server asks first, so the page's first HTML (what search engines and
+  // link previews read) has the story's count: it showed this report's own 9
+  // outlets for a story of 87 (Oct 20, 2026), until the browser had asked
+  const [storyOutlets, setStoryOutlets] = useState<number | null>(initialStoryOutlets)
+  const [storyAsked, setStoryAsked] = useState(initialStoryOutlets !== null)
   useEffect(() => {
+    if (initialStoryOutlets !== null) return
     let cancelled = false
     const API_BASE = `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/api/v1`
     fetch(`${API_BASE}/stories/outlets?ids=${encodeURIComponent(signal.id)}`)
@@ -231,7 +237,7 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal }
       .catch(() => { /* this report's own outlets stand in */ })
       .finally(() => { if (!cancelled) setStoryAsked(true) })
     return () => { cancelled = true }
-  }, [signal.id])
+  }, [signal.id, initialStoryOutlets])
   const ownOutlets = distinctOutlets(signal.originalUrls ?? []).length
   const outletCount = Math.max(storyOutlets ?? 0, ownOutlets)
 

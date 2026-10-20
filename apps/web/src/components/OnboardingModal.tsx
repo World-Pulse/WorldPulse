@@ -16,7 +16,7 @@ const STEPS: Step[] = [
   {
     icon: '📡',
     title: 'Real-time verified signals',
-    body: 'WorldPulse gathers breaking events from news outlets, government agencies and open-source feeds. Each is scored for reliability, and marked verified once a second, independent outlet reports the same story.',
+    body: 'WorldPulse gathers breaking events from news outlets, government agencies and open-source feeds. Each is scored for reliability, and marked verified once two or more outlets report the same story and its reliability score reaches 65%.',
   },
   {
     icon: '🔬',

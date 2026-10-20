@@ -56,7 +56,8 @@ export function WeekView({ data }: { data: WeekData }) {
                 <div className="min-w-0">
                   <Link href={`/signals/${s.leadId}`} className="text-[15px] font-semibold text-wp-text hover:text-wp-amber">{s.title}</Link>
                   <p className="text-[12px] text-wp-text3 mt-0.5">
-                    {s.outletCount} outlets{s.place ? ` · ${s.place}` : ''}{s.category ? ` · ${s.category}` : ''}
+                    {/* the week's own reports only, so a story's page, which counts every report, can show more */}
+                    {s.outletCount} outlets {data.underWay ? 'this week' : 'that week'}{s.place ? ` · ${s.place}` : ''}{s.category ? ` · ${s.category}` : ''}
                   </p>
                 </div>
               </li>

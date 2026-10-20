@@ -12,18 +12,20 @@ const TEXT = `# WorldPulse
 
 > WorldPulse is an open-source global intelligence network. It collects news and open-source signals from outlets, wire services, government and institutional feeds worldwide, scores how reliable each report is, and shows them in a live feed, AI digests and a live world map.
 
-A story is "verified" when a second, independent outlet reports the same story. Reports from the same outlet, or copies of one article, do not count twice. An AI check then looks for contradictions on facts such as where, who and how many. Verified means "more than one outlet says so", not "proven true". Every report keeps a link to the original source.
+A story is "verified" when two or more outlets (websites) report it and its reliability score reaches 65%. Reports from the same outlet, or copies of one article, do not count twice. An AI check then looks for contradictions on facts such as where, who and how many. Verified means "more than one outlet says so", not "proven true". Every report keeps a link to the original source.
 
 ## Read
 
 - [Latest verified stories](${SITE_URL}/): the day's top verified stories
 - [Live world map](${SITE_URL}/map): every located signal on a globe, filterable by topic, region and time
 - [Daily briefing](${SITE_URL}/briefing): the day's most important stories in one page
+- [WorldPulse Week](${SITE_URL}/week): the week's top stories, ranked by how many outlets reported each
 - [Countries](${SITE_URL}/countries): stories and risk by country
 - [Sources](${SITE_URL}/sources): the outlets and feeds WorldPulse reads
 
 ## How it works
 
+- [How we count independent outlets](${SITE_URL}/how-we-count): what "N outlets" and "Verified" mean, and what the count cannot tell you
 - [Help and FAQ](${SITE_URL}/help): what "verified" means, how the reliability score works, where the news comes from
 
 ## Feeds and data
@@ -32,6 +34,10 @@ A story is "verified" when a second, independent outlet reports the same story. 
 - [Verified stories feed (JSON)](${API_URL}/api/v1/rss/signals.json)
 - [News sitemap](${SITE_URL}/news-sitemap.xml): verified stories of the last 48 hours
 - [Developers and public API](${SITE_URL}/developers)
+
+## For AI assistants (MCP)
+
+An MCP server at ${API_URL}/mcp (Streamable HTTP, POST JSON-RPC; no sign-in and no key) answers with the outlet count, whether a story is verified and its world-pulse.io link. Tools: top_stories (the stories the most outlets carry in the last 1 to 72 hours, optionally one country's), story (one story with every outlet and its reports), search_reports (reports by meaning) and week (WorldPulse Week).
 
 ## Citing
 

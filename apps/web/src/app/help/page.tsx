@@ -28,7 +28,7 @@ const FAQ: Array<{ q: string; a: React.ReactNode }> = [
     q: 'What does "verified" mean?',
     a: (
       <>
-        A story is marked verified when a second, independent outlet reports the same story. Reports from the same outlet, or copies of one article, don&apos;t count twice. An AI check then reads the reports and looks for contradictions on facts such as where, who and how many. Verified means &ldquo;more than one outlet says so&rdquo;, not &ldquo;proven true&rdquo;. <Link href="/how-we-count" className="text-wp-amber underline">How the outlets are counted</Link>.
+        A story is marked verified when two or more outlets (websites) report it and its reliability score reaches 65%. Reports from the same outlet, or copies of one article, don&apos;t count twice. An AI check then reads the reports and looks for contradictions on facts such as where, who and how many. Verified means &ldquo;more than one outlet says so&rdquo;, not &ldquo;proven true&rdquo;. <Link href="/how-we-count" className="text-wp-amber underline">How the outlets are counted</Link>.
       </>
     ),
   },
@@ -52,8 +52,9 @@ const FAQ: Array<{ q: string; a: React.ReactNode }> = [
     q: 'Is there an API?',
     a: (
       <>
-        Yes. Sign in and create a key on <Link href="/developer" className="text-wp-amber underline">/developer</Link>; see{' '}
-        <Link href="/pricing" className="text-wp-amber underline">Pricing</Link> for the plans.
+        Yes. The public endpoints work without signing up; see the{' '}
+        <Link href="/developers" className="text-wp-amber underline">developer page</Link>. For higher limits, sign in and create a key on the{' '}
+        <Link href="/developer" className="text-wp-amber underline">API keys page</Link>; <Link href="/pricing" className="text-wp-amber underline">Pricing</Link> lists the plans.
       </>
     ),
   },
