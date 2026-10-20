@@ -98,6 +98,18 @@ describe('sitemap.xml', () => {
     }
   })
 
+  it('lists "WorldPulse Week": the week under way and the four finished weeks (G11, Oct 20, 2026)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ success: true, data: { stories: [] } }))))
+    const weeks = (await sitemap()).filter(e => e.url.includes('/week'))
+    expect(weeks[0]!.url).toBe('https://world-pulse.io/week')
+    const finished = weeks.slice(1)
+    expect(finished).toHaveLength(4)
+    for (const w of finished) {
+      expect(w.url).toMatch(/\/week\/\d{4}-W\d{2}$/)
+      expect((w.lastModified as Date).getTime()).toBeLessThanOrEqual(Date.now())
+    }
+  })
+
   it('still lists the main pages when the API is down', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('ECONNREFUSED') }))
     const entries = await sitemap()

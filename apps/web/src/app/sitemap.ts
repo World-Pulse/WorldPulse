@@ -2,6 +2,7 @@ import type { MetadataRoute } from 'next'
 import { SITE_URL } from '@/lib/page-metadata'
 import { entityPath } from '@/lib/entity-links'
 import { isListedCountry, type ListedCountry } from '@/lib/country-list'
+import { finishedWeeks } from '@/lib/week'
 
 /**
  * world-pulse.io/sitemap.xml (plan G2, Oct 11, 2026): the main pages and one
@@ -48,6 +49,8 @@ const PAGES: Array<{ path: string; changeFrequency: 'always' | 'hourly' | 'daily
   { path: '/ai-infrastructure', changeFrequency: 'weekly', priority: 0.4 },
   { path: '/clusters', changeFrequency: 'hourly', priority: 0.4 },
   { path: '/communities', changeFrequency: 'daily', priority: 0.3 },
+  // "WorldPulse Week" (plan G11): the week under way; the finished weeks are added below
+  { path: '/week', changeFrequency: 'daily', priority: 0.8 },
 ]
 
 interface SitemapStory { id: string; updatedAt: string }
@@ -94,6 +97,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const [stories, entities, countries] = await Promise.all([verifiedStories(), namedEntities(), activeCountries()])
   return [
     ...PAGES.map(p => ({ url: `${SITE_URL}${p.path === '/' ? '' : p.path}`, lastModified: now, changeFrequency: p.changeFrequency, priority: p.priority })),
+    ...finishedWeeks(now, 4).map(w => ({ url: `${SITE_URL}/week/${w.name}`, lastModified: w.end, changeFrequency: 'monthly' as const, priority: 0.5 })),
     ...stories.map(s => ({ url: `${SITE_URL}/signals/${s.id}`, lastModified: new Date(s.updatedAt), changeFrequency: 'hourly' as const, priority: 0.6 })),
     ...countries.map(c => {
       const latest = c.latest_signal_at ? new Date(c.latest_signal_at) : now

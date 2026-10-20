@@ -16,6 +16,9 @@ import { signalsHaveStoryIds, hostOf } from '../lib/stories'
 import { rankStories, textArray, EVENT_TEMPLATE_SQL, type StoryCandidate, type ListedStory } from '../lib/story-list'
 import { staleWhileRevalidate } from '../lib/swr-cache'
 import { longQuery } from '../lib/long-query'
+import { isoWeekOf, parseWeek, weekBounds, weekName, type IsoWeek } from '../lib/week'
+import { entityDirectory } from '../lib/entity-directory'
+import { COUNTRY_NAMES } from './countries'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MAX_SIGNALS = 50
@@ -50,6 +53,10 @@ const SITEMAP_CACHE_KEY = 'stories:sitemap:v3'
 const SITEMAP_CACHE_TTL = 1_800
 
 const SEVERITIES = ['info', 'low', 'medium', 'high', 'critical']
+/** A week's page (GET /stories/week): its top stories, busiest countries and the people most in the news */
+const WEEK_STORIES = 15
+const WEEK_COUNTRIES = 12
+const WEEK_PEOPLE = 10
 
 const MEMBER_COLUMNS = `s.id, s.title, s.category::text AS category, s.status::text AS status,
          CASE s.severity::text WHEN 'critical' THEN 5 WHEN 'high' THEN 4 WHEN 'medium' THEN 3 WHEN 'low' THEN 2 ELSE 1 END AS sev_rank,
@@ -65,36 +72,44 @@ const MEMBER_COLUMNS = `s.id, s.title, s.category::text AS category, s.status::t
  * A story is the signals sharing story_id, or a signal no story has claimed
  * whose links come from at least two addresses.
  */
-export function storyListSql(hasStoryIds: boolean, scope: 'recent' | 'signals' = 'recent'): string {
+export function storyListSql(hasStoryIds: boolean, scope: 'recent' | 'signals' | 'week' = 'recent'): string {
   // scope 'signals': only the stories of the signals in an extra first binding
-  // (uuid[]), e.g. the reports that name one entity (lib/entity-profile.ts)
+  // (uuid[]), e.g. the reports that name one entity (lib/entity-profile.ts).
+  // scope 'week': reported between the first two bindings (from, to), the
+  // biggest stories first instead of the newest, and only the week's own
+  // reports counted, so a finished week stays as it was and a story running
+  // for months doesn't top every week (GET /stories/week, plan G11)
+  const week = scope === 'week'
   const only = scope === 'signals' ? 'id = ANY(?::uuid[]) AND ' : ''
+  const since = week ? 'created_at >= (SELECT lo FROM win) AND created_at < (SELECT hi FROM win)' : 'created_at >= ?'
+  const inWeek = week ? ' AND s.created_at >= (SELECT lo FROM win) AND s.created_at < (SELECT hi FROM win)' : ''
+  const order = week ? 'count(*) DESC, max(created_at) DESC' : 'max(created_at) DESC'
   const active = hasStoryIds
     ? `SELECT COALESCE(story_id, id) AS story_key
          FROM signals
-        WHERE ${only}created_at >= ? AND status IN ('verified', 'pending')
+        WHERE ${only}${since} AND status IN ('verified', 'pending')
           AND (story_id IS NOT NULL OR cardinality(original_urls) >= 2)
         GROUP BY 1`
     : `SELECT id AS story_key
          FROM signals
-        WHERE ${only}created_at >= ? AND status IN ('verified', 'pending')
+        WHERE ${only}${since} AND status IN ('verified', 'pending')
           AND cardinality(original_urls) >= 2
         GROUP BY 1`
   const members = hasStoryIds
     ? `SELECT ${MEMBER_COLUMNS}, s.story_id AS story_key
          FROM signals s JOIN active a ON s.story_id = a.story_key
-        WHERE s.status IN ('verified', 'pending')
+        WHERE s.status IN ('verified', 'pending')${inWeek}
        UNION ALL
        SELECT ${MEMBER_COLUMNS}, s.id AS story_key
          FROM signals s JOIN active a ON s.id = a.story_key
-        WHERE s.story_id IS NULL AND s.status IN ('verified', 'pending')`
+        WHERE s.story_id IS NULL AND s.status IN ('verified', 'pending')${inWeek}`
     : `SELECT ${MEMBER_COLUMNS}, s.id AS story_key
          FROM signals s JOIN active a ON s.id = a.story_key
-        WHERE s.status IN ('verified', 'pending')`
+        WHERE s.status IN ('verified', 'pending')${inWeek}`
   return `
-    WITH active AS (
+    WITH ${week ? 'win AS (SELECT ?::timestamptz AS lo, ?::timestamptz AS hi), ' : ''}active AS (
       ${active}
-      ORDER BY max(created_at) DESC
+      ORDER BY ${order}
       LIMIT ${MAX_CANDIDATES}
     ),
     members AS (
@@ -230,6 +245,68 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
     )
     return reply.send(response)
   })
+
+  /**
+   * GET /api/v1/stories/week?week=2026-W43 (plan G11 slice 1, Oct 20, 2026):
+   * "WorldPulse Week": the week's top stories ranked by independent outlets
+   * (each event once, no fading with age), its busiest countries by verified
+   * stories, and for the week under way the people most in the news (the
+   * entity directory's last 7 days). Without ?week, the week under way.
+   * Weeks run Monday to Monday, UTC. Kept: the week under way for 15 minutes,
+   * finished weeks for 6 hours, each served while one process remakes it.
+   */
+  app.get('/week', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const asked = (req.query as { week?: string }).week
+    const now = new Date()
+    const current = isoWeekOf(now)
+    const week = asked ? parseWeek(asked) : current
+    if (!week) return sendError(reply, 400, 'VALIDATION_ERROR', 'week must be an ISO week like 2026-W43')
+    if (weekBounds(week).start.getTime() > now.getTime()) return sendError(reply, 404, 'NOT_FOUND', 'That week has not started yet')
+    const underWay = weekName(week) === weekName(current)
+    const response = await staleWhileRevalidate(
+      `stories:week:v1:${weekName(week)}`,
+      { freshSeconds: underWay ? 900 : 6 * 3_600, staleSeconds: 24 * 3_600, lockSeconds: 2 * LIST_QUERY_SECONDS },
+      async () => ({ success: true, data: await weekDigest(week, underWay) }),
+    )
+    return reply.send(response)
+  })
+
+  async function weekDigest(week: IsoWeek, underWay: boolean) {
+    const { start, end } = weekBounds(week)
+    const until = underWay ? new Date() : end
+    const hasStoryIds = await signalsHaveStoryIds()
+    const storyKey = hasStoryIds ? 'COALESCE(story_id, id)' : 'id'
+    const [stories, countryResult, directory] = await Promise.all([
+      longQuery(LIST_QUERY_SECONDS, trx => trx.raw(storyListSql(hasStoryIds, 'week'), [start, until, EVENT_TEMPLATE_SQL]))
+        .then(r => rankStories(candidatesOf(r), WEEK_STORIES, until.getTime(), { decay: false })),
+      longQuery(LIST_QUERY_SECONDS, trx => trx.raw(
+        `SELECT country_code AS code, count(DISTINCT ${storyKey})::int AS stories
+           FROM signals
+          WHERE status = 'verified' AND created_at >= ? AND created_at < ? AND country_code ~ '^[A-Z]{2}$'
+          GROUP BY 1 ORDER BY 2 DESC LIMIT ?`,
+        [start, until, WEEK_COUNTRIES + 4],
+      )),
+      underWay ? entityDirectory().catch(() => null) : Promise.resolve(null),
+    ])
+    const countryRows = ((countryResult as { rows?: Array<{ code: string; stories: number }> } | undefined)?.rows ?? [])
+    const countries = countryRows
+      .filter(r => r.code !== 'UK' && COUNTRY_NAMES[r.code])
+      .slice(0, WEEK_COUNTRIES)
+      .map(r => ({ code: r.code, name: COUNTRY_NAMES[r.code]!, stories: Number(r.stories) || 0 }))
+    const people = directory
+      ? (directory.groups.find(g => g.key === 'people')?.entities ?? []).slice(0, WEEK_PEOPLE).map(e => ({ id: e.id, name: e.name, reports: e.last7d }))
+      : null
+    return {
+      week: weekName(week),
+      start: start.toISOString(),
+      end: end.toISOString(),
+      underWay,
+      stories,
+      countries,
+      people,
+      generatedAt: new Date().toISOString(),
+    }
+  }
 
   /** A week of verified stories (3 s on Oct 15, 2026, and growing): its own time limit, off the request path */
   async function storySitemap() {

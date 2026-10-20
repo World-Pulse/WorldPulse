@@ -18,7 +18,7 @@ const COUNTRY_DETAIL_TTL = 120  // 2 min — per-country detail
 const COUNTRY_LIST_SECONDS = 25
 
 // ISO 3166-1 alpha-2 → full country name
-const COUNTRY_NAMES: Record<string, string> = {
+export const COUNTRY_NAMES: Record<string, string> = {
   AF: 'Afghanistan',    AL: 'Albania',        DZ: 'Algeria',        AD: 'Andorra',
   AO: 'Angola',         AR: 'Argentina',      AM: 'Armenia',        AU: 'Australia',
   AT: 'Austria',        AZ: 'Azerbaijan',     BS: 'Bahamas',        BH: 'Bahrain',

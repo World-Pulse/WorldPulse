@@ -16,6 +16,8 @@ const h = vi.hoisted(() => ({
   get: vi.fn(async () => null as string | null),
   /** statement time limits set for one transaction (lib/long-query.ts) */
   limits: [] as string[],
+  /** every query, in order */
+  calls: [] as Array<{ sql: string; bindings: unknown[] }>,
 }))
 
 vi.mock('../../db/redis', () => ({ redis: { get: h.get, setex: h.setex, set: vi.fn(async () => 'OK'), del: vi.fn(async () => 1) } }))
@@ -28,6 +30,7 @@ vi.mock('../../db/postgres', () => {
     if (/^SET LOCAL statement_timeout/.test(sql)) { h.limits.push(sql); return { rows: [] } }
     h.sql = sql
     h.bindings = bindings
+    h.calls.push({ sql, bindings })
     return { rows: h.rows }
   })
   return {
@@ -257,3 +260,58 @@ describe('GET /api/v1/stories/sitemap', () => {
     expect(h.setex).toHaveBeenCalledWith('stories:sitemap:v3', 1_800 + 86_400, expect.any(String))
   })
 })
+
+/** "WorldPulse Week" (plan G11 slice 1, Oct 20, 2026) */
+describe('GET /api/v1/stories/week', () => {
+  beforeEach(() => {
+    h.get.mockResolvedValue(null)
+    h.setex.mockClear()
+    h.calls.length = 0
+    h.rows = [{
+      story_key: 's-riyadh', size: 33, first_seen: '2026-10-13T20:00:00Z', newest: '2026-10-14T20:00:00Z',
+      verified_at: '2026-10-13T21:00:00Z', sev_rank: 4, place: 'Riyadh', category: 'conflict', lead_id: 'sig-1',
+      title: 'Twelve killed and 300 injured in attack on airport in Saudi capital Riyadh',
+      urls: ['https://www.aljazeera.com/a', 'https://www.bbc.co.uk/b', 'https://apnews.com/c'],
+      // (the same rows answer the countries query)
+      code: 'SA', stories: 3,
+    }]
+  })
+
+  it("lists a finished week's top stories by outlets, and its busiest countries", async () => {
+    const app = Fastify({ logger: false })
+    await app.register(registerStoryRoutes, { prefix: '/api/v1/stories' })
+    const res = await app.inject({ method: 'GET', url: '/api/v1/stories/week?week=2026-W42' })
+    expect(res.statusCode).toBe(200)
+    const d = res.json().data
+    expect(d).toMatchObject({ week: '2026-W42', start: '2026-10-12T00:00:00.000Z', end: '2026-10-19T00:00:00.000Z', underWay: false, people: null })
+    expect(d.stories).toHaveLength(1)
+    expect(d.stories[0]).toMatchObject({ id: 's-riyadh', outletCount: 3 })
+    expect(d.countries).toEqual([{ code: 'SA', name: expect.any(String), stories: 3 }])
+    const storySql = h.calls.find(c => /JOIN active a/.test(c.sql))!
+    expect(storySql.sql).toMatch(/win AS \(SELECT \?::timestamptz AS lo, \?::timestamptz AS hi\)/) // the week only
+    expect(storySql.sql).toMatch(/AND s\.created_at >= \(SELECT lo FROM win\) AND s\.created_at < \(SELECT hi FROM win\)/) // and only its own reports counted
+    expect(storySql.sql).toMatch(/ORDER BY count\(\*\) DESC/)                     // the biggest stories, not the newest
+    expect((storySql.bindings[0] as Date).toISOString()).toBe('2026-10-12T00:00:00.000Z')
+    expect((storySql.bindings[1] as Date).toISOString()).toBe('2026-10-19T00:00:00.000Z')
+    expect(h.calls.some(c => /count\(DISTINCT COALESCE\(story_id, id\)\)/.test(c.sql) && /status = 'verified'/.test(c.sql))).toBe(true)
+    // a finished week is kept 6 hours, then served while it is remade
+    expect(h.setex).toHaveBeenCalledWith('stories:week:v1:2026-W42', 6 * 3_600 + 24 * 3_600, expect.any(String))
+  })
+
+  it('refuses a week name that is not an ISO week, and a week not begun', async () => {
+    const app = Fastify({ logger: false })
+    await app.register(registerStoryRoutes, { prefix: '/api/v1/stories' })
+    expect((await app.inject({ method: 'GET', url: '/api/v1/stories/week?week=2026-43' })).statusCode).toBe(400)
+    expect((await app.inject({ method: 'GET', url: '/api/v1/stories/week?week=2099-W10' })).statusCode).toBe(404)
+  })
+})
+
+describe('rankStories without fading (a finished week)', () => {
+  it("ranks by outlets and severity only: an early story with more outlets stays ahead", () => {
+    const early = candidate({ key: 'early', leadId: 'e', title: 'Earthquake strikes the northern coast of Japan', updatedAt: hoursAgo(120), outlets: ['a.com', 'b.com', 'c.com', 'd.com', 'e.com'] })
+    const late = candidate({ key: 'late', leadId: 'l', title: 'Kenyan parliament passes the new national budget', updatedAt: hoursAgo(1), outlets: ['f.com', 'g.com'] })
+    expect(rankStories([late, early], 2, NOW).map(s => s.id)).toEqual(['late', 'early'])            // fading: the late one first
+    expect(rankStories([late, early], 2, NOW, { decay: false }).map(s => s.id)).toEqual(['early', 'late'])
+  })
+})
+

@@ -182,7 +182,11 @@ export function sameEvent(a: { title: string; place: string | null }, b: { title
  * headline, highest rank first, each event once (the best-ranked of its
  * stories), at most `limit`.
  */
-export function rankStories(candidates: StoryCandidate[], limit: number, now = Date.now()): ListedStory[] {
+/**
+ * `decay: false` ranks by outlets and severity only, for a finished stretch of
+ * time (a week's top stories: one from Monday counts as much as one from Sunday)
+ */
+export function rankStories(candidates: StoryCandidate[], limit: number, now = Date.now(), opts: { decay?: boolean } = {}): ListedStory[] {
   const scored: Array<{ story: ListedStory; score: number }> = []
   for (const c of candidates) {
     if (!c.title || looksLikeEventTemplate(c.title)) continue
@@ -190,7 +194,7 @@ export function rankStories(candidates: StoryCandidate[], limit: number, now = D
     const outlets = outletsOf(c.urls, 1000)
     if (outlets.length < 2) continue
     scored.push({
-      score: storyScore(outlets.length, c.severity, c.updatedAt, now),
+      score: storyScore(outlets.length, c.severity, opts.decay === false ? new Date(now) : c.updatedAt, now),
       story: {
         id:          c.key,
         leadId:      c.leadId,
