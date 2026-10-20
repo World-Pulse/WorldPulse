@@ -1,67 +1,61 @@
 // ─── WorldPulse SDK ──────────────────────────────────────────────
-// Official TypeScript client for the WorldPulse Public API
+// A small client for WorldPulse's open read routes (README.md).
 //
-// Usage:
 //   import { WorldPulse } from '@worldpulse/sdk'
 //   const wp = new WorldPulse()
-//   const { data } = await wp.signals.list({ category: 'conflict' })
-//
-// Real-time streaming (v1.1+):
-//   const stream = wp.stream.live({ channels: ['conflict', 'breaking'] })
-//   stream.on('signal', (s) => console.log(s.title))
-//   await stream.connect()
-//
-//   for await (const s of wp.stream.poll({ category: 'conflict' })) {
-//     console.log(s.title)
-//   }
-//
+//   const { data, total } = await wp.signals.list({ category: 'conflict' })
 
-export { WorldPulse } from './client'
+export {
+  WorldPulse,
+  DEFAULT_BASE_URL,
+  DEFAULT_TIMEOUT,
+  // the method groups (wp.signals, …), exported so their types can be named
+  SignalMethods,
+  CategoryMethods,
+  StoryMethods,
+  SearchMethods,
+  CountryMethods,
+} from './client'
 
-// Streaming
-export { SignalLiveStream, StreamMethods } from './stream'
-
-// Types
-export type {
-  WorldPulseConfig,
-  Signal,
-  SignalDetail,
-  Category,
-  Source,
-  IntelligenceDomain,
-  CountryActivity,
-  ThreatAssessment,
-  PlatformStats,
-  PaginatedResponse,
-  ListResponse,
-  DataResponse,
-  ListSignalsParams,
-  ListSourcesParams,
-  ListCountriesParams,
-  ListBreakingParams,
-  ApiErrorResponse,
-  Severity,
-  SignalCategory,
-  SignalSort,
-  PaginationLinks,
-  // Streaming types
-  LiveStreamOptions,
-  LiveStreamEventMap,
-  PollStreamOptions,
-  WsChannel,
-  WsEventType,
-  WsMessage,
-  WsConnectedData,
-  WsSignalData,
-} from './types'
-
-// Errors
 export {
   WorldPulseError,
   ApiError,
-  TimeoutError,
   RateLimitError,
   NetworkError,
-  StreamError,
-  StreamConnectionError,
+  TimeoutError,
 } from './errors'
+
+export type {
+  WorldPulseOptions,
+  Severity,
+  SignalStatus,
+  DataResponse,
+  // GET /api/v1/public/signals
+  ListSignalsParams,
+  PublicSignal,
+  SignalList,
+  // GET /api/v1/signals/:id
+  SignalDetail,
+  SignalSource,
+  SignalVerification,
+  SignalRiskScore,
+  SignalSummary,
+  SourceBias,
+  SignalMedia,
+  // GET /api/v1/stories, /api/v1/stories/:id, /api/v1/stories/week
+  TopStoriesParams,
+  Story,
+  StoryList,
+  StoryReport,
+  StoryDetail,
+  Week,
+  // GET /api/v1/search/semantic
+  SemanticSearchParams,
+  SemanticMatch,
+  SemanticSearchResponse,
+  // GET /api/v1/countries
+  CountryWindow,
+  CountryIndexParams,
+  CountryRisk,
+  CountryIndex,
+} from './types'

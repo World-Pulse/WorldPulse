@@ -1,476 +1,303 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { WorldPulse } from '../client'
-import { ApiError, TimeoutError, RateLimitError, NetworkError, WorldPulseError } from '../errors'
-import type { WorldPulseConfig, Signal, PaginatedResponse } from '../types'
+/**
+ * How the SDK asks and what it does with the answer (plan V3h): the address
+ * and parameters each method sends, the headers, and the errors for the
+ * answers the API gives (apps/api/src/lib/errors.ts, lib/error-reply.ts,
+ * lib/rate-limit-options.ts). fetch is stubbed: no network.
+ */
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import {
+  WorldPulse, DEFAULT_BASE_URL,
+  WorldPulseError, ApiError, RateLimitError, NetworkError, TimeoutError,
+  type SignalList,
+} from '../index'
 
-// ─── Helpers ─────────────────────────────────────────────────────
+const ID = '6f1c2a9e-3b7d-4c55-9a0e-8d2f4b1e7c30'
 
-function mockFetch(body: unknown, status = 200, headers: Record<string, string> = {}): typeof fetch {
-  return vi.fn().mockResolvedValue({
-    ok: status >= 200 && status < 300,
-    status,
-    headers: new Headers(headers),
-    json: () => Promise.resolve(body),
-  } as Response)
+/** A fetch answering `status` with `body` (JSON unless it's a string) */
+function answer(status = 200, body: unknown = { success: true, data: [] }, headers: Record<string, string> = {}) {
+  return vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
+    new Response(typeof body === 'string' ? body : JSON.stringify(body), { status, headers }))
 }
 
-function mockFetchSequence(responses: Array<{ body: unknown; status: number; headers?: Record<string, string> }>): typeof fetch {
-  const fn = vi.fn()
-  for (const [i, resp] of responses.entries()) {
-    fn.mockResolvedValueOnce({
-      ok: resp.status >= 200 && resp.status < 300,
-      status: resp.status,
-      headers: new Headers(resp.headers ?? {}),
-      json: () => Promise.resolve(resp.body),
-    } as Response)
+/** What the first request sent */
+function sent(fetch: ReturnType<typeof answer>) {
+  const [url, init] = fetch.mock.calls[0]!
+  return { url: new URL(String(url)), init: init ?? {}, headers: new Headers(init?.headers) }
+}
+
+/** The error a call rejects with */
+async function failure(call: Promise<unknown>): Promise<unknown> {
+  try {
+    await call
+  } catch (err) {
+    return err
   }
-  return fn
+  throw new Error('the call succeeded')
 }
 
-const SIGNAL_FIXTURE: Signal = {
-  id: 'sig_001',
-  title: 'Test signal',
-  category: 'conflict',
-  severity: 'high',
-  reliability_score: 0.85,
-  location_name: 'Kyiv, Ukraine',
-  published_at: '2026-04-06T00:00:00.000Z',
-  source_url: 'https://example.com/article',
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.useRealTimers()
+})
+
+// An answer of GET /api/v1/public/signals, as routes/public.ts builds it
+const SIGNALS: SignalList = {
+  success: true,
+  data: [{
+    id: ID,
+    title: 'Magnitude 6.2 earthquake near Tonga',
+    category: 'disaster',
+    severity: 'high',
+    reliability_score: 0.87,
+    location_name: 'Tonga',
+    published_at: '2026-10-20T14:32:00.000Z',
+    source_url: 'https://example.com/tonga',
+  }],
+  total: 2847,
+  total_exact: false,
+  limit: 50,
+  offset: 0,
 }
 
-// ─── Client Construction ─────────────────────────────────────────
-
-describe('WorldPulse constructor', () => {
-  it('uses default base URL when none provided', () => {
-    const wp = new WorldPulse({ fetch: mockFetch({}) })
-    const url = wp.buildUrl('/signals')
-    expect(url).toContain('api.world-pulse.io')
-  })
-
-  it('accepts custom base URL', () => {
-    const wp = new WorldPulse({ baseUrl: 'http://localhost:3001/api/v1/public', fetch: mockFetch({}) })
-    const url = wp.buildUrl('/signals')
-    expect(url).toContain('localhost:3001')
-  })
-
-  it('strips trailing slashes from base URL', () => {
-    const wp = new WorldPulse({ baseUrl: 'http://localhost:3001/', fetch: mockFetch({}) })
-    const url = wp.buildUrl('/signals')
-    expect(url).toBe('http://localhost:3001/signals')
-  })
-
-  it('exposes all method groups', () => {
-    const wp = new WorldPulse({ fetch: mockFetch({}) })
-    expect(wp.signals).toBeDefined()
-    expect(wp.categories).toBeDefined()
-    expect(wp.sources).toBeDefined()
-    expect(wp.intelligence).toBeDefined()
-    expect(wp.countries).toBeDefined()
-    expect(wp.threats).toBeDefined()
-    expect(wp.stats).toBeDefined()
-    expect(wp.breaking).toBeDefined()
-  })
-})
-
-// ─── URL Building ────────────────────────────────────────────────
-
-describe('buildUrl', () => {
-  const wp = new WorldPulse({ baseUrl: 'http://test.local/api', fetch: mockFetch({}) })
-
-  it('builds URL with no params', () => {
-    expect(wp.buildUrl('/signals')).toBe('http://test.local/api/signals')
-  })
-
-  it('appends query params', () => {
-    const url = wp.buildUrl('/signals', { category: 'conflict', limit: 10 })
-    expect(url).toContain('category=conflict')
-    expect(url).toContain('limit=10')
-  })
-
-  it('omits undefined and null params', () => {
-    const url = wp.buildUrl('/signals', { category: undefined, severity: null, limit: 5 })
-    expect(url).not.toContain('category')
-    expect(url).not.toContain('severity')
-    expect(url).toContain('limit=5')
-  })
-
-  it('encodes special characters', () => {
-    const url = wp.buildUrl('/signals', { q: 'foo bar & baz' })
-    expect(url).toContain('q=foo+bar')
-  })
-})
-
-// ─── HTTP GET / Fetch Behavior ───────────────────────────────────
-
-describe('get', () => {
-  it('sends GET request with correct headers', async () => {
-    const fetchMock = mockFetch({ success: true, data: [] })
-    const wp = new WorldPulse({ baseUrl: 'http://test.local/api', fetch: fetchMock })
-
-    await wp.get('/signals')
-
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-    const [url, init] = (fetchMock as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit]
-    expect(url).toBe('http://test.local/api/signals')
+describe('requests', () => {
+  it('ask https://api.world-pulse.io by default, with GET and Accept: application/json, and no credentials', async () => {
+    const fetch = answer()
+    await new WorldPulse({ fetch }).signals.list()
+    const { url, init, headers } = sent(fetch)
+    expect(DEFAULT_BASE_URL).toBe('https://api.world-pulse.io')
+    expect(url.href).toBe('https://api.world-pulse.io/api/v1/public/signals')
     expect(init.method).toBe('GET')
-    expect(init.headers).toMatchObject({
-      'Accept': 'application/json',
-    })
+    expect(headers.get('accept')).toBe('application/json')
+    expect(headers.has('x-api-key')).toBe(false)
+    expect(headers.has('authorization')).toBe(false)
+    expect(init.signal).toBeInstanceOf(AbortSignal)
   })
 
-  it('includes custom headers', async () => {
-    const fetchMock = mockFetch({ success: true })
-    const wp = new WorldPulse({
-      baseUrl: 'http://test.local/api',
-      fetch: fetchMock,
-      headers: { 'X-Custom': 'value' },
-    })
+  it('go to the baseUrl given, without its trailing slash, keeping its path', async () => {
+    const local = answer()
+    await new WorldPulse({ fetch: local, baseUrl: 'http://localhost:3001/' }).categories.list()
+    expect(sent(local).url.href).toBe('http://localhost:3001/api/v1/public/categories')
 
-    await wp.get('/signals')
-
-    const [, init] = (fetchMock as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit]
-    expect((init.headers as Record<string, string>)['X-Custom']).toBe('value')
+    const behindProxy = answer()
+    await new WorldPulse({ fetch: behindProxy, baseUrl: 'https://example.org/worldpulse//' }).stories.top()
+    expect(sent(behindProxy).url.href).toBe('https://example.org/worldpulse/api/v1/stories')
   })
 
-  it('returns parsed JSON on success', async () => {
-    const body = { success: true, data: [SIGNAL_FIXTURE], total: 1, limit: 50, offset: 0 }
-    const wp = new WorldPulse({ baseUrl: 'http://test.local/api', fetch: mockFetch(body) })
-
-    const result = await wp.get<PaginatedResponse<Signal>>('/signals')
-    expect(result.success).toBe(true)
-    expect(result.data).toHaveLength(1)
-    expect(result.data[0]?.id).toBe('sig_001')
+  it('send the parameters given and leave the others out', async () => {
+    const fetch = answer()
+    await new WorldPulse({ fetch }).signals.list({ category: 'conflict', limit: 10 })
+    expect([...sent(fetch).url.searchParams]).toEqual([['category', 'conflict'], ['limit', '10']])
   })
-})
 
-// ─── Error Handling ──────────────────────────────────────────────
+  it.each([
+    ['signals.list',    (wp: WorldPulse) => wp.signals.list({ category: 'climate', severity: 'info', limit: 100, offset: 10_000 }), '/api/v1/public/signals', { category: 'climate', severity: 'info', limit: '100', offset: '10000' }],
+    ['stories.top',     (wp: WorldPulse) => wp.stories.top({ hours: 72, limit: 20, country: 'NG' }),                               '/api/v1/stories',        { hours: '72', limit: '20', country: 'NG' }],
+    ['stories.week',    (wp: WorldPulse) => wp.stories.week('2026-W42'),                                                            '/api/v1/stories/week',   { week: '2026-W42' }],
+    ['stories.week()',  (wp: WorldPulse) => wp.stories.week(),                                                                      '/api/v1/stories/week',   {}],
+    ['search.semantic', (wp: WorldPulse) => wp.search.semantic('drought & crop failure in Kenya', { limit: 5, category: 'climate' }), '/api/v1/search/semantic', { q: 'drought & crop failure in Kenya', limit: '5', category: 'climate' }],
+    ['countries.list',  (wp: WorldPulse) => wp.countries.list({ window: '30d', limit: 200, category: 'conflict' }),                 '/api/v1/countries',      { window: '30d', limit: '200', category: 'conflict' }],
+    ['categories.list', (wp: WorldPulse) => wp.categories.list(),                                                                   '/api/v1/public/categories', {}],
+  ] as const)('%s sends its parameters under the names its route reads', async (_name, call, path, params) => {
+    const fetch = answer()
+    await call(new WorldPulse({ fetch }))
+    const { url } = sent(fetch)
+    expect(url.pathname).toBe(path)
+    expect(Object.fromEntries(url.searchParams)).toEqual(params)
+  })
 
-describe('error handling', () => {
-  it('throws ApiError on 400 response', async () => {
-    const body = { success: false, error: 'Bad request', code: 'VALIDATION_ERROR' }
-    const wp = new WorldPulse({
-      baseUrl: 'http://test.local/api',
-      fetch: mockFetch(body, 400),
-      maxRetries: 0,
-    })
+  it('encode what a question holds', async () => {
+    const fetch = answer(200, { success: true, results: [], semantic: true, partial: false })
+    await new WorldPulse({ fetch }).search.semantic('drought & crop failure in Kenya?')
+    expect(sent(fetch).url.search).toBe('?q=drought+%26+crop+failure+in+Kenya%3F')
+  })
 
-    await expect(wp.get('/signals')).rejects.toThrow(ApiError)
-    try {
-      await wp.get('/signals')
-    } catch (err) {
-      expect(err).toBeInstanceOf(ApiError)
-      expect((err as ApiError).status).toBe(400)
-      expect((err as ApiError).code).toBe('VALIDATION_ERROR')
+  it('put a signal or story id in the path', async () => {
+    const signal = answer()
+    await new WorldPulse({ fetch: signal }).signals.get(ID)
+    expect(sent(signal).url.pathname).toBe(`/api/v1/signals/${ID}`)
+
+    const story = answer()
+    await new WorldPulse({ fetch: story }).stories.get(ID.toUpperCase())
+    expect(sent(story).url.pathname).toBe(`/api/v1/stories/${ID.toUpperCase()}`)
+  })
+
+  it('refuse an id that isn\'t a UUID without asking: "week" would reach another route', async () => {
+    const fetch = answer()
+    const wp = new WorldPulse({ fetch })
+    for (const call of [wp.stories.get('week'), wp.stories.get(''), wp.signals.get('count'), wp.signals.get(`${ID}/summary`)]) {
+      const err = await failure(call)
+      expect(err).toBeInstanceOf(TypeError)
+      expect(String((err as Error).message)).toMatch(/UUID/)
     }
+    expect(fetch).not.toHaveBeenCalled()
   })
 
-  it('throws ApiError on 404', async () => {
-    const body = { success: false, error: 'Not found', code: 'NOT_FOUND' }
-    const wp = new WorldPulse({
-      baseUrl: 'http://test.local/api',
-      fetch: mockFetch(body, 404),
-      maxRetries: 0,
-    })
-    await expect(wp.get('/signals/nonexistent')).rejects.toThrow(ApiError)
+  it('send an API key as X-API-Key and a sign-in token as Authorization: Bearer, as the API reads them', async () => {
+    const fetch = answer()
+    await new WorldPulse({ fetch, apiKey: 'wp_live_0123456789abcdef0123456789abcdef', token: 'eyJhbGciOi.payload.sig' }).signals.list()
+    const { headers } = sent(fetch)
+    expect(headers.get('x-api-key')).toBe('wp_live_0123456789abcdef0123456789abcdef')
+    expect(headers.get('authorization')).toBe('Bearer eyJhbGciOi.payload.sig')
   })
 
-  it('throws RateLimitError on 429', async () => {
-    const body = { success: false, error: 'Too many requests', code: 'RATE_LIMITED' }
-    const wp = new WorldPulse({
-      baseUrl: 'http://test.local/api',
-      fetch: mockFetch(body, 429, { 'Retry-After': '30' }),
-      maxRetries: 0,
-    })
-
-    await expect(wp.get('/signals')).rejects.toThrow(RateLimitError)
-    try {
-      await wp.get('/signals')
-    } catch (err) {
-      expect((err as RateLimitError).retryAfterMs).toBe(30_000)
-    }
+  it('add the headers given to every request', async () => {
+    const fetch = answer()
+    const wp = new WorldPulse({ fetch, headers: { 'X-Request-Id': 'abc-123' } })
+    await wp.signals.list()
+    await wp.stories.week()
+    for (const [, init] of fetch.mock.calls) expect(new Headers(init?.headers).get('x-request-id')).toBe('abc-123')
   })
 
-  it('throws NetworkError on fetch failure', async () => {
-    const failFetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
-    const wp = new WorldPulse({
-      baseUrl: 'http://test.local/api',
-      fetch: failFetch,
-      maxRetries: 0,
-    })
+  /** A fetch that notes the `this` it was called with */
+  function noting(): { fetch: typeof globalThis.fetch; receivers: unknown[] } {
+    const receivers: unknown[] = []
+    const fetch = function (this: unknown) {
+      receivers.push(this)
+      return Promise.resolve(new Response('{"success":true,"data":[]}'))
+    } as unknown as typeof globalThis.fetch
+    return { fetch, receivers }
+  }
 
-    await expect(wp.get('/signals')).rejects.toThrow(NetworkError)
+  it('use the global fetch when none is given, called on globalThis', async () => {
+    const { fetch, receivers } = noting()
+    vi.stubGlobal('fetch', fetch)
+    await new WorldPulse().categories.list()
+    expect(receivers).toEqual([globalThis])
   })
 
-  it('throws TimeoutError on abort', async () => {
-    const slowFetch = vi.fn().mockRejectedValue(
-      new DOMException('The operation was aborted', 'AbortError'),
-    )
-    const wp = new WorldPulse({
-      baseUrl: 'http://test.local/api',
-      fetch: slowFetch,
-      timeout: 100,
-      maxRetries: 0,
-    })
+  it('call a fetch given as a plain function (a browser\'s fetch refuses any other `this`)', async () => {
+    const { fetch, receivers } = noting()
+    await new WorldPulse({ fetch }).categories.list()
+    expect(receivers).toEqual([undefined])
+  })
 
-    await expect(wp.get('/signals')).rejects.toThrow(TimeoutError)
+  it('return the answer as the API sent it', async () => {
+    const wp = new WorldPulse({ fetch: answer(200, SIGNALS) })
+    await expect(wp.signals.list()).resolves.toEqual(SIGNALS)
   })
 })
 
-// ─── Retry Logic ─────────────────────────────────────────────────
-
-describe('retry logic', () => {
-  it('retries on 500 then succeeds', async () => {
-    const fetchSeq = mockFetchSequence([
-      { body: null, status: 500 },
-      { body: { success: true, data: [] }, status: 200 },
-    ])
-    const wp = new WorldPulse({
-      baseUrl: 'http://test.local/api',
-      fetch: fetchSeq,
-      maxRetries: 2,
-      retryDelay: 1,
-    })
-
-    const result = await wp.get('/signals')
-    expect(fetchSeq).toHaveBeenCalledTimes(2)
-    expect((result as { success: boolean }).success).toBe(true)
-  })
-
-  it('retries on 429 then succeeds', async () => {
-    const fetchSeq = mockFetchSequence([
-      { body: { success: false }, status: 429, headers: { 'Retry-After': '0' } },
-      { body: { success: true, data: [] }, status: 200 },
-    ])
-    const wp = new WorldPulse({
-      baseUrl: 'http://test.local/api',
-      fetch: fetchSeq,
-      maxRetries: 2,
-      retryDelay: 1,
-    })
-
-    const result = await wp.get('/signals')
-    expect(fetchSeq).toHaveBeenCalledTimes(2)
-    expect((result as { success: boolean }).success).toBe(true)
-  })
-
-  it('exhausts retries on persistent 500', async () => {
-    const fetchSeq = mockFetchSequence([
-      { body: null, status: 500 },
-      { body: null, status: 500 },
-      { body: null, status: 500 },
-    ])
-    const wp = new WorldPulse({
-      baseUrl: 'http://test.local/api',
-      fetch: fetchSeq,
-      maxRetries: 2,
-      retryDelay: 1,
-    })
-
-    await expect(wp.get('/signals')).rejects.toThrow(ApiError)
-    expect(fetchSeq).toHaveBeenCalledTimes(3)
-  })
-
-  it('does not retry on 400 (client error)', async () => {
-    const fetchMock = mockFetch({ success: false, error: 'Bad request', code: 'BAD_REQUEST' }, 400)
-    const wp = new WorldPulse({
-      baseUrl: 'http://test.local/api',
-      fetch: fetchMock,
-      maxRetries: 2,
-    })
-
-    await expect(wp.get('/signals')).rejects.toThrow(ApiError)
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-  })
-})
-
-// ─── Method Groups ───────────────────────────────────────────────
-
-describe('signals', () => {
-  it('list() calls /signals with params', async () => {
-    const fetchMock = mockFetch({ success: true, data: [], total: 0, limit: 10, offset: 0 })
-    const wp = new WorldPulse({ baseUrl: 'http://test.local/api', fetch: fetchMock })
-
-    await wp.signals.list({ category: 'climate', limit: 10 })
-
-    const [url] = (fetchMock as ReturnType<typeof vi.fn>).mock.calls[0] as [string]
-    expect(url).toContain('/signals')
-    expect(url).toContain('category=climate')
-    expect(url).toContain('limit=10')
-  })
-
-  it('get() calls /signals/:id', async () => {
-    const fetchMock = mockFetch({ success: true, data: { ...SIGNAL_FIXTURE, body: 'text' } })
-    const wp = new WorldPulse({ baseUrl: 'http://test.local/api', fetch: fetchMock })
-
-    await wp.signals.get('sig_001')
-
-    const [url] = (fetchMock as ReturnType<typeof vi.fn>).mock.calls[0] as [string]
-    expect(url).toContain('/signals/sig_001')
-  })
-
-  it('get() encodes special characters in ID', async () => {
-    const fetchMock = mockFetch({ success: true, data: {} })
-    const wp = new WorldPulse({ baseUrl: 'http://test.local/api', fetch: fetchMock })
-
-    await wp.signals.get('sig/with spaces')
-
-    const [url] = (fetchMock as ReturnType<typeof vi.fn>).mock.calls[0] as [string]
-    expect(url).toContain('/signals/sig%2Fwith%20spaces')
-  })
-})
-
-describe('categories', () => {
-  it('list() calls /categories', async () => {
-    const fetchMock = mockFetch({ success: true, data: [] })
-    const wp = new WorldPulse({ baseUrl: 'http://test.local/api', fetch: fetchMock })
-
-    await wp.categories.list()
-
-    const [url] = (fetchMock as ReturnType<typeof vi.fn>).mock.calls[0] as [string]
-    expect(url).toContain('/categories')
-  })
-})
-
-describe('sources', () => {
-  it('list() calls /sources with params', async () => {
-    const fetchMock = mockFetch({ success: true, data: [], total: 0, limit: 50, offset: 0 })
-    const wp = new WorldPulse({ baseUrl: 'http://test.local/api', fetch: fetchMock })
-
-    await wp.sources.list({ tier: 'premium', country_code: 'US' })
-
-    const [url] = (fetchMock as ReturnType<typeof vi.fn>).mock.calls[0] as [string]
-    expect(url).toContain('/sources')
-    expect(url).toContain('tier=premium')
-    expect(url).toContain('country_code=US')
-  })
-})
-
-describe('intelligence', () => {
-  it('list() calls /intelligence', async () => {
-    const fetchMock = mockFetch({ success: true, data: [] })
-    const wp = new WorldPulse({ baseUrl: 'http://test.local/api', fetch: fetchMock })
-
-    await wp.intelligence.list()
-
-    const [url] = (fetchMock as ReturnType<typeof vi.fn>).mock.calls[0] as [string]
-    expect(url).toContain('/intelligence')
-  })
-})
-
-describe('countries', () => {
-  it('list() calls /countries with params', async () => {
-    const fetchMock = mockFetch({ success: true, data: [] })
-    const wp = new WorldPulse({ baseUrl: 'http://test.local/api', fetch: fetchMock })
-
-    await wp.countries.list({ since: '2026-04-01T00:00:00Z' })
-
-    const [url] = (fetchMock as ReturnType<typeof vi.fn>).mock.calls[0] as [string]
-    expect(url).toContain('/countries')
-    expect(url).toContain('since=')
-  })
-})
-
-describe('threats', () => {
-  it('list() calls /threats', async () => {
-    const fetchMock = mockFetch({ success: true, data: [] })
-    const wp = new WorldPulse({ baseUrl: 'http://test.local/api', fetch: fetchMock })
-
-    await wp.threats.list()
-
-    const [url] = (fetchMock as ReturnType<typeof vi.fn>).mock.calls[0] as [string]
-    expect(url).toContain('/threats')
-  })
-})
-
-describe('stats', () => {
-  it('get() calls /stats', async () => {
-    const fetchMock = mockFetch({ success: true, data: { total_signals: 5000 } })
-    const wp = new WorldPulse({ baseUrl: 'http://test.local/api', fetch: fetchMock })
-
-    const result = await wp.stats.get()
-
-    const [url] = (fetchMock as ReturnType<typeof vi.fn>).mock.calls[0] as [string]
-    expect(url).toContain('/stats')
-    expect(result.data.total_signals).toBe(5000)
-  })
-})
-
-describe('breaking', () => {
-  it('list() calls /breaking with params', async () => {
-    const fetchMock = mockFetch({ success: true, data: [] })
-    const wp = new WorldPulse({ baseUrl: 'http://test.local/api', fetch: fetchMock })
-
-    await wp.breaking.list({ limit: 5 })
-
-    const [url] = (fetchMock as ReturnType<typeof vi.fn>).mock.calls[0] as [string]
-    expect(url).toContain('/breaking')
-    expect(url).toContain('limit=5')
-  })
-})
-
-// ─── Error Class Hierarchy ───────────────────────────────────────
-
-describe('error classes', () => {
-  it('WorldPulseError is base class', () => {
-    const err = new WorldPulseError('test', 'TEST')
-    expect(err).toBeInstanceOf(Error)
-    expect(err.name).toBe('WorldPulseError')
-    expect(err.code).toBe('TEST')
-  })
-
-  it('ApiError extends WorldPulseError', () => {
-    const err = new ApiError('not found', 'NOT_FOUND', 404)
-    expect(err).toBeInstanceOf(WorldPulseError)
-    expect(err).toBeInstanceOf(Error)
-    expect(err.status).toBe(404)
-  })
-
-  it('RateLimitError has retryAfterMs', () => {
-    const err = new RateLimitError('slow down', '60')
+describe('errors', () => {
+  it('a route\'s 400 ({ success: false, code, error }) throws ApiError with the status, code, message and body', async () => {
+    const body = { success: false, code: 'VALIDATION_ERROR', error: 'category must be one of: breaking, conflict, climate (or all)' }
+    const err = await failure(new WorldPulse({ fetch: answer(400, body) }).signals.list({ category: 'not-a-category' }))
     expect(err).toBeInstanceOf(ApiError)
-    expect(err.retryAfterMs).toBe(60_000)
+    expect(err).toBeInstanceOf(WorldPulseError)
+    const e = err as ApiError
+    expect(e.name).toBe('ApiError')
+    expect(e.status).toBe(400)
+    expect(e.code).toBe('VALIDATION_ERROR')
+    expect(e.message).toBe('WorldPulse API 400 VALIDATION_ERROR: category must be one of: breaking, conflict, climate (or all)')
+    expect(e.body).toEqual(body)
+    expect(e.url).toBe('https://api.world-pulse.io/api/v1/public/signals?category=not-a-category')
   })
 
-  it('RateLimitError with null Retry-After', () => {
-    const err = new RateLimitError('slow down', null)
-    expect(err.retryAfterMs).toBeNull()
+  it('a 404 says so', async () => {
+    const err = await failure(new WorldPulse({ fetch: answer(404, { success: false, code: 'NOT_FOUND', error: 'Story not found' }) }).stories.get(ID))
+    expect(err).toBeInstanceOf(ApiError)
+    expect((err as ApiError).status).toBe(404)
+    expect((err as ApiError).code).toBe('NOT_FOUND')
   })
 
-  it('TimeoutError has correct message', () => {
-    const err = new TimeoutError('http://example.com', 5000)
-    expect(err.message).toContain('5000ms')
-    expect(err.code).toBe('TIMEOUT')
+  it('the error handler\'s answers ({ statusCode, code, error, message }) give their message', async () => {
+    const body = { statusCode: 400, code: 'FST_ERR_VALIDATION', error: 'Bad Request', message: 'querystring/window must be equal to one of the allowed values' }
+    const err = await failure(new WorldPulse({ fetch: answer(400, body) }).countries.list())
+    expect((err as ApiError).code).toBe('FST_ERR_VALIDATION')
+    expect((err as ApiError).message).toBe('WorldPulse API 400 FST_ERR_VALIDATION: querystring/window must be equal to one of the allowed values')
   })
 
-  it('NetworkError wraps cause', () => {
-    const cause = new TypeError('Failed to fetch')
-    const err = new NetworkError('http://example.com', cause)
-    expect(err.cause).toBe(cause)
-    expect(err.code).toBe('NETWORK_ERROR')
-  })
-})
-
-// ─── Type Safety ─────────────────────────────────────────────────
-
-describe('type definitions', () => {
-  it('Signal type has all required fields', () => {
-    const sig: Signal = SIGNAL_FIXTURE
-    expect(sig.id).toBeDefined()
-    expect(sig.title).toBeDefined()
-    expect(sig.category).toBeDefined()
-    expect(sig.severity).toBeDefined()
-    expect(sig.published_at).toBeDefined()
+  it('a 429 throws RateLimitError, with the seconds Retry-After asks', async () => {
+    const body = { statusCode: 429, code: 'RATE_LIMITED', error: 'Too Many Requests', message: 'Too many requests. Slow down.' }
+    const fetch = answer(429, body, { 'retry-after': '37', 'x-ratelimit-remaining': '0' })
+    const err = await failure(new WorldPulse({ fetch }).search.semantic('ports closed by the strike'))
+    expect(err).toBeInstanceOf(RateLimitError)
+    expect(err).toBeInstanceOf(ApiError)
+    const e = err as RateLimitError
+    expect(e.name).toBe('RateLimitError')
+    expect(e.status).toBe(429)
+    expect(e.code).toBe('RATE_LIMITED')
+    expect(e.retryAfter).toBe(37)
+    expect(e.message).toBe('WorldPulse API 429 RATE_LIMITED: Too many requests. Slow down.')
+    expect(e.body).toEqual(body)
   })
 
-  it('PaginatedResponse has pagination fields', () => {
-    const resp: PaginatedResponse<Signal> = {
-      success: true,
-      data: [SIGNAL_FIXTURE],
-      total: 1,
-      limit: 50,
-      offset: 0,
-    }
-    expect(resp.total).toBe(1)
-    expect(resp.limit).toBe(50)
+  it('a Retry-After date counts the seconds until it', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-20T12:00:00Z'))
+    const err = await failure(new WorldPulse({ fetch: answer(429, {}, { 'retry-after': 'Tue, 20 Oct 2026 12:01:30 GMT' }) }).categories.list())
+    expect((err as RateLimitError).retryAfter).toBe(90)
+  })
+
+  it('a 429 without Retry-After has retryAfter null', async () => {
+    const err = await failure(new WorldPulse({ fetch: answer(429, { success: false, code: 'RATE_LIMITED', error: 'Too many requests' }) }).categories.list())
+    expect(err).toBeInstanceOf(RateLimitError)
+    expect((err as RateLimitError).retryAfter).toBeNull()
+  })
+
+  it('a 5xx, which says nothing of its cause, throws ApiError without a code', async () => {
+    const body = { statusCode: 500, error: 'Internal Server Error', message: 'Something went wrong on our side.' }
+    const err = await failure(new WorldPulse({ fetch: answer(500, body) }).stories.top())
+    expect((err as ApiError).status).toBe(500)
+    expect((err as ApiError).code).toBeNull()
+    expect((err as ApiError).message).toBe('WorldPulse API 500: Something went wrong on our side.')
+  })
+
+  it('an error answer that isn\'t JSON (a proxy\'s page) is kept as text', async () => {
+    const page = '<html><body><h1>502 Bad Gateway</h1></body></html>'
+    const err = await failure(new WorldPulse({ fetch: answer(502, page) }).stories.week())
+    expect(err).toBeInstanceOf(ApiError)
+    expect((err as ApiError).status).toBe(502)
+    expect((err as ApiError).code).toBeNull()
+    expect((err as ApiError).body).toBe(page)
+    expect((err as ApiError).message).toBe('WorldPulse API 502')
+  })
+
+  it('nothing is retried: one request per call', async () => {
+    const busy = answer(503, { success: false, code: 'SERVICE_UNAVAILABLE', error: 'The category list could not be read; try again shortly' })
+    await failure(new WorldPulse({ fetch: busy }).categories.list())
+    expect(busy).toHaveBeenCalledTimes(1)
+
+    const limited = answer(429, {}, { 'retry-after': '1' })
+    await failure(new WorldPulse({ fetch: limited }).categories.list())
+    expect(limited).toHaveBeenCalledTimes(1)
+  })
+
+  it('a 2xx answer that isn\'t JSON throws WorldPulseError', async () => {
+    const err = await failure(new WorldPulse({ fetch: answer(200, '<html>Captive portal</html>') }).categories.list())
+    expect(err).toBeInstanceOf(WorldPulseError)
+    expect(err).not.toBeInstanceOf(ApiError)
+    expect((err as Error).message).toMatch(/isn't JSON/)
+  })
+
+  it('fetch failing throws NetworkError, carrying the cause', async () => {
+    const cause = new TypeError('fetch failed')
+    const err = await failure(new WorldPulse({ fetch: vi.fn().mockRejectedValue(cause) }).signals.list())
+    expect(err).toBeInstanceOf(NetworkError)
+    expect(err).toBeInstanceOf(WorldPulseError)
+    expect((err as NetworkError).name).toBe('NetworkError')
+    expect((err as NetworkError).cause).toBe(cause)
+    expect((err as NetworkError).url).toBe('https://api.world-pulse.io/api/v1/public/signals')
+  })
+
+  it('no answer within `timeout` ms throws TimeoutError (the request is aborted)', async () => {
+    let signal: AbortSignal | undefined
+    const silent = vi.fn((_url: string | URL | Request, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      signal = init?.signal ?? undefined
+      signal?.addEventListener('abort', () => reject(new DOMException('This operation was aborted', 'AbortError')))
+    }))
+    const err = await failure(new WorldPulse({ fetch: silent, timeout: 20 }).stories.top())
+    expect(err).toBeInstanceOf(TimeoutError)
+    expect((err as TimeoutError).name).toBe('TimeoutError')
+    expect((err as TimeoutError).timeout).toBe(20)
+    expect(signal?.aborted).toBe(true)
+  })
+
+  it('timeout: 0 waits as long as the answer takes', async () => {
+    const slow = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      await new Promise(resolve => setTimeout(resolve, 30))
+      expect(init?.signal?.aborted).toBe(false)
+      return new Response(JSON.stringify(SIGNALS))
+    })
+    await expect(new WorldPulse({ fetch: slow, timeout: 0 }).signals.list()).resolves.toEqual(SIGNALS)
   })
 })

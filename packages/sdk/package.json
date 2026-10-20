@@ -1,10 +1,10 @@
 {
   "name": "@worldpulse/sdk",
   "version": "1.1.0",
-  "description": "Official TypeScript SDK for the WorldPulse Public API — real-time global intelligence signals",
-  "license": "CC-BY-4.0",
+  "description": "A small TypeScript client for WorldPulse's open read routes: verified signals, stories, the week, search by meaning, countries",
+  "license": "MIT",
   "author": "WorldPulse Contributors",
-  "homepage": "https://world-pulse.io/developer/api-docs",
+  "homepage": "https://world-pulse.io/developers",
   "repository": {
     "type": "git",
     "url": "https://github.com/World-Pulse/WorldPulse",
