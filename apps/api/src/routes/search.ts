@@ -1,3 +1,4 @@
+import { scoreOf } from '../lib/score'
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { db } from '../db/postgres'
@@ -545,7 +546,7 @@ export const registerSearchRoutes: FastifyPluginAsync = async (app) => {
         category:        s.category,
         severity:        s.severity,
         status:          s.status,
-        reliabilityScore: s.reliability_score,
+        reliabilityScore: scoreOf(s.reliability_score),
         locationName:    s.location_name,
         countryCode:     s.country_code,
         tags:            s.tags ?? [],

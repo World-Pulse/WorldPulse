@@ -1,3 +1,4 @@
+import { scoreOf } from '../lib/score'
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
@@ -461,7 +462,7 @@ function formatPost(
     boostOf:     null,
     threadRootId: row.thread_root_id as string | null,
     location:    null,
-    reliabilityScore: row.reliability_score as number | null,
+    reliabilityScore: scoreOf(row.reliability_score),
     author: {
       id:            row.author_id as string,
       handle:        row.author_handle as string,
@@ -524,7 +525,7 @@ function formatSignal(row: Record<string, unknown>) {
     category:         row.category,
     severity:         row.severity,
     status:           row.status,
-    reliabilityScore: row.reliability_score,
+    reliabilityScore: scoreOf(row.reliability_score),
     sourceCount:      row.source_count,
     location:         row.location_geojson ? { lat: (row.location_geojson as { coordinates: number[] }).coordinates[1], lng: (row.location_geojson as { coordinates: number[] }).coordinates[0] } : null,
     locationName:     row.location_name,

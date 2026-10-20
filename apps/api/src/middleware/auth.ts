@@ -30,7 +30,13 @@ export async function authenticate(req: FastifyRequest, reply: FastifyReply) {
       trustScore:  user.trust_score,
     }
   } catch {
-    return reply.status(401).send({ success: false, error: 'Invalid or expired token', code: 'UNAUTHORIZED' })
+    // No token at all is not a bad token (V3f, Oct 20, 2026: both answered "Invalid or expired token")
+    const sent = typeof req.headers.authorization === 'string' && req.headers.authorization.trim() !== ''
+    return reply.status(401).send({
+      success: false,
+      error:   sent ? 'Invalid or expired token' : 'Sign-in required: send your sign-in token as "Authorization: Bearer <token>"',
+      code:    'UNAUTHORIZED',
+    })
   }
 }
 

@@ -13,6 +13,7 @@
  *   POST /api/v1/pulse/publish/syndicate — syndicate a social post
  *   POST /api/v1/pulse/check-flash       — auto-check for new flash briefs
  */
+import { scoreOf } from '../lib/score'
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify'
 import { db } from '../db/postgres'
 import { signalsHaveStoryIds, storyKeyOf } from '../lib/stories'
@@ -223,7 +224,7 @@ Rules:
     summary: s.summary,
     category: s.category,
     severity: s.severity,
-    reliabilityScore: s.reliability_score,
+    reliabilityScore: scoreOf(s.reliability_score) ?? 0,
     sourceCount: s.source_count,
     locationName: s.location_name,
     countryCode: s.country_code,
@@ -664,7 +665,7 @@ export const registerPulseRoutes: FastifyPluginAsync = async (app) => {
         boostCount: post.boost_count ?? 0,
         replyCount: post.reply_count ?? 0,
         viewCount: post.view_count ?? 0,
-        reliabilityScore: post.reliability_score,
+        reliabilityScore: scoreOf(post.reliability_score),
         locationName: post.location_name,
         language: post.language,
         createdAt: post.created_at,

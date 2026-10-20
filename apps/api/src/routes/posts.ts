@@ -1,3 +1,4 @@
+import { scoreOf } from '../lib/score'
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
@@ -401,7 +402,7 @@ export function formatBasicPost(
     boostOfId:   row.boost_of_id,
     threadRootId: row.thread_root_id,
     location:    null,
-    reliabilityScore: row.reliability_score,
+    reliabilityScore: scoreOf(row.reliability_score),
     author: {
       id:          row.author_id,
       handle:      row.author_handle,

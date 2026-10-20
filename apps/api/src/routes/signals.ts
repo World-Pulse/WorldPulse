@@ -1,3 +1,4 @@
+import { scoreOf } from '../lib/score'
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
 import { signalConnections } from '../lib/signal-connections'
@@ -1015,7 +1016,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
           summary: s.summary,
           category: s.category,
           severity: s.severity,
-          reliabilityScore: s.reliability_score,
+          reliabilityScore: scoreOf(s.reliability_score),
           locationName: s.location_name,
           sourceId: s.source_id,
           createdAt: s.created_at ? (s.created_at as Date).toISOString() : null,
@@ -1624,7 +1625,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
         category:         s.category,
         severity:         s.severity,
         status:           s.status,
-        reliabilityScore: s.reliability_score,
+        reliabilityScore: scoreOf(s.reliability_score),
         locationName:     s.location_name,
         countryCode:      s.country_code,
         tags:             s.tags ?? [],
@@ -1778,7 +1779,7 @@ export function formatSignal(row: Record<string, unknown>) {
     category:         row.category,
     severity:         row.severity,
     status:           row.status,
-    reliabilityScore: row.reliability_score,
+    reliabilityScore: scoreOf(row.reliability_score),
     sourceCount:      row.source_count,
     location:         geo?.coordinates ? { lng: geo.coordinates[0], lat: geo.coordinates[1] } : null,
     locationName:     row.location_name,
@@ -1816,7 +1817,7 @@ function formatBasicPost(row: Record<string, unknown>) {
     boostCount:  row.boost_count ?? 0,
     replyCount:  row.reply_count ?? 0,
     createdAt:   (row.created_at as Date).toISOString(),
-    reliabilityScore: row.reliability_score,
+    reliabilityScore: scoreOf(row.reliability_score),
     author: {
       id:          row.author_id,
       handle:      row.author_handle,
