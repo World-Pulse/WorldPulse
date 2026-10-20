@@ -9,26 +9,35 @@ import {
   TrendingUp, Shield, Unplug, Satellite, Lock, Waves, Landmark,
   Wheat, KeyRound, Droplets, Pickaxe, Map, ScrollText, Users, Search,
   Mic, Video, Radio, Wrench, Settings, Activity, Anchor, CalendarDays,
-  CircleDot, Swords, LineChart, Leaf, Pill, FlaskConical, Vote, Globe2, Network, Newspaper, Link2,
+  CircleDot, Swords, LineChart, Leaf, Pill, FlaskConical, Vote, Globe2, Network, Newspaper, Link2, BadgeCheck,
   type LucideProps,
 } from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
 // "NEW" on the newest few only: on Oct 11, 2026, 18 of 25 items carried it (and
-// Alerts a fixed "12"), so it told the reader nothing
-const NAV_ITEMS = [
+// Alerts a fixed "12"), so it told the reader nothing.
+// Oct 20, 2026: what WorldPulse is for comes first (the stories, the week, the
+// map, checking a link and how the outlets are counted); every other section
+// follows as before.
+const CORE_ITEMS = [
   { href: '/',           icon: Zap,           labelKey: 'liveFeed' },
   { href: '/map',        icon: Globe,         labelKey: 'worldMap',    badge: 'LIVE', badgeColor: 'amber' },
+  { href: '/briefing',   icon: ClipboardList, labelKey: 'briefing',   badge: 'NEW', badgeColor: 'indigo' },
+  { href: '/week',       icon: CalendarDays,  labelKey: 'week',       badge: 'NEW', badgeColor: 'indigo' }, // the week's top stories (plan G11, Oct 20, 2026)
+  { href: '/check',      icon: Link2,          labelKey: 'checkLink',  badge: 'NEW', badgeColor: 'indigo' }, // paste a link, get the count (Oct 20, 2026)
+  { href: '/entities',   icon: Newspaper,     labelKey: 'inTheNews',  badge: 'NEW', badgeColor: 'purple' }, // who's in the news: the entity pages' index (Oct 13, 2026)
+  { href: '/countries',  icon: Map,            labelKey: 'countries' },
+  { href: '/how-we-count', icon: BadgeCheck,  labelKey: 'howWeCount' },
+] as const
+
+/** Every other section, as before */
+const OTHER_ITEMS = [
   { href: '/alerts',     icon: Bell,          labelKey: 'alerts' },
   { href: '/analytics',  icon: BarChart3,     labelKey: 'analytics'  },
   { href: '/explore',    icon: Telescope,     labelKey: 'explore'    },
   { href: '/knowledge-graph/explorer', icon: Network, labelKey: 'knowledgeGraph', badge: 'NEW', badgeColor: 'purple' },
-  { href: '/entities',   icon: Newspaper,     labelKey: 'inTheNews',  badge: 'NEW', badgeColor: 'purple' }, // who's in the news: the entity pages' index (Oct 13, 2026)
   // { href: '/clusters',   icon: LayoutGrid,    labelKey: 'clusters',   badge: 'NEW', badgeColor: 'blue'   }, // Hidden — needs correlation engine (Aether)
-  { href: '/briefing',   icon: ClipboardList, labelKey: 'briefing',   badge: 'NEW', badgeColor: 'indigo' },
-  { href: '/week',       icon: CalendarDays,  labelKey: 'week',       badge: 'NEW', badgeColor: 'indigo' }, // the week's top stories (plan G11, Oct 20, 2026)
-  { href: '/check',      icon: Link2,          labelKey: 'checkLink',  badge: 'NEW', badgeColor: 'indigo' }, // paste a link, get the count (Oct 20, 2026)
   { href: '/finance',    icon: TrendingUp,    labelKey: 'finance' },
   { href: '/maritime',        icon: Anchor,     labelKey: 'maritime' },
   { href: '/sanctions',        icon: Shield,    labelKey: 'sanctions' },
@@ -41,7 +50,6 @@ const NAV_ITEMS = [
   { href: '/digital-rights', icon: KeyRound,    labelKey: 'digitalRights' },
   { href: '/water-security', icon: Droplets,    labelKey: 'waterSecurity' },
   { href: '/labor-rights',  icon: Pickaxe,      labelKey: 'laborRights' },
-  { href: '/countries',  icon: Map,            labelKey: 'countries' },
   // { href: '/cameras',    icon: Camera,      labelKey: 'cameras',    badge: 'LIVE', badgeColor: 'red'   }, // Hidden pre-launch: EarthCam hotlink-blocks snapshots; needs backend image proxy
   { href: '/patents',    icon: ScrollText,    labelKey: 'patents' },
   { href: '/communities',icon: Users,         labelKey: 'communities' },
@@ -53,6 +61,8 @@ const NAV_ITEMS = [
   { href: '/settings',   icon: Settings,      labelKey: 'settings'   },
   { href: '/status',     icon: Activity,      labelKey: 'status'     },
 ] as const
+
+type NavItem = (typeof CORE_ITEMS)[number] | (typeof OTHER_ITEMS)[number]
 
 const CHANNELS = [
   { href: '/c/breaking',   icon: CircleDot,   labelKey: 'breakingNews',  color: 'text-wp-red' },
@@ -184,6 +194,40 @@ export function LeftSidebar() {
     return () => clearInterval(interval)
   }, [])
 
+  const renderItem = (item: NavItem) => {
+    const isActive = pathname === item.href
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        aria-current={isActive ? 'page' : undefined}
+        className={`flex items-center gap-[10px] px-3 py-[9px] rounded-lg mb-0.5 text-[14px] transition-all relative no-underline
+          ${isActive
+            ? 'bg-[rgba(245,166,35,0.12)] text-wp-amber'
+            : 'text-wp-text2 hover:bg-wp-s2 hover:text-wp-text'
+          }`}
+      >
+        {isActive && (
+          <span className="absolute left-0 rtl:left-auto rtl:right-0 top-1/2 -translate-y-1/2 w-[3px] h-[60%] bg-wp-amber rounded-r rtl:rounded-r-none rtl:rounded-l" aria-hidden="true" />
+        )}
+        <item.icon className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+        <span>{tNav(item.labelKey)}</span>
+        {'badge' in item && item.badge && (
+          <span
+            className={`ml-auto rtl:ml-0 rtl:mr-auto font-mono text-[9px] px-[6px] py-0.5 rounded-full font-bold
+              ${String(item.badgeColor) === 'red'
+                ? 'bg-wp-red text-white'
+                : 'bg-wp-amber text-black'
+              }`}
+            aria-label={item.badge === 'LIVE' ? 'Live' : 'New'}
+          >
+            {item.badge}
+          </span>
+        )}
+      </Link>
+    )
+  }
+
   return (
     <aside
       aria-label="Main navigation"
@@ -224,39 +268,9 @@ export function LeftSidebar() {
         <div className="font-mono text-[9px] tracking-[2px] text-wp-text3 uppercase mb-2 px-1" aria-hidden="true">
           {tNav('navigate')}
         </div>
-        {NAV_ITEMS.map(item => {
-          const isActive = pathname === item.href
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={isActive ? 'page' : undefined}
-              className={`flex items-center gap-[10px] px-3 py-[9px] rounded-lg mb-0.5 text-[14px] transition-all relative no-underline
-                ${isActive
-                  ? 'bg-[rgba(245,166,35,0.12)] text-wp-amber'
-                  : 'text-wp-text2 hover:bg-wp-s2 hover:text-wp-text'
-                }`}
-            >
-              {isActive && (
-                <span className="absolute left-0 rtl:left-auto rtl:right-0 top-1/2 -translate-y-1/2 w-[3px] h-[60%] bg-wp-amber rounded-r rtl:rounded-r-none rtl:rounded-l" aria-hidden="true" />
-              )}
-              <item.icon className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
-              <span>{tNav(item.labelKey)}</span>
-              {'badge' in item && item.badge && (
-                <span
-                  className={`ml-auto rtl:ml-0 rtl:mr-auto font-mono text-[9px] px-[6px] py-0.5 rounded-full font-bold
-                    ${String(item.badgeColor) === 'red'
-                      ? 'bg-wp-red text-white'
-                      : 'bg-wp-amber text-black'
-                    }`}
-                  aria-label={item.badge === 'LIVE' ? 'Live' : 'New'}
-                >
-                  {item.badge}
-                </span>
-              )}
-            </Link>
-          )
-        })}
+        {CORE_ITEMS.map(renderItem)}
+        <div className="my-2 mx-3 h-px bg-[rgba(255,255,255,0.07)]" aria-hidden="true" />
+        {OTHER_ITEMS.map(renderItem)}
       </nav>
 
       {/* Signal Channels */}
