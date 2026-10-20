@@ -5,6 +5,7 @@ import { sendError } from '../lib/errors'
 import { signalsHaveStoryIds } from '../lib/stories'
 import { staleWhileRevalidate } from '../lib/swr-cache'
 import { longQuery } from '../lib/long-query'
+import { isSignalCategory, signalCategories } from '../lib/categories'
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -16,11 +17,9 @@ const QUERY_SECONDS = 25
 const SITE_URL = process.env.SITE_URL || 'https://world-pulse.io'
 const API_URL = process.env.API_URL || 'https://api.world-pulse.io'
 
-const VALID_CATEGORIES = [
-  'conflict', 'climate', 'politics', 'health', 'technology', 'economics',
-  'disaster', 'security', 'environment', 'military', 'humanitarian',
-  'infrastructure', 'space', 'maritime', 'aviation', 'cyber', 'nuclear',
-] as const
+// The categories feeds are offered for: the database's own list
+// (lib/categories.ts; plan 0o, Oct 20, 2026). The fixed list here had 10
+// names no signal has and refused 9 that signals do have.
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -260,8 +259,8 @@ export const registerRssRoutes: FastifyPluginAsync = async (app) => {
     const { category, severity, min_reliability, limit = DEFAULT_LIMIT } =
       req.query as { category?: string; severity?: string; min_reliability?: number; limit?: number }
 
-    if (category && !VALID_CATEGORIES.includes(category as typeof VALID_CATEGORIES[number])) {
-      return sendError(reply, 400, 'VALIDATION_ERROR', `Invalid category: ${category}`)
+    if (category && (await isSignalCategory(category)) === false) {
+      return sendError(reply, 400, 'VALIDATION_ERROR', `category must be one of: ${(await signalCategories()).join(', ')}`)
     }
 
     const cacheKey = `rss:atom:${category ?? 'all'}:${severity ?? 'all'}:${min_reliability ?? '0'}:${limit}`
@@ -310,8 +309,8 @@ export const registerRssRoutes: FastifyPluginAsync = async (app) => {
     const { category, severity, min_reliability, limit = DEFAULT_LIMIT } =
       req.query as { category?: string; severity?: string; min_reliability?: number; limit?: number }
 
-    if (category && !VALID_CATEGORIES.includes(category as typeof VALID_CATEGORIES[number])) {
-      return sendError(reply, 400, 'VALIDATION_ERROR', `Invalid category: ${category}`)
+    if (category && (await isSignalCategory(category)) === false) {
+      return sendError(reply, 400, 'VALIDATION_ERROR', `category must be one of: ${(await signalCategories()).join(', ')}`)
     }
 
     const cacheKey = `rss:json:${category ?? 'all'}:${severity ?? 'all'}:${min_reliability ?? '0'}:${limit}`
@@ -367,8 +366,8 @@ export const registerRssRoutes: FastifyPluginAsync = async (app) => {
     const { severity, min_reliability, limit = DEFAULT_LIMIT } =
       req.query as { severity?: string; min_reliability?: number; limit?: number }
 
-    if (!VALID_CATEGORIES.includes(category as typeof VALID_CATEGORIES[number])) {
-      return sendError(reply, 404, 'NOT_FOUND', `Unknown category: ${category}`)
+    if ((await isSignalCategory(category)) === false) {
+      return sendError(reply, 404, 'NOT_FOUND', 'No such category (GET /api/v1/public/categories lists them)')
     }
 
     const cacheKey = `rss:atom:cat:${category}:${severity ?? 'all'}:${min_reliability ?? '0'}:${limit}`
@@ -421,8 +420,8 @@ export const registerRssRoutes: FastifyPluginAsync = async (app) => {
     const { severity, min_reliability, limit = DEFAULT_LIMIT } =
       req.query as { severity?: string; min_reliability?: number; limit?: number }
 
-    if (!VALID_CATEGORIES.includes(category as typeof VALID_CATEGORIES[number])) {
-      return sendError(reply, 404, 'NOT_FOUND', `Unknown category: ${category}`)
+    if ((await isSignalCategory(category)) === false) {
+      return sendError(reply, 404, 'NOT_FOUND', 'No such category (GET /api/v1/public/categories lists them)')
     }
 
     const cacheKey = `rss:json:cat:${category}:${severity ?? 'all'}:${min_reliability ?? '0'}:${limit}`
@@ -458,7 +457,9 @@ export const registerRssRoutes: FastifyPluginAsync = async (app) => {
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
   }, async (_req, reply) => {
     const baseUrl = `${API_URL}/api/v1/rss`
-    const categories = VALID_CATEGORIES.map(cat =>
+    // every category signals can have, but "other"
+    const names = (await signalCategories().catch(() => [] as string[])).filter(c => c !== 'other')
+    const categories = names.map(cat =>
       `      <outline text="WorldPulse — ${cat.charAt(0).toUpperCase() + cat.slice(1)}" title="WorldPulse — ${cat.charAt(0).toUpperCase() + cat.slice(1)}" type="rss" xmlUrl="${baseUrl}/category/${cat}.xml" htmlUrl="${SITE_URL}"/>`
     ).join('\n')
 

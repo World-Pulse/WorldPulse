@@ -6,6 +6,7 @@ import { PublicSignalsQuerySchema, parseQuery } from '../lib/query-schemas'
 import { sendError } from '../lib/errors'
 import { staleWhileRevalidate } from '../lib/swr-cache'
 import { longQuery } from '../lib/long-query'
+import { signalCategories } from '../lib/categories'
 
 const PUBLIC_CACHE_TTL = 30  // seconds
 
@@ -59,20 +60,6 @@ function matchingTotal(category?: string, severity?: string): Promise<{ total: n
     () => exactTotal(category, severity),
     () => estimatedTotal(category, severity),
   )
-}
-
-let categoriesKept: Promise<string[]> | null = null
-
-/** The categories a signal can have (the database's own list), read once per process */
-export function signalCategories(): Promise<string[]> {
-  if (!categoriesKept) {
-    categoriesKept = Promise.resolve()
-      .then(() => db.raw(`SELECT unnest(enum_range(NULL::category))::text AS name`))
-      .then((r: { rows?: Array<{ name?: unknown }> }) => (r?.rows ?? []).map(x => x.name).filter((n): n is string => typeof n === 'string'))
-      .then(names => { if (!names.length) categoriesKept = null; return names })
-      .catch((err: unknown) => { categoriesKept = null; throw err })
-  }
-  return categoriesKept
 }
 
 export const registerPublicRoutes: FastifyPluginAsync = async (app) => {

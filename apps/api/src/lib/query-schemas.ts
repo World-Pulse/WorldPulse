@@ -46,17 +46,13 @@ function enumParam<T extends readonly [string, ...string[]]>(values: T, defaultV
 // ─── Shared domain enums ──────────────────────────────────────────────────────
 
 export const SEVERITY_VALUES  = ['low', 'medium', 'high', 'critical'] as const
-export const CATEGORY_VALUES  = [
-  'all', 'conflict', 'breaking_news', 'climate', 'health', 'markets',
-  'science', 'technology', 'politics', 'cyber', 'natural_disaster',
-  'humanitarian', 'maritime', 'aviation', 'space', 'sports', 'culture',
-] as const
+// Categories: the database's own list, lib/categories.ts (plan 0o, Oct 20,
+// 2026; a fixed list here named categories no signal has and was unused)
 export const WINDOW_VALUES    = ['1h', '6h', '12h', '24h', '48h', '7d', '30d'] as const
 export const SORT_VALUES      = ['recent', 'trending', 'reliability', 'views'] as const
 export const SIGNAL_STATUS_VALUES = ['all', 'verified', 'pending', 'disputed'] as const
 
 export type SeverityValue  = typeof SEVERITY_VALUES[number]
-export type CategoryValue  = typeof CATEGORY_VALUES[number]
 export type WindowValue    = typeof WINDOW_VALUES[number]
 export type SortValue      = typeof SORT_VALUES[number]
 
