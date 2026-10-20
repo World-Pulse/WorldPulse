@@ -1,6 +1,6 @@
 import createNextIntlPlugin from 'next-intl/plugin'
 import createBundleAnalyzer from '@next/bundle-analyzer'
-import { withSentryConfig } from '@sentry/nextjs'
+import { withSentryConfig } from '@sentry/nextjs/config'
 
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts')
 const withBundleAnalyzer = createBundleAnalyzer({
@@ -103,25 +103,24 @@ const nextConfig = {
 
 const nextConfigWithPlugins = withBundleAnalyzer(withNextIntl(nextConfig))
 
+// @sentry/nextjs 10 (plan 0, Oct 20, 2026: v8 doesn't support Next 16). Source
+// maps upload when SENTRY_AUTH_TOKEN is set, and are deleted from the build
+// after upload (the default), which is what hideSourceMaps did before v9
+// removed it; "uploadSourceMaps" was never an option
 export default withSentryConfig(nextConfigWithPlugins, {
   // Suppress noisy build output
   silent: true,
 
-  // Upload source maps to Sentry for readable stack traces
-  uploadSourceMaps: true,
-
-  // Tree-shake unused Sentry code from client bundle
+  // Upload more client files, for readable stack traces
   widenClientFileUpload: true,
-
-  // Automatically instrument Next.js data-fetching (getServerSideProps, etc.)
-  autoInstrumentServerFunctions: true,
 
   // Tunnel Sentry requests through the Next.js server to avoid ad-blockers
   tunnelRoute: '/monitoring-tunnel',
 
-  // Hide source map files from the browser
-  hideSourceMaps: true,
-
-  // Disable SDK logger in production builds
-  disableLogger: true,
+  webpack: {
+    // Automatically instrument Next.js data-fetching (getServerSideProps, etc.)
+    autoInstrumentServerFunctions: true,
+    // Leave the SDK's debug logging out of production bundles
+    treeshake: { removeDebugLogging: true },
+  },
 })
