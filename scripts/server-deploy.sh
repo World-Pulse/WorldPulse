@@ -160,6 +160,15 @@ if docker run --rm --network "$NET" \
      -v "$PWD/.certbot/conf:/etc/letsencrypt:ro" \
      nginx:1.27-alpine nginx -t >/dev/null 2>&1; then
   $COMPOSE up -d --no-deps nginx certbot
+  # nginx.conf is mounted as a single file, and a single-file mount keeps the
+  # file the container was made with: git replaces the file on each update, so
+  # a reload went on reading the old one (Oct 20, 2026: the /embed rule from
+  # Oct 18 had never reached the live nginx). Recreate nginx when the file it
+  # reads differs from the checkout's (it was tested just above).
+  if ! docker exec wp_nginx cat /etc/nginx/nginx.conf 2>/dev/null | cmp -s - "$PWD/nginx/nginx.conf"; then
+    $COMPOSE up -d --no-deps --force-recreate nginx
+    log "nginx recreated: it was still reading an older nginx.conf"
+  fi
   sleep 3
   docker exec wp_nginx nginx -s reload >/dev/null 2>&1 || true
   log "nginx config OK and reloaded"

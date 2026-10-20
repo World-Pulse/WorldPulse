@@ -164,6 +164,17 @@ describe('fetchStoryCard and /embed/story/<id>', () => {
     expect(html).toContain('background:#0d0f18')
     expect(html).toContain('✓ Verified · 112 outlets')
   })
+
+  it("lets the host page show at the card's corners, in the card's own colour scheme (Oct 20, 2026)", async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ success: true, data: answer }))))
+    for (const theme of ['light', 'dark'] as const) {
+      clearServerFetchCache()
+      const page = await EmbedStoryPage({ params: Promise.resolve({ id: OWN }), searchParams: Promise.resolve(theme === 'dark' ? { theme } : {}) })
+      const html = renderToStaticMarkup(page)
+      expect(html).toContain('html, body { background: transparent !important; }')
+      expect(html).toContain(`:root { color-scheme: ${theme}; }`)
+    }
+  })
 })
 
 describe('"Embed this card" in Share', () => {

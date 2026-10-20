@@ -134,3 +134,13 @@ export function storyEmbedCode(origin: string, id: string, title: string, theme:
   const name = title.replace(/\s+/g, ' ').trim().slice(0, 120)
   return `<iframe src="${attr(cardUrl(origin, id, theme))}" width="100%" height="${CARD_HEIGHT}" style="max-width:560px;border:0;border-radius:12px" loading="lazy" title="${attr(`${name} · WorldPulse`)}"></iframe>`
 }
+
+/**
+ * The frame's page around the card: see-through, so the host page shows at the
+ * card's rounded corners (the site's dark page showed there, Oct 20, 2026), and
+ * in the card's own colour scheme (browsers paint a frame opaque when its
+ * scheme differs from the host page's), without the site's noise layer
+ */
+export function cardPageStyle(theme: CardTheme): string {
+  return `html, body { background: transparent !important; } body::before { display: none !important; } :root { color-scheme: ${theme === 'dark' ? 'dark' : 'light'}; }`
+}
