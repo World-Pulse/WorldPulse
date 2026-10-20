@@ -243,6 +243,16 @@ export class ConflictZoneOverlay {
    * fading opacity from 0.3 → 0.0 over a 2-second cycle, then resets.
    */
   private _startPulseAnimation(): void {
+    // A device that asks for reduced motion gets a still ring, not a pulse
+    if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      try {
+        if (this.map.getLayer(CONFLICT_PULSE_ID)) {
+          this.map.setPaintProperty(CONFLICT_PULSE_ID, 'circle-radius', 22)
+          this.map.setPaintProperty(CONFLICT_PULSE_ID, 'circle-opacity', 0.15)
+        }
+      } catch { /* map transitioning */ }
+      return
+    }
     this._startMs = performance.now()
 
     let last = 0

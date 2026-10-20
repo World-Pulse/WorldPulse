@@ -266,6 +266,13 @@ export class EnhancedHeatmap {
    * as a sine wave: 0.3 → 0.6 → 0.3 over a 3 s period.
    */
   private _startGlowAnimation(): void {
+    // A device that asks for reduced motion gets a steady glow, not a pulse
+    if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      try {
+        if (this.map.getLayer(GLOW_LAYER_ID)) this.map.setPaintProperty(GLOW_LAYER_ID, 'heatmap-opacity', 0.4)
+      } catch { /* benign — map transitioning */ }
+      return
+    }
     this._startMs = performance.now()
 
     let last = 0
