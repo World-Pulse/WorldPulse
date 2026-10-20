@@ -1,6 +1,7 @@
 import type { MetadataRoute } from 'next'
 import { SITE_URL } from '@/lib/page-metadata'
 import { entityPath } from '@/lib/entity-links'
+import { isListedCountry, type ListedCountry } from '@/lib/country-list'
 
 /**
  * world-pulse.io/sitemap.xml (plan G2, Oct 11, 2026): the main pages and one
@@ -29,6 +30,24 @@ const PAGES: Array<{ path: string; changeFrequency: 'always' | 'hourly' | 'daily
   { path: '/how-we-count', changeFrequency: 'monthly', priority: 0.5 },
   { path: '/knowledge-graph', changeFrequency: 'hourly', priority: 0.6 },
   { path: '/entities', changeFrequency: 'hourly', priority: 0.7 },
+  // The index and topic pages, each with its own title since H-0023 (Oct 20, 2026)
+  { path: '/countries', changeFrequency: 'hourly', priority: 0.8 },
+  { path: '/maritime', changeFrequency: 'hourly', priority: 0.6 },
+  { path: '/explore', changeFrequency: 'hourly', priority: 0.6 },
+  { path: '/sources', changeFrequency: 'weekly', priority: 0.5 },
+  { path: '/cyber-threats', changeFrequency: 'hourly', priority: 0.5 },
+  { path: '/internet-outages', changeFrequency: 'hourly', priority: 0.5 },
+  { path: '/space-weather', changeFrequency: 'hourly', priority: 0.4 },
+  { path: '/undersea-cables', changeFrequency: 'weekly', priority: 0.4 },
+  { path: '/finance', changeFrequency: 'hourly', priority: 0.5 },
+  { path: '/food-security', changeFrequency: 'daily', priority: 0.4 },
+  { path: '/water-security', changeFrequency: 'daily', priority: 0.4 },
+  { path: '/governance', changeFrequency: 'weekly', priority: 0.4 },
+  { path: '/digital-rights', changeFrequency: 'weekly', priority: 0.4 },
+  { path: '/labor-rights', changeFrequency: 'weekly', priority: 0.4 },
+  { path: '/ai-infrastructure', changeFrequency: 'weekly', priority: 0.4 },
+  { path: '/clusters', changeFrequency: 'hourly', priority: 0.4 },
+  { path: '/communities', changeFrequency: 'daily', priority: 0.3 },
 ]
 
 interface SitemapStory { id: string; updatedAt: string }
@@ -57,15 +76,7 @@ async function namedEntities(): Promise<SitemapEntity[]> {
   }
 }
 
-interface SitemapCountry { code: string; name?: string; latest_signal_at?: string | null }
-
-/** Codes the API counts signals under that are not a country of their own: UK repeats GB, ZZ and the rest are placeholders */
-const NOT_A_COUNTRY = new Set(['UK', 'ZZ', 'EU', 'UN'])
-/** A real country: a two-letter code the API knows by name (it falls back to the code itself for strays like PO, SF, EI) */
-function isListedCountry(c: SitemapCountry): boolean {
-  const code = c.code.toUpperCase()
-  return !NOT_A_COUNTRY.has(code) && typeof c.name === 'string' && c.name.length > 0 && c.name.toUpperCase() !== code
-}
+type SitemapCountry = ListedCountry
 
 async function activeCountries(): Promise<SitemapCountry[]> {
   try {

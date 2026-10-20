@@ -50,7 +50,7 @@ describe('newsArticleJsonLd', () => {
 describe('robots.txt', () => {
   it('points to the sitemap and keeps account pages out, but not /developers', () => {
     const r = robots()
-    expect(r.sitemap).toBe('https://world-pulse.io/sitemap.xml')
+    expect(r.sitemap).toEqual(['https://world-pulse.io/sitemap.xml', 'https://world-pulse.io/news-sitemap.xml'])
     const rules = Array.isArray(r.rules) ? r.rules[0]! : r.rules
     const disallow = ([] as string[]).concat(rules.disallow ?? [])
     expect(disallow).toEqual(expect.arrayContaining(['/api/', '/admin', '/settings', '/auth/']))
@@ -84,6 +84,18 @@ describe('sitemap.xml', () => {
     ))))
     const entries = await sitemap()
     expect(entries.at(-1)).toMatchObject({ url: 'https://world-pulse.io/entities/houthis-a84d671cb97c1d91', lastModified: new Date('2026-10-12T20:00:00.000Z') })
+  })
+
+  it('lists the index and topic pages that have their own titles (H-0023, Oct 20, 2026)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ success: true, data: { stories: [] } }))))
+    const urls = (await sitemap()).map(e => e.url)
+    for (const path of ['/countries', '/maritime', '/sources', '/explore', '/cyber-threats', '/internet-outages']) {
+      expect(urls).toContain(`https://world-pulse.io${path}`)
+    }
+    // pages that don't load yet stay out
+    for (const path of ['/sanctions', '/cameras', '/audio-claims', '/video-claims', '/patents']) {
+      expect(urls).not.toContain(`https://world-pulse.io${path}`)
+    }
   })
 
   it('still lists the main pages when the API is down', async () => {
