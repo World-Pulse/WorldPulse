@@ -266,7 +266,7 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal, 
               </svg>
               Flag
             </button>
-            <ShareMenu title={signal.title} />
+            <ShareMenu title={signal.title} embedId={signal.id} />
           </div>
         </div>
         {flagOpen && <FlagModal signalId={signal.id} onClose={() => setFlagOpen(false)} />}
