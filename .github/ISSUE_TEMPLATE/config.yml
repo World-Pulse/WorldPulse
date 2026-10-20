@@ -1,8 +1,8 @@
 blank_issues_enabled: true
 contact_links:
-  - name: Discussions
-    url: https://github.com/World-Pulse/WorldPulse/discussions
-    about: Ask questions and share ideas
-  - name: Discord
-    url: https://discord.gg/worldpulse
-    about: Chat with the community
+  - name: How WorldPulse counts outlets
+    url: https://world-pulse.io/how-we-count
+    about: What "verified" means, and how outlets are counted
+  - name: API documentation
+    url: https://world-pulse.io/developers
+    about: Endpoints, examples and limits

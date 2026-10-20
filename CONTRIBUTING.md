@@ -17,7 +17,7 @@ Open a GitHub issue with:
 - Your environment (OS, Node.js version, etc.)
 
 ### Suggesting Features
-Open a GitHub Discussion in the "Ideas" category. Describe:
+Open an issue with the feature request form. Describe:
 - The problem you're solving
 - Your proposed solution
 - Alternatives you've considered
@@ -69,33 +69,31 @@ docs: update self-hosting guide for Kubernetes
 - Mobile app improvements
 - Search relevance tuning
 
-### Good First Issues
-Look for issues tagged `good-first-issue` — these are well-scoped, well-documented, and ideal for first contributions.
+### Good places to start
+- A new source (see below): one entry and a test
+- A bug you hit yourself, with steps to reproduce it
+- Tests for code that has none
 
 ## Source Contributions
 
-One of the most valuable contributions is adding new verified data sources.
-
-To propose a new source, open a PR modifying `infrastructure/docker/postgres/init.sql` with:
-```sql
-INSERT INTO sources (slug, name, url, tier, trust_score, language, country, categories, rss_feeds)
-VALUES ('source-slug', 'Source Name', 'https://source.example.com', 'regional', 0.80, 'en', 'XX', '{breaking}', '{https://source.example.com/rss}');
-```
+One of the most valuable contributions is a new source. News feeds live in `apps/scraper/src/sources/news-rss.ts` (`NEWS_SOURCE_REGISTRY`): propose one with the "New Intelligence Source" issue form, or open a PR that adds an entry at the end of the registry, in the same format as the others (id, name, feed URL, category, bias label, reliability, home country and point, tags, language).
 
 Source requirements:
-- Must have a public, stable RSS or API feed
-- Must be a legitimate news organization or official body
-- Trust score guidelines:
-  - `0.95+`: Major international wire services (AP, Reuters, AFP)
-  - `0.90–0.94`: Major national broadcasters (BBC, NPR, NHK)
-  - `0.85–0.89`: Quality national newspapers
-  - `0.80–0.84`: Regional outlets with editorial standards
-  - `0.70–0.79`: Community/local outlets, blogs with strong standards
+- A public RSS or Atom feed that answers the poller's own request (User-Agent `WorldPulse/1.0 (open-source global intelligence; https://world-pulse.io)`), with items from the last few days, each with a title, a link and a date
+- A news organization or an official body; not a site that mostly reposts other outlets' stories (a repost would count as a second outlet)
+- Terms that allow showing a headline, a short summary and a link (that is all WorldPulse keeps)
+- Not already in the registry (one entry per feed address)
+
+Reliability guidelines (0–1):
+- `0.90+`: wire services, national broadcasters, central banks and international bodies' own records
+- `0.80–0.89`: quality national and regional outlets with editorial standards
+- `0.70–0.79`: local outlets and specialist sites with clear standards
+- below `0.60`: state-controlled media (also labelled `state-media`)
 
 ## Architecture Decisions
 
 Major architecture changes require an RFC (Request for Comments):
-1. Open a GitHub Discussion titled "RFC: [Your Proposal]"
+1. Open an issue titled "RFC: [Your Proposal]"
 2. Describe the change, motivation, and trade-offs
 3. Allow 2 weeks for community feedback
 4. Maintainer review and merge/reject decision
@@ -106,11 +104,10 @@ Major architecture changes require an RFC (Request for Comments):
 # Run all tests
 pnpm test
 
-# Run specific package tests
+# Run one app's tests
 pnpm --filter @worldpulse/api test
-
-# Run with coverage
-pnpm --filter @worldpulse/api test:coverage
+pnpm --filter @worldpulse/scraper test
+pnpm --filter @worldpulse/web test
 ```
 
 Test requirements:
@@ -120,8 +117,6 @@ Test requirements:
 
 ## Questions?
 
-- **Discord**: [discord.gg/worldpulse](https://discord.gg/worldpulse)
-- **GitHub Discussions**: For design questions and proposals
-- **Issues**: For bugs and specific feature requests
+- **Issues**: for bugs, feature requests, new sources and design questions
 
 Thank you for contributing to a more informed world. 🌍
