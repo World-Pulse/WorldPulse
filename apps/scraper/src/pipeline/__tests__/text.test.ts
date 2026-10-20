@@ -71,6 +71,12 @@ describe('cleanSummary (feed footers, Oct 11, 2026)', () => {
     const story = 'The post office in Kyiv reopened; read more about the repairs in our live blog.'
     expect(cleanSummary(story)).toBe(story)
   })
+
+  it("takes out a membership plugin's paywall line (Post-Courier, Oct 20, 2026)", async () => {
+    const { cleanSummary, feedText } = await import('../text')
+    const html = '<p>Prime Minister James Marape opened the 32nd forum in Port Moresby.</p><div class="woocommerce"><div class="woocommerce-info wc-memberships-restriction-message">To access this post, you must purchase <span><a href="https://www.postcourier.com.pg/product/web/">Web</a>, <a href="https://www.postcourier.com.pg/product/web/?attribute_duration=One-Day">Web &#8211; One-Day</a>, <a href="https://www.postcourier.com.pg/product/web/?attribute_duration=Weekly">Web &#8211; Weekly</a> or <a href="https://www.postcourier.com.pg/product/web-ebook/">Web &amp; eBook &#8211; Annual</a></span>.</div></div><p>The post <a href="https://www.postcourier.com.pg/x/">Prime Minister Marape opens forum</a> appeared first on <a href="https://www.postcourier.com.pg">Post Courier</a>.</p>'
+    expect(cleanSummary(feedText(html))).toBe('Prime Minister James Marape opened the 32nd forum in Port Moresby.')
+  })
 })
 
 describe('summaryWithoutNotes (the outlet note, Oct 11, 2026)', () => {
@@ -141,6 +147,13 @@ describe('feedText (feed HTML as plain text, Oct 11, 2026)', () => {
   it('leaves plain text and comparisons alone', async () => {
     const { feedText } = await import('../text')
     expect(feedText('Inflation fell below 3% as rates < 5% held')).toBe('Inflation fell below 3% as rates < 5% held')
+  })
+
+  it('drops an XML declaration inside a description (Shafaq News, Oct 20, 2026)', async () => {
+    const { feedText } = await import('../text')
+    expect(feedText('<?xml encoding="utf-8" ?><p><em>Shafaq News- Baghdad</em></p><p>Iraq&rsquo;s electoral commission announced the results.</p>'))
+      .toBe('Shafaq News- Baghdad Iraq’s electoral commission announced the results.')
+    expect(feedText('&lt;?xml encoding="utf-8" ?&gt;&lt;p&gt;Text&lt;/p&gt;')).toBe('Text')
   })
 })
 

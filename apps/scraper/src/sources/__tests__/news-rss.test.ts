@@ -82,6 +82,18 @@ describe('NEWS_SOURCE_REGISTRY', () => {
     for (const id of ['un-press', 'uk-fcdo', 'icc-news', 'icrc-news', 'radio-tamazuj', 'times-central-asia']) expect(HOME_PIN_SOURCES.has(id)).toBe(false)
   })
 
+  it('carries the second batch added Oct 20, 2026 (R2b)', () => {
+    const ids = new Set(NEWS_SOURCE_REGISTRY.map(s => s.id))
+    for (const id of ['radio-dabanga', 'jamnews', 'post-courier-pg', 'vanuatu-daily-post', 'scr-whats-in-blue', 'economynext-lk', 'amu-tv', 'haitian-times', 'shafaq-iraq']) {
+      expect(ids.has(id)).toBe(true)
+    }
+    for (const id of ['jamnews', 'scr-whats-in-blue', 'haitian-times']) expect(HOME_PIN_SOURCES.has(id)).toBe(false)
+    // every feed host is polled once
+    const hosts = NEWS_SOURCE_REGISTRY.map(s => new URL(s.feedUrl).hostname.replace(/^www\./, ''))
+    const added = ['dabangasudan.org', 'jam-news.net', 'postcourier.com.pg', 'dailypost.vu', 'securitycouncilreport.org', 'economynext.com', 'amu.tv', 'haitiantimes.com', 'shafaq.com']
+    for (const h of added) expect(hosts.filter(x => x === h)).toHaveLength(1)
+  })
+
   it('all source IDs are unique', () => {
     const ids = NEWS_SOURCE_REGISTRY.map(s => s.id)
     expect(new Set(ids).size).toBe(ids.length)

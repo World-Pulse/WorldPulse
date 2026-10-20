@@ -35,6 +35,8 @@ export function stripTags(text: string): string {
 }
 
 const BLOCK_TAG = /(?:<|&lt;)\/?(?:p|br|hr|li|ul|ol|div|h[1-6]|blockquote|table|tr|td|th|figure|figcaption|section|article|header|footer)\b[^<>]*?(?:>|&gt;)/gi
+/** An XML declaration inside a description (Shafaq News starts every summary with one, Oct 20, 2026) */
+const XML_DECL = /(?:<|&lt;)\?xml\b[^<>]*?\?(?:>|&gt;)/gi
 const ANY_TAG = /(?:<|&lt;)\/?[a-z][^<>]*?(?:>|&gt;)/gi
 /** A tag cut off where a description was clipped ('… &lt;div class="field') */
 const CUT_TAG = /(?:<|&lt;)\/?[a-z][^<>]*$/i
@@ -49,7 +51,7 @@ export const HTML_TAG_RE = /(?:<|&lt;)\/?[a-z][^<>]*?(?:>|&gt;)/i
  * and Al-Monitor), paragraphs and list items kept apart, codes decoded.
  */
 export function feedText(html: string): string {
-  const strip = (t: string) => t.replace(BLOCK_TAG, ' ').replace(ANY_TAG, '').replace(CUT_TAG, '')
+  const strip = (t: string) => t.replace(XML_DECL, ' ').replace(BLOCK_TAG, ' ').replace(ANY_TAG, '').replace(CUT_TAG, '')
   return strip(decodeEntities(strip(html))).replace(/\s+/g, ' ').trim()
 }
 
@@ -120,7 +122,8 @@ export const ENCODED_TEXT_RE = /&(?:#x[0-9a-f]+|#\d+|amp|quot|apos|nbsp|gt|lt|rs
  * <site>.", "Read More: <link>", a trailing "Continue reading" or "Read more",
  * "[…]" (shown as "…"), The Guardian's "Get our breaking news email, free app
  * or daily news podcast", newsletter and subscription pitches, and Middle
- * East Eye's "Submitted by" left at the end.
+ * East Eye's "Submitted by" left at the end; since Oct 20, 2026 a WordPress
+ * membership plugin's "To access this post, you must purchase …" (Post-Courier).
  */
 const FEED_FOOTERS: Array<[RegExp, string]> = [
   [/\s*\bThe post\s.{1,400}?\sappeared first on\s[^.\n]{1,120}\.?/gi, ''],
@@ -130,6 +133,8 @@ const FEED_FOOTERS: Array<[RegExp, string]> = [
   [/\s*\bGet our [^.]{0,100}?\b(?:emails?|newsletters?)\b[^.]{0,80}?\bpodcast\b\.?/gi, ''],
   [/\s*\bSubscribe (?:to [^.]{0,80}?\bnewsletter|now)\b[^.]*\.?/gi, ''],
   [/\s*\bSubmitted by\b[^.]{0,80}$/i, ''],
+  // A WordPress membership plugin's paywall line (Post-Courier ends every summary with it, Oct 20, 2026)
+  [/\s*\bTo access this post, you must purchase\b[^.]{0,600}\./gi, ''],
 ]
 
 /** A feed's description without its footers (see FEED_FOOTERS) */

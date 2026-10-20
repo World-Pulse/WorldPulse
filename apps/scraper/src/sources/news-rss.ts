@@ -1,7 +1,7 @@
 /**
  * WorldPulse Global News RSS Adapter
  *
- * Ingests about 170 international news RSS feeds and creates WorldPulse signals from
+ * Ingests about 180 international news RSS feeds and creates WorldPulse signals from
  * breaking/world news items. Provides editorial-sourced signal coverage to
  * complement the OSINT/sensor feeds already in the pipeline.
  *
@@ -85,7 +85,10 @@
  * Sahel, Central Asia, Central America). Several of them allow only personal
  * or non-commercial use of their pages: like every feed here, only the
  * headline, at most 600 characters of the feed's own text and the link are
- * kept, and readers are sent to the original.
+ * kept, and readers are sent to the original. Later that day 9 more (R2b):
+ * Radio Dabanga (Sudan), JAMnews (South Caucasus), Post-Courier (Papua New
+ * Guinea), Vanuatu Daily Post, Security Council Report, EconomyNext (Sri
+ * Lanka), Amu TV (Afghanistan), The Haitian Times and Shafaq News (Iraq).
  */
 
 import https from 'node:https'
@@ -2602,6 +2605,138 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['costa-rica', 'central-america', 'latin-america'],
     language:        'en',
   },
+  // ── Added Oct 20, 2026 (R2b: thin regions, second batch) ─────────────────
+  // Each answered the server's own request (WorldPulse User-Agent and headers)
+  // with fresh items that day. Regions with no outlet before: Iraq,
+  // Afghanistan, Sri Lanka, Haiti, Papua New Guinea, Vanuatu. Sudan had only
+  // Radio Tamazuj (from the south) and the Caucasus three outlets. Security
+  // Council Report previews the Council's meetings and votes.
+  {
+    id:              'radio-dabanga',
+    name:            'Radio Dabanga (Sudan)',
+    feedUrl:         'https://www.dabangasudan.org/en/feed',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.80,
+    countryCode:     'SD',
+    defaultLat:      15.50,
+    defaultLng:      32.56,
+    defaultLocation: 'Khartoum, Sudan',
+    extraTags:       ['sudan', 'darfur', 'east-africa', 'africa', 'independent-media'],
+    language:        'en',
+  },
+  {
+    id:              'jamnews',
+    name:            'JAMnews (South Caucasus)',
+    feedUrl:         'https://jam-news.net/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.80,
+    countryCode:     'GE',
+    defaultLat:      41.72,
+    defaultLng:      44.79,
+    defaultLocation: 'Tbilisi, Georgia',
+    extraTags:       ['caucasus', 'georgia', 'armenia', 'azerbaijan', 'independent-media'],
+    language:        'en',
+  },
+  {
+    id:              'post-courier-pg',
+    name:            'Post-Courier (Papua New Guinea)',
+    feedUrl:         'https://www.postcourier.com.pg/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.74,
+    countryCode:     'PG',
+    defaultLat:      -9.44,
+    defaultLng:      147.18,
+    defaultLocation: 'Port Moresby, Papua New Guinea',
+    extraTags:       ['papua-new-guinea', 'pacific', 'pacific-islands', 'oceania'],
+    language:        'en',
+  },
+  {
+    id:              'vanuatu-daily-post',
+    name:            'Vanuatu Daily Post',
+    feedUrl:         'https://www.dailypost.vu/search/?f=rss&t=article&c=news&l=50&s=start_time&sd=desc',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.74,
+    countryCode:     'VU',
+    defaultLat:      -17.73,
+    defaultLng:      168.32,
+    defaultLocation: 'Port Vila, Vanuatu',
+    extraTags:       ['vanuatu', 'pacific', 'pacific-islands', 'oceania'],
+    language:        'en',
+  },
+  {
+    id:              'scr-whats-in-blue',
+    name:            'Security Council Report — What’s in Blue',
+    feedUrl:         'https://www.securitycouncilreport.org/whatsinblue/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.88,
+    countryCode:     'US',
+    defaultLat:      40.75,
+    defaultLng:      -73.98,
+    defaultLocation: 'New York, United States',
+    extraTags:       ['un', 'united-nations', 'security-council', 'diplomacy', 'analysis'],
+    language:        'en',
+  },
+  {
+    id:              'economynext-lk',
+    name:            'EconomyNext (Sri Lanka)',
+    feedUrl:         'https://economynext.com/feed/',
+    category:        'economy',
+    biasLabel:       'center',
+    reliability:     0.76,
+    countryCode:     'LK',
+    defaultLat:      6.93,
+    defaultLng:      79.86,
+    defaultLocation: 'Colombo, Sri Lanka',
+    extraTags:       ['sri-lanka', 'south-asia', 'business', 'markets'],
+    language:        'en',
+  },
+  {
+    id:              'amu-tv',
+    name:            'Amu TV (Afghanistan)',
+    feedUrl:         'https://amu.tv/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.78,
+    countryCode:     'AF',
+    defaultLat:      34.56,
+    defaultLng:      69.21,
+    defaultLocation: 'Kabul, Afghanistan',
+    extraTags:       ['afghanistan', 'south-asia', 'independent-media', 'exile-media'],
+    language:        'en',
+  },
+  {
+    id:              'haitian-times',
+    name:            'The Haitian Times',
+    feedUrl:         'https://haitiantimes.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.76,
+    countryCode:     'HT',
+    defaultLat:      18.54,
+    defaultLng:      -72.34,
+    defaultLocation: 'Port-au-Prince, Haiti',
+    extraTags:       ['haiti', 'caribbean', 'latin-america', 'diaspora'],
+    language:        'en',
+  },
+  {
+    id:              'shafaq-iraq',
+    name:            'Shafaq News (Iraq)',
+    feedUrl:         'https://shafaq.com/rss/en/Iraq',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.72,
+    countryCode:     'IQ',
+    defaultLat:      33.32,
+    defaultLng:      44.37,
+    defaultLocation: 'Baghdad, Iraq',
+    extraTags:       ['iraq', 'kurdistan', 'middle-east'],
+    language:        'en',
+  },
 ]
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────
@@ -2907,6 +3042,7 @@ export const HOME_PIN_SOURCES = new Set([
   'gulf-news', 'saudi-gazette', 'fana-en', 'scroll-in', 'meduza-en', 'folha-en',
   // Oct 20, 2026
   'boe-news', 'ec-press-corner', 'studio-tamani', 'tico-times',
+  'radio-dabanga', 'post-courier-pg', 'vanuatu-daily-post', 'economynext-lk', 'amu-tv', 'shafaq-iraq',
 ])
 
 export interface InferredGeo {
