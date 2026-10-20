@@ -18,11 +18,23 @@
  * reader can see why two entities are connected.
  *
  * Reads entity_nodes.signal_ids (the reports naming each entity) and signals;
- * no new tables. Each answer is kept for 10 minutes.
+ * no new tables. Each answer is fresh for 10 minutes and then served while
+ * one process remakes it (lib/swr-cache.ts), for up to 6 hours.
+ *
+ * Oct 20, 2026: /entities/anwar-ibrahim-… and /entities/african-union-…
+ * answered 500. Their "named with" list compares every entity in the graph
+ * with the entity's own reports (entity_nodes.signal_ids has no index), and as
+ * the graph grew that passed the pool's 5 seconds. That list now reads the
+ * entity's newest 300 reports of the 30 days and only entities seen since
+ * then, under its own 12-second limit (lib/long-query.ts); if it still fails,
+ * the page shows everything else.
  */
 
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
+import { logger } from './logger'
+import { longQuery } from './long-query'
+import { staleWhileRevalidate } from './swr-cache'
 import { storiesOfSignals } from '../routes/stories'
 import { signalsHaveStoryIds } from './stories'
 import type { ListedStory } from './story-list'
@@ -35,6 +47,12 @@ export const STORY_DAYS = 14
 const STORIES_SHOWN = 10
 const LATEST_SHOWN = 8
 const CONNECTIONS_SHOWN = 12
+/** "Named with" reads at most this many of the entity's newest reports */
+export const CONNECTION_REPORTS = 300
+/** …and may take this long (the pool's limit is 5 seconds) */
+export const CONNECTION_SECONDS = 12
+/** A profile is served while one process remakes it for this long after its 10 minutes */
+const PROFILE_STALE_S = 6 * 3_600
 
 export interface EntityProfile {
   entity: {
@@ -120,9 +138,45 @@ async function latestReports(ids: string[], skipStories: Set<string> = new Set()
   }).slice(0, LATEST_SHOWN)
 }
 
+/**
+ * The entities named in the same reports as this one in the last 30 days,
+ * most shared reports first. Only the entity's newest CONNECTION_REPORTS
+ * reports count, and only entities seen since the oldest of them (with 3 days
+ * to spare: an entity's last_seen is its newest report's own time, which can
+ * be a little before the report reached us). On a timeout or any failure, an
+ * empty list: the rest of the page still shows.
+ */
+export async function connectionsOf(id: string, ids: string[], since: Date): Promise<Row[]> {
+  if (ids.length === 0) return []
+  try {
+    return rowsOf(await longQuery(CONNECTION_SECONDS, trx => trx.raw(`
+      WITH mine AS (
+        SELECT id::text AS sid, created_at
+          FROM signals
+         WHERE id = ANY(?::uuid[]) AND created_at >= ?
+         ORDER BY created_at DESC
+         LIMIT ?
+      )
+      SELECT n.id, n.type, n.canonical_name AS name, count(*)::int AS shared
+        FROM entity_nodes n
+        CROSS JOIN LATERAL unnest(n.signal_ids) AS u(sid)
+        JOIN mine m ON m.sid = lower(u.sid)
+       WHERE n.id <> ?
+         AND n.last_seen >= (SELECT min(created_at) FROM mine) - interval '3 days'
+         AND n.signal_ids && (SELECT array_agg(sid) FROM mine)
+       GROUP BY n.id, n.type, n.canonical_name
+       ORDER BY shared DESC, n.canonical_name
+       LIMIT ?
+    `, [ids, since, CONNECTION_REPORTS, id, CONNECTIONS_SHOWN])))
+  } catch (err) {
+    logger.warn({ err, entity: id, reports: ids.length }, 'Entity profile: "named with" list failed, page shown without it')
+    return []
+  }
+}
+
 /** Everything the entity's page shows, or null when there is no such entity */
 export async function entityProfile(id: string): Promise<EntityProfile | null> {
-  return cached(`kg:profile:v1:${id}`, async () => {
+  return staleWhileRevalidate(`kg:profile:v2:${id}`, { freshSeconds: PROFILE_TTL, staleSeconds: PROFILE_STALE_S, lockSeconds: 60 }, async () => {
     const row = rowsOf(await db.raw(`
       SELECT id, type, canonical_name, first_seen, last_seen, signal_ids
         FROM entity_nodes WHERE id = ?
@@ -153,19 +207,7 @@ export async function entityProfile(id: string): Promise<EntityProfile | null> {
              GROUP BY 1
           `, [ids, since]).then(rowsOf),
           storiesAndLatest(),
-          db.raw(`
-            WITH mine AS (
-              SELECT id::text AS sid FROM signals WHERE id = ANY(?::uuid[]) AND created_at >= ?
-            )
-            SELECT n.id, n.type, n.canonical_name AS name, count(*)::int AS shared
-              FROM entity_nodes n
-              CROSS JOIN LATERAL unnest(n.signal_ids) AS u(sid)
-              JOIN mine m ON m.sid = lower(u.sid)
-             WHERE n.id <> ? AND n.signal_ids && (SELECT array_agg(sid) FROM mine)
-             GROUP BY n.id, n.type, n.canonical_name
-             ORDER BY shared DESC, n.canonical_name
-             LIMIT ?
-          `, [ids, since, id, CONNECTIONS_SHOWN]).then(rowsOf),
+          connectionsOf(id, ids, since),
         ])
 
     const perDay = new Map<string, number>()
