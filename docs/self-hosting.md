@@ -12,15 +12,15 @@ sudo apt update && sudo apt install -y docker.io docker-compose-plugin git
 sudo usermod -aG docker $USER && newgrp docker
 
 # 2. Clone WorldPulse
-git clone https://github.com/worldpulse/worldpulse.git
-cd worldpulse
+git clone https://github.com/World-Pulse/WorldPulse.git
+cd WorldPulse
 
 # 3. Configure
-cp .env.production.example .env.production
-nano .env.production  # Edit JWT_SECRET, domain, etc.
+cp .env.prod.example .env.prod
+nano .env.prod  # Edit JWT_SECRET, domain, etc.
 
 # 4. Launch
-docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
 
 # 5. Initialize database
 docker compose exec api pnpm db:migrate
@@ -244,6 +244,6 @@ This allows your instance to share signals with other WorldPulse instances and i
 
 ## Support
 
-- **GitHub Issues**: https://github.com/worldpulse/worldpulse/issues
+- **GitHub Issues**: https://github.com/World-Pulse/WorldPulse/issues
 - **Discord**: https://discord.gg/worldpulse
 - **Docs**: https://docs.worldpulse.io
