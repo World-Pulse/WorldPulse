@@ -27,6 +27,7 @@ import { longQuery } from '../lib/long-query'
 import { MARITIME_CANDIDATE, MARITIME_HEADLINE, firstOfEach, headlineKey, isShipHeadline } from '../lib/sea-headlines'
 import type { Knex } from 'knex'
 import { BAD_CURSOR, isUuid } from '../lib/cursor'
+import { visitorHash, alreadyFlagged } from '../lib/signal-flags'
 
 const SIGNAL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -573,12 +574,11 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
 
     const userId  = req.user?.id ?? null
     const ipRaw   = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim() ?? req.ip ?? ''
-    const ipHash  = ipRaw ? Buffer.from(ipRaw).toString('base64').slice(0, 32) : null
+    // A keyed hash, not the address (H-0020): the same visitor matches, nobody can read it back
+    const ipHash  = ipRaw ? visitorHash(ipRaw) : null
 
-    if (userId) {
-      const existing = await db('signal_flags').where({ signal_id: id, user_id: userId }).first('id')
-      if (existing) return sendError(reply, 409, 'CONFLICT', 'Already flagged')
-    }
+    // One flag per signal per reader: per account, or per hashed address when not signed in
+    if (await alreadyFlagged(id, userId, ipHash)) return sendError(reply, 409, 'CONFLICT', 'Already flagged')
 
     await db('signal_flags').insert({ signal_id: id, user_id: userId, ip_hash: ipHash, reason, notes: notes ?? null })
     await db('signals').where('id', id).increment('community_flag_count', 1)

@@ -94,6 +94,7 @@ import { startPulseScheduler, stopPulseScheduler } from './lib/pulse/scheduler'
 import { startSummaryPass, stopSummaryPass } from './lib/summary-pass'
 import { ensureSubscribersTable } from './lib/subscribers'
 import { ensureEntitySignalsIndex } from './lib/entity-index'
+import { hashStoredFlagAddresses } from './lib/signal-flags'
 import { startBriefingEmails, stopBriefingEmails } from './lib/briefing-email'
 import { startSocialPosters, stopSocialPosters } from './lib/social-posters'
 
@@ -482,6 +483,12 @@ async function bootstrap() {
   // stopping the scraper's writes; later starts find it and do nothing
   ensureEntitySignalsIndex()
     .then(r => { if (r !== 'ready') logger.info({ result: r }, 'Entity report index') })
+    .catch(() => {})
+
+  // Readers' flags stored before H-0020 kept the visitor's address readable
+  // (base64): each becomes a keyed hash; later starts find nothing to do
+  hashStoredFlagAddresses()
+    .then(n => { if (n > 0) logger.info({ rows: n }, 'Flag addresses hashed') })
     .catch(() => {})
 
   // ─── GRACEFUL SHUTDOWN ────────────────────────────────────
