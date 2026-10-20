@@ -14,6 +14,7 @@
 
 import { createHash } from 'crypto'
 import { redis } from '../lib/redis'
+import { cleanUrl } from './text'
 
 const DEDUP_TTL = 24 * 60 * 60  // 24 hours — prevents re-crawled RSS duplicates
 const CROSS_SOURCE_TTL = 6 * 60 * 60  // 6 hours — cross-source event dedup window
@@ -126,13 +127,17 @@ const TRACKING_PARAM_RE = /^(?:utm_|at_|ns_|mc_|pk_|mtm_)|^(?:fbclid|gclid|dclid
 /**
  * An article's address as a key, the same however a feed spells it: http or
  * https, with or without "www.", a trailing slash, a #fragment, tracking
- * parameters or parameters in another order. Null when the address isn't a
+ * parameters or parameters in another order, "&" written "&amp;" (the newer
+ * reader reads links from the feed's XML as written, so BBC's
+ * "?at_medium=RSS&amp;at_campaign=rss" kept a parameter "amp;at_campaign"
+ * and its key differed from the older reader's: one BBC article was still
+ * stored twice after the fix, Oct 20, 2026). Null when the address isn't a
  * web page or is a site's front page, which can't tell one article from
  * another.
  */
 export function articleKey(url: string): string | null {
   let u: URL
-  try { u = new URL(url.trim()) } catch { return null }
+  try { u = new URL(cleanUrl(url.trim())) } catch { return null }
   if (u.protocol !== 'http:' && u.protocol !== 'https:') return null
   const host = u.hostname.toLowerCase().replace(/^www\./, '')
   if (!host) return null

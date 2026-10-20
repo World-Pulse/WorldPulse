@@ -37,6 +37,8 @@ describe('articleKey', () => {
       'http://www.bbc.com/news/articles/c4g9xk2v7lzo/',
       'https://www.BBC.com/news/articles/c4g9xk2v7lzo#comments',
       'https://www.bbc.com/news/articles/c4g9xk2v7lzo?utm_source=twitter&at_campaign=other',
+      // as the newer reader reads it from the feed's XML (Oct 20, 2026: one BBC article was still stored twice)
+      'https://www.bbc.com/news/articles/c4g9xk2v7lzo?at_medium=RSS&amp;at_campaign=rss',
     ]) expect(articleKey(same)).toBe(k)
   })
 
