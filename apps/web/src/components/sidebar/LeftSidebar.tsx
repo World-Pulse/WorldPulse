@@ -8,7 +8,7 @@ import {
   Zap, Globe, Bell, BarChart3, Telescope, LayoutGrid, ClipboardList,
   TrendingUp, Shield, Unplug, Satellite, Lock, Waves, Landmark,
   Wheat, KeyRound, Droplets, Pickaxe, Map, ScrollText, Users, Search,
-  Mic, Video, Radio, Wrench, Settings, Activity, Anchor,
+  Mic, Video, Radio, Wrench, Settings, Activity, Anchor, CalendarDays,
   CircleDot, Swords, LineChart, Leaf, Pill, FlaskConical, Vote, Globe2, Network, Newspaper,
   type LucideProps,
 } from 'lucide-react'
@@ -27,6 +27,7 @@ const NAV_ITEMS = [
   { href: '/entities',   icon: Newspaper,     labelKey: 'inTheNews',  badge: 'NEW', badgeColor: 'purple' }, // who's in the news: the entity pages' index (Oct 13, 2026)
   // { href: '/clusters',   icon: LayoutGrid,    labelKey: 'clusters',   badge: 'NEW', badgeColor: 'blue'   }, // Hidden — needs correlation engine (Aether)
   { href: '/briefing',   icon: ClipboardList, labelKey: 'briefing',   badge: 'NEW', badgeColor: 'indigo' },
+  { href: '/week',       icon: CalendarDays,  labelKey: 'week',       badge: 'NEW', badgeColor: 'indigo' }, // the week's top stories (plan G11, Oct 20, 2026)
   { href: '/finance',    icon: TrendingUp,    labelKey: 'finance' },
   { href: '/maritime',        icon: Anchor,     labelKey: 'maritime' },
   { href: '/sanctions',        icon: Shield,    labelKey: 'sanctions' },

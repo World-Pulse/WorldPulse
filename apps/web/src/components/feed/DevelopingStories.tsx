@@ -75,6 +75,10 @@ export function DevelopingStories() {
             </li>
           ))}
         </ol>
+        {/* The week's biggest stories (plan G11): the page was reachable only by its address */}
+        <Link href="/week" className="mt-3 inline-block text-[12px] font-mono text-wp-cyan hover:underline">
+          This week&rsquo;s top stories &rarr;
+        </Link>
       </div>
     </section>
   )

@@ -620,6 +620,10 @@ export default function BriefingPage() {
                 AI-authored intelligence from verified global signals
               </p>
             )}
+            {/* The week's biggest stories (plan G11) */}
+            <a href="/week" className="inline-block text-sm text-indigo-400 hover:text-indigo-300 hover:underline mt-2">
+              See the whole week &rarr;
+            </a>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
