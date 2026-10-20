@@ -17,6 +17,13 @@ describe('pageMetadata', () => {
     expect(m.openGraph).toMatchObject({ url: '/map', siteName: 'WorldPulse', images: [SITE_IMAGE] })
     expect(m.twitter).toMatchObject({ card: 'summary_large_image', images: ['/og-image.png'] })
   })
+
+  it("names no picture for a page with its own picture files, so they're the ones announced", () => {
+    const m = pageMetadata({ path: '/week', title: 'WorldPulse Week', description: 'The week.', image: null })
+    expect(m.openGraph).not.toHaveProperty('images')
+    expect(m.twitter).not.toHaveProperty('images')
+    expect(m.openGraph).toMatchObject({ url: '/week', siteName: 'WorldPulse' })
+  })
 })
 
 describe('newsArticleJsonLd', () => {

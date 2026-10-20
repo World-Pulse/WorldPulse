@@ -26,8 +26,13 @@ export interface PageMetadataInput {
   /** The page's title; " — WorldPulse" is added */
   title: string
   description: string
-  /** A picture for share previews (default: the site's) */
-  image?: { url: string; width?: number; height?: number; alt?: string }
+  /**
+   * A picture for share previews (default: the site's). null for a page with
+   * its own picture files (opengraph-image.tsx, twitter-image.tsx): a picture
+   * named here would be announced instead of them (Oct 20, 2026: /week showed
+   * the site's picture, not its card)
+   */
+  image?: { url: string; width?: number; height?: number; alt?: string } | null
   type?: 'website' | 'article'
 }
 
@@ -50,8 +55,8 @@ export function pageMetadata({ path, title, description, image = SITE_IMAGE, typ
     title: full,
     description,
     alternates: { canonical: path },
-    openGraph: { title: full, description, url: path, siteName: SITE_NAME, type, images: [image] },
-    twitter: { card: 'summary_large_image', site: '@WorldPulse_io', title: full, description, images: [image.url] },
+    openGraph: { title: full, description, url: path, siteName: SITE_NAME, type, ...(image ? { images: [image] } : {}) },
+    twitter: { card: 'summary_large_image', site: '@WorldPulse_io', title: full, description, ...(image ? { images: [image.url] } : {}) },
   }
 }
 

@@ -18,7 +18,8 @@ export async function generateMetadata({ params }: { params: Promise<{ week: str
   const data = await fetchWeek(week)
   if (data === 'missing') return { title: 'Not found — WorldPulse', robots: { index: false } }
   if (data === 'unavailable') return { title: 'WorldPulse Week' }
-  const meta = pageMetadata({ path: `/week/${data.week}`, title: weekTitle(data), description: weekDescription(data) })
+  // The picture is the week's own card (opengraph-image.tsx, twitter-image.tsx)
+  const meta = pageMetadata({ path: `/week/${data.week}`, title: weekTitle(data), description: weekDescription(data), image: null })
   // A week with no story two outlets reported has nothing to find in search
   return data.stories.length ? meta : { ...meta, robots: { index: false, follow: true } }
 }

@@ -12,8 +12,9 @@ class WeekUnavailableError extends Error {
 
 export async function generateMetadata(): Promise<Metadata> {
   const data = await fetchWeek()
-  if (data === 'missing' || data === 'unavailable') return pageMetadata({ path: '/week', title: 'WorldPulse Week', description: "The week's top verified stories, ranked by independent outlets." })
-  return pageMetadata({ path: '/week', title: weekTitle(data), description: weekDescription(data) })
+  // The picture is the week's own card (opengraph-image.tsx, twitter-image.tsx)
+  if (data === 'missing' || data === 'unavailable') return pageMetadata({ path: '/week', title: 'WorldPulse Week', description: "The week's top verified stories, ranked by independent outlets.", image: null })
+  return pageMetadata({ path: '/week', title: weekTitle(data), description: weekDescription(data), image: null })
 }
 
 export default async function Page() {
