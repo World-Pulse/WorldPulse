@@ -1,4 +1,4 @@
-FROM node:20-alpine AS base
+FROM node:24-alpine AS base
 RUN npm install -g pnpm@9
 
 FROM base AS deps
@@ -31,7 +31,7 @@ ENV NEXT_PUBLIC_VAPID_KEY=$NEXT_PUBLIC_VAPID_KEY
 RUN pnpm --filter @worldpulse/types build
 RUN pnpm --filter @worldpulse/web build
 
-FROM node:20-alpine AS runner
+FROM node:24-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

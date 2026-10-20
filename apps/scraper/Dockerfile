@@ -1,4 +1,4 @@
-FROM node:20-alpine AS base
+FROM node:24-alpine AS base
 RUN npm install -g pnpm@9
 
 FROM base AS deps
@@ -20,7 +20,7 @@ RUN pnpm --filter @worldpulse/types build
 RUN pnpm --filter @worldpulse/scraper build || true
 RUN pnpm deploy --filter @worldpulse/scraper --prod /prod/scraper
 
-FROM node:20-alpine AS runner
+FROM node:24-alpine AS runner
 WORKDIR /app
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 scraper
 # The in-house fingerprint model is kept here (a volume shared with the API;

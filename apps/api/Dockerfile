@@ -1,4 +1,4 @@
-FROM node:20-alpine AS base
+FROM node:24-alpine AS base
 RUN npm install -g pnpm@9
 
 # ─── DEPENDENCIES ────────────────────────────────────────────
@@ -27,7 +27,7 @@ RUN pnpm --filter @worldpulse/api build
 RUN pnpm deploy --filter @worldpulse/api --prod /prod/api
 
 # ─── PRODUCTION IMAGE ────────────────────────────────────────
-FROM node:20-alpine AS runner
+FROM node:24-alpine AS runner
 WORKDIR /app
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 worldpulse
 
