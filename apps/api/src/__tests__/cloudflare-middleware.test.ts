@@ -204,11 +204,12 @@ describe('cloudflareMiddlewarePlugin', () => {
     expect(res.headers['x-real-client-ip']).toBeDefined()
   })
 
-  it('extracts real client IP from CF-Connecting-IP when CF-Ray is valid', async () => {
+  it('extracts real client IP from CF-Connecting-IP when the connection comes from Cloudflare', async () => {
     const app = await buildApp()
     const res = await app.inject({
       method: 'GET',
       url: '/test',
+      remoteAddress: '173.245.48.5', // a Cloudflare address (173.245.48.0/20)
       headers: {
         'cf-connecting-ip': '203.0.113.42',
         'cf-ray': '8a1b2c3d4e5f6789-LHR',
@@ -225,6 +226,7 @@ describe('cloudflareMiddlewarePlugin', () => {
     const res = await app.inject({
       method: 'GET',
       url: '/test',
+      remoteAddress: '173.245.48.5', // a Cloudflare address (173.245.48.0/20)
       headers: {
         'cf-connecting-ip': '1.2.3.4',
         'cf-ray': 'ffffffffffffffff-AMS',
@@ -238,6 +240,7 @@ describe('cloudflareMiddlewarePlugin', () => {
     const res = await app.inject({
       method: 'GET',
       url: '/test',
+      remoteAddress: '173.245.48.5', // a Cloudflare address (173.245.48.0/20)
       headers: {
         'cf-connecting-ip': '1.2.3.4',
         'cf-ray': 'invalid-ray-value',
@@ -251,13 +254,14 @@ describe('cloudflareMiddlewarePlugin', () => {
     const res = await app.inject({
       method: 'GET',
       url: '/test',
+      remoteAddress: '173.245.48.5', // a Cloudflare address (173.245.48.0/20)
       headers: {
         'cf-ray': '8a1b2c3d4e5f6789-LHR',
         // No CF-Connecting-IP
       },
     })
     const body = JSON.parse(res.body)
-    expect(body.isBehindCloudflare).toBe(true) // CF-Ray is present
+    expect(body.isBehindCloudflare).toBe(true) // the connection is Cloudflare's
     // cfClientIp should fall back to req.ip (not a CF IP from CF-Connecting-IP)
     expect(body.cfClientIp).toBeTruthy()
     expect(body.cfClientIp).not.toBe('') // Should have SOME value
@@ -268,6 +272,7 @@ describe('cloudflareMiddlewarePlugin', () => {
     const res = await app.inject({
       method: 'GET',
       url: '/test',
+      remoteAddress: '173.245.48.5', // a Cloudflare address (173.245.48.0/20)
       headers: {
         'cf-connecting-ip': '1.2.3.4; DROP TABLE users',
         'cf-ray': '8a1b2c3d4e5f6789-LHR',

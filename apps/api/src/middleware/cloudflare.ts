@@ -127,9 +127,14 @@ const cloudflarePlugin: FastifyPluginAsync = async (app) => {
     // Determine whether this request came through Cloudflare:
     // - CF-Ray header is present AND looks valid, OR
     // - the connecting IP falls within a known Cloudflare CIDR
+    // Only the connection itself proves Cloudflare: a CF-Ray header is
+    // something any client can send, and trusting it would let a client name
+    // its own address in CF-Connecting-IP (plan V3e, Oct 20, 2026). (nginx,
+    // in front of the API, already takes Cloudflare's real address:
+    // nginx/conf.d/cloudflare.conf.)
     const hasCfRay = isValidCfRay(cfRaw)
     const connectorIsCf = isCloudflareIp(req.socket?.remoteAddress ?? '')
-    const behindCloudflare = hasCfRay || connectorIsCf
+    const behindCloudflare = connectorIsCf
 
     req.isBehindCloudflare = behindCloudflare
 
@@ -141,7 +146,7 @@ const cloudflarePlugin: FastifyPluginAsync = async (app) => {
     }
 
     // CF-Ray: only set when we trust it's genuine
-    req.cfRay = hasCfRay ? cfRaw : undefined
+    req.cfRay = behindCloudflare && hasCfRay ? cfRaw : undefined
 
     // Echo CF-Ray in response header for ops correlation (e.g. match to CF logs)
     if (req.cfRay) {

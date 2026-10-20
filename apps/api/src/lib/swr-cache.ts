@@ -25,7 +25,23 @@ async function store<T>(key: string, value: T, opts: SwrOptions): Promise<void> 
   await redis.setex(key, opts.freshSeconds + opts.staleSeconds, JSON.stringify(kept)).catch(() => {})
 }
 
-export async function staleWhileRevalidate<T>(key: string, opts: SwrOptions, make: () => Promise<T>): Promise<T> {
+/** Make the next value in the background, by one process at a time (a Redis lock) */
+async function remakeInBackground<T>(key: string, opts: SwrOptions, make: () => Promise<T>): Promise<void> {
+  const lock = `${key}:refreshing`
+  const mine = await redis.set(lock, '1', 'EX', opts.lockSeconds ?? 120, 'NX').catch(() => null)
+  if (mine !== 'OK') return
+  void make()
+    .then(value => store(key, value, opts))
+    .catch(() => { /* keep serving what's kept; the next request tries again */ })
+    .finally(() => { redis.del(lock).catch(() => {}) })
+}
+
+/**
+ * `cold` (Oct 20, 2026): with nothing kept, answers at once (an estimate, say)
+ * while one process makes the value in the background, instead of the caller
+ * waiting for it.
+ */
+export async function staleWhileRevalidate<T>(key: string, opts: SwrOptions, make: () => Promise<T>, cold?: () => Promise<T>): Promise<T> {
   let kept: Kept<T> | null = null
   try {
     const raw = await redis.get(key)
@@ -36,16 +52,14 @@ export async function staleWhileRevalidate<T>(key: string, opts: SwrOptions, mak
     const age = (Date.now() - kept.at) / 1000
     if (age < opts.freshSeconds) return kept.value
     if (age < opts.freshSeconds + opts.staleSeconds) {
-      const lock = `${key}:refreshing`
-      const mine = await redis.set(lock, '1', 'EX', opts.lockSeconds ?? 120, 'NX').catch(() => null)
-      if (mine === 'OK') {
-        void make()
-          .then(value => store(key, value, opts))
-          .catch(() => { /* keep serving what's kept; the next request tries again */ })
-          .finally(() => { redis.del(lock).catch(() => {}) })
-      }
+      await remakeInBackground(key, opts, make)
       return kept.value
     }
+  }
+
+  if (cold) {
+    await remakeInBackground(key, opts, make)
+    return cold()
   }
 
   const value = await make()

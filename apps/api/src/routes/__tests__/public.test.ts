@@ -24,6 +24,8 @@ import { registerPublicRoutes } from '../public'
 const mockRedis = {
   get:   vi.fn().mockResolvedValue(null),
   setex: vi.fn().mockResolvedValue('OK'),
+  set:   vi.fn().mockResolvedValue('OK'),
+  del:   vi.fn().mockResolvedValue(1),
 }
 
 // (a getter: the module under test is imported, hoisted, before this file's consts exist; reading one in the factory threw and none of these tests ran. Oct 13, 2026)
@@ -73,29 +75,47 @@ function buildQueryChain(resolveWith: unknown[]) {
 }
 
 const mockDbFn = vi.fn()
+/** db.raw: the category list, the planner's estimate (EXPLAIN), and statement time limits */
+const mockRawFn = vi.fn()
 
-vi.mock('../../db/postgres', () => ({
-  db: new Proxy(
+vi.mock('../../db/postgres', () => {
+  // db and a transaction (lib/long-query.ts) are both callable query builders with raw()
+  const builder: unknown = new Proxy(
     function dbProxy(..._args: unknown[]) {
       return mockDbFn(..._args)
     } as unknown as { raw: (...args: unknown[]) => unknown },
     {
       get(_target, prop) {
-        if (prop === 'raw') {
-          return vi.fn((_sql: string, _bindings: unknown[]) => ({
-            __raw: true,
-            sql: _sql,
-            bindings: _bindings,
-          }))
-        }
+        if (prop === 'raw') return (...args: unknown[]) => mockRawFn(...args)
+        if (prop === 'transaction') return async (fn: (trx: unknown) => unknown) => fn(builder)
         return undefined
       },
       apply(_target, _this, args) {
         return mockDbFn(...args)
       },
     },
-  ),
-}))
+  )
+  return { db: builder }
+})
+
+/** A knex-like chain: every call returns it, awaiting it gives `rows` (or `countRows` after count()) */
+function chainOf(rows: unknown[], countRows: unknown[]) {
+  let result: unknown[] = rows
+  const chain: Record<string, unknown> = {}
+  for (const m of ['where', 'orderBy', 'limit', 'offset', 'select']) chain[m] = vi.fn(() => chain)
+  chain.count = vi.fn(() => { result = countRows; return chain })
+  chain.toSQL = vi.fn(() => ({ sql: 'select 1 from "signals" where "status" = ?', bindings: ['verified'] }))
+  chain.then = (resolve: (v: unknown[]) => unknown, reject?: (e: unknown) => unknown) => Promise.resolve(result).then(resolve, reject)
+  return chain
+}
+
+/** What db.raw answers: the categories, an estimate of 1,234 rows, nothing else */
+function rawAnswers(sql: string) {
+  if (/enum_range\(NULL::category\)/.test(sql)) return Promise.resolve({ rows: ['conflict', 'climate', 'economy', 'technology'].map(name => ({ name })) })
+  if (/^EXPLAIN/.test(sql)) return Promise.resolve({ rows: [{ 'QUERY PLAN': [{ Plan: { 'Plan Rows': 1234 } }] }] })
+  if (/^SET LOCAL/.test(sql)) return Promise.resolve({ rows: [] })
+  return Promise.resolve({ rows: [] })
+}
 
 import { db } from '../../db/postgres'
 import { redis } from '../../db/redis'
@@ -123,18 +143,9 @@ beforeEach(() => {
   mockR.get.mockResolvedValue(null)
   mockR.setex.mockResolvedValue('OK')
 
-  // Default: db('signals') returns signal rows for select, count rows for count
-  mockDb.mockImplementation((_table: string) => {
-    const selectChain = {
-      where:   vi.fn().mockReturnThis(),
-      orderBy: vi.fn().mockReturnThis(),
-      limit:   vi.fn().mockReturnThis(),
-      offset:  vi.fn().mockReturnThis(),
-      select:  vi.fn().mockResolvedValue(MOCK_SIGNAL_ROWS),
-      count:   vi.fn().mockResolvedValue(MOCK_COUNT_ROWS),
-    }
-    return selectChain
-  })
+  // Default: db('signals') gives the signal rows, or the count rows after count()
+  mockDb.mockImplementation((_table: string) => chainOf(MOCK_SIGNAL_ROWS, MOCK_COUNT_ROWS))
+  mockRawFn.mockImplementation(rawAnswers)
 })
 
 // ─── GET /public/signals ──────────────────────────────────────────────────────
@@ -169,11 +180,73 @@ describe('GET /public/signals', () => {
     expect(body.offset).toBe(0)
   })
 
-  it('returns total count from DB', async () => {
+  it('answers with the kept exact count of matching signals (plan V3a, Oct 20, 2026)', async () => {
+    mockR.get.mockImplementation(async (key: string) =>
+      key.startsWith('public:signals:total:') ? JSON.stringify({ at: Date.now(), value: { total: 42, exact: true } }) : null)
     const app = await buildApp()
     const res = await app.inject({ method: 'GET', url: '/public/signals' })
     const body = JSON.parse(res.payload)
     expect(body.total).toBe(42)
+    expect(body.total_exact).toBe(true)
+  })
+
+  it("answers at once with the database's estimate until an exact count is kept, and counts in the background", async () => {
+    const app = await buildApp()
+    const res = await app.inject({ method: 'GET', url: '/public/signals?category=conflict' })
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.payload)
+    expect(body.total).toBe(1234)
+    expect(body.total_exact).toBe(false)
+    await new Promise(r => setTimeout(r, 0)); await new Promise(r => setTimeout(r, 0))
+    // the exact count (42) is kept for the next caller, under its own time limit
+    expect(mockR.setex).toHaveBeenCalledWith('public:signals:total:v1:conflict:all', 600 + 86_400, expect.stringContaining('"total":42'))
+    expect(mockRawFn).toHaveBeenCalledWith(expect.stringMatching(/^SET LOCAL statement_timeout = '60s'/))
+  })
+
+  it('makes at most two exact counts at once, whatever filters are asked for', async () => {
+    let started = 0
+    const waiting: Array<() => void> = []
+    mockDb.mockImplementation((_table: string) => {
+      const chain = chainOf(MOCK_SIGNAL_ROWS, MOCK_COUNT_ROWS)
+      const count = chain.count as ReturnType<typeof vi.fn>
+      chain.count = vi.fn(() => {
+        count()
+        started++
+        // a count that takes a while
+        return { then: (resolve: (v: unknown[]) => unknown) => new Promise<void>(r => waiting.push(r)).then(() => resolve(MOCK_COUNT_ROWS)) }
+      })
+      return chain
+    })
+    const app = await buildApp()
+    for (const category of ['conflict', 'climate', 'economy', 'technology']) {
+      expect((await app.inject({ method: 'GET', url: `/public/signals?category=${category}` })).statusCode).toBe(200)
+    }
+    await new Promise(r => setTimeout(r, 0))
+    expect(started).toBe(2)
+    waiting.forEach(r => r())
+    await new Promise(r => setTimeout(r, 0)); await new Promise(r => setTimeout(r, 0))
+  })
+
+  it('never says fewer match than the page shows', async () => {
+    mockRawFn.mockImplementation(async (sql: string) =>
+      /^EXPLAIN/.test(sql) ? { rows: [{ 'QUERY PLAN': [{ Plan: { 'Plan Rows': 1 } }] }] } : rawAnswers(sql))
+    const app = await buildApp()
+    const body = JSON.parse((await app.inject({ method: 'GET', url: '/public/signals?offset=20' })).payload)
+    expect(body.total).toBe(22)
+  })
+
+  it('answers 400 with the list for a category the database does not have (it answered 500)', async () => {
+    const app = await buildApp()
+    const res = await app.inject({ method: 'GET', url: '/public/signals?category=economics' })
+    expect(res.statusCode).toBe(400)
+    expect(JSON.parse(res.payload).error).toMatch(/conflict, climate, economy, technology/)
+  })
+
+  it('lists the categories at GET /public/categories', async () => {
+    const app = await buildApp()
+    const res = await app.inject({ method: 'GET', url: '/public/categories' })
+    expect(res.statusCode).toBe(200)
+    expect(JSON.parse(res.payload).data).toEqual(['conflict', 'climate', 'economy', 'technology'])
   })
 
   it('returns data with correct signal field shape', async () => {
@@ -299,10 +372,9 @@ describe('GET /public/signals', () => {
   it('stores response in Redis cache after DB fetch', async () => {
     const app = await buildApp()
     await app.inject({ method: 'GET', url: '/public/signals' })
-    expect(mockR.setex).toHaveBeenCalledOnce()
-    // TTL = 30 seconds
+    // TTL = 30 seconds (the count is kept apart, see above)
     expect(mockR.setex).toHaveBeenCalledWith(
-      expect.stringContaining('public:signals:'),
+      expect.stringMatching(/^public:signals:all:/),
       30,
       expect.any(String),
     )
@@ -334,14 +406,9 @@ describe('GET /public/signals', () => {
   })
 
   it('returns empty data array when DB returns no rows', async () => {
-    mockDb.mockImplementation((_table: string) => ({
-      where:   vi.fn().mockReturnThis(),
-      orderBy: vi.fn().mockReturnThis(),
-      limit:   vi.fn().mockReturnThis(),
-      offset:  vi.fn().mockReturnThis(),
-      select:  vi.fn().mockResolvedValue([]),
-      count:   vi.fn().mockResolvedValue([{ count: '0' }]),
-    }))
+    mockDb.mockImplementation((_table: string) => chainOf([], [{ count: '0' }]))
+    mockRawFn.mockImplementation(async (sql: string) =>
+      /^EXPLAIN/.test(sql) ? { rows: [{ 'QUERY PLAN': [{ Plan: { 'Plan Rows': 0 } }] }] } : rawAnswers(sql))
 
     const app = await buildApp()
     const res = await app.inject({ method: 'GET', url: '/public/signals' })

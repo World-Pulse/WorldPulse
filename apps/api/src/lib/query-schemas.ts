@@ -82,8 +82,9 @@ export type FeedQuery = z.infer<typeof FeedQuerySchema>
  * GET /api/v1/public/signals
  */
 export const PublicSignalsQuerySchema = z.object({
-  category: z.string().trim().optional(),
-  severity: z.enum(SEVERITY_VALUES).optional(),
+  category: z.string().trim().max(40).optional(),
+  // 'info' too: the endpoint's own schema and the docs list it (plan V3a, Oct 20, 2026)
+  severity: z.enum(['info', ...SEVERITY_VALUES]).optional(),
   limit:    intParam(50, 1, 100),
   offset:   z
     .union([z.string(), z.number()])

@@ -68,6 +68,19 @@ describe('staleWhileRevalidate', () => {
     expect(await staleWhileRevalidate('k', opts, async () => 'new')).toBe('new')
   })
 
+  it('with a cold answer, gives it at once when nothing is kept and keeps the made value for next time (Oct 20, 2026)', async () => {
+    let finish: (v: string) => void = () => {}
+    const make = vi.fn(() => new Promise<string>(r => { finish = r }))
+    const cold = vi.fn(async () => 'estimate')
+    expect(await staleWhileRevalidate('k', opts, make, cold)).toBe('estimate')
+    expect(await staleWhileRevalidate('k', opts, make, cold)).toBe('estimate') // still making: not asked again
+    expect(make).toHaveBeenCalledTimes(1)
+    finish('exact')
+    await flush(); await flush(); await flush()
+    expect(await staleWhileRevalidate('k', opts, make, cold)).toBe('exact')
+    expect(cold).toHaveBeenCalledTimes(2)
+  })
+
   it('works without Redis', async () => {
     redisMock.get.mockRejectedValueOnce(new Error('down'))
     redisMock.setex.mockRejectedValueOnce(new Error('down'))

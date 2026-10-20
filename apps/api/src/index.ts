@@ -95,6 +95,8 @@ import { startSummaryPass, stopSummaryPass } from './lib/summary-pass'
 import { ensureSubscribersTable } from './lib/subscribers'
 import { ensureEntitySignalsIndex } from './lib/entity-index'
 import { hashStoredFlagAddresses } from './lib/signal-flags'
+import { corsDecision } from './lib/cors-policy'
+import { TRUSTED_PROXIES } from './lib/client-address'
 import { startBriefingEmails, stopBriefingEmails } from './lib/briefing-email'
 import { startSocialPosters, stopSocialPosters } from './lib/social-posters'
 
@@ -105,7 +107,8 @@ const app = Fastify({
       ? { target: 'pino-pretty', options: { colorize: true } }
       : undefined,
   },
-  trustProxy: true,
+  // The client's address is the one nginx saw (lib/client-address.ts, plan V3e)
+  trustProxy: TRUSTED_PROXIES,
 })
 
 // A failed request's answer (lib/error-reply.ts): an unexpected error says
@@ -139,16 +142,11 @@ async function bootstrap() {
         ...(process.env.CORS_ORIGINS ?? '').split(',').filter(Boolean),
       ]
 
+  // Per request (lib/cors-policy.ts): the site's own addresses as before, the
+  // public reads open to every website, and other websites answered without
+  // CORS headers instead of a 500 (plan V3b)
   await app.register(cors, {
-    origin: (origin, cb) => {
-      // Allow requests with no origin (server-to-server, curl, mobile apps, local files)
-      if (!origin || origin === 'null' || allowedOrigins.includes(origin)) {
-        cb(null, true)
-      } else {
-        cb(new Error(`CORS: origin '${origin}' not allowed`), false)
-      }
-    },
-    credentials: true,
+    delegator: (req, cb) => cb(null, corsDecision(req, allowedOrigins)),
   })
 
   // ─── SECURITY HEADERS (helmet) ────────────────────────────
