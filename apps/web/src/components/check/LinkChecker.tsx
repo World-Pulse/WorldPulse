@@ -81,7 +81,7 @@ export function LinkChecker() {
           <div className="rounded-xl border border-white/10 bg-wp-surface p-4">
             {state.view.similarTo && (
               <p className="mb-3 text-[12px] text-wp-text2 leading-relaxed">
-                WorldPulse hasn&rsquo;t collected this article. Its headline, &ldquo;{state.view.similarTo}&rdquo;, tells the same event as this story:
+                WorldPulse hasn&rsquo;t collected this article. Its headline, &ldquo;{state.view.similarTo}&rdquo;, looks like the same event as this story (compare them before relying on it):
               </p>
             )}
             <p className="text-[15px] font-semibold text-wp-text leading-snug">{state.view.title}</p>

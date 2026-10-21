@@ -188,7 +188,37 @@ export function particularWords(title: string): Set<string> {
   return out
 }
 
-export interface StoryCandidate { id: string; title: string; score: number }
+export interface StoryCandidate { id: string; title: string; score: number; createdAt?: string | null }
+
+/** How far apart a page's publication and a report may be to tell one event */
+export const SAME_EVENT_DAYS = 3
+
+/** A date in an article's address (/2025/12/14/, /2025-12-14-, /20251214/), as an ISO day, else null */
+export function dateInPath(url: string): string | null {
+  let path: string
+  try { path = new URL(url).pathname } catch { return null }
+  const m = /(?:^|[/_-])(20\d{2})[/_-]?(0[1-9]|1[0-2])[/_-]?(0[1-9]|[12]\d|3[01])(?=[/_.-]|$)/.exec(path)
+  if (!m) return null
+  const iso = `${m[1]}-${m[2]}-${m[3]}`
+  return Number.isFinite(Date.parse(`${iso}T12:00:00Z`)) ? iso : null
+}
+
+/**
+ * The reports a page may tell the same event as, by time: within
+ * SAME_EVENT_DAYS of when the page says it was published (or the date in its
+ * address). Oct 21, 2026: a December 2025 article on a drone strike in
+ * Abyei ("six Bangladesh Army soldiers") matched October 2026's Abyei
+ * market strike by its words. Without a date, all of them.
+ */
+export function nearInTime(candidates: StoryCandidate[], publishedAt: string | null): StoryCandidate[] {
+  const at = publishedAt ? Date.parse(publishedAt.length === 10 ? `${publishedAt}T12:00:00Z` : publishedAt) : NaN
+  if (!Number.isFinite(at)) return candidates
+  const span = SAME_EVENT_DAYS * 86_400_000 + (publishedAt!.length === 10 ? 86_400_000 : 0)
+  return candidates.filter(c => {
+    const t = c.createdAt ? Date.parse(c.createdAt) : NaN
+    return Number.isFinite(t) && Math.abs(t - at) <= span
+  })
+}
 
 /**
  * The report that tells the same event as a headline, among the closest in
@@ -221,7 +251,7 @@ export type PageLookup =
   /** Too many pages opened just now (this client, this website or all) */
   | { status: 'busy' }
 
-export interface PageFactsKept { title: string; site: string | null; canonical: string | null }
+export interface PageFactsKept { title: string; site: string | null; canonical: string | null; publishedAt?: string | null }
 
 /** Count one more under a key for `seconds`; false when that passes `max` */
 async function underLimit(key: string, max: number, seconds: number): Promise<boolean> {
@@ -246,7 +276,8 @@ export async function lookUpByPage(raw: string, client: string, deps: {
   if (!mayOpen(url)) return { status: 'unreadable', reason: 'not_public' }
   const now = deps.now ?? new Date()
 
-  const cacheKey = `linkcheck:page:${key}`
+  // v2: with the page's publication time (Oct 21, 2026)
+  const cacheKey = `linkcheck:page:v2:${key}`
   let facts: PageFactsKept | { failed: string } | null = null
   try { facts = JSON.parse((await redis.get(cacheKey)) ?? 'null') } catch { facts = null }
 
@@ -260,7 +291,7 @@ export async function lookUpByPage(raw: string, client: string, deps: {
       const page = await (deps.fetchPage ?? fetchPublicPage)(url)
       const f = pageFacts(page.html, page.url)
       facts = f.title
-        ? { title: headlineOnly(f.title, f.site, new URL(page.url).hostname), site: f.site, canonical: f.canonical }
+        ? { title: headlineOnly(f.title, f.site, new URL(page.url).hostname), site: f.site, canonical: f.canonical, publishedAt: f.publishedAt ?? dateInPath(page.url) ?? dateInPath(url.toString()) }
         : { failed: 'no_headline' }
     } catch (err) {
       facts = { failed: err instanceof PageRefused ? err.reason : 'unreachable' }
@@ -276,7 +307,7 @@ export async function lookUpByPage(raw: string, client: string, deps: {
   }
 
   const candidates = await (deps.similar ?? similarTitles)(facts.title, new Date(now.getTime() - SIMILAR_DAYS * 86_400_000)).catch(() => [] as StoryCandidate[])
-  const match = bestMatch(facts.title, candidates)
+  const match = bestMatch(facts.title, nearInTime(candidates, facts.publishedAt ?? dateInPath(url.toString())))
   if (match) return { status: 'found', reportId: match.id, via: 'similar', page: facts, score: match.score }
   return { status: 'not_seen', page: facts }
 }
@@ -286,7 +317,10 @@ async function similarTitles(q: string, from: Date): Promise<StoryCandidate[]> {
   const matches = await searchByMeaning(q, { limit: 12, minScore: SIMILAR_MIN_SCORE, from })
   if (!matches?.length) return []
   const rows = await db('signals').whereIn('id', matches.map(m => m.id)).whereIn('status', ['verified', 'pending'])
-    .select('id', 'title') as Array<{ id: string; title: string | null }>
-  const titles = new Map(rows.map(r => [String(r.id), String(r.title ?? '')]))
-  return matches.filter(m => titles.has(m.id)).map(m => ({ id: m.id, title: titles.get(m.id)!, score: m.score }))
+    .select('id', 'title', 'created_at') as Array<{ id: string; title: string | null; created_at: unknown }>
+  const found = new Map(rows.map(r => [String(r.id), r]))
+  return matches.filter(m => found.has(m.id)).map(m => {
+    const r = found.get(m.id)!
+    return { id: m.id, title: String(r.title ?? ''), score: m.score, createdAt: r.created_at ? new Date(r.created_at as string).toISOString() : null }
+  })
 }

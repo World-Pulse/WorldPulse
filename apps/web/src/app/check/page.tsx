@@ -24,7 +24,7 @@ export default function CheckPage() {
         <LinkChecker />
         <h2 className="text-base font-semibold text-wp-text mt-10">What this can and can’t tell you</h2>
         <ul className="list-disc pl-5 mt-2 space-y-2 text-sm text-wp-text2 leading-relaxed">
-          <li>It looks among the articles WorldPulse has collected in the last two weeks. If the link isn’t among them, WorldPulse opens that page once, only to read its headline (public web pages only), and looks for a story of the last week that tells the same event.</li>
+          <li>It looks among the articles WorldPulse has collected in the last two weeks. If the link isn’t among them, WorldPulse opens that page once, only to read its headline (public web pages only), and looks for a story from around when it was published that seems to tell the same event; such a match says so, so you can compare them.</li>
           <li>“Verified” means two or more outlets reported the story and its reliability score reached 65%: more than one outlet says so, not proven true.</li>
           <li>Websites, not owners, are counted, and a wire story rewritten under a new headline may count more than once.</li>
         </ul>

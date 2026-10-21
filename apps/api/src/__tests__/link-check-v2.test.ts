@@ -28,7 +28,7 @@ vi.mock('../lib/long-query', () => ({
 }))
 vi.mock('../lib/fingerprint-search', () => ({ searchByMeaning: async () => [] }))
 
-import { headlineOnly, particularWords, bestMatch, lookUpByPage, CLIENT_FETCHES_A_MINUTE } from '../lib/link-check'
+import { headlineOnly, particularWords, bestMatch, lookUpByPage, dateInPath, nearInTime, CLIENT_FETCHES_A_MINUTE } from '../lib/link-check'
 
 beforeEach(() => { h.kv.clear(); h.counts.clear(); h.linkRows = []; h.linkAsked = [] })
 
@@ -87,7 +87,7 @@ describe('lookUpByPage', () => {
     // asked again: the page isn't opened again
     await lookUpByPage('https://news.example.com/africa/abyei-1?utm_source=x', 'client-1', { fetchPage, similar: async () => abyei })
     expect(fetchPage).toHaveBeenCalledTimes(1)
-    expect([...h.kv.values()][0]).toBe(JSON.stringify({ title: 'Abyei: dozens dead after drone hits crowded market', site: null, canonical: null }))
+    expect(JSON.parse([...h.kv.values()][0]!)).toEqual({ title: 'Abyei: dozens dead after drone hits crowded market', site: null, canonical: null, publishedAt: null })
   })
 
   it('by the canonical address when the feed gave that one', async () => {
@@ -101,7 +101,7 @@ describe('lookUpByPage', () => {
 
   it('says so when it read the headline and has no story like it', async () => {
     const got = await lookUpByPage('https://a.example/x', 'c', { fetchPage: page('Zoo welcomes twin red panda cubs'), similar: async () => [] })
-    expect(got).toEqual({ status: 'not_seen', page: { title: 'Zoo welcomes twin red panda cubs', site: null, canonical: null } })
+    expect(got).toEqual({ status: 'not_seen', page: { title: 'Zoo welcomes twin red panda cubs', site: null, canonical: null, publishedAt: null } })
   })
 
   it('never opens a private address, and remembers a page it couldn\'t read', async () => {
@@ -120,5 +120,34 @@ describe('lookUpByPage', () => {
     }
     expect(await lookUpByPage('https://a.example/one-more', 'busy-client', { fetchPage, similar: async () => [], now: new Date('2026-10-21T16:00:40Z') })).toEqual({ status: 'busy' })
     expect(fetchPage).toHaveBeenCalledTimes(CLIENT_FETCHES_A_MINUTE)
+  })
+})
+
+describe('a page from another time tells another event (live, Oct 21, 2026)', () => {
+  it('reads a date in an article\'s address', () => {
+    expect(dateInPath('https://www.theweek.in/news/world/2025/12/14/did-rsf-group-s-drone-kill.amp.html')).toBe('2025-12-14')
+    expect(dateInPath('https://example.com/2026-10-21-quake-hits-coast')).toBe('2026-10-21')
+    expect(dateInPath('https://example.com/news/20261020/story')).toBe('2026-10-20')
+    expect(dateInPath('https://example.com/article/320174')).toBeNull()
+    expect(dateInPath('https://example.com/2026/13/40/x')).toBeNull()
+  })
+  it('keeps the reports within 3 days of the page', () => {
+    const c = [
+      { id: 'near', title: 't', score: 0.7, createdAt: '2026-10-20T10:00:00Z' },
+      { id: 'far', title: 't', score: 0.7, createdAt: '2026-10-10T10:00:00Z' },
+      { id: 'unknown', title: 't', score: 0.7, createdAt: null },
+    ]
+    expect(nearInTime(c, '2026-10-21T08:00:00Z').map(x => x.id)).toEqual(['near'])
+    expect(nearInTime(c, '2026-10-21').map(x => x.id)).toEqual(['near'])
+    expect(nearInTime(c, null).map(x => x.id)).toEqual(['near', 'far', 'unknown'])
+  })
+  it('a December 2025 drone strike in Abyei is not October 2026\'s market strike', async () => {
+    const strike = [{ id: '33333333-3333-3333-3333-333333333333', title: 'Sudan drone strike kills around 150 in Abyei market', score: 0.7, createdAt: '2026-10-20T09:00:00Z' }]
+    const html = async (url: URL) => ({ url: url.toString(), html: '<head><meta property="og:title" content="Did RSF group’s drone kill six Bangladesh Army soldiers in Sudan&#39;s Abyei?"><meta property="article:published_time" content="2025-12-14T08:00:00Z"></head>' })
+    const got = await lookUpByPage('https://www.theweek.in/news/world/2025/12/14/did-rsf-group-s-drone-kill.amp.html', 'c', { fetchPage: html, similar: async () => strike })
+    expect(got.status).toBe('not_seen')
+    // a report of the market strike published the same week is found
+    const now = async (url: URL) => ({ url: url.toString(), html: '<head><meta property="og:title" content="Drone strike on Abyei market kills 150, UN says"><meta property="article:published_time" content="2026-10-20T12:00:00Z"></head>' })
+    expect((await lookUpByPage('https://example.com/abyei-1', 'c', { fetchPage: now, similar: async () => strike })).status).toBe('found')
   })
 })

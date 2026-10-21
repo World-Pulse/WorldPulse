@@ -273,7 +273,7 @@ export const TOOLS: Tool[] = [
         ? `Verified · ${outlets} outlets`
         : outlets <= 1 ? 'Only one outlet so far: treat it as unconfirmed' : `${outlets} outlets so far (not verified)`
       const text = [
-        ...(d.match === 'similar' ? [`WorldPulse has not collected this article; its headline${d.page?.title ? ` ("${d.page.title}")` : ''} tells the same event as this story:`] : []),
+        ...(d.match === 'similar' ? [`WorldPulse has not collected this article; its headline${d.page?.title ? ` ("${d.page.title}")` : ''} looks like the same event as this story (compare them before relying on it):`] : []),
         `${d.report?.title ?? 'This article'}${d.report?.outlet ? ` (${d.report.outlet})` : ''}`,
         `${proof}${names.length ? ` · ${names.slice(0, 10).join(', ')}${names.length > 10 ? ', …' : ''}` : ''}`,
         `${d.link ?? signalLink(d.report?.id)} (story id ${d.story?.id ?? '?'})`,
