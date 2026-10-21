@@ -179,8 +179,9 @@ function KeyDevelopmentsSection({ developments }: { developments: BriefingDevelo
             <div className="flex items-center gap-2 mb-1.5 flex-wrap">
               <SeverityBadge severity={d.severity} />
               <CategoryBadge category={d.category} />
+              {/* the story's independent outlets (the briefing's writer is given them since Oct 21, 2026, plan 9) */}
               <span className="text-[10px] font-mono text-wp-text3">
-                {d.signal_count} signal{d.signal_count !== 1 ? 's' : ''}
+                {d.signal_count} outlet{d.signal_count !== 1 ? 's' : ''}
               </span>
             </div>
             <h3 className="text-[14px] font-semibold text-wp-text mb-1">{d.headline}</h3>

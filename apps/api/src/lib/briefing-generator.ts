@@ -40,6 +40,12 @@ export interface BriefingSignal {
   country_code: string | null
   source_domain: string | null
   created_at: string
+  /** verified once two or more independent outlets carry the story (plans E2 and 9, Oct 21, 2026) */
+  status?: string
+  /** The story's independent outlets */
+  source_count?: number | null
+  /** The start of its summary (240 characters at most) */
+  summary?: string | null
 }
 
 export interface BriefingCluster {
@@ -138,7 +144,8 @@ async function getTopSignals(hours: number): Promise<BriefingSignal[]> {
   // website. Asking for one failed every briefing, Oct 13, 2026)
   const rows = await db('signals')
     .select('id', 'title', 'category', 'severity', 'reliability_score',
-            'location_name', 'country_code', 'created_at',
+            'location_name', 'country_code', 'created_at', 'status', 'source_count',
+            db.raw('left(summary, 240) AS summary'),
             db.raw('substring(original_urls[1] from ?) AS source_domain', ['^https?://(?:www[.])?([^/:?#]+)']),
             db.raw(`${storyKey} AS story_key`))
     .where('created_at', '>=', since)
@@ -155,6 +162,52 @@ async function getTopSignals(hours: number): Promise<BriefingSignal[]> {
     `)
     .limit(MAX_SIGNALS_FOR_LLM * 4) as Array<BriefingSignal & { story_key?: string }>
   return onePerStory(rows).slice(0, MAX_SIGNALS_FOR_LLM)
+}
+
+/**
+ * Stories first reported before the period that more outlets carried during it
+ * (plan E2, "what changed overnight"): verified, one report each, the most
+ * outlets first
+ */
+async function getGrowingStories(hours: number): Promise<BriefingSignal[]> {
+  const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString()
+  const storyKey = await signalsHaveStoryIds() ? 'COALESCE(story_id, id)::text' : 'id::text'
+  const rows = await db('signals')
+    .select('id', 'title', 'category', 'severity', 'reliability_score',
+            'location_name', 'country_code', 'created_at', 'status', 'source_count',
+            db.raw('left(summary, 240) AS summary'),
+            db.raw('substring(original_urls[1] from ?) AS source_domain', ['^https?://(?:www[.])?([^/:?#]+)']),
+            db.raw(`${storyKey} AS story_key`))
+    .where('status', 'verified')
+    .where('last_corroborated_at', '>=', since)
+    .where('created_at', '<', since)
+    // a story a week old that one more outlet mentions isn't what changed overnight
+    .where('created_at', '>=', new Date(Date.now() - (hours + 72) * 60 * 60 * 1000).toISOString())
+    .orderByRaw('coalesce(source_count, 1) DESC')
+    .limit(40) as Array<BriefingSignal & { story_key?: string }>
+  return onePerStory(rows).slice(0, 8)
+}
+
+const outletsOf = (s: Pick<BriefingSignal, 'source_count'>): number => Math.max(1, Number(s.source_count ?? 1) || 1)
+
+/**
+ * What the briefing is written from (plans E2 and 9, Oct 21, 2026): the
+ * verified stories, most serious and most carried first; the serious reports
+ * no second outlet has carried yet, said to be unconfirmed; and the stories
+ * that grew during the period. Until now the writer got the most severe
+ * reports with a reliability percentage, never whether a story was verified
+ * or by how many outlets.
+ */
+export function briefingLists(signals: BriefingSignal[], growing: BriefingSignal[] = []): {
+  verified: BriefingSignal[]; unconfirmed: BriefingSignal[]; growing: BriefingSignal[]
+} {
+  const rank = (s: BriefingSignal) => SEVERITY_ORDER[s.severity] ?? 0
+  const verified = signals.filter(s => s.status === 'verified' && outletsOf(s) >= 2)
+    .sort((a, b) => rank(b) - rank(a) || outletsOf(b) - outletsOf(a))
+    .slice(0, 15)
+  const unconfirmed = signals.filter(s => !(s.status === 'verified' && outletsOf(s) >= 2) && rank(s) >= SEVERITY_ORDER.high)
+    .slice(0, 6)
+  return { verified, unconfirmed, growing: growing.slice(0, 8) }
 }
 
 /** The first report of each story, in order (exported for tests) */
@@ -277,107 +330,80 @@ async function getRecentClusters(): Promise<BriefingCluster[]> {
 
 // ─── LLM Briefing Generation ─────────────────────────────────────────────────
 
-function buildBriefingPrompt(
-  signals: BriefingSignal[],
-  clusters: BriefingCluster[],
+function reportLine(s: BriefingSignal): string {
+  const n = outletsOf(s)
+  const where = s.location_name ?? s.country_code ?? 'no place given'
+  const summary = s.summary && !s.summary.toLowerCase().startsWith(s.title.toLowerCase().slice(0, 40))
+    ? ` — ${s.summary.replace(/\s+/g, ' ').trim()}` : ''
+  return `- [${s.severity.toUpperCase()} · ${n} outlet${n === 1 ? '' : 's'} · ${s.category}] ${s.title} (${where})${summary}`
+}
+
+/**
+ * The writer's prompt (plans E2 and 9, Oct 21, 2026: "something an analyst
+ * reads instead of Twitter"). It leads with what two or more outlets
+ * verified, says what grew and what isn't confirmed yet, and asks for
+ * nothing the reports don't say: the old one told the writer every section
+ * was "MANDATORY", to "use ANY available" report for the maritime one and
+ * to write at least two sentences on a quiet day, which invites filler. The
+ * answer's shape is unchanged.
+ */
+export function buildBriefingPrompt(
+  lists: ReturnType<typeof briefingLists>,
   categories: CategoryBreakdown[],
   hotspots: GeographicHotspot[],
   totalSignals: number,
+  totalStories: number,
+  hours = 24,
 ): string {
-  const signalList = signals.slice(0, 20).map(s =>
-    `- [${s.severity.toUpperCase()}] ${s.title} (${s.category}, ${s.location_name ?? 'global'}, reliability: ${(s.reliability_score * 100).toFixed(0)}%)`
-  ).join('\n')
+  const list = (items: BriefingSignal[], none: string) => (items.length ? items.map(reportLine).join('\n') : none)
+  const categoryList = categories.map(c => `- ${c.category}: ${c.count} reports (${c.critical_count} critical, ${c.high_count} high)`).join('\n')
+  const hotspotList = hotspots.map(h => `- ${h.country_code}${h.location_name ? ` (${h.location_name})` : ''}: ${h.signal_count} reports`).join('\n')
 
-  const clusterList = clusters.length > 0
-    ? clusters.map(c =>
-        `- Cluster: ${c.signal_count} signals, type: ${c.correlation_type}, severity: ${c.severity}, categories: ${c.categories.join(', ')}`
-      ).join('\n')
-    : 'No correlated event clusters detected in this period.'
+  return `You write WorldPulse's Daily Briefing: what happened in the last ${hours} hours, for a reader who wants the essentials without the noise. WorldPulse reads news outlets around the world and counts how many independent outlets report each story; a story is verified once two or more do.
 
-  const categoryList = categories.map(c =>
-    `- ${c.category}: ${c.count} signals (${c.critical_count} critical, ${c.high_count} high)`
-  ).join('\n')
+In the last ${hours} hours: ${totalSignals} reports, ${totalStories} stories.
 
-  const hotspotList = hotspots.map(h =>
-    `- ${h.country_code}${h.location_name ? ` (${h.location_name})` : ''}: ${h.signal_count} signals, avg severity: ${h.avg_severity_score}`
-  ).join('\n')
+VERIFIED STORIES (two or more independent outlets), most serious first:
+${list(lists.verified, '(none)')}
 
-  return `You are PULSE, the senior intelligence analyst for WorldPulse — an open-source global intelligence network.
-Generate a structured Daily Intelligence Briefing from the following data collected over the last 24 hours.
+STORIES THAT GREW (first reported earlier; more outlets carried them in these ${hours} hours):
+${list(lists.growing, '(none)')}
 
-TOTAL SIGNALS PROCESSED: ${totalSignals}
+NOT YET CONFIRMED (serious reports only one outlet carries so far):
+${list(lists.unconfirmed, '(none)')}
 
-TOP SIGNALS BY SEVERITY & RELIABILITY:
-${signalList}
+REPORTS BY TOPIC:
+${categoryList || '(none)'}
 
-EVENT CLUSTERS (cross-source correlated events):
-${clusterList}
+PLACES WITH THE MOST REPORTS:
+${hotspotList || '(none)'}
 
-CATEGORY BREAKDOWN:
-${categoryList}
+Rules:
+- Use only the reports above. Never add a fact, number, name or place they don't give, and never guess at causes or at what will happen.
+- Lead with verified stories. When an outlet count matters, use the one given ("verified by 7 outlets"). Call a single-outlet report unconfirmed, and never present it as established.
+- Each section: one to four sentences from the reports that fit it. If none fit, write one sentence saying our reports had nothing notable on it in these ${hours} hours. Don't stretch other reports to fill a section.
+- No sensationalism and no intelligence jargon; plain, exact sentences.
 
-GEOGRAPHIC HOTSPOTS:
-${hotspotList}
+Sections:
+- threat_assessment: armed conflict, attacks, security and crime
+- geopolitical_pulse: diplomacy, governments and politics, elections, sanctions
+- economic_trade: markets, trade, companies, prices
+- maritime_intelligence: shipping, ports, navies, piracy at sea
+- climate_disaster: disasters, extreme weather, climate
+- cyber_tech: cyber attacks, internet outages, technology
+- what_to_watch: only the stories that grew and events the reports themselves say are coming; no predictions
 
-Your briefing MUST follow a FIXED 7-SECTION structure. Every section gets content, even on quiet days (minimum 2 sentences per section). This consistency is critical — readers develop a habit of checking the same structure daily.
-
-Generate a JSON response with EXACTLY this structure (no markdown, pure JSON):
+Answer with only this JSON:
 {
-  "executive_summary": "2-3 sentence overview of the global intelligence picture",
+  "executive_summary": "2 or 3 sentences: the most important verified developments and how many outlets carried them",
   "sections": {
-    "threat_assessment": {
-      "body": "2-4 sentences. Overall global threat posture: active conflicts, terrorism alerts, military escalations. What keeps the watch floor awake tonight.",
-      "severity": "critical|high|medium|low",
-      "signal_count": number
-    },
-    "geopolitical_pulse": {
-      "body": "2-4 sentences. Diplomatic shifts, elections, sanctions, regime changes, alliance moves, UN/NATO/EU actions.",
-      "severity": "critical|high|medium|low",
-      "signal_count": number
-    },
-    "economic_trade": {
-      "body": "2-4 sentences. Markets, trade disputes, supply chain disruptions, commodity shocks, central bank moves, sanctions impact on commerce.",
-      "severity": "critical|high|medium|low",
-      "signal_count": number
-    },
-    "maritime_intelligence": {
-      "body": "2-4 sentences. Chokepoint status (Suez, Hormuz, Malacca, Bab el-Mandeb), carrier strike group movements, piracy, dark shipping / sanctions evasion, port disruptions. This section is MANDATORY even if few maritime signals exist — use any shipping, naval, or trade signal.",
-      "severity": "critical|high|medium|low",
-      "signal_count": number
-    },
-    "climate_disaster": {
-      "body": "2-4 sentences. Natural disasters, extreme weather, climate policy, environmental crises, wildfire, flood, drought, earthquake alerts.",
-      "severity": "critical|high|medium|low",
-      "signal_count": number
-    },
-    "cyber_tech": {
-      "body": "2-4 sentences. Cyber attacks, data breaches, critical infrastructure threats, AI developments, technology regulation, internet outages.",
-      "severity": "critical|high|medium|low",
-      "signal_count": number
-    },
-    "what_to_watch": {
-      "body": "2-4 sentences. Forward-looking: what situations could escalate in the next 24-72 hours, scheduled events (elections, summits, hearings, launches), developing stories to monitor.",
-      "severity": "medium|low",
-      "signal_count": 0
-    }
+    "<section id>": { "body": "the section's sentences", "severity": "critical|high|medium|low", "signal_count": <how many of the reports above it draws on> }
   },
   "key_developments": [
-    {
-      "headline": "Short headline",
-      "detail": "1-2 sentence detail",
-      "severity": "critical|high|medium",
-      "category": "category name",
-      "signal_count": number
-    }
+    { "headline": "a short headline", "detail": "one or two sentences", "severity": "critical|high|medium", "category": "the report's category", "signal_count": <the story's outlets> }
   ]
 }
-
-IMPORTANT RULES:
-- Include 3-7 key_developments prioritized by severity and impact
-- EVERY section must have content (2+ sentences). On quiet days, note the absence of significant activity
-- Maritime Intelligence is mandatory — use ANY available military, shipping, economy, or trade signals
-- Be factual, concise, and analytical. No sensationalism
-- Do NOT include any text outside the JSON object`
+Give all seven sections, and 3 to 7 key_developments, verified stories first.`
 }
 
 async function generateWithLLM(prompt: string): Promise<{ text: string; model: string }> {
@@ -478,22 +504,28 @@ function buildExtractiveBriefing(
   const criticalSignals = signals.filter(s => s.severity === 'critical')
   const highSignals = signals.filter(s => s.severity === 'high')
 
-  const executive_summary = `WorldPulse processed ${totalSignals} signals in the last 24 hours across ${categories.length} categories. ${criticalSignals.length} critical and ${highSignals.length} high-severity signals detected${clusters.length > 0 ? `, with ${clusters.length} correlated event clusters identified` : ''}.`
+  const verifiedStories = signals.filter(s => s.status === 'verified' && outletsOf(s) >= 2)
+  const executive_summary = `WorldPulse processed ${totalSignals} signals in the last 24 hours across ${categories.length} categories: ${verifiedStories.length} of the top stories were verified by two or more outlets; ${criticalSignals.length} critical and ${highSignals.length} high-severity reports${clusters.length > 0 ? `, with ${clusters.length} correlated event clusters identified` : ''}.`
 
-  const key_developments: BriefingDevelopment[] = signals.slice(0, 5).map(s => ({
+  // Verified stories first, each with its outlets (plan 9, Oct 21, 2026)
+  const lead = [...verifiedStories, ...signals.filter(s => !verifiedStories.includes(s))]
+  const key_developments: BriefingDevelopment[] = lead.slice(0, 5).map(s => ({
     headline: s.title,
-    detail: `${s.category} signal from ${s.source_domain ?? 'unknown source'}, reliability ${(s.reliability_score * 100).toFixed(0)}%.`,
+    detail: outletsOf(s) >= 2 && s.status === 'verified'
+      ? `Verified by ${outletsOf(s)} outlets (${s.category}${s.location_name ? `, ${s.location_name}` : ''}).`
+      : `Unconfirmed: one outlet so far, ${s.source_domain ?? 'source unknown'} (${s.category}).`,
     severity: s.severity,
     category: s.category,
-    signal_count: 1,
+    signal_count: outletsOf(s),
   }))
 
   const topCategory = categories[0]?.category ?? 'general'
-  const threat_assessment = criticalSignals.length >= 3
-    ? `Elevated threat level with ${criticalSignals.length} critical signals. Primary concern: ${topCategory}.`
-    : `Moderate threat level. ${totalSignals} signals processed with ${criticalSignals.length} critical events.`
+  // Counts, not judgments: without the writer there is no one to weigh them (Oct 21, 2026)
+  const threat_assessment = `${criticalSignals.length} critical and ${highSignals.length} high-severity reports among the top stories; the most reported topic: ${topCategory}.`
 
-  const outlook = `Monitor ${topCategory} signals for escalation. ${clusters.length > 0 ? `${clusters.length} active event clusters may develop further.` : 'No cross-source clusters detected — situation appears decentralized.'}`
+  const outlook = verifiedStories.length
+    ? `The verified stories to follow: ${verifiedStories.slice(0, 3).map(s => s.title).join('; ')}.`
+    : 'No story was verified by two or more outlets among the top reports in the period.'
 
   // Build 7 fixed sections from extractive data
   const byCategory = (cats: string[]) => signals.filter(s => cats.includes(s.category))
@@ -516,12 +548,12 @@ function buildExtractiveBriefing(
   const cyberSignals = byCategory(['technology', 'security'])
 
   const sections: BriefingSection[] = [
-    { id: 'threat_assessment', title: SECTION_TITLES.threat_assessment, body: threat_assessment + ` ${conflictSignals.length} conflict/military signals detected.`, severity: sectionSeverity(conflictSignals), signal_count: conflictSignals.length },
-    { id: 'geopolitical_pulse', title: SECTION_TITLES.geopolitical_pulse, body: summaryFor(geopolSignals, 'No significant geopolitical developments in this period. Diplomatic channels remain active.'), severity: sectionSeverity(geopolSignals), signal_count: geopolSignals.length },
-    { id: 'economic_trade', title: SECTION_TITLES.economic_trade, body: summaryFor(econSignals, 'Markets and trade flows remain within normal parameters. No major disruptions reported.'), severity: sectionSeverity(econSignals), signal_count: econSignals.length },
-    { id: 'maritime_intelligence', title: SECTION_TITLES.maritime_intelligence, body: summaryFor(maritimeSignals, 'Major chokepoints operating normally. No significant piracy or dark shipping alerts in this period.'), severity: sectionSeverity(maritimeSignals), signal_count: maritimeSignals.length },
-    { id: 'climate_disaster', title: SECTION_TITLES.climate_disaster, body: summaryFor(climateSignals, 'No major natural disasters or extreme weather events in this period. Standard monitoring continues.'), severity: sectionSeverity(climateSignals), signal_count: climateSignals.length },
-    { id: 'cyber_tech', title: SECTION_TITLES.cyber_tech, body: summaryFor(cyberSignals, 'Cyber threat landscape remains at baseline. No major breaches or critical infrastructure incidents reported.'), severity: sectionSeverity(cyberSignals), signal_count: cyberSignals.length },
+    { id: 'threat_assessment', title: SECTION_TITLES.threat_assessment, body: threat_assessment + ` ${conflictSignals.length} conflict, military and security reports.`, severity: sectionSeverity(conflictSignals), signal_count: conflictSignals.length },
+    { id: 'geopolitical_pulse', title: SECTION_TITLES.geopolitical_pulse, body: summaryFor(geopolSignals, 'Nothing notable in our reports on this in the period.'), severity: sectionSeverity(geopolSignals), signal_count: geopolSignals.length },
+    { id: 'economic_trade', title: SECTION_TITLES.economic_trade, body: summaryFor(econSignals, 'Nothing notable in our reports on this in the period.'), severity: sectionSeverity(econSignals), signal_count: econSignals.length },
+    { id: 'maritime_intelligence', title: SECTION_TITLES.maritime_intelligence, body: summaryFor(maritimeSignals, 'Nothing notable in our reports on this in the period.'), severity: sectionSeverity(maritimeSignals), signal_count: maritimeSignals.length },
+    { id: 'climate_disaster', title: SECTION_TITLES.climate_disaster, body: summaryFor(climateSignals, 'Nothing notable in our reports on this in the period.'), severity: sectionSeverity(climateSignals), signal_count: climateSignals.length },
+    { id: 'cyber_tech', title: SECTION_TITLES.cyber_tech, body: summaryFor(cyberSignals, 'Nothing notable in our reports on this in the period.'), severity: sectionSeverity(cyberSignals), signal_count: cyberSignals.length },
     { id: 'what_to_watch', title: SECTION_TITLES.what_to_watch, body: outlook, severity: 'medium', signal_count: 0 },
   ]
 
@@ -548,14 +580,16 @@ export async function generateDailyBriefing(hours: number = 24): Promise<DailyBr
   logger.info({ dateKey, hours }, 'Generating fresh daily briefing')
 
   // Collect intelligence data in parallel
-  const [signals, totalSignals, totalStories, categories, hotspots, clusters] = await Promise.all([
+  const [signals, totalSignals, totalStories, categories, hotspots, clusters, growing] = await Promise.all([
     getTopSignals(hours),
     getTotalSignalCount(hours),
     getTotalStoryCount(hours),
     getCategoryBreakdown(hours),
     getGeographicHotspots(hours),
     getRecentClusters(),
+    getGrowingStories(hours).catch(() => [] as BriefingSignal[]),
   ])
+  const lists = briefingLists(signals, growing)
 
   let executive_summary: string
   let sections: BriefingSection[]
@@ -595,7 +629,7 @@ export async function generateDailyBriefing(hours: number = 24): Promise<DailyBr
   }
 
   // Try LLM generation
-  const prompt = buildBriefingPrompt(signals, clusters, categories, hotspots, totalSignals)
+  const prompt = buildBriefingPrompt(lists, categories, hotspots, totalSignals, totalStories, hours)
   const llmResult = await generateWithLLM(prompt)
   model = llmResult.model
 
@@ -671,7 +705,8 @@ export async function generateDailyBriefing(hours: number = 24): Promise<DailyBr
     geographic_hotspots: hotspots,
     threat_assessment,
     outlook,
-    top_signals: signals.slice(0, 10),
+    // verified stories first (plan 9)
+    top_signals: [...lists.verified, ...signals.filter(x => !lists.verified.includes(x))].slice(0, 10),
   }
 
   // Cache the briefing

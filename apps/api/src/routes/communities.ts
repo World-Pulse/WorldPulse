@@ -4,6 +4,7 @@ import { authenticate, optionalAuth } from '../middleware/auth'
 import { z } from 'zod'
 import { sendError } from '../lib/errors'
 import { parseQuery, CommunityListQuerySchema, CommunityMembersQuerySchema } from '../lib/query-schemas'
+import { communityLimitProblem, hoursSince } from '../lib/post-limits'
 
 /**
  * Members and posts counted, not read from the stored columns. The list asked
@@ -42,6 +43,25 @@ function canModerate(role: MemberRole | null): boolean {
 }
 
 // ─── ROUTES ──────────────────────────────────────────────────────────────
+/** Why this account can't create a community now (lib/post-limits.ts), or null; null too when the counts can't be read */
+async function communityLimitFor(userId: string): Promise<string | null> {
+  try {
+    const dayAgo = new Date(Date.now() - 86_400_000).toISOString()
+    const [user, today, total] = await Promise.all([
+      db('users').where('id', userId).first('created_at'),
+      db('communities').where('created_by', userId).where('created_at', '>', dayAgo).count('id as n').first(),
+      db('communities').where('created_by', userId).count('id as n').first(),
+    ]) as [{ created_at?: unknown } | undefined, { n?: unknown } | undefined, { n?: unknown } | undefined]
+    return communityLimitProblem({
+      accountAgeHours: hoursSince(user?.created_at),
+      createdToday: Number(today?.n ?? 0) || 0,
+      createdTotal: Number(total?.n ?? 0) || 0,
+    })
+  } catch {
+    return null
+  }
+}
+
 export const registerCommunityRoutes: FastifyPluginAsync = async (app) => {
 
   app.addHook('onRoute', (routeOptions) => {
@@ -225,12 +245,16 @@ export const registerCommunityRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // ─── CREATE COMMUNITY ────────────────────────────────────
-  app.post('/', { preHandler: [authenticate] }, async (req, reply) => {
+  app.post('/', { preHandler: [authenticate], config: { rateLimit: { max: 3, timeWindow: '1 hour' } } }, async (req, reply) => {
     const body = CreateCommunitySchema.safeParse(req.body)
     if (!body.success) return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid input')
 
     const userId = req.user!.id
     const d = body.data
+
+    // What stops a flood of communities (plan C6): 3 a day, one in an account's first week
+    const tooMany = await communityLimitFor(userId)
+    if (tooMany) return sendError(reply, 429, 'RATE_LIMITED', tooMany)
 
     // Check slug uniqueness
     const existing = await db('communities').where('slug', d.slug).first('id')

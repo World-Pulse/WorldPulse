@@ -9,6 +9,7 @@ import { indexPost, removePost } from '../lib/search'
 import { publishPostCreated, publishPostDeleted } from '../lib/search-events'
 import { sendError } from '../lib/errors'
 import { BAD_CURSOR, isUuid } from '../lib/cursor'
+import { postLimitProblem, linksIn, hoursSince } from '../lib/post-limits'
 
 // Simple script-based language detector — no external dependency needed.
 // Covers the languages most likely to appear in news posts.
@@ -63,6 +64,27 @@ export const CreatePostSchema = z.object({
   tags:        z.array(z.string().max(50)).max(10).default([]),
 })
 
+/** Why this account can't post this now (lib/post-limits.ts), or null; null too when the counts can't be read */
+async function postLimitFor(userId: string, content: string, sourceUrl?: string): Promise<string | null> {
+  try {
+    const dayAgo = new Date(Date.now() - 86_400_000).toISOString()
+    const hourAgo = new Date(Date.now() - 3_600_000).toISOString()
+    const [user, today, same] = await Promise.all([
+      db('users').where('id', userId).first('created_at'),
+      db('posts').where('author_id', userId).where('created_at', '>', dayAgo).count('id as n').first(),
+      db('posts').where('author_id', userId).where('content', content).where('created_at', '>', hourAgo).count('id as n').first(),
+    ]) as [{ created_at?: unknown } | undefined, { n?: unknown } | undefined, { n?: unknown } | undefined]
+    return postLimitProblem({
+      accountAgeHours: hoursSince(user?.created_at),
+      postsToday: Number(today?.n ?? 0) || 0,
+      sameTextLastHour: Number(same?.n ?? 0) || 0,
+      links: linksIn(`${content} ${sourceUrl ?? ''}`),
+    })
+  } catch {
+    return null
+  }
+}
+
 export const registerPostRoutes: FastifyPluginAsync = async (app) => {
 
   app.addHook('onRoute', (routeOptions) => {
@@ -79,6 +101,11 @@ export const registerPostRoutes: FastifyPluginAsync = async (app) => {
 
     const userId = req.user!.id
     const d = body.data
+
+    // What stops a flood of posts (plan C6): a day's posts, the same text
+    // again and again, too many links; tighter in an account's first day
+    const tooMuch = await postLimitFor(userId, d.content, d.sourceUrl)
+    if (tooMuch) return sendError(reply, 429, 'RATE_LIMITED', tooMuch)
 
     // Validate references exist
     if (d.signalId) {
