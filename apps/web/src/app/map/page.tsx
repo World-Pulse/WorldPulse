@@ -20,7 +20,7 @@ import { parseWindowHash, encodePermalink, type MapPermalinkState, type LayerKey
 import {
   Map as MapIcon, Moon, Satellite, Globe2, LocateFixed, Layers as LayersIcon,
   Flame, History, Swords, Crosshair, RadioTower, Anchor, Plane, Ship, Activity, ShieldAlert, Video, List as ListIcon,
-  SunMoon, Compass, Megaphone, Biohazard, Tent, WifiOff, Cable, Server,
+  SunMoon, Compass, Megaphone, Biohazard, Tent, WifiOff, Cable, Server, Atom, Rocket, Shield, Orbit,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { LayersPanel, activeLayerCount, type MapLayerGroup } from '@/components/map/LayersPanel'
@@ -323,11 +323,8 @@ function MapView({ embed = false }: { embed?: boolean }) {
     return d.toISOString().slice(0, 10)
   })
 
-  // ── CelesTrak satellite tracking state ─────────────────────────────────────
-  const [satTrackingMode,    setSatTrackingMode]    = useState(false)
-  const [satTrackingLoading, setSatTrackingLoading] = useState(false)
-  const [satCount,           setSatCount]           = useState(0)
-  const [satError,           setSatError]           = useState<string | null>(null)
+  // The old CelesTrak layer guessed positions from the orbit's angles and was
+  // never offered (M6); the Satellites layer (lib/map-satellites.ts) replaced it
   const [gibsError,          setGibsError]          = useState<string | null>(null)
 
   // ── Naval Intelligence layer state ──────────────────────────────────────────
@@ -1649,119 +1646,6 @@ function MapView({ embed = false }: { embed?: boolean }) {
     whenStyleUsable(map, () => { applyLayer() })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [satelliteMode, gibsDate, mapReady])
-
-  // ── CelesTrak satellite tracking layer ─────────────────────────────────────
-
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
-
-    const CT_SOURCE = 'celestrak-sats'
-    const CT_LAYER  = 'celestrak-sat-points'
-
-    const removeLayer = () => {
-      try {
-        if (map.getLayer(CT_LAYER))  map.removeLayer(CT_LAYER)
-        if (map.getSource(CT_SOURCE)) map.removeSource(CT_SOURCE)
-      } catch { /* ignore */ }
-    }
-
-    const applyLayer = async () => {
-      if (!satTrackingMode) {
-        removeLayer()
-        return
-      }
-
-      setSatTrackingLoading(true)
-      setSatError(null)
-      try {
-        // CelesTrak GP JSON — TLE-less orbital elements for all active objects
-        const res  = await fetch('https://celestrak.org/GP.php?GROUP=active&FORMAT=json')
-        if (!res.ok) throw new Error(`CelesTrak returned ${res.status}`)
-        const data = await res.json() as Array<{
-          SATNAME:          string
-          NORAD_CAT_ID:     number
-          OBJECT_TYPE:      string
-          INCLINATION:      number
-          RA_OF_ASC_NODE:   number
-          ECCENTRICITY:     number
-          MEAN_ANOMALY:     number
-          MEAN_MOTION:      number
-        }>
-
-        if (!Array.isArray(data) || data.length === 0) return
-
-        // Limit to first 200 client-side to keep rendering snappy
-        const subset = data.slice(0, 200)
-        setSatCount(subset.length)
-
-        // Approximate position: map INCLINATION → latitude range, RA_OF_ASC_NODE → longitude
-        // MEAN_ANOMALY moves the satellite along its orbit — use it to offset longitude
-        const features = subset.map(sat => {
-          // Approximate sub-satellite longitude from RAAN + mean anomaly offset
-          const lng = ((sat.RA_OF_ASC_NODE + sat.MEAN_ANOMALY) % 360 + 360) % 360
-          const lngNorm = lng > 180 ? lng - 360 : lng
-          // Latitude oscillates between ±inclination; use mean anomaly as phase
-          const incRad = (sat.INCLINATION * Math.PI) / 180
-          const maRad  = (sat.MEAN_ANOMALY * Math.PI) / 180
-          const lat    = Math.sin(maRad) * sat.INCLINATION
-          const clampedLat = Math.max(-85, Math.min(85, lat))
-
-          // Color by object type
-          const typeColor =
-            sat.OBJECT_TYPE === 'PAYLOAD'      ? '#3b82f6' :   // blue
-            sat.OBJECT_TYPE === 'ROCKET BODY'  ? '#6b7280' :   // gray
-            sat.OBJECT_TYPE === 'DEBRIS'       ? '#ef4444' :   // red
-                                                 '#f3f4f6'     // white / unknown
-
-          return {
-            type:       'Feature' as const,
-            geometry:   { type: 'Point' as const, coordinates: [lngNorm, clampedLat] },
-            properties: {
-              name:  sat.SATNAME,
-              id:    sat.NORAD_CAT_ID,
-              type:  sat.OBJECT_TYPE,
-              color: typeColor,
-            },
-          }
-        })
-
-        if (!map.getSource(CT_SOURCE)) {
-          map.addSource(CT_SOURCE, {
-            type: 'geojson',
-            data: { type: 'FeatureCollection', features },
-          })
-        } else {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ;(map.getSource(CT_SOURCE) as any).setData({ type: 'FeatureCollection', features })
-        }
-
-        if (!map.getLayer(CT_LAYER)) {
-          map.addLayer({
-            id:     CT_LAYER,
-            type:   'circle',
-            source: CT_SOURCE,
-            paint:  {
-              'circle-color':   ['get', 'color'],
-              'circle-radius':  3,
-              'circle-opacity': 0.7,
-              'circle-stroke-color':  'rgba(255,255,255,0.15)',
-              'circle-stroke-width':  0.5,
-            },
-          })
-        }
-      } catch (e) {
-        console.warn('[map] CelesTrak layer error:', e)
-        setSatError('CelesTrak satellite data unavailable')
-        setSatTrackingMode(false)
-      } finally {
-        setSatTrackingLoading(false)
-      }
-    }
-
-    whenStyleUsable(map, () => { void applyLayer() })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [satTrackingMode])
 
   // ── ADS-B Live Aircraft layer ──────────────────────────────────────────────
 
@@ -3777,6 +3661,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
         { key: 'naval', label: 'Naval intelligence', description: 'Navies, warships and carriers in the news, last 3 days', icon: Anchor, color: '#60a5fa',
           on: navalMode, loading: navalLoading, count: navalCount, toggle: () => setNavalMode(v => !v) },
         overlayItem('protests', Megaphone),
+        overlayItem('bases', Shield),
       ],
     },
     {
@@ -3828,6 +3713,14 @@ function MapView({ embed = false }: { embed?: boolean }) {
         overlayItem('outages', WifiOff),
         overlayItem('cable-landings', Cable),
         overlayItem('ai-dc', Server),
+        overlayItem('nuclear', Atom),
+      ],
+    },
+    {
+      title: 'Space',
+      items: [
+        overlayItem('satellites', Orbit),
+        overlayItem('spaceports', Rocket),
       ],
     },
   ]
@@ -3895,9 +3788,9 @@ function MapView({ embed = false }: { embed?: boolean }) {
                 ))}
               </div>
 
-              {(satError || gibsError) && (
+              {gibsError && (
                 <span className="text-[10px] text-red-300 font-mono px-2 py-1 bg-red-500/10 rounded border border-red-500/20">
-                  {satError || gibsError}
+                  {gibsError}
                 </span>
               )}
             </div>

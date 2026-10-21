@@ -295,6 +295,9 @@ importers:
       react-map-gl:
         specifier: ^7.1.7
         version: 7.1.9(mapbox-gl@3.20.0)(maplibre-gl@5.23.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      satellite.js:
+        specifier: 6.0.2
+        version: 6.0.2
       supercluster:
         specifier: ^8.0.1
         version: 8.0.1
@@ -6363,6 +6366,9 @@ packages:
   safer-buffer@2.1.2:
     resolution: {integrity: sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg==}
 
+  satellite.js@6.0.2:
+    resolution: {integrity: sha512-XWKxtqVF5xiJ1xAeiYeT/oSSzsukoCLWvk6nO/WFy4un0M3g4djAU9TAtOCqJLtYW9vxx9pkPJ1L9ITOc607GA==}
+
   sax@1.6.0:
     resolution: {integrity: sha512-6R3J5M4AcbtLUdZmRv2SygeVaM7IhrLXu9BmnOGmmACak8fiUtOsYNWUS4uK7upbmHIBbLBeFeI//477BKLBzA==}
     engines: {node: '>=11.0.0'}
@@ -10533,11 +10539,11 @@ snapshots:
   '@types/eslint-scope@3.7.7':
     dependencies:
       '@types/eslint': 9.6.1
-      '@types/estree': 1.0.8
+      '@types/estree': 1.0.9
 
   '@types/eslint@9.6.1':
     dependencies:
-      '@types/estree': 1.0.8
+      '@types/estree': 1.0.9
       '@types/json-schema': 7.0.15
 
   '@types/estree@1.0.8': {}
@@ -14470,6 +14476,8 @@ snapshots:
 
   safer-buffer@2.1.2: {}
 
+  satellite.js@6.0.2: {}
+
   sax@1.6.0: {}
 
   scheduler@0.24.0-canary-efb381bbf-20230505:
@@ -15351,7 +15359,7 @@ snapshots:
   webpack@5.106.2:
     dependencies:
       '@types/eslint-scope': 3.7.7
-      '@types/estree': 1.0.8
+      '@types/estree': 1.0.9
       '@types/json-schema': 7.0.15
       '@webassemblyjs/ast': 1.14.1
       '@webassemblyjs/wasm-edit': 1.14.1

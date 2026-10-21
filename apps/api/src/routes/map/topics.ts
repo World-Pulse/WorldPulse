@@ -20,7 +20,8 @@ export const TOPIC_READ = 600
 /** Points a layer shows */
 export const TOPIC_POINTS = 300
 export const TOPIC_FRESH_SECONDS = 600
-const TOPIC_QUERY_SECONDS = 30
+// Oct 21, 10:28 AM, live: protests (48 h) took 15 s, outbreaks (72 h) 22 s, displacement (7 days) past 30 s
+const TOPIC_QUERY_SECONDS = 45
 
 export interface TopicRow {
   id:            string
@@ -69,7 +70,7 @@ export const registerMapTopicRoutes: FastifyPluginAsync = async (app) => {
     schema: {
       tags: ['map'],
       summary: 'The map\'s news layers found by headline: protests, disease outbreaks, refugees and displacement',
-      description: 'News reports with a place, newest first, as GeoJSON: protests the last 48 hours, outbreaks 72, displacement 7 days. Found by words in the headline (English, French, Spanish, Portuguese), so a few may be off topic.',
+      description: 'News reports with a place, newest first, as GeoJSON: protests the last 48 hours, outbreaks and displacement 72. Found by words in the headline (English, French, Spanish, Portuguese), so a few may be off topic.',
       params: {
         type: 'object',
         required: ['topic'],

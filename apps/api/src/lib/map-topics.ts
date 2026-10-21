@@ -81,7 +81,8 @@ export const MAP_TOPIC_RULES: Record<MapTopic, MapTopicRule> = {
     ],
   },
   displacement: {
-    hours: 168,
+    // 7 days took past 30 seconds on the live database (Oct 21, 10:28 AM: 500); 72 hours as outbreaks
+    hours: 72,
     skipCategories: [...ARTS, 'economy', 'finance', 'technology'],
     words: [
       'refugees?', 'displaced', 'displacing', 'displacement', 'idps', 'internally displaced',

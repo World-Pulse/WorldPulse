@@ -14,15 +14,20 @@
  *     across land.
  *   - AI data centers: the sites of /ai-infrastructure
  *
- * Each turns its API's answer into points and a popup. Everything shown in a
- * popup comes from data, so it goes through escapeHtml.
+ * Then (plan M53; Devon: "Nice!") three from Wikidata (CC0), kept as files on
+ * our own server (public/geo/, built by scripts/map-data/wikidata-layers.py):
+ * nuclear power plants, military bases and spaceports.
+ *
+ * Each turns its answer into points and a popup. Everything shown in a popup
+ * comes from data, so it goes through escapeHtml.
  */
 
 import { escapeHtml, safeHttpUrl, timeAgo } from './map-utils'
+import { prepareSatellites, satellitePositions, type PreparedSats } from './map-satellites'
 
-export type OverlayKey = 'protests' | 'outbreaks' | 'displacement' | 'outages' | 'cable-landings' | 'ai-dc'
+export type OverlayKey = 'protests' | 'outbreaks' | 'displacement' | 'outages' | 'cable-landings' | 'ai-dc' | 'nuclear' | 'bases' | 'spaceports' | 'satellites'
 
-export const OVERLAY_KEYS: readonly OverlayKey[] = ['protests', 'outbreaks', 'displacement', 'outages', 'cable-landings', 'ai-dc']
+export const OVERLAY_KEYS: readonly OverlayKey[] = ['protests', 'outbreaks', 'displacement', 'outages', 'cable-landings', 'ai-dc', 'nuclear', 'bases', 'spaceports', 'satellites']
 
 export function isOverlayKey(value: unknown): value is OverlayKey {
   return typeof value === 'string' && (OVERLAY_KEYS as readonly string[]).includes(value)
@@ -39,14 +44,17 @@ export interface OverlayDef {
   label: string
   description: string
   color: string
-  /** Path on the API */
+  /** Path on the API, or on the site itself for files in public/ (base 'site') */
   path: string
+  base?: 'api' | 'site'
   /** How often the layer reloads while on */
   refreshMs: number
   /** Dot size: news by severity, the rest one size */
   bySeverity: boolean
   toFeatures: (json: unknown) => OverlayFeature[]
   popup: (props: Record<string, unknown>) => string
+  /** Points that move (satellites): made ready once per answer, then placed again every everyMs */
+  live?: { everyMs: number; prepare: (json: unknown) => Promise<unknown>; at: (prepared: unknown, now: Date) => OverlayFeature[] }
 }
 
 const MINUTE = 60_000
@@ -203,6 +211,63 @@ function dataCenterPopup(p: Record<string, unknown>): string {
     `<a href="/ai-infrastructure" style="${LINK};color:${color}">AI infrastructure →</a>`
 }
 
+// ── Wikidata layers (files on our server) ────────────────────────────────────
+
+const NUCLEAR_COLOR: Record<string, string> = {
+  'operating': '#facc15', 'status not recorded': '#eab308', 'under construction': '#fef08a', 'shut down': '#64748b',
+}
+
+function wikidataFeatures(colorOf: (p: Record<string, unknown>) => string | null) {
+  return (json: unknown): OverlayFeature[] => {
+    const list = (json as { features?: unknown })?.features
+    if (!Array.isArray(list)) return []
+    const out: OverlayFeature[] = []
+    for (const f of list as Array<{ geometry?: { coordinates?: unknown }; properties?: Record<string, unknown> }>) {
+      const c = Array.isArray(f?.geometry?.coordinates) ? f.geometry!.coordinates as unknown[] : []
+      const at = pointAt(c[1], c[0])
+      const p = f?.properties ?? {}
+      if (!at || !str(p.name)) continue
+      out.push(feature(at, {
+        name: str(p.name), country: str(p.country), status: str(p.status), kind: str(p.kind),
+        mw: num(p.mw), operator: str(p.operator), wikidata: /^Q\d+$/.test(String(p.wikidata ?? '')) ? String(p.wikidata) : null,
+        color: colorOf(p),
+      }))
+    }
+    return out
+  }
+}
+
+function wikidataLink(q: unknown): string {
+  const id = str(q)
+  return id && /^Q\d+$/.test(id)
+    ? `<a href="https://www.wikidata.org/wiki/${id}" target="_blank" rel="noopener noreferrer" style="${LINK};color:#94a3b8">Wikidata ↗</a>`
+    : ''
+}
+
+function wikidataPopup(label: string, color: string, facts: (p: Record<string, unknown>) => Array<string | null>) {
+  return (p: Record<string, unknown>) => {
+    const line = facts(p).filter(Boolean).join(' · ')
+    return header(color, label) +
+      `<div style="${TITLE}">${escapeHtml(p.name)}</div>` +
+      (str(p.country) ? `<div style="${META}">${escapeHtml(p.country)}</div>` : '') +
+      (line ? `<div style="${META}">${escapeHtml(line)}</div>` : '') +
+      wikidataLink(p.wikidata)
+  }
+}
+
+// ── Satellites (CelesTrak, placed by satellite.js) ────────────────────────────
+
+function satellitePopup(p: Record<string, unknown>): string {
+  const color = OVERLAYS.satellites.color
+  const km = num(p.km), kms = num(p.kms), norad = num(p.norad)
+  const facts = [km != null ? `${km.toLocaleString('en-US')} km up` : null, kms != null ? `${kms} km/s` : null, norad ? `NORAD ${norad}` : null].filter(Boolean).join(' · ')
+  return header(color, `SATELLITE · ${String(p.kind ?? '').toUpperCase()}`) +
+    `<div style="${TITLE}">${escapeHtml(p.name)}</div>` +
+    (facts ? `<div style="${META}">${escapeHtml(facts)}</div>` : '') +
+    `<div style="${META}">Where it is now, worked out from CelesTrak's orbital elements</div>` +
+    (norad ? `<a href="https://celestrak.org/satcat/table-satcat.php?CATNR=${norad}&MAX=1" target="_blank" rel="noopener noreferrer" style="${LINK};color:#94a3b8">CelesTrak ↗</a>` : '')
+}
+
 export const OVERLAYS: Record<OverlayKey, OverlayDef> = {
   protests: {
     key: 'protests', label: 'Protests and unrest', color: '#f472b6',
@@ -218,7 +283,7 @@ export const OVERLAYS: Record<OverlayKey, OverlayDef> = {
   },
   displacement: {
     key: 'displacement', label: 'Refugees and displacement', color: '#fde68a',
-    description: 'People displaced, fleeing or seeking asylum, in the news, last 7 days',
+    description: 'People displaced, fleeing or seeking asylum, in the news, last 72 h',
     path: '/api/v1/map/topics/displacement', refreshMs: 10 * MINUTE, bySeverity: true,
     toFeatures: topicFeatures, popup: topicPopup('REFUGEES & DISPLACEMENT', '#fde68a'),
   },
@@ -239,5 +304,40 @@ export const OVERLAYS: Record<OverlayKey, OverlayDef> = {
     description: 'Large AI computing sites: operator, power and chips',
     path: '/api/v1/ai-infrastructure/datacenters?limit=200', refreshMs: 6 * HOUR, bySeverity: false,
     toFeatures: dataCenterFeatures, popup: dataCenterPopup,
+  },
+  nuclear: {
+    key: 'nuclear', label: 'Nuclear power plants', color: '#facc15',
+    description: 'About 300 plants, operating, being built or shut down (Wikidata)',
+    path: '/geo/nuclear-plants.v1.geojson', base: 'site', refreshMs: 24 * HOUR, bySeverity: false,
+    toFeatures: wikidataFeatures(p => NUCLEAR_COLOR[String(p.status ?? '')] ?? null),
+    popup: wikidataPopup('NUCLEAR POWER PLANT', '#facc15', p => {
+      const mw = num(p.mw)
+      return [str(p.status), mw ? `${mw.toLocaleString('en-US')} MW` : null, str(p.operator)]
+    }),
+  },
+  bases: {
+    key: 'bases', label: 'Military bases', color: '#d4d4d8',
+    description: 'About 1,800 air, naval and army bases (Wikidata; incomplete, a few may be closed)',
+    path: '/geo/military-bases.v1.geojson', base: 'site', refreshMs: 24 * HOUR, bySeverity: false,
+    toFeatures: wikidataFeatures(() => null),
+    popup: wikidataPopup('MILITARY BASE', '#d4d4d8', p => [str(p.kind), str(p.operator)]),
+  },
+  spaceports: {
+    key: 'spaceports', label: 'Spaceports', color: '#22c55e',
+    description: 'Launch sites and spaceports, past and present (Wikidata)',
+    path: '/geo/spaceports.v1.geojson', base: 'site', refreshMs: 24 * HOUR, bySeverity: false,
+    toFeatures: wikidataFeatures(p => String(p.status ?? '') === 'shut down' ? '#64748b' : null),
+    popup: wikidataPopup('SPACEPORT', '#22c55e', p => [str(p.status) === 'active or not recorded' ? null : str(p.status), str(p.operator)]),
+  },
+  satellites: {
+    key: 'satellites', label: 'Satellites', color: '#e2e8f0',
+    description: 'About 500 satellites where they are now: space stations, navigation, weather, Earth observation, military',
+    path: '/api/v1/map/satellites', refreshMs: 6 * HOUR, bySeverity: false,
+    toFeatures: () => [], popup: satellitePopup,
+    live: {
+      everyMs: 5000,
+      prepare: prepareSatellites,
+      at: (prepared, now) => satellitePositions(prepared as PreparedSats, now),
+    },
   },
 }

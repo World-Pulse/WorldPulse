@@ -56,7 +56,7 @@ describe('the news layers (protests, outbreaks, displacement)', () => {
 
   it('point at the topics route, each with its window', () => {
     expect(OVERLAYS.protests.path).toBe('/api/v1/map/topics/protests')
-    expect(OVERLAYS.displacement.description).toContain('7 days')
+    expect(OVERLAYS.displacement.description).toContain('72 h')
   })
 })
 
@@ -216,5 +216,59 @@ describe('OverlayLayers', () => {
     await vi.waitFor(() => expect((sources.get('wp-overlay-outages')!.data as { features: unknown[] }).features).toHaveLength(2))
     layer.destroy()
     vi.useRealTimers()
+  })
+})
+
+describe('the Wikidata layers (files on our server)', () => {
+  const plants = { type: 'FeatureCollection', features: [
+    { type: 'Feature', geometry: { type: 'Point', coordinates: [-2.4091, 55.968] }, properties: { name: 'Torness Nuclear Power Station', country: 'United Kingdom', wikidata: 'Q1068785', status: 'operating', mw: 1190, operator: 'EDF Energy' } },
+    { type: 'Feature', geometry: { type: 'Point', coordinates: [8.4153, 49.71] }, properties: { name: 'Biblis Nuclear Power Plant', country: 'Germany', wikidata: 'Q1', status: 'shut down', mw: 2525 } },
+    { type: 'Feature', geometry: { type: 'Point', coordinates: [1, 1] }, properties: { name: 'Odd', wikidata: 'javascript:alert(1)' } },
+  ] }
+
+  it('come from the site itself, not the API', () => {
+    expect(OVERLAYS.nuclear).toMatchObject({ base: 'site', path: '/geo/nuclear-plants.v1.geojson' })
+    expect(OVERLAYS.bases.path).toBe('/geo/military-bases.v1.geojson')
+    expect(OVERLAYS.spaceports.path).toBe('/geo/spaceports.v1.geojson')
+  })
+
+  it('colour a plant by its status, and keep only Wikidata ids that look like ids', () => {
+    const f = OVERLAYS.nuclear.toFeatures(plants)
+    expect(f.map(x => x.properties.color)).toEqual(['#facc15', '#64748b', null])
+    expect(f[2].properties.wikidata).toBeNull()
+  })
+
+  it('popup: name, country, status, power, operator, a Wikidata link', () => {
+    const html = OVERLAYS.nuclear.popup(OVERLAYS.nuclear.toFeatures(plants)[0].properties)
+    expect(html).toContain('NUCLEAR POWER PLANT')
+    expect(html).toContain('Torness Nuclear Power Station')
+    expect(html).toContain('operating · 1,190 MW · EDF Energy')
+    expect(html).toContain('href="https://www.wikidata.org/wiki/Q1068785"')
+    expect(OVERLAYS.nuclear.popup(OVERLAYS.nuclear.toFeatures(plants)[2].properties)).not.toContain('wikidata.org')
+  })
+
+  it('the files the site serves read as layers', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    for (const key of ['nuclear', 'bases', 'spaceports'] as const) {
+      const json = JSON.parse(readFileSync(resolve(__dirname, '../../../public', OVERLAYS[key].path.slice(1)), 'utf8'))
+      const f = OVERLAYS[key].toFeatures(json)
+      expect(f.length, key).toBeGreaterThan(50)
+      expect(f.length, key).toBe(json.features.length)
+      expect(json.about, key).toContain('Wikidata (CC0)')
+    }
+  })
+})
+
+describe('the layer manager asks the site for files and the API for the rest', () => {
+  it('uses the right address', async () => {
+    const { map } = fakeMap()
+    const fetchImpl = vi.fn(() => json({ type: 'FeatureCollection', features: [] }))
+    const layer = new OverlayLayers(map, { apiUrl: 'https://api.test', popup: vi.fn(), loading: vi.fn(), count: vi.fn(), fetchImpl: fetchImpl as unknown as typeof fetch })
+    layer.set('bases', true)
+    layer.set('protests', true)
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2))
+    expect(fetchImpl.mock.calls.map(c => (c as unknown[])[0])).toEqual(['/geo/military-bases.v1.geojson', 'https://api.test/api/v1/map/topics/protests'])
+    layer.destroy()
   })
 })

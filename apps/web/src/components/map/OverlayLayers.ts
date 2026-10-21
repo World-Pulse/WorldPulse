@@ -5,7 +5,7 @@
  */
 
 import { OVERLAYS, type OverlayKey } from '@/lib/map-overlays'
-import { onLayer, offLayer, whenStyleUsable } from '@/lib/map-utils'
+import { onLayer, offLayer, styleUsable, whenStyleUsable } from '@/lib/map-utils'
 
 export interface OverlayHooks {
   /** The API's base address */
@@ -27,6 +27,8 @@ export class OverlayLayers {
   private hooks: OverlayHooks
   private on = new Set<OverlayKey>()
   private timers = new Map<OverlayKey, ReturnType<typeof setInterval>>()
+  /** Layers whose points move (satellites): placed again on this timer from what load() made ready */
+  private ticks = new Map<OverlayKey, ReturnType<typeof setInterval>>()
   /** Bumped on every switch, so an answer that arrives after the layer was switched off is dropped */
   private turn = new Map<OverlayKey, number>()
 
@@ -48,6 +50,7 @@ export class OverlayLayers {
       const t = this.timers.get(key)
       if (t) clearInterval(t)
       this.timers.delete(key)
+      this.stopTick(key)
       this.remove(key)
       this.hooks.count(key, 0)
       this.hooks.loading(key, false)
@@ -57,6 +60,8 @@ export class OverlayLayers {
   destroy(): void {
     for (const t of this.timers.values()) clearInterval(t)
     this.timers.clear()
+    for (const t of this.ticks.values()) clearInterval(t)
+    this.ticks.clear()
     for (const key of this.on) this.remove(key)
     this.on.clear()
   }
@@ -66,9 +71,27 @@ export class OverlayLayers {
     const turn = this.turn.get(key)
     this.hooks.loading(key, true)
     try {
-      const res = await (this.hooks.fetchImpl ?? fetch)(`${this.hooks.apiUrl}${def.path}`)
+      // files in public/ come from the site itself, the rest from the API
+      const res = await (this.hooks.fetchImpl ?? fetch)(`${def.base === 'site' ? '' : this.hooks.apiUrl}${def.path}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const features = def.toFeatures(await res.json())
+      const json = await res.json()
+      const live = def.live
+      if (live) {
+        const prepared = await live.prepare(json)
+        if (this.turn.get(key) !== turn || !this.on.has(key)) return
+        const place = () => {
+          if (this.turn.get(key) !== turn || !this.on.has(key)) return
+          const now = live.at(prepared, new Date())
+          this.draw(key, now)
+          return now.length
+        }
+        whenStyleUsable(this.map, () => { place() })
+        this.hooks.count(key, live.at(prepared, new Date()).length)
+        this.stopTick(key)
+        this.ticks.set(key, setInterval(() => { if (styleUsable(this.map)) place() }, live.everyMs))
+        return
+      }
+      const features = def.toFeatures(json)
       if (this.turn.get(key) !== turn || !this.on.has(key)) return
       whenStyleUsable(this.map, () => {
         if (this.turn.get(key) !== turn || !this.on.has(key)) return
@@ -83,6 +106,12 @@ export class OverlayLayers {
     }
   }
 
+  private stopTick(key: OverlayKey): void {
+    const t = this.ticks.get(key)
+    if (t) clearInterval(t)
+    this.ticks.delete(key)
+  }
+
   private draw(key: OverlayKey, features: unknown[]): void {
     const map = this.map
     const def = OVERLAYS[key]
@@ -95,7 +124,8 @@ export class OverlayLayers {
       type: 'circle',
       source: sourceId(key),
       paint: {
-        'circle-color': def.color,
+        // a point may carry its own colour (a plant's status), else the layer's
+        'circle-color': ['coalesce', ['get', 'color'], def.color],
         'circle-opacity': 0.85,
         'circle-radius': def.bySeverity
           ? ['match', ['get', 'severity'], 'critical', 8, 'high', 6.5, 'medium', 5.5, 4.5]
