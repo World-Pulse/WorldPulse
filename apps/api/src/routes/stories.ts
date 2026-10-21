@@ -24,6 +24,7 @@ import { findReport, lookUpByPage, MAX_LINK_LENGTH, type PageFactsKept } from '.
 import { internalCallHeaders } from '../lib/internal-call'
 import { rateLimitKey } from '../lib/rate-limit-options'
 import { inCountedWindow, STORY_COUNT_HOURS } from '../lib/story-window'
+import { storyFigures, type FigureReport } from '../lib/story-figures'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MAX_SIGNALS = 50
@@ -583,6 +584,51 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
    * One story's signals, oldest first. :id is a storyId from
    * /api/v1/feed/signals?group=story, or the id of any signal in the story.
    */
+  // A story's figures and the outlets that report each one (plan 14, Oct 21,
+  // 2026; lib/story-figures.ts): people killed, injured, missing, displaced,
+  // evacuated, abducted, arrested or rescued, read from the headlines of its
+  // reports in its last two days (the outlet count's window), each with its
+  // outlets, report count, first and last time and newest headline. Kept 2
+  // minutes, then remade in the background.
+  app.get('/:id/figures', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+    if (!UUID_RE.test(id)) return sendError(reply, 400, 'VALIDATION_ERROR', 'id: must be a story or signal id')
+
+    const hasStories = await signalsHaveStoryIds()
+    let storyId = id
+    if (hasStories) {
+      const row = await db('signals').where('id', id).first('story_id') as { story_id?: string | null } | undefined
+      if (row?.story_id) storyId = String(row.story_id)
+    }
+    const scope = hasStories ? '(story_id = ? OR id = ?)' : 'id = ?'
+    const scopeParams = hasStories ? [storyId, storyId] : [storyId]
+
+    const data = await staleWhileRevalidate(`stories:figures:v1:${storyId}`, { freshSeconds: 120, staleSeconds: 1800, lockSeconds: 30 }, async () => {
+      const result = await longQuery(10, trx => trx.raw(
+        `WITH m AS (
+           SELECT title, original_urls, created_at
+             FROM signals
+            WHERE status IN ('verified', 'pending') AND ${scope}
+         ),
+         newest AS (SELECT max(created_at) AS t FROM m)
+         SELECT m.title, m.original_urls, m.created_at
+           FROM m CROSS JOIN newest n
+          WHERE ${inCountedWindow('m.created_at', 'n.t')}
+          ORDER BY m.created_at DESC
+          LIMIT 400`,
+        scopeParams,
+      )) as { rows: Array<{ title: unknown; original_urls: unknown; created_at: unknown }> }
+      const reports: FigureReport[] = result.rows.map(r => ({
+        title: typeof r.title === 'string' ? r.title : '',
+        urls: Array.isArray(r.original_urls) ? (r.original_urls as unknown[]).map(String) : [],
+        at: r.created_at ? new Date(r.created_at as string).toISOString() : null,
+      }))
+      return { storyId, reports: reports.length, countedHours: STORY_COUNT_HOURS, figures: storyFigures(reports) }
+    })
+    if (!data.reports) return sendError(reply, 404, 'NOT_FOUND', 'Story not found')
+    return reply.send({ success: true, data })
+  })
+
   app.get('/:id', { preHandler: [optionalAuth], config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
     const { id } = req.params as { id: string }
     if (!UUID_RE.test(id)) return sendError(reply, 400, 'VALIDATION_ERROR', 'id: must be a story or signal id')

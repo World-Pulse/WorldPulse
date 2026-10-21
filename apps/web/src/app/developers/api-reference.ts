@@ -186,6 +186,12 @@ export const ENDPOINT_GROUPS: EndpointGroup[] = [
         rateLimit: '60 req/min',
       },
       {
+        method: 'GET', path: '/api/v1/stories/:id/figures',
+        description: 'A story\'s figures and the outlets that report each one: people killed, injured, missing, displaced, evacuated, abducted, arrested or rescued, read from the headlines of its reports in the story\'s last two days. Each figure: its number as most reports put it ("at least 153"), its outlets, its reports, when it was first and last reported, and its newest headline and link.',
+        access: 'none',
+        rateLimit: '60 req/min',
+      },
+      {
         method: 'GET', path: '/api/v1/stories/week',
         description: '"WorldPulse Week": a week\'s top stories ranked by independent outlets, and the countries with the most verified stories.',
         access: 'none',

@@ -226,7 +226,7 @@ export function openapiOptions(): FastifyDynamicSwaggerOptions {
         { name: 'auth',          description: 'Sign up, sign in and sign-in tokens' },
         { name: 'public',        description: 'Open endpoints for developers: verified signals and their categories' },
         // routes/stories.ts tags its routes "stories"; without an entry here Swagger UI lists them last, undescribed
-        { name: 'stories',       description: 'Stories: the reports of one event, with how many outlets reported it. The top stories now, one story with its reports, a week\'s top stories, the story of a news link, and outlet counts for a list of signals' },
+        { name: 'stories',       description: 'Stories: the reports of one event, with how many outlets reported it. The top stories now, one story with its reports, a week\'s top stories, the story of a news link, outlet counts for a list of signals, and a story\'s figures (people killed, injured, displaced…) with the outlets that report each' },
         { name: 'mcp',           description: 'The MCP server for AI assistants: read-only, no sign-in or key' },
         { name: 'feed',          description: 'Global feed, following feed, trending' },
         { name: 'signals',       description: 'World events (signals): lists, one signal in full, its sources and checks, map layers' },
