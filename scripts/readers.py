@@ -13,9 +13,19 @@ thrown away when the day ends (UTC), leaving only the day's totals. Like
 Plausible's counting: no cookies, no addresses stored.
 
 Many bots call themselves a browser. A visitor only counts once their browser
-also ran the page: it loaded the site's scripts (/_next/static/) or called
-the API (api.world-pulse.io), as every page does and almost no bot does.
-Page views from browser names that never did are reported as "unconfirmed".
+also ran the page: it called the API (api.world-pulse.io), as every page's
+top bar does as soon as it loads (TopNav asks for /signals/count and
+/signals/headlines). Page views from browser names that never did are
+reported as "unconfirmed". Until Oct 20, 2026 loading the site's scripts
+(/_next/static/) counted too, and that day 917 "people" were counted: 910
+"direct", one page each, 492 of them in one hour, reading the same kinds of
+pages as the bots (entity and sign-in pages) — most likely a crawler calling
+itself a browser that downloads a page's files without running them.
+Browsers that loaded the scripts but never called the API are now reported
+as "scripts_only", and that day's count is shown as not known (LOOSE_DAYS;
+the server's log of that morning is gone, so it can't be counted again). The people counted are also summed by browser and system
+("Chrome 129 · Windows") and by the part of the site they read, so the next
+look can tell readers from a farm of look-alike browsers (counts only).
 Requests for things only attackers look for (/wp-login.php, /.env…) never
 count.
 
@@ -64,7 +74,12 @@ SITE_HOSTS = (SITE_HOST, 'www.' + SITE_HOST)
 API_HOST = 'api.' + SITE_HOST
 OWN_SITES = (SITE_HOST, 'world-pulse.app')   # world-pulse.app points at the same server
 IP_ADDRESS = re.compile(r'^\d{1,3}(?:\.\d{1,3}){3}$|^[0-9a-f]*:[0-9a-f:.]*$')
-STATE_VERSION = 2
+STATE_VERSION = 3
+# Days counted before the API rule whose count a crawler clearly inflated: shown as not known (the
+# server's log no longer covers the day, so it can't be counted again); the old number is kept apart
+LOOSE_DAYS = ('2026-10-20',)
+LOOSE_NOTE = ('not known: a crawler that called itself a browser was counted as people '
+              '(fixed the evening of Oct 20, 2026; the old count is visitors_loose)')
 
 # docker logs --timestamps: "<RFC3339Nano> <nginx line>"; nginx's "main" format
 LINE = re.compile(
@@ -205,6 +220,25 @@ def top_bots(day, top=15):
     return sorted(rows, key=lambda r: -r['n'])[:top]
 
 
+def agent_family(ua):
+    """'Chrome 129 · Windows': a browser's name, its major version and the system (people only; no address
+    and not the full string, so it says which browsers read the site without telling anyone apart)"""
+    u = ua or ''
+    browser = 'other'
+    for name, pattern in (('Edge', r'Edg(?:e|A|iOS)?/(\d+)'), ('Opera', r'OPR/(\d+)'), ('Samsung', r'SamsungBrowser/(\d+)'),
+                          ('Firefox', r'(?:Firefox|FxiOS)/(\d+)'), ('Chrome', r'(?:Chrome|CriOS)/(\d+)'),
+                          ('Safari', r'Version/(\d+)[\d.]*(?: Mobile/\S+)? Safari/')):
+        m = re.search(pattern, u)
+        if m:
+            browser = f'{name} {m.group(1)}'
+            break
+    for name, pattern in (('iPhone', r'iPhone'), ('iPad', r'iPad'), ('Android', r'Android'), ('Windows', r'Windows NT'),
+                          ('Mac', r'Mac OS X'), ('ChromeOS', r'CrOS'), ('Linux', r'Linux')):
+        if re.search(pattern, u):
+            return f'{browser} · {name}'
+    return browser
+
+
 def own_site(host):
     """One of our own addresses (world-pulse.io, world-pulse.app or a subdomain of either), or a bare IP
     address (the server's own, when someone opened the site by its number): not a website that sent people"""
@@ -268,8 +302,8 @@ def per_visitor(views, people):
 
 def summary(d):
     """The day's totals, counting only visitors whose browser ran the page"""
-    channels, pages, sites, views, people, unconfirmed = {}, {}, {}, 0, 0, 0
-    hours, posts = {}, {}
+    channels, pages, sites, views, people, unconfirmed, scripts_only = {}, {}, {}, 0, 0, 0, 0
+    hours, posts, agents, sections = {}, {}, {}, {}
     # Page views by the channel that brought each visitor (plan G18 (3), Oct 20, 2026):
     # whether readers who came from X, search or a post read a second story
     channel_views = {}
@@ -277,9 +311,16 @@ def summary(d):
         if not isinstance(v, dict) or not v.get('p'):
             continue
         if not v.get('js'):
-            unconfirmed += 1
+            # never called the API: never ran the page (loading the scripts alone isn't enough, Oct 20, 2026)
+            if v.get('st'):
+                scripts_only += 1
+            else:
+                unconfirmed += 1
             continue
         people += 1
+        add(agents, v.get('a') or 'other')
+        for section, n in (v.get('q') or {}).items():
+            add(sections, section, n)
         ch, site = v.get('c') or 'direct', v.get('s')
         if site and own_site(site):
             ch, site = 'direct', None   # counted as a website before own_site (Oct 18)
@@ -300,7 +341,9 @@ def summary(d):
             'channel_views_per_visitor': {ch: per_visitor(channel_views.get(ch, 0), n) for ch, n in by_count(channels).items()},
             'sites': by_count(sites, 8), 'pages': by_count(pages), 'crawlers': by_count(d['crawlers']),
             'bots': top_bots(d), 'bot_pages': by_count(d.get('bot_pages') or {}, 12), 'bots_since': d.get('bots_since'),
-            'unconfirmed': unconfirmed, 'hours': dict(sorted(hours.items())), 'posts': by_count(posts, 20)}
+            'unconfirmed': unconfirmed, 'scripts_only': scripts_only, 'rule': 'api',
+            'people_agents': by_count(agents, 8), 'people_sections': by_count(sections, 12),
+            'hours': dict(sorted(hours.items())), 'posts': by_count(posts, 20)}
 
 
 def hourly(*days):
@@ -318,13 +361,24 @@ def load(path, now):
             st = json.load(fh)
         if isinstance(st.get('today'), dict) and isinstance(st.get('history'), list):
             if st.get('v') != STATE_VERSION:
-                # Counted the old way (no check that the page ran): count today again from midnight UTC
+                # Counted the old way (v1: no check that the page ran; v2: loading the scripts counted):
+                # count today again from midnight UTC, and show the inflated days as not known
                 st.update(v=STATE_VERSION, today=empty_day(now.strftime('%Y-%m-%d')), since=now.strftime('%Y-%m-%dT00:00:00.000000000Z'))
+                mark_loose_days(st['history'])
             return st
     except (OSError, ValueError):
         pass
     return {'v': STATE_VERSION, 'since': (now - timedelta(hours=24)).strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
             'today': empty_day(now.strftime('%Y-%m-%d')), 'history': []}
+
+
+def mark_loose_days(history):
+    """LOOSE_DAYS' counts become not known (None), the old ones kept as visitors_loose and views_loose"""
+    for h in history:
+        if isinstance(h, dict) and h.get('day') in LOOSE_DAYS and 'visitors_loose' not in h:
+            h['visitors_loose'], h['views_loose'] = h.get('visitors'), h.get('views')
+            h.update(visitors=None, views=None, views_per_visitor=None, channel_views=None,
+                     channel_views_per_visitor=None, hours={}, note=LOOSE_NOTE)
 
 
 def request_of(m):
@@ -413,9 +467,13 @@ def count(st, lines):
                 note_bot(today, ua, bot, path)
             continue
         who = hashlib.sha256(f"{today['salt']}|{m['ip']}|{ua}".encode()).hexdigest()[:16]
-        # The browser ran the page: it fetched the site's scripts or called the API
-        if host == API_HOST or path.startswith('/_next/static/') or (host is None and path.startswith('/api/')):
+        # The browser ran the page: its top bar called the API as the page loaded
+        if host == API_HOST or (host is None and path.startswith('/api/')):
             today['visitors'].setdefault(who, {'p': {}})['js'] = True
+            continue
+        # It only downloaded the site's scripts: not proof that it ran them (Oct 20, 2026)
+        if path.startswith('/_next/static/'):
+            today['visitors'].setdefault(who, {'p': {}})['st'] = True
             continue
         if not page:
             continue
@@ -428,7 +486,9 @@ def count(st, lines):
             k = post_key(query)
             if k:
                 v['k'] = k
+            v['a'] = agent_family(ua)
         add(v['p'], page_kind(path))
+        add(v.setdefault('q', {}), bot_section(path))
     return newest
 
 
@@ -458,7 +518,8 @@ def main():
     del out['hours']
     out['updated'] = now.isoformat(timespec='seconds')
     out['log_read'] = ok
-    out['history'] = [{k: h.get(k) for k in ('day', 'visitors', 'views', 'channels', 'channel_views', 'views_per_visitor', 'posts', 'crawlers')} for h in st['history'][-14:]]
+    out['history'] = [{k: h.get(k) for k in ('day', 'visitors', 'views', 'channels', 'channel_views', 'views_per_visitor', 'posts', 'crawlers',
+                                             'unconfirmed', 'scripts_only', 'rule', 'note', 'visitors_loose')} for h in st['history'][-14:]]
     print(json.dumps(out, separators=(',', ':')))
 
 

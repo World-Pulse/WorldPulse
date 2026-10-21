@@ -43,7 +43,7 @@ const OTHER_ITEMS = [
   { href: '/finance',    icon: TrendingUp,    labelKey: 'finance' },
   { href: '/maritime',        icon: Anchor,     labelKey: 'maritime' },
   { href: '/sanctions',        icon: Shield,    labelKey: 'sanctions' },
-  // { href: '/internet-outages', icon: Unplug,    labelKey: 'internetOutages', badge: 'NEW', badgeColor: 'cyan'   }, // Hidden — IODA source (ioda.caida.org) is down
+  { href: '/internet-outages', icon: Unplug,    labelKey: 'internetOutages', badge: 'NEW', badgeColor: 'cyan'   }, // back Oct 20, 2026 (Devon: "Yes"): reports come from IODA's new home at Georgia Tech
   // { href: '/space-weather',   icon: Satellite,  labelKey: 'spaceWeather',    badge: 'NEW', badgeColor: 'cyan'   }, // Hidden — needs more work before launch
   { href: '/cyber-threats',   icon: Lock,       labelKey: 'cyberThreats' },
   { href: '/undersea-cables', icon: Waves,      labelKey: 'underseaCables' },

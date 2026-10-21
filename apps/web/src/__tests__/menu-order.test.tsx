@@ -15,7 +15,7 @@ const { LeftSidebar } = await import('@/components/sidebar/LeftSidebar')
 const MAIN = ['/', '/map', '/briefing', '/week', '/check', '/entities', '/countries', '/how-we-count']
 const OTHERS = [
   '/alerts', '/analytics', '/explore', '/knowledge-graph/explorer', '/finance', '/maritime', '/sanctions',
-  '/cyber-threats', '/undersea-cables', '/governance', '/food-security', '/digital-rights', '/water-security',
+  '/internet-outages', '/cyber-threats', '/undersea-cables', '/governance', '/food-security', '/digital-rights', '/water-security',
   '/labor-rights', '/patents', '/communities', '/claims', '/sources', '/developers', '/settings', '/status',
 ]
 
