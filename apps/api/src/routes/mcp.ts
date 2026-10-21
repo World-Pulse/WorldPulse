@@ -237,7 +237,7 @@ export const TOOLS: Tool[] = [
   {
     name: 'check_link',
     title: 'Check a link',
-    description: 'Paste a news article\'s address: the WorldPulse story it belongs to, how many outlets (websites) reported that story, which ones, and whether it is verified. Only articles WorldPulse has collected in the last two weeks; the link itself is never fetched. "Only one outlet so far" means unconfirmed, not false.',
+    description: 'Paste a news article\'s address: the WorldPulse story it belongs to, how many outlets (websites) reported that story, which ones, and whether it is verified. Articles WorldPulse has collected in the last two weeks; for another link, WorldPulse opens the public page once to read its headline and looks for a story telling the same event (match "similar"). "Only one outlet so far" means unconfirmed, not false.',
     inputSchema: {
       type: 'object',
       properties: { url: { type: 'string', minLength: 4, maxLength: 2048, description: 'The article\'s address, e.g. https://www.bbc.com/news/articles/c4g9xk2v7lzo' } },
@@ -250,7 +250,8 @@ export const TOOLS: Tool[] = [
       if (status === 400) throw new ToolError(String((body as { error?: unknown }).error ?? 'url must be the address of a news article'))
       if (status !== 200) throw new Error(`by-link answered ${status}`)
       const d = (body.data ?? {}) as {
-        found?: boolean; reason?: string; link?: string
+        found?: boolean; reason?: string; link?: string; match?: string; opened?: boolean
+        page?: { title?: string | null } | null
         report?: { id?: string; title?: string; outlet?: string; url?: string; createdAt?: string }
         story?: { id?: string; outlets?: number; outletNames?: string[]; verified?: boolean; verifiedAt?: string | null; size?: number }
       }
@@ -259,7 +260,11 @@ export const TOOLS: Tool[] = [
           ? 'That is not the address of an article (a front page, or not a web address).'
           : d.reason === 'pending'
             ? 'WorldPulse is adding this article right now; ask again in a minute.'
-            : 'WorldPulse has not collected this article: it may be too new, from a site WorldPulse does not read, or older than two weeks.'
+            : d.reason === 'busy'
+              ? 'Many links are being checked just now; ask again in a few minutes.'
+              : d.opened && d.page?.title
+                ? `WorldPulse read the page's headline ("${d.page.title}") and has no story telling the same event in the last week: it may be very new, local, or from a site WorldPulse does not read.`
+                : 'WorldPulse has not collected this article: it may be too new, from a site WorldPulse does not read, or older than two weeks.'
         return { text: why, data: { found: false, reason: d.reason ?? 'not_seen' } }
       }
       const outlets = Number(d.story?.outlets) || 0
@@ -268,6 +273,7 @@ export const TOOLS: Tool[] = [
         ? `Verified · ${outlets} outlets`
         : outlets <= 1 ? 'Only one outlet so far: treat it as unconfirmed' : `${outlets} outlets so far (not verified)`
       const text = [
+        ...(d.match === 'similar' ? [`WorldPulse has not collected this article; its headline${d.page?.title ? ` ("${d.page.title}")` : ''} tells the same event as this story:`] : []),
         `${d.report?.title ?? 'This article'}${d.report?.outlet ? ` (${d.report.outlet})` : ''}`,
         `${proof}${names.length ? ` · ${names.slice(0, 10).join(', ')}${names.length > 10 ? ', …' : ''}` : ''}`,
         `${d.link ?? signalLink(d.report?.id)} (story id ${d.story?.id ?? '?'})`,
@@ -275,7 +281,7 @@ export const TOOLS: Tool[] = [
       return {
         text,
         data: {
-          found: true, url: d.link ?? signalLink(d.report?.id), report: d.report ?? null,
+          found: true, match: d.match === 'similar' ? 'similar' : 'exact', url: d.link ?? signalLink(d.report?.id), report: d.report ?? null,
           story: { id: d.story?.id ?? null, outlets, outletNames: names, verified: Boolean(d.story?.verified), verifiedAt: d.story?.verifiedAt ?? null, size: d.story?.size ?? null },
         },
       }

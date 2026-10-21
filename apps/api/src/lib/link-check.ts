@@ -5,9 +5,9 @@
  * /api/v1/stories/by-link answers it; world-pulse.io/check and the MCP
  * server's check_link tool ask it.
  *
- * Version 1 only looks among the articles WorldPulse has already collected.
- * It never fetches the link, so a pasted address can't make the server visit
- * anything. Two places are looked in:
+ * Version 1 only looks among the articles WorldPulse has already collected,
+ * never fetching the link (version 2, below, opens a page it hasn't, with
+ * safeguards). Two places are looked in:
  *   - the article claims the news readers keep for 4 days (Redis
  *     dedup:article:<key>, apps/scraper/src/pipeline/dedup.ts), keyed the way
  *     both readers key an article, so any spelling of one article's address
@@ -19,7 +19,11 @@
 
 import { createHash } from 'node:crypto'
 import { redis } from '../db/redis'
+import { db } from '../db/postgres'
 import { longQuery } from './long-query'
+import { fetchPublicPage, mayOpen, pageFacts, PageRefused } from './safe-fetch'
+import { searchByMeaning } from './fingerprint-search'
+import { headlineWords, sameEvent, stem } from './story-list'
 
 /** How far back the reports are searched by their links */
 export const LINK_DAYS = 14
@@ -127,4 +131,162 @@ export async function findReport(raw: string): Promise<LinkLookup> {
     // Too slow just now: say what the claims said
   }
   return held === 'pending' ? { status: 'pending' } : { status: 'not_seen' }
+}
+
+// ─── Version 2: links WorldPulse hasn't collected (plan G22; Devon, Oct 21,
+// 2026: "Yes, with safeguards": public pages only, size and time limits, rate
+// limits). The page is opened once, safely (lib/safe-fetch.ts), only to read
+// its headline and canonical address; nothing of it is kept but those, for 6
+// hours. Then: the canonical address among the collected articles, or the
+// story whose reports say the same as the headline: close in meaning (the
+// in-house fingerprints, lib/fingerprint-search.ts) and the same event by
+// their words (story-list.ts sameEvent), with a name, place or number in
+// common. Fingerprints alone aren't enough: on Oct 21 a pasted Vermont flood
+// headline came closest to a Spanish one (0.61) and a red panda birth to a
+// red panda's farewell (0.64), while a rewritten headline of the Abyei market
+// strike scored 0.66 against its own story.
+
+export const PAGE_KEEP_SECONDS = 6 * 3600
+export const PAGE_FAILED_SECONDS = 2 * 3600
+/** Pages opened: per client a minute, per website an hour, in all an hour */
+export const CLIENT_FETCHES_A_MINUTE = 6
+export const HOST_FETCHES_AN_HOUR = 30
+export const FETCHES_AN_HOUR = 300
+/** How far back a story is looked for by meaning, and how close a report must be to be read */
+export const SIMILAR_DAYS = 7
+export const SIMILAR_MIN_SCORE = 0.5
+
+/** A headline without the site's name tacked on ("… | Reuters", "… - BBC News") */
+export function headlineOnly(title: string, site: string | null, host: string): string {
+  const t = title.replace(/\s+/g, ' ').trim()
+  const parts = t.split(/\s+(?:\||-|–|—|::|·)\s+/)
+  if (parts.length < 2) return t
+  const raw = parts[parts.length - 1]!
+  const last = raw.toLowerCase()
+  const hostWord = host.toLowerCase().replace(/^www\./, '').split('.')[0] ?? ''
+  // the site's name, its address's name, or a short name in capitals ("AP News"), not "what we know"
+  const isSite = (site && last.includes(site.toLowerCase().slice(0, 12)))
+    || (hostWord.length >= 3 && last.replace(/[^a-z0-9]/g, '').includes(hostWord))
+    || (raw.length <= 24 && raw.split(/\s+/).every(w => /^[A-Z0-9&]/.test(w)))
+  return isSite ? parts.slice(0, -1).join(' - ').trim() : t
+}
+
+/**
+ * The words of a headline that name something particular: written with a
+ * capital letter but not as its first word (Abyei, Trump, France), or
+ * numbers of two digits or more. A headline in title case says nothing this
+ * way, so all its words count.
+ */
+export function particularWords(title: string): Set<string> {
+  const words = title.normalize('NFKD').replace(/[̀-ͯ]/g, '').match(/[A-Za-z0-9]+/g) ?? []
+  const caps = words.filter(w => /^[A-Z]/.test(w)).length
+  const titleCase = words.length >= 4 && caps / words.length > 0.7
+  const out = new Set<string>()
+  words.forEach((w, i) => {
+    if (/^\d{2,}$/.test(w) || ((titleCase || i > 0) && /^[A-Z]/.test(w))) out.add(stem(w.toLowerCase()))
+  })
+  return out
+}
+
+export interface StoryCandidate { id: string; title: string; score: number }
+
+/**
+ * The report that tells the same event as a headline, among the closest in
+ * meaning: the same event by sameEvent's words, with something particular in
+ * common; the most words in common first, then the closest. null when none.
+ */
+export function bestMatch(headline: string, candidates: StoryCandidate[]): (StoryCandidate & { shared: number }) | null {
+  const words = headlineWords(headline)
+  const particular = particularWords(headline)
+  let best: (StoryCandidate & { shared: number; ratio: number }) | null = null
+  for (const c of candidates) {
+    if (!c.title || !sameEvent({ title: headline, place: null }, { title: c.title, place: null })) continue
+    const theirs = headlineWords(c.title)
+    const theirParticular = particularWords(c.title)
+    const shared = [...words].filter(w => theirs.has(w))
+    if (!shared.some(w => particular.has(w) || theirParticular.has(w))) continue
+    const ratio = shared.length / Math.max(1, Math.min(words.size, theirs.size))
+    if (!best || ratio > best.ratio || (ratio === best.ratio && c.score > best.score)) best = { ...c, shared: shared.length, ratio }
+  }
+  if (!best) return null
+  const { ratio: _ratio, ...rest } = best
+  return rest
+}
+
+export type PageLookup =
+  | { status: 'found'; reportId: string; via: 'canonical' | 'similar'; page: PageFactsKept; score?: number }
+  | { status: 'not_seen'; page: PageFactsKept }
+  /** The page couldn't be opened (not public, not a web page, no answer) or no headline was found */
+  | { status: 'unreadable'; reason: string }
+  /** Too many pages opened just now (this client, this website or all) */
+  | { status: 'busy' }
+
+export interface PageFactsKept { title: string; site: string | null; canonical: string | null }
+
+/** Count one more under a key for `seconds`; false when that passes `max` */
+async function underLimit(key: string, max: number, seconds: number): Promise<boolean> {
+  try {
+    const n = await redis.incr(key)
+    if (n === 1) await redis.expire(key, seconds)
+    return n <= max
+  } catch {
+    return false   // can't count: don't open pages
+  }
+}
+
+/** Version 2: a link not among the collected articles, by its page's canonical address or headline */
+export async function lookUpByPage(raw: string, client: string, deps: {
+  fetchPage?: (url: URL) => Promise<{ url: string; html: string }>
+  similar?: (q: string, from: Date) => Promise<StoryCandidate[]>
+  now?: Date
+} = {}): Promise<PageLookup> {
+  const url = readLink(raw)
+  const key = url ? articleKey(url) : null
+  if (!url || !key) return { status: 'unreadable', reason: 'not_an_article' }
+  if (!mayOpen(url)) return { status: 'unreadable', reason: 'not_public' }
+  const now = deps.now ?? new Date()
+
+  const cacheKey = `linkcheck:page:${key}`
+  let facts: PageFactsKept | { failed: string } | null = null
+  try { facts = JSON.parse((await redis.get(cacheKey)) ?? 'null') } catch { facts = null }
+
+  if (!facts) {
+    const hour = now.toISOString().slice(0, 13)
+    const host = url.hostname.toLowerCase().replace(/^www\./, '')
+    if (!(await underLimit(`linkcheck:client:${client}:${now.toISOString().slice(0, 16)}`, CLIENT_FETCHES_A_MINUTE, 120))
+      || !(await underLimit(`linkcheck:host:${host}:${hour}`, HOST_FETCHES_AN_HOUR, 7200))
+      || !(await underLimit(`linkcheck:all:${hour}`, FETCHES_AN_HOUR, 7200))) return { status: 'busy' }
+    try {
+      const page = await (deps.fetchPage ?? fetchPublicPage)(url)
+      const f = pageFacts(page.html, page.url)
+      facts = f.title
+        ? { title: headlineOnly(f.title, f.site, new URL(page.url).hostname), site: f.site, canonical: f.canonical }
+        : { failed: 'no_headline' }
+    } catch (err) {
+      facts = { failed: err instanceof PageRefused ? err.reason : 'unreachable' }
+    }
+    await redis.setex(cacheKey, 'failed' in facts ? PAGE_FAILED_SECONDS : PAGE_KEEP_SECONDS, JSON.stringify(facts)).catch(() => {})
+  }
+  if ('failed' in facts) return { status: 'unreadable', reason: facts.failed }
+
+  // the canonical address may be the one the outlet's feed gave
+  if (facts.canonical && facts.canonical !== url.toString()) {
+    const byCanonical = await findReport(facts.canonical).catch(() => null)
+    if (byCanonical?.status === 'found') return { status: 'found', reportId: byCanonical.reportId, via: 'canonical', page: facts }
+  }
+
+  const candidates = await (deps.similar ?? similarTitles)(facts.title, new Date(now.getTime() - SIMILAR_DAYS * 86_400_000)).catch(() => [] as StoryCandidate[])
+  const match = bestMatch(facts.title, candidates)
+  if (match) return { status: 'found', reportId: match.id, via: 'similar', page: facts, score: match.score }
+  return { status: 'not_seen', page: facts }
+}
+
+/** Reports close in meaning to a headline since `from`, with their titles (collected stories only) */
+async function similarTitles(q: string, from: Date): Promise<StoryCandidate[]> {
+  const matches = await searchByMeaning(q, { limit: 12, minScore: SIMILAR_MIN_SCORE, from })
+  if (!matches?.length) return []
+  const rows = await db('signals').whereIn('id', matches.map(m => m.id)).whereIn('status', ['verified', 'pending'])
+    .select('id', 'title') as Array<{ id: string; title: string | null }>
+  const titles = new Map(rows.map(r => [String(r.id), String(r.title ?? '')]))
+  return matches.filter(m => titles.has(m.id)).map(m => ({ id: m.id, title: titles.get(m.id)!, score: m.score }))
 }

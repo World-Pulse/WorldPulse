@@ -79,6 +79,11 @@ export function LinkChecker() {
       <div aria-live="polite" className="mt-5">
         {state.kind === 'done' && state.view.kind === 'found' && (
           <div className="rounded-xl border border-white/10 bg-wp-surface p-4">
+            {state.view.similarTo && (
+              <p className="mb-3 text-[12px] text-wp-text2 leading-relaxed">
+                WorldPulse hasn&rsquo;t collected this article. Its headline, &ldquo;{state.view.similarTo}&rdquo;, tells the same event as this story:
+              </p>
+            )}
             <p className="text-[15px] font-semibold text-wp-text leading-snug">{state.view.title}</p>
             {state.view.outlet && <p className="mt-0.5 font-mono text-[11px] text-wp-text3">{state.view.outlet}</p>}
             <div className="mt-3 flex flex-wrap items-center gap-2">

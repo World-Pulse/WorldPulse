@@ -84,7 +84,7 @@ export async function similarReports(id: string, limit = 5, minScore = SIMILAR_M
 /** Reports closest in meaning to a question; null while the model isn't available */
 export async function searchByMeaning(
   q: string,
-  opts: { limit?: number; category?: string; minScore?: number } = {},
+  opts: { limit?: number; category?: string; minScore?: number; from?: Date } = {},
 ): Promise<MeaningMatch[] | null> {
   const model = await loadFingerprintModel()
   if (!model) return null
@@ -92,7 +92,7 @@ export async function searchByMeaning(
   if (!v) return []              // no word of the question is known
   try {
     return await nearest(toVectorLiteral(v), {
-      limit: opts.limit ?? 20, minScore: opts.minScore ?? SEARCH_MIN_SCORE, category: opts.category,
+      limit: opts.limit ?? 20, minScore: opts.minScore ?? SEARCH_MIN_SCORE, category: opts.category, from: opts.from,
     })
   } catch {
     return []

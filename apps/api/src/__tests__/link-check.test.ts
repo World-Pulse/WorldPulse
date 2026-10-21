@@ -22,8 +22,16 @@ vi.mock('../db/redis', () => ({
   redis: {
     get: vi.fn(async (k: string) => h.claims.get(k) ?? null),
     setex: vi.fn(async () => 'OK'),
+    // version 2's counts of pages opened (lib/link-check.ts lookUpByPage)
+    incr: vi.fn(async () => 1),
+    expire: vi.fn(async () => 1),
   },
 }))
+// Version 2 opens pages it hasn't collected: here the site doesn't answer
+vi.mock('../lib/safe-fetch', async (orig) => {
+  const real = await orig<typeof import('../lib/safe-fetch')>()
+  return { ...real, fetchPublicPage: vi.fn(async () => { throw new real.PageRefused('unreachable', 'the site did not answer') }) }
+})
 vi.mock('../middleware/auth', () => ({
   authenticate: (_req: unknown, _rep: unknown, done: () => void) => done(),
   optionalAuth: (_req: unknown, _rep: unknown, done: () => void) => done(),
@@ -152,6 +160,7 @@ describe('GET /api/v1/stories/by-link', () => {
     expect(res.json().data).toEqual({
       found: true,
       via: 'claim',
+      match: 'exact',
       report: {
         id: SIGNAL, title: 'Swimmer, 65, killed in shark attack', outlet: 'bbc.com',
         url: 'https://www.bbc.com/news/articles/c4g9xk2v7lzo', status: 'verified', createdAt: '2026-10-20T16:13:00.000Z',
@@ -165,7 +174,8 @@ describe('GET /api/v1/stories/by-link', () => {
   })
 
   it("says why when there is nothing to show, and asks for a link when there is none", async () => {
-    expect((await check(BBC)).json().data).toEqual({ found: false, reason: 'not_seen' })
+    // not collected, and (version 2) the page couldn't be opened
+    expect((await check(BBC)).json().data).toEqual({ found: false, reason: 'not_seen', opened: false, why: 'unreachable' })
     expect((await check('https://www.aljazeera.com/')).json().data).toEqual({ found: false, reason: 'not_an_article' })
     const none = await check()
     expect(none.statusCode).toBe(400)

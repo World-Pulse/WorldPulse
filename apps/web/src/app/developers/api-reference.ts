@@ -193,7 +193,7 @@ export const ENDPOINT_GROUPS: EndpointGroup[] = [
       },
       {
         method: 'GET', path: '/api/v1/stories/by-link',
-        description: 'Paste a news article\'s address: the story it belongs to, how many outlets reported it and which. Only articles WorldPulse has collected in the last two weeks; the link itself is never fetched.',
+        description: 'Paste a news article\'s address: the story it belongs to, how many outlets reported it and which. Articles WorldPulse has collected in the last two weeks; for another link, WorldPulse opens the public page once to read its headline and looks for a story of the last week telling the same event (match: "similar"). 6 page openings a minute per client.',
         access: 'none',
         rateLimit: '30 req/min',
         params: [

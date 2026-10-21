@@ -20,7 +20,7 @@ import { isoWeekOf, parseWeek, weekBounds, weekName, previousWeek, type IsoWeek 
 import { logger } from '../lib/logger'
 import { entityDirectory } from '../lib/entity-directory'
 import { COUNTRY_NAMES } from './countries'
-import { findReport, MAX_LINK_LENGTH } from '../lib/link-check'
+import { findReport, lookUpByPage, MAX_LINK_LENGTH, type PageFactsKept } from '../lib/link-check'
 import { internalCallHeaders } from '../lib/internal-call'
 import { rateLimitKey } from '../lib/rate-limit-options'
 import { inCountedWindow, STORY_COUNT_HOURS } from '../lib/story-window'
@@ -452,16 +452,34 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
    * Unknown ids are left out.
    */
   // GET /api/v1/stories/by-link?url=<a news article's address>: the story the
-  // article belongs to, with how many outlets reported it and which ones, among
-  // the articles WorldPulse has collected ("paste a link, get the count",
-  // version 1, Oct 20, 2026; lib/link-check.ts). The link itself is never fetched.
+  // article belongs to, with how many outlets reported it and which ones
+  // ("paste a link, get the count"; lib/link-check.ts). Version 1 (Oct 20,
+  // 2026) looks among the articles WorldPulse has collected; version 2 (Oct
+  // 21; Devon: "Yes, with safeguards"), for a link it hasn't collected, opens
+  // the page once, safely, to read its headline, and looks for the story by
+  // it (via "similar"), or by the page's canonical address.
   app.get('/by-link', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req, reply) => {
     const { url } = req.query as { url?: unknown }
     if (typeof url !== 'string' || !url.trim()) return sendError(reply, 400, 'VALIDATION_ERROR', 'url: paste the address of a news article')
     if (url.length > MAX_LINK_LENGTH) return sendError(reply, 400, 'VALIDATION_ERROR', `url: at most ${MAX_LINK_LENGTH} characters`)
 
-    const found = await findReport(url)
-    if (found.status !== 'found') return reply.send({ success: true, data: { found: false, reason: found.status } })
+    const first = await findReport(url)
+    let found: { reportId: string; via: 'claim' | 'links' | 'canonical' | 'similar'; page?: PageFactsKept; score?: number }
+    if (first.status === 'found') {
+      found = { reportId: first.reportId, via: first.via }
+    } else if (first.status !== 'not_seen') {
+      return reply.send({ success: true, data: { found: false, reason: first.status } })
+    } else {
+      const byPage = await lookUpByPage(url, rateLimitKey(req))
+      if (byPage.status === 'busy') return reply.send({ success: true, data: { found: false, reason: 'busy' } })
+      if (byPage.status === 'unreadable') {
+        return reply.send({ success: true, data: { found: false, reason: byPage.reason === 'not_an_article' ? 'not_an_article' : 'not_seen', opened: false, why: byPage.reason } })
+      }
+      if (byPage.status === 'not_seen') {
+        return reply.send({ success: true, data: { found: false, reason: 'not_seen', opened: true, page: { title: byPage.page.title, site: byPage.page.site } } })
+      }
+      found = { reportId: byPage.reportId, via: byPage.via, page: byPage.page, score: byPage.score }
+    }
 
     // The story, exactly as GET /stories/:id answers it, counted as this client's own call
     const res = await app.inject({ method: 'GET', url: `/api/v1/stories/${found.reportId}`, headers: internalCallHeaders(rateLimitKey(req)) })
@@ -476,8 +494,12 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
       success: true,
       data: {
         found: true,
-        /** How it was found: the news readers' article claim, or a report's links */
+        /** How it was found: the news readers' article claim or a report's links (this very
+         *  article), the page's canonical address, or a report telling the same event ("similar") */
         via: found.via,
+        /** "similar": WorldPulse hasn't collected this article; this story tells the same event */
+        match: found.via === 'similar' ? 'similar' : 'exact',
+        ...(found.page ? { page: { title: found.page.title, site: found.page.site } } : {}),
         report: {
           id: found.reportId,
           title: report.title ?? null,

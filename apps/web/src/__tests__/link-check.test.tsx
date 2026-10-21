@@ -61,6 +61,19 @@ describe('checkView', () => {
     expect(checkView({ found: false, reason: 'something new' })).toEqual({ kind: 'missing', message: expect.stringMatching(/hasn’t collected/) })
   })
 
+  it('version 2: a story found by the page\'s headline says so; and why nothing was found', () => {
+    const similar = checkView({ ...found({}), match: 'similar', page: { title: 'Shark kills swimmer off Sydney beach', site: 'Example' } })
+    expect(similar).toMatchObject({ kind: 'found', title: 'Swimmer, 65, killed in shark attack', similarTo: 'Shark kills swimmer off Sydney beach' })
+    expect(checkView(found({}))).toMatchObject({ similarTo: null })
+    expect(checkView({ found: false, reason: 'not_seen', opened: true, page: { title: 'Zoo welcomes twin red panda cubs' } }))
+      .toEqual({ kind: 'missing', message: expect.stringMatching(/read this page’s headline, “Zoo welcomes twin red panda cubs”, and has no story telling the same event in the last week/) })
+    expect(checkView({ found: false, reason: 'not_seen', opened: false, why: 'not_public' }))
+      .toEqual({ kind: 'missing', message: expect.stringMatching(/^That address isn’t a public web page\. WorldPulse hasn’t collected/) })
+    expect(checkView({ found: false, reason: 'not_seen', opened: false, why: 'timeout' }))
+      .toEqual({ kind: 'missing', message: expect.stringMatching(/^WorldPulse couldn’t open that page/) })
+    expect(checkView({ found: false, reason: 'busy' })).toEqual({ kind: 'missing', message: expect.stringMatching(/Try again in a few minutes/) })
+  })
+
   it("asks the API with the link, and says what went wrong when it couldn't answer", () => {
     expect(byLinkUrl(' https://www.bbc.com/news/a?x=1&y=2 ')).toBe('https://api.world-pulse.io/api/v1/stories/by-link?url=https%3A%2F%2Fwww.bbc.com%2Fnews%2Fa%3Fx%3D1%26y%3D2')
     expect(failureMessage(429)).toMatch(/Too many checks/)
@@ -74,7 +87,8 @@ describe('the /check page', () => {
     expect(html).toContain('Has more than one newsroom reported this?')
     expect(html).toContain('role="search"')
     expect(html).toContain('type="url"')
-    expect(html).toContain('It never opens the link itself')
+    // version 2 (Oct 21, 2026): it says it may open the page to read its headline
+    expect(html).toContain('opens that page once, only to read its headline (public web pages only)')
     expect(html).toContain('href="/how-we-count"')
     expect(String(metadata.title)).toBe('Has more than one newsroom reported this? Check a link — WorldPulse')
   })
