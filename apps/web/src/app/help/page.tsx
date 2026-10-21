@@ -45,6 +45,11 @@ const FAQ: Array<{ q: string; a: React.ReactNode }> = [
     a: 'Reports of the same event are grouped into one card in the feed. Grouping goes by headline wording, so now and then two cards describe one event. We are working on it.',
   },
   {
+    // plan C5 and C6 (Devon, Oct 21, 2026): readers' flags and reports are shown, reviewed, never automatic
+    q: 'A story looks wrong. What can I do?',
+    a: 'Open the story and press Flag, then pick a reason. The story page shows how many readers flagged it and why, never who. A flag is a reader\'s report, not a ruling: it does not change the reliability score or hide the story. When 3 or more readers flag the same story, it goes on a list that a person reviews. Posts and communities have a Report button that works the same way. For anything else, email support@world-pulse.io.',
+  },
+  {
     q: 'Are the AI digests written by AI?',
     a: 'Yes. The digests and briefings are written by an AI model from the verified reports.',
   },
