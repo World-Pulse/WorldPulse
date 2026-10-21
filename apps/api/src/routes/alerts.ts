@@ -19,6 +19,10 @@ const AlertSchema = z.object({
     in_app: z.boolean().default(true),
     // one email a day with the day's matches instead of one per report (plan K6)
     digest: z.enum(['daily']).optional(),
+    // fire once a story is verified, carried by at least min_outlets
+    // independent outlets (2 when not given), each story once (plan 10)
+    verified:    z.boolean().optional(),
+    min_outlets: z.number().int().min(2).max(10).optional(),
   }).default({}),
 })
 

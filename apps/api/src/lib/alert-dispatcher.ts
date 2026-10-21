@@ -5,7 +5,7 @@ import { logger } from './logger'
 import { notificationService } from './notifications'
 import { sendAlertEmail } from './email'
 import { parseAlertTier } from './alert-tier'
-import { keywordsMatch, isDailyDigest } from './alert-match'
+import { isDailyDigest, alertWhen, alertMatches } from './alert-match'
 import { keepForDigest } from './alert-digest'
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -31,6 +31,55 @@ const SEVERITY_ORDER: Record<SignalSeverity, number> = {
 }
 
 const DEDUP_TTL_SECONDS = 86_400 // 24 hours
+/**
+ * Emails an alert sends a day at most (Oct 21, 2026): alerts now see every
+ * new report, so a broad one could send hundreds; past this, its matches wait
+ * for the next morning's digest (lib/alert-digest.ts)
+ */
+export const EMAILS_A_DAY = 20
+/** A story's verified alert is sent once, for this long */
+const STORY_DEDUP_SECONDS = 3 * 86_400
+
+/** Whether this alert has sent its emails for the day; true from the first one past EMAILS_A_DAY */
+async function overDailyLimit(subId: string, now = new Date()): Promise<boolean> {
+  try {
+    const key = `alerts:emails:${subId}:${now.toISOString().slice(0, 10)}`
+    const n = await redis.incr(key)
+    if (n === 1) await redis.expire(key, 2 * 86_400)
+    return n > EMAILS_A_DAY
+  } catch {
+    return false
+  }
+}
+
+/** One alert's match: kept for its digest, or emailed (the day's limit permitting) */
+async function deliver(sub: { sub_id: string; email: string; channels: unknown }, signal: Signal): Promise<'digest' | 'email' | 'overflow'> {
+  if (isDailyDigest(sub.channels)) {
+    await keepForDigest(sub.sub_id, signal.id)
+    return 'digest'
+  }
+  if (await overDailyLimit(sub.sub_id)) {
+    await keepForDigest(sub.sub_id, signal.id)
+    return 'overflow'
+  }
+  logger.debug({ to: sub.email, signalId: signal.id, subId: sub.sub_id }, 'AlertDispatcher: sending DB subscription alert email')
+  sendAlertEmail(sub.email, signal).catch((err: unknown) => {
+    logger.warn({ err, to: sub.email }, 'AlertDispatcher: DB subscription email failed')
+  })
+  return 'email'
+}
+
+interface DbSubscription {
+  sub_id:       string
+  user_id:      string
+  keywords:     string[]
+  categories:   string[]
+  countries:    string[]
+  min_severity: SignalSeverity
+  channels:     unknown
+  email:        string
+  display_name: string | null
+}
 const POLL_INTERVAL_MS  = 60_000 // 60 seconds
 const LOOKBACK_MINUTES  = 2
 
@@ -123,7 +172,7 @@ class AlertDispatcher {
    * Dispatch tier-aware alerts for a batch of signals to all matching users.
    * FLASH and PRIORITY signals get prominent formatting with tier banners.
    */
-  async dispatchAlerts(signals: Signal[]): Promise<void> {
+  async dispatchAlerts(signals: Signal[], { subscriptions = true }: { subscriptions?: boolean } = {}): Promise<void> {
     if (signals.length === 0) return
 
     const userSettings = await this.loadUserAlertSettings()
@@ -193,7 +242,7 @@ class AlertDispatcher {
     }
 
     // ── DB-based alert subscriptions (keyword / category / country filters + email channel) ──
-    await this.dispatchDbSubscriptionAlerts(signals)
+    if (subscriptions) await this.dispatchDbSubscriptionAlerts(signals)
   }
 
   /**
@@ -209,56 +258,16 @@ class AlertDispatcher {
 
     try {
       // Load all active subscriptions with email channel enabled + user email
-      const subscriptions = await db('alert_subscriptions as a')
-        .join('users as u', 'u.id', 'a.user_id')
-        .where('a.active', true)
-        .whereRaw(`(a.channels->>'email')::boolean = true`)
-        .whereNotNull('u.email')
-        .select<Array<{
-          sub_id:       string
-          user_id:      string
-          keywords:     string[]
-          categories:   string[]
-          countries:    string[]
-          min_severity: SignalSeverity
-          channels:     unknown
-          email:        string
-          display_name: string | null
-        }>>(
-          'a.id as sub_id',
-          'a.user_id',
-          'a.keywords',
-          'a.categories',
-          'a.countries',
-          'a.min_severity',
-          'a.channels',
-          'u.email',
-          'u.display_name',
-        )
-
+      const subscriptions = await this.loadDbSubscriptions()
       if (subscriptions.length === 0) return
 
       for (const signal of signals) {
         for (const sub of subscriptions) {
-          // ── Severity threshold ──────────────────────────────────────────
-          if (SEVERITY_ORDER[signal.severity] < SEVERITY_ORDER[sub.min_severity]) continue
+          // ── An alert set to fire on verification waits for it (plan 10) ─
+          if (alertWhen(sub.channels).verified) continue
 
-          // ── Category filter (empty array = all categories) ──────────────
-          const cats = Array.isArray(sub.categories) ? sub.categories : []
-          if (cats.length > 0 && !cats.includes(signal.category)) continue
-
-          // ── Country filter (empty array = all countries) ────────────────
-          const countries = Array.isArray(sub.countries) ? sub.countries : []
-          if (
-            countries.length > 0 &&
-            signal.countryCode &&
-            !countries.includes(signal.countryCode)
-          ) continue
-
-          // ── Keyword filter: any keyword in the title or summary, as a whole
-          //    word or phrase (plan K6, Oct 21, 2026: "UN" matched "under") ─
-          const keywords = Array.isArray(sub.keywords) ? sub.keywords : []
-          if (keywords.length > 0 && !keywordsMatch(`${signal.title} ${signal.summary ?? ''}`, keywords)) continue
+          // ── Severity, category, country and keywords (whole words, K6) ──
+          if (!alertMatches(sub, signal)) continue
 
           // ── Deduplication — one email per (subscription, signal) pair ───
           const dedupKey = `notif:email:${sub.user_id}:${sub.sub_id}:${signal.id}`
@@ -266,26 +275,63 @@ class AlertDispatcher {
           if (alreadySent) continue
           redis.setex(dedupKey, DEDUP_TTL_SECONDS, '1').catch(() => {})
 
-          // ── Once a day instead (channels.digest "daily", plan K6): kept for
-          //    the morning's digest email (lib/alert-digest.ts) ─────────────
-          if (isDailyDigest(sub.channels)) {
-            await keepForDigest(sub.sub_id, signal.id)
-            continue
-          }
-
-          // ── Dispatch email ───────────────────────────────────────────────
-          logger.debug(
-            { to: sub.email, signalId: signal.id, subId: sub.sub_id },
-            'AlertDispatcher: sending DB subscription alert email',
-          )
-          sendAlertEmail(sub.email, signal).catch((err: unknown) => {
-            logger.warn({ err, to: sub.email }, 'AlertDispatcher: DB subscription email failed')
-          })
+          // ── Once a day (channels.digest "daily", plan K6), else an email,
+          //    up to EMAILS_A_DAY, the rest in the next digest ──────────────
+          await deliver(sub, signal)
         }
       }
     } catch (err) {
       logger.warn({ err }, 'AlertDispatcher: dispatchDbSubscriptionAlerts failed')
     }
+  }
+
+  /** Active alerts that email, with their user's address */
+  async loadDbSubscriptions(): Promise<DbSubscription[]> {
+    return db('alert_subscriptions as a')
+      .join('users as u', 'u.id', 'a.user_id')
+      .where('a.active', true)
+      .whereRaw(`(a.channels->>'email')::boolean = true`)
+      .whereNotNull('u.email')
+      .select<DbSubscription[]>(
+        'a.id as sub_id',
+        'a.user_id',
+        'a.keywords',
+        'a.categories',
+        'a.countries',
+        'a.min_severity',
+        'a.channels',
+        'u.email',
+        'u.display_name',
+      )
+  }
+
+  /**
+   * Alerts set to fire on verification (channels.verified, plan 10: "tell me
+   * when a story in my region reaches 3 independent outlets"): the reports
+   * that became verified, or reached more outlets, each with its story's key;
+   * an alert fires when a report passes its filters and has at least its
+   * min_outlets, once a story. Returns how many it sent or kept.
+   */
+  async dispatchVerifiedAlerts(reports: Array<{ signal: Signal; storyKey: string }>): Promise<number> {
+    if (reports.length === 0) return 0
+    let n = 0
+    try {
+      const subscriptions = (await this.loadDbSubscriptions()).filter(s => alertWhen(s.channels).verified)
+      for (const sub of subscriptions) {
+        const { minOutlets } = alertWhen(sub.channels)
+        for (const { signal, storyKey } of reports) {
+          if (signal.status !== 'verified' || (signal.sourceCount ?? 0) < minOutlets) continue
+          if (!alertMatches(sub, signal)) continue
+          const key = `notif:verified:${sub.sub_id}:${storyKey}`
+          if (await redis.set(key, '1', 'EX', STORY_DEDUP_SECONDS, 'NX').catch(() => null) !== 'OK') continue
+          await deliver(sub, signal)
+          n += 1
+        }
+      }
+    } catch (err) {
+      logger.warn({ err }, 'AlertDispatcher: dispatchVerifiedAlerts failed')
+    }
+    return n
   }
 
   /**
@@ -405,7 +451,8 @@ class AlertDispatcher {
     this.timer = setInterval(async () => {
       try {
         const signals = await this.fetchRecentSignals()
-        await this.dispatchAlerts(signals)
+        // saved alerts see every new report through lib/alert-scan.ts (Oct 21, 2026)
+        await this.dispatchAlerts(signals, { subscriptions: false })
       } catch (err) {
         logger.warn({ err }, 'AlertDispatcher: poll cycle error')
       }

@@ -38,11 +38,11 @@ vi.mock('../db/redis', () => ({
   },
 }))
 
-vi.mock('./logger', () => ({
+vi.mock('../lib/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }))
 
-vi.mock('./notifications', () => ({
+vi.mock('../lib/notifications', () => ({
   notificationService: {
     formatSignalAlert:         vi.fn().mockReturnValue('text'),
     sendTelegramMessage:       vi.fn().mockResolvedValue(undefined),
@@ -56,11 +56,11 @@ vi.mock('./notifications', () => ({
   },
 }))
 
-vi.mock('./alert-tier', () => ({
+vi.mock('../lib/alert-tier', () => ({
   parseAlertTier: vi.fn().mockReturnValue('ROUTINE'),
 }))
 
-vi.mock('./email', () => ({
+vi.mock('../lib/email', () => ({
   sendAlertEmail: vi.fn().mockResolvedValue(undefined),
 }))
 

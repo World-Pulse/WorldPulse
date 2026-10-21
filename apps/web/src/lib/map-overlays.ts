@@ -322,7 +322,7 @@ export const OVERLAYS: Record<OverlayKey, OverlayDef> = {
     toFeatures: topicFeatures, popup: topicPopup('REFUGEES & DISPLACEMENT', '#fde68a'),
   },
   displaced: {
-    key: 'displaced', label: 'Displaced people (UNHCR)', color: '#fb923c',
+    key: 'displaced', label: 'Displaced people (UNHCR)', color: '#2dd4bf',
     description: 'Refugees, asylum-seekers and people displaced inside their own country: UNHCR\'s 2025 figures (CC BY 4.0), added up by country',
     path: DISPLACED_FILE, base: 'site', refreshMs: 24 * HOUR, bySeverity: false, sized: true,
     toFeatures: displacedFeatures, popup: displacedPopup,

@@ -6,6 +6,10 @@
  * 7 AM New York time each alert sends one email with them, the most serious
  * first (15 at most, with how many more). Nothing is sent without the email
  * key (RESEND_API_KEY); the matches wait up to 3 days.
+ *
+ * An alert that emails each match keeps its matches here too once it has sent
+ * its emails for the day (alert-dispatcher.ts EMAILS_A_DAY), so they come in
+ * the next morning's digest instead of being lost.
  */
 
 import type { SignalSeverity } from '@worldpulse/types'
@@ -44,7 +48,7 @@ export async function sendAlertDigests(now = new Date()): Promise<DigestRun> {
   const subs = await db('alert_subscriptions as a')
     .join('users as u', 'u.id', 'a.user_id')
     .where('a.active', true)
-    .whereRaw(`a.channels->>'digest' = 'daily'`)
+    // every alert that emails: a daily one, or one with matches past its day's emails
     .whereRaw(`coalesce((a.channels->>'email')::boolean, true) = true`)
     .whereNotNull('u.email')
     .select('a.id as sub_id', 'a.name', 'u.email') as Array<{ sub_id: string; name: string; email: string }>

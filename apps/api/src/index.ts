@@ -94,6 +94,7 @@ import { startSearchConsumer, stopSearchConsumer } from './lib/search-consumer'
 import { initClickHouse } from './lib/search-analytics'
 import { startDispatcher, stopDispatcher } from './lib/alert-dispatcher'
 import { startAlertDigests, stopAlertDigests } from './lib/alert-digest'
+import { startAlertScan, stopAlertScan } from './lib/alert-scan'
 import { startPulseScheduler, stopPulseScheduler } from './lib/pulse/scheduler'
 import { startSummaryPass, stopSummaryPass } from './lib/summary-pass'
 import { ensureSubscribersTable } from './lib/subscribers'
@@ -400,6 +401,8 @@ async function bootstrap() {
   startDispatcher()
   // Daily alert digests (plan K6): once a day after 7 AM New York time
   startAlertDigests()
+  // saved alerts against every new report, and on verification (plan 10)
+  startAlertScan()
 
   // ─── PULSE AI PUBLISHER SCHEDULER ────────────────────────
   // Gated by PULSE_ENABLED=true — runs flash brief checks (5m)
@@ -454,6 +457,7 @@ async function bootstrap() {
     stopSocialPosters()
     stopDispatcher()
     stopAlertDigests()
+    stopAlertScan()
     await Promise.allSettled([
       stopSearchConsumer(),
       disconnectSearchProducer(),
