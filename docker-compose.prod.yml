@@ -269,6 +269,10 @@ services:
     environment:
       NODE_ENV:                   production
       PORT:                       3000
+      # The site's own server asks the API over the server's private network
+      # (plan D3, Oct 21, 2026: apps/api/src/lib/site-calls.ts); browsers keep
+      # NEXT_PUBLIC_API_URL
+      API_URL:                    http://wp_api:3001
       NEXT_PUBLIC_API_URL:        https://api.world-pulse.io
       NEXT_PUBLIC_WS_URL:         wss://api.world-pulse.io
       NEXT_PUBLIC_MEILI_HOST:     https://api.world-pulse.io/search

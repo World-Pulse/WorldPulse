@@ -3,6 +3,7 @@ import type { RateLimitPluginOptions } from '@fastify/rate-limit'
 import type Redis from 'ioredis'
 import { buildCfAwareKeyGenerator } from '../middleware/cloudflare'
 import { internalCallClient } from './internal-call'
+import { isSiteCall } from './site-calls'
 
 /**
  * Whose budget a request counts in: the signed-in user's or the client
@@ -27,6 +28,11 @@ export function rateLimitKey(req: FastifyRequest): string {
  * handler (lib/error-reply.ts) answers with its statusCode. Without one, a
  * client over the limit got "500 Something went wrong on our side." instead
  * of 429, and each refusal was logged as a server error.
+ *
+ * allowList (plan D3, Oct 21, 2026): the website's own server, calling over
+ * the server's private network, is never counted (lib/site-calls.ts); every
+ * route's own limit keeps this list, since a route's options are laid over
+ * these ones and none sets its own.
  */
 export function rateLimitOptions(redis: Redis): RateLimitPluginOptions {
   return {
@@ -35,6 +41,7 @@ export function rateLimitOptions(redis: Redis): RateLimitPluginOptions {
     redis,
     skipOnError: true,
     keyGenerator: rateLimitKey,
+    allowList:   (req) => isSiteCall(req as { ip?: string; headers: Record<string, unknown> }),
     errorResponseBuilder: (_req, context) => ({
       statusCode: context.statusCode,   // 429, or 403 once a client is banned
       code:       'RATE_LIMITED',

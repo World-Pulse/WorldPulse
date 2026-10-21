@@ -1,6 +1,7 @@
 import Fastify, { type FastifyError } from 'fastify'
 import { errorReply } from './lib/error-reply'
 import { registerErrorBody } from './lib/error-body'
+import { countRefusal } from './lib/refusals'
 import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
 import jwt from '@fastify/jwt'
@@ -137,6 +138,12 @@ app.setErrorHandler((err: FastifyError, req, reply) => {
 // Every error the API answers is one shape, whoever sent it (lib/error-body.ts, plan V3f):
 // { success: false, code, error, statusCode }, with whatever else the route said
 registerErrorBody(app)
+
+// Every request turned away as too many (429) is counted by route, a day at a
+// time, for /ops-status.json (lib/refusals.ts, plan D3)
+app.addHook('onResponse', async (req, reply) => {
+  if (reply.statusCode === 429) void countRefusal(redis, req.method, req.routeOptions?.url)
+})
 
 async function bootstrap() {
   // ─── SENTRY (optional, env-gated) ────────────────────────

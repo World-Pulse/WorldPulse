@@ -402,6 +402,33 @@ scraper_stats() {
   printf '{"errors":%d,"warnings":%d,"signals_created":%d,"top_errors":[%s],"top_warnings":[%s]}' \
     "${errs:-0}" "${warns:-0}" "${created:-0}" "$top" "$topw"
 }
+# Requests the API turned away as too many (429), today and yesterday (UTC),
+# by route (plan D3, Oct 21, 2026: the API counts each one in Redis,
+# api:429:<day>, a hash of "<METHOD> <route>" → count, and "total";
+# apps/api/src/lib/refusals.ts). nginx's own refusals never reach the API and
+# aren't in it. Counts only: no addresses.
+api_limit_stats() {
+  local pw out
+  pw=$(redis_pw) || pw=""
+  out=$(timeout 10 docker exec -e REDISCLI_AUTH="$pw" wp_redis sh -c '
+      echo "today=$(redis-cli --raw HGETALL "api:429:$1" | paste -sd "\t" -)"
+      echo "yesterday=$(redis-cli --raw HGETALL "api:429:$2" | paste -sd "\t" -)"' \
+      sh "$(date -u +%F)" "$(date -u -d yesterday +%F)" 2>/dev/null) || out=""
+  OUT="$out" python3 - <<'PY' 2>/dev/null || printf 'null'
+import json, os
+vals = dict(line.split('=', 1) for line in os.environ.get('OUT', '').splitlines() if '=' in line)
+def day(text):
+    words = text.split('\t') if text else []
+    counts = {}
+    for field, n in zip(words[0::2], words[1::2]):
+        try: counts[field] = int(n)
+        except ValueError: pass
+    total = counts.pop('total', sum(counts.values()))
+    routes = dict(sorted(counts.items(), key=lambda kv: -kv[1])[:10])
+    return {'total': total, 'routes': routes}
+print(json.dumps({'today': day(vals.get('today', '')), 'yesterday': day(vals.get('yesterday', ''))}, separators=(',', ':')))
+PY
+}
 # Run one part of the pipeline block into $parts/<name>.json and note how long
 # it took, in ms
 part() {
@@ -476,6 +503,7 @@ pipeline_stats() {
   part fingerprints fingerprint_stats
   part claude claude_stats
   part sources source_stats
+  part api_limits api_limit_stats
   part disk disk_stats
   # Readers of world-pulse.io today and where they came from (plan G1): counts
   # only, from nginx's log; scripts/readers.py says how (no addresses kept)
@@ -499,7 +527,7 @@ def part(name):
     return value
 out = {'window': '24h', 'checked': checked}
 out['db'] = [v if isinstance(v, dict) else None for v in (part('db%d' % i) for i in range(1, 6))]
-for name in ('scraper_30m', 'llm', 'fingerprints', 'claude', 'sources', 'disk', 'readers'):
+for name in ('scraper_30m', 'llm', 'fingerprints', 'claude', 'sources', 'api_limits', 'disk', 'readers'):
     out[name] = part(name)
 took = {}
 try:

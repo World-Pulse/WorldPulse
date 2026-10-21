@@ -56,20 +56,21 @@ async function appWith(options: ReturnType<typeof rateLimitOptions>) {
 describe('rate limit when Redis refuses writes', () => {
   it('still answers requests', async () => {
     const app = await appWith(rateLimitOptions(refusingRedis()))
-    expect((await app.inject({ method: 'GET', url: '/health' })).statusCode).toBe(200)
+    expect((await app.inject({ method: 'GET', url: '/health', remoteAddress: '203.0.113.5' })).statusCode).toBe(200)
     // routes with their own limit inherit it
-    expect((await app.inject({ method: 'GET', url: '/limited' })).statusCode).toBe(200)
+    expect((await app.inject({ method: 'GET', url: '/limited', remoteAddress: '203.0.113.5' })).statusCode).toBe(200)
   })
 
   it('would fail every request without skipOnError (what happened on Oct 12)', async () => {
     const app = await appWith({ ...rateLimitOptions(refusingRedis()), skipOnError: false })
-    expect((await app.inject({ method: 'GET', url: '/health' })).statusCode).toBe(500)
+    expect((await app.inject({ method: 'GET', url: '/health', remoteAddress: '203.0.113.5' })).statusCode).toBe(500)
   })
 
   it('still limits when Redis works, with a 429 (it used to answer 500)', async () => {
     const app = await appWith(rateLimitOptions(countingRedis()))
     const res = []
-    for (let i = 0; i < 3; i++) res.push(await app.inject({ method: 'GET', url: '/limited' }))
+    // a client from outside (the server's own addresses aren't limited: lib/site-calls.ts)
+    for (let i = 0; i < 3; i++) res.push(await app.inject({ method: 'GET', url: '/limited', remoteAddress: '203.0.113.5' }))
     expect(res.map(r => r.statusCode)).toEqual([200, 200, 429])
     expect(JSON.parse(res[2].body)).toMatchObject({ statusCode: 429, code: 'RATE_LIMITED', message: 'Too many requests. Slow down.' })
     expect(res[2].headers['retry-after']).toBeDefined()
