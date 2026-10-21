@@ -28,6 +28,38 @@ async function withMeiliTimeout<T>(
   ])
 }
 
+/** How long Meilisearch answers alone before Postgres starts too, and how long it may take in all (plan V3g) */
+export const MEILI_ALONE_MS = 150
+export const MEILI_MAX_MS = 1_500
+
+const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
+
+/**
+ * The main search's reports (plan V3g, Oct 21, 2026): Meilisearch first; if
+ * it hasn't answered after aloneMs, Postgres's full-text search starts too,
+ * and the first answer wins, Meilisearch's for up to maxMs. Until now
+ * Meilisearch had 150 ms and was then dropped: a broad search ("ukraine",
+ * "sudan") came back from Postgres every time, "partial", without the
+ * category and severity counts, in about 1.5 s, and wasn't kept, so the next
+ * one did it all again. When Meilisearch fails, Postgres answers.
+ */
+export type SearchAnswer<M, F> = { from: 'meili'; value: M } | { from: 'postgres'; value: F }
+
+export async function firstAnswer<M, F>(
+  meiliSearch: Promise<M>,
+  fallback: () => Promise<F>,
+  aloneMs = MEILI_ALONE_MS,
+  maxMs = MEILI_MAX_MS,
+): Promise<SearchAnswer<M, F>> {
+  const meili: Promise<SearchAnswer<M, F> | null> = meiliSearch.then(value => ({ from: 'meili' as const, value }), () => null)
+  const early = await Promise.race([meili, sleep(aloneMs).then(() => 'slow' as const)])
+  if (early !== 'slow' && early !== null) return early
+  const pg: Promise<SearchAnswer<M, F>> = fallback().then(value => ({ from: 'postgres' as const, value }))
+  if (early === null) return pg
+  const meiliInTime = Promise.race([meili, sleep(Math.max(0, maxMs - aloneMs)).then(() => null)])
+  return Promise.race([meiliInTime.then((answer): SearchAnswer<M, F> | Promise<SearchAnswer<M, F>> => answer ?? pg), pg])
+}
+
 /**
  * The tags of the last 7 days' reports, most used first, for autocomplete
  * (plan V3g, Oct 20, 2026). Autocomplete matched tags by turning every
@@ -201,6 +233,9 @@ export const registerSearchRoutes: FastifyPluginAsync = async (app) => {
     const results: Record<string, unknown[]> = {}
     const facets: Record<string, unknown> = {}
     let partialResults = false
+    // Which engine answered the reports, and how long Meilisearch said it took (headers, for V3g's check)
+    let searchSource: 'meili' | 'postgres' | null = null
+    let meiliMs: number | null = null
 
     // Build Meilisearch sort expression from sort param
     const signalSort = (() => {
@@ -260,8 +295,8 @@ export const registerSearchRoutes: FastifyPluginAsync = async (app) => {
 
       if (tier) filters.push(`alertTier = "${tier}"`)
 
-      // Helper: Postgres FTS fallback when Meilisearch times out
-      const signalsFtsFallback = (): Promise<void> =>
+      // Postgres full-text search, when Meilisearch is slow or fails: its rows
+      const signalsFts = (): Promise<unknown[]> =>
         db('signals')
           .whereRaw(
             `to_tsvector('english', coalesce(title,'') || ' ' || coalesce(summary,'')) @@ plainto_tsquery('english', ?)`,
@@ -300,11 +335,11 @@ export const registerSearchRoutes: FastifyPluginAsync = async (app) => {
           )
           .limit(type === 'all' ? 5 : pageLimit)
           .offset(type === 'all' ? 0 : pageOffset)
-          .then(rows => { results.signals = rows })
-          .catch(() => { results.signals = [] })
+          .then(rows => rows as unknown[])
+          .catch(() => [] as unknown[])
 
       searchPromises.push(
-        withMeiliTimeout(
+        firstAnswer(
           meili.index('signals').search(q, {
             limit:  type === 'all' ? 5 : pageLimit,
             offset: type === 'all' ? 0 : pageOffset,
@@ -312,19 +347,24 @@ export const registerSearchRoutes: FastifyPluginAsync = async (app) => {
             sort:   signalSort,
             facets: type !== 'all' ? ['category', 'severity'] : undefined,
           }),
-        ).then(({ result: r, partial }) => {
-          if (partial || r === null) {
-            // Meilisearch timed out — use Postgres FTS fallback
+          signalsFts,
+        ).then(answer => {
+          if (answer.from === 'postgres') {
+            // Meilisearch too slow or failing: Postgres's answer, without the counts
             partialResults = true
-            return signalsFtsFallback()
+            searchSource = 'postgres'
+            results.signals = answer.value
+            return
           }
-          // Meilisearch succeeded
+          const r = answer.value
+          searchSource = 'meili'
+          meiliMs = typeof r.processingTimeMs === 'number' ? r.processingTimeMs : null
           results.signals = r.hits
           if (r.facetDistribution) {
             facets.category = r.facetDistribution['category'] ?? {}
             facets.severity = r.facetDistribution['severity'] ?? {}
           }
-        }).catch(() => signalsFtsFallback()),
+        }).catch(() => { results.signals = [] }),
       )
     }
 
@@ -418,6 +458,8 @@ export const registerSearchRoutes: FastifyPluginAsync = async (app) => {
       redis.setex(cacheKey, SEARCH_CACHE_TTL, JSON.stringify(responseBody)).catch(() => {})
     }
 
+    if (searchSource) reply.header('X-Search-Source', searchSource)
+    if (meiliMs !== null) reply.header('X-Meili-Ms', String(meiliMs))
     return reply
       .header('X-Search-Latency-Ms', String(searchLatencyMs))
       .send(responseBody)
