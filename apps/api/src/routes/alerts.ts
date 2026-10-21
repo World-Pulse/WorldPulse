@@ -3,10 +3,13 @@ import { db } from '../db/postgres'
 import { authenticate } from '../middleware/auth'
 import { z } from 'zod'
 import { sendError } from '../lib/errors'
+import { keywordsMatch } from '../lib/alert-match'
+import { EMAIL_CONFIGURED } from '../lib/email'
 
 const AlertSchema = z.object({
   name:        z.string().min(1).max(100),
-  keywords:    z.array(z.string().max(50)).max(20).default([]),
+  // 100: a followed organisation's name can be long (plan K6)
+  keywords:    z.array(z.string().max(100)).max(20).default([]),
   categories:  z.array(z.string()).max(10).default([]),
   countries:   z.array(z.string().length(2)).max(20).default([]),
   minSeverity: z.enum(['critical', 'high', 'medium', 'low', 'info']).default('medium'),
@@ -14,6 +17,8 @@ const AlertSchema = z.object({
     email:  z.boolean().default(true),
     push:   z.boolean().default(true),
     in_app: z.boolean().default(true),
+    // one email a day with the day's matches instead of one per report (plan K6)
+    digest: z.enum(['daily']).optional(),
   }).default({}),
 })
 
@@ -28,7 +33,8 @@ export const registerAlertRoutes: FastifyPluginAsync = async (app) => {
     const alerts = await db('alert_subscriptions')
       .where('user_id', req.user!.id)
       .orderBy('created_at', 'desc')
-    return reply.send({ success: true, data: alerts })
+    // whether alert emails go out yet (the email key is on the server; plan K6)
+    return reply.send({ success: true, data: alerts, emailReady: EMAIL_CONFIGURED })
   })
 
   app.post('/', { preHandler: [authenticate] }, async (req, reply) => {
@@ -118,8 +124,7 @@ export async function matchAndDispatchAlerts(signal: {
     if (alert.categories?.length > 0 && alert.categories.includes(signal.category)) match = true
     // Keyword match
     if (!match && alert.keywords?.length > 0) {
-      const titleLower = signal.title.toLowerCase()
-      match = alert.keywords.some((kw: string) => titleLower.includes(kw.toLowerCase()))
+      match = keywordsMatch(signal.title, alert.keywords)
     }
     // Country match
     if (!match && alert.countries?.length > 0 && signal.country_code) {

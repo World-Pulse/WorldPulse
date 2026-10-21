@@ -5,6 +5,7 @@ import { SITE_NAME, SITE_URL, jsonLdText, metaDescription } from '@/lib/page-met
 import { entityIdFromSlug, entityPath, entityTypeIcon, entityTypeLabel } from '@/lib/entity-links'
 import { BriefingSignup } from '@/components/briefing/BriefingSignup'
 import { ShareMenu } from '@/components/signals/ShareMenu'
+import { FollowEntity } from '@/components/entities/FollowEntity'
 import { ConnectionWhy } from './ConnectionWhy'
 import { ActivityBars } from './ActivityBars'
 import { cachedFetch } from '@/lib/server-fetch'
@@ -171,6 +172,8 @@ export default async function EntityPage({ params }: { params: Promise<{ slug: s
             and <strong className="text-wp-text font-semibold">{activity.last7d.toLocaleString('en-US')}</strong> in the last 7 days,
             across the outlets WorldPulse follows.
           </p>
+          {/* Follow: a daily email with the new reports naming it (plan K6) */}
+          <FollowEntity name={entity.name} path={path} />
         </header>
 
         <section aria-labelledby="activity-heading" className="p-4 rounded-xl border border-white/[0.07] bg-wp-surface">

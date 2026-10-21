@@ -5,6 +5,8 @@ import { logger } from './logger'
 import { notificationService } from './notifications'
 import { sendAlertEmail } from './email'
 import { parseAlertTier } from './alert-tier'
+import { keywordsMatch, isDailyDigest } from './alert-match'
+import { keepForDigest } from './alert-digest'
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -219,6 +221,7 @@ class AlertDispatcher {
           categories:   string[]
           countries:    string[]
           min_severity: SignalSeverity
+          channels:     unknown
           email:        string
           display_name: string | null
         }>>(
@@ -228,6 +231,7 @@ class AlertDispatcher {
           'a.categories',
           'a.countries',
           'a.min_severity',
+          'a.channels',
           'u.email',
           'u.display_name',
         )
@@ -251,19 +255,23 @@ class AlertDispatcher {
             !countries.includes(signal.countryCode)
           ) continue
 
-          // ── Keyword filter (any keyword must appear in title or summary) ─
+          // ── Keyword filter: any keyword in the title or summary, as a whole
+          //    word or phrase (plan K6, Oct 21, 2026: "UN" matched "under") ─
           const keywords = Array.isArray(sub.keywords) ? sub.keywords : []
-          if (keywords.length > 0) {
-            const haystack = `${signal.title} ${signal.summary ?? ''}`.toLowerCase()
-            const anyMatch = keywords.some(kw => haystack.includes(kw.toLowerCase()))
-            if (!anyMatch) continue
-          }
+          if (keywords.length > 0 && !keywordsMatch(`${signal.title} ${signal.summary ?? ''}`, keywords)) continue
 
           // ── Deduplication — one email per (subscription, signal) pair ───
           const dedupKey = `notif:email:${sub.user_id}:${sub.sub_id}:${signal.id}`
           const alreadySent = await redis.exists(dedupKey).catch(() => 0)
           if (alreadySent) continue
           redis.setex(dedupKey, DEDUP_TTL_SECONDS, '1').catch(() => {})
+
+          // ── Once a day instead (channels.digest "daily", plan K6): kept for
+          //    the morning's digest email (lib/alert-digest.ts) ─────────────
+          if (isDailyDigest(sub.channels)) {
+            await keepForDigest(sub.sub_id, signal.id)
+            continue
+          }
 
           // ── Dispatch email ───────────────────────────────────────────────
           logger.debug(

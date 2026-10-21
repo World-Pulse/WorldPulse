@@ -237,3 +237,69 @@ export async function sendAlertEmail(to: string, signal: Signal): Promise<void> 
     logger.error({ err, to }, 'sendAlertEmail: request failed')
   }
 }
+
+// ─── The daily alert digest (plan K6, Oct 21, 2026) ─────────────────────────
+
+export interface DigestItem {
+  id:           string
+  title:        string
+  severity:     SignalSeverity
+  locationName: string | null
+  status:       string
+}
+
+/** One email with a day's matches of one alert ("Follow: NATO"), the most serious first */
+export function buildDigest(alertName: string, items: DigestItem[], total: number): { subject: string; html: string; text: string } {
+  const more = total > items.length ? total - items.length : 0
+  const subject = `${alertName}: ${total} new report${total === 1 ? '' : 's'} on WorldPulse`
+  const rows = items.map(i => {
+    const color = SEVERITY_COLORS[i.severity] ?? '#8892a4'
+    const where = i.locationName ? ` · ${escapeHtml(i.locationName)}` : ''
+    const verified = i.status === 'verified' ? ' · ✓ Verified' : ''
+    return `<tr><td style="padding:10px 0;border-bottom:1px solid #1f2937">
+      <div style="font:600 11px monospace;color:${color};letter-spacing:1px">${escapeHtml(SEVERITY_LABELS[i.severity] ?? i.severity)}${where}${verified}</div>
+      <a href="https://world-pulse.io/signals/${encodeURIComponent(i.id)}?utm_source=alert-digest&utm_medium=email" style="font:15px/1.4 sans-serif;color:#f3f4f6;text-decoration:none">${escapeHtml(i.title)}</a>
+    </td></tr>`
+  }).join('')
+  const html = `<!doctype html><html><body style="margin:0;background:#06070d;padding:24px">
+  <table role="presentation" width="100%" style="max-width:600px;margin:0 auto;background:#0d0f18;border-radius:12px;padding:20px">
+    <tr><td style="font:700 18px sans-serif;color:#f3f4f6;padding-bottom:4px">${escapeHtml(alertName)}</td></tr>
+    <tr><td style="font:13px sans-serif;color:#9ca3af;padding-bottom:12px">${total} new report${total === 1 ? '' : 's'} since yesterday's email, the most serious first.</td></tr>
+    ${rows}
+    ${more ? `<tr><td style="font:13px sans-serif;color:#9ca3af;padding-top:12px">And ${more} more on WorldPulse.</td></tr>` : ''}
+    <tr><td style="font:12px sans-serif;color:#6b7280;padding-top:20px">You get this because you follow it on WorldPulse. Change or stop it: <a href="https://world-pulse.io/alerts" style="color:#f5a623">world-pulse.io/alerts</a></td></tr>
+  </table></body></html>`
+  const text = [
+    `${alertName}: ${total} new report${total === 1 ? '' : 's'} since yesterday's email, the most serious first.`,
+    '',
+    ...items.map(i => `[${SEVERITY_LABELS[i.severity] ?? i.severity}] ${i.title}${i.locationName ? ` (${i.locationName})` : ''}\nhttps://world-pulse.io/signals/${i.id}`),
+    ...(more ? ['', `And ${more} more on WorldPulse.`] : []),
+    '',
+    'Change or stop this email: https://world-pulse.io/alerts',
+  ].join('\n')
+  return { subject, html, text }
+}
+
+/** Send one alert's digest; whether Resend took it */
+export async function sendAlertDigestEmail(to: string, alertName: string, items: DigestItem[], total: number): Promise<boolean> {
+  if (!EMAIL_CONFIGURED) return false
+  const { subject, html, text } = buildDigest(alertName, items, total)
+  const payload: ResendPayload = { from: FROM_ADDRESS, to: [to], subject, html, text }
+  if (REPLY_TO) payload.reply_to = REPLY_TO
+  try {
+    const res = await fetch(RESEND_API_URL, {
+      method:  'POST',
+      headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+      signal:  AbortSignal.timeout(15_000),
+    })
+    if (!res.ok) {
+      logger.warn({ status: res.status, to }, 'sendAlertDigestEmail: Resend API error')
+      return false
+    }
+    return true
+  } catch (err) {
+    logger.error({ err, to }, 'sendAlertDigestEmail: request failed')
+    return false
+  }
+}

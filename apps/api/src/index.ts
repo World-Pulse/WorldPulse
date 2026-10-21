@@ -93,6 +93,7 @@ import { connectSearchProducer, disconnectSearchProducer } from './lib/search-ev
 import { startSearchConsumer, stopSearchConsumer } from './lib/search-consumer'
 import { initClickHouse } from './lib/search-analytics'
 import { startDispatcher, stopDispatcher } from './lib/alert-dispatcher'
+import { startAlertDigests, stopAlertDigests } from './lib/alert-digest'
 import { startPulseScheduler, stopPulseScheduler } from './lib/pulse/scheduler'
 import { startSummaryPass, stopSummaryPass } from './lib/summary-pass'
 import { ensureSubscribersTable } from './lib/subscribers'
@@ -397,6 +398,8 @@ async function bootstrap() {
   // ─── ALERT DISPATCHER ────────────────────────────────────
   // Non-fatal — starts 60s polling loop for Telegram/Discord alerts.
   startDispatcher()
+  // Daily alert digests (plan K6): once a day after 7 AM New York time
+  startAlertDigests()
 
   // ─── PULSE AI PUBLISHER SCHEDULER ────────────────────────
   // Gated by PULSE_ENABLED=true — runs flash brief checks (5m)
@@ -450,6 +453,7 @@ async function bootstrap() {
     stopBriefingEmails()
     stopSocialPosters()
     stopDispatcher()
+    stopAlertDigests()
     await Promise.allSettled([
       stopSearchConsumer(),
       disconnectSearchProducer(),
