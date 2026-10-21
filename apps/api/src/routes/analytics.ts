@@ -7,6 +7,8 @@ import { loadEngine } from '../lib/engine-loader'
 import { internalCallHeaders } from '../lib/internal-call'
 import { rateLimitKey } from '../lib/rate-limit-options'
 import { trendingEntityRows, KG_TYPE_FOR_API, type KgTrendingItem } from '../lib/trending-entities'
+import { staleWhileRevalidate } from '../lib/swr-cache'
+import { longQuery } from '../lib/long-query'
 
 const THREAT_INDEX_TTL      = 120  // 2 min cache
 const MARKETS_CACHE_TTL     = 300  // 5 min cache — respects Yahoo Finance rate limits
@@ -1017,28 +1019,29 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
     const { window = '24h' } = req.query as { window?: string }
 
     const hours = window === '1h' ? 1 : window === '6h' ? 6 : window === '7d' ? 168 : 24
-    const cacheKey = `analytics:category-breakdown:${hours}`
-    const cached = await redis.get(cacheKey).catch(() => null)
-    if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
-
-    const since = new Date(Date.now() - hours * 3600 * 1000).toISOString()
-
-    const rows = await db('signals')
-      .select('category')
-      .count('* as count')
-      .where('created_at', '>=', since)
-      .whereIn('status', ['verified', 'pending'])
-      .whereNotNull('category')
-      .groupBy('category')
-      .orderByRaw('count DESC')
-
-    const categories = (rows as Array<{ category: string; count: string }>).map(r => ({
-      category: r.category,
-      count: Number(r.count),
-    }))
-
-    const result = { success: true, window, categories, generated_at: new Date().toISOString() }
-    await redis.setex(cacheKey, 120, JSON.stringify(result)).catch(() => {})
+    // The window counted, not the one asked for (one kept answer per window)
+    const counted = hours === 1 ? '1h' : hours === 6 ? '6h' : hours === 168 ? '7d' : '24h'
+    // Kept and remade in the background, each count with up to 20 seconds
+    // (plan R3, Oct 21, 2026: the 7-day count read a week of reports on every
+    // miss, ran into the 5-second limit and answered 500)
+    const result = await staleWhileRevalidate(`analytics:category-breakdown:v2:${hours}`,
+      { freshSeconds: hours >= 168 ? 1800 : 120, staleSeconds: 6 * 3600, lockSeconds: 60 },
+      async () => {
+        const since = new Date(Date.now() - hours * 3600 * 1000).toISOString()
+        const rows = await longQuery(20, trx => trx('signals')
+          .select('category')
+          .count('* as count')
+          .where('created_at', '>=', since)
+          .whereIn('status', ['verified', 'pending'])
+          .whereNotNull('category')
+          .groupBy('category')
+          .orderByRaw('count DESC'))
+        const categories = (rows as Array<{ category: string; count: string }>).map(r => ({
+          category: r.category,
+          count: Number(r.count),
+        }))
+        return { success: true, window: counted, categories, generated_at: new Date().toISOString() }
+      })
     return reply.send(result)
   })
 

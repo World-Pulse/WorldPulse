@@ -379,8 +379,42 @@ if run:
 print(json.dumps(out, separators=(',', ':')))
 PY
 }
+# One database query in its own psql call, with its own time limit in seconds,
+# which the database keeps too (statement_timeout): the JSON line it printed,
+# else null. Oct 21, 2026: the four queries shared one psql call and 25
+# seconds; from 16:00 UTC only the first one's answer came back, and when the
+# client was stopped the query ran on in the database
+db_json() {
+  local out
+  out=$(timeout $(( $1 + 5 )) docker exec wp_postgres sh -c \
+        'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAq -c "SET statement_timeout = $1" -c "$2"' \
+        sh "$(( $1 * 1000 ))" "$2" 2>/dev/null | tr -d '\r' | grep '^{' | head -n 1) || out=""
+  printf '%s' "${out:-null}"
+}
+# The scraper's log lines from the last 30 minutes ($scr), counted by level
+scraper_stats() {
+  local errs warns created top topw
+  errs=$(grep -c '"level":[56]0' <<< "$scr") || true
+  warns=$(grep -c '"level":40' <<< "$scr") || true
+  created=$(grep -c '"msg":"Signal created"' <<< "$scr") || true
+  top=$(grep '"level":[56]0' <<< "$scr" | top_msgs)
+  topw=$(grep '"level":40' <<< "$scr" | top_msgs)
+  printf '{"errors":%d,"warnings":%d,"signals_created":%d,"top_errors":[%s],"top_warnings":[%s]}' \
+    "${errs:-0}" "${warns:-0}" "${created:-0}" "$top" "$topw"
+}
+# Run one part of the pipeline block into $parts/<name>.json and note how long
+# it took, in ms
+part() {
+  local name=$1 t0
+  shift
+  t0=$(date +%s%3N)
+  "$@" > "$parts/$name.json" 2>/dev/null
+  echo "$name $(( $(date +%s%3N) - t0 ))" >> "$parts/took"
+}
 pipeline_stats() {
-  local q1 q2 q3 q4 db scr errs warns created top topw
+  local q1 q2 q3 q4 scr parts checked t0
+  checked=$(date -Is)
+  parts=$(mktemp -d) || return 1
   q1="SELECT json_build_object(
         'created',      count(*),
         'verified',     count(*) FILTER (WHERE status = 'verified'),
@@ -419,28 +453,61 @@ pipeline_stats() {
         SELECT count(*) FROM (SELECT signal_id FROM signal_flags
                                WHERE created_at > now() - interval '30 days'
                                GROUP BY signal_id HAVING count(*) >= 3) t))"
-  db=$(timeout 25 docker exec wp_postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAq -c "$1" -c "$2" -c "$3" -c "$4"' sh "$q1" "$q2" "$q3" "$q4" 2>/dev/null \
-       | tr -d '\r' | grep '^{' | paste -sd ',' -) || db=""
+  # db is these four answers in this order, each null when it failed or ran out
+  # of time (scripts/autopilot_hq.py reads the first two)
+  part db1 db_json 45 "$q1"
+  part db2 db_json 20 "$q2"
+  part db3 db_json 30 "$q3"
+  part db4 db_json 10 "$q4"
   # Scraper log lines from the last 30 minutes, counted by level; the most
   # frequent error and warning messages, digits blanked out (our own log text only)
+  t0=$(date +%s%3N)
   scr=$(timeout 25 docker logs --since 30m wp_scraper 2>&1 | tail -n 50000) || scr=""
-  errs=$(grep -c '"level":[56]0' <<< "$scr") || true
-  warns=$(grep -c '"level":40' <<< "$scr") || true
-  created=$(grep -c '"msg":"Signal created"' <<< "$scr") || true
-  top=$(grep '"level":[56]0' <<< "$scr" | top_msgs)
-  topw=$(grep '"level":40' <<< "$scr" | top_msgs)
-  printf '{"window":"24h","checked":"%s",' "$(date -Is)"
-  printf '"db":%s,' "$( [ -n "$db" ] && printf '[%s]' "$db" || printf 'null')"
-  printf '"scraper_30m":{"errors":%d,"warnings":%d,"signals_created":%d,"top_errors":[%s],"top_warnings":[%s]},' \
-    "${errs:-0}" "${warns:-0}" "${created:-0}" "$top" "$topw"
-  printf '"llm":%s,' "$(llm_stats "$scr")"
-  printf '"fingerprints":%s,' "$(fingerprint_stats)"
-  printf '"claude":%s,' "$(claude_stats)"
-  printf '"sources":%s,' "$(source_stats)"
-  printf '"disk":%s,' "$(disk_stats)"
+  echo "scraper_logs $(( $(date +%s%3N) - t0 ))" >> "$parts/took"
+  part scraper_30m scraper_stats
+  part llm llm_stats "$scr"
+  part fingerprints fingerprint_stats
+  part claude claude_stats
+  part sources source_stats
+  part disk disk_stats
   # Readers of world-pulse.io today and where they came from (plan G1): counts
   # only, from nginx's log; scripts/readers.py says how (no addresses kept)
-  printf '"readers":%s}' "$(timeout 90 python3 scripts/readers.py logs/readers-state.json 2>/dev/null || printf 'null')"
+  part readers timeout 90 python3 scripts/readers.py logs/readers-state.json
+  # Put together in Python (Oct 21, 2026): a part that printed nothing or
+  # something that isn't JSON is null, and is named in "failed", instead of
+  # making the whole block unreadable (which kept the last one, unchanged, for
+  # 40 minutes); took_ms says how long each part took
+  python3 - "$parts" "$checked" <<'PY'
+import json, os, sys
+parts, checked = sys.argv[1], sys.argv[2]
+failed = []
+def part(name):
+    try:
+        with open(os.path.join(parts, name + '.json'), encoding='utf-8') as fh:
+            value = json.loads(fh.read())
+    except (OSError, ValueError):
+        value = None
+    if value is None:
+        failed.append(name)
+    return value
+out = {'window': '24h', 'checked': checked}
+out['db'] = [v if isinstance(v, dict) else None for v in (part('db%d' % i) for i in range(1, 5))]
+for name in ('scraper_30m', 'llm', 'fingerprints', 'claude', 'sources', 'disk', 'readers'):
+    out[name] = part(name)
+took = {}
+try:
+    with open(os.path.join(parts, 'took')) as fh:
+        for line in fh:
+            name, ms = line.split()
+            took[name] = int(ms)
+except (OSError, ValueError):
+    pass
+out['took_ms'] = took
+out['failed'] = failed
+print(json.dumps(out, separators=(',', ':')))
+PY
+  rm -f "$parts"/*.json "$parts/took"
+  rmdir "$parts" 2>/dev/null || true
 }
 # Why the last deploy wasn't clean, from the deploy script's own log lines only
 # (its warnings, or the reason it rolled back or failed); empty when it was clean
@@ -452,13 +519,20 @@ deploy_note() {
   esac | tr -d '"\\' | tr -d '\000-\037' | cut -c1-240
 }
 pipe_cache=logs/pipeline-stats.json
-# Refresh every 30 minutes, or straight away when the cache predates a new field
+# Refresh every 30 minutes, or straight away when the cache predates a new field.
+# One refresh at a time, each in its own file (Oct 21, 2026): while a deploy
+# builds, a refresh can outlast the 5 minutes to the next run, and two runs
+# writing the same file left neither readable
 if [ ! -s "$pipe_cache" ] || [ -n "$(find "$pipe_cache" -mmin +29 2>/dev/null)" ] \
-   || ! grep -q '"fingerprints":' "$pipe_cache" 2>/dev/null; then
-  pipeline_stats > "$pipe_cache.tmp" 2>/dev/null \
-    && python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$pipe_cache.tmp" 2>/dev/null \
-    && mv "$pipe_cache.tmp" "$pipe_cache"
-  rm -f "$pipe_cache.tmp"
+   || ! grep -q '"took_ms":' "$pipe_cache" 2>/dev/null; then
+  (
+    flock -n 9 || exit 0
+    tmp="$pipe_cache.$$.tmp"
+    pipeline_stats > "$tmp" 2>/dev/null \
+      && python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$tmp" 2>/dev/null \
+      && mv "$tmp" "$pipe_cache"
+    rm -f "$tmp"
+  ) 9> logs/pipeline-stats.lock
 fi
 pipeline=$(cat "$pipe_cache" 2>/dev/null || true)
 [ -n "$pipeline" ] || pipeline=null
@@ -475,4 +549,4 @@ pipeline=$(cat "$pipe_cache" 2>/dev/null || true)
   printf '"cert_days_left":%s,' "$days"
   printf '"containers":{%s},' "$containers"
   printf '"pipeline":%s}\n' "$pipeline"
-} > logs/public/status.json.tmp && mv logs/public/status.json.tmp logs/public/status.json
+} > "logs/public/status.json.$$.tmp" && mv "logs/public/status.json.$$.tmp" logs/public/status.json

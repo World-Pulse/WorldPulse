@@ -329,6 +329,33 @@ services:
     entrypoint: /bin/sh -c 'trap exit TERM; while :; do certbot renew --quiet --webroot -w /var/www/certbot || true; sleep 12h & wait $${!}; done'
     logging: *default-logging
 
+  # ─── "THE WORLD IN 60 SECONDS" (plan G9, slice 2; Devon, Oct 21, 2026: "Yes,
+  # once a night") ───────────────────────────────────────────────────────────
+  # Records the World Map's play mode at 5:30 AM New York time each day as a
+  # 720 × 1280 MP4: https://world-pulse.io/uploads/video/world-in-60s-<date>.mp4
+  # (infrastructure/recorder). Not started by deploys: once, by hand:
+  #   docker compose -f docker-compose.prod.yml --env-file .env.prod --profile recorder up -d --build recorder
+  recorder:
+    profiles: ["recorder"]
+    build:
+      context: ./infrastructure/recorder
+    container_name: wp_recorder
+    restart: unless-stopped
+    environment:
+      TZ: America/New_York
+      RECORD_URL: https://world-pulse.io/map?play=24h&frame=vertical&utm_source=video
+      RECORD_AT: "05:30"
+      KEEP_DAYS: "14"
+      OUT_DIR: /out/video
+    volumes:
+      - uploads_data:/out
+    shm_size: "1gb"
+    mem_limit: 1536m
+    cpus: 1.0
+    networks:
+      - wp_net
+    logging: *default-logging
+
   # ─── MONITORING ────────────────────────────────────────────────────────────
   prometheus:
     image: prom/prometheus:v2.54.0

@@ -823,8 +823,10 @@ function MapView({ embed = false }: { embed?: boolean }) {
   // ── Rebuild Supercluster when signals change ───────────────────────────────
 
   useEffect(() => {
-    // While Replay runs it owns the map's points; closing it brings the live ones back
-    if (timelineActive) return
+    // While Replay runs it owns the map's points; closing it brings the live ones back.
+    // Play mode (/map?play=24h) starts in Replay: the index must still be made once,
+    // or Replay has none to draw into (Oct 21, 2026: the recorder's video had no dots)
+    if (timelineActive && scRef.current) return
     let cancelled = false
     ;(async () => {
       const { default: SuperclusterLib } = await import('supercluster')
@@ -3729,8 +3731,9 @@ function MapView({ embed = false }: { embed?: boolean }) {
 
   return (
     <div className={playMode
-      // Covers the site's header and tab bar; a vertical frame is a 9:16 column with black bars
-      ? `fixed top-0 bottom-0 z-[70] flex flex-col bg-wp-bg ${playVertical ? 'left-1/2 -translate-x-1/2 aspect-[9/16] max-w-full shadow-[0_0_0_100vmax_#000]' : 'inset-x-0'}`
+      // Covers the site's header (z-1000) and tab bar (z-900); a vertical frame is a 9:16
+      // column with black bars. (z-70 left both on top: the recorder's first video, Oct 21, 2026)
+      ? `fixed top-0 bottom-0 z-[1050] flex flex-col bg-wp-bg ${playVertical ? 'left-1/2 -translate-x-1/2 aspect-[9/16] max-w-full shadow-[0_0_0_100vmax_#000]' : 'inset-x-0'}`
       : embed
         ? 'absolute inset-0 flex flex-col bg-wp-bg'
         : 'h-[calc(100dvh-52px-56px)] md:h-[calc(100dvh-52px)] flex flex-col bg-wp-bg'}>
