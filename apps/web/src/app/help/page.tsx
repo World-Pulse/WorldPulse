@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { pageMetadata } from '@/lib/page-metadata'
+import { pageMetadata, faqJsonLd, jsonLdText } from '@/lib/page-metadata'
 
 export const metadata: Metadata = pageMetadata({
   path: '/help',
@@ -8,8 +8,10 @@ export const metadata: Metadata = pageMetadata({
   description: 'What "verified" means, how the reliability score works and where WorldPulse gets its news.',
 })
 
-// Plain-language answers, checked against the code (Harbor's draft, plan C2)
-const FAQ: Array<{ q: string; a: React.ReactNode }> = [
+// Plain-language answers, checked against the code (Harbor's draft, plan C2).
+// `text`: an answer with links, in plain words, for the structured data search
+// engines and AI assistants read (K2a, Oct 21, 2026)
+const FAQ: Array<{ q: string; a: React.ReactNode; text?: string }> = [
   {
     q: 'What is WorldPulse?',
     a: 'WorldPulse collects news and open-source signals from around the world, checks how far each can be trusted, and shows them in a live feed, AI digests and a World Map.',
@@ -23,6 +25,7 @@ const FAQ: Array<{ q: string; a: React.ReactNode }> = [
         <Link href="/sources/suggest" className="text-wp-amber underline">/sources/suggest</Link>.
       </>
     ),
+    text: 'From news outlets, wire services, government and institutional feeds and open data sources. Each report keeps a link to the original. The full list is on the Sources page (world-pulse.io/sources), and you can suggest one at world-pulse.io/sources/suggest.',
   },
   {
     q: 'What does "verified" mean?',
@@ -31,6 +34,7 @@ const FAQ: Array<{ q: string; a: React.ReactNode }> = [
         A story is marked verified when two or more outlets (websites) report it and its reliability score reaches 65%. Reports from the same outlet, or copies of one article, don&apos;t count twice. An AI check then reads the reports and looks for contradictions on facts such as where, who and how many. Verified means &ldquo;more than one outlet says so&rdquo;, not &ldquo;proven true&rdquo;. <Link href="/how-we-count" className="text-wp-amber underline">How the outlets are counted</Link>.
       </>
     ),
+    text: 'A story is marked verified when two or more outlets (websites) report it and its reliability score reaches 65%. Reports from the same outlet, or copies of one article, don\'t count twice. An AI check then reads the reports and looks for contradictions on facts such as where, who and how many. Verified means "more than one outlet says so", not "proven true". How the outlets are counted: world-pulse.io/how-we-count.',
   },
   {
     q: 'What is the reliability score?',
@@ -62,6 +66,7 @@ const FAQ: Array<{ q: string; a: React.ReactNode }> = [
         <Link href="/pricing" className="text-wp-amber underline">Pricing</Link>).
       </>
     ),
+    text: 'Yes, and an MCP server for AI assistants. The public endpoints work without signing up or a key; see the developer page (world-pulse.io/developers). Everything is free today; a Pro plan is coming (world-pulse.io/pricing).',
   },
   {
     // Devon, Oct 21, 2026: the hosted API is "Free with credit; companies ask"
@@ -77,12 +82,17 @@ const FAQ: Array<{ q: string; a: React.ReactNode }> = [
         <Link href="/sources/suggest" className="text-wp-amber underline">/sources/suggest</Link>.
       </>
     ),
+    text: 'Email support@world-pulse.io. To suggest a news source, use world-pulse.io/sources/suggest.',
   },
 ]
+
+/** Every answer in plain text: an answer with links has its own `text` */
+const FAQ_TEXT = FAQ.map(i => ({ q: i.q, text: i.text ?? (typeof i.a === 'string' ? i.a : '') })).filter(i => i.text)
 
 export default function HelpPage() {
   return (
     <div className="min-h-screen bg-wp-bg text-wp-text">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdText(faqJsonLd(FAQ_TEXT)) }} />
       <main className="max-w-2xl mx-auto px-4 py-10">
         <h1 className="text-2xl font-bold text-wp-text">Help &amp; FAQ</h1>
         <p className="text-sm text-wp-text3 mt-1 mb-8">How to read what you see on WorldPulse.</p>

@@ -94,6 +94,57 @@ export function newsArticleJsonLd(s: {
 }
 
 /**
+ * A page that lists stories, for search engines (schema.org CollectionPage
+ * with an ItemList and a BreadcrumbList; K2a, Oct 21, 2026: country pages
+ * carried no structured data). `trail` is the path to the page: Home is added.
+ */
+export function storyListJsonLd(p: {
+  path: string
+  name: string
+  description: string
+  stories: ReadonlyArray<{ id: string; title: string }>
+  trail: ReadonlyArray<{ name: string; path: string }>
+}): Record<string, unknown> {
+  const url = `${SITE_URL}${p.path}`
+  const crumbs = [{ name: SITE_NAME, path: '/' }, ...p.trail]
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'CollectionPage',
+        '@id': url,
+        url,
+        name: p.name,
+        description: p.description,
+        isPartOf: { '@type': 'WebSite', name: SITE_NAME, url: SITE_URL },
+        mainEntity: {
+          '@type': 'ItemList',
+          itemListElement: p.stories.map((s, i) => ({
+            '@type': 'ListItem',
+            position: i + 1,
+            url: `${SITE_URL}/signals/${s.id}`,
+            name: s.title.length > 110 ? `${s.title.slice(0, 109)}…` : s.title,
+          })),
+        },
+      },
+      {
+        '@type': 'BreadcrumbList',
+        itemListElement: crumbs.map((c, i) => ({ '@type': 'ListItem', position: i + 1, name: c.name, item: `${SITE_URL}${c.path === '/' ? '' : c.path}` })),
+      },
+    ],
+  }
+}
+
+/** Questions and answers in plain text, for search engines and AI assistants (schema.org FAQPage; K2a) */
+export function faqJsonLd(items: ReadonlyArray<{ q: string; text: string }>): Record<string, unknown> {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: items.map(i => ({ '@type': 'Question', name: i.q, acceptedAnswer: { '@type': 'Answer', text: i.text } })),
+  }
+}
+
+/**
  * JSON-LD as script text: "<" written as < so a headline can't close the
  * script tag (as Next's JSON-LD guide advises)
  */

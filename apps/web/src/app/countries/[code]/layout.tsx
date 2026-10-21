@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { pageMetadata, metaDescription } from '@/lib/page-metadata'
+import { pageMetadata, metaDescription, storyListJsonLd, jsonLdText } from '@/lib/page-metadata'
 import { cachedFetch } from '@/lib/server-fetch'
 
 // The page itself is a client component, so its HTML used to carry no
@@ -86,8 +86,21 @@ export default async function Layout(
   const country = validCode(code) ? await fetchCountry(code.toUpperCase()) : null
   const stories = country && country !== 'unavailable' ? country.stories : []
 
+  const upper = code.toUpperCase()
+  // For search engines: the page as a list of its stories, under Home › Countries (K2a)
+  const jsonLd = stories.length > 0 && country && country !== 'unavailable'
+    ? storyListJsonLd({
+        path: `/countries/${upper}`,
+        name: `${country.name} news today: verified stories`,
+        description: `Verified stories about ${country.name} from independent outlets, each with how many outlets reported it.`,
+        stories,
+        trail: [{ name: 'Countries', path: '/countries' }, { name: country.name, path: `/countries/${upper}` }],
+      })
+    : null
+
   return (
     <>
+      {jsonLd && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdText(jsonLd) }} />}
       {children}
       {stories.length > 0 && country && country !== 'unavailable' && (
         // The same stories the page lists, as plain links for search engines
