@@ -207,7 +207,7 @@ export function startFirmsPoller(
         const severity = firmsSeverity(cell.frp)
 
         // ── Smart headline: reverse-geocode coordinates to a real place name ──
-        let locationName = `${cell.lat.toFixed(1)}°N, ${cell.lng.toFixed(1)}°E`
+        let locationName = `${Math.abs(cell.lat).toFixed(1)}°${cell.lat < 0 ? 'S' : 'N'}, ${Math.abs(cell.lng).toFixed(1)}°${cell.lng < 0 ? 'W' : 'E'}`
         let countryCode: string | null = null
         let regionName: string | null = null
         try {

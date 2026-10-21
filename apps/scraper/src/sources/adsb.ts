@@ -174,7 +174,7 @@ export function startAdsbPoller(
             summary:           [
               `Aircraft ${callsign} (ICAO: ${icao24}) from ${country}`,
               `is transmitting squawk code ${squawk}: ${info.description}.`,
-              lat != null && lng != null ? `Last position: ${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E` : '',
+              lat != null && lng != null ? `Last position: ${Math.abs(lat).toFixed(4)}°${lat < 0 ? 'S' : 'N'}, ${Math.abs(lng).toFixed(4)}°${lng < 0 ? 'W' : 'E'}` : '',
               'Source: OpenSky Network (ADS-B telemetry)',
             ].filter(Boolean).join(' '),
             category:          info.category,

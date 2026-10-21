@@ -56,6 +56,8 @@ function parseBbox(raw: string): { coords: [number, number, number, number] } | 
 
 // ─── Cache TTLs ───────────────────────────────────────────────────────────────
 const MAP_CACHE_TTL    = 45  // seconds — map points (expensive PostGIS queries)
+/** Titles a scraper falls back to when a page's own title can't be read (lower case) */
+const PLACEHOLDER_TITLES = ['title of the page', 'untitled', 'untitled document', 'no title', 'document', 'home']
 const MAP_KEEP_SECONDS = 15 * 60 // map points older than MAP_CACHE_TTL are still served this long while the next is made
 const MAP_QUERY_SECONDS = 30 // the map points query's own time limit, off the request path (lib/long-query.ts)
 const DETAIL_CACHE_TTL = 60  // seconds — signal detail (view count incremented async)
@@ -916,6 +918,9 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       // (6% of its newest 500 points, Oct 11, 2026); the scraper no longer
       // saves them.
       .whereRaw("NOT (tags @> ARRAY['gdelt']::text[] AND title ~ ?)", [EVENT_TEMPLATE_SQL])
+      // A page whose real title the scraper couldn't read ("Title of the
+      // Page", seen Oct 21, 2026) is not a headline either.
+      .whereRaw(`lower(btrim(title)) NOT IN (${PLACEHOLDER_TITLES.map(() => '?').join(', ')})`, PLACEHOLDER_TITLES)
       .select(lean
         ? [
             'id', 'title', 'category', 'severity', 'status',
