@@ -12,6 +12,7 @@
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
 import { MORE_COUNTRIES, ABBREVIATED_COUNTRIES, US_STATES, countryNameOf } from './world-countries'
+import { INTL_COUNTRY_NAMES } from './country-names-intl'
 
 export interface GeoResult {
   point:        boolean
@@ -373,6 +374,8 @@ const COUNTRY_PATTERNS: [RegExp, string][] = [
   // …and every other country (world-countries.ts: "Panama", "Vanuatu", "Slovenia" named no country before Oct 11, 2026)
   ...MORE_COUNTRIES.map((entry): [RegExp, string] => [entry.pattern, entry.code]),
   ...ABBREVIATED_COUNTRIES,
+  // …and their French, Spanish and Portuguese names ("Sénégal", "États-Unis", "Moçambique": country-names-intl.ts, Oct 21, 2026)
+  ...INTL_COUNTRY_NAMES,
 ]
 
 /**
@@ -385,6 +388,26 @@ const COUNTRY_MATCHERS: [RegExp, string][] = COUNTRY_PATTERNS.map(([pattern, cod
   NO_PLURAL.has(code) || !pattern.source.endsWith(')\\b')
     ? [pattern, code]
     : [new RegExp(`${pattern.source.slice(0, -2)}s?\\b`, pattern.flags), code])
+
+/**
+ * Names an outlet's own country goes by at home (round 5, Oct 21, 2026). A
+ * Brazzaville outlet's bare "Congo" is the Republic of the Congo (ACI's
+ * "Congo/Elections : ..."), but read alone "Congo" is DR Congo, the bigger
+ * news country: 6 of ACI's 10 items went there. A Mauritian outlet's
+ * "Maurice" is Mauritius; elsewhere it is mostly a first name, and 9 of Top
+ * FM's 10 items found no place. Applied to the outlet's own headline and
+ * summary only, and not when the text names the other Congo.
+ */
+const HOME_NAMES: Record<string, { name: RegExp; as: string; unless?: RegExp }> = {
+  CG: { name: /\bcongo\b(?![-\s]brazzaville)/gi, as: 'Congo-Brazzaville', unless: /\b(?:rdc|rd[-\s]?congo|drc|dr congo|d[ée]mocratique|democratic|kinshasa)\b/i },
+  MU: { name: /(?<![\p{L}\p{N}])maurice(?![\p{L}\p{N}])/giu, as: 'Mauritius' },
+}
+
+export function withHomeNames(text: string, countryCode: string | null | undefined): string {
+  const rule = countryCode ? HOME_NAMES[countryCode.toUpperCase()] : undefined
+  if (!rule || !text || (rule.unless && rule.unless.test(text))) return text
+  return text.replace(rule.name, rule.as)
+}
 
 /** Countries the text names, in order of first mention (the headline comes first) */
 export function mentionedCountries(text: string): string[] {

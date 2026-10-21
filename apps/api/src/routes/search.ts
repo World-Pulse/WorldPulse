@@ -57,6 +57,35 @@ async function recentTags(): Promise<CountedTag[]> {
   }, async () => [])
 }
 
+/**
+ * The search's "Tags" pills: tags that appear with the query's tag in the
+ * last 7 days, most used first. Oct 21, 2026: counted over all time, a tag a
+ * busy country's outlets put on every report ("nigeria") matched so many
+ * reports that the count ran past the 5-second limit even through the tag
+ * index (5.35 s, then no tags), and every "All" search, the page's default,
+ * waited for it. The 7-day window keeps the count small, a 2-second limit of
+ * its own keeps a slow count from holding the page (no tags then), and the
+ * tags every news report carries are left out: "news", "rss", its severity
+ * and its outlet's two-letter country code matched every result and told the
+ * reader nothing ("#rss · 775" for "ukraine").
+ */
+export const RELATED_TAG_SECONDS = 2
+
+export function relatedTagsQuery(q: string, limit: number): { sql: string; bindings: Array<string | number> } {
+  return {
+    sql: `SELECT tag, COUNT(*) AS count
+            FROM signals, unnest(tags) AS tag
+           WHERE tags @> ARRAY[?]::text[]
+             AND created_at >= now() - interval '7 days'
+             AND tag NOT IN ('news', 'rss', 'critical', 'high', 'medium', 'low', 'info')
+             AND tag !~ '^[a-z]{2}$'
+           GROUP BY tag
+           ORDER BY count DESC
+           LIMIT ?`,
+    bindings: [q.trim().toLowerCase(), limit],
+  }
+}
+
 /** Tags that start with the query first, then tags that contain it, each most used first */
 export function matchTags(tags: CountedTag[], q: string, limit = 5): string[] {
   const needle = q.trim().toLowerCase()
@@ -333,22 +362,14 @@ export const registerSearchRoutes: FastifyPluginAsync = async (app) => {
     }
 
     // ── Tags ──────────────────────────────────────────────────
-    // Simplified: look up tags that contain the query term exactly, ranked by
-    // how many signals carry each tag. tags @> uses idx_signals_tags (GIN);
-    // "? = ANY(tags)" can't, so it read the whole table and ran into the
-    // 5-second limit (5.4 s, answering no tags, and every "All" search waited
-    // for it: 3.6 s against 0.7 s for reports alone; found Oct 20, 2026).
+    // Tags seen with the query's tag (relatedTagsQuery). tags @> uses
+    // idx_signals_tags (GIN); "? = ANY(tags)" can't, so it read the whole
+    // table and ran into the 5-second limit (found Oct 20, 2026).
     if (type === 'all' || type === 'tags') {
+      const { sql, bindings } = relatedTagsQuery(q, type === 'all' ? 5 : pageLimit)
       searchPromises.push(
-        db.raw<{ rows: { tag: string; count: string }[] }>(`
-          SELECT unnest(tags) AS tag, COUNT(*) AS count
-          FROM signals
-          WHERE tags @> ARRAY[?]::text[]
-          GROUP BY tag
-          ORDER BY count DESC
-          LIMIT ?
-        `, [q.toLowerCase(), type === 'all' ? 5 : pageLimit])
-          .then(r => { results.tags = r.rows })
+        longQuery(RELATED_TAG_SECONDS, trx => trx.raw(sql, bindings))
+          .then(r => { results.tags = (r as { rows?: { tag: string; count: string }[] }).rows ?? [] })
           .catch(() => { results.tags = [] })
       )
     }

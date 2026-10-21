@@ -9,6 +9,8 @@
  * Those are kept in Redis and remade off the request path by one process at
  * a time (lib/swr-cache.ts), so they may take longer: SET LOCAL gives this one
  * transaction its own limit, and the connection's own comes back after it.
+ * The same works the other way: the search's tag count gets 2 seconds, so a
+ * slow one can't hold the page (routes/search.ts, Oct 21, 2026).
  */
 
 import type { Knex } from 'knex'

@@ -16,6 +16,10 @@ import { SITE_URL } from '@/lib/page-metadata'
  * charge. Crawler directories say it obeys robots.txt. Every other bot reads
  * as before; machines that want the stories in bulk have the API (/llms.txt
  * points there).
+ *
+ * Oct 21, 2026 (Devon: "Yes proceed to block it"): it didn't obey (6,677 pages
+ * between 8 PM ET on Oct 20 and 7:25 AM the next morning), so nginx answers it
+ * 403 everywhere but this file (nginx/conf.d/worldpulse.conf, $blocked_bot).
  */
 export default function robots(): MetadataRoute.Robots {
   return {

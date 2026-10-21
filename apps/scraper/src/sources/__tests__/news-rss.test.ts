@@ -220,6 +220,17 @@ describe('NEWS_SOURCE_REGISTRY', () => {
     }
   })
 
+  it("drops the feeds our server can't read, Oct 21, 2026", () => {
+    // Paused overnight after failing every poll from the server while answering other networks:
+    // Middle East Eye (404), Guam PDN (429), Jornal Tribuna de Macau (401), Le Quotidien (403),
+    // North Press Agency (403), Hellenic Shipping News (403), Les Nouvelles Calédoniennes (timed out)
+    for (const id of ['middle-east-eye', 'guam-pdn', 'jtm-macau', 'le-quotidien-sn', 'north-press-agency-en',
+                      'hellenic-shipping-news', 'les-nouvelles-caledoniennes']) {
+      expect(NEWS_SOURCE_REGISTRY.find(s => s.id === id)).toBeUndefined()
+      expect(HOME_PIN_SOURCES.has(id)).toBe(false)
+    }
+  })
+
   it('drops the feeds that never answered our server and covers Canada (Oct 17, 2026)', () => {
     for (const id of ['anadolu-en', 'new-arab', 'thaiger', 'reliefweb-updates']) {
       expect(NEWS_SOURCE_REGISTRY.find(s => s.id === id)).toBeUndefined()

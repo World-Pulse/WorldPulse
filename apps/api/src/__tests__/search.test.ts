@@ -59,6 +59,8 @@ import {
   SearchQuerySchema,
   EntityQuerySchema,
   AutocompleteQuerySchema,
+  relatedTagsQuery,
+  RELATED_TAG_SECONDS,
 } from '../routes/search'
 
 describe('SearchQuerySchema — Zod validation', () => {
@@ -599,5 +601,37 @@ describe('Autocomplete short-circuit', () => {
 
   it('returns false (proceed) when q is multiple characters', () => {
     expect(isAutocompleteTooShort('ukraine')).toBe(false)
+  })
+})
+
+describe('relatedTagsQuery — the "Tags" pills (Oct 21, 2026)', () => {
+  const { sql, bindings } = relatedTagsQuery('  Nigeria ', 5)
+
+  it('filters through the tag index, never "? = ANY(tags)"', () => {
+    expect(sql).toContain('tags @> ARRAY[?]::text[]')
+    expect(sql).not.toMatch(/=\s*ANY\s*\(\s*tags/i)
+  })
+
+  it('counts the last 7 days only, so a busy tag stays under the limit', () => {
+    expect(sql).toContain("created_at >= now() - interval '7 days'")
+  })
+
+  it('leaves out the tags every news report carries', () => {
+    for (const t of ['news', 'rss', 'critical', 'high', 'medium', 'low', 'info']) expect(sql).toContain(`'${t}'`)
+    expect(sql).toContain("tag !~ '^[a-z]{2}$'")
+    const twoLetters = /^[a-z]{2}$/
+    expect(twoLetters.test('ng')).toBe(true)
+    expect(twoLetters.test('ngo')).toBe(false)
+    expect(twoLetters.test('state-media')).toBe(false)
+  })
+
+  it('binds the trimmed, lower-cased query and the limit, in order', () => {
+    expect(bindings).toEqual(['nigeria', 5])
+    expect((sql.match(/\?/g) ?? []).length).toBe(2)
+  })
+
+  it('gives the count less time than the pool\'s 5 seconds', () => {
+    expect(RELATED_TAG_SECONDS).toBeGreaterThanOrEqual(1)
+    expect(RELATED_TAG_SECONDS).toBeLessThan(5)
   })
 })

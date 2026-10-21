@@ -102,8 +102,9 @@ export const MORE_COUNTRIES: CountryEntry[] = [
   c('TD', 'Chad', /\b(?:chadian|in chad|n['’]djamena)\b/i, "N'Djamena", 12.13, 15.06),
   // French "Comores" and the islands too (round 4, Oct 20, 2026: 15 of HZK-Presse's 20 items found no place)
   c('KM', 'Comoros', /\b(?:comoros|comores|comorian|comorien(?:ne)?|anjouan|moh[eé]li)\b/i, 'Moroni', -11.70, 43.26),
-  c('CG', 'Republic of the Congo', /\b(?:(?<!democratic )republic of the congo|congo[-\s]brazzaville|brazzaville)\b/i, 'Brazzaville', -4.27, 15.28),
-  c('CD', 'DR Congo', /\b(?:democratic republic of (?:the )?congo|dr congo|drc|congolese|(?<!republic of the )congo(?![-\s]brazzaville))\b/i, 'Kinshasa', -4.44, 15.27),
+  // French, Spanish and Portuguese "République du Congo" too: it read as DR Congo (round 5, Oct 21, 2026)
+  c('CG', 'Republic of the Congo', /\b(?:(?<!democratic )republic of the congo|r[ée]publique du congo|rep[uú]blica del? congo|rep[uú]blica do congo|congo[-\s]brazzaville|brazzaville)\b/i, 'Brazzaville', -4.27, 15.28),
+  c('CD', 'DR Congo', /\b(?:democratic republic of (?:the )?congo|dr congo|drc|congolese|(?<!republic of the |r[ée]publique du |rep[uú]blica del? |rep[uú]blica do )congo(?![-\s]brazzaville))\b/i, 'Kinshasa', -4.44, 15.27),
   c('CI', "Côte d'Ivoire", /\b(?:ivory coast|c[oô]te d['’]ivoire|ivorian)\b/i, 'Abidjan', 5.36, -4.01),
   c('DJ', 'Djibouti', /\bdjibouti\b/i, 'Djibouti', 11.59, 43.15),
   // (Spanish "Guinea Ecuatorial" too: it read as Guinea, Oct 20, 2026)
