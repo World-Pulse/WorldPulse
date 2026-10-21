@@ -75,12 +75,25 @@ describe('NEWS_SOURCE_REGISTRY', () => {
 
   it('carries the official and regional feeds added Oct 20, 2026 (plan R2), pinning only the one-country ones at home', () => {
     const ids = new Set(NEWS_SOURCE_REGISTRY.map(s => s.id))
-    for (const id of ['un-press', 'ec-press-corner', 'uk-fcdo', 'boe-news', 'icc-news', 'icrc-news', 'radio-tamazuj', 'studio-tamani', 'times-central-asia', 'tico-times']) {
+    // Radio Tamazuj left on Oct 21, 2026: it failed every poll from the server (Q5 round 6)
+    for (const id of ['un-press', 'ec-press-corner', 'uk-fcdo', 'boe-news', 'icc-news', 'icrc-news', 'studio-tamani', 'times-central-asia', 'tico-times']) {
       expect(ids.has(id)).toBe(true)
     }
     for (const id of ['boe-news', 'ec-press-corner', 'studio-tamani', 'tico-times']) expect(HOME_PIN_SOURCES.has(id)).toBe(true)
     // stories from these range over many countries
-    for (const id of ['un-press', 'uk-fcdo', 'icc-news', 'icrc-news', 'radio-tamazuj', 'times-central-asia']) expect(HOME_PIN_SOURCES.has(id)).toBe(false)
+    for (const id of ['un-press', 'uk-fcdo', 'icc-news', 'icrc-news', 'times-central-asia']) expect(HOME_PIN_SOURCES.has(id)).toBe(false)
+  })
+
+  it('Q5 round 6 (Oct 21, 2026): six feeds the server failed to read all day are out, two in their place', () => {
+    const ids = new Set(NEWS_SOURCE_REGISTRY.map(s => s.id))
+    for (const id of ['colombia-reports', 'eye-radio-ss', 'eyewitness-news-bs', 'radio-tamazuj', 'tasr-en', 'lsm-en']) {
+      expect(ids.has(id)).toBe(false)
+      expect(HOME_PIN_SOURCES.has(id)).toBe(false)
+    }
+    expect(ids.has('city-paper-bogota') && ids.has('sudans-post')).toBe(true)
+    // Bogotá's own paper falls back to Bogotá; Sudans Post covers two countries
+    expect(HOME_PIN_SOURCES.has('city-paper-bogota')).toBe(true)
+    expect(HOME_PIN_SOURCES.has('sudans-post')).toBe(false)
   })
 
   it('carries the second batch added Oct 20, 2026 (R2b)', () => {

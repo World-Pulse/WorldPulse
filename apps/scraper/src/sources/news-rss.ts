@@ -2615,20 +2615,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     language:        'en',
   },
   {
-    id:              'radio-tamazuj',
-    name:            'Radio Tamazuj',
-    feedUrl:         'https://www.radiotamazuj.org/en/feed',
-    category:        'geopolitics',
-    biasLabel:       'center',
-    reliability:     0.80,
-    countryCode:     'SS',
-    defaultLat:      4.85,
-    defaultLng:      31.58,
-    defaultLocation: 'Juba, South Sudan',
-    extraTags:       ['south-sudan', 'sudan', 'east-africa', 'africa', 'independent-media'],
-    language:        'en',
-  },
-  {
     id:              'studio-tamani',
     name:            'Studio Tamani (Mali)',
     feedUrl:         'https://www.studiotamani.org/feed',
@@ -2688,6 +2674,25 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLng:      32.56,
     defaultLocation: 'Khartoum, Sudan',
     extraTags:       ['sudan', 'darfur', 'east-africa', 'africa', 'independent-media'],
+    language:        'en',
+  },
+  // independent news site on South Sudan and Sudan (Juba), about 9 items a day; robots.txt allows all;
+  // its terms ask for approval before its content is redistributed for commercial
+  // purposes: like every feed here, only the headline, the feed's own text (600
+  // characters at most) and the link are kept (Oct 21, 2026, Q5 round 6: Eye
+  // Radio and Radio Tamazuj failed every poll from the server)
+  {
+    id:              'sudans-post',
+    name:            'Sudans Post',
+    feedUrl:         'https://sudanspost.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.72,
+    countryCode:     'SS',
+    defaultLat:      4.85,
+    defaultLng:      31.58,
+    defaultLocation: 'Juba, South Sudan',
+    extraTags:       ['south-sudan', 'sudan', 'east-africa', 'africa', 'independent-media'],
     language:        'en',
   },
   {
@@ -2907,21 +2912,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLng:      24.75,
     defaultLocation: 'Tallinn, Estonia',
     extraTags:       ['estonia', 'baltics', 'europe', 'public-broadcaster'],
-    language:        'en',
-  },
-  // Latvia's public broadcaster, English service
-  {
-    id:              'lsm-en',
-    name:            'LSM (Latvian Public Media, English)',
-    feedUrl:         'https://eng.lsm.lv/rss/',
-    category:        'geopolitics',
-    biasLabel:       'center',
-    reliability:     0.86,
-    countryCode:     'LV',
-    defaultLat:      56.95,
-    defaultLng:      24.11,
-    defaultLocation: 'Riga, Latvia',
-    extraTags:       ['latvia', 'baltics', 'europe', 'public-broadcaster'],
     language:        'en',
   },
   // Lithuania's public broadcaster, English service
@@ -3507,21 +3497,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLng:      36.28,
     defaultLocation: 'Damascus, Syria',
     extraTags:       ['syria', 'middle-east', 'independent-media'],
-    language:        'en',
-  },
-  // Juba radio and news site
-  {
-    id:              'eye-radio-ss',
-    name:            'Eye Radio (South Sudan)',
-    feedUrl:         'https://eyeradio.org/feed/',
-    category:        'geopolitics',
-    biasLabel:       'center',
-    reliability:     0.74,
-    countryCode:     'SS',
-    defaultLat:      4.85,
-    defaultLng:      31.58,
-    defaultLocation: 'Juba, South Sudan',
-    extraTags:       ['south-sudan', 'east-africa', 'africa'],
     language:        'en',
   },
   // Monrovia daily
@@ -4547,21 +4522,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['italy', 'southern-europe', 'europe', 'analysis'],
     language:        'en',
   },
-  // the News Agency of the Slovak Republic's English newswire (NewsNow)
-  {
-    id:              'tasr-en',
-    name:            'TASR (Slovakia, English)',
-    feedUrl:         'https://newsnow.tasr.sk/rss/',
-    category:        'geopolitics',
-    biasLabel:       'center',
-    reliability:     0.76,
-    countryCode:     'SK',
-    defaultLat:      48.15,
-    defaultLng:      17.11,
-    defaultLocation: 'Bratislava, Slovakia',
-    extraTags:       ['slovakia', 'central-europe', 'europe', 'news-agency'],
-    language:        'en',
-  },
   // Iceland's longest-running English-language publication (founded 1963), now online with daily news
   {
     id:              'iceland-review',
@@ -4803,6 +4763,23 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLocation: 'Bogotá, Colombia',
     extraTags:       ['colombia', 'south-america', 'latin-america', 'analysis'],
     language:        'es',
+  },
+  // Bogotá's English-language newspaper; no terms page; robots.txt allows all; about
+  // 5 items a week (Oct 21, 2026, Q5 round 6: Colombia Reports' feed now answers with
+  // a web page)
+  {
+    id:              'city-paper-bogota',
+    name:            'The City Paper Bogotá',
+    feedUrl:         'https://thecitypaperbogota.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.72,
+    countryCode:     'CO',
+    defaultLat:      4.71,
+    defaultLng:      -74.07,
+    defaultLocation: 'Bogotá, Colombia',
+    extraTags:       ['colombia', 'south-america', 'latin-america'],
+    language:        'en',
   },
   // Santiago news radio, all-news feed (about 3 items an hour)
   {
@@ -6040,21 +6017,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['antigua-and-barbuda', 'caribbean', 'state-media'],
     language:        'en',
   },
-  // Nassau news site; headlines and links only (its feed has no summaries)
-  {
-    id:              'eyewitness-news-bs',
-    name:            'Eye Witness News (Bahamas)',
-    feedUrl:         'https://ewnews.com/feed/',
-    category:        'geopolitics',
-    biasLabel:       'center',
-    reliability:     0.72,
-    countryCode:     'BS',
-    defaultLat:      25.05,
-    defaultLng:      -77.35,
-    defaultLocation: 'Nassau, Bahamas',
-    extraTags:       ['bahamas', 'caribbean'],
-    language:        'en',
-  },
   // La Paz digital daily (its latest-news feed); Spanish, so no home pin
   {
     id:              'vision-360-bo',
@@ -6599,21 +6561,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLng:      -79.52,
     defaultLocation: 'Panama City, Panama',
     extraTags:       ['panama', 'central-america', 'latin-america'],
-    language:        'en',
-  },
-  // not-for-profit English-language news site on Colombia (Medellín); about one item a day
-  {
-    id:              'colombia-reports',
-    name:            'Colombia Reports',
-    feedUrl:         'https://colombiareports.com/feed/',
-    category:        'geopolitics',
-    biasLabel:       'center',
-    reliability:     0.72,
-    countryCode:     'CO',
-    defaultLat:      4.71,
-    defaultLng:      -74.07,
-    defaultLocation: 'Bogotá, Colombia',
-    extraTags:       ['colombia', 'south-america', 'latin-america', 'independent-media'],
     language:        'en',
   },
   // Santo Domingo daily; no terms page (footer: all rights reserved); Spanish, so no home pin
@@ -8216,14 +8163,14 @@ export const HOME_PIN_SOURCES = new Set([
   'radio-dabanga', 'post-courier-pg', 'vanuatu-daily-post', 'economynext-lk', 'amu-tv', 'shafaq-iraq',
   'eu-council',
   // Oct 20, 2026 (Q5, batch A): national outlets; a story that names no place is pinned at home
-  'notes-from-poland', 'daily-news-hungary', 'bnr-en', 'novinite-bg', 'err-news', 'lsm-en',
+  'notes-from-poland', 'daily-news-hungary', 'bnr-en', 'novinite-bg', 'err-news', 
   'lrt-en', 'sarajevo-times', 'newsinenglish-no', 'ruv-en', 'rte-news', 'radio-prague-en',
   'romania-insider', 'croatia-week', 'total-croatia-news', 'radio-sweden', 'yle-news',
   'helsinki-times', 'copenhagen-post', 'portugal-resident', 'the-shift-mt', 'tovima-en',
   'rtl-today-lu', 'slovak-spectator', 'independent-ug', 'nile-post-ug', 'nation-malawi',
   'the-namibian', 'kun-uz-en', 'daryo-uz-en', 'astana-times', 'asia-plus-tj', 'bianet-en',
   'taarifa-rw', 'arab-times-kw', 'times-of-oman', 'news-of-bahrain', 'somali-guardian',
-  'ethiopia-insight', 'syria-direct', 'eye-radio-ss', 'frontpage-africa',
+  'ethiopia-insight', 'syria-direct', 'frontpage-africa',
   'mimi-mefo-info', 'myjoyonline-gh', 'naharnet', 'hong-kong-free-press', 'camboja-news',
   'businessworld-ph', 'kaniva-tonga', 'korea-herald', 'onlinekhabar-en', 'laotian-times',
   'prachatai-en', 'sibc-sb', 'solomon-times', 'talamua-ws', 'tatoli-en', 'tuoi-tre-news',
@@ -8232,7 +8179,7 @@ export const HOME_PIN_SOURCES = new Set([
   'caracas-chronicles', 'dominican-today', 'jamaica-observer', 'tribune-242', 'amandala-bz',
   'st-lucia-times', 'kaieteur-news', 'nation-news-bb', 'trinidad-express',
   // Oct 20, 2026 (Q5, round 2)
-  'serbian-monitor', 'business-review-ro', 'wanted-in-rome', 'budapest-times', 'tasr-en',
+  'serbian-monitor', 'business-review-ro', 'wanted-in-rome', 'budapest-times', 
   'iceland-review', 'reykjavik-grapevine', 'newswire-lk', 'rthk-en', 'japan-forward',
   '1news-nz', 'now-grenada', 'iwitness-news-vc', 'bernews-bm', 'cayman-news-service',
   'cnc3-tt', 'zambia-monitor', 'cite-zw', '263chat-zw', 'sunday-standard-bw', 'botswana-gazette',
@@ -8242,13 +8189,13 @@ export const HOME_PIN_SOURCES = new Set([
   'kerr-fatou-gm', 'sierraloaded-sl', 'libya-review', 'kt-press-rw', 'windhoek-observer',
   'hetq-am', 'evn-report', 'tdh-turkmenistan', 'monaco-life', 'newsbook-mt',
   'gulf-times-qatar', 'times-kuwait', 'iraq-business-news', 'antigua-news',
-  'eyewitness-news-bs', '7news-belize', 'demerara-waves', 'jamaica-gleaner', 'vbtc-vu',
+  '7news-belize', 'demerara-waves', 'jamaica-gleaner', 'vbtc-vu',
   // Oct 20/21, 2026 (Q5, round 4)
   'euronews-albania', 'diplomat-in-spain', 'zf-english-ro', 'ammon-news-en',
   'news-central-asia-tm', 'tengrinews-en', 'gazeta-uz-en', 'globes-en', 'sixth-tone',
   'focus-taiwan', 'new-bloom', 'cambodia-investment-review', 'khabarhub-en', 'malaysiakini-en',
   'vietnamplus-en', 'fiji-one-news', 'island-sun-sb', 'in-depth-solomons', 'opm-pressroom-dm',
-  'newsroom-panama', 'colombia-reports', 'our-news-bs', 'le360-en', 'almarsad-en',
+  'newsroom-panama', 'city-paper-bogota', 'our-news-bs', 'le360-en', 'almarsad-en',
   'analyst-liberia', '3news-gh', 'egyptian-streets', 'newsday-ls', 'the-reporter-ls',
   'sunday-express-ls', 'zambian-business-times', 'capital-ethiopia', 'newshawks-zw',
   'sabc-news',

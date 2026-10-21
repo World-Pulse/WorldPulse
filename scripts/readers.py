@@ -52,6 +52,13 @@ itself in its user agent (AhrefsBot, python-requests, HeadlessChrome…), with
 the parts of the site bots read ("bots", "bot_pages"). Bots only: nothing
 about people changes.
 
+Readers' languages (plans L4 and L5, Oct 21, 2026): the main language each
+counted reader's browser asks for (the first of its Accept-Language, as its
+code only: "en", "es", "fr"), summed for the day ("people_languages"), so
+WorldPulse can tell which language to offer next. Counts only; nothing else
+from the header is kept. Lines logged before nginx recorded it count as "not
+recorded".
+
 For HQ's cause-and-effect timeline and morning summary (Oct 11, 2026): the
 hour (UTC) each visitor arrived, by channel, for today and yesterday
 ("hourly"), and which post or email brought them ("posts"): links in HQ's
@@ -90,6 +97,7 @@ LINE = re.compile(
     r'^(?P<ts>\S+) (?P<ip>\S+) - \S+ \[[^\]]+\] "(?P<method>[A-Z]+) (?P<target>\S+) [^"]*" (?P<status>\d{3}) \S+ '
     r'"(?P<ref>[^"]*)" "(?P<ua>[^"]*)"(?P<rest>.*)$')
 HOST = re.compile(r'\bhost=(\S+)')
+LANG = re.compile(r'\blang="([^"]*)"')
 
 # Not page views: the API, Next.js assets and data requests, files, health checks
 NOT_PAGE = re.compile(
@@ -272,6 +280,18 @@ def channel(query, ref):
     return 'other sites'
 
 
+def primary_language(line_rest):
+    """The code of the first language a browser asks for ("es" for "es-MX,es;q=0.9,en;q=0.8"); None when the line has none"""
+    m = LANG.search(line_rest or '')
+    if not m:
+        return None
+    first = m.group(1).split(',')[0].split(';')[0].strip().lower()
+    if first in ('', '-', '*'):
+        return 'not sent'   # nginx logs a missing header as "-"
+    code = first.split('-')[0]
+    return code if re.fullmatch(r'[a-z]{2,3}', code) else 'other'
+
+
 def post_key(query):
     """'hq:83b746ee' for a link from an HQ post draft or an email briefing, else None"""
     q = parse_qs(query)
@@ -309,7 +329,7 @@ def per_visitor(views, people):
 def summary(d):
     """The day's totals, counting only visitors whose browser ran the page"""
     channels, pages, sites, views, people, unconfirmed, scripts_only, sign_in_only = {}, {}, {}, 0, 0, 0, 0, 0
-    hours, posts, agents, sections = {}, {}, {}, {}
+    hours, posts, agents, sections, languages = {}, {}, {}, {}, {}
     # Page views by the channel that brought each visitor (plan G18 (3), Oct 20, 2026):
     # whether readers who came from X, search or a post read a second story
     channel_views = {}
@@ -334,6 +354,7 @@ def summary(d):
             continue
         people += 1
         add(agents, v.get('a') or 'other')
+        add(languages, v.get('l') or 'not recorded')
         for section, n in (v.get('q') or {}).items():
             add(sections, section, n)
         ch, site = v.get('c') or 'direct', v.get('s')
@@ -358,6 +379,7 @@ def summary(d):
             'bots': top_bots(d), 'bot_pages': by_count(d.get('bot_pages') or {}, 12), 'bots_since': d.get('bots_since'),
             'unconfirmed': unconfirmed, 'scripts_only': scripts_only, 'sign_in_only': sign_in_only, 'rule': 'api, no sign-in pages',
             'people_agents': by_count(agents, 8), 'people_sections': by_count(sections, 12),
+            'people_languages': by_count(languages, 12),
             'hours': dict(sorted(hours.items())), 'posts': by_count(posts, 20)}
 
 
@@ -506,6 +528,9 @@ def count(st, lines):
             if k:
                 v['k'] = k
             v['a'] = agent_family(ua)
+            lang = primary_language(m['rest'])
+            if lang:
+                v['l'] = lang
         add(v['p'], page_kind(path))
         add(v.setdefault('q', {}), bot_section(path))
     return newest
