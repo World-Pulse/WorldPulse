@@ -119,19 +119,25 @@ export class OverlayLayers {
     const source = map.getSource(sourceId(key))
     if (source) { source.setData(data); return }
     map.addSource(sourceId(key), { type: 'geojson', data })
+    const size = ['coalesce', ['get', 'size'], 0]
     map.addLayer({
       id: layerId(key),
       type: 'circle',
       source: sourceId(key),
+      // sized circles: the small ones on top, so each stays clickable
+      ...(def.sized ? { layout: { 'circle-sort-key': ['-', 1, size] } } : {}),
       paint: {
         // a point may carry its own colour (a plant's status), else the layer's
         'circle-color': ['coalesce', ['get', 'color'], def.color],
-        'circle-opacity': 0.85,
-        'circle-radius': def.bySeverity
-          ? ['match', ['get', 'severity'], 'critical', 8, 'high', 6.5, 'medium', 5.5, 4.5]
-          : ['interpolate', ['linear'], ['zoom'], 1, 4, 6, 6.5],
-        'circle-stroke-color': 'rgba(8,12,20,0.9)',
-        'circle-stroke-width': 1.5,
+        'circle-opacity': def.sized ? 0.45 : 0.85,
+        'circle-radius': def.sized
+          // the circle's area follows the count: "size" is its square root, 0 to 1
+          ? ['interpolate', ['linear'], ['zoom'], 1, ['+', 3, ['*', 22, size]], 5, ['+', 4, ['*', 40, size]]]
+          : def.bySeverity
+            ? ['match', ['get', 'severity'], 'critical', 8, 'high', 6.5, 'medium', 5.5, 4.5]
+            : ['interpolate', ['linear'], ['zoom'], 1, 4, 6, 6.5],
+        'circle-stroke-color': def.sized ? def.color : 'rgba(8,12,20,0.9)',
+        'circle-stroke-width': def.sized ? 1 : 1.5,
       },
     })
     onLayer(map, 'mouseenter', layerId(key), () => { map.getCanvas().style.cursor = 'pointer' })

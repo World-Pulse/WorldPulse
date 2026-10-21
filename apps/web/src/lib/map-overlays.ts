@@ -18,16 +18,22 @@
  * our own server (public/geo/, built by scripts/map-data/wikidata-layers.py):
  * nuclear power plants, military bases and spaceports.
  *
+ * And (plan R4; Devon, Oct 21: "Add - added refugee and displacement data")
+ * UNHCR's figures for each country (CC BY 4.0), one circle a country sized by
+ * the people displaced from it: inside it and abroad. Kept as a file too
+ * (scripts/map-data/unhcr-displacement.py), as they change twice a year.
+ *
  * Each turns its answer into points and a popup. Everything shown in a popup
  * comes from data, so it goes through escapeHtml.
  */
 
 import { escapeHtml, safeHttpUrl, timeAgo } from './map-utils'
 import { prepareSatellites, satellitePositions, type PreparedSats } from './map-satellites'
+import { DISPLACED_FILE, UNHCR_DATA_URL, displacedFigures, displacedLines } from './displaced'
 
-export type OverlayKey = 'protests' | 'outbreaks' | 'displacement' | 'outages' | 'cable-landings' | 'ai-dc' | 'nuclear' | 'bases' | 'spaceports' | 'satellites'
+export type OverlayKey = 'protests' | 'outbreaks' | 'displacement' | 'displaced' | 'outages' | 'cable-landings' | 'ai-dc' | 'nuclear' | 'bases' | 'spaceports' | 'satellites'
 
-export const OVERLAY_KEYS: readonly OverlayKey[] = ['protests', 'outbreaks', 'displacement', 'outages', 'cable-landings', 'ai-dc', 'nuclear', 'bases', 'spaceports', 'satellites']
+export const OVERLAY_KEYS: readonly OverlayKey[] = ['protests', 'outbreaks', 'displacement', 'displaced', 'outages', 'cable-landings', 'ai-dc', 'nuclear', 'bases', 'spaceports', 'satellites']
 
 export function isOverlayKey(value: unknown): value is OverlayKey {
   return typeof value === 'string' && (OVERLAY_KEYS as readonly string[]).includes(value)
@@ -51,6 +57,8 @@ export interface OverlayDef {
   refreshMs: number
   /** Dot size: news by severity, the rest one size */
   bySeverity: boolean
+  /** Circles sized by each point's own "size" (0 to 1: the circle's area follows a count), drawn see-through */
+  sized?: boolean
   toFeatures: (json: unknown) => OverlayFeature[]
   popup: (props: Record<string, unknown>) => string
   /** Points that move (satellites): made ready once per answer, then placed again every everyMs */
@@ -122,6 +130,32 @@ function topicPopup(label: string, color: string) {
       (meta ? `<div style="${META}">${escapeHtml(meta)}</div>` : '') +
       storyLink(p.id, color)
   }
+}
+
+// ── Displaced people (UNHCR's figures) ────────────────────────────────────────
+
+function displacedFeatures(json: unknown): OverlayFeature[] {
+  return displacedFigures(json).map(f => feature([f.lng, f.lat], {
+    name: f.name, iso2: f.iso2, year: f.year, inside: f.inside, abroad: f.abroad, hosted: f.hosted,
+    stateless: f.stateless, returned: f.returned, size: f.size, note: f.note,
+  }))
+}
+
+function displacedPopup(p: Record<string, unknown>): string {
+  const color = OVERLAYS.displaced.color
+  const year = num(p.year)
+  const lines = displacedLines({
+    inside: num(p.inside) ?? 0, abroad: num(p.abroad) ?? 0, hosted: num(p.hosted) ?? 0,
+    stateless: num(p.stateless) ?? 0, returned: num(p.returned) ?? 0, year,
+  })
+  if (!lines.length) lines.push('Fewer than 1,000 in each group')
+  const iso2 = /^[A-Z]{2}$/.test(String(p.iso2 ?? '')) ? String(p.iso2).toLowerCase() : null
+  return header(color, `DISPLACED PEOPLE${year ? ` · ${year}` : ''}`) +
+    `<div style="${TITLE}">${escapeHtml(p.name)}</div>` +
+    lines.map(l => `<div style="${META}">${escapeHtml(l)}</div>`).join('') +
+    (str(p.note) ? `<div style="${META};max-width:260px;font-style:italic">${escapeHtml(p.note)}</div>` : '') +
+    (iso2 ? `<a href="/countries/${iso2}" style="${LINK};color:${color}">${escapeHtml(String(p.name))} today →</a>` : '') +
+    ` <a href="${UNHCR_DATA_URL}" target="_blank" rel="noopener noreferrer" style="${LINK};color:#94a3b8;margin-left:8px">UNHCR ↗</a>`
 }
 
 // ── Internet outages (IODA) ───────────────────────────────────────────────────
@@ -286,6 +320,12 @@ export const OVERLAYS: Record<OverlayKey, OverlayDef> = {
     description: 'People displaced, fleeing or seeking asylum, in the news, last 72 h',
     path: '/api/v1/map/topics/displacement', refreshMs: 10 * MINUTE, bySeverity: true,
     toFeatures: topicFeatures, popup: topicPopup('REFUGEES & DISPLACEMENT', '#fde68a'),
+  },
+  displaced: {
+    key: 'displaced', label: 'Displaced people (UNHCR)', color: '#fb923c',
+    description: 'Refugees, asylum-seekers and people displaced inside their own country: UNHCR\'s 2025 figures (CC BY 4.0), added up by country',
+    path: DISPLACED_FILE, base: 'site', refreshMs: 24 * HOUR, bySeverity: false, sized: true,
+    toFeatures: displacedFeatures, popup: displacedPopup,
   },
   outages: {
     key: 'outages', label: 'Internet outages', color: '#818cf8',

@@ -5,6 +5,7 @@
  */
 import { describe, it, expect, vi } from 'vitest'
 import { OVERLAYS, OVERLAY_KEYS, isOverlayKey, pointAt } from '../map-overlays'
+import { people } from '../displaced'
 import { OverlayLayers } from '@/components/map/OverlayLayers'
 
 describe('pointAt', () => {
@@ -272,3 +273,63 @@ describe('the layer manager asks the site for files and the API for the rest', (
     layer.destroy()
   })
 })
+
+describe('displaced people (UNHCR\'s figures, plan R4)', () => {
+  // shaped like public/geo/unhcr-displacement.v1.geojson, made by scripts/map-data/unhcr-displacement.py
+  const file = { type: 'FeatureCollection', source: 'UNHCR Refugee Data Finder (api.unhcr.org), CC BY 4.0', year: 2025, features: [
+    { type: 'Feature', geometry: { type: 'Point', coordinates: [29.863, 15.991] }, properties: { iso3: 'SDN', iso2: 'SD', name: 'Sudan', inside: 9139309, abroad: 3761034, hosted: 859963, stateless: 0, returned: 0, size: 1 } },
+    { type: 'Feature', geometry: { type: 'Point', coordinates: [10.4, 51.1] }, properties: { iso3: 'DEU', iso2: 'DE', name: 'Germany', inside: 0, abroad: 953, hosted: 2952694, stateless: 28315, returned: 0, size: 0.0086 } },
+    { type: 'Feature', geometry: { type: 'Point', coordinates: [35.2, 31.9] }, properties: { iso3: 'PSE', iso2: 'PS', name: 'Palestine', inside: 0, abroad: 65049, hosted: 0, stateless: 0, returned: 24, size: 0.071 } },
+    { type: 'Feature', geometry: { type: 'Point', coordinates: [1, 1] }, properties: { iso2: '<b>', name: '<img src=x onerror=alert(1)>', inside: 5000, size: 7 } },
+  ] }
+
+  it('comes from the site, as circles sized by the people displaced', () => {
+    expect(OVERLAYS.displaced).toMatchObject({ base: 'site', path: '/geo/unhcr-displacement.v1.geojson', sized: true, bySeverity: false })
+    const f = OVERLAYS.displaced.toFeatures(file)
+    expect(f.map(x => x.properties.name)).toEqual(['Sudan', 'Germany', 'Palestine', '<img src=x onerror=alert(1)>'])
+    expect(f[0]!.geometry.coordinates).toEqual([29.863, 15.991])
+    expect(f[0]!.properties).toMatchObject({ year: 2025, inside: 9139309, abroad: 3761034, hosted: 859963, size: 1 })
+    // a size out of range is held to 0..1, and an odd code is dropped
+    expect(f[3]!.properties).toMatchObject({ size: 1, iso2: null })
+  })
+
+  it('says each group in plain numbers, links the country\'s page and credits UNHCR', () => {
+    const [sudan, germany, palestine, odd] = OVERLAYS.displaced.toFeatures(file)
+    const html = OVERLAYS.displaced.popup(sudan!.properties)
+    expect(html).toContain('DISPLACED PEOPLE · 2025')
+    expect(html).toContain('9.1 million displaced inside the country')
+    expect(html).toContain('3.8 million refugees and asylum-seekers abroad')
+    expect(html).toContain('Hosts 859,963 from elsewhere')
+    expect(html).toContain('href="/countries/sd"')
+    expect(html).toContain('https://www.unhcr.org/refugee-statistics/')
+    const de = OVERLAYS.displaced.popup(germany!.properties)
+    expect(de).toContain('Hosts 3 million from elsewhere')
+    expect(de).toContain('28,315 stateless people')
+    expect(de).not.toContain('displaced inside')
+    // UNHCR's figures leave out the Palestine refugees UNRWA serves: the popup says so
+    expect(OVERLAYS.displaced.popup(palestine!.properties)).toContain('UNRWA')
+    const bad = OVERLAYS.displaced.popup(odd!.properties)
+    expect(bad).not.toContain('<img')
+    expect(bad).not.toContain('/countries/')
+  })
+
+  it('reads big numbers as millions', () => {
+    expect(people(9139309)).toBe('9.1 million')
+    expect(people(2952694)).toBe('3 million')
+    expect(people(270007)).toBe('270,007')
+  })
+
+  it('draws see-through circles whose area follows the count, the small ones on top', async () => {
+    const { map, layers } = fakeMap()
+    const layer = new OverlayLayers(map, { apiUrl: 'https://api.test', popup: vi.fn(), loading: vi.fn(), count: vi.fn(),
+      fetchImpl: vi.fn(() => json(file)) as unknown as typeof fetch })
+    layer.set('displaced', true)
+    await vi.waitFor(() => expect(layers.has('wp-overlay-displaced-dots')).toBe(true))
+    const def = layers.get('wp-overlay-displaced-dots') as { layout?: Record<string, unknown>; paint: Record<string, unknown> }
+    expect(JSON.stringify(def.paint['circle-radius'])).toContain('"size"')
+    expect(def.paint['circle-opacity']).toBeLessThan(0.6)
+    expect(def.layout?.['circle-sort-key']).toEqual(['-', 1, ['coalesce', ['get', 'size'], 0]])
+    layer.destroy()
+  })
+})
+

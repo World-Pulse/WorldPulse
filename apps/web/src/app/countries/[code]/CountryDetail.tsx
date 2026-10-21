@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { CountryTopStories, type CountryStory } from '@/components/countries/CountryTopStories'
+import { CountryDisplacement } from '@/components/countries/CountryDisplacement'
 
 // ─── Resilience Types ─────────────────────────────────────────────────────────
 
@@ -277,6 +278,9 @@ export default function CountryDetailPage({
             <span className="font-mono text-[9px] text-wp-text3">CRITICAL</span>
           </div>
         </div>
+
+        {/* ── Displaced people (UNHCR's figures, plan R4) ─────────────────── */}
+        <CountryDisplacement code={detail.code} />
 
         {/* ── Resilience Score card ───────────────────────────────────────── */}
         {resilience && (
