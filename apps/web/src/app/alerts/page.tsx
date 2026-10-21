@@ -67,9 +67,11 @@ export default function AlertsPage() {
       const res = await fetch(`${API_URL}/api/v1/alerts`, {
         method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(made.body),
       })
-      const d = await res.json().catch(() => ({})) as { data?: SavedAlert; error?: { message?: string } }
+      // the API's one error body: { success: false, code, error, statusCode } (plan V3f)
+      const d = await res.json().catch(() => ({})) as { data?: SavedAlert; error?: unknown }
       if (!res.ok || !d.data) {
-        setFormError(res.status === 429 ? `You have ${MAX_ALERTS} alerts, the most there can be: delete one first.` : (d.error?.message ?? 'The alert could not be saved. Try again.'))
+        setFormError(res.status === 429 ? `You have ${MAX_ALERTS} alerts, the most there can be: delete one first.`
+          : typeof d.error === 'string' && d.error ? `The alert could not be saved: ${d.error.replace(/\.$/, '')}.` : 'The alert could not be saved. Try again.')
         return
       }
       setAlerts(list => [d.data!, ...list])

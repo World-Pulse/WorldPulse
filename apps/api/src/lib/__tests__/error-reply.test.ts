@@ -7,16 +7,23 @@ describe('errorReply', () => {
     const r = errorReply(db)
     expect(r.status).toBe(500)
     expect(r.internal).toBe(true)
-    expect(r.body).toEqual({ statusCode: 500, error: 'Internal Server Error', message: 'Something went wrong on our side.' })
+    expect(r.body).toEqual({
+      success: false, statusCode: 500, code: 'INTERNAL_ERROR',
+      error: 'Something went wrong on our side.', message: 'Something went wrong on our side.',
+    })
     expect(JSON.stringify(r.body)).not.toContain('source_id')
+    expect(JSON.stringify(r.body)).not.toContain('42703')
   })
 
-  it('keeps the message of a 4xx error', () => {
+  it('keeps the message of a 4xx error, in the one error body (plan V3f)', () => {
     const bad = Object.assign(new Error('querystring/limit must be <= 100'), { statusCode: 400, code: 'FST_ERR_VALIDATION' })
     expect(errorReply(bad)).toEqual({
       status: 400, internal: false,
-      body: { statusCode: 400, code: 'FST_ERR_VALIDATION', error: 'Bad Request', message: 'querystring/limit must be <= 100' },
+      body: { success: false, statusCode: 400, code: 'VALIDATION_ERROR', error: 'querystring/limit must be <= 100', message: 'querystring/limit must be <= 100' },
     })
-    expect(errorReply(Object.assign(new Error('Rate limit exceeded'), { statusCode: 429 })).body.error).toBe('Too Many Requests')
+    const limited = errorReply(Object.assign(new Error('Too many requests. Slow down.'), { statusCode: 429, code: 'RATE_LIMITED' }))
+    expect(limited.body).toMatchObject({ statusCode: 429, code: 'RATE_LIMITED', error: 'Too many requests. Slow down.' })
+    // Fastify's own codes become the status's word
+    expect(errorReply(Object.assign(new Error('Unsupported Media Type: text/csv'), { statusCode: 415, code: 'FST_ERR_CTP_INVALID_MEDIA_TYPE' })).body.code).toBe('BAD_REQUEST')
   })
 })

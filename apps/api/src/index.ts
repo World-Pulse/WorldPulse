@@ -1,5 +1,6 @@
 import Fastify, { type FastifyError } from 'fastify'
 import { errorReply } from './lib/error-reply'
+import { registerErrorBody } from './lib/error-body'
 import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
 import jwt from '@fastify/jwt'
@@ -132,6 +133,10 @@ app.setErrorHandler((err: FastifyError, req, reply) => {
   }
   return reply.status(status).send(body)
 })
+
+// Every error the API answers is one shape, whoever sent it (lib/error-body.ts, plan V3f):
+// { success: false, code, error, statusCode }, with whatever else the route said
+registerErrorBody(app)
 
 async function bootstrap() {
   // ─── SENTRY (optional, env-gated) ────────────────────────

@@ -3,6 +3,8 @@
  *
  * Enforces a single canonical error shape across all WorldPulse API routes:
  *   { success: false, code: ErrorCode, error: string }
+ * (the API's onSend hook, lib/error-body.ts, adds statusCode and brings an
+ * error a route sent in another shape to this one: plan V3f)
  *
  * Usage:
  *   import { sendError } from '../lib/errors'

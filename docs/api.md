@@ -2,7 +2,7 @@
 
 The WorldPulse Public API provides read-only access to verified global intelligence signals. No authentication is required. All endpoints are available under the `/api/v1/public` prefix.
 
-**Base URL (production):** `https://api.worldpulse.io`
+**Base URL (production):** `https://api.world-pulse.io`
 **Base URL (local dev):** `http://localhost:3001`
 
 ---
@@ -26,10 +26,31 @@ When the rate limit is exceeded the API returns `429 Too Many Requests`:
 ```json
 {
   "success": false,
+  "code": "RATE_LIMITED",
   "error": "Too many requests. Slow down.",
-  "code": "RATE_LIMITED"
+  "statusCode": 429
 }
 ```
+
+---
+
+## Errors
+
+Every error answers the same JSON, with the HTTP status:
+
+```json
+{
+  "success": false,
+  "code": "NOT_FOUND",
+  "error": "Signal not found",
+  "statusCode": 404
+}
+```
+
+- `code` is one word for the kind of error: `BAD_REQUEST`, `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `RATE_LIMITED`, `INTERNAL_ERROR`, `UPSTREAM_ERROR`, `SERVICE_UNAVAILABLE`, or an endpoint's own (such as `SOURCE_EXISTS`).
+- `error` says what went wrong, in words. An unexpected error (5xx) says only "Something went wrong on our side."
+- Some errors carry more fields, such as a list of valid values.
+- The MCP server (`POST /mcp`) answers JSON-RPC errors instead.
 
 ---
 

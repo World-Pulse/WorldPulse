@@ -421,6 +421,24 @@ export default function DevelopersPage() {
                 </p>
               </div>
             </div>
+
+            {/* The one error body (plan V3f, lib/error-body.ts in the API) */}
+            <div id="errors" className="sm:col-span-2 p-5 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.02)]">
+              <h3 className="text-[14px] font-medium text-wp-text1 mb-3">Errors</h3>
+              <div className="space-y-2 text-[13px] text-wp-text3 leading-relaxed">
+                <p>Every error answers the same JSON, with the HTTP status:</p>
+                <code className="block p-2 rounded bg-[rgba(0,0,0,0.3)] font-mono text-[12px] text-wp-cyan overflow-x-auto whitespace-pre">
+                  {'{ "success": false, "code": "NOT_FOUND", "error": "Signal not found", "statusCode": 404 }'}
+                </code>
+                <p>
+                  <code className="text-wp-cyan font-mono">code</code> is one word for the kind of error:{' '}
+                  <span className="font-mono text-[12px]">BAD_REQUEST, VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR, UPSTREAM_ERROR, SERVICE_UNAVAILABLE</span>,
+                  or an endpoint&apos;s own (such as <span className="font-mono text-[12px]">SOURCE_EXISTS</span>).{' '}
+                  <code className="text-wp-cyan font-mono">error</code> says what went wrong, in words. Some errors carry more fields (a list of valid values, say).
+                  The MCP server answers JSON-RPC errors instead.
+                </p>
+              </div>
+            </div>
           </div>
         </section>
 
