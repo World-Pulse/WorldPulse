@@ -115,6 +115,11 @@ export default function LoginPage() {
             />
           </div>
 
+          {/* Forgot password (plan G13) */}
+          <Link href="/auth/forgot-password" className="-mt-2 self-end text-[12px] text-wp-text3 hover:text-wp-amber transition-colors">
+            Forgot password?
+          </Link>
+
           <button
             type="submit"
             disabled={loading}

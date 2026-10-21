@@ -7,6 +7,11 @@ import type { AuthTokens, ApiResponse, AuthUser } from '@worldpulse/types'
 import { indexUser } from '../lib/search'
 import { checkLoginAttempt, recordFailedLogin, clearLoginAttempts } from '../lib/security'
 import { sendError } from '../lib/errors'
+import { EMAIL_CONFIGURED, sendEmail } from '../lib/email'
+import {
+  resetConfigured, resetToken, parseResetToken, checkResetToken, resetLink, resetEmail, resetCountKey,
+  RESETS_PER_HOUR, RESET_SENT_TEXT, RESET_OFFLINE_TEXT, RESET_DONE_TEXT, RESET_EXPIRED_TEXT, RESET_INVALID_TEXT,
+} from '../lib/password-reset'
 
 const RegisterSchema = z.object({
   handle:      z.string().min(3).max(50).regex(/^[a-zA-Z0-9_]+$/),
@@ -18,6 +23,15 @@ const RegisterSchema = z.object({
 const LoginSchema = z.object({
   email:    z.string().email(),
   password: z.string(),
+})
+
+const ForgotPasswordSchema = z.object({
+  email: z.string().trim().email().max(254),
+})
+
+const ResetPasswordSchema = z.object({
+  token:    z.string().min(1).max(200),
+  password: z.string().min(8).max(128),
 })
 
 const RefreshTokenSchema = z.object({
@@ -237,6 +251,75 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
       success: true,
       data: { user: formatUser(user), ...tokens },
     })
+  })
+
+  // ─── FORGOT PASSWORD (plan G13, Oct 21, 2026; lib/password-reset.ts) ──────
+  // Always the same answer, whether or not an account uses the address, so
+  // the form can't be used to find out who has an account; the email goes out
+  // in the background for the same reason. 3 links an hour per address.
+  app.post('/forgot-password', {
+    schema: {
+      tags: ['auth'],
+      summary: 'Email a link to choose a new password',
+      description: 'Sends a link that works once, for 1 hour, if an account uses the address; the answer is the same either way. 3 links an hour per address. 503 while the server has no email key.',
+      // checked by the route (zod), so its answers say what was wrong in its own words
+      body: { type: 'object', required: ['email'], properties: { email: { type: 'string', description: 'The account\'s email address' } } },
+    },
+    config: { rateLimit: { max: 3, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    const body = ForgotPasswordSchema.safeParse(req.body)
+    if (!body.success) return sendError(reply, 400, 'VALIDATION_ERROR', 'email: must be an email address')
+    if (!EMAIL_CONFIGURED || !resetConfigured()) return sendError(reply, 503, 'SERVICE_UNAVAILABLE', RESET_OFFLINE_TEXT)
+
+    const email = body.data.email.toLowerCase()
+    const key = resetCountKey(email)
+    const sent = await redis.incr(key)
+    if (sent === 1) await redis.expire(key, 60 * 60)
+    if (sent <= RESETS_PER_HOUR) {
+      const user = await db('users').whereRaw('lower(email) = ?', [email]).first('id', 'email', 'handle', 'password_hash', 'suspended') as
+        { id: string; email: string; handle: string; password_hash: string | null; suspended: boolean } | undefined
+      // An account that signs in with GitHub has no password to reset
+      if (user && user.password_hash && !user.suspended) {
+        const link = resetLink(resetToken(user.id, user.password_hash))
+        void sendEmail(user.email, resetEmail(link, user.handle)).then(ok => {
+          if (!ok) app.log.warn('forgot-password: the email was not sent')
+        })
+      }
+    }
+    return reply.send({ success: true, data: { message: RESET_SENT_TEXT } })
+  })
+
+  // ─── RESET PASSWORD: the link's page sends the token and the new password ──
+  app.post('/reset-password', {
+    schema: {
+      tags: ['auth'],
+      summary: 'Choose a new password with the link from the email',
+      description: 'The token from the emailed link and the new password (8 to 128 characters). The link then stops working, and the account is signed out everywhere.',
+      body: { type: 'object', required: ['token', 'password'], properties: { token: { type: 'string', description: 'From the link: the part after #token=' }, password: { type: 'string', description: '8 to 128 characters' } } },
+    },
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    const body = ResetPasswordSchema.safeParse(req.body)
+    if (!body.success) {
+      const field = body.error.issues[0]?.path[0]
+      return sendError(reply, 400, 'VALIDATION_ERROR', field === 'password' ? 'password: 8 to 128 characters' : RESET_INVALID_TEXT)
+    }
+    if (!resetConfigured()) return sendError(reply, 503, 'SERVICE_UNAVAILABLE', RESET_OFFLINE_TEXT)
+
+    const parsed = parseResetToken(body.data.token)
+    if (!parsed) return sendError(reply, 400, 'BAD_REQUEST', RESET_INVALID_TEXT)
+    const user = await db('users').where('id', parsed.userId).first('id', 'email', 'password_hash', 'suspended') as
+      { id: string; email: string; password_hash: string | null; suspended: boolean } | undefined
+    if (!user || !user.password_hash || user.suspended) return sendError(reply, 400, 'BAD_REQUEST', RESET_INVALID_TEXT)
+    const check = checkResetToken(parsed, user.password_hash)
+    if (check === 'expired') return sendError(reply, 400, 'BAD_REQUEST', RESET_EXPIRED_TEXT)
+    if (check !== 'ok') return sendError(reply, 400, 'BAD_REQUEST', RESET_INVALID_TEXT)
+
+    await db('users').where('id', user.id).update({ password_hash: await bcrypt.hash(body.data.password, 12) })
+    await clearLoginAttempts(user.email)
+    // Whoever was signed in with the old password is signed out
+    await endSessions(user.id).catch(err => app.log.warn({ err }, 'reset-password: sessions not ended'))
+    return reply.send({ success: true, data: { message: RESET_DONE_TEXT } })
   })
 
   // ─── REFRESH TOKEN ───────────────────────────────────────
@@ -497,6 +580,27 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
 }
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────
+/**
+ * Sign an account out everywhere: its refresh tokens (refresh:<token> → user
+ * id in Redis, 30 days) are removed, so no device gets a new sign-in token;
+ * one already issued lasts out its 24 hours. Up to 50,000 tokens looked at.
+ */
+export async function endSessions(userId: string): Promise<number> {
+  let cursor = '0'
+  let ended = 0
+  for (let round = 0; round < 100; round++) {
+    const [next, keys] = await redis.scan(cursor, 'MATCH', 'refresh:*', 'COUNT', 500) as [string, string[]]
+    if (keys.length) {
+      const owners = await redis.mget(...keys)
+      const mine = keys.filter((_, i) => owners[i] === userId)
+      if (mine.length) ended += await redis.del(...mine)
+    }
+    cursor = next
+    if (cursor === '0') break
+  }
+  return ended
+}
+
 async function issueTokens(app: Parameters<FastifyPluginAsync>[0], userId: string): Promise<AuthTokens> {
   const accessToken  = app.jwt.sign({ id: userId }, { expiresIn: '24h' })
   const refreshToken = crypto.randomUUID()

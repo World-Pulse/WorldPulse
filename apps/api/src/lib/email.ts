@@ -303,3 +303,28 @@ export async function sendAlertDigestEmail(to: string, alertName: string, items:
     return false
   }
 }
+
+// ─── One email of the API's own (plan G13: a password reset link) ───────────
+
+/** Send one email; whether Resend took it. Nothing is sent without RESEND_API_KEY */
+export async function sendEmail(to: string, msg: { subject: string; html: string; text: string }): Promise<boolean> {
+  if (!EMAIL_CONFIGURED) return false
+  const payload: ResendPayload = { from: FROM_ADDRESS, to: [to], subject: msg.subject, html: msg.html, text: msg.text }
+  if (REPLY_TO) payload.reply_to = REPLY_TO
+  try {
+    const res = await fetch(RESEND_API_URL, {
+      method:  'POST',
+      headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+      signal:  AbortSignal.timeout(15_000),
+    })
+    if (!res.ok) {
+      logger.warn({ status: res.status, subject: msg.subject }, 'sendEmail: Resend API error')
+      return false
+    }
+    return true
+  } catch (err) {
+    logger.error({ err, subject: msg.subject }, 'sendEmail: request failed')
+    return false
+  }
+}
