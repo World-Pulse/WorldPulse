@@ -1,175 +1,75 @@
 /**
- * i18n shim tests — useLocale(), useTranslations(), useIsRTL()
- *
- * Verifies URL-based locale detection, fallback to English,
- * RTL detection, and cross-locale translation with English fallback.
+ * The translator (lib/i18n.ts): the reader's language comes from the root
+ * layout through LocaleProvider (plan L5, Oct 21, 2026; it was read from the
+ * address, /fr/…, and those pages don't exist). Rendered on the server, as
+ * the page is. Until Oct 21 this file read window.location and never ran in
+ * the tests' Node environment ("window is not defined").
  */
+import { describe, it, expect } from 'vitest'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { useLocale, useTranslations, useIsRTL, SUPPORTED_LOCALES, RTL_LOCALES, type SupportedLocale } from '../lib/i18n'
+import { LocaleProvider } from '../components/locale/LocaleProvider'
 
-// Store original window.location so we can restore it
-const originalLocation = window.location
-
-function mockPathname(pathname: string) {
-  Object.defineProperty(window, 'location', {
-    writable: true,
-    value: { ...originalLocation, pathname },
-  })
+/** A hook's value when rendered on the server, inside the provider for `locale` (none for null) */
+function inLocale<T>(locale: SupportedLocale | null, hook: () => T): T {
+  let out: { value: T } | null = null
+  function Probe() { out = { value: hook() }; return null }
+  renderToStaticMarkup(locale === null ? createElement(Probe) : createElement(LocaleProvider, { locale, children: createElement(Probe) }))
+  if (!out) throw new Error('not rendered')
+  return (out as { value: T }).value
 }
-
-function restoreLocation() {
-  Object.defineProperty(window, 'location', {
-    writable: true,
-    value: originalLocation,
-  })
-}
-
-// Re-import after mocking (jest module cache handles this)
-import { useLocale, useTranslations, useIsRTL, SUPPORTED_LOCALES, RTL_LOCALES } from '../lib/i18n'
 
 describe('useLocale()', () => {
-  afterEach(restoreLocation)
-
-  it('returns "en" for root path with no locale prefix', () => {
-    mockPathname('/')
-    expect(useLocale()).toBe('en')
+  it("is the provider's language", () => {
+    expect(inLocale('fr', useLocale)).toBe('fr')
+    expect(inLocale('es', useLocale)).toBe('es')
+    expect(inLocale('pt', useLocale)).toBe('pt')
   })
 
-  it('returns "en" for English-prefixed path', () => {
-    mockPathname('/en/some/page')
-    expect(useLocale()).toBe('en')
+  it('is English outside a provider (tests, a page rendered on its own)', () => {
+    expect(inLocale(null, useLocale)).toBe('en')
   })
 
-  it('returns "fr" for French-prefixed path', () => {
-    mockPathname('/fr/world-map')
-    expect(useLocale()).toBe('fr')
-  })
-
-  it('returns "ar" for Arabic-prefixed path', () => {
-    mockPathname('/ar/alerts')
-    expect(useLocale()).toBe('ar')
-  })
-
-  it('returns "zh" for Chinese-prefixed path', () => {
-    mockPathname('/zh/finance')
-    expect(useLocale()).toBe('zh')
-  })
-
-  it('returns "ja" for Japanese-prefixed path', () => {
-    mockPathname('/ja/space-weather')
-    expect(useLocale()).toBe('ja')
-  })
-
-  it('returns "de" for German-prefixed path', () => {
-    mockPathname('/de/cyber-threats')
-    expect(useLocale()).toBe('de')
-  })
-
-  it('returns "en" for an unsupported/unknown prefix', () => {
-    mockPathname('/xx/some/page')
-    expect(useLocale()).toBe('en')
-  })
-
-  it('returns "en" for a deep path with no locale prefix', () => {
-    mockPathname('/signals/123/ukraine-conflict')
-    expect(useLocale()).toBe('en')
-  })
-
-  it('returns locale for path with just the locale code', () => {
-    mockPathname('/ru')
-    expect(useLocale()).toBe('ru')
+  it('is English for a value that is not a language', () => {
+    expect(inLocale('xx' as SupportedLocale, useLocale)).toBe('en')
   })
 })
 
 describe('useTranslations()', () => {
-  afterEach(restoreLocation)
-
-  it('returns English nav.liveFeed for default locale', () => {
-    mockPathname('/')
-    const t = useTranslations('nav')
-    expect(t('liveFeed')).toBe('Live Feed')
+  it('English by default', () => {
+    expect(inLocale(null, () => useTranslations('nav')('liveFeed'))).toBe('Live Feed')
   })
 
-  it('returns French nav.liveFeed when locale is fr', () => {
-    mockPathname('/fr/live')
-    const t = useTranslations('nav')
-    expect(t('liveFeed')).toBe('Fil en direct')
+  it("the reader's language", () => {
+    expect(inLocale('fr', () => useTranslations('nav')('liveFeed'))).toBe('Fil en direct')
+    expect(inLocale('es', () => useTranslations('nav')('worldMap'))).toBe('Mapa mundial')
+    expect(inLocale('pt', () => useTranslations('nav')('liveFeed'))).toBe('Feed ao vivo')
+    expect(inLocale('fr', () => useTranslations('nav')('language'))).toBe('Langue')
   })
 
-  it('returns Spanish nav.worldMap when locale is es', () => {
-    mockPathname('/es/map')
-    const t = useTranslations('nav')
-    expect(t('worldMap')).toBe('Mapa mundial')
+  it('English for a phrase a language lacks, the name only when English lacks it too', () => {
+    // German has no "language" phrase (the menu doesn't offer German)
+    expect(inLocale('de', () => useTranslations('nav')('language'))).toBe('Language')
+    expect(inLocale('fr', () => useTranslations('nav')('definitelyMissingKey'))).toBe('definitelyMissingKey')
   })
 
-  it('falls back to English for a key missing in the current locale', () => {
-    mockPathname('/fr/live')
-    const t = useTranslations('nav')
-    // 'NONEXISTENT_KEY' does not exist in any messages → returns the key itself
-    expect(t('NONEXISTENT_KEY')).toBe('NONEXISTENT_KEY')
-  })
-
-  it('returns the raw key if key is missing entirely', () => {
-    mockPathname('/')
-    const t = useTranslations('nav')
-    expect(t('definitelyMissingKey')).toBe('definitelyMissingKey')
-  })
-
-  it('handles dot-separated namespace "sources.suggest"', () => {
-    mockPathname('/')
-    const t = useTranslations('sources.suggest')
-    // Should return a string (not undefined) for known keys
-    expect(typeof t('title')).toBe('string')
-  })
-
-  it('returns German translation for nav.alerts', () => {
-    mockPathname('/de/alerts')
-    const t = useTranslations('nav')
-    // German: "Alerts" might be "Benachrichtigungen" or similar — just check it's a string
-    expect(typeof t('alerts')).toBe('string')
-    expect(t('alerts').length).toBeGreaterThan(0)
-  })
-
-  it('returns Russian translation for nav.liveFeed', () => {
-    mockPathname('/ru/live')
-    const t = useTranslations('nav')
-    expect(typeof t('liveFeed')).toBe('string')
-    expect(t('liveFeed').length).toBeGreaterThan(0)
+  it('dot-separated namespaces', () => {
+    expect(typeof inLocale(null, () => useTranslations('sources.suggest')('title'))).toBe('string')
   })
 })
 
 describe('useIsRTL()', () => {
-  afterEach(restoreLocation)
-
-  it('returns false for English', () => {
-    mockPathname('/')
-    expect(useIsRTL()).toBe(false)
-  })
-
-  it('returns true for Arabic (RTL locale)', () => {
-    mockPathname('/ar/live')
-    expect(useIsRTL()).toBe(true)
-  })
-
-  it('returns false for French (LTR locale)', () => {
-    mockPathname('/fr/live')
-    expect(useIsRTL()).toBe(false)
-  })
-
-  it('returns false for Chinese', () => {
-    mockPathname('/zh/live')
-    expect(useIsRTL()).toBe(false)
+  it('right to left for Arabic only', () => {
+    expect(inLocale('ar', useIsRTL)).toBe(true)
+    expect(inLocale('fr', useIsRTL)).toBe(false)
+    expect(inLocale(null, useIsRTL)).toBe(false)
   })
 })
 
-describe('SUPPORTED_LOCALES constant', () => {
-  it('contains all 10 expected locales', () => {
-    expect(SUPPORTED_LOCALES).toHaveLength(10)
-    const expected = ['en', 'fr', 'es', 'de', 'pt', 'ar', 'zh', 'ja', 'hi', 'ru']
-    expected.forEach(loc => {
-      expect(SUPPORTED_LOCALES).toContain(loc)
-    })
-  })
-
-  it('RTL_LOCALES contains Arabic', () => {
-    expect(RTL_LOCALES).toContain('ar')
+describe('the languages', () => {
+  it('all 10 in messages/', () => {
+    expect([...SUPPORTED_LOCALES].sort()).toEqual(['ar', 'de', 'en', 'es', 'fr', 'hi', 'ja', 'pt', 'ru', 'zh'])
+    expect(RTL_LOCALES).toEqual(['ar'])
   })
 })

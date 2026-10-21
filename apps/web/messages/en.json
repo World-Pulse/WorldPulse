@@ -44,7 +44,8 @@
     "audioClaims": "Audio Claims",
     "videoClaims": "Video Claims",
     "status": "System Status",
-    "pricing": "Pricing"
+    "pricing": "Pricing",
+    "language": "Language"
   },
   "channels": {
     "breakingNews": "Breaking News",

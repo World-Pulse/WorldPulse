@@ -1,19 +1,24 @@
+'use client'
+
 /**
  * Lightweight i18n shim — replaces next-intl's useTranslations/useLocale hooks.
  *
  * next-intl's Turbopack plugin doesn't inject the request config at build time,
- * causing "Couldn't find next-intl config file" on every SSR render. Since the
- * app bypasses the plugin, we read locale from the URL pathname directly.
+ * causing "Couldn't find next-intl config file" on every SSR render, so the app
+ * bypasses it.
  *
- * Locale strategy (as-needed):
- *   /en/...  → English (or no prefix → English default)
- *   /fr/...  → Français
- *   /ar/...  → العربية  (RTL)
- *   etc.
+ * The language (plan L5, Oct 21, 2026): the reader's choice in the language
+ * menu, a cookie the root layout reads on the server and hands down through
+ * LocaleProvider (lib/locale.ts says why). The server renders the chosen
+ * language and the browser renders the same, so nothing flickers. It was read
+ * from the address (/fr/…), and those pages don't exist.
  *
  * Drop-in replacement: swap `import { useTranslations } from 'next-intl'`
  * with                 `import { useTranslations } from '@/lib/i18n'`
  */
+
+import { createContext, useContext } from 'react'
+import { SUPPORTED_LOCALES, RTL_LOCALES, type SupportedLocale } from './locale'
 
 import messagesEn from '../../messages/en.json'
 import messagesFr from '../../messages/fr.json'
@@ -28,12 +33,9 @@ import messagesRu from '../../messages/ru.json'
 
 type Messages = typeof messagesEn
 
-/** All supported locale codes — must match routing.ts and message files */
-export const SUPPORTED_LOCALES = ['en', 'fr', 'es', 'de', 'pt', 'ar', 'zh', 'ja', 'hi', 'ru'] as const
-export type SupportedLocale = typeof SUPPORTED_LOCALES[number]
-
-/** RTL locales — used to set document direction */
-export const RTL_LOCALES: SupportedLocale[] = ['ar']
+// All supported locale codes and the right-to-left ones: lib/locale.ts (server-safe)
+export { SUPPORTED_LOCALES, RTL_LOCALES }
+export type { SupportedLocale }
 
 /** Static map of all locale messages (bundled at build time, no async needed) */
 const ALL_MESSAGES: Record<SupportedLocale, Messages> = {
@@ -50,25 +52,13 @@ const ALL_MESSAGES: Record<SupportedLocale, Messages> = {
   ru: messagesRu as unknown as Messages,
 }
 
-/**
- * Read the active locale from the URL pathname.
- *
- * Strategy (mirrors LanguageSwitcher.switchLocale):
- *   - SSR / no window → 'en' (safe default)
- *   - pathname starts with /xx/ or equals /xx where xx is a supported locale → return xx
- *   - otherwise → 'en' (English default, no URL prefix)
- */
+/** The reader's language, set by the root layout (components/locale/LocaleProvider.tsx) */
+export const LocaleContext = createContext<SupportedLocale | null>(null)
+
+/** The active language: the provider's, or English outside one (tests, embeds) */
 export function useLocale(): SupportedLocale {
-  if (typeof window === 'undefined') return 'en'
-
-  const segments = window.location.pathname.split('/').filter(Boolean)
-  const candidate = segments[0] as SupportedLocale
-
-  if (candidate && (SUPPORTED_LOCALES as readonly string[]).includes(candidate)) {
-    return candidate
-  }
-
-  return 'en'
+  const locale = useContext(LocaleContext)
+  return locale && (SUPPORTED_LOCALES as readonly string[]).includes(locale) ? locale : 'en'
 }
 
 /** Resolve a dot-separated namespace path, e.g. "sources.suggest" */
@@ -84,7 +74,7 @@ function getNamespace(ns: string, messages: Messages): Record<string, string> {
 
 /**
  * Returns a translator function for the given namespace.
- * Picks messages for the locale detected from the current URL.
+ * Picks messages for the reader's language (useLocale).
  * Falls back to English if the key is missing in the current locale.
  *
  * Supports dot-separated namespaces: useTranslations('sources.suggest')
@@ -97,10 +87,7 @@ export function useTranslations(namespace: string) {
   return (key: string): string => ns[key] ?? nsEn[key] ?? key
 }
 
-/**
- * Returns true if the current locale is RTL.
- * Safe to call during SSR (returns false).
- */
+/** Returns true if the current locale is RTL */
 export function useIsRTL(): boolean {
   return (RTL_LOCALES as SupportedLocale[]).includes(useLocale())
 }

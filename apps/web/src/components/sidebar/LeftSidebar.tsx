@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useTranslations } from '@/lib/i18n'
+import { useTranslations, useLocale } from '@/lib/i18n'
 import { useState, useEffect, type ElementType } from 'react'
 import { trendingRows, TRENDING_SHOWN, type TrendingRow, type TrendingAnswer } from '@/lib/trending-entities'
 import { entityTypeIcon } from '@/lib/entity-links'
@@ -81,6 +81,8 @@ export function LeftSidebar() {
   const pathname = usePathname()
   const router   = useRouter()
   const tNav = useTranslations('nav')
+  // The sidebar's language (the page's stories stay English: lib/locale.ts)
+  const locale = useLocale()
   const tChannels = useTranslations('channels')
   const tCommon = useTranslations('common')
 
@@ -170,6 +172,7 @@ export function LeftSidebar() {
   return (
     <aside
       aria-label="Main navigation"
+      lang={locale}
       className="sticky top-[52px] h-[calc(100vh-52px)] overflow-y-auto border-r border-[rgba(255,255,255,0.07)] bg-wp-surface flex flex-col scrollbar-thin scrollbar-thumb-[rgba(255,255,255,0.07)] scrollbar-track-transparent rtl:border-r-0 rtl:border-l rtl:border-l-[rgba(255,255,255,0.07)]"
     >
 

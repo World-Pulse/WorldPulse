@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useTranslations } from '@/lib/i18n'
+import { useTranslations, useLocale } from '@/lib/i18n'
 import { authHref } from '@/lib/auth-next'
+import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { useTheme } from '@/components/providers'
 import {
   Zap, Globe, Bell, BarChart3, Telescope, Users, Radio,
@@ -25,18 +26,19 @@ const DOT_COLORS: Record<string, string> = {
   green: 'bg-wp-green shadow-[0_0_6px_#00e676]',
 }
 
+// The phone menu's links; labelKey is the phrase in messages/*.json "nav" (plan L5)
 const NAV_LINKS = [
-  { href: '/',            icon: Zap,        label: 'Live Feed'    },
-  { href: '/map',         icon: Globe,      label: 'World Map'    },
-  { href: '/finance',     icon: TrendingUp, label: 'Finance'      },
-  { href: '/alerts',      icon: Bell,       label: 'Alerts'       },
-  { href: '/analytics',   icon: BarChart3,  label: 'Analytics'    },
-  { href: '/explore',     icon: Telescope,  label: 'Explore'      },
-  { href: '/communities', icon: Users,      label: 'Communities'  },
-  { href: '/sources',     icon: Radio,      label: 'Sources'      },
-  { href: '/pricing',     icon: Gem,        label: 'Pricing'      },
-  { href: '/developers',  icon: Wrench,     label: 'Developers'   },
-  { href: '/settings',    icon: Settings,   label: 'Settings'     },
+  { href: '/',            icon: Zap,        label: 'Live Feed',    labelKey: 'liveFeed'    },
+  { href: '/map',         icon: Globe,      label: 'World Map',    labelKey: 'worldMap'    },
+  { href: '/finance',     icon: TrendingUp, label: 'Finance',      labelKey: 'finance'     },
+  { href: '/alerts',      icon: Bell,       label: 'Alerts',       labelKey: 'alerts'      },
+  { href: '/analytics',   icon: BarChart3,  label: 'Analytics',    labelKey: 'analytics'   },
+  { href: '/explore',     icon: Telescope,  label: 'Explore',      labelKey: 'explore'     },
+  { href: '/communities', icon: Users,      label: 'Communities',  labelKey: 'communities' },
+  { href: '/sources',     icon: Radio,      label: 'Sources',      labelKey: 'mySources'   },
+  { href: '/pricing',     icon: Gem,        label: 'Pricing',      labelKey: 'pricing'     },
+  { href: '/developers',  icon: Wrench,     label: 'Developers',   labelKey: 'developers'  },
+  { href: '/settings',    icon: Settings,   label: 'Settings',     labelKey: 'settings'    },
 ]
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
@@ -65,6 +67,8 @@ export function TopNav() {
   const pathname = usePathname()
   const router   = useRouter()
   const t        = useTranslations('nav')
+  // The menu's language (the page's stories stay English: lib/locale.ts)
+  const locale   = useLocale()
   const { theme, toggle } = useTheme()
   const doubled  = [...tickerItems, ...tickerItems]  // seamless loop
 
@@ -145,6 +149,7 @@ export function TopNav() {
     <>
       <nav
         aria-label="WorldPulse top navigation"
+        lang={locale}
         className="fixed top-0 left-0 right-0 h-[52px] glass border-b border-[rgba(255,255,255,0.07)] flex items-center px-4 z-[1000] gap-0"
       >
 
@@ -237,7 +242,8 @@ export function TopNav() {
             className="hidden md:flex items-center gap-2 bg-wp-s2 border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-[6px] text-wp-text3 hover:text-wp-text hover:border-[rgba(255,255,255,0.15)] transition-all text-[13px] w-44"
           >
             <Search className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
-            <span aria-hidden="true" className="flex-1">{t('searchSignals')}</span>
+            {/* one line in every language ("Rechercher des signaux…" wrapped to two) */}
+            <span aria-hidden="true" className="flex-1 min-w-0 truncate">{t('searchSignals')}</span>
             <kbd className="font-mono text-[10px] border border-[rgba(255,255,255,0.1)] rounded px-1 py-px ml-auto" aria-hidden="true">⌘K</kbd>
           </Link>
 
@@ -251,9 +257,12 @@ export function TopNav() {
             {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
 
-          {/* The language menu is off until other languages have pages of their own
-              (H-0021, Oct 20, 2026): it sent readers to /fr, /de, /ar…, which don't
-              exist, so every choice but English showed "page not found" */}
+          {/* The language menu (plan L5, Oct 21, 2026): a cookie the server reads, so the
+              menus come in that language on the same page. Off from Oct 20 (H-0021): it
+              sent readers to /fr, /de, /ar…, which don't exist. On phones: in the menu drawer */}
+          <div className="hidden sm:block">
+            <LanguageSwitcher />
+          </div>
 
           {/* Auth controls */}
           {user ? (
@@ -320,6 +329,7 @@ export function TopNav() {
           aria-modal="true"
           role="dialog"
           aria-label="Navigation menu"
+          lang={locale}
         >
           {/* Backdrop */}
           <div
@@ -347,7 +357,7 @@ export function TopNav() {
 
             {/* Nav links */}
             <nav aria-label="Primary navigation" className="flex-1 px-3 py-4 space-y-0.5">
-              {NAV_LINKS.map(({ href, icon: Icon, label }) => {
+              {NAV_LINKS.map(({ href, icon: Icon, label, labelKey }) => {
                 const active = href === '/' ? pathname === '/' : pathname.startsWith(href)
                 return (
                   <Link
@@ -361,11 +371,17 @@ export function TopNav() {
                       }`}
                   >
                     <Icon className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
-                    <span>{label}</span>
+                    <span>{labelKey ? t(labelKey) : label}</span>
                   </Link>
                 )
               })}
             </nav>
+
+            {/* The language menu, on phones (plan L5) */}
+            <div className="px-4 pb-3 flex items-center justify-between gap-3 flex-shrink-0">
+              <span className="text-[13px] text-wp-text3">{t('language')}</span>
+              <LanguageSwitcher up />
+            </div>
 
             {/* Footer — auth */}
             {user ? (
@@ -393,13 +409,13 @@ export function TopNav() {
                   href={authHref('login', pathname)}
                   className="flex items-center justify-center py-3 rounded-xl border border-[rgba(255,255,255,0.15)] text-wp-text2 text-[14px] font-medium hover:border-wp-amber hover:text-wp-amber transition-all"
                 >
-                  Sign In
+                  {t('signIn')}
                 </Link>
                 <Link
                   href={authHref('register', pathname)}
                   className="flex items-center justify-center py-3 rounded-xl bg-wp-amber text-black text-[14px] font-bold hover:bg-[#ffb84d] transition-all"
                 >
-                  Join Free
+                  {t('joinFree')}
                 </Link>
               </div>
             )}

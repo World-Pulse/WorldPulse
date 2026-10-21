@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import Script from 'next/script'
+import { cookies } from 'next/headers'
 import { Inter, Bebas_Neue, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import { Providers } from '@/components/providers'
@@ -9,7 +10,8 @@ import { BottomTabBar } from '@/components/nav/BottomTabBar'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { CommandPaletteProvider, CommandPalette } from '@/components/CommandPalette'
 import { HideOnEmbed } from '@/components/nav/HideOnEmbed'
-import { LocaleAttributes } from '@/components/locale/LocaleAttributes'
+import { LocaleProvider } from '@/components/locale/LocaleProvider'
+import { LOCALE_COOKIE, localeFromCookie } from '@/lib/locale'
 import { X_HANDLE } from '@/lib/share-links'
 
 const inter = Inter({
@@ -81,7 +83,11 @@ export const metadata: Metadata = {
 // NextIntlClientProvider/useTranslations to throw "Couldn't find config file".
 export const dynamic = 'force-dynamic'
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // The reader's language for the menus, chosen in the language menu (plan L5):
+  // read here so the server renders it and nothing flickers. The page itself stays
+  // lang="en": its stories are in English (lib/locale.ts)
+  const locale = localeFromCookie((await cookies()).get(LOCALE_COOKIE)?.value)
   return (
     <html lang="en" dir="ltr" className="dark">
       <Script
@@ -111,7 +117,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           Skip to main content
         </a>
-        <LocaleAttributes />
+        <LocaleProvider locale={locale}>
           <Providers>
             {/* CommandPaletteProvider registers the ⌘K/Ctrl+K global shortcut */}
             <CommandPaletteProvider>
@@ -127,6 +133,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <HideOnEmbed><BottomTabBar /></HideOnEmbed>
             </CommandPaletteProvider>
           </Providers>
+        </LocaleProvider>
       </body>
     </html>
   )

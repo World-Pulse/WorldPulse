@@ -44,7 +44,8 @@
     "audioClaims": "Alegações em áudio",
     "videoClaims": "Alegações em vídeo",
     "status": "Status do sistema",
-    "pricing": "Preços"
+    "pricing": "Preços",
+    "language": "Idioma"
   },
   "channels": {
     "breakingNews": "Notícias urgentes",

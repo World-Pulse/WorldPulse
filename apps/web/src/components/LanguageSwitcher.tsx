@@ -1,28 +1,31 @@
 'use client'
 
+/**
+ * The language menu (plan L5, Oct 21, 2026; off from Oct 20, when it sent
+ * readers to /fr, /de, /ar…, which don't exist). A choice is saved as the
+ * wp_lang cookie and the page is rendered again on the server, in place: the
+ * menu and the left sidebar come back in that language, the reader stays on
+ * the same page. The languages with every phrase translated (lib/locale.ts).
+ */
+
 import { useState, useRef, useEffect, useTransition } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { useLocale } from '@/lib/i18n'
+import { localeCookie, type MenuLocale } from '@/lib/locale'
 
-const LANGUAGES = [
-  { code: 'en', label: 'English',    flag: '🇺🇸', dir: 'ltr' },
-  { code: 'ar', label: 'العربية',    flag: '🇸🇦', dir: 'rtl' },
-  { code: 'fr', label: 'Français',   flag: '🇫🇷', dir: 'ltr' },
-  { code: 'es', label: 'Español',    flag: '🇪🇸', dir: 'ltr' },
-  { code: 'pt', label: 'Português',  flag: '🇧🇷', dir: 'ltr' },
-  { code: 'de', label: 'Deutsch',    flag: '🇩🇪', dir: 'ltr' },
-  { code: 'zh', label: '中文',       flag: '🇨🇳', dir: 'ltr' },
-  { code: 'ja', label: '日本語',     flag: '🇯🇵', dir: 'ltr' },
-  { code: 'hi', label: 'हिन्दी',    flag: '🇮🇳', dir: 'ltr' },
-  { code: 'ru', label: 'Русский',    flag: '🇷🇺', dir: 'ltr' },
-] as const
+export const LANGUAGES: ReadonlyArray<{ code: MenuLocale; label: string; flag: string }> = [
+  { code: 'en', label: 'English',    flag: '🇺🇸' },
+  { code: 'es', label: 'Español',    flag: '🇪🇸' },
+  { code: 'fr', label: 'Français',   flag: '🇫🇷' },
+  { code: 'pt', label: 'Português',  flag: '🇧🇷' },
+]
 
-type LocaleCode = typeof LANGUAGES[number]['code']
+type LocaleCode = MenuLocale
 
-export function LanguageSwitcher() {
+/** `up`: the list opens above the button (the phone menu's drawer, near the bottom of the screen) */
+export function LanguageSwitcher({ up = false }: { up?: boolean } = {}) {
   const locale = useLocale() as LocaleCode
   const router = useRouter()
-  const pathname = usePathname()
   const [isPending, startTransition] = useTransition()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -44,28 +47,10 @@ export function LanguageSwitcher() {
     setOpen(false)
     if (nextLocale === locale) return
 
+    // The server reads the cookie: render this page again in that language
+    document.cookie = localeCookie(nextLocale, window.location.protocol === 'https:')
     startTransition(() => {
-      // Strip existing locale prefix and navigate to new locale
-      const segments = pathname.split('/')
-      const currentLocaleIndex = LANGUAGES.map(l => l.code).includes(segments[1] as LocaleCode)
-        ? 1
-        : -1
-
-      let newPath: string
-      if (nextLocale === 'en') {
-        // en uses no prefix (as-needed strategy)
-        newPath = currentLocaleIndex === 1
-          ? '/' + segments.slice(2).join('/')
-          : pathname
-      } else {
-        newPath = currentLocaleIndex === 1
-          ? '/' + nextLocale + '/' + segments.slice(2).join('/')
-          : '/' + nextLocale + pathname
-      }
-
-      // Clean up trailing slash
-      newPath = newPath.replace(/\/$/, '') || '/'
-      router.push(newPath)
+      router.refresh()
     })
   }
 
@@ -86,7 +71,7 @@ export function LanguageSwitcher() {
 
       {open && (
         <div
-          className="absolute right-0 top-full mt-2 w-44 bg-wp-surface border border-[rgba(255,255,255,0.1)] rounded-xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] overflow-hidden z-[2000]"
+          className={`absolute right-0 ${up ? 'bottom-full mb-2' : 'top-full mt-2'} w-44 bg-wp-surface border border-[rgba(255,255,255,0.1)] rounded-xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] overflow-hidden z-[2000]`}
           role="listbox"
           aria-label="Select language"
         >

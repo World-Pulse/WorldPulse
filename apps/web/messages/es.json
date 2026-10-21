@@ -44,7 +44,8 @@
     "audioClaims": "Afirmaciones en audio",
     "videoClaims": "Afirmaciones en video",
     "status": "Estado del sistema",
-    "pricing": "Precios"
+    "pricing": "Precios",
+    "language": "Idioma"
   },
   "channels": {
     "breakingNews": "Noticias de última hora",
