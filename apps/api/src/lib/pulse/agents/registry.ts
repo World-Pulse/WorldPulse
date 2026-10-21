@@ -206,7 +206,9 @@ IMPORTANT DISTINCTIONS:
     llmTier: 'fast',
     minSeverity: 'high',
     trendThreshold: 5,
-    enabled: true,
+    // Off since Oct 21, 2026: X gets 3 posts a day of the best verified story
+    // (lib/social-posters.ts; Devon: "Yes, 3 a day"), not up to 15 PULSE posts
+    enabled: false,
   },
 
   // ═══════════════════════════════════════════════════════════════════════════

@@ -5,7 +5,13 @@
  */
 import { describe, it, expect, vi } from 'vitest'
 
-vi.mock('../db/redis', () => ({ redis: {} }))
+const kv = vi.hoisted(() => new Map<string, string>())
+vi.mock('../db/redis', () => ({
+  redis: {
+    get: async (k: string) => kv.get(k) ?? null,
+    setex: async (k: string, _s: number, v: string) => { kv.set(k, v); return 'OK' },
+  },
+}))
 vi.mock('../lib/swr-cache', () => ({ staleWhileRevalidate: (_k: string, _o: unknown, make: () => Promise<unknown>) => make() }))
 
 import Fastify from 'fastify'
@@ -66,6 +72,22 @@ describe('GET /api/v1/map/satellites', () => {
     expect(fetchMock).toHaveBeenCalledTimes(SATELLITE_GROUPS.length)
     expect(String(fetchMock.mock.calls[0][0])).toBe('https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle')
     expect(res.headers['cache-control']).toBe('public, max-age=3600')
+    vi.unstubAllGlobals()
+  })
+
+  it('a group that didn\'t answer waits 30 minutes; nothing at all is kept one minute', async () => {
+    kv.clear()
+    const fetchMock = vi.fn(async () => { throw new Error('connect timeout') })
+    vi.stubGlobal('fetch', fetchMock)
+    const app = Fastify()
+    await app.register(registerMapSatelliteRoutes, { prefix: '/api/v1/map' })
+    const first = await app.inject({ method: 'GET', url: '/api/v1/map/satellites' })
+    expect(first.json().count).toBe(0)
+    expect(first.headers['cache-control']).toBe('public, max-age=60')
+    expect(fetchMock).toHaveBeenCalledTimes(SATELLITE_GROUPS.length)
+    expect(kv.get('map:satellites:stations:down')).toBe('1')
+    await app.inject({ method: 'GET', url: '/api/v1/map/satellites' })
+    expect(fetchMock).toHaveBeenCalledTimes(SATELLITE_GROUPS.length)
     vi.unstubAllGlobals()
   })
 })

@@ -162,14 +162,17 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
     ])
     const seen = safeOffset + rows.length
 
+    // never fewer than this page shows (an estimate can be low)
+    const total = Math.max(counted?.total ?? 0, seen)
     const response = {
       success: true,
       data: rows.map(formatPublicSignal),
-      // never fewer than this page shows (an estimate can be low)
-      total:  Math.max(counted?.total ?? 0, seen),
+      total,
       total_exact: counted?.exact ?? false,
       limit:  safeLimit,
       offset: safeOffset,
+      // the same, in the meta block the other lists answer with (plan V3f, Oct 21, 2026)
+      meta: { total, total_exact: counted?.exact ?? false, limit: safeLimit, offset: safeOffset, has_more: seen < total },
     }
 
     redis.setex(cacheKey, PUBLIC_CACHE_TTL, JSON.stringify(response)).catch(() => {})

@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, vi } from 'vitest'
 import * as satellite from 'satellite.js'
-import { prepareWith, satellitePositions } from '../map-satellites'
+import { prepareWith, prepareSatellites, satellitePositions, parseTleText, celestrakGroup, CELESTRAK_KEEP_MS, type KeptStore } from '../map-satellites'
 import { OVERLAYS } from '../map-overlays'
 import { OverlayLayers } from '@/components/map/OverlayLayers'
 
@@ -86,7 +86,10 @@ describe('OverlayLayers with moving points', () => {
       on: () => {}, off: () => {},
       getCanvas: () => ({ style: {} }),
     }
-    const fetchImpl = vi.fn(async () => ({ ok: true, json: async () => ({ satellites: [ISS] }) }) as unknown as Response)
+    // the API has one satellite; CelesTrak, asked from the browser, doesn't answer
+    const fetchImpl = vi.fn(async (url: string) => (url.startsWith('https://celestrak.org/')
+      ? { ok: false, status: 503, text: async () => '' }
+      : { ok: true, json: async () => ({ satellites: [ISS] }) }) as unknown as Response)
     const count = vi.fn()
     const layer = new OverlayLayers(map, { apiUrl: 'https://api.test', popup: vi.fn(), loading: vi.fn(), count, fetchImpl: fetchImpl as unknown as typeof fetch })
     layer.set('satellites', true)
@@ -103,5 +106,54 @@ describe('OverlayLayers with moving points', () => {
     expect(sources.size).toBe(0)
     layer.destroy()
     vi.useRealTimers()
+  })
+})
+
+describe('when the API has too few: CelesTrak, from the browser', () => {
+  const text = [ISS.name, ISS.tle1, ISS.tle2, GPS.name, GPS.tle1, GPS.tle2].join('\r\n') + '\r\n'
+  const memory = (): KeptStore & { data: Map<string, string> } => {
+    const data = new Map<string, string>()
+    return { data, getItem: k => data.get(k) ?? null, setItem: (k, v) => { data.set(k, v) } }
+  }
+  const celestrak = (body = text) => vi.fn(async (_url: string) => ({ ok: true, status: 200, text: async () => body }) as unknown as Response)
+
+  it('reads CelesTrak\'s three-line text', () => {
+    expect(parseTleText(text, 'gnss').map(s => [s.norad, s.name, s.group])).toEqual([[25544, 'ISS (ZARYA)', 'gnss'], [26407, 'GPS BIIR-5  (PRN 22)', 'gnss']])
+    expect(parseTleText('No GP data found', 'gnss')).toEqual([])
+  })
+
+  it('keeps each group two hours in this browser, as CelesTrak asks', async () => {
+    const store = memory()
+    const f = celestrak()
+    const t0 = Date.parse('2026-10-21T12:00:00Z')
+    expect(await celestrakGroup('stations', f as unknown as typeof fetch, store, t0)).toHaveLength(2)
+    expect(String(f.mock.calls[0][0])).toBe('https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle')
+    await celestrakGroup('stations', f as unknown as typeof fetch, store, t0 + CELESTRAK_KEEP_MS - 1000)
+    expect(f).toHaveBeenCalledTimes(1)
+    await celestrakGroup('stations', f as unknown as typeof fetch, store, t0 + CELESTRAK_KEEP_MS + 1000)
+    expect(f).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps no empty answer', async () => {
+    const store = memory()
+    expect(await celestrakGroup('weather', celestrak('No GP data found') as unknown as typeof fetch, store)).toEqual([])
+    expect(store.data.size).toBe(0)
+  })
+
+  it('asks CelesTrak only when the API has fewer than 50, each satellite once', async () => {
+    const f = celestrak()
+    const few = await prepareSatellites({ satellites: [ISS] }, f as unknown as typeof fetch, memory())
+    expect(f).toHaveBeenCalledTimes(5)
+    expect(few.sats.map(s => s.norad)).toEqual([25544, 26407])
+    expect(few.sats[0].group).toBe('stations')
+    const g = celestrak()
+    const many = await prepareSatellites({ satellites: Array.from({ length: 50 }, () => ISS) }, g as unknown as typeof fetch, memory())
+    expect(g).not.toHaveBeenCalled()
+    expect(many.sats).toHaveLength(50)
+  })
+
+  it('keeps the API\'s few when CelesTrak doesn\'t answer either', async () => {
+    const down = vi.fn(async () => { throw new Error('offline') })
+    expect((await prepareSatellites({ satellites: [ISS] }, down as unknown as typeof fetch, null)).sats).toHaveLength(1)
   })
 })

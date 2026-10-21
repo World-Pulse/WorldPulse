@@ -14,18 +14,12 @@
 
 import { redis } from './redis'
 import { logger } from './logger'
+import { CLAUDE_PRICES, CLAUDE_UNKNOWN_PRICE } from './llm-models'
 
 /** The model for sorting and checking: Claude's newest small model */
 export const CLAUDE_SMALL = process.env.CLAUDE_SMALL_MODEL || 'claude-haiku-5-5'
 
-/** US dollars per million tokens, [input, output] (Anthropic list prices, Oct 2026) */
-const PRICES: Record<string, [number, number]> = {
-  'claude-haiku-5-5':          [0.10, 0.50],
-  'claude-sonnet-5-5':         [2, 10],
-  'claude-haiku-4-5-20251001': [1, 5],
-}
-/** A model missing above is counted at the dearest price listed */
-const UNKNOWN_PRICE: [number, number] = [2, 10]
+// Prices: lib/llm-models.ts (CLAUDE_PRICES), with the other model settings
 
 export function claudeConfigured(): boolean {
   return !!process.env.ANTHROPIC_API_KEY
@@ -39,7 +33,7 @@ export function monthlyCapUsd(): number {
 
 /** A reply's cost in millionths of a dollar ($ per million tokens × tokens) */
 export function costMicros(model: string, inputTokens: number, outputTokens: number): number {
-  const [input, output] = PRICES[model] ?? UNKNOWN_PRICE
+  const [input, output] = CLAUDE_PRICES[model] ?? CLAUDE_UNKNOWN_PRICE
   return Math.ceil(inputTokens * input + outputTokens * output)
 }
 

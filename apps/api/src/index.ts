@@ -96,6 +96,8 @@ import { startDispatcher, stopDispatcher } from './lib/alert-dispatcher'
 import { startPulseScheduler, stopPulseScheduler } from './lib/pulse/scheduler'
 import { startSummaryPass, stopSummaryPass } from './lib/summary-pass'
 import { ensureSubscribersTable } from './lib/subscribers'
+import { ensureWaitlistTable } from './lib/pro-waitlist'
+import { registerProWaitlistRoutes } from './routes/pro-waitlist'
 import { ensureEntitySignalsIndex } from './lib/entity-index'
 import { hashStoredFlagAddresses } from './lib/signal-flags'
 import { corsDecision } from './lib/cors-policy'
@@ -343,6 +345,8 @@ async function bootstrap() {
   await app.register(registerMapOgRoutes,             { prefix: '/api/v1/map' })
   await app.register(registerMapTopicRoutes,          { prefix: '/api/v1/map' })
   await app.register(registerMapSatelliteRoutes,      { prefix: '/api/v1/map' })
+  // "Pro coming soon": the waitlist (Devon, Oct 21, 2026: "Waitlist now, price later")
+  await app.register(registerProWaitlistRoutes,       { prefix: '/api/v1/pro' })
   await app.register(registerClaimsRoutes,            { prefix: '/api/v1/claims' })
 
   // ─── PULSE AI PUBLISHER ──────────────────────────────────
@@ -415,6 +419,9 @@ async function bootstrap() {
 
   // Telegram and Bluesky posts (plan G10): off until their keys are on the server
   startSocialPosters()
+
+  // The Pro waitlist's table (plan 13; Devon, Oct 21, 2026: "Waitlist now, price later")
+  ensureWaitlistTable().catch(err => logger.warn({ err }, 'Pro waitlist failed to start'))
 
   // ─── ENTITY PAGES: an index on the reports each entity is named in ──
   // (Devon's OK, Oct 20, 2026): built once, in the background, without

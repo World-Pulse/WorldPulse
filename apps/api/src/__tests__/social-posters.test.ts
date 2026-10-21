@@ -30,7 +30,7 @@ vi.mock('../routes/stories', () => ({ topStories: vi.fn(async () => h.stories) }
 // (briefing-email, for newYorkTime, would otherwise connect to Postgres)
 vi.mock('../db/postgres', () => ({ db: vi.fn() }))
 
-import { runSocialPosts, postableStories, blueskyText, telegramText } from '../lib/social-posters'
+import { runSocialPosts, postableStories, blueskyText, telegramText, xText } from '../lib/social-posters'
 
 const story = (n: number, extra: Partial<ListedStory> = {}): ListedStory => ({
   id: `story-${n}`, leadId: `${n}${n}${n}${n}${n}${n}${n}${n}-0000-0000-0000-000000000000`,
@@ -52,6 +52,7 @@ beforeEach(() => {
   process.env.TELEGRAM_CHANNEL = '@worldpulse'
   delete process.env.BLUESKY_HANDLE
   delete process.env.BLUESKY_APP_PASSWORD
+  for (const k of ['TWITTER_API_KEY', 'TWITTER_API_SECRET', 'TWITTER_ACCESS_TOKEN', 'TWITTER_ACCESS_SECRET']) delete process.env[k]
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) : init?.body
     calls.push({ url, body })
@@ -60,6 +61,7 @@ beforeEach(() => {
     if (url.endsWith('/opengraph-image')) return new Response(new Uint8Array([137, 80, 78, 71]), { status: 200 })
     if (url.endsWith('uploadBlob')) return new Response(JSON.stringify({ blob: { ref: 'blob1' } }), { status: 200 })
     if (url.endsWith('createRecord')) return new Response(JSON.stringify({ uri: 'at://x' }), { status: 200 })
+    if (url === 'https://api.x.com/2/tweets') return new Response(JSON.stringify({ data: { id: '1', text: 'ok' } }), { status: 201 })
     return new Response('{}', { status: 404 })
   }))
 })
@@ -89,7 +91,7 @@ describe('which stories go out', () => {
 describe('posting', () => {
   it('does nothing without keys', async () => {
     delete process.env.TELEGRAM_BOT_TOKEN
-    expect(await runSocialPosts(MORNING)).toEqual({ telegram: 'off', bluesky: 'off' })
+    expect(await runSocialPosts(MORNING)).toEqual({ telegram: 'off', bluesky: 'off', x: 'off' })
     expect(calls).toHaveLength(0)
   })
 
@@ -131,5 +133,36 @@ describe('posting', () => {
     expect(record.record.embed.external.uri).toContain('utm_source=bluesky')
     expect(record.record.embed.external.thumb).toEqual({ ref: 'blob1' })
     expect(record.record.text).toContain('Verified · 5 outlets')
+  })
+})
+
+describe('X (plan G7; Devon, Oct 21, 2026: "Yes, 3 a day")', () => {
+  const xKeys = () => {
+    delete process.env.TELEGRAM_BOT_TOKEN
+    process.env.TWITTER_API_KEY = 'ck'; process.env.TWITTER_API_SECRET = 'cs'
+    process.env.TWITTER_ACCESS_TOKEN = 'at'; process.env.TWITTER_ACCESS_SECRET = 'as'
+  }
+
+  it('fits 280 characters, a link counting as 23', () => {
+    const t = xText(story(1, { title: 'A'.repeat(400) }))
+    const link = t.slice(t.lastIndexOf('\n') + 1)
+    expect(link).toMatch(/^https:\/\/world-pulse\.io\/signals\/.+utm_source=x&utm_medium=social/)
+    expect([...t.slice(0, t.lastIndexOf('\n') + 1)].length + 23).toBeLessThanOrEqual(280)
+    expect(xText(story(1))).toContain('Earthquake number 1 shakes the coast\n\n✓ Verified · 5 outlets, including Reuters, AP and BBC · Chile\n')
+  })
+
+  it('posts the best story with the account\'s own keys, signed', async () => {
+    xKeys()
+    expect((await runSocialPosts(MORNING)).x).toMatch(/^posted: Earthquake number 1/)
+    const post = calls.find(c => c.url === 'https://api.x.com/2/tweets')!
+    expect((post.body as { text: string }).text).toContain('utm_source=x')
+  })
+
+  it('three a day, four hours apart', async () => {
+    xKeys()
+    expect((await runSocialPosts(MORNING)).x).toMatch(/^posted:/)
+    expect((await runSocialPosts(minutes(MORNING, 120))).x).toBe('waiting between posts')
+    h.kv.set('social:x:count:2026-10-12', '3')
+    expect((await runSocialPosts(minutes(MORNING, 300))).x).toBe('daily limit reached')
   })
 })

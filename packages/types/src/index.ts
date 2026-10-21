@@ -10,10 +10,19 @@ export type PostType       = 'signal' | 'thread' | 'report' | 'boost' | 'deep_di
 export type SourceTier     = 'wire' | 'national' | 'regional' | 'community' | 'user'
 export type SignalMomentum = 'surging' | 'rising' | 'steady' | 'cooling'
 
+/**
+ * A signal's category: the database's own list (the category enum, as
+ * GET /api/v1/public/categories answers it on Oct 21, 2026; plan 0o). This
+ * type lacked the eight the database gained since it was written: weather,
+ * humanitarian, infrastructure, military, aviation, maritime,
+ * electronic_warfare and politics (which the scraper writes).
+ */
 export type Category =
   | 'breaking' | 'conflict' | 'geopolitics' | 'climate' | 'health'
   | 'economy'  | 'technology' | 'science' | 'elections' | 'culture'
-  | 'disaster' | 'security' | 'sports' | 'space' | 'finance' | 'other'
+  | 'disaster' | 'security' | 'sports' | 'space' | 'other'
+  | 'weather' | 'finance' | 'humanitarian' | 'infrastructure' | 'military'
+  | 'aviation' | 'maritime' | 'electronic_warfare' | 'politics'
 
 export type FinanceSubcategory = 'market_move' | 'central_bank' | 'sanctions' | 'corporate' | 'crypto'
 

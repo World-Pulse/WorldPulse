@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { authHref } from '@/lib/auth-next'
+import { ProWaitlist } from '@/components/ProWaitlist'
 import { Zap, Shield, Globe, Bot, MapPin, Unlock } from 'lucide-react'
 import {
   API_BASE, LANGS, ENDPOINT_GROUPS, ACCESS_LABEL, getCodeExample,
@@ -153,48 +153,8 @@ function EndpointCard({ endpoint }: { endpoint: Endpoint }) {
 
 /* ── main page ───────────────────────────────────────────────────────── */
 export default function DevelopersPage() {
-  const router = useRouter()
   const [activeLang, setActiveLang] = useState<Lang>('curl')
   const [activeGroup, setActiveGroup] = useState<string | null>(null)
-  const [upgradeLoading, setUpgradeLoading] = useState(false)
-  const [upgradeError, setUpgradeError] = useState<string | null>(null)
-
-  async function handleUpgrade() {
-    setUpgradeLoading(true)
-    setUpgradeError(null)
-    try {
-      const token = typeof window !== 'undefined'
-        ? localStorage.getItem('wp_access_token') ?? sessionStorage.getItem('wp_access_token')
-        : null
-
-      if (!token) {
-        router.push('/auth/login?next=/developers')
-        return
-      }
-
-      const res = await fetch(`${API_BASE}/api/v1/billing/checkout`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          plan: 'pro',
-          successUrl: `${window.location.origin}/settings?billing=success`,
-          cancelUrl:  `${window.location.origin}/developers`,
-        }),
-      })
-
-      const data = await res.json() as { url?: string; error?: string }
-      if (!res.ok || !data.url) {
-        setUpgradeError(data.error ?? 'Failed to start checkout. Please try again.')
-        return
-      }
-      window.location.href = data.url
-    } catch {
-      setUpgradeError('Network error. Please check your connection and try again.')
-    } finally {
-      setUpgradeLoading(false)
-    }
-  }
-
   return (
     <div className="min-h-[calc(100vh-52px)] bg-wp-bg">
       {/* Hero */}
@@ -246,52 +206,53 @@ export default function DevelopersPage() {
         </div>
       </div>
 
-      {/* API Tier Pricing */}
+      {/* API tiers (Oct 21, 2026): what the code does. A key or a sign-in doesn't raise the
+          limits (lib/rate-limit-options.ts); Pro is a waitlist (Devon: "Waitlist now, price later") */}
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10 border-b border-[rgba(255,255,255,0.07)]">
-        <h2 className="font-display text-xl text-wp-text1 mb-6 tracking-wide">API TIERS</h2>
+        <h2 className="font-display text-xl text-wp-text1 mb-6 tracking-wide">API ACCESS</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-wp-surface border border-[rgba(255,255,255,0.07)] rounded-xl p-5">
             <div className="flex items-center gap-2 mb-2">
               <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">FREE</span>
             </div>
             <h3 className="text-[16px] font-bold text-wp-text mb-1">Public</h3>
-            <p className="text-[12px] text-wp-text3 mb-3">Open access for research, open-source projects, and prototyping.</p>
+            <p className="text-[12px] text-wp-text3 mb-3">No key, no sign-up.</p>
             <ul className="space-y-1 text-[12px] text-wp-text3">
-              <li>• Public signals, search, feed</li>
-              <li>• RSS / Atom / JSON Feed</li>
-              <li>• Country risk scores</li>
-              <li>• 60 req/min rate limit</li>
+              <li>• Stories with their outlet counts, signals, search, feeds</li>
+              <li>• RSS / Atom / JSON Feed, OPML</li>
+              <li>• The MCP server for AI assistants</li>
+              <li>• Up to 200 requests a minute (some endpoints fewer)</li>
             </ul>
           </div>
           <div className="bg-wp-surface border border-wp-amber/30 rounded-xl p-5 relative">
             <div className="flex items-center gap-2 mb-2">
-              <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20">AUTH</span>
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20">FREE ACCOUNT</span>
             </div>
-            <h3 className="text-[16px] font-bold text-wp-text mb-1">Authenticated</h3>
-            <p className="text-[12px] text-wp-text3 mb-3">Free account required. Higher limits and personalized data.</p>
+            <h3 className="text-[16px] font-bold text-wp-text mb-1">Signed in</h3>
+            <p className="text-[12px] text-wp-text3 mb-3">The same limits, plus what needs an account.</p>
             <ul className="space-y-1 text-[12px] text-wp-text3">
               <li>• Everything in Public</li>
-              <li>• Daily AI briefings</li>
-              <li>• Following feed</li>
-              <li>• 120 req/min rate limit</li>
+              <li>• Daily AI briefings and the following feed</li>
+              <li>• Up to 10 webhooks</li>
+              <li>• API keys for the STIX export</li>
             </ul>
           </div>
           <div className="bg-wp-surface border border-wp-cyan/40 rounded-xl p-5 relative shadow-[0_0_20px_rgba(0,212,255,0.06)]">
-            <div className="absolute -top-2 right-4 px-2 py-0.5 rounded text-[9px] font-mono bg-wp-cyan text-black font-bold">$12 / MO</div>
+            <div className="absolute -top-2 right-4 px-2 py-0.5 rounded text-[9px] font-mono bg-wp-cyan text-black font-bold">COMING SOON</div>
             <div className="flex items-center gap-2 mb-2">
               <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-wp-cyan/10 text-wp-cyan border border-wp-cyan/20">PRO</span>
             </div>
             <h3 className="text-[16px] font-bold text-wp-text mb-1">Pro</h3>
-            <p className="text-[12px] text-wp-text3 mb-3">Full intelligence suite for analysts, newsrooms, and enterprise.</p>
-            <ul className="space-y-1 text-[12px] text-wp-text3">
-              <li>• Everything in Authenticated</li>
-              <li>• Missile & drone intelligence</li>
-              <li>• Maritime/naval tracking</li>
-              <li>• GPS/GNSS jamming zones</li>
-              <li>• STIX 2.1 export & signed bundles</li>
-              <li>• 600 req/min rate limit</li>
-            </ul>
+            <p className="text-[12px] text-wp-text3 mb-3">Not on sale yet. Planned: higher limits, longer history, priority support.</p>
+            <Link href="/pricing#pro" className="text-[12px] text-wp-cyan hover:underline">Join the waitlist →</Link>
           </div>
+        </div>
+        <div className="mt-5 p-4 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.02)] text-[13px] text-wp-text3 leading-relaxed">
+          <span className="text-wp-text1 font-medium">Using the data.</span>{' '}
+          Personal, research, education and non-profit use of the hosted API is free, with a link back to world-pulse.io.
+          Companies: email <span className="text-wp-cyan select-all">support@world-pulse.io</span> first.
+          The code is open source under the{' '}
+          <a href={LICENSE_URL} target="_blank" rel="noopener noreferrer" className="text-wp-cyan hover:underline">MIT license</a>.
         </div>
       </div>
 
@@ -441,22 +402,19 @@ export default function DevelopersPage() {
             <div className="p-5 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.02)]">
               <h3 className="text-[14px] font-medium text-wp-text1 mb-3">Rate Limits</h3>
               <div className="space-y-2 text-[13px] text-wp-text3">
-                <div className="flex justify-between">
-                  <span>Public endpoints</span>
-                  <span className="font-mono text-wp-amber">60 req/min</span>
+                <div className="flex justify-between gap-3">
+                  <span>The whole API, per signed-in user or per address</span>
+                  <span className="font-mono text-wp-amber whitespace-nowrap">200 req/min</span>
                 </div>
-                <div className="flex justify-between">
-                  <span>Authenticated</span>
-                  <span className="font-mono text-wp-amber">200 req/min</span>
+                <div className="flex justify-between gap-3">
+                  <span>Most endpoints, each (listed with it above)</span>
+                  <span className="font-mono text-wp-amber whitespace-nowrap">30–60 req/min</span>
                 </div>
-                <div className="flex justify-between">
-                  <span>Auth endpoints</span>
-                  <span className="font-mono text-wp-amber">5 req/min</span>
+                <div className="flex justify-between gap-3">
+                  <span>Sign-in endpoints</span>
+                  <span className="font-mono text-wp-amber whitespace-nowrap">5 req/min</span>
                 </div>
-                <div className="flex justify-between">
-                  <span>Write endpoints</span>
-                  <span className="font-mono text-wp-amber">10 req/min</span>
-                </div>
+                <p className="text-[12px]">A key or a sign-in doesn&apos;t raise these limits today.</p>
                 <p className="text-[12px] mt-2 pt-2 border-t border-[rgba(255,255,255,0.05)]">
                   Rate limit headers (<code className="text-wp-cyan font-mono">X-RateLimit-Limit</code>,{' '}
                   <code className="text-wp-cyan font-mono">X-RateLimit-Remaining</code>) are included in every response.
@@ -535,24 +493,16 @@ export default function DevelopersPage() {
           </div>
         </section>
 
-        {/* Pricing & Upgrade */}
+        {/* Plans (Oct 21, 2026): Pro is a waitlist (Devon: "Waitlist now, price later") */}
         <section className="mb-16">
-          <h2 className="text-xl font-display text-wp-text1 tracking-wide mb-2">PLANS & PRICING</h2>
-          <p className="text-[14px] text-wp-text3 mb-6">Start free, upgrade when you need more. No lock-in, cancel anytime.</p>
-
+          <h2 className="text-xl font-display text-wp-text1 tracking-wide mb-2">PLANS</h2>
+          <p className="text-[14px] text-wp-text3 mb-6">Everything here is free today. Pro is coming; it has no price yet.</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-6">
-            {/* Free plan */}
             <div className="rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(255,255,255,0.02)] p-6 flex flex-col">
-              <div className="mb-5">
-                <p className="text-[10px] font-mono font-semibold text-wp-text3 uppercase tracking-widest mb-2">Free</p>
-                <div className="flex items-end gap-2">
-                  <span className="text-4xl font-bold text-wp-text">$0</span>
-                  <span className="text-wp-text3 mb-1 text-[13px]">/ month</span>
-                </div>
-                <p className="mt-1.5 text-[12px] text-wp-text3">Full core access. No credit card required.</p>
-              </div>
+              <p className="text-[10px] font-mono font-semibold text-wp-text3 uppercase tracking-widest mb-2">Free</p>
+              <p className="text-4xl font-bold text-wp-text mb-4">$0</p>
               <ul className="space-y-2 mb-6 flex-1 text-[13px] text-wp-text3">
-                {['60 API requests / minute', '7-day signal history', 'Up to 3 alert subscriptions', 'Global live feed & world map', 'Community access', 'RSS / JSON Feed export'].map(f => (
+                {['The public API, feeds and MCP server, no key', 'Up to 200 requests a minute', 'Up to 10 webhooks (free account)', 'Alerts on what you follow', 'RSS / JSON Feed export'].map(f => (
                   <li key={f} className="flex items-start gap-2">
                     <span className="text-emerald-400 mt-0.5 flex-shrink-0">✓</span>
                     <span>{f}</span>
@@ -563,53 +513,15 @@ export default function DevelopersPage() {
                 href={authHref('register', '/developers')}
                 className="block w-full text-center rounded-lg border border-[rgba(255,255,255,0.15)] bg-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.08)] text-wp-text font-semibold py-2.5 text-[14px] transition-colors"
               >
-                Get Started — Free
+                Create a free account
               </Link>
             </div>
-
-            {/* Pro plan */}
-            <div className="rounded-xl border-2 border-wp-cyan/50 bg-wp-cyan/5 p-6 flex flex-col shadow-[0_0_30px_rgba(0,212,255,0.07)] relative">
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                <span className="px-3 py-1 rounded-full bg-wp-cyan text-black text-[10px] font-mono font-bold tracking-widest uppercase shadow-lg">
-                  Most Popular
-                </span>
-              </div>
-              <div className="mb-5">
-                <p className="text-[10px] font-mono font-semibold text-wp-cyan/80 uppercase tracking-widest mb-2">Pro</p>
-                <div className="flex items-end gap-2">
-                  <span className="text-4xl font-bold text-wp-text">$12</span>
-                  <span className="text-wp-text3 mb-1 text-[13px]">/ month</span>
-                </div>
-                <p className="mt-1.5 text-[12px] text-wp-text3">Higher limits, webhooks & full intelligence suite.</p>
-              </div>
-              <ul className="space-y-2 mb-6 flex-1 text-[13px] text-wp-text3">
-                {['600 API requests / minute', '90-day signal history', 'Unlimited alert subscriptions', '5 webhook endpoints', 'Advanced analytics', 'Priority support', 'Early access to beta features'].map(f => (
-                  <li key={f} className="flex items-start gap-2">
-                    <span className="text-wp-cyan mt-0.5 flex-shrink-0">✓</span>
-                    <span>{f}</span>
-                  </li>
-                ))}
-              </ul>
-
-              {upgradeError && (
-                <p className="mb-3 text-[12px] text-red-400 bg-red-400/10 rounded-lg px-3 py-2 border border-red-400/20">
-                  {upgradeError}
-                </p>
-              )}
-
-              <button
-                onClick={handleUpgrade}
-                disabled={upgradeLoading}
-                className="block w-full text-center rounded-lg bg-wp-cyan hover:bg-wp-cyan/90 active:bg-wp-cyan/80 text-black font-bold py-2.5 text-[14px] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {upgradeLoading ? 'Redirecting to Stripe…' : 'Upgrade to Pro — $12/mo'}
-              </button>
-              <p className="text-center text-[11px] text-wp-text3 mt-2">
-                Secure checkout via Stripe. Cancel anytime.
-              </p>
+            <div className="rounded-xl border-2 border-wp-cyan/50 bg-wp-cyan/5 p-6 flex flex-col shadow-[0_0_30px_rgba(0,212,255,0.07)]">
+              <p className="text-[10px] font-mono font-semibold text-wp-cyan/80 uppercase tracking-widest mb-2">Pro · coming soon</p>
+              <p className="text-[13px] text-wp-text3 mb-4">Planned: higher API limits, longer history and exports, priority support. Hear when it opens:</p>
+              <ProWaitlist source="/developers" />
             </div>
           </div>
-
         </section>
 
         {/* Footer CTA */}

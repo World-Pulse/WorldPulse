@@ -10,7 +10,7 @@
  *   - NOAA SWPC — space weather alerts: geomagnetic/solar/radio (10-min polls)
  *   - GPS/GNSS Jamming Intelligence — multi-source jamming detection with military/spoofing/civilian classification (30-min polls)
  *   - Georgia Tech IODA — internet outage alerts by country/ASN (10-min polls)
- *   - CelesTrak — active satellite catalog, launches & re-entries (30-min polls)
+ *   - CelesTrak — switched off Oct 21, 2026 (see below)
  *   - US Navy CSG Tracker — all 11 carrier strike groups via USNI News RSS (30-min polls)
  *   - WHO Disease Outbreak News — official WHO disease outbreak notifications (30-min polls)
  *   - IAEA Nuclear Events — nuclear safety incidents & radiation events (30-min polls)
@@ -61,7 +61,6 @@ import { startGpsJammingPoller } from './gps-jamming'
 // enrichment, configurable thresholds, and 4-hour dedup TTL.
 // Dedup key prefix shared (`gpsjam:dedup:`) to prevent duplicate signals.
 import { startIodaPoller } from './ioda'
-import { startCelesTrakPoller } from './celestrak'
 import { startCarrierStrikeGroupPoller } from './carrier-strike-groups'
 import { startWhoPoller } from './who'
 import { startIaeaPoller } from './iaea'
@@ -149,12 +148,6 @@ export function startOsintPollers(
     cleanups.push(startIodaPoller(db, redis, producer))
   } catch (err) {
     logger.error({ err }, 'Failed to start IODA internet outage poller')
-  }
-
-  try {
-    cleanups.push(startCelesTrakPoller(db, redis, producer))
-  } catch (err) {
-    logger.error({ err }, 'Failed to start CelesTrak satellite poller')
   }
 
   try {
@@ -261,6 +254,13 @@ export function startOsintPollers(
   //                       moves to the USPTO Open Data Portal (needs a key)
   //   aviation-incidents  aviation-safety.net answers every feed request with a
   //                       Cloudflare browser check (HTTP 403)
+  //   celestrak           (Oct 21, 2026) downloaded CelesTrak's whole catalogue
+  //                       every 30 minutes, where CelesTrak asks for no more
+  //                       than once every 2 hours, for an hourly count of
+  //                       satellites as a signal; the server's requests to
+  //                       celestrak.org now time out. The World Map's
+  //                       Satellites layer asks CelesTrak itself
+  //                       (apps/web/src/lib/map-satellites.ts)
 
   // ── Global News RSS (25 international outlets) ──────────────────────────
   try {
@@ -283,7 +283,6 @@ export function startOsintPollers(
     ['spaceweather',       'NOAA Space Weather',             'spaceweather'],
     ['gps-jamming',        'GPS/GNSS Jamming Intelligence',   'gps-jamming'],
     ['ioda',               'IODA Internet Outages',          'ioda'],
-    ['celestrak',          'CelesTrak Satellites',           'celestrak'],
     ['carrier-strike-groups', 'US Navy CSG Tracker',        'carrier-strike-groups'],
     ['who',                'WHO Disease Outbreak',           'who'],
     ['iaea',               'IAEA Nuclear Events',            'iaea'],

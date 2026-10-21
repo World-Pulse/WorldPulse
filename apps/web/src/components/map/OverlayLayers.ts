@@ -77,7 +77,7 @@ export class OverlayLayers {
       const json = await res.json()
       const live = def.live
       if (live) {
-        const prepared = await live.prepare(json)
+        const prepared = await live.prepare(json, this.hooks.fetchImpl ?? fetch)
         if (this.turn.get(key) !== turn || !this.on.has(key)) return
         const place = () => {
           if (this.turn.get(key) !== turn || !this.on.has(key)) return

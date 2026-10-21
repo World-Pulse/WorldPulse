@@ -52,9 +52,24 @@ const FAQ: Array<{ q: string; a: React.ReactNode }> = [
     q: 'Is there an API?',
     a: (
       <>
-        Yes. The public endpoints work without signing up; see the{' '}
-        <Link href="/developers" className="text-wp-amber underline">developer page</Link>. For higher limits, sign in and create a key on the{' '}
-        <Link href="/developer" className="text-wp-amber underline">API keys page</Link>; <Link href="/pricing" className="text-wp-amber underline">Pricing</Link> lists the plans.
+        Yes, and an MCP server for AI assistants. The public endpoints work without signing up or a key; see the{' '}
+        <Link href="/developers" className="text-wp-amber underline">developer page</Link>. Everything is free today; a Pro plan is coming (
+        <Link href="/pricing" className="text-wp-amber underline">Pricing</Link>).
+      </>
+    ),
+  },
+  {
+    // Devon, Oct 21, 2026: the hosted API is "Free with credit; companies ask"
+    q: 'Can I use WorldPulse\'s data?',
+    a: 'Personal, research, education and non-profit use is free, with a link back to world-pulse.io. Companies: email support@world-pulse.io first. The code is open source under the MIT license.',
+  },
+  {
+    // Devon, Oct 21, 2026: support@world-pulse.io reaches him (plan C1)
+    q: 'How do I contact WorldPulse?',
+    a: (
+      <>
+        Email <span className="text-wp-amber select-all">support@world-pulse.io</span>. To suggest a news source, use{' '}
+        <Link href="/sources/suggest" className="text-wp-amber underline">/sources/suggest</Link>.
       </>
     ),
   },

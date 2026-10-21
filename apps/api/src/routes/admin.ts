@@ -6,7 +6,7 @@ import { getSecurityMetrics } from '../lib/security'
 import { runFullReindex } from '../lib/search-backfill'
 import { sendError } from '../lib/errors'
 import { CLAUDE_SMALL } from '../lib/claude'
-import { GEMINI_MODEL } from '../lib/llm-models'
+import { GEMINI_MODEL, OLLAMA_MODEL } from '../lib/llm-models'
 
 // ─── Stability keys (mirror apps/scraper/src/lib/stability-tracker.ts) ───────
 const STABILITY_KEYS = {
@@ -324,7 +324,7 @@ export const registerAdminRoutes: FastifyPluginAsync = async (app) => {
       {
         id:         'ollama',
         label:      'Local AI (Ollama)',
-        model:      process.env.OLLAMA_MODEL ?? 'llama3.2',
+        model:      OLLAMA_MODEL,
         configured: !!process.env.OLLAMA_URL,
         active:     false,
       },

@@ -42,6 +42,10 @@ An MCP server at ${API_URL}/mcp (Streamable HTTP, POST JSON-RPC; no sign-in and 
 ## Citing
 
 When you cite a story, link to its page on ${SITE_URL}/signals/<id> and say how many outlets reported it.
+
+## Using the data
+
+Personal, research, education and non-profit use of the hosted API is free, with a link back to world-pulse.io. Companies: email support@world-pulse.io first. The code is open source under the MIT license.
 `
 
 export function GET(): Response {

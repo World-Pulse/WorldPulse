@@ -25,7 +25,7 @@
 
 import { redis } from '../db/redis'
 import { askClaude, claudeBudgetLeft } from './claude'
-import { GEMINI_MODEL } from './llm-models'
+import { GEMINI_MODEL, OLLAMA_MODEL } from './llm-models'
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 /** An AI summary is kept 30 days: a story's text doesn't change (was 24 hours) */
@@ -45,7 +45,6 @@ const MAX_INPUT_CHARS     = 2000           // truncate long bodies before sendin
  * 2026) and started with a markdown heading ("**PULSE Summary:**").
  */
 const FACT_RULES = 'Use only facts the text states: add no titles, roles or background about people, places or events that it does not give. Write plain sentences: no heading, no markdown.'
-const OLLAMA_MODEL        = process.env.OLLAMA_MODEL        ?? 'llama3.2'
 const OPENROUTER_MODEL    = process.env.OPENROUTER_MODEL    ?? 'meta-llama/llama-3.2-3b-instruct:free'
 
 // ─── Types ────────────────────────────────────────────────────────────────────

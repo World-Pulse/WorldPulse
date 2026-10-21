@@ -15,7 +15,7 @@
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 import { logger } from './logger'
-import { GEMINI_MODEL } from './llm-models'
+import { GEMINI_MODEL, OLLAMA_MODEL } from './llm-models'
 import { askClaude, CLAUDE_SMALL } from './claude'
 import { signalsHaveStoryIds } from './stories'
 
@@ -450,7 +450,7 @@ async function generateWithLLM(prompt: string): Promise<{ text: string; model: s
   const ollamaUrl = process.env.OLLAMA_URL
   if (ollamaUrl) {
     try {
-      const model = process.env.OLLAMA_MODEL ?? 'llama3.2'
+      const model = OLLAMA_MODEL
       const res = await fetch(`${ollamaUrl}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

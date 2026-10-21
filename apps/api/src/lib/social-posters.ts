@@ -6,6 +6,12 @@
  * post), or BLUESKY_HANDLE and BLUESKY_APP_PASSWORD (Settings → App
  * passwords; never the account password).
  *
+ * X (@WorldPulse_io) since Oct 21, 2026 (plan G7; Devon: "Yes, 3 a day"):
+ * off until TWITTER_API_KEY, TWITTER_API_SECRET, TWITTER_ACCESS_TOKEN and
+ * TWITTER_ACCESS_SECRET are on the server (an X developer account with
+ * pay-per-use credits, about $0.20 a post with a link). Three a day, at least
+ * four hours apart. The old PULSE X agent, up to 15 a day, stays off.
+ *
  * Every 10 minutes from 6 AM to 11 PM New York time, each channel posts the
  * highest-ranked verified story of the last 12 hours it hasn't posted yet: 3+
  * independent outlets, an English headline, not sports or culture. At most
@@ -19,14 +25,16 @@ import { topStories } from '../routes/stories'
 import { newYorkTime } from './briefing-email'
 import { outletNames, joinNames } from './outlet-names'
 import type { ListedStory } from './story-list'
+import { isTwitterConfigured, postTweet } from './pulse/agents/twitter-client'
 
-export type Channel = 'telegram' | 'bluesky'
+export type Channel = 'telegram' | 'bluesky' | 'x'
 
 const SITE_URL = (process.env.FRONTEND_URL || 'https://world-pulse.io').replace(/\/+$/, '')
 const BLUESKY_HOST = 'https://bsky.social'
 const RULES: Record<Channel, { perDay: number; gapMinutes: number }> = {
   telegram: { perDay: 8, gapMinutes: 75 },
   bluesky:  { perDay: 6, gapMinutes: 90 },
+  x:        { perDay: 3, gapMinutes: 240 },
 }
 const FIRST_HOUR = 6     // New York time
 const LAST_HOUR = 22     // posts until 10:59 PM
@@ -37,9 +45,9 @@ const POSTED_TTL = 14 * 86_400
 const TICK_MS = 10 * 60_000
 
 function configured(channel: Channel): boolean {
-  return channel === 'telegram'
-    ? Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHANNEL)
-    : Boolean(process.env.BLUESKY_HANDLE && process.env.BLUESKY_APP_PASSWORD)
+  if (channel === 'telegram') return Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHANNEL)
+  if (channel === 'bluesky') return Boolean(process.env.BLUESKY_HANDLE && process.env.BLUESKY_APP_PASSWORD)
+  return isTwitterConfigured()
 }
 
 /** A headline in English: mostly Latin letters, no common French/Spanish/German/Italian words */
@@ -84,6 +92,20 @@ export function blueskyText(s: ListedStory): string {
   const room = 300 - [...tail].length
   const title = [...s.title].length > room ? `${[...s.title].slice(0, room - 1).join('').trimEnd()}…` : s.title
   return `${title}${tail}`.slice(0, 1000)
+}
+
+/** X counts a link as 23 characters, whatever its length; 280 in all */
+const X_LINK = 23
+export function xText(s: ListedStory): string {
+  const tail = `\n\n✓ ${verifiedLine(s)}${s.place ? ` · ${s.place}` : ''}`
+  const room = 280 - X_LINK - 1 - [...tail].length
+  const title = [...s.title].length > room ? `${[...s.title].slice(0, Math.max(0, room - 1)).join('').trimEnd()}…` : s.title
+  return `${title}${tail}\n${storyLink(s, 'x')}`
+}
+
+async function xPost(s: ListedStory): Promise<void> {
+  const r = await postTweet(xText(s))
+  if (!r.success) throw new Error(`X: ${String(r.error ?? 'no answer').slice(0, 120)}`)
 }
 
 async function telegramPost(s: ListedStory): Promise<void> {
@@ -143,12 +165,12 @@ async function blueskyPost(s: ListedStory): Promise<void> {
   })
 }
 
-const POSTERS: Record<Channel, (s: ListedStory) => Promise<void>> = { telegram: telegramPost, bluesky: blueskyPost }
+const POSTERS: Record<Channel, (s: ListedStory) => Promise<void>> = { telegram: telegramPost, bluesky: blueskyPost, x: xPost }
 const status: Record<string, unknown> = {}
 
 /** One pass: each configured channel posts at most one story (exported for tests) */
 export async function runSocialPosts(now: Date = new Date()): Promise<Record<Channel, string>> {
-  const result = { telegram: 'off', bluesky: 'off' } as Record<Channel, string>
+  const result = { telegram: 'off', bluesky: 'off', x: 'off' } as Record<Channel, string>
   const ny = newYorkTime(now)
   const channels = (Object.keys(RULES) as Channel[]).filter(configured)
   if (channels.length === 0) return result
@@ -201,7 +223,7 @@ let timer: ReturnType<typeof setInterval> | null = null
 export function startSocialPosters(): void {
   if (timer) return
   const on = (Object.keys(RULES) as Channel[]).filter(configured)
-  console.log(on.length ? `[SOCIAL] Automatic posts on for: ${on.join(', ')}` : '[SOCIAL] Automatic posts off (no Telegram or Bluesky keys)')
+  console.log(on.length ? `[SOCIAL] Automatic posts on for: ${on.join(', ')}` : '[SOCIAL] Automatic posts off (no Telegram, Bluesky or X keys)')
   if (!on.length) return
   timer = setInterval(() => { void runSocialPosts().catch(err => console.error('[SOCIAL] pass failed:', err)) }, TICK_MS)
 }

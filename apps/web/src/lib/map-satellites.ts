@@ -4,6 +4,11 @@
  * now. The API sends their orbital elements (GET /api/v1/map/satellites,
  * TLEs kept 6 hours); satellite.js (MIT, SGP4) works out each position in
  * the browser, again every few seconds while the layer is on.
+ *
+ * When the API has too few (Oct 21, 2026: celestrak.org didn't answer our
+ * server), the browser asks CelesTrak itself (it allows that: its answers
+ * carry Access-Control-Allow-Origin: *), and keeps each group two hours, as
+ * CelesTrak asks.
  */
 
 import type { OverlayFeature } from './map-overlays'
@@ -64,8 +69,72 @@ export function prepareWith(lib: SatLib, json: unknown): PreparedSats {
   return { lib, sats }
 }
 
-export async function prepareSatellites(json: unknown): Promise<PreparedSats> {
-  return prepareWith(await import('satellite.js'), json)
+const CELESTRAK_GP = 'https://celestrak.org/NORAD/elements/gp.php'
+const GROUPS = Object.keys(SAT_GROUP_LABEL) as SatGroup[]
+/** CelesTrak asks that the same data be fetched at most once every two hours: each browser keeps a group that long */
+export const CELESTRAK_KEEP_MS = 2 * 60 * 60_000
+/** Fewer than this from the API: ask CelesTrak from the browser */
+const ENOUGH_FROM_API = 50
+
+/** CelesTrak's three-line text (name, line 1, line 2) as element sets of one group */
+export function parseTleText(text: string, group: SatGroup): SatTle[] {
+  const lines = String(text ?? '').split(/\r?\n/).map(l => l.trimEnd()).filter(Boolean)
+  const out: SatTle[] = []
+  let i = 0
+  while (i + 2 < lines.length) {
+    const [name, tle1, tle2] = [lines[i], lines[i + 1], lines[i + 2]]
+    if (!isTleLine(tle1, 1) || !isTleLine(tle2, 2)) { i += 1; continue }
+    const norad = Number(tle1.slice(2, 7).trim())
+    if (Number.isFinite(norad) && norad > 0) out.push({ name: name.trim(), norad, group, tle1, tle2 })
+    i += 3
+  }
+  return out
+}
+
+export interface KeptStore { getItem(key: string): string | null; setItem(key: string, value: string): void }
+
+function browserStore(): KeptStore | null {
+  try { return typeof localStorage === 'undefined' ? null : localStorage } catch { return null }
+}
+
+/** One group from CelesTrak: this browser's copy while under two hours old, else a fresh one */
+export async function celestrakGroup(group: SatGroup, fetchImpl: typeof fetch, store: KeptStore | null = browserStore(), now = Date.now()): Promise<SatTle[]> {
+  const key = `wp:celestrak:${group}:v1`
+  try {
+    const kept = JSON.parse(store?.getItem(key) ?? 'null') as { at?: unknown; text?: unknown } | null
+    if (kept && typeof kept.at === 'number' && typeof kept.text === 'string' && now - kept.at >= 0 && now - kept.at < CELESTRAK_KEEP_MS) {
+      const list = parseTleText(kept.text, group)
+      if (list.length) return list
+    }
+  } catch { /* nothing kept, or storage blocked */ }
+  const res = await fetchImpl(`${CELESTRAK_GP}?GROUP=${group}&FORMAT=tle`)
+  if (!res.ok) throw new Error(`CelesTrak ${group}: HTTP ${res.status}`)
+  const text = await res.text()
+  const list = parseTleText(text, group)
+  if (list.length) { try { store?.setItem(key, JSON.stringify({ at: now, text })) } catch { /* storage full or blocked */ } }
+  return list
+}
+
+/** The five groups from CelesTrak, each satellite once (the first group listed wins); a group that doesn't answer is left out */
+export async function celestrakSatellites(fetchImpl: typeof fetch, store: KeptStore | null = browserStore()): Promise<SatTle[]> {
+  const lists = await Promise.all(GROUPS.map(g => celestrakGroup(g, fetchImpl, store).catch(() => [] as SatTle[])))
+  const seen = new Set<number>()
+  const out: SatTle[] = []
+  for (const list of lists) for (const s of list) {
+    if (seen.has(s.norad)) continue
+    seen.add(s.norad)
+    out.push(s)
+  }
+  return out
+}
+
+/** The API's satellites, or, when it has fewer than 50, CelesTrak's straight to this browser */
+export async function prepareSatellites(json: unknown, fetchImpl: typeof fetch = fetch, store: KeptStore | null = browserStore()): Promise<PreparedSats> {
+  const lib = await import('satellite.js')
+  const fromApi = prepareWith(lib, json)
+  if (fromApi.sats.length >= ENOUGH_FROM_API) return fromApi
+  const direct = prepareWith(lib, { satellites: await celestrakSatellites(fetchImpl, store).catch(() => [] as SatTle[]) })
+  return direct.sats.length > fromApi.sats.length ? direct : fromApi
 }
 
 /** Where each satellite is at `now`: a point, its height (km) and speed (km/s) */

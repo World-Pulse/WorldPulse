@@ -8,10 +8,16 @@
  * CelesTrak asks that its GP data be fetched no more than once every two
  * hours: each group is kept in Redis for 6 hours and remade in the
  * background, and a group that doesn't answer keeps its last copy.
+ *
+ * A group that didn't answer isn't asked again for 30 minutes, and an empty
+ * answer is kept by browsers one minute, not an hour (Oct 21, 2026: on its
+ * first morning celestrak.org didn't answer the server, each try waiting 10
+ * seconds; the map then asks CelesTrak from the browser, lib/map-satellites.ts).
  */
 
 import type { FastifyPluginAsync } from 'fastify'
 import { staleWhileRevalidate } from '../../lib/swr-cache'
+import { redis } from '../../db/redis'
 
 export const SATELLITE_GROUPS = ['stations', 'gnss', 'weather', 'resource', 'military'] as const
 export type SatelliteGroup = (typeof SATELLITE_GROUPS)[number]
@@ -27,6 +33,7 @@ export interface SatelliteTle {
 const CELESTRAK = 'https://celestrak.org/NORAD/elements/gp.php'
 const UA = 'WorldPulse/1.0 (+https://world-pulse.io; map layer, cached 6 h)'
 export const SATELLITES_FRESH_SECONDS = 6 * 3600
+export const SATELLITES_RETRY_SECONDS = 30 * 60
 
 /** A TLE line: its number, a space, then 67 more characters (some feeds trim trailing spaces) */
 const LINE = (n: 1 | 2) => new RegExp(`^${n} [0-9 ]{5}`)
@@ -66,6 +73,20 @@ async function fetchGroup(group: SatelliteGroup, fetchImpl: typeof fetch = fetch
   return list
 }
 
+/** fetchGroup, unless the group failed in the last 30 minutes (then a failure at once) */
+async function fetchGroupUnlessDown(group: SatelliteGroup): Promise<SatelliteTle[]> {
+  const down = `map:satellites:${group}:down`
+  let recent: unknown = null
+  try { recent = await redis.get(down) } catch { /* Redis unavailable: ask */ }
+  if (recent) throw new Error(`CelesTrak ${group}: didn't answer in the last 30 minutes`)
+  try {
+    return await fetchGroup(group)
+  } catch (err) {
+    try { await redis.setex(down, SATELLITES_RETRY_SECONDS, '1') } catch { /* not kept: the next request asks again */ }
+    throw err
+  }
+}
+
 export const registerMapSatelliteRoutes: FastifyPluginAsync = async (app) => {
   app.get('/satellites', {
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
@@ -77,11 +98,11 @@ export const registerMapSatelliteRoutes: FastifyPluginAsync = async (app) => {
   }, async (_req, reply) => {
     const lists = await Promise.all(SATELLITE_GROUPS.map(group =>
       staleWhileRevalidate(`map:satellites:${group}:v1`, { freshSeconds: SATELLITES_FRESH_SECONDS, staleSeconds: 48 * 3600, lockSeconds: 60 },
-        () => fetchGroup(group))
+        () => fetchGroupUnlessDown(group))
         .catch(err => { app.log.warn({ err: String(err), group }, 'satellites group unavailable'); return [] as SatelliteTle[] })))
     const satellites = mergeGroups(lists)
     const groups = Object.fromEntries(SATELLITE_GROUPS.map((g, i) => [g, lists[i].length]))
-    void reply.header('Cache-Control', 'public, max-age=3600')
+    void reply.header('Cache-Control', satellites.length ? 'public, max-age=3600' : 'public, max-age=60')
     return reply.send({ success: true, source: 'CelesTrak (celestrak.org)', groups, count: satellites.length, satellites })
   })
 }

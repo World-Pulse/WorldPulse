@@ -54,7 +54,7 @@ export interface OverlayDef {
   toFeatures: (json: unknown) => OverlayFeature[]
   popup: (props: Record<string, unknown>) => string
   /** Points that move (satellites): made ready once per answer, then placed again every everyMs */
-  live?: { everyMs: number; prepare: (json: unknown) => Promise<unknown>; at: (prepared: unknown, now: Date) => OverlayFeature[] }
+  live?: { everyMs: number; prepare: (json: unknown, fetchImpl: typeof fetch) => Promise<unknown>; at: (prepared: unknown, now: Date) => OverlayFeature[] }
 }
 
 const MINUTE = 60_000
@@ -336,7 +336,7 @@ export const OVERLAYS: Record<OverlayKey, OverlayDef> = {
     toFeatures: () => [], popup: satellitePopup,
     live: {
       everyMs: 5000,
-      prepare: prepareSatellites,
+      prepare: (json, fetchImpl) => prepareSatellites(json, fetchImpl),
       at: (prepared, now) => satellitePositions(prepared as PreparedSats, now),
     },
   },

@@ -159,6 +159,12 @@ services:
       TELEGRAM_CHANNEL:     ${TELEGRAM_CHANNEL:-}
       BLUESKY_HANDLE:       ${BLUESKY_HANDLE:-}
       BLUESKY_APP_PASSWORD: ${BLUESKY_APP_PASSWORD:-}
+      # X (@WorldPulse_io), 3 posts a day (plan G7; Devon, Oct 21, 2026: "Yes, 3 a day"):
+      # all four from an X developer app with write access; empty = off
+      TWITTER_API_KEY:       ${TWITTER_API_KEY:-}
+      TWITTER_API_SECRET:    ${TWITTER_API_SECRET:-}
+      TWITTER_ACCESS_TOKEN:  ${TWITTER_ACCESS_TOKEN:-}
+      TWITTER_ACCESS_SECRET: ${TWITTER_ACCESS_SECRET:-}
       # Optional — OAuth
       GITHUB_CLIENT_ID:     ${GITHUB_CLIENT_ID:-}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
@@ -181,7 +187,7 @@ services:
       UPLOADS_BASE_URL:  ${UPLOADS_BASE_URL:-https://world-pulse.io}
       # PULSE AI Publisher (the AI Digest). On since Oct 11, 2026: it writes on
       # Claude within AI_MONTHLY_CAP_USD, shared with the scraper (lib/claude.ts).
-      # Auto-posting to X needs TWITTER_API_KEY, which isn't passed here.
+      # Auto-posting to X: the TWITTER_* keys above (lib/social-posters.ts).
       PULSE_ENABLED:     ${PULSE_ENABLED:-true}
       PULSE_API_KEY:     ${PULSE_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}

@@ -212,6 +212,8 @@ pnpm dev
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+The code is MIT — see [LICENSE](LICENSE) for details.
+
+Using the hosted API at api.world-pulse.io: personal, research, education and non-profit use is free, with a link back to world-pulse.io. Companies: email support@world-pulse.io first.
 
 
