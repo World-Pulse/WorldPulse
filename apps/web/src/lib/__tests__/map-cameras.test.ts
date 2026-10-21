@@ -1,5 +1,12 @@
 import { describe, it, expect, vi } from 'vitest'
-import { cameraPopupHtml, pictureAgeLabel, startCameraPicture } from '../map-cameras'
+import { cameraPictureUrl, cameraPopupHtml, pictureAgeLabel, startCameraPicture } from '../map-cameras'
+
+describe('cameraPictureUrl (the camera wall, Oct 21, 2026)', () => {
+  it('asks for this minute\'s picture', () => {
+    expect(cameraPictureUrl('https://api.world-pulse.io/api/v1/cameras/tfl%3A1/image', 29342817)).toBe('https://api.world-pulse.io/api/v1/cameras/tfl%3A1/image?m=29342817')
+    expect(cameraPictureUrl('https://x.test/img?size=s', 5)).toBe('https://x.test/img?size=s&m=5')
+  })
+})
 
 describe('pictureAgeLabel', () => {
   const now = Date.parse('2026-10-19T17:00:00Z')

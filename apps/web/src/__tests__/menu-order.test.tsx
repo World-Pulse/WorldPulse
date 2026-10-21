@@ -16,7 +16,8 @@ const MAIN = ['/', '/map', '/briefing', '/week', '/check', '/entities', '/countr
 const OTHERS = [
   '/alerts', '/analytics', '/explore', '/knowledge-graph/explorer', '/finance', '/maritime', '/sanctions',
   '/internet-outages', '/cyber-threats', '/undersea-cables', '/governance', '/food-security', '/digital-rights', '/water-security',
-  '/labor-rights', '/patents', '/communities', '/claims', '/sources', '/developers', '/settings', '/status',
+  // the camera wall, back Oct 21, 2026 (M45)
+  '/labor-rights', '/cameras', '/patents', '/communities', '/claims', '/sources', '/developers', '/settings', '/status',
 ]
 
 describe('the left menu', () => {

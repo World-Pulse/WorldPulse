@@ -36,6 +36,8 @@ const PAGES: Array<{ path: string; changeFrequency: 'always' | 'hourly' | 'daily
   // The index and topic pages, each with its own title since H-0023 (Oct 20, 2026)
   { path: '/countries', changeFrequency: 'hourly', priority: 0.8 },
   { path: '/maritime', changeFrequency: 'hourly', priority: 0.6 },
+  // The camera wall, back Oct 21, 2026 (plan M45)
+  { path: '/cameras', changeFrequency: 'daily', priority: 0.4 },
   { path: '/explore', changeFrequency: 'hourly', priority: 0.6 },
   { path: '/sources', changeFrequency: 'weekly', priority: 0.5 },
   { path: '/cyber-threats', changeFrequency: 'hourly', priority: 0.5 },

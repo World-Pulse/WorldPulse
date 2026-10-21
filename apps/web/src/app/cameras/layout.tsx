@@ -8,10 +8,9 @@ export const metadata: Metadata = {
   ...pageMetadata({
     path: '/cameras',
     title: 'Live cameras',
-    description: 'Public webcams around the world.',
+    description: 'Live road and city cameras in London, New York, California, Finland, Hong Kong and New Zealand, a new picture every minute.',
   }),
-  // Hidden since the camera feeds stopped (plan M45)
-  robots: { index: false, follow: true },
+  // Hidden from search from Oct 13 while the camera feeds were down; back Oct 21, 2026 (plan M45)
 }
 
 export default function Layout({ children }: { children: React.ReactNode }) {

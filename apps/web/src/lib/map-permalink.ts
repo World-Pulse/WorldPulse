@@ -14,9 +14,12 @@
  */
 
 import { toBasemapMode, type BasemapMode } from './map-style'
+import type { OverlayKey } from './map-overlays'
 export type { BasemapMode }
 
+/** Every switchable layer; the newer ones (Oct 21, 2026) are lib/map-overlays.ts's keys */
 export type LayerKey =
+  | OverlayKey
   | 'wind'
   | 'heat'
   | 'timeline'

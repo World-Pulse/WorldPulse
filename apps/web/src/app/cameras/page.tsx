@@ -1,11 +1,25 @@
 'use client'
 
+/**
+ * The camera wall (plan M45, back Oct 21, 2026): the map's live cameras on one
+ * page. Hidden since EarthCam blocked its pictures; the cameras are now the
+ * public road and city cameras of M37 (Transport for London, NYC DOT,
+ * Caltrans, Fintraffic, Hong Kong's Transport Department, NZ Transport
+ * Agency), each picture through our API (GET /api/v1/cameras/:id/image, kept
+ * a minute), so no other site is shown in a frame.
+ */
+
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Video, AlertTriangle } from 'lucide-react'
+import { cameraPictureUrl } from '@/lib/map-cameras'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
-const SNAPSHOT_REFRESH_MS = 30_000
+/** The API keeps each picture a minute: a fresh one each minute, while the page is in view */
+const SNAPSHOT_REFRESH_MS = 60_000
+/** Cameras a page shows; "Show more" adds as many again */
+const PAGE_SIZE = 48
+const MAX_CAMERAS = 192
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -23,17 +37,19 @@ interface CameraFeed {
   snapshotUrl: string | null
   type: CameraType
   isLive: boolean
+  city?: string
+  /** Who runs the camera (Fintraffic's pictures are CC BY 4.0: the credit is required) */
+  sourceName?: string
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
+// Only regions with cameras (Oct 21, 2026: none yet in the Middle East or Africa)
 const REGIONS = [
   { id: 'global',     label: 'Global'      },
   { id: 'americas',   label: 'Americas'    },
   { id: 'europe',     label: 'Europe'      },
-  { id: 'mena',       label: 'MENA'        },
   { id: 'asia',       label: 'Asia'        },
-  { id: 'africa',     label: 'Africa'      },
   { id: 'oceania',    label: 'Oceania'     },
   { id: 'easteurope', label: 'East Europe' },
 ]
@@ -75,16 +91,14 @@ interface CameraCardProps {
 }
 
 function CameraCard({ camera, refreshTick }: CameraCardProps) {
-  const meta = TYPE_META[camera.type]
+  const meta = TYPE_META[camera.type] ?? TYPE_META.traffic
   const flag = COUNTRY_FLAG[camera.countryCode] ?? '🌐'
   const [imgError, setImgError] = useState(false)
+  // a picture that failed gets another chance at the next minute
+  useEffect(() => { setImgError(false) }, [refreshTick])
 
-  const snapshotSrc = (!imgError && camera.snapshotUrl)
-    ? `${camera.snapshotUrl}?t=${refreshTick}`
-    : null
-
-  // Detect invalid Windy embed URLs (placeholder IDs that won't render)
-  const isValidEmbed = camera.embedUrl && !camera.embedUrl.includes('embed-webcam.html?id=1')
+  const snapshotSrc = (!imgError && camera.snapshotUrl) ? cameraPictureUrl(camera.snapshotUrl, refreshTick) : null
+  const sourcePage = /^https?:\/\//.test(camera.embedUrl ?? '') ? camera.embedUrl : null
 
   return (
     <div className="group bg-zinc-900 border border-zinc-700/50 hover:border-zinc-600 rounded-2xl overflow-hidden transition-all duration-200 hover:shadow-lg hover:shadow-black/30">
@@ -93,31 +107,23 @@ function CameraCard({ camera, refreshTick }: CameraCardProps) {
         {snapshotSrc ? (
           <img
             src={snapshotSrc}
-            alt={camera.name}
+            alt={`Live view: ${camera.name}`}
+            loading="lazy"
             className="w-full h-full object-cover"
             onError={() => setImgError(true)}
           />
-        ) : isValidEmbed ? (
-          <iframe
-            src={camera.embedUrl}
-            title={camera.name}
-            className="w-full h-full border-0"
-            loading="lazy"
-            allow="autoplay; fullscreen"
-            sandbox="allow-scripts allow-same-origin allow-popups"
-          />
         ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-zinc-900 to-zinc-800">
+          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-zinc-900 to-zinc-800 px-4 text-center">
             <Video className="w-10 h-10 mb-2 opacity-60 mx-auto" />
-            <span className="text-[11px] text-zinc-500 font-mono">Stream connecting…</span>
-            {isValidEmbed && (
+            <span className="text-[11px] text-zinc-500">No picture from this camera right now.</span>
+            {sourcePage && (
               <a
-                href={camera.embedUrl}
+                href={sourcePage}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-2 text-[10px] text-amber-500/70 hover:text-amber-400 font-mono transition-colors"
+                className="mt-2 text-[11px] text-amber-500/80 hover:text-amber-400 transition-colors"
               >
-                Open external feed →
+                The camera&apos;s own page ↗
               </a>
             )}
           </div>
@@ -144,12 +150,19 @@ function CameraCard({ camera, refreshTick }: CameraCardProps) {
           <span className="text-xl flex-shrink-0 mt-0.5">{flag}</span>
         </div>
         <div className="flex items-center gap-2 mt-1">
-          <span className="text-[12px] text-zinc-500">{camera.country}</span>
+          <span className="text-[12px] text-zinc-500">{camera.city && !camera.city.includes(camera.country) ? `${camera.city}, ${camera.country}` : (camera.city ?? camera.country)}</span>
           <span className="text-zinc-700">·</span>
           <span className={`font-mono text-[9px] px-1.5 py-0.5 rounded border ${meta.color}`}>
             {meta.label.toUpperCase()}
           </span>
         </div>
+        {camera.sourceName && (
+          <div className="mt-1 text-[11px] text-zinc-600">
+            Camera: {sourcePage
+              ? <a href={sourcePage} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-zinc-400">{camera.sourceName}</a>
+              : camera.sourceName}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -162,18 +175,19 @@ export default function CamerasPage() {
   const [loading, setLoading]     = useState(true)
   const [region, setRegion]       = useState('global')
   const [typeFilter, setTypeFilter] = useState<CameraType | 'all'>('all')
-  const [refreshTick, setRefreshTick] = useState(Date.now())
+  const [refreshTick, setRefreshTick] = useState(() => Math.floor(Date.now() / SNAPSHOT_REFRESH_MS))
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
   const [error, setError]         = useState<string | null>(null)
   const [total, setTotal]         = useState(0)
+  const [limit, setLimit]         = useState(PAGE_SIZE)
 
-  const load = useCallback(async (r: string, t: CameraType | 'all') => {
+  const load = useCallback(async (r: string, t: CameraType | 'all', n: number) => {
     setLoading(true)
     setError(null)
     try {
       const typeParam = t !== 'all' ? `&type=${t}` : ''
       const res = await fetch(
-        `${API_URL}/api/v1/cameras?region=${r}&limit=50${typeParam}`,
+        `${API_URL}/api/v1/cameras?region=${r}&limit=${n}${typeParam}`,
         { cache: 'no-store' }
       )
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -189,13 +203,19 @@ export default function CamerasPage() {
   }, [])
 
   useEffect(() => {
-    void load(region, typeFilter)
-  }, [region, typeFilter, load])
+    void load(region, typeFilter, limit)
+  }, [region, typeFilter, limit, load])
 
-  // Auto-refresh snapshots every 30 s
+  // A new region or type starts at one page again
+  useEffect(() => { setLimit(PAGE_SIZE) }, [region, typeFilter])
+
+  // A fresh picture each minute, only while the page is in view
   useEffect(() => {
-    const id = setInterval(() => setRefreshTick(Date.now()), SNAPSHOT_REFRESH_MS)
-    return () => clearInterval(id)
+    const tick = () => { if (document.visibilityState === 'visible') setRefreshTick(Math.floor(Date.now() / SNAPSHOT_REFRESH_MS)) }
+    tick()
+    const id = setInterval(tick, SNAPSHOT_REFRESH_MS)
+    document.addEventListener('visibilitychange', tick)
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', tick) }
   }, [])
 
   return (
@@ -218,12 +238,12 @@ export default function CamerasPage() {
             <Video className="w-6 h-6 text-red-400" />
             <div>
               <h1 className="text-xl font-bold text-zinc-100 leading-none">Live Cameras</h1>
-              <p className="text-[12px] text-zinc-500 mt-0.5">Public CCTV & webcam feeds worldwide</p>
+              <p className="text-[12px] text-zinc-500 mt-0.5">Public road and city cameras: London, New York, California, Finland, Hong Kong, New Zealand · a new picture every minute · <Link href="/map#@20,0,1.5|l=cameras" className="underline underline-offset-2 hover:text-zinc-300">on the map</Link></p>
             </div>
             <div className="ml-auto flex items-center gap-2">
               {!loading && total > 0 && (
                 <span className="font-mono text-[11px] bg-zinc-800 text-zinc-400 px-2.5 py-1 rounded-full">
-                  {total} feeds
+                  {total} cameras
                 </span>
               )}
               {lastRefreshed && (
@@ -276,13 +296,13 @@ export default function CamerasPage() {
               <AlertTriangle className="w-10 h-10 text-amber-400 mx-auto mb-4" />
               <p className="text-zinc-400 mb-4">{error}</p>
               <button
-                onClick={() => void load(region, typeFilter)}
+                onClick={() => void load(region, typeFilter, limit)}
                 className="px-4 py-2 bg-wp-amber text-black font-semibold rounded-lg text-[13px] hover:bg-amber-400 transition-colors"
               >
                 Retry
               </button>
             </div>
-          ) : loading ? (
+          ) : loading && cameras.length === 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {Array.from({ length: 12 }, (_, i) => <CameraCardSkeleton key={i} />)}
             </div>
@@ -293,15 +313,29 @@ export default function CamerasPage() {
               <p className="text-zinc-600 text-[13px] mt-1">Try a different region or remove the type filter.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {cameras.map(cam => (
-                <CameraCard
-                  key={cam.id}
-                  camera={cam}
-                  refreshTick={refreshTick}
-                />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {cameras.map(cam => (
+                  <CameraCard
+                    key={cam.id}
+                    camera={cam}
+                    refreshTick={refreshTick}
+                  />
+                ))}
+              </div>
+              {cameras.length >= limit && limit < MAX_CAMERAS && (
+                <div className="flex justify-center mt-6">
+                  <button
+                    type="button"
+                    onClick={() => setLimit(l => Math.min(l + PAGE_SIZE, MAX_CAMERAS))}
+                    disabled={loading}
+                    className="px-4 py-2 rounded-lg border border-zinc-700 text-zinc-300 text-[13px] hover:border-zinc-500 disabled:opacity-50"
+                  >
+                    {loading ? 'Loading…' : 'Show more cameras'}
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

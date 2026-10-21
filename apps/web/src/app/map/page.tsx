@@ -20,8 +20,9 @@ import { parseWindowHash, encodePermalink, type MapPermalinkState, type LayerKey
 import {
   Map as MapIcon, Moon, Satellite, Globe2, LocateFixed, Layers as LayersIcon,
   Flame, History, Swords, Crosshair, RadioTower, Anchor, Plane, Ship, Activity, ShieldAlert, Video, List as ListIcon,
-  SunMoon, Compass,
+  SunMoon, Compass, Megaphone, Biohazard, Tent, WifiOff, Cable, Server,
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { LayersPanel, activeLayerCount, type MapLayerGroup } from '@/components/map/LayersPanel'
 import { MapLegend } from '@/components/map/MapLegend'
 import { LiveList, latestFirst, storyBadge, type StoryOutlets } from '@/components/map/LiveList'
@@ -44,6 +45,8 @@ import { SITE_URL as SITE_ORIGIN } from '@/lib/page-metadata'
 import { embedBackLink, embedMapCode, regionView, type MapEmbedView } from '@/lib/map-embed'
 import { SavedViews } from '@/components/map/SavedViews'
 import { SignalConnections } from '@/components/map/SignalConnections'
+import { OverlayLayers } from '@/components/map/OverlayLayers'
+import { OVERLAYS, OVERLAY_KEYS, type OverlayKey } from '@/lib/map-overlays'
 import {
   SEVERITY_COLOR, SEVERITY_BG, SEVERITY_RANK, CLUSTER_COLOR_EXPR, SIGNAL_RADIUS_EXPR, FONT_BOLD,
   CLUSTER_RING_EXPR, CLUSTER_HALO_EXPR, CLUSTER_TEXT_EXPR,
@@ -332,6 +335,15 @@ function MapView({ embed = false }: { embed?: boolean }) {
   const [navalLoading, setNavalLoading] = useState(false)
   const [navalCount,   setNavalCount]   = useState(0)
 
+  // ── The newer layers (lib/map-overlays.ts, Oct 21, 2026): protests, disease
+  // outbreaks, refugees and displacement, internet outages, cable landings, AI
+  // data centers. One switch each; OverlayLayers draws them.
+  const [overlayOn, setOverlayOn] = useState<Record<OverlayKey, boolean>>(
+    () => Object.fromEntries(OVERLAY_KEYS.map(k => [k, false])) as Record<OverlayKey, boolean>)
+  const [overlayCount,   setOverlayCount]   = useState<Partial<Record<OverlayKey, number | null>>>({})
+  const [overlayLoading, setOverlayLoading] = useState<Partial<Record<OverlayKey, boolean>>>({})
+  const overlayLayersRef = useRef<OverlayLayers | null>(null)
+
   // ── Maritime AIS ship tracking layer state ───────────────────────────────────
   const [showShips,    setShowShips]    = useState(false)
   const [shipCount,    setShipCount]    = useState(0)
@@ -601,11 +613,12 @@ function MapView({ embed = false }: { embed?: boolean }) {
       [heatmapMode, 'heat'], [timelineActive, 'timeline'], [showAircraft, 'adsb'], [showShips, 'ships'],
       [showCameras, 'cameras'], [navalMode, 'naval'], [threatMode, 'threats'], [jammingMode, 'jamming'],
       [hazardsMode, 'hazards'], [satelliteMode, 'sat'], [countryRiskMode, 'country-risk'], [conflictMode, 'conflict'],
+      ...OVERLAY_KEYS.map(k => [overlayOn[k], k] as [boolean, LayerKey]),
     ]
     activeLayerKeysRef.current = on.filter(([isOn]) => isOn).map(([, key]) => key)
     updateHash()
   }, [heatmapMode, timelineActive, showAircraft, showShips, showCameras, navalMode, threatMode, jammingMode,
-      hazardsMode, satelliteMode, countryRiskMode, conflictMode, updateHash])
+      hazardsMode, satelliteMode, countryRiskMode, conflictMode, overlayOn, updateHash])
 
   // A shared link opens with its layers and basemap (M10). Applied after the first
   // render: the server can't see the #hash, so doing it in useState broke hydration
@@ -626,6 +639,8 @@ function MapView({ embed = false }: { embed?: boolean }) {
     if (has('sat'))          setSatelliteMode(true)
     if (has('country-risk')) setCountryRiskMode(true)
     if (has('conflict'))     setConflictMode(true)
+    const linked = OVERLAY_KEYS.filter(k => has(k))
+    if (linked.length) setOverlayOn(o => ({ ...o, ...Object.fromEntries(linked.map(k => [k, true])) }))
     if (link.timelineRange) { setTimelineRange(link.timelineRange); setTimelineActive(true) }
   }, [])
 
@@ -1538,6 +1553,21 @@ function MapView({ embed = false }: { embed?: boolean }) {
           enhancedHeatmapRef.current.show(catRef.current)
         }
 
+        // The newer layers (lib/map-overlays.ts); their popups share the page's one popup
+        overlayLayersRef.current = new OverlayLayers(map, {
+          apiUrl: API_URL,
+          popup: (lngLat, html) => {
+            if (popupRef.current) { popupRef.current.remove(); popupRef.current = null }
+            popupRef.current = new ml.Popup({ closeButton: true, closeOnClick: false, offset: 10, className: 'wp-map-popup', maxWidth: '300px' })
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              .setLngLat(lngLat as any)
+              .setHTML(html)
+              .addTo(map)
+          },
+          count:   (key, n)  => setOverlayCount(c => ({ ...c, [key]: n })),
+          loading: (key, on) => setOverlayLoading(c => ({ ...c, [key]: on })),
+        })
+
         // Overlay layers that were switched on before the map loaded draw now
         setMapReady(true)
       })
@@ -1553,12 +1583,21 @@ function MapView({ embed = false }: { embed?: boolean }) {
       // BAT-16: cleanup EnhancedHeatmap RAF loop
       enhancedHeatmapRef.current?.destroy()
       enhancedHeatmapRef.current = null
+      overlayLayersRef.current?.destroy()
+      overlayLayersRef.current = null
       if (mapRef.current)   { mapRef.current.remove();   mapRef.current   = null }
       if (hashTimerRef.current) { clearTimeout(hashTimerRef.current); hashTimerRef.current = null }
     }
   // refreshClusters and refreshHighlights are stable useCallbacks with [] deps
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshClusters, refreshHighlights])
+
+  // ── The newer layers follow their switches once the map has loaded ─────────
+  useEffect(() => {
+    const layers = overlayLayersRef.current
+    if (!layers || !mapReady) return
+    for (const key of OVERLAY_KEYS) layers.set(key, overlayOn[key])
+  }, [overlayOn, mapReady])
 
   // ── NASA GIBS satellite imagery layer ─────────────────────────────────────
 
@@ -3697,6 +3736,22 @@ function MapView({ embed = false }: { embed?: boolean }) {
       linkText2: 'Sign in',
     }
   }
+  const overlayItem = (key: OverlayKey, icon: LucideIcon) => ({
+    key,
+    label:       OVERLAYS[key].label,
+    description: OVERLAYS[key].description,
+    icon,
+    color:       OVERLAYS[key].color,
+    on:          overlayOn[key],
+    loading:     overlayLoading[key] ?? false,
+    count:       overlayCount[key] ?? null,
+    // null: the layer's data didn't load (it tries again at its next refresh)
+    note:        overlayOn[key] && overlayCount[key] === null ? { text: 'Couldn’t load this layer just now; it tries again in a few minutes.' } : null,
+    toggle: () => {
+      setOverlayCount(c => ({ ...c, [key]: undefined }))
+      setOverlayOn(o => ({ ...o, [key]: !o[key] }))
+    },
+  })
   const layerGroups: MapLayerGroup[] = [
     {
       title: 'Signals',
@@ -3721,6 +3776,14 @@ function MapView({ embed = false }: { embed?: boolean }) {
           note: signInNeeded.jamming ? signInNote('jamming') : null },
         { key: 'naval', label: 'Naval intelligence', description: 'Navies, warships and carriers in the news, last 3 days', icon: Anchor, color: '#60a5fa',
           on: navalMode, loading: navalLoading, count: navalCount, toggle: () => setNavalMode(v => !v) },
+        overlayItem('protests', Megaphone),
+      ],
+    },
+    {
+      title: 'People',
+      items: [
+        overlayItem('outbreaks', Biohazard),
+        overlayItem('displacement', Tent),
       ],
     },
     {
@@ -3753,9 +3816,18 @@ function MapView({ embed = false }: { embed?: boolean }) {
             />
           ) },
         { key: 'cams', label: 'Live cameras', description: 'Live road cameras: London, New York, California, Finland, Hong Kong, New Zealand', icon: Video, color: '#2dd4bf',
-          on: showCameras, count: cameraCount, toggle: () => setShowCameras(v => !v) },
+          on: showCameras, count: cameraCount, toggle: () => setShowCameras(v => !v),
+          extra: <Link href="/cameras" className="text-[11px] text-[#2dd4bf] underline underline-offset-2 hover:text-wp-text">All the cameras on one page →</Link> },
         { key: 'daynight', label: 'Day and night', description: 'Where it is night right now, updated every 5 minutes', icon: SunMoon, color: '#94a3b8',
           on: dayNight, toggle: toggleDayNight },
+      ],
+    },
+    {
+      title: 'Infrastructure',
+      items: [
+        overlayItem('outages', WifiOff),
+        overlayItem('cable-landings', Cable),
+        overlayItem('ai-dc', Server),
       ],
     },
   ]

@@ -96,11 +96,12 @@ describe('sitemap.xml', () => {
   it('lists the index and topic pages that have their own titles (H-0023, Oct 20, 2026)', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ success: true, data: { stories: [] } }))))
     const urls = (await sitemap()).map(e => e.url)
-    for (const path of ['/countries', '/maritime', '/sources', '/explore', '/cyber-threats', '/internet-outages']) {
+    // the camera wall is back since Oct 21, 2026 (M45)
+    for (const path of ['/countries', '/maritime', '/sources', '/explore', '/cyber-threats', '/internet-outages', '/cameras']) {
       expect(urls).toContain(`https://world-pulse.io${path}`)
     }
     // pages that don't load yet stay out
-    for (const path of ['/sanctions', '/cameras', '/audio-claims', '/video-claims', '/patents']) {
+    for (const path of ['/sanctions', '/audio-claims', '/video-claims', '/patents']) {
       expect(urls).not.toContain(`https://world-pulse.io${path}`)
     }
   })

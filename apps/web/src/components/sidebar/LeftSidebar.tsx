@@ -10,7 +10,7 @@ import {
   Zap, Globe, Bell, BarChart3, Telescope, LayoutGrid, ClipboardList,
   TrendingUp, Shield, Unplug, Satellite, Lock, Waves, Landmark,
   Wheat, KeyRound, Droplets, Pickaxe, Map, ScrollText, Users, Search,
-  Mic, Video, Radio, Wrench, Settings, Activity, Anchor, CalendarDays,
+  Mic, Video, Radio, Wrench, Settings, Activity, Anchor, CalendarDays, Camera,
   CircleDot, Swords, LineChart, Leaf, Pill, FlaskConical, Vote, Globe2, Network, Newspaper, Link2, BadgeCheck,
   type LucideProps,
 } from 'lucide-react'
@@ -52,7 +52,7 @@ const OTHER_ITEMS = [
   { href: '/digital-rights', icon: KeyRound,    labelKey: 'digitalRights' },
   { href: '/water-security', icon: Droplets,    labelKey: 'waterSecurity' },
   { href: '/labor-rights',  icon: Pickaxe,      labelKey: 'laborRights' },
-  // { href: '/cameras',    icon: Camera,      labelKey: 'cameras',    badge: 'LIVE', badgeColor: 'red'   }, // Hidden pre-launch: EarthCam hotlink-blocks snapshots; needs backend image proxy
+  { href: '/cameras',    icon: Camera,      labelKey: 'cameras',    badge: 'LIVE', badgeColor: 'red'   }, // back Oct 21, 2026 (M45): the pictures come through our API since M37
   { href: '/patents',    icon: ScrollText,    labelKey: 'patents' },
   { href: '/communities',icon: Users,         labelKey: 'communities' },
   { href: '/claims',     icon: Search,        labelKey: 'claims' },

@@ -71,6 +71,7 @@ import digitalRightsPlugin               from './routes/digital-rights'
 import waterSecurityPlugin               from './routes/water-security'
 import laborRightsPlugin                 from './routes/labor-rights'
 import { registerMapOgRoutes }           from './routes/map/og'
+import { registerMapTopicRoutes }        from './routes/map/topics'
 import { registerClaimsRoutes }          from './routes/claims'
 import { registerPulseRoutes }           from './routes/pulse'
 import { registerMcpRoutes }             from './routes/mcp'
@@ -339,6 +340,7 @@ async function bootstrap() {
   await app.register(waterSecurityPlugin,            { prefix: '/api/v1/water-security' })
   await app.register(laborRightsPlugin,              { prefix: '/api/v1/labor-rights' })
   await app.register(registerMapOgRoutes,             { prefix: '/api/v1/map' })
+  await app.register(registerMapTopicRoutes,          { prefix: '/api/v1/map' })
   await app.register(registerClaimsRoutes,            { prefix: '/api/v1/claims' })
 
   // ─── PULSE AI PUBLISHER ──────────────────────────────────

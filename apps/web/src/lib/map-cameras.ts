@@ -34,6 +34,14 @@ export interface CameraPopupProps {
   embedUrl?:   string
 }
 
+/**
+ * A camera's picture for this minute, for the camera wall (/cameras): the API
+ * keeps one a minute, so the browser's copy is reused within it
+ */
+export function cameraPictureUrl(snapshotUrl: string, minute: number): string {
+  return `${snapshotUrl}${snapshotUrl.includes('?') ? '&' : '?'}m=${minute}`
+}
+
 /** "just now", "4 min ago", "2 h ago" for when a picture was taken */
 export function pictureAgeLabel(iso: string | null | undefined, now = Date.now()): string {
   const t = iso ? Date.parse(iso) : NaN
