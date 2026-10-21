@@ -52,7 +52,7 @@ vi.mock('../../lib/claude', () => ({
   }),
 }))
 
-import { readSecondReads, verdictOf, timelineNote, secondReadPrompt, runSecondReads, SECOND_READ_SYSTEM, DAILY_MAX } from '../second-read'
+import { readSecondReads, verdictOf, timelineNote, secondReadPrompt, runSecondReads, answerTokens, SECOND_READ_SYSTEM, DAILY_MAX } from '../second-read'
 
 const NOW = new Date('2026-10-21T16:00:00Z')
 const row = (n: number, severity = 'high', title = `Report number ${n}`) => ({ id: `00000000-0000-0000-0000-${String(n).padStart(12, '0')}`, title, summary: null, severity })
@@ -73,6 +73,23 @@ describe('reading the answer', () => {
     expect(readSecondReads('{"reports": [{"report": 2, "kind": "event", "severity": "low"}]}', 2)).toEqual([null, { kind: 'event', severity: 'low', note: '' }])
     expect(readSecondReads('{"reports": [{"report": 1, "kind": "rumour", "severity": "high"}, {"report": 2, "kind": "event", "severity": "extreme"}]}', 2)).toEqual([null, null])
     expect(readSecondReads('no JSON here', 1)).toEqual([null])
+  })
+  it('an answer cut off before its end still gives the entries it finished (Oct 21, 2026: 40 of the first 49 went unread)', () => {
+    const cut = '{"reports": [{"report": 1, "kind": "event", "severity": "high", "note": "A strike"}, {"report": 2, "kind": "analysis", "severity": "low", "note": "A preview"}, {"report": 3, "kind": "ev'
+    expect(readSecondReads(cut, 3)).toEqual([
+      { kind: 'event', severity: 'high', note: 'A strike' },
+      { kind: 'analysis', severity: 'low', note: 'A preview' },
+      null,
+    ])
+    // fenced and spread over lines, as the small model often answers
+    const spread = '```json\n{\n  "reports": [\n    {\n      "report": 1,\n      "kind": "event",\n      "severity": "critical",\n      "note": "Dozens dead"\n    },\n    {\n      "report": 2,\n      "kind": "eve'
+    expect(readSecondReads(spread, 2)).toEqual([{ kind: 'event', severity: 'critical', note: 'Dozens dead' }, null])
+  })
+  it('leaves room for eight entries with their notes, fenced and spread over lines', () => {
+    const entry = (n: number) => ({ report: n, kind: 'analysis', severity: 'medium', note: 'An explainer on the talks, no new event' })
+    const answer = '```json\n' + JSON.stringify({ reports: Array.from({ length: 8 }, (_, i) => entry(i + 1)) }, null, 2) + '\n```'
+    // JSON's quotes and brackets come to about one token for every 2.5 characters
+    expect(answerTokens(8)).toBeGreaterThanOrEqual(Math.ceil(answer.length / 2.5))
   })
 })
 
@@ -133,6 +150,28 @@ describe('a pass', () => {
     expect(h.logged).toHaveLength(8)
     // the first eight are read; the other four can be read by the next pass
     expect([...h.keys.keys()].filter(k => k.startsWith('ai:second:done:'))).toHaveLength(8)
+  })
+
+  it('asks with room for the whole answer', async () => {
+    h.rows = Array.from({ length: 8 }, (_, i) => row(i + 1))
+    h.replies = ['{"reports": []}']
+    await runSecondReads(NOW)
+    expect(h.asked[0]!.maxTokens).toBe(answerTokens(8))
+  })
+
+  it('a report the answer left out gets one more try, not more', async () => {
+    h.rows = [row(1), row(2), row(3)]
+    const only1 = '{"reports": [{"report": 1, "kind": "event", "severity": "high", "note": "A strike"}]}'
+    h.replies = [only1]
+    expect(await runSecondReads(NOW)).toMatchObject({ read: 3, agree: 1, unread: 2 })
+    const done = () => [...h.keys.keys()].filter(k => k.startsWith('ai:second:done:')).map(k => k.slice(-1)).sort()
+    expect(done()).toEqual(['1'])
+    // the next pass reads 2 and 3 again; left out again, they stay done
+    h.replies = ['{"reports": []}']
+    expect(await runSecondReads(NOW)).toMatchObject({ read: 2, unread: 2 })
+    expect(h.asked[1]!.prompt.split('\n')).toHaveLength(2)
+    expect(done()).toEqual(['1', '2', '3'])
+    expect((await runSecondReads(NOW)).read).toBe(0)
   })
 
   it('stops at the day\'s limit', async () => {

@@ -34,8 +34,16 @@ const LOOKBACK_HOURS = 6
 const SETTLE_MS = 2 * 60_000
 const LOCK_KEY = 'ai:second:lock'
 const DONE_KEY = (id: string) => `ai:second:done:${id}`
+/** Set when a report went unread once: it gets one more try, not more */
+const RETRY_KEY = (id: string) => `ai:second:retry:${id}`
 const COUNTS_KEY = (day: string) => `ai:second:counts:${day}`
-export const SECOND_READ_PROMPT_VERSION = 1
+export const SECOND_READ_PROMPT_VERSION = 2
+/**
+ * Room for the answer (Oct 21, 2026): 60 + 45 a report cut off most answers
+ * to eight reports before their end, so whole batches went unread (40 of the
+ * first 49 reports); an entry with its note takes up to about 60
+ */
+export const answerTokens = (reports: number): number => 120 + 80 * reports
 
 export type SecondReadKind = 'event' | 'analysis' | 'roundup' | 'other'
 export type SecondReadVerdict = 'agree' | 'lower' | 'higher' | 'not_event'
@@ -45,7 +53,7 @@ const RANK: Record<string, number> = { info: 0, low: 1, medium: 2, high: 3, crit
 export const SECOND_READ_SYSTEM = `You give the second read of WorldPulse, a global news service. Word rules rated each numbered report high or critical, and only one or two outlets carry it so far. Judge each report only from its headline and summary.
 - kind: "event" when it reports a specific new occurrence (an attack, a disaster, a death, an arrest, a decision, a result), "analysis" for opinion, analysis, an explainer, a preview or an anniversary, "roundup" for a digest or live blog of several items, "other" for anything else (adverts, features, sport).
 - severity, on WorldPulse's scale: "critical" for mass casualties (100 or more dead), a nuclear or chemical attack or threat, or a major disaster happening now; "high" for 5 or more dead or 100 or more injured, strikes, bombings, coups, massacres, major earthquakes or storms, or hundreds of thousands without power or displaced; "medium" for any death or 10 or more injured, fighting, protests, disasters, arrests, policy changes or notable accidents; "low" for routine news and minor events.
-Answer with only this JSON, one entry per report, in order: {"reports": [{"report": 1, "kind": "event", "severity": "high", "note": "a few words why"}]}`
+Answer with only this JSON, on one line, one entry per report, in order: {"reports": [{"report": 1, "kind": "event", "severity": "high", "note": "a few words why"}]}`
 
 export interface SecondReadRow { id: string; title: string; summary: string | null; severity: string }
 
@@ -61,15 +69,31 @@ export function secondReadPrompt(rows: SecondReadRow[]): string {
 
 export interface SecondRead { kind: SecondReadKind; severity: SignalSeverity; note: string }
 
+/** The entries an answer finished, when it was cut off before its end: each one's own {...} */
+function finishedEntries(text: string): unknown[] {
+  const out: unknown[] = []
+  for (const m of text.matchAll(/\{[^{}]*\}/g)) {
+    try {
+      const e = JSON.parse(m[0]) as unknown
+      if (e && typeof e === 'object' && 'severity' in e) out.push(e)
+    } catch { /* not a whole entry */ }
+  }
+  return out
+}
+
 /** Claude's answer as one read per report, in order (null where it said nothing usable) */
 export function readSecondReads(text: string, count: number): Array<SecondRead | null> {
   const out: Array<SecondRead | null> = Array.from({ length: count }, () => null)
+  let reports: unknown[] | null = null
   const json = jsonIn(text)
-  if (!json) return out
-  let parsed: { reports?: unknown }
-  try { parsed = JSON.parse(json) as { reports?: unknown } } catch { return out }
-  if (!Array.isArray(parsed.reports)) return out
-  parsed.reports.forEach((entry, i) => {
+  if (json) {
+    try {
+      const parsed = JSON.parse(json) as { reports?: unknown }
+      if (Array.isArray(parsed.reports)) reports = parsed.reports
+    } catch { /* cut off: the entries it finished still count */ }
+  }
+  reports ??= finishedEntries(text)
+  reports.forEach((entry, i) => {
     const e = entry as { report?: unknown; kind?: unknown; severity?: unknown; note?: unknown }
     const at = typeof e.report === 'number' && Number.isInteger(e.report) ? e.report - 1 : i
     if (at < 0 || at >= count) return
@@ -131,21 +155,23 @@ export async function runSecondReads(now = new Date()): Promise<SecondReadStats>
       if (rows.length >= room) break
       if (await redis.set(DONE_KEY(r.id), '1', 'EX', 2 * 86_400, 'NX') === 'OK') rows.push(r)
     }
+    const unread: string[] = []
     for (let i = 0; i < rows.length; i += BATCH) {
       const batch = rows.slice(i, i + BATCH)
-      const reply = await askClaude({ purpose: 'second_read', system: SECOND_READ_SYSTEM, prompt: secondReadPrompt(batch), maxTokens: 60 + 45 * batch.length, timeoutMs: 20_000 })
+      const reply = await askClaude({ purpose: 'second_read', system: SECOND_READ_SYSTEM, prompt: secondReadPrompt(batch), maxTokens: answerTokens(batch.length), timeoutMs: 20_000 })
       stats.calls += 1
       if (!reply) {
         // the cap, no key or an error: these reports and the rest wait for a later pass
         await Promise.all(rows.slice(i).map(r => redis.del(DONE_KEY(r.id)).catch(() => 0)))
         break
       }
+      if (reply.stopReason === 'max_tokens') logger.warn({ reports: batch.length, outputTokens: reply.outputTokens }, 'Second read: the answer was cut off')
       const reads = readSecondReads(reply.text, batch.length)
       const entries: Array<Record<string, unknown>> = []
       batch.forEach((r, j) => {
         const read = reads[j]
         stats.read += 1
-        if (!read) { stats.unread += 1; return }
+        if (!read) { stats.unread += 1; unread.push(r.id); return }
         const verdict = verdictOf(r.severity, read)
         stats[verdict] += 1
         entries.push({
@@ -159,6 +185,10 @@ export async function runSecondReads(now = new Date()): Promise<SecondReadStats>
         })
       })
       if (entries.length) await db('verification_log').insert(entries)
+    }
+    // A report Claude's answer left out gets one more try in a later pass
+    for (const id of unread) {
+      if (await redis.set(RETRY_KEY(id), '1', 'EX', 2 * 86_400, 'NX') === 'OK') await redis.del(DONE_KEY(id)).catch(() => 0)
     }
     if (stats.read) {
       const key = COUNTS_KEY(day)
