@@ -32,6 +32,8 @@ import { displaySummary, isStateMedia, STATE_MEDIA_NOTE, storyTags } from '@/lib
 import { storyCountsOf, type StoryOutletCounts } from '@/lib/story-count'
 import { howSure } from '@/lib/how-sure'
 import { HowSureBlock } from '@/components/signals/HowSureBlock'
+import { FollowStory } from '@/components/signals/FollowStory'
+import { ReaderFlags } from '@/components/signals/ReaderFlags'
 import { outletLine, type CountryStory } from '@/components/countries/CountryTopStories'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -371,6 +373,12 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal, 
                 </>
               )}
             </div>
+
+            {/* Follow the story, and what changed since the last visit (plan 8) */}
+            <FollowStory signalId={signal.id} />
+
+            {/* How many readers flagged this report, and why (plan C5) */}
+            <ReaderFlags signalId={signal.id} count={flagCount} />
 
             {/* Summary (without the outlet note RSS used to add, and not a repeat of the headline) */}
             {summaryText && (

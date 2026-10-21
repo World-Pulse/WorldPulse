@@ -106,6 +106,19 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
             total_exact: { type: 'boolean' },
             limit:  { type: 'number' },
             offset: { type: 'number' },
+            // The same, as the other lists answer it (plan V3f). Listed here or
+            // the serializer drops it: on Oct 21, 2026 it shipped unlisted and
+            // never reached readers
+            meta: {
+              type: 'object',
+              properties: {
+                total:       { type: 'number' },
+                total_exact: { type: 'boolean' },
+                limit:       { type: 'number' },
+                offset:      { type: 'number' },
+                has_more:    { type: 'boolean' },
+              },
+            },
           },
         },
       },

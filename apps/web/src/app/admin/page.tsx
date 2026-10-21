@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { ScraperGate1Status } from '@/components/scraper/ScraperGate1Status'
+import { FlagReview } from '@/components/admin/FlagReview'
 import { Lock } from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
@@ -385,6 +386,11 @@ export default function AdminPage() {
             {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
           </div>
         )}
+      </section>
+
+      {/* ── READERS' FLAGS: THE REVIEW LIST (plan C5) ───────── */}
+      <section className="mb-8">
+        <FlagReview token={token} />
       </section>
 
       {/* ── GATE 1 STABILITY CLOCK ─────────────────────────── */}

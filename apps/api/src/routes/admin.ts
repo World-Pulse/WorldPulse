@@ -6,6 +6,7 @@ import { getSecurityMetrics } from '../lib/security'
 import { runFullReindex } from '../lib/search-backfill'
 import { sendError } from '../lib/errors'
 import { CLAUDE_SMALL } from '../lib/claude'
+import { flagReviewList, REVIEW_AT, REVIEW_DAYS } from '../lib/signal-flags'
 import { GEMINI_MODEL, OLLAMA_MODEL } from '../lib/llm-models'
 
 // ─── Stability keys (mirror apps/scraper/src/lib/stability-tracker.ts) ───────
@@ -91,6 +92,18 @@ export const registerAdminRoutes: FastifyPluginAsync = async (app) => {
     routeOptions.schema ??= {}
     routeOptions.schema.tags = routeOptions.schema.tags ?? ['admin']
     routeOptions.schema.security = routeOptions.schema.security ?? [{ bearerAuth: [] }]
+  })
+
+  // ─── GET /api/v1/admin/flags ───────────────────────────────────────────────
+  // Devon's review list (plan C5, Oct 21, 2026: "Show it + review list"):
+  // reports 3 or more readers flagged in the last 30 days, with why and the
+  // newest notes
+  app.get('/flags', { preHandler: [authenticate], config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req, reply) => {
+    if (!req.user || req.user.accountType !== 'admin') {
+      return sendError(reply, 403, 'FORBIDDEN', 'Admin access required')
+    }
+    const items = await flagReviewList(100)
+    return reply.send({ success: true, data: { minFlags: REVIEW_AT, days: REVIEW_DAYS, items } })
   })
 
   // ─── GET /api/v1/admin/scraper/health ──────────────────────────────────────

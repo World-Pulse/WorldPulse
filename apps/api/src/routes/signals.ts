@@ -28,7 +28,7 @@ import { longQuery } from '../lib/long-query'
 import { MARITIME_CANDIDATE, MARITIME_HEADLINE, firstOfEach, headlineKey, isShipHeadline } from '../lib/sea-headlines'
 import type { Knex } from 'knex'
 import { BAD_CURSOR, isUuid } from '../lib/cursor'
-import { visitorHash, alreadyFlagged } from '../lib/signal-flags'
+import { visitorHash, alreadyFlagged, flagSummary } from '../lib/signal-flags'
 
 const SIGNAL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -588,6 +588,23 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     redis.del(`signals:detail:${id}`).catch(() => {})
 
     return reply.status(201).send({ success: true })
+  })
+
+  // ─── FLAGS ON A SIGNAL (public: how many readers and why) ──
+  // Plan C5 (Devon, Oct 21, 2026: "Show it + review list"): the signal page
+  // says "Flagged by N readers" and their reasons. Never the notes or who.
+  app.get('/:id/flags', {
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+    schema: {
+      tags: ['signals'],
+      summary: 'How many readers flagged a signal, and why',
+      params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+    },
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+    if (!isUuid(id)) return sendError(reply, 404, 'NOT_FOUND', 'Signal not found')
+    void reply.header('Cache-Control', 'public, max-age=60')
+    return reply.send({ success: true, data: await flagSummary(id) })
   })
 
   // ─── SLOP SCORE (admin only) ──────────────────────────────

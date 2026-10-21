@@ -374,7 +374,7 @@ print(json.dumps(out, separators=(',', ':')))
 PY
 }
 pipeline_stats() {
-  local q1 q2 db scr errs warns created top topw
+  local q1 q2 q3 q4 db scr errs warns created top topw
   q1="SELECT json_build_object(
         'created',      count(*),
         'verified',     count(*) FILTER (WHERE status = 'verified'),
@@ -407,7 +407,13 @@ pipeline_stats() {
                     FROM s
                    WHERE first_at >= (date_trunc('day', now() AT TIME ZONE 'UTC') - interval '13 days') AT TIME ZONE 'UTC'
                    GROUP BY 1) t))"
-  db=$(timeout 25 docker exec wp_postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAq -c "$1" -c "$2" -c "$3"' sh "$q1" "$q2" "$q3" 2>/dev/null \
+  # Reports 3 or more readers flagged in the last 30 days (plan C5, Oct 21,
+  # 2026): how long Devon's review list on /admin is. A count, no titles
+  q4="SELECT json_build_object('flagged_for_review', (
+        SELECT count(*) FROM (SELECT signal_id FROM signal_flags
+                               WHERE created_at > now() - interval '30 days'
+                               GROUP BY signal_id HAVING count(*) >= 3) t))"
+  db=$(timeout 25 docker exec wp_postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAq -c "$1" -c "$2" -c "$3" -c "$4"' sh "$q1" "$q2" "$q3" "$q4" 2>/dev/null \
        | tr -d '\r' | grep '^{' | paste -sd ',' -) || db=""
   # Scraper log lines from the last 30 minutes, counted by level; the most
   # frequent error and warning messages, digits blanked out (our own log text only)

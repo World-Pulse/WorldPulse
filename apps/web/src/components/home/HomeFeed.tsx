@@ -7,6 +7,7 @@ import { FeedList } from '@/components/feed/FeedList'
 import { Composer } from '@/components/composer/Composer'
 import { NewPostsBar } from '@/components/feed/NewPostsBar'
 import { DevelopingStories } from '@/components/feed/DevelopingStories'
+import { FollowedStories } from '@/components/home/FollowedStories'
 import { InTheNews } from '@/components/feed/InTheNews'
 import { OnboardingModal } from '@/components/OnboardingModal'
 
@@ -110,6 +111,9 @@ export function HomeFeed() {
             ))}
           </div>
         </div>
+
+        {/* Stories the reader follows (plan 8), for signed-in readers who follow one */}
+        {signedIn && <FollowedStories />}
 
         {/* Developing Stories — escalating/developing event threads */}
         <DevelopingStories />

@@ -98,6 +98,8 @@ import { startSummaryPass, stopSummaryPass } from './lib/summary-pass'
 import { ensureSubscribersTable } from './lib/subscribers'
 import { ensureWaitlistTable } from './lib/pro-waitlist'
 import { registerProWaitlistRoutes } from './routes/pro-waitlist'
+import { ensureStoryFollowsTable } from './lib/story-follows'
+import { registerStoryFollowRoutes } from './routes/story-follows'
 import { ensureEntitySignalsIndex } from './lib/entity-index'
 import { hashStoredFlagAddresses } from './lib/signal-flags'
 import { corsDecision } from './lib/cors-policy'
@@ -266,6 +268,8 @@ async function bootstrap() {
   await app.register(registerAuthRoutes,   { prefix: '/api/v1/auth' })
   await app.register(registerFeedRoutes,   { prefix: '/api/v1/feed' })
   await app.register(registerStoryRoutes,  { prefix: '/api/v1/stories' })
+  // Follow a story (plan 8; Devon, Oct 21, 2026: "Yes, add it")
+  await app.register(registerStoryFollowRoutes, { prefix: '/api/v1/stories' })
   await app.register(registerPostRoutes,   { prefix: '/api/v1/posts' })
   await app.register(registerSignalRoutes, { prefix: '/api/v1/signals' })
   await app.register(registerTimelineRoutes, { prefix: '/api/v1/signals' })
@@ -422,6 +426,8 @@ async function bootstrap() {
 
   // The Pro waitlist's table (plan 13; Devon, Oct 21, 2026: "Waitlist now, price later")
   ensureWaitlistTable().catch(err => logger.warn({ err }, 'Pro waitlist failed to start'))
+  // Follow a story's table (plan 8; Devon, Oct 21, 2026: "Yes, add it")
+  ensureStoryFollowsTable().catch(err => logger.warn({ err }, 'Story follows failed to start'))
 
   // ─── ENTITY PAGES: an index on the reports each entity is named in ──
   // (Devon's OK, Oct 20, 2026): built once, in the background, without
