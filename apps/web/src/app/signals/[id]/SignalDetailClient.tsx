@@ -17,15 +17,15 @@ import { ReliabilityDots, scoreBand } from '@/components/signals/ReliabilityDots
 import { BiasCorrectionPanel } from '@/components/sources/BiasCorrectionPanel'
 import { AISummary } from '@/components/signals/AISummary'
 import { RiskScoreGauge } from '@/components/signals/RiskScoreGauge'
-import { ConnectionWeb } from './ConnectionWeb'
+import { AroundTabs } from './AroundTabs'
+import { WhoReported } from './WhoReported'
 import { CIBWarningBadge } from '@/components/signals/CIBWarningBadge'
 import { VerificationTimeline } from '@/components/signals/VerificationTimeline'
 import { VerificationBadge, buildVerificationSummary } from '@/components/signals/VerificationBadge'
 import { ViralityBadge } from '@/components/signals/ViralityBadge'
 import { RichMediaEmbed, extractFirstEmbedUrl } from '@/components/RichMediaEmbed'
 import { SignalMedia } from '@/components/signals/SignalMedia'
-import { SourceChain, distinctOutlets } from '@/components/signals/SourceChain'
-import { StoryMembers } from './StoryMembers'
+import { distinctOutlets } from '@/components/signals/SourceChain'
 import { PredictionMarkets } from '@/components/signals/PredictionMarkets'
 import { ShareMenu } from '@/components/signals/ShareMenu'
 import { displaySummary, isStateMedia, STATE_MEDIA_NOTE, storyTags } from '@/lib/signal-text'
@@ -141,17 +141,7 @@ function ReliabilityScore({ signal }: { signal: SignalDetail }) {
         <Link href="/how-we-count#score" className="text-wp-amber hover:underline">How we score this</Link>
       </p>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-2 pt-1 font-mono text-[10px] text-wp-text3">
-        <div>
-          <div className="text-wp-text2">{signal.viewCount.toLocaleString()}</div>
-          <div>views</div>
-        </div>
-        <div>
-          <div className="text-wp-text2">{signal.postCount.toLocaleString()}</div>
-          <div>posts</div>
-        </div>
-      </div>
+      {/* (Views and posts are in the meta row under the headline: plan P2, step 4) */}
     </div>
   )
 }
@@ -265,8 +255,9 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal, 
   // since it began: this report's own outlets are among them, however old it is
   const outletsAll = Math.max(storyCounts?.outletsAll ?? 0, ownOutlets, outletCount)
   // What the count means (plan P2, step 1): the story is verified when any of its reports is
+  const storyVerified = storyCounts?.verified === true || signal.status === 'verified'
   const sure = howSure({
-    verified: storyCounts?.verified === true || signal.status === 'verified',
+    verified: storyVerified,
     outlets: outletCount,
     outletsAll,
     firstReportAt: storyCounts?.firstReportAt,
@@ -320,12 +311,14 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal, 
                 <span aria-hidden="true">{CAT_ICON[signal.category] ?? ''}</span>{' '}
                 {signal.category}
               </span>
-              {/* Verification badge — derived from verification_log */}
+              {/* Verification badge — derived from verification_log, and the story's verdict:
+                  a report of a verified story said UNVERIFIED above "Verified · 5 outlets"
+                  (Oct 21, 2026). A disputed report still says so. */}
               {(() => {
                 const summary = buildVerificationSummary(signal.verifications, signal.status)
                 return (
                   <VerificationBadge
-                    status={summary.status}
+                    status={storyVerified && summary.status !== 'disputed' ? 'verified' : summary.status}
                     summary={{ confirmed_checks: summary.confirmed_checks, total_checks: summary.total_checks }}
                     size="md"
                   />
@@ -388,6 +381,19 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal, 
                   <span>{outletCount} outlet{outletCount !== 1 ? 's' : ''}</span>
                 </>
               )}
+              {/* views and posts, small, once there are any (they were in the sidebar's Reliability box: P2, step 4) */}
+              {signal.viewCount > 0 && (
+                <>
+                  <span>·</span>
+                  <span className="text-[10px]">{signal.viewCount.toLocaleString('en-US')} view{signal.viewCount !== 1 ? 's' : ''}</span>
+                </>
+              )}
+              {signal.postCount > 0 && (
+                <>
+                  <span>·</span>
+                  <span className="text-[10px]">{signal.postCount.toLocaleString('en-US')} post{signal.postCount !== 1 ? 's' : ''}</span>
+                </>
+              )}
             </div>
 
             {/* Follow the story, and what changed since the last visit (plan 8) */}
@@ -435,16 +441,16 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal, 
                 showed a grey placeholder on the first screen for ~5 s, then vanished and
                 the page jumped, and every visit spent GDELT requests the scraper needs. */}
 
-            {/* Source chain — all sources with trust scores and article links */}
-            <SourceChain
+            {/* Who reported it: one block for the outlets (plan P2, step 3): this report's
+                source and links, then the story so far (plan 12c). It replaces "Source
+                Intelligence", the separate story timeline and the sidebar's "Source chain". */}
+            <WhoReported
+              signalId={signal.id}
               sources={signal.sources}
               sourceUrl={signal.originalUrls?.[0] ?? null}
               originalUrls={signal.originalUrls ?? []}
               storyOutlets={storyCounts ? outletsAll : null}
             />
-
-            {/* Also reported by — the other reports of this story (plan 12c) */}
-            <StoryMembers signalId={signal.id} />
 
             {/* AI Summary — WorldPulse differentiator vs Ground News Ground Summary */}
             <AISummary
@@ -499,10 +505,13 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal, 
                 the economics Nobel), and every row read "Invalid Date". The story timeline
                 above (StoryMembers) shows how the story developed, from its own reports. */}
 
-            {/* Source Media — embedded player + source link */}
-            {(srcUrl || (signal.media_urls?.length ?? 0) > 0) && (() => {
+            {/* Source Media — an embedded player, with its source. Only when there's
+                something to play: "View original source" is in Who reported it (P2, step 3;
+                the page showed that button twice) */}
+            {(() => {
               const embeddable = srcUrl ? extractFirstEmbedUrl(srcUrl) : null
               const mediaUrls  = signal.media_urls ?? []
+              if (!embeddable && mediaUrls.length === 0) return null
 
               return (
                 <div>
@@ -524,34 +533,19 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal, 
                     </div>
                   )}
 
-                  {/* Source link — prominent button if no embed, subdued attribution if embedded */}
-                  {srcUrl && (
-                    embeddable ? (
-                      <a
-                        href={srcUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 font-mono text-[11px] text-wp-text3 hover:text-wp-text transition-colors"
-                      >
-                        {srcDomain ?? srcUrl}
-                        <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
-                          <path d="M2 10L10 2M10 2H5M10 2V7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                        </svg>
-                      </a>
-                    ) : (
-                      <a
-                        href={srcUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold transition-all"
-                        style={{ background: bg, color, border: `1px solid ${color}40` }}
-                      >
-                        View original source →
-                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                          <path d="M2 10L10 2M10 2H5M10 2V7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                        </svg>
-                      </a>
-                    )
+                  {/* Where the embedded player comes from */}
+                  {srcUrl && embeddable && (
+                    <a
+                      href={srcUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 font-mono text-[11px] text-wp-text3 hover:text-wp-text transition-colors"
+                    >
+                      {srcDomain ?? srcUrl}
+                      <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                        <path d="M2 10L10 2M10 2H5M10 2V7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                      </svg>
+                    </a>
                   )}
                 </div>
               )
@@ -584,70 +578,13 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal, 
               )
             })()}
 
-            {/* Intelligence Web — recent stories naming the same people, places and organisations */}
-            <ConnectionWeb signalId={signal.id} />
-
-            {/* (The "Related signals" panel read the same correlation cluster as the old
-                event timeline, so it went with it.) */}
-
-            {/* Sources list with trust scores */}
-            {signal.sources.length > 0 && (
-              <div className="p-4 rounded-xl border border-white/[0.07] bg-white/[0.02] space-y-3">
-                <div className="font-mono text-[10px] tracking-widest uppercase text-wp-text3">
-                  Source chain
-                </div>
-                <div className="space-y-3">
-                  {signal.sources.map(src => (
-                    <div key={src.id}>
-                      <a
-                        href={src.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 text-[12px] text-wp-text2 hover:text-wp-text transition-colors group mb-1"
-                      >
-                        <span className="font-mono text-[9px] uppercase text-wp-text3 border border-white/10 rounded px-1 shrink-0">
-                          {src.tier}
-                        </span>
-                        <span className="truncate group-hover:underline">{src.name}</span>
-                        <span className="font-mono text-[10px] text-wp-text3 shrink-0 ml-auto">
-                          {Math.round(src.trustScore * 100)}%
-                        </span>
-                      </a>
-                      {/* Trust score bar */}
-                      <div className="h-0.5 bg-white/[0.06] rounded-full overflow-hidden ml-[calc(theme(spacing.6)+theme(spacing.2))]">
-                        <div
-                          className="h-full rounded-full"
-                          style={{
-                            width: `${Math.round(src.trustScore * 100)}%`,
-                            background: src.trustScore >= 0.8
-                              ? '#00e676'
-                              : src.trustScore >= 0.5
-                                ? '#f5a623'
-                                : '#ff3b5c',
-                          }}
-                        />
-                      </div>
-                      {src.activeAt && (
-                        <div className="font-mono text-[9px] text-wp-text3 mt-0.5 ml-[calc(theme(spacing.6)+theme(spacing.2))]">
-                          {timeAgo(src.activeAt)}
-                        </div>
-                      )}
-                      {src.articleUrl && (
-                        <a
-                          href={src.articleUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 mt-1.5 ml-[calc(theme(spacing.6)+theme(spacing.2))] px-2 py-0.5 rounded-full text-[10px] font-mono font-medium transition-colors"
-                          style={{ background: 'rgba(0,210,210,0.1)', color: '#00d2d2', border: '1px solid rgba(0,210,210,0.25)' }}
-                        >
-                          View original article →
-                        </a>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* Around this story: Related and the Intelligence Web as two tabs (plan P2,
+                step 4). The sidebar's "Source chain" list left: it repeated this report's
+                sources, which Who reported it shows with the kind of outlet and trust bar. */}
+            <AroundTabs
+              signalId={signal.id}
+              related={related.length > 0 ? related.map(s => <RelatedCard key={s.id} story={s} />) : null}
+            />
 
             {/* Community bias corrections — shown when signal has at least one source */}
             {signal.sources.length > 0 && signal.sources[0] != null && (
@@ -657,13 +594,6 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal, 
               />
             )}
 
-            {/* Related signals */}
-            {related.length > 0 && (
-              <div className="space-y-2">
-                <div className="font-mono text-[10px] tracking-widest uppercase text-wp-text3 px-1">Related</div>
-                {related.map(s => <RelatedCard key={s.id} story={s} />)}
-              </div>
-            )}
           </div>
         </div>
       </div>

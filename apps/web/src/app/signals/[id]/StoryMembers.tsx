@@ -95,7 +95,11 @@ const TAIL = 4
 
 const SEVERITY_TEXT: Record<string, string> = { critical: 'text-red-400', high: 'text-orange-400', medium: 'text-amber-300' }
 
-export function StoryMembers({ signalId }: { signalId: string }) {
+/**
+ * `bare`: inside the story page's one "Who reported it" block (plan P2, step
+ * 3), under the report's own outlets: no card of its own, "The story so far"
+ */
+export function StoryMembers({ signalId, bare = false }: { signalId: string; bare?: boolean }) {
   const [story, setStory] = useState<StoryDetail | null>(null)
   const [seenAt, setSeenAt] = useState<number | null>(null)
   const [expanded, setExpanded] = useState(false)
@@ -130,10 +134,11 @@ export function StoryMembers({ signalId }: { signalId: string }) {
   const folds = expanded ? new Map<number, number>() : foldTimeline(entries, HEAD, TAIL)
 
   return (
-    <section className="p-4 rounded-xl border border-white/10 bg-white/[0.02] space-y-3" aria-label="Story timeline">
+    <section className={bare ? 'pt-3 border-t border-white/[0.06] space-y-3' : 'p-4 rounded-xl border border-white/10 bg-white/[0.02] space-y-3'}
+      aria-label={bare ? 'The story so far' : 'Story timeline'}>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <span className="font-mono text-[10px] tracking-widest uppercase text-wp-text3">
-          Story timeline · {totalReports} reports ·{' '}
+          {bare ? 'The story so far' : 'Story timeline'} · {totalReports} reports ·{' '}
           {outletNames.length > 0 ? (
             <button type="button" onClick={() => setShowOutlets(v => !v)} aria-expanded={showOutlets}
               className="uppercase tracking-widest underline decoration-dotted underline-offset-2 hover:text-wp-text2 transition-colors">

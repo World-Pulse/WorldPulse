@@ -22,6 +22,18 @@ describe('displaySummary', () => {
       .toBe('Floods closed schools.')
   })
 
+  it('shows nothing when the summary is the headline and the outlet’s name (Oct 21, 2026)', () => {
+    const rafale = 'France, UAE revive Rafale F5 talks after €3.5 billion dispute'
+    expect(displaySummary(`${rafale} | Dunya News`, rafale)).toBe('')
+    expect(displaySummary(`${TITLE} - AOL`, TITLE)).toBe('')
+    expect(displaySummary(`${TITLE} — Al Jazeera English`, TITLE)).toBe('')
+    // a dash with more of the story after it stays
+    expect(displaySummary(`${TITLE} - at least 3 dead`, TITLE)).toBe(`${TITLE} - at least 3 dead`)
+    expect(displaySummary(`${TITLE} - 12 Killed`, TITLE)).toBe(`${TITLE} - 12 Killed`)
+    // the outlet's name after something else than the headline stays
+    expect(displaySummary('Talks resume on Sunday | Reuters', 'Talks')).toBe('Talks resume on Sunday | Reuters')
+  })
+
   it('leaves other summaries as they are', () => {
     const story = 'Talks resume on Sunday, the source said (reliability of the claim unclear).'
     expect(displaySummary(story, 'Talks')).toBe(story)

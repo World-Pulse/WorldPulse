@@ -34,8 +34,18 @@ function comparable(text: string): string {
 }
 
 /**
+ * An outlet's name after the headline, as some feeds send the summary:
+ * "Title | Dunya News", "Title - AOL" (2 of 100 summaries on Oct 21, 2026).
+ * After a dash only a short name (up to 4 words, each starting with a
+ * capital, no digits), so "Title - at least 3 dead" is still shown.
+ */
+const OUTLET_AFTER_PIPE = /\s+\|\s+[^|]{1,60}$/u
+const OUTLET_AFTER_DASH = /\s+[-–—]\s+(?:[\p{Lu}][\p{L}.&'’]*)(?:\s+[\p{Lu}][\p{L}.&'’]*){0,3}$/u
+
+/**
  * The summary to show under a headline: without the outlet note, and empty
- * when all it says is the headline again ("Title." under "Title").
+ * when all it says is the headline again ("Title." under "Title"), or the
+ * headline and the outlet's name ("Title | Dunya News").
  */
 export function displaySummary(summary: string | null | undefined, title: string | null | undefined): string {
   if (typeof summary !== 'string') return ''
@@ -43,7 +53,14 @@ export function displaySummary(summary: string | null | undefined, title: string
   for (const re of OUTLET_NOTES) text = text.replace(re, '')
   text = text.replace(TAG, ' ').replace(CUT_TAG, '').replace(/\s+/g, ' ').trim()
   const plain = comparable(text)
-  if (plain === '' || (typeof title === 'string' && plain === comparable(title))) return ''
+  if (plain === '') return ''
+  if (typeof title === 'string') {
+    const headline = comparable(title)
+    if (plain === headline) return ''
+    for (const outlet of [OUTLET_AFTER_PIPE, OUTLET_AFTER_DASH]) {
+      if (outlet.test(text) && comparable(text.replace(outlet, '')) === headline) return ''
+    }
+  }
   return text
 }
 

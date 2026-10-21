@@ -70,6 +70,8 @@ interface Props {
   originalUrls?: string[] | null
   /** Outlets that carried the whole story, when known */
   storyOutlets?: number | null
+  /** Inside the story page's one "Who reported it" block (plan P2, step 3): no card or title of its own */
+  bare?: boolean
 }
 
 function SourceDomain({ url }: { url: string }) {
@@ -80,15 +82,15 @@ function SourceDomain({ url }: { url: string }) {
   }
 }
 
-export function SourceChain({ sources, sourceUrl, originalUrls, storyOutlets }: Props) {
+export function SourceChain({ sources, sourceUrl, originalUrls, storyOutlets, bare = false }: Props) {
   const mode = computeSourceChainMode(sources, sourceUrl)
   const outlets = distinctOutlets(originalUrls)
   if (mode === 'hidden') return null
 
   return (
-    <div className="p-4 rounded-xl border border-white/10 bg-white/[0.02] space-y-4">
+    <div className={bare ? 'space-y-3' : 'p-4 rounded-xl border border-white/10 bg-white/[0.02] space-y-4'}>
       <div className="font-mono text-[10px] tracking-widest uppercase text-wp-text3">
-        🔗 Source Intelligence
+        {bare ? 'This report' : '🔗 Source Intelligence'}
       </div>
 
       {mode === 'cta_only' && (
@@ -112,10 +114,17 @@ export function SourceChain({ sources, sourceUrl, originalUrls, storyOutlets }: 
             const color = reliabilityBarColor(src.trustScore)
             return (
               <div key={src.id} className="space-y-1.5">
-                {/* Name + score */}
+                {/* Kind of outlet, name + score */}
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[13px] font-medium text-wp-text truncate">
-                    {src.name}
+                  <span className="flex items-center gap-2 min-w-0">
+                    {src.tier && (
+                      <span className="font-mono text-[9px] uppercase text-wp-text3 border border-white/10 rounded px-1 shrink-0">
+                        {src.tier}
+                      </span>
+                    )}
+                    <span className="text-[13px] font-medium text-wp-text truncate">
+                      {src.name}
+                    </span>
                   </span>
                   <span
                     className="font-mono text-[11px] shrink-0 font-semibold tabular-nums"
@@ -189,8 +198,10 @@ export function SourceChain({ sources, sourceUrl, originalUrls, storyOutlets }: 
         </div>
       )}
 
-      {/* Primary source CTA — shown when sourceUrl differs from all articleUrls */}
-      {showPrimarySourceCTA(sources, sourceUrl) && (
+      {/* Primary source CTA — shown when sourceUrl differs from all articleUrls. Only
+          beside a list: without one, "View original source" above is that link already
+          (the page showed both buttons, to the same address; Oct 21, 2026) */}
+      {mode === 'list' && showPrimarySourceCTA(sources, sourceUrl) && (
         <a
           href={sourceUrl!}
           target="_blank"
