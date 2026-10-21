@@ -334,14 +334,16 @@ export const registerSearchRoutes: FastifyPluginAsync = async (app) => {
 
     // ── Tags ──────────────────────────────────────────────────
     // Simplified: look up tags that contain the query term exactly, ranked by
-    // how many signals carry each tag.  Uses idx_signals_tags (GIN array index)
-    // on the ANY() predicate — far cheaper than the previous nested unnest+FTS.
+    // how many signals carry each tag. tags @> uses idx_signals_tags (GIN);
+    // "? = ANY(tags)" can't, so it read the whole table and ran into the
+    // 5-second limit (5.4 s, answering no tags, and every "All" search waited
+    // for it: 3.6 s against 0.7 s for reports alone; found Oct 20, 2026).
     if (type === 'all' || type === 'tags') {
       searchPromises.push(
         db.raw<{ rows: { tag: string; count: string }[] }>(`
           SELECT unnest(tags) AS tag, COUNT(*) AS count
           FROM signals
-          WHERE ? = ANY(tags)
+          WHERE tags @> ARRAY[?]::text[]
           GROUP BY tag
           ORDER BY count DESC
           LIMIT ?

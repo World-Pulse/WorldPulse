@@ -64,7 +64,7 @@ describe('Outages API', () => {
     const builder = vi.mocked(db).mock.results.at(-1)!.value as Record<string, ReturnType<typeof vi.fn>>
     expect(builder.where!.mock.calls).toEqual([])
     expect(builder.whereRaw!.mock.calls).toEqual([
-      ['? = ANY(tags)', ['ioda']],
+      ['tags @> ARRAY[?]::text[]', ['ioda']],   // the tag index; "? = ANY(tags)" read the whole table
       ['COALESCE(event_time, created_at) > now() - make_interval(hours => ?)', [24]],
     ])
     const selected = builder.select!.mock.calls[0]!.map(String)
@@ -75,7 +75,7 @@ describe('Outages API', () => {
     await app.inject({ method: 'GET', url: '/api/v1/outages/summary' })
     const summary = vi.mocked(db).mock.results.at(-1)!.value as Record<string, ReturnType<typeof vi.fn>>
     expect(summary.where!.mock.calls).toEqual([])
-    expect(summary.whereRaw!.mock.calls[0]).toEqual(['? = ANY(tags)', ['ioda']])
+    expect(summary.whereRaw!.mock.calls[0]).toEqual(['tags @> ARRAY[?]::text[]', ['ioda']])
   })
 
   // ── GET /recent ───────────────────────────────────────────────────────────

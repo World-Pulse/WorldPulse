@@ -135,7 +135,10 @@ export const registerOutagesRoutes: FastifyPluginAsync = async (app) => {
           db.raw('ST_X(location::geometry) as lng'),
           db.raw('ST_Y(location::geometry) as lat'),
         )
-        .whereRaw('? = ANY(tags)', [IODA_TAG])
+        // tags @> uses the reports' tag index (idx_signals_tags, GIN); "? = ANY(tags)" can't,
+        // so it read the whole table, hit the 5-second limit and answered "no outages"
+        // (found Oct 20, 2026, 8:15 PM: 5.5 s and empty while IODA's first report was in)
+        .whereRaw('tags @> ARRAY[?]::text[]', [IODA_TAG])
         .whereRaw('COALESCE(event_time, created_at) > now() - make_interval(hours => ?)', [Math.max(1, Math.round(hours))])
         .orderByRaw('COALESCE(event_time, created_at) DESC')
         .limit(limit)
@@ -208,7 +211,7 @@ export const registerOutagesRoutes: FastifyPluginAsync = async (app) => {
           db.raw('count(*) as event_count'),
           db.raw('max(COALESCE(event_time, created_at)) as latest_at'),
         )
-        .whereRaw('? = ANY(tags)', [IODA_TAG])
+        .whereRaw('tags @> ARRAY[?]::text[]', [IODA_TAG])
         .whereNotNull('location_name')
         .whereRaw("COALESCE(event_time, created_at) > now() - interval '24 hours'")
         .groupBy('location_name')
