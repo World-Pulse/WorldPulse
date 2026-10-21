@@ -18,12 +18,16 @@ top bar does as soon as it loads (TopNav asks for /signals/count and
 /signals/headlines). Page views from browser names that never did are
 reported as "unconfirmed". Until Oct 20, 2026 loading the site's scripts
 (/_next/static/) counted too, and that day 917 "people" were counted: 910
-"direct", one page each, 492 of them in one hour, reading the same kinds of
-pages as the bots (entity and sign-in pages) — most likely a crawler calling
-itself a browser that downloads a page's files without running them.
-Browsers that loaded the scripts but never called the API are now reported
-as "scripts_only", and that day's count is shown as not known (LOOSE_DAYS;
-the server's log of that morning is gone, so it can't be counted again). The people counted are also summed by browser and system
+"direct", one page each, 492 of them in one hour. Counted again that evening
+with the API rule, the 109 "people" since midnight were still mostly one
+farm: 96 were "Chrome 155 on Linux", a browser that does run the page, from
+as many addresses, and 97 of their 112 page views were sign-in pages, which
+robots.txt asks every bot to leave alone. So sign-in pages (/auth/…) no longer
+make anyone a reader (a person who signs in and reads counts for the reading);
+visitors who opened only sign-in pages are reported as "sign_in_only", and
+browsers that loaded the scripts but never called the API as "scripts_only".
+Oct 20's count is shown as not known (LOOSE_DAYS; the server's log of that
+morning is gone, so it can't be counted again). The people counted are also summed by browser and system
 ("Chrome 129 · Windows") and by the part of the site they read, so the next
 look can tell readers from a farm of look-alike browsers (counts only).
 Requests for things only attackers look for (/wp-login.php, /.env…) never
@@ -74,7 +78,7 @@ SITE_HOSTS = (SITE_HOST, 'www.' + SITE_HOST)
 API_HOST = 'api.' + SITE_HOST
 OWN_SITES = (SITE_HOST, 'world-pulse.app')   # world-pulse.app points at the same server
 IP_ADDRESS = re.compile(r'^\d{1,3}(?:\.\d{1,3}){3}$|^[0-9a-f]*:[0-9a-f:.]*$')
-STATE_VERSION = 3
+STATE_VERSION = 4
 # Days counted before the API rule whose count a crawler clearly inflated: shown as not known (the
 # server's log no longer covers the day, so it can't be counted again); the old number is kept apart
 LOOSE_DAYS = ('2026-10-20',)
@@ -124,6 +128,8 @@ FIRST_WORD = re.compile(r'^([A-Za-z][\w.\-]*)')
 MAX_BOT_NAMES = 60       # a day's distinct names kept; the rest are counted as "(other names)"
 MAX_BOT_SECTIONS = 30
 SECTION = re.compile(r'^/([a-z][a-z-]{0,23})(?:/|$)')
+# Sign-in, sign-up and their callbacks: opening one isn't reading (a farm of browsers opened mostly these, Oct 20, 2026)
+SIGN_IN = re.compile(r'^/auth(?:/|$)')
 
 CHANNEL_SITES = [
     ('x', re.compile(r'(^|\.)(t\.co|x\.com|twitter\.com)$')),
@@ -302,13 +308,22 @@ def per_visitor(views, people):
 
 def summary(d):
     """The day's totals, counting only visitors whose browser ran the page"""
-    channels, pages, sites, views, people, unconfirmed, scripts_only = {}, {}, {}, 0, 0, 0, 0
+    channels, pages, sites, views, people, unconfirmed, scripts_only, sign_in_only = {}, {}, {}, 0, 0, 0, 0, 0
     hours, posts, agents, sections = {}, {}, {}, {}
     # Page views by the channel that brought each visitor (plan G18 (3), Oct 20, 2026):
     # whether readers who came from X, search or a post read a second story
     channel_views = {}
     for v in d['visitors'].values():
-        if not isinstance(v, dict) or not v.get('p'):
+        if not isinstance(v, dict):
+            continue
+        if not v.get('p'):
+            if v.get('sa'):   # opened only sign-in pages
+                if v.get('js'):
+                    sign_in_only += 1   # ran them, and read nothing
+                elif v.get('st'):
+                    scripts_only += 1
+                else:
+                    unconfirmed += 1
             continue
         if not v.get('js'):
             # never called the API: never ran the page (loading the scripts alone isn't enough, Oct 20, 2026)
@@ -341,7 +356,7 @@ def summary(d):
             'channel_views_per_visitor': {ch: per_visitor(channel_views.get(ch, 0), n) for ch, n in by_count(channels).items()},
             'sites': by_count(sites, 8), 'pages': by_count(pages), 'crawlers': by_count(d['crawlers']),
             'bots': top_bots(d), 'bot_pages': by_count(d.get('bot_pages') or {}, 12), 'bots_since': d.get('bots_since'),
-            'unconfirmed': unconfirmed, 'scripts_only': scripts_only, 'rule': 'api',
+            'unconfirmed': unconfirmed, 'scripts_only': scripts_only, 'sign_in_only': sign_in_only, 'rule': 'api, no sign-in pages',
             'people_agents': by_count(agents, 8), 'people_sections': by_count(sections, 12),
             'hours': dict(sorted(hours.items())), 'posts': by_count(posts, 20)}
 
@@ -478,6 +493,10 @@ def count(st, lines):
         if not page:
             continue
         v = today['visitors'].setdefault(who, {'p': {}})
+        if SIGN_IN.match(path):
+            v['sa'] = True   # a sign-in page: noted, not read
+            add(v.setdefault('q', {}), 'auth')
+            continue
         if 'c' not in v:
             v['c'] = channel(query, m['ref'])
             if v['c'] == 'other sites':
@@ -519,7 +538,7 @@ def main():
     out['updated'] = now.isoformat(timespec='seconds')
     out['log_read'] = ok
     out['history'] = [{k: h.get(k) for k in ('day', 'visitors', 'views', 'channels', 'channel_views', 'views_per_visitor', 'posts', 'crawlers',
-                                             'unconfirmed', 'scripts_only', 'rule', 'note', 'visitors_loose')} for h in st['history'][-14:]]
+                                             'unconfirmed', 'scripts_only', 'sign_in_only', 'rule', 'note', 'visitors_loose')} for h in st['history'][-14:]]
     print(json.dumps(out, separators=(',', ':')))
 
 
