@@ -20,6 +20,7 @@ import { BiasIndicator } from '@/components/signals/BiasIndicator'
 import type { BiasLabel } from '@/components/signals/BiasIndicator'
 import { ViralityBadge } from '@/components/signals/ViralityBadge'
 import { StoryOutlets, storyOf } from './StoryOutlets'
+import { loadFailure, LOAD_FAILURE_TEXT, type LoadFailure } from '@/lib/load-failure'
 import type { StoryInfo } from './StoryOutlets'
 import { Users, Cpu, Radio, Newspaper } from 'lucide-react'
 import { displaySummary, isStateMedia, STATE_MEDIA_NOTE, outletSite } from '@/lib/signal-text'
@@ -614,6 +615,21 @@ function FeedEmptyState({ tab }: { tab: string }) {
   )
 }
 
+/** The feed didn't load: say so, rather than "No signals yet" (plan D2) */
+function FeedFailedState({ kind, onRetry }: { kind: LoadFailure; onRetry: () => void }) {
+  const text = LOAD_FAILURE_TEXT[kind]
+  return (
+    <div role="alert">
+      <EmptyState
+        icon={<Radio className="w-10 h-10 text-wp-amber" />}
+        headline={text.headline}
+        message={text.message}
+        cta={{ label: 'Try again', onClick: onRetry }}
+      />
+    </div>
+  )
+}
+
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 /** signupAfter: show the email briefing sign-up after this many cards (the home page; hidden until email can be sent) */
 export function FeedList({ tab, category, signupAfter }: { tab: string; category: string; signupAfter?: number }) {
@@ -622,6 +638,8 @@ export function FeedList({ tab, category, signupAfter }: { tab: string; category
   const [cursor, setCursor]   = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
+  // The first page didn't load (the API down or busy): shown instead of the empty state (D2)
+  const [failed, setFailed] = useState<LoadFailure | null>(null)
   const { toast } = useToast()
 
   const fetchFeed = useCallback(async (nextCursor?: string) => {
@@ -651,7 +669,7 @@ export function FeedList({ tab, category, signupAfter }: { tab: string; category
 
     try {
       const res = await fetch(url, { headers })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status })
       const data = await res.json()
 
       // feed/signals returns { items, cursor, hasMore }
@@ -685,10 +703,14 @@ export function FeedList({ tab, category, signupAfter }: { tab: string; category
       }
       setCursor(data.cursor ?? null)
       setHasMore(more)
+      if (!nextCursor) setFailed(null)
     } catch (err) {
       console.error('[FeedList] fetch failed:', err)
       if (!nextCursor) {
-        toast('Could not load feed — check your connection and try again', 'error')
+        // said in place of the list (a toast vanished, and "No signals yet" stayed)
+        setFailed(loadFailure((err as { status?: number }).status))
+      } else {
+        toast('Could not load more — try again', 'error')
       }
     }
   }, [tab, category, toast])
@@ -708,6 +730,9 @@ export function FeedList({ tab, category, signupAfter }: { tab: string; category
   }
 
   if (loading) return <FeedSkeleton />
+  if (items.length === 0 && failed) {
+    return <FeedFailedState kind={failed} onRetry={() => { setLoading(true); fetchFeed().finally(() => setLoading(false)) }} />
+  }
   if (items.length === 0) return <FeedEmptyState tab={tab} />
   const digestUpdated = tab === 'digest' ? lastDigestUpdate(items) : null
 

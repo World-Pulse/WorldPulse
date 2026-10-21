@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import type Supercluster from 'supercluster'
 import { EmptyState } from '@/components/EmptyState'
+import { loadFailure, LOAD_FAILURE_TEXT, type LoadFailure } from '@/lib/load-failure'
 import { useToast } from '@/components/Toast'
 import { ReliabilityDots } from '@/components/signals/ReliabilityDots'
 import { FlagModal } from '@/components/signals/FlagModal'
@@ -300,6 +301,8 @@ function MapView({ embed = false }: { embed?: boolean }) {
   const [country,          setCountry]          = useState<(CountryHit & { risk: CountryRisk | null }) | null>(null)
   const [flagModalSignalId, setFlagModalSignalId] = useState<string | null>(null)
   const [loading,  setLoading]  = useState(true)
+  // The map's stories didn't load (the API down or busy): said instead of "No signals match" (plan D2)
+  const [loadFailed, setLoadFailed] = useState<LoadFailure | null>(null)
   const [category,    setCategory]    = useState(() => searchParams.get('cat') ?? 'all')
   const [severity,    setSeverity]    = useState(() => {
     const v = searchParams.get('sev')
@@ -667,15 +670,19 @@ function MapView({ embed = false }: { embed?: boolean }) {
       if (category !== 'all') p.set('category', category)
       if (severity !== 'all') p.set('severity', severity)
       const res  = await fetch(`${API_URL}/api/v1/signals/map/points?${p}`)
-      const data = await res.json() as { success: boolean; data: MapSignal[] }
-      if (data.success && Array.isArray(data.data)) {
+      const data = await res.json().catch(() => null) as { success?: boolean; data?: MapSignal[] } | null
+      if (res.ok && data?.success && Array.isArray(data.data)) {
         // "All topics" shows news: low-severity other, culture and sports only under their topic (M27)
         const points = mapPointsFor(data.data, category)
         signalsRef.current = points
         setSignals(points)
+        setLoadFailed(null)
+      } else if (!background) {
+        setLoadFailed(loadFailure(res.status) ?? 'down')
       }
     } catch (e) {
       console.error('[map] fetch error:', e)
+      if (!background) setLoadFailed('down')
     } finally {
       if (!background) setLoading(false)
     }
@@ -4298,8 +4305,25 @@ function MapView({ embed = false }: { embed?: boolean }) {
           </div>
         )}
 
+        {/* The stories didn't load: say so, with a way to try again (plan D2) */}
+        {!loading && signals.length === 0 && loadFailed && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
+            <div className="pointer-events-auto" role="alert">
+              <div className="bg-[rgba(6,7,13,0.92)] border border-[rgba(255,255,255,0.09)] rounded-2xl backdrop-blur-xl shadow-2xl max-w-[300px]">
+                <EmptyState
+                  icon="🗺️"
+                  headline={LOAD_FAILURE_TEXT[loadFailed].headline}
+                  message={LOAD_FAILURE_TEXT[loadFailed].message}
+                  cta={{ label: 'Try again', onClick: () => { void fetchSignals(false) } }}
+                  compact
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* No signals in area empty state (only shown when map is done loading) */}
-        {!loading && signals.length === 0 && (
+        {!loading && signals.length === 0 && !loadFailed && (
           <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
             <div className="pointer-events-auto">
               <div className="bg-[rgba(6,7,13,0.92)] border border-[rgba(255,255,255,0.09)] rounded-2xl backdrop-blur-xl shadow-2xl max-w-[300px]">
