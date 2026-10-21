@@ -98,6 +98,10 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
                   location_name:     { type: 'string', nullable: true },
                   published_at:      { type: 'string' },
                   source_url:        { type: 'string', nullable: true },
+                  // plan 15 (Oct 21, 2026): how many independent outlets, which websites, its page
+                  outlets:           { type: 'number' },
+                  sites:             { type: 'array', items: { type: 'string' } },
+                  url:               { type: 'string' },
                 },
               },
             },
@@ -144,7 +148,8 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
     }
 
     // Cache key encodes all query params
-    const cacheKey = `public:signals:${category ?? 'all'}:${severity ?? 'all'}:${safeLimit}:${safeOffset}`
+    // v2: each signal says its outlets, websites and page (plan 15, Oct 21, 2026)
+    const cacheKey = `public:signals:v2:${category ?? 'all'}:${severity ?? 'all'}:${safeLimit}:${safeOffset}`
     const cached = await redis.get(cacheKey).catch(() => null)
     if (cached) {
       return reply
@@ -162,7 +167,7 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
         'id', 'title', 'category', 'severity',
         'reliability_score', 'location_name',
         db.raw('created_at as published_at'),
-        'source_url',
+        'source_url', 'source_count', 'original_urls',
       ])
 
     if (category && category !== 'all') query = query.where('category', category)
@@ -219,7 +224,20 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
   })
 }
 
-function formatPublicSignal(row: Record<string, unknown>) {
+/** The websites of a signal's links, each once, without "www." (10 at most) */
+export function sitesOf(urls: unknown): string[] {
+  const out: string[] = []
+  for (const u of Array.isArray(urls) ? urls : []) {
+    try {
+      const host = new URL(String(u)).hostname.toLowerCase().replace(/^www\./, '')
+      if (host && !out.includes(host)) out.push(host)
+    } catch { /* not a link */ }
+    if (out.length >= 10) break
+  }
+  return out
+}
+
+export function formatPublicSignal(row: Record<string, unknown>) {
   return {
     id:                row.id,
     title:             row.title,
@@ -231,5 +249,11 @@ function formatPublicSignal(row: Record<string, unknown>) {
       ? (row.published_at as Date).toISOString()
       : (row.published_at as string | null) ?? null,
     source_url: row.source_url ?? null,
+    // The independent outlets that reported it (an outlet's sister sites and
+    // word-for-word wire copies count once: pipeline/independence.ts), the
+    // websites it links to, and its page (plan 15, Oct 21, 2026)
+    outlets: Math.max(1, Math.round(Number(row.source_count ?? 1)) || 1),
+    sites:   sitesOf(row.original_urls),
+    url:     `https://world-pulse.io/signals/${encodeURIComponent(String(row.id))}`,
   }
 }

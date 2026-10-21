@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { ScraperGate1Status } from '@/components/scraper/ScraperGate1Status'
 import { FlagReview } from '@/components/admin/FlagReview'
+import { ReportReview } from '@/components/admin/ReportReview'
 import { Lock } from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
@@ -388,9 +389,10 @@ export default function AdminPage() {
         )}
       </section>
 
-      {/* ── READERS' FLAGS: THE REVIEW LIST (plan C5) ───────── */}
-      <section className="mb-8">
+      {/* ── READERS' FLAGS AND REPORTS: THE REVIEW LISTS (plans C5, C6) ── */}
+      <section className="mb-8 space-y-4">
         <FlagReview token={token} />
+        <ReportReview token={token} />
       </section>
 
       {/* ── GATE 1 STABILITY CLOCK ─────────────────────────── */}

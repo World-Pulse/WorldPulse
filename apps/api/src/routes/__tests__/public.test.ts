@@ -372,9 +372,10 @@ describe('GET /public/signals', () => {
   it('stores response in Redis cache after DB fetch', async () => {
     const app = await buildApp()
     await app.inject({ method: 'GET', url: '/public/signals' })
-    // TTL = 30 seconds (the count is kept apart, see above)
+    // TTL = 30 seconds (the count is kept apart, see above); v2 since each
+    // signal says its outlets (plan 15, Oct 21, 2026)
     expect(mockR.setex).toHaveBeenCalledWith(
-      expect.stringMatching(/^public:signals:all:/),
+      expect.stringMatching(/^public:signals:v2:all:/),
       30,
       expect.any(String),
     )

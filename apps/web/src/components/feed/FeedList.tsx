@@ -11,6 +11,7 @@ import { useToast } from '@/components/Toast'
 import { ReliabilityDots } from '@/components/signals/ReliabilityDots'
 import { RiskScoreGauge } from '@/components/signals/RiskScoreGauge'
 import { FlagModal } from '@/components/signals/FlagModal'
+import { ReportModal } from '@/components/community/ReportModal'
 import { VerificationBadge, computeVerificationStatus } from '@/components/signals/VerificationBadge'
 import type { VerificationStatus } from '@/components/signals/VerificationBadge'
 import type { CrossCheckStatus, AlertTier } from '@worldpulse/types'
@@ -382,6 +383,8 @@ function ActionBar({ item }: { item: FeedItem }) {
   const [boosted,       setBoosted]       = useState(item.hasBoosted ?? false)
   const [bookmarked,    setBookmarked]    = useState(item.hasBookmarked ?? false)
   const [flagModalOpen, setFlagModalOpen] = useState(false)
+  // a post (not a news report) can be reported (plan C6)
+  const [reportOpen,    setReportOpen]    = useState(false)
   const [likes,  setLikes]  = useState(item.likes)
   const [boosts, setBoosts] = useState(item.boosts)
   const { toast } = useToast()
@@ -504,6 +507,18 @@ function ActionBar({ item }: { item: FeedItem }) {
           </svg>
         </button>
       )}
+      {item.type !== 'signal' && (
+        <button
+          onClick={() => setReportOpen(true)}
+          className="flex items-center gap-[5px] px-2 sm:px-3 py-[6px] rounded-full text-[12px] text-wp-text3 hover:text-wp-red hover:bg-[rgba(255,59,92,0.08)] transition-all"
+          aria-label="Report post"
+          title="Report this post"
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>
+          </svg>
+        </button>
+      )}
       {item.reliability != null && (
         <div className="ml-auto">
           <ReliabilityDots
@@ -520,6 +535,7 @@ function ActionBar({ item }: { item: FeedItem }) {
       {flagModalOpen && (
         <FlagModal signalId={item.id} onClose={() => setFlagModalOpen(false)} />
       )}
+      {reportOpen && <ReportModal type="post" id={item.id} onClose={() => setReportOpen(false)} />}
     </div>
   )
 }

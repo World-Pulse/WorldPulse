@@ -101,6 +101,7 @@ import { ensureSubscribersTable } from './lib/subscribers'
 import { ensureWaitlistTable } from './lib/pro-waitlist'
 import { registerProWaitlistRoutes } from './routes/pro-waitlist'
 import { ensureStoryFollowsTable } from './lib/story-follows'
+import { ensureContentReportsTable } from './lib/content-reports'
 import { registerStoryFollowRoutes } from './routes/story-follows'
 import { ensureEntitySignalsIndex } from './lib/entity-index'
 import { hashStoredFlagAddresses } from './lib/signal-flags'
@@ -434,6 +435,8 @@ async function bootstrap() {
   ensureWaitlistTable().catch(err => logger.warn({ err }, 'Pro waitlist failed to start'))
   // Follow a story's table (plan 8; Devon, Oct 21, 2026: "Yes, add it")
   ensureStoryFollowsTable().catch(err => logger.warn({ err }, 'Story follows failed to start'))
+  // readers' reports of posts and communities (plan C6; Devon, Oct 21, 2026: "Yes, add the table")
+  ensureContentReportsTable().catch(err => logger.warn({ err }, 'Content reports failed to start'))
 
   // ─── ENTITY PAGES: an index on the reports each entity is named in ──
   // (Devon's OK, Oct 20, 2026): built once, in the background, without

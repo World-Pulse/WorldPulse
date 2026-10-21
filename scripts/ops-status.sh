@@ -412,7 +412,7 @@ part() {
   echo "$name $(( $(date +%s%3N) - t0 ))" >> "$parts/took"
 }
 pipeline_stats() {
-  local q1 q2 q3 q4 scr parts checked t0
+  local q1 q2 q3 q4 q5 scr parts checked t0
   checked=$(date -Is)
   parts=$(mktemp -d) || return 1
   q1="SELECT json_build_object(
@@ -453,12 +453,19 @@ pipeline_stats() {
         SELECT count(*) FROM (SELECT signal_id FROM signal_flags
                                WHERE created_at > now() - interval '30 days'
                                GROUP BY signal_id HAVING count(*) >= 3) t))"
-  # db is these four answers in this order, each null when it failed or ran out
+  # Posts and communities 3 or more readers reported in the last 30 days (plan
+  # C6, Oct 21, 2026): how long the second review list on /admin is. A count
+  q5="SELECT json_build_object('reported_for_review', (
+        SELECT count(*) FROM (SELECT target_type, target_id FROM content_reports
+                               WHERE created_at > now() - interval '30 days'
+                               GROUP BY target_type, target_id HAVING count(*) >= 3) t))"
+  # db is these five answers in this order, each null when it failed or ran out
   # of time (scripts/autopilot_hq.py reads the first two)
   part db1 db_json 45 "$q1"
   part db2 db_json 20 "$q2"
   part db3 db_json 30 "$q3"
   part db4 db_json 10 "$q4"
+  part db5 db_json 10 "$q5"
   # Scraper log lines from the last 30 minutes, counted by level; the most
   # frequent error and warning messages, digits blanked out (our own log text only)
   t0=$(date +%s%3N)
@@ -491,7 +498,7 @@ def part(name):
         failed.append(name)
     return value
 out = {'window': '24h', 'checked': checked}
-out['db'] = [v if isinstance(v, dict) else None for v in (part('db%d' % i) for i in range(1, 5))]
+out['db'] = [v if isinstance(v, dict) else None for v in (part('db%d' % i) for i in range(1, 6))]
 for name in ('scraper_30m', 'llm', 'fingerprints', 'claude', 'sources', 'disk', 'readers'):
     out[name] = part(name)
 took = {}

@@ -5,6 +5,8 @@ import { z } from 'zod'
 import { sendError } from '../lib/errors'
 import { parseQuery, CommunityListQuerySchema, CommunityMembersQuerySchema } from '../lib/query-schemas'
 import { communityLimitProblem, hoursSince } from '../lib/post-limits'
+import { isUuid } from '../lib/cursor'
+import { REPORT_REASONS, reportContent, reportsReady } from '../lib/content-reports'
 
 /**
  * Members and posts counted, not read from the stored columns. The list asked
@@ -61,6 +63,12 @@ async function communityLimitFor(userId: string): Promise<string | null> {
     return null
   }
 }
+
+/** A reader's report of a post or community (plan C6) */
+const ReportSchema = z.object({
+  reason: z.enum(REPORT_REASONS),
+  note:   z.string().max(500).optional(),
+})
 
 export const registerCommunityRoutes: FastifyPluginAsync = async (app) => {
 
@@ -284,6 +292,21 @@ export const registerCommunityRoutes: FastifyPluginAsync = async (app) => {
     })
 
     return reply.status(201).send({ success: true, data: community })
+  })
+
+  // ─── REPORT COMMUNITY (plan C6; Devon, Oct 21, 2026: "Yes, add the table") ──
+  // A signed-in reader reports it once, with a reason; 3 or more reports in
+  // 30 days put it on Devon's review list (GET /api/v1/admin/reports)
+  app.post('/:id/report', { preHandler: [authenticate], config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+    if (!isUuid(id)) return sendError(reply, 404, 'NOT_FOUND', 'Community not found')
+    const body = ReportSchema.safeParse(req.body)
+    if (!body.success) return sendError(reply, 400, 'VALIDATION_ERROR', `reason must be one of: ${REPORT_REASONS.join(', ')}`)
+    if (!reportsReady()) return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'Reporting is starting up; try again in a minute')
+    const result = await reportContent('community', id, req.user!.id, body.data.reason, body.data.note)
+    if (result === 'not_found') return sendError(reply, 404, 'NOT_FOUND', 'Community not found')
+    if (result === 'already') return sendError(reply, 409, 'CONFLICT', 'You have already reported this community')
+    return reply.status(201).send({ success: true, data: { reported: true } })
   })
 
   // ─── JOIN / LEAVE COMMUNITY ───────────────────────────────

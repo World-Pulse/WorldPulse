@@ -7,6 +7,7 @@ import { runFullReindex } from '../lib/search-backfill'
 import { sendError } from '../lib/errors'
 import { CLAUDE_SMALL } from '../lib/claude'
 import { flagReviewList, REVIEW_AT, REVIEW_DAYS } from '../lib/signal-flags'
+import { contentReviewList, REPORT_REVIEW_AT, REPORT_REVIEW_DAYS } from '../lib/content-reports'
 import { GEMINI_MODEL, OLLAMA_MODEL } from '../lib/llm-models'
 
 // ─── Stability keys (mirror apps/scraper/src/lib/stability-tracker.ts) ───────
@@ -104,6 +105,17 @@ export const registerAdminRoutes: FastifyPluginAsync = async (app) => {
     }
     const items = await flagReviewList(100)
     return reply.send({ success: true, data: { minFlags: REVIEW_AT, days: REVIEW_DAYS, items } })
+  })
+
+  // ─── GET /api/v1/admin/reports ─────────────────────────────────────────────
+  // Posts and communities 3 or more readers reported in the last 30 days
+  // (plan C6, Oct 21, 2026: "Yes, add the table"), with why and the newest notes
+  app.get('/reports', { preHandler: [authenticate], config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req, reply) => {
+    if (!req.user || req.user.accountType !== 'admin') {
+      return sendError(reply, 403, 'FORBIDDEN', 'Admin access required')
+    }
+    const items = await contentReviewList(100).catch(() => [])
+    return reply.send({ success: true, data: { minReports: REPORT_REVIEW_AT, days: REPORT_REVIEW_DAYS, items } })
   })
 
   // ─── GET /api/v1/admin/scraper/health ──────────────────────────────────────

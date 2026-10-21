@@ -64,7 +64,7 @@ export const ENDPOINT_GROUPS: EndpointGroup[] = [
     endpoints: [
       {
         method: 'GET', path: '/api/v1/public/signals',
-        description: 'List the latest verified signals from the 1,000+ outlets WorldPulse reads each day, newest first. reliability_score runs from 0 to 1, and published_at is when WorldPulse saved the report. total counts every match; while total_exact is false it is an estimate.',
+        description: 'List the latest verified signals from the 1,000+ outlets WorldPulse reads each day, newest first. Each is verified: two or more independent outlets reported it. outlets is how many (an outlet\'s sister sites and word-for-word wire copies count once), sites the websites of the reports it links to, and url its page on WorldPulse. reliability_score runs from 0 to 1, and published_at is when WorldPulse saved the report. total counts every match; while total_exact is false it is an estimate.',
         access: 'none', rateLimit: '60 req/min per IP',
         params: [
           { name: 'category', type: 'string', description: 'One of the categories GET /api/v1/public/categories lists (conflict, climate, economy, …), or all', required: false },
@@ -83,7 +83,10 @@ export const ENDPOINT_GROUPS: EndpointGroup[] = [
       "reliability_score": 0.87,
       "location_name": "Tonga, South Pacific",
       "published_at": "2026-10-20T14:32:00.000Z",
-      "source_url": "https://example.com/tonga-earthquake"
+      "source_url": "https://example.com/tonga-earthquake",
+      "outlets": 4,
+      "sites": ["rnz.co.nz", "abc.net.au", "matangitonga.to", "example.com"],
+      "url": "https://world-pulse.io/signals/6f1c2a9e-3b7d-4c55-9a0e-8d2f4b1e7c30"
     }
   ],
   "total": 2847,
@@ -498,6 +501,9 @@ interface Signal {
   location_name: string | null;
   published_at: string;      // when WorldPulse saved the report
   source_url: string | null;
+  outlets: number;           // independent outlets that reported it (2 or more)
+  sites: string[];           // the websites of the reports it links to
+  url: string;               // its page on world-pulse.io
 }
 
 // What GET /api/v1/public/signals answers

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Globe2 } from 'lucide-react'
+import { ReportModal } from '@/components/community/ReportModal'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -39,6 +40,8 @@ export default function CommunityDetailPage() {
   const router = useRouter()
   const [community, setCommunity] = useState<CommunityDetail | null>(null)
   const [loading, setLoading]     = useState(true)
+  // readers can report a community (plan C6)
+  const [reportOpen, setReportOpen] = useState(false)
 
   useEffect(() => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
@@ -133,8 +136,16 @@ export default function CommunityDetailPage() {
               >
                 {community.isMember ? 'Leave community' : 'Join community'}
               </button>
+              <button
+                onClick={() => setReportOpen(true)}
+                className="px-3 py-2 rounded-lg text-[12px] border border-[rgba(255,255,255,0.08)] text-wp-text3 hover:text-wp-red hover:border-wp-red transition-all"
+                title="Report this community"
+              >
+                Report
+              </button>
             </div>
           </div>
+          {reportOpen && <ReportModal type="community" id={community.id} onClose={() => setReportOpen(false)} />}
 
           <h1 className="text-[20px] font-bold text-wp-text mb-1">{community.name}</h1>
           {community.description && (

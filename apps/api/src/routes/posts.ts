@@ -10,6 +10,7 @@ import { publishPostCreated, publishPostDeleted } from '../lib/search-events'
 import { sendError } from '../lib/errors'
 import { BAD_CURSOR, isUuid } from '../lib/cursor'
 import { postLimitProblem, linksIn, hoursSince } from '../lib/post-limits'
+import { REPORT_REASONS, reportContent, reportsReady } from '../lib/content-reports'
 
 // Simple script-based language detector — no external dependency needed.
 // Covers the languages most likely to appear in news posts.
@@ -84,6 +85,12 @@ async function postLimitFor(userId: string, content: string, sourceUrl?: string)
     return null
   }
 }
+
+/** A reader's report of a post or community (plan C6) */
+const ReportSchema = z.object({
+  reason: z.enum(REPORT_REASONS),
+  note:   z.string().max(500).optional(),
+})
 
 export const registerPostRoutes: FastifyPluginAsync = async (app) => {
 
@@ -332,6 +339,21 @@ export const registerPostRoutes: FastifyPluginAsync = async (app) => {
     await db('bookmarks').insert({ user_id: userId, post_id: id })
     invalidateUserFeedCache(userId).catch(() => {})
     return reply.send({ success: true, data: { bookmarked: true } })
+  })
+
+  // ─── REPORT POST (plan C6; Devon, Oct 21, 2026: "Yes, add the table") ──
+  // A signed-in reader reports it once, with a reason; 3 or more reports in
+  // 30 days put it on Devon's review list (GET /api/v1/admin/reports)
+  app.post('/:id/report', { preHandler: [authenticate], config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+    if (!isUuid(id)) return sendError(reply, 404, 'NOT_FOUND', 'Post not found')
+    const body = ReportSchema.safeParse(req.body)
+    if (!body.success) return sendError(reply, 400, 'VALIDATION_ERROR', `reason must be one of: ${REPORT_REASONS.join(', ')}`)
+    if (!reportsReady()) return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'Reporting is starting up; try again in a minute')
+    const result = await reportContent('post', id, req.user!.id, body.data.reason, body.data.note)
+    if (result === 'not_found') return sendError(reply, 404, 'NOT_FOUND', 'Post not found')
+    if (result === 'already') return sendError(reply, 409, 'CONFLICT', 'You have already reported this post')
+    return reply.status(201).send({ success: true, data: { reported: true } })
   })
 
   // ─── DELETE POST ─────────────────────────────────────────
