@@ -121,6 +121,9 @@ export const UpdateSignalSchema = z.object({
   body:              z.string().max(50000).optional(),
 }).refine(obj => Object.keys(obj).length > 0, { message: 'No updatable fields provided' })
 
+/** What the second read can say (scraper: pipeline/second-read.ts) */
+const SECOND_READ_VERDICTS = new Set(['agree', 'lower', 'higher', 'not_event'])
+
 export const FlagSignalSchema = z.object({
   reason: z.enum(['inaccurate', 'outdated', 'duplicate', 'misinformation']),
   notes:  z.string().max(500).optional(),
@@ -275,6 +278,18 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       .limit(10)
       .select(['check_type', 'result', 'confidence', 'notes', 'created_at'])
 
+    // The second read of a high or critical report few outlets carry (plan 11;
+    // the scraper's pipeline/second-read.ts): asked apart from the log's 10
+    // newest lines, which later checks can push it out of
+    const secondRow = await db('verification_log')
+      .where({ signal_id: id, check_type: 'second_read' })
+      .orderBy('created_at', 'desc')
+      .first(['verdict', 'notes', 'created_at'])
+      .catch(() => null) as { verdict?: string | null; notes?: string | null; created_at?: unknown } | null | undefined
+    const secondRead = secondRow && SECOND_READ_VERDICTS.has(String(secondRow.verdict))
+      ? { verdict: String(secondRow.verdict), note: String(secondRow.notes ?? '').replace(/^\[Claude, second read\]\s*/, ''), at: secondRow.created_at ? new Date(secondRow.created_at as string).toISOString() : null }
+      : null
+
     // Get multimedia items (YouTube, podcast audio) — table may not exist yet
     let media: Array<Record<string, unknown>> = []
     try {
@@ -324,6 +339,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
         ...formatSignal(signal),
         sources:       signal.sources_data ?? [],
         verifications,
+        secondRead,
         aiSummary,
         sourceBias,
         media,

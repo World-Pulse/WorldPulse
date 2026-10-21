@@ -12,6 +12,7 @@ import { fetchCountryStories } from '@/lib/country-stories'
 import { fetchTopStories, rankRelatedStories } from '@/lib/related-stories'
 import type { CountryStory } from '@/components/countries/CountryTopStories'
 import { fetchStoryOutletCounts } from '@/lib/story-outlets'
+import type { SecondReadInfo } from '@/lib/second-read'
 
 const API_BASE = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -25,6 +26,8 @@ export interface Verification {
 
 export interface SignalDetail extends Signal {
   verifications: Verification[]
+  /** The second read of a high or critical report few outlets carry (plan 11) */
+  secondRead?: SecondReadInfo | null
 }
 
 /**

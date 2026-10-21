@@ -34,6 +34,7 @@ import { howSure } from '@/lib/how-sure'
 import { HowSureBlock } from '@/components/signals/HowSureBlock'
 import { FollowStory } from '@/components/signals/FollowStory'
 import { ReaderFlags } from '@/components/signals/ReaderFlags'
+import { secondReadBadge } from '@/lib/second-read'
 import { outletLine, type CountryStory } from '@/components/countries/CountryTopStories'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -350,6 +351,21 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal, 
                   CONTESTED
                 </span>
               )}
+              {/* The second read: an AI model's own read of how serious it is (plan 11) */}
+              {(() => {
+                const badge = secondReadBadge(signal.secondRead)
+                if (!badge) return null
+                return (
+                  <span
+                    title={badge.title}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-mono ${
+                      badge.tone === 'agree' ? 'border-wp-cyan/40 bg-wp-cyan/10 text-wp-cyan' : 'border-wp-amber/40 bg-wp-amber/10 text-wp-amber'
+                    }`}
+                  >
+                    {badge.label}
+                  </span>
+                )
+              })()}
             </div>
 
             {/* Title */}

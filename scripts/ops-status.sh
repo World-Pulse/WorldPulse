@@ -113,6 +113,7 @@ claude_stats() {
       echo "health=$(redis-cli --raw HGETALL ai:claude:health | paste -s -)"
       echo "editor=$(redis-cli --raw GET ai:editor:last)"
       echo "verify=$(redis-cli --raw HGETALL "ai:verify:counts:$1" | paste -sd " " -)"
+      echo "second=$(redis-cli --raw HGETALL "ai:second:counts:$1" | paste -sd " " -)"
       redis-cli --raw LRANGE ai:verify:recent 0 4 | sed "s/^/doubt=/"
       redis-cli --raw LRANGE ai:verify:different 0 29 | sed "s/^/different=/"
       echo "social=$(redis-cli --raw GET social:status)"' sh "$(date -u +%F)" "$(date -u +%Y-%m)" 2>/dev/null) || out=""
@@ -130,6 +131,10 @@ except ValueError: editor = None
 # verdicts, and the newest stories Claude doubted (public headlines only)
 words = vals.get('verify', '').split()
 verify = {words[i]: int(words[i + 1]) for i in range(0, len(words) - 1, 2) if words[i + 1].isdigit()}
+# The second read of high and critical reports few outlets carry (plan 11,
+# pipeline/second-read.ts): today's verdicts (read, agree, lower, higher, not_event, unread)
+words = vals.get('second', '').split()
+second = {words[i]: int(words[i + 1]) for i in range(0, len(words) - 1, 2) if words[i + 1].isdigit()}
 doubts, different = [], []
 for line in os.environ.get('OUT', '').splitlines():
     for prefix, into in (('doubt=', doubts), ('different=', different)):
@@ -170,6 +175,7 @@ print(json.dumps({
     'crosscheck_doubts': doubts,
     # The newest "different event" verdicts (30), read before they may hold a story at pending
     'crosscheck_different': different,
+    'second_read_today': second,
     # Automatic Telegram and Bluesky posts (plan G10): last post, posts today, last error per channel
     'social': social,
 }, separators=(',', ':')))
