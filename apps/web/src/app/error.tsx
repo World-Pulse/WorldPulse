@@ -42,10 +42,10 @@ export default function Error({
         </svg>
       </div>
 
-      <h2 className="text-xl font-semibold text-white mb-2">
+      <h2 className="text-xl font-semibold text-wp-text mb-2">
         Something went wrong
       </h2>
-      <p className="text-sm text-gray-400 mb-6 max-w-sm">
+      <p className="text-sm text-wp-text2 mb-6 max-w-sm">
         An unexpected error occurred. The issue has been logged and our team will look into it.
       </p>
 

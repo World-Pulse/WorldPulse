@@ -22,6 +22,15 @@
   --wp-text:        #e2e6f0;
   --wp-text-2:      #8892a4;
   --wp-text-3:      #4a5568;
+  /* The same neutrals as channels, for Tailwind's wp-* colours (plan D4):
+     they must match the values above, here and under html.light */
+  --wp-bg-rgb:       6 7 13;
+  --wp-surface-rgb:  13 15 24;
+  --wp-s2-rgb:       20 23 34;
+  --wp-s3-rgb:       27 32 48;
+  --wp-text-rgb:     226 230 240;
+  --wp-text2-rgb:    136 146 164;
+  --wp-text3-rgb:    74 85 104;
   --wp-font-display: var(--font-display, 'Bebas Neue'), sans-serif;
   --wp-font-mono:   var(--font-mono, 'JetBrains Mono'), monospace;
 }
@@ -175,6 +184,13 @@ html.light {
   --wp-text:         #111827;
   --wp-text-2:       #374151;
   --wp-text-3:       #6b7280;
+  --wp-bg-rgb:       240 242 245;
+  --wp-surface-rgb:  255 255 255;
+  --wp-s2-rgb:       245 247 250;
+  --wp-s3-rgb:       232 236 242;
+  --wp-text-rgb:     17 24 39;
+  --wp-text2-rgb:    55 65 81;
+  --wp-text3-rgb:    107 114 128;
 }
 
 html.light body { background: var(--wp-bg); color: var(--wp-text); }

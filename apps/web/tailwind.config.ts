@@ -9,18 +9,23 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      // The neutrals follow the theme (plan D4, Oct 21, 2026): they were fixed
+      // dark values, so in the light theme panels stayed dark and text on the
+      // page's light background could be unreadable. Each is its channels in
+      // globals.css (--wp-*-rgb, redefined under html.light), so opacity
+      // modifiers (text-wp-text/60) keep working. The accents stay fixed.
       colors: {
-        'wp-bg':      '#06070d',
-        'wp-surface': '#0d0f18',
-        'wp-s2':      '#141722',
-        'wp-s3':      '#1b2030',
+        'wp-bg':      'rgb(var(--wp-bg-rgb) / <alpha-value>)',
+        'wp-surface': 'rgb(var(--wp-surface-rgb) / <alpha-value>)',
+        'wp-s2':      'rgb(var(--wp-s2-rgb) / <alpha-value>)',
+        'wp-s3':      'rgb(var(--wp-s3-rgb) / <alpha-value>)',
         'wp-amber':   '#f5a623',
         'wp-cyan':    '#00d4ff',
         'wp-red':     '#ff3b5c',
         'wp-green':   '#00e676',
-        'wp-text':    '#e2e6f0',
-        'wp-text2':   '#8892a4',
-        'wp-text3':   '#4a5568',
+        'wp-text':    'rgb(var(--wp-text-rgb) / <alpha-value>)',
+        'wp-text2':   'rgb(var(--wp-text2-rgb) / <alpha-value>)',
+        'wp-text3':   'rgb(var(--wp-text3-rgb) / <alpha-value>)',
       },
       fontFamily: {
         display: ['Bebas Neue', 'sans-serif'],
@@ -28,8 +33,8 @@ const config: Config = {
         body:    ['DM Sans', 'sans-serif'],
       },
       borderColor: {
-        DEFAULT: 'rgba(255,255,255,0.07)',
-        bright:  'rgba(255,255,255,0.15)',
+        DEFAULT: 'var(--wp-border)',
+        bright:  'var(--wp-border-bright)',
       },
       animation: {
         'live-pulse':  'live-pulse 1.4s ease-in-out infinite',
