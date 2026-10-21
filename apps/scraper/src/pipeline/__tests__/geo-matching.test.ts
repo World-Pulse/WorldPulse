@@ -24,6 +24,14 @@ describe('findGazetteerPlace', () => {
     expect(findGazetteerPlace('Talks in New Delhi; Delhi traffic halted')?.place).toBe('new delhi')
   })
 
+  it("finds India's states and cities, not only its biggest four", () => {
+    expect(findGazetteerPlace('Heavy rain floods Bengaluru suburbs in Karnataka')?.coords.name).toBe('Bangalore')
+    expect(findGazetteerPlace('Telangana cabinet clears new IT policy')?.coords.country).toBe('IN')
+    expect(findGazetteerPlace('Pune police arrest two over cyber fraud')?.coords.region).toBe('Maharashtra')
+    expect(findGazetteerPlace('Floods hit Tamil Nadu coast')?.place).toBe('tamil nadu')
+    expect(findGazetteerPlace('Assamese cuisine festival opens')).toBeNull()                   // whole words only
+  })
+
   it('ignores newspaper names', () => {
     expect(findGazetteerPlace('US troops on Okinawa face new limits, the Washington Post reported')).toBeNull()
     expect(findGazetteerPlace('According to the New York Times, talks in Cairo resumed')?.place).toBe('cairo')
