@@ -303,12 +303,19 @@ function MapView({ embed = false }: { embed?: boolean }) {
   const [loading,  setLoading]  = useState(true)
   // The map's stories didn't load (the API down or busy): said instead of "No signals match" (plan D2)
   const [loadFailed, setLoadFailed] = useState<LoadFailure | null>(null)
-  const [category,    setCategory]    = useState(() => searchParams.get('cat') ?? 'all')
+  // A link naming a topic or window the map doesn't know opens the default instead of an empty map
+  const [category,    setCategory]    = useState(() => {
+    const v = searchParams.get('cat')
+    return v && (CATS.includes(v) || v in CAT_ICON) ? v : 'all'
+  })
   const [severity,    setSeverity]    = useState(() => {
     const v = searchParams.get('sev')
     return v && (SEVS as readonly string[]).includes(v) ? v : 'all'
   })
-  const [timeRange,   setTimeRange]   = useState(() => searchParams.get('tr')  ?? '24h')
+  const [timeRange,   setTimeRange]   = useState(() => {
+    const v = searchParams.get('tr')
+    return v && TRANGE.some(t => t.v === v) ? v : '24h'
+  })
   const [wsOnline,    setWsOnline]    = useState(false)
   const [heatmapMode, setHeatmapMode] = useState(() => searchParams.get('hm') === '1')
   const [visibleCount, setVisibleCount] = useState(0)
