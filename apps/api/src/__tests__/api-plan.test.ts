@@ -91,6 +91,12 @@ describe('lib/api-plan', () => {
     expect(plan.routeMaxFor(null, 60)).toBe(60)
   })
 
+  it('does not look up a key that is not shaped like ours', async () => {
+    expect(await plan.resolveApiPlan({ 'x-api-key': 'anything-at-all' })).toBeNull()
+    expect(await plan.resolveApiPlan({ 'x-api-key': 'wp_live_x' })).toBeNull()
+    expect(h.lookups).toBe(0)
+  })
+
   it('looks a key up once a minute', async () => {
     await plan.resolveApiPlan({ 'x-api-key': PRO }, 1_000)
     await plan.resolveApiPlan({ 'x-api-key': PRO }, 30_000)

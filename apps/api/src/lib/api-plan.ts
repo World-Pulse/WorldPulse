@@ -48,6 +48,8 @@ export const ROUTE_MULTIPLIER = 10
 const KEEP_MS = 60_000
 const MAX_KEPT = 5_000
 
+const WELL_FORMED_KEY = /^wp_live_[0-9a-f]{32}$/
+
 /** The API key a request sends, or null */
 export function sentKey(headers: Record<string, unknown>): string | null {
   const x = headers['x-api-key']
@@ -84,7 +86,8 @@ export function forgetApiPlans(): void {
 /** The Pro budget of the key a request sends, or null; looked up at most once a minute per key */
 export async function resolveApiPlan(headers: Record<string, unknown>, now = Date.now()): Promise<ApiPlan | null> {
   const raw = sentKey(headers)
-  if (!raw) return null
+  // A made-up key is no reason to ask the database: every key we issue is wp_live_ and 32 hex characters
+  if (!raw || !WELL_FORMED_KEY.test(raw)) return null
   const hash = hashKey(raw)
   const hit = kept.get(hash)
   if (hit && now - hit.at < KEEP_MS) return hit.plan
