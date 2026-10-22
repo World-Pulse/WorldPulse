@@ -46,6 +46,7 @@ import { startEditor, catchUpEditor } from './pipeline/editor'
 import { startSecondReads } from './pipeline/second-read'
 import { startSecondOutlets } from './pipeline/second-outlet'
 import { verifyArchive } from './pipeline/archive-outlets'
+import { backfillPulse } from './pipeline/gkg-pulse'
 import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames, fixGdeltFipsCountries, stripOutletNotes, stripOutletNames, repairHeadlineSummaries, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability, switchOffRetiredSources } from './pipeline/repairs'
 import { batchValidateGeo } from './pipeline/geo-validator'
 import { recomputeSourceReputation } from './pipeline/source-reputation'
@@ -276,6 +277,14 @@ async function bootstrap() {
       .then(t => { if (t) logger.info(t, 'Repair: April–May reports verified by their other outlets') })
       .catch(err => logger.warn({ err }, 'April–May outlet repair failed (non-fatal)'))
   }, 3 * 60_000)
+  // Once: the world's coverage by country and kind of event, counted for the
+  // week before from GDELT's kept files, so the hours since can be compared
+  // with the same hours on earlier days at once (pipeline/gkg-pulse.ts)
+  setTimeout(() => {
+    runOnce('repair:gkg-pulse-week:2026-10-22', () => backfillPulse())
+      .then(t => { if (t) logger.info(t, "Pulse: the week before counted from GDELT's files") })
+      .catch(err => logger.warn({ err }, 'Pulse week count failed (non-fatal)'))
+  }, 4 * 60_000)
   // Once, the last 12 hours again: most of the editor's calls so far came back
   // empty (Claude's thinking used up the reply's token limit, lib/claude.ts
   // thinkingOff), and the RSS repair above put back what it had re-filed. (The

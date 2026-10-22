@@ -690,21 +690,35 @@ export function countryLevelPlace(name: string | null | undefined): boolean {
   return countries.length > 0 && !/\p{L}/u.test(rest.replace(/\b(?:and|the|of)\b/gi, ''))
 }
 
+/** Words that open a headline with a colon as a label, not a name ("Breaking:", "Watch:") */
+const HEADLINE_LABELS = new Set(['breaking', 'watch', 'video', 'videos', 'live', 'update', 'updated', 'opinion', 'analysis',
+  'exclusive', 'explainer', 'explained', 'photos', 'pictures', 'gallery', 'editorial', 'report', 'news', 'just', 'listen',
+  'podcast', 'interview', 'review', 'factbox', 'timeline', 'revealed', 'confirmed', 'official', 'urgent', 'alert', 'flash',
+  'developing', 'latest', 'recap', 'quiz', 'poll', 'comment', 'letters', 'obituary'])
+
 /**
  * Whether each headline names someone or somewhere the other doesn't: a
  * capitalised word (not the first word) missing from the other headline.
  * Two stories that share a headline template but differ in that name
  * ("Russia launches drone attack on Kyiv" / "... on Odesa") collide on the
- * scraper's topic hash, so merged articles must pass this too.
+ * scraper's topic hash, so merged articles must pass this too. A first word
+ * ending in a colon is a name too ("Benue: Gunmen kill 12 …" / "Delta: …",
+ * Nigerian outlets' style, matched as one story in the April–May repair of
+ * Oct 22, 2026), unless it is a label ("Breaking:").
  */
 export function namesDiffer(a: string, b: string): boolean {
   const tidy = (t: string) => t.replace(/[\u2018\u2019]/g, "'")
-  const names = (t: string) => new Set(
-    tidy(t).split(/\s+/).slice(1)
-      .flatMap(w => w.replace(/'s\b/g, '').split(/[^\p{L}\p{N}]+/u))
-      .filter(w => /^\p{Lu}/u.test(w) && w.length > 1)
-      .map(w => w.toLowerCase()),
-  )
+  const names = (t: string) => {
+    const words = tidy(t).split(/\s+/).filter(Boolean)
+    const first = words[0] ?? ''
+    const lead = /^\p{Lu}[\p{L}\p{N}'-]*:$/u.test(first) && !HEADLINE_LABELS.has(first.slice(0, -1).toLowerCase()) ? [first.slice(0, -1)] : []
+    return new Set(
+      [...lead, ...words.slice(1)]
+        .flatMap(w => w.replace(/'s\b/g, '').split(/[^\p{L}\p{N}]+/u))
+        .filter(w => /^\p{Lu}/u.test(w) && w.length > 1)
+        .map(w => w.toLowerCase()),
+    )
+  }
   const words = (t: string) => new Set(tidy(t).toLowerCase().replace(/'s\b/g, '').split(/[^\p{L}\p{N}]+/u).filter(Boolean))
   const [na, nb] = [names(a), names(b)]
   const [wa, wb] = [words(a), words(b)]

@@ -265,6 +265,11 @@ describe('different places and names are different stories', () => {
     expect(namesDiffer('Strikes hit Al-Shifa hospital in Gaza', 'Israeli strikes hit Al-Shifa hospital, Gaza officials say')).toBe(false)
     expect(namesDiffer('Massive Drone Attack Hits Kyiv Overnight', 'Massive drone attack hits Kyiv overnight, officials say')).toBe(false)
     expect(namesDiffer('Talks resume as Iran\u2019s envoy meets Oman mediators', "Iran's envoy meets Oman mediators as talks resume")).toBe(false)
+    // a first word with a colon is a place or a name (Oct 22): two states' attacks are two stories, a label changes nothing
+    expect(namesDiffer('Benue: Gunmen kill 12 in fresh attack on farmers', 'Delta: Gunmen kill 12 in fresh attack on farmers')).toBe(true)
+    expect(namesDiffer('Benue: gunmen kill 12 in fresh attack on farmers', 'Gunmen kill 12 farmers in fresh Benue attack')).toBe(false)
+    expect(namesDiffer('Breaking: Gunmen kill 12 farmers in Benue', 'Watch: Gunmen kill 12 farmers in Benue')).toBe(false)
+    expect(namesDiffer('Breaking: Gunmen kill 12 farmers in Benue', 'Gunmen kill 12 farmers in Delta')).toBe(true)
   })
 })
 

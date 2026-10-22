@@ -55,6 +55,7 @@ import { hostOf, sourceKey } from './signal-columns'
 import { cleanUrl } from './text'
 import { fetchArticles, fetchNewestStamp, filesToRead, siteOf, stampDate, type GdeltArticle } from './gdelt-articles'
 import { queueReindex } from './reindex'
+import { readPulse, recordPulse } from './gkg-pulse'
 
 export { siteOf, articleTitle } from './gdelt-articles'
 
@@ -521,7 +522,8 @@ function toHeld(r: ReportRow): HeldReport {
 
 export const liveDeps: SecondOutletDeps = {
   newestStamp: fetchNewestStamp,
-  fetchArticles,
+  // each file read also adds to the world's press counts (gkg-pulse.ts)
+  fetchArticles: (stamp) => fetchArticles(stamp, (s, text) => recordPulse(s, readPulse(text))),
 
   async waiting(now) {
     // Pending, one outlet, medium or above, in English, settled

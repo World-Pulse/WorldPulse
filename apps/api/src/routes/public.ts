@@ -239,7 +239,10 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
     reply.header('Access-Control-Allow-Origin', '*')
     const day = (offset: number) => new Date(Date.now() - offset * 86_400_000).toISOString().slice(0, 10)
     const days = [day(0), day(1)]
-    const [today, yesterday, recent, last, archive, archiveDone] = await Promise.all([
+    // the world's coverage counts (apps/scraper/src/pipeline/gkg-pulse.ts): the files counted each hour, the last 7 days
+    const hourNow = Math.floor(Date.now() / 3_600_000) * 3_600_000
+    const hours = Array.from({ length: 168 }, (_, i) => new Date(hourNow - i * 3_600_000).toISOString().slice(0, 13).replace(/[-T]/g, ''))
+    const [today, yesterday, recent, last, archive, archiveDone, week, weekDone, hourFiles] = await Promise.all([
       redis.hgetall(`second-outlet:day:${days[0]}`).catch(() => null),
       redis.hgetall(`second-outlet:day:${days[1]}`).catch(() => null),
       redis.lrange('second-outlet:recent', 0, 49).catch(() => [] as string[]),
@@ -247,6 +250,9 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
       // the April–May repair (apps/scraper/src/pipeline/archive-outlets.ts)
       redis.hgetall('repair:archive-outlets:stats').catch(() => null),
       redis.get('repair:archive-outlets:2026-10-22:done').catch(() => null),
+      redis.hgetall('gkg:pulse:backfill').catch(() => null),
+      redis.get('repair:gkg-pulse-week:2026-10-22:done').catch(() => null),
+      Promise.all(hours.map(h => redis.hget(`gkg:pulse:${h}`, '_files').catch(() => null))),
     ])
     const numbers = (h: Record<string, string> | null) =>
       Object.fromEntries(Object.entries(h ?? {}).map(([k, v]) => [k, Number(v) || 0]))
@@ -258,7 +264,16 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
     const archived = archive && Object.keys(archive).length
       ? { ...Object.fromEntries(Object.entries(archive).map(([k, v]) => [k, /^\d+$/.test(v) ? Number(v) : v])), done_at: archiveDone ?? null }
       : null
-    return reply.send({ success: true, data: { days: { [days[0]!]: numbers(today), [days[1]!]: numbers(yesterday) }, last_cycle: lastCycle, latest, archive: archived } })
+    // counts as numbers; "last" is a file's time (20261018041500), kept as written
+    const values = (h: Record<string, string> | null) => Object.fromEntries(Object.entries(h ?? {}).map(([k, v]) => [k, k !== 'last' && /^\d+$/.test(v) ? Number(v) : v]))
+    const counted = hourFiles.map(v => Number(v) || 0)
+    const pulse = {
+      week: week && Object.keys(week).length ? { ...values(week), done_at: weekDone ?? null } : null,
+      // the files counted in each of the last 24 hours, oldest first, the hour now last (4 an hour when every file is read)
+      last_24h: Object.fromEntries(hours.slice(0, 24).map((h, i) => [h, counted[i]!]).reverse()),
+      hours_counted_7d: counted.filter(n => n > 0).length,
+    }
+    return reply.send({ success: true, data: { days: { [days[0]!]: numbers(today), [days[1]!]: numbers(yesterday) }, last_cycle: lastCycle, latest, archive: archived, pulse } })
   })
 
   // ─── OPTIONS preflight ────────────────────────────────────

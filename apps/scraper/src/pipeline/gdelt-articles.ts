@@ -19,6 +19,15 @@ import { cleanTitle, withoutOutletName } from './text'
 
 export const LASTUPDATE_URL = 'https://data.gdeltproject.org/gdeltv2/lastupdate.txt'
 const FILE_URL = (stamp: string) => `https://data.gdeltproject.org/gdeltv2/${stamp}.gkg.csv.zip`
+/**
+ * A fresh address for each request (Oct 22): GDELT lists a file the moment it
+ * uploads it (10 to 15 minutes before the time in its name), and a request
+ * that came a moment too early got a "not found" that Google's cache then kept
+ * answering for up to an hour (public, max-age 3600): the 20:00 file of Oct 22
+ * was still missing for the server at 20:22 while it answered elsewhere, and
+ * 8 of the day's first 17 files were read. GDELT ignores the query.
+ */
+export const fresh = (url: string, now = Date.now()) => `${url}?t=${now}`
 const UA = 'WorldPulse/0.1 (open-source; https://world-pulse.io)'
 const inflateRawAsync = promisify(zlib.inflateRaw)
 
@@ -141,16 +150,26 @@ export function readArticles(text: string): GdeltArticle[] {
 // ─── The network ─────────────────────────────────────────────────────────────
 
 export async function fetchNewestStamp(): Promise<string | null> {
-  const res = await fetch(LASTUPDATE_URL, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(20_000) })
+  const res = await fetch(fresh(LASTUPDATE_URL), { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(20_000) })
   if (!res.ok) throw new Error(`GDELT articles: HTTP ${res.status} for lastupdate.txt`)
   return newestStamp(await res.text())
 }
 
-/** One file's articles; null when GDELT doesn't have it (a file it skipped) */
-export async function fetchArticles(stamp: string): Promise<GdeltArticle[] | null> {
-  const res = await fetch(FILE_URL(stamp), { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(90_000) })
+/** One file's text; null when GDELT doesn't have it (a file it skipped) */
+export async function fetchFileText(stamp: string): Promise<string | null> {
+  const res = await fetch(fresh(FILE_URL(stamp)), { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(90_000) })
   if (res.status === 404) return null
   if (!res.ok) throw new Error(`GDELT articles: HTTP ${res.status} for ${stamp}`)
-  const text = (await unzipFirst(Buffer.from(await res.arrayBuffer()))).toString('utf8')
+  return (await unzipFirst(Buffer.from(await res.arrayBuffer()))).toString('utf8')
+}
+
+/**
+ * One file's articles; null when GDELT doesn't have it (a file it skipped).
+ * `onText` gets the whole file too (the pulse counts, gkg-pulse.ts).
+ */
+export async function fetchArticles(stamp: string, onText?: (stamp: string, text: string) => Promise<unknown>): Promise<GdeltArticle[] | null> {
+  const text = await fetchFileText(stamp)
+  if (text === null) return null
+  if (onText) await onText(stamp, text).catch(() => null)
   return readArticles(text)
 }
