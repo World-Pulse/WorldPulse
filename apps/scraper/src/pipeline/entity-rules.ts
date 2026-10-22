@@ -14,6 +14,7 @@
  */
 
 import { placesInText } from './geo'
+import { WORLD_CITIES, WORLD_REGIONS } from './world-places'
 
 export type RuleEntityType = 'person' | 'organisation' | 'location' | 'weapon_system' | 'commodity' | 'technology'
 
@@ -299,13 +300,113 @@ export function extractEntitiesByRules(title: string, body: string | null): Rule
     }
   }
 
-  placesInText(text).forEach((place: string, i: number) => add(place, 'location', i === 0 ? 0.6 : 0.5))
+  const places = placesInText(text)
+  places.forEach((place: string, i: number) => add(place, 'location', i === 0 ? 0.6 : 0.5))
+  morePlacesInText(title, body, places).forEach(place => add(place, 'location', 0.5))
 
   for (const m of text.matchAll(WEAPONS)) add(m[0].replace(/s$/, ''), 'weapon_system', 0.8)
   for (const [re, name] of COMMODITIES) if (re.test(text)) add(name, 'commodity', 0.5)
   for (const [re, name] of TECHNOLOGY) if (re.test(text)) add(name, 'technology', 0.5)
 
   return out.slice(0, MAX_ENTITIES)
+}
+
+// ─── MORE PLACES (world-places.ts) ──────────────────────────────────────────
+// Oct 22, 2026: the gazetteer knows about 300 places, so nearly half of the
+// week's reports were linked to no person, place or organisation. These are
+// the world's cities of 300,000 people or more, its capitals and the states of
+// the countries whose outlets name them most, matched only where the words
+// around them say it's the place: "in Sokoto", "Kano State", "Harare," — not
+// "Santiago Peña", "Real Madrid" or "Kathmandu Post".
+
+const unaccent = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '')
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/** The name without accents, in lower case → the name as stored */
+const MORE_PLACES = new Map<string, string>()
+for (const name of [...WORLD_CITIES, ...WORLD_REGIONS]) {
+  const key = unaccent(name).toLowerCase()
+  if (!MORE_PLACES.has(key)) MORE_PLACES.set(key, name)
+}
+const MORE_PLACES_RE = new RegExp(
+  String.raw`(?<![\p{L}\p{N}])(?:${[...MORE_PLACES.keys()].sort((a, b) => b.length - a.length).map(escapeRe).join('|')})(?![\p{L}\p{N}])`,
+  'giu',
+)
+
+/** A word after the name that keeps it the place: "Kano State", "Harare Airport" */
+const PLACE_NEXT = new Set([
+  'state', 'city', 'province', 'region', 'district', 'county', 'division', 'governorate', 'oblast', 'prefecture',
+  'municipality', 'metropolitan', 'metro', 'airport', 'port', 'valley', 'area', 'township', 'department', 'territory',
+  'island', 'islands', 'coast', 'bay', 'lake', 'river', 'harbour', 'harbor', 'highway', 'expressway', 'road', 'street',
+  'hospital', 'university', 'high', 'court', 'police', 'council', 'assembly', 'government', 'governor', 'mayor', 'zone',
+])
+/** A capitalised word before the name that keeps it the place: "In Sokoto", "De Bogotá", "Greater Accra" */
+const PLACE_BEFORE = new Set([
+  'in', 'at', 'from', 'to', 'for', 'of', 'on', 'near', 'across', 'over', 'outside', 'inside', 'around', 'into', 'the', 'and',
+  'or', 'with', 'by', 'after', 'before', 'via', 'between', 'en', 'de', 'del', 'la', 'el', 'a', 'em', 'no', 'na', 'do', 'da',
+  'dos', 'das', 'au', 'du', 'le', 'dans', 'desde', 'para', 'por', 'hacia', 'entre', 'sur', 'north', 'south', 'east', 'west',
+  'central', 'greater', 'downtown', 'northern', 'southern', 'eastern', 'western', 'northeast', 'northwest', 'southeast',
+  'southwest', 'rural', 'coastal',
+])
+/** Clubs named after their city: the name is the club, not the place */
+const CLUB_BEFORE = new Set([
+  'real', 'atletico', 'athletic', 'fc', 'ac', 'as', 'sc', 'cf', 'inter', 'sporting', 'olympique', 'dynamo', 'dinamo',
+  'deportivo', 'racing', 'club', 'union', 'borussia', 'lokomotiv', 'spartak', 'zenit', 'rb', 'vfb', 'werder', 'hertha',
+  'eintracht', 'fortuna', 'hellas', 'stade',
+])
+const CLUB_AFTER = new Set([
+  'fc', 'cf', 'sc', 'united', 'wanderers', 'rovers', 'athletic', 'pillars', 'rangers', 'indians', 'capitals', 'kings',
+  'royals', 'titans', 'sunrisers', 'heat', 'lakers', 'warriors', 'bulls', 'giants', 'knights', 'stars', 'raiders',
+])
+
+const startsUpper = (w: string) => /^\p{Lu}/u.test(w)
+/** The word right before `at`, with only spaces between ("Lewis" in "Lewis Hamilton"); none after punctuation */
+function wordBefore(text: string, at: number): string | null {
+  return /([\p{L}][\p{L}'’-]*)[ \t]+$/u.exec(text.slice(Math.max(0, at - 40), at))?.[1] ?? null
+}
+/** The word right after `end`, with only spaces between; none before punctuation */
+function wordAfter(text: string, end: number): string | null {
+  return /^[ \t]+([\p{L}][\p{L}'’-]*)/u.exec(text.slice(end, end + 40))?.[1] ?? null
+}
+/** A Headline In Title Case, where capitals say nothing about names */
+function titleCased(title: string): boolean {
+  const long = (title.match(/\p{L}[\p{L}'’-]*/gu) ?? []).filter(w => w.length >= 4)
+  return long.length >= 3 && long.filter(startsUpper).length / long.length >= 0.9
+}
+
+/** Places from world-places.ts the text names (at most 3), beyond `known` (what placesInText found) */
+export function morePlacesInText(title: string, body: string | null, known: readonly string[] = []): string[] {
+  const text = unaccent(`${title}. ${body ?? ''}`)
+  const titleEnd = unaccent(title).length
+  const titleCase = titleCased(title)
+  const knownKeys = known.map(k => ` ${unaccent(k).toLowerCase()} `)
+  const out: string[] = []
+  for (const m of text.matchAll(MORE_PLACES_RE)) {
+    if (out.length >= 3) break
+    const name = MORE_PLACES.get(m[0].toLowerCase())
+    if (!name || out.includes(name)) continue
+    const at = m.index ?? 0
+    const end = at + m[0].length
+    // Capitals where the name has them ("Sokoto", not "sokoto"); an acronym isn't the place ("IMO" is not Imo)
+    const want = unaccent(name).split(/\s+/)
+    const got = m[0].split(/\s+/)
+    if (!got.every((w, i) => !startsUpper(want[i] ?? '') || startsUpper(w))) continue
+    if (m[0].length > 2 && m[0] === m[0].toUpperCase() && name !== name.toUpperCase()) continue
+    // One place counts once: "New York City" where "New York" was found, "Guatemala City" where Guatemala was
+    const key = ` ${m[0].toLowerCase()} `
+    if (knownKeys.some(k => k.includes(key) || key.includes(k))) continue
+    const before = wordBefore(text, at)
+    const after = wordAfter(text, end)
+    if (before && CLUB_BEFORE.has(before.toLowerCase())) continue
+    if (after && CLUB_AFTER.has(after.toLowerCase())) continue
+    // A capitalised word after it makes it part of a name ("Santiago Peña", "Kathmandu Post"), unless it's a place word
+    if (after && startsUpper(after) && !PLACE_NEXT.has(after.toLowerCase())) continue
+    // ...and one before it too ("Lewis Hamilton"), except in a Title Case headline, after "in"/"De" and after "Nigeria's"
+    const inTitleCase = titleCase && at < titleEnd
+    if (before && startsUpper(before) && !inTitleCase && !PLACE_BEFORE.has(before.toLowerCase()) && !/['’]s$/.test(before)) continue
+    out.push(name)
+  }
+  return out
 }
 
 // ─── CLEANING ENTITIES ALREADY STORED (the start-up repair) ─────────────────

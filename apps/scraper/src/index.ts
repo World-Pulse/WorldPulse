@@ -11,6 +11,7 @@ import { redis } from './lib/redis'
 import { db } from './lib/postgres'
 import { repinNewsHomePins } from './sources/news-rss'
 import { cleanEntityGraph } from './pipeline/entity-cleanup'
+import { backfillMorePlaces } from './pipeline/entity-places-backfill'
 import { logger } from './lib/logger'
 import { withRetry, RetryExhaustedError } from './lib/retry'
 import { isCircuitOpen, getCircuitState, acquireProbeSlot, cbSuccess, cbFailure, CircuitStatus } from './lib/circuit-breaker'
@@ -243,6 +244,12 @@ async function bootstrap() {
   cleanEntityGraph()
     .then(t => { if (t.merged + t.removed + t.retyped + t.renamed > 0) logger.info(t, 'Repair: Knowledge Graph entities cleaned (titles dropped, duplicates merged, junk removed)') })
     .catch(err => logger.warn({ err }, 'Knowledge Graph clean-up failed (non-fatal)'))
+    // then, once: the last 8 days of reports get the places the new list finds in their words
+    .finally(() => {
+      backfillMorePlaces()
+        .then(t => { if (t) logger.info(t, 'Repair: the last 8 days of reports linked to the cities and states they name') })
+        .catch(err => logger.warn({ err }, 'Place links backfill failed (non-fatal)'))
+    })
   // Runs in the background for several minutes (one geocoder lookup per old pin name)
   recheckGeocodedPlaces(geocodePlace, placeFromText)
     .then(t => { if (t.renamed + t.repinned + t.cleared > 0 || t.stopped) logger.info(t, 'Repair: map pins from capitalised words re-checked') })

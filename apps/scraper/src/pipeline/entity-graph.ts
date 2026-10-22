@@ -346,7 +346,9 @@ export async function upsertEntityNode(
     `INSERT INTO entity_nodes (id, type, canonical_name, aliases, first_seen, last_seen, mention_count, signal_ids, metadata)
      VALUES ($1, $2, $3, $4, $5, $5, 1, ARRAY[$6]::text[], $7)
      ON CONFLICT (id) DO UPDATE SET
-       last_seen = $5,
+       -- an older report (a backfill, a late feed) never moves the dates the wrong way
+       first_seen = LEAST(entity_nodes.first_seen, $5::timestamptz),
+       last_seen = GREATEST(entity_nodes.last_seen, $5::timestamptz),
        mention_count = entity_nodes.mention_count + 1,
        signal_ids = (
          SELECT array_agg(DISTINCT sid)

@@ -9,9 +9,10 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('../../lib/redis', () => ({ redis: { get: vi.fn(async () => null), setex: vi.fn(async () => 'OK') } }))
 vi.mock('../../lib/postgres', () => ({ pgPool: { query: vi.fn() }, db: vi.fn() }))
 
-import { extractEntitiesByRules, cleanStoredEntity, canonicalPerson } from '../entity-rules'
+import { extractEntitiesByRules, cleanStoredEntity, canonicalPerson, morePlacesInText } from '../entity-rules'
 import { planEntityCleanup, refinePlace } from '../entity-cleanup'
 import { entityId } from '../entity-graph'
+import { morePlacesFor } from '../entity-places-backfill'
 
 const names = (title: string, body: string | null = null, type?: string) =>
   extractEntitiesByRules(title, body).filter(e => !type || e.type === type).map(e => e.name)
@@ -43,9 +44,41 @@ describe('organisations, places and things', () => {
     expect(names('Houthi attack on Saudi airport kills 12', null, 'organisation')).toEqual(['Houthis'])
   })
 
-  it('takes places from the gazetteer and country list only', () => {
+  it('takes places from the gazetteer and country list, and no junk words', () => {
     expect(names('Exports of petroleum products from Nigeria rose in April', null, 'location')).toEqual(['Nigeria'])
     expect(names('Houthi attack on Saudi airport kills 12', null, 'location')).toEqual(['Saudi Arabia'])
+  })
+
+  it('takes the cities, capitals and states the gazetteer lacks, where the words around say it is the place', () => {
+    expect(names('Bandits kill driver, two passengers on Sokoto road', null, 'location')).toEqual(['Sokoto'])
+    expect(names('Ogun offers jobs to 52 newly inducted nurses', 'The Ogun State government has offered jobs.', 'location')).toEqual(['Ogun'])
+    expect(names('Ruto attends the 25th COMESA summit in Harare', null, 'location')).toEqual(['Harare'])
+    expect(names('2 killed in attack on airport in Dammam, Saudi Arabia', null, 'location')).toEqual(['Saudi Arabia', 'Dammam'])
+    expect(names('Lluvias intensas inundan calles de Medellin', null, 'location')).toEqual(['Medellín'])
+    expect(names('Floods Hit Piura, Killing Five As Rains Continue', null, 'location')).toEqual(['Piura'])
+    expect(names("Clashes in Nigeria's Kano after the vote", null, 'location')).toEqual(['Nigeria', 'Kano'])
+  })
+
+  it('leaves a city alone in a name, a club, a newspaper, an acronym or a common word', () => {
+    expect(morePlacesInText('Santiago Peña meets business leaders', null)).toEqual([])
+    expect(morePlacesInText('Real Madrid beat RB Leipzig 4-1 in the Champions League', null)).toEqual([])
+    expect(morePlacesInText('Kano Pillars sign a new striker', null)).toEqual([])
+    expect(morePlacesInText('Floods recede, the Kathmandu Post reported on Monday', null)).toEqual([])
+    expect(morePlacesInText('The IMO said ships must report the incident', null)).toEqual([])
+    expect(morePlacesInText('Para el gobierno, la medida es necesaria', null)).toEqual([])
+    expect(morePlacesInText('Brent crude tops $112 as gas prices stay high', null)).toEqual([])
+    expect(morePlacesInText('Lewis Hamilton wins in Austin', null)).toEqual([])
+  })
+
+  it('gives an older report the places it names, beyond the ones it has (the one-off backfill)', () => {
+    expect(morePlacesFor({ title: '2 killed in attack on airport in Dammam, Saudi Arabia', summary: null })).toEqual(['Dammam'])
+    expect(morePlacesFor({ title: 'Oil prices rise', summary: null })).toEqual([])
+  })
+
+  it('counts one place once', () => {
+    expect(morePlacesInText('Rents soar in New York City', null, ['New York'])).toEqual([])
+    expect(morePlacesInText('Protest in Guatemala City', null, ['Guatemala'])).toEqual([])
+    expect(morePlacesInText('Kano, Kaduna and Zaria get a new highway as Kano celebrates', null)).toEqual(['Kano', 'Kaduna', 'Zaria'])
   })
 
   it('finds commodities, and not in a sports medal', () => {
