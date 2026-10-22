@@ -17,6 +17,14 @@ describe('categorizeText', () => {
     expect(categorizeText('Tunisia\'s Carthage Music Days puts its faith in the local scene')).toBe('culture')
   })
 
+  it('files club football as sports, not politics, and leaves strikes alone', () => {
+    expect(categorizeText('Ten Hag tells Ronaldo he is not in his plans')).toBe('sports')
+    expect(categorizeText('Soccer striker completes move after transfer talks')).toBe('sports')
+    expect(categorizeText('Football club mourns fans killed in stadium crush')).toBe('sports')
+    expect(categorizeText('Missile strike on a football pitch kills 5')).toBe('conflict')
+    expect(categorizeText('Air strike hits village, 3 killed')).toBe('conflict')
+  })
+
   it('reads care words in a headline only, and not "rushed to hospital"', () => {
     expect(categorizeText('Two Carlton players treated in hospital after needing care')).toBeNull()
     // The description's "medical evacuation" doesn't make a sea standoff health news
