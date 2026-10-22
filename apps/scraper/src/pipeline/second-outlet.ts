@@ -6,14 +6,16 @@
  * Most reports stay pending with one outlet because WorldPulse reads a few
  * hundred feeds, not because no one else carried the story: of the 100
  * newest medium reports on Oct 22, 93 had one outlet, and the share of
- * reports verified by 2+ outlets was 12%. GDELT's news index (its DOC 2.0
- * API: free, no key, 100,000+ outlets) finds the others. A medium, high or
- * critical news report in English with one outlet is searched a while after
- * it arrives (medium after 3 hours, high and critical after 1 and again after
- * 10): its headline's two most telling words, in English-language coverage
- * of the 24 hours either side of it (three, when the 75 most relevant
- * articles held no match and there were more). An article found there counts
+ * reports verified by 2+ outlets was 12%. GDELT reads far more outlets, and
+ * every 15 minutes publishes, free, the list of the articles it read
+ * (gdelt-articles.ts). Every 15 minutes this reads the new list and holds the
+ * last 8 hours of it in memory (about 50,000 English articles), and each
+ * medium, high or critical news report in English with one outlet, from the
+ * last 30 hours, is compared with it: with the articles new since the last
+ * time, or, for a report new since then, with all 8 hours. An article counts
  * as another outlet when
+ *  - it shares two or more of the report's headline words (not only words of
+ *    a kind of event: "killed", "police"),
  *  - it is on another website (sister sites of one owner are one: en. and
  *    www.protothema.gr, frontline.thehindu.com and thehindu.com),
  *  - the website is a newsroom, not an aggregator, a press-release wire, a
@@ -32,15 +34,14 @@
  * 1,092 of them cross-checks, had cost 48 cents), the rest stand on the
  * headline test, as merged articles did before the cross-check existed.
  *
- * GDELT asks for one request every 5 seconds from a server: a request starts
- * 6 seconds after the last one was answered, by a slot shared with the story
- * page's news images and TV clips (gdelt:doc:slot), and a pass waits 2
- * seconds after each search so they get their turn. When GDELT says to slow
- * down, searching stops for 10 minutes, twice as long each time it says so
- * again within 6 hours (at most 2 hours).
+ * First built on GDELT's search API (one search per report): live on Oct 22
+ * it answered "Please limit requests to one every 5 seconds" after 5 to 8
+ * requests even at one every 6 seconds, and tells heavy users to use its
+ * files. The files have no such limit and cover every article, not 75 a
+ * search. After a restart the last hour of files is read again.
  *
- * Daily counts: second-outlet:day:<date> (on /api/v1/health); the latest
- * matches, for reading by hand: second-outlet:recent. Off with
+ * Daily counts: second-outlet:day:<date> (GET /api/v1/public/second-outlets);
+ * the latest matches, for reading by hand: second-outlet:recent. Off with
  * SECOND_OUTLET=off.
  */
 
@@ -49,182 +50,109 @@ import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
 import { confirmMergedArticle, isSameStory, namesDiffer, type CorrelationCandidate } from './correlate'
 import { isEventTemplateTitle } from './event-titles'
-import { morePlacesInText } from './entity-rules'
-import { placesInText } from './geo'
 import { isCopyOf } from './independence'
 import { hostOf, sourceKey } from './signal-columns'
-import { cleanTitle, cleanUrl, withoutOutletName } from './text'
+import { cleanUrl } from './text'
+import { fetchArticles, fetchNewestStamp, filesToRead, siteOf, stampDate, type GdeltArticle } from './gdelt-articles'
 
-export const DOC_API = 'https://api.gdeltproject.org/api/v2/doc/doc'
-const UA = 'WorldPulse/0.1 (open-source; https://world-pulse.io)'
+export { siteOf, articleTitle } from './gdelt-articles'
 
-export const PASS_INTERVAL_MS = 5 * 60_000
-/** A pass stops searching after this long (the next starts at the next interval) */
-const PASS_BUDGET_MS = 4.5 * 60_000
-/** GDELT asks for one request every 5 seconds: one every 6, for the whole server */
-export const SLOT_KEY = 'gdelt:doc:slot'
-const SLOT_MS = 6_000
-/** After a search, room for the story page's searches */
-const YIELD_MS = 2_000
-const PAUSE_KEY = 'second-outlet:pause'
-const PAUSE_S = 10 * 60
-const SLOW_STREAK_KEY = 'second-outlet:slow-streak'
+/** GDELT publishes a file every 15 minutes; a few minutes after, it is read */
+export const CYCLE_MS = 15 * 60_000
 const LOCK_KEY = 'second-outlet:lock'
-const CHECKED_KEY = (id: string, round: number) => `second-outlet:checked:${id}:${round}`
 export const DAY_KEY = (day: string) => `second-outlet:day:${day}`
 export const RECENT_KEY = 'second-outlet:recent'
 const KEEP_S = 40 * 86_400
 
 const HOUR = 3_600_000
-/** When a report is searched: medium after 3 hours; high and critical after 1, and again after 10 */
-const FIRST_AFTER_MS = 3 * HOUR
-const FIRST_AFTER_BIG_MS = 1 * HOUR
-const SECOND_AFTER_MS = 10 * HOUR
+/** How much of GDELT's list is held: 8 hours, about 50,000 English articles */
+export const WINDOW_KEEP_MS = 8 * HOUR
+/** Files read in one cycle: after a restart the last hour, after a gap at most 2 hours */
+const WARM_FILES = 4
+const MAX_FILES = 8
+/** Reports compared: from the last 30 hours, settled for 20 minutes (intake may still add outlets) */
 const LOOKBACK_MS = 30 * HOUR
-/** The search window either side of the report (isSameStory's window too) */
-const WINDOW_MS = 24 * HOUR
+const SETTLE_MS = 20 * 60_000
 export const MAX_ADDED = 3
-const MAX_RECORDS = 75
+/** The articles a report is compared with in one cycle, the most words shared first */
+const MAX_CANDIDATES = 40
 const CROSSCHECKS_A_DAY = Number(process.env.SECOND_OUTLET_CROSSCHECKS) || 100
 
-// ─── Search words ────────────────────────────────────────────────────────────
+// ─── Headline words ──────────────────────────────────────────────────────────
 
 /** Words that don't say which story it is */
 const PLAIN = new Set([
-  'about', 'above', 'according', 'across', 'after', 'again', 'against', 'ahead', 'allegedly', 'also', 'amid', 'among', 'another',
-  'around', 'away', 'back', 'been', 'before', 'behind', 'being', 'below', 'between', 'beyond', 'both', 'breaking',
-  'call', 'called', 'calls', 'claim', 'claims', 'could', 'despite', 'does', 'down', 'during', 'each', 'even', 'every',
-  'exclusive', 'explainer', 'first', 'from', 'gets', 'give', 'gives', 'have', 'here', 'into', 'just', 'know', 'last',
-  'latest', 'live', 'made', 'make', 'makes', 'many', 'media', 'more', 'most', 'much', 'must', 'near', 'news', 'next',
-  'official', 'officials', 'once', 'only', 'onto', 'other', 'over', 'photos', 'report', 'reported', 'reportedly', 'reports', 'said',
-  'says', 'second', 'should', 'since', 'some', 'source', 'sources', 'spokesman', 'spokesperson', 'spokeswoman',
-  'still', 'such', 'take', 'takes', 'than', 'that', 'their', 'them', 'then', 'there', 'these', 'they', 'third',
-  'this', 'those', 'through', 'today', 'told', 'tells', 'tonight', 'took', 'toward', 'towards', 'under', 'until',
-  'update', 'updates', 'upon', 'very', 'video', 'videos', 'want', 'wants', 'watch', 'week', 'were', 'what', 'when',
-  'where', 'which', 'while', 'will', 'with', 'within', 'without', 'would', 'year', 'years', 'yesterday',
+  'about', 'above', 'according', 'across', 'after', 'again', 'against', 'ahead', 'all', 'allegedly', 'also', 'amid',
+  'among', 'and', 'another', 'any', 'are', 'around', 'away', 'back', 'been', 'before', 'behind', 'being', 'below',
+  'between', 'beyond', 'both', 'breaking', 'but', 'call', 'called', 'calls', 'can', 'claim', 'claims', 'could',
+  'despite', 'did', 'does', 'down', 'during', 'each', 'even', 'every', 'exclusive', 'explainer', 'first', 'for',
+  'from', 'get', 'gets', 'give', 'gives', 'had', 'has', 'have', 'her', 'here', 'his', 'how', 'into', 'its', 'just',
+  'know', 'last', 'latest', 'live', 'made', 'make', 'makes', 'many', 'may', 'media', 'more', 'most', 'much', 'must',
+  'near', 'new', 'news', 'next', 'not', 'now', 'off', 'official', 'officials', 'once', 'one', 'only', 'onto', 'other',
+  'our', 'out', 'over', 'photos', 'report', 'reported', 'reportedly', 'reports', 'said', 'says', 'second', 'she',
+  'should', 'since', 'some', 'source', 'sources', 'spokesman', 'spokesperson', 'spokeswoman', 'still', 'such',
+  'take', 'takes', 'than', 'that', 'the', 'their', 'them', 'then', 'there', 'these', 'they', 'third', 'this',
+  'those', 'through', 'today', 'told', 'tells', 'tonight', 'took', 'toward', 'towards', 'two', 'under', 'until',
+  'update', 'updates', 'upon', 'very', 'video', 'videos', 'want', 'wants', 'was', 'watch', 'way', 'week', 'were',
+  'what', 'when', 'where', 'which', 'while', 'who', 'why', 'will', 'with', 'within', 'without', 'would', 'year',
+  'years', 'yesterday', 'you', 'your',
+  'ago', 'ask', 'big', 'end', 'far', 'few', 'got', 'key', 'let', 'lot', 'old', 'own', 'per', 'put', 'say', 'see', 'set',
+  'top', 'use', 'via', 'yet',
   'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
   'january', 'february', 'march', 'april', 'june', 'july', 'august', 'september', 'october', 'november', 'december',
 ])
 
 /** Words of a kind of event or its usual actors: many stories share them */
 const EVENTISH = new Set([
-  'attack', 'attacks', 'army', 'case', 'cases', 'country', 'court', 'crash', 'dead', 'deal', 'death', 'deaths', 'died',
-  'dies', 'election', 'fire', 'fires', 'flood', 'floods', 'forces', 'government', 'injured', 'injures', 'kill', 'killed',
-  'killing', 'kills', 'market', 'markets', 'military', 'minister', 'nation', 'national', 'outbreak', 'people', 'police',
-  'president', 'price', 'prices', 'protest', 'protests', 'rain', 'rains', 'state', 'storm', 'strike', 'strikes',
-  'talks', 'troops', 'world',
+  'attack', 'attacks', 'army', 'case', 'cases', 'country', 'court', 'crash', 'dead', 'deal', 'death', 'deaths', 'die',
+  'died', 'dies', 'election', 'fire', 'fires', 'flood', 'floods', 'forces', 'government', 'injured', 'injures', 'kill',
+  'killed', 'killing', 'kills', 'market', 'markets', 'military', 'minister', 'nation', 'national', 'outbreak', 'people',
+  'police', 'president', 'price', 'prices', 'protest', 'protests', 'rain', 'rains', 'state', 'storm', 'strike',
+  'strikes', 'talks', 'troops', 'war', 'world',
+  // counts in words: shared by many stories
+  'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'dozen', 'dozens', 'hundreds', 'thousands',
 ])
 
-/** Headline verbs: other outlets tell the same story with other ones */
-const WEAK = new Set([
-  'announce', 'announced', 'announces', 'backs', 'begins', 'calls', 'closes', 'ends', 'faces', 'falls', 'hits',
-  'joins', 'leave', 'leaves', 'loses', 'meets', 'opens', 'plans', 'rises', 'seeks', 'sets', 'signs', 'slams',
-  'urge', 'urged', 'urges', 'visits', 'vows', 'warn', 'warned', 'warns', 'wins',
-])
+/** A headline's words that can tie it to another outlet's: lower case, 3 or more letters or digits, no plain words */
+export function storyTokens(title: string): string[] {
+  const out = new Set<string>()
+  for (const raw of title.replace(/[‘’]/g, "'").toLowerCase().split(/[^\p{L}\p{N}']+/u)) {
+    const word = raw.replace(/'s$/, '').replace(/'/g, '')
+    if (word.length < 3 || PLAIN.has(word)) continue
+    out.add(word)
+  }
+  return [...out]
+}
 
 /**
- * The three words of a headline most likely to find other outlets' articles
- * on the same story, the most telling first: the places it names, names in a
- * sentence-case headline (capitalised past its first word), long words, and
- * last the words of a kind of event and headline verbs. Only plain letters, 4
- * or more of them (GDELT refuses short words; counts differ from outlet to
- * outlet).
+ * For each report, the articles that share two or more of its words, one at
+ * least not a word of a kind of event, the most shared first
  */
-export function queryWords(title: string, max = 3): string[] {
-  const tokens = title.replace(/[\u2018\u2019]/g, "'").split(/[\s\-–—/]+/)
-  const words = tokens
-    .map(t => t.replace(/'s$/i, '').replace(/^[^A-Za-z]+|[^A-Za-z]+$/g, ''))
-    .map((word, i) => ({ word, i }))
-    .filter(({ word }) => word.length >= 4 && /^[A-Za-z]+$/.test(word))
-  const capitals = words.filter(({ word }) => /^[A-Z]/.test(word)).length
-  const titleCase = words.length > 0 && capitals / words.length >= 0.6
-  const known = placesInText(title)
-  const placeWords = new Set([...known, ...morePlacesInText(title, null, known)].flatMap(p => p.toLowerCase().split(/[^a-z]+/)))
-  const scored = new Map<string, number>()
-  for (const { word, i } of words) {
-    const lower = word.toLowerCase()
-    if (PLAIN.has(lower)) continue
-    let score = Math.min(word.length, 12) / 12
-    if (/^[A-Z]/.test(word) && !titleCase) score += i === 0 ? 0.5 : 2
-    if (placeWords.has(lower)) score += 1
-    if (EVENTISH.has(lower)) score -= 0.6
-    if (WEAK.has(lower)) score -= 0.6
-    if (score > (scored.get(lower) ?? -Infinity)) scored.set(lower, score)
-  }
-  return [...scored.entries()].sort((a, b) => b[1] - a[1]).slice(0, max).map(([w]) => w)
-}
-
-/** GDELT's time format, YYYYMMDDHHMMSS (UTC) */
-export function gdeltTime(d: Date): string {
-  return d.toISOString().replace(/[-:T]/g, '').slice(0, 14)
-}
-
-/** The DOC 2.0 search for these words, English-language articles between the two times */
-export function searchUrl(words: string[], from: Date, to: Date): string {
-  const params = new URLSearchParams({
-    query:         `${words.join(' ')} sourcelang:english`,
-    mode:          'artlist',
-    format:        'json',
-    maxrecords:    String(MAX_RECORDS),
-    sort:          'HybridRel',
-    startdatetime: gdeltTime(from),
-    enddatetime:   gdeltTime(to),
-  })
-  return `${DOC_API}?${params}`
-}
-
-/** An article's "seendate" (20261022T153000Z) as a date */
-export function seenAt(value: unknown): Date | null {
-  const m = typeof value === 'string' ? /^(\d{4})(\d{2})(\d{2})T?(\d{2})(\d{2})(\d{2})Z?$/.exec(value.trim()) : null
-  if (!m) return null
-  const d = new Date(Date.UTC(+m[1]!, +m[2]! - 1, +m[3]!, +m[4]!, +m[5]!, +m[6]!))
-  return isNaN(d.getTime()) ? null : d
-}
-
-// ─── GDELT's reply ───────────────────────────────────────────────────────────
-
-export interface DocArticle { url?: unknown; title?: unknown; seendate?: unknown; domain?: unknown; language?: unknown }
-
-export type SearchReply =
-  | { kind: 'ok'; articles: DocArticle[] }
-  | { kind: 'slow' }                       // GDELT says to slow down
-  | { kind: 'error'; reason: string }
-
-/** GDELT's reply: its articles, "slow down", or what went wrong */
-export function readReply(status: number, body: string): SearchReply {
-  const text = body.trim()
-  if (status === 429 || /limit requests to one every/i.test(text.slice(0, 300))) return { kind: 'slow' }
-  if (status < 200 || status >= 300) return { kind: 'error', reason: `HTTP ${status}` }
-  if (!text || text === '{}') return { kind: 'ok', articles: [] }
-  if (!text.startsWith('{')) return { kind: 'error', reason: `query refused: ${text.slice(0, 80)}` }
-  let json: unknown = null
-  try {
-    json = JSON.parse(text)
-  } catch {
-    // GDELT's JSON sometimes carries a stray backslash or control character from a headline
-    try {
-      json = JSON.parse(text.replace(/\\(?!["\\/bfnrtu])/g, '\\\\').replace(/[\u0000-\u001f]+/g, ' '))
-    } catch {
-      return { kind: 'error', reason: 'unreadable reply' }
+export function candidatePairs(reports: Array<{ tokens: string[] }>, articles: Array<{ tokens: string[] }>): Map<number, number[]> {
+  const index = new Map<string, number[]>()
+  reports.forEach((r, i) => { for (const t of r.tokens) { const list = index.get(t); if (list) list.push(i); else index.set(t, [i]) } })
+  const out = new Map<number, Array<{ a: number; n: number }>>()
+  articles.forEach((article, a) => {
+    const shared = new Map<number, { n: number; telling: boolean }>()
+    for (const t of article.tokens) {
+      const list = index.get(t)
+      if (!list) continue
+      const telling = !EVENTISH.has(t)
+      for (const r of list) {
+        const s = shared.get(r)
+        if (s) { s.n++; s.telling ||= telling } else shared.set(r, { n: 1, telling })
+      }
     }
-  }
-  const articles = (json as { articles?: unknown })?.articles
-  return { kind: 'ok', articles: Array.isArray(articles) ? articles.filter(a => a && typeof a === 'object') as DocArticle[] : [] }
+    for (const [r, s] of shared) {
+      if (s.n < 2 || !s.telling) continue
+      const list = out.get(r)
+      if (list) list.push({ a, n: s.n }); else out.set(r, [{ a, n: s.n }])
+    }
+  })
+  return new Map([...out].map(([r, list]) => [r, list.sort((x, y) => y.n - x.n).map(x => x.a)]))
 }
 
 // ─── Which articles are other outlets ────────────────────────────────────────
-
-/** Second-level names under a country's domain: news.bbc.co.uk is the site bbc.co.uk */
-const SECOND_LEVEL = new Set(['ac', 'co', 'com', 'edu', 'gen', 'go', 'gob', 'gov', 'info', 'mil', 'ne', 'net', 'news', 'nic', 'or', 'org', 'web'])
-
-/** The website a host belongs to: one owner's sister sites are one (en.protothema.gr, www.protothema.gr) */
-export function siteOf(host: string): string {
-  const labels = host.toLowerCase().replace(/^www\./, '').split('.').filter(Boolean)
-  if (labels.length <= 2) return labels.join('.')
-  const tld = labels[labels.length - 1]!
-  const sld = labels[labels.length - 2]!
-  return labels.slice(tld.length === 2 && SECOND_LEVEL.has(sld) ? -3 : -2).join('.')
-}
 
 /**
  * Websites whose articles aren't another newsroom's reporting: readers and
@@ -237,7 +165,12 @@ export const NOT_OUTLETS = new Set([
   'flipboard.com', 'google.com', 'ground.news', 'headtopics.com', 'inkl.com', 'latestly.com', 'menafn.com', 'msn.com',
   'newsbreak.com', 'newsnow.co.uk', 'pressreader.com', 'theworldnews.net', 'yahoo.com', 'zawya.com',
   'accesswire.com', 'businesswire.com', 'einpresswire.com', 'globenewswire.com', 'newswire.com', 'openpr.com',
-  'prnewswire.com', 'prweb.com',
+  'prnewswire.com', 'prweb.com', 'csrwire.com', '3blmedia.com', 'einnews.com', 'finanznachrichten.de', 'pr-inside.com',
+  'prlog.org',
+  // republishers seen in GDELT's list on Oct 22: other outlets' articles under their own name
+  'allafrica.com', 'aol.co.uk', 'cedarnews.net', 'ghanamma.com', 'hawaiitelegraph.com', 'iheart.com', 'indiagazette.com',
+  'heraldglobe.com', 'kenyastar.com', 'netscape.com', 'newjerseytelegraph.com', 'nigerianeye.com', 'romaniapress.com',
+  'russiaherald.com', 'wn.com',
   'blogspot.com', 'facebook.com', 'medium.com', 'reddit.com', 'substack.com', 'tumblr.com', 'twitter.com',
   'wordpress.com', 'x.com', 'youtube.com',
   'allnewsupdate.net', 'breakingnewsreporter.com', 'currentnewspaper.net', 'dailynewspulse.net', 'dailytrendingnews.net',
@@ -247,7 +180,73 @@ export const NOT_OUTLETS = new Set([
   'urgentdispatch.net', 'usadailytimes.com', 'usanewsflash.com', 'worldnewsdaily24.com', 'worldpresswire.io',
 ])
 
-/** A report waiting for a second outlet, as the search reads it */
+/**
+ * One owner's websites count as one: its papers share stories (in the dry run
+ * of Oct 22, Torstar's Spectator and Niagara Falls Review, Reach's Express and
+ * Daily Star, Newsquest's Northwich Guardian and Messenger "confirmed" each
+ * other). The big chains whose papers GDELT reads most; any other website is
+ * its own owner.
+ */
+const OWNER_GROUPS: Record<string, string[]> = {
+  bbc: ['bbc.co.uk', 'bbc.com'],
+  aol: ['aol.com', 'aol.co.uk'],
+  guardian: ['theguardian.com', 'guardian.co.uk'],
+  reach: ['express.co.uk', 'dailystar.co.uk', 'mirror.co.uk', 'themirror.com', 'dailyrecord.co.uk', 'chroniclelive.co.uk',
+    'manchestereveningnews.co.uk', 'liverpoolecho.co.uk', 'walesonline.co.uk', 'birminghammail.co.uk', 'irishmirror.ie',
+    'belfastlive.co.uk', 'bristolpost.co.uk', 'nottinghampost.com', 'leicestermercury.co.uk', 'hulldailymail.co.uk',
+    'devonlive.com', 'cornwalllive.com', 'kentlive.news', 'mylondon.news', 'examinerlive.co.uk', 'lancs.live',
+    'gloucestershirelive.co.uk', 'stokesentinel.co.uk', 'derbytelegraph.co.uk', 'coventrytelegraph.net', 'glasgowlive.co.uk',
+    'edinburghlive.co.uk', 'dailypost.co.uk', 'hertfordshiremercury.co.uk', 'getsurrey.co.uk', 'irishstar.com', 'ok.co.uk'],
+  newsquest: ['thenorthernecho.co.uk', 'glasgowtimes.co.uk', 'heraldscotland.com', 'thenational.scot', 'bournemouthecho.co.uk',
+    'dailyecho.co.uk', 'theargus.co.uk', 'oxfordmail.co.uk', 'yorkpress.co.uk', 'thetelegraphandargus.co.uk',
+    'lancashiretelegraph.co.uk', 'theboltonnews.co.uk', 'southwalesargus.co.uk', 'messengernewspapers.co.uk',
+    'northwichguardian.co.uk', 'thecomet.net', 'edp24.co.uk', 'eveningnews24.co.uk', 'ipswichstar.co.uk', 'eadt.co.uk',
+    'newsandstar.co.uk', 'nwemail.co.uk', 'hexham-courant.co.uk', 'thenorthernecho.co.uk', 'worcesternews.co.uk',
+    'swindonadvertiser.co.uk', 'wiltshiretimes.co.uk', 'gazetteandherald.co.uk', 'dorsetecho.co.uk', 'eastlondonadvertiser.co.uk'],
+  nationalworld: ['scotsman.com', 'yorkshirepost.co.uk', 'yorkshireeveningpost.co.uk', 'sunderlandecho.com', 'shieldsgazette.com',
+    'lep.co.uk', 'thestar.co.uk', 'newsletter.co.uk', 'nationalworld.com', 'edinburghnews.scotsman.com'],
+  postmedia: ['nationalpost.com', 'financialpost.com', 'calgaryherald.com', 'calgarysun.com', 'edmontonjournal.com', 'edmontonsun.com',
+    'vancouversun.com', 'theprovince.com', 'ottawacitizen.com', 'ottawasun.com', 'montrealgazette.com', 'torontosun.com',
+    'winnipegsun.com', 'leaderpost.com', 'thestarphoenix.com', 'windsorstar.com', 'lfpress.com', 'thewhig.com', 'canada.com'],
+  torstar: ['thestar.com', 'thespec.com', 'niagarafallsreview.ca', 'wellandtribune.ca', 'stcatharinesstandard.ca', 'therecord.com',
+    'guelphmercury.com', 'simcoe.com', 'durhamregion.com', 'insidehalton.com', 'thepeterboroughexaminer.com'],
+  gannett: ['usatoday.com', 'cincinnati.com', 'freep.com', 'jsonline.com', 'indystar.com', 'azcentral.com', 'tennessean.com',
+    'desmoinesregister.com', 'courier-journal.com', 'democratandchronicle.com', 'northjersey.com', 'app.com', 'lohud.com',
+    'detroitnews.com', 'commercialappeal.com', 'statesman.com', 'palmbeachpost.com', 'jacksonville.com', 'dispatch.com'],
+  alden: ['chicagotribune.com', 'nydailynews.com', 'baltimoresun.com', 'orlandosentinel.com', 'sun-sentinel.com', 'courant.com',
+    'mcall.com', 'dailypress.com', 'pilotonline.com', 'mercurynews.com', 'eastbaytimes.com', 'denverpost.com', 'ocregister.com',
+    'presstelegram.com', 'dailynews.com', 'twincities.com', 'bostonherald.com', 'sbsun.com', 'dailybulletin.com', 'pe.com'],
+  mcclatchy: ['miamiherald.com', 'kansascity.com', 'sacbee.com', 'star-telegram.com', 'newsobserver.com', 'charlotteobserver.com',
+    'kentucky.com', 'thestate.com', 'idahostatesman.com', 'fresnobee.com', 'bnd.com', 'thenewstribune.com', 'heraldsun.com'],
+  hearst: ['sfchronicle.com', 'sfgate.com', 'houstonchronicle.com', 'chron.com', 'timesunion.com', 'ctpost.com', 'nhregister.com',
+    'expressnews.com', 'mysanantonio.com', 'seattlepi.com', 'stamfordadvocate.com', 'greenwichtime.com'],
+  lee: ['tucson.com', 'stltoday.com', 'omaha.com', 'richmond.com', 'buffalonews.com', 'journalstar.com', 'madison.com',
+    'wcfcourier.com', 'qctimes.com', 'roanoke.com', 'pantagraph.com', 'nwitimes.com'],
+  cox: ['wokv.com', 'krmg.com', 'wsbradio.com', 'whio.com', 'wftv.com'],
+}
+const OWNERS = new Map(Object.entries(OWNER_GROUPS).flatMap(([group, sites]) => sites.map(site => [site, group] as const)))
+export const ownerOf = (site: string): string => OWNERS.get(site) ?? site
+
+/** Pieces about a story, not reports of it: a factbox, an explainer, a live page, an opinion */
+export const FEATURE_RE = /^(?:factbox|fact\s?check|explainer|analysis|timeline|opinion|editorial|letter|live|watch|q&a|quiz|podcast|in pictures|photos?)\b|^(?:who|what|why|how)\s+(?:is|are|was|were|to|do|does|did)\b/i
+
+/**
+ * Whether one headline is another's copy with a little added or cut: 85% or
+ * more of the shorter one's words (5 or more) in the longer one ("Nigeria:
+ * Kaduna Journalist Granted Bail ..." on a republisher, a wire story's
+ * headline reworded on a member paper, "... - ICIJ"). One wire story on
+ * several papers is one source.
+ */
+export function nearCopy(a: string, b: string): boolean {
+  const words = (t: string) => t.toLowerCase().replace(/[\u2018\u2019']/g, '').split(/[^\p{L}\p{N}]+/u).filter(w => w.length > 1)
+  const [wa, wb] = [words(a), words(b)]
+  const [short, long] = wa.length <= wb.length ? [wa, wb] : [wb, wa]
+  if (short.length < 5) return false
+  const inLong = new Set(long)
+  return short.filter(w => inLong.has(w)).length / short.length >= 0.85
+}
+
+/** A report waiting for a second outlet */
 export interface HeldReport {
   id: string
   title: string
@@ -264,18 +263,11 @@ export interface HeldReport {
 
 export interface FoundOutlet { url: string; title: string; site: string; at: Date }
 
-/** A headline as GDELT gives it, tidied: no outlet name at the end, no spaces before punctuation */
-export function articleTitle(title: unknown, url: string): string {
-  if (typeof title !== 'string') return ''
-  const tidy = cleanTitle(title).replace(/\s+([,.;:!?%)])/g, '$1').replace(/\(\s+/g, '(').replace(/\s+'\s*s\b/g, "'s")
-  return withoutOutletName(tidy, url)
-}
-
 /**
  * The articles that are other outlets' reports of this report's story, at
- * most `max`, the most relevant first (GDELT's order)
+ * most `max`, in the order given (the most words shared first)
  */
-export function otherOutlets(report: HeldReport, articles: DocArticle[], now = new Date(), max = MAX_ADDED): FoundOutlet[] {
+export function otherOutlets(report: HeldReport, articles: GdeltArticle[], now = new Date(), max = MAX_ADDED): FoundOutlet[] {
   const held: CorrelationCandidate = {
     id: report.id,
     title: report.title,
@@ -290,135 +282,164 @@ export function otherOutlets(report: HeldReport, articles: DocArticle[], now = n
     tags: [],
     url: report.original_urls[0] ?? null,
   }
-  const sites = new Set(report.original_urls.map(u => siteOf(hostOf(u))).filter(Boolean))
+  const sites = new Set(report.original_urls.map(u => ownerOf(siteOf(hostOf(u)))).filter(Boolean))
   const found: FoundOutlet[] = []
-  for (const article of articles) {
+  for (const { url, title, site, at } of articles) {
     if (found.length >= max) break
-    const url = typeof article.url === 'string' ? article.url.trim() : ''
-    if (!/^https?:\/\//i.test(url)) continue
-    const site = siteOf(hostOf(url))
-    if (!site || sites.has(site) || NOT_OUTLETS.has(site)) continue
-    const at = seenAt(article.seendate)
-    if (!at || at.getTime() > now.getTime() + 10 * 60_000) continue
-    const title = articleTitle(article.title, url)
-    if (!title) continue
+    if (!site || sites.has(ownerOf(site)) || NOT_OUTLETS.has(site)) continue
+    if (at.getTime() > now.getTime() + 10 * 60_000) continue
+    if (FEATURE_RE.test(title)) continue
     const other: CorrelationCandidate = { ...held, id: 'gdelt', title, source_id: site, published_at: at, url, lat: null, lng: null }
     if (!isSameStory(held, other) || namesDiffer(report.title, title)) continue
-    if (isCopyOf({ url, title }, { urls: report.original_urls, title: report.title })) continue
-    if (found.some(f => isCopyOf({ url, title }, { urls: [f.url], title: f.title }))) continue
-    sites.add(site)
+    if (isCopyOf({ url, title }, { urls: report.original_urls, title: report.title }) || nearCopy(title, report.title)) continue
+    if (found.some(f => isCopyOf({ url, title }, { urls: [f.url], title: f.title }) || nearCopy(title, f.title))) continue
+    sites.add(ownerOf(site))
     found.push({ url: cleanUrl(url), title, site, at })
   }
   return found
 }
 
-// ─── Which reports, and when ─────────────────────────────────────────────────
-
-/** Whether a report is news a search can find: not a machine feed's (aircraft, fires, quakes), not a template headline */
+/** Whether a report is news another outlet could carry: not a machine feed's (aircraft, fires, quakes), not a template headline */
 export function searchable(report: Pick<HeldReport, 'title' | 'tags'>): boolean {
   const tags = new Set(report.tags.map(t => String(t).toLowerCase()))
   if (tags.has('osint') && !tags.has('gdelt')) return false
   if (isEventTemplateTitle(report.title)) return false
-  return queryWords(report.title).length >= 2
+  return storyTokens(report.title).length >= 3
 }
 
-/** Which search a report is due for: 1, 2 (high and critical, again after 10 hours), or 0 (none now) */
-export function dueRound(severity: string, ageMs: number, done1: boolean, done2: boolean): 0 | 1 | 2 {
-  if (ageMs > LOOKBACK_MS) return 0
-  const big = severity === 'high' || severity === 'critical'
-  if (big && ageMs >= SECOND_AFTER_MS) return done2 ? 0 : 2
-  if (done1) return 0
-  return ageMs >= (big ? FIRST_AFTER_BIG_MS : FIRST_AFTER_MS) ? 1 : 0
+// ─── The articles held ───────────────────────────────────────────────────────
+
+type HeldArticle = GdeltArticle & { tokens: string[] }
+
+/** GDELT's files of the last 8 hours, a batch a file */
+export class ArticleWindow {
+  private batches: Array<{ stamp: string; articles: HeldArticle[] }> = []
+
+  add(stamp: string, articles: GdeltArticle[]): void {
+    if (this.batches.some(b => b.stamp === stamp)) return
+    this.batches.push({ stamp, articles: articles.map(a => ({ ...a, tokens: storyTokens(a.title) })) })
+    this.batches.sort((a, b) => a.stamp.localeCompare(b.stamp))
+  }
+
+  /** Drop the files older than `keepMs` before `now` */
+  evict(now: Date, keepMs = WINDOW_KEEP_MS): void {
+    this.batches = this.batches.filter(b => stampDate(b.stamp).getTime() >= now.getTime() - keepMs)
+  }
+
+  newest(): string | null {
+    return this.batches.length ? this.batches[this.batches.length - 1]!.stamp : null
+  }
+
+  /** The articles of the files after `stamp` (all with null) */
+  after(stamp: string | null): HeldArticle[] {
+    return this.batches.filter(b => stamp === null || b.stamp > stamp).flatMap(b => b.articles)
+  }
+
+  get size(): number {
+    return this.batches.reduce((n, b) => n + b.articles.length, 0)
+  }
 }
 
-// ─── A pass ──────────────────────────────────────────────────────────────────
+/** What a cycle keeps for the next: the articles held, and how far each report has been compared */
+export interface FinderState {
+  window: ArticleWindow
+  /** The newest file each report was compared with */
+  compared: Map<string, string>
+}
 
-export interface PassStats {
-  due: number
-  searched: number
-  requests: number
+export const newState = (): FinderState => ({ window: new ArticleWindow(), compared: new Map() })
+
+// ─── A cycle ─────────────────────────────────────────────────────────────────
+
+export interface CycleStats {
+  files: number
+  articles: number
+  reports: number
+  pairs: number
   matched: number
   outlets: number
   promoted: number
   crosschecked: number
-  skipped: number
-  slow: number
   errors: number
 }
 
-export interface DueReport { report: HeldReport; round: 1 | 2; at: Date }
-
 export interface SecondOutletDeps {
-  /** The reports due for a search now, the most urgent first */
-  due(now: Date): Promise<DueReport[]>
-  /** Mark a report's search as taken (false: another pass took it) */
-  claim(id: string, round: number): Promise<boolean>
-  release(id: string, round: number): Promise<void>
-  /** The report as it is now: null when it no longer waits for a second outlet */
-  current(id: string): Promise<HeldReport | null>
-  search(url: string): Promise<SearchReply>
+  newestStamp(): Promise<string | null>
+  fetchArticles(stamp: string): Promise<GdeltArticle[] | null>
+  /** The reports waiting for a second outlet now */
+  waiting(now: Date): Promise<HeldReport[]>
   /** Add the outlets; true when the report turned verified */
   add(report: HeldReport, found: FoundOutlet[], crossCheck: boolean): Promise<boolean>
   crossChecksToday(day: string): Promise<number>
-  paused(): Promise<boolean>
-  pause(): Promise<void>
   lock(): Promise<boolean>
   unlock(): Promise<void>
-  count(day: string, stats: PassStats): Promise<void>
+  count(day: string, stats: CycleStats): Promise<void>
   remember(entry: Record<string, unknown>): Promise<void>
-  wait(ms: number): Promise<void>
   clock(): number
 }
 
-const emptyStats = (): PassStats => ({ due: 0, searched: 0, requests: 0, matched: 0, outlets: 0, promoted: 0, crosschecked: 0, skipped: 0, slow: 0, errors: 0 })
+const emptyStats = (): CycleStats => ({ files: 0, articles: 0, reports: 0, pairs: 0, matched: 0, outlets: 0, promoted: 0, crosschecked: 0, errors: 0 })
 
-/** One pass: the due reports, searched one at a time, until the pass's time is up */
-export async function runSecondOutlets(deps: SecondOutletDeps = liveDeps): Promise<PassStats> {
+/** One cycle: GDELT's new files in, every waiting report compared with what it hasn't been compared with */
+export async function runSecondOutlets(state: FinderState, deps: SecondOutletDeps = liveDeps): Promise<CycleStats> {
   const stats = emptyStats()
-  if (await deps.paused()) return stats
   if (!(await deps.lock())) return stats
-  const started = deps.clock()
-  const day = new Date(started).toISOString().slice(0, 10)
+  const now = new Date(deps.clock())
+  const day = now.toISOString().slice(0, 10)
   try {
-    const due = await deps.due(new Date(started))
-    stats.due = due.length
-    let crossChecks = await deps.crossChecksToday(day)
-    for (const { report: listed, round, at } of due) {
-      if (deps.clock() - started > PASS_BUDGET_MS) break
-      if (!(await deps.claim(listed.id, round))) continue
-      const report = await deps.current(listed.id)
-      if (!report) { stats.skipped++; continue }
-      const words = queryWords(report.title)
-      const from = new Date(at.getTime() - WINDOW_MS)
-      const to = new Date(Math.min(deps.clock(), at.getTime() + WINDOW_MS))
-      // The two best words; three when GDELT's most relevant held no match and there were more
-      let reply = await deps.search(searchUrl(words.slice(0, 2), from, to))
-      stats.requests++
-      let found = reply.kind === 'ok' ? otherOutlets(report, reply.articles, new Date(deps.clock())) : []
-      if (reply.kind === 'ok' && found.length === 0 && reply.articles.length >= MAX_RECORDS && words.length > 2) {
-        await deps.wait(YIELD_MS)
-        reply = await deps.search(searchUrl(words, from, to))
-        stats.requests++
-        found = reply.kind === 'ok' ? otherOutlets(report, reply.articles, new Date(deps.clock())) : []
+    // 1. GDELT's new files
+    const newest = await deps.newestStamp().catch(err => { stats.errors++; logger.warn({ err }, 'Second outlet: GDELT file list unreadable'); return null })
+    if (newest) {
+      const held = state.window.newest()
+      for (const stamp of filesToRead(newest, held, held ? MAX_FILES : WARM_FILES)) {
+        const articles = await deps.fetchArticles(stamp).catch(err => { stats.errors++; logger.warn({ err, stamp }, 'Second outlet: GDELT file unreadable'); return null })
+        if (!articles) continue
+        state.window.add(stamp, articles)
+        stats.files++
+        stats.articles += articles.length
       }
-      if (reply.kind === 'slow') {
-        stats.slow++
-        await deps.release(listed.id, round)   // searched again after the pause
-        await deps.pause()
-        break
+    }
+    state.window.evict(now)
+    const latest = state.window.newest()
+    if (!latest) return stats
+
+    // 2. The reports, each compared with the files it hasn't been compared with
+    const reports = (await deps.waiting(now)).filter(searchable)
+    stats.reports = reports.length
+    const groups = new Map<string | null, HeldReport[]>()
+    for (const r of reports) {
+      const since = state.compared.get(r.id) ?? null
+      if (since === latest) continue
+      const list = groups.get(since)
+      if (list) list.push(r); else groups.set(since, [r])
+    }
+    const found = new Map<string, { report: HeldReport; outlets: FoundOutlet[] }>()
+    for (const [since, group] of groups) {
+      const articles = state.window.after(since)
+      const pairs = candidatePairs(group.map(r => ({ tokens: storyTokens(r.title) })), articles)
+      let n = 0
+      for (const [i, list] of pairs) {
+        const report = group[i]!
+        const best = list.slice(0, MAX_CANDIDATES)
+        stats.pairs += best.length
+        const outlets = otherOutlets(report, best.map(a => articles[a]!), now)
+        if (outlets.length) found.set(report.id, { report, outlets })
+        // room for the scraper's other work between reports
+        if (++n % 100 === 0) await new Promise(resolve => setImmediate(resolve))
       }
-      if (reply.kind === 'error') {
-        stats.errors++
-        logger.debug({ id: report.id, reason: reply.reason }, 'Second outlet: search failed')
-        await deps.wait(YIELD_MS)
-        continue
-      }
-      stats.searched++
-      if (found.length > 0) {
-        const crossCheck = crossChecks < CROSSCHECKS_A_DAY
-        const promoted = await deps.add(report, found, crossCheck)
+    }
+    for (const r of reports) state.compared.set(r.id, latest)
+    const live = new Set(reports.map(r => r.id))
+    for (const id of state.compared.keys()) if (!live.has(id)) state.compared.delete(id)
+
+    // 3. The outlets found join their reports
+    let crossChecks = await deps.crossChecksToday(day).catch(() => CROSSCHECKS_A_DAY)
+    for (const { report, outlets } of found.values()) {
+      const crossCheck = crossChecks < CROSSCHECKS_A_DAY
+      try {
+        const promoted = await deps.add(report, outlets, crossCheck)
         stats.matched++
-        stats.outlets += found.length
+        stats.outlets += outlets.length
         if (promoted) {
           stats.promoted++
           if (crossCheck) { stats.crosschecked++; crossChecks++ }
@@ -428,12 +449,13 @@ export async function runSecondOutlets(deps: SecondOutletDeps = liveDeps): Promi
           id: report.id,
           severity: report.severity,
           title: report.title.slice(0, 140),
-          words,
           promoted,
-          found: found.map(f => ({ site: f.site, title: f.title.slice(0, 140), url: f.url })),
+          found: outlets.map(f => ({ site: f.site, title: f.title.slice(0, 140), url: f.url })),
         })
+      } catch (err) {
+        stats.errors++
+        logger.warn({ err, id: report.id }, 'Second outlet: outlets not added')
       }
-      await deps.wait(YIELD_MS)
     }
   } finally {
     await deps.count(day, stats).catch(err => logger.warn({ err }, 'Second outlet: counts not saved'))
@@ -444,15 +466,11 @@ export async function runSecondOutlets(deps: SecondOutletDeps = liveDeps): Promi
 
 // ─── The live parts ──────────────────────────────────────────────────────────
 
-const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
-
 interface ReportRow {
   id: string
   title: string | null
   category: string | null
   severity: string | null
-  status?: string | null
-  source_count?: number | string | null
   source_ids: unknown
   original_urls: unknown
   location_name: string | null
@@ -460,7 +478,6 @@ interface ReportRow {
   lng: number | string | null
   tags: unknown
   published_at: Date | string
-  created_at: Date | string
 }
 
 const strings = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : [])
@@ -482,76 +499,32 @@ function toHeld(r: ReportRow): HeldReport {
   }
 }
 
-const REPORT_COLUMNS = `id, title, category, severity, status, source_count, source_ids, original_urls, location_name, tags,
-  COALESCE(event_time, created_at) AS published_at, created_at,
-  ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng`
-
-/** Waiting for a second outlet: pending, one outlet, medium or above, in English */
-const WAITING = `status = 'pending' AND COALESCE(source_count, 1) <= 1
-  AND severity IN ('medium', 'high', 'critical') AND language = 'en'
-  AND cardinality(original_urls) >= 1`
-
-const SEVERITY_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2 }
-
 export const liveDeps: SecondOutletDeps = {
-  async due(now) {
+  newestStamp: fetchNewestStamp,
+  fetchArticles,
+
+  async waiting(now) {
+    // Pending, one outlet, medium or above, in English, settled
     const { rows } = await db.raw(
-      `SELECT ${REPORT_COLUMNS} FROM signals
-        WHERE ${WAITING}
+      `SELECT id, title, category, severity, source_ids, original_urls, location_name, tags,
+              COALESCE(event_time, created_at) AS published_at,
+              ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng
+         FROM signals
+        WHERE status = 'pending' AND COALESCE(source_count, 1) <= 1
+          AND severity IN ('medium', 'high', 'critical') AND language = 'en'
+          AND cardinality(original_urls) >= 1
           AND created_at > ?::timestamptz AND created_at < ?::timestamptz
-        ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 ELSE 2 END, created_at DESC
-        LIMIT 800`,
-      [new Date(now.getTime() - LOOKBACK_MS).toISOString(), new Date(now.getTime() - FIRST_AFTER_BIG_MS).toISOString()],
+        ORDER BY created_at DESC
+        LIMIT 20000`,
+      [new Date(now.getTime() - LOOKBACK_MS).toISOString(), new Date(now.getTime() - SETTLE_MS).toISOString()],
     ) as { rows: ReportRow[] }
-    const reports = rows.map(r => ({ row: r, report: toHeld(r) })).filter(({ report }) => searchable(report))
-    if (reports.length === 0) return []
-    const pipe = redis.pipeline()
-    for (const { report } of reports) pipe.exists(CHECKED_KEY(report.id, 1)).exists(CHECKED_KEY(report.id, 2))
-    const done = ((await pipe.exec()) ?? []).map(([, n]) => Number(n) > 0)
-    const due: DueReport[] = []
-    reports.forEach(({ row, report }, i) => {
-      const age = now.getTime() - new Date(row.created_at).getTime()
-      const round = dueRound(report.severity, age, done[2 * i] ?? false, done[2 * i + 1] ?? false)
-      const at = new Date(report.published_at)
-      if (round && !isNaN(at.getTime())) due.push({ report, round, at: at.getTime() > now.getTime() ? now : at })
-    })
-    return due.sort((a, b) => (SEVERITY_RANK[a.report.severity] ?? 3) - (SEVERITY_RANK[b.report.severity] ?? 3))
-  },
-
-  async claim(id, round) {
-    return await redis.set(CHECKED_KEY(id, round), '1', 'EX', 3 * 86_400, 'NX') === 'OK'
-  },
-
-  async release(id, round) {
-    await redis.del(CHECKED_KEY(id, round))
-  },
-
-  async current(id) {
-    const { rows } = await db.raw(`SELECT ${REPORT_COLUMNS} FROM signals WHERE id = ? AND ${WAITING}`, [id]) as { rows: ReportRow[] }
-    return rows[0] ? toHeld(rows[0]) : null
-  },
-
-  async search(url) {
-    // One request at a time across the server: the slot frees 6 seconds after it was taken
-    const giveUp = Date.now() + 60_000
-    for (;;) {
-      const ok = await redis.set(SLOT_KEY, '1', 'PX', SLOT_MS, 'NX').catch(() => 'OK')
-      if (ok === 'OK') break
-      if (Date.now() > giveUp) return { kind: 'error', reason: 'slot busy' }
-      await sleep(250)
-    }
-    try {
-      const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' }, signal: AbortSignal.timeout(20_000) })
-      return readReply(res.status, await res.text())
-    } catch (err) {
-      return { kind: 'error', reason: (err as Error)?.name === 'TimeoutError' ? 'timeout' : 'network' }
-    } finally {
-      // 6 seconds from when GDELT answered, not from when it was asked (Oct 22: "slow down" after 5 requests)
-      await redis.set(SLOT_KEY, '1', 'PX', SLOT_MS).catch(() => {})
-    }
+    return rows.map(toHeld)
   },
 
   async add(report, found, crossCheck) {
+    // Still waiting? (an outlet may have joined since it was read)
+    const now = await db('signals').where('id', report.id).first('status', 'source_count') as { status?: string; source_count?: number } | undefined
+    if (!now || now.status !== 'pending' || Number(now.source_count ?? 1) > 1) return false
     // The links and the count, as a merged article adds them (index.ts storeArticleGroup)
     for (const f of found) {
       await db('signals').where('id', report.id).update({
@@ -570,7 +543,7 @@ export const liveDeps: SecondOutletDeps = {
       check_type: 'corroboration',
       result:     'confirmed',
       confidence: 0.8,
-      notes:      `Also reported by ${found.map(f => f.site).join(', ')} (found in GDELT's index of news outlets)`,
+      notes:      `Also reported by ${found.map(f => f.site).join(', ')} (found in GDELT's list of news articles)`,
     }).catch(err => logger.warn({ err, id: report.id }, 'Second outlet: not logged on the report page'))
     const row = await db('signals').where('id', report.id).first('status') as { status?: string } | undefined
     return row?.status === 'verified'
@@ -580,19 +553,8 @@ export const liveDeps: SecondOutletDeps = {
     return Number(await redis.hget(DAY_KEY(day), 'crosschecked')) || 0
   },
 
-  async paused() {
-    return !!(await redis.get(PAUSE_KEY))
-  },
-
-  async pause() {
-    // 10 minutes, then twice as long each time GDELT says it again within 6 hours (at most 2 hours)
-    const streak = await redis.incr(SLOW_STREAK_KEY).catch(() => 1)
-    await redis.expire(SLOW_STREAK_KEY, 6 * 3_600).catch(() => {})
-    await redis.set(PAUSE_KEY, new Date().toISOString(), 'EX', Math.min(PAUSE_S * 2 ** Math.max(0, streak - 1), 2 * 3_600))
-  },
-
   async lock() {
-    return await redis.set(LOCK_KEY, '1', 'EX', 600, 'NX') === 'OK'
+    return await redis.set(LOCK_KEY, '1', 'EX', 14 * 60, 'NX') === 'OK'
   },
 
   async unlock() {
@@ -603,34 +565,37 @@ export const liveDeps: SecondOutletDeps = {
     const multi = redis.multi()
     let any = false
     for (const [k, v] of Object.entries(stats)) {
-      if (k === 'due' || !v) continue
+      if (!v || k === 'reports') continue
       multi.hincrby(DAY_KEY(day), k, v)
       any = true
     }
-    if (!any) return
+    // the reports waiting at the latest cycle (a count, not a sum)
+    multi.hset(DAY_KEY(day), 'waiting', stats.reports)
     multi.expire(DAY_KEY(day), KEEP_S)
-    await multi.exec()
+    if (any || stats.reports) await multi.exec()
   },
 
   async remember(entry) {
     await redis.multi().lpush(RECENT_KEY, JSON.stringify(entry)).ltrim(RECENT_KEY, 0, 99).expire(RECENT_KEY, 7 * 86_400).exec()
   },
 
-  wait: sleep,
   clock: () => Date.now(),
 }
 
-/** Every 5 minutes (off with SECOND_OUTLET=off) */
+/** Every 15 minutes, a few minutes after GDELT publishes (off with SECOND_OUTLET=off) */
 export function startSecondOutlets(): void {
   if ((process.env.SECOND_OUTLET || 'on').toLowerCase() === 'off') {
     logger.info('Second outlet off (SECOND_OUTLET=off)')
     return
   }
+  const state = newState()
   const run = () => {
-    runSecondOutlets()
-      .then(s => { if (s.requests) logger.info(s, 'Second outlet pass') })
-      .catch(err => logger.warn({ err }, 'Second outlet pass failed (non-fatal)'))
+    runSecondOutlets(state)
+      .then(s => logger.info({ ...s, held: state.window.size }, 'Second outlet cycle'))
+      .catch(err => logger.warn({ err }, 'Second outlet cycle failed (non-fatal)'))
   }
-  setTimeout(run, 4 * 60_000)
-  setInterval(run, PASS_INTERVAL_MS)
+  // GDELT's files come at :00, :15, :30 and :45, listed a few minutes later
+  const now = Date.now()
+  const nextSlot = Math.ceil((now - 7 * 60_000) / CYCLE_MS) * CYCLE_MS + 7 * 60_000
+  setTimeout(() => { run(); setInterval(run, CYCLE_MS) }, Math.max(60_000, nextSlot - now))
 }
