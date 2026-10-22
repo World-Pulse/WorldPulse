@@ -348,8 +348,9 @@ export function weekWindow(week: IsoWeek) {
   return { window: 'week' as const, week: weekName(week), start, end }
 }
 
+/** v2 (Oct 21, 2026): the lists made before each crisis's stories were about the crisis (c6b9417) are made again */
 export function coverageGapKey(week: IsoWeek | null): string {
-  return `coverage:gap:v1:${week ? weekName(week) : 'last7days'}`
+  return `coverage:gap:v2:${week ? weekName(week) : 'last7days'}`
 }
 
 /**

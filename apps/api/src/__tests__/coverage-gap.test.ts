@@ -229,7 +229,7 @@ describe('GET /api/v1/coverage-gap', () => {
     expect(d.week).toBeNull()
     expect(new Date(d.end).getTime() - new Date(d.start).getTime()).toBe(7 * 86_400_000)
     expect(d.crises.length).toBe(gap.crisisCountries().length)
-    expect(h.ttl.get('coverage:gap:v1:last7days')).toBe(3_600 + 24 * 3_600)
+    expect(h.ttl.get('coverage:gap:v2:last7days')).toBe(3_600 + 24 * 3_600)
   })
 
   it('a finished week: made in the background the first time (503 with Retry-After), then served', async () => {
@@ -238,8 +238,8 @@ describe('GET /api/v1/coverage-gap', () => {
     const first = await a.inject({ method: 'GET', url: '/api/v1/coverage-gap?week=2026-W42' })
     expect(first.statusCode).toBe(503)
     expect(first.headers['retry-after']).toBe('120')
-    await vi.waitFor(() => expect(h.kept.has('coverage:gap:v1:2026-W42')).toBe(true))
-    expect(h.ttl.get('coverage:gap:v1:2026-W42')).toBe(24 * 3_600 + 30 * 86_400)
+    await vi.waitFor(() => expect(h.kept.has('coverage:gap:v2:2026-W42')).toBe(true))
+    expect(h.ttl.get('coverage:gap:v2:2026-W42')).toBe(24 * 3_600 + 30 * 86_400)
     const res = await a.inject({ method: 'GET', url: '/api/v1/coverage-gap?week=2026-W42' })
     expect(res.statusCode).toBe(200)
     expect(res.json().data).toMatchObject({ window: 'week', week: '2026-W42', start: '2026-10-12T00:00:00.000Z', end: '2026-10-19T00:00:00.000Z' })
