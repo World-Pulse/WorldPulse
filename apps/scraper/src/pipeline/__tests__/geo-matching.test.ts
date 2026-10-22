@@ -44,12 +44,16 @@ describe('mentionedCountries', () => {
     expect(mentionedCountries('Storms hit Indiana farms')).toEqual([])                          // "india"
     expect(mentionedCountries('Wildfires in New South Wales and New England')).toEqual([])
     expect(mentionedCountries('British Columbia floods close highways')).toEqual([])          // not Colombia
+    expect(mentionedCountries("Witness in Chad Daybell's murder trial testifies")).toEqual([])   // a first name, not Chad
   })
 
   it('finds real mentions, first mentioned first', () => {
     expect(mentionedCountries('Colombian troops and Brazilian police meet')).toEqual(['CO', 'BR'])
     expect(mentionedCountries('The U.S. and Japan sign a pact')).toEqual(['US', 'JP'])
     expect(mentionedCountries('Saudi airport closed after drone attack')).toEqual(['SA'])
+    expect(mentionedCountries('Floods displace thousands in Chad')).toEqual(['TD'])
+    expect(mentionedCountries("Clashes in Chad's east kill 12")).toEqual(['TD'])
+    expect(mentionedCountries("Chadian army says 3 killed near N'Djamena")).toEqual(['TD'])
   })
 })
 

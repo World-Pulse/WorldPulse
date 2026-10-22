@@ -8,7 +8,8 @@
  *
  * Patterns are whole words, case-insensitive. Words that are also common
  * names or other places are left out or narrowed: "Georgia" (the US state),
- * "Jordan" and "Chad" (first names), "Guinea pig", "Benin City" and the
+ * "Jordan" and "Chad" (first names; "in Chad" only when no surname follows,
+ * so "in Chad Daybell's trial" is not the country), "Guinea pig", "Benin City" and the
  * "Niger Delta" (both in Nigeria), "Polish", "Spanish" and "Portuguese"
  * (also languages or verbs), "Houthi" (their attacks are often elsewhere).
  */
@@ -99,7 +100,7 @@ export const MORE_COUNTRIES: CountryEntry[] = [
   c('CV', 'Cabo Verde', /\b(?:cabo verde|cape verde)\b/i, 'Praia', 14.93, -23.51),
   c('CM', 'Cameroon', /\b(?:cameroon|cameroonian)\b/i, 'Yaoundé', 3.85, 11.50),
   c('CF', 'Central African Republic', /\bcentral african republic\b/i, 'Bangui', 4.39, 18.56),
-  c('TD', 'Chad', /\b(?:chadian|in chad|n['’]djamena)\b/i, "N'Djamena", 12.13, 15.06),
+  c('TD', 'Chad', /\b(?:[Cc]hadian|[Ii]n [Cc]had(?!\s+[A-Z][a-z])|CHADIAN|IN CHAD|N['’][Dd]jamena|N['’]DJAMENA)\b/, "N'Djamena", 12.13, 15.06),
   // French "Comores" and the islands too (round 4, Oct 20, 2026: 15 of HZK-Presse's 20 items found no place)
   c('KM', 'Comoros', /\b(?:comoros|comores|comorian|comorien(?:ne)?|anjouan|moh[eé]li)\b/i, 'Moroni', -11.70, 43.26),
   // French, Spanish and Portuguese "République du Congo" too: it read as DR Congo (round 5, Oct 21, 2026)
