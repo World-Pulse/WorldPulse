@@ -25,6 +25,7 @@ import { internalCallHeaders } from '../lib/internal-call'
 import { rateLimitKey } from '../lib/rate-limit-options'
 import { inCountedWindow, STORY_COUNT_HOURS } from '../lib/story-window'
 import { storyFigures, type FigureReport } from '../lib/story-figures'
+import { siteInfo } from '../lib/outlets'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MAX_SIGNALS = 50
@@ -707,6 +708,8 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
         outlets,
         /** Those websites, A to Z */
         outletNames,
+        /** What each of them is: name, kind, home country, state media (lib/outlets.ts, plan 15, Oct 22, 2026) */
+        outletInfo: siteInfo(outletNames),
         /** Websites that carried it since it began, and their names, A to Z */
         outletsAll,
         outletNamesAll: outletNamesAll.length > 0 ? outletNamesAll : outletNames,

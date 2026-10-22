@@ -24,6 +24,9 @@ export interface GapCrisis {
   inside: number
   abroad: number
   outlets: number
+  /** Of those, the ones WorldPulse's outlet list knows to be based in the country, and abroad (from Oct 22, 2026) */
+  outletsHome?: number
+  outletsAbroad?: number
   articles: number
   peoplePerOutlet: number
   sites: Array<{ site: string; articles: number }>

@@ -28,6 +28,7 @@ import { EVENT_TEMPLATE_SQL, tidyHeadline } from './story-list'
 import { UNHCR_DISPLACED, UNHCR_YEAR } from './unhcr-displaced'
 import { isoWeekOf, previousWeek, weekBounds, weekName, type IsoWeek } from './week'
 import { COUNTRY_NAMES } from '../routes/countries'
+import { outletOf } from './outlets'
 
 /** A crisis: at least this many people displaced from the country */
 export const MIN_DISPLACED = 1_000_000
@@ -146,6 +147,12 @@ export interface GapCrisis {
   outlets: number
   /** Their articles (distinct links) */
   articles: number
+  /**
+   * Of those outlets, the ones the outlet directory knows to be based in the
+   * country, and abroad (the rest, many of the articles GDELT points to, aren't known)
+   */
+  outletsHome: number
+  outletsAbroad: number
   /** displaced / outlets (a crisis no outlet covered counts as one outlet), rounded */
   peoplePerOutlet: number
   /** The outlets with the most articles on it */
@@ -202,10 +209,17 @@ export function buildCoverageGap(hostRows: HostRow[], storyRows: StoryRow[], w: 
   }
   const coverage = (code: string) => {
     const sites = perCountry.get(code)
-    if (!sites) return { outlets: 0, articles: 0, top: [] as Array<{ site: string; articles: number }> }
+    if (!sites) return { outlets: 0, articles: 0, top: [] as Array<{ site: string; articles: number }>, home: 0, abroad: 0 }
     const top = [...sites.entries()].map(([site, a]) => ({ site, articles: a }))
       .sort((a, b) => b.articles - a.articles || a.site.localeCompare(b.site))
-    return { outlets: sites.size, articles: top.reduce((t, s) => t + s.articles, 0), top: top.slice(0, SITES_SHOWN) }
+    // where the outlets are based, for those the outlet directory knows (plan 15, Oct 22, 2026)
+    let home = 0, abroad = 0
+    for (const site of sites.keys()) {
+      const country = outletOf(site)?.country
+      if (country === code) home += 1
+      else if (country) abroad += 1
+    }
+    return { outlets: sites.size, articles: top.reduce((t, s) => t + s.articles, 0), top: top.slice(0, SITES_SHOWN), home, abroad }
   }
 
   // each crisis's stories as the database ranked them, those naming the country first (a stable sort)
@@ -235,6 +249,8 @@ export function buildCoverageGap(hostRows: HostRow[], storyRows: StoryRow[], w: 
       inside: c.inside,
       abroad: c.abroad,
       outlets: cov.outlets,
+      outletsHome: cov.home,
+      outletsAbroad: cov.abroad,
       articles: cov.articles,
       peoplePerOutlet: Math.round(c.displaced / Math.max(1, cov.outlets)),
       sites: cov.top,
@@ -348,9 +364,12 @@ export function weekWindow(week: IsoWeek) {
   return { window: 'week' as const, week: weekName(week), start, end }
 }
 
-/** v2 (Oct 21, 2026): the lists made before each crisis's stories were about the crisis (c6b9417) are made again */
+/**
+ * v2 (Oct 21, 2026): the lists made before each crisis's stories were about the crisis (c6b9417) are made again;
+ * v3 (Oct 22): with each crisis's outlets at home and abroad
+ */
 export function coverageGapKey(week: IsoWeek | null): string {
-  return `coverage:gap:v2:${week ? weekName(week) : 'last7days'}`
+  return `coverage:gap:v3:${week ? weekName(week) : 'last7days'}`
 }
 
 /**

@@ -53,7 +53,7 @@ const ten = (prefix: string, n: number, articles: number) =>
 function rowsForAWeek() {
   h.hostRows = [
     { code: 'SD', host: 'dabangasudan.org', articles: 12 },
-    { code: 'SD', host: 'sudanspost.net', articles: 4 },
+    { code: 'SD', host: 'sudanspost.com', articles: 4 },
     { code: 'SD', host: 'www.aljazeera.com', articles: 3 },
     { code: 'SD', host: 'aljazeera.com', articles: 2 },
     // data feeds and press offices: not outlets
@@ -134,7 +134,9 @@ describe('buildCoverageGap', () => {
     const d = gap.buildCoverageGap(h.hostRows as never, h.storyRows as never, W, new Date('2026-10-19T01:00:00Z'))
     const sd = d.crises.find(c => c.code === 'SD')!
     expect(sd).toMatchObject({ name: 'Sudan', outlets: 3, articles: 21, displaced: displaced('SD'), peoplePerOutlet: Math.round(displaced('SD') / 3) })
-    expect(sd.sites).toEqual([{ site: 'dabangasudan.org', articles: 12 }, { site: 'aljazeera.com', articles: 5 }, { site: 'sudanspost.net', articles: 4 }])
+    // where they're based (the outlet directory): Radio Dabanga in Sudan; Sudans Post (South Sudan) and Al Jazeera (Qatar) abroad
+    expect(sd).toMatchObject({ outletsHome: 1, outletsAbroad: 2 })
+    expect(sd.sites).toEqual([{ site: 'dabangasudan.org', articles: 12 }, { site: 'aljazeera.com', articles: 5 }, { site: 'sudanspost.com', articles: 4 }])
     // three of its stories, the headline without the outlet's name; those naming the country's places first
     expect(sd.stories).toEqual([
       { id: 'a1', title: 'Drone strike kills 40 at El Fasher market', outlets: 3, verified: true },
@@ -156,7 +158,8 @@ describe('buildCoverageGap', () => {
     expect(uncovered[0]).toMatchObject({ code: 'SY', articles: 0, peoplePerOutlet: displaced('SY'), sites: [], stories: [] })
     expect(d.crises[0]!.code).toBe('SY')
     const ua = d.crises.find(c => c.code === 'UA')!
-    expect(ua).toMatchObject({ outlets: 7, articles: 70 })
+    // websites the directory doesn't know are neither at home nor abroad
+    expect(ua).toMatchObject({ outlets: 7, articles: 70, outletsHome: 0, outletsAbroad: 0 })
   })
 
   it('the most covered countries for comparison, and the share of the week\'s articles the crises got', () => {
@@ -229,7 +232,7 @@ describe('GET /api/v1/coverage-gap', () => {
     expect(d.week).toBeNull()
     expect(new Date(d.end).getTime() - new Date(d.start).getTime()).toBe(7 * 86_400_000)
     expect(d.crises.length).toBe(gap.crisisCountries().length)
-    expect(h.ttl.get('coverage:gap:v2:last7days')).toBe(3_600 + 24 * 3_600)
+    expect(h.ttl.get('coverage:gap:v3:last7days')).toBe(3_600 + 24 * 3_600)
   })
 
   it('a finished week: made in the background the first time (503 with Retry-After), then served', async () => {
@@ -238,8 +241,8 @@ describe('GET /api/v1/coverage-gap', () => {
     const first = await a.inject({ method: 'GET', url: '/api/v1/coverage-gap?week=2026-W42' })
     expect(first.statusCode).toBe(503)
     expect(first.headers['retry-after']).toBe('120')
-    await vi.waitFor(() => expect(h.kept.has('coverage:gap:v2:2026-W42')).toBe(true))
-    expect(h.ttl.get('coverage:gap:v2:2026-W42')).toBe(24 * 3_600 + 30 * 86_400)
+    await vi.waitFor(() => expect(h.kept.has('coverage:gap:v3:2026-W42')).toBe(true))
+    expect(h.ttl.get('coverage:gap:v3:2026-W42')).toBe(24 * 3_600 + 30 * 86_400)
     const res = await a.inject({ method: 'GET', url: '/api/v1/coverage-gap?week=2026-W42' })
     expect(res.statusCode).toBe(200)
     expect(res.json().data).toMatchObject({ window: 'week', week: '2026-W42', start: '2026-10-12T00:00:00.000Z', end: '2026-10-19T00:00:00.000Z' })

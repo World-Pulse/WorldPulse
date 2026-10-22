@@ -13,6 +13,7 @@ import { fetchTopStories, rankRelatedStories } from '@/lib/related-stories'
 import type { CountryStory } from '@/components/countries/CountryTopStories'
 import { fetchStoryOutletCounts } from '@/lib/story-outlets'
 import type { SecondReadInfo } from '@/lib/second-read'
+import type { OutletInfo } from '@/lib/outlet-kinds'
 
 const API_BASE = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -26,6 +27,8 @@ export interface Verification {
 
 export interface SignalDetail extends Signal {
   verifications: Verification[]
+  /** What each linked website is: name, kind, home country, state media (plan 15, Oct 22, 2026) */
+  outletInfo?: OutletInfo[]
   /** The second read of a high or critical report few outlets carry (plan 11) */
   secondRead?: SecondReadInfo | null
 }

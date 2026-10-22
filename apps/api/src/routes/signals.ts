@@ -29,6 +29,7 @@ import { MARITIME_CANDIDATE, MARITIME_HEADLINE, firstOfEach, headlineKey, isShip
 import type { Knex } from 'knex'
 import { BAD_CURSOR, isUuid } from '../lib/cursor'
 import { visitorHash, alreadyFlagged, flagSummary } from '../lib/signal-flags'
+import { siteInfo, sitesOfLinks } from '../lib/outlets'
 
 const SIGNAL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -1832,6 +1833,8 @@ export function formatSignal(row: Record<string, unknown>) {
     region:           row.region,
     tags:             row.tags ?? [],
     originalUrls:     row.original_urls ?? [],
+    // what each linked website is: name, kind, home country, state media (plan 15, Oct 22, 2026)
+    outletInfo:       siteInfo(sitesOfLinks(row.original_urls, 20)),
     language:         row.language ?? 'en',
     viewCount:        row.view_count ?? 0,
     shareCount:       row.share_count ?? 0,

@@ -33,7 +33,7 @@ const week: CoverageGapData = {
   crises: [
     { rank: 1, code: 'SY', name: 'Syria', displaced: 10_562_346, inside: 5_542_227, abroad: 5_020_119, outlets: 0, articles: 0, peoplePerOutlet: 10_562_346, sites: [], stories: [] },
     {
-      rank: 2, code: 'SS', name: 'South Sudan', displaced: 3_788_010, inside: 2_000_000, abroad: 1_788_010, outlets: 7, articles: 12, peoplePerOutlet: 541_144,
+      rank: 2, code: 'SS', name: 'South Sudan', displaced: 3_788_010, inside: 2_000_000, abroad: 1_788_010, outlets: 7, outletsHome: 2, outletsAbroad: 3, articles: 12, peoplePerOutlet: 541_144,
       sites: [{ site: 'radiotamazuj.org', articles: 4 }, { site: 'eyeradio.org', articles: 3 }, { site: 'sudanspost.net', articles: 2 }, { site: 'aljazeera.com', articles: 1 }, { site: 'bbc.com', articles: 1 }],
       stories: [{ id: 'sig-1', title: 'Floods cut off Bentiu camps', outlets: 3, verified: true }],
     },
@@ -92,6 +92,9 @@ describe('CoverageGapView', () => {
     expect(html).toContain('No outlet WorldPulse reads reported on it that week.')
     expect(html).toContain('3.8 million displaced')
     expect(html).toContain('541,144 people per outlet')
+    // where its outlets are based, for those WorldPulse's outlet list knows (Oct 22, 2026)
+    expect(html).toContain('(3 based abroad)')
+    expect(html.match(/based abroad\)/g)).toHaveLength(1)
     expect(html).toContain('href="/signals/sig-1"')
     expect(html).toContain('Verified · 3 outlets')
     expect(html).toContain('Reported by radiotamazuj.org, eyeradio.org, sudanspost.net, aljazeera.com, bbc.com and 2 more')

@@ -450,6 +450,7 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal, 
               sourceUrl={signal.originalUrls?.[0] ?? null}
               originalUrls={signal.originalUrls ?? []}
               storyOutlets={storyCounts ? outletsAll : null}
+              outletInfo={signal.outletInfo ?? null}
             />
 
             {/* AI Summary — WorldPulse differentiator vs Ground News Ground Summary */}

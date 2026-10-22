@@ -1,0 +1,891 @@
+{
+  "_about": "What kind of outlet each news feed is (plan 15, Oct 22, 2026), read by build-outlet-directory.py. A feed not listed under kinds is a national outlet: a country's general news outlet. agency: a news agency (wire service), whose copy other outlets often run. international: a broadcaster or publisher whose audience is the world or a whole region. local: a city, region or community outlet. specialist: one subject (business, defence, science, shipping...). aggregator: mostly runs other outlets' reports. official: a government, central bank, court, UN or Red Cross press office or alert service. state: the outlet answers to a government (from the feed list's state-media label, plus the ones listed).",
+  "kinds": {
+    "agency": [
+      "tass-en",
+      "upi-top",
+      "ansa-en",
+      "yonhap-en",
+      "yonhap-nk",
+      "antara-en",
+      "agencia-brasil",
+      "akipress-en",
+      "tatoli-en",
+      "adi-djibouti",
+      "tdh-turkmenistan",
+      "agenzia-fides",
+      "anp-niger",
+      "aci-congo",
+      "habari-za-comores-km",
+      "focus-taiwan",
+      "interfax-ukraine-en",
+      "kazakhstan-today-en",
+      "vietnamplus-en"
+    ],
+    "international": [
+      "bbc-world",
+      "dw-world",
+      "dw-africa",
+      "al-jazeera",
+      "france24",
+      "euronews",
+      "voa-news",
+      "rferl",
+      "cgtn-world",
+      "al-monitor",
+      "asia-times",
+      "the-diplomat",
+      "east-african",
+      "africanews",
+      "eu-observer",
+      "rnz-pacific",
+      "abc-pacific",
+      "balkan-insight",
+      "eurasianet",
+      "mercopress",
+      "times-central-asia",
+      "oc-media",
+      "jamnews",
+      "channel-news-asia",
+      "aawsat-en",
+      "radio-prague-en",
+      "radio-sweden",
+      "barents-observer",
+      "wadr",
+      "ouestaf-news"
+    ],
+    "local": [
+      "wanted-in-rome",
+      "prague-morning",
+      "brno-daily",
+      "sur-in-english",
+      "portugal-resident",
+      "reykjavik-grapevine",
+      "city-paper-bogota",
+      "zeta-tijuana",
+      "prensa-comunitaria-gt",
+      "radio-progreso-hn",
+      "riviera-radio-mc",
+      "bali-times",
+      "noticias-do-norte-cv"
+    ],
+    "specialist": [
+      "nikkei-asia",
+      "bloomberg-markets",
+      "ft-headlines",
+      "marketwatch-top",
+      "coindesk",
+      "theblock",
+      "cnbc-markets",
+      "investing-com-news",
+      "forbes-money",
+      "fortune",
+      "businessday-ng",
+      "the-conversation",
+      "carbon-brief",
+      "climate-home-news",
+      "renewableenergyworld",
+      "oilprice-com",
+      "solar-power-world",
+      "pv-magazine",
+      "new-scientist",
+      "phys-org",
+      "science-daily",
+      "mit-tech-review",
+      "war-on-the-rocks",
+      "bellingcat",
+      "breaking-defense",
+      "just-security",
+      "occrp-news",
+      "maritime-executive",
+      "gcaptain",
+      "splash247",
+      "seatrade-maritime",
+      "usni-news",
+      "loadstar",
+      "freightwaves",
+      "windward-intelligence",
+      "stat-news",
+      "the-lancet",
+      "crisis-group",
+      "techcrunch",
+      "ars-technica",
+      "wired",
+      "the-record-cyber",
+      "dark-reading",
+      "defense-news",
+      "the-war-zone",
+      "defense-one",
+      "marinelink",
+      "offshore-energy",
+      "energy-monitor",
+      "foreign-policy",
+      "rest-of-world",
+      "sciencealert",
+      "the-register",
+      "scr-whats-in-blue",
+      "economynext-lk",
+      "businessworld-ph",
+      "corporate-maldives",
+      "business-review-ro",
+      "baj-belarus-en",
+      "european-western-balkans",
+      "high-north-news",
+      "togo-first",
+      "financial-mirror-cy",
+      "iraq-business-news",
+      "silicon-republic",
+      "defence24-en",
+      "diplomat-in-spain",
+      "zf-english-ro",
+      "globes-en",
+      "cambodia-investment-review",
+      "gestion-pe",
+      "tanzaniainvest-tz",
+      "zambian-business-times",
+      "capital-ethiopia",
+      "economy-middle-east",
+      "lanka-business-online",
+      "maghreb-emergent",
+      "leseco-ma",
+      "sin-comillas-pr",
+      "nyt-business",
+      "wsj-markets"
+    ],
+    "aggregator": [
+      "allafrica",
+      "yahoo-news-world",
+      "eurasia-review"
+    ],
+    "official": [
+      "un-news",
+      "un-press",
+      "ec-press-corner",
+      "uk-fcdo",
+      "icc-news",
+      "icrc-news",
+      "cdc-outbreaks",
+      "gdacs",
+      "ecb-press",
+      "fed-press",
+      "boe-news",
+      "eu-council",
+      "opm-pressroom-dm",
+      "gouvernement-nouvelle-caledonie"
+    ]
+  },
+  "state": [
+    "daily-news-tz",
+    "rthk-en",
+    "antigua-news",
+    "fana-en",
+    "sixth-tone"
+  ],
+  "country": {
+    "mondoweiss": "US",
+    "eurasianet": "US",
+    "allafrica": "ZA"
+  },
+  "names": {
+    "bbc-world": "BBC",
+    "dw-world": "DW",
+    "dw-africa": "DW",
+    "france24": "France 24",
+    "guardian-world": "The Guardian",
+    "nyt-world": "The New York Times",
+    "nyt-business": "The New York Times",
+    "wsj-world": "The Wall Street Journal",
+    "wsj-markets": "The Wall Street Journal",
+    "the-hindu": "The Hindu",
+    "the-hindu-national": "The Hindu",
+    "folha-sao-paulo": "Folha de S.Paulo",
+    "folha-en": "Folha de S.Paulo",
+    "yonhap-en": "Yonhap",
+    "yonhap-nk": "Yonhap",
+    "rnz-pacific": "RNZ",
+    "rnz-national": "RNZ",
+    "abc-pacific": "ABC (Australia)",
+    "abc-au-world": "ABC (Australia)",
+    "abc-news": "ABC News",
+    "sky-news-world": "Sky News",
+    "independent-world": "The Independent",
+    "times-of-india": "The Times of India",
+    "scmp-world": "South China Morning Post",
+    "le-monde": "Le Monde",
+    "der-spiegel-intl": "Der Spiegel",
+    "el-pais-eng": "El País",
+    "tass-en": "TASS",
+    "cgtn-world": "CGTN",
+    "voa-news": "VOA",
+    "upi-top": "UPI",
+    "ansa-en": "ANSA",
+    "antara-en": "Antara",
+    "pbs-world": "PBS NewsHour",
+    "csmonitor-world": "The Christian Science Monitor",
+    "fox-news-world": "Fox News",
+    "yahoo-news-world": "Yahoo News",
+    "bloomberg-markets": "Bloomberg",
+    "ft-headlines": "Financial Times",
+    "marketwatch-top": "MarketWatch",
+    "cnbc-markets": "CNBC",
+    "forbes-money": "Forbes",
+    "un-news": "UN News",
+    "un-press": "UN Meetings Coverage and Press Releases",
+    "ec-press-corner": "European Commission",
+    "uk-fcdo": "UK Foreign Office",
+    "eu-council": "Council of the EU",
+    "icc-news": "International Criminal Court",
+    "icrc-news": "ICRC",
+    "cdc-outbreaks": "CDC",
+    "gdacs": "GDACS",
+    "ecb-press": "European Central Bank",
+    "fed-press": "Federal Reserve",
+    "boe-news": "Bank of England",
+    "focus-taiwan": "Focus Taiwan (CNA)",
+    "interfax-ukraine-en": "Interfax-Ukraine",
+    "vietnamplus-en": "VietnamPlus (VNA)",
+    "aawsat-en": "Asharq Al-Awsat",
+    "channel-news-asia": "CNA (Channel NewsAsia)",
+    "rferl": "Radio Free Europe/Radio Liberty",
+    "al-jazeera": "Al Jazeera",
+    "haaretz": "Haaretz",
+    "dvb-en": "DVB",
+    "rthk-en": "RTHK",
+    "ruv-en": "RÚV",
+    "lrt-en": "LRT",
+    "bnr-en": "Bulgarian National Radio",
+    "err-news": "ERR News",
+    "yle-news": "Yle",
+    "rte-news": "RTÉ",
+    "sabc-news": "SABC News",
+    "tvn-panama": "TVN Noticias",
+    "meduza-en": "Meduza",
+    "moscow-times": "The Moscow Times",
+    "kyiv-independent": "The Kyiv Independent"
+  },
+  "hosts": {
+    "bbc-world": [
+      "bbc.co.uk",
+      "bbc.com"
+    ],
+    "abc-news": [
+      "abcnews.go.com",
+      "abcnews.com"
+    ],
+    "wsj-world": [
+      "wsj.com"
+    ],
+    "wsj-markets": [
+      "wsj.com"
+    ],
+    "sky-news-world": [
+      "news.sky.com"
+    ],
+    "csmonitor-world": [
+      "csmonitor.com"
+    ],
+    "thelocal-ch": [
+      "thelocal.ch"
+    ],
+    "scroll-in": [
+      "scroll.in"
+    ],
+    "news-central-asia-tm": [
+      "newscentralasia.net"
+    ],
+    "focus-taiwan": [
+      "focustaiwan.tw"
+    ],
+    "radio-okapi-cd": [
+      "radiookapi.net"
+    ],
+    "radio-sweden": [
+      "sverigesradio.se"
+    ],
+    "sixth-tone": [
+      "sixthtone.com"
+    ],
+    "folha-sao-paulo": [
+      "folha.uol.com.br"
+    ],
+    "folha-en": [
+      "folha.uol.com.br"
+    ],
+    "nyt-world": [
+      "nytimes.com"
+    ],
+    "nyt-business": [
+      "nytimes.com"
+    ],
+    "npr-news": [
+      "npr.org"
+    ],
+    "el-pais-eng": [
+      "elpais.com"
+    ],
+    "bloomberg-markets": [
+      "bloomberg.com"
+    ],
+    "marketwatch-top": [
+      "marketwatch.com"
+    ],
+    "ars-technica": [
+      "arstechnica.com"
+    ],
+    "nbc-news": [
+      "nbcnews.com"
+    ],
+    "upi-top": [
+      "upi.com"
+    ],
+    "dw-world": [
+      "dw.com"
+    ],
+    "dw-africa": [
+      "dw.com"
+    ],
+    "cdc-outbreaks": [
+      "cdc.gov"
+    ],
+    "capitalfm-ke": [
+      "capitalfm.co.ke",
+      "capitalfm.africa"
+    ],
+    "un-news": [
+      "news.un.org"
+    ],
+    "un-press": [
+      "press.un.org"
+    ],
+    "rthk-en": [
+      "rthk.hk"
+    ],
+    "cnbc-markets": [
+      "cnbc.com"
+    ],
+    "yahoo-news-world": [
+      "yahoo.com"
+    ],
+    "fox-news-world": [
+      "foxnews.com"
+    ],
+    "gma-news-nation": [
+      "gmanetwork.com"
+    ],
+    "aristegui-noticias": [
+      "aristeguinoticias.com"
+    ]
+  },
+  "host_kind": {
+    "dw.com": "international",
+    "abc.net.au": "national",
+    "rnz.co.nz": "national",
+    "nytimes.com": "national",
+    "wsj.com": "national",
+    "folha.uol.com.br": "national",
+    "thehindu.com": "national",
+    "yna.co.kr": "agency"
+  },
+  "extra": [
+    {
+      "host": "reuters.com",
+      "name": "Reuters",
+      "country": "GB",
+      "kind": "agency"
+    },
+    {
+      "host": "apnews.com",
+      "name": "AP",
+      "country": "US",
+      "kind": "agency"
+    },
+    {
+      "host": "afp.com",
+      "name": "AFP",
+      "country": "FR",
+      "kind": "agency"
+    },
+    {
+      "host": "aa.com.tr",
+      "name": "Anadolu Agency",
+      "country": "TR",
+      "kind": "agency",
+      "state": true
+    },
+    {
+      "host": "xinhuanet.com",
+      "name": "Xinhua",
+      "country": "CN",
+      "kind": "agency",
+      "state": true
+    },
+    {
+      "host": "news.cn",
+      "name": "Xinhua",
+      "country": "CN",
+      "kind": "agency",
+      "state": true
+    },
+    {
+      "host": "kyodonews.net",
+      "name": "Kyodo News",
+      "country": "JP",
+      "kind": "agency"
+    },
+    {
+      "host": "efe.com",
+      "name": "EFE",
+      "country": "ES",
+      "kind": "agency"
+    },
+    {
+      "host": "ptinews.com",
+      "name": "PTI",
+      "country": "IN",
+      "kind": "agency"
+    },
+    {
+      "host": "ianslive.in",
+      "name": "IANS",
+      "country": "IN",
+      "kind": "agency"
+    },
+    {
+      "host": "irna.ir",
+      "name": "IRNA",
+      "country": "IR",
+      "kind": "agency",
+      "state": true
+    },
+    {
+      "host": "sana.sy",
+      "name": "SANA",
+      "country": "SY",
+      "kind": "agency",
+      "state": true
+    },
+    {
+      "host": "wam.ae",
+      "name": "WAM",
+      "country": "AE",
+      "kind": "agency",
+      "state": true
+    },
+    {
+      "host": "spa.gov.sa",
+      "name": "Saudi Press Agency",
+      "country": "SA",
+      "kind": "agency",
+      "state": true
+    },
+    {
+      "host": "kcna.kp",
+      "name": "KCNA",
+      "country": "KP",
+      "kind": "agency",
+      "state": true
+    },
+    {
+      "host": "presstv.ir",
+      "name": "Press TV",
+      "country": "IR",
+      "kind": "international",
+      "state": true
+    },
+    {
+      "host": "presstv.co.uk",
+      "name": "Press TV",
+      "country": "IR",
+      "kind": "international",
+      "state": true
+    },
+    {
+      "host": "rt.com",
+      "name": "RT",
+      "country": "RU",
+      "kind": "international",
+      "state": true
+    },
+    {
+      "host": "globaltimes.cn",
+      "name": "Global Times",
+      "country": "CN",
+      "kind": "national",
+      "state": true
+    },
+    {
+      "host": "chinadaily.com.cn",
+      "name": "China Daily",
+      "country": "CN",
+      "kind": "national",
+      "state": true
+    },
+    {
+      "host": "trtworld.com",
+      "name": "TRT World",
+      "country": "TR",
+      "kind": "international",
+      "state": true
+    },
+    {
+      "host": "dailysabah.com",
+      "name": "Daily Sabah",
+      "country": "TR",
+      "kind": "national"
+    },
+    {
+      "host": "rfi.fr",
+      "name": "RFI",
+      "country": "FR",
+      "kind": "international"
+    },
+    {
+      "host": "nhk.or.jp",
+      "name": "NHK",
+      "country": "JP",
+      "kind": "national"
+    },
+    {
+      "host": "cnn.com",
+      "name": "CNN",
+      "country": "US",
+      "kind": "national"
+    },
+    {
+      "host": "washingtonpost.com",
+      "name": "The Washington Post",
+      "country": "US",
+      "kind": "national"
+    },
+    {
+      "host": "nypost.com",
+      "name": "New York Post",
+      "country": "US",
+      "kind": "national"
+    },
+    {
+      "host": "usatoday.com",
+      "name": "USA Today",
+      "country": "US",
+      "kind": "national"
+    },
+    {
+      "host": "latimes.com",
+      "name": "Los Angeles Times",
+      "country": "US",
+      "kind": "national"
+    },
+    {
+      "host": "politico.com",
+      "name": "Politico",
+      "country": "US",
+      "kind": "national"
+    },
+    {
+      "host": "axios.com",
+      "name": "Axios",
+      "country": "US",
+      "kind": "national"
+    },
+    {
+      "host": "thehill.com",
+      "name": "The Hill",
+      "country": "US",
+      "kind": "national"
+    },
+    {
+      "host": "time.com",
+      "name": "Time",
+      "country": "US",
+      "kind": "national"
+    },
+    {
+      "host": "newsweek.com",
+      "name": "Newsweek",
+      "country": "US",
+      "kind": "national"
+    },
+    {
+      "host": "theepochtimes.com",
+      "name": "The Epoch Times",
+      "country": "US",
+      "kind": "national"
+    },
+    {
+      "host": "breitbart.com",
+      "name": "Breitbart",
+      "country": "US",
+      "kind": "national"
+    },
+    {
+      "host": "democracynow.org",
+      "name": "Democracy Now!",
+      "country": "US",
+      "kind": "national"
+    },
+    {
+      "host": "economist.com",
+      "name": "The Economist",
+      "country": "GB",
+      "kind": "national"
+    },
+    {
+      "host": "telegraph.co.uk",
+      "name": "The Telegraph",
+      "country": "GB",
+      "kind": "national"
+    },
+    {
+      "host": "dailymail.co.uk",
+      "name": "Daily Mail",
+      "country": "GB",
+      "kind": "national"
+    },
+    {
+      "host": "dailymail.com",
+      "name": "Daily Mail",
+      "country": "GB",
+      "kind": "national"
+    },
+    {
+      "host": "mirror.co.uk",
+      "name": "Daily Mirror",
+      "country": "GB",
+      "kind": "national"
+    },
+    {
+      "host": "lbc.co.uk",
+      "name": "LBC",
+      "country": "GB",
+      "kind": "national"
+    },
+    {
+      "host": "middleeasteye.net",
+      "name": "Middle East Eye",
+      "country": "GB",
+      "kind": "international"
+    },
+    {
+      "host": "timesofisrael.com",
+      "name": "The Times of Israel",
+      "country": "IL",
+      "kind": "national"
+    },
+    {
+      "host": "jpost.com",
+      "name": "The Jerusalem Post",
+      "country": "IL",
+      "kind": "national"
+    },
+    {
+      "host": "i24news.tv",
+      "name": "i24NEWS",
+      "country": "IL",
+      "kind": "international"
+    },
+    {
+      "host": "israelnationalnews.com",
+      "name": "Israel National News",
+      "country": "IL",
+      "kind": "national"
+    },
+    {
+      "host": "hindustantimes.com",
+      "name": "Hindustan Times",
+      "country": "IN",
+      "kind": "national"
+    },
+    {
+      "host": "indianexpress.com",
+      "name": "The Indian Express",
+      "country": "IN",
+      "kind": "national"
+    },
+    {
+      "host": "newindianexpress.com",
+      "name": "The New Indian Express",
+      "country": "IN",
+      "kind": "national"
+    },
+    {
+      "host": "deccanchronicle.com",
+      "name": "Deccan Chronicle",
+      "country": "IN",
+      "kind": "national"
+    },
+    {
+      "host": "tribuneindia.com",
+      "name": "The Tribune (India)",
+      "country": "IN",
+      "kind": "national"
+    },
+    {
+      "host": "economictimes.indiatimes.com",
+      "name": "The Economic Times",
+      "country": "IN",
+      "kind": "specialist"
+    },
+    {
+      "host": "livemint.com",
+      "name": "Mint",
+      "country": "IN",
+      "kind": "specialist"
+    },
+    {
+      "host": "businesstoday.in",
+      "name": "Business Today",
+      "country": "IN",
+      "kind": "specialist"
+    },
+    {
+      "host": "thenews.com.pk",
+      "name": "The News International",
+      "country": "PK",
+      "kind": "national"
+    },
+    {
+      "host": "geo.tv",
+      "name": "Geo News",
+      "country": "PK",
+      "kind": "national"
+    },
+    {
+      "host": "arynews.tv",
+      "name": "ARY News",
+      "country": "PK",
+      "kind": "national"
+    },
+    {
+      "host": "freemalaysiatoday.com",
+      "name": "Free Malaysia Today",
+      "country": "MY",
+      "kind": "national"
+    },
+    {
+      "host": "philstar.com",
+      "name": "The Philippine Star",
+      "country": "PH",
+      "kind": "national"
+    },
+    {
+      "host": "nzherald.co.nz",
+      "name": "The New Zealand Herald",
+      "country": "NZ",
+      "kind": "national"
+    },
+    {
+      "host": "afr.com",
+      "name": "Australian Financial Review",
+      "country": "AU",
+      "kind": "specialist"
+    },
+    {
+      "host": "winnipegfreepress.com",
+      "name": "Winnipeg Free Press",
+      "country": "CA",
+      "kind": "local"
+    },
+    {
+      "host": "cbc.ca",
+      "name": "CBC News",
+      "country": "CA",
+      "kind": "national"
+    },
+    {
+      "host": "cyprus-mail.com",
+      "name": "Cyprus Mail",
+      "country": "CY",
+      "kind": "national"
+    },
+    {
+      "host": "thesun.ng",
+      "name": "The Sun (Nigeria)",
+      "country": "NG",
+      "kind": "national"
+    },
+    {
+      "host": "thenationonlineng.net",
+      "name": "The Nation (Nigeria)",
+      "country": "NG",
+      "kind": "national"
+    },
+    {
+      "host": "eyeradio.org",
+      "name": "Eye Radio",
+      "country": "SS",
+      "kind": "national"
+    },
+    {
+      "host": "radiotamazuj.org",
+      "name": "Radio Tamazuj",
+      "country": "SS",
+      "kind": "national"
+    },
+    {
+      "host": "sudantribune.com",
+      "name": "Sudan Tribune",
+      "country": "SD",
+      "kind": "national"
+    },
+    {
+      "host": "hellenicshippingnews.com",
+      "name": "Hellenic Shipping News",
+      "country": "GR",
+      "kind": "specialist"
+    },
+    {
+      "host": "bnnbloomberg.ca",
+      "name": "BNN Bloomberg",
+      "country": "CA",
+      "kind": "specialist"
+    },
+    {
+      "host": "msn.com",
+      "name": "MSN",
+      "country": "US",
+      "kind": "aggregator"
+    },
+    {
+      "host": "aol.com",
+      "name": "AOL",
+      "country": "US",
+      "kind": "aggregator"
+    },
+    {
+      "host": "aol.co.uk",
+      "name": "AOL",
+      "country": "GB",
+      "kind": "aggregator"
+    },
+    {
+      "host": "news.yahoo.com",
+      "name": "Yahoo News",
+      "country": "US",
+      "kind": "aggregator"
+    },
+    {
+      "host": "news.google.com",
+      "name": "Google News",
+      "country": "US",
+      "kind": "aggregator"
+    },
+    {
+      "host": "bignewsnetwork.com",
+      "name": "Big News Network",
+      "country": "AU",
+      "kind": "aggregator"
+    },
+    {
+      "host": "news.webindia123.com",
+      "name": "WebIndia123",
+      "country": "IN",
+      "kind": "aggregator"
+    },
+    {
+      "host": "rediff.com",
+      "name": "Rediff",
+      "country": "IN",
+      "kind": "national"
+    }
+  ]
+}

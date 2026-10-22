@@ -29,6 +29,12 @@ const STEPS: Array<{ id?: string; h: string; p: React.ReactNode }> = [
     p: 'A report from a source we already hold for the story. A second website that only copied the article (the same article slug, or the same headline word for word). An article merged into another report still counts as its website: it carried the story.',
   },
   {
+    // plan 15 (Oct 22, 2026): the outlet directory, apps/api/src/lib/outlet-directory.ts
+    id: 'kinds',
+    h: 'What kind of outlet it is',
+    p: 'Each outlet in WorldPulse’s list of sources has a kind: a news agency (a wire service such as Reuters, AP or Yonhap, whose copy other outlets often run), international (a broadcaster or publisher for the world or a whole region, such as the BBC or Al Jazeera), national, local, specialist (one subject, such as business, defence, science or shipping), aggregator (mostly other outlets’ reports) or official source (a government, central bank, court, the UN or the Red Cross). Outlets a government runs are marked state media. A story page shows each outlet’s kind, and the API gives it as site_info. Every kind counts the same toward Verified; the kind helps you judge who is saying it. Websites outside the list, such as many of the articles GDELT points to, have no kind yet.',
+  },
+  {
     id: 'score',
     h: 'The reliability score',
     p: 'Every report gets a score from 0 to 100%. It starts from the outlet’s rating in WorldPulse’s list of sources (most outlets are rated between 70% and 90%, state-run outlets between 45% and 60%), moved a few points by the report itself, for example: a summary and a place add a little; a state-run outlet on conflict, politics, elections or security loses 10 points; and a single report marked high or critical loses up to 15. The same report always gets the same score. Each further independent outlet that reports the story closes 40% of the gap to 98%: a report at 80% goes to 87% with a second outlet and to 92% with a third. No story reaches 100%. AI checks and reader flags don’t change the score; an AI check can send a story back to pending when its outlets describe different events.',

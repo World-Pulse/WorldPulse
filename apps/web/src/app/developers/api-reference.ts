@@ -86,6 +86,12 @@ export const ENDPOINT_GROUPS: EndpointGroup[] = [
       "source_url": "https://example.com/tonga-earthquake",
       "outlets": 4,
       "sites": ["rnz.co.nz", "abc.net.au", "matangitonga.to", "example.com"],
+      "site_info": [
+        { "site": "rnz.co.nz", "name": "RNZ", "kind": "national", "country": "NZ", "state_media": false },
+        { "site": "abc.net.au", "name": "ABC (Australia)", "kind": "national", "country": "AU", "state_media": false },
+        { "site": "matangitonga.to", "name": null, "kind": "unknown", "country": null, "state_media": false },
+        { "site": "example.com", "name": null, "kind": "unknown", "country": null, "state_media": false }
+      ],
       "url": "https://world-pulse.io/signals/6f1c2a9e-3b7d-4c55-9a0e-8d2f4b1e7c30"
     }
   ],
@@ -509,7 +515,17 @@ interface Signal {
   source_url: string | null;
   outlets: number;           // independent outlets that reported it (2 or more)
   sites: string[];           // the websites of the reports it links to
+  site_info: SiteInfo[];     // what each of those websites is
   url: string;               // its page on world-pulse.io
+}
+
+// What a website is, from WorldPulse's outlet list (https://world-pulse.io/how-we-count#kinds)
+interface SiteInfo {
+  site: string;
+  name: string | null;       // null: a website not in the list
+  kind: "agency" | "international" | "national" | "local" | "specialist" | "aggregator" | "official" | "unknown";
+  country: string | null;    // the outlet's home country (ISO 3166-1 alpha-2)
+  state_media: boolean;      // a government runs it
 }
 
 // What GET /api/v1/public/signals answers

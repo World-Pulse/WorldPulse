@@ -79,7 +79,7 @@ async function build(): Promise<FastifyInstance> {
       data: {
         window: week ? 'week' : 'last7days', week: week ?? null, unhcrYear: 2025,
         crises: [
-          { rank: 1, code: 'SS', name: 'South Sudan', displaced: 3_788_010, outlets: 2, peoplePerOutlet: 1_894_005, stories: [{ id: STORY.leadId, title: 'Floods cut off Bentiu camps', outlets: 2, verified: true }] },
+          { rank: 1, code: 'SS', name: 'South Sudan', displaced: 3_788_010, outlets: 2, outletsAbroad: 1, peoplePerOutlet: 1_894_005, stories: [{ id: STORY.leadId, title: 'Floods cut off Bentiu camps', outlets: 2, verified: true }] },
           { rank: 2, code: 'CF', name: 'Central African Republic', displaced: 1_184_301, outlets: 1, peoplePerOutlet: 1_184_301, stories: [] },
         ],
         mostCovered: [{ code: 'US', name: 'United States', outlets: 412, articles: 9000 }],
@@ -145,7 +145,9 @@ describe('MCP server', () => {
   it('story lists every outlet and report; a wrong id is a tool error, not a crash', async () => {
     const app = await build()
     const r = await call(app, 'story', { id: STORY.leadId })
-    expect(r.content[0].text).toContain('Outlets: aljazeera.com, bbc.co.uk')
+    // each outlet with what it is (lib/outlets.ts, plan 15, Oct 22, 2026)
+    expect(r.content[0].text).toContain('Outlets: Al Jazeera (international, QA), BBC (international, GB)')
+    expect(r.structuredContent.outletInfo[1]).toEqual({ site: 'bbc.co.uk', name: 'BBC', kind: 'international', country: 'GB', stateMedia: false })
     expect(r.content[0].text).toContain('https://www.bbc.co.uk/b')
     expect(r.structuredContent).toMatchObject({ outlets: 2, reports: 2 })
     const missing = await call(app, 'story', { id: '44444444-4444-4444-8444-444444444444' })
@@ -194,7 +196,7 @@ describe('MCP server', () => {
     const text = r.content[0].text as string
     expect(text).toContain('Under-reported crises, the last 7 days: 2 countries with at least a million people displaced (UNHCR 2025 figures)')
     expect(text).toContain('Page: https://world-pulse.io/under-reported')
-    expect(text).toContain('1. South Sudan: 3.8M displaced, 2 outlets (1,894,005 people per outlet) · top story: Floods cut off Bentiu camps')
+    expect(text).toContain('1. South Sudan: 3.8M displaced, 2 outlets, 1 based abroad (1,894,005 people per outlet) · top story: Floods cut off Bentiu camps')
     expect(text).toContain('2. Central African Republic: 1.2M displaced, 1 outlet (1,184,301 people per outlet)')
     expect(text).toContain('6.1% of the news articles')
     expect(text).toContain('United States 412 outlets')

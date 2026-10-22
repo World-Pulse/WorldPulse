@@ -41,10 +41,12 @@ describe('Who reported it', () => {
   })
 
   it("a report with a source record: the kind of outlet, the trust bar, and the story's count", () => {
+    // the kind comes from the API's outlet directory (plan 15, Oct 22, 2026), not the source record's old tier
+    const info = [{ site: 'theguardian.com', name: 'The Guardian', kind: 'national' as const, country: 'GB', stateMedia: false }]
     const html = renderToStaticMarkup(
-      <WhoReported signalId="s1" sources={[guardian()]} sourceUrl="https://www.theguardian.com/us-news/x" originalUrls={URLS} storyOutlets={5} />,
+      <WhoReported signalId="s1" sources={[guardian()]} sourceUrl="https://www.theguardian.com/us-news/x" originalUrls={URLS} storyOutlets={5} outletInfo={info} />,
     )
-    expect(html).toContain('national')
+    expect(html).toContain('>National</span>')
     expect(html).toContain('The Guardian')
     expect(html).toContain('87%')
     expect(html).toContain('This report links 2 of the story&#x27;s 5 outlets')

@@ -40,8 +40,14 @@ describe('GET /api/v1/public/signals: outlets', () => {
       sites: ['bbc.co.uk', 'apnews.com', 'dabangasudan.org'],
       url: 'https://world-pulse.io/signals/s1',
     })
+    // what each website is (the outlet directory, Oct 22, 2026), through the schema too
+    expect(one.site_info).toEqual([
+      { site: 'bbc.co.uk', name: 'BBC', kind: 'international', country: 'GB', state_media: false },
+      { site: 'apnews.com', name: 'AP', kind: 'agency', country: 'US', state_media: false },
+      { site: 'dabangasudan.org', name: 'Radio Dabanga', kind: 'national', country: 'SD', state_media: false },
+    ])
     // a signal without a count says 1, without links an empty list
-    expect(two).toMatchObject({ outlets: 1, sites: [], url: 'https://world-pulse.io/signals/s2' })
+    expect(two).toMatchObject({ outlets: 1, sites: [], site_info: [], url: 'https://world-pulse.io/signals/s2' })
   })
 
   it('websites each once, at most 10', () => {

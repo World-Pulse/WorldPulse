@@ -1,6 +1,7 @@
 'use client'
 
 import type { Source } from '@worldpulse/types'
+import { hostOf, infoFor, kindLine, type OutletInfo } from '@/lib/outlet-kinds'
 
 // ─── Pure helpers (exported for tests) ───────────────────────────────────────
 
@@ -72,6 +73,8 @@ interface Props {
   storyOutlets?: number | null
   /** Inside the story page's one "Who reported it" block (plan P2, step 3): no card or title of its own */
   bare?: boolean
+  /** What each linked website is, from the API (plan 15, Oct 22, 2026): its name and kind on the outlet list */
+  outletInfo?: OutletInfo[] | null
 }
 
 function SourceDomain({ url }: { url: string }) {
@@ -82,7 +85,7 @@ function SourceDomain({ url }: { url: string }) {
   }
 }
 
-export function SourceChain({ sources, sourceUrl, originalUrls, storyOutlets, bare = false }: Props) {
+export function SourceChain({ sources, sourceUrl, originalUrls, storyOutlets, bare = false, outletInfo = null }: Props) {
   const mode = computeSourceChainMode(sources, sourceUrl)
   const outlets = distinctOutlets(originalUrls)
   if (mode === 'hidden') return null
@@ -112,14 +115,16 @@ export function SourceChain({ sources, sourceUrl, originalUrls, storyOutlets, ba
           {sources.map(src => {
             const pct   = Math.round(src.trustScore * 100)
             const color = reliabilityBarColor(src.trustScore)
+            // the outlet directory's kind (plan 15, Oct 22, 2026); the sources table's old tier called the BBC a wire service
+            const kind  = kindLine(infoFor(outletInfo, hostOf(src.articleUrl) ?? hostOf(src.url)))
             return (
               <div key={src.id} className="space-y-1.5">
                 {/* Kind of outlet, name + score */}
                 <div className="flex items-center justify-between gap-2">
                   <span className="flex items-center gap-2 min-w-0">
-                    {src.tier && (
+                    {kind && (
                       <span className="font-mono text-[9px] uppercase text-wp-text3 border border-white/10 rounded px-1 shrink-0">
-                        {src.tier}
+                        {kind}
                       </span>
                     )}
                     <span className="text-[13px] font-medium text-wp-text truncate">
@@ -183,17 +188,23 @@ export function SourceChain({ sources, sourceUrl, originalUrls, storyOutlets, ba
             {outletsHeading(outlets.length, storyOutlets)}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            {outlets.map(o => (
-              <a
-                key={o.host}
-                href={o.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-mono border border-white/10 text-wp-text2 hover:text-wp-text hover:border-white/20 transition-colors"
-              >
-                {o.host} ↗
-              </a>
-            ))}
+            {outlets.map(o => {
+              const info = infoFor(outletInfo, o.host)
+              const kind = kindLine(info)
+              return (
+                <a
+                  key={o.host}
+                  href={o.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={info?.name ? `${info.name}${kind ? ` · ${kind}` : ''}${info.country ? ` · ${info.country}` : ''} (${o.host})` : o.host}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-mono border border-white/10 text-wp-text2 hover:text-wp-text hover:border-white/20 transition-colors"
+                >
+                  {info?.name ?? o.host}
+                  {kind && <span className="text-wp-text3">· {kind}</span>} ↗
+                </a>
+              )
+            })}
           </div>
         </div>
       )}

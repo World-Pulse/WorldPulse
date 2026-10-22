@@ -24,6 +24,7 @@ function Crisis({ c, week }: { c: GapCrisis; week: boolean }) {
           <div><Link href={`/countries/${c.code}`} className="text-[16px] font-semibold text-wp-text hover:text-wp-amber">{c.name}</Link></div>
           <div className="mt-0.5 sm:mt-0 text-[13px] text-wp-text2 tabular-nums">
             {people(c.displaced)} displaced · <span className={c.outlets <= 2 ? 'text-wp-amber' : ''}>{plural(c.outlets, 'outlet')}</span>
+            {(c.outletsAbroad ?? 0) > 0 && <span className="text-wp-text3"> ({c.outletsAbroad} based abroad)</span>}
             {c.outlets > 0 && <span className="text-wp-text3"> · {people(c.peoplePerOutlet)} people per outlet</span>}
           </div>
         </div>
@@ -106,6 +107,8 @@ export function CoverageGapView({ data }: { data: CoverageGapData }) {
             <span className="text-wp-text">The coverage</span> is the news websites (outlets) WorldPulse placed in each country:
             the sites of the articles in its news reports, from the 500+ outlets it reads and the articles GDELT points it to. Data feeds and official press offices don&apos;t count, and neither do reports on sports, culture,
             technology, science or space. {data.totals.outlets > 0 && <>This {week ? 'week' : 'time'}: {plural(data.totals.articles, 'article')} from {plural(data.totals.outlets, 'outlet')} in {plural(data.totals.countries, 'country', 'countries')}.</>}
+            {' '}&ldquo;Based abroad&rdquo; counts the outlets in WorldPulse&apos;s outlet list whose home country isn&apos;t the crisis&apos;s own;
+            the other websites GDELT points to count as outlets, but not there.
           </p>
           <p>
             <span className="text-wp-text">What it can&apos;t tell you:</span> it counts the outlets WorldPulse reads, not all the world&apos;s

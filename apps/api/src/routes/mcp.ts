@@ -20,6 +20,7 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import { internalCallHeaders } from '../lib/internal-call'
 import { rateLimitKey } from '../lib/rate-limit-options'
+import { describeSite, siteInfo } from '../lib/outlets'
 
 const SITE = (process.env.SITE_URL || 'https://world-pulse.io').replace(/\/+$/, '')
 
@@ -152,6 +153,7 @@ export const TOOLS: Tool[] = [
       if (status !== 200) throw new Error(`story answered ${status}`)
       const d = (body.data ?? {}) as {
         storyId?: string; size?: number; outlets?: number; outletsAll?: number; firstReportAt?: string | null; outletNames?: string[]; verifiedAt?: string | null
+        outletInfo?: Array<{ site: string; name: string | null; kind: string; country: string | null; stateMedia: boolean }>
         signals?: Array<{ id: string; title: string; status: string; outlet: string; url: string | null; createdAt: string | null; locationName: string | null }>
       }
       const reports = d.signals ?? []
@@ -160,7 +162,7 @@ export const TOOLS: Tool[] = [
       const text = [
         first?.title ?? 'Story',
         `${d.verifiedAt ? `Verified ${d.verifiedAt.slice(0, 16).replace('T', ' ')} UTC` : 'Not verified yet'} · ${d.outlets ?? 0} outlets in its last two days${sinceNote(d.outlets ?? 0, d.outletsAll, d.firstReportAt)} · ${d.size ?? reports.length} reports`,
-        ...(d.outletNames?.length ? [`Outlets: ${d.outletNames.join(', ')}`] : []),
+        ...(d.outletNames?.length ? [`Outlets: ${d.outletNames.map(site => describeSite(site)).join(', ')}`] : []),
         `Page: ${signalLink(first?.id ?? id)}`,
         '',
         'Reports:',
@@ -170,7 +172,7 @@ export const TOOLS: Tool[] = [
         text,
         data: {
           storyId: d.storyId ?? id, url: signalLink(first?.id ?? id), verifiedAt: d.verifiedAt ?? null, outlets: d.outlets ?? 0,
-          outletNames: d.outletNames ?? [], reports: d.size ?? reports.length,
+          outletNames: d.outletNames ?? [], outletInfo: d.outletInfo ?? siteInfo(d.outletNames ?? []), reports: d.size ?? reports.length,
           items: reports.map(r => ({ id: r.id, title: r.title, outlet: r.outlet, url: r.url, status: r.status, at: r.createdAt, place: r.locationName })),
         },
       }
@@ -304,7 +306,7 @@ export const TOOLS: Tool[] = [
       if (status !== 200) throw new Error(`coverage-gap answered ${status}`)
       const d = (body.data ?? {}) as {
         week?: string | null; unhcrYear?: number
-        crises?: Array<{ rank: number; code: string; name: string; displaced: number; outlets: number; peoplePerOutlet: number; stories?: Array<{ id: string; title: string; outlets: number }> }>
+        crises?: Array<{ rank: number; code: string; name: string; displaced: number; outlets: number; outletsAbroad?: number; peoplePerOutlet: number; stories?: Array<{ id: string; title: string; outlets: number }> }>
         mostCovered?: Array<{ name: string; outlets: number }>
         totals?: { crisisShare?: number; crisisDisplaced?: number }
       }
@@ -313,7 +315,8 @@ export const TOOLS: Tool[] = [
       const millions = (n: number) => `${(n / 1_000_000).toFixed(1)}M`
       const line = (c: (typeof crises)[number]) => {
         const lead = c.stories?.[0]
-        return `${c.rank}. ${c.name}: ${millions(c.displaced)} displaced, ${c.outlets} outlet${c.outlets === 1 ? '' : 's'} (${c.peoplePerOutlet.toLocaleString('en-US')} people per outlet)${lead ? ` · top story: ${lead.title} ${signalLink(lead.id)}` : ''}`
+        const abroad = c.outletsAbroad ? `, ${c.outletsAbroad} based abroad` : ''
+        return `${c.rank}. ${c.name}: ${millions(c.displaced)} displaced, ${c.outlets} outlet${c.outlets === 1 ? '' : 's'}${abroad} (${c.peoplePerOutlet.toLocaleString('en-US')} people per outlet)${lead ? ` · top story: ${lead.title} ${signalLink(lead.id)}` : ''}`
       }
       const share = d.totals?.crisisShare
       const text = [
@@ -327,7 +330,7 @@ export const TOOLS: Tool[] = [
         text,
         data: {
           week: d.week ?? null, url: page,
-          crises: crises.map(c => ({ rank: c.rank, code: c.code, name: c.name, displaced: c.displaced, outlets: c.outlets, peoplePerOutlet: c.peoplePerOutlet, topStory: c.stories?.[0] ? { ...c.stories[0], url: signalLink(c.stories[0].id) } : null })),
+          crises: crises.map(c => ({ rank: c.rank, code: c.code, name: c.name, displaced: c.displaced, outlets: c.outlets, outletsAbroad: c.outletsAbroad ?? null, peoplePerOutlet: c.peoplePerOutlet, topStory: c.stories?.[0] ? { ...c.stories[0], url: signalLink(c.stories[0].id) } : null })),
           mostCovered: d.mostCovered ?? [],
         },
       }

@@ -7,6 +7,7 @@ import { sendError } from '../lib/errors'
 import { staleWhileRevalidate } from '../lib/swr-cache'
 import { longQuery } from '../lib/long-query'
 import { signalCategories } from '../lib/categories'
+import { siteInfo, sitesOfLinks } from '../lib/outlets'
 
 const PUBLIC_CACHE_TTL = 30  // seconds
 
@@ -101,6 +102,20 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
                   // plan 15 (Oct 21, 2026): how many independent outlets, which websites, its page
                   outlets:           { type: 'number' },
                   sites:             { type: 'array', items: { type: 'string' } },
+                  // plan 15 (Oct 22, 2026): each website's outlet: name, kind, home country, state media
+                  site_info: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        site:        { type: 'string' },
+                        name:        { type: 'string', nullable: true },
+                        kind:        { type: 'string' },
+                        country:     { type: 'string', nullable: true },
+                        state_media: { type: 'boolean' },
+                      },
+                    },
+                  },
                   url:               { type: 'string' },
                 },
               },
@@ -226,15 +241,7 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
 
 /** The websites of a signal's links, each once, without "www." (10 at most) */
 export function sitesOf(urls: unknown): string[] {
-  const out: string[] = []
-  for (const u of Array.isArray(urls) ? urls : []) {
-    try {
-      const host = new URL(String(u)).hostname.toLowerCase().replace(/^www\./, '')
-      if (host && !out.includes(host)) out.push(host)
-    } catch { /* not a link */ }
-    if (out.length >= 10) break
-  }
-  return out
+  return sitesOfLinks(urls, 10)
 }
 
 export function formatPublicSignal(row: Record<string, unknown>) {
@@ -254,6 +261,8 @@ export function formatPublicSignal(row: Record<string, unknown>) {
     // websites it links to, and its page (plan 15, Oct 21, 2026)
     outlets: Math.max(1, Math.round(Number(row.source_count ?? 1)) || 1),
     sites:   sitesOf(row.original_urls),
+    // what each website is (lib/outlets.ts, plan 15, Oct 22, 2026)
+    site_info: siteInfo(sitesOf(row.original_urls)).map(s => ({ site: s.site, name: s.name, kind: s.kind, country: s.country, state_media: s.stateMedia })),
     url:     `https://world-pulse.io/signals/${encodeURIComponent(String(row.id))}`,
   }
 }
