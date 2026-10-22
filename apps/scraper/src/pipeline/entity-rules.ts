@@ -14,6 +14,7 @@
  */
 
 import { placesInText } from './geo'
+import { PLACE_NEXT, PLACE_BEFORE, CLUB_BEFORE, CLUB_AFTER, startsUpper, wordBefore, wordAfter, titleCased } from './place-words'
 import { WORLD_CITIES, WORLD_REGIONS } from './world-places'
 
 export type RuleEntityType = 'person' | 'organisation' | 'location' | 'weapon_system' | 'commodity' | 'technology'
@@ -332,47 +333,6 @@ const MORE_PLACES_RE = new RegExp(
   String.raw`(?<![\p{L}\p{N}])(?:${[...MORE_PLACES.keys()].sort((a, b) => b.length - a.length).map(escapeRe).join('|')})(?![\p{L}\p{N}])`,
   'giu',
 )
-
-/** A word after the name that keeps it the place: "Kano State", "Harare Airport" */
-const PLACE_NEXT = new Set([
-  'state', 'city', 'province', 'region', 'district', 'county', 'division', 'governorate', 'oblast', 'prefecture',
-  'municipality', 'metropolitan', 'metro', 'airport', 'port', 'valley', 'area', 'township', 'department', 'territory',
-  'island', 'islands', 'coast', 'bay', 'lake', 'river', 'harbour', 'harbor', 'highway', 'expressway', 'road', 'street',
-  'hospital', 'university', 'high', 'court', 'police', 'council', 'assembly', 'government', 'governor', 'mayor', 'zone',
-])
-/** A capitalised word before the name that keeps it the place: "In Sokoto", "De Bogotá", "Greater Accra" */
-const PLACE_BEFORE = new Set([
-  'in', 'at', 'from', 'to', 'for', 'of', 'on', 'near', 'across', 'over', 'outside', 'inside', 'around', 'into', 'the', 'and',
-  'or', 'with', 'by', 'after', 'before', 'via', 'between', 'en', 'de', 'del', 'la', 'el', 'a', 'em', 'no', 'na', 'do', 'da',
-  'dos', 'das', 'au', 'du', 'le', 'dans', 'desde', 'para', 'por', 'hacia', 'entre', 'sur', 'north', 'south', 'east', 'west',
-  'central', 'greater', 'downtown', 'northern', 'southern', 'eastern', 'western', 'northeast', 'northwest', 'southeast',
-  'southwest', 'rural', 'coastal',
-])
-/** Clubs named after their city: the name is the club, not the place */
-const CLUB_BEFORE = new Set([
-  'real', 'atletico', 'athletic', 'fc', 'ac', 'as', 'sc', 'cf', 'inter', 'sporting', 'olympique', 'dynamo', 'dinamo',
-  'deportivo', 'racing', 'club', 'union', 'borussia', 'lokomotiv', 'spartak', 'zenit', 'rb', 'vfb', 'werder', 'hertha',
-  'eintracht', 'fortuna', 'hellas', 'stade',
-])
-const CLUB_AFTER = new Set([
-  'fc', 'cf', 'sc', 'united', 'wanderers', 'rovers', 'athletic', 'pillars', 'rangers', 'indians', 'capitals', 'kings',
-  'royals', 'titans', 'sunrisers', 'heat', 'lakers', 'warriors', 'bulls', 'giants', 'knights', 'stars', 'raiders',
-])
-
-const startsUpper = (w: string) => /^\p{Lu}/u.test(w)
-/** The word right before `at`, with only spaces between ("Lewis" in "Lewis Hamilton"); none after punctuation */
-function wordBefore(text: string, at: number): string | null {
-  return /([\p{L}][\p{L}'’-]*)[ \t]+$/u.exec(text.slice(Math.max(0, at - 40), at))?.[1] ?? null
-}
-/** The word right after `end`, with only spaces between; none before punctuation */
-function wordAfter(text: string, end: number): string | null {
-  return /^[ \t]+([\p{L}][\p{L}'’-]*)/u.exec(text.slice(end, end + 40))?.[1] ?? null
-}
-/** A Headline In Title Case, where capitals say nothing about names */
-function titleCased(title: string): boolean {
-  const long = (title.match(/\p{L}[\p{L}'’-]*/gu) ?? []).filter(w => w.length >= 4)
-  return long.length >= 3 && long.filter(startsUpper).length / long.length >= 0.9
-}
 
 /** Places from world-places.ts the text names (at most 3), beyond `known` (what placesInText found) */
 export function morePlacesInText(title: string, body: string | null, known: readonly string[] = []): string[] {

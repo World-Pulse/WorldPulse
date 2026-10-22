@@ -9,6 +9,7 @@
  * 5. Rate limiting — max 1 Nominatim request/second per ToS
  */
 
+import { partOfAName } from './place-words'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
 import { MORE_COUNTRIES, ABBREVIATED_COUNTRIES, US_STATES, countryNameOf } from './world-countries'
@@ -606,14 +607,22 @@ for (const [place, entry] of Object.entries(US_STATES)) GAZETTEER[place] ??= ent
 const GAZETTEER_MATCHERS = Object.entries(GAZETTEER)
   .sort((a, b) => b[0].length - a[0].length)
   .map(([place, coords]) => ({ place, coords, re: new RegExp(`\\b${escapeRegExp(place)}\\b`, 'i') }))
+const GAZETTEER_SCAN = GAZETTEER_MATCHERS.map(m => ({ place: m.place, coords: m.coords, re: new RegExp(m.re.source, 'gi') }))
 
 /** The gazetteer place mentioned first (the headline comes first); the longer name on a tie */
 export function findGazetteerPlace(text: string): { place: string; coords: typeof GAZETTEER[string] } | null {
   const clean = text.replace(OUTLET_NAMES, ' ')
   let best: { place: string; coords: typeof GAZETTEER[string]; index: number } | null = null
-  for (const m of GAZETTEER_MATCHERS) {
-    const hit = m.re.exec(clean)
-    if (hit && (!best || hit.index < best.index)) best = { place: m.place, coords: m.coords, index: hit.index }
+  for (const m of GAZETTEER_SCAN) {
+    m.re.lastIndex = 0
+    for (const hit of clean.matchAll(m.re)) {
+      const index = hit.index ?? 0
+      if (best && index >= best.index) break
+      // "Santiago Peña" is a person, "Real Madrid" a club (place-words.ts, plan 0s5)
+      if (partOfAName(clean, index, index + hit[0].length)) continue
+      best = { place: m.place, coords: m.coords, index }
+      break
+    }
   }
   return best ? { place: best.place, coords: best.coords } : null
 }
@@ -623,7 +632,7 @@ const MAX_NOMINATIM_LOOKUPS = 4
 
 /** The gazetteer place the text names first, as a map point */
 function gazetteerPoint(text: string): GeoResult | null {
-  const found = findGazetteerPlace(text.toLowerCase())
+  const found = findGazetteerPlace(text)
   return found
     ? {
         point:       true,
@@ -650,7 +659,6 @@ function countryPoint(countries: string[]): GeoResult {
     : { point: false, countryCode: code }
 }
 
-const GAZETTEER_SCAN = GAZETTEER_MATCHERS.map(m => ({ coords: m.coords, re: new RegExp(m.re.source, 'gi') }))
 const COUNTRY_SCAN = COUNTRY_MATCHERS.map(([pattern, code]) => ({ code, re: new RegExp(pattern.source, `${pattern.flags.replace('g', '')}g`) }))
 
 /**
@@ -673,6 +681,7 @@ export function splitPlaces(text: string): { countries: string[]; rest: string }
   for (const m of GAZETTEER_SCAN) {
     m.re.lastIndex = 0
     for (const hit of clean.matchAll(m.re)) {
+      if (partOfAName(clean, hit.index ?? 0, (hit.index ?? 0) + hit[0].length)) continue
       if (take(hit.index ?? 0, hit[0].length) && m.coords.country) codes.add(m.coords.country)
     }
   }
@@ -694,15 +703,15 @@ export function splitPlaces(text: string): { countries: string[]; rest: string }
  */
 export function placesInText(text: string, max = 6): string[] {
   const clean = text.replace(OUTLET_NAMES, ' ')
-  const lower = clean.toLowerCase()
   const hits: Array<{ name: string; index: number; end: number }> = []
   // Longest names first, so "West Virginia" keeps "Virginia" from counting again
-  for (const m of GAZETTEER_MATCHERS) {
-    const re = new RegExp(m.re.source, 'gi')
-    for (const hit of lower.matchAll(re)) {
+  for (const m of GAZETTEER_SCAN) {
+    m.re.lastIndex = 0
+    for (const hit of clean.matchAll(m.re)) {
       const index = hit.index ?? 0
       const end = index + hit[0].length
       if (hits.some(h => index < h.end && end > h.index)) continue
+      if (partOfAName(clean, index, end)) continue
       hits.push({ name: m.coords.name ?? titleCase(m.place), index, end })
     }
   }
@@ -745,7 +754,7 @@ export async function extractGeo(text: string): Promise<GeoResult> {
   }
 
   // 1. Gazetteer: whole words only, the place mentioned first
-  const fromGazetteer = gazetteerPoint(lower)
+  const fromGazetteer = gazetteerPoint(text)
   if (fromGazetteer) return remember(fromGazetteer)
 
   // 2. NER extraction → Nominatim fallback (notable places only, see
