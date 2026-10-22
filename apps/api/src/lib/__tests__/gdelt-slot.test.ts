@@ -16,7 +16,8 @@ vi.mock('../../db/redis', () => ({
   },
 }))
 
-import { gdeltSlot } from '../gdelt-slot'
+import { gdeltSlot, gdeltDone } from '../gdelt-slot'
+import { redis } from '../../db/redis'
 
 describe('gdeltSlot', () => {
   beforeEach(() => { h.answers = [] })
@@ -33,5 +34,10 @@ describe('gdeltSlot', () => {
     expect(await gdeltSlot(300)).toBe(false)
     h.answers = [new Error('Redis down')]
     expect(await gdeltSlot(300)).toBe(true)
+  })
+
+  it('keeps the slot 6 seconds from when GDELT answered', async () => {
+    await gdeltDone()
+    expect(redis.set).toHaveBeenLastCalledWith('gdelt:doc:slot', '1', 'PX', 6_000)
   })
 })

@@ -30,7 +30,7 @@ import type { Knex } from 'knex'
 import { BAD_CURSOR, isUuid } from '../lib/cursor'
 import { visitorHash, alreadyFlagged, flagSummary } from '../lib/signal-flags'
 import { siteInfo, sitesOfLinks } from '../lib/outlets'
-import { gdeltSlot } from '../lib/gdelt-slot'
+import { gdeltSlot, gdeltDone } from '../lib/gdelt-slot'
 
 const SIGNAL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -1533,6 +1533,8 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     } catch {
       // Timeout, network error, parse error — return empty clips
       clips = []
+    } finally {
+      await gdeltDone()
     }
 
     const response = {
@@ -1620,6 +1622,8 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     } catch {
       // Timeout, network error, parse error — return empty images
       images = []
+    } finally {
+      await gdeltDone()
     }
 
     const response = {

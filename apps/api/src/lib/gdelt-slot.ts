@@ -5,7 +5,7 @@
  * second-outlet search (apps/scraper/src/pipeline/second-outlet.ts) now asks
  * GDELT's news index a question every few seconds, so the story page's news
  * images and TV clips take the same slot: a Redis key that frees 6 seconds
- * after it was taken.
+ * after GDELT answered the last request (gdeltDone).
  */
 
 import { redis } from '../db/redis'
@@ -30,5 +30,14 @@ export async function gdeltSlot(waitMs: number): Promise<boolean> {
     if (ok !== null) return true
     if (Date.now() >= until) return false
     await new Promise(resolve => setTimeout(resolve, 250))
+  }
+}
+
+/** When GDELT has answered (or failed to): the next request waits 6 seconds from now */
+export async function gdeltDone(): Promise<void> {
+  try {
+    await redis.set(GDELT_SLOT_KEY, '1', 'PX', SLOT_MS)
+  } catch {
+    // without Redis there is no slot to keep
   }
 }

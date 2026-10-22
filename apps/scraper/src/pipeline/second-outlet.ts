@@ -10,9 +10,10 @@
  * API: free, no key, 100,000+ outlets) finds the others. A medium, high or
  * critical news report in English with one outlet is searched a while after
  * it arrives (medium after 3 hours, high and critical after 1 and again after
- * 10): its headline's three most telling words, in English-language coverage
- * of the 24 hours either side of it (the two best words when three find
- * nothing). An article found there counts as another outlet when
+ * 10): its headline's two most telling words, in English-language coverage
+ * of the 24 hours either side of it (three, when the 75 most relevant
+ * articles held no match and there were more). An article found there counts
+ * as another outlet when
  *  - it is on another website (sister sites of one owner are one: en. and
  *    www.protothema.gr, frontline.thehindu.com and thehindu.com),
  *  - the website is a newsroom, not an aggregator, a press-release wire, a
@@ -27,13 +28,16 @@
  * goes up, it turns verified the way a merged article verifies it
  * (confirmMergedArticle), and its page says so ("Also reported by …").
  * Claude's cross-check reads the first CROSSCHECKS_A_DAY reports a day this
- * verifies (100: about 20 cents of the $20 a month), the rest stand on the
+ * verifies (100: a few cents; by 1:35 PM on Oct 22 the day's 2,087 AI calls,
+ * 1,092 of them cross-checks, had cost 48 cents), the rest stand on the
  * headline test, as merged articles did before the cross-check existed.
  *
- * GDELT asks for one request every 5 seconds from a server: one every 6, by
- * a slot shared with the story page's news images and TV clips
- * (gdelt:doc:slot), and a pass waits 2 seconds after each search so they get
- * their turn. When GDELT says to slow down, searching stops for 10 minutes.
+ * GDELT asks for one request every 5 seconds from a server: a request starts
+ * 6 seconds after the last one was answered, by a slot shared with the story
+ * page's news images and TV clips (gdelt:doc:slot), and a pass waits 2
+ * seconds after each search so they get their turn. When GDELT says to slow
+ * down, searching stops for 10 minutes, twice as long each time it says so
+ * again within 6 hours (at most 2 hours).
  *
  * Daily counts: second-outlet:day:<date> (on /api/v1/health); the latest
  * matches, for reading by hand: second-outlet:recent. Off with
@@ -64,6 +68,7 @@ const SLOT_MS = 6_000
 const YIELD_MS = 2_000
 const PAUSE_KEY = 'second-outlet:pause'
 const PAUSE_S = 10 * 60
+const SLOW_STREAK_KEY = 'second-outlet:slow-streak'
 const LOCK_KEY = 'second-outlet:lock'
 const CHECKED_KEY = (id: string, round: number) => `second-outlet:checked:${id}:${round}`
 export const DAY_KEY = (day: string) => `second-outlet:day:${day}`
@@ -386,12 +391,15 @@ export async function runSecondOutlets(deps: SecondOutletDeps = liveDeps): Promi
       const words = queryWords(report.title)
       const from = new Date(at.getTime() - WINDOW_MS)
       const to = new Date(Math.min(deps.clock(), at.getTime() + WINDOW_MS))
-      let reply = await deps.search(searchUrl(words, from, to))
+      // The two best words; three when GDELT's most relevant held no match and there were more
+      let reply = await deps.search(searchUrl(words.slice(0, 2), from, to))
       stats.requests++
-      if (reply.kind === 'ok' && reply.articles.length === 0 && words.length > 2) {
+      let found = reply.kind === 'ok' ? otherOutlets(report, reply.articles, new Date(deps.clock())) : []
+      if (reply.kind === 'ok' && found.length === 0 && reply.articles.length >= MAX_RECORDS && words.length > 2) {
         await deps.wait(YIELD_MS)
-        reply = await deps.search(searchUrl(words.slice(0, 2), from, to))
+        reply = await deps.search(searchUrl(words, from, to))
         stats.requests++
+        found = reply.kind === 'ok' ? otherOutlets(report, reply.articles, new Date(deps.clock())) : []
       }
       if (reply.kind === 'slow') {
         stats.slow++
@@ -406,7 +414,6 @@ export async function runSecondOutlets(deps: SecondOutletDeps = liveDeps): Promi
         continue
       }
       stats.searched++
-      const found = otherOutlets(report, reply.articles, new Date(deps.clock()))
       if (found.length > 0) {
         const crossCheck = crossChecks < CROSSCHECKS_A_DAY
         const promoted = await deps.add(report, found, crossCheck)
@@ -538,6 +545,9 @@ export const liveDeps: SecondOutletDeps = {
       return readReply(res.status, await res.text())
     } catch (err) {
       return { kind: 'error', reason: (err as Error)?.name === 'TimeoutError' ? 'timeout' : 'network' }
+    } finally {
+      // 6 seconds from when GDELT answered, not from when it was asked (Oct 22: "slow down" after 5 requests)
+      await redis.set(SLOT_KEY, '1', 'PX', SLOT_MS).catch(() => {})
     }
   },
 
@@ -575,7 +585,10 @@ export const liveDeps: SecondOutletDeps = {
   },
 
   async pause() {
-    await redis.set(PAUSE_KEY, new Date().toISOString(), 'EX', PAUSE_S)
+    // 10 minutes, then twice as long each time GDELT says it again within 6 hours (at most 2 hours)
+    const streak = await redis.incr(SLOW_STREAK_KEY).catch(() => 1)
+    await redis.expire(SLOW_STREAK_KEY, 6 * 3_600).catch(() => {})
+    await redis.set(PAUSE_KEY, new Date().toISOString(), 'EX', Math.min(PAUSE_S * 2 ** Math.max(0, streak - 1), 2 * 3_600))
   },
 
   async lock() {

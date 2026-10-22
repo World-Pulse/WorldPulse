@@ -171,19 +171,26 @@ describe('a pass', () => {
     return { d, calls }
   }
 
-  it('adds the outlets it finds, searches again with two words when three find nothing, and keeps count', async () => {
+  it('adds the outlets it finds with two words, narrows to three when the 75 most relevant held none, and keeps count', async () => {
     const one = report()
     const two = report({ id: 'sig-2', severity: 'medium', title: 'Melioidosis kills 45 in four northeastern provinces', original_urls: ['https://www.khaosodenglish.com/news/2026/10/22/melioidosis-kills-45/'], location_name: null, lat: null, lng: null })
+    const three = report({ id: 'sig-3', severity: 'medium', title: 'Rangamati, Khagrachhari roads and waterways to face half-day blockade', original_urls: ['https://www.dhakatribune.com/bangladesh/1/blockade'], location_name: null, lat: null, lng: null })
+    const unrelated = Array.from({ length: 75 }, (_, i) => article(`https://site${i}.example.com/a${i}`, `Melioidosis study number ${i} finds new soil risks`))
     const { d, calls } = deps([
       { kind: 'ok', articles: [article('https://www.ndtv.com/india-news/six-killed-40-injured-after-bus-hits-tree-in-chhattisgarh-123', 'Six killed, 40 injured after bus hits tree in Chhattisgarh')] },
+      { kind: 'ok', articles: unrelated },
       { kind: 'ok', articles: [] },
       { kind: 'ok', articles: [] },
-    ], [{ report: one, round: 1, at: AT }, { report: two, round: 1, at: AT }])
+    ], [{ report: one, round: 1, at: AT }, { report: two, round: 1, at: AT }, { report: three, round: 1, at: AT }])
     const stats = await runSecondOutlets(d)
     expect(calls.added).toEqual([{ id: 'sig-1', sites: ['ndtv.com'], crossCheck: true }])
-    expect(calls.urls).toHaveLength(3)
-    expect(new URL(calls.urls[2]!).searchParams.get('query')).toBe('melioidosis northeastern sourcelang:english')
-    expect(stats).toMatchObject({ due: 2, searched: 2, requests: 3, matched: 1, outlets: 1, promoted: 1, crosschecked: 1, slow: 0, errors: 0 })
+    expect(calls.urls.map(u => new URL(u).searchParams.get('query'))).toEqual([
+      'chhattisgarh tree sourcelang:english',
+      'melioidosis northeastern sourcelang:english',
+      'melioidosis northeastern provinces sourcelang:english',
+      'khagrachhari rangamati sourcelang:english',
+    ])
+    expect(stats).toMatchObject({ due: 3, searched: 3, requests: 4, matched: 1, outlets: 1, promoted: 1, crosschecked: 1, slow: 0, errors: 0 })
     expect(calls.counted).toMatchObject({ matched: 1 })
     expect(calls.remembered).toBe(1)
   })
