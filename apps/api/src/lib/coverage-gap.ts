@@ -38,6 +38,10 @@ const MOST_COVERED = 5
 /** The outlets named for each crisis, and its stories */
 const SITES_SHOWN = 5
 const STORIES_SHOWN = 3
+/** The stories the database gives for each crisis, before those naming the country are put first */
+const STORY_CANDIDATES = 8
+/** A story on these is about a crisis; others (a TV anchor leaving CNN, placed in Iraq) come after them */
+export const CRISIS_TOPICS = ['conflict', 'disaster', 'health', 'security', 'breaking', 'geopolitics', 'climate', 'elections'] as const
 const QUERY_SECONDS = 60
 const DAY_MS = 86_400_000
 
@@ -80,6 +84,49 @@ const LONG_NAMES: Record<string, string> = {
 
 export function countryName(code: string): string {
   return LONG_NAMES[code] ?? COUNTRY_NAMES[code] ?? code
+}
+
+/**
+ * Words that place a headline in a crisis country: its name's stem (Syria in
+ * "Syrian"), Spanish, French and Portuguese spellings, its capital and the
+ * places and groups its crisis is named by. A story WorldPulse placed in the
+ * country whose headline names none of them may be placed there by mistake
+ * (Oct 21, 2026: a US court case of a Syrian-born activist, "placed" in Syria,
+ * was Syria's top story), so the stories naming the country go first.
+ */
+const CRISIS_WORDS: Record<string, string[]> = {
+  SD: ['sudan', 'khartoum', 'darfur', 'fasher', 'kordofan', 'omdurman', 'port sudan', 'rsf'],
+  SS: ['south sudan', 'juba', 'abyei', 'bentiu', 'jonglei', 'upper nile', 'soudan du sud', 'sudán del sur'],
+  SY: ['syri', 'siria', 'syrie', 'damascus', 'damas', 'aleppo', 'alep', 'idlib', 'homs', 'latakia', 'deir ez'],
+  UA: ['ukrain', 'ucrania', 'ucrânia', 'kyiv', 'kiev', 'kharkiv', 'odesa', 'zelensk', 'donbas', 'donetsk', 'zaporizh', 'kherson'],
+  VE: ['venezuel', 'caracas', 'maduro'],
+  CO: ['colombi', 'bogot', 'medell', 'catatumbo', 'eln', 'farc'],
+  AF: ['afghan', 'afgan', 'kabul', 'taliban', 'kandahar', 'herat'],
+  CD: ['congo', 'drc', 'rdc', 'kinshasa', 'goma', 'kivu', 'ituri', 'm23', 'bukavu'],
+  MM: ['myanmar', 'burm', 'rakhine', 'rohingya', 'yangon', 'naypyi', 'mandalay'],
+  YE: ['yemen', 'houthi', 'sanaa', "sana'a", 'aden', 'marib', 'hodeid'],
+  SO: ['somali', 'mogadishu', 'shabaab', 'puntland', 'jubaland', 'baidoa'],
+  NG: ['nigeria', 'abuja', 'lagos', 'borno', 'kaduna', 'zamfara', 'benue', 'plateau state', 'boko haram'],
+  ET: ['ethiopia', 'éthiopie', 'etiopía', 'addis', 'tigray', 'amhara', 'oromia', 'abiy'],
+  BF: ['burkina', 'ouagadougou', 'djibo', 'traoré'],
+  HT: ['haiti', 'haïti', 'haití', 'port-au-prince', 'haitian'],
+  IQ: ['iraq', 'irak', 'baghdad', 'bagdad', 'mosul', 'erbil', 'basra', 'kurdistan', 'kirkuk'],
+  CF: ['central african', 'centrafric', 'centroafric', 'bangui'],
+  CM: ['cameroon', 'cameroun', 'camerún', 'yaound', 'douala', 'anglophone', 'bamenda'],
+}
+
+const escapeRe = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * Whether a headline names the country (or, for a crisis, its capital, places
+ * and groups), each word at the start of a word: "Iraqi" names Iraq, "bin
+ * Laden" doesn't name Aden
+ */
+export function namesCountry(code: string, title: string): boolean {
+  const t = title.toLowerCase()
+  const name = countryName(code).toLowerCase()
+  const words = CRISIS_WORDS[code] ?? [name.length > 5 ? name.slice(0, -1) : name]
+  return words.some(w => new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(w)}`, 'u').test(t))
 }
 
 /** One country's links from one site in the window (the first query) */
@@ -161,13 +208,21 @@ export function buildCoverageGap(hostRows: HostRow[], storyRows: StoryRow[], w: 
     return { outlets: sites.size, articles: top.reduce((t, s) => t + s.articles, 0), top: top.slice(0, SITES_SHOWN) }
   }
 
-  const storiesOf = new Map<string, GapCrisis['stories']>()
+  // each crisis's stories as the database ranked them, those naming the country first (a stable sort)
+  const candidates = new Map<string, StoryRow[]>()
   for (const r of storyRows) {
-    const list = storiesOf.get(r.code) ?? []
-    if (list.length < STORIES_SHOWN && r.lead_id && r.title) {
-      list.push({ id: String(r.lead_id), title: tidyHeadline(String(r.title)), outlets: Math.max(1, Number(r.sites) || 1), verified: Boolean(r.verified) })
-    }
-    storiesOf.set(r.code, list)
+    if (!r.lead_id || !r.title) continue
+    const list = candidates.get(r.code) ?? []
+    list.push(r)
+    candidates.set(r.code, list)
+  }
+  const storiesOf = new Map<string, GapCrisis['stories']>()
+  for (const [code, list] of candidates) {
+    const named = list.filter(r => namesCountry(code, String(r.title)))
+    const rest = list.filter(r => !namesCountry(code, String(r.title)))
+    storiesOf.set(code, [...named, ...rest].slice(0, STORIES_SHOWN).map(r => ({
+      id: String(r.lead_id), title: tidyHeadline(String(r.title)), outlets: Math.max(1, Number(r.sites) || 1), verified: Boolean(r.verified),
+    })))
   }
 
   const crises = crisisCountries().map(c => {
@@ -240,7 +295,7 @@ export const HOSTS_SQL = `
 export const STORIES_SQL = `
   WITH s AS (
     SELECT s.country_code AS code, COALESCE(s.story_id, s.id) AS story_key, s.id, s.title,
-           s.status::text AS status, s.reliability_score, s.created_at, s.original_urls,
+           s.status::text AS status, s.category::text AS category, s.reliability_score, s.created_at, s.original_urls,
            CASE s.severity::text WHEN 'critical' THEN 5 WHEN 'high' THEN 4 WHEN 'medium' THEN 3 WHEN 'low' THEN 2 ELSE 1 END AS sev,
            (s.title ~ ?) AS template
       FROM signals s
@@ -251,13 +306,14 @@ export const STORIES_SQL = `
   k AS (
     SELECT s.code, s.story_key, count(DISTINCT s.id)::int AS reports, bool_or(s.status = 'verified') AS verified,
            max(s.sev) AS sev, bool_or(NOT s.template) AS has_headline,
+           bool_or(s.category = ANY(?::text[])) AS crisis_topic,
            count(DISTINCT ${SITE_SQL('u.url')})::int AS sites
       FROM s
       LEFT JOIN LATERAL unnest(s.original_urls) AS u(url) ON true
      GROUP BY s.code, s.story_key
   ),
   r AS (
-    SELECT k.*, row_number() OVER (PARTITION BY k.code ORDER BY k.has_headline DESC, k.sites DESC, k.verified DESC, k.sev DESC, k.reports DESC) AS rn
+    SELECT k.*, row_number() OVER (PARTITION BY k.code ORDER BY k.has_headline DESC, k.crisis_topic DESC, k.sites DESC, k.verified DESC, k.sev DESC, k.reports DESC) AS rn
       FROM k
   )
   SELECT r.code, r.sites, r.verified, lead.id::text AS lead_id, lead.title
@@ -277,7 +333,7 @@ export async function makeCoverageGap(w: { window: CoverageGap['window']; week: 
   const codes = crisisCountries().map(c => c.code)
   const [hosts, stories] = await Promise.all([
     longQuery(QUERY_SECONDS, trx => trx.raw(HOSTS_SQL, [w.start, w.end, left])),
-    longQuery(QUERY_SECONDS, trx => trx.raw(STORIES_SQL, [EVENT_TEMPLATE_SQL, w.start, w.end, codes, left, STORIES_SHOWN])),
+    longQuery(QUERY_SECONDS, trx => trx.raw(STORIES_SQL, [EVENT_TEMPLATE_SQL, w.start, w.end, codes, left, [...CRISIS_TOPICS], STORY_CANDIDATES])),
   ])
   const rows = <T>(r: unknown): T[] => ((r as { rows?: T[] } | undefined)?.rows ?? [])
   return buildCoverageGap(rows<HostRow>(hosts), rows<StoryRow>(stories), w)

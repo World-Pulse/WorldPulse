@@ -108,6 +108,20 @@ describe('the crises', () => {
     expect(crises.map(c => c.code)).not.toContain('PS')
   })
 
+  it('a headline names a crisis country by its name, spellings, capital or places, at the start of a word', () => {
+    expect(gap.namesCountry('SY', 'Syrian authorities arrest main suspect in Baniyas killings')).toBe(true)
+    expect(gap.namesCountry('SY', 'Palestinian Activist Mahmoud Khalil Appeals to the Supreme Court')).toBe(false)
+    expect(gap.namesCountry('IQ', 'Iraqi forces close a border crossing')).toBe(true)
+    expect(gap.namesCountry('YE', 'Houthis attack presidential palace in Aden')).toBe(true)
+    expect(gap.namesCountry('YE', 'Twenty years after bin Laden')).toBe(false)
+    expect(gap.namesCountry('ET', 'En Éthiopie, la guerre reprend au Tigré')).toBe(true)
+    expect(gap.namesCountry('CD', 'M23 advances toward Uvira')).toBe(true)
+    expect(gap.namesCountry('AF', "CNN's Christiane Amanpour Announces Exit From Network After 43 Years")).toBe(false)
+    // a country without its own list: its name's stem
+    expect(gap.namesCountry('FR', 'French unions strike')).toBe(false)
+    expect(gap.namesCountry('FR', 'France votes')).toBe(true)
+  })
+
   it('full names where the country list abbreviates', () => {
     expect(gap.countryName('CF')).toBe('Central African Republic')
     expect(gap.countryName('SD')).toBe('Sudan')
@@ -121,11 +135,11 @@ describe('buildCoverageGap', () => {
     const sd = d.crises.find(c => c.code === 'SD')!
     expect(sd).toMatchObject({ name: 'Sudan', outlets: 3, articles: 21, displaced: displaced('SD'), peoplePerOutlet: Math.round(displaced('SD') / 3) })
     expect(sd.sites).toEqual([{ site: 'dabangasudan.org', articles: 12 }, { site: 'aljazeera.com', articles: 5 }, { site: 'sudanspost.net', articles: 4 }])
-    // its three best-covered stories, the headline without the outlet's name
+    // three of its stories, the headline without the outlet's name; those naming the country's places first
     expect(sd.stories).toEqual([
       { id: 'a1', title: 'Drone strike kills 40 at El Fasher market', outlets: 3, verified: true },
-      { id: 'a2', title: 'Aid convoy reaches Tawila camp after weeks of delays', outlets: 2, verified: true },
       { id: 'a3', title: 'Cholera cases rise in North Darfur camps', outlets: 1, verified: false },
+      { id: 'a2', title: 'Aid convoy reaches Tawila camp after weeks of delays', outlets: 2, verified: true },
     ])
     const cf = d.crises.find(c => c.code === 'CF')!
     expect(cf).toMatchObject({ name: 'Central African Republic', outlets: 1, articles: 2, peoplePerOutlet: displaced('CF') })
@@ -158,6 +172,17 @@ describe('buildCoverageGap', () => {
     expect(d).toMatchObject({ window: 'week', week: '2026-W42', start: '2026-10-12T00:00:00.000Z', end: '2026-10-19T00:00:00.000Z', minDisplaced: 1_000_000 })
   })
 
+  it("a crisis's story that doesn't name it (placed there by mistake) comes after those that do", () => {
+    const rows = [
+      { code: 'SY', lead_id: 'k1', title: 'Palestinian Activist Mahmoud Khalil Appeals to the Supreme Court', sites: 6, verified: true },
+      { code: 'SY', lead_id: 'k2', title: 'Syrian authorities arrest main suspect in 2013 Baniyas mass killing', sites: 4, verified: true },
+      { code: 'SY', lead_id: 'k3', title: 'Court in Damascus sentences two over coastal violence', sites: 3, verified: true },
+      { code: 'SY', lead_id: 'k4', title: 'Another story about somewhere else', sites: 2, verified: false },
+    ]
+    const d = gap.buildCoverageGap([{ code: 'SY', host: 'sana.sy', articles: 3 }], rows, W)
+    expect(d.crises.find(c => c.code === 'SY')!.stories.map(s => s.id)).toEqual(['k2', 'k3', 'k1'])
+  })
+
   it('a week with no reports: every crisis at zero, nothing to divide', () => {
     const d = gap.buildCoverageGap([], [], W)
     expect(d.crises.every(c => c.outlets === 0 && c.peoplePerOutlet === c.displaced)).toBe(true)
@@ -169,7 +194,7 @@ describe('buildCoverageGap', () => {
 describe('the queries', () => {
   it('each ? is a value: the link patterns write theirs \\?', () => {
     expect(placeholders(gap.HOSTS_SQL)).toBe(3)
-    expect(placeholders(gap.STORIES_SQL)).toBe(6)
+    expect(placeholders(gap.STORIES_SQL)).toBe(7)
     expect(gap.HOSTS_SQL).toContain("'^https\\?://([^/:\\?#]+)'")
   })
 
@@ -181,7 +206,9 @@ describe('the queries', () => {
     expect(h.sql[hosts]).toMatch(/'news' = ANY\(s\.tags\) OR 'gdelt' = ANY\(s\.tags\)/)
     expect(h.sql[hosts]).toMatch(/NOT \('institutional' = ANY\(s\.tags\)\)/)
     expect(h.bindings[hosts]).toEqual([W.start, W.end, ['sports', 'culture', 'technology', 'science', 'space']])
-    expect(h.bindings[stories]).toEqual([EVENT_TEMPLATE_SQL, W.start, W.end, gap.crisisCountries().map(c => c.code), ['sports', 'culture', 'technology', 'science', 'space'], 3])
+    // up to 8 stories a crisis, crisis topics first (then the headlines naming the country are put first)
+    expect(h.bindings[stories]).toEqual([EVENT_TEMPLATE_SQL, W.start, W.end, gap.crisisCountries().map(c => c.code), ['sports', 'culture', 'technology', 'science', 'space'], [...gap.CRISIS_TOPICS], 8])
+    expect(h.sql[stories]).toMatch(/ORDER BY k\.has_headline DESC, k\.crisis_topic DESC, k\.sites DESC/)
   })
 })
 
