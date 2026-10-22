@@ -10,13 +10,23 @@
  *
  * Test mode (a secret key starting sk_test_ or rk_test_): only admins and
  * the addresses in BILLING_TEST_EMAILS may check out, so nobody gets Pro
- * with a test card while Devon makes his test purchase.
+ * with a test card while Devon makes his test purchase. The test key goes in
+ * STRIPE_TEST_SECRET_KEY (its webhook's secret in STRIPE_TEST_WEBHOOK_SECRET),
+ * beside the live key, which stays where it is: while a test key is set,
+ * billing uses it.
+ *
+ * A live key alone doesn't open checkout (Oct 21, 2026: the server already
+ * held one, and Pro opened to real cards the moment this shipped, against
+ * Devon's "test mode first"): checkout is "closed" until PRO_CHECKOUT=open
+ * is on the server too.
  */
 
 import Stripe from 'stripe'
 
 // `||`: compose passes an unset variable as "" (lib/email.ts says why)
-const SECRET_KEY = process.env.STRIPE_SECRET_KEY || ''
+const TEST_KEY = process.env.STRIPE_TEST_SECRET_KEY || ''
+const USING_TEST_KEY = /^(sk|rk)_test_/.test(TEST_KEY)
+const SECRET_KEY = USING_TEST_KEY ? TEST_KEY : (process.env.STRIPE_SECRET_KEY || '')
 
 // Conditional init — STRIPE_SECRET_KEY will be undefined in dev/test
 const stripe = SECRET_KEY
@@ -30,20 +40,26 @@ export function getStripe(): Stripe {
   return stripe
 }
 
-export const PRO_PRICE_ID = process.env.STRIPE_PRO_PRICE_ID || ''
-export const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || ''
+export const PRO_PRICE_ID = USING_TEST_KEY ? '' : (process.env.STRIPE_PRO_PRICE_ID || '')
+/** The signing secret of the webhook for the key in use (test or live) */
+export const WEBHOOK_SECRET = (USING_TEST_KEY ? process.env.STRIPE_TEST_WEBHOOK_SECRET : process.env.STRIPE_WEBHOOK_SECRET) || ''
 
 /** Pro's price: $12 a month (Devon, Oct 21, 2026) */
 export const PRO_PRICE = { cents: 1200, currency: 'usd', interval: 'month' } as const
 
 export type Plan = 'free' | 'pro'
 
-/** Whether people can pay: live (real cards), test (Stripe's test mode: the team only) or off (no key on the server) */
-export type BillingMode = 'live' | 'test' | 'off'
+/**
+ * Whether people can pay: live (real cards, open to everyone), test
+ * (Stripe's test mode: the team only), closed (a live key, but checkout not
+ * opened yet: PRO_CHECKOUT=open opens it) or off (no key on the server)
+ */
+export type BillingMode = 'live' | 'test' | 'closed' | 'off'
 
-export function billingMode(key: string = SECRET_KEY): BillingMode {
+export function billingMode(key: string = SECRET_KEY, open: string = process.env.PRO_CHECKOUT || ''): BillingMode {
   if (!key) return 'off'
-  return /^(sk|rk)_test_/.test(key) ? 'test' : 'live'
+  if (/^(sk|rk)_test_/.test(key)) return 'test'
+  return open.trim().toLowerCase() === 'open' ? 'live' : 'closed'
 }
 
 /** The addresses allowed to check out in test mode (BILLING_TEST_EMAILS, comma-separated), lower-case */
@@ -54,7 +70,7 @@ export function testBuyers(raw: string = process.env.BILLING_TEST_EMAILS || ''):
 /** Whether this account may start a checkout now */
 export function mayCheckout(user: { accountType?: string | null; email?: string | null }, mode: BillingMode = billingMode()): boolean {
   if (mode === 'live') return true
-  if (mode === 'off') return false
+  if (mode !== 'test') return false
   if (user.accountType === 'admin') return true
   const email = (user.email || '').trim().toLowerCase()
   return email !== '' && testBuyers().includes(email)

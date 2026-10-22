@@ -73,12 +73,42 @@ beforeEach(() => {
 })
 
 describe('lib/stripe', () => {
-  it('knows test mode, live mode and off from the key', () => {
+  it('knows test mode, closed, live and off from the key and PRO_CHECKOUT', () => {
     expect(lib.billingMode('sk_test_abc')).toBe('test')
     expect(lib.billingMode('rk_test_abc')).toBe('test')
-    expect(lib.billingMode('sk_live_abc')).toBe('live')
-    expect(lib.billingMode('')).toBe('off')
+    // a live key alone keeps checkout closed: real cards only once PRO_CHECKOUT=open
+    expect(lib.billingMode('sk_live_abc', '')).toBe('closed')
+    expect(lib.billingMode('sk_live_abc', 'open')).toBe('live')
+    expect(lib.billingMode('sk_live_abc', ' Open ')).toBe('live')
+    expect(lib.billingMode('sk_live_abc', 'yes')).toBe('closed')
+    expect(lib.billingMode('', 'open')).toBe('off')
     expect(lib.billingMode()).toBe('test')
+  })
+
+  it('a test key beside the live one wins, with its own webhook secret; without it, the live key, closed', async () => {
+    const saved = { ...process.env }
+    try {
+      vi.resetModules()
+      Object.assign(process.env, { STRIPE_SECRET_KEY: 'sk_live_server', STRIPE_TEST_SECRET_KEY: 'sk_test_devon', STRIPE_WEBHOOK_SECRET: 'whsec_live', STRIPE_TEST_WEBHOOK_SECRET: 'whsec_test', STRIPE_PRO_PRICE_ID: 'price_live' })
+      const t = await import('../lib/stripe')
+      expect(t.billingMode()).toBe('test')
+      expect(t.WEBHOOK_SECRET).toBe('whsec_test')
+      expect(t.PRO_PRICE_ID).toBe('') // the live price doesn't exist in test mode: the inline $12
+      vi.resetModules()
+      delete process.env.STRIPE_TEST_SECRET_KEY
+      const l = await import('../lib/stripe')
+      expect(l.billingMode()).toBe('closed')
+      expect(l.WEBHOOK_SECRET).toBe('whsec_live')
+      expect(l.mayCheckout({ accountType: 'admin', email: 'devon@example.com' })).toBe(false)
+      vi.resetModules()
+      process.env.PRO_CHECKOUT = 'open'
+      expect((await import('../lib/stripe')).billingMode()).toBe('live')
+    } finally {
+      for (const k of ['STRIPE_SECRET_KEY', 'STRIPE_TEST_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_TEST_WEBHOOK_SECRET', 'STRIPE_PRO_PRICE_ID', 'PRO_CHECKOUT']) {
+        if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]
+      }
+      vi.resetModules()
+    }
   })
 
   it('in test mode only admins and the listed addresses may check out; live, anyone signed in; off, nobody', () => {
@@ -88,6 +118,7 @@ describe('lib/stripe', () => {
     expect(lib.mayCheckout({ accountType: 'admin', email: null }, 'test')).toBe(true)
     expect(lib.mayCheckout({ accountType: 'community', email: 'reader@example.com' }, 'live')).toBe(true)
     expect(lib.mayCheckout({ accountType: 'admin', email: 'devon@example.com' }, 'off')).toBe(false)
+    expect(lib.mayCheckout({ accountType: 'admin', email: 'devon@example.com' }, 'closed')).toBe(false)
   })
 
   it('sells $12 a month without a dashboard price, or the dashboard price when one is set', () => {

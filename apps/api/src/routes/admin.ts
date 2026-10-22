@@ -125,7 +125,7 @@ export const registerAdminRoutes: FastifyPluginAsync = async (app) => {
     if (!req.user || req.user.accountType !== 'admin') {
       return sendError(reply, 403, 'FORBIDDEN', 'Admin access required')
     }
-    if (billingMode() !== 'live') return sendError(reply, 409, 'CONFLICT', "Pro isn't open yet: checkout is in Stripe's test mode or off. Put the live keys on the server first.")
+    if (billingMode() !== 'live') return sendError(reply, 409, 'CONFLICT', "Pro isn't open yet: checkout is in Stripe's test mode, closed or off. Open it on the server first (the live keys and PRO_CHECKOUT=open).")
     if (!EMAIL_CONFIGURED) return sendError(reply, 503, 'SERVICE_UNAVAILABLE', "The server can't send email yet: the Resend key isn't on it.")
     const result = await announceProOpen(redis, sendEmail)
     if (result.busy) return sendError(reply, 409, 'CONFLICT', 'The email is already being sent.')

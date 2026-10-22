@@ -7,7 +7,8 @@
  * /api/v1/billing/subscription what this account has and may do.
  */
 
-export type CheckoutMode = 'live' | 'test' | 'off'
+/** live: real cards for everyone; test: Stripe's test mode, the team only; closed: a live key, not opened yet; off: no key */
+export type CheckoutMode = 'live' | 'test' | 'closed' | 'off'
 
 export interface Subscription {
   plan: 'free' | 'pro'

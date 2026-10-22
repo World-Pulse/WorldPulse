@@ -14,13 +14,15 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 interface WaitlistState {
   waiting: number
   announced: number
-  checkout: 'live' | 'test' | 'off'
+  checkout: 'live' | 'test' | 'closed' | 'off'
   emailReady: boolean
 }
 
 /** Why the button is off, or null when it can be pressed */
 export function announceBlocked(s: WaitlistState): string | null {
-  if (s.checkout !== 'live') return s.checkout === 'test' ? 'Checkout is in Stripe test mode: put the live keys on the server first.' : 'Checkout is off: the server has no Stripe key.'
+  if (s.checkout === 'test') return 'Checkout is in Stripe test mode: take the test lines out of the server settings and open it first.'
+  if (s.checkout === 'closed') return 'Checkout is closed: add PRO_CHECKOUT=open to the server settings when Pro opens.'
+  if (s.checkout !== 'live') return 'Checkout is off: the server has no Stripe key.'
   if (!s.emailReady) return "The server can't send email yet (the Resend key)."
   if (s.waiting <= s.announced) return s.waiting === 0 ? 'Nobody is on the list.' : 'Everyone on the list has had the email.'
   return null

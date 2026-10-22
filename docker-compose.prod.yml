@@ -179,8 +179,13 @@ services:
       STRIPE_SECRET_KEY:     ${STRIPE_SECRET_KEY:-}
       STRIPE_PRO_PRICE_ID:   ${STRIPE_PRO_PRICE_ID:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
-      # Stripe's test mode: who may check out (comma-separated addresses; lib/stripe.ts)
-      BILLING_TEST_EMAILS:   ${BILLING_TEST_EMAILS:-}
+      # Stripe's test mode (lib/stripe.ts): a test key beside the live one, its
+      # webhook's secret, and who may check out (comma-separated addresses)
+      STRIPE_TEST_SECRET_KEY:     ${STRIPE_TEST_SECRET_KEY:-}
+      STRIPE_TEST_WEBHOOK_SECRET: ${STRIPE_TEST_WEBHOOK_SECRET:-}
+      BILLING_TEST_EMAILS:        ${BILLING_TEST_EMAILS:-}
+      # Opens Pro's checkout to real cards: "open" (with the live key); unset, it stays closed
+      PRO_CHECKOUT:               ${PRO_CHECKOUT:-}
       # Sanctions search (plan P16): OpenSanctions answers 401 without a key;
       # unset, /sanctions says searching is offline and links to their own search
       OPENSANCTIONS_API_KEY: ${OPENSANCTIONS_API_KEY:-}

@@ -29,7 +29,9 @@ describe("the Pro card's button", () => {
     expect(proAction('test', false, null)).toEqual({ kind: 'waitlist' })
   })
 
-  it('off, or the API not answering: the waitlist', () => {
+  it('closed (a live key, not opened yet), off, or the API not answering: the waitlist', () => {
+    expect(proAction('closed', true, { ...free, canCheckout: false })).toEqual({ kind: 'waitlist' })
+    expect(proAction('closed', false, null)).toEqual({ kind: 'waitlist' })
     expect(proAction('off', true, free)).toEqual({ kind: 'waitlist' })
     expect(proAction(null, false, null)).toEqual({ kind: 'waitlist' })
   })
@@ -76,6 +78,7 @@ describe('the waitlist email on /admin', () => {
     const ok = { waiting: 12, announced: 0, checkout: 'live' as const, emailReady: true }
     expect(announceBlocked(ok)).toBeNull()
     expect(announceBlocked({ ...ok, checkout: 'test' })).toMatch(/test mode/)
+    expect(announceBlocked({ ...ok, checkout: 'closed' })).toMatch(/PRO_CHECKOUT=open/)
     expect(announceBlocked({ ...ok, emailReady: false })).toMatch(/Resend/)
     expect(announceBlocked({ ...ok, announced: 12 })).toMatch(/Everyone/)
   })

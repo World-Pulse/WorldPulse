@@ -73,12 +73,12 @@ export const registerBillingRoutes: FastifyPluginAsync = async (app) => {
     schema: {
       tags: ['billing'],
       summary: 'List available plans',
-      description: 'Free and Pro ($12 a month), what each includes, and whether checkout is open: "live", "test" (Stripe test mode: the team only) or "off".',
+      description: 'Free and Pro ($12 a month), what each includes, and whether checkout is open: "live", "test" (Stripe test mode: the team only), "closed" (not opened yet) or "off".',
       response: {
         200: {
           type: 'object',
           properties: {
-            checkout: { type: 'string', enum: ['live', 'test', 'off'] },
+            checkout: { type: 'string', enum: ['live', 'test', 'closed', 'off'] },
             plans: {
               type: 'array',
               items: {
