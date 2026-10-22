@@ -170,7 +170,7 @@ export const NOT_OUTLETS = new Set([
   // republishers seen in GDELT's list on Oct 22: other outlets' articles under their own name
   'allafrica.com', 'aol.co.uk', 'cedarnews.net', 'ghanamma.com', 'hawaiitelegraph.com', 'iheart.com', 'indiagazette.com',
   'heraldglobe.com', 'kenyastar.com', 'netscape.com', 'newjerseytelegraph.com', 'nigerianeye.com', 'romaniapress.com',
-  'russiaherald.com', 'wn.com',
+  'russiaherald.com', 'wn.com', 'zerohedge.com',
   'blogspot.com', 'facebook.com', 'medium.com', 'reddit.com', 'substack.com', 'tumblr.com', 'twitter.com',
   'wordpress.com', 'x.com', 'youtube.com',
   'allnewsupdate.net', 'breakingnewsreporter.com', 'currentnewspaper.net', 'dailynewspulse.net', 'dailytrendingnews.net',

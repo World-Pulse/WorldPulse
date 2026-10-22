@@ -105,6 +105,14 @@ function gdeltDate(value: string | undefined): Date | null {
 }
 
 /**
+ * Big News Network's hundred-odd websites (europesun.com, russiaherald.com,
+ * indiagazette.com, kenyastar.com …) republish agency and press-release copy
+ * at /news/<9-digit id>/<slug>: 1,540 of 31,723 articles in 5 hours on Oct 22,
+ * on 98 websites. Never another newsroom's report.
+ */
+export const REPUBLISHED_URL = /^https?:\/\/[^/]+\/news\/\d{9}\//i
+
+/**
  * The articles of one GKG file: web pages (collection 1) with a title. A
  * line's fields (GKG 2.1, tab-separated): 1 DATE, 2 SourceCollectionIdentifier,
  * 3 SourceCommonName, 4 DocumentIdentifier (the address), 26 V2EXTRASXML
@@ -118,7 +126,7 @@ export function readArticles(text: string): GdeltArticle[] {
     const f = line.split('\t')
     if (f.length < 27 || f[2] !== '1') continue
     const url = (f[4] ?? '').trim()
-    if (!/^https?:\/\//i.test(url) || seen.has(url)) continue
+    if (!/^https?:\/\//i.test(url) || REPUBLISHED_URL.test(url) || seen.has(url)) continue
     const m = /<PAGE_TITLE>([\s\S]*?)<\/PAGE_TITLE>/.exec(f[26] ?? '')
     const title = m ? articleTitle(m[1], url) : ''
     const at = gdeltDate(f[1])

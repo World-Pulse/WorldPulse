@@ -71,6 +71,7 @@ describe("GDELT's list of articles", () => {
       gkgLine('20261022121500', 'https://www.ndtv.com/india-news/bus-123', 'Six killed, 40 injured after bus hits tree in Chhattisgarh - NDTV'),
       gkgLine('20261022121500', 'https://example.org/broadcast', 'A TV transcript', '2'),
       gkgLine('20261022121500', 'https://en.protothema.gr/x', 'Athens explosion: police trace bag &amp; drugs'),
+      gkgLine('20261022121500', 'http://www.europesun.com/news/279392606/european-parliament-calls-for-houthis', 'European Parliament calls for Houthis to be added to EU terrorist list'),
       '',
     ].join('\n')
     const articles = readArticles((await unzipFirst(zipOf('20261022121500.gkg.csv', text))).toString('utf8'))
