@@ -239,17 +239,20 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
     reply.header('Access-Control-Allow-Origin', '*')
     const day = (offset: number) => new Date(Date.now() - offset * 86_400_000).toISOString().slice(0, 10)
     const days = [day(0), day(1)]
-    const [today, yesterday, recent] = await Promise.all([
+    const [today, yesterday, recent, last] = await Promise.all([
       redis.hgetall(`second-outlet:day:${days[0]}`).catch(() => null),
       redis.hgetall(`second-outlet:day:${days[1]}`).catch(() => null),
       redis.lrange('second-outlet:recent', 0, 49).catch(() => [] as string[]),
+      redis.get('second-outlet:last-cycle').catch(() => null),
     ])
     const numbers = (h: Record<string, string> | null) =>
       Object.fromEntries(Object.entries(h ?? {}).map(([k, v]) => [k, Number(v) || 0]))
     const latest = (recent ?? []).flatMap(entry => {
       try { return [JSON.parse(entry) as Record<string, unknown>] } catch { return [] }
     })
-    return reply.send({ success: true, data: { days: { [days[0]!]: numbers(today), [days[1]!]: numbers(yesterday) }, latest } })
+    let lastCycle: unknown = null
+    try { lastCycle = last ? JSON.parse(last) : null } catch { lastCycle = null }
+    return reply.send({ success: true, data: { days: { [days[0]!]: numbers(today), [days[1]!]: numbers(yesterday) }, last_cycle: lastCycle, latest } })
   })
 
   // ─── OPTIONS preflight ────────────────────────────────────

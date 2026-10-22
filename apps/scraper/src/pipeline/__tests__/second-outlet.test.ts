@@ -159,7 +159,7 @@ describe('a cycle', () => {
   const other = article('https://www.example-news.com/a', 'Peso closes at record low for fourth day')
 
   const deps = (files: Record<string, GdeltArticle[]>, reports: HeldReport[], over: Partial<SecondOutletDeps> = {}) => {
-    const calls = { fetched: [] as string[], added: [] as Array<{ id: string; sites: string[]; crossCheck: boolean }>, counted: [] as CycleStats[], remembered: 0 }
+    const calls = { fetched: [] as string[], added: [] as Array<{ id: string; sites: string[]; crossCheck: boolean }>, counted: [] as CycleStats[], remembered: 0, traced: [] as Array<Record<string, unknown>> }
     const d: SecondOutletDeps = {
       newestStamp: async () => Object.keys(files).sort().pop() ?? null,
       fetchArticles: async stamp => { calls.fetched.push(stamp); return files[stamp] ?? null },
@@ -170,6 +170,7 @@ describe('a cycle', () => {
       unlock: async () => {},
       count: async (_day, stats) => { calls.counted.push({ ...stats }) },
       remember: async () => { calls.remembered++ },
+      trace: async entry => { calls.traced.push(entry) },
       clock: () => LATER.getTime(),
       ...over,
     }
@@ -184,6 +185,15 @@ describe('a cycle', () => {
     expect(calls.added).toEqual([{ id: 'sig-1', sites: ['ndtv.com'], crossCheck: true }])
     expect(stats).toMatchObject({ files: 4, articles: 2, reports: 2, matched: 1, outlets: 1, promoted: 1, crosschecked: 1, errors: 0 })
     expect(calls.remembered).toBe(1)
+    expect(calls.traced[0]).toMatchObject({ newest: '20261022123000', read: [['20261022114500', 1], ['20261022120000', 1], ['20261022121500', 0], ['20261022123000', 0]], missing: [], failed: [], held: 2 })
+  })
+
+  it('says which files were missing and which failed', async () => {
+    const { d, calls } = deps({ '20261022120000': [ndtv], '20261022123000': [] }, [report()], {
+      fetchArticles: async stamp => { if (stamp === '20261022121500') throw new Error('HTTP 503'); return stamp === '20261022114500' ? null : [] },
+    })
+    await runSecondOutlets(newState(), d)
+    expect(calls.traced[0]).toMatchObject({ missing: ['20261022114500'], failed: [['20261022121500', 'HTTP 503']] })
   })
 
   it('compares a report only with the articles new since it was last compared', async () => {

@@ -62,6 +62,7 @@ export const CYCLE_MS = 15 * 60_000
 const LOCK_KEY = 'second-outlet:lock'
 export const DAY_KEY = (day: string) => `second-outlet:day:${day}`
 export const RECENT_KEY = 'second-outlet:recent'
+export const LAST_CYCLE_KEY = 'second-outlet:last-cycle'
 const KEEP_S = 40 * 86_400
 
 const HOUR = 3_600_000
@@ -375,8 +376,13 @@ export interface SecondOutletDeps {
   unlock(): Promise<void>
   count(day: string, stats: CycleStats): Promise<void>
   remember(entry: Record<string, unknown>): Promise<void>
+  /** The last cycle's files and counts, kept for reading */
+  trace(entry: Record<string, unknown>): Promise<void>
   clock(): number
 }
+
+/** What the last cycle read, for GET /api/v1/public/second-outlets (second-outlet:last-cycle) */
+let lastTrace: Record<string, unknown> | null = null
 
 const emptyStats = (): CycleStats => ({ files: 0, articles: 0, reports: 0, pairs: 0, matched: 0, outlets: 0, promoted: 0, crosschecked: 0, errors: 0 })
 
@@ -389,16 +395,27 @@ export async function runSecondOutlets(state: FinderState, deps: SecondOutletDep
   try {
     // 1. GDELT's new files
     const newest = await deps.newestStamp().catch(err => { stats.errors++; logger.warn({ err }, 'Second outlet: GDELT file list unreadable'); return null })
+    const trace: { newest: string | null; read: Array<[string, number]>; missing: string[]; failed: Array<[string, string]> } = { newest, read: [], missing: [], failed: [] }
     if (newest) {
       const held = state.window.newest()
       for (const stamp of filesToRead(newest, held, held ? MAX_FILES : WARM_FILES)) {
-        const articles = await deps.fetchArticles(stamp).catch(err => { stats.errors++; logger.warn({ err, stamp }, 'Second outlet: GDELT file unreadable'); return null })
-        if (!articles) continue
+        let articles: GdeltArticle[] | null = null
+        try {
+          articles = await deps.fetchArticles(stamp)
+        } catch (err) {
+          stats.errors++
+          trace.failed.push([stamp, String((err as Error)?.message || err).slice(0, 120)])
+          logger.warn({ err, stamp }, 'Second outlet: GDELT file unreadable')
+          continue
+        }
+        if (!articles) { trace.missing.push(stamp); continue }
         state.window.add(stamp, articles)
         stats.files++
         stats.articles += articles.length
+        trace.read.push([stamp, articles.length])
       }
     }
+    lastTrace = { at: now.toISOString(), ...trace }
     state.window.evict(now)
     const latest = state.window.newest()
     if (!latest) return stats
@@ -459,6 +476,7 @@ export async function runSecondOutlets(state: FinderState, deps: SecondOutletDep
     }
   } finally {
     await deps.count(day, stats).catch(err => logger.warn({ err }, 'Second outlet: counts not saved'))
+    if (lastTrace) await deps.trace({ ...lastTrace, held: state.window.size, stats }).catch(() => {})
     await deps.unlock().catch(() => {})
   }
   return stats
@@ -577,6 +595,10 @@ export const liveDeps: SecondOutletDeps = {
 
   async remember(entry) {
     await redis.multi().lpush(RECENT_KEY, JSON.stringify(entry)).ltrim(RECENT_KEY, 0, 99).expire(RECENT_KEY, 7 * 86_400).exec()
+  },
+
+  async trace(entry) {
+    await redis.set(LAST_CYCLE_KEY, JSON.stringify(entry), 'EX', 2 * 86_400)
   },
 
   clock: () => Date.now(),
