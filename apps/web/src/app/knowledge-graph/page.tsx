@@ -19,6 +19,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { entityPath } from '@/lib/entity-links'
+import { PRO_PITCH } from '@/lib/pro-plan'
 
 const ForceGraph = dynamic(
   () => import('../../components/knowledge-graph/ForceGraph'),
@@ -552,15 +553,13 @@ export default function KnowledgeGraphPage() {
         {/* Pro CTA */}
         <div className="rounded-xl border border-indigo-500/30 bg-gradient-to-r from-indigo-950/40 to-purple-950/40 p-6 text-center">
           <h3 className="text-lg font-semibold text-indigo-300 mb-2">
-            WorldPulse Pro — Full Graph API Access
+            WorldPulse Pro
           </h3>
           <p className="text-sm text-gray-400 mb-4">
-            Get programmatic access to entity search, graph traversal, and trending alerts
-            via the Knowledge Graph API. Build custom intelligence dashboards and automated
-            monitoring workflows.
+            {PRO_PITCH}
           </p>
           <a
-            href="/pricing"
+            href="/pricing#pro"
             className="inline-block rounded-lg bg-indigo-600 px-8 py-2.5 text-sm font-medium text-white hover:bg-indigo-500 transition"
           >
             Upgrade to Pro

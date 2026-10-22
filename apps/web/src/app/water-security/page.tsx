@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { PRO_PITCH } from '@/lib/pro-plan'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -264,11 +265,11 @@ export default function WaterSecurityPage() {
         )}
 
         <div className="mt-10 bg-gradient-to-r from-cyan-900/20 to-blue-900/20 border border-cyan-500/20 rounded-xl p-6 text-center">
-          <h3 className="text-[18px] font-bold mb-2">WorldPulse Pro — Water Crisis Alerts</h3>
+          <h3 className="text-[18px] font-bold mb-2">WorldPulse Pro</h3>
           <p className="text-[13px] text-wp-text3 max-w-lg mx-auto mb-4">
-            Get real-time alerts on water crises, drought onset, flood warnings, and infrastructure failures.
+            {PRO_PITCH}
           </p>
-          <Link href="/pricing" className="inline-block bg-wp-cyan text-wp-bg font-semibold text-[13px] px-5 py-2 rounded-lg hover:bg-wp-cyan/90 transition-colors">
+          <Link href="/pricing#pro" className="inline-block bg-wp-cyan text-wp-bg font-semibold text-[13px] px-5 py-2 rounded-lg hover:bg-wp-cyan/90 transition-colors">
             Upgrade to Pro
           </Link>
         </div>

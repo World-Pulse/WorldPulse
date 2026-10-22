@@ -19,9 +19,11 @@ interface ApiKey {
 }
 
 const TIER_META: Record<Tier, { label: string; color: string; rpm: string }> = {
-  free:       { label: 'Free',       color: 'bg-[rgba(74,85,104,0.3)] text-[#8892a4] border border-[rgba(74,85,104,0.4)]',       rpm: '60 req/min' },
-  pro:        { label: 'Pro',        color: 'bg-[rgba(245,166,35,0.12)] text-wp-amber border border-[rgba(245,166,35,0.3)]',     rpm: '300 req/min' },
-  enterprise: { label: 'Enterprise', color: 'bg-[rgba(0,212,255,0.10)] text-[#00d4ff] border border-[rgba(0,212,255,0.3)]',     rpm: 'Unlimited' },
+  // What the API enforces (Oct 21, 2026: apps/api/src/lib/api-plan.ts): a free key counts like
+  // no key; a Pro account's keys get their own budget; enterprise is the data license, by arrangement
+  free:       { label: 'Free',       color: 'bg-[rgba(74,85,104,0.3)] text-[#8892a4] border border-[rgba(74,85,104,0.4)]',       rpm: '200 req/min' },
+  pro:        { label: 'Pro',        color: 'bg-[rgba(245,166,35,0.12)] text-wp-amber border border-[rgba(245,166,35,0.3)]',     rpm: '600 req/min' },
+  enterprise: { label: 'Enterprise', color: 'bg-[rgba(0,212,255,0.10)] text-[#00d4ff] border border-[rgba(0,212,255,0.3)]',     rpm: 'By arrangement' },
 }
 
 function TierBadge({ tier }: { tier: Tier }) {
@@ -178,9 +180,9 @@ export default function DeveloperPage() {
               <TierBadge tier={tier} />
             </div>
             <p className="text-[22px] font-mono font-semibold text-wp-text">{meta.rpm}</p>
-            {tier === 'free' && <p className="text-[11px] text-wp-text2 mt-1">1,000 req/day · Public signals only</p>}
-            {tier === 'pro' && <p className="text-[11px] text-wp-text2 mt-1">10,000 req/day · Full access</p>}
-            {tier === 'enterprise' && <p className="text-[11px] text-wp-text2 mt-1">Unlimited · Priority support</p>}
+            {tier === 'free' && <p className="text-[11px] text-wp-text2 mt-1">Counts like no key: per address, endpoints 30–60 a minute</p>}
+            {tier === 'pro' && <p className="text-[11px] text-wp-text2 mt-1">50,000 req/day · its own budget · <Link href="/pricing#pro" className="text-wp-amber hover:underline">with Pro, $12/mo</Link></p>}
+            {tier === 'enterprise' && <p className="text-[11px] text-wp-text2 mt-1">The data license: email support@world-pulse.io</p>}
           </div>
         ))}
       </div>

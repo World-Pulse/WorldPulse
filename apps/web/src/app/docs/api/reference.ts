@@ -88,11 +88,13 @@ export const ROUTE_LIMITS: Array<{ method: Method; path: string; perMinute: numb
   { method: 'POST', path: '/api/v1/slop/check',               perMinute: 100 },
 ]
 
-/** The tier limits a key records (apps/api/src/lib/api-keys.ts TIER_LIMITS); requests aren't counted against them yet */
-export const KEY_RECORDED_LIMITS = [
-  { tier: 'free', perMinute: 60, perDay: 1_000 },
-  { tier: 'pro',  perMinute: 300, perDay: 10_000 },
-] as const
+/**
+ * A Pro API key's own budget (apps/api/src/lib/api-plan.ts; Devon, Oct 21,
+ * 2026: "600 a minute and 50,000 a day; free stays as today"): the whole API
+ * a minute, a read endpoint's own limit times routeMultiplier (at most
+ * perMinute), and a day. A free key counts like no key.
+ */
+export const PRO_KEY_BUDGET = { perMinute: 600, perDay: 50_000, routeMultiplier: 10 } as const
 
 export const RATE_LIMIT_HEADERS = [
   { header: 'X-RateLimit-Limit',     description: 'The endpoint\'s limit, in requests a minute' },

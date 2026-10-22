@@ -62,16 +62,16 @@ const FAQ: Array<{ q: string; a: React.ReactNode; text?: string }> = [
     a: (
       <>
         Yes, and an MCP server for AI assistants. The public endpoints work without signing up or a key; see the{' '}
-        <Link href="/developers" className="text-wp-amber underline">developer page</Link>. Everything is free today; a Pro plan is coming (
+        <Link href="/developers" className="text-wp-amber underline">developer page</Link>. All of it is free; Pro ($12 a month) adds an API key with its own budget, commercial use and priority support (
         <Link href="/pricing" className="text-wp-amber underline">Pricing</Link>).
       </>
     ),
-    text: 'Yes, and an MCP server for AI assistants. The public endpoints work without signing up or a key; see the developer page (world-pulse.io/developers). Everything is free today; a Pro plan is coming (world-pulse.io/pricing).',
+    text: 'Yes, and an MCP server for AI assistants. The public endpoints work without signing up or a key; see the developer page (world-pulse.io/developers). All of it is free; Pro ($12 a month) adds an API key with its own budget, commercial use and priority support (world-pulse.io/pricing).',
   },
   {
-    // Devon, Oct 21, 2026: the hosted API is "Free with credit; companies ask"
+    // Devon, Oct 21, 2026: the hosted API is "Free with credit"; 8:10 PM: commercial use comes with Pro, reselling is a data license
     q: 'Can I use WorldPulse\'s data?',
-    a: 'Personal, research, education and non-profit use is free, with a link back to world-pulse.io. Companies: email support@world-pulse.io first. The code is open source under the MIT license.',
+    a: 'Personal, research, education and non-profit use is free, with a link back to world-pulse.io. Commercial use, in your own work and products, comes with Pro ($12 a month), with a link back. Reselling or redistributing the data needs a data license: email support@world-pulse.io. The code is open source under the MIT license.',
   },
   {
     // Devon, Oct 21, 2026: support@world-pulse.io reaches him (plan C1)

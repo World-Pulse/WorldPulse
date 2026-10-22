@@ -9,6 +9,9 @@ import { CLAUDE_SMALL } from '../lib/claude'
 import { flagReviewList, REVIEW_AT, REVIEW_DAYS } from '../lib/signal-flags'
 import { contentReviewList, REPORT_REVIEW_AT, REPORT_REVIEW_DAYS } from '../lib/content-reports'
 import { GEMINI_MODEL, OLLAMA_MODEL } from '../lib/llm-models'
+import { waitlistCounts, announceProOpen } from '../lib/pro-waitlist'
+import { billingMode } from '../lib/stripe'
+import { EMAIL_CONFIGURED, sendEmail } from '../lib/email'
 
 // ─── Stability keys (mirror apps/scraper/src/lib/stability-tracker.ts) ───────
 const STABILITY_KEYS = {
@@ -105,6 +108,28 @@ export const registerAdminRoutes: FastifyPluginAsync = async (app) => {
     }
     const items = await flagReviewList(100)
     return reply.send({ success: true, data: { minFlags: REVIEW_AT, days: REVIEW_DAYS, items } })
+  })
+
+  // ─── The Pro waitlist (plan 13a, Oct 21, 2026) ─────────────────────────────
+  // How many wait, and the one "Pro is open" email, sent when Devon presses
+  // the button on /admin once checkout is live (lib/pro-waitlist.ts)
+  app.get('/pro-waitlist', { preHandler: [authenticate], config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req, reply) => {
+    if (!req.user || req.user.accountType !== 'admin') {
+      return sendError(reply, 403, 'FORBIDDEN', 'Admin access required')
+    }
+    const counts = await waitlistCounts(redis).catch(() => ({ waiting: 0, announced: 0 }))
+    return reply.send({ success: true, data: { ...counts, checkout: billingMode(), emailReady: EMAIL_CONFIGURED } })
+  })
+
+  app.post('/pro-waitlist/announce', { preHandler: [authenticate], config: { rateLimit: { max: 3, timeWindow: '1 minute' } } }, async (req, reply) => {
+    if (!req.user || req.user.accountType !== 'admin') {
+      return sendError(reply, 403, 'FORBIDDEN', 'Admin access required')
+    }
+    if (billingMode() !== 'live') return sendError(reply, 409, 'CONFLICT', "Pro isn't open yet: checkout is in Stripe's test mode or off. Put the live keys on the server first.")
+    if (!EMAIL_CONFIGURED) return sendError(reply, 503, 'SERVICE_UNAVAILABLE', "The server can't send email yet: the Resend key isn't on it.")
+    const result = await announceProOpen(redis, sendEmail)
+    if (result.busy) return sendError(reply, 409, 'CONFLICT', 'The email is already being sent.')
+    return reply.send({ success: true, data: result })
   })
 
   // ─── GET /api/v1/admin/reports ─────────────────────────────────────────────

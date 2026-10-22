@@ -28,6 +28,7 @@
 import type { FastifySchema, RouteOptions } from 'fastify'
 import type { FastifyDynamicSwaggerOptions, SwaggerTransform } from '@fastify/swagger'
 import { authenticate, apiKeyAuth } from '../middleware/auth'
+import { PRO_KEY_LIMITS, ROUTE_MULTIPLIER } from './api-plan'
 
 /** Where the guides and code examples are */
 export const DEVELOPERS_URL = 'https://world-pulse.io/developers'
@@ -199,7 +200,8 @@ const DESCRIPTION = [
   `\`POST /mcp\` is an MCP server (Model Context Protocol) for AI assistants such as Claude. It is read-only and open: no sign-in or key. How to connect one: [world-pulse.io/developers#mcp](${DEVELOPERS_URL}#mcp).`,
   '',
   '## Rate limits',
-  `Requests are counted per client address, whatever credential they carry. Endpoints without a limit of their own share one budget: ${SHARED_PER_MINUTE} requests a minute. Many endpoints have a limit of their own, counted for that endpoint alone (5 a minute to sign in or register), and each of those says so below.`,
+  `Requests are counted per client address, whatever credential they carry, except a Pro API key's. Endpoints without a limit of their own share one budget: ${SHARED_PER_MINUTE} requests a minute. Many endpoints have a limit of their own, counted for that endpoint alone (5 a minute to sign in or register), and each of those says so below.`,
+  `A Pro API key ([WorldPulse Pro](https://world-pulse.io/pricing), $12 a month), sent as \`X-Api-Key\`, counts in its own budget: ${PRO_KEY_LIMITS.perMinute} requests a minute across the API, each read endpoint up to ${ROUTE_MULTIPLIER} times its own limit (at most ${PRO_KEY_LIMITS.perMinute}), and ${PRO_KEY_LIMITS.perDay.toLocaleString('en-US')} a day (it starts again at midnight UTC). A free key counts like no key.`,
   'Answers carry `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset` (seconds until the count starts again); past the limit the API answers 429 with `Retry-After`.',
 ].join('\n')
 

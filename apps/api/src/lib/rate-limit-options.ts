@@ -4,6 +4,7 @@ import type Redis from 'ioredis'
 import { buildCfAwareKeyGenerator } from '../middleware/cloudflare'
 import { internalCallClient } from './internal-call'
 import { isSiteCall } from './site-calls'
+import './api-plan' // req.apiPlan (lib/api-plan.ts sets it)
 
 /**
  * Whose budget a request counts in: the signed-in user's or the client
@@ -33,14 +34,18 @@ export function rateLimitKey(req: FastifyRequest): string {
  * the server's private network, is never counted (lib/site-calls.ts); every
  * route's own limit keeps this list, since a route's options are laid over
  * these ones and none sets its own.
+ *
+ * Pro keys (plan V3d, Oct 21, 2026; lib/api-plan.ts): a request with a Pro
+ * key counts in the key's own budget, 600 a minute, instead of the user's or
+ * address's 200; read endpoints' own limits are raised for it there.
  */
 export function rateLimitOptions(redis: Redis): RateLimitPluginOptions {
   return {
-    max:         200,
+    max:         (req) => req.apiPlan?.perMinute ?? 200,
     timeWindow:  '1 minute',
     redis,
     skipOnError: true,
-    keyGenerator: rateLimitKey,
+    keyGenerator: (req) => (req.apiPlan ? `key:${req.apiPlan.keyId}` : rateLimitKey(req)),
     allowList:   (req) => isSiteCall(req as { ip?: string; headers: Record<string, unknown> }),
     errorResponseBuilder: (_req, context) => ({
       statusCode: context.statusCode,   // 429, or 403 once a client is banned

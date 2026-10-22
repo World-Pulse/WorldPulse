@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Video } from 'lucide-react'
+import { PRO_PITCH } from '@/lib/pro-plan'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -419,13 +420,12 @@ export default function VideoClaimsPage() {
 
         {/* Pro CTA */}
         <div className="rounded-lg bg-gradient-to-r from-purple-900/40 to-blue-900/40 border border-purple-500/20 p-6 text-center">
-          <h3 className="text-lg font-semibold mb-2">WorldPulse Pro — Video Intelligence</h3>
+          <h3 className="text-lg font-semibold mb-2">WorldPulse Pro</h3>
           <p className="text-sm text-white/50 mb-4 max-w-lg mx-auto">
-            Unlock real-time video monitoring, automated debate fact-checking, speaker
-            identification, and full transcript search across all 25+ channels.
+            {PRO_PITCH}
           </p>
           {/* Was a button that did nothing (plan G14) */}
-          <Link href="/pricing" className="inline-block rounded-lg bg-purple-600 hover:bg-purple-500 px-6 py-2 text-sm font-semibold transition-colors">
+          <Link href="/pricing#pro" className="inline-block rounded-lg bg-purple-600 hover:bg-purple-500 px-6 py-2 text-sm font-semibold transition-colors">
             Upgrade to Pro
           </Link>
         </div>

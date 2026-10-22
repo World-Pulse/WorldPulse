@@ -12,7 +12,8 @@ export interface TierConfig {
 
 export const TIER_LIMITS: Record<string, TierConfig | undefined> = {
   free:       { rpm: 60,   rpd: 1_000 },
-  pro:        { rpm: 300,  rpd: 10_000 },
+  // Devon, Oct 21, 2026: a Pro key's own budget (lib/api-plan.ts enforces it)
+  pro:        { rpm: 600,  rpd: 50_000 },
   enterprise: { rpm: 9999, rpd: 999_999 },
 }
 

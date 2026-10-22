@@ -214,6 +214,6 @@ pnpm dev
 
 The code is MIT — see [LICENSE](LICENSE) for details.
 
-Using the hosted API at api.world-pulse.io: personal, research, education and non-profit use is free, with a link back to world-pulse.io. Companies: email support@world-pulse.io first.
+Using the hosted API at api.world-pulse.io: personal, research, education and non-profit use is free, with a link back to world-pulse.io. Commercial use, in your own work and products, comes with WorldPulse Pro ($12 a month: [world-pulse.io/pricing](https://world-pulse.io/pricing)), with a link back; a Pro API key also gets its own budget, 600 requests a minute and 50,000 a day. Reselling or redistributing the data needs a data license: email support@world-pulse.io.
 
 

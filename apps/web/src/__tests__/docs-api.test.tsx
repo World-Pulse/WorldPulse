@@ -18,7 +18,7 @@ import ApiDocsPage from '../app/docs/api/page'
 import {
   API_ORIGIN, INTERACTIVE_DOCS_URL, KEY_PREFIX, API_KEY_HEADER, SIGN_IN_REQUIRED, BAD_TOKEN,
   API_KEY_ENDPOINTS, SIGN_IN_ENDPOINTS,
-  DEFAULT_PER_MINUTE, ROUTE_LIMITS, KEY_RECORDED_LIMITS, RATE_LIMIT_HEADERS, CORS_OPEN_PREFIXES,
+  DEFAULT_PER_MINUTE, ROUTE_LIMITS, PRO_KEY_BUDGET, RATE_LIMIT_HEADERS, CORS_OPEN_PREFIXES,
   PUBLIC_SIGNALS_PARAMS, OTHER_OPEN_ENDPOINTS, PUBLIC_SIGNALS_RESPONSE,
   MCP_URL, MCP_TOOLS, MCP_GUIDE, MCP_EXAMPLE,
   WEBHOOKS_PATH, WEBHOOK_ENDPOINTS, MAX_WEBHOOKS, WEBHOOK_EVENTS, WEBHOOK_FILTERS,
@@ -219,7 +219,7 @@ describe('credentials (apps/api/src/middleware/auth.ts, lib/api-keys.ts)', () =>
 
 describe('rate limits (apps/api/src/lib/rate-limit-options.ts and each route\'s config)', () => {
   it('names the budget the routes without their own limit share', () => {
-    expect(api('lib/rate-limit-options.ts')).toMatch(new RegExp(`max:\\s+${DEFAULT_PER_MINUTE},`))
+    expect(api('lib/rate-limit-options.ts')).toMatch(new RegExp(`max:\\s+\\(req\\) => req\\.apiPlan\\?\\.perMinute \\?\\? ${DEFAULT_PER_MINUTE},`))
     expect(TEXT).toContain(`Endpoints without a limit of their own share one budget: ${DEFAULT_PER_MINUTE} requests a minute`)
     expect(TEXT).toContain('counted for that endpoint alone')
   })
@@ -232,13 +232,13 @@ describe('rate limits (apps/api/src/lib/rate-limit-options.ts and each route\'s 
     expect(API_ROUTES.filter(r => r.perMinute !== null).length).toBeGreaterThan(50)
   })
 
-  it('names the limits a key records, which nothing counts against', () => {
-    const keys = api('lib/api-keys.ts')
-    for (const l of KEY_RECORDED_LIMITS) {
-      expect(keys).toMatch(new RegExp(`${l.tier}:\\s+\\{ rpm: ${l.perMinute},\\s+rpd: ${String(l.perDay).replace(/(\d)(?=(\d{3})+$)/g, '$1_')} \\}`))
-    }
-    // the stored limits are read by the key checks, never compared with a count
-    expect(api('middleware/auth.ts') + api('routes/slop.ts')).not.toMatch(/rate_limit_per_(min|day)\s*[<>]/)
+  it("names a Pro key's own budget as the API counts it (Oct 21, 2026)", () => {
+    const plan = api('lib/api-plan.ts')
+    expect(plan).toMatch(new RegExp(`PRO_KEY_LIMITS = \\{ perMinute: ${PRO_KEY_BUDGET.perMinute}, perDay: 50_000 \\}`))
+    expect(plan).toMatch(new RegExp(`ROUTE_MULTIPLIER = ${PRO_KEY_BUDGET.routeMultiplier}\\b`))
+    expect(api('lib/api-keys.ts')).toMatch(/pro:\s+\{ rpm: 600,\s+rpd: 50_000 \}/)
+    expect(TEXT).toContain(`counts in its own budget: ${PRO_KEY_BUDGET.perMinute} requests a minute across the API`)
+    expect(TEXT).toContain('A free key counts like no key')
   })
 
   it('lists the headers browsers on other sites may read', () => {

@@ -85,6 +85,7 @@ import { requestLoggerPlugin } from './middleware/request-logger'
 import { securityPlugin } from './middleware/security'
 import { cloudflareMiddlewarePlugin } from './middleware/cloudflare'
 import { rateLimitOptions } from './lib/rate-limit-options'
+import { registerApiPlans } from './lib/api-plan'
 import { registerHealthRoutes } from './routes/health'
 import { registerStatusRoutes } from './routes/status'
 import { logger } from './lib/logger'
@@ -229,6 +230,10 @@ async function bootstrap() {
   // Must be registered BEFORE rate-limit so the CF-aware key generator
   // can read req.cfClientIp and req.isBehindCloudflare reliably.
   await app.register(cloudflareMiddlewarePlugin)
+
+  // Pro keys' own budgets (lib/api-plan.ts): before the rate limit, whose
+  // hooks read what this sets
+  registerApiPlans(app, redis)
 
   // Served even when Redis can't count a request (lib/rate-limit-options.ts)
   await app.register(rateLimit, rateLimitOptions(redis))

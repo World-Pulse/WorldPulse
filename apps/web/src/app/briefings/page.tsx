@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { PRO_PITCH } from '@/lib/pro-plan'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -582,10 +583,10 @@ export default function BriefingsPage() {
                 WorldPulse Pro
               </p>
               <p className="text-[12px] text-wp-text2 mb-3 leading-relaxed">
-                Get briefings for up to 72 hours, custom category filters, and email delivery every morning.
+                {PRO_PITCH}
               </p>
               <Link
-                href="/developers#pricing"
+                href="/pricing#pro"
                 className="inline-block px-4 py-1.5 rounded-lg bg-wp-amber text-[#0d1117] text-[11px] font-mono font-bold hover:brightness-110 transition-all"
               >
                 Upgrade to Pro

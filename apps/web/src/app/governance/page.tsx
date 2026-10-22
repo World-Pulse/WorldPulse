@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Landmark, TrendingUp, TrendingDown, ArrowRight } from 'lucide-react'
+import { PRO_PITCH } from '@/lib/pro-plan'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -394,10 +395,10 @@ export default function GovernancePage() {
         {/* Pro CTA Banner */}
         <div className="bg-gradient-to-r from-purple-900/40 to-blue-900/40 border border-purple-500/30 rounded-lg p-6 text-center mt-8">
           <p className="text-sm text-zinc-300 mb-2">
-            Deep governance analysis, OSINT-enriched signals, and real-time alerts available to Pro members.
+            {PRO_PITCH}
           </p>
           {/* Was a button that did nothing (plan G14) */}
-          <Link href="/pricing" className="inline-block px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-sm font-medium text-white transition-colors">
+          <Link href="/pricing#pro" className="inline-block px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-sm font-medium text-white transition-colors">
             Upgrade to Pro
           </Link>
         </div>

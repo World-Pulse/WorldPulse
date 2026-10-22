@@ -45,7 +45,7 @@ When you cite a story, link to its page on ${SITE_URL}/signals/<id> and say how 
 
 ## Using the data
 
-Personal, research, education and non-profit use of the hosted API is free, with a link back to world-pulse.io. Companies: email support@world-pulse.io first. The code is open source under the MIT license.
+Personal, research, education and non-profit use of the hosted API is free, with a link back to world-pulse.io. Commercial use, in your own work and products, comes with WorldPulse Pro ($12 a month, https://world-pulse.io/pricing), with a link back; a Pro API key also gets its own budget (600 requests a minute, 50,000 a day). Reselling or redistributing the data needs a data license: email support@world-pulse.io. The code is open source under the MIT license.
 `
 
 export function GET(): Response {

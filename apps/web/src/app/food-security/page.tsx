@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Wheat, TrendingUp, TrendingDown, ArrowRight } from 'lucide-react'
+import { PRO_PITCH } from '@/lib/pro-plan'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -389,13 +390,12 @@ export default function FoodSecurityPage() {
 
       {/* Pro CTA */}
       <div className="bg-gradient-to-r from-amber-900/20 to-orange-900/20 border border-amber-800/30 rounded-lg p-6 text-center">
-        <h3 className="text-lg font-semibold text-amber-400 mb-2">WorldPulse Pro — Food Security Alerts</h3>
+        <h3 className="text-lg font-semibold text-amber-400 mb-2">WorldPulse Pro</h3>
         <p className="text-gray-400 text-sm mb-4">
-          Get real-time IPC phase change alerts, commodity price notifications, and custom
-          food security dashboards. Integrate with FAO and WFP data feeds via API.
+          {PRO_PITCH}
         </p>
         {/* Was a button that did nothing (plan G14) */}
-        <Link href="/pricing" className="inline-block bg-amber-600 hover:bg-amber-500 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors">
+        <Link href="/pricing#pro" className="inline-block bg-amber-600 hover:bg-amber-500 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors">
           Upgrade to Pro
         </Link>
       </div>

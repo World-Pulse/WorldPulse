@@ -179,6 +179,8 @@ services:
       STRIPE_SECRET_KEY:     ${STRIPE_SECRET_KEY:-}
       STRIPE_PRO_PRICE_ID:   ${STRIPE_PRO_PRICE_ID:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      # Stripe's test mode: who may check out (comma-separated addresses; lib/stripe.ts)
+      BILLING_TEST_EMAILS:   ${BILLING_TEST_EMAILS:-}
       # Sanctions search (plan P16): OpenSanctions answers 401 without a key;
       # unset, /sanctions says searching is offline and links to their own search
       OPENSANCTIONS_API_KEY: ${OPENSANCTIONS_API_KEY:-}

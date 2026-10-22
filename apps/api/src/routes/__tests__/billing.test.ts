@@ -40,6 +40,8 @@ vi.mock('../../db/redis', () => ({
 const mockStripeInstance = vi.hoisted(() => ({
   customers: {
     create: vi.fn().mockResolvedValue({ id: 'cus_test123', email: 'user@example.com' }),
+    // checkout checks a saved customer still exists (a test-mode one doesn't once the live key is in)
+    retrieve: vi.fn().mockImplementation(async (id: string) => ({ id })),
   },
   checkout: {
     sessions: {
@@ -54,14 +56,15 @@ const mockStripeInstance = vi.hoisted(() => ({
   },
 }))
 
-vi.mock('../../lib/stripe', () => ({
+// The real plan rules (lib/stripe.ts: limits, which subscriptions give Pro);
+// Stripe itself stood in for, and checkout live and open to this test user
+vi.mock('../../lib/stripe', async (orig) => ({
+  ...(await orig<typeof import('../../lib/stripe')>()),
   getStripe:      vi.fn().mockReturnValue(mockStripeInstance),
   PRO_PRICE_ID:   'price_pro_test123',
   WEBHOOK_SECRET: '',
-  getPlanLimits:  vi.fn((plan: string) => {
-    if (plan === 'pro') return { requestsPerMinute: 600, historyDays: 90, maxAlerts: -1, maxWebhooks: 5 }
-    return { requestsPerMinute: 60, historyDays: 7, maxAlerts: 3, maxWebhooks: 0 }
-  }),
+  billingMode:    vi.fn(() => 'live'),
+  mayCheckout:    vi.fn(() => true),
 }))
 
 // Mock auth — default: authenticated as test user
@@ -181,7 +184,8 @@ describe('Billing API', () => {
       const free = json.plans.find((p) => p.id === 'free')!
       const pro  = json.plans.find((p) => p.id === 'pro')!
       expect(pro.limits.requestsPerMinute).toBeGreaterThan(free.limits.requestsPerMinute)
-      expect(pro.limits.historyDays).toBeGreaterThan(free.limits.historyDays)
+      // no plan limits history (Devon, Oct 21, 2026: what's free stays free)
+      expect(pro.limits.historyDays).toBe(free.limits.historyDays)
     })
   })
 
@@ -605,13 +609,13 @@ describe('Billing API', () => {
   // ── getPlanLimits unit tests ───────────────────────────────────────────────
 
   describe('getPlanLimits utility', () => {
-    it('Test 26: free plan returns correct rate limit (60 req/min)', async () => {
+    it('Test 26: free plan returns correct rate limit (200 req/min, the API-wide budget)', async () => {
       const res = await app.inject({ method: 'GET', url: '/api/v1/billing/plans' })
       const json = JSON.parse(res.payload) as {
         plans: Array<{ id: string; limits: { requestsPerMinute: number } }>
       }
       const free = json.plans.find((p) => p.id === 'free')!
-      expect(free.limits.requestsPerMinute).toBe(60)
+      expect(free.limits.requestsPerMinute).toBe(200)
     })
 
     it('Test 27: pro plan returns correct rate limit (600 req/min)', async () => {
@@ -632,26 +636,26 @@ describe('Billing API', () => {
       expect(pro.limits.maxAlerts).toBe(-1) // -1 = unlimited
     })
 
-    it('Test 29: free plan has 0 webhooks and pro has 5', async () => {
+    it('Test 29: webhooks: 10 each on both plans (Devon, Oct 21, 2026: "Free, 10 each")', async () => {
       const res = await app.inject({ method: 'GET', url: '/api/v1/billing/plans' })
       const json = JSON.parse(res.payload) as {
         plans: Array<{ id: string; limits: { maxWebhooks: number } }>
       }
       const free = json.plans.find((p) => p.id === 'free')!
       const pro  = json.plans.find((p) => p.id === 'pro')!
-      expect(free.limits.maxWebhooks).toBe(0)
-      expect(pro.limits.maxWebhooks).toBe(5)
+      expect(free.limits.maxWebhooks).toBe(10)
+      expect(pro.limits.maxWebhooks).toBe(10)
     })
 
-    it('Test 30: free plan has 7-day history and pro has 90-day history', async () => {
+    it('Test 30: no plan limits history (-1)', async () => {
       const res = await app.inject({ method: 'GET', url: '/api/v1/billing/plans' })
       const json = JSON.parse(res.payload) as {
         plans: Array<{ id: string; limits: { historyDays: number } }>
       }
       const free = json.plans.find((p) => p.id === 'free')!
       const pro  = json.plans.find((p) => p.id === 'pro')!
-      expect(free.limits.historyDays).toBe(7)
-      expect(pro.limits.historyDays).toBe(90)
+      expect(free.limits.historyDays).toBe(-1)
+      expect(pro.limits.historyDays).toBe(-1)
     })
   })
 })

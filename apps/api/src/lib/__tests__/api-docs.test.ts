@@ -233,7 +233,9 @@ describe('the OpenAPI document, over stub routes', () => {
 
   it('names the rate limits the code sets', () => {
     // 200 a minute shared by the routes without their own (lib/rate-limit-options.ts), 5 to sign in or register (routes/auth.ts)
-    expect(source('lib/rate-limit-options.ts')).toMatch(new RegExp(`max:\\s+${SHARED_PER_MINUTE},`))
+    expect(source('lib/rate-limit-options.ts')).toMatch(new RegExp(`max:\\s+\\(req\\) => req\\.apiPlan\\?\\.perMinute \\?\\? ${SHARED_PER_MINUTE},`))
+    // a Pro key's own budget (lib/api-plan.ts; Devon, Oct 21, 2026: 600 a minute, 50,000 a day)
+    expect(spec.info.description).toContain('counts in its own budget: 600 requests a minute across the API, each read endpoint up to 10 times its own limit (at most 600), and 50,000 a day')
     expect(spec.info.description).toContain(`Endpoints without a limit of their own share one budget: ${SHARED_PER_MINUTE} requests a minute.`)
     expect(spec.info.description).toContain('counted for that endpoint alone')
     const auth = source('routes/auth.ts')

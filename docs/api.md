@@ -9,9 +9,14 @@ The WorldPulse Public API provides read-only access to verified global intellige
 
 ## Rate Limits
 
-| Tier   | Limit              | Key       |
-|--------|--------------------|-----------|
-| Public | 60 requests/minute | Per IP    |
+| Who | Limit | Counted per |
+|-----|-------|-------------|
+| No key, or a free key | 200 requests a minute across the API; most endpoints 30–60 a minute each | Signed-in user or address |
+| A Pro key ([WorldPulse Pro](https://world-pulse.io/pricing), $12 a month) | 600 requests a minute across the API; each read endpoint 10× its limit, up to 600; 50,000 a day (resets at midnight UTC) | The key: its own budget |
+
+Send a key as `X-Api-Key: <key>` (keys: https://world-pulse.io/developer). A key counts as Pro while its account is on Pro.
+
+Using the data: personal, research, education and non-profit use is free, with a link back to world-pulse.io. Commercial use, in your own work and products, comes with Pro, with a link back. Reselling or redistributing the data needs a data license: email support@world-pulse.io.
 
 Rate-limit headers are included in every response:
 

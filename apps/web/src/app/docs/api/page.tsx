@@ -5,7 +5,7 @@ import Link from 'next/link'
 import {
   API_ORIGIN, INTERACTIVE_DOCS_URL, KEY_PREFIX, API_KEY_HEADER, SIGN_IN_REQUIRED, BAD_TOKEN,
   API_KEY_ENDPOINTS, SIGN_IN_ENDPOINTS, KEY_TIERS,
-  DEFAULT_PER_MINUTE, ROUTE_LIMITS, KEY_RECORDED_LIMITS, RATE_LIMIT_HEADERS,
+  DEFAULT_PER_MINUTE, ROUTE_LIMITS, PRO_KEY_BUDGET, RATE_LIMIT_HEADERS,
   PUBLIC_SIGNALS_PARAMS, OTHER_OPEN_ENDPOINTS, PUBLIC_SIGNALS_RESPONSE,
   MCP_URL, MCP_TOOLS, MCP_GUIDE, MCP_EXAMPLE,
   WEBHOOK_ENDPOINTS, MAX_WEBHOOKS, WEBHOOK_EVENTS, WEBHOOK_BODY_FIELDS, WEBHOOK_FILTERS,
@@ -443,7 +443,8 @@ export default function ApiDocsPage() {
           {/* ── Rate Limits ─────────────────────────────────────────────── */}
           <Section id="rate-limits" title="Rate Limits">
             <p className="text-[13px] text-zinc-400 mb-3">
-              Requests are counted per client address, whatever credential they carry. Endpoints
+              Requests are counted per client address, whatever credential they carry, except a Pro
+              API key&apos;s (below). Endpoints
               without a limit of their own share one budget: {DEFAULT_PER_MINUTE} requests a minute.
               Many endpoints have a limit of their own, counted for that endpoint alone. Here are some;
               the <a href={INTERACTIVE_DOCS_URL} className="text-amber-400 hover:text-amber-300">interactive docs</a> give
@@ -479,10 +480,11 @@ export default function ApiDocsPage() {
             </div>
 
             <p className="mt-4 text-[12px] text-zinc-500">
-              An API key also records its tier&apos;s limits ({KEY_RECORDED_LIMITS.map(l =>
-                `${l.tier}: ${l.perMinute.toLocaleString('en-US')} a minute and ${l.perDay.toLocaleString('en-US')} a day`).join('; ')}),
-              which <InlineCode>GET /api/v1/developer/keys</InlineCode> shows, but requests aren&apos;t
-              counted against them yet: the per-address limits above apply to every request.
+              A Pro API key (<a href="https://world-pulse.io/pricing" className="text-amber-400 hover:text-amber-300">WorldPulse Pro</a>, $12 a month),
+              sent as <InlineCode>X-Api-Key</InlineCode>, counts in its own budget:{' '}
+              {PRO_KEY_BUDGET.perMinute} requests a minute across the API, each read endpoint up to{' '}
+              {PRO_KEY_BUDGET.routeMultiplier} times its own limit (at most {PRO_KEY_BUDGET.perMinute}), and{' '}
+              {PRO_KEY_BUDGET.perDay.toLocaleString('en-US')} a day (it starts again at midnight UTC). A free key counts like no key.
             </p>
 
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">

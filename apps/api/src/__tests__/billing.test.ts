@@ -61,7 +61,8 @@ vi.mock('../db/postgres', () => ({
 
 // ── Auth mock ─────────────────────────────────────────────────────────────────
 vi.mock('../middleware/auth', () => ({
-  authenticate: vi.fn((req: { user?: unknown }, reply: { status: (n: number) => { send: (b: unknown) => void } }) => {
+  // async: a two-argument hook that returns nothing makes Fastify wait for a done() that never comes
+  authenticate: vi.fn(async (req: { user?: unknown }, reply: { status: (n: number) => { send: (b: unknown) => void } }) => {
     if (!(req as { _authed?: boolean })._authed) {
       return reply.status(401).send({ success: false, error: 'Unauthorized', code: 'UNAUTHORIZED' })
     }
@@ -76,28 +77,30 @@ vi.mock('../middleware/auth', () => ({
 // ─────────────────────────────────────────────────────────────────────────────
 import { getPlanLimits, getStripe, PRO_PRICE_ID, WEBHOOK_SECRET } from '../lib/stripe'
 
-// ─── 1. getPlanLimits — free ─────────────────────────────────────────────────
+// ─── 1. getPlanLimits — free (Devon, Oct 21, 2026: what the code enforces) ───
 describe('getPlanLimits', () => {
   it('returns correct free limits', () => {
     const limits = getPlanLimits('free')
-    expect(limits.requestsPerMinute).toBe(60)
-    expect(limits.historyDays).toBe(7)
-    expect(limits.maxAlerts).toBe(3)
-    expect(limits.maxWebhooks).toBe(0)
+    expect(limits.requestsPerMinute).toBe(200)
+    expect(limits.requestsPerDay).toBeNull()
+    expect(limits.historyDays).toBe(-1)
+    expect(limits.maxAlerts).toBe(-1)
+    expect(limits.maxWebhooks).toBe(10)
   })
 
   // ─── 2. getPlanLimits — pro ──────────────────────────────────────────────
   it('returns correct pro limits', () => {
     const limits = getPlanLimits('pro')
     expect(limits.requestsPerMinute).toBe(600)
-    expect(limits.historyDays).toBe(90)
-    expect(limits.maxAlerts).toBe(-1)   // unlimited
-    expect(limits.maxWebhooks).toBe(5)
+    expect(limits.requestsPerDay).toBe(50_000)
+    expect(limits.maxAlerts).toBe(-1)   // alerts are free for everyone
+    expect(limits.maxWebhooks).toBe(10)
   })
 
-  // ─── 3. maxAlerts -1 means unlimited ─────────────────────────────────────
-  it('signals unlimited maxAlerts with -1 for pro', () => {
+  // ─── 3. -1 means no plan limit ────────────────────────────────────────────
+  it('signals no plan limit with -1 for alerts and history', () => {
     expect(getPlanLimits('pro').maxAlerts).toBe(-1)
+    expect(getPlanLimits('free').historyDays).toBe(-1)
   })
 })
 
@@ -194,7 +197,7 @@ describe('GET /billing/plans', () => {
     const app = await buildApp()
     const res = await app.inject({ method: 'GET', url: '/api/v1/billing/plans' })
     const body = JSON.parse(res.body) as { plans: Array<{ limits?: { requestsPerMinute: number } }> }
-    expect(body.plans[0]?.limits?.requestsPerMinute).toBe(60)
+    expect(body.plans[0]?.limits?.requestsPerMinute).toBe(200)
     expect(body.plans[1]?.limits?.requestsPerMinute).toBe(600)
   })
 })

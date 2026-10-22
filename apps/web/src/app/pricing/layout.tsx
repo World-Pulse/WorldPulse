@@ -6,7 +6,7 @@ import { pageMetadata } from '@/lib/page-metadata'
 export const metadata: Metadata = pageMetadata({
   path: '/pricing',
   title: 'Pricing',
-  description: 'Everything on WorldPulse is free today. Pro is coming: join the waitlist to hear when it opens.',
+  description: 'Everything on WorldPulse is free. Pro, $12 a month, adds a Pro API key with its own budget, commercial use and priority support.',
 })
 
 export default function Layout({ children }: { children: React.ReactNode }) {

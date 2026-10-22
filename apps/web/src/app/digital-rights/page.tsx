@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { ShieldCheck, TrendingUp, TrendingDown, ArrowRight } from 'lucide-react'
+import { PRO_PITCH } from '@/lib/pro-plan'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -462,10 +463,10 @@ export default function DigitalRightsPage() {
         {/* Pro CTA */}
         <div className="bg-gradient-to-r from-cyan-900/40 to-indigo-900/40 border border-cyan-500/30 rounded-lg p-6 text-center mt-8">
           <p className="text-sm text-zinc-300 mb-2">
-            Deep digital rights analysis, real-time shutdown alerts, and OSINT-enriched surveillance signals for Pro members.
+            {PRO_PITCH}
           </p>
           {/* Was a button that did nothing (plan G14) */}
-          <Link href="/pricing" className="inline-block px-4 py-2 bg-cyan-600 hover:bg-cyan-500 rounded-lg text-sm font-medium text-white transition-colors">
+          <Link href="/pricing#pro" className="inline-block px-4 py-2 bg-cyan-600 hover:bg-cyan-500 rounded-lg text-sm font-medium text-white transition-colors">
             Upgrade to Pro
           </Link>
         </div>

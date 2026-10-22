@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ScraperGate1Status } from '@/components/scraper/ScraperGate1Status'
 import { FlagReview } from '@/components/admin/FlagReview'
 import { ReportReview } from '@/components/admin/ReportReview'
+import { ProWaitlistAdmin } from '@/components/admin/ProWaitlistAdmin'
 import { Lock } from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
@@ -393,6 +394,7 @@ export default function AdminPage() {
       <section className="mb-8 space-y-4">
         <FlagReview token={token} />
         <ReportReview token={token} />
+        <ProWaitlistAdmin token={token} />
       </section>
 
       {/* ── GATE 1 STABILITY CLOCK ─────────────────────────── */}

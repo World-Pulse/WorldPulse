@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { authHref } from '@/lib/auth-next'
-import { ProWaitlist } from '@/components/ProWaitlist'
 import { Zap, Shield, Globe, Bot, MapPin, Unlock } from 'lucide-react'
 import {
   API_BASE, LANGS, ENDPOINT_GROUPS, ACCESS_LABEL, getCodeExample,
@@ -206,8 +205,8 @@ export default function DevelopersPage() {
         </div>
       </div>
 
-      {/* API tiers (Oct 21, 2026): what the code does. A key or a sign-in doesn't raise the
-          limits (lib/rate-limit-options.ts); Pro is a waitlist (Devon: "Waitlist now, price later") */}
+      {/* API tiers (Oct 21, 2026): what the code does. Pro (Devon, 8:10 PM: $12 a month) gives a
+          key its own budget (apps/api/src/lib/api-plan.ts); a free key counts like no key */}
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10 border-b border-[rgba(255,255,255,0.07)]">
         <h2 className="font-display text-xl text-wp-text1 mb-6 tracking-wide">API ACCESS</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -238,19 +237,25 @@ export default function DevelopersPage() {
             </ul>
           </div>
           <div className="bg-wp-surface border border-wp-cyan/40 rounded-xl p-5 relative shadow-[0_0_20px_rgba(0,212,255,0.06)]">
-            <div className="absolute -top-2 right-4 px-2 py-0.5 rounded text-[9px] font-mono bg-wp-cyan text-black font-bold">COMING SOON</div>
             <div className="flex items-center gap-2 mb-2">
-              <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-wp-cyan/10 text-wp-cyan border border-wp-cyan/20">PRO</span>
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-wp-cyan/10 text-wp-cyan border border-wp-cyan/20">PRO · $12/MO</span>
             </div>
             <h3 className="text-[16px] font-bold text-wp-text mb-1">Pro</h3>
-            <p className="text-[12px] text-wp-text3 mb-3">Not on sale yet. Planned: higher limits, longer history, priority support.</p>
-            <Link href="/pricing#pro" className="text-[12px] text-wp-cyan hover:underline">Join the waitlist →</Link>
+            <p className="text-[12px] text-wp-text3 mb-3">For using WorldPulse at work.</p>
+            <ul className="space-y-1 text-[12px] text-wp-text3 mb-3">
+              <li>• Everything in Signed in</li>
+              <li>• A Pro key with its own budget: 600 requests a minute, 50,000 a day</li>
+              <li>• Commercial use, with a link back</li>
+              <li>• Priority support</li>
+            </ul>
+            <Link href="/pricing#pro" className="text-[12px] text-wp-cyan hover:underline">See Pro →</Link>
           </div>
         </div>
         <div className="mt-5 p-4 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.02)] text-[13px] text-wp-text3 leading-relaxed">
           <span className="text-wp-text1 font-medium">Using the data.</span>{' '}
           Personal, research, education and non-profit use of the hosted API is free, with a link back to world-pulse.io.
-          Companies: email <span className="text-wp-cyan select-all">support@world-pulse.io</span> first.
+          Commercial use, in your own work and products, comes with <Link href="/pricing#pro" className="text-wp-cyan hover:underline">Pro</Link>, with a link back.
+          Reselling or redistributing the data needs a data license: email <span className="text-wp-cyan select-all">support@world-pulse.io</span>.
           The code is open source under the{' '}
           <a href={LICENSE_URL} target="_blank" rel="noopener noreferrer" className="text-wp-cyan hover:underline">MIT license</a>.
         </div>
@@ -414,7 +419,15 @@ export default function DevelopersPage() {
                   <span>Sign-in endpoints</span>
                   <span className="font-mono text-wp-amber whitespace-nowrap">5 req/min</span>
                 </div>
-                <p className="text-[12px]">A key or a sign-in doesn&apos;t raise these limits today.</p>
+                <div className="flex justify-between gap-3">
+                  <span>A Pro key (<Link href="/pricing#pro" className="text-wp-cyan hover:underline">Pro</Link>), its own budget: the whole API, and each read endpoint up to 10× its limit</span>
+                  <span className="font-mono text-wp-amber whitespace-nowrap">600 req/min</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span>A Pro key, a day (resets at midnight UTC)</span>
+                  <span className="font-mono text-wp-amber whitespace-nowrap">50,000 req</span>
+                </div>
+                <p className="text-[12px]">A free key counts like no key, and a sign-in doesn&apos;t raise the limits. Send a key as <code className="text-wp-cyan font-mono">X-Api-Key</code>.</p>
                 <p className="text-[12px] mt-2 pt-2 border-t border-[rgba(255,255,255,0.05)]">
                   Rate limit headers (<code className="text-wp-cyan font-mono">X-RateLimit-Limit</code>,{' '}
                   <code className="text-wp-cyan font-mono">X-RateLimit-Remaining</code>) are included in every response.
@@ -511,10 +524,10 @@ export default function DevelopersPage() {
           </div>
         </section>
 
-        {/* Plans (Oct 21, 2026): Pro is a waitlist (Devon: "Waitlist now, price later") */}
+        {/* Plans (Oct 21, 2026, 8:10 PM; Devon: Pro at $12 a month; checkout opens on /pricing) */}
         <section className="mb-16">
           <h2 className="text-xl font-display text-wp-text1 tracking-wide mb-2">PLANS</h2>
-          <p className="text-[14px] text-wp-text3 mb-6">Everything here is free today. Pro is coming; it has no price yet.</p>
+          <p className="text-[14px] text-wp-text3 mb-6">Everything here is free. Pro is for using WorldPulse at work.</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-6">
             <div className="rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(255,255,255,0.02)] p-6 flex flex-col">
               <p className="text-[10px] font-mono font-semibold text-wp-text3 uppercase tracking-widest mb-2">Free</p>
@@ -535,9 +548,22 @@ export default function DevelopersPage() {
               </Link>
             </div>
             <div className="rounded-xl border-2 border-wp-cyan/50 bg-wp-cyan/5 p-6 flex flex-col shadow-[0_0_30px_rgba(0,212,255,0.07)]">
-              <p className="text-[10px] font-mono font-semibold text-wp-cyan/80 uppercase tracking-widest mb-2">Pro · coming soon</p>
-              <p className="text-[13px] text-wp-text3 mb-4">Planned: higher API limits, longer history and exports, priority support. Hear when it opens:</p>
-              <ProWaitlist source="/developers" />
+              <p className="text-[10px] font-mono font-semibold text-wp-cyan/80 uppercase tracking-widest mb-2">Pro</p>
+              <p className="text-4xl font-bold text-wp-text mb-4">$12 <span className="text-[14px] font-normal text-wp-text3">a month</span></p>
+              <ul className="space-y-2 mb-6 flex-1 text-[13px] text-wp-text3">
+                {['Everything in Free', 'A Pro API key with its own budget: 600 requests a minute, 50,000 a day', 'Commercial use of the API and data, with a link back', 'Priority support by email'].map(f => (
+                  <li key={f} className="flex items-start gap-2">
+                    <span className="text-wp-cyan mt-0.5 flex-shrink-0">✓</span>
+                    <span>{f}</span>
+                  </li>
+                ))}
+              </ul>
+              <Link
+                href="/pricing#pro"
+                className="block w-full text-center rounded-lg bg-wp-cyan hover:bg-wp-cyan/90 text-black font-semibold py-2.5 text-[14px] transition-colors"
+              >
+                See Pro
+              </Link>
             </div>
           </div>
         </section>

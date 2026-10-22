@@ -2,38 +2,54 @@ import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 import { db } from '../db/postgres'
 import { authenticate } from '../middleware/auth'
-import { getStripe, PRO_PRICE_ID, WEBHOOK_SECRET, getPlanLimits } from '../lib/stripe'
+import { getStripe, WEBHOOK_SECRET, getPlanLimits, billingMode, mayCheckout, proLineItem, planOf, PRO_PRICE } from '../lib/stripe'
 import type { Plan } from '../lib/stripe'
 import { sendError } from '../lib/errors'
 
-// ─── Plan catalogue ──────────────────────────────────────────────────────────
+// ─── Plan catalogue (Devon, Oct 21, 2026, 8:10 PM) ───────────────────────────
+// What each plan gets, as the code does it. Until Oct 21 Pro listed 90-day
+// history, unlimited alerts, analytics and exports that nothing enforced or
+// built (departments/revenue/pricing-review-2026-10-20.md).
 
 const FREE_FEATURES = [
-  '60 API requests / minute',
-  '7-day signal history',
-  'Up to 3 alert subscriptions',
-  'Global live feed',
-  'Public map access',
-  'Community access',
+  'The live feed, the World Map and all its layers',
+  'Verified stories with how many outlets reported each',
+  'The public API, RSS feeds and the MCP server, with no key',
+  'Up to 200 API requests a minute (some endpoints allow fewer)',
+  'Alerts on the people, places and topics you follow',
+  'Up to 10 webhooks',
+  'Personal, research, education and non-profit use, with a link back',
 ]
 
 const PRO_FEATURES = [
-  '600 API requests / minute',
-  '90-day signal history',
-  'Unlimited alert subscriptions',
-  '5 webhook endpoints',
-  'Priority support',
-  'Early access to beta features',
-  'Advanced analytics',
-  'RSS & OPML export',
+  'Everything in Free',
+  'A Pro API key with its own budget: 600 requests a minute, 50,000 a day',
+  'Commercial use of the API and data, with a link back',
+  'Priority support by email',
 ]
+
+/** Where Stripe sends the reader back: the site's pricing page */
+const SITE_URL = (process.env.SITE_URL || 'https://world-pulse.io').replace(/\/+$/, '')
+
+/** A return address on this site only (Stripe sends the reader there after paying) */
+function onSite(url: string | undefined, fallback: string): string {
+  if (!url) return fallback
+  try {
+    return new URL(url).origin === new URL(SITE_URL).origin ? url : fallback
+  } catch {
+    return fallback
+  }
+}
+
+/** Statuses of a subscription that is still running: a second checkout would charge twice */
+const RUNNING = new Set(['active', 'trialing', 'past_due', 'incomplete'])
 
 // ─── Zod schemas ─────────────────────────────────────────────────────────────
 
 const CheckoutBody = z.object({
   plan:       z.literal('pro'),
-  successUrl: z.string().url(),
-  cancelUrl:  z.string().url(),
+  successUrl: z.string().url().optional(),
+  cancelUrl:  z.string().url().optional(),
 })
 
 // ─── Helper: subscription row → API shape ────────────────────────────────────
@@ -57,10 +73,12 @@ export const registerBillingRoutes: FastifyPluginAsync = async (app) => {
     schema: {
       tags: ['billing'],
       summary: 'List available plans',
+      description: 'Free and Pro ($12 a month), what each includes, and whether checkout is open: "live", "test" (Stripe test mode: the team only) or "off".',
       response: {
         200: {
           type: 'object',
           properties: {
+            checkout: { type: 'string', enum: ['live', 'test', 'off'] },
             plans: {
               type: 'array',
               items: {
@@ -76,6 +94,7 @@ export const registerBillingRoutes: FastifyPluginAsync = async (app) => {
                     type: 'object',
                     properties: {
                       requestsPerMinute: { type: 'number' },
+                      requestsPerDay:    { type: 'number', nullable: true },
                       historyDays:       { type: 'number' },
                       maxAlerts:         { type: 'number' },
                       maxWebhooks:       { type: 'number' },
@@ -90,6 +109,7 @@ export const registerBillingRoutes: FastifyPluginAsync = async (app) => {
     },
   }, async (_req, reply) => {
     return reply.send({
+      checkout: billingMode(),
       plans: [
         {
           id:       'free',
@@ -103,9 +123,9 @@ export const registerBillingRoutes: FastifyPluginAsync = async (app) => {
         {
           id:       'pro',
           name:     'Pro',
-          price:    1200,
-          currency: 'usd',
-          interval: 'month',
+          price:    PRO_PRICE.cents,
+          currency: PRO_PRICE.currency,
+          interval: PRO_PRICE.interval,
           features: PRO_FEATURES,
           limits:   getPlanLimits('pro'),
         },
@@ -114,11 +134,14 @@ export const registerBillingRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // ── POST /checkout ─────────────────────────────────────────────────────────
+  // $12 a month (lib/stripe.ts). In Stripe's test mode only admins and
+  // BILLING_TEST_EMAILS may check out. The reader comes back to /pricing.
   app.post('/checkout', {
     preHandler: [authenticate],
     schema: {
       tags: ['billing'],
       summary: 'Create Stripe checkout session for Pro upgrade',
+      description: 'Pro at $12 a month. Answers { url } to send the reader to Stripe; 409 when the account already has Pro; 403 while checkout is in test mode.',
       security: [{ bearerAuth: [] }],
     },
   }, async (req, reply) => {
@@ -135,16 +158,30 @@ export const registerBillingRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const userId = req.user.id
-    const user   = await db('users').where('id', userId).first(['id', 'email', 'display_name'])
+    const user   = await db('users').where('id', userId).first(['id', 'email', 'display_name', 'account_type'])
     if (!user) return sendError(reply, 401, 'UNAUTHORIZED', 'User not found')
+    if (!mayCheckout({ accountType: user.account_type as string, email: user.email as string })) {
+      return sendError(reply, 403, 'FORBIDDEN', 'Pro checkout is being tested and is not open yet. Join the waitlist on world-pulse.io/pricing to hear when it opens.')
+    }
 
     // Look up or create Stripe customer
-    let existingSub = await db('subscriptions').where('user_id', userId).first()
-    let customerId: string
+    const existingSub = await db('subscriptions').where('user_id', userId).first()
+    if (existingSub?.plan === 'pro' && RUNNING.has(String(existingSub.status))) {
+      return sendError(reply, 409, 'CONFLICT', "You're already on Pro: manage it from world-pulse.io/pricing.")
+    }
 
-    if (existingSub?.stripe_customer_id) {
-      customerId = existingSub.stripe_customer_id
-    } else {
+    // A customer saved in another mode (a test customer once the live key is in) or deleted: make a new one
+    let customerId: string | null = (existingSub?.stripe_customer_id as string | undefined) ?? null
+    if (customerId) {
+      try {
+        const found = await stripe.customers.retrieve(customerId)
+        if ((found as { deleted?: boolean }).deleted) customerId = null
+      } catch {
+        customerId = null
+      }
+    }
+
+    if (!customerId) {
       const customer = await stripe.customers.create({
         email: user.email as string,
         name:  user.display_name as string | undefined,
@@ -168,20 +205,54 @@ export const registerBillingRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    if (!PRO_PRICE_ID) {
-      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'Billing not configured — price ID missing')
-    }
-
     const session = await stripe.checkout.sessions.create({
-      mode:                 'subscription',
-      customer:             customerId,
-      line_items:           [{ price: PRO_PRICE_ID, quantity: 1 }],
-      success_url:          body.data.successUrl,
-      cancel_url:           body.data.cancelUrl,
+      mode:                  'subscription',
+      customer:              customerId,
+      client_reference_id:   userId,
+      line_items:            [proLineItem()],
+      subscription_data:     { metadata: { worldpulse_plan: 'pro', worldpulse_user_id: userId } },
+      metadata:              { worldpulse_plan: 'pro', worldpulse_user_id: userId },
+      success_url:           onSite(body.data.successUrl, `${SITE_URL}/pricing?checkout=done`),
+      cancel_url:            onSite(body.data.cancelUrl, `${SITE_URL}/pricing?checkout=cancelled`),
       allow_promotion_codes: true,
     })
 
     return reply.send({ url: session.url })
+  })
+
+  // ── POST /portal: "Manage subscription" ────────────────────────────────────
+  // Stripe's own page for the subscriber: change the card, see invoices,
+  // cancel. It must be switched on once in Stripe (Settings → Billing →
+  // Customer portal).
+  app.post('/portal', {
+    preHandler: [authenticate],
+    schema: {
+      tags: ['billing'],
+      summary: 'Open Stripe\'s page to manage the subscription',
+      description: 'Answers { url }: Stripe\'s customer portal (card, invoices, cancel), back to /pricing after.',
+      security: [{ bearerAuth: [] }],
+    },
+  }, async (req, reply) => {
+    let stripe
+    try {
+      stripe = getStripe()
+    } catch {
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'Billing not configured')
+    }
+    const row = await db('subscriptions').where('user_id', req.user.id).first()
+    if (!row?.stripe_customer_id) {
+      return sendError(reply, 404, 'NOT_FOUND', 'No subscription to manage')
+    }
+    try {
+      const session = await stripe.billingPortal.sessions.create({
+        customer:   row.stripe_customer_id as string,
+        return_url: `${SITE_URL}/pricing`,
+      })
+      return reply.send({ url: session.url })
+    } catch (err) {
+      req.log.warn({ err }, 'billing portal: Stripe refused')
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'Managing a subscription online is not switched on yet: write to support@world-pulse.io.')
+    }
   })
 
   // ── GET /subscription ──────────────────────────────────────────────────────
@@ -194,7 +265,13 @@ export const registerBillingRoutes: FastifyPluginAsync = async (app) => {
     },
   }, async (req, reply) => {
     const row = await db('subscriptions').where('user_id', req.user.id).first()
-    return reply.send(formatSubscription(row))
+    // Whether this account may start a checkout now (in test mode only the team may), for /pricing's button
+    const user = await db('users').where('id', req.user.id).first(['email', 'account_type']) as { email?: string; account_type?: string } | undefined
+    return reply.send({
+      ...formatSubscription(row),
+      checkout:    billingMode(),
+      canCheckout: mayCheckout({ accountType: user?.account_type ?? req.user.accountType, email: user?.email ?? null }),
+    })
   })
 
   // ── POST /cancel ───────────────────────────────────────────────────────────
@@ -261,11 +338,17 @@ export const registerBillingRoutes: FastifyPluginAsync = async (app) => {
         return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid signature')
       }
     } else {
+      // Only Stripe-signed events change a plan on the live server: without the
+      // signing secret anyone could post "subscription created" and get Pro
+      if (!WEBHOOK_SECRET && process.env.NODE_ENV === 'production') {
+        app.log.warn('Stripe webhook refused: STRIPE_WEBHOOK_SECRET is not set')
+        return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'Billing webhook not configured')
+      }
       // rawBody not available — parse body as event directly (dev/no-secret mode)
-      if (WEBHOOK_SECRET && sig) {
-        // Secret configured but rawBody unavailable — reject for safety
-        app.log.warn('Stripe webhook: STRIPE_WEBHOOK_SECRET is set but rawBody is unavailable — install @fastify/raw-body')
-        return sendError(reply, 400, 'VALIDATION_ERROR', 'Webhook signature verification unavailable')
+      if (WEBHOOK_SECRET) {
+        // Secret configured but no signature, or no rawBody to check it against — reject
+        if (sig) app.log.warn('Stripe webhook: STRIPE_WEBHOOK_SECRET is set but rawBody is unavailable — install @fastify/raw-body')
+        return sendError(reply, 400, 'VALIDATION_ERROR', sig ? 'Webhook signature verification unavailable' : 'Missing Stripe signature')
       }
       event = req.body as import('stripe').default.Event
     }
@@ -287,7 +370,7 @@ async function handleWebhookEvent(
       case 'customer.subscription.created':
       case 'customer.subscription.updated': {
         const sub  = event.data.object as import('stripe').default.Subscription
-        const plan = resolvePlan(sub)
+        const plan = planOf(sub as unknown as Parameters<typeof planOf>[0])
         await db('subscriptions')
           .where('stripe_customer_id', sub.customer as string)
           .update({
@@ -346,13 +429,4 @@ async function handleWebhookEvent(
   } catch (err) {
     log.warn({ err }, 'Stripe webhook handler error')
   }
-}
-
-// Derive 'free' | 'pro' from a Stripe Subscription object
-function resolvePlan(sub: import('stripe').default.Subscription): 'free' | 'pro' {
-  const priceId = sub.items.data[0]?.price.id ?? ''
-  if (priceId === PRO_PRICE_ID && PRO_PRICE_ID !== '') return 'pro'
-  // Also check metadata or nickname as fallback
-  const nickname = (sub.items.data[0]?.price.nickname ?? '').toLowerCase()
-  return nickname.includes('pro') ? 'pro' : 'free'
 }
