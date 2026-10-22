@@ -10,6 +10,7 @@ import { flagReviewList, REVIEW_AT, REVIEW_DAYS } from '../lib/signal-flags'
 import { contentReviewList, REPORT_REVIEW_AT, REPORT_REVIEW_DAYS } from '../lib/content-reports'
 import { GEMINI_MODEL, OLLAMA_MODEL } from '../lib/llm-models'
 import { waitlistCounts, announceProOpen } from '../lib/pro-waitlist'
+import { outsideUse } from '../lib/outside-use'
 import { billingMode } from '../lib/stripe'
 import { EMAIL_CONFIGURED, sendEmail } from '../lib/email'
 
@@ -119,6 +120,17 @@ export const registerAdminRoutes: FastifyPluginAsync = async (app) => {
     }
     const counts = await waitlistCounts(redis).catch(() => ({ waiting: 0, announced: 0 }))
     return reply.send({ success: true, data: { ...counts, checkout: billingMode(), emailReady: EMAIL_CONFIGURED } })
+  })
+
+  // Use from outside (lib/outside-use.ts, Oct 22, 2026): the API and the MCP server
+  // used by anyone but the website, a day at a time, the last 14 days by default
+  app.get('/outside-use', { preHandler: [authenticate], config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req, reply) => {
+    if (!req.user || req.user.accountType !== 'admin') {
+      return sendError(reply, 403, 'FORBIDDEN', 'Admin access required')
+    }
+    const asked = Number((req.query as { days?: string }).days)
+    const days = Number.isInteger(asked) && asked >= 1 && asked <= 45 ? asked : 14
+    return reply.send({ success: true, data: { days: await outsideUse(redis, days) } })
   })
 
   app.post('/pro-waitlist/announce', { preHandler: [authenticate], config: { rateLimit: { max: 3, timeWindow: '1 minute' } } }, async (req, reply) => {

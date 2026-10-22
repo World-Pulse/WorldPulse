@@ -2,6 +2,7 @@ import Fastify, { type FastifyError } from 'fastify'
 import { errorReply } from './lib/error-reply'
 import { registerErrorBody } from './lib/error-body'
 import { countRefusal } from './lib/refusals'
+import { countOutsideUse } from './lib/outside-use'
 import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
 import jwt from '@fastify/jwt'
@@ -146,6 +147,8 @@ registerErrorBody(app)
 // time, for /ops-status.json (lib/refusals.ts, plan D3)
 app.addHook('onResponse', async (req, reply) => {
   if (reply.statusCode === 429) void countRefusal(redis, req.method, req.routeOptions?.url)
+  // Use from outside: the API and MCP server used by anyone but the website (lib/outside-use.ts, Oct 22, 2026)
+  void countOutsideUse(redis, req, reply.statusCode)
 })
 
 async function bootstrap() {

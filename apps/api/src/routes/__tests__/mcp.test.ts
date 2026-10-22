@@ -3,9 +3,18 @@
  * over one POST, the six read-only tools asking the API's own routes, and
  * those inner calls counted as the client who asked.
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import Fastify, { type FastifyInstance } from 'fastify'
 import rateLimit from '@fastify/rate-limit'
+
+// tool calls counted as use from outside (lib/outside-use.ts), recorded here instead of in Redis
+const counted = vi.hoisted(() => ({ tools: [] as string[] }))
+vi.mock('../../db/redis', () => ({ redis: {} }))
+vi.mock('../../lib/outside-use', async (actual) => ({
+  ...(await actual<typeof import('../../lib/outside-use')>()),
+  countMcpTool: vi.fn(async (_redis: unknown, tool: string) => { counted.tools.push(tool) }),
+}))
+
 import { registerMcpRoutes, PROTOCOL_VERSIONS } from '../mcp'
 import { internalCallClient } from '../../lib/internal-call'
 import { rateLimitKey } from '../../lib/rate-limit-options'
@@ -261,5 +270,27 @@ describe('inner calls and the rate limiter', () => {
     for (let i = 0; i < 2; i++) await app.inject({ method: 'GET', url: '/api/v1/search/semantic?q=ports', remoteAddress: '203.0.113.7', headers: asOther })
     expect((await app.inject({ method: 'GET', url: '/api/v1/search/semantic?q=ports', remoteAddress: '203.0.113.7', headers: asOther })).statusCode).toBe(429)
     expect((await search(app, '198.51.100.4')).json().result.isError).toBe(false)
+  })
+})
+
+describe('tool calls counted as use from outside (Oct 22, 2026)', () => {
+  beforeEach(() => { counted.tools = [] })
+  const ask = (app: FastifyInstance, name: string, from: string, headers: Record<string, string> = {}) =>
+    app.inject({ method: 'POST', url: '/mcp', remoteAddress: from, headers: { 'content-type': 'application/json', ...headers }, payload: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: {} } }) })
+
+  it("counts a client's tool calls, by tool", async () => {
+    const app = await build()
+    await ask(app, 'top_stories', '203.0.113.7')
+    await ask(app, 'week', '198.51.100.4', { 'user-agent': 'Claude-User/1.0' })
+    expect(counted.tools).toEqual(['top_stories', 'week'])
+  })
+
+  it("not the server's own calls, a world-pulse.io page's, WorldPulse's own checks, or a tool that doesn't exist", async () => {
+    const app = await build()
+    await ask(app, 'top_stories', '127.0.0.1')
+    await ask(app, 'top_stories', '203.0.113.7', { origin: 'https://world-pulse.io' })
+    await ask(app, 'top_stories', '203.0.113.7', { 'user-agent': 'WorldPulse-Autopilot/1.0 (checks)' })
+    await ask(app, 'no_such_tool', '203.0.113.7')
+    expect(counted.tools).toEqual([])
   })
 })

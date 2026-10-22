@@ -21,6 +21,8 @@ import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import { internalCallHeaders } from '../lib/internal-call'
 import { rateLimitKey } from '../lib/rate-limit-options'
 import { describeSite, siteInfo } from '../lib/outlets'
+import { countMcpTool, isOutsideUse, isOwnCheck } from '../lib/outside-use'
+import { redis } from '../db/redis'
 
 const SITE = (process.env.SITE_URL || 'https://world-pulse.io').replace(/\/+$/, '')
 
@@ -38,7 +40,12 @@ const INSTRUCTIONS = [
 interface ToolResult { text: string; data: Record<string, unknown> }
 
 /** The API, and the rate-limit key of the client asking */
-export interface Asker { app: FastifyInstance; client: string }
+export interface Asker {
+  app: FastifyInstance
+  client: string
+  /** Counts a tool call as use from outside (lib/outside-use.ts; the route passes it, tests may not) */
+  countTool?: (tool: string) => void
+}
 
 interface Tool {
   name: string
@@ -367,6 +374,7 @@ export async function handleMessage(m: unknown, asker: Asker): Promise<Record<st
     case 'tools/call': {
       const tool = TOOLS.find(t => t.name === params.name)
       if (!tool) return rpcError(msg.id, -32602, `Unknown tool: ${String(params.name ?? '')}`)
+      asker.countTool?.(tool.name)
       const args = (params.arguments && typeof params.arguments === 'object' ? params.arguments : {}) as Record<string, unknown>
       try {
         const { text, data } = await tool.run(args, asker)
@@ -415,7 +423,9 @@ export const registerMcpRoutes: FastifyPluginAsync = async (app) => {
     const batch = Array.isArray(body)
     const messages = batch ? (body as unknown[]) : [body]
     if (messages.length === 0 || messages.length > 20) return reply.code(400).send(rpcError(null, -32600, 'Invalid Request'))
-    const asker: Asker = { app, client: rateLimitKey(req) }
+    // tool calls count as use from outside when the POST itself does (not the website's, not WorldPulse's own checks)
+    const outside = isOutsideUse(req, 200) && !isOwnCheck(req.headers['user-agent'])
+    const asker: Asker = { app, client: rateLimitKey(req), countTool: outside ? tool => { void countMcpTool(redis, tool) } : undefined }
     const answers: Array<Record<string, unknown>> = []
     for (const m of messages) {
       const a = await handleMessage(m, asker)

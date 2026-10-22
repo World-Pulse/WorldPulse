@@ -6,6 +6,7 @@ import { ScraperGate1Status } from '@/components/scraper/ScraperGate1Status'
 import { FlagReview } from '@/components/admin/FlagReview'
 import { ReportReview } from '@/components/admin/ReportReview'
 import { ProWaitlistAdmin } from '@/components/admin/ProWaitlistAdmin'
+import { OutsideUseAdmin } from '@/components/admin/OutsideUseAdmin'
 import { Lock } from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
@@ -388,6 +389,11 @@ export default function AdminPage() {
             {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
           </div>
         )}
+      </section>
+
+      {/* ── USE FROM OUTSIDE: THE API AND MCP SERVER, A DAY AT A TIME (Oct 22, 2026) ── */}
+      <section className="mb-8">
+        <OutsideUseAdmin token={token} />
       </section>
 
       {/* ── READERS' FLAGS AND REPORTS: THE REVIEW LISTS (plans C5, C6) ── */}
