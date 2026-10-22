@@ -279,9 +279,10 @@ async function bootstrap() {
   }, 3 * 60_000)
   // Once: the world's coverage by country and kind of event, counted for the
   // week before from GDELT's kept files, so the hours since can be compared
-  // with the same hours on earlier days at once (pipeline/gkg-pulse.ts)
+  // with the same hours on earlier days at once (pipeline/gkg-pulse.ts; "b":
+  // version 2's keys, Oct 22, 5:30 PM, with the tighter kinds of event)
   setTimeout(() => {
-    runOnce('repair:gkg-pulse-week:2026-10-22', () => backfillPulse())
+    runOnce('repair:gkg-pulse-week:2026-10-22b', () => backfillPulse())
       .then(t => { if (t) logger.info(t, "Pulse: the week before counted from GDELT's files") })
       .catch(err => logger.warn({ err }, 'Pulse week count failed (non-fatal)'))
   }, 4 * 60_000)

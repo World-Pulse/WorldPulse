@@ -13,11 +13,11 @@ const hourAgo = (n: number) => new Date(Math.floor(Date.now() / 3_600_000) * 3_6
 vi.mock('../db/redis', () => ({
   redis: {
     get: async (key: string) => (key === 'repair:archive-outlets:2026-10-22:done' ? '2026-10-22T23:10:00Z' : null),
-    hget: async (key: string, field: string) => (field === '_files' && key === `gkg:pulse:${hourAgo(1)}` ? '4' : field === '_files' && key === `gkg:pulse:${hourAgo(30)}` ? '1' : null),
+    hget: async (key: string, field: string) => (field === '_files' && key === `gkg:pulse:2:${hourAgo(1)}` ? '4' : field === '_files' && key === `gkg:pulse:2:${hourAgo(30)}` ? '1' : null),
     setex: async () => 'OK',
     hgetall: async (key: string) => (key.endsWith(today) ? { searched: '40', matched: '9', outlets: '13', promoted: '8' }
       : key === 'repair:archive-outlets:stats' ? { days: '46', verified: '1200', last_day: '2026-05-20' }
-      : key === 'gkg:pulse:backfill' ? { files: '120', skipped: '2', missing: '0', failed: '1', last: '20261018041500', updated_at: '2026-10-22T21:52:00.000Z' } : {}),
+      : key === 'gkg:pulse:2:backfill' ? { files: '120', skipped: '2', missing: '0', failed: '1', last: '20261018041500', updated_at: '2026-10-22T21:52:00.000Z' } : {}),
     lrange: async () => [
       JSON.stringify({ id: 's1', title: 'Six dead as bus hits tree in Chhattisgarh', found: [{ site: 'ndtv.com', title: 'Six killed after bus hits tree in Chhattisgarh', url: 'https://www.ndtv.com/a' }] }),
       'not json',

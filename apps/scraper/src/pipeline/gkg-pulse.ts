@@ -8,13 +8,13 @@
  * where the world's coverage jumps ("protest coverage of Kenya at four times
  * its usual for these hours"), often before WorldPulse's own feeds carry it.
  *
- * Kept in Redis, a hash an hour (gkg:pulse:<YYYYMMDDHH>, 9 days): "<ISO
+ * Kept in Redis, a hash an hour (gkg:pulse:2:<YYYYMMDDHH>, 9 days): "<ISO
  * country>|*|n" articles naming the country, "<ISO country>|*|t" their tone
  * (tenths, summed), "<ISO country>|<group>|n" the articles of each group,
  * "_articles" the articles that named any country, "_files" the files
  * counted that hour (a restart or a file GDELT skipped leaves fewer: readers
  * compare rates per file). A file is counted once
- * (gkg:pulse:files:<YYYYMMDD>), whatever restarts re-read. The analysis
+ * (gkg:pulse:2:files:<YYYYMMDD>), whatever restarts re-read. The analysis
  * engine's reading compares the last 6 hours with the same hours on the days
  * before.
  */
@@ -23,22 +23,33 @@ import { redis } from '../lib/redis'
 import { isoFromFips } from './fips-countries'
 import { fetchFileText, stampOf } from './gdelt-articles'
 
-export const PULSE_KEY = (hour: string) => `gkg:pulse:${hour}`
-const FILES_KEY = (day: string) => `gkg:pulse:files:${day}`
+/**
+ * Version 2 (Oct 22, 2026, 5:30 PM): tighter kinds of event, read from one real
+ * file of 1,770 articles: "disaster" had counted GDELT's vague
+ * MANMADE_DISASTER_IMPLIED (332 articles) and NATURAL_DISASTER_ICE (80, mostly
+ * America's immigration agency), "health" every disease (cancer, brain
+ * injury), "shipping" every mention of the sea and "conflict" every killing
+ * and gun; killings now count apart as "casualties". Its own keys, so counts
+ * of the two versions never mix.
+ */
+export const PULSE_PREFIX = 'gkg:pulse:2:'
+export const PULSE_KEY = (hour: string) => `${PULSE_PREFIX}${hour}`
+const FILES_KEY = (day: string) => `${PULSE_PREFIX}files:${day}`
 const KEEP_S = 9 * 86_400
 
 /** GDELT's themes, gathered into the kinds of event WorldPulse follows (an article counts once per group) */
 export const PULSE_GROUPS: ReadonlyArray<readonly [string, RegExp]> = [
-  ['conflict', /^(ARMEDCONFLICT|MILITARY|KILL|WOUND|TAX_WEAPONS|CEASEFIRE|SEIGE|SIEGE)/],
+  ['conflict', /^(ARMEDCONFLICT|MILITARY$|CEASEFIRE|SEIGE|SIEGE|TAX_WEAPONS_(MISSILE|ROCKET|BOMB|EXPLOSIVE|DRONE|ARTILLERY|MORTAR|GRENADE|WARSHIP|AIRCRAFT_CARRIER|TANK))/],
+  ['casualties', /^(KILL|WOUND|CRISISLEX_T03_DEAD|CRISISLEX_T02_INJURED)/],
   ['terror', /^(TERROR|SUICIDE_ATTACK)/],
-  ['unrest', /^(PROTEST|RIOT|CURFEW|STATE_OF_EMERGENCY|UNREST_|REBELLION|GENERAL_STRIKE)/],
+  ['unrest', /^(PROTEST|RIOT|CURFEW|STATE_OF_EMERGENCY|REBELLION|GENERAL_STRIKE|UNREST_(?!BELLIGERENT|SELF_IDENTIFIED|NATIONAL_SELF_DEFENSE))/],
   ['coup', /^(COUP|REGIME_CHANGE)/],
-  ['disaster', /^(NATURAL_DISASTER|MANMADE_DISASTER|EVACUATION)/],
-  ['health', /^(HEALTH_PANDEMIC|TAX_DISEASE|EPIDEMIC)/],
+  ['disaster', /^(NATURAL_DISASTER_(?!ICE)|MANMADE_DISASTER(?!_IMPLIED)|EVACUATION)/],
+  ['health', /^(HEALTH_PANDEMIC|EPIDEMIC|TAX_DISEASE_(EPIDEMIC|OUTBREAK|PANDEMIC|INFECTIO|EBOLA|CHOLERA|MEASLES|MPOX|MONKEYPOX|MARBURG|DENGUE|MALARIA|POLIO|ANTHRAX|PLAGUE|AVIAN|BIRD_FLU|H5N1|INFLUENZA|FLU$|CORONAVIRUS|COVID|YELLOW_FEVER|LASSA|NIPAH|ZIKA|DIPHTHERIA|MENINGITIS|TYPHOID|HEPATITIS|CHIKUNGUNYA|RABIES|TUBERCULOSIS))/],
   ['election', /^ELECTION/],
   ['economy', /^ECON_/],
   ['energy', /^(ENV_OIL|ENV_NATURALGAS|FUELPRICES|ENERGY)/],
-  ['shipping', /^(MARITIME|PIRACY|BLOCKADE)/],
+  ['shipping', /^(MARITIME_INCIDENT|MARITIME_PIRACY|PIRACY|BLOCKADE)/],
   ['cyber', /^CYBER/],
   ['displacement', /^(REFUGEES|DISPLACED)/],
   ['sanctions', /^(SANCTIONS|EMBARGO)/],
@@ -94,7 +105,7 @@ export async function recordPulse(stamp: string, counts: PulseCounts): Promise<b
 // ─── The week before ─────────────────────────────────────────────────────────
 
 export const BACKFILL_DAYS = 7
-export const BACKFILL_STATS = 'gkg:pulse:backfill'
+export const BACKFILL_STATS = `${PULSE_PREFIX}backfill`
 
 export interface BackfillDeps {
   counted(stamp: string): Promise<boolean>

@@ -64,8 +64,8 @@ describe('the pulse of one file', () => {
     ].join('\n')
     expect(readPulse(text)).toEqual({
       _articles: 2,
-      'NG|*|n': 2, 'NG|*|t': -105, 'NG|unrest|n': 1, 'NG|disaster|n': 1, 'NG|conflict|n': 1,
-      'KE|*|n': 1, 'KE|*|t': -60, 'KE|disaster|n': 1, 'KE|conflict|n': 1,
+      'NG|*|n': 2, 'NG|*|t': -105, 'NG|unrest|n': 1, 'NG|disaster|n': 1, 'NG|casualties|n': 1,
+      'KE|*|n': 1, 'KE|*|t': -60, 'KE|disaster|n': 1, 'KE|casualties|n': 1,
     })
   })
 
@@ -75,21 +75,32 @@ describe('the pulse of one file', () => {
     expect(await recordPulse('20261022121500', { 'NG|*|n': 2, 'NG|*|t': -105, 'NG|unrest|n': 1 })).toBe(false)
     expect(await recordPulse('20261022123000', { 'NG|*|n': 1, 'KE|*|n': 3 })).toBe(true)
     expect(await recordPulse('20261022130000', { 'KE|*|n': 1 })).toBe(true)
-    expect(Object.fromEntries(store.get('gkg:pulse:2026102212')!)).toEqual({ 'NG|*|n': 3, 'NG|*|t': -105, 'NG|unrest|n': 1, 'KE|*|n': 3, _files: 2 })
-    expect(Object.fromEntries(store.get('gkg:pulse:2026102213')!)).toEqual({ 'KE|*|n': 1, _files: 1 })
-    expect([...sets.get('gkg:pulse:files:20261022')!]).toEqual(['20261022121500', '20261022123000', '20261022130000'])
-    expect(ttl.get('gkg:pulse:2026102212')).toBe(9 * 86_400)
-    expect(ttl.get('gkg:pulse:files:20261022')).toBe(9 * 86_400)
+    expect(Object.fromEntries(store.get('gkg:pulse:2:2026102212')!)).toEqual({ 'NG|*|n': 3, 'NG|*|t': -105, 'NG|unrest|n': 1, 'KE|*|n': 3, _files: 2 })
+    expect(Object.fromEntries(store.get('gkg:pulse:2:2026102213')!)).toEqual({ 'KE|*|n': 1, _files: 1 })
+    expect([...sets.get('gkg:pulse:2:files:20261022')!]).toEqual(['20261022121500', '20261022123000', '20261022130000'])
+    expect(ttl.get('gkg:pulse:2:2026102212')).toBe(9 * 86_400)
+    expect(ttl.get('gkg:pulse:2:files:20261022')).toBe(9 * 86_400)
   })
 
   it('a file with nothing to count still counts as read', async () => {
     store.clear(); sets.clear(); ttl.clear()
     expect(await recordPulse('20261022140000', {})).toBe(true)
-    expect(Object.fromEntries(store.get('gkg:pulse:2026102214')!)).toEqual({ _files: 1 })
+    expect(Object.fromEntries(store.get('gkg:pulse:2:2026102214')!)).toEqual({ _files: 1 })
   })
 
   it('knows the kinds of event WorldPulse follows', () => {
-    expect(PULSE_GROUPS.map(([g]) => g)).toEqual(['conflict', 'terror', 'unrest', 'coup', 'disaster', 'health', 'election', 'economy', 'energy', 'shipping', 'cyber', 'displacement', 'sanctions'])
+    expect(PULSE_GROUPS.map(([g]) => g)).toEqual(['conflict', 'casualties', 'terror', 'unrest', 'coup', 'disaster', 'health', 'election', 'economy', 'energy', 'shipping', 'cyber', 'displacement', 'sanctions'])
+  })
+
+  // version 2 (Oct 22): GDELT's vague or misleading themes, read from a real file, are left out
+  it('leaves out vague themes: implied disasters, ICE, every disease, every mention of the sea', () => {
+    const kinds = (themes: string) => Object.keys(readPulse(line(themes, lagos, '-1,1,2,3,10,0,100'))).filter(k => k.startsWith('NG|') && !k.startsWith('NG|*')).map(k => k.split('|')[1])
+    expect(kinds('MANMADE_DISASTER_IMPLIED;NATURAL_DISASTER;NATURAL_DISASTER_ICE')).toEqual([])
+    expect(kinds('TAX_DISEASE;TAX_DISEASE_CANCER;TAX_DISEASE_BRAIN_INJURY')).toEqual([])
+    expect(kinds('MARITIME;MILITARY_COOPERATION;UNREST_BELLIGERENT;TAX_WEAPONS_FIREARM')).toEqual([])
+    expect(kinds('NATURAL_DISASTER_FLOOD;MANMADE_DISASTER_OIL_SPILL')).toEqual(['disaster'])
+    expect(kinds('TAX_DISEASE_CHOLERA;TAX_DISEASE_INFECTION')).toEqual(['health'])
+    expect(kinds('MARITIME_INCIDENT;ARMEDCONFLICT;TAX_WEAPONS_MISSILE;UNREST_CRACKDOWN')).toEqual(['conflict', 'unrest', 'shipping'])
   })
 })
 

@@ -250,9 +250,10 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
       // the April–May repair (apps/scraper/src/pipeline/archive-outlets.ts)
       redis.hgetall('repair:archive-outlets:stats').catch(() => null),
       redis.get('repair:archive-outlets:2026-10-22:done').catch(() => null),
-      redis.hgetall('gkg:pulse:backfill').catch(() => null),
-      redis.get('repair:gkg-pulse-week:2026-10-22:done').catch(() => null),
-      Promise.all(hours.map(h => redis.hget(`gkg:pulse:${h}`, '_files').catch(() => null))),
+      // version 2's keys (Oct 22, 5:30 PM: the tighter kinds of event)
+      redis.hgetall('gkg:pulse:2:backfill').catch(() => null),
+      redis.get('repair:gkg-pulse-week:2026-10-22b:done').catch(() => null),
+      Promise.all(hours.map(h => redis.hget(`gkg:pulse:2:${h}`, '_files').catch(() => null))),
     ])
     const numbers = (h: Record<string, string> | null) =>
       Object.fromEntries(Object.entries(h ?? {}).map(([k, v]) => [k, Number(v) || 0]))
