@@ -44,6 +44,7 @@ import { independentReports, isCopyOf } from './pipeline/independence'
 import { ensureStoryIdColumn } from './pipeline/stories'
 import { startEditor, catchUpEditor } from './pipeline/editor'
 import { startSecondReads } from './pipeline/second-read'
+import { startSecondOutlets } from './pipeline/second-outlet'
 import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames, fixGdeltFipsCountries, stripOutletNotes, stripOutletNames, repairHeadlineSummaries, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability, switchOffRetiredSources } from './pipeline/repairs'
 import { batchValidateGeo } from './pipeline/geo-validator'
 import { recomputeSourceReputation } from './pipeline/source-reputation'
@@ -261,6 +262,9 @@ async function bootstrap() {
   startEditor()
   // A second read of the high and critical reports few outlets carry (plan 11)
   startSecondReads()
+  // Other outlets' reports of medium-and-above stories only one outlet carries,
+  // found in GDELT's news index (plan 0s3)
+  startSecondOutlets()
   // Once, the last 12 hours again: most of the editor's calls so far came back
   // empty (Claude's thinking used up the reply's token limit, lib/claude.ts
   // thinkingOff), and the RSS repair above put back what it had re-filed. (The

@@ -226,6 +226,32 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ success: true, data: names })
   })
 
+  // ─── GET /second-outlets ──────────────────────────────────
+  // The other outlets found for reports only one outlet carried (plan 0s3,
+  // Oct 22, 2026): the scraper searches GDELT's news index for them
+  // (apps/scraper/src/pipeline/second-outlet.ts). Today's and yesterday's
+  // counts (UTC days) and the latest reports it found outlets for, so anyone
+  // can read the matches.
+  app.get('/second-outlets', {
+    schema: { tags: ['public'], summary: 'Other outlets found for one-outlet reports (public, no auth required)' },
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (_req, reply) => {
+    reply.header('Access-Control-Allow-Origin', '*')
+    const day = (offset: number) => new Date(Date.now() - offset * 86_400_000).toISOString().slice(0, 10)
+    const days = [day(0), day(1)]
+    const [today, yesterday, recent] = await Promise.all([
+      redis.hgetall(`second-outlet:day:${days[0]}`).catch(() => null),
+      redis.hgetall(`second-outlet:day:${days[1]}`).catch(() => null),
+      redis.lrange('second-outlet:recent', 0, 49).catch(() => [] as string[]),
+    ])
+    const numbers = (h: Record<string, string> | null) =>
+      Object.fromEntries(Object.entries(h ?? {}).map(([k, v]) => [k, Number(v) || 0]))
+    const latest = (recent ?? []).flatMap(entry => {
+      try { return [JSON.parse(entry) as Record<string, unknown>] } catch { return [] }
+    })
+    return reply.send({ success: true, data: { days: { [days[0]!]: numbers(today), [days[1]!]: numbers(yesterday) }, latest } })
+  })
+
   // ─── OPTIONS preflight ────────────────────────────────────
   app.options('/signals', {
     config: { rateLimit: { max: 120, timeWindow: '1 minute' } },

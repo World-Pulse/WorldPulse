@@ -30,6 +30,7 @@ import type { Knex } from 'knex'
 import { BAD_CURSOR, isUuid } from '../lib/cursor'
 import { visitorHash, alreadyFlagged, flagSummary } from '../lib/signal-flags'
 import { siteInfo, sitesOfLinks } from '../lib/outlets'
+import { gdeltSlot } from '../lib/gdelt-slot'
 
 const SIGNAL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -1507,6 +1508,12 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       gdeltUrl = `https://api.gdeltproject.org/api/v2/tv/tv?query=${encodedQ}&mode=clipgallery&format=json&maxrecords=6&startdatetime=${formatGdeltDate(start)}&enddatetime=${formatGdeltDate(end)}`
     }
 
+    // GDELT takes one request every 5 seconds from this server (lib/gdelt-slot.ts):
+    // when the slot stays taken, no clips this time, and nothing kept in the cache
+    if (!(await gdeltSlot(6_000))) {
+      return reply.send({ success: true, data: { clips: [], query, total: 0 } })
+    }
+
     // ── Fetch from GDELT (5s timeout, never throw) ───────────────────────────
     let clips: TVClip[] = []
     try {
@@ -1586,6 +1593,12 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       `?query=${encodedQ}&mode=artlist&format=json&maxrecords=6` +
       `&timespan=${timespan}&SOURCELANG:eng`
     )
+
+    // GDELT takes one request every 5 seconds from this server (lib/gdelt-slot.ts):
+    // when the slot stays taken, no images this time, and nothing kept in the cache
+    if (!(await gdeltSlot(6_000))) {
+      return reply.send({ success: true, data: { images: [], query, total: 0 } })
+    }
 
     // ── Fetch from GDELT DOC (5s timeout, never throw) ───────────────────────
     let images: NewsImage[] = []

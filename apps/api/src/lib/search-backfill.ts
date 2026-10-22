@@ -12,6 +12,7 @@
  */
 
 import { db } from '../db/postgres'
+import { redis } from '../db/redis'
 import { meili, indexSignals, indexPosts, indexUsers } from './search'
 import { logger } from './logger'
 
@@ -252,4 +253,79 @@ export async function runFullReindex(): Promise<BackfillResult> {
 
   logger.info(result, 'Full Meilisearch reindex complete')
   return result
+}
+
+// ─── Catch-up of verified reports the index never got (Oct 22, 2026) ─────
+
+/**
+ * The index held Apr 5–6 and Oct 11 on, while the database holds verified
+ * reports from Apr 5 on: the start-up backfill runs only when the index is
+ * empty, so one cut short by a restart never resumed, and search couldn't find
+ * anything from Apr 7 to May 20. This walks every verified report once, oldest
+ * first, from a cursor kept in Redis, so a restart resumes where it stopped.
+ * Search only ever shows verified reports, so the others aren't sent.
+ * addDocuments replaces a report already there (same id): nothing is deleted.
+ * Done once (a Redis mark); one process at a time (a lock).
+ */
+export const CATCHUP_DONE = 'search:catchup:verified:v1'
+export const CATCHUP_CURSOR = 'search:catchup:verified:cursor'
+const CATCHUP_LOCK = 'search:catchup:verified:lock'
+
+export interface CatchUpCursor { at: string; id: string }
+export interface CatchUpDeps {
+  get(key: string): Promise<string | null>
+  set(key: string, value: string): Promise<unknown>
+  lock(): Promise<boolean>
+  unlock(): Promise<unknown>
+  /** The next verified reports after the cursor, oldest first, each with at_text (created_at to the microsecond) */
+  batch(after: CatchUpCursor | null, size: number): Promise<Array<Record<string, unknown>>>
+  index(rows: Array<Record<string, unknown>>): Promise<void>
+  pause(ms: number): Promise<void>
+}
+
+const liveDeps: CatchUpDeps = {
+  get: (key) => redis.get(key),
+  set: (key, value) => redis.set(key, value),
+  lock: async () => (await redis.set(CATCHUP_LOCK, '1', 'EX', 900, 'NX')) === 'OK',
+  unlock: () => redis.del(CATCHUP_LOCK),
+  batch: (after, size) => db('signals')
+    .select('*', db.raw('created_at::text AS at_text'))
+    .where('status', 'verified')
+    // (the plain created_at bound lets the (status, created_at) index start at the cursor)
+    .modify((qb) => { if (after) qb.where('created_at', '>=', after.at).whereRaw('(created_at, id::text) > (?::timestamptz, ?)', [after.at, after.id]) })
+    .orderByRaw('created_at, id::text')
+    .limit(size) as unknown as Promise<Array<Record<string, unknown>>>,
+  index: (rows) => indexSignals(rows),
+  pause: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+}
+
+/** How many verified reports it sent to the index; null when done before or running elsewhere */
+export async function catchUpVerifiedSignals(
+  opts: { size?: number; pauseMs?: number } = {},
+  deps: CatchUpDeps = liveDeps,
+): Promise<number | null> {
+  if (await deps.get(CATCHUP_DONE)) return null
+  if (!(await deps.lock())) return null
+  const size = opts.size ?? 500
+  let sent = 0
+  try {
+    const kept = await deps.get(CATCHUP_CURSOR)
+    let cursor: CatchUpCursor | null = kept ? JSON.parse(kept) as CatchUpCursor : null
+    for (;;) {
+      const rows = await deps.batch(cursor, size)
+      if (rows.length === 0) break
+      await deps.index(rows)
+      sent += rows.length
+      const last = rows[rows.length - 1]!
+      cursor = { at: String(last.at_text), id: String(last.id) }
+      await deps.set(CATCHUP_CURSOR, JSON.stringify(cursor))
+      if (rows.length < size) break
+      await deps.pause(opts.pauseMs ?? 300)
+    }
+    await deps.set(CATCHUP_DONE, new Date().toISOString())
+    logger.info({ sent }, 'Search catch-up: verified reports the index lacked are in')
+  } finally {
+    await deps.unlock()
+  }
+  return sent
 }

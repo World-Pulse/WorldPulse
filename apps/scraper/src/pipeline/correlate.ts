@@ -1033,6 +1033,8 @@ export async function corroborateWithDuplicate(
 export async function confirmMergedArticle(
   signalId: string,
   incoming: Pick<CorrelationCandidate, 'title' | 'source_id' | 'published_at'>,
+  /** crossCheck false: no Claude cross-check of what this verifies (second-outlet.ts past its daily share) */
+  opts: { crossCheck?: boolean } = {},
 ): Promise<boolean> {
   const row = await db('signals').where('id', signalId).first(
     'id', 'title', 'category', 'severity', 'source_ids', 'original_urls',
@@ -1059,7 +1061,7 @@ export async function confirmMergedArticle(
     .where('reliability_score', '>=', 0.65)
     .update({ status: 'verified', verified_at: db.raw('NOW()') })
 
-  if (promoted > 0) crossCheckLater([signalId], [{ title: incoming.title }], [signalId])
+  if (promoted > 0 && opts.crossCheck !== false) crossCheckLater([signalId], [{ title: incoming.title }], [signalId])
 
   logger.info({ signal_id: signalId, outlet: incoming.source_id, promoted },
     'Merged article from another outlet confirmed a story')

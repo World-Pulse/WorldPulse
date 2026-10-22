@@ -94,7 +94,7 @@ import { registerStatusRoutes } from './routes/status'
 import { logger } from './lib/logger'
 import { initSentry, flushSentry, captureException } from './lib/sentry'
 import { setupSearchIndexes } from './lib/search'
-import { runStartupBackfill, syncRecentSignalsOnStartup } from './lib/search-backfill'
+import { runStartupBackfill, syncRecentSignalsOnStartup, catchUpVerifiedSignals } from './lib/search-backfill'
 import { connectSearchProducer, disconnectSearchProducer } from './lib/search-events'
 import { startSearchConsumer, stopSearchConsumer } from './lib/search-consumer'
 import { initClickHouse } from './lib/search-analytics'
@@ -403,6 +403,8 @@ async function bootstrap() {
   setupSearchIndexes()
     .then(() => runStartupBackfill())
     .then(() => syncRecentSignalsOnStartup())
+    // once: the verified reports a cut-short backfill never sent (Oct 22, 2026: Apr 7 – May 20)
+    .then(() => catchUpVerifiedSignals())
     .catch(err => {
       logger.warn({ err }, 'Meilisearch index setup/backfill failed — search may degrade gracefully')
     })
