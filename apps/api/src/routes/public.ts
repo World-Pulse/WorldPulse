@@ -239,11 +239,14 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
     reply.header('Access-Control-Allow-Origin', '*')
     const day = (offset: number) => new Date(Date.now() - offset * 86_400_000).toISOString().slice(0, 10)
     const days = [day(0), day(1)]
-    const [today, yesterday, recent, last] = await Promise.all([
+    const [today, yesterday, recent, last, archive, archiveDone] = await Promise.all([
       redis.hgetall(`second-outlet:day:${days[0]}`).catch(() => null),
       redis.hgetall(`second-outlet:day:${days[1]}`).catch(() => null),
       redis.lrange('second-outlet:recent', 0, 49).catch(() => [] as string[]),
       redis.get('second-outlet:last-cycle').catch(() => null),
+      // the April–May repair (apps/scraper/src/pipeline/archive-outlets.ts)
+      redis.hgetall('repair:archive-outlets:stats').catch(() => null),
+      redis.get('repair:archive-outlets:2026-10-22:done').catch(() => null),
     ])
     const numbers = (h: Record<string, string> | null) =>
       Object.fromEntries(Object.entries(h ?? {}).map(([k, v]) => [k, Number(v) || 0]))
@@ -252,7 +255,10 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
     })
     let lastCycle: unknown = null
     try { lastCycle = last ? JSON.parse(last) : null } catch { lastCycle = null }
-    return reply.send({ success: true, data: { days: { [days[0]!]: numbers(today), [days[1]!]: numbers(yesterday) }, last_cycle: lastCycle, latest } })
+    const archived = archive && Object.keys(archive).length
+      ? { ...Object.fromEntries(Object.entries(archive).map(([k, v]) => [k, /^\d+$/.test(v) ? Number(v) : v])), done_at: archiveDone ?? null }
+      : null
+    return reply.send({ success: true, data: { days: { [days[0]!]: numbers(today), [days[1]!]: numbers(yesterday) }, last_cycle: lastCycle, latest, archive: archived } })
   })
 
   // ─── OPTIONS preflight ────────────────────────────────────

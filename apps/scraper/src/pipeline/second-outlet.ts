@@ -54,12 +54,14 @@ import { isCopyOf } from './independence'
 import { hostOf, sourceKey } from './signal-columns'
 import { cleanUrl } from './text'
 import { fetchArticles, fetchNewestStamp, filesToRead, siteOf, stampDate, type GdeltArticle } from './gdelt-articles'
+import { queueReindex } from './reindex'
 
 export { siteOf, articleTitle } from './gdelt-articles'
 
 /** GDELT publishes a file every 15 minutes; a few minutes after, it is read */
 export const CYCLE_MS = 15 * 60_000
 const LOCK_KEY = 'second-outlet:lock'
+const LOCK_S = 6 * 60
 export const DAY_KEY = (day: string) => `second-outlet:day:${day}`
 export const RECENT_KEY = 'second-outlet:recent'
 export const LAST_CYCLE_KEY = 'second-outlet:last-cycle'
@@ -564,6 +566,8 @@ export const liveDeps: SecondOutletDeps = {
       notes:      `Also reported by ${found.map(f => f.site).join(', ')} (found in GDELT's list of news articles)`,
     }).catch(err => logger.warn({ err, id: report.id }, 'Second outlet: not logged on the report page'))
     const row = await db('signals').where('id', report.id).first('status') as { status?: string } | undefined
+    // the search index still has it as it came: pending, one outlet (reindex.ts)
+    await queueReindex([report.id]).catch(err => logger.warn({ err, id: report.id }, 'Second outlet: search re-index not queued'))
     return row?.status === 'verified'
   },
 
@@ -572,7 +576,9 @@ export const liveDeps: SecondOutletDeps = {
   },
 
   async lock() {
-    return await redis.set(LOCK_KEY, '1', 'EX', 14 * 60, 'NX') === 'OK'
+    // 6 minutes: a cycle takes one or two; a restart that killed one mid-cycle
+    // cost the next cycle while the old lock held (14 minutes until Oct 22)
+    return await redis.set(LOCK_KEY, '1', 'EX', LOCK_S, 'NX') === 'OK'
   },
 
   async unlock() {
@@ -611,6 +617,8 @@ export function startSecondOutlets(): void {
     return
   }
   const state = newState()
+  // One scraper runs at a time: a lock left by the process this one replaced is stale
+  redis.del(LOCK_KEY).catch(() => {})
   const run = () => {
     runSecondOutlets(state)
       .then(s => logger.info({ ...s, held: state.window.size }, 'Second outlet cycle'))

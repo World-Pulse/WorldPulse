@@ -95,6 +95,7 @@ import { logger } from './lib/logger'
 import { initSentry, flushSentry, captureException } from './lib/sentry'
 import { setupSearchIndexes } from './lib/search'
 import { runStartupBackfill, syncRecentSignalsOnStartup, catchUpVerifiedSignals } from './lib/search-backfill'
+import { startReindexDrain } from './lib/search-reindex'
 import { connectSearchProducer, disconnectSearchProducer } from './lib/search-events'
 import { startSearchConsumer, stopSearchConsumer } from './lib/search-consumer'
 import { initClickHouse } from './lib/search-analytics'
@@ -408,6 +409,8 @@ async function bootstrap() {
     .catch(err => {
       logger.warn({ err }, 'Meilisearch index setup/backfill failed — search may degrade gracefully')
     })
+  // Reports whose status changed after they were indexed (lib/search-reindex.ts)
+  startReindexDrain()
 
   // ─── CLICKHOUSE INIT ─────────────────────────────────────
   initClickHouse().catch(err => {

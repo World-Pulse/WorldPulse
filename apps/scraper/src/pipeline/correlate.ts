@@ -33,6 +33,7 @@ import { countIndependentOutlets, isCopyOf } from './independence'
 import { joinStory } from './stories'
 import { liftedSeverity, readLoweredSql, type SeverityRow } from './severity-lift'
 import { crossCheckLater } from './crosscheck'
+import { reindexLater } from './reindex'
 import { createHash } from 'crypto'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -100,7 +101,7 @@ export function corroboratedReliability(score: number, added: number): number {
 }
 
 /** corroboratedReliability as an update of reliability_score; `added` is SQL for the outlets added */
-function corroboratedReliabilitySql(added: string, bindings: unknown[] = []) {
+export function corroboratedReliabilitySql(added: string, bindings: unknown[] = []) {
   return db.raw(
     `CASE WHEN reliability_score >= ? THEN reliability_score
           ELSE ? - (? - reliability_score) * POWER(?, GREATEST(${added}, 0)) END`,
@@ -916,6 +917,8 @@ async function applyCorroborationBoost(
     // turned verified and records whether they're one event; when they aren't,
     // the ones promoted here go back to pending (pipeline/crosscheck.ts)
     if (promoted.length > 0) crossCheckLater(ids, [], promoted.map(r => r.id))
+    // the search index keeps the status a report had when new (reindex.ts)
+    if (promoted.length > 0) reindexLater(promoted.map(r => r.id))
 
     // With the outlets counted, the single-source severity cap lifts: each
     // report gets the severity its own words earn, up to what the count allows
@@ -1013,6 +1016,7 @@ export async function corroborateWithDuplicate(
     .update({ status: 'verified', verified_at: db.raw('NOW()') })
 
   if (promoted > 0) crossCheckLater([existingId], [{ title: incoming.title }], [existingId])
+  if (promoted > 0) reindexLater([existingId])
 
   logger.info({
     signal_id: existingId,
@@ -1062,6 +1066,7 @@ export async function confirmMergedArticle(
     .update({ status: 'verified', verified_at: db.raw('NOW()') })
 
   if (promoted > 0 && opts.crossCheck !== false) crossCheckLater([signalId], [{ title: incoming.title }], [signalId])
+  if (promoted > 0) reindexLater([signalId])
 
   logger.info({ signal_id: signalId, outlet: incoming.source_id, promoted },
     'Merged article from another outlet confirmed a story')

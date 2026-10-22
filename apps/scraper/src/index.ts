@@ -45,6 +45,7 @@ import { ensureStoryIdColumn } from './pipeline/stories'
 import { startEditor, catchUpEditor } from './pipeline/editor'
 import { startSecondReads } from './pipeline/second-read'
 import { startSecondOutlets } from './pipeline/second-outlet'
+import { verifyArchive } from './pipeline/archive-outlets'
 import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames, fixGdeltFipsCountries, stripOutletNotes, stripOutletNames, repairHeadlineSummaries, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability, switchOffRetiredSources } from './pipeline/repairs'
 import { batchValidateGeo } from './pipeline/geo-validator'
 import { recomputeSourceReputation } from './pipeline/source-reputation'
@@ -265,6 +266,16 @@ async function bootstrap() {
   // Other outlets' reports of medium-and-above stories only one outlet carries,
   // found in GDELT's news index (plan 0s3)
   startSecondOutlets()
+  // Once: the April–May archive's one-outlet reports matched with the other
+  // outlets' reports of the same days (Devon, Oct 22: "verify April–May now by
+  // running the outlet matching over those weeks … PROCEED"). A few minutes
+  // after start, so a deploy settles first; a restart carries on from the last
+  // day done (pipeline/archive-outlets.ts)
+  setTimeout(() => {
+    runOnce('repair:archive-outlets:2026-10-22', () => verifyArchive())
+      .then(t => { if (t) logger.info(t, 'Repair: April–May reports verified by their other outlets') })
+      .catch(err => logger.warn({ err }, 'April–May outlet repair failed (non-fatal)'))
+  }, 3 * 60_000)
   // Once, the last 12 hours again: most of the editor's calls so far came back
   // empty (Claude's thinking used up the reply's token limit, lib/claude.ts
   // thinkingOff), and the RSS repair above put back what it had re-filed. (The

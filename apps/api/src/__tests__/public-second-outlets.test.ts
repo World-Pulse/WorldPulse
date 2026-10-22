@@ -11,9 +11,10 @@ const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
 
 vi.mock('../db/redis', () => ({
   redis: {
-    get: async () => null,
+    get: async (key: string) => (key === 'repair:archive-outlets:2026-10-22:done' ? '2026-10-22T23:10:00Z' : null),
     setex: async () => 'OK',
-    hgetall: async (key: string) => (key.endsWith(today) ? { searched: '40', matched: '9', outlets: '13', promoted: '8' } : {}),
+    hgetall: async (key: string) => (key.endsWith(today) ? { searched: '40', matched: '9', outlets: '13', promoted: '8' }
+      : key === 'repair:archive-outlets:stats' ? { days: '46', verified: '1200', last_day: '2026-05-20' } : {}),
     lrange: async () => [
       JSON.stringify({ id: 's1', title: 'Six dead as bus hits tree in Chhattisgarh', found: [{ site: 'ndtv.com', title: 'Six killed after bus hits tree in Chhattisgarh', url: 'https://www.ndtv.com/a' }] }),
       'not json',
@@ -39,5 +40,7 @@ describe('GET /api/v1/public/second-outlets', () => {
     expect(data.days[yesterday]).toEqual({})
     expect(data.latest).toHaveLength(1)
     expect(data.latest[0].found[0].site).toBe('ndtv.com')
+    // the April–May repair's progress (Oct 22)
+    expect(data.archive).toEqual({ days: 46, verified: 1200, last_day: '2026-05-20', done_at: '2026-10-22T23:10:00Z' })
   })
 })

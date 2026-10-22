@@ -27,6 +27,7 @@ import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
 import { askClaude, claudeConfigured } from '../lib/claude'
 import { jsonIn } from './verify'
+import { reindexLater } from './reindex'
 
 /**
  * What Claude is asked (version 3, Oct 14, 2026).
@@ -192,6 +193,8 @@ async function holdAtPending(ids: string[], now: Date): Promise<string[]> {
     .returning('id') as Array<{ id: string }>
   const held = rows.map(r => r.id)
   if (held.length > 0) {
+    // out of the search's verified list too (reindex.ts)
+    reindexLater(held)
     await redis.hincrby(COUNTS_KEY(now), 'held', held.length)
     logger.info({ held }, 'Cross-check: held at pending (the other reports are a different event)')
   }
