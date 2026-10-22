@@ -12,7 +12,7 @@ import { EVENT_TEMPLATE_SQL } from './event-titles'
 import { countIndependentOutlets } from './independence'
 import { hostOf } from './signal-columns'
 import { decodeEntities, cleanUrl, cleanTitle, ENCODED_TEXT_RE, FEED_FOOTER_SQL, OUTLET_NOTE_SQL, OUTLET_SUFFIX_SQL, summaryWithoutNotes, feedText, HTML_TAG_RE, withoutOutletName, saysMore, articleSummary, storyPostText } from './text'
-import { liftedSeverity, type SeverityRow } from './severity-lift'
+import { liftedSeverity, readLoweredSql, type SeverityRow } from './severity-lift'
 import { tidyGeoName } from '../sources/gdelt'
 import { NEWS_SOURCE_REGISTRY, detectNewsCategory, isShoppingItem } from '../sources/news-rss'
 import { categorizeArticle, categorizeText } from './categories'
@@ -319,7 +319,7 @@ export async function liftCappedSeverities(): Promise<number> {
     .where('source_count', '>=', 2)
     .whereIn('status', ['verified', 'pending'])
     .whereIn('severity', ['info', 'low', 'medium', 'high'])
-    .select('id', 'title', 'summary', 'category', 'severity', 'source_count')
+    .select('id', 'title', 'summary', 'category', 'severity', 'source_count', db.raw(`${readLoweredSql()} AS read_lowered`))
     .limit(5000) as Array<SeverityRow & { source_count: number }>
   let raised = 0
   for (const row of rows) {
@@ -569,7 +569,8 @@ const CAPPED_AT_MEDIUM = new Set(['culture', 'sports', 'science', 'space'])
  */
 export async function recategorizeRecentArticles(before: Date): Promise<number> {
   const found = await db.raw(
-    `SELECT id, title, summary, category::text AS category, severity::text AS severity, source_count
+    `SELECT id, title, summary, category::text AS category, severity::text AS severity, source_count,
+            ${readLoweredSql()} AS read_lowered
        FROM signals
       WHERE created_at > NOW() - INTERVAL '3 days'
         AND created_at < ?

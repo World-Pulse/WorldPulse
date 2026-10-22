@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { liftedSeverity } from '../severity-lift'
+import { liftedSeverity, heldBySecondRead, readLoweredSql } from '../severity-lift'
 
 const row = (title: string, severity = 'medium', category = 'conflict', summary: string | null = null) =>
   ({ id: 'x', title, summary, category, severity })
@@ -27,5 +27,25 @@ describe('liftedSeverity', () => {
 
   it('never lowers', () => {
     expect(liftedSeverity(row('Talks resume in Geneva', 'high', 'geopolitics'), 5)).toBeNull()
+  })
+})
+
+describe('after the second read lowered a report (plan 11a, Oct 22, 2026)', () => {
+  const lowered = { ...row('Missile attack kills 120 in crowded market', 'medium'), read_lowered: true }
+
+  it("its words don't lift it back while fewer than 3 outlets carry it", () => {
+    expect(liftedSeverity(lowered, 2)).toBeNull()
+    expect(heldBySecondRead(lowered, 2)).toBe(true)
+  })
+
+  it('with 3 or more, the rules apply again', () => {
+    expect(liftedSeverity(lowered, 3)).toBe('critical')
+    expect(heldBySecondRead(lowered, 3)).toBe(false)
+    expect(heldBySecondRead({ read_lowered: false }, 1)).toBe(false)
+  })
+
+  it('reads the lowering from the verification log, the table named as the query names it', () => {
+    expect(readLoweredSql()).toBe("EXISTS (SELECT 1 FROM verification_log rl WHERE rl.signal_id = signals.id AND rl.check_type = 'second_read' AND rl.result = 'lowered')")
+    expect(readLoweredSql('s')).toContain('rl.signal_id = s.id')
   })
 })

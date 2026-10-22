@@ -24,7 +24,7 @@ import { db } from '../lib/postgres'
 import { redis } from '../lib/redis'
 import { logger as rootLogger } from '../lib/logger'
 import { correlateSignal, type CorrelationCandidate } from './correlate'
-import { liftedSeverity } from './severity-lift'
+import { liftedSeverity, readLoweredSql } from './severity-lift'
 import { sourceKey } from './signal-columns'
 
 const log = rootLogger.child({ module: 'rescore' })
@@ -62,6 +62,8 @@ export async function runDelayedRescore(): Promise<{
       'source_count',
       db.raw('ST_Y(location::geometry) as lat'),
       db.raw('ST_X(location::geometry) as lng'),
+      // the second read's lowering holds while few outlets carry it (severity-lift.ts, plan 11a)
+      db.raw(`${readLoweredSql()} AS read_lowered`),
     )
     // created_at, not published_at: new rows had no published_at until Oct 2026
     .where('created_at', '>=', windowStart.toISOString())
@@ -129,6 +131,7 @@ export async function runDelayedRescore(): Promise<{
         // to high for being corroborated, whatever it said.
         const lifted = liftedSeverity({
           id: signal.id, title: signal.title, summary: null, category: signal.category, severity: signal.severity,
+          read_lowered: signal.read_lowered === true,
         }, newSourceCount)
         if (lifted) {
           await db('signals').where('id', signal.id).update({ severity: lifted })

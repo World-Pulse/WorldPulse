@@ -283,14 +283,21 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
 
     // The second read of a high or critical report few outlets carry (plan 11;
     // the scraper's pipeline/second-read.ts): asked apart from the log's 10
-    // newest lines, which later checks can push it out of
+    // newest lines, which later checks can push it out of. Since plan 11a
+    // (Oct 22, 2026) it lowers the report one level when it rates it lower or
+    // reads it as no new event (result "lowered", the note says from what)
     const secondRow = await db('verification_log')
       .where({ signal_id: id, check_type: 'second_read' })
       .orderBy('created_at', 'desc')
-      .first(['verdict', 'notes', 'created_at'])
-      .catch(() => null) as { verdict?: string | null; notes?: string | null; created_at?: unknown } | null | undefined
+      .first(['verdict', 'result', 'notes', 'created_at'])
+      .catch(() => null) as { verdict?: string | null; result?: string | null; notes?: string | null; created_at?: unknown } | null | undefined
     const secondRead = secondRow && SECOND_READ_VERDICTS.has(String(secondRow.verdict))
-      ? { verdict: String(secondRow.verdict), note: String(secondRow.notes ?? '').replace(/^\[Claude, second read\]\s*/, ''), at: secondRow.created_at ? new Date(secondRow.created_at as string).toISOString() : null }
+      ? {
+          verdict: String(secondRow.verdict),
+          note: String(secondRow.notes ?? '').replace(/^\[Claude, second read\]\s*/, ''),
+          at: secondRow.created_at ? new Date(secondRow.created_at as string).toISOString() : null,
+          lowered: secondRow.result === 'lowered',
+        }
       : null
 
     // Get multimedia items (YouTube, podcast audio) — table may not exist yet

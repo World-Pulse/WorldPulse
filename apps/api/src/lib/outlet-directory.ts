@@ -28,7 +28,7 @@ export const OUTLET_DIRECTORY: Readonly<Record<string, OutletEntry>> = {
   "adi.dj": { name: "ADI", country: "DJ", kind: 'agency', state: true },
   "afp.com": { name: "AFP", country: "FR", kind: 'agency' },
   "afr.com": { name: "Australian Financial Review", country: "AU", kind: 'specialist' },
-  "africanews.com": { name: "Africanews", country: "CD", kind: 'international' },
+  "africanews.com": { name: "Africanews", country: "CG", kind: 'international' },
   "agenciabrasil.ebc.com.br": { name: "Agência Brasil", country: "BR", kind: 'agency', state: true },
   "akipress.com": { name: "AKIpress", country: "KG", kind: 'agency' },
   "al-monitor.com": { name: "Al-Monitor", country: "US", kind: 'international' },

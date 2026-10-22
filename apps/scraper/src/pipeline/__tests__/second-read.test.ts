@@ -14,17 +14,32 @@ const h = vi.hoisted(() => ({
   logged: [] as Array<Record<string, unknown>>,
   keys: new Map<string, string>(),
   counts: new Map<string, number>(),
+  /** Reports whose severity changed (or that gained outlets) since they were read: the UPDATE skips them */
+  moved: new Set<string>(),
+  lowered: [] as Array<{ id: string; was: string; to: string }>,
 }))
 
-vi.mock('../../lib/postgres', () => ({
-  db: Object.assign(
-    vi.fn((table: string) => {
-      if (table !== 'verification_log') throw new Error(`unexpected table ${table}`)
-      return { insert: vi.fn(async (rows: Array<Record<string, unknown>>) => { h.logged.push(...rows) }) }
-    }),
-    { raw: vi.fn(async (sql: string, params: unknown[]) => { h.raw.push({ sql, params }); return { rows: h.rows } }) },
-  ),
-}))
+vi.mock('../../lib/postgres', () => {
+  const table = vi.fn((name: string) => {
+    if (name !== 'verification_log') throw new Error(`unexpected table ${name}`)
+    return { insert: vi.fn(async (rows: Array<Record<string, unknown>>) => { h.logged.push(...rows.map(r => ({ ...r }))) }) }
+  })
+  const raw = vi.fn(async (sql: string, params: unknown[]) => {
+    h.raw.push({ sql, params })
+    if (!sql.trim().startsWith('UPDATE signals')) return { rows: h.rows }
+    // (id, was, lowered) triples: the rows still at the severity read and with fewer than 3 outlets
+    const out: Array<{ id: string }> = []
+    for (let i = 0; i < params.length; i += 3) {
+      const [id, was, to] = params.slice(i, i + 3).map(String)
+      if (h.moved.has(id!)) continue
+      h.lowered.push({ id: id!, was: was!, to: to! })
+      out.push({ id: id! })
+    }
+    return { rows: out }
+  })
+  const trx = Object.assign((name: string) => table(name), { raw })
+  return { db: Object.assign((name: string) => table(name), { raw, transaction: vi.fn(async (fn: (t: typeof trx) => unknown) => fn(trx)) }) }
+})
 vi.mock('../../lib/redis', () => {
   const multi = () => {
     const chain: Record<string, unknown> = {}
@@ -52,13 +67,13 @@ vi.mock('../../lib/claude', () => ({
   }),
 }))
 
-import { readSecondReads, verdictOf, timelineNote, secondReadPrompt, runSecondReads, answerTokens, SECOND_READ_SYSTEM, DAILY_MAX } from '../second-read'
+import { readSecondReads, verdictOf, timelineNote, secondReadPrompt, runSecondReads, answerTokens, loweredSeverity, NOT_EVENT_LOWERS, SECOND_READ_SYSTEM, DAILY_MAX } from '../second-read'
 
 const NOW = new Date('2026-10-21T16:00:00Z')
 const row = (n: number, severity = 'high', title = `Report number ${n}`) => ({ id: `00000000-0000-0000-0000-${String(n).padStart(12, '0')}`, title, summary: null, severity })
 
 beforeEach(() => {
-  h.rows = []; h.raw = []; h.replies = []; h.asked = []; h.logged = []; h.keys.clear(); h.counts.clear()
+  h.rows = []; h.raw = []; h.replies = []; h.asked = []; h.logged = []; h.keys.clear(); h.counts.clear(); h.moved.clear(); h.lowered = []
 })
 
 describe('reading the answer', () => {
@@ -116,20 +131,49 @@ describe('a pass', () => {
     h.rows = [row(1, 'high'), row(2, 'critical'), row(3, 'high')]
     h.replies = ['{"reports": [{"report": 1, "kind": "event", "severity": "high", "note": "A strike"}, {"report": 2, "kind": "event", "severity": "medium", "note": "Two injured"}, {"report": 3, "kind": "analysis", "severity": "medium", "note": "A preview"}]}']
     const stats = await runSecondReads(NOW)
-    expect(stats).toMatchObject({ read: 3, agree: 1, lower: 1, not_event: 1, calls: 1 })
+    expect(stats).toMatchObject({ read: 3, agree: 1, lower: 1, not_event: 1, calls: 1, lowered: 1 })
     const sql = h.raw[0]!.sql
     expect(sql).toMatch(/severity IN \('high', 'critical'\)/)
     expect(sql).toMatch(/source_count, 1\) < 3/)
     expect(sql).toMatch(/check_type = 'second_read'/)
     expect(h.asked[0]).toMatchObject({ purpose: 'second_read' })
+    // the lower one goes down one level (plan 11a), critical to high whatever level the read said; "not an event" doesn't lower yet
+    expect(h.lowered).toEqual([{ id: row(2).id, was: 'critical', to: 'high' }])
+    expect(h.raw[1]!.sql).toMatch(/s\.severity::text = v\.was AND coalesce\(s\.source_count, 1\) < 3/)
     expect(h.logged.map(r => [r.verdict, r.result, r.check_type])).toEqual([
-      ['agree', 'confirmed', 'second_read'], ['lower', 'warning', 'second_read'], ['not_event', 'warning', 'second_read'],
+      ['agree', 'confirmed', 'second_read'], ['lower', 'lowered', 'second_read'], ['not_event', 'warning', 'second_read'],
     ])
+    expect(h.logged[1]!.notes).toBe('[Claude, second read] Rates it MEDIUM, not CRITICAL. Two injured. Lowered from CRITICAL to HIGH.')
+    expect(h.logged[2]!.notes).toBe('[Claude, second read] Reads as analysis, not a new event. A preview.')
     expect(h.counts.get('ai:second:counts:2026-10-21|read')).toBe(3)
+    expect(h.counts.get('ai:second:counts:2026-10-21|lowered')).toBe(1)
     // the same reports again: already read
     h.replies = ['{"reports": []}']
     expect((await runSecondReads(NOW)).read).toBe(0)
     expect(h.asked).toHaveLength(1)
+  })
+
+  it("lowers only a report still at the severity it was read at, with fewer than 3 outlets; never raises one", async () => {
+    h.rows = [row(1, 'high'), row(2, 'high'), row(3, 'high')]
+    h.moved.add(row(2).id)
+    h.replies = ['{"reports": [{"report": 1, "kind": "event", "severity": "low", "note": "A drill"}, {"report": 2, "kind": "event", "severity": "medium", "note": "One death"}, {"report": 3, "kind": "event", "severity": "critical", "note": "Hundreds dead"}]}']
+    const stats = await runSecondReads(NOW)
+    expect(stats).toMatchObject({ lower: 2, higher: 1, lowered: 1 })
+    // a "low" read still lowers one level only
+    expect(h.lowered).toEqual([{ id: row(1).id, was: 'high', to: 'medium' }])
+    expect(h.logged.map(r => r.result)).toEqual(['lowered', 'warning', 'warning'])
+    expect(String(h.logged[1]!.notes)).not.toMatch(/Lowered/)
+  })
+
+  it('one level down, only for "lower" (and "not an event" once its read passes)', () => {
+    expect(loweredSeverity('critical', 'lower')).toBe('high')
+    expect(loweredSeverity('high', 'lower')).toBe('medium')
+    expect(NOT_EVENT_LOWERS).toBe(false)
+    expect(loweredSeverity('high', 'not_event')).toBeNull()
+    expect(loweredSeverity('high', 'not_event', true)).toBe('medium')
+    expect(loweredSeverity('high', 'agree', true)).toBeNull()
+    expect(loweredSeverity('high', 'higher', true)).toBeNull()
+    expect(loweredSeverity('medium', 'lower')).toBeNull()
   })
 
   it('eight to a call, three calls a pass', async () => {

@@ -10,7 +10,20 @@
  * says whether each is a specific new event and how serious it is. The
  * story page shows the second read beside the rules': "Second read agrees:
  * HIGH", or "Second read: MEDIUM, not HIGH", or "Second read: analysis, not
- * a new event". Nothing changes the report's severity or status.
+ * a new event".
+ *
+ * It lowers (plan 11a, Oct 22, 2026): a second read that rates a report lower
+ * lowers it one level, critical to high or high to medium, and so its place
+ * on the map, in the feed and in alerts, with a line on its page ("Lowered
+ * from HIGH to MEDIUM"). Only while the report still has the severity it was
+ * read at and fewer than 3 outlets; the word rules don't lift it back until 3
+ * or more carry it (severity-lift.ts). Read first, as the plan asked: of a
+ * random 30 "lower" verdicts of Oct 21-22, 29 were right (debatable: a super
+ * typhoon nearing Taiwan, rated medium). "Not an event" (analysis, a roundup,
+ * a feature) will lower the same way once 30 of those are read and 25 are
+ * right (NOT_EVENT_LOWERS): on Oct 22 only 17 existed, 16 right (wrong: an
+ * evening news edition that led with a drone strike reported to have killed
+ * 153). Never higher: that is shown only.
  *
  * Its verdicts go to verification_log (check_type second_read; verdict
  * agree, lower, higher or not_event), each report once. At most 400 reports
@@ -23,6 +36,7 @@ import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
 import { askClaude, claudeConfigured } from '../lib/claude'
 import { jsonIn } from './verify'
+import { READ_HOLDS_BELOW } from './severity-lift'
 
 export const SECOND_READ_INTERVAL_MS = 10 * 60_000
 /** Reports a call, calls a pass, reports a day */
@@ -113,6 +127,21 @@ export function verdictOf(rules: string, read: SecondRead): SecondReadVerdict {
   return b === a ? 'agree' : b < a ? 'lower' : 'higher'
 }
 
+/** One level down (plan 11a) */
+const ONE_DOWN: Record<string, SignalSeverity> = { critical: 'high', high: 'medium' }
+
+/**
+ * Whether "not an event" lowers too: off until 30 such verdicts are read and
+ * 25 or more are right (plan 11a; Oct 22, 2026: 16 of the 17 there were)
+ */
+export const NOT_EVENT_LOWERS = false
+
+/** What a report goes down to when the second read rates it lower: one level, whatever level the read gave (null: it stays) */
+export function loweredSeverity(rules: string, verdict: SecondReadVerdict, notEventLowers = NOT_EVENT_LOWERS): SignalSeverity | null {
+  if (verdict !== 'lower' && !(verdict === 'not_event' && notEventLowers)) return null
+  return ONE_DOWN[rules] ?? null
+}
+
 const KIND_WORDS: Record<SecondReadKind, string> = { event: 'a new event', analysis: 'analysis', roundup: 'a roundup', other: 'not news of an event' }
 
 /** The line on the report's page (its verification timeline) */
@@ -124,11 +153,41 @@ export function timelineNote(rules: string, read: SecondRead, verdict: SecondRea
   return `[Claude, second read] Rates it ${up(read.severity)}, not ${up(rules)}.${why}`
 }
 
-export interface SecondReadStats { read: number; agree: number; lower: number; higher: number; not_event: number; unread: number; calls: number }
+export interface SecondReadStats { read: number; agree: number; lower: number; higher: number; not_event: number; unread: number; calls: number; lowered: number }
+
+/**
+ * Lower these reports, each only while it still has the severity the second
+ * read was asked about and fewer than 3 outlets carry it, with the log lines
+ * in the same transaction (the lift guard reads them). The ids lowered.
+ */
+async function lowerAndLog(lower: Array<{ id: string; from: string; to: string }>, entries: Array<Record<string, unknown>>): Promise<Set<string>> {
+  return db.transaction(async trx => {
+    let lowered = new Set<string>()
+    if (lower.length) {
+      const result = await trx.raw(
+        `UPDATE signals AS s SET severity = v.lowered::signal_severity
+           FROM (VALUES ${lower.map(() => '(?::uuid, ?::text, ?::text)').join(', ')}) AS v(id, was, lowered)
+          WHERE s.id = v.id AND s.severity::text = v.was AND coalesce(s.source_count, 1) < ${READ_HOLDS_BELOW}
+          RETURNING s.id`,
+        lower.flatMap(r => [r.id, r.from, r.to]),
+      )
+      lowered = new Set(((result as { rows?: Array<{ id: string }> })?.rows ?? []).map(r => String(r.id)))
+    }
+    for (const e of entries) {
+      const l = lower.find(x => x.id === e.signal_id)
+      if (l && lowered.has(l.id)) {
+        e.result = 'lowered'
+        e.notes = `${String(e.notes)} Lowered from ${l.from.toUpperCase()} to ${l.to.toUpperCase()}.`
+      }
+    }
+    if (entries.length) await trx('verification_log').insert(entries)
+    return lowered
+  })
+}
 
 /** One pass: the newest high and critical reports with fewer than 3 outlets, each once */
 export async function runSecondReads(now = new Date()): Promise<SecondReadStats> {
-  const stats: SecondReadStats = { read: 0, agree: 0, lower: 0, higher: 0, not_event: 0, unread: 0, calls: 0 }
+  const stats: SecondReadStats = { read: 0, agree: 0, lower: 0, higher: 0, not_event: 0, unread: 0, calls: 0, lowered: 0 }
   if (!claudeConfigured()) return stats
   if (await redis.set(LOCK_KEY, '1', 'EX', 300, 'NX') !== 'OK') return stats
   try {
@@ -168,12 +227,15 @@ export async function runSecondReads(now = new Date()): Promise<SecondReadStats>
       if (reply.stopReason === 'max_tokens') logger.warn({ reports: batch.length, outputTokens: reply.outputTokens }, 'Second read: the answer was cut off')
       const reads = readSecondReads(reply.text, batch.length)
       const entries: Array<Record<string, unknown>> = []
+      const lower: Array<{ id: string; from: string; to: string }> = []
       batch.forEach((r, j) => {
         const read = reads[j]
         stats.read += 1
         if (!read) { stats.unread += 1; unread.push(r.id); return }
         const verdict = verdictOf(r.severity, read)
         stats[verdict] += 1
+        const to = loweredSeverity(r.severity, verdict)
+        if (to) lower.push({ id: r.id, from: r.severity, to })
         entries.push({
           signal_id:     r.id,
           check_type:    'second_read',
@@ -184,7 +246,9 @@ export async function runSecondReads(now = new Date()): Promise<SecondReadStats>
           notes:         timelineNote(r.severity, read, verdict),
         })
       })
-      if (entries.length) await db('verification_log').insert(entries)
+      const lowered = await lowerAndLog(lower, entries)
+      stats.lowered += lowered.size
+      if (lowered.size) logger.info({ lowered: [...lowered] }, 'Second read: lowered one level')
     }
     // A report Claude's answer left out gets one more try in a later pass
     for (const id of unread) {
@@ -193,7 +257,7 @@ export async function runSecondReads(now = new Date()): Promise<SecondReadStats>
     if (stats.read) {
       const key = COUNTS_KEY(day)
       const multi = redis.multi()
-      for (const k of ['read', 'agree', 'lower', 'higher', 'not_event', 'unread'] as const) if (stats[k]) multi.hincrby(key, k, stats[k])
+      for (const k of ['read', 'agree', 'lower', 'higher', 'not_event', 'unread', 'lowered'] as const) if (stats[k]) multi.hincrby(key, k, stats[k])
       await multi.expire(key, 40 * 86_400).exec()
     }
     return stats

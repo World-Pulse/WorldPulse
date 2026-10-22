@@ -107,6 +107,14 @@ describe('severityUnder', () => {
     // never lowered outside the caps
     expect(severityUnder({ title: 'Talks resume', summary: null, severity: 'high', source_count: 1 }, 'geopolitics')).toBe('high')
   })
+
+  it("doesn't lift back a report the second read lowered while fewer than 3 outlets carry it (plan 11a)", () => {
+    const sunk = { title: 'Au large de Djibouti, 109 dead as migrant boat sinks', summary: null, severity: 'medium', source_count: 1, read_lowered: true }
+    expect(severityUnder(sunk, 'disaster')).toBe('medium')
+    expect(severityUnder({ ...sunk, source_count: 3 }, 'disaster')).toBe('critical')
+    // the caps still apply
+    expect(severityUnder({ ...sunk, title: 'Horror film tops the box office' }, 'other')).toBe('low')
+  })
 })
 
 describe('runEditorPass', () => {

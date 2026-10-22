@@ -21,6 +21,7 @@ import { askClaude, claudeConfigured, whyNoAnswer } from '../lib/claude'
 import { EVENT_TEMPLATE_SQL } from './event-titles'
 import { rateSeverity } from './severity'
 import { maxSeverityForSourceCount } from './reliability-score'
+import { heldBySecondRead, readLoweredSql } from './severity-lift'
 import { repeatsTitle } from './text'
 
 export const EDITOR_INTERVAL_MS = 15 * 60_000
@@ -71,6 +72,8 @@ export interface EditorRow {
   severity:     string
   source_count: number | null
   created_at:   Date | string
+  /** The second read lowered it (severity-lift.ts readLoweredSql, plan 11a) */
+  read_lowered?: boolean | null
 }
 
 /** The numbered list the editor reads: each headline, and the start of its summary when it says more */
@@ -126,11 +129,12 @@ const CAPPED_AT_MEDIUM = new Set(['culture', 'sports', 'science', 'space'])
  * count allows, never below what the story had; then classify.ts's caps
  * ("other" at most low; culture, sports, science and space at most medium).
  */
-export function severityUnder(row: Pick<EditorRow, 'title' | 'summary' | 'severity' | 'source_count'>, category: string): SignalSeverity {
+export function severityUnder(row: Pick<EditorRow, 'title' | 'summary' | 'severity' | 'source_count' | 'read_lowered'>, category: string): SignalSeverity {
   const current = RANK[row.severity] ?? RANK.low!
   const earned  = RANK[rateSeverity(row.title, row.summary, category)] ?? 0
   const allowed = RANK[maxSeverityForSourceCount(Number(row.source_count) || 1, category)] ?? RANK.medium!
-  let rank = Math.max(current, Math.min(earned, allowed))
+  // a report the second read lowered isn't lifted back while few outlets carry it (severity-lift.ts, plan 11a)
+  let rank = heldBySecondRead(row, Number(row.source_count) || 1) ? current : Math.max(current, Math.min(earned, allowed))
   if (category === 'other') rank = Math.min(rank, RANK.low!)
   else if (CAPPED_AT_MEDIUM.has(category)) rank = Math.min(rank, RANK.medium!)
   return BY_RANK[rank]!
@@ -208,7 +212,8 @@ export async function runEditorPass(now = new Date(), lookbackMs = LOOKBACK_MS):
     const since = new Date(Math.max(mark, now.getTime() - lookbackMs))
     const until = new Date(now.getTime() - SETTLE_MS)
     const found = await db.raw(
-      `SELECT id, title, summary, category::text AS category, severity::text AS severity, source_count, created_at
+      `SELECT id, title, summary, category::text AS category, severity::text AS severity, source_count, created_at,
+              ${readLoweredSql()} AS read_lowered
          FROM signals
         WHERE created_at > ? AND created_at <= ?
           AND status IN ('pending', 'verified')

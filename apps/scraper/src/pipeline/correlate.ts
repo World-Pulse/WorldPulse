@@ -31,7 +31,7 @@ import { findGazetteerPlace, splitPlaces } from './geo'
 import { isEventTemplateTitle } from './event-titles'
 import { countIndependentOutlets, isCopyOf } from './independence'
 import { joinStory } from './stories'
-import { liftedSeverity, type SeverityRow } from './severity-lift'
+import { liftedSeverity, readLoweredSql, type SeverityRow } from './severity-lift'
 import { crossCheckLater } from './crosscheck'
 import { createHash } from 'crypto'
 
@@ -920,7 +920,7 @@ async function applyCorroborationBoost(
     // With the outlets counted, the single-source severity cap lifts: each
     // report gets the severity its own words earn, up to what the count allows
     const rows = await db('signals').whereIn('id', ids)
-      .select('id', 'title', 'summary', 'category', 'severity') as SeverityRow[]
+      .select('id', 'title', 'summary', 'category', 'severity', db.raw(`${readLoweredSql()} AS read_lowered`)) as SeverityRow[]
     let raised = 0
     for (const row of rows) {
       const severity = liftedSeverity(row, uniqueSources)

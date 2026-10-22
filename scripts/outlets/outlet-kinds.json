@@ -184,7 +184,8 @@
   "country": {
     "mondoweiss": "US",
     "eurasianet": "US",
-    "allafrica": "ZA"
+    "allafrica": "ZA",
+    "africanews": "CG"
   },
   "names": {
     "bbc-world": "BBC",
