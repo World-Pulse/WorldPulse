@@ -32,6 +32,16 @@ describe('findGazetteerPlace', () => {
     expect(findGazetteerPlace('Assamese cuisine festival opens')).toBeNull()                   // whole words only
   })
 
+  it('pins a named region at the region, not at its country\'s capital', () => {
+    const quake = findGazetteerPlace("Magnitude 7 earthquake kills 16 people in China's Tibet, Xinhua reports")
+    expect(quake?.place).toBe('tibet')
+    expect(quake?.coords.country).toBe('CN')
+    expect(quake?.coords.lat).toBeLessThan(35)                                                   // Beijing is 39.9
+    expect(findGazetteerPlace('Tibetan monks mark the festival')).toBeNull()                    // whole words only
+    expect(findGazetteerPlace('Militants attack convoy in Balochistan')?.coords.country).toBe('PK')
+    expect(findGazetteerPlace('Xinjiang cotton ban widens')?.coords.region).toBe('Xinjiang')
+  })
+
   it('ignores newspaper names', () => {
     expect(findGazetteerPlace('US troops on Okinawa face new limits, the Washington Post reported')).toBeNull()
     expect(findGazetteerPlace('According to the New York Times, talks in Cairo resumed')?.place).toBe('cairo')
