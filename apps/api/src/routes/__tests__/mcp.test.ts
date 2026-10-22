@@ -1,6 +1,6 @@
 /**
  * WorldPulse's MCP server (routes/mcp.ts, plan 15, Oct 20, 2026): JSON-RPC
- * over one POST, the five read-only tools asking the API's own routes, and
+ * over one POST, the six read-only tools asking the API's own routes, and
  * those inner calls counted as the client who asked.
  */
 import { describe, it, expect, beforeEach } from 'vitest'
@@ -70,6 +70,23 @@ async function build(): Promise<FastifyInstance> {
     }
     return { success: true, data: { found: false, reason: url.endsWith('.com/') ? 'not_an_article' : 'not_seen' } }
   })
+  app.get('/api/v1/coverage-gap', async (req, reply) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    const week = (req.query as { week?: string }).week
+    if (week === '2026-W43') return reply.code(400).send({ success: false, code: 'VALIDATION_ERROR', error: 'That week is not over yet: leave out week for the last 7 days' })
+    return {
+      success: true,
+      data: {
+        window: week ? 'week' : 'last7days', week: week ?? null, unhcrYear: 2025,
+        crises: [
+          { rank: 1, code: 'SS', name: 'South Sudan', displaced: 3_788_010, outlets: 2, peoplePerOutlet: 1_894_005, stories: [{ id: STORY.leadId, title: 'Floods cut off Bentiu camps', outlets: 2, verified: true }] },
+          { rank: 2, code: 'CF', name: 'Central African Republic', displaced: 1_184_301, outlets: 1, peoplePerOutlet: 1_184_301, stories: [] },
+        ],
+        mostCovered: [{ code: 'US', name: 'United States', outlets: 412, articles: 9000 }],
+        totals: { crisisShare: 0.0612, crisisDisplaced: 94_989_774 },
+      },
+    }
+  })
   app.get('/api/v1/search/semantic', async (req) => {
     asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
     return { success: true, semantic: true, results: [{ id: STORY.leadId, title: STORY.title, status: 'verified', locationName: 'Doha', createdAt: '2026-10-20T08:00:00.000Z', category: 'conflict', score: 0.61 }] }
@@ -104,10 +121,10 @@ describe('MCP server', () => {
     expect((await rpc(app, { jsonrpc: '2.0', id: 3, method: 'ping' })).json()).toEqual({ jsonrpc: '2.0', id: 3, result: {} })
   })
 
-  it('lists five read-only tools with their input schemas', async () => {
+  it('lists six read-only tools with their input schemas', async () => {
     const app = await build()
     const { tools } = (await rpc(app, { jsonrpc: '2.0', id: 4, method: 'tools/list' })).json().result
-    expect(tools.map((t: { name: string }) => t.name)).toEqual(['top_stories', 'story', 'search_reports', 'week', 'check_link'])
+    expect(tools.map((t: { name: string }) => t.name)).toEqual(['top_stories', 'story', 'search_reports', 'week', 'check_link', 'under_reported'])
     for (const t of tools) {
       expect(t.inputSchema.type).toBe('object')
       expect(t.annotations.readOnlyHint).toBe(true)
@@ -167,6 +184,26 @@ describe('MCP server', () => {
     const front = await call(app, 'check_link', { url: 'https://www.aljazeera.com/' })
     expect(front.content[0].text).toMatch(/not the address of an article/)
     expect((await call(app, 'check_link', {})).isError).toBe(true)
+  })
+
+  it('under_reported lists the crises with the fewest outlets per person displaced, crediting UNHCR (Oct 21, 2026)', async () => {
+    const app = await build()
+    const r = await call(app, 'under_reported')
+    expect(asked[0]).toEqual({ url: '/api/v1/coverage-gap', client: 'ip:127.0.0.1' })
+    expect(r.isError).toBe(false)
+    const text = r.content[0].text as string
+    expect(text).toContain('Under-reported crises, the last 7 days: 2 countries with at least a million people displaced (UNHCR 2025 figures)')
+    expect(text).toContain('Page: https://world-pulse.io/under-reported')
+    expect(text).toContain('1. South Sudan: 3.8M displaced, 2 outlets (1,894,005 people per outlet) · top story: Floods cut off Bentiu camps')
+    expect(text).toContain('2. Central African Republic: 1.2M displaced, 1 outlet (1,184,301 people per outlet)')
+    expect(text).toContain('6.1% of the news articles')
+    expect(text).toContain('United States 412 outlets')
+    expect(r.structuredContent.crises[0]).toMatchObject({ code: 'SS', outlets: 2, topStory: { url: `https://world-pulse.io/signals/${STORY.leadId}` } })
+    const week = await call(app, 'under_reported', { week: '2026-W42' })
+    expect(asked[1].url).toBe('/api/v1/coverage-gap?week=2026-W42')
+    expect(week.structuredContent.url).toBe('https://world-pulse.io/under-reported/2026-W42')
+    expect(await call(app, 'under_reported', { week: '2026-W43' })).toMatchObject({ isError: true, content: [{ text: 'That week is not over yet: leave out week for the last 7 days' }] })
+    expect((await call(app, 'under_reported', { week: 'last week' })).isError).toBe(true)
   })
 
   it('answers an unknown tool and an unknown method with JSON-RPC errors, and a batch with a list', async () => {

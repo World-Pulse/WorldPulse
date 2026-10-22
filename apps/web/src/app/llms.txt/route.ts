@@ -20,6 +20,7 @@ A story is "verified" when two or more outlets (websites) report it and its reli
 - [Live world map](${SITE_URL}/map): every located signal on a globe, filterable by topic, region and time
 - [Daily briefing](${SITE_URL}/briefing): the day's most important stories in one page
 - [WorldPulse Week](${SITE_URL}/week): the week's top stories, ranked by how many outlets reported each
+- [Under-reported crises](${SITE_URL}/under-reported): the countries with at least a million people displaced (UNHCR's figures), ranked by how few outlets reported on them this week
 - [Countries](${SITE_URL}/countries): stories and risk by country
 - [Sources](${SITE_URL}/sources): the outlets and feeds WorldPulse reads
 
@@ -37,7 +38,7 @@ A story is "verified" when two or more outlets (websites) report it and its reli
 
 ## For AI assistants (MCP)
 
-An MCP server at ${API_URL}/mcp (Streamable HTTP, POST JSON-RPC; no sign-in and no key) answers with the outlet count, whether a story is verified and its world-pulse.io link. Tools: top_stories (the stories the most outlets carry in the last 1 to 72 hours, optionally one country's), story (one story with every outlet and its reports), search_reports (reports by meaning), week (WorldPulse Week) and check_link (an article's address: how many outlets reported its story, among the articles collected in the last two weeks).
+An MCP server at ${API_URL}/mcp (Streamable HTTP, POST JSON-RPC; no sign-in and no key) answers with the outlet count, whether a story is verified and its world-pulse.io link. Tools: top_stories (the stories the most outlets carry in the last 1 to 72 hours, optionally one country's), story (one story with every outlet and its reports), search_reports (reports by meaning), week (WorldPulse Week), check_link (an article's address: how many outlets reported its story, among the articles collected in the last two weeks) and under_reported (the crises with the fewest outlets for the people displaced).
 
 ## Citing
 

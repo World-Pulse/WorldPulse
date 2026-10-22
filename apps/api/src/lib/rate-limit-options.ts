@@ -4,7 +4,9 @@ import type Redis from 'ioredis'
 import { buildCfAwareKeyGenerator } from '../middleware/cloudflare'
 import { internalCallClient } from './internal-call'
 import { isSiteCall } from './site-calls'
-import './api-plan' // req.apiPlan (lib/api-plan.ts sets it)
+// req.apiPlan's type (lib/api-plan.ts sets it): type-only, so loading these options doesn't
+// open the database (the MCP server's tests exited on it, Oct 21, 2026)
+import type {} from './api-plan'
 
 /**
  * Whose budget a request counts in: the signed-in user's or the client

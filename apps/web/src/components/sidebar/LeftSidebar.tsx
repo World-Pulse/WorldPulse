@@ -11,7 +11,7 @@ import {
   TrendingUp, Shield, Unplug, Satellite, Lock, Waves, Landmark,
   Wheat, KeyRound, Droplets, Pickaxe, Map, ScrollText, Users, Search,
   Mic, Video, Radio, Wrench, Settings, Activity, Anchor, CalendarDays, Camera,
-  CircleDot, Swords, LineChart, Leaf, Pill, FlaskConical, Vote, Globe2, Network, Newspaper, Link2, BadgeCheck,
+  CircleDot, Swords, LineChart, Leaf, Pill, FlaskConical, Vote, Globe2, Network, Newspaper, Link2, BadgeCheck, EyeOff,
   type LucideProps,
 } from 'lucide-react'
 
@@ -27,6 +27,7 @@ const CORE_ITEMS = [
   { href: '/map',        icon: Globe,         labelKey: 'worldMap',    badge: 'LIVE', badgeColor: 'amber' },
   { href: '/briefing',   icon: ClipboardList, labelKey: 'briefing',   badge: 'NEW', badgeColor: 'indigo' },
   { href: '/week',       icon: CalendarDays,  labelKey: 'week',       badge: 'NEW', badgeColor: 'indigo' }, // the week's top stories (plan G11, Oct 20, 2026)
+  { href: '/under-reported', icon: EyeOff,    labelKey: 'underReported', badge: 'NEW', badgeColor: 'indigo' }, // the crises with the fewest outlets for the people displaced (Oct 21, 2026)
   { href: '/check',      icon: Link2,          labelKey: 'checkLink',  badge: 'NEW', badgeColor: 'indigo' }, // paste a link, get the count (Oct 20, 2026)
   { href: '/entities',   icon: Newspaper,     labelKey: 'inTheNews',  badge: 'NEW', badgeColor: 'purple' }, // who's in the news: the entity pages' index (Oct 13, 2026)
   { href: '/countries',  icon: Map,            labelKey: 'countries' },

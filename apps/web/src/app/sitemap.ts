@@ -55,6 +55,8 @@ const PAGES: Array<{ path: string; changeFrequency: 'always' | 'hourly' | 'daily
   { path: '/communities', changeFrequency: 'daily', priority: 0.3 },
   // "WorldPulse Week" (plan G11): the week under way; the finished weeks are added below
   { path: '/week', changeFrequency: 'daily', priority: 0.8 },
+  // Under-reported crises (Oct 21, 2026): the last 7 days; the finished weeks are added below
+  { path: '/under-reported', changeFrequency: 'daily', priority: 0.7 },
 ]
 
 interface SitemapStory { id: string; updatedAt: string }
@@ -102,6 +104,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   return [
     ...PAGES.map(p => ({ url: `${SITE_URL}${p.path === '/' ? '' : p.path}`, lastModified: now, changeFrequency: p.changeFrequency, priority: p.priority })),
     ...finishedWeeks(now, 4).map(w => ({ url: `${SITE_URL}/week/${w.name}`, lastModified: w.end, changeFrequency: 'monthly' as const, priority: 0.5 })),
+    ...finishedWeeks(now, 4).map(w => ({ url: `${SITE_URL}/under-reported/${w.name}`, lastModified: w.end, changeFrequency: 'monthly' as const, priority: 0.4 })),
     ...stories.map(s => ({ url: `${SITE_URL}/signals/${s.id}`, lastModified: new Date(s.updatedAt), changeFrequency: 'hourly' as const, priority: 0.6 })),
     ...countries.map(c => {
       const latest = c.latest_signal_at ? new Date(c.latest_signal_at) : now

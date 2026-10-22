@@ -31,7 +31,7 @@ const SERVER_INFO = { name: 'worldpulse', title: 'WorldPulse', version: '1.0.0' 
 const INSTRUCTIONS = [
   'WorldPulse groups news reports of one event into one story and counts the outlets (websites) that report it. A story\'s count covers its last two days; a story that has run longer also gives how many outlets have reported it since it began.',
   'A story is "verified" when two or more outlets report it and its reliability score reaches 65%; verified means more than one outlet says so, not proven true (https://world-pulse.io/how-we-count).',
-  'Cite stories with their world-pulse.io links. Start with top_stories; open one with story; find reports on a subject with search_reports; a week at a glance with week; how many outlets reported an article someone shared with check_link.',
+  'Cite stories with their world-pulse.io links. Start with top_stories; open one with story; find reports on a subject with search_reports; a week at a glance with week; how many outlets reported an article someone shared with check_link; the crises with the fewest outlets for the people displaced with under_reported.',
 ].join(' ')
 
 interface ToolResult { text: string; data: Record<string, unknown> }
@@ -283,6 +283,52 @@ export const TOOLS: Tool[] = [
         data: {
           found: true, match: d.match === 'similar' ? 'similar' : 'exact', url: d.link ?? signalLink(d.report?.id), report: d.report ?? null,
           story: { id: d.story?.id ?? null, outlets, outletNames: names, verified: Boolean(d.story?.verified), verifiedAt: d.story?.verifiedAt ?? null, size: d.story?.size ?? null },
+        },
+      }
+    },
+  },
+  {
+    name: 'under_reported',
+    title: 'Under-reported crises',
+    description: 'The coverage gap: the countries UNHCR counts at least a million people displaced from (inside the country or abroad), each with how many news outlets (websites) WorldPulse placed in it, ranked by people displaced per outlet, the most people for the fewest outlets first (a crisis no outlet covered comes before them). Without week, the last 7 days; or a finished ISO week such as 2026-W42. It counts the outlets WorldPulse reads, not all the world\'s media; displacement figures are UNHCR\'s (CC BY 4.0), to be credited.',
+    inputSchema: {
+      type: 'object',
+      properties: { week: { type: 'string', pattern: '^\\d{4}-W\\d{2}$', description: 'Optional finished ISO week, e.g. 2026-W42' } },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const week = strArg(args, 'week', { pattern: /^\d{4}-W\d{2}$/, hint: 'must be an ISO week such as 2026-W42' })
+      const { status, body } = await ask(asker, `/api/v1/coverage-gap${week ? `?week=${week}` : ''}`)
+      if (status === 400 || status === 404) throw new ToolError(String((body as { error?: unknown }).error ?? 'No such week'))
+      if (status === 503) throw new ToolError(String((body as { error?: unknown }).error ?? 'This week is being put together; try again in a couple of minutes'))
+      if (status !== 200) throw new Error(`coverage-gap answered ${status}`)
+      const d = (body.data ?? {}) as {
+        week?: string | null; unhcrYear?: number
+        crises?: Array<{ rank: number; code: string; name: string; displaced: number; outlets: number; peoplePerOutlet: number; stories?: Array<{ id: string; title: string; outlets: number }> }>
+        mostCovered?: Array<{ name: string; outlets: number }>
+        totals?: { crisisShare?: number; crisisDisplaced?: number }
+      }
+      const crises = d.crises ?? []
+      const page = d.week ? `${SITE}/under-reported/${d.week}` : `${SITE}/under-reported`
+      const millions = (n: number) => `${(n / 1_000_000).toFixed(1)}M`
+      const line = (c: (typeof crises)[number]) => {
+        const lead = c.stories?.[0]
+        return `${c.rank}. ${c.name}: ${millions(c.displaced)} displaced, ${c.outlets} outlet${c.outlets === 1 ? '' : 's'} (${c.peoplePerOutlet.toLocaleString('en-US')} people per outlet)${lead ? ` · top story: ${lead.title} ${signalLink(lead.id)}` : ''}`
+      }
+      const share = d.totals?.crisisShare
+      const text = [
+        `Under-reported crises, ${d.week ? `week ${d.week}` : 'the last 7 days'}: ${crises.length} countries with at least a million people displaced (UNHCR ${d.unhcrYear ?? ''} figures), the fewest outlets per person first. Page: ${page}`,
+        share !== undefined && d.totals?.crisisDisplaced ? `Together, ${millions(d.totals.crisisDisplaced)} people displaced; ${(share * 100).toFixed(1)}% of the news articles WorldPulse placed in a country.` : '',
+        '',
+        crises.map(line).join('\n'),
+        d.mostCovered?.length ? `\nFor comparison, the most covered countries: ${d.mostCovered.map(c => `${c.name} ${c.outlets} outlets`).join(', ')}` : '',
+      ].join('\n').trim()
+      return {
+        text,
+        data: {
+          week: d.week ?? null, url: page,
+          crises: crises.map(c => ({ rank: c.rank, code: c.code, name: c.name, displaced: c.displaced, outlets: c.outlets, peoplePerOutlet: c.peoplePerOutlet, topStory: c.stories?.[0] ? { ...c.stories[0], url: signalLink(c.stories[0].id) } : null })),
+          mostCovered: d.mostCovered ?? [],
         },
       }
     },

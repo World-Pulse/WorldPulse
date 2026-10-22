@@ -157,7 +157,7 @@ export const PUBLIC_SIGNALS_RESPONSE = `{
 export const MCP_URL = `${API_ORIGIN}/mcp`
 
 /** Its tools (routes/mcp.ts TOOLS) */
-export const MCP_TOOLS = ['top_stories', 'story', 'search_reports', 'week', 'check_link'] as const
+export const MCP_TOOLS = ['top_stories', 'story', 'search_reports', 'week', 'check_link', 'under_reported'] as const
 
 /** How to connect an assistant (the developer page's MCP section) */
 export const MCP_GUIDE = '/developers#mcp'

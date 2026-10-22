@@ -25,6 +25,12 @@ For each country, the newest year UNHCR has:
 The point sits at the middle of the country's largest land area (Natural
 Earth's shapes, already on the site); countries too small for those shapes
 are left off the map (they are few, and their figures small).
+
+The same figures go to the API too, as apps/api/src/lib/unhcr-displaced.ts
+(the coverage gap, /under-reported, compares each country's displaced people
+with the outlets reporting on it; Oct 21, 2026). To write only that file from
+the map's file, without asking UNHCR:
+    python3 scripts/map-data/unhcr-displacement.py --api-only
 """
 import json, math, os, re, sys, urllib.parse, urllib.request
 
@@ -32,6 +38,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 GEO = os.path.join(ROOT, 'apps', 'web', 'public', 'geo')
 SHAPES = os.path.join(GEO, 'ne_110m_admin_0_countries.v1.geojson')
 OUT = os.path.join(GEO, 'unhcr-displacement.v1.geojson')
+API_OUT = os.path.join(ROOT, 'apps', 'api', 'src', 'lib', 'unhcr-displaced.ts')
 API = 'https://api.unhcr.org/population/v1/'
 UA = 'WorldPulse-map-data/1.0 (https://world-pulse.io; open-source news map)'
 # Natural Earth's own codes where they differ from ISO's
@@ -173,7 +180,41 @@ def main():
         print(f"  {p['name']}: {p['inside']:,} inside, {p['abroad']:,} abroad, hosts {p['hosted']:,} at {x['geometry']['coordinates']}")
     if unplaced:
         print('  100,000 or more displaced but no shape on the map:', unplaced)
+    write_api_module(out)
+
+
+def write_api_module(collection):
+    """The API's copy: each country's people displaced inside it and abroad, by ISO alpha-2 code"""
+    rows = []
+    for f in collection['features']:
+        p = f['properties']
+        if p.get('iso2') and re.fullmatch(r'[A-Z]{2}', p['iso2']) and p['inside'] + p['abroad'] > 0:
+            rows.append((p['iso2'], p['inside'], p['abroad']))
+    rows.sort(key=lambda r: -(r[1] + r[2]))
+    lines = [
+        '/**',
+        ' * UNHCR\'s figures of the people displaced from each country: inside it, and',
+        ' * abroad as refugees, asylum-seekers and others in need of international',
+        ' * protection. Written by scripts/map-data/unhcr-displacement.py from the same',
+        ' * figures as the World Map\'s layer (apps/web/public/geo/unhcr-displacement.v1.geojson);',
+        ' * don\'t edit by hand, run the script when UNHCR publishes new figures.',
+        ' * UNHCR\'s Refugee Data Finder is licensed CC BY 4.0: whatever shows these credits UNHCR.',
+        ' */',
+        '',
+        f"export const UNHCR_YEAR = {int(collection['year'])}",
+        '',
+        '/** ISO 3166-1 alpha-2 code: [displaced inside the country, its people abroad], largest first */',
+        'export const UNHCR_DISPLACED: Readonly<Record<string, readonly [inside: number, abroad: number]>> = {',
+    ]
+    lines += [f'  {iso2}: [{inside}, {abroad}],' for iso2, inside, abroad in rows]
+    lines += ['}', '']
+    with open(API_OUT, 'w') as fh:
+        fh.write('\n'.join(lines))
+    print(f'  {len(rows)} countries for the API in {os.path.relpath(API_OUT, ROOT)}')
 
 
 if __name__ == '__main__':
-    main()
+    if '--api-only' in sys.argv[1:]:
+        write_api_module(json.load(open(OUT)))
+    else:
+        main()

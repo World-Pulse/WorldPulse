@@ -323,6 +323,7 @@ describe('the MCP server (apps/api/src/routes/mcp.ts)', () => {
     const named: Record<string, string> = {
       '/api/v1/stories': 'the top stories', '/api/v1/stories/:id': 'one story', '/api/v1/search/semantic': 'search by meaning',
       '/api/v1/stories/week': 'the week', '/api/v1/stories/by-link': 'the story of a news link',
+      '/api/v1/coverage-gap': 'the under-reported crises',
     }
     const said = TEXT.slice(TEXT.indexOf('Each tool asks the API\'s own open endpoints'), TEXT.indexOf('How to connect'))
     for (const path of asked) {

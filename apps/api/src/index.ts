@@ -14,6 +14,8 @@ import { redis } from './db/redis'
 import { db } from './db/postgres'
 import { registerFeedRoutes } from './routes/feed'
 import { registerStoryRoutes, startWeekWarmer, stopWeekWarmer } from './routes/stories'
+import { registerCoverageGapRoutes } from './routes/coverage-gap'
+import { startCoverageGapWarmer, stopCoverageGapWarmer } from './lib/coverage-gap'
 import { registerAuthRoutes } from './routes/auth'
 import { registerPostRoutes } from './routes/posts'
 import { registerSignalRoutes } from './routes/signals'
@@ -314,6 +316,8 @@ async function bootstrap() {
   await app.register(registerBriefingRoutes,        { prefix: '/api/v1/briefings' })
   await app.register(registerBriefingDailyRoutes,   { prefix: '/api/v1/briefing' })
   await app.register(registerCountryRoutes,     { prefix: '/api/v1/countries' })
+  // Under-reported crises: UNHCR's displaced people against the outlets covering them (lib/coverage-gap.ts)
+  await app.register(registerCoverageGapRoutes, { prefix: '/api/v1/coverage-gap' })
   await app.register(registerBreakingRoutes,    { prefix: '/api/v1/breaking' })
   await app.register(registerTradeRoutes,       { prefix: '/api/v1/trade' })
   await app.register(registerCameraRoutes,      { prefix: '/api/v1/cameras' })
@@ -436,6 +440,8 @@ async function bootstrap() {
   // The week under way and the last 4 finished weeks made ahead of visitors:
   // a finished week takes up to a minute to make
   startWeekWarmer()
+  // The coverage gap's last 7 days and its last 4 finished weeks, made the same way
+  startCoverageGapWarmer()
 
   // ─── EMAIL BRIEFING (plan G4) ─────────────────────────────
   // Creates the subscribers table if missing (Devon approved, Oct 11, 2026),
@@ -473,6 +479,7 @@ async function bootstrap() {
     stopPulseScheduler()
     stopSummaryPass()
     stopWeekWarmer()
+    stopCoverageGapWarmer()
     stopBriefingEmails()
     stopSocialPosters()
     stopDispatcher()

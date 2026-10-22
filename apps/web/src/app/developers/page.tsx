@@ -16,6 +16,7 @@ const MCP_TOOLS = [
   { name: 'search_reports', what: 'Reports about a subject, found by meaning' },
   { name: 'week', what: 'WorldPulse Week: a week\'s top stories and its busiest countries' },
   { name: 'check_link', what: 'An article\'s address: how many outlets reported its story, and which' },
+  { name: 'under_reported', what: 'The crises with the fewest outlets for the people displaced (UNHCR), the last 7 days or a finished week' },
 ]
 const MCP_CURSOR = '{"mcpServers":{"worldpulse":{"url":"https://api.world-pulse.io/mcp"}}}'
 

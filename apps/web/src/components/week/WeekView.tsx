@@ -105,6 +105,7 @@ export function WeekView({ data }: { data: WeekData }) {
             <Link key={w} href={`/week/${w}`} className="text-wp-amber underline">Week {weekNumber(w)}</Link>
           ))}
           <Link href="/briefing" className="text-wp-amber underline">Today&apos;s briefing</Link>
+          <Link href="/under-reported" className="text-wp-amber underline">Under-reported crises</Link>
         </nav>
       </main>
     </div>

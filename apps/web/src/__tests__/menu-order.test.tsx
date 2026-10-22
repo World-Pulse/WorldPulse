@@ -12,7 +12,8 @@ vi.mock('next/navigation', () => ({ usePathname: () => '/', useRouter: () => ({ 
 
 const { LeftSidebar } = await import('@/components/sidebar/LeftSidebar')
 
-const MAIN = ['/', '/map', '/briefing', '/week', '/check', '/entities', '/countries', '/how-we-count']
+// the under-reported crises, right after the week (Oct 21, 2026)
+const MAIN = ['/', '/map', '/briefing', '/week', '/under-reported', '/check', '/entities', '/countries', '/how-we-count']
 const OTHERS = [
   '/alerts', '/analytics', '/explore', '/knowledge-graph/explorer', '/finance', '/maritime', '/sanctions',
   '/internet-outages', '/cyber-threats', '/undersea-cables', '/governance', '/food-security', '/digital-rights', '/water-security',
