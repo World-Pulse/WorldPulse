@@ -49,6 +49,18 @@ const STEPS: Array<{ id?: string; h: string; p: React.ReactNode }> = [
     h: 'When a story becomes Verified',
     p: 'When two or more outlets report it and its reliability score reaches 65%. An AI check then reads the reports and looks for contradictions on facts such as where, who and how many.',
   },
+  {
+    // plan N2 (Oct 23, 2026): scraper pipeline/second-outlet.ts and independence.ts
+    id: 'second-outlet',
+    h: 'A second outlet from GDELT',
+    p: 'WorldPulse reads a few hundred news feeds, so many reports start with one outlet even when others carried the story. Every 15 minutes it also reads GDELT’s free list of the articles news outlets published, and looks for another outlet for each English report of medium or higher seriousness that has only one. An article counts only when it is on a different website, from a newsroom (not an aggregator, a press-release wire or a content farm), has a headline that matches the report’s story, and is not a copy: sister sites of one owner that run the same article, and one wire story on many papers, count as one outlet. Up to three such outlets are added to a report, with links, and its page says “Also reported by”.',
+  },
+  {
+    // plan D6 (Oct 15, 2026): scraper pipeline/crosscheck.ts
+    id: 'cross-check',
+    h: 'The cross-check read, and held stories',
+    p: 'When a report turns verified because another outlet joined it, an AI model reads the outlets’ reports and says whether they describe the same event and whether they agree on its main facts. If they describe different events, the report goes back to pending (held), and its page says so. If the outlets describe the same event but differ on facts, the page says “the outlets differ”. When the AI gives no answer, nothing is held and the story stays verified. A held story can verify again when further outlets report it.',
+  },
 ]
 
 const LIMITS = [
