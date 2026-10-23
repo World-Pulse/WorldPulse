@@ -52,6 +52,12 @@ itself in its user agent (AhrefsBot, python-requests, HeadlessChrome…), with
 the parts of the site bots read ("bots", "bot_pages"). Bots only: nothing
 about people changes.
 
+No language, no reader (plan LR5, Oct 23, 2026, before the launch): a
+visitor whose browser ran the page but asked for no language at all (no
+Accept-Language) is counted as "no_language", not as a reader. Every real
+browser sends one; on Oct 23 by 10 AM, 4 of the day's 10 "people" sent none.
+Visitors from before nginx logged the header ("not recorded") still count.
+
 Readers' languages (plans L4 and L5, Oct 21, 2026): the main language each
 counted reader's browser asks for (the first of its Accept-Language, as its
 code only: "en", "es", "fr"), summed for the day ("people_languages"), so
@@ -329,6 +335,7 @@ def per_visitor(views, people):
 def summary(d):
     """The day's totals, counting only visitors whose browser ran the page"""
     channels, pages, sites, views, people, unconfirmed, scripts_only, sign_in_only = {}, {}, {}, 0, 0, 0, 0, 0
+    no_language = 0
     hours, posts, agents, sections, languages = {}, {}, {}, {}, {}
     # Page views by the channel that brought each visitor (plan G18 (3), Oct 20, 2026):
     # whether readers who came from X, search or a post read a second story
@@ -351,6 +358,10 @@ def summary(d):
                 scripts_only += 1
             else:
                 unconfirmed += 1
+            continue
+        if v.get('l') == 'not sent':
+            # ran the page, but its browser asked for no language at all: automation (plan LR5, Oct 23, 2026)
+            no_language += 1
             continue
         people += 1
         add(agents, v.get('a') or 'other')
@@ -377,7 +388,8 @@ def summary(d):
             'channel_views_per_visitor': {ch: per_visitor(channel_views.get(ch, 0), n) for ch, n in by_count(channels).items()},
             'sites': by_count(sites, 8), 'pages': by_count(pages), 'crawlers': by_count(d['crawlers']),
             'bots': top_bots(d), 'bot_pages': by_count(d.get('bot_pages') or {}, 12), 'bots_since': d.get('bots_since'),
-            'unconfirmed': unconfirmed, 'scripts_only': scripts_only, 'sign_in_only': sign_in_only, 'rule': 'api, no sign-in pages',
+            'unconfirmed': unconfirmed, 'scripts_only': scripts_only, 'sign_in_only': sign_in_only, 'no_language': no_language,
+            'rule': 'api, a language, no sign-in pages',
             'people_agents': by_count(agents, 8), 'people_sections': by_count(sections, 12),
             'people_languages': by_count(languages, 12),
             'hours': dict(sorted(hours.items())), 'posts': by_count(posts, 20)}
@@ -563,7 +575,7 @@ def main():
     out['updated'] = now.isoformat(timespec='seconds')
     out['log_read'] = ok
     out['history'] = [{k: h.get(k) for k in ('day', 'visitors', 'views', 'channels', 'channel_views', 'views_per_visitor', 'posts', 'crawlers',
-                                             'unconfirmed', 'scripts_only', 'sign_in_only', 'rule', 'note', 'visitors_loose')} for h in st['history'][-14:]]
+                                             'unconfirmed', 'scripts_only', 'sign_in_only', 'no_language', 'rule', 'note', 'visitors_loose')} for h in st['history'][-14:]]
     print(json.dumps(out, separators=(',', ':')))
 
 

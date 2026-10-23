@@ -582,6 +582,8 @@ pipeline=$(cat "$pipe_cache" 2>/dev/null || true)
   printf '"disk_free_mb":%s,' "$(df -BM --output=avail / | tail -1 | tr -dc '0-9')"
   printf '"disk_guard_last":"%s",' "$(tail -n 1 logs/disk-guard.log 2>/dev/null | tr -cd 'A-Za-z0-9 :+>.?-' | cut -c1-80)"
   printf '"cert_days_left":%s,' "$days"
+  # The database's last copy and restore test (scripts/db-backup.sh, plan LR8); null before the first
+  printf '"backup":%s,' "$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1])), separators=(",", ":")))' logs/backup-status.json 2>/dev/null || echo null)"
   printf '"containers":{%s},' "$containers"
   printf '"pipeline":%s}\n' "$pipeline"
 } > "logs/public/status.json.$$.tmp" && mv "logs/public/status.json.$$.tmp" logs/public/status.json

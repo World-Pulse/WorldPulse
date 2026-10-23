@@ -268,7 +268,7 @@ export default function DevelopersPage() {
         <section className="mb-16">
           <h2 className="text-xl font-display text-wp-text1 tracking-wide mb-6">QUICK START</h2>
 
-          <div className="grid gap-4 sm:grid-cols-3 mb-8">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 mb-8">
             {([
               { step: '1', title: 'No signup needed', desc: 'Public endpoints work immediately. Just make a GET request.' },
               // Keys are made on /developer, which this page didn't link (plan V3c)
@@ -314,7 +314,7 @@ export default function DevelopersPage() {
         {/* Features Grid */}
         <section className="mb-16">
           <h2 className="text-xl font-display text-wp-text1 tracking-wide mb-6">WHY WORLDPULSE API</h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {([
               // ("50K+ sources" until Oct 13, 2026; ops-status counts about 1,000 outlets a day)
               { icon: Globe, title: '1,000+ Outlets a Day', desc: 'Wire services, OSINT feeds, GDELT, government databases, and community reports — deduplicated, with every report checked against the others.' },
@@ -384,7 +384,7 @@ export default function DevelopersPage() {
         <section className="mb-16">
           <h2 className="text-xl font-display text-wp-text1 tracking-wide mb-6">AUTHENTICATION & RATE LIMITS</h2>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="p-5 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.02)]">
               <h3 className="text-[14px] font-medium text-wp-text1 mb-3">Authentication</h3>
               <div className="space-y-2 text-[13px] text-wp-text3 leading-relaxed">

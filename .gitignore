@@ -26,6 +26,8 @@ nginx/certs/
 
 # Logs
 logs/
+# The database copies scripts/db-backup.sh makes on the server (plan LR8)
+backups/
 *.log
 
 # OS

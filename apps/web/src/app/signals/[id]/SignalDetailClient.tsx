@@ -39,6 +39,9 @@ import { outletLine, type CountryStory } from '@/components/countries/CountryTop
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
+/** A story's view count shows from this many views (Oct 23, 2026) */
+const VIEWS_SHOWN_FROM = 100
+
 const SEV_COLOR: Record<string, string> = {
   critical: '#ff3b5c',
   high:     '#f5a623',
@@ -381,8 +384,10 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal, 
                   <span>{outletCount} outlet{outletCount !== 1 ? 's' : ''}</span>
                 </>
               )}
-              {/* views and posts, small, once there are any (they were in the sidebar's Reliability box: P2, step 4) */}
-              {signal.viewCount > 0 && (
+              {/* views and posts, small, once there are any (they were in the sidebar's Reliability box: P2, step 4).
+                  Views only from 100 (Oct 23, 2026, before the launch): "4 views" beside "VIRAL" (a badge
+                  about outlets, not readers) read as a dead site to a first-time visitor */}
+              {signal.viewCount >= VIEWS_SHOWN_FROM && (
                 <>
                   <span>·</span>
                   <span className="text-[10px]">{signal.viewCount.toLocaleString('en-US')} view{signal.viewCount !== 1 ? 's' : ''}</span>

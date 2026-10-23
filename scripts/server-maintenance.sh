@@ -24,6 +24,12 @@ OPS_LINE="*/5 * * * * root cd $(pwd) && bash scripts/ops-status.sh > /dev/null 2
 if [ -d /etc/cron.d ] && [ "$(cat "$OPS_CRON" 2> /dev/null)" != "$OPS_LINE" ]; then
   printf '%s\n' "$OPS_LINE" > "$OPS_CRON" && chmod 644 "$OPS_CRON"
 fi
+# The database's nightly copy, checked (scripts/db-backup.sh; plan LR8, Oct 23, 2026): 09:10 UTC, 5:10 AM New York in summer time
+DB_CRON=/etc/cron.d/worldpulse-db-backup
+DB_LINE="10 9 * * * root cd $(pwd) && bash scripts/db-backup.sh > logs/db-backup.log 2>&1"
+if [ -d /etc/cron.d ] && [ "$(cat "$DB_CRON" 2> /dev/null)" != "$DB_LINE" ]; then
+  printf '%s\n' "$DB_LINE" > "$DB_CRON" && chmod 644 "$DB_CRON"
+fi
 
 log "Disk free before: $(free_gb)G"
 find /var/lib/docker/containers -name '*-json.log' -size +100M -exec truncate -s 0 {} \; 2>/dev/null || true

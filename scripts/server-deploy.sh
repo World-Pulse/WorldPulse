@@ -54,6 +54,12 @@ OPS_LINE="*/5 * * * * root cd $(pwd) && bash scripts/ops-status.sh > /dev/null 2
 if [ -d /etc/cron.d ] && [ "$(cat "$OPS_CRON" 2> /dev/null)" != "$OPS_LINE" ]; then
   printf '%s\n' "$OPS_LINE" > "$OPS_CRON" && chmod 644 "$OPS_CRON"
 fi
+# The database's nightly copy, checked (scripts/db-backup.sh; plan LR8, Oct 23, 2026): 09:10 UTC, 5:10 AM New York in summer time
+DB_CRON=/etc/cron.d/worldpulse-db-backup
+DB_LINE="10 9 * * * root cd $(pwd) && bash scripts/db-backup.sh > logs/db-backup.log 2>&1"
+if [ -d /etc/cron.d ] && [ "$(cat "$DB_CRON" 2> /dev/null)" != "$DB_LINE" ]; then
+  printf '%s\n' "$DB_LINE" > "$DB_CRON" && chmod 644 "$DB_CRON"
+fi
 log "Deploying ${SHA}"
 # Which repository this copy follows (owner/name only; anything before an "@" is left out)
 log "Code from $(git remote get-url origin 2>/dev/null | sed -E 's#^[a-z]+://([^@/]*@)?##; s#^git@##; s#[.]git$##; s#^[^/:]*[/:]##' | tr -cd 'A-Za-z0-9._/-' | cut -c1-80)"
@@ -199,6 +205,27 @@ check() {  # check <host> <path>
 }
 check world-pulse.io /
 check api.world-pulse.io /health
+
+# Warm what a first visitor opens (Oct 23, 2026, before the Monday launch): a
+# new web process and API start cold, and right after the 9:47 AM deploy on
+# Oct 23 a story page took 8 s and two of the home page's API answers failed
+# (500) while their caches refilled. Ask once for the main pages, the day's
+# top stories and the API answers the home page and map load, through nginx,
+# which also keeps the pages (page_cache, nginx/conf.d/worldpulse.conf).
+warm() { curl -s -o /dev/null --max-time 30 --resolve "$1:443:127.0.0.1" "https://$1$2" || true; }
+for p in / /week /under-reported /map /how-we-count /developers; do warm world-pulse.io "$p"; done
+for p in "/api/v1/feed/global?group=story" "/api/v1/stories?hours=12&limit=5" "/api/v1/stories?hours=24&limit=20" \
+         "/api/v1/signals/count" "/api/v1/signals/headlines" "/api/v1/analytics/threat-index?window=6h" \
+         "/api/v1/analytics/escalation-index" "/api/v1/analytics/markets" \
+         "/api/v1/analytics/trending-entities?window=24h&limit=12&type=all" \
+         "/api/v1/knowledge-graph/trending?limit=10&window_hours=24&lean=1" "/api/v1/digest/config" \
+         "/api/v1/signals/map/hotspots?hours=24&min_categories=2&limit=25" "/api/v1/signals/map/points?hours=24&limit=3000&lean=1"; do
+  warm api.world-pulse.io "$p"
+done
+top=$(curl -s --max-time 30 --resolve "api.world-pulse.io:443:127.0.0.1" "https://api.world-pulse.io/api/v1/stories?hours=24&limit=8" \
+  | grep -o '"leadId":"[0-9a-f-]\{36\}"' | cut -d'"' -f4)
+for id in $top; do warm world-pulse.io "/signals/$id"; done
+log "Warmed the main pages, $(echo "$top" | grep -c .) top story pages and the home page's API answers"
 
 for domain in world-pulse.io world-pulse.app; do
   end=$(openssl x509 -enddate -noout -in ".certbot/conf/live/${domain}/fullchain.pem" 2>/dev/null | cut -d= -f2)
