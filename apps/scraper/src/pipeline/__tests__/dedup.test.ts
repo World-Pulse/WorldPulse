@@ -63,9 +63,9 @@ describe('dedup.check', () => {
     const result = await dedup.check('https://reuters.com/article/2', 'reuters')
     expect(result).toBe(false)
     expect(redisMock.setex).toHaveBeenCalledOnce()
-    // TTL should be 7 days in seconds
+    // TTL should be 24 hours in seconds (DEDUP_TTL in dedup.ts)
     const [, ttl] = redisMock.setex.mock.calls[0] as [string, number, string]
-    expect(ttl).toBe(7 * 24 * 60 * 60)
+    expect(ttl).toBe(24 * 60 * 60)
   })
 
   it('strips UTM tracking params so the same article URL deduplicates correctly', async () => {
