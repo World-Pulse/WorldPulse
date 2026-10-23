@@ -109,6 +109,11 @@ Act as the bot that owns the work: engineering → `atlas` (server), `cipher` (s
 
 ## Each shift
 
+**Two rules before any commit** (Devon, Oct 23, 2026):
+
+- **Desk check.** For anything readers will see (page text, numbers, counts, labels, share text, emails, posts), check every number and claim against its source before you commit: the live site or API (WebFetch with `?t=`), `/ops-status.json`, or the code that computes it. Say what you compared under **How I checked it**. A number you can't check doesn't ship: write the line without it. (Oct 23: a shift shipped "19 sources read" while the site read 651.)
+- **Launch day freeze.** No commit on Monday Oct 26, 2026 from 6 AM to 2 PM Eastern (check with `TZ=America/New_York date`): every commit deploys and restarts the site while launch visitors arrive. Do `.hq` work that needs no commit, and say so in the report.
+
 1. Read `.hq/PLAN.md`, `.hq/handoffs.json` and the newest report in `.hq/reports/`. Check production (ops-status + health).
 2. Pick the work as above.
 3. Implement it.
