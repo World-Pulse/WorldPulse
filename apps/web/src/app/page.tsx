@@ -26,7 +26,7 @@ interface HomeStory { id: string; title: string; outletCount: number }
 /** The stories most outlets reported in the last day; empty when the API doesn't answer */
 async function fetchStories(): Promise<HomeStory[]> {
   try {
-    const res = await cachedFetch(`${API_BASE}/api/v1/stories?hours=24&limit=12`, 120_000)
+    const res = await cachedFetch(`${API_BASE}/api/v1/stories?hours=24&limit=${STORY_LIMIT}`, 120_000)
     if (!res.ok) return []
     const json = await res.json() as { data?: { stories?: Array<{ id?: string; leadId?: string; title?: string; outletCount?: number }> } }
     const list = Array.isArray(json.data?.stories) ? json.data.stories : []
@@ -41,6 +41,22 @@ async function fetchStories(): Promise<HomeStory[]> {
     return []
   }
 }
+
+/** Active sources WorldPulse reads; null when the API doesn't answer */
+async function fetchSourceCount(): Promise<number | null> {
+  try {
+    const res = await cachedFetch(`${API_BASE}/api/v1/sources?limit=1`, 600_000)
+    if (!res.ok) return null
+    const json = await res.json() as { data?: { total?: number } }
+    const total = Number(json.data?.total)
+    return Number.isFinite(total) && total > 0 ? Math.round(total) : null
+  } catch {
+    return null
+  }
+}
+
+/** Page size of the stories call: a full list means "at least" this many */
+const STORY_LIMIT = 20
 
 const DESCRIPTION = metaDescription(
   "World news with how many independent outlets reported each story, and which ones. Live map, the week's top stories, open data and a free API.",
@@ -66,7 +82,10 @@ const STRUCTURED_DATA = [
 ]
 
 export default async function HomePage() {
-  const stories = await fetchStories()
+  const [stories, sourceCount] = await Promise.all([fetchStories(), fetchSourceCount()])
+  const verified = stories.filter(s => s.outletCount >= 2)
+  const widest = verified.reduce((m, s) => Math.max(m, s.outletCount), 0)
+  const verifiedLabel = `${verified.length}${stories.length >= STORY_LIMIT ? '+' : ''}`
   return (
     <>
       <script
@@ -74,6 +93,17 @@ export default async function HomePage() {
         // Fixed data from this file; "<" escaped so nothing can close the tag
         dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED_DATA).replace(/</g, '\\u003c') }}
       />
+      {verified.length > 0 && (
+        // Counts as the API gives them: stories two or more outlets reported
+        // in the last 24 hours, the widest one, and the sources read
+        <p className="border-b border-[rgba(255,255,255,0.07)] bg-wp-bg px-4 py-2 text-center text-xs text-wp-text">
+          <span className="text-wp-cyan">{verifiedLabel} stories</span> reported by 2 or more independent outlets in the last 24 hours
+          {widest >= 2 && <> · the widest by {widest} outlets</>}
+          {sourceCount && <> · {sourceCount} sources read</>}
+          {' · '}
+          <Link href="/how-we-count" className="underline underline-offset-2 hover:text-wp-cyan">How we count</Link>
+        </p>
+      )}
       <HomeFeed />
       {stories.length > 0 && (
         // The stories most outlets report, as plain links for search engines
