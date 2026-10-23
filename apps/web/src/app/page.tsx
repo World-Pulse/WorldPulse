@@ -4,6 +4,7 @@ import { HomeFeed } from '@/components/home/HomeFeed'
 import { SITE_URL, metaDescription } from '@/lib/page-metadata'
 import { X_HANDLE } from '@/lib/share-links'
 import { cachedFetch } from '@/lib/server-fetch'
+import { fetchHomeTotals } from '@/lib/home-totals'
 
 // The feed is a client component, so the home page's HTML used to carry no
 // stories, no structured data and no feed address: a crawler saw an empty
@@ -42,18 +43,7 @@ async function fetchStories(): Promise<HomeStory[]> {
   }
 }
 
-/** Active sources WorldPulse reads; null when the API doesn't answer */
-async function fetchSourceCount(): Promise<number | null> {
-  try {
-    const res = await cachedFetch(`${API_BASE}/api/v1/sources?limit=1`, 600_000)
-    if (!res.ok) return null
-    const json = await res.json() as { data?: { total?: number } }
-    const total = Number(json.data?.total)
-    return Number.isFinite(total) && total > 0 ? Math.round(total) : null
-  } catch {
-    return null
-  }
-}
+const fmt = (n: number) => n.toLocaleString('en-US')
 
 /** Page size of the stories call: a full list means "at least" this many */
 const STORY_LIMIT = 20
@@ -82,7 +72,7 @@ const STRUCTURED_DATA = [
 ]
 
 export default async function HomePage() {
-  const [stories, sourceCount] = await Promise.all([fetchStories(), fetchSourceCount()])
+  const [stories, totals] = await Promise.all([fetchStories(), fetchHomeTotals()])
   const verified = stories.filter(s => s.outletCount >= 2)
   const widest = verified.reduce((m, s) => Math.max(m, s.outletCount), 0)
   const verifiedLabel = `${verified.length}${stories.length >= STORY_LIMIT ? '+' : ''}`
@@ -93,13 +83,15 @@ export default async function HomePage() {
         // Fixed data from this file; "<" escaped so nothing can close the tag
         dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED_DATA).replace(/</g, '\\u003c') }}
       />
-      {verified.length > 0 && (
-        // Counts as the API gives them: stories two or more outlets reported
-        // in the last 24 hours, the widest one, and the sources read
+      {(totals.verified24h || verified.length > 0) && (
+        // The day's verified stories and sources from the status file; when
+        // it doesn't answer, the stories list's own count ("20+": at least)
         <p className="border-b border-[rgba(255,255,255,0.07)] bg-wp-bg px-4 py-2 text-center text-xs text-wp-text">
-          <span className="text-wp-cyan">{verifiedLabel} stories</span> reported by 2 or more independent outlets in the last 24 hours
-          {widest >= 2 && <> · the widest by {widest} outlets</>}
-          {sourceCount && <> · {sourceCount} sources read</>}
+          {totals.verified24h
+            ? <><span className="text-wp-cyan">{fmt(totals.verified24h)} stories</span> verified in the last 24 hours</>
+            : <><span className="text-wp-cyan">{verifiedLabel} stories</span> reported by 2 or more independent outlets in the last 24 hours</>}
+          {widest >= 2 && <> · the widest by {fmt(widest)} outlets</>}
+          {totals.sources && <> · {fmt(totals.sources)} sources read</>}
           {' · '}
           <Link href="/how-we-count" className="underline underline-offset-2 hover:text-wp-cyan">How we count</Link>
         </p>
