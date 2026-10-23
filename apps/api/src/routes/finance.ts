@@ -98,7 +98,10 @@ export function inferSubcategory(
 
   // title fallback
   const lower = title.toLowerCase()
-  if (/\b(federal reserve|ecb|fomc|rate hike|rate cut|central bank|bps|basis points)\b/.test(lower)) return 'central_bank'
+  // "Fed" as the Federal Reserve, not "fed by", "fed up" or "fed into" (plan LR6, Oct 23, 2026:
+  // "Fed rate decision" went unclassified)
+  if (/\b(federal reserve|ecb|fomc|rate hike|rate cut|rate decision|central bank|bps|basis points)\b/.test(lower)
+    || /\bfed\b(?! (?:by|up|into|to)\b)/.test(lower)) return 'central_bank'
   if (/\b(bitcoin|btc|ethereum|eth|crypto|blockchain|defi|stablecoin)\b/.test(lower)) return 'crypto'
   if (/\b(sanctions|ofac|asset freeze|blacklist|sdn)\b/.test(lower)) return 'sanctions'
   if (/\b(s&p|dow jones|ftse|nasdaq|dax|nikkei|yield|bond|rally|sell.off|correction)\b/.test(lower)) return 'market_move'

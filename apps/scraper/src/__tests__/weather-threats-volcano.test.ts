@@ -51,8 +51,9 @@ describe('nwsSeverity', () => {
     expect(nwsSeverity('Moderate', 'Heat Advisory', 'Expected')).toBe('medium')
   })
 
-  it('defaults to medium for unknown CAP severity', () => {
-    expect(nwsSeverity('Unknown', 'Special Weather Statement', 'Future')).toBe('medium')
+  it('maps Unknown CAP severity to low, and a missing one to medium', () => {
+    expect(nwsSeverity('Unknown', 'Special Weather Statement', 'Future')).toBe('low')
+    expect(nwsSeverity('', 'Special Weather Statement', 'Future')).toBe('medium')
   })
 })
 
@@ -74,6 +75,11 @@ describe('extractNwsLocation', () => {
     const result = extractNwsLocation(null, 'Central TX')
     expect(result).not.toBeNull()
     expect(result!.lat).toBeCloseTo(31.97, 1)
+  })
+
+  it('finds the state in the "County, ST" form, even when another code-like word comes first', () => {
+    expect(extractNwsLocation(null, 'Lake In The Hills, IL; Cook, IL')!.lat).toBeCloseTo(40.63, 1)
+    expect(extractNwsLocation(null, 'Bowie, TX; Miller, AR')!.lat).toBeCloseTo(31.97, 1)
   })
 
   it('returns CONUS center for unknown area', () => {

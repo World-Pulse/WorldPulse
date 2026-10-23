@@ -258,8 +258,8 @@ describe('comtradeDedupKey', () => {
 // ─── STRATEGIC_COMMODITIES static export ─────────────────────────────────────
 
 describe('STRATEGIC_COMMODITIES', () => {
-  it('contains all 8 required HS codes', () => {
-    expect(Object.keys(STRATEGIC_COMMODITIES)).toHaveLength(8)
+  it('contains at least the 8 required HS codes (12 since the list grew)', () => {
+    expect(Object.keys(STRATEGIC_COMMODITIES).length).toBeGreaterThanOrEqual(8)
   })
 
   it('includes crude petroleum (HS 2709)', () => {

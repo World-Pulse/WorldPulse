@@ -90,12 +90,13 @@ async function buildApp() {
   const app = Fastify({ logger: false })
 
   // Register rate-limit plugin (required by the route config)
+  // Counted in memory: @fastify/rate-limit 10 counts in Redis with a script of its own,
+  // which this Redis stand-in (get and setex, for the routes' cache) doesn't run
   await app.register(rateLimit, {
     max: 200,
     timeWindow: '1 minute',
-    redis: redis as never,
     keyGenerator: (req) => req.ip,
-    errorResponseBuilder: () => ({ success: false, error: 'rate limited' }),
+    errorResponseBuilder: (_req, context) => ({ statusCode: context.statusCode, success: false, error: 'rate limited' }),
   })
 
   await app.register(registerPublicRoutes, { prefix: '/api/v1/public' })
@@ -184,14 +185,13 @@ describe('GET /api/v1/public/signals', () => {
   })
 
   // 4 ── Respects limit param (max 100) ──────────────────────────────────────
-  it('clamps limit to 100 and reflects it in the response', async () => {
+  it('refuses a limit over 100 (the route\'s schema maximum) and serves 100', async () => {
     mockDbResult([makeSignalRow()])
 
-    const res = await app.inject({
-      method: 'GET',
-      url:    '/api/v1/public/signals?limit=200',
-    })
+    const over = await app.inject({ method: 'GET', url: '/api/v1/public/signals?limit=200' })
+    expect(over.statusCode).toBe(400)
 
+    const res = await app.inject({ method: 'GET', url: '/api/v1/public/signals?limit=100' })
     expect(res.statusCode).toBe(200)
     const body = res.json<{ limit: number }>()
     expect(body.limit).toBe(100)

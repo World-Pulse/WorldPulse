@@ -16,7 +16,7 @@ const dbMock = vi.fn(() => ({
   insert: vi.fn(() => ({ catch: catchMock })),
 }))
 
-vi.mock('../../../db/postgres.js', () => ({ db: dbMock }))
+vi.mock('../../db/postgres', () => ({ db: dbMock }))   // src/lib/__tests__ → src/db
 
 // ─── Import after mocks ───────────────────────────────────────────────────────
 

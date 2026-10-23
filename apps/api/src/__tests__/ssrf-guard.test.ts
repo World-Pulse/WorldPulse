@@ -100,6 +100,13 @@ describe('isSSRFSafeUrl', () => {
     expect(isSSRFSafeUrl('http://[::ffff:192.168.1.1]/')).toBe(false)
   })
 
+  it('blocks IPv4-mapped loopback and private addresses written in hex, and lets public ones through', () => {
+    expect(isSSRFSafeUrl('http://[::ffff:7f00:1]:6379/')).toBe(false)     // 127.0.0.1
+    expect(isSSRFSafeUrl('http://[::ffff:a00:1]/')).toBe(false)           // 10.0.0.1
+    expect(isSSRFSafeUrl('http://[::ffff:127.0.0.1]/')).toBe(false)
+    expect(isSSRFSafeUrl('http://[::ffff:808:808]/')).toBe(true)          // 8.8.8.8
+  })
+
   // ── Scheme validation ────────────────────────────────────────────────────────
   it('blocks file:// scheme', () => {
     expect(isSSRFSafeUrl('file:///etc/passwd')).toBe(false)

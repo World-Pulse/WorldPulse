@@ -6,6 +6,7 @@
  * cache key scoping, URL generation, and volume/date formatting helpers.
  */
 
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   POLYMARKET_CACHE_TTL,
   POLYMARKET_RATE_LIMIT,
@@ -19,7 +20,7 @@ import {
 
 // ─── Mock fetch ───────────────────────────────────────────────────────────────
 
-const mockFetch = jest.fn()
+const mockFetch = vi.fn()
 global.fetch = mockFetch
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -188,10 +189,11 @@ describe('fetchPolymarketMarkets — success cases', () => {
   })
 
   it('volume field is parsed as a number', async () => {
+    // A market's volume is its own ('1500000' in the fixture), not its event's total
     mockGammaSuccess([makeGammaEvent({ volume: '2500000' })])
     const { markets } = await fetchPolymarketMarkets('', 5)
     expect(typeof markets[0].volume).toBe('number')
-    expect(markets[0].volume).toBe(2500000)
+    expect(markets[0].volume).toBe(1500000)
   })
 })
 

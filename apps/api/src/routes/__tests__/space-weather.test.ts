@@ -12,23 +12,23 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import Fastify from 'fastify'
 import type { FastifyInstance } from 'fastify'
 import { registerSpaceWeatherRoutes } from '../space-weather'
+import { errorReply } from '../../lib/error-reply'
 import { redis } from '../../db/redis'
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 // db is a function (the query builder) with db.raw on it, as knex is
-vi.mock('../../db/postgres', () => ({
-  db: Object.assign(vi.fn(() => ({
-    select:      vi.fn().mockReturnThis(),
-    where:       vi.fn().mockReturnThis(),
-    whereIn:     vi.fn().mockReturnThis(),
-    whereRaw:    vi.fn().mockReturnThis(),
-    whereNotNull: vi.fn().mockReturnThis(),
-    orderBy:     vi.fn().mockReturnThis(),
-    orderByRaw:  vi.fn().mockReturnThis(),
-    limit:       vi.fn().mockResolvedValue([]),
-  })), { raw: vi.fn((s: string) => s) }),
-}))
+// A query builder awaited like knex's after any chain (the severity filter adds a whereIn
+// after limit, which a limit that answered the rows turned into a 500)
+vi.mock('../../db/postgres', () => {
+  const builder = (): Record<string, unknown> => {
+    const b: Record<string, unknown> = {}
+    for (const m of ['select', 'where', 'whereIn', 'whereRaw', 'whereNotNull', 'orderBy', 'orderByRaw', 'limit']) b[m] = vi.fn(() => b)
+    b.then = (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) => Promise.resolve([]).then(resolve, reject)
+    return b
+  }
+  return { db: Object.assign(vi.fn(() => builder()), { raw: vi.fn((s: string) => s) }) }
+})
 
 vi.mock('../../db/redis', () => ({
   redis: {
@@ -44,6 +44,12 @@ describe('Space Weather API', () => {
 
   beforeAll(async () => {
     app = Fastify()
+    // The API's answer to a failed request (index.ts): a schema refusal is
+    // { success: false, code: 'VALIDATION_ERROR', … }
+    app.setErrorHandler((err, _req, reply) => {
+      const { status, body } = errorReply(err)
+      return reply.status(status).send(body)
+    })
     await app.register(registerSpaceWeatherRoutes, { prefix: '/api/v1/space-weather' })
   })
 
@@ -67,7 +73,7 @@ describe('Space Weather API', () => {
       expect(res.statusCode).toBe(400)
       const json = JSON.parse(res.payload) as { success: boolean; code: string }
       expect(json.success).toBe(false)
-      expect(json.code).toBe('INVALID_HOURS')
+      expect(json.code).toBe('VALIDATION_ERROR')   // the API's one code for a bad query since Oct 20, 2026
     })
 
     it('Test 3: rejects hours > 720', async () => {
@@ -75,7 +81,7 @@ describe('Space Weather API', () => {
       expect(res.statusCode).toBe(400)
       const json = JSON.parse(res.payload) as { success: boolean; code: string }
       expect(json.success).toBe(false)
-      expect(json.code).toBe('INVALID_HOURS')
+      expect(json.code).toBe('VALIDATION_ERROR')   // the API's one code for a bad query since Oct 20, 2026
     })
 
     it('Test 4: rejects non-numeric hours', async () => {
@@ -83,7 +89,7 @@ describe('Space Weather API', () => {
       expect(res.statusCode).toBe(400)
       const json = JSON.parse(res.payload) as { success: boolean; code: string }
       expect(json.success).toBe(false)
-      expect(json.code).toBe('INVALID_HOURS')
+      expect(json.code).toBe('VALIDATION_ERROR')   // the API's one code for a bad query since Oct 20, 2026
     })
 
     it('Test 5: rejects limit > 200', async () => {
@@ -91,7 +97,7 @@ describe('Space Weather API', () => {
       expect(res.statusCode).toBe(400)
       const json = JSON.parse(res.payload) as { success: boolean; code: string }
       expect(json.success).toBe(false)
-      expect(json.code).toBe('INVALID_LIMIT')
+      expect(json.code).toBe('VALIDATION_ERROR')   // the API's one code for a bad query since Oct 20, 2026
     })
 
     it('Test 6: rejects limit < 1', async () => {
@@ -99,7 +105,7 @@ describe('Space Weather API', () => {
       expect(res.statusCode).toBe(400)
       const json = JSON.parse(res.payload) as { success: boolean; code: string }
       expect(json.success).toBe(false)
-      expect(json.code).toBe('INVALID_LIMIT')
+      expect(json.code).toBe('VALIDATION_ERROR')   // the API's one code for a bad query since Oct 20, 2026
     })
 
     it('Test 7: accepts valid hours=24', async () => {

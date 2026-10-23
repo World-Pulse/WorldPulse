@@ -73,12 +73,12 @@ vi.mock('../utils/sanitize',       () => ({ sanitizeString: (s: string) => s }))
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function makeApp() {
+async function makeApp() {
   // Import inline to get a fresh module after mocks are set up
-  const fastify = require('fastify').default ?? require('fastify')
+  const fastify = (await import('fastify')).default
   const app = fastify({ logger: false })
 
-  const { registerSearchRoutes } = require('../routes/search')
+  const { registerSearchRoutes } = await import('../routes/search')
   app.register(registerSearchRoutes, { prefix: '/' })
   return app
 }
@@ -99,7 +99,7 @@ describe('Gate 3 — Search Latency Hardening', () => {
       })
       redisMock.get.mockResolvedValueOnce(cachedBody)
 
-      const app = makeApp()
+      const app = await makeApp()
       await app.ready()
 
       const res = await app.inject({
@@ -127,7 +127,7 @@ describe('Gate 3 — Search Latency Hardening', () => {
       }
       redisMock.get.mockResolvedValueOnce(JSON.stringify(payload))
 
-      const app = makeApp()
+      const app = await makeApp()
       await app.ready()
 
       const res = await app.inject({ method: 'GET', url: '/?q=fire&type=signals' })
@@ -158,7 +158,7 @@ describe('Gate 3 — Search Latency Hardening', () => {
         modify:   vi.fn((fn: (q: object) => void) => { fn({}); return { select: vi.fn().mockReturnThis(), orderBy: vi.fn().mockReturnThis(), limit: vi.fn().mockReturnThis(), offset: vi.fn().mockResolvedValue([{ id: 'fb-1', title: 'Fallback' }]) } }),
       })
 
-      const app = makeApp()
+      const app = await makeApp()
       await app.ready()
 
       const res = await app.inject({ method: 'GET', url: '/?q=conflict&type=signals' })
@@ -179,14 +179,15 @@ describe('Gate 3 — Search Latency Hardening', () => {
         () => new Promise(resolve => setTimeout(() => resolve({ hits: [{ id: 'm1' }] }), 200)),
       )
 
-      const app = makeApp()
+      const app = await makeApp()
       await app.ready()
 
       await app.inject({ method: 'GET', url: '/?q=partial&type=signals' })
 
-      // setex should NOT have been called with a partial result
+      // setex should NOT have been called with a partial result (the latency tracker's own
+      // search:latency:* figures are not results)
       const setexCalls = redisMock.setex.mock.calls.filter(
-        (c: unknown[]) => (c[0] as string).startsWith('search:'),
+        (c: unknown[]) => (c[0] as string).startsWith('search:') && !(c[0] as string).startsWith('search:latency:'),
       )
       expect(setexCalls).toHaveLength(0)
 
@@ -203,7 +204,7 @@ describe('Gate 3 — Search Latency Hardening', () => {
       meiliSearchMock.mockResolvedValue({ hits })
       redisMock.get.mockResolvedValue(null)
 
-      const app = makeApp()
+      const app = await makeApp()
       await app.ready()
 
       const res = await app.inject({ method: 'GET', url: '/autocomplete?q=war' })
@@ -222,7 +223,7 @@ describe('Gate 3 — Search Latency Hardening', () => {
       meiliSearchMock.mockResolvedValue({ hits: userHits })
       redisMock.get.mockResolvedValue(null)
 
-      const app = makeApp()
+      const app = await makeApp()
       await app.ready()
 
       const res = await app.inject({ method: 'GET', url: '/autocomplete?q=analyst' })
@@ -235,7 +236,7 @@ describe('Gate 3 — Search Latency Hardening', () => {
     })
 
     it('returns empty data gracefully for single-character query', async () => {
-      const app = makeApp()
+      const app = await makeApp()
       await app.ready()
 
       // Single char is valid (min 1)
@@ -251,7 +252,7 @@ describe('Gate 3 — Search Latency Hardening', () => {
       meiliSearchMock.mockRejectedValue(new Error('Meilisearch unavailable'))
       redisMock.get.mockResolvedValue(null)
 
-      const app = makeApp()
+      const app = await makeApp()
       await app.ready()
 
       const res = await app.inject({ method: 'GET', url: '/autocomplete?q=crisis' })
@@ -411,9 +412,9 @@ describe('Gate 3 — Search Latency Hardening', () => {
       })
       redisMock.ping.mockResolvedValue('PONG')
 
-      const fastify = require('fastify').default ?? require('fastify')
+      const fastify = (await import('fastify')).default
       const healthApp = fastify({ logger: false })
-      const { registerHealthRoutes } = require('../routes/health')
+      const { registerHealthRoutes } = await import('../routes/health')
       healthApp.register(registerHealthRoutes, { prefix: '/' })
       await healthApp.ready()
 
@@ -429,9 +430,9 @@ describe('Gate 3 — Search Latency Hardening', () => {
       redisMock.get.mockResolvedValue(null)
       redisMock.ping.mockResolvedValue('PONG')
 
-      const fastify = require('fastify').default ?? require('fastify')
+      const fastify = (await import('fastify')).default
       const healthApp = fastify({ logger: false })
-      const { registerHealthRoutes } = require('../routes/health')
+      const { registerHealthRoutes } = await import('../routes/health')
       healthApp.register(registerHealthRoutes, { prefix: '/' })
       await healthApp.ready()
 

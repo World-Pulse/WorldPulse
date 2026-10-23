@@ -132,6 +132,11 @@ describe('buildSubcategoryBreakdown', () => {
     expect(bd.unclassified).toBe(1)
   })
 
+  it('takes "Fed" as the Federal Reserve, but not "fed by"', () => {
+    expect(inferSubcategory('Fed holds rates steady', [])).toBe('central_bank')
+    expect(inferSubcategory('Bitcoin rally fed by ETF inflows', [])).toBe('crypto')
+  })
+
   it('returns all-zero breakdown for empty input', () => {
     const bd = buildSubcategoryBreakdown([])
     expect(bd.market_move).toBe(0)

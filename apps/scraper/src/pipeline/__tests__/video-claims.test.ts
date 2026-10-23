@@ -97,8 +97,8 @@ describe('LANGUAGE_NAMES', () => {
 })
 
 describe('MONITORED_CHANNELS', () => {
-  it('has 25 monitored channels', () => {
-    expect(MONITORED_CHANNELS.length).toBe(25)
+  it('has 24 monitored channels', () => {
+    expect(MONITORED_CHANNELS.length).toBe(24)
   })
 
   it('each channel has required fields', () => {

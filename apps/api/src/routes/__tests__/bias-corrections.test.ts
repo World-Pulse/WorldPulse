@@ -61,6 +61,12 @@ async function buildApp() {
   return app
 }
 
+// authenticate looks the token's user up in the database (users), so a test whose other
+// lookups find nothing still needs that one to find the user
+function signedInWith(otherRows: unknown) {
+  mockDb.mockImplementation((table: unknown) => mockChain(table === 'users' ? { id: 1 } : otherRows))
+}
+
 function makeToken(app: ReturnType<typeof Fastify>, userId = 1) {
   return (app as unknown as { jwt: { sign: (p: unknown) => string } })
     .jwt.sign({ id: userId })
@@ -115,7 +121,7 @@ describe('POST /sources/:id/bias-corrections', () => {
 
   it('returns 404 when source does not exist', async () => {
     const token = makeToken(app)
-    mockDb.mockReturnValue(mockChain(undefined))
+    signedInWith(undefined)
 
     const res = await app.inject({
       method:  'POST',
@@ -198,6 +204,7 @@ describe('POST /sources/:id/bias-corrections/:cid/vote', () => {
 
   it('returns 400 for invalid vote value', async () => {
     const token = makeToken(app)
+    signedInWith({ id: 1 })
     const res = await app.inject({
       method:  'POST',
       url:     '/sources/1/bias-corrections/1/vote',

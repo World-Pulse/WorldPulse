@@ -361,7 +361,8 @@ describe('Space Weather — alert message parsing', () => {
 
   it('filters alerts without relevant keywords', () => {
     const now = new Date()
-    const dt  = new Date(now.getTime() - 30 * 60 * 1_000).toISOString().replace('T', ' ').replace('Z', '.000')
+    // SWPC's issue_datetime looks like "2026-03-22 13:00:00.000" (UTC, no zone)
+    const dt  = new Date(now.getTime() - 30 * 60 * 1_000).toISOString().replace('T', ' ').replace('Z', '')
     expect(isRelevantAlert('Proton flux increase', dt, now)).toBe(false)
     expect(isRelevantAlert('RADIO BLACKOUT observed', dt, now)).toBe(true)
   })
@@ -456,41 +457,9 @@ describe('GPSJam — severity mapping', () => {
 })
 
 // ─── IODA INTERNET OUTAGE TESTS ─────────────────────────────────────────────
-import { iodaSeverity } from '../ioda'
-
-describe('IODA — severity mapping from anomaly score', () => {
-  it('returns critical for score >= 500', () => {
-    expect(iodaSeverity(500)).toBe('critical')
-    expect(iodaSeverity(1200)).toBe('critical')
-    expect(iodaSeverity(999)).toBe('critical')
-  })
-
-  it('returns high for score >= 100 and < 500', () => {
-    expect(iodaSeverity(100)).toBe('high')
-    expect(iodaSeverity(250)).toBe('high')
-    expect(iodaSeverity(499)).toBe('high')
-  })
-
-  it('returns medium for score >= 30 and < 100', () => {
-    expect(iodaSeverity(30)).toBe('medium')
-    expect(iodaSeverity(50)).toBe('medium')
-    expect(iodaSeverity(99)).toBe('medium')
-  })
-
-  it('returns low for score < 30', () => {
-    expect(iodaSeverity(10)).toBe('low')
-    expect(iodaSeverity(0)).toBe('low')
-    expect(iodaSeverity(29)).toBe('low')
-  })
-
-  it('boundary: exactly 100 is high not medium', () => {
-    expect(iodaSeverity(100)).toBe('high')
-  })
-
-  it('boundary: exactly 500 is critical not high', () => {
-    expect(iodaSeverity(500)).toBe('critical')
-  })
-})
+// IODA's severity scale changed with its new home on Oct 20, 2026 (scores of 1,000 and up;
+// high from 5,000, critical from 20,000): ioda.test.ts tests it. The old 30/100/500 scale's
+// tests were removed here (plan LR6, Oct 23, 2026).
 
 // ─── WHO DISEASE OUTBREAK ─────────────────────────────────────────────────
 import { whoSeverity, inferLocation, parseRssItems as parseWhoRssItems } from '../who'
@@ -796,5 +765,4 @@ describe('Market — marketDedupKey', () => {
     const key2 = marketDedupKey('^GSPC', 'plunge', '2026-03-23')
     expect(key1).not.toBe(key2)
   })
-})
 })

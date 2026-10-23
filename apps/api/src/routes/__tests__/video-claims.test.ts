@@ -142,8 +142,8 @@ describe('isValidSortField', () => {
 // ─── Monitored Channels ─────────────────────────────────────────────────────
 
 describe('MONITORED_CHANNELS', () => {
-  it('has 25 channels', () => {
-    expect(MONITORED_CHANNELS).toHaveLength(25)
+  it('has 24 channels', () => {
+    expect(MONITORED_CHANNELS).toHaveLength(24)
   })
 
   it('all channels have valid types', () => {

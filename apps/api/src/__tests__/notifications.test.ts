@@ -8,6 +8,9 @@ import type { Signal } from '@worldpulse/types'
 
 // ─── Mocks ────────────────────────────────────────────────────────────────
 
+// The alert dispatcher loads the database module, which connects on load and exits
+// the process when it can't: a stand-in instead
+vi.mock('../db/postgres', () => ({ db: Object.assign(vi.fn(), { raw: vi.fn(async () => ({ rows: [] })) }) }))
 vi.mock('../lib/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() },
 }))

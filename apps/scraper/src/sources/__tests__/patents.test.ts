@@ -40,7 +40,9 @@ describe('patentSeverity', () => {
   })
 
   it('returns high for missile guidance keyword', () => {
-    expect(patentSeverity('F42B15', 'Missile Guidance System', 'Inertial navigation for ballistic trajectory')).toBe('high')
+    // G01C (navigation): F42B15, guided missiles, is critical by its code alone
+    expect(patentSeverity('G01C21', 'Missile Guidance System', 'Inertial navigation for ballistic trajectory')).toBe('high')
+    expect(patentSeverity('F42B15', 'Missile Guidance System', 'Inertial navigation for ballistic trajectory')).toBe('critical')
   })
 
   it('returns high for anti-satellite keyword', () => {

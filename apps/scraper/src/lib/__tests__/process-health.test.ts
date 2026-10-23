@@ -2,9 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
-const mockHset    = vi.fn().mockResolvedValue(1)
-const mockPexpire = vi.fn().mockResolvedValue(1)
-const mockSet     = vi.fn().mockResolvedValue('OK')
+// vi.mock factories are hoisted above the imports, so the mocks they use are made in vi.hoisted
+const { mockHset, mockPexpire, mockSet } = vi.hoisted(() => ({
+  mockHset:    vi.fn().mockResolvedValue(1),
+  mockPexpire: vi.fn().mockResolvedValue(1),
+  mockSet:     vi.fn().mockResolvedValue('OK'),
+}))
 
 vi.mock('../redis.js', () => ({
   redis: {
@@ -44,7 +47,7 @@ describe('startHeartbeat', () => {
   it('sets scraper:process hash with status=running immediately', async () => {
     const timer = startHeartbeat(100)
     // Flush the initial async write
-    await vi.runAllTimersAsync()
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(mockHset).toHaveBeenCalledWith(
       'scraper:process',
@@ -55,14 +58,14 @@ describe('startHeartbeat', () => {
 
   it('advances last_heartbeat after one interval tick', async () => {
     const timer = startHeartbeat(100)
-    await vi.runAllTimersAsync()
+    await vi.advanceTimersByTimeAsync(0)
 
     const firstCall = mockHset.mock.calls[0]![1] as Record<string, string>
     const firstTimestamp = firstCall['last_heartbeat']
 
     // Advance by one interval
     await vi.advanceTimersByTimeAsync(100)
-    await vi.runAllMicrotasksAsync()
+    await vi.advanceTimersByTimeAsync(0)   // let the tick's async write finish
 
     const secondCall = mockHset.mock.calls[1]![1] as Record<string, string>
     const secondTimestamp = secondCall['last_heartbeat']
@@ -77,7 +80,7 @@ describe('startHeartbeat', () => {
   it('sets TTL via pexpire at intervalMs * 3', async () => {
     const intervalMs = 100
     const timer = startHeartbeat(intervalMs)
-    await vi.runAllTimersAsync()
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(mockPexpire).toHaveBeenCalledWith('scraper:process', intervalMs * 3)
     stopHeartbeat(timer)
@@ -96,7 +99,7 @@ describe('stopHeartbeat', () => {
 
   it('clears the interval so no further writes occur', async () => {
     const timer = startHeartbeat(100)
-    await vi.runAllTimersAsync()
+    await vi.advanceTimersByTimeAsync(0)
 
     const callsAfterStart = mockHset.mock.calls.length
 
@@ -104,7 +107,7 @@ describe('stopHeartbeat', () => {
 
     // Advance past multiple intervals — no new calls expected
     await vi.advanceTimersByTimeAsync(500)
-    await vi.runAllMicrotasksAsync()
+    await vi.advanceTimersByTimeAsync(0)   // let the tick's async write finish
 
     expect(mockHset.mock.calls.length).toBe(callsAfterStart)
   })

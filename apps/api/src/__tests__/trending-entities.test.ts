@@ -178,9 +178,11 @@ describe('trending-entities — entity extraction logic', () => {
     const sorted = [...map.values()].sort((a, b) => b.count - a.count)
     // 'china' tag: 2 bumps + 'china' title pattern: 2 bumps + 'CN' code: 2 bumps = 6 total
     // 'china' (from title) should be near the top
-    const chinaTitle = sorted.find(e => e.entity === 'China' && e.type === 'country')
+    // A tag and a headline name share one entry (keyed by the lower-cased name); the first
+    // seen, the tag, sets its type
+    const chinaTitle = sorted.find(e => e.entity.toLowerCase() === 'china')
     expect(chinaTitle).toBeDefined()
-    const russiaTitle = sorted.find(e => e.entity === 'Russia' && e.type === 'country')
+    const russiaTitle = sorted.find(e => e.entity.toLowerCase() === 'russia')
     expect(russiaTitle).toBeDefined()
     expect(chinaTitle!.count).toBeGreaterThan(russiaTitle!.count)
   })

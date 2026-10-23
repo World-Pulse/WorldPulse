@@ -76,7 +76,9 @@ describe('detectCIB', () => {
     expect(result.clusterSize).toBe(1);
   });
 
-  it('3 similar low-trust signals in window returns COORDINATED NARRATIVE DETECTED', () => {
+  // Since Apr 2026 the confidence grows with the cluster ((matches - 1) / 4 × similarity):
+  // three look-alikes are suspicious, five or more a coordinated narrative
+  it('3 similar low-trust signals in window are SUSPICIOUS; 5 are a COORDINATED NARRATIVE', () => {
     const signal = makeSignal({ id: 's0', title: 'Breaking news about major global crisis event' });
     const similar = [
       makeSignal({ id: 's1', title: 'Breaking news about major global crisis event today' }),
@@ -85,8 +87,16 @@ describe('detectCIB', () => {
     ];
     const result = detectCIB(signal, similar);
     expect(result.detected).toBe(true);
-    expect(result.label).toBe('COORDINATED NARRATIVE DETECTED');
+    expect(result.label).toBe('SUSPICIOUS');
     expect(result.clusterSize).toBeGreaterThanOrEqual(3);
+
+    const more = [...similar,
+      makeSignal({ id: 's4', title: 'Breaking news about major global crisis event' }),
+      makeSignal({ id: 's5', title: 'Breaking news about major global crisis event' }),
+    ];
+    const coordinated = detectCIB(signal, more);
+    expect(coordinated.detected).toBe(true);
+    expect(coordinated.label).toBe('COORDINATED NARRATIVE DETECTED');
   });
 
   it('only 2 signals in cluster (size < 3) returns CLEAN', () => {

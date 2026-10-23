@@ -137,12 +137,10 @@ describe('GraphQL resolvers', () => {
     const countChain = makeChain([{ total: '50' }])
     countChain.first = vi.fn().mockResolvedValue({ total: '50' })
 
-    vi.mocked(db).mockImplementation((table: unknown) => {
-      if (typeof table === 'string' && table.startsWith('signals as s')) {
-        return chain as ReturnType<typeof db>
-      }
-      return countChain as ReturnType<typeof db>
-    })
+    // The rows' query first, then the count's: both read 'signals as s'
+    vi.mocked(db)
+      .mockImplementationOnce(() => chain as ReturnType<typeof db>)
+      .mockImplementationOnce(() => countChain as ReturnType<typeof db>)
 
     const result = await resolvers.Query.signals(undefined, { limit: 5, offset: 10 })
 

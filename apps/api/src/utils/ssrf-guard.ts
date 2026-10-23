@@ -82,6 +82,16 @@ function isPrivateIPv6(host: string): boolean {
     return isPrivateIPv4(ipv4Mapped[1])
   }
 
+  // The same in hex, as URL parsing writes it: new URL('http://[::ffff:192.168.1.1]/')
+  // has the hostname [::ffff:c0a8:101], which the dotted form above let through
+  // (plan LR6, Oct 23, 2026)
+  const ipv4Hex = lower.match(/^::(?:ffff:)?([0-9a-f]{1,4}):([0-9a-f]{1,4})$/)
+  if (ipv4Hex?.[1] && ipv4Hex[2]) {
+    const hi = parseInt(ipv4Hex[1], 16)
+    const lo = parseInt(ipv4Hex[2], 16)
+    return isPrivateIPv4(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`)
+  }
+
   return false
 }
 

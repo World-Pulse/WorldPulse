@@ -384,6 +384,8 @@ const KNOWN_ENTITIES: Record<string, string[]> = {
   'G20': ['G20', 'Group of Twenty'],
 }
 
+const TITLES_BEFORE_NAMES = /^(?:(?:President|Vice|Chancellor|Prime|Minister|Premier|King|Queen|Pope|Senator|Governor|Secretary|Ambassador|Mayor)\s+)+/
+
 export function extractEntities(text: string): string[] {
   const found: Set<string> = new Set()
 
@@ -396,10 +398,12 @@ export function extractEntities(text: string): string[] {
     }
   }
 
-  // Simple proper noun detection (capitalized multi-word sequences)
+  // Simple proper noun detection (capitalized multi-word sequences), without a title
+  // before the name ("President Emmanuel Macron" is Emmanuel Macron; plan LR6, Oct 23, 2026)
   const properNouns = text.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/g) ?? []
   for (const noun of properNouns) {
-    if (noun.length >= 4) found.add(noun)
+    const name = noun.replace(TITLES_BEFORE_NAMES, '')
+    if (name.length >= 4) found.add(name)
   }
 
   return Array.from(found)

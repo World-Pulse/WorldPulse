@@ -176,7 +176,7 @@ describe('buildSuccessRedirect', () => {
 
   it('respects a custom frontend URL', () => {
     const url = buildSuccessRedirect('https://worldpulse.io', 'at', 'rt', 900)
-    expect(url).toStartWith('https://worldpulse.io')
+    expect(url.startsWith('https://worldpulse.io')).toBe(true)
   })
 })
 

@@ -299,7 +299,7 @@ describe('nginx/conf.d/cloudflare.conf', () => {
     const fs = await import('fs/promises')
     const path = await import('path')
     // Resolve relative to the project root
-    const root = path.resolve(__dirname, '../../../../..')
+    const root = path.resolve(__dirname, '../../../..')   // apps/api/src/__tests__ → the repository
     const confPath = path.join(root, 'nginx', 'conf.d', 'cloudflare.conf')
     const content = await fs.readFile(confPath, 'utf-8')
     expect(content).toContain('real_ip_header')

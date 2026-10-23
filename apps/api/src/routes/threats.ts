@@ -217,27 +217,31 @@ export function classifyThreatType(title: string): ThreatType {
   return 'unknown'
 }
 
+// Each origin's words, as whole words: "pla" inside "plans" made a story about
+// Ukraine's plans Chinese, and "IDF" in "Hezbollah ... at IDF vehicle" made it Israel's
+const THREAT_ORIGINS: Array<[RegExp, string]> = [
+  [/\b(?:russia|russian|kremlin)\b/, 'Russia'],
+  [/\b(?:iran|iranian|irgc)\b/, 'Iran'],
+  [/\b(?:north korea|north korean|dprk|pyongyang|kim jong)\b/, 'North Korea'],
+  [/\b(?:china|chinese|pla)\b/, 'China'],
+  [/\b(?:ukraine|ukrainian)\b/, 'Ukraine'],
+  [/\b(?:israel|israeli|idf)\b/, 'Israel'],
+  [/\b(?:hamas|hezbollah|houthis?)\b/, 'Non-State Actor'],
+]
+
 /**
- * Attempt to parse the origin country from the signal title using common
- * state actor and proxy names. Returns null when no known origin is detected.
+ * The actor a threat headline starts from: the first origin it names (a headline names
+ * its actor before its target: "Hezbollah launches missile at IDF vehicle"), or null.
+ * (plan LR6, Oct 23, 2026; before, a fixed order and substrings decided)
  */
 export function parseThreatOrigin(title: string): string | null {
   const lower = title.toLowerCase()
-
-  if (lower.includes('russia') || lower.includes('russian') || lower.includes('kremlin')) return 'Russia'
-  if (lower.includes('iran') || lower.includes('iranian') || lower.includes('irgc'))      return 'Iran'
-  if (
-    lower.includes('north korea') ||
-    lower.includes('dprk') ||
-    lower.includes('pyongyang') ||
-    lower.includes('kim jong')
-  ) return 'North Korea'
-  if (lower.includes('china') || lower.includes('chinese') || lower.includes('pla'))      return 'China'
-  if (lower.includes('ukraine') || lower.includes('ukrainian'))                            return 'Ukraine'
-  if (lower.includes('israel') || lower.includes('idf'))                                   return 'Israel'
-  if (lower.includes('hamas') || lower.includes('hezbollah') || lower.includes('houthi')) return 'Non-State Actor'
-
-  return null
+  let first: { at: number; origin: string } | null = null
+  for (const [words, origin] of THREAT_ORIGINS) {
+    const m = words.exec(lower)
+    if (m && (!first || m.index < first.at)) first = { at: m.index, origin }
+  }
+  return first?.origin ?? null
 }
 
 // ─── Route ────────────────────────────────────────────────────────────────────

@@ -97,9 +97,14 @@ describe('verifySignal — status from score', () => {
       { ...makeArticle({ sourceId: 'anon-2', sourceTrust: 0.10, sourceTier: 'community' }), publishedAt: fiftyHoursAgo },
       { ...makeArticle({ sourceId: 'anon-2', sourceTrust: 0.10, sourceTier: 'community' }), publishedAt: new Date(now).toISOString() },
     ]
-    const result = await verifySignal(signal, articles)
+    // A medium report is disputed under 0.30; a high one only under 0.25, so it stays pending
+    // for review instead of being discarded (verify.ts's severity-aware thresholds)
+    const result = await verifySignal({ ...signal, severity: 'medium' }, articles)
     expect(result.status).toBe('disputed')
     expect(result.score).toBeLessThan(0.30)
+    const high = await verifySignal(signal, articles)
+    expect(high.score).toBeGreaterThanOrEqual(0.25)
+    expect(high.status).toBe('pending')
   })
 
   it('score is always in the [0, 1] range', async () => {

@@ -159,6 +159,11 @@ const cloudflarePlugin: FastifyPluginAsync = async (app) => {
   })
 }
 
+// Not encapsulated, as fastify-plugin would mark it: registered in its own scope, its hook
+// and request decorations reached none of the app's routes, so req.isBehindCloudflare
+// was always undefined (plan LR6, Oct 23, 2026). Fastify skips the scope for a plugin
+// carrying this symbol.
+Object.assign(cloudflarePlugin, { [Symbol.for('skip-override')]: true })
 export const cloudflareMiddlewarePlugin: FastifyPluginAsync = cloudflarePlugin
 
 /**

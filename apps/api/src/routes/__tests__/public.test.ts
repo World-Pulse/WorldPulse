@@ -419,11 +419,12 @@ describe('GET /public/signals', () => {
     expect(body.total).toBe(0)
   })
 
-  it('rejects unknown query params (additionalProperties: false)', async () => {
+  it('ignores unknown query params (additionalProperties: false strips them)', async () => {
     const app = await buildApp()
     const res = await app.inject({ method: 'GET', url: '/public/signals?foo=bar' })
-    // schema has additionalProperties: false — Fastify returns 400
-    expect(res.statusCode).toBe(400)
+    // Fastify's validator removes properties the schema doesn't name (removeAdditional, on by
+    // default) rather than refusing the request: a link with ?utm_source= or ?t= still works
+    expect(res.statusCode).toBe(200)
   })
 
   it('rejects invalid severity enum value', async () => {

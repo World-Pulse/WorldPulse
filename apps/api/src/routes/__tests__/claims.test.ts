@@ -53,7 +53,7 @@ describe('Claims API — Claim Extraction Logic', () => {
 
     it('should recognise statistical claims with percentages', () => {
       const text = 'The unemployment rate dropped by 2.5% in the last quarter.'
-      const pattern = /(?:^|[.!?]\s+)([^.!?]*?\b(?:\d+(?:\.\d+)?%|\d{1,3}(?:,\d{3})+|\d+\s*(?:million|billion|trillion|thousand|hundred))\b[^.!?]*[.!?])/gi
+      const pattern = /(?:^|[.!?]\s+)([^.!?]*?\b(?:\d+(?:\.\d+)?%|\d{1,3}(?:,\d{3})+\b|\d+\s*(?:million|billion|trillion|thousand|hundred)\b)[^.!?]*[.!?])/gi
       const match = pattern.exec(text)
       expect(match).not.toBeNull()
       expect(match?.[0]).toContain('2.5%')
@@ -61,7 +61,7 @@ describe('Claims API — Claim Extraction Logic', () => {
 
     it('should recognise statistical claims with large numbers', () => {
       const text = 'The company raised 500 million in its latest funding round.'
-      const pattern = /(?:^|[.!?]\s+)([^.!?]*?\b(?:\d+(?:\.\d+)?%|\d{1,3}(?:,\d{3})+|\d+\s*(?:million|billion|trillion|thousand|hundred))\b[^.!?]*[.!?])/gi
+      const pattern = /(?:^|[.!?]\s+)([^.!?]*?\b(?:\d+(?:\.\d+)?%|\d{1,3}(?:,\d{3})+\b|\d+\s*(?:million|billion|trillion|thousand|hundred)\b)[^.!?]*[.!?])/gi
       const match = pattern.exec(text)
       expect(match).not.toBeNull()
       expect(match?.[0]).toContain('500 million')

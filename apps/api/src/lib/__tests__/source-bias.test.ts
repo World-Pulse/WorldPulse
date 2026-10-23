@@ -162,8 +162,11 @@ describe('detectBiasHeuristic', () => {
   })
 
   describe('domain keyword signals', () => {
+    // Keywords are whole words of the domain, split at hyphens and dots: "patriotnews.com"
+    // is one word and gets no label. Splitting run-together words would label real
+    // organisations by accident ("freedomhouse" as right-leaning), so it doesn't
     it('right-leaning keyword → positive score', () => {
-      const result = detectBiasHeuristic('patriotnews.com')
+      const result = detectBiasHeuristic('patriot-news.com')
       expect(result).not.toBeNull()
       expect(result!.score).toBeGreaterThan(0)
       expect(result!.label).toMatch(/center-right|right|far-right/)
@@ -172,7 +175,7 @@ describe('detectBiasHeuristic', () => {
     })
 
     it('left-leaning keyword → negative score', () => {
-      const result = detectBiasHeuristic('progressivedaily.com')
+      const result = detectBiasHeuristic('progressive-daily.com')
       expect(result).not.toBeNull()
       expect(result!.score).toBeLessThan(0)
       expect(result!.label).toMatch(/center-left|left|far-left/)
@@ -180,7 +183,7 @@ describe('detectBiasHeuristic', () => {
     })
 
     it('multiple right keywords → more positive score', () => {
-      const single = detectBiasHeuristic('patriotnews.com')
+      const single = detectBiasHeuristic('patriot-news.com')
       const multi  = detectBiasHeuristic('patriot-liberty-freedom.com')
       expect(multi!.score).toBeGreaterThanOrEqual(single!.score)
     })

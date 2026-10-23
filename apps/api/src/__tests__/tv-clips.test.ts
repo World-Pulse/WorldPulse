@@ -46,7 +46,7 @@ vi.mock('../lib/fingerprint-search', () => ({ similarReports: vi.fn(async () => 
 vi.mock('../lib/risk-score',      () => ({ computeRiskScore: vi.fn(() => ({ score: 0, level: 'low', label: 'Low' })) }))
 vi.mock('../lib/cib-detection',   () => ({ detectCIB: vi.fn() }))
 vi.mock('../lib/source-bias',     () => ({ getSourceBias: vi.fn(), extractDomain: vi.fn() }))
-vi.mock('../lib/errors',          () => ({ sendError: vi.fn() }))
+// lib/errors is the real one: a stand-in sendError sent nothing, so a not-found answered an empty 200
 
 // ── Lazy imports (after mocks) ───────────────────────────────────────────────
 

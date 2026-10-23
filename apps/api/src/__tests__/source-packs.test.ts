@@ -42,22 +42,28 @@ const mockSignalRows = [
   },
 ]
 
-const dbMock = vi.fn()
+// db('signals') answers the query builder (a bare vi.fn() answered undefined, so the
+// route's .select() threw and every request was a 500); implementations are given to
+// vi.fn() itself so restoring mocks between tests keeps them
 const qb: Record<string, unknown> = {}
+const dbMock = vi.fn(() => qb)
 const chainable = () => qb
 qb.select   = chainable
 qb.where    = chainable
 qb.orderBy  = chainable
-qb.limit    = vi.fn().mockResolvedValue(mockSignalRows)
+qb.limit    = chainable
+// Awaited like knex's builder, after any chain (the category route adds a where after limit)
+qb.then     = (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
+  Promise.resolve(mockSignalRows).then(resolve, reject)
 const dbObj = Object.assign(dbMock, qb)
 vi.mock('../db/postgres', () => ({ db: dbObj }))
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function makeApp() {
-  const fastify = (require('fastify').default ?? require('fastify'))
+async function makeApp() {
+  const fastify = (await import('fastify')).default
   const app = fastify({ logger: false })
-  const { registerSourcePacksRoutes } = require('../routes/source-packs')
+  const { registerSourcePacksRoutes } = await import('../routes/source-packs')
   app.register(registerSourcePacksRoutes, { prefix: '/' })
   return app
 }
@@ -152,11 +158,10 @@ describe('GET /latest', () => {
     redisMock.get.mockResolvedValueOnce(null)
     redisMock.set.mockResolvedValueOnce('OK')
 
-    const app = makeApp()
+    const app = await makeApp()
     await app.ready()
     const res = await app.inject({ method: 'GET', url: '/latest' })
     await app.close()
-
     expect(res.statusCode).toBe(200)
     const body = JSON.parse(res.body)
     expect(body.success).toBe(true)
@@ -178,7 +183,7 @@ describe('GET /latest', () => {
     })
     redisMock.get.mockResolvedValueOnce(cached)
 
-    const app = makeApp()
+    const app = await makeApp()
     await app.ready()
     const res = await app.inject({ method: 'GET', url: '/latest' })
     await app.close()
@@ -197,7 +202,7 @@ describe('GET /category/:slug', () => {
     redisMock.get.mockResolvedValueOnce(null)
     redisMock.set.mockResolvedValueOnce('OK')
 
-    const app = makeApp()
+    const app = await makeApp()
     await app.ready()
     const res = await app.inject({ method: 'GET', url: '/category/conflict' })
     await app.close()
@@ -209,7 +214,7 @@ describe('GET /category/:slug', () => {
   })
 
   it('returns 400 for an unknown category', async () => {
-    const app = makeApp()
+    const app = await makeApp()
     await app.ready()
     const res = await app.inject({ method: 'GET', url: '/category/unknowncategory999' })
     await app.close()
@@ -230,7 +235,7 @@ describe('GET /category/:slug', () => {
     })
     redisMock.get.mockResolvedValueOnce(cached)
 
-    const app = makeApp()
+    const app = await makeApp()
     await app.ready()
     const res = await app.inject({ method: 'GET', url: '/category/conflict' })
     await app.close()
@@ -242,7 +247,7 @@ describe('GET /category/:slug', () => {
 
 describe('GET /public-key', () => {
   it('returns public key and algorithm', async () => {
-    const app = makeApp()
+    const app = await makeApp()
     await app.ready()
     const res = await app.inject({ method: 'GET', url: '/public-key' })
     await app.close()

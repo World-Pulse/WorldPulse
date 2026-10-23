@@ -119,11 +119,15 @@ export function extractNwsLocation(
     'VA': { lat: 37.43, lon: -78.66 }, 'WA': { lat: 47.75, lon: -120.74 },
   }
 
+  // A state's two-letter code as a word of its own, the "County, ST" form first. A plain
+  // substring test found "AL" inside "CENTRAL" and "AR" inside "AREA", so an alert for
+  // "Central TX" was placed in Alabama (plan LR6, Oct 23, 2026)
   const upper = areaDesc.toUpperCase()
-  for (const [abbr, coords] of Object.entries(stateCentroids)) {
-    if (upper.includes(abbr) || upper.includes(abbr)) {
-      return coords
-    }
+  const codes = [...upper.matchAll(/,\s*([A-Z]{2})\b/g)].map(m => m[1] ?? '')
+    .concat(upper.match(/\b[A-Z]{2}\b/g) ?? [])
+  for (const code of codes) {
+    const coords = stateCentroids[code]
+    if (coords) return coords
   }
 
   // Default: center of CONUS

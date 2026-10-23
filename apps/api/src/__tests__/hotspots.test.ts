@@ -7,24 +7,26 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// ── Mock dependencies ─────────────────────────────────────────────────────────
-vi.mock('../lib/postgres', () => ({
+// ── Mock dependencies (the modules the signals routes use: db/, middleware/auth) ──
+vi.mock('../db/postgres', () => ({
   db: Object.assign(
     vi.fn(),
     { raw: vi.fn() },
   ),
 }))
-vi.mock('../lib/redis', () => ({
+vi.mock('../db/redis', () => ({
   redis: {
-    get:    vi.fn().mockResolvedValue(null),
-    setex:  vi.fn().mockResolvedValue('OK'),
+    get:    vi.fn(async () => null),
+    setex:  vi.fn(async () => 'OK'),
   },
 }))
-vi.mock('../lib/kafka', () => ({ kafka: null, producer: null }))
-vi.mock('../lib/logger',  () => ({ logger: { child: () => ({ info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() }) } }))
+vi.mock('../middleware/auth', () => ({
+  authenticate: (_req: unknown, _rep: unknown, done: () => void) => done(),
+  optionalAuth: (_req: unknown, _rep: unknown, done: () => void) => done(),
+}))
 
-import { db }    from '../lib/postgres'
-import { redis } from '../lib/redis'
+import { db }    from '../db/postgres'
+import { redis } from '../db/redis'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function makeHotspotRow(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
@@ -51,8 +53,8 @@ async function buildApp() {
   const app = fastify({ logger: false })
 
   // Register the signals route under /api/v1/signals
-  const { default: signalRoutes } = await import('../routes/signals')
-  await app.register(signalRoutes, { prefix: '/api/v1/signals' })
+  const { registerSignalRoutes } = await import('../routes/signals')
+  await app.register(registerSignalRoutes, { prefix: '/api/v1/signals' })
 
   await app.ready()
   return app
@@ -123,7 +125,7 @@ describe('GET /api/v1/signals/map/hotspots', () => {
     await app.close()
   })
 
-  it('clamps hours to max 168', async () => {
+  it("refuses hours over 168 (the route's schema refuses, it doesn't clamp)", async () => {
     const mockRaw = vi.fn().mockResolvedValue({ rows: [] })
     ;(db as unknown as { raw: ReturnType<typeof vi.fn> }).raw = mockRaw
 
@@ -133,13 +135,12 @@ describe('GET /api/v1/signals/map/hotspots', () => {
       url:    '/api/v1/signals/map/hotspots?hours=9999',
     })
 
-    expect(res.statusCode).toBe(200)
-    const json = JSON.parse(res.body) as { success: boolean; data: { hours: number } }
-    expect(json.data.hours).toBe(168)
+    expect(res.statusCode).toBe(400)
+    expect(mockRaw).not.toHaveBeenCalled()
     await app.close()
   })
 
-  it('clamps min_categories to max 10', async () => {
+  it("refuses min_categories over 10 (the route's schema refuses, it doesn't clamp)", async () => {
     const mockRaw = vi.fn().mockResolvedValue({ rows: [] })
     ;(db as unknown as { raw: ReturnType<typeof vi.fn> }).raw = mockRaw
 
@@ -149,9 +150,8 @@ describe('GET /api/v1/signals/map/hotspots', () => {
       url:    '/api/v1/signals/map/hotspots?min_categories=999',
     })
 
-    expect(res.statusCode).toBe(200)
-    const json = JSON.parse(res.body) as { success: boolean; data: { minCategoryCount: number } }
-    expect(json.data.minCategoryCount).toBe(10)
+    expect(res.statusCode).toBe(400)
+    expect(mockRaw).not.toHaveBeenCalled()
     await app.close()
   })
 

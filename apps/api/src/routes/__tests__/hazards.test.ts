@@ -8,14 +8,39 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import Fastify from 'fastify'
 import type { FastifyInstance } from 'fastify'
 import { registerHazardsRoutes } from '../hazards'
+import { errorReply } from '../../lib/error-reply'
 import { db } from '../../db/postgres'
 import { redis } from '../../db/redis'
+
+// Stand-ins for the database and Redis (the test used the real ones, so it needed a server
+// with both running): a query builder that answers no rows after any chain, and an empty cache
+vi.mock('../../db/postgres', () => {
+  const builder = (): unknown => {
+    const b: Record<string, unknown> = {}
+    const proxy: unknown = new Proxy(b, {
+      get: (_t, prop) => prop === 'then'
+        ? (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) => Promise.resolve([]).then(resolve, reject)
+        : () => proxy,
+    })
+    return proxy
+  }
+  return { db: Object.assign(vi.fn(() => builder()), { raw: vi.fn((sql: string) => sql) }) }
+})
+vi.mock('../../db/redis', () => ({
+  redis: { get: vi.fn(async () => null), setex: vi.fn(async () => 'OK') },
+}))
 
 describe('Hazards API', () => {
   let app: FastifyInstance
 
   beforeAll(async () => {
     app = Fastify()
+    // The API's answer to a failed request (index.ts): a schema refusal is
+    // { success: false, code: 'VALIDATION_ERROR', … }
+    app.setErrorHandler((err, _req, reply) => {
+      const { status, body } = errorReply(err)
+      return reply.status(status).send(body)
+    })
     await app.register(registerHazardsRoutes, { prefix: '/api/v1/hazards' })
   })
 

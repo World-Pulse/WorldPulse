@@ -197,7 +197,9 @@ describe('jammingDedupKey', () => {
   })
 
   it('negative coordinates are handled correctly', () => {
-    expect(jammingDedupKey(-20.5, -55.5)).toBe('gnss:jam:-21:-56')
+    // Math.round takes a half up (toward +∞) on both sides of zero: one grid, either way
+    expect(jammingDedupKey(-20.5, -55.5)).toBe('gnss:jam:-20:-55')
+    expect(jammingDedupKey(-20.6, -55.4)).toBe('gnss:jam:-21:-55')
   })
 
   it('starts with gnss:jam: prefix for namespace isolation', () => {

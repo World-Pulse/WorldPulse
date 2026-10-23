@@ -54,9 +54,11 @@ describe('acledSeverity', () => {
   })
 
   it('returns critical for explosions with 5+ fatalities', () => {
-    expect(acledSeverity('Explosions/Remote violence', 5)).toBe('high') // fatalities 5 < 10, but explosion type = high
-    expect(acledSeverity('Explosions/Remote violence', 10)).toBe('high')
+    expect(acledSeverity('Explosions/Remote violence', 4)).toBe('high')
+    expect(acledSeverity('Explosions/Remote violence', 5)).toBe('critical')
+    expect(acledSeverity('Explosions/Remote violence', 10)).toBe('critical')   // never below 5-9 deaths
     expect(acledSeverity('Explosions/Remote violence', 50)).toBe('critical')
+    expect(acledSeverity('Battles', 10)).toBe('high')
   })
 })
 

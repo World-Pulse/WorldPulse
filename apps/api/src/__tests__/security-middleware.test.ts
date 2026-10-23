@@ -38,6 +38,14 @@ const mockRedis = {
   pttl: vi.fn().mockResolvedValue(-2),
   keys: vi.fn().mockResolvedValue([]),
   defineCommand: vi.fn(),
+  // @fastify/rate-limit 10 counts with its own Redis command (a Lua script it defines
+  // unless the client already has one): INCR, and the window's length back
+  rateLimit: vi.fn((key: string, timeWindow: number, _max: number, _cont: boolean, _expo: boolean,
+    cb: (err: Error | null, result: [number, number]) => void) => {
+    const current = (rateLimitCounts.get(key) ?? 0) + 1
+    rateLimitCounts.set(key, current)
+    cb(null, [current, timeWindow])
+  }),
 }
 
 vi.mock('../db/redis', () => ({ redis: mockRedis }))
@@ -53,6 +61,7 @@ async function buildTestApp(options: {
   allowedOrigins?: string[]
 } = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: false, trustProxy: true })
+  rateLimitCounts.clear()   // each app starts with no requests counted
 
   const allowedOrigins = options.allowedOrigins ?? ['http://localhost:3000', 'https://worldpulse.io']
 
@@ -93,7 +102,10 @@ async function buildTestApp(options: {
     timeWindow: '1 minute',
     redis:      mockRedis as unknown as Parameters<typeof rateLimit>[1]['redis'],
     keyGenerator: (req) => req.ip,
-    errorResponseBuilder: () => ({
+    // The plugin throws what this returns: without a statusCode it answers 500, not 429
+    // (as lib/rate-limit-options.ts does in the API itself)
+    errorResponseBuilder: (_req, context) => ({
+      statusCode: context.statusCode,
       success: false,
       error:   'Too many requests. Slow down.',
       code:    'RATE_LIMITED',

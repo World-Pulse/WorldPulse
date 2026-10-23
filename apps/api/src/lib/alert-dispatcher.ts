@@ -88,7 +88,8 @@ const SIGNAL_NEW_CHANNEL = 'wp:signal.new'
 
 // ─── AlertDispatcher ───────────────────────────────────────────────────────
 
-class AlertDispatcher {
+// Exported for the tests of shouldNotify; the app uses the one alertDispatcher below
+export class AlertDispatcher {
   private timer: ReturnType<typeof setInterval> | null = null
   private subscriber: typeof redis | null = null
 

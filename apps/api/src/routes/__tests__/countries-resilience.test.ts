@@ -26,6 +26,7 @@ const mockDb = vi.fn(() => ({
   andWhere:     mockAndWhere,
   whereNotNull: mockWhereNotNull,
   groupBy:      mockGroupBy,
+  groupByRaw:   mockGroupBy,   // the route groups with groupByRaw since the period column (Oct 2026)
   orderByRaw:   mockOrderByRaw,
   having:       mockHaving,
   limit:        mockLimit,
@@ -61,6 +62,22 @@ vi.mock('../../lib/query-schemas', () => ({
 
 // ─── Fixture data ─────────────────────────────────────────────────────────────
 
+// Both routes read the last 60 days in one query, grouped by category and by period
+// (current: the last 30 days; prev: the 30 before), with groupByRaw (countries.ts)
+const PERIOD_ROWS = [
+  { category: 'conflict',  period: 'current', cnt: '5', risk_sum: '20' },
+  { category: 'political', period: 'current', cnt: '3', risk_sum: '6'  },
+  { category: 'economic',  period: 'current', cnt: '8', risk_sum: '8'  },
+  { category: 'climate',   period: 'current', cnt: '2', risk_sum: '10' },
+  { category: 'cyber',     period: 'current', cnt: '4', risk_sum: '16' },
+  { category: 'conflict',  period: 'prev',    cnt: '3', risk_sum: '12' },
+]
+const RANKING_PERIOD_ROWS = [
+  ...PERIOD_ROWS.map(r => ({ ...r, country_code: 'JP' })),
+  { country_code: 'SY', category: 'conflict', period: 'current', cnt: '10', risk_sum: '45' },
+  { country_code: 'SY', category: 'economic', period: 'current', cnt: '5',  risk_sum: '15' },
+]
+
 const SIGNAL_ROWS = [
   { category: 'conflict',  severity: 'high',     signal_count: '5' },
   { category: 'political', severity: 'medium',   signal_count: '3' },
@@ -90,10 +107,8 @@ describe('GET /countries/:code/resilience', () => {
     vi.clearAllMocks()
     mockRedisGet.mockResolvedValue(null)
     mockRedisSetex.mockResolvedValue('OK')
-    // Mock current-period signals
-    mockLimit.mockResolvedValueOnce(SIGNAL_ROWS)
-    // Mock prev-period signals (for trend)
-    mockLimit.mockResolvedValueOnce(SIGNAL_ROWS)
+    // The one query's rows, both periods
+    mockGroupBy.mockResolvedValueOnce(PERIOD_ROWS)
   })
 
   it('returns HTTP 200 for a valid country code', async () => {
@@ -185,27 +200,8 @@ describe('GET /countries/resilience/rankings', () => {
     vi.clearAllMocks()
     mockRedisGet.mockResolvedValue(null)
     mockRedisSetex.mockResolvedValue('OK')
-    // Rankings query returns array of country rows
-    mockHaving.mockResolvedValue([
-      {
-        country_code: 'JP', signal_count: '12',
-        sec_count: '1', sec_sev: '40',
-        pol_count: '2', pol_sev: '40',
-        eco_count: '3', eco_sev: '15',
-        env_count: '1', env_sev: '40',
-        inf_count: '1', inf_sev: '15',
-        cyb_count: '0', cyb_sev: null,
-      },
-      {
-        country_code: 'SY', signal_count: '30',
-        sec_count: '10', sec_sev: '90',
-        pol_count: '8',  pol_sev: '80',
-        eco_count: '5',  eco_sev: '70',
-        env_count: '4',  env_sev: '60',
-        inf_count: '3',  inf_sev: '50',
-        cyb_count: '2',  cyb_sev: '70',
-      },
-    ])
+    // The rankings' one query: every country's rows, both periods
+    mockGroupBy.mockResolvedValue(RANKING_PERIOD_ROWS)
   })
 
   it('returns HTTP 200', async () => {
@@ -218,17 +214,17 @@ describe('GET /countries/resilience/rankings', () => {
   it('returns success:true with a rankings array', async () => {
     const app = await buildApp()
     const res = await app.inject({ method: 'GET', url: '/countries/resilience/rankings' })
-    const body = JSON.parse(res.body) as { success: boolean; data: { rankings: unknown[] } }
+    const body = JSON.parse(res.body) as { success: boolean; rankings: unknown[] }
     expect(body.success).toBe(true)
-    expect(Array.isArray(body.data.rankings)).toBe(true)
+    expect(Array.isArray(body.rankings)).toBe(true)
     await app.close()
   })
 
   it('each ranking entry has required fields', async () => {
     const app = await buildApp()
     const res = await app.inject({ method: 'GET', url: '/countries/resilience/rankings' })
-    const body = JSON.parse(res.body) as { data: { rankings: Array<Record<string, unknown>> } }
-    for (const entry of body.data.rankings) {
+    const body = JSON.parse(res.body) as { rankings: Array<Record<string, unknown>> }
+    for (const entry of body.rankings) {
       expect(entry).toHaveProperty('country_code')
       expect(entry).toHaveProperty('composite_score')
       expect(entry).toHaveProperty('risk_level')
@@ -242,8 +238,8 @@ describe('GET /countries/resilience/rankings', () => {
   it('composite scores are in 0-100 range', async () => {
     const app = await buildApp()
     const res = await app.inject({ method: 'GET', url: '/countries/resilience/rankings' })
-    const body = JSON.parse(res.body) as { data: { rankings: Array<{ composite_score: number }> } }
-    for (const entry of body.data.rankings) {
+    const body = JSON.parse(res.body) as { rankings: Array<{ composite_score: number }> }
+    for (const entry of body.rankings) {
       expect(entry.composite_score).toBeGreaterThanOrEqual(0)
       expect(entry.composite_score).toBeLessThanOrEqual(100)
     }

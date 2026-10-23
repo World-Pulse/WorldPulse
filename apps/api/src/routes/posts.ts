@@ -14,9 +14,11 @@ import { REPORT_REASONS, reportContent, reportsReady } from '../lib/content-repo
 
 // Simple script-based language detector — no external dependency needed.
 // Covers the languages most likely to appear in news posts.
+// Kana before the ideographs: Japanese writes with both, so a test for the ideographs
+// first called nearly every Japanese post Chinese (plan LR6, Oct 23, 2026)
 const SCRIPT_PATTERNS: [RegExp, string][] = [
-  [/[\u4E00-\u9FFF]/, 'zh'],          // CJK Unified Ideographs (Chinese)
   [/[\u3040-\u30FF]/, 'ja'],          // Hiragana / Katakana (Japanese)
+  [/[\u4E00-\u9FFF]/, 'zh'],          // CJK Unified Ideographs (Chinese)
   [/[\uAC00-\uD7AF]/, 'ko'],          // Hangul (Korean)
   [/[\u0600-\u06FF]/, 'ar'],          // Arabic
   [/[\u0400-\u04FF]/, 'ru'],          // Cyrillic (Russian default)

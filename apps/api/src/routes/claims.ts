@@ -48,8 +48,10 @@ interface ClaimExtractionResult {
 // ─── Claim extraction patterns ───────────────────────────────────────────────
 
 const CLAIM_PATTERNS: Array<{ pattern: RegExp; type: ExtractedClaim['type'] }> = [
-  // Statistical claims: numbers, percentages, metrics
-  { pattern: /(?:^|[.!?]\s+)([^.!?]*?\b(?:\d+(?:\.\d+)?%|\d{1,3}(?:,\d{3})+|\d+\s*(?:million|billion|trillion|thousand|hundred))\b[^.!?]*[.!?])/gi, type: 'statistical' },
+  // Statistical claims: numbers, percentages, metrics. The word boundary is part of the
+  // number words only: one after "%" (two non-word characters) never matched, so no
+  // percentage was a claim (plan LR6, Oct 23, 2026)
+  { pattern: /(?:^|[.!?]\s+)([^.!?]*?\b(?:\d+(?:\.\d+)?%|\d{1,3}(?:,\d{3})+\b|\d+\s*(?:million|billion|trillion|thousand|hundred)\b)[^.!?]*[.!?])/gi, type: 'statistical' },
   // Attribution: "X said/claimed/stated/reported/announced"
   { pattern: /(?:^|[.!?]\s+)([^.!?]*?\b(?:said|claimed|stated|reported|announced|confirmed|denied|warned|revealed|disclosed|alleged)\b[^.!?]*[.!?])/gi, type: 'attribution' },
   // Causal: "because/caused by/resulted in/led to/due to"

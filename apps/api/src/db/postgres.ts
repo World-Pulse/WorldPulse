@@ -44,10 +44,13 @@ export const db = Knex({
   acquireConnectionTimeout: 10_000,
 })
 
-// Test connection on startup
-db.raw('SELECT 1')
-  .then(() => console.log('✅ PostgreSQL connected'))
-  .catch(err => {
-    console.error('❌ PostgreSQL connection failed:', err.message)
-    process.exit(1)
-  })
+// Test connection on startup: the server's check, not the test runner's (a test that loads a
+// route without a database stand-in ended the whole run here; plan LR6, Oct 23, 2026)
+if (!process.env['VITEST']) {
+  db.raw('SELECT 1')
+    .then(() => console.log('✅ PostgreSQL connected'))
+    .catch(err => {
+      console.error('❌ PostgreSQL connection failed:', err.message)
+      process.exit(1)
+    })
+}

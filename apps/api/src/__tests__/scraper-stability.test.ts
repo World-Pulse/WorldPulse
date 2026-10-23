@@ -37,7 +37,8 @@ const mockRedis = {
   })),
 }
 
-vi.mock('../db/redis', () => ({ redis: mockRedis }))
+// The tracker is the scraper's: it reads the scraper's own Redis client (apps/scraper/src/lib/redis)
+vi.mock('../../../scraper/src/lib/redis', () => ({ redis: mockRedis }))
 
 // Import after mocks are in place
 const {
@@ -50,10 +51,10 @@ const {
   STABILITY_KEYS,
   TARGET_HOURS,
   CLEAN_SOURCE_THRESHOLD,
-} = await import('../../../../../../apps/scraper/src/lib/stability-tracker')
+} = await import('../../../scraper/src/lib/stability-tracker')   // apps/api/src/__tests__ → apps/scraper
 
 // Silence logger noise during tests
-vi.mock('../../../../../../apps/scraper/src/lib/logger', () => ({
+vi.mock('../../../scraper/src/lib/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }))
 

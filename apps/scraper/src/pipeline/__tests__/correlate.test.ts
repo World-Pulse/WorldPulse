@@ -154,37 +154,39 @@ describe('haversineKm', () => {
 
 // ─── CAUSAL SCORE ────────────────────────────────────────────────────────────
 
+// Categories are the database's own (category enum: breaking, conflict, geopolitics, climate,
+// health, economy, technology, science, elections, culture, disaster, security, sports, space,
+// other); the chains and scores are correlate.ts's since Apr 2026 (plan LR6, Oct 23, 2026)
 describe('causalScore', () => {
-  it('returns 1.0 for earthquake → tsunami chain', () => {
+  it('returns 1.0 for earthquake → tsunami chain (science → disaster)', () => {
     const a = makeSignal({ category: 'science' })
-    const b = makeSignal({ category: 'weather' })
-    // science:earthquake → weather:tsunami is a known chain
+    const b = makeSignal({ category: 'disaster' })
     expect(causalScore(a, b)).toBe(1.0)
   })
 
-  it('returns 1.0 for conflict → humanitarian chain', () => {
+  it('returns 1.0 for conflict → humanitarian chain (conflict → disaster)', () => {
     const a = makeSignal({ category: 'conflict' })
-    const b = makeSignal({ category: 'humanitarian' })
+    const b = makeSignal({ category: 'disaster' })
     expect(causalScore(a, b)).toBe(1.0)
   })
 
-  it('returns 1.0 for reverse direction (humanitarian → conflict)', () => {
-    const a = makeSignal({ category: 'humanitarian' })
+  it('returns 1.0 for reverse direction (disaster → conflict)', () => {
+    const a = makeSignal({ category: 'disaster' })
     const b = makeSignal({ category: 'conflict' })
     expect(causalScore(a, b)).toBe(1.0)
   })
 
-  it('returns 0.6 for same-category different-source signals', () => {
+  it('returns 0.7 for same-category different-source signals', () => {
     const a = makeSignal({ category: 'security', source_id: 'src_a' })
     const b = makeSignal({ category: 'security', source_id: 'src_b' })
-    expect(causalScore(a, b)).toBe(0.6)
+    expect(causalScore(a, b)).toBe(0.7)
   })
 
-  it('returns 0.3 for same-family different-category', () => {
-    // infrastructure and transportation are in the same family
-    const a = makeSignal({ category: 'infrastructure' })
-    const b = makeSignal({ category: 'transportation' })
-    expect(causalScore(a, b)).toBe(0.3)
+  it('returns 0.35 for same-family different-category', () => {
+    // elections and culture are both in the political family, with no chain between them
+    const a = makeSignal({ category: 'elections' })
+    const b = makeSignal({ category: 'culture' })
+    expect(causalScore(a, b)).toBe(0.35)
   })
 
   it('returns 0 for unrelated categories', () => {
@@ -193,11 +195,11 @@ describe('causalScore', () => {
     expect(causalScore(a, b)).toBe(0)
   })
 
-  it('returns 0 for same-category same-source (not corroboration)', () => {
+  it('gives same-category same-source only the family score, not the corroboration score', () => {
     const a = makeSignal({ category: 'security', source_id: 'same' })
     const b = makeSignal({ category: 'security', source_id: 'same' })
-    // Same source is not cross-source corroboration
-    expect(causalScore(a, b)).toBe(0)
+    // Same source is not cross-source corroboration (0.7); the same category is still the same family
+    expect(causalScore(a, b)).toBe(0.35)
   })
 })
 
@@ -251,7 +253,7 @@ describe('computeCorrelationScore', () => {
       published_at: now.toISOString(),
     })
     const b = makeSignal({
-      category: 'weather',
+      category: 'disaster',
       title: 'Tsunami warning issued Japan Pacific coast',
       tags: ['tsunami', 'japan'],
       lat: 38.5, lng: 142.6,
@@ -290,7 +292,7 @@ describe('computeCorrelationScore', () => {
       published_at: now.toISOString(),
     })
     const b = makeSignal({
-      category: 'humanitarian',
+      category: 'disaster',
       title: 'Cholera displacement crisis deepens',
       tags: ['displacement'],
       lat: null, lng: null,

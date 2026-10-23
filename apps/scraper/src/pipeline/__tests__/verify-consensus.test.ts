@@ -6,13 +6,21 @@
  * - consensus_verified reflects model agreement
  * - Score blending stays within [0, 1]
  * - Graceful fallback when Claude is unavailable
+ *
+ * Since Oct 11, 2026 (in-house plan, verify.ts), with a Claude key Claude IS the
+ * fact-check, asked once and only for stories that matter (two or more reports,
+ * or a high or critical one: verify-claude.test.ts). The second-opinion pass
+ * runs only after a self-hosted model's check, which a Claude key turns off, so
+ * these tests now pin that Claude isn't asked twice (plan LR6, Oct 23, 2026).
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // ── DB mock ─────────────────────────────────────────────────────────────────
 
-const dbInsertMock = vi.fn().mockResolvedValue([])
+// Implementations given to vi.fn() itself: vi.restoreAllMocks() (after each test) puts a mock back
+// to that, and would leave a .mockResolvedValue() mock answering undefined
+const dbInsertMock = vi.fn(async () => [])
 const dbTableMock  = vi.fn(() => ({ insert: dbInsertMock }))
 
 vi.mock('../../lib/postgres.js', () => ({ db: dbTableMock }))
@@ -21,8 +29,8 @@ vi.mock('../../lib/postgres.js', () => ({ db: dbTableMock }))
 
 vi.mock('../../lib/redis.js', () => ({
   redis: {
-    get:   vi.fn().mockResolvedValue(null),
-    setex: vi.fn().mockResolvedValue('OK'),
+    get:   vi.fn(async () => null),
+    setex: vi.fn(async () => 'OK'),
   },
 }))
 
@@ -112,17 +120,18 @@ describe('Multi-model consensus — activation window', () => {
     expect(anthropicCall).toBeUndefined()
   })
 
-  it('calls Claude API when score is in uncertain zone 0.30–0.70', async () => {
+  it('asks Claude no second opinion on an uncertain single report (Claude is the fact-check itself, for stories that matter)', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       mockClaudeResponse(true, 0.75) as unknown as Response,
     )
 
-    await verifySignal(signal, uncertainArticles)
+    const result = await verifySignal(signal, uncertainArticles)
 
     const anthropicCall = fetchSpy.mock.calls.find(
       ([url]) => typeof url === 'string' && url.includes('anthropic.com'),
     )
-    expect(anthropicCall).toBeDefined()
+    expect(anthropicCall).toBeUndefined()
+    expect(result.checkTypes).not.toContain('claude_consensus')
   })
 
   it('does NOT call Claude API when ANTHROPIC_API_KEY is not set', async () => {
@@ -155,7 +164,7 @@ describe('Multi-model consensus — consensus_verified flag', () => {
     vi.restoreAllMocks()
   })
 
-  it('consensus_verified=true when both models agree signal is consistent', async () => {
+  it('consensus_verified stays false with a Claude key, even when the checks agree (no second model is asked)', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
       if (typeof url === 'string' && url.includes('anthropic.com')) {
         return mockClaudeResponse(true, 0.8) as unknown as Response
@@ -173,7 +182,7 @@ describe('Multi-model consensus — consensus_verified flag', () => {
     })
 
     const result = await verifySignal(signal, uncertainArticles)
-    expect(result.consensus_verified).toBe(true)
+    expect(result.consensus_verified).toBe(false)
   })
 
   it('consensus_verified=false when models disagree (one pass, one fail)', async () => {
@@ -232,21 +241,6 @@ describe('Multi-model consensus — score blending', () => {
     expect(result.score).toBeLessThanOrEqual(1)
   })
 
-  it('score increases toward verified when Claude confirms consistency', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      mockClaudeResponse(true, 0.95) as unknown as Response,
-    )
-
-    const withClaude    = await verifySignal(signal, uncertainArticles)
-
-    // Temporarily disable Claude and compare
-    delete process.env.ANTHROPIC_API_KEY
-    vi.restoreAllMocks()
-    const withoutClaude = await verifySignal(signal, uncertainArticles)
-
-    // Claude confirmation should push the score higher
-    expect(withClaude.score).toBeGreaterThan(withoutClaude.score)
-  })
 })
 
 describe('Multi-model consensus — checkTypes and DB logging', () => {
@@ -261,26 +255,17 @@ describe('Multi-model consensus — checkTypes and DB logging', () => {
     vi.restoreAllMocks()
   })
 
-  it('checkTypes includes claude_consensus when it ran', async () => {
+  it('verification_log gets a row per check, and none for a consensus pass that didn\'t run', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       mockClaudeResponse(true, 0.8) as unknown as Response,
     )
 
     const result = await verifySignal(signal, uncertainArticles)
-    expect(result.checkTypes).toContain('claude_consensus')
-  })
-
-  it('verification_log contains a claude_consensus row when it ran', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      mockClaudeResponse(true, 0.8) as unknown as Response,
-    )
-
-    await verifySignal(signal, uncertainArticles)
 
     const [rows] = dbInsertMock.mock.calls[0] as [Array<Record<string, unknown>>]
-    const consensusRow = rows.find(r => r['check_type'] === 'claude_consensus')
-    expect(consensusRow).toBeDefined()
-    expect(consensusRow!['signal_id']).toBe(signal.id)
+    expect(rows.map(r => r['check_type'])).toEqual(result.checkTypes)
+    expect(rows.every(r => r['signal_id'] === signal.id)).toBe(true)
+    expect(rows.find(r => r['check_type'] === 'claude_consensus')).toBeUndefined()
   })
 
   it('checkTypes does NOT include claude_consensus when score is above 0.70', async () => {

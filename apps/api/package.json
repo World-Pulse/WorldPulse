@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "vitest run",
+    "test:server": "vitest run --config vitest.server.config.ts",
     "lint": "eslint src",
     "db:migrate": "knex migrate:latest --knexfile src/db/knexfile.ts",
     "db:seed": "knex seed:run --knexfile src/db/knexfile.ts",

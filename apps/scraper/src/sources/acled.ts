@@ -45,16 +45,18 @@ export function acledSeverity(
 ): SignalSeverity {
   // Fatality-based escalation takes priority
   if (fatalities >= 50) return 'critical'
-  if (fatalities >= 10) return 'high'
 
   const type = eventType.toLowerCase()
   const sub  = subEventType.toLowerCase()
 
-  // Critical: mass atrocity / large-scale battle / air/drone strike with casualties
+  // Critical: mass atrocity / large-scale battle / air/drone strike with casualties.
+  // Checked before the 10-death rule, which rated an explosion with 10-49 deaths
+  // below one with 5-9 (plan LR6, Oct 23, 2026)
   if (
     /sexual violence|chemical weapon|mass killing|ethnic cleansing/i.test(sub) ||
     (type.includes('explosion') && fatalities >= 5)
   ) return 'critical'
+  if (fatalities >= 10) return 'high'
 
   // High: battles / explosions / violence against civilians
   if (

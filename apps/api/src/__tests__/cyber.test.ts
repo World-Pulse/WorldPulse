@@ -90,7 +90,7 @@ describe('Cyber Threat Intelligence API', () => {
       expect(res.statusCode).toBe(400)
       const json = JSON.parse(res.payload) as { success: boolean; code: string }
       expect(json.success).toBe(false)
-      expect(json.code).toBe('INVALID_WINDOW')
+      expect(json.code).toBe('VALIDATION_ERROR')   // the API's one code for a bad query since Oct 20, 2026
     })
 
     it('Test 6: rejects numeric window param with 400', async () => {
@@ -98,7 +98,7 @@ describe('Cyber Threat Intelligence API', () => {
       expect(res.statusCode).toBe(400)
       const json = JSON.parse(res.payload) as { success: boolean; code: string }
       expect(json.success).toBe(false)
-      expect(json.code).toBe('INVALID_WINDOW')
+      expect(json.code).toBe('VALIDATION_ERROR')   // the API's one code for a bad query since Oct 20, 2026
     })
 
     it('Test 7: count field matches signals array length', async () => {

@@ -13,7 +13,7 @@
  *  - filterBySeverity: critical min keeps only critical
  *  - sendDigestEmail: returns early (no-op) when RESEND_API_KEY not set
  *  - (subscribe, confirm, unsubscribe and status: digest-routes.test.ts)
- *  - POST /admin/digest/send: 401 when not authenticated as admin
+ *  - POST /admin/digest/send: 403 when not authenticated as admin
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -195,7 +195,10 @@ describe('email-digest — sendDigestEmail', () => {
 // digest-routes.test.ts.
 
 describe('POST /api/v1/admin/digest/send', () => {
-  it('401 when not authenticated as admin', async () => {
+  // authenticate (stood in for above: lets every request through, with no user) is the
+  // route's only guard before its own admin check, which answers 403; the real
+  // authenticate answers 401 to a request without a sign-in
+  it('403 when not authenticated as admin', async () => {
     const { registerAdminDigestRoutes } = await import('../routes/digest')
     const Fastify = (await import('fastify')).default
     const app = Fastify()
@@ -206,6 +209,6 @@ describe('POST /api/v1/admin/digest/send', () => {
       url:    '/api/v1/admin/digest/send',
     })
 
-    expect(res.statusCode).toBe(401)
+    expect(res.statusCode).toBe(403)
   })
 })

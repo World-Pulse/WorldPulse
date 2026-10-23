@@ -29,17 +29,17 @@ describe('computeEscalationScore', () => {
 
   it('caps volumeRatio at 3x (prevents runaway scores)', () => {
     // 30 current vs 1 previous → ratio would be 30x without cap; capped at 3x
-    const counts: SeverityCounts = { critical: 0, high: 0, medium: 30, low: 0, info: 0 }
-    const uncapped = computeEscalationScore(30, 1, counts)
-    const capped   = computeEscalationScore(9, 1, counts)  // 9/1 = 9x → still capped to 3
+    // The severity counts add up to each call's current count (the severity points are a
+    // share of that count: with 30 mediums of 9 signals the share passed 1)
+    const uncapped = computeEscalationScore(30, 1, { critical: 0, high: 0, medium: 30, low: 0, info: 0 })
+    const capped   = computeEscalationScore(9, 1, { critical: 0, high: 0, medium: 9, low: 0, info: 0 })  // 9/1 = 9x → still capped to 3
     // Both should give same volume points (capped)
     expect(uncapped).toBe(capped)
   })
 
   it('gives full volume score when ratio is exactly 3x', () => {
-    const counts: SeverityCounts = { critical: 0, high: 0, medium: 3, low: 0, info: 0 }
-    const score3x = computeEscalationScore(3, 1, counts)
-    const score6x = computeEscalationScore(6, 1, counts)
+    const score3x = computeEscalationScore(3, 1, { critical: 0, high: 0, medium: 3, low: 0, info: 0 })
+    const score6x = computeEscalationScore(6, 1, { critical: 0, high: 0, medium: 6, low: 0, info: 0 })
     // Both should produce the same volume points (capped at 3x)
     expect(score3x).toBe(score6x)
   })

@@ -11,7 +11,7 @@ import { readFileSync, existsSync } from 'fs'
 import { join } from 'path'
 
 // Resolve root relative to this test file (apps/web/src/__tests__/ → ../../../../)
-const ROOT = join(__dirname, '..', '..', '..', '..', '..')
+const ROOT = join(__dirname, '..', '..', '..', '..')
 const WEB_ROOT = join(ROOT, 'apps', 'web')
 
 // ─── vercel.json ────────────────────────────────────────────────────────────

@@ -194,6 +194,12 @@ describe('parseThreatOrigin', () => {
     expect(parseThreatOrigin('Hezbollah launches anti-tank missile at IDF vehicle')).toBe('Non-State Actor')
   })
 
+  it('names the actor a headline starts from, in whole words', () => {
+    expect(parseThreatOrigin('Israeli strike kills Hamas commander in Gaza')).toBe('Israel')
+    expect(parseThreatOrigin('Ukraine plans new counteroffensive near Kharkiv')).toBe('Ukraine')   // "plans" isn't the PLA
+    expect(parseThreatOrigin('Explosion reported at Tirana port')).toBeNull()                       // "Tirana" isn't Iran
+  })
+
   it('detects Non-State Actor by "houthi"', () => {
     expect(parseThreatOrigin('Houthi drone targets Israeli cargo ship')).toBe('Non-State Actor')
   })

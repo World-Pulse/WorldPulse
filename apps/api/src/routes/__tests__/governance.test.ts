@@ -151,9 +151,10 @@ describe('Key Countries', () => {
 // ─── filterCountries Function ───────────────────────────────────────────────
 
 describe('filterCountries', () => {
-  it('should return all countries when no filters applied', () => {
+  it('should return the default page (50) when no filters applied, and every country with limit 100', () => {
     const filtered = filterCountries(COUNTRY_REGISTRY, {})
-    expect(filtered.length).toBe(COUNTRY_REGISTRY.length)
+    expect(filtered.length).toBe(Math.min(COUNTRY_REGISTRY.length, DEFAULT_LIMIT))
+    expect(filterCountries(COUNTRY_REGISTRY, { limit: 100 }).length).toBe(COUNTRY_REGISTRY.length)
   })
 
   it('should filter by region', () => {
@@ -329,7 +330,10 @@ describe('GeoJSON Map Points', () => {
       'US': [-95.71, 37.09], 'CN': [104.07, 35.86],
     }
 
-    COUNTRY_REGISTRY.slice(0, 2).forEach(country => {
+    // The US and China, wherever they sit in the registry
+    const named = COUNTRY_REGISTRY.filter(country => country.code in countryCoords)
+    expect(named).toHaveLength(2)
+    named.forEach(country => {
       const coords = countryCoords[country.code]
       expect(coords).toBeDefined()
       expect(Array.isArray(coords)).toBe(true)
