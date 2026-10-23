@@ -42,6 +42,15 @@ describe('findGazetteerPlace', () => {
     expect(findGazetteerPlace('Xinjiang cotton ban widens')?.coords.region).toBe('Xinjiang')
   })
 
+  it('pins Sarawak, Sabah and Auckland stories there, not at their capitals', () => {
+    const school = findGazetteerPlace('Police record 24 statements over Kuching school attack')
+    expect(school?.coords.region).toBe('Sarawak')
+    expect(school?.coords.lat).toBeLessThan(3)                                                   // Kuala Lumpur is 3.1
+    expect(findGazetteerPlace('Abang Johari expected to dissolve Sarawak assembly')?.place).toBe('sarawak')
+    expect(findGazetteerPlace('Woman dies after train strikes her at Auckland crossing')?.coords.country).toBe('NZ')
+    expect(findGazetteerPlace('Sabahan singer wins award')).toBeNull()                           // whole words only
+  })
+
   it('ignores newspaper names', () => {
     expect(findGazetteerPlace('US troops on Okinawa face new limits, the Washington Post reported')).toBeNull()
     expect(findGazetteerPlace('According to the New York Times, talks in Cairo resumed')?.place).toBe('cairo')
