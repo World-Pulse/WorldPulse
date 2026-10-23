@@ -74,6 +74,13 @@ export const WINDOW_KEEP_MS = 8 * HOUR
 /** Files read in one cycle: after a restart the last hour, after a gap at most 2 hours */
 const WARM_FILES = 4
 const MAX_FILES = 8
+/**
+ * A file GDELT lists but doesn't serve yet (or a moment's error) is read on the next cycle: the cycle stops
+ * there, so the window never moves past it. On Oct 22-23 one file in four was lost when the file after it
+ * read fine in the same cycle. A file still missing an hour after a newer one is listed is one GDELT
+ * skipped: the cycle goes past it.
+ */
+const GIVE_UP_MS = HOUR
 /** Reports compared: from the last 30 hours, settled for 20 minutes (intake may still add outlets) */
 const LOOKBACK_MS = 30 * HOUR
 const SETTLE_MS = 20 * 60_000
@@ -401,6 +408,8 @@ export async function runSecondOutlets(state: FinderState, deps: SecondOutletDep
     const trace: { newest: string | null; read: Array<[string, number]>; missing: string[]; failed: Array<[string, string]> } = { newest, read: [], missing: [], failed: [] }
     if (newest) {
       const held = state.window.newest()
+      // With a window held, a file not read yet stops the cycle (GIVE_UP_MS); after a restart nothing is lost
+      const waitFor = (stamp: string) => held !== null && stampDate(newest).getTime() - stampDate(stamp).getTime() < GIVE_UP_MS
       for (const stamp of filesToRead(newest, held, held ? MAX_FILES : WARM_FILES)) {
         let articles: GdeltArticle[] | null = null
         try {
@@ -409,9 +418,10 @@ export async function runSecondOutlets(state: FinderState, deps: SecondOutletDep
           stats.errors++
           trace.failed.push([stamp, String((err as Error)?.message || err).slice(0, 120)])
           logger.warn({ err, stamp }, 'Second outlet: GDELT file unreadable')
+          if (waitFor(stamp)) break
           continue
         }
-        if (!articles) { trace.missing.push(stamp); continue }
+        if (!articles) { trace.missing.push(stamp); if (waitFor(stamp)) break; continue }
         state.window.add(stamp, articles)
         stats.files++
         stats.articles += articles.length

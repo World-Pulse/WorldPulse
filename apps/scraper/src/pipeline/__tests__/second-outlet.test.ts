@@ -196,6 +196,36 @@ describe('a cycle', () => {
     expect(calls.traced[0]).toMatchObject({ missing: ['20261022114500'], failed: [['20261022121500', 'HTTP 503']] })
   })
 
+  it('waits for a file GDELT lists but has not put up yet, instead of moving past it', async () => {
+    const state = newState()
+    const files: Record<string, GdeltArticle[] | null> = { '20261022120000': [ndtv] }
+    await runSecondOutlets(state, deps(files as Record<string, GdeltArticle[]>, [report()], { add: async () => false }).d)
+    // 12:15 is listed but not there yet, 12:30 is: the cycle stops at 12:15 so the next one reads it
+    files['20261022121500'] = null
+    files['20261022123000'] = [other]
+    const second = deps(files as Record<string, GdeltArticle[]>, [report()])
+    await runSecondOutlets(state, second.d)
+    expect(second.calls.fetched).toEqual(['20261022121500'])
+    expect(second.calls.traced[0]).toMatchObject({ missing: ['20261022121500'], read: [] })
+    files['20261022121500'] = []
+    const third = deps(files as Record<string, GdeltArticle[]>, [report()])
+    await runSecondOutlets(state, third.d)
+    expect(third.calls.fetched).toEqual(['20261022121500', '20261022123000'])
+    expect(third.calls.traced[0]).toMatchObject({ read: [['20261022121500', 0], ['20261022123000', 1]], missing: [] })
+  })
+
+  it('goes past a file still missing an hour after a newer one is listed: GDELT skipped it', async () => {
+    const state = newState()
+    const files: Record<string, GdeltArticle[] | null> = { '20261022100000': [ndtv] }
+    await runSecondOutlets(state, deps(files as Record<string, GdeltArticle[]>, [report()], { add: async () => false }).d)
+    files['20261022101500'] = null
+    for (const s of ['20261022103000', '20261022104500', '20261022110000', '20261022111500']) files[s] = []
+    const later = deps(files as Record<string, GdeltArticle[]>, [report()])
+    await runSecondOutlets(state, later.d)
+    expect(later.calls.fetched).toEqual(['20261022101500', '20261022103000', '20261022104500', '20261022110000', '20261022111500'])
+    expect(later.calls.traced[0]).toMatchObject({ missing: ['20261022101500'] })
+  })
+
   it('compares a report only with the articles new since it was last compared', async () => {
     const state = newState()
     const files: Record<string, GdeltArticle[]> = { '20261022120000': [ndtv] }
