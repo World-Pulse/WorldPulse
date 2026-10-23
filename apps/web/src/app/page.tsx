@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { HomeFeed } from '@/components/home/HomeFeed'
+import { UnderReportedStrip } from '@/components/home/UnderReportedStrip'
 import { SITE_URL, metaDescription } from '@/lib/page-metadata'
 import { X_HANDLE } from '@/lib/share-links'
 import { cachedFetch } from '@/lib/server-fetch'
@@ -96,6 +97,7 @@ export default async function HomePage() {
           <Link href="/how-we-count" className="underline underline-offset-2 hover:text-wp-cyan">How we count</Link>
         </p>
       )}
+      <UnderReportedStrip />
       <HomeFeed />
       {stories.length > 0 && (
         // The stories most outlets report, as plain links for search engines
