@@ -17,15 +17,25 @@ import { promisify } from 'node:util'
 import { hostOf } from './signal-columns'
 import { cleanTitle, withoutOutletName } from './text'
 
-export const LASTUPDATE_URL = 'https://data.gdeltproject.org/gdeltv2/lastupdate.txt'
-const FILE_URL = (stamp: string) => `https://data.gdeltproject.org/gdeltv2/${stamp}.gkg.csv.zip`
+/**
+ * GDELT's files are read from its storage bucket's own address (Oct 23).
+ * GDELT's web address (data.gdeltproject.org) is the same Google Cloud
+ * Storage bucket behind Google's edge cache, which keeps a "not found" for an
+ * hour (public, max-age 3600) when anyone anywhere asks for a file a moment
+ * before GDELT uploads it, and ignores the query string and no-cache headers:
+ * at 03:22 UTC on Oct 23 the server still got "not found" for the 03:15 file,
+ * up since 03:03, while the bucket's address answered it fresh each time.
+ */
+export const GDELT_BUCKET = 'https://storage.googleapis.com/data.gdeltproject.org/gdeltv2'
+export const LASTUPDATE_URL = `${GDELT_BUCKET}/lastupdate.txt`
+export const FILE_URL = (stamp: string) => `${GDELT_BUCKET}/${stamp}.gkg.csv.zip`
 /**
  * A fresh address for each request (Oct 22): GDELT lists a file the moment it
  * uploads it (10 to 15 minutes before the time in its name), and a request
  * that came a moment too early got a "not found" that Google's cache then kept
- * answering for up to an hour (public, max-age 3600): the 20:00 file of Oct 22
- * was still missing for the server at 20:22 while it answered elsewhere, and
- * 8 of the day's first 17 files were read. GDELT ignores the query.
+ * answering for up to an hour (public, max-age 3600). The edge cache turned
+ * out to ignore the query (Oct 23: hence GDELT_BUCKET); it stays as a harmless
+ * extra. GDELT ignores the query too.
  */
 export const fresh = (url: string, now = Date.now()) => `${url}?t=${now}`
 const UA = 'WorldPulse/0.1 (open-source; https://world-pulse.io)'

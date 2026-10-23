@@ -39,7 +39,7 @@ vi.mock('../../lib/redis', () => ({
 }))
 
 import { readPulse, recordPulse, backfillStamps, backfillPulse, PULSE_GROUPS, type BackfillDeps } from '../gkg-pulse'
-import { fresh } from '../gdelt-articles'
+import { fresh, FILE_URL, LASTUPDATE_URL } from '../gdelt-articles'
 
 /** A GKG 2.1 line with the fields the pulse reads: 2 collection, 7 V1THEMES, 9 V1LOCATIONS, 15 V1.5TONE */
 const line = (themes: string, locations: string, tone: string, collection = '1') => {
@@ -108,6 +108,13 @@ describe("GDELT's files", () => {
   it('are asked for at a fresh address each time, past a cached "not found"', () => {
     expect(fresh('https://data.gdeltproject.org/gdeltv2/20261022200000.gkg.csv.zip', 1792700000000))
       .toBe('https://data.gdeltproject.org/gdeltv2/20261022200000.gkg.csv.zip?t=1792700000000')
+  })
+
+  // Oct 23: Google's edge cache in front of data.gdeltproject.org ignores the query and kept a "not found" for an hour
+  it("are read from GDELT's storage bucket itself, not through Google's edge cache", () => {
+    expect(FILE_URL('20261023031500')).toBe('https://storage.googleapis.com/data.gdeltproject.org/gdeltv2/20261023031500.gkg.csv.zip')
+    expect(LASTUPDATE_URL).toBe('https://storage.googleapis.com/data.gdeltproject.org/gdeltv2/lastupdate.txt')
+    expect(fresh(FILE_URL('20261023031500'), 1792724700000)).toBe('https://storage.googleapis.com/data.gdeltproject.org/gdeltv2/20261023031500.gkg.csv.zip?t=1792724700000')
   })
 })
 
