@@ -351,6 +351,22 @@ PY
 # many of the last 24 hours' reports have one, how far back the archive is
 # done, and the backfill's last run as the scraper recorded it (counts and a
 # short error only)
+# GDELT's file list as the second-outlet reader last read it (plan N3, Oct 24,
+# 2026): files read per UTC hour over 24 hours, and the last cycle's time and its
+# missing or failed files, from the public API (counts and file names only)
+gdelt_stats() {
+  timeout 35 curl -s --max-time 30 --resolve "api.world-pulse.io:443:127.0.0.1" -A "WorldPulse-Status/1.0" \
+       "https://api.world-pulse.io/api/v1/public/second-outlets" 2>/dev/null \
+    | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+d = d.get("data", d) if isinstance(d, dict) else {}
+p = d.get("pulse") or {}
+c = d.get("last_cycle") or {}
+print(json.dumps({"last_24h": p.get("last_24h") or {},
+                  "last_cycle": {k: c.get(k) for k in ("at", "newest", "missing", "failed")}}, separators=(",", ":")))' 2>/dev/null \
+    || printf 'null'
+}
 fingerprint_stats() {
   local q db pw run
   q="SELECT json_build_object(
@@ -493,6 +509,17 @@ pipeline_stats() {
   part db3 db_json 30 "$q3"
   part db4 db_json 10 "$q4"
   part db5 db_json 10 "$q5"
+  # Data health (plan N3, Oct 24, 2026): reports in the last 6 hours against the
+  # same 6 hours a week ago (scripts/data_health.py reads it against the clock)
+  q6="SELECT json_build_object(
+        'last_6h',     count(*) FILTER (WHERE created_at > now() - interval '6 hours'),
+        'week_ago_6h', count(*) FILTER (WHERE created_at <= now() - interval '168 hours'))
+      FROM signals WHERE created_at > now() - interval '174 hours'
+        AND (created_at > now() - interval '6 hours' OR created_at <= now() - interval '168 hours')"
+  part report_rate db_json 20 "$q6"
+  # ... and GDELT's file list as the second-outlet reader last read it: files per
+  # hour for 24 hours and the last cycle's missing and failed files (counts only)
+  part gdelt gdelt_stats
   # Scraper log lines from the last 30 minutes, counted by level; the most
   # frequent error and warning messages, digits blanked out (our own log text only)
   t0=$(date +%s%3N)
@@ -527,7 +554,7 @@ def part(name):
     return value
 out = {'window': '24h', 'checked': checked}
 out['db'] = [v if isinstance(v, dict) else None for v in (part('db%d' % i) for i in range(1, 6))]
-for name in ('scraper_30m', 'llm', 'fingerprints', 'claude', 'sources', 'api_limits', 'disk', 'readers'):
+for name in ('scraper_30m', 'llm', 'fingerprints', 'claude', 'sources', 'api_limits', 'disk', 'readers', 'report_rate', 'gdelt'):
     out[name] = part(name)
 took = {}
 try:
@@ -559,7 +586,7 @@ pipe_cache=logs/pipeline-stats.json
 # builds, a refresh can outlast the 5 minutes to the next run, and two runs
 # writing the same file left neither readable
 if [ ! -s "$pipe_cache" ] || [ -n "$(find "$pipe_cache" -mmin +29 2>/dev/null)" ] \
-   || ! grep -q '"took_ms":' "$pipe_cache" 2>/dev/null; then
+   || ! grep -q '"gdelt":' "$pipe_cache" 2>/dev/null; then
   (
     flock -n 9 || exit 0
     tmp="$pipe_cache.$$.tmp"
@@ -586,4 +613,8 @@ pipeline=$(cat "$pipe_cache" 2>/dev/null || true)
   printf '"backup":%s,' "$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1])), separators=(",", ":")))' logs/backup-status.json 2>/dev/null || echo null)"
   printf '"containers":{%s},' "$containers"
   printf '"pipeline":%s}\n' "$pipeline"
-} > "logs/public/status.json.$$.tmp" && mv "logs/public/status.json.$$.tmp" logs/public/status.json
+} > "logs/public/status.json.$$.tmp" \
+  && { python3 scripts/data_health.py "logs/public/status.json.$$.tmp" 2> logs/data-health.err || true; } \
+  && mv "logs/public/status.json.$$.tmp" logs/public/status.json
+# (data_health: plan N3. It adds "data_health" to the file, ok / warn / alarm per
+# check with one plain line; if it fails, the file goes out without it.)
