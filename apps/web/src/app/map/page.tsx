@@ -21,13 +21,19 @@ import { parseWindowHash, encodePermalink, type MapPermalinkState, type LayerKey
 import {
   Map as MapIcon, Moon, Satellite, Globe2, LocateFixed, Layers as LayersIcon,
   Flame, History, Swords, Crosshair, RadioTower, Anchor, Plane, Ship, Activity, ShieldAlert, Video, List as ListIcon,
-  SunMoon, Compass, Megaphone, Biohazard, Tent, WifiOff, Cable, Server, Atom, Rocket, Shield, Orbit,
+  SunMoon, Compass, Megaphone, Biohazard, Tent, WifiOff, Cable, Server, Atom, Rocket, Shield, Orbit, Wheat, Landmark, TrendingUp,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { LayersPanel, activeLayerCount, type MapLayerGroup } from '@/components/map/LayersPanel'
 import { MapLegend } from '@/components/map/MapLegend'
 import { LiveList, latestFirst, storyBadge, type StoryOutlets } from '@/components/map/LiveList'
 import { CountryBrief, type CountryRisk } from '@/components/map/CountryBrief'
+import { CommodityBriefSection } from '@/components/commodities/CommodityBriefSection'
+import { EconomyBriefSection } from '@/components/commodities/EconomyBriefSection'
+import { useEconomyLayer, usePriceMovesLayer } from '@/components/map/useTradeLayers'
+import { ScaleLegend } from '@/components/map/ScaleLegend'
+import { ECON_LAYER_KEYS, ECON_SCALES, MOVE_SCALE, scaleLabels } from '@/lib/trade-layers'
+import { scoreColor, LEVEL_COLOR, type MapRow } from '@/lib/commodities'
 import { SinceLastVisit } from '@/components/map/SinceLastVisit'
 import { useLastVisit } from '@/hooks/useLastVisit'
 import { sinceLastVisit, awayLabel } from '@/lib/last-visit'
@@ -378,6 +384,17 @@ function MapView({ embed = false }: { embed?: boolean }) {
   const [countryRiskLoading, setCountryRiskLoading] = useState(false)
   const [countryRiskCount,   setCountryRiskCount]   = useState(0)
 
+  // ── Commodities layer state (Oct 23, 2026): supply risk by country, all commodities or one ──
+  const [commodityMode,    setCommodityMode]    = useState(false)
+  const [commodityKey,     setCommodityKey]     = useState('')
+  const [commodityLoading, setCommodityLoading] = useState(false)
+  const [commodityCount,   setCommodityCount]   = useState(0)
+  const [commodityOptions, setCommodityOptions] = useState<Array<{ key: string; name: string; flags: number }>>([])
+  // ── Country economics and price moves (Oct 23, 2026; Devon: "CME like data and the Lloyd's bank like data and layers to the map too") ──
+  const [economyMode,      setEconomyMode]      = useState(false)
+  const [economyIndicator, setEconomyIndicator] = useState<string>('growth')
+  const [priceMovesMode,   setPriceMovesMode]   = useState(false)
+
   // ── Conflict Zone Overlay layer state (BAT-17) ─────────────────────────────
   const [conflictMode,    setConflictMode]    = useState(false)
   const [conflictLoading, setConflictLoading] = useState(false)
@@ -620,12 +637,13 @@ function MapView({ embed = false }: { embed?: boolean }) {
       [heatmapMode, 'heat'], [timelineActive, 'timeline'], [showAircraft, 'adsb'], [showShips, 'ships'],
       [showCameras, 'cameras'], [navalMode, 'naval'], [threatMode, 'threats'], [jammingMode, 'jamming'],
       [hazardsMode, 'hazards'], [satelliteMode, 'sat'], [countryRiskMode, 'country-risk'], [conflictMode, 'conflict'],
+      [commodityMode, 'commodities'], [economyMode, 'economy'], [priceMovesMode, 'price-moves'],
       ...OVERLAY_KEYS.map(k => [overlayOn[k], k] as [boolean, LayerKey]),
     ]
     activeLayerKeysRef.current = on.filter(([isOn]) => isOn).map(([, key]) => key)
     updateHash()
   }, [heatmapMode, timelineActive, showAircraft, showShips, showCameras, navalMode, threatMode, jammingMode,
-      hazardsMode, satelliteMode, countryRiskMode, conflictMode, overlayOn, updateHash])
+      hazardsMode, satelliteMode, countryRiskMode, conflictMode, commodityMode, economyMode, priceMovesMode, overlayOn, updateHash])
 
   // A shared link opens with its layers and basemap (M10). Applied after the first
   // render: the server can't see the #hash, so doing it in useState broke hydration
@@ -646,6 +664,9 @@ function MapView({ embed = false }: { embed?: boolean }) {
     if (has('sat'))          setSatelliteMode(true)
     if (has('country-risk')) setCountryRiskMode(true)
     if (has('conflict'))     setConflictMode(true)
+    if (has('commodities'))  setCommodityMode(true)
+    if (has('economy'))      setEconomyMode(true)
+    if (has('price-moves'))  setPriceMovesMode(true)
     const linked = OVERLAY_KEYS.filter(k => has(k))
     if (linked.length) setOverlayOn(o => ({ ...o, ...Object.fromEntries(linked.map(k => [k, true])) }))
     if (link.timelineRange) { setTimelineRange(link.timelineRange); setTimelineActive(true) }
@@ -1492,7 +1513,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
         // Layers that are scenery, not something to click
         // Shading and outlines over the land: a click through them still picks the country
         // (the day/night polygons cover the whole globe, so leaving them out blocked every brief)
-        const SCENERY = /^(wp-imagery-|country-select-|country-risk-|enhanced-heatmap|list-hover|since-visit-|daynight-|country-links-)/
+        const SCENERY = /^(wp-imagery-|country-select-|country-risk-|commodity-|econ-|pricemove-|enhanced-heatmap|list-hover|since-visit-|daynight-|country-links-)/
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const pickCountry = async (e: any) => {
           const base = new Set(baseIdsRef.current ?? [])
@@ -3515,6 +3536,105 @@ function MapView({ embed = false }: { embed?: boolean }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [countryRiskMode, mapReady])
 
+  // ── Commodities layer (Oct 23, 2026; Devon: "The map layer - all commodities should go first") ──
+  // Countries shaded by the commodity watch's supply-risk score (all commodities: each country's
+  // most at-risk one; or one commodity), flagged ones outlined in red, and each crop region's
+  // weather risk as a dot. A click on a country opens its brief, with its commodity cards.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const SRC = 'commodity-geo', FILL = 'commodity-fill', LINE = 'commodity-border'
+    const DOTS_SRC = 'commodity-regions-geo', DOTS = 'commodity-regions'
+    const remove = () => {
+      try {
+        for (const id of [DOTS, LINE, FILL]) if (map.getLayer(id)) map.removeLayer(id)
+        for (const id of [DOTS_SRC, SRC]) if (map.getSource(id)) map.removeSource(id)
+      } catch { /* ignore */ }
+    }
+    let cancelled = false
+    async function apply() {
+      if (!commodityMode) { remove(); setCommodityCount(0); return }
+      setCommodityLoading(true)
+      try {
+        const q = commodityKey ? `?commodity=${encodeURIComponent(commodityKey)}` : ''
+        const [res, shapes, list] = await Promise.all([
+          fetch(`${API_URL}/api/v1/commodities/map${q}`),
+          loadCountryShapes().catch(() => null),
+          commodityOptions.length ? Promise.resolve(null) : fetch(`${API_URL}/api/v1/commodities`).then(r => (r.ok ? r.json() : null)).catch(() => null),
+        ])
+        if (cancelled) return
+        if (list?.success && list.data?.available) {
+          setCommodityOptions((list.data.commodities as Array<{ key: string; name: string; flags: number }>).map(c => ({ key: c.key, name: c.name, flags: c.flags })))
+        }
+        const json = res.ok ? await res.json() as { success?: boolean; data?: { available?: boolean; rows?: MapRow[] } } : null
+        const rows = json?.success && json.data?.available ? json.data.rows ?? [] : []
+        if (!shapes) return
+        const byIso = new Map<string, MapRow>()
+        for (const r of rows) {
+          byIso.set(r.iso, r)
+          // USDA reports the EU as one: its card shades every member state
+        }
+        const eu = byIso.get('EU')
+        const EU = ['AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE']
+        setCommodityCount(rows.length)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const geo = shapes as unknown as { type: string; features: any[] }
+        const annotated = {
+          ...geo,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          features: geo.features.map((f: any) => {
+            const iso2 = countryCodeOf(f.properties) ?? ''
+            const row = byIso.get(iso2) ?? (eu && EU.includes(iso2) ? eu : undefined)
+            return { ...f, properties: { ...f.properties, wpCmHas: !!row, wpCmScore: row?.score ?? 0, wpCmFlag: row?.flag ?? false, wpCmColor: row ? scoreColor(row.score) : 'rgba(0,0,0,0)' } }
+          }),
+        }
+        const dots = {
+          type: 'FeatureCollection' as const,
+          features: rows.flatMap(r => r.regions.map(g => ({
+            type: 'Feature' as const,
+            geometry: { type: 'Point' as const, coordinates: [g.lon, g.lat] },
+            properties: { level: g.level, color: LEVEL_COLOR[g.level] ?? LEVEL_COLOR[0], name: g.name },
+          }))),
+        }
+        if (!map.getSource(SRC)) map.addSource(SRC, { type: 'geojson', data: annotated })
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        else (map.getSource(SRC) as any).setData(annotated)
+        if (!map.getSource(DOTS_SRC)) map.addSource(DOTS_SRC, { type: 'geojson', data: dots })
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        else (map.getSource(DOTS_SRC) as any).setData(dots)
+        const before = map.getLayer('cluster-halo') ? 'cluster-halo' : undefined
+        if (!map.getLayer(FILL)) {
+          map.addLayer({ id: FILL, type: 'fill', source: SRC, paint: { 'fill-color': ['get', 'wpCmColor'], 'fill-opacity': ['case', ['get', 'wpCmHas'], 0.32, 0] } }, before)
+          map.addLayer({ id: LINE, type: 'line', source: SRC, paint: {
+            'line-color': ['case', ['get', 'wpCmFlag'], '#ef4444', ['get', 'wpCmHas'], ['get', 'wpCmColor'], 'rgba(0,0,0,0)'],
+            'line-width': ['case', ['get', 'wpCmFlag'], 2, 0.6],
+            'line-opacity': ['case', ['get', 'wpCmHas'], 0.8, 0],
+          } }, before)
+          map.addLayer({ id: DOTS, type: 'circle', source: DOTS_SRC, paint: {
+            'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, ['+', 2, ['get', 'level']], 6, ['+', 5, ['*', 2, ['get', 'level']]]],
+            'circle-color': ['get', 'color'],
+            'circle-opacity': ['case', ['>', ['get', 'level'], 0], 0.95, 0.45],
+            'circle-stroke-color': 'rgba(0,0,0,0.6)',
+            'circle-stroke-width': 0.8,
+          } }, before)
+        }
+      } catch (e) {
+        console.warn('[map] Commodities layer error:', e)
+      } finally {
+        if (!cancelled) setCommodityLoading(false)
+      }
+    }
+    whenStyleUsable(map, () => { void apply() })
+    // The watch changes every 6 hours: refresh every 30 minutes while on
+    const timer = commodityMode ? setInterval(() => { void apply() }, 30 * 60_000) : null
+    return () => { cancelled = true; if (timer) clearInterval(timer) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commodityMode, commodityKey, mapReady])
+
+  // Country economics (World Bank) and price moves (World Bank prices over each country's exports)
+  const economyLayer = useEconomyLayer(mapRef, mapReady, economyMode, economyIndicator)
+  const priceMovesLayer = usePriceMovesLayer(mapRef, mapReady, priceMovesMode)
+
   // ── Timeline Playback data fetch + map integration (BAT-14) ─────────────────
   useEffect(() => {
     if (!timelineActive) return
@@ -3721,6 +3841,46 @@ function MapView({ embed = false }: { embed?: boolean }) {
           extra: <Link href="/cameras" className="text-[11px] text-[#2dd4bf] underline underline-offset-2 hover:text-wp-text">All the cameras on one page →</Link> },
         { key: 'daynight', label: 'Day and night', description: 'Where it is night right now, updated every 5 minutes', icon: SunMoon, color: '#94a3b8',
           on: dayNight, toggle: toggleDayNight },
+      ],
+    },
+    {
+      title: 'Commodities & trade',
+      items: [
+        { key: 'commodities', label: 'Commodities', description: "Supply risk by country: USDA's crop outlook, the weather over the growing regions, prices and the news. Red outline: a risk our sources aren't covering", icon: Wheat, color: '#a3e635',
+          on: commodityMode, loading: commodityLoading, count: commodityCount, toggle: () => setCommodityMode(v => !v),
+          extra: (
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={commodityKey}
+                onChange={e => setCommodityKey(e.target.value)}
+                aria-label="Which commodity"
+                className="bg-black/30 border border-white/10 text-wp-text2 text-[11px] font-mono rounded-md px-2 py-1 outline-none focus:border-[rgba(163,230,53,0.6)] max-w-[200px]"
+              >
+                <option value="">All commodities</option>
+                {commodityOptions.map(o => <option key={o.key} value={o.key}>{o.name}{o.flags ? ` (${o.flags} flagged)` : ''}</option>)}
+              </select>
+              <Link href={commodityKey ? `/commodities?commodity=${encodeURIComponent(commodityKey)}` : '/commodities'} className="text-[11px] text-[#a3e635] underline underline-offset-2 hover:text-wp-text">The commodity watch →</Link>
+            </div>
+          ) },
+        { key: 'price-moves', label: 'Price moves', description: "How this month's commodity prices moved each country's exports: the World Bank's prices, weighted by what it sells (CME's own prices need CME's licence)", icon: TrendingUp, color: '#4ade80',
+          on: priceMovesMode, loading: priceMovesLayer.loading, count: priceMovesLayer.count, toggle: () => setPriceMovesMode(v => !v),
+          extra: <ScaleLegend title={priceMovesLayer.month ? `Change on the month, ${new Date(`${priceMovesLayer.month}-15T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })}` : 'Change on the month'} colors={MOVE_SCALE.colors} labels={scaleLabels(MOVE_SCALE)} /> },
+        { key: 'economy', label: 'Country economics', description: 'Growth, inflation, jobs, income and trade by country: the World Bank\'s latest figures (CC BY 4.0)', icon: Landmark, color: '#fcd34d',
+          on: economyMode, loading: economyLayer.loading, count: economyLayer.count, toggle: () => setEconomyMode(v => !v),
+          extra: (
+            <div className="space-y-1.5">
+              <select
+                value={economyIndicator}
+                onChange={e => setEconomyIndicator(e.target.value)}
+                aria-label="Which figure"
+                className="bg-black/30 border border-white/10 text-wp-text2 text-[11px] font-mono rounded-md px-2 py-1 outline-none focus:border-[rgba(252,211,77,0.6)] max-w-[220px]"
+              >
+                {ECON_LAYER_KEYS.map(k => <option key={k} value={k}>{economyLayer.meta?.indicators.find(i => i.key === k)?.name ?? k.replace(/_/g, ' ')}</option>)}
+              </select>
+              <ScaleLegend title={economyLayer.meta?.year ? `World Bank, mostly ${economyLayer.meta.year}` : 'World Bank'} colors={(ECON_SCALES[economyIndicator] ?? ECON_SCALES.growth!).colors} labels={scaleLabels(ECON_SCALES[economyIndicator] ?? ECON_SCALES.growth!)} />
+            </div>
+          ) },
+        overlayItem('shipping-news', Ship),
       ],
     },
     {
@@ -4183,7 +4343,10 @@ function MapView({ embed = false }: { embed?: boolean }) {
             onZoom={zoomToCountry}
             connections={connections}
             onPickCountry={openCountry}
-          />
+          >
+            <CommodityBriefSection iso={country.code} highlight={commodityMode ? commodityKey : undefined} />
+            <EconomyBriefSection iso={country.code} />
+          </CountryBrief>
         )}
 
         {/* ── Basemap, projection and reset view (top-right, under the zoom buttons) ── */}

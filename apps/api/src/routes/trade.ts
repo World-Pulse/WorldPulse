@@ -7,6 +7,7 @@
  * Routes:
  *   GET /api/v1/trade/commodity-flows
  *   GET /api/v1/trade/commodity-flows/:cmdCode
+ *   GET /api/v1/trade/us-export-sales   USDA's weekly export sales (Oct 23, 2026)
  */
 
 import type { FastifyPluginAsync } from 'fastify'
@@ -233,6 +234,23 @@ const SEED_FLOWS: ComtradeFlow[] = [
   { period: '2024', reporterCode: 156, reporterDesc: 'China',         reporterIso2: 'CN', partnerCode: 586, partnerDesc: 'Pakistan',      partnerIso2: 'PK', flowCode: 'X', cmdCode: '9301', cmdDesc: 'Military Weapons',      primaryValue: 1_600_000_000,  netWgt: 0 },
 ]
 
+// ─── USDA WEEKLY EXPORT SALES ────────────────────────────────────────────────
+
+/** Where the scraper keeps the latest week (apps/scraper/src/sources/usda-export-sales.ts) */
+export const US_EXPORT_SALES_KEY = 'usda:esr:latest'
+/** The scraper's commodity names (GROUPS there) */
+export const US_EXPORT_SALES_COMMODITIES = ['wheat', 'corn', 'soybeans', 'soybean-meal', 'soybean-oil', 'sorghum', 'rice', 'cotton', 'beef', 'pork']
+
+interface UsExportSalesWeek {
+  week_ending: string
+  period?: string | null
+  released_at: string
+  source: string
+  report: string
+  commodities: Array<{ key: string; [field: string]: unknown }>
+  buyers: Array<{ commodity: string; country_code: string | null; net_sales: number; [field: string]: unknown }>
+}
+
 // ─── ROUTE PLUGIN ────────────────────────────────────────────────────────────
 
 export const registerTradeRoutes: FastifyPluginAsync = async (app) => {
@@ -394,4 +412,51 @@ export const registerTradeRoutes: FastifyPluginAsync = async (app) => {
       return reply.send(response)
     },
   )
+
+  // ─── GET /us-export-sales ─────────────────────────────────
+  // USDA's Weekly Export Sales (Oct 23, 2026): what US exporters sold and shipped in the latest
+  // reported week, per main commodity and buyer country. The scraper keeps the week in Redis
+  // (apps/scraper/src/sources/usda-export-sales.ts) once USDA has published it.
+  app.get<{ Querystring: { country?: string; commodity?: string } }>('/us-export-sales', {
+    schema: {
+      summary: 'US farm export sales, latest week (USDA)',
+      description: "USDA's Weekly Export Sales: net sales (new sales less cancellations), shipments, sales not yet shipped and this marketing year's shipments, per commodity and buyer country, for the latest week USDA has published (Thursdays, 8:30 AM Eastern). Tons, or running bales for cotton. US government data, free to reuse.",
+      querystring: {
+        type: 'object',
+        properties: {
+          country:   { type: 'string', pattern: '^[A-Za-z]{2}$', description: "Buyer country, ISO 3166-1 alpha-2 (for example CN)" },
+          commodity: { type: 'string', enum: US_EXPORT_SALES_COMMODITIES, description: 'One commodity' },
+        },
+      },
+    },
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    const raw = await redis.get(US_EXPORT_SALES_KEY).catch(() => null)
+    let week: UsExportSalesWeek | null = null
+    try { week = raw ? JSON.parse(raw) as UsExportSalesWeek : null } catch { week = null }
+    if (!week) {
+      return reply.send({ success: true, data: { available: false, message: "USDA's weekly export sales haven't been read yet: they come out on Thursdays at 8:30 AM Eastern." } })
+    }
+    const country = req.query.country?.toUpperCase()
+    const commodity = req.query.commodity
+    const commodities = (week.commodities ?? []).filter(c => !commodity || c.key === commodity)
+    const buyers = (week.buyers ?? [])
+      .filter(b => (!country || b.country_code === country) && (!commodity || b.commodity === commodity))
+      .sort((a, b) => b.net_sales - a.net_sales)
+    return reply
+      .header('Cache-Control', 'public, max-age=600')
+      .send({
+        success: true,
+        data: {
+          available:   true,
+          week_ending: week.week_ending,
+          period:      week.period ?? null,
+          released_at: week.released_at,
+          source:      week.source,
+          report:      week.report,
+          commodities,
+          buyers,
+        },
+      })
+  })
 }

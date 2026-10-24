@@ -34,6 +34,9 @@ export type LayerKey =
   | 'sat'
   | 'country-risk'
   | 'conflict'
+  | 'commodities'
+  | 'economy'
+  | 'price-moves'
 
 export interface MapPermalinkState {
   /** Center latitude */

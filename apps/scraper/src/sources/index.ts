@@ -35,6 +35,10 @@
  *   - Interpol Red Notices — international wanted persons and law enforcement alerts (60-min polls)
  *   - UN Comtrade Commodity Flows — strategic commodity trade flows: oil, uranium, arms, semiconductors (60-min polls)
  *   - USPTO PatentsView — defense & dual-use patent grants: weapons, nuclear, cyber, autonomous systems (60-min polls)
+ *   - USDA Weekly Export Sales — US farm exports by commodity and buyer country, weekly (3-hour polls)
+ *   - CFTC Commitments of Traders — hedge funds' positions in 23 futures markets, weekly (2-hour polls)
+ *   - Lloyd's List headlines — the free feed it offers websites, credited, no AI (30-min polls)
+ *   - World Bank World Development Indicators — country economics, CC BY 4.0 (daily)
  *
  * 29 OSINT feeds + 25 global news RSS feeds (54 total).
  *
@@ -77,6 +81,14 @@ import { startEuSanctionsPoller } from './eu-sanctions'
 import { startTsunamiWarningPoller } from './tsunami-warnings'
 import { startInterpolNoticesPoller } from './interpol-notices'
 import { startComtradePoller } from './comtrade'
+import { startUsdaExportSalesPoller } from './usda-export-sales'
+import { startCftcCotPoller } from './cftc-cot'
+import { startUsdaPsdPoller } from './usda-psd'
+import { startWorldBankPricesPoller } from './worldbank-prices'
+import { startBaciTradePoller } from './baci-trade'
+import { startLloydsListPoller } from './lloyds-list'
+import { startWorldBankWdiPoller } from './worldbank-wdi'
+import { startCommodityWatch } from '../commodity/watch'
 import { startNewsRssPoller, NEWS_SOURCE_REGISTRY } from './news-rss'
 
 export type OsintCleanupFn = () => void
@@ -246,6 +258,65 @@ export function startOsintPollers(
     logger.error({ err }, 'Failed to start UN Comtrade commodity flows poller')
   }
 
+  // USDA's Weekly Export Sales (Oct 23, 2026): public files, no key
+  try {
+    cleanups.push(startUsdaExportSalesPoller(db, redis, producer))
+  } catch (err) {
+    logger.error({ err }, 'Failed to start USDA export sales poller')
+  }
+
+  // CFTC Commitments of Traders (Oct 23, 2026): the regulator's weekly positions in CME's and
+  // ICE's markets, free to reuse (CME's own data needs a licence)
+  try {
+    cleanups.push(startCftcCotPoller(db, redis, producer))
+  } catch (err) {
+    logger.error({ err }, 'Failed to start CFTC Commitments of Traders poller')
+  }
+
+  // The commodity watch's data (Oct 23, 2026): USDA's world crop forecasts (every crop and country)
+  // and the World Bank's monthly prices, both free to reuse; kept in Redis, no reports of their own
+  try {
+    cleanups.push(startUsdaPsdPoller(redis))
+  } catch (err) {
+    logger.error({ err }, 'Failed to start USDA PSD poller')
+  }
+
+  try {
+    cleanups.push(startWorldBankPricesPoller(redis))
+  } catch (err) {
+    logger.error({ err }, 'Failed to start World Bank prices poller')
+  }
+
+  // Trade partners (Oct 23, 2026): CEPII's BACI, every country's farm trade with every other, yearly
+  try {
+    cleanups.push(startBaciTradePoller(redis))
+  } catch (err) {
+    logger.error({ err }, 'Failed to start BACI trade partners poller')
+  }
+
+  // Lloyd's List's headlines (Oct 23, 2026): the free feed it offers websites, shown credited with a
+  // link to each article; never summarized, classified or stored as signals
+  try {
+    cleanups.push(startLloydsListPoller(redis))
+  } catch (err) {
+    logger.error({ err }, "Failed to start Lloyd's List headlines poller")
+  }
+
+  // Country economics (Oct 23, 2026): the World Bank's World Development Indicators (CC BY 4.0), daily
+  try {
+    cleanups.push(startWorldBankWdiPoller(redis))
+  } catch (err) {
+    logger.error({ err }, 'Failed to start World Bank country economics poller')
+  }
+
+  // The commodity watch (Oct 23, 2026): weather over every crop region, a card per commodity and
+  // country, a flag in the feed when a supply risk isn't in the news, and its calls against USDA's
+  try {
+    cleanups.push(startCommodityWatch(db, redis, producer))
+  } catch (err) {
+    logger.error({ err }, 'Failed to start the commodity watch')
+  }
+
   // Switched off (October 2026) because their APIs no longer answer; the code
   // stays so they can come back once there is a working source:
   //   power-outage        PowerOutage.us's JSON needs a paid key now (HTTP 401)
@@ -298,6 +369,9 @@ export function startOsintPollers(
     ['tsunami-warnings',   'NOAA Tsunami Warnings',          'tsunami-warnings'],
     ['interpol-notices',   'Interpol Red Notices',           'interpol-notices'],
     ['comtrade',           'UN Comtrade Commodity Flows',    'comtrade'],
+    ['usda-export-sales',  'USDA Weekly Export Sales',       'usda-export-sales'],
+    ['cftc-cot',           'CFTC Commitments of Traders',    'cftc-cot'],
+    ['commodity-watch',    'WorldPulse commodity watch',     'commodity-watch'],
     // OTX only runs with an API key, so it is only watched with one
     ...(otxEnabled() ? [['otx-threats', 'AlienVault OTX', 'otx-threats'] as [string, string, string]] : []),
   ]
@@ -352,5 +426,12 @@ export { startUnhcrDisplacementPoller } from './unhcr-displacement'
 export { startTsunamiWarningPoller } from './tsunami-warnings'
 export { startInterpolNoticesPoller } from './interpol-notices'
 export { startComtradePoller } from './comtrade'
+export { startUsdaExportSalesPoller } from './usda-export-sales'
+export { startCftcCotPoller } from './cftc-cot'
+export { startUsdaPsdPoller } from './usda-psd'
+export { startWorldBankPricesPoller } from './worldbank-prices'
+export { startBaciTradePoller } from './baci-trade'
+export { startLloydsListPoller } from './lloyds-list'
+export { startWorldBankWdiPoller } from './worldbank-wdi'
 export { startPatentsPoller } from './patents'
 export { startNewsRssPoller, NEWS_SOURCE_REGISTRY } from './news-rss'

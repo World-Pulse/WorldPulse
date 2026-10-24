@@ -8,6 +8,7 @@
  * the map has loaded (lib/country-brief.ts), so it opens at once.
  */
 
+import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { X, BadgeCheck, Maximize2, ArrowRight } from 'lucide-react'
 import { SEVERITY_COLOR } from '@/lib/map-style'
@@ -27,7 +28,7 @@ export interface CountryRisk {
 }
 
 export function CountryBrief<T extends BriefListItem>({
-  country, brief, windowLabel, risk, categoryIcon, onClose, onSelect, onZoom, connections = [], onPickCountry,
+  country, brief, windowLabel, risk, categoryIcon, onClose, onSelect, onZoom, connections = [], onPickCountry, children,
 }: {
   country: { code: string | null; name: string }
   brief: CountryBriefData<T>
@@ -42,6 +43,8 @@ export function CountryBrief<T extends BriefListItem>({
   /** Countries this one's news is tied to (drawn as arcs on the map) */
   connections?: Array<{ code: string; name: string; count: number }>
   onPickCountry?: (code: string) => void
+  /** More about the country under the numbers (its commodities, Oct 23, 2026) */
+  children?: ReactNode
 }) {
   const flag = flagEmoji(country.code)
   const serious = brief.bySeverity.critical + brief.bySeverity.high
@@ -101,6 +104,8 @@ export function CountryBrief<T extends BriefListItem>({
               </span>
             </div>
           )}
+
+          {children}
 
           {brief.total > 0 && (
             <>

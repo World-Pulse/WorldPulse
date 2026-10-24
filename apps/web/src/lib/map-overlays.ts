@@ -18,6 +18,10 @@
  * our own server (public/geo/, built by scripts/map-data/wikidata-layers.py):
  * nuclear power plants, military bases and spaceports.
  *
+ * And (Oct 23, 2026; Devon: "Add Lloyd's List data ... and layers to the map") Lloyd's List's
+ * shipping headlines, from the free feed it offers websites: a circle per country or sea area the
+ * headlines are tagged with, each headline linking to its article on lloydslist.com, credited.
+ *
  * And (plan R4; Devon, Oct 21: "Add - added refugee and displacement data")
  * UNHCR's figures for each country (CC BY 4.0), one circle a country sized by
  * the people displaced from it: inside it and abroad. Kept as a file too
@@ -31,9 +35,9 @@ import { escapeHtml, safeHttpUrl, timeAgo } from './map-utils'
 import { prepareSatellites, satellitePositions, type PreparedSats } from './map-satellites'
 import { DISPLACED_FILE, UNHCR_DATA_URL, displacedFigures, displacedLines } from './displaced'
 
-export type OverlayKey = 'protests' | 'outbreaks' | 'displacement' | 'displaced' | 'outages' | 'cable-landings' | 'ai-dc' | 'nuclear' | 'bases' | 'spaceports' | 'satellites'
+export type OverlayKey = 'protests' | 'outbreaks' | 'displacement' | 'displaced' | 'outages' | 'cable-landings' | 'ai-dc' | 'nuclear' | 'bases' | 'spaceports' | 'satellites' | 'shipping-news'
 
-export const OVERLAY_KEYS: readonly OverlayKey[] = ['protests', 'outbreaks', 'displacement', 'displaced', 'outages', 'cable-landings', 'ai-dc', 'nuclear', 'bases', 'spaceports', 'satellites']
+export const OVERLAY_KEYS: readonly OverlayKey[] = ['protests', 'outbreaks', 'displacement', 'displaced', 'outages', 'cable-landings', 'ai-dc', 'nuclear', 'bases', 'spaceports', 'satellites', 'shipping-news']
 
 export function isOverlayKey(value: unknown): value is OverlayKey {
   return typeof value === 'string' && (OVERLAY_KEYS as readonly string[]).includes(value)
@@ -289,6 +293,50 @@ function wikidataPopup(label: string, color: string, facts: (p: Record<string, u
   }
 }
 
+// ── Shipping headlines (Lloyd's List's free feed, credited) ───────────────────
+
+const SHIPPING_COLOR = '#22d3ee'
+export const LLOYDS_LIST_CREDIT = "Headlines: Lloyd's List (lloydslist.com)"
+
+/** A circle per place the headlines are tagged with, its headlines kept on it for the popup */
+export function shippingFeatures(json: unknown): OverlayFeature[] {
+  const items = (json as { data?: { items?: unknown } })?.data?.items
+  if (!Array.isArray(items)) return []
+  const byPlace = new Map<string, { name: string; at: [number, number]; list: Array<{ title: string; url: string; published: string; kind: string | null }> }>()
+  for (const it of items as Array<Record<string, unknown>>) {
+    const title = str(it.title), url = safeHttpUrl(it.url), published = str(it.published)
+    // Only links to lloydslist.com: the popup sends readers to the article there
+    if (!title || !url || !/^https:\/\/(www\.)?lloydslist\.com\//.test(url) || !published || !Array.isArray(it.places)) continue
+    for (const p of it.places as Array<Record<string, unknown>>) {
+      const key = str(p.key), at = pointAt(p.lat, p.lon)
+      if (!key || !at) continue
+      const place = byPlace.get(key) ?? (byPlace.set(key, { name: str(p.name) ?? key, at, list: [] }), byPlace.get(key)!)
+      place.list.push({ title, url, published, kind: str(it.kind) })
+    }
+  }
+  const most = Math.max(1, ...[...byPlace.values()].map(p => p.list.length))
+  return [...byPlace.entries()].map(([key, p]) => feature(p.at, {
+    key, name: p.name, count: p.list.length, size: Math.max(0.15, p.list.length / most),
+    items: JSON.stringify(p.list.slice(0, 6)),
+  }))
+}
+
+export function shippingPopup(p: Record<string, unknown>): string {
+  let list: Array<{ title?: unknown; url?: unknown; published?: unknown; kind?: unknown }> = []
+  try { list = JSON.parse(String(p.items ?? '[]')) } catch { list = [] }
+  const n = num(p.count) ?? list.length
+  const rows = list.map(it => {
+    const url = safeHttpUrl(it.url)
+    if (!url || !/^https:\/\/(www\.)?lloydslist\.com\//.test(url)) return ''
+    const meta = [str(it.kind), str(it.published) ? timeAgo(String(it.published)) : null].filter(Boolean).join(' · ')
+    return `<div style="margin-top:7px"><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" style="${TITLE};display:block;text-decoration:none">${escapeHtml(it.title)} ↗</a>` +
+      (meta ? `<div style="${META}">${escapeHtml(meta)}</div>` : '') + '</div>'
+  }).join('')
+  return header(SHIPPING_COLOR, `SHIPPING NEWS · ${String(p.name ?? '').toUpperCase()}`) +
+    `<div style="${META}">${n} headline${n === 1 ? '' : 's'} in the last two weeks</div>` + rows +
+    `<div style="${META};margin-top:8px">${escapeHtml(LLOYDS_LIST_CREDIT)}</div>`
+}
+
 // ── Satellites (CelesTrak, placed by satellite.js) ────────────────────────────
 
 function satellitePopup(p: Record<string, unknown>): string {
@@ -368,6 +416,12 @@ export const OVERLAYS: Record<OverlayKey, OverlayDef> = {
     path: '/geo/spaceports.v1.geojson', base: 'site', refreshMs: 24 * HOUR, bySeverity: false,
     toFeatures: wikidataFeatures(p => String(p.status ?? '') === 'shut down' ? '#64748b' : null),
     popup: wikidataPopup('SPACEPORT', '#22c55e', p => [str(p.status) === 'active or not recorded' ? null : str(p.status), str(p.operator)]),
+  },
+  'shipping-news': {
+    key: 'shipping-news', label: "Shipping news (Lloyd's List)", color: SHIPPING_COLOR,
+    description: "Lloyd's List's headlines on the countries and sea lanes they're about (its free feed, credited; each opens on lloydslist.com)",
+    path: '/api/v1/maritime/headlines?limit=100', refreshMs: 30 * MINUTE, bySeverity: false, sized: true,
+    toFeatures: shippingFeatures, popup: shippingPopup,
   },
   satellites: {
     key: 'satellites', label: 'Satellites', color: '#e2e8f0',
