@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import type { Signal, Post } from '@worldpulse/types'
 import { SignalDetailClient } from './SignalDetailClient'
 import { displaySummary } from '@/lib/signal-text'
+import { storyPageTitle } from '@/lib/story-count'
 import { SITE_NAME, SITE_URL, newsArticleJsonLd, jsonLdText, metaDescription } from '@/lib/page-metadata'
 import { cachedFetch } from '@/lib/server-fetch'
 import Link from 'next/link'
@@ -119,11 +120,13 @@ export async function generateMetadata(
   // description; search results and share cards show about 160 characters)
   const description = metaDescription(displaySummary(signal.summary, signal.title) || signal.title)
   const path = `/signals/${signal.id}`
+  // (the same count the page shows; kept 60 s, so the page's own call reuses it)
+  const title = storyPageTitle(signal.title, await fetchStoryOutletCounts(signal.id))
   // The page's own address and the site name: this openGraph replaces the
   // root layout's whole one. The picture is the story's own card
   // (opengraph-image.tsx and twitter-image.tsx next to this page, plan G3)
   return {
-    title:       `${signal.title} — WorldPulse`,
+    title:       `${title} — WorldPulse`,
     description,
     alternates:  { canonical: path },
     openGraph: {

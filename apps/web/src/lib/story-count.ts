@@ -51,3 +51,15 @@ export function sinceText(outlets: number, outletsAll: number, firstReportAt: st
   const day = firstReportAt && Number.isFinite(Date.parse(firstReportAt)) ? storyDay(firstReportAt) : null
   return `${outletsAll} since ${day ?? 'it began'}`
 }
+
+/**
+ * The story page's browser-tab and search-result title (plan N8): the
+ * headline, then "verified by N outlets" when the story is verified and two or
+ * more outlets carried it in its last two days: the same count the page shows
+ * as "Verified · N outlets". Without counts, or when it isn't verified, the
+ * headline alone (nothing is claimed that the page doesn't show).
+ */
+export function storyPageTitle(headline: string, counts: StoryOutletCounts | null): string {
+  if (!counts || counts.verified !== true || counts.outlets < 2) return headline
+  return `${headline} · verified by ${counts.outlets} outlets`
+}
