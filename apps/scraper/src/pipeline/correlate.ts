@@ -642,7 +642,18 @@ export function isSameStory(a: CorrelationCandidate, b: CorrelationCandidate): b
   // ...and something particular in common: a name, a thing or a count, not just
   // the kind of event and the country ("Russian attack kills seven in Ukraine's
   // Zaporizhzhia" and "Russian attacks kill 24 across Ukraine" share only that)
-  if (![...wordsA].some(w => wordsB.has(w) && isParticular(w))) return false
+  const particular = [...wordsA].filter(w => wordsB.has(w) && isParticular(w))
+  if (particular.length === 0) return false
+  // A toll is common to many events ("one killed, three injured"): when it is all
+  // the two share, the countries they name must agree. "One killed, three injured
+  // as gunmen attack NDC candidate's convoy" (Nigeria) and "One Indian killed, 3
+  // injured in attacks in Saudi Arabia" passed for one story on Oct 23, 2026, and
+  // put the Nigerian attack's headline on the Saudi airport attacks' story
+  if (particular.every(w => w.startsWith('#'))) {
+    const countriesA = [...wordsA].filter(w => w.startsWith('@'))
+    const countriesB = [...wordsB].filter(w => w.startsWith('@'))
+    if ((countriesA.length > 0 || countriesB.length > 0) && !countriesA.some(w => wordsB.has(w))) return false
+  }
   // Headlines whose first ordinals differ tell of two occurrences ("Kenya
   // confirms second Ebola case" / "... third Ebola case")
   const nthA = [...wordsA].find(w => w.startsWith('%'))

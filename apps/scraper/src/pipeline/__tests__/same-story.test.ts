@@ -526,3 +526,29 @@ describe('ordinals (Oct 16, 2026)', () => {
     expect([...storyWords('Constructor wins big contract in Leeds')].some(w => /^[#%]/.test(w))).toBe(false)
   })
 })
+
+describe("tolls (Oct 24, 2026: a Nigerian attack's headline on the Saudi airport attacks' story)", () => {
+  const at = (title: string, source_id: string) => sig({ id: source_id, title, source_id, category: 'conflict' })
+
+  it('keeps two events apart when a toll is all they share and their headlines name different countries, or only one names one', () => {
+    expect(isSameStory(
+      at('One Indian killed, 3 injured in attacks in Saudi Arabia', 'navhindtimes.in'),
+      at('One killed, three injured as gunmen attack NDC candidate’s convoy', 'premiumtimesng.com'),
+    )).toBe(false)
+    expect(isSameStory(
+      at('One killed, four injured in drive-by shooting near Paris', 'straitstimes.com'),
+      at('Suspect wanted in North Philadelphia shooting that killed 1, injured 4', 'nbcphiladelphia.com'),
+    )).toBe(false)
+  })
+
+  it('still joins reports of one event that share a toll and a country, or a name', () => {
+    expect(isSameStory(
+      at('1 die, 3 injured in alleged attack on NDC candidate’s convoy in Ebonyi', 'vanguardngr.com'),
+      at('One killed, three injured as gunmen attack NDC candidate’s convoy', 'premiumtimesng.com'),
+    )).toBe(true)
+    expect(isSameStory(
+      at('One killed, four injured in drive-by shooting near Paris', 'straitstimes.com'),
+      at('France: 1 killed, 4 wounded after shooting near Paris', 'dw.com'),
+    )).toBe(true)
+  })
+})

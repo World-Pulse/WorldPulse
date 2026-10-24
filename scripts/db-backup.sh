@@ -36,6 +36,15 @@ flock -n 8 || { echo "A database copy is already being made — exiting."; exit 
 STATUS=logs/backup-status.json
 KEEP=3
 MARGIN_MB=8192   # the disk keeps at least this much free beyond what a copy or a test needs
+# How long the copy may take, and how long it may wait for a table it has to
+# lock. The first nightly copy (Oct 24, 2026) was stopped by a one-hour limit
+# with nothing said: 4.5 GB, mostly embeddings that hardly compress, at gzip
+# level 6 on a server busy with the scraper. It now compresses at level 1 (a
+# few times faster, a slightly bigger file) and may take 3 hours (done by
+# 8:10 AM New York); a table it can't lock within 15 minutes stops it with the
+# table's name, instead of a silent wait.
+DUMP_LIMIT=${DB_DUMP_LIMIT:-10800}
+LOCK_WAIT_MS=900000
 log() { echo "[db-backup $(date '+%H:%M:%S')] $*"; }
 free_mb() { df -Pm "$1" 2>/dev/null | awk 'NR == 2 { print $4 }'; }
 psql_live() {  # psql_live <query>: one value from the live database
@@ -95,10 +104,18 @@ if [ -z "$have_mb" ] || [ "$have_mb" -lt "$need_mb" ]; then
 fi
 t0=$(date +%s)
 log "Copying the database to $file"
-if ! timeout 3600 docker exec wp_postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc -Z 6' > "$file.part" 2> logs/db-backup-err.log; then
+timeout "$DUMP_LIMIT" docker exec wp_postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc -Z 1 --lock-wait-timeout="$1"' sh "$LOCK_WAIT_MS" > "$file.part" 2> logs/db-backup-err.log
+rc=$?
+if [ "$rc" -ne 0 ]; then
+  # How far it got says what went wrong: a few MB is a wait, gigabytes a slow copy
+  part_mb=$(( $(stat -c %s "$file.part" 2>/dev/null || echo 0) / 1048576 ))
   rm -f "$file.part"
-  write_status false "pg_dump failed: $(tail -n 1 logs/db-backup-err.log | tr -d '"\\' | cut -c1-160)"
-  log "pg_dump failed"; exit 1
+  if [ "$rc" -eq 124 ]; then
+    write_status false "pg_dump didn't finish within $(( DUMP_LIMIT / 60 )) minutes ($part_mb MB written); the older copies are kept"
+  else
+    write_status false "pg_dump failed (exit $rc, $part_mb MB written): $(tail -n 1 logs/db-backup-err.log | tr -d '"\\' | cut -c1-160)"
+  fi
+  log "pg_dump failed (exit $rc, $part_mb MB written)"; exit 1
 fi
 dump_secs=$(( $(date +%s) - t0 ))
 size_b=$(stat -c %s "$file.part")
