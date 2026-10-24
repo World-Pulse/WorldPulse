@@ -91,6 +91,12 @@ if ! docker inspect -f '{{.State.Running}}' wp_postgres 2>/dev/null | grep -q tr
   log "wp_postgres isn't running — no copy made"; exit 1
 fi
 live_signals=$(psql_live "SELECT count(*) FROM signals")
+# A time limit only cuts docker's link to pg_dump: the dump in the container runs
+# on, holding its snapshot of the database, until its session is ended. One an
+# earlier run left behind is ended first (this run holds the lock, so it isn't ours).
+stop_dumps() { psql_live "SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity WHERE application_name = 'pg_dump' AND pid <> pg_backend_pid()"; }
+left=$(stop_dumps)
+[ -n "$left" ] && [ "$left" != "0" ] && log "Ended $left pg_dump session(s) an earlier run left running"
 
 # ── 1. The copy ───────────────────────────────────────────────────────────────
 prev=$(ls -1t backups/db-*.dump 2>/dev/null | grep -v "^$file$" | head -n 1)
@@ -111,7 +117,8 @@ if [ "$rc" -ne 0 ]; then
   part_mb=$(( $(stat -c %s "$file.part" 2>/dev/null || echo 0) / 1048576 ))
   rm -f "$file.part"
   if [ "$rc" -eq 124 ]; then
-    write_status false "pg_dump didn't finish within $(( DUMP_LIMIT / 60 )) minutes ($part_mb MB written); the older copies are kept"
+    stopped=$(stop_dumps)
+    write_status false "pg_dump didn't finish within $(( DUMP_LIMIT / 60 )) minutes ($part_mb MB written; ${stopped:-?} session(s) in the database ended); the older copies are kept"
   else
     write_status false "pg_dump failed (exit $rc, $part_mb MB written): $(tail -n 1 logs/db-backup-err.log | tr -d '"\\' | cut -c1-160)"
   fi
