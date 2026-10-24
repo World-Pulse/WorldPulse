@@ -105,6 +105,25 @@ export interface PriceSeries { key: string; name: string; unit: string; month: s
 export interface PricesData { available: true; source: string; licence: string; file_url: string; updated: string | null; month: string | null; series: PriceSeries[] }
 
 /** Risk level → words and colour (0 none, 1 low, 2 medium, 3 high) */
+/** The EU's member states: USDA reports the EU as one, so its card shades all of them on the map */
+export const EU_MEMBERS = ['AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE'] as const
+
+/**
+ * The member states the EU's flag outlines on the map: only those holding one of its growing regions
+ * at medium or high risk. Its card still shades all 27, but on Oct 24, 2026 a dry Castile and León
+ * outlined every one of them in red as if each were at risk; now it outlines Spain.
+ * `contains(iso, lng, lat)` says whether a member's shape holds the point.
+ */
+export function euFlagMembers(eu: MapRow | undefined, contains: (iso: string, lng: number, lat: number) => boolean): Set<string> {
+  const out = new Set<string>()
+  if (!eu?.flag) return out
+  for (const g of eu.regions) {
+    if (g.level < 2) continue
+    for (const iso of EU_MEMBERS) if (contains(iso, g.lon, g.lat)) out.add(iso)
+  }
+  return out
+}
+
 export const LEVEL_WORDS = ['No risk', 'Low', 'Medium', 'High'] as const
 export const LEVEL_COLOR = ['#64748b', '#38bdf8', '#f59e0b', '#ef4444'] as const
 

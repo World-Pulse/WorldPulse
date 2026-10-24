@@ -33,11 +33,11 @@ import { EconomyBriefSection } from '@/components/commodities/EconomyBriefSectio
 import { useEconomyLayer, usePriceMovesLayer } from '@/components/map/useTradeLayers'
 import { ScaleLegend } from '@/components/map/ScaleLegend'
 import { ECON_LAYER_KEYS, ECON_SCALES, MOVE_SCALE, scaleLabels } from '@/lib/trade-layers'
-import { scoreColor, LEVEL_COLOR, type MapRow } from '@/lib/commodities'
+import { scoreColor, LEVEL_COLOR, EU_MEMBERS, euFlagMembers, type MapRow } from '@/lib/commodities'
 import { SinceLastVisit } from '@/components/map/SinceLastVisit'
 import { useLastVisit } from '@/hooks/useLastVisit'
 import { sinceLastVisit, awayLabel } from '@/lib/last-visit'
-import { countryAt, loadCountryShapes, focusBboxOf, findCountry, countryCodeOf, countryNameOf, type CountryHit, type CountryFeature } from '@/lib/country-shapes'
+import { countryAt, loadCountryShapes, focusBboxOf, findCountry, countryCodeOf, countryNameOf, featureContains, type CountryHit, type CountryFeature } from '@/lib/country-shapes'
 import { countryConnections, countryCentre, connectionFeatures, fitZoom, arcDegrees, type Connection } from '@/lib/country-connections'
 import { signalsInCountry, countryBrief } from '@/lib/country-brief'
 import { toHotspot, hotspotPlace, type Hotspot } from '@/lib/hotspots'
@@ -3570,22 +3570,26 @@ function MapView({ embed = false }: { embed?: boolean }) {
         const rows = json?.success && json.data?.available ? json.data.rows ?? [] : []
         if (!shapes) return
         const byIso = new Map<string, MapRow>()
-        for (const r of rows) {
-          byIso.set(r.iso, r)
-          // USDA reports the EU as one: its card shades every member state
-        }
+        for (const r of rows) byIso.set(r.iso, r)
+        // USDA reports the EU as one: its card shades every member state, and its red flag
+        // outline goes only on the members holding its region at risk (euFlagMembers)
         const eu = byIso.get('EU')
-        const EU = ['AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE']
+        const members = new Set<string>(EU_MEMBERS)
         setCommodityCount(rows.length)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const geo = shapes as unknown as { type: string; features: any[] }
+        const shapeOf = new Map<string, CountryFeature>()
+        for (const f of geo.features) { const iso2 = countryCodeOf(f.properties); if (iso2 && members.has(iso2)) shapeOf.set(iso2, f as CountryFeature) }
+        const euFlagged = euFlagMembers(eu, (iso, lng, lat) => { const f = shapeOf.get(iso); return !!f && featureContains(f, lng, lat) })
         const annotated = {
           ...geo,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           features: geo.features.map((f: any) => {
             const iso2 = countryCodeOf(f.properties) ?? ''
-            const row = byIso.get(iso2) ?? (eu && EU.includes(iso2) ? eu : undefined)
-            return { ...f, properties: { ...f.properties, wpCmHas: !!row, wpCmScore: row?.score ?? 0, wpCmFlag: row?.flag ?? false, wpCmColor: row ? scoreColor(row.score) : 'rgba(0,0,0,0)' } }
+            const own = byIso.get(iso2)
+            const row = own ?? (eu && members.has(iso2) ? eu : undefined)
+            const flag = own ? own.flag : row ? euFlagged.has(iso2) : false
+            return { ...f, properties: { ...f.properties, wpCmHas: !!row, wpCmScore: row?.score ?? 0, wpCmFlag: flag, wpCmColor: row ? scoreColor(row.score) : 'rgba(0,0,0,0)' } }
           }),
         }
         const dots = {

@@ -3,7 +3,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { scoreColor, monthLabel, signedPct, dollarsK, partnersText, baciCredit, type CommodityCard, type CommodityOverview } from '@/lib/commodities'
+import { scoreColor, monthLabel, signedPct, dollarsK, partnersText, baciCredit, euFlagMembers, EU_MEMBERS, type CommodityCard, type CommodityOverview, type MapRow } from '@/lib/commodities'
 import { CommodityCardView } from '@/components/commodities/CommodityCardView'
 import { CommodityWatchView } from '@/components/commodities/CommodityWatchView'
 
@@ -68,5 +68,32 @@ describe('the page', () => {
   })
   it("says so before the watch has run", () => {
     expect(renderToStaticMarkup(<CommodityWatchView overview={null} prices={null} />)).toContain("hasn&#x27;t run yet")
+  })
+})
+
+describe('the EU on the map (Oct 24, 2026: a dry Castile and León outlined all 27 members in red)', () => {
+  const eu: MapRow = {
+    iso: 'EU', country: 'European Union', commodity: 'barley', commodity_name: 'Barley', score: 25, call: 'no cut expected', weather_level: 2,
+    flag: true, share_pct: 32.6, exports_share_pct: 22.9, headline: null,
+    regions: [
+      { name: 'Castile and León, Spain (Valladolid)', lat: 41.65, lon: -4.72, level: 2, risk: '0 mm of rain forecast in the next 9 days' },
+      { name: 'Champagne, France', lat: 49, lon: 4, level: 0, risk: null },
+    ],
+  }
+  // boxes standing in for Spain and France
+  const box: Record<string, [number, number, number, number]> = { ES: [-9.3, 36, 3.3, 43.8], FR: [-4.8, 42.3, 8.2, 51.1] }
+  const contains = (iso: string, lng: number, lat: number) => { const b = box[iso]; return !!b && lng >= b[0] && lng <= b[2] && lat >= b[1] && lat <= b[3] }
+
+  it('outlines only the members holding a region at risk', () => {
+    expect([...euFlagMembers(eu, contains)]).toEqual(['ES'])
+  })
+  it('outlines none when the EU isn\'t flagged or no region is at medium or high risk', () => {
+    expect(euFlagMembers({ ...eu, flag: false }, contains).size).toBe(0)
+    expect(euFlagMembers({ ...eu, regions: eu.regions.map(g => ({ ...g, level: 1 })) }, contains).size).toBe(0)
+    expect(euFlagMembers(undefined, contains).size).toBe(0)
+  })
+  it('knows the 27 members', () => {
+    expect(EU_MEMBERS).toHaveLength(27)
+    expect(new Set(EU_MEMBERS).size).toBe(27)
   })
 })
