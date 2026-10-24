@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { pageMetadata } from '@/lib/page-metadata'
+import { fetchHomeTotals } from '@/lib/home-totals'
 
 // Plan G19 (Oct 20, 2026): what "N outlets" and "Verified" mean, in words a
 // reader can check against the code (scraper pipeline/correlate.ts counts a
@@ -69,7 +70,9 @@ const LIMITS = [
   'Grouping goes by wording, so now and then two cards describe one event, or two events are grouped.',
 ]
 
-export default function HowWeCountPage() {
+export default async function HowWeCountPage() {
+  // Plan N2: today's totals, from the same status file as the home page's line
+  const totals = await fetchHomeTotals()
   return (
     <div className="min-h-screen bg-wp-bg text-wp-text">
       <main className="max-w-2xl mx-auto px-4 py-10">
@@ -77,6 +80,15 @@ export default function HowWeCountPage() {
         <p className="text-sm text-wp-text2 mt-2 mb-8 leading-relaxed">
           Every story on WorldPulse shows how many outlets reported it. This page says exactly what that number is, so you can decide how much to trust it.
         </p>
+        {(totals.verified24h || totals.sources) && (
+          <p className="text-sm text-wp-text mb-8 leading-relaxed rounded border border-[rgba(255,255,255,0.07)] px-4 py-3">
+            <span className="font-semibold">Today:</span>{' '}
+            {totals.verified24h && <><span className="text-wp-cyan">{totals.verified24h.toLocaleString('en-US')} stories</span> reached Verified in the last 24 hours</>}
+            {totals.verified24h && totals.sources && ', '}
+            {totals.sources && <>{totals.verified24h ? 'from' : 'reading'} {totals.sources.toLocaleString('en-US')} sources the scraper reads</>}
+            .
+          </p>
+        )}
         <ol className="space-y-6">
           {STEPS.map((s, i) => (
             <li key={s.h} id={s.id}>
