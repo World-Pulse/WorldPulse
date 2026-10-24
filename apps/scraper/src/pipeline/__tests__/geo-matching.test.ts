@@ -42,6 +42,14 @@ describe('findGazetteerPlace', () => {
     expect(findGazetteerPlace('Xinjiang cotton ban widens')?.coords.region).toBe('Xinjiang')
   })
 
+  it('pins Lyon, Taif and Ras Al Khaimah stories there, not at the capital', () => {
+    expect(findGazetteerPlace('Police disperse Lyon student protest')?.place).toBe('lyon')
+    expect(findGazetteerPlace('Air defenses intercept Houthi missiles at Taif and Yanbu')?.place).toBe('taif')
+    expect(findGazetteerPlace('Ras Al Khaimah shuts beaches after oil leak')?.coords.country).toBe('AE')
+    expect(findGazetteerPlace('Ras Al Khaimah shuts beaches after oil leak')?.coords.lat).toBeGreaterThan(25.5)  // Dubai is 25.2
+    expect(findGazetteerPlace('Jordan church attack: Irbid mourns')?.place).toBe('irbid')
+  })
+
   it('pins Sarawak, Sabah and Auckland stories there, not at their capitals', () => {
     const school = findGazetteerPlace('Police record 24 statements over Kuching school attack')
     expect(school?.coords.region).toBe('Sarawak')
