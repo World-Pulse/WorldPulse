@@ -65,7 +65,32 @@ jobs:
             exit 1
           fi
           echo "SSH=$SSH" >> "$GITHUB_ENV"
-
+      - name: Hand the keys to the server
+        # The services' keys live in GitHub's Secrets (Settings → Secrets and variables → Actions),
+        # under the names below. Only the ones that are set go across, as NAME=value lines on SSH's
+        # input (never on a command line or in a log), and the server's scripts/server-keys.sh
+        # writes them into its settings file before the code is updated. A key that isn't set
+        # here is left as it is on the server.
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
+          BLUESKY_HANDLE: ${{ secrets.BLUESKY_HANDLE }}
+          BLUESKY_APP_PASSWORD: ${{ secrets.BLUESKY_APP_PASSWORD }}
+          OPENSANCTIONS_API_KEY: ${{ secrets.OPENSANCTIONS_API_KEY }}
+          AIS_STREAM_API_KEY: ${{ secrets.AIS_STREAM_API_KEY }}
+          GH_OAUTH_CLIENT_ID: ${{ secrets.GH_OAUTH_CLIENT_ID }}
+          GH_OAUTH_CLIENT_SECRET: ${{ secrets.GH_OAUTH_CLIENT_SECRET }}
+          EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
+          ACLED_API_KEY: ${{ secrets.ACLED_API_KEY }}
+          ACLED_API_EMAIL: ${{ secrets.ACLED_API_EMAIL }}
+        run: |
+          for name in RESEND_API_KEY TELEGRAM_BOT_TOKEN TELEGRAM_CHANNEL BLUESKY_HANDLE BLUESKY_APP_PASSWORD \
+                      OPENSANCTIONS_API_KEY AIS_STREAM_API_KEY GH_OAUTH_CLIENT_ID GH_OAUTH_CLIENT_SECRET \
+                      EIA_API_KEY ACLED_API_KEY ACLED_API_EMAIL; do
+            if [ -n "${!name:-}" ]; then printf '%s=%s\n' "$name" "${!name}"; fi
+          done | $SSH 'cd /opt/worldpulse && git fetch --quiet origin main && git show origin/main:scripts/server-keys.sh > /root/.server-keys.sh && bash /root/.server-keys.sh; rc=$?; rm -f /root/.server-keys.sh; exit $rc' \
+            || echo "::warning::The keys couldn't be handed to the server; the deploy goes on with the ones it has."
       - name: Update code and start the deploy on the server
         run: |
           $SSH bash -s -- "${GITHUB_SHA::7}" <<'REMOTE'
