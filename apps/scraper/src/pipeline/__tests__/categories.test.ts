@@ -25,6 +25,13 @@ describe('categorizeText', () => {
     expect(categorizeText('Air strike hits village, 3 killed')).toBe('conflict')
   })
 
+  it('files gymnastics, swimming and other everyday sports as sports, not politics', () => {
+    expect(categorizeText('Gymnast wins gold for Algeria at the world championships')).toBe('sports')
+    expect(categorizeText('Swimmer breaks national record in Lagos')).toBe('sports')
+    expect(categorizeText('Boxing champion visits parliament')).toBe('sports')
+    expect(categorizeText('Gunmen attack swimming pool, 4 killed')).toBe('conflict')
+  })
+
   it('reads care words in a headline only, and not "rushed to hospital"', () => {
     expect(categorizeText('Two Carlton players treated in hospital after needing care')).toBeNull()
     // The description's "medical evacuation" doesn't make a sea standoff health news
