@@ -948,4 +948,7 @@ const COMMON_WORDS = new Set([
   'president', 'prime', 'police', 'government', 'military', 'forces',
   'united', 'national', 'international', 'world', 'global', 'local',
   'north', 'south', 'east', 'west', 'central',
+  // The first word of a longer place name: the geocoder takes "French" for French
+  // Guiana (Oct 25, 2026: a French presidential campaign story was pinned there)
+  'french', 'british', 'american', 'northern', 'southern', 'eastern', 'western',
 ])

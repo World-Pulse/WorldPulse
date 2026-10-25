@@ -137,6 +137,18 @@ describe('extractGeo', () => {
     expect(geo.lat).toBeCloseTo(42.9)
   }, 15_000)
 
+  it('does not read "French" as French Guiana (live, Oct 25, 2026: Le Pen\'s campaign launch)', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      // the geocoder files French Guiana under country code fr
+      json: async () => [hit('French Guiana', 'fr', { addresstype: 'region', importance: 0.6 }, 4.0, -53.0)],
+    })
+    const geo = await extractGeo('Marine Le Pen launches French presidential campaign')
+    expect(geo.name).not.toBe('French Guiana')
+    expect(geo.countryCode).toBe('FR')
+    expect(geo.lat).toBeCloseTo(48.8566)
+  }, 15_000)
+
   it('does not pin a climate story to Lima', async () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => [] })
     const geo = await extractGeo('Climate pledges fall short as emissions keep rising')
