@@ -60,6 +60,8 @@ function parseBbox(raw: string): { coords: [number, number, number, number] } | 
 const MAP_CACHE_TTL    = 45  // seconds — map points (expensive PostGIS queries)
 /** Titles a scraper falls back to when a page's own title can't be read (lower case) */
 const PLACEHOLDER_TITLES = ['title of the page', 'untitled', 'untitled document', 'no title', 'document', 'home']
+/** Daily calendar and photo roundups, not events with a place (case-insensitive; matched at the start of a title) */
+const ROUNDUP_TITLE_SQL = "^(today('s)? in history|(today's |the day's )?news in pictures|(today's |the day's )?photos of the day)"
 const MAP_KEEP_SECONDS = 15 * 60 // map points older than MAP_CACHE_TTL are still served this long while the next is made
 const MAP_QUERY_SECONDS = 30 // the map points query's own time limit, off the request path (lib/long-query.ts)
 const DETAIL_CACHE_TTL = 60  // seconds — signal detail (view count incremented async)
@@ -930,6 +932,9 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       // A page whose real title the scraper couldn't read ("Title of the
       // Page", seen Oct 21, 2026) is not a headline either.
       .whereRaw(`lower(btrim(title)) NOT IN (${PLACEHOLDER_TITLES.map(() => '?').join(', ')})`, PLACEHOLDER_TITLES)
+      // "Today in History: 25 October" and "Today's news in pictures" (Oct 25,
+      // 2026) are daily roundups pinned to wherever the outlet sits.
+      .whereRaw('btrim(title) !~* ?', [ROUNDUP_TITLE_SQL])
       .select(lean
         ? [
             'id', 'title', 'category', 'severity', 'status',
