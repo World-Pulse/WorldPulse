@@ -59,6 +59,14 @@ describe('findGazetteerPlace', () => {
     expect(findGazetteerPlace('Sabahan singer wins award')).toBeNull()                           // whole words only
   })
 
+  it('pins Melaka, Penang suburb, Selangor beach and northern Nigeria stories there, not at Kuala Lumpur or Lagos', () => {
+    expect(findGazetteerPlace('Perikatan confirms using own logo for Melaka election')?.coords.region).toBe('Melaka')
+    expect(findGazetteerPlace('Paya Terubong landslide slope stable for now, says MBPP mayor')?.coords.region).toBe('Penang')
+    expect(findGazetteerPlace('Police warn public to avoid Bagan Lalang Beach after crocodile sighting')?.coords.region).toBe('Selangor')
+    expect(findGazetteerPlace('Death toll in Taraba bandits’ attack now 50')?.coords.country).toBe('NG')
+    expect(findGazetteerPlace('Death toll in Taraba bandits’ attack now 50')?.coords.lat).toBeGreaterThan(8)   // Lagos is 6.5
+  })
+
   it('ignores newspaper names', () => {
     expect(findGazetteerPlace('US troops on Okinawa face new limits, the Washington Post reported')).toBeNull()
     expect(findGazetteerPlace('According to the New York Times, talks in Cairo resumed')?.place).toBe('cairo')
