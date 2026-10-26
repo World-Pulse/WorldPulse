@@ -593,9 +593,10 @@ server_load() {
                                   FROM pg_stat_activity WHERE datname = current_database() AND xact_start IS NOT NULL AND pid <> pg_backend_pid()))" \
         2>/dev/null | tr -d '\r' | grep '^{' | head -n 1) || act=""
   # The three longest running queries, in their own query so a failure here keeps the counts above
+  # (jsonb: json_agg puts a line break between items, and only the first line is read)
   act2=$(timeout 15 docker exec wp_postgres sh -c \
         'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAq -c "SET statement_timeout = 5000" -c "$1"' sh \
-        "SELECT json_build_object('longest', (SELECT json_agg(t) FROM (
+        "SELECT jsonb_build_object('longest', (SELECT jsonb_agg(t) FROM (
               SELECT backend_type AS kind, host(client_addr) AS ip,
                      coalesce(wait_event_type || ':' || wait_event, 'cpu') AS waiting_on,
                      round(extract(epoch FROM now() - query_start))::int AS running_s,
