@@ -62,6 +62,8 @@ const MAP_CACHE_TTL    = 45  // seconds — map points (expensive PostGIS querie
 const PLACEHOLDER_TITLES = ['title of the page', 'untitled', 'untitled document', 'no title', 'document', 'home']
 /** Daily calendar and photo roundups, not events with a place (case-insensitive; matched at the start of a title) */
 const ROUNDUP_TITLE_SQL = "^(today('s)? in history|(today's |the day's )?news in pictures|(today's |the day's )?photos of the day)"
+/** A title that is only a date ("October 26, 2026", "Monday 26 October 2026"): a page whose real title wasn't read */
+const DATE_TITLE_SQL = '^((mon|tues?|wednes|thur?s?|fri|satur|sun)(day)?[ ,.]+)?(([a-z]{3,9}\\.? +[0-9]{1,2}(st|nd|rd|th)?,? +[0-9]{4})|([0-9]{1,2}(st|nd|rd|th)? +[a-z]{3,9}\\.?,? +[0-9]{4})|([0-9]{4}-[0-9]{2}-[0-9]{2}))$'
 const MAP_KEEP_SECONDS = 15 * 60 // map points older than MAP_CACHE_TTL are still served this long while the next is made
 const MAP_QUERY_SECONDS = 30 // the map points query's own time limit, off the request path (lib/long-query.ts)
 const DETAIL_CACHE_TTL = 60  // seconds — signal detail (view count incremented async)
@@ -935,6 +937,8 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       // "Today in History: 25 October" and "Today's news in pictures" (Oct 25,
       // 2026) are daily roundups pinned to wherever the outlet sits.
       .whereRaw('btrim(title) !~* ?', [ROUNDUP_TITLE_SQL])
+      // A title that is only a date ("October 26, 2026", seen Oct 26, 2026).
+      .whereRaw('btrim(title) !~* ?', [DATE_TITLE_SQL])
       .select(lean
         ? [
             'id', 'title', 'category', 'severity', 'status',
