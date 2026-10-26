@@ -92,6 +92,22 @@ export function isSeaHeadline(title: string): boolean {
 /** The newest rows the lists read before the headline check (the check drops some) */
 export const SEA_LIST_READ = 400
 
+/**
+ * GET /signals reads a week of reports; on Oct 26, 2026 it crossed the pool's
+ * 5 seconds and answered 500 every time. Kept in Redis instead and remade off
+ * the request path by one process at a time, with its own time limit
+ * (lib/long-query.ts, lib/swr-cache.ts), as GET /overview already is.
+ */
+export const SEA_SIGNALS_QUERY_SECONDS = 25
+export const SEA_SIGNALS_KEEP = { freshSeconds: 120, staleSeconds: 6 * 3_600, lockSeconds: 60 }
+
+/** "lat,lng" rounded to about a kilometre, or '' when it isn't two numbers (then no place filter, as before) */
+export function nearKey(near: string | undefined): string {
+  if (!near) return ''
+  const [lat, lng] = near.split(',').map(s => parseFloat(s))
+  return Number.isFinite(lat) && Number.isFinite(lng) ? `${lat.toFixed(2)},${lng.toFixed(2)}` : ''
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type VesselType = 'carrier' | 'vessel' | 'dark_ship'
@@ -332,39 +348,40 @@ export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
       type?: string; limit?: number; offset?: number; near?: string; radius?: number
     }
 
-    let query = db('signals')
-      .whereIn('status', ['verified', 'pending'])
-      .whereRaw("(category IN ('military','maritime','economy','conflict') AND (tags @> ARRAY['maritime']::text[] OR tags @> ARRAY['shipping']::text[] OR tags @> ARRAY['naval']::text[] OR tags @> ARRAY['piracy']::text[] OR tags @> ARRAY['ports']::text[] OR category = 'military'))")
-      .whereRaw("created_at > now() - interval '7 days'")
-      .orderBy('created_at', 'desc')
-      .limit(SEA_LIST_READ)
+    const place = nearKey(near)
+    const key = `maritime:signals:v2:${type}:${place}:${place ? radius : ''}`
+    const read: Array<Record<string, unknown>> = await staleWhileRevalidate(key, SEA_SIGNALS_KEEP, () =>
+      longQuery(SEA_SIGNALS_QUERY_SECONDS, async (trx) => {
+        let query = trx('signals')
+          .whereIn('status', ['verified', 'pending'])
+          .whereRaw("(category IN ('military','maritime','economy','conflict') AND (tags @> ARRAY['maritime']::text[] OR tags @> ARRAY['shipping']::text[] OR tags @> ARRAY['naval']::text[] OR tags @> ARRAY['piracy']::text[] OR tags @> ARRAY['ports']::text[] OR category = 'military'))")
+          .whereRaw("created_at > now() - interval '7 days'")
+          .orderBy('created_at', 'desc')
+          .limit(SEA_LIST_READ)
 
-    if (type === 'piracy')     query = query.whereRaw("tags @> ARRAY['piracy']::text[]")
-    if (type === 'naval')      query = query.where('category', 'military')
-    if (type === 'shipping')   query = query.whereRaw("tags @> ARRAY['shipping']::text[]")
-    if (type === 'port')       query = query.whereRaw("tags @> ARRAY['ports']::text[]")
-    if (type === 'sanctions')  query = query.whereRaw("tags @> ARRAY['sanctions']::text[]")
+        if (type === 'piracy')     query = query.whereRaw("tags @> ARRAY['piracy']::text[]")
+        if (type === 'naval')      query = query.where('category', 'military')
+        if (type === 'shipping')   query = query.whereRaw("tags @> ARRAY['shipping']::text[]")
+        if (type === 'port')       query = query.whereRaw("tags @> ARRAY['ports']::text[]")
+        if (type === 'sanctions')  query = query.whereRaw("tags @> ARRAY['sanctions']::text[]")
 
-    // Geographic proximity filter — filter signals near a chokepoint
-    if (near) {
-      const [latStr, lngStr] = near.split(',')
-      const lat = parseFloat(latStr)
-      const lng = parseFloat(lngStr)
-      if (!isNaN(lat) && !isNaN(lng)) {
-        const radiusMeters = (radius ?? 500) * 1000
-        query = query.whereRaw(
-          'location IS NOT NULL AND ST_DWithin(location::geography, ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography, ?)',
-          [lng, lat, radiusMeters]
+        // Geographic proximity filter — filter signals near a chokepoint
+        if (place) {
+          const [lat, lng] = place.split(',').map(Number)
+          const radiusMeters = (radius ?? 500) * 1000
+          query = query.whereRaw(
+            'location IS NOT NULL AND ST_DWithin(location::geography, ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography, ?)',
+            [lng, lat, radiusMeters]
+          )
+        }
+
+        return query.select(
+          'id', 'title', 'category', 'severity', 'reliability_score',
+          'location_name', 'source_url', 'created_at',
+          trx.raw('ST_X(location::geometry) as lng'),
+          trx.raw('ST_Y(location::geometry) as lat'),
         )
-      }
-    }
-
-    const read = await query.select(
-      'id', 'title', 'category', 'severity', 'reliability_score',
-      'location_name', 'source_url', 'created_at',
-      db.raw('ST_X(location::geometry) as lng'),
-      db.raw('ST_Y(location::geometry) as lat'),
-    )
+      }))
     const rows = read
       .filter((r: Record<string, unknown>) => (type === 'naval' ? isNavalHeadline : isSeaHeadline)(String(r.title ?? '')))
       .slice(offset, offset + limit)

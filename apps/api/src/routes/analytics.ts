@@ -92,6 +92,27 @@ export function parseWindowHours(window: string): number {
   return 24  // default: 24h
 }
 
+/** GET /signal-volume's count: its own time limit, kept 10 minutes and served up to a day while remade */
+export const SIGNAL_VOLUME_QUERY_SECONDS = 30
+export const SIGNAL_VOLUME_KEEP = { freshSeconds: 600, staleSeconds: 24 * 3_600, lockSeconds: 2 * SIGNAL_VOLUME_QUERY_SECONDS }
+
+/** The last `days` UTC days, oldest first, each with its count from `rows` ({date, count}) or 0 */
+export function dailyVolume(rows: Array<{ date: unknown; count: unknown }>, days: number, now = new Date()): Array<{ date: string; count: number }> {
+  const dayMap = new Map<string, number>()
+  for (const row of rows) {
+    const dateStr = typeof row.date === 'string' ? row.date.slice(0, 10) : new Date(row.date as Date).toISOString().slice(0, 10)
+    dayMap.set(dateStr, Number(row.count))
+  }
+  const volume: Array<{ date: string; count: number }> = []
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now)
+    d.setUTCDate(d.getUTCDate() - i)
+    const key = d.toISOString().slice(0, 10)
+    volume.push({ date: key, count: dayMap.get(key) ?? 0 })
+  }
+  return volume
+}
+
 // Market instruments tracked — core set (sidebar widget)
 const MARKET_TICKERS = [
   { symbol: '^VIX',    name: 'VIX',    type: 'volatility' },
@@ -965,38 +986,24 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
     const { days = 7 } = req.query as { days?: number }
     const safeDays = Math.min(90, Math.max(1, Number(days)))
 
-    const cacheKey = `analytics:signal-volume:${safeDays}`
-    const cached = await redis.get(cacheKey).catch(() => null)
-    if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
-
-    const rows = await db.raw(`
-      SELECT
-        DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')::date AS date,
-        COUNT(*) AS count
-      FROM signals
-      WHERE created_at >= NOW() - INTERVAL '${safeDays} days'
-        AND status IN ('verified', 'pending')
-      GROUP BY date
-      ORDER BY date ASC
-    `)
-
-    // Fill in any missing days with zeroes
-    const dayMap = new Map<string, number>()
-    for (const row of rows.rows) {
-      const dateStr = typeof row.date === 'string' ? row.date.slice(0, 10) : new Date(row.date).toISOString().slice(0, 10)
-      dayMap.set(dateStr, Number(row.count))
-    }
-
-    const volume: Array<{ date: string; count: number }> = []
-    for (let i = safeDays - 1; i >= 0; i--) {
-      const d = new Date()
-      d.setUTCDate(d.getUTCDate() - i)
-      const key = d.toISOString().slice(0, 10)
-      volume.push({ date: key, count: dayMap.get(key) ?? 0 })
-    }
-
-    const result = { success: true, days: safeDays, volume, generated_at: new Date().toISOString() }
-    await redis.setex(cacheKey, 300, JSON.stringify(result)).catch(() => {})
+    // Oct 26, 2026: a week of reports (about 10,000 a day now) crossed the
+    // pool's 5 seconds and the count answered 500 every time, so nothing was
+    // kept and every visit asked again. Kept in Redis and remade off the
+    // request path by one process at a time, with its own time limit
+    // (lib/swr-cache.ts, lib/long-query.ts); a failed remake keeps the copy
+    const result = await staleWhileRevalidate(`analytics:signal-volume:v2:${safeDays}`, SIGNAL_VOLUME_KEEP, async () => {
+      const rows = await longQuery(SIGNAL_VOLUME_QUERY_SECONDS, trx => trx.raw(`
+        SELECT
+          DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')::date AS date,
+          COUNT(*) AS count
+        FROM signals
+        WHERE created_at >= NOW() - INTERVAL '${safeDays} days'
+          AND status IN ('verified', 'pending')
+        GROUP BY date
+        ORDER BY date ASC
+      `))
+      return { success: true, days: safeDays, volume: dailyVolume(rows.rows, safeDays), generated_at: new Date().toISOString() }
+    })
     return reply.send(result)
   })
 
