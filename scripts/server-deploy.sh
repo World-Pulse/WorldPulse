@@ -227,6 +227,11 @@ top=$(curl -s --max-time 30 --resolve "api.world-pulse.io:443:127.0.0.1" "https:
 for id in $top; do warm world-pulse.io "/signals/$id"; done
 log "Warmed the main pages, $(echo "$top" | grep -c .) top story pages and the home page's API answers"
 
+# End the database queries the replaced containers left running (scripts/db-orphans.sh,
+# Oct 26, 2026: a query keeps running after its container is gone, and that
+# afternoon about 50 ran at once, the oldest for over 3 hours)
+log "$(bash scripts/db-orphans.sh 2>&1 | tail -n 1)"
+
 for domain in world-pulse.io world-pulse.app; do
   end=$(openssl x509 -enddate -noout -in ".certbot/conf/live/${domain}/fullchain.pem" 2>/dev/null | cut -d= -f2)
   if [ -z "$end" ]; then
