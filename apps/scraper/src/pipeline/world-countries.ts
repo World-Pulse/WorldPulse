@@ -78,7 +78,7 @@ export const MORE_COUNTRIES: CountryEntry[] = [
   // Middle East and North Africa
   c('BH', 'Bahrain', /\b(?:bahrain|bahraini)\b/i, 'Manama', 26.23, 50.59),
   c('EG', 'Egypt', /\b(?:egypt|egyptian)\b/i, 'Cairo', 30.04, 31.24),
-  c('JO', 'Jordan', /\b(?:jordanian|king of jordan|in jordan|jordan['’]s (?:king|queen|foreign|government|army|prime))\b/i, 'Amman', 31.95, 35.93),
+  c('JO', 'Jordan', /\b(?:jordanian|king of jordan|in jordan|jordan['’]s (?:king|queen|foreign|government|army|prime))\b|^jordan (?:says|said|arrests?|arrested|condemns|warns|summons|rejects|denies|intercepts|shoots|foils|bans|orders|announces|reopens|closes|seizes|sentences|expels)\b/i, 'Amman', 31.95, 35.93),
   c('KW', 'Kuwait', /\b(?:kuwait|kuwaiti)\b/i, 'Kuwait City', 29.38, 47.99),
   c('LB', 'Lebanon', /\b(?:lebanon|lebanese)\b/i, 'Beirut', 33.89, 35.50),
   c('OM', 'Oman', /\b(?:oman|omani)\b/i, 'Muscat', 23.59, 58.41),

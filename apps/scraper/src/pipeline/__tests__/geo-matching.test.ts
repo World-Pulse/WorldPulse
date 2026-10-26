@@ -67,6 +67,11 @@ describe('findGazetteerPlace', () => {
     expect(findGazetteerPlace('Death toll in Taraba bandits’ attack now 50')?.coords.lat).toBeGreaterThan(8)   // Lagos is 6.5
   })
 
+  it('a headline that starts "Jordan says" is about the country, not Greece through "Greek"', () => {
+    expect(placeFromText('Jordan says 3 arrested in deadly attack on Greek Orthodox church').countryCode).toBe('JO')
+    expect(placeFromText('Jordan Henderson says he wants to stay at the club').countryCode).not.toBe('JO')
+  })
+
   it('ignores newspaper names', () => {
     expect(findGazetteerPlace('US troops on Okinawa face new limits, the Washington Post reported')).toBeNull()
     expect(findGazetteerPlace('According to the New York Times, talks in Cairo resumed')?.place).toBe('cairo')
