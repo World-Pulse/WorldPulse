@@ -575,10 +575,11 @@ PY
 # 30-minute counts took 22-33 s, /health 6 s, two pages crossed the 5-second
 # limit) and nothing in this file said why. Load averages, memory, each
 # container's CPU and memory, and the database's connections by state with the
-# age of its longest running query and transaction: numbers only, no query
-# text (this file is public). Every 5 minutes; any part that fails is null.
+# age of its longest running query and transaction, and for the three longest
+# queries where they come from and what they wait on: numbers and names only,
+# no query text (this file is public). Every 5 minutes; a part that fails is null.
 server_load() {
-  local stats act
+  local stats act act2 ips
   stats=$(timeout 20 docker stats --no-stream --format '{{.Name}}|{{.CPUPerc}}|{{.MemUsage}}' 2>/dev/null | grep '^wp_') || stats=""
   act=$(timeout 15 docker exec wp_postgres sh -c \
         'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAq -c "SET statement_timeout = 5000" -c "$1"' sh \
@@ -591,7 +592,23 @@ server_load() {
            'longest_open_transaction_s', (SELECT coalesce(round(extract(epoch FROM max(now() - xact_start)))::int, 0)
                                   FROM pg_stat_activity WHERE datname = current_database() AND xact_start IS NOT NULL AND pid <> pg_backend_pid()))" \
         2>/dev/null | tr -d '\r' | grep '^{' | head -n 1) || act=""
-  STATS="$stats" ACT="$act" python3 - <<'PY'
+  # The three longest running queries, in their own query so a failure here keeps the counts above
+  act2=$(timeout 15 docker exec wp_postgres sh -c \
+        'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAq -c "SET statement_timeout = 5000" -c "$1"' sh \
+        "SELECT json_build_object('longest', (SELECT json_agg(t) FROM (
+              SELECT backend_type AS kind, host(client_addr) AS ip,
+                     coalesce(wait_event_type || ':' || wait_event, 'cpu') AS waiting_on,
+                     round(extract(epoch FROM now() - query_start))::int AS running_s,
+                     upper(split_part(btrim(regexp_replace(query, '\s+', ' ', 'g')), ' ', 1)) AS verb,
+                     (SELECT string_agg(DISTINCT lower((r.m)[1]), ',')
+                        FROM regexp_matches(query, '(?:from|join|into|update|vacuum(?: analyze)?|analyze)\s+(?:only\s+)?\"?(?:public\.)?\"?([a-z_][a-z0-9_]*)', 'gi') AS r(m)) AS tables
+                FROM pg_stat_activity
+               WHERE datname = current_database() AND state = 'active' AND pid <> pg_backend_pid()
+               ORDER BY query_start ASC LIMIT 3) t))" \
+        2>/dev/null | tr -d '\r' | grep '^{' | head -n 1) || act2=""
+  # Which container each of those connections comes from (its address on Docker's network)
+  ips=$(timeout 10 docker inspect -f '{{.Name}}|{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' $(docker ps -q 2>/dev/null) 2>/dev/null) || ips=""
+  STATS="$stats" ACT="$act" ACT2="$act2" IPS="$ips" python3 - <<'PY'
 import json, os
 def num(s):
     try:
@@ -624,6 +641,26 @@ try:
     out['database'] = json.loads(os.environ.get('ACT') or 'null')
 except ValueError:
     out['database'] = None
+# The longest running queries: what kind (a client or autovacuum), from which
+# container, what they wait on, how long, the statement's first word and the
+# tables it names. Never its text or values; the network address is dropped
+by_ip = {}
+for line in os.environ.get('IPS', '').splitlines():
+    name, _, addrs = line.partition('|')
+    for a in addrs.split():
+        by_ip[a] = name.lstrip('/')
+db = out.get('database')
+try:
+    longest = (json.loads(os.environ.get('ACT2') or 'null') or {}).get('longest')
+except (ValueError, AttributeError):
+    longest = None
+if isinstance(db, dict):
+    db['longest'] = longest if isinstance(longest, list) else None
+if isinstance(db, dict) and isinstance(db.get('longest'), list):
+    for q in db['longest']:
+        if isinstance(q, dict):
+            ip = q.pop('ip', None)
+            q['from'] = by_ip.get(ip, 'another address') if ip else 'inside the database'
 print(json.dumps(out, separators=(',', ':')))
 PY
 }
