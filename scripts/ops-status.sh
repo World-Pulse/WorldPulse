@@ -571,6 +571,62 @@ PY
   rm -f "$parts"/*.json "$parts/took"
   rmdir "$parts" 2>/dev/null || true
 }
+# The server's load (Oct 26, 2026): in the afternoon the database was slow (the
+# 30-minute counts took 22-33 s, /health 6 s, two pages crossed the 5-second
+# limit) and nothing in this file said why. Load averages, memory, each
+# container's CPU and memory, and the database's connections by state with the
+# age of its longest running query and transaction: numbers only, no query
+# text (this file is public). Every 5 minutes; any part that fails is null.
+server_load() {
+  local stats act
+  stats=$(timeout 20 docker stats --no-stream --format '{{.Name}}|{{.CPUPerc}}|{{.MemUsage}}' 2>/dev/null | grep '^wp_') || stats=""
+  act=$(timeout 15 docker exec wp_postgres sh -c \
+        'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAq -c "SET statement_timeout = 5000" -c "$1"' sh \
+        "SELECT json_build_object(
+           'by_state', (SELECT json_object_agg(st, n) FROM (SELECT coalesce(state, 'none') AS st, count(*) AS n
+                          FROM pg_stat_activity WHERE datname = current_database() GROUP BY 1) t),
+           'waiting_on_locks', (SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'),
+           'longest_active_s', (SELECT coalesce(round(extract(epoch FROM max(now() - query_start)))::int, 0)
+                                  FROM pg_stat_activity WHERE datname = current_database() AND state = 'active' AND pid <> pg_backend_pid()),
+           'longest_open_transaction_s', (SELECT coalesce(round(extract(epoch FROM max(now() - xact_start)))::int, 0)
+                                  FROM pg_stat_activity WHERE datname = current_database() AND xact_start IS NOT NULL AND pid <> pg_backend_pid()))" \
+        2>/dev/null | tr -d '\r' | grep '^{' | head -n 1) || act=""
+  STATS="$stats" ACT="$act" python3 - <<'PY'
+import json, os
+def num(s):
+    try:
+        return float(s)
+    except (TypeError, ValueError):
+        return None
+out = {}
+try:
+    l1, l5, l15 = open('/proc/loadavg').read().split()[:3]
+    out['load'] = {'1m': num(l1), '5m': num(l5), '15m': num(l15)}
+except OSError:
+    out['load'] = None
+out['cpus'] = os.cpu_count()
+try:
+    mi = {}
+    for line in open('/proc/meminfo'):
+        k, v = line.split(':', 1)
+        mi[k] = int(v.split()[0])   # kB
+    out['memory_mb'] = {'total': mi['MemTotal'] // 1024, 'available': mi['MemAvailable'] // 1024,
+                        'swap_used': (mi.get('SwapTotal', 0) - mi.get('SwapFree', 0)) // 1024}
+except (OSError, KeyError, ValueError):
+    out['memory_mb'] = None
+cont = {}
+for line in os.environ.get('STATS', '').splitlines():
+    parts = line.split('|')
+    if len(parts) == 3:
+        cont[parts[0]] = {'cpu_pct': num(parts[1].strip().rstrip('%')), 'mem': parts[2].split('/')[0].strip()}
+out['containers'] = cont or None
+try:
+    out['database'] = json.loads(os.environ.get('ACT') or 'null')
+except ValueError:
+    out['database'] = None
+print(json.dumps(out, separators=(',', ':')))
+PY
+}
 # Why the last deploy wasn't clean, from the deploy script's own log lines only
 # (its warnings, or the reason it rolled back or failed); empty when it was clean
 deploy_note() {
@@ -612,6 +668,7 @@ pipeline=$(cat "$pipe_cache" 2>/dev/null || true)
   # The database's last copy and restore test (scripts/db-backup.sh, plan LR8); null before the first
   printf '"backup":%s,' "$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1])), separators=(",", ":")))' logs/backup-status.json 2>/dev/null || echo null)"
   printf '"containers":{%s},' "$containers"
+  printf '"server":%s,' "$(server_load 2>/dev/null | grep '^{' || echo null)"
   printf '"pipeline":%s}\n' "$pipeline"
 } > "logs/public/status.json.$$.tmp" \
   && { python3 scripts/data_health.py "logs/public/status.json.$$.tmp" 2> logs/data-health.err || true; } \
