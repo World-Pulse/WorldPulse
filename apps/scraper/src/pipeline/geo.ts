@@ -958,4 +958,8 @@ const COMMON_WORDS = new Set([
   // The first word of a longer place name: the geocoder takes "French" for French
   // Guiana (Oct 25, 2026: a French presidential campaign story was pinned there)
   'french', 'british', 'american', 'northern', 'southern', 'eastern', 'western',
+  // Words that are also small towns elsewhere (Oct 27, 2026, H-0032): "Council" Idaho
+  // pinned two unrelated stories, "Spring" Texas a Latin America column, "Sabha"
+  // Libya an Indian parliament story (Lok Sabha, Rajya Sabha)
+  'council', 'spring', 'summer', 'winter', 'autumn', 'sabha',
 ])

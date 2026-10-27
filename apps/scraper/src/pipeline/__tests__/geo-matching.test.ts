@@ -162,6 +162,18 @@ describe('extractGeo', () => {
     expect(geo.lat).toBeCloseTo(48.8566)
   }, 15_000)
 
+  it('does not read "Council", "Spring" or "Sabha" as the towns of those names (live, Oct 26, 2026)', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => [hit('Council', 'us', { importance: 0.6 }, 44.73, -116.44)],
+    })
+    for (const title of ['Council approves new budget for housing', 'Spring offensive plans reported by analysts', 'Sabha passes the bill after a long debate']) {
+      const geo = await extractGeo(title)
+      expect(geo.lat).not.toBeCloseTo(44.73)
+    }
+    expect(fetchMock).not.toHaveBeenCalled()
+  }, 15_000)
+
   it('does not pin a climate story to Lima', async () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => [] })
     const geo = await extractGeo('Climate pledges fall short as emissions keep rising')
