@@ -939,6 +939,9 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       .whereRaw('btrim(title) !~* ?', [ROUNDUP_TITLE_SQL])
       // A title that is only a date ("October 26, 2026", seen Oct 26, 2026).
       .whereRaw('btrim(title) !~* ?', [DATE_TITLE_SQL])
+      // Squawk 7600 (radio failure) is a routine, mostly harmless aircraft
+      // alert, not news; the Aircraft layer still shows those planes.
+      .whereRaw("NOT (tags @> ARRAY['squawk-7600']::text[])")
       .select(lean
         ? [
             'id', 'title', 'category', 'severity', 'status',
