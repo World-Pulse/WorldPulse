@@ -26,6 +26,12 @@ describe('findGazetteerPlace', () => {
     expect(findGazetteerPlace('Cargo ship docks at Port Qasim')?.place).toBe('port qasim')
   })
 
+  it('pins Russian republics and cities in Russia, not in a neighbouring country', () => {
+    expect(findGazetteerPlace('Drone attack reported in Ufa, Bashkortostan')?.coords.country).toBe('RU')
+    expect(findGazetteerPlace('Bashkortostan oil refinery fire')?.place).toBe('bashkortostan')
+    expect(findGazetteerPlace('Kazan airport closed after drone alert')?.coords.country).toBe('RU')
+  })
+
   it('prefers the place named first, which is the headline', () => {
     expect(findGazetteerPlace('Explosion hits Kherson. Officials in Moscow deny involvement')?.place).toBe('kherson')
     expect(findGazetteerPlace('Talks in New Delhi; Delhi traffic halted')?.place).toBe('new delhi')
