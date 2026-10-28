@@ -19,6 +19,13 @@ describe('findGazetteerPlace', () => {
     expect(findGazetteerPlace('Protests continue in Lima after the vote')?.place).toBe('lima')
   })
 
+  it('pins Pavlohrad and Port Qasim at their own towns, not at the capital', () => {
+    const p = findGazetteerPlace('Russian strike hits Pavlohrad rail depot')
+    expect(p?.place).toBe('pavlohrad')
+    expect(p?.coords.country).toBe('UA')
+    expect(findGazetteerPlace('Cargo ship docks at Port Qasim')?.place).toBe('port qasim')
+  })
+
   it('prefers the place named first, which is the headline', () => {
     expect(findGazetteerPlace('Explosion hits Kherson. Officials in Moscow deny involvement')?.place).toBe('kherson')
     expect(findGazetteerPlace('Talks in New Delhi; Delhi traffic halted')?.place).toBe('new delhi')
