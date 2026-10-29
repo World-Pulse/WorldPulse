@@ -8077,7 +8077,7 @@ interface GeoHint { lat: number; lng: number; name: string; code?: string }
 
 /** Rough keyword → coordinates for common geographic entities in headlines. */
 const GEO_HINTS: Array<{ keywords: string[]; geo: GeoHint }> = [
-  { keywords: ['ukraine', 'kyiv', 'zaporizhzhia', 'kharkiv'],      geo: { lat: 50.45,  lng: 30.52,   name: 'Ukraine',          code: 'UA' } },
+  { keywords: ['ukraine', 'kyiv', 'zaporizhzhia', 'zaporizhia', 'kharkiv', 'donetsk', 'kherson', 'odesa', 'dnipropetrovsk', 'chernihiv', 'sumy'],      geo: { lat: 50.45,  lng: 30.52,   name: 'Ukraine',          code: 'UA' } },
   { keywords: ['russia', 'moscow', 'kremlin'],                      geo: { lat: 55.75,  lng: 37.62,   name: 'Moscow, Russia',   code: 'RU' } },
   { keywords: ['israel', 'tel aviv', 'jerusalem', 'idf'],           geo: { lat: 31.77,  lng: 35.22,   name: 'Israel',           code: 'IL' } },
   { keywords: ['gaza', 'palestin', 'hamas', 'west bank'],           geo: { lat: 31.50,  lng: 34.47,   name: 'Gaza',             code: 'PS' } },
@@ -8215,9 +8215,18 @@ export interface InferredGeo {
   countryCode: string | null
 }
 
-function fromHints(text: string): InferredGeo | null {
+/**
+ * "Russian drones", "Russian troops" in a Ukrainian outlet's headline are the
+ * war in Ukraine, not Moscow (Oct 29, 2026: Interfax-Ukraine's and Ukrainska
+ * Pravda's air-defence and front-line stories sat in Moscow). Only the noun
+ * or its capital pins them in Russia.
+ */
+const RUSSIA_NOUN = /\b(?:russia|moscow|kremlin)\b/
+
+function fromHints(text: string, homeCountry?: string): InferredGeo | null {
   const lower = text.toLowerCase()
   for (const { keywords, geo } of GEO_HINTS) {
+    if (geo.code === 'RU' && homeCountry === 'UA' && !RUSSIA_NOUN.test(lower)) continue
     if (keywords.some(kw => hintMatches(lower, kw))) {
       return { lat: geo.lat, lng: geo.lng, locationName: geo.name, countryCode: geo.code ?? null }
     }
@@ -8252,7 +8261,7 @@ export function inferGeo(
     const named = fromPlace(head)
     return { lat: point.lat, lng: point.lng, locationName: named?.locationName ?? null, countryCode: named?.countryCode ?? null }
   }
-  const found = fromPlace(head) ?? fromHints(head) ?? fromPlace(body) ?? fromHints(body)
+  const found = fromPlace(head) ?? fromHints(head, source.countryCode) ?? fromPlace(body) ?? fromHints(body, source.countryCode)
   if (found) return found
   if (HOME_PIN_SOURCES.has(source.id)) {
     return { lat: source.defaultLat, lng: source.defaultLng, locationName: source.defaultLocation, countryCode: source.countryCode }

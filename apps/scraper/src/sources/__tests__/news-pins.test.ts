@@ -33,6 +33,13 @@ describe('inferGeo', () => {
     expect(inferGeo('Wildfire spreads across New Mexico', '', source('abc-news')).locationName).toBe('New Mexico')
   })
 
+  it("keeps a Ukrainian outlet's 'Russian drones' and front-line stories in Ukraine, not Moscow (Oct 29, 2026)", () => {
+    const ip = source('interfax-ukraine-en')
+    expect(inferGeo('Air defense downs 97 of 112 Russian drones, strikes recorded at 7 locations – Air Force', '', ip).countryCode).toBe('UA')
+    expect(inferGeo('Russian troops advance near 2 villages in Zaporizhia region – DeepState', '', ip).countryCode).toBe('UA')
+    expect(inferGeo('Kremlin says talks continue', '', ip).countryCode).toBe('RU')
+  })
+
   it('uses the point the feed gives, named from the headline', () => {
     expect(inferGeo('Orange earthquake in Vanuatu', '', source('gdacs'), { lat: -17.5, lng: 168.1 }))
       .toEqual({ lat: -17.5, lng: 168.1, locationName: 'Vanuatu', countryCode: 'VU' })
