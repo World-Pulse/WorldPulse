@@ -255,6 +255,13 @@ describe('NEWS_SOURCE_REGISTRY', () => {
     expect(NEWS_SOURCE_REGISTRY.some(s => s.countryCode === 'TR')).toBe(true)
   })
 
+  it('has Tehran Times as Iran\'s outlet, flagged as state media (H-0033)', () => {
+    const src = NEWS_SOURCE_REGISTRY.find(s => s.id === 'tehran-times')
+    expect(src?.countryCode).toBe('IR')
+    expect(src?.biasLabel).toBe('state-media')
+    expect(HOME_PIN_SOURCES.has('tehran-times')).toBe(true)
+  })
+
   it('lists every feed once', () => {
     const ids = NEWS_SOURCE_REGISTRY.map(s => s.id)
     expect(new Set(ids).size).toBe(ids.length)

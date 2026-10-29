@@ -7844,6 +7844,21 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['guyana', 'caribbean', 'south-america'],
     language:        'en',
   },
+  // Iran's first outlet (plan R2, H-0033): a Tehran daily in English that follows the government's line, so flagged state media like Anadolu and CGTN; the feed's channel title is empty, hence the name here; Sage's Oct 28 check: 30 items, newest that day
+  {
+    id:              'tehran-times',
+    name:            'Tehran Times',
+    feedUrl:         'https://www.tehrantimes.com/rss',
+    category:        'geopolitics',
+    biasLabel:       'state-media',
+    reliability:     0.45,
+    countryCode:     'IR',
+    defaultLat:      35.69,
+    defaultLng:      51.39,
+    defaultLocation: 'Tehran, Iran',
+    extraTags:       ['tehran-times', 'iran', 'middle-east', 'state-media'],
+    language:        'en',
+  },
 ]
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────
@@ -8206,6 +8221,8 @@ export const HOME_PIN_SOURCES = new Set([
   'kazakhstan-today-en', 'dhaka-tribune', 'lanka-business-online',
   'tpn-national-th', 'guam-daily-post', 'fritong-post', 'gambiana', 'smart-news-liberia',
   'malawi-voice', 'pml-daily-ug', 'weekend-post-bw', 'inews-guyana',
+  // Oct 29, 2026 (H-0033)
+  'tehran-times',
 ])
 
 export interface InferredGeo {
