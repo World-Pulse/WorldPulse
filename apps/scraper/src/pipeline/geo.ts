@@ -235,6 +235,8 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'grozny':           { lat: 43.3178, lng: 45.6949, country: 'RU' },
   'cluj-napoca':      { lat: 46.7712, lng: 23.6236, country: 'RO', region: 'Cluj' },
   'oshkosh':          { lat: 44.0247, lng: -88.5426, country: 'US', region: 'Wisconsin' },
+  'burlington':       { lat: 43.3255, lng: -79.7990, country: 'CA', region: 'Ontario' },
+  'halton':           { lat: 43.4700, lng: -79.8800, country: 'CA', region: 'Ontario' },
   'idlib':            { lat: 35.9306, lng: 36.6339, country: 'SY' },
   'homs':             { lat: 34.7324, lng: 36.7137, country: 'SY' },
   'latakia':          { lat: 35.5317, lng: 35.7901, country: 'SY' },

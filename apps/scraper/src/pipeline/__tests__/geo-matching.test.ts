@@ -41,6 +41,11 @@ describe('findGazetteerPlace', () => {
     expect(osh?.coords.country).toBe('US')
   })
 
+  it('pins Halton and Burlington in Ontario, not at Burlington, Vermont', () => {
+    expect(findGazetteerPlace('Halton police charge man in Burlington crash')?.coords.country).toBe('CA')
+    expect(findGazetteerPlace('Burlington council approves budget')?.coords.country).toBe('CA')
+  })
+
   it('prefers the place named first, which is the headline', () => {
     expect(findGazetteerPlace('Explosion hits Kherson. Officials in Moscow deny involvement')?.place).toBe('kherson')
     expect(findGazetteerPlace('Talks in New Delhi; Delhi traffic halted')?.place).toBe('new delhi')
