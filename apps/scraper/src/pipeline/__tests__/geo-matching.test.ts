@@ -32,6 +32,15 @@ describe('findGazetteerPlace', () => {
     expect(findGazetteerPlace('Kazan airport closed after drone alert')?.coords.country).toBe('RU')
   })
 
+  it('pins Cluj-Napoca and Oshkosh at their own towns, not at a capital named in the story', () => {
+    const cluj = findGazetteerPlace("'King of Waltz' André Rieu returns to Cluj-Napoca in October 2027")
+    expect(cluj?.place).toBe('cluj-napoca')
+    expect(cluj?.coords.country).toBe('RO')
+    const osh = findGazetteerPlace("Husband of deported Oshkosh teacher speaks out")
+    expect(osh?.place).toBe('oshkosh')
+    expect(osh?.coords.country).toBe('US')
+  })
+
   it('prefers the place named first, which is the headline', () => {
     expect(findGazetteerPlace('Explosion hits Kherson. Officials in Moscow deny involvement')?.place).toBe('kherson')
     expect(findGazetteerPlace('Talks in New Delhi; Delhi traffic halted')?.place).toBe('new delhi')
