@@ -345,7 +345,7 @@ export default function CountriesPage() {
               </h1>
               <p className="text-wp-text3 text-[12px] mt-0.5">
                 Composite risk index · {countries.length} countries tracked
-                {lastUpdated && <span className="ml-2 opacity-60">· updated {timeAgo(lastUpdated.toISOString())} ago</span>}
+                {lastUpdated && <span className="ml-2 opacity-60">· updated {timeAgo(lastUpdated.toISOString()) === 'now' ? 'just now' : `${timeAgo(lastUpdated.toISOString())} ago`}</span>}
               </p>
             </div>
 

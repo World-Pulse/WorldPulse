@@ -275,6 +275,15 @@ services:
     networks:
       - wp_net
     logging: *default-logging
+    # A ceiling on the scraper's memory (Oct 29, 2026): it grows after each
+    # restart (about 900 MB, swap included, two hours after the 9:06 AM one),
+    # and on Oct 28 it ran 18 hours without one until the server's memory and
+    # swap were full and the whole site slowed. Past 1.4 GB in memory plus
+    # 400 MB of swap it is stopped and Docker starts it again (restart:
+    # unless-stopped), as a deploy would. The status file's scraper_process
+    # block shows where its memory goes, to fix the growth itself (PLAN LR10).
+    mem_limit: 1400m
+    memswap_limit: 1800m
 
   web:
     build:

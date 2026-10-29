@@ -457,7 +457,7 @@ export default function PatentsPage() {
                 <h2 className="text-[11px] font-mono text-wp-text3 uppercase tracking-widest">Recent Patent Signals</h2>
                 {data && (
                   <span className="text-[10px] font-mono text-wp-text3">
-                    Updated {timeAgo(data.generated_at)} ago
+                    Updated {timeAgo(data.generated_at) === 'now' ? 'just now' : `${timeAgo(data.generated_at)} ago`}
                   </span>
                 )}
               </div>

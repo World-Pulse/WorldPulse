@@ -723,6 +723,54 @@ if isinstance(db, dict) and isinstance(db.get('longest'), list):
 print(json.dumps(out, separators=(',', ':')))
 PY
 }
+# The scraper's own memory (Oct 29, 2026): it grows after each restart (about
+# 900 MB two hours after the 9:06 AM one; on Oct 28 it ran 18 hours and the
+# server's memory and swap filled). From its heartbeat (scraper:process, every
+# 30 s) and its 5-minute samples (scraper:memory:history, apps/scraper/src/lib/
+# process-health.ts): when it started, its heap (used, total, limit), what it
+# holds outside the heap, and, over the samples since that start, how fast
+# each grows in MB an hour. Numbers only.
+scraper_process() {
+  local pw out
+  pw=$(redis_pw) || pw=""
+  out=$(timeout 15 docker exec -e REDISCLI_AUTH="$pw" wp_redis sh -c '
+      redis-cli --raw HGETALL scraper:process | sed "s/^/h=/"
+      redis-cli --raw LRANGE scraper:memory:history 0 47 | sed "s/^/m=/"' 2>/dev/null) || out=""
+  OUT="$out" python3 - <<'PY' 2>/dev/null || printf 'null'
+import json, os, datetime as dt
+h, samples = [], []
+for line in os.environ.get('OUT', '').splitlines():
+    kind, _, val = line.partition('=')
+    if kind == 'h': h.append(val)
+    elif kind == 'm':
+        try: samples.append(json.loads(val))
+        except ValueError: pass
+proc = dict(zip(h[0::2], h[1::2]))
+if not proc:
+    print('null'); raise SystemExit
+def num(v):
+    try: return int(float(v))
+    except (TypeError, ValueError): return None
+def when(s):
+    try: return dt.datetime.fromisoformat(str(s).replace('Z', '+00:00'))
+    except ValueError: return None
+started = proc.get('started_at')
+out = {'started_at': started, 'last_heartbeat': proc.get('last_heartbeat')}
+t0 = when(started)
+if t0: out['uptime_h'] = round((dt.datetime.now(dt.timezone.utc) - t0).total_seconds() / 3600, 1)
+for k in ('rss_mb', 'heap_used_mb', 'heap_total_mb', 'external_mb', 'array_buffers_mb', 'heap_limit_mb'):
+    out[k] = num(proc.get(k))
+mine = sorted((s for s in samples if s.get('started') == started and when(s.get('at'))), key=lambda s: s['at'])
+if len(mine) >= 2:
+    a, b = mine[0], mine[-1]
+    hours = (when(b['at']) - when(a['at'])).total_seconds() / 3600
+    if hours >= 0.5:
+        out['growth_mb_per_h'] = {k.replace('_mb', ''): round((b.get(k, 0) - a.get(k, 0)) / hours)
+                                  for k in ('heap_used_mb', 'heap_total_mb', 'external_mb', 'rss_mb')}
+        out['growth_over_h'] = round(hours, 1)
+print(json.dumps(out, separators=(',', ':')))
+PY
+}
 # Why the last deploy wasn't clean, from the deploy script's own log lines only
 # (its warnings, or the reason it rolled back or failed); empty when it was clean
 deploy_note() {
@@ -750,6 +798,7 @@ if [ ! -s "$pipe_cache" ] || [ -n "$(find "$pipe_cache" -mmin +29 2>/dev/null)" 
 fi
 pipeline=$(cat "$pipe_cache" 2>/dev/null || true)
 [ -n "$pipeline" ] || pipeline=null
+sproc=$(scraper_process 2>/dev/null | grep -E '^(\{|null)' | head -n 1)
 {
   printf '{"updated":"%s",' "$(date -Is)"
   printf '"commit":"%s",' "$(git rev-parse --short=7 HEAD 2>/dev/null || echo unknown)"
@@ -765,6 +814,7 @@ pipeline=$(cat "$pipe_cache" 2>/dev/null || true)
   printf '"backup":%s,' "$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1])), separators=(",", ":")))' logs/backup-status.json 2>/dev/null || echo null)"
   printf '"containers":{%s},' "$containers"
   printf '"server":%s,' "$(server_load 2>/dev/null | grep '^{' || echo null)"
+  printf '"scraper_process":%s,' "${sproc:-null}"
   printf '"pipeline":%s}\n' "$pipeline"
 } > "logs/public/status.json.$$.tmp" \
   && { python3 scripts/data_health.py "logs/public/status.json.$$.tmp" 2> logs/data-health.err || true; } \

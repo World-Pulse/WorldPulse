@@ -810,7 +810,7 @@ export function FeedList({ tab, category, signupAfter }: { tab: string; category
               {item.time === 'now' || item.time.endsWith('m') && parseInt(item.time) <= 5 ? (
                 <span className="source-badge bg-[rgba(0,230,118,0.15)] text-wp-green border border-[rgba(0,230,118,0.3)] text-[9px] animate-flash-tag">NEW</span>
               ) : null}
-              <span className="ml-auto font-mono text-[12px] text-wp-text3 flex-shrink-0">{item.time} ago</span>
+              <span className="ml-auto font-mono text-[12px] text-wp-text3 flex-shrink-0">{item.time === 'now' ? 'just now' : `${item.time} ago`}</span>
             </div>
 
             {/* Event card for signals */}

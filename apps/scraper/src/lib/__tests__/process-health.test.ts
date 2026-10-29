@@ -3,10 +3,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 // vi.mock factories are hoisted above the imports, so the mocks they use are made in vi.hoisted
-const { mockHset, mockPexpire, mockSet } = vi.hoisted(() => ({
+const { mockHset, mockPexpire, mockSet, mockLpush, mockLtrim } = vi.hoisted(() => ({
   mockHset:    vi.fn().mockResolvedValue(1),
   mockPexpire: vi.fn().mockResolvedValue(1),
   mockSet:     vi.fn().mockResolvedValue('OK'),
+  mockLpush:   vi.fn().mockResolvedValue(1),
+  mockLtrim:   vi.fn().mockResolvedValue('OK'),
 }))
 
 vi.mock('../redis.js', () => ({
@@ -14,6 +16,8 @@ vi.mock('../redis.js', () => ({
     hset:    mockHset,
     pexpire: mockPexpire,
     set:     mockSet,
+    lpush:   mockLpush,
+    ltrim:   mockLtrim,
   },
 }))
 
@@ -74,6 +78,31 @@ describe('startHeartbeat', () => {
     // Timestamps must differ (second tick is later)
     expect(secondTimestamp).not.toBe(firstTimestamp)
 
+    stopHeartbeat(timer)
+  })
+
+  // Oct 29, 2026: where the scraper's memory is, and how it grows since its start
+  it('adds the memory in MB to scraper:process, and a sample to the history every 5 minutes', async () => {
+    mockLpush.mockClear(); mockLtrim.mockClear()
+    const timer = startHeartbeat(30_000)
+    await vi.advanceTimersByTimeAsync(0)
+    const fields = mockHset.mock.calls[0]![1] as Record<string, string>
+    for (const k of ['rss_mb', 'heap_used_mb', 'heap_total_mb', 'external_mb', 'array_buffers_mb', 'heap_limit_mb']) {
+      expect(Number(fields[k])).toBeGreaterThan(-1)
+    }
+    expect(Number(fields['heap_limit_mb'])).toBeGreaterThan(0)
+    expect(mockLpush).toHaveBeenCalledTimes(1)
+    const [key, json] = mockLpush.mock.calls[0]! as [string, string]
+    expect(key).toBe('scraper:memory:history')
+    const sample = JSON.parse(json)
+    expect(sample.started).toBe(fields['started_at'])
+    expect(typeof sample.heap_used_mb).toBe('number')
+    expect(mockLtrim).toHaveBeenCalledWith('scraper:memory:history', 0, 47)
+    // the next heartbeats within 5 minutes add no sample; the one after 5 minutes does
+    await vi.advanceTimersByTimeAsync(4 * 60_000)
+    expect(mockLpush).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(mockLpush).toHaveBeenCalledTimes(2)
     stopHeartbeat(timer)
   })
 
