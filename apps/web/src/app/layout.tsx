@@ -61,9 +61,13 @@ export const metadata: Metadata = {
     title: 'WorldPulse',
   },
   // No og:url here: every page inherits this, and it made each one claim to be
-  // the home page in share previews (pages set their own, lib/page-metadata.ts)
+  // the home page in share previews (pages set their own, lib/page-metadata.ts).
+  // The share cards (LinkedIn, X, Slack, messages) get a hook instead of the
+  // search title (Devon, Oct 29, 2026, on the card in his 500,000-signals post:
+  // the old line was "lame", he wanted one that "catches peoples attention");
+  // the page title above stays the way people search (Oct 20)
   openGraph: {
-    title: 'WorldPulse — How many newsrooms reported each world story',
+    title: 'WorldPulse — Don’t trust one headline. Count the newsrooms.',
     description: "World news with how many independent outlets reported each story, and which ones. Live map, the week's top stories, open data and a free API.",
     type: 'website',
     siteName: 'WorldPulse',
@@ -72,7 +76,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     site: `@${X_HANDLE}`,
-    title: 'WorldPulse — How many newsrooms reported each world story',
+    title: 'WorldPulse — Don’t trust one headline. Count the newsrooms.',
     description: "World news with how many independent outlets reported each story, and which ones. Live map, the week's top stories, open data and a free API.",
     images: ['/og-image.png'],
   },

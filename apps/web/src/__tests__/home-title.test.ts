@@ -2,7 +2,9 @@
  * What WorldPulse calls itself, the way people search (Devon, Oct 20, 2026:
  * the title was "Global Intelligence Network", which put it among the
  * dashboards): the site's title and description, and the same words on the
- * home page, /llms.txt, /developers and the app manifest.
+ * home page, /llms.txt, /developers and the app manifest. The share cards
+ * (Open Graph and X) carry a hook instead (Devon, Oct 29, 2026: the search
+ * title in his LinkedIn post's link card was "lame").
  */
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
@@ -10,6 +12,7 @@ import { join } from 'node:path'
 
 const read = (p: string) => readFileSync(join(__dirname, '..', p), 'utf8')
 const TITLE = 'WorldPulse — How many newsrooms reported each world story'
+const SHARE_TITLE = 'WorldPulse — Don’t trust one headline. Count the newsrooms.'
 
 describe('the title and description', () => {
   it('say what WorldPulse is, the way people search', () => {
@@ -18,7 +21,7 @@ describe('the title and description', () => {
     const layout = read('app/layout.tsx')
     const meta = layout.slice(layout.indexOf('export const metadata'), layout.indexOf('export const dynamic'))
     const titles = [...meta.matchAll(/title: '([^']+)'/g)].map(m => m[1])
-    expect(titles.filter(t => t !== 'WorldPulse')).toEqual([TITLE, TITLE, TITLE])   // page, Open Graph, X
+    expect(titles.filter(t => t !== 'WorldPulse')).toEqual([TITLE, SHARE_TITLE, SHARE_TITLE])   // page (search), Open Graph, X (share cards)
     const descriptions = [...meta.matchAll(/description: "([^"]+)"/g)].map(m => m[1]!)
     expect(descriptions).toHaveLength(3)
     for (const d of descriptions) {
