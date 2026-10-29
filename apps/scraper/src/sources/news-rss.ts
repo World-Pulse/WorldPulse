@@ -8199,10 +8199,11 @@ export const HOME_PIN_SOURCES = new Set([
   'analyst-liberia', '3news-gh', 'egyptian-streets', 'newsday-ls', 'the-reporter-ls',
   'sunday-express-ls', 'zambian-business-times', 'capital-ethiopia', 'newshawks-zw',
   'sabc-news',
-  // Oct 21, 2026 (Q5, round 5)
+  // Oct 21, 2026 (Q5, round 5). bdnews24 left out Oct 29: its site-wide feed carries world business
+  // news, so "Asian shares fall after Alphabet earnings miss" sat in Dhaka
   'luxtoday-lu', 'the-ditch-ie', 'tirana-times', 'cin-ba-en', 'kyiv-post',
   'interfax-ukraine-en', 'keep-talking-greece', 'the-arabian-stories', 'khaleej-times-uae',
-  'kazakhstan-today-en', 'bdnews24', 'dhaka-tribune', 'lanka-business-online',
+  'kazakhstan-today-en', 'dhaka-tribune', 'lanka-business-online',
   'tpn-national-th', 'guam-daily-post', 'fritong-post', 'gambiana', 'smart-news-liberia',
   'malawi-voice', 'pml-daily-ug', 'weekend-post-bw', 'inews-guyana',
 ])

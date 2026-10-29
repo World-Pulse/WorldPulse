@@ -54,6 +54,7 @@ describe('inferGeo', () => {
     expect(HOME_PIN_SOURCES.has('punch-nigeria')).toBe(true)
     expect(HOME_PIN_SOURCES.has('gdacs')).toBe(false)
     expect(HOME_PIN_SOURCES.has('investing-com-news')).toBe(false)
+    expect(HOME_PIN_SOURCES.has('bdnews24')).toBe(false)
     for (const id of HOME_PIN_SOURCES) expect(NEWS_SOURCE_REGISTRY.some(s => s.id === id)).toBe(true)
     expect(inferGeo('8 emerging markets to consider in 2027: HSBC', '', source('investing-com-news')).lat).toBeNull()
   })
