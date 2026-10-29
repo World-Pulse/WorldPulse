@@ -60,6 +60,13 @@ services:
       retries: 5
     logging: *default-logging
 
+  # Meilisearch's memory (Oct 29, 2026): by default it lets indexing use up to
+  # two thirds of the server's memory. The status file's first swap figures
+  # (8:11 AM, right after 914689f) put it first of any container: 742 MiB in
+  # memory and 777 MB in swap (Kafka 199, ZooKeeper 189). The API sends it the
+  # last few minutes' reports every 5 minutes, which needs far less: 256 MiB
+  # (in bytes). scripts/server-deploy.sh recreates it when this block changes;
+  # its indexes stay on the meili_data volume.
   meilisearch:
     image: getmeili/meilisearch:v1.10
     container_name: wp_meilisearch
@@ -68,6 +75,7 @@ services:
       MEILI_MASTER_KEY: ${MEILI_KEY}
       MEILI_ENV:        production
       MEILI_NO_ANALYTICS: "true"
+      MEILI_MAX_INDEXING_MEMORY: "268435456"
     volumes:
       - meili_data:/meili_data
     networks:
