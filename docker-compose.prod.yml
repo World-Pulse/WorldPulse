@@ -88,13 +88,23 @@ services:
       - wp_net
     logging: *default-logging
 
+  # Kafka's memory and health check (Oct 29, 2026): the image starts the broker
+  # with 1 GB of Java heap, and the old check, kafka-topics --list, started a
+  # second Java program every 30 seconds. On Oct 28 the 2-CPU, 4 GB server had
+  # its swap full and 130 MB free, and wp_kafka showed 112% CPU. About ten
+  # topics and some 15,000 messages a day need far less: 256-384 MB of heap,
+  # and the check only asks whether the broker's port answers.
+  # scripts/server-deploy.sh recreates Kafka when this block changes (its
+  # messages stay on the kafka_data volume; ZooKeeper is left as it is).
   kafka:
     image: confluentinc/cp-kafka:7.7.0
     container_name: wp_kafka
     restart: unless-stopped
+    stop_grace_period: 60s
     depends_on:
       - zookeeper
     environment:
+      KAFKA_HEAP_OPTS:                        "-Xms256m -Xmx384m"
       KAFKA_BROKER_ID:                        1
       KAFKA_ZOOKEEPER_CONNECT:                zookeeper:2181
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP:   PLAINTEXT:PLAINTEXT
@@ -108,10 +118,11 @@ services:
     networks:
       - wp_net
     healthcheck:
-      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:29092", "--list"]
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/29092"]
       interval: 30s
       timeout: 10s
       retries: 5
+      start_period: 60s
     logging: *default-logging
 
   # ─── APPLICATIONS ──────────────────────────────────────────────────────────

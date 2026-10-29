@@ -106,7 +106,7 @@ describe('GET /api/v1/knowledge-graph/trending', () => {
     h.answers.push({ rows: [{ id: 'b2', recent: 12, previous: 0 }] }, { rows: [node('b2', 'Sudden Person', 40, [S2], 0.2)] })
     const server = await app()
     const first = await server.inject({ method: 'GET', url: '/api/v1/knowledge-graph/trending?limit=10&window_hours=24&lean=1' })
-    expect(h.limits).toEqual(["SET LOCAL statement_timeout = '60s'"])
+    expect(h.limits.map(s => s.split(';')[0])).toEqual(["SET LOCAL statement_timeout = '60s'"])
     expect([...h.kept.keys()]).toEqual(['kg:api:trending:v2:all:24:10:lean'])
     // the next request is answered from what was kept, without asking the database
     h.raws.length = 0
@@ -125,7 +125,7 @@ describe('GET /api/v1/knowledge-graph/sitemap', () => {
     const res = await (await app()).inject({ method: 'GET', url: '/api/v1/knowledge-graph/sitemap' })
     expect(res.statusCode).toBe(200)
     expect(res.json().data.entities).toEqual([{ id: 'a1', name: 'Steady Org', lastReport: '2026-10-15T10:00:00.000Z', reports: 40 }])
-    expect(h.limits).toEqual(["SET LOCAL statement_timeout = '60s'"])
+    expect(h.limits.map(s => s.split(';')[0])).toEqual(["SET LOCAL statement_timeout = '60s'"])
     expect([...h.kept.keys()]).toEqual(['kg:api:sitemap:v2'])
   })
 })

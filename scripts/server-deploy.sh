@@ -145,7 +145,14 @@ rollback() {
 reload_nginx() { docker exec wp_nginx nginx -s reload >/dev/null 2>&1 || true; }
 
 # Make sure the supporting services exist and run (recreates any that went missing)
-$COMPOSE up -d --no-recreate postgres redis meilisearch zookeeper kafka
+$COMPOSE up -d --no-recreate postgres redis meilisearch zookeeper
+# Kafka is recreated when its block in docker-compose.prod.yml changes (Oct 29,
+# 2026: its memory cap and light health check; until then it kept whatever it
+# was first made with). Its messages are on the kafka_data volume, and ZooKeeper,
+# which holds its topics and cluster id, is never recreated here. Unchanged, this
+# leaves it running. The API and scraper are recreated just below, after it.
+$COMPOSE up -d --no-deps kafka
+wait_healthy wp_kafka 150 || log "Kafka isn't answering yet; the API and scraper keep retrying until it does"
 
 $COMPOSE up -d --no-deps --force-recreate api
 wait_healthy wp_api 180 || rollback "API failed its health check"

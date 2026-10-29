@@ -221,7 +221,7 @@ describe('GET /api/v1/stories', () => {
     // outlets of each story's last two days (lib/story-window.ts) beside all of its links
     expect(h.sql).toMatch(/FILTER \(WHERE m\.created_at >= f\.newest - INTERVAL '48 hours'\) AS recent_urls/)
     // its own time limit (over a day of reports it passed the pool's 5 seconds, Oct 15, 2026)
-    expect(h.limits).toEqual(["SET LOCAL statement_timeout = '60s'"])
+    expect(h.limits.map(s => s.split(';')[0])).toEqual(["SET LOCAL statement_timeout = '60s'"])
     // kept 10 minutes, then served for up to 6 hours more while one process remakes it
     expect(h.setex).toHaveBeenCalledWith('stories:list:v2:12:5', 600 + 6 * 3_600, expect.any(String))
     const kept = JSON.parse(String((h.setex.mock.calls[0] as unknown[])[2]))

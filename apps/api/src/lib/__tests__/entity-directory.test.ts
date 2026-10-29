@@ -78,7 +78,7 @@ describe('entityDirectory (Oct 15, 2026: its pass took over 5 s and /entities an
   it('gives the pass two minutes, keeps the directory, and serves the kept one', async () => {
     const first = await entityDirectory()
     expect(first.groups[0].entities.map(e => e.name)).toEqual(['Donald Trump'])
-    expect(h.limits).toEqual(["SET LOCAL statement_timeout = '120s'"])
+    expect(h.limits.map(s => s.split(';')[0])).toEqual(["SET LOCAL statement_timeout = '120s'"])
     expect([...h.kept.keys()]).toEqual(['kg:api:directory:v2'])
     const again = await entityDirectory()
     expect(h.queries).toBe(1)

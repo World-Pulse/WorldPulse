@@ -609,7 +609,9 @@ server_load() {
         2>/dev/null | tr -d '\r' | grep '^{' | head -n 1) || act2=""
   # Which container each of those connections comes from (its address on Docker's network)
   ips=$(timeout 10 docker inspect -f '{{.Name}}|{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' $(docker ps -q 2>/dev/null) 2>/dev/null) || ips=""
-  STATS="$stats" ACT="$act" ACT2="$act2" IPS="$ips" python3 - <<'PY'
+  # Each container's full id, to find its memory group (its swap, below)
+  ids=$(timeout 10 docker ps --no-trunc --format '{{.Names}}|{{.ID}}' 2>/dev/null) || ids=""
+  STATS="$stats" ACT="$act" ACT2="$act2" IPS="$ips" IDS="$ids" python3 - <<'PY'
 import json, os
 def num(s):
     try:
@@ -637,6 +639,62 @@ for line in os.environ.get('STATS', '').splitlines():
     parts = line.split('|')
     if len(parts) == 3:
         cont[parts[0]] = {'cpu_pct': num(parts[1].strip().rstrip('%')), 'mem': parts[2].split('/')[0].strip()}
+# Swap (Oct 29, 2026): docker stats leaves it out. On Oct 28 the 4 GB swap was
+# full and 130 MB of memory free, while the containers' figures above added up
+# to 2.3 GB: what the server had pushed out to disk, and whose it was, showed
+# nowhere. Each container's from its memory group (cgroup v2, or v1), in MB;
+# then the processes holding the most, with the container each runs in ("host"
+# for the server's own). Process names only, never their command lines.
+import re
+CG = os.environ.get('CGROUP_ROOT') or '/sys/fs/cgroup'
+PROC = os.environ.get('PROC_ROOT') or '/proc'
+def read_int(path):
+    try:
+        return int(open(path).read().split()[0])
+    except (OSError, ValueError, IndexError):
+        return None
+def swap_bytes(cid):
+    for d in (f'{CG}/system.slice/docker-{cid}.scope', f'{CG}/docker/{cid}'):
+        if os.path.isfile(d + '/memory.swap.current'):
+            return read_int(d + '/memory.swap.current')
+    for d in (f'{CG}/memory/docker/{cid}', f'{CG}/memory/system.slice/docker-{cid}.scope'):
+        both, ram = read_int(d + '/memory.memsw.usage_in_bytes'), read_int(d + '/memory.usage_in_bytes')
+        if both is not None and ram is not None:
+            return max(0, both - ram)
+    return None
+ids = {}
+for line in os.environ.get('IDS', '').splitlines():
+    name, _, cid = line.partition('|')
+    if re.fullmatch(r'[0-9a-f]{64}', cid.strip()):
+        ids[cid.strip()] = name.strip()
+for cid, name in ids.items():
+    sw = swap_bytes(cid)
+    if sw is not None and name in cont:
+        cont[name]['swap_mb'] = sw // 1048576
+holders = []
+try:
+    pids = [p for p in os.listdir(PROC) if p.isdigit()]
+except OSError:
+    pids = []
+for pid in pids:
+    try:
+        status = open(f'{PROC}/{pid}/status').read()
+    except OSError:
+        continue
+    pname = re.search(r'^Name:\s*(.*)$', status, re.M)
+    vm = re.search(r'^VmSwap:\s*(\d+)\s*kB', status, re.M)
+    if not vm or int(vm.group(1)) < 1024:
+        continue
+    where = 'host'
+    try:
+        m = re.search(r'docker-([0-9a-f]{64})\.scope|/docker/([0-9a-f]{64})', open(f'{PROC}/{pid}/cgroup').read())
+        if m:
+            where = ids.get(m.group(1) or m.group(2), 'another container')
+    except OSError:
+        pass
+    holders.append((int(vm.group(1)), (pname.group(1).strip() if pname else '?')[:32], where))
+holders.sort(reverse=True)
+out['swap_top'] = [{'process': n, 'in': w, 'swap_mb': kb // 1024} for kb, n, w in holders[:8]] or None
 out['containers'] = cont or None
 try:
     out['database'] = json.loads(os.environ.get('ACT') or 'null')

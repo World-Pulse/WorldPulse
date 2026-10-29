@@ -16,7 +16,7 @@ const redisMock = {
 }
 vi.mock('../../db/redis', () => ({ get redis() { return redisMock } }))
 
-import { staleWhileRevalidate } from '../swr-cache'
+import { staleWhileRevalidate, remakeNow } from '../swr-cache'
 
 const opts = { freshSeconds: 900, staleSeconds: 7200 }
 const flush = () => new Promise(r => setTimeout(r, 0))
@@ -85,5 +85,45 @@ describe('staleWhileRevalidate', () => {
     redisMock.get.mockRejectedValueOnce(new Error('down'))
     redisMock.setex.mockRejectedValueOnce(new Error('down'))
     expect(await staleWhileRevalidate('k', opts, async () => 'v')).toBe('v')
+  })
+
+  // Oct 29, 2026: on Oct 28 the stories list's remake outlived its 2-minute lock, each lapse
+  // started one more (three of the same query at once), and with nothing kept every visitor
+  // started their own
+  it('with nothing kept, callers arriving meanwhile wait for the same make', async () => {
+    let finish: (v: string) => void = () => {}
+    const make = vi.fn(() => new Promise<string>(r => { finish = r }))
+    const first = staleWhileRevalidate('cold-share', opts, make)
+    const second = staleWhileRevalidate('cold-share', opts, make)
+    await flush(); await flush()
+    expect(make).toHaveBeenCalledTimes(1)
+    finish('made')
+    expect(await first).toBe('made')
+    expect(await second).toBe('made')
+    expect(make).toHaveBeenCalledTimes(1)
+    // settled: the next one, once too old, makes again
+    vi.setSystemTime(new Date('2026-10-13T07:00:00Z'))
+    expect(await staleWhileRevalidate('cold-share', opts, async () => 'again')).toBe('again')
+  })
+
+  it("starts no second remake in this process while one is under way, even after its Redis lock lapsed", async () => {
+    await staleWhileRevalidate('lapsed', opts, async () => 'old')
+    vi.setSystemTime(new Date('2026-10-13T04:20:00Z'))
+    let finish: (v: string) => void = () => {}
+    const make = vi.fn(() => new Promise<string>(r => { finish = r }))
+    expect(await staleWhileRevalidate('lapsed', opts, make)).toBe('old')
+    await flush()
+    store.delete('lapsed:refreshing')   // the lock's time ran out while the remake still runs
+    expect(await staleWhileRevalidate('lapsed', opts, make)).toBe('old')
+    expect(await remakeNow('lapsed', opts, make)).toBe(false)
+    expect(make).toHaveBeenCalledTimes(1)
+    finish('new')
+    await flush(); await flush(); await flush()
+    expect(await staleWhileRevalidate('lapsed', opts, make)).toBe('new')
+  })
+
+  it('a make that fails leaves nothing behind: the next caller tries again', async () => {
+    await expect(staleWhileRevalidate('fails', opts, async () => { throw new Error('timeout') })).rejects.toThrow('timeout')
+    expect(await staleWhileRevalidate('fails', opts, async () => 'ok')).toBe('ok')
   })
 })

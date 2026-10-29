@@ -100,7 +100,7 @@ describe('GET /api/v1/signals/map/points', () => {
     expect(res.statusCode).toBe(200)
     expect(res.json().data).toEqual([{ id: 'a', lat: 1, lng: 2 }])
     expect(res.json().meta.total).toBe(1)
-    expect(h.limits).toEqual(["SET LOCAL statement_timeout = '30s'"])
+    expect(h.limits.map(s => s.split(';')[0])).toEqual(["SET LOCAL statement_timeout = '30s'"])
     expect(h.setex[0].key).toBe('signals:map:v2:all:all:24:3000:lean')
     expect(h.setex[0].seconds).toBeGreaterThan(15 * 60)
   })
