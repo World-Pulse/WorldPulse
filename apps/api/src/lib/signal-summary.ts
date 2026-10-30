@@ -314,6 +314,15 @@ export async function readSignalSummary(signal: SignalSummaryInput): Promise<AIS
 }
 
 /** One of the day's AI summaries, if any are left (none when Redis can't count) */
+/** How many AI summaries the day's limit has counted so far (the UTC day); on any Redis trouble, as many as allowed */
+export async function summariesUsedToday(now = new Date()): Promise<number> {
+  try {
+    return Number((await redis.get(COUNT_KEY(now))) || 0)
+  } catch {
+    return summaryDailyLimit()
+  }
+}
+
 export async function takeSummarySlot(now = new Date()): Promise<boolean> {
   try {
     const key = COUNT_KEY(now)
