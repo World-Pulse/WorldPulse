@@ -2,7 +2,7 @@
 Password-guessing bots shut out of SSH (scripts/ssh-guard.sh), plan LR11, Oct 30, 2026.
 Run: python3 -m unittest scripts/test_ssh_guard.py  (from the repository's top folder)
 
-The system's commands (apt-get, systemctl, fail2ban-client, python3's systemd check, sleep)
+The system's commands (apt-get, dpkg, systemctl, fail2ban-client, python3's systemd check, sleep)
 are stand-ins on PATH that record how they were called.
 """
 import json
@@ -39,7 +39,11 @@ echo "systemctl $*" >> "$CALLS"
 exit 0
 """
 DPKG = """#!/bin/bash
-[ "$1" = --audit ] && printf 'The following packages are only half configured, probably due to problems\nconfiguring them the first time.\n libssl3t64:amd64     Secure Sockets Layer toolkit - shared libraries\n openssh-server       secure shell (SSH) server\n'
+echo "dpkg $*" >> "$CALLS"
+if [ "$1" = --audit ] && [ -n "${DPKG_HALF:-}" ]; then
+  printf 'The following packages are only half configured, probably due to problems\nconfiguring them the first time.\n'
+  for p in $DPKG_HALF; do printf ' %-20s a package\n' "$p"; done
+fi
 exit 0
 """
 PY = """#!/bin/bash
@@ -74,7 +78,8 @@ class SshGuard(unittest.TestCase):
 
     def run_guard(self, **env):
         e = {'PATH': self.bin + ':/usr/bin:/bin', 'BIN': self.bin, 'CALLS': self.calls, 'SSH_GUARD_JAIL': self.jail,
-             'SSH_GUARD_PYTHON': os.path.join(self.bin, 'python3'), 'SSH_GUARD_F2B': os.path.join(self.bin, 'fail2ban-client'), 'SSH_GUARD_AUTH_LOG': os.path.join(self.dir, 'auth.log')}
+             'SSH_GUARD_PYTHON': os.path.join(self.bin, 'python3'), 'SSH_GUARD_F2B': os.path.join(self.bin, 'fail2ban-client'), 'SSH_GUARD_AUTH_LOG': os.path.join(self.dir, 'auth.log'),
+             'SSH_GUARD_DPKG_UPDATES': os.path.join(self.dir, 'dpkg-updates')}
         e.update({k: str(v) for k, v in env.items()})
         r = subprocess.run(['bash', os.path.join(self.dir, 'scripts', 'ssh-guard.sh')], capture_output=True, text=True, env=e)
         self.assertEqual(r.returncode, 0, r.stderr)
@@ -154,11 +159,37 @@ class SshGuard(unittest.TestCase):
         self.assertFalse(os.path.exists(self.jail))
         self.assertIn("didn't install", r.stdout)
 
-    def test_names_the_packages_an_interrupted_install_left_half_done(self):
-        self.run_guard(APT_FAIL_FIRST=5, APT_ERROR="E: dpkg was interrupted, you must manually run 'dpkg --configure -a' to correct the problem.")
-        note = self.status()['note']
-        self.assertIn('dpkg was interrupted; half done: libssl3t64:amd64 openssh-server', note)
-        self.assertNotIn('dpkg --configure', ' '.join(self.calls_made()))   # nothing is run to fix it here
+    def test_finishes_an_interrupted_install_first_then_installs(self):
+        os.makedirs(os.path.join(self.dir, 'dpkg-updates'))
+        open(os.path.join(self.dir, 'dpkg-updates', '0001'), 'w').close()    # dpkg's journal of a run cut off
+        r = self.run_guard()
+        calls = self.calls_made()
+        conf = [i for i, c in enumerate(calls) if c.startswith('dpkg --configure -a')]
+        inst = [i for i, c in enumerate(calls) if c.startswith('apt-get') and ' install ' in c]
+        self.assertEqual(len(conf), 1, calls)
+        self.assertLess(conf[0], inst[0])
+        self.assertEqual(self.status()['ok'], True)
+        self.assertIn('Finishing an interrupted install (half done: none named)', r.stdout)
+
+    def test_finishes_half_done_packages_that_restart_no_containers(self):
+        self.run_guard(DPKG_HALF='libssl3t64:amd64 openssh-server')
+        self.assertIn('dpkg --configure -a --force-confdef --force-confold', self.calls_made())
+        self.assertEqual(self.status()['ok'], True)
+
+    def test_leaves_half_done_docker_packages_for_a_decision(self):
+        r = self.run_guard(DPKG_HALF='containerd.io docker-ce libssl3t64:amd64')
+        calls = self.calls_made()
+        self.assertFalse(any(c.startswith('dpkg --configure') for c in calls), calls)
+        self.assertFalse(any(c.startswith('apt-get') for c in calls), calls)
+        st = self.status()
+        self.assertEqual(st['ok'], False)
+        self.assertIn('containerd.io docker-ce', st['note'])
+        self.assertIn('waits for a decision', st['note'])
+
+    def test_names_the_packages_when_the_install_still_fails(self):
+        self.run_guard(DPKG_HALF='libssl3t64:amd64 openssh-server', APT_FAIL_FIRST=5,
+                       APT_ERROR="E: dpkg was interrupted, you must manually run 'dpkg --configure -a' to correct the problem.")
+        self.assertIn('dpkg was interrupted; half done: libssl3t64:amd64 openssh-server', self.status()['note'])
 
     def test_a_jail_that_does_not_answer_is_reported(self):
         self.installed()

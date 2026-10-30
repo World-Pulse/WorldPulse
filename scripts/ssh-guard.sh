@@ -30,8 +30,29 @@ if ! command -v "$F2B" > /dev/null 2>&1; then
     log "No apt-get here: fail2ban not set up"; status false "no apt-get on this server"; exit 0
   fi
   log "Installing fail2ban"
-  export DEBIAN_FRONTEND=noninteractive
+  # No questions, the settings files kept as they are, and no service restarted by needrestart
+  # after apt runs (Ubuntu 24.04 restarts services that use updated libraries; Docker among them)
+  export DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1
   opts=(-y -q -o DPkg::Lock::Timeout=180 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
+  # An install cut off part way (Oct 30: "dpkg was interrupted", most likely in the Oct 28 memory
+  # crunch) stops every install, the system's own security updates included. When no package
+  # it left half done is one whose finishing restarts Docker (and so every container), it is
+  # finished first (dpkg --configure -a); otherwise it waits for a decision, named in the status.
+  UPDATES=${SSH_GUARD_DPKG_UPDATES:-/var/lib/dpkg/updates}   # dpkg's journal of a run that was cut off
+  if [ -n "$(ls -A "$UPDATES" 2> /dev/null)" ] || dpkg --audit 2> /dev/null | grep -q '^ [a-z0-9]'; then
+    half=$(dpkg --audit 2> /dev/null | sed -n 's/^ \([a-z0-9][a-z0-9.+:-]*\) .*/\1/p' | head -n 15 | paste -sd ' ' - | tr -cd 'a-z0-9 .+:-' | cut -c1-300)
+    if printf '%s' "$half" | grep -qE '(^| )(docker|containerd|runc)'; then
+      log "An interrupted install left Docker's packages half done ($half): waiting for a decision"
+      status false "an interrupted install left Docker's packages half done: $half; finishing it restarts every container, so it waits for a decision"
+      exit 0
+    fi
+    log "Finishing an interrupted install (half done: ${half:-none named})"
+    if dpkg --configure -a --force-confdef --force-confold > logs/ssh-guard-dpkg.log 2>&1; then
+      echo "$(date -Is) finished an interrupted install (half done: ${half:-none named})" >> logs/ssh-guard-dpkg-done.log
+    else
+      log "dpkg --configure -a failed (logs/ssh-guard-dpkg.log)"
+    fi
+  fi
   if ! apt-get install "${opts[@]}" fail2ban > logs/ssh-guard-install.log 2>&1; then
     # The package lists may be old: refresh them once and try again
     apt-get update -q -o DPkg::Lock::Timeout=180 >> logs/ssh-guard-install.log 2>&1 || true
