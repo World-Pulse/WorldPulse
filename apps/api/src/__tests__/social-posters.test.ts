@@ -122,6 +122,8 @@ describe('posting', () => {
     expect(h.kv.get('social:telegram:pause')).toBe('1')
     expect((await runSocialPosts(minutes(MORNING, 10))).telegram).toBe('paused after an error')
     expect(JSON.parse(h.kv.get('social:status')!).telegram.last_error).toMatch(/Telegram 403/)
+    // each pass says what it did, so an hour with no post and no error still reads (Oct 30, 2026)
+    expect(JSON.parse(h.kv.get('social:status')!).last_pass).toEqual({ at: minutes(MORNING, 10).toISOString(), telegram: 'paused after an error' })
   })
 
   it('posts to Bluesky with the story card as the link preview', async () => {

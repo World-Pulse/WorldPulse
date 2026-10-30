@@ -229,8 +229,19 @@ export async function runSocialPosts(now: Date = new Date()): Promise<Record<Cha
       console.error(`[SOCIAL] ${channel} post failed; paused for an hour: ${message}`)
     }
   }
+  // What each channel did this pass ("paused after an error", "waiting between posts", "posted: ..."), so the
+  // status file shows why nothing went out (Oct 30, 2026: after Bluesky's refused sign-ins, hours with no post
+  // and no error said nothing either way)
+  status.last_pass = { at: now.toISOString(), ...Object.fromEntries(channels.map(c => [c, result[c].slice(0, 120)])) }
   await redis.set('social:status', JSON.stringify(status), 'EX', 2 * 86_400).catch(() => {})
   return result
+}
+
+/** A pass that failed before any channel was tried (the stories query, say), recorded like the others */
+async function notePassFailed(err: unknown, now: Date = new Date()): Promise<void> {
+  console.error('[SOCIAL] pass failed:', err)
+  status.last_pass = { at: now.toISOString(), failed: String((err as Error)?.message ?? err).replace(/bot\d+:[\w-]+/g, 'bot***').slice(0, 160) }
+  await redis.set('social:status', JSON.stringify(status), 'EX', 2 * 86_400).catch(() => {})
 }
 
 let timer: ReturnType<typeof setInterval> | null = null
@@ -240,7 +251,7 @@ export function startSocialPosters(): void {
   const on = (Object.keys(RULES) as Channel[]).filter(configured)
   console.log(on.length ? `[SOCIAL] Automatic posts on for: ${on.join(', ')}` : '[SOCIAL] Automatic posts off (no Telegram, Bluesky or X keys)')
   if (!on.length) return
-  timer = setInterval(() => { void runSocialPosts().catch(err => console.error('[SOCIAL] pass failed:', err)) }, TICK_MS)
+  timer = setInterval(() => { void runSocialPosts().catch(err => notePassFailed(err)) }, TICK_MS)
 }
 
 export function stopSocialPosters(): void {
