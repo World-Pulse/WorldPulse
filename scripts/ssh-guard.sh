@@ -38,6 +38,12 @@ if ! command -v "$F2B" > /dev/null 2>&1; then
     if ! apt-get install "${opts[@]}" fail2ban >> logs/ssh-guard-install.log 2>&1; then
       # apt's last error line and the system's name go in the status, so the status file says why
       why=$(grep -E '^(E|W): ' logs/ssh-guard-install.log | tail -n 1 | tr -cd 'A-Za-z0-9 .,:;/()_+=-' | cut -c1-160)
+      # An interrupted package install (Oct 30: "dpkg was interrupted") also holds back the system's
+      # own updates: name the packages left half done, so the fix can be weighed before it runs
+      if grep -q 'dpkg was interrupted' logs/ssh-guard-install.log; then
+        half=$(dpkg --audit 2> /dev/null | sed -n 's/^ \([a-z0-9][a-z0-9.+:-]*\) .*/\1/p' | head -n 15 | paste -sd ' ' - | tr -cd 'a-z0-9 .+:-' | cut -c1-300)
+        why="dpkg was interrupted; half done: ${half:-none named}"
+      fi
       os=$( (. /etc/os-release 2> /dev/null && printf '%s' "${PRETTY_NAME:-}") | tr -cd 'A-Za-z0-9 .()_-' | cut -c1-60)
       log "fail2ban didn't install: ${why:-see logs/ssh-guard-install.log}"
       status false "fail2ban did not install${why:+: $why}${os:+ ($os)}"; exit 0

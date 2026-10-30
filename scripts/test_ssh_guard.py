@@ -27,7 +27,7 @@ echo "apt-get $*" >> "$CALLS"
 for a in "$@"; do
   if [ "$a" = install ]; then
     n=$(cat "$BIN/.apt_tries" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$BIN/.apt_tries"
-    [ "$n" -le "${APT_FAIL_FIRST:-0}" ] && { echo 'E: Unable to locate package "fail2ban"'; exit 100; }
+    [ "$n" -le "${APT_FAIL_FIRST:-0}" ] && { echo "${APT_ERROR:-E: Unable to locate package \"fail2ban\"}"; exit 100; }
     cp "$BIN/.f2b" "$BIN/fail2ban-client" && chmod +x "$BIN/fail2ban-client"
   fi
 done
@@ -36,6 +36,10 @@ exit 0
 SYSTEMCTL = """#!/bin/bash
 echo "systemctl $*" >> "$CALLS"
 [ "$1" = is-active ] && exit "${ACTIVE_RC:-0}"
+exit 0
+"""
+DPKG = """#!/bin/bash
+[ "$1" = --audit ] && printf 'The following packages are only half configured, probably due to problems\nconfiguring them the first time.\n libssl3t64:amd64     Secure Sockets Layer toolkit - shared libraries\n openssh-server       secure shell (SSH) server\n'
 exit 0
 """
 PY = """#!/bin/bash
@@ -52,7 +56,7 @@ class SshGuard(unittest.TestCase):
         shutil.copy(SCRIPT, os.path.join(d, 'scripts', 'ssh-guard.sh'))
         self.bin = os.path.join(d, 'bin')
         os.makedirs(self.bin)
-        for name, text in (('.f2b', F2B), ('apt-get', APT), ('systemctl', SYSTEMCTL), ('python3', PY), ('sleep', '#!/bin/bash\nexit 0\n')):
+        for name, text in (('.f2b', F2B), ('apt-get', APT), ('systemctl', SYSTEMCTL), ('python3', PY), ('dpkg', DPKG), ('sleep', '#!/bin/bash\nexit 0\n')):
             p = os.path.join(self.bin, name)
             with open(p, 'w') as fh:
                 fh.write(text)
@@ -149,6 +153,12 @@ class SshGuard(unittest.TestCase):
         self.assertTrue(st['note'].startswith('fail2ban did not install: E: Unable to locate package fail2ban'), st['note'])
         self.assertFalse(os.path.exists(self.jail))
         self.assertIn("didn't install", r.stdout)
+
+    def test_names_the_packages_an_interrupted_install_left_half_done(self):
+        self.run_guard(APT_FAIL_FIRST=5, APT_ERROR="E: dpkg was interrupted, you must manually run 'dpkg --configure -a' to correct the problem.")
+        note = self.status()['note']
+        self.assertIn('dpkg was interrupted; half done: libssl3t64:amd64 openssh-server', note)
+        self.assertNotIn('dpkg --configure', ' '.join(self.calls_made()))   # nothing is run to fix it here
 
     def test_a_jail_that_does_not_answer_is_reported(self):
         self.installed()
