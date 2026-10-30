@@ -79,6 +79,11 @@ export function acledSeverity(
 
 // ─── MAIN POLLER ────────────────────────────────────────────────────────────
 
+/** Whether ACLED's keys are set (its API answers only to an account since 2025) */
+export function acledConfigured(env: Record<string, string | undefined>): boolean {
+  return !!(env.ACLED_API_KEY || '').trim() && !!(env.ACLED_API_EMAIL || '').trim()
+}
+
 export function startAcledPoller(
   db:       Knex,
   redis:    Redis,
@@ -87,6 +92,16 @@ export function startAcledPoller(
   const INTERVAL_MS = Number(process.env.ACLED_INTERVAL_MS ?? 30 * 60_000)
   const API_KEY     = process.env.ACLED_API_KEY ?? ''
   const API_EMAIL   = process.env.ACLED_API_EMAIL ?? ''
+
+  // Plan N11 (Oct 30, 2026): ACLED's API sits behind an account now. The old public address no longer
+  // exists and the new one answers "authentication required", so without a login this poller only failed
+  // every 30 minutes (data_health's failing sources). Devon, Oct 29: no account for now. It stays off
+  // until its keys are set; then the reader is rewritten for the new sign-in (a token).
+  if (!acledConfigured(process.env)) {
+    log.info('ACLED is off: its API needs an account (set ACLED_API_KEY and ACLED_API_EMAIL); plan N11')
+    void redis.del('scraper:cb:acled').catch(() => {})
+    return () => {}
+  }
 
   async function poll(): Promise<void> {
     try {

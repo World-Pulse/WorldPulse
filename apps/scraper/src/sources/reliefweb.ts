@@ -285,12 +285,27 @@ async function fetchFromRss(): Promise<ReliefWebItem[]> {
 
 // ─── POLLER ─────────────────────────────────────────────────────────────────
 
+/** Whether ReliefWeb's approved app name is set (its RSS turns automated readers away) */
+export function reliefWebConfigured(env: Record<string, string | undefined>): boolean {
+  return !!(env.RELIEFWEB_APPNAME || '').trim()
+}
+
 export function startReliefWebPoller(
   db: Knex,
   redis: Redis,
   producer?: Producer | null,
 ): () => void {
   let timer: ReturnType<typeof setInterval>
+
+  // Plan N11 (Oct 30, 2026): ReliefWeb takes automated readers only through its API with an approved app
+  // name; its RSS turns the server away (HTTP 406), so without one this poller only failed every 30
+  // minutes. Devon, Oct 29: no app name for now; Copernicus EMS's activations (copernicus-ems.ts) cover
+  // the disasters meanwhile. It stays off until RELIEFWEB_APPNAME is set.
+  if (!reliefWebConfigured(process.env)) {
+    log.info('ReliefWeb is off: it needs an approved app name (set RELIEFWEB_APPNAME); plan N11')
+    void redis.del('scraper:cb:reliefweb').catch(() => {})
+    return () => {}
+  }
 
   async function poll(): Promise<void> {
     try {

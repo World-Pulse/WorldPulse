@@ -35,6 +35,7 @@ import { extractGeo }                  from '../pipeline/geo'
 import { classifyContent }             from '../pipeline/classify'
 import { CAMEO_LABEL }                 from '../pipeline/event-titles'
 import { isoFromFips }                 from '../pipeline/fips-countries'
+import { GDELT_BUCKET }                from '../pipeline/gdelt-articles'
 
 const log = rootLogger.child({ module: 'gdelt-source' })
 
@@ -42,7 +43,11 @@ const inflateRawAsync = promisify(zlib.inflateRaw)
 
 // ─── CONSTANTS ──────────────────────────────────────────────────────────────
 
-const LASTUPDATE_URL  = 'http://data.gdeltproject.org/gdeltv2/lastupdate.txt'
+// GDELT's files from its storage bucket's own address (plan N11, Oct 30, 2026), as the article reader has
+// read them since Oct 23: data.gdeltproject.org is the same bucket behind Google's edge cache, which keeps
+// a "not found" for an hour when a file is asked for a moment before GDELT uploads it. That was the
+// "GDELT CSV export: HTTP 404" in data_health's failing sources, right after each scraper restart.
+const LASTUPDATE_URL  = `${GDELT_BUCKET}/lastupdate.txt`
 const RELIABILITY     = 0.65
 const DEDUP_TTL_S     = 86_400   // 24 h — per-event dedup
 const FILE_TTL_S      = 1_200   // 20 min — prevent re-processing the same file
@@ -140,6 +145,11 @@ export function parseLastUpdateUrl(text: string): string | null {
     if (url.endsWith('.export.CSV.zip')) return url
   }
   return null
+}
+
+/** A file's address in GDELT's storage bucket ("http://data.gdeltproject.org/gdeltv2/X" → "<bucket>/X"); other addresses as they are */
+export function bucketUrl(url: string): string {
+  return url.replace(/^https?:\/\/data\.gdeltproject\.org\/gdeltv2\//i, `${GDELT_BUCKET}/`)
 }
 
 /** Fields extracted from a single GDELT event TSV row. */
@@ -294,7 +304,8 @@ export function startGdeltPoller(
         if (err instanceof CircuitOpenError) return
         throw err
       }
-      const zipUrl = parseLastUpdateUrl(updateText)
+      const listed = parseLastUpdateUrl(updateText)
+      const zipUrl = listed ? bucketUrl(listed) : null
       if (!zipUrl) {
         log.warn('GDELT: no .export.CSV.zip URL found in lastupdate.txt')
         return

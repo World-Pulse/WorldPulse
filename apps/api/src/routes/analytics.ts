@@ -839,7 +839,7 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
       'osint', 'rss', 'news', 'gdelt', 'firms', 'acled', 'iaea', 'usgs',
       'safecast', 'reliefweb', 'noaa', 'nws', 'otx', 'ofac', 'who', 'unhcr',
       'interpol', 'cisa', 'celestrak', 'gpsjam', 'adsb', 'ais', 'comtrade',
-      'alienvault', 'gvp', 'asn', 'viirs', 'nasa',
+      'alienvault', 'gvp', 'asn', 'viirs', 'nasa', 'copernicus', 'cems',
       'critical', 'high', 'medium', 'low', 'info',
       'conflict', 'climate', 'economy', 'technology', 'health', 'elections',
       'culture', 'humanitarian', 'science', 'security', 'breaking',

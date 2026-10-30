@@ -16,11 +16,12 @@
  *   - IAEA Nuclear Events — nuclear safety incidents & radiation events (30-min polls)
  *   - Market Intelligence — VIX, S&P 500, NASDAQ, BTC, Crude Oil via Yahoo Finance (15-min polls)
  *
- *   - ACLED Conflict & Protest — armed conflict, protests, riots, political violence (30-min polls)
+ *   - ACLED Conflict & Protest — armed conflict, protests, riots, political violence (30-min polls; off without an account, plan N11)
  *   - Safecast Radiation — crowdsourced environmental radiation monitoring (30-min polls)
  *   - CISA KEV Cybersecurity — actively exploited vulnerabilities catalog (30-min polls)
  *   - OFAC Sanctions — US Treasury sanctions designations & SDN updates (30-min polls)
- *   - UN ReliefWeb — humanitarian crises, disasters & emergencies (30-min polls)
+ *   - UN ReliefWeb — humanitarian crises, disasters & emergencies (30-min polls; off without an approved app name, plan N11)
+ *   - Copernicus EMS — EU rapid mapping activations for disasters (30-min polls; plan N11)
  *
  *   - NWS Severe Weather — NOAA National Weather Service CAP alerts (10-min polls)
  *   - AlienVault OTX — community cyber threat intelligence pulses (30-min polls)
@@ -74,6 +75,7 @@ import { startSafecastPoller } from './safecast'
 import { startCisaKevPoller } from './cisa-kev'
 import { startOfacSanctionsPoller } from './ofac-sanctions'
 import { startReliefWebPoller } from './reliefweb'
+import { startCopernicusEmsPoller } from './copernicus-ems'
 import { startNwsAlertsPoller } from './nws-alerts'
 import { startOtxPoller, otxEnabled } from './otx-threats'
 import { startGvpVolcanoPoller } from './gvp-volcano'
@@ -214,6 +216,12 @@ export function startOsintPollers(
     cleanups.push(startReliefWebPoller(db, redis, producer))
   } catch (err) {
     logger.error({ err }, 'Failed to start ReliefWeb humanitarian poller')
+  }
+
+  try {
+    cleanups.push(startCopernicusEmsPoller(db, redis, producer))
+  } catch (err) {
+    logger.error({ err }, 'Failed to start Copernicus EMS activations poller')
   }
 
   try {
@@ -416,6 +424,7 @@ export { startSafecastPoller } from './safecast'
 export { startCisaKevPoller } from './cisa-kev'
 export { startOfacSanctionsPoller } from './ofac-sanctions'
 export { startReliefWebPoller } from './reliefweb'
+export { startCopernicusEmsPoller } from './copernicus-ems'
 export { startNwsAlertsPoller } from './nws-alerts'
 export { startOtxPoller } from './otx-threats'
 export { startGvpVolcanoPoller } from './gvp-volcano'

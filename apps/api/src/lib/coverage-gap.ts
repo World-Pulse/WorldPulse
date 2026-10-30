@@ -66,7 +66,7 @@ const NOT_OUTLETS = [
   'interpol.int', 'inetintel.cc.gatech.edu', 'finance.yahoo.com', 'weather.gov', 'alienvault.com',
   'patentsview.org', 'poweroutage.us', 'reliefweb.int', 'safecast.org', 'noaa.gov', 'tsunami.gov',
   'unhcr.org', 'who.int', 'iaea.org', 'treasury.gov', 'gdacs.org', 'cdc.gov', 'press.un.org',
-  'ec.europa.eu', 'consilium.europa.eu', 'gov.uk', 'icc-cpi.int', 'icrc.org',
+  'ec.europa.eu', 'consilium.europa.eu', 'gov.uk', 'icc-cpi.int', 'icrc.org', 'emergency.copernicus.eu',
 ]
 
 /** Whether a site (a link's host, without "www.") counts as a news outlet */
