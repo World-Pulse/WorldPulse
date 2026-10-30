@@ -6,6 +6,7 @@ import { SITE_URL, metaDescription } from '@/lib/page-metadata'
 import { X_HANDLE } from '@/lib/share-links'
 import { cachedFetch } from '@/lib/server-fetch'
 import { fetchHomeTotals } from '@/lib/home-totals'
+import { fetchHomeBrief } from '@/lib/home-brief'
 
 // The feed is a client component, so the home page's HTML used to carry no
 // stories, no structured data and no feed address: a crawler saw an empty
@@ -73,7 +74,7 @@ const STRUCTURED_DATA = [
 ]
 
 export default async function HomePage() {
-  const [stories, totals] = await Promise.all([fetchStories(), fetchHomeTotals()])
+  const [stories, totals, brief] = await Promise.all([fetchStories(), fetchHomeTotals(), fetchHomeBrief(API_BASE)])
   const verified = stories.filter(s => s.outletCount >= 2)
   const widest = verified.reduce((m, s) => Math.max(m, s.outletCount), 0)
   const verifiedLabel = `${verified.length}${stories.length >= STORY_LIMIT ? '+' : ''}`
@@ -98,7 +99,8 @@ export default async function HomePage() {
         </p>
       )}
       <UnderReportedStrip />
-      <HomeFeed />
+      {/* The first block says what changed and what to watch (plan N6), from the Daily Briefing */}
+      <HomeFeed brief={brief} />
       {stories.length > 0 && (
         // The stories most outlets report, as plain links for search engines
         // and readers without JavaScript; kept out of the visual layout

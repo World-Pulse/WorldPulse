@@ -61,11 +61,19 @@ describe('the tooltip', () => {
 
 describe('How We Count', () => {
   it('explains the score where the story page links (#score)', async () => {
-    const { default: HowWeCountPage } = await import('@/app/how-we-count/page')
-    const html = renderToStaticMarkup(<HowWeCountPage />)
-    expect(html).toContain('id="score"')
-    expect(html).toContain('The reliability score')
-    expect(html).toContain('closes 40% of the gap to 98%')
-    expect(html).toContain('AI checks and reader flags don’t change the score')
+    // The page has been async since N2 (it reads today's totals from the status file), so it is awaited
+    // first; with no network here it shows no totals
+    const realFetch = globalThis.fetch
+    globalThis.fetch = (async () => { throw new Error('offline in tests') }) as unknown as typeof fetch
+    try {
+      const { default: HowWeCountPage } = await import('@/app/how-we-count/page')
+      const html = renderToStaticMarkup(await HowWeCountPage())
+      expect(html).toContain('id="score"')
+      expect(html).toContain('The reliability score')
+      expect(html).toContain('closes 40% of the gap to 98%')
+      expect(html).toContain('AI checks and reader flags don’t change the score')
+    } finally {
+      globalThis.fetch = realFetch
+    }
   })
 })

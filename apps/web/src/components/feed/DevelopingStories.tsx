@@ -6,6 +6,7 @@ import {
   toDevelopingStories, sinceLabel, outletBadge, namedOutlets, outletsTitle, LOUD_SEVERITIES,
   type DevelopingStory,
 } from '@/lib/developing-stories'
+import type { HomeBrief } from '@/lib/home-brief'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -20,14 +21,25 @@ const SEVERITY_TEXT: Record<string, string> = {
   high:     'text-wp-amber',
 }
 
+/** The reader's morning (local time), when the block is "Overnight" (plan N6) */
+const MORNING_FROM = 4
+const MORNING_UNTIL = 12
+
 /**
  * Developing Stories on the home page: the stories most outlets are reporting
  * in the last 12 hours, ranked by how many outlets and how serious, freshest
  * first among equals; each opens its signal page, which lists every outlet.
+ * For the 7 AM reader (plan N6, Oct 30, 2026) it is "Overnight" in the
+ * reader's morning, and leads with what changed and ends with what to watch,
+ * one line each from the Daily Briefing, read by the page's server (brief).
  */
-export function DevelopingStories() {
+export function DevelopingStories({ brief = null }: { brief?: HomeBrief | null } = {}) {
   const [stories, setStories] = useState<DevelopingStory[]>([])
   const [now, setNow] = useState(() => Date.now())
+  // The reader's own hour, known only in the browser (the server's would be wrong)
+  const [hour, setHour] = useState<number | null>(null)
+  useEffect(() => { setHour(new Date().getHours()) }, [])
+  const morning = hour !== null && hour >= MORNING_FROM && hour < MORNING_UNTIL
 
   useEffect(() => {
     let cancelled = false
@@ -57,7 +69,7 @@ export function DevelopingStories() {
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-wp-red animate-pulse" aria-hidden />
             <h2 id="developing-stories" className="text-[13px] font-semibold text-wp-text tracking-wide uppercase">
-              Developing Stories
+              {morning ? 'Overnight' : 'Developing Stories'}
             </h2>
           </div>
           {/* A story here was reported in the last 12 hours; it may have started earlier */}
@@ -65,6 +77,19 @@ export function DevelopingStories() {
             <span className="hidden sm:inline">most reported · </span>updated in the last {WINDOW_HOURS}h
           </span>
         </div>
+
+        {brief?.changed && (
+          <p className="mb-2.5 text-[13px] leading-snug text-wp-text2">
+            <span className="mr-1.5 font-mono text-[10px] uppercase tracking-[0.5px] text-wp-cyan">
+              {/* the briefing covers the last 24 hours, so it says "what changed", not "overnight" */}
+              {morning ? 'What changed' : 'Today\u2019s briefing'}
+            </span>
+            {brief.changed}{' '}
+            <Link href="/briefing" className="whitespace-nowrap font-mono text-[11px] text-wp-cyan hover:underline">
+              Daily briefing &rarr;
+            </Link>
+          </p>
+        )}
 
         <ol className="space-y-2">
           <li><StoryRow story={lead!} now={now} lead /></li>
@@ -75,6 +100,12 @@ export function DevelopingStories() {
             </li>
           ))}
         </ol>
+        {brief?.watch && (
+          <p className="mt-2.5 text-[12px] leading-snug text-wp-text2">
+            <span className="mr-1.5 font-mono text-[10px] uppercase tracking-[0.5px] text-wp-amber">To watch</span>
+            {brief.watch}
+          </p>
+        )}
         {/* The week's biggest stories (plan G11): the page was reachable only by its address */}
         <Link href="/week" className="mt-3 inline-block text-[12px] font-mono text-wp-cyan hover:underline">
           This week&rsquo;s top stories &rarr;

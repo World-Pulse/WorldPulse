@@ -10,6 +10,7 @@ import { DevelopingStories } from '@/components/feed/DevelopingStories'
 import { FollowedStories } from '@/components/home/FollowedStories'
 import { InTheNews } from '@/components/feed/InTheNews'
 import { OnboardingModal } from '@/components/OnboardingModal'
+import type { HomeBrief } from '@/lib/home-brief'
 
 type FeedTab    = 'global' | 'following' | 'verified' | 'digest' | 'for_you'
 type FilterCat  = 'all' | 'breaking' | 'conflict' | 'climate' | 'economy' | 'technology' | 'health'
@@ -32,7 +33,7 @@ const FILTERS: { id: FilterCat; label: string }[] = [
   { id: 'health',     label: 'Health'   },
 ]
 
-export function HomeFeed() {
+export function HomeFeed({ brief = null }: { brief?: HomeBrief | null } = {}) {
   const [activeTab,    setActiveTab]    = useState<FeedTab>('global')
   const [activeFilter, setActiveFilter] = useState<FilterCat>('all')
   const [newCount,     setNewCount]     = useState(0)
@@ -115,8 +116,9 @@ export function HomeFeed() {
         {/* Stories the reader follows (plan 8), for signed-in readers who follow one */}
         {signedIn && <FollowedStories />}
 
-        {/* Developing Stories — escalating/developing event threads */}
-        <DevelopingStories />
+        {/* Developing Stories — escalating/developing event threads; "Overnight" in the reader's morning,
+            with what changed and what to watch from the Daily Briefing (plan N6) */}
+        <DevelopingStories brief={brief} />
 
         {/* In the news: the people, places and organisations named most, each with its page */}
         <InTheNews />
