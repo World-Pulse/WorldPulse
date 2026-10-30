@@ -128,25 +128,28 @@ describe('the verdict and the page\'s line', () => {
 
 describe('a pass', () => {
   it('reads the newest high and critical reports with fewer than 3 outlets, each once, and logs each verdict', async () => {
-    h.rows = [row(1, 'high'), row(2, 'critical'), row(3, 'high')]
-    h.replies = ['{"reports": [{"report": 1, "kind": "event", "severity": "high", "note": "A strike"}, {"report": 2, "kind": "event", "severity": "medium", "note": "Two injured"}, {"report": 3, "kind": "analysis", "severity": "medium", "note": "A preview"}]}']
+    h.rows = [row(1, 'high'), row(2, 'critical'), row(3, 'high'), row(4, 'high')]
+    h.replies = ['{"reports": [{"report": 1, "kind": "event", "severity": "high", "note": "A strike"}, {"report": 2, "kind": "event", "severity": "medium", "note": "Two injured"}, {"report": 3, "kind": "analysis", "severity": "medium", "note": "A preview"}, {"report": 4, "kind": "roundup", "severity": "medium", "note": "A digest"}]}']
     const stats = await runSecondReads(NOW)
-    expect(stats).toMatchObject({ read: 3, agree: 1, lower: 1, not_event: 1, calls: 1, lowered: 1 })
+    expect(stats).toMatchObject({ read: 4, agree: 1, lower: 1, not_event: 2, calls: 1, lowered: 2 })
     const sql = h.raw[0]!.sql
     expect(sql).toMatch(/severity IN \('high', 'critical'\)/)
     expect(sql).toMatch(/source_count, 1\) < 3/)
     expect(sql).toMatch(/check_type = 'second_read'/)
     expect(h.asked[0]).toMatchObject({ purpose: 'second_read' })
-    // the lower one goes down one level (plan 11a), critical to high whatever level the read said; "not an event" doesn't lower yet
-    expect(h.lowered).toEqual([{ id: row(2).id, was: 'critical', to: 'high' }])
+    // the lower one goes down one level (plan 11a), critical to high whatever level the read said; since Oct 30 "not an
+    // event" lowers too (analysis: high to medium), but never a roundup (report 4)
+    expect(h.lowered).toEqual([{ id: row(2).id, was: 'critical', to: 'high' }, { id: row(3).id, was: 'high', to: 'medium' }])
     expect(h.raw[1]!.sql).toMatch(/s\.severity::text = v\.was AND coalesce\(s\.source_count, 1\) < 3/)
     expect(h.logged.map(r => [r.verdict, r.result, r.check_type])).toEqual([
-      ['agree', 'confirmed', 'second_read'], ['lower', 'lowered', 'second_read'], ['not_event', 'warning', 'second_read'],
+      ['agree', 'confirmed', 'second_read'], ['lower', 'lowered', 'second_read'], ['not_event', 'lowered', 'second_read'],
+      ['not_event', 'warning', 'second_read'],
     ])
     expect(h.logged[1]!.notes).toBe('[Claude, second read] Rates it MEDIUM, not CRITICAL. Two injured. Lowered from CRITICAL to HIGH.')
-    expect(h.logged[2]!.notes).toBe('[Claude, second read] Reads as analysis, not a new event. A preview.')
-    expect(h.counts.get('ai:second:counts:2026-10-21|read')).toBe(3)
-    expect(h.counts.get('ai:second:counts:2026-10-21|lowered')).toBe(1)
+    expect(h.logged[2]!.notes).toBe('[Claude, second read] Reads as analysis, not a new event. A preview. Lowered from HIGH to MEDIUM.')
+    expect(h.logged[3]!.notes).toBe('[Claude, second read] Reads as a roundup, not a new event. A digest.')
+    expect(h.counts.get('ai:second:counts:2026-10-21|read')).toBe(4)
+    expect(h.counts.get('ai:second:counts:2026-10-21|lowered')).toBe(2)
     // the same reports again: already read
     h.replies = ['{"reports": []}']
     expect((await runSecondReads(NOW)).read).toBe(0)
@@ -165,15 +168,20 @@ describe('a pass', () => {
     expect(String(h.logged[1]!.notes)).not.toMatch(/Lowered/)
   })
 
-  it('one level down, only for "lower" (and "not an event" once its read passes)', () => {
+  it('one level down, for "lower" and, since its read passed (Oct 30: 28 of 30), "not an event" except a roundup', () => {
     expect(loweredSeverity('critical', 'lower')).toBe('high')
     expect(loweredSeverity('high', 'lower')).toBe('medium')
-    expect(NOT_EVENT_LOWERS).toBe(false)
-    expect(loweredSeverity('high', 'not_event')).toBeNull()
-    expect(loweredSeverity('high', 'not_event', true)).toBe('medium')
+    expect(NOT_EVENT_LOWERS).toBe(true)
+    expect(loweredSeverity('high', 'not_event')).toBe('medium')
+    expect(loweredSeverity('critical', 'not_event', true, 'analysis')).toBe('high')
+    expect(loweredSeverity('high', 'not_event', true, 'other')).toBe('medium')
+    // a digest can lead with an event no other report carries: never lowered
+    expect(loweredSeverity('high', 'not_event', true, 'roundup')).toBeNull()
+    expect(loweredSeverity('high', 'not_event', false, 'analysis')).toBeNull()
     expect(loweredSeverity('high', 'agree', true)).toBeNull()
     expect(loweredSeverity('high', 'higher', true)).toBeNull()
     expect(loweredSeverity('medium', 'lower')).toBeNull()
+    expect(loweredSeverity('medium', 'not_event', true, 'analysis')).toBeNull()
   })
 
   it('eight to a call, three calls a pass', async () => {

@@ -19,11 +19,16 @@
  * read at and fewer than 3 outlets; the word rules don't lift it back until 3
  * or more carry it (severity-lift.ts). Read first, as the plan asked: of a
  * random 30 "lower" verdicts of Oct 21-22, 29 were right (debatable: a super
- * typhoon nearing Taiwan, rated medium). "Not an event" (analysis, a roundup,
- * a feature) will lower the same way once 30 of those are read and 25 are
- * right (NOT_EVENT_LOWERS): on Oct 22 only 17 existed, 16 right (wrong: an
- * evening news edition that led with a drone strike reported to have killed
- * 153). Never higher: that is shown only.
+ * typhoon nearing Taiwan, rated medium). "Not an event" lowers the same way
+ * since Oct 30 (NOT_EVENT_LOWERS): of the newest 30 of the 175 there were
+ * (Oct 29-30), 28 were right (explainers and follow-ups to the Spanish train
+ * crash and the Hong Kong fire, studies, campaign pledges, awareness-day
+ * messages, features, a border traffic note). The two wrong were event
+ * coverage: a "grieving Spain demands answers" piece on a fresh rail
+ * disaster, and a UN news digest leading with a drone strike that killed 5
+ * children (on Oct 22 the one wrong of 17 was also a digest leading with a
+ * strike). So a roundup never lowers: a digest can lead with an event no
+ * other report carries. Never higher: that is shown only.
  *
  * Its verdicts go to verification_log (check_type second_read; verdict
  * agree, lower, higher or not_event), each report once. At most 400 reports
@@ -131,14 +136,20 @@ export function verdictOf(rules: string, read: SecondRead): SecondReadVerdict {
 const ONE_DOWN: Record<string, SignalSeverity> = { critical: 'high', high: 'medium' }
 
 /**
- * Whether "not an event" lowers too: off until 30 such verdicts are read and
- * 25 or more are right (plan 11a; Oct 22, 2026: 16 of the 17 there were)
+ * Whether "not an event" lowers too (plan 11a): on since Oct 30, 2026, when 28
+ * of the newest 30 such verdicts read right (the bar was 25); Oct 22: 16 of 17
  */
-export const NOT_EVENT_LOWERS = false
+export const NOT_EVENT_LOWERS = true
 
-/** What a report goes down to when the second read rates it lower: one level, whatever level the read gave (null: it stays) */
-export function loweredSeverity(rules: string, verdict: SecondReadVerdict, notEventLowers = NOT_EVENT_LOWERS): SignalSeverity | null {
-  if (verdict !== 'lower' && !(verdict === 'not_event' && notEventLowers)) return null
+/**
+ * What a report goes down to when the second read rates it lower: one level,
+ * whatever level the read gave (null: it stays). "Not an event" lowers analysis
+ * and the like, never a roundup (kind): a digest can lead with an event no
+ * other report carries (both digests among the verdicts read did).
+ */
+export function loweredSeverity(rules: string, verdict: SecondReadVerdict, notEventLowers = NOT_EVENT_LOWERS, kind?: SecondReadKind): SignalSeverity | null {
+  if (verdict === 'not_event' && (!notEventLowers || kind === 'roundup')) return null
+  if (verdict !== 'lower' && verdict !== 'not_event') return null
   return ONE_DOWN[rules] ?? null
 }
 
@@ -234,7 +245,7 @@ export async function runSecondReads(now = new Date()): Promise<SecondReadStats>
         if (!read) { stats.unread += 1; unread.push(r.id); return }
         const verdict = verdictOf(r.severity, read)
         stats[verdict] += 1
-        const to = loweredSeverity(r.severity, verdict)
+        const to = loweredSeverity(r.severity, verdict, NOT_EVENT_LOWERS, read.kind)
         if (to) lower.push({ id: r.id, from: r.severity, to })
         entries.push({
           signal_id:     r.id,
