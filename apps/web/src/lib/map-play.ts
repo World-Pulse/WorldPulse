@@ -81,6 +81,11 @@ export const PLAY_OUTRO_MS = 6_000
 export const TOUR_EVERY_MS = 4_500
 /** How many moments back the camera looks for its next story */
 const TOUR_LOOKBACK = 6
+/**
+ * The camera's next story is at least this far from the last one when any is (Oct 30, 2026: the first video sat on
+ * Indonesia's middle for 25 s, where every report placed only "Indonesia" is pinned)
+ */
+export const TOUR_MIN_HOP_KM = 1_200
 
 export interface TourSignal {
   id: string
@@ -92,20 +97,48 @@ export interface TourSignal {
   is_breaking: boolean
 }
 
+/** Great-circle distance in km */
+export function distanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const rad = Math.PI / 180
+  const dLat = (b.lat - a.lat) * rad
+  const dLng = (b.lng - a.lng) * rad
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2
+  return 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(h)))
+}
+
 /**
  * The story the camera visits next: of the last few moments, the best-ranked report with a place (verified first,
- * then the most severe, breaking breaking ties), not the one it is already at
+ * then the most severe, breaking breaking ties) that the camera hasn't visited (`exclude`: the ids it has, or the
+ * one it is at), at least TOUR_MIN_HOP_KM from where it is (`from`) when any such report is there
  */
-export function pickTourStop(buckets: Array<{ signals: TourSignal[] }>, index: number, currentId: string | null = null): TourSignal | null {
+export function pickTourStop(
+  buckets: Array<{ signals: TourSignal[] }>,
+  index: number,
+  exclude: ReadonlySet<string> | string | null = null,
+  from: { lat: number; lng: number } | null = null,
+): TourSignal | null {
+  const skip = (id: string) => (typeof exclude === 'string' ? id === exclude : exclude?.has(id) ?? false)
   let best: TourSignal | null = null
+  let bestFar: TourSignal | null = null
   for (let i = Math.min(index, buckets.length - 1); i >= 0 && i > index - TOUR_LOOKBACK; i--) {
     for (const s of buckets[i]?.signals ?? []) {
       if (!Number.isFinite(s.lat) || !Number.isFinite(s.lng) || (s.lat === 0 && s.lng === 0)) continue
-      if (s.id === currentId || !s.title?.trim()) continue
+      if (skip(s.id) || !s.title?.trim()) continue
       if (!best || rank(s) > rank(best)) best = s
+      if (from && distanceKm(from, s) >= TOUR_MIN_HOP_KM && (!bestFar || rank(s) > rank(bestFar))) bestFar = s
     }
   }
-  return best
+  return bestFar ?? best
+}
+
+/** The caption for the story the camera is at, so the headline and the place on screen match */
+export function tourCaption(stop: TourSignal): PlayCaption {
+  const title = stop.title.trim()
+  return {
+    title: title.length > CAPTION_MAX ? `${title.slice(0, CAPTION_MAX - 1).trimEnd()}…` : title,
+    severity: stop.severity,
+    verified: stop.status === 'verified',
+  }
 }
 
 /** Reports and verified reports on the map by a step (the replay shows every moment up to it) */

@@ -130,7 +130,9 @@ export function PlayOverlay({ phase, caption, timeLabel, dateLabel, progress, wi
             </ol>
             <div className="mt-8 wp-play-in" style={{ animationDelay: `${450 + Math.min(3, topStories.length) * 450}ms` }}>
               <div className="text-[14px] opacity-90">Don&apos;t trust one headline. Count the newsrooms.</div>
-              <div className="mt-2 flex items-baseline gap-2"><Mark size={15} /><span className="font-mono text-[12px] tracking-wider opacity-80">world-pulse.io</span></div>
+              {/* (the beating dot keeps the page painting, so the recorder films the card to the end: Oct 30, 2026,
+                  a still closing card was cut to 2 s) */}
+              <div className="mt-2 flex items-center gap-2"><Mark size={15} /><span className="font-mono text-[12px] tracking-wider opacity-80">world-pulse.io</span><span className="ml-1 w-2 h-2 rounded-full bg-wp-amber wp-play-beat" /></div>
             </div>
           </>
         )}

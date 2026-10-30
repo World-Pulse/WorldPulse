@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { pickTourStop, playCounts, playDateLabel, type TourSignal } from '../lib/map-play'
+import { pickTourStop, playCounts, playDateLabel, tourCaption, distanceKm, TOUR_MIN_HOP_KM, type TourSignal } from '../lib/map-play'
 
 const read = (p: string) => readFileSync(join(__dirname, '..', p), 'utf8')
 const zOf = (src: string, marker: RegExp) => Number(marker.exec(src)?.[1] ?? NaN)
@@ -54,5 +54,46 @@ describe('the video (Oct 30, 2026: "add some more layers, make it more exciting"
     expect(map).toContain('const [hazardsMode,    setHazardsMode]    = useState(playParam)')
     expect(map).toContain('document.documentElement.dataset.playDone = \'1\'')
     expect(read('../../../infrastructure/recorder/record.mjs')).toContain('dataset.playDone')
+  })
+})
+
+describe('the video, round 2 (Oct 30, 2026: the camera sat on Indonesia, captions named other places, the closing card was empty)', () => {
+  const sig = (id: string, extra: Partial<TourSignal> = {}): TourSignal =>
+    ({ id, lat: 10, lng: 20, title: `Story ${id}`, severity: 'medium', status: 'pending', is_breaking: false, ...extra })
+  const indonesia = { lat: -0.8, lng: 113.9 }
+
+  it('measures distances on the globe', () => {
+    const londonParis = distanceKm({ lat: 51.5, lng: -0.13 }, { lat: 48.86, lng: 2.35 })
+    expect(londonParis).toBeGreaterThan(338)
+    expect(londonParis).toBeLessThan(348)   // about 343 km
+    expect(distanceKm(indonesia, indonesia)).toBe(0)
+  })
+  it('flies somewhere new: no story twice, and far from where it is when it can', () => {
+    const buckets = [{ signals: [
+      sig('jakarta', { ...indonesia, severity: 'critical', status: 'verified' }),
+      sig('borneo', { lat: 0.5, lng: 114.2, severity: 'high', status: 'verified' }),
+      sig('athens', { lat: 37.98, lng: 23.73, severity: 'high' }),
+    ] }]
+    // from Indonesia, the best story more than TOUR_MIN_HOP_KM away beats a better one next door
+    expect(distanceKm(indonesia, { lat: 0.5, lng: 114.2 })).toBeLessThan(TOUR_MIN_HOP_KM)
+    expect(pickTourStop(buckets, 0, new Set(['jakarta']), indonesia)?.id).toBe('athens')
+    // nothing far left: the best one not yet visited
+    expect(pickTourStop(buckets, 0, new Set(['jakarta', 'athens']), indonesia)?.id).toBe('borneo')
+    expect(pickTourStop(buckets, 0, new Set(['jakarta', 'athens', 'borneo']), indonesia)).toBeNull()
+  })
+  it('captions the story the camera is at', () => {
+    expect(tourCaption(sig('x', { title: '  Floods in Pabna ', severity: 'high', status: 'verified' }))).toEqual({ title: 'Floods in Pabna', severity: 'high', verified: true })
+    const map = read('app/map/page.tsx')
+    expect(map).toContain('caption={tourCaptionNow ?? captionAt(')
+    expect(map).toContain('setTourCaptionNow(tourCaption(stop))')
+  })
+  it('reads the day\'s most-reported stories from data.stories, and tells the recorder when the replay begins', () => {
+    const map = read('app/map/page.tsx')
+    expect(map).toContain('Array.isArray(d?.stories) ? d.stories')
+    expect(map).toContain('document.documentElement.dataset.playPhase = playPhase')
+    const rec = read('../../../infrastructure/recorder/record.mjs')
+    expect(rec).toContain("dataset.playPhase === 'play'")
+    expect(rec).toContain('page.waitForTimeout(TAIL_MS)')
+    expect(read('components/map/PlayOverlay.tsx')).toContain('wp-play-beat" /></div>')
   })
 })

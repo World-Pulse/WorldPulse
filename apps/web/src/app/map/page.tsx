@@ -16,7 +16,7 @@ import HotspotLabels from '@/components/map/HotspotLabels'
 import { EnhancedHeatmap } from '@/components/map/EnhancedHeatmap'
 import { PlayOverlay, type PlayDayStats, type PlayTopStory } from '@/components/map/PlayOverlay'
 import { useTimelinePlayback } from '@/hooks/useTimelinePlayback'
-import { parsePlayParam, playStepMs, captionAt, playTimeLabel, playDateLabel, pickTourStop, PLAY_INTRO_MS, PLAY_OUTRO_MS, TOUR_EVERY_MS, type PlayPhase } from '@/lib/map-play'
+import { parsePlayParam, playStepMs, captionAt, playTimeLabel, playDateLabel, pickTourStop, tourCaption, PLAY_INTRO_MS, PLAY_OUTRO_MS, TOUR_EVERY_MS, type PlayPhase, type PlayCaption } from '@/lib/map-play'
 import { parseWindowHash, encodePermalink, type MapPermalinkState, type LayerKey } from '@/lib/map-permalink'
 import {
   Map as MapIcon, Moon, Satellite, Globe2, LocateFixed, Layers as LayersIcon,
@@ -422,6 +422,8 @@ function MapView({ embed = false }: { embed?: boolean }) {
   const [playPhase, setPlayPhase] = useState<PlayPhase>('intro')
   const [playDay, setPlayDay] = useState<PlayDayStats | null>(null)
   const [playTop, setPlayTop] = useState<PlayTopStory[]>([])
+  /** The headline of the story the camera is at (the play mode's caption once the tour starts) */
+  const [tourCaptionNow, setTourCaptionNow] = useState<PlayCaption | null>(null)
 
 
   // ── Basemap switcher state ────────────────────────────────────────────────────
@@ -3648,8 +3650,11 @@ function MapView({ embed = false }: { embed?: boolean }) {
         setPlayDay({ reports: Number(d.last24h), outlets: Number(d.outlets24h) || 0, countries: Number(d.countries24h) || 0, verified: Number(d.verified24h) || 0 })
       }
     }).catch(() => {})
-    fetch(`${API_URL}/api/v1/stories?hours=24&limit=3`).then(r => (r.ok ? r.json() : null)).then((j: { data?: Array<{ title?: string; outletCount?: number }> } | null) => {
-      const list = Array.isArray(j?.data) ? j!.data : []
+    // (the answer is { data: { stories: [...] } }; Oct 30, 2026: read as a bare list, the first closing card had no stories)
+    type TopStory = { title?: string; outletCount?: number }
+    fetch(`${API_URL}/api/v1/stories?hours=24&limit=3`).then(r => (r.ok ? r.json() : null)).then((j: { data?: { stories?: TopStory[] } | TopStory[] } | null) => {
+      const d = j?.data
+      const list: TopStory[] = Array.isArray(d) ? d : Array.isArray(d?.stories) ? d.stories : []
       if (alive) setPlayTop(list.filter(s => s.title).map(s => ({ title: String(s.title), outlets: Number(s.outletCount) || 0 })))
     }).catch(() => {})
     return () => { alive = false }
@@ -3670,8 +3675,15 @@ function MapView({ embed = false }: { embed?: boolean }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playMode, timeline.loading, timeline.data, mapReady])
 
-  // The camera flies to the story of the moment every few seconds, with a ripple where it happened
-  const tourRef = useRef<{ at: number; id: string | null }>({ at: 0, id: null })
+  // The recorder trims the video's start by the moment the replay begins (data-play-phase on <html>)
+  useEffect(() => {
+    if (playMode) document.documentElement.dataset.playPhase = playPhase
+  }, [playMode, playPhase])
+
+  // The camera flies to the story of the moment every few seconds, with a ripple where it happened; the caption is
+  // that story's headline, and no story is visited twice
+  const tourRef = useRef<{ at: number; id: string | null; lat: number; lng: number } | null>(null)
+  const tourSeenRef = useRef<Set<string>>(new Set())
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rippleRef = useRef<any>(null)
   useEffect(() => {
@@ -3680,10 +3692,13 @@ function MapView({ embed = false }: { embed?: boolean }) {
     const map = mapRef.current as any
     if (!map) return
     const now = Date.now()
-    if (now - tourRef.current.at < TOUR_EVERY_MS) return
-    const stop = pickTourStop(timeline.data.buckets, timeline.currentIndex, tourRef.current.id)
+    const last = tourRef.current
+    if (last && now - last.at < TOUR_EVERY_MS) return
+    const stop = pickTourStop(timeline.data.buckets, timeline.currentIndex, tourSeenRef.current, last)
     if (!stop) return
-    tourRef.current = { at: now, id: stop.id }
+    tourRef.current = { at: now, id: stop.id, lat: stop.lat, lng: stop.lng }
+    tourSeenRef.current.add(stop.id)
+    setTourCaptionNow(tourCaption(stop))
     const canvas = map.getCanvas()
     const zoom = worldZoom(canvas.clientWidth, canvas.clientHeight, projectionRef.current) + 1.1
     try { map.flyTo({ center: [stop.lng, stop.lat], zoom, duration: 2400, curve: 1.3, essential: true }) } catch { /* map busy */ }
@@ -4522,7 +4537,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
         {playMode && (
           <PlayOverlay
             phase={playPhase}
-            caption={captionAt(timeline.data?.buckets ?? [], timeline.currentIndex)}
+            caption={tourCaptionNow ?? captionAt(timeline.data?.buckets ?? [], timeline.currentIndex)}
             timeLabel={playTimeLabel(timeline.currentTime)}
             dateLabel={playDateLabel(timeline.data?.buckets.at(-1)?.t ?? null)}
             progress={timeline.data && timeline.data.buckets.length > 1 ? timeline.currentIndex / (timeline.data.buckets.length - 1) : 0}

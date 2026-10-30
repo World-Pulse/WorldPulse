@@ -26,8 +26,21 @@ const KEEP_DAYS = Number(process.env.KEEP_DAYS || 14)
  * then sets data-play-done on <html>: the recording stops there, or after RECORD_MS at the most
  */
 const RECORD_MS = Number(process.env.RECORD_MS || 120_000)
-/** Seconds cut from the start: the blank page before the title card */
+/** Seconds cut from the start at the least: the blank page before the title card */
 const TRIM_START = Number(process.env.TRIM_START || 1.5)
+/**
+ * Seconds of title card kept before the replay begins (the page sets data-play-phase="play"): the rest of the wait
+ * for the map is cut (Oct 30, 2026: the first lively video held its title card for 11 s, from a white page on)
+ */
+const INTRO_KEEP = Number(process.env.INTRO_KEEP || 3.2)
+/** Milliseconds filmed after data-play-done, so the closing card isn't cut short */
+const TAIL_MS = Number(process.env.TAIL_MS || 1_500)
+
+/** Where the video starts: INTRO_KEEP seconds before the replay began, never before TRIM_START */
+export function trimStart(playStartedAfterMs) {
+  if (!Number.isFinite(playStartedAfterMs) || playStartedAfterMs <= 0) return TRIM_START
+  return Math.max(TRIM_START, Math.round((playStartedAfterMs / 1000 - INTRO_KEEP) * 10) / 10)
+}
 /**
  * A phone-sized page (CSS pixels), made a 720 × 1280 video. (Playwright records
  * a page at its CSS size whatever its pixel density: a 360 × 640 phone at
@@ -72,18 +85,24 @@ export async function recordOnce() {
       recordVideo: { dir: work, size: { width: W, height: H } }, colorScheme: 'dark',
     })
     const page = await context.newPage()
+    const filmingSince = Date.now()             // the video starts with the page
     log('opening', URL_TO_RECORD)
     await page.goto(URL_TO_RECORD, { waitUntil: 'domcontentloaded', timeout: 60_000 })
+    const playStarted = await page.waitForFunction(() => document.documentElement.dataset.playPhase === 'play', null, { timeout: RECORD_MS, polling: 200 })
+      .then(() => Date.now() - filmingSince, () => NaN)
     await page.waitForFunction(() => document.documentElement.dataset.playDone === '1', null, { timeout: RECORD_MS, polling: 500 })
       .catch(() => log(`no data-play-done after ${RECORD_MS / 1000} s: keeping what was recorded`))
+    await page.waitForTimeout(TAIL_MS)
     const video = page.video()
     await context.close()                       // writes the video
+    const trim = trimStart(playStarted)
+    log(`the replay began ${Number.isFinite(playStarted) ? `${(playStarted / 1000).toFixed(1)} s` : 'at an unknown time'} in; cutting ${trim} s`)
     const webm = await video.path()
     await mkdir(OUT_DIR, { recursive: true })
     const tmp = join(OUT_DIR, `.world-in-60s-${date}.mp4`)
     const out = join(OUT_DIR, `world-in-60s-${date}.mp4`)
     // H.264 for every app; a quiet audio track some apps want; the start of loading cut
-    await run('ffmpeg', ['-y', '-ss', String(TRIM_START), '-i', webm, '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo', '-shortest',
+    await run('ffmpeg', ['-y', '-ss', String(trim), '-i', webm, '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo', '-shortest',
       '-vf', `scale=${OUT_W}:${OUT_H}:flags=lanczos`,
       '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', '-b:a', '64k',
       '-movflags', '+faststart', tmp])
