@@ -21,6 +21,11 @@ describe('inferGeo', () => {
     expect(inferGeo('Major earthquake shakes Panama', '', source('abc-news')).countryCode).toBe('PA')
   })
 
+  it('gives league football and crypto-exchange stories no home pin (Oct 30, 2026)', () => {
+    expect(inferGeo('Binance hit by hack, users told to freeze accounts', '', source('rte-news'))).toMatchObject({ lat: null, countryCode: null })
+    expect(inferGeo('Everton v Manchester United: Premier League preview', '', source('myjoyonline-gh')).lat).toBeNull()
+  })
+
   it('reads the summary when the headline names no place', () => {
     const geo = inferGeo('Christa Pike released from hospital', 'The Tennessee inmate survived a failed execution', source('abc-au-world'))
     expect(geo).toMatchObject({ locationName: 'Tennessee', countryCode: 'US' })

@@ -8240,6 +8240,13 @@ export interface InferredGeo {
  */
 const RUSSIA_NOUN = /\b(?:russia|moscow|kremlin)\b/
 
+/**
+ * Stories with no place of their own: league football and crypto-exchange news
+ * (Oct 30, 2026: a Premier League story sat in Accra, a Binance hack in Dublin,
+ * both home pins of national outlets). They get no pin unless the text names a place.
+ */
+const NO_PLACE_TOPIC = /\b(?:premier league|champions league|europa league|la liga|serie a|bundesliga|man(?:chester)? (?:utd|united|city)|binance|coinbase|bitcoin|ethereum|crypto(?:currency)? (?:exchange|hack))\b/i
+
 function fromHints(text: string, homeCountry?: string): InferredGeo | null {
   const lower = text.toLowerCase()
   for (const { keywords, geo } of GEO_HINTS) {
@@ -8280,7 +8287,7 @@ export function inferGeo(
   }
   const found = fromPlace(head) ?? fromHints(head, source.countryCode) ?? fromPlace(body) ?? fromHints(body, source.countryCode)
   if (found) return found
-  if (HOME_PIN_SOURCES.has(source.id)) {
+  if (HOME_PIN_SOURCES.has(source.id) && !NO_PLACE_TOPIC.test(`${title} ${description}`)) {
     return { lat: source.defaultLat, lng: source.defaultLng, locationName: source.defaultLocation, countryCode: source.countryCode }
   }
   return { lat: null, lng: null, locationName: null, countryCode: null }
