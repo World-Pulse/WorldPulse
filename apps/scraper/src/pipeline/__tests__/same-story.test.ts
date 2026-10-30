@@ -588,6 +588,29 @@ describe('common things (Oct 30, 2026: helicopter crashes in Bosnia, Oregon and 
   })
 })
 
+describe('every place a headline names counts, and a state and a place in it are one area (Oct 30, 2026)', () => {
+  const at = (title: string, source_id: string, category = 'conflict') => sig({ id: source_id, title, source_id, category,
+    published_at: '2026-10-30T09:00:00Z', location_name: null, lat: null, lng: null })
+
+  it('joins headlines that share a place the other names second, or a state and a city in it', () => {
+    expect(isSameStory(
+      at('Russia strikes Dnipro train station in central Ukraine, killing 14', 'rferl.org'),
+      at('Russian drone strike kills 14 in Ukraine', 'aljazeera.com'),
+    )).toBe(true)
+    expect(isSameStory(
+      at('Flávio Bolsonaro arrives in Florida after fleeing Brazil', 'reuters.com', 'politics'),
+      at('Flávio Bolsonaro lands in Miami after fleeing Brazil via Argentina', 'apnews.com', 'politics'),
+    )).toBe(true)
+  })
+
+  it('keeps apart headlines that name different places of one country', () => {
+    expect(isSameStory(
+      at('Jigawa assembly passes state police bill', 'punchng.com', 'politics'),
+      at('Ebonyi Assembly unanimously backs state police bill', 'vanguardngr.com', 'politics'),
+    )).toBe(false)
+  })
+})
+
 describe('one story per match set (Oct 30, 2026: Spain\'s train crash and the Dnipro station strike became one story)', () => {
   const at = new Date('2026-10-29T19:00:00Z')
   const r = (id: string, source_id: string, title: string, category = 'disaster') =>

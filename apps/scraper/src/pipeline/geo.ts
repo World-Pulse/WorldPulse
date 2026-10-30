@@ -261,7 +261,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'bukavu':           { lat: -2.5083, lng: 28.8608, country: 'CD' },
   'kampala':          { lat: 0.3476,  lng: 32.5825, country: 'UG' },
   'kigali':           { lat: -1.9441, lng: 30.0619, country: 'RW' },
-  'maiduguri':        { lat: 11.8333, lng: 13.1500, country: 'NG' },
+  'maiduguri':        { lat: 11.8333, lng: 13.1500, country: 'NG', region: 'Borno' },
   'taraba':           { lat: 8.8937,  lng: 11.3596, country: 'NG', region: 'Taraba', name: 'Taraba' },
   'jalingo':          { lat: 8.8937,  lng: 11.3596, country: 'NG', region: 'Taraba' },
   'kaduna':           { lat: 10.5105, lng: 7.4165,  country: 'NG' },
@@ -348,6 +348,102 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'chisinau':         { lat: 47.0105, lng: 28.8638, country: 'MD' },
   'belgrade':         { lat: 44.7866, lng: 20.4489, country: 'RS' },
   'culiacan':         { lat: 24.8091, lng: -107.3940, country: 'MX', region: 'Sinaloa' },
+  // Oct 30, 2026: places that 72 hours of verified headlines named and the gazetteer didn't know. Reports from
+  // Nigeria's states sat at their outlet's home (Lagos or Abuja), "Hajj ... Makkah" stories in Abuja, Incheon's
+  // airport in China and Guayaquil's reports nowhere. Each state comes after its capital (a state is pinned at
+  // its capital), and both carry the state as region (oneArea: "Borno" and "Maiduguri" are one area). Left out:
+  // names that are also other words, names or clubs (Oyo, Imo, Jos, Rabat, Punjab, Quito's football club)
+  'kano':             { lat: 12.0022, lng: 8.5920,  country: 'NG', region: 'Kano', name: 'Kano' },
+  'borno':            { lat: 11.8333, lng: 13.1500, country: 'NG', region: 'Borno', name: 'Borno' },
+  'makurdi':          { lat: 7.7337,  lng: 8.5214,  country: 'NG', region: 'Benue' },
+  'benue':            { lat: 7.7337,  lng: 8.5214,  country: 'NG', region: 'Benue', name: 'Benue' },
+  'akure':            { lat: 7.2571,  lng: 5.2058,  country: 'NG', region: 'Ondo' },
+  'ondo':             { lat: 7.2571,  lng: 5.2058,  country: 'NG', region: 'Ondo', name: 'Ondo' },
+  'birnin kebbi':     { lat: 12.4539, lng: 4.1975,  country: 'NG', region: 'Kebbi', name: 'Birnin Kebbi' },
+  'kebbi':            { lat: 12.4539, lng: 4.1975,  country: 'NG', region: 'Kebbi', name: 'Kebbi' },
+  'dutse':            { lat: 11.7562, lng: 9.3388,  country: 'NG', region: 'Jigawa' },
+  'jigawa':           { lat: 11.7562, lng: 9.3388,  country: 'NG', region: 'Jigawa', name: 'Jigawa' },
+  'damaturu':         { lat: 11.7470, lng: 11.9608, country: 'NG', region: 'Yobe' },
+  'yobe':             { lat: 11.7470, lng: 11.9608, country: 'NG', region: 'Yobe', name: 'Yobe' },
+  'benin city':       { lat: 6.3350,  lng: 5.6037,  country: 'NG', region: 'Edo', name: 'Benin City' },
+  'edo':              { lat: 6.3350,  lng: 5.6037,  country: 'NG', region: 'Edo', name: 'Edo' },
+  'ekiti':            { lat: 7.6211,  lng: 5.2214,  country: 'NG', region: 'Ekiti', name: 'Ekiti' },
+  'katsina':          { lat: 12.9908, lng: 7.6018,  country: 'NG', region: 'Katsina', name: 'Katsina' },
+  'abakaliki':        { lat: 6.3249,  lng: 8.1137,  country: 'NG', region: 'Ebonyi' },
+  'ebonyi':           { lat: 6.3249,  lng: 8.1137,  country: 'NG', region: 'Ebonyi', name: 'Ebonyi' },
+  'adamawa':          { lat: 9.2035,  lng: 12.4954, country: 'NG', region: 'Adamawa', name: 'Adamawa' },
+  'yenagoa':          { lat: 4.9267,  lng: 6.2676,  country: 'NG', region: 'Bayelsa' },
+  'bayelsa':          { lat: 4.9267,  lng: 6.2676,  country: 'NG', region: 'Bayelsa', name: 'Bayelsa' },
+  'gusau':            { lat: 12.1704, lng: 6.6641,  country: 'NG', region: 'Zamfara' },
+  'zamfara':          { lat: 12.1704, lng: 6.6641,  country: 'NG', region: 'Zamfara', name: 'Zamfara' },
+  'umuahia':          { lat: 5.5250,  lng: 7.4922,  country: 'NG', region: 'Abia' },
+  'abia':             { lat: 5.5250,  lng: 7.4922,  country: 'NG', region: 'Abia', name: 'Abia' },
+  'uyo':              { lat: 5.0377,  lng: 7.9128,  country: 'NG', region: 'Akwa Ibom' },
+  'akwa ibom':        { lat: 5.0377,  lng: 7.9128,  country: 'NG', region: 'Akwa Ibom', name: 'Akwa Ibom' },
+  'calabar':          { lat: 4.9757,  lng: 8.3417,  country: 'NG', region: 'Cross River' },
+  'cross river state':{ lat: 4.9757,  lng: 8.3417,  country: 'NG', region: 'Cross River', name: 'Cross River' },
+  'enugu':            { lat: 6.4584,  lng: 7.5464,  country: 'NG', region: 'Enugu', name: 'Enugu' },
+  'osogbo':           { lat: 7.7827,  lng: 4.5418,  country: 'NG', region: 'Osun' },
+  'osun':             { lat: 7.7827,  lng: 4.5418,  country: 'NG', region: 'Osun', name: 'Osun' },
+  'ibadan':           { lat: 7.3775,  lng: 3.9470,  country: 'NG', region: 'Oyo' },
+  'ikeja':            { lat: 6.6018,  lng: 3.3515,  country: 'NG', region: 'Lagos' },
+  'plateau state':    { lat: 9.8965,  lng: 8.8583,  country: 'NG', region: 'Plateau', name: 'Plateau' },
+  'ilorin':           { lat: 8.4966,  lng: 4.5421,  country: 'NG', region: 'Kwara' },
+  'kwara':            { lat: 8.4966,  lng: 4.5421,  country: 'NG', region: 'Kwara', name: 'Kwara' },
+  'gombe':            { lat: 10.2897, lng: 11.1673, country: 'NG', region: 'Gombe', name: 'Gombe' },
+  'bauchi':           { lat: 10.3158, lng: 9.8442,  country: 'NG', region: 'Bauchi', name: 'Bauchi' },
+  'abeokuta':         { lat: 7.1475,  lng: 3.3619,  country: 'NG', region: 'Ogun' },
+  'ogun':             { lat: 7.1475,  lng: 3.3619,  country: 'NG', region: 'Ogun', name: 'Ogun' },
+  'owerri':           { lat: 5.4836,  lng: 7.0333,  country: 'NG', region: 'Imo' },
+  'awka':             { lat: 6.2104,  lng: 7.0719,  country: 'NG', region: 'Anambra' },
+  'onitsha':          { lat: 6.1499,  lng: 6.7857,  country: 'NG', region: 'Anambra' },
+  'anambra':          { lat: 6.2104,  lng: 7.0719,  country: 'NG', region: 'Anambra', name: 'Anambra' },
+  'asaba':            { lat: 6.1980,  lng: 6.7318,  country: 'NG', region: 'Delta' },
+  'warri':            { lat: 5.5167,  lng: 5.7500,  country: 'NG', region: 'Delta' },
+  'delta state':      { lat: 6.1980,  lng: 6.7318,  country: 'NG', region: 'Delta', name: 'Delta' },
+  'port harcourt':    { lat: 4.8156,  lng: 7.0498,  country: 'NG', region: 'Rivers', name: 'Port Harcourt' },
+  'rivers state':     { lat: 4.8156,  lng: 7.0498,  country: 'NG', region: 'Rivers', name: 'Rivers' },
+  'nasarawa':         { lat: 8.4939,  lng: 8.5153,  country: 'NG', region: 'Nasarawa', name: 'Nasarawa' },
+  'lokoja':           { lat: 7.8023,  lng: 6.7333,  country: 'NG', region: 'Kogi' },
+  'kogi':             { lat: 7.8023,  lng: 6.7333,  country: 'NG', region: 'Kogi', name: 'Kogi' },
+  'guayaquil':        { lat: -2.1709, lng: -79.9224, country: 'EC' },
+  'samborondón':      { lat: -1.9606, lng: -79.7246, country: 'EC', name: 'Samborondón' },
+  'durban':           { lat: -29.8587, lng: 31.0218, country: 'ZA' },
+  'aden':             { lat: 12.7855, lng: 45.0187, country: 'YE' },
+  'taiz':             { lat: 13.5795, lng: 44.0209, country: 'YE' },
+  'makkah':           { lat: 21.3891, lng: 39.8579, country: 'SA' },
+  'muscat':           { lat: 23.5880, lng: 58.3829, country: 'OM' },
+  'incheon':          { lat: 37.4563, lng: 126.7052, country: 'KR' },
+  'kathmandu':        { lat: 27.7172, lng: 85.3240, country: 'NP' },
+  'athens':           { lat: 37.9838, lng: 23.7275, country: 'GR' },
+  'harare':           { lat: -17.8252, lng: 31.0335, country: 'ZW' },
+  'dushanbe':         { lat: 38.5598, lng: 68.7870, country: 'TJ' },
+  'ajman':            { lat: 25.4052, lng: 55.5136, country: 'AE' },
+  'gazipur':          { lat: 23.9999, lng: 90.4203, country: 'BD' },
+  'arequipa':         { lat: -16.4090, lng: -71.5375, country: 'PE' },
+  'belfast':          { lat: 54.5973, lng: -5.9301, country: 'GB' },
+  'glasgow':          { lat: 55.8642, lng: -4.2518, country: 'GB' },
+  'samarkand':        { lat: 39.6542, lng: 66.9597, country: 'UZ' },
+  'el obeid':         { lat: 13.1843, lng: 30.2167, country: 'SD', name: 'El Obeid' },
+  'nyala':            { lat: 12.0489, lng: 24.8807, country: 'SD', region: 'Darfur' },
+  'chiba':            { lat: 35.6074, lng: 140.1065, country: 'JP' },
+  'kumamoto':         { lat: 32.8031, lng: 130.7079, country: 'JP' },
+  'kaliningrad':      { lat: 54.7104, lng: 20.4522, country: 'RU' },
+  'dublin':           { lat: 53.3498, lng: -6.2603, country: 'IE' },
+  'tallinn':          { lat: 59.4370, lng: 24.7536, country: 'EE' },
+  'vilnius':          { lat: 54.6872, lng: 25.2797, country: 'LT' },
+  'agadez':           { lat: 16.9733, lng: 7.9911,  country: 'NE' },
+  'alicante':         { lat: 38.3452, lng: -0.4810, country: 'ES' },
+  'guiyang':          { lat: 26.6470, lng: 106.6302, country: 'CN' },
+  'bishkek':          { lat: 42.8746, lng: 74.5698, country: 'KG' },
+  'astana':           { lat: 51.1694, lng: 71.4491, country: 'KZ' },
+  'calgary':          { lat: 51.0447, lng: -114.0719, country: 'CA' },
+  'ottawa':           { lat: 45.4215, lng: -75.6972, country: 'CA' },
+  'kumasi':           { lat: 6.6885,  lng: -1.6244, country: 'GH' },
+  'tangier':          { lat: 35.7595, lng: -5.8340, country: 'MA' },
+  'casablanca':       { lat: 33.5731, lng: -7.5898, country: 'MA' },
+  'bissau':           { lat: 11.8636, lng: -15.5977, country: 'GW' },
+  'culiacán':         { lat: 24.8091, lng: -107.3940, country: 'MX', region: 'Sinaloa', name: 'Culiacán' },
 }
 
 // ─── NER PATTERNS ────────────────────────────────────────────────────────────
@@ -712,6 +808,20 @@ export function findGazetteerPlace(text: string): { place: string; coords: typeo
   return best ? { place: best.place, coords: best.coords } : null
 }
 
+/**
+ * Whether two gazetteer places are one area: the same place under two names ("Kiev" and "Kyiv"), or a state or
+ * region and a place in it ("Borno" and "Maiduguri", "Maharashtra" and "Pune"). Two cities in one state are two
+ * areas ("Pune" and "Nagpur").
+ */
+export function oneArea(a: { place: string; coords: { region?: string; name?: string } }, b: { place: string; coords: { region?: string; name?: string } }): boolean {
+  if (a.place === b.place) return true
+  const names = (p: typeof a) => [p.place, p.coords.name?.toLowerCase()].filter((n): n is string => !!n)
+  const namesA = names(a), namesB = names(b)
+  if (namesA.some(n => namesB.includes(n))) return true
+  const regionA = a.coords.region?.toLowerCase(), regionB = b.coords.region?.toLowerCase()
+  return (!!regionB && namesA.includes(regionB)) || (!!regionA && namesB.includes(regionA))
+}
+
 /** At most this many geocoder lookups per text (each one waits about a second) */
 const MAX_NOMINATIM_LOOKUPS = 4
 
@@ -752,10 +862,11 @@ const COUNTRY_SCAN = COUNTRY_MATCHERS.map(([pattern, code]) => ({ code, re: new 
  * with those names blanked out. For comparing headlines (correlate.ts
  * storyWords), where a place should count once, as its country.
  */
-export function splitPlaces(text: string): { countries: string[]; rest: string } {
+export function splitPlaces(text: string): { countries: string[]; rest: string; places: Array<{ place: string; coords: typeof GAZETTEER[string] }> } {
   const clean = text.replace(OUTLET_NAMES, ' ')
   const spans: Array<[number, number]> = []
   const codes = new Set<string>()
+  const found: Array<{ place: string; coords: typeof GAZETTEER[string]; index: number }> = []
   const take = (index: number, length: number): boolean => {
     const end = index + length
     if (length === 0 || spans.some(([a, b]) => index < b && end > a)) return false
@@ -767,7 +878,9 @@ export function splitPlaces(text: string): { countries: string[]; rest: string }
     m.re.lastIndex = 0
     for (const hit of clean.matchAll(m.re)) {
       if (partOfAName(clean, hit.index ?? 0, (hit.index ?? 0) + hit[0].length)) continue
-      if (take(hit.index ?? 0, hit[0].length) && m.coords.country) codes.add(m.coords.country)
+      if (!take(hit.index ?? 0, hit[0].length)) continue
+      if (m.coords.country) codes.add(m.coords.country)
+      found.push({ place: m.place, coords: m.coords, index: hit.index ?? 0 })
     }
   }
   for (const m of COUNTRY_SCAN) {
@@ -778,7 +891,9 @@ export function splitPlaces(text: string): { countries: string[]; rest: string }
   }
   let rest = clean
   for (const [a, b] of spans) rest = rest.slice(0, a) + ' '.repeat(b - a) + rest.slice(b)
-  return { countries: [...codes], rest }
+  // ...and the gazetteer places it names, in order of mention (correlate.ts isSameStory compares them)
+  const places = found.sort((a, b) => a.index - b.index).map(({ place, coords }) => ({ place, coords }))
+  return { countries: [...codes], rest, places }
 }
 
 /**
@@ -964,8 +1079,10 @@ export async function reverseGeocode(lat: number, lng: number): Promise<ReverseG
     const dLat = Math.abs(coords.lat - lat)
     const dLng = Math.abs(coords.lng - lng)
     if (dLat < 1.5 && dLng < 1.5) {
+      // "Kano", not "Kano, Kano": a state is its own region (Oct 30, 2026)
+      const named = coords.name ?? titleCase(place)
       const result: ReverseGeoResult = {
-        name:        coords.region ? `${titleCase(place)}, ${coords.region}` : titleCase(place),
+        name:        coords.region && coords.region.toLowerCase() !== named.toLowerCase() ? `${named}, ${coords.region}` : named,
         countryCode: coords.country,
         region:      coords.region ?? null,
       }

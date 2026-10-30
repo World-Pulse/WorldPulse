@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 vi.mock('../../lib/redis', () => ({ redis: { get: vi.fn(async () => null), setex: vi.fn(async () => 'OK') } }))
 vi.mock('../../lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }))
 
-import { extractGeo, findGazetteerPlace, mentionedCountries, acceptGeocoderHit, placeFromText, geocodePlace, throttleNominatim, type NominatimResult } from '../geo'
+import { extractGeo, findGazetteerPlace, mentionedCountries, acceptGeocoderHit, placeFromText, geocodePlace, throttleNominatim, oneArea, type NominatimResult } from '../geo'
 import { redis } from '../../lib/redis'
 
 describe('findGazetteerPlace', () => {
@@ -345,5 +345,32 @@ describe('M57, Oct 30, 2026: the fresh read of the live map', () => {
     expect((await extractGeo('Ukraine: drone attack on an energy plant', 'Russian drones hit a plant in Kharkiv overnight.')).name).toBe('Kharkiv')
     // an adjective names the actor: the article's place stays ("Israeli strike" in Gaza)
     expect((await extractGeo('Israeli strike kills five', 'The strike hit a house in Gaza on Tuesday.')).countryCode).toBe('PS')
+  })
+})
+
+describe('places 72 hours of headlines named and the gazetteer missed (Oct 30, 2026)', () => {
+  it("pins Nigeria's states, Guayaquil, Makkah and Incheon at their own places", () => {
+    expect(findGazetteerPlace('Troops kill 44 terrorists, destroy IED materials in Borno')?.coords.country).toBe('NG')
+    expect(findGazetteerPlace('5 arrested as NSCDC uncovers illegal diesel refinery in Kano')?.place).toBe('kano')
+    expect(findGazetteerPlace('Police rescue 29 kidnap victims, arrest 34 foreigners in Benue – Official')?.coords.region).toBe('Benue')
+    expect(findGazetteerPlace('Fiscalía intervino oficinas de la Alcaldía de Guayaquil por presunto peculado')?.coords.country).toBe('EC')
+    expect(findGazetteerPlace('Tinubu heads to Makkah to pray for Nigeria')?.coords.country).toBe('SA')
+    expect(findGazetteerPlace('13 airlines hit by check-in disruption at Incheon Airport')?.coords.country).toBe('KR')
+    expect(findGazetteerPlace('Balean antigua casa de campaña de Rocha Moya en Culiacán')?.coords.region).toBe('Sinaloa')
+  })
+  it('leaves out names that are also other words or names', () => {
+    expect(findGazetteerPlace('OYO raises funds as Indian hotel chain expands')).toBeNull()
+    expect(findGazetteerPlace('IMO adopts new shipping emissions rules')).toBeNull()
+    expect(findGazetteerPlace('Jos Buttler leads England to victory')).toBeNull()
+  })
+  it('a state and a place in it are one area; two cities in one state are not', () => {
+    const at = (t: string) => findGazetteerPlace(t)!
+    expect(oneArea(at('Clashes in Borno'), at('Clashes in Maiduguri'))).toBe(true)
+    expect(oneArea(at('Floods in Maharashtra'), at('Floods in Pune'))).toBe(true)
+    expect(oneArea(at('Bolsonaro lands in Miami'), at('Bolsonaro arrives in Florida'))).toBe(true)
+    expect(oneArea(at('Blast in Kiev'), at('Blast in Kyiv'))).toBe(true)
+    expect(oneArea(at('Strike on Nyala market'), at('Fighting in Darfur'))).toBe(true)
+    expect(oneArea(at('Floods in Pune'), at('Floods in Nagpur'))).toBe(false)
+    expect(oneArea(at('Assembly in Jigawa'), at('Assembly in Ebonyi'))).toBe(false)
   })
 })

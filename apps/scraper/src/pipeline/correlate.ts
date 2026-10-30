@@ -27,7 +27,7 @@ import { db } from '../lib/postgres'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
 import { sourceKey, hostOf } from './signal-columns'
-import { findGazetteerPlace, splitPlaces } from './geo'
+import { findGazetteerPlace, oneArea, splitPlaces } from './geo'
 import { isEventTemplateTitle } from './event-titles'
 import { countIndependentOutlets, isCopyOf } from './independence'
 import { joinStory, ensureStoryIdColumn } from './stories'
@@ -584,6 +584,17 @@ const COMMON_THINGS = new Set([
 ].map(stemWord))
 
 const storyWordCache = new Map<string, Set<string>>()
+const storyPlaceCache = new Map<string, ReturnType<typeof splitPlaces>['places']>()
+
+/** The gazetteer places a headline names, in order of mention (see isSameStory) */
+function storyPlaces(title: string): ReturnType<typeof splitPlaces>['places'] {
+  const known = storyPlaceCache.get(title)
+  if (known) return known
+  const { places } = splitPlaces(title)
+  if (storyPlaceCache.size >= 5000) storyPlaceCache.clear()
+  storyPlaceCache.set(title, places)
+  return places
+}
 
 /**
  * What a headline says, for telling whether two are the same story: its
@@ -684,11 +695,15 @@ export function isSameStory(a: CorrelationCandidate, b: CorrelationCandidate): b
   if (nthA && nthB && nthA !== nthB) return false
 
   // Headlines that name different known places are different events, however
-  // alike the rest is ("Explosion hits Kherson" / "Explosion hits Kyiv")
-  const placeA = findGazetteerPlace(a.title ?? '')
-  const placeB = findGazetteerPlace(b.title ?? '')
-  if (placeA && placeB && placeA.place !== placeB.place) return false
-  if (farApartEvents(a, b, !!placeA && placeA.place === placeB?.place)) return false
+  // alike the rest is ("Explosion hits Kherson" / "Explosion hits Kyiv"). Every place
+  // each names counts, and a state and a place in it are one area (geo.ts oneArea):
+  // "Tinubu departs Abuja for Umrah at Makkah" and "Tinubu jets to Makkah for Umrah"
+  // are one story, "Gunmen kill 12 in Borno" and "... near Maiduguri" too (Oct 30, 2026)
+  const placesA = storyPlaces(a.title ?? '')
+  const placesB = storyPlaces(b.title ?? '')
+  const samePlace = placesA.some(pa => placesB.some(pb => oneArea(pa, pb)))
+  if (placesA.length > 0 && placesB.length > 0 && !samePlace) return false
+  if (farApartEvents(a, b, samePlace)) return false
   return true
 }
 
