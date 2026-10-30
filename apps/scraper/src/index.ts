@@ -9,7 +9,7 @@ import Parser from 'rss-parser'
 import { Kafka, Producer, Consumer } from 'kafkajs'
 import { redis } from './lib/redis'
 import { db } from './lib/postgres'
-import { repinNewsHomePins } from './sources/news-rss'
+import { repinNewsHomePins, fetchUrl } from './sources/news-rss'
 import { cleanEntityGraph } from './pipeline/entity-cleanup'
 import { backfillMorePlaces } from './pipeline/entity-places-backfill'
 import { logger } from './lib/logger'
@@ -469,7 +469,7 @@ async function retryDlqBatch(): Promise<void> {
     try {
       // Rate-limit and retry with a shorter schedule (2 retries: 2 s, 10 s)
       await acquireRateLimit(item.feedUrl)
-      await withRetry(() => parser.parseURL(item.feedUrl), { delays: [2_000, 10_000] })
+      await withRetry(async () => parser.parseString(await fetchUrl(item.feedUrl)), { delays: [2_000, 10_000] })
 
       // Feed is responsive again — reset the circuit breaker so the normal
       // scrape cycle will re-include this source on its next pass.
@@ -590,7 +590,10 @@ async function scrapeSource(source: ScraperSource): Promise<number> {
 
       // ── Fetch with exponential backoff (1 s, 5 s, 30 s) ────────────────
       const fetchStart = Date.now()
-      const feed = await withRetry(() => parser.parseURL(feedUrl))
+      // Read with the news reader's fetch, which decodes gzip, deflate and brotli: rss-parser's own
+      // parseURL doesn't, and some servers compress whatever the client asks (Oct 30, 2026: UN News's
+      // feed answered gzip to a request that asked for none, "Non-whitespace before first tag", 6 fails)
+      const feed = await withRetry(async () => parser.parseString(await fetchUrl(feedUrl)))
       totalLatencyMs += Date.now() - fetchStart
       feedSuccesses++
 
