@@ -26,6 +26,13 @@ describe('findGazetteerPlace', () => {
     expect(findGazetteerPlace('Cargo ship docks at Port Qasim')?.place).toBe('port qasim')
   })
 
+  it('pins Vietnamese provinces, Ugandan towns and the Algarve at their own places, not at Thailand, Kampala or Dakar', () => {
+    expect(findGazetteerPlace('Thai Nguyen seeks to expand tea in tourism')?.coords.country).toBe('VN')
+    expect(findGazetteerPlace('Can Tho supports fishing vessel decommissioning')?.coords.country).toBe('VN')
+    expect(findGazetteerPlace('193 Police Officers Graduate in Masindi')?.coords.country).toBe('UG')
+    expect(findGazetteerPlace('Algarve hoteliers hail return of Dakar Rally')?.coords.country).toBe('PT')
+  })
+
   it('pins Russian republics and cities in Russia, not in a neighbouring country', () => {
     expect(findGazetteerPlace('Drone attack reported in Ufa, Bashkortostan')?.coords.country).toBe('RU')
     expect(findGazetteerPlace('Bashkortostan oil refinery fire')?.place).toBe('bashkortostan')
