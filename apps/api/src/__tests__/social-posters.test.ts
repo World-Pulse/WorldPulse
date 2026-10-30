@@ -30,7 +30,7 @@ vi.mock('../routes/stories', () => ({ topStories: vi.fn(async () => h.stories) }
 // (briefing-email, for newYorkTime, would otherwise connect to Postgres)
 vi.mock('../db/postgres', () => ({ db: vi.fn() }))
 
-import { runSocialPosts, postableStories, blueskyText, telegramText, xText } from '../lib/social-posters'
+import { runSocialPosts, postableStories, blueskyText, blueskyIdentifier, telegramText, xText } from '../lib/social-posters'
 
 const story = (n: number, extra: Partial<ListedStory> = {}): ListedStory => ({
   id: `story-${n}`, leadId: `${n}${n}${n}${n}${n}${n}${n}${n}-0000-0000-0000-000000000000`,
@@ -133,6 +133,22 @@ describe('posting', () => {
     expect(record.record.embed.external.uri).toContain('utm_source=bluesky')
     expect(record.record.embed.external.thumb).toEqual({ ref: 'blob1' })
     expect(record.record.text).toContain('Verified · 5 outlets')
+  })
+
+  it('signs in to Bluesky with the handle as people copy it (Oct 30, 2026: "Invalid identifier or password")', async () => {
+    expect(blueskyIdentifier('@worldpulse.bsky.social')).toBe('worldpulse.bsky.social')
+    expect(blueskyIdentifier('  worldpulse.bsky.social \t')).toBe('worldpulse.bsky.social')
+    expect(blueskyIdentifier('https://bsky.app/profile/worldpulse.bsky.social')).toBe('worldpulse.bsky.social')
+    expect(blueskyIdentifier('worldpulse')).toBe('worldpulse.bsky.social')
+    expect(blueskyIdentifier('world-pulse.io')).toBe('world-pulse.io')
+    expect(blueskyIdentifier('newsdesk@example.org')).toBe('newsdesk@example.org')
+    expect(blueskyIdentifier('did:plc:wp')).toBe('did:plc:wp')
+    expect(blueskyIdentifier(undefined)).toBe('')
+    delete process.env.TELEGRAM_BOT_TOKEN
+    process.env.BLUESKY_HANDLE = '@worldpulse.bsky.social '
+    process.env.BLUESKY_APP_PASSWORD = ' app-pass\t'
+    expect((await runSocialPosts(MORNING)).bluesky).toMatch(/^posted:/)
+    expect(calls.find(c => c.url.endsWith('createSession'))!.body).toEqual({ identifier: 'worldpulse.bsky.social', password: 'app-pass' })
   })
 })
 

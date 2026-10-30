@@ -126,11 +126,26 @@ async function bsky<T>(path: string, init: RequestInit): Promise<T> {
   return body
 }
 
+/**
+ * The handle as Bluesky's sign-in takes it (Oct 30, 2026: the first post, at 6:02 AM New York time, was
+ * refused with "Invalid identifier or password"). A handle is often copied as the profile shows it,
+ * "@name.bsky.social", with a space around it, or as the profile's address; a bare "name" is
+ * name.bsky.social. An email address or a did: is used as given.
+ */
+export function blueskyIdentifier(raw: string | undefined): string {
+  let v = (raw || '').trim()
+  const profile = /^https?:\/\/(?:www\.)?bsky\.app\/profile\/([^/?#\s]+)/i.exec(v)
+  if (profile?.[1]) v = profile[1]
+  v = v.replace(/^@+/, '')
+  if (v && !v.includes('.') && !v.includes('@') && !v.startsWith('did:')) v += '.bsky.social'
+  return v
+}
+
 async function blueskyPost(s: ListedStory): Promise<void> {
   const session = await bsky<{ accessJwt: string; did: string }>('com.atproto.server.createSession', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ identifier: process.env.BLUESKY_HANDLE, password: process.env.BLUESKY_APP_PASSWORD }),
+    body: JSON.stringify({ identifier: blueskyIdentifier(process.env.BLUESKY_HANDLE), password: (process.env.BLUESKY_APP_PASSWORD || '').trim() }),
   })
   const auth = { Authorization: `Bearer ${session.accessJwt}` }
   // The story's own card as the link preview (Bluesky doesn't fetch cards itself)
