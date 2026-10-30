@@ -76,8 +76,11 @@ function requirePulseKey(req: FastifyRequest, reply: FastifyReply, done: () => v
 
 /** Seconds one overnight briefing is reused for everyone in a timezone */
 const BRIEFING_CACHE_TTL = 15 * 60
-/** Seconds after that it is still shown while the next is made */
-const BRIEFING_STALE_TTL = 2 * 60 * 60
+/**
+ * Seconds after that it is still shown while the next is made: 6 hours, like the daily briefing's (Oct 30, 2026:
+ * with 2, a time zone nobody had asked for in that long was made while its first reader waited, 2 to 7 s)
+ */
+export const BRIEFING_STALE_TTL = 6 * 60 * 60
 
 /** At most this many subjects in the briefing's "Escalating" list */
 const MAX_ESCALATING = 5

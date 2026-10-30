@@ -522,22 +522,18 @@ export default function BriefingPage() {
       const token = typeof window !== 'undefined' ? localStorage.getItem('wp_access_token') : null
       const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
 
-      const [morningRes, pulseRes, signalRes, structuredRes] = await Promise.all([
-        fetch(`${apiBase}/api/v1/pulse/briefing?tz=${encodeURIComponent(tz)}`).catch(() => null),
+      // The overnight card fills in when it comes; the page doesn't wait for it (Oct 30, 2026: made fresh for a
+      // time zone nobody had asked for lately, it took the API 2 to 7 s, and the whole page waited with it)
+      fetch(`${apiBase}/api/v1/pulse/briefing?tz=${encodeURIComponent(tz)}`)
+        .then(res => (res.ok ? res.json() : null))
+        .then(json => { if (json?.success && json.briefing) setMorningBriefing(json.briefing) })
+        .catch(() => { /* non-critical */ })
+
+      const [pulseRes, signalRes, structuredRes] = await Promise.all([
         fetch(`${apiBase}/api/v1/pulse/latest?content_type=daily_briefing`).catch(() => null),
         fetch(`${apiBase}/api/v1/briefing/daily?${params.toString()}`),
         fetch(`${apiBase}/api/v1/briefing/structured`, { headers: authHeaders }).catch(() => null),
       ])
-
-      // Parse morning briefing (non-critical)
-      if (morningRes?.ok) {
-        try {
-          const morningJson = await morningRes.json()
-          if (morningJson.success && morningJson.briefing) {
-            setMorningBriefing(morningJson.briefing)
-          }
-        } catch { /* non-critical */ }
-      }
 
       // Parse PULSE narrative (non-critical — page works without it)
       if (pulseRes?.ok) {
