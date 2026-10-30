@@ -66,6 +66,9 @@ fi
 # End the database queries left running by containers that are gone (scripts/db-orphans.sh, Oct 26, 2026)
 log "$(bash scripts/db-orphans.sh 2>&1 | tail -n 1)"
 
+# Password-guessing bots shut out of SSH (scripts/ssh-guard.sh, plan LR11, Oct 30, 2026)
+log "$(timeout 600 bash scripts/ssh-guard.sh 2>&1 | tail -n 1)"
+
 result=ok
 [ "$(free_gb)" -ge 5 ] || result=low_disk
 echo "$result $(date -Is)" > logs/maintenance.status

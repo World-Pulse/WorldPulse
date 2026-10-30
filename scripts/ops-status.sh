@@ -771,6 +771,23 @@ if len(mine) >= 2:
 print(json.dumps(out, separators=(',', ':')))
 PY
 }
+# Password-guessing bots shut out of SSH (scripts/ssh-guard.sh, plan LR11, Oct
+# 30, 2026): whether fail2ban's sshd jail is on, the failed sign-ins it has
+# counted and the addresses shut out now and since it started. Counts only,
+# never an address. null before the guard is set up.
+ssh_guard() {
+  local out setup
+  setup=$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1])), separators=(",", ":")))' logs/ssh-guard.status 2>/dev/null) || setup=null
+  if ! command -v fail2ban-client > /dev/null 2>&1; then
+    [ "$setup" = null ] && { printf 'null'; return; }
+    printf '{"on":false,"setup":%s}' "$setup"; return
+  fi
+  out=$(timeout 10 fail2ban-client status sshd 2>/dev/null) || { printf '{"on":false,"setup":%s}' "$setup"; return; }
+  n() { printf '%s\n' "$out" | sed -n "s/.*$1:[[:space:]]*\([0-9][0-9]*\).*/\1/p" | head -n 1; }
+  printf '{"on":true,"failed_now":%s,"failed_total":%s,"shut_out_now":%s,"shut_out_total":%s,"setup":%s}' \
+    "$(n 'Currently failed')" "$(n 'Total failed')" "$(n 'Currently banned')" "$(n 'Total banned')" "$setup" \
+    | sed 's/:,/:null,/g'
+}
 # Why the last deploy wasn't clean, from the deploy script's own log lines only
 # (its warnings, or the reason it rolled back or failed); empty when it was clean
 deploy_note() {
@@ -799,6 +816,9 @@ fi
 pipeline=$(cat "$pipe_cache" 2>/dev/null || true)
 [ -n "$pipeline" ] || pipeline=null
 sproc=$(scraper_process 2>/dev/null | grep -E '^(\{|null)' | head -n 1)
+# (only when it reads as JSON: a broken block never breaks the file)
+sguard=$(ssh_guard 2>/dev/null | head -n 1)
+printf '%s' "$sguard" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null || sguard=null
 {
   printf '{"updated":"%s",' "$(date -Is)"
   printf '"commit":"%s",' "$(git rev-parse --short=7 HEAD 2>/dev/null || echo unknown)"
@@ -815,6 +835,7 @@ sproc=$(scraper_process 2>/dev/null | grep -E '^(\{|null)' | head -n 1)
   printf '"containers":{%s},' "$containers"
   printf '"server":%s,' "$(server_load 2>/dev/null | grep '^{' || echo null)"
   printf '"scraper_process":%s,' "${sproc:-null}"
+  printf '"ssh_guard":%s,' "${sguard:-null}"
   printf '"pipeline":%s}\n' "$pipeline"
 } > "logs/public/status.json.$$.tmp" \
   && { python3 scripts/data_health.py "logs/public/status.json.$$.tmp" 2> logs/data-health.err || true; } \
