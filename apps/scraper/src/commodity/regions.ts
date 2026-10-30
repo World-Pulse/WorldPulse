@@ -117,9 +117,17 @@ const ROWS: Row[] = [
   ['wheat', 'RU', 'Stavropol', 'Stavropol', 45.0, 42.0, 0.1, 'GGGGBFHOPPGG'],
   ['wheat', 'RU', 'Volga', 'Volga (Saratov)', 51.5, 46.0, 0.08, 'GGGGBFHHPPGG'],
   ['wheat', 'RU', 'Siberia', 'West Siberia spring wheat (Altai)', 53.3, 81.5, 0.1, 'OOOOPGBFHOOO'],
-  ['wheat', 'US', 'Kansas', 'Kansas (Hays)', 38.5, -98.8, 0.25, 'GGGGBFHOPPGG'],
-  ['wheat', 'US', 'Oklahoma', 'Oklahoma (Enid)', 36.4, -97.9, 0.1, 'GGGBFHOOPPGG'],
-  ['wheat', 'US', 'North Dakota', 'North Dakota spring wheat', 47.9, -99.4, 0.2, 'OOOPPGBHHOOO'],
+  // CM9 (Oct 30, 2026): US wheat by USDA NASS's Small Grains Summaries, 2025 and 2026 averaged (2026's Plains drought
+  // took Kansas from 17% of the crop to 13%). Kansas, Oklahoma and North Dakota were 0.25, 0.1 and 0.2, about 37% of the
+  // crop read as 55%; with Montana, the Pacific Northwest and northwest Minnesota, about 63%
+  ['wheat', 'US', 'Kansas', 'Kansas (Hays)', 38.5, -98.8, 0.15, 'GGGGBFHOPPGG'],
+  ['wheat', 'US', 'Oklahoma', 'Oklahoma (Enid)', 36.4, -97.9, 0.045, 'GGGBFHOOPPGG'],
+  ['wheat', 'US', 'North Dakota', 'North Dakota spring wheat', 47.9, -99.4, 0.17, 'OOOPPGBHHOOO'],
+  ['wheat', 'US', 'Montana', 'Golden Triangle, Montana (Conrad)', 48.17, -111.95, 0.05, 'GGGGGBFHPPGG'],
+  ['wheat', 'US', 'Montana', 'Northeast Montana spring wheat and durum (Glasgow)', 48.2, -106.63, 0.055, 'OOOPPGBHHOOO'],
+  ['wheat', 'US', 'Washington', 'Eastern Washington (Ritzville)', 47.13, -118.38, 0.09, 'GGGGGBFHPPGG'],
+  ['wheat', 'US', 'Oregon', 'Columbia Plateau, Oregon (Pendleton)', 45.67, -118.79, 0.03, 'GGGGBFHOPPGG'],
+  ['wheat', 'US', 'Minnesota', 'Northwest Minnesota (Crookston)', 47.77, -96.61, 0.04, 'OOOPPGBHHOOO'],
   ['wheat', 'CA', 'Saskatchewan', 'Saskatchewan (Regina)', 50.9, -105.0, 0.45, 'OOOOPGBFHOOO'],
   ['wheat', 'CA', 'Alberta', 'Alberta (Red Deer)', 52.27, -113.8, 0.3, 'OOOOPGBFHOOO'],
   ['wheat', 'AU', 'New South Wales', 'Central West NSW (Parkes)', -33.0, 148.0, 0.3, 'OOOPPGGGBFHH'],

@@ -23,6 +23,9 @@ describe('the crop regions', () => {
     expect(new Set(REGIONS.map(r => r.id)).size).toBe(REGIONS.length)
     expect(REGIONS.filter(r => r.iso === 'EU').every(r => r.country !== 'EU' && r.country.length === 2)).toBe(true)
     expect(regionsOf('wheat', 'EU').map(r => r.country)).toEqual(['FR', 'DE', 'PL', 'RO', 'BG', 'ES', 'IT', 'HU', 'CZ', 'LT', 'DK', 'SE'])
+    // US wheat by NASS's 2025-26 production: Kansas and North Dakota still lead the country's level (a share of 0.15 or more)
+    expect(regionsOf('wheat', 'US').map(r => r.place)).toEqual(['Kansas', 'Oklahoma', 'North Dakota', 'Montana', 'Montana', 'Washington', 'Oregon', 'Minnesota'])
+    expect(regionsOf('wheat', 'US').filter(r => r.share >= 0.15).map(r => r.place)).toEqual(['Kansas', 'North Dakota'])
   })
 
   it("keeps each country's shares of a crop within the whole", () => {
