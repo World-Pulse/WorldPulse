@@ -106,6 +106,15 @@ describe('a region\'s weather risk', () => {
     expect(assessRegion(minas, coffee, soaked, wetPlace, NOW).risks.find(r => r.kind === 'wet')).toBeUndefined()
   })
 
+  it("calls no flooding out of season (Oct 30, 2026: Paraná's corn, 186 mm while its second crop waits for January)", () => {
+    const parana = REGIONS.find(r => r.id === 'corn:BR:parana-cascavel')!
+    const corn = BY_KEY.get('corn')!
+    const soaked = forecast(x => ({ rain: x.rain * 2 }))                           // 190 mm against 40 normal
+    expect(assessRegion(parana, corn, soaked, NORMALS, NOW)).toMatchObject({ stage: 'O', level: 0, risks: [] })
+    // the same rain at planting is a flooding risk
+    expect(assessRegion(parana, corn, soaked, NORMALS, new Date('2026-02-02T00:00:00Z')).risks[0]).toMatchObject({ kind: 'wet', level: 2 })
+  })
+
   it('needs a forecast to say anything', () => {
     expect(assessRegion(minas, coffee, null, NORMALS, NOW)).toMatchObject({ level: 0, days: 0, risks: [] })
   })

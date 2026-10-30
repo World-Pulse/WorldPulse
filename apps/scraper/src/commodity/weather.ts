@@ -191,9 +191,10 @@ export function assessRegion(region: CropRegion, commodity: WatchCommodity, fore
     const raw = ratio < 0.25 ? 3 : ratio < 0.5 ? 2 : ratio < 0.75 ? 1 : 0
     add('dry', atStage(raw, stage), `${r1(rain)} mm of rain forecast in ${span}, ${Math.round(ratio * 100)}% of normal, while the crop is ${doing}`)
   }
-  // Wet: flooding rain whatever the stage (at least twice normal: some places are always this wet),
-  // or far above normal at harvest
-  if (rain >= 150 && (normal === null || rain >= 2 * normal)) {
+  // Wet: flooding rain at any stage the crop is in the field or being harvested (at least twice normal:
+  // some places are always this wet), or far above normal at harvest. Not out of season (Oct 30, 2026:
+  // Paraná's corn was flagged for 186 mm of rain while the second crop its calendar follows waits for January)
+  if (stage !== 'O' && rain >= 150 && (normal === null || rain >= 2 * normal)) {
     add('wet', rain >= 200 && (normal === null || rain >= 2.5 * normal) ? 3 : 2, `${Math.round(rain)} mm of rain forecast in ${span}${normal ? `, ${r1(rain / normal)} times normal` : ''}: a flooding risk while the crop is ${doing}`)
   } else if (stage === 'H' && normal !== null && normal > 0) {
     const ratio = rain / normal

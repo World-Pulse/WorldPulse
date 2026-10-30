@@ -47,9 +47,14 @@ const FLAG_TTL_S = 8 * 86_400
 /**
  * Flags show on the map, the commodities page and the country panels from the first round. Into the
  * feed as reports only once a day of flags has been checked by hand (Oct 23, 2026): a forecast-based
- * flag that's wrong in the public feed costs more than a day's wait.
+ * flag that's wrong in the public feed costs more than a day's wait. Checked Oct 30, 2026 (CM8): two
+ * rounds on different forecasts (2:38 and 7:35 AM New York time), each flag against its region's
+ * normal rain, its crop calendar and the news. The 8 flags of both rounds held up (coastal Ecuador's
+ * flood rain is INAMHI's El Niño warning; Europe's dry ones a blocking high); Cambodia's rice dropped
+ * out with the newer forecast; Paraná's corn, flagged for flooding out of season, was the rule's
+ * fault (weather.ts no longer calls flooding then). So they go in.
  */
-export const FLAGS_IN_FEED = false
+export const FLAGS_IN_FEED = true
 const PAGE = 'https://world-pulse.io/commodities'
 
 const sleep = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms))
