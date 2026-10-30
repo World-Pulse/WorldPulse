@@ -91,6 +91,13 @@ describe('inferGeo', () => {
     expect(inferGeo('If Netanyahu stays, even his voters will feel it', '', source('abc-news')).countryCode).toBe('IL')
     expect(inferGeo('Putin’s envoy delays talks', '', source('kyiv-independent')).countryCode).toBe('UA')
   })
+
+  it("reads a bare \"Congress\" from a national outlet of a country with its own as that one", () => {
+    expect(inferGeo('Cyclone Arnab: Congress says Centre must lead coordinated relief efforts', '', source('the-hindu-national')).countryCode).toBe('IN')
+    expect(inferGeo('US Congress passes the spending bill', '', source('the-hindu-national')).countryCode).toBe('US')
+    expect(inferGeo('Congress passes the spending bill', '', source('abc-news')).countryCode).toBe('US')
+    expect(inferGeo('Congress passes the spending bill', '', source('gulf-news')).countryCode).toBe('US')
+  })
 })
 
 describe('datelinePlace (Oct 30, 2026)', () => {

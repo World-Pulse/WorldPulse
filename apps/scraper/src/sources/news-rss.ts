@@ -8247,11 +8247,20 @@ const RUSSIA_NOUN = /\b(?:russia|moscow|kremlin)\b/
  */
 const NO_PLACE_TOPIC = /\b(?:premier league|champions league|europa league|la liga|serie a|bundesliga|man(?:chester)? (?:utd|united|city)|binance|coinbase|bitcoin|ethereum|crypto(?:currency)? (?:exchange|hack))\b/i
 
-function fromHints(text: string, homeCountry?: string): InferredGeo | null {
+/**
+ * Countries whose own Congress the English-language press calls just "Congress": India's and Nepal's
+ * parties, the Philippines' legislature and Latin America's congresses
+ */
+const OWN_CONGRESS = new Set(['IN', 'NP', 'PH', 'MX', 'GT', 'HN', 'DO', 'CO', 'PE', 'EC', 'BO', 'CL', 'AR', 'PY'])
+
+function fromHints(text: string, homeCountry?: string, national = false): InferredGeo | null {
   const lower = text.toLowerCase()
   for (const { keywords, geo } of GEO_HINTS) {
     if (geo.code === 'RU' && homeCountry === 'UA' && !RUSSIA_NOUN.test(lower)) continue
-    if (keywords.some(kw => hintMatches(lower, kw))) {
+    // A bare "Congress" from a national outlet of a country with its own is that one (Oct 30, 2026: The Hindu's
+    // "Cyclone Arnab: Congress says Centre must lead ... relief" sat in Washington)
+    const words = national && geo.code === 'US' && OWN_CONGRESS.has(homeCountry ?? '') ? keywords.filter(kw => kw !== 'congress') : keywords
+    if (words.some(kw => hintMatches(lower, kw))) {
       return { lat: geo.lat, lng: geo.lng, locationName: geo.name, countryCode: geo.code ?? null }
     }
   }
@@ -8311,7 +8320,7 @@ export function inferGeo(
     const named = fromPlace(head)
     return { lat: point.lat, lng: point.lng, locationName: named?.locationName ?? null, countryCode: named?.countryCode ?? null }
   }
-  const fromHead = fromPlace(head) ?? fromHints(head, source.countryCode)
+  const fromHead = fromPlace(head) ?? fromHints(head, source.countryCode, HOME_PIN_SOURCES.has(source.id))
   if (fromHead) return fromHead
   // A national outlet's story that names no place in its headline is about its own country unless its
   // dateline says otherwise (Oct 30, 2026, M57: a place found anywhere in the summary won before, so
