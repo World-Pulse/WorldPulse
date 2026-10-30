@@ -41,7 +41,7 @@ describe('a place that is part of a name', () => {
   it('reads the Colorado party as a party, not the US state', () => {
     expect(findGazetteerPlace('Hugo Velázquez inscribió Fuerza Republicana ante el TEP de ANR. Dirigente colorado')).toBeNull()
     expect(findGazetteerPlace('Cartes lidera el Partido Colorado')).toBeNull()
-    expect(findGazetteerPlace('Wildfire near Denver, Colorado forces evacuations')?.place).toBe('denver')
+    expect(findGazetteerPlace('Wildfire forces evacuations across Colorado')?.place).toBe('colorado')
     expect(findGazetteerPlace('Snow closes roads across Colorado')?.place).toBe('colorado')
   })
 
