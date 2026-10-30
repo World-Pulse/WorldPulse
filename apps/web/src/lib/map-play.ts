@@ -68,6 +68,67 @@ export function captionAt(buckets: PlayBucket[], index: number): PlayCaption | n
   return null
 }
 
+// ── The video's shape (Oct 30, 2026; Devon: "The video is kind of lame, add some more layers, make it more
+// exciting"): a title card while the map and the day's data load, the replay with the camera flying to the
+// story of the moment, then the day's most-reported stories. The recorder waits for data-play-done.
+
+export type PlayPhase = 'intro' | 'play' | 'outro'
+/** The title card stays this long once the map and the day's data are ready */
+export const PLAY_INTRO_MS = 2_800
+/** The closing card's time on screen before the recording may stop */
+export const PLAY_OUTRO_MS = 6_000
+/** The camera flies to a new story at most this often */
+export const TOUR_EVERY_MS = 4_500
+/** How many moments back the camera looks for its next story */
+const TOUR_LOOKBACK = 6
+
+export interface TourSignal {
+  id: string
+  lat: number
+  lng: number
+  title: string
+  severity: string
+  status?: string
+  is_breaking: boolean
+}
+
+/**
+ * The story the camera visits next: of the last few moments, the best-ranked report with a place (verified first,
+ * then the most severe, breaking breaking ties), not the one it is already at
+ */
+export function pickTourStop(buckets: Array<{ signals: TourSignal[] }>, index: number, currentId: string | null = null): TourSignal | null {
+  let best: TourSignal | null = null
+  for (let i = Math.min(index, buckets.length - 1); i >= 0 && i > index - TOUR_LOOKBACK; i--) {
+    for (const s of buckets[i]?.signals ?? []) {
+      if (!Number.isFinite(s.lat) || !Number.isFinite(s.lng) || (s.lat === 0 && s.lng === 0)) continue
+      if (s.id === currentId || !s.title?.trim()) continue
+      if (!best || rank(s) > rank(best)) best = s
+    }
+  }
+  return best
+}
+
+/** Reports and verified reports on the map by a step (the replay shows every moment up to it) */
+export function playCounts(buckets: Array<{ signals: Array<{ status?: string }> }>, index: number): { reports: number; verified: number } {
+  let reports = 0
+  let verified = 0
+  for (let i = 0; i <= Math.min(index, buckets.length - 1); i++) {
+    for (const s of buckets[i]?.signals ?? []) {
+      reports++
+      if (s.status === 'verified') verified++
+    }
+  }
+  return { reports, verified }
+}
+
+/** "FRIDAY, OCTOBER 30" for the day the window ends on (UTC, like the time label) */
+export function playDateLabel(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' }).toUpperCase()
+}
+
 /** "Oct 17 · 14:00 UTC" */
 export function playTimeLabel(iso: string | null): string {
   if (!iso) return ''

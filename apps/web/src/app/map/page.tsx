@@ -14,9 +14,9 @@ import { TimeSlider } from '@/components/map/TimeSlider'
 import { ShareButton } from '@/components/map/ShareButton'
 import HotspotLabels from '@/components/map/HotspotLabels'
 import { EnhancedHeatmap } from '@/components/map/EnhancedHeatmap'
-import { PlayOverlay } from '@/components/map/PlayOverlay'
+import { PlayOverlay, type PlayDayStats, type PlayTopStory } from '@/components/map/PlayOverlay'
 import { useTimelinePlayback } from '@/hooks/useTimelinePlayback'
-import { parsePlayParam, playStepMs, captionAt, playTimeLabel } from '@/lib/map-play'
+import { parsePlayParam, playStepMs, captionAt, playTimeLabel, playDateLabel, pickTourStop, PLAY_INTRO_MS, PLAY_OUTRO_MS, TOUR_EVERY_MS, type PlayPhase } from '@/lib/map-play'
 import { parseWindowHash, encodePermalink, type MapPermalinkState, type LayerKey } from '@/lib/map-permalink'
 import {
   Map as MapIcon, Moon, Satellite, Globe2, LocateFixed, Layers as LayersIcon,
@@ -323,7 +323,10 @@ function MapView({ embed = false }: { embed?: boolean }) {
     return v && TRANGE.some(t => t.v === v) ? v : '24h'
   })
   const [wsOnline,    setWsOnline]    = useState(false)
-  const [heatmapMode, setHeatmapMode] = useState(() => searchParams.get('hm') === '1')
+  // Play mode (G9, Oct 30, 2026: "add some more layers, make it more exciting") opens with the heat, which builds
+  // as the day plays, the conflict zones and the natural hazards on
+  const playParam = parsePlayParam(searchParams.get('play')) !== null
+  const [heatmapMode, setHeatmapMode] = useState(() => searchParams.get('hm') === '1' || playParam)
   const [visibleCount, setVisibleCount] = useState(0)
   const [mapZoom, setMapZoom] = useState(2)
   // BAT-16: EnhancedHeatmap instance — created once after map loads
@@ -375,7 +378,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
   const [signInNeeded,   setSignInNeeded]   = useState<{ threats?: boolean; jamming?: boolean }>({})
 
   // ── Natural Hazards layer state ───────────────────────────────────────────────
-  const [hazardsMode,    setHazardsMode]    = useState(false)
+  const [hazardsMode,    setHazardsMode]    = useState(playParam)
   const [hazardsLoading, setHazardsLoading] = useState(false)
   const [hazardsCount,   setHazardsCount]   = useState(0)
 
@@ -396,7 +399,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
   const [priceMovesMode,   setPriceMovesMode]   = useState(false)
 
   // ── Conflict Zone Overlay layer state (BAT-17) ─────────────────────────────
-  const [conflictMode,    setConflictMode]    = useState(false)
+  const [conflictMode,    setConflictMode]    = useState(playParam)
   const [conflictLoading, setConflictLoading] = useState(false)
   const [conflictCount,   setConflictCount]   = useState(0)
   const conflictLayerRef  = useRef<import('@/components/map/ConflictZoneOverlay').ConflictZoneOverlay | null>(null)
@@ -416,15 +419,10 @@ function MapView({ embed = false }: { embed?: boolean }) {
   const [timelineRange, setTimelineRange] = useState(playRange ?? '24h')
   const timeline = useTimelinePlayback(playStep)
 
-  // Once the day has loaded: pace it to about a minute, then start
-  useEffect(() => {
-    if (!playMode || playStartedRef.current || timeline.loading || !timeline.data) return
-    if (timeline.data.buckets.length === 0) return
-    playStartedRef.current = true
-    setPlayStep(playStepMs(timeline.data.buckets.length))
-    timeline.togglePlay()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playMode, timeline.loading, timeline.data])
+  const [playPhase, setPlayPhase] = useState<PlayPhase>('intro')
+  const [playDay, setPlayDay] = useState<PlayDayStats | null>(null)
+  const [playTop, setPlayTop] = useState<PlayTopStory[]>([])
+
 
   // ── Basemap switcher state ────────────────────────────────────────────────────
   // Starts dark on the server and the client alike (the server can't see the #hash); a
@@ -1203,7 +1201,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
 
         // A slow spin of the whole-world globe until someone touches the map
         // (not on shared links, which open on a chosen place)
-        if (!hasLinkedView && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+        if (!hasLinkedView && !playMode && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
           spinState.on = true
           const stopSpin = () => { spinState.on = false }
           map.once('mousedown', stopSpin)
@@ -3639,6 +3637,90 @@ function MapView({ embed = false }: { embed?: boolean }) {
   const economyLayer = useEconomyLayer(mapRef, mapReady, economyMode, economyIndicator)
   const priceMovesLayer = usePriceMovesLayer(mapRef, mapReady, priceMovesMode)
 
+  // ── Play mode (G9): the title card, the start, the camera's tour and the closing card ──
+  // The title card's numbers and the closing card's stories (the same public answers the home page reads)
+  useEffect(() => {
+    if (!playMode) return
+    let alive = true
+    fetch(`${API_URL}/api/v1/signals/count`).then(r => (r.ok ? r.json() : null)).then((j: { data?: Record<string, number> } | null) => {
+      const d = j?.data
+      if (alive && d && Number(d.last24h) > 0) {
+        setPlayDay({ reports: Number(d.last24h), outlets: Number(d.outlets24h) || 0, countries: Number(d.countries24h) || 0, verified: Number(d.verified24h) || 0 })
+      }
+    }).catch(() => {})
+    fetch(`${API_URL}/api/v1/stories?hours=24&limit=3`).then(r => (r.ok ? r.json() : null)).then((j: { data?: Array<{ title?: string; outletCount?: number }> } | null) => {
+      const list = Array.isArray(j?.data) ? j!.data : []
+      if (alive) setPlayTop(list.filter(s => s.title).map(s => ({ title: String(s.title), outlets: Number(s.outletCount) || 0 })))
+    }).catch(() => {})
+    return () => { alive = false }
+  }, [playMode])
+
+  // Once the map and the day have loaded, and the title card has had its moment: pace the day to about a minute, then start
+  useEffect(() => {
+    if (!playMode || playStartedRef.current || timeline.loading || !timeline.data || !mapReady) return
+    if (timeline.data.buckets.length === 0) return
+    playStartedRef.current = true
+    const buckets = timeline.data.buckets.length
+    // (once, without a cleanup: a later render mustn't cancel the start)
+    setTimeout(() => {
+      setPlayStep(playStepMs(buckets))
+      setPlayPhase('play')
+      timeline.togglePlay()
+    }, PLAY_INTRO_MS)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playMode, timeline.loading, timeline.data, mapReady])
+
+  // The camera flies to the story of the moment every few seconds, with a ripple where it happened
+  const tourRef = useRef<{ at: number; id: string | null }>({ at: 0, id: null })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rippleRef = useRef<any>(null)
+  useEffect(() => {
+    if (!playMode || playPhase !== 'play' || !timeline.data) return
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const map = mapRef.current as any
+    if (!map) return
+    const now = Date.now()
+    if (now - tourRef.current.at < TOUR_EVERY_MS) return
+    const stop = pickTourStop(timeline.data.buckets, timeline.currentIndex, tourRef.current.id)
+    if (!stop) return
+    tourRef.current = { at: now, id: stop.id }
+    const canvas = map.getCanvas()
+    const zoom = worldZoom(canvas.clientWidth, canvas.clientHeight, projectionRef.current) + 1.1
+    try { map.flyTo({ center: [stop.lng, stop.lat], zoom, duration: 2400, curve: 1.3, essential: true }) } catch { /* map busy */ }
+    const color = ({ critical: '#ff3b5c', high: '#ff9f43', medium: '#f5a623', low: '#00d4aa' } as Record<string, string>)[stop.severity] ?? '#f5a623'
+    void (async () => {
+      const { default: ml } = await import('maplibre-gl')
+      if (!rippleRef.current) {
+        const el = document.createElement('div')
+        el.className = 'wp-play-ripple'
+        el.innerHTML = '<i></i><i></i><b></b>'
+        rippleRef.current = new ml.Marker({ element: el }).setLngLat([stop.lng, stop.lat]).addTo(map)
+      }
+      rippleRef.current.setLngLat([stop.lng, stop.lat])
+      rippleRef.current.getElement().style.setProperty('--c', color)
+    })()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playMode, playPhase, timeline.currentIndex, timeline.data])
+
+  // When the day has played: the closing card over the whole world, then the recorder may stop (data-play-done)
+  const outroRef = useRef(false)
+  useEffect(() => {
+    if (!playMode || outroRef.current || playPhase !== 'play' || timeline.isPlaying || !timeline.data) return
+    if (timeline.currentIndex < timeline.data.buckets.length - 1) return
+    outroRef.current = true
+    setPlayPhase('outro')
+    rippleRef.current?.remove()
+    rippleRef.current = null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const map = mapRef.current as any
+    try {
+      const canvas = map.getCanvas()
+      map.flyTo({ center: [map.getCenter().lng, 22], zoom: worldZoom(canvas.clientWidth, canvas.clientHeight, projectionRef.current), duration: 2600, essential: true })
+    } catch { /* map busy */ }
+    setTimeout(() => { document.documentElement.dataset.playDone = '1' }, PLAY_OUTRO_MS)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playMode, playPhase, timeline.isPlaying, timeline.currentIndex, timeline.data])
+
   // ── Timeline Playback data fetch + map integration (BAT-14) ─────────────────
   useEffect(() => {
     if (!timelineActive) return
@@ -4439,12 +4521,14 @@ function MapView({ embed = false }: { embed?: boolean }) {
         {/* Play mode (G9): captions and the mark instead of the controls */}
         {playMode && (
           <PlayOverlay
+            phase={playPhase}
             caption={captionAt(timeline.data?.buckets ?? [], timeline.currentIndex)}
             timeLabel={playTimeLabel(timeline.currentTime)}
+            dateLabel={playDateLabel(timeline.data?.buckets.at(-1)?.t ?? null)}
             progress={timeline.data && timeline.data.buckets.length > 1 ? timeline.currentIndex / (timeline.data.buckets.length - 1) : 0}
-            finished={playStartedRef.current && !timeline.isPlaying && !!timeline.data && timeline.currentIndex >= timeline.data.buckets.length - 1}
-            signalCount={timeline.data?.total_signals ?? 0}
             windowLabel={`LAST ${timelineRange.toUpperCase()}`}
+            day={playDay}
+            topStories={playTop}
           />
         )}
 

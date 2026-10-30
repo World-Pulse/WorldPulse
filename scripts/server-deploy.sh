@@ -269,12 +269,16 @@ log "Disk free after deploy: $(free_gb)G"
 # in the console. When it isn't running, it is built and started in the
 # background, outside this deploy's lock, so the deploy doesn't wait for its
 # first build (Playwright's image, about 5 minutes); later deploys find it
-# running and leave it alone. Not when the disk or memory is short.
-if ! timeout 10 docker ps --format '{{.Names}}' 2>/dev/null | grep -qx wp_recorder; then
+# running and leave it alone, unless its own files (record.mjs, the Dockerfile) changed since it was built:
+# then it is built again and replaced (logs/recorder-source.sum). Not when the disk or memory is short.
+rec_sum=$(cat infrastructure/recorder/Dockerfile infrastructure/recorder/record.mjs 2>/dev/null | sha256sum | cut -c1-16)
+if ! timeout 10 docker ps --format '{{.Names}}' 2>/dev/null | grep -qx wp_recorder \
+   || [ "$(cat logs/recorder-source.sum 2>/dev/null)" != "$rec_sum" ]; then
   avail_mb=$(awk '/^MemAvailable:/ {print int($2 / 1024)}' /proc/meminfo 2>/dev/null)
   if [ "$(free_gb)" -ge 15 ] && [ "${avail_mb:-0}" -ge 900 ]; then
-    nohup setsid $COMPOSE --profile recorder up -d --build recorder > logs/recorder-start.log 2>&1 < /dev/null 9>&- &
-    log "Starting the daily map video's recorder in the background (logs/recorder-start.log)"
+    nohup setsid bash -c "$COMPOSE --profile recorder up -d --build recorder && echo $rec_sum > logs/recorder-source.sum" \
+      > logs/recorder-start.log 2>&1 < /dev/null 9>&- &
+    log "Building and starting the daily map video's recorder in the background (logs/recorder-start.log)"
   else
     log "The daily map video's recorder not started: $(free_gb)G of disk free, ${avail_mb:-?} MB of memory available"
   fi

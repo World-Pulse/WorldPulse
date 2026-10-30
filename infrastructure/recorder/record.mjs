@@ -21,10 +21,13 @@ const URL_TO_RECORD = process.env.RECORD_URL || 'https://world-pulse.io/map?play
 const OUT_DIR = process.env.OUT_DIR || '/out/video'
 const RECORD_AT = process.env.RECORD_AT || '05:30'       // New York time
 const KEEP_DAYS = Number(process.env.KEEP_DAYS || 14)
-/** The play mode lasts about 60 s after the map loads; record a little more */
-const RECORD_MS = Number(process.env.RECORD_MS || 80_000)
-/** Seconds of loading cut from the start */
-const TRIM_START = Number(process.env.TRIM_START || 6)
+/**
+ * Since Oct 30, 2026 the page opens on a title card, plays the day, shows the day's most-reported stories and
+ * then sets data-play-done on <html>: the recording stops there, or after RECORD_MS at the most
+ */
+const RECORD_MS = Number(process.env.RECORD_MS || 120_000)
+/** Seconds cut from the start: the blank page before the title card */
+const TRIM_START = Number(process.env.TRIM_START || 1.5)
 /**
  * A phone-sized page (CSS pixels), made a 720 × 1280 video. (Playwright records
  * a page at its CSS size whatever its pixel density: a 360 × 640 phone at
@@ -71,7 +74,8 @@ export async function recordOnce() {
     const page = await context.newPage()
     log('opening', URL_TO_RECORD)
     await page.goto(URL_TO_RECORD, { waitUntil: 'domcontentloaded', timeout: 60_000 })
-    await page.waitForTimeout(RECORD_MS)
+    await page.waitForFunction(() => document.documentElement.dataset.playDone === '1', null, { timeout: RECORD_MS, polling: 500 })
+      .catch(() => log(`no data-play-done after ${RECORD_MS / 1000} s: keeping what was recorded`))
     const video = page.video()
     await context.close()                       // writes the video
     const webm = await video.path()
