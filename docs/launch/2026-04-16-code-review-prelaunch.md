@@ -17,7 +17,7 @@ But:
 
 **Action steps (est. 15 min):**
 
-1. Log into the Stripe dashboard → API keys → revoke `rk_live_51TGstQ5h85I1AGiU...`.
+1. Log into the Stripe dashboard → API keys → revoke `rk_live_…`.
 2. Generate a new restricted key with the same permissions.
 3. Update `/opt/worldpulse/apps/api/.env.prod` on the prod server with the new value (do not commit).
 4. Regenerate the webhook signing secret from Stripe → Developers → Webhooks → worldpulse endpoint → roll secret.
@@ -43,8 +43,8 @@ But:
 | `REDIS_URL` | `redis://:wp_redis_local@...` | Low-risk password. Rotate post-launch. |
 | `MEILI_KEY` | `wp_meili_local_key` | Rotate post-launch. |
 | `JWT_SECRET` | `wp_jwt_secret_local_change_in_prod` | **Rotate today** — signed tokens will be invalid but reissue on next login is acceptable pre-launch. |
-| `STRIPE_SECRET_KEY` | `rk_live_51TGstQ5h85I1AGiU...` | **CRITICAL — rotate today (see above).** |
-| `STRIPE_WEBHOOK_SECRET` | `whsec_cGTo4vk6EAyl5344...` | **Rotate today (see above).** |
+| `STRIPE_SECRET_KEY` | `rk_live_…` | **CRITICAL — rotate today (see above).** |
+| `STRIPE_WEBHOOK_SECRET` | `whsec_…` | **Rotate today (see above).** |
 | `GRAFANA_PASSWORD` | `wp_grafana_admin_2026` | Rotate post-launch. |
 
 **Source code secret grep:** No hardcoded API keys or tokens in `apps/api/src/`, `apps/web/src/`, `apps/scraper/src/`. Connection strings are pulled from env vars everywhere.
