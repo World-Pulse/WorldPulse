@@ -7,6 +7,7 @@ import type { AuthTokens, ApiResponse, AuthUser } from '@worldpulse/types'
 import { indexUser } from '../lib/search'
 import { checkLoginAttempt, recordFailedLogin, clearLoginAttempts } from '../lib/security'
 import { sendError } from '../lib/errors'
+import { markSeen } from '../lib/last-seen'
 import { EMAIL_CONFIGURED, sendEmail } from '../lib/email'
 import {
   resetConfigured, resetToken, parseResetToken, checkResetToken, resetLink, resetEmail, resetCountKey,
@@ -361,6 +362,8 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
     // Rotate: delete old, issue new
     await redis.del(`refresh:${refreshToken}`)
     const tokens = await issueTokens(app, userId)
+    // A signed-in reader back on the site (plan N9): at most one mark an hour, never in the way
+    void markSeen(userId)
 
     return reply.send({ success: true, data: tokens })
   })

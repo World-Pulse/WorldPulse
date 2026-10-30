@@ -522,9 +522,16 @@ pipeline_stats() {
   # accounts), email briefing subscribers (confirmed from their inbox, and the
   # ones still to confirm) and Pro members (paying or on trial). Counts, never
   # a name or an address; it goes under readers as "members"
+  # Returning readers (plan N9, privacy first: no new cookie or identifier): the
+  # accounts seen in the last 24 hours and 7 days (users.last_seen_at, marked at
+  # sign-in and, from Oct 30, at most hourly when a signed-in reader's tokens
+  # refresh), and those made before the last 7 days that came back in them
   q7="SELECT json_build_object(
         'accounts',    count(*),
         'accounts_7d', count(*) FILTER (WHERE created_at > now() - interval '7 days'),
+        'seen_24h',    count(*) FILTER (WHERE last_seen_at > now() - interval '24 hours'),
+        'seen_7d',     count(*) FILTER (WHERE last_seen_at > now() - interval '7 days'),
+        'returning_7d', count(*) FILTER (WHERE last_seen_at > now() - interval '7 days' AND created_at < now() - interval '7 days'),
         'subscribers', (SELECT count(*) FROM digest_subscriptions WHERE is_active AND confirmed_at IS NOT NULL),
         'subscribers_7d', (SELECT count(*) FROM digest_subscriptions WHERE is_active AND confirmed_at > now() - interval '7 days'),
         'subscribers_unconfirmed', (SELECT count(*) FROM digest_subscriptions WHERE is_active AND confirmed_at IS NULL),
