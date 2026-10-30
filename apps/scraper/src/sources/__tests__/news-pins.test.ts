@@ -70,6 +70,47 @@ describe('inferGeo', () => {
     for (const id of HOME_PIN_SOURCES) expect(NEWS_SOURCE_REGISTRY.some(s => s.id === id)).toBe(true)
     expect(inferGeo('8 emerging markets to consider in 2027: HSBC', '', source('investing-com-news')).lat).toBeNull()
   })
+
+  // Oct 30, 2026 (M57): a place anywhere in the summary won, so about 1 in 8 placeless headlines sat in another country
+  it("keeps a national outlet's placeless story at home unless its dateline is elsewhere", () => {
+    expect(inferGeo('GC Biopharma, Hanmi Pharm strike $475m Fabry disease drug deal with BioMarin',
+      'GC Biopharma and Hanmi Pharmaceutical announced on Friday that they had signed a deal with US-based BioMarin', source('korea-herald')).countryCode).toBe('KR')
+    expect(inferGeo('Three children charged with threatening elderly woman with iron rod, mop',
+      'BUKIT MERTAJAM: Three children from Myanmar were charged with criminal intimidation', source('nst-malaysia')).countryCode).toBe('MY')
+    expect(inferGeo('Lawmakers voice alarm over KP situation, seek electoral reforms',
+      '• Achakzai questions govt’s handling of Tehran diplomacy, Afghanistan policy', source('dawn-pakistan')).countryCode).toBe('PK')
+    expect(inferGeo('Mbilli ‘ready to shock the world’ against Canelo', 'PARIS: French boxer Christian Mbilli said', source('nst-malaysia')))
+      .toMatchObject({ locationName: 'Paris', countryCode: 'FR' })
+    // the headline's own place still comes first, and other outlets still read the whole summary
+    expect(inferGeo('Kim urges drone dominance as North Korea fires missiles', 'According to KCNA, Kim said', source('japan-times')).countryCode).toBe('KP')
+    expect(inferGeo('Christa Pike released from hospital', 'The Tennessee inmate survived', source('abc-au-world')).countryCode).toBe('US')
+  })
+
+  it('names Putin and Netanyahu as their countries, but not Putin in a Ukrainian outlet', () => {
+    expect(inferGeo('World multipolar order taking shape – Putin', '', source('abc-news')).countryCode).toBe('RU')
+    expect(inferGeo('If Netanyahu stays, even his voters will feel it', '', source('abc-news')).countryCode).toBe('IL')
+    expect(inferGeo('Putin’s envoy delays talks', '', source('kyiv-independent')).countryCode).toBe('UA')
+  })
+})
+
+describe('datelinePlace (Oct 30, 2026)', () => {
+  it('reads the place a summary is datelined from', async () => {
+    const { datelinePlace } = await import('../news-rss')
+    expect(datelinePlace('PARIS: The French government said')).toMatchObject({ locationName: 'Paris', countryCode: 'FR' })
+    expect(datelinePlace('Mumbai: Shares fell')).toMatchObject({ countryCode: 'IN' })
+    expect(datelinePlace('NAIROBI, Kenya — Kenyan police')).toMatchObject({ locationName: 'Nairobi', countryCode: 'KE' })
+    expect(datelinePlace('TOKYO (Kyodo) -- Japan')).toMatchObject({ countryCode: 'JP' })
+    expect(datelinePlace('WASHINGTON (AP) — The Senate')).toMatchObject({ countryCode: 'US' })
+    expect(datelinePlace('KUALA LUMPUR, Oct 30 — Three Myanmar nationals')).toMatchObject({ countryCode: 'MY' })
+  })
+
+  it('ignores openings that are not a place', async () => {
+    const { datelinePlace } = await import('../news-rss')
+    for (const text of ['Opinion: why we', 'LETTERS: Malaysia’s innovation problem', 'Victoria Beckham — the designer',
+      'NLC: “If the 2026 budget', 'Paris, Saturday 3 dead', 'Lagos State Governor Babajide Sanwo-Olu has', 'The PARIS: summit', '']) {
+      expect(datelinePlace(text)).toBeNull()
+    }
+  })
 })
 
 describe('feed points', () => {

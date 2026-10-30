@@ -104,7 +104,7 @@ import { insertAndCorrelate } from '../pipeline/insert-signal'
 import { MAX_ITEM_AGE_MS, isStaleItem } from '../pipeline/freshness'
 // Feeds send "&#x27;" and "&amp;" in titles and summaries
 import { decodeEntities, cleanSummary, repeatsTitle, feedText, clipText } from '../pipeline/text'
-import { placeFromText, withHomeNames } from '../pipeline/geo'
+import { placeFromText, splitPlaces, withHomeNames } from '../pipeline/geo'
 import { rateSeverity } from '../pipeline/severity'
 import { categorizeText } from '../pipeline/categories'
 import { gdacsAlertLevel, gdacsSeverity, gdacsTags, tidyGdacsTitle } from './gdacs'
@@ -8093,8 +8093,8 @@ interface GeoHint { lat: number; lng: number; name: string; code?: string }
 /** Rough keyword → coordinates for common geographic entities in headlines. */
 const GEO_HINTS: Array<{ keywords: string[]; geo: GeoHint }> = [
   { keywords: ['ukraine', 'kyiv', 'zaporizhzhia', 'zaporizhia', 'kharkiv', 'donetsk', 'kherson', 'odesa', 'dnipropetrovsk', 'chernihiv', 'sumy'],      geo: { lat: 50.45,  lng: 30.52,   name: 'Ukraine',          code: 'UA' } },
-  { keywords: ['russia', 'moscow', 'kremlin'],                      geo: { lat: 55.75,  lng: 37.62,   name: 'Moscow, Russia',   code: 'RU' } },
-  { keywords: ['israel', 'tel aviv', 'jerusalem', 'idf'],           geo: { lat: 31.77,  lng: 35.22,   name: 'Israel',           code: 'IL' } },
+  { keywords: ['russia', 'moscow', 'kremlin', 'putin'],             geo: { lat: 55.75,  lng: 37.62,   name: 'Moscow, Russia',   code: 'RU' } },
+  { keywords: ['israel', 'tel aviv', 'jerusalem', 'idf', 'netanyahu'], geo: { lat: 31.77, lng: 35.22, name: 'Israel',           code: 'IL' } },
   { keywords: ['gaza', 'palestin', 'hamas', 'west bank'],           geo: { lat: 31.50,  lng: 34.47,   name: 'Gaza',             code: 'PS' } },
   { keywords: ['china', 'beijing', 'shanghai', 'ccp', 'xi jinping'], geo: { lat: 39.91, lng: 116.39,  name: 'Beijing, China',   code: 'CN' } },
   { keywords: ['taiwan', 'taipei'],                                  geo: { lat: 25.03,  lng: 121.57,  name: 'Taipei, Taiwan',   code: 'TW' } },
@@ -8265,6 +8265,32 @@ function fromPlace(text: string): InferredGeo | null {
     : null
 }
 
+/** One capitalised word of a dateline's place: "PARIS", "Kathmandu", "Bukit", "Abu", "D.C." */
+const DATELINE_WORD = "\\p{Lu}[\\p{L}'’.-]*"
+/**
+ * A summary's dateline: one to four capitalised words, maybe ", Kenya", maybe
+ * "(Reuters)", then a colon, a dash or ", October 30" (the month is checked in code).
+ */
+const DATELINE = new RegExp(
+  `^\\s*(${DATELINE_WORD}(?:\\s+${DATELINE_WORD}){0,3}(?:,\\s*${DATELINE_WORD}(?:\\s+${DATELINE_WORD}){0,2})?)` +
+  `\\s*(?:\\([^)]{1,40}\\)\\s*)?` +
+  `(?::|\\s[—–-]{1,2}\\s|[—–]|,\\s*(\\p{L}+)\\.?\\s+\\d{1,2}\\b)`, 'u')
+const MONTH = /^(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)$/i
+
+/**
+ * The place a summary's dateline names: "PARIS:", "Mumbai:", "NAIROBI, Kenya —",
+ * "TOKYO (Kyodo) -", "Kathmandu, October 30". Only when every word before the
+ * mark is a place name ("Opinion:", "Victoria Beckham —" are not).
+ */
+export function datelinePlace(text: string): InferredGeo | null {
+  const m = DATELINE.exec(text)
+  if (!m?.[1]) return null
+  if (m[2] && !MONTH.test(m[2])) return null
+  const { rest } = splitPlaces(m[1])
+  if (rest.replace(/[\s,.'’-]+/g, '') !== '') return null
+  return fromPlace(m[1])
+}
+
 /**
  * Where a news story is: the feed's own point for it (GDACS gives each
  * alert's coordinates), else a place its headline names (any city in the
@@ -8285,11 +8311,18 @@ export function inferGeo(
     const named = fromPlace(head)
     return { lat: point.lat, lng: point.lng, locationName: named?.locationName ?? null, countryCode: named?.countryCode ?? null }
   }
-  const found = fromPlace(head) ?? fromHints(head, source.countryCode) ?? fromPlace(body) ?? fromHints(body, source.countryCode)
-  if (found) return found
+  const fromHead = fromPlace(head) ?? fromHints(head, source.countryCode)
+  if (fromHead) return fromHead
+  // A national outlet's story that names no place in its headline is about its own country unless its
+  // dateline says otherwise (Oct 30, 2026, M57: a place found anywhere in the summary won before, so
+  // Haaretz's column on Netanyahu sat in Washington, a Penang court case in Myanmar, Japan's new
+  // prime minister in Beijing and a Khyber Pakhtunkhwa story in Tehran: about 1 in 8 placeless headlines)
   if (HOME_PIN_SOURCES.has(source.id) && !NO_PLACE_TOPIC.test(`${title} ${description}`)) {
-    return { lat: source.defaultLat, lng: source.defaultLng, locationName: source.defaultLocation, countryCode: source.countryCode }
+    return datelinePlace(body)
+      ?? { lat: source.defaultLat, lng: source.defaultLng, locationName: source.defaultLocation, countryCode: source.countryCode }
   }
+  const fromBody = fromPlace(body) ?? fromHints(body, source.countryCode)
+  if (fromBody) return fromBody
   return { lat: null, lng: null, locationName: null, countryCode: null }
 }
 
