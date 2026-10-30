@@ -517,6 +517,20 @@ pipeline_stats() {
       FROM signals WHERE created_at > now() - interval '174 hours'
         AND (created_at > now() - interval '6 hours' OR created_at <= now() - interval '168 hours')"
   part report_rate db_json 20 "$q6"
+  # Members (plan LR9; Devon, Oct 29, 10:47 PM: yes, counts only): people with
+  # an account (signed up with an email; not WorldPulse's own bot, AI or admin
+  # accounts), email briefing subscribers (confirmed from their inbox, and the
+  # ones still to confirm) and Pro members (paying or on trial). Counts, never
+  # a name or an address; it goes under readers as "members"
+  q7="SELECT json_build_object(
+        'accounts',    count(*),
+        'accounts_7d', count(*) FILTER (WHERE created_at > now() - interval '7 days'),
+        'subscribers', (SELECT count(*) FROM digest_subscriptions WHERE is_active AND confirmed_at IS NOT NULL),
+        'subscribers_7d', (SELECT count(*) FROM digest_subscriptions WHERE is_active AND confirmed_at > now() - interval '7 days'),
+        'subscribers_unconfirmed', (SELECT count(*) FROM digest_subscriptions WHERE is_active AND confirmed_at IS NULL),
+        'pro', (SELECT count(*) FROM subscriptions WHERE plan = 'pro' AND status IN ('active', 'trialing')))
+      FROM users WHERE email IS NOT NULL AND account_type NOT IN ('ai', 'bot', 'admin')"
+  part members db_json 10 "$q7"
   # ... and GDELT's file list as the second-outlet reader last read it: files per
   # hour for 24 hours and the last cycle's missing and failed files (counts only)
   part gdelt gdelt_stats
@@ -556,6 +570,11 @@ out = {'window': '24h', 'checked': checked}
 out['db'] = [v if isinstance(v, dict) else None for v in (part('db%d' % i) for i in range(1, 6))]
 for name in ('scraper_30m', 'llm', 'fingerprints', 'claude', 'sources', 'api_limits', 'disk', 'readers', 'report_rate', 'gdelt'):
     out[name] = part(name)
+# Members: in the pipeline block, and with the readers too (the HQ copies the readers block
+# whole); null when the query failed
+out['members'] = part('members')
+if isinstance(out.get('readers'), dict):
+    out['readers']['members'] = out['members']
 took = {}
 try:
     with open(os.path.join(parts, 'took')) as fh:
@@ -803,7 +822,7 @@ pipe_cache=logs/pipeline-stats.json
 # builds, a refresh can outlast the 5 minutes to the next run, and two runs
 # writing the same file left neither readable
 if [ ! -s "$pipe_cache" ] || [ -n "$(find "$pipe_cache" -mmin +29 2>/dev/null)" ] \
-   || ! grep -q '"gdelt":' "$pipe_cache" 2>/dev/null; then
+   || ! grep -q '"members":' "$pipe_cache" 2>/dev/null; then
   (
     flock -n 9 || exit 0
     tmp="$pipe_cache.$$.tmp"
