@@ -98,6 +98,17 @@ const ROWS: Row[] = [
   ['wheat', 'EU', 'Germany', 'Saxony-Anhalt, Germany', 51.9, 11.6, 0.15, 'GGGGBFHHOPPG'],
   ['wheat', 'EU', 'Poland', 'Greater Poland (Poznań)', 52.4, 17.0, 0.08, 'GGGGBFHHOPGG'],
   ['wheat', 'EU', 'Romania', 'Bărăgan, Romania', 44.5, 27.3, 0.08, 'GGGBFHOOOPPG'],
+  // CM9 (Oct 30, 2026): the next eight member states, each at its main wheat area with about its whole
+  // share, like the four above, by the European Commission's 2026/27 estimates (July 30, 2026: 125.4
+  // million t of soft wheat, 7.3 of durum, most of it Italy's): about 79% of the EU's wheat with the four above
+  ['wheat', 'EU', 'Bulgaria', 'Dobruja, Bulgaria (Dobrich)', 43.57, 27.83, 0.05, 'GGGGBFHOOPPG'],
+  ['wheat', 'EU', 'Spain', 'Castile and León, Spain (Valladolid)', 41.65, -4.72, 0.05, 'GGGGBFHOOPGG'],
+  ['wheat', 'EU', 'Italy', 'Apulia, Italy (Foggia)', 41.46, 15.55, 0.04, 'GGGBFHOOOOPG'],
+  ['wheat', 'EU', 'Hungary', 'Great Hungarian Plain', 46.9, 20.0, 0.03, 'GGGGBFHOOPGG'],
+  ['wheat', 'EU', 'Czechia', 'Elbe lowland, Czechia (Kolín)', 50.03, 15.2, 0.03, 'GGGGBFHHOPPG'],
+  ['wheat', 'EU', 'Lithuania', 'Central Lithuania (Panevėžys)', 55.73, 24.36, 0.03, 'GGGGGBFHPGGG'],
+  ['wheat', 'EU', 'Denmark', 'Funen, Denmark (Odense)', 55.4, 10.39, 0.025, 'GGGGGBFHPGGG'],
+  ['wheat', 'EU', 'Sweden', 'Skåne, Sweden (Lund)', 55.7, 13.19, 0.02, 'GGGGGBFHPGGG'],
   ['wheat', 'IN', 'Punjab', 'Punjab, India (Ludhiana)', 30.9, 75.85, 0.18, 'GBFHOOOOOOPG', 'I'],
   ['wheat', 'IN', 'Uttar Pradesh', 'Western Uttar Pradesh', 28.5, 78.5, 0.3, 'GBFHOOOOOOPG', 'I'],
   ['wheat', 'IN', 'Madhya Pradesh', 'Madhya Pradesh (Bhopal)', 23.25, 77.4, 0.2, 'GBFHOOOOOOPG'],
@@ -381,7 +392,10 @@ function slug(s: string): string {
 }
 
 /** USDA reports the EU as one: the member state each EU region is in */
-const EU_MEMBER: Record<string, string> = { France: 'FR', Germany: 'DE', Poland: 'PL', Romania: 'RO', Hungary: 'HU', Spain: 'ES', Bulgaria: 'BG' }
+const EU_MEMBER: Record<string, string> = {
+  France: 'FR', Germany: 'DE', Poland: 'PL', Romania: 'RO', Hungary: 'HU', Spain: 'ES', Bulgaria: 'BG',
+  Italy: 'IT', Czechia: 'CZ', Lithuania: 'LT', Denmark: 'DK', Sweden: 'SE',
+}
 
 export const REGIONS: CropRegion[] = ROWS.map(([commodity, iso, place, name, lat, lon, share, calendar, flags = '']) => ({
   id: `${commodity}:${iso}:${slug(name)}`,

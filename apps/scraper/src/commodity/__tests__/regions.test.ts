@@ -22,7 +22,7 @@ describe('the crop regions', () => {
   it('gives each row its own id, and EU rows their member state', () => {
     expect(new Set(REGIONS.map(r => r.id)).size).toBe(REGIONS.length)
     expect(REGIONS.filter(r => r.iso === 'EU').every(r => r.country !== 'EU' && r.country.length === 2)).toBe(true)
-    expect(regionsOf('wheat', 'EU').map(r => r.country)).toEqual(['FR', 'DE', 'PL', 'RO'])
+    expect(regionsOf('wheat', 'EU').map(r => r.country)).toEqual(['FR', 'DE', 'PL', 'RO', 'BG', 'ES', 'IT', 'HU', 'CZ', 'LT', 'DK', 'SE'])
   })
 
   it("keeps each country's shares of a crop within the whole", () => {
