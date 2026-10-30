@@ -538,6 +538,21 @@ pipeline_stats() {
         'pro', (SELECT count(*) FROM subscriptions WHERE plan = 'pro' AND status IN ('active', 'trialing')))
       FROM users WHERE email IS NOT NULL AND account_type NOT IN ('ai', 'bot', 'admin')"
   part members db_json 10 "$q7"
+  # The second read's "not an event" verdicts (plan 11a, Oct 30, 2026): how many
+  # there are, and the newest 30 with their report's title and the verdict's
+  # line, to read whether they're right before such a verdict may lower a
+  # report (NOT_EVENT_LOWERS in apps/scraper/src/pipeline/second-read.ts). Both
+  # are public already: the title on the report's page, the line on its timeline.
+  # (jsonb_agg: json_agg puts a line break between rows, and db_json reads one line)
+  q8="SELECT json_build_object(
+        'total', (SELECT count(*) FROM verification_log WHERE check_type = 'second_read' AND verdict = 'not_event'),
+        'newest', coalesce((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.at DESC) FROM (
+            SELECT s.id, left(s.title, 140) AS title, s.severity, s.source_count AS outlets,
+                   left(v.notes, 240) AS line, v.created_at AS at
+              FROM verification_log v JOIN signals s ON s.id = v.signal_id
+             WHERE v.check_type = 'second_read' AND v.verdict = 'not_event'
+             ORDER BY v.created_at DESC LIMIT 30) x), '[]'::jsonb))"
+  part second_read_not_event db_json 10 "$q8"
   # ... and GDELT's file list as the second-outlet reader last read it: files per
   # hour for 24 hours and the last cycle's missing and failed files (counts only)
   part gdelt gdelt_stats
@@ -575,7 +590,7 @@ def part(name):
     return value
 out = {'window': '24h', 'checked': checked}
 out['db'] = [v if isinstance(v, dict) else None for v in (part('db%d' % i) for i in range(1, 6))]
-for name in ('scraper_30m', 'llm', 'fingerprints', 'claude', 'sources', 'api_limits', 'disk', 'readers', 'report_rate', 'gdelt'):
+for name in ('scraper_30m', 'llm', 'fingerprints', 'claude', 'sources', 'api_limits', 'disk', 'readers', 'report_rate', 'gdelt', 'second_read_not_event'):
     out[name] = part(name)
 # Members: in the pipeline block, and with the readers too (the HQ copies the readers block
 # whole); null when the query failed
@@ -829,7 +844,7 @@ pipe_cache=logs/pipeline-stats.json
 # builds, a refresh can outlast the 5 minutes to the next run, and two runs
 # writing the same file left neither readable
 if [ ! -s "$pipe_cache" ] || [ -n "$(find "$pipe_cache" -mmin +29 2>/dev/null)" ] \
-   || ! grep -q '"members":' "$pipe_cache" 2>/dev/null; then
+   || ! grep -q '"second_read_not_event":' "$pipe_cache" 2>/dev/null; then
   (
     flock -n 9 || exit 0
     tmp="$pipe_cache.$$.tmp"
