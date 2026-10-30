@@ -119,6 +119,17 @@ export function titleCaseAround(text: string, at: number, end: number): boolean 
 const COLORADO_PARTY = /\bANR\b|\bcolorados\b|asociaci[oó]n nacional republicana/i
 
 /**
+ * A capitalised word after a city that makes it a treaty's name, not the place (M57, Oct 30, 2026: "Vietnam
+ * improves compliance score under Cape Town Convention in aviation" was pinned in Cape Town): the Geneva
+ * Conventions, the Kyoto Protocol, the Paris Agreement, the Oslo Accords, the Rome Statute, the Washington
+ * Consensus, the Budapest Memorandum. Lower case ("the Paris agreement reached on Monday") says nothing.
+ */
+const DOCUMENT_AFTER = new Set([
+  'convention', 'conventions', 'protocol', 'protocols', 'accord', 'accords', 'agreement', 'agreements', 'treaty',
+  'statute', 'consensus', 'memorandum',
+])
+
+/**
  * Whether the place name at text[at, end) is part of a name, not the place:
  * a club ("Real Madrid", "Manchester United", "Kano Pillars"), or, for a place
  * that is also a first name or surname and outside a Title Case headline, a
@@ -132,11 +143,15 @@ export function partOfAName(text: string, at: number, end: number): boolean {
   // Paraguay's and Uruguay's Colorado party (ANR), not the US state (Oct 30, 2026: a Paraguayan
   // party-registration story was pinned in Denver)
   if (hit.toLowerCase() === 'colorado' && (wordBefore(text, at)?.toLowerCase() === 'partido' || COLORADO_PARTY.test(text))) return true
+  // Lower-case "colorado" is Spanish for the party's people ("el oficialismo colorado", M57, Oct 30, 2026:
+  // pinned in Denver); the US state is always written with a capital
+  if (hit === 'colorado') return true
   if (!startsUpper(hit)) return false
   const before = wordBefore(text, at)
   const after = wordAfter(text, end)
   if (before && clubWord(before, CLUB_BEFORE)) return true
   if (after && clubWord(after, CLUB_AFTER)) return true
+  if (after && startsUpper(after) && DOCUMENT_AFTER.has(after.toLowerCase())) return true
   const key = hit.toLowerCase()
   if (!FIRST_NAME_PLACES.has(key) || titleCaseAround(text, at, end)) return false
   if (after && startsUpper(after) && !GAZETTEER_NEXT.has(after.toLowerCase())) return true

@@ -43,6 +43,21 @@ describe('a place that is part of a name', () => {
     expect(findGazetteerPlace('Cartes lidera el Partido Colorado')).toBeNull()
     expect(findGazetteerPlace('Wildfire forces evacuations across Colorado')?.place).toBe('colorado')
     expect(findGazetteerPlace('Snow closes roads across Colorado')?.place).toBe('colorado')
+    // M57, Oct 30, 2026: pinned in Denver
+    expect(findGazetteerPlace('Santiago Peña insta a acompañar la candidatura de Pedro Alliana. El oficialismo colorado apunta a retener el poder')).toBeNull()
+  })
+
+  it('reads a city before Convention, Protocol, Agreement or Statute as a treaty, not the place (M57)', () => {
+    expect(findGazetteerPlace('Vietnam improves compliance score under Cape Town Convention in aviation')?.place).not.toBe('cape town')
+    expect(at('Vietnam improves compliance score under Cape Town Convention in aviation', 'Cape Town')).toBe(true)
+    expect(at('Israel accused of breaching the Geneva Conventions', 'Geneva')).toBe(true)
+    expect(at('Countries agree to cut HFCs under the Montreal Protocol', 'Montreal')).toBe(true)
+    expect(at('Nations restate the Paris Agreement goals', 'Paris')).toBe(true)
+    expect(at('Mongolia was obliged under the Rome Statute to arrest him', 'Rome')).toBe(true)
+    expect(at('Floods hit Cape Town', 'Cape Town')).toBe(false)
+    expect(at('Geneva talks on Ukraine resume', 'Geneva')).toBe(false)
+    expect(at('Delegates reach the Paris agreement on Monday', 'Paris')).toBe(false)
+    expect(at('Thousands attend a Chicago convention centre fair', 'Chicago')).toBe(false)
   })
 
   it('takes them out of the map pin, the places and the countries', () => {
