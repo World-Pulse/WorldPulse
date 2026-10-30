@@ -91,6 +91,9 @@ const ROWS: Row[] = [
   ['wheat', 'CN', 'Henan', 'Henan (Zhoukou)', 33.6, 114.6, 0.28, 'GGGBFHOOOPGG', 'I'],
   ['wheat', 'CN', 'Shandong', 'Shandong (Tai\'an)', 36.2, 117.0, 0.18, 'GGGBFHOOOPGG', 'I'],
   ['wheat', 'CN', 'Hebei', 'Hebei (Shijiazhuang)', 38.0, 114.5, 0.11, 'GGGBFHOOOPGG', 'I'],
+  // CM9 (Oct 30, 2026): the Huai River plain, by the National Bureau of Statistics' provincial output (about 79% with the three above)
+  ['wheat', 'CN', 'Anhui', 'Northern Anhui (Fuyang)', 32.9, 115.8, 0.12, 'GGGBFHOOOPGG'],
+  ['wheat', 'CN', 'Jiangsu', 'Northern Jiangsu (Xuzhou)', 34.3, 117.2, 0.1, 'GGGBFHOOOPGG'],
   ['wheat', 'EU', 'France', 'Beauce, France (Chartres)', 48.45, 1.49, 0.2, 'GGGGBFHOOPPG'],
   ['wheat', 'EU', 'Germany', 'Saxony-Anhalt, Germany', 51.9, 11.6, 0.15, 'GGGGBFHHOPPG'],
   ['wheat', 'EU', 'Poland', 'Greater Poland (Poznań)', 52.4, 17.0, 0.08, 'GGGGBFHHOPGG'],
@@ -142,6 +145,9 @@ const ROWS: Row[] = [
   ['corn', 'AR', 'Buenos Aires', 'North Buenos Aires (Pergamino)', -33.9, -60.6, 0.3, 'BFHHHHOOPPGG'],
   ['corn', 'AR', 'Santa Fe', 'Santa Fe (Venado Tuerto)', -33.75, -61.97, 0.15, 'BFHHHHOOPPGG'],
   ['corn', 'IN', 'Karnataka', 'Karnataka (Davangere)', 14.47, 75.92, 0.15, 'OOOOOPGBFHOO'],
+  // CM9 (Oct 30, 2026): the next two monsoon-maize states (about 37% with Karnataka)
+  ['corn', 'IN', 'Madhya Pradesh', 'Madhya Pradesh (Chhindwara)', 22.06, 78.94, 0.12, 'OOOOOPGBFHOO'],
+  ['corn', 'IN', 'Maharashtra', 'Marathwada, Maharashtra (Chhatrapati Sambhajinagar)', 19.88, 75.34, 0.1, 'OOOOOPGBFHOO'],
   ['corn', 'EU', 'Romania', 'Southern Romania', 44.6, 26.0, 0.25, 'OOOPPGBFHHOO'],
   ['corn', 'EU', 'France', 'South-West France (Pau)', 43.5, -0.4, 0.2, 'OOOPPGBFHHOO'],
   ['corn', 'EU', 'Hungary', 'Great Hungarian Plain', 46.9, 20.0, 0.12, 'OOOPPGBFHHOO'],
@@ -286,6 +292,9 @@ const ROWS: Row[] = [
   ['sunflowerseed', 'UA', 'Dnipro', 'Dnipropetrovsk', 48.45, 35.05, 0.15, 'OOOPPGBFHHOO'],
   ['sunflowerseed', 'UA', 'Kharkiv', 'Kharkiv', 49.7, 36.5, 0.12, 'OOOPPGBFHHOO'],
   ['sunflowerseed', 'UA', 'Kirovohrad', 'Kirovohrad', 48.5, 32.3, 0.12, 'OOOPPGBFHHOO'],
+  // CM9 (Oct 30, 2026): the southern steppe, the driest of the sunflower oblasts (about 54% with the three above)
+  ['sunflowerseed', 'UA', 'Mykolaiv', 'Mykolaiv', 47.3, 31.9, 0.08, 'OOOPPGBFHHOO'],
+  ['sunflowerseed', 'UA', 'Odesa', 'Odesa region', 46.8, 30.5, 0.07, 'OOOPPGBFHHOO'],
   ['sunflowerseed', 'EU', 'Romania', 'South-East Romania', 44.5, 27.5, 0.3, 'OOOPPGBFHHOO'],
   ['sunflowerseed', 'EU', 'Bulgaria', 'Dobruja, Bulgaria (Dobrich)', 43.57, 27.83, 0.2, 'OOOPPGBFHHOO'],
   ['sunflowerseed', 'EU', 'Hungary', 'Eastern Hungary', 47.0, 21.0, 0.15, 'OOOPPGBFHHOO'],
