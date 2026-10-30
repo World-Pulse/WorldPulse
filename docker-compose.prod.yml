@@ -372,7 +372,8 @@ services:
   # once a night") ───────────────────────────────────────────────────────────
   # Records the World Map's play mode at 5:30 AM New York time each day as a
   # 720 × 1280 MP4: https://world-pulse.io/uploads/video/world-in-60s-<date>.mp4
-  # (infrastructure/recorder). Not started by deploys: once, by hand:
+  # (infrastructure/recorder). Since Oct 30, 2026 a deploy starts it when it isn't running
+  # (scripts/server-deploy.sh, step 8; Devon: "automate everything you can"). By hand:
   #   docker compose -f docker-compose.prod.yml --env-file .env.prod --profile recorder up -d --build recorder
   recorder:
     profiles: ["recorder"]

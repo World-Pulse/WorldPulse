@@ -14,6 +14,7 @@
 #    5. Test the nginx config, apply nginx/certbot changes, reload nginx
 #    6. Anything unhealthy → automatic rollback to the previous images
 #    7. Check the public site + certificates, clean up old images
+#    8. Start the daily map video's recorder when it isn't running (background)
 #
 #  Result is written to logs/deploy.status:
 #    running | success | success_with_warnings | rolled_back | failed
@@ -260,6 +261,24 @@ docker builder prune -af --max-used-space 8gb >/dev/null 2>&1 \
   || docker builder prune -af --keep-storage 8gb >/dev/null 2>&1 \
   || docker builder prune -f --filter until=72h >/dev/null 2>&1 || true
 log "Disk free after deploy: $(free_gb)G"
+
+# ── 8. The daily map video's recorder (plan G9) ─────────────────────────────
+# "The world in 60 seconds" (Devon, Oct 21, 2026: "Yes, once a night"; Oct 30:
+# "automate everything you can"): the recorder (compose profile "recorder",
+# infrastructure/recorder) starts itself instead of waiting for a command typed
+# in the console. When it isn't running, it is built and started in the
+# background, outside this deploy's lock, so the deploy doesn't wait for its
+# first build (Playwright's image, about 5 minutes); later deploys find it
+# running and leave it alone. Not when the disk or memory is short.
+if ! timeout 10 docker ps --format '{{.Names}}' 2>/dev/null | grep -qx wp_recorder; then
+  avail_mb=$(awk '/^MemAvailable:/ {print int($2 / 1024)}' /proc/meminfo 2>/dev/null)
+  if [ "$(free_gb)" -ge 15 ] && [ "${avail_mb:-0}" -ge 900 ]; then
+    nohup setsid $COMPOSE --profile recorder up -d --build recorder > logs/recorder-start.log 2>&1 < /dev/null 9>&- &
+    log "Starting the daily map video's recorder in the background (logs/recorder-start.log)"
+  else
+    log "The daily map video's recorder not started: $(free_gb)G of disk free, ${avail_mb:-?} MB of memory available"
+  fi
+fi
 
 if [ -n "$WARNINGS" ]; then
   finish success_with_warnings "Deployed ${SHA}, but:${WARNINGS#;}"

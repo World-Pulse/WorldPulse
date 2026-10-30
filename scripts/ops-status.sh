@@ -829,6 +829,33 @@ ssh_guard() {
     "$(n 'Currently failed')" "$(n 'Total failed')" "$(n 'Currently banned')" "$(n 'Total banned')" "$setup" \
     | sed 's/:,/:null,/g'
 }
+# The daily map video (plan G9, Oct 30, 2026): whether the recorder runs, and
+# the newest video it made (name, size, time and public address), from the
+# uploads volume nginx serves. The deploy starts the recorder when it isn't
+# running (scripts/server-deploy.sh, step 8); start_note is that start's last
+# log line.
+daily_video() {
+  local state src newest note
+  state=$(timeout 10 docker inspect -f '{{.State.Status}}' wp_recorder 2>/dev/null) || state=absent
+  src=$(timeout 10 docker inspect -f '{{range .Mounts}}{{if eq .Destination "/var/www/uploads"}}{{.Source}}{{end}}{{end}}' wp_nginx 2>/dev/null) || src=""
+  newest=""
+  [ -n "$src" ] && newest=$(ls -1t "$src"/video/world-in-60s-*.mp4 2>/dev/null | head -n 1)
+  note=$(tail -n 1 logs/recorder-start.log 2>/dev/null | tr -d '"\\' | tr -d '\000-\037' | cut -c1-160)
+  python3 - "${state:-absent}" "$newest" "$note" <<'PY'
+import datetime, json, os, sys
+state, newest, note = sys.argv[1], sys.argv[2], sys.argv[3]
+out = {'recorder': state}
+if newest and os.path.isfile(newest):
+    st = os.stat(newest)
+    name = os.path.basename(newest)
+    out.update(newest=name, bytes=st.st_size,
+               at=datetime.datetime.fromtimestamp(st.st_mtime, datetime.timezone.utc).isoformat(timespec='seconds'),
+               url='https://world-pulse.io/uploads/video/' + name)
+if note:
+    out['start_note'] = note
+print(json.dumps(out, separators=(',', ':')))
+PY
+}
 # Why the last deploy wasn't clean, from the deploy script's own log lines only
 # (its warnings, or the reason it rolled back or failed); empty when it was clean
 deploy_note() {
@@ -860,6 +887,8 @@ sproc=$(scraper_process 2>/dev/null | grep -E '^(\{|null)' | head -n 1)
 # (only when it reads as JSON: a broken block never breaks the file)
 sguard=$(ssh_guard 2>/dev/null | head -n 1)
 printf '%s' "$sguard" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null || sguard=null
+dvideo=$(daily_video 2>/dev/null | head -n 1)
+printf '%s' "$dvideo" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null || dvideo=null
 {
   printf '{"updated":"%s",' "$(date -Is)"
   printf '"commit":"%s",' "$(git rev-parse --short=7 HEAD 2>/dev/null || echo unknown)"
@@ -877,6 +906,7 @@ printf '%s' "$sguard" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/de
   printf '"server":%s,' "$(server_load 2>/dev/null | grep '^{' || echo null)"
   printf '"scraper_process":%s,' "${sproc:-null}"
   printf '"ssh_guard":%s,' "${sguard:-null}"
+  printf '"daily_video":%s,' "${dvideo:-null}"
   printf '"pipeline":%s}\n' "$pipeline"
 } > "logs/public/status.json.$$.tmp" \
   && { python3 scripts/data_health.py "logs/public/status.json.$$.tmp" 2> logs/data-health.err || true; } \
