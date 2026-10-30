@@ -131,3 +131,28 @@ describe("a country's weather risk", () => {
     expect(c.regions[0]!.id).toBe(minas.id)
   })
 })
+
+describe('CM9, Oct 30, 2026: pastures and the regions that set a country', () => {
+  const dry = forecast(x => ({ rain: x.rain / 20 }))
+
+  it("reads a dry spell on the meat and dairy cards' pastures as the grass's", () => {
+    const beef = BY_KEY.get('beef')!
+    const matoGrosso = REGIONS.find(r => r.commodity === 'beef' && r.iso === 'BR' && r.place === 'Mato Grosso')!
+    const r = assessRegion(matoGrosso, beef, dry, NORMALS, NOW)
+    expect(r.stage).toBe('G')
+    expect(r.risks[0]).toMatchObject({ kind: 'dry', level: 2 })
+    expect(r.risks[0]!.text).toMatch(/while the grass is growing$/)
+    // the dry months rest: nothing to say
+    expect(assessRegion(matoGrosso, beef, dry, NORMALS, new Date('2026-07-01T00:00:00Z')).level).toBe(0)
+  })
+
+  it('lets the biggest regions set the level where none grows 15% (Russia\'s wheat)', () => {
+    const wheat = BY_KEY.get('wheat')!
+    const ru = REGIONS.filter(r => r.commodity === 'wheat' && r.iso === 'RU')
+    const onlySamaraDry = ru.map(r => assessRegion(r, wheat, r.place === 'Samara' ? dry : forecast(), NORMALS, NOW))
+    expect(onlySamaraDry.find(r => r.name.startsWith('Samara'))!.level).toBeGreaterThan(0)
+    expect(countryWeather('wheat', 'RU', onlySamaraDry).level).toBe(0)
+    const krasnodarDry = ru.map(r => assessRegion(r, wheat, r.place === 'Krasnodar' ? dry : forecast(), NORMALS, NOW))
+    expect(countryWeather('wheat', 'RU', krasnodarDry).level).toBeGreaterThan(0)
+  })
+})

@@ -632,6 +632,10 @@ import {
   formatMarketTitle,
   marketDedupKey,
   MARKET_INDICATORS,
+  buildEiaWtiUrl,
+  readEiaWti,
+  EIA_WTI,
+  formatMarketContent,
 } from '../market'
 
 describe('Market — vixSeverity', () => {
@@ -764,5 +768,31 @@ describe('Market — marketDedupKey', () => {
     const key1 = marketDedupKey('^GSPC', 'plunge', '2026-03-22')
     const key2 = marketDedupKey('^GSPC', 'plunge', '2026-03-23')
     expect(key1).not.toBe(key2)
+  })
+})
+
+describe('Market — WTI from the EIA (CM6, Oct 30, 2026)', () => {
+  it('asks the EIA for the two newest daily Cushing WTI spot prices', () => {
+    const url = buildEiaWtiUrl('k y')
+    expect(url).toContain('https://api.eia.gov/v2/petroleum/pri/spt/data/?api_key=k%20y')
+    expect(url).toContain('facets[series][]=RWTC')
+    expect(url).toContain('sort[0][direction]=desc')
+    expect(url).toContain('length=2')
+  })
+
+  it('reads the newest day against the one before', () => {
+    const answer = { response: { data: [{ period: '2026-10-27', value: 61.85 }, { period: '2026-10-26', value: '58.40' }] } }
+    expect(readEiaWti(answer)).toEqual({ price: 61.85, prevClose: 58.4, day: '2026-10-27' })
+    expect(readEiaWti({ response: { data: [{ period: '2026-10-27', value: 61.85 }] } })).toBeNull()
+    expect(readEiaWti({ response: { data: [{ period: 'x', value: 1 }, { period: 'y', value: 0 }] } })).toBeNull()
+    expect(readEiaWti(null)).toBeNull()
+  })
+
+  it('says where the price is from, a public-domain source rather than CME\'s futures', () => {
+    const text = formatMarketContent(EIA_WTI, 61.85, 5.9, 58.4, '2026-10-27')
+    expect(text).toContain('$61.85 a barrel on 2026-10-27')
+    expect(text).toContain('Source: U.S. Energy Information Administration (EIA).')
+    expect(shouldEmitMarketSignal(EIA_WTI, 61.85, 5.9)).toBe(true)
+    expect(EIA_WTI.sourceUrl).toContain('eia.gov')
   })
 })

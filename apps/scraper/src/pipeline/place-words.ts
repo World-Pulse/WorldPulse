@@ -26,11 +26,12 @@ export const PLACE_BEFORE = new Set([
 export const CLUB_BEFORE = new Set([
   'real', 'atletico', 'athletic', 'fc', 'ac', 'as', 'sc', 'cf', 'inter', 'sporting', 'olympique', 'dynamo', 'dinamo',
   'deportivo', 'racing', 'club', 'union', 'borussia', 'lokomotiv', 'spartak', 'zenit', 'rb', 'vfb', 'werder', 'hertha',
-  'eintracht', 'fortuna', 'hellas', 'stade',
+  'eintracht', 'fortuna', 'hellas', 'stade', 'bayern',
 ])
 export const CLUB_AFTER = new Set([
   'fc', 'cf', 'sc', 'united', 'wanderers', 'rovers', 'athletic', 'pillars', 'rangers', 'indians', 'capitals', 'kings',
   'royals', 'titans', 'sunrisers', 'heat', 'lakers', 'warriors', 'bulls', 'giants', 'knights', 'stars', 'raiders',
+  'saint-germain',
 ])
 
 export const startsUpper = (w: string) => /^\p{Lu}/u.test(w)
@@ -146,6 +147,10 @@ export function partOfAName(text: string, at: number, end: number): boolean {
   // Lower-case "colorado" is Spanish for the party's people ("el oficialismo colorado", M57, Oct 30, 2026:
   // pinned in Denver); the US state is always written with a capital
   if (hit === 'colorado') return true
+  // The Dakar Rally, not the city (M57, Oct 30, 2026: "El Dakar 2027 arrancará en Portugal" was pinned in
+  // Senegal; the rally left Africa in 2009): "Dakar 2027", "Dakar Rally", "Rallye Dakar", "el/le/the Dakar"
+  if (hit.toLowerCase() === 'dakar' && (/^[ \t]*(?:20\d\d|rall(?:y|ye))\b/i.test(text.slice(end, end + 12))
+    || /\b(?:rall(?:y|ye)|the|el|le)[ \t]+$/i.test(text.slice(Math.max(0, at - 12), at)))) return true
   if (!startsUpper(hit)) return false
   const before = wordBefore(text, at)
   const after = wordAfter(text, end)

@@ -90,10 +90,17 @@ describe('the video, round 2 (Oct 30, 2026: the camera sat on Indonesia, caption
   it('reads the day\'s most-reported stories from data.stories, and tells the recorder when the replay begins', () => {
     const map = read('app/map/page.tsx')
     expect(map).toContain('Array.isArray(d?.stories) ? d.stories')
+    expect(map).toContain('.sort((a, b) => b.outlets - a.outlets))')
+    // the closing card's camera jumps, so the recorder's software-drawn map isn't stuck flying
+    expect(map).toContain('map.jumpTo({ center: [map.getCenter().lng, 22]')
     expect(map).toContain('document.documentElement.dataset.playPhase = playPhase')
     const rec = read('../../../infrastructure/recorder/record.mjs')
     expect(rec).toContain("dataset.playPhase === 'play'")
     expect(rec).toContain('page.waitForTimeout(TAIL_MS)')
+    // a page without its stylesheets, or a replay that never begins, is not saved; the morning run tries once more
+    expect(rec).toContain('document.styleSheets')
+    expect(rec).toContain("the replay didn't begin within")
+    expect(rec).toContain('trying again in')
     expect(read('components/map/PlayOverlay.tsx')).toContain('wp-play-beat" /></div>')
   })
 })

@@ -112,11 +112,21 @@ const ROWS: Row[] = [
   ['wheat', 'IN', 'Punjab', 'Punjab, India (Ludhiana)', 30.9, 75.85, 0.18, 'GBFHOOOOOOPG', 'I'],
   ['wheat', 'IN', 'Uttar Pradesh', 'Western Uttar Pradesh', 28.5, 78.5, 0.3, 'GBFHOOOOOOPG', 'I'],
   ['wheat', 'IN', 'Madhya Pradesh', 'Madhya Pradesh (Bhopal)', 23.25, 77.4, 0.2, 'GBFHOOOOOOPG'],
+  // CM9 (Oct 30, 2026): Russia's wheat by Rosstat's 2024 harvest (its ten biggest regions, as Reuters reported
+  // them: Rostov 10.1 million t, about 12%; Krasnodar 9.9, 12%; Stavropol 6.5, 7.8%; Altai 3.5, 4.2%; Orenburg
+  // 2.9, 3.5%; Saratov 2.8, 3.4%; Kursk 2.5, 3.0%; Lipetsk 1.97, 2.4%; Voronezh 1.94, 2.35%; Samara 1.8, 2.2%):
+  // Stavropol, Saratov and Altai had been read as 10%, 8% and 10%; Orenburg and the Black Earth come in, about
+  // 53% of the crop in all. No region grows 15%, so the biggest ones set the country's level (countryWeather)
   ['wheat', 'RU', 'Krasnodar', 'Krasnodar', 45.0, 39.0, 0.12, 'GGGGBFHOPPGG'],
   ['wheat', 'RU', 'Rostov', 'Rostov', 47.2, 40.5, 0.12, 'GGGGBFHOPPGG'],
-  ['wheat', 'RU', 'Stavropol', 'Stavropol', 45.0, 42.0, 0.1, 'GGGGBFHOPPGG'],
-  ['wheat', 'RU', 'Volga', 'Volga (Saratov)', 51.5, 46.0, 0.08, 'GGGGBFHHPPGG'],
-  ['wheat', 'RU', 'Siberia', 'West Siberia spring wheat (Altai)', 53.3, 81.5, 0.1, 'OOOOPGBFHOOO'],
+  ['wheat', 'RU', 'Stavropol', 'Stavropol', 45.0, 42.0, 0.078, 'GGGGBFHOPPGG'],
+  ['wheat', 'RU', 'Saratov', 'Saratov (Volga)', 51.5, 46.0, 0.034, 'GGGGBFHHPPGG'],
+  ['wheat', 'RU', 'Altai', 'Altai Krai spring wheat (Barnaul)', 53.3, 81.5, 0.042, 'OOOOPGBFHOOO'],
+  ['wheat', 'RU', 'Orenburg', 'Orenburg spring wheat', 51.77, 55.1, 0.035, 'OOOOPGBFHOOO'],
+  ['wheat', 'RU', 'Kursk', 'Kursk (Black Earth)', 51.73, 36.19, 0.03, 'GGGGGBFHPPGG'],
+  ['wheat', 'RU', 'Lipetsk', 'Lipetsk (Black Earth)', 52.61, 39.57, 0.024, 'GGGGGBFHPPGG'],
+  ['wheat', 'RU', 'Voronezh', 'Voronezh (Black Earth)', 51.66, 39.2, 0.024, 'GGGGGBFHPPGG'],
+  ['wheat', 'RU', 'Samara', 'Samara (Middle Volga)', 53.2, 50.15, 0.022, 'GGGGBFHHPPGG'],
   // CM9 (Oct 30, 2026): US wheat by USDA NASS's Small Grains Summaries, 2025 and 2026 averaged (2026's Plains drought
   // took Kansas from 17% of the crop to 13%). Kansas, Oklahoma and North Dakota were 0.25, 0.1 and 0.2, about 37% of the
   // crop read as 55%; with Montana, the Pacific Northwest and northwest Minnesota, about 63%
@@ -393,6 +403,32 @@ const ROWS: Row[] = [
   ['rubber', 'CN', 'Yunnan', 'Xishuangbanna, Yunnan', 22.0, 100.8, 0.4, 'GOOGGGGGGGGG'],
   ['rubber', 'IN', 'Kerala', 'Kerala (Kottayam)', 9.6, 76.5, 0.8, 'GOOGGGGGGGGG'],
   ['rubber', 'MY', 'Kedah', 'Kedah', 6.0, 100.5, 0.3, 'GOOGGGGGGGGG'],
+  // Pastures (CM9, Oct 30, 2026): the meat and dairy cards read the weather where the herds graze, the calendar
+  // giving the months the grass grows (G) and rests (O). Beef by each country's herd: Brazil, IBGE's 2024 count
+  // (238.2 million head: Mato Grosso 13.8%, Pará 10.7%, Goiás 9.7%, Minas Gerais 9.3%, Mato Grosso do Sul 7.9%);
+  // Australia, the ABS's beef cattle at June 30, 2025 (27.6 million: Queensland 49%, New South Wales 20%,
+  // Victoria 9.5%, Western Australia 8%, the Northern Territory 7.6%). Milk: New Zealand, DairyNZ's milksolids
+  // in 2024/25 (Canterbury 22.4%, Waikato 22.2%, Southland 14.1%, Taranaki 9.2%, Otago 5.9%); Brazil, IBGE's
+  // 2024 milk (35.7 billion litres: Minas Gerais 27.4%, Paraná 12.9%, Rio Grande do Sul 11.3%, Santa Catarina 9.2%)
+  ['beef', 'BR', 'Mato Grosso', 'Mato Grosso pastures (Cáceres)', -16.07, -57.68, 0.138, 'GGGGOOOOOGGG'],
+  ['beef', 'BR', 'Pará', 'Southeast Pará pastures (São Félix do Xingu)', -6.64, -51.99, 0.107, 'GGGGGOOOOOOG'],
+  ['beef', 'BR', 'Goiás', 'Goiás pastures (São Luís de Montes Belos)', -16.52, -50.37, 0.097, 'GGGGOOOOOGGG'],
+  ['beef', 'BR', 'Minas Gerais', 'North Minas Gerais pastures (Montes Claros)', -16.73, -43.86, 0.093, 'GGGGOOOOOGGG'],
+  ['beef', 'BR', 'Mato Grosso do Sul', 'Mato Grosso do Sul pastures (Campo Grande)', -20.44, -54.65, 0.079, 'GGGGOOOOOGGG'],
+  ['beef', 'AU', 'Queensland', 'Central Queensland grazing (Emerald)', -23.53, 148.16, 0.49, 'GGGGOOOOOOGG'],
+  ['beef', 'AU', 'New South Wales', 'New England tablelands, NSW (Armidale)', -30.51, 151.67, 0.2, 'GGGGGOOOGGGG'],
+  ['beef', 'AU', 'Victoria', 'Gippsland, Victoria (Sale)', -38.11, 147.07, 0.095, 'OOOGGGGGGGGO'],
+  ['beef', 'AU', 'Western Australia', 'South-west Western Australia (Bunbury)', -33.33, 115.64, 0.08, 'OOOOGGGGGGOO'],
+  ['beef', 'AU', 'Northern Territory', 'Barkly Tableland, NT (Tennant Creek)', -19.65, 134.19, 0.076, 'GGGGOOOOOOGG'],
+  ['milk', 'NZ', 'Canterbury', 'Canterbury dairy (Ashburton)', -43.9, 171.75, 0.224, 'GGGGGOOGGGGG'],
+  ['milk', 'NZ', 'Waikato', 'Waikato dairy (Hamilton)', -37.79, 175.28, 0.222, 'GGGGGOOGGGGG'],
+  ['milk', 'NZ', 'Southland', 'Southland dairy (Gore)', -46.1, 168.94, 0.141, 'GGGGGOOGGGGG'],
+  ['milk', 'NZ', 'Taranaki', 'Taranaki dairy (Hāwera)', -39.59, 174.28, 0.092, 'GGGGGOOGGGGG'],
+  ['milk', 'NZ', 'Otago', 'Otago dairy (Balclutha)', -46.24, 169.74, 0.059, 'GGGGGOOGGGGG'],
+  ['milk', 'BR', 'Minas Gerais', 'South Minas Gerais dairy (Varginha)', -21.55, -45.43, 0.274, 'GGGGOOOOOGGG'],
+  ['milk', 'BR', 'Paraná', 'Campos Gerais dairy, Paraná (Castro)', -24.79, -50.01, 0.129, 'GGGGGGGGGGGG'],
+  ['milk', 'BR', 'Rio Grande do Sul', 'Northwest Rio Grande do Sul dairy (Passo Fundo)', -28.26, -52.41, 0.113, 'GGGGGGGGGGGG'],
+  ['milk', 'BR', 'Santa Catarina', 'West Santa Catarina dairy (Chapecó)', -27.1, -52.62, 0.092, 'GGGGGGGGGGGG'],
 ]
 
 function slug(s: string): string {

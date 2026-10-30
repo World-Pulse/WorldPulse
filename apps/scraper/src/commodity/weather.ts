@@ -145,6 +145,8 @@ export function assessRegion(region: CropRegion, commodity: WatchCommodity, fore
   const mid = new Date(now.getTime() + (days / 2) * DAY_MS)
   const stage = region.calendar[mid.getUTCMonth()] ?? 'O'
   const doing = stageWords(commodity, stage)
+  // ("the grass" on the meat and dairy cards' pastures, CM9)
+  const crop = w.pasture ? 'the grass' : 'the crop'
   const base: RegionWeather = {
     id: region.id, commodity: region.commodity, iso: region.iso, country: region.country, name: region.name,
     lat: region.lat, lon: region.lon, share: region.share, stage, doing, days,
@@ -189,30 +191,30 @@ export function assessRegion(region: CropRegion, commodity: WatchCommodity, fore
   if (normal !== null && normal >= 15 && inField && !region.irrigated) {
     const ratio = rain / normal
     const raw = ratio < 0.25 ? 3 : ratio < 0.5 ? 2 : ratio < 0.75 ? 1 : 0
-    add('dry', atStage(raw, stage), `${r1(rain)} mm of rain forecast in ${span}, ${Math.round(ratio * 100)}% of normal, while the crop is ${doing}`)
+    add('dry', atStage(raw, stage), `${r1(rain)} mm of rain forecast in ${span}, ${Math.round(ratio * 100)}% of normal, while ${crop} is ${doing}`)
   }
   // Wet: flooding rain at any stage the crop is in the field or being harvested (at least twice normal:
   // some places are always this wet), or far above normal at harvest. Not out of season (Oct 30, 2026:
   // Paraná's corn was flagged for 186 mm of rain while the second crop its calendar follows waits for January)
   if (stage !== 'O' && rain >= 150 && (normal === null || rain >= 2 * normal)) {
-    add('wet', rain >= 200 && (normal === null || rain >= 2.5 * normal) ? 3 : 2, `${Math.round(rain)} mm of rain forecast in ${span}${normal ? `, ${r1(rain / normal)} times normal` : ''}: a flooding risk while the crop is ${doing}`)
+    add('wet', rain >= 200 && (normal === null || rain >= 2.5 * normal) ? 3 : 2, `${Math.round(rain)} mm of rain forecast in ${span}${normal ? `, ${r1(rain / normal)} times normal` : ''}: a flooding risk while ${crop} is ${doing}`)
   } else if (stage === 'H' && normal !== null && normal > 0) {
     const ratio = rain / normal
     const raw = ratio >= 3 && rain >= 100 ? 3 : ratio >= 2 && rain >= 60 ? 2 : ratio >= 1.5 && rain >= 40 ? 1 : 0
-    add('wet', raw, `${Math.round(rain)} mm of rain forecast in ${span}, ${r1(ratio)} times normal, while the crop is being harvested`)
+    add('wet', raw, `${Math.round(rain)} mm of rain forecast in ${span}, ${r1(ratio)} times normal, while ${crop} is being harvested`)
   }
   // Frost
   const frostMatters = w.frost === 'always' || (w.frost === 'field' && inField) || (w.frost === 'flowering' && (stage === 'B' || stage === 'F'))
   if (frostMatters && low && low.min !== null) {
     const raw = low.min <= w.frostC - 2 ? 3 : low.min <= w.frostC ? 2 : low.min <= w.frostC + 2 ? 1 : 0
     const lvl = w.frost === 'always' ? raw : atStage(raw, stage)
-    add('frost', lvl, `Lows of ${r1(low.min)}°C forecast on ${dayOf(low.start)}${frostNights > 1 ? `, ${frostNights} nights at ${w.frostC}°C or less` : ''}, while the crop is ${doing}`)
+    add('frost', lvl, `Lows of ${r1(low.min)}°C forecast on ${dayOf(low.start)}${frostNights > 1 ? `, ${frostNights} nights at ${w.frostC}°C or less` : ''}, while ${crop} is ${doing}`)
   }
   // Heat, at flowering and filling
   if ((stage === 'B' || stage === 'F') && high && high.max !== null) {
     // One hot afternoon is a low risk; two or more days a medium one; four, or two well over the line, high
     const raw = hotDays >= 4 || (hotDays >= 2 && high.max >= w.heatC + 3) ? 3 : hotDays >= 2 ? 2 : hotDays === 1 || high.max >= w.heatC - 2 ? 1 : 0
-    add('heat', raw, `Highs of ${r1(high.max)}°C forecast${hotDays ? `, ${hotDays} day${hotDays > 1 ? 's' : ''} at ${w.heatC}°C or more` : ''}, while the crop is ${doing}`)
+    add('heat', raw, `Highs of ${r1(high.max)}°C forecast${hotDays ? `, ${hotDays} day${hotDays > 1 ? 's' : ''} at ${w.heatC}°C or more` : ''}, while ${crop} is ${doing}`)
   }
   risks.sort((a, b) => b.level - a.level)
   out.risks = risks
@@ -223,7 +225,7 @@ export function assessRegion(region: CropRegion, commodity: WatchCommodity, fore
 export interface CountryWeather {
   commodity: string
   iso: string
-  /** The worst risk in the regions growing a good part of the crop (or the worst anywhere when no region does) */
+  /** The worst risk in the regions growing a good part of the crop (15% or more; else those with half the biggest share or more) */
   level: Level
   /** The regions' risk weighted by their share of the crop, 0 to 3 */
   weighted: number
@@ -236,7 +238,10 @@ export interface CountryWeather {
 export function countryWeather(commodity: string, iso: string, regions: RegionWeather[]): CountryWeather {
   const sorted = [...regions].sort((a, b) => b.level - a.level || b.share - a.share)
   const big = sorted.filter(r => r.share >= 0.15)
-  const pool = big.length ? big : sorted
+  // Where no region grows 15% (Russia's wheat, CM9, Oct 30, 2026), the biggest ones set the level: those with half
+  // the biggest share or more, so a dry week in a small region (Samara, 2%) doesn't flag the country
+  const top = regions.reduce((m, r) => Math.max(m, r.share), 0)
+  const pool = big.length ? big : sorted.filter(r => r.share >= top / 2)
   const level = pool.reduce<number>((m, r) => Math.max(m, r.level), 0) as Level
   const total = regions.reduce((s, r) => s + r.share, 0)
   const weighted = total > 0 ? Math.round((regions.reduce((s, r) => s + r.share * r.level, 0) / total) * 100) / 100 : 0

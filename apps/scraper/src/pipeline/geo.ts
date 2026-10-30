@@ -159,6 +159,10 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'masindi':          { lat: 1.6744, lng: 31.7150, country: 'UG' },
   'mukono':           { lat: 0.3533, lng: 32.7553, country: 'UG' },
   'algarve':          { lat: 37.0179, lng: -7.9304, country: 'PT', region: 'Algarve' },
+  // M57, Oct 30, 2026: "Antigua Guatemala" was pinned in Antigua and Barbuda, Merz "at DMZ" in Beijing
+  'antigua guatemala': { lat: 14.5586, lng: -90.7295, country: 'GT' },
+  'dmz':              { lat: 37.9560, lng: 126.6770, country: 'KR', name: 'Korean DMZ' },
+  'panmunjom':        { lat: 37.9560, lng: 126.6770, country: 'KR' },
   'kuala lumpur':     { lat: 3.1390, lng: 101.6869, country: 'MY' },
   'singapore':        { lat: 1.3521, lng: 103.8198, country: 'SG' },
   'pyongyang':        { lat: 39.0392, lng: 125.7625, country: 'KP' },
@@ -522,14 +526,24 @@ export function withHomeNames(text: string, countryCode: string | null | undefin
   return text.replace(rule.name, rule.as)
 }
 
-/** Countries the text names, in order of first mention (the headline comes first) */
+/** Each country pattern without its plural people-word ending: "Cuban" but not "Cubans" */
+const SINGULAR_MATCHERS = new Map(COUNTRY_PATTERNS.map(([pattern, code]) => [code + pattern.source, new RegExp(`^(?:${pattern.source})$`, pattern.flags.replace('g', ''))]))
+
+/**
+ * Countries the text names, in order of first mention (the headline comes first), except that people named
+ * by a plural ("Cubans", "Afghans") come after the countries named otherwise: they are often abroad (M57,
+ * Oct 30, 2026: "ICE nabs Cubans for unlawfully voting in the United States" was pinned in Havana)
+ */
 export function mentionedCountries(text: string): string[] {
-  const hits: Array<{ code: string; index: number }> = []
-  for (const [pattern, code] of COUNTRY_MATCHERS) {
+  const hits: Array<{ code: string; index: number; people: boolean }> = []
+  COUNTRY_PATTERNS.forEach(([original, code], i) => {
+    const pattern = COUNTRY_MATCHERS[i]![0]
     const m = pattern.exec(text)
-    if (m) hits.push({ code, index: m.index })
-  }
-  return [...new Set(hits.sort((a, b) => a.index - b.index).map(h => h.code))]
+    if (!m) return
+    const singular = SINGULAR_MATCHERS.get(code + original.source)
+    hits.push({ code, index: m.index, people: pattern !== original && !!singular && !singular.test(m[0]) })
+  })
+  return [...new Set(hits.sort((a, b) => Number(a.people) - Number(b.people) || a.index - b.index).map(h => h.code))]
 }
 
 // ─── NOMINATIM LOOKUP ────────────────────────────────────────────────────────
@@ -804,7 +818,72 @@ export function placeFromText(text: string): GeoResult {
 }
 
 // ─── MAIN EXPORT ─────────────────────────────────────────────────────────────
-export async function extractGeo(text: string): Promise<GeoResult> {
+/**
+ * Countries a headline names outright, by name ("Ireland", "Romania", "U.S."), not by an adjective ("Irish",
+ * "Israeli"): an adjective names the actor, and the story is often elsewhere ("Israeli strike" in Gaza City)
+ */
+export function countriesNamedOutright(text: string): string[] {
+  const clean = text.replace(OUTLET_NAMES, ' ')
+  const hits: Array<{ code: string; index: number }> = []
+  for (const [pattern, code] of COUNTRY_PATTERNS) {
+    const name = (countryNameOf(code) ?? '').toLowerCase()
+    // the first time the country is named outright ("Irish government ... united Ireland": Ireland)
+    for (const m of clean.matchAll(new RegExp(pattern.source, `${pattern.flags.replace('g', '')}g`))) {
+      const said = m[0].replace(/\./g, '').trim().toLowerCase()
+      if ((name && said === name) || /^(?:[A-Z]\.?){2,4}$/.test(m[0].trim())) { hits.push({ code, index: m.index ?? 0 }); break }
+    }
+  }
+  return [...new Set(hits.sort((a, b) => a.index - b.index).map(h => h.code))]
+}
+
+/** The first gazetteer place in the text that lies in one of `countries` */
+function gazetteerPointIn(text: string, countries: string[]): GeoResult | null {
+  const clean = text.replace(OUTLET_NAMES, ' ')
+  let best: { place: string; coords: typeof GAZETTEER[string]; index: number } | null = null
+  for (const m of GAZETTEER_SCAN) {
+    if (!m.coords.country || !countries.includes(m.coords.country)) continue
+    m.re.lastIndex = 0
+    for (const hit of clean.matchAll(m.re)) {
+      const index = hit.index ?? 0
+      if (best && index >= best.index) break
+      if (partOfAName(clean, index, index + hit[0].length)) continue
+      best = { place: m.place, coords: m.coords, index }
+      break
+    }
+  }
+  return best
+    ? { point: true, lat: best.coords.lat, lng: best.coords.lng, name: best.coords.name ?? titleCase(best.place), countryCode: best.coords.country, region: best.coords.region }
+    : null
+}
+
+/**
+ * Where a report is. With `body` (a story's headline as `text`, its article as `body`), the headline speaks first:
+ * a place it names, else a country it names outright, at a place the body names in that country or its capital
+ * (M57, Oct 30, 2026: "Irish government to assess potential for united Ireland" sat in London, which its summary
+ * named; Radio Romania's energy prices in Luxembourg); a headline that names neither goes on as before.
+ */
+export async function extractGeo(text: string, body?: string): Promise<GeoResult> {
+  if (body) {
+    let fromHead = gazetteerPoint(text)
+    let outright = fromHead ? [] : countriesNamedOutright(text)
+    // A country the gazetteer holds ("Ukraine: drone attack...") is still a country: a place the article names
+    // in it ("in Kharkiv") is closer, and the country's own point is the fallback
+    let countryAsPlace: GeoResult | null = null
+    if (fromHead?.countryCode && fromHead.name && fromHead.name.toLowerCase() === (countryNameOf(fromHead.countryCode) ?? '').toLowerCase()) {
+      countryAsPlace = fromHead
+      outright = [fromHead.countryCode]
+      fromHead = null
+    }
+    if (fromHead || outright.length > 0) {
+      const key = `geo3h:${hashText(`${text}\n${body}`.toLowerCase())}`
+      const hit = await redis.get(key)
+      if (hit) return JSON.parse(hit) as GeoResult
+      const result = fromHead ?? gazetteerPointIn(body, outright) ?? countryAsPlace ?? countryPoint(outright)
+      await redis.setex(key, 3600, JSON.stringify(result))
+      return result
+    }
+    text = `${text} ${body}`
+  }
   const lower = text.toLowerCase()
 
   // Cache by text fingerprint (1h TTL; geo2: since the Oct 11, 2026 geocoder rules)

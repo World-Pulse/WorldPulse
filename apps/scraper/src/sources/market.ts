@@ -65,6 +65,8 @@ export interface MarketIndicator {
   name:      string
   type:      'vix' | 'index' | 'crypto' | 'commodity'
   sourceUrl: string
+  /** Where the number comes from: Yahoo Finance's chart API unless said */
+  source?:   'yahoo' | 'eia'
 }
 
 export const MARKET_INDICATORS: MarketIndicator[] = [
@@ -74,6 +76,36 @@ export const MARKET_INDICATORS: MarketIndicator[] = [
   { symbol: 'BTC-USD', name: 'Bitcoin',                type: 'crypto',    sourceUrl: 'https://finance.yahoo.com/quote/BTC-USD' },
   { symbol: 'CL=F',    name: 'Crude Oil WTI Futures',  type: 'commodity', sourceUrl: 'https://finance.yahoo.com/quote/CL%3DF' },
 ]
+
+// ─── EIA (plan CM6, Oct 30, 2026) ────────────────────────────────────────────
+// With EIA_API_KEY set (a free key from eia.gov/opendata; Devon, Oct 30: "keep it as long as it's free and
+// easy"), oil comes from the U.S. Energy Information Administration's open data, which is public domain: the
+// Cushing WTI spot price, daily (series RWTC), instead of Yahoo Finance's CL=F quote of CME's futures (CM4: no
+// CME licence). EIA publishes the daily prices a few days late, so the move is the newest day against the one
+// before, once per published day.
+
+export const EIA_WTI: MarketIndicator = {
+  symbol: 'CL=F', name: 'WTI crude oil', type: 'commodity', source: 'eia',
+  sourceUrl: 'https://www.eia.gov/dnav/pet/hist/RWTCD.htm',
+}
+
+/** The EIA's open-data address for the two newest daily WTI spot prices */
+export function buildEiaWtiUrl(key: string): string {
+  return `https://api.eia.gov/v2/petroleum/pri/spt/data/?api_key=${encodeURIComponent(key)}`
+    + '&frequency=daily&data[0]=value&facets[series][]=RWTC&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=2'
+}
+
+/** The EIA's answer: the newest day's price, the day before's, and the newest day (YYYY-MM-DD); null if unusable */
+export function readEiaWti(json: unknown): { price: number; prevClose: number; day: string } | null {
+  const rows = (json as { response?: { data?: Array<{ period?: unknown; value?: unknown }> } } | null)?.response?.data
+  if (!Array.isArray(rows) || rows.length < 2) return null
+  const [newest, before] = rows
+  const price = Number(newest?.value)
+  const prevClose = Number(before?.value)
+  const day = typeof newest?.period === 'string' ? newest.period : ''
+  if (!Number.isFinite(price) || !Number.isFinite(prevClose) || prevClose <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return null
+  return { price, prevClose, day }
+}
 
 // ─── HTTP HELPER ─────────────────────────────────────────────────────────────
 
@@ -199,11 +231,21 @@ export function formatMarketContent(
   price: number,
   changePercent: number,
   prevClose: number,
+  /** The day an EIA price is for (YYYY-MM-DD) */
+  day?: string,
 ): string {
   const sign = changePercent >= 0 ? '+' : ''
   const changeFmt = `${sign}${changePercent.toFixed(2)}%`
   const priceChange = price - prevClose
   const priceChangeFmt = `${priceChange >= 0 ? '+' : ''}${priceChange.toFixed(2)}`
+
+  if (indicator.source === 'eia') {
+    return (
+      `${indicator.name} (Cushing, Oklahoma, spot) was $${price.toFixed(2)} a barrel${day ? ` on ${day}` : ''} ` +
+      `(${changeFmt}, ${priceChangeFmt} from $${prevClose.toFixed(2)} the trading day before). ` +
+      `Source: U.S. Energy Information Administration (EIA).`
+    )
+  }
 
   if (indicator.type === 'vix') {
     return (
@@ -249,7 +291,10 @@ export function startMarketPoller(
 ): () => void {
   const INTERVAL_MS = Number(process.env.MARKET_INTERVAL_MS ?? DEFAULT_INTERVAL_MS)
 
+  const eiaKey = process.env.EIA_API_KEY || ''
+
   async function pollIndicator(indicator: MarketIndicator): Promise<void> {
+    if (indicator.symbol === EIA_WTI.symbol && eiaKey) return pollEiaWti()
     try {
       const url  = buildYFUrl(indicator.symbol)
       const raw  = await httpsGet(url)
@@ -272,12 +317,34 @@ export function startMarketPoller(
       const changePercent = meta.regularMarketChangePercent ??
         (prevClose !== 0 ? ((price - prevClose) / prevClose) * 100 : 0)
 
+      const today = new Date().toISOString().split('T')[0] ?? 'unknown'
+      await emitIfNotable(indicator, price, prevClose, changePercent, today)
+    } catch (err) {
+      log.warn({ err, symbol: indicator.symbol }, 'Market indicator poll error (non-fatal)')
+    }
+  }
+
+  /** WTI from the EIA (CM6): the newest published day against the one before, once per published day */
+  async function pollEiaWti(): Promise<void> {
+    try {
+      const row = readEiaWti(JSON.parse(await httpsGet(buildEiaWtiUrl(eiaKey))))
+      if (!row) { log.warn('EIA WTI: no usable answer (check EIA_API_KEY)'); return }
+      const changePercent = ((row.price - row.prevClose) / row.prevClose) * 100
+      await emitIfNotable(EIA_WTI, row.price, row.prevClose, changePercent, `eia-${row.day}`, row.day)
+    } catch (err) {
+      log.warn({ err }, 'EIA WTI poll error (non-fatal)')
+    }
+  }
+
+  /** A signal for a notable move, once a day (`dateKey`) per direction */
+  async function emitIfNotable(indicator: MarketIndicator, price: number, prevClose: number, changePercent: number, dateKey: string, day?: string): Promise<void> {
+    try {
       if (!shouldEmitMarketSignal(indicator, price, changePercent)) {
         log.debug({ symbol: indicator.symbol, price, changePercent }, 'Market signal below threshold, skipping')
         return
       }
 
-      const today        = new Date().toISOString().split('T')[0] ?? 'unknown'
+      const today        = dateKey
       const directionTag = buildDirectionTag(indicator, price, changePercent)
       const dedupKey     = marketDedupKey(indicator.symbol, directionTag, today)
       const seen         = await redis.get(dedupKey)
@@ -292,7 +359,7 @@ export function startMarketPoller(
           : percentChangeSeverity(Math.abs(changePercent), indicator.type)
 
       const title   = formatMarketTitle(indicator, price, changePercent).slice(0, 500)
-      const content = formatMarketContent(indicator, price, changePercent, prevClose).slice(0, 1000)
+      const content = formatMarketContent(indicator, price, changePercent, prevClose, day).slice(0, 1000)
 
       try {
         const signal = await insertAndCorrelate({
@@ -309,12 +376,13 @@ export function startMarketPoller(
           location_name:     'New York, US',
           country_code:      'US',
           region:            'Americas',
-          tags:              ['osint', 'market', 'economy', indicator.type, indicator.symbol.replace(/[^a-z0-9]/gi, '').toLowerCase()],
+          tags:              ['osint', 'market', 'economy', indicator.type, indicator.symbol.replace(/[^a-z0-9]/gi, '').toLowerCase(), ...(indicator.source === 'eia' ? ['eia'] : [])],
           language:          'en',
           event_time:        new Date(),
         }, { lat: NYSE_LAT, lng: NYSE_LNG, sourceId: 'market' })
 
-        await redis.setex(dedupKey, DEDUP_TTL_S, '1')
+        // (an EIA day stays the newest for days: it is kept until well after the next one is out)
+        await redis.setex(dedupKey, indicator.source === 'eia' ? 10 * 86_400 : DEDUP_TTL_S, '1')
 
         log.info(
           { symbol: indicator.symbol, price, changePercent, severity, title },
@@ -355,7 +423,7 @@ export function startMarketPoller(
   void poll()
   const timer = setInterval(() => void poll(), INTERVAL_MS)
 
-  log.info({ intervalMs: INTERVAL_MS, indicators: MARKET_INDICATORS.length }, 'Market intelligence poller started (Yahoo Finance: VIX + S&P500 + NASDAQ + BTC + Oil)')
+  log.info({ intervalMs: INTERVAL_MS, indicators: MARKET_INDICATORS.length }, `Market intelligence poller started (Yahoo Finance: VIX + S&P500 + NASDAQ + BTC${eiaKey ? '; oil from the EIA' : ' + Oil'})`)
 
   return () => {
     clearInterval(timer)

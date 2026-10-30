@@ -840,7 +840,8 @@ async function storeArticleGroup(topicHash: string, articles: RawArticle[], held
   // Geo extraction — traced
   const geo = await startSpan('pipeline.geo', async (span) => {
     span.attributes['title'] = primary.title.slice(0, 80)
-    return extractGeo(primary.title + ' ' + (primary.body ?? ''))
+    // (the headline first, then its article: M57, Oct 30, 2026)
+    return extractGeo(primary.title, primary.body ?? '')
   })
 
   // One article per independent outlet: sibling feeds of one website are one

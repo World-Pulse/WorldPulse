@@ -40,3 +40,20 @@ describe('the crop regions', () => {
     expect(points.size).toBeLessThan(REGIONS.length)
   })
 })
+
+describe('CM9, Oct 30, 2026', () => {
+  it("reads Russia's wheat at its ten biggest regions by Rosstat's 2024 harvest, none of them 15%", () => {
+    const ru = regionsOf('wheat', 'RU')
+    expect(ru.map(r => r.place)).toEqual(['Krasnodar', 'Rostov', 'Stavropol', 'Saratov', 'Altai', 'Orenburg', 'Kursk', 'Lipetsk', 'Voronezh', 'Samara'])
+    expect(ru.filter(r => r.share >= 0.15)).toHaveLength(0)
+    expect(ru.reduce((s, r) => s + r.share, 0)).toBeCloseTo(0.529, 2)
+  })
+  it('reads the beef and milk cards\' weather on their pastures', () => {
+    for (const key of ['beef', 'milk']) {
+      expect(BY_KEY.get(key)?.weather?.pasture, key).toBe(true)
+      expect(REGIONS.filter(r => r.commodity === key).length, key).toBeGreaterThanOrEqual(9)
+    }
+    expect(regionsOf('beef', 'AU').filter(r => r.share >= 0.15).map(r => r.place)).toEqual(['Queensland', 'New South Wales'])
+    expect(regionsOf('milk', 'NZ').map(r => r.place)).toEqual(['Canterbury', 'Waikato', 'Southland', 'Taranaki', 'Otago'])
+  })
+})

@@ -19,6 +19,8 @@ export interface CropWeather {
   /** What the crop is doing at its flowering and filling stages, in words */
   bloom?: string
   fill?: string
+  /** Grass, not a crop: the meat and dairy cards' pastures (the risks say "the grass") */
+  pasture?: boolean
 }
 
 export interface WatchCommodity {
@@ -43,6 +45,12 @@ export interface WatchCommodity {
 const SUMMER: CropWeather = { frost: 'field', frostC: 1, heatC: 35 }
 const WINTER: CropWeather = { frost: 'flowering', frostC: 0, heatC: 32, bloom: 'heading and flowering', fill: 'filling its grain' }
 const TREE: CropWeather = { frost: 'always', frostC: 0, heatC: 38 }
+/**
+ * Pasture (CM9, Oct 30, 2026): the meat and dairy cards' weather is their grass's. A dry spell in the months the
+ * grass grows (calendar G) thins the grazing, so herds are fed, sold or milked less; flooding rain hurts herds at
+ * any time it grows. A crop's frost and heat lines don't apply: grass has no flowering or filling to lose.
+ */
+const PASTURE: CropWeather = { frost: 'never', frostC: -99, heatC: 99, pasture: true }
 
 const c = (key: string, name: string, psd: string | null, group: WatchCommodity['group'], prices: string[], cftc: string | null, news: string | null, weather: CropWeather | null = null): WatchCommodity =>
   ({ key, name, psd, group, prices, cftc, news, weather })
@@ -95,7 +103,7 @@ export const COMMODITIES: WatchCommodity[] = [
   // Fibre
   c('cotton', 'Cotton', '2631000', 'fibres', ['cotton-a-index'], '033661', 'cotton', { ...SUMMER, frostC: 2, heatC: 38, bloom: 'flowering', fill: 'setting bolls' }),
   // Meat and livestock
-  c('beef', 'Beef', '0111000', 'meat', ['beef'], '057642', 'beef | cattle'),
+  c('beef', 'Beef', '0111000', 'meat', ['beef'], '057642', 'beef | cattle', PASTURE),
   c('pork', 'Pork', '0113000', 'meat', [], '054642', 'pork | hog | hogs | swine'),
   c('chicken', 'Chicken', '0115000', 'meat', ['chicken'], null, 'chicken | poultry'),
   c('cattle', 'Cattle herds', '0011000', 'meat', ['beef'], '057642', null),
@@ -105,7 +113,7 @@ export const COMMODITIES: WatchCommodity[] = [
   c('cheese', 'Cheese', '0240000', 'dairy', [], null, 'cheese'),
   c('milk-powder', 'Whole milk powder', '0224400', 'dairy', [], null, 'milk <-> powder'),
   c('skim-milk-powder', 'Skim milk powder', '0224200', 'dairy', [], null, null),
-  c('milk', 'Milk', '0223000', 'dairy', [], null, 'dairy | milk'),
+  c('milk', 'Milk', '0223000', 'dairy', [], null, 'dairy | milk', PASTURE),
   // Fruit
   c('oranges', 'Oranges', '0571120', 'fruit', ['orange'], null, 'oranges | citrus', { ...TREE, heatC: 38, bloom: 'blooming', fill: 'setting fruit' }),
   c('tangerines', 'Tangerines and mandarins', '0571220', 'fruit', [], null, 'tangerines | mandarins'),

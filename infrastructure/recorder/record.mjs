@@ -33,8 +33,15 @@ const TRIM_START = Number(process.env.TRIM_START || 1.5)
  * for the map is cut (Oct 30, 2026: the first lively video held its title card for 11 s, from a white page on)
  */
 const INTRO_KEEP = Number(process.env.INTRO_KEEP || 3.2)
-/** Milliseconds filmed after data-play-done, so the closing card isn't cut short */
-const TAIL_MS = Number(process.env.TAIL_MS || 1_500)
+/** Milliseconds filmed after data-play-done, so the closing card isn't cut short (the frames trail the page) */
+const TAIL_MS = Number(process.env.TAIL_MS || 3_000)
+/**
+ * The replay must begin within this long, or the page is broken and nothing is saved (Oct 30, 2026: a recording
+ * started as a deploy finished got the page without its stylesheets and filmed 4 minutes of bare text)
+ */
+const START_MS = Number(process.env.START_MS || 100_000)
+/** After a failed morning recording, wait this long and try once more */
+const RETRY_MS = Number(process.env.RETRY_MS || 180_000)
 
 /** Where the video starts: INTRO_KEEP seconds before the replay began, never before TRIM_START */
 export function trimStart(playStartedAfterMs) {
@@ -88,8 +95,16 @@ export async function recordOnce() {
     const filmingSince = Date.now()             // the video starts with the page
     log('opening', URL_TO_RECORD)
     await page.goto(URL_TO_RECORD, { waitUntil: 'domcontentloaded', timeout: 60_000 })
-    const playStarted = await page.waitForFunction(() => document.documentElement.dataset.playPhase === 'play', null, { timeout: RECORD_MS, polling: 200 })
+    // The page must run the play mode with its stylesheets, and the replay must begin
+    // (the site's own stylesheet: the map's and the page's inline styles load even when it doesn't)
+    const styled = await page.waitForFunction(() => document.documentElement.dataset.playPhase !== undefined
+      && [...document.styleSheets].some(sheet => { try { return (sheet.href || '').includes('/_next/static/') && sheet.cssRules.length > 100 } catch { return false } }),
+      null, { timeout: 45_000, polling: 500 })
+      .then(() => true, () => false)
+    if (!styled) throw new Error('the page came without its stylesheets or its play mode: nothing saved')
+    const playStarted = await page.waitForFunction(() => document.documentElement.dataset.playPhase === 'play', null, { timeout: START_MS, polling: 200 })
       .then(() => Date.now() - filmingSince, () => NaN)
+    if (!Number.isFinite(playStarted)) throw new Error(`the replay didn't begin within ${START_MS / 1000} s: nothing saved`)
     await page.waitForFunction(() => document.documentElement.dataset.playDone === '1', null, { timeout: RECORD_MS, polling: 500 })
       .catch(() => log(`no data-play-done after ${RECORD_MS / 1000} s: keeping what was recorded`))
     await page.waitForTimeout(TAIL_MS)
@@ -132,7 +147,12 @@ async function main() {
     const wait = msUntilNext()
     log(`next recording in ${Math.round(wait / 60_000)} min`)
     await new Promise(r => setTimeout(r, wait))
-    try { await recordOnce(); await prune() } catch (err) { log('failed:', err?.message ?? err) }
+    try { await recordOnce() } catch (err) {
+      log('failed:', err?.message ?? err, `; trying again in ${RETRY_MS / 60_000} min`)
+      await new Promise(r => setTimeout(r, RETRY_MS))
+      try { await recordOnce() } catch (err2) { log('failed again:', err2?.message ?? err2) }
+    }
+    await prune().catch(() => {})
     await new Promise(r => setTimeout(r, 120_000))   // never twice in one minute
   }
 }

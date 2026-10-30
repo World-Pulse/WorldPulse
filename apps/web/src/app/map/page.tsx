@@ -3655,7 +3655,8 @@ function MapView({ embed = false }: { embed?: boolean }) {
     fetch(`${API_URL}/api/v1/stories?hours=24&limit=3`).then(r => (r.ok ? r.json() : null)).then((j: { data?: { stories?: TopStory[] } | TopStory[] } | null) => {
       const d = j?.data
       const list: TopStory[] = Array.isArray(d) ? d : Array.isArray(d?.stories) ? d.stories : []
-      if (alive) setPlayTop(list.filter(s => s.title).map(s => ({ title: String(s.title), outlets: Number(s.outletCount) || 0 })))
+      // (the most outlets first: the card says "most-reported")
+      if (alive) setPlayTop(list.filter(s => s.title).map(s => ({ title: String(s.title), outlets: Number(s.outletCount) || 0 })).sort((a, b) => b.outlets - a.outlets))
     }).catch(() => {})
     return () => { alive = false }
   }, [playMode])
@@ -3730,7 +3731,9 @@ function MapView({ embed = false }: { embed?: boolean }) {
     const map = mapRef.current as any
     try {
       const canvas = map.getCanvas()
-      map.flyTo({ center: [map.getCenter().lng, 22], zoom: worldZoom(canvas.clientWidth, canvas.clientHeight, projectionRef.current), duration: 2600, essential: true })
+      // One jump, not a flight: the recorder's software-drawn map took seconds a frame flying out over the heat
+      // layer, and the video lost the closing card (Oct 30, 2026)
+      map.jumpTo({ center: [map.getCenter().lng, 22], zoom: worldZoom(canvas.clientWidth, canvas.clientHeight, projectionRef.current) })
     } catch { /* map busy */ }
     setTimeout(() => { document.documentElement.dataset.playDone = '1' }, PLAY_OUTRO_MS)
   // eslint-disable-next-line react-hooks/exhaustive-deps

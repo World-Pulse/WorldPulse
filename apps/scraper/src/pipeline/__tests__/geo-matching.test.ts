@@ -312,3 +312,28 @@ describe('geocoder politeness', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   }, 10_000)
 })
+
+describe('M57, Oct 30, 2026: the fresh read of the live map', () => {
+  it('a club or a rally named after a city is not the city', () => {
+    expect(placeFromText("Bayern Munich's Kenya friendly highlights Africa's growing pull for global sport").countryCode).toBe('KE')
+    expect(placeFromText('El Dakar 2027 arrancará en Portugal y tendrá a Marruecos como principal escenario').countryCode).toBe('PT')
+    expect(placeFromText('Dakar Rally route announced for January').countryCode).not.toBe('SN')
+    expect(placeFromText('Floods hit Dakar suburbs').countryCode).toBe('SN')
+  })
+  it('knows Antigua Guatemala and the Korean DMZ', () => {
+    expect(placeFromText('Tres meses después, el Centro Materno Infantil de Antigua Guatemala continúa inhabilitado').countryCode).toBe('GT')
+    expect(placeFromText('Germany news: Merz calls for Korean reunification at DMZ').countryCode).toBe('KR')
+  })
+  it('people named by a plural come after the country the headline names', () => {
+    expect(mentionedCountries('ICE nabs Cubans for unlawfully voting in the United States')).toEqual(['US', 'CU'])
+    expect(mentionedCountries('Cuba frees prisoners')).toEqual(['CU'])
+  })
+  it('the headline speaks first: its place, or a country it names outright, before a place in the article', async () => {
+    expect((await extractGeo('Irish government to assess potential for united Ireland', 'London has to call a referendum on Irish unity if most Northern Irish voters would back it.')).countryCode).toBe('IE')
+    expect((await extractGeo('Concerns Regarding Energy Prices - Radio Romania International', 'Energy ministers met in Luxembourg on Thursday.')).countryCode).toBe('RO')
+    // a place in the article in the named country is taken
+    expect((await extractGeo('Ukraine: drone attack on an energy plant', 'Russian drones hit a plant in Kharkiv overnight.')).name).toBe('Kharkiv')
+    // an adjective names the actor: the article's place stays ("Israeli strike" in Gaza)
+    expect((await extractGeo('Israeli strike kills five', 'The strike hit a house in Gaza on Tuesday.')).countryCode).toBe('PS')
+  })
+})

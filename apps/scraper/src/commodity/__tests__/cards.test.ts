@@ -165,7 +165,8 @@ describe('assessing every region', () => {
     const minas = REGIONS.find(r => r.id === 'coffee:BR:south-minas-gerais-varginha')!
     const { regions, byCountry } = assessAll(new Map([[pointKey(minas.lat, minas.lon), dry]]), new Map([[pointKey(minas.lat, minas.lon), NORMALS]]), NOW)
     expect(regions).toHaveLength(REGIONS.length)
-    expect([...byCountry.keys()]).toEqual(['coffee:BR'])
+    // (South Minas's dairy pastures share the coffee's point since CM9, Oct 30, 2026)
+    expect([...byCountry.keys()]).toEqual(['coffee:BR', 'milk:BR'])
     expect(byCountry.get('coffee:BR')!.level).toBe(3)
   })
 })
