@@ -14,11 +14,20 @@ describe('the email sign-up box', () => {
     expect(src).toContain("choice: 'Every morning'")
     expect(src).toContain("choice: 'Once a week'")
     expect(src).toContain('role="radiogroup"')
-    expect(src).toContain('JSON.stringify({ email, frequency, source })')
+    expect(src).toContain('JSON.stringify({ email, frequency, ')
     expect(src).not.toContain("frequency: 'daily', source")
   })
   it('tells a weekly reader when the first email comes', () => {
     expect(src).toContain("sub === 'weekly'")
     expect(src).toContain('Your first weekly email arrives on Monday at 7 AM New York time.')
+  })
+})
+
+describe('follow your countries (plan G13)', () => {
+  it('lets a reader follow up to 5 countries and sends them', () => {
+    expect(src).toContain('const MAX_COUNTRIES = 5')
+    expect(src).toContain('+ Follow your countries (optional)')
+    expect(src).toContain('JSON.stringify({ email, frequency, countries, source })')
+    expect(src).toContain("new Intl.DisplayNames(['en'], { type: 'region' })")
   })
 })

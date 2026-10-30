@@ -114,6 +114,14 @@ describe('sign-up and confirmation', () => {
     expect(tables.digest_subscriptions[0].confirmed_at).not.toBeNull()
   })
 
+  it('keeps the countries a reader follows (G13)', async () => {
+    const res = await app.inject({ method: 'POST', url: '/api/v1/digest/subscribe', payload: { email: 'fr@example.com', countries: ['fr', 'JP'] } })
+    expect(res.statusCode).toBe(201)
+    expect(tables.digest_subscriptions.find(r => r.email === 'fr@example.com')).toMatchObject({ categories: ['country:FR', 'country:JP'] })
+    const bad = await app.inject({ method: 'POST', url: '/api/v1/digest/subscribe', payload: { email: 'x@example.com', countries: ['FRA'] } })
+    expect(bad.statusCode).toBe(400)
+  })
+
   it('tells a weekly reader their first email comes on Monday (G11)', async () => {
     tables.digest_subscriptions = [{ id: 's1', email: 'week@example.com', is_active: true, confirmed_at: null, frequency: 'weekly' }]
     const { emailToken } = await import('../lib/subscribers')

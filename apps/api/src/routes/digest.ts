@@ -7,6 +7,7 @@ import { sendError } from '../lib/errors'
 import { EMAIL_CONFIGURED } from '../lib/email'
 import {
   normalizeEmail, verifyEmailToken, subscribersReady, linksConfigured, SITE_URL,
+  splitFollows, joinFollows, MAX_COUNTRIES,
 } from '../lib/subscribers'
 import { sendConfirmEmail } from '../lib/briefing-email'
 import type { Signal, SignalSeverity } from '@worldpulse/types'
@@ -27,6 +28,8 @@ const SubscribeSchema = z.object({
   email:        z.string().trim().max(254).email(),
   frequency:    z.enum(['daily', 'weekly']).default('daily'),
   categories:   z.array(z.string().max(40)).max(20).default([]),
+  /** Countries the reader follows (two-letter codes): their stories lead the briefing (plan G13) */
+  countries:    z.array(z.string().regex(/^[A-Za-z]{2}$/)).max(MAX_COUNTRIES).default([]),
   min_severity: z.enum(['critical', 'high', 'medium', 'low', 'info']).default('info'),
   /** The page the reader signed up on */
   source:       z.string().max(200).optional(),
@@ -96,7 +99,9 @@ export const registerDigestRoutes: FastifyPluginAsync = async (app) => {
       return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The email briefing isn’t open yet')
     }
 
-    const { frequency, categories, min_severity, source } = parsed.data
+    const { frequency, min_severity, source } = parsed.data
+    // Followed countries live beside the topics (plan G13)
+    const categories = joinFollows(parsed.data.categories, parsed.data.countries.map(c => c.toUpperCase()))
     const email = normalizeEmail(parsed.data.email)
     const userId = (req.user as { id?: string } | undefined)?.id ?? null
 
@@ -195,7 +200,8 @@ export const registerDigestRoutes: FastifyPluginAsync = async (app) => {
         pending:      Boolean(sub.is_active && !sub.confirmed_at),
         email:        sub.email,
         frequency:    sub.frequency,
-        categories:   sub.categories,
+        categories:   splitFollows(sub.categories).topics,
+        countries:    splitFollows(sub.categories).countries,
         min_severity: sub.min_severity,
         last_sent_at: sub.last_sent_at,
         created_at:   sub.created_at,
@@ -289,8 +295,9 @@ export const registerAdminDigestRoutes: FastifyPluginAsync = async (app) => {
     for (const sub of subscriptions) {
       // Filter signals by subscriber's category preferences
       let filtered = signals
-      if (Array.isArray(sub.categories) && sub.categories.length > 0) {
-        filtered = filtered.filter((s: Signal) => sub.categories.includes(s.category))
+      const topics = splitFollows(sub.categories).topics   // (followed countries aren't topics: plan G13)
+      if (topics.length > 0) {
+        filtered = filtered.filter((s: Signal) => topics.includes(s.category))
       }
 
       // Filter by minimum severity

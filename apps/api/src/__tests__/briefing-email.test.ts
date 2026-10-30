@@ -10,9 +10,9 @@ vi.mock('../db/redis', () => ({ redis: {} }))
 const kept = { value: null as unknown }
 vi.mock('../routes/stories', () => ({ topStories: async () => [], keptWeek: async () => kept.value }))
 
-const { newYorkTime, newYorkMidnight, buildBriefingEmail, buildConfirmEmail, weekLabel, lastWeek } = await import('../lib/briefing-email')
+const { newYorkTime, newYorkMidnight, buildBriefingEmail, buildConfirmEmail, weekLabel, lastWeek, forSubscriber, yourCountryStories } = await import('../lib/briefing-email')
 const { whatsNewSince } = await import('../lib/whats-new')
-const { emailToken, verifyEmailToken, emailLink, normalizeEmail } = await import('../lib/subscribers')
+const { emailToken, verifyEmailToken, emailLink, normalizeEmail, splitFollows, joinFollows, countryName } = await import('../lib/subscribers')
 const { outletNames, joinNames } = await import('../lib/outlet-names')
 
 const story = (title: string, extra: Record<string, unknown> = {}) => ({
@@ -132,5 +132,48 @@ describe('the weekly email (plan G11 slice 2, Oct 30, 2026)', () => {
     expect(made.stories).toHaveLength(1)
     kept.value = null
     expect((await lastWeek(new Date('2026-10-26T11:05:00Z'))).week).toBeNull()
+  })
+})
+
+describe('follow your countries (plan G13, Oct 30, 2026)', () => {
+  const unsubscribeUrl = 'https://api.world-pulse.io/api/v1/digest/unsubscribe?e=a%40b.c&t=x'
+  const paris = story('Paris metro strike enters third day', { leadId: 'fr000000-0000-0000-0000-000000000000', place: 'Paris', outletCount: 9 })
+  const tokyo = story('Tokyo raises its quake warning', { leadId: 'jp000000-0000-0000-0000-000000000000', place: 'Tokyo', outletCount: 14 })
+  const world = story('Ceasefire talks resume in Cairo', { leadId: 'eg000000-0000-0000-0000-000000000000', outletCount: 120 })
+
+  it('keeps followed countries beside the topics, without a new column', () => {
+    expect(splitFollows(['conflict', 'country:fr', 'country:FR', 'country:XYZ', 7])).toEqual({ topics: ['conflict'], countries: ['FR'] })
+    expect(joinFollows(['conflict'], ['jp', 'FR', 'JP'])).toEqual(['conflict', 'country:JP', 'country:FR'])
+    expect(splitFollows(['country:A1', 'country:B2', 'country:C3', 'country:D4', 'country:E5', 'country:F6'].map(c => c.replace(/\d/, 'X'))).countries).toHaveLength(5)
+    expect(countryName('FR')).toBe('France')
+  })
+  it('a followed country is not a topic filter', () => {
+    expect(forSubscriber([world] as never, { categories: ['country:FR'], min_severity: 'info' }, 7)).toHaveLength(1)
+    expect(forSubscriber([world] as never, { categories: ['economy'], min_severity: 'info' }, 7)).toHaveLength(0)
+  })
+  it('takes each country story once, the most outlets first, verified only, at most 3', () => {
+    const unverified = story('Rumour in Lyon', { leadId: 'fr111111-0000-0000-0000-000000000000', verifiedAt: null, outletCount: 50 })
+    const picked = yourCountryStories([[paris, unverified, tokyo], [tokyo]] as never, { categories: ['country:FR', 'country:JP'], min_severity: 'info' })
+    expect(picked.map(s => s.leadId.slice(0, 2))).toEqual(['jp', 'fr'])
+  })
+  it('leads the email with the reader\'s countries, then the world without repeats', () => {
+    const email = buildBriefingEmail({
+      stories: [world, tokyo] as never, whatsNew: [], dateLabel: 'Friday, October 30', weekly: false, unsubscribeUrl,
+      yourCountries: { names: ['France', 'Japan'], stories: [tokyo, paris] as never },
+    })
+    expect(email.html).toContain('Your countries')
+    expect(email.html).toContain('· France, Japan')
+    expect(email.html).toContain('The world')
+    expect(email.text).toContain('YOUR COUNTRIES · France, Japan\n\n1. Tokyo raises its quake warning')
+    expect(email.text.split('Tokyo raises its quake warning')).toHaveLength(2)   // not again in the world list
+    expect(email.text).toContain('THE WORLD\n\n1. Ceasefire talks resume in Cairo')
+    expect(email.subject).toBe('Ceasefire talks resume in Cairo + 1 more verified story')
+  })
+  it('says so when nothing was confirmed in them', () => {
+    const email = buildBriefingEmail({
+      stories: [world] as never, whatsNew: [], dateLabel: 'Friday, October 30', weekly: false, unsubscribeUrl,
+      yourCountries: { names: ['France', 'Japan'], stories: [] },
+    })
+    expect(email.text).toContain('Nothing several outlets confirmed in France and Japan in the last 24 hours.')
   })
 })

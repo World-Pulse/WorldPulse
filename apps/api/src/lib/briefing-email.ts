@@ -18,7 +18,7 @@ import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 import { logger } from './logger'
 import { EMAIL_CONFIGURED } from './email'
-import { emailLink, SITE_URL, subscribersReady, linksConfigured } from './subscribers'
+import { emailLink, SITE_URL, subscribersReady, linksConfigured, splitFollows, countryName } from './subscribers'
 import { outletNames, joinNames } from './outlet-names'
 import { whatsNewSince, type WhatsNewItem } from './whats-new'
 import { topStories, keptWeek } from '../routes/stories'
@@ -111,6 +111,13 @@ export interface BriefingInput {
   unsubscribeUrl: string
   /** Weekly emails: the finished week, when its page is made */
   week?: BriefingWeek | null
+  /** The countries the reader follows and their stories, which lead the email (plan G13) */
+  yourCountries?: { names: string[]; stories: ListedStory[] } | null
+}
+
+/** "France", "France and Japan", "France, Japan and Peru" */
+function joinWords(names: string[]): string {
+  return names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 }
 
 /** "Oct 19 – 25", or "Sep 28 – Oct 4" across a month (Monday to Sunday, UTC like the week's page) */
@@ -142,7 +149,15 @@ export function buildBriefingEmail(input: BriefingInput): { subject: string; htm
   const busiest = week ? week.countries.slice(0, 5).filter(c => c.name && c.stories > 0) : []
   const busiestLine = busiest.map(c => `${c.name} ${c.stories.toLocaleString('en-US')}`).join(' · ')
 
-  const storyHtml = stories.map(s => {
+  const yours = input.yourCountries && input.yourCountries.names.length > 0 ? input.yourCountries : null
+  const yoursIds = new Set((yours?.stories ?? []).map(s => s.leadId))
+  const worldStories = yours ? stories.filter(s => !yoursIds.has(s.leadId)) : stories
+  const sectionHead = (label: string, sub: string) => `<tr><td style="padding:18px 0 0;">
+      <div style="font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#7c3aed;">${escapeHtml(label)}${sub ? ` <span style="color:#6b7280;font-weight:600;letter-spacing:0;text-transform:none;">· ${escapeHtml(sub)}</span>` : ''}</div>
+    </td></tr>`
+  const nothingIn = yours ? `Nothing several outlets confirmed in ${joinWords(yours.names)} ${weekly ? 'last week' : 'in the last 24 hours'}.` : ''
+
+  const storyRow = (s: ListedStory) => {
     const color = SEVERITY_COLOR[s.severity] ?? '#64748b'
     const names = outletNames(s.outlets)
     const meta = [s.place, categoryLabel(s.category)].filter(Boolean).join(' · ')
@@ -151,7 +166,13 @@ export function buildBriefingEmail(input: BriefingInput): { subject: string; htm
       <a href="${escapeHtml(storyUrl(s.leadId, campaign))}" style="display:block;margin:4px 0 6px;font-size:17px;line-height:1.35;font-weight:700;color:#0f172a;text-decoration:none;">${escapeHtml(s.title)}</a>
       <div style="font-size:13px;color:#15803d;font-weight:600;">✓ Verified · ${s.outletCount.toLocaleString('en-US')} outlets${names.length ? ` <span style="color:#4b5563;font-weight:400;">including ${escapeHtml(joinNames(names))}</span>` : ''}</div>
     </td></tr>`
-  }).join('')
+  }
+  const yoursHtml = yours
+    ? `${sectionHead('Your countries', yours.names.join(', '))}${yours.stories.length
+        ? yours.stories.map(storyRow).join('')
+        : `<tr><td style="padding:8px 0 4px;font-size:13px;color:#6b7280;">${escapeHtml(nothingIn)}</td></tr>`}${sectionHead('The world', '')}`
+    : ''
+  const storyHtml = `${yoursHtml}${worldStories.map(storyRow).join('')}`
 
   const newHtml = whatsNew.length ? `<tr><td style="padding:22px 0 6px;">
       <div style="font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#0891b2;">New on WorldPulse</div>
@@ -189,11 +210,15 @@ export function buildBriefingEmail(input: BriefingInput): { subject: string; htm
   </td></tr>
 </table></td></tr></table></body></html>`
 
-  const textStories = stories.map((s, i) => {
+  const storyText = (s: ListedStory, i: number) => {
     const names = outletNames(s.outlets)
     const meta = [s.place, categoryLabel(s.category)].filter(Boolean).join(' · ')
     return `${i + 1}. ${s.title}\n   ${s.severity.toUpperCase()}${meta ? ` · ${meta}` : ''}\n   Verified · ${s.outletCount} outlets${names.length ? `, including ${joinNames(names)}` : ''}\n   ${storyUrl(s.leadId, campaign)}`
-  }).join('\n\n')
+  }
+  const textYours = yours
+    ? `YOUR COUNTRIES · ${yours.names.join(', ')}\n\n${yours.stories.length ? yours.stories.map(storyText).join('\n\n') : nothingIn}\n\nTHE WORLD\n\n`
+    : ''
+  const textStories = `${textYours}${worldStories.map(storyText).join('\n\n')}`
   const textNew = whatsNew.length ? `\n\nNEW ON WORLDPULSE\n${whatsNew.map(i => `- ${i.text} ${siteUrl(i.path, campaign)}`).join('\n')}` : ''
   const textBusiest = busiestLine ? `\n\nBUSIEST COUNTRIES (verified stories)\n${busiestLine}` : ''
   const textWeek = week ? `\n\nThe whole week: ${weekUrl}` : ''
@@ -310,14 +335,22 @@ export async function lastWeek(now: Date): Promise<{ stories: ListedStory[]; wee
   return { stories: await topStories(24 * 7, 25), week: null }
 }
 
-function forSubscriber(stories: ListedStory[], sub: SubscriberRow, max: number): ListedStory[] {
-  const cats = Array.isArray(sub.categories) ? sub.categories.filter(Boolean) : []
+export function forSubscriber(stories: ListedStory[], sub: Pick<SubscriberRow, 'categories' | 'min_severity'>, max: number): ListedStory[] {
+  // (followed countries sit beside the topics as "country:FR": they aren't topics, plan G13)
+  const cats = splitFollows(sub.categories).topics
   const min = SEVERITY_RANK[sub.min_severity ?? 'info'] ?? 1
   return stories
     .filter(s => s.verifiedAt !== null)
     .filter(s => cats.length === 0 || (s.category !== null && cats.includes(s.category)))
     .filter(s => (SEVERITY_RANK[s.severity] ?? 1) >= min)
     .slice(0, max)
+}
+
+/** The reader's countries' stories for the top of the email: each once, the most outlets first, at most 3 (plan G13) */
+export function yourCountryStories(lists: ListedStory[][], sub: Pick<SubscriberRow, 'categories' | 'min_severity'>): ListedStory[] {
+  const seen = new Set<string>()
+  const merged = lists.flat().filter(s => (seen.has(s.leadId) ? false : (seen.add(s.leadId), true)))
+  return forSubscriber(merged.sort((a, b) => b.outletCount - a.outletCount), sub, 3)
 }
 
 /**
@@ -356,14 +389,26 @@ export async function dispatchBriefingEmails(now = new Date()): Promise<number> 
     const { stories: weekly, week } = subs.some(s => s.frequency === 'weekly') ? await lastWeek(now) : { stories: [], week: null }
     const dateLabel = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'long', month: 'long', day: 'numeric' }).format(now)
 
+    // Each followed country's stories, read once a pass (plan G13)
+    const byCountry = new Map<string, Promise<ListedStory[]>>()
+    const countryStories = (cc: string, isWeekly: boolean) => {
+      const key = `${cc}:${isWeekly ? 'week' : 'day'}`
+      if (!byCountry.has(key)) byCountry.set(key, topStories(isWeekly ? 24 * 7 : 24, 8, cc).catch(() => []))
+      return byCountry.get(key)!
+    }
+
     let sent = 0
     for (const sub of subs) {
       const isWeekly = sub.frequency === 'weekly'
       const stories = forSubscriber(isWeekly ? weekly : daily, sub, isWeekly ? STORIES_WEEKLY : STORIES_DAILY)
-      if (stories.length === 0) continue
+      const { countries } = splitFollows(sub.categories)
+      const yourCountries = countries.length > 0
+        ? { names: countries.map(countryName), stories: yourCountryStories(await Promise.all(countries.map(cc => countryStories(cc, isWeekly))), sub) }
+        : null
+      if (stories.length === 0 && !yourCountries?.stories.length) continue
       const last = sub.last_sent_at ? new Date(sub.last_sent_at) : null
       const unsubscribeUrl = emailLink(sub.email, 'unsubscribe')
-      const msg = buildBriefingEmail({ stories, whatsNew: whatsNewSince(last, now), dateLabel, weekly: isWeekly, unsubscribeUrl, week: isWeekly ? week : null })
+      const msg = buildBriefingEmail({ stories, whatsNew: whatsNewSince(last, now), dateLabel, weekly: isWeekly, unsubscribeUrl, week: isWeekly ? week : null, yourCountries })
       const r = await sendEmail({
         to: sub.email, ...msg,
         headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },

@@ -63,6 +63,40 @@ export async function ensureSubscribersTable(): Promise<boolean> {
   }
 }
 
+/**
+ * The countries a reader follows for the briefing (plan G13, Oct 30, 2026) are kept beside the topics in
+ * digest_subscriptions.categories as "country:FR", so following needs no new column
+ */
+export const COUNTRY_PREFIX = 'country:'
+/** At most this many countries per reader */
+export const MAX_COUNTRIES = 5
+
+/** A subscriber's categories split into topics and followed countries (two-letter codes, at most MAX_COUNTRIES) */
+export function splitFollows(categories: unknown): { topics: string[]; countries: string[] } {
+  const all = Array.isArray(categories) ? categories.filter((c): c is string => typeof c === 'string' && c.length > 0) : []
+  const countries = all
+    .filter(c => c.startsWith(COUNTRY_PREFIX))
+    .map(c => c.slice(COUNTRY_PREFIX.length).toUpperCase())
+    .filter(c => /^[A-Z]{2}$/.test(c))
+  return { topics: all.filter(c => !c.startsWith(COUNTRY_PREFIX)), countries: [...new Set(countries)].slice(0, MAX_COUNTRIES) }
+}
+
+/** Topics and followed countries as one categories list */
+export function joinFollows(topics: string[], countries: string[]): string[] {
+  const own = splitFollows([...topics, ...countries.map(c => `${COUNTRY_PREFIX}${c}`)])
+  return [...own.topics, ...own.countries.map(c => `${COUNTRY_PREFIX}${c}`)]
+}
+
+/** "France" for "FR" (English names; the code itself if unknown) */
+export function countryName(code: string): string {
+  try {
+    const name = new Intl.DisplayNames(['en'], { type: 'region' }).of(code)
+    return name && name !== code ? name : code
+  } catch {
+    return code
+  }
+}
+
 /** One spelling per address: trimmed and lower-case */
 export function normalizeEmail(raw: string): string {
   return raw.trim().toLowerCase()

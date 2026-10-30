@@ -11,15 +11,31 @@
  * Readers pick every morning or once a week (plan G11 slice 2, Oct 30, 2026):
  * the weekly email goes on Mondays at 7 AM with last week's stories as the
  * WorldPulse Week page ranks them, the busiest countries and a link to the page.
+ * They can also follow up to 5 countries, whose stories lead each email (plan
+ * G13, Oct 30, 2026).
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.world-pulse.io'
 
 type Notice = { tone: 'ok' | 'warn'; text: string }
 
 type Frequency = 'daily' | 'weekly'
+
+/** At most this many followed countries (the API's limit too) */
+const MAX_COUNTRIES = 5
+/** The countries a reader can follow (ISO codes; the names come from the browser) */
+const COUNTRY_CODES = ('AF AL DZ AD AO AG AR AM AU AT AZ BS BH BD BB BY BE BZ BJ BT BO BA BW BR BN BG BF BI CV KH CM CA CF TD CL CN CO KM CG CD '
+  + 'CR CI HR CU CY CZ DK DJ DM DO EC EG SV GQ ER EE SZ ET FJ FI FR GA GM GE DE GH GR GD GT GN GW GY HT HN HK HU IS IN ID IR IQ IE IL IT JM JP JO '
+  + 'KZ KE KI KP KR KW KG LA LV LB LS LR LY LI LT LU MG MW MY MV ML MT MH MR MU MX FM MD MC MN ME MA MZ MM NA NR NP NL NZ NI NE NG MK NO OM '
+  + 'PK PW PS PA PG PY PE PH PL PT QA RO RU RW KN LC VC WS SM ST SA SN RS SC SL SG SK SI SB SO ZA SS ES LK SD SR SE CH SY TW TJ TZ TH TL TG TO '
+  + 'TT TN TR TM TV UG UA AE GB US UY UZ VU VA VE VN YE ZM ZW').split(' ')
+
+/** "France" for "FR" (the code itself where the browser has no names) */
+function countryLabel(code: string): string {
+  try { return new Intl.DisplayNames(['en'], { type: 'region' }).of(code) ?? code } catch { return code }
+}
 
 /** What the box says for each choice */
 const SIGNUP_COPY: Record<Frequency, { choice: string; title: string; blurb: string; button: string }> = {
@@ -54,6 +70,12 @@ export function BriefingSignup({ source, compact = false, className = '' }: { so
   const [notice, setNotice] = useState<Notice | null>(null)
   const [email, setEmail] = useState('')
   const [frequency, setFrequency] = useState<Frequency>('daily')
+  const [countries, setCountries] = useState<string[]>([])
+  const [picking, setPicking] = useState(false)
+  const countryOptions = useMemo(
+    () => (picking ? COUNTRY_CODES.map(code => ({ code, name: countryLabel(code) })).sort((a, b) => a.name.localeCompare(b.name)) : []),
+    [picking],
+  )
   const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
   const [message, setMessage] = useState('')
 
@@ -75,7 +97,7 @@ export function BriefingSignup({ source, compact = false, className = '' }: { so
       const res = await fetch(`${API_URL}/api/v1/digest/subscribe`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, frequency, source }),
+        body: JSON.stringify({ email, frequency, countries, source }),
       })
       const data = await res.json().catch(() => null) as { message?: string; error?: string | { message?: string } } | null
       if (res.ok) {
@@ -128,6 +150,42 @@ export function BriefingSignup({ source, compact = false, className = '' }: { so
                 </button>
               ))}
             </div>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {countries.map(c => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setCountries(cs => cs.filter(x => x !== c))}
+                  aria-label={`Stop following ${countryLabel(c)}`}
+                  className="inline-flex items-center gap-1 rounded-full border border-wp-amber/40 bg-wp-amber/10 px-2.5 py-1 text-[12px] text-wp-text hover:border-wp-amber/70"
+                >
+                  {countryLabel(c)} <span aria-hidden="true" className="text-wp-text3">×</span>
+                </button>
+              ))}
+              {countries.length < MAX_COUNTRIES && (picking ? (
+                <select
+                  aria-label="Add a country"
+                  autoFocus
+                  value=""
+                  onChange={e => {
+                    const v = e.target.value
+                    if (v) setCountries(cs => (cs.includes(v) ? cs : [...cs, v].slice(0, MAX_COUNTRIES)))
+                    setPicking(false)
+                  }}
+                  className="max-w-[220px] rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-[12.5px] text-wp-text focus:outline-none focus:border-wp-amber/60"
+                >
+                  <option value="">Add a country…</option>
+                  {countryOptions.filter(o => !countries.includes(o.code)).map(o => <option key={o.code} value={o.code}>{o.name}</option>)}
+                </select>
+              ) : (
+                <button type="button" onClick={() => setPicking(true)} className="text-[12.5px] font-medium text-wp-amber hover:underline">
+                  {countries.length ? '+ Another country' : '+ Follow your countries (optional)'}
+                </button>
+              ))}
+            </div>
+            {countries.length > 0 && (
+              <p className="mt-1 text-[11.5px] text-wp-text3">Their stories come first in each email.</p>
+            )}
             <form onSubmit={e => { void submit(e) }} className="mt-2.5 flex flex-col sm:flex-row gap-2">
               <label htmlFor={`briefing-email-${source}`} className="sr-only">Email address</label>
               <input
