@@ -27,7 +27,7 @@ echo "apt-get $*" >> "$CALLS"
 for a in "$@"; do
   if [ "$a" = install ]; then
     n=$(cat "$BIN/.apt_tries" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$BIN/.apt_tries"
-    [ "$n" -le "${APT_FAIL_FIRST:-0}" ] && exit 100
+    [ "$n" -le "${APT_FAIL_FIRST:-0}" ] && { echo 'E: Unable to locate package "fail2ban"'; exit 100; }
     cp "$BIN/.f2b" "$BIN/fail2ban-client" && chmod +x "$BIN/fail2ban-client"
   fi
 done
@@ -146,7 +146,7 @@ class SshGuard(unittest.TestCase):
         r = self.run_guard(APT_FAIL_FIRST=5)
         st = self.status()
         self.assertEqual(st['ok'], False)
-        self.assertEqual(st['note'], 'fail2ban did not install')
+        self.assertTrue(st['note'].startswith('fail2ban did not install: E: Unable to locate package fail2ban'), st['note'])
         self.assertFalse(os.path.exists(self.jail))
         self.assertIn("didn't install", r.stdout)
 

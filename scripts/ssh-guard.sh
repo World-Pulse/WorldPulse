@@ -36,7 +36,11 @@ if ! command -v "$F2B" > /dev/null 2>&1; then
     # The package lists may be old: refresh them once and try again
     apt-get update -q -o DPkg::Lock::Timeout=180 >> logs/ssh-guard-install.log 2>&1 || true
     if ! apt-get install "${opts[@]}" fail2ban >> logs/ssh-guard-install.log 2>&1; then
-      log "fail2ban didn't install (logs/ssh-guard-install.log)"; status false "fail2ban did not install"; exit 0
+      # apt's last error line and the system's name go in the status, so the status file says why
+      why=$(grep -E '^(E|W): ' logs/ssh-guard-install.log | tail -n 1 | tr -cd 'A-Za-z0-9 .,:;/()_+=-' | cut -c1-160)
+      os=$( (. /etc/os-release 2> /dev/null && printf '%s' "${PRETTY_NAME:-}") | tr -cd 'A-Za-z0-9 .()_-' | cut -c1-60)
+      log "fail2ban didn't install: ${why:-see logs/ssh-guard-install.log}"
+      status false "fail2ban did not install${why:+: $why}${os:+ ($os)}"; exit 0
     fi
   fi
 fi
