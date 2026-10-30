@@ -23,7 +23,7 @@ vi.mock('../../lib/postgres', () => {
   }
 })
 
-import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability, stripOutletNames, switchOffRetiredSources, RETIRED_SOURCE_SLUGS, fixGdeltFipsCountries, splitDniproFromSpainTrainStory } from '../repairs'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability, stripOutletNames, switchOffRetiredSources, RETIRED_SOURCE_SLUGS, fixGdeltFipsCountries, splitDniproFromSpainTrainStory, splitHelicopterCrashStories, HELICOPTER_STORY } from '../repairs'
 import { db } from '../../lib/postgres'
 import { EVENT_TEMPLATE_SQL } from '../event-titles'
 
@@ -351,5 +351,31 @@ describe('the Dnipro strike out of Spain\'s train crash story (Oct 30, 2026)', (
     expect(sql).toMatch(/story_id = 'cff6a84b-9fac-44ee-9058-d03156fb8b32'/)
     expect(sql).toMatch(/dnipro\|ukrain/)
     expect(sql).toMatch(/ORDER BY created_at ASC, id ASC LIMIT 1/)
+  })
+})
+
+describe('splitHelicopterCrashStories (Oct 30, 2026)', () => {
+  it("moves Oregon's and then Uttarakhand's reports out of Bosnia's helicopter crash story, each under its oldest", async () => {
+    h.raws.length = 0
+    expect(await splitHelicopterCrashStories()).toBe(6)
+    expect(h.raws).toHaveLength(2)
+    for (const { sql, params } of h.raws) {
+      expect(sql).toMatch(/WHERE story_id = \? AND \(title ~\* \? OR location_name ~\* \?\)/)
+      expect(sql).toMatch(/ORDER BY created_at ASC, id ASC LIMIT 1/)
+      expect(params?.[0]).toBe(HELICOPTER_STORY)
+    }
+    expect(HELICOPTER_STORY).toBe('c1f7be3f-34dc-4cfc-a15d-da1ca82128e9')
+    const [oregon, india] = h.raws.map(r => [new RegExp(String(r.params?.[1]), 'i'), new RegExp(String(r.params?.[2]), 'i')] as const)
+    expect(oregon![0].test('Three killed after two helicopters collide near McMinnville')).toBe(true)
+    expect(oregon![0].test('Brit student pilot killed after two helicopters collide mid-air')).toBe(true)
+    expect(oregon![1].test('Oregon')).toBe(true)
+    expect(india![0].test('Six feared dead in helicopter crash in Indian Himalayan state')).toBe(true)
+    expect(india![1].test('Uttarakhand')).toBe(true)
+    // Bosnia's own reports stay
+    for (const t of ['Italian military helicopter on EU mission in Bosnia crashes', 'Another Victim Dies Following EUFOR Helicopter Crash Near Brcko',
+      'Meloni pays tribute to victims of Italian military helicopter crash in Bosnia']) {
+      expect(oregon![0].test(t) || india![0].test(t)).toBe(false)
+    }
+    expect(oregon![1].test('Bosnia and Herzegovina') || india![1].test('Italy') || india![1].test('Italian Peninsula')).toBe(false)
   })
 })

@@ -736,3 +736,34 @@ export async function splitDniproFromSpainTrainStory(): Promise<number> {
   )
   return Number((result as { rowCount?: number })?.rowCount ?? 0)
 }
+
+/**
+ * An EU helicopter crash in Bosnia (Oct 29, 2026), two helicopters colliding in Oregon and a helicopter crash in
+ * India's Uttarakhand (both Oct 30) became one story, c1f7be3f, placed in Oregon: their headlines shared only
+ * "helicopter" and a toll (correlate.ts isSameStory now asks two headlines that both name countries to name one
+ * in common then). Oregon's and Uttarakhand's reports get a story each again, under the oldest of each. Only that
+ * story's members that name the place or are placed there are read, so a later start changes nothing.
+ */
+export const HELICOPTER_STORY = 'c1f7be3f-34dc-4cfc-a15d-da1ca82128e9'
+const HELICOPTER_SPLITS: Array<{ title: string; place: string }> = [
+  { title: '(oregon|mcminnville|collid|collision|mid-?air)', place: '^oregon' },
+  { title: '(india|uttarakhand|joshimath|himalaya|dehradun|kedarnath|char dham|pilgrim)', place: '^(uttarakhand|dehradun|india)' },
+]
+
+export async function splitHelicopterCrashStories(): Promise<number> {
+  let moved = 0
+  for (const { title, place } of HELICOPTER_SPLITS) {
+    const result = await db.raw(
+      `WITH part AS (
+          SELECT id, created_at FROM signals
+           WHERE story_id = ? AND (title ~* ? OR location_name ~* ?)
+        ),
+        root AS (SELECT id FROM part ORDER BY created_at ASC, id ASC LIMIT 1)
+        UPDATE signals SET story_id = (SELECT id FROM root)
+         WHERE id IN (SELECT id FROM part)`,
+      [HELICOPTER_STORY, title, place],
+    )
+    moved += Number((result as { rowCount?: number })?.rowCount ?? 0)
+  }
+  return moved
+}

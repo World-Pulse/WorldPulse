@@ -571,6 +571,18 @@ export function stemWord(word: string): string {
   return w.slice(0, 6)
 }
 
+/**
+ * Things many unrelated events happen to or in, as stemWord leaves them: like a toll, they single out no story
+ * (see isSameStory). Defined after ENDINGS, which stemWord reads.
+ */
+const COMMON_THINGS = new Set([
+  'helicopter', 'chopper', 'plane', 'airplane', 'aircraft', 'jet', 'airliner', 'flight', 'train', 'bus', 'minibus',
+  'coach', 'boat', 'ship', 'ferry', 'vessel', 'tanker', 'truck', 'lorry', 'car', 'vehicle', 'motorcycle', 'pilot',
+  'crew', 'passenger', 'building', 'bridge', 'mine', 'school', 'hospital', 'market', 'hotel', 'church', 'mosque',
+  'temple', 'road', 'highway', 'station', 'airport', 'factory', 'plant', 'warehouse', 'tower', 'dam', 'house',
+  'home', 'village',
+].map(stemWord))
+
 const storyWordCache = new Map<string, Set<string>>()
 
 /**
@@ -655,6 +667,15 @@ export function isSameStory(a: CorrelationCandidate, b: CorrelationCandidate): b
     const countriesA = [...wordsA].filter(w => w.startsWith('@'))
     const countriesB = [...wordsB].filter(w => w.startsWith('@'))
     if ((countriesA.length > 0 || countriesB.length > 0) && !countriesA.some(w => wordsB.has(w))) return false
+  } else if (particular.every(w => w.startsWith('#') || COMMON_THINGS.has(w))) {
+    // So are the things many events happen to (a helicopter, a train, a market): when they and a toll are all
+    // the two share, two headlines that both name countries must name one in common. On Oct 30, 2026 an EU
+    // helicopter crash in Bosnia, a midair collision in Oregon and a crash in India's Uttarakhand were one
+    // story of 36 outlets, placed in Oregon. A headline naming no country is let be: "the EUFOR Helicopter
+    // Crash in BiH" and "Drone Strike on Nyala Market" name theirs in words the place list doesn't read
+    const countriesA = [...wordsA].filter(w => w.startsWith('@'))
+    const countriesB = [...wordsB].filter(w => w.startsWith('@'))
+    if (countriesA.length > 0 && countriesB.length > 0 && !countriesA.some(w => wordsB.has(w))) return false
   }
   // Headlines whose first ordinals differ tell of two occurrences ("Kenya
   // confirms second Ebola case" / "... third Ebola case")

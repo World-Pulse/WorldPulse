@@ -553,6 +553,41 @@ describe("tolls (Oct 24, 2026: a Nigerian attack's headline on the Saudi airport
   })
 })
 
+describe('common things (Oct 30, 2026: helicopter crashes in Bosnia, Oregon and India became one story)', () => {
+  const at = (title: string, source_id: string) => sig({ id: source_id, title, source_id, category: 'disaster',
+    published_at: '2026-10-30T09:00:00Z', location_name: null, lat: null, lng: null })
+
+  it('keeps two events apart when a thing and a toll are all they share and their headlines name different countries', () => {
+    expect(isSameStory(
+      at('3 people killed after 2 helicopters collide midair in Oregon, authorities say', 'abcnews.com'),
+      at('Three people killed in EUFOR helicopter crash in Bosnia and Herzegovina', 'sarajevotimes.com'),
+    )).toBe(false)
+    expect(isSameStory(
+      at('Uttarakhand: Six killed as helicopter crashes near Joshimath', 'scroll.in'),
+      at('EU force helicopter crash kills four in Bosnia', 'apnews.com'),
+    )).toBe(false)
+  })
+
+  it("still joins one event's reports, also when one headline names its country in words the place list doesn't read", () => {
+    expect(isSameStory(
+      at('Four killed in Italian military helicopter crash in Bosnia', 'euronews.com'),
+      at('4 killed in Italian helicopter crash during EU peacekeeping operation in Bosnia', 'apnews.com'),
+    )).toBe(true)
+    expect(isSameStory(
+      at('EU force helicopter crash in Bosnia kills four crew', 'rferl.org'),
+      at('EU force helicopter crash kills four in Bosnia', 'apnews.com'),
+    )).toBe(true)
+    expect(isSameStory(
+      at('4 killed, 11 injured as helicopter with EU force crashes in Bosnia', 'aa.com.tr'),
+      at('Three killed and Twelve injured in the EUFOR Helicopter Crash in BiH', 'sarajevotimes.com'),
+    )).toBe(true)
+    expect(isSameStory(
+      at('Ten dead in high-speed train crash in Spain', 'rte.ie'),
+      at('Reports: 10 Dead in Crash Between 2 Spanish Trains in Toledo Province', 'newsmax.com'),
+    )).toBe(true)
+  })
+})
+
 describe('one story per match set (Oct 30, 2026: Spain\'s train crash and the Dnipro station strike became one story)', () => {
   const at = new Date('2026-10-29T19:00:00Z')
   const r = (id: string, source_id: string, title: string, category = 'disaster') =>
