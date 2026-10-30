@@ -358,6 +358,13 @@ describe('places 72 hours of headlines named and the gazetteer missed (Oct 30, 2
     expect(findGazetteerPlace('13 airlines hit by check-in disruption at Incheon Airport')?.coords.country).toBe('KR')
     expect(findGazetteerPlace('Balean antigua casa de campaña de Rocha Moya en Culiacán')?.coords.region).toBe('Sinaloa')
   })
+  it('pins Australian, New Zealand and Tobago local stories at their own places', () => {
+    expect(findGazetteerPlace("Interstate investors sparking 'astronomical' house sales in Alice Springs")?.coords.country).toBe('AU')
+    expect(findGazetteerPlace("Wairarapa drug kingpin's prison sentence cut on appeal")?.coords.country).toBe('NZ')
+    expect(findGazetteerPlace('Calls for freedom camping ban at popular Wānaka lake')?.place).toBe('wānaka')
+    expect(findGazetteerPlace('Four held for drunk driving in Tobago')?.coords.country).toBe('TT')
+    expect(findGazetteerPlace('Donald Trump rally threat ahead of Daytona Beach appearance')?.coords.region).toBe('Florida')
+  })
   it('leaves out names that are also other words or names', () => {
     expect(findGazetteerPlace('OYO raises funds as Indian hotel chain expands')).toBeNull()
     expect(findGazetteerPlace('IMO adopts new shipping emissions rules')).toBeNull()

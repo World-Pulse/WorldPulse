@@ -444,6 +444,24 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'casablanca':       { lat: 33.5731, lng: -7.5898, country: 'MA' },
   'bissau':           { lat: 11.8636, lng: -15.5977, country: 'GW' },
   'culiacán':         { lat: 24.8091, lng: -107.3940, country: 'MX', region: 'Sinaloa', name: 'Culiacán' },
+  // Oct 30, 2026, evening: Australian, New Zealand and Caribbean local stories read off the live map points sat at
+  // Melbourne, Wellington and Port of Spain ("... house sales in Alice Springs", "Wairarapa drug kingpin",
+  // "Four held for drunk driving in Tobago"). Wanaka is also kept with its macron: names are matched as written
+  'alice springs':    { lat: -23.6980, lng: 133.8807, country: 'AU', region: 'Northern Territory' },
+  'canberra':         { lat: -35.2809, lng: 149.1300, country: 'AU' },
+  'hobart':           { lat: -42.8821, lng: 147.3272, country: 'AU', region: 'Tasmania' },
+  'cairns':           { lat: -16.9186, lng: 145.7781, country: 'AU', region: 'Queensland' },
+  'townsville':       { lat: -19.2590, lng: 146.8169, country: 'AU', region: 'Queensland' },
+  'geelong':          { lat: -38.1499, lng: 144.3617, country: 'AU', region: 'Victoria' },
+  'dunedin':          { lat: -45.8788, lng: 170.5028, country: 'NZ' },
+  'tauranga':         { lat: -37.6878, lng: 176.1651, country: 'NZ' },
+  'rotorua':          { lat: -38.1368, lng: 176.2497, country: 'NZ' },
+  'wairarapa':        { lat: -40.9511, lng: 175.6576, country: 'NZ', region: 'Wairarapa', name: 'Wairarapa' },
+  'masterton':        { lat: -40.9511, lng: 175.6576, country: 'NZ', region: 'Wairarapa' },
+  'wanaka':           { lat: -44.7032, lng: 169.1321, country: 'NZ' },
+  'wānaka':           { lat: -44.7032, lng: 169.1321, country: 'NZ' },
+  'daytona beach':    { lat: 29.2108, lng: -81.0228, country: 'US', region: 'Florida' },
+  'tobago':           { lat: 11.1800, lng: -60.7400, country: 'TT', region: 'Tobago', name: 'Tobago' },
 }
 
 // ─── NER PATTERNS ────────────────────────────────────────────────────────────
