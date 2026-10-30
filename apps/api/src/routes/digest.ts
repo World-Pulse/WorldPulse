@@ -139,7 +139,11 @@ export const registerDigestRoutes: FastifyPluginAsync = async (app) => {
       .where('email', email)
       .where('is_active', true)
       .update({ confirmed_at: db.fn.now(), updated_at: db.fn.now() })
-    return reply.redirect(`${SITE_URL}/briefing?subscribed=${updated > 0 ? '1' : 'invalid'}`, 302)
+    // Weekly readers are told their first email comes on Monday (plan G11 slice 2)
+    const row = updated > 0
+      ? await db('digest_subscriptions').where('email', email).where('is_active', true).first('frequency').catch(() => null) as { frequency?: string } | null | undefined
+      : null
+    return reply.redirect(`${SITE_URL}/briefing?subscribed=${updated > 0 ? (row?.frequency === 'weekly' ? 'weekly' : '1') : 'invalid'}`, 302)
   })
 
   // ── GET|POST /api/v1/digest/unsubscribe?e=&t= ─────────────────────────────

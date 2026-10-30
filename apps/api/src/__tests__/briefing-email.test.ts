@@ -7,9 +7,10 @@ import { describe, it, expect, vi } from 'vitest'
 process.env.JWT_SECRET = 'test-secret-for-email-links'
 vi.mock('../db/postgres', () => ({ db: Object.assign(() => ({}), { raw: async () => ({ rows: [] }), fn: { now: () => new Date() } }) }))
 vi.mock('../db/redis', () => ({ redis: {} }))
-vi.mock('../routes/stories', () => ({ topStories: async () => [] }))
+const kept = { value: null as unknown }
+vi.mock('../routes/stories', () => ({ topStories: async () => [], keptWeek: async () => kept.value }))
 
-const { newYorkTime, newYorkMidnight, buildBriefingEmail, buildConfirmEmail } = await import('../lib/briefing-email')
+const { newYorkTime, newYorkMidnight, buildBriefingEmail, buildConfirmEmail, weekLabel, lastWeek } = await import('../lib/briefing-email')
 const { whatsNewSince } = await import('../lib/whats-new')
 const { emailToken, verifyEmailToken, emailLink, normalizeEmail } = await import('../lib/subscribers')
 const { outletNames, joinNames } = await import('../lib/outlet-names')
@@ -92,5 +93,44 @@ describe('outlet names', () => {
   it('names well-known outlets first and joins them', () => {
     expect(outletNames(['wapt.com', 'yahoo.com', 'dw.com', 'reuters.com'])).toEqual(['Reuters', 'DW', 'wapt.com'])
     expect(joinNames(['A', 'B', 'C'])).toBe('A, B and C')
+  })
+})
+
+describe('the weekly email (plan G11 slice 2, Oct 30, 2026)', () => {
+  const unsubscribeUrl = 'https://api.world-pulse.io/api/v1/digest/unsubscribe?e=a%40b.c&t=x'
+  const week = { name: '2026-W43', label: 'Oct 19 – 25', countries: [{ name: 'Israel', stories: 31 }, { name: 'Ukraine', stories: 24 }, { name: 'Sudan', stories: 0 }] }
+  const email = buildBriefingEmail({
+    stories: [story('Ceasefire talks resume in Cairo'), story('Floods in Nepal', { leadId: 'abcdef12-0000-0000-0000-000000000000', outletCount: 12 })] as never,
+    whatsNew: [], dateLabel: 'Monday, October 26', weekly: true, unsubscribeUrl, week,
+  })
+
+  it('names the finished week: Monday to Sunday, across a month too', () => {
+    expect(weekLabel({ year: 2026, week: 43 })).toBe('Oct 19 – 25')
+    expect(weekLabel({ year: 2026, week: 44 })).toBe('Oct 26 – Nov 1')
+  })
+  it('says it is last week in the subject and the intro', () => {
+    expect(email.subject).toBe('Last week: Ceasefire talks resume in Cairo + 1 more verified story')
+    expect(email.text).toContain('Last week’s stories (Oct 19 – 25) that the most outlets confirmed')
+  })
+  it('links the week\'s page and lists the busiest countries', () => {
+    expect(email.html).toContain('Read the whole week')
+    expect(email.html).toContain('https://world-pulse.io/week/2026-W43?utm_source=email&amp;utm_medium=email&amp;utm_campaign=weekly')
+    expect(email.text).toContain('The whole week: https://world-pulse.io/week/2026-W43?utm_source=email&utm_medium=email&utm_campaign=weekly')
+    expect(email.text).toContain('BUSIEST COUNTRIES (verified stories)\nIsrael 31 · Ukraine 24')
+    expect(email.text).not.toContain('Sudan')
+  })
+  it('the morning briefing has neither', () => {
+    const daily = buildBriefingEmail({ stories: [story('Floods in Nepal')] as never, whatsNew: [], dateLabel: 'Friday, October 30', weekly: false, unsubscribeUrl, week })
+    expect(daily.html).not.toContain('Read the whole week')
+    expect(daily.text).not.toContain('BUSIEST COUNTRIES')
+    expect(daily.subject).toBe('Floods in Nepal')
+  })
+  it('takes the stories from the finished week\'s page, or the last 7 days while it isn\'t made', async () => {
+    kept.value = { success: true, data: { week: '2026-W43', stories: [story('Ceasefire talks resume in Cairo')], countries: week.countries } }
+    const made = await lastWeek(new Date('2026-10-26T11:05:00Z'))
+    expect(made.week).toMatchObject({ name: '2026-W43', label: 'Oct 19 – 25' })
+    expect(made.stories).toHaveLength(1)
+    kept.value = null
+    expect((await lastWeek(new Date('2026-10-26T11:05:00Z'))).week).toBeNull()
   })
 })

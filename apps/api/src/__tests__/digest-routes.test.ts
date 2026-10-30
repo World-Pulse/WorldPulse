@@ -114,6 +114,13 @@ describe('sign-up and confirmation', () => {
     expect(tables.digest_subscriptions[0].confirmed_at).not.toBeNull()
   })
 
+  it('tells a weekly reader their first email comes on Monday (G11)', async () => {
+    tables.digest_subscriptions = [{ id: 's1', email: 'week@example.com', is_active: true, confirmed_at: null, frequency: 'weekly' }]
+    const { emailToken } = await import('../lib/subscribers')
+    const ok = await app.inject({ method: 'GET', url: `/api/v1/digest/confirm?e=week%40example.com&t=${emailToken('week@example.com', 'confirm')}` })
+    expect(ok.headers.location).toContain('subscribed=weekly')
+  })
+
   it("an unsubscribe signature doesn't confirm", async () => {
     tables.digest_subscriptions = [{ id: 's1', email: 'new@example.com', is_active: true, confirmed_at: null }]
     const { emailToken } = await import('../lib/subscribers')

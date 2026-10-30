@@ -2,8 +2,9 @@
  * The WorldPulse morning briefing by email (plan G4).
  *
  * At 7 AM New York time each confirmed subscriber gets the verified stories
- * most outlets reported in the last 24 hours (Mondays: the last 7 days for
- * weekly subscribers), each with how many outlets back it and which, plus
+ * most outlets reported in the last 24 hours (weekly subscribers, on Mondays:
+ * last week's stories as its WorldPulse Week page ranks them, the busiest
+ * countries and a link to the page; plan G11), each with how many outlets back it and which, plus
  * "New on WorldPulse" (lib/whats-new.ts). Sent through Resend, one email per
  * reader, with a one-click unsubscribe link and the List-Unsubscribe headers
  * Gmail and Yahoo ask of bulk senders.
@@ -20,8 +21,9 @@ import { EMAIL_CONFIGURED } from './email'
 import { emailLink, SITE_URL, subscribersReady, linksConfigured } from './subscribers'
 import { outletNames, joinNames } from './outlet-names'
 import { whatsNewSince, type WhatsNewItem } from './whats-new'
-import { topStories } from '../routes/stories'
+import { topStories, keptWeek } from '../routes/stories'
 import type { ListedStory } from './story-list'
+import { isoWeekOf, previousWeek, weekBounds, weekName, type IsoWeek } from './week'
 
 const RESEND_API_URL = 'https://api.resend.com/emails'
 // `||`: compose passes an unset variable as ""
@@ -91,6 +93,15 @@ function categoryLabel(c: string | null): string {
   return c ? c.replace(/_/g, ' ').replace(/^./, x => x.toUpperCase()) : ''
 }
 
+/** The finished week a weekly email covers (plan G11 slice 2): its WorldPulse Week page and busiest countries */
+export interface BriefingWeek {
+  /** "2026-W43" */
+  name: string
+  /** "Oct 19 – 25" */
+  label: string
+  countries: Array<{ name: string; stories: number }>
+}
+
 export interface BriefingInput {
   stories: ListedStory[]
   whatsNew: WhatsNewItem[]
@@ -98,20 +109,38 @@ export interface BriefingInput {
   dateLabel: string
   weekly: boolean
   unsubscribeUrl: string
+  /** Weekly emails: the finished week, when its page is made */
+  week?: BriefingWeek | null
+}
+
+/** "Oct 19 – 25", or "Sep 28 – Oct 4" across a month (Monday to Sunday, UTC like the week's page) */
+export function weekLabel(w: IsoWeek): string {
+  const { start, end } = weekBounds(w)
+  const last = new Date(end.getTime() - 86_400_000)
+  const month = (d: Date) => d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })
+  return month(start) === month(last)
+    ? `${month(start)} ${start.getUTCDate()} – ${last.getUTCDate()}`
+    : `${month(start)} ${start.getUTCDate()} – ${month(last)} ${last.getUTCDate()}`
 }
 
 /** The briefing's subject, HTML and plain text */
 export function buildBriefingEmail(input: BriefingInput): { subject: string; html: string; text: string } {
   const { stories, whatsNew, dateLabel, weekly, unsubscribeUrl } = input
+  const week = weekly ? input.week ?? null : null
   const campaign = weekly ? 'weekly' : 'briefing'
   const lead = stories[0]
   const more = stories.length - 1
   const subject = lead
-    ? `${shorten(lead.title, 70)}${more > 0 ? ` + ${more} more verified ${more === 1 ? 'story' : 'stories'}` : ''}`
+    ? `${weekly ? 'Last week: ' : ''}${shorten(lead.title, weekly ? 60 : 70)}${more > 0 ? ` + ${more} more verified ${more === 1 ? 'story' : 'stories'}` : ''}`
     : `Your WorldPulse ${weekly ? 'week' : 'briefing'}, ${dateLabel}`
-  const intro = weekly
-    ? 'The week’s stories that the most outlets confirmed, and how many back each one.'
-    : 'What happened overnight that several outlets confirm, and how many back each one.'
+  const intro = week
+    ? `Last week’s stories (${week.label}) that the most outlets confirmed, and how many back each one.`
+    : weekly
+      ? 'The week’s stories that the most outlets confirmed, and how many back each one.'
+      : 'What happened overnight that several outlets confirm, and how many back each one.'
+  const weekUrl = week ? siteUrl(`/week/${week.name}`, campaign) : ''
+  const busiest = week ? week.countries.slice(0, 5).filter(c => c.name && c.stories > 0) : []
+  const busiestLine = busiest.map(c => `${c.name} ${c.stories.toLocaleString('en-US')}`).join(' · ')
 
   const storyHtml = stories.map(s => {
     const color = SEVERITY_COLOR[s.severity] ?? '#64748b'
@@ -130,6 +159,16 @@ export function buildBriefingEmail(input: BriefingInput): { subject: string; htm
         `<li style="margin:0 0 6px;">${escapeHtml(i.text)} <a href="${escapeHtml(siteUrl(i.path, campaign))}" style="color:#0369a1;">See it</a></li>`).join('')}</ul>
     </td></tr>` : ''
 
+  const busiestHtml = busiestLine ? `<tr><td style="padding:18px 0 4px;font-size:14px;line-height:1.5;color:#1f2937;">
+      <div style="font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#0891b2;">Busiest countries <span style="color:#6b7280;font-weight:600;letter-spacing:0;text-transform:none;">· verified stories</span></div>
+      <div style="margin-top:6px;">${escapeHtml(busiestLine)}</div>
+    </td></tr>` : ''
+  const mapButton = `<a href="${escapeHtml(siteUrl('/map', campaign))}" style="display:inline-block;background:#f59e0b;color:#111827;font-weight:700;font-size:14px;text-decoration:none;padding:10px 18px;border-radius:8px;">Open the live map</a>`
+  const buttons = week
+    ? `<a href="${escapeHtml(weekUrl)}" style="display:inline-block;background:#f59e0b;color:#111827;font-weight:700;font-size:14px;text-decoration:none;padding:10px 18px;border-radius:8px;">Read the whole week</a>
+    <a href="${escapeHtml(siteUrl('/map', campaign))}" style="display:inline-block;margin-left:10px;color:#0369a1;font-weight:600;font-size:14px;text-decoration:none;padding:10px 4px;">Open the live map</a>`
+    : mapButton
+
   const html = `<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(subject)}</title></head>
 <body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
@@ -140,9 +179,9 @@ export function buildBriefingEmail(input: BriefingInput): { subject: string; htm
     <span style="float:right;font-size:12px;color:#94a3b8;line-height:24px;">${escapeHtml(weekly ? 'The week' : 'Morning briefing')} · ${escapeHtml(dateLabel)}</span>
   </td></tr>
   <tr><td style="padding:20px 24px 4px;font-size:14px;line-height:1.5;color:#374151;">${escapeHtml(intro)}</td></tr>
-  <tr><td style="padding:0 24px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${storyHtml || '<tr><td style="padding:14px 0;color:#6b7280;">No story reached several outlets in this window.</td></tr>'}${newHtml}</table></td></tr>
+  <tr><td style="padding:0 24px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${storyHtml || '<tr><td style="padding:14px 0;color:#6b7280;">No story reached several outlets in this window.</td></tr>'}${busiestHtml}${newHtml}</table></td></tr>
   <tr><td style="padding:18px 24px 22px;">
-    <a href="${escapeHtml(siteUrl('/map', campaign))}" style="display:inline-block;background:#f59e0b;color:#111827;font-weight:700;font-size:14px;text-decoration:none;padding:10px 18px;border-radius:8px;">Open the live map</a>
+    ${buttons}
   </td></tr>
   <tr><td style="padding:14px 24px 20px;border-top:1px solid #e5e7eb;font-size:12px;line-height:1.5;color:#6b7280;">
     You get this because you signed up at world-pulse.io and confirmed your address. “Verified” means several separate outlets reported the story; every source is on its page.<br>
@@ -156,7 +195,9 @@ export function buildBriefingEmail(input: BriefingInput): { subject: string; htm
     return `${i + 1}. ${s.title}\n   ${s.severity.toUpperCase()}${meta ? ` · ${meta}` : ''}\n   Verified · ${s.outletCount} outlets${names.length ? `, including ${joinNames(names)}` : ''}\n   ${storyUrl(s.leadId, campaign)}`
   }).join('\n\n')
   const textNew = whatsNew.length ? `\n\nNEW ON WORLDPULSE\n${whatsNew.map(i => `- ${i.text} ${siteUrl(i.path, campaign)}`).join('\n')}` : ''
-  const text = `WORLDPULSE · ${weekly ? 'The week' : 'Morning briefing'} · ${dateLabel}\n\n${intro}\n\n${textStories || 'No story reached several outlets in this window.'}${textNew}\n\nLive map: ${siteUrl('/map', campaign)}\n\nYou get this because you signed up at world-pulse.io and confirmed your address.\nUnsubscribe: ${unsubscribeUrl}\n`
+  const textBusiest = busiestLine ? `\n\nBUSIEST COUNTRIES (verified stories)\n${busiestLine}` : ''
+  const textWeek = week ? `\n\nThe whole week: ${weekUrl}` : ''
+  const text = `WORLDPULSE · ${weekly ? 'The week' : 'Morning briefing'} · ${dateLabel}\n\n${intro}\n\n${textStories || 'No story reached several outlets in this window.'}${textBusiest}${textNew}${textWeek}\n\nLive map: ${siteUrl('/map', campaign)}\n\nYou get this because you signed up at world-pulse.io and confirmed your address.\nUnsubscribe: ${unsubscribeUrl}\n`
 
   return { subject, html, text }
 }
@@ -256,6 +297,19 @@ interface SubscriberRow {
   last_sent_at: Date | string | null
 }
 
+/**
+ * A weekly email's stories (plan G11 slice 2): the finished week as its WorldPulse Week page ranks them (kept by the
+ * week warmer, GET /stories/week), with the page's name and busiest countries; the last 7 days while it isn't made
+ */
+export async function lastWeek(now: Date): Promise<{ stories: ListedStory[]; week: BriefingWeek | null }> {
+  const finished = previousWeek(isoWeekOf(now))
+  const kept = await keptWeek(finished, false).catch(() => null)
+  if (kept && kept.data.stories.length > 0) {
+    return { stories: kept.data.stories, week: { name: weekName(finished), label: weekLabel(finished), countries: kept.data.countries } }
+  }
+  return { stories: await topStories(24 * 7, 25), week: null }
+}
+
 function forSubscriber(stories: ListedStory[], sub: SubscriberRow, max: number): ListedStory[] {
   const cats = Array.isArray(sub.categories) ? sub.categories.filter(Boolean) : []
   const min = SEVERITY_RANK[sub.min_severity ?? 'info'] ?? 1
@@ -299,7 +353,7 @@ export async function dispatchBriefingEmails(now = new Date()): Promise<number> 
     }
 
     const daily = subs.some(s => s.frequency === 'daily') ? await topStories(24, 20) : []
-    const weekly = subs.some(s => s.frequency === 'weekly') ? await topStories(24 * 7, 25) : []
+    const { stories: weekly, week } = subs.some(s => s.frequency === 'weekly') ? await lastWeek(now) : { stories: [], week: null }
     const dateLabel = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'long', month: 'long', day: 'numeric' }).format(now)
 
     let sent = 0
@@ -309,7 +363,7 @@ export async function dispatchBriefingEmails(now = new Date()): Promise<number> 
       if (stories.length === 0) continue
       const last = sub.last_sent_at ? new Date(sub.last_sent_at) : null
       const unsubscribeUrl = emailLink(sub.email, 'unsubscribe')
-      const msg = buildBriefingEmail({ stories, whatsNew: whatsNewSince(last, now), dateLabel, weekly: isWeekly, unsubscribeUrl })
+      const msg = buildBriefingEmail({ stories, whatsNew: whatsNewSince(last, now), dateLabel, weekly: isWeekly, unsubscribeUrl, week: isWeekly ? week : null })
       const r = await sendEmail({
         to: sub.email, ...msg,
         headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
