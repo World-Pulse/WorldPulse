@@ -30,6 +30,8 @@ describe('categorizeText', () => {
     expect(categorizeText('Swimmer breaks national record in Lagos')).toBe('sports')
     expect(categorizeText('Boxing champion visits parliament')).toBe('sports')
     expect(categorizeText('Gunmen attack swimming pool, 4 killed')).toBe('conflict')
+    expect(categorizeText('Morocco named hosts of the Africa Cup of Nations as AFCON moves to a two-year cycle')).toBe('sports')
+    expect(categorizeText('Copa América draw announced')).toBe('sports')
   })
 
   it('reads care words in a headline only, and not "rushed to hospital"', () => {
