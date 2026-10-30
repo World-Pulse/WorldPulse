@@ -132,10 +132,25 @@ function gdeltDate(value: string | undefined): Date | null {
 export const REPUBLISHED_URL = /^https?:\/\/[^/]+\/news\/\d{9}\//i
 
 /**
+ * A string's own copy (Oct 30, 2026, LR10). A piece cut from a big text (by
+ * split, trim, a regex match, or a replace that changed nothing) can be kept
+ * by V8 as a pointer into that text, which then lives as long as the piece
+ * does. A GKG file's text is tens of MB, and the second outlet keeps 8 hours
+ * of its articles (ArticleWindow): their addresses and titles kept the text of
+ * every file read in those hours, and the scraper's memory grew about 220 MB
+ * an hour until its 1.4 GB ceiling restarted it. Copied through a Buffer, a
+ * piece is a short string of its own.
+ */
+export function ownCopy(s: string): string {
+  return Buffer.from(s, 'utf8').toString('utf8')
+}
+
+/**
  * The articles of one GKG file: web pages (collection 1) with a title. A
  * line's fields (GKG 2.1, tab-separated): 1 DATE, 2 SourceCollectionIdentifier,
  * 3 SourceCommonName, 4 DocumentIdentifier (the address), 26 V2EXTRASXML
- * (<PAGE_TITLE>…</PAGE_TITLE>).
+ * (<PAGE_TITLE>…</PAGE_TITLE>). The strings kept are copies (ownCopy), so the
+ * file's text is freed once it has been read.
  */
 export function readArticles(text: string): GdeltArticle[] {
   const out: GdeltArticle[] = []
@@ -152,7 +167,7 @@ export function readArticles(text: string): GdeltArticle[] {
     const site = siteOf(hostOf(url))
     if (!title || !at || !site) continue
     seen.add(url)
-    out.push({ url, title, site, at })
+    out.push({ url: ownCopy(url), title: ownCopy(title), site: ownCopy(site), at })
   }
   return out
 }
@@ -161,15 +176,16 @@ export function readArticles(text: string): GdeltArticle[] {
 
 export async function fetchNewestStamp(): Promise<string | null> {
   const res = await fetch(fresh(LASTUPDATE_URL), { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(20_000) })
-  if (!res.ok) throw new Error(`GDELT articles: HTTP ${res.status} for lastupdate.txt`)
+  if (!res.ok) { void res.body?.cancel().catch(() => {}); throw new Error(`GDELT articles: HTTP ${res.status} for lastupdate.txt`) }
   return newestStamp(await res.text())
 }
 
 /** One file's text; null when GDELT doesn't have it (a file it skipped) */
 export async function fetchFileText(stamp: string): Promise<string | null> {
   const res = await fetch(fresh(FILE_URL(stamp)), { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(90_000) })
-  if (res.status === 404) return null
-  if (!res.ok) throw new Error(`GDELT articles: HTTP ${res.status} for ${stamp}`)
+  // An answer's body not read is let go at once, not left to the garbage collector
+  if (res.status === 404) { void res.body?.cancel().catch(() => {}); return null }
+  if (!res.ok) { void res.body?.cancel().catch(() => {}); throw new Error(`GDELT articles: HTTP ${res.status} for ${stamp}`) }
   return (await unzipFirst(Buffer.from(await res.arrayBuffer()))).toString('utf8')
 }
 

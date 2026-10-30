@@ -11,7 +11,7 @@ vi.mock('../../lib/postgres', () => ({ db: Object.assign(vi.fn(), { raw: vi.fn()
 vi.mock('../../lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }))
 vi.mock('../crosscheck', () => ({ crossCheckLater: vi.fn() }))
 
-import { readArticles, filesToRead, newestStamp, unzipFirst, stampOf, type GdeltArticle } from '../gdelt-articles'
+import { readArticles, ownCopy, filesToRead, newestStamp, unzipFirst, stampOf, type GdeltArticle } from '../gdelt-articles'
 import {
   storyTokens, candidatePairs, siteOf, ownerOf, nearCopy, otherOutlets, searchable, runSecondOutlets, newState,
   MAX_ADDED, FEATURE_RE, type HeldReport, type SecondOutletDeps, type CycleStats,
@@ -80,6 +80,14 @@ describe("GDELT's list of articles", () => {
       ['protothema.gr', 'Athens explosion: police trace bag & drugs'],
     ])
     expect(articles[0]!.at.toISOString()).toBe('2026-10-22T12:15:00.000Z')
+  })
+
+  // Oct 30, 2026 (LR10): the strings kept are copies, so a file's text is not kept alive by its articles
+  it('keeps copies of the address, title and site, letter for letter', () => {
+    for (const s of ['https://www.example.com/a?b=c', 'São Paulo: 東京 и Київ — “quoted” 🌍 news', '']) expect(ownCopy(s)).toBe(s)
+    const text = gkgLine('20261022121500', 'https://www.folha.uol.com.br/mundo/2026/10/ameaca.shtml', 'Ameaça de tempestade em São Paulo – 東京 também')
+    const [a] = readArticles(text + '\n')
+    expect(a).toEqual({ url: 'https://www.folha.uol.com.br/mundo/2026/10/ameaca.shtml', title: 'Ameaça de tempestade em São Paulo – 東京 também', site: 'uol.com.br', at: new Date('2026-10-22T12:15:00Z') })
   })
 })
 
