@@ -36,6 +36,8 @@ PIPELINE_COUNTS = (45, 120)    # the pipeline counts themselves (made every 30 m
 REPORT_RATE = (0.5, 0.2)       # last 6 hours against the same hours a week ago: warn under, alarm under
 REPORT_RATE_MIN = 60           # ... only when the week before had this many
 FEEDS_FAILING = (12, 40)       # sources and news feeds failing at once
+FEED_DAY_FAILS = 7             # a news feed's failed polls in a row by which it has failed for a day (see below)
+FEEDS_DEAD = 12                # news feeds failing for over a day: past this many, time to fix or drop them
 BACKUP_AGE_H = 30              # the last copy's age, hours
 DISK_GB = (10, 4)              # free disk: warn under, alarm under
 CERT_DAYS = (21, 7)            # certificate days left: warn under, alarm under
@@ -172,9 +174,18 @@ def health(status, now=None):
     if src:
         nf = src.get('news_feeds') if isinstance(src.get('news_feeds'), dict) else {}
         s_fail, f_fail = int(src.get('failing') or 0), int(nf.get('failing') or 0)
-        total = s_fail + f_fail
-        state = 'alarm' if total > FEEDS_FAILING[1] else 'warn' if total > FEEDS_FAILING[0] else 'ok'
+        # Oct 30, 2026: a news feed that has failed for over a day (a site that turns us away, a feed
+        # that is gone) is one to fix or drop, not part of a failure "at once", so it counts against a
+        # limit of its own. The scraper pauses a feed for 6 hours after 3 failed polls 30 minutes apart
+        # and then tries it once a pause (news-rss.ts), so 7 failures in a row is about a day. The list
+        # holds the 40 feeds with the most failures, so those not listed have fewer. That morning 5 of
+        # the 12 failing feeds had failed for 1 to 5 days, and two one-off refusals took the count past 12.
+        dead = sum(1 for f in nf.get('list') or [] if isinstance(f, dict) and int(f.get('fails') or 0) >= FEED_DAY_FAILS)
+        total = s_fail + f_fail - dead
+        state = 'alarm' if total > FEEDS_FAILING[1] else 'warn' if total > FEEDS_FAILING[0] or dead > FEEDS_DEAD else 'ok'
         line = f'{s_fail} source{"" if s_fail == 1 else "s"} and {f_fail} news feed{"" if f_fail == 1 else "s"} failing'
+        if dead:
+            line += f', {dead} of the feeds for over a day'
         # the longest failing source: never worked, else the oldest last success
         worst = None
         for item in src.get('list') or []:

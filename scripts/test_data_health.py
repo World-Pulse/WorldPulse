@@ -136,6 +136,28 @@ class WhatItCatches(unittest.TestCase):
         self.assertEqual(check(h, 'containers')['line'], 'Not running: wp_scraper (exited)')
         self.assertEqual(check(h, 'editor')['status'], 'warn')
 
+    def test_feeds_failing_for_days_are_not_a_failure_at_once(self):
+        # Oct 30, 6:05 AM: 1 source and 12 news feeds failing, 5 of the feeds for 1 to 5 days
+        s = healthy()
+        fails = [20, 15, 13, 10, 9, 5, 5, 5, 3, 3, 1, 1]
+        s['pipeline']['sources']['failing'] = 1
+        s['pipeline']['sources']['news_feeds'] = {'failing': len(fails), 'paused': 10,
+                                                  'list': [{'id': f'feed-{i}', 'fails': n, 'paused': n >= 3, 'why': 'turned away (403)'}
+                                                           for i, n in enumerate(fails)]}
+        c = check(dh.health(s, now=NOW), 'feeds')
+        self.assertEqual(c['status'], 'ok', c)
+        self.assertTrue(c['line'].startswith('1 source and 12 news feeds failing, 5 of the feeds for over a day (longest: '), c['line'])
+        # six more failing at once is a warning again
+        s['pipeline']['sources']['news_feeds']['failing'] += 6
+        s['pipeline']['sources']['news_feeds']['list'] += [{'id': f'new-{i}', 'fails': 1, 'paused': False, 'why': 'answered 503'} for i in range(6)]
+        self.assertEqual(check(dh.health(s, now=NOW), 'feeds')['status'], 'warn')
+        # and so are dead feeds left to pile up
+        s = healthy()
+        s['pipeline']['sources']['news_feeds'] = {'failing': 13, 'list': [{'id': f'feed-{i}', 'fails': 9} for i in range(13)]}
+        c = check(dh.health(s, now=NOW), 'feeds')
+        self.assertEqual(c['status'], 'warn', c)
+        self.assertIn('13 news feeds failing, 13 of the feeds for over a day', c['line'])
+
     def test_old_counts_and_unread_parts(self):
         s = healthy()
         s['pipeline']['checked'] = '2026-10-24T13:00:00+00:00'
