@@ -324,6 +324,16 @@ describe('M57, Oct 30, 2026: the fresh read of the live map', () => {
     expect(placeFromText('Tres meses después, el Centro Materno Infantil de Antigua Guatemala continúa inhabilitado').countryCode).toBe('GT')
     expect(placeFromText('Germany news: Merz calls for Korean reunification at DMZ').countryCode).toBe('KR')
   })
+  it('a country named where something happens comes first ("in Ghana", "visits Iran"); an actor named alone stays', () => {
+    expect(placeFromText('Swiss Group unveils Jetour G700 and F700 at 2026 auto expo in Ghana').countryCode).toBe('GH')
+    expect(placeFromText('JD Vance, vice de EE.UU., visitará Colombia en noviembre').countryCode).toBe('CO')
+    expect(placeFromText('Qatari delegation visits Iran as US peace talks intensify').countryCode).toBe('IR')
+    expect(placeFromText('Turkish President urges resolving Iran tensions through diplomacy').countryCode).toBe('TR')
+    expect(placeFromText('Swiss foreign minister discusses security issues with North Korea').countryCode).toBe('CH')
+  })
+  it('a document named after a place is not the place ("la Convention d\'Accra")', () => {
+    expect(placeFromText('Transports et logistique : le Gabon signe la Convention d’Accra pour fluidifier les échanges').countryCode).toBe('GA')
+  })
   it('people named by a plural come after the country the headline names', () => {
     expect(mentionedCountries('ICE nabs Cubans for unlawfully voting in the United States')).toEqual(['US', 'CU'])
     expect(mentionedCountries('Cuba frees prisoners')).toEqual(['CU'])

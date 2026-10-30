@@ -152,6 +152,9 @@ export function partOfAName(text: string, at: number, end: number): boolean {
   if (hit.toLowerCase() === 'dakar' && (/^[ \t]*(?:20\d\d|rall(?:y|ye))\b/i.test(text.slice(end, end + 12))
     || /\b(?:rall(?:y|ye)|the|el|le)[ \t]+$/i.test(text.slice(Math.max(0, at - 12), at)))) return true
   if (!startsUpper(hit)) return false
+  // A French or Spanish document named after a place: "la Convention d'Accra", "l'Accord de Paris" (M57,
+  // Oct 30, 2026: Gabon signing the Accra convention was pinned in Accra)
+  if (/\b(?:convention|accords?|acuerdos?|protocole|protocolo|traité|tratado|déclaration|declaración|charte|pacte|pacto)\s+(?:d['’]|de\s+(?:la\s+|l['’])?)$/i.test(text.slice(Math.max(0, at - 30), at))) return true
   const before = wordBefore(text, at)
   const after = wordAfter(text, end)
   if (before && clubWord(before, CLUB_BEFORE)) return true

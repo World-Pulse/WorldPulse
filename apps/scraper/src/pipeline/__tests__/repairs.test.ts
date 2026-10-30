@@ -23,7 +23,7 @@ vi.mock('../../lib/postgres', () => {
   }
 })
 
-import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability, stripOutletNames, switchOffRetiredSources, RETIRED_SOURCE_SLUGS, fixGdeltFipsCountries } from '../repairs'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability, stripOutletNames, switchOffRetiredSources, RETIRED_SOURCE_SLUGS, fixGdeltFipsCountries, splitDniproFromSpainTrainStory } from '../repairs'
 import { db } from '../../lib/postgres'
 import { EVENT_TEMPLATE_SQL } from '../event-titles'
 
@@ -340,5 +340,16 @@ describe('fixGdeltFipsCountries (Oct 20, 2026, H-0022)', () => {
     expect(await fixGdeltFipsCountries()).toBe(0)
     expect(h.updates).toEqual([])
     h.rows = []
+  })
+})
+
+describe('the Dnipro strike out of Spain\'s train crash story (Oct 30, 2026)', () => {
+  it("moves only that story's strike reports into a story of their own, under the oldest", async () => {
+    h.raws.length = 0
+    expect(await splitDniproFromSpainTrainStory()).toBe(3)
+    const [{ sql }] = h.raws
+    expect(sql).toMatch(/story_id = 'cff6a84b-9fac-44ee-9058-d03156fb8b32'/)
+    expect(sql).toMatch(/dnipro\|ukrain/)
+    expect(sql).toMatch(/ORDER BY created_at ASC, id ASC LIMIT 1/)
   })
 })

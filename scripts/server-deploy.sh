@@ -11,7 +11,8 @@
 #    2. Keep the running images as :previous so we can roll back
 #    3. Build new images one at a time (the server is small)
 #    4. Swap in api → wait until healthy → swap in scraper + web
-#    5. Test the nginx config, apply nginx/certbot changes, reload nginx
+#    5. Test the nginx config, apply nginx/certbot changes, reload nginx, and
+#       clear the pages nginx kept from the old build
 #    6. Anything unhealthy → automatic rollback to the previous images
 #    7. Check the public site + certificates, clean up old images
 #    8. Start the daily map video's recorder when it isn't running (background)
@@ -190,6 +191,19 @@ if docker run --rm --network "$NET" \
 else
   WARNINGS="$WARNINGS; nginx config test failed, so the old nginx was kept running"
   log "WARNING: nginx config test failed — kept the old nginx running"
+fi
+
+# ── 5b. Pages nginx kept were made by the old build ─────────────────────────
+# They name the old build's scripts, which are gone, and nginx serves an expired
+# page once more while it fetches a new one (page_cache: 60 s, stale while
+# updating): the first visitor to each page after a deploy got a page that
+# couldn't load its scripts (Oct 30, 2026: the daily video's recorder filmed
+# bare text three times just after deploys, and a script it asked for answered
+# 404). Clear them; the next visitor's page is made by the new build.
+if timeout 20 docker exec wp_nginx sh -c 'find /var/cache/nginx/pages -type f -delete' 2>/dev/null; then
+  log "Pages nginx kept from the old build cleared"
+else
+  log "Pages nginx kept could not be cleared"
 fi
 
 # ── 6. Public checks through nginx, with real certificate validation ────────

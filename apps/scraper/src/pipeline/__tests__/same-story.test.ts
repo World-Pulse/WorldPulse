@@ -54,7 +54,7 @@ vi.mock('../../lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), err
 // Ledger's cross-check gets the reports a verification promoted, the ones its gate may hold back (plan D6)
 vi.mock('../crosscheck', () => ({ crossCheckLater: (...args: unknown[]) => h.crossCheck(...args) }))
 
-import { isSameStory, correlateSignal, corroborateWithDuplicate, confirmMergedArticle, namesDiffer, corroboratedReliability, RELIABILITY_CEILING, storyWords, takeDates, countryLevelPlace, type CorrelationCandidate } from '../correlate'
+import { isSameStory, correlateSignal, corroborateWithDuplicate, confirmMergedArticle, namesDiffer, corroboratedReliability, RELIABILITY_CEILING, storyWords, takeDates, countryLevelPlace, oneStory, type CorrelationCandidate } from '../correlate'
 
 const now = new Date('2026-10-10T15:40:00Z')
 
@@ -550,5 +550,27 @@ describe("tolls (Oct 24, 2026: a Nigerian attack's headline on the Saudi airport
       at('One killed, four injured in drive-by shooting near Paris', 'straitstimes.com'),
       at('France: 1 killed, 4 wounded after shooting near Paris', 'dw.com'),
     )).toBe(true)
+  })
+})
+
+describe('one story per match set (Oct 30, 2026: Spain\'s train crash and the Dnipro station strike became one story)', () => {
+  const at = new Date('2026-10-29T19:00:00Z')
+  const r = (id: string, source_id: string, title: string, category = 'disaster') =>
+    sig({ id, source_id, title, category, published_at: at, location_name: null, lat: null, lng: null })
+  const spainA = r('es1', 'rte', 'Spain train crash death toll rises to 69 as search for victims goes on')
+  const spainB = r('es2', 'bbc', 'Spain train crash death toll rises to 69, search for victims goes on')
+  const dnipro = r('ua1', 'upi', 'Russian drone strike kills 14 at Dnipro train station', 'conflict')
+  const loose = r('x1', 'dw', 'Death toll in Spain train crash rises to 69 as search for victims continues')
+
+  it('keeps the matches of the story with the most of them, and drops another story they bridge to', () => {
+    expect(isSameStory(dnipro, spainA)).toBe(false)
+    const kept = oneStory([spainA, spainB, dnipro, loose], new Map([['es1', 'S'], ['es2', 'S'], ['ua1', 'U']]))
+    expect(kept.map(m => m.id)).toEqual(['es1', 'es2', 'x1'])
+  })
+  it('keeps two stories that are one story told apart, and anything in one story or none', () => {
+    expect(isSameStory(spainA, spainB)).toBe(true)
+    expect(oneStory([spainA, spainB], new Map([['es1', 'S'], ['es2', 'T']])).map(m => m.id)).toEqual(['es1', 'es2'])
+    expect(oneStory([spainA, dnipro], new Map([['es1', 'S']])).map(m => m.id)).toEqual(['es1', 'ua1'])
+    expect(oneStory([spainA, dnipro], new Map()).map(m => m.id)).toEqual(['es1', 'ua1'])
   })
 })

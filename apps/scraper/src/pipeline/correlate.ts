@@ -30,7 +30,7 @@ import { sourceKey, hostOf } from './signal-columns'
 import { findGazetteerPlace, splitPlaces } from './geo'
 import { isEventTemplateTitle } from './event-titles'
 import { countIndependentOutlets, isCopyOf } from './independence'
-import { joinStory } from './stories'
+import { joinStory, ensureStoryIdColumn } from './stories'
 import { liftedSeverity, readLoweredSql, type SeverityRow } from './severity-lift'
 import { crossCheckLater } from './crosscheck'
 import { reindexLater } from './reindex'
@@ -209,7 +209,9 @@ export async function correlateSignal(signal: CorrelationCandidate): Promise<Eve
     for (const c of [...candidates, ...wider]) pool.set(c.id, c)
     const sameStory = [...pool.values()].filter(c => isSameStory(signal, c))
     if (sameStory.length > 0) {
-      await applyCorroborationBoost(signal, sameStory)
+      // ...kept to one story: a report that matches two stories doesn't join them (oneStory)
+      const stories = await storiesOf(sameStory.map(c => c.id)).catch(() => new Map<string, string>())
+      await applyCorroborationBoost(signal, oneStory(sameStory, stories))
     }
 
     if (candidates.length === 0) return null
@@ -667,6 +669,37 @@ export function isSameStory(a: CorrelationCandidate, b: CorrelationCandidate): b
   if (placeA && placeB && placeA.place !== placeB.place) return false
   if (farApartEvents(a, b, !!placeA && placeA.place === placeB?.place)) return false
   return true
+}
+
+/**
+ * A report's same-story matches, kept to one story (Oct 30, 2026: a report that matched reports of two
+ * different stories joined them, and Spain's train crash and the drone strike on Dnipro's train station
+ * became one story of 132 outlets, at the top of the day's most-reported). When the matches sit in two or
+ * more stories, the one with the most matches leads (the earliest on a tie), and another story's matches
+ * stay only when one of them is the same story as one of the leader's. Matches in no story yet stay.
+ */
+export function oneStory(matches: CorrelationCandidate[], storyOf: ReadonlyMap<string, string>): CorrelationCandidate[] {
+  const byStory = new Map<string, CorrelationCandidate[]>()
+  for (const m of matches) {
+    const story = storyOf.get(m.id)
+    if (story) byStory.set(story, [...(byStory.get(story) ?? []), m])
+  }
+  if (byStory.size <= 1) return matches
+  const time = (m: CorrelationCandidate) => new Date(m.published_at).getTime() || 0
+  const earliest = (ms: CorrelationCandidate[]) => Math.min(...ms.map(time))
+  const [lead, ...others] = [...byStory.values()].sort((a, b) => b.length - a.length || earliest(a) - earliest(b))
+  const dropped = new Set<string>()
+  for (const other of others) {
+    if (!other.some(m => lead!.some(x => isSameStory(m, x)))) for (const m of other) dropped.add(m.id)
+  }
+  return matches.filter(m => !dropped.has(m.id))
+}
+
+/** The story each of these signals is in (only those in one) */
+async function storiesOf(ids: string[]): Promise<Map<string, string>> {
+  if (ids.length < 2 || !(await ensureStoryIdColumn())) return new Map()
+  const rows = await db('signals').whereIn('id', ids).whereNotNull('story_id').select('id', 'story_id') as Array<{ id: string; story_id: string }>
+  return new Map(rows.map(r => [String(r.id), String(r.story_id)]))
 }
 
 /**

@@ -47,7 +47,7 @@ import { startSecondReads } from './pipeline/second-read'
 import { startSecondOutlets } from './pipeline/second-outlet'
 import { verifyArchive } from './pipeline/archive-outlets'
 import { backfillPulse } from './pipeline/gkg-pulse'
-import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames, fixGdeltFipsCountries, stripOutletNotes, stripOutletNames, repairHeadlineSummaries, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability, switchOffRetiredSources } from './pipeline/repairs'
+import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames, fixGdeltFipsCountries, stripOutletNotes, stripOutletNames, repairHeadlineSummaries, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability, switchOffRetiredSources, splitDniproFromSpainTrainStory } from './pipeline/repairs'
 import { batchValidateGeo } from './pipeline/geo-validator'
 import { recomputeSourceReputation } from './pipeline/source-reputation'
 import { startKafkaLagMonitor } from './lib/kafka-lag-monitor'
@@ -187,6 +187,9 @@ async function bootstrap() {
   fixLocalhostUploadUrls()
     .then(posts => { if (posts > 0) logger.info({ posts }, 'Repair: pointed old upload URLs at the public site') })
     .catch(err => logger.warn({ err }, 'Upload URL repair failed (non-fatal)'))
+  splitDniproFromSpainTrainStory()
+    .then(rows => { if (rows > 0) logger.info({ rows }, "Repair: the Dnipro station strike's reports out of Spain's train crash story") })
+    .catch(err => logger.warn({ err }, 'Train story split failed (non-fatal)'))
   undoTemplateCorroboration()
     .then(rows => { if (rows > 0) logger.info({ rows }, 'Repair: GDELT event-label signals back to pending') })
     .catch(err => logger.warn({ err }, 'GDELT template repair failed (non-fatal)'))

@@ -101,6 +101,8 @@ describe('the video, round 2 (Oct 30, 2026: the camera sat on Indonesia, caption
     expect(rec).toContain('document.styleSheets')
     expect(rec).toContain("the replay didn't begin within")
     expect(rec).toContain('trying again in')
+    // a deploy clears the pages nginx kept from the old build, whose scripts are gone
+    expect(read('../../../scripts/server-deploy.sh')).toContain("find /var/cache/nginx/pages -type f -delete")
     expect(read('components/map/PlayOverlay.tsx')).toContain('wp-play-beat" /></div>')
   })
 })

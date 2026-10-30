@@ -714,3 +714,25 @@ export async function switchOffRetiredSources(): Promise<number> {
     .whereIn('slug', RETIRED_SOURCE_SLUGS)
     .update({ active: false, updated_at: new Date() })
 }
+
+/**
+ * Spain's train crash (Oct 28, 2026) and the drone strike on Dnipro's train station (Oct 29) became one story,
+ * cff6a84b, when a report matched both (correlate.ts oneStory now keeps a report's matches to one story): its
+ * 132 outlets led the day's most-reported stories on Oct 30. The strike's reports get a story of their own again,
+ * under the oldest of them. Only that story's members that name Ukraine, Dnipro or the strike, or are placed
+ * there, are read, so a later start changes nothing.
+ */
+export async function splitDniproFromSpainTrainStory(): Promise<number> {
+  const result = await db.raw(
+    `WITH strike AS (
+        SELECT id, created_at FROM signals
+         WHERE story_id = 'cff6a84b-9fac-44ee-9058-d03156fb8b32'
+           AND (title ~* '(dnipro|ukrain|kyiv|russian (drone|strike|attack)|russia strikes)'
+                OR location_name ~* '^(dnipro|ukraine)')
+      ),
+      root AS (SELECT id FROM strike ORDER BY created_at ASC, id ASC LIMIT 1)
+      UPDATE signals SET story_id = (SELECT id FROM root)
+       WHERE id IN (SELECT id FROM strike)`,
+  )
+  return Number((result as { rowCount?: number })?.rowCount ?? 0)
+}

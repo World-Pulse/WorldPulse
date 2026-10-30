@@ -529,21 +529,28 @@ export function withHomeNames(text: string, countryCode: string | null | undefin
 /** Each country pattern without its plural people-word ending: "Cuban" but not "Cubans" */
 const SINGULAR_MATCHERS = new Map(COUNTRY_PATTERNS.map(([pattern, code]) => [code + pattern.source, new RegExp(`^(?:${pattern.source})$`, pattern.flags.replace('g', ''))]))
 
+/** A word that puts what follows it somewhere: "in Ghana", "visits Iran", "visitará Colombia", "en Bolivie" */
+const LOCATIVE_BEFORE = /(?:^|[\s,(])(?:in|inside|visits?|visited|visiting|visitará|visita|visitó|en|em|à|au|aux)\s+(?:the\s+)?$/i
+
 /**
- * Countries the text names, in order of first mention (the headline comes first), except that people named
- * by a plural ("Cubans", "Afghans") come after the countries named otherwise: they are often abroad (M57,
- * Oct 30, 2026: "ICE nabs Cubans for unlawfully voting in the United States" was pinned in Havana)
+ * Countries the text names, in order of first mention (the headline comes first), except that a country
+ * named where something happens ("... auto expo in Ghana", "JD Vance ... visitará Colombia") comes before
+ * the others, and people named by a plural ("Cubans", "Afghans") after them: they are often abroad (M57,
+ * Oct 30, 2026: "ICE nabs Cubans for unlawfully voting in the United States" was pinned in Havana, "Swiss
+ * Group unveils Jetour G700 ... at 2026 auto expo in Ghana" in Bern)
  */
 export function mentionedCountries(text: string): string[] {
-  const hits: Array<{ code: string; index: number; people: boolean }> = []
+  const hits: Array<{ code: string; index: number; people: boolean; there: boolean }> = []
   COUNTRY_PATTERNS.forEach(([original, code], i) => {
     const pattern = COUNTRY_MATCHERS[i]![0]
     const m = pattern.exec(text)
     if (!m) return
     const singular = SINGULAR_MATCHERS.get(code + original.source)
-    hits.push({ code, index: m.index, people: pattern !== original && !!singular && !singular.test(m[0]) })
+    const people = pattern !== original && !!singular && !singular.test(m[0])
+    hits.push({ code, index: m.index, people, there: !people && LOCATIVE_BEFORE.test(text.slice(Math.max(0, m.index - 24), m.index)) })
   })
-  return [...new Set(hits.sort((a, b) => Number(a.people) - Number(b.people) || a.index - b.index).map(h => h.code))]
+  const rank = (h: { people: boolean; there: boolean }) => (h.there ? 0 : h.people ? 2 : 1)
+  return [...new Set(hits.sort((a, b) => rank(a) - rank(b) || a.index - b.index).map(h => h.code))]
 }
 
 // ─── NOMINATIM LOOKUP ────────────────────────────────────────────────────────
