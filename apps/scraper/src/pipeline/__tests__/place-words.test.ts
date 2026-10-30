@@ -38,6 +38,13 @@ describe('a place that is part of a name', () => {
     expect(titleCaseAround('Athens Explosion Puzzles Police as Three Scenarios Emerge', 0, 6)).toBe(true)
   })
 
+  it('reads the Colorado party as a party, not the US state', () => {
+    expect(findGazetteerPlace('Hugo Velázquez inscribió Fuerza Republicana ante el TEP de ANR. Dirigente colorado')).toBeNull()
+    expect(findGazetteerPlace('Cartes lidera el Partido Colorado')).toBeNull()
+    expect(findGazetteerPlace('Wildfire near Denver, Colorado forces evacuations')?.place).toBe('denver')
+    expect(findGazetteerPlace('Snow closes roads across Colorado')?.place).toBe('colorado')
+  })
+
   it('takes them out of the map pin, the places and the countries', () => {
     expect(placesInText('Santiago Peña meets business leaders in Asunción')).not.toContain('Santiago')
     expect(placeFromText('Paris Hilton reveals her new album').name ?? null).toBeNull()

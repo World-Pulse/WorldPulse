@@ -115,6 +115,9 @@ export function titleCaseAround(text: string, at: number, end: number): boolean 
   return long.length >= 3 && long.filter(startsUpper).length / long.length >= 0.85
 }
 
+/** Words that say "Colorado" in a text is the Colorado party: its abbreviation, full name, or its members */
+const COLORADO_PARTY = /\bANR\b|\bcolorados\b|asociaci[oó]n nacional republicana/i
+
 /**
  * Whether the place name at text[at, end) is part of a name, not the place:
  * a club ("Real Madrid", "Manchester United", "Kano Pillars"), or, for a place
@@ -126,6 +129,9 @@ export function titleCaseAround(text: string, at: number, end: number): boolean 
  */
 export function partOfAName(text: string, at: number, end: number): boolean {
   const hit = text.slice(at, end)
+  // Paraguay's and Uruguay's Colorado party (ANR), not the US state (Oct 30, 2026: a Paraguayan
+  // party-registration story was pinned in Denver)
+  if (hit.toLowerCase() === 'colorado' && (wordBefore(text, at)?.toLowerCase() === 'partido' || COLORADO_PARTY.test(text))) return true
   if (!startsUpper(hit)) return false
   const before = wordBefore(text, at)
   const after = wordAfter(text, end)
