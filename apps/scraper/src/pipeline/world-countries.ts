@@ -30,7 +30,7 @@ const c = (code: string, name: string, pattern: RegExp, capital: string, lat: nu
 export const MORE_COUNTRIES: CountryEntry[] = [
   // Europe
   c('AL', 'Albania', /\b(?:albania|albanian)\b/i, 'Tirana', 41.33, 19.82),
-  c('AD', 'Andorra', /\bandorra\b/i, 'Andorra la Vella', 42.51, 1.52),
+  c('AD', 'Andorra', /\b(?:andorra|andorran)\b/i, 'Andorra la Vella', 42.51, 1.52),
   c('AT', 'Austria', /\b(?:austria|austrian)\b/i, 'Vienna', 48.21, 16.37),
   c('BY', 'Belarus', /\b(?:belarus|belarusian)\b/i, 'Minsk', 53.90, 27.57),
   c('BE', 'Belgium', /\b(?:belgium|belgian)\b/i, 'Brussels', 50.85, 4.35),
@@ -54,7 +54,7 @@ export const MORE_COUNTRIES: CountryEntry[] = [
   c('LU', 'Luxembourg', /\bluxembourg\b/i, 'Luxembourg', 49.61, 6.13),
   c('MT', 'Malta', /\b(?:malta|maltese)\b/i, 'Valletta', 35.90, 14.51),
   c('MD', 'Moldova', /\b(?:moldova|moldovan)\b/i, 'Chișinău', 47.01, 28.86),
-  c('MC', 'Monaco', /\bmonaco\b/i, 'Monaco', 43.73, 7.42),
+  c('MC', 'Monaco', /\b(?:monaco|monegasque)\b/i, 'Monaco', 43.73, 7.42),
   c('ME', 'Montenegro', /\b(?:montenegro|montenegrin)\b/i, 'Podgorica', 42.44, 19.26),
   c('NL', 'Netherlands', /\b(?:netherlands|dutch|holland)\b/i, 'Amsterdam', 52.37, 4.90),
   c('MK', 'North Macedonia', /\b(?:north macedonia|macedonia|macedonian)\b/i, 'Skopje', 42.00, 21.43),
@@ -62,7 +62,7 @@ export const MORE_COUNTRIES: CountryEntry[] = [
   c('PL', 'Poland', /\b(?:poland\b|polish(?=\s+(?:president|prime\s+minister|premier|government|parliament|lawmakers?|minister|ministry|senate|supreme\s+court|constitutional\s+(?:court|tribunal)|opposition|election|elections|voters|police|army|military|troops|authorities|border|airspace|economy|central\s+bank)))/i, 'Warsaw', 52.23, 21.01),
   c('PT', 'Portugal', /\b(?:portugal\b|portuguese(?=\s+(?:president|prime\s+minister|premier|government|parliament|lawmakers?|minister|ministry|senate|supreme\s+court|constitutional\s+(?:court|tribunal)|opposition|election|elections|voters|police|army|military|troops|authorities|border|airspace|economy|central\s+bank)))/i, 'Lisbon', 38.72, -9.14),
   c('RO', 'Romania', /\b(?:romania|romanian)\b/i, 'Bucharest', 44.43, 26.10),
-  c('SM', 'San Marino', /\bsan marino\b/i, 'San Marino', 43.94, 12.45),
+  c('SM', 'San Marino', /\b(?:san marino|sammarinese)\b/i, 'San Marino', 43.94, 12.45),
   c('RS', 'Serbia', /\b(?:serbia|serbian)\b/i, 'Belgrade', 44.79, 20.45),
   c('SK', 'Slovakia', /\b(?:slovakia|slovak)\b/i, 'Bratislava', 48.15, 17.11),
   c('SI', 'Slovenia', /\b(?:slovenia|slovenian|slovene)\b/i, 'Ljubljana', 46.06, 14.51),
@@ -73,7 +73,7 @@ export const MORE_COUNTRIES: CountryEntry[] = [
   c('GE', 'Georgia', /\b(?:republic of georgia|georgian dream|tbilisi)\b/i, 'Tbilisi', 41.72, 44.79),
   c('AM', 'Armenia', /\b(?:armenia|armenian)\b/i, 'Yerevan', 40.18, 44.51),
   c('AZ', 'Azerbaijan', /\b(?:azerbaijan|azerbaijani|azeri)\b/i, 'Baku', 40.41, 49.87),
-  c('GL', 'Greenland', /\bgreenland\b/i, 'Nuuk', 64.18, -51.72),
+  c('GL', 'Greenland', /\b(?:greenland|greenlandic)\b/i, 'Nuuk', 64.18, -51.72),
 
   // Middle East and North Africa
   c('BH', 'Bahrain', /\b(?:bahrain|bahraini)\b/i, 'Manama', 26.23, 50.59),
@@ -94,10 +94,10 @@ export const MORE_COUNTRIES: CountryEntry[] = [
   // Sub-Saharan Africa
   c('AO', 'Angola', /\b(?:angola|angolan)\b/i, 'Luanda', -8.84, 13.23),
   c('BJ', 'Benin', /\b(?:benin(?!\s+city)|beninese)\b/i, 'Porto-Novo', 6.50, 2.60),
-  c('BW', 'Botswana', /\bbotswana\b/i, 'Gaborone', -24.65, 25.91),
+  c('BW', 'Botswana', /\b(?:botswana|botswanan)\b/i, 'Gaborone', -24.65, 25.91),
   c('BF', 'Burkina Faso', /\b(?:burkina faso|burkina|burkinabe)\b/i, 'Ouagadougou', 12.37, -1.52),
   c('BI', 'Burundi', /\b(?:burundi|burundian)\b/i, 'Gitega', -3.43, 29.93),
-  c('CV', 'Cabo Verde', /\b(?:cabo verde|cape verde)\b/i, 'Praia', 14.93, -23.51),
+  c('CV', 'Cabo Verde', /\b(?:cabo verde|cape verde|cape verdean)\b/i, 'Praia', 14.93, -23.51),
   c('CM', 'Cameroon', /\b(?:cameroon|cameroonian)\b/i, 'Yaoundé', 3.85, 11.50),
   c('CF', 'Central African Republic', /\bcentral african republic\b/i, 'Bangui', 4.39, 18.56),
   c('TD', 'Chad', /\b(?:[Cc]hadian|[Ii]n [Cc]had(?!\s+[A-Z][a-z])|CHADIAN|IN CHAD|N['’][Dd]jamena|N['’]DJAMENA)\b/, "N'Djamena", 12.13, 15.06),
@@ -107,7 +107,7 @@ export const MORE_COUNTRIES: CountryEntry[] = [
   c('CG', 'Republic of the Congo', /\b(?:(?<!democratic )republic of the congo|r[ée]publique du congo|rep[uú]blica del? congo|rep[uú]blica do congo|congo[-\s]brazzaville|brazzaville)\b/i, 'Brazzaville', -4.27, 15.28),
   c('CD', 'DR Congo', /\b(?:democratic republic of (?:the )?congo|dr congo|drc|congolese|(?<!republic of the |r[ée]publique du |rep[uú]blica del? |rep[uú]blica do )congo(?![-\s]brazzaville))\b/i, 'Kinshasa', -4.44, 15.27),
   c('CI', "Côte d'Ivoire", /\b(?:ivory coast|c[oô]te d['’]ivoire|ivorian)\b/i, 'Abidjan', 5.36, -4.01),
-  c('DJ', 'Djibouti', /\bdjibouti\b/i, 'Djibouti', 11.59, 43.15),
+  c('DJ', 'Djibouti', /\b(?:djibouti|djiboutian)\b/i, 'Djibouti', 11.59, 43.15),
   // (Spanish "Guinea Ecuatorial" too: it read as Guinea, Oct 20, 2026)
   c('GQ', 'Equatorial Guinea', /\bequatorial guinea\b|\bguinea ecuatorial\b/i, 'Malabo', 3.75, 8.78),
   c('ER', 'Eritrea', /\b(?:eritrea|eritrean)\b/i, 'Asmara', 15.32, 38.93),
@@ -117,7 +117,7 @@ export const MORE_COUNTRIES: CountryEntry[] = [
   c('GH', 'Ghana', /\b(?:ghana|ghanaian)\b/i, 'Accra', 5.60, -0.19),
   c('GW', 'Guinea-Bissau', /\bguinea[-\s]bissau\b/i, 'Bissau', 11.86, -15.60),
   c('GN', 'Guinea', /\b(?:(?<!(?:new|equatorial|papua) )guinea(?![-\s](?:bissau|pigs?|ecuatorial)\b)|guinean)\b/i, 'Conakry', 9.64, -13.58),
-  c('LS', 'Lesotho', /\blesotho\b/i, 'Maseru', -29.31, 27.48),
+  c('LS', 'Lesotho', /\b(?:lesotho|basotho)\b/i, 'Maseru', -29.31, 27.48),
   c('LR', 'Liberia', /\b(?:liberia|liberian)\b/i, 'Monrovia', 6.30, -10.80),
   c('MG', 'Madagascar', /\b(?:madagascar|malagasy)\b/i, 'Antananarivo', -18.88, 47.51),
   c('MW', 'Malawi', /\b(?:malawi|malawian)\b/i, 'Lilongwe', -13.96, 33.79),
@@ -132,7 +132,7 @@ export const MORE_COUNTRIES: CountryEntry[] = [
   // "São Tomé" with its accent never matched until Oct 20, 2026)
   c('ST', 'São Tomé and Príncipe', /\bs[aã]o tom[eé](?![a-zà-ÿ])/i, 'São Tomé', 0.34, 6.73),
   c('SN', 'Senegal', /\b(?:senegal|senegalese)\b/i, 'Dakar', 14.72, -17.47),
-  c('SC', 'Seychelles', /\bseychelles\b/i, 'Victoria', -4.62, 55.45),
+  c('SC', 'Seychelles', /\b(?:seychelles|seychellois)\b/i, 'Victoria', -4.62, 55.45),
   c('SL', 'Sierra Leone', /\bsierra leone(?:an)?\b/i, 'Freetown', 8.48, -13.23),
   c('SO', 'Somalia', /\b(?:somalia|somali)\b/i, 'Mogadishu', 2.05, 45.32),
   c('SS', 'South Sudan', /\bsouth sudan(?:ese)?\b/i, 'Juba', 4.85, 31.58),
@@ -146,7 +146,7 @@ export const MORE_COUNTRIES: CountryEntry[] = [
   // Asia
   c('BD', 'Bangladesh', /\b(?:bangladesh|bangladeshi)\b/i, 'Dhaka', 23.81, 90.41),
   c('BT', 'Bhutan', /\b(?:bhutan|bhutanese)\b/i, 'Thimphu', 27.47, 89.64),
-  c('BN', 'Brunei', /\bbrunei\b/i, 'Bandar Seri Begawan', 4.90, 114.94),
+  c('BN', 'Brunei', /\b(?:brunei|bruneian)\b/i, 'Bandar Seri Begawan', 4.90, 114.94),
   c('KH', 'Cambodia', /\b(?:cambodia|cambodian)\b/i, 'Phnom Penh', 11.56, 104.92),
   c('TL', 'Timor-Leste', /\b(?:timor[-\s]leste|east timor(?:ese)?)\b/i, 'Dili', -8.56, 125.57),
   c('HK', 'Hong Kong', /\bhong kong\b/i, 'Hong Kong', 22.32, 114.17),
@@ -212,7 +212,7 @@ export const MORE_COUNTRIES: CountryEntry[] = [
   c('SB', 'Solomon Islands', /\bsolomon islands?\b/i, 'Honiara', -9.43, 159.95),
   c('TO', 'Tonga', /\btonga(?:n)?\b/i, "Nuku'alofa", -21.14, -175.20),
   c('TV', 'Tuvalu', /\btuvalu\b/i, 'Funafuti', -8.52, 179.20),
-  c('VU', 'Vanuatu', /\bvanuatu\b/i, 'Port Vila', -17.73, 168.32),
+  c('VU', 'Vanuatu', /\b(?:vanuatu|ni-vanuatu)\b/i, 'Port Vila', -17.73, 168.32),
   c('NC', 'New Caledonia', /\bnew caledonia(?:n)?\b/i, 'Nouméa', -22.27, 166.44),
 ]
 

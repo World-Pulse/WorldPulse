@@ -735,7 +735,7 @@ const COUNTRY_PATTERNS: [RegExp, string][] = [
   // stories to Washington DC). "Colombia" was misspelled "columbia", so
   // British Columbia and Columbia University counted as Colombia.
   [/\b(?:united states|usa|u\.s\.a?\.?)(?!\w)/i, 'US'],
-  [/\b(?:united kingdom|britain|(?<!new )england|scotland|(?<!new south )wales)\b/i, 'GB'],
+  [/\b(?:united kingdom|britain|(?<!new )england|scotland|scottish|(?<!new south )wales)\b/i, 'GB'],
   [/\b(?:china|chinese)\b/i, 'CN'],
   [/\b(?:russia|russian federation)\b/i, 'RU'],
   [/\b(?:france|french)\b/i, 'FR'],
