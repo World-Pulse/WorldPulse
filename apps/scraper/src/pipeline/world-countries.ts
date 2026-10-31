@@ -190,6 +190,10 @@ export const MORE_COUNTRIES: CountryEntry[] = [
   c('PE', 'Peru', /\b(?:peru|peruvian)\b/i, 'Lima', -12.05, -77.04),
   c('PR', 'Puerto Rico', /\bpuerto ric(?:o|an)\b/i, 'San Juan', 18.47, -66.11),
   c('LC', 'Saint Lucia', /\b(?:saint|st\.?) lucia\b/i, 'Castries', 14.01, -60.99),
+  // Oct 31, 2026 (sources round 6): the two countries no pattern named ("St Kitts", "St Vincent"). Not St Vincent's
+  // hospitals or St Vincent de Paul
+  c('KN', 'Saint Kitts and Nevis', /\b(?:(?:saint|st\.?) kitts(?: and nevis| & nevis)?|kittitians?|nevisians?)\b/i, 'Basseterre', 17.30, -62.73),
+  c('VC', 'Saint Vincent and the Grenadines', /\b(?:(?:saint|st\.?) vincent(?: and the grenadines| & the grenadines)?(?![''’]s|\s+de\s+paul)|vincentians?)\b/i, 'Kingstown', 13.16, -61.23),
   c('SR', 'Suriname', /\b(?:suriname|surinamese)\b/i, 'Paramaribo', 5.85, -55.20),
   c('TT', 'Trinidad and Tobago', /\b(?:trinidad|trinidadian)\b/i, 'Port of Spain', 10.65, -61.51),
   c('UY', 'Uruguay', /\buruguay(?:an)?\b/i, 'Montevideo', -34.90, -56.16),

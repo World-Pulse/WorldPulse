@@ -462,6 +462,110 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'wānaka':           { lat: -44.7032, lng: 169.1321, country: 'NZ' },
   'daytona beach':    { lat: 29.2108, lng: -81.0228, country: 'US', region: 'Florida' },
   'tobago':           { lat: 11.1800, lng: -60.7400, country: 'TT', region: 'Tobago', name: 'Tobago' },
+  // Oct 31, 2026 (sources round 6): towns of the 18 countries that had no outlet of their own, as English and their
+  // own press write them ("Bălți" is matched as written; local-names.ts turns "Prishtinës", "Nikšiću" or "Kopru" into
+  // these names for a feed in that language). Their capitals come from the country table (after the US states, below).
+  // Left out: names that are words elsewhere ("encamp", Italian "ordino" (I order), Dutch "koper" (copper), French "la
+  // digue" (the dike), English "bled")
+  'graz':             { lat: 47.0707, lng: 15.4395, country: 'AT' },
+  'linz':             { lat: 48.3069, lng: 14.2858, country: 'AT' },
+  'salzburg':         { lat: 47.8095, lng: 13.0550, country: 'AT' },
+  'innsbruck':        { lat: 47.2692, lng: 11.4041, country: 'AT' },
+  'klagenfurt':       { lat: 46.6247, lng: 14.3053, country: 'AT' },
+  'villach':          { lat: 46.6103, lng: 13.8558, country: 'AT' },
+  'bregenz':          { lat: 47.5031, lng: 9.7471,  country: 'AT' },
+  'dornbirn':         { lat: 47.4125, lng: 9.7417,  country: 'AT' },
+  'eisenstadt':       { lat: 47.8456, lng: 16.5233, country: 'AT' },
+  'wiener neustadt':  { lat: 47.8151, lng: 16.2461, country: 'AT' },
+  'schaan':           { lat: 47.1650, lng: 9.5097,  country: 'LI' },
+  'balzers':          { lat: 47.0667, lng: 9.5000,  country: 'LI' },
+  'triesen':          { lat: 47.1000, lng: 9.5333,  country: 'LI' },
+  'maribor':          { lat: 46.5547, lng: 15.6459, country: 'SI' },
+  'celje':            { lat: 46.2309, lng: 15.2604, country: 'SI' },
+  'kranj':            { lat: 46.2389, lng: 14.3556, country: 'SI' },
+  'novo mesto':       { lat: 45.8034, lng: 15.1689, country: 'SI' },
+  'nova gorica':      { lat: 45.9559, lng: 13.6483, country: 'SI' },
+  'velenje':          { lat: 46.3592, lng: 15.1100, country: 'SI' },
+  'ptuj':             { lat: 46.4200, lng: 15.8700, country: 'SI' },
+  'murska sobota':    { lat: 46.6625, lng: 16.1664, country: 'SI' },
+  'trieste':          { lat: 45.6495, lng: 13.7768, country: 'IT' },
+  'transnistria':     { lat: 46.8403, lng: 29.6433, country: 'MD', region: 'Transnistria', name: 'Transnistria' },
+  'tiraspol':         { lat: 46.8403, lng: 29.6433, country: 'MD', region: 'Transnistria' },
+  'tighina':          { lat: 46.8317, lng: 29.4744, country: 'MD', region: 'Transnistria', name: 'Bender' },
+  'gagauzia':         { lat: 46.3003, lng: 28.6572, country: 'MD', region: 'Gagauzia', name: 'Gagauzia' },
+  'comrat':           { lat: 46.3003, lng: 28.6572, country: 'MD', region: 'Gagauzia' },
+  'bălți':            { lat: 47.7617, lng: 27.9289, country: 'MD', name: 'Bălți' },
+  'bălţi':            { lat: 47.7617, lng: 27.9289, country: 'MD', name: 'Bălți' },
+  'cahul':            { lat: 45.9075, lng: 28.1944, country: 'MD' },
+  'orhei':            { lat: 47.3831, lng: 28.8231, country: 'MD' },
+  'ungheni':          { lat: 47.2108, lng: 27.8006, country: 'MD' },
+  'soroca':           { lat: 48.1561, lng: 28.2975, country: 'MD' },
+  'niksic':           { lat: 42.7731, lng: 18.9445, country: 'ME', name: 'Nikšić' },
+  'budva':            { lat: 42.2864, lng: 18.8400, country: 'ME' },
+  'herceg novi':      { lat: 42.4531, lng: 18.5375, country: 'ME' },
+  'cetinje':          { lat: 42.3906, lng: 18.9142, country: 'ME' },
+  'bijelo polje':     { lat: 43.0383, lng: 19.7476, country: 'ME' },
+  'pljevlja':         { lat: 43.3567, lng: 19.3584, country: 'ME' },
+  'ulcinj':           { lat: 41.9294, lng: 19.2244, country: 'ME' },
+  'kotor':            { lat: 42.4247, lng: 18.7712, country: 'ME' },
+  'tivat':            { lat: 42.4350, lng: 18.6961, country: 'ME' },
+  'berane':           { lat: 42.8425, lng: 19.8733, country: 'ME' },
+  'prishtina':        { lat: 42.6629, lng: 21.1655, country: 'XK', name: 'Pristina' },
+  'prizren':          { lat: 42.2139, lng: 20.7397, country: 'XK' },
+  'mitrovica':        { lat: 42.8914, lng: 20.8660, country: 'XK' },
+  'sremska mitrovica': { lat: 44.9764, lng: 19.6122, country: 'RS' },
+  'peja':             { lat: 42.6593, lng: 20.2887, country: 'XK' },
+  'gjakova':          { lat: 42.3803, lng: 20.4308, country: 'XK' },
+  'ferizaj':          { lat: 42.3706, lng: 21.1553, country: 'XK' },
+  'gjilan':           { lat: 42.4635, lng: 21.4694, country: 'XK' },
+  'podujeva':         { lat: 42.9106, lng: 21.1931, country: 'XK' },
+  'vushtrri':         { lat: 42.8231, lng: 20.9675, country: 'XK' },
+  'escaldes-engordany': { lat: 42.5089, lng: 1.5397, country: 'AD', name: 'Escaldes-Engordany' },
+  'canillo':          { lat: 42.5676, lng: 1.5976,  country: 'AD' },
+  'la massana':       { lat: 42.5450, lng: 1.5148,  country: 'AD' },
+  'sant julia de loria': { lat: 42.4637, lng: 1.4913, country: 'AD', name: 'Sant Julià de Lòria' },
+  'borgo maggiore':   { lat: 43.9408, lng: 12.4486, country: 'SM' },
+  'domagnano':        { lat: 43.9486, lng: 12.4686, country: 'SM' },
+  'rimini':           { lat: 44.0678, lng: 12.5695, country: 'IT' },
+  'ilulissat':        { lat: 69.2198, lng: -51.0986, country: 'GL' },
+  'sisimiut':         { lat: 66.9395, lng: -53.6735, country: 'GL' },
+  'qaqortoq':         { lat: 60.7184, lng: -46.0356, country: 'GL' },
+  'aasiaat':          { lat: 68.7098, lng: -52.8699, country: 'GL' },
+  'maniitsoq':        { lat: 65.4167, lng: -52.9000, country: 'GL' },
+  'tasiilaq':         { lat: 65.6145, lng: -37.6368, country: 'GL' },
+  'kangerlussuaq':    { lat: 67.0086, lng: -50.6892, country: 'GL' },
+  'narsarsuaq':       { lat: 61.1600, lng: -45.4200, country: 'GL' },
+  'pituffik':         { lat: 76.5312, lng: -68.7031, country: 'GL' },
+  'upernavik':        { lat: 72.7869, lng: -56.1472, country: 'GL' },
+  'uummannaq':        { lat: 70.6747, lng: -52.1264, country: 'GL' },
+  'paamiut':          { lat: 61.9940, lng: -49.6678, country: 'GL' },
+  'nanortalik':       { lat: 60.1431, lng: -45.2400, country: 'GL' },
+  'narsaq':           { lat: 60.9167, lng: -46.0500, country: 'GL' },
+  'nickerie':         { lat: 5.9483,  lng: -56.9714, country: 'SR', name: 'Nieuw Nickerie' },
+  'lelydorp':         { lat: 5.7000,  lng: -55.2333, country: 'SR' },
+  'moengo':           { lat: 5.6167,  lng: -54.4000, country: 'SR' },
+  'brokopondo':       { lat: 5.0667,  lng: -54.9833, country: 'SR' },
+  'kuala belait':     { lat: 4.5833,  lng: 114.2333, country: 'BN' },
+  'tutong':           { lat: 4.8028,  lng: 114.6492, country: 'BN' },
+  'jerudong':         { lat: 4.9500,  lng: 114.8333, country: 'BN' },
+  'temburong':        { lat: 4.7000,  lng: 115.0700, country: 'BN' },
+  'betio':            { lat: 1.3570,  lng: 172.9300, country: 'KI' },
+  'kiritimati':       { lat: 1.8721,  lng: -157.4278, country: 'KI' },
+  'ebeye':            { lat: 8.7800,  lng: 167.7400, country: 'MH' },
+  'kwajalein':        { lat: 8.7200,  lng: 167.7300, country: 'MH' },
+  'bikini atoll':     { lat: 11.5833, lng: 165.3833, country: 'MH' },
+  'enewetak':         { lat: 11.3500, lng: 162.3500, country: 'MH' },
+  'pohnpei':          { lat: 6.8874,  lng: 158.2150, country: 'FM' },
+  'chuuk':            { lat: 7.4167,  lng: 151.7833, country: 'FM' },
+  'kosrae':           { lat: 5.3167,  lng: 162.9833, country: 'FM' },
+  'weno':             { lat: 7.4447,  lng: 151.8617, country: 'FM' },
+  'vaitupu':          { lat: -7.4800, lng: 178.6800, country: 'TV' },
+  'praslin':          { lat: -4.3194, lng: 55.7392, country: 'SC' },
+  'the hague':        { lat: 52.0705, lng: 4.3007,  country: 'NL' },
+  // (other places that start with a capital's name: "San Salvador de Jujuy" is in Argentina)
+  'san salvador de jujuy': { lat: -24.1858, lng: -65.2995, country: 'AR', name: 'San Salvador de Jujuy' },
+  'santo domingo de los tsachilas': { lat: -0.2530, lng: -79.1754, country: 'EC', name: 'Santo Domingo de los Tsáchilas' },
+  'santo domingo de los tsáchilas': { lat: -0.2530, lng: -79.1754, country: 'EC', name: 'Santo Domingo de los Tsáchilas' },
 }
 
 // ─── NER PATTERNS ────────────────────────────────────────────────────────────
@@ -632,6 +736,9 @@ const COUNTRY_MATCHERS: [RegExp, string][] = COUNTRY_PATTERNS.map(([pattern, cod
 const HOME_NAMES: Record<string, { name: RegExp; as: string; unless?: RegExp }> = {
   CG: { name: /\bcongo\b(?![-\s]brazzaville)/gi, as: 'Congo-Brazzaville', unless: /\b(?:rdc|rd[-\s]?congo|drc|dr congo|d[ée]mocratique|democratic|kinshasa)\b/i },
   MU: { name: /(?<![\p{L}\p{N}])maurice(?![\p{L}\p{N}])/giu, as: 'Mauritius' },
+  // An Ecuadorian outlet's "Santo Domingo" is Santo Domingo de los Tsáchilas, not the Dominican capital (Oct 31, 2026:
+  // El Comercio's and El Universo's "choque frontal en la vía Quinindé – Santo Domingo", once capitals were places)
+  EC: { name: /\bsanto domingo\b(?!\s+de\s+los\s+ts[áa]chilas)/gi, as: 'Santo Domingo de los Tsachilas' },
 }
 
 export function withHomeNames(text: string, countryCode: string | null | undefined): string {
@@ -802,6 +909,35 @@ function escapeRegExp(s: string): string {
  *  "promote" to Rome. */
 // US states (world-countries.ts); a place already in the gazetteer keeps its entry
 for (const [place, entry] of Object.entries(US_STATES)) GAZETTEER[place] ??= entry
+
+/**
+ * Every country's capital by its name (sources round 6, Oct 31, 2026): 107 of 195 capitals named no place,
+ * so "Thousands protest in Budapest", "Prague court jails ex-minister" or "Majuro king tide" had no pin unless
+ * the country was named too, among them the capitals of 16 of the 18 countries that had no outlet. Left out:
+ * capitals that are more often another place, a name or a word ("Victoria", "Kingston", "Georgetown",
+ * "Nassau", "San José", "San Juan", "La Paz", "Wellington", "Juba" (also Somalia's Jubaland), "Praia" (a
+ * beach in Portuguese), "Quito" ("I remove" in Spanish), "Malé", "Rabat"), and those the country's own name
+ * already finds ("Kuwait City", "Djibouti", "Andorra la Vella"). A name that ends in an accented letter can't
+ * be matched as a whole word, so "Lomé" goes by "Lome"; "Brasília" by both its spellings.
+ */
+const NOT_A_CAPITAL = new Set(['victoria', 'kingston', 'georgetown', 'nassau', 'san jose', 'san juan', 'la paz',
+  'wellington', 'juba', 'praia', 'quito', 'male', 'rabat', 'washington dc', "st. george's", "st george's", "saint john's"])
+const plainName = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+const nameWords = (s: string) => s.split(/[^a-z]+/).filter(Boolean)
+const CAPITALS = [
+  ...MORE_COUNTRIES.map(({ code, capital, lat, lng }) => ({ code, capital, lat, lng })),
+  ...Object.entries(COUNTRY_CENTROIDS).map(([code, { name, lat, lng }]) => ({ code, capital: name, lat, lng })),
+]
+for (const { code, capital, lat, lng } of CAPITALS) {
+  const plain = plainName(capital)
+  const inName = nameWords(plainName(countryNameOf(code) ?? ''))
+  const words = nameWords(plain)
+  // (the country's name says it: "Kuwait City", "São Tomé", but not "Tunis")
+  if (NOT_A_CAPITAL.has(plain) || (inName.length > 0 && (words.every(w => inName.includes(w)) || inName.every(w => words.includes(w))))) continue
+  for (const key of new Set([plain, capital.toLowerCase()])) {
+    if (/[a-z]$/.test(key)) GAZETTEER[key] ??= { lat, lng, country: code, name: capital }
+  }
+}
 
 const GAZETTEER_MATCHERS = Object.entries(GAZETTEER)
   .sort((a, b) => b[0].length - a[0].length)

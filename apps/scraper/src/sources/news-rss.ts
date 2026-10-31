@@ -105,6 +105,7 @@ import { MAX_ITEM_AGE_MS, isStaleItem } from '../pipeline/freshness'
 // Feeds send "&#x27;" and "&amp;" in titles and summaries
 import { decodeEntities, cleanSummary, repeatsTitle, feedText, clipText } from '../pipeline/text'
 import { placeFromText, splitPlaces, withHomeNames } from '../pipeline/geo'
+import { withLocalNames } from '../pipeline/local-names'
 import { rateSeverity } from '../pipeline/severity'
 import { categorizeText } from '../pipeline/categories'
 import { gdacsAlertLevel, gdacsSeverity, gdacsTags, tidyGdacsTitle } from './gdacs'
@@ -8129,9 +8130,10 @@ const GEO_HINTS: Array<{ keywords: string[]; geo: GeoHint }> = [
  * Words that start like a place hint but aren't one. A hint matches the start
  * of a word ("Indian" is India, "Parisian" Paris), so "modifier" was Modi: on
  * Oct 14, 2026 a Le Monde reader survey asking who would modify their holiday
- * plans was pinned on New Delhi. "Parish" isn't Paris, "Indiana" isn't India.
+ * plans was pinned on New Delhi. "Parish" isn't Paris, "Indiana" isn't India,
+ * German "Trumpf" (a trump card, a machine maker) isn't Trump.
  */
-const NOT_A_HINT = /^(?:modif|modic|modish|indiana|parish|trumpet|turkeys|chinatown)/
+const NOT_A_HINT = /^(?:modif|modic|modish|indiana|parish|trumpet|trumpf|turkeys|chinatown)/
 
 /**
  * "Congress" that isn't the US Congress (Oct 20, 2026): a party, as Sierra
@@ -8313,9 +8315,10 @@ export function inferGeo(
   source:      NewsSource,
   point?:      { lat: number; lng: number } | null,
 ): InferredGeo {
-  // A Brazzaville outlet's "Congo", a Mauritian outlet's "Maurice" (geo.ts, withHomeNames; Oct 21, 2026)
-  const head = withHomeNames(title, source.countryCode)
-  const body = withHomeNames(description, source.countryCode)
+  // A Brazzaville outlet's "Congo", a Mauritian outlet's "Maurice" (geo.ts, withHomeNames; Oct 21, 2026), and
+  // places named in the feed's own language: "Wien", "Rusiji", "Mali i Zi" (local-names.ts; Oct 31, 2026)
+  const head = withLocalNames(withHomeNames(title, source.countryCode), source.language)
+  const body = withLocalNames(withHomeNames(description, source.countryCode), source.language)
   if (point) {
     const named = fromPlace(head)
     return { lat: point.lat, lng: point.lng, locationName: named?.locationName ?? null, countryCode: named?.countryCode ?? null }
