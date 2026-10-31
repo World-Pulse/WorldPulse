@@ -21,8 +21,13 @@ describe('busiestPlaces', () => {
 describe('mapCardText', () => {
   it('writes the day in thousands separators', () => {
     const t = mapCardText({ verified24h: 1125, outlets24h: 1387, countries24h: 195 }, pts('UA'))
-    expect(t?.stats.map(s => s.value)).toEqual(['1,125', '1,387', '195'])
+    expect(t?.stats.map(s => s.value)).toEqual(['1,125', '1,387', '202'])
     expect(t?.places).toEqual([{ name: 'Ukraine', count: '1 on the map' }])
+  })
+
+  it('says how many countries WorldPulse covers, not how many had news today (Devon, Oct 31: "202 countries not 200")', () => {
+    const t = mapCardText({ verified24h: 2194, outlets24h: 1426, countries24h: 200 }, [])
+    expect(t?.stats[2]).toEqual({ value: '202', label: 'COUNTRIES COVERED' })
   })
 
   it('has no card when nothing was verified or reported', () => {

@@ -22,6 +22,15 @@ export interface MapCardText {
 
 const num = (n: number) => n.toLocaleString('en-US')
 
+/**
+ * The countries and territories WorldPulse reads the news from: all 202 on its coverage map (the
+ * UN's members and observers, Kosovo, Taiwan, Hong Kong, Macau, Puerto Rico, Greenland and New
+ * Caledonia) since Oct 31, 2026 (Q9). The card says this, not the day's count of countries with
+ * news (Devon, Oct 31, 2:52 PM: "the graphic needs to say 202 countries not 200"); the scraper's
+ * last-four-places test keeps a feed for every one of them.
+ */
+export const COUNTRIES_COVERED = 202
+
 /** "Ukraine" for "UA", or null for anything that isn't a country code */
 function countryName(code: string): string | null {
   try {
@@ -55,7 +64,7 @@ export function mapCardText(day: MapDay, points: MapPoint[]): MapCardText | null
     stats: [
       { value: num(day.verified24h), label: 'VERIFIED STORIES' },
       { value: num(day.outlets24h), label: 'OUTLETS' },
-      { value: num(day.countries24h), label: 'COUNTRIES' },
+      { value: num(COUNTRIES_COVERED), label: 'COUNTRIES COVERED' },
     ],
     places: busiestPlaces(points).map(p => ({ name: p.name, count: `${num(p.count)} on the map` })),
   }
