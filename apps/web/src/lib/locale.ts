@@ -8,7 +8,7 @@
  * those pages don't exist.
  *
  * The menu offers the languages with every phrase translated: Spanish,
- * French and Portuguese (a test keeps them complete). The others in
+ * French, Portuguese and, since Oct 31, Chinese (a test keeps them complete). The others in
  * messages/ are missing phrases, so a cookie naming one shows English.
  *
  * Only the top menu and the left sidebar are translated; the stories are in
@@ -27,7 +27,7 @@ export type SupportedLocale = typeof SUPPORTED_LOCALES[number]
 export const RTL_LOCALES: SupportedLocale[] = ['ar']
 
 /** The languages the menu offers: every phrase translated */
-export const MENU_LOCALES = ['en', 'es', 'fr', 'pt'] as const
+export const MENU_LOCALES = ['en', 'es', 'fr', 'pt', 'zh'] as const
 export type MenuLocale = typeof MENU_LOCALES[number]
 
 export const LOCALE_COOKIE = 'wp_lang'

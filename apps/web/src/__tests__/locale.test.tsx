@@ -24,6 +24,7 @@ describe('the cookie', () => {
     expect(localeFromCookie('fr')).toBe('fr')
     expect(localeFromCookie(' ES ')).toBe('es')
     expect(localeFromCookie('pt')).toBe('pt')
+    expect(localeFromCookie('zh')).toBe('zh')
     expect(localeFromCookie('de')).toBe('en') // in messages/, but missing phrases: not offered
     expect(localeFromCookie('ar')).toBe('en')
     expect(localeFromCookie('xx')).toBe('en')
@@ -45,7 +46,7 @@ describe('the cookie', () => {
 })
 
 describe('the menu', () => {
-  it('offers English, Spanish, French and Portuguese', () => {
+  it('offers English, Spanish, French, Portuguese and Chinese', () => {
     expect(LANGUAGES.map(l => l.code)).toEqual([...MENU_LOCALES])
     for (const l of MENU_LOCALES) expect(SUPPORTED_LOCALES).toContain(l)
   })

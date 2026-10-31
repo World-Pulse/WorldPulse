@@ -18,6 +18,7 @@ export const LANGUAGES: ReadonlyArray<{ code: MenuLocale; label: string; flag: s
   { code: 'es', label: 'Español',    flag: '🇪🇸' },
   { code: 'fr', label: 'Français',   flag: '🇫🇷' },
   { code: 'pt', label: 'Português',  flag: '🇧🇷' },
+  { code: 'zh', label: '中文',        flag: '🇨🇳' },
 ]
 
 type LocaleCode = MenuLocale
