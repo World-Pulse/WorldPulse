@@ -17,6 +17,14 @@ describe('decodeEntities', () => {
     expect(decodeEntities('&lt;script&gt;alert(1)&lt;/script&gt;')).toBe('&lt;script>alert(1)&lt;/script>')
     expect(decodeEntities('&#60;b&#62; &#x3c;!-- &lt;?xml')).toBe('&#60;b> &#x3c;!-- &lt;?xml')
   })
+
+  it("decodes the Latin-1 names and the South Slavic letters, in their case (Aktuelno's \"na&scaron;oj\", Oct 31, 2026)", () => {
+    expect(decodeEntities('na&scaron;oj teritoriji')).toBe('našoj teritoriji')
+    expect(decodeEntities('&Scaron;ibenik, &Zcaron;abljak, &ccaron;as, &cacute;e, &Dstrok;akovica')).toBe('Šibenik, Žabljak, čas, će, Đakovica')
+    expect(decodeEntities('Caf&eacute; &Eacute;lys&eacute;e, M&uuml;nchen, Espa&ntilde;a, 3&frac12; &euro;, &laquo;oui&raquo;')).toBe('Café Élysée, München, España, 3½ €, «oui»')
+    expect(decodeEntities('a&nbsp;b')).toBe('a b')
+    expect(decodeEntities('&EACUTE; &foo; &amp')).toBe('é &foo; &amp')
+  })
 })
 
 describe('cleanTitle', () => {
@@ -40,6 +48,10 @@ describe('ENCODED_TEXT_RE', () => {
     expect(ENCODED_TEXT_RE.test('AT&T earnings')).toBe(false)
     expect(ENCODED_TEXT_RE.test('in MMI&gt;=VII')).toBe(true)
     expect(ENCODED_TEXT_RE.test('Osaka <i>danjiri</i>')).toBe(true)
+    // any name decodeEntities knows, so the repair decodes the week's stored ones too
+    expect(ENCODED_TEXT_RE.test('na&scaron;oj')).toBe(true)
+    expect(ENCODED_TEXT_RE.test('Caf&eacute;')).toBe(true)
+    expect(ENCODED_TEXT_RE.test('R&D; budget')).toBe(false)
   })
 })
 
@@ -64,6 +76,14 @@ describe('cleanSummary (feed footers, Oct 11, 2026)', () => {
       .toBe('SERAP has sued the CBN. Source: The Punch.')
     expect(cleanSummary('Talks resumed in Geneva on Sunday [&#8230;]')).toBe('Talks resumed in Geneva on Sunday…')
     expect(cleanSummary('Flooding cut roads across the north. Continue reading')).toBe('Flooding cut roads across the north.')
+  })
+
+  it("takes out WordPress's footer glued to the summary's last word (Balkan Green Energy News, Oct 31, 2026)", async () => {
+    const { cleanSummary, feedText } = await import('../text')
+    const html = 'Preparations are underway for the repowering of the Trtar-Krtolin wind farmThe post <a href="https://balkangreenenergynews.com/x/">Croatia&#8217;s second-oldest wind farm Trtar-Krtolin to be repowered</a> appeared first on <a href="https://balkangreenenergynews.com">Balkan Green Energy News</a>.'
+    expect(cleanSummary(feedText(html))).toBe('Preparations are underway for the repowering of the Trtar-Krtolin wind farm')
+    // "the post" in the story itself stays
+    expect(cleanSummary('He left the post of mayor in May.')).toBe('He left the post of mayor in May.')
   })
 
   it('leaves the story alone', async () => {
@@ -170,6 +190,20 @@ describe('feedText (feed HTML as plain text, Oct 11, 2026)', () => {
     expect(feedText('<?xml encoding="utf-8" ?><p><em>Shafaq News- Baghdad</em></p><p>Iraq&rsquo;s electoral commission announced the results.</p>'))
       .toBe('Shafaq News- Baghdad Iraq’s electoral commission announced the results.')
     expect(feedText('&lt;?xml encoding="utf-8" ?&gt;&lt;p&gt;Text&lt;/p&gt;')).toBe('Text')
+  })
+
+  it('decodes the codes inside encoded HTML too (LSM and the Maldives finance ministry, Oct 31, 2026)', async () => {
+    const { feedText } = await import('../text')
+    expect(feedText("the day&#039;s news stories in a&amp;nbsp;simplified&amp;nbsp;language")).toBe("the day's news stories in a simplified language")
+    expect(feedText('Understanding Personal Finances &amp;amp; Planning Ahead')).toBe('Understanding Personal Finances & Planning Ahead')
+    expect(feedText('&amp;lt;p&amp;gt;Text&amp;lt;/p&amp;gt;')).toBe('Text')
+    expect(feedText('&lt;p&gt;x &amp;lt; 5&lt;/p&gt;')).toBe('x < 5')
+  })
+
+  it('drops HTML comments, written out or encoded (WordPress blocks, Gazeta Express, Oct 31, 2026)', async () => {
+    const { feedText } = await import('../text')
+    expect(feedText('<!-- wp:paragraph --><p>Agjencia e Statistikave</p><!-- /wp:paragraph -->')).toBe('Agjencia e Statistikave')
+    expect(feedText('&lt;!-- wp:image {"id":5} --&gt;&lt;p&gt;Text&lt;/p&gt;')).toBe('Text')
   })
 })
 

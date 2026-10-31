@@ -21,7 +21,14 @@
       "interfax-ukraine-en",
       "kazakhstan-today-en",
       "vietnamplus-en",
-      "ami-mauritania-en"
+      "ami-mauritania-en",
+      "azertac-en",
+      "aip-cote-divoire",
+      "ang-guinea-bissau",
+      "stp-press",
+      "atpe-tchad",
+      "khovar-en",
+      "saba-yemen-en"
     ],
     "international": [
       "bbc-world",
@@ -56,7 +63,10 @@
       "ouestaf-news",
       "islands-business-kiribati",
       "islands-business-tuvalu",
-      "islands-business-nauru"
+      "islands-business-nauru",
+      "china-digital-times",
+      "e-global-equatorial-guinea",
+      "e-global-guinea-bissau"
     ],
     "local": [
       "wanted-in-rome",
@@ -72,7 +82,10 @@
       "riviera-radio-mc",
       "bali-times",
       "noticias-do-norte-cv",
-      "rtnk-me"
+      "rtnk-me",
+      "san-pedro-sun-bz",
+      "primorske-novice-si",
+      "corriere-romagna-sm"
     ],
     "specialist": [
       "nikkei-asia",
@@ -158,7 +171,13 @@
       "wsj-markets",
       "african-manager-en",
       "fresh-fruit-portal-chile",
-      "fresh-fruit-portal-peru"
+      "fresh-fruit-portal-peru",
+      "business-in-cameroon",
+      "direct-infos-gabon",
+      "bgen-croatia",
+      "mfr-maldives",
+      "crux-vatican",
+      "zenit-pope-va"
     ],
     "aggregator": [
       "allafrica",
@@ -202,7 +221,14 @@
     "islands-business-kiribati": "FJ",
     "islands-business-tuvalu": "FJ",
     "islands-business-nauru": "FJ",
-    "fresh-fruit-portal-peru": "CL"
+    "fresh-fruit-portal-peru": "CL",
+    "china-digital-times": "US",
+    "e-global-equatorial-guinea": "PT",
+    "e-global-guinea-bissau": "PT",
+    "bgen-croatia": "RS",
+    "corriere-romagna-sm": "IT",
+    "crux-vatican": "US",
+    "zenit-pope-va": "IT"
   },
   "names": {
     "bbc-world": "BBC",

@@ -6,19 +6,39 @@
  * Qassem? &#8211; Analysis") and GDACS links didn't open.
  */
 
+/**
+ * HTML's names for the Latin-1 characters, U+00A0 to U+00FF in order; Aktuelno (Montenegro) wrote
+ * "na&scaron;oj" and LSM and the Maldives' finance ministry "&nbsp;" and "&amp;" inside their
+ * already-encoded summaries (Oct 31, 2026), so more names are decoded than the first few
+ */
+const LATIN_1_NAMES = ('nbsp iexcl cent pound curren yen brvbar sect uml copy ordf laquo not shy reg macr deg plusmn ' +
+  'sup2 sup3 acute micro para middot cedil sup1 ordm raquo frac14 frac12 frac34 iquest Agrave Aacute Acirc Atilde ' +
+  'Auml Aring AElig Ccedil Egrave Eacute Ecirc Euml Igrave Iacute Icirc Iuml ETH Ntilde Ograve Oacute Ocirc Otilde ' +
+  'Ouml times Oslash Ugrave Uacute Ucirc Uuml Yacute THORN szlig agrave aacute acirc atilde auml aring aelig ccedil ' +
+  'egrave eacute ecirc euml igrave iacute icirc iuml eth ntilde ograve oacute ocirc otilde ouml divide oslash ugrave ' +
+  'uacute ucirc uuml yacute thorn yuml').split(' ')
+
 const NAMED_CODES: Record<string, number> = {
+  ...Object.fromEntries(LATIN_1_NAMES.map((name, i) => [name, 0xa0 + i])),
   amp: 38, quot: 34, apos: 39, nbsp: 32, gt: 62, lt: 60,
   rsquo: 0x2019, lsquo: 0x2018, rdquo: 0x201d, ldquo: 0x201c, ndash: 0x2013, mdash: 0x2014, hellip: 0x2026,
+  sbquo: 0x201a, bdquo: 0x201e, lsaquo: 0x2039, rsaquo: 0x203a, bull: 0x2022, euro: 0x20ac, trade: 0x2122,
+  dagger: 0x2020, Dagger: 0x2021, permil: 0x2030, prime: 0x2032, Prime: 0x2033, ensp: 32, emsp: 32, thinsp: 32,
+  OElig: 0x152, oelig: 0x153, Yuml: 0x178, fnof: 0x192, circ: 0x2c6, tilde: 0x2dc,
+  // the South Slavic letters (Montenegro, Serbia, Croatia, Bosnia, Slovenia)
+  Scaron: 0x160, scaron: 0x161, Zcaron: 0x17d, zcaron: 0x17e, Ccaron: 0x10c, ccaron: 0x10d,
+  Cacute: 0x106, cacute: 0x107, Dstrok: 0x110, dstrok: 0x111,
 }
 
 /**
  * HTML codes as characters. ">" is decoded ("MMI&gt;=VII" in GDACS titles):
  * on its own it can't start markup. "<" stays encoded when a letter, "/", "!"
- * or "?" follows it, so decoded text can never become a tag.
+ * or "?" follows it, so decoded text can never become a tag. A name is looked
+ * up as written ("&Scaron;" is "Š"), then in lower case.
  */
 export function decodeEntities(text: string): string {
-  return text.replace(/&(?:#x([0-9a-f]+)|#(\d+)|([a-z]+));/gi, (whole: string, hex: string | undefined, dec: string | undefined, name: string | undefined, offset: number, full: string) => {
-    const code = hex ? parseInt(hex, 16) : dec ? parseInt(dec, 10) : NAMED_CODES[String(name).toLowerCase()] ?? NaN
+  return text.replace(/&(?:#x([0-9a-f]+)|#(\d+)|([a-z][a-z0-9]*));/gi, (whole: string, hex: string | undefined, dec: string | undefined, name: string | undefined, offset: number, full: string) => {
+    const code = hex ? parseInt(hex, 16) : dec ? parseInt(dec, 10) : NAMED_CODES[String(name)] ?? NAMED_CODES[String(name).toLowerCase()] ?? NaN
     if (Number.isNaN(code) || code <= 0 || code > 0x10ffff) return whole
     if (code === 60 && /^[a-z/!?]/i.test(full.slice(offset + whole.length))) return whole
     return String.fromCodePoint(code)
@@ -37,6 +57,12 @@ export function stripTags(text: string): string {
 const BLOCK_TAG = /(?:<|&lt;)\/?(?:p|br|hr|li|ul|ol|div|h[1-6]|blockquote|table|tr|td|th|figure|figcaption|section|article|header|footer)\b[^<>]*?(?:>|&gt;)/gi
 /** An XML declaration inside a description (Shafaq News starts every summary with one, Oct 20, 2026) */
 const XML_DECL = /(?:<|&lt;)\?xml\b[^<>]*?\?(?:>|&gt;)/gi
+/**
+ * An HTML comment, written out or encoded: WordPress's block editor leaves "<!-- wp:paragraph -->"
+ * around each paragraph, and Gazeta Express (Kosovo) sends them in every summary (Oct 31, 2026,
+ * round 8); summaries showed them as text
+ */
+const HTML_COMMENT = /(?:<|&lt;)!--[\s\S]*?--(?:>|&gt;)/g
 const ANY_TAG = /(?:<|&lt;)\/?[a-z][^<>]*?(?:>|&gt;)/gi
 /** A tag cut off where a description was clipped ('… &lt;div class="field') */
 const CUT_TAG = /(?:<|&lt;)\/?[a-z][^<>]*$/i
@@ -49,10 +75,12 @@ export const HTML_TAG_RE = /(?:<|&lt;)\/?[a-z][^<>]*?(?:>|&gt;)/i
  * encoded ("&lt;p&gt;": 119 of 3,211 recent summaries showed the codes on
  * Oct 11, 2026, from Dawn, Middle East Eye, The Straits Times, The Guardian
  * and Al-Monitor), paragraphs and list items kept apart, codes decoded.
+ * Codes are decoded twice: a feed that encodes its HTML encodes the codes in
+ * it too ("a&amp;nbsp;simplified", LSM's English feed, Oct 31, 2026).
  */
 export function feedText(html: string): string {
-  const strip = (t: string) => t.replace(XML_DECL, ' ').replace(BLOCK_TAG, ' ').replace(ANY_TAG, '').replace(CUT_TAG, '')
-  return strip(decodeEntities(strip(html))).replace(/\s+/g, ' ').trim()
+  const strip = (t: string) => t.replace(HTML_COMMENT, ' ').replace(XML_DECL, ' ').replace(BLOCK_TAG, ' ').replace(ANY_TAG, '').replace(CUT_TAG, '')
+  return strip(decodeEntities(decodeEntities(strip(html)))).replace(/\s+/g, ' ').trim()
 }
 
 /** Text cut to at most `max` characters at a word, ending in "…" when cut */
@@ -113,8 +141,8 @@ export function cleanUrl(url: string): string {
   return url.replace(/&amp;/gi, '&')
 }
 
-/** Text that still has HTML codes worth decoding, or tags (for the repair) */
-export const ENCODED_TEXT_RE = /&(?:#x[0-9a-f]+|#\d+|amp|quot|apos|nbsp|gt|lt|rsquo|lsquo|rdquo|ldquo|ndash|mdash|hellip);|<\/?[a-z][^<>]*>/i
+/** Text that still has HTML codes worth decoding (any name decodeEntities knows), or tags (for the repair) */
+export const ENCODED_TEXT_RE = new RegExp(`&(?:#x[0-9a-f]+|#\\d+|${Object.keys(NAMED_CODES).join('|')});|<\\/?[a-z][^<>]*>`, 'i')
 
 /**
  * Feed footers and pitches that aren't part of the story (Oct 11, 2026: 11 of
@@ -126,7 +154,8 @@ export const ENCODED_TEXT_RE = /&(?:#x[0-9a-f]+|#\d+|amp|quot|apos|nbsp|gt|lt|rs
  * membership plugin's "To access this post, you must purchase …" (Post-Courier).
  */
 const FEED_FOOTERS: Array<[RegExp, string]> = [
-  [/\s*\bThe post\s.{1,400}?\sappeared first on\s[^.\n]{1,120}\.?/gi, ''],
+  // also glued to the summary's last word ("…wind farmThe post …", Balkan Green Energy News, Oct 31, 2026)
+  [/\s*(?:\b|(?<=[a-z]))The post\s.{1,400}?\sappeared first on\s[^.\n]{1,120}\.?/gi, ''],
   [/\s*\bRead more\s*:\s*https?:\/\/\S+/gi, ''],
   [/\s*\b(?:Continue reading|Read more)(?:\s*(?:\.\.\.|…|»|→))?\s*$/i, ''],
   [/\s*\[(?:…|\.\.\.|&hellip;|&#8230;)\]/g, '…'],
@@ -150,6 +179,10 @@ const FEED_FOOTERS: Array<[RegExp, string]> = [
   [/\s*\bPostimi\s.{1,400}?\su shfaq s[ëe] pari n[ëe]\s[^.\n]{1,120}\.?/gi, ''],
   // Radio Ndeke Luka's language switch (French, Sango) at the start of its summaries
   [/^\s*Fr\s*:\s*Sa\s*:\s*/i, ''],
+  // Round 8 (Oct 31, 2026): News Diggers' paywall line, its whole summary, and the Eswatini
+  // Observer's reading-time note at the start of each
+  [/\s*\bThis content is for members only\.(?:\s*Visit the site and log in\/register to read\.?)?/gi, ''],
+  [/^\s*Reading Time:\s*\d+\s*minutes?\s*/i, ''],
 ]
 
 /** A feed's description without its footers (see FEED_FOOTERS) */

@@ -86,6 +86,8 @@ describe('NEWS_SOURCE_REGISTRY', () => {
 
   it('Q5 round 6 (Oct 21, 2026): six feeds the server failed to read all day are out, two in their place', () => {
     const ids = new Set(NEWS_SOURCE_REGISTRY.map(s => s.id))
+    // LSM's English feed is tried once more since Oct 31, 2026 (round 8) as lsm-english-lv
+    // (round8-depth.test.ts); the old id stays out
     for (const id of ['colombia-reports', 'eye-radio-ss', 'eyewitness-news-bs', 'radio-tamazuj', 'tasr-en', 'lsm-en']) {
       expect(ids.has(id)).toBe(false)
       expect(HOME_PIN_SOURCES.has(id)).toBe(false)
@@ -102,10 +104,13 @@ describe('NEWS_SOURCE_REGISTRY', () => {
       expect(ids.has(id)).toBe(true)
     }
     for (const id of ['jamnews', 'scr-whats-in-blue', 'haitian-times']) expect(HOME_PIN_SOURCES.has(id)).toBe(false)
-    // every feed host is polled once
+    // every feed host is polled once, except Shafaq News: its Kurdistan section is read too since
+    // Oct 31, 2026 (round 8; no story is in both sections)
     const hosts = NEWS_SOURCE_REGISTRY.map(s => new URL(s.feedUrl).hostname.replace(/^www\./, ''))
-    const added = ['dabangasudan.org', 'jam-news.net', 'postcourier.com.pg', 'dailypost.vu', 'securitycouncilreport.org', 'economynext.com', 'amu.tv', 'haitiantimes.com', 'shafaq.com']
+    const added = ['dabangasudan.org', 'jam-news.net', 'postcourier.com.pg', 'dailypost.vu', 'securitycouncilreport.org', 'economynext.com', 'amu.tv', 'haitiantimes.com']
     for (const h of added) expect(hosts.filter(x => x === h)).toHaveLength(1)
+    expect(NEWS_SOURCE_REGISTRY.filter(s => s.feedUrl.includes('shafaq.com')).map(s => s.feedUrl).sort())
+      .toEqual(['https://shafaq.com/rss/en/Iraq', 'https://shafaq.com/rss/en/Kurdistan'])
   })
 
   it('all source IDs are unique', () => {
