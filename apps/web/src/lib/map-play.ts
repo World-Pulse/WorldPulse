@@ -36,6 +36,21 @@ export function playStepMs(bucketCount: number): number {
   return Math.min(MAX_STEP_MS, Math.max(MIN_STEP_MS, Math.round(PLAY_TOTAL_MS / bucketCount)))
 }
 
+/**
+ * How far a playback tick moves (Oct 31, 2026, G9): the steps to take and the new time of the last step.
+ * In play mode (`catchUp`) the replay keeps its length whatever the frame rate: a slow frame takes every
+ * step it covered and the leftover carries over. Taking one step a frame at most, the 5:30 AM recording
+ * on a busy server ran 2.5 times slow and reached the recorder's 2-minute limit at midnight of its 24
+ * hours, before the closing card. The timeline a reader plays still takes one step a tick.
+ */
+export function playbackAdvance(now: number, lastTick: number, intervalMs: number, catchUp: boolean): { steps: number; lastTick: number } {
+  const elapsed = now - lastTick
+  if (!(intervalMs > 0) || !(elapsed >= intervalMs)) return { steps: 0, lastTick }
+  if (!catchUp) return { steps: 1, lastTick: now }
+  const steps = Math.floor(elapsed / intervalMs)
+  return { steps, lastTick: lastTick + steps * intervalMs }
+}
+
 const SEVERITY_RANK: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 }
 
 function rank(s: PlayBucket['signals'][number]): number {

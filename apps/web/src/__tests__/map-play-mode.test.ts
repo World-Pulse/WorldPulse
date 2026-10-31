@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { pickTourStop, playCounts, playDateLabel, tourCaption, distanceKm, TOUR_MIN_HOP_KM, type TourSignal } from '../lib/map-play'
+import { pickTourStop, playCounts, playDateLabel, tourCaption, distanceKm, playbackAdvance, playStepMs, PLAY_TOTAL_MS, TOUR_MIN_HOP_KM, type TourSignal } from '../lib/map-play'
 
 const read = (p: string) => readFileSync(join(__dirname, '..', p), 'utf8')
 const zOf = (src: string, marker: RegExp) => Number(marker.exec(src)?.[1] ?? NaN)
@@ -104,5 +104,38 @@ describe('the video, round 2 (Oct 30, 2026: the camera sat on Indonesia, caption
     // a deploy clears the pages nginx kept from the old build, whose scripts are gone
     expect(read('../../../scripts/server-deploy.sh')).toContain("find /var/cache/nginx/pages -type f -delete")
     expect(read('components/map/PlayOverlay.tsx')).toContain('wp-play-beat" /></div>')
+  })
+})
+
+describe('the replay keeps its length on a slow machine (Oct 31, 2026: the 5:30 AM video was cut at midnight)', () => {
+  it('takes nothing before a step is due', () => {
+    expect(playbackAdvance(1_100, 1_000, 625, true)).toEqual({ steps: 0, lastTick: 1_000 })
+    expect(playbackAdvance(1_100, 1_000, 0, true)).toEqual({ steps: 0, lastTick: 1_000 })
+  })
+  it('takes every step a late frame covered in play mode, and carries the rest', () => {
+    expect(playbackAdvance(2_400, 1_000, 625, true)).toEqual({ steps: 2, lastTick: 2_250 })
+    expect(playbackAdvance(4_000, 1_000, 250, true)).toEqual({ steps: 12, lastTick: 4_000 })
+  })
+  it('still takes one step a tick on the timeline a reader plays', () => {
+    expect(playbackAdvance(4_000, 1_000, 800, false)).toEqual({ steps: 1, lastTick: 4_000 })
+  })
+  it('plays 24 hours in about a minute at one frame a second, as at 60 frames', () => {
+    const buckets = 96, step = playStepMs(buckets)
+    const run = (frameMs: number) => {
+      let t = 0, last = 0, index = 0
+      while (index < buckets - 1 && t < 10 * PLAY_TOTAL_MS) {
+        t += frameMs
+        const a = playbackAdvance(t, last, step, true)
+        last = a.lastTick
+        index = Math.min(buckets - 1, index + a.steps)
+      }
+      return t
+    }
+    expect(run(1_000)).toBeLessThanOrEqual(PLAY_TOTAL_MS + 1_000)
+    expect(run(16)).toBeLessThanOrEqual(PLAY_TOTAL_MS + 16)
+    // the old way, one step a frame: the same replay at one frame a second took 95 s
+    let t = 0, index = 0
+    while (index < buckets - 1) { t += 1_000; index++ }
+    expect(t).toBeGreaterThan(1.5 * PLAY_TOTAL_MS)
   })
 })

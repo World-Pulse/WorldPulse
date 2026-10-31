@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { playbackAdvance } from '@/lib/map-play'
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
@@ -121,8 +122,10 @@ export function useTimelinePlayback(stepMs?: number): TimelinePlaybackState & Ti
     if (!playingRef.current || !dataRef.current) return
 
     const interval = stepMsRef.current || BASE_INTERVAL_MS / speedRef.current
-    if (timestamp - lastTickRef.current >= interval) {
-      lastTickRef.current = timestamp
+    // Play mode (a fixed step) keeps the replay's length on a slow machine: a late frame takes every step it covered
+    const { steps, lastTick } = playbackAdvance(timestamp, lastTickRef.current, interval, !!stepMsRef.current)
+    if (steps > 0) {
+      lastTickRef.current = lastTick
       const maxIndex = dataRef.current.buckets.length - 1
 
       setCurrentIndex(prev => {
@@ -131,7 +134,7 @@ export function useTimelinePlayback(stepMs?: number): TimelinePlaybackState & Ti
           setIsPlaying(false)
           return prev
         }
-        return prev + 1
+        return Math.min(maxIndex, prev + steps)
       })
     }
 
