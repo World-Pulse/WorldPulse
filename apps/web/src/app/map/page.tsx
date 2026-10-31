@@ -1386,8 +1386,10 @@ function MapView({ embed = false }: { embed?: boolean }) {
           animFrameRef.current = requestAnimationFrame(animatePulse)
           if (now - lastTickMs < 66) return
           lastTickMs = now
-          const pulseT = (now % 4000) / 4000      // one ripple every 4 s
-          const hlT    = (now / 1000) * 4.2       // gold ring breathes ~every 1.5 s
+          // (filmed in slow motion, ?slow=, the rings slow down too: sped back up they keep their pace, Oct 31, 2026)
+          const t = now / playSlow
+          const pulseT = (t % 4000) / 4000        // one ripple every 4 s
+          const hlT    = (t / 1000) * 4.2         // gold ring breathes ~every 1.5 s
           const r  = 8 + pulseT * 18
           const o  = 0.65 * (1 - pulseT)
           const hr = 16 + Math.sin(hlT) * 5

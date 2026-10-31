@@ -178,6 +178,8 @@ describe('a 30-second video, filmed in slow motion (Oct 31, 2026: "shorten the v
     expect(map).toContain('duration: 2400 * playSlow')
     expect(map).toContain('a.playbackRate = rate')
     expect(map).toContain('seconds={playLen ?? 60}')
+    // the map's rings (the critical ripple, the gold ring) keep their pace in the sped-up video
+    expect(map).toContain('const t = now / playSlow')
     expect(read('components/map/PlayOverlay.tsx')).toContain('IN {seconds} SECONDS')
   })
 })
