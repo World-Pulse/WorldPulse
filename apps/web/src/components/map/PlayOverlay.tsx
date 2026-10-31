@@ -32,6 +32,8 @@ interface PlayOverlayProps {
   day: PlayDayStats | null
   /** The day's most-reported stories for the closing card */
   topStories: PlayTopStory[]
+  /** The video's length for the title card ("THE WORLD IN 30 SECONDS"; ?len=, Oct 31, 2026) */
+  seconds?: number
 }
 
 /** Keyframes for the cards, the captions and the ripple at the story the camera visits (page.tsx) */
@@ -57,7 +59,7 @@ const Mark = ({ size = 15 }: { size?: number }) => (
  * What the video shows over the map while /map?play= plays (plan G9): a title card, the clock and the headline
  * of each moment during the replay, and the day's most-reported stories at the end
  */
-export function PlayOverlay({ phase, caption, timeLabel, dateLabel, progress, windowLabel, day, topStories }: PlayOverlayProps) {
+export function PlayOverlay({ phase, caption, timeLabel, dateLabel, progress, windowLabel, day, topStories, seconds = 60 }: PlayOverlayProps) {
   const sev = caption ? SEV_DOT[caption.severity] ?? '#8892a4' : '#8892a4'
   return (
     <>
@@ -99,7 +101,7 @@ export function PlayOverlay({ phase, caption, timeLabel, dateLabel, progress, wi
         style={{ background: 'radial-gradient(120% 75% at 50% 38%, #101a2e 0%, #070a12 62%, #05070d 100%)' }}>
         <span className="w-3 h-3 rounded-full bg-wp-amber wp-play-beat" />
         <div className="mt-5"><Mark size={14} /></div>
-        <h1 className="mt-6 font-display font-bold leading-[1.02] text-[34px] tracking-[1px]">THE WORLD<br />IN 60 SECONDS</h1>
+        <h1 className="mt-6 font-display font-bold leading-[1.02] text-[34px] tracking-[1px]">THE WORLD<br />IN {seconds} SECONDS</h1>
         {dateLabel && <div className="mt-4 font-mono text-[12px] tracking-[2px] text-wp-amber">{dateLabel}</div>}
         <p className="mt-5 text-[14px] leading-relaxed max-w-[300px] opacity-80">24 hours of world news on one map: every report, and the stories newsrooms confirmed.</p>
         {day && (

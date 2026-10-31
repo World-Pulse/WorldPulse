@@ -16,7 +16,7 @@ import HotspotLabels from '@/components/map/HotspotLabels'
 import { EnhancedHeatmap } from '@/components/map/EnhancedHeatmap'
 import { PlayOverlay, type PlayDayStats, type PlayTopStory } from '@/components/map/PlayOverlay'
 import { useTimelinePlayback } from '@/hooks/useTimelinePlayback'
-import { parsePlayParam, playStepMs, captionAt, playTimeLabel, playDateLabel, pickTourStop, tourCaption, PLAY_INTRO_MS, PLAY_OUTRO_MS, TOUR_EVERY_MS, type PlayPhase, type PlayCaption } from '@/lib/map-play'
+import { parsePlayParam, parsePlayLength, parsePlaySlow, playReplayMs, playStepMs, captionAt, playTimeLabel, playDateLabel, pickTourStop, tourCaption, PLAY_INTRO_MS, PLAY_OUTRO_MS, TOUR_EVERY_MS, type PlayPhase, type PlayCaption } from '@/lib/map-play'
 import { parseWindowHash, encodePermalink, type MapPermalinkState, type LayerKey } from '@/lib/map-permalink'
 import {
   Map as MapIcon, Moon, Satellite, Globe2, LocateFixed, Layers as LayersIcon,
@@ -409,6 +409,10 @@ function MapView({ embed = false }: { embed?: boolean }) {
   // A shared link's Replay is switched on after the first render (see the M10 effect)
   // /map?play=24h (G9): Replay plays once, alone on the screen, for a screen recording
   const [playRange] = useState(() => parsePlayParam(searchParams.get('play')))
+  // ?len=30: the whole video in 30 s, title card and closing card included (Oct 31, 2026); absent: a minute of replay
+  const [playLen] = useState(() => parsePlayLength(searchParams.get('len')))
+  // ?slow=20: the recorder films the play mode that many times slower, then speeds the video back up (Oct 31, 2026)
+  const [playSlow] = useState(() => parsePlaySlow(searchParams.get('slow')))
   const playMode = playRange !== null
   // An embedded map shows the map alone: no toolbar, panels or lists (G17)
   const bare = playMode || embed
@@ -3667,12 +3671,14 @@ function MapView({ embed = false }: { embed?: boolean }) {
     if (timeline.data.buckets.length === 0) return
     playStartedRef.current = true
     const buckets = timeline.data.buckets.length
+    // The recorder films from here, frame by frame on the page's clock (Oct 31, 2026): the title card's moment first
+    document.documentElement.dataset.playReady = '1'
     // (once, without a cleanup: a later render mustn't cancel the start)
     setTimeout(() => {
-      setPlayStep(playStepMs(buckets))
+      setPlayStep(playStepMs(buckets, playLen ? playReplayMs(playLen) : undefined, playSlow))
       setPlayPhase('play')
       timeline.togglePlay()
-    }, PLAY_INTRO_MS)
+    }, PLAY_INTRO_MS * playSlow)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playMode, timeline.loading, timeline.data, mapReady])
 
@@ -3680,6 +3686,16 @@ function MapView({ embed = false }: { embed?: boolean }) {
   useEffect(() => {
     if (playMode) document.documentElement.dataset.playPhase = playPhase
   }, [playMode, playPhase])
+
+  // ?slow: the cards' fades, the ripple and the beat (CSS animations) slow down with the rest
+  useEffect(() => {
+    if (!playMode || playSlow <= 1 || typeof document.getAnimations !== 'function') return
+    const rate = 1 / playSlow
+    const id = setInterval(() => {
+      for (const a of document.getAnimations()) if (a.playbackRate !== rate) a.playbackRate = rate
+    }, 40)
+    return () => clearInterval(id)
+  }, [playMode, playSlow])
 
   // The camera flies to the story of the moment every few seconds, with a ripple where it happened; the caption is
   // that story's headline, and no story is visited twice
@@ -3694,7 +3710,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
     if (!map) return
     const now = Date.now()
     const last = tourRef.current
-    if (last && now - last.at < TOUR_EVERY_MS) return
+    if (last && now - last.at < TOUR_EVERY_MS * playSlow) return
     const stop = pickTourStop(timeline.data.buckets, timeline.currentIndex, tourSeenRef.current, last)
     if (!stop) return
     tourRef.current = { at: now, id: stop.id, lat: stop.lat, lng: stop.lng }
@@ -3702,7 +3718,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
     setTourCaptionNow(tourCaption(stop))
     const canvas = map.getCanvas()
     const zoom = worldZoom(canvas.clientWidth, canvas.clientHeight, projectionRef.current) + 1.1
-    try { map.flyTo({ center: [stop.lng, stop.lat], zoom, duration: 2400, curve: 1.3, essential: true }) } catch { /* map busy */ }
+    try { map.flyTo({ center: [stop.lng, stop.lat], zoom, duration: 2400 * playSlow, curve: 1.3, essential: true }) } catch { /* map busy */ }
     const color = ({ critical: '#ff3b5c', high: '#ff9f43', medium: '#f5a623', low: '#00d4aa' } as Record<string, string>)[stop.severity] ?? '#f5a623'
     void (async () => {
       const { default: ml } = await import('maplibre-gl')
@@ -3735,7 +3751,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
       // layer, and the video lost the closing card (Oct 30, 2026)
       map.jumpTo({ center: [map.getCenter().lng, 22], zoom: worldZoom(canvas.clientWidth, canvas.clientHeight, projectionRef.current) })
     } catch { /* map busy */ }
-    setTimeout(() => { document.documentElement.dataset.playDone = '1' }, PLAY_OUTRO_MS)
+    setTimeout(() => { document.documentElement.dataset.playDone = '1' }, PLAY_OUTRO_MS * playSlow)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playMode, playPhase, timeline.isPlaying, timeline.currentIndex, timeline.data])
 
@@ -4547,6 +4563,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
             windowLabel={`LAST ${timelineRange.toUpperCase()}`}
             day={playDay}
             topStories={playTop}
+            seconds={playLen ?? 60}
           />
         )}
 

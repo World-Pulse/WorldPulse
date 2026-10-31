@@ -30,10 +30,10 @@ export function parsePlayParam(value: string | null): string | null {
   return (PLAY_RANGES as readonly string[]).includes(value) ? value : null
 }
 
-/** How long each step lasts so the whole window plays in about a minute */
-export function playStepMs(bucketCount: number): number {
-  if (bucketCount <= 0) return MAX_STEP_MS
-  return Math.min(MAX_STEP_MS, Math.max(MIN_STEP_MS, Math.round(PLAY_TOTAL_MS / bucketCount)))
+/** How long each step lasts so the whole window plays in about a minute (or in `totalMs`), `slow` times slower */
+export function playStepMs(bucketCount: number, totalMs: number = PLAY_TOTAL_MS, slow = 1): number {
+  if (bucketCount <= 0) return MAX_STEP_MS * slow
+  return Math.min(MAX_STEP_MS * slow, Math.max(MIN_STEP_MS * slow, Math.round((totalMs * slow) / bucketCount)))
 }
 
 /**
@@ -94,6 +94,32 @@ export const PLAY_INTRO_MS = 2_800
 export const PLAY_OUTRO_MS = 6_000
 /** The camera flies to a new story at most this often */
 export const TOUR_EVERY_MS = 4_500
+
+/**
+ * The video's length in seconds (Oct 31, 2026; Devon: "shorten the video ... to 30 seconds so the quality is
+ * higher and crisp drawing more attention"): ?len=30 plays the day in what the title card and the closing card
+ * leave of 30 s. Absent or out of range (15 to 120): null, the minute of replay as before
+ */
+export function parsePlayLength(value: string | null): number | null {
+  if (value === null || value.trim() === '') return null
+  const n = Number(value)
+  return Number.isInteger(n) && n >= 15 && n <= 120 ? n : null
+}
+
+/** The replay's own length in a video of `lengthSec` seconds: what the title card and the closing card leave, 10 s at least */
+export function playReplayMs(lengthSec: number): number {
+  return Math.max(10_000, lengthSec * 1000 - PLAY_INTRO_MS - PLAY_OUTRO_MS)
+}
+
+/**
+ * ?slow=20: everything in play mode (the replay, the title and closing cards, the camera's flights, the cards'
+ * animations) runs that many times slower, for the recorder (Oct 31, 2026). The server draws the map in software
+ * at 2 or 3 frames a second; filmed 20 times slower and sped back up, the video plays smoothly. 1 to 40, else 1
+ */
+export function parsePlaySlow(value: string | null): number {
+  const n = Number(value)
+  return Number.isInteger(n) && n >= 1 && n <= 40 ? n : 1
+}
 /** How many moments back the camera looks for its next story */
 const TOUR_LOOKBACK = 6
 /**

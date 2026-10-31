@@ -370,8 +370,8 @@ services:
     entrypoint: /bin/sh -c 'trap exit TERM; while :; do certbot renew --quiet --webroot -w /var/www/certbot || true; sleep 12h & wait $${!}; done'
     logging: *default-logging
 
-  # ─── "THE WORLD IN 60 SECONDS" (plan G9, slice 2; Devon, Oct 21, 2026: "Yes,
-  # once a night") ───────────────────────────────────────────────────────────
+  # ─── "THE WORLD IN 30 SECONDS" (plan G9, slice 2; Devon, Oct 21, 2026: "Yes,
+  # once a night"; 60 seconds until Oct 31) ───────────────────────────────────
   # Records the World Map's play mode at 5:30 AM New York time each day as a
   # 720 × 1280 MP4: https://world-pulse.io/uploads/video/world-in-60s-<date>.mp4
   # (infrastructure/recorder). Since Oct 30, 2026 a deploy starts it when it isn't running
@@ -385,7 +385,8 @@ services:
     restart: unless-stopped
     environment:
       TZ: America/New_York
-      RECORD_URL: https://world-pulse.io/map?play=24h&frame=vertical&utm_source=video
+      # (len=30: the 30-second video, Oct 31, 2026; the recorder adds slow=, its slow motion)
+      RECORD_URL: https://world-pulse.io/map?play=24h&frame=vertical&len=30&utm_source=video
       RECORD_AT: "05:30"
       KEEP_DAYS: "14"
       OUT_DIR: /out/video

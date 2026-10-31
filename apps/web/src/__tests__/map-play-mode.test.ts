@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { pickTourStop, playCounts, playDateLabel, tourCaption, distanceKm, playbackAdvance, playStepMs, PLAY_TOTAL_MS, TOUR_MIN_HOP_KM, type TourSignal } from '../lib/map-play'
+import { pickTourStop, playCounts, playDateLabel, tourCaption, distanceKm, playbackAdvance, playStepMs, parsePlayLength, parsePlaySlow, playReplayMs, PLAY_TOTAL_MS, PLAY_INTRO_MS, PLAY_OUTRO_MS, TOUR_MIN_HOP_KM, type TourSignal } from '../lib/map-play'
 
 const read = (p: string) => readFileSync(join(__dirname, '..', p), 'utf8')
 const zOf = (src: string, marker: RegExp) => Number(marker.exec(src)?.[1] ?? NaN)
@@ -97,10 +97,11 @@ describe('the video, round 2 (Oct 30, 2026: the camera sat on Indonesia, caption
     const rec = read('../../../infrastructure/recorder/record.mjs')
     expect(rec).toContain("dataset.playPhase === 'play'")
     expect(rec).toContain('page.waitForTimeout(TAIL_MS)')
-    // a page without its stylesheets, or a replay that never begins, is not saved; the morning run tries once more
+    // a page without its stylesheets, or a replay that never begins, is not saved; the morning run tries once more,
+    // filmed live (Oct 31, 2026: slow motion first)
     expect(rec).toContain('document.styleSheets')
     expect(rec).toContain("the replay didn't begin within")
-    expect(rec).toContain('trying again in')
+    expect(rec).toContain('trying again live in')
     // a deploy clears the pages nginx kept from the old build, whose scripts are gone
     expect(read('../../../scripts/server-deploy.sh')).toContain("find /var/cache/nginx/pages -type f -delete")
     expect(read('components/map/PlayOverlay.tsx')).toContain('wp-play-beat" /></div>')
@@ -137,5 +138,46 @@ describe('the replay keeps its length on a slow machine (Oct 31, 2026: the 5:30 
     let t = 0, index = 0
     while (index < buckets - 1) { t += 1_000; index++ }
     expect(t).toBeGreaterThan(1.5 * PLAY_TOTAL_MS)
+  })
+})
+
+describe('a 30-second video, filmed in slow motion (Oct 31, 2026: "shorten the video go 30 seconds so the quality is higher and crisp")', () => {
+  it('reads ?len= from 15 to 120 seconds, and nothing else', () => {
+    expect(parsePlayLength('30')).toBe(30)
+    expect(parsePlayLength(null)).toBeNull()
+    expect(parsePlayLength('')).toBeNull()
+    expect(parsePlayLength('5')).toBeNull()
+    expect(parsePlayLength('30.5')).toBeNull()
+    expect(parsePlayLength('600')).toBeNull()
+  })
+  it('gives the replay what the title card and the closing card leave of the length', () => {
+    expect(playReplayMs(30)).toBe(30_000 - PLAY_INTRO_MS - PLAY_OUTRO_MS)
+    expect(PLAY_INTRO_MS + playReplayMs(30) + PLAY_OUTRO_MS).toBe(30_000)
+    expect(playReplayMs(15)).toBe(10_000)
+  })
+  it('reads ?slow= from 1 to 40, else 1', () => {
+    expect(parsePlaySlow('30')).toBe(30)
+    expect(parsePlaySlow(null)).toBe(1)
+    expect(parsePlaySlow('0')).toBe(1)
+    expect(parsePlaySlow('2.5')).toBe(1)
+    expect(parsePlaySlow('99')).toBe(1)
+  })
+  it('slows each step by the same factor, its limits too', () => {
+    expect(playStepMs(96, playReplayMs(30))).toBe(Math.round(playReplayMs(30) / 96))
+    expect(playStepMs(96, playReplayMs(30), 30)).toBe(Math.round((playReplayMs(30) * 30) / 96))
+    // 24 hourly steps of a 60 s replay hit the 3 s cap; 30 times slower, the cap is 90 s
+    expect(playStepMs(24, 120_000, 30)).toBe(90_000)
+    expect(playStepMs(24, PLAY_TOTAL_MS, 30)).toBe(75_000)
+  })
+  it('slows every timer of the play mode, says when it is ready, and titles the card with the length', () => {
+    const map = read('app/map/page.tsx')
+    expect(map).toContain("document.documentElement.dataset.playReady = '1'")
+    expect(map).toContain('PLAY_INTRO_MS * playSlow')
+    expect(map).toContain('PLAY_OUTRO_MS * playSlow')
+    expect(map).toContain('TOUR_EVERY_MS * playSlow')
+    expect(map).toContain('duration: 2400 * playSlow')
+    expect(map).toContain('a.playbackRate = rate')
+    expect(map).toContain('seconds={playLen ?? 60}')
+    expect(read('components/map/PlayOverlay.tsx')).toContain('IN {seconds} SECONDS')
   })
 })
