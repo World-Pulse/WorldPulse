@@ -67,6 +67,16 @@ const GERMAN: Rule[] = [
   r('pekings?', 'Beijing'), r('kiews?', 'Kyiv'), r('warschaus?', 'Warsaw'), r('prags?', 'Prague'),
   r('belgrads?', 'Belgrade'), r('roms?', 'Rome'), r('athens?', 'Athens'), r('wei(?:ss|ß)e[ns]?\\s+haus(?:es)?', 'White House'),
   r('kreml', 'Kremlin'),
+  // adjectives, as English "Russian" or "Chinese" count ("nordkoreanische Hacker", "russische Drohnen")
+  r('russische[nrsm]?', 'Russian'), r('ukrainische[nrsm]?', 'Ukrainian'), r('amerikanische[nrsm]?', 'United States'),
+  r('chinesische[nrsm]?', 'Chinese'), r('nordkoreanische[nrsm]?', 'North Korea'), r('s[üu]dkoreanische[nrsm]?', 'South Korea'),
+  r('israelische[nrsm]?', 'Israeli'), r('iranische[nrsm]?', 'Iranian'), r('t[üu]rkische[nrsm]?', 'Turkish'),
+  r('franz[öo]sische[nrsm]?', 'French'), r('italienische[nrsm]?', 'Italian'), r('britische[nrsm]?', 'United Kingdom'),
+  r('japanische[nrsm]?', 'Japanese'), r('indische[nrsm]?', 'Indian'), r('ungarische[nrsm]?', 'Hungary'),
+  r('tschechische[nrsm]?', 'Czech'), r('slowenische[nrsm]?', 'Slovenian'), r('kroatische[nrsm]?', 'Croatian'),
+  r('serbische[nrsm]?', 'Serbian'), r('schweizer(?:ische[nrsm]?)?', 'Swiss'), r('syrische[nrsm]?', 'Syrian'),
+  r('pal[äa]stinensische[nrsm]?', 'Palestinian'), r('griechische[nrsm]?', 'Greece'), r('rum[äa]nische[nrsm]?', 'Romanian'),
+  r('deutsche[nrsm]?', 'German'), r('[öo]sterreichische[nrsm]?', 'Austria'),
 ]
 
 const ITALIAN: Rule[] = [
@@ -146,6 +156,10 @@ const ROMANIAN: Rule[] = [
   r('chi[șşs]in[ăa]u(?:lui)?', 'Chisinau'), r('tiraspol(?:ul|ului)', 'Tiraspol'), r('bucure[șşs]ti(?:ului)?', 'Bucharest'), r('moscova', 'Moscow'),
   r('bruxelles', 'Brussels'), r('londra', 'London'), r('kiev(?:ul|ului)?', 'Kyiv'), r('casa\\s+alb[ăa]', 'White House'),
   r('kremlin(?:ul|ului)', 'Kremlin'),
+  r('rus(?:ă|a|esc|ească|easca|ești|eşti|esti|ii|ilor)', 'Russian'), r('ucrainean(?:ă|a|ul|ului|ii|ilor|ca|e)?', 'Ukrainian'),
+  r('american(?:ă|a|ul|ului|ii|ilor|ca|e)?', 'United States'), r('chinez(?:ă|a|ul|ii|e|esc|ească)?', 'Chinese'),
+  r('israelian(?:ă|a|ul|ii|e)?', 'Israeli'), r('turc(?:ă|a|ul|ii|e|esc|ească)?', 'Turkish'),
+  r('francez(?:ă|a|ul|ii|e)?', 'French'), r('britanic(?:ă|a|ul|ii|e)?', 'United Kingdom'),
   mask('usa'),
 ]
 
@@ -158,9 +172,9 @@ const SLOVENE: Rule[] = [
   r('slovenij[aeio]', 'Slovenia'), r('hrva[šs]k[aeio]', 'Croatia'), r('avstrij[aeio]', 'Austria'),
   r('italij[aeio]', 'Italy'), r('mad[žz]arsk[aeio]', 'Hungary'), r('nem[čc]ij[aeio]', 'Germany'),
   r('francij[aeio]', 'France'), r('[šs]panij[aeio]', 'Spain'), r('rusij[aeio]', 'Russia'), r('ukrajin[aeio]', 'Ukraine'),
-  r('kitajsk[aeio]', 'China'), r('japonsk[aeio]', 'Japan'), r('srbij[aeio]', 'Serbia'), r('albanij[aeio]', 'Albania'),
+  r('kitajsk(?:a|e|i|o|ega|emu|em|im|ih|imi|ima)', 'China'), r('japonsk[aeio]', 'Japan'), r('srbij[aeio]', 'Serbia'), r('albanij[aeio]', 'Albania'),
   r('gr[čc]ij[aeio]', 'Greece'), r('tur[čc]ij[aeio]', 'Turkey'), r('izrael(?:a|u|om)?', 'Israel'),
-  r('poljsk[aeio]', 'Poland'), r('[čc]e[šs]k[aeio]', 'Czechia'), r('slova[šs]k[aeio]', 'Slovakia'),
+  r('poljsk(?:a|e|i|o|em)', 'Poland'), r('var[šs]av[aeio]', 'Warsaw'), r('[čc]e[šs]k[aeio]', 'Czechia'), r('slova[šs]k[aeio]', 'Slovakia'),
   r('romunij[aeio]', 'Romania'), r('bolgarij[aeio]', 'Bulgaria'), r('[šs]vic[aeio]', 'Switzerland'),
   r('belgij[aeio]', 'Belgium'), r('nizozemsk[aeio]', 'Netherlands'), r('[šs]vedsk[aeio]', 'Sweden'),
   r('norve[šs]k[aeio]', 'Norway'), r('kanad[aeio]', 'Canada'), r('mehik[aeio]', 'Mexico'),
@@ -173,6 +187,11 @@ const SLOVENE: Rule[] = [
   r('beograd(?:u|a)?', 'Belgrade'), r('bruselj|brusl(?:ju|ja)', 'Brussels'), r('moskv[aeio]', 'Moscow'),
   r('kijev(?:u|a)?', 'Kyiv'), r('peking(?:u|a)', 'Beijing'), r('bel[aeio]\\s+hi[šs][aeio]', 'White House'),
   r('kremelj|kremlj[aeu]', 'Kremlin'),
+  r('rusk(?:i|a|o|e|ega|emu|em|im|ih|imi|ima)', 'Russian'), r('ukrajinsk(?:i|a|o|e|ega|emu|em|im|ih|imi|ima)', 'Ukrainian'),
+  r('ameri[šs]k(?:i|a|o|e|ega|emu|em|im|ih|imi|ima)', 'United States'), r('izraelsk(?:i|a|o|e|ega|emu|em|im|ih|imi|ima)', 'Israeli'),
+  r('nem[šs]k(?:i|a|o|e|ega|emu|em|im|ih|imi|ima)', 'German'), r('italijansk(?:i|a|o|e|ega|emu|em|im|ih|imi|ima)', 'Italian'),
+  r('francosk(?:i|a|o|e|ega|emu|em|im|ih|imi|ima)', 'French'), r('britansk(?:i|a|o|e|ega|emu|em|im|ih|imi|ima)', 'United Kingdom'),
+  r('srbsk(?:i|a|o|e|ega|emu|em|im|ih|imi|ima)', 'Serbian'),
   r('mali', '…'),
 ]
 
@@ -183,9 +202,9 @@ const MONTENEGRIN: Rule[] = [
   r('velik(?:a|e|oj|u)\\s+britanij(?:a|e|i|u)', 'United Kingdom'),
   r('(?:sjevern(?:a|e|oj|u)\\s+)?makedonij(?:a|e|i|u|om)', 'North Macedonia'),
   r('srbij(?:a|e|i|u|om)', 'Serbia'), r('hrvatsk(?:a|e|oj|u|om)', 'Croatia'), r('albanij(?:a|e|i|u|om)', 'Albania'),
-  r('kosov(?:a|u|om)', 'Kosovo'), r('njema[čc]k(?:a|e|oj|u|om)', 'Germany'), r('francusk(?:a|e|oj|u|om)', 'France'),
+  r('kosov(?:a|u|om)', 'Kosovo'), r('njema[čc]k(?:a|e|i|o|oj|u|om|og|oga|ih|im|ima)', 'Germany'), r('francusk(?:a|e|oj|u|om)', 'France'),
   r('italij(?:a|e|i|u|om)', 'Italy'), r('rusij(?:a|e|i|u|om)', 'Russia'), r('ukrajin(?:a|e|i|u|om)', 'Ukraine'),
-  cs('Kin(?:a|e|i|u|om)', 'China'), r('tursk(?:a|e|oj|u|om)', 'Turkey'), r('gr[čc]k(?:a|e|oj|u|om)', 'Greece'),
+  cs('Kin(?:a|e|i|u|om)', 'China'), r('tursk(?:a|e|i|o|oj|u|om|og|oga|ih|im|ima)', 'Turkey'), r('gr[čc]k(?:a|e|oj|u|om)', 'Greece'),
   r('austrij(?:a|e|i|u|om)', 'Austria'), r('ma[đd]arsk(?:a|e|oj|u|om)', 'Hungary'), r('slovenij(?:a|e|i|u|om)', 'Slovenia'),
   r('izrael(?:a|u|om)?', 'Israel'), r('poljsk(?:a|e|oj|u|om)', 'Poland'), r('[čc]e[šs]k(?:a|e|oj|u|om)', 'Czechia'),
   r('slova[čc]k(?:a|e|oj|u|om)', 'Slovakia'), r('rumunij(?:a|e|i|u|om)', 'Romania'), r('bugarsk(?:a|e|oj|u|om)', 'Bulgaria'),
@@ -201,6 +220,9 @@ const MONTENEGRIN: Rule[] = [
   r('pri[šs]tin(?:a|e|i|u|om)', 'Pristina'), r('brisel(?:a|u|om)?', 'Brussels'), r('moskv(?:a|e|i|u|om)', 'Moscow'),
   r('va[šs]ington(?:a|u|om)?', 'Washington'), r('kijev(?:a|u|om)?', 'Kyiv'), r('peking(?:a|u|om)', 'Beijing'),
   r('bijel(?:a|e|oj|u)\\s+ku[ćc](?:a|e|i|u)', 'White House'), r('kremlj(?:a|u|om)?', 'Kremlin'),
+  r('rusk(?:i|a|o|e|og|oga|om|omu|oj|u|ih|im|ima)', 'Russian'), r('ukrajinsk(?:i|a|o|e|og|oga|om|omu|oj|u|ih|im|ima)', 'Ukrainian'),
+  r('ameri[čc]k(?:i|a|o|e|og|oga|om|omu|oj|u|ih|im|ima)', 'United States'), r('kinesk(?:i|a|o|e|og|oga|om|omu|oj|u|ih|im|ima)', 'Chinese'),
+  r('izraelsk(?:i|a|o|e|og|oga|om|omu|oj|u|ih|im|ima)', 'Israeli'),
   r('mali', '…'),
 ]
 
@@ -227,6 +249,9 @@ const ALBANIAN: Rule[] = [
   r('tiran(?:a|[ëe]s?|[ëe]n)', 'Tirana'), r('beograd(?:i|it|in)?', 'Belgrade'), r('shkup(?:i|it|in)?', 'Skopje'),
   r('bruksel(?:i|it|in)?', 'Brussels'), r('mosk(?:va|[ëe]s?|[ëe]n)', 'Moscow'), r('uashington(?:i|it|in)?', 'Washington'),
   r('sht[ëe]pi(?:a|s[ëe])?\\s+e\\s+bardh[ëe]', 'White House'), r('kreml(?:in)?(?:i|it)?', 'Kremlin'),
+  r('kanad(?:a|aja|as[ëe]|an[ëe])', 'Canada'), r('ruse|rus[ëe]t|rus[ëe]ve', 'Russian'),
+  r('amerikan(?:e|[ëe]t|[ëe]ve|i|it)?', 'United States'), r('kinez(?:e|[ëe]t|[ëe]ve|i|it)?', 'Chinese'),
+  r('ukrainas(?:e|i|it)?', 'Ukrainian'), r('izraelit(?:e|[ëe]t|[ëe]ve|i)?', 'Israeli'), r('gjerman(?:e|[ëe]t|[ëe]ve|i|it)?', 'German'),
   r('mali', '…'),
 ]
 

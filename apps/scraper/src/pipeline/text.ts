@@ -139,6 +139,15 @@ const FEED_FOOTERS: Array<[RegExp, string]> = [
   [/\s*\bL[’']article\s.{1,400}?\sest apparu en premier sur\s[^.\n]{1,120}\.?/gi, ''],
   [/\s*\bLa entrada\s.{1,400}?\sse public[oó] primero en\s[^.\n]{1,120}\.?/gi, ''],
   [/\s*\bO post\s.{1,400}?\sapareceu primeiro em\s[^.\n]{1,120}\.?/gi, ''],
+  // ...and in the languages added on Oct 31, 2026 (round 6): German, Italian, Dutch, Danish, Catalan, Romanian, Slovene, Albanian
+  [/\s*\bDer Beitrag\s.{1,400}?\serschien zuerst auf\s[^.\n]{1,120}\.?/gi, ''],
+  [/\s*\bL[’']articolo\s.{1,400}?\s(?:proviene da|sembra essere il primo su)\s[^.\n]{1,120}\.?/gi, ''],
+  [/\s*\bHet bericht\s.{1,400}?\sverscheen eerst op\s[^.\n]{1,120}\.?/gi, ''],
+  [/\s*\bIndlægget\s.{1,400}?\sblev vist første gang på\s[^.\n]{1,120}\.?/gi, ''],
+  [/\s*\bL[’']entrada\s.{1,400}?\sha aparegut primer a\s[^.\n]{1,120}\.?/gi, ''],
+  [/\s*\bArticolul\s.{1,400}?\sapare prima dat[ăa] [îi]n\s[^.\n]{1,120}\.?/gi, ''],
+  [/\s*\bPrispevek\s.{1,400}?\sse je najprej pojavil na\s[^.\n]{1,120}\.?/gi, ''],
+  [/\s*\bPostimi\s.{1,400}?\su shfaq s[ëe] pari n[ëe]\s[^.\n]{1,120}\.?/gi, ''],
   // Radio Ndeke Luka's language switch (French, Sango) at the start of its summaries
   [/^\s*Fr\s*:\s*Sa\s*:\s*/i, ''],
 ]

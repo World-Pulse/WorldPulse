@@ -77,6 +77,22 @@ describe('cleanSummary (feed footers, Oct 11, 2026)', () => {
     const html = '<p>Prime Minister James Marape opened the 32nd forum in Port Moresby.</p><div class="woocommerce"><div class="woocommerce-info wc-memberships-restriction-message">To access this post, you must purchase <span><a href="https://www.postcourier.com.pg/product/web/">Web</a>, <a href="https://www.postcourier.com.pg/product/web/?attribute_duration=One-Day">Web &#8211; One-Day</a>, <a href="https://www.postcourier.com.pg/product/web/?attribute_duration=Weekly">Web &#8211; Weekly</a> or <a href="https://www.postcourier.com.pg/product/web-ebook/">Web &amp; eBook &#8211; Annual</a></span>.</div></div><p>The post <a href="https://www.postcourier.com.pg/x/">Prime Minister Marape opens forum</a> appeared first on <a href="https://www.postcourier.com.pg">Post Courier</a>.</p>'
     expect(cleanSummary(feedText(html))).toBe('Prime Minister James Marape opened the 32nd forum in Port Moresby.')
   })
+
+  it('takes out WordPress footers in the languages added in round 6 (Oct 31, 2026)', async () => {
+    const { cleanSummary } = await import('../text')
+    const cases: Array<[string, string]> = [
+      ['Der Beitrag Brand in Wien erschien zuerst auf Kurier.', 'de'],
+      ["L'articolo Incendio a Rimini proviene da San Marino RTV.", 'it'],
+      ["L’articolo Incendio a Rimini sembra essere il primo su Libertas.", 'it'],
+      ['Het bericht Brand in Paramaribo verscheen eerst op Suriname Herald.', 'nl'],
+      ['Indlægget Brand i Nuuk blev vist første gang på Sermitsiaq.', 'da'],
+      ["L'entrada Incendi a Andorra ha aparegut primer a Altaveu.", 'ca'],
+      ['Articolul Incendiu la Chișinău apare prima dată în Ziarul de Gardă.', 'ro'],
+      ['Prispevek Požar v Mariboru se je najprej pojavil na Večer.', 'sl'],
+      ['Postimi Zjarr në Prishtinë u shfaq së pari në Koha.', 'sq'],
+    ]
+    for (const [footer, language] of cases) expect(cleanSummary(`Firefighters came at dawn. ${footer}`), language).toBe('Firefighters came at dawn.')
+  })
 })
 
 describe('summaryWithoutNotes (the outlet note, Oct 11, 2026)', () => {

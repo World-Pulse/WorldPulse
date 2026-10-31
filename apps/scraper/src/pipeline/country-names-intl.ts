@@ -1,7 +1,8 @@
 /**
  * Country names in French, Spanish and Portuguese (Oct 21, 2026).
  *
- * The reader takes feeds in four languages (en, es, pt, fr), but the
+ * The reader took feeds in four languages (en, es, pt, fr; ten more since Oct 31, 2026, whose names
+ * are in local-names.ts), but the
  * place-finder knew countries by their English names only, so a French
  * headline about "l'Algérie", "le Maroc" or "le Sénégal" named no country:
  * a probe of 119 such names found 91 that matched nothing ("Égypte",

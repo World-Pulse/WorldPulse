@@ -7,7 +7,7 @@ import { describe, it, expect, vi } from 'vitest'
 
 vi.mock('../../lib/redis', () => ({ redis: {} }))
 
-const { inferGeo } = await import('../news-rss')
+const { inferGeo, NEWS_SOURCE_REGISTRY, HOME_PIN_SOURCES } = await import('../news-rss')
 const { mentionedCountries } = await import('../../pipeline/geo')
 const { LOCAL_NAMES, withLocalNames } = await import('../../pipeline/local-names')
 
@@ -122,6 +122,14 @@ describe('place names in the languages added in round 6', () => {
   })
 })
 
+describe("a feed's footer is not the story", () => {
+  it("reads the place in the story, not in WordPress's \"appeared first on <outlet>\"", async () => {
+    const { cleanSummary } = await import('../../pipeline/text')
+    const summary = 'The pope calls on states to ban lethal autonomous weapons. The post AI and Autonomous Weapons appeared first on BENIN WEB TV .'
+    expect(inferGeo('AI and Autonomous Weapons: Léon XIV Draws a Red Line', cleanSummary(summary), outlet('en', 'BJ')).countryCode).toBeNull()
+  })
+})
+
 describe('words that only look like a place', () => {
   const cases: Array<[string, string]> = [
     ['Il governo usa i fondi per i mali della sanità', 'it'],
@@ -149,5 +157,36 @@ describe('words that only look like a place', () => {
     expect(placed('Golpe di stato in Mali', 'it', 'SM').countryCode).toBe('ML')
     expect(placed('Gli USA rispondono', 'it', 'SM').countryCode).toBe('US')
     expect(placed('Modi incontra Meloni', 'it', 'SM').countryCode).toBe('IN')
+  })
+})
+
+describe("round 6's feeds", () => {
+  it('reads every feed in a language whose place names the place-finder knows', () => {
+    const known = new Set(['en', 'fr', 'es', 'pt', ...Object.keys(LOCAL_NAMES)])
+    for (const src of NEWS_SOURCE_REGISTRY) expect(known.has(src.language), `${src.id}: ${src.language}`).toBe(true)
+  })
+
+  it('gives the 11 countries that had no outlet and one in their own language that outlet, at home', () => {
+    const own: Record<string, string> = { AT: 'kurier-at', SI: 'rtv-slo-slovenija', MD: 'zdg-md', ME: 'rtnk-me', XK: 'lajmi-net-xk',
+      AD: 'el-periodic-andorra', SM: 'san-marino-rtv', SR: 'de-ware-tijd-sr' }
+    for (const [code, id] of Object.entries(own)) {
+      const src = NEWS_SOURCE_REGISTRY.find(s => s.id === id)
+      expect(src?.countryCode, id).toBe(code)
+      expect(HOME_PIN_SOURCES.has(id), id).toBe(true)
+    }
+    // and an English outlet for the countries that had none at all and publish in English
+    for (const code of ['AT', 'KN', 'MH', 'SC', 'MD', 'XK']) {
+      expect(NEWS_SOURCE_REGISTRY.some(s => s.countryCode === code && s.language === 'en'), code).toBe(true)
+    }
+  })
+
+  it('pins a national outlet\'s story in its own language where it names its place', () => {
+    const src = (id: string) => NEWS_SOURCE_REGISTRY.find(s => s.id === id)!
+    expect(inferGeo('Štajerska avtocesta proti Mariboru tudi po drugi nesreči ponovno odprta', '', src('rtv-slo-slovenija'))).toMatchObject({ locationName: 'Maribor', countryCode: 'SI' })
+    expect(inferGeo('Proteste masive în Italia: Mii de oameni au ieșit în stradă', '', src('tv8-md')).countryCode).toBe('IT')
+    expect(inferGeo('Radunović u posjeti Beranama: U fokusu prostorno planiranje', '', src('aktuelno-me'))).toMatchObject({ locationName: 'Berane', countryCode: 'ME' })
+    expect(inferGeo('Çeku zhvillon takime me prindër në Pejë dhe Gjakovë', '', src('lajmi-net-xk'))).toMatchObject({ locationName: 'Peja', countryCode: 'XK' })
+    expect(inferGeo('Krakers Sunny Point blok 2 doen beklag over intimidatie', '', src('de-ware-tijd-sr'))).toMatchObject({ locationName: 'Paramaribo, Suriname', countryCode: 'SR' })
+    expect(inferGeo('6,3 Milliarden Dollar weg: Wie nordkoreanische Hacker die Kryptobörse bestahlen', '', src('kurier-at')).countryCode).toBe('KP')
   })
 })
