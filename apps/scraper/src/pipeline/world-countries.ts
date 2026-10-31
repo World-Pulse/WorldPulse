@@ -11,7 +11,7 @@
  * "Jordan" and "Chad" (first names; "in Chad" only when no surname follows,
  * so "in Chad Daybell's trial" is not the country), "Guinea pig", "Benin City" and the
  * "Niger Delta" (both in Nigeria), "Polish", "Spanish" and "Portuguese"
- * (also languages or verbs), "Houthi" (their attacks are often elsewhere).
+ * (also languages or verbs: they count only before a word like "president" or "government", Oct 31, 2026), "Houthi" (their attacks are often elsewhere).
  */
 
 export interface CountryEntry {
@@ -59,14 +59,14 @@ export const MORE_COUNTRIES: CountryEntry[] = [
   c('NL', 'Netherlands', /\b(?:netherlands|dutch|holland)\b/i, 'Amsterdam', 52.37, 4.90),
   c('MK', 'North Macedonia', /\b(?:north macedonia|macedonia|macedonian)\b/i, 'Skopje', 42.00, 21.43),
   c('NO', 'Norway', /\b(?:norway|norwegian)\b/i, 'Oslo', 59.91, 10.75),
-  c('PL', 'Poland', /\bpoland\b/i, 'Warsaw', 52.23, 21.01),
-  c('PT', 'Portugal', /\bportugal\b/i, 'Lisbon', 38.72, -9.14),
+  c('PL', 'Poland', /\b(?:poland\b|polish(?=\s+(?:president|prime\s+minister|premier|government|parliament|lawmakers?|minister|ministry|senate|supreme\s+court|constitutional\s+(?:court|tribunal)|opposition|election|elections|voters|police|army|military|troops|authorities|border|airspace|economy|central\s+bank)))/i, 'Warsaw', 52.23, 21.01),
+  c('PT', 'Portugal', /\b(?:portugal\b|portuguese(?=\s+(?:president|prime\s+minister|premier|government|parliament|lawmakers?|minister|ministry|senate|supreme\s+court|constitutional\s+(?:court|tribunal)|opposition|election|elections|voters|police|army|military|troops|authorities|border|airspace|economy|central\s+bank)))/i, 'Lisbon', 38.72, -9.14),
   c('RO', 'Romania', /\b(?:romania|romanian)\b/i, 'Bucharest', 44.43, 26.10),
   c('SM', 'San Marino', /\bsan marino\b/i, 'San Marino', 43.94, 12.45),
   c('RS', 'Serbia', /\b(?:serbia|serbian)\b/i, 'Belgrade', 44.79, 20.45),
   c('SK', 'Slovakia', /\b(?:slovakia|slovak)\b/i, 'Bratislava', 48.15, 17.11),
   c('SI', 'Slovenia', /\b(?:slovenia|slovenian|slovene)\b/i, 'Ljubljana', 46.06, 14.51),
-  c('ES', 'Spain', /\bspain\b/i, 'Madrid', 40.42, -3.70),
+  c('ES', 'Spain', /\b(?:spain\b|spanish(?=\s+(?:president|prime\s+minister|premier|government|parliament|lawmakers?|minister|ministry|senate|supreme\s+court|constitutional\s+(?:court|tribunal)|opposition|election|elections|voters|police|army|military|troops|authorities|border|airspace|economy|central\s+bank)))/i, 'Madrid', 40.42, -3.70),
   c('SE', 'Sweden', /\b(?:sweden|swedish)\b/i, 'Stockholm', 59.33, 18.07),
   c('CH', 'Switzerland', /\b(?:switzerland|swiss)\b/i, 'Bern', 46.95, 7.45),
   c('VA', 'Vatican City', /\b(?:vatican|holy see)\b/i, 'Vatican City', 41.90, 12.45),
