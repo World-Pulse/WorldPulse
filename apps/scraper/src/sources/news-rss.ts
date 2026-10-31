@@ -8368,9 +8368,9 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   // personal use only (The Bruneian's terms). Greenland's have a dead feed (KNR, last item 2017),
   // allow private use only (Sermitsiaq.AG) or reserve their texts against data mining (Altinget
   // Arktis). So both are read through their governments' press offices, as state media, the way
-  // Micronesia and Seychelles are. Not added: Liechtenstein's government sends its releases out
-  // through presseportal.ch, whose terms ask for an application before any automated use, and
-  // its own feed (llv.li) turns us away; Nauru has no newsroom with a feed.
+  // Micronesia and Seychelles are. Liechtenstein's papers have no feed or bar reuse, so it is read
+  // through its government's releases too (below). Nauru has no newsroom with a feed: a regional
+  // newsroom's Nauru tag (Islands Business), slow, is all there is.
   // The Prime Minister's Office of Brunei: its News section, in English (the whole feed adds the sultan's speeches in Malay and tender notices); about 10 a month (its newest was 8 days old on the check, past round 7's 7-day rule, kept because nothing else covers Brunei, as with Tuvalu); its site's only notice is "Copyright Government of Brunei Darussalam"
   {
     id:              'pmo-brunei',
@@ -8400,6 +8400,36 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLocation: 'Nuuk, Greenland',
     extraTags:       ['greenland', 'arctic', 'nordics', 'government', 'state-media'],
     language:        'da',
+  },
+  // The Government of Liechtenstein's releases (its information office, Vaduz), sent out through presseportal.ch (news aktuell), about 45 a month, in German. presseportal's terms ask a website that takes the releases in automatically to apply for a key first; Devon, Oct 31, 1:40 PM: "Do it without the key". Each item links back to its release on presseportal. The government's own feed (llv.li) answers our requests with a bot check
+  {
+    id:              'regierung-li',
+    name:            'Government of Liechtenstein',
+    feedUrl:         'https://www.presseportal.ch/de/rss/pm_100000148.rss2?langid=1',
+    category:        'geopolitics',
+    biasLabel:       'state-media',
+    reliability:     0.50,
+    countryCode:     'LI',
+    defaultLat:      47.14,
+    defaultLng:      9.52,
+    defaultLocation: 'Vaduz, Liechtenstein',
+    extraTags:       ['liechtenstein', 'europe', 'government', 'state-media'],
+    language:        'de',
+  },
+  // Islands Business (Suva): its Naoero tag (Nauru's name since Aug 2026; its Nauru tag stopped in June), about 2 stories a month (its newest was 29 days old on the check, far past round 7's 7-day rule; kept because nothing else covers Nauru: the government's site has no feed, PINA's feeds answer "No Feed Access" and the Guardian's Nauru tag is mostly Australia's detention politics); no terms page
+  {
+    id:              'islands-business-nauru',
+    name:            'Islands Business (Nauru)',
+    feedUrl:         'https://islandsbusiness.com/tag/naoero/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.75,
+    countryCode:     'NR',
+    defaultLat:      -0.55,
+    defaultLng:      166.92,
+    defaultLocation: 'Yaren, Nauru',
+    extraTags:       ['nauru', 'naoero', 'pacific', 'oceania'],
+    language:        'en',
   },
 ]
 
@@ -8797,7 +8827,7 @@ export const HOME_PIN_SOURCES = new Set([
   'confidencial-en', 'islands-business-kiribati', 'islands-business-tuvalu', 'fresh-fruit-portal-chile',
   'fresh-fruit-portal-peru', 'fsm-president-office', 'sos-medias-burundi-en', 'mauritius-times',
   // Oct 31, 2026 (Q9, the last four places)
-  'pmo-brunei', 'naalakkersuisut-gl',
+  'pmo-brunei', 'naalakkersuisut-gl', 'regierung-li', 'islands-business-nauru',
 ])
 
 export interface InferredGeo {

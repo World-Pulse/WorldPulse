@@ -22,6 +22,8 @@ describe('countriesMentioned', () => {
   it("knows Nauru by its name since Aug 2026, Naoero (Oct 31, 2026)", () => {
     expect(countriesMentioned('Naoero signs new policing deal with Australia')).toEqual(['NR', 'AU'])
     expect(countriesMentioned('Nauruan president visits Fiji')).toEqual(['NR', 'FJ'])
+    // and Liechtenstein in its own German (its government's releases, Oct 31, 2026)
+    expect(countriesMentioned('Historischer Staatsbesuch Liechtensteins in Indien')).toContain('LI')
   })
 })
 

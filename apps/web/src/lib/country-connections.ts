@@ -68,7 +68,7 @@ const COUNTRY_WORDS: Array<[string, string, RegExp]> = [
   ['IT', 'Italy', /\b(?:italy|italian)\b/i],
   ['XK', 'Kosovo', /\b(?:kosovo|kosovar)\b/i],
   ['LV', 'Latvia', /\b(?:latvia|latvian)\b/i],
-  ['LI', 'Liechtenstein', /\bliechtenstein\b/i],
+  ['LI', 'Liechtenstein', /\bliechtenstein(?:s|ers?|isch(?:e[mnrs]?)?)?\b/i],   // and German "Liechtensteins", "liechtensteinische"
   ['LT', 'Lithuania', /\b(?:lithuania|lithuanian)\b/i],
   ['LU', 'Luxembourg', /\bluxembourg\b/i],
   ['MT', 'Malta', /\b(?:malta|maltese)\b/i],

@@ -55,7 +55,8 @@
       "wadr",
       "ouestaf-news",
       "islands-business-kiribati",
-      "islands-business-tuvalu"
+      "islands-business-tuvalu",
+      "islands-business-nauru"
     ],
     "local": [
       "wanted-in-rome",
@@ -182,7 +183,8 @@
       "statehouse-seychelles",
       "fsm-president-office",
       "pmo-brunei",
-      "naalakkersuisut-gl"
+      "naalakkersuisut-gl",
+      "regierung-li"
     ]
   },
   "state": [
@@ -199,6 +201,7 @@
     "africanews": "CG",
     "islands-business-kiribati": "FJ",
     "islands-business-tuvalu": "FJ",
+    "islands-business-nauru": "FJ",
     "fresh-fruit-portal-peru": "CL"
   },
   "names": {
@@ -292,9 +295,15 @@
     "sos-medias-burundi-en": "SOS Médias Burundi",
     "mauritius-times": "Mauritius Times",
     "pmo-brunei": "Prime Minister's Office of Brunei",
-    "naalakkersuisut-gl": "Naalakkersuisut, Government of Greenland"
+    "naalakkersuisut-gl": "Naalakkersuisut, Government of Greenland",
+    "regierung-li": "Government of Liechtenstein",
+    "islands-business-nauru": "Islands Business"
   },
   "hosts": {
+    "regierung-li": [
+      "regierung.li",
+      "llv.li"
+    ],
     "bbc-world": [
       "bbc.co.uk",
       "bbc.com"
@@ -424,6 +433,12 @@
     "yna.co.kr": "agency"
   },
   "extra": [
+    {
+      "host": "presseportal.ch",
+      "name": "Presseportal (news aktuell)",
+      "country": "CH",
+      "kind": "aggregator"
+    },
     {
       "host": "reuters.com",
       "name": "Reuters",

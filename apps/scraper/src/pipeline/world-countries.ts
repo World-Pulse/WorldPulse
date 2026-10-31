@@ -49,7 +49,8 @@ export const MORE_COUNTRIES: CountryEntry[] = [
   c('IT', 'Italy', /\b(?:italy|italian)\b/i, 'Rome', 41.90, 12.50),
   c('XK', 'Kosovo', /\b(?:kosovo|kosovar)\b/i, 'Pristina', 42.66, 21.17),
   c('LV', 'Latvia', /\b(?:latvia|latvian)\b/i, 'Riga', 56.95, 24.11),
-  c('LI', 'Liechtenstein', /\bliechtenstein\b/i, 'Vaduz', 47.14, 9.52),
+  // (German too: "Liechtensteins", "liechtensteinische"; the people are Liechtensteiners)
+  c('LI', 'Liechtenstein', /\bliechtenstein(?:s|ers?|isch(?:e[mnrs]?)?)?\b/i, 'Vaduz', 47.14, 9.52),
   c('LT', 'Lithuania', /\b(?:lithuania|lithuanian)\b/i, 'Vilnius', 54.69, 25.28),
   c('LU', 'Luxembourg', /\bluxembourg\b/i, 'Luxembourg', 49.61, 6.13),
   c('MT', 'Malta', /\b(?:malta|maltese)\b/i, 'Valletta', 35.90, 14.51),

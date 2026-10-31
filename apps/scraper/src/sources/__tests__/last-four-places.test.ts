@@ -1,7 +1,8 @@
 /**
  * The last four places without an outlet (Oct 31, 2026, Q9). Devon: "Let's close the gap and try
- * to find signals for Brunei, Greenland, Liechtenstein and Nauru". Brunei and Greenland are read
- * through their governments' press offices; Nauru's new name, Naoero, now names it.
+ * to find signals for Brunei, Greenland, Liechtenstein and Nauru". Brunei, Greenland and (Devon,
+ * 1:40 PM: "Do it without the key") Liechtenstein are read through their governments' press
+ * offices; Nauru through Islands Business's Naoero tag, and its new name, Naoero, now names it.
  */
 import { describe, it, expect } from 'vitest'
 import { NEWS_SOURCE_REGISTRY, HOME_PIN_SOURCES, parseFeedItems, dateFromLink, inferGeo } from '../news-rss'
@@ -10,8 +11,8 @@ import { mentionedCountries } from '../../pipeline/geo'
 const src = (id: string) => NEWS_SOURCE_REGISTRY.find(s => s.id === id)!
 
 describe('the last four places', () => {
-  it('gives Brunei and Greenland an outlet at home, as state media', () => {
-    for (const [id, code, language] of [['pmo-brunei', 'BN', 'en'], ['naalakkersuisut-gl', 'GL', 'da']]) {
+  it('gives Brunei, Greenland and Liechtenstein an outlet at home, as state media', () => {
+    for (const [id, code, language] of [['pmo-brunei', 'BN', 'en'], ['naalakkersuisut-gl', 'GL', 'da'], ['regierung-li', 'LI', 'de']]) {
       expect(src(id)?.countryCode, id).toBe(code)
       expect(src(id).language, id).toBe(language)
       expect(src(id).biasLabel, id).toBe('state-media')
@@ -19,11 +20,27 @@ describe('the last four places', () => {
     }
   })
 
+  it("gives Nauru a regional newsroom's feed for it, at home (Devon, 1:40 PM: \"is there anything for Nauru at all?\")", () => {
+    expect(src('islands-business-nauru')).toMatchObject({ countryCode: 'NR', language: 'en', feedUrl: 'https://islandsbusiness.com/tag/naoero/feed/' })
+    expect(HOME_PIN_SOURCES.has('islands-business-nauru')).toBe(true)
+    // every place on the map now has an outlet of its own
+    for (const code of ['BN', 'GL', 'LI', 'NR']) expect(NEWS_SOURCE_REGISTRY.some(s => s.countryCode === code), code).toBe(true)
+  })
+
   it("pins their stories at home, or where they name", () => {
     expect(inferGeo('His Majesty presents, receives Letters of Credence', '', src('pmo-brunei')).countryCode).toBe('BN')
     expect(inferGeo('Crown Prince receives Singapore minister', '', src('pmo-brunei')).countryCode).toBe('SG')
     expect(inferGeo('Jens-Frederik Nielsen: Med den nye lufthavn bygger vi landet', '', src('naalakkersuisut-gl'))).toMatchObject({ countryCode: 'GL', locationName: 'Nuuk, Greenland' })
     expect(inferGeo('Pressemeddelelse vedrørende indsættelse af vinter backup-helikopterkapacitet i Tasiilaq-distriktet', '', src('naalakkersuisut-gl'))).toMatchObject({ countryCode: 'GL', locationName: 'Tasiilaq' })
+    expect(inferGeo('Richtig Heizen mit Holz', 'Fürstentum Liechtenstein: Vaduz (ots) - Die Tage werden kürzer', src('regierung-li')).countryCode).toBe('LI')
+    expect(inferGeo('Schweizer Identitätskarten: Neue Erfassungsstelle in Sargans', '', src('regierung-li')).countryCode).toBe('CH')
+    expect(inferGeo('Life expectancy in the Pacific, and the case of Naoero', '', src('islands-business-nauru')).countryCode).toBe('NR')
+  })
+
+  it("names Liechtenstein in German too", () => {
+    expect(mentionedCountries('Historischer Staatsbesuch Liechtensteins in Indien')).toContain('LI')
+    expect(mentionedCountries('Die liechtensteinische Regierung tagt')).toEqual(['LI'])
+    expect(mentionedCountries('Liechtensteiners vote on casinos')).toEqual(['LI'])
   })
 
   it('names Nauru by its new name and its people', () => {
