@@ -85,7 +85,9 @@
       "rtnk-me",
       "san-pedro-sun-bz",
       "primorske-novice-si",
-      "corriere-romagna-sm"
+      "corriere-romagna-sm",
+      "oon-at",
+      "nice-matin-monaco-mc"
     ],
     "specialist": [
       "nikkei-asia",
@@ -177,7 +179,8 @@
       "bgen-croatia",
       "mfr-maldives",
       "crux-vatican",
-      "zenit-pope-va"
+      "zenit-pope-va",
+      "asgam-macau-mo"
     ],
     "aggregator": [
       "allafrica",
@@ -203,7 +206,8 @@
       "fsm-president-office",
       "pmo-brunei",
       "naalakkersuisut-gl",
-      "regierung-li"
+      "regierung-li",
+      "shabait-er"
     ]
   },
   "state": [
@@ -228,7 +232,8 @@
     "bgen-croatia": "RS",
     "corriere-romagna-sm": "IT",
     "crux-vatican": "US",
-    "zenit-pope-va": "IT"
+    "zenit-pope-va": "IT",
+    "nice-matin-monaco-mc": "FR"
   },
   "names": {
     "bbc-world": "BBC",
@@ -323,7 +328,8 @@
     "pmo-brunei": "Prime Minister's Office of Brunei",
     "naalakkersuisut-gl": "Naalakkersuisut, Government of Greenland",
     "regierung-li": "Government of Liechtenstein",
-    "islands-business-nauru": "Islands Business"
+    "islands-business-nauru": "Islands Business",
+    "nice-matin-monaco-mc": "Nice-Matin"
   },
   "hosts": {
     "regierung-li": [

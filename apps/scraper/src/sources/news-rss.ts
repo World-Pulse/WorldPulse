@@ -8436,7 +8436,8 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   // more depth", with helpers. Eight helpers searched the 105 places region by region under rounds 6
   // and 7's rules: each feed answers the server's own request with fresh, dated items, and its terms
   // allow headlines with links (any clause about reuse is noted); every pick was checked again before
-  // it went in: 63 feeds for 48 places. Left out: Shabait (Eritrea; terms unread), Kuensel (Bhutan)
+  // it went in: 63 feeds for 48 places. Left out: Shabait (Eritrea; terms unread; added at 7:02 PM on
+  // Devon's call, below), Kuensel (Bhutan)
   // and NBC Radio (Saint Vincent) on terms, Levant24 (Syria; written up from other outlets' reports),
   // Times Caribbean (Saint Kitts and Nevis; 3 of its 10 newest stories carry an AI chat tool's search
   // citations, "<Cite ref=turn480065search23/>", so they're written up from others' reports too) and
@@ -9389,6 +9390,176 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['zambia', 'southern-africa', 'africa'],
     language:        'en',
   },
+  // ── Added Oct 31, 2026, 7:02 PM (round 8: Devon's call on the feeds whose terms we couldn't read) ──
+  // Round 8's helpers found these feeds passing every check but one: each site's pages turn automated
+  // visitors away with a bot check, so nobody could read its terms. Devon: "add them anyway". Each was
+  // checked again with the server's request at 7:05 PM. La Perla del Sur (Puerto Rico) is left out: its
+  // feed itself now answers with a bot check. Monaco-Matin's address leads to Nice-Matin's Monaco section.
+  // Dominica News Online, an independent Roseau news site (Dominica's other feed is the prime minister's press room); its pages show a bot check, so its terms are unread
+  {
+    id:              'dominica-news-online-dm',
+    name:            'Dominica News Online',
+    feedUrl:         'https://dominicanewsonline.com/news/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.65,
+    countryCode:     'DM',
+    defaultLat:      15.30,
+    defaultLng:      -61.39,
+    defaultLocation: 'Roseau, Dominica',
+    extraTags:       ['dominica', 'caribbean'],
+    language:        'en',
+  },
+  // Doha News, an English news site in Qatar; its homepage shows a bot check, so its terms are unread
+  {
+    id:              'doha-news-qa',
+    name:            'Doha News',
+    feedUrl:         'https://dohanews.co/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.65,
+    countryCode:     'QA',
+    defaultLat:      25.29,
+    defaultLng:      51.53,
+    defaultLocation: 'Doha, Qatar',
+    extraTags:       ['qatar', 'gulf', 'middle-east'],
+    language:        'en',
+  },
+  // Shabait, the Eritrean Ministry of Information's news site, its Local News section, in English: state media (Eritrea's other feed is the opposition site Awate.com); terms unread (bot check)
+  {
+    id:              'shabait-er',
+    name:            'Shabait (Eritrea\'s Ministry of Information)',
+    feedUrl:         'https://shabait.com/category/local-news/feed/',
+    category:        'geopolitics',
+    biasLabel:       'state-media',
+    reliability:     0.45,
+    countryCode:     'ER',
+    defaultLat:      15.33,
+    defaultLng:      38.93,
+    defaultLocation: 'Asmara, Eritrea',
+    extraTags:       ['eritrea', 'horn-of-africa', 'africa', 'government', 'state-media'],
+    language:        'en',
+  },
+  // Breaking Belize News, a Belize City news site; terms unread (bot check)
+  {
+    id:              'breaking-belize-news-bz',
+    name:            'Breaking Belize News',
+    feedUrl:         'https://www.breakingbelizenews.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.62,
+    countryCode:     'BZ',
+    defaultLat:      17.50,
+    defaultLng:      -88.20,
+    defaultLocation: 'Belize City, Belize',
+    extraTags:       ['belize', 'central-america', 'caribbean'],
+    language:        'en',
+  },
+  // Starcom Network, a Barbados radio group's newsroom; terms unread (bot check)
+  {
+    id:              'starcom-barbados-bb',
+    name:            'Starcom Network (Barbados)',
+    feedUrl:         'https://starcomnetwork.net/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.65,
+    countryCode:     'BB',
+    defaultLat:      13.10,
+    defaultLng:      -59.62,
+    defaultLocation: 'Bridgetown, Barbados',
+    extraTags:       ['barbados', 'caribbean'],
+    language:        'en',
+  },
+  // Inside Asian Gaming, a Macau trade publication on the gaming industry: its Macau tag (casinos, tourism and the economy); terms unread (bot check)
+  {
+    id:              'asgam-macau-mo',
+    name:            'Inside Asian Gaming (Macau)',
+    feedUrl:         'https://asgam.com/tag/macau/feed/',
+    category:        'economy',
+    biasLabel:       'center',
+    reliability:     0.70,
+    countryCode:     'MO',
+    defaultLat:      22.20,
+    defaultLng:      113.55,
+    defaultLocation: 'Macau',
+    extraTags:       ['macau', 'china', 'gaming', 'asia'],
+    language:        'en',
+  },
+  // Libertas, a San Marino online daily, in Italian; terms unread (its pages show a security check)
+  {
+    id:              'libertas-sm',
+    name:            'Libertas (San Marino)',
+    feedUrl:         'https://www.libertas.sm/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.65,
+    countryCode:     'SM',
+    defaultLat:      43.94,
+    defaultLng:      12.45,
+    defaultLocation: 'San Marino',
+    extraTags:       ['san-marino', 'europe'],
+    language:        'it',
+  },
+  // Luxembourg Times, the English news site of Luxemburger Wort's publisher; terms unread (bot check)
+  {
+    id:              'luxembourg-times-lu',
+    name:            'Luxembourg Times',
+    feedUrl:         'https://www.luxtimes.lu/rss/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.75,
+    countryCode:     'LU',
+    defaultLat:      49.61,
+    defaultLng:      6.13,
+    defaultLocation: 'Luxembourg',
+    extraTags:       ['luxembourg', 'europe'],
+    language:        'en',
+  },
+  // Monaco-Matin, Nice-Matin's Monaco edition (monacomatin.mc now leads to its Monaco section), in French; terms unread (its terms page doesn't load for us)
+  {
+    id:              'nice-matin-monaco-mc',
+    name:            'Monaco-Matin (Nice-Matin)',
+    feedUrl:         'https://www.nicematin.com/monaco/rss',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.70,
+    countryCode:     'MC',
+    defaultLat:      43.74,
+    defaultLng:      7.42,
+    defaultLocation: 'Monaco',
+    extraTags:       ['monaco', 'europe'],
+    language:        'fr',
+  },
+  // OÖN, the Linz daily for Upper Austria, in German; its feed is ISO-8859-15, which decodeFeed reads from its prolog; terms unread (they load by script)
+  {
+    id:              'oon-at',
+    name:            'Oberösterreichische Nachrichten (OÖN)',
+    feedUrl:         'https://www.nachrichten.at/storage/rss/rss/nachrichten.xml',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.78,
+    countryCode:     'AT',
+    defaultLat:      48.31,
+    defaultLng:      14.29,
+    defaultLocation: 'Linz, Austria',
+    extraTags:       ['austria', 'upper-austria', 'europe'],
+    language:        'de',
+  },
+  // Alsat, a Skopje TV station broadcasting in Albanian: its news feed; terms unread (bot check)
+  {
+    id:              'alsat-mk',
+    name:            'Alsat (North Macedonia)',
+    feedUrl:         'https://alsat.mk/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.62,
+    countryCode:     'MK',
+    defaultLat:      42.00,
+    defaultLng:      21.43,
+    defaultLocation: 'Skopje, North Macedonia',
+    extraTags:       ['north-macedonia', 'balkans', 'europe'],
+    language:        'sq',
+  },
 ]
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────
@@ -9799,6 +9970,10 @@ export const HOME_PIN_SOURCES = new Set([
   'stp-press', 'eswatini-observer-sz', 'eswatini-positive-news-sz', 'atpe-tchad', '24heureinfo-tg',
   'khovar-en', 'diligente-tl', 'ttt-news-tt', 'crux-vatican', 'zenit-pope-va', 'samoa-global-news-ws',
   'saba-yemen-en', 'mwebantu-zm', 'news-diggers-zm',
+  // Oct 31, 2026, 7:02 PM (round 8, Devon: "add them anyway"): national outlets, Macau's gaming trade paper and
+  // Nice-Matin's Monaco edition
+  'dominica-news-online-dm', 'doha-news-qa', 'shabait-er', 'breaking-belize-news-bz', 'starcom-barbados-bb', 'asgam-macau-mo',
+  'libertas-sm', 'luxembourg-times-lu', 'nice-matin-monaco-mc', 'oon-at', 'alsat-mk',
 ])
 
 export interface InferredGeo {

@@ -70,9 +70,10 @@ describe('round 8: depth for the places with one or two feeds', () => {
     expect(NEWS_SOURCE_REGISTRY.some(s => s.id === 'lsm-en')).toBe(false)
   })
 
-  it('leaves out the six held back on terms or for what they publish', () => {
-    // Times Caribbean: 3 of its 10 newest stories carried an AI chat tool's search citations
-    for (const host of ['shabait.com', 'kuenselonline.com', 'nbcsvg.com', 'levant24.com', 'businessadvantagepng.com', 'timescaribbeanonline.com']) {
+  it('leaves out the five held back on terms or for what they publish', () => {
+    // Times Caribbean: 3 of its 10 newest stories carried an AI chat tool's search citations. Shabait, held
+    // back for its unread terms, went in at 7:02 PM on Devon's call (below)
+    for (const host of ['kuenselonline.com', 'nbcsvg.com', 'levant24.com', 'businessadvantagepng.com', 'timescaribbeanonline.com']) {
       expect(NEWS_SOURCE_REGISTRY.some(s => new URL(s.feedUrl).hostname.replace(/^www\./, '') === host), host).toBe(false)
     }
   })
@@ -108,5 +109,40 @@ describe("round 8's summaries", () => {
       <pubDate>Sat, 31 Oct 2026 10:00:00 +0000</pubDate><description><![CDATA[<p><img src="https://www.gazetaexpress.com/a.jpg" /></p>
       <!-- wp:paragraph --><p>Agjencia e Statistikave të Kosovës ka publikuar statistikat.</p><!-- /wp:paragraph -->]]></description></item></channel></rss>`)
     expect(summary(item.description ?? '')).toBe('Agjencia e Statistikave të Kosovës ka publikuar statistikat.')
+  })
+})
+
+describe("round 8, Devon's call on the feeds whose terms we couldn't read (Oct 31, 7:02 PM: \"add them anyway\")", () => {
+  const ADDED = [
+    'dominica-news-online-dm', 'doha-news-qa', 'shabait-er', 'breaking-belize-news-bz', 'starcom-barbados-bb',
+    'asgam-macau-mo', 'libertas-sm', 'luxembourg-times-lu', 'nice-matin-monaco-mc', 'oon-at', 'alsat-mk',
+  ]
+
+  it('reads the eleven whose feeds still answer, each at its own address, pinned at home', () => {
+    for (const id of ADDED) {
+      expect(NEWS_SOURCE_REGISTRY.filter(s => s.id === id), id).toHaveLength(1)
+      expect(NEWS_SOURCE_REGISTRY.filter(s => s.feedUrl === src(id).feedUrl), id).toHaveLength(1)
+      expect(HOME_PIN_SOURCES.has(id), id).toBe(true)
+    }
+    expect(ADDED.map(id => src(id).countryCode)).toEqual(['DM', 'QA', 'ER', 'BZ', 'BB', 'MO', 'SM', 'LU', 'MC', 'AT', 'MK'])
+    expect(ADDED.map(id => src(id).language)).toEqual(['en', 'en', 'en', 'en', 'en', 'en', 'it', 'en', 'fr', 'de', 'sq'])
+    // Shabait is the Eritrean Ministry of Information's site
+    expect(ADDED.filter(id => src(id).biasLabel === 'state-media')).toEqual(['shabait-er'])
+    expect(src('shabait-er').extraTags).toContain('state-media')
+  })
+
+  it("leaves out La Perla del Sur, whose feed itself now answers with a bot check, and reads Monaco-Matin at Nice-Matin's Monaco section", () => {
+    expect(NEWS_SOURCE_REGISTRY.some(s => s.feedUrl.includes('periodicolaperla.com'))).toBe(false)
+    expect(src('nice-matin-monaco-mc').feedUrl).toBe('https://www.nicematin.com/monaco/rss')
+  })
+
+  it('pins their stories at home, or where they name', () => {
+    expect(inferGeo('Pioneering Educator Dame Avisene Carrington Dies at 108', '', src('starcom-barbados-bb')).countryCode).toBe('BB')
+    expect(inferGeo('Luxembourg guardianship association fears closure without new funding', '', src('luxembourg-times-lu')).countryCode).toBe('LU')
+    // the talks are in Doha, the place named
+    expect(inferGeo('Iranian negotiators in Doha for Qatar-mediated talks', '', src('doha-news-qa')).countryCode).toBe('QA')
+    expect(inferGeo('Uzbekistan signs a new gas deal', '', src('doha-news-qa')).countryCode).toBe('UZ')
+    expect(inferGeo('2:1 - Der LASK erledigt die Pflichtübung gegen Tirol', 'LINZ. Erneut drehten die Linzer einen Rückstand', src('oon-at')))
+      .toMatchObject({ countryCode: 'AT', locationName: 'Linz, Austria' })
   })
 })
