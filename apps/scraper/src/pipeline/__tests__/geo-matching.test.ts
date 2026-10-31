@@ -365,6 +365,13 @@ describe('places 72 hours of headlines named and the gazetteer missed (Oct 30, 2
     expect(findGazetteerPlace('Four held for drunk driving in Tobago')?.coords.country).toBe('TT')
     expect(findGazetteerPlace('Donald Trump rally threat ahead of Daytona Beach appearance')?.coords.region).toBe('Florida')
   })
+  it('pins big Asian and European cities at their own places', () => {
+    expect(findGazetteerPlace('Factory fire kills five in Faisalabad')?.coords.country).toBe('PK')
+    expect(findGazetteerPlace('Shenzhen tech firm unveils new chip')?.coords.region).toBe('Guangdong')
+    expect(findGazetteerPlace('Edinburgh council approves tram line')?.coords.country).toBe('GB')
+    expect(findGazetteerPlace('Gdańsk shipyard marks anniversary')?.coords.country).toBe('PL')
+    expect(findGazetteerPlace('Jakarta and Surabaya hit by floods')?.place).toBe('jakarta')
+  })
   it('leaves out names that are also other words or names', () => {
     expect(findGazetteerPlace('OYO raises funds as Indian hotel chain expands')).toBeNull()
     expect(findGazetteerPlace('IMO adopts new shipping emissions rules')).toBeNull()
