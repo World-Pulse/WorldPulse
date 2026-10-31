@@ -8073,21 +8073,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['austria', 'europe'],
     language:        'de',
   },
-  // Vienna national daily (Telekurier); about half its items are Austrian; kurier.at links no terms of its own (its group's app terms grant private use if no ad blocker is used); in German
-  {
-    id:              'kurier-at',
-    name:            'Kurier (Austria)',
-    feedUrl:         'https://kurier.at/xml/rss',
-    category:        'geopolitics',
-    biasLabel:       'center',
-    reliability:     0.72,
-    countryCode:     'AT',
-    defaultLat:      48.21,
-    defaultLng:      16.37,
-    defaultLocation: 'Vienna, Austria',
-    extraTags:       ['austria', 'europe'],
-    language:        'de',
-  },
   // Ljubljana national daily (Dnevnik Mediji): Slovenian, world and celebrity news; the feed also holds old promotional items, which the reader skips as old; no site terms; in Slovene; no home pin
   {
     id:              'dnevnik-si',
@@ -8207,21 +8192,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLocation: 'Pristina, Kosovo',
     extraTags:       ['kosovo', 'europe', 'balkans'],
     language:        'en',
-  },
-  // Kosovo's largest news portal (Pristina); about half entertainment, so no home pin; no terms page; in Albanian; no home pin
-  {
-    id:              'telegrafi-xk',
-    name:            'Telegrafi (Kosovo)',
-    feedUrl:         'https://telegrafi.com/feeds/feed.rss',
-    category:        'geopolitics',
-    biasLabel:       'center',
-    reliability:     0.68,
-    countryCode:     'XK',
-    defaultLat:      42.66,
-    defaultLng:      21.17,
-    defaultLocation: 'Pristina, Kosovo',
-    extraTags:       ['kosovo', 'europe', 'balkans'],
-    language:        'sq',
   },
   // Pristina news portal; no terms page; in Albanian
   {
@@ -8637,7 +8607,7 @@ export const HOME_PIN_SOURCES = new Set([
   'ami-mauritania-en', 'african-manager-en', 'echorouk-en', 'marshall-islands-journal', 'de-ware-tijd-sr',
   'starnieuws-sr', 'suriname-herald-sr', 'von-radio-kn', 'cuenca-high-life-ec', 'asuncion-times-py',
   'statehouse-seychelles', 'maka-angola-en', 'thelocal-at',
-  'kurier-at', 'rtv-slo-slovenija', 'moldovalive-md', 'zdg-md', 'tv8-md',
+  'rtv-slo-slovenija', 'moldovalive-md', 'zdg-md', 'tv8-md',
   'aktuelno-me', 'rtnk-me', 'prishtina-insight', 'lajmi-net-xk', 'el-periodic-andorra',
   'san-marino-rtv',
 ])

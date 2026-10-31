@@ -166,8 +166,8 @@ describe("round 6's feeds", () => {
     for (const src of NEWS_SOURCE_REGISTRY) expect(known.has(src.language), `${src.id}: ${src.language}`).toBe(true)
   })
 
-  it('gives the 11 countries that had no outlet and one in their own language that outlet, at home', () => {
-    const own: Record<string, string> = { AT: 'kurier-at', SI: 'rtv-slo-slovenija', MD: 'zdg-md', ME: 'rtnk-me', XK: 'lajmi-net-xk',
+  it('gives the countries that had no outlet and one in their own language that outlet, at home', () => {
+    const own: Record<string, string> = { SI: 'rtv-slo-slovenija', MD: 'zdg-md', ME: 'rtnk-me', XK: 'lajmi-net-xk',
       AD: 'el-periodic-andorra', SM: 'san-marino-rtv', SR: 'de-ware-tijd-sr' }
     for (const [code, id] of Object.entries(own)) {
       const src = NEWS_SOURCE_REGISTRY.find(s => s.id === id)
@@ -187,6 +187,6 @@ describe("round 6's feeds", () => {
     expect(inferGeo('Radunović u posjeti Beranama: U fokusu prostorno planiranje', '', src('aktuelno-me'))).toMatchObject({ locationName: 'Berane', countryCode: 'ME' })
     expect(inferGeo('Çeku zhvillon takime me prindër në Pejë dhe Gjakovë', '', src('lajmi-net-xk'))).toMatchObject({ locationName: 'Peja', countryCode: 'XK' })
     expect(inferGeo('Krakers Sunny Point blok 2 doen beklag over intimidatie', '', src('de-ware-tijd-sr'))).toMatchObject({ locationName: 'Paramaribo, Suriname', countryCode: 'SR' })
-    expect(inferGeo('6,3 Milliarden Dollar weg: Wie nordkoreanische Hacker die Kryptobörse bestahlen', '', src('kurier-at')).countryCode).toBe('KP')
+    expect(inferGeo('6,3 Milliarden Dollar weg: Wie nordkoreanische Hacker die Kryptobörse bestahlen', '', src('die-presse-at')).countryCode).toBe('KP')
   })
 })

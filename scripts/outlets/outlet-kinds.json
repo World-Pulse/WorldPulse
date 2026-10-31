@@ -909,6 +909,18 @@
       "name": "El Nuevo Día",
       "country": "PR",
       "kind": "national"
+    },
+    {
+      "host": "kurier.at",
+      "name": "Kurier",
+      "country": "AT",
+      "kind": "national"
+    },
+    {
+      "host": "telegrafi.com",
+      "name": "Telegrafi",
+      "country": "XK",
+      "kind": "national"
     }
   ]
 }
