@@ -53,7 +53,9 @@
       "radio-sweden",
       "barents-observer",
       "wadr",
-      "ouestaf-news"
+      "ouestaf-news",
+      "islands-business-kiribati",
+      "islands-business-tuvalu"
     ],
     "local": [
       "wanted-in-rome",
@@ -153,7 +155,9 @@
       "sin-comillas-pr",
       "nyt-business",
       "wsj-markets",
-      "african-manager-en"
+      "african-manager-en",
+      "fresh-fruit-portal-chile",
+      "fresh-fruit-portal-peru"
     ],
     "aggregator": [
       "allafrica",
@@ -175,7 +179,8 @@
       "eu-council",
       "opm-pressroom-dm",
       "gouvernement-nouvelle-caledonie",
-      "statehouse-seychelles"
+      "statehouse-seychelles",
+      "fsm-president-office"
     ]
   },
   "state": [
@@ -189,7 +194,10 @@
     "mondoweiss": "US",
     "eurasianet": "US",
     "allafrica": "ZA",
-    "africanews": "CG"
+    "africanews": "CG",
+    "islands-business-kiribati": "FJ",
+    "islands-business-tuvalu": "FJ",
+    "fresh-fruit-portal-peru": "CL"
   },
   "names": {
     "bbc-world": "BBC",
@@ -272,7 +280,15 @@
     "thelocal-at": "The Local Austria",
     "rtv-slo-slovenija": "RTV Slovenija",
     "de-ware-tijd-sr": "De Ware Tijd",
-    "ami-mauritania-en": "AMI"
+    "ami-mauritania-en": "AMI",
+    "islands-business-kiribati": "Islands Business",
+    "islands-business-tuvalu": "Islands Business",
+    "fresh-fruit-portal-chile": "Fresh Fruit Portal",
+    "fresh-fruit-portal-peru": "Fresh Fruit Portal",
+    "fsm-president-office": "FSM Office of the President",
+    "confidencial-en": "Confidencial",
+    "sos-medias-burundi-en": "SOS Médias Burundi",
+    "mauritius-times": "Mauritius Times"
   },
   "hosts": {
     "bbc-world": [

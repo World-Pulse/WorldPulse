@@ -8238,6 +8238,129 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['san-marino', 'europe'],
     language:        'it',
   },
+  // ── Sources round 7 (Q9, Oct 31, 2026; Devon: "2 yes"): an English regional newsroom's feed for one country
+  // counts too, for the countries still without English. Fresh enough here means the newest item under 7 days
+  // and 4 or more in 30 days
+  // Confidencial's English edition (the Nicaraguan newsroom; its Spanish feed is read); posts in batches, so its newest item can be 3 days old; no terms published
+  {
+    id:              'confidencial-en',
+    name:            'Confidencial English (Nicaragua)',
+    feedUrl:         'https://confidencial.digital/en/english/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.80,
+    countryCode:     'NI',
+    defaultLat:      12.14,
+    defaultLng:      -86.25,
+    defaultLocation: 'Managua, Nicaragua',
+    extraTags:       ['nicaragua', 'central-america', 'ortega'],
+    language:        'en',
+  },
+  // Islands Business, the Pacific regional newsroom (Suva): its Kiribati tag, written by its correspondents there; no terms page
+  {
+    id:              'islands-business-kiribati',
+    name:            'Islands Business (Kiribati)',
+    feedUrl:         'https://islandsbusiness.com/tag/kiribati/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.75,
+    countryCode:     'KI',
+    defaultLat:      1.33,
+    defaultLng:      172.98,
+    defaultLocation: 'Tarawa, Kiribati',
+    extraTags:       ['kiribati', 'pacific', 'oceania'],
+    language:        'en',
+  },
+  // Islands Business: its Tuvalu tag, about 6 stories a month (its newest was 11 days old on the check, past round 7's 7-day rule, kept because nothing else covers Tuvalu); no terms page
+  {
+    id:              'islands-business-tuvalu',
+    name:            'Islands Business (Tuvalu)',
+    feedUrl:         'https://islandsbusiness.com/tag/tuvalu/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.75,
+    countryCode:     'TV',
+    defaultLat:      -8.52,
+    defaultLng:      179.2,
+    defaultLocation: 'Funafuti, Tuvalu',
+    extraTags:       ['tuvalu', 'pacific'],
+    language:        'en',
+  },
+  // Fresh Fruit Portal, a fruit-trade newsroom (Santiago): its Chile tag, fruit exports only; no terms page
+  {
+    id:              'fresh-fruit-portal-chile',
+    name:            'Fresh Fruit Portal (Chile)',
+    feedUrl:         'https://www.freshfruitportal.com/tag/chile/feed/',
+    category:        'economy',
+    biasLabel:       'center',
+    reliability:     0.65,
+    countryCode:     'CL',
+    defaultLat:      -33.45,
+    defaultLng:      -70.67,
+    defaultLocation: 'Santiago, Chile',
+    extraTags:       ['chile', 'agriculture', 'exports', 'south-america'],
+    language:        'en',
+  },
+  // Fresh Fruit Portal (Santiago): its Peru tag, fruit exports only; no terms page
+  {
+    id:              'fresh-fruit-portal-peru',
+    name:            'Fresh Fruit Portal (Peru)',
+    feedUrl:         'https://www.freshfruitportal.com/tag/peru/feed/',
+    category:        'economy',
+    biasLabel:       'center',
+    reliability:     0.65,
+    countryCode:     'PE',
+    defaultLat:      -12.05,
+    defaultLng:      -77.04,
+    defaultLocation: 'Lima, Peru',
+    extraTags:       ['peru', 'agriculture', 'exports', 'south-america'],
+    language:        'en',
+  },
+  // The Micronesian president's office (Palikir): a government press office, read because no FSM newsroom has a feed (the Kaselehlie Press's website is gone); no terms page
+  {
+    id:              'fsm-president-office',
+    name:            'FSM Government, Office of the President (Micronesia)',
+    feedUrl:         'https://gov.fm/feed/',
+    category:        'geopolitics',
+    biasLabel:       'state-media',
+    reliability:     0.50,
+    countryCode:     'FM',
+    defaultLat:      6.92,
+    defaultLng:      158.16,
+    defaultLocation: 'Palikir, Micronesia',
+    extraTags:       ['micronesia', 'fsm', 'pacific', 'government', 'state-media'],
+    language:        'en',
+  },
+  // SOS Médias Burundi's English edition (its French feed is read); posts in batches; no terms page
+  {
+    id:              'sos-medias-burundi-en',
+    name:            'SOS Médias Burundi English (Burundi)',
+    feedUrl:         'https://www.sosmediasburundi.org/en/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.68,
+    countryCode:     'BI',
+    defaultLat:      -3.38,
+    defaultLng:      29.36,
+    defaultLocation: 'Bujumbura, Burundi',
+    extraTags:       ['burundi', 'great-lakes', 'africa'],
+    language:        'en',
+  },
+  // The Mauritius Times (Port Louis), a weekly opinion paper: its Features section (its main feed goes through follow.it's tracking links); no terms page
+  {
+    id:              'mauritius-times',
+    name:            'Mauritius Times (Mauritius)',
+    feedUrl:         'https://www.mauritiustimes.com/mt/category/features/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center-left',
+    reliability:     0.60,
+    countryCode:     'MU',
+    defaultLat:      -20.16,
+    defaultLng:      57.5,
+    defaultLocation: 'Port Louis, Mauritius',
+    extraTags:       ['mauritius', 'indian-ocean', 'africa'],
+    language:        'en',
+  },
 ]
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────
@@ -8610,6 +8733,9 @@ export const HOME_PIN_SOURCES = new Set([
   'rtv-slo-slovenija', 'moldovalive-md', 'zdg-md', 'tv8-md',
   'aktuelno-me', 'rtnk-me', 'prishtina-insight', 'lajmi-net-xk', 'el-periodic-andorra',
   'san-marino-rtv',
+  // Oct 31, 2026 (Q9, sources round 7)
+  'confidencial-en', 'islands-business-kiribati', 'islands-business-tuvalu', 'fresh-fruit-portal-chile',
+  'fresh-fruit-portal-peru', 'fsm-president-office', 'sos-medias-burundi-en', 'mauritius-times',
 ])
 
 export interface InferredGeo {

@@ -175,7 +175,8 @@ describe("round 6's feeds", () => {
       expect(HOME_PIN_SOURCES.has(id), id).toBe(true)
     }
     // and an English outlet for the countries that had none at all and publish in English
-    for (const code of ['AT', 'KN', 'MH', 'SC', 'MD', 'XK']) {
+    // (round 7: Kiribati, Tuvalu and Micronesia, and English for Nicaragua, Chile, Peru, Burundi and Mauritius)
+    for (const code of ['AT', 'KN', 'MH', 'SC', 'MD', 'XK', 'KI', 'TV', 'FM', 'NI', 'CL', 'PE', 'BI', 'MU']) {
       expect(NEWS_SOURCE_REGISTRY.some(s => s.countryCode === code && s.language === 'en'), code).toBe(true)
     }
   })
