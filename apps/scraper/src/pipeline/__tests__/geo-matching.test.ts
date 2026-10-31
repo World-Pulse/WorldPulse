@@ -372,6 +372,14 @@ describe('places 72 hours of headlines named and the gazetteer missed (Oct 30, 2
     expect(findGazetteerPlace('Gdańsk shipyard marks anniversary')?.coords.country).toBe('PL')
     expect(findGazetteerPlace('Jakarta and Surabaya hit by floods')?.place).toBe('jakarta')
   })
+  it('pins more big cities at their own places (M63)', () => {
+    expect(findGazetteerPlace('Police say a man was arrested in Mombasa on Friday')?.coords.country).toBe('KE')
+    expect(findGazetteerPlace('Tabriz earthquake damages homes')?.coords.country).toBe('IR')
+    expect(findGazetteerPlace('Seattle council passes budget')?.coords.region).toBe('Washington')
+    expect(findGazetteerPlace('Düsseldorf trade fair opens')?.coords.country).toBe('DE')
+    expect(findGazetteerPlace('Ciudad Juárez shooting leaves three dead')?.coords.country).toBe('MX')
+    expect(findGazetteerPlace('Aberdeen oil firm cuts jobs')?.coords.region).toBe('Scotland')
+  })
   it('leaves out names that are also other words or names', () => {
     expect(findGazetteerPlace('OYO raises funds as Indian hotel chain expands')).toBeNull()
     expect(findGazetteerPlace('IMO adopts new shipping emissions rules')).toBeNull()
