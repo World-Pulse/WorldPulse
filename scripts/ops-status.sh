@@ -538,6 +538,40 @@ pipeline_stats() {
         'pro', (SELECT count(*) FROM subscriptions WHERE plan = 'pro' AND status IN ('active', 'trialing')))
       FROM users WHERE email IS NOT NULL AND account_type NOT IN ('ai', 'bot', 'admin')"
   part members db_json 10 "$q7"
+  # Who the accounts are (Devon, Oct 31, 9:32 AM: "Do we really have 17 members per the HQ?"): counts
+  # only, never a name or an address. When they were made (by month), whether they ever signed in, how
+  # they sign in, and how many look like tests (test or example addresses, throwaway inboxes, test
+  # handles), a world-pulse.io address, a +tag address or another login of an admin (the same name
+  # before the @, dots and +tags aside); "real" is the rest. Its own query, so a column a copy of the
+  # database lacks only empties this part
+  q7d="WITH m AS (SELECT * FROM users WHERE email IS NOT NULL AND account_type NOT IN ('ai', 'bot', 'admin')),
+          a AS (SELECT DISTINCT replace(split_part(lower(regexp_replace(email, '[+][^@]*@', '@')), '@', 1), '.', '') AS name
+                  FROM users WHERE account_type = 'admin' AND email IS NOT NULL),
+          f AS (SELECT m.*,
+                  (split_part(lower(email), '@', 1) ~ '(^test|(^|[^a-z])(tester|e2e|qa|demo|dummy|fake|sample)([^a-z]|\$))'
+                   OR lower(email) ~ '@(example[.]|test[.]|localhost)' OR lower(email) ~ '[.](test|local|invalid|example)\$'
+                   OR lower(email) ~ '(mailinator|guerrillamail|yopmail|sharklasers|tempmail|10minutemail|trashmail|getnada|dispostable)'
+                   OR lower(handle) ~ '(^test|(^|[^a-z])(tester|e2e|qa|demo|dummy|fake)([^a-z]|\$))') AS t_test,
+                  lower(email) LIKE '%@world-pulse.io' AS t_staff,
+                  email LIKE '%+%@%' AS t_plus,
+                  replace(split_part(lower(regexp_replace(email, '[+][^@]*@', '@')), '@', 1), '.', '') IN (SELECT name FROM a) AS t_admin
+                FROM m)
+    SELECT json_build_object(
+        'by_month',      (SELECT coalesce(json_object_agg(mo, n ORDER BY mo), '{}'::json)
+                            FROM (SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM') AS mo, count(*) AS n FROM m GROUP BY 1) x),
+        'ever_seen',     count(*) FILTER (WHERE last_seen_at IS NOT NULL),
+        'seen_30d',      count(*) FILTER (WHERE last_seen_at > now() - interval '30 days'),
+        'google',        count(*) FILTER (WHERE oauth_google IS NOT NULL),
+        'github',        count(*) FILTER (WHERE oauth_github IS NOT NULL),
+        'password',      count(*) FILTER (WHERE password_hash IS NOT NULL),
+        'test',          count(*) FILTER (WHERE t_test),
+        'staff',         count(*) FILTER (WHERE t_staff),
+        'plus',          count(*) FILTER (WHERE t_plus),
+        'like_admin',    count(*) FILTER (WHERE t_admin),
+        'real',          count(*) FILTER (WHERE NOT (t_test OR t_staff OR t_plus OR t_admin)),
+        'real_seen_30d', count(*) FILTER (WHERE NOT (t_test OR t_staff OR t_plus OR t_admin) AND last_seen_at > now() - interval '30 days'))
+      FROM f"
+  part members_detail db_json 10 "$q7d"
   # The second read's "not an event" verdicts (plan 11a, Oct 30, 2026): how many
   # there are, and the newest 30 with their report's title and the verdict's
   # line, to read whether they're right before such a verdict may lower a
@@ -595,6 +629,9 @@ for name in ('scraper_30m', 'llm', 'fingerprints', 'claude', 'sources', 'api_lim
 # Members: in the pipeline block, and with the readers too (the HQ copies the readers block
 # whole); null when the query failed
 out['members'] = part('members')
+# Who the accounts are (counts only), with the members; null when that query failed
+if isinstance(out['members'], dict):
+    out['members']['detail'] = part('members_detail')
 if isinstance(out.get('readers'), dict):
     out['readers']['members'] = out['members']
 took = {}
