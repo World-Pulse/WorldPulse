@@ -8436,12 +8436,14 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   // more depth", with helpers. Eight helpers searched the 105 places region by region under rounds 6
   // and 7's rules: each feed answers the server's own request with fresh, dated items, and its terms
   // allow headlines with links (any clause about reuse is noted); every pick was checked again before
-  // it went in: 64 feeds for 49 places. Left out: Shabait (Eritrea; terms unread), Kuensel (Bhutan)
+  // it went in: 63 feeds for 48 places. Left out: Shabait (Eritrea; terms unread), Kuensel (Bhutan)
   // and NBC Radio (Saint Vincent) on terms, Levant24 (Syria; written up from other outlets' reports),
   // Times Caribbean (Saint Kitts and Nevis; 3 of its 10 newest stories carry an AI chat tool's search
   // citations, "<Cite ref=turn480065search23/>", so they're written up from others' reports too) and
   // Business Advantage PNG (magazine features). The helpers' notes are in the HQ's
   // departments/research/sources-round-8-2026-10-31.md.
+  // Taken out after it went in: Gazeta Express (Kosovo), which turned the server away (403) on its first two
+  // reads (Oct 31, about 4:30 and 5:00 PM).
   // Altaveu, an Andorran digital daily (Andorra la Vella), in Catalan; its legal notice covers data and links only
   {
     id:              'altaveu-ad',
@@ -9341,21 +9343,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLocation: 'Apia, Samoa',
     extraTags:       ['samoa', 'pacific', 'pacific-islands', 'oceania'],
     language:        'en',
-  },
-  // Gazeta Express, a major Prishtina news portal: its news category (Kosovo, Albania, regional and world, so no home pin), in Albanian; its terms bar commercial republication without permission, and its robots.txt opts out of AI training only
-  {
-    id:              'gazeta-express-xk',
-    name:            'Gazeta Express (Kosovo)',
-    feedUrl:         'https://www.gazetaexpress.com/category/lajme/feed/',
-    category:        'geopolitics',
-    biasLabel:       'center',
-    reliability:     0.65,
-    countryCode:     'XK',
-    defaultLat:      42.66,
-    defaultLng:      21.17,
-    defaultLocation: 'Pristina, Kosovo',
-    extraTags:       ['kosovo', 'balkans', 'europe'],
-    language:        'sq',
   },
   // Saba, the news agency of Yemen's internationally recognized government (sabanew.net, not the Houthi-run saba.ye), in English: home point Aden; its usage page is an unfilled template
   {

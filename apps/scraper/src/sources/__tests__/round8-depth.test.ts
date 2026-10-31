@@ -1,7 +1,7 @@
 /**
  * Round 8 (Oct 31, 2026, Q9): depth for the places with one or two feeds. Devon, 2:43 PM: "let's now
  * [go through] every place with only 1 or 2 sources to create more depth", with helpers (eight, one
- * per region). 64 feeds for 49 places, each checked again before it went in; the helpers' notes are
+ * per region). 63 feeds for 48 places, each checked again before it went in; the helpers' notes are
  * in the HQ's departments/research/sources-round-8-2026-10-31.md.
  */
 import { describe, it, expect } from 'vitest'
@@ -18,14 +18,14 @@ const ROUND_8 = [
   'diligente-tl', 'tbs-bangladesh', 'china-digital-times', 'antigua-observer-ag', 'abs-tv-radio-ag',
   'cbc-barbados-bb', 'the-voice-lc', 'zns-bahamas-bs', 'love-fm-bz',
   'san-pedro-sun-bz', 'nationwide-news-jm', 'ttt-news-tt', 'portalb-mk', 'tv21-mk', 'rtsh-al',
-  'balkanweb-al', 'sofia-globe-bg', 'bgen-croatia', 'gazeta-express-xk', 'borba-me', 'primorske-novice-si',
+  'balkanweb-al', 'sofia-globe-bg', 'bgen-croatia', 'borba-me', 'primorske-novice-si',
   'azertac-en', 'saba-yemen-en', 'khovar-en', 'shafaq-kurdistan', 'kuwait-times-kw', 'qatar-tribune',
   'lsm-english-lv', 'altaveu-ad', 'corriere-romagna-sm', 'crux-vatican', 'zenit-pope-va', 'hello-monaco',
   'kleine-zeitung-at', 'samoa-global-news-ws',
 ]
 
-/** Their stories range over many countries, so a story that names no place isn't pinned at home */
-const NOT_AT_HOME = ['china-digital-times', 'gazeta-express-xk']
+/** Its stories range over many countries, so a story that names no place isn't pinned at home */
+const NOT_AT_HOME = ['china-digital-times']
 
 /** State news agencies, state-owned papers and state broadcasters */
 const STATE_MEDIA = [
@@ -37,15 +37,15 @@ const STATE_MEDIA = [
 const src = (id: string) => NEWS_SOURCE_REGISTRY.find(s => s.id === id)!
 
 describe('round 8: depth for the places with one or two feeds', () => {
-  it('reads 64 more feeds, each once and at an address no other entry reads', () => {
-    expect(new Set(ROUND_8).size).toBe(64)
+  it('reads 63 more feeds, each once and at an address no other entry reads', () => {
+    expect(new Set(ROUND_8).size).toBe(63)
     for (const id of ROUND_8) {
       expect(NEWS_SOURCE_REGISTRY.filter(s => s.id === id), id).toHaveLength(1)
       expect(src(id).feedUrl, id).toMatch(/^https:\/\//)
       expect(NEWS_SOURCE_REGISTRY.filter(s => s.feedUrl === src(id).feedUrl), id).toHaveLength(1)
     }
-    // 49 places
-    expect(new Set(ROUND_8.map(id => src(id).countryCode)).size).toBe(49)
+    // 48 places
+    expect(new Set(ROUND_8.map(id => src(id).countryCode)).size).toBe(48)
   })
 
   it('reads them in languages the reader handles', () => {
@@ -53,12 +53,16 @@ describe('round 8: depth for the places with one or two feeds', () => {
     for (const id of ROUND_8) expect(languages.has(String(src(id).language)), id).toBe(true)
   })
 
-  it('pins a story that names no place at home, except for the two that cover many countries', () => {
+  it('pins a story that names no place at home, except for China Digital Times, which covers many countries', () => {
     for (const id of ROUND_8) expect(HOME_PIN_SOURCES.has(id), id).toBe(!NOT_AT_HOME.includes(id))
   })
 
   it('labels state agencies, state-owned papers and state broadcasters as state media', () => {
     for (const id of ROUND_8) expect(src(id).biasLabel === 'state-media', id).toBe(STATE_MEDIA.includes(id))
+  })
+
+  it('takes out Gazeta Express (Kosovo), which turned the server away (403) on its first two reads', () => {
+    expect(NEWS_SOURCE_REGISTRY.some(s => s.id === 'gazeta-express-xk' || s.feedUrl.includes('gazetaexpress.com'))).toBe(false)
   })
 
   it("tries LSM's English feed once more, at the address lsm-en had until Oct 21", () => {

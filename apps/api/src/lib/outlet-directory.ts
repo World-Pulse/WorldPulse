@@ -268,7 +268,6 @@ export const OUTLET_DIRECTORY: Readonly<Record<string, OutletEntry>> = {
   "gabonreview.com": { name: "Gabonreview", country: "GA", kind: 'national' },
   "gambiana.com": { name: "Gambiana", country: "GM", kind: 'national' },
   "gazeta.uz": { name: "Gazeta.uz", country: "UZ", kind: 'national' },
-  "gazetaexpress.com": { name: "Gazeta Express", country: "XK", kind: 'national' },
   "gcaptain.com": { name: "gCaptain", country: "US", kind: 'specialist' },
   "gdacs.org": { name: "GDACS", country: "IT", kind: 'official' },
   "geo.tv": { name: "Geo News", country: "PK", kind: 'national' },
