@@ -4200,21 +4200,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['panama', 'central-america', 'latin-america'],
     language:        'es',
   },
-  // Puerto Rico's largest daily
-  {
-    id:              'el-nuevo-dia-pr',
-    name:            'El Nuevo Día (Puerto Rico)',
-    feedUrl:         'https://www.elnuevodia.com/arc/outboundfeeds/rss/?outputType=xml',
-    category:        'geopolitics',
-    biasLabel:       'center',
-    reliability:     0.80,
-    countryCode:     'PR',
-    defaultLat:      18.47,
-    defaultLng:      -66.11,
-    defaultLocation: 'San Juan, Puerto Rico',
-    extraTags:       ['puerto-rico', 'caribbean', 'latin-america'],
-    language:        'es',
-  },
   // Mexico City daily
   {
     id:              'el-universal-mx',

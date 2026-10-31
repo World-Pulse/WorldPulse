@@ -20,7 +20,8 @@
       "focus-taiwan",
       "interfax-ukraine-en",
       "kazakhstan-today-en",
-      "vietnamplus-en"
+      "vietnamplus-en",
+      "ami-mauritania-en"
     ],
     "international": [
       "bbc-world",
@@ -67,7 +68,8 @@
       "radio-progreso-hn",
       "riviera-radio-mc",
       "bali-times",
-      "noticias-do-norte-cv"
+      "noticias-do-norte-cv",
+      "rtnk-me"
     ],
     "specialist": [
       "nikkei-asia",
@@ -150,7 +152,8 @@
       "leseco-ma",
       "sin-comillas-pr",
       "nyt-business",
-      "wsj-markets"
+      "wsj-markets",
+      "african-manager-en"
     ],
     "aggregator": [
       "allafrica",
@@ -171,7 +174,8 @@
       "boe-news",
       "eu-council",
       "opm-pressroom-dm",
-      "gouvernement-nouvelle-caledonie"
+      "gouvernement-nouvelle-caledonie",
+      "statehouse-seychelles"
     ]
   },
   "state": [
@@ -262,7 +266,13 @@
     "tvn-panama": "TVN Noticias",
     "meduza-en": "Meduza",
     "moscow-times": "The Moscow Times",
-    "kyiv-independent": "The Kyiv Independent"
+    "kyiv-independent": "The Kyiv Independent",
+    "benin-web-tv-en": "Benin Web TV",
+    "maka-angola-en": "Maka Angola",
+    "thelocal-at": "The Local Austria",
+    "rtv-slo-slovenija": "RTV Slovenija",
+    "de-ware-tijd-sr": "De Ware Tijd",
+    "ami-mauritania-en": "AMI"
   },
   "hosts": {
     "bbc-world": [
@@ -375,6 +385,12 @@
     ],
     "aristegui-noticias": [
       "aristeguinoticias.com"
+    ],
+    "thelocal-at": [
+      "thelocal.at"
+    ],
+    "rtv-slo-slovenija": [
+      "rtvslo.si"
     ]
   },
   "host_kind": {
@@ -886,6 +902,12 @@
       "host": "rediff.com",
       "name": "Rediff",
       "country": "IN",
+      "kind": "national"
+    },
+    {
+      "host": "elnuevodia.com",
+      "name": "El Nuevo Día",
+      "country": "PR",
       "kind": "national"
     }
   ]
