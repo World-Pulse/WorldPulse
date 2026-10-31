@@ -180,7 +180,9 @@
       "opm-pressroom-dm",
       "gouvernement-nouvelle-caledonie",
       "statehouse-seychelles",
-      "fsm-president-office"
+      "fsm-president-office",
+      "pmo-brunei",
+      "naalakkersuisut-gl"
     ]
   },
   "state": [
@@ -288,7 +290,9 @@
     "fsm-president-office": "FSM Office of the President",
     "confidencial-en": "Confidencial",
     "sos-medias-burundi-en": "SOS Médias Burundi",
-    "mauritius-times": "Mauritius Times"
+    "mauritius-times": "Mauritius Times",
+    "pmo-brunei": "Prime Minister's Office of Brunei",
+    "naalakkersuisut-gl": "Naalakkersuisut, Government of Greenland"
   },
   "hosts": {
     "bbc-world": [

@@ -18,6 +18,11 @@ describe('countriesMentioned', () => {
     expect(countriesMentioned('US says it disabled a cargo vessel near the UK')).toEqual(['US', 'GB'])
     expect(countriesMentioned('Michael Jordan buys turkeys for us')).toEqual([])
   })
+
+  it("knows Nauru by its name since Aug 2026, Naoero (Oct 31, 2026)", () => {
+    expect(countriesMentioned('Naoero signs new policing deal with Australia')).toEqual(['NR', 'AU'])
+    expect(countriesMentioned('Nauruan president visits Fiji')).toEqual(['NR', 'FJ'])
+  })
 })
 
 describe('countryConnections', () => {

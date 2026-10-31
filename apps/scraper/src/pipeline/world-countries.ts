@@ -204,7 +204,8 @@ export const MORE_COUNTRIES: CountryEntry[] = [
   c('KI', 'Kiribati', /\bkiribati\b/i, 'Tarawa', 1.33, 172.98),
   c('MH', 'Marshall Islands', /\bmarshall islands\b/i, 'Majuro', 7.09, 171.38),
   c('FM', 'Micronesia', /\bmicronesia\b/i, 'Palikir', 6.92, 158.16),
-  c('NR', 'Nauru', /\bnauru\b/i, 'Yaren', -0.55, 166.92),
+  // (its name since Aug 2026 is the Republic of Naoero, its people the dei-Naoero)
+  c('NR', 'Nauru', /\b(?:nauru(?:ans?)?|naoero)\b/i, 'Yaren', -0.55, 166.92),
   c('NZ', 'New Zealand', /\bnew zealand(?:ers?)?\b/i, 'Wellington', -41.29, 174.78),
   c('PW', 'Palau', /\bpalau\b/i, 'Ngerulmud', 7.50, 134.62),
   c('PG', 'Papua New Guinea', /\bpapua new guinea(?:n)?\b/i, 'Port Moresby', -9.44, 147.18),

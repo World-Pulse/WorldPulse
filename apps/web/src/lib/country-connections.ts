@@ -204,7 +204,7 @@ const COUNTRY_WORDS: Array<[string, string, RegExp]> = [
   ['KI', 'Kiribati', /\bkiribati\b/i],
   ['MH', 'Marshall Islands', /\bmarshall islands\b/i],
   ['FM', 'Micronesia', /\bmicronesia\b/i],
-  ['NR', 'Nauru', /\bnauru\b/i],
+  ['NR', 'Nauru', /\b(?:nauru(?:ans?)?|naoero)\b/i],   // Naoero: its name since Aug 2026
   ['NZ', 'New Zealand', /\bnew zealand(?:ers?)?\b/i],
   ['PW', 'Palau', /\bpalau\b/i],
   ['PG', 'Papua New Guinea', /\bpapua new guinea(?:n)?\b/i],

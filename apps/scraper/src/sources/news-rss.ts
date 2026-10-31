@@ -8361,6 +8361,46 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['mauritius', 'indian-ocean', 'africa'],
     language:        'en',
   },
+  // ── Added Oct 31, 2026 (Q9, the last four places) ──────────────────────────
+  // Devon, Oct 31, 12:33 PM: "Let's close the gap and try to find signals for Brunei, Greenland,
+  // Liechtenstein and Nauru". Brunei's newsrooms turn our requests away (Borneo Bulletin, Media
+  // Permata), stopped (RTB's feed, in June), post about once a month (The Scoop) or are for
+  // personal use only (The Bruneian's terms). Greenland's have a dead feed (KNR, last item 2017),
+  // allow private use only (Sermitsiaq.AG) or reserve their texts against data mining (Altinget
+  // Arktis). So both are read through their governments' press offices, as state media, the way
+  // Micronesia and Seychelles are. Not added: Liechtenstein's government sends its releases out
+  // through presseportal.ch, whose terms ask for an application before any automated use, and
+  // its own feed (llv.li) turns us away; Nauru has no newsroom with a feed.
+  // The Prime Minister's Office of Brunei: its News section, in English (the whole feed adds the sultan's speeches in Malay and tender notices); about 10 a month (its newest was 8 days old on the check, past round 7's 7-day rule, kept because nothing else covers Brunei, as with Tuvalu); its site's only notice is "Copyright Government of Brunei Darussalam"
+  {
+    id:              'pmo-brunei',
+    name:            "Prime Minister's Office (Brunei)",
+    feedUrl:         'https://www.pmo.gov.bn/category/news/feed/',
+    category:        'geopolitics',
+    biasLabel:       'state-media',
+    reliability:     0.45,
+    countryCode:     'BN',
+    defaultLat:      4.90,
+    defaultLng:      114.94,
+    defaultLocation: 'Bandar Seri Begawan, Brunei',
+    extraTags:       ['brunei', 'southeast-asia', 'asean', 'government', 'state-media'],
+    language:        'en',
+  },
+  // The Government of Greenland (Naalakkersuisut, Nuuk): its news in Danish (the same news is in Greenlandic); about 45 a month; the feed dates nothing, so each item's date comes from its link (dateFromLink); no terms page
+  {
+    id:              'naalakkersuisut-gl',
+    name:            'Naalakkersuisut (Greenland)',
+    feedUrl:         'https://naalakkersuisut.gl/rss/rssda.xml',
+    category:        'geopolitics',
+    biasLabel:       'state-media',
+    reliability:     0.50,
+    countryCode:     'GL',
+    defaultLat:      64.18,
+    defaultLng:      -51.72,
+    defaultLocation: 'Nuuk, Greenland',
+    extraTags:       ['greenland', 'arctic', 'nordics', 'government', 'state-media'],
+    language:        'da',
+  },
 ]
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────
@@ -8525,6 +8565,25 @@ export function feedPoint(block: string): { lat: number; lng: number } | null {
 }
 
 /**
+ * An item's date from its own link, for a feed that dates nothing (Oct 31, 2026: the Greenland
+ * government's feed gives a link and a title only, but .../Nyheder/2026/10/3010_styrelseschef is
+ * Oct 30, 2026). An undated item counts as new, so its 2,584 releases would all have come in as
+ * today's. The day only: noon UTC, never later than now; '' when the link carries no date.
+ */
+export function dateFromLink(link: string, now: number = Date.now()): string {
+  const path = (link || '').replace(/^https?:\/\/[^/]+/i, '')
+  // .../2026/10/3010_slug (the day, then the month again), or .../2026/10/30/slug
+  const glued = /\/(20\d{2})\/(\d{2})\/(\d{2})(\d{2})_/.exec(path)
+  const parts = glued && glued[4] === glued[2] ? glued : /\/(20\d{2})\/(\d{2})\/(\d{2})\//.exec(path)
+  if (!parts) return ''
+  const [year, month, day] = [Number(parts[1]), Number(parts[2]), Number(parts[3])]
+  const t = Date.UTC(year, month - 1, day, 12)
+  const d = new Date(t)
+  if (d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) return ''
+  return new Date(Math.min(t, now)).toISOString()
+}
+
+/**
  * Minimal RSS 2.0 + Atom parser.
  * Handles: RSS <item>, Atom <entry>, CDATA sections, encoded HTML.
  */
@@ -8565,8 +8624,9 @@ export function parseFeedItems(xml: string): FeedItem[] {
     items.push({
       title:       extract(['title']),
       link:        link.replace(/^https?:\/\/feedproxy\.google\.com\/~r\//i, 'https://'),
-      // (the Council of the EU's feed dates its items in Atom's <a10:updated>)
-      pubDate:     extract(['pubDate', 'published', 'updated', 'dc:date', 'a10:updated']),
+      // (the Council of the EU's feed dates its items in Atom's <a10:updated>; the Greenland
+      // government's dates nothing but its links)
+      pubDate:     extract(['pubDate', 'published', 'updated', 'dc:date', 'a10:updated']) || dateFromLink(link),
       description: extract(['description', 'summary', 'content', 'content:encoded']),
       point:       feedPoint(block),
       alertLevel:  extract(['gdacs:alertlevel']) || undefined,
@@ -8736,6 +8796,8 @@ export const HOME_PIN_SOURCES = new Set([
   // Oct 31, 2026 (Q9, sources round 7)
   'confidencial-en', 'islands-business-kiribati', 'islands-business-tuvalu', 'fresh-fruit-portal-chile',
   'fresh-fruit-portal-peru', 'fsm-president-office', 'sos-medias-burundi-en', 'mauritius-times',
+  // Oct 31, 2026 (Q9, the last four places)
+  'pmo-brunei', 'naalakkersuisut-gl',
 ])
 
 export interface InferredGeo {
