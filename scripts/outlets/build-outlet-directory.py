@@ -17,6 +17,12 @@ From two files:
   read directly (Reuters, AP...).
 
 Run after adding feeds:  python3 scripts/outlets/build-outlet-directory.py
+
+It also writes apps/api/src/lib/feed-history.ts (Oct 31, 2026): how many news feeds
+each country has had since Oct 14, 2026, by the day feeds were added (the dated
+"// ── ... Mon D, YYYY" headers in the feed list), and the place names its reports
+use: a place whose feeds just grew reports more than its usual for a few weeks,
+and counts over time can allow for that.
 """
 import json, os, re, sys
 
@@ -24,6 +30,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 FEEDS = os.path.join(ROOT, 'apps', 'scraper', 'src', 'sources', 'news-rss.ts')
 KINDS = os.path.join(ROOT, 'scripts', 'outlets', 'outlet-kinds.json')
 OUT = os.path.join(ROOT, 'apps', 'api', 'src', 'lib', 'outlet-directory.ts')
+HISTORY_OUT = os.path.join(ROOT, 'apps', 'api', 'src', 'lib', 'feed-history.ts')
+COUNTRIES = os.path.join(ROOT, 'apps', 'scraper', 'src', 'pipeline', 'world-countries.ts')
+GEO = os.path.join(ROOT, 'apps', 'scraper', 'src', 'pipeline', 'geo.ts')
+# Feeds added before this day count as each country's base
+HISTORY_SINCE = '2026-10-14'
 KIND_NAMES = ('agency', 'international', 'national', 'local', 'specialist', 'aggregator', 'official')
 # A feed's own address prefixes that aren't the website's
 FEED_PREFIXES = ('www.', 'feeds.', 'feed.', 'rss.', 'rssfeeds.')
@@ -65,6 +76,135 @@ def clean_name(name):
     n = re.split(r'\s+[—–-]\s+', name)[0].strip()
     n = re.sub(r'\s*\([^)]*\)$', '', n).strip()
     return n or name
+
+
+MONTHS = {m: i + 1 for i, m in enumerate(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'])}
+HEADER_DAY = re.compile(r'^\s*//\s*──.*?\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{1,2}), (20\d\d)')
+
+
+def dated_feeds():
+    """Each feed's country, home place and the day it was added: the date of the last dated section header above it"""
+    text = open(FEEDS, encoding='utf-8').read()
+    body = text[text.index('export const NEWS_SOURCE_REGISTRY'):]
+    body = body[:body.index('\n]\n')]
+    out, day = [], ''
+    for m in re.finditer(r"^[^\n]*$", body, re.M):
+        line = m.group(0)
+        h = HEADER_DAY.match(line)
+        if h:
+            day = f'{h.group(3)}-{MONTHS[h.group(1)]:02d}-{int(h.group(2)):02d}'
+            continue
+        f = re.match(r"\s*id:\s*" + STR, line)
+        if f:
+            out.append({'id': unescape(f.group(1)), 'day': day, 'country': None, 'home': None})
+            continue
+        if out:
+            c = re.match(r"\s*countryCode:\s*" + STR, line)
+            if c and out[-1]['country'] is None:
+                out[-1]['country'] = unescape(c.group(1)).upper()
+            loc = re.match(r"\s*defaultLocation:\s*" + STR, line)
+            if loc and out[-1]['home'] is None:
+                out[-1]['home'] = unescape(loc.group(1))
+    return out
+
+
+def country_names():
+    """Code → [name, capital] from the place-finder's country list (world-countries.ts) and capitals from geo.ts"""
+    names = {}
+    for m in re.finditer(r"^\s*c\('([A-Z]{2})',\s*" + r"('(?:[^'\\]|\\.)*'|\"[^\"]*\")" + r",\s*/.*?/[a-z]*,\s*" + STR,
+                         open(COUNTRIES, encoding='utf-8').read(), re.M):
+        name = m.group(2)[1:-1].replace("\\'", "'")
+        names.setdefault(m.group(1), []).extend([name, unescape(m.group(3))])
+    geo = open(GEO, encoding='utf-8').read()
+    cent = geo[geo.index('const COUNTRY_CENTROIDS'):]
+    cent = cent[:cent.index('\n}')]
+    for m in re.finditer(r"^\s*([A-Z]{2}):\s*\{[^}]*name:\s*" + STR, cent, re.M):
+        names.setdefault(m.group(1), []).append(unescape(m.group(2)))
+    return names
+
+
+# Home places that name a region or an organisation, not a country (Al-Monitor's "Middle East", UN News's "United Nations")
+NOT_PLACES = {'united nations', 'middle east', 'eurasia', 'pan-african', 'africa', 'asia', 'europe', 'global', 'world',
+              'worldwide', 'caribbean', 'pacific', 'gulf', 'latin america', 'central asia', 'balkans', 'sahel',
+              'west africa', 'east africa', 'southern africa', 'central africa', 'arctic', 'online'}
+
+
+def display_names(codes):
+    """English names of country codes, as Node's Intl gives them ("United States", "Türkiye")"""
+    import subprocess
+    js = ("const n=new Intl.DisplayNames(['en'],{type:'region'});const o={};"
+          "for(const c of process.argv.slice(1)){try{o[c]=n.of(c)}catch(e){}}console.log(JSON.stringify(o))")
+    try:
+        return json.loads(subprocess.run(['node', '-e', js] + sorted(codes), capture_output=True, text=True, timeout=30).stdout or '{}')
+    except Exception:
+        return {}
+
+
+def write_feed_history():
+    rows = [r for r in dated_feeds() if r['country']]
+    known = country_names()
+    by = {}
+    for r in rows:
+        by.setdefault(r['country'], []).append(r)
+    for cc, name in display_names(by).items():
+        if name and name != cc:
+            known.setdefault(cc, []).append(name)
+    known_owner = {}
+    for cc, ns in known.items():
+        for n_ in ns:
+            known_owner.setdefault(n_.lower(), cc)
+    home_owners = {}
+    for r in rows:
+        for part in (r['home'] or '').split(','):
+            home_owners.setdefault(part.strip().lower(), set()).add(r['country'])
+
+    def usable(part, cc):
+        low = part.lower()
+        return (len(part) > 2 and '/' not in part and low not in NOT_PLACES
+                and known_owner.get(low, cc) == cc and home_owners.get(low, {cc}) == {cc})
+    lines = [
+        '/**',
+        ' * How many news feeds each country has had since Oct 14, 2026, by the day feeds',
+        ' * were added, and the place names its reports use (its name, capital and its',
+        " * feeds' home places). Written by scripts/outlets/build-outlet-directory.py from",
+        " * the news feeds (apps/scraper/src/sources/news-rss.ts): don't edit by hand, run",
+        ' * the script. Countries whose feeds have not changed since then are left out.',
+        ' */',
+        '',
+        'export interface FeedHistory {',
+        '  /** place names, as reports name places ("Doha, Qatar" has the parts Doha and Qatar) */',
+        '  names: string[]',
+        '  /** news feeds homed in the country before the first step */',
+        '  base: number',
+        '  /** [day feeds were added (YYYY-MM-DD), feeds from that day on], oldest first */',
+        '  steps: Array<[string, number]>',
+        '}',
+        '',
+        f"export const FEED_HISTORY_SINCE = '{HISTORY_SINCE}'",
+        '',
+        '/** By country (ISO 3166-1 alpha-2) */',
+        'export const FEED_HISTORY: Readonly<Record<string, FeedHistory>> = {',
+    ]
+    shown = 0
+    for cc in sorted(by):
+        feeds_ = by[cc]
+        base = sum(1 for r in feeds_ if not r['day'] or r['day'] < HISTORY_SINCE)
+        days = sorted({r['day'] for r in feeds_ if r['day'] and r['day'] >= HISTORY_SINCE})
+        if not days:
+            continue
+        steps, n = [], base
+        for d in days:
+            n += sum(1 for r in feeds_ if r['day'] == d)
+            steps.append([d, n])
+        names = []
+        for n_ in known.get(cc, []) + [part.strip() for r in feeds_ for part in (r['home'] or '').split(',') if usable(part.strip(), cc)]:
+            if n_ and n_ not in names:
+                names.append(n_)
+        lines.append(f"  {cc}: {{ names: {json.dumps(names, ensure_ascii=False)}, base: {base}, steps: {json.dumps(steps)} }},")
+        shown += 1
+    lines += ['}', '']
+    open(HISTORY_OUT, 'w', encoding='utf-8').write('\n'.join(lines))
+    print(f'{shown} countries whose feeds changed since {HISTORY_SINCE} → {os.path.relpath(HISTORY_OUT, ROOT)}')
 
 
 def main():
@@ -141,6 +281,7 @@ def main():
     for e in directory.values():
         counts[e['kind']] = counts.get(e['kind'], 0) + 1
     print(f'{len(rows)} feeds, {len(directory)} websites → {os.path.relpath(OUT, ROOT)}: {counts}, state {sum(1 for e in directory.values() if e.get("state"))}')
+    write_feed_history()
 
 
 if __name__ == '__main__':

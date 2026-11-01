@@ -463,13 +463,15 @@ describe('the Council of the EU (plan R2a, Oct 20, 2026)', () => {
   it("reads each item's date from <a10:updated>, so the 3-day age rule applies", () => {
     const items = parseFeedItems(council)
     expect(items).toHaveLength(2)
-    expect(items[0]).toMatchObject({
+    // newest first since Oct 31, 2026 (newestFirst): the media advisory (14:45) before the Nigeria measure (13:40)
+    expect(items.map(i => i.pubDate)).toEqual(['2026-10-19T14:45:00Z', '2026-10-19T13:40:00Z'])
+    expect(items[1]).toMatchObject({
       title: 'European Peace Facility: Council adopts assistance measure to support defence capacities of Nigeria',
       link: 'https://www.consilium.europa.eu/en/press/press-releases/2026/10/19/european-peace-facility-council-adopts-assistance-measure-to-support-defence-capacities-of-nigeria/',
       pubDate: '2026-10-19T13:40:00Z',
     })
-    expect(isStaleItem(items[0]!.pubDate, new Date('2026-10-20T12:00:00Z').getTime())).toBe(false)
-    expect(isStaleItem(items[0]!.pubDate, new Date('2026-10-25T12:00:00Z').getTime())).toBe(true)
+    expect(isStaleItem(items[1]!.pubDate, new Date('2026-10-20T12:00:00Z').getTime())).toBe(false)
+    expect(isStaleItem(items[1]!.pubDate, new Date('2026-10-25T12:00:00Z').getTime())).toBe(true)
   })
 
   it('leaves out its media advisories, accreditation notices, schedules and briefing announcements', () => {

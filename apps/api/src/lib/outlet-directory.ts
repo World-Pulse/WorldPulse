@@ -313,6 +313,7 @@ export const OUTLET_DIRECTORY: Readonly<Record<string, OutletEntry>> = {
   "inewsguyana.com": { name: "iNews Guyana", country: "GY", kind: 'national' },
   "inquirer.net": { name: "Philippine Daily Inquirer", country: "PH", kind: 'national' },
   "investing.com": { name: "Investing.com News", country: "CY", kind: 'specialist' },
+  "iranwire.com": { name: "IranWire", country: "IR", kind: 'national' },
   "iraq-businessnews.com": { name: "Iraq Business News", country: "IQ", kind: 'specialist' },
   "irna.ir": { name: "IRNA", country: "IR", kind: 'agency', state: true },
   "irrawaddy.com": { name: "The Irrawaddy", country: "MM", kind: 'national' },

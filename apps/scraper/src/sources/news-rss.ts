@@ -9547,6 +9547,29 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['north-macedonia', 'balkans', 'europe'],
     language:        'sq',
   },
+  // ── Added Oct 31, 2026, 9:32 PM (Devon: "Implement all of the improvements you've just suggested") ──
+  // Round 8 found two feeds the reader itself kept out: IranWire lists its items oldest first, and Jordan News
+  // dates its items about 3 hours ahead. The reader now takes a feed's newest items (newestFirst) and dates an
+  // item from the future at the time it reads it (eventTimeOf). Jordan News stays out on its terms of use
+  // (checked 9:55 PM: "personal, non-commercial use only", and they name RSS feeds), as This Is Beirut did.
+  // IranWire: an independent newsroom on Iran, run from London since 2013; in English; 463 items, 115 in the
+  // last week; its pages show a bot check, so its terms are unread (Devon's 7:02 PM call: "add them anyway");
+  // its robots.txt allows every reader but the AI-training crawlers it names, with "search=yes" (links and
+  // short excerpts, as here) and "ai-train=no" in its content signals
+  {
+    id:              'iranwire-en',
+    name:            'IranWire',
+    feedUrl:         'https://iranwire.com/en/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.74,
+    countryCode:     'IR',
+    defaultLat:      35.69,
+    defaultLng:      51.39,
+    defaultLocation: 'Tehran, Iran',
+    extraTags:       ['iran', 'middle-east', 'independent-media', 'exile-media'],
+    language:        'en',
+  },
 ]
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────
@@ -9779,7 +9802,37 @@ export function parseFeedItems(xml: string): FeedItem[] {
     })
   }
 
-  return items.slice(0, MAX_ITEMS)
+  return newestFirst(items).slice(0, MAX_ITEMS)
+}
+
+/**
+ * A feed's items newest first, before the reader takes MAX_ITEMS (Oct 31, 2026). Most feeds list their
+ * newest first, but some list their oldest first (IranWire, found in sources round 8), and the first 20
+ * in file order then gave the server only month-old items. A stable sort: a feed already newest first is
+ * unchanged, and items without a date (each counts as new) come first in their own order.
+ */
+export function newestFirst<T extends { pubDate: string }>(items: T[]): T[] {
+  return items
+    .map((item, i) => {
+      const t = Date.parse(item.pubDate)
+      return { item, i, t: Number.isNaN(t) ? Number.POSITIVE_INFINITY : t }
+    })
+    .sort((a, b) => (b.t - a.t) || (a.i - b.i))
+    .map((x) => x.item)
+}
+
+/** How far ahead of now an item's date may be before it counts as "just published" (clocks differ a little) */
+export const FUTURE_SLACK_MS = 10 * 60_000
+
+/**
+ * When an item happened (Oct 31, 2026): its date, or now when it has none, can't be read, or lies ahead of
+ * now. Jordan News dates its items about 3 hours ahead (Amman's time marked as UTC, found in sources round 8),
+ * and an item from the future sat above the day's real news and looked like a scheduled event.
+ */
+export function eventTimeOf(pubDate: string | undefined, now: number = Date.now()): Date {
+  const d = pubDate ? new Date(pubDate) : new Date(now)
+  if (Number.isNaN(d.getTime()) || d.getTime() > now + FUTURE_SLACK_MS) return new Date(now)
+  return d
 }
 
 
@@ -10153,8 +10206,7 @@ async function processItem(
   const found       = inferGeo(item.title, cleanSummary(text), source, item.point)
   const geo         = gdacs?.place && !found.locationName ? { ...found, locationName: gdacs.place } : found
 
-  const pubDate  = item.pubDate ? new Date(item.pubDate) : new Date()
-  const eventTime = isNaN(pubDate.getTime()) ? new Date() : pubDate
+  const eventTime = eventTimeOf(item.pubDate)
 
   // The article's own words, or none when they only repeat the headline. The
   // outlet, its reliability and bias are on the signal (its source and the
