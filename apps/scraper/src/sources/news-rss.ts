@@ -9395,6 +9395,8 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   // visitors away with a bot check, so nobody could read its terms. Devon: "add them anyway". Each was
   // checked again with the server's request at 7:05 PM. La Perla del Sur (Puerto Rico) is left out: its
   // feed itself now answers with a bot check. Monaco-Matin's address leads to Nice-Matin's Monaco section.
+  // Taken out after it went in: Luxembourg Times, which turned the server away (403) on its first two reads
+  // (about 7:40 and 8:15 PM), though it answers the workspace.
   // Dominica News Online, an independent Roseau news site (Dominica's other feed is the prime minister's press room); its pages show a bot check, so its terms are unread
   {
     id:              'dominica-news-online-dm',
@@ -9499,21 +9501,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLocation: 'San Marino',
     extraTags:       ['san-marino', 'europe'],
     language:        'it',
-  },
-  // Luxembourg Times, the English news site of Luxemburger Wort's publisher; terms unread (bot check)
-  {
-    id:              'luxembourg-times-lu',
-    name:            'Luxembourg Times',
-    feedUrl:         'https://www.luxtimes.lu/rss/',
-    category:        'geopolitics',
-    biasLabel:       'center',
-    reliability:     0.75,
-    countryCode:     'LU',
-    defaultLat:      49.61,
-    defaultLng:      6.13,
-    defaultLocation: 'Luxembourg',
-    extraTags:       ['luxembourg', 'europe'],
-    language:        'en',
   },
   // Monaco-Matin, Nice-Matin's Monaco edition (monacomatin.mc now leads to its Monaco section), in French; terms unread (its terms page doesn't load for us)
   {
@@ -9973,7 +9960,7 @@ export const HOME_PIN_SOURCES = new Set([
   // Oct 31, 2026, 7:02 PM (round 8, Devon: "add them anyway"): national outlets, Macau's gaming trade paper and
   // Nice-Matin's Monaco edition
   'dominica-news-online-dm', 'doha-news-qa', 'shabait-er', 'breaking-belize-news-bz', 'starcom-barbados-bb', 'asgam-macau-mo',
-  'libertas-sm', 'luxembourg-times-lu', 'nice-matin-monaco-mc', 'oon-at', 'alsat-mk',
+  'libertas-sm', 'nice-matin-monaco-mc', 'oon-at', 'alsat-mk',
 ])
 
 export interface InferredGeo {

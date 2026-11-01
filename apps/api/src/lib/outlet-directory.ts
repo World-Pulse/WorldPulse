@@ -380,7 +380,6 @@ export const OUTLET_DIRECTORY: Readonly<Record<string, OutletEntry>> = {
   "lostiempos.com": { name: "Los Tiempos", country: "BO", kind: 'national' },
   "lovefm.com": { name: "Love FM", country: "BZ", kind: 'national' },
   "lrt.lt": { name: "LRT", country: "LT", kind: 'national' },
-  "luxtimes.lu": { name: "Luxembourg Times", country: "LU", kind: 'national' },
   "luxtoday.lu": { name: "Luxtoday", country: "LU", kind: 'national' },
   "madamasr.com": { name: "Mada Masr", country: "EG", kind: 'national' },
   "maghrebemergent.news": { name: "Maghreb Émergent", country: "DZ", kind: 'specialist' },

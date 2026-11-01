@@ -115,30 +115,32 @@ describe("round 8's summaries", () => {
 describe("round 8, Devon's call on the feeds whose terms we couldn't read (Oct 31, 7:02 PM: \"add them anyway\")", () => {
   const ADDED = [
     'dominica-news-online-dm', 'doha-news-qa', 'shabait-er', 'breaking-belize-news-bz', 'starcom-barbados-bb',
-    'asgam-macau-mo', 'libertas-sm', 'luxembourg-times-lu', 'nice-matin-monaco-mc', 'oon-at', 'alsat-mk',
+    'asgam-macau-mo', 'libertas-sm', 'nice-matin-monaco-mc', 'oon-at', 'alsat-mk',
   ]
 
-  it('reads the eleven whose feeds still answer, each at its own address, pinned at home', () => {
+  it('reads the ten whose feeds answer the server, each at its own address, pinned at home', () => {
     for (const id of ADDED) {
       expect(NEWS_SOURCE_REGISTRY.filter(s => s.id === id), id).toHaveLength(1)
       expect(NEWS_SOURCE_REGISTRY.filter(s => s.feedUrl === src(id).feedUrl), id).toHaveLength(1)
       expect(HOME_PIN_SOURCES.has(id), id).toBe(true)
     }
-    expect(ADDED.map(id => src(id).countryCode)).toEqual(['DM', 'QA', 'ER', 'BZ', 'BB', 'MO', 'SM', 'LU', 'MC', 'AT', 'MK'])
-    expect(ADDED.map(id => src(id).language)).toEqual(['en', 'en', 'en', 'en', 'en', 'en', 'it', 'en', 'fr', 'de', 'sq'])
+    expect(ADDED.map(id => src(id).countryCode)).toEqual(['DM', 'QA', 'ER', 'BZ', 'BB', 'MO', 'SM', 'MC', 'AT', 'MK'])
+    expect(ADDED.map(id => src(id).language)).toEqual(['en', 'en', 'en', 'en', 'en', 'en', 'it', 'fr', 'de', 'sq'])
     // Shabait is the Eritrean Ministry of Information's site
     expect(ADDED.filter(id => src(id).biasLabel === 'state-media')).toEqual(['shabait-er'])
     expect(src('shabait-er').extraTags).toContain('state-media')
   })
 
-  it("leaves out La Perla del Sur, whose feed itself now answers with a bot check, and reads Monaco-Matin at Nice-Matin's Monaco section", () => {
+  it("leaves out La Perla del Sur (its feed shows a bot check) and Luxembourg Times (it turned the server away), and reads Monaco-Matin at Nice-Matin's Monaco section", () => {
     expect(NEWS_SOURCE_REGISTRY.some(s => s.feedUrl.includes('periodicolaperla.com'))).toBe(false)
+    // Luxembourg Times went in, then came out: it turned the server away (403) on its first two reads
+    expect(NEWS_SOURCE_REGISTRY.some(s => s.feedUrl.includes('luxtimes.lu'))).toBe(false)
     expect(src('nice-matin-monaco-mc').feedUrl).toBe('https://www.nicematin.com/monaco/rss')
   })
 
   it('pins their stories at home, or where they name', () => {
     expect(inferGeo('Pioneering Educator Dame Avisene Carrington Dies at 108', '', src('starcom-barbados-bb')).countryCode).toBe('BB')
-    expect(inferGeo('Luxembourg guardianship association fears closure without new funding', '', src('luxembourg-times-lu')).countryCode).toBe('LU')
+    expect(inferGeo('Ministry of Culture mourns death of talented musician', '', src('breaking-belize-news-bz')).countryCode).toBe('BZ')
     // the talks are in Doha, the place named
     expect(inferGeo('Iranian negotiators in Doha for Qatar-mediated talks', '', src('doha-news-qa')).countryCode).toBe('QA')
     expect(inferGeo('Uzbekistan signs a new gas deal', '', src('doha-news-qa')).countryCode).toBe('UZ')
