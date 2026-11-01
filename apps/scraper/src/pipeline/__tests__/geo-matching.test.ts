@@ -396,3 +396,14 @@ describe('places 72 hours of headlines named and the gazetteer missed (Oct 30, 2
     expect(oneArea(at('Assembly in Jigawa'), at('Assembly in Ebonyi'))).toBe(false)
   })
 })
+
+describe('islands and regions headlines name plainly (M64)', () => {
+  it('pins them at their own places', () => {
+    expect(findGazetteerPlace('Aid reaches the Galapagos after storm')?.coords.country).toBe('EC')
+    expect(findGazetteerPlace('Whale spotted in the Gulf of St. Lawrence')?.coords.country).toBe('CA')
+    expect(findGazetteerPlace('Tenerife wildfire forces evacuations')?.coords.country).toBe('ES')
+    expect(findGazetteerPlace('Sardinia heatwave breaks record')?.coords.country).toBe('IT')
+    expect(findGazetteerPlace('Floods hit Sumatra villages')?.coords.country).toBe('ID')
+    expect(findGazetteerPlace('Nunavut hamlet loses power')?.coords.country).toBe('CA')
+  })
+})
