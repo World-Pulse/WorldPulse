@@ -407,3 +407,15 @@ describe('islands and regions headlines name plainly (M64)', () => {
     expect(findGazetteerPlace('Nunavut hamlet loses power')?.coords.country).toBe('CA')
   })
 })
+
+describe('cities that share a name with a word count with their state or country (H-0037)', () => {
+  it('pins them when the state or country follows, not when the name stands alone', () => {
+    expect(findGazetteerPlace('Flooding in Austin, Texas kills two')?.coords.country).toBe('US')
+    expect(findGazetteerPlace('Tyre, Lebanon hit by overnight strikes')?.coords.country).toBe('LB')
+    expect(findGazetteerPlace('Gao, Mali airport attacked')?.coords.country).toBe('ML')
+    expect(findGazetteerPlace('Portland, Oregon protest turns tense')?.coords.region).toBe('Oregon')
+    expect(findGazetteerPlace('Nice, France market reopens')?.coords.country).toBe('FR')
+    expect(findGazetteerPlace('Tyre prices rise as Nice weather returns')).toBeNull()
+    expect(findGazetteerPlace('Phoenix rises as Austin Butler stars')).toBeNull()
+  })
+})

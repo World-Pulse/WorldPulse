@@ -884,6 +884,29 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'rakhine': { lat: 20.1, lng: 93.5, country: 'MM', name: 'Rakhine' },
   'kordofan': { lat: 13.0, lng: 30.0, country: 'SD', name: 'Kordofan' },
   'macau': { lat: 22.1987, lng: 113.5439, country: 'MO', name: 'Macau' },
+  // Nov 1, 2026, 2:30 AM (H-0037): cities that share a name with a word or a person count only with the state or country written
+  // right after them ("Austin, Texas"), as headlines and datelines write them; the bare name stays unpinned.
+  'austin, texas': { lat: 30.2672, lng: -97.7431, country: 'US', region: 'Texas', name: 'Austin' },
+  'charlotte, north carolina': { lat: 35.2271, lng: -80.8431, country: 'US', region: 'North Carolina', name: 'Charlotte' },
+  'orlando, florida': { lat: 28.5383, lng: -81.3792, country: 'US', region: 'Florida', name: 'Orlando' },
+  'phoenix, arizona': { lat: 33.4484, lng: -112.074, country: 'US', region: 'Arizona', name: 'Phoenix' },
+  'buffalo, new york': { lat: 42.8864, lng: -78.8784, country: 'US', region: 'New York', name: 'Buffalo' },
+  'portland, oregon': { lat: 45.5152, lng: -122.6784, country: 'US', region: 'Oregon', name: 'Portland' },
+  'portland, maine': { lat: 43.6591, lng: -70.2568, country: 'US', region: 'Maine', name: 'Portland' },
+  'columbus, ohio': { lat: 39.9612, lng: -82.9988, country: 'US', region: 'Ohio', name: 'Columbus' },
+  'hamilton, ontario': { lat: 43.2557, lng: -79.8711, country: 'CA', region: 'Ontario', name: 'Hamilton' },
+  'newcastle upon tyne': { lat: 54.9783, lng: -1.6178, country: 'GB', name: 'Newcastle upon Tyne' },
+  'valencia, spain': { lat: 39.4699, lng: -0.3763, country: 'ES', name: 'Valencia' },
+  'santa cruz de la sierra': { lat: -17.7833, lng: -63.1821, country: 'BO', name: 'Santa Cruz de la Sierra' },
+  'cordoba, argentina': { lat: -31.4201, lng: -64.1888, country: 'AR', name: 'Córdoba' },
+  'córdoba, argentina': { lat: -31.4201, lng: -64.1888, country: 'AR', name: 'Córdoba' },
+  'cordoba, spain': { lat: 37.8882, lng: -4.7794, country: 'ES', name: 'Córdoba' },
+  'córdoba, spain': { lat: 37.8882, lng: -4.7794, country: 'ES', name: 'Córdoba' },
+  'nice, france': { lat: 43.7102, lng: 7.262, country: 'FR', name: 'Nice' },
+  'split, croatia': { lat: 43.5081, lng: 16.4402, country: 'HR', name: 'Split' },
+  'tyre, lebanon': { lat: 33.2705, lng: 35.2038, country: 'LB', name: 'Tyre' },
+  'gao, mali': { lat: 16.2717, lng: -0.0447, country: 'ML', name: 'Gao' },
+  'cali, colombia': { lat: 3.4516, lng: -76.532, country: 'CO', name: 'Cali' },
 }
 
 // ─── NER PATTERNS ────────────────────────────────────────────────────────────
