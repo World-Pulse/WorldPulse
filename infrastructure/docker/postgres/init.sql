@@ -555,6 +555,23 @@ CREATE TABLE device_push_tokens (
 
 CREATE INDEX idx_device_tokens_user ON device_push_tokens(user_id) WHERE active = TRUE;
 
+-- ─── WEB PUSH SUBSCRIPTIONS (Oct 31, 2026) ───────────────────────────────
+-- A browser that turned on alerts on the website (apps/api/src/lib/web-push.ts):
+-- its push address and keys, what it wants and its sending record; no account
+CREATE TABLE web_push_subscriptions (
+  id            UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+  endpoint      TEXT        NOT NULL UNIQUE,
+  p256dh        TEXT        NOT NULL,
+  auth          TEXT        NOT NULL,
+  breaking      BOOLEAN     NOT NULL DEFAULT TRUE,
+  countries     TEXT[]      NOT NULL DEFAULT '{}',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_sent_at  TIMESTAMPTZ,
+  sent_count    INTEGER     NOT NULL DEFAULT 0,
+  fail_count    INTEGER     NOT NULL DEFAULT 0
+);
+
 -- ─── SEED AI DIGEST USER ─────────────────────────────────────────────────
 INSERT INTO users (handle, display_name, account_type, verified, trust_score, bio) VALUES
   ('worldpulse_ai', 'WorldPulse AI Digest', 'ai', TRUE, 0.950, 'Automated synthesis of verified global signals. Powered by open-source AI.');

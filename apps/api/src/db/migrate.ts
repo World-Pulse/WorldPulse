@@ -472,6 +472,27 @@ async function run() {
   `)
   await db.raw(`CREATE INDEX IF NOT EXISTS idx_device_tokens_user ON device_push_tokens(user_id) WHERE active = TRUE`)
 
+  // ── web_push_subscriptions (Oct 31, 2026; Devon's OK at 11:11 PM) ────────
+  // A browser that turned on alerts on world-pulse.io (lib/web-push.ts,
+  // routes/push.ts): its push address and keys, what it wants (breaking
+  // stories, countries) and its sending record. No account, and nothing
+  // else about the reader.
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS web_push_subscriptions (
+      id            UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+      endpoint      TEXT        NOT NULL UNIQUE,
+      p256dh        TEXT        NOT NULL,
+      auth          TEXT        NOT NULL,
+      breaking      BOOLEAN     NOT NULL DEFAULT TRUE,
+      countries     TEXT[]      NOT NULL DEFAULT '{}',
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_sent_at  TIMESTAMPTZ,
+      sent_count    INTEGER     NOT NULL DEFAULT 0,
+      fail_count    INTEGER     NOT NULL DEFAULT 0
+    )
+  `)
+
   // ── search_analytics ──────────────────────────────────────────────────────
   await db.raw(`
     CREATE TABLE IF NOT EXISTS search_analytics (

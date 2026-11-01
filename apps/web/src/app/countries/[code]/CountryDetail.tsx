@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { CountryTopStories, type CountryStory } from '@/components/countries/CountryTopStories'
 import { CountryDisplacement } from '@/components/countries/CountryDisplacement'
+import { PushCountryButton } from '@/components/alerts/PushAlerts'
 
 // ─── Resilience Types ─────────────────────────────────────────────────────────
 
@@ -241,6 +242,10 @@ export default function CountryDetailPage({
             <p className="font-mono text-[12px] text-wp-text3 tracking-widest mt-0.5">
               {detail.code} · COUNTRY INTELLIGENCE
             </p>
+          </div>
+          {/* Push alerts for this country's major stories (Oct 31, 2026) */}
+          <div className="ml-auto self-start">
+            <PushCountryButton code={detail.code} name={detail.name} />
           </div>
         </div>
 

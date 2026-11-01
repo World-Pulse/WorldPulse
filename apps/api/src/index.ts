@@ -34,6 +34,7 @@ import { registerEmbedRoutes } from './routes/embed'
 import { registerStixRoutes } from './routes/stix'
 import { registerPublicRoutes } from './routes/public'
 import { registerNotificationRoutes } from './routes/notifications'
+import { registerPushRoutes } from './routes/push'
 import { registerUploadRoutes } from './routes/uploads'
 import { registerBriefingRoutes } from './routes/briefings'
 import { registerBriefingDailyRoutes } from './routes/briefing'
@@ -105,6 +106,7 @@ import { initClickHouse } from './lib/search-analytics'
 import { startDispatcher, stopDispatcher } from './lib/alert-dispatcher'
 import { startAlertDigests, stopAlertDigests } from './lib/alert-digest'
 import { startAlertScan, stopAlertScan } from './lib/alert-scan'
+import { startPushScan, stopPushScan } from './lib/push-scan'
 import { startPulseScheduler, stopPulseScheduler } from './lib/pulse/scheduler'
 import { startSummaryPass, stopSummaryPass } from './lib/summary-pass'
 import { ensureSubscribersTable } from './lib/subscribers'
@@ -314,6 +316,8 @@ async function bootstrap() {
   await app.register(registerPollRoutes,       { prefix: '/api/v1/polls' })
   await app.register(registerSourceRoutes,     { prefix: '/api/v1/sources' })
   await app.register(registerNotificationRoutes, { prefix: '/api/v1/notifications' })
+  // Push alerts on readers' own devices, no account (Oct 31, 2026)
+  await app.register(registerPushRoutes,         { prefix: '/api/v1/push' })
   await app.register(registerUploadRoutes,       { prefix: '/api/v1/uploads' })
   await app.register(registerAdminRoutes,        { prefix: '/api/v1/admin' })
   await app.register(registerDeveloperRoutes,    { prefix: '/api/v1/developer/keys' })
@@ -439,6 +443,7 @@ async function bootstrap() {
   startAlertDigests()
   // saved alerts against every new report, and on verification (plan 10)
   startAlertScan()
+  startPushScan()
 
   // ─── PULSE AI PUBLISHER SCHEDULER ────────────────────────
   // Gated by PULSE_ENABLED=true — runs flash brief checks (5m)
@@ -499,6 +504,7 @@ async function bootstrap() {
     stopDispatcher()
     stopAlertDigests()
     stopAlertScan()
+    stopPushScan()
     await Promise.allSettled([
       stopSearchConsumer(),
       disconnectSearchProducer(),

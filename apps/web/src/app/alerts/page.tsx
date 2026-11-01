@@ -16,6 +16,7 @@ import Link from 'next/link'
 import { Bell } from 'lucide-react'
 import { authHref } from '@/lib/auth-next'
 import { authHeaders } from '@/lib/story-follow'
+import { PushAlertsCard } from '@/components/alerts/PushAlerts'
 import {
   ALERT_CATEGORIES, SEVERITY_CHOICES, WHEN_CHOICES, EMPTY_FORM, alertBody, describeAlert,
   type AlertForm, type SavedAlert,
@@ -95,6 +96,8 @@ export default function AlertsPage() {
     return (
       <div className="max-w-2xl mx-auto px-4 py-8">
         <h1 className="text-[22px] font-bold text-wp-text mb-6">Alerts</h1>
+        {/* Push alerts need no account (Oct 31, 2026) */}
+        <div className="mb-6"><PushAlertsCard /></div>
         <div className="glass border border-[rgba(255,255,255,0.07)] rounded-xl p-8 text-center">
           <Bell className="w-10 h-10 text-wp-text3 mx-auto mb-3" />
           <div className="text-[16px] font-semibold text-wp-text mb-2">Sign in to set up alerts</div>
@@ -119,6 +122,9 @@ export default function AlertsPage() {
           <p className="mt-2 text-[12px] text-wp-amber">Alert emails are being switched on: your alerts are saved and will start sending soon.</p>
         )}
       </div>
+
+      {/* ── On this device: push alerts, no account (Oct 31, 2026) ──────── */}
+      <PushAlertsCard />
 
       {/* ── Your alerts ─────────────────────────────────────────────────── */}
       <section aria-labelledby="your-alerts" className="space-y-2">

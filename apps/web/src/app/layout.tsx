@@ -109,7 +109,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <Script id="sw-register" strategy="afterInteractive">
         {`
           if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js').catch(() => {});
+            navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
           }
         `}
       </Script>
