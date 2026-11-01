@@ -67,6 +67,42 @@ export function wants(sub: Pick<PushSub, 'breaking' | 'countries'>, s: PushStory
   return !!s.country_code && (s.severity === 'critical' || s.severity === 'high') && sub.countries.includes(s.country_code)
 }
 
+let tableReady = false
+
+/** True once the subscriptions table is known to exist */
+export function pushReady(): boolean {
+  return tableReady
+}
+
+/**
+ * Create the subscriptions table if it is missing (Devon's OK, Oct 31, 2026), at every start like the
+ * email subscribers' (lib/subscribers.ts): the deploy doesn't run db/migrate.ts. The first deploy of
+ * push alerts (b185cb1) answered 500 until this: the table only existed in migrate.ts.
+ */
+export async function ensurePushTable(): Promise<boolean> {
+  try {
+    await db.raw(`
+      CREATE TABLE IF NOT EXISTS web_push_subscriptions (
+        id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        endpoint      TEXT        NOT NULL UNIQUE,
+        p256dh        TEXT        NOT NULL,
+        auth          TEXT        NOT NULL,
+        breaking      BOOLEAN     NOT NULL DEFAULT TRUE,
+        countries     TEXT[]      NOT NULL DEFAULT '{}',
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_sent_at  TIMESTAMPTZ,
+        sent_count    INTEGER     NOT NULL DEFAULT 0,
+        fail_count    INTEGER     NOT NULL DEFAULT 0
+      )`)
+    tableReady = true
+    return true
+  } catch (err) {
+    logger.warn({ err }, 'Push subscriptions table could not be created; push alerts stay off')
+    return false
+  }
+}
+
 /** The stories in a look: one per story (its report with the most outlets), in the order they were verified */
 export function oneEach(rows: PushStory[]): PushStory[] {
   const best = new Map<string, PushStory>()

@@ -106,7 +106,7 @@ import { initClickHouse } from './lib/search-analytics'
 import { startDispatcher, stopDispatcher } from './lib/alert-dispatcher'
 import { startAlertDigests, stopAlertDigests } from './lib/alert-digest'
 import { startAlertScan, stopAlertScan } from './lib/alert-scan'
-import { startPushScan, stopPushScan } from './lib/push-scan'
+import { ensurePushTable, startPushScan, stopPushScan } from './lib/push-scan'
 import { startPulseScheduler, stopPulseScheduler } from './lib/pulse/scheduler'
 import { startSummaryPass, stopSummaryPass } from './lib/summary-pass'
 import { ensureSubscribersTable } from './lib/subscribers'
@@ -443,7 +443,10 @@ async function bootstrap() {
   startAlertDigests()
   // saved alerts against every new report, and on verification (plan 10)
   startAlertScan()
-  startPushScan()
+  // push alerts on readers' devices: the table at every start, then the minute look (Oct 31, 2026)
+  ensurePushTable()
+    .then(ok => { if (ok) startPushScan() })
+    .catch(err => logger.warn({ err }, 'Push alerts failed to start'))
 
   // ─── PULSE AI PUBLISHER SCHEDULER ────────────────────────
   // Gated by PULSE_ENABLED=true — runs flash brief checks (5m)

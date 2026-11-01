@@ -17,7 +17,7 @@ import { db } from '../db/postgres'
 import { logger } from '../lib/logger'
 import { sendError } from '../lib/errors'
 import { isPushEndpoint, validKeys, vapidKeys, sendPush } from '../lib/web-push'
-import { welcomeMessage, PUSHES_A_DAY } from '../lib/push-scan'
+import { welcomeMessage, pushReady, PUSHES_A_DAY } from '../lib/push-scan'
 
 /** Countries a browser may follow at most */
 export const MAX_PUSH_COUNTRIES = 30
@@ -37,6 +37,9 @@ const EndpointSchema = z.object({ endpoint: Endpoint })
 
 const LIMIT = { rateLimit: { max: 20, timeWindow: '1 minute' } }
 
+/** Until the subscriptions table is known to exist (lib/push-scan.ts ensurePushTable, at start) */
+const NOT_READY = 'Alerts are being switched on. Please try again in a minute.'
+
 /** A country's name for the welcome message, in English */
 function countryName(code: string): string {
   try {
@@ -53,6 +56,7 @@ export const registerPushRoutes: FastifyPluginAsync = async (app) => {
   })
 
   app.post('/subscribe', { config: LIMIT }, async (req, reply) => {
+    if (!pushReady()) return sendError(reply, 503, 'SERVICE_UNAVAILABLE', NOT_READY)
     const parsed = SubscribeSchema.safeParse(req.body)
     if (!parsed.success || !validKeys(parsed.data.subscription.keys.p256dh, parsed.data.subscription.keys.auth)) {
       return sendError(reply, 400, 'VALIDATION_ERROR', 'This browser’s subscription isn’t one we can send to')
@@ -84,6 +88,7 @@ export const registerPushRoutes: FastifyPluginAsync = async (app) => {
   })
 
   app.post('/status', { config: LIMIT }, async (req, reply) => {
+    if (!pushReady()) return sendError(reply, 503, 'SERVICE_UNAVAILABLE', NOT_READY)
     const parsed = EndpointSchema.safeParse(req.body)
     if (!parsed.success) return reply.send({ success: true, data: { subscribed: false, breaking: false, countries: [] } })
     const row = await db('web_push_subscriptions').where('endpoint', parsed.data.endpoint).select('breaking', 'countries').first()
@@ -96,6 +101,7 @@ export const registerPushRoutes: FastifyPluginAsync = async (app) => {
   })
 
   app.post('/unsubscribe', { config: LIMIT }, async (req, reply) => {
+    if (!pushReady()) return sendError(reply, 503, 'SERVICE_UNAVAILABLE', NOT_READY)
     const parsed = EndpointSchema.safeParse(req.body)
     if (!parsed.success) return sendError(reply, 400, 'VALIDATION_ERROR', 'Not a push subscription')
     await db('web_push_subscriptions').where('endpoint', parsed.data.endpoint).delete()

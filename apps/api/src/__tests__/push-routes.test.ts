@@ -26,6 +26,7 @@ vi.mock('../db/postgres', () => {
   }
   const db = (t: string) => builder(t)
   db.fn = { now: () => new Date() }
+  db.raw = async () => ({ rows: [] })
   return { db }
 })
 vi.mock('../lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() } }))
@@ -53,6 +54,16 @@ async function makeApp() {
 const post = (url: string, payload: unknown) => app.inject({ method: 'POST', url: `/api/v1/push/${url}`, payload: payload as Record<string, unknown> })
 
 beforeAll(async () => { app = await makeApp() })
+
+describe('before the table is known to exist', () => {
+  it('asks the browser to try again in a minute rather than failing', async () => {
+    const res = await post('status', { endpoint })
+    expect(res.statusCode).toBe(503)
+    expect(res.json().error).toContain('try again in a minute')
+    const { ensurePushTable } = await import('../lib/push-scan')
+    expect(await ensurePushTable()).toBe(true)
+  })
+})
 beforeEach(() => { tables.web_push_subscriptions = []; welcomes.length = 0 })
 
 describe('push routes', () => {

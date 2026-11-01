@@ -23,6 +23,8 @@ vi.mock('../lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), debug:
 type Row = Record<string, unknown>
 const tables: Record<string, Row[]> = { signals: [], web_push_subscriptions: [] }
 const updates: Array<{ id: unknown; data: Row }> = []
+const created: string[] = []
+let failCreate = false
 const deletes: unknown[] = []
 vi.mock('../db/postgres', () => {
   const chain = (table: string) => {
@@ -41,7 +43,10 @@ vi.mock('../db/postgres', () => {
     return api
   }
   const db = (t: string) => chain(t)
-  db.raw = (s: string) => ({ raw: s })
+  db.raw = (s: string) => {
+    if (s.includes('CREATE TABLE')) { created.push(s); if (failCreate) return Promise.reject(new Error('no rights')); return Promise.resolve({ rows: [] }) }
+    return { raw: s }
+  }
   db.fn = { now: () => 'now()' }
   return { db }
 })
@@ -55,11 +60,23 @@ vi.mock('../lib/web-push', () => ({
   pushTopic: (k: string) => `t-${k}`,
 }))
 
-import { isBreaking, wants, oneEach, pushMessage, nyDay, welcomeMessage, scanPush, PUSHES_A_DAY, type PushStory } from '../lib/push-scan'
+import { isBreaking, wants, oneEach, pushMessage, nyDay, welcomeMessage, scanPush, ensurePushTable, pushReady, PUSHES_A_DAY, type PushStory } from '../lib/push-scan'
 
 const story = (o: Partial<PushStory> = {}): PushStory => ({
   id: 's1', title: 'Strong earthquake strikes off the coast', severity: 'critical', source_count: 3,
   country_code: 'JP', location_name: 'Sendai, Japan', story_key: 'k1', ...o,
+})
+
+describe('the subscriptions table', () => {
+  it("is made at start if missing (the deploy doesn't run migrate.ts), and alerts stay off if it can't be", async () => {
+    failCreate = true
+    expect(await ensurePushTable()).toBe(false)
+    expect(pushReady()).toBe(false)
+    failCreate = false
+    expect(await ensurePushTable()).toBe(true)
+    expect(pushReady()).toBe(true)
+    expect(created.at(-1)).toContain('CREATE TABLE IF NOT EXISTS web_push_subscriptions')
+  })
 })
 
 describe('which stories go to which browsers', () => {
