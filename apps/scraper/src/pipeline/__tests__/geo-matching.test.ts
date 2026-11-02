@@ -444,3 +444,14 @@ describe('second cities of francophone Africa, Uganda, Madagascar and Panama get
     expect(findGazetteerPlace('Colon cancer screening expands')).toBeNull()
   })
 })
+
+describe('second cities of East Africa, Central Asia, the Caucasus and southern Africa get their own pins', () => {
+  it('pins them in their own country', () => {
+    expect(findGazetteerPlace('Clashes in Garissa leave five dead')?.coords.country).toBe('KE')
+    expect(findGazetteerPlace('Drone strike hits Port Sudan road near Kassala')?.coords.country).toBe('SD')
+    expect(findGazetteerPlace('Protesters gather in Osh over water prices')?.coords.country).toBe('KG')
+    expect(findGazetteerPlace('Oil leak reported near Atyrau')?.coords.country).toBe('KZ')
+    expect(findGazetteerPlace('Bus crash near Kutaisi kills six')?.coords.country).toBe('GE')
+    expect(findGazetteerPlace('Cyclone damage reported in Walvis Bay')?.coords.country).toBe('NA')
+  })
+})
