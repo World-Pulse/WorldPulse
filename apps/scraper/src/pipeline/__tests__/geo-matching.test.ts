@@ -433,3 +433,14 @@ describe('cities that share a name with a word count with their state or country
     expect(findGazetteerPlace('Rugby fans in Bury wait for wells to be dug')).toBeNull()
   })
 })
+
+describe('second cities of francophone Africa, Uganda, Madagascar and Panama get their own pins', () => {
+  it('pins them in their own country', () => {
+    expect(findGazetteerPlace('Travaux de maintenance à Ntoum (Communiqué SEEG)')?.coords.country).toBe('GA')
+    expect(findGazetteerPlace('Attaque jihadiste près de Thiès')?.coords.country).toBe('SN')
+    expect(findGazetteerPlace('Fighting reaches Uvira as thousands flee')?.coords.country).toBe('CD')
+    expect(findGazetteerPlace('Migrants cross the Darién Gap in record numbers')?.coords.country).toBe('PA')
+    expect(findGazetteerPlace('Floods in Colon, Panama leave hundreds homeless')?.coords.country).toBe('PA')
+    expect(findGazetteerPlace('Colon cancer screening expands')).toBeNull()
+  })
+})
