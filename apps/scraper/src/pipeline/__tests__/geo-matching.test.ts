@@ -485,3 +485,23 @@ describe('second cities of South America, Central America, Mexico and the Caribb
     expect(findGazetteerPlace('Police in Granada, Nicaragua arrested a man on Friday')?.coords.country).toBe('NI')
   })
 })
+
+describe('second cities of the Ukraine front, Russia, Turkey, the Levant and Europe get their own pins', () => {
+  it('pins them in their own country', () => {
+    expect(findGazetteerPlace('Russian drones hit an energy site in Sumy overnight')?.coords.country).toBe('UA')
+    expect(findGazetteerPlace('Fighting near Kupiansk and Avdiivka intensifies')?.coords.country).toBe('UA')
+    expect(findGazetteerPlace('Drone attack on Novorossiysk oil terminal')?.coords.country).toBe('RU')
+    expect(findGazetteerPlace('Officials said police in Bursa arrested a man on Friday')?.coords.country).toBe('TR')
+    expect(findGazetteerPlace('Strike on Qamishli kills two')?.coords.country).toBe('SY')
+    expect(findGazetteerPlace('Rocket alert in Ashkelon and Sderot')?.coords.country).toBe('IL')
+    expect(findGazetteerPlace('Dockers strike in Le Havre enters second week')?.coords.country).toBe('FR')
+    expect(findGazetteerPlace('Fan banned after incident in Bochum')?.coords.country).toBe('DE')
+    expect(findGazetteerPlace('Floods hit Murcia and Almería')?.coords.country).toBe('ES')
+    expect(findGazetteerPlace('Protest in Łódź over the budget')?.coords.country).toBe('PL')
+  })
+  it('does not pin words that contain them', () => {
+    expect(findGazetteerPlace('The summary of the bonnet recall')).toBeNull()
+    expect(findGazetteerPlace('Sumyt is a made-up word')).toBeNull()
+    expect(findGazetteerPlace('Foołódź festival opens')).toBeNull()
+  })
+})
