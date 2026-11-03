@@ -19,6 +19,11 @@ describe('findGazetteerPlace', () => {
     expect(findGazetteerPlace('Protests continue in Lima after the vote')?.place).toBe('lima')
   })
 
+  it('does not pin a cannabis story to Ganja, Azerbaijan', () => {
+    expect(findGazetteerPlace('Thailand shops sell ganja after the legal change')?.coords.country).not.toBe('AZ')
+    expect(findGazetteerPlace('Flood in Ganja, Azerbaijan displaces families')?.coords.country).toBe('AZ')
+  })
+
   it('pins Pavlohrad and Port Qasim at their own towns, not at the capital', () => {
     const p = findGazetteerPlace('Russian strike hits Pavlohrad rail depot')
     expect(p?.place).toBe('pavlohrad')

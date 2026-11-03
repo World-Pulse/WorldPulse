@@ -1108,7 +1108,9 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'turkmenabat': { lat: 39.0733, lng: 63.5786, country: 'TM', name: 'Turkmenabat' },
   'dashoguz': { lat: 41.8363, lng: 59.9666, country: 'TM', name: 'Dashoguz' },
   'turkmenbashi': { lat: 40.0225, lng: 52.955, country: 'TM', name: 'Turkmenbashi' },
-  'ganja': { lat: 40.6828, lng: 46.3606, country: 'AZ', name: 'Ganja' },
+  // ("ganja" is also the plant: only with the country after it)
+  'ganja, azerbaijan': { lat: 40.6828, lng: 46.3606, country: 'AZ', name: 'Ganja' },
+  'ganja city': { lat: 40.6828, lng: 46.3606, country: 'AZ', name: 'Ganja' },
   'sumqayit': { lat: 40.5855, lng: 49.6317, country: 'AZ', name: 'Sumqayit' },
   'gyumri': { lat: 40.7942, lng: 43.8453, country: 'AM', name: 'Gyumri' },
   'vanadzor': { lat: 40.8128, lng: 44.4883, country: 'AM', name: 'Vanadzor' },
