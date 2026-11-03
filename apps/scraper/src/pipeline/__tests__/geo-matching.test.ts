@@ -461,6 +461,16 @@ describe('second cities of East Africa, Central Asia, the Caucasus and southern 
   })
 })
 
+describe('names that end on an accented letter are found as whole words', () => {
+  it('pins Potosí, Cuiabá and Macapá, with or without the accent, and not inside a longer word', () => {
+    expect(findGazetteerPlace('Miners block roads in Potosí over pay')?.coords.country).toBe('BO')
+    expect(findGazetteerPlace('Fire spreads near Cuiabá, officials say')?.coords.country).toBe('BR')
+    expect(findGazetteerPlace('Flooding in Macapá displaces families')?.coords.country).toBe('BR')
+    expect(findGazetteerPlace('Flooding in Macapa displaces families')?.coords.country).toBe('BR')
+    expect(findGazetteerPlace('Cuiabáx festival opens')).toBeNull()
+  })
+})
+
 describe('second cities of South America, Central America, Mexico and the Caribbean get their own pins', () => {
   it('pins them in their own country', () => {
     expect(findGazetteerPlace('Clashes in Cúcuta leave five dead')?.coords.country).toBe('CO')

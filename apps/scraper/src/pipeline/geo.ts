@@ -1655,7 +1655,9 @@ for (const { code, capital, lat, lng } of CAPITALS) {
 
 const GAZETTEER_MATCHERS = Object.entries(GAZETTEER)
   .sort((a, b) => b[0].length - a[0].length)
-  .map(([place, coords]) => ({ place, coords, re: new RegExp(`\\b${escapeRegExp(place)}\\b`, 'i') }))
+  // \b can't see the end of a name that finishes on an accented letter ("Potosí", "Cuiabá": é, í, á count as
+  // non-word characters), so those names end where no other Latin letter follows instead
+  .map(([place, coords]) => ({ place, coords, re: new RegExp(`\\b${escapeRegExp(place)}${/[^\x00-\x7f]$/.test(place) ? '(?![A-Za-z0-9\\u00C0-\\u024F])' : '\\b'}`, 'i') }))
 const GAZETTEER_SCAN = GAZETTEER_MATCHERS.map(m => ({ place: m.place, coords: m.coords, re: new RegExp(m.re.source, 'gi') }))
 
 /** The gazetteer place mentioned first (the headline comes first); the longer name on a tie */
