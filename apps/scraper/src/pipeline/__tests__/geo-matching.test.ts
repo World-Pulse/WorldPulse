@@ -460,3 +460,18 @@ describe('second cities of East Africa, Central Asia, the Caucasus and southern 
     expect(findGazetteerPlace('Cyclone damage reported in Walvis Bay')?.coords.country).toBe('NA')
   })
 })
+
+describe('second cities of South America, Central America, Mexico and the Caribbean get their own pins', () => {
+  it('pins them in their own country', () => {
+    expect(findGazetteerPlace('Clashes in Cúcuta leave five dead')?.coords.country).toBe('CO')
+    expect(findGazetteerPlace('Port strike in Buenaventura enters third day')?.coords.country).toBe('CO')
+    expect(findGazetteerPlace('Police in Matamoros arrested a man on Friday')?.coords.country).toBe('MX')
+    expect(findGazetteerPlace('Protesters gather in Santiago de Cuba over blackouts')?.coords.country).toBe('CU')
+    expect(findGazetteerPlace('Gang attack in Cap-Haïtien kills four')?.coords.country).toBe('HT')
+    expect(findGazetteerPlace('Fire near Punta Arenas port')?.coords.country).toBe('CL')
+  })
+  it('pins the ambiguous names only with their country', () => {
+    expect(findGazetteerPlace('Flooding in Salvador, Brazil displaces thousands')?.coords.country).toBe('BR')
+    expect(findGazetteerPlace('Police in Granada, Nicaragua arrested a man on Friday')?.coords.country).toBe('NI')
+  })
+})
