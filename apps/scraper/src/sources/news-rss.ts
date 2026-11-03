@@ -10044,6 +10044,13 @@ const NO_PLACE_TOPIC = /\b(?:premier league|champions league|europa league|la li
  */
 const OWN_CONGRESS = new Set(['IN', 'NP', 'PH', 'MX', 'GT', 'HN', 'DO', 'CO', 'PE', 'EC', 'BO', 'CL', 'AR', 'PY'])
 
+/**
+ * A fixture headline ("Villarreal vs. PSG", "Everton v Chelsea"): two clubs, so a city found only in
+ * the summary is one team's, not where the story is (Nov 3, 2026: "Where to watch Villarreal vs. PSG"
+ * sat in Paris because the summary said Paris Saint-Germain)
+ */
+const FIXTURE_HEADLINE = /\S\s(?:vs?\.?|contra|frente a|gegen|contre)\s+\p{Lu}/u
+
 function fromHints(text: string, homeCountry?: string, national = false): InferredGeo | null {
   const lower = text.toLowerCase()
   for (const { keywords, geo } of GEO_HINTS) {
@@ -10122,6 +10129,7 @@ export function inferGeo(
     return datelinePlace(body)
       ?? { lat: source.defaultLat, lng: source.defaultLng, locationName: source.defaultLocation, countryCode: source.countryCode }
   }
+  if (FIXTURE_HEADLINE.test(title)) return { lat: null, lng: null, locationName: null, countryCode: null }
   const fromBody = fromPlace(body) ?? fromHints(body, source.countryCode)
   if (fromBody) return fromBody
   return { lat: null, lng: null, locationName: null, countryCode: null }

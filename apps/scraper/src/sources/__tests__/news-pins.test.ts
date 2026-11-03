@@ -26,6 +26,11 @@ describe('inferGeo', () => {
     expect(inferGeo('Everton v Manchester United: Premier League preview', '', source('myjoyonline-gh')).lat).toBeNull()
   })
 
+  it('does not pin a fixture to a club city found only in the summary (Nov 3, 2026)', () => {
+    expect(inferGeo('Dónde y a qué hora ver a Villarreal vs. PSG en TV y streaming', 'El Villarreal recibe al Paris Saint-Germain', source('abc-au-world')).lat).toBeNull()
+    expect(inferGeo('Christa Pike released', 'The Tennessee inmate survived', source('abc-au-world')).locationName).toBe('Tennessee')
+  })
+
   it('reads the summary when the headline names no place', () => {
     const geo = inferGeo('Christa Pike released from hospital', 'The Tennessee inmate survived a failed execution', source('abc-au-world'))
     expect(geo).toMatchObject({ locationName: 'Tennessee', countryCode: 'US' })
