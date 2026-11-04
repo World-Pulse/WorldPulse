@@ -7,6 +7,13 @@ import { describe, it, expect } from 'vitest'
 import { categorizeText, categorizeArticle, lede } from '../categories'
 
 describe('categorizeText', () => {
+  it('files health stories in Portuguese, Spanish, French and German by their disease words', () => {
+    expect(categorizeText('Quatro casos de tuberculose em Câmara de Lobos na Madeira')).toBe('health')
+    expect(categorizeText('Brote de sarampión en Chihuahua suma 40 casos')).toBe('health')
+    expect(categorizeText('Nouveau foyer de rougeole dans le Doubs')).toBe('health')
+    expect(categorizeText('Masern: Zahl der Fälle in Berlin steigt')).toBe('health')
+    expect(categorizeText('Campanha de vacinas chega a 200 escolas')).toBe('health')
+  })
   it('files the stories the old rules got wrong', () => {
     expect(categorizeText('Pope Leo XIV to undergo surgery to remove lump on lung')).toBe('health')
     expect(categorizeText('Children among 109 dead after boat capsizes off Djibouti, UN says')).toBe('disaster')
