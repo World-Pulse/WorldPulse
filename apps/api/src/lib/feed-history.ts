@@ -185,7 +185,7 @@ export const FEED_HISTORY: Readonly<Record<string, FeedHistory>> = {
   SK: { names: ["Slovakia", "Bratislava"], base: 0, steps: [["2026-10-20", 1]] },
   SL: { names: ["Sierra Leone", "Freetown"], base: 0, steps: [["2026-10-20", 1], ["2026-10-21", 2], ["2026-10-31", 3]] },
   SM: { names: ["San Marino"], base: 0, steps: [["2026-10-31", 3]] },
-  SN: { names: ["Senegal", "Dakar"], base: 1, steps: [["2026-10-20", 2], ["2026-10-21", 5]] },
+  SN: { names: ["Senegal", "Dakar"], base: 1, steps: [["2026-10-20", 2], ["2026-10-21", 4]] },
   SO: { names: ["Somalia", "Mogadishu"], base: 0, steps: [["2026-10-20", 3]] },
   SR: { names: ["Suriname", "Paramaribo"], base: 0, steps: [["2026-10-31", 3]] },
   SS: { names: ["South Sudan", "Juba"], base: 0, steps: [["2026-10-20", 1], ["2026-10-31", 2]] },

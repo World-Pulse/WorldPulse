@@ -678,7 +678,6 @@ export const OUTLET_DIRECTORY: Readonly<Record<string, OutletEntry>> = {
   "vision360.bo": { name: "Visión 360", country: "BO", kind: 'national' },
   "voanews.com": { name: "VOA", country: "US", kind: 'international' },
   "vonradio.com": { name: "VON Radio", country: "KN", kind: 'national' },
-  "wadr.org": { name: "West Africa Democracy Radio", country: "SN", kind: 'international' },
   "wam.ae": { name: "WAM", country: "AE", kind: 'agency', state: true },
   "wantedinrome.com": { name: "Wanted in Rome", country: "IT", kind: 'local' },
   "wardheernews.com": { name: "WardheerNews", country: "SO", kind: 'national' },

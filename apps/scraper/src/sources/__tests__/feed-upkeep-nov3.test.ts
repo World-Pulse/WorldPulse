@@ -43,3 +43,11 @@ describe('feed upkeep (Nov 3, 2026)', () => {
     expect(NEWS_SOURCE_REGISTRY.filter(s => s.countryCode === 'MU')).toHaveLength(2)
   })
 })
+
+describe('feed upkeep (Nov 4, 2026)', () => {
+  it('takes out West Africa Democracy Radio: wadr.org/feed/ now answers a "coming soon" page', () => {
+    expect(src('wadr')).toBeUndefined()
+    expect(HOME_PIN_SOURCES.has('wadr')).toBe(false)
+    expect(NEWS_SOURCE_REGISTRY.filter(s => s.countryCode === 'SN').map(s => s.id)).toContain('ouestaf-news')
+  })
+})

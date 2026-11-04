@@ -7443,21 +7443,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['senegal', 'west-africa', 'africa'],
     language:        'fr',
   },
-  // regional radio newsroom in Dakar created in 2005 by OSIWA (its about page), covering 14 West African countries in English; some items are bundled news bulletins; regional, so no home pin
-  {
-    id:              'wadr',
-    name:            'West Africa Democracy Radio (WADR)',
-    feedUrl:         'https://wadr.org/feed/',
-    category:        'geopolitics',
-    biasLabel:       'center',
-    reliability:     0.78,
-    countryCode:     'SN',
-    defaultLat:      14.72,
-    defaultLng:      -17.47,
-    defaultLocation: 'Dakar, Senegal',
-    extraTags:       ['west-africa', 'ecowas', 'senegal', 'africa', 'independent-media'],
-    language:        'en',
-  },
   // Dakar-based regional news site (Ouestaf Multimédia) covering West Africa; regional, so no home pin
   {
     id:              'ouestaf-news',
