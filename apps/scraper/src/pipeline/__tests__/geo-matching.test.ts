@@ -528,3 +528,27 @@ describe('second cities of Asia, Iran, the Gulf and Central Asia get their own p
     expect(findGazetteerPlace('Gwadarx is a made-up word')).toBeNull()
   })
 })
+
+describe('second cities of Africa get their own pins', () => {
+  it('pins them in their own country', () => {
+    expect(findGazetteerPlace('Officials said police in Zaria arrested a man on Friday')?.coords.country).toBe('NG')
+    expect(findGazetteerPlace('Attack near Gwoza leaves dozens dead')?.coords.country).toBe('NG')
+    expect(findGazetteerPlace('Cocoa traders protest in Takoradi')?.coords.country).toBe('GH')
+    expect(findGazetteerPlace('Floods hit Ismailia and Damietta')?.coords.country).toBe('EG')
+    expect(findGazetteerPlace('Armed groups clash in Zawiya')?.coords.country).toBe('LY')
+    expect(findGazetteerPlace('Protesters gather in Oran')?.coords.country).toBe('DZ')
+    expect(findGazetteerPlace('Migrants cross into Ceuta')?.coords.country).toBe('ES')
+    expect(findGazetteerPlace('Hotel strike in Hammamet')?.coords.country).toBe('TN')
+    expect(findGazetteerPlace('Drone strike on Kadugli')?.coords.country).toBe('SD')
+    expect(findGazetteerPlace('Fresh fighting in Juba')?.coords.country).toBe('SS')
+    expect(findGazetteerPlace('Mine accident near Polokwane')?.coords.country).toBe('ZA')
+    expect(findGazetteerPlace('Cholera spreads in Beledweyne')?.coords.country).toBe('SO')
+    expect(findGazetteerPlace('M23 advances toward Walikale')?.coords.country).toBe('CD')
+    expect(findGazetteerPlace('Jihadists attack Djibo')?.coords.country).toBe('BF')
+    expect(findGazetteerPlace('Rains delay flights in Dar es Salaam')?.coords.country).toBe('TZ')
+  })
+  it('does not pin words that contain them', () => {
+    expect(findGazetteerPlace('The zariaxx festival opens')).toBeNull()
+    expect(findGazetteerPlace('The Ho Chi Minh Trail museum reopens')?.coords.country).not.toBe('GH')
+  })
+})
