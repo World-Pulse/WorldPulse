@@ -53,6 +53,19 @@ vi.mock('../lib/email', () => ({ EMAIL_CONFIGURED: true }))
 const sendConfirmEmail = vi.fn(async () => true)
 vi.mock('../lib/briefing-email', () => ({ sendConfirmEmail: (...a: unknown[]) => sendConfirmEmail(...(a as [])) }))
 vi.mock('../lib/email-digest', () => ({ sendDigestEmail: vi.fn(), filterBySeverity: vi.fn((s: unknown) => s) }))
+// The bot trap's counts (lib/signup-guard.ts)
+const redisStore = new Map<string, string>()
+const trapped = new Map<string, Record<string, number>>()
+vi.mock('../db/redis', () => ({
+  redis: {
+    get: vi.fn(async (k: string) => redisStore.get(k) ?? null),
+    incr: vi.fn(async (k: string) => { const n = Number(redisStore.get(k) ?? 0) + 1; redisStore.set(k, String(n)); return n }),
+    expire: vi.fn(async () => 1),
+    hincrby: vi.fn(async (k: string, f: string, by: number) => {
+      const h = trapped.get(k) ?? {}; h[f] = (h[f] ?? 0) + by; trapped.set(k, h); return h[f]
+    }),
+  },
+}))
 vi.mock('../middleware/auth', () => ({
   optionalAuth: async (req: { headers: Record<string, string>; user?: unknown }) => {
     if (req.headers['x-test-user']) req.user = { id: req.headers['x-test-user'] }
@@ -79,6 +92,39 @@ beforeEach(() => {
   tables.digest_subscriptions = []
   tables.users = [{ id: 'user-1', email: 'Owner@Example.com' }]
   sendConfirmEmail.mockClear()
+  redisStore.clear()
+  trapped.clear()
+})
+
+describe('the bot trap on the briefing sign-up (Nov 4, 2026)', () => {
+  const post = (payload: Row, ip = '203.0.113.9') =>
+    app.inject({ method: 'POST', url: '/api/v1/digest/subscribe', payload, remoteAddress: ip })
+
+  it("emails a person who filled in the form, and no one when a script filled in the hidden box", async () => {
+    expect((await post({ email: 'reader@example.com', extra: '', formMs: 6_000 })).statusCode).toBe(201)
+    expect(sendConfirmEmail).toHaveBeenCalledTimes(1)
+    const bot = await post({ email: 'victim@example.com', extra: 'http://spam.example', formMs: 6_000 })
+    expect(bot.statusCode).toBe(400)
+    expect(tables.digest_subscriptions.map(r => r.email)).toEqual(['reader@example.com'])
+    expect(sendConfirmEmail).toHaveBeenCalledTimes(1)
+    await new Promise(r => setTimeout(r, 0))
+    expect([...trapped.entries()]).toEqual([[expect.stringMatching(/^briefing:trapped:\d{4}-\d{2}-\d{2}$/), { 'filled-hidden-box': 1 }]])
+  })
+
+  it('asks a form sent at once to try again, and sends nothing', async () => {
+    const res = await post({ email: 'quick@example.com', extra: '', formMs: 400 })
+    expect(res.statusCode).toBe(400)
+    expect(res.json().error).toContain('try again')
+    expect(sendConfirmEmail).not.toHaveBeenCalled()
+  })
+
+  it('sends at most 5 confirmation emails an hour for one address; others carry on', async () => {
+    for (let i = 0; i < 5; i++) expect((await post({ email: `p${i}@example.com`, extra: '', formMs: 5_000 })).statusCode).toBe(201)
+    const over = await post({ email: 'p5@example.com', extra: '', formMs: 5_000 })
+    expect(over.statusCode).toBe(429)
+    expect(sendConfirmEmail).toHaveBeenCalledTimes(5)
+    expect((await post({ email: 'other@example.com', extra: '', formMs: 5_000 }, '198.51.100.30')).statusCode).toBe(201)
+  })
 })
 
 describe('sign-up and confirmation', () => {

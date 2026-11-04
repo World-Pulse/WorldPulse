@@ -10,6 +10,7 @@ import {
   splitFollows, joinFollows, MAX_COUNTRIES,
 } from '../lib/subscribers'
 import { sendConfirmEmail } from '../lib/briefing-email'
+import { signupTrap, signupAllowed, countSignup, noteTrapped } from '../lib/signup-guard'
 import type { Signal, SignalSeverity } from '@worldpulse/types'
 
 /**
@@ -91,12 +92,24 @@ export const registerDigestRoutes: FastifyPluginAsync = async (app) => {
     preHandler: [optionalAuth],
     config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
   }, async (req, reply) => {
+    // The bot trap (lib/signup-guard.ts, Nov 4, 2026): no confirmation email for a form a script filled in
+    const trap = signupTrap(req.body)
+    if (trap) {
+      req.log.info({ trap }, 'Briefing sign-up stopped by the bot trap')
+      void noteTrapped(trap, 'briefing')
+      return trap === 'too-fast'
+        ? sendError(reply, 400, 'VALIDATION_ERROR', 'That was quick. Please check the address and try again.')
+        : sendError(reply, 400, 'VALIDATION_ERROR', 'Please enter a valid email address')
+    }
     const parsed = SubscribeSchema.safeParse(req.body)
     if (!parsed.success) {
       return sendError(reply, 400, 'VALIDATION_ERROR', 'Please enter a valid email address')
     }
     if (!EMAIL_CONFIGURED || !subscribersReady() || !linksConfigured()) {
       return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The email briefing isn’t open yet')
+    }
+    if (!(await signupAllowed(req.ip, 'briefing'))) {
+      return sendError(reply, 429, 'RATE_LIMITED', 'Too many sign-ups from this connection. Please try again in an hour.')
     }
 
     const { frequency, min_severity, source } = parsed.data
@@ -125,6 +138,7 @@ export const registerDigestRoutes: FastifyPluginAsync = async (app) => {
       })
     }
 
+    void countSignup(req.ip, 'briefing')
     const sent = await sendConfirmEmail(email)
     if (!sent) {
       return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'We couldn’t send the confirmation email just now. Please try again later.')

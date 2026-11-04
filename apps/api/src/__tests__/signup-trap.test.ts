@@ -1,7 +1,7 @@
 /**
  * The sign-up bot trap (lib/signup-guard.ts and the website's lib/signup-trap.ts, Nov 3, 2026): a form a
  * script filled in makes no account, a person's form does, and one address makes at most
- * SIGNUPS_PER_HOUR accounts in an hour. A direct call to the API, which sends neither of the form's
+ * SIGNUPS_PER_HOUR.account accounts in an hour. A direct call to the API, which sends neither of the form's
  * fields, still works.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
@@ -114,14 +114,14 @@ describe('POST /api/v1/auth/register with the trap', () => {
     expect((await register(person())).statusCode).toBe(201)
   })
 
-  it(`makes at most ${SIGNUPS_PER_HOUR} accounts from one address in an hour; other addresses carry on`, async () => {
-    for (let i = 0; i < SIGNUPS_PER_HOUR; i++) {
+  it(`makes at most ${SIGNUPS_PER_HOUR.account} accounts from one address in an hour; other addresses carry on`, async () => {
+    for (let i = 0; i < SIGNUPS_PER_HOUR.account; i++) {
       expect((await register({ ...person(), extra: '', formMs: 5_000 })).statusCode).toBe(201)
     }
     const over = await register({ ...person(), extra: '', formMs: 5_000 })
     expect(over.statusCode).toBe(429)
     expect(over.json().error).toContain('in an hour')
-    expect(users).toHaveLength(SIGNUPS_PER_HOUR)
+    expect(users).toHaveLength(SIGNUPS_PER_HOUR.account)
     expect((await register({ ...person(), extra: '', formMs: 5_000 }, '198.51.100.20')).statusCode).toBe(201)
   })
 })

@@ -27,7 +27,9 @@ describe('follow your countries (plan G13)', () => {
   it('lets a reader follow up to 5 countries and sends them', () => {
     expect(src).toContain('const MAX_COUNTRIES = 5')
     expect(src).toContain('+ Follow your countries (optional)')
-    expect(src).toContain('JSON.stringify({ email, frequency, countries, source })')
+    // with the bot trap's two fields since Nov 4, 2026 (lib/signup-trap.ts)
+    expect(src).toContain('JSON.stringify({ email, frequency, countries, source, ...trapFields(extra, openedAt.current) })')
+    expect(src).toContain('name={TRAP_FIELD}')
     expect(src).toContain("new Intl.DisplayNames(['en'], { type: 'region' })")
   })
 })

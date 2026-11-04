@@ -15,7 +15,8 @@
  * G13, Oct 30, 2026).
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { TRAP_FIELD, trapFields } from '@/lib/signup-trap'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.world-pulse.io'
 
@@ -78,8 +79,12 @@ export function BriefingSignup({ source, compact = false, className = '' }: { so
   )
   const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
   const [message, setMessage] = useState('')
+  // The bot trap (lib/signup-trap.ts): the invisible box, and when the form opened
+  const [extra, setExtra] = useState('')
+  const openedAt = useRef(0)
 
   useEffect(() => {
+    openedAt.current = Date.now()
     setNotice(noticeFromAddress())
     let alive = true
     fetch(`${API_URL}/api/v1/digest/config`)
@@ -97,7 +102,7 @@ export function BriefingSignup({ source, compact = false, className = '' }: { so
       const res = await fetch(`${API_URL}/api/v1/digest/subscribe`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, frequency, countries, source }),
+        body: JSON.stringify({ email, frequency, countries, source, ...trapFields(extra, openedAt.current) }),
       })
       const data = await res.json().catch(() => null) as { message?: string; error?: string | { message?: string } } | null
       if (res.ok) {
@@ -186,7 +191,20 @@ export function BriefingSignup({ source, compact = false, className = '' }: { so
             {countries.length > 0 && (
               <p className="mt-1 text-[11.5px] text-wp-text3">Their stories come first in each email.</p>
             )}
-            <form onSubmit={e => { void submit(e) }} className="mt-2.5 flex flex-col sm:flex-row gap-2">
+            <form onSubmit={e => { void submit(e) }} className="relative mt-2.5 flex flex-col sm:flex-row gap-2">
+              {/* The bot trap's invisible box: off screen, out of the tab order and hidden from screen readers */}
+              <div aria-hidden="true" style={{ position: 'absolute', left: '-10000px', top: 'auto', width: 1, height: 1, overflow: 'hidden' }}>
+                <label htmlFor={`${TRAP_FIELD}-${source}`}>Leave this empty</label>
+                <input
+                  id={`${TRAP_FIELD}-${source}`}
+                  name={TRAP_FIELD}
+                  type="text"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={extra}
+                  onChange={e => setExtra(e.target.value)}
+                />
+              </div>
               <label htmlFor={`briefing-email-${source}`} className="sr-only">Email address</label>
               <input
                 id={`briefing-email-${source}`}

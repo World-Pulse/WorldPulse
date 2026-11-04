@@ -195,6 +195,33 @@ PY
 # are never polled again: they are left out of "tracked" and the failing list
 # and only counted ("switched_off").
 # Names, counts and times only: no addresses, no error text.
+# The sign-up bot trap (Nov 3-4, 2026; apps/api/src/lib/signup-guard.ts): the sign-ups it stopped today
+# and yesterday (UTC), for accounts and for the email briefing, by reason. Counts only.
+signup_trap_stats() {
+  local pw out
+  pw=$(redis_pw) || pw=""
+  out=$(timeout 10 docker exec -e REDISCLI_AUTH="$pw" wp_redis sh -c '
+      for kind in signup briefing; do
+        for day in "$1" "$2"; do
+          echo "$kind $day $(redis-cli --raw HGETALL "$kind:trapped:$day" | paste -sd " " -)"
+        done
+      done' sh "$(date -u +%F)" "$(date -u -d yesterday +%F)" 2>/dev/null) || out=""
+  OUT="$out" python3 - <<'PY' 2>/dev/null || printf 'null'
+import json, os
+res = {'accounts': {'today': {}, 'yesterday': {}}, 'briefing': {'today': {}, 'yesterday': {}}}
+lines = [l.split() for l in os.environ.get('OUT', '').splitlines() if l.strip()]
+if not lines:
+    print('null')
+else:
+    days = sorted({l[1] for l in lines})
+    for l in lines:
+        kind = 'accounts' if l[0] == 'signup' else 'briefing'
+        when = 'today' if l[1] == days[-1] else 'yesterday'
+        words = l[2:]
+        res[kind][when] = {words[i]: int(words[i + 1]) for i in range(0, len(words) - 1, 2) if words[i + 1].isdigit()}
+    print(json.dumps(res))
+PY
+}
 source_stats() {
   local pw out off
   pw=$(redis_pw) || pw=""
@@ -529,12 +556,14 @@ pipeline_stats() {
   q7="SELECT json_build_object(
         'accounts',    count(*),
         'accounts_7d', count(*) FILTER (WHERE created_at > now() - interval '7 days'),
+        'accounts_24h', count(*) FILTER (WHERE created_at > now() - interval '24 hours'),
         'seen_24h',    count(*) FILTER (WHERE last_seen_at > now() - interval '24 hours'),
         'seen_7d',     count(*) FILTER (WHERE last_seen_at > now() - interval '7 days'),
         'returning_7d', count(*) FILTER (WHERE last_seen_at > now() - interval '7 days' AND created_at < now() - interval '7 days'),
         'subscribers', (SELECT count(*) FROM digest_subscriptions WHERE is_active AND confirmed_at IS NOT NULL),
         'subscribers_7d', (SELECT count(*) FROM digest_subscriptions WHERE is_active AND confirmed_at > now() - interval '7 days'),
         'subscribers_unconfirmed', (SELECT count(*) FROM digest_subscriptions WHERE is_active AND confirmed_at IS NULL),
+        'subscribers_unconfirmed_24h', (SELECT count(*) FROM digest_subscriptions WHERE is_active AND confirmed_at IS NULL AND created_at > now() - interval '24 hours'),
         'pro', (SELECT count(*) FROM subscriptions WHERE plan = 'pro' AND status IN ('active', 'trialing')))
       FROM users WHERE email IS NOT NULL AND account_type NOT IN ('ai', 'bot', 'admin')"
   part members db_json 10 "$q7"
@@ -572,6 +601,7 @@ pipeline_stats() {
         'real_seen_30d', count(*) FILTER (WHERE NOT (t_test OR t_staff OR t_plus OR t_admin) AND last_seen_at > now() - interval '30 days'))
       FROM f"
   part members_detail db_json 10 "$q7d"
+  part signup_trap signup_trap_stats
   # The second read's "not an event" verdicts (plan 11a, Oct 30, 2026): how many
   # there are, and the newest 30 with their report's title and the verdict's
   # line, to read whether they're right before such a verdict may lower a
@@ -632,6 +662,8 @@ out['members'] = part('members')
 # Who the accounts are (counts only), with the members; null when that query failed
 if isinstance(out['members'], dict):
     out['members']['detail'] = part('members_detail')
+    # The sign-ups the bot trap stopped (Nov 4, 2026); null when Redis couldn't be read
+    out['members']['trapped'] = part('signup_trap')
 if isinstance(out.get('readers'), dict):
     out['readers']['members'] = out['members']
 took = {}
