@@ -254,7 +254,8 @@ describe('NEWS_SOURCE_REGISTRY', () => {
       expect(NEWS_SOURCE_REGISTRY.find(s => s.id === id)).toBeUndefined()
     }
     const canada = NEWS_SOURCE_REGISTRY.filter(s => s.countryCode === 'CA').map(s => s.id)
-    expect(canada).toEqual(expect.arrayContaining(['globe-and-mail-ca', 'global-news-ca', 'national-post']))
+    // National Post was taken out on Nov 3, 2026: its feed addresses now lead to web pages
+    expect(canada).toEqual(expect.arrayContaining(['globe-and-mail-ca', 'global-news-ca']))
     // Thailand and Turkey keep an outlet each
     expect(NEWS_SOURCE_REGISTRY.some(s => s.countryCode === 'TH')).toBe(true)
     expect(NEWS_SOURCE_REGISTRY.some(s => s.countryCode === 'TR')).toBe(true)

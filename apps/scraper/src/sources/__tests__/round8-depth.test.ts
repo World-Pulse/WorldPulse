@@ -2,14 +2,15 @@
  * Round 8 (Oct 31, 2026, Q9): depth for the places with one or two feeds. Devon, 2:43 PM: "let's now
  * [go through] every place with only 1 or 2 sources to create more depth", with helpers (eight, one
  * per region). 63 feeds for 48 places, each checked again before it went in; the helpers' notes are
- * in the HQ's departments/research/sources-round-8-2026-10-31.md.
+ * in the HQ's departments/research/sources-round-8-2026-10-31.md. 62 since Nov 3, 2026: Défi Media
+ * (Mauritius) was taken out when its new site dropped its feed; Mauritius keeps Top FM and Mauritius Times.
  */
 import { describe, it, expect } from 'vitest'
 import { NEWS_SOURCE_REGISTRY, HOME_PIN_SOURCES, inferGeo, parseFeedItems } from '../news-rss'
 import { cleanSummary, feedText } from '../../pipeline/text'
 
 const ROUND_8 = [
-  'eswatini-observer-sz', 'eswatini-positive-news-sz', 'the-dawn-ss', 'defimedia-mu', 'namibian-sun-na',
+  'eswatini-observer-sz', 'eswatini-positive-news-sz', 'the-dawn-ss', 'namibian-sun-na',
   'new-era-na', 'rwanda-dispatch-rw', 'mwebantu-zm', 'news-diggers-zm', 'ang-guinea-bissau',
   'e-global-guinea-bissau', 'journal-de-brazza-cg', 'rstp-sao-tome', 'stp-press', 'business-in-cameroon',
   'datacameroon', 'corbeau-news-centrafrique', 'atpe-tchad', 'aip-cote-divoire', 'rti-info-ci',
@@ -37,15 +38,15 @@ const STATE_MEDIA = [
 const src = (id: string) => NEWS_SOURCE_REGISTRY.find(s => s.id === id)!
 
 describe('round 8: depth for the places with one or two feeds', () => {
-  it('reads 63 more feeds, each once and at an address no other entry reads', () => {
-    expect(new Set(ROUND_8).size).toBe(63)
+  it('reads 62 more feeds, each once and at an address no other entry reads', () => {
+    expect(new Set(ROUND_8).size).toBe(62)
     for (const id of ROUND_8) {
       expect(NEWS_SOURCE_REGISTRY.filter(s => s.id === id), id).toHaveLength(1)
       expect(src(id).feedUrl, id).toMatch(/^https:\/\//)
       expect(NEWS_SOURCE_REGISTRY.filter(s => s.feedUrl === src(id).feedUrl), id).toHaveLength(1)
     }
-    // 48 places
-    expect(new Set(ROUND_8.map(id => src(id).countryCode)).size).toBe(48)
+    // 47 places (48 with Défi Media's Mauritius)
+    expect(new Set(ROUND_8.map(id => src(id).countryCode)).size).toBe(47)
   })
 
   it('reads them in languages the reader handles', () => {

@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { afterSignIn, authHref, nextFromLocation } from '@/lib/auth-next'
+import { TRAP_FIELD, signupBody } from '@/lib/signup-trap'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -25,7 +26,13 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false)
   // The page to return to after onboarding (?next=, plan G13)
   const [next, setNext] = useState<string | null>(null)
-  useEffect(() => { setNext(nextFromLocation()) }, [])
+  // The bot trap (lib/signup-trap.ts): the invisible box, and when the form opened
+  const [extra, setExtra] = useState('')
+  const openedAt = useRef(0)
+  useEffect(() => {
+    setNext(nextFromLocation())
+    openedAt.current = Date.now()
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -36,7 +43,7 @@ export default function RegisterPage() {
       const res = await fetch(`${API_URL}/api/v1/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ handle, displayName, email, password }),
+        body: JSON.stringify(signupBody({ handle, displayName, email, password }, extra, openedAt.current)),
       })
 
       const data = await res.json()
@@ -133,6 +140,20 @@ export default function RegisterPage() {
               autoComplete="email"
               className="bg-wp-surface2 border border-[rgba(255,255,255,0.08)] rounded-lg px-3 py-2 text-[14px] text-wp-text placeholder-wp-text3 outline-none focus:border-wp-amber transition-colors"
               placeholder="you@example.com"
+            />
+          </div>
+
+          {/* The bot trap's invisible box: off screen, out of the tab order and hidden from screen readers */}
+          <div aria-hidden="true" style={{ position: 'absolute', left: '-10000px', top: 'auto', width: 1, height: 1, overflow: 'hidden' }}>
+            <label htmlFor={TRAP_FIELD}>Leave this empty</label>
+            <input
+              id={TRAP_FIELD}
+              name={TRAP_FIELD}
+              type="text"
+              tabIndex={-1}
+              autoComplete="off"
+              value={extra}
+              onChange={e => setExtra(e.target.value)}
             />
           </div>
 

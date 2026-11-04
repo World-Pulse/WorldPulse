@@ -9,6 +9,7 @@ import { checkLoginAttempt, recordFailedLogin, clearLoginAttempts } from '../lib
 import { sendError } from '../lib/errors'
 import { markSeen } from '../lib/last-seen'
 import { EMAIL_CONFIGURED, sendEmail } from '../lib/email'
+import { signupTrap, signupAllowed, countSignup, noteTrapped } from '../lib/signup-guard'
 import {
   resetConfigured, resetToken, parseResetToken, checkResetToken, resetLink, resetEmail, resetCountKey,
   RESETS_PER_HOUR, RESET_SENT_TEXT, RESET_OFFLINE_TEXT, RESET_DONE_TEXT, RESET_EXPIRED_TEXT, RESET_INVALID_TEXT,
@@ -110,6 +111,9 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
           displayName: { type: 'string', minLength: 1, maxLength: 100 },
           email:       { type: 'string', format: 'email' },
           password:    { type: 'string', minLength: 8, maxLength: 128 },
+          // Sent by the website's form for the bot trap (lib/signup-guard.ts): leave both out when calling directly
+          extra:       { type: 'string', maxLength: 200 },
+          formMs:      { type: 'number' },
         },
       },
       response: {
@@ -129,10 +133,24 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
         },
         400: { description: 'Validation error', ...ErrorSchema },
         409: { description: 'Handle or email already taken', ...ErrorSchema },
+        429: { description: 'Too many new accounts from one address this hour', ...ErrorSchema },
       },
     },
     config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
   }, async (req, reply) => {
+    // The sign-up bot trap (lib/signup-guard.ts, Nov 3, 2026): no account for a form a script filled in
+    const trap = signupTrap(req.body)
+    if (trap) {
+      req.log.info({ trap }, 'Sign-up stopped by the bot trap')
+      void noteTrapped(trap)
+      return trap === 'too-fast'
+        ? sendError(reply, 400, 'VALIDATION_ERROR', 'That was quick. Please check the form and try again.')
+        : sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid input')
+    }
+    if (!(await signupAllowed(req.ip))) {
+      return sendError(reply, 429, 'RATE_LIMITED', 'Too many new accounts from this connection. Please try again in an hour.')
+    }
+
     const body = RegisterSchema.safeParse(req.body)
     if (!body.success) {
       return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid input')
@@ -161,6 +179,7 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
         password_hash: passwordHash,
       })
       .returning(['id', 'handle', 'display_name', 'email', 'account_type', 'trust_score', 'verified', 'onboarded', 'created_at'])
+    void countSignup(req.ip)
 
     const tokens = await issueTokens(app, user.id)
 

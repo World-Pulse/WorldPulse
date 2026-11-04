@@ -501,20 +501,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['dw', 'africa', 'dw-africa'],
     language:        'en',
   },
-  {
-    id:              'east-african',
-    name:            'The East African',
-    feedUrl:         'https://www.theeastafrican.co.ke/rss.xml',
-    category:        'geopolitics',
-    biasLabel:       'center',
-    reliability:     0.76,
-    countryCode:     'KE',
-    defaultLat:      -1.29,
-    defaultLng:      36.82,
-    defaultLocation: 'Nairobi, Kenya',
-    extraTags:       ['east-african', 'east-africa', 'africa'],
-    language:        'en',
-  },
   // ── Tier 2b — Regional & Emerging-Market outlets ────────────────────────
   {
     id:              'le-monde',
@@ -1209,20 +1195,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLng:      -0.12,
     defaultLocation: 'London, United Kingdom',
     extraTags:       ['climate-home', 'climate', 'climate-policy', 'energy'],
-    language:        'en',
-  },
-  {
-    id:              'renewableenergyworld',
-    name:            'Renewable Energy World',
-    feedUrl:         'https://www.renewableenergyworld.com/feed/',
-    category:        'climate',
-    biasLabel:       'center',
-    reliability:     0.78,
-    countryCode:     'US',
-    defaultLat:      40.71,
-    defaultLng:      -74.01,
-    defaultLocation: 'New York, United States',
-    extraTags:       ['renewable-energy', 'clean-energy', 'climate', 'solar', 'wind'],
     language:        'en',
   },
   {
@@ -2509,20 +2481,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLng:      -79.38,
     defaultLocation: 'Toronto, Canada',
     extraTags:       ['global-news', 'canada', 'north-america'],
-    language:        'en',
-  },
-  {
-    id:              'national-post',
-    name:            'National Post',
-    feedUrl:         'https://nationalpost.com/feed',
-    category:        'geopolitics',
-    biasLabel:       'center-right',
-    reliability:     0.80,
-    countryCode:     'CA',
-    defaultLat:      43.65,
-    defaultLng:      -79.38,
-    defaultLocation: 'Toronto, Canada',
-    extraTags:       ['national-post', 'canada', 'north-america'],
     language:        'en',
   },
   // ── Added Oct 20, 2026 (R2: official sources and thin regions) ────────────
@@ -8970,21 +8928,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['north-macedonia', 'balkans', 'europe'],
     language:        'sq',
   },
-  // Le Défi Media Group (Port Louis), Mauritius's largest media group, in French: about 40 headlines a day, no summaries; its dates use French day names, which JavaScript reads; no terms page
-  {
-    id:              'defimedia-mu',
-    name:            'Défi Media (Mauritius)',
-    feedUrl:         'https://defimedia.info/rss.xml',
-    category:        'geopolitics',
-    biasLabel:       'center',
-    reliability:     0.66,
-    countryCode:     'MU',
-    defaultLat:      -20.16,
-    defaultLng:      57.50,
-    defaultLocation: 'Port Louis, Mauritius',
-    extraTags:       ['mauritius', 'indian-ocean', 'africa'],
-    language:        'fr',
-  },
   // Maldives Voice, the English edition of voice.mv (Malé): its terms let readers share its stories but not republish them commercially
   {
     id:              'maldives-voice-mv',
@@ -9570,6 +9513,49 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['iran', 'middle-east', 'independent-media', 'exile-media'],
     language:        'en',
   },
+  // ── Added Nov 3, 2026, 10 PM (Devon: "Can you bring them back? We need to maintain") ──
+  // The failing list had 20 feeds that morning; requested the way the server asks (its User-Agent and
+  // headers, from another network), 13 answered, so those sites were turning away the server's own address,
+  // and 9 of them came back by themselves by evening (each paused feed is retried every 6 hours). Taken out
+  // because the feed itself is gone: Renewable Energy World (refused the server since Oct 26, 33 reads in a
+  // row), National Post (its feed addresses now lead to web pages), Défi Media (its new site has no feed) and
+  // The East African (its feed answers 404 and the rest of the site shows a bot check). Kept, to come back on
+  // their own: France 24 (refuses only the server), Nation News, Borba, Sunday Standard and Security Council
+  // Report (a bot check to every reader since Oct 31-Nov 2, the kind sites switch off again).
+  // Canary Media, in place of Renewable Energy World: an independent nonprofit newsroom on clean energy and
+  // the climate (Canary Media, Inc., a 501(c)(3)); in English; about two stories a day, 100 items in its feed;
+  // no terms of use, a republishing policy and the feed linked from every page
+  {
+    id:              'canary-media',
+    name:            'Canary Media',
+    feedUrl:         'https://www.canarymedia.com/rss.rss',
+    category:        'climate',
+    biasLabel:       'center',
+    reliability:     0.78,
+    countryCode:     'US',
+    defaultLat:      40.71,
+    defaultLng:      -74.01,
+    defaultLocation: 'United States',
+    extraTags:       ['clean-energy', 'renewable-energy', 'energy-transition', 'climate'],
+    language:        'en',
+  },
+  // KBC News, the Kenya Broadcasting Corporation's newsroom (Nairobi), Kenya's public broadcaster, owned by the
+  // government, in English: so Kenya keeps three feeds without The East African; about ten stories a day; no
+  // terms page (checked: none linked, the usual addresses answer 404)
+  {
+    id:              'kbc-ke',
+    name:            'KBC News (Kenya)',
+    feedUrl:         'https://www.kbc.co.ke/feed/',
+    category:        'geopolitics',
+    biasLabel:       'state-media',
+    reliability:     0.55,
+    countryCode:     'KE',
+    defaultLat:      -1.29,
+    defaultLng:      36.82,
+    defaultLocation: 'Nairobi, Kenya',
+    extraTags:       ['kenya', 'east-africa', 'africa', 'state-media'],
+    language:        'en',
+  },
 ]
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────
@@ -10004,7 +9990,7 @@ export const HOME_PIN_SOURCES = new Set([
   'business-in-cameroon', 'datacameroon', 'direct-infos-gabon', 'lunion-gabon', 'e-global-equatorial-guinea',
   'ang-guinea-bissau', 'e-global-guinea-bissau', 'bgen-croatia', 'shafaq-kurdistan', 'nationwide-news-jm',
   'kuwait-times-kw', 'the-voice-lc', 'lsm-english-lv', 'hello-monaco', 'borba-me',
-  'portalb-mk', 'tv21-mk', 'defimedia-mu', 'maldives-voice-mv', 'mfr-maldives', 'namibian-sun-na',
+  'portalb-mk', 'tv21-mk', 'maldives-voice-mv', 'mfr-maldives', 'namibian-sun-na',
   'new-era-na', 'actuniger-politique', 'le-sahel-niger', 'qatar-tribune', 'rwanda-dispatch-rw',
   'primorske-novice-si', 'calabash-newspaper-sl', 'corriere-romagna-sm', 'the-dawn-ss', 'rstp-sao-tome',
   'stp-press', 'eswatini-observer-sz', 'eswatini-positive-news-sz', 'atpe-tchad', '24heureinfo-tg',
@@ -10014,6 +10000,8 @@ export const HOME_PIN_SOURCES = new Set([
   // Nice-Matin's Monaco edition
   'dominica-news-online-dm', 'doha-news-qa', 'shabait-er', 'breaking-belize-news-bz', 'starcom-barbados-bb', 'asgam-macau-mo',
   'libertas-sm', 'nice-matin-monaco-mc', 'oon-at', 'alsat-mk',
+  // Nov 3, 2026: KBC News, Kenya's public broadcaster (in place of The East African)
+  'kbc-ke',
 ])
 
 export interface InferredGeo {
