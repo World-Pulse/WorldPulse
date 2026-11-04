@@ -505,3 +505,26 @@ describe('second cities of the Ukraine front, Russia, Turkey, the Levant and Eur
     expect(findGazetteerPlace('Foołódź festival opens')).toBeNull()
   })
 })
+
+describe('second cities of Asia, Iran, the Gulf and Central Asia get their own pins', () => {
+  it('pins them in their own country', () => {
+    expect(findGazetteerPlace('Officials said police in Gwadar arrested a man on Friday')?.coords.country).toBe('PK')
+    expect(findGazetteerPlace('Flooding hits Pune and Nashik')?.coords.country).toBe('IN')
+    expect(findGazetteerPlace('Rohingya boat reaches Cox\'s Bazar')?.coords.country).toBe('BD')
+    expect(findGazetteerPlace('Fighting near Lashio displaces thousands')?.coords.country).toBe('MM')
+    expect(findGazetteerPlace('Tourists evacuated in Phuket')?.coords.country).toBe('TH')
+    expect(findGazetteerPlace('Typhoon makes landfall near Da Nang')?.coords.country).toBe('VN')
+    expect(findGazetteerPlace('Clashes in Marawi leave two dead')?.coords.country).toBe('PH')
+    expect(findGazetteerPlace('Earthquake shakes Surabaya')?.coords.country).toBe('ID')
+    expect(findGazetteerPlace('Fans gather in Busan for the final')?.coords.country).toBe('KR')
+    expect(findGazetteerPlace('Port strike in Shenzhen widens')?.coords.country).toBe('CN')
+    expect(findGazetteerPlace('Explosion heard near Natanz')?.coords.country).toBe('IR')
+    expect(findGazetteerPlace('Drone intercepted over Ras Tanura')?.coords.country).toBe('SA')
+    expect(findGazetteerPlace('Houthi strike on Hodeidah port')?.coords.country).toBe('YE')
+    expect(findGazetteerPlace('Rain delays flights in Samarkand')?.coords.country).toBe('UZ')
+  })
+  it('does not pin words that contain them', () => {
+    expect(findGazetteerPlace('The punebased startup is hiring')).toBeNull()
+    expect(findGazetteerPlace('Gwadarx is a made-up word')).toBeNull()
+  })
+})
