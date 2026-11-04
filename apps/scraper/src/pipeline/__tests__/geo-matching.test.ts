@@ -552,3 +552,25 @@ describe('second cities of Africa get their own pins', () => {
     expect(findGazetteerPlace('The Ho Chi Minh Trail museum reopens')?.coords.country).not.toBe('GH')
   })
 })
+
+describe('second cities of the Americas and Oceania get their own pins', () => {
+  it('pins them in their own country', () => {
+    expect(findGazetteerPlace('Officials said police in Tampico arrested a man on Friday')?.coords.country).toBe('MX')
+    expect(findGazetteerPlace('Cartel gunmen kill five in Los Mochis')?.coords.country).toBe('MX')
+    expect(findGazetteerPlace('Dam failure near Brumadinho')?.coords.country).toBe('BR')
+    expect(findGazetteerPlace('Floods hit Petropolis')?.coords.country).toBe('BR')
+    expect(findGazetteerPlace('Strike paralyses Comodoro Rivadavia')?.coords.country).toBe('AR')
+    expect(findGazetteerPlace('Protesters block roads in Puno')?.coords.country).toBe('PE')
+    expect(findGazetteerPlace('Gangs attack Croix-des-Bouquets')?.coords.country).toBe('HT')
+    expect(findGazetteerPlace('Tulsa police shot a man')?.coords.country).toBe('US')
+    expect(findGazetteerPlace('Tornado hits Fort Lauderdale')?.coords.country).toBe('US')
+    expect(findGazetteerPlace('Wildfire reaches Lahaina')?.coords.country).toBe('US')
+    expect(findGazetteerPlace('Wildfire smoke over Kelowna')?.coords.country).toBe('CA')
+    expect(findGazetteerPlace('Floods in Lismore')?.coords.country).toBe('AU')
+    expect(findGazetteerPlace('Riots in Invercargill')?.coords.country).toBe('NZ')
+    expect(findGazetteerPlace('Landslide near Mount Hagen')?.coords.country).toBe('PG')
+  })
+  it('does not pin words that contain them', () => {
+    expect(findGazetteerPlace('The tulsax festival opens')).toBeNull()
+  })
+})
