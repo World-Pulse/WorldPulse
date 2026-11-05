@@ -592,3 +592,20 @@ describe('named hot spots get their own pins', () => {
     expect(findGazetteerPlace('The narvax festival opens')).toBeNull()
   })
 })
+
+describe('second cities of Britain, the Baltics, Europe and the Balkans get their own pins', () => {
+  it('pins them in their own country', () => {
+    expect(findGazetteerPlace('Stabbing in Dundee')?.coords.country).toBe('GB')
+    expect(findGazetteerPlace('Protest in Klaipeda port')?.coords.country).toBe('LT')
+    expect(findGazetteerPlace('Strike hits Liège')?.coords.country).toBe('BE')
+    expect(findGazetteerPlace('Attack in Cologne')?.coords.country).toBe('DE')
+    expect(findGazetteerPlace('Migrants land on Lesbos')?.coords.country).toBe('GR')
+    expect(findGazetteerPlace('Migrants camp near Bihac')?.coords.country).toBe('BA')
+    expect(findGazetteerPlace('Blast in Przemyśl')?.coords.country).toBe('PL')
+    expect(findGazetteerPlace('Rally in Grodno')?.coords.country).toBe('BY')
+    expect(findGazetteerPlace('Talks in Geneva')?.coords.country).toBe('CH')
+  })
+  it('does not pin words that contain them', () => {
+    expect(findGazetteerPlace('The dundeex festival opens')).toBeNull()
+  })
+})
