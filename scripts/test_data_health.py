@@ -158,6 +158,20 @@ class WhatItCatches(unittest.TestCase):
         self.assertEqual(c['status'], 'warn', c)
         self.assertIn('13 news feeds failing, 13 of the feeds for over a day', c['line'])
 
+    def test_parked_feeds_are_named_not_counted(self):
+        # Nov 5, 2026: six feeds behind a bot check are parked, tried once a day and not counted as failing
+        s = healthy()
+        s['pipeline']['sources']['news_feeds'] = {'failing': 5, 'parked': 6,
+                                                  'parked_list': [{'id': f'parked-{i}', 'answering': i == 0} for i in range(6)]}
+        c = check(dh.health(s, now=NOW), 'feeds')
+        self.assertEqual(c['status'], check(dh.health(healthy(), now=NOW), 'feeds')['status'], c)
+        self.assertTrue(c['line'].endswith('; 6 feeds parked behind a bot check, tried once a day (1 answering again)'), c['line'])
+        # none answering, one parked
+        s['pipeline']['sources']['news_feeds'] = {'failing': 5, 'parked': 1, 'parked_list': [{'id': 'parked-0', 'answering': False}]}
+        self.assertTrue(check(dh.health(s, now=NOW), 'feeds')['line'].endswith('; 1 feed parked behind a bot check, tried once a day'))
+        # an older status file without the field says nothing about it
+        self.assertNotIn('parked', check(dh.health(healthy(), now=NOW), 'feeds')['line'])
+
     def test_old_counts_and_unread_parts(self):
         s = healthy()
         s['pipeline']['checked'] = '2026-10-24T13:00:00+00:00'

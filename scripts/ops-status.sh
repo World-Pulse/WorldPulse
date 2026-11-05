@@ -190,7 +190,9 @@ PY
 # Listed: paused now, or failed in the last 48 hours (last_failed_at); older
 # counts belong to sources no longer polled and are only counted ("stale").
 # Also the news poller's feeds (news-rss.ts keeps its own count of failed
-# polls in a row, news-rss:fail:<id>, and pauses a feed after 3).
+# polls in a row, news-rss:fail:<id>, and pauses a feed after 3). Feeds parked
+# behind a bot check (Nov 5, 2026) are listed apart: tried once a day, never
+# counted as failing, and marked answering once they answer again.
 # Sources switched off in the database (sources.active, Oct 14: 9 dead feeds)
 # are never polled again: they are left out of "tracked" and the failing list
 # and only counted ("switched_off").
@@ -240,6 +242,8 @@ source_stats() {
         printf "feed=%s\t%s\t%s\t%s\n" "$id" "$(redis-cli --raw GET "$k")" "$(redis-cli --raw EXISTS "news-rss:pause:$id")" \
           "$(redis-cli --raw GET "news-rss:why:$id")"
       done
+      redis-cli --raw SMEMBERS news-rss:parked | head -n 100 | sed "s/^/parked=/"
+      redis-cli --raw --scan --pattern "news-rss:parked-works:*" | head -n 100 | sed "s/^news-rss:parked-works:/parked_ok=/"
       redis-cli --raw LRANGE scraper:dlq 0 299 | sed "s/^/dlq=/"' 2>/dev/null) || out=""
   OUT="$out" OFF="$off" python3 - <<'PY' 2>/dev/null || printf 'null'
 import calendar, json, os, re, time
@@ -275,9 +279,15 @@ def ms_of(text):
     try: return calendar.timegm(time.strptime(text[:19], '%Y-%m-%dT%H:%M:%S')) * 1000
     except (TypeError, ValueError): return 0
 tracked, failing, stale, feeds, members = 0, [], 0, [], set()
+parked, parked_ok = set(), set()
 for line in lines:
     if line.startswith('tracked='):
         tracked = num(line[8:])
+    elif line.startswith('parked='):
+        # feeds parked behind a bot check (news-rss.ts, Nov 5, 2026): tried once a day, not counted as failing
+        if re.fullmatch(r'[a-z0-9-]{1,60}', line[7:].strip()): parked.add(line[7:].strip())
+    elif line.startswith('parked_ok='):
+        parked_ok.add(line[10:].strip()[:60])
     elif line.startswith('member='):
         members.add(line[7:])
     elif line.startswith('cb='):
@@ -312,7 +322,11 @@ print(json.dumps({'tracked': tracked, 'failing': len(failing),
                   'paused': sum(1 for s in failing if s['paused_until']),
                   'stale': stale, 'switched_off': len(off), 'list': failing[:40],
                   'news_feeds': {'failing': len(feeds), 'paused': sum(1 for f in feeds if f['paused']),
-                                 'list': feeds[:40]}}, separators=(',', ':')))
+                                 'list': feeds[:40],
+                                 # answering: it answered again, so it is read as usual (for a week from its last answer)
+                                 'parked': len(parked),
+                                 'parked_list': [{'id': p, 'answering': p in parked_ok} for p in sorted(parked)][:40]}},
+                 separators=(',', ':')))
 PY
 }
 # Where the disk goes: Docker's totals (images, containers, volumes, build

@@ -199,6 +199,14 @@ def health(status, now=None):
             since = ts(item.get('last_worked'))
             when = 'no success on record' if since is None else f'last worked {words((at - since) / 60)} ago'
             line += f" (longest: {item.get('name') or item.get('slug')}, {item.get('why') or 'failing'}, {when})"
+        # Nov 5, 2026: feeds whose sites turn every automated reader away are parked (news-rss.ts): tried
+        # once a day and not counted as failing, so they are named here instead
+        parked = int(nf.get('parked') or 0)
+        if parked:
+            answering = sum(1 for f in nf.get('parked_list') or [] if isinstance(f, dict) and f.get('answering'))
+            line += f'; {parked} feed{"" if parked == 1 else "s"} parked behind a bot check, tried once a day'
+            if answering:
+                line += f' ({answering} answering again)'
         add('feeds', state, line)
 
     # Claude: the editor, failures, the monthly cap

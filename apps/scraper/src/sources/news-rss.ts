@@ -244,6 +244,13 @@ export interface NewsSource {
   extraTags:   string[]
   /** Language of the feed */
   language:    string
+  /**
+   * Set (Nov 5, 2026) when the feed's site turns every automated reader away
+   * with a bot check: why, in a few words. A parked feed is tried once a day,
+   * not every 30 minutes, its failed reads aren't counted as failing, and it is
+   * read as usual again from the first time it answers (parkedFeedDue).
+   */
+  parked?:     string
 }
 
 export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
@@ -2709,6 +2716,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLocation: 'New York, United States',
     extraTags:       ['un', 'united-nations', 'security-council', 'diplomacy', 'analysis'],
     language:        'en',
+    parked:          'bot check page (HTTP 403), Nov 5, 2026',
   },
   {
     id:              'economynext-lk',
@@ -3967,6 +3975,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLocation: 'Bridgetown, Barbados',
     extraTags:       ['barbados', 'caribbean'],
     language:        'en',
+    parked:          'bot check page (HTTP 403), Nov 5, 2026',
   },
   // Port of Spain daily (its news section); a national outlet, so stories that name no place are pinned at home
   {
@@ -5145,6 +5154,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLocation: 'Gaborone, Botswana',
     extraTags:       ['botswana', 'southern-africa', 'africa'],
     language:        'en',
+    parked:          'bot check page (HTTP 403), Nov 5, 2026',
   },
   // Botswana newspaper site; about 2 stories a day
   {
@@ -6566,6 +6576,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLocation: 'Port-au-Prince, Haiti',
     extraTags:       ['haiti', 'caribbean', 'latin-america'],
     language:        'fr',
+    parked:          'script cookie check (HTTP 409), Nov 5, 2026',
   },
   // Nicaraguan newsroom working in exile; also covers the region; Spanish, so no home pin
   {
@@ -7940,6 +7951,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLocation: 'Cuenca, Ecuador',
     extraTags:       ['ecuador', 'south-america'],
     language:        'en',
+    parked:          'browser check page (HTTP 403), Nov 5, 2026',
   },
   // Paraguay's English-language paper (Asunción); its terms bar collecting data by automated means without permission, a clause aimed at scraping (the site offers this feed)
   {
@@ -8882,6 +8894,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLocation: 'Podgorica, Montenegro',
     extraTags:       ['montenegro', 'balkans', 'europe'],
     language:        'sr',
+    parked:          'bot check page (HTTP 403), Nov 5, 2026',
   },
   // Portalb, an independent Albanian-language portal in Skopje: its content may be taken with a hyperlink to the source (Creative Commons)
   {
@@ -9541,6 +9554,44 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['kenya', 'east-africa', 'africa', 'state-media'],
     language:        'en',
   },
+  // ── Added Nov 5, 2026 (Devon: "replace broken feeds if they're not live and give us time to fix the broken
+  // feeds"): outlets for the places left thin by the six feeds parked behind a bot check and the four sites
+  // that are down, under rounds 6 to 8's rules: fresh, dated items read with the poller's own reader, and
+  // terms that don't limit use to personal or non-commercial use or ban robots (neither of these two sites
+  // publishes terms). Held back on terms: Barbados Today (no robots), Dan and Portal Analitika (Montenegro;
+  // personal use only), Le Nouvelliste (Haiti; personal, non-commercial use, no automated cataloguing), The
+  // Observer (Uganda; personal use), The Citizen (Tanzania; Nation Media Group's personal, non-commercial
+  // use) and Kuensel (Bhutan; out since Oct 31, Devon's call). Also left out: The Bhutanese (weekly; newest
+  // item 5 days old), Business Bhutan (half its feed was paid casino reviews) and Metro Puerto Rico (much of
+  // its feed is lifestyle and opinion) ──
+  {
+    id:              'haitilibre-ht',
+    name:            'HaitiLibre',
+    feedUrl:         'https://www.haitilibre.com/rss-flash.php',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.66,
+    countryCode:     'HT',
+    defaultLat:      18.54,
+    defaultLng:      -72.34,
+    defaultLocation: 'Port-au-Prince, Haiti',
+    extraTags:       ['haiti', 'caribbean', 'latin-america'],
+    language:        'fr',
+  },
+  {
+    id:              'noticel-pr',
+    name:            'NotiCel (Puerto Rico)',
+    feedUrl:         'https://www.noticel.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.72,
+    countryCode:     'PR',
+    defaultLat:      18.47,
+    defaultLng:      -66.11,
+    defaultLocation: 'San Juan, Puerto Rico',
+    extraTags:       ['puerto-rico', 'caribbean', 'latin-america'],
+    language:        'es',
+  },
 ]
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────
@@ -9987,6 +10038,8 @@ export const HOME_PIN_SOURCES = new Set([
   'libertas-sm', 'nice-matin-monaco-mc', 'oon-at', 'alsat-mk',
   // Nov 3, 2026: KBC News, Kenya's public broadcaster (in place of The East African)
   'kbc-ke',
+  // Nov 5, 2026: national outlets for places left thin by parked and down feeds
+  'haitilibre-ht', 'noticel-pr',
 ])
 
 export interface InferredGeo {
@@ -10373,6 +10426,63 @@ export async function clearFeedFailures(redis: Redis, sourceId: string): Promise
   }
 }
 
+// ─── PARKED FEEDS ────────────────────────────────────────────────────────────
+// Nov 5, 2026: six of the 19 failing feeds' sites answer every automated reader
+// with a bot check, from any network. Each was read every 30 minutes, counted as
+// failing, paused and tried again every 6 hours, for nothing, and kept the
+// failing list long enough to hide a feed that had just broken. A parked feed
+// (NewsSource.parked) is tried once a day instead, isn't counted as failing,
+// and is read as usual for as long as it answers again.
+
+const PARKED_TRY_S   = 86_400                // a parked feed that doesn't answer is tried once a day
+const PARKED_WORKS_S = 7 * 86_400            // one that answers is read as usual, for a week from its last answer
+const PARKED_SET     = 'news-rss:parked'     // the parked feeds, for /ops-status.json
+const parkedTryKey   = (sourceId: string) => `news-rss:parked-try:${sourceId}`
+const parkedWorksKey = (sourceId: string) => `news-rss:parked-works:${sourceId}`
+
+/**
+ * Whether a parked feed is read now: 'answering' while it answers again (read
+ * as usual), 'daily-try' for its one try of the day, otherwise null.
+ */
+export async function parkedFeedDue(redis: Redis, sourceId: string): Promise<'answering' | 'daily-try' | null> {
+  try {
+    if ((await redis.exists(parkedWorksKey(sourceId))) > 0) return 'answering'
+    return (await redis.set(parkedTryKey(sourceId), '1', 'EX', PARKED_TRY_S, 'NX')) === 'OK' ? 'daily-try' : null
+  } catch {
+    return null
+  }
+}
+
+/** A parked feed answered (read it as usual) or didn't (back to once a day). */
+export async function noteParkedResult(redis: Redis, sourceId: string, answered: boolean): Promise<void> {
+  try {
+    if (answered) await redis.set(parkedWorksKey(sourceId), '1', 'EX', PARKED_WORKS_S)
+    else await redis.del(parkedWorksKey(sourceId))
+  } catch {
+    // best effort
+  }
+}
+
+/**
+ * When the poller starts: the parked feeds leave the failing list (their
+ * failure counts, pauses and reasons are cleared) and are listed in
+ * news-rss:parked for /ops-status.json. Returns how many feeds are parked.
+ */
+export async function noteParkedFeeds(
+  redis:   Redis,
+  sources: ReadonlyArray<Pick<NewsSource, 'id' | 'parked'>>,
+): Promise<number> {
+  const ids = sources.filter(s => s.parked).map(s => s.id)
+  try {
+    await redis.del(PARKED_SET)
+    if (ids.length > 0) await redis.sadd(PARKED_SET, ...ids)
+    for (const id of ids) await redis.del(failKey(id), pauseKey(id), whyKey(id))
+  } catch {
+    // best effort: the next start tries again
+  }
+  return ids.length
+}
+
 /**
  * Forget the failure counts and pauses of feeds that are no longer in the
  * registry. A removed feed is never polled again, so its count would sit in
@@ -10412,32 +10522,47 @@ async function pollSource(
   source:   NewsSource,
 ): Promise<void> {
   const sourceLog = log.child({ sourceId: source.id, feed: source.name })
-  if (await feedPaused(redis, source.id)) {
+  // A parked feed (behind a bot check) is read while it answers again, else once a day
+  const parked = source.parked ? await parkedFeedDue(redis, source.id) : null
+  if (source.parked && !parked) return
+  if (!source.parked && await feedPaused(redis, source.id)) {
     sourceLog.debug(`${source.name}: paused after repeated failures`)
     return
   }
   sourceLog.debug(`Polling ${source.name}...`)
 
+  // A parked feed's failed reads aren't counted: it goes back to one try a day
+  const failed = async (reason: string): Promise<void> => {
+    if (!source.parked) return noteFeedFailure(redis, source, sourceLog, reason)
+    await noteParkedResult(redis, source.id, false)
+    sourceLog.debug({ reason: feedFailureWhy(reason) }, `${source.name}: parked feed still not answering`)
+  }
+
   let xml: string
   try {
     xml = await fetchUrl(source.feedUrl)
   } catch (err) {
-    await noteFeedFailure(redis, source, sourceLog, err instanceof Error ? err.message : String(err))
+    await failed(err instanceof Error ? err.message : String(err))
     return
   }
 
   if (!xml || xml.length < 50) {
-    await noteFeedFailure(redis, source, sourceLog, 'empty response')
+    await failed('empty response')
     return
   }
 
   const items = parseFeedItems(xml)
   if (items.length === 0) {
     // A page that isn't a feed (moved feed, bot check) parses to nothing
-    await noteFeedFailure(redis, source, sourceLog, 'no items in the response')
+    await failed('no items in the response')
     return
   }
-  await clearFeedFailures(redis, source.id)
+  if (source.parked) {
+    await noteParkedResult(redis, source.id, true)
+    if (parked === 'daily-try') sourceLog.info(`${source.name}: parked feed answered; read as usual while it does`)
+  } else {
+    await clearFeedFailures(redis, source.id)
+  }
 
   let created = 0
   let stale = 0
@@ -10534,6 +10659,10 @@ export function startNewsRssPoller(
   // Feeds taken out of the registry stop counting as failing
   void forgetRemovedFeeds(redis, NEWS_SOURCE_REGISTRY.map(s => s.id)).then(n => {
     if (n > 0) log.info({ feeds: n }, 'News RSS: forgot the failure counts of feeds no longer listed')
+  })
+  // Feeds parked behind a bot check leave the failing list; they're tried once a day
+  void noteParkedFeeds(redis, NEWS_SOURCE_REGISTRY).then(n => {
+    if (n > 0) log.info({ feeds: n }, 'News RSS: feeds parked behind a bot check are tried once a day')
   })
 
   // Kick off immediately

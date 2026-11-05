@@ -58,7 +58,6 @@
       "radio-prague-en",
       "radio-sweden",
       "barents-observer",
-      "wadr",
       "ouestaf-news",
       "islands-business-kiribati",
       "islands-business-tuvalu",
@@ -451,6 +450,10 @@
     ],
     "rtv-slo-slovenija": [
       "rtvslo.si"
+    ],
+    "haitilibre-ht": [
+      "haitilibre.com",
+      "icihaiti.com"
     ]
   },
   "host_kind": {
