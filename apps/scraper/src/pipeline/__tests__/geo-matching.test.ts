@@ -574,3 +574,21 @@ describe('second cities of the Americas and Oceania get their own pins', () => {
     expect(findGazetteerPlace('The tulsax festival opens')).toBeNull()
   })
 })
+
+describe('named hot spots get their own pins', () => {
+  it('pins them in their own country', () => {
+    expect(findGazetteerPlace('Drone strike near the Khmeimim air base')?.coords.country).toBe('SY')
+    expect(findGazetteerPlace('Raid in Tulkarm refugee camp')?.coords.country).toBe('PS')
+    expect(findGazetteerPlace('Yazidis return to Sinjar')?.coords.country).toBe('IQ')
+    expect(findGazetteerPlace('Fighting spreads across Amhara')?.coords.country).toBe('ET')
+    expect(findGazetteerPlace('Aid trucks reach Dadaab')?.coords.country).toBe('KE')
+    expect(findGazetteerPlace('Satellite images show work at Punggye-ri')?.coords.country).toBe('KP')
+    expect(findGazetteerPlace('Cartel violence in Sinaloa')?.coords.country).toBe('MX')
+    expect(findGazetteerPlace('Cartel violence in Michoacán')?.coords.country).toBe('MX')
+    expect(findGazetteerPlace('Rebels seize Mocimboa da Praia')?.coords.country).toBe('MZ')
+    expect(findGazetteerPlace('Unrest in Nouméa')?.coords.country).toBe('NC')
+  })
+  it('does not pin words that contain them', () => {
+    expect(findGazetteerPlace('The narvax festival opens')).toBeNull()
+  })
+})
