@@ -77,6 +77,7 @@ import { startOfacSanctionsPoller } from './ofac-sanctions'
 import { startReliefWebPoller } from './reliefweb'
 import { startCopernicusEmsPoller } from './copernicus-ems'
 import { startTravelAdvisoriesPoller } from './travel-advisories'
+import { startUkTravelAdvicePoller } from './uk-travel-advice'
 import { startNwsAlertsPoller } from './nws-alerts'
 import { startOtxPoller, otxEnabled } from './otx-threats'
 import { startGvpVolcanoPoller } from './gvp-volcano'
@@ -229,6 +230,12 @@ export function startOsintPollers(
     cleanups.push(startTravelAdvisoriesPoller(db, redis, producer))
   } catch (err) {
     logger.error({ err }, 'Failed to start US travel advisories poller')
+  }
+
+  try {
+    cleanups.push(startUkTravelAdvicePoller(db, redis, producer))
+  } catch (err) {
+    logger.error({ err }, 'Failed to start UK travel advice poller')
   }
 
   try {
@@ -433,6 +440,7 @@ export { startOfacSanctionsPoller } from './ofac-sanctions'
 export { startReliefWebPoller } from './reliefweb'
 export { startCopernicusEmsPoller } from './copernicus-ems'
 export { startTravelAdvisoriesPoller } from './travel-advisories'
+export { startUkTravelAdvicePoller } from './uk-travel-advice'
 export { startNwsAlertsPoller } from './nws-alerts'
 export { startOtxPoller } from './otx-threats'
 export { startGvpVolcanoPoller } from './gvp-volcano'
