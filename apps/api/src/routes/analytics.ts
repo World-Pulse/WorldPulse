@@ -852,11 +852,13 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
       'cybersecurity', 'threat', 'sanctions', 'law-enforcement', 'red-notice',
       'satellite', 'space', 'spaceweather', 'geomagnetic', 'gps', 'jamming',
       'electronic-warfare', 'infrastructure', 'patent', 'patent-intel',
+      'travel-advisory', 'us-state-department',
       'en',
     ])
 
     const SYSTEM_TAG_PATTERNS: RegExp[] = [
       /^cameo-\d+$/,
+      /^level-[1-4]$/,
       /^squawk-\d+$/,
       /^status-\d+$/,
       /^hs-\d+$/,

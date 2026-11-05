@@ -76,6 +76,7 @@ import { startCisaKevPoller } from './cisa-kev'
 import { startOfacSanctionsPoller } from './ofac-sanctions'
 import { startReliefWebPoller } from './reliefweb'
 import { startCopernicusEmsPoller } from './copernicus-ems'
+import { startTravelAdvisoriesPoller } from './travel-advisories'
 import { startNwsAlertsPoller } from './nws-alerts'
 import { startOtxPoller, otxEnabled } from './otx-threats'
 import { startGvpVolcanoPoller } from './gvp-volcano'
@@ -222,6 +223,12 @@ export function startOsintPollers(
     cleanups.push(startCopernicusEmsPoller(db, redis, producer))
   } catch (err) {
     logger.error({ err }, 'Failed to start Copernicus EMS activations poller')
+  }
+
+  try {
+    cleanups.push(startTravelAdvisoriesPoller(db, redis, producer))
+  } catch (err) {
+    logger.error({ err }, 'Failed to start US travel advisories poller')
   }
 
   try {
@@ -425,6 +432,7 @@ export { startCisaKevPoller } from './cisa-kev'
 export { startOfacSanctionsPoller } from './ofac-sanctions'
 export { startReliefWebPoller } from './reliefweb'
 export { startCopernicusEmsPoller } from './copernicus-ems'
+export { startTravelAdvisoriesPoller } from './travel-advisories'
 export { startNwsAlertsPoller } from './nws-alerts'
 export { startOtxPoller } from './otx-threats'
 export { startGvpVolcanoPoller } from './gvp-volcano'

@@ -662,6 +662,7 @@ export const OUTLET_DIRECTORY: Readonly<Record<string, OutletEntry>> = {
   "total-croatia-news.com": { name: "Total Croatia News", country: "HR", kind: 'national' },
   "tovima.com": { name: "To Vima", country: "GR", kind: 'national' },
   "tpnnational.com": { name: "TPN National", country: "TH", kind: 'national' },
+  "travel.state.gov": { name: "U.S. Department of State", country: "US", kind: 'official', state: true },
   "tribune242.com": { name: "The Tribune", country: "BS", kind: 'national' },
   "tribuneindia.com": { name: "The Tribune (India)", country: "IN", kind: 'national' },
   "trinidadexpress.com": { name: "Trinidad Express", country: "TT", kind: 'national' },

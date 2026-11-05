@@ -990,6 +990,13 @@
       "name": "Telegrafi",
       "country": "XK",
       "kind": "national"
+    },
+    {
+      "host": "travel.state.gov",
+      "name": "U.S. Department of State",
+      "country": "US",
+      "kind": "official",
+      "state": true
     }
   ]
 }
