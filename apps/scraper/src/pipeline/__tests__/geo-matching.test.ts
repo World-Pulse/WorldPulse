@@ -609,3 +609,19 @@ describe('second cities of Britain, the Baltics, Europe and the Balkans get thei
     expect(findGazetteerPlace('The dundeex festival opens')).toBeNull()
   })
 })
+
+describe('second cities of the Nordics, Japan, South Korea and the Pacific get their own pins', () => {
+  it('pins them in their own country', () => {
+    expect(findGazetteerPlace('Fire in Esbjerg harbour')?.coords.country).toBe('DK')
+    expect(findGazetteerPlace('Mine accident in Kiruna')?.coords.country).toBe('SE')
+    expect(findGazetteerPlace('Strike in Luleå')?.coords.country).toBe('SE')
+    expect(findGazetteerPlace('Quake shakes Shizuoka')?.coords.country).toBe('JP')
+    expect(findGazetteerPlace('Protest in Hamamatsu')?.coords.country).toBe('JP')
+    expect(findGazetteerPlace('Fire in Seongnam')?.coords.country).toBe('KR')
+    expect(findGazetteerPlace('Typhoon hits Saipan')?.coords.country).toBe('MP')
+    expect(findGazetteerPlace('Storm in Pago Pago')?.coords.country).toBe('AS')
+  })
+  it('does not pin words that contain them', () => {
+    expect(findGazetteerPlace('The gifuu festival opens')).toBeNull()
+  })
+})
