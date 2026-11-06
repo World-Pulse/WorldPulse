@@ -486,6 +486,41 @@ def day(text):
 print(json.dumps({'today': day(vals.get('today', '')), 'yesterday': day(vals.get('yesterday', ''))}, separators=(',', ':')))
 PY
 }
+# The Dev Room's coverage map (Nov 6, 2026; Devon: "Update the coverage map automatically when these
+# updates happen"): each place's news feeds, their languages and outlets as the news poller listed them
+# (news-rss:coverage, apps/scraper/src/sources/coverage.ts, written at each start and every cycle), and the
+# verified reports pinned in each country over the last 7 days. HQ's hourly cloud sync turns it into the
+# Dev Room's Coverage tab. Names and counts only: no feed addresses.
+coverage_stats() {
+  local pw cov rep
+  pw=$(redis_pw) || pw=""
+  cov=$(mktemp) || return 1
+  timeout 15 docker exec -e REDISCLI_AUTH="$pw" wp_redis redis-cli --raw GET news-rss:coverage > "$cov" 2>/dev/null || true
+  rep=$(db_json 20 "SELECT coalesce(jsonb_object_agg(cc, n), '{}'::jsonb) FROM (
+          SELECT upper(country_code) AS cc, count(*) AS n FROM signals
+           WHERE status = 'verified' AND created_at > now() - interval '7 days'
+             AND country_code IS NOT NULL AND length(country_code) = 2
+           GROUP BY 1) x")
+  REP="$rep" python3 - "$cov" <<'PY' 2>/dev/null || printf 'null'
+import json, os, sys
+try:
+    with open(sys.argv[1], encoding='utf-8') as fh:
+        cov = json.loads(fh.read() or 'null')
+except (OSError, ValueError):
+    cov = None
+if not isinstance(cov, dict) or not isinstance(cov.get('places'), list):
+    print('null')
+    sys.exit(0)
+try:
+    rep = json.loads(os.environ.get('REP') or 'null')
+except ValueError:
+    rep = None
+# null when the count failed: HQ then keeps the counts it showed last
+cov['reports_7d'] = {k: v for k, v in rep.items() if isinstance(v, int)} if isinstance(rep, dict) else None
+print(json.dumps(cov, separators=(',', ':')))
+PY
+  rm -f "$cov"
+}
 # Run one part of the pipeline block into $parts/<name>.json and note how long
 # it took, in ms
 part() {
@@ -644,6 +679,7 @@ pipeline_stats() {
   part fingerprints fingerprint_stats
   part claude claude_stats
   part sources source_stats
+  part coverage coverage_stats
   part api_limits api_limit_stats
   part disk disk_stats
   # Readers of world-pulse.io today and where they came from (plan G1): counts
@@ -680,6 +716,13 @@ if isinstance(out['members'], dict):
     out['members']['trapped'] = part('signup_trap')
 if isinstance(out.get('readers'), dict):
     out['readers']['members'] = out['members']
+# The coverage map's numbers (Nov 6, 2026): null until the news poller has written them once, which
+# isn't a failure (right after a deploy the poller may not have started yet)
+try:
+    with open(os.path.join(parts, 'coverage.json'), encoding='utf-8') as fh:
+        out['coverage'] = json.loads(fh.read())
+except (OSError, ValueError):
+    out['coverage'] = None
 took = {}
 try:
     with open(os.path.join(parts, 'took')) as fh:

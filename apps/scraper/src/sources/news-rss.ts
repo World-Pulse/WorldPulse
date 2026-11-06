@@ -101,6 +101,7 @@ import { logger as rootLogger } from '../lib/logger'
 import type { Category, SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate } from '../pipeline/insert-signal'
 import { setThinPlaces } from '../pipeline/correlate'
+import { noteCoverage } from './coverage'
 // Feed items published more than 3 days ago aren't news
 import { MAX_ITEM_AGE_MS, isStaleItem } from '../pipeline/freshness'
 // Feeds send "&#x27;" and "&amp;" in titles and summaries
@@ -11189,12 +11190,18 @@ export function startNewsRssPoller(
   })
   // Places with few feeds of their own get the same-story second look across two days (correlate.ts)
   setThinPlaces(thinPlaces())
+  // The Dev Room's coverage map: each place's feeds, for /ops-status.json (coverage.ts); again with every
+  // cycle, so the numbers are back within one cycle if Redis loses them
+  void noteCoverage(redis, NEWS_SOURCE_REGISTRY)
 
   // Kick off immediately
   void runCycle()
 
   // Then on a fixed interval
-  timer = setInterval(() => void runCycle(), POLL_INTERVAL)
+  timer = setInterval(() => {
+    void runCycle()
+    void noteCoverage(redis, NEWS_SOURCE_REGISTRY)
+  }, POLL_INTERVAL)
 
   log.info(
     {
