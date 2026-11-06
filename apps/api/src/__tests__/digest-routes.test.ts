@@ -127,9 +127,33 @@ describe('the bot trap on the briefing sign-up (Nov 4, 2026)', () => {
   })
 })
 
+describe('only the website\'s form or a signed-in reader (Nov 5, 2026)', () => {
+  it('sends no email to an address a script posted without the form, and counts it', async () => {
+    const res = await app.inject({ method: 'POST', url: '/api/v1/digest/subscribe', payload: { email: 'victim@example.com' } })
+    expect(res.statusCode).toBe(400)
+    expect(res.json().error).toBe('Please sign up with the form on world-pulse.io')
+    expect(sendConfirmEmail).not.toHaveBeenCalled()
+    expect(tables.digest_subscriptions).toEqual([])
+    await new Promise(r => setTimeout(r, 0))
+    expect([...trapped.values()]).toEqual([{ 'no-form': 1 }])
+  })
+
+  it('takes a signed-in reader without the timer (Settings, from a page loaded before this change)', async () => {
+    const res = await app.inject({ method: 'POST', url: '/api/v1/digest/subscribe', payload: { email: 'owner@example.com', source: '/settings' }, headers: { 'x-test-user': 'user-1' } })
+    expect(res.statusCode).toBe(201)
+    expect(sendConfirmEmail).toHaveBeenCalledTimes(1)
+  })
+
+  it('a timer that isn\'t a number is no form', async () => {
+    const res = await app.inject({ method: 'POST', url: '/api/v1/digest/subscribe', payload: { email: 'x@example.com', formMs: '5000' } })
+    expect(res.statusCode).toBe(400)
+    expect(sendConfirmEmail).not.toHaveBeenCalled()
+  })
+})
+
 describe('sign-up and confirmation', () => {
   it('a new address is stored unconfirmed and gets a confirmation email', async () => {
-    const res = await app.inject({ method: 'POST', url: '/api/v1/digest/subscribe', payload: { email: '  New@Example.com ', source: '/briefing' } })
+    const res = await app.inject({ method: 'POST', url: '/api/v1/digest/subscribe', payload: { email: '  New@Example.com ', source: '/briefing', formMs: 5_000 } })
     expect(res.statusCode).toBe(201)
     expect(tables.digest_subscriptions).toHaveLength(1)
     expect(tables.digest_subscriptions[0]).toMatchObject({ email: 'new@example.com', frequency: 'daily', confirmed_at: null, is_active: true, source: '/briefing' })
@@ -138,13 +162,13 @@ describe('sign-up and confirmation', () => {
 
   it('answers the same for an address already on the list, without emailing it', async () => {
     tables.digest_subscriptions = [{ id: 's1', email: 'old@example.com', is_active: true, confirmed_at: new Date() }]
-    const res = await app.inject({ method: 'POST', url: '/api/v1/digest/subscribe', payload: { email: 'old@example.com' } })
+    const res = await app.inject({ method: 'POST', url: '/api/v1/digest/subscribe', payload: { email: 'old@example.com', formMs: 5_000 } })
     expect(res.statusCode).toBe(201)
     expect(sendConfirmEmail).not.toHaveBeenCalled()
   })
 
   it('rejects an invalid address', async () => {
-    const res = await app.inject({ method: 'POST', url: '/api/v1/digest/subscribe', payload: { email: 'nope' } })
+    const res = await app.inject({ method: 'POST', url: '/api/v1/digest/subscribe', payload: { email: 'nope', formMs: 5_000 } })
     expect(res.statusCode).toBe(400)
   })
 
@@ -161,10 +185,10 @@ describe('sign-up and confirmation', () => {
   })
 
   it('keeps the countries a reader follows (G13)', async () => {
-    const res = await app.inject({ method: 'POST', url: '/api/v1/digest/subscribe', payload: { email: 'fr@example.com', countries: ['fr', 'JP'] } })
+    const res = await app.inject({ method: 'POST', url: '/api/v1/digest/subscribe', payload: { email: 'fr@example.com', countries: ['fr', 'JP'], formMs: 5_000 } })
     expect(res.statusCode).toBe(201)
     expect(tables.digest_subscriptions.find(r => r.email === 'fr@example.com')).toMatchObject({ categories: ['country:FR', 'country:JP'] })
-    const bad = await app.inject({ method: 'POST', url: '/api/v1/digest/subscribe', payload: { email: 'x@example.com', countries: ['FRA'] } })
+    const bad = await app.inject({ method: 'POST', url: '/api/v1/digest/subscribe', payload: { email: 'x@example.com', countries: ['FRA'], formMs: 5_000 } })
     expect(bad.statusCode).toBe(400)
   })
 

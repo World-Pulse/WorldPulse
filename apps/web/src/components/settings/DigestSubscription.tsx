@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useToast } from '@/components/Toast'
+import { trapFields } from '@/lib/signup-trap'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -78,6 +79,9 @@ export default function DigestSubscription({ defaultEmail = '' }: Props) {
   const [status,      setStatus]      = useState<DigestStatus | null>(null)
   const [loading,     setLoading]     = useState(false)
   const [checking,    setChecking]    = useState(false)
+  // When the form opened: the API takes email sign-ups only from the website's forms or signed-in readers (Nov 5, 2026)
+  const openedAt = useRef(0)
+  useEffect(() => { openedAt.current = Date.now() }, [])
 
   // ── Check subscription status ────────────────────────────────────────────
 
@@ -129,6 +133,7 @@ export default function DigestSubscription({ defaultEmail = '' }: Props) {
           categories,
           min_severity: minSeverity,
           source:       '/settings',
+          ...trapFields('', openedAt.current),
         }),
       })
       const data = await res.json() as { success: boolean; message?: string; error?: string }

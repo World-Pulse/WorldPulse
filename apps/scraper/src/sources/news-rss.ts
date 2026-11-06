@@ -9558,12 +9558,11 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   // feeds"): outlets for the places left thin by the six feeds parked behind a bot check and the four sites
   // that are down, under rounds 6 to 8's rules: fresh, dated items read with the poller's own reader, and
   // terms that don't limit use to personal or non-commercial use or ban robots (neither of these two sites
-  // publishes terms). Held back on terms: Barbados Today (no robots), Dan and Portal Analitika (Montenegro;
-  // personal use only), Le Nouvelliste (Haiti; personal, non-commercial use, no automated cataloguing), The
-  // Observer (Uganda; personal use), The Citizen (Tanzania; Nation Media Group's personal, non-commercial
-  // use) and Kuensel (Bhutan; out since Oct 31, Devon's call). Also left out: The Bhutanese (weekly; newest
-  // item 5 days old), Business Bhutan (half its feed was paid casino reviews) and Metro Puerto Rico (much of
-  // its feed is lifestyle and opinion) ──
+  // publishes terms). Held back on terms that morning, then added at 8:18 PM on Devon's call (the next
+  // block): Barbados Today, Dan, Portal Analitika, Le Nouvelliste, The Observer (Uganda) and The Citizen
+  // (Tanzania). Kuensel (Bhutan) stays out (Devon's call, Oct 31). Also left out: The Bhutanese (weekly;
+  // newest item 5 days old), Business Bhutan (half its feed was paid casino reviews) and Metro Puerto Rico
+  // (much of its feed is lifestyle and opinion) ──
   {
     id:              'haitilibre-ht',
     name:            'HaitiLibre',
@@ -9591,6 +9590,99 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLocation: 'San Juan, Puerto Rico',
     extraTags:       ['puerto-rico', 'caribbean', 'latin-america'],
     language:        'es',
+  },
+  // ── Added Nov 5, 2026, 8:18 PM (Devon's call on the six held back on terms that morning: "Go in anyway") ──
+  // Each answered the poller's own reader at 8:25 PM with stories from the last day (Le Nouvelliste's
+  // English edition from the last two). What each site's terms say about use, noted as round 8 did:
+  // Barbados Today, a Bridgetown news site; terms: no robots, spiders or other automatic access, no commercial use
+  {
+    id:              'barbados-today-bb',
+    name:            'Barbados Today',
+    feedUrl:         'https://barbadostoday.bb/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.72,
+    countryCode:     'BB',
+    defaultLat:      13.10,
+    defaultLng:      -59.62,
+    defaultLocation: 'Bridgetown, Barbados',
+    extraTags:       ['barbados', 'caribbean'],
+    language:        'en',
+  },
+  // Dan, a Podgorica daily (pro-Serbian, conservative); terms: personal, non-commercial use only
+  {
+    id:              'dan-me',
+    name:            'Dan (Montenegro)',
+    feedUrl:         'https://www.dan.co.me/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center-right',
+    reliability:     0.62,
+    countryCode:     'ME',
+    defaultLat:      42.44,
+    defaultLng:      19.26,
+    defaultLocation: 'Podgorica, Montenegro',
+    extraTags:       ['montenegro', 'balkans', 'europe'],
+    language:        'sr',
+  },
+  // Portal Analitika, a Podgorica news portal; terms: personal use only
+  {
+    id:              'portal-analitika-me',
+    name:            'Portal Analitika (Montenegro)',
+    feedUrl:         'https://rss.portalanalitika.me',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.64,
+    countryCode:     'ME',
+    defaultLat:      42.44,
+    defaultLng:      19.26,
+    defaultLocation: 'Podgorica, Montenegro',
+    extraTags:       ['montenegro', 'balkans', 'europe'],
+    language:        'sr',
+  },
+  // Le Nouvelliste's English edition (Haiti's oldest daily); terms: personal, non-commercial use, no automatic cataloguing or monitoring
+  {
+    id:              'le-nouvelliste-ht',
+    name:            'Le Nouvelliste (Haiti, English)',
+    feedUrl:         'https://lenouvelliste.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.78,
+    countryCode:     'HT',
+    defaultLat:      18.54,
+    defaultLng:      -72.34,
+    defaultLocation: 'Port-au-Prince, Haiti',
+    extraTags:       ['haiti', 'caribbean', 'latin-america'],
+    language:        'en',
+  },
+  // The Observer, a Kampala newspaper; terms: a limited licence for personal use
+  {
+    id:              'observer-ug',
+    name:            'The Observer (Uganda)',
+    feedUrl:         'https://observer.ug/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.74,
+    countryCode:     'UG',
+    defaultLat:      0.35,
+    defaultLng:      32.58,
+    defaultLocation: 'Kampala, Uganda',
+    extraTags:       ['uganda', 'east-africa', 'africa'],
+    language:        'en',
+  },
+  // The Citizen, a Dar es Salaam daily (Mwananchi, Nation Media Group); about a third of its feed is world news, so no home pin; terms: personal, non-commercial use, no systematic copying into a database
+  {
+    id:              'the-citizen-tz',
+    name:            'The Citizen (Tanzania)',
+    feedUrl:         'https://www.thecitizen.co.tz/rss.xml',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.76,
+    countryCode:     'TZ',
+    defaultLat:      -6.79,
+    defaultLng:      39.21,
+    defaultLocation: 'Dar es Salaam, Tanzania',
+    extraTags:       ['tanzania', 'east-africa', 'africa'],
+    language:        'en',
   },
 ]
 
@@ -10038,8 +10130,9 @@ export const HOME_PIN_SOURCES = new Set([
   'libertas-sm', 'nice-matin-monaco-mc', 'oon-at', 'alsat-mk',
   // Nov 3, 2026: KBC News, Kenya's public broadcaster (in place of The East African)
   'kbc-ke',
-  // Nov 5, 2026: national outlets for places left thin by parked and down feeds
-  'haitilibre-ht', 'noticel-pr',
+  // Nov 5, 2026: national outlets for places left thin by parked and down feeds; at 8:18 PM (Devon: "Go in
+  // anyway") five more, but not The Citizen (Tanzania), a third of whose feed is world news
+  'haitilibre-ht', 'noticel-pr', 'barbados-today-bb', 'dan-me', 'portal-analitika-me', 'le-nouvelliste-ht', 'observer-ug',
 ])
 
 export interface InferredGeo {

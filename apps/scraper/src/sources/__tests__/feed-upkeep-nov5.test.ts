@@ -2,9 +2,9 @@
  * Feed upkeep, Nov 5, 2026 (Devon: "replace broken feeds if they're not live and give us time to fix the
  * broken feeds, find a way to fix the 19 failing"). Six of the 19 failing feeds' sites answer every automated
  * reader with a bot check: they are parked (tried once a day, not counted as failing, read as usual again
- * once they answer). Two outlets come in for places those six and four sites that are down left thin; seven
- * more were read and held back on their terms or their feeds. The other nine failing feeds answer from other
- * networks and come back by themselves.
+ * once they answer). Two outlets come in for places those six and four sites that are down left thin; six
+ * more held back on their terms that morning went in at 8:18 PM on Devon's call ("Go in anyway"). The other
+ * nine failing feeds answer from other networks and come back by themselves.
  */
 import { describe, it, expect, vi } from 'vitest'
 import type { Redis } from 'ioredis'
@@ -15,6 +15,7 @@ import {
 const src = (id: string) => NEWS_SOURCE_REGISTRY.find(s => s.id === id)
 const PARKED = ['nation-news-bb', 'borba-me', 'sunday-standard-bw', 'scr-whats-in-blue', 'cuenca-high-life-ec', 'vant-bef-info-ht']
 const ADDED = ['haitilibre-ht', 'noticel-pr']
+const ANYWAY = ['barbados-today-bb', 'dan-me', 'portal-analitika-me', 'le-nouvelliste-ht', 'observer-ug', 'the-citizen-tz']
 const host = (url: string) => new URL(url).hostname.replace(/^(?:www|rss)\./, '')
 
 function fakeRedis() {
@@ -58,19 +59,34 @@ describe('feed upkeep (Nov 5, 2026)', () => {
     }
   })
 
-  it('leaves out the outlets held back on their terms or their feeds', () => {
-    // terms: no robots (Barbados Today); personal or non-commercial use only (Dan, Portal Analitika, Le Nouvelliste,
-    // The Observer, Nation Media Group's The Citizen); Kuensel stays out on Devon's Oct 31 call. Feeds: The
-    // Bhutanese's newest item was 5 days old, half of Business Bhutan's were paid casino reviews, and much of
-    // Metro Puerto Rico's is lifestyle and opinion
-    for (const h of ['barbadostoday.bb', 'dan.co.me', 'portalanalitika.me', 'lenouvelliste.com', 'observer.ug', 'thecitizen.co.tz',
-      'kuenselonline.com', 'thebhutanese.bt', 'businessbhutan.bt', 'metro.pr']) {
+  it('adds the six held back on terms, on Devon\'s call at 8:18 PM ("Go in anyway")', () => {
+    expect(ANYWAY.map(id => src(id)?.countryCode)).toEqual(['BB', 'ME', 'ME', 'HT', 'UG', 'TZ'])
+    for (const id of ANYWAY) {
+      const s = src(id)!
+      expect(s.feedUrl, id).toMatch(/^https:\/\//)
+      expect(NEWS_SOURCE_REGISTRY.filter(x => host(x.feedUrl) === host(s.feedUrl)), id).toHaveLength(1)
+      expect(NEWS_SOURCE_REGISTRY.filter(x => x.id === id), id).toHaveLength(1)
+    }
+    // Le Nouvelliste's feed is its English edition; Dan and Portal Analitika write Montenegrin in Latin script
+    expect(src('le-nouvelliste-ht')!.language).toBe('en')
+    expect(['dan-me', 'portal-analitika-me'].map(id => src(id)!.language)).toEqual(['sr', 'sr'])
+  })
+
+  it('still leaves out Kuensel and the feeds held back for what they publish', () => {
+    // Kuensel stays out on Devon's Oct 31 call. The Bhutanese's newest item was 5 days old, half of Business
+    // Bhutan's were paid casino reviews, and much of Metro Puerto Rico's is lifestyle and opinion
+    for (const h of ['kuenselonline.com', 'thebhutanese.bt', 'businessbhutan.bt', 'metro.pr']) {
       expect(NEWS_SOURCE_REGISTRY.some(s => host(s.feedUrl) === h), h).toBe(false)
     }
   })
 
   it('pins their stories at home, or where they name', () => {
-    for (const id of ADDED) expect(HOME_PIN_SOURCES.has(id), id).toBe(true)
+    for (const id of [...ADDED, ...ANYWAY.filter(i => i !== 'the-citizen-tz')]) expect(HOME_PIN_SOURCES.has(id), id).toBe(true)
+    // about a third of The Citizen's feed is world news: its Tanzanian stories are placed by name
+    expect(HOME_PIN_SOURCES.has('the-citizen-tz')).toBe(false)
+    expect(inferGeo('Ronaldo retires from Portugal duty amid reported tensions with coach Jesus', '', src('the-citizen-tz')).countryCode).not.toBe('TZ')
+    expect(inferGeo('Tanesco explains power cuts affecting four areas in Dar es Salaam, Coast', '', src('the-citizen-tz')).countryCode).toBe('TZ')
+    expect(inferGeo('Police seek public’s help to identify person of interest', '', src('barbados-today-bb')).countryCode).toBe('BB')
     expect(inferGeo('Pronostican otra tarde lluviosa para el interior y noreste', '', src('noticel-pr')).countryCode).toBe('PR')
     expect(inferGeo('Latinos en EE.UU. fueron los votantes que más se alejaron de los republicanos y Trump', '', src('noticel-pr')).countryCode).toBe('US')
     expect(inferGeo("Haïti - FLASH : L'État passe à l'offensive contre les terroristes, adresse à la Nation", '', src('haitilibre-ht')).countryCode).toBe('HT')
@@ -79,9 +95,9 @@ describe('feed upkeep (Nov 5, 2026)', () => {
 
   it('leaves every place with a parked feed at least two feeds that are read every 30 minutes', () => {
     const read = (cc: string) => NEWS_SOURCE_REGISTRY.filter(s => s.countryCode === cc && !s.parked).length
-    expect(['BB', 'ME', 'HT', 'BW', 'EC'].map(read)).toEqual([2, 2, 3, 2, 3])
-    // and Puerto Rico, whose Sin Comillas turns the server away for now, has a third
-    expect(read('PR')).toBe(3)
+    expect(['BB', 'ME', 'HT', 'BW', 'EC'].map(read)).toEqual([3, 4, 4, 2, 3])
+    // and the places with a site down, or one that turns the server away for now, have one more
+    expect(['PR', 'UG', 'TZ'].map(read)).toEqual([3, 4, 3])
   })
 })
 

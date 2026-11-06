@@ -10,7 +10,7 @@ import {
   splitFollows, joinFollows, MAX_COUNTRIES,
 } from '../lib/subscribers'
 import { sendConfirmEmail } from '../lib/briefing-email'
-import { signupTrap, signupAllowed, countSignup, noteTrapped } from '../lib/signup-guard'
+import { signupTrap, signupAllowed, countSignup, noteTrapped, fromSignupForm } from '../lib/signup-guard'
 import type { Signal, SignalSeverity } from '@worldpulse/types'
 
 /**
@@ -100,6 +100,13 @@ export const registerDigestRoutes: FastifyPluginAsync = async (app) => {
       return trap === 'too-fast'
         ? sendError(reply, 400, 'VALIDATION_ERROR', 'That was quick. Please check the address and try again.')
         : sendError(reply, 400, 'VALIDATION_ERROR', 'Please enter a valid email address')
+    }
+    // Nov 5, 2026: only the website's form or a signed-in reader; scripts calling the API without the
+    // form's fields got 10 confirmation emails sent in a day past the trap (lib/signup-guard.ts)
+    if (!fromSignupForm(req.body) && !(req.user as { id?: string } | undefined)?.id) {
+      req.log.info('Briefing sign-up without the form stopped')
+      void noteTrapped('no-form', 'briefing')
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Please sign up with the form on world-pulse.io')
     }
     const parsed = SubscribeSchema.safeParse(req.body)
     if (!parsed.success) {

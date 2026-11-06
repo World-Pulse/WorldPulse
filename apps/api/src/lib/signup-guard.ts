@@ -13,6 +13,10 @@
  * sign-ups went from 19 to 40 in two days, very likely the same scripts, and since the briefing is
  * switched on each one makes WorldPulse send a confirmation email to an address it was handed.
  *
+ * Nov 5, 2026 (Devon asked what I'd recommend): the trap stopped 46 such sign-ups in a day, yet 10
+ * more got through by calling the API without the form's fields. The briefing's sign-up now takes
+ * only the website's form (it sends formMs) or a signed-in reader (fromSignupForm).
+ *
  * Nothing here ever blocks a sign-up because Redis is down: the limit then lets it through.
  */
 import { redis } from '../db/redis'
@@ -29,7 +33,8 @@ export type SignupKind = 'account' | 'briefing'
  */
 export const SIGNUPS_PER_HOUR: Record<SignupKind, number> = { account: 10, briefing: 5 }
 
-export type SignupTrap = 'filled-hidden-box' | 'too-fast'
+/** no-form: a briefing sign-up that came neither from the website's form nor from a signed-in reader */
+export type SignupTrap = 'filled-hidden-box' | 'too-fast' | 'no-form'
 
 /** Whether the form's own signals say a script filled it in */
 export function signupTrap(body: unknown): SignupTrap | null {
@@ -38,6 +43,13 @@ export function signupTrap(body: unknown): SignupTrap | null {
   if (typeof b.extra === 'string' && b.extra.trim() !== '') return 'filled-hidden-box'
   if (typeof b.formMs === 'number' && Number.isFinite(b.formMs) && b.formMs < SIGNUP_MIN_FORM_MS) return 'too-fast'
   return null
+}
+
+/** Whether a sign-up came from one of the website's forms, which send how long they were open (formMs) */
+export function fromSignupForm(body: unknown): boolean {
+  if (!body || typeof body !== 'object') return false
+  const ms = (body as Record<string, unknown>).formMs
+  return typeof ms === 'number' && Number.isFinite(ms)
 }
 
 /** The Redis names, by kind: accounts keep the names they had (signup:...) */
