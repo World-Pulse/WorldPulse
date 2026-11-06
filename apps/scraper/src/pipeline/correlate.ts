@@ -711,6 +711,218 @@ const COMMON_THINGS = new Set([
   'home', 'village',
 ].map(stemWord))
 
+// ── Headlines in Arabic and Cyrillic letters (Nov 6, 2026; Devon: "proceed") ────────────────────────────────
+// Until now storyWords read Latin letters only, so two Arabic or Russian headlines of one story had no words in
+// common and an outlet in those scripts could never verify a story (Jordan's, Syria's and Bahrain's Arabic press,
+// Kyrgyzstan's and Mongolia's Cyrillic press). Each script gets the same treatment as Latin words: its little words
+// left out, one form for a word's variants, its countries marked "@JO", and its kinds of events and common things
+// known, so they don't single out a story on their own. Latin headlines read exactly as before.
+
+/** Arabic-Indic digits (٠١٢ and ۰۱۲) as 0-9, so a toll counts in either script */
+export function westernDigits(text: string): string {
+  return text.replace(/[٠-٩۰-۹]/g, d => String(d.charCodeAt(0) & 0xf))
+}
+
+/** One spelling of an Arabic word, after foldAccents (which drops the vowel marks and hamzas): no tatweel, ى as ي, ة as ه */
+function arabicLetters(word: string): string {
+  return word.replace(/ـ/g, '').replace(/ى/g, 'ي').replace(/ة/g, 'ه')
+}
+
+/** The article and the little words joined to it: "والحكومه", "بالعاصمه" and "للرئيس" are "حكومه", "عاصمه" and "رئيس" */
+const ARABIC_ARTICLES = ['وال', 'بال', 'فال', 'كال', 'لل', 'ال']
+export function arabicBase(word: string): string {
+  let w = arabicLetters(word)
+  for (const a of ARABIC_ARTICLES) if (w.startsWith(a) && w.length - a.length >= 2) { w = w.slice(a.length); break }
+  // and "و" (and) or "ب" (in, by) joined to the word: "وزيارة" and "بحادث" are "زياره" and "حادث" (4 letters left: "وزير" stays)
+  if ((w.startsWith('و') || w.startsWith('ب')) && w.length >= 5) w = w.slice(1)
+  return w
+}
+
+/** One form for an Arabic word's variants: the article, then one plural, dual or feminine ending, leaving 3 letters */
+const ARABIC_ENDINGS = ['ات', 'ون', 'ين', 'ان', 'يه', 'ه']
+export function arabicStem(word: string): string {
+  const w = arabicBase(word)
+  for (const end of ARABIC_ENDINGS) if (w.endsWith(end) && w.length - end.length >= 3) return w.slice(0, -end.length)
+  return w
+}
+
+/**
+ * One form for a Russian, Kyrgyz or Mongolian word's variants: one case ending (the longest that leaves 3 letters),
+ * then the first six letters, as for Latin words ("президента" and "президент" are "презид", "Москве" and
+ * "Москва" "москв"). foldAccents has made й и and ё е.
+ */
+const CYRILLIC_ENDINGS = ['ями', 'ами', 'ого', 'его', 'ому', 'ему', 'ыми', 'ими', 'ах', 'ях', 'ам', 'ям', 'ов', 'ев', 'ом', 'ем',
+  'ым', 'ои', 'еи', 'ыи', 'ая', 'яя', 'ое', 'ее', 'ые', 'ие', 'ую', 'юю', 'а', 'я', 'ы', 'и', 'у', 'ю', 'е', 'о', 'ь']
+export function cyrillicStem(word: string, agglutinative = false): string {
+  let w = word
+  for (const end of agglutinative ? STEPPE_ENDINGS : CYRILLIC_ENDINGS) {
+    if (w.endsWith(end) && w.length - end.length >= 3) { w = w.slice(0, -end.length); break }
+  }
+  return w.slice(0, 6)
+}
+
+/**
+ * Kyrgyz and Mongolian add their case and plural endings to the word ("Японд", to Japan; "Улсын", of the state):
+ * a headline with ө, ү or ң, letters Russian doesn't use, has its words' endings taken off from these instead,
+ * the longest first ("Японд" is "япон", "улсад" "улс", "төрийн" "төр")
+ */
+const STEPPE_ENDINGS = [
+  // mn
+  'нүүд', 'нууд', 'чууд', 'үүд', 'ууд', 'аас', 'ээс', 'оос', 'өөс', 'тай', 'тэй', 'той', 'руу', 'рүү', 'аар', 'ээр', 'оор', 'өөр',
+  'иин', 'нии', 'ыг', 'иг', 'ын', 'ад', 'эд', 'од', 'өд',
+  // ky
+  'дын', 'дин', 'дун', 'дүн', 'тын', 'тин', 'тун', 'түн', 'нын', 'нин', 'нун', 'нүн', 'дан', 'ден', 'дон', 'дөн', 'тан', 'тен',
+  'тон', 'төн', 'лар', 'лер', 'лор', 'лөр', 'дар', 'дер', 'дор', 'дөр', 'тар', 'тер', 'тор', 'төр', 'га', 'ге', 'го', 'гө', 'ка',
+  'ке', 'ко', 'кө', 'да', 'де', 'до', 'дө', 'та', 'те', 'то', 'тө', 'ды', 'ди', 'ду', 'дү', 'ты', 'ти', 'ту', 'тү', 'ны', 'ни',
+  'ну', 'нү', 'сы', 'си', 'су', 'сү',
+  // mn, one letter
+  'д', 'т', 'н', 'г',
+].sort((a, b) => b.length - a.length)
+const STEPPE_LETTERS = /[өүң]/u
+
+// (Script_Extensions: the tatweel is a letter of Arabic and of other scripts)
+const ARABIC_SCRIPT = /^\p{scx=Arabic}+$/u
+const CYRILLIC_SCRIPT = /^\p{scx=Cyrillic}+$/u
+/** A word's form in its script, as storyWords compares them (and the stop lists below are built) */
+function otherScriptStem(word: string): string {
+  const w = foldAccents(word)
+  return ARABIC_SCRIPT.test(w) ? arabicStem(w) : cyrillicStem(w, STEPPE_LETTERS.test(w))
+}
+const stemsOf = (list: string) => new Set(list.split(/\s+/).filter(Boolean).map(otherScriptStem))
+
+/** The little words, reporting verbs and headline labels of Arabic, Russian, Kyrgyz and Mongolian (as written; compared folded) */
+const OTHER_SCRIPT_STOP = new Set([
+  // ar
+  'في من الى إلى على عن مع بعد قبل خلال حول ضد بين تحت فوق منذ حتى او أو ثم قد لم لن لا ما ان أن إن هذا هذه ذلك تلك التي الذي ' +
+  'الذين هو هي هم كان كانت يكون كما اي أي كل عند لدى غير اكثر أكثر اول أول جديد جديدة يوم اليوم امس أمس عاجل فيديو صور ' +
+  'بالصور بالفيديو شاهد تقرير قال قالت يقول تقول أكد اكد أكدت أعلن اعلن أعلنت مصدر مصادر نحو وسط إثر اثر عبر لدى',
+  // ru
+  'и в во на с со по для не что из к ко о об от за у до как это а но его ее её их при после над под без между уже также или ' +
+  'ли же бы чем то все всё был была были будет быть может могут год года году заявил заявила заявили сообщил сообщила ' +
+  'сообщили сегодня вчера новости видео фото срочно стало известно более около против через',
+  // ky
+  'жана менен үчүн боюнча деп бул ал да дагы анын алар болуп керек тууралуу кийин чейин',
+  // mn
+  'ба болон нь юм энэ тэр байна гэж гэв хийх тухай дээр үед шинэ өнөөдөр',
+].join(' ').split(/\s+/).filter(Boolean).flatMap(w => [foldAccents(w), otherScriptStem(w)]))
+
+/** Kinds of events and their usual actors (see EVENT_WORDS) */
+for (const stem of stemsOf(
+  // ar
+  'قتل مقتل قتلى هجوم هجمات قصف غارة غارات انفجار إصابة إصابات جرحى شهيد شهداء حرب اشتباكات اعتقال الشرطة الجيش قوات ' +
+  'رئيس الرئيس الحكومة وزير وزارة مجلس الدولة حريق فيضانات زلزال عاصفة حادث وفاة مواطن مواطنين شخص أشخاص ' +
+  // ru, ky, mn
+  'убит убиты погиб погибли погибших атака атаки удар удары обстрел взрыв ранен ранены раненых война войны бой бои арест ' +
+  'задержан полиция армия военные военный президент правительство министр министерство глава власти страна государство ' +
+  'пожар наводнение землетрясение авария человек люди граждане өкмөт милиция кырсык өрт ерөнхийлөгч засгийн сайд цагдаа ' +
+  'гал осол хүн иргэд улс',
+)) EVENT_WORDS.add(stem)
+
+/** Numbers in words, as their stems: "ثلاثة" and "три" are #3, like "three" */
+const OTHER_SCRIPT_COUNTS = new Map<string, number>(([
+  [1, 'واحد один одна одного'], [2, 'اثنان اثنين اثنتان два две двое двух'], [3, 'ثلاث ثلاثة три трое трех'],
+  [4, 'أربع أربعة четыре четырех'], [5, 'خمس خمسة пять пяти'], [6, 'ستة шесть шести'], [7, 'سبع سبعة семь семи'],
+  [8, 'ثماني ثمانية восемь восьми'], [9, 'تسع تسعة девять девяти'], [10, 'عشر عشرة десять десяти'],
+] as Array<[number, string]>).flatMap(([n, names]) => names.split(' ').map(w => [otherScriptStem(w), n] as [string, number])))
+
+/** Things many unrelated events happen to or in (see COMMON_THINGS) */
+for (const stem of stemsOf(
+  'طائرة مروحية قطار حافلة سفينة قارب شاحنة سيارة مستشفى مدرسة سوق مسجد كنيسة جسر مبنى منزل فندق مطار ' +
+  'самолет вертолет поезд автобус судно корабль лодка грузовик автомобиль машина больница школа рынок мечеть церковь мост ' +
+  'здание дом гостиница отель аэропорт',
+)) COMMON_THINGS.add(stem)
+
+/**
+ * Countries named in Arabic, Russian, Kyrgyz or Mongolian (their names, peoples and capitals): an Arabic word by its
+ * form without the article (its endings stay: "حلبة", an arena, is not Aleppo, nor "عدنان" Aden), a Cyrillic word by its stem
+ */
+const OTHER_SCRIPT_COUNTRIES = new Map<string, string>(([
+  ['JO', 'الأردن أردني الأردنية الأردنيين الأردنيون إربد العقبة'],
+  ['SY', 'سوريا سورية سوري السورية السوريين السوريون دمشق حلب حمص إدلب درعا اللاذقية السويداء الحسكة'],
+  ['BH', 'البحرين بحريني البحرينية البحرينيين البحرينيون المنامة المحرق'],
+  ['LB', 'لبنان لبناني اللبنانية اللبنانيين اللبنانيون بيروت'],
+  ['IQ', 'العراق عراقي العراقية بغداد البصرة الموصل أربيل'], ['EG', 'مصر مصري المصرية القاهرة'],
+  ['SA', 'السعودية سعودي الرياض جدة مكة'], ['IR', 'إيران إيراني الإيرانية طهران'],
+  ['IL', 'إسرائيل إسرائيلي الإسرائيلية الإسرائيليين الإسرائيليون'],
+  ['PS', 'فلسطين فلسطيني الفلسطينية الفلسطينيين الفلسطينيون غزة'], ['AE', 'الإمارات إماراتي الإماراتية دبي أبوظبي'], ['QA', 'قطر قطري القطرية الدوحة'],
+  ['KW', 'الكويت كويتي الكويتية'], ['YE', 'اليمن يمني اليمنية صنعاء عدن'], ['LY', 'ليبيا ليبي الليبية'], ['TN', 'تونس تونسي التونسية'],
+  ['DZ', 'الجزائر جزائري الجزائرية'], ['MA', 'المغرب مغربي المغربية الرباط'], ['SD', 'السودان سوداني السودانية الخرطوم'],
+  ['TR', 'تركيا التركية أنقرة إسطنبول اسطنبول'], ['RU', 'روسيا روسي الروسية موسكو'], ['UA', 'أوكرانيا أوكراني الأوكرانية كييف'],
+  ['CN', 'الصين صيني الصينية بكين'], ['US', 'أمريكا أميركا أمريكي أميركي الأمريكية الأميركية واشنطن'],
+  ['FR', 'فرنسا فرنسي الفرنسية باريس'], ['GB', 'بريطانيا بريطاني البريطانية لندن'], ['DE', 'ألمانيا ألماني الألمانية برلين'],
+  ['IN', 'الهند هندي الهندية'], ['PK', 'باكستان باكستاني'], ['AF', 'أفغانستان أفغاني'], ['JP', 'اليابان ياباني اليابانية'],
+  ['RU', 'россия россии российский российская рф москва москве орусия орос оросын'],
+  ['KG', 'кыргызстан кыргызстана кыргызстане кыргызский кыргыз киргизия бишкек бишкеке'],
+  ['KZ', 'казахстан казахский астана алматы'], ['UZ', 'узбекистан узбекский ташкент'], ['TJ', 'таджикистан таджикский душанбе'],
+  ['TM', 'туркменистан'], ['MN', 'монголия монголии монгол монгольский улаанбаатар'],
+  ['CN', 'китай китая китайский хятад кытай'], ['US', 'сша америка американский ану акш'],
+  ['UA', 'украина украины украинский киев'], ['BY', 'беларусь белоруссия минск'], ['TR', 'турция турции турецкий түркия'],
+  ['IR', 'иран ирана иранский'], ['JP', 'япония японии японский япон'], ['DE', 'германия германии'],
+  ['FR', 'франция франции'], ['GB', 'великобритания британия'], ['IN', 'индия индии'], ['AF', 'афганистан'], ['PK', 'пакистан'],
+] as Array<[string, string]>).flatMap(([code, names]) => names.split(' ').flatMap(n => {
+  const w = foldAccents(n)
+  return ARABIC_SCRIPT.test(w) ? [[arabicBase(w), code]] : [[cyrillicStem(w), code], [cyrillicStem(w, true), code]]
+}) as Array<[string, string]>))
+
+/** Arabic country names of two words, found before the words are split (as foldAccents leaves them); with a city's name */
+const ARABIC_COUNTRY_PHRASES: Array<[RegExp, string, string?]> = [
+  [/الولايات\s+المتحد[ةه](?:\s+الامريكي[ةه]|\s+الاميركي[ةه])?/g, 'US'], [/المملك[ةه]\s+المتحد[ةه]/g, 'GB'],
+  [/المملك[ةه]\s+العربي[ةه]\s+السعودي[ةه]/g, 'SA'], [/سلطن[ةه]\s+عمان/g, 'OM'], [/تل\s+ابيب/g, 'IL', 'تل ابيب'],
+  [/الضف[ةه]\s+الغربي[ةه]/g, 'PS'], [/رام\s+الله/g, 'PS', 'رام الله'], [/دير\s+الزور/g, 'SY', 'دير الزور'],
+  [/ابو\s+ظبي/g, 'AE', 'ابوظبي'],
+]
+
+/**
+ * The cities among those names: headlines that each name a city, and none the same, tell of two events, as
+ * isSameStory reads the place list's cities ("مقتل 3 أشخاص في قصف على ريف إدلب" is not "... في انفجار في حلب")
+ */
+const OTHER_SCRIPT_CITIES = new Set(('إربد العقبة دمشق حلب حمص إدلب درعا اللاذقية السويداء الحسكة المنامة المحرق بيروت بغداد البصرة ' +
+  'الموصل أربيل القاهرة الرياض جدة مكة طهران دبي أبوظبي الدوحة صنعاء عدن الرباط الخرطوم أنقرة إسطنبول موسكو كييف بكين واشنطن ' +
+  'باريس لندن برلين غزة бишкек астана алматы ташкент душанбе улаанбаатар москва киев минск').split(' ').map(n => {
+  const w = foldAccents(n)
+  return ARABIC_SCRIPT.test(w) ? arabicBase(w) : cyrillicStem(w)
+}))
+const OTHER_SCRIPT_LETTERS = /[\u0600-\u06FF\u0400-\u04FF]/
+
+/** The cities a headline names in Arabic or Cyrillic letters (see OTHER_SCRIPT_CITIES) */
+export function otherScriptCities(title: string): string[] {
+  if (!OTHER_SCRIPT_LETTERS.test(title)) return []
+  let text = foldAccents(title)
+  const out: string[] = []
+  for (const [re, , city] of ARABIC_COUNTRY_PHRASES) if (city) text = text.replace(re, () => { out.push(city); return ' ' })
+  for (const token of text.split(/[^\p{L}]+/u)) {
+    if (!token) continue
+    const key = ARABIC_SCRIPT.test(token) ? arabicBase(token) : CYRILLIC_SCRIPT.test(token) ? cyrillicStem(token) : ''
+    if (key && OTHER_SCRIPT_CITIES.has(key) && !out.includes(key)) out.push(key)
+  }
+  return out
+}
+
+/**
+ * The words of a headline's Arabic and Cyrillic parts, as storyWords compares them: stems, and the countries
+ * named, marked "@JO" (text: the headline after foldAccents)
+ */
+export function otherScriptWords(text: string): string[] {
+  const out: string[] = []
+  let rest = text
+  for (const [re, code] of ARABIC_COUNTRY_PHRASES) rest = rest.replace(re, () => { out.push(`@${code}`); return ' ' })
+  const steppe = STEPPE_LETTERS.test(rest)
+  for (const token of rest.split(/[^\p{L}]+/u)) {
+    if (!token) continue
+    const arabic = ARABIC_SCRIPT.test(token)
+    if (!arabic && !CYRILLIC_SCRIPT.test(token)) continue
+    if (OTHER_SCRIPT_STOP.has(token)) continue
+    const stem = arabic ? arabicStem(token) : cyrillicStem(token, steppe)
+    const code = OTHER_SCRIPT_COUNTRIES.get(arabic ? arabicBase(token) : stem) ?? (steppe ? OTHER_SCRIPT_COUNTRIES.get(cyrillicStem(token)) : undefined)
+    if (code) { out.push(`@${code}`); continue }
+    const count = OTHER_SCRIPT_COUNTS.get(stem)
+    if (count !== undefined) { out.push(`#${count}`); continue }
+    if (stem.length < (arabic ? 2 : 3) || OTHER_SCRIPT_STOP.has(stem)) continue
+    out.push(stem)
+  }
+  return out
+}
+
 const storyWordCache = new Map<string, Set<string>>()
 const storyPlaceCache = new Map<string, ReturnType<typeof splitPlaces>['places']>()
 
@@ -745,7 +957,8 @@ export function storyWords(title: string): Set<string> {
   const { text: undated, dates } = takeDates(rest)
   for (const date of dates) words.add(date)
   // Accents folded (foldAccents): "Kovač" and "Kovac" are one word, not "kova" and "kovac"
-  const text = foldAccents(undated).replace(/(\d),(?=\d{3}\b)/g, '$1')
+  // (and Arabic-Indic digits as digits: a toll counts in either script)
+  const text = foldAccents(westernDigits(undated)).replace(/(\d),(?=\d{3}\b)/g, '$1')
   for (const raw of text.replace(/[^a-z0-9\s-]/g, ' ').split(/[\s-]+/)) {
     if (!raw) continue
     if (/^\d+$/.test(raw)) { words.add(`#${Number(raw)}`); continue }
@@ -756,6 +969,8 @@ export function storyWords(title: string): Set<string> {
     if (raw.length < 3 || STOP_WORDS.has(raw) || HEADLINE_FILLER.has(raw) || FUNCTION_WORDS.has(raw)) continue
     words.add(stemWord(raw))
   }
+  // Words in Arabic and Cyrillic letters (Nov 6, 2026), with the countries they name
+  for (const word of otherScriptWords(text)) words.add(word)
   for (const code of countries) words.add(`@${code}`)
   if (storyWordCache.size >= 5000) storyWordCache.clear()
   storyWordCache.set(title, words)
@@ -770,12 +985,18 @@ export function storyWords(title: string): Set<string> {
  */
 export function searchWords(title: string): string[] {
   const keep = (w: string) => w.length >= 4 && !STOP_WORDS.has(w) && !HEADLINE_FILLER.has(w) && !FUNCTION_WORDS.has(w)
+    && !OTHER_SCRIPT_STOP.has(foldAccents(w))
   const out: string[] = []
   let base = 0
   for (const token of takeDates(title).text.toLowerCase().split(/[^\p{L}\p{N}]+/u)) {
     if (base >= 12) break
     // As written in plain letters (as before), as written with its accents, and without them
     const forms = [...token.split(/[^a-z0-9]+/), token, foldAccents(token)]
+    // An Arabic word also without its article and with it (Nov 6, 2026): "الحكومة" finds "حكومة" and the reverse
+    if (ARABIC_SCRIPT.test(foldAccents(token))) {
+      const stem = arabicStem(foldAccents(token))
+      if (stem.length >= 3 && !OTHER_SCRIPT_STOP.has(stem) && !OTHER_SCRIPT_STOP.has(foldAccents(token))) forms.push(stem, `ال${stem}`)
+    }
     let counted = false
     for (const form of forms) {
       if (!keep(form) || /[^\p{L}\p{N}]/u.test(form)) continue
@@ -810,6 +1031,7 @@ function secondLook(a: CorrelationCandidate, b: CorrelationCandidate, wordsA: Se
   if (shared < SECOND_LOOK_MIN_SHARED || jaccard < SECOND_LOOK_MIN_JACCARD) return false
   const cities = new Set(storyPlaces(a.title ?? '').map(p => p.place)
     .filter(place => storyPlaces(b.title ?? '').some(pb => pb.place === place)))
+  for (const city of otherScriptCities(a.title ?? '')) if (otherScriptCities(b.title ?? '').includes(city)) cities.add(city)
   const strong = [...wordsA].filter(w => wordsB.has(w) && strongWord(w) && !busy.has(w)).length + cities.size
   if (strong < SECOND_LOOK_MIN_STRONG) return false
   // The countries: the same, or only one headline names any ("Paraguay President Santiago Peña resigns" /
@@ -925,6 +1147,10 @@ export function isSameStory(a: CorrelationCandidate, b: CorrelationCandidate, op
   const placesB = storyPlaces(b.title ?? '')
   const samePlace = placesA.some(pa => placesB.some(pb => oneArea(pa, pb)))
   if (placesA.length > 0 && placesB.length > 0 && !samePlace) return false
+  // ...and the cities named in Arabic or Cyrillic letters (Nov 6, 2026)
+  const citiesA = otherScriptCities(a.title ?? '')
+  const citiesB = otherScriptCities(b.title ?? '')
+  if (citiesA.length > 0 && citiesB.length > 0 && !citiesA.some(c => citiesB.includes(c))) return false
   if (farApartEvents(a, b, samePlace)) return false
   return true
 }

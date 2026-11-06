@@ -760,3 +760,75 @@ describe('the second look (Nov 5, 2026, plan Q10)', () => {
     expect(busyWords(reports.slice(0, 4)).size).toBe(0)
   })
 })
+
+// Nov 6, 2026 (Devon: "proceed" with teaching the matching to read Arabic and Cyrillic). The Arabic pairs are real
+// headlines of Nov 6 from Jordan's and Syria's outlets (JO24, Roya, Al Ghad, SANA, Syria TV); of 135 headlines from
+// 7 outlets, the matcher joined 8 pairs, all one story each.
+describe('headlines in Arabic and Cyrillic letters (Nov 6, 2026)', () => {
+  const at = (title: string, source_id: string) => sig({ id: source_id, title, source_id, category: 'geopolitics' })
+  const look = { secondLook: { busy: new Set<string>() } }
+
+  it('reads Arabic words: without the article, in one spelling, with their countries and numbers', async () => {
+    const { searchWords, westernDigits } = await import('../correlate')
+    expect([...storyWords('الأردن: مقتل 3 أشخاص في حادث سير على طريق إربد')].sort())
+      .toEqual(['#3', '@JO', 'اشخاص', 'حادث', 'سير', 'طريق', 'مقتل'].sort())
+    // "ثلاثة" is 3, "بحادث" is "حادث" (in an accident), "على" and "في" are little words
+    expect([...storyWords('مصرع ثلاثة أشخاص بحادث سير على طريق إربد')].sort())
+      .toEqual(['#3', '@JO', 'اشخاص', 'حادث', 'سير', 'طريق', 'مصرع'].sort())
+    expect(westernDigits('٢٠٢٦ و ۱۲')).toBe('2026 و 12')
+    expect(storyWords('الحكومة السورية تعلن ١٢ إجراء').has('#12')).toBe(true)
+    expect(storyWords('الحكومة السورية تعلن ١٢ إجراء').has('@SY')).toBe(true)
+    // the same word with and without the article, the hamza and the final ة
+    expect(storyWords('وزير الخارجية الأردني').has('خارج') && storyWords('وزارة خارجية أردنية').has('خارج')).toBe(true)
+    // an arena is not Aleppo, Adnan is not Aden
+    expect(storyWords('افتتاح حلبة جديدة لسباق السيارات').has('@SY')).toBe(false)
+    expect(storyWords('عدنان يفوز بالجائزة الكبرى للرواية').has('@YE')).toBe(false)
+    // the search finds a word with or without its article
+    expect(searchWords('الحكومة تقر موازنة العام المقبل')).toEqual(expect.arrayContaining(['الحكوم', 'حكوم']))
+  })
+
+  it('joins one story told by two outlets, and keeps two stories apart', () => {
+    expect(isSameStory(
+      at('الاتحاد الأوروبي يدين العمل الإرهابي الذي أسفر عن استشهاد السلايطة', 'jo24.net'),
+      at('الاتحاد الأوروبي يعلن وقوفه مع الأردن ويدين حادثة استشهاد السلايطة', 'royanews.tv'),
+    )).toBe(true)
+    expect(isSameStory(
+      at('الأردن يدين الاعتداء المسلح الذي وقع في مصر وأسفر عن وفاة ضابطين', 'jo24.net'),
+      at('الأردن يدين الاعتداء المسلح جنوبي مصر ويعزي بوفاة ضابطين من حرس الحدود', 'alghad.com'),
+    )).toBe(true)
+    expect(isSameStory(
+      at('حبس وزيرة الأسرة السابقة في تركيا بقضية صناديق الاستثمار.. ما القصة؟', 'syria.tv'),
+      at('محكمة تركية تأمر بحبس وزيرة سابقة في إطار تحقيق بشأن صناديق الاستثمار', 'alwatan.sy'),
+      look,
+    )).toBe(true)
+    // the attack itself and Jordan's condemnation of it are two stories
+    expect(isSameStory(
+      at('الأردن يدين الاعتداء المسلح الذي وقع في مصر وأسفر عن وفاة ضابطين', 'jo24.net'),
+      at('مقتل رئيس أركان حرس حدود المنطقة الجنوبية في مصر وضابط آخر خلال اشتباكات مسلحة', 'syria.tv'),
+      look,
+    )).toBe(false)
+    // a toll and a kind of event are not a story
+    expect(isSameStory(at('مقتل 3 أشخاص في قصف على ريف إدلب', 'sana.sy'), at('مقتل 3 أشخاص في انفجار في حلب', 'syria.tv'), look)).toBe(false)
+  })
+
+  it('reads Russian, Kyrgyz and Mongolian words: one form for their cases, their countries marked', () => {
+    expect(storyWords('В Бишкеке задержали подозреваемых в мошенничестве с квартирами'))
+      .toEqual(new Set(['@KG', 'задерж', 'подозр', 'мошенн', 'кварти']))
+    expect(storyWords('Москва и Пекин договорились').has('@RU') && storyWords('Москве и Пекину').has('@RU')).toBe(true)
+    // Mongolian endings: "Японд" (to Japan) is Japan, "Улсын" (of the state) the state
+    expect(storyWords('Монгол Улсын Ерөнхийлөгч У.Хүрэлсүх Японд айлчилна')).toEqual(new Set(['@MN', '@JP', 'улс', 'ерөнхи', 'хүрэлс', 'аилчил']))
+    expect(isSameStory(
+      at('В Бишкеке задержали подозреваемых в мошенничестве с квартирами', '24.kg'),
+      at('Милиция Бишкека задержала мошенников, продававших чужие квартиры', 'vesti.kg'),
+    )).toBe(true)
+    expect(isSameStory(
+      at('В Бишкеке задержан подозреваемый в краже. Забрал деньги из ящика для садака', '24.kg'),
+      at('В Бишкеке задержан подозреваемый в крупном мошенничестве на $69 тысяч', 'vesti.kg'),
+      look,
+    )).toBe(false)
+    expect(isSameStory(
+      at('Монгол Улсын Ерөнхийлөгч У.Хүрэлсүх Японд айлчилна', 'ikon.mn'),
+      at('Ерөнхийлөгч У.Хүрэлсүх Япон улсад төрийн айлчлал хийнэ', 'montsame.mn'),
+    )).toBe(true)
+  })
+})
