@@ -128,6 +128,9 @@ const COLORADO_PARTY = /\bANR\b|\bcolorados\b|asociaci[oó]n nacional republican
 const DOCUMENT_AFTER = new Set([
   'convention', 'conventions', 'protocol', 'protocols', 'accord', 'accords', 'agreement', 'agreements', 'treaty',
   'statute', 'consensus', 'memorandum',
+  // Nov 6, 2026: "Aqaba Process AI security summit underway in Astana" was pinned in Aqaba; the Aqaba, Istanbul,
+  // Doha and Rabat Processes are talks, held anywhere
+  'process', 'declaration', 'pact',
 ])
 
 /**

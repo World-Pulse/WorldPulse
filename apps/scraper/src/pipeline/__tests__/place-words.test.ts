@@ -60,6 +60,14 @@ describe('a place that is part of a name', () => {
     expect(at('Thousands attend a Chicago convention centre fair', 'Chicago')).toBe(false)
   })
 
+  it('reads a city before Process, Declaration or Pact as the name of talks, not the place (Nov 6)', () => {
+    expect(at('Aqaba Process AI security summit underway in Astana', 'Aqaba')).toBe(true)
+    expect(findGazetteerPlace('Aqaba Process AI security summit underway in Astana')?.place).toBe('astana')
+    expect(at('Leaders sign the Doha Declaration on trade', 'Doha')).toBe(true)
+    expect(at('Port workers strike in Aqaba', 'Aqaba')).toBe(false)
+    expect(at('Aqaba process plant fire injures two', 'Aqaba')).toBe(false)
+  })
+
   it('takes them out of the map pin, the places and the countries', () => {
     expect(placesInText('Santiago Peña meets business leaders in Asunción')).not.toContain('Santiago')
     expect(placeFromText('Paris Hilton reveals her new album').name ?? null).toBeNull()
