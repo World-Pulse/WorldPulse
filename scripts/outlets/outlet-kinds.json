@@ -28,7 +28,8 @@
       "stp-press",
       "atpe-tchad",
       "khovar-en",
-      "saba-yemen-en"
+      "saba-yemen-en",
+      "tasr-en"
     ],
     "international": [
       "bbc-world",
@@ -62,6 +63,7 @@
       "islands-business-kiribati",
       "islands-business-tuvalu",
       "islands-business-nauru",
+      "islands-business-pacific",
       "china-digital-times",
       "e-global-equatorial-guinea",
       "e-global-guinea-bissau"
@@ -213,7 +215,8 @@
       "regierung-li",
       "shabait-er",
       "ecdc-news",
-      "nasa-news"
+      "nasa-news",
+      "sknis-kn"
     ]
   },
   "state": [

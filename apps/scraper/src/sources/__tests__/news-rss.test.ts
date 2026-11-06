@@ -87,8 +87,10 @@ describe('NEWS_SOURCE_REGISTRY', () => {
   it('Q5 round 6 (Oct 21, 2026): six feeds the server failed to read all day are out, two in their place', () => {
     const ids = new Set(NEWS_SOURCE_REGISTRY.map(s => s.id))
     // LSM's English feed is tried once more since Oct 31, 2026 (round 8) as lsm-english-lv
-    // (round8-depth.test.ts); the old id stays out
-    for (const id of ['colombia-reports', 'eye-radio-ss', 'eyewitness-news-bs', 'radio-tamazuj', 'tasr-en', 'lsm-en']) {
+    // (round8-depth.test.ts); the old id stays out. TASR is back since Nov 6, 2026, parked: tried once a day
+    // (one-outlet-places-nov6.test.ts)
+    expect(NEWS_SOURCE_REGISTRY.find(s => s.id === 'tasr-en')?.parked).toBeTruthy()
+    for (const id of ['colombia-reports', 'eye-radio-ss', 'eyewitness-news-bs', 'radio-tamazuj', 'lsm-en']) {
       expect(ids.has(id)).toBe(false)
       expect(HOME_PIN_SOURCES.has(id)).toBe(false)
     }
@@ -243,10 +245,12 @@ describe('NEWS_SOURCE_REGISTRY', () => {
     // Middle East Eye (404), Guam PDN (429), Jornal Tribuna de Macau (401), Le Quotidien (403),
     // North Press Agency (403), Hellenic Shipping News (403), Les Nouvelles Calédoniennes (timed out)
     for (const id of ['middle-east-eye', 'guam-pdn', 'jtm-macau', 'le-quotidien-sn', 'north-press-agency-en',
-                      'hellenic-shipping-news', 'les-nouvelles-caledoniennes']) {
+                      'hellenic-shipping-news']) {
       expect(NEWS_SOURCE_REGISTRY.find(s => s.id === id)).toBeUndefined()
       expect(HOME_PIN_SOURCES.has(id)).toBe(false)
     }
+    // Les Nouvelles Calédoniennes is back since Nov 6, 2026, parked: tried once a day (one-outlet-places-nov6.test.ts)
+    expect(NEWS_SOURCE_REGISTRY.find(s => s.id === 'les-nouvelles-caledoniennes')?.parked).toBeTruthy()
   })
 
   it('drops the feeds that never answered our server and covers Canada (Oct 17, 2026)', () => {

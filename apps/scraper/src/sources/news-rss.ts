@@ -9982,6 +9982,82 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['saint-vincent', 'caribbean'],
     language:        'en',
   },
+  // ── Added Nov 6, 2026, 10 AM (Devon, 8:45 AM: "Look into the 30 places that still only have 1 feed , what else can we
+  // add there?"). Read with the poller's own reader at 9 AM, terms searched for, robots.txt read, headlines read; the rest
+  // of the 30, and what each would take, in departments/research/r7-one-outlet-places-2026-11-06.md
+  // Islands Business (Suva), its news section: the Pacific's stories from its Suva newsroom and its correspondents,
+  // about 6 a day; a Fijian newsroom, so Fiji's second outlet; the region's, so no home pin (its stories go where they
+  // name: Tonga, the Marshall Islands, PNG, the Cook Islands, Kiribati...). Not its PACNEWS bulletins ("PACNEWS ONE,
+  // 06 NOVEMBER 2026"), which its country tags carry; no terms page; robots.txt allows all
+  {
+    id:              'islands-business-pacific',
+    name:            'Islands Business (Pacific)',
+    feedUrl:         'https://islandsbusiness.com/category/news-break/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.75,
+    countryCode:     'FJ',
+    defaultLat:      -18.14,
+    defaultLng:      178.44,
+    defaultLocation: 'Suva, Fiji',
+    extraTags:       ['pacific', 'oceania'],
+    language:        'en',
+    skipLinks:       /\/(?:pacnews|partner-news)\//,
+  },
+  // SKNIS, the St Kitts and Nevis Information Service: the government's communications department (Basseterre), a few
+  // stories a day; a government press office, so labelled state media; St Kitts and Nevis's second outlet beside VON
+  // Radio; home pin; no terms published (its footer's "Terms" links nowhere)
+  {
+    id:              'sknis-kn',
+    name:            'SKNIS (St Kitts and Nevis Information Service)',
+    feedUrl:         'https://www.sknis.gov.kn/feed/',
+    category:        'geopolitics',
+    biasLabel:       'state-media',
+    reliability:     0.50,
+    countryCode:     'KN',
+    defaultLat:      17.30,
+    defaultLng:      -62.72,
+    defaultLocation: 'Basseterre, Saint Kitts and Nevis',
+    extraTags:       ['saint-kitts-and-nevis', 'caribbean', 'state-media', 'government'],
+    language:        'en',
+  },
+  // TASR, the News Agency of the Slovak Republic's English newswire (NewsNow): taken out on Oct 21 when the server
+  // couldn't read it all day; it answers other networks (15 items, 2 a day), so it comes back parked: tried once a
+  // day, read as usual from the first time it answers; home pin; no terms page
+  {
+    id:              'tasr-en',
+    name:            'TASR (Slovakia, English)',
+    feedUrl:         'https://newsnow.tasr.sk/rss/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.76,
+    countryCode:     'SK',
+    defaultLat:      48.15,
+    defaultLng:      17.11,
+    defaultLocation: 'Bratislava, Slovakia',
+    extraTags:       ['slovakia', 'europe', 'news-agency'],
+    language:        'en',
+    parked:          'the server could not read it all day on Oct 21, 2026; answers other networks (Nov 6)',
+  },
+  // Les Nouvelles Calédoniennes, Nouméa's daily, in French (the site's own Drupal feed, rss.xml; NOT the FeedBurner feed
+  // its pages advertise, which carries spam): taken out on Oct 21 when every read from the server timed out; it answers
+  // other networks (8 stories a day), so it comes back parked; mostly New Caledonia's own news, home pin; its legal
+  // notice forbids reproducing or using its articles in any form (no clause on robots or data mining)
+  {
+    id:              'les-nouvelles-caledoniennes',
+    name:            'Les Nouvelles Calédoniennes',
+    feedUrl:         'https://www.lnc.nc/rss.xml',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.72,
+    countryCode:     'NC',
+    defaultLat:      -22.27,
+    defaultLng:      166.44,
+    defaultLocation: 'Nouméa, New Caledonia',
+    extraTags:       ['new-caledonia', 'pacific', 'oceania', 'french-language'],
+    language:        'fr',
+    parked:          'every read from the server timed out on Oct 21, 2026; answers other networks (Nov 6)',
+  },
 ]
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────
@@ -10328,7 +10404,7 @@ function hintMatches(text: string, keyword: string): boolean {
 }
 
 /** Government press offices whose stories are their own country's day (inferGeo; Nov 5, 2026) */
-export const PRESS_OFFICES = new Set(['pmo-brunei', 'statehouse-seychelles', 'fsm-president-office', 'opm-pressroom-dm',
+export const PRESS_OFFICES = new Set(['pmo-brunei', 'statehouse-seychelles', 'fsm-president-office', 'opm-pressroom-dm', 'sknis-kn',
   'naalakkersuisut-gl', 'regierung-li'])
 /** A visit received at home: "receives", "hosts", "welcomes", "in audience", "courtesy call", "credentials" */
 const HOSTING_WORDS = /\b(?:receives?|received|hosts?|hosted|welcomes?|welcomed|in audience|courtesy call|credentials|bids? farewell)\b/i
@@ -10464,6 +10540,8 @@ export const HOME_PIN_SOURCES = new Set([
   // Nov 6, 2026, 8 AM: 15min (less its world section) and LRT's "In Lithuania" section, Estonian World and St Vincent
   // Times; not This is Beirut (mostly the region) or Spaceflight Now
   '15min-lt', 'lrt-lt', 'estonian-world-ee', 'st-vincent-times-vc',
+  // Nov 6, 2026, 10 AM: SKNIS, and TASR and Les Nouvelles Calédoniennes (parked); not Islands Business (the region's)
+  'sknis-kn', 'tasr-en', 'les-nouvelles-caledoniennes',
 ])
 
 export interface InferredGeo {

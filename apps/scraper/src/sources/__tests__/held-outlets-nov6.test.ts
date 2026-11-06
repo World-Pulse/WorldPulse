@@ -44,8 +44,8 @@ describe('the five held back on terms, and LRT in Lithuanian (Nov 6, 2026)', () 
     expect(skippedLink(fifteen, 'https://www.15min.lt/naujiena/aktualu/lietuva/ministras-situacija-lietuvos-pasienyje-56-2800290')).toBe(false)
     expect(skippedLink(fifteen, 'https://www.15min.lt/naujiena/aktualu/nusikaltimaiirnelaimes/kaune-masiskai-59-2800270')).toBe(false)
     expect(skippedLink(fifteen, undefined)).toBe(false)
-    // no other feed skips anything
-    expect(NEWS_SOURCE_REGISTRY.filter(s => s.skipLinks).map(s => s.id)).toEqual(['15min-lt'])
+    // the only other feed that skips a section is Islands Business's (its bulletins; one-outlet-places-nov6.test.ts)
+    expect(NEWS_SOURCE_REGISTRY.filter(s => s.skipLinks).map(s => s.id)).toEqual(['15min-lt', 'islands-business-pacific'])
     expect(skippedLink(src('lrt-lt'), 'https://www.lrt.lt/naujienos/pasaulyje/5/1/x')).toBe(false)
   })
 
