@@ -656,3 +656,18 @@ describe('second cities of the Nordics, Japan, South Korea and the Pacific get t
     expect(findGazetteerPlace('The gifuu festival opens')).toBeNull()
   })
 })
+
+describe('small towns of Nigeria get their own pins', () => {
+  it('pins them in Nigeria, at their own town', () => {
+    expect(findGazetteerPlace('Igbokoda air crash: NAF recovers cockpit voice recorder')?.place).toBe('igbokoda')
+    expect(findGazetteerPlace('Gunmen attack Kafanchan market')?.coords.country).toBe('NG')
+    expect(findGazetteerPlace('Flood displaces families in Hadejia')?.coords.country).toBe('NG')
+    expect(findGazetteerPlace('Students abducted near Ikare')?.coords.country).toBe('NG')
+    expect(findGazetteerPlace('Fire guts market in Nnewi')?.coords.country).toBe('NG')
+    expect(findGazetteerPlace('Lekki toll gate protest')?.coords.country).toBe('NG')
+    expect(findGazetteerPlace('Sagamu residents protest')?.coords.country).toBe('NG')
+  })
+  it('does not pin words that contain them', () => {
+    expect(findGazetteerPlace('The sagamux festival opens')).toBeNull()
+  })
+})
