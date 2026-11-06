@@ -179,10 +179,13 @@ const STOP_WORDS = new Set([
  * Two articles about the same event will produce similar fingerprints
  * because they share the same nouns (people, places, events).
  */
-function eventFingerprint(title: string, category: string): string {
+export function eventFingerprint(title: string, category: string): string {
   const words = title
     .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, '')
+    // Latin letters as before, and Arabic and Cyrillic letters too (Nov 6, 2026): with Latin letters only, every
+    // Arabic or Russian headline had the same fingerprint, its category alone, so after the first one each six hours
+    // the others were thrown away as its duplicates (Roya News, JO24, 24.kg and Vesti.kg on their first day)
+    .replace(/[^a-z0-9\s\p{Script=Arabic}\p{Script=Cyrillic}]/gu, '')
     .split(/\s+/)
     .filter(w => w.length > 2 && !STOP_WORDS.has(w))
     .sort()
