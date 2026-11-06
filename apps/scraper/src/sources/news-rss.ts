@@ -10059,6 +10059,42 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     language:        'fr',
     parked:          'every read from the server timed out on Oct 21, 2026; answers other networks (Nov 6)',
   },
+  // ── Added Nov 6, 2026, 11 AM (Devon, 10:19 AM, on the four outlets held back on their terms: "1 go in anyway"):
+  // Cayman Compass and FBC News. The Royal Gazette and Sermitsiaq.AG wait for their feeds' addresses.
+  // Cayman Compass, George Town's daily (about 10 stories a day): the Cayman Islands' second outlet beside Cayman News
+  // Service; mostly the islands' own news, home pin. Its terms: "Your use of the Compass Media Site is for your own
+  // personal and non-commercial use only", and its content is not to be shown on other websites (Devon's call, Nov 6)
+  {
+    id:              'cayman-compass-ky',
+    name:            'Cayman Compass',
+    feedUrl:         'https://www.caymancompass.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.74,
+    countryCode:     'KY',
+    defaultLat:      19.29,
+    defaultLng:      -81.38,
+    defaultLocation: 'George Town, Cayman Islands',
+    extraTags:       ['cayman-islands', 'caribbean'],
+    language:        'en',
+  },
+  // FBC News, the Fiji Broadcasting Corporation's newsroom (Suva, about 10 stories a day): the government owns the
+  // corporation, so it is labelled state media; mostly Fiji's own news, home pin. Its terms forbid linking to its pages
+  // without its consent (Devon's call, Nov 6)
+  {
+    id:              'fbc-news-fj',
+    name:            'FBC News (Fiji)',
+    feedUrl:         'https://www.fbcnews.com.fj/feed/',
+    category:        'geopolitics',
+    biasLabel:       'state-media',
+    reliability:     0.55,
+    countryCode:     'FJ',
+    defaultLat:      -18.14,
+    defaultLng:      178.44,
+    defaultLocation: 'Suva, Fiji',
+    extraTags:       ['fiji', 'pacific', 'oceania', 'state-media', 'public-broadcaster'],
+    language:        'en',
+  },
 ]
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────
@@ -10543,6 +10579,8 @@ export const HOME_PIN_SOURCES = new Set([
   '15min-lt', 'lrt-lt', 'estonian-world-ee', 'st-vincent-times-vc',
   // Nov 6, 2026, 10 AM: SKNIS, and TASR and Les Nouvelles Calédoniennes (parked); not Islands Business (the region's)
   'sknis-kn', 'tasr-en', 'les-nouvelles-caledoniennes',
+  // Nov 6, 2026, 11 AM: Cayman Compass and FBC News, each mostly its own place's news
+  'cayman-compass-ky', 'fbc-news-fj',
 ])
 
 export interface InferredGeo {
