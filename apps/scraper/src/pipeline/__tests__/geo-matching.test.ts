@@ -189,6 +189,15 @@ describe('extractGeo', () => {
     expect(geo.lat).toBeCloseTo(42.9)
   }, 15_000)
 
+  it('does not ask the geocoder for "Nation" (Nov 6, 2026: Australia\'s One Nation stories sat in Brunei, kept for a day)', async () => {
+    // as a cached answer from before Nov 5 would give it back
+    fetchMock.mockResolvedValue({ ok: true, json: async () => [hit('Brunei', 'bn', { addresstype: 'country', importance: 0.78,
+      namedetails: { name: 'Brunei', 'official_name:en': 'Nation of Brunei, the Abode of Peace' } }, 4.5, 114.7)] })
+    const geo = await extractGeo('Nationals leader to run for lower house seat in possible showdown with One Nation')
+    expect(geo.countryCode).not.toBe('BN')
+    expect(fetchMock.mock.calls.some(([url]) => /q=nation&/.test(String(url)))).toBe(false)
+  }, 15_000)
+
   it('does not read "French" as French Guiana (live, Oct 25, 2026: Le Pen\'s campaign launch)', async () => {
     fetchMock.mockResolvedValue({
       ok: true,

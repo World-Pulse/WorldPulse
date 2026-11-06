@@ -2984,7 +2984,9 @@ export async function extractGeo(text: string, body?: string): Promise<GeoResult
   let lookups = 0
   for (const candidate of candidates) {
     // Skip very common English words that match Title Case regex
-    if (COMMON_WORDS.has(candidate)) continue
+    // ...and words of countries' long official names (GENERIC_PLACE_WORDS), not even asked: the geocoder's answers
+    // are kept for a day, so "nation" would still come back as Brunei from the cache (Nov 6, 2026)
+    if (COMMON_WORDS.has(candidate) || GENERIC_PLACE_WORDS.has(candidate)) continue
     if (lookups++ >= MAX_NOMINATIM_LOOKUPS) break
     const places = await geocodePlace(candidate)
     if (places === null) break   // the geocoder can't be asked right now
