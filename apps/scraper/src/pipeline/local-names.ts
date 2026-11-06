@@ -263,13 +263,25 @@ const MALAY: Rule[] = [
   r('rumah\\s+putih', 'White House'),
 ]
 
+/**
+ * Lithuanian (Nov 6, 2026): Lithuania's own names only. Its feeds are Lithuania's own news (15min less its world
+ * section, LRT's "In Lithuania"), so a story that names a neighbour in passing ("pasienyje su Baltarusija", at the
+ * border with Belarus) stays at home rather than going abroad. "palaužė" (broke down) read as Palau: the
+ * place-finder took "Palau" before a letter it doesn't know as a word's end (seen in LRT's sports headlines).
+ */
+const LITHUANIAN: Rule[] = [
+  r('lietuv(?:a|os|ai|ą|oje)', 'Lithuania'), r('viln(?:ius|iaus|iui|ių|iuje)', 'Vilnius'),
+  r('kaun(?:as|o|ui|ą|e)', 'Kaunas'), r('klaip[ėe]d(?:a|os|ai|ą|oje)', 'Klaipeda'),
+  r('[šs]iaul(?:iai|ių|iams|ius|iuose)', 'Siauliai'), mask('palauž\\p{L}*'),
+]
+
 /** Words that only look like a place in the three languages the reader took before round 6 */
 const SPANISH: Rule[] = [mask('usa|irán|chile|maduros?')]
 const PORTUGUESE: Rule[] = [mask('usa|irão|peru|maduros?')]
 
 export const LOCAL_NAMES: Record<string, Rule[]> = {
   de: GERMAN, it: ITALIAN, ca: CATALAN, da: DANISH, kl: DANISH, nl: DUTCH, ro: ROMANIAN, sl: SLOVENE,
-  sr: MONTENEGRIN, cnr: MONTENEGRIN, sq: ALBANIAN, ms: MALAY, es: SPANISH, pt: PORTUGUESE,
+  sr: MONTENEGRIN, cnr: MONTENEGRIN, sq: ALBANIAN, ms: MALAY, es: SPANISH, pt: PORTUGUESE, lt: LITHUANIAN,
 }
 
 /** The text with its language's place names in English and its look-alike words blanked out, for finding its place */

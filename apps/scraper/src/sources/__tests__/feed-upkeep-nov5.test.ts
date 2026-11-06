@@ -44,7 +44,8 @@ function fakeRedis() {
 
 describe('feed upkeep (Nov 5, 2026)', () => {
   it('parks the six feeds behind a bot check, and only those, saying why', () => {
-    expect(NEWS_SOURCE_REGISTRY.filter(s => s.parked).map(s => s.id).sort()).toEqual([...PARKED].sort())
+    // and North Press since Nov 6 (held-outlets-nov6.test.ts): it turns the server away, with no bot check
+    expect(NEWS_SOURCE_REGISTRY.filter(s => s.parked && s.id !== 'north-press-sy').map(s => s.id).sort()).toEqual([...PARKED].sort())
     for (const id of PARKED) expect(src(id)!.parked, id).toMatch(/check .*\(HTTP 40[39]\), Nov 5, 2026$/)
   })
 

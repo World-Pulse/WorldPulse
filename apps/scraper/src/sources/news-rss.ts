@@ -252,6 +252,13 @@ export interface NewsSource {
    * read as usual again from the first time it answers (parkedFeedDue).
    */
   parked?:     string
+  /**
+   * Set (Nov 6, 2026) for a feed whose site-wide feed mixes in a section the
+   * reader can't place: items whose link matches aren't read (skippedLink).
+   * 15min's world section is in Lithuanian, whose foreign place names the
+   * place-finder doesn't know, so its stories would be pinned in Vilnius.
+   */
+  skipLinks?:  RegExp
 }
 
 export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
@@ -9693,8 +9700,10 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   // left it out on Oct 31 for writing up Arabic outlets' reports); Lebanon's, Jordan's and the Baltics' candidates
   // failed or wait on terms (departments/research/r5-second-newsrooms-2026-11-05.md).
   // North Press Agency (Qamishli, north-east Syria), its English site, taken out on Oct 21 when it failed every read
-  // from the server, answering again; regional (Syria, Iraq's Kurdistan, Jordan), so no home pin; no terms published
-  // (its only policy page is about readers' personal data)
+  // from the server; it answered other networks on Nov 5, but on its first reads here it turned the server away
+  // again (HTTP 403), so it is parked (Nov 6): tried once a day, read as usual from the first time it answers.
+  // Regional (Syria, Iraq's Kurdistan, Jordan), so no home pin; no terms published (its only policy page is about
+  // readers' personal data)
   {
     id:              'north-press-sy',
     name:            'North Press Agency (Syria)',
@@ -9708,6 +9717,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLocation: 'Qamishli, Syria',
     extraTags:       ['syria', 'middle-east', 'kurdistan'],
     language:        'en',
+    parked:          'turns the server away (HTTP 403), Oct 21 and Nov 6, 2026; answers other networks',
   },
   // ECDC, the EU's public health agency (Stockholm), its news: outbreaks, threat assessments and preparedness across
   // Europe; terms: CC BY 4.0, commercial use allowed with ECDC acknowledged as the creator
@@ -9865,6 +9875,112 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLocation: 'Malabo, Equatorial Guinea',
     extraTags:       ['equatorial-guinea', 'central-africa', 'africa', 'state-media'],
     language:        'es',
+  },
+  // ── Added Nov 6, 2026, 8 AM (Devon's call on the five held back on terms on Nov 5: "go in anyway to all of them") ──
+  // Each answered the poller's own reader at 7:45 AM; robots.txt lets general readers in (each turns away only AI
+  // crawlers by name). What each site's terms say about use, noted as round 8 did
+  // (departments/research/r5-second-newsrooms-2026-11-05.md):
+  // This is Beirut (Beirut and Washington), its news section; mostly the region (Iran, Israel, the Gulf, Syria) beside
+  // Lebanon, so no home pin; terms: "a strictly personal license ... for private, non-commercial purposes", but
+  // "citing the title and two lines of the article together with a link" is allowed
+  {
+    id:              'this-is-beirut-lb',
+    name:            'This is Beirut (Lebanon)',
+    feedUrl:         'https://thisisbeirut.com.lb/rss/news',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.66,
+    countryCode:     'LB',
+    defaultLat:      33.89,
+    defaultLng:      35.50,
+    defaultLocation: 'Beirut, Lebanon',
+    extraTags:       ['lebanon', 'middle-east'],
+    language:        'en',
+  },
+  // 15min, a Vilnius news site, in Lithuanian; its site-wide feed less its world section (skipLinks: the place-finder
+  // doesn't know Lithuanian names of foreign places), so the rest is Lithuania's own news, home pin; terms: "may be used
+  // only for your private purposes", but clause 29.1 allows "the article headline" on a website, followed by "a link
+  // to the full article"
+  {
+    id:              '15min-lt',
+    name:            '15min (Lithuania)',
+    feedUrl:         'https://www.15min.lt/rss',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.76,
+    countryCode:     'LT',
+    defaultLat:      54.69,
+    defaultLng:      25.28,
+    defaultLocation: 'Vilnius, Lithuania',
+    extraTags:       ['lithuania', 'baltics', 'europe'],
+    language:        'lt',
+    skipLinks:       /\/pasaulis\//,
+  },
+  // LRT, Lithuania's public broadcaster, its "In Lithuania" section in Lithuanian, so that 15min's reports have a
+  // report in the same language to be matched with (LRT English, lrt-en, is the same outlet); home pin; LRT publishes
+  // no terms of use for its news (its FAQ is silent; robots.txt lets general readers in)
+  {
+    id:              'lrt-lt',
+    name:            'LRT (Lithuania), in Lithuanian',
+    feedUrl:         'https://www.lrt.lt/naujienos/lietuvoje?rss',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.85,
+    countryCode:     'LT',
+    defaultLat:      54.69,
+    defaultLng:      25.28,
+    defaultLocation: 'Vilnius, Lithuania',
+    extraTags:       ['lithuania', 'baltics', 'europe', 'public-broadcaster'],
+    language:        'lt',
+  },
+  // Estonian World, an English-language magazine on Estonia (Tallinn); news, business, security and some culture,
+  // a few items a day; home pin; terms: content is for "personal, non-commercial benefit", but "for commercial
+  // purposes, a maximum of two sentences and a headline ... may be paraphrased", with a link
+  {
+    id:              'estonian-world-ee',
+    name:            'Estonian World',
+    feedUrl:         'https://estonianworld.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.72,
+    countryCode:     'EE',
+    defaultLat:      59.44,
+    defaultLng:      24.75,
+    defaultLocation: 'Tallinn, Estonia',
+    extraTags:       ['estonia', 'baltics', 'europe'],
+    language:        'en',
+  },
+  // Spaceflight Now, launches, missions and the space station; terms: "personal, non-commercial use", but "brief
+  // excerpts may be quoted with clear attribution and a link back"
+  {
+    id:              'spaceflight-now',
+    name:            'Spaceflight Now',
+    feedUrl:         'https://spaceflightnow.com/feed/',
+    category:        'space',
+    biasLabel:       'center',
+    reliability:     0.88,
+    countryCode:     'US',
+    defaultLat:      28.39,
+    defaultLng:      -80.60,
+    defaultLocation: 'Cape Canaveral, Florida, United States',
+    extraTags:       ['space', 'spaceflight'],
+    language:        'en',
+  },
+  // St Vincent Times, a Kingstown news site; mostly St Vincent's own news beside the region's, home pin; terms: "for
+  // your personal and non-business use"
+  {
+    id:              'st-vincent-times-vc',
+    name:            'St Vincent Times',
+    feedUrl:         'https://www.stvincenttimes.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.62,
+    countryCode:     'VC',
+    defaultLat:      13.16,
+    defaultLng:      -61.22,
+    defaultLocation: 'Kingstown, Saint Vincent and the Grenadines',
+    extraTags:       ['saint-vincent', 'caribbean'],
+    language:        'en',
   },
 ]
 
@@ -10345,6 +10461,9 @@ export const HOME_PIN_SOURCES = new Set([
   'farmdoc-daily', 'top-fm-mu',
   // Nov 6, 2026, 12:10 AM: Honduras's, Djibouti's and Equatorial Guinea's second newsrooms, each mostly its own country's news
   'el-pulso-hn', 'la-nation-dj', 'ahora-eg-gq',
+  // Nov 6, 2026, 8 AM: 15min (less its world section) and LRT's "In Lithuania" section, Estonian World and St Vincent
+  // Times; not This is Beirut (mostly the region) or Spaceflight Now
+  '15min-lt', 'lrt-lt', 'estonian-world-ee', 'st-vincent-times-vc',
 ])
 
 export interface InferredGeo {
@@ -10472,6 +10591,10 @@ export function inferGeo(
       ?? { lat: source.defaultLat, lng: source.defaultLng, locationName: source.defaultLocation, countryCode: source.countryCode }
   }
   if (FIXTURE_HEADLINE.test(title)) return { lat: null, lng: null, locationName: null, countryCode: null }
+  // A space outlet's summary names the crew's agencies and countries, not where the story happens: Spaceflight
+  // Now's spacewalks at the space station sat in Canada for "Canadian Space Agency astronaut Joshua Kutryk"
+  // (Nov 6, 2026), so its stories are placed by their headline only
+  if (source.category === 'space') return { lat: null, lng: null, locationName: null, countryCode: null }
   const fromBody = fromPlace(body) ?? fromHints(body, source.countryCode)
   if (fromBody) return fromBody
   return { lat: null, lng: null, locationName: null, countryCode: null }
@@ -10883,6 +11006,7 @@ async function pollSource(
   let created = 0
   let stale = 0
   for (const item of items) {
+    if (skippedLink(source, item.link)) continue
     const result = await processItem(db, redis, producer, source, item)
     if (result === 'created') created++
     else if (result === 'stale') stale++
@@ -10897,6 +11021,11 @@ async function pollSource(
   } else {
     sourceLog.debug({ total: items.length }, `${source.name}: poll complete (no new items)`)
   }
+}
+
+/** An item from a section of its feed the reader skips (NewsSource.skipLinks) */
+export function skippedLink(source: Pick<NewsSource, 'skipLinks'>, link: string | null | undefined): boolean {
+  return Boolean(source.skipLinks && link && source.skipLinks.test(link))
 }
 
 // ─── MAIN POLLER ─────────────────────────────────────────────────────────────

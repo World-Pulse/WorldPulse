@@ -33,8 +33,10 @@ describe('feeds added Nov 5, 2026, 11:45 PM', () => {
 
   it('leaves out the candidates whose terms or answers failed (departments/research/r5-second-newsrooms-2026-11-05.md)', () => {
     const urls = NEWS_SOURCE_REGISTRY.map(s => s.feedUrl)
-    for (const site of ['lbcgroup.tv', 'syrianobserver.com', 'thisisbeirut.com.lb', '15min.lt', 'postimees.ee', 'estonianworld.com',
-      'aerotime.aero', 'rigzone.com', 'atlanticcouncil.org', 'lowyinstitute.org', 'spaceflightnow.com', 'jordantimes.com', 'levant24.com']) {
+    // This is Beirut, 15min, Estonian World and Spaceflight Now waited on Devon's call, and went in on Nov 6, 7:34 AM
+    // (held-outlets-nov6.test.ts)
+    for (const site of ['lbcgroup.tv', 'syrianobserver.com', 'postimees.ee',
+      'aerotime.aero', 'rigzone.com', 'atlanticcouncil.org', 'lowyinstitute.org', 'jordantimes.com', 'levant24.com']) {
       expect(urls.some(u => u.includes(site)), site).toBe(false)
     }
   })
@@ -69,8 +71,9 @@ describe('second newsrooms for the places of Q10 with one (Nov 6, 2026, 12:10 AM
     expect(inferGeo('Billet : La commande publique en tournée régionale', '', src('la-nation-dj')!).countryCode).toBe('DJ')
     expect(inferGeo('Cristiano Ronaldo anuncia su retirada de la selección de Portugal', '', src('ahora-eg-gq')!).countryCode).toBe('PT')
     expect(inferGeo('Gobierno anuncia que buscará concluir los ocho hospitales iniciados por la administración anterior', '', src('el-pulso-hn')!).countryCode).toBe('HN')
-    // St Vincent Times stays out: "for your personal and non-business use"
-    expect(NEWS_SOURCE_REGISTRY.some(s => s.feedUrl.includes('stvincenttimes.com'))).toBe(false)
+    // St Vincent Times stayed out ("for your personal and non-business use") until Devon's call on Nov 6, 7:34 AM
+    // (held-outlets-nov6.test.ts)
+    expect(NEWS_SOURCE_REGISTRY.filter(s => s.feedUrl.includes('stvincenttimes.com')).map(s => s.id)).toEqual(['st-vincent-times-vc'])
   })
 })
 
