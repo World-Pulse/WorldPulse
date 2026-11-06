@@ -2377,6 +2377,35 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'tokmok': { lat: 42.8421, lng: 75.3015, country: 'KG', name: 'Tokmok' },
   'naryn': { lat: 41.4287, lng: 75.9911, country: 'KG', name: 'Naryn' },
   'batken': { lat: 40.0626, lng: 70.8194, country: 'KG', name: 'Batken' },
+  // Nov 6, 2026, 2 PM: Mongolia's provinces (at their centres) and towns its Mongolian-language press names (Ikon.mn),
+  // and the Syrian and Moroccan places Syria's and Bahrain's Arabic press names that the map lacked
+  'arkhangai': { lat: 47.4747, lng: 101.4542, country: 'MN', name: 'Arkhangai' },
+  'bayan-olgii': { lat: 48.9683, lng: 89.9625, country: 'MN', name: 'Bayan-Ölgii' },
+  'olgii': { lat: 48.9683, lng: 89.9625, country: 'MN', name: 'Ölgii' },
+  'bayankhongor': { lat: 46.1944, lng: 100.7181, country: 'MN', name: 'Bayankhongor' },
+  'bulgan': { lat: 48.8125, lng: 103.5347, country: 'MN', name: 'Bulgan' },
+  'govi-altai': { lat: 46.3722, lng: 96.2583, country: 'MN', name: 'Govi-Altai' },
+  'govisumber': { lat: 46.3611, lng: 108.3611, country: 'MN', name: 'Govisümber' },
+  'dornogovi': { lat: 44.8925, lng: 110.1386, country: 'MN', name: 'Dornogovi' },
+  'dornod': { lat: 48.0667, lng: 114.5000, country: 'MN', name: 'Dornod' },
+  'dundgovi': { lat: 45.7625, lng: 106.2708, country: 'MN', name: 'Dundgovi' },
+  'zavkhan': { lat: 47.7417, lng: 96.8444, country: 'MN', name: 'Zavkhan' },
+  'orkhon': { lat: 49.0276, lng: 104.0447, country: 'MN', name: 'Orkhon' },
+  'uvurkhangai': { lat: 46.2639, lng: 102.7750, country: 'MN', name: 'Övörkhangai' },
+  'umnugovi': { lat: 43.5708, lng: 104.4250, country: 'MN', name: 'Ömnögovi' },
+  'sukhbaatar province': { lat: 46.6806, lng: 113.2792, country: 'MN', name: 'Sükhbaatar Province' },
+  'selenge': { lat: 50.2314, lng: 106.2078, country: 'MN', name: 'Selenge' },
+  'tov province': { lat: 47.7069, lng: 106.9472, country: 'MN', name: 'Töv Province' },
+  'uvs province': { lat: 49.9811, lng: 92.0667, country: 'MN', name: 'Uvs Province' },
+  'khovd': { lat: 48.0056, lng: 91.6419, country: 'MN', name: 'Khovd' },
+  'khuvsgul': { lat: 49.6342, lng: 100.1625, country: 'MN', name: 'Khövsgöl' },
+  'khentii': { lat: 47.3194, lng: 110.6556, country: 'MN', name: 'Khentii' },
+  'zamiin-uud': { lat: 43.7167, lng: 111.9000, country: 'MN', name: 'Zamiin-Üüd' },
+  'hama': { lat: 35.1318, lng: 36.7578, country: 'SY', name: 'Hama' },
+  'quneitra': { lat: 33.1258, lng: 35.8236, country: 'SY', name: 'Quneitra' },
+  'abu kamal': { lat: 34.4506, lng: 40.9187, country: 'SY', name: 'Abu Kamal' },
+  'jisr al-shughur': { lat: 35.8126, lng: 36.3176, country: 'SY', name: 'Jisr al-Shughur' },
+  'rabat': { lat: 34.0209, lng: -6.8416, country: 'MA', name: 'Rabat' },
   'muharraq': { lat: 26.2572, lng: 50.6119, country: 'BH', name: 'Muharraq' },
   'riffa': { lat: 26.1300, lng: 50.5550, country: 'BH', name: 'Riffa' },
   'suwayda': { lat: 32.7089, lng: 36.5695, country: 'SY', name: 'Sweida' },
@@ -2621,8 +2650,12 @@ export function withHomeNames(text: string, countryCode: string | null | undefin
 /** Each country pattern without its plural people-word ending: "Cuban" but not "Cubans" */
 const SINGULAR_MATCHERS = new Map(COUNTRY_PATTERNS.map(([pattern, code]) => [code + pattern.source, new RegExp(`^(?:${pattern.source})$`, pattern.flags.replace('g', ''))]))
 
-/** A word that puts what follows it somewhere: "in Ghana", "visits Iran", "visitará Colombia", "en Bolivie" */
-const LOCATIVE_BEFORE = /(?:^|[\s,(])(?:in|inside|visits?|visited|visiting|visitará|visita|visitó|en|em|à|au|aux)\s+(?:the\s+)?$/i
+/**
+ * A word that puts what follows it somewhere: "in Ghana", "visits Iran", "visitará Colombia", "en Bolivie", and Arabic
+ * "في" (in), as the Arabic press's names are read in English (local-names.ts; Nov 6, 2026: "ملاحقة قضائية للاجئ سوري في
+ * بلجيكا", a Syrian refugee prosecuted in Belgium, is Belgium's)
+ */
+const LOCATIVE_BEFORE = /(?:^|[\s,(])(?:in|inside|visits?|visited|visiting|visitará|visita|visitó|en|em|à|au|aux|في)\s+(?:the\s+)?$/i
 
 /**
  * Countries the text names, in order of first mention (the headline comes first), except that a country

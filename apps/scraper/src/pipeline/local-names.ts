@@ -285,7 +285,11 @@ const LITHUANIAN: Rule[] = [
 const AL = '(?:[وف]?[بلك]?ال|[وف]?لل|[وف]?[بلك]|[وف])?'   // the article, "and", "in", "to", "as" before a name
 const AL_ONLY = '(?:[وف]?[بلك]?ال|[وف]?لل)'                 // the article itself, required
 const PEOPLE = '(?:ي|ي[ةه]|يون|يين)?'                         // the people's adjective and plural
-const ARABIC: Rule[] = [
+// The rules are written with the letters as spelled ("إسرائيل", "الجزائر") and read as arabicPlain leaves the text
+// (Nov 6, 2026: "اسرائيل" with its ئ never matched the plain "اسراييل", so "الحكومة الإسرائيلية" named no place)
+const ARABIC: Rule[] = ([
+  // clubs named after a city, before the city (a Real Madrid or PSG story is sport, not Madrid's or Paris's news)
+  r(`${AL}ريال\\s+مدريد|${AL}اتلتيكو\\s+مدريد|${AL}باريس\\s+سان\\s+جيرمان`, '…'),
   r(`${AL}اردن${PEOPLE}`, 'Jordanian'), r(`${AL}اربد`, 'Irbid'), r(`${AL_ONLY}عقب[ةه]`, 'Aqaba'),
   r(`${AL}سوري(?:ا|[ةه]|ون|ين)?`, 'Syria'), r(`${AL}دمشق`, 'Damascus'), r(`${AL}حلب`, 'Aleppo'), r(`${AL}حمص`, 'Homs'),
   r(`${AL}ادلب`, 'Idlib'), r(`${AL_ONLY}لاذقي[ةه]`, 'Latakia'), r(`${AL}درعا`, 'Daraa'), r(`${AL_ONLY}حسك[ةه]`, 'Hasakah'),
@@ -310,7 +314,61 @@ const ARABIC: Rule[] = [
   r(`${AL}اندونيسيا`, 'Indonesia'), r(`${AL}هولندا`, 'Netherlands'), r(`${AL_ONLY}سويد`, 'Sweden'), r(`${AL}بيرو`, 'Peru'),
   r(`${AL_ONLY}يابان|${AL}ياباني(?:[ةه]|ون|ين)?`, 'Japan'), r(`${AL_ONLY}هند|${AL}هندي(?:[ةه])?`, 'India'),
   r(`${AL}باكستان${PEOPLE}`, 'Pakistan'), r(`${AL}افغانستان`, 'Afghanistan'),
-]
+  // Nov 6, 2026, 2 PM, with Syria's and Bahrain's Arabic press: Syria's other cities ("ريف حماة", "بالرقة"), and the
+  // countries and cities their world news names. Left out: "حماة" without a place word before it (also protectors:
+  // "حماة الوطن"), "تدمر" (also destroys), "سيول" (also floods), "كابل" (a cable), "كوبا" (a cup), "روما" (mostly the
+  // football club), "رومانيا"'s adjective (also Roman: "المدرج الروماني"), "الكندي" (a family name), "اوسلو" (mostly
+  // the Oslo Accords), "طرابلس" (Libya's and Lebanon's), "صور" (also pictures), "الباب" (also the door), "دوما" (also
+  // the Duma), "جورجيا" (also the US state)
+  r(`(?<=(?:ريف|محافظ[ةه]|مدين[ةه]|ريفي|في|من|الى)\\s)حما[ةه]|[وب]حما[ةه]`, 'Hama'), r(`${AL_ONLY}قنيطر[ةه]`, 'Quneitra'),
+  r(`${AL_ONLY}رق[ةه]`, 'Raqqa'), r(`${AL_ONLY}قامشلي|${AL}قامشلو`, 'Qamishli'), r(`${AL}عفرين`, 'Afrin'),
+  r(`${AL}منبج`, 'Manbij'), r(`${AL_ONLY}بوكمال|${AL}ابو\\s?كمال`, 'Abu Kamal'), r(`${AL}جسر\\s+الشغور`, 'Jisr al-Shughur'),
+  r(`${AL}اقليم\\s+كردستان(?:\\s+العراق)?|${AL}كردستان\\s+العراق`, 'Iraqi Kurdistan'), r(`${AL}كركوك`, 'Kirkuk'),
+  r(`${AL_ONLY}نجف`, 'Najaf'), r(`${AL}كربلاء`, 'Karbala'),
+  // Sulaymaniyah only after a place word or a joined "in" ("التكية السليمانية" is the Sulaymaniyya Takiyya in Damascus)
+  r(`(?<=(?:في|محافظ[ةه]|مدين[ةه]|من|الى)\\s)السليماني[ةه]|[وب]السليماني[ةه]|للسليماني[ةه]`, 'Sulaymaniyah'),
+  r(`${AL_ONLY}فلوج[ةه]`, 'Fallujah'), r(`${AL}حيفا`, 'Haifa'), r(`${AL}تل\\s?ابيب`, 'Tel Aviv'), r(`${AL}نابلس`, 'Nablus'),
+  r(`${AL}رفح`, 'Rafah'), r(`${AL}خان\\s+يونس`, 'Khan Younis'), r(`[وف]?[بل]?جنين`, 'Jenin'), r(`${AL}صيدا`, 'Sidon'),
+  r(`${AL}بعلبك`, 'Baalbek'), r(`${AL}بنغازي`, 'Benghazi'), r(`${AL}مصرات[ةه]`, 'Misrata'), r(`${AL_ONLY}خرطوم`, 'Khartoum'),
+  r(`${AL}ام\\s?درمان`, 'Omdurman'), r(`${AL_ONLY}فاشر`, 'El Fasher'), r(`${AL}دارفور`, 'Darfur'),
+  r(`${AL}بور\\s?سودان`, 'Port Sudan'), r(`${AL_ONLY}دار\\s+البيضاء`, 'Casablanca'), r(`${AL_ONLY}رباط`, 'Rabat'),
+  r(`${AL}مراكش`, 'Marrakech'), r(`${AL}نواكشوط`, 'Nouakchott'), r(`${AL}مقديشو`, 'Mogadishu'),
+  r(`${AL}اديس\\s+ابابا`, 'Addis Ababa'), r(`${AL_ONLY}حديد[ةه]`, 'Hodeidah'), r(`${AL}عدن`, 'Aden'), r(`${AL}تعز`, 'Taiz'),
+  r(`${AL_ONLY}شارق[ةه]`, 'Sharjah'), r(`${AL_ONLY}مدين[ةه]\\s+المنور[ةه]`, 'Medina'), r(`${AL_ONLY}بيت\\s+الابيض`, 'White House'),
+  r(`${AL}فاتيكان`, 'Vatican'), r(`${AL}نيويورك`, 'New York'), r(`${AL}ديترويت`, 'Detroit'),
+  r(`${AL}لوس\\s+انجلوس|${AL}لوس\\s+انجليس`, 'Los Angeles'), r(`${AL}شيكاغو`, 'Chicago'), r(`${AL}تورنتو|${AL}تورونتو`, 'Toronto'),
+  r(`${AL}براغ`, 'Prague'), r(`${AL}مدريد`, 'Madrid'), r(`${AL}بروكسل`, 'Brussels'), r(`${AL}جنيف`, 'Geneva'),
+  r(`${AL}فيينا`, 'Vienna'), r(`${AL}اثينا`, 'Athens'), r(`${AL}ستوكهولم`, 'Stockholm'), r(`${AL}كوبنهاغن|${AL}كوبنهاجن`, 'Copenhagen'),
+  r(`${AL}وارسو`, 'Warsaw'), r(`${AL}بودابست`, 'Budapest'), r(`${AL}بوخارست`, 'Bucharest'), r(`${AL}مينسك`, 'Minsk'),
+  r(`${AL}طوكيو`, 'Tokyo'), r(`${AL}نيودلهي|${AL}نيو\\s+دلهي`, 'New Delhi'), r(`${AL}اسلام\\s?اباد`, 'Islamabad'),
+  r(`${AL}كراتشي`, 'Karachi'), r(`${AL}مومباي`, 'Mumbai'), r(`${AL}جاكرتا`, 'Jakarta'), r(`${AL}كوالالمبور`, 'Kuala Lumpur'),
+  r(`${AL}بانكوك`, 'Bangkok'), r(`${AL}هانوي`, 'Hanoi'), r(`${AL}مانيلا`, 'Manila'), r(`${AL}سنغافور[ةه]`, 'Singapore'),
+  r(`${AL}هونغ\\s?كونغ|${AL}هونج\\s?كونج`, 'Hong Kong'), r(`${AL}شنغهاي`, 'Shanghai'), r(`${AL}تايبيه`, 'Taipei'),
+  r(`${AL}باكو`, 'Baku'), r(`${AL}يريفان`, 'Yerevan'), r(`${AL}تبليسي`, 'Tbilisi'),
+  r(`${AL}جنوب\\s+السودان`, 'South Sudan'), r(`${AL_ONLY}سودان${PEOPLE}`, 'Sudan'), r(`${AL_ONLY}مغرب${PEOPLE}|${AL}مغربي(?:[ةه]|ون|ين)?`, 'Morocco'),
+  r(`${AL_ONLY}جزائر${PEOPLE}`, 'Algeria'), r(`${AL}تونس${PEOPLE}`, 'Tunisia'), r(`${AL}ليبيا|${AL}ليبي(?:[ةه]|ون|ين)?`, 'Libya'),
+  r(`${AL}موريتانيا|${AL}موريتاني(?:[ةه]|ون|ين)?`, 'Mauritania'), r(`${AL_ONLY}صومال${PEOPLE}`, 'Somalia'),
+  r(`${AL}جيبوتي`, 'Djibouti'), r(`${AL}اثيوبيا|${AL}اثيوبي(?:[ةه]|ون|ين)?`, 'Ethiopia'), r(`${AL}اريتريا`, 'Eritrea'),
+  r(`${AL}كينيا`, 'Kenya'), r(`${AL}نيجيريا`, 'Nigeria'), r(`${AL}تشاد`, 'Chadian'),
+  r(`${AL}اسبانيا|${AL}اسباني(?:[ةه]|ون|ين)?`, 'Spain'), r(`${AL_ONLY}برتغال${PEOPLE}`, 'Portugal'),
+  r(`${AL}انجلترا|${AL}انكلترا`, 'England'),
+  r(`${AL}ايطاليا|${AL}ايطالي(?:[ةه]|ون|ين)?`, 'Italy'), r(`${AL_ONLY}يونان${PEOPLE}`, 'Greece'), r(`${AL}قبرص${PEOPLE}`, 'Cyprus'),
+  r(`${AL}بلجيكا|${AL}بلجيكي(?:[ةه]|ون|ين)?`, 'Belgium'), r(`${AL}سويسرا|${AL}سويسري(?:[ةه]|ون|ين)?`, 'Switzerland'),
+  r(`${AL_ONLY}نمسا|${AL}نمساوي(?:[ةه]|ون|ين)?`, 'Austria'), r(`${AL}بولندا|${AL}بولندي(?:[ةه]|ون|ين)?`, 'Poland'),
+  r(`${AL_ONLY}مجر${PEOPLE}`, 'Hungary'), r(`${AL_ONLY}تشيك${PEOPLE}`, 'Czechia'), r(`${AL}رومانيا`, 'Romania'),
+  r(`${AL}بلغاريا`, 'Bulgaria'), r(`${AL}صربيا|${AL}صربي(?:[ةه]|ون|ين)?`, 'Serbia'), r(`${AL}كرواتيا`, 'Croatia'),
+  r(`${AL}البانيا`, 'Albania'), r(`${AL}مالطا`, 'Malta'), r(`${AL_ONLY}دنمارك${PEOPLE}`, 'Denmark'),
+  r(`${AL_ONLY}نرويج${PEOPLE}`, 'Norway'), r(`${AL}فنلندا`, 'Finland'), r(`${AL}ايرلندا|${AL}ايرلندي(?:[ةه]|ون|ين)?`, 'Ireland'),
+  r(`${AL}كندا|${AL}كندي(?:[ةه]|ون|ين)`, 'Canada'), r(`${AL_ONLY}مكسيك${PEOPLE}`, 'Mexico'), r(`${AL_ONLY}برازيل${PEOPLE}`, 'Brazil'),
+  r(`${AL_ONLY}ارجنتين${PEOPLE}`, 'Argentina'), r(`${AL}فنزويلا|${AL}فنزويلي(?:[ةه]|ون|ين)?`, 'Venezuela'),
+  r(`${AL}كولومبيا`, 'Colombia'), r(`${AL}تشيلي`, 'Chile'), r(`${AL}استراليا|${AL}استرالي(?:[ةه]|ون|ين)?`, 'Australia'),
+  r(`${AL}كوريا\\s+الشمالي[ةه]`, 'North Korea'), r(`${AL}كوريا\\s+الجنوبي[ةه]`, 'South Korea'), r(`${AL}تايوان`, 'Taiwan'),
+  r(`${AL}ماليزيا`, 'Malaysia'), r(`${AL_ONLY}فلبين`, 'Philippines'), r(`${AL}فيتنام`, 'Vietnam'), r(`${AL}تايلاند`, 'Thailand'),
+  r(`${AL}بنغلاديش`, 'Bangladesh'), r(`${AL}ميانمار`, 'Myanmar'), r(`${AL}سريلانكا`, 'Sri Lanka'),
+  r(`${AL}اذربيجان`, 'Azerbaijan'), r(`${AL}ارمينيا`, 'Armenia'), r(`${AL}اوزبكستان`, 'Uzbekistan'),
+  r(`${AL}قيرغيزستان|${AL}قرغيزستان`, 'Kyrgyzstan'), r(`${AL}طاجيكستان`, 'Tajikistan'), r(`${AL}تركمانستان`, 'Turkmenistan'),
+  r(`${AL}منغوليا`, 'Mongolia'),
+] as Rule[]).map(([pattern, as]): Rule => [new RegExp(arabicPlain(pattern.source), pattern.flags), as])
 
 /** Arabic text without its vowel marks, hamzas (أ إ آ are ا) and tatweel, for the rules above to read */
 export function arabicPlain(text: string): string {
@@ -340,6 +398,64 @@ const RUSSIAN: Rule[] = [
   r('инди(?:я|и|ю|ей)', 'India'), r('монголи(?:я|и|ю|ей)', 'Mongolia'), r('сальвадор(?:а|е|у|ом)?', 'El Salvador'),
 ]
 
+/**
+ * Mongolian (Nov 6, 2026; Ikon.mn): Mongolia's provinces and towns, and the countries and capitals its world news names,
+ * with the endings Mongolian adds to a name ("Хятадын", "Орост", "Японоос", "АНУ-ын", "Улаанбаатарт"). Its stories are
+ * mostly Mongolia's own, so the rest stay at home, and a province named beside a donor keeps the story there ("Японы
+ * ЗГ-ын буцалтгүй тусламжаар Булган аймгийн ..." is Bulgan's: a province is a place, Japan only a country). A country's
+ * language is not the country ("орос хэлний багш", a Russian teacher). As written with a capital only, being everyday
+ * words too: "Булган" (sable), "Өлгий" (a cradle), "Дархан" (a craftsman), "Бутан" (butane), "Орхон", "Эрдэнэт",
+ * "Эрээн" (motley), and
+ * "Дорнод" (eastern; not before Asia or Europe). Sükhbaatar (also the hero, and Ulaanbaatar's square and district) and
+ * Töv (centre) only before "аймаг"; English (Англи) left out, mostly the language or the Premier League.
+ */
+const MN_END = '(?:-?(?:гийн|ийн|ын|йн|ий|ы|н|гийг|ийг|ыг|йг|г|ад|эд|од|өд|даа|дээ|доо|дөө|таа|тээ|тоо|төө|д|т|гаас|гээс|иас|аас|ээс|оос|өөс|ас|гаар|гээр|иар|аар|ээр|оор|өөр|ар|эр|тай|тэй|той|төй|ууд|үүд|чууд))?'
+const NOT_LANGUAGE = '(?!\\s+хэл(?:ний|ээр|ийг|ийн|ээс|тэй)?(?!\\p{L}))'
+const AIMAG = '\\s+айм(?:аг|агт|агтай|гийн|гаас|гийг|гаар)'   // "аймаг" (province), "аймгийн" (of the province), ...
+const mn = (stem: string, as: string): Rule => r(`(?:${stem})${MN_END}${NOT_LANGUAGE}`, as)
+const mnAsWritten = (stem: string, as: string): Rule => cs(`(?:${stem})${MN_END}`, as)
+const MONGOLIAN: Rule[] = [
+  mn('өвөр\\s+монгол', 'Inner Mongolia'), mn('монгол(?:\\s+улс)?', 'Mongolia'), mn('улаанбаатар', 'Ulaanbaatar'),
+  mnAsWritten('УБ', 'Ulaanbaatar'), mnAsWritten('Дархан(?:-Уул)?', 'Darkhan'), mnAsWritten('Эрдэнэт', 'Erdenet'),
+  mnAsWritten('Орхон', 'Orkhon'), mn('архангай', 'Arkhangai'), mn('баян-өлгий', 'Bayan-Olgii'), mnAsWritten('Өлгий', 'Olgii'),
+  mn('баянхонгор', 'Bayankhongor'), mnAsWritten('Булган', 'Bulgan'), mn('говь-алтай', 'Govi-Altai'), mn('говьсүмбэр', 'Govisumber'),
+  mn('дорноговь', 'Dornogovi'), cs(`Дорнод${MN_END}(?!\\s+(?:Ази|Европ|Сибир))`, 'Dornod'), mn('дундговь', 'Dundgovi'),
+  mn('завхан', 'Zavkhan'), mn('өвөрхангай', 'Uvurkhangai'), mn('өмнөговь', 'Umnugovi'), r(`сүхбаатар${AIMAG}`, 'Sukhbaatar Province'),
+  mn('сэлэнгэ', 'Selenge'), r(`төв${AIMAG}`, 'Tov Province'), mn('увс', 'Uvs Province'), mn('ховд', 'Khovd'),
+  mn('хөвсгөл', 'Khuvsgul'), mn('хэнтий', 'Khentii'), mn('замын-үүд', 'Zamiin-Uud'),
+  mn('хятад', 'China'), mnAsWritten('БНХАУ', 'China'), mn('орос', 'Russia'), mnAsWritten('ОХУ', 'Russia'), mn('япон', 'Japan'),
+  mnAsWritten('АНУ', 'United States'), mn('америк', 'United States'), mn('өмнөд\\s+солонгос', 'South Korea'),
+  mn('хойд\\s+солонгос', 'North Korea'), mnAsWritten('БНСУ', 'South Korea'), mnAsWritten('БНАСАУ|КНДР', 'North Korea'),
+  mn('солонгос', 'South Korea'), mn('казахстан|хасагстан', 'Kazakhstan'), mn('кыргызстан|киргиз', 'Kyrgyzstan'),
+  mn('узбекистан', 'Uzbekistan'), mn('герман', 'Germany'), mn('франц', 'France'), mn('их\\s+британи', 'United Kingdom'),
+  mn('энэтхэг', 'India'), mn('турк', 'Turkey'), mn('украин', 'Ukraine'), mn('беларусь', 'Belarus'), mn('иран', 'Iran'),
+  mn('израиль|израил', 'Israel'), mn('саудын\\s+араб', 'Saudi Arabia'), mn('испани', 'Spain'), mn('итали', 'Italy'),
+  mn('канад', 'Canada'), mn('австрали', 'Australia'), mn('австри', 'Austria'), mn('вьетнам', 'Vietnam'), mn('тайланд', 'Thailand'),
+  mn('сингапур', 'Singapore'), mn('тайвань|тайван', 'Taiwan'), mn('хонконг', 'Hong Kong'), mn('польш', 'Poland'),
+  mn('унгар', 'Hungary'), mn('швейцари|швейцарь', 'Switzerland'), mn('швед', 'Sweden'), mn('норвеги', 'Norway'),
+  mn('финланд', 'Finland'), mn('нидерланд|голланд', 'Netherlands'), mn('бельги', 'Belgium'), mn('грек', 'Greece'),
+  mn('бразил', 'Brazil'), mn('аргентин', 'Argentina'), mn('мексик', 'Mexico'), mn('египет', 'Egypt'),
+  mn('афганистан', 'Afghanistan'), mn('пакистан', 'Pakistan'), mn('ирак', 'Iraq'), mn('сири', 'Syria'), mn('ливан', 'Lebanon'),
+  mn('катар', 'Qatar'), mn('палестин', 'Palestine'), mn('газын\\s+зурвас', 'Gaza'), mn('иордан', 'Jordanian'),
+  mn('кувейт', 'Kuwait'), mn('бахрейн', 'Bahrain'), mn('оман', 'Oman'), mn('йемен', 'Yemen'),
+  mnAsWritten('АНЭУ', 'United Arab Emirates'), mn('арабын\\s+нэгдсэн\\s+эмират', 'United Arab Emirates'),
+  mn('тажикистан', 'Tajikistan'), mn('туркменистан', 'Turkmenistan'), mn('азербайжан', 'Azerbaijan'), mn('армени', 'Armenia'),
+  mn('гүрж', 'Republic of Georgia'), mn('молдав', 'Moldova'), mn('румын', 'Romania'), mn('болгар', 'Bulgaria'),
+  mn('серби', 'Serbia'), mn('хорват', 'Croatia'), mn('словак', 'Slovakia'), mn('словени', 'Slovenia'), mn('чех', 'Czechia'),
+  mn('эстони', 'Estonia'), mn('латви', 'Latvia'), mn('литва', 'Lithuania'), mn('дани', 'Denmark'), mn('ирланд', 'Ireland'),
+  mn('исланд', 'Iceland'), mn('португал', 'Portugal'), mn('шинэ\\s+зеланд', 'New Zealand'), mn('ватикан', 'Vatican'),
+  mn('индонез', 'Indonesia'), mn('малайз', 'Malaysia'), mn('филиппин', 'Philippines'), mn('камбож', 'Cambodia'),
+  mn('лаос', 'Laos'), mn('мьянмар', 'Myanmar'), mn('бангладеш', 'Bangladesh'), mn('шри[-\\s]ланк(?:а)?', 'Sri Lanka'),
+  mn('непал', 'Nepal'), mnAsWritten('Бутан', 'Bhutan'), mn('өмнөд\\s+африк', 'South Africa'), mn('нигери', 'Nigeria'),
+  mn('кени', 'Kenya'), mn('этиоп', 'Ethiopia'), mn('өмнөд\\s+судан', 'South Sudan'), mn('судан', 'Sudan'), mn('ливи', 'Libya'), mn('тунис', 'Tunisia'), mn('алжир', 'Algeria'),
+  mn('марокко', 'Morocco'), mn('парагвай', 'Paraguay'), mn('уругвай', 'Uruguay'), mn('чили', 'Chile'), mn('перу', 'Peru'),
+  mn('колумби', 'Colombia'), mn('венесуэл', 'Venezuela'), mn('куба', 'Cuba'), mn('эквадор', 'Ecuador'), mn('боливи', 'Bolivia'),
+  mn('бээжин', 'Beijing'), mn('москва', 'Moscow'),
+  mn('токио', 'Tokyo'), mn('сөүл', 'Seoul'), mn('вашингтон', 'Washington'), mn('лондон', 'London'), mn('парис', 'Paris'),
+  mn('берлин', 'Berlin'), r('цагаан\\s+орд(?:он|ны|онд|оноос|ныг)', 'White House'), mn('кремль|кремл', 'Kremlin'),
+  mn('хөх\\s+хот', 'Hohhot'), mnAsWritten('Эрээн', 'Inner Mongolia'),
+]
+
 /** Words that only look like a place in the three languages the reader took before round 6 */
 const SPANISH: Rule[] = [mask('usa|irán|chile|maduros?')]
 const PORTUGUESE: Rule[] = [mask('usa|irão|peru|maduros?')]
@@ -347,7 +463,7 @@ const PORTUGUESE: Rule[] = [mask('usa|irão|peru|maduros?')]
 export const LOCAL_NAMES: Record<string, Rule[]> = {
   de: GERMAN, it: ITALIAN, ca: CATALAN, da: DANISH, kl: DANISH, nl: DUTCH, ro: ROMANIAN, sl: SLOVENE,
   sr: MONTENEGRIN, cnr: MONTENEGRIN, sq: ALBANIAN, ms: MALAY, es: SPANISH, pt: PORTUGUESE, lt: LITHUANIAN,
-  ar: ARABIC, ru: RUSSIAN,
+  ar: ARABIC, ru: RUSSIAN, mn: MONGOLIAN,
 }
 
 /** The text with its language's place names in English and its look-alike words blanked out, for finding its place */

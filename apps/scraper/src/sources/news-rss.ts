@@ -10163,6 +10163,108 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['kyrgyzstan', 'central-asia', 'russian-language'],
     language:        'ru',
   },
+  // ── Added Nov 6, 2026, 2 PM (Devon, 1:17 PM, "Ok to all": The Royal Gazette's feed list page pasted in, and "Go in
+  // anyway or skip: Syria (SANA, Syria TV, Al-Watan), Bahrain (Al Bilad), Mongolia (Ikon.mn)"). Read with the poller's
+  // own reader at 1:25 PM; each robots.txt allows its feed. Their terms are noted beside each, as Devon's call.
+  // The Royal Gazette, Bermuda's daily since 1828 (Hamilton; about 25 stories a day): mostly Bermuda's own news, home
+  // pin; Bermuda's second outlet beside Bernews. Its feed list page is itself the all-stories feed. Its terms: personal,
+  // non-commercial use; its content "may not be used to construct any kind of database"; links to any article allowed
+  {
+    id:              'royal-gazette-bm',
+    name:            'The Royal Gazette (Bermuda)',
+    feedUrl:         'https://www.royalgazette.com/feeds/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.76,
+    countryCode:     'BM',
+    defaultLat:      32.29,
+    defaultLng:      -64.78,
+    defaultLocation: 'Hamilton, Bermuda',
+    extraTags:       ['bermuda', 'caribbean', 'atlantic'],
+    language:        'en',
+  },
+  // SANA, Syria's state news agency, in Arabic (Damascus; about 150 stories a day): the government's, so labelled state
+  // media; mostly Syria's own news, home pin. From here it cuts about one read in two (the reader tries again next
+  // cycle). Its terms page couldn't be read here (a server error)
+  {
+    id:              'sana-sy-ar',
+    name:            'SANA (Syria, Arabic)',
+    feedUrl:         'https://sana.sy/feed/',
+    category:        'geopolitics',
+    biasLabel:       'state-media',
+    reliability:     0.50,
+    countryCode:     'SY',
+    defaultLat:      33.51,
+    defaultLng:      36.28,
+    defaultLocation: 'Damascus, Syria',
+    extraTags:       ['syria', 'middle-east', 'news-agency', 'state-media', 'arabic-language'],
+    language:        'ar',
+  },
+  // Syria TV, the television channel's newsroom, in Arabic (about 50 stories a day): Syria's news and the region's and
+  // the world's (a third of its headlines name another country), so no home pin. Its terms page couldn't be read here
+  {
+    id:              'syria-tv-ar',
+    name:            'Syria TV (Arabic)',
+    feedUrl:         'https://www.syria.tv/rss2',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.62,
+    countryCode:     'SY',
+    defaultLat:      33.51,
+    defaultLng:      36.28,
+    defaultLocation: 'Damascus, Syria',
+    extraTags:       ['syria', 'middle-east', 'arabic-language'],
+    language:        'ar',
+  },
+  // Al-Watan, Damascus's daily, in Arabic (about 20 stories a day): mostly Syria's own news, its sport and its economy,
+  // home pin (its few stories on foreign football and film stars sit in Syria). Its terms page couldn't be read here
+  {
+    id:              'al-watan-sy-ar',
+    name:            'Al-Watan (Syria, Arabic)',
+    feedUrl:         'https://alwatan.sy/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.58,
+    countryCode:     'SY',
+    defaultLat:      33.51,
+    defaultLng:      36.28,
+    defaultLocation: 'Damascus, Syria',
+    extraTags:       ['syria', 'middle-east', 'arabic-language'],
+    language:        'ar',
+  },
+  // Al Bilad, Manama's daily, in Arabic (about 100 stories a day): Bahrain's news and the Arab world's and the world's
+  // (two in five of its headlines name another country), so no home pin; Bahrain's second outlet beside News of Bahrain.
+  // Its terms page couldn't be read here
+  {
+    id:              'al-bilad-bh-ar',
+    name:            'Al Bilad (Bahrain, Arabic)',
+    feedUrl:         'https://www.albiladpress.com/rss',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.62,
+    countryCode:     'BH',
+    defaultLat:      26.23,
+    defaultLng:      50.59,
+    defaultLocation: 'Manama, Bahrain',
+    extraTags:       ['bahrain', 'gulf', 'middle-east', 'arabic-language'],
+    language:        'ar',
+  },
+  // Ikon.mn, Ulaanbaatar's news site, in Mongolian (about 80 stories a day): mostly Mongolia's own news, home pin;
+  // Mongolia's second outlet beside News.mn's English edition. Its terms allow personal use only
+  {
+    id:              'ikon-mn',
+    name:            'Ikon.mn',
+    feedUrl:         'https://ikon.mn/rss',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.68,
+    countryCode:     'MN',
+    defaultLat:      47.89,
+    defaultLng:      106.91,
+    defaultLocation: 'Ulaanbaatar, Mongolia',
+    extraTags:       ['mongolia', 'east-asia', 'asia', 'mongolian-language'],
+    language:        'mn',
+  },
 ]
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────
@@ -10651,6 +10753,9 @@ export const HOME_PIN_SOURCES = new Set([
   'cayman-compass-ky', 'fbc-news-fj',
   // Nov 6, 2026, 1 PM: 24.kg and Vesti.kg in Russian, mostly Kyrgyzstan's news; not Roya or JO24 (the region's too)
   '24kg-ru', 'vesti-kg',
+  // Nov 6, 2026, 2 PM: The Royal Gazette, SANA, Al-Watan and Ikon.mn, each mostly its own country's news; not Syria TV
+  // or Al Bilad (the region's and the world's too)
+  'royal-gazette-bm', 'sana-sy-ar', 'al-watan-sy-ar', 'ikon-mn',
 ])
 
 export interface InferredGeo {

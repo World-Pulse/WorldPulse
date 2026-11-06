@@ -25,8 +25,9 @@ describe('feeds added Nov 5, 2026, 11:45 PM', () => {
     expect(src('farmdoc-daily')).toMatchObject({ category: 'economy', countryCode: 'US' })
     expect(src('the-conversation-fr')).toMatchObject({ language: 'fr', category: 'science' })
     expect(src('the-conversation-es')).toMatchObject({ language: 'es', category: 'science' })
-    // Syria now has two newsrooms of its own; Levant24 stays out (round 8, Oct 31: it writes up Arabic outlets' reports)
-    const syria = NEWS_SOURCE_REGISTRY.filter(s => s.countryCode === 'SY')
+    // Syria now has two newsrooms of its own in English (and three in Arabic since Nov 6, ok-to-all-outlets-nov6.test.ts);
+    // Levant24 stays out (round 8, Oct 31: it writes up Arabic outlets' reports)
+    const syria = NEWS_SOURCE_REGISTRY.filter(s => s.countryCode === 'SY' && s.language === 'en')
     expect(syria.map(s => s.id).sort()).toEqual(['north-press-sy', 'syria-direct'])
     expect(new Set(syria.map(s => host(s.feedUrl))).size).toBe(2)
   })
@@ -56,8 +57,9 @@ describe('feeds added Nov 5, 2026, 11:45 PM', () => {
 describe('thinly covered places (Nov 5, 2026)', () => {
   it(`are those with ${THIN_PLACE_FEEDS} feeds of their own or fewer`, () => {
     const thin = new Set(thinPlaces())
-    for (const code of ['DM', 'LC', 'TO', 'VU', 'GD', 'HR', 'SY', 'DJ', 'LB', 'JO', 'EE', 'LT']) expect(thin.has(code), code).toBe(true)
-    for (const code of ['US', 'GB', 'IN', 'NG', 'FR', 'HN']) expect(thin.has(code), code).toBe(false)   // Honduras has four since El Pulso
+    for (const code of ['DM', 'LC', 'TO', 'VU', 'GD', 'HR', 'DJ', 'LB', 'JO', 'EE', 'LT']) expect(thin.has(code), code).toBe(true)
+    // Honduras has four since El Pulso, Syria five since its Arabic press (Nov 6)
+    for (const code of ['US', 'GB', 'IN', 'NG', 'FR', 'HN', 'SY']) expect(thin.has(code), code).toBe(false)
     expect(thinPlaces([{ ...src('naharnet')!, countryCode: 'ZZ' }])).toEqual(['ZZ'])
   })
 })
