@@ -13,6 +13,7 @@ import { partOfAName } from './place-words'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
 import { MORE_COUNTRIES, ABBREVIATED_COUNTRIES, US_STATES, countryNameOf } from './world-countries'
+import { WORLD_TOWNS, HOME_TOWNS, type TownEntry } from './world-gazetteer'
 import { INTL_COUNTRY_NAMES } from './country-names-intl'
 
 export interface GeoResult {
@@ -54,7 +55,7 @@ async function startNominatimCooldown(status: number): Promise<void> {
 }
 
 // ─── GAZETTEER (fast-path; ~140 locations) ───────────────────────────────────
-const GAZETTEER: Record<string, { lat: number; lng: number; country: string; region?: string; name?: string }> = {
+const GAZETTEER: Record<string, { lat: number; lng: number; country: string; region?: string; name?: string; asWritten?: string }> = {
   'manila':           { lat: 14.5995, lng: 120.9842, country: 'PH', region: 'Metro Manila' },
   'philippines':      { lat: 12.8797, lng: 121.7740, country: 'PH' },
   'tokyo':            { lat: 35.6762, lng: 139.6503, country: 'JP', region: 'Kanto' },
@@ -2405,7 +2406,25 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'quneitra': { lat: 33.1258, lng: 35.8236, country: 'SY', name: 'Quneitra' },
   'abu kamal': { lat: 34.4506, lng: 40.9187, country: 'SY', name: 'Abu Kamal' },
   'jisr al-shughur': { lat: 35.8126, lng: 36.3176, country: 'SY', name: 'Jisr al-Shughur' },
-  'rabat': { lat: 34.0209, lng: -6.8416, country: 'MA', name: 'Rabat' },
+  'rabat': { lat: 34.0209, lng: -6.8416, country: 'MA', name: 'Rabat', asWritten: 'Rabat' },   // not "rabat" (a discount)
+  // Nov 6, 2026, 5 PM: names that held another place's name and landed there ("Baja California" in California, "Los
+  // Lagos" in Lagos, "East New Britain" in Britain, "New Ireland" in Ireland, "Republika Srpska" in Serbia, "Niger
+  // State" in Niger, "Somali Region" in Somalia); Natural Earth's towns fix the rest (world-gazetteer.ts)
+  'baja california': { lat: 32.6245, lng: -115.4523, country: 'MX', name: 'Baja California' },
+  'baja california sur': { lat: 24.1426, lng: -110.3128, country: 'MX', name: 'Baja California Sur' },
+  'san luis potosí': { lat: 22.1565, lng: -100.9855, country: 'MX', name: 'San Luis Potosí' },
+  'san luis potosi': { lat: 22.1565, lng: -100.9855, country: 'MX', name: 'San Luis Potosí' },
+  'los lagos region': { lat: -41.4693, lng: -72.9424, country: 'CL', name: 'Los Lagos' },
+  'región de los lagos': { lat: -41.4693, lng: -72.9424, country: 'CL', name: 'Los Lagos' },
+  'region de los lagos': { lat: -41.4693, lng: -72.9424, country: 'CL', name: 'Los Lagos' },
+  'east new britain': { lat: -4.3420, lng: 152.2633, country: 'PG', name: 'East New Britain' },
+  'west new britain': { lat: -5.5500, lng: 150.1428, country: 'PG', name: 'West New Britain' },
+  'new ireland': { lat: -2.5735, lng: 150.7963, country: 'PG', name: 'New Ireland', asWritten: 'New Ireland' },
+  'morona santiago': { lat: -2.3087, lng: -78.1114, country: 'EC', name: 'Morona Santiago' },
+  'republika srpska': { lat: 44.7722, lng: 17.1910, country: 'BA', name: 'Republika Srpska' },
+  'serbian republic': { lat: 44.7722, lng: 17.1910, country: 'BA', name: 'Republika Srpska' },
+  'niger state': { lat: 9.6139, lng: 6.5569, country: 'NG', name: 'Niger State' },
+  'somali region': { lat: 9.3500, lng: 42.8000, country: 'ET', name: 'Somali Region' },
   'muharraq': { lat: 26.2572, lng: 50.6119, country: 'BH', name: 'Muharraq' },
   'riffa': { lat: 26.1300, lng: 50.5550, country: 'BH', name: 'Riffa' },
   'suwayda': { lat: 32.7089, lng: 36.5695, country: 'SY', name: 'Sweida' },
@@ -2867,19 +2886,39 @@ for (const { code, capital, lat, lng } of CAPITALS) {
   }
 }
 
+// Towns and provinces from Natural Earth (world-gazetteer.ts; Nov 6, 2026: of each country's 10 largest towns the map knew
+// fewer than half in 72 of the 202 places counted, and about 1 in 4 of the world's provinces and states). The entries
+// above come first. Their names are read as written, with their capitals: "Ganja" is Azerbaijan's city, "ganja" isn't.
+for (const [name, entry] of Object.entries(WORLD_TOWNS)) GAZETTEER[name.toLowerCase()] ??= { ...entry, asWritten: name }
+
 const GAZETTEER_MATCHERS = Object.entries(GAZETTEER)
   .sort((a, b) => b[0].length - a[0].length)
-  // \b can't see the end of a name that finishes on an accented letter ("Potosí", "Cuiabá": é, í, á count as
-  // non-word characters), so those names end where no other Latin letter follows instead (and names that start
-  // on one, like "Łódź", start where no other Latin letter comes before)
-  .map(([place, coords]) => ({ place, coords, re: new RegExp(`${/^[^\x00-\x7f]/.test(place) ? '(?<![A-Za-z0-9\\u00C0-\\u024F])' : '\\b'}${escapeRegExp(place)}${/[^\x00-\x7f]$/.test(place) ? '(?![A-Za-z0-9\\u00C0-\\u024F])' : '\\b'}`, 'i') }))
-const GAZETTEER_SCAN = GAZETTEER_MATCHERS.map(m => ({ place: m.place, coords: m.coords, re: new RegExp(m.re.source, 'gi') }))
+  // A name is a whole word where no letter or digit of any script touches it (Nov 6, 2026: \b took accented letters
+  // for spaces, so a name was found inside a word: "nica" in "Única", "cesis" in "Arquidiócesis", "kandal" in
+  // "škandal"; names starting or ending on one, "Potosí" or "Łódź", had their own rule). The hand-kept names are read
+  // in any case, Natural Earth's as written (above).
+  .map(([place, coords]) => ({ place, coords, re: new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(coords.asWritten ?? place)}(?![\\p{L}\\p{N}])`, coords.asWritten ? 'u' : 'iu') }))
+const GAZETTEER_SCAN = GAZETTEER_MATCHERS.map(m => ({
+  place: m.place, coords: m.coords, re: new RegExp(m.re.source, `g${m.re.flags}`),
+  // the name as plain text: a text that doesn't hold it needn't run its pattern (scanIn)
+  needle: m.coords.asWritten ?? m.place.toLowerCase(), asWritten: !!m.coords.asWritten,
+}))
+
+/**
+ * The gazetteer names a text can hold, in GAZETTEER_SCAN's order: a quick look for each name's letters before its
+ * pattern runs (Nov 6, 2026: with Natural Earth's towns and patterns that see every script's letters, running all
+ * 4,000 patterns took a story 15 ms; most names are in no given text)
+ */
+function scanIn(clean: string): typeof GAZETTEER_SCAN {
+  const lower = clean.toLowerCase()
+  return GAZETTEER_SCAN.filter(m => (m.asWritten ? clean : lower).includes(m.needle))
+}
 
 /** The gazetteer place mentioned first (the headline comes first); the longer name on a tie */
 export function findGazetteerPlace(text: string): { place: string; coords: typeof GAZETTEER[string] } | null {
   const clean = cleanText(text)
   let best: { place: string; coords: typeof GAZETTEER[string]; index: number } | null = null
-  for (const m of GAZETTEER_SCAN) {
+  for (const m of scanIn(clean)) {
     m.re.lastIndex = 0
     for (const hit of clean.matchAll(m.re)) {
       const index = hit.index ?? 0
@@ -2909,6 +2948,37 @@ export function oneArea(a: { place: string; coords: { region?: string; name?: st
 
 /** At most this many geocoder lookups per text (each one waits about a second) */
 const MAX_NOMINATIM_LOOKUPS = 4
+
+/**
+ * Towns read only for their own country's outlets (world-gazetteer.ts HOME_TOWNS, Nov 6, 2026): names that are also
+ * words, people, US states or another country's places. A Jamaican outlet's "Mandeville", "Kingston" or "May Pen" is
+ * the Jamaican town; anyone else's stays unplaced. Read as written (capitalised), whole words, longest first.
+ */
+const HOME_MATCHERS: Record<string, Array<{ name: string; entry: TownEntry; re: RegExp }>> = Object.fromEntries(
+  Object.entries(HOME_TOWNS).map(([code, towns]) => [code, Object.entries(towns)
+    .sort((a, b) => b[0].length - a[0].length)
+    .map(([name, entry]) => ({ name, entry, re: new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(name)}(?![\\p{L}\\p{N}])`, 'gu') }))]))
+
+/** The first of its own country's home-only towns a text names, for that country's outlets (HOME_MATCHERS) */
+export function homePlaceFromText(text: string, countryCode: string | null | undefined): GeoResult | null {
+  const towns = countryCode ? HOME_MATCHERS[countryCode.toUpperCase()] : undefined
+  if (!towns || !text) return null
+  const clean = cleanText(text)
+  let best: { entry: TownEntry; index: number } | null = null
+  for (const m of towns) {
+    m.re.lastIndex = 0
+    for (const hit of clean.matchAll(m.re)) {
+      const index = hit.index ?? 0
+      if (best && index >= best.index) break
+      if (partOfAName(clean, index, index + hit[0].length)) continue
+      best = { entry: m.entry, index }
+      break
+    }
+  }
+  return best
+    ? { point: true, lat: best.entry.lat, lng: best.entry.lng, name: best.entry.name, countryCode: best.entry.country, region: best.entry.region }
+    : null
+}
 
 /** The gazetteer place the text names first, as a map point */
 function gazetteerPoint(text: string): GeoResult | null {
@@ -2959,7 +3029,7 @@ export function splitPlaces(text: string): { countries: string[]; rest: string; 
     return true
   }
   // Longest gazetteer names first ("West Virginia" before "Virginia"), then countries
-  for (const m of GAZETTEER_SCAN) {
+  for (const m of scanIn(clean)) {
     m.re.lastIndex = 0
     for (const hit of clean.matchAll(m.re)) {
       if (partOfAName(clean, hit.index ?? 0, (hit.index ?? 0) + hit[0].length)) continue
@@ -2990,7 +3060,7 @@ export function placesInText(text: string, max = 6): string[] {
   const clean = cleanText(text)
   const hits: Array<{ name: string; index: number; end: number }> = []
   // Longest names first, so "West Virginia" keeps "Virginia" from counting again
-  for (const m of GAZETTEER_SCAN) {
+  for (const m of scanIn(clean)) {
     m.re.lastIndex = 0
     for (const hit of clean.matchAll(m.re)) {
       const index = hit.index ?? 0
@@ -3047,7 +3117,7 @@ export function countriesNamedOutright(text: string): string[] {
 function gazetteerPointIn(text: string, countries: string[]): GeoResult | null {
   const clean = cleanText(text)
   let best: { place: string; coords: typeof GAZETTEER[string]; index: number } | null = null
-  for (const m of GAZETTEER_SCAN) {
+  for (const m of scanIn(clean)) {
     if (!m.coords.country || !countries.includes(m.coords.country)) continue
     m.re.lastIndex = 0
     for (const hit of clean.matchAll(m.re)) {

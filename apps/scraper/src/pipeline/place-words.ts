@@ -154,6 +154,9 @@ export function partOfAName(text: string, at: number, end: number): boolean {
   // Senegal; the rally left Africa in 2009): "Dakar 2027", "Dakar Rally", "Rallye Dakar", "el/le/the Dakar"
   if (hit.toLowerCase() === 'dakar' && (/^[ \t]*(?:20\d\d|rall(?:y|ye))\b/i.test(text.slice(end, end + 12))
     || /\b(?:rall(?:y|ye)|the|el|le)[ \t]+$/i.test(text.slice(Math.max(0, at - 12), at)))) return true
+  // Spanish "los lagos" is the lakes, not Lagos (Nov 6, 2026: "Los lagos de Palermo se secan" was pinned in Nigeria;
+  // Chile's Los Lagos region is a gazetteer place of its own)
+  if (hit.toLowerCase() === 'lagos' && wordBefore(text, at)?.toLowerCase() === 'los') return true
   if (!startsUpper(hit)) return false
   // A French or Spanish document named after a place: "la Convention d'Accra", "l'Accord de Paris" (M57,
   // Oct 30, 2026: Gabon signing the Accra convention was pinned in Accra)

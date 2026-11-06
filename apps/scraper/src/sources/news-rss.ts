@@ -106,7 +106,7 @@ import { noteCoverage } from './coverage'
 import { MAX_ITEM_AGE_MS, isStaleItem } from '../pipeline/freshness'
 // Feeds send "&#x27;" and "&amp;" in titles and summaries
 import { decodeEntities, cleanSummary, repeatsTitle, feedText, clipText } from '../pipeline/text'
-import { placeFromText, splitPlaces, withHomeNames, mentionedCountries } from '../pipeline/geo'
+import { placeFromText, splitPlaces, withHomeNames, mentionedCountries, homePlaceFromText, findGazetteerPlace } from '../pipeline/geo'
 import { withLocalNames } from '../pipeline/local-names'
 import { rateSeverity } from '../pipeline/severity'
 import { categorizeText } from '../pipeline/categories'
@@ -10816,6 +10816,14 @@ function fromPlace(text: string): InferredGeo | null {
     : null
 }
 
+/** A town only its own country's outlets are read for (geo.ts homePlaceFromText): "Mandeville" in a Jamaican outlet */
+function fromHome(text: string, source: NewsSource): InferredGeo | null {
+  const place = homePlaceFromText(text, source.countryCode)
+  return place?.point && place.lat !== undefined && place.lng !== undefined
+    ? { lat: place.lat, lng: place.lng, locationName: place.name ?? null, countryCode: place.countryCode ?? null }
+    : null
+}
+
 /** One capitalised word of a dateline's place: "PARIS", "Kathmandu", "Bukit", "Abu", "D.C." */
 const DATELINE_WORD = "\\p{Lu}[\\p{L}'’.-]*"
 /**
@@ -10863,7 +10871,12 @@ export function inferGeo(
     const named = fromPlace(head)
     return { lat: point.lat, lng: point.lng, locationName: named?.locationName ?? null, countryCode: named?.countryCode ?? null }
   }
-  const fromHead = fromPlace(head) ?? fromHints(head, source.countryCode, HOME_PIN_SOURCES.has(source.id))
+  // A town its own country's outlets name that is also a word, a person or another country's place ("Mandeville",
+  // "Kingston"; geo.ts homePlaceFromText, Nov 6, 2026), when the headline names no other place, or names only its own
+  // country ("Liberia: Lofa County University President ..."); before a leader or an institution it names
+  const named = fromPlace(head)
+  const home = !named || (named.countryCode === source.countryCode && !findGazetteerPlace(head)) ? fromHome(head, source) : null
+  const fromHead = home ?? named ?? fromHints(head, source.countryCode, HOME_PIN_SOURCES.has(source.id))
   // A government's press office tells of its own country's day, also when a visitor's country is named: "His
   // Majesty receives in audience His Majesty The Sultan of Oman" and "Crown Prince Receives Outgoing High
   // Commissioner Islamic Republic Of Pakistan" (Brunei's PMO) sat in Muscat and Islamabad (Nov 5, 2026, plan Q10:
