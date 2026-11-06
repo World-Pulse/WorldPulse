@@ -53,7 +53,8 @@ describe('organisations, places and things', () => {
     expect(names('Bandits kill driver, two passengers on Sokoto road', null, 'location')).toEqual(['Sokoto'])
     expect(names('Ogun offers jobs to 52 newly inducted nurses', 'The Ogun State government has offered jobs.', 'location')).toEqual(['Ogun'])
     expect(names('Ruto attends the 25th COMESA summit in Harare', null, 'location')).toEqual(['Harare'])
-    expect(names('2 killed in attack on airport in Dammam, Saudi Arabia', null, 'location')).toEqual(['Saudi Arabia', 'Dammam'])
+    // (Dammam, the example until Nov 6, 2026, is now on the map: world-gazetteer.ts)
+    expect(names('2 killed in attack on airport in Khamis Mushait, Saudi Arabia', null, 'location')).toEqual(['Saudi Arabia', 'Khamis Mushait'])
     expect(names('Lluvias intensas inundan calles de Bucaramanga', null, 'location')).toEqual(['Bucaramanga'])
     expect(names('Floods Hit Piura, Killing Five As Rains Continue', null, 'location')).toEqual(['Piura'])
     expect(names("Clashes in Nigeria's Kano after the vote", null, 'location')).toEqual(['Nigeria', 'Kano'])
@@ -71,7 +72,7 @@ describe('organisations, places and things', () => {
   })
 
   it('gives an older report the places it names, beyond the ones it has (the one-off backfill)', () => {
-    expect(morePlacesFor({ title: '2 killed in attack on airport in Dammam, Saudi Arabia', summary: null })).toEqual(['Dammam'])
+    expect(morePlacesFor({ title: '2 killed in attack on airport in Khamis Mushait, Saudi Arabia', summary: null })).toEqual(['Khamis Mushait'])
     expect(morePlacesFor({ title: 'Oil prices rise', summary: null })).toEqual([])
   })
 

@@ -81,11 +81,17 @@ const SURNAME_PLACES = new Set([
   'hamilton', 'houston', 'washington', 'jackson', 'austin', 'madison', 'lincoln', 'carson', 'warren', 'nelson', 'kent',
   'preston', 'cleveland', 'tyler', 'quincy', 'raleigh', 'denver', 'chester', 'kingston', 'wellington', 'jordan', 'marion',
 ])
+/** The small words inside people's names, and not places': "José dos Santos", "Ludwig van Beethoven" */
+const NAME_PARTICLES = new Set(['dos', 'das', 'van', 'von', 'bin', 'ibn'])
 /** Capitalised words before a place that don't make it a person's surname */
 const NOT_FIRST_NAMES = new Set([
   ...PLACE_BEFORE, 'as', 'if', 'when', 'while', 'amid', 'despite', 'how', 'why', 'what', 'where', 'but', 'so', 'now',
   'top', 'new', 'old', 'big', 'democratic', 'democrat', 'democrats', 'republican', 'republicans', 'gop', 'labour',
   'conservative', 'liberal', 'federal', 'state', 'city', 'county', 'metro', 'greater', 'downtown', 'suburban',
+  // a place's kind before its name: "Isla Colón", "Estado Lara", "Ciudad Hidalgo"
+  'isla', 'islas', 'ilha', 'île', 'ciudad', 'cidade', 'puerto', 'villa', 'vila', 'provincia', 'província', 'departamento',
+  'estado', 'distrito', 'municipio', 'región', 'cantón', 'parroquia', 'commune', 'préfecture', 'wilaya', 'lake', 'mount',
+  'fort', 'port', 'cape', 'cabo', 'lago', 'río', 'rio', 'valle', 'monte', 'porto', 'ilha', 'cidade', 'bairro',
 ])
 
 /**
@@ -140,9 +146,10 @@ const DOCUMENT_AFTER = new Set([
  * capitalised word right after it that isn't a place word ("Santiago Peña",
  * "Paris Hilton", "Sydney Sweeney", "Houston Rockets"), or a first name right
  * before a surname-place ("Lewis Hamilton", "Whitney Houston"). Text in
- * lower case says nothing: false.
+ * lower case says nothing: false. `surname`: the place is also a surname, like those of SURNAME_PLACES
+ * (world-gazetteer.ts's home towns: "Armando León", "Dion George's").
  */
-export function partOfAName(text: string, at: number, end: number): boolean {
+export function partOfAName(text: string, at: number, end: number, surname?: boolean): boolean {
   const hit = text.slice(at, end)
   // Paraguay's and Uruguay's Colorado party (ANR), not the US state (Oct 30, 2026: a Paraguayan
   // party-registration story was pinned in Denver)
@@ -158,6 +165,18 @@ export function partOfAName(text: string, at: number, end: number): boolean {
   // Chile's Los Lagos region is a gazetteer place of its own)
   if (hit.toLowerCase() === 'lagos' && wordBefore(text, at)?.toLowerCase() === 'los') return true
   if (!startsUpper(hit)) return false
+  // A virus or a fever named after a place, not the place (Nov 6, 2026: "Bundibugyo virus disease" in a story on
+  // the Congo's Ebola outbreak): "Marburg virus", "Lassa fever", "Rift Valley fever", "the Zaire strain"
+  if (/^[ \t]+(?:virus|viruses|fever|ebolavirus|strain|variant)\b/i.test(text.slice(end, end + 14))) return true
+  // A gang or a cartel named after its home, not the place: "the Tren de Aragua" (Nov 6, 2026: five stories on a
+  // US reward for its leaders were pinned in Aragua), "el Cártel de Sinaloa", "the Sinaloa Cartel"
+  if (/\b(?:tren|c[aá]rtel|cartel|clan)\s+(?:de|del)\s+$/i.test(text.slice(Math.max(0, at - 14), at))
+    || /^[ \t]+c[aá]rtel\b/i.test(text.slice(end, end + 10))) return true
+  // The other side in a match, a club named after its city, not the city (Nov 6, 2026: "absent du match de Ligue 1
+  // contre Troyes" in a story on Morocco's Hakimi was pinned in Troyes): "le match contre Troyes", "the game against
+  // Leeds", "el partido ante Huracán", after a score "2:1 - Der LASK erledigt die Pflichtübung gegen Tirol" (WSG
+  // Tirol); where the match is played ("en Chillán") stays the place
+  if (/(?:\b(?:match|matchs|rencontre|partido|jogo|partita|game|clash|fixture|derby|duel|spiel|partie)\b|(?<!\d)\d{1,2}[:-]\d{1,2}(?!\d))[^.!?]{0,60}\b(?:contre|contra|against|gegen|vs\.?|face\s+à|ante)[ \t]+$/i.test(text.slice(Math.max(0, at - 90), at))) return true
   // A French or Spanish document named after a place: "la Convention d'Accra", "l'Accord de Paris" (M57,
   // Oct 30, 2026: Gabon signing the Accra convention was pinned in Accra)
   if (/\b(?:convention|accords?|acuerdos?|protocole|protocolo|traité|tratado|déclaration|declaración|charte|pacte|pacto)\s+(?:d['’]|de\s+(?:la\s+|l['’])?)$/i.test(text.slice(Math.max(0, at - 30), at))) return true
@@ -167,9 +186,15 @@ export function partOfAName(text: string, at: number, end: number): boolean {
   if (after && clubWord(after, CLUB_AFTER)) return true
   if (after && startsUpper(after) && DOCUMENT_AFTER.has(after.toLowerCase())) return true
   const key = hit.toLowerCase()
-  if (!FIRST_NAME_PLACES.has(key) || titleCaseAround(text, at, end)) return false
-  if (after && startsUpper(after) && !GAZETTEER_NEXT.has(after.toLowerCase())) return true
-  if (SURNAME_PLACES.has(key) && before && startsUpper(before) && !NOT_FIRST_NAMES.has(before.toLowerCase())
+  if (!(FIRST_NAME_PLACES.has(key) || surname) || titleCaseAround(text, at, end)) return false
+  if (FIRST_NAME_PLACES.has(key) && after && startsUpper(after) && !GAZETTEER_NEXT.has(after.toLowerCase())) return true
+  // ...also across a name's particle: "Zélia José dos Santos" (Nov 6, 2026); not "de" or "da", which places take
+  // too ("la Ferme-Asile de Sion", "Prefeitura de Santos")
+  if (surname && before && NAME_PARTICLES.has(before)) {
+    const first = wordBefore(text, at - before.length - 1)
+    if (first && startsUpper(first) && !NOT_FIRST_NAMES.has(first.toLowerCase()) && !startsSentence(text, at - before.length - 1)) return true
+  }
+  if ((SURNAME_PLACES.has(key) || surname) && before && startsUpper(before) && !NOT_FIRST_NAMES.has(before.toLowerCase())
     && !/['’]s$/.test(before) && !startsSentence(text, at)) return true
   return false
 }

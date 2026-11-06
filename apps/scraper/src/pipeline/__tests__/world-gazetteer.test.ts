@@ -77,3 +77,55 @@ describe("Natural Earth's towns and provinces", () => {
     expect(at('zdg-md', 'Compensații vs. facturi. Cine va primi ajutor la contor și cine nu. De unde bani').countryCode).not.toBe('DO')
   })
 })
+
+/**
+ * Batch 2 (Nov 6, 2026, evening): every other country's towns and provinces. Each case below was a story of the
+ * day's 13,761 that the first try of batch 2 put in the wrong place.
+ */
+describe('batch 2: names that are no place', () => {
+  it('reads no abbreviation, code or neighbour\'s name as a place', () => {
+    expect(at('bloomberg-markets', 'Airbnb Moves on Revenue; DraftKings Sinks on Forecast Miss | Stock Movers').locationName).not.toBe('Mississippi')
+    expect(at('theblock', 'Ark Invest buys more Coinbase as shares plunge 10% in wider market rout').locationName).not.toBe('Arkansas')
+    expect(at('cooperativa-cl', 'León XIV se embarcó en Roma con destino a Sudamérica').locationName).not.toBe('Los Ríos')
+    expect(at('investing-com-news', 'Hims & Hers stock climbs on direct partnership with Eli Lilly for obesity drug').countryCode).not.toBe('SY')
+    expect(at('investing-com-news', 'Northland cuts Terawulf stock price target to $22.50 on market pricing').countryCode).not.toBe('NZ')
+    // Natural Earth's Yahoo names: Peru's Puno was also "Callao", Uganda's Ntoroko "Bundibugyo"
+    expect(at('rpp-noticias', 'Callao: asesinan a balazos a dos hombres en la avenida Atalaya')).toMatchObject({ countryCode: 'PE', locationName: 'Callao' })
+    expect(at('premium-times-nigeria', 'WHO recommends two new Ebola vaccines for clinical trials as DRC battles Bundibugyo outbreak',
+      'He said the Tumaini trial is designed to evaluate vaccine candidates among contacts of people confirmed to have Bundibugyo virus disease.').countryCode).toBe('CD')
+  })
+
+  it('tells a person, a gang, a rival club or a filing from a place', () => {
+    expect(at('daily-maverick', 'The Honeybadger’s revenge: Former minister Dion George’s nuclear war over SA’s captive lions').locationName).not.toBe('George')
+    expect(at('agencia-brasil', 'Cursos populares ajudam mulheres a retomar estudos para o Enem',
+      'No caso de Zélia José dos Santos, de 72 anos, esse sonho não ficou para trás').locationName).not.toBe('Santos')
+    expect(at('tela-non-st', 'A geração que sonha com a partida',
+      'Formada em Ciências Farmacêuticas, Evanilde Espírito Santo concluiu os estudos em Portugal').countryCode).not.toBe('BR')
+    expect(at('el-universo-ec', 'EE. UU. da 50 millones de dólares por estos tres líderes del Tren de Aragua').countryCode).not.toBe('VE')
+    expect(at('yabiladi', 'Le PSG accorde une pause à Hakimi avant qu’il ne rejoigne les Lions de l’Atlas',
+      'Achraf Hakimi sera absent du match de Ligue 1 contre Troyes, prévu samedi.').countryCode).not.toBe('FR')
+    expect(at('allafrica', "Malawi: 'Ngora Has No Power to Deregister HRDC' - Activist Slams Watchdog").countryCode).toBe('MW')
+    expect(at('eldiarioar', 'Para Lula, su triunfo electoral en Brasil y la derrota de Trump en EE.UU. son "una señal"').locationName).not.toBe('Pará')
+  })
+})
+
+describe('batch 2: towns read when their country is named', () => {
+  it("reads a town that shares its name, in any outlet, when the text names its country", () => {
+    expect(at('bbc-world', 'Floods hit Rosario, Argentina')).toMatchObject({ countryCode: 'AR', locationName: 'Rosario' })
+    expect(at('uk-fcdo', 'UK travel advice for Kenya updated: FCDO now advises against all but essential travel to Moyale').locationName).toBe('Moyale')
+    // ...but not a country's name, or a first name
+    expect(at('ouestaf-news', 'Nigeria : plus de 66 000 personnes se sont réfugiées au Niger et au Bénin').countryCode).toBe('NE')
+    expect(at('japan-times', 'Vladimir Putin calls out nations opposing Russia’s return to international sport').locationName).not.toBe('Vladimir')
+  })
+
+  it('places the provinces and towns batch 2 added', () => {
+    expect(country('Fresh fighting erupts in South Kivu')).toBe('CD')
+    expect(country('Russia attacks energy infrastructure in Kirovohrad region')).toBe('UA')
+    expect(country('Drone strike sets fire to refinery in Syzran')).toBe('RU')
+    expect(country('Intempéries en Corse-du-Sud : deux personnes retrouvées mortes')).toBe('FR')
+    expect(at('el-universal-mx', 'PAN designa a su coordinador en Sonora rumbo a 2027').locationName).toBe('Sonora')
+    expect(country('Extorsión policial en Anzoátegui')).toBe('VE')
+    expect(country('Dias do Jazz nas Caldas da Rainha')).toBe('PT')
+    expect(at('rpp-noticias', 'Una joven falleció en choque entre un mototaxi y un automóvil en San Martín de Porres').locationName).toBe('San Martín de Porres')
+  })
+})

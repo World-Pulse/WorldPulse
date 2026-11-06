@@ -162,9 +162,11 @@ describe('extractGeo', () => {
 
   it('rejects a geocoder hit in a country the text does not mention', async () => {
     fetchMock.mockResolvedValue(nominatim('ro', 45.9, 24.9, 'Khamis'))  // an ambiguous name resolved to Romania
-    const geo = await extractGeo('Abha airport near Khamis closed after Saudi air defences intercept a drone')
+    const geo = await extractGeo('Airport near Khamis closed after Saudi air defences intercept a drone')
     expect(geo.countryCode).toBe('SA')
-    expect(geo.name).not.toBe('Abha')
+    expect(geo.lat).not.toBe(45.9)
+    // Abha itself has been on the map since Nov 6, 2026 (world-gazetteer.ts): the geocoder isn't asked
+    expect((await extractGeo('Abha airport near Khamis closed after Saudi air defences intercept a drone')).name).toBe('Abha')
   }, 15_000)
 
   it('keeps a geocoder hit in a mentioned country', async () => {

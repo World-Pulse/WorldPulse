@@ -106,7 +106,7 @@ import { noteCoverage } from './coverage'
 import { MAX_ITEM_AGE_MS, isStaleItem } from '../pipeline/freshness'
 // Feeds send "&#x27;" and "&amp;" in titles and summaries
 import { decodeEntities, cleanSummary, repeatsTitle, feedText, clipText } from '../pipeline/text'
-import { placeFromText, splitPlaces, withHomeNames, mentionedCountries, homePlaceFromText, findGazetteerPlace } from '../pipeline/geo'
+import { placeFromText, splitPlaces, withHomeNames, mentionedCountries, homePlaceFromText, findGazetteerPlace, namedCountryHomePlace } from '../pipeline/geo'
 import { withLocalNames } from '../pipeline/local-names'
 import { rateSeverity } from '../pipeline/severity'
 import { categorizeText } from '../pipeline/categories'
@@ -10816,6 +10816,14 @@ function fromPlace(text: string): InferredGeo | null {
     : null
 }
 
+/** A home-only town of a country the text names by name (geo.ts namedCountryHomePlace): "Rosario, Argentina" */
+function fromNamedCountry(text: string): InferredGeo | null {
+  const place = namedCountryHomePlace(text)
+  return place?.point && place.lat !== undefined && place.lng !== undefined
+    ? { lat: place.lat, lng: place.lng, locationName: place.name ?? null, countryCode: place.countryCode ?? null }
+    : null
+}
+
 /** A town only its own country's outlets are read for (geo.ts homePlaceFromText): "Mandeville" in a Jamaican outlet */
 function fromHome(text: string, source: NewsSource): InferredGeo | null {
   const place = homePlaceFromText(text, source.countryCode)
@@ -10876,7 +10884,16 @@ export function inferGeo(
   // country ("Liberia: Lofa County University President ..."); before a leader or an institution it names
   const named = fromPlace(head)
   const home = !named || (named.countryCode === source.countryCode && !findGazetteerPlace(head)) ? fromHome(head, source) : null
-  const fromHead = home ?? named ?? fromHints(head, source.countryCode, HOME_PIN_SOURCES.has(source.id))
+  // ...and any outlet's, when the headline names the town's country and no other place ("Floods in Rosario, Argentina")
+  const ofNamed = !home && named && !findGazetteerPlace(head) ? fromNamedCountry(head) : null
+  const fromHead = home ?? ofNamed ?? named ?? fromHints(head, source.countryCode, HOME_PIN_SOURCES.has(source.id))
+  // AllAfrica files each story under its country, named first: "Malawi: 'Ngora Has No Power to Deregister HRDC'" is
+  // Malawi's NGO regulator, not Uganda's Ngora district (Nov 6, 2026); another country's place there is a name
+  const filedUnder = source.id === 'allafrica' ? /^([^:]{3,40}):\s/.exec(title)?.[1] : undefined
+  if (filedUnder && fromHead && !findGazetteerPlace(filedUnder)) {
+    const countries = mentionedCountries(filedUnder)
+    if (countries.length === 1 && fromHead.countryCode !== countries[0]) return fromPlace(filedUnder) ?? fromHead
+  }
   // A government's press office tells of its own country's day, also when a visitor's country is named: "His
   // Majesty receives in audience His Majesty The Sultan of Oman" and "Crown Prince Receives Outgoing High
   // Commissioner Islamic Republic Of Pakistan" (Brunei's PMO) sat in Muscat and Islamabad (Nov 5, 2026, plan Q10:
@@ -10900,7 +10917,8 @@ export function inferGeo(
   // Now's spacewalks at the space station sat in Canada for "Canadian Space Agency astronaut Joshua Kutryk"
   // (Nov 6, 2026), so its stories are placed by their headline only
   if (source.category === 'space') return { lat: null, lng: null, locationName: null, countryCode: null }
-  const fromBody = fromPlace(body) ?? fromHints(body, source.countryCode)
+  const bodyNamed = fromPlace(body)
+  const fromBody = (bodyNamed && !findGazetteerPlace(body) ? fromNamedCountry(body) : null) ?? bodyNamed ?? fromHints(body, source.countryCode)
   if (fromBody) return fromBody
   return { lat: null, lng: null, locationName: null, countryCode: null }
 }

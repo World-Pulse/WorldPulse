@@ -2,7 +2,8 @@
 The map's towns and provinces from Natural Earth (apps/scraper/src/pipeline/world-gazetteer.ts; Nov 6, 2026). On
 Nov 6, of each country's 10 largest towns the place-finder knew fewer than half in 72 of the 202 places WorldPulse
 counts, and about 1 in 4 of the world's provinces and states: a Reuters story naming only "Mandeville" or
-"Queensland" landed nowhere, and "Baja California" landed in California. Natural Earth is in the public domain
+"Queensland" landed nowhere, and "Baja California" landed in California. Batch 1 mapped those 72 countries, batch 2
+(the same evening) every country: towns 56% to 83%, provinces 23% to 71%. Natural Earth is in the public domain
 (naturalearthdata.com). To make the file again, from the repository's root:
 
   # 1. the data, each in its own new folder (Natural Earth 5.1, and the word lists that say which names are words)
@@ -10,11 +11,12 @@ counts, and about 1 in 4 of the world's provinces and states: a Reuters story na
   curl -sSO https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_populated_places_simple.geojson
   curl -sSO https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/10m_cultural/ne_10m_admin_1_states_provinces.dbf
   curl -sS -o en.txt https://raw.githubusercontent.com/first20hours/google-10000-english/master/google-10000-english.txt
-  for l in en es fr pt de it nl; do curl -sS -o ${l}_50k.txt https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/$l/${l}_50k.txt; done
+  for l in en es fr pt de it nl sr hr bs sl sq ca lt ro da; do curl -sS -o ${l}_50k.txt https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/$l/${l}_50k.txt; done
   curl -sSO https://raw.githubusercontent.com/dominictarr/random-name/master/first-names.txt
   curl -sSO https://raw.githubusercontent.com/fivethirtyeight/data/master/most-common-name/surnames.csv
+  curl -sSO https://raw.githubusercontent.com/datasets/world-cities/master/data/world-cities.csv
   cd -
-  # 2. the candidates, for the countries to map ("all", or codes: AE,AG,...)
+  # 2. the candidates, for the countries to map (the 202 places WorldPulse counts, as codes: AE,AF,AG,...; or "all")
   python3 -I scripts/places/make_gazetteer.py candidates $D <countries> /tmp/candidates.json
   # 3. what the place-finder makes of each name today: with world-gazetteer.ts emptied to its two empty tables
   (cd apps/scraper && npx tsx ../../scripts/places/known-places.ts /tmp/candidates.json /tmp/verdicts.json)
@@ -48,6 +50,16 @@ COUNTRY_ALIASES = {
     'Equatorial Guinea': 'GQ', 'Dominican Republic': 'DO', 'Trinidad and Tobago': 'TT', 'Antigua and Barbuda': 'AG',
     'Falkland Islands': 'FK', 'U.S. Virgin Islands': 'VI', 'British Virgin Islands': 'VG', 'Puerto Rico': 'PR',
     'Western Sahara': 'EH', 'South Sudan': 'SS', 'Eswatini': 'SZ', 'North Macedonia': 'MK',
+    # GeoNames' (ISO's) names: unmatched, each counted as a second country, so that Venezuela's Anzoátegui or Syria's
+    # Homs was "in two countries" (Nov 6, 2026)
+    'Türkiye': 'TR', 'Russian Federation': 'RU', 'Viet Nam': 'VN', 'Venezuela, Bolivarian Republic of': 'VE',
+    'Iran, Islamic Republic of': 'IR', 'Tanzania, United Republic of': 'TZ', 'Congo, The Democratic Republic of the': 'CD',
+    "Côte d'Ivoire": 'CI', 'Bolivia, Plurinational State of': 'BO', 'Moldova, Republic of': 'MD', 'Syrian Arab Republic': 'SY',
+    'Taiwan, Province of China': 'TW', 'Korea, Republic of': 'KR', 'Congo': 'CG', "Korea, Democratic People's Republic of": 'KP',
+    "Lao People's Democratic Republic": 'LA', 'Timor-Leste': 'TL', 'Réunion': 'RE', 'Palestine, State of': 'PS',
+    'Cabo Verde': 'CV', 'Brunei Darussalam': 'BN', 'Martinique': 'MQ', 'Holy See (Vatican City State)': 'VA',
+    'Micronesia, Federated States of': 'FM', 'Bonaire, Sint Eustatius and Saba': 'BQ', 'Guadeloupe': 'GP',
+    'Svalbard and Jan Mayen': 'SJ',
 }
 # Regions and peoples' words a province is named after, that headlines use for the region itself (Nov 6, 2026: Turkmenistan's
 # Balkan province took Balkan Insight's "Week in Review" and "EU and the Western Balkans")
@@ -58,10 +70,26 @@ REGION_WORDS = {
     'scandinavia', 'nordic', 'iberia', 'anatolia', 'mesopotamia', 'balkanski', 'dinaric', 'carpathian', 'carpathians',
     'pannonia', 'kurdistan', 'baluchistan', 'pashtunistan', 'transylvania', 'bessarabia', 'galicia', 'lapland',
     'chaco',                 # the Gran Chaco: Argentina's, Paraguay's and Bolivia's
+    # English words for a region, and companies' names: "Northland cuts Terawulf stock price target" is Northland
+    # Capital Markets (Nov 6, 2026: pinned in New Zealand's Northland)
+    'northland', 'southland', 'westland', 'eastland', 'highland', 'midlands', 'heartland', 'outback', 'riviera',
 }
 # Names read for their own country's outlets only, though nothing else in the data says so
 HOME_ONLY = {
     ('MW', 'Balaka'),        # also the Central African Republic's Anti-Balaka militias
+    ('BR', 'Espírito Santo'),  # the Holy Spirit, and a surname ("Evanilde Espírito Santo", São Tomé, Nov 6, 2026)
+    ('UG', 'Bundibugyo'),    # also an Ebola virus ("DRC battles Bundibugyo outbreak", Nov 6, 2026)
+    ('VE', 'Portuguesa'),    # Portuguese, the word: "Língua Portuguesa", "a seleção portuguesa"
+    ('IR', 'Markazi'),       # "central" in Persian and Urdu: Pakistan's "Markazi Jamiat Ahl-e-Hadith"
+    ('VN', 'Vinh'),          # also a given name: "Pham Thanh Vinh"
+}
+# Names that are no one place's in headlines: Washington's "District of Columbia" less its kind is "Columbia" (the
+# university, Columbia in South Carolina, Columbia Sportswear)
+SKIP = {
+    ('US', 'Columbia'),
+    ('RU', 'Vladimir'),      # Vladimir Putin (Nov 6, 2026: "Vladimir Putin calls out nations ..." was pinned in Vladimir);
+                             # geo.ts keeps "Vladimir Oblast" and "Vladimir region"
+    ('CO', 'Meta'),          # the company, in Colombia's outlets too; geo.ts keeps "del Meta", the department's
 }
 # English names Natural Earth lacks
 EXTRA_NAMES = {
@@ -77,6 +105,8 @@ GENERIC = {
     'old', 'great', 'little', 'interior', 'highlands', 'lowlands', 'plateau', 'mountains', 'valley', 'river',
     'delta', 'savanes', 'plateaux', 'maritime', 'grand', 'haut', 'bas', 'alto', 'bajo', 'de', 'del', 'la', 'el',
     'los', 'las', 'du', 'des', 'le', 'and', 'of', 'the', 'saint', 'san', 'santa', 'st', 'st.', 'sainte',
+    'mercedes',              # the carmaker and the Formula 1 team before Uruguay's and Argentina's towns
+    'nacional', 'metropolitana', 'metropolitano', 'metropolitan',   # "Día Nacional del Deporte" isn't Distrito Nacional
 }
 # A province's kind, after its name: "Kasese District", "Ontario Province"; left off the key
 KIND_BEFORE = re.compile(r'^(?:emirate|province|region|state|governorate|department|county|municipality|city|'
@@ -88,6 +118,11 @@ KIND_WORDS = re.compile(r'\s+(?:province|region|district|governorate|county|depa
 
 def fold(s):
     return ''.join(ch for ch in unicodedata.normalize('NFD', s) if unicodedata.category(ch) != 'Mn')
+
+
+def same(s):
+    """A name as compared across places and countries: without accents, case or hyphens ("Porto-Novo" is "Porto Novo")"""
+    return re.sub(r'[\s\-]+', ' ', fold(s).lower()).strip()
 
 
 def read_dbf(path):
@@ -132,7 +167,12 @@ def variants(*names):
     out = []
     for n in names:
         for part in (n or '').split('|'):
-            part = re.sub(r'\s+', ' ', part.strip().strip('.'))
+            raw = re.sub(r'\s+', ' ', part.strip())
+            # an abbreviation or a code, not a name headlines use for the place: "Miss." and "Ark." took "Forecast Miss"
+            # and "Ark Invest" (Nov 6, 2026); "XIV", Chile's Los Ríos region, took "León XIV"
+            if re.fullmatch(r"(?:[^\W\d_]{1,5}\.\s?)+", raw) or re.fullmatch(r"[IVXLCDM]+", raw):
+                continue
+            part = raw.strip('.')
             if not good_name(part):
                 continue
             forms = [part]
@@ -169,9 +209,11 @@ def candidates(data, countries, out):
         if lat is None or lng is None:
             continue
         shown = KIND_BEFORE.sub('', a.get('name_en') or a.get('name'))
-        names = variants(a.get('name_en'), a.get('name'), a.get('woe_name'), a.get('name_alt'))
+        # not Yahoo's woe_name: now and then a neighbour's ("Bundibugyo" for Uganda's Ntoroko district, "Callao" for
+        # Peru's Puno; Nov 6, 2026: the Callao's stories were pinned in Puno)
+        names = variants(a.get('name_en'), a.get('name'), a.get('name_alt'))
         names = list(dict.fromkeys(KIND_WORDS.sub('', KIND_BEFORE.sub('', n)) for n in names))
-        main = list(dict.fromkeys(KIND_WORDS.sub('', KIND_BEFORE.sub('', n)) for n in variants(a.get('name_en'), a.get('name'), a.get('woe_name'))))
+        main = list(dict.fromkeys(KIND_WORDS.sub('', KIND_BEFORE.sub('', n)) for n in variants(a.get('name_en'), a.get('name'))))
         # Natural Earth's English name is now and then cut short ("Kam", Kampong Speu) or one word of the name ("Nacional",
         # Distrito Nacional): then the longest main name that holds it
         longer = [n for n in main if len(n) > len(shown) and fold(shown).lower() in fold(n).lower()]
@@ -180,6 +222,18 @@ def candidates(data, countries, out):
         rows.append({'cc': cc, 'kind': 'province', 'shown': shown, 'type': a.get('type_en') or '', 'lat': round(lat, 4),
                      'lng': round(lng, 4), 'names': names, 'main': main, 'pop': None, 'adm1': a.get('name'),
                      'country_name': a.get('admin') or ''})
+    # a town's province as Natural Earth's provinces write it: its towns' file has "?" for some letters ("Qu?ng Ninh")
+    provinces_of = collections.defaultdict(list)
+    for a in admin1:
+        if code(a):
+            provinces_of[code(a)] += [n for n in (a.get('name'), a.get('name_en')) if n]
+
+    def province_name(cc, name):
+        if not name or ('?' not in name and '\ufffd' not in name):
+            return name
+        pattern = re.compile(re.escape(name).replace(re.escape('?'), '.').replace('\ufffd', '.') + '$', re.I)
+        return next((n for n in provinces_of[cc] if pattern.match(n)), None)
+
     by = collections.defaultdict(list)
     for p in places:
         cc = code(p)
@@ -197,18 +251,21 @@ def candidates(data, countries, out):
                 continue
             seen.add(id(p))
             names = variants(p['name'], p.get('nameascii'), p.get('namealt'), *EXTRA_NAMES.get((cc, p['name']), []))
-            main = variants(p['name'], p.get('nameascii'), *EXTRA_NAMES.get((cc, p['name']), []))
+            # the ASCII name is the name's own only when it is the name without its accents: Homs's is "Hims" (Nov 6,
+            # 2026: "Hims & Hers stock climbs" was pinned in Syria)
+            ascii_name = p.get('nameascii') if fold(p.get('nameascii') or '').lower() == fold(p['name']).lower() else None
+            main = variants(p['name'], ascii_name, *EXTRA_NAMES.get((cc, p['name']), []))
             rows.append({'cc': cc, 'kind': 'town', 'shown': p['name'], 'type': p.get('featurecla'), 'lat': round(p['latitude'], 4),
                          'lng': round(p['longitude'], 4), 'names': names, 'main': main, 'pop': p.get('pop_max'),
-                         'adm1': p.get('adm1name'), 'country_name': p.get('adm0name') or ''})
+                         'adm1': province_name(cc, p.get('adm1name')), 'country_name': p.get('adm0name') or ''})
     # every name Natural Earth gives any place or province, by country: a name in two countries is no one's alone
     everywhere = collections.defaultdict(set)
     for p in places:
         for n in variants(p['name'], p.get('nameascii'), p.get('namealt')):
-            everywhere[n.lower()].add(code(p))
+            everywhere[same(n)].add(code(p))
     for a in admin1:
-        for n in variants(a.get('name_en'), a.get('name'), a.get('woe_name'), a.get('name_alt')):
-            everywhere[KIND_WORDS.sub('', n).lower()].add(code(a))
+        for n in variants(a.get('name_en'), a.get('name'), a.get('name_alt')):
+            everywhere[same(KIND_WORDS.sub('', n))].add(code(a))
     # and GeoNames' towns of about 15,000 people or more and their provinces (datasets/world-cities, CC BY 4.0): Natural
     # Earth has one Falmouth (Jamaica's), GeoNames England's too
     named = {p.get('adm0name'): code(p) for p in places if code(p)}
@@ -218,11 +275,24 @@ def candidates(data, countries, out):
     for row in csv.DictReader(open(f'{data}/world-cities.csv', encoding='utf-8')):
         cc = named.get(row['country']) or 'name:' + row['country']
         for n in variants(row['name']):
-            everywhere[n.lower()].add(cc)
+            everywhere[same(n)].add(cc)
         for n in variants(row.get('subcountry') or ''):
-            everywhere[KIND_WORDS.sub('', n).lower()].add(cc)
+            everywhere[same(KIND_WORDS.sub('', n))].add(cc)
+    # the first and last words of every longer place name, by country: Colombia's Caldas is the start of Portugal's
+    # Caldas da Rainha and Brazil's Caldas Novas (Nov 6, 2026: Caldas da Rainha's jazz festival was pinned in Colombia)
+    in_longer = collections.defaultdict(set)
+    longer_names = [(n, code(p)) for p in places for n in variants(p['name'], p.get('nameascii'))]
+    for row in csv.DictReader(open(f'{data}/world-cities.csv', encoding='utf-8')):
+        longer_names += [(n, named.get(row['country']) or 'name:' + row['country']) for n in variants(row['name'])]
+    for n, c in longer_names:
+        words = fold(n).lower().split()
+        if len(words) > 1 and c:
+            for w in (words[0], words[-1]):
+                if w not in GENERIC and w not in ARTICLES:
+                    in_longer[w].add(c)
     for r in rows:
-        r['countries_by_name'] = {n: sorted(c for c in everywhere.get(n.lower(), set()) if c) for n in r['names']}
+        r['countries_by_name'] = {n: sorted(c for c in everywhere.get(same(n), set()) if c) for n in r['names']}
+        r['in_longer_names'] = {n: sorted(in_longer[fold(n).lower()]) for n in r['names'] if ' ' not in n and fold(n).lower() in in_longer}
     json.dump(rows, open(out, 'w', encoding='utf-8'), ensure_ascii=False)
     print('candidates', len(rows), collections.Counter(r['kind'] for r in rows))
 
@@ -241,19 +311,19 @@ def word_lists(data):
                 break
             w = line.split(' ')[0].strip().lower()
             if w:
-                words[lang].add(w)
+                words[lang].update({w, fold(w)})
                 if i < 2_000:
-                    very.add(w)
+                    very.update({w, fold(w)})
     common = set().union(*words.values())
-    first = {l.strip().lower() for l in open(f'{data}/first-names.txt', encoding='utf-8') if l.strip()}
+    first = {fold(l.strip().lower()) for l in open(f'{data}/first-names.txt', encoding='utf-8') if l.strip()}
     surnames = set()
     for i, line in enumerate(open(f'{data}/surnames.csv', encoding='utf-8')):
         if i == 0:
             continue
         if i > 25_000:
             break
-        surnames.add(line.split(',')[0].strip().lower())
-    return common, very, first | surnames
+        surnames.add(fold(line.split(',')[0].strip().lower()))
+    return common, very, first | surnames, surnames
 
 
 ARTICLES = {'al', 'el', 'ad', 'as', 'ash', 'ar', 'az', 'an', 'at', 'ath', 'adh', 'aḑ', 'aş', 'aţ'}
@@ -269,7 +339,7 @@ US_STATES = {'alabama', 'alaska', 'arizona', 'arkansas', 'california', 'colorado
 def emit(data, cand_path, verdict_path, out):
     rows = json.load(open(cand_path, encoding='utf-8'))
     verdicts = json.load(open(verdict_path, encoding='utf-8'))      # name -> {country, whole}
-    common, very, people = word_lists(data)
+    common, very, people, surnames = word_lists(data)
     world, home, world_keys = {}, collections.defaultdict(dict), set()
     why = collections.Counter()
     for r in rows:
@@ -282,6 +352,14 @@ def emit(data, cand_path, verdict_path, out):
             words = re.findall(r"[^\W\d_]+", fold(key))
             if not words or all(w in GENERIC for w in words) or len(fold(key).replace(' ', '')) < 3:
                 why['generic'] += 1
+                continue
+            if (cc, n) in SKIP:
+                why['skipped by hand'] += 1
+                continue
+            # a name without its accents that is a common word: Brazil's Pará as "Para" took "Para Lula, su triunfo ..."
+            # (Nov 6, 2026), Malé's "Male"
+            if len(words) == 1 and key in very and any(fold(m) == n and m != n for m in r['names']):
+                why['a common word without its accents'] += 1
                 continue
             v = verdicts.get(n) or verdicts.get(key) or {}
             if v.get('country') == cc:
@@ -308,6 +386,8 @@ def emit(data, cand_path, verdict_path, out):
                 risky = 'a US state'
             elif len(core) == 1 and (core[0] in common or core[0] in people or (len(words) == 1 and key in common)):
                 risky = 'a word or a name'
+            elif len(words) == 1 and any(c != cc for c in r.get('in_longer_names', {}).get(n, [])):
+                risky = 'part of a longer name elsewhere'
             elif len(core) == 2 and all(w in very or w in people or w in GENERIC for w in core):
                 risky = 'common words'
             elif len(fold(key).replace(' ', '').replace('-', '')) < 4 or (len(words) == 1 and len(words[0]) <= 4
@@ -315,9 +395,18 @@ def emit(data, cand_path, verdict_path, out):
                 risky = 'too short'          # "Yoro" (Honduras) is also a West African name: "Médina Yoro Foulah"
             elif r['kind'] == 'town' and (r.get('pop') or 0) < WORLD_MIN_POP and 'capital' not in (r.get('type') or ''):
                 risky = 'a small town'
+            # a longer name, part of which the map puts in another country, is better read whole, everywhere: "Coronel
+            # Oviedo" (Paraguay) was Spain's Oviedo, "El Beni" (Bolivia) the Congo's Beni (Nov 6, 2026)
+            # (not "East London", South Africa's: Britain's outlets write London's East End so too)
+            if (risky in ('common words', 'a small town', 'a word or a name') and len(words) > 1 and v.get('country')
+                    and v['country'] != cc and not v.get('whole') and words[0] not in GENERIC):
+                why['world: part of it was elsewhere (' + risky + ')'] += 1
+                risky = None
             if risky:
                 why['home: ' + risky] += 1
-                home[cc].setdefault(n, place)
+                # a surname too ("Armando León", "Dion George's"): geo.ts reads it as the place unless a capitalised
+                # name comes right before it ("Zélia José dos Santos")
+                home[cc].setdefault(n, {**place, 'surname': True} if len(core) == 1 and core[0] in surnames else place)
             else:
                 why['world'] += 1
                 if key not in world_keys:
@@ -336,6 +425,8 @@ def ts_place(p):
     parts = [f"lat: {p['lat']}", f"lng: {p['lng']}", f"country: '{p['country']}'", f"name: {json.dumps(p['name'], ensure_ascii=False)}"]
     if p.get('region'):
         parts.append(f"region: {json.dumps(p['region'], ensure_ascii=False)}")
+    if p.get('surname'):
+        parts.append('surname: true')
     return '{ ' + ', '.join(parts) + ' }'
 
 
@@ -349,7 +440,8 @@ def write_ts(world, home, out):
         ' * Jamaican outlet\'s "Mandeville" or "Kingston").',
         ' */',
         '',
-        'export interface TownEntry { lat: number; lng: number; country: string; name: string; region?: string }',
+        '/** surname: also a surname, read as the place unless a capitalised first name comes right before it */',
+        'export interface TownEntry { lat: number; lng: number; country: string; name: string; region?: string; surname?: true }',
         '',
         f'/** {len(world)} names */',
         'export const WORLD_TOWNS: Record<string, TownEntry> = {',

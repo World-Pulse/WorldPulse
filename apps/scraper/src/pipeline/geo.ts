@@ -2425,6 +2425,43 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'serbian republic': { lat: 44.7722, lng: 17.1910, country: 'BA', name: 'Republika Srpska' },
   'niger state': { lat: 9.6139, lng: 6.5569, country: 'NG', name: 'Niger State' },
   'somali region': { lat: 9.3500, lng: 42.8000, country: 'ET', name: 'Somali Region' },
+  // Nov 6, 2026, batch 2: Lima's largest district, not the San Martín region ("choque ... en San Martín de Porres");
+  // Portugal's spa town, not Colombia's Caldas ("Dias do Jazz nas Caldas da Rainha")
+  'san martín de porres': { lat: -12.0297, lng: -77.0583, country: 'PE', name: 'San Martín de Porres', region: 'Lima' },
+  'san martin de porres': { lat: -12.0297, lng: -77.0583, country: 'PE', name: 'San Martín de Porres', region: 'Lima' },
+  'caldas da rainha': { lat: 39.4036, lng: -9.1386, country: 'PT', name: 'Caldas da Rainha' },
+  // Bocas del Toro's island, not Colón province ("drenaje en Isla Colón"); Western Province's districts, which
+  // Port Moresby's Post-Courier names alone ("North Fly Relief Exercise")
+  'isla colón': { lat: 9.4040, lng: -82.2570, country: 'PA', name: 'Isla Colón', region: 'Bocas del Toro' },
+  'isla colon': { lat: 9.4040, lng: -82.2570, country: 'PA', name: 'Isla Colón', region: 'Bocas del Toro' },
+  'north fly': { lat: -6.1236, lng: 141.2906, country: 'PG', name: 'North Fly', region: 'Western' },
+  // Russia's Vladimir region and Colombia's Meta department, without Vladimir Putin and the company
+  'vladimir oblast': { lat: 56.1290, lng: 40.4070, country: 'RU', name: 'Vladimir Oblast' },
+  'vladimir region': { lat: 56.1290, lng: 40.4070, country: 'RU', name: 'Vladimir Oblast' },
+  'del meta': { lat: 4.1420, lng: -73.6266, country: 'CO', name: 'Meta', region: 'Meta', asWritten: 'del Meta' },
+  // Names often in the news that Natural Earth spells otherwise, or that are too small or too ambiguous for its tables
+  // (Nov 6, 2026: refinery and air-base strikes in Russia, Venezuela's ports, Vietnam's flooded provinces)
+  'naberezhnye chelny': { lat: 55.7000, lng: 52.3199, country: 'RU', name: 'Naberezhnye Chelny', region: 'Tatarstan' },
+  'togliatti': { lat: 53.4804, lng: 49.5300, country: 'RU', name: 'Tolyatti', region: 'Samara' },
+  'engels air base': { lat: 51.4986, lng: 46.1253, country: 'RU', name: 'Engels', region: 'Saratov' },
+  'engels airbase': { lat: 51.4986, lng: 46.1253, country: 'RU', name: 'Engels', region: 'Saratov' },
+  'engels airfield': { lat: 51.4986, lng: 46.1253, country: 'RU', name: 'Engels', region: 'Saratov' },
+  'syzran': { lat: 53.1558, lng: 48.4744, country: 'RU', name: 'Syzran', region: 'Samara' },
+  'kstovo': { lat: 56.1500, lng: 44.2000, country: 'RU', name: 'Kstovo', region: 'Nizhny Novgorod' },
+  'yelets': { lat: 52.6167, lng: 38.5000, country: 'RU', name: 'Yelets', region: 'Lipetsk' },
+  'van province': { lat: 38.5012, lng: 43.3730, country: 'TR', name: 'Van' },
+  'lake van': { lat: 38.6500, lng: 42.9000, country: 'TR', name: 'Lake Van' },
+  'puerto cabello': { lat: 10.4704, lng: -68.1700, country: 'VE', name: 'Puerto Cabello', region: 'Carabobo', asWritten: 'Puerto Cabello' },
+  'la guaira': { lat: 10.6012, lng: -66.9331, country: 'VE', name: 'La Guaira' },
+  'huế': { lat: 16.4700, lng: 107.5800, country: 'VN', name: 'Huế' },
+  'hue city': { lat: 16.4700, lng: 107.5800, country: 'VN', name: 'Huế' },
+  'lào cai': { lat: 22.5014, lng: 103.9660, country: 'VN', name: 'Lào Cai' },
+  'lao cai': { lat: 22.5014, lng: 103.9660, country: 'VN', name: 'Lào Cai', asWritten: 'Lao Cai' },
+  'yên bái': { lat: 21.7050, lng: 104.8750, country: 'VN', name: 'Yên Bái' },
+  'yen bai': { lat: 21.7050, lng: 104.8750, country: 'VN', name: 'Yên Bái', asWritten: 'Yen Bai' },
+  'deir el-zor': { lat: 35.3359, lng: 40.1408, country: 'SY', name: 'Deir ez-Zor' },
+  'deir al-zor': { lat: 35.3359, lng: 40.1408, country: 'SY', name: 'Deir ez-Zor' },
+  'south fly': { lat: -9.0667, lng: 143.2081, country: 'PG', name: 'South Fly', region: 'Western' },
   'muharraq': { lat: 26.2572, lng: 50.6119, country: 'BH', name: 'Muharraq' },
   'riffa': { lat: 26.1300, lng: 50.5550, country: 'BH', name: 'Riffa' },
   'suwayda': { lat: 32.7089, lng: 36.5695, country: 'SY', name: 'Sweida' },
@@ -2683,7 +2720,7 @@ const LOCATIVE_BEFORE = /(?:^|[\s,(])(?:in|inside|visits?|visited|visiting|visit
  * Oct 30, 2026: "ICE nabs Cubans for unlawfully voting in the United States" was pinned in Havana, "Swiss
  * Group unveils Jetour G700 ... at 2026 auto expo in Ghana" in Bern)
  */
-export function mentionedCountries(text: string): string[] {
+export function mentionedCountries(text: string, byNameOnly = false): string[] {
   const hits: Array<{ code: string; index: number; people: boolean; there: boolean }> = []
   COUNTRY_PATTERNS.forEach(([original, code], i) => {
     const pattern = COUNTRY_MATCHERS[i]![0]
@@ -2691,6 +2728,7 @@ export function mentionedCountries(text: string): string[] {
     if (!m) return
     const singular = SINGULAR_MATCHERS.get(code + original.source)
     const people = pattern !== original && !!singular && !singular.test(m[0])
+    if (byNameOnly && people) return
     hits.push({ code, index: m.index, people, there: !people && LOCATIVE_BEFORE.test(text.slice(Math.max(0, m.index - 24), m.index)) })
   })
   const rank = (h: { people: boolean; there: boolean }) => (h.there ? 0 : h.people ? 2 : 1)
@@ -2959,6 +2997,14 @@ const HOME_MATCHERS: Record<string, Array<{ name: string; entry: TownEntry; re: 
     .sort((a, b) => b[0].length - a[0].length)
     .map(([name, entry]) => ({ name, entry, re: new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(name)}(?![\\p{L}\\p{N}])`, 'gu') }))]))
 
+const COUNTRY_NAMED = new Map<string, boolean>()
+/** Whether the name is a country's name ("Niger", "Georgia", "Mali") */
+function isCountryName(name: string): boolean {
+  let known = COUNTRY_NAMED.get(name)
+  if (known === undefined) COUNTRY_NAMED.set(name, known = mentionedCountries(name, true).length > 0)
+  return known
+}
+
 /** The first of its own country's home-only towns a text names, for that country's outlets (HOME_MATCHERS) */
 export function homePlaceFromText(text: string, countryCode: string | null | undefined): GeoResult | null {
   const towns = countryCode ? HOME_MATCHERS[countryCode.toUpperCase()] : undefined
@@ -2966,11 +3012,14 @@ export function homePlaceFromText(text: string, countryCode: string | null | und
   const clean = cleanText(text)
   let best: { entry: TownEntry; index: number } | null = null
   for (const m of towns) {
+    // a country's name is the country: Nigeria's Niger state and Guinea's Mali prefecture are written with their kind
+    // ("Niger State"; Nov 6, 2026: "réfugiées au Niger et au Bénin" was pinned in Niger State)
+    if (isCountryName(m.name)) continue
     m.re.lastIndex = 0
     for (const hit of clean.matchAll(m.re)) {
       const index = hit.index ?? 0
       if (best && index >= best.index) break
-      if (partOfAName(clean, index, index + hit[0].length)) continue
+      if (partOfAName(clean, index, index + hit[0].length, m.entry.surname)) continue
       best = { entry: m.entry, index }
       break
     }
@@ -2978,6 +3027,20 @@ export function homePlaceFromText(text: string, countryCode: string | null | und
   return best
     ? { point: true, lat: best.entry.lat, lng: best.entry.lng, name: best.entry.name, countryCode: best.entry.country, region: best.entry.region }
     : null
+}
+
+/**
+ * A home-only town of a country the text names by its name, for any outlet: the country says which Rosario or
+ * Kingston it is ("Floods in Rosario, Argentina", "KINGSTON, Jamaica (AP)"; Nov 6, 2026, batch 2: Argentina's,
+ * Jamaica's and Guyana's largest towns share their names with other places). A people's word ("an Argentine
+ * striker") doesn't say it.
+ */
+export function namedCountryHomePlace(text: string): GeoResult | null {
+  for (const code of mentionedCountries(cleanText(text), true)) {
+    const place = homePlaceFromText(text, code)
+    if (place) return place
+  }
+  return null
 }
 
 /** The gazetteer place the text names first, as a map point */
