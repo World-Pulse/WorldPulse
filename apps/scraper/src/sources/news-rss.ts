@@ -10095,6 +10095,74 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['fiji', 'pacific', 'oceania', 'state-media', 'public-broadcaster'],
     language:        'en',
   },
+  // ── Added Nov 6, 2026, 1 PM (Devon, 10:19 AM, on teaching the matching to read Arabic and Cyrillic, then adding those
+  // outlets: "4 proceed with this"): Jordan's and Kyrgyzstan's second newsrooms, in their own languages; the matching
+  // reads them since 648f9ae. Read with the poller's own reader at 11:30 AM.
+  // Roya News, Amman's television newsroom, in Arabic (about 20 stories a day): Jordan's news and the region's, so no
+  // home pin. Its copyright page sets out how Roya itself quotes others' material; no clause on reading its feed or on
+  // automated access. Its robots.txt allows the feed and turns away AI crawlers by name (GPTBot, ClaudeBot)
+  {
+    id:              'roya-news-ar',
+    name:            'Roya News (Arabic)',
+    feedUrl:         'https://royanews.tv/rss',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.70,
+    countryCode:     'JO',
+    defaultLat:      31.95,
+    defaultLng:      35.93,
+    defaultLocation: 'Amman, Jordan',
+    extraTags:       ['jordan', 'middle-east', 'arabic-language'],
+    language:        'ar',
+  },
+  // JO24, Amman's news site, in Arabic (about 20 stories a day): Jordan's news, the region's and the world's, so no home
+  // pin. No terms published; its robots.txt allows the feed and turns away AI crawlers by name
+  {
+    id:              'jo24-ar',
+    name:            'JO24',
+    feedUrl:         'https://jo24.net/rss.xml',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.62,
+    countryCode:     'JO',
+    defaultLat:      31.95,
+    defaultLng:      35.93,
+    defaultLocation: 'Amman, Jordan',
+    extraTags:       ['jordan', 'middle-east', 'arabic-language'],
+    language:        'ar',
+  },
+  // 24.kg, Bishkek's news agency, in Russian (about 20 stories a day): mostly Kyrgyzstan's own news, home pin; its
+  // English edition has no feed. No terms page found; its robots.txt allows the feed
+  {
+    id:              '24kg-ru',
+    name:            '24.kg (Russian)',
+    feedUrl:         'https://24.kg/rss',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.74,
+    countryCode:     'KG',
+    defaultLat:      42.87,
+    defaultLng:      74.59,
+    defaultLocation: 'Bishkek, Kyrgyzstan',
+    extraTags:       ['kyrgyzstan', 'central-asia', 'news-agency', 'russian-language'],
+    language:        'ru',
+  },
+  // Vesti.kg, Bishkek's news site, in Russian (about 20 stories a day): mostly Kyrgyzstan's own news, home pin. No terms
+  // page found; its robots.txt has no rule for the feed
+  {
+    id:              'vesti-kg',
+    name:            'Vesti.kg',
+    feedUrl:         'https://vesti.kg/?format=feed&type=rss',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.66,
+    countryCode:     'KG',
+    defaultLat:      42.87,
+    defaultLng:      74.59,
+    defaultLocation: 'Bishkek, Kyrgyzstan',
+    extraTags:       ['kyrgyzstan', 'central-asia', 'russian-language'],
+    language:        'ru',
+  },
 ]
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────
@@ -10581,6 +10649,8 @@ export const HOME_PIN_SOURCES = new Set([
   'sknis-kn', 'tasr-en', 'les-nouvelles-caledoniennes',
   // Nov 6, 2026, 11 AM: Cayman Compass and FBC News, each mostly its own place's news
   'cayman-compass-ky', 'fbc-news-fj',
+  // Nov 6, 2026, 1 PM: 24.kg and Vesti.kg in Russian, mostly Kyrgyzstan's news; not Roya or JO24 (the region's too)
+  '24kg-ru', 'vesti-kg',
 ])
 
 export interface InferredGeo {

@@ -275,6 +275,71 @@ const LITHUANIAN: Rule[] = [
   r('[šs]iaul(?:iai|ių|iams|ius|iuose)', 'Siauliai'), mask('palauž\\p{L}*'),
 ]
 
+/**
+ * Arabic (Nov 6, 2026; the Arabic press of Jordan, and later Syria and Bahrain): the places their headlines name most,
+ * with the article and the little words joined to a name ("الأردن", "بالأردن", "للأردن", "والعراق"), and the peoples'
+ * adjectives ("الأردنية", "سوريون"). The text's vowel marks and hamzas are dropped first (arabicPlain), so "الأُرْدُنِّ"
+ * and "الاردن" read alike. Left out: names that are everyday words or names too ("عمان" is Amman and Oman, "الرياض" also
+ * gardens, "جدة" a grandmother, "الزرقاء" blue, "تركي" a first name, "هند" without its article a woman's name).
+ */
+const AL = '(?:[وف]?[بلك]?ال|[وف]?لل|[وف]?[بلك]|[وف])?'   // the article, "and", "in", "to", "as" before a name
+const AL_ONLY = '(?:[وف]?[بلك]?ال|[وف]?لل)'                 // the article itself, required
+const PEOPLE = '(?:ي|ي[ةه]|يون|يين)?'                         // the people's adjective and plural
+const ARABIC: Rule[] = [
+  r(`${AL}اردن${PEOPLE}`, 'Jordanian'), r(`${AL}اربد`, 'Irbid'), r(`${AL_ONLY}عقب[ةه]`, 'Aqaba'),
+  r(`${AL}سوري(?:ا|[ةه]|ون|ين)?`, 'Syria'), r(`${AL}دمشق`, 'Damascus'), r(`${AL}حلب`, 'Aleppo'), r(`${AL}حمص`, 'Homs'),
+  r(`${AL}ادلب`, 'Idlib'), r(`${AL_ONLY}لاذقي[ةه]`, 'Latakia'), r(`${AL}درعا`, 'Daraa'), r(`${AL_ONLY}حسك[ةه]`, 'Hasakah'),
+  r(`${AL}دير\\s+الزور`, 'Deir ez-Zor'), r(`${AL_ONLY}سويداء`, 'Suwayda'), r(`${AL}طرطوس`, 'Tartus'),
+  r(`${AL}بحرين${PEOPLE}`, 'Bahrain'), r(`${AL_ONLY}منام[ةه]`, 'Manama'), r(`${AL_ONLY}محرق`, 'Muharraq'), r(`${AL_ONLY}رفاع`, 'Riffa'),
+  r(`${AL}عراق${PEOPLE}`, 'Iraq'), r(`${AL}بغداد`, 'Baghdad'), r(`${AL_ONLY}بصر[ةه]`, 'Basra'), r(`${AL_ONLY}موصل`, 'Mosul'),
+  r(`${AL}اربيل`, 'Erbil'), r(`${AL}لبنان${PEOPLE}`, 'Lebanon'), r(`${AL}بيروت`, 'Beirut'), r(`${AL}مصر${PEOPLE}`, 'Egypt'),
+  r(`${AL_ONLY}قاهر[ةه]`, 'Cairo'), r(`${AL}سعودي[ةه]?`, 'Saudi Arabia'), r(`${AL}مك[ةه]\\s+المكرم[ةه]|${AL}مك[ةه]`, 'Makkah'),
+  r(`${AL}فلسطين${PEOPLE}`, 'Palestine'), r(`${AL}غز[ةه]`, 'Gaza'), r(`${AL_ONLY}ضف[ةه]\\s+(?:ال)?غربي[ةه]`, 'West Bank'),
+  r(`${AL_ONLY}قدس`, 'Jerusalem'), r(`${AL}رام\\s+الله`, 'Ramallah'), r(`${AL}اسرائيل${PEOPLE}`, 'Israel'),
+  r(`${AL}ايران${PEOPLE}`, 'Iran'), r(`${AL}طهران`, 'Tehran'), r(`${AL}تركيا|${AL}تركي[ةه]`, 'Turkey'), r(`${AL}انقر[ةه]`, 'Ankara'),
+  r(`${AL}اسطنبول`, 'Istanbul'), r(`${AL}قطر${PEOPLE}`, 'Qatar'), r(`${AL_ONLY}دوح[ةه]`, 'Doha'),
+  r(`${AL}امارات${PEOPLE}`, 'United Arab Emirates'), r(`${AL}دبي`, 'Dubai'), r(`${AL}ابو\\s?ظبي`, 'Abu Dhabi'),
+  r(`${AL}كويت${PEOPLE}`, 'Kuwait'), r(`سلطن[ةه]\\s+عمان`, 'Oman'), r(`${AL_ONLY}يمن${PEOPLE}|${AL}يمني(?:[ةه]|ون|ين)?`, 'Yemen'),
+  r(`${AL}صنعاء`, 'Sanaa'), r(`${AL}الولايات\\s+المتحد[ةه](?:\\s+الامريكي[ةه]|\\s+الاميركي[ةه])?`, 'United States'),
+  r(`${AL}(?:امريكا|اميركا|امريكي|اميركي)(?:[ةه]|ون|ين)?`, 'United States'), r(`${AL}واشنطن`, 'Washington'),
+  r(`${AL}روسيا|${AL}روسي(?:[ةه]|ون|ين)?`, 'Russia'), r(`${AL}موسكو`, 'Moscow'), r(`${AL}كرملين`, 'Moscow'),
+  r(`${AL}اوكرانيا|${AL}اوكراني(?:[ةه]|ون|ين)?`, 'Ukraine'), r(`${AL}كييف`, 'Kyiv'), r(`${AL_ONLY}صين|${AL}صيني(?:[ةه]|ون|ين)?`, 'China'),
+  r(`${AL}بكين`, 'Beijing'), r(`${AL}بريطانيا|${AL}بريطاني(?:[ةه]|ون|ين)?`, 'United Kingdom'), r(`${AL}لندن`, 'London'),
+  r(`${AL}فرنسا|${AL}فرنسي(?:[ةه]|ون|ين)?`, 'France'), r(`${AL}باريس`, 'Paris'), r(`${AL}المانيا|${AL}الماني(?:[ةه]|ون|ين)?`, 'Germany'),
+  r(`${AL}برلين`, 'Berlin'), r(`${AL}كازاخستان`, 'Kazakhstan'), r(`${AL}استانا`, 'Astana'), r(`${AL}استونيا`, 'Estonia'),
+  r(`${AL}اندونيسيا`, 'Indonesia'), r(`${AL}هولندا`, 'Netherlands'), r(`${AL_ONLY}سويد`, 'Sweden'), r(`${AL}بيرو`, 'Peru'),
+  r(`${AL_ONLY}يابان|${AL}ياباني(?:[ةه]|ون|ين)?`, 'Japan'), r(`${AL_ONLY}هند|${AL}هندي(?:[ةه])?`, 'India'),
+  r(`${AL}باكستان${PEOPLE}`, 'Pakistan'), r(`${AL}افغانستان`, 'Afghanistan'),
+]
+
+/** Arabic text without its vowel marks, hamzas (أ إ آ are ا) and tatweel, for the rules above to read */
+export function arabicPlain(text: string): string {
+  return text.normalize('NFD').replace(/[ً-ٰٟـ]/g, '').normalize('NFC')
+}
+
+/**
+ * Russian (Nov 6, 2026; Kyrgyzstan's Russian-language press): Kyrgyzstan's places and its neighbours, with the endings
+ * Russian declines names in ("в Бишкеке", "из России", "Кыргызстана"), and the adjectives of its provinces ("в Ошской
+ * области"). Their stories are mostly Kyrgyzstan's own, so the rest stay at home.
+ */
+const RUSSIAN: Rule[] = [
+  r('кыргызстан(?:а|е|у|ом)?|киргизи(?:я|и|ю|ей)|кыргызск\\p{L}*|кыргызстанц\\p{L}*', 'Kyrgyzstan'),
+  r('бишкек(?:а|е|у|ом)?|бишкекск\\p{L}*', 'Bishkek'), r('ош(?:а|е|у|ом)?|ошск\\p{L}*', 'Osh'),
+  r('джалал-абад(?:а|е|у|ом)?|джалал-абадск\\p{L}*', 'Jalal-Abad'), r('каракол(?:а|е|у|ом)?', 'Karakol'),
+  r('иссык-кул(?:ь|я|е|ю|ем)|иссык-кульск\\p{L}*', 'Issyk-Kul'), r('нарын(?:а|е|у|ом)?|нарынск\\p{L}*', 'Naryn'),
+  r('баткен(?:а|е|у|ом)?|баткенск\\p{L}*', 'Batken'), r('токмок(?:а|е|у|ом)?', 'Tokmok'),
+  r('росси(?:я|и|ю|ей)|российск\\p{L}*', 'Russia'), cs('РФ', 'Russia'), r('москв(?:а|ы|е|у|ой)', 'Moscow'),
+  r('казахстан(?:а|е|у|ом)?|казахстанск\\p{L}*', 'Kazakhstan'), r('астан(?:а|ы|е|у|ой)', 'Astana'), r('алмат(?:ы|е)', 'Almaty'),
+  r('узбекистан(?:а|е|у|ом)?', 'Uzbekistan'), r('ташкент(?:а|е|у|ом)?', 'Tashkent'),
+  r('таджикистан(?:а|е|у|ом)?', 'Tajikistan'), r('душанбе', 'Dushanbe'), r('туркменистан(?:а|е|у|ом)?', 'Turkmenistan'),
+  r('кита(?:й|я|е|ю|ем)', 'China'), r('пекин(?:а|е|у|ом)?', 'Beijing'), cs('США', 'United States'),
+  r('вашингтон(?:а|е|у|ом)?', 'Washington'), r('украин(?:а|ы|е|у|ой)', 'Ukraine'), r('киев(?:а|е|у|ом)?', 'Kyiv'),
+  r('беларус(?:ь|и|ью)', 'Belarus'), r('минск(?:а|е|у|ом)?', 'Minsk'), r('турци(?:я|и|ю|ей)', 'Turkey'),
+  r('иран(?:а|е|у|ом)?', 'Iran'), r('афганистан(?:а|е|у|ом)?', 'Afghanistan'), r('германи(?:я|и|ю|ей)', 'Germany'),
+  r('франци(?:я|и|ю|ей)', 'France'), r('великобритани(?:я|и|ю|ей)', 'United Kingdom'), r('япони(?:я|и|ю|ей)', 'Japan'),
+  r('инди(?:я|и|ю|ей)', 'India'), r('монголи(?:я|и|ю|ей)', 'Mongolia'), r('сальвадор(?:а|е|у|ом)?', 'El Salvador'),
+]
+
 /** Words that only look like a place in the three languages the reader took before round 6 */
 const SPANISH: Rule[] = [mask('usa|irán|chile|maduros?')]
 const PORTUGUESE: Rule[] = [mask('usa|irão|peru|maduros?')]
@@ -282,13 +347,14 @@ const PORTUGUESE: Rule[] = [mask('usa|irão|peru|maduros?')]
 export const LOCAL_NAMES: Record<string, Rule[]> = {
   de: GERMAN, it: ITALIAN, ca: CATALAN, da: DANISH, kl: DANISH, nl: DUTCH, ro: ROMANIAN, sl: SLOVENE,
   sr: MONTENEGRIN, cnr: MONTENEGRIN, sq: ALBANIAN, ms: MALAY, es: SPANISH, pt: PORTUGUESE, lt: LITHUANIAN,
+  ar: ARABIC, ru: RUSSIAN,
 }
 
 /** The text with its language's place names in English and its look-alike words blanked out, for finding its place */
 export function withLocalNames(text: string, language: string | null | undefined): string {
   const rules = language ? LOCAL_NAMES[language.toLowerCase().split('-')[0]!] : undefined
   if (!rules || !text) return text
-  let out = text
+  let out = rules === ARABIC ? arabicPlain(text) : text
   for (const [pattern, as] of rules) out = out.replace(pattern, as)
   return out
 }

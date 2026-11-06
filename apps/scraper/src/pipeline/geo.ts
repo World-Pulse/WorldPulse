@@ -2373,6 +2373,10 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'phuentsholing': { lat: 26.8516, lng: 89.3884, country: 'BT', name: 'Phuentsholing' },
   'issyk-kul': { lat: 42.4500, lng: 77.2500, country: 'KG', name: 'Issyk-Kul' },
   'issyk kul': { lat: 42.4500, lng: 77.2500, country: 'KG', name: 'Issyk-Kul' },
+  // Nov 6, 2026: Kyrgyz towns its Russian-language press names (Kyrgyzstan's Arabic-and-Cyrillic round)
+  'tokmok': { lat: 42.8421, lng: 75.3015, country: 'KG', name: 'Tokmok' },
+  'naryn': { lat: 41.4287, lng: 75.9911, country: 'KG', name: 'Naryn' },
+  'batken': { lat: 40.0626, lng: 70.8194, country: 'KG', name: 'Batken' },
   'muharraq': { lat: 26.2572, lng: 50.6119, country: 'BH', name: 'Muharraq' },
   'riffa': { lat: 26.1300, lng: 50.5550, country: 'BH', name: 'Riffa' },
   'suwayda': { lat: 32.7089, lng: 36.5695, country: 'SY', name: 'Sweida' },
