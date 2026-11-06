@@ -10,6 +10,7 @@ counts, and about 1 in 4 of the world's provinces and states: a Reuters story na
   D=$(mktemp -d); cd $D
   curl -sSO https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_populated_places_simple.geojson
   curl -sSO https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/10m_cultural/ne_10m_admin_1_states_provinces.dbf
+  curl -sSO https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/10m_cultural/ne_10m_admin_2_counties.dbf
   curl -sS -o en.txt https://raw.githubusercontent.com/first20hours/google-10000-english/master/google-10000-english.txt
   for l in en es fr pt de it nl sr hr bs sl sq ca lt ro da; do curl -sS -o ${l}_50k.txt https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/$l/${l}_50k.txt; done
   curl -sSO https://raw.githubusercontent.com/dominictarr/random-name/master/first-names.txt
@@ -82,6 +83,9 @@ HOME_ONLY = {
     ('VE', 'Portuguesa'),    # Portuguese, the word: "Língua Portuguesa", "a seleção portuguesa"
     ('IR', 'Markazi'),       # "central" in Persian and Urdu: Pakistan's "Markazi Jamiat Ahl-e-Hadith"
     ('VN', 'Vinh'),          # also a given name: "Pham Thanh Vinh"
+    ('LC', 'Soufrière'),     # also St Vincent's La Soufrière volcano, Guadeloupe's, and Montserrat's Soufrière Hills
+    ('LC', 'Laborie'), ('LC', 'Micoud'), ('LC', 'Dennery'),   # surnames too
+    ('JM', 'Trelawny'),      # also a Cornish name and surname
 }
 # Names that are no one place's in headlines: Washington's "District of Columbia" less its kind is "Columbia" (the
 # university, Columbia in South Carolina, Columbia Sportswear)
@@ -266,6 +270,12 @@ def candidates(data, countries, out):
     for a in admin1:
         for n in variants(a.get('name_en'), a.get('name'), a.get('name_alt')):
             everywhere[same(KIND_WORDS.sub('', n))].add(code(a))
+    # the United States' 3,224 counties (Natural Earth): GDELT's local American news names them alone (Nov 6, 2026: The
+    # Sumter Item's "Johnson loses Clarendon by 10 votes in governor's race" was pinned in Jamaica's Clarendon); not
+    # Puerto Rico's towns (WorldPulse's own place), and not against the British and Irish places counties were named
+    # after (the Isle of Wight, Wexford)
+    us_counties = {same(KIND_WORDS.sub('', n)) for a in read_dbf(f'{data}/ne_10m_admin_2_counties.dbf') if a.get('REGION') != 'PR'
+                   for n in variants(a.get('NAME'), a.get('NAME_ALT'))}
     # and GeoNames' towns of about 15,000 people or more and their provinces (datasets/world-cities, CC BY 4.0): Natural
     # Earth has one Falmouth (Jamaica's), GeoNames England's too
     named = {p.get('adm0name'): code(p) for p in places if code(p)}
@@ -291,7 +301,8 @@ def candidates(data, countries, out):
                 if w not in GENERIC and w not in ARTICLES:
                     in_longer[w].add(c)
     for r in rows:
-        r['countries_by_name'] = {n: sorted(c for c in everywhere.get(same(n), set()) if c) for n in r['names']}
+        r['countries_by_name'] = {n: sorted(c for c in everywhere.get(same(n), set()) | ({'US'} if r['cc'] not in ('GB', 'IE')
+                                  and same(n) in us_counties else set()) if c) for n in r['names']}
         r['in_longer_names'] = {n: sorted(in_longer[fold(n).lower()]) for n in r['names'] if ' ' not in n and fold(n).lower() in in_longer}
     json.dump(rows, open(out, 'w', encoding='utf-8'), ensure_ascii=False)
     print('candidates', len(rows), collections.Counter(r['kind'] for r in rows))

@@ -107,6 +107,14 @@ describe('batch 2: names that are no place', () => {
     expect(at('allafrica', "Malawi: 'Ngora Has No Power to Deregister HRDC' - Activist Slams Watchdog").countryCode).toBe('MW')
     expect(at('eldiarioar', 'Para Lula, su triunfo electoral en Brasil y la derrota de Trump en EE.UU. son "una señal"').locationName).not.toBe('Pará')
   })
+
+  it("keeps a name that is also a US county for its own country's outlets", () => {
+    // GDELT, live on Nov 6, 2026: The Sumter Item (South Carolina) was pinned in Jamaica
+    expect(country("Andrews carries tri-county into historic Senate win, Johnson loses Clarendon by 10 votes in governor's race")).not.toBe('JM')
+    expect(at('jamaica-gleaner', 'Flooding blocks roads in Clarendon')).toMatchObject({ countryCode: 'JM', locationName: 'Clarendon' })
+    // ...but not the British and Irish places the counties were named after
+    expect(country('Ferry strike hits the Isle of Wight')).toBe('GB')
+  })
 })
 
 describe('batch 2: towns read when their country is named', () => {

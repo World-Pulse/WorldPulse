@@ -9,7 +9,7 @@
 /** surname: also a surname, read as the place unless a capitalised first name comes right before it */
 export interface TownEntry { lat: number; lng: number; country: string; name: string; region?: string; surname?: true }
 
-/** 5418 names */
+/** 5412 names */
 export const WORLD_TOWNS: Record<string, TownEntry> = {
   "Encamp": { lat: 42.5381, lng: 1.6441, country: 'AD', name: "Encamp" },
   "Sant Julià de Lòria": { lat: 42.4511, lng: 1.4797, country: 'AD', name: "Sant Julià de Lòria" },
@@ -2268,14 +2268,12 @@ export const WORLD_TOWNS: Record<string, TownEntry> = {
   "Vercelli": { lat: 45.8416, lng: 8.1596, country: 'IT', name: "Vercelli" },
   "Vibo Valentia": { lat: 38.6431, lng: 16.1928, country: 'IT', name: "Vibo Valentia" },
   "Vicenza": { lat: 45.712, lng: 11.4753, country: 'IT', name: "Vicenza" },
-  "Clarendon": { lat: 17.9666, lng: -77.2333, country: 'JM', name: "Clarendon" },
   "Half Way Tree": { lat: 18.0333, lng: -76.8, country: 'JM', name: "Half Way Tree", region: "Saint Andrew" },
   "Lucea": { lat: 18.443, lng: -78.179, country: 'JM', name: "Lucea", region: "Hanover" },
   "Saint Ann's Bay": { lat: 18.4326, lng: -77.1995, country: 'JM', name: "Saint Ann's Bay", region: "Saint Ann" },
   "Savanna-la-Mar": { lat: 18.164, lng: -77.948, country: 'JM', name: "Savanna-la-Mar", region: "Westmoreland" },
   "St Ann's Bay": { lat: 18.4326, lng: -77.1995, country: 'JM', name: "Saint Ann's Bay", region: "Saint Ann" },
   "St. Ann's Bay": { lat: 18.4326, lng: -77.1995, country: 'JM', name: "Saint Ann's Bay", region: "Saint Ann" },
-  "Trelawny": { lat: 18.4796, lng: -77.656, country: 'JM', name: "Trelawny" },
   "Ajloun": { lat: 32.2932, lng: 35.761, country: 'JO', name: "Ajloun" },
   "Ajlun": { lat: 32.2932, lng: 35.761, country: 'JO', name: "Ajloun" },
   "Al Aqabah": { lat: 29.527, lng: 35.0777, country: 'JO', name: "Al Aqabah", region: "Aqaba" },
@@ -2582,18 +2580,14 @@ export const WORLD_TOWNS: Record<string, TownEntry> = {
   "Anse-la-Raye": { lat: 13.935, lng: -61.0189, country: 'LC', name: "Anse la Raye Quarter" },
   "Choiseul Quarter": { lat: 13.7912, lng: -61.0296, country: 'LC', name: "Choiseul Quarter" },
   "Dauphin Quarter": { lat: 14.0176, lng: -60.9062, country: 'LC', name: "Dauphin Quarter" },
-  "Dennery": { lat: 13.9425, lng: -60.9052, country: 'LC', name: "Dennery Quarter" },
   "Dennery Quarter": { lat: 13.9425, lng: -60.9052, country: 'LC', name: "Dennery Quarter" },
   "Gros Islet": { lat: 14.0664, lng: -60.9446, country: 'LC', name: "Gros Islet Quarter" },
   "Gros Islet Quarter": { lat: 14.0664, lng: -60.9446, country: 'LC', name: "Gros Islet Quarter" },
-  "Laborie": { lat: 13.7676, lng: -60.9867, country: 'LC', name: "Laborie Quarter" },
   "Laborie Quarter": { lat: 13.7676, lng: -60.9867, country: 'LC', name: "Laborie Quarter" },
-  "Micoud": { lat: 13.8159, lng: -60.918, country: 'LC', name: "Micoud Quarter" },
   "Micoud Quarter": { lat: 13.8159, lng: -60.918, country: 'LC', name: "Micoud Quarter" },
   "Praslin Quarter": { lat: 13.8674, lng: -60.918, country: 'LC', name: "Praslin Quarter" },
   "Soufriere": { lat: 13.8545, lng: -61.0447, country: 'LC', name: "Soufrière Quarter" },
   "Soufriere Quarter": { lat: 13.8545, lng: -61.0447, country: 'LC', name: "Soufrière Quarter" },
-  "Soufrière": { lat: 13.8545, lng: -61.0447, country: 'LC', name: "Soufrière Quarter" },
   "Soufrière Quarter": { lat: 13.8545, lng: -61.0447, country: 'LC', name: "Soufrière Quarter" },
   "Vieux Fort Quarter": { lat: 13.7762, lng: -60.9438, country: 'LC', name: "Vieux Fort Quarter" },
   "Eschen": { lat: 47.2058, lng: 9.5338, country: 'LI', name: "Eschen" },
@@ -5431,7 +5425,7 @@ export const WORLD_TOWNS: Record<string, TownEntry> = {
   "Zvishavane": { lat: -20.3296, lng: 30.05, country: 'ZW', name: "Zvishavane", region: "Midlands" },
 }
 
-/** 5043 names, by country: each as written, read with its capitals */
+/** 5049 names, by country: each as written, read with its capitals */
 export const HOME_TOWNS: Record<string, Record<string, TownEntry>> = {
   AD: {
     "Ordino": { lat: 42.6036, lng: 1.5244, country: 'AD', name: "Ordino" },
@@ -8002,6 +7996,7 @@ export const HOME_TOWNS: Record<string, Record<string, TownEntry>> = {
   },
   JM: {
     "Black River": { lat: 18.031, lng: -77.852, country: 'JM', name: "Black River", region: "Saint Elizabeth" },
+    "Clarendon": { lat: 17.9666, lng: -77.2333, country: 'JM', name: "Clarendon" },
     "Falmouth": { lat: 18.4796, lng: -77.656, country: 'JM', name: "Falmouth", region: "Trelawny" },
     "Halfway Tree": { lat: 18.0333, lng: -76.8, country: 'JM', name: "Half Way Tree", region: "Saint Andrew" },
     "Hanover": { lat: 18.443, lng: -78.179, country: 'JM', name: "Hanover", surname: true },
@@ -8036,6 +8031,7 @@ export const HOME_TOWNS: Record<string, Record<string, TownEntry>> = {
     "St. James": { lat: 18.4667, lng: -77.9167, country: 'JM', name: "Saint James" },
     "St. Mary": { lat: 18.377, lng: -76.9, country: 'JM', name: "Saint Mary" },
     "St. Thomas": { lat: 17.891, lng: -76.329, country: 'JM', name: "Saint Thomas" },
+    "Trelawny": { lat: 18.4796, lng: -77.656, country: 'JM', name: "Trelawny" },
     "Westmoreland": { lat: 18.164, lng: -77.948, country: 'JM', name: "Westmoreland", surname: true },
   },
   JO: {
@@ -8388,7 +8384,11 @@ export const HOME_TOWNS: Record<string, Record<string, TownEntry>> = {
   LC: {
     "Choiseul": { lat: 13.7912, lng: -61.0296, country: 'LC', name: "Choiseul Quarter" },
     "Dauphin": { lat: 14.0176, lng: -60.9062, country: 'LC', name: "Dauphin Quarter", surname: true },
+    "Dennery": { lat: 13.9425, lng: -60.9052, country: 'LC', name: "Dennery Quarter" },
+    "Laborie": { lat: 13.7676, lng: -60.9867, country: 'LC', name: "Laborie Quarter" },
+    "Micoud": { lat: 13.8159, lng: -60.918, country: 'LC', name: "Micoud Quarter" },
     "Praslin": { lat: 13.8674, lng: -60.918, country: 'LC', name: "Praslin Quarter" },
+    "Soufrière": { lat: 13.8545, lng: -61.0447, country: 'LC', name: "Soufrière Quarter" },
     "Vieux Fort": { lat: 13.7762, lng: -60.9438, country: 'LC', name: "Vieux Fort Quarter" },
   },
   LI: {
