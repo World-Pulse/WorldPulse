@@ -29,7 +29,9 @@ describe('the last four places', () => {
 
   it("pins their stories at home, or where they name", () => {
     expect(inferGeo('His Majesty presents, receives Letters of Credence', '', src('pmo-brunei')).countryCode).toBe('BN')
-    expect(inferGeo('Crown Prince receives Singapore minister', '', src('pmo-brunei')).countryCode).toBe('SG')
+    // a visit received at home stays at home (Nov 5, 2026: Oman's state visit sat in Muscat); a trip abroad goes where it names
+    expect(inferGeo('Crown Prince receives Singapore minister', '', src('pmo-brunei')).countryCode).toBe('BN')
+    expect(inferGeo('Crown Prince attends ASEAN meeting in Singapore', '', src('pmo-brunei')).countryCode).toBe('SG')
     expect(inferGeo('Jens-Frederik Nielsen: Med den nye lufthavn bygger vi landet', '', src('naalakkersuisut-gl'))).toMatchObject({ countryCode: 'GL', locationName: 'Nuuk, Greenland' })
     expect(inferGeo('Pressemeddelelse vedrørende indsættelse af vinter backup-helikopterkapacitet i Tasiilaq-distriktet', '', src('naalakkersuisut-gl'))).toMatchObject({ countryCode: 'GL', locationName: 'Tasiilaq' })
     expect(inferGeo('Richtig Heizen mit Holz', 'Fürstentum Liechtenstein: Vaduz (ots) - Die Tage werden kürzer', src('regierung-li')).countryCode).toBe('LI')

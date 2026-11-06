@@ -632,3 +632,131 @@ describe('one story per match set (Oct 30, 2026: Spain\'s train crash and the Dn
     expect(oneStory([spainA, dnipro], new Map()).map(m => m.id)).toEqual(['es1', 'ua1'])
   })
 })
+
+// Plan Q10 (Nov 5, 2026): 24 places had no verified story in the week to Oct 31. The headlines below are real
+// pairs from their outlets that week (and Nov 5's busiest stories, for what the second look must not join).
+describe('headline words in other languages and spellings (Nov 5, 2026)', () => {
+  it('folds accents, so a name in two spellings is one word', async () => {
+    const { foldAccents } = await import('../correlate')
+    expect(foldAccents('Mišo Kovač, Sécurité, Gießen, Łódź')).toBe('miso kovac, securite, giessen, lodz')
+    expect([...storyWords('Mišo Kovač dies aged 85')].sort()).toEqual(['#85', 'aged', 'die', 'kovac', 'miso'])
+    // until Nov 5 "délégation" became "d", "l" and "gation"
+    expect(storyWords('Coopération sécuritaire : une délégation du Sultanat')).toEqual(new Set(['cooper', 'securi', 'delega', 'sultan']))
+  })
+
+  it("leaves out the little words of the feeds' languages, pronouns and forms of address", () => {
+    expect([...storyWords('Una nueva caravana de migrantes sale de Honduras rumbo a EE. UU.')].sort())
+      .toEqual(['@HN', '@US', 'carava', 'migran', 'rumbo', 'sal'])
+    expect(storyWords('His Majesty Sultan Haitham arrives in Brunei for state visit').has('majest')).toBe(false)
+    expect(storyWords('His Majesty Sultan Haitham arrives in Brunei for state visit').has('his')).toBe(false)
+    // English words that look like another language's little words stay
+    expect(storyWords("Zidane's son dropped from Algeria squad").has('son')).toBe(true)
+    expect(storyWords('Kane signs new Bayern contract').has('kan')).toBe(true)
+  })
+
+  it('searches for a word as written and without its accents; plain headlines as before', async () => {
+    const { searchWords } = await import('../correlate')
+    expect(searchWords('Mišo Kovač dies aged 85: Croatia loses one of its greatest music legends'))
+      .toEqual(expect.arrayContaining(['kovač', 'kovac', 'aged', 'croati', 'greate', 'music', 'legend']))
+    expect(searchWords('Strong magnitude 6.1 earthquake hits off northern Japan coast'))
+      .toEqual(['strong', 'magnit', 'earthq', 'northe', 'japan', 'coast'])
+  })
+})
+
+describe('the second look (Nov 5, 2026, plan Q10)', () => {
+  const at = (title: string, source_id: string, over: Partial<CorrelationCandidate> = {}) =>
+    sig({ id: source_id, title, source_id, category: 'geopolitics', ...over })
+  const look = (busy: string[] = []) => ({ secondLook: { busy: new Set(busy) } })
+  const hoursLater = (n: number) => new Date(now.getTime() + n * 3600_000).toISOString()
+
+  it('joins one story told in other words, by names, sums or a city both give', async () => {
+    const airportA = at('Dubrovnik Airport faces €22 million EU repayment over procurement irregularities', 'croatiaweek.com', { category: 'economy' })
+    const airportB = at('Dubrovnik Airport Scandal – Wrong Pipes Used, €22 Million Must be Returned', 'total-croatia-news.com', { category: 'economy', published_at: hoursLater(9) })
+    expect(isSameStory(airportA, airportB)).toBe(false)               // 31% of their words: not the first look
+    expect(isSameStory(airportB, airportA, look())).toBe(true)
+    expect(isSameStory(airportB, airportA, look(['millio', 'airpor']))).toBe(true)   // the sum and the city still single it out
+    const kovac = [at('Mišo Kovač dies aged 85: Croatia loses one of its greatest music legends', 'croatiaweek.com', { category: 'culture' }),
+      at('Miso Kovac, One of the greatest Singers in Croatia, passes away', 'sarajevotimes.com', { category: 'culture' })] as const
+    expect(isSameStory(kovac[1], kovac[0], look())).toBe(true)
+    // across languages, by the words they share
+    expect(isSameStory(
+      at('Programme de développement de la ville de Nouakchott : le président Ghazouani en a lancé la deuxième phase', 'fr.saharamedias.net'),
+      at('Republic President Inaugurates Phase One of Nouakchott Emergency Development Program, Launches Phase Two', 'ami.mr'),
+      look(),
+    )).toBe(true)
+  })
+
+  it("doesn't count the day's busy words: other angles of one big story are not one report", () => {
+    const sanchez = at('El frío saludo entre Pedro Sánchez y Javier Milei en la Cumbre Iberoamericana de Madrid', 'elmundo.cr')
+    const insults = at('Pedro Sánchez, tajante sobre los insultos que recibe por parte de Javier Milei', 'pagina12.com.ar')
+    expect(isSameStory(insults, sanchez, look())).toBe(true)
+    expect(isSameStory(insults, sanchez, look(['pedro', 'sanche', 'javi', 'milei']))).toBe(false)
+  })
+
+  it('keeps apart headlines that each name a country the other does not, or give different sums', async () => {
+    const samoa = at('Tonga beat Samoa 20-18 to reach the Rugby League World Cup semi-finals', 'kanivatonga.co.nz', { category: 'sports' })
+    const fiji = at('Tonga beat Fiji 30-10 to reach the Rugby League World Cup semi-finals', 'rnz.co.nz', { category: 'sports' })
+    expect(isSameStory(fiji, samoa)).toBe(false)   // the first look too (they share 60% of their words)
+    expect(isSameStory(fiji, samoa, look())).toBe(false)
+    // two central banks' rate rises the same day; the Vatican and Rome are one place here
+    expect(isSameStory(at('Czech central bank raises key interest rate to four percent', 'english.radio.cz', { category: 'economy' }),
+      at('Bank of England raises key interest rate for first time in over 3 years', 'euronews.com', { category: 'economy' }))).toBe(false)
+    expect(isSameStory(at('Bob Dylan meets with Pope Leo XIV at the Vatican', 'globalnews.ca', { category: 'culture' }),
+      at('Pope Leo XIV hosts Bob Dylan at the Vatican for a private meeting', 'bbc.co.uk', { category: 'culture' }))).toBe(true)
+    expect(isSameStory(at('Bob Dylan meets with Pope Leo XIV at the Vatican', 'globalnews.ca', { category: 'culture' }),
+      at('Pope Leo XIV meets Bob Dylan in Rome', 'bbc.co.uk', { category: 'culture' }), look())).toBe(true)
+    expect(isSameStory(
+      at('Tonga edge Samoa 20-18 in blockbuster, both join heavyweights in World Cup semis', 'nst.com.my', { category: 'sports' }),
+      at('Tonga XIII edge Samoa in thrilling Rugby League World Cup showdown', 'kanivatonga.co.nz', { category: 'sports' }),
+      look(),
+    )).toBe(true)
+    // two seizures by Saint Lucia's coast guard a day apart: the sums disagree
+    const { setThinPlaces } = await import('../correlate')
+    setThinPlaces(['LC'])
+    const seized = at('Coast guard seizes 45 kilos of cocaine off Vieux Fort, two men held', 'stluciatimes.com', { category: 'security', tags: ['lc'] })
+    const stopped = (kilos: number) => at(`Coast guard intercepts vessel with ${kilos} kilos of cocaine off Vieux Fort`, 'thevoiceslu.com',
+      { category: 'security', tags: ['lc'], published_at: hoursLater(30) })
+    expect(isSameStory(stopped(61), seized, look())).toBe(false)
+    expect(isSameStory(stopped(45), seized, look())).toBe(true)
+    setThinPlaces([])
+  })
+
+  it('is never for events tied to a spot, or without being asked', () => {
+    const crashA = at('San Marino, auto perde il controllo sulla Superstrada e centra due vetture in sosta', 'libertas.sm', { category: 'disaster' })
+    const crashB = at('Domagnano: incidente tra due auto, superstrada temporaneamente bloccata', 'sanmarinortv.sm', { category: 'disaster', published_at: hoursLater(11) })
+    expect(isSameStory(crashB, crashA, look())).toBe(false)
+  })
+
+  it("reaches back two days only for two reports from one thinly covered place's own outlets", async () => {
+    const { setThinPlaces, thinHome } = await import('../correlate')
+    setThinPlaces(['LC', 'DM'])
+    const voice = at('Joint Police Operation Leads to Apprehension of Four Persons, Including Two Wanted for Extradition', 'thevoiceslu.com',
+      { category: 'security', tags: ['news', 'rss', 'the-voice-lc', 'lc'] })
+    const times = at('Police operation nets two men wanted for extradition, two murder suspects', 'stluciatimes.com',
+      { category: 'security', tags: ['news', 'rss', 'st-lucia-times', 'lc'], published_at: hoursLater(26) })
+    expect(thinHome(times)).toBe('LC')
+    expect(isSameStory(times, voice)).toBe(false)
+    expect(isSameStory(times, voice, look())).toBe(true)
+    expect(isSameStory({ ...times, tags: ['news', 'rss', 'some-feed', 'us'] }, voice, look())).toBe(false)
+    expect(isSameStory({ ...times, published_at: hoursLater(50) }, voice, look())).toBe(false)
+    // Dominica's two outlets, 37 hours apart: no country named, but both are Dominica's own
+    expect(isSameStory(
+      at('2026 Independence Day Message from Prime Minister Honourable Roosevelt Skerrit', 'dominicanewsonline.com',
+        { tags: ['dominica-news-online-dm', 'dm'], published_at: hoursLater(37) }),
+      at('Prime Minister Roosevelt Skerrit, 48th Anniversary of Independence Address: “Forty-eight not out”', 'pressroomopm.gov.dm',
+        { tags: ['opm-pressroom-dm', 'dm'] }),
+      look(['prim', 'indepe']),
+    )).toBe(true)
+    setThinPlaces([])
+  })
+
+  it('finds the busy words: those five or more outlets use', async () => {
+    const { busyWords } = await import('../correlate')
+    const reports = ['a.com', 'b.com', 'c.com', 'd.com', 'e.com'].map((site, i) =>
+      at(`Trump midterm defeat analysis number ${i + 1} from ${site.slice(0, 1)}`, site))
+    reports.push(at('Trump midterm defeat analysis again', 'a.com'))
+    const busy = busyWords(reports)
+    expect([...busy].sort()).toEqual(['analys', 'defeat', 'midter', 'numb', 'trump'])
+    expect(busyWords(reports.slice(0, 4)).size).toBe(0)
+  })
+})

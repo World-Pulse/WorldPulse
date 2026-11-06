@@ -100,11 +100,12 @@ import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { Category, SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate } from '../pipeline/insert-signal'
+import { setThinPlaces } from '../pipeline/correlate'
 // Feed items published more than 3 days ago aren't news
 import { MAX_ITEM_AGE_MS, isStaleItem } from '../pipeline/freshness'
 // Feeds send "&#x27;" and "&amp;" in titles and summaries
 import { decodeEntities, cleanSummary, repeatsTitle, feedText, clipText } from '../pipeline/text'
-import { placeFromText, splitPlaces, withHomeNames } from '../pipeline/geo'
+import { placeFromText, splitPlaces, withHomeNames, mentionedCountries } from '../pipeline/geo'
 import { withLocalNames } from '../pipeline/local-names'
 import { rateSeverity } from '../pipeline/severity'
 import { categorizeText } from '../pipeline/categories'
@@ -7559,7 +7560,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['cabo-verde', 'west-africa', 'africa'],
     language:        'pt',
   },
-  // Mauritian private radio's news site (since 2002), its Politique section feed; French, so no home pin
+  // Mauritian private radio's news site (since 2002), its Politique section feed; home pin since Nov 5, 2026 (HOME_PIN_SOURCES)
   {
     id:              'top-fm-mu',
     name:            'Top FM (Mauritius)',
@@ -9684,6 +9685,138 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['tanzania', 'east-africa', 'africa'],
     language:        'en',
   },
+  // ── Added Nov 5, 2026, 11:45 PM (Devon, 10:01 PM: "Second newsrooms for the 32 places that have only one feed,
+  // starting with Lebanon, Syria, Jordan and the Baltics" and "Next signals: US and EU health alerts, US maritime
+  // advisories, aviation news, space news, commodities news and research/education publications, once their terms
+  // check out"). The standing method (plan Q15): each read with the poller's own reader at 11:20 PM, terms read
+  // through a web search's link, headlines read. Syria gets its second newsroom (Levant24 answered too, but round 8
+  // left it out on Oct 31 for writing up Arabic outlets' reports); Lebanon's, Jordan's and the Baltics' candidates
+  // failed or wait on terms (departments/research/r5-second-newsrooms-2026-11-05.md).
+  // North Press Agency (Qamishli, north-east Syria), its English site, taken out on Oct 21 when it failed every read
+  // from the server, answering again; regional (Syria, Iraq's Kurdistan, Jordan), so no home pin; no terms published
+  // (its only policy page is about readers' personal data)
+  {
+    id:              'north-press-sy',
+    name:            'North Press Agency (Syria)',
+    feedUrl:         'https://npasyria.com/en/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.70,
+    countryCode:     'SY',
+    defaultLat:      37.05,
+    defaultLng:      41.23,
+    defaultLocation: 'Qamishli, Syria',
+    extraTags:       ['syria', 'middle-east', 'kurdistan'],
+    language:        'en',
+  },
+  // ECDC, the EU's public health agency (Stockholm), its news: outbreaks, threat assessments and preparedness across
+  // Europe; terms: CC BY 4.0, commercial use allowed with ECDC acknowledged as the creator
+  {
+    id:              'ecdc-news',
+    name:            'ECDC (European Centre for Disease Prevention and Control)',
+    feedUrl:         'https://www.ecdc.europa.eu/en/taxonomy/term/1307/feed',
+    category:        'health',
+    biasLabel:       'center',
+    reliability:     0.95,
+    countryCode:     'SE',
+    defaultLat:      59.35,
+    defaultLng:      18.02,
+    defaultLocation: 'Stockholm, Sweden',
+    extraTags:       ['ecdc', 'health', 'outbreak', 'europe', 'institutional'],
+    language:        'en',
+  },
+  // NASA's news releases; NASA's media are "generally not subject to copyright in the United States" and news
+  // outlets may use them without asking, with NASA named as the source and no endorsement implied
+  {
+    id:              'nasa-news',
+    name:            'NASA News Releases',
+    feedUrl:         'https://www.nasa.gov/news-release/feed/',
+    category:        'space',
+    biasLabel:       'center',
+    reliability:     0.94,
+    countryCode:     'US',
+    defaultLat:      38.88,
+    defaultLng:      -77.02,
+    defaultLocation: 'Washington, United States',
+    extraTags:       ['nasa', 'space', 'institutional'],
+    language:        'en',
+  },
+  // AirlineGeeks, a US aviation news site: airlines, airports, aircraft makers, labour and safety, worldwide (no home
+  // pin); terms: its content may not be copied or republished without permission, nothing on personal use or robots
+  {
+    id:              'airlinegeeks',
+    name:            'AirlineGeeks',
+    feedUrl:         'https://airlinegeeks.com/feed/',
+    category:        'economy',
+    biasLabel:       'center',
+    reliability:     0.72,
+    countryCode:     'US',
+    defaultLat:      40.71,
+    defaultLng:      -74.01,
+    defaultLocation: 'New York, United States',
+    extraTags:       ['aviation', 'airlines', 'transport'],
+    language:        'en',
+  },
+  // farmdoc daily, the University of Illinois' farm economics research (grain and oilseed markets, farm policy, crop
+  // insurance), mostly the US's own (home pin); its policy: repost with the title, a link back and the author named
+  {
+    id:              'farmdoc-daily',
+    name:            'farmdoc daily (University of Illinois)',
+    feedUrl:         'https://farmdocdaily.illinois.edu/feed',
+    category:        'economy',
+    biasLabel:       'center',
+    reliability:     0.88,
+    countryCode:     'US',
+    defaultLat:      40.11,
+    defaultLng:      -88.23,
+    defaultLocation: 'Urbana, Illinois, United States',
+    extraTags:       ['agriculture', 'commodities', 'research', 'university'],
+    language:        'en',
+  },
+  // The Conversation's Africa, France and Spain editions: academics' articles on research (the global edition is
+  // above); CC BY-ND, republishing allowed
+  {
+    id:              'the-conversation-africa',
+    name:            'The Conversation — Africa',
+    feedUrl:         'https://theconversation.com/africa/articles.atom',
+    category:        'science',
+    biasLabel:       'center',
+    reliability:     0.87,
+    countryCode:     'ZA',
+    defaultLat:      -26.20,
+    defaultLng:      28.05,
+    defaultLocation: 'Johannesburg, South Africa',
+    extraTags:       ['the-conversation', 'academic', 'research', 'africa'],
+    language:        'en',
+  },
+  {
+    id:              'the-conversation-fr',
+    name:            'The Conversation — France',
+    feedUrl:         'https://theconversation.com/fr/articles.atom',
+    category:        'science',
+    biasLabel:       'center',
+    reliability:     0.87,
+    countryCode:     'FR',
+    defaultLat:      48.86,
+    defaultLng:      2.35,
+    defaultLocation: 'Paris, France',
+    extraTags:       ['the-conversation', 'academic', 'research', 'francophone'],
+    language:        'fr',
+  },
+  {
+    id:              'the-conversation-es',
+    name:            'The Conversation — España',
+    feedUrl:         'https://theconversation.com/es/articles.atom',
+    category:        'science',
+    biasLabel:       'center',
+    reliability:     0.87,
+    countryCode:     'ES',
+    defaultLat:      40.42,
+    defaultLng:      -3.70,
+    defaultLocation: 'Madrid, Spain',
+    extraTags:       ['the-conversation', 'academic', 'research'],
+    language:        'es',
+  },
 ]
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────
@@ -10029,6 +10162,26 @@ function hintMatches(text: string, keyword: string): boolean {
   return false
 }
 
+/** Government press offices whose stories are their own country's day (inferGeo; Nov 5, 2026) */
+export const PRESS_OFFICES = new Set(['pmo-brunei', 'statehouse-seychelles', 'fsm-president-office', 'opm-pressroom-dm',
+  'naalakkersuisut-gl', 'regierung-li'])
+/** A visit received at home: "receives", "hosts", "welcomes", "in audience", "courtesy call", "credentials" */
+const HOSTING_WORDS = /\b(?:receives?|received|hosts?|hosted|welcomes?|welcomed|in audience|courtesy call|credentials|bids? farewell)\b/i
+
+/** A place with this many of its own feeds or fewer is thinly covered (Nov 5, 2026) */
+export const THIN_PLACE_FEEDS = 3
+
+/**
+ * The thinly covered places (upper-case codes): those with THIN_PLACE_FEEDS or fewer feeds of their own.
+ * Two of their outlets' reports of one story may be a day or two apart (weeklies, a press office), so the
+ * same-story second look reaches back two days for them (correlate.ts setThinPlaces).
+ */
+export function thinPlaces(sources: readonly NewsSource[] = NEWS_SOURCE_REGISTRY): string[] {
+  const feeds = new Map<string, number>()
+  for (const s of sources) if (s.countryCode) feeds.set(s.countryCode, (feeds.get(s.countryCode) ?? 0) + 1)
+  return [...feeds].filter(([, n]) => n <= THIN_PLACE_FEEDS).map(([code]) => code).sort()
+}
+
 /**
  * National outlets whose stories are mostly about their own country: a story
  * that names no place is pinned at the outlet's home. Every other outlet's
@@ -10135,6 +10288,12 @@ export const HOME_PIN_SOURCES = new Set([
   // its site-wide feed carries world, celebrity and sport, and on its first read (9:45 PM) a London court
   // verdict, a Hollywood interview and a horoscope sat in Podgorica
   'haitilibre-ht', 'noticel-pr', 'barbados-today-bb', 'portal-analitika-me', 'le-nouvelliste-ht', 'observer-ug',
+  // Nov 5, 2026, 11:45 PM: farmdoc daily (the US farm economy); not North Press (Syria, Iraq's Kurdistan and
+  // Jordan alike), ECDC, NASA, AirlineGeeks or The Conversation's editions. And Top FM's politics section (plan Q10):
+  // in French, it had no home pin when it came in (Oct 21, before the reader knew French place names), so its
+  // stories named no place it knew ("Navin Ramgoolam", "Paul Bérenger") and none of its week's stories was
+  // Mauritius's (Defimedia, Mauritius's busiest feed, went on Nov 3)
+  'farmdoc-daily', 'top-fm-mu',
 ])
 
 export interface InferredGeo {
@@ -10243,6 +10402,15 @@ export function inferGeo(
     return { lat: point.lat, lng: point.lng, locationName: named?.locationName ?? null, countryCode: named?.countryCode ?? null }
   }
   const fromHead = fromPlace(head) ?? fromHints(head, source.countryCode, HOME_PIN_SOURCES.has(source.id))
+  // A government's press office tells of its own country's day, also when a visitor's country is named: "His
+  // Majesty receives in audience His Majesty The Sultan of Oman" and "Crown Prince Receives Outgoing High
+  // Commissioner Islamic Republic Of Pakistan" (Brunei's PMO) sat in Muscat and Islamabad (Nov 5, 2026, plan Q10:
+  // 5 of the office's 10 newest stories); a trip abroad ("President Simina Meets with JICA President in Tokyo")
+  // goes where it names
+  if (fromHead && fromHead.countryCode !== source.countryCode && PRESS_OFFICES.has(source.id)
+    && (HOSTING_WORDS.test(head) || mentionedCountries(head).includes(source.countryCode))) {
+    return { lat: source.defaultLat, lng: source.defaultLng, locationName: source.defaultLocation, countryCode: source.countryCode }
+  }
   if (fromHead) return fromHead
   // A national outlet's story that names no place in its headline is about its own country unless its
   // dateline says otherwise (Oct 30, 2026, M57: a place found anywhere in the summary won before, so
@@ -10761,6 +10929,8 @@ export function startNewsRssPoller(
   void noteParkedFeeds(redis, NEWS_SOURCE_REGISTRY).then(n => {
     if (n > 0) log.info({ feeds: n }, 'News RSS: feeds parked behind a bot check are tried once a day')
   })
+  // Places with few feeds of their own get the same-story second look across two days (correlate.ts)
+  setThinPlaces(thinPlaces())
 
   // Kick off immediately
   void runCycle()

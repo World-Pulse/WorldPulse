@@ -178,7 +178,12 @@
       "mfr-maldives",
       "crux-vatican",
       "zenit-pope-va",
-      "asgam-macau-mo"
+      "asgam-macau-mo",
+      "airlinegeeks",
+      "farmdoc-daily",
+      "the-conversation-africa",
+      "the-conversation-fr",
+      "the-conversation-es"
     ],
     "aggregator": [
       "allafrica",
@@ -205,7 +210,9 @@
       "pmo-brunei",
       "naalakkersuisut-gl",
       "regierung-li",
-      "shabait-er"
+      "shabait-er",
+      "ecdc-news",
+      "nasa-news"
     ]
   },
   "state": [

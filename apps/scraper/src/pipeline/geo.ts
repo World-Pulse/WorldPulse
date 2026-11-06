@@ -2609,16 +2609,32 @@ export function acceptGeocoderHit(candidate: string, hit: NominatimResult): bool
   const min = GEOCODER_PLACE_TYPES[hit.addresstype ?? '']
   if (min === undefined || (hit.importance ?? 0) < min) return false
   const wanted = normalizePlaceName(candidate)
-  if (!wanted) return false
-  const names = [
-    hit.name ?? '',
-    ...Object.entries(hit.namedetails ?? {}).filter(([key]) => NAME_KEYS.test(key)).flatMap(([, value]) => value.split(';')),
+  if (!wanted || GENERIC_PLACE_WORDS.has(wanted)) return false
+  const names: Array<[key: string, name: string]> = [
+    ['name', hit.name ?? ''],
+    ...Object.entries(hit.namedetails ?? {}).filter(([key]) => NAME_KEYS.test(key))
+      .flatMap(([key, value]) => value.split(';').map(name => [key, name] as [string, string])),
   ]
-  return names.some(name => {
+  return names.some(([key, name]) => {
     const have = normalizePlaceName(name)
-    return have !== '' && ` ${have} `.includes(` ${wanted} `)
+    if (have === '' || !` ${have} `.includes(` ${wanted} `)) return false
+    // One word inside a long official name is not that place's name ("Nation" in "Nation of Brunei, the
+    // Abode of Peace"): its usual names, or the official name whole, or more of it than one word
+    return !key.startsWith('official_name') || have === wanted || wanted.includes(' ')
   })
 }
+
+/**
+ * Words of countries' long official names that name no place by themselves (Nov 5, 2026): "One Nation"
+ * (Australia's party) and "State of the Nation Address" stories were pinned in Brunei, "Nation of Brunei,
+ * the Abode of Peace", 10 of them in a week
+ */
+const GENERIC_PLACE_WORDS = new Set([
+  'nation', 'nations', 'national', 'republic', 'kingdom', 'state', 'states', 'federation', 'federal', 'commonwealth',
+  'union', 'united', 'democratic', 'people', 'peoples', 'socialist', 'islamic', 'abode', 'peace', 'independent',
+  'plurinational', 'bolivarian', 'oriental', 'cooperative', 'co operative', 'principality', 'duchy', 'grand duchy',
+  'sovereign', 'territory', 'territories',
+])
 
 /**
  * Places the geocoder knows by this name that pass acceptGeocoderHit, best

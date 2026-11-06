@@ -38,6 +38,45 @@ class WhoCounts(unittest.TestCase):
         self.assertEqual((s['visitors'], s['unconfirmed'], s['scripts_only'], s['no_language']), (0, 1, 1, 0))
 
 
+class AiAssistants(unittest.TestCase):
+    """Plan K9, Nov 5, 2026: how often ChatGPT and the other AI assistants send readers, and read us for someone"""
+
+    def test_a_reader_an_assistant_sent_is_its_channel_and_counted_by_assistant(self):
+        self.assertEqual(readers.channel('utm_source=chatgpt.com', '-'), 'ai assistants')
+        self.assertEqual(readers.ai_assistant('utm_source=chatgpt.com', '-'), 'ChatGPT')
+        self.assertEqual(readers.ai_assistant('', 'https://www.perplexity.ai/search/abc'), 'Perplexity')
+        self.assertEqual(readers.ai_assistant('', 'https://gemini.google.com/app'), 'Gemini')
+        self.assertEqual(readers.ai_assistant('', 'https://copilot.microsoft.com/chats/1'), 'Copilot')
+        self.assertIsNone(readers.ai_assistant('utm_source=x', 'https://t.co/abc'))
+        self.assertEqual(readers.channel('utm_source=x', '-'), 'x')
+        self.assertEqual(readers.channel('', 'https://www.google.com/'), 'google')
+        s = readers.summary(day_with(a={'p': {'story': 2}, 'js': True, 'l': 'en', 'c': 'ai assistants', 'ai': 'ChatGPT'},
+                                     b={'p': {'story': 1}, 'js': True, 'l': 'en', 'c': 'direct'},
+                                     c={'p': {'story': 1}, 'l': 'en', 'c': 'ai assistants', 'ai': 'Claude'}))
+        self.assertEqual(s['ai_referrals'], {'ChatGPT': 1})   # c never ran the page: not a reader
+        self.assertEqual(s['channels'], {'ai assistants': 1, 'direct': 1})
+
+    def test_the_assistants_fetchers_and_search_crawlers_by_name(self):
+        ua = 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot'
+        self.assertEqual(readers.ai_fetcher(ua, readers.AI_READERS), 'ChatGPT')
+        self.assertEqual(readers.ai_fetcher('Mozilla/5.0 (compatible; OAI-SearchBot/1.0)', readers.AI_INDEXES), 'ChatGPT')
+        self.assertIsNone(readers.ai_fetcher('Mozilla/5.0 (compatible; GPTBot/1.2)', readers.AI_READERS))
+        st = {'v': readers.STATE_VERSION, 'since': '', 'today': readers.empty_day('2026-11-05'), 'history': []}
+        line = ('2026-11-05T10:00:00.000000000Z 1.2.3.4 - - [05/Nov/2026:10:00:00 +0000] "GET /signals/abc HTTP/1.1" 200 512 "-" '
+                '"Mozilla/5.0 (compatible; Claude-User/1.0; +Claude-User@anthropic.com)" rt=0.1 host=world-pulse.io')
+        index = line.replace('Claude-User/1.0; +Claude-User@anthropic.com', 'PerplexityBot/1.0').replace('10:00:00.0', '10:00:01.0')
+        readers.count(st, [line, index])
+        s = readers.summary(st['today'])
+        self.assertEqual((s['ai_reads'], s['ai_search'], s['visitors']), ({'Claude': 1}, {'Perplexity': 1}, 0))
+
+    def test_older_days_from_their_channels_and_the_last_7_days(self):
+        self.assertEqual(readers.ai_referrals_of({'channels': {'direct': 10, 'chatgptcom': 2}}), {'ChatGPT': 2})
+        w = readers.ai_week({'day': '2026-11-05', 'visitors': 10, 'ai_referrals': {'ChatGPT': 1}, 'ai_reads': {'Claude': 3}},
+                            [{'day': '2026-11-04', 'visitors': 10, 'channels': {'chatgptcom': 1, 'direct': 9}}])
+        self.assertEqual((w['days'], w['since'], w['referrals'], w['referrals_by'], w['reads'], w['share_of_readers']),
+                         (2, '2026-11-04', 2, {'ChatGPT': 2}, 3, 0.1))
+
+
 class Languages(unittest.TestCase):
     def test_the_first_language_code_or_not_sent(self):
         self.assertEqual(readers.primary_language(' rt=0.1 host=world-pulse.io lang="es-MX,es;q=0.9,en;q=0.8"'), 'es')

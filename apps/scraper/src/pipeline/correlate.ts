@@ -129,6 +129,65 @@ const SAME_STORY_MIN_JACCARD = 0.4  // shared words / all words of both headline
 const SAME_STORY_RADIUS_KM = 300    // reports of an event tied to a spot must be near each other (see farApartEvents)
 
 /**
+ * A second look for a report that matched nothing the usual way (Nov 5, 2026, plan Q10: 24 places had
+ * no verified story in the week to Oct 31). In small places one outlet's story is rarely told again
+ * within the day in most of the same words: "Dubrovnik Airport faces €22 million EU repayment over
+ * procurement irregularities" and "Dubrovnik Airport Scandal – Wrong Pipes Used, €22 Million Must be
+ * Returned" (Croatia Week and Total Croatia News, 9 hours apart) share 31% of their words; Dominica's two
+ * outlets carried the prime minister's Independence Day address 37 hours apart; weeklies print days
+ * apart. The second look (secondLook) takes fewer words in common, but at least two that single the story
+ * out and are not the day's busy words (BUSY_WORD_OUTLETS: on Nov 5, 2026 "Trump", "midterm", "Peña" and
+ * "juicio político" were in hundreds of headlines about other angles of one big story); and up to
+ * SLOW_WINDOW_HOURS apart only for two reports from the outlets of one thinly covered place (setThinPlaces).
+ * Tried on a day of reports (17,525, Nov 5) and the 24 places' week before it is turned on: see
+ * departments/data/q10-no-verified-story-2026-11-05.md.
+ */
+const SLOW_WINDOW_HOURS = Math.max(TEMPORAL_WINDOW_HOURS, Number(process.env.CORRELATION_SLOW_WINDOW_HOURS || 48))
+const SECOND_LOOK_MIN_SHARED = 4
+const SECOND_LOOK_MIN_JACCARD = 0.3
+const SECOND_LOOK_MIN_STRONG = 2
+/** A word this many outlets among a report's candidates use is the day's topic, not what singles a story out */
+const BUSY_WORD_OUTLETS = 5
+
+/** Places whose own feeds are few (set when the news reader starts: news-rss.ts thinPlaces), upper-case codes */
+let thinPlaces: ReadonlySet<string> = new Set()
+export function setThinPlaces(codes: Iterable<string>): void {
+  thinPlaces = new Set([...codes].map(c => c.toUpperCase()))
+}
+
+/** The thinly covered place whose outlet filed a report (its feed's country tag), or null */
+export function thinHome(c: Pick<CorrelationCandidate, 'tags'>): string | null {
+  const home = outletHome(c)
+  return home && thinPlaces.has(home) ? home : null
+}
+
+/** The country of the outlet that filed a report: its feed's country tag (news feeds tag each item with it), or null */
+export function outletHome(c: Pick<CorrelationCandidate, 'tags'>): string | null {
+  const tag = (c.tags ?? []).find(t => /^[a-z]{2}$/.test(t))
+  return tag ? tag.toUpperCase() : null
+}
+
+/** The words that BUSY_WORD_OUTLETS or more different outlets among these candidates use (not countries, counts or dates) */
+export function busyWords(candidates: Iterable<CorrelationCandidate>): Set<string> {
+  const outlets = new Map<string, Set<string>>()
+  for (const c of candidates) {
+    if (!c.source_id) continue
+    for (const w of storyWords(c.title ?? '')) {
+      if (/^[@#~%]/.test(w)) continue
+      let set = outlets.get(w)
+      if (!set) outlets.set(w, set = new Set())
+      set.add(c.source_id)
+    }
+  }
+  return new Set([...outlets].filter(([, set]) => set.size >= BUSY_WORD_OUTLETS).map(([w]) => w))
+}
+
+/** isSameStory's options: the second look, with the words busy among the report's candidates (correlateSignal only) */
+export interface SameStoryOptions {
+  secondLook?: { busy: ReadonlySet<string> }
+}
+
+/**
  * Kinds of story whose map point is where the event happened (an earthquake,
  * a storm, a crash), so two reports far apart are two events. For other
  * stories a report's point is a place it mentions, or its outlet's home city.
@@ -207,7 +266,17 @@ export async function correlateSignal(signal: CorrelationCandidate): Promise<Eve
     })
     const pool = new Map<string, CorrelationCandidate>()
     for (const c of [...candidates, ...wider]) pool.set(c.id, c)
-    const sameStory = [...pool.values()].filter(c => isSameStory(signal, c))
+    let sameStory = [...pool.values()].filter(c => isSameStory(signal, c))
+    if (sameStory.length === 0) {
+      // Nothing the usual way: the second look (see SLOW_WINDOW_HOURS), also at the day before for a
+      // thinly covered place's own outlets
+      if (thinHome(signal)) {
+        const older = await fetchSameStoryCandidates(signal, true).catch(() => [] as CorrelationCandidate[])
+        for (const c of older) pool.set(c.id, c)
+      }
+      const busy = busyWords(pool.values())
+      sameStory = [...pool.values()].filter(c => isSameStory(signal, c, { secondLook: { busy } }))
+    }
     if (sameStory.length > 0) {
       // ...kept to one story: a report that matches two stories doesn't join them (oneStory)
       const stories = await storiesOf(sameStory.map(c => c.id)).catch(() => new Map<string, string>())
@@ -292,21 +361,20 @@ async function fetchRecentSignals(signal: CorrelationCandidate): Promise<Correla
  * Signals from the whole window whose headlines share words with this one,
  * best matches first. fetchRecentSignals only returns the 200 newest signals
  * (about 45 minutes of intake), so most reports of the same story were never
- * compared. Only used for same-story corroboration, not for clusters.
+ * compared. Only used for same-story corroboration, not for clusters. With
+ * `older`, the day before the window (the second look, for thinly covered places).
  */
-async function fetchSameStoryCandidates(signal: CorrelationCandidate): Promise<CorrelationCandidate[]> {
+async function fetchSameStoryCandidates(signal: CorrelationCandidate, older = false): Promise<CorrelationCandidate[]> {
   // Each word by its stem, as a prefix ("attack:*" finds "attacks" and "attacked"; isSameStory compares stems).
   // Not its date: "october:*" and "2026:*" would find every daily feature
-  const words = [...new Set(takeDates(signal.title ?? '').text.toLowerCase().split(/[^a-z0-9]+/)
-    .filter(w => w.length >= 4 && !STOP_WORDS.has(w) && !HEADLINE_FILLER.has(w))
-    .map(w => stemWord(w))
-    .filter(w => w.length >= 4))]
-    .slice(0, 12)
+  const words = searchWords(signal.title ?? '')
   if (words.length < SAME_STORY_MIN_SHARED) return []
   const tsquery = words.map(w => `${w}:*`).join(' | ')
-  const since = new Date(Date.now() - TEMPORAL_WINDOW_HOURS * 60 * 60 * 1000)
+  // The day before by default; the second look's day before that (SLOW_WINDOW_HOURS) when asked
+  const since = new Date(Date.now() - (older ? SLOW_WINDOW_HOURS : TEMPORAL_WINDOW_HOURS) * 60 * 60 * 1000)
+  const until = older ? new Date(Date.now() - TEMPORAL_WINDOW_HOURS * 60 * 60 * 1000) : null
 
-  const rows = await db('signals')
+  let query = db('signals')
     .select(
       'id', 'title', 'category', 'severity',
       db.raw('source_ids[1]::text as source_id'),
@@ -317,10 +385,12 @@ async function fetchSameStoryCandidates(signal: CorrelationCandidate): Promise<C
       db.raw('ST_X(location::geometry) as lng'),
     )
     .where('created_at', '>=', since.toISOString())
+  if (until) query = query.where('created_at', '<', until.toISOString())
+  const rows = await query
     .whereNot('id', signal.id)
     .whereRaw(`to_tsvector('simple', title) @@ to_tsquery('simple', ?)`, [tsquery])
     .orderByRaw(`ts_rank(to_tsvector('simple', title), to_tsquery('simple', ?)) DESC`, [tsquery])
-    .limit(50)
+    .limit(older ? 25 : 50)
   return rows.map(toCandidate)
 }
 
@@ -485,7 +555,65 @@ const HEADLINE_FILLER = new Set([
   'source', 'sources', 'report', 'claims', 'claim',
   'against', 'about', 'across', 'around', 'toward', 'towards', 'despite', 'among', 'between', 'within',
   'under', 'off', 'onto', 'upon', 'via', 'per', 'near', 'behind', 'beyond', 'until', 'since',
+  // Pronouns and forms of address (Nov 5, 2026): "His Majesty Sultan Haitham accorded official welcome in
+  // Brunei" and "His Majesty the Sultan ... witness signing of several documents" shared "his", "majesty"
+  // and "sultan", as Times of Oman's and The Arabian Stories' every headline of the visit did
+  'his', 'her', 'hers', 'him', 'their', 'theirs', 'them', 'they', 'our', 'ours', 'your', 'yours', 'she',
+  'majesty', 'highness', 'excellency', 'honourable', 'honorable',
 ])
+
+/**
+ * The little words of the feeds' other languages (Nov 5, 2026), as foldAccents leaves them: like "the" and
+ * "of", they say nothing about which story it is. Without them two Spanish headlines shared "una" and
+ * "nueva" as if they were words of the story ("Una nueva caravana de migrantes sale de Honduras..." and
+ * "...Familias emprenden una nueva caravana"). Spanish, French, Italian, Portuguese, German, Dutch, Catalan,
+ * Romanian, Albanian, the languages of the former Yugoslavia and Danish; words that are also English
+ * headline words or names were left out (son, care, Kane, Jane, Das, CES, PAS, MAS, NAS, ALS, NYT).
+ */
+const FUNCTION_WORDS = new Set((
+  // es
+  'los las una unos unas del con por para que sus sobre tras ante entre hasta desde sin este esta estos estas fue hay muy ser ' +
+  'tiene tienen pero nueva nuevo nuevas nuevos otra otro otras otros cuando donde segun durante contra hacia tambien cual quien ' +
+  'todo toda todos todas sera puede pueden hace dice dicen ' +
+  // fr
+  'les une des aux avec pour par sur dans qui ses est plus apres avant contre sans sous chez leur leurs cette ont ete etre tout ' +
+  'tous toute toutes nouveau nouvelle nouvelles nouveaux selon lors depuis encore mais fait faire avoir comme aussi alors sont ' +
+  'elle elles ils nous vous lui dont vers ' +
+  // it
+  'gli uno dei della delle dello degli dal dalla dalle dai dagli sul sulla sulle sui sugli tra fra che non piu alla alle agli ' +
+  'allo nel nella nelle nei negli nello sono dopo anche questo questa quella quello suo sua suoi loro nuovo nuova nuovi nuove ' +
+  'essere stato ancora ecco tutto tutti tutta senza oggi ieri cosa perche ' +
+  // pt
+  'umas uns dos nos pelo pela pelos pelas com seu seus suas mais apos sem sao foi tem onde novos novas isso esse essa ainda ' +
+  'depois antes diz dizem ' +
+  // de, nl
+  'der das den des ein eine einen einem einer und oder auf bei nach von vor zum zur ist sind nicht auch wie wird werden wurde ' +
+  'haben sich noch nur mehr gegen neue neuen neuer neues seit schon heute beim vom ins ihre ihr sein ' +
+  'het een voor aan uit bij naar niet ook zijn wordt worden werd maar nog dat deze heeft hebben geen meer tegen onder nieuwe ' +
+  'tussen sinds omdat wel ' +
+  // ca, ro, sq
+  'els amb dels pel pels seva aquest aquesta fins durant ' +
+  'din pentru sunt dupa cel cea cei cele sau iar fost este dar prin spre catre fara intre despre acest aceasta noul unei unui ' +
+  'cand unde ' +
+  'dhe ose nje nuk eshte jane ishte kete kjo mbi deri edhe sot ' +
+  // bs, hr, me, sr, sl (Latin script)
+  'kod nakon zbog koji koja koje kojeg biti vise nije ili sto kao pri preko prema protiv tokom oko bez izmedju nove novi sve ' +
+  'svi sta danas juce sutra ter tudi kot kjer zaradi proti brez nad bil bila bilo bodo lahko vec ' +
+  // da
+  'det til har ikke efter fra som vil skal blev bliver ved mellem nye hendes deres eller ogsa'
+).split(' '))
+
+/** Letters that lose their marks but don't come apart in Unicode's decomposition */
+const LETTER_FOLDS: Record<string, string> = { 'ß': 'ss', 'æ': 'ae', 'œ': 'oe', 'ø': 'o', 'đ': 'd', 'ð': 'd', 'ł': 'l', 'ı': 'i', 'þ': 'th', 'ħ': 'h' }
+
+/**
+ * Lower-case text without its accents (Nov 5, 2026): "Mišo Kovač" and "Miso Kovac", "Sécurité" and
+ * "securite" are one word each. Before, the accented letters were dropped and split the words ("mi",
+ * "kova"; "d", "l", "gation" for "délégation"), so the same name in two outlets' spellings never matched.
+ */
+export function foldAccents(text: string): string {
+  return text.toLowerCase().normalize('NFD').replace(/\p{M}+/gu, '').replace(/[ßæœøđðłıþħ]/g, ch => LETTER_FOLDS[ch] ?? ch)
+}
 
 /**
  * Kinds of events and their usual actors, as stemWord leaves them: two
@@ -616,7 +744,8 @@ export function storyWords(title: string): Set<string> {
   // A date is one word ("~10-15"), not a day and a year counted as two numbers
   const { text: undated, dates } = takeDates(rest)
   for (const date of dates) words.add(date)
-  const text = undated.toLowerCase().replace(/(\d),(?=\d{3}\b)/g, '$1')
+  // Accents folded (foldAccents): "Kovač" and "Kovac" are one word, not "kova" and "kovac"
+  const text = foldAccents(undated).replace(/(\d),(?=\d{3}\b)/g, '$1')
   for (const raw of text.replace(/[^a-z0-9\s-]/g, ' ').split(/[\s-]+/)) {
     if (!raw) continue
     if (/^\d+$/.test(raw)) { words.add(`#${Number(raw)}`); continue }
@@ -624,13 +753,86 @@ export function storyWords(title: string): Set<string> {
     if (Object.hasOwn(COUNT_WORDS, raw)) { words.add(`#${COUNT_WORDS[raw]}`); continue }
     const nth = /^(\d+)(?:st|nd|rd|th)$/.exec(raw)?.[1] ?? (Object.hasOwn(ORDINAL_WORDS, raw) ? ORDINAL_WORDS[raw] : undefined)
     if (nth !== undefined) { words.add(`%${Number(nth)}`); continue }
-    if (raw.length < 3 || STOP_WORDS.has(raw) || HEADLINE_FILLER.has(raw)) continue
+    if (raw.length < 3 || STOP_WORDS.has(raw) || HEADLINE_FILLER.has(raw) || FUNCTION_WORDS.has(raw)) continue
     words.add(stemWord(raw))
   }
   for (const code of countries) words.add(`@${code}`)
   if (storyWordCache.size >= 5000) storyWordCache.clear()
   storyWordCache.set(title, words)
   return words
+}
+
+/**
+ * The words the same-story search looks for (fetchSameStoryCandidates), stems as prefixes, at most 12
+ * of the headline's words: each as written, and without its accents when it has them, so "Kovač" finds
+ * "Kovač" and "Kovac" (the database's word index keeps accents). A headline in plain letters gets the
+ * same words as before Nov 5, 2026.
+ */
+export function searchWords(title: string): string[] {
+  const keep = (w: string) => w.length >= 4 && !STOP_WORDS.has(w) && !HEADLINE_FILLER.has(w) && !FUNCTION_WORDS.has(w)
+  const out: string[] = []
+  let base = 0
+  for (const token of takeDates(title).text.toLowerCase().split(/[^\p{L}\p{N}]+/u)) {
+    if (base >= 12) break
+    // As written in plain letters (as before), as written with its accents, and without them
+    const forms = [...token.split(/[^a-z0-9]+/), token, foldAccents(token)]
+    let counted = false
+    for (const form of forms) {
+      if (!keep(form) || /[^\p{L}\p{N}]/u.test(form)) continue
+      const stem = stemWord(form)
+      if (stem.length < 4 || out.includes(stem)) continue
+      if (!counted) { base++; counted = true }
+      out.push(stem)
+    }
+  }
+  return out
+}
+
+/** A shared word that singles a story out more than most: a name or a thing (not one many events share), or a sum of 10 or more that isn't a year */
+function strongWord(word: string): boolean {
+  if (word.startsWith('#')) {
+    const n = Number(word.slice(1))
+    return n >= 10 && (n < 1900 || n > 2100)
+  }
+  return isParticular(word) && !COMMON_THINGS.has(word)
+}
+
+/**
+ * The second look (see SLOW_WINDOW_HOURS): headlines that share at least 4 words and 30% of them, 2
+ * of them strongWords that aren't busy among the report's candidates (a city both name counts as one),
+ * that name the same countries (or only one names any, and then 3: "Prime Minister Roosevelt Skerrit,
+ * 48th Anniversary of Independence Address" and "2026 Independence Day Message from Prime Minister
+ * Honourable Roosevelt Skerrit"), and whose sums of 10 or more agree when both give some ("Tonga beat
+ * Samoa 20-18" is not "Tonga beat Fiji 30-10").
+ */
+function secondLook(a: CorrelationCandidate, b: CorrelationCandidate, wordsA: Set<string>, wordsB: Set<string>,
+  shared: number, jaccard: number, busy: ReadonlySet<string>): boolean {
+  if (shared < SECOND_LOOK_MIN_SHARED || jaccard < SECOND_LOOK_MIN_JACCARD) return false
+  const cities = new Set(storyPlaces(a.title ?? '').map(p => p.place)
+    .filter(place => storyPlaces(b.title ?? '').some(pb => pb.place === place)))
+  const strong = [...wordsA].filter(w => wordsB.has(w) && strongWord(w) && !busy.has(w)).length + cities.size
+  if (strong < SECOND_LOOK_MIN_STRONG) return false
+  // The countries: the same, or only one headline names any ("Paraguay President Santiago Peña resigns" /
+  // "Santiago Peña promete acudir al juicio político en su contra"). With no country in common, 3 strongWords,
+  // unless both outlets are the same thinly covered place's own (Dominica News Online and the prime minister's press room)
+  const countries = (words: Set<string>) => [...words].filter(w => w.startsWith('@')).sort().join(' ')
+  const countriesA = countries(wordsA)
+  const countriesB = countries(wordsB)
+  if (countriesA && countriesB && countriesA !== countriesB) return false
+  // and 4 when the outlets are of two different countries ("Budget 2027 : le ministère de l'Économie dénonce
+  // des manœuvres à l'Assemblée nationale" in Dakar and "Loi de finances 2027 : un budget ... à l'épreuve de
+  // l'Assemblée nationale" in Antananarivo)
+  const home = thinHome(a)
+  const placeInCommon = (countriesA !== '' && countriesA === countriesB) || (home !== null && thinHome(b) === home)
+  const homeA = outletHome(a)
+  const homeB = outletHome(b)
+  const need = placeInCommon ? SECOND_LOOK_MIN_STRONG : homeA && homeB && homeA !== homeB ? SECOND_LOOK_MIN_STRONG + 2 : SECOND_LOOK_MIN_STRONG + 1
+  if (strong < need) return false
+  const sums = (words: Set<string>) => [...words].filter(w => w.startsWith('#') && strongWord(w))
+  const sumsA = sums(wordsA)
+  const sumsB = sums(wordsB)
+  if (sumsA.length > 0 && sumsB.length > 0 && !sumsA.some(w => wordsB.has(w))) return false
+  return true
 }
 
 /**
@@ -641,12 +843,20 @@ export function storyWords(title: string): Set<string> {
  * headlines ("Protest in Jaipur, Rajasthan, India") never qualify: they don't
  * carry enough of the story to compare.
  */
-export function isSameStory(a: CorrelationCandidate, b: CorrelationCandidate): boolean {
+export function isSameStory(a: CorrelationCandidate, b: CorrelationCandidate, options: SameStoryOptions = {}): boolean {
   if (!a.source_id || !b.source_id || a.source_id === b.source_id) return false
   // GDELT's "<event label> in <place>" titles name an event type and a place,
   // not a story ("Armed conflict in Washington, District of Columbia, ...")
   if (isEventTemplateTitle(a.title) || isEventTemplateTitle(b.title)) return false
-  if (temporalScore(a, b) <= 0) return false
+  // Within the day; a day or two apart only in the second look, for two reports from the outlets of one
+  // thinly covered place (thinHome). Unreadable dates count as within the day, as before.
+  const second = options.secondLook
+  const hours = Math.abs(new Date(a.published_at).getTime() - new Date(b.published_at).getTime()) / (60 * 60 * 1000)
+  const withinDay = !(hours >= TEMPORAL_WINDOW_HOURS)
+  if (!withinDay) {
+    const home = second && hours < SLOW_WINDOW_HOURS ? thinHome(a) : null
+    if (!home || thinHome(b) !== home) return false
+  }
 
   const wordsA = storyWords(a.title ?? '')
   const wordsB = storyWords(b.title ?? '')
@@ -663,7 +873,11 @@ export function isSameStory(a: CorrelationCandidate, b: CorrelationCandidate): b
   }
   for (const w of wordsB) if (!wordsA.has(w) && !w.startsWith('#')) all++
   const jaccard = shared / Math.max(1, all)
-  if (shared < SAME_STORY_MIN_SHARED || jaccard < SAME_STORY_MIN_JACCARD) return false
+  const firstLook = withinDay && shared >= SAME_STORY_MIN_SHARED && jaccard >= SAME_STORY_MIN_JACCARD
+  // The second look is never for events tied to a spot (PLACE_BOUND_CATEGORIES), which recur there: an
+  // aftershock, the next day's flood, two road accidents on San Marino's Superstrada in one day
+  const placeBound = PLACE_BOUND_CATEGORIES.has(a.category) || PLACE_BOUND_CATEGORIES.has(b.category)
+  if (!firstLook && (!second || placeBound || !secondLook(a, b, wordsA, wordsB, shared, jaccard, second.busy))) return false
   // ...and something particular in common: a name, a thing or a count, not just
   // the kind of event and the country ("Russian attack kills seven in Ukraine's
   // Zaporizhzhia" and "Russian attacks kill 24 across Ukraine" share only that)
@@ -688,6 +902,14 @@ export function isSameStory(a: CorrelationCandidate, b: CorrelationCandidate): b
     const countriesB = [...wordsB].filter(w => w.startsWith('@'))
     if (countriesA.length > 0 && countriesB.length > 0 && !countriesA.some(w => wordsB.has(w))) return false
   }
+  // Headlines that each name a country the other doesn't tell of two events, though they share one
+  // ("Tonga beat Samoa 20-18 to reach the Rugby League World Cup semi-finals" / "Tonga beat Fiji 30-10 to
+  // reach ..." share 60% of their words; Nov 5, 2026)
+  // (the Vatican counts as Italy here: "Bob Dylan meets Pope Leo at the Vatican" / "Pope Leo hosts Bob Dylan in Rome")
+  const named = (words: Set<string>) => new Set([...words].filter(w => w.startsWith('@')).map(w => w === '@VA' ? '@IT' : w))
+  const namedA = named(wordsA)
+  const namedB = named(wordsB)
+  if ([...namedA].some(c => !namedB.has(c)) && [...namedB].some(c => !namedA.has(c))) return false
   // Headlines whose first ordinals differ tell of two occurrences ("Kenya
   // confirms second Ebola case" / "... third Ebola case")
   const nthA = [...wordsA].find(w => w.startsWith('%'))

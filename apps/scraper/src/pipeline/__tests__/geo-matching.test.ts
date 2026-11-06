@@ -252,6 +252,21 @@ describe('acceptGeocoderHit', () => {
   it('needs the whole word, not part of one', () => {
     expect(acceptGeocoderHit('kher', hit('Kherson Oblast', 'state', 0.633))).toBe(false)
   })
+
+  it('turns down a word of a long official name (Nov 5, 2026: "One Nation" stories pinned in Brunei)', () => {
+    const brunei = hit('Brunei', 'country', 0.78, {
+      name: 'Brunei', 'name:en': 'Brunei', official_name: 'Negara Brunei Darussalam', 'official_name:en': 'Nation of Brunei, the Abode of Peace',
+    })
+    expect(acceptGeocoderHit('nation', brunei)).toBe(false)
+    expect(acceptGeocoderHit('peace', brunei)).toBe(false)
+    expect(acceptGeocoderHit('abode', brunei)).toBe(false)
+    expect(acceptGeocoderHit('brunei', brunei)).toBe(true)
+    expect(acceptGeocoderHit('brunei darussalam', brunei)).toBe(true)
+    const russia = hit('Russia', 'country', 0.85, { 'name:en': 'Russia', 'official_name:en': 'Russian Federation' })
+    expect(acceptGeocoderHit('federation', russia)).toBe(false)
+    expect(acceptGeocoderHit('russian federation', russia)).toBe(true)
+    expect(acceptGeocoderHit('republic', hit('Czechia', 'country', 0.8, { 'official_name:en': 'Czech Republic' }))).toBe(false)
+  })
 })
 
 describe('placeFromText', () => {

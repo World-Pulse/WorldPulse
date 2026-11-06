@@ -71,6 +71,13 @@ hour (UTC) each visitor arrived, by channel, for today and yesterday
 ready-to-post drafts and the email briefing carry utm_campaign (hq,
 briefing, weekly) and utm_content (the story's first 8 characters).
 
+AI assistants (plan K9, Nov 5, 2026): readers sent by ChatGPT, Perplexity,
+Claude, Gemini, Copilot and the others (AI_ASSISTANTS) are the channel "ai
+assistants" and are counted by assistant ("ai_referrals"); the pages the
+assistants' fetchers open while answering someone ("ai_reads") and their
+search crawlers' visits ("ai_search") are counted by assistant too, and
+"ai_week" adds up the last 7 days. Counts only.
+
 Usage: readers.py <state file>   (prints one JSON object)
 """
 
@@ -119,7 +126,7 @@ CRAWLERS = [
     ('google', re.compile(r'googlebot|google-inspectiontool|googleother|adsbot-google|storebot-google|google-extended', re.I)),
     ('bing', re.compile(r'bingbot|bingpreview|msnbot', re.I)),
     ('ai', re.compile(r'gptbot|oai-searchbot|chatgpt-user|claudebot|claude-user|claude-searchbot|anthropic-ai|perplexitybot|perplexity-user'
-                      r'|ccbot|bytespider|amazonbot|applebot|youbot|cohere-ai|meta-externalagent|duckassistbot|mistralai', re.I)),
+                      r'|ccbot|bytespider|amazonbot|applebot|youbot|cohere-ai|meta-externalagent|meta-externalfetcher|duckassistbot|mistralai', re.I)),
     ('social', re.compile(r'twitterbot|facebookexternalhit|facebookcatalog|linkedinbot|telegrambot|whatsapp|slackbot|discordbot'
                           r'|bluesky|cardyb|redditbot|pinterest|skypeuripreview|mastodon|embedly|iframely|vkshare', re.I)),
 ]
@@ -157,8 +164,65 @@ CHANNEL_SITES = [
     ('bluesky', re.compile(r'(^|\.)bsky\.app$')),
     ('facebook', re.compile(r'(^|\.)(facebook\.com|fb\.com|fb\.me)$')),
     ('whatsapp', re.compile(r'(^|\.)whatsapp\.com$')),
-    ('ai assistants', re.compile(r'(^|\.)(chatgpt\.com|chat\.openai\.com|perplexity\.ai|claude\.ai|gemini\.google\.com|copilot\.microsoft\.com)$')),
 ]
+
+# AI assistants (plan K9, Nov 5, 2026: "track how often ChatGPT and other AI assistants send readers to us").
+# A reader an assistant sent comes with its utm_source (ChatGPT adds utm_source=chatgpt.com to the links in
+# its answers; until Nov 5 those readers were counted under a channel "chatgptcom": 6 from Oct 30 to Nov 4)
+# or with its website as the referrer. Each one is the channel "ai assistants", and the day's count by
+# assistant is "ai_referrals". The assistants' own fetchers that open a page while answering someone
+# (ChatGPT-User, Claude-User, Perplexity-User...) are "ai_reads", by assistant; their search indexes'
+# crawlers (OAI-SearchBot, Claude-SearchBot, PerplexityBot) "ai_search". Counts only, as for everyone.
+AI_ASSISTANTS = [
+    # (name, the websites it sends readers from, its utm_source values)
+    ('ChatGPT', r'chatgpt\.com|chat\.openai\.com|openai\.com', ('chatgpt.com', 'chatgpt', 'chat.openai.com', 'openai')),
+    ('Perplexity', r'perplexity\.ai', ('perplexity', 'perplexity.ai')),
+    ('Claude', r'claude\.ai', ('claude.ai', 'claude')),
+    ('Gemini', r'gemini\.google\.com|bard\.google\.com', ('gemini', 'gemini.google.com', 'bard')),
+    ('Copilot', r'copilot\.microsoft\.com|copilot\.cloud\.microsoft|copilot\.com', ('copilot', 'copilot.com', 'copilot.microsoft.com')),
+    ('DeepSeek', r'deepseek\.com', ('deepseek', 'deepseek.com')),
+    ('Grok', r'grok\.com|x\.ai', ('grok', 'grok.com')),
+    ('Meta AI', r'meta\.ai', ('meta.ai', 'metaai')),
+    ('Mistral', r'mistral\.ai', ('mistral', 'mistral.ai', 'lechat')),
+    ('You.com', r'you\.com', ('you.com', 'youdotcom')),
+    ('Phind', r'phind\.com', ('phind', 'phind.com')),
+    ('Poe', r'poe\.com', ('poe', 'poe.com')),
+    ('Qwen', r'qwen\.ai|tongyi\.aliyun\.com', ('qwen', 'qwen.ai')),
+    ('Kimi', r'kimi\.com|kimi\.moonshot\.cn', ('kimi', 'kimi.com')),
+    ('Doubao', r'doubao\.com', ('doubao', 'doubao.com')),
+]
+AI_SITES = [(name, re.compile(rf'(^|\.)(?:{hosts})$')) for name, hosts, _ in AI_ASSISTANTS]
+AI_SOURCES = {src: name for name, _, sources in AI_ASSISTANTS for src in sources}
+# Old channel names an assistant's readers were counted under (utm_source with its dots dropped)
+AI_OLD_CHANNELS = {re.sub(r'[^a-z0-9 _-]', '', src): name for src, name in AI_SOURCES.items()}
+# Fetchers that open a page for someone the assistant is answering, and the crawlers of their search indexes
+AI_READERS = [('ChatGPT', r'chatgpt-user'), ('Claude', r'claude-user'), ('Perplexity', r'perplexity-user'),
+              ('Mistral', r'mistralai-user'), ('Meta AI', r'meta-externalfetcher'), ('DuckDuckGo', r'duckassistbot')]
+AI_INDEXES = [('ChatGPT', r'oai-searchbot'), ('Claude', r'claude-searchbot'), ('Perplexity', r'perplexitybot')]
+AI_READERS = [(name, re.compile(p, re.I)) for name, p in AI_READERS]
+AI_INDEXES = [(name, re.compile(p, re.I)) for name, p in AI_INDEXES]
+
+
+def ai_assistant(query, ref):
+    """The AI assistant a visit came from (its utm_source, else its website), or None"""
+    src = (parse_qs(query).get('utm_source') or [''])[0].strip().lower()
+    if src:
+        return AI_SOURCES.get(src)
+    if not ref or ref == '-':
+        return None
+    host = (urlsplit(ref).hostname or '').lower()
+    for name, pattern in AI_SITES:
+        if pattern.search(host):
+            return name
+    return None
+
+
+def ai_fetcher(ua, kinds):
+    """The assistant whose fetcher (AI_READERS) or search crawler (AI_INDEXES) this user agent is, or None"""
+    for name, pattern in kinds:
+        if pattern.search(ua or ''):
+            return name
+    return None
 
 
 def ts_key(ts):
@@ -269,7 +333,9 @@ def own_site(host):
 
 
 def channel(query, ref):
-    """Where a visit came from: utm_source first, then the sending website"""
+    """Where a visit came from: an AI assistant (AI_ASSISTANTS), else utm_source, else the sending website"""
+    if ai_assistant(query, ref):
+        return 'ai assistants'
     src = (parse_qs(query).get('utm_source') or [''])[0].strip().lower()
     if src:
         return re.sub(r'[^a-z0-9 _-]', '', src)[:24] or 'other'
@@ -340,6 +406,7 @@ def summary(d):
     # Page views by the channel that brought each visitor (plan G18 (3), Oct 20, 2026):
     # whether readers who came from X, search or a post read a second story
     channel_views = {}
+    ai_referrals = {}
     for v in d['visitors'].values():
         if not isinstance(v, dict):
             continue
@@ -372,6 +439,8 @@ def summary(d):
         if site and own_site(site):
             ch, site = 'direct', None   # counted as a website before own_site (Oct 18)
         add(channels, ch)
+        if v.get('ai'):
+            add(ai_referrals, v['ai'])
         if site:
             add(sites, site)
         if v.get('h'):
@@ -392,7 +461,43 @@ def summary(d):
             'rule': 'api, a language, no sign-in pages',
             'people_agents': by_count(agents, 8), 'people_sections': by_count(sections, 12),
             'people_languages': by_count(languages, 12),
-            'hours': dict(sorted(hours.items())), 'posts': by_count(posts, 20)}
+            'hours': dict(sorted(hours.items())), 'posts': by_count(posts, 20),
+            'ai_referrals': by_count(ai_referrals), 'ai_reads': by_count(d.get('ai_reads') or {}),
+            'ai_search': by_count(d.get('ai_search') or {})}
+
+
+def ai_referrals_of(day):
+    """A day's readers by the AI assistant that sent them; for days counted before Nov 5, 2026, from their channels
+    ("chatgptcom" was ChatGPT's utm_source; "ai assistants" then had no name)"""
+    if isinstance(day.get('ai_referrals'), dict):
+        return day['ai_referrals']
+    out = {}
+    for ch, n in (day.get('channels') or {}).items():
+        if ch in AI_OLD_CHANNELS:
+            add(out, AI_OLD_CHANNELS[ch], n)
+        elif ch == 'ai assistants':
+            add(out, 'not named', n)
+    return by_count(out)
+
+
+def ai_week(today, earlier):
+    """The last 7 days (today and the 6 before): readers the AI assistants sent, and the pages their
+    fetchers opened while answering someone, in all and by assistant"""
+    referrals, reads, search = {}, {}, {}
+    days = [d for d in earlier if isinstance(d, dict)] + [today]
+    for d in days:
+        for name, n in ai_referrals_of(d).items():
+            add(referrals, name, n)
+        for name, n in (d.get('ai_reads') or {}).items():
+            add(reads, name, n)
+        for name, n in (d.get('ai_search') or {}).items():
+            add(search, name, n)
+    visitors = sum(d.get('visitors') or 0 for d in days)
+    return {'days': len(days), 'since': days[0].get('day') if days else None,
+            'referrals': sum(referrals.values()), 'referrals_by': by_count(referrals),
+            'share_of_readers': round(sum(referrals.values()) / visitors, 3) if visitors else 0,
+            'reads': sum(reads.values()), 'reads_by': by_count(reads),
+            'search_crawls': sum(search.values()), 'search_by': by_count(search)}
 
 
 def hourly(*days):
@@ -514,6 +619,14 @@ def count(st, lines):
             if page:
                 add(today['crawlers'], bot)
                 note_bot(today, ua, bot, path)
+                if bot == 'ai':
+                    reader = ai_fetcher(ua, AI_READERS)
+                    if reader:
+                        add(today.setdefault('ai_reads', {}), reader)
+                    else:
+                        index = ai_fetcher(ua, AI_INDEXES)
+                        if index:
+                            add(today.setdefault('ai_search', {}), index)
             continue
         who = hashlib.sha256(f"{today['salt']}|{m['ip']}|{ua}".encode()).hexdigest()[:16]
         # The browser ran the page: its top bar called the API as the page loaded
@@ -533,6 +646,9 @@ def count(st, lines):
             continue
         if 'c' not in v:
             v['c'] = channel(query, m['ref'])
+            assistant = ai_assistant(query, m['ref'])
+            if assistant:
+                v['ai'] = assistant
             if v['c'] == 'other sites':
                 v['s'] = ref_site(m['ref'])
             v['h'] = ts[11:13]   # the hour (UTC) they arrived
@@ -574,8 +690,11 @@ def main():
     del out['hours']
     out['updated'] = now.isoformat(timespec='seconds')
     out['log_read'] = ok
-    out['history'] = [{k: h.get(k) for k in ('day', 'visitors', 'views', 'channels', 'channel_views', 'views_per_visitor', 'posts', 'crawlers',
-                                             'unconfirmed', 'scripts_only', 'sign_in_only', 'no_language', 'rule', 'note', 'visitors_loose')} for h in st['history'][-14:]]
+    out['history'] = [{**{k: h.get(k) for k in ('day', 'visitors', 'views', 'channels', 'channel_views', 'views_per_visitor', 'posts', 'crawlers',
+                                                'unconfirmed', 'scripts_only', 'sign_in_only', 'no_language', 'rule', 'note', 'visitors_loose')},
+                       'ai_referrals': ai_referrals_of(h), 'ai_reads': h.get('ai_reads') or {}, 'ai_search': h.get('ai_search') or {}}
+                      for h in st['history'][-14:]]
+    out['ai_week'] = ai_week(out, st['history'][-6:])
     print(json.dumps(out, separators=(',', ':')))
 
 
