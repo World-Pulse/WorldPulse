@@ -9817,6 +9817,55 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['the-conversation', 'academic', 'research'],
     language:        'es',
   },
+  // ── Added Nov 6, 2026, 12:10 AM (plan R5, the places of Q10 with one newsroom first: Honduras's news came mostly from
+  // Proceso Digital, Djibouti's all from ADI, Equatorial Guinea's mostly from Real Equatorial Guinea). Read with the
+  // poller's own reader at 11:55 PM, terms searched for, headlines read (departments/research/r5-second-newsrooms-2026-11-05.md)
+  // El Pulso, a Tegucigalpa news site (investigative reporting and the day's news); Honduras's own news, home pin;
+  // no terms published
+  {
+    id:              'el-pulso-hn',
+    name:            'El Pulso (Honduras)',
+    feedUrl:         'https://elpulso.hn/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.68,
+    countryCode:     'HN',
+    defaultLat:      14.07,
+    defaultLng:      -87.19,
+    defaultLocation: 'Tegucigalpa, Honduras',
+    extraTags:       ['honduras', 'central-america', 'latin-america'],
+    language:        'es',
+  },
+  // La Nation, Djibouti's national daily (state-owned), in French; home pin; no terms published
+  {
+    id:              'la-nation-dj',
+    name:            'La Nation (Djibouti)',
+    feedUrl:         'https://www.lanation.dj/feed/',
+    category:        'geopolitics',
+    biasLabel:       'state-media',
+    reliability:     0.55,
+    countryCode:     'DJ',
+    defaultLat:      11.59,
+    defaultLng:      43.15,
+    defaultLocation: 'Djibouti, Djibouti',
+    extraTags:       ['djibouti', 'horn-of-africa', 'africa', 'francophone', 'state-media'],
+    language:        'fr',
+  },
+  // Ahora EG, the Equatorial Guinea government's news site, in Spanish; home pin; no terms published
+  {
+    id:              'ahora-eg-gq',
+    name:            'Ahora EG (Equatorial Guinea)',
+    feedUrl:         'https://www.ahoraeg.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'state-media',
+    reliability:     0.58,
+    countryCode:     'GQ',
+    defaultLat:      3.75,
+    defaultLng:      8.78,
+    defaultLocation: 'Malabo, Equatorial Guinea',
+    extraTags:       ['equatorial-guinea', 'central-africa', 'africa', 'state-media'],
+    language:        'es',
+  },
 ]
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────
@@ -10294,6 +10343,8 @@ export const HOME_PIN_SOURCES = new Set([
   // stories named no place it knew ("Navin Ramgoolam", "Paul Bérenger") and none of its week's stories was
   // Mauritius's (Defimedia, Mauritius's busiest feed, went on Nov 3)
   'farmdoc-daily', 'top-fm-mu',
+  // Nov 6, 2026, 12:10 AM: Honduras's, Djibouti's and Equatorial Guinea's second newsrooms, each mostly its own country's news
+  'el-pulso-hn', 'la-nation-dj', 'ahora-eg-gq',
 ])
 
 export interface InferredGeo {

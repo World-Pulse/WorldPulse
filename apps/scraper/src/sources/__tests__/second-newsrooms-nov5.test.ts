@@ -54,9 +54,23 @@ describe('feeds added Nov 5, 2026, 11:45 PM', () => {
 describe('thinly covered places (Nov 5, 2026)', () => {
   it(`are those with ${THIN_PLACE_FEEDS} feeds of their own or fewer`, () => {
     const thin = new Set(thinPlaces())
-    for (const code of ['DM', 'LC', 'TO', 'VU', 'GD', 'HR', 'HN', 'SY', 'LB', 'JO', 'EE', 'LT']) expect(thin.has(code), code).toBe(true)
-    for (const code of ['US', 'GB', 'IN', 'NG', 'FR']) expect(thin.has(code), code).toBe(false)
+    for (const code of ['DM', 'LC', 'TO', 'VU', 'GD', 'HR', 'SY', 'DJ', 'LB', 'JO', 'EE', 'LT']) expect(thin.has(code), code).toBe(true)
+    for (const code of ['US', 'GB', 'IN', 'NG', 'FR', 'HN']) expect(thin.has(code), code).toBe(false)   // Honduras has four since El Pulso
     expect(thinPlaces([{ ...src('naharnet')!, countryCode: 'ZZ' }])).toEqual(['ZZ'])
+  })
+})
+
+describe('second newsrooms for the places of Q10 with one (Nov 6, 2026, 12:10 AM)', () => {
+  it('adds El Pulso (Honduras), La Nation (Djibouti) and Ahora EG (Equatorial Guinea), each pinned at home', () => {
+    expect(src('el-pulso-hn')).toMatchObject({ countryCode: 'HN', language: 'es' })
+    expect(src('la-nation-dj')).toMatchObject({ countryCode: 'DJ', language: 'fr', biasLabel: 'state-media' })
+    expect(src('ahora-eg-gq')).toMatchObject({ countryCode: 'GQ', language: 'es', biasLabel: 'state-media' })
+    for (const id of ['el-pulso-hn', 'la-nation-dj', 'ahora-eg-gq']) expect(HOME_PIN_SOURCES.has(id), id).toBe(true)
+    expect(inferGeo('Billet : La commande publique en tournée régionale', '', src('la-nation-dj')!).countryCode).toBe('DJ')
+    expect(inferGeo('Cristiano Ronaldo anuncia su retirada de la selección de Portugal', '', src('ahora-eg-gq')!).countryCode).toBe('PT')
+    expect(inferGeo('Gobierno anuncia que buscará concluir los ocho hospitales iniciados por la administración anterior', '', src('el-pulso-hn')!).countryCode).toBe('HN')
+    // St Vincent Times stays out: "for your personal and non-business use"
+    expect(NEWS_SOURCE_REGISTRY.some(s => s.feedUrl.includes('stvincenttimes.com'))).toBe(false)
   })
 })
 
