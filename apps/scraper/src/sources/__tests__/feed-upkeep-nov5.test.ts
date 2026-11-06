@@ -81,9 +81,16 @@ describe('feed upkeep (Nov 5, 2026)', () => {
   })
 
   it('pins their stories at home, or where they name', () => {
-    for (const id of [...ADDED, ...ANYWAY.filter(i => i !== 'the-citizen-tz')]) expect(HOME_PIN_SOURCES.has(id), id).toBe(true)
-    // about a third of The Citizen's feed is world news: its Tanzanian stories are placed by name
+    for (const id of [...ADDED, ...ANYWAY.filter(i => i !== 'the-citizen-tz' && i !== 'dan-me')]) expect(HOME_PIN_SOURCES.has(id), id).toBe(true)
+    // about a third of The Citizen's feed is world news, and Dan's site-wide feed carries world, celebrity and
+    // sport: their stories are placed by name
     expect(HOME_PIN_SOURCES.has('the-citizen-tz')).toBe(false)
+    expect(HOME_PIN_SOURCES.has('dan-me')).toBe(false)
+    expect(inferGeo('Rasel Brend proglašen krivim za silovanje i tri seksualna napada', '', src('dan-me')).countryCode).not.toBe('ME')
+    expect(inferGeo('Budva bolja od BVSC Mane', '', src('dan-me')).countryCode).toBe('ME')
+    // and a horoscope has no place of its own, even from an outlet whose other stories are pinned at home
+    expect(inferGeo('Horoskop za 6. novembar: Lav okreće stvari u svoju korist, Jarac mora da se prilagodi', '', src('portal-analitika-me')).countryCode).not.toBe('ME')
+    expect(inferGeo('DPS Zeta: Zamjena na mjestu predsjednika neće izbrisati pitanje', '', src('portal-analitika-me')).countryCode).toBe('ME')
     expect(inferGeo('Ronaldo retires from Portugal duty amid reported tensions with coach Jesus', '', src('the-citizen-tz')).countryCode).not.toBe('TZ')
     expect(inferGeo('Tanesco explains power cuts affecting four areas in Dar es Salaam, Coast', '', src('the-citizen-tz')).countryCode).toBe('TZ')
     expect(inferGeo('Police seek public’s help to identify person of interest', '', src('barbados-today-bb')).countryCode).toBe('BB')

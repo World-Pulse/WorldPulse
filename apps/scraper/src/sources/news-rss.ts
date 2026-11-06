@@ -10131,8 +10131,10 @@ export const HOME_PIN_SOURCES = new Set([
   // Nov 3, 2026: KBC News, Kenya's public broadcaster (in place of The East African)
   'kbc-ke',
   // Nov 5, 2026: national outlets for places left thin by parked and down feeds; at 8:18 PM (Devon: "Go in
-  // anyway") five more, but not The Citizen (Tanzania), a third of whose feed is world news
-  'haitilibre-ht', 'noticel-pr', 'barbados-today-bb', 'dan-me', 'portal-analitika-me', 'le-nouvelliste-ht', 'observer-ug',
+  // anyway") four more. Not The Citizen (Tanzania), a third of whose feed is world news, nor Dan (Montenegro):
+  // its site-wide feed carries world, celebrity and sport, and on its first read (9:45 PM) a London court
+  // verdict, a Hollywood interview and a horoscope sat in Podgorica
+  'haitilibre-ht', 'noticel-pr', 'barbados-today-bb', 'portal-analitika-me', 'le-nouvelliste-ht', 'observer-ug',
 ])
 
 export interface InferredGeo {
@@ -10153,9 +10155,11 @@ const RUSSIA_NOUN = /\b(?:russia|moscow|kremlin)\b/
 /**
  * Stories with no place of their own: league football and crypto-exchange news
  * (Oct 30, 2026: a Premier League story sat in Accra, a Binance hack in Dublin,
- * both home pins of national outlets). They get no pin unless the text names a place.
+ * both home pins of national outlets), and horoscopes (Nov 5, 2026: Portal
+ * Analitika's and Dan's daily one, "Horoskop za 6. novembar"). They get no pin
+ * unless the text names a place.
  */
-const NO_PLACE_TOPIC = /\b(?:premier league|champions league|europa league|la liga|serie a|bundesliga|man(?:chester)? (?:utd|united|city)|binance|coinbase|bitcoin|ethereum|crypto(?:currency)? (?:exchange|hack))\b/i
+const NO_PLACE_TOPIC = /\b(?:premier league|champions league|europa league|la liga|serie a|bundesliga|man(?:chester)? (?:utd|united|city)|binance|coinbase|bitcoin|ethereum|crypto(?:currency)? (?:exchange|hack)|horoscopes?|horoskop[aeiu]?|hor[oó]scopos?|oroscopo)\b/i
 
 /**
  * Countries whose own Congress the English-language press calls just "Congress": India's and Nepal's
