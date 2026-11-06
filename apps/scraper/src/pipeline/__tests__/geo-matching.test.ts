@@ -19,6 +19,13 @@ describe('findGazetteerPlace', () => {
     expect(findGazetteerPlace('Protests continue in Lima after the vote')?.place).toBe('lima')
   })
 
+  it('reads capital "LA" before mayor, county or a team as Los Angeles, and nothing else', () => {
+    expect(findGazetteerPlace('Nithya Raman set to become LA mayor')?.place).toBe('los angeles')
+    expect(findGazetteerPlace('LA County sues over wildfire fund')?.place).toBe('los angeles')
+    expect(findGazetteerPlace('LA Times reports on the vote')).toBeNull()
+    expect(findGazetteerPlace('Flood warning for parts of LA and the delta')).toBeNull()
+  })
+
   it('does not pin a cannabis story to Ganja, Azerbaijan', () => {
     expect(findGazetteerPlace('Thailand shops sell ganja after the legal change')?.coords.country).not.toBe('AZ')
     expect(findGazetteerPlace('Flood in Ganja, Azerbaijan displaces families')?.coords.country).toBe('AZ')

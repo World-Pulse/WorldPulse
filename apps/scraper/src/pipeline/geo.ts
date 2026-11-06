@@ -2696,6 +2696,14 @@ export async function geocodePlace(location: string): Promise<GeoResult[] | null
 // Washington Post reported..."), so they are blanked out before matching.
 const OUTLET_NAMES = /\b(?:usa today|washington (?:post|times|examiner)|new york (?:times|post|daily news)|los angeles times|chicago tribune|miami herald|houston chronicle|jerusalem post|sydney morning herald|toronto star|london evening standard|manila times)\b/gi
 
+/** "LA" in capitals before a word that makes it the city ("LA mayor", "LA County"); on its own it stays
+ *  Louisiana or nothing. "LA Times" is an outlet and is blanked out first. */
+const LA_WORDS = ['mayor', 'mayoral', 'county', 'metro', 'unified', 'dodgers', 'lakers', 'clippers', 'rams', 'chargers', 'olympics', 'wildfires?', 'city council', 'police', 'fire department']
+const LA_CITY = new RegExp(`\\bLA(?=\\s+(?:${LA_WORDS.map(w => w.replace(/^./, c => `[${c}${c.toUpperCase()}]`)).join('|')})\\b)`, 'g')
+function cleanText(text: string): string {
+  return text.replace(OUTLET_NAMES, ' ').replace(/\bLA Times\b/g, ' ').replace(LA_CITY, 'Los Angeles')
+}
+
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
@@ -2745,7 +2753,7 @@ const GAZETTEER_SCAN = GAZETTEER_MATCHERS.map(m => ({ place: m.place, coords: m.
 
 /** The gazetteer place mentioned first (the headline comes first); the longer name on a tie */
 export function findGazetteerPlace(text: string): { place: string; coords: typeof GAZETTEER[string] } | null {
-  const clean = text.replace(OUTLET_NAMES, ' ')
+  const clean = cleanText(text)
   let best: { place: string; coords: typeof GAZETTEER[string]; index: number } | null = null
   for (const m of GAZETTEER_SCAN) {
     m.re.lastIndex = 0
@@ -2816,7 +2824,7 @@ const COUNTRY_SCAN = COUNTRY_MATCHERS.map(([pattern, code]) => ({ code, re: new 
  * storyWords), where a place should count once, as its country.
  */
 export function splitPlaces(text: string): { countries: string[]; rest: string; places: Array<{ place: string; coords: typeof GAZETTEER[string] }> } {
-  const clean = text.replace(OUTLET_NAMES, ' ')
+  const clean = cleanText(text)
   const spans: Array<[number, number]> = []
   const codes = new Set<string>()
   const found: Array<{ place: string; coords: typeof GAZETTEER[string]; index: number }> = []
@@ -2855,7 +2863,7 @@ export function splitPlaces(text: string): { countries: string[]; rest: string; 
  * Used by the Knowledge Graph's rule-based extraction (pipeline/entity-rules.ts).
  */
 export function placesInText(text: string, max = 6): string[] {
-  const clean = text.replace(OUTLET_NAMES, ' ')
+  const clean = cleanText(text)
   const hits: Array<{ name: string; index: number; end: number }> = []
   // Longest names first, so "West Virginia" keeps "Virginia" from counting again
   for (const m of GAZETTEER_SCAN) {
@@ -2889,7 +2897,7 @@ export function placesInText(text: string, max = 6): string[] {
  * the capital of the first country it names, else none.
  */
 export function placeFromText(text: string): GeoResult {
-  return gazetteerPoint(text) ?? countryPoint(mentionedCountries(text.replace(OUTLET_NAMES, ' ')))
+  return gazetteerPoint(text) ?? countryPoint(mentionedCountries(cleanText(text)))
 }
 
 // ─── MAIN EXPORT ─────────────────────────────────────────────────────────────
@@ -2898,7 +2906,7 @@ export function placeFromText(text: string): GeoResult {
  * "Israeli"): an adjective names the actor, and the story is often elsewhere ("Israeli strike" in Gaza City)
  */
 export function countriesNamedOutright(text: string): string[] {
-  const clean = text.replace(OUTLET_NAMES, ' ')
+  const clean = cleanText(text)
   const hits: Array<{ code: string; index: number }> = []
   for (const [pattern, code] of COUNTRY_PATTERNS) {
     const name = (countryNameOf(code) ?? '').toLowerCase()
@@ -2913,7 +2921,7 @@ export function countriesNamedOutright(text: string): string[] {
 
 /** The first gazetteer place in the text that lies in one of `countries` */
 function gazetteerPointIn(text: string, countries: string[]): GeoResult | null {
-  const clean = text.replace(OUTLET_NAMES, ' ')
+  const clean = cleanText(text)
   let best: { place: string; coords: typeof GAZETTEER[string]; index: number } | null = null
   for (const m of GAZETTEER_SCAN) {
     if (!m.coords.country || !countries.includes(m.coords.country)) continue
@@ -2979,7 +2987,7 @@ export async function extractGeo(text: string, body?: string): Promise<GeoResult
   //    acceptGeocoderHit). When the text names countries, the place must be
   //    in one of them (a Saudi airport was pinned in Romania by an ambiguous
   //    name).
-  const countries = mentionedCountries(text.replace(OUTLET_NAMES, ' '))
+  const countries = mentionedCountries(cleanText(text))
   const candidates = extractCandidateLocations(text)
   let lookups = 0
   for (const candidate of candidates) {
