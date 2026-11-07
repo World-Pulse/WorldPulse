@@ -26,13 +26,17 @@ counts, and about 1 in 4 of the world's provinces and states: a Reuters story na
 
 A name goes on the map everywhere (WORLD_TOWNS) only when it can't be anything else: one country's, not a common word
 in the feeds' languages, not a first name or a common surname, not the name of a country, a US state or a place the
-map already puts elsewhere. Otherwise it is read for that country's own outlets only (HOME_TOWNS): a Jamaican outlet's
-"Mandeville" or "Kingston" is the Jamaican town; Reuters' "Kingston" stays unplaced.
+map already puts elsewhere; or when it is a big city looked at by hand (READ_EVERYWHERE: Boston, Kōbe, Surat).
+Otherwise it is read for that country's own outlets only (HOME_TOWNS): a Jamaican outlet's "Mandeville" or "Kingston"
+is the Jamaican town; Reuters' "Kingston" stays unplaced. Each country's 600 largest towns (60 until the night of
+Nov 6, 2026); beyond its 60 largest, none that is any surname, and none everywhere under 100,000 people.
 """
 import json, re, sys, unicodedata, collections, struct, os
 
 MIN_POP = 15_000          # towns of at least this many people, and every capital, national or provincial
-MAX_TOWNS = 60            # at most this many towns a country (the largest), besides its capitals
+MAX_TOWNS = 600           # at most this many towns a country (the largest), besides its capitals (60 until Nov 6, 2026:
+                          # China's and India's towns beyond their 60 largest, Foshan or Surat, weren't on the map)
+OLD_MAX_TOWNS = 60        # beyond a country's 60 largest, stricter (emit)
 MIN_TOWNS = 12            # at least this many, for small countries
 WORLD_MIN_POP = 30_000    # read everywhere: towns of at least this many people, and capitals; smaller ones at home only
 TOWN_CLASSES = {'Admin-0 capital', 'Admin-0 capital alt', 'Admin-1 capital', 'Admin-1 region capital',
@@ -86,7 +90,45 @@ HOME_ONLY = {
     ('LC', 'Soufrière'),     # also St Vincent's La Soufrière volcano, Guadeloupe's, and Montserrat's Soufrière Hills
     ('LC', 'Laborie'), ('LC', 'Micoud'), ('LC', 'Dennery'),   # surnames too
     ('JM', 'Trelawny'),      # also a Cornish name and surname
+    # towns beyond their country's 60 largest, smaller than a namesake abroad (Nov 6, 2026): Afghanistan's Faizabad
+    # (Badakhshan's capital); Nepal's Krishnanagar ("261 families in Krishnanagar receive ... land ownership
+    # certificates", Khabarhub, was pinned in West Bengal); "Hisar", Turkish for a fortress ("Rumeli Hisarı")
+    ('IN', 'Faizabad'), ('IN', 'Krishnanagar'), ('IN', 'Hisar'),
 }
+# Cities read everywhere though another country has a place of the name, or the name is a word or a person's in some
+# language: each looked at by hand for what a world outlet's capitalised name, or GDELT's American, British and
+# Australian local news's, most likely is (Nov 6, 2026: 323 of the world's 1,182 cities of 400,000 people or more
+# couldn't be placed by a world outlet, Boston behind Boston, Lincolnshire). A person of the name is told apart by
+# place-words.ts's FIRST_NAME_PLACES ("Kobe Bryant", "Princess Charlotte", "Boston Scientific"); a namesake's own
+# country's outlets read their own town first (geo.ts homeTwinPlace).
+# Left out after a look, with the day's stories: Natal (Portuguese for Christmas), Essen (German for a meal), Santos
+# ("Todos los Santos"), León ("León XIV"), Salvador (the country in French, "au Salvador", and inside "El Salvador"),
+# Kota (Malay and Indonesian for a city, "Kota Surabaya"), Mesa ("la Mesa del Congreso"), Hue (an English word,
+# capitalised in Title Case), Chihuahua (the dog), Perm ("Perm Sec", a permanent secretary), Buffalo, Fez, Nice,
+# Columbus (the explorer); San Juan (Guatemala's San Juan Sacatepéquez, Honduras' San Juan Guarita, Trinidad's,
+# "el hospital San Juan de Dios"), Santa Cruz (California's, the Galápagos'), Tula (Mexico's refinery), George Town
+# (the Cayman Islands' capital); Odessa, Durango, La Plata, Kingston, Bristol, Portsmouth, Hanover (towns of American
+# or Canadian local news: Odessa, Texas, "Durango and La Plata County residents shaken by flooding", Kingston,
+# Ontario); Berkeley (Bermuda's Berkeley Institute); Liverpool, Leeds, Brighton (most often the football clubs,
+# Uruguay's Liverpool too); and cities of two countries of about a size (Valencia, Birmingham, Córdoba, Newcastle, San
+# José) or of two US states (Portland, Albany, Rochester, Pasadena, Glendale, Springfield, Arlington). Nor any city
+# geo.ts keeps only with its state or country written after it (H-0037, Nov 1, 2026: "Austin, Texas", "Perth,
+# Australia", "Cali, Colombia", "Hyderabad, India", "Campo Grande, Brazil"; geo.ts's tests: "Phoenix rises as Austin
+# Butler stars" is no place), nor La Paz (Baja California Sur's hurricanes)
+READ_EVERYWHERE = {
+    'US': {'Boston', 'San Diego', 'Denver', 'St. Louis', 'Long Beach', 'San Bernardino', 'Virginia Beach', 'Ft. Worth',
+           'Irvine', 'Bridgeport', 'Stamford', 'Laredo'},
+    'RU': {'St. Petersburg', 'Samara', 'Rostov', 'Ivanovo'},
+    'CN': {'Handan', 'Yangzhou', 'Chaozhou', 'Jining', 'Jincheng'},
+    'IN': {'Surat'},
+    'JP': {'Kōbe', 'Nagano'},
+    'BR': {'Santo André', 'Vila Velha'},
+    'DE': {'Heidelberg'},
+    'AU': {'Adelaide'}, 'CO': {'Cartagena'}, 'DK': {'København'}, 'SE': {'Göteborg'}, 'FR': {'Metz'}, 'NG': {'Aba'},
+    'AE': {'Al Ayn'},
+}
+# Natural Earth's rows that are another row again in the wrong place: a second Vila Velha, of the same size, in Amapá
+WRONG_ROWS = {('BR', 'Vila Velha', 3.2)}
 # Names that are no one place's in headlines: Washington's "District of Columbia" less its kind is "Columbia" (the
 # university, Columbia in South Carolina, Columbia Sportswear)
 SKIP = {
@@ -94,10 +136,15 @@ SKIP = {
     ('RU', 'Vladimir'),      # Vladimir Putin (Nov 6, 2026: "Vladimir Putin calls out nations ..." was pinned in Vladimir);
                              # geo.ts keeps "Vladimir Oblast" and "Vladimir region"
     ('CO', 'Meta'),          # the company, in Colombia's outlets too; geo.ts keeps "del Meta", the department's
+    ('MX', 'Cuauhtémoc'),    # Chihuahua's town, not Mexico City's borough ("la alcaldía Cuauhtémoc"), nor Cuauhtémoc Blanco
+    ('MX', 'Cuauhtemoc'),
+    ('BR', 'Caxias'),        # Maranhão's, not Caxias do Sul or Duque de Caxias, both written "Caxias" too
+    ('BR', 'Lajes'),         # Santa Catarina's Lages (the old spelling), not the Azores' Lajes air base
 }
 # English names Natural Earth lacks
 EXTRA_NAMES = {
     ('AE', 'Al Ayn'): ['Al Ain'],
+    ('DE', 'Hanover'): ['Hannover'],       # the German name, Natural Earth's other name for it
 }
 # Words that alone name no one place: a province called "Central" or "Upper East" is several countries'
 GENERIC = {
@@ -180,12 +227,19 @@ def variants(*names):
             if not good_name(part):
                 continue
             forms = [part]
-            # "Saint Ann", "St Ann", "St. Ann" (and Sainte, Ste)
-            m = re.match(r'^(Saint|Sainte|St\.?|Ste\.?)\s+(.+)$', part)
+            # "Saint Ann", "St Ann", "St. Ann" (and Sainte, Ste); "Saint-Denis", "St-Denis", "St.-Denis"
+            m = re.match(r'^(Saint|Sainte|St\.?|Ste\.?)(\s+|-)(.+)$', part)
             if m:
                 female = m.group(1).lower().startswith(('sainte', 'ste'))
-                forms += [f"{'Sainte' if female else 'Saint'} {m.group(2)}", f"{'Ste' if female else 'St'} {m.group(2)}",
-                          f"{'Ste' if female else 'St'}. {m.group(2)}"]
+                sep = ' ' if m.group(2).strip() == '' else '-'
+                forms += [f"{'Sainte' if female else 'Saint'}{sep}{m.group(3)}", f"{'Ste' if female else 'St'}{sep}{m.group(3)}",
+                          f"{'Ste' if female else 'St'}.{sep}{m.group(3)}"]
+            # "Fort Worth" for Natural Earth's "Ft. Worth", "Mount Hagen" for "Mt. Hagen" (Nov 6, 2026: Fort Worth was
+            # another name for Ft. Worth, read only by American outlets)
+            m = re.match(r'^(Ft|Mt)\.?\s+(.+)$', part)
+            if m:
+                forms += [f"{'Fort' if m.group(1) == 'Ft' else 'Mount'} {m.group(2)}", f"{m.group(1)} {m.group(2)}",
+                          f"{m.group(1)}. {m.group(2)}"]
             for f in forms:
                 out.append(f)
                 if fold(f) != f and good_name(fold(f)):
@@ -241,6 +295,8 @@ def candidates(data, countries, out):
     by = collections.defaultdict(list)
     for p in places:
         cc = code(p)
+        if (cc, p['name'], round(p['latitude'], 1)) in WRONG_ROWS:
+            continue
         if cc and (not want or cc in want) and p.get('featurecla') in TOWN_CLASSES:
             by[cc].append(p)
     for cc, ps in by.items():
@@ -261,7 +317,8 @@ def candidates(data, countries, out):
             main = variants(p['name'], ascii_name, *EXTRA_NAMES.get((cc, p['name']), []))
             rows.append({'cc': cc, 'kind': 'town', 'shown': p['name'], 'type': p.get('featurecla'), 'lat': round(p['latitude'], 4),
                          'lng': round(p['longitude'], 4), 'names': names, 'main': main, 'pop': p.get('pop_max'),
-                         'adm1': province_name(cc, p.get('adm1name')), 'country_name': p.get('adm0name') or ''})
+                         'adm1': province_name(cc, p.get('adm1name')), 'country_name': p.get('adm0name') or '',
+                         'rank': ps.index(p)})
     # every name Natural Earth gives any place or province, by country: a name in two countries is no one's alone
     everywhere = collections.defaultdict(set)
     for p in places:
@@ -327,14 +384,15 @@ def word_lists(data):
                     very.update({w, fold(w)})
     common = set().union(*words.values())
     first = {fold(l.strip().lower()) for l in open(f'{data}/first-names.txt', encoding='utf-8') if l.strip()}
-    surnames = set()
+    surnames, every_surname = set(), set()
     for i, line in enumerate(open(f'{data}/surnames.csv', encoding='utf-8')):
         if i == 0:
             continue
-        if i > 25_000:
-            break
-        surnames.add(fold(line.split(',')[0].strip().lower()))
-    return common, very, first | surnames, surnames
+        name = fold(line.split(',')[0].strip().lower())
+        every_surname.add(name)
+        if i <= 25_000:
+            surnames.add(name)
+    return common, very, first | surnames, surnames, first | every_surname
 
 
 ARTICLES = {'al', 'el', 'ad', 'as', 'ash', 'ar', 'az', 'an', 'at', 'ath', 'adh', 'aḑ', 'aş', 'aţ'}
@@ -347,19 +405,45 @@ US_STATES = {'alabama', 'alaska', 'arizona', 'arkansas', 'california', 'colorado
              'utah', 'vermont', 'virginia', 'washington', 'west virginia', 'wisconsin', 'wyoming'}
 
 
+def with_state_only():
+    """geo.ts's hand-kept cities written with their state or country ("austin, texas", H-0037): the bare name isn't
+    read everywhere, it is a word or a name too often"""
+    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../apps/scraper/src/pipeline/geo.ts'), encoding='utf-8').read()
+    # not Kansas City, neither a word nor a name: written alone it is Missouri's, not the state of Kansas
+    return {fold(m.group(1)) for m in re.finditer(r"^  '([^',]+), [^']+': \{", src, re.M)} - {'kansas city'}
+
+
+def first_name_places():
+    """place-words.ts's FIRST_NAME_PLACES: places that are also people's names, whose capitals around say which (Denver, Austin)"""
+    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../apps/scraper/src/pipeline/place-words.ts'), encoding='utf-8').read()
+    block = re.search(r'const FIRST_NAME_PLACES = new Set\(\[(.*?)\]\)', src, re.S).group(1)
+    return set(re.findall(r"'([^']+)'", re.sub(r'//[^\n]*', '', block)))
+
+
 def emit(data, cand_path, verdict_path, out):
     rows = json.load(open(cand_path, encoding='utf-8'))
     verdicts = json.load(open(verdict_path, encoding='utf-8'))      # name -> {country, whole}
-    common, very, people, surnames = word_lists(data)
+    common, very, people, surnames, anyone = word_lists(data)
+    named_places = first_name_places()
+    state_only = with_state_only()
     world, home, world_keys = {}, collections.defaultdict(dict), set()
     why = collections.Counter()
+    hand_world = set()
     for r in rows:
         cc = r['cc']
         place = {'lat': r['lat'], 'lng': r['lng'], 'country': cc, 'name': r['shown']}
         if r['kind'] == 'town' and r.get('adm1'):
             place['region'] = r['adm1']
+        # a town beyond its country's 60 largest (OLD_MAX_TOWNS) is smaller than its name's other uses more often: none
+        # that is any of 150,000 surnames (Nov 6, 2026: Bellingham, Washington took "Jude Bellingham's brother Jobe
+        # gets England call-up", Dickinson "Emily Dickinson", Brazil's Salgueiro Matosinhos' mayor Luísa Salgueiro), and
+        # read everywhere only from 100,000 people
+        beyond = r['kind'] == 'town' and r.get('rank', 0) >= OLD_MAX_TOWNS and 'capital' not in (r.get('type') or '')
+        listed = READ_EVERYWHERE.get(cc, ())
+        shown = re.sub(r'\s+', ' ', r['shown'])
         for n in r['names']:
             key = n.lower()
+            hand = (shown in listed or n in listed) and n in r['main']
             words = re.findall(r"[^\W\d_]+", fold(key))
             if not words or all(w in GENERIC for w in words) or len(fold(key).replace(' ', '')) < 3:
                 why['generic'] += 1
@@ -373,7 +457,9 @@ def emit(data, cand_path, verdict_path, out):
                 why['a common word without its accents'] += 1
                 continue
             v = verdicts.get(n) or verdicts.get(key) or {}
-            if v.get('country') == cc:
+            # known: the place-finder reads the whole name in this country already; read in part, the name is still
+            # wanted (Nov 6, 2026: with accents read, "Kasaï-Oriental" was the Kasaï, another province)
+            if v.get('country') == cc and v.get('whole'):
                 why['known'] += 1
                 continue
             own = set(re.findall(r"[^\W\d_]+", fold(r.get('country_name', '')).lower()))
@@ -382,9 +468,14 @@ def emit(data, cand_path, verdict_path, out):
                 continue
             # an Arabic article doesn't make a name two common words ("Al Ain", "As Suwayda")
             core = [w for w in words if w not in ARTICLES] or words
+            if beyond and not hand and any(w in anyone for w in core if w not in GENERIC):
+                why['skipped: beyond the 60 largest, a person\'s name'] += 1
+                continue
             risky = None
             if (cc, r['shown']) in HOME_ONLY or (cc, n) in HOME_ONLY:
                 risky = 'kept at home by hand'
+            elif fold(key) in state_only:
+                risky = 'geo.ts reads it with its state or country'
             elif n not in r.get('main', r['names']):
                 risky = 'another name for it'
             elif any(w in REGION_WORDS for w in words):
@@ -406,6 +497,16 @@ def emit(data, cand_path, verdict_path, out):
                 risky = 'too short'          # "Yoro" (Honduras) is also a West African name: "Médina Yoro Foulah"
             elif r['kind'] == 'town' and (r.get('pop') or 0) < WORLD_MIN_POP and 'capital' not in (r.get('type') or ''):
                 risky = 'a small town'
+            elif beyond and (r.get('pop') or 0) < 100_000:
+                risky = 'a small town beyond the 60 largest'
+            # a city looked at by hand (READ_EVERYWHERE): Boston, Hyderabad, Perth
+            if (risky in ('in two countries', 'part of a longer name elsewhere', 'common words', 'a word or a name', 'too short')
+                    and hand):
+                why['world: read everywhere by hand (' + risky + ')'] += 1
+                if len(words) == 1 and words[0] in people and fold(key) not in named_places:
+                    print('warning: read everywhere, also a person\'s name, not in place-words.ts\'s FIRST_NAME_PLACES:', cc, n)
+                hand_world.add((cc, shown if shown in listed else n))
+                risky = None
             # a longer name, part of which the map puts in another country, is better read whole, everywhere: "Coronel
             # Oviedo" (Paraguay) was Spain's Oviedo, "El Beni" (Bolivia) the Congo's Beni (Nov 6, 2026)
             # (not "East London", South Africa's: Britain's outlets write London's East End so too)
@@ -423,10 +524,15 @@ def emit(data, cand_path, verdict_path, out):
                 if key not in world_keys:
                     world_keys.add(key)
                     world[n] = place
-    # a name both put on the map everywhere and kept for one country's outlets is the map's
+    # a name both put on the map everywhere and kept for its own country's outlets is the map's; another country's
+    # town of the name stays its outlets' (Odessa, Texas, for a Texan outlet)
+    world_country = {k.lower(): p['country'] for k, p in world.items()}
     for cc in home:
-        for n in [n for n in home[cc] if n.lower() in world_keys]:
+        for n in [n for n in home[cc] if world_country.get(n.lower()) == cc]:
             del home[cc][n]
+    missing = {(cc, n) for cc, ns in READ_EVERYWHERE.items() for n in ns} - hand_world
+    if missing:
+        print('warning: READ_EVERYWHERE names not found or not needed:', sorted(missing))
     print(dict(why))
     print('world', len(world), 'home', sum(len(v) for v in home.values()), 'countries', len(home))
     write_ts(world, home, out)

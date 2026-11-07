@@ -2134,7 +2134,9 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'raleigh': { lat: 35.7796, lng: -78.6382, country: 'US', name: 'Raleigh' },
   'salt lake': { lat: 40.7608, lng: -111.891, country: 'US', name: 'Salt Lake', asWritten: 'Salt Lake' },
   'san cristobal de las casas': { lat: 16.737, lng: -92.6376, country: 'MX', name: 'San Cristobal de Las Casas' },
-  'santa barbara': { lat: 34.4208, lng: -119.6982, country: 'US', name: 'Santa Barbara' },
+  // as written: Spanish "Santa Bárbara" is the saint, Honduras' department and a dozen towns (Nov 6, 2026: with accents
+  // read, Honduras' was California's)
+  'santa barbara': { lat: 34.4208, lng: -119.6982, country: 'US', name: 'Santa Barbara', asWritten: 'Santa Barbara' },
   'sao jose dos campos': { lat: -23.2237, lng: -45.9009, country: 'BR', name: 'Sao Jose dos Campos' },
   'saskatoon': { lat: 52.1332, lng: -106.67, country: 'CA', name: 'Saskatoon' },
   'scranton': { lat: 41.409, lng: -75.6624, country: 'US', name: 'Scranton' },

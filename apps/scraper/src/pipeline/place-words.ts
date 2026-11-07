@@ -75,11 +75,62 @@ const FIRST_NAME_PLACES = new Set([
   'alexandria', 'savannah', 'aurora', 'augusta', 'eugene', 'virginia', 'carolina', 'dakota', 'montana', 'jordan',
   'lincoln', 'hamilton', 'washington', 'jackson', 'carson', 'warren', 'nelson', 'kent', 'preston', 'cleveland',
   'tyler', 'quincy', 'raleigh', 'denver', 'chester', 'kingston', 'wellington', 'columbia', 'troy', 'marion',
+  // Nov 6, 2026: big cities read everywhere since (make_gazetteer.py's READ_EVERYWHERE) or by their own outlets, that
+  // are names too: "Samara Weaving", "Kobe Bryant", "Irvine Welsh", "Odessa Young", a company or a team ("Boston
+  // Celtics", "Providence Health", "Bristol Myers Squibb", "Heidelberg Materials")
+  'boston', 'cali', 'samara', 'odessa', 'kobe', 'bristol', 'providence', 'irvine', 'metz', 'hanover', 'heidelberg',
+  'cartagena',
 ])
 /** Of those, the ones that are surnames too: a capitalised first name before them makes a person ("Lewis Hamilton") */
 const SURNAME_PLACES = new Set([
   'hamilton', 'houston', 'washington', 'jackson', 'austin', 'madison', 'lincoln', 'carson', 'warren', 'nelson', 'kent',
   'preston', 'cleveland', 'tyler', 'quincy', 'raleigh', 'denver', 'chester', 'kingston', 'wellington', 'jordan', 'marion',
+  'phoenix', 'irvine', 'metz',
+])
+/**
+ * A title before a first-name place makes a person, in any headline: "Princess Charlotte", "Queen Victoria", "Lord
+ * Nelson", "Dr Austin Demby" (Nov 6, 2026: a Sierra Leonean health centre opening was pinned in Texas), "Sen. Warren"
+ */
+const TITLES = new Set([
+  'prince', 'princess', 'queen', 'king', 'lady', 'lord', 'sir', 'dame', 'duke', 'duchess', 'emperor', 'empress',
+  'príncipe', 'princesa', 'reina', 'rey', 'infanta', 'infante', 'princesse', 'reine', 'roi', 'prinz', 'prinzessin',
+  'königin', 'könig', 'principessa', 'regina',
+  'dr', 'mr', 'mrs', 'ms', 'prof', 'professor', 'doctor', 'rev', 'reverend', 'pastor', 'father', 'bishop', 'imam',
+  'sheikh', 'senator', 'sen', 'rep', 'president', 'judge', 'coach', 'captain', 'capt', 'gen', 'col', 'sgt', 'detective',
+  'sr', 'sra', 'señor', 'señora', 'dra', 'monsieur', 'madame', 'mme', 'herr', 'frau',
+])
+/**
+ * Common given names, written without accents: one right before a surname-place makes a person even where capitals
+ * say nothing, at a sentence's start or in A Headline In Title Case (Nov 6, 2026: the day's stories began "Lewis
+ * Hamilton will celebrate", "Elizabeth Warren's Power", "Paris Jackson seeks", "Luis Hamilton: Lekler"). Not the names
+ * that are everyday words too (Will, Mark, Grace, May, Frank).
+ */
+const GIVEN_NAMES = new Set([
+  'james', 'john', 'robert', 'michael', 'william', 'david', 'richard', 'joseph', 'thomas', 'charles', 'christopher',
+  'daniel', 'matthew', 'anthony', 'donald', 'steven', 'paul', 'andrew', 'joshua', 'kenneth', 'kevin', 'brian', 'george',
+  'timothy', 'ronald', 'edward', 'jason', 'jeffrey', 'ryan', 'jacob', 'gary', 'nicholas', 'eric', 'jonathan', 'stephen',
+  'larry', 'justin', 'scott', 'brandon', 'benjamin', 'samuel', 'gregory', 'alexander', 'patrick', 'raymond', 'jack',
+  'dennis', 'jerry', 'aaron', 'jose', 'adam', 'nathan', 'henry', 'douglas', 'zachary', 'peter', 'kyle', 'ethan',
+  'walter', 'noah', 'jeremy', 'keith', 'roger', 'terry', 'gerald', 'harold', 'sean', 'carl', 'arthur',
+  'lawrence', 'dylan', 'jesse', 'bryan', 'billy', 'joe', 'bruce', 'gabriel', 'logan', 'albert', 'willie', 'alan', 'juan',
+  'wayne', 'elijah', 'randy', 'roy', 'vincent', 'ralph', 'eugene', 'russell', 'bobby', 'mason', 'philip', 'louis',
+  'lewis', 'luis', 'carlos', 'jorge', 'pedro', 'miguel', 'antonio', 'manuel', 'francisco', 'javier', 'rafael',
+  'fernando', 'diego', 'alejandro', 'ricardo', 'eduardo', 'sergio', 'pablo', 'andres', 'joaquin', 'mario', 'roberto',
+  'jesus', 'marco', 'paulo', 'joao', 'lucas', 'gustavo', 'felipe', 'rodrigo', 'thiago', 'mateus', 'jean', 'pierre',
+  'michel', 'philippe', 'alain', 'jacques', 'francois', 'nicolas', 'olivier', 'laurent', 'emmanuel', 'mohamed',
+  'muhammad', 'mohammed', 'ahmed', 'ali', 'hassan', 'hussein', 'omar', 'ibrahim', 'mustafa', 'khalid', 'abdul', 'rahul',
+  'amit', 'arjun', 'vijay', 'sanjay', 'ravi', 'suresh', 'ramesh', 'hans', 'klaus', 'stefan', 'markus',
+  'giuseppe', 'giovanni', 'luca', 'alessandro', 'jude', 'jobe', 'rory', 'harry', 'oliver', 'charlie', 'liam',
+  'mary', 'patricia', 'jennifer', 'linda', 'elizabeth', 'barbara', 'susan', 'jessica', 'sarah', 'karen', 'lisa', 'nancy',
+  'betty', 'sandra', 'margaret', 'ashley', 'kimberly', 'emily', 'donna', 'michelle', 'carol', 'amanda', 'melissa',
+  'deborah', 'stephanie', 'rebecca', 'laura', 'sharon', 'cynthia', 'kathleen', 'amy', 'angela', 'shirley', 'brenda',
+  'emma', 'anna', 'pamela', 'nicole', 'samantha', 'katherine', 'christine', 'helen', 'debra', 'rachel', 'carolyn',
+  'janet', 'maria', 'catherine', 'heather', 'diane', 'olivia', 'julie', 'joyce', 'ruth', 'lauren', 'kelly', 'christina',
+  'joan', 'evelyn', 'judith', 'andrea', 'hannah', 'megan', 'cheryl', 'jacqueline', 'martha', 'teresa', 'gloria', 'sara',
+  'janice', 'ann', 'kathryn', 'abigail', 'sophia', 'frances', 'alice', 'judy', 'isabella', 'julia', 'amber', 'denise',
+  'danielle', 'marilyn', 'beverly', 'natalie', 'theresa', 'diana', 'brittany', 'doris', 'kayla', 'alexis', 'lori',
+  'marie', 'paris', 'whitney', 'taylor', 'kamala', 'hillary', 'ana', 'lucia', 'carmen', 'isabel', 'sofia', 'camila',
+  'valentina', 'fernanda', 'juliana', 'beatriz', 'claire', 'sophie', 'nathalie', 'isabelle', 'fatima', 'aisha', 'priya',
 ])
 /** The small words inside people's names, and not places': "José dos Santos", "Ludwig van Beethoven" */
 const NAME_PARTICLES = new Set(['dos', 'das', 'van', 'von', 'bin', 'ibn'])
@@ -182,9 +233,14 @@ export function partOfAName(text: string, at: number, end: number, surname?: boo
   // Chile's Los Lagos region is a gazetteer place of its own)
   if (hit.toLowerCase() === 'lagos' && wordBefore(text, at)?.toLowerCase() === 'los') return true
   if (!startsUpper(hit)) return false
+  // A ship named after a place, not the place (Nov 6, 2026: Antara's "Indonesia, US navies honor USS Houston in joint
+  // dive"): "USS Houston", "HMS Belfast", "INS Mumbai", "the MV Ruby"
+  if (/(?:^|[^\p{L}])(?:USS|USNS|HMS|HMAS|HMCS|HMNZS|INS|PNS|KRI|ROKS|MV|RV)[ \t]+$/u.test(text.slice(Math.max(0, at - 8), at))) return true
   // A virus or a fever named after a place, not the place (Nov 6, 2026: "Bundibugyo virus disease" in a story on
   // the Congo's Ebola outbreak): "Marburg virus", "Lassa fever", "Rift Valley fever", "the Zaire strain"
   if (/^[ \t]+(?:virus|viruses|fever|ebolavirus|strain|variant)\b/i.test(text.slice(end, end + 14))) return true
+  // The northern and southern lights, not Aurora, Colorado (Nov 6, 2026: "The Aurora Borealis May Appear In 10 States")
+  if (hit.toLowerCase() === 'aurora' && /^[ \t]+(?:borealis|australis)\b/i.test(text.slice(end, end + 12))) return true
   // An oil benchmark, not the place (Nov 6, 2026: oilprice.com's "West Texas Intermediate was trading at $91" was
   // pinned in Texas): "Brent crude" (Brent is also a London borough), "West Texas Intermediate", "Urals crude"
   if (/^(?:brent[ \t]+(?:crude|oil|futures|blend|benchmark|prices?)|(?:west[ \t]+)?texas[ \t]+intermediate|urals[ \t]+(?:crude|oil|blend|prices?)|(?:dubai|oman|murban)[ \t]+crude)\b/i.test(text.slice(at, end + 24))) return true
@@ -212,15 +268,23 @@ export function partOfAName(text: string, at: number, end: number, surname?: boo
   if (after && startsUpper(after) && DOCUMENT_AFTER.has(after.toLowerCase())) return true
   // without accents: "Sofía" is the first name "sofia"
   const key = hit.normalize('NFD').replace(/\p{Mn}/gu, '').toLowerCase()
+  const title = /(\p{L}+)\.?[ \t]+$/u.exec(text.slice(Math.max(0, at - 24), at))?.[1]
+  if (FIRST_NAME_PLACES.has(key) && title && startsUpper(title) && TITLES.has(title.toLowerCase())) return true
+  if ((SURNAME_PLACES.has(key) || surname) && before && startsUpper(before)
+    && GIVEN_NAMES.has(before.normalize('NFD').replace(/\p{Mn}/gu, '').toLowerCase())) return true
   if (!(FIRST_NAME_PLACES.has(key) || surname) || titleCaseAround(text, at, end)) return false
   if (FIRST_NAME_PLACES.has(key) && after && startsUpper(after) && !GAZETTEER_NEXT.has(after.toLowerCase())) return true
+  // ...or joined to it by a hyphen: "Bristol-Myers Squibb" (Nov 6, 2026), not "Boston-based"
+  const joined = /^-(\p{Lu}[\p{L}'’]*)/u.exec(text.slice(end, end + 30))?.[1]
+  if (FIRST_NAME_PLACES.has(key) && joined && !GAZETTEER_NEXT.has(joined.toLowerCase())) return true
   // ...also across a name's particle: "Zélia José dos Santos" (Nov 6, 2026); not "de" or "da", which places take
   // too ("la Ferme-Asile de Sion", "Prefeitura de Santos")
   if (surname && before && NAME_PARTICLES.has(before)) {
     const first = wordBefore(text, at - before.length - 1)
     if (first && startsUpper(first) && !NOT_FIRST_NAMES.has(first.toLowerCase()) && !startsSentence(text, at - before.length - 1)) return true
   }
+  // not an acronym before it, a university's campus: "UC Irvine", "UT Austin"
   if ((SURNAME_PLACES.has(key) || surname) && before && startsUpper(before) && !NOT_FIRST_NAMES.has(before.toLowerCase())
-    && !/['’]s$/.test(before) && !startsSentence(text, at)) return true
+    && before !== before.toUpperCase() && !/['’]s$/.test(before) && !startsSentence(text, at)) return true
   return false
 }
