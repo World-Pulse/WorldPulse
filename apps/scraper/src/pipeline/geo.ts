@@ -209,6 +209,10 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'montreal':         { lat: 45.5017, lng: -73.5673, country: 'CA' },
   'vancouver':        { lat: 49.2827, lng: -123.1207, country: 'CA' },
   'mexico city':      { lat: 19.4326, lng: -99.1332, country: 'MX' },
+  // Mexico City and the State of Mexico as Mexican outlets write them (Nov 7, 2026: 13 and 5 of two days' headlines,
+  // El Universal's "Incidencia delictiva en Central de Abasto de CDMX baja 8%" no place)
+  'cdmx':             { lat: 19.4326, lng: -99.1332, country: 'MX', name: 'Mexico City', asWritten: 'CDMX' },
+  'edomex':           { lat: 19.2826, lng: -99.6557, country: 'MX', name: 'State of Mexico', asWritten: 'Edomex' },
   'sao paulo':        { lat: -23.5505, lng: -46.6333, country: 'BR' },
   'rio de janeiro':   { lat: -22.9068, lng: -43.1729, country: 'BR' },
   'buenos aires':     { lat: -34.6037, lng: -58.3816, country: 'AR' },

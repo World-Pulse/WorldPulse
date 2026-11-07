@@ -10756,6 +10756,10 @@ export const HOME_PIN_SOURCES = new Set([
   // Nov 6, 2026, 2 PM: The Royal Gazette, SANA, Al-Watan and Ikon.mn, each mostly its own country's news; not Syria TV
   // or Al Bilad (the region's and the world's too)
   'royal-gazette-bm', 'sana-sy-ar', 'al-watan-sy-ar', 'ikon-mn',
+  // Nov 7, 2026: Paraguay's three national outlets, each almost only its own country's news (ABC Color's national
+  // section; of 30 unplaced headlines sampled from each, all but one Paraguay's own); in two days 100 of their unplaced
+  // headlines named President Peña during his impeachment, and dozens more the collapse of ueno bank, none of them on the map
+  'abc-color-py', 'la-nacion-py', 'el-nacional-py',
 ])
 
 export interface InferredGeo {
