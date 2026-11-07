@@ -2735,6 +2735,9 @@ const HOME_NAMES: Record<string, { name: RegExp; as: string; unless?: RegExp }> 
   // A Mexican outlet's "la Roma" is Mexico City's Colonia Roma (Nov 6, 2026: "5 actividades para este fin de semana en
   // CDMX" was pinned in Rome), as are "Roma Norte" and "Roma-Condesa"
   MX: { name: /\b[Ll]a\s+Roma\b(?![\s-]+(?:Italia|italiana))|\bRoma(?=[\s-]+(?:Norte|Sur|Condesa)\b)/g, as: 'Colonia Roma' },
+  // A Nigerian outlet's "Plateau" is Plateau State, not the word (Nov 7, 2026: Punch's and Vanguard's "Soldiers rescue
+  // three abducted women in Plateau" was no place; 10 of two days' stories)
+  NG: { name: /\bPlateau\b(?!\s+State)/g, as: 'Plateau State' },
 }
 
 export function withHomeNames(text: string, countryCode: string | null | undefined): string {

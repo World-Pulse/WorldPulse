@@ -566,6 +566,12 @@ const FRENCH: Rule[] = towns([
   ['Chiraz', 'Shiraz'], ['Louhansk', 'Luhansk'], ['Marioupol', 'Mariupol'], ['Zaporijjia|Zaporijia', 'Zaporizhzhia'], ['Crimée', 'Crimea'],
   ['Sébastopol', 'Sevastopol'], ['Koursk', 'Kursk'], ['Briansk', 'Bryansk'], ['Ormuz', 'Hormuz'], ['Nouvelle-Delhi', 'New Delhi'],
   ['Smyrne', 'Izmir'], ['Pyongyang', 'Pyongyang'],
+  // countries and US states the place-finder doesn't know in French (Nov 7, 2026: "Élections au Chili" was no place); not
+  // "Équateur" (also Congo's province), "Géorgie" (the country or the state), "Virginie" (a first name)
+  ['Chili', 'Chile'], ['Suède', 'Sweden'], ['Écosse|Ecosse', 'Scotland'], ['Groenland', 'Greenland'], ['Népal', 'Nepal'],
+  ['Bhoutan', 'Bhutan'], ['(?<=(?:[Aa]u|[Dd]u|[Ll]e)\\s)Salvador', 'El Salvador'], ['Floride', 'Florida'], ['Californie', 'California'],
+  ['Louisiane', 'Louisiana'], ['Pennsylvanie', 'Pennsylvania'], ['Caroline\\s+du\\s+Nord', 'North Carolina'],
+  ['Caroline\\s+du\\s+Sud', 'South Carolina'], ['Nouveau-Mexique', 'New Mexico'],
 ])
 
 export const LOCAL_NAMES: Record<string, Rule[]> = {

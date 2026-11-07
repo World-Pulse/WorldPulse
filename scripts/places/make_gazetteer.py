@@ -4,7 +4,8 @@ Nov 6, of each country's 10 largest towns the place-finder knew fewer than half 
 counts, and about 1 in 4 of the world's provinces and states: a Reuters story naming only "Mandeville" or
 "Queensland" landed nowhere, and "Baja California" landed in California. Batch 1 mapped those 72 countries, batch 2
 (the same evening) every country: towns 56% to 83%, provinces 23% to 71%. Natural Earth is in the public domain
-(naturalearthdata.com). To make the file again, from the repository's root:
+(naturalearthdata.com); what it lacks (Kenya's counties, Nepal's provinces, Thane) is written by hand (EXTRA_PLACES).
+To make the file again, from the repository's root:
 
   # 1. the data, each in its own new folder (Natural Earth 5.1, and the word lists that say which names are words)
   D=$(mktemp -d); cd $D
@@ -123,13 +124,78 @@ READ_EVERYWHERE = {
            'Irvine', 'Bridgeport', 'Stamford', 'Laredo'},
     'RU': {'St. Petersburg', 'Samara', 'Rostov', 'Ivanovo'},
     'CN': {'Handan', 'Yangzhou', 'Chaozhou', 'Jining', 'Jincheng'},
-    'IN': {'Surat'},
+    'IN': {'Surat', 'Thane'},   # Thane: Albanian "thanë" (they said) is a word without its accent, never "Thane"
     'JP': {'Kōbe', 'Nagano'},
     'BR': {'Santo André', 'Vila Velha'},
     'DE': {'Heidelberg'},
     'AU': {'Adelaide'}, 'CO': {'Cartagena'}, 'DK': {'København'}, 'SE': {'Göteborg'}, 'FR': {'Metz'}, 'NG': {'Aba'},
     'AE': {'Al Ayn'},
 }
+# Places Natural Earth lacks, by hand (Nov 7, 2026, from two days' stories the map couldn't place): Kenya's counties
+# (its provinces there are the 8 of before 2013: "Floods in Migori" was no place), Nepal's new provinces (it has the 14
+# zones of before 2015) and some districts, Kerala's districts and its new name, Thane and Howrah (1.8 and 1.1 million
+# people), and towns of the news (Qeshm, Teknaf, Kajang, Abyei). Each at its seat or main town, as written down from
+# memory and checked against a second list of towns (within 2 km; Howrah and Pokhara's 6). The same rules then say
+# whether a name is read everywhere: (country, kind, name, lat, lng, region of a town or None, population of a town or
+# None, other names)
+EXTRA_PLACES = [
+    ('KE', 'province', 'Kwale', -4.174, 39.452, None, None, []),
+    ('KE', 'province', 'Tana River', -1.500, 40.030, None, None, []),
+    ('KE', 'province', 'Taita Taveta', -3.505, 38.378, None, None, ['Taita-Taveta']),
+    ('KE', 'province', 'Tharaka Nithi', -0.333, 37.647, None, None, ['Tharaka-Nithi']),
+    ('KE', 'province', 'Makueni', -1.781, 37.629, None, None, []),
+    ('KE', 'province', 'Nyandarua', -0.273, 36.379, None, None, []),
+    ('KE', 'province', 'Kirinyaga', -0.499, 37.281, None, None, []),
+    ('KE', 'province', "Murang'a", -0.721, 37.153, None, None, ['Muranga', 'Murang’a']),
+    ('KE', 'province', 'Kiambu', -1.171, 36.835, None, None, []),
+    ('KE', 'province', 'West Pokot', 1.239, 35.112, None, None, []),
+    ('KE', 'province', 'Samburu', 1.097, 36.698, None, None, []),
+    ('KE', 'province', 'Trans Nzoia', 1.016, 35.006, None, None, ['Trans-Nzoia']),
+    ('KE', 'province', 'Uasin Gishu', 0.514, 35.270, None, None, []),
+    ('KE', 'province', 'Elgeyo Marakwet', 0.671, 35.508, None, None, ['Elgeyo-Marakwet']),
+    ('KE', 'province', 'Nandi', 0.204, 35.105, None, None, []),
+    ('KE', 'province', 'Baringo', 0.492, 35.743, None, None, []),
+    ('KE', 'province', 'Laikipia', 0.012, 37.074, None, None, []),
+    ('KE', 'province', 'Kajiado', -1.852, 36.776, None, None, []),
+    ('KE', 'province', 'Bomet', -0.782, 35.342, None, None, []),
+    ('KE', 'province', 'Vihiga', 0.077, 34.723, None, None, []),
+    ('KE', 'province', 'Busia', 0.460, 34.111, None, None, []),
+    ('KE', 'province', 'Siaya', 0.061, 34.288, None, None, []),
+    ('KE', 'province', 'Homa Bay', -0.527, 34.457, None, None, []),
+    ('KE', 'province', 'Migori', -1.063, 34.473, None, None, []),
+    ('KE', 'province', 'Nyamira', -0.567, 34.935, None, None, []),
+    ('NP', 'province', 'Koshi', 26.455, 87.270, None, None, []),
+    ('NP', 'province', 'Madhesh', 26.729, 85.926, None, None, []),
+    ('NP', 'province', 'Sudurpashchim', 28.708, 80.590, None, None, ['Sudurpaschim']),
+    ('NP', 'province', 'Chitwan', 27.683, 84.433, None, None, []),
+    ('NP', 'province', 'Rasuwa', 28.107, 85.296, None, None, []),
+    ('NP', 'province', 'Humla', 29.970, 81.831, None, None, []),
+    ('NP', 'town', 'Kirtipur', 27.678, 85.278, 'Bagmati', 65_000, []),
+    ('IN', 'town', 'Thane', 19.218, 72.978, 'Maharashtra', 1_841_000, []),
+    ('IN', 'town', 'Howrah', 22.596, 88.264, 'West Bengal', 1_077_000, []),
+    ('IN', 'province', 'Keralam', 10.8505, 76.2711, None, None, []),
+    ('IN', 'province', 'Thrissur', 10.527, 76.214, None, None, ['Trichur']),
+    ('IN', 'province', 'Kannur', 11.874, 75.370, None, None, []),
+    ('IN', 'province', 'Palakkad', 10.786, 76.654, None, None, []),
+    ('IN', 'province', 'Malappuram', 11.051, 76.071, None, None, []),
+    ('IN', 'province', 'Kottayam', 9.591, 76.522, None, None, []),
+    ('IN', 'province', 'Ernakulam', 10.016, 76.341, None, None, []),
+    ('IN', 'province', 'Idukki', 9.851, 76.946, None, None, []),
+    ('IN', 'province', 'Wayanad', 11.609, 76.084, None, None, []),
+    ('IN', 'province', 'Pathanamthitta', 9.264, 76.787, None, None, []),
+    ('IN', 'province', 'Kasaragod', 12.500, 74.990, None, None, []),
+    ('IN', 'province', 'East Godavari', 17.005, 81.777, None, None, []),
+    ('IN', 'province', 'West Godavari', 16.544, 81.521, None, None, []),
+    ('IR', 'province', 'Qeshm', 26.958, 56.270, None, None, []),
+    ('BD', 'province', 'Teknaf', 20.863, 92.302, None, None, []),
+    ('KG', 'province', 'Sokuluk', 42.859, 74.305, None, None, []),
+    ('AT', 'province', 'Voitsberg', 47.044, 15.159, None, None, []),
+    ('MY', 'town', 'Kajang', 2.993, 101.788, 'Selangor', 342_000, []),
+    ('UA', 'province', 'Oleshky', 46.617, 32.722, None, None, []),
+    ('BG', 'province', 'Shabla', 43.539, 28.535, None, None, []),
+    ('SD', 'province', 'Abyei', 9.596, 28.437, None, None, []),
+    ('BS', 'province', 'Grand Bahama', 26.533, -78.697, None, None, []),
+]
 # Natural Earth's rows that are another row again, of the same size, in the wrong place: a second Vila Velha in Amapá,
 # Crato in Amazonas, Nakhodka (Primorye's port) in Yamal-Nenets, Noginsk (Moscow's) in Evenkia
 WRONG_ROWS = {('BR', 'Vila Velha', 3.2), ('BR', 'Crato', -7.5), ('RU', 'Nakhodka', 67.8), ('RU', 'Noginsk', 64.5)}
@@ -323,8 +389,19 @@ def candidates(data, countries, out):
                          'lng': round(p['longitude'], 4), 'names': names, 'main': main, 'pop': p.get('pop_max'),
                          'adm1': province_name(cc, p.get('adm1name')), 'country_name': p.get('adm0name') or '',
                          'rank': ps.index(p)})
+    country_of = {code(p): p.get('adm0name') for p in places if code(p)}
+    for cc, kind, name, lat, lng, region, pop, others in EXTRA_PLACES:
+        if want and cc not in want:
+            continue
+        # as written by hand, an apostrophe too ("Murang'a")
+        names = list(dict.fromkeys([name, *others] + variants(name, *others)))
+        rows.append({'cc': cc, 'kind': kind, 'shown': name, 'type': 'by hand', 'lat': lat, 'lng': lng, 'names': names,
+                     'main': names, 'pop': pop, 'adm1': region, 'country_name': country_of.get(cc) or '', 'rank': 0})
     # every name Natural Earth gives any place or province, by country: a name in two countries is no one's alone
     everywhere = collections.defaultdict(set)
+    for cc, kind, name, lat, lng, region, pop, others in EXTRA_PLACES:
+        for n in [name, *others] + variants(name, *others):
+            everywhere[same(n)].add(cc)
     for p in places:
         for n in variants(p['name'], p.get('nameascii'), p.get('namealt')):
             everywhere[same(n)].add(code(p))
