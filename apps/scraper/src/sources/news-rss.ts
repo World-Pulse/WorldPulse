@@ -106,7 +106,7 @@ import { noteCoverage } from './coverage'
 import { MAX_ITEM_AGE_MS, isStaleItem } from '../pipeline/freshness'
 // Feeds send "&#x27;" and "&amp;" in titles and summaries
 import { decodeEntities, cleanSummary, repeatsTitle, feedText, clipText } from '../pipeline/text'
-import { placeFromText, splitPlaces, withHomeNames, mentionedCountries, homePlaceFromText, findGazetteerPlace, namedCountryHomePlace, homeTwinPlace, placeInCountry } from '../pipeline/geo'
+import { placeFromText, splitPlaces, withHomeNames, mentionedCountries, homePlaceFromText, findGazetteerPlace, namedCountryHomePlace, homeTwinPlace, placeInCountry, withoutEnvoyCountries } from '../pipeline/geo'
 import { withLocalNames } from '../pipeline/local-names'
 import { rateSeverity } from '../pipeline/severity'
 import { categorizeText } from '../pipeline/categories'
@@ -10900,9 +10900,11 @@ export function inferGeo(
   point?:      { lat: number; lng: number } | null,
 ): InferredGeo {
   // A Brazzaville outlet's "Congo", a Mauritian outlet's "Maurice" (geo.ts, withHomeNames; Oct 21, 2026), and
-  // places named in the feed's own language: "Wien", "Rusiji", "Mali i Zi" (local-names.ts; Oct 31, 2026)
-  const head = withLocalNames(withHomeNames(title, source.countryCode), source.language)
-  const body = withLocalNames(withHomeNames(description, source.countryCode), source.language)
+  // places named in the feed's own language: "Wien", "Rusiji", "Mali i Zi" (local-names.ts; Oct 31, 2026); not the
+  // country an embassy or envoy is from ("Chinese Embassy Pledges More Support for Vulnerable Communities" is Uganda's;
+  // geo.ts withoutEnvoyCountries, Nov 7, 2026)
+  const head = withoutEnvoyCountries(withLocalNames(withHomeNames(title, source.countryCode), source.language))
+  const body = withoutEnvoyCountries(withLocalNames(withHomeNames(description, source.countryCode), source.language))
   if (point) {
     const named = fromPlace(head)
     return { lat: point.lat, lng: point.lng, locationName: named?.locationName ?? null, countryCode: named?.countryCode ?? null }

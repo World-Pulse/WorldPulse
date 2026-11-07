@@ -661,7 +661,8 @@ describe('news text fixes', () => {
     const src = NEWS_SOURCE_REGISTRY[0]
     expect(inferGeo('Tirana hosts summit', '', src).countryCode).not.toBe('IR')
     expect(inferGeo('The Dukes of Hazzard return', '', src).countryCode).toBeNull()
-    expect(inferGeo('Iranian envoy arrives', '', src).countryCode).toBe('IR')
+    // (not "Iranian envoy arrives": an envoy's own country isn't where it is, envoys-nov7.test.ts)
+    expect(inferGeo('Iranian minister arrives', '', src).countryCode).toBe('IR')
     expect(inferGeo('Palestinian president speaks', '', src).countryCode).toBe('PS')
     expect(inferGeo('UK inflation falls', '', src).countryCode).toBe('GB')
   })

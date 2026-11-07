@@ -2693,7 +2693,7 @@ const COUNTRY_PATTERNS: [RegExp, string][] = [
   [/\b(?:ethiopia|ethiopian)\b/i, 'ET'],
   [/\b(?:indonesia|indonesian)\b/i, 'ID'],
   [/\b(?:philippines|philippine|filipino)\b/i, 'PH'],
-  [/\b(?:vietnam|vietnamese)\b/i, 'VN'],
+  [/\b(?:vietnam|viet\s+nam|vietnamese)\b/i, 'VN'],   // "Viet Nam", the UN's and Hanoi's spelling (Nov 7, 2026)
   [/\b(?:thailand|thai)\b/i, 'TH'],
   [/\b(?:malaysia|malaysian)\b/i, 'MY'],
   // …and every other country (world-countries.ts: "Panama", "Vanuatu", "Slovenia" named no country before Oct 11, 2026)
@@ -2776,6 +2776,49 @@ export function mentionedCountries(text: string, byNameOnly = false): string[] {
   })
   const rank = (h: { people: boolean; there: boolean }) => (h.there ? 0 : h.people ? 2 : 1)
   return [...new Set(hits.sort((a, b) => rank(a) - rank(b) || a.index - b.index).map(h => h.code))]
+}
+
+/**
+ * An embassy, an ambassador or an envoy is where the story says it is, not in its own country (Nov 7, 2026: of two days'
+ * 114 headlines about envoys, 25 were pinned in the envoy's country: Uganda's Nile Post's "Chinese Embassy Pledges More
+ * Support for Vulnerable Communities" in China, "US Embassy explains how Ghanaians can secure emergency visa interviews"
+ * in the US, "South Korean Ambassador pays courtesy call on President Paudel" in Seoul). The country an envoy is from,
+ * named before the word ("Chinese Embassy", "Israel's New Ambassador", "US-Botschafter") or after it ("Embassy of Saint
+ * Kitts and Nevis", "la embajada de Japón", "l'ambassade du Royaume-Uni", "el embajador chino"), is blanked out of the
+ * text, its length kept, so that the place the text names is read ("Embassy in Tajikistan", "Ambassador to Albania"),
+ * or else the outlet's own country. Not a country after a possessive: "Trump's Ukraine envoy" is an envoy for Ukraine.
+ */
+const ENVOY_WORD = String.raw`(?:ambassadors?|embass(?:y|ies)|envoys?|consul(?:ates?|s)?(?:[-\s]generals?)?|vice[-\s]consuls?|high\s+commission(?:ers?|s)?|charg[ée]s?\s+d['’]affaires)`
+const ENVOY_AFTER = new RegExp(String.raw`^['’]?s?(?:[\s-]+(?:new|former|ex|outgoing|incoming|special|presidential|deputy|honorary|acting|resident|non-resident|top|chief|first|female|interim|trade))*[\s-]+(?:${ENVOY_WORD}|botschaft(?:er(?:in)?)?|konsulat|generalkonsul(?:at)?)(?![\p{L}\p{N}])`, 'iu')
+const ENVOY_BEFORE = new RegExp(String.raw`(?:^|[^\p{L}])(?:${ENVOY_WORD}\s+(?:of|from)\s+(?:the\s+)?(?:(?:people['’]s|democratic|islamic|federal|federative|socialist|arab|united|hashemite|bolivarian|plurinational|cooperative|co-operative|republic|kingdom|state|states|commonwealth|principality|grand|duchy|sultanate|union|of|the)\s+)*|(?:embajad(?:a|ora?|ores)|consulado(?:[-\s]gene?ral)?|c[óo]nsul(?:es)?(?:\s+general)?|encargad[oa]\s+de\s+negocios|embaixad(?:a|ora?|ores)|ambassad(?:e|eurs?|rices?)|consulat(?:\s+g[ée]n[ée]ral)?|vice-consul|consul(?:\s+g[ée]n[ée]ral)?)\s+(?:(?:de\s+la|de\s+los|de\s+las|del|de|du|des|da|do|dos|das)\s+|d['’]|de\s+l['’])?)$`, 'iu')
+const ENVOY_ANY = /ambassad|embass|envoy|consul|commission|charg[ée]s?\s+d|embajad|embaixad|botschaft|konsul/i
+const ENVOY_LIST = /^\s*(?:,|&|and|y|et|e|und)\s+$/i
+const POSSESSIVE_BEFORE = /\p{L}['’]s?\s+$/u
+const COUNTRY_SPANS = COUNTRY_PATTERNS.map(([p]) => new RegExp(p.source, p.flags.includes('g') ? p.flags : `${p.flags}g`))
+
+export function withoutEnvoyCountries(text: string): string {
+  if (!text || !ENVOY_ANY.test(text)) return text
+  const found: Array<[number, number]> = []
+  for (const pattern of COUNTRY_SPANS) {
+    pattern.lastIndex = 0
+    for (let m = pattern.exec(text); m; m = pattern.exec(text)) {
+      if (!m[0]) { pattern.lastIndex++; continue }
+      found.push([m.index, m.index + m[0].length])
+    }
+  }
+  // the longest name at each place ("South Korean", not "Korean"), in order
+  const spans = found
+    .filter(([s, e]) => !found.some(([s2, e2]) => s2 <= s && e <= e2 && e2 - s2 > e - s))
+    .sort((a, b) => a[0] - b[0])
+    .filter(([s], i, all) => i === 0 || s >= all[i - 1]![1])
+  const sender = spans.map(([s, e]) => !POSSESSIVE_BEFORE.test(text.slice(Math.max(0, s - 24), s))
+    && (ENVOY_AFTER.test(text.slice(e)) || ENVOY_BEFORE.test(text.slice(Math.max(0, s - 80), s))))
+  // ...and a list of them: "U.S, U.K, Australia, Canada & Japan Embassies", "the embassies of France and Germany"
+  for (let i = spans.length - 2; i >= 0; i--) if (sender[i + 1] && ENVOY_LIST.test(text.slice(spans[i]![1], spans[i + 1]![0]))) sender[i] = true
+  for (let i = 1; i < spans.length; i++) if (sender[i - 1] && ENVOY_LIST.test(text.slice(spans[i - 1]![1], spans[i]![0]))) sender[i] = true
+  let out = text
+  spans.forEach(([s, e], i) => { if (sender[i]) out = out.slice(0, s) + ' '.repeat(e - s) + out.slice(e) })
+  return out
 }
 
 // ─── NOMINATIM LOOKUP ────────────────────────────────────────────────────────
