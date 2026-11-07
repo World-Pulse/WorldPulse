@@ -9,7 +9,7 @@
 /** surname: also a surname, read as the place unless a capitalised first name comes right before it */
 export interface TownEntry { lat: number; lng: number; country: string; name: string; region?: string; surname?: true }
 
-/** 6118 names */
+/** 6121 names */
 export const WORLD_TOWNS: Record<string, TownEntry> = {
   "Andorra la Vella": { lat: 42.5128, lng: 1.5107, country: 'AD', name: "Andorra la Vella" },
   "Encamp": { lat: 42.5381, lng: 1.6441, country: 'AD', name: "Encamp" },
@@ -3970,6 +3970,8 @@ export const WORLD_TOWNS: Record<string, TownEntry> = {
   "Perlis": { lat: 6.433, lng: 100.19, country: 'MY', name: "Perlis" },
   "Pulau Pinang": { lat: 5.4136, lng: 100.3294, country: 'MY', name: "Penang" },
   "Sandakan": { lat: 5.843, lng: 118.108, country: 'MY', name: "Sandakan", region: "Sabah" },
+  "Seberang Jaya": { lat: 5.398, lng: 100.402, country: 'MY', name: "Seberang Jaya", region: "Penang" },
+  "Seberang Perai": { lat: 5.398, lng: 100.402, country: 'MY', name: "Seberang Perai" },
   "Selangor": { lat: 3.0667, lng: 101.55, country: 'MY', name: "Selangor" },
   "Seremban": { lat: 2.7105, lng: 101.94, country: 'MY', name: "Seremban", region: "Negeri Sembilan" },
   "Sibu": { lat: 2.303, lng: 111.843, country: 'MY', name: "Sibu", region: "Sarawak" },
@@ -4447,6 +4449,7 @@ export const WORLD_TOWNS: Record<string, TownEntry> = {
   "Setubal": { lat: 38.2071, lng: -8.5732, country: 'PT', name: "Setúbal" },
   "Setúbal": { lat: 38.2071, lng: -8.5732, country: 'PT', name: "Setúbal" },
   "Viana do Castelo": { lat: 41.6962, lng: -8.8441, country: 'PT', name: "Viana do Castelo" },
+  "Vila Franca de Xira": { lat: 38.955, lng: -8.99, country: 'PT', name: "Vila Franca de Xira", region: "Lisbon" },
   "Évora": { lat: 38.56, lng: -7.906, country: 'PT', name: "Évora" },
   "Aimeliik": { lat: 7.4324, lng: 134.533, country: 'PW', name: "Aimeliik" },
   "Airai": { lat: 7.3995, lng: 134.571, country: 'PW', name: "Airai" },
@@ -6131,7 +6134,7 @@ export const WORLD_TOWNS: Record<string, TownEntry> = {
   "Zvishavane": { lat: -20.3296, lng: 30.05, country: 'ZW', name: "Zvishavane", region: "Midlands" },
 }
 
-/** 5936 names, by country: each as written, read with its capitals */
+/** 5938 names, by country: each as written, read with its capitals */
 export const HOME_TOWNS: Record<string, Record<string, TownEntry>> = {
   AD: {
     "Ordino": { lat: 42.6036, lng: 1.5244, country: 'AD', name: "Ordino" },
@@ -6386,6 +6389,7 @@ export const HOME_TOWNS: Record<string, Record<string, TownEntry>> = {
     "Missões": { lat: -27.3578, lng: -55.8851, country: 'AR', name: "Misiones" },
     "Neuquem": { lat: -38.95, lng: -68.06, country: 'AR', name: "Neuquén" },
     "Neuquém": { lat: -38.95, lng: -68.06, country: 'AR', name: "Neuquén" },
+    "Palermo": { lat: -34.578, lng: -58.425, country: 'AR', name: "Palermo", region: "Buenos Aires", surname: true },
     "Parana": { lat: -31.7333, lng: -60.5333, country: 'AR', name: "Paraná", region: "Entre Ríos" },
     "Paraná": { lat: -31.7333, lng: -60.5333, country: 'AR', name: "Paraná", region: "Entre Ríos" },
     "Pergamino": { lat: -33.8996, lng: -60.57, country: 'AR', name: "Pergamino", region: "Ciudad de Buenos Aires" },
@@ -7384,6 +7388,7 @@ export const HOME_TOWNS: Record<string, Record<string, TownEntry>> = {
     "Magellan and the Chilean Antarctic": { lat: -53.165, lng: -70.94, country: 'CL', name: "Magellan and the Chilean Antarctic" },
     "Magellan et Antarctique Chilienne": { lat: -53.165, lng: -70.94, country: 'CL', name: "Magellan and the Chilean Antarctic" },
     "Maule": { lat: -35.455, lng: -71.67, country: 'CL', name: "Maule", surname: true },
+    "Nancagua": { lat: -34.66, lng: -71.21, country: 'CL', name: "Nancagua", region: "O'Higgins" },
     "Nueva Imperial": { lat: -38.74, lng: -72.96, country: 'CL', name: "Nueva Imperial", region: "La Araucanía" },
     "Ovalle": { lat: -30.59, lng: -71.2001, country: 'CL', name: "Ovalle", region: "Coquimbo", surname: true },
     "Puente Alto": { lat: -33.611, lng: -70.576, country: 'CL', name: "Puente Alto", region: "Santiago Metropolitan" },

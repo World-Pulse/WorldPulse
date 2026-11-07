@@ -131,6 +131,9 @@ const GIVEN_NAMES = new Set([
   'danielle', 'marilyn', 'beverly', 'natalie', 'theresa', 'diana', 'brittany', 'doris', 'kayla', 'alexis', 'lori',
   'marie', 'paris', 'whitney', 'taylor', 'kamala', 'hillary', 'ana', 'lucia', 'carmen', 'isabel', 'sofia', 'camila',
   'valentina', 'fernanda', 'juliana', 'beatriz', 'claire', 'sophie', 'nathalie', 'isabelle', 'fatima', 'aisha', 'priya',
+  // West Africa's (Nov 7, 2026)
+  'issa', 'moussa', 'ousmane', 'amadou', 'mamadou', 'abdoulaye', 'ibrahima', 'seydou', 'boubacar', 'souleymane', 'aliou',
+  'modou', 'lamine', 'kofi', 'kwame', 'kwaku', 'kojo', 'kwabena', 'aminata', 'fatoumata', 'mariam',
 ])
 /** The small words inside people's names, and not places': "José dos Santos", "Ludwig van Beethoven" */
 const NAME_PARTICLES = new Set(['dos', 'das', 'van', 'von', 'bin', 'ibn'])
@@ -270,8 +273,11 @@ export function partOfAName(text: string, at: number, end: number, surname?: boo
   const key = hit.normalize('NFD').replace(/\p{Mn}/gu, '').toLowerCase()
   const title = /(\p{L}+)\.?[ \t]+$/u.exec(text.slice(Math.max(0, at - 24), at))?.[1]
   if (FIRST_NAME_PLACES.has(key) && title && startsUpper(title) && TITLES.has(title.toLowerCase())) return true
-  if ((SURNAME_PLACES.has(key) || surname) && before && startsUpper(before)
-    && GIVEN_NAMES.has(before.normalize('NFD').replace(/\p{Mn}/gu, '').toLowerCase())) return true
+  // ...and so is any place right after one: "Jonathan Gambela" is a Congolese singer in Ouagadougou, "Issa Belém" a
+  // Burkinabè sculptor (Nov 7, 2026: in Gambela, Ethiopia, and Belém, Brazil); until then only the places that are
+  // common surnames ("Lewis Hamilton"). Not after a saint's name, part of a town's: "San Juan Sacatepéquez"
+  const saint = /(?:^|[^\p{L}])(?:san|santa|santo|são|sao|saint|sainte|st|ste|sankt)\.?[ \t]+\p{L}+[ \t]+$/iu.test(text.slice(Math.max(0, at - 30), at))
+  if (before && startsUpper(before) && !saint && GIVEN_NAMES.has(before.normalize('NFD').replace(/\p{Mn}/gu, '').toLowerCase())) return true
   if (!(FIRST_NAME_PLACES.has(key) || surname) || titleCaseAround(text, at, end)) return false
   if (FIRST_NAME_PLACES.has(key) && after && startsUpper(after) && !GAZETTEER_NEXT.has(after.toLowerCase())) return true
   // ...or joined to it by a hyphen: "Bristol-Myers Squibb" (Nov 6, 2026), not "Boston-based"

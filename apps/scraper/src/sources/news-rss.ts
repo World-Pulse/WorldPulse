@@ -10586,9 +10586,10 @@ const GEO_HINTS: Array<{ keywords: string[]; geo: GeoHint }> = [
  * of a word ("Indian" is India, "Parisian" Paris), so "modifier" was Modi: on
  * Oct 14, 2026 a Le Monde reader survey asking who would modify their holiday
  * plans was pinned on New Delhi. "Parish" isn't Paris, "Indiana" isn't India,
- * German "Trumpf" (a trump card, a machine maker) isn't Trump.
+ * German "Trumpf" (a trump card, a machine maker) isn't Trump; nor are Modivo (a Polish retailer: "MODIVO Platform
+ * Q3 2026 slides" sat in New Delhi on Nov 7, 2026), Modigliani or Matthew Modine Modi.
  */
-const NOT_A_HINT = /^(?:modif|modic|modish|indiana|parish|trumpet|trumpf|turkeys|chinatown)/
+const NOT_A_HINT = /^(?:modif|modic|modish|modiv|modig|modin|indiana|parish|trumpet|trumpf|turkeys|chinatown)/
 
 /**
  * "Congress" that isn't the US Congress (Oct 20, 2026): a party, as Sierra

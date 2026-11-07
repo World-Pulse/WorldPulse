@@ -568,7 +568,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'gondar':            { lat: 12.6, lng: 37.4667, country: 'ET' },
   'timbuktu':          { lat: 16.7666, lng: -3.0026, country: 'ML' },
   'zinder':            { lat: 13.8069, lng: 8.9881, country: 'NE' },
-  'bobo-dioulasso':    { lat: 11.1771, lng: -4.2979, country: 'BF' },
+  'bobo-dioulasso':    { lat: 11.1771, lng: -4.2979, country: 'BF', name: 'Bobo-Dioulasso' },
   'douala':            { lat: 4.0511, lng: 9.7679, country: 'CM' },
   'pointe-noire':      { lat: -4.7692, lng: 11.8664, country: 'CG' },
   'huambo':            { lat: -12.7761, lng: 15.7392, country: 'AO' },
@@ -2713,10 +2713,12 @@ const COUNTRY_PATTERNS: [RegExp, string][] = [
  * or Guinea ("the 2,000 Guineas").
  */
 const NO_PLURAL = new Set(['TR', 'CL', 'GN'])
+/** A country's name with an s that is no people-word: "Payo Cubas", a Paraguayan senator (Nov 7, 2026) */
+const NOT_PEOPLE: Record<string, string> = { CU: 'cubas' }
 const COUNTRY_MATCHERS: [RegExp, string][] = COUNTRY_PATTERNS.map(([pattern, code]) =>
   NO_PLURAL.has(code) || !pattern.source.endsWith(')\\b')
     ? [pattern, code]
-    : [new RegExp(`${pattern.source.slice(0, -2)}s?\\b`, pattern.flags), code])
+    : [new RegExp(`${NOT_PEOPLE[code] ? `(?!(?:${NOT_PEOPLE[code]})\\b)` : ''}${pattern.source.slice(0, -2)}s?\\b`, pattern.flags), code])
 
 /**
  * Names an outlet's own country goes by at home (round 5, Oct 21, 2026). A
@@ -2742,6 +2744,9 @@ const HOME_NAMES: Record<string, { name: RegExp; as: string; unless?: RegExp }> 
   // A Nigerian outlet's "Plateau" is Plateau State, not the word (Nov 7, 2026: Punch's and Vanguard's "Soldiers rescue
   // three abducted women in Plateau" was no place; 10 of two days' stories)
   NG: { name: /\bPlateau\b(?!\s+State)/g, as: 'Plateau State' },
+  // A Burkinabè outlet's "Bobo" is Bobo-Dioulasso (Nov 7, 2026: Lefaso's "Une première vague de 3 400 Burkinabè
+  // accueillie à Bobo" was pinned in Guinea, where they had come from)
+  BF: { name: /\bBobo\b(?![-\s]+Dioulasso)/g, as: 'Bobo-Dioulasso' },
 }
 
 export function withHomeNames(text: string, countryCode: string | null | undefined): string {

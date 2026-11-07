@@ -238,6 +238,14 @@ EXTRA_PLACES = [
     # Natural Earth's Stepanakert by its name in Azerbaijan since 2023, shown as the story writes it (AzerTAc's "Khankendi
     # Stadium")
     ('AZ', 'town', 'Khankendi', 39.816, 46.752, 'Khankendi', 57_000, ['Xankəndi']),
+    # Nov 7, 2026 (part 8, a hand check of 120 random stories): Buenos Aires's Palermo (elDiarioAR's march "después del
+    # ataque ... en Palermo" sat in Sicily; Argentina's outlets read their own first, geo.ts homeTwinPlace), Penang's
+    # Seberang Jaya and Seberang Perai (at its seat), Vila Franca de Xira, Nancagua
+    ('AR', 'town', 'Palermo', -34.578, -58.425, 'Buenos Aires', 225_000, []),
+    ('MY', 'town', 'Seberang Jaya', 5.398, 100.402, 'Penang', 50_000, []),
+    ('MY', 'province', 'Seberang Perai', 5.398, 100.402, None, None, []),
+    ('PT', 'town', 'Vila Franca de Xira', 38.955, -8.990, 'Lisbon', 137_000, []),
+    ('CL', 'town', 'Nancagua', -34.660, -71.210, "O'Higgins", 17_000, []),
 ]
 # Natural Earth's rows that are another row again, of the same size, in the wrong place: a second Vila Velha in Amapá,
 # Crato in Amazonas, Nakhodka (Primorye's port) in Yamal-Nenets, Noginsk (Moscow's) in Evenkia
