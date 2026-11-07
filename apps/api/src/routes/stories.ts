@@ -168,6 +168,9 @@ export function storyListSql(hasStoryIds: boolean, scope: 'recent' | 'signals' |
         JOIN facts f ON f.story_key = m.story_key
        ORDER BY m.story_key,
                 (m.title ~ ?) ASC,
+                -- a report placed away from the story's usual place is a local angle (a Cayman outlet's
+                -- "what the US midterms mean for Cayman" led a 229-outlet US story on Nov 6, H-0043)
+                (m.location_name IS NOT NULL AND f.place IS NOT NULL AND m.location_name <> f.place) ASC,
                 (m.created_at >= f.newest - INTERVAL '6 hours') DESC,
                 (m.status = 'verified') DESC,
                 m.reliability_score DESC NULLS LAST,
