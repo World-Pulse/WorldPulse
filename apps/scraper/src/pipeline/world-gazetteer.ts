@@ -9,7 +9,7 @@
 /** surname: also a surname, read as the place unless a capitalised first name comes right before it */
 export interface TownEntry { lat: number; lng: number; country: string; name: string; region?: string; surname?: true }
 
-/** 6035 names */
+/** 6031 names */
 export const WORLD_TOWNS: Record<string, TownEntry> = {
   "Andorra la Vella": { lat: 42.5128, lng: 1.5107, country: 'AD', name: "Andorra la Vella" },
   "Encamp": { lat: 42.5381, lng: 1.6441, country: 'AD', name: "Encamp" },
@@ -950,7 +950,6 @@ export const WORLD_TOWNS: Record<string, TownEntry> = {
   "Foshan": { lat: 23.032, lng: 113.1181, country: 'CN', name: "Foshan", region: "Guangdong" },
   "Fushun": { lat: 41.8673, lng: 123.8681, country: 'CN', name: "Fushun", region: "Liaoning" },
   "Fuxin": { lat: 42.0124, lng: 121.6581, country: 'CN', name: "Fuxin", region: "Liaoning" },
-  "Fuyang": { lat: 30.0553, lng: 119.95, country: 'CN', name: "Fuyang", region: "Zhejiang" },
   "Gansu": { lat: 36.6219, lng: 101.7681, country: 'CN', name: "Gansu" },
   "Ganzhou": { lat: 25.92, lng: 114.95, country: 'CN', name: "Ganzhou", region: "Jiangxi" },
   "Gejiu": { lat: 23.38, lng: 103.1501, country: 'CN', name: "Gejiu", region: "Yunnan" },
@@ -1151,7 +1150,6 @@ export const WORLD_TOWNS: Record<string, TownEntry> = {
   "Yanji": { lat: 42.8823, lng: 129.5128, country: 'CN', name: "Yanji", region: "Jilin" },
   "Yibin": { lat: 28.7719, lng: 104.5681, country: 'CN', name: "Yibin", region: "Sichuan" },
   "Yichang": { lat: 30.7019, lng: 111.2781, country: 'CN', name: "Yichang", region: "Hubei" },
-  "Yichun": { lat: 27.8353, lng: 114.3981, country: 'CN', name: "Yichun", region: "Jiangxi" },
   "Yingkow": { lat: 40.6723, lng: 122.2781, country: 'CN', name: "Yingkow", region: "Liaoning" },
   "Yining": { lat: 43.9, lng: 81.35, country: 'CN', name: "Yining", region: "Xinjiang Uygur" },
   "Yiyang": { lat: 28.6024, lng: 112.3281, country: 'CN', name: "Yiyang", region: "Hunan" },
@@ -4624,7 +4622,7 @@ export const WORLD_TOWNS: Record<string, TownEntry> = {
   "Moskovskaya": { lat: 55.1508, lng: 38.671, country: 'RU', name: "Moscow" },
   "Murom": { lat: 55.5704, lng: 42.04, country: 'RU', name: "Murom", region: "Vladimir" },
   "Naberezhnyye Chelny": { lat: 55.7, lng: 52.3199, country: 'RU', name: "Naberezhnyye Chelny", region: "Tatarstan" },
-  "Nakhodka": { lat: 67.7504, lng: 77.52, country: 'RU', name: "Nakhodka", region: "Yamal-Nenets" },
+  "Nakhodka": { lat: 42.8374, lng: 132.8874, country: 'RU', name: "Nakhodka", region: "Primor'ye" },
   "Nalchik": { lat: 43.4981, lng: 43.6179, country: 'RU', name: "Nalchik", region: "Kabardin-Balkar" },
   "Naryan Mar": { lat: 67.6474, lng: 53.0574, country: 'RU', name: "Naryan Mar", region: "Nenets" },
   "Nazran": { lat: 43.233, lng: 44.783, country: 'RU', name: "Nazran", region: "Ingush" },
@@ -5668,7 +5666,6 @@ export const WORLD_TOWNS: Record<string, TownEntry> = {
   "Yumbe": { lat: 3.5231, lng: 31.2996, country: 'UG', name: "Yumbe" },
   "Asheville": { lat: 35.6012, lng: -82.5541, country: 'US', name: "Asheville", region: "North Carolina" },
   "Binghamton": { lat: 42.099, lng: -75.9183, country: 'US', name: "Binghamton", region: "New York" },
-  "Bloomington": { lat: 40.4846, lng: -88.9936, country: 'US', name: "Bloomington", region: "Illinois" },
   "Boston": { lat: 42.3319, lng: -71.072, country: 'US', name: "Boston", region: "Massachusetts" },
   "Bremerton": { lat: 47.5736, lng: -122.642, country: 'US', name: "Bremerton", region: "Washington" },
   "Bridgeport": { lat: 41.1819, lng: -73.2019, country: 'US', name: "Bridgeport", region: "Connecticut" },
@@ -5677,7 +5674,6 @@ export const WORLD_TOWNS: Record<string, TownEntry> = {
   "Denver": { lat: 39.7411, lng: -104.986, country: 'US', name: "Denver", region: "Colorado" },
   "Edinburg": { lat: 26.3032, lng: -98.16, country: 'US', name: "Edinburg", region: "Texas" },
   "Elkhart": { lat: 41.6829, lng: -85.9688, country: 'US', name: "Elkhart", region: "Indiana" },
-  "Fayetteville": { lat: 35.0629, lng: -78.8836, country: 'US', name: "Fayetteville", region: "North Carolina" },
   "Fort Worth": { lat: 32.74, lng: -97.34, country: 'US', name: "Ft.  Worth", region: "Texas" },
   "Fredericksburg": { lat: 38.3035, lng: -77.4608, country: 'US', name: "Fredericksburg", region: "Virginia" },
   "Ft Worth": { lat: 32.74, lng: -97.34, country: 'US', name: "Ft.  Worth", region: "Texas" },
@@ -6048,7 +6044,7 @@ export const WORLD_TOWNS: Record<string, TownEntry> = {
   "Zvishavane": { lat: -20.3296, lng: 30.05, country: 'ZW', name: "Zvishavane", region: "Midlands" },
 }
 
-/** 5907 names, by country: each as written, read with its capitals */
+/** 5911 names, by country: each as written, read with its capitals */
 export const HOME_TOWNS: Record<string, Record<string, TownEntry>> = {
   AD: {
     "Ordino": { lat: 42.6036, lng: 1.5244, country: 'AD', name: "Ordino" },
@@ -7349,6 +7345,7 @@ export const HOME_TOWNS: Record<string, Record<string, TownEntry>> = {
     "Fuan": { lat: 27.0704, lng: 119.62, country: 'CN', name: "Fuan", region: "Fujian" },
     "Fujian": { lat: 26.0819, lng: 119.2981, country: 'CN', name: "Fujian" },
     "Fujin": { lat: 47.2704, lng: 132.02, country: 'CN', name: "Fujin", region: "Heilongjiang" },
+    "Fuyang": { lat: 30.0553, lng: 119.95, country: 'CN', name: "Fuyang", region: "Zhejiang" },
     "Fuyu": { lat: 45.1804, lng: 124.82, country: 'CN', name: "Songyuan", region: "Jilin" },
     "Fújiàn": { lat: 26.0819, lng: 119.2981, country: 'CN', name: "Fujian" },
     "Gannan": { lat: 47.9204, lng: 123.51, country: 'CN', name: "Gannan", region: "Heilongjiang" },
@@ -7446,6 +7443,7 @@ export const HOME_TOWNS: Record<string, Record<string, TownEntry>> = {
     "Xīnjiāng Wéiwúěr": { lat: 41.122, lng: 85.4253, country: 'CN', name: "Xinjiang" },
     "Xīzàng": { lat: 29.645, lng: 91.1, country: 'CN', name: "Tibet" },
     "Yian": { lat: 47.8804, lng: 125.3, country: 'CN', name: "Yian", region: "Heilongjiang" },
+    "Yichun": { lat: 27.8353, lng: 114.3981, country: 'CN', name: "Yichun", region: "Jiangxi" },
     "Yingkou": { lat: 40.6723, lng: 122.2781, country: 'CN', name: "Yingkow", region: "Liaoning" },
     "Yishan": { lat: 24.5004, lng: 108.6667, country: 'CN', name: "Yishan", region: "Guangxi" },
     "Yishui": { lat: 35.7904, lng: 118.62, country: 'CN', name: "Yishui", region: "Shandong" },
@@ -11913,6 +11911,7 @@ export const HOME_TOWNS: Record<string, Record<string, TownEntry>> = {
     "Birmingham": { lat: 33.53, lng: -86.825, country: 'US', name: "Birmingham", region: "Alabama", surname: true },
     "Bismarck": { lat: 46.8083, lng: -100.7833, country: 'US', name: "Bismarck", region: "North Dakota" },
     "Blacksburg": { lat: 37.2294, lng: -80.4142, country: 'US', name: "Blacksburg", region: "Virginia" },
+    "Bloomington": { lat: 40.4846, lng: -88.9936, country: 'US', name: "Bloomington", region: "Illinois" },
     "Boulder": { lat: 40.0384, lng: -105.2461, country: 'US', name: "Boulder", region: "Colorado" },
     "Boulder City": { lat: 35.979, lng: -114.8316, country: 'US', name: "Boulder City", region: "Nevada" },
     "Bridgeport-Stamford": { lat: 41.1819, lng: -73.2019, country: 'US', name: "Bridgeport", region: "Connecticut" },
@@ -11946,6 +11945,7 @@ export const HOME_TOWNS: Record<string, Record<string, TownEntry>> = {
     "Evanston": { lat: 42.0483, lng: -87.7, country: 'US', name: "Evanston", region: "Illinois" },
     "Faribault": { lat: 44.2905, lng: -93.268, country: 'US', name: "Faribault", region: "Minnesota" },
     "Farmington": { lat: 36.7542, lng: -108.1861, country: 'US', name: "Farmington", region: "New Mexico" },
+    "Fayetteville": { lat: 35.0629, lng: -78.8836, country: 'US', name: "Fayetteville", region: "North Carolina" },
     "Flagstaff": { lat: 35.1981, lng: -111.6505, country: 'US', name: "Flagstaff", region: "Arizona" },
     "Frankfort": { lat: 38.2008, lng: -84.8734, country: 'US', name: "Frankfort", region: "Kentucky" },
     "Freeport": { lat: 28.9595, lng: -95.3569, country: 'US', name: "Freeport", region: "Texas" },

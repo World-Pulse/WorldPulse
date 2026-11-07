@@ -94,6 +94,9 @@ HOME_ONLY = {
     # (Badakhshan's capital); Nepal's Krishnanagar ("261 families in Krishnanagar receive ... land ownership
     # certificates", Khabarhub, was pinned in West Bengal); "Hisar", Turkish for a fortress ("Rumeli Hisarı")
     ('IN', 'Faizabad'), ('IN', 'Krishnanagar'), ('IN', 'Hisar'),
+    # towns two regions of their own country share at about a size: Anhui's and Zhejiang's Fuyang, Jiangxi's and
+    # Heilongjiang's Yichun, Illinois' and Indiana's Bloomington, North Carolina's and Arkansas' Fayetteville
+    ('CN', 'Fuyang'), ('CN', 'Yichun'), ('US', 'Bloomington'), ('US', 'Fayetteville'),
 }
 # Cities read everywhere though another country has a place of the name, or the name is a word or a person's in some
 # language: each looked at by hand for what a world outlet's capitalised name, or GDELT's American, British and
@@ -127,8 +130,9 @@ READ_EVERYWHERE = {
     'AU': {'Adelaide'}, 'CO': {'Cartagena'}, 'DK': {'København'}, 'SE': {'Göteborg'}, 'FR': {'Metz'}, 'NG': {'Aba'},
     'AE': {'Al Ayn'},
 }
-# Natural Earth's rows that are another row again in the wrong place: a second Vila Velha, of the same size, in Amapá
-WRONG_ROWS = {('BR', 'Vila Velha', 3.2)}
+# Natural Earth's rows that are another row again, of the same size, in the wrong place: a second Vila Velha in Amapá,
+# Crato in Amazonas, Nakhodka (Primorye's port) in Yamal-Nenets, Noginsk (Moscow's) in Evenkia
+WRONG_ROWS = {('BR', 'Vila Velha', 3.2), ('BR', 'Crato', -7.5), ('RU', 'Nakhodka', 67.8), ('RU', 'Noginsk', 64.5)}
 # Names that are no one place's in headlines: Washington's "District of Columbia" less its kind is "Columbia" (the
 # university, Columbia in South Carolina, Columbia Sportswear)
 SKIP = {
