@@ -397,6 +397,26 @@ const ARABIC: Rule[] = ([
   r(`${AL}اذربيجان`, 'Azerbaijan'), r(`${AL}ارمينيا`, 'Armenia'), r(`${AL}اوزبكستان`, 'Uzbekistan'),
   r(`${AL}قيرغيزستان|${AL}قرغيزستان`, 'Kyrgyzstan'), r(`${AL}طاجيكستان`, 'Tajikistan'), r(`${AL}تركمانستان`, 'Turkmenistan'),
   r(`${AL}منغوليا`, 'Mongolia'),
+  // Nov 6, 2026, 8:44 PM QA: Syria TV's "Paraguay's Senate impeaches President Peña" was pinned in Damascus because the
+  // Latin American, African and other countries below had no Arabic name here. Left out as also everyday words: "كوبا"
+  // (Cuba, also a cup), "مالي" (Mali, also financial), "اكرا" (Accra), "دكا" (Dhaka), "سيول", "روما", "جورجيا"
+  r(`${AL}باراغواي|${AL}باراجواي`, 'Paraguay'), r(`${AL}اوروغواي|${AL}اوروجواي`, 'Uruguay'), r(`${AL}بوليفيا`, 'Bolivia'),
+  r(`${AL_ONLY}اكوادور`, 'Ecuador'), r(`${AL}بنما`, 'Panama'), r(`${AL}غواتيمالا|${AL}جواتيمالا`, 'Guatemala'),
+  r(`${AL}هندوراس`, 'Honduras'), r(`${AL}نيكاراغوا|${AL}نيكاراجوا`, 'Nicaragua'), r(`${AL}كوستاريكا`, 'Costa Rica'),
+  r(`${AL_ONLY}سلفادور`, 'El Salvador'), r(`${AL}هايتي`, 'Haiti'), r(`${AL}دومينيكان`, 'Dominican Republic'),
+  r(`${AL}غانا`, 'Ghana'), r(`${AL_ONLY}سنغال`, 'Senegal'), r(`${AL}اوغندا|${AL}اوجندا`, 'Uganda'), r(`${AL}تنزانيا`, 'Tanzania'),
+  r(`${AL}جنوب\\s+افريقيا`, 'South Africa'), r(`${AL}زيمبابوي`, 'Zimbabwe'), r(`${AL}انغولا|${AL}انجولا`, 'Angola'),
+  r(`${AL_ONLY}نيجر`, 'Niger'), r(`${AL_ONLY}كاميرون`, 'Cameroon'), r(`${AL}رواندا`, 'Rwanda'), r(`${AL}موزمبيق`, 'Mozambique'),
+  r(`${AL}زامبيا`, 'Zambia'), r(`${AL}مدغشقر`, 'Madagascar'), r(`${AL}نيبال`, 'Nepal'), r(`${AL}كمبوديا`, 'Cambodia'),
+  r(`${AL}ايسلندا`, 'Iceland'), r(`${AL}لاتفيا`, 'Latvia'), r(`${AL}ليتوانيا`, 'Lithuania'), r(`${AL}بيلاروس(?:يا)?`, 'Belarus'),
+  r(`${AL}سلوفاكيا`, 'Slovakia'), r(`${AL}سلوفينيا`, 'Slovenia'), r(`${AL}بوسن[ةه]`, 'Bosnia'), r(`${AL}مولدوفا`, 'Moldova'),
+  r(`${AL}نيوزيلند[ا]?`, 'New Zealand'), r(`${AL}لوكسمبورغ`, 'Luxembourg'),
+  r(`${AL}ليما`, 'Lima'), r(`${AL}بوينس\\s+ايرس|${AL}بيونس\\s+ايرس`, 'Buenos Aires'), r(`${AL}بوغوتا|${AL}بوجوتا`, 'Bogota'),
+  r(`${AL}هافانا`, 'Havana'), r(`${AL}برازيليا`, 'Brasilia'), r(`${AL}مونتفيديو`, 'Montevideo'), r(`${AL}كاراكاس`, 'Caracas'),
+  r(`${AL}اسونسيون`, 'Asuncion'), r(`${AL}كيتو`, 'Quito'), r(`${AL}مكسيكو\\s+سيتي`, 'Mexico City'),
+  r(`${AL}ساو\\s+باولو`, 'Sao Paulo'), r(`${AL}بريتوريا`, 'Pretoria'), r(`${AL}نيروبي`, 'Nairobi'), r(`${AL}كمبالا`, 'Kampala'),
+  r(`${AL}كينشاسا`, 'Kinshasa'), r(`${AL}كانبيرا`, 'Canberra'), r(`${AL}اوتاوا`, 'Ottawa'), r(`${AL}لشبونة`, 'Lisbon'),
+  r(`${AL}هلسنكي`, 'Helsinki'), r(`${AL}كاتماندو`, 'Kathmandu'),
 ] as Rule[]).map(([pattern, as]): Rule => [new RegExp(arabicPlain(pattern.source), pattern.flags), as])
 
 /** Arabic text without its vowel marks, hamzas (أ إ آ are ا) and tatweel, for the rules above to read */
