@@ -9,7 +9,7 @@
  * 5. Rate limiting — max 1 Nominatim request/second per ToS
  */
 
-import { partOfAName } from './place-words'
+import { partOfAName, betweenNames, afterAName } from './place-words'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
 import { MORE_COUNTRIES, ABBREVIATED_COUNTRIES, US_STATES, countryNameOf } from './world-countries'
@@ -55,6 +55,14 @@ async function startNominatimCooldown(status: number): Promise<void> {
 }
 
 // ─── GAZETTEER (fast-path; ~140 locations) ───────────────────────────────────
+// asWritten: read only as written, with its capital, where the name is also a common word in a feed's language
+// (Nov 6, 2026: Spanish "un nuevo tema" was pinned in Ghana's Tema; Croatian "puno" (a lot) is Peru's Puno, Albanian
+// "punë" Pune, Portuguese "mataram" (they killed) Mataram, "à beira de" Beira, "contagem" Contagem, Slovenian "varna"
+// Varna, Serbian "davao" Davao, Spanish "huye" Huye and "quito" Quito, Romanian "bursa" Bursa, Portuguese "lagos" Lagos),
+// or where the name's accented spelling is one (French "détroit d'Ormuz" isn't Detroit, "crête" Crete; Romanian "moșul"
+// Mosul, "constantă" Constanța; Lithuanian "turkų" Turku; Portuguese "quântico" Quantico), and names made of everyday
+// words: Spanish "dar el paso" isn't El Paso, "el Alto Mando" El Alto, "los ángeles" Los Angeles; English "the port said"
+// isn't Port Said, "the west bank of the Nile" the West Bank; French "des moines" (monks) isn't Des Moines
 const GAZETTEER: Record<string, { lat: number; lng: number; country: string; region?: string; name?: string; asWritten?: string }> = {
   'manila':           { lat: 14.5995, lng: 120.9842, country: 'PH', region: 'Metro Manila' },
   'philippines':      { lat: 12.8797, lng: 121.7740, country: 'PH' },
@@ -72,7 +80,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'zaporizhzhia':     { lat: 47.8388, lng: 35.1396, country: 'UA' },
   'washington':       { lat: 38.9072, lng: -77.0369, country: 'US', region: 'DC' },
   'new york':         { lat: 40.7128, lng: -74.0060, country: 'US', region: 'New York' },
-  'los angeles':      { lat: 34.0522, lng: -118.2437, country: 'US', region: 'California' },
+  'los angeles':      { lat: 34.0522, lng: -118.2437, country: 'US', region: 'California', asWritten: 'Los Angeles' },
   'chicago':          { lat: 41.8781, lng: -87.6298, country: 'US', region: 'Illinois' },
   'miami':            { lat: 25.7617, lng: -80.1918, country: 'US', region: 'Florida' },
   'houston':          { lat: 29.7604, lng: -95.3698, country: 'US', region: 'Texas' },
@@ -105,7 +113,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'tel aviv':         { lat: 32.0853, lng: 34.7818, country: 'IL' },
   'jerusalem':        { lat: 31.7683, lng: 35.2137, country: 'IL' },
   'gaza':             { lat: 31.5017, lng: 34.4668, country: 'PS' },
-  'west bank':        { lat: 31.9522, lng: 35.2332, country: 'PS' },
+  'west bank':        { lat: 31.9522, lng: 35.2332, country: 'PS', asWritten: 'West Bank' },
   'beirut':           { lat: 33.8938, lng: 35.5018, country: 'LB' },
   'amman':            { lat: 31.9454, lng: 35.9284, country: 'JO' },
   // Jordan's other cities, Saudi Arabia's west coast, the northern emirates and France's regional cities:
@@ -121,7 +129,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'ras al-khaimah':   { lat: 25.7895, lng: 55.9432, country: 'AE' },
   'lyon':             { lat: 45.7640, lng: 4.8357, country: 'FR' },
   'toulouse':         { lat: 43.6047, lng: 1.4442, country: 'FR' },
-  'lille':            { lat: 50.6292, lng: 3.0573, country: 'FR' },
+  'lille':            { lat: 50.6292, lng: 3.0573, country: 'FR', asWritten: 'Lille' },
   'bordeaux':         { lat: 44.8378, lng: -0.5792, country: 'FR' },
   'nantes':           { lat: 47.2184, lng: -1.5536, country: 'FR' },
   'strasbourg':       { lat: 48.5734, lng: 7.7521, country: 'FR' },
@@ -130,7 +138,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'alexandria':       { lat: 31.2001, lng: 29.9187, country: 'EG' },
   'johannesburg':     { lat: -26.2041, lng: 28.0473, country: 'ZA' },
   'cape town':        { lat: -33.9249, lng: 18.4241, country: 'ZA' },
-  'lagos':            { lat: 6.5244, lng: 3.3792, country: 'NG' },
+  'lagos':            { lat: 6.5244, lng: 3.3792, country: 'NG', asWritten: 'Lagos' },
   'abuja':            { lat: 9.0579, lng: 7.4951, country: 'NG' },
   'accra':            { lat: 5.6037, lng: -0.1870, country: 'GH' },
   'addis ababa':      { lat: 9.0320, lng: 38.7469, country: 'ET' },
@@ -148,7 +156,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'islamabad':        { lat: 33.6844, lng: 73.0479, country: 'PK' },
   'lahore':           { lat: 31.5204, lng: 74.3587, country: 'PK' },
   'dhaka':            { lat: 23.8103, lng: 90.4125, country: 'BD' },
-  'colombo':          { lat: 6.9271, lng: 79.8612, country: 'LK' },
+  'colombo':          { lat: 6.9271, lng: 79.8612, country: 'LK', asWritten: 'Colombo' },
   'bangkok':          { lat: 13.7563, lng: 100.5018, country: 'TH' },
   'jakarta':          { lat: -6.2088, lng: 106.8456, country: 'ID' },
   'hanoi':            { lat: 21.0285, lng: 105.8542, country: 'VN' },
@@ -170,7 +178,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'seoul':            { lat: 37.5665, lng: 126.9780, country: 'KR', region: 'Seoul Capital Area' },
   'kabul':            { lat: 34.5553, lng: 69.2075, country: 'AF' },
   'baghdad':          { lat: 33.3152, lng: 44.3661, country: 'IQ' },
-  'mosul':            { lat: 36.3350, lng: 43.1189, country: 'IQ' },
+  'mosul':            { lat: 36.3350, lng: 43.1189, country: 'IQ', asWritten: 'Mosul' },
   'damascus':         { lat: 33.5138, lng: 36.2765, country: 'SY' },
   'aleppo':           { lat: 36.2021, lng: 37.1343, country: 'SY' },
   'tripoli':          { lat: 32.8872, lng: 13.1913, country: 'LY' },
@@ -277,7 +285,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'misrata':          { lat: 32.3754, lng: 15.0925, country: 'LY' },
   'srinagar':         { lat: 34.0837, lng: 74.7973, country: 'IN' },
   // India's states and bigger cities: its outlets' stories were pinned at the outlet's home city (Chennai)
-  'pune':             { lat: 18.5204, lng: 73.8567, country: 'IN', region: 'Maharashtra' },
+  'pune':             { lat: 18.5204, lng: 73.8567, country: 'IN', region: 'Maharashtra', asWritten: 'Pune' },
   'nagpur':           { lat: 21.1458, lng: 79.0882, country: 'IN', region: 'Maharashtra' },
   'ahmedabad':        { lat: 23.0225, lng: 72.5714, country: 'IN', region: 'Gujarat' },
   'lucknow':          { lat: 26.8467, lng: 80.9462, country: 'IN', region: 'Uttar Pradesh' },
@@ -339,7 +347,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'yangon':           { lat: 16.8409, lng: 96.1735, country: 'MM' },
   'naypyidaw':        { lat: 19.7633, lng: 96.0785, country: 'MM' },
   'taipei':           { lat: 25.0330, lng: 121.5654, country: 'TW' },
-  'caracas':          { lat: 10.4806, lng: -66.9036, country: 'VE' },
+  'caracas':          { lat: 10.4806, lng: -66.9036, country: 'VE', asWritten: 'Caracas' },
   'havana':           { lat: 23.1136, lng: -82.3666, country: 'CU' },
   'port-au-prince':   { lat: 18.5944, lng: -72.3074, country: 'HT', name: 'Port-au-Prince' },
   'tbilisi':          { lat: 41.7151, lng: 44.8271, country: 'GE' },
@@ -378,7 +386,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'gusau':            { lat: 12.1704, lng: 6.6641,  country: 'NG', region: 'Zamfara' },
   'zamfara':          { lat: 12.1704, lng: 6.6641,  country: 'NG', region: 'Zamfara', name: 'Zamfara' },
   'umuahia':          { lat: 5.5250,  lng: 7.4922,  country: 'NG', region: 'Abia' },
-  'abia':             { lat: 5.5250,  lng: 7.4922,  country: 'NG', region: 'Abia', name: 'Abia' },
+  'abia':             { lat: 5.5250,  lng: 7.4922,  country: 'NG', region: 'Abia', name: 'Abia', asWritten: 'Abia' },
   'uyo':              { lat: 5.0377,  lng: 7.9128,  country: 'NG', region: 'Akwa Ibom' },
   'akwa ibom':        { lat: 5.0377,  lng: 7.9128,  country: 'NG', region: 'Akwa Ibom', name: 'Akwa Ibom' },
   'calabar':          { lat: 4.9757,  lng: 8.3417,  country: 'NG', region: 'Cross River' },
@@ -413,7 +421,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'aden':             { lat: 12.7855, lng: 45.0187, country: 'YE' },
   'taiz':             { lat: 13.5795, lng: 44.0209, country: 'YE' },
   'makkah':           { lat: 21.3891, lng: 39.8579, country: 'SA' },
-  'muscat':           { lat: 23.5880, lng: 58.3829, country: 'OM' },
+  'muscat':           { lat: 23.5880, lng: 58.3829, country: 'OM', asWritten: 'Muscat' },
   'incheon':          { lat: 37.4563, lng: 126.7052, country: 'KR' },
   'kathmandu':        { lat: 27.7172, lng: 85.3240, country: 'NP' },
   'athens':           { lat: 37.9838, lng: 23.7275, country: 'GR' },
@@ -477,7 +485,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'mandalay':         { lat: 21.9588, lng: 96.0891, country: 'MM' },
   'da nang':          { lat: 16.0544, lng: 108.2022, country: 'VN' },
   'cebu':             { lat: 10.3157, lng: 123.8854, country: 'PH' },
-  'davao':            { lat: 7.1907, lng: 125.4553, country: 'PH', region: 'Mindanao' },
+  'davao':            { lat: 7.1907, lng: 125.4553, country: 'PH', region: 'Mindanao', asWritten: 'Davao' },
   'surabaya':         { lat: -7.2575, lng: 112.7521, country: 'ID', region: 'East Java' },
   'bandung':          { lat: -6.9175, lng: 107.6191, country: 'ID', region: 'West Java' },
   'medan':            { lat: 3.5952, lng: 98.6722, country: 'ID', region: 'North Sumatra' },
@@ -507,8 +515,8 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'gothenburg':       { lat: 57.7089, lng: 11.9746, country: 'SE' },
   'malmö':            { lat: 55.605, lng: 13.0038, country: 'SE' },
   'malmo':            { lat: 55.605, lng: 13.0038, country: 'SE' },
-  'bergen':           { lat: 60.3913, lng: 5.3221, country: 'NO' },
-  'cork':             { lat: 51.8985, lng: -8.4756, country: 'IE' },
+  'bergen':           { lat: 60.3913, lng: 5.3221, country: 'NO', asWritten: 'Bergen' },
+  'cork':             { lat: 51.8985, lng: -8.4756, country: 'IE', asWritten: 'Cork' },
   'edinburgh':        { lat: 55.9533, lng: -3.1883, country: 'GB', region: 'Scotland' },
   'cardiff':          { lat: 51.4816, lng: -3.1791, country: 'GB', region: 'Wales' },
   'hamburg':          { lat: 53.5511, lng: 9.9937, country: 'DE' },
@@ -522,7 +530,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'gdansk':           { lat: 54.352, lng: 18.6466, country: 'PL' },
   'gdańsk':           { lat: 54.352, lng: 18.6466, country: 'PL' },
   'thessaloniki':     { lat: 40.6401, lng: 22.9444, country: 'GR' },
-  'turin':            { lat: 45.0703, lng: 7.6869, country: 'IT' },
+  'turin':            { lat: 45.0703, lng: 7.6869, country: 'IT', asWritten: 'Turin' },
   'antwerp':          { lat: 51.2194, lng: 4.4025, country: 'BE' },
   'rotterdam':        { lat: 51.9244, lng: 4.4777, country: 'NL' },
   // Oct 31, 2026, 6:43 PM (M63): 300 more large cities tested in "Police say a man was arrested in <city> on Friday"; these had no place of their own.
@@ -539,7 +547,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'arusha':            { lat: -3.3869, lng: 36.683, country: 'TZ' },
   'mwanza':            { lat: -2.5164, lng: 32.9175, country: 'TZ' },
   'zanzibar':          { lat: -6.1659, lng: 39.2026, country: 'TZ' },
-  'goma':              { lat: -1.6585, lng: 29.2205, country: 'CD' },
+  'goma':              { lat: -1.6585, lng: 29.2205, country: 'CD', asWritten: 'Goma' },
   'lubumbashi':        { lat: -11.6609, lng: 27.4794, country: 'CD' },
   'kisangani':         { lat: 0.5153, lng: 25.19, country: 'CD' },
   'bouake':            { lat: 7.6906, lng: -5.0366, country: 'CI' },
@@ -548,7 +556,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'agadir':            { lat: 30.4278, lng: -9.5981, country: 'MA' },
   'luxor':             { lat: 25.6872, lng: 32.6396, country: 'EG' },
   'aswan':             { lat: 24.0889, lng: 32.8998, country: 'EG' },
-  'port said':         { lat: 31.2653, lng: 32.3019, country: 'EG' },
+  'port said':         { lat: 31.2653, lng: 32.3019, country: 'EG', asWritten: 'Port Said' },
   'omdurman':          { lat: 15.6445, lng: 32.4777, country: 'SD' },
   'kismayo':           { lat: -0.3582, lng: 42.5454, country: 'SO' },
   'bosaso':            { lat: 11.2842, lng: 49.1816, country: 'SO' },
@@ -560,13 +568,13 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'douala':            { lat: 4.0511, lng: 9.7679, country: 'CM' },
   'pointe-noire':      { lat: -4.7692, lng: 11.8664, country: 'CG' },
   'huambo':            { lat: -12.7761, lng: 15.7392, country: 'AO' },
-  'beira':             { lat: -19.8436, lng: 34.8389, country: 'MZ' },
+  'beira':             { lat: -19.8436, lng: 34.8389, country: 'MZ', asWritten: 'Beira' },
   'gqeberha':          { lat: -33.9608, lng: 25.6022, country: 'ZA' },
   'port elizabeth':    { lat: -33.9608, lng: 25.6022, country: 'ZA' },
   'bloemfontein':      { lat: -29.0852, lng: 26.1596, country: 'ZA' },
   'soweto':            { lat: -26.2678, lng: 27.8585, country: 'ZA' },
   'pietermaritzburg':  { lat: -29.6006, lng: 30.3794, country: 'ZA' },
-  'quito':             { lat: -0.1807, lng: -78.4678, country: 'EC' },
+  'quito':             { lat: -0.1807, lng: -78.4678, country: 'EC', asWritten: 'Quito' },
   'medellin':          { lat: 6.2476, lng: -75.5658, country: 'CO' },
   'medellín':          { lat: 6.2476, lng: -75.5658, country: 'CO' },
   'barranquilla':      { lat: 10.9685, lng: -74.7813, country: 'CO' },
@@ -577,11 +585,11 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'cusco':             { lat: -13.5319, lng: -71.9675, country: 'PE' },
   'valparaiso':        { lat: -33.0472, lng: -71.6127, country: 'CL' },
   'valparaíso':        { lat: -33.0472, lng: -71.6127, country: 'CL' },
-  'recife':            { lat: -8.0476, lng: -34.877, country: 'BR' },
-  'fortaleza':         { lat: -3.7319, lng: -38.5267, country: 'BR' },
+  'recife':            { lat: -8.0476, lng: -34.877, country: 'BR', asWritten: 'Recife' },
+  'fortaleza':         { lat: -3.7319, lng: -38.5267, country: 'BR', asWritten: 'Fortaleza' },
   'manaus':            { lat: -3.119, lng: -60.0217, country: 'BR' },
   'curitiba':          { lat: -25.4284, lng: -49.2733, country: 'BR' },
-  'porto alegre':      { lat: -30.0346, lng: -51.2177, country: 'BR' },
+  'porto alegre':      { lat: -30.0346, lng: -51.2177, country: 'BR', asWritten: 'Porto Alegre' },
   'belo horizonte':    { lat: -19.9167, lng: -43.9345, country: 'BR' },
   'guadalajara':       { lat: 20.6597, lng: -103.3496, country: 'MX' },
   'monterrey':         { lat: 25.6866, lng: -100.3161, country: 'MX' },
@@ -604,7 +612,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'mashhad':           { lat: 36.2605, lng: 59.6168, country: 'IR' },
   'ahvaz':             { lat: 31.3183, lng: 48.6706, country: 'IR' },
   'bandar abbas':      { lat: 27.1865, lng: 56.2808, country: 'IR' },
-  'medina':            { lat: 24.5247, lng: 39.5692, country: 'SA' },
+  'medina':            { lat: 24.5247, lng: 39.5692, country: 'SA', asWritten: 'Medina' },
   'kuwait city':       { lat: 29.3759, lng: 47.9774, country: 'KW' },
   'salalah':           { lat: 17.0151, lng: 54.0924, country: 'OM' },
   'haifa':             { lat: 32.794, lng: 34.9896, country: 'IL' },
@@ -661,7 +669,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'chernihiv':         { lat: 51.4982, lng: 31.2893, country: 'UA' },
   'timisoara':         { lat: 45.7489, lng: 21.2087, country: 'RO' },
   'timișoara':         { lat: 45.7489, lng: 21.2087, country: 'RO' },
-  'constanta':         { lat: 44.1598, lng: 28.6348, country: 'RO' },
+  'constanta':         { lat: 44.1598, lng: 28.6348, country: 'RO', asWritten: 'Constanta' },
   'plovdiv':           { lat: 42.1354, lng: 24.7453, country: 'BG' },
   'mostar':            { lat: 43.3438, lng: 17.8078, country: 'BA' },
   'banja luka':        { lat: 44.7722, lng: 17.191, country: 'BA' },
@@ -714,16 +722,16 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'san francisco':     { lat: 37.7749, lng: -122.4194, country: 'US', region: 'California' },
   'oakland':           { lat: 37.8044, lng: -122.2712, country: 'US', region: 'California' },
   'sacramento':        { lat: 38.5816, lng: -121.4944, country: 'US', region: 'California' },
-  'las vegas':         { lat: 36.1699, lng: -115.1398, country: 'US', region: 'Nevada' },
+  'las vegas':         { lat: 36.1699, lng: -115.1398, country: 'US', region: 'Nevada', asWritten: 'Las Vegas' },
   'tucson':            { lat: 32.2226, lng: -110.9747, country: 'US', region: 'Arizona' },
   'salt lake city':    { lat: 40.7608, lng: -111.891, country: 'US', region: 'Utah' },
   'albuquerque':       { lat: 35.0844, lng: -106.6504, country: 'US', region: 'New Mexico' },
   'dallas':            { lat: 32.7767, lng: -96.797, country: 'US', region: 'Texas' },
   'san antonio':       { lat: 29.4241, lng: -98.4936, country: 'US', region: 'Texas' },
-  'el paso':           { lat: 31.7619, lng: -106.485, country: 'US', region: 'Texas' },
+  'el paso':           { lat: 31.7619, lng: -106.485, country: 'US', region: 'Texas', asWritten: 'El Paso' },
   'minneapolis':       { lat: 44.9778, lng: -93.265, country: 'US', region: 'Minnesota' },
   'milwaukee':         { lat: 43.0389, lng: -87.9065, country: 'US', region: 'Wisconsin' },
-  'detroit':           { lat: 42.3314, lng: -83.0458, country: 'US', region: 'Michigan' },
+  'detroit':           { lat: 42.3314, lng: -83.0458, country: 'US', region: 'Michigan', asWritten: 'Detroit' },
   'cleveland':         { lat: 41.4993, lng: -81.6944, country: 'US', region: 'Ohio' },
   'cincinnati':        { lat: 39.1031, lng: -84.512, country: 'US', region: 'Ohio' },
   'pittsburgh':        { lat: 40.4406, lng: -79.9959, country: 'US', region: 'Pennsylvania' },
@@ -757,7 +765,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'maribor':          { lat: 46.5547, lng: 15.6459, country: 'SI' },
   'celje':            { lat: 46.2309, lng: 15.2604, country: 'SI' },
   'kranj':            { lat: 46.2389, lng: 14.3556, country: 'SI' },
-  'novo mesto':       { lat: 45.8034, lng: 15.1689, country: 'SI' },
+  'novo mesto':       { lat: 45.8034, lng: 15.1689, country: 'SI', asWritten: 'Novo Mesto' },
   'nova gorica':      { lat: 45.9559, lng: 13.6483, country: 'SI' },
   'velenje':          { lat: 46.3592, lng: 15.1100, country: 'SI' },
   'ptuj':             { lat: 46.4200, lng: 15.8700, country: 'SI' },
@@ -851,12 +859,12 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'tenerife': { lat: 28.2916, lng: -16.6291, country: 'ES', name: 'Tenerife' },
   'gran canaria': { lat: 27.9202, lng: -15.5474, country: 'ES', name: 'Gran Canaria' },
   'azores': { lat: 37.7412, lng: -25.6756, country: 'PT', name: 'Azores' },
-  'madeira': { lat: 32.6669, lng: -16.9241, country: 'PT', name: 'Madeira' },
+  'madeira': { lat: 32.6669, lng: -16.9241, country: 'PT', name: 'Madeira', asWritten: 'Madeira' },
   'mallorca': { lat: 39.6953, lng: 3.0176, country: 'ES', name: 'Mallorca' },
   'majorca': { lat: 39.6953, lng: 3.0176, country: 'ES', name: 'Mallorca' },
   'ibiza': { lat: 38.9067, lng: 1.4206, country: 'ES', name: 'Ibiza' },
   'sardinia': { lat: 40.1209, lng: 9.0129, country: 'IT', name: 'Sardinia' },
-  'crete': { lat: 35.2401, lng: 24.8093, country: 'GR', name: 'Crete' },
+  'crete': { lat: 35.2401, lng: 24.8093, country: 'GR', name: 'Crete', asWritten: 'Crete' },
   'corsica': { lat: 42.0396, lng: 9.0129, country: 'FR', name: 'Corsica' },
   'mykonos': { lat: 37.4467, lng: 25.3289, country: 'GR', name: 'Mykonos' },
   'santorini': { lat: 36.3932, lng: 25.4615, country: 'GR', name: 'Santorini' },
@@ -1059,7 +1067,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'garissa': { lat: -0.4532, lng: 39.6461, country: 'KE', name: 'Garissa' },
   'kitale': { lat: 1.0157, lng: 35.0062, country: 'KE', name: 'Kitale' },
   'nyeri': { lat: -0.4201, lng: 36.9476, country: 'KE', name: 'Nyeri' },
-  'thika': { lat: -1.0333, lng: 37.0693, country: 'KE', name: 'Thika' },
+  'thika': { lat: -1.0333, lng: 37.0693, country: 'KE', name: 'Thika', asWritten: 'Thika' },
   'naivasha': { lat: -0.7172, lng: 36.431, country: 'KE', name: 'Naivasha' },
   'morogoro': { lat: -6.8211, lng: 37.6595, country: 'TZ', name: 'Morogoro' },
   'mbeya': { lat: -8.9094, lng: 33.4608, country: 'TZ', name: 'Mbeya' },
@@ -1116,12 +1124,12 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'gyumri': { lat: 40.7942, lng: 43.8453, country: 'AM', name: 'Gyumri' },
   'vanadzor': { lat: 40.8128, lng: 44.4883, country: 'AM', name: 'Vanadzor' },
   'kutaisi': { lat: 42.2679, lng: 42.6946, country: 'GE', name: 'Kutaisi' },
-  'poti': { lat: 42.1462, lng: 41.6719, country: 'GE', name: 'Poti' },
+  'poti': { lat: 42.1462, lng: 41.6719, country: 'GE', name: 'Poti', asWritten: 'Poti' },
   'zugdidi': { lat: 42.5088, lng: 41.8709, country: 'GE', name: 'Zugdidi' },
   'zomba': { lat: -15.3833, lng: 35.3333, country: 'MW', name: 'Zomba' },
   'kabwe': { lat: -14.4469, lng: 28.4464, country: 'ZM', name: 'Kabwe' },
   'mongu': { lat: -15.2484, lng: 23.1274, country: 'ZM', name: 'Mongu' },
-  'mutare': { lat: -18.9707, lng: 32.6709, country: 'ZW', name: 'Mutare' },
+  'mutare': { lat: -18.9707, lng: 32.6709, country: 'ZW', name: 'Mutare', asWritten: 'Mutare' },
   'gweru': { lat: -19.45, lng: 29.8167, country: 'ZW', name: 'Gweru' },
   'masvingo': { lat: -20.0637, lng: 30.8277, country: 'ZW', name: 'Masvingo' },
   'kariba': { lat: -16.5167, lng: 28.8, country: 'ZW', name: 'Kariba' },
@@ -1181,8 +1189,8 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'encarnacion': { lat: -27.3306, lng: -55.8667, country: 'PY', name: 'Encarnación' },
   'encarnación': { lat: -27.3306, lng: -55.8667, country: 'PY', name: 'Encarnación' },
   'punta del este': { lat: -34.9628, lng: -54.9506, country: 'UY', name: 'Punta del Este' },
-  'belem': { lat: -1.4558, lng: -48.5044, country: 'BR', name: 'Belém' },
-  'belém': { lat: -1.4558, lng: -48.5044, country: 'BR', name: 'Belém' },
+  'belem': { lat: -1.4558, lng: -48.5044, country: 'BR', name: 'Belém', asWritten: 'Belem' },
+  'belém': { lat: -1.4558, lng: -48.5044, country: 'BR', name: 'Belém', asWritten: 'Belém' },
   'goiania': { lat: -16.6869, lng: -49.2648, country: 'BR', name: 'Goiânia' },
   'goiânia': { lat: -16.6869, lng: -49.2648, country: 'BR', name: 'Goiânia' },
   'campinas': { lat: -22.9099, lng: -47.0626, country: 'BR', name: 'Campinas' },
@@ -1201,7 +1209,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'ribeirao preto': { lat: -21.1775, lng: -47.8103, country: 'BR', name: 'Ribeirão Preto' },
   'foz do iguaçu': { lat: -25.5163, lng: -54.5854, country: 'BR', name: 'Foz do Iguaçu' },
   'foz do iguacu': { lat: -25.5163, lng: -54.5854, country: 'BR', name: 'Foz do Iguaçu' },
-  'porto velho': { lat: -8.7612, lng: -63.9004, country: 'BR', name: 'Porto Velho' },
+  'porto velho': { lat: -8.7612, lng: -63.9004, country: 'BR', name: 'Porto Velho', asWritten: 'Porto Velho' },
   'macapa': { lat: 0.0349, lng: -51.0694, country: 'BR', name: 'Macapá' },
   'macapá': { lat: 0.0349, lng: -51.0694, country: 'BR', name: 'Macapá' },
   'quetzaltenango': { lat: 14.8347, lng: -91.5181, country: 'GT', name: 'Quetzaltenango' },
@@ -1327,7 +1335,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'nizhny novgorod': { lat: 56.2965, lng: 43.9361, country: 'RU', name: 'Nizhny Novgorod' },
   'taganrog': { lat: 47.2362, lng: 38.8969, country: 'RU', name: 'Taganrog' },
   'yeysk': { lat: 46.7056, lng: 38.2739, country: 'RU', name: 'Yeysk' },
-  'kerch': { lat: 45.3562, lng: 36.4674, country: 'RU', name: 'Kerch' },
+  'kerch': { lat: 45.3562, lng: 36.4674, country: 'UA', name: 'Kerch', region: 'Crimea' },   // in Crimea, as 'crimea' and 'sevastopol'
   'saratov': { lat: 51.5336, lng: 46.0343, country: 'RU', name: 'Saratov' },
   'ryazan': { lat: 54.6269, lng: 39.6916, country: 'RU', name: 'Ryazan' },
   'lipetsk': { lat: 52.6031, lng: 39.5708, country: 'RU', name: 'Lipetsk' },
@@ -1343,7 +1351,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'yuzhno-sakhalinsk': { lat: 46.9591, lng: 142.738, country: 'RU', name: 'Yuzhno-Sakhalinsk' },
   'norilsk': { lat: 69.3558, lng: 88.1893, country: 'RU', name: 'Norilsk' },
   'magnitogorsk': { lat: 53.4186, lng: 59.0472, country: 'RU', name: 'Magnitogorsk' },
-  'bursa': { lat: 40.1885, lng: 29.061, country: 'TR', name: 'Bursa' },
+  'bursa': { lat: 40.1885, lng: 29.061, country: 'TR', name: 'Bursa', asWritten: 'Bursa' },
   'adana': { lat: 37.0, lng: 35.3213, country: 'TR', name: 'Adana' },
   'konya': { lat: 37.8746, lng: 32.4932, country: 'TR', name: 'Konya' },
   'kayseri': { lat: 38.7312, lng: 35.4787, country: 'TR', name: 'Kayseri' },
@@ -1431,7 +1439,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'san sebastián': { lat: 43.3183, lng: -1.9812, country: 'ES', name: 'San Sebastián' },
   'san sebastian': { lat: 43.3183, lng: -1.9812, country: 'ES', name: 'San Sebastian' },
   'oviedo': { lat: 43.3614, lng: -5.8593, country: 'ES', name: 'Oviedo' },
-  'las palmas': { lat: 28.1235, lng: -15.4363, country: 'ES', name: 'Las Palmas' },
+  'las palmas': { lat: 28.1235, lng: -15.4363, country: 'ES', name: 'Las Palmas', asWritten: 'Las Palmas' },
   'santa cruz de tenerife': { lat: 28.4636, lng: -16.2518, country: 'ES', name: 'Santa Cruz de Tenerife' },
   'badajoz': { lat: 38.8794, lng: -6.9707, country: 'ES', name: 'Badajoz' },
   'almería': { lat: 36.8381, lng: -2.4597, country: 'ES', name: 'Almería' },
@@ -1481,7 +1489,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'maastricht': { lat: 50.8514, lng: 5.691, country: 'NL', name: 'Maastricht' },
   'odense': { lat: 55.4038, lng: 10.4024, country: 'DK', name: 'Odense' },
   'aalborg': { lat: 57.0488, lng: 9.9217, country: 'DK', name: 'Aalborg' },
-  'turku': { lat: 60.4518, lng: 22.2666, country: 'FI', name: 'Turku' },
+  'turku': { lat: 60.4518, lng: 22.2666, country: 'FI', name: 'Turku', asWritten: 'Turku' },
   'oulu': { lat: 65.0121, lng: 25.4651, country: 'FI', name: 'Oulu' },
   'örebro': { lat: 59.2753, lng: 15.2134, country: 'SE', name: 'Örebro' },
   'orebro': { lat: 59.2753, lng: 15.2134, country: 'SE', name: 'Orebro' },
@@ -1494,11 +1502,11 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'brasov': { lat: 45.6427, lng: 25.5887, country: 'RO', name: 'Brasov' },
   'sibiu': { lat: 45.7983, lng: 24.1256, country: 'RO', name: 'Sibiu' },
   'oradea': { lat: 47.0465, lng: 21.9189, country: 'RO', name: 'Oradea' },
-  'varna': { lat: 43.2141, lng: 27.9147, country: 'BG', name: 'Varna' },
+  'varna': { lat: 43.2141, lng: 27.9147, country: 'BG', name: 'Varna', asWritten: 'Varna' },
   'burgas': { lat: 42.5048, lng: 27.4626, country: 'BG', name: 'Burgas' },
   'niš': { lat: 43.3209, lng: 21.8958, country: 'RS', name: 'Niš' },
   'bitola': { lat: 41.0297, lng: 21.3292, country: 'MK', name: 'Bitola' },
-  'rijeka': { lat: 45.3271, lng: 14.4422, country: 'HR', name: 'Rijeka' },
+  'rijeka': { lat: 45.3271, lng: 14.4422, country: 'HR', name: 'Rijeka', asWritten: 'Rijeka' },
   'osijek': { lat: 45.555, lng: 18.6955, country: 'HR', name: 'Osijek' },
   'gomel': { lat: 52.4345, lng: 30.9754, country: 'BY', name: 'Gomel' },
   'homel': { lat: 52.4345, lng: 30.9754, country: 'BY', name: 'Homel' },
@@ -1525,7 +1533,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'rajkot': { lat: 22.3039, lng: 70.8022, country: 'IN', name: 'Rajkot' },
   'jodhpur': { lat: 26.2389, lng: 73.0243, country: 'IN', name: 'Jodhpur' },
   'udaipur': { lat: 24.5854, lng: 73.7125, country: 'IN', name: 'Udaipur' },
-  'agra': { lat: 27.1767, lng: 78.0081, country: 'IN', name: 'Agra' },
+  'agra': { lat: 27.1767, lng: 78.0081, country: 'IN', name: 'Agra', asWritten: 'Agra' },
   'prayagraj': { lat: 25.4358, lng: 81.8463, country: 'IN', name: 'Prayagraj' },
   'allahabad': { lat: 25.4358, lng: 81.8463, country: 'IN', name: 'Allahabad' },
   'ayodhya': { lat: 26.7922, lng: 82.1998, country: 'IN', name: 'Ayodhya' },
@@ -1628,7 +1636,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'bekasi': { lat: -6.2383, lng: 106.9756, country: 'ID', name: 'Bekasi' },
   'tangerang': { lat: -6.1783, lng: 106.63, country: 'ID', name: 'Tangerang' },
   'kupang': { lat: -10.1772, lng: 123.607, country: 'ID', name: 'Kupang' },
-  'mataram': { lat: -8.5833, lng: 116.1167, country: 'ID', name: 'Mataram' },
+  'mataram': { lat: -8.5833, lng: 116.1167, country: 'ID', name: 'Mataram', asWritten: 'Mataram' },
   'malacca': { lat: 2.1896, lng: 102.2501, country: 'MY', name: 'Malacca' },
   'putrajaya': { lat: 2.9264, lng: 101.6964, country: 'MY', name: 'Putrajaya' },
   'shah alam': { lat: 3.0738, lng: 101.5183, country: 'MY', name: 'Shah Alam' },
@@ -1719,17 +1727,17 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   // Nov 4, 2026, 8:43 AM (M71): second cities of Africa (Nigeria, Ghana, North Africa, Sudan, South Sudan, the Horn, the Great Lakes, the Sahel, southern Africa) that gave no pin
   'zaria': { lat: 11.0855, lng: 7.7199, country: 'NG', name: 'Zaria' },
   'lafia': { lat: 8.4966, lng: 8.5153, country: 'NG', name: 'Lafia' },
-  'bonny': { lat: 4.4333, lng: 7.1667, country: 'NG', name: 'Bonny' },
+  'bonny': { lat: 4.4333, lng: 7.1667, country: 'NG', name: 'Bonny', asWritten: 'Bonny' },
   'sambisa': { lat: 11.3, lng: 13.5, country: 'NG', name: 'Sambisa' },
   'chibok': { lat: 10.8667, lng: 12.85, country: 'NG', name: 'Chibok' },
-  'baga': { lat: 13.2167, lng: 13.8833, country: 'NG', name: 'Baga' },
+  'baga': { lat: 13.2167, lng: 13.8833, country: 'NG', name: 'Baga', asWritten: 'Baga' },
   'gwoza': { lat: 11.0833, lng: 13.6957, country: 'NG', name: 'Gwoza' },
   'konduga': { lat: 11.65, lng: 13.4167, country: 'NG', name: 'Konduga' },
   'minna': { lat: 9.6139, lng: 6.5569, country: 'NG', name: 'Minna' },
   'yola': { lat: 9.2035, lng: 12.4954, country: 'NG', name: 'Yola' },
   'takoradi': { lat: 4.8845, lng: -1.7554, country: 'GH', name: 'Takoradi' },
   'cape coast': { lat: 5.1053, lng: -1.2466, country: 'GH', name: 'Cape Coast' },
-  'tema': { lat: 5.6698, lng: -0.0166, country: 'GH', name: 'Tema' },
+  'tema': { lat: 5.6698, lng: -0.0166, country: 'GH', name: 'Tema', asWritten: 'Tema' },
   'sunyani': { lat: 7.3399, lng: -2.3268, country: 'GH', name: 'Sunyani' },
   'bolgatanga': { lat: 10.7856, lng: -0.8514, country: 'GH', name: 'Bolgatanga' },
   'koforidua': { lat: 6.0941, lng: -0.2591, country: 'GH', name: 'Koforidua' },
@@ -1744,7 +1752,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'suez': { lat: 29.9668, lng: 32.5498, country: 'EG', name: 'Suez' },
   'ismailia': { lat: 30.5965, lng: 32.2715, country: 'EG', name: 'Ismailia' },
   'mansoura': { lat: 31.0409, lng: 31.3785, country: 'EG', name: 'Mansoura' },
-  'tanta': { lat: 30.7865, lng: 31.0004, country: 'EG', name: 'Tanta' },
+  'tanta': { lat: 30.7865, lng: 31.0004, country: 'EG', name: 'Tanta', asWritten: 'Tanta' },
   'asyut': { lat: 27.1809, lng: 31.1837, country: 'EG', name: 'Asyut' },
   'assiut': { lat: 27.1809, lng: 31.1837, country: 'EG', name: 'Assiut' },
   'sharm el-sheikh': { lat: 27.9158, lng: 34.33, country: 'EG', name: 'Sharm el-Sheikh' },
@@ -1824,7 +1832,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'dongola': { lat: 19.1654, lng: 30.4763, country: 'SD', name: 'Dongola' },
   'atbara': { lat: 17.7022, lng: 33.9864, country: 'SD', name: 'Atbara' },
   'gedaref': { lat: 14.0349, lng: 35.3834, country: 'SD', name: 'Gedaref' },
-  'kosti': { lat: 13.1629, lng: 32.6637, country: 'SD', name: 'Kosti' },
+  'kosti': { lat: 13.1629, lng: 32.6637, country: 'SD', name: 'Kosti', asWritten: 'Kosti' },
   'zalingei': { lat: 12.9097, lng: 23.4719, country: 'SD', name: 'Zalingei' },
   'el daein': { lat: 11.4608, lng: 26.1307, country: 'SD', name: 'El Daein' },
   'sennar': { lat: 13.5489, lng: 33.6, country: 'SD', name: 'Sennar' },
@@ -1853,7 +1861,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'tshwane': { lat: -25.7479, lng: 28.2293, country: 'ZA', name: 'Tshwane' },
   'mahikeng': { lat: -25.8652, lng: 25.6443, country: 'ZA', name: 'Mahikeng' },
   'upington': { lat: -28.4478, lng: 21.2561, country: 'ZA', name: 'Upington' },
-  'welkom': { lat: -27.9772, lng: 26.7351, country: 'ZA', name: 'Welkom' },
+  'welkom': { lat: -27.9772, lng: 26.7351, country: 'ZA', name: 'Welkom', asWritten: 'Welkom' },
   'soshanguve': { lat: -25.5167, lng: 28.1, country: 'ZA', name: 'Soshanguve' },
   'khayelitsha': { lat: -34.0383, lng: 18.6772, country: 'ZA', name: 'Khayelitsha' },
   'marikana': { lat: -25.7019, lng: 27.4756, country: 'ZA', name: 'Marikana' },
@@ -1867,12 +1875,12 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'chipata': { lat: -13.6333, lng: 32.65, country: 'ZM', name: 'Chipata' },
   'solwezi': { lat: -12.1833, lng: 26.3833, country: 'ZM', name: 'Solwezi' },
   'mazabuka': { lat: -15.8583, lng: 27.7536, country: 'ZM', name: 'Mazabuka' },
-  'tanga': { lat: -5.0689, lng: 39.0988, country: 'TZ', name: 'Tanga' },
+  'tanga': { lat: -5.0689, lng: 39.0988, country: 'TZ', name: 'Tanga', asWritten: 'Tanga' },
   'mtwara': { lat: -10.2736, lng: 40.1828, country: 'TZ', name: 'Mtwara' },
   'iringa': { lat: -7.7667, lng: 35.7, country: 'TZ', name: 'Iringa' },
   'tabora': { lat: -5.0167, lng: 32.8, country: 'TZ', name: 'Tabora' },
   'bagamoyo': { lat: -6.4333, lng: 38.9, country: 'TZ', name: 'Bagamoyo' },
-  'stone town': { lat: -6.1622, lng: 39.1921, country: 'TZ', name: 'Stone Town' },
+  'stone town': { lat: -6.1622, lng: 39.1921, country: 'TZ', name: 'Stone Town', asWritten: 'Stone Town' },
   'dar es salaam': { lat: -6.7924, lng: 39.2083, country: 'TZ', name: 'Dar es Salaam' },
   'kakamega': { lat: 0.2827, lng: 34.7519, country: 'KE', name: 'Kakamega' },
   'isiolo': { lat: 0.3546, lng: 37.5822, country: 'KE', name: 'Isiolo' },
@@ -1911,7 +1919,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'erigavo': { lat: 10.6167, lng: 47.3667, country: 'SO', name: 'Erigavo' },
   'baraawe': { lat: 1.1131, lng: 44.0278, country: 'SO', name: 'Baraawe' },
   'luuq': { lat: 3.8017, lng: 42.5469, country: 'SO', name: 'Luuq' },
-  'beni': { lat: 0.4914, lng: 29.4731, country: 'CD', name: 'Beni' },
+  'beni': { lat: 0.4914, lng: 29.4731, country: 'CD', name: 'Beni', asWritten: 'Beni' },
   'kindu': { lat: -2.9436, lng: 25.9222, country: 'CD', name: 'Kindu' },
   'matadi': { lat: -5.8167, lng: 13.4667, country: 'CD', name: 'Matadi' },
   'likasi': { lat: -10.9833, lng: 26.7333, country: 'CD', name: 'Likasi' },
@@ -1938,7 +1946,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'zouerate': { lat: 22.7333, lng: -12.4667, country: 'MR', name: 'Zouerate' },
   'kiffa': { lat: 16.6167, lng: -11.4, country: 'MR', name: 'Kiffa' },
   'diffa': { lat: 13.3154, lng: 12.6113, country: 'NE', name: 'Diffa' },
-  'dosso': { lat: 13.05, lng: 3.2, country: 'NE', name: 'Dosso' },
+  'dosso': { lat: 13.05, lng: 3.2, country: 'NE', name: 'Dosso', asWritten: 'Dosso' },
   'arlit': { lat: 18.7369, lng: 7.3853, country: 'NE', name: 'Arlit' },
   'tillaberi': { lat: 14.2089, lng: 1.4531, country: 'NE', name: 'Tillaberi' },
   'menaka': { lat: 15.9167, lng: 2.4, country: 'ML', name: 'Menaka' },
@@ -1974,13 +1982,13 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'uige': { lat: -7.6087, lng: 15.0613, country: 'AO', name: 'Uige' },
   'menongue': { lat: -14.6579, lng: 17.691, country: 'AO', name: 'Menongue' },
   'oshakati': { lat: -17.7883, lng: 15.6994, country: 'NA', name: 'Oshakati' },
-  'rundu': { lat: -17.9333, lng: 19.7667, country: 'NA', name: 'Rundu' },
+  'rundu': { lat: -17.9333, lng: 19.7667, country: 'NA', name: 'Rundu', asWritten: 'Rundu' },
   'katima mulilo': { lat: -17.5, lng: 24.2667, country: 'NA', name: 'Katima Mulilo' },
   'maun': { lat: -19.9833, lng: 23.4167, country: 'BW', name: 'Maun' },
   'kasane': { lat: -17.8, lng: 25.15, country: 'BW', name: 'Kasane' },
   'gisenyi': { lat: -1.7028, lng: 29.2564, country: 'RW', name: 'Gisenyi' },
   'rubavu': { lat: -1.7028, lng: 29.2564, country: 'RW', name: 'Rubavu' },
-  'huye': { lat: -2.5967, lng: 29.7394, country: 'RW', name: 'Huye' },
+  'huye': { lat: -2.5967, lng: 29.7394, country: 'RW', name: 'Huye', asWritten: 'Huye' },
   'rusizi': { lat: -2.4833, lng: 28.9, country: 'RW', name: 'Rusizi' },
   'ngozi': { lat: -2.9075, lng: 29.8306, country: 'BI', name: 'Ngozi' },
   'muyinga': { lat: -2.845, lng: 30.3417, country: 'BI', name: 'Muyinga' },
@@ -1989,7 +1997,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   // Nov 4, 2026, 5:42 PM (M72): second cities of the Americas and Oceania (Mexico, Brazil, the Andes, the Caribbean, the United States, Canada, Australia, New Zealand, the Pacific) that gave no pin
   'akron': { lat: 41.0814, lng: -81.519, country: 'US', name: 'Akron' },
   'allentown': { lat: 40.6084, lng: -75.4902, country: 'US', name: 'Allentown' },
-  'amarillo': { lat: 35.222, lng: -101.8313, country: 'US', name: 'Amarillo' },
+  'amarillo': { lat: 35.222, lng: -101.8313, country: 'US', name: 'Amarillo', asWritten: 'Amarillo' },
   'anaheim': { lat: 33.8366, lng: -117.9143, country: 'US', name: 'Anaheim' },
   'anapolis': { lat: -16.3281, lng: -48.9534, country: 'BR', name: 'Anapolis' },
   'ann arbor': { lat: 42.2808, lng: -83.743, country: 'US', name: 'Ann Arbor' },
@@ -2025,17 +2033,17 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'colima': { lat: 19.2433, lng: -103.725, country: 'MX', name: 'Colima' },
   'colorado springs': { lat: 38.8339, lng: -104.8214, country: 'US', name: 'Colorado Springs' },
   'comodoro rivadavia': { lat: -45.8641, lng: -67.4966, country: 'AR', name: 'Comodoro Rivadavia' },
-  'contagem': { lat: -19.9319, lng: -44.0539, country: 'BR', name: 'Contagem' },
+  'contagem': { lat: -19.9319, lng: -44.0539, country: 'BR', name: 'Contagem', asWritten: 'Contagem' },
   'corpus christi': { lat: 27.8006, lng: -97.3964, country: 'US', name: 'Corpus Christi' },
   'cozumel': { lat: 20.423, lng: -86.9223, country: 'MX', name: 'Cozumel' },
   'croix-des-bouquets': { lat: 18.5772, lng: -72.2272, country: 'HT', name: 'Croix-Des-Bouquets' },
   'dayton': { lat: 39.7589, lng: -84.1916, country: 'US', name: 'Dayton' },
-  'des moines': { lat: 41.5868, lng: -93.625, country: 'US', name: 'Des Moines' },
+  'des moines': { lat: 41.5868, lng: -93.625, country: 'US', name: 'Des Moines', asWritten: 'Des Moines' },
   'dubbo': { lat: -32.2569, lng: 148.6011, country: 'AU', name: 'Dubbo' },
   'duluth': { lat: 46.7867, lng: -92.1005, country: 'US', name: 'Duluth' },
   'duque de caxias': { lat: -22.7856, lng: -43.3117, country: 'BR', name: 'Duque de Caxias' },
   'ecatepec': { lat: 19.601, lng: -99.06, country: 'MX', name: 'Ecatepec' },
-  'el alto': { lat: -16.5047, lng: -68.163, country: 'BO', name: 'El Alto' },
+  'el alto': { lat: -16.5047, lng: -68.163, country: 'BO', name: 'El Alto', asWritten: 'El Alto' },
   'evansville': { lat: 37.9716, lng: -87.5711, country: 'US', name: 'Evansville' },
   'fargo': { lat: 46.8772, lng: -96.7898, country: 'US', name: 'Fargo' },
   'feira de santana': { lat: -12.2664, lng: -38.9663, country: 'BR', name: 'Feira de Santana' },
@@ -2048,7 +2056,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'fresno': { lat: 36.7378, lng: -119.7871, country: 'US', name: 'Fresno' },
   'galveston': { lat: 29.3013, lng: -94.7977, country: 'US', name: 'Galveston' },
   'gatineau': { lat: 45.4765, lng: -75.7013, country: 'CA', name: 'Gatineau' },
-  'gold coast': { lat: -28.0167, lng: 153.4, country: 'AU', name: 'Gold Coast' },
+  'gold coast': { lat: -28.0167, lng: 153.4, country: 'AU', name: 'Gold Coast', asWritten: 'Gold Coast' },
   'grand rapids': { lat: 42.9634, lng: -85.6681, country: 'US', name: 'Grand Rapids' },
   'green bay': { lat: 44.5192, lng: -88.0198, country: 'US', name: 'Green Bay' },
   'greensboro': { lat: 36.0726, lng: -79.792, country: 'US', name: 'Greensboro' },
@@ -2065,7 +2073,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'jeremie': { lat: 18.65, lng: -74.1167, country: 'HT', name: 'Jeremie' },
   'joao pessoa': { lat: -7.1195, lng: -34.845, country: 'BR', name: 'Joao Pessoa' },
   'juazeiro do norte': { lat: -7.213, lng: -39.3153, country: 'BR', name: 'Juazeiro Do Norte' },
-  'juiz de fora': { lat: -21.7642, lng: -43.3503, country: 'BR', name: 'Juiz de Fora' },
+  'juiz de fora': { lat: -21.7642, lng: -43.3503, country: 'BR', name: 'Juiz de Fora', asWritten: 'Juiz de Fora' },
   'juneau': { lat: 58.3019, lng: -134.4197, country: 'US', name: 'Juneau' },
   'kalgoorlie': { lat: -30.7489, lng: 121.4658, country: 'AU', name: 'Kalgoorlie' },
   'kamloops': { lat: 50.6745, lng: -120.3273, country: 'CA', name: 'Kamloops' },
@@ -2078,9 +2086,9 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'lautoka': { lat: -17.6167, lng: 177.45, country: 'FJ', name: 'Lautoka' },
   'lethbridge': { lat: 49.6935, lng: -112.8418, country: 'CA', name: 'Lethbridge' },
   'lismore': { lat: -28.8135, lng: 153.277, country: 'AU', name: 'Lismore' },
-  'little rock': { lat: 34.7465, lng: -92.2896, country: 'US', name: 'Little Rock' },
+  'little rock': { lat: 34.7465, lng: -92.2896, country: 'US', name: 'Little Rock', asWritten: 'Little Rock' },
   'londrina': { lat: -23.3045, lng: -51.1696, country: 'BR', name: 'Londrina' },
-  'los cabos': { lat: 22.8905, lng: -109.9167, country: 'MX', name: 'Los Cabos' },
+  'los cabos': { lat: 22.8905, lng: -109.9167, country: 'MX', name: 'Los Cabos', asWritten: 'Los Cabos' },
   'los mochis': { lat: 25.7903, lng: -108.9858, country: 'MX', name: 'Los Mochis' },
   'louisville': { lat: 38.2527, lng: -85.7585, country: 'US', name: 'Louisville' },
   'lubbock': { lat: 33.5779, lng: -101.8552, country: 'US', name: 'Lubbock' },
@@ -2107,24 +2115,24 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'palmerston north': { lat: -40.3523, lng: 175.6082, country: 'NZ', name: 'Palmerston North' },
   'papeete': { lat: -17.5516, lng: -149.5585, country: 'PF', name: 'Papeete' },
   'pedro juan caballero': { lat: -22.5472, lng: -55.7258, country: 'PY', name: 'Pedro Juan Caballero' },
-  'pelotas': { lat: -31.7654, lng: -52.3376, country: 'BR', name: 'Pelotas' },
+  'pelotas': { lat: -31.7654, lng: -52.3376, country: 'BR', name: 'Pelotas', asWritten: 'Pelotas' },
   'pensacola': { lat: 30.4213, lng: -87.2169, country: 'US', name: 'Pensacola' },
   'petion-ville': { lat: 18.5125, lng: -72.2853, country: 'HT', name: 'Petion-Ville' },
   'petropolis': { lat: -22.505, lng: -43.1786, country: 'BR', name: 'Petropolis' },
   'port hedland': { lat: -20.3106, lng: 118.6011, country: 'AU', name: 'Port Hedland' },
-  'porto seguro': { lat: -16.4435, lng: -39.0643, country: 'BR', name: 'Porto Seguro' },
+  'porto seguro': { lat: -16.4435, lng: -39.0643, country: 'BR', name: 'Porto Seguro', asWritten: 'Porto Seguro' },
   'prince george': { lat: 53.9171, lng: -122.7497, country: 'CA', name: 'Prince George' },
   'pucallpa': { lat: -8.3791, lng: -74.5539, country: 'PE', name: 'Pucallpa' },
   'puebla': { lat: 19.0414, lng: -98.2063, country: 'MX', name: 'Puebla' },
   'puerto barrios': { lat: 15.7278, lng: -88.5944, country: 'GT', name: 'Puerto Barrios' },
   'puerto la cruz': { lat: 10.2136, lng: -64.6306, country: 'VE', name: 'Puerto La Cruz' },
   'puerto vallarta': { lat: 20.6534, lng: -105.2253, country: 'MX', name: 'Puerto Vallarta' },
-  'puno': { lat: -15.8402, lng: -70.0219, country: 'PE', name: 'Puno' },
-  'quantico': { lat: 38.522, lng: -77.2933, country: 'US', name: 'Quantico' },
+  'puno': { lat: -15.8402, lng: -70.0219, country: 'PE', name: 'Puno', asWritten: 'Puno' },
+  'quantico': { lat: 38.522, lng: -77.2933, country: 'US', name: 'Quantico', asWritten: 'Quantico' },
   'quibdo': { lat: 5.6947, lng: -76.6611, country: 'CO', name: 'Quibdo' },
   'rabaul': { lat: -4.1999, lng: 152.1721, country: 'PG', name: 'Rabaul' },
   'raleigh': { lat: 35.7796, lng: -78.6382, country: 'US', name: 'Raleigh' },
-  'salt lake': { lat: 40.7608, lng: -111.891, country: 'US', name: 'Salt Lake' },
+  'salt lake': { lat: 40.7608, lng: -111.891, country: 'US', name: 'Salt Lake', asWritten: 'Salt Lake' },
   'san cristobal de las casas': { lat: 16.737, lng: -92.6376, country: 'MX', name: 'San Cristobal de Las Casas' },
   'santa barbara': { lat: 34.4208, lng: -119.6982, country: 'US', name: 'Santa Barbara' },
   'sao jose dos campos': { lat: -23.2237, lng: -45.9009, country: 'BR', name: 'Sao Jose dos Campos' },
@@ -2138,10 +2146,10 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'sunshine coast': { lat: -26.65, lng: 153.0667, country: 'AU', name: 'Sunshine Coast' },
   'syracuse': { lat: 43.0481, lng: -76.1474, country: 'US', name: 'Syracuse' },
   'tabatinga': { lat: -4.253, lng: -69.938, country: 'BR', name: 'Tabatinga' },
-  'tacna': { lat: -18.0066, lng: -70.2463, country: 'PE', name: 'Tacna' },
+  'tacna': { lat: -18.0066, lng: -70.2463, country: 'PE', name: 'Tacna', asWritten: 'Tacna' },
   'tacoma': { lat: 47.2529, lng: -122.4443, country: 'US', name: 'Tacoma' },
   'tallahassee': { lat: 30.4383, lng: -84.2807, country: 'US', name: 'Tallahassee' },
-  'tampa': { lat: 27.9506, lng: -82.4572, country: 'US', name: 'Tampa' },
+  'tampa': { lat: 27.9506, lng: -82.4572, country: 'US', name: 'Tampa', asWritten: 'Tampa' },
   'tampico': { lat: 22.2331, lng: -97.8611, country: 'MX', name: 'Tampico' },
   'tamuning': { lat: 13.4894, lng: 144.7833, country: 'GU', name: 'Tamuning' },
   'thunder bay': { lat: 48.3809, lng: -89.2477, country: 'CA', name: 'Thunder Bay' },
@@ -2174,7 +2182,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'bougainville': { lat: -6.3, lng: 155.4, country: 'PG', name: 'Bougainville' },
   'catatumbo': { lat: 8.5, lng: -73.0, country: 'CO', name: 'Catatumbo' },
   'chapare': { lat: -16.9, lng: -65.4, country: 'BO', name: 'Chapare' },
-  'chernobyl': { lat: 51.389, lng: 30.099, country: 'UA', name: 'Chernobyl' },
+  'chernobyl': { lat: 51.389, lng: 30.099, country: 'UA', name: 'Chernobyl', asWritten: 'Chernobyl' },   // not "el «Chernóbyl argentino»"
   'chiapas': { lat: 16.5, lng: -92.5, country: 'MX', name: 'Chiapas' },
   'dadaab': { lat: 0.054, lng: 40.31, country: 'KE', name: 'Dadaab' },
   'dimona': { lat: 31.07, lng: 35.03, country: 'IL', name: 'Dimona' },
@@ -2258,8 +2266,8 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'klaipeda': { lat: 55.7033, lng: 21.1443, country: 'LT', name: 'Klaipeda' },
   'klaipėda': { lat: 55.7033, lng: 21.1443, country: 'LT', name: 'Klaipeda' },
   'siauliai': { lat: 55.9349, lng: 23.3137, country: 'LT', name: 'Siauliai' },
-  'liege': { lat: 50.6326, lng: 5.5797, country: 'BE', name: 'Liege' },
-  'liège': { lat: 50.6326, lng: 5.5797, country: 'BE', name: 'Liege' },
+  'liege': { lat: 50.6326, lng: 5.5797, country: 'BE', name: 'Liege', asWritten: 'Liege' },
+  'liège': { lat: 50.6326, lng: 5.5797, country: 'BE', name: 'Liege', asWritten: 'Liège' },
   'dunkirk': { lat: 51.0343, lng: 2.3768, country: 'FR', name: 'Dunkirk' },
   'dunkerque': { lat: 51.0343, lng: 2.3768, country: 'FR', name: 'Dunkirk' },
   'cannes': { lat: 43.5528, lng: 7.0174, country: 'FR', name: 'Cannes' },
@@ -2271,12 +2279,12 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'geneva': { lat: 46.2044, lng: 6.1432, country: 'CH', name: 'Geneva' },
   'genève': { lat: 46.2044, lng: 6.1432, country: 'CH', name: 'Geneva' },
   'bologna': { lat: 44.4949, lng: 11.3426, country: 'IT', name: 'Bologna' },
-  'bari': { lat: 41.1171, lng: 16.8719, country: 'IT', name: 'Bari' },
+  'bari': { lat: 41.1171, lng: 16.8719, country: 'IT', name: 'Bari', asWritten: 'Bari' },
   'brindisi': { lat: 40.6327, lng: 17.9418, country: 'IT', name: 'Brindisi' },
   'messina': { lat: 38.1938, lng: 15.554, country: 'IT', name: 'Messina' },
   'vigo': { lat: 42.2406, lng: -8.7207, country: 'ES', name: 'Vigo' },
-  'porto': { lat: 41.1579, lng: -8.6291, country: 'PT', name: 'Porto' },
-  'faro': { lat: 37.0194, lng: -7.9304, country: 'PT', name: 'Faro' },
+  'porto': { lat: 41.1579, lng: -8.6291, country: 'PT', name: 'Porto', asWritten: 'Porto' },
+  'faro': { lat: 37.0194, lng: -7.9304, country: 'PT', name: 'Faro', asWritten: 'Faro' },
   'braga': { lat: 41.5454, lng: -8.4265, country: 'PT', name: 'Braga' },
   'patras': { lat: 38.2466, lng: 21.7346, country: 'GR', name: 'Patras' },
   'heraklion': { lat: 35.3387, lng: 25.1442, country: 'GR', name: 'Heraklion' },
@@ -2297,7 +2305,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'craiova': { lat: 44.3302, lng: 23.7949, country: 'RO', name: 'Craiova' },
   'kragujevac': { lat: 44.0128, lng: 20.9114, country: 'RS', name: 'Kragujevac' },
   'subotica': { lat: 46.1, lng: 19.6667, country: 'RS', name: 'Subotica' },
-  'zadar': { lat: 44.1194, lng: 15.2314, country: 'HR', name: 'Zadar' },
+  'zadar': { lat: 44.1194, lng: 15.2314, country: 'HR', name: 'Zadar', asWritten: 'Zadar' },
   'dubrovnik': { lat: 42.6507, lng: 18.0944, country: 'HR', name: 'Dubrovnik' },
   'tuzla': { lat: 44.5384, lng: 18.6671, country: 'BA', name: 'Tuzla' },
   'bihac': { lat: 44.8169, lng: 15.8708, country: 'BA', name: 'Bihac' },
@@ -2362,7 +2370,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'kimbe': { lat: -5.5500, lng: 150.1500, country: 'PG', name: 'Kimbe' },
   'kavieng': { lat: -2.5667, lng: 150.8000, country: 'PG', name: 'Kavieng' },
   'alotau': { lat: -10.3167, lng: 150.4333, country: 'PG', name: 'Alotau' },
-  'kolonia': { lat: 6.9639, lng: 158.2083, country: 'FM', name: 'Kolonia' },
+  'kolonia': { lat: 6.9639, lng: 158.2083, country: 'FM', name: 'Kolonia', asWritten: 'Kolonia' },
   'yap state': { lat: 9.5144, lng: 138.1292, country: 'FM', name: 'Yap' },
   "vava'u": { lat: -18.6500, lng: -173.9833, country: 'TO', name: "Vava'u" },
   'neiafu': { lat: -18.6500, lng: -173.9833, country: 'TO', name: 'Neiafu' },
@@ -2461,6 +2469,30 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'yen bai': { lat: 21.7050, lng: 104.8750, country: 'VN', name: 'Yên Bái', asWritten: 'Yen Bai' },
   'deir el-zor': { lat: 35.3359, lng: 40.1408, country: 'SY', name: 'Deir ez-Zor' },
   'deir al-zor': { lat: 35.3359, lng: 40.1408, country: 'SY', name: 'Deir ez-Zor' },
+  // Famous cities that share their name with small American towns, so the tables keep them at home (Nov 6, 2026: no
+  // outlet's "Naples" or "Venice" was placed), as written, without their American namesakes ("Naples, Florida")
+  'naples': { lat: 40.8518, lng: 14.2681, country: 'IT', name: 'Naples', asWritten: 'Naples' },
+  'naples, florida': { lat: 26.1420, lng: -81.7948, country: 'US', region: 'Florida', name: 'Naples' },
+  'naples, fla': { lat: 26.1420, lng: -81.7948, country: 'US', region: 'Florida', name: 'Naples' },
+  'venice': { lat: 45.4408, lng: 12.3155, country: 'IT', name: 'Venice', asWritten: 'Venice' },
+  'venice beach': { lat: 33.9850, lng: -118.4695, country: 'US', name: 'Venice Beach', region: 'California' },
+  'venice, florida': { lat: 27.0998, lng: -82.4543, country: 'US', region: 'Florida', name: 'Venice' },
+  'florence': { lat: 43.7696, lng: 11.2558, country: 'IT', name: 'Florence', asWritten: 'Florence' },
+  'florence, south carolina': { lat: 34.1954, lng: -79.7626, country: 'US', region: 'South Carolina', name: 'Florence' },
+  'mecca': { lat: 21.4225, lng: 39.8262, country: 'SA', name: 'Mecca', asWritten: 'Mecca' },
+  'los ángeles': { lat: 34.0522, lng: -118.2437, country: 'US', name: 'Los Ángeles', region: 'California', asWritten: 'Los Ángeles' },
+  'quebec': { lat: 46.8139, lng: -71.2080, country: 'CA', name: 'Quebec', region: 'Quebec' },
+  // Straits in the news: Iran's threats to Hormuz, the Houthis' Bab el-Mandeb
+  'strait of hormuz': { lat: 26.5667, lng: 56.2500, country: 'IR', name: 'Strait of Hormuz' },
+  'hormuz': { lat: 26.5667, lng: 56.2500, country: 'IR', name: 'Strait of Hormuz', asWritten: 'Hormuz' },
+  'bab el-mandeb': { lat: 12.5833, lng: 43.3333, country: 'YE', name: 'Bab el-Mandeb' },
+  'bab al-mandab': { lat: 12.5833, lng: 43.3333, country: 'YE', name: 'Bab el-Mandeb' },
+  'taiwan strait': { lat: 24.0000, lng: 119.5000, country: 'TW', name: 'Taiwan Strait' },
+  'strait of malacca': { lat: 2.5000, lng: 101.4000, country: 'MY', name: 'Strait of Malacca' },
+  'malacca strait': { lat: 2.5000, lng: 101.4000, country: 'MY', name: 'Strait of Malacca' },
+  'bosporus': { lat: 41.1194, lng: 29.0753, country: 'TR', name: 'Bosporus' },
+  'bosphorus': { lat: 41.1194, lng: 29.0753, country: 'TR', name: 'Bosporus' },
+  'kerch strait': { lat: 45.3000, lng: 36.5500, country: 'UA', name: 'Kerch Strait', region: 'Crimea' },
   'south fly': { lat: -9.0667, lng: 143.2081, country: 'PG', name: 'South Fly', region: 'Western' },
   'muharraq': { lat: 26.2572, lng: 50.6119, country: 'BH', name: 'Muharraq' },
   'riffa': { lat: 26.1300, lng: 50.5550, country: 'BH', name: 'Riffa' },
@@ -2695,6 +2727,12 @@ const HOME_NAMES: Record<string, { name: RegExp; as: string; unless?: RegExp }> 
   // An Ecuadorian outlet's "Santo Domingo" is Santo Domingo de los Tsáchilas, not the Dominican capital (Oct 31, 2026:
   // El Comercio's and El Universo's "choque frontal en la vía Quinindé – Santo Domingo", once capitals were places)
   EC: { name: /\bsanto domingo\b(?!\s+de\s+los\s+ts[áa]chilas)/gi, as: 'Santo Domingo de los Tsachilas' },
+  // A Malaysian outlet's "Bursa" is its stock exchange, not Türkiye's Bursa (Nov 6, 2026: the NST's "Oil price slide
+  // hits Bursa energy stocks")
+  MY: { name: /\bBursa\b/g, as: 'the bourse', unless: /\bt(?:urkey|ürkiye|urkiye)\b/i },
+  // A Mexican outlet's "la Roma" is Mexico City's Colonia Roma (Nov 6, 2026: "5 actividades para este fin de semana en
+  // CDMX" was pinned in Rome), as are "Roma Norte" and "Roma-Condesa"
+  MX: { name: /\b[Ll]a\s+Roma\b(?![\s-]+(?:Italia|italiana))|\bRoma(?=[\s-]+(?:Norte|Sur|Condesa)\b)/g, as: 'Colonia Roma' },
 }
 
 export function withHomeNames(text: string, countryCode: string | null | undefined): string {
@@ -2889,6 +2927,26 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+/**
+ * A hand-kept name written without accents is read with them too (Nov 6, 2026: "bogota" didn't find "Bogotá", nor
+ * "sao paulo" "São Paulo", in Spanish and Portuguese headlines): each letter matches its accented forms, and a space
+ * or a hyphen either ("Tel-Aviv", "Port-Louis", "Addis-Abeba").
+ */
+const ACCENTED: Record<string, string> = {
+  a: 'aàáâãäåāăą', c: 'cçćčĉċ', d: 'dďđ', e: 'eèéêëēĕėęě', g: 'gğĝġģ', h: 'hĥħ', i: 'iìíîïĩīĭįıİ', j: 'jĵ', k: 'kķ',
+  // not ñ, a letter of its own: Spanish "montaña" (mountain) isn't Montana
+  l: 'lĺļľŀł', n: 'nńņňŉ', o: 'oòóôõöøōŏő', r: 'rŕŗř', s: 'sśŝşšș', t: 'tţťŧț', u: 'uùúûüũūŭůűų', w: 'wŵ',
+  y: 'yýÿŷ', z: 'zźżž',
+}
+function withAccents(name: string): string {
+  return [...name].map(ch => ACCENTED[ch] ? `[${ACCENTED[ch]}]` : ch === ' ' || ch === '-' ? '[\\s-]' : escapeRegExp(ch)).join('')
+}
+const UNACCENTED: Record<string, string> = { ø: 'o', Ø: 'O', ł: 'l', Ł: 'L', đ: 'd', Đ: 'D', ı: 'i' }
+/** The text without its accents, and hyphens as spaces, for scanIn's quick look */
+function withoutAccents(text: string): string {
+  return text.normalize('NFD').replace(/\p{Mn}/gu, '').replace(/[øØłŁđĐı]/g, ch => UNACCENTED[ch]!).replace(/-/g, ' ')
+}
+
 /** Gazetteer places as whole words, longest names first. Plain substring
  *  matching pinned "climate" stories to Lima, "comparison" to Paris and
  *  "promote" to Rome. */
@@ -2935,11 +2993,18 @@ const GAZETTEER_MATCHERS = Object.entries(GAZETTEER)
   // for spaces, so a name was found inside a word: "nica" in "Única", "cesis" in "Arquidiócesis", "kandal" in
   // "škandal"; names starting or ending on one, "Potosí" or "Łódź", had their own rule). The hand-kept names are read
   // in any case, Natural Earth's as written (above).
-  .map(([place, coords]) => ({ place, coords, re: new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(coords.asWritten ?? place)}(?![\\p{L}\\p{N}])`, coords.asWritten ? 'u' : 'iu') }))
+  .map(([place, coords]) => {
+    const plain = !coords.asWritten && /^[a-z' .-]+$/.test(place)
+    // as written, or in capitals: a wire story's dateline ("CARACAS, Venezuela (AP) —", "DETROIT (AP) —")
+    const pattern = coords.asWritten ? `(?:${escapeRegExp(coords.asWritten)}|${escapeRegExp(coords.asWritten.toUpperCase())})`
+      : plain ? withAccents(place) : escapeRegExp(place)
+    return { place, coords, plain, re: new RegExp(`(?<![\\p{L}\\p{N}])${pattern}(?![\\p{L}\\p{N}])`, coords.asWritten ? 'u' : 'iu') }
+  })
 const GAZETTEER_SCAN = GAZETTEER_MATCHERS.map(m => ({
   place: m.place, coords: m.coords, re: new RegExp(m.re.source, `g${m.re.flags}`),
   // the name as plain text: a text that doesn't hold it needn't run its pattern (scanIn)
-  needle: m.coords.asWritten ?? m.place.toLowerCase(), asWritten: !!m.coords.asWritten,
+  needle: m.coords.asWritten ?? (m.plain ? m.place.replace(/-/g, ' ') : m.place.toLowerCase()), asWritten: !!m.coords.asWritten, plain: m.plain,
+  upper: m.coords.asWritten?.toUpperCase(),
 }))
 
 /**
@@ -2949,25 +3014,52 @@ const GAZETTEER_SCAN = GAZETTEER_MATCHERS.map(m => ({
  */
 function scanIn(clean: string): typeof GAZETTEER_SCAN {
   const lower = clean.toLowerCase()
-  return GAZETTEER_SCAN.filter(m => (m.asWritten ? clean : lower).includes(m.needle))
+  const plain = withoutAccents(lower)
+  return GAZETTEER_SCAN.filter(m => m.asWritten ? clean.includes(m.needle) || clean.includes(m.upper!) : (m.plain ? plain : lower).includes(m.needle))
+}
+
+/**
+ * Whether a gazetteer hit is a name, not the place: part of one (place-words.ts), or, for a hand-kept name found with
+ * accents it is written without, inside a person's name or after a capitalised name (Nov 6, 2026: "Aleida Sofía
+ * Silvestre" and "Frida Sofía niega" were Sofia, "Octavio Ondó Oyono" Nigeria's Ondo)
+ */
+function notThePlace(m: { plain: boolean; asWritten?: boolean; needle?: string }, clean: string, index: number, end: number): boolean {
+  if (partOfAName(clean, index, end)) return true
+  const hit = clean.slice(index, end)
+  // a name read as written, found in capitals: only a dateline's ("CARACAS, Venezuela (AP) —", "SEREMBAN:", "MAROVOAY -"),
+  // not an acronym or a word of a headline in capitals (Nov 6, 2026: "Gates Foundation faces reckoning over AGRA", GDELT's
+  // "PAITA CLARIFIES REPORTS ON PEC MEMBER'S TRAVEL", a Papua New Guinean)
+  if (m.asWritten && hit !== m.needle && hit === hit.toUpperCase()) {
+    return !(/^\s*[,:(\-–—]/.test(clean.slice(end, end + 3)) || clean.trim() === hit)
+  }
+  if (!m.plain) return false
+  return withoutAccents(hit) !== hit.replace(/-/g, ' ') && (betweenNames(clean, index, end) || afterAName(clean, index, end))
 }
 
 /** The gazetteer place mentioned first (the headline comes first); the longer name on a tie */
-export function findGazetteerPlace(text: string): { place: string; coords: typeof GAZETTEER[string] } | null {
+export function findGazetteerPlace(text: string): { place: string; coords: typeof GAZETTEER[string]; written?: string } | null {
   const clean = cleanText(text)
-  let best: { place: string; coords: typeof GAZETTEER[string]; index: number } | null = null
+  let best: { place: string; coords: typeof GAZETTEER[string]; index: number; written: string } | null = null
   for (const m of scanIn(clean)) {
     m.re.lastIndex = 0
     for (const hit of clean.matchAll(m.re)) {
       const index = hit.index ?? 0
       if (best && index >= best.index) break
       // "Santiago Peña" is a person, "Real Madrid" a club (place-words.ts, plan 0s5)
-      if (partOfAName(clean, index, index + hit[0].length)) continue
-      best = { place: m.place, coords: m.coords, index }
+      if (notThePlace(m, clean, index, index + hit[0].length)) continue
+      best = { place: m.place, coords: m.coords, index, written: hit[0] }
       break
     }
   }
-  return best ? { place: best.place, coords: best.coords } : null
+  return best ? { place: best.place, coords: best.coords, written: best.written } : null
+}
+
+/** A place's shown name, as the story writes it when that is the name with its accents ("Bogotá" for "Bogota") */
+function shownName(coords: typeof GAZETTEER[string], place: string, written?: string): string {
+  const shown = coords.name ?? titleCase(place)
+  if (!written || written === shown || !/^\p{Lu}/u.test(written) || !/\p{Ll}/u.test(written)) return shown
+  const accented = withoutAccents(written) !== written.replace(/-/g, ' ')
+  return accented && withoutAccents(written.toLowerCase()) === withoutAccents(shown.toLowerCase()) ? written : shown
 }
 
 /**
@@ -2996,6 +3088,24 @@ const HOME_MATCHERS: Record<string, Array<{ name: string; entry: TownEntry; re: 
   Object.entries(HOME_TOWNS).map(([code, towns]) => [code, Object.entries(towns)
     .sort((a, b) => b[0].length - a[0].length)
     .map(([name, entry]) => ({ name, entry, re: new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(name)}(?![\\p{L}\\p{N}])`, 'gu') }))]))
+
+/**
+ * The outlet's own country's town of the same name as the place the text names (Nov 6, 2026: with accents read, a
+ * Chilean outlet's "Los Ángeles" found the American city): that town, when its country's home table has the name and the
+ * text writes it so
+ */
+export function homeTwinPlace(text: string, countryCode: string | null | undefined, place: string): GeoResult | null {
+  const towns = countryCode ? HOME_MATCHERS[countryCode.toUpperCase()] : undefined
+  if (!towns || !text) return null
+  const want = withoutAccents(place.toLowerCase())
+  const clean = cleanText(text)
+  for (const m of towns) {
+    if (withoutAccents(m.name.toLowerCase()) !== want) continue
+    m.re.lastIndex = 0
+    if (m.re.test(clean)) return { point: true, lat: m.entry.lat, lng: m.entry.lng, name: m.entry.name, countryCode: m.entry.country, region: m.entry.region }
+  }
+  return null
+}
 
 const COUNTRY_NAMED = new Map<string, boolean>()
 /** Whether the name is a country's name ("Niger", "Georgia", "Mali") */
@@ -3051,7 +3161,7 @@ function gazetteerPoint(text: string): GeoResult | null {
         point:       true,
         lat:         found.coords.lat,
         lng:         found.coords.lng,
-        name:        found.coords.name ?? titleCase(found.place),
+        name:        shownName(found.coords, found.place, found.written),
         countryCode: found.coords.country,
         region:      found.coords.region,
       }
@@ -3095,7 +3205,7 @@ export function splitPlaces(text: string): { countries: string[]; rest: string; 
   for (const m of scanIn(clean)) {
     m.re.lastIndex = 0
     for (const hit of clean.matchAll(m.re)) {
-      if (partOfAName(clean, hit.index ?? 0, (hit.index ?? 0) + hit[0].length)) continue
+      if (notThePlace(m, clean, hit.index ?? 0, (hit.index ?? 0) + hit[0].length)) continue
       if (!take(hit.index ?? 0, hit[0].length)) continue
       if (m.coords.country) codes.add(m.coords.country)
       found.push({ place: m.place, coords: m.coords, index: hit.index ?? 0 })
@@ -3129,7 +3239,7 @@ export function placesInText(text: string, max = 6): string[] {
       const index = hit.index ?? 0
       const end = index + hit[0].length
       if (hits.some(h => index < h.end && end > h.index)) continue
-      if (partOfAName(clean, index, end)) continue
+      if (notThePlace(m, clean, index, end)) continue
       hits.push({ name: m.coords.name ?? titleCase(m.place), index, end })
     }
   }
@@ -3179,20 +3289,20 @@ export function countriesNamedOutright(text: string): string[] {
 /** The first gazetteer place in the text that lies in one of `countries` */
 function gazetteerPointIn(text: string, countries: string[]): GeoResult | null {
   const clean = cleanText(text)
-  let best: { place: string; coords: typeof GAZETTEER[string]; index: number } | null = null
+  let best: { place: string; coords: typeof GAZETTEER[string]; index: number; written: string } | null = null
   for (const m of scanIn(clean)) {
     if (!m.coords.country || !countries.includes(m.coords.country)) continue
     m.re.lastIndex = 0
     for (const hit of clean.matchAll(m.re)) {
       const index = hit.index ?? 0
       if (best && index >= best.index) break
-      if (partOfAName(clean, index, index + hit[0].length)) continue
-      best = { place: m.place, coords: m.coords, index }
+      if (notThePlace(m, clean, index, index + hit[0].length)) continue
+      best = { place: m.place, coords: m.coords, index, written: hit[0] }
       break
     }
   }
   return best
-    ? { point: true, lat: best.coords.lat, lng: best.coords.lng, name: best.coords.name ?? titleCase(best.place), countryCode: best.coords.country, region: best.coords.region }
+    ? { point: true, lat: best.coords.lat, lng: best.coords.lng, name: shownName(best.coords, best.place, best.written), countryCode: best.coords.country, region: best.coords.region }
     : null
 }
 

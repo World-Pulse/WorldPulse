@@ -37,6 +37,12 @@ const r = (alts: string, as: string): Rule => [new RegExp(`${B}(?:${alts})${E}`,
 const cs = (alts: string, as: string): Rule => [new RegExp(`${B}(?:${alts})${E}`, 'gu'), as]
 /** A word that only looks like a place: blanked out, as written (lowercase) */
 const mask = (alts: string): Rule => cs(alts, '…')
+/**
+ * World cities by a language's own names, as written (Nov 6, 2026: Spanish, Portuguese, Italian and German missed most
+ * capitals, "Pekín", "Pequim", "Lisbona", "Kairo"; French had none): with their capital, since several are words or
+ * names in lower case ("damas", "colonia"). Not Mecca: "ein Mekka für Surfer", "la meca del cine" are figures of speech.
+ */
+const towns = (pairs: Array<[string, string]>): Rule[] => pairs.map(([alts, as]) => cs(alts, as))
 
 const GERMAN: Rule[] = [
   r('vereinigte[nr]?\\s+arabische[nr]?\\s+emirate[n]?', 'United Arab Emirates'),
@@ -77,6 +83,18 @@ const GERMAN: Rule[] = [
   r('serbische[nrsm]?', 'Serbian'), r('schweizer(?:ische[nrsm]?)?', 'Swiss'), r('syrische[nrsm]?', 'Syrian'),
   r('pal[äa]stinensische[nrsm]?', 'Palestinian'), r('griechische[nrsm]?', 'Greece'), r('rum[äa]nische[nrsm]?', 'Romanian'),
   r('deutsche[nrsm]?', 'German'), r('[öo]sterreichische[nrsm]?', 'Austria'),
+  ...towns([
+    ['Kairo', 'Cairo'], ['Algier', 'Algiers'], ['Teheran', 'Tehran'], ['Bagdad', 'Baghdad'], ['Dschidda', 'Jeddah'],
+    ['Kapstadt', 'Cape Town'], ['Kopenhagen', 'Copenhagen'], ['Den\\s+Haag', 'The Hague'], ['Lissabon', 'Lisbon'], ['Tokio', 'Tokyo'],
+    ['Genf', 'Geneva'], ['Bukarest', 'Bucharest'], ['Damaskus', 'Damascus'], ['Riad', 'Riyadh'], ['Tripolis', 'Tripoli'],
+    ['Khartum', 'Khartoum'], ['Addis\\s+Abeba', 'Addis Ababa'], ['Schanghai', 'Shanghai'], ['Taipeh', 'Taipei'], ['Kalkutta', 'Kolkata'],
+    ['Karatschi', 'Karachi'], ['Sankt\\s+Petersburg', 'Saint Petersburg'], ['Mailand', 'Milan'], ['Venedig', 'Venice'],
+    ['Florenz', 'Florence'], ['Neapel', 'Naples'], ['Genua', 'Genoa'], ['Havanna', 'Havana'], ['Westjordanland', 'West Bank'],
+    ['Mossul', 'Mosul'], ['Charkiw', 'Kharkiv'], ['Cherson', 'Kherson'], ['Donezk', 'Donetsk'], ['Saporischschja', 'Zaporizhzhia'],
+    ['Krim', 'Crimea'], ['Sewastopol', 'Sevastopol'], ['Neu-Delhi', 'New Delhi'], ['Mexiko-Stadt', 'Mexico City'],
+    ['Hongkong', 'Hong Kong'], ['Köln', 'Cologne'], ['Nürnberg', 'Nuremberg'], ['Lüttich', 'Liège'], ['Antwerpen', 'Antwerp'],
+    ['Brügge', 'Bruges'], ['Stra(?:ß|ss)burg', 'Strasbourg'], ['Hormus|Ormus', 'Hormuz'],
+  ]),
 ]
 
 const ITALIAN: Rule[] = [
@@ -98,6 +116,17 @@ const ITALIAN: Rule[] = [
   r('praga', 'Prague'), r('roma', 'Rome'), r('milano', 'Milan'), r('casa\\s+bianca', 'White House'),
   r('cremlino', 'Kremlin'),
   mask('mali|usa|modi'),
+  ...towns([
+    ['Algeri', 'Algiers'], ['Teheran', 'Tehran'], ['Gedda', 'Jeddah'], ['Città\\s+del\\s+Capo', 'Cape Town'],
+    ['Copenaghen', 'Copenhagen'], ["L['’]Aia", 'The Hague'], ['Lisbona', 'Lisbon'], ['Edimburgo', 'Edinburgh'], ['Seul', 'Seoul'],
+    ['Ginevra', 'Geneva'], ['Damasco', 'Damascus'], ['Riad', 'Riyadh'], ['Tunisi', 'Tunis'], ['Khartum', 'Khartoum'],
+    ['Addis\\s+Abeba', 'Addis Ababa'], ['Giacarta', 'Jakarta'], ['San\\s+Pietroburgo', 'Saint Petersburg'], ['Stoccolma', 'Stockholm'],
+    ['Dublino', 'Dublin'], ['Anversa', 'Antwerp'], ['Francoforte', 'Frankfurt'], ['Amburgo', 'Hamburg'], ['Colonia', 'Cologne'],
+    ['Zurigo', 'Zurich'], ['Monaco\\s+di\\s+Baviera', 'Munich'], ['Torino', 'Turin'], ['Venezia', 'Venice'], ['Firenze', 'Florence'],
+    ['Napoli', 'Naples'], ['Genova', 'Genoa'], ['Siviglia', 'Seville'], ['Barcellona', 'Barcelona'],
+    ['Città\\s+del\\s+Messico', 'Mexico City'], ["L['’]Avana", 'Havana'], ['Filadelfia', 'Philadelphia'], ['Cisgiordania', 'West Bank'],
+    ['Bassora', 'Basra'], ['Sebastopoli', 'Sevastopol'], ['Nuova\\s+Delhi', 'New Delhi'], ['Hormuz|Ormuz', 'Hormuz'],
+  ]),
 ]
 
 const CATALAN: Rule[] = [
@@ -457,13 +486,72 @@ const MONGOLIAN: Rule[] = [
 ]
 
 /** Words that only look like a place in the three languages the reader took before round 6 */
-const SPANISH: Rule[] = [mask('usa|irán|chile|maduros?')]
-const PORTUGUESE: Rule[] = [mask('usa|irão|peru|maduros?')]
+const SPANISH: Rule[] = [
+  mask('usa|irán|chile|maduros?'),
+  ...towns([
+    ['Londres', 'London'], ['Moscú|Moscu', 'Moscow'], ['Bruselas', 'Brussels'], ['Pekín|Pekin', 'Beijing'], ['Argel', 'Algiers'],
+    ['Varsovia', 'Warsaw'], ['Viena', 'Vienna'], ['Atenas(?!\\s+de\\s+Alajuela)', 'Athens'], ['Teherán|Teheran', 'Tehran'],
+    ['Bagdad', 'Baghdad'], ['Yeda', 'Jeddah'], ['Ciudad\\s+del\\s+Cabo', 'Cape Town'], ['Copenhague', 'Copenhagen'],
+    ['La\\s+Haya', 'The Hague'], ['Lisboa', 'Lisbon'], ['Edimburgo', 'Edinburgh'], ['Jerusalén|Jerusalen', 'Jerusalem'], ['Seúl', 'Seoul'],
+    ['Tokio', 'Tokyo'], ['Nueva\\s+York', 'New York'], ['Ginebra', 'Geneva'], ['Praga', 'Prague'], ['Bucarest', 'Bucharest'],
+    ['Belgrado', 'Belgrade'], ['Estambul', 'Istanbul'], ['Damasco', 'Damascus'], ['Amán', 'Amman'], ['Riad', 'Riyadh'],
+    ['Abu\\s+Dabi', 'Abu Dhabi'], ['Mascate', 'Muscat'], ['Saná', 'Sanaa'], ['Jartum', 'Khartoum'], ['Adís\\s+Abeba|Addis\\s+Abeba', 'Addis Ababa'],
+    ['Johannesburgo', 'Johannesburg'], ['Yakarta', 'Jakarta'], ['Bombay', 'Mumbai'], ['Calcuta', 'Kolkata'], ['Daca', 'Dhaka'],
+    ['San\\s+Petersburgo', 'Saint Petersburg'], ['Estocolmo', 'Stockholm'], ['Amberes', 'Antwerp'], ['Fráncfort|Francfort', 'Frankfurt'],
+    ['Hamburgo', 'Hamburg'], ['Venecia', 'Venice'], ['Nápoles', 'Naples'], ['Génova', 'Genoa'], ['Sevilla', 'Seville'], ['Oporto', 'Porto'],
+    ['Ciudad\\s+de\\s+M[ée]xico', 'Mexico City'], ['La\\s+Habana', 'Havana'], ['Puerto\\s+Príncipe', 'Port-au-Prince'],
+    ['Nueva\\s+Orleans', 'New Orleans'], ['Filadelfia', 'Philadelphia'], ['Sídney', 'Sydney'], ['Cisjordania', 'West Bank'],
+    ['Alepo', 'Aleppo'], ['Basora', 'Basra'], ['Járkov|Jarkov', 'Kharkiv'], ['Jersón|Jerson', 'Kherson'], ['Lugansk', 'Luhansk'],
+    ['Mariúpol', 'Mariupol'], ['Zaporiyia|Zaporiyya', 'Zaporizhzhia'], ['Sebastopol', 'Sevastopol'], ['Nueva\\s+Delhi', 'New Delhi'],
+    ['Ormuz', 'Hormuz'],
+    // Mexico City's Colonia Roma is a neighbourhood, not Rome
+    ['(?<![Cc]olonia\\s|[Cc]ol\\.\\s)Roma(?![\\s-]+(?:Norte|Sur))', 'Rome'],
+  ]),
+]
+const PORTUGUESE: Rule[] = [
+  mask('usa|irão|peru|maduros?'),
+  ...towns([
+    ['Londres', 'London'], ['Moscovo|Moscou', 'Moscow'], ['Bruxelas', 'Brussels'], ['Pequim', 'Beijing'], ['Argel', 'Algiers'],
+    ['Varsóvia|Varsovia', 'Warsaw'], ['Viena', 'Vienna'], ['Atenas', 'Athens'], ['Beirute', 'Beirut'], ['Teerão|Teerã|Teerao', 'Tehran'],
+    ['Cabul', 'Kabul'], ['Bagdade|Bagdá', 'Baghdad'], ['Jidá', 'Jeddah'], ['Cidade\\s+do\\s+Cabo', 'Cape Town'],
+    ['Copenhaga|Copenhague', 'Copenhagen'], ['Haia', 'The Hague'], ['Lisboa', 'Lisbon'], ['Edimburgo', 'Edinburgh'], ['Seul', 'Seoul'],
+    ['Tóquio', 'Tokyo'], ['Nova\\s+(?:Iorque|York)', 'New York'], ['Berlim', 'Berlin'], ['Roma', 'Rome'], ['Genebra', 'Geneva'],
+    ['Praga', 'Prague'], ['Budapeste', 'Budapest'], ['Bucareste', 'Bucharest'], ['Belgrado', 'Belgrade'], ['Ancara', 'Ankara'],
+    ['Istambul', 'Istanbul'], ['Damasco', 'Damascus'], ['Amã', 'Amman'], ['Riade', 'Riyadh'], ['Mascate', 'Muscat'], ['Tunes', 'Tunis'],
+    ['Dacar', 'Dakar'], ['Cartum', 'Khartoum'], ['Adis\\s+Abeba', 'Addis Ababa'], ['Joanesburgo', 'Johannesburg'], ['Xangai', 'Shanghai'],
+    ['Taipé', 'Taipei'], ['Banguecoque', 'Bangkok'], ['Singapura', 'Singapore'], ['Jacarta', 'Jakarta'], ['Nova\\s+D[ée]lhi|Nova\\s+Deli', 'New Delhi'],
+    ['Bombaim', 'Mumbai'], ['Calcutá', 'Kolkata'], ['Carachi', 'Karachi'], ['Islamabade', 'Islamabad'], ['Daca', 'Dhaka'],
+    ['São\\s+Petersburgo', 'Saint Petersburg'], ['Estocolmo', 'Stockholm'], ['Helsínquia', 'Helsinki'], ['Amesterdão|Amsterdã', 'Amsterdam'],
+    ['Antuérpia', 'Antwerp'], ['Munique', 'Munich'], ['Hamburgo', 'Hamburg'], ['Col[óô]nia(?!\\s+do\\s+Sacramento)', 'Cologne'],
+    ['Zurique', 'Zurich'], ['Milão', 'Milan'], ['Turim', 'Turin'], ['Veneza', 'Venice'], ['Florença', 'Florence'], ['Nápoles', 'Naples'],
+    ['G[ée]nova', 'Genoa'], ['Sevilha', 'Seville'], ['Cidade\\s+do\\s+México', 'Mexico City'], ['Montevideu', 'Montevideo'],
+    ['Quebeque', 'Quebec'], ['Otava', 'Ottawa'], ['Nova\\s+Orle(?:ães|ans)', 'New Orleans'], ['Filadélfia', 'Philadelphia'],
+    ['Cisjordânia', 'West Bank'], ['Telavive', 'Tel Aviv'], ['Alepo', 'Aleppo'], ['Mossul', 'Mosul'], ['Bassorá', 'Basra'],
+    ['Zaporíjia', 'Zaporizhzhia'], ['Crimeia', 'Crimea'], ['Sebastopol', 'Sevastopol'], ['Lugansk', 'Luhansk'], ['Ormuz', 'Hormuz'],
+  ]),
+]
+/** French: no list until Nov 6, 2026, so Le Monde's "à Londres", "Moscou" or "Bruxelles" named no place */
+const FRENCH: Rule[] = towns([
+  ['Londres', 'London'], ['Moscou', 'Moscow'], ['Bruxelles', 'Brussels'], ['Pékin|Pekin', 'Beijing'], ['Caire', 'Cairo'], ['Alger', 'Algiers'],
+  ['Varsovie', 'Warsaw'], ['(?<![Ll]a\\s|Haute-)Vienne(?!\\s+\\((?:Is[èe]re)\\))', 'Vienna'], ['Athènes|Athenes', 'Athens'],
+  ['Beyrouth', 'Beirut'], ['Téhéran|Teheran', 'Tehran'], ['Kaboul', 'Kabul'], ['Bagdad', 'Baghdad'], ['Djeddah', 'Jeddah'],
+  ['(?:Le|du|au)\\s+Cap(?![\\p{L}-])', 'Cape Town'], ['Copenhague', 'Copenhagen'], ['La\\s+Haye', 'The Hague'],
+  ['Lisbonne', 'Lisbon'], ['Édimbourg|Edimbourg', 'Edinburgh'], ['Bucarest', 'Bucharest'], ['Damas', 'Damascus'], ['Riyad', 'Riyadh'],
+  ['Abou\\s+Dhabi', 'Abu Dhabi'], ['Mascate', 'Muscat'], ['Addis[-\\s]+Abeba', 'Addis Ababa'], ['Djakarta', 'Jakarta'], ['Manille', 'Manila'],
+  ['Bombay', 'Mumbai'], ['Calcutta', 'Kolkata'], ['Dacca', 'Dhaka'], ['Saint-Pétersbourg', 'Saint Petersburg'], ['Anvers', 'Antwerp'],
+  ['Gand', 'Ghent'], ['Francfort', 'Frankfurt'], ['Hambourg', 'Hamburg'], ['Bâle', 'Basel'], ['Berne', 'Bern'], ['Venise', 'Venice'],
+  ['Gênes', 'Genoa'], ['Barcelone', 'Barcelona'], ['La\\s+Havane', 'Havana'], ['Saint-Domingue', 'Santo Domingo'],
+  ['La\\s+Nouvelle-Orléans', 'New Orleans'], ['Philadelphie', 'Philadelphia'], ['Cisjordanie', 'West Bank'],
+  ['Jérusalem-Est', 'East Jerusalem'], ['Alep', 'Aleppo'], ['Mossoul', 'Mosul'], ['Bassora', 'Basra'], ['Ispahan', 'Isfahan'],
+  ['Chiraz', 'Shiraz'], ['Louhansk', 'Luhansk'], ['Marioupol', 'Mariupol'], ['Zaporijjia|Zaporijia', 'Zaporizhzhia'], ['Crimée', 'Crimea'],
+  ['Sébastopol', 'Sevastopol'], ['Koursk', 'Kursk'], ['Briansk', 'Bryansk'], ['Ormuz', 'Hormuz'], ['Nouvelle-Delhi', 'New Delhi'],
+  ['Smyrne', 'Izmir'], ['Pyongyang', 'Pyongyang'],
+])
 
 export const LOCAL_NAMES: Record<string, Rule[]> = {
   de: GERMAN, it: ITALIAN, ca: CATALAN, da: DANISH, kl: DANISH, nl: DUTCH, ro: ROMANIAN, sl: SLOVENE,
   sr: MONTENEGRIN, cnr: MONTENEGRIN, sq: ALBANIAN, ms: MALAY, es: SPANISH, pt: PORTUGUESE, lt: LITHUANIAN,
-  ar: ARABIC, ru: RUSSIAN, mn: MONGOLIAN,
+  ar: ARABIC, ru: RUSSIAN, mn: MONGOLIAN, fr: FRENCH,
 }
 
 /** The text with its language's place names in English and its look-alike words blanked out, for finding its place */

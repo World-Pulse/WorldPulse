@@ -399,7 +399,8 @@ describe('places 72 hours of headlines named and the gazetteer missed (Oct 30, 2
   it('pins Australian, New Zealand and Tobago local stories at their own places', () => {
     expect(findGazetteerPlace("Interstate investors sparking 'astronomical' house sales in Alice Springs")?.coords.country).toBe('AU')
     expect(findGazetteerPlace("Wairarapa drug kingpin's prison sentence cut on appeal")?.coords.country).toBe('NZ')
-    expect(findGazetteerPlace('Calls for freedom camping ban at popular Wānaka lake')?.place).toBe('wānaka')
+    // either of its two keys: since Nov 6, 2026 "wanaka" reads "Wānaka" too
+    expect(findGazetteerPlace('Calls for freedom camping ban at popular Wānaka lake')?.place).toMatch(/^w[aā]naka$/)
     expect(findGazetteerPlace('Four held for drunk driving in Tobago')?.coords.country).toBe('TT')
     expect(findGazetteerPlace('Donald Trump rally threat ahead of Daytona Beach appearance')?.coords.region).toBe('Florida')
   })

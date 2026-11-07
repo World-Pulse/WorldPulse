@@ -122,6 +122,23 @@ export function titleCaseAround(text: string, at: number, end: number): boolean 
   return long.length >= 3 && long.filter(startsUpper).length / long.length >= 0.85
 }
 
+/**
+ * Whether the words right before and after the name are capitalised, outside a Title Case run: the name sits inside a
+ * person's ("Aleida Sofía Silvestre", "Octavio Ondó Oyono")
+ */
+export function betweenNames(text: string, at: number, end: number): boolean {
+  const before = wordBefore(text, at)
+  const after = wordAfter(text, end)
+  return !!before && !!after && startsUpper(before) && startsUpper(after) && !NOT_FIRST_NAMES.has(before.toLowerCase())
+    && !GAZETTEER_NEXT.has(after.toLowerCase()) && !titleCaseAround(text, at, end)
+}
+
+/** Whether a capitalised name comes right before, outside a Title Case run, even at a sentence's start ("Frida Sofía niega") */
+export function afterAName(text: string, at: number, end: number): boolean {
+  const before = wordBefore(text, at)
+  return !!before && startsUpper(before) && !NOT_FIRST_NAMES.has(before.toLowerCase()) && !titleCaseAround(text, at, end)
+}
+
 /** Words that say "Colorado" in a text is the Colorado party: its abbreviation, full name, or its members */
 const COLORADO_PARTY = /\bANR\b|\bcolorados\b|asociaci[oó]n nacional republicana/i
 
@@ -168,6 +185,14 @@ export function partOfAName(text: string, at: number, end: number, surname?: boo
   // A virus or a fever named after a place, not the place (Nov 6, 2026: "Bundibugyo virus disease" in a story on
   // the Congo's Ebola outbreak): "Marburg virus", "Lassa fever", "Rift Valley fever", "the Zaire strain"
   if (/^[ \t]+(?:virus|viruses|fever|ebolavirus|strain|variant)\b/i.test(text.slice(end, end + 14))) return true
+  // An oil benchmark, not the place (Nov 6, 2026: oilprice.com's "West Texas Intermediate was trading at $91" was
+  // pinned in Texas): "Brent crude" (Brent is also a London borough), "West Texas Intermediate", "Urals crude"
+  if (/^(?:brent[ \t]+(?:crude|oil|futures|blend|benchmark|prices?)|(?:west[ \t]+)?texas[ \t]+intermediate|urals[ \t]+(?:crude|oil|blend|prices?)|(?:dubai|oman|murban)[ \t]+crude)\b/i.test(text.slice(at, end + 24))) return true
+  // Malaysia's stock exchange, not Türkiye's Bursa (Nov 6, 2026: the NST's "Oil price slide hits Bursa energy stocks"
+  // was pinned in Bursa; Malaysia's outlets' "Bursa" alone is the exchange too, geo.ts HOME_NAMES); a company named
+  // after a place: "AngloGold Ashanti"
+  if (hit.toLowerCase() === 'bursa' && /^[ \t]+Malaysia\b/.test(text.slice(end, end + 12))) return true
+  if (/\bAngloGold[ \t]+$/.test(text.slice(Math.max(0, at - 12), at))) return true
   // A gang or a cartel named after its home, not the place: "the Tren de Aragua" (Nov 6, 2026: five stories on a
   // US reward for its leaders were pinned in Aragua), "el Cártel de Sinaloa", "the Sinaloa Cartel"
   if (/\b(?:tren|c[aá]rtel|cartel|clan)\s+(?:de|del)\s+$/i.test(text.slice(Math.max(0, at - 14), at))
@@ -185,7 +210,8 @@ export function partOfAName(text: string, at: number, end: number, surname?: boo
   if (before && clubWord(before, CLUB_BEFORE)) return true
   if (after && clubWord(after, CLUB_AFTER)) return true
   if (after && startsUpper(after) && DOCUMENT_AFTER.has(after.toLowerCase())) return true
-  const key = hit.toLowerCase()
+  // without accents: "Sofía" is the first name "sofia"
+  const key = hit.normalize('NFD').replace(/\p{Mn}/gu, '').toLowerCase()
   if (!(FIRST_NAME_PLACES.has(key) || surname) || titleCaseAround(text, at, end)) return false
   if (FIRST_NAME_PLACES.has(key) && after && startsUpper(after) && !GAZETTEER_NEXT.has(after.toLowerCase())) return true
   // ...also across a name's particle: "Zélia José dos Santos" (Nov 6, 2026); not "de" or "da", which places take
