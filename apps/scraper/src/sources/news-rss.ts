@@ -106,7 +106,7 @@ import { noteCoverage } from './coverage'
 import { MAX_ITEM_AGE_MS, isStaleItem } from '../pipeline/freshness'
 // Feeds send "&#x27;" and "&amp;" in titles and summaries
 import { decodeEntities, cleanSummary, repeatsTitle, feedText, clipText } from '../pipeline/text'
-import { placeFromText, splitPlaces, withHomeNames, mentionedCountries, homePlaceFromText, findGazetteerPlace, namedCountryHomePlace, homeTwinPlace } from '../pipeline/geo'
+import { placeFromText, splitPlaces, withHomeNames, mentionedCountries, homePlaceFromText, findGazetteerPlace, namedCountryHomePlace, homeTwinPlace, placeInCountry } from '../pipeline/geo'
 import { withLocalNames } from '../pipeline/local-names'
 import { rateSeverity } from '../pipeline/severity'
 import { categorizeText } from '../pipeline/categories'
@@ -10836,6 +10836,22 @@ function fromNamedCountry(text: string): InferredGeo | null {
     : null
 }
 
+/**
+ * A place in a national outlet's own country that its summary names, when its headline names none (Nov 7, 2026: of 120
+ * random stories pinned at a spot, 9 sat at the outlet's home though the summary named the town, among them the
+ * Windhoek Observer's "The Swakopmund town hall meeting" and the Friday Times' "Upper Swat district of Khyber
+ * Pakhtunkhwa"). Never another country's: a place abroad anywhere in the summary misplaced 1 in 8 placeless headlines
+ * (Oct 30, 2026, M57).
+ */
+function ownPlace(text: string, source: NewsSource): InferredGeo | null {
+  const place = placeInCountry(text, source.countryCode)
+  // not the territory its home is written with ("Guam" for "Hagåtña, Guam")
+  const around = (source.defaultLocation ?? '').toLowerCase().split(/,\s*/).slice(1)
+  return place?.point && place.lat !== undefined && place.lng !== undefined && !around.includes((place.name ?? '').toLowerCase())
+    ? { lat: place.lat, lng: place.lng, locationName: place.name ?? null, countryCode: place.countryCode ?? null }
+    : fromHome(text, source)
+}
+
 /** A town only its own country's outlets are read for (geo.ts homePlaceFromText): "Mandeville" in a Jamaican outlet */
 function fromHome(text: string, source: NewsSource): InferredGeo | null {
   const place = homePlaceFromText(text, source.countryCode)
@@ -10923,7 +10939,7 @@ export function inferGeo(
   // Haaretz's column on Netanyahu sat in Washington, a Penang court case in Myanmar, Japan's new
   // prime minister in Beijing and a Khyber Pakhtunkhwa story in Tehran: about 1 in 8 placeless headlines)
   if (HOME_PIN_SOURCES.has(source.id) && !NO_PLACE_TOPIC.test(`${title} ${description}`)) {
-    return datelinePlace(body)
+    return datelinePlace(body) ?? ownPlace(body, source)
       ?? { lat: source.defaultLat, lng: source.defaultLng, locationName: source.defaultLocation, countryCode: source.countryCode }
   }
   if (FIXTURE_HEADLINE.test(title)) return { lat: null, lng: null, locationName: null, countryCode: null }

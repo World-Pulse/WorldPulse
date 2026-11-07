@@ -145,7 +145,8 @@ describe("round 8, Devon's call on the feeds whose terms we couldn't read (Oct 3
     // the talks are in Doha, the place named
     expect(inferGeo('Iranian negotiators in Doha for Qatar-mediated talks', '', src('doha-news-qa')).countryCode).toBe('QA')
     expect(inferGeo('Uzbekistan signs a new gas deal', '', src('doha-news-qa')).countryCode).toBe('UZ')
+    // the summary's "LINZ." is read since Nov 7, 2026 (news-rss.ts ownPlace): the outlet's home, by the town's name
     expect(inferGeo('2:1 - Der LASK erledigt die Pflichtübung gegen Tirol', 'LINZ. Erneut drehten die Linzer einen Rückstand', src('oon-at')))
-      .toMatchObject({ countryCode: 'AT', locationName: 'Linz, Austria' })
+      .toMatchObject({ countryCode: 'AT', locationName: 'Linz' })
   })
 })

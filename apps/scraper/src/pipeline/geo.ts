@@ -3288,17 +3288,38 @@ export function countriesNamedOutright(text: string): string[] {
   return [...new Set(hits.sort((a, b) => a.index - b.index).map(h => h.code))]
 }
 
-/** The first gazetteer place in the text that lies in one of `countries` */
-function gazetteerPointIn(text: string, countries: string[]): GeoResult | null {
+/** The first town or province the text names in one country, never the country itself (news-rss.ts ownPlace) */
+export function placeInCountry(text: string, country: string): GeoResult | null {
+  return gazetteerPointIn(text, [country], true)
+}
+
+/** Where a text names a country, by its name or another of its patterns: "Trinidad and Tobago" holds no Tobago */
+function countryNameSpans(clean: string, code: string): Array<[number, number]> {
+  const spans: Array<[number, number]> = []
+  const name = countryNameOf(code)
+  const patterns = COUNTRY_PATTERNS.filter(([, c]) => c === code).map(([p]) => p)
+  if (name) patterns.push(new RegExp(name.split(/\s+and\s+/).map(part => part.split(/\s+/).map(escapeRegExp).join('\\s+')).join('\\s+(?:and|&)\\s+'), 'i'))
+  for (const p of patterns) {
+    for (const m of clean.matchAll(new RegExp(p.source, `${p.flags.replace('g', '')}g`))) spans.push([m.index ?? 0, (m.index ?? 0) + m[0].length])
+  }
+  return spans
+}
+
+/** The first gazetteer place in the text that lies in one of `countries` (not a country kept as a place, if told) */
+function gazetteerPointIn(text: string, countries: string[], notACountry = false): GeoResult | null {
   const clean = cleanText(text)
   let best: { place: string; coords: typeof GAZETTEER[string]; index: number; written: string } | null = null
+  const inCountryName = notACountry ? countries.flatMap(code => countryNameSpans(clean, code)) : []
   for (const m of scanIn(clean)) {
     if (!m.coords.country || !countries.includes(m.coords.country)) continue
+    if (notACountry && (isCountryName(m.place) || m.place === (countryNameOf(m.coords.country) ?? '').toLowerCase())) continue
     m.re.lastIndex = 0
     for (const hit of clean.matchAll(m.re)) {
       const index = hit.index ?? 0
       if (best && index >= best.index) break
-      if (notThePlace(m, clean, index, index + hit[0].length)) continue
+      const end = index + hit[0].length
+      if (inCountryName.some(([from, to]) => index >= from && end <= to)) continue
+      if (notThePlace(m, clean, index, end)) continue
       best = { place: m.place, coords: m.coords, index, written: hit[0] }
       break
     }
