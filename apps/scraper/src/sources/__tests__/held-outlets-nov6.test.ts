@@ -26,14 +26,17 @@ describe('the five held back on terms, and LRT in Lithuanian (Nov 6, 2026)', () 
       expect(s.feedUrl, id).toMatch(/^https:\/\//)
       expect(NEWS_SOURCE_REGISTRY.filter(x => x.feedUrl === s.feedUrl), id).toHaveLength(1)
       expect(NEWS_SOURCE_REGISTRY.filter(x => x.id === id), id).toHaveLength(1)
-      expect(s.parked, id).toBeUndefined()
+      // 15min has turned the server away (HTTP 403) since it came in, so it is parked (Nov 7, 2026)
+      if (id === '15min-lt') expect(s.parked, id).toMatch(/HTTP 403/)
+      else expect(s.parked, id).toBeUndefined()
     }
   })
 
-  it('gives Lebanon, Estonia, Lithuania and Saint Vincent a second outlet', () => {
+  it('gives Lebanon, Estonia and Saint Vincent a second outlet (Lithuania\'s, 15min, parked on Nov 7)', () => {
     const hosts = (code: string) => new Set(NEWS_SOURCE_REGISTRY.filter(s => s.countryCode === code && !s.parked)
       .map(s => new URL(s.feedUrl).hostname.replace(/^www\./, '')))
-    for (const code of ['LB', 'EE', 'LT', 'VC']) expect(hosts(code).size, code).toBe(2)
+    for (const code of ['LB', 'EE', 'VC']) expect(hosts(code).size, code).toBe(2)
+    expect(hosts('LT').size).toBe(1)
     // still thinly covered, so their own outlets' reports are matched across two days
     for (const code of ['LB', 'EE', 'LT', 'VC']) expect(thinPlaces().includes(code), code).toBe(true)
   })

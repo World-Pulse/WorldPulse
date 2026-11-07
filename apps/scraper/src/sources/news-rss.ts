@@ -9901,7 +9901,8 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   // 15min, a Vilnius news site, in Lithuanian; its site-wide feed less its world section (skipLinks: the place-finder
   // doesn't know Lithuanian names of foreign places), so the rest is Lithuania's own news, home pin; terms: "may be used
   // only for your private purposes", but clause 29.1 allows "the article headline" on a website, followed by "a link
-  // to the full article"
+  // to the full article". It has turned the server away (HTTP 403) since it came in, so it is parked (Nov 7): tried
+  // once a day, read as usual from the first time it answers
   {
     id:              '15min-lt',
     name:            '15min (Lithuania)',
@@ -9916,6 +9917,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['lithuania', 'baltics', 'europe'],
     language:        'lt',
     skipLinks:       /\/pasaulis\//,
+    parked:          'turns the server away (HTTP 403), Nov 6 and 7, 2026',
   },
   // LRT, Lithuania's public broadcaster, its "In Lithuania" section in Lithuanian, so that 15min's reports have a
   // report in the same language to be matched with (LRT English, lrt-en, is the same outlet); home pin; LRT publishes
@@ -10201,7 +10203,8 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     language:        'ar',
   },
   // Syria TV, the television channel's newsroom, in Arabic (about 50 stories a day): Syria's news and the region's and
-  // the world's (a third of its headlines name another country), so no home pin. Its terms page couldn't be read here
+  // the world's (a third of its headlines name another country), so no home pin. Its terms page couldn't be read here.
+  // It has turned the server away (HTTP 403) since it came in, so it is parked (Nov 7)
   {
     id:              'syria-tv-ar',
     name:            'Syria TV (Arabic)',
@@ -10215,6 +10218,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLocation: 'Damascus, Syria',
     extraTags:       ['syria', 'middle-east', 'arabic-language'],
     language:        'ar',
+    parked:          'turns the server away (HTTP 403), Nov 6 and 7, 2026',
   },
   // Al-Watan, Damascus's daily, in Arabic (about 20 stories a day): mostly Syria's own news, its sport and its economy,
   // home pin (its few stories on foreign football and film stars sit in Syria). Its terms page couldn't be read here
