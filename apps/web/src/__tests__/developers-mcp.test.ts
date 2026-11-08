@@ -8,6 +8,9 @@ import { join } from 'node:path'
 const page = readFileSync(join(__dirname, '..', 'app', 'developers', 'page.tsx'), 'utf8')
 const server = readFileSync(join(__dirname, '..', '..', '..', 'api', 'src', 'routes', 'mcp.ts'), 'utf8')
 
+/** The TOOLS array of routes/mcp.ts (its starter prompts, after it, have names too) */
+const toolsBlock = (src: string) => src.slice(src.indexOf('export const TOOLS'), src.indexOf('export const PROMPTS'))
+
 describe('the developer page on the MCP server', () => {
   it('gives its address and says it needs no key', () => {
     expect(page).toContain('https://api.world-pulse.io/mcp')
@@ -21,9 +24,9 @@ describe('the developer page on the MCP server', () => {
   })
 
   it("lists exactly the server's tools", () => {
-    const served = [...server.matchAll(/^\s{4}name: '([a-z_]+)',$/gm)].map(m => m[1]).sort()
+    const served = [...toolsBlock(server).matchAll(/^\s{4}name: '([a-z_]+)',$/gm)].map(m => m[1]).sort()
     const listed = [...page.matchAll(/\{ name: '([a-z_]+)', what:/g)].map(m => m[1]).sort()
-    expect(served).toEqual(['check_link', 'search_reports', 'story', 'top_stories', 'under_reported', 'week'])
+    expect(served).toEqual(['check_link', 'country', 'daily_brief', 'near', 'outlet', 'search_reports', 'story', 'story_numbers', 'top_stories', 'under_reported', 'week'])
     expect(listed).toEqual(served)
   })
 })

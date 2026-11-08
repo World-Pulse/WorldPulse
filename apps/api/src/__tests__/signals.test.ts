@@ -356,6 +356,15 @@ describe('Cache key patterns', () => {
     expect(key.startsWith('signals:list:')).toBe(true)
   })
 
+  it("the route's list key includes the area asked for, and is unchanged without one (Nov 8, 2026)", async () => {
+    const { signalListCacheKey } = await import('../routes/signals')
+    const base = { status: 'verified', category: undefined, severity: undefined, country: undefined, limit: 20 }
+    expect(signalListCacheKey(base)).toBe('signals:list:verified:all:all:all:20')
+    // an area's list was kept under the whole world's key (and served to it) for 30 seconds
+    expect(signalListCacheKey({ ...base, bbox: '51.2,25.0,51.8,25.5' })).toBe('signals:list:verified:all:all:all:20:51.2,25.0,51.8,25.5')
+    expect(signalListCacheKey({ ...base, bbox: '1,2,3,4' })).not.toBe(signalListCacheKey({ ...base, bbox: '1,2,3,5' }))
+  })
+
   it('list cache key uses "all" fallback for missing category/severity/country', () => {
     const key = `signals:list:verified:${'all'}:${'all'}:${'all'}:20`
     expect(key).toBe('signals:list:verified:all:all:all:20')

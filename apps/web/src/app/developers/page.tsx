@@ -17,6 +17,11 @@ const MCP_TOOLS = [
   { name: 'week', what: 'WorldPulse Week: a week\'s top stories and its busiest countries' },
   { name: 'check_link', what: 'An article\'s address: how many outlets reported its story, and which' },
   { name: 'under_reported', what: 'The crises with the fewest outlets for the people displaced (UNHCR), the last 7 days or a finished week' },
+  { name: 'story_numbers', what: 'A story\'s numbers (the dead, the injured…), each with how many outlets give it' },
+  { name: 'outlet', what: 'What a news website is: its country, its kind, state media or not' },
+  { name: 'near', what: 'The reports pinned on the map near a place' },
+  { name: 'country', what: 'A country right now: the outlets based there, its stories, under-reported or not' },
+  { name: 'daily_brief', what: 'The Daily Briefing: the main developments and what to watch' },
 ]
 const MCP_CURSOR = '{"mcpServers":{"worldpulse":{"url":"https://api.world-pulse.io/mcp"}}}'
 

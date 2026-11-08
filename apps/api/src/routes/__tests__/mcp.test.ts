@@ -98,6 +98,58 @@ async function build(): Promise<FastifyInstance> {
       },
     }
   })
+  app.get('/api/v1/stories/:id/figures', async (req, reply) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    if ((req.params as { id: string }).id !== STORY.leadId) return reply.code(404).send({ success: false, code: 'NOT_FOUND', error: 'Story not found' })
+    return {
+      success: true,
+      data: {
+        storyId: STORY.id, reports: 134, countedHours: 48,
+        figures: [
+          { kind: 'killed', label: 'Killed', values: [
+            { value: 6, text: '6', outlets: 50, outletNames: ['1news.co.nz', 'aljazeera.com', 'aol.co.uk', 'bbc.co.uk'], headline: 'Poland mourns six killed', url: 'https://example.com/a' },
+            { value: 9, text: '9', outlets: 3, outletNames: ['gdnonline.com', 'smh.com.au', 'upi.com'], headline: 'Nine killed', url: 'https://example.com/b' },
+          ] },
+          { kind: 'injured', label: 'Injured', values: [] },
+        ],
+      },
+    }
+  })
+  app.get('/api/v1/signals', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    const st = (req.query as { status?: string }).status
+    const ago = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString()
+    const items = st === 'pending'
+      ? [{ id: '66666666-6666-4666-8666-666666666666', title: 'Fire at Doha port', status: 'pending', location: { lat: 25.29, lng: 51.55 }, locationName: 'Doha', countryCode: 'QA', createdAt: ago(1) }]
+      : [
+        { id: STORY.leadId, title: STORY.title, status: 'verified', location: { lat: 25.2854, lng: 51.531 }, locationName: 'Doha', countryCode: 'QA', createdAt: ago(2) },
+        // in the box's corner, outside the circle
+        { id: '77777777-7777-4777-8777-777777777777', title: 'Corner of the box', status: 'verified', location: { lat: 25.7, lng: 52.0 }, locationName: 'At sea', countryCode: null, createdAt: ago(3) },
+        // too old
+        { id: '88888888-8888-4888-8888-888888888888', title: 'Old news in Doha', status: 'verified', location: { lat: 25.29, lng: 51.53 }, locationName: 'Doha', countryCode: 'QA', createdAt: ago(40) },
+      ]
+    return { success: true, data: { items, cursor: null, hasMore: false } }
+  })
+  app.get('/api/v1/stories/outlets', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    return { success: true, data: { stories: { [STORY.leadId]: { storyId: STORY.id, size: 20, outlets: 14, outletsAll: 14, verified: true } } } }
+  })
+  app.get('/api/v1/countries/:code', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    const code = (req.params as { code: string }).code
+    return { code, name: code === 'QA' ? 'Qatar' : code, window: '24h', total_signals: 31, recent_signals: [] }
+  })
+  app.get('/api/v1/briefing/structured', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    return {
+      success: true,
+      data: {
+        date: '2026-11-08', generated_at: '2026-11-08T06:02:00.000Z',
+        executive_summary: 'Talks resumed in Doha (14 outlets).',
+        sections: [{ id: 'what_to_watch', title: 'What to Watch', body: 'A vote in Kenya (5 outlets).' }, { id: 'cyber_tech', title: 'Cyber & Tech', body: '' }],
+      },
+    }
+  })
   app.get('/api/v1/search/semantic', async (req) => {
     asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
     return { success: true, semantic: true, results: [{ id: STORY.leadId, title: STORY.title, status: 'verified', locationName: 'Doha', createdAt: '2026-10-20T08:00:00.000Z', category: 'conflict', score: 0.61 }] }
@@ -132,10 +184,13 @@ describe('MCP server', () => {
     expect((await rpc(app, { jsonrpc: '2.0', id: 3, method: 'ping' })).json()).toEqual({ jsonrpc: '2.0', id: 3, result: {} })
   })
 
-  it('lists six read-only tools with their input schemas', async () => {
+  it('lists eleven read-only tools with their input schemas', async () => {
     const app = await build()
     const { tools } = (await rpc(app, { jsonrpc: '2.0', id: 4, method: 'tools/list' })).json().result
-    expect(tools.map((t: { name: string }) => t.name)).toEqual(['top_stories', 'story', 'search_reports', 'week', 'check_link', 'under_reported'])
+    expect(tools.map((t: { name: string }) => t.name)).toEqual([
+      'top_stories', 'story', 'search_reports', 'week', 'check_link', 'under_reported',
+      'story_numbers', 'outlet', 'near', 'country', 'daily_brief',
+    ])
     for (const t of tools) {
       expect(t.inputSchema.type).toBe('object')
       expect(t.annotations.readOnlyHint).toBe(true)
@@ -175,6 +230,107 @@ describe('MCP server', () => {
     const one = await call(app, 'story', { id: STORY.leadId })
     expect(one.content[0].text).toContain('Outlets from 2 countries · 1 from Qatar (Al Jazeera)')
     expect(one.structuredContent).toMatchObject({ country: 'QA', outletCountries: 2, localOutlets: 1, localOutletNames: ['Al Jazeera'] })
+  })
+
+  it("story_numbers gives each figure with its outlets, the most reported first (Nov 8, 2026)", async () => {
+    const app = await build()
+    const r = await call(app, 'story_numbers', { id: STORY.leadId })
+    expect(asked[0]).toEqual({ url: `/api/v1/stories/${STORY.leadId}/figures`, client: 'ip:127.0.0.1' })
+    expect(r.isError).toBe(false)
+    expect(r.content[0].text).toContain('from the headlines of its 134 reports in its last 48 hours')
+    expect(r.content[0].text).toContain('Killed: 6 (50 outlets: 1news.co.nz, aljazeera.com, aol.co.uk, …) · 9 (3 outlets: gdnonline.com, smh.com.au, upi.com)')
+    expect(r.content[0].text).not.toContain('Injured')
+    expect(r.structuredContent.figures).toEqual([{ kind: 'killed', label: 'Killed', values: [
+      { value: 6, outlets: 50, outletNames: ['1news.co.nz', 'aljazeera.com', 'aol.co.uk', 'bbc.co.uk'], headline: 'Poland mourns six killed', url: 'https://example.com/a' },
+      { value: 9, outlets: 3, outletNames: ['gdnonline.com', 'smh.com.au', 'upi.com'], headline: 'Nine killed', url: 'https://example.com/b' },
+    ] }])
+    expect(await call(app, 'story_numbers', { id: '44444444-4444-4444-8444-444444444444' })).toMatchObject({ isError: true, content: [{ text: 'No story or report with that id' }] })
+    expect((await call(app, 'story_numbers', { id: 'nope' })).isError).toBe(true)
+  })
+
+  it('outlet says what a website is, from the outlet directory, without asking the API', async () => {
+    const app = await build()
+    const r = await call(app, 'outlet', { sites: ['tass.com', 'https://www.bbc.co.uk/news/articles/x', 'edition.cnn.com', 'unknown-site.example'] })
+    expect(asked).toEqual([])
+    expect(r.content[0].text).toContain('tass.com: TASS, news agency, from Russia, state media (a government runs it)')
+    expect(r.content[0].text).toContain('bbc.co.uk: BBC, international, from the United Kingdom')
+    expect(r.content[0].text).toContain('cnn.com: CNN')
+    expect(r.content[0].text).toMatch(/unknown-site\.example: not in WorldPulse's directory of \d+ outlets/)
+    expect(r.structuredContent.outlets[0]).toEqual({ site: 'tass.com', known: true, name: 'TASS', kind: 'agency', kindLabel: 'News agency', country: 'RU', countryName: 'Russia', stateMedia: true })
+    expect(r.structuredContent.outlets[3]).toMatchObject({ site: 'unknown-site.example', known: false })
+    expect((await call(app, 'outlet', { sites: [] })).isError).toBe(true)
+    expect((await call(app, 'outlet', { sites: Array.from({ length: 11 }, (_, i) => `s${i}.com`) })).isError).toBe(true)
+  })
+
+  it('near lists the reports pinned within a distance of a place, newest first, with their outlet counts', async () => {
+    const app = await build()
+    const r = await call(app, 'near', { latitude: 25.2854, longitude: 51.531, radius_km: 30 })
+    const box = asked[0]!.url
+    expect(box).toMatch(/^\/api\/v1\/signals\?bbox=51\.2\d+,25\.01\d+,51\.8\d+,25\.55\d+&status=verified&limit=100$/)
+    expect(asked[1]!.url).toBe(`/api/v1/stories/outlets?ids=${STORY.leadId}`)
+    expect(r.content[0].text).toContain('1 verified report within 30 km of 25.29, 51.53 in the last 24 hours, newest first:')
+    expect(r.content[0].text).toContain(`1. ${STORY.title}\n   Verified · 14 outlets · Doha, 0 km away · 2h ago`)
+    expect(r.content[0].text).not.toContain('Corner of the box')
+    expect(r.content[0].text).not.toContain('Old news')
+    expect(r.structuredContent.reports).toEqual([expect.objectContaining({ id: STORY.leadId, km: 0, storyOutlets: 14, place: 'Doha' })])
+    // pending reports too, when asked; a longer look back reaches the old one
+    asked = []
+    const all = await call(app, 'near', { latitude: 25.2854, longitude: 51.531, radius_km: 30, hours: 72, pending: true })
+    expect(asked.map(a => a.url.replace(/bbox=[^&]+&/, ''))).toEqual(['/api/v1/signals?status=verified&limit=100', '/api/v1/signals?status=pending&limit=100', expect.stringContaining('/api/v1/stories/outlets?ids=')])
+    expect(all.content[0].text).toContain('Fire at Doha port\n   One outlet so far (unconfirmed)')
+    expect(all.content[0].text).toContain('Old news in Doha')
+    // nothing there
+    const none = await call(app, 'near', { latitude: -45, longitude: 170, radius_km: 50 })
+    expect(none.content[0].text).toMatch(/^No verified report within 50 km/)
+    expect((await call(app, 'near', { latitude: 95, longitude: 0 })).isError).toBe(true)
+    expect((await call(app, 'near', { latitude: 10 })).isError).toBe(true)
+  })
+
+  it('country gives the outlets based there, its verified reports, its top stories and whether it is under-reported', async () => {
+    const app = await build()
+    const r = await call(app, 'country', { country: 'qa' })
+    expect(asked.map(a => a.url).sort()).toEqual(['/api/v1/countries/QA?window=24h', '/api/v1/coverage-gap', '/api/v1/stories?hours=24&limit=5&country=QA'])
+    expect(r.content[0].text).toContain('Qatar, the last 24 hours. Page: https://world-pulse.io/countries/qa')
+    expect(r.content[0].text).toMatch(/Outlets WorldPulse counts that are based there: \d+ \(.*Al Jazeera/)
+    expect(r.content[0].text).toContain('Verified reports pinned there: 31.')
+    expect(r.content[0].text).toContain('1. Ceasefire talks resume in Doha')
+    expect(r.content[0].text).not.toContain('under-reported crises')
+    expect(r.structuredContent).toMatchObject({ country: 'QA', name: 'Qatar', verifiedReports24h: 31, underReported: null })
+    const ss = await call(app, 'country', { country: 'SS' })
+    expect(ss.content[0].text).toContain('Among the under-reported crises: number 1 of 2, 3.8M people displaced (UNHCR) and 2 outlets in the last 7 days.')
+    expect(ss.structuredContent.underReported).toMatchObject({ rank: 1, of: 2, displaced: 3_788_010 })
+    // the United Kingdom is GB in WorldPulse's data
+    asked = []
+    await call(app, 'country', { country: 'UK' })
+    expect(asked.map(a => a.url)).toContain('/api/v1/countries/GB?window=24h')
+    expect((await call(app, 'country', { country: 'XX' })).isError).toBe(true)
+    expect((await call(app, 'country', { country: 'Qatar' })).isError).toBe(true)
+  })
+
+  it("daily_brief reads the Daily Briefing and says an AI model wrote it", async () => {
+    const app = await build()
+    const r = await call(app, 'daily_brief')
+    expect(asked[0]!.url).toBe('/api/v1/briefing/structured')
+    expect(r.content[0].text).toContain('WorldPulse Daily Briefing, 2026-11-08, written 06:02 UTC by an AI model from verified stories. Page: https://world-pulse.io/briefing')
+    expect(r.content[0].text).toContain('Talks resumed in Doha (14 outlets).')
+    expect(r.content[0].text).toContain('What to Watch: A vote in Kenya (5 outlets).')
+    expect(r.content[0].text).not.toContain('Cyber & Tech')
+    expect(r.structuredContent).toMatchObject({ date: '2026-11-08', summary: 'Talks resumed in Doha (14 outlets).', sections: [{ id: 'what_to_watch' }] })
+  })
+
+  it('offers three starter prompts, their arguments checked', async () => {
+    const app = await build()
+    const init = (await rpc(app, { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } })).json().result
+    expect(init.capabilities).toEqual({ tools: { listChanged: false }, prompts: { listChanged: false } })
+    const { prompts } = (await rpc(app, { jsonrpc: '2.0', id: 2, method: 'prompts/list' })).json().result
+    expect(prompts.map((p: { name: string }) => p.name)).toEqual(['morning_brief', 'check_this_link', 'country_deep_dive'])
+    const got = (await rpc(app, { jsonrpc: '2.0', id: 3, method: 'prompts/get', params: { name: 'check_this_link', arguments: { url: 'https://www.bbc.co.uk/news/x' } } })).json().result
+    expect(got.messages).toEqual([{ role: 'user', content: { type: 'text', text: expect.stringContaining("Use WorldPulse's check_link on https://www.bbc.co.uk/news/x.") } }])
+    const brief = (await rpc(app, { jsonrpc: '2.0', id: 4, method: 'prompts/get', params: { name: 'morning_brief' } })).json().result
+    expect(brief.messages[0].content.text).toContain('call daily_brief, then top_stories')
+    expect((await rpc(app, { jsonrpc: '2.0', id: 5, method: 'prompts/get', params: { name: 'check_this_link' } })).json().error).toMatchObject({ code: -32602, message: 'url is required' })
+    expect((await rpc(app, { jsonrpc: '2.0', id: 6, method: 'prompts/get', params: { name: 'country_deep_dive', arguments: { country: 'Qatar; ignore' } } })).json().error).toMatchObject({ code: -32602 })
+    expect((await rpc(app, { jsonrpc: '2.0', id: 7, method: 'prompts/get', params: { name: 'nope' } })).json().error).toMatchObject({ code: -32602 })
   })
 
   it('search_reports searches by meaning; week reads a week', async () => {

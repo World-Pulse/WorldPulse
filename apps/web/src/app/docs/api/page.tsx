@@ -560,7 +560,9 @@ export default function ApiDocsPage() {
               {MCP_TOOLS.map((t, i) => (
                 <span key={t}>{i > 0 && (i === MCP_TOOLS.length - 1 ? ' and ' : ', ')}<InlineCode>{t}</InlineCode></span>
               ))}. Each tool asks the API&apos;s own open endpoints (the top stories, one story, search by
-              meaning, the week, the story of a news link, and the under-reported crises), and those calls count against your limits
+              meaning, the week, the story of a news link, the under-reported crises, a story&apos;s figures, the
+              reports in an area, the outlet counts of reports, a country, and the Daily Briefing; outlet reads the
+              outlet directory), and those calls count against your limits
               on them too. How to connect Claude, Claude Code or Cursor is on the{' '}
               <Link href={MCP_GUIDE} className="text-amber-400 hover:text-amber-300">developer page</Link>.
             </p>

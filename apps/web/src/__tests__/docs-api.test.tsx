@@ -294,6 +294,9 @@ describe('open endpoints (apps/api/src/routes/public.ts, lib/query-schemas.ts, l
 describe('the MCP server (apps/api/src/routes/mcp.ts)', () => {
   const server = api('routes/mcp.ts')
 
+/** The TOOLS array of routes/mcp.ts (its starter prompts, after it, have names too) */
+const toolsBlock = (src: string) => src.slice(src.indexOf('export const TOOLS'), src.indexOf('export const PROMPTS'))
+
   it('is at /mcp, open, with its own limit of 60 POSTs a minute', () => {
     expect(api('index.ts')).toMatch(/await app\.register\(registerMcpRoutes,\s+\{ prefix: '\/mcp' \}\)/)
     expect(MCP_URL).toBe(`${API_ORIGIN}/mcp`)
@@ -305,7 +308,7 @@ describe('the MCP server (apps/api/src/routes/mcp.ts)', () => {
   })
 
   it('names the server\'s tools, the batch size and an example it answers', () => {
-    const served = [...server.matchAll(/^\s{4}name: '([a-z_]+)',$/gm)].map(m => m[1]).sort()
+    const served = [...toolsBlock(server).matchAll(/^\s{4}name: '([a-z_]+)',$/gm)].map(m => m[1]).sort()
     expect([...MCP_TOOLS].sort()).toEqual(served)
     for (const t of MCP_TOOLS) expect(HTML).toContain(`>${t}</code>`)
     expect(server).toContain('messages.length > 20')
@@ -316,18 +319,22 @@ describe('the MCP server (apps/api/src/routes/mcp.ts)', () => {
   })
 
   it('says each tool asks an open endpoint, and names them all', () => {
-    // ask(asker, `/api/v1/...`) in each tool: the path up to its query or its first ${...}
-    const asked = [...server.matchAll(/ask\(asker, `(\/api\/v1\/[^`?$]*)([?$])?/g)]
-      .map(m => (m[2] === '$' && m[1].endsWith('/') ? `${m[1]}:id` : m[1]))
-    expect(asked.length).toBe(MCP_TOOLS.length)
+    // ask(asker, `/api/v1/...`) in each tool: the path up to its query, a ${...} in it a parameter (one that holds a
+    // "?", such as `week${week ? `?week=…` : ''}`, starts the query); a tool may ask more than one (Nov 8, 2026)
+    const asked = [...new Set([...server.matchAll(/ask\(asker, `(\/api\/v1\/(?:[^`?$]|\$\{(?![^}]*\?)[^}]*\})*)/g)]
+      .map(m => m[1].replace(/\$\{[^}]*\}/g, ':param')))]
+    expect(asked.length).toBeGreaterThanOrEqual(MCP_TOOLS.length - 1)   // outlet reads the directory, asking nothing
     const named: Record<string, string> = {
-      '/api/v1/stories': 'the top stories', '/api/v1/stories/:id': 'one story', '/api/v1/search/semantic': 'search by meaning',
+      '/api/v1/stories': 'the top stories', '/api/v1/stories/:param': 'one story', '/api/v1/search/semantic': 'search by meaning',
       '/api/v1/stories/week': 'the week', '/api/v1/stories/by-link': 'the story of a news link',
-      '/api/v1/coverage-gap': 'the under-reported crises',
+      '/api/v1/coverage-gap': 'the under-reported crises', '/api/v1/stories/:param/figures': 'a story\'s figures',
+      '/api/v1/signals': 'the reports in an area', '/api/v1/stories/outlets': 'the outlet counts of reports',
+      '/api/v1/countries/:param': 'a country', '/api/v1/briefing/structured': 'the Daily Briefing',
     }
     const said = TEXT.slice(TEXT.indexOf('Each tool asks the API\'s own open endpoints'), TEXT.indexOf('How to connect'))
+    const routeLike = (path: string) => API_ROUTES.find(r => r.method === 'GET' && r.path.replace(/:[A-Za-z_]+/g, ':param') === path)
     for (const path of asked) {
-      expect(route('GET', path)?.access, path).toBe('none')
+      expect(routeLike(path)?.access, path).toBe('none')
       expect(said, path).toContain(named[path])
     }
   })

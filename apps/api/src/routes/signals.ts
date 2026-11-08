@@ -36,6 +36,14 @@ const SIGNAL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 
 // ─── Bbox Validation Helper ───────────────────────────────────────────────────
 /**
+ * The list's cache key. An area (bbox) is part of it since Nov 8, 2026: it wasn't, so a list asked for one
+ * area was kept under the key of the whole world's list (and the other way round) for 30 seconds.
+ */
+export function signalListCacheKey(q: { status?: string | null; category?: string | null; severity?: string | null; country?: string | null; limit?: number | string | null; bbox?: string | null }): string {
+  return `signals:list:${q.status}:${q.category ?? 'all'}:${q.severity ?? 'all'}:${q.country ?? 'all'}:${q.limit}${q.bbox ? `:${q.bbox}` : ''}`
+}
+
+/**
  * Validates a bbox query string ("minLng,minLat,maxLng,maxLat") and returns
  * the four parsed coordinate numbers, or null if the string is invalid.
  *
@@ -181,7 +189,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
 
     // Cache unauthenticated list requests (no cursor-based pages beyond first)
     const isFirstPage = !cursor
-    const cacheKey = `signals:list:${status}:${category ?? 'all'}:${severity ?? 'all'}:${country ?? 'all'}:${limit}`
+    const cacheKey = signalListCacheKey({ status, category, severity, country, limit, bbox })
     if (!req.user && isFirstPage) {
       const cached = await redis.get(cacheKey).catch(() => null)
       if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
