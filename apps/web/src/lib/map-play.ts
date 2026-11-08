@@ -136,7 +136,12 @@ export interface TourSignal {
   severity: string
   status?: string
   is_breaking: boolean
+  /** Its story, when it is one of several reports of one (the timeline API, Nov 8, 2026) */
+  story?: string
 }
+
+/** The story a report belongs to: its own id when the timeline doesn't say */
+export const storyKeyOf = (s: Pick<TourSignal, 'id' | 'story'>): string => s.story || s.id
 
 /** Great-circle distance in km */
 export function distanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
@@ -158,13 +163,15 @@ export function pickTourStop(
   exclude: ReadonlySet<string> | string | null = null,
   from: { lat: number; lng: number } | null = null,
 ): TourSignal | null {
-  const skip = (id: string) => (typeof exclude === 'string' ? id === exclude : exclude?.has(id) ?? false)
+  // a report, or its story, already visited (two reports of one story are one visit)
+  const skipOne = (id: string) => (typeof exclude === 'string' ? id === exclude : exclude?.has(id) ?? false)
+  const skip = (id: string, story?: string) => skipOne(id) || (story ? skipOne(story) : false)
   let best: TourSignal | null = null
   let bestFar: TourSignal | null = null
   for (let i = Math.min(index, buckets.length - 1); i >= 0 && i > index - TOUR_LOOKBACK; i--) {
     for (const s of buckets[i]?.signals ?? []) {
       if (!Number.isFinite(s.lat) || !Number.isFinite(s.lng) || (s.lat === 0 && s.lng === 0)) continue
-      if (skip(s.id) || !s.title?.trim()) continue
+      if (skip(s.id, s.story) || !s.title?.trim()) continue
       if (!best || rank(s) > rank(best)) best = s
       if (from && distanceKm(from, s) >= TOUR_MIN_HOP_KM && (!bestFar || rank(s) > rank(bestFar))) bestFar = s
     }
@@ -172,9 +179,13 @@ export function pickTourStop(
   return bestFar ?? best
 }
 
-/** The caption for the story the camera is at, so the headline and the place on screen match */
-export function tourCaption(stop: TourSignal): PlayCaption {
-  const title = stop.title.trim()
+/**
+ * The caption for the story the camera is at, so the headline and the place on screen match; the story's own
+ * headline when the day's stories list has it (`storyTitles`, by story id), so the caption says what the closing
+ * card says (Nov 8, 2026: the Krakow shooting's caption read one report's "nine dead", the card the story's six)
+ */
+export function tourCaption(stop: TourSignal, storyTitles?: ReadonlyMap<string, string> | null): PlayCaption {
+  const title = (storyTitles?.get(storyKeyOf(stop))?.trim() || stop.title).trim()
   return {
     title: title.length > CAPTION_MAX ? `${title.slice(0, CAPTION_MAX - 1).trimEnd()}…` : title,
     severity: stop.severity,

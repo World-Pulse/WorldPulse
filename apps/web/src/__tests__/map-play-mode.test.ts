@@ -85,7 +85,25 @@ describe('the video, round 2 (Oct 30, 2026: the camera sat on Indonesia, caption
     expect(tourCaption(sig('x', { title: '  Floods in Pabna ', severity: 'high', status: 'verified' }))).toEqual({ title: 'Floods in Pabna', severity: 'high', verified: true })
     const map = read('app/map/page.tsx')
     expect(map).toContain('caption={tourCaptionNow ?? captionAt(')
-    expect(map).toContain('setTourCaptionNow(tourCaption(stop))')
+    expect(map).toContain('setTourCaptionNow(tourCaption(stop, storyTitlesRef.current))')
+  })
+  it("captions a story with the story's own headline, as the closing card does, and visits a story once (Nov 8, 2026)", () => {
+    const titles = new Map([['krakow', 'Gunman kills 6 in Krakow shopping centre']])
+    // one report said nine dead; the caption says what the story (and the closing card) says
+    expect(tourCaption(sig('r2', { title: 'Nine dead in Krakow shooting', story: 'krakow' }), titles).title).toBe('Gunman kills 6 in Krakow shopping centre')
+    // a report the list doesn't have, or no list: its own headline
+    expect(tourCaption(sig('r3', { title: 'Floods in Pabna', story: 'pabna' }), titles).title).toBe('Floods in Pabna')
+    expect(tourCaption(sig('r2', { title: 'Nine dead in Krakow shooting', story: 'krakow' })).title).toBe('Nine dead in Krakow shooting')
+    // a story whose report it visited is not visited again through another report
+    const buckets = [{ signals: [
+      sig('r1', { story: 'krakow', severity: 'critical', status: 'verified' }),
+      sig('r2', { story: 'krakow', severity: 'critical', status: 'verified' }),
+      sig('other', { severity: 'medium' }),
+    ] }]
+    expect(pickTourStop(buckets, 0, new Set(['r1', 'krakow']))?.id).toBe('other')
+    const map = read('app/map/page.tsx')
+    expect(map).toContain('tourSeenRef.current.add(storyKeyOf(stop))')
+    expect(map).toContain('/api/v1/stories?hours=24&limit=20')
   })
   it('reads the day\'s most-reported stories from data.stories, and tells the recorder when the replay begins', () => {
     const map = read('app/map/page.tsx')

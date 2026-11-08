@@ -16,7 +16,7 @@ import HotspotLabels from '@/components/map/HotspotLabels'
 import { EnhancedHeatmap } from '@/components/map/EnhancedHeatmap'
 import { PlayOverlay, type PlayDayStats, type PlayTopStory } from '@/components/map/PlayOverlay'
 import { useTimelinePlayback } from '@/hooks/useTimelinePlayback'
-import { parsePlayParam, parsePlayLength, parsePlaySlow, playReplayMs, playStepMs, captionAt, playTimeLabel, playDateLabel, pickTourStop, tourCaption, PLAY_INTRO_MS, PLAY_OUTRO_MS, TOUR_EVERY_MS, type PlayPhase, type PlayCaption } from '@/lib/map-play'
+import { parsePlayParam, parsePlayLength, parsePlaySlow, playReplayMs, playStepMs, captionAt, playTimeLabel, playDateLabel, pickTourStop, tourCaption, storyKeyOf, PLAY_INTRO_MS, PLAY_OUTRO_MS, TOUR_EVERY_MS, type PlayPhase, type PlayCaption } from '@/lib/map-play'
 import { parseWindowHash, encodePermalink, type MapPermalinkState, type LayerKey } from '@/lib/map-permalink'
 import {
   Map as MapIcon, Moon, Satellite, Globe2, LocateFixed, Layers as LayersIcon,
@@ -426,6 +426,8 @@ function MapView({ embed = false }: { embed?: boolean }) {
   const [playPhase, setPlayPhase] = useState<PlayPhase>('intro')
   const [playDay, setPlayDay] = useState<PlayDayStats | null>(null)
   const [playTop, setPlayTop] = useState<PlayTopStory[]>([])
+  // The day's stories' headlines by story id, for the tour's captions (Nov 8, 2026)
+  const storyTitlesRef = useRef<Map<string, string>>(new Map())
   /** The headline of the story the camera is at (the play mode's caption once the tour starts) */
   const [tourCaptionNow, setTourCaptionNow] = useState<PlayCaption | null>(null)
 
@@ -3657,10 +3659,12 @@ function MapView({ embed = false }: { embed?: boolean }) {
       }
     }).catch(() => {})
     // (the answer is { data: { stories: [...] } }; Oct 30, 2026: read as a bare list, the first closing card had no stories)
-    type TopStory = { title?: string; outletCount?: number; countries?: number }
-    fetch(`${API_URL}/api/v1/stories?hours=24&limit=3`).then(r => (r.ok ? r.json() : null)).then((j: { data?: { stories?: TopStory[] } | TopStory[] } | null) => {
+    type TopStory = { id?: string; title?: string; outletCount?: number; countries?: number }
+    // (20 stories: the closing card's three most-reported, and the headlines the tour's captions use)
+    fetch(`${API_URL}/api/v1/stories?hours=24&limit=20`).then(r => (r.ok ? r.json() : null)).then((j: { data?: { stories?: TopStory[] } | TopStory[] } | null) => {
       const d = j?.data
       const list: TopStory[] = Array.isArray(d) ? d : Array.isArray(d?.stories) ? d.stories : []
+      for (const s of list) if (typeof s.id === 'string' && typeof s.title === 'string' && s.title.trim()) storyTitlesRef.current.set(s.id, s.title)
       // (the most outlets first: the card says "most-reported")
       if (alive) setPlayTop(list.filter(s => s.title).map(s => ({ title: String(s.title), outlets: Number(s.outletCount) || 0, countries: Number(s.countries) || 0 })).sort((a, b) => b.outlets - a.outlets))
     }).catch(() => {})
@@ -3717,7 +3721,8 @@ function MapView({ embed = false }: { embed?: boolean }) {
     if (!stop) return
     tourRef.current = { at: now, id: stop.id, lat: stop.lat, lng: stop.lng }
     tourSeenRef.current.add(stop.id)
-    setTourCaptionNow(tourCaption(stop))
+    tourSeenRef.current.add(storyKeyOf(stop))
+    setTourCaptionNow(tourCaption(stop, storyTitlesRef.current))
     const canvas = map.getCanvas()
     const zoom = worldZoom(canvas.clientWidth, canvas.clientHeight, projectionRef.current) + 1.1
     try { map.flyTo({ center: [stop.lng, stop.lat], zoom, duration: 2400 * playSlow, curve: 1.3, essential: true }) } catch { /* map busy */ }

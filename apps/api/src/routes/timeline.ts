@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 import { sendError } from '../lib/errors'
+import { signalsHaveStoryIds } from '../lib/stories'
 import { z } from 'zod'
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
@@ -84,6 +85,12 @@ export const registerTimelineRoutes: FastifyPluginAsync = async (app) => {
     const cached = await redis.get(cacheKey).catch(() => null)
     if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
 
+    // Each report's story (Nov 8, 2026): the map's video captions the story the camera visits with the story's
+    // own headline, as its closing card does (one report of the Krakow shooting said nine dead, the story six)
+    const storyKey = (await signalsHaveStoryIds())
+      ? db.raw('COALESCE(story_id, id)::text AS story_key')
+      : db.raw('id::text AS story_key')
+
     // ── Build query ───────────────────────────────────────────
     // Step 1: Get bucketed counts + signal data using window functions
     let query = db('signals')
@@ -93,7 +100,7 @@ export const registerTimelineRoutes: FastifyPluginAsync = async (app) => {
       .select([
         'id', 'title', 'summary', 'category', 'severity', 'status',
         'location_name', 'country_code', 'reliability_score', 'created_at',
-        'is_breaking',
+        'is_breaking', storyKey,
         db.raw('ST_X(location::geometry) as lng'),
         db.raw('ST_Y(location::geometry) as lat'),
         db.raw(`date_trunc('${config.bucket.split(' ')[1] === 'minutes' ? 'hour' : config.bucket.split(' ')[1]}', created_at) as bucket_time`),
@@ -109,7 +116,7 @@ export const registerTimelineRoutes: FastifyPluginAsync = async (app) => {
         .select([
           'id', 'title', 'summary', 'category', 'severity', 'status',
           'location_name', 'country_code', 'reliability_score', 'created_at',
-          'is_breaking',
+          'is_breaking', storyKey,
           db.raw('ST_X(location::geometry) as lng'),
           db.raw('ST_Y(location::geometry) as lat'),
           db.raw(`to_timestamp(floor(extract(epoch from created_at) / 300) * 300) as bucket_time`),
@@ -123,7 +130,7 @@ export const registerTimelineRoutes: FastifyPluginAsync = async (app) => {
         .select([
           'id', 'title', 'summary', 'category', 'severity', 'status',
           'location_name', 'country_code', 'reliability_score', 'created_at',
-          'is_breaking',
+          'is_breaking', storyKey,
           db.raw('ST_X(location::geometry) as lng'),
           db.raw('ST_Y(location::geometry) as lat'),
           db.raw(`to_timestamp(floor(extract(epoch from created_at) / 900) * 900) as bucket_time`),
@@ -137,7 +144,7 @@ export const registerTimelineRoutes: FastifyPluginAsync = async (app) => {
         .select([
           'id', 'title', 'summary', 'category', 'severity', 'status',
           'location_name', 'country_code', 'reliability_score', 'created_at',
-          'is_breaking',
+          'is_breaking', storyKey,
           db.raw('ST_X(location::geometry) as lng'),
           db.raw('ST_Y(location::geometry) as lat'),
           db.raw(`to_timestamp(floor(extract(epoch from created_at) / 21600) * 21600) as bucket_time`),
@@ -177,6 +184,8 @@ export const registerTimelineRoutes: FastifyPluginAsync = async (app) => {
         title: string
         is_breaking: boolean
         status: string
+        /** The report's story, when it is one of several reports of it */
+        story?: string
       }>
     }>()
 
@@ -198,6 +207,8 @@ export const registerTimelineRoutes: FastifyPluginAsync = async (app) => {
           title:       row.title as string,
           is_breaking: Boolean(row.is_breaking),
           status:      row.status as string,
+          // only when it differs from the report's own id, to keep the answer small
+          ...(row.story_key && row.story_key !== row.id ? { story: row.story_key as string } : {}),
         })
       }
     }
