@@ -298,7 +298,12 @@ describe('GET /api/v1/stories/sitemap', () => {
       stories: [{ id: '0b2c3d4e-0000-4000-8000-000000000001', title: 'Flood hits city', publishedAt: '2026-10-11T16:00:00.000Z', updatedAt: '2026-10-11T18:00:00.000Z' }],
     })
     expect(h.sql).toMatch(/s\.status = 'verified'/)
-    expect(h.sql).toMatch(/DISTINCT ON \(COALESCE\(s\.story_id, s\.id\)\)/)      // one page per story
+    expect(h.sql).toMatch(/SELECT COALESCE\(s\.story_id, s\.id\) AS key/)          // one page per story
+    expect(h.sql).toMatch(/DISTINCT ON \(k\.key\)/)
+    // at its canonical page: its first verified report with a real headline, as /stories/outlets names it (Nov 8, 2026)
+    expect(h.sql).toMatch(/JOIN signals c ON \(c\.story_id = k\.key OR c\.id = k\.key\) AND c\.status = 'verified'/)
+    expect(h.sql).toMatch(/ORDER BY k\.key, \(c\.title ~ \?\) ASC, c\.created_at ASC, c\.id ASC/)
+    expect(h.sql).not.toMatch(/reliability_score/)
     expect(Date.now() - (h.bindings[0] as Date).getTime()).toBeCloseTo(7 * 86_400_000, -4)
     expect(String(h.bindings[1])).toMatch(/^\^\(Public statement\|/)             // real headlines first
     expect(h.bindings[2]).toBe(5_000)

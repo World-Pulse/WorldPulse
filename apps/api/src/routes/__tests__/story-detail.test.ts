@@ -142,7 +142,8 @@ describe('GET /api/v1/stories/outlets', () => {
     expect((await get(`outlets?ids=${SIGNAL}`)).json().data.stories[SIGNAL].firstReportAt).toBeNull()
     // only well-formed ids, once each, as one array value
     expect(h.bindings[0]).toEqual([SIGNAL])
-    expect(h.bindings.slice(1)).toEqual(['^https?://([^/:?#]+)', '^www\\.', '^https?://([^/:?#]+)', '^www\\.', '^https?://([^/:?#]+)', '^www\\.'])
+    expect(h.bindings.slice(1, 7)).toEqual(['^https?://([^/:?#]+)', '^www\\.', '^https?://([^/:?#]+)', '^www\\.', '^https?://([^/:?#]+)', '^www\\.'])
+    expect(String(h.bindings[7])).toMatch(/^\^\(Public statement\|/)   // the canonical page has a real headline
     // the count covers the story's last two days (lib/story-window.ts), and outlets_all its whole life
     expect(h.sql).toMatch(/FILTER \(WHERE m\.created_at >= f\.newest - INTERVAL '48 hours'\)/)
     expect(h.sql).toMatch(/unnest\(m\.original_urls\)/)
@@ -156,6 +157,17 @@ describe('GET /api/v1/stories/outlets', () => {
     h.rows = [{ id: SIGNAL, story_id: STORY, size: 1, outlets: 1, outlets_all: 1, verified: false, hosts: ['unknown-site.example'] }]
     expect((await get(`outlets?ids=${SIGNAL}`)).json().data.stories[SIGNAL]).not.toHaveProperty('countries')
     expect(h.sql).toMatch(/array_agg\(DISTINCT/)
+  })
+
+  it("names the story's canonical page: its first verified report with a real headline (Nov 8, 2026)", async () => {
+    const CANON = '99999999-9999-4999-8999-999999999999'
+    h.rows = [{ id: SIGNAL, story_id: STORY, size: 33, outlets: 12, outlets_all: 40, verified: true, canonical_id: CANON }]
+    expect((await get(`outlets?ids=${SIGNAL}`)).json().data.stories[SIGNAL].canonicalId).toBe(CANON)
+    expect(h.sql).toMatch(/LEFT JOIN LATERAL \(/)
+    expect(h.sql).toMatch(/m\.status = 'verified'\s+ORDER BY \(m\.title ~ \?\) ASC, m\.created_at ASC, m\.id ASC\s+LIMIT 1/)
+    // a story with no verified report has none
+    h.rows = [{ id: SIGNAL, story_id: STORY, size: 1, outlets: 1, outlets_all: 1, verified: false, canonical_id: null }]
+    expect((await get(`outlets?ids=${SIGNAL}`)).json().data.stories[SIGNAL]).not.toHaveProperty('canonicalId')
   })
 
   it('answers an empty list without asking the database', async () => {

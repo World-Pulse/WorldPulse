@@ -421,15 +421,24 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
 
   /** A week of verified stories (3 s on Oct 15, 2026, and growing): its own time limit, off the request path */
   async function storySitemap() {
-    const storyKey = await signalsHaveStoryIds() ? 'COALESCE(s.story_id, s.id)' : 's.id'
+    const hasStories = await signalsHaveStoryIds()
+    const storyKey = hasStories ? 'COALESCE(s.story_id, s.id)' : 's.id'
+    const inStory = hasStories ? '(c.story_id = k.key OR c.id = k.key)' : 'c.id = k.key'
     const since = new Date(Date.now() - SITEMAP_DAYS * 86_400_000)
+    // Each story verified in the last 7 days once, at its canonical page (Nov 8, 2026): its first verified report
+    // whose headline isn't an event template, the page every other report of the story names as canonical
+    // (/stories/outlets canonicalId); it listed the best-scored report of the 7 days, which moved as scores did
     const result = await longQuery(LIST_QUERY_SECONDS, trx => trx.raw(
       `SELECT id, title, published, updated FROM (
-         SELECT DISTINCT ON (${storyKey}) s.id::text AS id, s.title, s.created_at AS published,
-                GREATEST(s.created_at, COALESCE(s.last_updated, s.created_at)) AS updated
-           FROM signals s
-          WHERE s.status = 'verified' AND s.created_at >= ?
-          ORDER BY ${storyKey}, (s.title ~ ?) ASC, s.reliability_score DESC NULLS LAST, s.created_at ASC
+         SELECT DISTINCT ON (k.key) c.id::text AS id, c.title, c.created_at AS published, k.updated
+           FROM (
+             SELECT ${storyKey} AS key, max(GREATEST(s.created_at, COALESCE(s.last_updated, s.created_at))) AS updated
+               FROM signals s
+              WHERE s.status = 'verified' AND s.created_at >= ?
+              GROUP BY 1
+           ) k
+           JOIN signals c ON ${inStory} AND c.status = 'verified'
+          ORDER BY k.key, (c.title ~ ?) ASC, c.created_at ASC, c.id ASC
        ) t ORDER BY updated DESC LIMIT ?`,
       [since, EVENT_TEMPLATE_SQL, SITEMAP_MAX],
     ))
@@ -547,7 +556,8 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
       `WITH asked AS (
          SELECT s.id, ${storyKey} AS story_key FROM signals s WHERE s.id = ANY(?::uuid[])
        )
-       SELECT a.id::text AS id, a.story_key::text AS story_id, f.size, f.verified, f.first_at, o.outlets, o.hosts, o.outlets_all
+       SELECT a.id::text AS id, a.story_key::text AS story_id, f.size, f.verified, f.first_at, o.outlets, o.hosts, o.outlets_all,
+              c.canonical_id
          FROM asked a
          CROSS JOIN LATERAL (
            SELECT count(*)::int AS size, bool_or(m.status = 'verified') AS verified,
@@ -564,12 +574,21 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
                   count(DISTINCT lower(regexp_replace(substring(link.url from ?), ?, '')))::int AS outlets_all
              FROM signals m CROSS JOIN LATERAL unnest(m.original_urls) AS link(url)
             WHERE ${inStory} AND m.status IN ('verified', 'pending')
-         ) o`,
-      [ids, HOST_PATTERN, WWW_PATTERN, HOST_PATTERN, WWW_PATTERN, HOST_PATTERN, WWW_PATTERN],
-    ) as { rows?: Array<{ id: string; story_id: string; size: unknown; verified: unknown; first_at?: unknown; outlets: unknown; hosts?: unknown; outlets_all: unknown }> } | undefined
+         ) o
+         LEFT JOIN LATERAL (
+           -- the one page search engines should read for the story (Nov 8, 2026): its first verified report whose
+           -- headline isn't an event template, the one the sitemap lists (storySitemap orders them the same way)
+           SELECT m.id::text AS canonical_id
+             FROM signals m
+            WHERE ${inStory} AND m.status = 'verified'
+            ORDER BY (m.title ~ ?) ASC, m.created_at ASC, m.id ASC
+            LIMIT 1
+         ) c ON true`,
+      [ids, HOST_PATTERN, WWW_PATTERN, HOST_PATTERN, WWW_PATTERN, HOST_PATTERN, WWW_PATTERN, EVENT_TEMPLATE_SQL],
+    ) as { rows?: Array<{ id: string; story_id: string; size: unknown; verified: unknown; first_at?: unknown; outlets: unknown; hosts?: unknown; outlets_all: unknown; canonical_id?: unknown }> } | undefined
 
     // (verified: any of the story's reports is, as the story page and the home page say)
-    const stories: Record<string, { storyId: string; size: number; outlets: number; outletsAll: number; firstReportAt: string | null; verified: boolean; countries?: number }> = {}
+    const stories: Record<string, { storyId: string; size: number; outlets: number; outletsAll: number; firstReportAt: string | null; verified: boolean; countries?: number; canonicalId?: string }> = {}
     for (const r of result?.rows ?? []) {
       const outlets = Number(r.outlets) || 0
       const firstAt = r.first_at ? new Date(r.first_at as string | Date) : null
@@ -585,6 +604,8 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
         firstReportAt: firstAt && Number.isFinite(firstAt.getTime()) ? firstAt.toISOString() : null,
         verified:   r.verified === true,
         ...(countries > 0 ? { countries } : {}),
+        // the story's page for search engines (its first verified report), when it has a verified one
+        ...(typeof r.canonical_id === 'string' && UUID_RE.test(r.canonical_id) ? { canonicalId: r.canonical_id } : {}),
       }
     }
     return reply.send({ success: true, data: { stories } })

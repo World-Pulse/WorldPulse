@@ -3,7 +3,7 @@ import type { Metadata } from 'next'
 import type { Signal, Post } from '@worldpulse/types'
 import { SignalDetailClient } from './SignalDetailClient'
 import { displaySummary } from '@/lib/signal-text'
-import { storyPageTitle } from '@/lib/story-count'
+import { storyPageTitle, storyIndexable, storyCanonicalPath, storyFactLine } from '@/lib/story-count'
 import { SITE_NAME, SITE_URL, newsArticleJsonLd, jsonLdText, metaDescription } from '@/lib/page-metadata'
 import { cachedFetch } from '@/lib/server-fetch'
 import Link from 'next/link'
@@ -118,17 +118,27 @@ export async function generateMetadata(
   if (signal === 'missing') return { title: 'Signal Not Found — WorldPulse', robots: { index: false } }
   // (a summary that only repeats the headline, or the old outlet note, isn't a
   // description; search results and share cards show about 160 characters)
-  const description = metaDescription(displaySummary(signal.summary, signal.title) || signal.title)
   const path = `/signals/${signal.id}`
   // (the same count the page shows; kept 60 s, so the page's own call reuses it)
-  const title = storyPageTitle(signal.title, await fetchStoryOutletCounts(signal.id))
+  const counts = await fetchStoryOutletCounts(signal.id)
+  const title = storyPageTitle(signal.title, counts)
+  // The story's facts first (Nov 8, 2026): what a search result or an AI assistant quotes
+  const fact = storyFactLine({
+    verified: counts?.verified === true || signal.status === 'verified',
+    outlets: counts?.outlets ?? 0,
+    countries: counts?.countries,
+    firstReportAt: counts?.firstReportAt ?? signal.firstReported,
+  })
+  const description = metaDescription([fact, displaySummary(signal.summary, signal.title) || signal.title].filter(Boolean).join(' '))
   // The page's own address and the site name: this openGraph replaces the
   // root layout's whole one. The picture is the story's own card
   // (opengraph-image.tsx and twitter-image.tsx next to this page, plan G3)
   return {
     title:       `${title} — WorldPulse`,
     description,
-    alternates:  { canonical: path },
+    // One page per story for search engines, and only verified stories in their results (Nov 8, 2026)
+    alternates:  { canonical: storyCanonicalPath(signal.id, counts) },
+    ...(storyIndexable(signal.status, counts) ? {} : { robots: { index: false, follow: true } }),
     openGraph: {
       title:         signal.title,
       description,

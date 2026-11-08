@@ -4,7 +4,7 @@
  * option 1: Oct 20's biggest story said 143 outlets and went back ten days).
  */
 import { describe, it, expect } from 'vitest'
-import { storyCountsOf, sinceText, storyDay, storyPageTitle, STORY_COUNT_DAYS } from '@/lib/story-count'
+import { storyCountsOf, sinceText, storyDay, storyPageTitle, storyIndexable, storyCanonicalPath, storyFactLine, STORY_COUNT_DAYS } from '@/lib/story-count'
 
 describe('storyCountsOf', () => {
   it("reads one story of GET /stories/outlets, never fewer since it began than in its last two days", () => {
@@ -66,5 +66,37 @@ describe('storyPageTitle', () => {
     expect(storyPageTitle('A', { outlets: 3, outletsAll: 3, firstReportAt: null })).toBe('A')
     expect(storyPageTitle('A', counts({ outlets: 1 }))).toBe('A')
     expect(storyPageTitle('A', null)).toBe('A')
+  })
+})
+
+describe('what search engines read (Nov 8, 2026: "Do it now" to winning Google)', () => {
+  const CANON = '99999999-9999-4999-8999-999999999999'
+  const counts = (over: Record<string, unknown> = {}) => storyCountsOf({ outlets: 81, outletsAll: 81, firstReportAt: '2026-11-07T15:31:00.000Z', verified: true, countries: 36, canonicalId: CANON, ...over })
+
+  it('reads the story\'s canonical page from the API, a real id only', () => {
+    expect(counts()?.canonicalId).toBe(CANON)
+    expect(counts({ canonicalId: 'not-an-id' })).not.toHaveProperty('canonicalId')
+  })
+
+  it('points every report of a story at its one page; a report on its own is its own', () => {
+    expect(storyCanonicalPath('11111111-1111-4111-8111-111111111111', counts())).toBe(`/signals/${CANON}`)
+    expect(storyCanonicalPath('11111111-1111-4111-8111-111111111111', counts({ canonicalId: undefined }))).toBe('/signals/11111111-1111-4111-8111-111111111111')
+    expect(storyCanonicalPath('11111111-1111-4111-8111-111111111111', null)).toBe('/signals/11111111-1111-4111-8111-111111111111')
+  })
+
+  it("puts only verified stories in search results: an unconfirmed report's page stays out", () => {
+    expect(storyIndexable('verified', null)).toBe(true)
+    expect(storyIndexable('pending', counts())).toBe(true)                       // its story is verified
+    expect(storyIndexable('pending', counts({ verified: false, outlets: 1 }))).toBe(false)
+    expect(storyIndexable('pending', null)).toBe(false)
+    expect(storyIndexable('false', counts({ verified: false }))).toBe(false)
+  })
+
+  it('says the facts in one sentence, first', () => {
+    expect(storyFactLine({ verified: true, outlets: 81, countries: 36, firstReportAt: '2026-11-07T15:31:00.000Z' }))
+      .toBe('Verified: 81 outlets in 36 countries have reported this story since Nov 7.')
+    expect(storyFactLine({ verified: false, outlets: 3, countries: 1 })).toBe('3 outlets have reported this story so far; it is not verified yet.')
+    expect(storyFactLine({ verified: false, outlets: 1 })).toBe('Only one outlet has reported this so far: treat it as unconfirmed.')
+    expect(storyFactLine({ verified: false, outlets: 0 })).toBe('')
   })
 })

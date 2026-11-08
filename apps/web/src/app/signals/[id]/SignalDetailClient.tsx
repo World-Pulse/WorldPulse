@@ -29,7 +29,7 @@ import { distinctOutlets } from '@/components/signals/SourceChain'
 import { PredictionMarkets } from '@/components/signals/PredictionMarkets'
 import { ShareMenu } from '@/components/signals/ShareMenu'
 import { displaySummary, isStateMedia, STATE_MEDIA_NOTE, storyTags } from '@/lib/signal-text'
-import { storyCountsOf, type StoryOutletCounts } from '@/lib/story-count'
+import { storyCountsOf, storyFactLine, type StoryOutletCounts } from '@/lib/story-count'
 import { howSure } from '@/lib/how-sure'
 import { HowSureBlock } from '@/components/signals/HowSureBlock'
 import { FollowStory } from '@/components/signals/FollowStory'
@@ -368,6 +368,13 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal, 
             <h1 className="text-[22px] lg:text-[26px] font-bold leading-[1.3] text-wp-text">
               {signal.title}
             </h1>
+
+            {/* The story's facts in one sentence, first, for readers and for the search engines and AI assistants
+                that quote the page (Nov 8, 2026): "Verified: 81 outlets in 36 countries have reported this story since Nov 7." */}
+            {storyAsked && (() => {
+              const fact = storyFactLine({ verified: storyVerified, outlets: outletCount, countries: storyCounts?.countries, firstReportAt: storyCounts?.firstReportAt ?? signal.firstReported })
+              return fact ? <p className="text-[14px] leading-relaxed text-wp-text2" data-story-facts>{fact}</p> : null
+            })()}
 
             {/* Meta row */}
             <div className="flex items-center gap-3 font-mono text-[11px] text-wp-text3 flex-wrap">

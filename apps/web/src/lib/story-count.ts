@@ -24,11 +24,13 @@ export interface StoryOutletCounts {
   storyId?: string
   /** How many countries its last two days' outlets are from, when the API says (lib/story-reach.ts) */
   countries?: number
+  /** The story's one page for search engines (its first verified report with a real headline), when it has one */
+  canonicalId?: string
 }
 
 /** One story's counts from GET /api/v1/stories/outlets, or null when it gives none */
 export function storyCountsOf(v: unknown): StoryOutletCounts | null {
-  const o = (v ?? {}) as { outlets?: unknown; outletsAll?: unknown; firstReportAt?: unknown; verified?: unknown; storyId?: unknown; countries?: unknown }
+  const o = (v ?? {}) as { outlets?: unknown; outletsAll?: unknown; firstReportAt?: unknown; verified?: unknown; storyId?: unknown; countries?: unknown; canonicalId?: unknown }
   const outlets = Number(o.outlets)
   if (!Number.isFinite(outlets) || outlets <= 0) return null
   const all = Number(o.outletsAll)
@@ -40,7 +42,45 @@ export function storyCountsOf(v: unknown): StoryOutletCounts | null {
     ...(typeof o.verified === 'boolean' ? { verified: o.verified } : {}),
     ...(typeof o.storyId === 'string' && o.storyId ? { storyId: o.storyId } : {}),
     ...(Number.isInteger(o.countries) && Number(o.countries) >= 2 ? { countries: Number(o.countries) } : {}),
+    ...(typeof o.canonicalId === 'string' && UUID.test(o.canonicalId) ? { canonicalId: o.canonicalId } : {}),
   }
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * Whether search engines should index a report's page (Nov 8, 2026; Devon: "Do it now" to winning Google, which
+ * read 5 to 20 of our pages a day among some 11,000 new ones, most of them one outlet's unconfirmed report): only
+ * a verified story's. An unconfirmed report's page stays readable and its links followed, out of search results
+ * until its story is verified.
+ */
+export function storyIndexable(status: string | null | undefined, counts: StoryOutletCounts | null): boolean {
+  return status === 'verified' || counts?.verified === true
+}
+
+/**
+ * The address search engines should read for a report: its story's one page (its first verified report with a
+ * real headline, as the sitemap lists it) when the API names it, else its own. A story of 134 reports was 134
+ * pages, each its own canonical.
+ */
+export function storyCanonicalPath(signalId: string, counts: StoryOutletCounts | null): string {
+  return `/signals/${counts?.canonicalId ?? signalId}`
+}
+
+/**
+ * The story's facts in one sentence, first on its page and in its search-result description, so readers,
+ * search engines and AI assistants that quote the page get them before anything else (Nov 8, 2026):
+ * "Verified: 81 outlets in 36 countries have reported this story since Nov 7."
+ */
+export function storyFactLine(f: { verified: boolean; outlets: number; countries?: number; firstReportAt?: string | null }): string {
+  const n = Math.max(0, Math.floor(f.outlets))
+  if (n <= 0) return ''
+  const since = f.firstReportAt && Number.isFinite(Date.parse(f.firstReportAt)) ? ` since ${storyDay(f.firstReportAt)}` : ''
+  if (n === 1) return f.verified ? 'Verified.' : 'Only one outlet has reported this so far: treat it as unconfirmed.'
+  const where = f.countries && f.countries >= 2 ? ` in ${f.countries} countries` : ''
+  return f.verified
+    ? `Verified: ${n} outlets${where} have reported this story${since}.`
+    : `${n} outlets${where} have reported this story so far; it is not verified yet.`
 }
 
 /** "Oct 10" (in UTC, so the server's page and the browser's agree) */
