@@ -27,6 +27,12 @@ const STORY = {
 }
 
 let asked: Array<{ url: string; client: string | undefined }> = []
+const OTHER_REPORT = '99999999-9999-4999-8999-999999999999'
+const LONE_REPORT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+const NATO = { id: '5d5292fe23563321', type: 'organisation', canonical_name: 'NATO', aliases: ['North Atlantic Treaty Organization'], mention_count: 1010 }
+const ANATOLIE = { id: '1959a1b94db30907', type: 'person', canonical_name: 'Anatolie Nosatîi', aliases: [], mention_count: 1 }
+const NATO_PA = { id: '7c1e2d3f4a5b6c7d', type: 'organisation', canonical_name: 'NATO Parliamentary Assembly', aliases: [], mention_count: 40 }
+const days = (n: number, f: (i: number) => number) => Array.from({ length: n }, (_, i) => ({ day: new Date(Date.UTC(2026, 9, 10 + i)).toISOString().slice(0, 10), n: f(i) }))
 
 async function build(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false })
@@ -100,7 +106,7 @@ async function build(): Promise<FastifyInstance> {
   })
   app.get('/api/v1/stories/:id/figures', async (req, reply) => {
     asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
-    if ((req.params as { id: string }).id !== STORY.leadId) return reply.code(404).send({ success: false, code: 'NOT_FOUND', error: 'Story not found' })
+    if (![STORY.leadId, STORY.id].includes((req.params as { id: string }).id)) return reply.code(404).send({ success: false, code: 'NOT_FOUND', error: 'Story not found' })
     return {
       success: true,
       data: {
@@ -132,7 +138,44 @@ async function build(): Promise<FastifyInstance> {
   })
   app.get('/api/v1/stories/outlets', async (req) => {
     asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
-    return { success: true, data: { stories: { [STORY.leadId]: { storyId: STORY.id, size: 20, outlets: 14, outletsAll: 14, verified: true } } } }
+    return {
+      success: true,
+      data: {
+        stories: {
+          [STORY.leadId]: { storyId: STORY.id, size: 20, outlets: 14, outletsAll: 14, verified: true, countries: 9, canonicalId: STORY.leadId, firstReportAt: '2026-10-20T08:00:00.000Z' },
+          [OTHER_REPORT]: { storyId: STORY.id, size: 20, outlets: 14, outletsAll: 14, verified: true, countries: 9, canonicalId: STORY.leadId },
+          [LONE_REPORT]: { storyId: LONE_REPORT, size: 1, outlets: 1, outletsAll: 1, verified: false },
+        },
+      },
+    }
+  })
+  app.get('/api/v1/knowledge-graph/entities', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    const q = String((req.query as { search?: string }).search ?? '').toLowerCase()
+    // as the API matches: the name contains it (any case), or one of its other names is it exactly; the most mentioned first
+    const data = [NATO, NATO_PA, ANATOLIE].filter(e => e.canonical_name.toLowerCase().includes(q) || e.aliases.some(a => a.toLowerCase() === q))
+    return { data, pagination: { total: data.length, limit: 8, offset: 0, has_more: false } }
+  })
+  app.get('/api/v1/knowledge-graph/entities/:id/profile', async (req, reply) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    const { id } = req.params as { id: string }
+    if (id !== NATO.id) return reply.code(404).send({ error: 'Entity not found' })
+    return {
+      success: true,
+      data: {
+        entity: { id: NATO.id, type: 'organisation', name: 'NATO', firstSeen: '2026-04-26T15:25:17.423Z', lastSeen: '2026-11-08T16:27:44.575Z' },
+        activity: { last24h: 10, previous24h: 21, last7d: 178, daily: days(30, i => (i >= 23 ? 30 : 10)) },
+        stories: [STORY],
+        latest: [],
+        connections: [{ id: 'u1', type: 'location', name: 'Ukraine', shared: 25 }, { id: 'u2', type: 'location', name: 'United States', shared: 1 }],
+      },
+    }
+  })
+  app.get('/api/v1/countries/:code/daily', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    const { code } = req.params as { code: string }
+    const n = Number((req.query as { days?: string }).days) || 30
+    return { success: true, data: { code, name: code, days: n, daily: days(n, i => (i === 5 ? 40 : i >= n - 7 ? 12 : 6)).map(d => ({ day: d.day, reports: d.n, verified: Math.floor(d.n / 3) })) } }
   })
   app.get('/api/v1/countries/:code', async (req) => {
     asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
@@ -152,6 +195,18 @@ async function build(): Promise<FastifyInstance> {
   })
   app.get('/api/v1/search/semantic', async (req) => {
     asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    const q = String((req.query as { q?: string }).q ?? '')
+    if (q.includes('Atlantis')) return { success: true, semantic: true, results: [] }
+    if (q.includes('nine')) {
+      return {
+        success: true, semantic: true,
+        results: [
+          { id: STORY.leadId, title: 'Six people killed in attack', status: 'verified', locationName: 'Doha', createdAt: '2026-10-20T08:00:00.000Z', score: 0.9 },
+          { id: OTHER_REPORT, title: 'Nine dead in attack', status: 'pending', locationName: 'Doha', createdAt: '2026-10-20T09:00:00.000Z', score: 0.88 },
+          { id: LONE_REPORT, title: 'A different attack', status: 'pending', locationName: 'Basra', createdAt: '2026-10-19T09:00:00.000Z', score: 0.7 },
+        ],
+      }
+    }
     return { success: true, semantic: true, results: [{ id: STORY.leadId, title: STORY.title, status: 'verified', locationName: 'Doha', createdAt: '2026-10-20T08:00:00.000Z', category: 'conflict', score: 0.61 }] }
   })
   await app.register(registerMcpRoutes, { prefix: '/mcp' })
@@ -184,12 +239,12 @@ describe('MCP server', () => {
     expect((await rpc(app, { jsonrpc: '2.0', id: 3, method: 'ping' })).json()).toEqual({ jsonrpc: '2.0', id: 3, result: {} })
   })
 
-  it('lists eleven read-only tools with their input schemas', async () => {
+  it('lists fourteen read-only tools with their input schemas', async () => {
     const app = await build()
     const { tools } = (await rpc(app, { jsonrpc: '2.0', id: 4, method: 'tools/list' })).json().result
     expect(tools.map((t: { name: string }) => t.name)).toEqual([
       'top_stories', 'story', 'search_reports', 'week', 'check_link', 'under_reported',
-      'story_numbers', 'outlet', 'near', 'country', 'daily_brief',
+      'story_numbers', 'outlet', 'near', 'country', 'daily_brief', 'entity', 'trend', 'check_claim',
     ])
     for (const t of tools) {
       expect(t.inputSchema.type).toBe('object')
@@ -316,6 +371,78 @@ describe('MCP server', () => {
     expect(r.content[0].text).toContain('What to Watch: A vote in Kenya (5 outlets).')
     expect(r.content[0].text).not.toContain('Cyber & Tech')
     expect(r.structuredContent).toMatchObject({ date: '2026-11-08', summary: 'Talks resumed in Doha (14 outlets).', sections: [{ id: 'what_to_watch' }] })
+  })
+
+  it('entity finds a person, organisation or place by name and gives its stories and company (Nov 8, 2026)', async () => {
+    const app = await build()
+    const r = await call(app, 'entity', { name: 'nato' })
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/knowledge-graph/entities?search=nato&limit=20&sort=mention_count&lean=1', `/api/v1/knowledge-graph/entities/${NATO.id}/profile`])
+    expect(r.isError).toBe(false)
+    expect(r.content[0].text).toContain(`NATO (organisation). Page: https://world-pulse.io/entities/nato-${NATO.id}`)
+    expect(r.content[0].text).toContain('Reports naming it: 10 in the last 24 hours (21 the day before), 178 in the last 7 days.')
+    expect(r.content[0].text).toContain('1. Ceasefire talks resume in Doha')
+    expect(r.content[0].text).toContain('In the news with: Ukraine (25 reports together), United States (1 report together)')
+    // the other matches with the name as a whole word, not the names that only contain its letters
+    expect(r.content[0].text).toContain(`Other matches for "nato": NATO Parliamentary Assembly (organisation, id ${NATO_PA.id})`)
+    expect(r.content[0].text).not.toContain('Anatolie')
+    expect((r.structuredContent as { otherMatches: unknown[] }).otherMatches).toEqual([{ id: NATO_PA.id, type: 'organisation', name: 'NATO Parliamentary Assembly', mentions: 40 }])
+    expect(r.structuredContent).toMatchObject({ entity: { id: NATO.id, name: 'NATO' }, activity: { last7d: 178 } })
+    // its other name, exactly, and by id
+    asked = []
+    await call(app, 'entity', { name: 'North Atlantic Treaty Organization' })
+    expect(asked[1]!.url).toBe(`/api/v1/knowledge-graph/entities/${NATO.id}/profile`)
+    asked = []
+    expect((await call(app, 'entity', { id: NATO.id })).isError).toBe(false)
+    expect(asked.map(a => a.url)).toEqual([`/api/v1/knowledge-graph/entities/${NATO.id}/profile`])
+    // a whole word of a name when nothing is named exactly so
+    asked = []
+    await call(app, 'entity', { name: 'Nosatîi' })
+    expect(asked[1]!.url).toBe(`/api/v1/knowledge-graph/entities/${ANATOLIE.id}/profile`)
+    expect(await call(app, 'entity', { name: 'Zzyzx' })).toMatchObject({ isError: true, content: [{ text: 'No person, organisation or place named "Zzyzx" in WorldPulse\'s reports' }] })
+    expect((await call(app, 'entity', {})).isError).toBe(true)
+  })
+
+  it("trend gives a country's or an entity's coverage day by day, the last 7 days against the 7 before", async () => {
+    const app = await build()
+    const r = await call(app, 'trend', { country: 'sd', days: 14 })
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/countries/SD/daily?days=14'])
+    expect(r.content[0].text).toContain('Coverage of Sudan on WorldPulse, the last 14 days (reports a day, UTC). Page: https://world-pulse.io/countries/sd')
+    // days 0-6: 6 each but day 5 (40); days 7-13: 12 each
+    expect(r.content[0].text).toContain('Total: 160 reports (53 verified). The last 7 days: 84; the 7 before: 76 (+11%). Busiest day: Oct 15 (40).')
+    expect(r.content[0].text).toContain('By week: Oct 10–Oct 16: 76 · Oct 17–Oct 23: 84')
+    expect(r.content[0].text).toContain('The last 7 days: Oct 17: 12 · Oct 18: 12')
+    expect(r.structuredContent).toMatchObject({ subject: 'Sudan', kind: 'country', total: 160, last7: 84, previous7: 76 })
+    asked = []
+    const n = await call(app, 'trend', { name: 'NATO' })
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/knowledge-graph/entities?search=NATO&limit=20&sort=mention_count&lean=1', `/api/v1/knowledge-graph/entities/${NATO.id}/profile`])
+    expect(n.content[0].text).toContain('Coverage of NATO on WorldPulse, the last 30 days')
+    expect(n.content[0].text).toContain('The last 7 days: 210; the 7 before: 70 (+200%).')
+    expect((await call(app, 'trend', {})).isError).toBe(true)
+    expect((await call(app, 'trend', { country: 'SD', name: 'NATO' })).isError).toBe(true)
+    expect((await call(app, 'trend', { country: 'XX' })).isError).toBe(true)
+  })
+
+  it('check_claim gives the closest stories once each with their counts, and the numbers of the closest; it rules nothing', async () => {
+    const app = await build()
+    const r = await call(app, 'check_claim', { claim: 'nine people were killed in the Doha attack' })
+    expect(asked.map(a => a.url)).toEqual([
+      '/api/v1/search/semantic?q=nine%20people%20were%20killed%20in%20the%20Doha%20attack&limit=10',
+      `/api/v1/stories/outlets?ids=${STORY.leadId},${OTHER_REPORT},${LONE_REPORT}`,
+      `/api/v1/stories/${STORY.id}/figures`,
+    ])
+    const text = r.content[0].text as string
+    expect(text).toContain('WorldPulse does not rule claims true or false')
+    // the story once (its closest report), then the other story
+    expect(text).toContain(`1. Six people killed in attack (Doha)
+   Verified · 14 outlets in 9 countries · reported since Oct 20
+   https://world-pulse.io/signals/${STORY.leadId}`)
+    expect(text).not.toContain('Nine dead in attack')
+    expect(text).toContain('2. A different attack (Basra)\n   Only one outlet so far: unconfirmed')
+    expect(text).toContain('Killed: 6 (50 outlets: 1news.co.nz, aljazeera.com, aol.co.uk, …) · 9 (3 outlets: gdnonline.com, smh.com.au, upi.com)')
+    expect(r.structuredContent.stories).toHaveLength(2)
+    const none = await call(app, 'check_claim', { claim: 'Atlantis rose from the sea' })
+    expect(none.content[0].text).toMatch(/That is not evidence the claim is false/)
+    expect((await call(app, 'check_claim', { claim: 'no' })).isError).toBe(true)
   })
 
   it('offers three starter prompts, their arguments checked', async () => {

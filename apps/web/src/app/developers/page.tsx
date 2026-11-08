@@ -22,6 +22,9 @@ const MCP_TOOLS = [
   { name: 'near', what: 'The reports pinned on the map near a place' },
   { name: 'country', what: 'A country right now: the outlets based there, its stories, under-reported or not' },
   { name: 'daily_brief', what: 'The Daily Briefing: the main developments and what to watch' },
+  { name: 'entity', what: 'A person, organisation or place in the news: its stories, who it is in the news with' },
+  { name: 'trend', what: 'How coverage of a country or an entity changed, day by day' },
+  { name: 'check_claim', what: 'What the newsrooms report about a claim, with their counts and numbers (it rules nothing true or false)' },
 ]
 const MCP_CURSOR = '{"mcpServers":{"worldpulse":{"url":"https://api.world-pulse.io/mcp"}}}'
 

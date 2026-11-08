@@ -145,7 +145,7 @@ GET  /rss/signals.xml              Atom feed of verified reports (also /rss/sign
 
 ```
 POST https://api.world-pulse.io/mcp     Streamable HTTP, JSON-RPC; no key
-Tools: top_stories, story, search_reports, week, check_link (paste an article's address: how many outlets reported its story), under_reported (the crises with the fewest outlets for the people displaced), story_numbers (a story's figures, each with how many outlets give it), outlet (what a news website is), near (the reports pinned near a place), country (a country right now), daily_brief (the Daily Briefing)
+Tools: top_stories, story, search_reports, week, check_link (paste an article's address: how many outlets reported its story), under_reported (the crises with the fewest outlets for the people displaced), story_numbers (a story's figures, each with how many outlets give it), outlet (what a news website is), near (the reports pinned near a place), country (a country right now), daily_brief (the Daily Briefing), entity (a person, organisation or place in the news), trend (coverage of a country or an entity, day by day), check_claim (what the newsrooms report about a claim)
 ```
 
 Claude Code: `claude mcp add --transport http worldpulse https://api.world-pulse.io/mcp`

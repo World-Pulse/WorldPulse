@@ -31,13 +31,13 @@ const SITE = (process.env.SITE_URL || 'https://world-pulse.io').replace(/\/+$/, 
 /** Protocol versions this server speaks, newest first */
 export const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'] as const
 
-const SERVER_INFO = { name: 'worldpulse', title: 'WorldPulse', version: '1.1.0' }
+const SERVER_INFO = { name: 'worldpulse', title: 'WorldPulse', version: '1.2.0' }
 
 const INSTRUCTIONS = [
   'WorldPulse groups news reports of one event into one story and counts the outlets (websites) that report it. A story\'s count covers its last two days; a story that has run longer also gives how many outlets have reported it since it began.',
   'A story is "verified" when two or more outlets report it and its reliability score reaches 65%; verified means more than one outlet says so, not proven true (https://world-pulse.io/how-we-count).',
   'Cite stories with their world-pulse.io links. Start with top_stories; open one with story; find reports on a subject with search_reports; a week at a glance with week; how many outlets reported an article someone shared with check_link; the crises with the fewest outlets for the people displaced with under_reported.',
-  'Since Nov 8, 2026 also: story_numbers (each figure in a story, such as the dead, with how many outlets give it), outlet (what a news website is: its country, its kind, state media or not), near (the reports pinned near a place), country (a country right now) and daily_brief (the Daily Briefing).',
+  'Since Nov 8, 2026 also: story_numbers (each figure in a story, such as the dead, with how many outlets give it), outlet (what a news website is: its country, its kind, state media or not), near (the reports pinned near a place), country (a country right now), daily_brief (the Daily Briefing), entity (a person, organisation or place in the news), trend (how coverage of a country or an entity changed day by day) and check_claim (what the newsrooms report about a claim; it never rules true or false).',
 ].join(' ')
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -128,6 +128,56 @@ export function boxAround(lat: number, lng: number, km: number): [number, number
   const dLng = km / (111.32 * Math.max(Math.cos(lat * Math.PI / 180), 0.01))
   const r = (n: number) => Math.round(n * 10_000) / 10_000
   return [r(Math.max(-180, lng - dLng)), r(Math.max(-90, lat - dLat)), r(Math.min(180, lng + dLng)), r(Math.min(90, lat + dLat))]
+}
+
+/** A story figure's line: "Killed: 6 (50 outlets: a.com, b.com, c.com, …) · 9 (3 outlets: d.com, e.com, f.com)" */
+interface FigureValues { label: string; values?: Array<{ text: string; outlets: number; outletNames?: string[] }> }
+function figureLine(f: FigureValues): string {
+  const value = (v: { text: string; outlets: number; outletNames?: string[] }, i: number) => {
+    // the most reported value names a few of its outlets, the others all of theirs (they are the ones to check)
+    const names = v.outletNames ?? []
+    const shown = i === 0 ? names.slice(0, 3) : names.slice(0, 6)
+    const more = v.outlets - shown.length
+    return `${v.text} (${v.outlets} outlet${v.outlets === 1 ? '' : 's'}${shown.length ? `: ${shown.join(', ')}${more > 0 ? ', …' : ''}` : ''})`
+  }
+  return `${f.label}: ${(f.values ?? []).map(value).join(' · ')}`
+}
+
+/** An entity's page, as the website writes its address (apps/web/src/lib/entity-links.ts entityPath) */
+export function entityPage(id: string, name: string): string {
+  const slug = name.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60).replace(/-+$/, '')
+  return `${SITE}/entities/${slug ? `${slug}-` : ''}${encodeURIComponent(id)}`
+}
+
+/** "Nov 3" from "2026-11-03" (UTC) */
+const shortDay = (day: string) => new Date(`${day}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+
+interface EntityHit { id: string; type: string; canonical_name: string; aliases?: string[]; mention_count: number; last_seen?: string }
+
+/** A name to compare: no accents, lower case ("Anatolie Nosatîi" -> "anatolie nosatii") */
+const foldName = (s: string) => s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+/** Text to match as it is inside a regular expression */
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * The entity a name means: the one named exactly so (its name or one of its other names, any case or accent),
+ * else the most mentioned with the name as a whole word ("Musk" for "Elon Musk"), else the most mentioned whose
+ * name contains it. The other candidates come back too, so the assistant can ask: the whole-word ones only when
+ * there are any ("NATO" brings "NATO Parliamentary Assembly", not "Anatolie" or "Renato", which the search's
+ * contains-the-letters match also finds)
+ */
+async function findEntity(asker: Asker, name: string): Promise<{ entity: EntityHit | null; others: EntityHit[] }> {
+  const { status, body } = await ask(asker, `/api/v1/knowledge-graph/entities?search=${encodeURIComponent(name)}&limit=20&sort=mention_count&lean=1`)
+  if (status !== 200) throw new Error(`entities answered ${status}`)
+  const hits = (((body as { data?: EntityHit[] }).data) ?? []).filter(e => e && typeof e.id === 'string' && typeof e.canonical_name === 'string')
+  const wanted = foldName(name)
+  const namesOf = (e: EntityHit) => [e.canonical_name, ...(e.aliases ?? [])].map(n => foldName(String(n)))
+  const word = new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRe(wanted)}($|[^\\p{L}\\p{N}])`, 'u')
+  const whole = hits.filter(e => namesOf(e).some(n => word.test(n)))
+  const exact = hits.find(e => namesOf(e).includes(wanted))
+  const entity = exact ?? whole[0] ?? hits[0] ?? null
+  return { entity, others: (whole.length ? whole : hits).filter(e => e !== entity).slice(0, 4) }
 }
 
 /** A website from a website or an article's address: "bbc.co.uk" from "https://www.bbc.co.uk/news/x" */
@@ -433,18 +483,11 @@ export const TOOLS: Tool[] = [
       }
       const figures = (d.figures ?? []).filter(f => (f.values ?? []).length > 0)
       const page = signalLink(id)
-      const value = (v: { text: string; outlets: number; outletNames?: string[] }, i: number) => {
-        // the most reported value names a few of its outlets, the others all of theirs (they are the ones to check)
-        const names = v.outletNames ?? []
-        const shown = i === 0 ? names.slice(0, 3) : names.slice(0, 6)
-        const more = v.outlets - shown.length
-        return `${v.text} (${v.outlets} outlet${v.outlets === 1 ? '' : 's'}${shown.length ? `: ${shown.join(', ')}${more > 0 ? ', …' : ''}` : ''})`
-      }
       const text = figures.length === 0
         ? `No numbers (killed, injured, missing, displaced, evacuated, abducted, arrested, rescued) in the headlines of this story's reports in its last ${d.countedHours ?? 48} hours. Page: ${page}`
         : [
           `The numbers in this story, as its outlets report them (from the headlines of its ${d.reports ?? 0} reports in its last ${d.countedHours ?? 48} hours; the most reported first):`,
-          ...figures.map(f => `${f.label}: ${(f.values ?? []).map(value).join(' · ')}`),
+          ...figures.map(figureLine),
           `Page: ${page}`,
         ].join('\n')
       return {
@@ -641,6 +684,201 @@ export const TOOLS: Tool[] = [
         ...sections.map(x => `\n${x.title}: ${x.body}`),
       ].join('\n').trim()
       return { text, data: { date: d.date ?? null, generatedAt: d.generated_at ?? null, url: `${SITE}/briefing`, summary: d.executive_summary ?? null, sections: sections.map(x => ({ id: x.id ?? null, title: x.title, body: x.body })) } }
+    },
+  },
+  {
+    name: 'entity',
+    title: 'Who or what is in the news',
+    description: 'A person, organisation or place in the news, by name (e.g. "NATO", "Elon Musk", "the Houthis", "Kharkiv"): how many WorldPulse reports name it in the last 24 hours, the day before and the last 7 days, the stories naming it with how many outlets carry each and from how many countries, and who or what it is in the news with. Other entities matching the name are listed with their ids; pass id to open one of them.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', minLength: 2, maxLength: 120, description: 'The name, e.g. NATO' },
+        id: { type: 'string', pattern: '^[A-Za-z0-9_-]{4,64}$', description: 'An entity id this tool gave, instead of name' },
+      },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const id = strArg(args, 'id', { pattern: /^[A-Za-z0-9_-]{4,64}$/, hint: 'must be an entity id this tool gave' })
+      const name = id ? undefined : strArg(args, 'name', { required: true, max: 120 })
+      if (name !== undefined && name.length < 2) throw new ToolError('name must be at least 2 characters')
+      let others: EntityHit[] = []
+      let entityId = id
+      if (!entityId) {
+        const found = await findEntity(asker, name!)
+        if (!found.entity) throw new ToolError(`No person, organisation or place named "${name}" in WorldPulse's reports`)
+        entityId = found.entity.id
+        others = found.others
+      }
+      const { status, body } = await ask(asker, `/api/v1/knowledge-graph/entities/${encodeURIComponent(entityId)}/profile`)
+      if (status === 404) throw new ToolError('No person, organisation or place with that id')
+      if (status !== 200) throw new Error(`entity profile answered ${status}`)
+      const p = (body.data ?? {}) as {
+        entity?: { id: string; type: string; name: string; firstSeen?: string | null; lastSeen?: string | null }
+        activity?: { last24h?: number; previous24h?: number; last7d?: number }
+        stories?: ListedStory[]
+        connections?: Array<{ id: string; type: string; name: string; shared: number }>
+      }
+      const e = p.entity ?? { id: entityId, type: 'other', name: name ?? entityId }
+      const page = entityPage(e.id, e.name)
+      const a = p.activity ?? {}
+      const stories = (p.stories ?? []).slice(0, 6)
+      const connections = (p.connections ?? []).slice(0, 8)
+      const text = [
+        `${e.name} (${e.type}). Page: ${page}`,
+        `Reports naming it: ${a.last24h ?? 0} in the last 24 hours (${a.previous24h ?? 0} the day before), ${a.last7d ?? 0} in the last 7 days.`,
+        '',
+        stories.length ? `Stories naming it, the most outlets first:\n${stories.map(storyLine).join('\n')}` : 'No story naming it was reported by two or more outlets in the last two weeks.',
+        connections.length ? `\nIn the news with: ${connections.map(c => `${c.name} (${c.shared} report${c.shared === 1 ? '' : 's'} together)`).join(', ')}` : '',
+        others.length ? `\nOther matches for "${name}": ${others.map(o => `${o.canonical_name} (${o.type}, id ${o.id})`).join('; ')}` : '',
+      ].join('\n').trim()
+      return {
+        text,
+        data: {
+          entity: { id: e.id, type: e.type, name: e.name, url: page, firstSeen: e.firstSeen ?? null, lastSeen: e.lastSeen ?? null },
+          activity: { last24h: a.last24h ?? 0, previous24h: a.previous24h ?? 0, last7d: a.last7d ?? 0 },
+          stories: stories.map(storyOut),
+          connections: connections.map(c => ({ id: c.id, type: c.type, name: c.name, shared: c.shared })),
+          otherMatches: others.map(o => ({ id: o.id, type: o.type, name: o.canonical_name, mentions: o.mention_count })),
+        },
+      }
+    },
+  },
+  {
+    name: 'trend',
+    title: 'How coverage changed',
+    description: 'How much WorldPulse\'s outlets report about a country, or about a person, organisation or place, day by day: the total, the last 7 days against the 7 before, the busiest day, week by week and the last 7 days one by one. Give country (a two-letter code such as SD, 7 to 90 days, default 30) or name (an entity, the last 30 days). The counts are reports WorldPulse holds, and it reads more sources over time: compare recent weeks rather than months.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        country: { type: 'string', pattern: '^[A-Za-z]{2}$', description: 'A two-letter country code, e.g. SD' },
+        name: { type: 'string', minLength: 2, maxLength: 120, description: 'A person, organisation or place, e.g. NATO' },
+        days: { type: 'integer', minimum: 7, maximum: 90, default: 30, description: 'For a country: 7 to 90 days (default 30)' },
+      },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const country = strArg(args, 'country', { pattern: /^[A-Za-z]{2}$/, hint: 'must be a two-letter country code such as SD' })
+      const name = strArg(args, 'name', { max: 120 })
+      if (!country === !name) throw new ToolError('Give either country (a two-letter code) or name (a person, organisation or place)')
+      let label: string
+      let page: string
+      let days: Array<{ day: string; n: number; verified?: number }>
+      if (country) {
+        const code = country.toUpperCase() === 'UK' ? 'GB' : country.toUpperCase()
+        label = countryLabel(code, false)
+        if (label === code) throw new ToolError(`${code} is not a country code WorldPulse knows`)
+        const n = intArg(args, 'days', 30, 7, 90)
+        const { status, body } = await ask(asker, `/api/v1/countries/${code}/daily?days=${n}`)
+        if (status === 400) throw new ToolError('country must be a two-letter country code such as SD')
+        if (status !== 200) throw new Error(`country daily answered ${status}`)
+        const d = (body.data ?? {}) as { daily?: Array<{ day: string; reports: number; verified: number }> }
+        page = `${SITE}/countries/${code.toLowerCase()}`
+        days = (d.daily ?? []).map(x => ({ day: x.day, n: x.reports, verified: x.verified }))
+      } else {
+        if (name!.length < 2) throw new ToolError('name must be at least 2 characters')
+        const found = await findEntity(asker, name!)
+        if (!found.entity) throw new ToolError(`No person, organisation or place named "${name}" in WorldPulse's reports`)
+        const { status, body } = await ask(asker, `/api/v1/knowledge-graph/entities/${encodeURIComponent(found.entity.id)}/profile`)
+        if (status !== 200) throw new Error(`entity profile answered ${status}`)
+        const p = (body.data ?? {}) as { entity?: { name: string }; activity?: { daily?: Array<{ day: string; n: number }> } }
+        label = p.entity?.name ?? found.entity.canonical_name
+        page = entityPage(found.entity.id, label)
+        days = p.activity?.daily ?? []
+      }
+      if (days.length === 0) throw new ToolError('WorldPulse has no counts for that just now; try again in a few minutes')
+      const sum = (xs: typeof days) => xs.reduce((t, x) => t + (Number(x.n) || 0), 0)
+      const total = sum(days)
+      const last7 = sum(days.slice(-7))
+      const prev7 = sum(days.slice(-14, -7))
+      const change = prev7 > 0 ? `${last7 >= prev7 ? '+' : ''}${Math.round(((last7 - prev7) / prev7) * 100)}%` : last7 > 0 ? 'up from none' : 'none either week'
+      const busiest = days.reduce((b, x) => (x.n > b.n ? x : b), days[0]!)
+      // weeks from the newest back, so the last one is the last 7 days
+      const weeks: string[] = []
+      for (let end = days.length; end > 0; end -= 7) {
+        const w = days.slice(Math.max(0, end - 7), end)
+        weeks.unshift(`${shortDay(w[0]!.day)}–${shortDay(w[w.length - 1]!.day)}: ${sum(w)}`)
+      }
+      const verifiedTotal = days.some(x => typeof x.verified === 'number') ? days.reduce((t, x) => t + (x.verified ?? 0), 0) : null
+      const text = [
+        `Coverage of ${label} on WorldPulse, the last ${days.length} days (reports a day, UTC). Page: ${page}`,
+        `Total: ${total} reports${verifiedTotal !== null ? ` (${verifiedTotal} verified)` : ''}. The last 7 days: ${last7}; the 7 before: ${prev7} (${change}). Busiest day: ${shortDay(busiest.day)} (${busiest.n}).`,
+        `By week: ${weeks.join(' · ')}`,
+        `The last 7 days: ${days.slice(-7).map(x => `${shortDay(x.day)}: ${x.n}`).join(' · ')}`,
+        'These are the reports WorldPulse holds; it reads more sources over time, so compare recent weeks rather than months.',
+      ].join('\n')
+      return {
+        text,
+        data: { subject: label, kind: country ? 'country' : 'entity', url: page, total, verifiedTotal, last7, previous7: prev7, busiest: { day: busiest.day, reports: busiest.n }, daily: days.map(x => ({ day: x.day, reports: x.n, ...(typeof x.verified === 'number' ? { verified: x.verified } : {}) })) },
+      }
+    },
+  },
+  {
+    name: 'check_claim',
+    title: 'Check a claim against the newsrooms',
+    description: 'What the newsrooms WorldPulse reads report about a claim (e.g. "nine people were killed in the Krakow shooting"): the closest stories, each with how many outlets carry it, from how many countries, whether it is verified and its link, and for the closest one the numbers its outlets give (the dead, the injured…) with how many outlets give each. It never rules a claim true or false: it shows what the outlets say. No story close to it is not evidence that a claim is false.',
+    inputSchema: {
+      type: 'object',
+      properties: { claim: { type: 'string', minLength: 5, maxLength: 300, description: 'The claim, in plain words' } },
+      required: ['claim'],
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const claim = strArg(args, 'claim', { required: true, max: 300 })!
+      if (claim.length < 5) throw new ToolError('claim must be at least 5 characters')
+      const search = await ask(asker, `/api/v1/search/semantic?q=${encodeURIComponent(claim)}&limit=10`)
+      if (search.status !== 200) throw new Error(`search answered ${search.status}`)
+      if (search.body.semantic === false) throw new ToolError('Search by meaning is starting up; try again in a few minutes')
+      type Hit = { id: string; title: string; status?: string; score?: number; createdAt?: string; locationName?: string | null }
+      const hits = ((search.body.results ?? []) as Hit[]).filter(r => r && UUID.test(String(r.id)) && typeof r.title === 'string')
+      if (hits.length === 0) {
+        return {
+          text: `WorldPulse holds no report close to "${claim}". That is not evidence the claim is false: it may be very new, local, or reported only by newsrooms WorldPulse doesn't read.`,
+          data: { claim, stories: [], figures: null },
+        }
+      }
+      const outlets = await ask(asker, `/api/v1/stories/outlets?ids=${hits.map(h => h.id).join(',')}`)
+      const counts = (outlets.status === 200 ? ((outlets.body.data ?? {}) as { stories?: Record<string, { storyId?: string; outlets?: number; verified?: boolean; countries?: number; canonicalId?: string; firstReportAt?: string | null }> }).stories : undefined) ?? {}
+      // one line per story: its closest report (the search gives the closest first)
+      const seen = new Set<string>()
+      const stories: Array<{ hit: Hit; storyId: string; outlets: number; verified: boolean; countries: number; url: string; since: string | null }> = []
+      for (const h of hits) {
+        const c = counts[h.id]
+        const storyId = c?.storyId ?? h.id
+        if (seen.has(storyId)) continue
+        seen.add(storyId)
+        stories.push({
+          hit: h, storyId, outlets: Number(c?.outlets) || 1, verified: c?.verified === true || h.status === 'verified',
+          countries: Number(c?.countries) || 0, url: signalLink(c?.canonicalId ?? h.id), since: c?.firstReportAt ?? null,
+        })
+        if (stories.length === 3) break
+      }
+      const top = stories[0]!
+      // the closest story's numbers, as its outlets give them
+      const fig = await ask(asker, `/api/v1/stories/${top.storyId}/figures`)
+      const figures = fig.status === 200 ? ((((fig.body.data ?? {}) as { figures?: FigureValues[] }).figures) ?? []).filter(f => (f.values ?? []).length > 0) : []
+      const proof = (s: (typeof stories)[number]) => {
+        const where = s.countries >= 2 ? ` in ${s.countries} countries` : ''
+        const since = s.since ? ` · reported since ${shortDay(s.since.slice(0, 10))}` : ''
+        return s.verified
+          ? `Verified · ${s.outlets} outlets${where}${since}`
+          : s.outlets >= 2 ? `${s.outlets} outlets so far${where}, not verified yet${since}` : `Only one outlet so far: unconfirmed${since}`
+      }
+      const text = [
+        `What the newsrooms WorldPulse reads report about: "${claim}"`,
+        'WorldPulse does not rule claims true or false; here are the closest stories, the closest first. Compare them with the claim before relying on one.',
+        '',
+        ...stories.map((s, i) => `${i + 1}. ${s.hit.title}${s.hit.locationName ? ` (${s.hit.locationName})` : ''}\n   ${proof(s)}\n   ${s.url}`),
+        figures.length ? `\nThe numbers the first story's outlets give, the most reported first:\n${figures.map(figureLine).join('\n')}` : '',
+      ].join('\n').trim()
+      return {
+        text,
+        data: {
+          claim,
+          stories: stories.map(s => ({ storyId: s.storyId, title: s.hit.title, url: s.url, place: s.hit.locationName ?? null, verified: s.verified, outlets: s.outlets, outletCountries: s.countries, reportedSince: s.since, match: s.hit.score ?? null })),
+          figures: figures.length ? figures.map(f => ({ label: f.label, values: (f.values ?? []).map(v => ({ value: v.text, outlets: v.outlets, outletNames: v.outletNames ?? [] })) })) : null,
+        },
+      }
     },
   },
 ]

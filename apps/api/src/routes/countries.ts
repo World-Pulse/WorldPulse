@@ -503,6 +503,39 @@ export const registerCountryRoutes: FastifyPluginAsync = async (app) => {
     return reply.send(result)
   })
 
+  // ─── GET /api/v1/countries/:code/daily?days=30 ────────────────────────────
+  // The reports pinned in a country per UTC day (Nov 8, 2026: the AI assistants'
+  // trend tool, "is coverage of Sudan growing?"): every report, and the verified
+  // ones, for the last 7 to 90 days, today included, a day with none as 0. Kept
+  // 30 minutes and served while one request remakes it.
+  app.get('/:code/daily', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const code = String((req.params as { code?: unknown }).code ?? '').toUpperCase()
+    if (!/^[A-Z]{2}$/.test(code)) return sendError(reply, 400, 'VALIDATION_ERROR', 'code: a two-letter country code such as SD')
+    const asked = Number((req.query as { days?: unknown } | undefined)?.days)
+    const days = Number.isInteger(asked) && asked >= 7 && asked <= 90 ? asked : 30
+    const data = await staleWhileRevalidate(`countries:daily:v1:${code}:${days}`, { freshSeconds: 1_800, staleSeconds: 6 * 3_600, lockSeconds: 30 }, async () => {
+      const today = new Date()
+      const first = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - (days - 1)))
+      const result = await db.raw(
+        `SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
+                count(*)::int AS reports,
+                count(*) FILTER (WHERE status = 'verified')::int AS verified
+           FROM signals
+          WHERE country_code = ? AND created_at >= ? AND status IN ('verified', 'pending')
+          GROUP BY 1`,
+        [code, first],
+      ) as { rows?: Array<{ day: string; reports: number; verified: number }> }
+      const byDay = new Map((result.rows ?? []).map(r => [String(r.day), r]))
+      const daily = Array.from({ length: days }, (_, i) => {
+        const day = new Date(first.getTime() + i * 86_400_000).toISOString().slice(0, 10)
+        const r = byDay.get(day)
+        return { day, reports: Number(r?.reports) || 0, verified: Number(r?.verified) || 0 }
+      })
+      return { success: true, data: { code, name: COUNTRY_NAMES[code] ?? code, days, daily, generatedAt: today.toISOString() } }
+    })
+    return reply.send(data)
+  })
+
   // ─── GET /api/v1/countries/:code ──────────────────────────────────────────
   // Detailed intelligence profile for a single country.
   app.get('/:code', {
