@@ -22,11 +22,13 @@ export interface StoryOutletCounts {
   verified?: boolean
   /** The story's id (its first report's, or the story id its reports share), when the API says */
   storyId?: string
+  /** How many countries its last two days' outlets are from, when the API says (lib/story-reach.ts) */
+  countries?: number
 }
 
 /** One story's counts from GET /api/v1/stories/outlets, or null when it gives none */
 export function storyCountsOf(v: unknown): StoryOutletCounts | null {
-  const o = (v ?? {}) as { outlets?: unknown; outletsAll?: unknown; firstReportAt?: unknown; verified?: unknown; storyId?: unknown }
+  const o = (v ?? {}) as { outlets?: unknown; outletsAll?: unknown; firstReportAt?: unknown; verified?: unknown; storyId?: unknown; countries?: unknown }
   const outlets = Number(o.outlets)
   if (!Number.isFinite(outlets) || outlets <= 0) return null
   const all = Number(o.outletsAll)
@@ -37,6 +39,7 @@ export function storyCountsOf(v: unknown): StoryOutletCounts | null {
     firstReportAt: first,
     ...(typeof o.verified === 'boolean' ? { verified: o.verified } : {}),
     ...(typeof o.storyId === 'string' && o.storyId ? { storyId: o.storyId } : {}),
+    ...(Number.isInteger(o.countries) && Number(o.countries) >= 2 ? { countries: Number(o.countries) } : {}),
   }
 }
 
@@ -56,10 +59,12 @@ export function sinceText(outlets: number, outletsAll: number, firstReportAt: st
  * The story page's browser-tab and search-result title (plan N8): the
  * headline, then "verified by N outlets" when the story is verified and two or
  * more outlets carried it in its last two days: the same count the page shows
- * as "Verified · N outlets". Without counts, or when it isn't verified, the
+ * as "Verified · N outlets", and "in M countries" from two on, as the badge
+ * says "Verified · 81 outlets · 36 countries" (Nov 8, 2026, plan G25). Without counts, or when it isn't verified, the
  * headline alone (nothing is claimed that the page doesn't show).
  */
 export function storyPageTitle(headline: string, counts: StoryOutletCounts | null): string {
   if (!counts || counts.verified !== true || counts.outlets < 2) return headline
-  return `${headline} · verified by ${counts.outlets} outlets`
+  const where = counts.countries && counts.countries >= 2 ? ` in ${counts.countries} countries` : ''
+  return `${headline} · verified by ${counts.outlets} outlets${where}`
 }

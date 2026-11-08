@@ -547,7 +547,7 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
       `WITH asked AS (
          SELECT s.id, ${storyKey} AS story_key FROM signals s WHERE s.id = ANY(?::uuid[])
        )
-       SELECT a.id::text AS id, a.story_key::text AS story_id, f.size, f.verified, f.first_at, o.outlets, o.outlets_all
+       SELECT a.id::text AS id, a.story_key::text AS story_id, f.size, f.verified, f.first_at, o.outlets, o.hosts, o.outlets_all
          FROM asked a
          CROSS JOIN LATERAL (
            SELECT count(*)::int AS size, bool_or(m.status = 'verified') AS verified,
@@ -559,18 +559,22 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
            -- the story's last two days, as /stories/:id counts them (lib/story-window.ts)
            SELECT count(DISTINCT lower(regexp_replace(substring(link.url from ?), ?, '')))
                     FILTER (WHERE ${inCountedWindow('m.created_at', 'f.newest')})::int AS outlets,
+                  COALESCE(array_agg(DISTINCT lower(regexp_replace(substring(link.url from ?), ?, '')))
+                    FILTER (WHERE ${inCountedWindow('m.created_at', 'f.newest')}), '{}') AS hosts,
                   count(DISTINCT lower(regexp_replace(substring(link.url from ?), ?, '')))::int AS outlets_all
              FROM signals m CROSS JOIN LATERAL unnest(m.original_urls) AS link(url)
             WHERE ${inStory} AND m.status IN ('verified', 'pending')
          ) o`,
-      [ids, HOST_PATTERN, WWW_PATTERN, HOST_PATTERN, WWW_PATTERN],
-    ) as { rows?: Array<{ id: string; story_id: string; size: unknown; verified: unknown; first_at?: unknown; outlets: unknown; outlets_all: unknown }> } | undefined
+      [ids, HOST_PATTERN, WWW_PATTERN, HOST_PATTERN, WWW_PATTERN, HOST_PATTERN, WWW_PATTERN],
+    ) as { rows?: Array<{ id: string; story_id: string; size: unknown; verified: unknown; first_at?: unknown; outlets: unknown; hosts?: unknown; outlets_all: unknown }> } | undefined
 
     // (verified: any of the story's reports is, as the story page and the home page say)
-    const stories: Record<string, { storyId: string; size: number; outlets: number; outletsAll: number; firstReportAt: string | null; verified: boolean }> = {}
+    const stories: Record<string, { storyId: string; size: number; outlets: number; outletsAll: number; firstReportAt: string | null; verified: boolean; countries?: number }> = {}
     for (const r of result?.rows ?? []) {
       const outlets = Number(r.outlets) || 0
       const firstAt = r.first_at ? new Date(r.first_at as string | Date) : null
+      // how many countries those outlets are from (the directory's; left out when none is known)
+      const countries = outletReach(textArray(r.hosts), null).countries
       stories[String(r.id)] = {
         storyId:    String(r.story_id),
         size:       Number(r.size) || 1,
@@ -580,6 +584,7 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
         outletsAll: Math.max(Number(r.outlets_all) || 0, outlets),
         firstReportAt: firstAt && Number.isFinite(firstAt.getTime()) ? firstAt.toISOString() : null,
         verified:   r.verified === true,
+        ...(countries > 0 ? { countries } : {}),
       }
     }
     return reply.send({ success: true, data: { stories } })

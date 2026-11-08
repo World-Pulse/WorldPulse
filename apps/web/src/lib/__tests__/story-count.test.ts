@@ -52,6 +52,15 @@ describe('storyPageTitle', () => {
       .toBe('Riyadh airport attack kills 12 · verified by 25 outlets')
   })
 
+  it('adds the countries the outlets are from, from two on', () => {
+    expect(storyPageTitle('Riyadh airport attack kills 12', { ...counts({ outlets: 81 }), countries: 36 }))
+      .toBe('Riyadh airport attack kills 12 · verified by 81 outlets in 36 countries')
+    expect(storyPageTitle('A', { ...counts({ outlets: 5 }), countries: 1 })).toBe('A · verified by 5 outlets')
+    expect(storyCountsOf({ outlets: 4, countries: 7 })?.countries).toBe(7)
+    expect(storyCountsOf({ outlets: 4, countries: 1 })).not.toHaveProperty('countries')
+    expect(storyCountsOf({ outlets: 4, countries: 'x' })).not.toHaveProperty('countries')
+  })
+
   it('leaves the headline alone when the story is not verified, has one outlet or has no counts', () => {
     expect(storyPageTitle('A', counts({ verified: false }))).toBe('A')
     expect(storyPageTitle('A', { outlets: 3, outletsAll: 3, firstReportAt: null })).toBe('A')

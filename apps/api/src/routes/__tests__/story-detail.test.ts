@@ -142,12 +142,20 @@ describe('GET /api/v1/stories/outlets', () => {
     expect((await get(`outlets?ids=${SIGNAL}`)).json().data.stories[SIGNAL].firstReportAt).toBeNull()
     // only well-formed ids, once each, as one array value
     expect(h.bindings[0]).toEqual([SIGNAL])
-    expect(h.bindings.slice(1)).toEqual(['^https?://([^/:?#]+)', '^www\\.', '^https?://([^/:?#]+)', '^www\\.'])
+    expect(h.bindings.slice(1)).toEqual(['^https?://([^/:?#]+)', '^www\\.', '^https?://([^/:?#]+)', '^www\\.', '^https?://([^/:?#]+)', '^www\\.'])
     // the count covers the story's last two days (lib/story-window.ts), and outlets_all its whole life
     expect(h.sql).toMatch(/FILTER \(WHERE m\.created_at >= f\.newest - INTERVAL '48 hours'\)/)
     expect(h.sql).toMatch(/unnest\(m\.original_urls\)/)
     expect(h.sql).toMatch(/m\.story_id = a\.story_key OR m\.id = a\.story_key/)
     expect(h.sql).toMatch(/bool_or\(m\.status = 'verified'\)/)
+  })
+
+  it('says how many countries the outlets are from (Nov 8, 2026), left out when none is known', async () => {
+    h.rows = [{ id: SIGNAL, story_id: STORY, size: 3, outlets: 3, outlets_all: 3, verified: true, hosts: '{aljazeera.com,defence24.com,unknown-site.example}' }]
+    expect((await get(`outlets?ids=${SIGNAL}`)).json().data.stories[SIGNAL].countries).toBe(2)
+    h.rows = [{ id: SIGNAL, story_id: STORY, size: 1, outlets: 1, outlets_all: 1, verified: false, hosts: ['unknown-site.example'] }]
+    expect((await get(`outlets?ids=${SIGNAL}`)).json().data.stories[SIGNAL]).not.toHaveProperty('countries')
+    expect(h.sql).toMatch(/array_agg\(DISTINCT/)
   })
 
   it('answers an empty list without asking the database', async () => {
