@@ -122,7 +122,8 @@ const ITALIAN: Rule[] = [
     ['Ginevra', 'Geneva'], ['Damasco', 'Damascus'], ['Riad', 'Riyadh'], ['Tunisi', 'Tunis'], ['Khartum', 'Khartoum'],
     ['Addis\\s+Abeba', 'Addis Ababa'], ['Giacarta', 'Jakarta'], ['San\\s+Pietroburgo', 'Saint Petersburg'], ['Stoccolma', 'Stockholm'],
     ['Dublino', 'Dublin'], ['Anversa', 'Antwerp'], ['Francoforte', 'Frankfurt'], ['Amburgo', 'Hamburg'], ['Colonia', 'Cologne'],
-    ['Zurigo', 'Zurich'], ['Monaco\\s+di\\s+Baviera', 'Munich'], ['Torino', 'Turin'], ['Venezia', 'Venice'], ['Firenze', 'Florence'],
+    ['Zurigo', 'Zurich'], ['Losanna', 'Lausanne'], ['Basilea', 'Basel'], ['Lucerna', 'Lucerne'], ['Berna', 'Bern'],
+    ['Monaco\\s+di\\s+Baviera', 'Munich'], ['Torino', 'Turin'], ['Venezia', 'Venice'], ['Firenze', 'Florence'],
     ['Napoli', 'Naples'], ['Genova', 'Genoa'], ['Siviglia', 'Seville'], ['Barcellona', 'Barcelona'],
     ['Città\\s+del\\s+Messico', 'Mexico City'], ["L['’]Avana", 'Havana'], ['Filadelfia', 'Philadelphia'], ['Cisgiordania', 'West Bank'],
     ['Bassora', 'Basra'], ['Sebastopoli', 'Sevastopol'], ['Nuova\\s+Delhi', 'New Delhi'], ['Hormuz|Ormuz', 'Hormuz'], ['Cracovia', 'Krakow'],
@@ -279,6 +280,11 @@ const ALBANIAN: Rule[] = [
   r('tiran(?:a|[ëe]s?|[ëe]n)', 'Tirana'), r('beograd(?:i|it|in)?', 'Belgrade'), r('shkup(?:i|it|in)?', 'Skopje'),
   r('bruksel(?:i|it|in)?', 'Brussels'), r('mosk(?:va|[ëe]s?|[ëe]n)', 'Moscow'), r('uashington(?:i|it|in)?', 'Washington'),
   r('kiev(?:i|it|in)?', 'Kyiv'),
+  // North Macedonia's, Serbia's and Montenegro's Albanian-speaking towns by their own names (Nov 8, 2026: Portalb's "Në
+  // Kumanovë u shënua 81-vjetori i Ansamblit" sat in Skopje). Not "Dibër", also Albania's own county
+  r('kumanov(?:a|[ëe]s?|[ëe]n)', 'Kumanovo'), r('tetov(?:a|[ëe]s?|[ëe]n)', 'Tetovo'), r('gostivar(?:i|it|in)?', 'Gostivar'),
+  r('strug(?:a|[ëe]s?|[ëe]n)', 'Struga'), r('k[ëe]r[çc]ov(?:a|[ëe]s?|[ëe]n)', 'Kicevo'), r('oh[ëe]r|ohr(?:i|it|in)', 'Ohrid'),
+  r('presh(?:eva|ev[ëe]s?|ev[ëe]n)', 'Presevo'), r('bujanoc(?:i|it|in)?', 'Bujanovac'), r('ulqin(?:i|it|in)?', 'Ulcinj'),
   r('sht[ëe]pi(?:a|s[ëe])?\\s+e\\s+bardh[ëe]', 'White House'), r('kreml(?:in)?(?:i|it)?', 'Kremlin'),
   r('kanad(?:a|aja|as[ëe]|an[ëe])', 'Canada'), r('ruse|rus[ëe]t|rus[ëe]ve', 'Russian'),
   r('amerikan(?:e|[ëe]t|[ëe]ve|i|it)?', 'United States'), r('kinez(?:e|[ëe]t|[ëe]ve|i|it)?', 'Chinese'),
@@ -321,6 +327,10 @@ const PEOPLE = '(?:ي|ي[ةه]|يون|يين)?'                         // the p
 const ARABIC: Rule[] = ([
   // clubs named after a city, before the city (a Real Madrid or PSG story is sport, not Madrid's or Paris's news)
   r(`${AL}ريال\\s+مدريد|${AL}اتلتيكو\\s+مدريد|${AL}باريس\\s+سان\\s+جيرمان`, '…'),
+  // ...and a league is its country's (Nov 8, 2026: Al-Watan's "البايرن ودورتموند يصران على الصدارة في البوندسليغا",
+  // Bayern and Dortmund stay top of the Bundesliga, sat in Damascus, the outlet's home)
+  r(`${AL}بوندسليغا|${AL}بوندسليجا`, 'Germany'), r(`${AL}ليغا|${AL}ليجا`, 'Spain'),
+  r(`${AL}بريميرليغ|${AL}بريمرليغ`, 'England'), r(`${AL}كالتشيو`, 'Italy'),
   r(`${AL}اردن${PEOPLE}`, 'Jordanian'), r(`${AL}اربد`, 'Irbid'), r(`${AL_ONLY}عقب[ةه]`, 'Aqaba'),
   r(`${AL}سوري(?:ا|[ةه]|ون|ين)?`, 'Syria'), r(`${AL}دمشق`, 'Damascus'), r(`${AL}حلب`, 'Aleppo'), r(`${AL}حمص`, 'Homs'),
   r(`${AL}ادلب`, 'Idlib'), r(`${AL_ONLY}لاذقي[ةه]`, 'Latakia'), r(`${AL}درعا`, 'Daraa'), r(`${AL_ONLY}حسك[ةه]`, 'Hasakah'),
@@ -538,7 +548,10 @@ const PORTUGUESE: Rule[] = [
     ['Cabul', 'Kabul'], ['Bagdade|Bagdá', 'Baghdad'], ['Jidá', 'Jeddah'], ['Cidade\\s+do\\s+Cabo', 'Cape Town'],
     ['Copenhaga|Copenhague', 'Copenhagen'], ['Haia', 'The Hague'], ['Lisboa', 'Lisbon'], ['Edimburgo', 'Edinburgh'], ['Seul', 'Seoul'],
     ['Tóquio', 'Tokyo'], ['Nova\\s+(?:Iorque|York)', 'New York'], ['Berlim', 'Berlin'], ['Roma', 'Rome'], ['Genebra', 'Geneva'],
-    ['Praga', 'Prague'], ['Budapeste', 'Budapest'], ['Bucareste', 'Bucharest'], ['Belgrado', 'Belgrade'], ['Ancara', 'Ankara'],
+    // "praga" is also a pest (Nov 8, 2026: the Observador's "Praga devasta 90% da castanha na Terceira", a pest on the
+    // Azores, sat in Prague): the city after "em", "de", "para"... or before a comma or a colon
+    ['(?<=(?:^|[^\\p{L}])(?:em|de|para|a|à|até|desde|por|via|e)\\s+)Praga|Praga(?=\\s*(?:[,.;:)]|$))', 'Prague'],
+    ['Budapeste', 'Budapest'], ['Bucareste', 'Bucharest'], ['Belgrado', 'Belgrade'], ['Ancara', 'Ankara'],
     ['Istambul', 'Istanbul'], ['Damasco', 'Damascus'], ['Amã', 'Amman'], ['Riade', 'Riyadh'], ['Mascate', 'Muscat'], ['Tunes', 'Tunis'],
     ['Dacar', 'Dakar'], ['Cartum', 'Khartoum'], ['Adis\\s+Abeba', 'Addis Ababa'], ['Joanesburgo', 'Johannesburg'], ['Xangai', 'Shanghai'],
     ['Taipé', 'Taipei'], ['Banguecoque', 'Bangkok'], ['Singapura', 'Singapore'], ['Jacarta', 'Jakarta'], ['Nova\\s+D[ée]lhi|Nova\\s+Deli', 'New Delhi'],

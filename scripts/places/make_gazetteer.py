@@ -130,6 +130,7 @@ READ_EVERYWHERE = {
     'DE': {'Heidelberg'},
     'AU': {'Adelaide'}, 'CO': {'Cartagena'}, 'DK': {'København'}, 'SE': {'Göteborg'}, 'FR': {'Metz'}, 'NG': {'Aba'},
     'AE': {'Al Ayn'},
+    'ID': {'Batam'},   # 1.2 million people; Singapore's and Malaysia's outlets name it most (Nov 8, 2026)
 }
 # Places Natural Earth lacks, by hand (Nov 7, 2026, from two days' stories the map couldn't place): Kenya's counties
 # (its provinces there are the 8 of before 2013: "Floods in Migori" was no place), Nepal's new provinces (it has the 14
@@ -246,6 +247,15 @@ EXTRA_PLACES = [
     ('MY', 'province', 'Seberang Perai', 5.398, 100.402, None, None, []),
     ('PT', 'town', 'Vila Franca de Xira', 38.955, -8.990, 'Lisbon', 137_000, []),
     ('CL', 'town', 'Nancagua', -34.660, -71.210, "O'Higgins", 17_000, []),
+    # Nov 8, 2026 (part 12, a hand check of 120 random stories): Batam (Antara's "Malaysian held in Batam" sat in
+    # Malaysia, Batam unknown), Preševo and Bujanovac (Serbia's towns that Albanian outlets name, local-names.ts),
+    # Vehari (The Nation's "PPMF report reveals Vehari district performance plummets"), Saluru (The Hindu's "YSRCP wins
+    # key ZPTC seats in Saluru" sat in Chennai)
+    ('ID', 'town', 'Batam', 1.083, 104.030, 'Riau Islands', 1_200_000, []),
+    ('RS', 'town', 'Preševo', 42.309, 21.650, 'Pčinja', 34_000, ['Presevo']),
+    ('RS', 'town', 'Bujanovac', 42.460, 21.767, 'Pčinja', 41_000, []),
+    ('PK', 'town', 'Vehari', 30.045, 72.349, 'Punjab', 145_000, []),
+    ('IN', 'town', 'Saluru', 18.517, 83.200, 'Andhra Pradesh', 50_000, []),
 ]
 # Natural Earth's rows that are another row again, of the same size, in the wrong place: a second Vila Velha in Amapá,
 # Crato in Amazonas, Nakhodka (Primorye's port) in Yamal-Nenets, Noginsk (Moscow's) in Evenkia

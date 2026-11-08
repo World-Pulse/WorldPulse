@@ -2750,6 +2750,12 @@ const HOME_NAMES: Record<string, { name: RegExp; as: string; unless?: RegExp }> 
   // A Burkinabè outlet's "Bobo" is Bobo-Dioulasso (Nov 7, 2026: Lefaso's "Une première vague de 3 400 Burkinabè
   // accueillie à Bobo" was pinned in Guinea, where they had come from)
   BF: { name: /\bBobo\b(?![-\s]+Dioulasso)/g, as: 'Bobo-Dioulasso' },
+  // A Panamanian outlet's "Merca Panamá" is the capital's wholesale market, not Somalia's Merca (Nov 8, 2026: TVN's
+  // "Casos de malaria afectan las ventas ... en Merca Panamá")
+  PA: { name: /(?<![\p{L}\p{N}])Merca\s+Panam[áa](?![\p{L}\p{N}])/gu, as: 'Panama City' },
+  // A Peruvian outlet's "Comas:" or "San Juan de Lurigancho:" is one of Lima's districts, as RPP heads its city news
+  // (Nov 8, 2026: "Comas: bomberos confinan incendio que se produjo en un edificio de siete pisos" had no place)
+  PE: { name: /(?<![\p{L}\p{N}])(?:Comas|Ate|Chorrillos|Santiago\s+de\s+Surco|Surco|San\s+Juan\s+de\s+Lurigancho|San\s+Juan\s+de\s+Miraflores|Villa\s+El\s+Salvador|Villa\s+Mar[íi]a\s+del\s+Triunfo|Los\s+Olivos|San\s+Mart[íi]n\s+de\s+Porres|Puente\s+Piedra|Carabayllo|Independencia|R[íi]mac|Bre[ñn]a|La\s+Victoria|Lince|Jes[úu]s\s+Mar[íi]a|Pueblo\s+Libre|San\s+Isidro|San\s+Borja|San\s+Miguel|Surquillo|Barranco|La\s+Molina|Lur[íi]n|Pachac[áa]mac|Miraflores|Cercado\s+de\s+Lima)(?=\s*:)/gu, as: 'Lima' },
 }
 
 export function withHomeNames(text: string, countryCode: string | null | undefined): string {
@@ -2831,6 +2837,84 @@ export function withoutEnvoyCountries(text: string): string {
   let out = text
   spans.forEach(([s, e], i) => { if (sender[i]) out = out.slice(0, s) + ' '.repeat(e - s) + out.slice(e) })
   return out
+}
+
+/**
+ * Names that put a place in a headline without putting the story there (Nov 8, 2026, part 12 of the map's accuracy
+ * work, a hand check of 120 random stories), blanked out of the text with their length kept, so the place the text
+ * does name is read, or else the outlet's own country:
+ * - a title: "Duchess of Edinburgh due Monday" (the Dhaka Tribune's royal visit to Bangladesh sat in Scotland),
+ *   "Princess of Wales", "Prince of Asturias";
+ * - a place or a people joined to who backs, leads, flags, made or owns something: "Iran-backed Houthis attack ship in
+ *   Red Sea", "Liberia-flagged tanker struck off Yemen coast", "Saudi-led coalition", "French-made";
+ * - ...and to where someone is from or something is based, but only when the text names another place: "Pakistan-based
+ *   group threatened to kill him" (the Times of India's BJP MLA sat in Pakistan), "London-based charity warns of famine"
+ *   in Darfur, "Moroccan-born former Israeli army chief"; alone, "a Montego Bay-based school" is in Montego Bay.
+ * Only places and peoples: "Trump-backed" or "Modi-led" stays as written.
+ */
+const TITLE_OF = /(?<![\p{L}\p{N}])(?:Duke|Duchess|Earl|Countess|Marquess|Marchioness|Viscount|Viscountess|Baron|Baroness|Prince|Princess)\s+of\s+(\p{Lu}[\p{L}'’.-]*(?:\s+\p{Lu}[\p{L}'’.-]*)?)/gu
+const JOINED_ALWAYS = new Set([
+  'backed', 'flagged', 'led', 'brokered', 'made', 'built', 'owned', 'registered', 'funded', 'sponsored', 'aligned',
+  'linked', 'allied', 'supported', 'run', 'financed', 'armed', 'trained', 'style',
+])
+const JOINED_UNLESS_ALONE = new Set(['based', 'born', 'headquartered', 'listed'])
+const JOINED = /(?<![\p{L}\p{N}])(?:(\p{Lu}[\p{L}'’.]*)\s+)?(\p{Lu}[\p{L}'’.]*)[-‑](\p{L}+)(?![\p{L}\p{N}])/gu
+const NON_PLACE_ANY = /\bof\s+\p{Lu}|\p{L}[-‑]\p{L}/u
+
+/** The country of a place's or a people's whole name: "Edinburgh", "New York", "Saudi", "Iranian" (not "Trump") */
+function placeCountry(name: string): string | null {
+  const known = GAZETTEER[name.toLowerCase()]
+  if (known) return known.country
+  for (let i = 0; i < COUNTRY_SPANS.length; i++) {
+    const p = COUNTRY_SPANS[i]!
+    p.lastIndex = 0
+    const m = p.exec(name)
+    if (m && m.index === 0 && m[0].length === name.length) return COUNTRY_PATTERNS[i]![1]
+  }
+  return null
+}
+
+type Span = [number, number, string]
+const blankSpans = (text: string, spans: Span[]): string =>
+  spans.reduce((out, [s, e]) => out.slice(0, s) + ' '.repeat(e - s) + out.slice(e), text)
+
+function nonPlaceSpans(text: string): { always: Span[]; unlessAlone: Span[] } {
+  const always: Span[] = []
+  const unlessAlone: Span[] = []
+  if (!text || !NON_PLACE_ANY.test(text)) return { always, unlessAlone }
+  for (const m of text.matchAll(TITLE_OF)) always.push([m.index! + m[0].length - m[1]!.length, m.index! + m[0].length, ''])
+  for (const m of text.matchAll(JOINED)) {
+    const word = m[3]!.toLowerCase()
+    const spans = JOINED_ALWAYS.has(word) ? always : JOINED_UNLESS_ALONE.has(word) ? unlessAlone : null
+    if (!spans) continue
+    // the joined word, with the word before it when the two are one place's name ("New York-based")
+    const at = m.index! + (m[1] ? m[0].indexOf(m[2]!, m[1].length) : 0)
+    const pair = m[1] ? placeCountry(`${m[1]} ${m[2]}`) : null
+    const one = pair ? null : placeCountry(m[2]!)
+    if (pair) spans.push([m.index!, at + m[2]!.length, pair])
+    else if (one) spans.push([at, at + m[2]!.length, one])
+  }
+  return { always, unlessAlone }
+}
+
+/**
+ * The headline and the summary without those names, read together: where someone is from or something is based is
+ * blanked out when either names another place, and when neither does, only if it is abroad (`home`: the outlet's
+ * country; the Times of India's "Pakistan-based group threatened to kill him" is India's story, the Gleaner's
+ * "Montego Bay-based school" Montego Bay's)
+ */
+export function withoutNonPlaceNames(head: string, body: string, home?: string | null): [string, string] {
+  const h = nonPlaceSpans(head)
+  const b = nonPlaceSpans(body)
+  const head1 = blankSpans(head, h.always)
+  const body1 = blankSpans(body, b.always)
+  if (h.unlessAlone.length === 0 && b.unlessAlone.length === 0) return [head1, body1]
+  const head2 = blankSpans(head1, h.unlessAlone)
+  const body2 = blankSpans(body1, b.unlessAlone)
+  const names = (t: string) => !!findGazetteerPlace(t) || mentionedCountries(t).length > 0
+  if (names(head2) || names(body2)) return [head2, body2]
+  const abroad = (spans: Span[]) => spans.filter(([, , cc]) => !home || cc !== home.toUpperCase())
+  return [blankSpans(head1, abroad(h.unlessAlone)), blankSpans(body1, abroad(b.unlessAlone))]
 }
 
 // ─── NOMINATIM LOOKUP ────────────────────────────────────────────────────────

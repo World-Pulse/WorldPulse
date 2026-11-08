@@ -9,7 +9,7 @@
 /** surname: also a surname, read as the place unless a capitalised first name comes right before it */
 export interface TownEntry { lat: number; lng: number; country: string; name: string; region?: string; surname?: true }
 
-/** 6121 names */
+/** 6127 names */
 export const WORLD_TOWNS: Record<string, TownEntry> = {
   "Andorra la Vella": { lat: 42.5128, lng: 1.5107, country: 'AD', name: "Andorra la Vella" },
   "Encamp": { lat: 42.5381, lng: 1.6441, country: 'AD', name: "Encamp" },
@@ -2282,6 +2282,7 @@ export const WORLD_TOWNS: Record<string, TownEntry> = {
   "Bangka-Belitung": { lat: -2.9582, lng: 106.819, country: 'ID', name: "Bangka Belitung Islands" },
   "Banten": { lat: -6.2579, lng: 106.167, country: 'ID', name: "Banten" },
   "Banyuwangi": { lat: -8.195, lng: 114.3696, country: 'ID', name: "Banyuwangi", region: "Jawa Timur" },
+  "Batam": { lat: 1.083, lng: 104.03, country: 'ID', name: "Batam", region: "Riau Islands" },
   "Bengkulu": { lat: -3.8, lng: 102.27, country: 'ID', name: "Bengkulu" },
   "Biak": { lat: -1.1615, lng: 136.0485, country: 'ID', name: "Biak", region: "Papua" },
   "Binjai": { lat: 3.6204, lng: 98.5001, country: 'ID', name: "Binjai", region: "Sumatera Utara" },
@@ -2525,6 +2526,7 @@ export const WORLD_TOWNS: Record<string, TownEntry> = {
   "Raurkela": { lat: 22.2304, lng: 84.83, country: 'IN', name: "Raurkela", region: "Orissa" },
   "Rohtak": { lat: 28.9, lng: 76.58, country: 'IN', name: "Rohtak", region: "Haryana" },
   "Saharanpur": { lat: 29.97, lng: 77.55, country: 'IN', name: "Saharanpur", region: "Uttar Pradesh" },
+  "Saluru": { lat: 18.517, lng: 83.2, country: 'IN', name: "Saluru", region: "Andhra Pradesh" },
   "Sambalpur": { lat: 21.4704, lng: 83.9701, country: 'IN', name: "Sambalpur", region: "Orissa" },
   "Sangli": { lat: 16.8604, lng: 74.575, country: 'IN', name: "Sangli", region: "Maharashtra" },
   "Shahjahanpur": { lat: 27.8804, lng: 79.905, country: 'IN', name: "Shahjahanpur", region: "Uttar Pradesh" },
@@ -4394,6 +4396,7 @@ export const WORLD_TOWNS: Record<string, TownEntry> = {
   "Sargodha": { lat: 32.0854, lng: 72.675, country: 'PK', name: "Sargodha", region: "Punjab" },
   "Sheikhu Pura": { lat: 31.72, lng: 73.99, country: 'PK', name: "Sheikhu Pura", region: "Punjab" },
   "Sialkote": { lat: 32.52, lng: 74.56, country: 'PK', name: "Sialkote", region: "Punjab" },
+  "Vehari": { lat: 30.045, lng: 72.349, country: 'PK', name: "Vehari", region: "Punjab" },
   "Bytom": { lat: 50.35, lng: 18.91, country: 'PL', name: "Bytom", region: "Silesian" },
   "Elblag": { lat: 54.19, lng: 19.4027, country: 'PL', name: "Elbląg", region: "Warmian-Masurian" },
   "Elbląg": { lat: 54.19, lng: 19.4027, country: 'PL', name: "Elbląg", region: "Warmian-Masurian" },
@@ -4574,6 +4577,7 @@ export const WORLD_TOWNS: Record<string, TownEntry> = {
   "Branicevo": { lat: 44.4632, lng: 21.5363, country: 'RS', name: "Braničevo" },
   "Branicevski": { lat: 44.4632, lng: 21.5363, country: 'RS', name: "Braničevo" },
   "Braničevo": { lat: 44.4632, lng: 21.5363, country: 'RS', name: "Braničevo" },
+  "Bujanovac": { lat: 42.46, lng: 21.767, country: 'RS', name: "Bujanovac", region: "Pčinja" },
   "Cacak": { lat: 43.8897, lng: 20.3301, country: 'RS', name: "Čačak", region: "Moravicki" },
   "Central Banat": { lat: 45.4421, lng: 20.5398, country: 'RS', name: "Central Banat" },
   "Grad Beograd": { lat: 44.8206, lng: 20.466, country: 'RS', name: "Belgrade" },
@@ -4604,6 +4608,8 @@ export const WORLD_TOWNS: Record<string, TownEntry> = {
   "Podunavlje": { lat: 44.4765, lng: 20.9527, country: 'RS', name: "Podunavlje" },
   "Podunavski": { lat: 44.4765, lng: 20.9527, country: 'RS', name: "Podunavlje" },
   "Pomoravski": { lat: 43.5211, lng: 21.1638, country: 'RS', name: "Rasina" },
+  "Presevo": { lat: 42.309, lng: 21.65, country: 'RS', name: "Preševo", region: "Pčinja" },
+  "Preševo": { lat: 42.309, lng: 21.65, country: 'RS', name: "Preševo", region: "Pčinja" },
   "Pčinja": { lat: 42.5543, lng: 22.0252, country: 'RS', name: "Pčinja" },
   "Rasina": { lat: 43.5211, lng: 21.1638, country: 'RS', name: "Rasina" },
   "Raska": { lat: 43.3811, lng: 20.5783, country: 'RS', name: "Raška" },
