@@ -2491,6 +2491,9 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   // Straits in the news: Iran's threats to Hormuz, the Houthis' Bab el-Mandeb
   'strait of hormuz': { lat: 26.5667, lng: 56.2500, country: 'IR', name: 'Strait of Hormuz' },
   'hormuz': { lat: 26.5667, lng: 56.2500, country: 'IR', name: 'Strait of Hormuz', asWritten: 'Hormuz' },
+  'gulf of oman': { lat: 24.8, lng: 58.6, country: 'OM', name: 'Gulf of Oman' },
+  'sea of oman': { lat: 24.8, lng: 58.6, country: 'OM', name: 'Gulf of Oman' },
+  'gulf of aden': { lat: 12.0, lng: 48.0, country: 'YE', name: 'Gulf of Aden' },
   'bab el-mandeb': { lat: 12.5833, lng: 43.3333, country: 'YE', name: 'Bab el-Mandeb' },
   'bab al-mandab': { lat: 12.5833, lng: 43.3333, country: 'YE', name: 'Bab el-Mandeb' },
   'taiwan strait': { lat: 24.0000, lng: 119.5000, country: 'TW', name: 'Taiwan Strait' },
