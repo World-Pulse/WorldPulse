@@ -10846,6 +10846,21 @@ function fromNamedCountry(text: string): InferredGeo | null {
 }
 
 /**
+ * A match or stadium story whose headline names no place and whose summary says where it was played ("in Tromsø",
+ * "at Anfield"): the venue, not the outlet's home (Nov 8, 2026: Vanguard's "Fan rushed to hospital after stadium
+ * stand collapses during Bodo/Glimt match" sat in Lagos; its summary put it in Tromsø). Only a town found in the
+ * summary after "in" or "at", so a player's home town or a club's name doesn't move a story.
+ */
+const SPORTS_VENUE_TOPIC = /\b(?:match|stadium|stands?|fixture|derby|pitch|kick-?off|fans?)\b/i
+export function sportsVenue(title: string, body: string): InferredGeo | null {
+  if (!SPORTS_VENUE_TOPIC.test(title)) return null
+  const place = fromPlace(body)
+  if (!place?.locationName) return null
+  const name = place.locationName.split(',')[0]!.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`\\b(?:in|at)\\s+(?:the\\s+)?${name}(?![\\p{L}])`, 'iu').test(body) ? place : null
+}
+
+/**
  * A place in a national outlet's own country that its summary names, when its headline names none (Nov 7, 2026: of 120
  * random stories pinned at a spot, 9 sat at the outlet's home though the summary named the town, among them the
  * Windhoek Observer's "The Swakopmund town hall meeting" and the Friday Times' "Upper Swat district of Khyber
@@ -10955,7 +10970,7 @@ export function inferGeo(
   // Haaretz's column on Netanyahu sat in Washington, a Penang court case in Myanmar, Japan's new
   // prime minister in Beijing and a Khyber Pakhtunkhwa story in Tehran: about 1 in 8 placeless headlines)
   if (HOME_PIN_SOURCES.has(source.id) && !NO_PLACE_TOPIC.test(`${title} ${description}`)) {
-    return datelinePlace(body) ?? ownPlace(body, source)
+    return datelinePlace(body) ?? ownPlace(body, source) ?? sportsVenue(title, body)
       ?? { lat: source.defaultLat, lng: source.defaultLng, locationName: source.defaultLocation, countryCode: source.countryCode }
   }
   if (FIXTURE_HEADLINE.test(title)) return { lat: null, lng: null, locationName: null, countryCode: null }
