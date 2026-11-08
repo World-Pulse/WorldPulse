@@ -20,7 +20,7 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import { internalCallHeaders } from '../lib/internal-call'
 import { rateLimitKey } from '../lib/rate-limit-options'
-import { describeSite, siteInfo } from '../lib/outlets'
+import { describeSite, siteInfo, countryLabel } from '../lib/outlets'
 import { countMcpTool, isOutsideUse, isOwnCheck } from '../lib/outside-use'
 import { redis } from '../db/redis'
 
@@ -93,6 +93,19 @@ const signalLink = (id: unknown) => `${SITE}/signals/${String(id)}`
 interface ListedStory {
   id: string; leadId: string; title: string; place: string | null; category: string | null; severity: string
   outletCount: number; outletCountAll?: number; outlets?: string[]; verifiedAt: string | null; updatedAt?: string; firstSeenAt?: string
+  country?: string | null; countries?: number; localOutlets?: number; localNames?: string[]
+}
+
+/** "2 from Poland (Defence24, Notes from Poland)": the outlets of the story's own country, or '' (Nov 8, 2026) */
+function localNote(country: string | null | undefined, local: number | undefined, names: string[] | undefined): string {
+  return country && local ? `${local} from ${countryLabel(country)}${names?.length ? ` (${names.join(', ')})` : ''}` : ''
+}
+
+/** " in 36 countries · 2 from Poland (Defence24, Notes from Poland)": where its outlets are from */
+function reachNote(s: ListedStory): string {
+  const countries = s.countries && s.countries > 1 ? ` in ${s.countries} countries` : ''
+  const local = localNote(s.country, s.localOutlets, s.localNames)
+  return countries + (local ? ` · ${local}` : '')
 }
 
 /** " · 143 since Oct 10" for a story that has run longer than its counted two days */
@@ -105,7 +118,7 @@ function sinceNote(count: number, all: number | undefined, firstSeenAt: string |
 
 function storyLine(s: ListedStory, i: number): string {
   const proof = (s.verifiedAt ? `Verified · ${s.outletCount} outlets` : `${s.outletCount} outlets so far (not verified)`)
-    + sinceNote(s.outletCount, s.outletCountAll, s.firstSeenAt)
+    + reachNote(s) + sinceNote(s.outletCount, s.outletCountAll, s.firstSeenAt)
   const where = [s.place, s.category, s.severity].filter(Boolean).join(', ')
   const names = s.outlets?.length ? ` · ${s.outlets.slice(0, 5).join(', ')}${s.outlets.length > 5 ? ', …' : ''}` : ''
   return `${i + 1}. ${s.title}\n   ${proof}${where ? ` · ${where}` : ''}${names}\n   ${signalLink(s.leadId)} (story id ${s.id})`
@@ -115,13 +128,14 @@ const storyOut = (s: ListedStory) => ({
   id: s.id, title: s.title, url: signalLink(s.leadId), leadReportId: s.leadId, place: s.place, category: s.category,
   severity: s.severity, outlets: s.outletCount, outletsAll: s.outletCountAll ?? s.outletCount, outletNames: s.outlets ?? [], verified: Boolean(s.verifiedAt),
   verifiedAt: s.verifiedAt, firstSeenAt: s.firstSeenAt ?? null, updatedAt: s.updatedAt ?? null,
+  country: s.country ?? null, outletCountries: s.countries ?? 0, localOutlets: s.localOutlets ?? 0, localOutletNames: s.localNames ?? [],
 })
 
 export const TOOLS: Tool[] = [
   {
     name: 'top_stories',
     title: 'Top stories now',
-    description: 'The stories the most independent outlets are reporting in the last hours, ranked by outlets, severity and how recent, each event once. Each story says how many outlets (websites) carry it, whether it is verified, where, and links to its page. Give country (a two-letter code such as NG or FR) for one country\'s stories.',
+    description: 'The stories the most independent outlets are reporting in the last hours, ranked by outlets, severity and how recent, each event once. Each story says how many outlets (websites) carry it, how many countries they are from and how many are from the story\'s own country, whether it is verified, where, and links to its page. Give country (a two-letter code such as NG or FR) for one country\'s stories.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -146,7 +160,7 @@ export const TOOLS: Tool[] = [
   {
     name: 'story',
     title: 'One story with every outlet',
-    description: 'One story: every outlet (website) that reported it, when it turned verified, and its reports in order (the first ones and the latest ones for a big story), each with its outlet, link and time. Takes a story id or a report id, as top_stories, week and search_reports give them.',
+    description: 'One story: every outlet (website) that reported it, how many countries they are from and which are the story\'s own country\'s, when it turned verified, and its reports in order (the first ones and the latest ones for a big story), each with its outlet, link and time. Takes a story id or a report id, as top_stories, week and search_reports give them.',
     inputSchema: {
       type: 'object',
       properties: { id: { type: 'string', description: 'A story id or a report id (a UUID)' } },
@@ -160,15 +174,22 @@ export const TOOLS: Tool[] = [
       if (status !== 200) throw new Error(`story answered ${status}`)
       const d = (body.data ?? {}) as {
         storyId?: string; size?: number; outlets?: number; outletsAll?: number; firstReportAt?: string | null; outletNames?: string[]; verifiedAt?: string | null
+        country?: string | null; outletCountries?: number; localOutlets?: number; localOutletNames?: string[]
         outletInfo?: Array<{ site: string; name: string | null; kind: string; country: string | null; stateMedia: boolean }>
         signals?: Array<{ id: string; title: string; status: string; outlet: string; url: string | null; createdAt: string | null; locationName: string | null }>
       }
       const reports = d.signals ?? []
       const first = reports[0]
       const lines = reports.map(r => `- ${r.createdAt ? r.createdAt.slice(0, 16).replace('T', ' ') + ' UTC' : ''} · ${r.outlet || 'unknown outlet'} · ${r.title}${r.url ? `\n  ${r.url}` : ''}`)
+      // Where its outlets are from (Nov 8, 2026): "Outlets from 36 countries · 2 from Poland (Defence24, Notes from Poland)"
+      const reach = [
+        d.outletCountries && d.outletCountries > 1 ? `Outlets from ${d.outletCountries} countries` : '',
+        localNote(d.country, d.localOutlets, d.localOutletNames),
+      ].filter(Boolean).join(' · ')
       const text = [
         first?.title ?? 'Story',
         `${d.verifiedAt ? `Verified ${d.verifiedAt.slice(0, 16).replace('T', ' ')} UTC` : 'Not verified yet'} · ${d.outlets ?? 0} outlets in its last two days${sinceNote(d.outlets ?? 0, d.outletsAll, d.firstReportAt)} · ${d.size ?? reports.length} reports`,
+        ...(reach ? [reach] : []),
         ...(d.outletNames?.length ? [`Outlets: ${d.outletNames.map(site => describeSite(site)).join(', ')}`] : []),
         `Page: ${signalLink(first?.id ?? id)}`,
         '',
@@ -180,6 +201,7 @@ export const TOOLS: Tool[] = [
         data: {
           storyId: d.storyId ?? id, url: signalLink(first?.id ?? id), verifiedAt: d.verifiedAt ?? null, outlets: d.outlets ?? 0,
           outletNames: d.outletNames ?? [], outletInfo: d.outletInfo ?? siteInfo(d.outletNames ?? []), reports: d.size ?? reports.length,
+          country: d.country ?? null, outletCountries: d.outletCountries ?? 0, localOutlets: d.localOutlets ?? 0, localOutletNames: d.localOutletNames ?? [],
           items: reports.map(r => ({ id: r.id, title: r.title, outlet: r.outlet, url: r.url, status: r.status, at: r.createdAt, place: r.locationName })),
         },
       }

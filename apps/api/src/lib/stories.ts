@@ -8,6 +8,7 @@
 
 import { db } from '../db/postgres'
 import { inCountedWindow } from './story-window'
+import { outletReach } from './outlets'
 
 /** How long a "the column isn't there yet" answer is trusted before checking again */
 const RECHECK_MS = 5 * 60_000
@@ -140,6 +141,12 @@ export interface StoryFacts {
   verifiedAt: Date | null
   /** Its newest signal */
   newest: Date | null
+  /** The country most of its signals are pinned to, when known */
+  country: string | null
+  /** How many countries its outlets of the last two days are from, and how many are the story's own country's */
+  countries: number
+  localOutlets: number
+  localNames: string[]
 }
 
 /**
@@ -152,26 +159,32 @@ export async function storyFacts(keys: string[]): Promise<Map<string, StoryFacts
   if (unique.length === 0) return facts
   const result = await db.raw(
     `WITH s AS (
-       SELECT COALESCE(story_id, id) AS story_key, id, created_at, verified_at, original_urls
+       SELECT COALESCE(story_id, id) AS story_key, id, created_at, verified_at, original_urls, country_code
          FROM signals
         WHERE story_id = ANY(?::uuid[]) OR id = ANY(?::uuid[])
      ),
-     n AS (SELECT story_key, max(created_at) AS newest FROM s GROUP BY story_key)
+     n AS (
+       SELECT story_key, max(created_at) AS newest,
+              MODE() WITHIN GROUP (ORDER BY country_code) FILTER (WHERE country_code ~ '^[A-Z]{2}$') AS country
+         FROM s GROUP BY story_key
+     )
      SELECT s.story_key::text AS story_key,
             count(DISTINCT s.id)::int AS size,
             min(s.verified_at) AS verified_at,
-            n.newest,
+            n.newest, n.country,
             array_remove(array_agg(u.url ORDER BY s.created_at, u.ord), NULL) AS urls,
             array_remove(array_agg(u.url ORDER BY s.created_at, u.ord) FILTER (WHERE ${inCountedWindow('s.created_at', 'n.newest')}), NULL) AS recent_urls
        FROM s
        JOIN n ON n.story_key = s.story_key
        LEFT JOIN LATERAL unnest(s.original_urls) WITH ORDINALITY AS u(url, ord) ON true
-      GROUP BY s.story_key, n.newest`,
+      GROUP BY s.story_key, n.newest, n.country`,
     [unique, unique],
   )
   for (const r of (result as { rows?: Array<Record<string, unknown>> }).rows ?? []) {
     const all = outletsOf(Array.isArray(r.urls) ? r.urls : [], 10_000)
     const recent = outletsOf(Array.isArray(r.recent_urls) ? r.recent_urls : (Array.isArray(r.urls) ? r.urls : []), 10_000)
+    const country = typeof r.country === 'string' && /^[A-Z]{2}$/.test(r.country) ? r.country : null
+    const reach = outletReach(recent, country)
     facts.set(String(r.story_key), {
       size: Number(r.size) || 1,
       outlets: recent.slice(0, 12),
@@ -179,6 +192,10 @@ export async function storyFacts(keys: string[]): Promise<Map<string, StoryFacts
       outletCountAll: Math.max(all.length, recent.length),
       verifiedAt: r.verified_at ? new Date(r.verified_at as string) : null,
       newest: r.newest ? new Date(r.newest as string) : null,
+      country,
+      countries: reach.countries,
+      localOutlets: reach.local,
+      localNames: reach.localNames,
     })
   }
   return facts

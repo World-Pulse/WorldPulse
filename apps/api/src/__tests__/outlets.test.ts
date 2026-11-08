@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { OUTLET_DIRECTORY } from '../lib/outlet-directory'
-import { outletOf, siteInfo, sitesOfLinks, describeSite, OUTLET_KIND_LABELS } from '../lib/outlets'
+import { outletOf, siteInfo, sitesOfLinks, describeSite, outletReach, countryLabel, OUTLET_KIND_LABELS } from '../lib/outlets'
 
 describe('the outlet directory', () => {
   it('holds every news feed WorldPulse reads, with a kind, a country and a name each', () => {
@@ -61,5 +61,32 @@ describe('siteInfo and describeSite', () => {
   it('the websites of links, once each, http(s) only, in order', () => {
     expect(sitesOfLinks(['https://www.bbc.co.uk/a', 'https://bbc.co.uk/b', 'ftp://x.example/c', 'not a link', 'http://Reuters.com/d'])).toEqual(['bbc.co.uk', 'reuters.com'])
     expect(sitesOfLinks(Array.from({ length: 15 }, (_, i) => `https://s${i}.example.com/`), 3)).toHaveLength(3)
+  })
+})
+
+describe('outletReach (Nov 8, 2026)', () => {
+  it("counts the countries a story's outlets are from, and its own country's newsrooms by name", () => {
+    const sites = ['defence24.com', 'notesfrompoland.com', 'reuters.com', 'bbc.co.uk', 'aljazeera.com', 'unknown-site.example']
+    expect(outletReach(sites, 'PL')).toEqual({ countries: 3, local: 2, localNames: ['Defence24', 'Notes from Poland'] })
+    // any case; a story with no country has no local outlets; websites the directory doesn't know count for neither
+    expect(outletReach(sites, 'pl').local).toBe(2)
+    expect(outletReach(sites, null)).toEqual({ countries: 3, local: 0, localNames: [] })
+    expect(outletReach(['unknown-site.example'], 'PL')).toEqual({ countries: 0, local: 0, localNames: [] })
+  })
+
+  it('names three local outlets at most, and counts them all', () => {
+    const r = outletReach(['reuters.com', 'bbc.co.uk', 'theguardian.com', 'independent.co.uk', 'aljazeera.com'], 'GB')
+    expect(r).toEqual({ countries: 2, local: 4, localNames: ['Reuters', 'BBC', 'The Guardian'] })
+  })
+})
+
+describe('countryLabel', () => {
+  it('names a country as a sentence says it', () => {
+    expect(countryLabel('PL')).toBe('Poland')
+    expect(countryLabel('us')).toBe('the United States')
+    expect(countryLabel('US', false)).toBe('United States')
+    expect(countryLabel('GB')).toBe('the United Kingdom')
+    expect(countryLabel('CD')).toBe('DR Congo')
+    expect(countryLabel('MM')).toBe('Myanmar')
   })
 })

@@ -9,6 +9,7 @@
  */
 
 import type { ReactNode } from 'react'
+import { reachOf, countriesLabel, localLabel, type StoryReach } from '@/lib/story-reach'
 
 export interface StoryInfo {
   /** The story's id (the id of its first signal) */
@@ -25,6 +26,8 @@ export interface StoryInfo {
   verifiedAt: string | null
   /** The story's newest signal */
   updatedAt: string | null
+  /** Where its outlets are from: how many countries, and its own country's (lib/story-reach.ts, Nov 8, 2026) */
+  reach?: StoryReach
 }
 
 /** The story fields of a feed row from `?group=story`, or undefined when it has none */
@@ -38,6 +41,7 @@ export function storyOf(raw: any): StoryInfo | undefined {
   const count = Number(raw.storyOutletCount)
   const outletCount = Number.isFinite(count) && count > outlets.length ? count : outlets.length
   const all = Number(raw.storyOutletCountAll)
+  const reach = reachOf(raw.storyCountry, raw.storyCountries, raw.storyLocalOutlets, raw.storyLocalNames)
   return {
     id:         raw.storyId,
     size:       Number.isFinite(size) && size > 0 ? size : 1,
@@ -46,6 +50,7 @@ export function storyOf(raw: any): StoryInfo | undefined {
     outletCountAll: Number.isFinite(all) && all > outletCount ? all : outletCount,
     verifiedAt: typeof raw.storyVerifiedAt === 'string' ? raw.storyVerifiedAt : null,
     updatedAt:  typeof raw.storyUpdatedAt === 'string' ? raw.storyUpdatedAt : null,
+    ...(reach ? { reach } : {}),
   }
 }
 
@@ -54,13 +59,17 @@ export type StoryTone = 'verified' | 'multi' | 'single'
 /**
  * The badge for a story: verified with its outlet count, several outlets
  * not (yet) verified, or a single outlet. Null when it has no known outlet.
+ * Since Nov 8, 2026 it leads with how far the story reached: "Verified · 81
+ * outlets · 36 countries" (the countries its known outlets are from).
  */
 export function storyBadge(story: StoryInfo, status?: string | null): { label: string; tone: StoryTone } | null {
   const n = Math.max(story.outletCount ?? 0, story.outlets.length)
+  const countries = n >= 2 ? countriesLabel(story.reach) : null
+  const reach = countries ? ` · ${countries}` : ''
   if (story.verifiedAt || status === 'verified') {
-    return { label: n >= 2 ? `Verified · ${n} outlets` : 'Verified', tone: 'verified' }
+    return { label: n >= 2 ? `Verified · ${n} outlets${reach}` : 'Verified', tone: 'verified' }
   }
-  if (n >= 2) return { label: `${n} outlets`, tone: 'multi' }
+  if (n >= 2) return { label: `${n} outlets${reach}`, tone: 'multi' }
   if (n === 1) return { label: '1 outlet so far', tone: 'single' }
   return null
 }
@@ -87,6 +96,8 @@ export const OUTLETS_SHOWN = 3
 export function StoryOutlets({ story, status, extra }: { story: StoryInfo; status?: string | null; extra?: ReactNode }) {
   const badge = storyBadge(story, status)
   if (!badge) return null
+  // "2 from Poland": the newsrooms of the story's own country (Nov 8, 2026)
+  const local = localLabel(story.reach)
   const shown = story.outlets.slice(0, OUTLETS_SHOWN)
   const count = Math.max(story.outletCount ?? 0, story.outlets.length)
   const more  = count - shown.length
@@ -98,6 +109,14 @@ export function StoryOutlets({ story, status, extra }: { story: StoryInfo; statu
       >
         {badge.tone === 'verified' ? '✓ ' : ''}{badge.label}
       </span>
+      {local && (
+        <span
+          className="inline-flex items-center px-2 py-[2px] rounded-full font-mono text-[10px] text-wp-amber border border-[rgba(245,166,35,0.35)]"
+          title={local.title}
+        >
+          {local.label}
+        </span>
+      )}
       {shown.map(host => (
         <span
           key={host}

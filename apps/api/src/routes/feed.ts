@@ -430,6 +430,11 @@ function storyFieldsOf(key: string, f: StoryFacts | undefined): Record<string, u
     storyOutletCount:    f?.outletCount ?? (f?.outlets.length ?? 0),
     storyOutletCountAll: f?.outletCountAll ?? (f?.outlets.length ?? 0),
     storyVerifiedAt: f?.verifiedAt ? f.verifiedAt.toISOString() : null,
+    // Where its outlets are from (Nov 8, 2026): how many countries, and the story's own country's newsrooms
+    storyCountry:      f?.country ?? null,
+    storyCountries:    f?.countries ?? 0,
+    storyLocalOutlets: f?.localOutlets ?? 0,
+    storyLocalNames:   f?.localNames ?? [],
     // The story's newest signal: grouped rows sit at this time in the feed
     storyUpdatedAt:  f?.newest ? f.newest.toISOString() : null,
   }

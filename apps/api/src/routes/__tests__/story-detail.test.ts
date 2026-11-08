@@ -105,6 +105,25 @@ describe('GET /api/v1/stories/:id', () => {
     expect(data.outlets).toBe(2)
   })
 
+  it("says the story's country, how many countries its outlets are from, and its own country's (Nov 8, 2026)", async () => {
+    h.rows = [member({
+      story_country: 'PL', outlets: 4, outlet_names: ['aljazeera.com', 'defence24.com', 'notesfrompoland.com', 'reuters.com'],
+      outlets_all: 5, outlet_names_all: ['aljazeera.com', 'defence24.com', 'notesfrompoland.com', 'reuters.com', 'tvp.info'],
+    })]
+    const data = (await get(SIGNAL)).json().data
+    expect(data).toMatchObject({
+      country: 'PL', outletCountries: 3, localOutlets: 2, localOutletNames: ['Defence24', 'Notes from Poland'],
+    })
+    expect(data.outletCountriesAll).toBeGreaterThanOrEqual(3)
+    expect(data.localOutletsAll).toBeGreaterThanOrEqual(2)
+    // the country most of its reports are in, read from every member
+    expect(h.sql).toMatch(/mode\(\) WITHIN GROUP \(ORDER BY country_code\) FROM m/)
+    expect(h.sql).toMatch(/country_code, created_at, verified_at/)
+    // no country (or a stray code): no local outlets, the countries still counted
+    h.rows = [member({ story_country: 'Poland' })]
+    expect((await get(SIGNAL)).json().data).toMatchObject({ country: null, outletCountries: 2, localOutlets: 0, localOutletNames: [] })
+  })
+
   it('answers 404 for a story with no reports, and 400 for a malformed id', async () => {
     h.rows = []
     expect((await get(SIGNAL)).statusCode).toBe(404)

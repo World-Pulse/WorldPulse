@@ -25,7 +25,7 @@ import { internalCallHeaders } from '../lib/internal-call'
 import { rateLimitKey } from '../lib/rate-limit-options'
 import { inCountedWindow, STORY_COUNT_HOURS } from '../lib/story-window'
 import { storyFigures, type FigureReport } from '../lib/story-figures'
-import { siteInfo } from '../lib/outlets'
+import { siteInfo, outletReach } from '../lib/outlets'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MAX_SIGNALS = 50
@@ -80,7 +80,7 @@ const WARM_WEEKS_MS = 30 * 60_000
 
 const MEMBER_COLUMNS = `s.id, s.title, s.category::text AS category, s.status::text AS status,
          CASE s.severity::text WHEN 'critical' THEN 5 WHEN 'high' THEN 4 WHEN 'medium' THEN 3 WHEN 'low' THEN 2 ELSE 1 END AS sev_rank,
-         s.reliability_score, s.location_name, s.original_urls, s.created_at, s.verified_at`
+         s.reliability_score, s.location_name, s.country_code, s.original_urls, s.created_at, s.verified_at`
 
 /**
  * The stories reported since the first binding (newest first, at most
@@ -145,6 +145,7 @@ export function storyListSql(hasStoryIds: boolean, scope: 'recent' | 'signals' |
              min(verified_at)                               AS verified_at,
              max(sev_rank)                                  AS sev_rank,
              MODE() WITHIN GROUP (ORDER BY location_name)   AS place,
+             MODE() WITHIN GROUP (ORDER BY country_code) FILTER (WHERE country_code ~ '^[A-Z]{2}$') AS country,
              MODE() WITHIN GROUP (ORDER BY category)        AS category
         FROM members
        GROUP BY story_key
@@ -177,7 +178,7 @@ export function storyListSql(hasStoryIds: boolean, scope: 'recent' | 'signals' |
                 m.created_at DESC
     )
     SELECT f.story_key::text AS story_key, f.size, f.first_seen, f.newest, f.verified_at,
-           f.sev_rank, f.place, f.category, COALESCE(l2.urls, '{}') AS urls,
+           f.sev_rank, f.place, f.country, f.category, COALESCE(l2.urls, '{}') AS urls,
            COALESCE(l2.recent_urls, '{}') AS recent_urls, l.lead_id, l.title
       FROM facts f
       JOIN leads l ON l.story_key = f.story_key
@@ -242,6 +243,7 @@ function candidatesOf(result: unknown): StoryCandidate[] {
       firstSeenAt,
       updatedAt,
       verifiedAt:  r.verified_at ? new Date(r.verified_at as string) : null,
+      country:     typeof r.country === 'string' && /^[A-Z]{2}$/.test(r.country) ? r.country : null,
     })
   }
   return candidates
@@ -657,7 +659,7 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
     const result = await db.raw(
       `WITH m AS (
          SELECT id, title, status, severity, category, reliability_score, original_urls, location_name,
-                created_at, verified_at,
+                country_code, created_at, verified_at,
                 row_number() OVER (ORDER BY created_at ASC, id ASC)   AS position,
                 row_number() OVER (ORDER BY created_at DESC, id DESC) AS from_end,
                 count(*) OVER ()                                       AS total,
@@ -685,7 +687,10 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
               (SELECT count(*) FROM hosts WHERE recent)                         AS outlets,
               (SELECT array_agg(host ORDER BY host) FROM hosts WHERE recent)    AS outlet_names,
               (SELECT count(*) FROM hosts)                                      AS outlets_all,
-              (SELECT array_agg(host ORDER BY host) FROM hosts)                 AS outlet_names_all
+              (SELECT array_agg(host ORDER BY host) FROM hosts)                 AS outlet_names_all,
+              -- the country most of its reports are in (as the story list reads it)
+              (SELECT mode() WITHIN GROUP (ORDER BY country_code) FROM m
+                WHERE country_code ~ '^[A-Z]{2}$')                              AS story_country
          FROM m
         WHERE position <= ? OR from_end <= ? OR id::text = ?
         ORDER BY created_at ASC, id ASC`,
@@ -700,6 +705,10 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
     const outlets = Math.max(Number(members[0]!.outlets) || 0, outletNames.length)
     const outletNamesAll = textArray(members[0]!.outlet_names_all)
     const outletsAll = Math.max(Number(members[0]!.outlets_all) || 0, outlets, outletNamesAll.length)
+    const modeCountry = members[0]!.story_country
+    const storyCountry = typeof modeCountry === 'string' && /^[A-Z]{2}$/.test(modeCountry) ? modeCountry : null
+    const reach = outletReach(outletNames, storyCountry)
+    const reachAll = outletNamesAll.length > 0 ? outletReach(outletNamesAll, storyCountry) : reach
 
     return reply.send({
       success: true,
@@ -713,6 +722,16 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
         outletNames,
         /** What each of them is: name, kind, home country, state media (lib/outlets.ts, plan 15, Oct 22, 2026) */
         outletInfo: siteInfo(outletNames),
+        /** The country most of its reports are in; how many countries the outlets the directory knows are from, and
+         *  how many of them (the first three by name) are the story's own country's: of the last two days, and since
+         *  it began (Nov 8, 2026) */
+        country: storyCountry,
+        outletCountries: reach.countries,
+        localOutlets: reach.local,
+        localOutletNames: reach.localNames,
+        outletCountriesAll: reachAll.countries,
+        localOutletsAll: reachAll.local,
+        localOutletNamesAll: reachAll.localNames,
         /** Websites that carried it since it began, and their names, A to Z */
         outletsAll,
         outletNamesAll: outletNamesAll.length > 0 ? outletNamesAll : outletNames,

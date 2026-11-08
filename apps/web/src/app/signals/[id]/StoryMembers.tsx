@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { storyTimeline, foldTimeline, clockLabel, sinceFirst } from '@/lib/story-timeline'
 import { STORY_COUNT_DAYS } from '@/lib/story-count'
+import { reachOf, countriesLabel, localLabel, type StoryReach } from '@/lib/story-reach'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -44,6 +45,29 @@ export interface StoryDetail {
   latestReportAt?: string | null
   verifiedAt: string | null
   signals: StoryMember[]
+  /** The country most of its reports are in; the countries its outlets are from, and its own country's outlets:
+   *  of its last two days, and since it began (Nov 8, 2026) */
+  country?: string | null
+  outletCountries?: number
+  localOutlets?: number
+  localOutletNames?: string[]
+  outletCountriesAll?: number
+  localOutletsAll?: number
+  localOutletNamesAll?: string[]
+}
+
+/**
+ * Where the timeline's outlets are from: the whole life's, as the timeline counts its outlets (the last two
+ * days' from an API that sends only those); null from an older API
+ */
+export function timelineReach(story: StoryDetail): StoryReach | null {
+  const all = typeof story.outletCountriesAll === 'number'
+  return reachOf(
+    story.country,
+    all ? story.outletCountriesAll : story.outletCountries,
+    all ? story.localOutletsAll : story.localOutlets,
+    all ? story.localOutletNamesAll : story.localOutletNames,
+  )
 }
 
 /**
@@ -130,6 +154,10 @@ export function StoryMembers({ signalId, bare = false }: { signalId: string; bar
   // Every outlet that carried it since it began, so the count can be checked against the names
   const { total: totalOutlets, names: outletNames, recent: recentOutlets } = timelineOutlets(story, outlets)
   const outletWord = `${totalOutlets} ${totalOutlets === 1 ? 'outlet' : 'outlets'}`
+  // Where they are from: "36 countries", "2 outlets from Poland, where the story is: Defence24, Notes from Poland"
+  const reach = timelineReach(story)
+  const countries = totalOutlets >= 2 ? countriesLabel(reach) : null
+  const local = localLabel(reach)
   // Long stories: the start and the latest, the middle behind "Show all"
   const folds = expanded ? new Map<number, number>() : foldTimeline(entries, HEAD, TAIL)
 
@@ -145,6 +173,7 @@ export function StoryMembers({ signalId, bare = false }: { signalId: string; bar
               {outletWord} {showOutlets ? '▴' : '▾'}
             </button>
           ) : outletWord}
+          {countries && ` · ${countries}`}
           {recentOutlets !== null && ` · ${recentOutlets} in its last ${STORY_COUNT_DAYS} days`}
         </span>
         {newCount > 0 && (
@@ -156,6 +185,14 @@ export function StoryMembers({ signalId, bare = false }: { signalId: string; bar
           <span className="ml-auto font-mono text-[10px] text-wp-green">✓ Verified {timeAgo(story.verifiedAt)}</span>
         )}
       </div>
+
+      {local && (
+        <p className="text-[12px] text-wp-text2 leading-relaxed">
+          <span className="text-wp-amber">{local.long}</span>, where the story is{local.names ? `: ${local.names}` : ''}
+          {' · '}
+          <Link href="/how-we-count#reach" className="underline decoration-dotted underline-offset-2 hover:text-wp-text">how we count</Link>
+        </p>
+      )}
 
       {showOutlets && outletNames.length > 0 && (
         <p className="font-mono text-[11px] leading-relaxed text-wp-text2 break-words" aria-label="Outlets that carried this story">

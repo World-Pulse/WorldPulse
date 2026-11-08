@@ -23,6 +23,7 @@ const STORY = {
   id: '11111111-1111-4111-8111-111111111111', leadId: '22222222-2222-4222-8222-222222222222',
   title: 'Ceasefire talks resume in Doha', place: 'Doha, Qatar', category: 'conflict', severity: 'high',
   outletCount: 14, outlets: ['aljazeera.com', 'bbc.co.uk', 'reuters.com'], verifiedAt: '2026-10-20T09:00:00.000Z',
+  country: 'QA', countries: 9, localOutlets: 1, localNames: ['Al Jazeera'],
 }
 
 let asked: Array<{ url: string; client: string | undefined }> = []
@@ -47,6 +48,7 @@ async function build(): Promise<FastifyInstance> {
       success: true,
       data: {
         storyId: STORY.id, size: 2, outlets: 2, outletNames: ['aljazeera.com', 'bbc.co.uk'], verifiedAt: STORY.verifiedAt,
+        country: 'QA', outletCountries: 2, localOutlets: 1, localOutletNames: ['Al Jazeera'],
         signals: [
           { id: STORY.leadId, title: STORY.title, status: 'verified', outlet: 'aljazeera.com', url: 'https://www.aljazeera.com/a', createdAt: '2026-10-20T08:00:00.000Z', locationName: 'Doha' },
           { id: '33333333-3333-4333-8333-333333333333', title: 'Talks on Gaza resume', status: 'verified', outlet: 'bbc.co.uk', url: 'https://www.bbc.co.uk/b', createdAt: '2026-10-20T08:30:00.000Z', locationName: 'Doha' },
@@ -163,6 +165,16 @@ describe('MCP server', () => {
     expect(missing).toMatchObject({ isError: true, content: [{ type: 'text', text: 'No story or report with that id' }] })
     const bad = await call(app, 'story', { id: 'not-an-id' })
     expect(bad.isError).toBe(true)
+  })
+
+  it("says where a story's outlets are from: how many countries, and the story's own country's (Nov 8, 2026)", async () => {
+    const app = await build()
+    const top = await call(app, 'top_stories', { hours: 24 })
+    expect(top.content[0].text).toContain('Verified · 14 outlets in 9 countries · 1 from Qatar (Al Jazeera)')
+    expect(top.structuredContent.stories[0]).toMatchObject({ country: 'QA', outletCountries: 9, localOutlets: 1, localOutletNames: ['Al Jazeera'] })
+    const one = await call(app, 'story', { id: STORY.leadId })
+    expect(one.content[0].text).toContain('Outlets from 2 countries · 1 from Qatar (Al Jazeera)')
+    expect(one.structuredContent).toMatchObject({ country: 'QA', outletCountries: 2, localOutlets: 1, localOutletNames: ['Al Jazeera'] })
   })
 
   it('search_reports searches by meaning; week reads a week', async () => {

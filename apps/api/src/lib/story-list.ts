@@ -10,6 +10,7 @@
  */
 
 import { outletsOf } from './stories'
+import { outletReach } from './outlets'
 
 /** One story as the list query returns it (see routes/stories.ts) */
 export interface StoryCandidate {
@@ -38,6 +39,8 @@ export interface StoryCandidate {
   updatedAt: Date
   /** When it first turned verified */
   verifiedAt: Date | null
+  /** The country most members are pinned to (ISO 3166-1 alpha-2), when known */
+  country?: string | null
 }
 
 export interface ListedStory {
@@ -54,6 +57,13 @@ export interface ListedStory {
   outletCount: number
   /** How many websites reported it since it began */
   outletCountAll: number
+  /** The country most of its reports are pinned to, when known */
+  country: string | null
+  /** How many countries its outlets of the last two days are from (those the outlet directory knows) */
+  countries: number
+  /** How many of them are newsrooms of the story's own country, and up to three of their names */
+  localOutlets: number
+  localNames: string[]
   firstSeenAt: string
   updatedAt: string
   verifiedAt: string | null
@@ -203,6 +213,7 @@ export function rankStories(candidates: StoryCandidate[], limit: number, now = D
     const outlets = outletsOf(c.recentUrls && c.recentUrls.length > 0 ? c.recentUrls : c.urls, 1000)
     if (outlets.length < 2) continue
     const outletCountAll = Math.max(outletsOf(c.urls, 1000).length, outlets.length)
+    const reach = outletReach(outlets, c.country)
     scored.push({
       score: storyScore(outlets.length, c.severity, opts.decay === false ? new Date(now) : c.updatedAt, now),
       story: {
@@ -216,6 +227,10 @@ export function rankStories(candidates: StoryCandidate[], limit: number, now = D
         outlets:     outlets.slice(0, OUTLETS_LISTED),
         outletCount: outlets.length,
         outletCountAll,
+        country:     c.country ?? null,
+        countries:   reach.countries,
+        localOutlets: reach.local,
+        localNames:  reach.localNames,
         firstSeenAt: c.firstSeenAt.toISOString(),
         updatedAt:   c.updatedAt.toISOString(),
         verifiedAt:  c.verifiedAt ? c.verifiedAt.toISOString() : null,

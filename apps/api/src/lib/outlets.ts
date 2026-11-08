@@ -68,6 +68,56 @@ export function siteInfo(sites: readonly string[]): SiteInfo[] {
   })
 }
 
+/**
+ * How far a story reached (Nov 8, 2026; Devon: "find a way to retain the edge" once WorldMonitor counted outlets too):
+ * how many countries its outlets are from, and how many are newsrooms of the story's own country (`country`, the
+ * place most of its reports are pinned to), with up to three of their names. Websites the directory doesn't know
+ * count for neither.
+ */
+export interface OutletReach {
+  countries: number
+  local: number
+  localNames: string[]
+}
+
+export function outletReach(sites: readonly string[], country: string | null | undefined): OutletReach {
+  const seen = new Set<string>()
+  const localNames: string[] = []
+  let local = 0
+  const home = country ? country.toUpperCase() : null
+  for (const site of sites) {
+    const e = outletOf(site)
+    if (!e?.country) continue
+    seen.add(e.country)
+    if (home && e.country === home) {
+      local++
+      if (localNames.length < 3 && !localNames.includes(e.name)) localNames.push(e.name)
+    }
+  }
+  return { countries: seen.size, local, localNames }
+}
+
+/** Names that read better than Unicode's ("Congo - Kinshasa", "Myanmar (Burma)"), or as the site writes them */
+const COUNTRY_LABELS: Record<string, string> = {
+  CD: 'DR Congo', CG: 'Congo', MM: 'Myanmar', HK: 'Hong Kong', MO: 'Macau', PS: 'Palestine', TR: 'Turkey',
+  CZ: 'Czech Republic', BA: 'Bosnia and Herzegovina', TT: 'Trinidad and Tobago', AG: 'Antigua and Barbuda',
+  KN: 'St Kitts and Nevis', LC: 'St Lucia', VC: 'St Vincent and the Grenadines', ST: 'São Tomé and Príncipe',
+  VA: 'Vatican City', FM: 'Micronesia',
+}
+/** Countries said with "the": "2 from the United States" */
+const WITH_THE = new Set(['US', 'GB', 'NL', 'PH', 'AE', 'CF', 'DO', 'BS', 'GM', 'MV', 'KM', 'SB', 'MH', 'KY', 'FO', 'FK', 'TC', 'VG', 'VI', 'MP', 'CK'])
+const REGION_NAMES = new Intl.DisplayNames(['en'], { type: 'region' })
+
+/** "Poland", "the United States" (`the` false: "United States"); the code itself when it is not one */
+export function countryLabel(code: string, the = true): string {
+  const c = code.toUpperCase()
+  let name = COUNTRY_LABELS[c]
+  if (!name) {
+    try { name = REGION_NAMES.of(c) ?? c } catch { name = c }
+  }
+  return the && WITH_THE.has(c) ? `the ${name}` : name
+}
+
 /** "Reuters (news agency, GB)", "TASS (news agency, RU, state media)", "example.com" */
 export function describeSite(site: string): string {
   const e = outletOf(site)

@@ -24,20 +24,20 @@ export const metadata: Metadata = {
   },
 }
 
-interface HomeStory { id: string; title: string; outletCount: number }
+interface HomeStory { id: string; title: string; outletCount: number; countries: number }
 
 /** The stories most outlets reported in the last day; empty when the API doesn't answer */
 async function fetchStories(): Promise<HomeStory[]> {
   try {
     const res = await cachedFetch(`${API_BASE}/api/v1/stories?hours=24&limit=${STORY_LIMIT}`, 120_000)
     if (!res.ok) return []
-    const json = await res.json() as { data?: { stories?: Array<{ id?: string; leadId?: string; title?: string; outletCount?: number }> } }
+    const json = await res.json() as { data?: { stories?: Array<{ id?: string; leadId?: string; title?: string; outletCount?: number; countries?: number }> } }
     const list = Array.isArray(json.data?.stories) ? json.data.stories : []
     const out: HomeStory[] = []
     for (const s of list) {
       const id = s.leadId || s.id
       if (typeof id !== 'string' || typeof s.title !== 'string' || !s.title) continue
-      out.push({ id, title: s.title, outletCount: Number(s.outletCount) || 0 })
+      out.push({ id, title: s.title, outletCount: Number(s.outletCount) || 0, countries: Number(s.countries) || 0 })
     }
     return out
   } catch {
@@ -76,7 +76,10 @@ const STRUCTURED_DATA = [
 export default async function HomePage() {
   const [stories, totals, brief] = await Promise.all([fetchStories(), fetchHomeTotals(), fetchHomeBrief(API_BASE)])
   const verified = stories.filter(s => s.outletCount >= 2)
-  const widest = verified.reduce((m, s) => Math.max(m, s.outletCount), 0)
+  const widestStory = verified.reduce<HomeStory | null>((m, s) => (!m || s.outletCount > m.outletCount ? s : m), null)
+  const widest = widestStory?.outletCount ?? 0
+  // where its outlets are from (Nov 8, 2026): "the widest by 81 outlets in 36 countries"
+  const widestCountries = widestStory && widestStory.countries >= 2 ? widestStory.countries : 0
   const verifiedLabel = `${verified.length}${stories.length >= STORY_LIMIT ? '+' : ''}`
   return (
     <>
@@ -92,7 +95,7 @@ export default async function HomePage() {
           {totals.verified24h
             ? <><span className="text-wp-cyan">{fmt(totals.verified24h)} stories</span> verified in the last 24 hours</>
             : <><span className="text-wp-cyan">{verifiedLabel} stories</span> reported by 2 or more independent outlets in the last 24 hours</>}
-          {widest >= 2 && <> · the widest by {fmt(widest)} outlets</>}
+          {widest >= 2 && <> · the widest by {fmt(widest)} outlets{widestCountries > 0 && <> in {fmt(widestCountries)} countries</>}</>}
           {totals.sources && <> · {fmt(totals.sources)} sources read</>}
           {' · '}
           <Link href="/how-we-count" className="underline underline-offset-2 hover:text-wp-cyan">How we count</Link>
@@ -110,7 +113,7 @@ export default async function HomePage() {
             {stories.map(s => (
               <li key={s.id}>
                 <Link href={`/signals/${s.id}`}>{s.title}</Link>
-                {s.outletCount > 1 ? ` (${s.outletCount} outlets)` : ''}
+                {s.outletCount > 1 ? ` (${s.outletCount} outlets${s.countries >= 2 ? ` in ${s.countries} countries` : ''})` : ''}
               </li>
             ))}
           </ul>

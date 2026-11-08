@@ -16,6 +16,8 @@ export interface PlayDayStats {
 export interface PlayTopStory {
   title: string
   outlets: number
+  /** How many countries its outlets are from (Nov 8, 2026; 0: not known) */
+  countries?: number
 }
 
 interface PlayOverlayProps {
@@ -125,7 +127,7 @@ export function PlayOverlay({ phase, caption, timeLabel, dateLabel, progress, wi
             <ol className="mt-4 flex flex-col gap-4">
               {topStories.slice(0, 3).map((s, i) => (
                 <li key={s.title} className="wp-play-in" style={{ animationDelay: `${350 + i * 450}ms` }}>
-                  <div className="font-mono text-[10.5px] tracking-wider opacity-60">{i + 1} · {s.outlets.toLocaleString()} OUTLETS</div>
+                  <div className="font-mono text-[10.5px] tracking-wider opacity-60">{i + 1} · {s.outlets.toLocaleString()} OUTLETS{(s.countries ?? 0) >= 2 ? ` · ${s.countries} COUNTRIES` : ''}</div>
                   <div className="text-[16px] font-semibold leading-snug">{s.title}</div>
                 </li>
               ))}

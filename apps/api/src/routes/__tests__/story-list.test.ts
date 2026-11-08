@@ -178,6 +178,15 @@ describe('rankStories', () => {
   })
 })
 
+describe("where a story's outlets are from (Nov 8, 2026)", () => {
+  it("counts the countries of its outlets and its own country's newsrooms", () => {
+    const [s] = rankStories([candidate({ country: 'PL', outlets: ['defence24.com', 'notesfrompoland.com', 'reuters.com', 'aljazeera.com', 'unknown.example'] })], 1, NOW)
+    expect(s).toMatchObject({ outletCount: 5, country: 'PL', countries: 3, localOutlets: 2, localNames: ['Defence24', 'Notes from Poland'] })
+    const [none] = rankStories([candidate({})], 1, NOW)
+    expect(none).toMatchObject({ country: null, countries: 2, localOutlets: 0, localNames: [] })
+  })
+})
+
 describe('GET /api/v1/stories', () => {
   beforeEach(() => {
     h.get.mockResolvedValue(null)
@@ -218,6 +227,8 @@ describe('GET /api/v1/stories', () => {
     expect(h.sql).toMatch(/s\.story_id IS NULL/)                         // and single signals with several outlets
     expect(h.sql).toMatch(/cardinality\(original_urls\) >= 2/)
     expect(h.sql).toMatch(/LIMIT 600/)
+    // the country most of its members are pinned to (Nov 8, 2026)
+    expect(h.sql).toMatch(/MODE\(\) WITHIN GROUP \(ORDER BY country_code\) FILTER \(WHERE country_code ~ '\^\[A-Z\]\{2\}\$'\) AS country/)
     // outlets of each story's last two days (lib/story-window.ts) beside all of its links
     expect(h.sql).toMatch(/FILTER \(WHERE m\.created_at >= f\.newest - INTERVAL '48 hours'\) AS recent_urls/)
     // its own time limit (over a day of reports it passed the pool's 5 seconds, Oct 15, 2026)

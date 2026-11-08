@@ -9,7 +9,7 @@ import { fetchHomeTotals } from '@/lib/home-totals'
 export const metadata: Metadata = pageMetadata({
   path: '/how-we-count',
   title: 'How we count independent outlets',
-  description: 'What “Verified · N outlets” means on WorldPulse: how a story gets its outlet count, what is not counted twice, and what the count cannot tell you.',
+  description: 'What “Verified · N outlets · N countries” means on WorldPulse: how a story gets its outlet count, where the outlets are from, what is not counted twice, and what the count cannot tell you.',
 })
 
 const STEPS: Array<{ id?: string; h: string; p: React.ReactNode }> = [
@@ -34,6 +34,12 @@ const STEPS: Array<{ id?: string; h: string; p: React.ReactNode }> = [
     id: 'kinds',
     h: 'What kind of outlet it is',
     p: 'Each outlet in WorldPulse’s list of sources has a kind: a news agency (a wire service such as Reuters, AP or Yonhap, whose copy other outlets often run), international (a broadcaster or publisher for the world or a whole region, such as the BBC or Al Jazeera), national, local, specialist (one subject, such as business, defence, science or shipping), aggregator (mostly other outlets’ reports) or official source (a government, central bank, court, the UN or the Red Cross). Outlets a government runs are marked state media. A story page shows each outlet’s kind, and the API gives it as site_info. Every kind counts the same toward Verified; the kind helps you judge who is saying it. Websites outside the list, such as many of the articles GDELT points to, have no kind yet.',
+  },
+  {
+    // Nov 8, 2026: apps/api/src/lib/outlets.ts outletReach, from the same outlet directory
+    id: 'reach',
+    h: 'Where the outlets are from',
+    p: 'Each outlet in the list of sources also has a home country. A story says how many countries its outlets are from (“Verified · 81 outlets · 36 countries”) and how many of them are newsrooms of the country the story is in (“2 from Poland”): the outlets closest to what happened. The story’s country is the one most of its reports are pinned to on the map. Websites outside the list have no country yet, so a story’s outlets are from at least that many countries. A story that only outlets abroad carry, or only the country’s own, is worth reading with that in mind; the count of countries says nothing about whether those outlets agree.',
   },
   {
     // plan 11a (Oct 22, 2026): the second read lowers (the scraper's pipeline/second-read.ts); "not an event" too since Oct 30, roundups aside

@@ -3657,12 +3657,12 @@ function MapView({ embed = false }: { embed?: boolean }) {
       }
     }).catch(() => {})
     // (the answer is { data: { stories: [...] } }; Oct 30, 2026: read as a bare list, the first closing card had no stories)
-    type TopStory = { title?: string; outletCount?: number }
+    type TopStory = { title?: string; outletCount?: number; countries?: number }
     fetch(`${API_URL}/api/v1/stories?hours=24&limit=3`).then(r => (r.ok ? r.json() : null)).then((j: { data?: { stories?: TopStory[] } | TopStory[] } | null) => {
       const d = j?.data
       const list: TopStory[] = Array.isArray(d) ? d : Array.isArray(d?.stories) ? d.stories : []
       // (the most outlets first: the card says "most-reported")
-      if (alive) setPlayTop(list.filter(s => s.title).map(s => ({ title: String(s.title), outlets: Number(s.outletCount) || 0 })).sort((a, b) => b.outlets - a.outlets))
+      if (alive) setPlayTop(list.filter(s => s.title).map(s => ({ title: String(s.title), outlets: Number(s.outletCount) || 0, countries: Number(s.countries) || 0 })).sort((a, b) => b.outlets - a.outlets))
     }).catch(() => {})
     return () => { alive = false }
   }, [playMode])
