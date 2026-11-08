@@ -230,7 +230,9 @@ export function partOfAName(text: string, at: number, end: number, surname?: boo
   if (hit === 'colorado') return true
   // The Dakar Rally, not the city (M57, Oct 30, 2026: "El Dakar 2027 arrancará en Portugal" was pinned in
   // Senegal; the rally left Africa in 2009): "Dakar 2027", "Dakar Rally", "Rallye Dakar", "el/le/the Dakar"
-  if (hit.toLowerCase() === 'dakar' && (/^[ \t]*(?:20\d\d|rall(?:y|ye))\b/i.test(text.slice(end, end + 12))
+  // except "Dakar 2026", the Youth Olympic Games in the city itself (Nov 8, 2026: "JOJ Dakar 2026 : le Sénégal s'offre
+  // ses premières médailles d'or" was pinned at the country, not Dakar); "Rallye Dakar 2026" still counts by its "rallye"
+  if (hit.toLowerCase() === 'dakar' && (/^[ \t]*(?:20(?!26)\d\d|rall(?:y|ye))\b/i.test(text.slice(end, end + 12))
     || /\b(?:rall(?:y|ye)|the|el|le)[ \t]+$/i.test(text.slice(Math.max(0, at - 12), at)))) return true
   // Spanish "los lagos" is the lakes, not Lagos (Nov 6, 2026: "Los lagos de Palermo se secan" was pinned in Nigeria;
   // Chile's Los Lagos region is a gazetteer place of its own)
