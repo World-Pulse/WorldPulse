@@ -197,6 +197,7 @@ async function build(): Promise<FastifyInstance> {
     asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
     const q = String((req.query as { q?: string }).q ?? '')
     if (q.includes('Atlantis')) return { success: true, semantic: true, results: [] }
+    if (q.includes('dragon')) return { success: true, semantic: true, results: [{ id: LONE_REPORT, title: 'Dragon boat festival ends', status: 'pending', locationName: 'Basra', createdAt: '2026-10-19T09:00:00.000Z', score: 0.53 }] }
     if (q.includes('nine')) {
       return {
         success: true, semantic: true,
@@ -440,8 +441,17 @@ describe('MCP server', () => {
     expect(text).toContain('2. A different attack (Basra)\n   Only one outlet so far: unconfirmed')
     expect(text).toContain('Killed: 6 (50 outlets: 1news.co.nz, aljazeera.com, aol.co.uk, …) · 9 (3 outlets: gdnonline.com, smh.com.au, upi.com)')
     expect(r.structuredContent.stories).toHaveLength(2)
+    expect(r.structuredContent).toMatchObject({ close: true })
     const none = await call(app, 'check_claim', { claim: 'Atlantis rose from the sea' })
     expect(none.content[0].text).toMatch(/That is not evidence the claim is false/)
+    // nothing close (a made-up claim's nearest reports are about 0.55 alike): the nearest, said to be about something else, without numbers
+    asked = []
+    const far = await call(app, 'check_claim', { claim: 'a dragon flew over the city hall' })
+    expect(far.content[0].text).toContain('Nothing WorldPulse holds is close to this claim. The nearest stories are below, probably about something else.')
+    expect(far.content[0].text).toContain('1. Dragon boat festival ends (Basra)')
+    expect(far.content[0].text).not.toContain('The numbers')
+    expect(far.structuredContent).toMatchObject({ close: false, figures: null })
+    expect(asked.some(a => a.url.includes('/figures'))).toBe(false)
     expect((await call(app, 'check_claim', { claim: 'no' })).isError).toBe(true)
   })
 

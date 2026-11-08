@@ -155,6 +155,13 @@ const shortDay = (day: string) => new Date(`${day}T00:00:00Z`).toLocaleDateStrin
 
 interface EntityHit { id: string; type: string; canonical_name: string; aliases?: string[]; mention_count: number; last_seen?: string }
 
+/**
+ * check_claim: a report this close in meaning to a claim is about it (the search's in-house fingerprints).
+ * Measured Nov 8, 2026 on the live search: real claims' nearest reports 0.65 to 0.96 ("Paraguay's president was
+ * impeached" 0.80, "Sudan's army retook El Fasher" 0.67), made-up ones' 0.53 to 0.58 ("the moon is made of cheese")
+ */
+export const CLAIM_CLOSE = 0.6
+
 /** A name to compare: no accents, lower case ("Anatolie Nosatîi" -> "anatolie nosatii") */
 const foldName = (s: string) => s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
 /** Text to match as it is inside a regular expression */
@@ -816,7 +823,7 @@ export const TOOLS: Tool[] = [
   {
     name: 'check_claim',
     title: 'Check a claim against the newsrooms',
-    description: 'What the newsrooms WorldPulse reads report about a claim (e.g. "nine people were killed in the Krakow shooting"): the closest stories, each with how many outlets carry it, from how many countries, whether it is verified and its link, and for the closest one the numbers its outlets give (the dead, the injured…) with how many outlets give each. It never rules a claim true or false: it shows what the outlets say. No story close to it is not evidence that a claim is false.',
+    description: 'What the newsrooms WorldPulse reads report about a claim (e.g. "nine people were killed in the Krakow shooting"): the closest stories, each with how many outlets carry it, from how many countries, whether it is verified and its link, and for the closest one the numbers its outlets give (the dead, the injured…) with how many outlets give each. It never rules a claim true or false: it shows what the outlets say. When no story is close (close: false), the nearest are shown as probably about something else; that is not evidence that a claim is false.',
     inputSchema: {
       type: 'object',
       properties: { claim: { type: 'string', minLength: 5, maxLength: 300, description: 'The claim, in plain words' } },
@@ -834,15 +841,19 @@ export const TOOLS: Tool[] = [
       if (hits.length === 0) {
         return {
           text: `WorldPulse holds no report close to "${claim}". That is not evidence the claim is false: it may be very new, local, or reported only by newsrooms WorldPulse doesn't read.`,
-          data: { claim, stories: [], figures: null },
+          data: { claim, close: false, stories: [], figures: null },
         }
       }
-      const outlets = await ask(asker, `/api/v1/stories/outlets?ids=${hits.map(h => h.id).join(',')}`)
+      // the reports about the claim; when none is that close, the nearest, said to be probably about something else
+      const close = hits.filter(h => typeof h.score !== 'number' || h.score >= CLAIM_CLOSE)
+      const nearOnly = close.length === 0
+      const pool = nearOnly ? hits : close
+      const outlets = await ask(asker, `/api/v1/stories/outlets?ids=${pool.map(h => h.id).join(',')}`)
       const counts = (outlets.status === 200 ? ((outlets.body.data ?? {}) as { stories?: Record<string, { storyId?: string; outlets?: number; verified?: boolean; countries?: number; canonicalId?: string; firstReportAt?: string | null }> }).stories : undefined) ?? {}
       // one line per story: its closest report (the search gives the closest first)
       const seen = new Set<string>()
       const stories: Array<{ hit: Hit; storyId: string; outlets: number; verified: boolean; countries: number; url: string; since: string | null }> = []
-      for (const h of hits) {
+      for (const h of pool) {
         const c = counts[h.id]
         const storyId = c?.storyId ?? h.id
         if (seen.has(storyId)) continue
@@ -854,9 +865,9 @@ export const TOOLS: Tool[] = [
         if (stories.length === 3) break
       }
       const top = stories[0]!
-      // the closest story's numbers, as its outlets give them
-      const fig = await ask(asker, `/api/v1/stories/${top.storyId}/figures`)
-      const figures = fig.status === 200 ? ((((fig.body.data ?? {}) as { figures?: FigureValues[] }).figures) ?? []).filter(f => (f.values ?? []).length > 0) : []
+      // the closest story's numbers, as its outlets give them (not for a story about something else)
+      const fig = nearOnly ? null : await ask(asker, `/api/v1/stories/${top.storyId}/figures`)
+      const figures = fig?.status === 200 ? ((((fig.body.data ?? {}) as { figures?: FigureValues[] }).figures) ?? []).filter(f => (f.values ?? []).length > 0) : []
       const proof = (s: (typeof stories)[number]) => {
         const where = s.countries >= 2 ? ` in ${s.countries} countries` : ''
         const since = s.since ? ` · reported since ${shortDay(s.since.slice(0, 10))}` : ''
@@ -866,7 +877,9 @@ export const TOOLS: Tool[] = [
       }
       const text = [
         `What the newsrooms WorldPulse reads report about: "${claim}"`,
-        'WorldPulse does not rule claims true or false; here are the closest stories, the closest first. Compare them with the claim before relying on one.',
+        nearOnly
+          ? 'Nothing WorldPulse holds is close to this claim. The nearest stories are below, probably about something else. That is not evidence the claim is false: it may be very new, local, or reported only by newsrooms WorldPulse doesn\'t read.'
+          : 'WorldPulse does not rule claims true or false; here are the closest stories, the closest first. Compare them with the claim before relying on one.',
         '',
         ...stories.map((s, i) => `${i + 1}. ${s.hit.title}${s.hit.locationName ? ` (${s.hit.locationName})` : ''}\n   ${proof(s)}\n   ${s.url}`),
         figures.length ? `\nThe numbers the first story's outlets give, the most reported first:\n${figures.map(figureLine).join('\n')}` : '',
@@ -875,6 +888,7 @@ export const TOOLS: Tool[] = [
         text,
         data: {
           claim,
+          close: !nearOnly,
           stories: stories.map(s => ({ storyId: s.storyId, title: s.hit.title, url: s.url, place: s.hit.locationName ?? null, verified: s.verified, outlets: s.outlets, outletCountries: s.countries, reportedSince: s.since, match: s.hit.score ?? null })),
           figures: figures.length ? figures.map(f => ({ label: f.label, values: (f.values ?? []).map(v => ({ value: v.text, outlets: v.outlets, outletNames: v.outletNames ?? [] })) })) : null,
         },
