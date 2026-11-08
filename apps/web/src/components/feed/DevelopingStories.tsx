@@ -127,7 +127,7 @@ function StoryRow({ story, now, lead = false }: { story: DevelopingStory; now: n
       className={`block rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.02)] ${lead ? 'p-3.5' : 'px-3 py-2.5'} hover:border-[rgba(255,255,255,0.15)] hover:bg-[rgba(255,255,255,0.04)] transition-all group`}
       data-story-id={story.id}
     >
-      <div className="flex items-center gap-2 mb-1 min-w-0">
+      <div className="flex items-center gap-1.5 sm:gap-2 mb-1 min-w-0">
         <span
           className={`flex-shrink-0 inline-flex items-center px-2 py-[2px] rounded-full font-mono text-[10px] tracking-[0.3px] ${
             badge.verified
@@ -135,7 +135,8 @@ function StoryRow({ story, now, lead = false }: { story: DevelopingStory; now: n
               : 'bg-[rgba(0,212,255,0.10)] text-wp-cyan border border-[rgba(0,212,255,0.3)]'
           }`}
         >
-          {badge.label}
+          {/* a phone shows "✓ 54 outlets · 30 countries", so the row's time still fits */}
+          {badge.verified ? <>✓ <span className="hidden sm:inline">Verified · </span>{badge.count}</> : badge.count}
         </span>
         {LOUD_SEVERITIES.has(story.severity) && (
           <span className={`flex-shrink-0 font-mono text-[10px] uppercase tracking-[0.5px] ${SEVERITY_TEXT[story.severity] ?? ''}`}>

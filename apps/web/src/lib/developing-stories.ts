@@ -69,12 +69,18 @@ export function sinceLabel(iso: string, now = Date.now()): string {
   return `${Math.floor(hours / 24)}d ago`
 }
 
-/** The badge: "✓ Verified · 81 outlets · 36 countries" (the countries from Nov 8, 2026), or "4 outlets" */
-export function outletBadge(story: Pick<DevelopingStory, 'outletCount' | 'verifiedAt' | 'reach'>): { label: string; verified: boolean } {
+/**
+ * The badge: "✓ Verified · 81 outlets · 36 countries" (the countries from Nov 8, 2026), or "4 outlets"; `count`
+ * is the part after "Verified · ", which a phone shows alone after the ✓ (the whole badge pushed the row's time
+ * off a 390-pixel screen)
+ */
+export function outletBadge(story: Pick<DevelopingStory, 'outletCount' | 'verifiedAt' | 'reach'>): { label: string; verified: boolean; count: string } {
   const n = story.outletCount
   const countries = n >= 2 ? countriesLabel(story.reach) : null
   const outlets = `${n} outlet${n === 1 ? '' : 's'}${countries ? ` · ${countries}` : ''}`
-  return story.verifiedAt ? { label: `✓ Verified · ${outlets}`, verified: true } : { label: outlets, verified: false }
+  return story.verifiedAt
+    ? { label: `✓ Verified · ${outlets}`, verified: true, count: outlets }
+    : { label: outlets, verified: false, count: outlets }
 }
 
 /** "2 from Poland", with the names on hover: the newsrooms of the story's own country, or null */

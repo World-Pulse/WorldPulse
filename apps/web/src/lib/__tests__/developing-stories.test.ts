@@ -38,8 +38,8 @@ describe('row text', () => {
   })
 
   it('badges verified stories with their outlet count', () => {
-    expect(outletBadge(story)).toEqual({ label: '✓ Verified · 14 outlets', verified: true })
-    expect(outletBadge({ outletCount: 2, verifiedAt: null })).toEqual({ label: '2 outlets', verified: false })
+    expect(outletBadge(story)).toEqual({ label: '✓ Verified · 14 outlets', verified: true, count: '14 outlets' })
+    expect(outletBadge({ outletCount: 2, verifiedAt: null })).toEqual({ label: '2 outlets', verified: false, count: '2 outlets' })
   })
 
   it('names a few outlets and counts the rest from the full total', () => {
@@ -59,12 +59,12 @@ describe("where a story's outlets are from (Nov 8, 2026)", () => {
       id: 'k', leadId: 'l', title: 'Poland in shock after six die in Krakow mass shooting', outletCount: 81, outlets: ['france24.com'],
       verifiedAt: '2026-11-08T07:00:00Z', country: 'PL', countries: 36, localOutlets: 2, localNames: ['Notes from Poland', 'Defence24'],
     }] } })
-    expect(outletBadge(s!)).toEqual({ label: '✓ Verified · 81 outlets · 36 countries', verified: true })
+    expect(outletBadge(s!)).toEqual({ label: '✓ Verified · 81 outlets · 36 countries', verified: true, count: '81 outlets · 36 countries' })
     expect(localOutlets(s!)).toEqual({ label: '2 from Poland', title: 'Notes from Poland, Defence24: outlets from Poland, where the story is' })
     // an older answer: as before
     const [old] = toDevelopingStories({ data: { stories: [{ id: 'k', leadId: 'l', title: 'A story', outletCount: 3, verifiedAt: null }] } })
     expect(old!.reach).toBeUndefined()
-    expect(outletBadge(old!)).toEqual({ label: '3 outlets', verified: false })
+    expect(outletBadge(old!)).toEqual({ label: '3 outlets', verified: false, count: '3 outlets' })
     expect(localOutlets(old!)).toBeNull()
   })
 })
