@@ -47,7 +47,9 @@ import type { ListedStory } from './story-list'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const DAY_MS = 86_400_000
-export const PROFILE_TTL = 600
+// an hour (it was 10 minutes) before a view remakes it in the background: the traffic test of Nov 8, 2026 found
+// these remakes the heaviest work on the 2-processor server
+export const PROFILE_TTL = 3_600
 export const ACTIVITY_DAYS = 30
 export const STORY_DAYS = 14
 const STORIES_SHOWN = 10
@@ -223,7 +225,7 @@ const PROFILE_SWR = { freshSeconds: PROFILE_TTL, staleSeconds: PROFILE_STALE_S, 
  * and tie up the pool. Past the limit a remake is skipped; the kept profile
  * is served, and the next view after it is due tries again.
  */
-export const MAX_FULL_BUILDS = 2
+export const MAX_FULL_BUILDS = 1   // 2 until the traffic test of Nov 8, 2026
 let fullBuilds = 0
 
 /** The full profile, made in the background (throws, so nothing is stored, when MAX_FULL_BUILDS are running) */
