@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import {
-  toDevelopingStories, sinceLabel, outletBadge, namedOutlets, outletsTitle, LOUD_SEVERITIES,
+  toDevelopingStories, sinceLabel, outletBadge, localOutlets, namedOutlets, outletsTitle, LOUD_SEVERITIES,
   type DevelopingStory,
 } from '@/lib/developing-stories'
 import type { HomeBrief } from '@/lib/home-brief'
@@ -117,6 +117,7 @@ export function DevelopingStories({ brief = null }: { brief?: HomeBrief | null }
 
 function StoryRow({ story, now, lead = false }: { story: DevelopingStory; now: number; lead?: boolean }) {
   const badge = outletBadge(story)
+  const local = localOutlets(story)
   const { names, more } = namedOutlets(story, lead ? 4 : 3)
   const updated = sinceLabel(story.updatedAt, now)
   const since = sinceLabel(story.firstSeenAt, now)
@@ -155,7 +156,9 @@ function StoryRow({ story, now, lead = false }: { story: DevelopingStory; now: n
         {story.title}
       </p>
 
-      <p className="mt-1 text-[11px] text-wp-text2 font-mono truncate" title={outletsTitle(story)}>
+      <p className="mt-1 text-[11px] text-wp-text2 font-mono truncate" title={local ? `${local.title} · ${outletsTitle(story)}` : outletsTitle(story)}>
+        {/* the story's own country's newsrooms first (Nov 8, 2026) */}
+        {local && <><span className="text-wp-amber">{local.label}</span>{names.length > 0 ? ' · ' : ''}</>}
         {names.join(' · ')}
         {more > 0 && <> +{more} more</>}
       </p>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { toDevelopingStories, sinceLabel, outletBadge, namedOutlets, outletsTitle } from '../developing-stories'
+import { toDevelopingStories, sinceLabel, outletBadge, localOutlets, namedOutlets, outletsTitle } from '../developing-stories'
 
 const NOW = Date.parse('2026-10-11T07:00:00Z')
 
@@ -50,5 +50,21 @@ describe('row text', () => {
   it("says on hover that the names aren't all of them (the API sends at most 12)", () => {
     expect(outletsTitle({ outlets: ['a.com', 'b.com'], outletCount: 55 })).toBe("a.com, b.com and 53 more (all on the story's page)")
     expect(outletsTitle({ outlets: ['a.com', 'b.com'], outletCount: 2 })).toBe('a.com, b.com')
+  })
+})
+
+describe("where a story's outlets are from (Nov 8, 2026)", () => {
+  it('leads the badge with the countries, and names the story\'s own country\'s outlets', () => {
+    const [s] = toDevelopingStories({ data: { stories: [{
+      id: 'k', leadId: 'l', title: 'Poland in shock after six die in Krakow mass shooting', outletCount: 81, outlets: ['france24.com'],
+      verifiedAt: '2026-11-08T07:00:00Z', country: 'PL', countries: 36, localOutlets: 2, localNames: ['Notes from Poland', 'Defence24'],
+    }] } })
+    expect(outletBadge(s!)).toEqual({ label: '✓ Verified · 81 outlets · 36 countries', verified: true })
+    expect(localOutlets(s!)).toEqual({ label: '2 from Poland', title: 'Notes from Poland, Defence24: outlets from Poland, where the story is' })
+    // an older answer: as before
+    const [old] = toDevelopingStories({ data: { stories: [{ id: 'k', leadId: 'l', title: 'A story', outletCount: 3, verifiedAt: null }] } })
+    expect(old!.reach).toBeUndefined()
+    expect(outletBadge(old!)).toEqual({ label: '3 outlets', verified: false })
+    expect(localOutlets(old!)).toBeNull()
   })
 })

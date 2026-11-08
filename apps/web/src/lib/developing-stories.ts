@@ -5,6 +5,8 @@
  * signals"), an F1 sprint and an op-ed marked "critical" at the top.
  */
 
+import { reachOf, countriesLabel, localLabel, type StoryReach } from './story-reach'
+
 export interface DevelopingStory {
   /** The story's id */
   id: string
@@ -22,6 +24,8 @@ export interface DevelopingStory {
   firstSeenAt: string
   updatedAt: string
   verifiedAt: string | null
+  /** Where its outlets are from: how many countries, and its own country's (lib/story-reach.ts, Nov 8, 2026) */
+  reach?: StoryReach
 }
 
 /** Stories from a GET /api/v1/stories answer; anything malformed is left out */
@@ -34,6 +38,7 @@ export function toDevelopingStories(json: any): DevelopingStory[] {
     if (!s || typeof s.id !== 'string' || typeof s.leadId !== 'string' || typeof s.title !== 'string' || s.title.trim() === '') continue
     const outlets = Array.isArray(s.outlets) ? s.outlets.filter((o: unknown): o is string => typeof o === 'string' && o !== '') : []
     const count = Number(s.outletCount)
+    const reach = reachOf(s.country, s.countries, s.localOutlets, s.localNames)
     out.push({
       id:          s.id,
       leadId:      s.leadId,
@@ -46,6 +51,7 @@ export function toDevelopingStories(json: any): DevelopingStory[] {
       firstSeenAt: typeof s.firstSeenAt === 'string' ? s.firstSeenAt : '',
       updatedAt:   typeof s.updatedAt === 'string' ? s.updatedAt : '',
       verifiedAt:  typeof s.verifiedAt === 'string' ? s.verifiedAt : null,
+      ...(reach ? { reach } : {}),
     })
   }
   return out
@@ -63,11 +69,18 @@ export function sinceLabel(iso: string, now = Date.now()): string {
   return `${Math.floor(hours / 24)}d ago`
 }
 
-/** The badge: "✓ Verified · 12 outlets" or "4 outlets" */
-export function outletBadge(story: Pick<DevelopingStory, 'outletCount' | 'verifiedAt'>): { label: string; verified: boolean } {
+/** The badge: "✓ Verified · 81 outlets · 36 countries" (the countries from Nov 8, 2026), or "4 outlets" */
+export function outletBadge(story: Pick<DevelopingStory, 'outletCount' | 'verifiedAt' | 'reach'>): { label: string; verified: boolean } {
   const n = story.outletCount
-  const outlets = `${n} outlet${n === 1 ? '' : 's'}`
+  const countries = n >= 2 ? countriesLabel(story.reach) : null
+  const outlets = `${n} outlet${n === 1 ? '' : 's'}${countries ? ` · ${countries}` : ''}`
   return story.verifiedAt ? { label: `✓ Verified · ${outlets}`, verified: true } : { label: outlets, verified: false }
+}
+
+/** "2 from Poland", with the names on hover: the newsrooms of the story's own country, or null */
+export function localOutlets(story: Pick<DevelopingStory, 'reach'>): { label: string; title: string } | null {
+  const local = localLabel(story.reach)
+  return local ? { label: local.label, title: local.title } : null
 }
 
 /** The outlets named on a row, and how many more reported it */
