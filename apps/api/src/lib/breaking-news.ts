@@ -13,8 +13,15 @@
 /** An aircraft's transponder alarm ("Aircraft FDX382 squawking 7500 …") */
 export const SQUAWK = /\bsquawk(?:ing)?\s+7[567]00\b/i
 
+/**
+ * A "tsunami" that is a figure of speech ("the blue tsunami" of an election, "el tsunami azul", a tsunami of lawsuits):
+ * the word made such headlines high-severity disasters. The scraper's pipeline/figurative.ts keeps the same list and
+ * no longer files them so (Nov 8, 2026); this catches those stored before.
+ */
+const FIGURATIVE_TSUNAMI = /\b(?:(?:blue|red|pink|green|silver|grey|gray|electoral|election|political|democratic|republican|progressive|conservative|populist|midterms?|voter|legal|regulatory|tariff|digital|data|azul|roj[oa]|rosa|verde|pol[ií]tic[oa])\s+tsunami|tsunami\s+(?:azul|roj[oa]|rosa|verde|electoral|pol[ií]tic[oa]|dem[oó]crata|republicano|of\s+(?:votes|voters|support|money|cash|lawsuits|litigation|criticism|complaints|applications|orders|emails|requests|data|information|misinformation|disinformation|debt|layoffs|regulations?|tariffs|imports)))\b/i
+
 /** Why a report isn't breaking news, or null when it may be */
-export function notBreakingNews(title: string): 'transponder' | 'sensor' | 'opinion' | null {
+export function notBreakingNews(title: string): 'transponder' | 'sensor' | 'opinion' | 'figurative' | null {
   const t = title.trim()
   if (SQUAWK.test(t)) return 'transponder'
   if (/^(?:(?:large|major|extreme|massive|significant)\s+)?wildfire detected near\b/i.test(t) || /^M\s?\d+(?:\.\d+)?\s+-\s/.test(t) || /^(?:volcanic|tsunami) alert\b/i.test(t)) return 'sensor'
@@ -22,5 +29,6 @@ export function notBreakingNews(title: string): 'transponder' | 'sensor' | 'opin
   // "DAVID MARCUS: Where does …", a columnist's name, not "BREAKING:" or "JUST IN:"
   const byline = /^([A-Z][A-Z.'’-]+(?: [A-Z][A-Z.'’-]+){1,3}):\s/.exec(t)
   if (byline && !/^(?:BREAKING|JUST IN|LIVE|UPDATE|UPDATED|WATCH|EXCLUSIVE|PHOTOS|VIDEO|DEVELOPING|ALERT|URGENT)(?: NEWS)?$/.test(byline[1]!)) return 'opinion'
+  if (FIGURATIVE_TSUNAMI.test(t)) return 'figurative'
   return null
 }

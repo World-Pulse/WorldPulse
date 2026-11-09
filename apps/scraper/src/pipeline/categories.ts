@@ -19,6 +19,7 @@
  */
 
 import type { Category } from '@worldpulse/types'
+import { literalText } from './figurative'
 
 const SPORTS_RE = /\b(premier\s+league|champions\s+league|europa\s+league|la\s+liga|serie\s+a|bundesliga|ligue\s+1|world\s+cup|euro\s+20\d\d|olympics?|olympic\s+games|paralympics?|fifa|uefa|nba|nfl|nhl|mlb|pga|lpga|grand\s+prix|formula\s+(?:1|one)|wimbledon|french\s+open|australian\s+open|ryder\s+cup|super\s+bowl|test\s+match|ipl|t20|rugby|cricket|tennis|marathon|ufc|athletics|footballer|goalkeeper|midfielder|head\s+coach|transfer\s+window|hat-trick|player\s+of\s+the\s+year|soccer|strikers?|wingers?|relegation|ten\s+hag|cristiano\s+ronaldo|lionel\s+messi|football\s+(?:club|match|fans|manager|team|league|coach)|basketball|baseball|volleyball|badminton|gymnasts?|gymnastics|swimmers?|sprinters?|weightlift(?:er|ers|ing)|boxing(?!\s+day)|golfers?|tour\s+de\s+france|world\s+championships?|africa\s+cup\s+of\s+nations|afcon|asian\s+cup|copa\s+am[eé]rica|copa\s+libertadores|caf\s+champions\s+league|confederation\s+cup|champions\s+trophy)\b|\bvs\.?\b.{1,60}\blive\b/
 // Before health: "scientists publish a study on a cancer treatment" is science
@@ -73,7 +74,8 @@ const RULES: Array<[RegExp, Category]> = [
 const HEADLINE_RULES: Array<[RegExp, Category]> = [...RULES.slice(0, -1), [CARE_RE, 'health'], RULES[RULES.length - 1]!]
 
 function byRules(text: string, rules: Array<[RegExp, Category]>): Category | null {
-  const lower = text.toLowerCase()
+  // "the blue tsunami" of an election is no disaster (figurative.ts, Nov 8, 2026)
+  const lower = literalText(text).toLowerCase()
   for (const [re, category] of rules) if (re.test(lower)) return category
   return null
 }

@@ -16,6 +16,10 @@ describe('notBreakingNews', () => {
     // a columnist's name or a bracketed byline before the headline (Nov 8: two "blue tsunami" columns were disasters)
     expect(notBreakingNews('DAVID MARCUS: Where does the blue tsunami leave old school Dems like John Fetterman?')).toBe('opinion')
     expect(notBreakingNews('[Aziz Huq] Utilizing US midterm tsunami')).toBe('opinion')
+    // a figurative tsunami, with no byline to tell it (live on the list at 9:36 PM)
+    expect(notBreakingNews('El tsunami azul y el fenómeno demócrata en las elecciones en Estados Unidos')).toBe('figurative')
+    expect(notBreakingNews('Where does the blue tsunami leave old school Dems?')).toBe('figurative')
+    expect(notBreakingNews('Tsunami warning issued after magnitude 7.6 quake off Japan')).toBeNull()
     for (const news of ['BREAKING: Dam bursts above Valencia', 'JUST IN: Strike on Kharkiv', 'Seven dead and more than 100 injured after trains collide in Egypt', 'UN says 2 million displaced in Sudan', 'M23 rebels take Goma airport']) {
       expect(notBreakingNews(news), news).toBeNull()
     }

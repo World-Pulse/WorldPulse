@@ -94,3 +94,17 @@ describe('lede', () => {
     expect(cut.endsWith('word')).toBe(true)
   })
 })
+
+describe('a figurative tsunami (Nov 8, 2026)', () => {
+  it('is no disaster: the blue tsunami of an election, in English or Spanish', () => {
+    expect(categorizeText('DAVID MARCUS: Where does the blue tsunami leave old school Dems like John Fetterman?')).not.toBe('disaster')
+    expect(categorizeText('El tsunami azul y el fenómeno demócrata en las elecciones en Estados Unidos')).not.toBe('disaster')
+    expect(categorizeText('[Aziz Huq] Utilizing US midterm tsunami')).not.toBe('disaster')
+    expect(categorizeText('A tsunami of lawsuits hits the tariff policy')).not.toBe('disaster')
+  })
+
+  it('while the sea\'s still is', () => {
+    expect(categorizeText('Tsunami warning issued after magnitude 7.6 quake off Japan')).toBe('disaster')
+    expect(categorizeText('Tsunami waves reach the coast of Chile')).toBe('disaster')
+  })
+})

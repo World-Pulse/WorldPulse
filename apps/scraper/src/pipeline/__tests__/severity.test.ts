@@ -57,3 +57,14 @@ describe('rateSeverity', () => {
     expect(rateSeverity('Officials meet in Geneva', 'At least 20 people were killed in the attack.')).toBe('high')
   })
 })
+
+describe('a figurative tsunami (Nov 8, 2026)', () => {
+  it('is not high: the blue tsunami of an election', () => {
+    expect(rateSeverity('Where does the blue tsunami leave old school Dems like John Fetterman?')).not.toBe('high')
+    expect(rateSeverity('El tsunami azul y el fenómeno demócrata en las elecciones en Estados Unidos', null, 'geopolitics')).not.toBe('high')
+  })
+
+  it('while a real one still is', () => {
+    expect(rateSeverity('Tsunami hits the coast after a strong quake')).toBe('high')
+  })
+})

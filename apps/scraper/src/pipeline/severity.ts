@@ -12,6 +12,7 @@
  */
 
 import type { SignalSeverity } from '@worldpulse/types'
+import { literalText } from './figurative'
 
 const RANK: Record<SignalSeverity, number> = { info: 0, low: 1, medium: 2, high: 3, critical: 4 }
 const BY_RANK: SignalSeverity[] = ['info', 'low', 'medium', 'high', 'critical']
@@ -90,7 +91,9 @@ const OPINION = /\b(?:opinion|op-?ed|editorial|commentary|analysis|column|perspe
  * least medium.
  */
 export function rateSeverity(title: string, body: string | null = null, category?: string | null): SignalSeverity {
-  const headline = title ?? ''
+  // "the blue tsunami" of an election is no disaster (figurative.ts, Nov 8, 2026)
+  const headline = literalText(title ?? '')
+  body = body === null ? null : literalText(body)
   const text = `${headline}. ${body ?? ''}`
   const { dead, injured, deathsNamed } = casualties(text)
 
