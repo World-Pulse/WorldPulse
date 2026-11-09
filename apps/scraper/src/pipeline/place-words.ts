@@ -228,6 +228,8 @@ export function partOfAName(text: string, at: number, end: number, surname?: boo
   // Lower-case "colorado" is Spanish for the party's people ("el oficialismo colorado", M57, Oct 30, 2026:
   // pinned in Denver); the US state is always written with a capital
   if (hit === 'colorado') return true
+  // B.C. is British Columbia, but "500 B.C." and "the 3rd century B.C." are the era
+  if (hit === 'B.C.' && /(?:\d|century|millennium|circa|ca\.|before)\s*$/i.test(text.slice(Math.max(0, at - 14), at))) return true
   // The Dakar Rally, not the city (M57, Oct 30, 2026: "El Dakar 2027 arrancará en Portugal" was pinned in
   // Senegal; the rally left Africa in 2009): "Dakar 2027", "Dakar Rally", "Rallye Dakar", "el/le/the Dakar"
   // except "Dakar 2026", the Youth Olympic Games in the city itself (Nov 8, 2026: "JOJ Dakar 2026 : le Sénégal s'offre

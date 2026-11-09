@@ -2488,6 +2488,8 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'mecca': { lat: 21.4225, lng: 39.8262, country: 'SA', name: 'Mecca', asWritten: 'Mecca' },
   'los ángeles': { lat: 34.0522, lng: -118.2437, country: 'US', name: 'Los Ángeles', region: 'California', asWritten: 'Los Ángeles' },
   'quebec': { lat: 46.8139, lng: -71.2080, country: 'CA', name: 'Quebec', region: 'Quebec' },
+  // Canadian Press style (Nov 9, 2026: Global News' "Third storm heads for already drenched B.C. coast" had no pin); "500 B.C." is an era (place-words.ts)
+  'b.c.': { lat: 53.7267, lng: -127.6476, country: 'CA', name: 'British Columbia', region: 'British Columbia', asWritten: 'B.C.' },
   // Straits in the news: Iran's threats to Hormuz, the Houthis' Bab el-Mandeb
   'strait of hormuz': { lat: 26.5667, lng: 56.2500, country: 'IR', name: 'Strait of Hormuz' },
   'hormuz': { lat: 26.5667, lng: 56.2500, country: 'IR', name: 'Strait of Hormuz', asWritten: 'Hormuz' },
