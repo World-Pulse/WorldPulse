@@ -31,7 +31,7 @@ import type { Category, SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate }          from '../pipeline/insert-signal'
 import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilience'
 import { extractArticle, setArticleExtractorRedis } from '../pipeline/article-extractor'
-import { extractGeo }                  from '../pipeline/geo'
+import { extractGeo, mentionedCountries } from '../pipeline/geo'
 import { classifyContent }             from '../pipeline/classify'
 import { CAMEO_LABEL }                 from '../pipeline/event-titles'
 import { isoFromFips }                 from '../pipeline/fips-countries'
@@ -183,6 +183,16 @@ export function tidyGeoName(name: string): string {
     parts.push(part)
   }
   return parts.join(', ')
+}
+
+/**
+ * Whether the text names the country GDELT coded as the event's place (by name or by its people's adjective).
+ * GDELT's coding of where is often wrong (a US politics story coded Iran); a coded place the text never
+ * mentions is no evidence, so the story is left unplaced.
+ */
+export function actionGeoIsNamed(countryCode: string, text: string): boolean {
+  if (!countryCode) return true
+  return mentionedCountries(text).includes(countryCode)
 }
 
 /**
@@ -422,6 +432,14 @@ export function startGdeltPoller(
           }
         } catch {
           // Geo extraction failed — keep ActionGeo as fallback
+        }
+        // GDELT's coded place is kept only when the headline or the start of the text names that country
+        // (Nov 8: "Democrats turn up heat on Hegseth ... after midterm victories" sat in Iran, 32/53)
+        if (signalCC && signalCC === row.countryCode && signalLat === row.lat && !actionGeoIsNamed(row.countryCode, geoText)) {
+          signalLat = null
+          signalLng = null
+          signalLoc = null
+          signalCC  = null
         }
 
         try {
