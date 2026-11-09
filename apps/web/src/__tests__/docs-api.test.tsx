@@ -333,6 +333,9 @@ const toolsBlock = (src: string) => src.slice(src.indexOf('export const TOOLS'),
       '/api/v1/knowledge-graph/entities': 'people, places and organisations by name',
       '/api/v1/knowledge-graph/entities/:param/profile': 'an entity\'s profile',
       '/api/v1/countries/:param/daily': 'a country\'s reports a day',
+      '/api/v1/breaking/alerts': 'the breaking alerts', '/api/v1/knowledge-graph/trending': 'who is trending',
+      '/api/v1/signals/map/hotspots': 'the map\'s hotspots', '/api/v1/maritime/signals': 'the shipping news',
+      '/api/v1/hazards/map/points': 'the natural hazards',
     }
     const said = TEXT.slice(TEXT.indexOf('Each tool asks the API\'s own open endpoints'), TEXT.indexOf('How to connect'))
     const routeLike = (path: string) => API_ROUTES.find(r => r.method === 'GET' && r.path.replace(/:[A-Za-z_]+/g, ':param') === path)

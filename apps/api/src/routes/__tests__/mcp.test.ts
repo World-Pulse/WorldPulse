@@ -32,6 +32,10 @@ const LONE_REPORT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const NATO = { id: '5d5292fe23563321', type: 'organisation', canonical_name: 'NATO', aliases: ['North Atlantic Treaty Organization'], mention_count: 1010 }
 const ANATOLIE = { id: '1959a1b94db30907', type: 'person', canonical_name: 'Anatolie Nosatîi', aliases: [], mention_count: 1 }
 const NATO_PA = { id: '7c1e2d3f4a5b6c7d', type: 'organisation', canonical_name: 'NATO Parliamentary Assembly', aliases: [], mention_count: 40 }
+const WORLD_REPORT = '55555555-5555-4555-8555-555555555555'
+const SQUAWK_REPORT = '44444444-4444-4444-8444-444444444444'
+const DAM_REPORT = '88888888-8888-4888-8888-888888888888'
+const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString()
 const days = (n: number, f: (i: number) => number) => Array.from({ length: n }, (_, i) => ({ day: new Date(Date.UTC(2026, 9, 10 + i)).toISOString().slice(0, 10), n: f(i) }))
 
 async function build(): Promise<FastifyInstance> {
@@ -49,6 +53,30 @@ async function build(): Promise<FastifyInstance> {
   })
   app.get('/api/v1/stories/:id', async (req, reply) => {
     const { id } = req.params as { id: string }
+    if (id === WORLD_REPORT) {
+      asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+      return {
+        success: true,
+        data: {
+          storyId: 'world-story', size: 9, outlets: 7, verifiedAt: '2026-11-07T16:00:00.000Z', country: 'PL',
+          outletNames: ['aljazeera.com', 'bbc.co.uk', 'bbc.com', 'notesfrompoland.com', 'tass.com', 'tvpworld.com', 'unknown-site.example'],
+          outletInfo: [
+            { site: 'aljazeera.com', name: 'Al Jazeera', kind: 'international', country: 'QA', stateMedia: false },
+            { site: 'bbc.co.uk', name: 'BBC', kind: 'international', country: 'GB', stateMedia: false },
+            { site: 'bbc.com', name: 'BBC', kind: 'international', country: 'GB', stateMedia: false },
+            { site: 'notesfrompoland.com', name: 'Notes from Poland', kind: 'national', country: 'PL', stateMedia: false },
+            { site: 'tass.com', name: 'TASS', kind: 'agency', country: 'RU', stateMedia: true },
+            { site: 'tvpworld.com', name: 'TVP World', kind: 'national', country: 'PL', stateMedia: true },
+            { site: 'unknown-site.example', name: null, kind: 'unknown', country: null, stateMedia: false },
+          ],
+          signals: [
+            { id: WORLD_REPORT, title: 'Six killed in Krakow shooting', status: 'verified', outlet: 'notesfrompoland.com', url: 'https://notesfrompoland.com/x', createdAt: '2026-11-07T15:31:00.000Z' },
+            { id: '66666666-6666-4666-8666-666666666666', title: 'Gunman kills six in Polish city', status: 'verified', outlet: 'bbc.co.uk', url: 'https://www.bbc.co.uk/y', createdAt: '2026-11-07T15:40:00.000Z' },
+            { id: '77777777-7777-4777-8777-777777777777', title: 'Shooting in Krakow: six dead', status: 'verified', outlet: 'tass.com', url: 'https://tass.com/z', createdAt: '2026-11-07T16:10:00.000Z' },
+          ],
+        },
+      }
+    }
     if (id !== STORY.leadId) return reply.code(404).send({ success: false, code: 'NOT_FOUND', error: 'Story not found' })
     return {
       success: true,
@@ -210,6 +238,92 @@ async function build(): Promise<FastifyInstance> {
     }
     return { success: true, semantic: true, results: [{ id: STORY.leadId, title: STORY.title, status: 'verified', locationName: 'Doha', createdAt: '2026-10-20T08:00:00.000Z', category: 'conflict', score: 0.61 }] }
   })
+  app.get('/api/v1/breaking/alerts', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    const until = new Date(Date.now() + 3_600_000).toISOString()
+    return {
+      success: true,
+      data: {
+        count: 5,
+        alerts: [
+          { alertId: 'a1', signalId: STORY.leadId, title: STORY.title, severity: 'critical', category: 'conflict', locationName: 'Doha', countryCode: 'QA', timestamp: hoursAgo(2), expiresAt: until },
+          { alertId: 'a2', signalId: LONE_REPORT, title: 'Trains collide near Cairo', severity: 'high', category: 'disaster', locationName: 'Cairo', countryCode: 'EG', timestamp: hoursAgo(0.5), expiresAt: until },
+          { alertId: 'a3', signalId: SQUAWK_REPORT, title: 'Aircraft FDX382 squawking 7500 — Unlawful interference (hijacking) (United States)', severity: 'high', category: 'security', locationName: 'United States', countryCode: null, timestamp: hoursAgo(0.2), expiresAt: until },
+          { alertId: 'a4', signalId: STORY.leadId, title: STORY.title, severity: 'critical', category: 'conflict', locationName: 'Doha', countryCode: 'QA', timestamp: hoursAgo(3), expiresAt: until },
+          { alertId: 'a5', signalId: OTHER_REPORT, title: 'An alert past its six hours', severity: 'high', category: 'disaster', locationName: 'Doha', countryCode: 'QA', timestamp: hoursAgo(7), expiresAt: hoursAgo(1) },
+          // another report of the Doha story: the story once, as its newest alert
+          { alertId: 'a6', signalId: OTHER_REPORT, title: 'Talks in Doha go on', severity: 'high', category: 'conflict', locationName: 'Doha', countryCode: 'QA', timestamp: hoursAgo(1), expiresAt: until },
+          { alertId: 'a7', signalId: '12121212-1212-4212-8212-121212121212', title: 'Large wildfire detected near Western Australia, Australia', severity: 'high', category: 'disaster', locationName: 'Western Australia, Australia', countryCode: 'AU', timestamp: hoursAgo(0.3), expiresAt: until },
+          { alertId: 'a8', signalId: '13131313-1313-4313-8313-131313131313', title: 'DAVID MARCUS: Where does the blue tsunami leave old school Dems?', severity: 'high', category: 'disaster', locationName: 'Pennsylvania', countryCode: 'US', timestamp: hoursAgo(0.4), expiresAt: until },
+          { alertId: 'a9', signalId: '14141414-1414-4414-8414-141414141414', title: '[Aziz Huq] Utilizing US midterm tsunami', severity: 'high', category: 'disaster', locationName: 'United States', countryCode: 'US', timestamp: hoursAgo(0.45), expiresAt: until },
+          { alertId: 'a10', signalId: DAM_REPORT, title: 'BREAKING: Dam bursts above Valencia', severity: 'critical', category: 'disaster', locationName: 'Valencia', countryCode: 'ES', timestamp: hoursAgo(0.1), expiresAt: until },
+        ],
+      },
+    }
+  })
+  app.get('/api/v1/knowledge-graph/trending', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    const type = (req.query as { type?: string }).type
+    const rows = [
+      { entity: { id: '4883865b2f6813ce', type: 'location', canonical_name: 'Egypt', signal_ids: [] }, recent_mentions: 113, previous_mentions: 31, daily_avg: 31, spike_ratio: 3.4, is_new: false },
+      { entity: { id: '73bf81678b4cf07b', type: 'person', canonical_name: 'Javier Milei', signal_ids: [] }, recent_mentions: 57, previous_mentions: 11, daily_avg: 11, spike_ratio: 4.5, is_new: false },
+      { entity: { id: 'aa00bb11cc22dd33', type: 'organisation', canonical_name: 'Aramco', signal_ids: [] }, recent_mentions: 12, previous_mentions: 0, daily_avg: 0, spike_ratio: null, is_new: true },
+    ].filter(r => !type || r.entity.type === type)
+    return { trending: rows, window_hours: 24, generated_at: '2026-11-08T23:00:00.000Z' }
+  })
+  app.get('/api/v1/signals/map/hotspots', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    return {
+      success: true,
+      data: {
+        hours: 24, minCategoryCount: 2, generatedAt: '2026-11-08T23:00:00.000Z',
+        hotspots: [
+          {
+            cellLat: 30, cellLng: 31, centerLat: 30.0444, centerLng: 31.2357, place: 'Egypt', signalCount: 133, categoryCount: 3, categories: ['conflict', 'disaster', 'economy'],
+            maxSeverity: 'critical', avgReliability: 0.86, latestSignalAt: hoursAgo(1 / 6),
+            sampleTitles: ['Aircraft N857ER squawking 7700 — General emergency (Egypt)', 'Seven killed in train collision in Egypt', 'Trains collide near Cairo'],
+            sampleIds: [SQUAWK_REPORT, STORY.leadId, LONE_REPORT],
+          },
+          {
+            cellLat: 50, cellLng: 20, centerLat: 50.06, centerLng: 19.94, place: 'Krakow', signalCount: 113, categoryCount: 2, categories: ['conflict', 'security'],
+            maxSeverity: 'high', avgReliability: 0.85, latestSignalAt: hoursAgo(1), sampleTitles: ['A shooting in Krakow killed 6'], sampleIds: ['not-a-report-id'],
+          },
+        ],
+      },
+    }
+  })
+  app.get('/api/v1/maritime/signals', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    if ((req.query as { type?: string }).type === 'sanctions') return { success: true, data: [], total: 0, limit: 30, offset: 0 }
+    return {
+      success: true, total: 2, limit: 30, offset: 0,
+      data: [
+        { id: LONE_REPORT, title: 'Tanker burns after strike in Strait of Hormuz', category: 'conflict', severity: 'high', reliability_score: 0.8, location_name: 'Strait of Hormuz', source_url: null, lat: 26.5, lng: 56.3, created_at: hoursAgo(3) },
+        { id: STORY.leadId, title: 'Navy escorts a convoy through the strait', category: 'military', severity: 'medium', reliability_score: 0.8, location_name: 'Doha', source_url: null, lat: 25.3, lng: 51.5, created_at: hoursAgo(5) },
+      ],
+    }
+  })
+  app.get('/api/v1/hazards/map/points', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    const p = (n: number, title: string, lat: number, lng: number, slug: string, severity: string, h: number) =>
+      ({ id: `${String(n).repeat(8)}-0000-4000-8000-000000000000`, title, lat, lng, severity, category: 'disaster', source_slug: slug, published_at: hoursAgo(h), reliability_score: 0.95 })
+    return {
+      success: true, cached: false,
+      data: {
+        hours: 48, count: 6,
+        points: [
+          p(1, 'M 4.5 - 43 km E of Onagawa Chō, Japan', 38.38, 141.94, 'seismic', 'low', 3),
+          p(2, 'M 6.2 - 120 km E of Miyako, Japan', 39.86, 143.53, 'seismic', 'high', 10),
+          p(3, 'M 4.8 - central Mid-Atlantic Ridge', 7.7, -36.9, 'seismic', 'low', 1),
+          p(4, 'Volcanic Alert — Kilauea: ADVISORY | Aviation: YELLOW', 19.42, -155.29, 'gvp-volcano', 'medium', 20),
+          p(5, 'Large wildfire detected near Western Australia, Australia', -19.5, 124.5, 'firms', 'medium', 30),
+          p(6, 'Major wildfire detected near Western Australia, Australia', -19.5, 123.5, 'firms', 'high', 40),
+          // stored in the window, sent 100 hours ago
+          p(7, 'Tsunami Alert: 75 miles SW of Eureka, California', 40.4, -125.2, 'tsunami-warnings', 'medium', 100),
+        ],
+      },
+    }
+  })
   await app.register(registerMcpRoutes, { prefix: '/mcp' })
   return app
 }
@@ -246,6 +360,7 @@ describe('MCP server', () => {
     expect(tools.map((t: { name: string }) => t.name)).toEqual([
       'top_stories', 'story', 'search_reports', 'week', 'check_link', 'under_reported',
       'story_numbers', 'outlet', 'near', 'country', 'daily_brief', 'entity', 'trend', 'check_claim',
+      'breaking', 'trending', 'hotspots', 'story_by_country', 'shipping', 'hazards',
     ])
     for (const t of tools) {
       expect(t.inputSchema.type).toBe('object')
@@ -597,5 +712,140 @@ describe('tool calls counted as use from outside (Oct 22, 2026)', () => {
     await ask(app, 'top_stories', '203.0.113.7', { 'user-agent': 'WorldPulse-Autopilot/1.0 (checks)' })
     await ask(app, 'no_such_tool', '203.0.113.7')
     expect(counted.tools).toEqual([])
+  })
+})
+
+describe('MCP server: the six tools of Nov 8, 2026, evening (twenty in all)', () => {
+  beforeEach(() => { asked = [] })
+
+  it('breaking gives the live alerts newest first, each story once, with its count; alarms, sensor readings and opinion left out', async () => {
+    const app = await build()
+    const r = await call(app, 'breaking')
+    expect(r.isError).toBe(false)
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/breaking/alerts', `/api/v1/stories/outlets?ids=${DAM_REPORT},${LONE_REPORT},${OTHER_REPORT},${STORY.leadId}`])
+    const text = r.content[0].text as string
+    expect(text).toContain('(left out: 1 aircraft transponder alarm, 1 satellite or sensor reading (see hazards), 2 opinion pieces)')
+    expect(text).toContain(`1. BREAKING: Dam bursts above Valencia\n   Critical · disaster · Valencia · 6m ago · Only one outlet so far: unconfirmed\n   https://world-pulse.io/signals/${DAM_REPORT}`)
+    expect(text).toContain('2. Trains collide near Cairo\n   High · disaster · Cairo · 30m ago · Only one outlet so far: unconfirmed')
+    // the Doha story once, as its newest alert, linked to the story's page
+    expect(text).toContain(`3. Talks in Doha go on\n   High · conflict · Doha · 1h ago · Verified · 14 outlets in 9 countries\n   https://world-pulse.io/signals/${STORY.leadId}`)
+    expect(text).not.toContain('Ceasefire talks')
+    for (const gone of ['FDX382', 'past its six hours', 'wildfire', 'DAVID MARCUS', 'Aziz Huq']) expect(text).not.toContain(gone)
+    expect(r.structuredContent).toMatchObject({ leftOut: { transponder: 1, sensor: 1, opinion: 2 }, alerts: [{ reportId: DAM_REPORT }, { reportId: LONE_REPORT, storyOutlets: 1, verified: false }, { reportId: OTHER_REPORT, storyOutlets: 14, verified: true }] })
+    expect((await call(app, 'breaking', { limit: 1 })).structuredContent.alerts).toHaveLength(1)
+  })
+
+  it('tells a news report from an alarm, a sensor reading or an opinion piece', async () => {
+    const { notBreakingNews } = await import('../mcp')
+    expect(notBreakingNews('Aircraft N857ER squawking 7700 — General emergency (United States)')).toBe('transponder')
+    expect(notBreakingNews('Major wildfire detected near Western Australia, Australia')).toBe('sensor')
+    expect(notBreakingNews('M 6.2 - 120 km E of Miyako, Japan')).toBe('sensor')
+    expect(notBreakingNews('Tsunami Alert: 75 miles SW of Eureka, California')).toBe('sensor')
+    expect(notBreakingNews('US Midterms And The Emerging Paradoxes – OpEd')).toBe('opinion')
+    expect(notBreakingNews('Opinion: The court got it wrong')).toBe('opinion')
+    for (const news of ['BREAKING: Dam bursts above Valencia', 'JUST IN: Strike on Kharkiv', 'Seven dead and more than 100 injured after trains collide in Egypt', 'UN says 2 million displaced in Sudan', 'M23 rebels take Goma airport']) {
+      expect(notBreakingNews(news), news).toBeNull()
+    }
+  })
+
+  it('trending asks the website\'s own question and gives each name\'s reports in both days, its page and its id', async () => {
+    const app = await build()
+    const r = await call(app, 'trending')
+    expect(asked[0]!.url).toBe('/api/v1/knowledge-graph/trending?limit=10&window_hours=24&lean=1')
+    const text = r.content[0].text as string
+    expect(text).toContain('1. Egypt (place): 113 reports (31 the 24 hours before)\n   https://world-pulse.io/entities/egypt-4883865b2f6813ce (id 4883865b2f6813ce)')
+    expect(text).toContain('3. Aramco (organisation): 12 reports (0 the 24 hours before) · new in the news')
+    expect(r.structuredContent.entities[1]).toEqual({ id: '73bf81678b4cf07b', type: 'person', name: 'Javier Milei', url: 'https://world-pulse.io/entities/javier-milei-73bf81678b4cf07b', reports24h: 57, reportsDayBefore: 11, newInTheNews: false })
+    asked = []
+    const people = await call(app, 'trending', { type: 'person' })
+    expect(asked[0]!.url).toBe('/api/v1/knowledge-graph/trending?limit=10&window_hours=24&lean=1&type=person')
+    expect(people.content[0].text).toContain('(people only)')
+    expect(people.content[0].text).not.toContain('Egypt')
+    asked = []
+    await call(app, 'trending', { type: 'place' })
+    expect(asked[0]!.url).toContain('&type=location')
+    expect((await call(app, 'trending', { type: 'weapon' })).isError).toBe(true)
+  })
+
+  it('hotspots gives the places where reports of several kinds meet, two headlines each and a map link', async () => {
+    const app = await build()
+    const r = await call(app, 'hotspots')
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/signals/map/hotspots?hours=24&min_categories=2&limit=25'])
+    const text = r.content[0].text as string
+    expect(text).toContain('1. Egypt: 133 reports, 3 kinds (conflict, disaster, economy), worst critical · latest 10m ago')
+    expect(text).toContain(`   "Seven killed in train collision in Egypt" https://world-pulse.io/signals/${STORY.leadId}`)
+    expect(text).toContain(`   "Trains collide near Cairo" https://world-pulse.io/signals/${LONE_REPORT}`)
+    expect(text).not.toContain('squawking')
+    expect(text).toContain('   Map: https://world-pulse.io/map?lat=30.04&lng=31.24&z=6')
+    // a headline whose id isn't a report's has no link
+    expect(text).toContain('   "A shooting in Krakow killed 6"\n   Map:')
+    expect((await call(app, 'hotspots', { limit: 1 })).structuredContent.hotspots).toHaveLength(1)
+  })
+
+  it('story_by_country puts the story\'s own country first, marks state media and gives each country a headline', async () => {
+    const app = await build()
+    const r = await call(app, 'story_by_country', { id: WORLD_REPORT })
+    expect(asked[0]!.url).toBe(`/api/v1/stories/${WORLD_REPORT}`)
+    const text = r.content[0].text as string
+    expect(text).toContain(`Verified · 7 outlets in its last two days, from 4 countries (and 1 website the outlet directory doesn't place). Page: https://world-pulse.io/signals/${WORLD_REPORT}`)
+    expect(text).toContain('Poland (where the story is): 2 outlets · Notes from Poland, TVP World (state media)\n   "Six killed in Krakow shooting" (Notes from Poland)')
+    expect(text).toContain('Russia: 1 outlet · TASS (state media)\n   "Shooting in Krakow: six dead" (TASS)')
+    expect(text).toContain('United Kingdom: 2 outlets · BBC (2 websites)\n   "Gunman kills six in Polish city" (BBC)')
+    // Qatar's outlet has no report of its own in the story: no headline
+    expect(text).toContain('Qatar: 1 outlet · Al Jazeera\nRussia')
+    expect(text.indexOf('Poland')).toBeLessThan(text.indexOf('United Kingdom'))
+    expect(text.indexOf('United Kingdom')).toBeLessThan(text.indexOf('Qatar'))
+    expect(text).toContain('Not placed: unknown-site.example')
+    expect(r.structuredContent.countries[0]).toMatchObject({ code: 'PL', ownCountry: true, outlets: 2, stateMedia: ['TVP World'] })
+    const two = await call(app, 'story_by_country', { id: WORLD_REPORT, limit: 2 })
+    expect(two.content[0].text).toContain('… and 2 more countries (limit takes up to 40).')
+    expect((await call(app, 'story_by_country', { id: 'nope' })).isError).toBe(true)
+    expect((await call(app, 'story_by_country', { id: '99999999-0000-4000-8000-000000000000' })).isError).toBe(true)
+  })
+
+  it('shipping gives the sea\'s reports, near a chokepoint when asked, each with its story\'s count', async () => {
+    const app = await build()
+    const r = await call(app, 'shipping', { chokepoint: 'hormuz' })
+    expect(asked.map(a => a.url)).toEqual([
+      '/api/v1/maritime/signals?type=all&limit=30&near=26.57,56.25&radius=500',
+      `/api/v1/stories/outlets?ids=${LONE_REPORT},${STORY.leadId}`,
+    ])
+    const text = r.content[0].text as string
+    expect(text).toContain('Ships, ports, straits and navies, the last 7 days, newest first, within 500 km of the Strait of Hormuz:')
+    expect(text).toContain('1. Tanker burns after strike in Strait of Hormuz\n   Only one outlet so far: unconfirmed · Strait of Hormuz · 3h ago')
+    expect(text).toContain(`2. Navy escorts a convoy through the strait\n   Verified · 14 outlets in 9 countries · Doha · 5h ago\n   https://world-pulse.io/signals/${STORY.leadId}`)
+    expect(text).not.toContain('chokepoints: suez')
+    expect(r.structuredContent.chokepoint).toEqual({ id: 'hormuz', name: 'Strait of Hormuz', latitude: 26.57, longitude: 56.25, radiusKm: 500 })
+    // by its name too, and "Bab el-Mandeb" without "the"
+    expect((await call(app, 'shipping', { chokepoint: 'Strait of Hormuz' })).isError).toBe(false)
+    expect((await call(app, 'shipping', { chokepoint: 'bab-el-mandeb' })).content[0].text).toContain('within 500 km of Bab el-Mandeb:')
+    const all = await call(app, 'shipping')
+    expect(all.content[0].text).toContain('chokepoints: suez, panama, hormuz')
+    const none = await call(app, 'shipping', { type: 'sanctions' })
+    expect(none.content[0].text).toBe('No report about ships, ports or navies in the last 7 days (sanctions). Maritime page: https://world-pulse.io/maritime')
+    expect((await call(app, 'shipping', { chokepoint: 'atlantis' })).content[0].text).toContain('chokepoint must be one of suez, panama, hormuz')
+  })
+
+  it('hazards counts each kind with its source, the strongest earthquakes and largest fires first, near a place when asked', async () => {
+    const app = await build()
+    const r = await call(app, 'hazards')
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/hazards/map/points?hours=48'])
+    const text = r.content[0].text as string
+    expect(text).toContain('Natural hazards, the last 48 hours: 3 earthquakes of magnitude 4.5 or more (USGS), 1 volcano alert (USGS, US volcanoes), 0 tsunami messages (NOAA\'s tsunami warning centres), 2 large wildfires (NASA FIRMS, seen by satellite).')
+    expect(text).toContain('Earthquakes of magnitude 4.5 or more, the strongest first:\n1. M 6.2 - 120 km E of Miyako, Japan · 10h ago')
+    expect(text).toContain('2. M 4.8 - central Mid-Atlantic Ridge · 1h ago')
+    expect(text).toContain('Large wildfires, the largest first:\n1. Major wildfire detected near Western Australia, Australia · 40h ago · at -19.5, 123.5')
+    expect(text).not.toContain('Tsunami messages,')
+    expect(r.structuredContent.kinds[0].items[0]).toMatchObject({ magnitude: 6.2, latitude: 39.86 })
+    const strong = await call(app, 'hazards', { kind: 'earthquake', min_magnitude: 5 })
+    expect(strong.content[0].text).toContain('Natural hazards, the last 48 hours: 1 earthquake of magnitude 5 or more (USGS).')
+    expect(strong.content[0].text).not.toContain('Onagawa')
+    const japan = await call(app, 'hazards', { latitude: 38.3, longitude: 141.9, radius_km: 300 })
+    expect(japan.content[0].text).toContain('Natural hazards, the last 48 hours within 300 km of 38.30, 141.90: 2 earthquakes')
+    expect(japan.content[0].text).toMatch(/Onagawa Chō, Japan · 3h ago · \d+ km away/)
+    expect(japan.content[0].text).not.toContain('Kilauea')
+    expect((await call(app, 'hazards', { latitude: 38.3 })).content[0].text).toBe('Give latitude and longitude together')
+    expect((await call(app, 'hazards', { hours: 168 })).content[0].text).toContain('1 tsunami message (NOAA\'s tsunami warning centres)')
+    expect((await call(app, 'hazards', { kind: 'meteor' })).isError).toBe(true)
   })
 })

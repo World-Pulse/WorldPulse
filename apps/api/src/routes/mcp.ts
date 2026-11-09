@@ -25,19 +25,21 @@ import { OUTLET_DIRECTORY } from '../lib/outlet-directory'
 import { hostOf } from '../lib/stories'
 import { countMcpTool, isOutsideUse, isOwnCheck } from '../lib/outside-use'
 import { redis } from '../db/redis'
+import { CHOKEPOINTS } from '../lib/chokepoints'
 
 const SITE = (process.env.SITE_URL || 'https://world-pulse.io').replace(/\/+$/, '')
 
 /** Protocol versions this server speaks, newest first */
 export const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'] as const
 
-const SERVER_INFO = { name: 'worldpulse', title: 'WorldPulse', version: '1.2.0' }
+const SERVER_INFO = { name: 'worldpulse', title: 'WorldPulse', version: '1.3.0' }
 
 const INSTRUCTIONS = [
   'WorldPulse groups news reports of one event into one story and counts the outlets (websites) that report it. A story\'s count covers its last two days; a story that has run longer also gives how many outlets have reported it since it began.',
   'A story is "verified" when two or more outlets report it and its reliability score reaches 65%; verified means more than one outlet says so, not proven true (https://world-pulse.io/how-we-count).',
   'Cite stories with their world-pulse.io links. Start with top_stories; open one with story; find reports on a subject with search_reports; a week at a glance with week; how many outlets reported an article someone shared with check_link; the crises with the fewest outlets for the people displaced with under_reported.',
   'Since Nov 8, 2026 also: story_numbers (each figure in a story, such as the dead, with how many outlets give it), outlet (what a news website is: its country, its kind, state media or not), near (the reports pinned near a place), country (a country right now), daily_brief (the Daily Briefing), entity (a person, organisation or place in the news), trend (how coverage of a country or an entity changed day by day) and check_claim (what the newsrooms report about a claim; it never rules true or false).',
+  'And: breaking (the urgent reports of the last few hours), trending (who and what is in the news most), hotspots (where serious reports of several kinds meet), story_by_country (one story country by country: whose newsrooms carry it and how they headline it), shipping (ships, ports, straits and navies, near a chokepoint) and hazards (earthquakes, volcanoes, tsunamis, wildfires).',
 ].join(' ')
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -234,6 +236,64 @@ const storyOut = (s: ListedStory) => ({
   verifiedAt: s.verifiedAt, firstSeenAt: s.firstSeenAt ?? null, updatedAt: s.updatedAt ?? null,
   country: s.country ?? null, outletCountries: s.countries ?? 0, localOutlets: s.localOutlets ?? 0, localOutletNames: s.localNames ?? [],
 })
+
+/** An aircraft's transponder alarm ("Aircraft FDX382 squawking 7500 …"): an automatic reading, often wrong (Nov 8, 2026) */
+const SQUAWK = /\bsquawk(?:ing)?\s+7[567]00\b/i
+
+/**
+ * Why a breaking alert isn't a news report, or null: the breaking list takes any critical or high report, so it also
+ * holds aircraft transponder alarms, satellite and sensor readings (the hazards tool has those) and bylined opinion
+ * pieces a word like "tsunami" made a disaster (Nov 8, 2026: 13 of the 20 live alerts)
+ */
+export function notBreakingNews(title: string): 'transponder' | 'sensor' | 'opinion' | null {
+  const t = title.trim()
+  if (SQUAWK.test(t)) return 'transponder'
+  if (/^(?:(?:large|major|extreme|massive|significant)\s+)?wildfire detected near\b/i.test(t) || /^M\s?\d+(?:\.\d+)?\s+-\s/.test(t) || /^(?:volcanic|tsunami) alert\b/i.test(t)) return 'sensor'
+  if (/^\[[^\]]{3,40}\]\s/.test(t) || /[–—-]\s*(?:op-?ed|opinion|commentary|editorial|analysis)\s*$/i.test(t) || /^(?:opinion|op-?ed|editorial|commentary|analysis)\s*[:|]/i.test(t)) return 'opinion'
+  // "DAVID MARCUS: Where does …", a columnist's name, not "BREAKING:" or "JUST IN:"
+  const byline = /^([A-Z][A-Z.'’-]+(?: [A-Z][A-Z.'’-]+){1,3}):\s/.exec(t)
+  if (byline && !/^(?:BREAKING|JUST IN|LIVE|UPDATE|UPDATED|WATCH|EXCLUSIVE|PHOTOS|VIDEO|DEVELOPING|ALERT|URGENT)(?: NEWS)?$/.test(byline[1]!)) return 'opinion'
+  return null
+}
+
+/** "High" from "high" */
+const cap = (s: string | null | undefined) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : '')
+
+/** A report's story, as GET /api/v1/stories/outlets counts it */
+interface StoryCount { storyId?: string; outlets?: number; verified?: boolean; countries?: number; canonicalId?: string; firstReportAt?: string | null }
+
+/** The stories of some reports (one call for all of them), by report id; {} when the count can't be had */
+async function storyCounts(asker: Asker, ids: string[]): Promise<Record<string, StoryCount>> {
+  const valid = [...new Set(ids.filter(id => UUID.test(id)))].slice(0, 60)
+  if (valid.length === 0) return {}
+  const { status, body } = await ask(asker, `/api/v1/stories/outlets?ids=${valid.join(',')}`)
+  return status === 200 ? ((((body.data ?? {}) as { stories?: Record<string, StoryCount> }).stories) ?? {}) : {}
+}
+
+/** "Verified · 25 outlets in 12 countries", "3 outlets so far, not verified yet", "Only one outlet so far: unconfirmed" */
+function proofLine(c: StoryCount | undefined): string {
+  const outlets = Number(c?.outlets) || 1
+  const where = (Number(c?.countries) || 0) >= 2 ? ` in ${c!.countries} countries` : ''
+  if (c?.verified) return `Verified · ${outlets} outlet${outlets === 1 ? '' : 's'}${where}`
+  return outlets >= 2 ? `${outlets} outlets so far${where}, not verified yet` : 'Only one outlet so far: unconfirmed'
+}
+
+/** The hazards tool's kinds: the hazards route's sources (GET /api/v1/hazards/map/points); {m}, the smallest magnitude */
+const HAZARD_KINDS: Record<string, { slug: string; one: string; many: string; source: string; order: string }> = {
+  earthquake: { slug: 'seismic', one: 'earthquake of magnitude {m} or more', many: 'earthquakes of magnitude {m} or more', source: 'USGS', order: 'the strongest first' },
+  volcano: { slug: 'gvp-volcano', one: 'volcano alert', many: 'volcano alerts', source: 'USGS, US volcanoes', order: 'newest first' },
+  tsunami: { slug: 'tsunami-warnings', one: 'tsunami message', many: 'tsunami messages', source: 'NOAA\'s tsunami warning centres', order: 'newest first' },
+  wildfire: { slug: 'firms', one: 'large wildfire', many: 'large wildfires', source: 'NASA FIRMS, seen by satellite', order: 'the largest first' },
+}
+
+/** An earthquake's magnitude from its headline: 6.1 from "M 6.1 - 120 km E of Miyako, Japan" */
+export const magnitudeOf = (title: string): number | null => {
+  const m = /^M\s?(\d+(?:\.\d+)?)\b/i.exec(title.trim())
+  return m ? Number(m[1]) : null
+}
+
+/** "the Strait of Hormuz", "Bab el-Mandeb" */
+const theChokepoint = (c: { id: string; name: string }) => (c.id === 'bab-el-mandeb' ? c.name : `the ${c.name}`)
 
 export const TOOLS: Tool[] = [
   {
@@ -891,6 +951,359 @@ export const TOOLS: Tool[] = [
           close: !nearOnly,
           stories: stories.map(s => ({ storyId: s.storyId, title: s.hit.title, url: s.url, place: s.hit.locationName ?? null, verified: s.verified, outlets: s.outlets, outletCountries: s.countries, reportedSince: s.since, match: s.hit.score ?? null })),
           figures: figures.length ? figures.map(f => ({ label: f.label, values: (f.values ?? []).map(v => ({ value: v.text, outlets: v.outlets, outletNames: v.outletNames ?? [] })) })) : null,
+        },
+      }
+    },
+  },
+  {
+    name: 'breaking',
+    title: 'Breaking now',
+    description: 'The urgent reports of the last few hours: the critical and high-severity reports WorldPulse flagged as breaking (each stays up for 6 hours), newest first and each story once, each with its severity, kind, place, how long ago, how many outlets carry its story (verified or not yet) and its link. Left out: aircraft transponder alarms (squawk 7500, 7600, 7700: automatic readings, often wrong), satellite and sensor readings (wildfire detections, earthquakes: the hazards tool has them) and opinion pieces. A breaking report may come from one outlet so far: check its line before relying on it.',
+    inputSchema: {
+      type: 'object',
+      properties: { limit: { type: 'integer', minimum: 1, maximum: 20, default: 10, description: 'How many (1 to 20, default 10)' } },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const limit = intArg(args, 'limit', 10, 1, 20)
+      const { status, body } = await ask(asker, `/api/v1/breaking/alerts`)
+      if (status !== 200) throw new Error(`breaking alerts answered ${status}`)
+      type Alert = { signalId: string; title: string; severity?: string; category?: string; locationName?: string | null; countryCode?: string | null; timestamp?: string; expiresAt?: string }
+      const now = Date.now()
+      const live = ((((body.data ?? {}) as { alerts?: Alert[] }).alerts) ?? [])
+        .filter(a => a && typeof a.title === 'string' && UUID.test(String(a.signalId)) && !(Date.parse(String(a.expiresAt)) < now))
+      const why = live.map(a => notBreakingNews(a.title))
+      const news = live.filter((_, i) => why[i] === null)
+        .sort((x, y) => (Date.parse(String(y.timestamp)) || 0) - (Date.parse(String(x.timestamp)) || 0))
+      const left = { transponder: why.filter(w => w === 'transponder').length, sensor: why.filter(w => w === 'sensor').length, opinion: why.filter(w => w === 'opinion').length }
+      // newest first, each story once (an alert can be raised for several reports of one story, or twice for one)
+      const counts = await storyCounts(asker, news.map(a => a.signalId))
+      const seen = new Set<string>()
+      const alerts: Alert[] = []
+      for (const a of news) {
+        const story = counts[a.signalId]?.storyId ?? a.signalId
+        if (seen.has(story)) continue
+        seen.add(story)
+        alerts.push(a)
+        if (alerts.length === limit) break
+      }
+      const placeOf = (a: Alert) => a.locationName || (a.countryCode ? countryLabel(a.countryCode, false) : '')
+      const urlOf = (a: Alert) => signalLink(counts[a.signalId]?.canonicalId ?? a.signalId)
+      const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`
+      const parts = [
+        left.transponder ? n(left.transponder, 'aircraft transponder alarm', 'aircraft transponder alarms') : '',
+        left.sensor ? `${n(left.sensor, 'satellite or sensor reading', 'satellite and sensor readings')} (see hazards)` : '',
+        left.opinion ? n(left.opinion, 'opinion piece', 'opinion pieces') : '',
+      ].filter(Boolean)
+      const skipped = parts.length ? ` (left out: ${parts.join(', ')})` : ''
+      const text = alerts.length === 0
+        ? `No breaking report right now${skipped}. The stories the most outlets carry: top_stories. ${SITE}`
+        : [
+          `Breaking: the critical and high-severity reports of the last few hours, newest first${skipped}:`,
+          ...alerts.map((a, i) => `${i + 1}. ${a.title}\n   ${[cap(a.severity), a.category, placeOf(a), agoLabel(a.timestamp, now)].filter(Boolean).join(' · ')} · ${proofLine(counts[a.signalId])}\n   ${urlOf(a)}`),
+          'A breaking report may come from one outlet so far: check its line before relying on it.',
+        ].join('\n')
+      return {
+        text,
+        data: {
+          alerts: alerts.map(a => {
+            const c = counts[a.signalId]
+            return {
+              reportId: a.signalId, title: a.title, url: urlOf(a), severity: a.severity ?? null, category: a.category ?? null, place: placeOf(a) || null,
+              country: a.countryCode ?? null, at: a.timestamp ?? null, storyOutlets: Number(c?.outlets) || 1, verified: c?.verified === true, outletCountries: Number(c?.countries) || 0,
+            }
+          }),
+          leftOut: left,
+        },
+      }
+    },
+  },
+  {
+    name: 'trending',
+    title: 'Who and what is in the news',
+    description: 'The people, organisations and places named in the most WorldPulse reports in the last 24 hours, weighted by how much more than in the 24 hours before (so a sudden name ranks above a constant one): each with its reports in both windows, whether it is new in the news, its page and its id (open one with entity, or trend for day by day). Give type for only people, organisations or places.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        type: { type: 'string', enum: ['person', 'organisation', 'place'], description: 'Only people, organisations or places' },
+        limit: { type: 'integer', minimum: 1, maximum: 10, default: 10, description: 'How many (1 to 10, default 10)' },
+      },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const given = strArg(args, 'type', { pattern: /^(person|people|organisation|organization|place|location)$/i, hint: 'must be person, organisation or place' })?.toLowerCase()
+      const type = given ? ({ person: 'person', people: 'person', organisation: 'organisation', organization: 'organisation', place: 'location', location: 'location' } as Record<string, string>)[given] : undefined
+      const limit = intArg(args, 'limit', 10, 1, 10)
+      // the website's own question (its "In the news" row), so the answer is usually kept and ready
+      const { status, body } = await ask(asker, `/api/v1/knowledge-graph/trending?limit=10&window_hours=24&lean=1${type ? `&type=${type}` : ''}`)
+      if (status !== 200) throw new Error(`trending answered ${status}`)
+      type Row = { entity?: { id: string; type: string; canonical_name?: string; name?: string }; recent_mentions?: number; previous_mentions?: number; is_new?: boolean }
+      const rows = (((body as { trending?: Row[] }).trending) ?? []).filter(r => r?.entity && typeof r.entity.id === 'string').slice(0, limit)
+      const kind = (t: string) => (t === 'location' ? 'place' : t)
+      const plural: Record<string, string> = { person: 'people', organisation: 'organisations', location: 'places' }
+      const nameOf = (r: Row) => r.entity!.canonical_name || r.entity!.name || r.entity!.id
+      const text = rows.length === 0
+        ? 'No name stands out in the news just now; try again in a few minutes.'
+        : [
+          `In the news most, the last 24 hours against the 24 before${type ? ` (${plural[type]} only)` : ''}:`,
+          ...rows.map((r, i) => `${i + 1}. ${nameOf(r)} (${kind(r.entity!.type)}): ${r.recent_mentions ?? 0} report${r.recent_mentions === 1 ? '' : 's'} (${r.previous_mentions ?? 0} the 24 hours before)${r.is_new ? ' · new in the news' : ''}\n   ${entityPage(r.entity!.id, nameOf(r))} (id ${r.entity!.id})`),
+          'Open one with entity (its stories, who it is in the news with) or trend (day by day).',
+        ].join('\n')
+      return {
+        text,
+        data: {
+          type: type ? kind(type) : 'all', windowHours: 24, generatedAt: (body as { generated_at?: string }).generated_at ?? null,
+          entities: rows.map(r => ({
+            id: r.entity!.id, type: kind(r.entity!.type), name: nameOf(r), url: entityPage(r.entity!.id, nameOf(r)),
+            reports24h: r.recent_mentions ?? 0, reportsDayBefore: r.previous_mentions ?? 0, newInTheNews: r.is_new === true,
+          })),
+        },
+      }
+    },
+  },
+  {
+    name: 'hotspots',
+    title: 'Where the news meets',
+    description: 'Where the most is happening in the last 24 hours: the places (map cells about 100 km across) where serious reports of several kinds meet (conflict, disaster, economy, health…), the most serious first: each with its reports, its kinds, its worst severity, how recent, two of its headlines and a map link. A place named for a whole country also gathers that country\'s stories pinned to it as a whole.',
+    inputSchema: {
+      type: 'object',
+      properties: { limit: { type: 'integer', minimum: 1, maximum: 15, default: 8, description: 'How many places (1 to 15, default 8)' } },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const limit = intArg(args, 'limit', 8, 1, 15)
+      // the website's globe asks this, so the answer is usually kept and ready
+      const { status, body } = await ask(asker, `/api/v1/signals/map/hotspots?hours=24&min_categories=2&limit=25`)
+      if (status !== 200) throw new Error(`hotspots answered ${status}`)
+      type Spot = { centerLat: number; centerLng: number; place: string | null; signalCount: number; categoryCount: number; categories?: string[]; maxSeverity?: string; latestSignalAt?: string | null; sampleTitles?: string[]; sampleIds?: string[] }
+      const spots = ((((body.data ?? {}) as { hotspots?: Spot[] }).hotspots) ?? [])
+        .filter(s => s && Number.isFinite(s.centerLat) && Number.isFinite(s.centerLng))
+        .slice(0, limit)
+      const mapLink = (s: Spot) => `${SITE}/map?lat=${s.centerLat.toFixed(2)}&lng=${s.centerLng.toFixed(2)}&z=6`
+      const placeOf = (s: Spot) => s.place || `${s.centerLat.toFixed(1)}, ${s.centerLng.toFixed(1)}`
+      const headlines = (s: Spot) => (s.sampleTitles ?? [])
+        .map((title, k) => ({ title, url: UUID.test(String((s.sampleIds ?? [])[k])) ? signalLink((s.sampleIds ?? [])[k]) : null }))
+        .filter(h => !SQUAWK.test(h.title))
+        .slice(0, 2)
+      const text = spots.length === 0
+        ? `No place stands out in the last 24 hours. Map: ${SITE}/map`
+        : [
+          'Where the most is happening, the last 24 hours: places where serious reports of several kinds meet, the most serious first.',
+          ...spots.map((s, i) => [
+            `${i + 1}. ${placeOf(s)}: ${s.signalCount} reports, ${s.categoryCount} kinds (${(s.categories ?? []).join(', ')}), worst ${s.maxSeverity ?? 'unknown'}${s.latestSignalAt ? ` · latest ${agoLabel(s.latestSignalAt)}` : ''}`,
+            ...headlines(s).map(h => `   "${h.title}"${h.url ? ` ${h.url}` : ''}`),
+            `   Map: ${mapLink(s)}`,
+          ].join('\n')),
+          'A place named for a whole country also gathers that country\'s stories pinned to it as a whole. The reports near a point: near.',
+        ].join('\n')
+      return {
+        text,
+        data: {
+          hours: 24,
+          hotspots: spots.map(s => ({
+            place: placeOf(s), latitude: s.centerLat, longitude: s.centerLng, reports: s.signalCount, kinds: s.categoryCount, categories: s.categories ?? [],
+            worstSeverity: s.maxSeverity ?? null, latestAt: s.latestSignalAt ?? null, headlines: headlines(s), map: mapLink(s),
+          })),
+        },
+      }
+    },
+  },
+  {
+    name: 'story_by_country',
+    title: 'One story, country by country',
+    description: 'Where a story\'s outlets are from, country by country: for each country, how many of the outlets that carried the story in its last two days are based there, their names (state media marked) and one of their headlines, so how each country\'s newsrooms put it can be compared; the story\'s own country first, then the most outlets. Websites the outlet directory doesn\'t place are listed apart. Takes a story id or a report id, as top_stories, search_reports and the other tools give them.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'A story id or a report id (a UUID)' },
+        limit: { type: 'integer', minimum: 1, maximum: 40, default: 15, description: 'How many countries (1 to 40, default 15)' },
+      },
+      required: ['id'],
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const id = strArg(args, 'id', { required: true, pattern: UUID, hint: 'must be a story or report id (a UUID)' })!
+      const limit = intArg(args, 'limit', 15, 1, 40)
+      const { status, body } = await ask(asker, `/api/v1/stories/${id}`)
+      if (status === 404) throw new ToolError('No story or report with that id')
+      if (status !== 200) throw new Error(`story answered ${status}`)
+      type Info = { site: string; name: string | null; kind: string; country: string | null; stateMedia: boolean }
+      const d = (body.data ?? {}) as {
+        storyId?: string; outlets?: number; outletNames?: string[]; verifiedAt?: string | null; country?: string | null
+        outletInfo?: Info[]
+        signals?: Array<{ id: string; title: string; outlet?: string | null; url?: string | null }>
+      }
+      const info: Info[] = d.outletInfo ?? siteInfo(d.outletNames ?? [])
+      const reports = d.signals ?? []
+      const byCountry = new Map<string, Info[]>()
+      const notPlaced: string[] = []
+      for (const o of info) {
+        if (!o.country) { notPlaced.push(o.site); continue }
+        byCountry.set(o.country, [...(byCountry.get(o.country) ?? []), o])
+      }
+      const own = d.country ?? null
+      const order = [...byCountry.entries()].sort((a, b) =>
+        Number(b[0] === own) - Number(a[0] === own) || b[1].length - a[1].length || countryLabel(a[0], false).localeCompare(countryLabel(b[0], false)))
+      const countries = order.slice(0, limit).map(([code, outlets]) => {
+        // one of its outlets' own reports in the story (a website whose article was merged into another report has none)
+        const sites = new Set(outlets.map(o => o.site))
+        const r = reports.find(x => sites.has(String(x.outlet ?? '')))
+        const outlet = r?.outlet ? (outlets.find(o => o.site === r.outlet)?.name ?? outletOf(r.outlet)?.name ?? r.outlet) : null
+        const headline = r ? { title: r.title, outlet, url: signalLink(r.id) } : null
+        return { code, name: countryLabel(code, false), own: code === own, outlets, headline }
+      })
+      const first = reports[0]
+      const page = signalLink(first?.id ?? id)
+      // each outlet once by name: "BBC (2 websites)" for bbc.co.uk and bbc.com
+      const names = (outlets: Info[]) => {
+        const by = new Map<string, { sites: number; state: boolean }>()
+        for (const o of outlets) {
+          const e = by.get(o.name ?? o.site) ?? { sites: 0, state: false }
+          by.set(o.name ?? o.site, { sites: e.sites + 1, state: e.state || o.stateMedia })
+        }
+        return [...by.entries()].map(([name, e]) => `${name}${e.sites > 1 ? ` (${e.sites} websites)` : ''}${e.state ? ' (state media)' : ''}`)
+      }
+      const more = order.length - countries.length
+      const text = [
+        first?.title ?? 'Story',
+        `${d.verifiedAt ? 'Verified' : 'Not verified yet'} · ${d.outlets ?? info.length} outlets in its last two days, from ${byCountry.size} countr${byCountry.size === 1 ? 'y' : 'ies'}${notPlaced.length ? ` (and ${notPlaced.length} website${notPlaced.length === 1 ? '' : 's'} the outlet directory doesn't place)` : ''}. Page: ${page}`,
+        '',
+        ...countries.map(c => [
+          `${c.name}${c.own ? ' (where the story is)' : ''}: ${c.outlets.length} outlet${c.outlets.length === 1 ? '' : 's'} · ${names(c.outlets).slice(0, 8).join(', ')}${names(c.outlets).length > 8 ? ', …' : ''}`,
+          ...(c.headline ? [`   "${c.headline.title}"${c.headline.outlet ? ` (${c.headline.outlet})` : ''}`] : []),
+        ].join('\n')),
+        ...(more > 0 ? [`… and ${more} more countr${more === 1 ? 'y' : 'ies'} (limit takes up to 40).`] : []),
+        ...(notPlaced.length ? [`Not placed: ${notPlaced.slice(0, 8).join(', ')}${notPlaced.length > 8 ? ', …' : ''}`] : []),
+      ].join('\n')
+      return {
+        text,
+        data: {
+          storyId: d.storyId ?? id, url: page, verified: Boolean(d.verifiedAt), outlets: d.outlets ?? info.length, country: own, outletCountries: byCountry.size,
+          countries: countries.map(c => ({
+            code: c.code, name: c.name, ownCountry: c.own, outlets: c.outlets.length, outletNames: [...new Set(c.outlets.map(o => o.name ?? o.site))],
+            stateMedia: c.outlets.filter(o => o.stateMedia).map(o => o.name ?? o.site), headline: c.headline,
+          })),
+          moreCountries: Math.max(0, more), notPlaced,
+        },
+      }
+    },
+  },
+  {
+    name: 'shipping',
+    title: 'Ships, ports, straits and navies',
+    description: 'The last 7 days\' reports about ships, ports, straits, navies, piracy and sanctions at sea, newest first, each with how many outlets carry its story, its place, how long ago and its link. Give chokepoint for those within 500 km of one (suez, panama, hormuz, malacca, bab-el-mandeb, dover, gibraltar, taiwan, good-hope, bosporus, lombok, danish-straits) and type for one kind (piracy, naval, shipping, port, sanctions).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        chokepoint: { type: 'string', enum: CHOKEPOINTS.map(c => c.id), description: 'A chokepoint, e.g. hormuz' },
+        type: { type: 'string', enum: ['piracy', 'naval', 'shipping', 'port', 'sanctions'], description: 'One kind of report' },
+        limit: { type: 'integer', minimum: 1, maximum: 20, default: 10, description: 'How many (1 to 20, default 10)' },
+      },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const asked = strArg(args, 'chokepoint', { max: 40 })?.toLowerCase()
+      const cp = asked ? CHOKEPOINTS.find(c => c.id === asked || c.name.toLowerCase() === asked) : undefined
+      if (asked && !cp) throw new ToolError(`chokepoint must be one of ${CHOKEPOINTS.map(c => c.id).join(', ')}`)
+      const type = strArg(args, 'type', { pattern: /^(piracy|naval|shipping|port|sanctions)$/, hint: 'must be piracy, naval, shipping, port or sanctions' })
+      const limit = intArg(args, 'limit', 10, 1, 20)
+      const near = cp ? `&near=${cp.lat},${cp.lng}&radius=500` : ''
+      const { status, body } = await ask(asker, `/api/v1/maritime/signals?type=${type ?? 'all'}&limit=30${near}`)
+      if (status !== 200) throw new Error(`shipping news answered ${status}`)
+      type Item = { id: string; title: string; category?: string; severity?: string; location_name?: string | null; created_at?: string | null }
+      const items = (((body as { data?: Item[] }).data) ?? []).filter(x => x && UUID.test(String(x.id)) && typeof x.title === 'string').slice(0, limit)
+      const counts = await storyCounts(asker, items.map(x => x.id))
+      const urlOf = (x: Item) => signalLink(counts[x.id]?.canonicalId ?? x.id)
+      const scope = `${cp ? `, within 500 km of ${theChokepoint(cp)}` : ''}${type ? ` (${type})` : ''}`
+      const text = items.length === 0
+        ? `No report about ships, ports or navies in the last 7 days${scope}. Maritime page: ${SITE}/maritime`
+        : [
+          `Ships, ports, straits and navies, the last 7 days, newest first${scope}:`,
+          ...items.map((x, i) => `${i + 1}. ${x.title}\n   ${[proofLine(counts[x.id]), x.location_name, agoLabel(x.created_at)].filter(Boolean).join(' · ')}\n   ${urlOf(x)}`),
+          `Maritime page: ${SITE}/maritime${cp ? '' : ` · chokepoints: ${CHOKEPOINTS.map(c => c.id).join(', ')}`}`,
+        ].join('\n')
+      return {
+        text,
+        data: {
+          chokepoint: cp ? { id: cp.id, name: cp.name, latitude: cp.lat, longitude: cp.lng, radiusKm: 500 } : null, type: type ?? 'all',
+          reports: items.map(x => ({
+            id: x.id, title: x.title, url: urlOf(x), place: x.location_name ?? null, at: x.created_at ?? null, category: x.category ?? null,
+            storyOutlets: Number(counts[x.id]?.outlets) || 1, verified: counts[x.id]?.verified === true,
+          })),
+        },
+      }
+    },
+  },
+  {
+    name: 'hazards',
+    title: 'Earthquakes, volcanoes, tsunamis and wildfires',
+    description: 'Natural hazards in the last 48 hours (1 to 168): earthquakes of magnitude 4.5 or more (USGS), US volcano alerts (USGS), tsunami messages (NOAA\'s tsunami warning centres) and large wildfires seen by satellite (NASA FIRMS), each with its place, how long ago and its link; the strongest earthquakes and the largest fires first. Give kind for one of them, latitude and longitude (and radius_km) for those near a place, min_magnitude for stronger earthquakes.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        kind: { type: 'string', enum: ['earthquake', 'volcano', 'tsunami', 'wildfire'], description: 'Only one kind' },
+        hours: { type: 'integer', minimum: 1, maximum: 168, default: 48, description: 'How many hours back (1 to 168, default 48)' },
+        latitude: { type: 'number', minimum: -90, maximum: 90, description: 'With longitude: only those near this place, e.g. 35.68' },
+        longitude: { type: 'number', minimum: -180, maximum: 180, description: 'With latitude, e.g. 139.69' },
+        radius_km: { type: 'integer', minimum: 10, maximum: 2000, default: 500, description: 'How far from the place, in km (10 to 2000, default 500)' },
+        min_magnitude: { type: 'number', minimum: 4.5, maximum: 10, description: 'Only earthquakes of at least this magnitude, e.g. 6' },
+        limit: { type: 'integer', minimum: 1, maximum: 20, default: 5, description: 'How many of each kind (1 to 20, default 5)' },
+      },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const kind = strArg(args, 'kind', { pattern: /^(earthquake|volcano|tsunami|wildfire)$/, hint: 'must be earthquake, volcano, tsunami or wildfire' })
+      const hours = intArg(args, 'hours', 48, 1, 168)
+      const limit = intArg(args, 'limit', 5, 1, 20)
+      const given = (name: string) => args[name] !== undefined && args[name] !== null && args[name] !== ''
+      if (given('latitude') !== given('longitude')) throw new ToolError('Give latitude and longitude together')
+      const at = given('latitude') ? { lat: numArg(args, 'latitude', -90, 90), lng: numArg(args, 'longitude', -180, 180), km: intArg(args, 'radius_km', 500, 10, 2000) } : null
+      const minMag = given('min_magnitude') ? numArg(args, 'min_magnitude', 4.5, 10) : null
+      // the map's own question at 48 hours, so the answer is usually kept and ready
+      const { status, body } = await ask(asker, `/api/v1/hazards/map/points?hours=${hours}`)
+      if (status !== 200) throw new Error(`hazards answered ${status}`)
+      type Point = { id: string; title: string; lat: number; lng: number; severity?: string; source_slug?: string; published_at?: string | null }
+      const kmFrom = (p: Point) => (at ? distanceKm(at.lat, at.lng, p.lat, p.lng) : 0)
+      const points = ((((body.data ?? {}) as { points?: Point[] }).points) ?? [])
+        .filter(p => p && typeof p.title === 'string' && Number.isFinite(p.lat) && Number.isFinite(p.lng))
+        .filter(p => !at || kmFrom(p) <= at.km)
+        .filter(p => minMag === null || p.source_slug !== 'seismic' || (magnitudeOf(p.title) ?? 0) >= minMag)
+        // by its own time: the route's window is when WorldPulse stored it (a tsunami message 4 days old was in 48 hours)
+        .filter(p => !(Date.parse(String(p.published_at)) < Date.now() - hours * 3_600_000))
+      const time = (p: Point) => Date.parse(String(p.published_at)) || 0
+      const rank = (s?: string) => ({ critical: 4, high: 3, medium: 2, low: 1 } as Record<string, number>)[s ?? ''] ?? 0
+      const sections = (kind ? [kind] : Object.keys(HAZARD_KINDS)).map(k => {
+        const meta = HAZARD_KINDS[k]!
+        const all = points.filter(p => p.source_slug === meta.slug)
+        const sorted = all.slice().sort(
+          k === 'earthquake' ? (a, b) => (magnitudeOf(b.title) ?? 0) - (magnitudeOf(a.title) ?? 0) || time(b) - time(a)
+            : k === 'wildfire' ? (a, b) => rank(b.severity) - rank(a.severity) || time(b) - time(a)
+              : (a, b) => time(b) - time(a))
+        return { kind: k, meta, total: all.length, shown: sorted.slice(0, limit) }
+      })
+      const where = at ? ` within ${at.km} km of ${at.lat.toFixed(2)}, ${at.lng.toFixed(2)}` : ''
+      const label = (k: { one: string; many: string }, n: number) => (n === 1 ? k.one : k.many).replace('{m}', String(minMag ?? 4.5))
+      const text = [
+        `Natural hazards, the last ${hours} hours${where}: ${sections.map(s => `${s.total} ${label(s.meta, s.total)} (${s.meta.source})`).join(', ')}.`,
+        ...sections.filter(s => s.shown.length > 0).map(s => [
+          '',
+          `${cap(label(s.meta, 2))}, ${s.meta.order}:`,
+          ...s.shown.map((p, i) => `${i + 1}. ${p.title} · ${agoLabel(p.published_at)}${s.kind === 'wildfire' ? ` · at ${p.lat.toFixed(1)}, ${p.lng.toFixed(1)}` : ''}${at ? ` · ${Math.round(kmFrom(p))} km away` : ''}\n   ${signalLink(p.id)}`),
+        ].join('\n')),
+        '',
+        `Map: ${SITE}/map`,
+      ].join('\n')
+      return {
+        text,
+        data: {
+          hours, near: at ? { latitude: at.lat, longitude: at.lng, radiusKm: at.km } : null, minMagnitude: minMag,
+          kinds: sections.map(s => ({
+            kind: s.kind, source: s.meta.source, total: s.total,
+            items: s.shown.map(p => ({
+              id: p.id, title: p.title, url: signalLink(p.id), magnitude: s.kind === 'earthquake' ? magnitudeOf(p.title) : null, severity: p.severity ?? null,
+              latitude: p.lat, longitude: p.lng, at: p.published_at ?? null, ...(at ? { km: Math.round(kmFrom(p)) } : {}),
+            })),
+          })),
         },
       }
     },
