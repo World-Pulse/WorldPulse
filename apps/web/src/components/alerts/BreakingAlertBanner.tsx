@@ -3,8 +3,9 @@
 /**
  * The breaking banner, under the top menu (Nov 9, 2026: back on, Devon: "Yes", after "the banner should always be
  * accurate"). It shows the API's breaking list (news only, each story once with its outlet count) for the last few
- * hours, newest first, rotating every 8 seconds. A reader closes it for themselves only, for the rest of the visit.
- * It asks the API every 90 seconds (the API keeps its answer 15 seconds), so it opens no connection of its own.
+ * hours, the stories two outlets or more report, newest first, rotating every 8 seconds. A reader closes it for
+ * themselves only, for the rest of the visit. It asks the API every 90 seconds (the API keeps its answer 15
+ * seconds), so it opens no connection of its own.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -102,7 +103,7 @@ export function BreakingAlertBanner() {
       role="region"
       aria-label="Breaking news"
     >
-      <div className="mx-auto max-w-7xl px-3 py-1.5 flex items-center gap-3">
+      <div className="mx-auto max-w-7xl px-3 py-0.5 sm:py-1.5 flex items-center gap-3">
         <div className="flex items-center gap-2 shrink-0">
           <span className="relative flex h-2 w-2" aria-hidden="true">
             <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${styles.dot} opacity-75`} />
@@ -111,8 +112,9 @@ export function BreakingAlertBanner() {
           <span className="text-[11px] font-bold tracking-wider text-white uppercase">Breaking</span>
         </div>
 
-        <Link href={alertHref(alert)} className="flex-1 min-w-0 text-left text-[13px] font-medium text-white truncate hover:underline" title={alert.title}>
-          {alert.title}
+        {/* a flex box: on phones every link is at least 44 px tall (globals.css), so the headline sits in its middle */}
+        <Link href={alertHref(alert)} className="flex-1 min-w-0 flex items-center text-left text-[13px] font-medium text-white hover:underline" title={alert.title}>
+          <span className="truncate">{alert.title}</span>
         </Link>
 
         {proof && (
@@ -121,7 +123,7 @@ export function BreakingAlertBanner() {
             title={proof}
           >
             <span className="hidden sm:inline">{proof}</span>
-            <span className="sm:hidden">{alert.story?.verified ? `✓ ${alert.story.outlets}` : `${alert.story?.outlets ?? 1} so far`}</span>
+            <span className="sm:hidden">{alert.story?.verified ? `✓ ${alert.story.outlets} outlets` : `${alert.story?.outlets ?? 2} outlets`}</span>
           </span>
         )}
 

@@ -22,17 +22,25 @@ export interface BannerAlert {
 /** Breaking means the last few hours: an older alert stays on the API's list (6 hours) but leaves the banner */
 export const BANNER_HOURS = 3
 
-/** The alerts to show: not expired, from the last BANNER_HOURS, not closed by this reader, newest first */
+/**
+ * A story on the banner has at least two outlets (Nov 9, 2026). On its first morning back, the list's one-outlet
+ * stories were mostly not breaking news at all ("Traffic is normal at all Bulgarian border crossings"); a second
+ * outlet usually follows real news within minutes. The AI assistants' breaking tool still shows them, labelled.
+ */
+export const BANNER_MIN_OUTLETS = 2
+
+/** The alerts to show: two outlets or more, not expired, from the last BANNER_HOURS, not closed here, newest first */
 export function bannerAlerts(alerts: BannerAlert[], now: number, closed: ReadonlySet<string>): BannerAlert[] {
   return alerts
     .filter(a => a && typeof a.title === 'string' && a.title.trim() !== '' && typeof a.alertId === 'string')
+    .filter(a => (Number(a.story?.outlets) || 0) >= BANNER_MIN_OUTLETS)
     .filter(a => !closed.has(a.alertId))
     .filter(a => (Date.parse(a.expiresAt) || 0) > now)
     .filter(a => now - (Date.parse(a.timestamp) || 0) <= BANNER_HOURS * 3_600_000)
     .sort((x, y) => (Date.parse(y.timestamp) || 0) - (Date.parse(x.timestamp) || 0))
 }
 
-/** "Verified · 14 outlets in 13 countries", "3 outlets so far, not verified yet", "1 outlet so far · unconfirmed" */
+/** "Verified · 14 outlets in 13 countries", "3 outlets so far, not verified yet" ("1 outlet so far · unconfirmed" never shows) */
 export function proofText(story?: BannerStory | null): string {
   if (!story) return ''
   const n = Math.max(1, Math.round(Number(story.outlets) || 1))

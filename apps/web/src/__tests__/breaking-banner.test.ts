@@ -1,6 +1,7 @@
 /**
  * The breaking banner (Nov 9, 2026: back on; Devon: "the banner should always be accurate"): the last few hours of
- * the API's news-only list, newest first, each with its outlet count, never on embeds or the full-screen map.
+ * the API's news-only list, the stories two outlets or more report, newest first, each with its outlet count, never
+ * on embeds or the full-screen map.
  */
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
@@ -9,8 +10,10 @@ import { alertHref, bannerAlerts, bannerHiddenOn, proofText, timeAgo, BANNER_HOU
 
 const NOW = Date.parse('2026-11-09T13:00:00.000Z')
 const ago = (min: number) => new Date(NOW - min * 60_000).toISOString()
+const story = (outlets: number) => ({ id: 's', outlets, verified: outlets >= 2, countries: outlets, page: 'p' })
 const alert = (alertId: string, min: number, extra: Partial<BannerAlert> = {}): BannerAlert => ({
-  alertId, signalId: `${alertId}-report`, title: `Alert ${alertId}`, severity: 'high', timestamp: ago(min), expiresAt: new Date(NOW + 3_600_000).toISOString(), ...extra,
+  alertId, signalId: `${alertId}-report`, title: `Alert ${alertId}`, severity: 'high', timestamp: ago(min), expiresAt: new Date(NOW + 3_600_000).toISOString(),
+  story: story(5), ...extra,
 })
 
 describe('bannerAlerts', () => {
@@ -23,6 +26,15 @@ describe('bannerAlerts', () => {
       alert('gone', 2, { expiresAt: ago(1) }),
     ]
     expect(bannerAlerts(list, NOW, new Set(['closed'])).map(a => a.alertId)).toEqual(['b', 'a'])
+  })
+
+  it('keeps only the stories two outlets or more report (Nov 9: one-outlet alerts were mostly not breaking news)', () => {
+    const list = [
+      alert('lone', 1, { title: 'Traffic is normal at all Bulgarian border crossings', story: story(1) }),
+      alert('unknown', 2, { story: null }),
+      alert('two', 3, { story: story(2) }),
+    ]
+    expect(bannerAlerts(list, NOW, new Set()).map(a => a.alertId)).toEqual(['two'])
   })
 })
 
@@ -57,5 +69,7 @@ describe('where and what it opens', () => {
     expect(banner).toContain('top-[52px]')
     expect(banner).not.toContain('new WebSocket')
     expect(banner).not.toContain('/dismiss')
+    // on phones every link is at least 44 px tall: the headline is centered in a flex box, truncated in its span
+    expect(banner).toMatch(/className="flex-1 min-w-0 flex items-center[^"]*"[^>]*>\s*<span className="truncate">/)
   })
 })
