@@ -667,6 +667,8 @@ export const OUTLET_DIRECTORY: Readonly<Record<string, OutletEntry>> = {
   "theloadstar.com": { name: "The Loadstar", country: "GB", kind: 'specialist' },
   "thelocal.at": { name: "The Local Austria", country: "AT", kind: 'national' },
   "thelocal.ch": { name: "The Local Switzerland", country: "CH", kind: 'national' },
+  "thelocal.dk": { name: "The Local Denmark", country: "DK", kind: 'national' },
+  "thelocal.se": { name: "The Local Sweden", country: "SE", kind: 'national' },
   "themoscowtimes.com": { name: "The Moscow Times", country: "RU", kind: 'national' },
   "thenationalnews.com": { name: "The National", country: "AE", kind: 'national' },
   "thenationonlineng.net": { name: "The Nation (Nigeria)", country: "NG", kind: 'national' },

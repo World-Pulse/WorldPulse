@@ -10269,6 +10269,36 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['mongolia', 'east-asia', 'asia', 'mongolian-language'],
     language:        'mn',
   },
+  // ── Added Nov 9, 2026, 3 AM (R5, Devon's Nov 8 coverage rule: second newsrooms for places that read one) ──
+  // The Local's Denmark and Sweden editions (R5, Nov 9, 2026): news and explainers in English for people living there, the second newsroom in English for each (Denmark had The Copenhagen Post, Sweden Radio Sweden); same publisher, feed host and terms as The Local Switzerland and Austria; home pin; each feed read Nov 9: Denmark's newest item that morning, Sweden's two days old (Nov 7)
+  {
+    id:              'thelocal-dk',
+    name:            'The Local Denmark',
+    feedUrl:         'https://feeds.thelocal.com/rss/dk',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.75,
+    countryCode:     'DK',
+    defaultLat:      55.68,
+    defaultLng:      12.57,
+    defaultLocation: 'Copenhagen, Denmark',
+    extraTags:       ['denmark', 'nordics', 'europe'],
+    language:        'en',
+  },
+  {
+    id:              'thelocal-se',
+    name:            'The Local Sweden',
+    feedUrl:         'https://feeds.thelocal.com/rss/se',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.75,
+    countryCode:     'SE',
+    defaultLat:      59.33,
+    defaultLng:      18.07,
+    defaultLocation: 'Stockholm, Sweden',
+    extraTags:       ['sweden', 'nordics', 'europe'],
+    language:        'en',
+  },
 ]
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────
@@ -10708,7 +10738,7 @@ export const HOME_PIN_SOURCES = new Set([
   // Oct 31, 2026 (Q9, sources round 6)
   'ami-mauritania-en', 'african-manager-en', 'echorouk-en', 'marshall-islands-journal', 'de-ware-tijd-sr',
   'starnieuws-sr', 'suriname-herald-sr', 'von-radio-kn', 'cuenca-high-life-ec', 'asuncion-times-py',
-  'statehouse-seychelles', 'maka-angola-en', 'thelocal-at',
+  'statehouse-seychelles', 'maka-angola-en', 'thelocal-at', 'thelocal-dk', 'thelocal-se',
   'rtv-slo-slovenija', 'moldovalive-md', 'zdg-md', 'tv8-md',
   'aktuelno-me', 'rtnk-me', 'prishtina-insight', 'lajmi-net-xk', 'el-periodic-andorra',
   'san-marino-rtv',
