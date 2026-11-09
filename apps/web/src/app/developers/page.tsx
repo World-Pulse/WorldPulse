@@ -31,6 +31,11 @@ const MCP_TOOLS = [
   { name: 'story_by_country', what: 'One story country by country: whose newsrooms carry it (state media marked) and how they headline it' },
   { name: 'shipping', what: 'Ships, ports, straits and navies, near any of 12 chokepoints' },
   { name: 'hazards', what: 'Earthquakes, volcanoes, tsunamis and large wildfires (USGS, NOAA, NASA)' },
+  { name: 'latest', what: 'The newest verified reports, of one subject or one country' },
+  { name: 'how_verified', what: 'How a story was checked: its outlets, then each comparison of what they report' },
+  { name: 'story_timeline', what: 'Who reported a story first, the next outlets in order, and how long verification took' },
+  { name: 'conflicts', what: 'Where conflict and military news is reported in the last 72 hours' },
+  { name: 'internet_outages', what: 'Internet outages by country, from IODA (Georgia Tech)' },
 ]
 const MCP_CURSOR = '{"mcpServers":{"worldpulse":{"url":"https://api.world-pulse.io/mcp"}}}'
 

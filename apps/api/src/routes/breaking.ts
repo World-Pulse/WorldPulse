@@ -9,6 +9,7 @@ import type { BreakingAlert } from '../lib/breaking-alerts'
 import { redis } from '../db/redis'
 import { logger } from '../lib/logger'
 import { sendError } from '../lib/errors'
+import { authenticate } from '../middleware/auth'
 
 const BREAKING_CACHE_TTL = 15 // 15-second cache for GET
 
@@ -96,6 +97,8 @@ export const registerBreakingRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Params: { alertId: string }; Reply: { success: boolean } }>(
     '/alerts/:alertId/dismiss',
     {
+      // admins only (Nov 8, 2026): anyone could remove an alert for everyone, and the banner did each one after 60 seconds
+      preHandler: [authenticate],
       schema: {
         tags: ['breaking-alerts'],
         description: 'Dismiss a breaking news alert',
@@ -116,6 +119,9 @@ export const registerBreakingRoutes: FastifyPluginAsync = async (app) => {
     },
     async (request, reply) => {
       try {
+        if (!request.user || request.user.accountType !== 'admin') {
+          return sendError(reply, 403, 'FORBIDDEN', 'Admin access required')
+        }
         const { alertId } = request.params
         if (!alertId || alertId.trim().length === 0) {
           return sendError(reply, 400, 'BAD_REQUEST', 'Bad request')

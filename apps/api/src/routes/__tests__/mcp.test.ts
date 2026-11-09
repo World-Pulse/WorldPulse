@@ -58,7 +58,8 @@ async function build(): Promise<FastifyInstance> {
       return {
         success: true,
         data: {
-          storyId: 'world-story', size: 9, outlets: 7, verifiedAt: '2026-11-07T16:00:00.000Z', country: 'PL',
+          storyId: 'world-story', size: 9, outlets: 7, outletsAll: 90, verifiedAt: '2026-11-07T16:00:00.000Z', country: 'PL',
+          firstReportAt: '2026-11-07T15:31:00.000Z', latestReportAt: hoursAgo(2),
           outletNames: ['aljazeera.com', 'bbc.co.uk', 'bbc.com', 'notesfrompoland.com', 'tass.com', 'tvpworld.com', 'unknown-site.example'],
           outletInfo: [
             { site: 'aljazeera.com', name: 'Al Jazeera', kind: 'international', country: 'QA', stateMedia: false },
@@ -151,8 +152,24 @@ async function build(): Promise<FastifyInstance> {
   })
   app.get('/api/v1/signals', async (req) => {
     asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
-    const st = (req.query as { status?: string }).status
+    const q = req.query as { status?: string; limit?: string; category?: string; country?: string }
+    const st = q.status
     const ago = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString()
+    // the latest tool asks for 50, with no area
+    if (q.limit === '50') {
+      if (q.category === 'sports') return { success: true, data: { items: [], cursor: null, hasMore: false } }
+      return {
+        success: true,
+        data: {
+          items: [
+            { id: OTHER_REPORT, title: 'Talks in Doha go on', status: 'verified', locationName: 'Doha', countryCode: 'QA', category: 'geopolitics', createdAt: ago(1) },
+            { id: STORY.leadId, title: STORY.title, status: 'verified', locationName: 'Doha', countryCode: 'QA', category: 'geopolitics', createdAt: ago(2) },
+            { id: LONE_REPORT, title: 'Trains collide near Cairo', status: 'verified', locationName: null, countryCode: 'EG', category: 'disaster', createdAt: ago(3) },
+          ],
+          cursor: null, hasMore: false,
+        },
+      }
+    }
     const items = st === 'pending'
       ? [{ id: '66666666-6666-4666-8666-666666666666', title: 'Fire at Doha port', status: 'pending', location: { lat: 25.29, lng: 51.55 }, locationName: 'Doha', countryCode: 'QA', createdAt: ago(1) }]
       : [
@@ -324,6 +341,47 @@ async function build(): Promise<FastifyInstance> {
       },
     }
   })
+  app.get('/api/v1/signals/:id/verifications', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    const { id } = req.params as { id: string }
+    const items = id !== STORY.leadId ? [] : [
+      { id: 'v2', verifierType: 'cross_check', checkType: 'cross_check', verdict: null, result: 'warning', confidence: 0.6, scoreDelta: null, notes: '[Claude] The outlets differ: one gives 60 injured, the others 100.', createdAt: '2026-11-08T23:40:00.000Z' },
+      { id: 'v1', verifierType: 'cross_check', checkType: 'cross_check', verdict: null, result: 'confirmed', confidence: 0.9, scoreDelta: null, notes: '[Claude] All three reports describe the same talks.', createdAt: '2026-11-08T13:32:00.000Z' },
+    ]
+    return { success: true, data: { items, total: items.length, page: 1, limit: 20 } }
+  })
+  app.get('/api/v1/signals/map/conflict-zones', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    const f = (id: string | null, title: string, severity: string, place: string | null, h: number) =>
+      ({ type: 'Feature', geometry: { type: 'Point', coordinates: [0, 0] }, properties: { id, title, severity, category: 'conflict', reliability_score: 0.7, source_name: place, published_at: hoursAgo(h) } })
+    return {
+      type: 'FeatureCollection',
+      features: [
+        f(STORY.leadId, 'Strikes reported in Gaza City', 'high', 'Gaza', 5),
+        f(LONE_REPORT, 'Shelling near Khan Younis', 'critical', 'Gaza', 1),
+        f(null, 'Gaza ceasefire talks stall', 'medium', 'Gaza', 9),
+        f(OTHER_REPORT, 'Drones hit Kyiv overnight', 'high', 'Kyiv', 2),
+        f(null, 'Air raid alert in Kyiv', 'high', 'Kyiv', 4),
+        f(null, 'Iran warns of response', 'medium', 'Tehran', 6),
+        // newer, but an opinion piece: not the place's newest headline
+        f(null, 'The Unavoidable War – OpEd', 'medium', 'Tehran', 0.5),
+        f(null, 'Troops move at sea', 'medium', null, 3),
+      ],
+    }
+  })
+  app.get('/api/v1/outages/recent', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    return {
+      success: true, cached: false,
+      data: {
+        hours: 72, count: 2,
+        events: [
+          { id: '21212121-2121-4121-8121-212121212121', title: 'Internet outage in Iran', summary: 'IODA saw routing drop by 40%. It had not recovered by 21:00 UTC.', severity: 'high', category: 'technology', country_code: 'IR', location_name: 'Iran', published_at: hoursAgo(3) },
+          { id: '23232323-2323-4323-8323-232323232323', title: 'Internet outage in Cuba', summary: null, severity: 'medium', category: 'technology', country_code: 'CU', location_name: 'Cuba', published_at: hoursAgo(30) },
+        ],
+      },
+    }
+  })
   await app.register(registerMcpRoutes, { prefix: '/mcp' })
   return app
 }
@@ -361,6 +419,7 @@ describe('MCP server', () => {
       'top_stories', 'story', 'search_reports', 'week', 'check_link', 'under_reported',
       'story_numbers', 'outlet', 'near', 'country', 'daily_brief', 'entity', 'trend', 'check_claim',
       'breaking', 'trending', 'hotspots', 'story_by_country', 'shipping', 'hazards',
+      'latest', 'how_verified', 'story_timeline', 'conflicts', 'internet_outages',
     ])
     for (const t of tools) {
       expect(t.inputSchema.type).toBe('object')
@@ -718,34 +777,21 @@ describe('tool calls counted as use from outside (Oct 22, 2026)', () => {
 describe('MCP server: the six tools of Nov 8, 2026, evening (twenty in all)', () => {
   beforeEach(() => { asked = [] })
 
-  it('breaking gives the live alerts newest first, each story once, with its count; alarms, sensor readings and opinion left out', async () => {
+  it('breaking gives the live news alerts newest first, each story once, with its count; never alarms, sensor readings or opinion', async () => {
     const app = await build()
     const r = await call(app, 'breaking')
     expect(r.isError).toBe(false)
     expect(asked.map(a => a.url)).toEqual(['/api/v1/breaking/alerts', `/api/v1/stories/outlets?ids=${DAM_REPORT},${LONE_REPORT},${OTHER_REPORT},${STORY.leadId}`])
     const text = r.content[0].text as string
-    expect(text).toContain('(left out: 1 aircraft transponder alarm, 1 satellite or sensor reading (see hazards), 2 opinion pieces)')
+    expect(text.split('\n')[0]).toBe('Breaking: the critical and high-severity news reports of the last few hours, newest first:')
     expect(text).toContain(`1. BREAKING: Dam bursts above Valencia\n   Critical · disaster · Valencia · 6m ago · Only one outlet so far: unconfirmed\n   https://world-pulse.io/signals/${DAM_REPORT}`)
     expect(text).toContain('2. Trains collide near Cairo\n   High · disaster · Cairo · 30m ago · Only one outlet so far: unconfirmed')
     // the Doha story once, as its newest alert, linked to the story's page
     expect(text).toContain(`3. Talks in Doha go on\n   High · conflict · Doha · 1h ago · Verified · 14 outlets in 9 countries\n   https://world-pulse.io/signals/${STORY.leadId}`)
     expect(text).not.toContain('Ceasefire talks')
     for (const gone of ['FDX382', 'past its six hours', 'wildfire', 'DAVID MARCUS', 'Aziz Huq']) expect(text).not.toContain(gone)
-    expect(r.structuredContent).toMatchObject({ leftOut: { transponder: 1, sensor: 1, opinion: 2 }, alerts: [{ reportId: DAM_REPORT }, { reportId: LONE_REPORT, storyOutlets: 1, verified: false }, { reportId: OTHER_REPORT, storyOutlets: 14, verified: true }] })
+    expect(r.structuredContent).toMatchObject({ alerts: [{ reportId: DAM_REPORT }, { reportId: LONE_REPORT, storyOutlets: 1, verified: false }, { reportId: OTHER_REPORT, storyOutlets: 14, verified: true }] })
     expect((await call(app, 'breaking', { limit: 1 })).structuredContent.alerts).toHaveLength(1)
-  })
-
-  it('tells a news report from an alarm, a sensor reading or an opinion piece', async () => {
-    const { notBreakingNews } = await import('../mcp')
-    expect(notBreakingNews('Aircraft N857ER squawking 7700 — General emergency (United States)')).toBe('transponder')
-    expect(notBreakingNews('Major wildfire detected near Western Australia, Australia')).toBe('sensor')
-    expect(notBreakingNews('M 6.2 - 120 km E of Miyako, Japan')).toBe('sensor')
-    expect(notBreakingNews('Tsunami Alert: 75 miles SW of Eureka, California')).toBe('sensor')
-    expect(notBreakingNews('US Midterms And The Emerging Paradoxes – OpEd')).toBe('opinion')
-    expect(notBreakingNews('Opinion: The court got it wrong')).toBe('opinion')
-    for (const news of ['BREAKING: Dam bursts above Valencia', 'JUST IN: Strike on Kharkiv', 'Seven dead and more than 100 injured after trains collide in Egypt', 'UN says 2 million displaced in Sudan', 'M23 rebels take Goma airport']) {
-      expect(notBreakingNews(news), news).toBeNull()
-    }
   })
 
   it('trending asks the website\'s own question and gives each name\'s reports in both days, its page and its id', async () => {
@@ -847,5 +893,82 @@ describe('MCP server: the six tools of Nov 8, 2026, evening (twenty in all)', ()
     expect((await call(app, 'hazards', { latitude: 38.3 })).content[0].text).toBe('Give latitude and longitude together')
     expect((await call(app, 'hazards', { hours: 168 })).content[0].text).toContain('1 tsunami message (NOAA\'s tsunami warning centres)')
     expect((await call(app, 'hazards', { kind: 'meteor' })).isError).toBe(true)
+  })
+})
+
+describe('MCP server: the five tools of Nov 8, 2026, 9 PM (twenty-five in all)', () => {
+  beforeEach(() => { asked = [] })
+
+  it('latest gives the newest verified reports, each story once, of one subject or country when asked', async () => {
+    const app = await build()
+    const r = await call(app, 'latest')
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/signals?status=verified&limit=50', `/api/v1/stories/outlets?ids=${OTHER_REPORT},${STORY.leadId},${LONE_REPORT}`])
+    const text = r.content[0].text as string
+    expect(text).toContain(`1. Talks in Doha go on\n   1h ago · Doha · Verified · 14 outlets in 9 countries\n   https://world-pulse.io/signals/${STORY.leadId}`)
+    expect(text).toContain('2. Trains collide near Cairo\n   3h ago · Egypt · Only one outlet so far: unconfirmed')
+    expect(text).not.toContain('Ceasefire talks')
+    asked = []
+    await call(app, 'latest', { category: 'Geopolitics', country: 'qa', limit: 1 })
+    expect(asked[0]!.url).toBe('/api/v1/signals?status=verified&limit=50&category=geopolitics&country=QA')
+    expect((await call(app, 'latest', { category: 'sports' })).content[0].text).toBe('No verified report about sports lately. https://world-pulse.io')
+    expect((await call(app, 'latest', { category: 'gossip' })).content[0].text).toContain('category must be one of conflict, geopolitics')
+  })
+
+  it('how_verified gives the story\'s count, then each comparison of what its outlets report, from its page when the report has none', async () => {
+    const app = await build()
+    const r = await call(app, 'how_verified', { id: OTHER_REPORT })
+    expect(asked.map(a => a.url)).toEqual([
+      `/api/v1/stories/outlets?ids=${OTHER_REPORT}`, `/api/v1/signals/${OTHER_REPORT}/verifications?limit=20`, `/api/v1/signals/${STORY.leadId}/verifications?limit=20`,
+    ])
+    const text = r.content[0].text as string
+    expect(text).toContain(`Verified · 14 outlets in 9 countries. Page: https://world-pulse.io/signals/${STORY.leadId}`)
+    expect(text).toContain('1. An AI model compared the outlets\' reports (2026-11-08 23:40 UTC): the outlets differ (confidence 0.6). "The outlets differ: one gives 60 injured, the others 100."')
+    expect(text).toContain('2. An AI model compared the outlets\' reports (2026-11-08 13:32 UTC): the outlets agree (confidence 0.9). "All three reports describe the same talks."')
+    expect(text).not.toContain('[Claude]')
+    expect(r.structuredContent.checks[0]).toEqual({ kind: 'outlets compared by an AI model', result: 'warning', confidence: 0.6, note: 'The outlets differ: one gives 60 injured, the others 100.', at: '2026-11-08T23:40:00.000Z' })
+    const lone = await call(app, 'how_verified', { id: LONE_REPORT })
+    expect(lone.content[0].text).toContain('Only one outlet so far: unconfirmed. Page:')
+    expect(lone.content[0].text).toContain('No check recorded on it yet')
+    expect((await call(app, 'how_verified', { id: '99999999-0000-4000-8000-000000000000' })).content[0].text).toBe('No story or report with that id')
+  })
+
+  it('story_timeline gives who reported first, the next outlets with their minutes, and how long verification took', async () => {
+    const app = await build()
+    const r = await call(app, 'story_timeline', { id: WORLD_REPORT })
+    const text = r.content[0].text as string
+    expect(text).toContain('First reported 2026-11-07 15:31 UTC by Notes from Poland: "Six killed in Krakow shooting"')
+    expect(text).toContain('Verified 2026-11-07 16:00 UTC, 29 min after the first report.')
+    expect(text).toContain(`Since: 90 outlets in all, 9 reports, the latest 2h ago. Page: https://world-pulse.io/signals/${WORLD_REPORT}`)
+    expect(text).toContain('1. Notes from Poland (first): "Six killed in Krakow shooting"\n2. BBC (+9 min): "Gunman kills six in Polish city"\n3. TASS (+39 min): "Shooting in Krakow: six dead"')
+    expect(r.structuredContent).toMatchObject({ minutesToVerified: 29, outletsAll: 90, firstOutlets: [{ outlet: 'Notes from Poland' }, { outlet: 'BBC' }, { outlet: 'TASS' }] })
+    expect((await call(app, 'story_timeline', { id: '99999999-0000-4000-8000-000000000000' })).isError).toBe(true)
+  })
+
+  it('conflicts groups the 72 hours\' conflict and military reports by place, the most first, with the newest headline', async () => {
+    const app = await build()
+    const r = await call(app, 'conflicts')
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/signals/map/conflict-zones'])
+    const text = r.content[0].text as string
+    expect(text).toContain('(8 reports in 3 places)')
+    expect(text).toContain(`1. Gaza: 3 reports, worst critical\n   Newest: "Shelling near Khan Younis" (1h ago) https://world-pulse.io/signals/${LONE_REPORT}`)
+    expect(text).toContain(`2. Kyiv: 2 reports, worst high\n   Newest: "Drones hit Kyiv overnight" (2h ago) https://world-pulse.io/signals/${OTHER_REPORT}`)
+    expect(text).toContain('3. Tehran: 2 reports, worst medium\n   Newest: "Iran warns of response" (6h ago)\n')
+    expect(text).toContain('These count reports, not attacks.')
+    expect((await call(app, 'conflicts', { limit: 1 })).structuredContent.places).toHaveLength(1)
+  })
+
+  it('internet_outages gives IODA\'s outages newest first, of one country when asked', async () => {
+    const app = await build()
+    const r = await call(app, 'internet_outages')
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/outages/recent?hours=72&limit=100'])
+    const text = r.content[0].text as string
+    expect(text).toContain('Internet outages in the last 72 hours, newest first (from IODA, Georgia Tech):')
+    expect(text).toContain('1. Internet outage in Iran\n   High · Iran · 3h ago\n   IODA saw routing drop by 40%.\n   https://world-pulse.io/signals/21212121-2121-4121-8121-212121212121')
+    expect(text).toContain('2. Internet outage in Cuba\n   Medium · Cuba · 30h ago\n   https://world-pulse.io/signals/23232323')
+    const cuba = await call(app, 'internet_outages', { country: 'cu', hours: 48 })
+    expect(asked.at(-1)!.url).toBe('/api/v1/outages/recent?hours=48&limit=100')
+    expect(cuba.content[0].text).toContain('Internet outages in Cuba in the last 48 hours')
+    expect(cuba.content[0].text).not.toContain('Iran')
+    expect((await call(app, 'internet_outages', { country: 'DE' })).content[0].text).toBe('No internet outage reported in Germany in the last 72 hours (IODA: routing, probing and telescope signals).')
   })
 })

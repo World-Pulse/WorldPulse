@@ -323,7 +323,10 @@ const toolsBlock = (src: string) => src.slice(src.indexOf('export const TOOLS'),
     // "?", such as `week${week ? `?week=…` : ''}`, starts the query); a tool may ask more than one (Nov 8, 2026)
     const asked = [...new Set([...server.matchAll(/ask\(asker, `(\/api\/v1\/(?:[^`?$]|\$\{(?![^}]*\?)[^}]*\})*)/g)]
       .map(m => m[1].replace(/\$\{[^}]*\}/g, ':param')))]
-    expect(asked.length).toBeGreaterThanOrEqual(MCP_TOOLS.length - 1)   // outlet reads the directory, asking nothing
+    // Nov 8, 2026: the 25 tools ask 22 routes (latest, story_timeline, story_by_country and how_verified share the
+    // reports list, the story and the outlet counts with other tools; outlet reads the directory, asking nothing)
+    expect(MCP_TOOLS.length).toBe(25)
+    expect(asked.length).toBeGreaterThanOrEqual(22)
     const named: Record<string, string> = {
       '/api/v1/stories': 'the top stories', '/api/v1/stories/:param': 'one story', '/api/v1/search/semantic': 'search by meaning',
       '/api/v1/stories/week': 'the week', '/api/v1/stories/by-link': 'the story of a news link',
@@ -336,6 +339,8 @@ const toolsBlock = (src: string) => src.slice(src.indexOf('export const TOOLS'),
       '/api/v1/breaking/alerts': 'the breaking alerts', '/api/v1/knowledge-graph/trending': 'who is trending',
       '/api/v1/signals/map/hotspots': 'the map\'s hotspots', '/api/v1/maritime/signals': 'the shipping news',
       '/api/v1/hazards/map/points': 'the natural hazards',
+      '/api/v1/signals/:param/verifications': 'a report\'s checks', '/api/v1/signals/map/conflict-zones': 'the conflict reports',
+      '/api/v1/outages/recent': 'internet outages',
     }
     const said = TEXT.slice(TEXT.indexOf('Each tool asks the API\'s own open endpoints'), TEXT.indexOf('How to connect'))
     const routeLike = (path: string) => API_ROUTES.find(r => r.method === 'GET' && r.path.replace(/:[A-Za-z_]+/g, ':param') === path)

@@ -90,6 +90,20 @@ describe('checkAndEmitBreakingAlert', () => {
     )
   })
 
+  it('raises no alert for what is not news: a transponder alarm, a sensor reading, an opinion piece (Nov 8, 2026)', async () => {
+    for (const title of [
+      'Aircraft FDX382 squawking 7500 — Unlawful interference (hijacking) (United States)',
+      'Large wildfire detected near Western Australia, Australia',
+      'DAVID MARCUS: Where does the blue tsunami leave old school Dems like John Fetterman?',
+    ]) {
+      await checkAndEmitBreakingAlert(makeSignal({ title, severity: 'high', reliability_score: 0.9 }))
+    }
+    // no dedup key, no rate count, no list entry, nothing published
+    expect(mockRedis.exists).not.toHaveBeenCalled()
+    expect(mockRedis.lpush).not.toHaveBeenCalled()
+    expect(mockRedis.publish).not.toHaveBeenCalled()
+  })
+
   it('emits alert for high severity with sufficient reliability', async () => {
     await checkAndEmitBreakingAlert(makeSignal({ severity: 'high', reliability_score: 0.6 }))
     expect(mockRedis.lpush).toHaveBeenCalled()
@@ -175,6 +189,17 @@ describe('getActiveBreakingAlerts', () => {
     const result = await getActiveBreakingAlerts()
     expect(result).toHaveLength(1)
     expect(result[0]?.alertId).toBe('a1')
+  })
+
+  it('leaves out what is not news, stored before the rule (Nov 8, 2026)', async () => {
+    const at = { severity: 'high', category: 'disaster', timestamp: new Date().toISOString(), expiresAt: new Date(Date.now() + 3_600_000).toISOString() }
+    mockRedis.lrange.mockResolvedValue([
+      JSON.stringify({ alertId: 'a1', signalId: 's1', title: 'Aircraft N857ER squawking 7700 — General emergency (United States)', ...at }),
+      JSON.stringify({ alertId: 'a2', signalId: 's2', title: 'Seven dead and more than 100 injured after trains collide in Egypt', ...at }),
+      JSON.stringify({ alertId: 'a3', signalId: 's3', title: '[Aziz Huq] Utilizing US midterm tsunami', ...at }),
+    ])
+    const result = await getActiveBreakingAlerts()
+    expect(result.map(a => a.alertId)).toEqual(['a2'])
   })
 
   it('returns empty array when list is empty', async () => {

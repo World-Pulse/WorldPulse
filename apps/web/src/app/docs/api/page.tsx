@@ -563,8 +563,9 @@ export default function ApiDocsPage() {
               meaning, the week, the story of a news link, the under-reported crises, a story&apos;s figures, the
               reports in an area, the outlet counts of reports, a country, the Daily Briefing, people, places and
               organisations by name, an entity&apos;s profile, a country&apos;s reports a day, the breaking alerts,
-              who is trending, the map&apos;s hotspots, the shipping news and the natural hazards; outlet reads the
-              outlet directory), and those calls count against your limits
+              who is trending, the map&apos;s hotspots, the shipping news, the natural hazards, the newest reports,
+              a report&apos;s checks, the conflict reports and internet outages; outlet reads the outlet directory), and
+              those calls count against your limits
               on them too. How to connect Claude, Claude Code or Cursor is on the{' '}
               <Link href={MCP_GUIDE} className="text-amber-400 hover:text-amber-300">developer page</Link>.
             </p>

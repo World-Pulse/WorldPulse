@@ -2,6 +2,7 @@ import { redis } from '../db/redis'
 import { db } from '../db/postgres'
 import { logger } from './logger'
 import { broadcast } from '../ws/handler'
+import { notBreakingNews } from './breaking-news'
 
 // ─── CONSTANTS ──────────────────────────────────────────────────────────────
 
@@ -211,6 +212,14 @@ export async function checkAndEmitBreakingAlert(signal: SignalInput): Promise<vo
       return
     }
 
+    // 1b. News only (Nov 8, 2026; Devon: "the banner should always be accurate"): no aircraft transponder alarm,
+    // satellite or sensor reading or opinion piece, which also used up the eight alerts an hour (lib/breaking-news.ts)
+    const notNews = notBreakingNews(String(signal.title ?? ''))
+    if (notNews) {
+      logger.debug({ signalId: signal.id, notNews }, 'Signal is not breaking news')
+      return
+    }
+
     // 2. Deduplication check
     if (await isAlertDuplicate(signal.id)) {
       logger.debug({ signalId: signal.id }, 'Alert already emitted for this signal (dedup)')
@@ -270,6 +279,8 @@ export async function getActiveBreakingAlerts(): Promise<BreakingAlert[]> {
     for (const item of items) {
       try {
         const alert = JSON.parse(item) as BreakingAlert
+        // news only, also for the alerts stored before the rule (Nov 8, 2026)
+        if (notBreakingNews(String(alert.title ?? ''))) continue
         alerts.push(alert)
       } catch {
         logger.warn({ item }, 'Failed to parse active alert from Redis')

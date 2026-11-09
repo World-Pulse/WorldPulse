@@ -103,8 +103,8 @@ export function BreakingAlertBanner() {
       return next
     })
     setCurrentIdx(0)
-    // Fire-and-forget server dismiss
-    fetch(`${API_URL}/api/v1/breaking/alerts/${alertId}/dismiss`, { method: 'POST' }).catch(() => {})
+    // This reader's banner only (Nov 8, 2026): the server's dismiss removed the alert for everyone and is admins'
+    // now, and the banner's own 60-second auto-dismiss called it for each alert
   }, [])
 
   // ─── WebSocket connection ──────────────────────────────────────────────
