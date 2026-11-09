@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 vi.mock('../../lib/redis', () => ({ redis: { get: vi.fn(async () => null), setex: vi.fn(async () => 'OK') } }))
 vi.mock('../../lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }))
 
-import { extractGeo, findGazetteerPlace, mentionedCountries, acceptGeocoderHit, placeFromText, geocodePlace, throttleNominatim, oneArea, type NominatimResult } from '../geo'
+import { extractGeo, findGazetteerPlace, homePlaceFromText, mentionedCountries, acceptGeocoderHit, placeFromText, geocodePlace, throttleNominatim, oneArea, type NominatimResult } from '../geo'
 import { redis } from '../../lib/redis'
 
 describe('findGazetteerPlace', () => {
@@ -672,5 +672,27 @@ describe('small towns of Nigeria get their own pins', () => {
   })
   it('does not pin words that contain them', () => {
     expect(findGazetteerPlace('The sagamux festival opens')).toBeNull()
+  })
+})
+
+describe('metro communes and towns of South America get their own pins (M79)', () => {
+  it('pins distinctive ones for any outlet', () => {
+    expect(findGazetteerPlace('Inician desalojo en Ñuñoa')?.coords.country).toBe('CL')
+    expect(findGazetteerPlace('Police in Nunoa arrested a man')?.coords.country).toBe('CL')
+    expect(findGazetteerPlace('Choque en San Juan de Lurigancho')?.coords.country).toBe('PE')
+    expect(findGazetteerPlace('Fire in Quilmes')?.coords.country).toBe('AR')
+    expect(findGazetteerPlace('Tiroteo en Soacha')?.coords.country).toBe('CO')
+    expect(findGazetteerPlace('Rescue in Puerto Ordaz')?.coords.country).toBe('VE')
+  })
+  it('reads names shared with a word, a person or a place only for their own country', () => {
+    expect(homePlaceFromText('Inician desalojo de toma Nuevo Amanecer en Cerrillos', 'CL')?.name).toBe('Cerrillos')
+    expect(homePlaceFromText('Choque en Maipú deja dos heridos', 'CL')?.countryCode).toBe('CL')
+    expect(homePlaceFromText('Incendio en Tigre', 'AR')?.countryCode).toBe('AR')
+    expect(homePlaceFromText('Inician desalojo de toma Nuevo Amanecer en Cerrillos', 'ES')).toBeNull()
+    expect(findGazetteerPlace('Inician desalojo de toma Nuevo Amanecer en Cerrillos')).toBeNull()
+  })
+  it('does not read a footballer as a town', () => {
+    expect(homePlaceFromText('Lautaro Martínez marcó dos goles', 'AR')).toBeNull()
+    expect(findGazetteerPlace('Lautaro Martínez marcó dos goles')).toBeNull()
   })
 })
