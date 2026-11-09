@@ -6,7 +6,7 @@ import './globals.css'
 import { Providers } from '@/components/providers'
 import { TopNav } from '@/components/nav/TopNav'
 import { BottomTabBar } from '@/components/nav/BottomTabBar'
-// import { BreakingAlertBanner } from '@/components/alerts/BreakingAlertBanner'
+import { BreakingAlertBanner } from '@/components/alerts/BreakingAlertBanner'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { CommandPaletteProvider, CommandPalette } from '@/components/CommandPalette'
 import { HideOnEmbed } from '@/components/nav/HideOnEmbed'
@@ -126,8 +126,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             {/* CommandPaletteProvider registers the ⌘K/Ctrl+K global shortcut */}
             <CommandPaletteProvider>
               <HideOnEmbed><CommandPalette /></HideOnEmbed>
-              {/* <BreakingAlertBanner /> */}
               <HideOnEmbed><TopNav /></HideOnEmbed>
+              {/* under the top menu, news only, each story with its outlet count (Nov 9, 2026: back on) */}
+              <BreakingAlertBanner />
               <main
                 id="main-content"
                 className="pt-[52px] min-h-screen main-content-mobile-pb"

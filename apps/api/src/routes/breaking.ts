@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from 'fastify'
+import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import {
   getActiveBreakingAlerts,
   dismissBreakingAlert,
@@ -10,8 +10,51 @@ import { redis } from '../db/redis'
 import { logger } from '../lib/logger'
 import { sendError } from '../lib/errors'
 import { authenticate } from '../middleware/auth'
+import { internalCallHeaders } from '../lib/internal-call'
 
 const BREAKING_CACHE_TTL = 15 // 15-second cache for GET
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** An alert's story as GET /api/v1/stories/outlets counts it: what the banner shows beside the headline */
+export interface AlertStory { id: string; outlets: number; verified: boolean; countries: number; page: string }
+
+/**
+ * Each story once, as its newest alert, with its outlet count (Nov 9, 2026; Devon: "the banner should always be
+ * accurate"): a story often gets an alert from two of its reports ("21 dead after migrant boat sinks off Senegal",
+ * "At least 35 killed in migrant boat sinking off Senegal"), and a headline alone doesn't say how sure the news is.
+ * The counts are the story page's, asked of the outlets route; without them the alerts still go out, story null.
+ */
+export async function withStories(app: FastifyInstance, alerts: BreakingAlert[]): Promise<Array<BreakingAlert & { story: AlertStory | null }>> {
+  const newest = alerts.slice().sort((a, b) => (Date.parse(b.timestamp) || 0) - (Date.parse(a.timestamp) || 0))
+  const ids = [...new Set(newest.map(a => a.signalId).filter(id => UUID_RE.test(String(id))))].slice(0, 50)
+  type Count = { storyId?: string; outlets?: number; verified?: boolean; countries?: number; canonicalId?: string | null }
+  let counts: Record<string, Count> = {}
+  if (ids.length > 0) {
+    try {
+      const res = await app.inject({ method: 'GET', url: `/api/v1/stories/outlets?ids=${ids.join(',')}`, headers: internalCallHeaders('breaking-alerts') })
+      if (res.statusCode === 200) counts = ((res.json() as { data?: { stories?: Record<string, Count> } }).data?.stories) ?? {}
+    } catch (err) {
+      logger.warn({ err }, 'Breaking alerts: outlet counts unavailable')
+    }
+  }
+  const seen = new Set<string>()
+  const out: Array<BreakingAlert & { story: AlertStory | null }> = []
+  for (const a of newest) {
+    const c = counts[a.signalId]
+    const key = c?.storyId ?? a.signalId
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({
+      ...a,
+      story: c ? {
+        id: key, outlets: Number(c.outlets) || 1, verified: c.verified === true, countries: Number(c.countries) || 0,
+        page: c.canonicalId && UUID_RE.test(c.canonicalId) ? c.canonicalId : a.signalId,
+      } : null,
+    })
+  }
+  return out
+}
 
 export const registerBreakingRoutes: FastifyPluginAsync = async (app) => {
   // Tag all routes in this plugin
@@ -22,7 +65,7 @@ export const registerBreakingRoutes: FastifyPluginAsync = async (app) => {
 
   // ─── GET /alerts — active breaking alerts (public, no auth) ───────────
   app.get<{
-    Reply: { success: boolean; data: { alerts: BreakingAlert[]; count: number } }
+    Reply: { success: boolean; data: { alerts: Array<BreakingAlert & { story: AlertStory | null }>; count: number } }
   }>(
     '/alerts',
     {
@@ -52,6 +95,16 @@ export const registerBreakingRoutes: FastifyPluginAsync = async (app) => {
                         sourceUrl:    { type: 'string' },
                         timestamp:    { type: 'string', format: 'date-time' },
                         expiresAt:    { type: 'string', format: 'date-time' },
+                        story: {
+                          type: ['object', 'null'],
+                          properties: {
+                            id:        { type: 'string' },
+                            outlets:   { type: 'number' },
+                            verified:  { type: 'boolean' },
+                            countries: { type: 'number' },
+                            page:      { type: 'string' },
+                          },
+                        },
                       },
                     },
                   },
@@ -77,9 +130,9 @@ export const registerBreakingRoutes: FastifyPluginAsync = async (app) => {
 
         const alerts = await getActiveBreakingAlerts()
 
-        // Filter out expired alerts
+        // Filter out expired alerts; each story once, with its outlet count
         const now = Date.now()
-        const active = alerts.filter((a) => new Date(a.expiresAt).getTime() > now)
+        const active = await withStories(app, alerts.filter((a) => new Date(a.expiresAt).getTime() > now))
 
         const body = { success: true as const, data: { alerts: active, count: active.length } }
 
