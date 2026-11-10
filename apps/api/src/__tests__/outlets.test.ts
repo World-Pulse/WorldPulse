@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { OUTLET_DIRECTORY } from '../lib/outlet-directory'
-import { outletOf, siteInfo, sitesOfLinks, describeSite, outletReach, countryLabel, OUTLET_KIND_LABELS } from '../lib/outlets'
+import { outletOf, siteInfo, sitesOfLinks, describeSite, outletReach, outletLanguages, countryLabel, OUTLET_KIND_LABELS } from '../lib/outlets'
 
 describe('the outlet directory', () => {
   it('holds every news feed WorldPulse reads, with a kind, a country and a name each', () => {
@@ -88,5 +88,13 @@ describe('countryLabel', () => {
     expect(countryLabel('GB')).toBe('the United Kingdom')
     expect(countryLabel('CD')).toBe('DR Congo')
     expect(countryLabel('MM')).toBe('Myanmar')
+  })
+})
+
+describe('outletLanguages (Nov 10, 2026)', () => {
+  it("is the languages of a story's outlets and of its reports, each once, A to Z", () => {
+    expect(outletLanguages(['14ymedio.com', '15min.lt', '1news.co.nz', 'www.1news.co.nz', 'unknown-site.example'])).toEqual(['en', 'es', 'lt'])
+    expect(outletLanguages(['1news.co.nz'], ['fr', 'en', 'xx1', null, 7])).toEqual(['en', 'fr'])
+    expect(outletLanguages([], [])).toEqual([])
   })
 })

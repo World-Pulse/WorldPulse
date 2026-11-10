@@ -25,7 +25,7 @@ import { internalCallHeaders } from '../lib/internal-call'
 import { rateLimitKey } from '../lib/rate-limit-options'
 import { inCountedWindow, STORY_COUNT_HOURS } from '../lib/story-window'
 import { storyFigures, type FigureReport } from '../lib/story-figures'
-import { siteInfo, outletReach } from '../lib/outlets'
+import { siteInfo, outletReach, outletLanguages } from '../lib/outlets'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MAX_SIGNALS = 50
@@ -769,7 +769,7 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
     const result = await db.raw(
       `WITH m AS (
          SELECT id, title, status, severity, category, reliability_score, original_urls, location_name,
-                country_code, created_at, verified_at,
+                country_code, created_at, verified_at, language,
                 row_number() OVER (ORDER BY created_at ASC, id ASC)   AS position,
                 row_number() OVER (ORDER BY created_at DESC, id DESC) AS from_end,
                 count(*) OVER ()                                       AS total,
@@ -800,7 +800,10 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
               (SELECT array_agg(host ORDER BY host) FROM hosts)                 AS outlet_names_all,
               -- the country most of its reports are in (as the story list reads it)
               (SELECT mode() WITHIN GROUP (ORDER BY country_code) FROM m
-                WHERE country_code ~ '^[A-Z]{2}$')                              AS story_country
+                WHERE country_code ~ '^[A-Z]{2}$')                              AS story_country,
+              -- the languages its reports are in (Nov 10, 2026)
+              (SELECT array_agg(DISTINCT trim(language)) FROM m
+                WHERE trim(language) ~ '^[a-z]{2}$')                            AS story_languages
          FROM m
         WHERE position <= ? OR from_end <= ? OR id::text = ?
         ORDER BY created_at ASC, id ASC`,
@@ -819,6 +822,7 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
     const storyCountry = typeof modeCountry === 'string' && /^[A-Z]{2}$/.test(modeCountry) ? modeCountry : null
     const reach = outletReach(outletNames, storyCountry)
     const reachAll = outletNamesAll.length > 0 ? outletReach(outletNamesAll, storyCountry) : reach
+    const languages = outletLanguages(outletNames, textArray(members[0]!.story_languages))
 
     return reply.send({
       success: true,
@@ -842,6 +846,10 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
         outletCountriesAll: reachAll.countries,
         localOutletsAll: reachAll.local,
         localOutletNamesAll: reachAll.localNames,
+        /** The languages it is reported in, A to Z, and how many: its outlets' (the directory's) and its reports'
+         *  own (Nov 10, 2026; the X drafts' "Reported in 7 languages across 41 countries") */
+        languages,
+        outletLanguages: languages.length,
         /** Websites that carried it since it began, and their names, A to Z */
         outletsAll,
         outletNamesAll: outletNamesAll.length > 0 ? outletNamesAll : outletNames,

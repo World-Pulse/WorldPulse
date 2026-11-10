@@ -97,6 +97,21 @@ export function outletReach(sites: readonly string[], country: string | null | u
   return { countries: seen.size, local, localNames }
 }
 
+/**
+ * The languages a story is reported in (Nov 10, 2026; Devon: "Add 'reported in N languages' to your X posts"): its
+ * outlets' feed languages as the directory knows them (an outlet WorldPulse sees only in GDELT's articles has none),
+ * and its reports' own (`reportLanguages`; a second outlet the search finds is in its report's language), A to Z
+ */
+export function outletLanguages(sites: readonly string[], reportLanguages: readonly unknown[] = []): string[] {
+  const out = new Set<string>()
+  for (const site of sites) {
+    const lang = outletOf(site)?.lang
+    if (lang && /^[a-z]{2}$/.test(lang)) out.add(lang)
+  }
+  for (const lang of reportLanguages) if (typeof lang === 'string' && /^[a-z]{2}$/.test(lang)) out.add(lang)
+  return [...out].sort()
+}
+
 /** Names that read better than Unicode's ("Congo - Kinshasa", "Myanmar (Burma)"), or as the site writes them */
 const COUNTRY_LABELS: Record<string, string> = {
   CD: 'DR Congo', CG: 'Congo', MM: 'Myanmar', HK: 'Hong Kong', MO: 'Macau', PS: 'Palestine', TR: 'Turkey',
