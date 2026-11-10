@@ -324,9 +324,11 @@ const toolsBlock = (src: string) => src.slice(src.indexOf('export const TOOLS'),
     const asked = [...new Set([...server.matchAll(/ask\(asker, `(\/api\/v1\/(?:[^`?$]|\$\{(?![^}]*\?)[^}]*\})*)/g)]
       .map(m => m[1].replace(/\$\{[^}]*\}/g, ':param')))]
     // Nov 8, 2026: the 25 tools ask 22 routes (latest, story_timeline, story_by_country and how_verified share the
-    // reports list, the story and the outlet counts with other tools; outlet reads the directory, asking nothing)
-    expect(MCP_TOOLS.length).toBe(25)
-    expect(asked.length).toBeGreaterThanOrEqual(22)
+    // reports list, the story and the outlet counts with other tools; outlet reads the directory, asking nothing).
+    // Nov 9: 30 tools, 24 routes (protests, outbreaks and displacement share the map's topic layers; connections
+    // asks what two entities share, and an entity's profile as entity does; who_covers reads the directory)
+    expect(MCP_TOOLS.length).toBe(30)
+    expect(asked.length).toBeGreaterThanOrEqual(24)
     const named: Record<string, string> = {
       '/api/v1/stories': 'the top stories', '/api/v1/stories/:param': 'one story', '/api/v1/search/semantic': 'search by meaning',
       '/api/v1/stories/week': 'the week', '/api/v1/stories/by-link': 'the story of a news link',
@@ -341,6 +343,8 @@ const toolsBlock = (src: string) => src.slice(src.indexOf('export const TOOLS'),
       '/api/v1/hazards/map/points': 'the natural hazards',
       '/api/v1/signals/:param/verifications': 'a report\'s checks', '/api/v1/signals/map/conflict-zones': 'the conflict reports',
       '/api/v1/outages/recent': 'internet outages',
+      '/api/v1/knowledge-graph/entities/:param/with/:param': 'what two entities share',
+      '/api/v1/map/topics/:param': 'the map\'s protest, outbreak and displacement layers',
     }
     const said = TEXT.slice(TEXT.indexOf('Each tool asks the API\'s own open endpoints'), TEXT.indexOf('How to connect'))
     const routeLike = (path: string) => API_ROUTES.find(r => r.method === 'GET' && r.path.replace(/:[A-Za-z_]+/g, ':param') === path)

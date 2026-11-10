@@ -36,6 +36,11 @@ const MCP_TOOLS = [
   { name: 'story_timeline', what: 'Who reported a story first, the next outlets in order, and how long verification took' },
   { name: 'conflicts', what: 'Where conflict and military news is reported in the last 72 hours' },
   { name: 'internet_outages', what: 'Internet outages by country, from IODA (Georgia Tech)' },
+  { name: 'connections', what: 'Who and what a person, organisation or place is named with, or the stories naming two of them' },
+  { name: 'protests', what: 'Protests, strikes and unrest on the map in the last 48 hours, place by place' },
+  { name: 'outbreaks', what: 'Disease outbreaks on the map in the last 72 hours, place by place' },
+  { name: 'displacement', what: 'Refugees and people displaced on the map in the last 72 hours, place by place' },
+  { name: 'who_covers', what: 'The newsrooms WorldPulse reads in a country: their kind, language, state media or not' },
 ]
 const MCP_CURSOR = '{"mcpServers":{"worldpulse":{"url":"https://api.world-pulse.io/mcp"}}}'
 

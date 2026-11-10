@@ -33,7 +33,7 @@ const SITE = (process.env.SITE_URL || 'https://world-pulse.io').replace(/\/+$/, 
 /** Protocol versions this server speaks, newest first */
 export const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'] as const
 
-const SERVER_INFO = { name: 'worldpulse', title: 'WorldPulse', version: '1.4.0' }
+const SERVER_INFO = { name: 'worldpulse', title: 'WorldPulse', version: '1.5.0' }
 
 const INSTRUCTIONS = [
   'WorldPulse groups news reports of one event into one story and counts the outlets (websites) that report it. A story\'s count covers its last two days; a story that has run longer also gives how many outlets have reported it since it began.',
@@ -42,6 +42,7 @@ const INSTRUCTIONS = [
   'Since Nov 8, 2026 also: story_numbers (each figure in a story, such as the dead, with how many outlets give it), outlet (what a news website is: its country, its kind, state media or not), near (the reports pinned near a place), country (a country right now), daily_brief (the Daily Briefing), entity (a person, organisation or place in the news), trend (how coverage of a country or an entity changed day by day) and check_claim (what the newsrooms report about a claim; it never rules true or false).',
   'And: breaking (the urgent reports of the last few hours), trending (who and what is in the news most), hotspots (where serious reports of several kinds meet), story_by_country (one story country by country: whose newsrooms carry it and how they headline it), shipping (ships, ports, straits and navies, near a chokepoint) and hazards (earthquakes, volcanoes, tsunamis, wildfires).',
   'And: latest (the newest verified reports, of one subject or country), how_verified (how a story was checked: the outlets, then each comparison of what they report), story_timeline (who reported a story first and how it spread), conflicts (where conflict and military news is reported) and internet_outages (internet outages, from IODA).',
+  'And since Nov 9, 2026: connections (who and what a person, organisation or place is named with, or the stories naming two of them), protests, outbreaks and displacement (the map\'s protest, outbreak and refugee reports, place by place) and who_covers (the newsrooms WorldPulse reads in a country).',
 ].join(' ')
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -283,6 +284,107 @@ export const LATEST_CATEGORIES: readonly string[] = [
 
 /** "the Strait of Hormuz", "Bab el-Mandeb" */
 const theChokepoint = (c: { id: string; name: string }) => (c.id === 'bab-el-mandeb' ? c.name : `the ${c.name}`)
+
+/**
+ * The map's news layers found by headline (GET /api/v1/map/topics/:topic, lib/map-topics.ts; Nov 9, 2026): one tool
+ * each. The layers find their reports by words in the headline, in English, French, Spanish and Portuguese.
+ */
+const TOPIC_TOOLS = {
+  protests: { title: 'Protests and unrest', what: 'protests, strikes, riots and unrest', none: 'No protest or unrest report' },
+  outbreaks: { title: 'Disease outbreaks', what: 'disease outbreaks (cholera, measles, mpox, Ebola, bird flu and others)', none: 'No outbreak report' },
+  displacement: { title: 'Refugees and displacement', what: 'refugees, people displaced and asylum seekers', none: 'No report of refugees or displacement' },
+} as const
+type TopicTool = keyof typeof TOPIC_TOOLS
+
+/** A word or name as a whole word in a text, any case or accent ("Niger" is not in "Nigeria") */
+const hasWord = (text: string, word: string) =>
+  new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRe(foldName(word))}($|[^\\p{L}\\p{N}])`, 'u').test(foldName(text))
+
+const SEVERITY_RANK: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 }
+
+/** A topic layer's reports, place by place: the most reports first, each place with its worst severity and newest headline */
+async function topicPlaces(topic: TopicTool, args: Record<string, unknown>, asker: Asker): Promise<ToolResult> {
+  const place = strArg(args, 'place', { max: 80 })
+  if (place !== undefined && place.length < 2) throw new ToolError('place must be at least 2 characters')
+  const limit = intArg(args, 'limit', 10, 1, 20)
+  const { status, body } = await ask(asker, `/api/v1/map/topics/${topic}`)
+  if (status !== 200) throw new Error(`the ${topic} layer answered ${status}`)
+  type Feature = { properties?: { id?: string; title?: string; place?: string | null; severity?: string; created_at?: string } }
+  const hours = Number(body.hours) || (topic === 'protests' ? 48 : 72)
+  const all = (((body as { features?: Feature[] }).features) ?? [])
+    .filter(f => f?.properties && typeof f.properties.title === 'string' && UUID.test(String(f.properties.id)))
+  const reports = place ? all.filter(f => hasWord(`${f.properties!.place ?? ''} ${f.properties!.title}`, place)) : all
+  type Place = { name: string; reports: number; worst: string; newest: { id: string; title: string; at: string | null } }
+  const places = new Map<string, Place>()
+  for (const f of reports) {
+    const p = f.properties!
+    const name = String(p.place ?? '').trim() || 'No named place'
+    const e = places.get(name) ?? { name, reports: 0, worst: 'low', newest: { id: p.id!, title: p.title!, at: p.created_at ?? null } }
+    e.reports++
+    if ((SEVERITY_RANK[p.severity ?? ''] ?? 0) > (SEVERITY_RANK[e.worst] ?? 0)) e.worst = p.severity!
+    if ((Date.parse(String(p.created_at)) || 0) > (Date.parse(String(e.newest.at)) || 0)) e.newest = { id: p.id!, title: p.title!, at: p.created_at ?? null }
+    places.set(name, e)
+  }
+  // a town named alone and with its country is one place ("Dhaka" and "Dhaka, Bangladesh"), when only one country's has it
+  for (const [name, bare] of [...places]) {
+    if (name.includes(',')) continue
+    const fuller = [...places.values()].filter(p => p !== bare && p.name.includes(',') && foldName(p.name.split(',')[0]!) === foldName(name))
+    if (fuller.length !== 1) continue
+    const into = fuller[0]!
+    into.reports += bare.reports
+    if ((SEVERITY_RANK[bare.worst] ?? 0) > (SEVERITY_RANK[into.worst] ?? 0)) into.worst = bare.worst
+    if ((Date.parse(String(bare.newest.at)) || 0) > (Date.parse(String(into.newest.at)) || 0)) into.newest = bare.newest
+    places.delete(name)
+  }
+  const top = [...places.values()]
+    .sort((a, b) => b.reports - a.reports || (SEVERITY_RANK[b.worst] ?? 0) - (SEVERITY_RANK[a.worst] ?? 0) || (Date.parse(String(b.newest.at)) || 0) - (Date.parse(String(a.newest.at)) || 0))
+    .slice(0, limit)
+  // each place's newest report: its story's outlet count (one call for all of them)
+  const counts = await storyCounts(asker, top.map(p => p.newest.id))
+  const t = TOPIC_TOOLS[topic]
+  const scope = `${place ? ` naming ${place}` : ''} in the last ${hours} hours`
+  const text = top.length === 0
+    ? `${t.none}${scope} on WorldPulse's map. The ${topic} layer finds reports by words in their headlines (English, French, Spanish, Portuguese); try without place or another spelling. Map: ${SITE}/map`
+    : [
+      `${t.title}${scope}: ${reports.length} report${reports.length === 1 ? '' : 's'} in ${places.size} place${places.size === 1 ? '' : 's'}, the most reports first:`,
+      ...top.map((p, i) => `${i + 1}. ${p.name}: ${p.reports} report${p.reports === 1 ? '' : 's'}, worst ${p.worst}\n   Newest: "${p.newest.title}" (${[agoLabel(p.newest.at), proofLine(counts[p.newest.id])].filter(Boolean).join(' · ')})\n   ${signalLink(p.newest.id)}`),
+      `Found by words in the headline, so a few may be off topic, and the same event can count more than once. The map's ${topic} layer: ${SITE}/map`,
+    ].join('\n')
+  return {
+    text,
+    data: {
+      topic, hours, place: place ?? null, reports: reports.length, placesFound: places.size,
+      places: top.map(p => {
+        const c = counts[p.newest.id]
+        return {
+          place: p.name, reports: p.reports, worstSeverity: p.worst,
+          newest: { id: p.newest.id, title: p.newest.title, url: signalLink(p.newest.id), at: p.newest.at, outlets: Number(c?.outlets) || 1, verified: Boolean(c?.verified) },
+        }
+      }),
+    },
+  }
+}
+
+/** A topic layer's tool, but its name (written out in TOOLS, where the pages' tests read the names) */
+const topicTool = (topic: TopicTool, description: string): Omit<Tool, 'name'> => ({
+  title: TOPIC_TOOLS[topic].title,
+  description,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      place: { type: 'string', minLength: 2, maxLength: 80, description: 'Only reports naming this place in their place or headline, e.g. Kenya or Gaza' },
+      limit: { type: 'integer', minimum: 1, maximum: 20, default: 10, description: 'How many places (1 to 20, default 10)' },
+    },
+    additionalProperties: false,
+  },
+  run: (args, asker) => topicPlaces(topic, args, asker),
+})
+
+/** "Danish" from "da"; the code itself when it is not one */
+const LANGUAGE_NAMES = new Intl.DisplayNames(['en'], { type: 'language' })
+function languageLabel(code: string): string {
+  try { return LANGUAGE_NAMES.of(code) ?? code } catch { return code }
+}
 
 export const TOOLS: Tool[] = [
   {
@@ -1536,6 +1638,138 @@ export const TOOLS: Tool[] = [
           outages: events.map(o => ({ id: o.id, title: o.title, url: signalLink(o.id), severity: o.severity ?? null, country: o.country_code ?? null, place: where(o) || null, at: o.published_at ?? null, summary: o.summary ?? null })),
         },
       }
+    },
+  },
+  // ── Nov 9, 2026 (Devon: "Build the 5 let's get up to 30") ──
+  {
+    name: 'connections',
+    title: 'Who and what is in the news together',
+    description: 'Who and what a person, organisation or place is named with in WorldPulse\'s reports, the most reports together first (e.g. name "Hamas"); or, with with (e.g. name "Hamas", with "Israel"), the stories and the newest reports naming both, each story with how many outlets carry it and its link. Both look at the newest 100 reports naming each, of the last 30 days. Named together means in the same reports: it is not a tie between them.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', minLength: 2, maxLength: 120, description: 'A person, organisation or place, e.g. Hamas' },
+        with: { type: 'string', minLength: 2, maxLength: 120, description: 'Another one, for the stories naming both, e.g. Qatar' },
+        limit: { type: 'integer', minimum: 1, maximum: 12, default: 10, description: 'How many it is named with (1 to 12, default 10)' },
+      },
+      required: ['name'],
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const name = strArg(args, 'name', { required: true, max: 120 })!
+      const other = strArg(args, 'with', { max: 120 })
+      if (name.length < 2 || (other !== undefined && other.length < 2)) throw new ToolError('Names must be at least 2 characters')
+      const limit = intArg(args, 'limit', 10, 1, 12)
+      const found = await findEntity(asker, name)
+      if (!found.entity) throw new ToolError(`No person, organisation or place named "${name}" in WorldPulse's reports`)
+      const a = found.entity
+      if (other === undefined) {
+        const { status, body } = await ask(asker, `/api/v1/knowledge-graph/entities/${encodeURIComponent(a.id)}/profile`)
+        if (status !== 200) throw new Error(`entity profile answered ${status}`)
+        const p = (body.data ?? {}) as { entity?: { name?: string }; connections?: Array<{ id: string; type: string; name: string; shared: number }> }
+        const aName = p.entity?.name ?? a.canonical_name
+        const connections = (p.connections ?? []).filter(c => c && typeof c.name === 'string').slice(0, limit)
+        const text = connections.length === 0
+          ? `Nothing is named in the same reports as ${aName} in the last 30 days. Page: ${entityPage(a.id, aName)}`
+          : [
+            `Who and what ${aName} (${a.type}) is named with in WorldPulse's reports, the last 30 days (its newest 100 reports), the most reports together first:`,
+            ...connections.map((c, i) => `${i + 1}. ${c.name} (${c.type}): ${c.shared} report${c.shared === 1 ? '' : 's'} together · ${entityPage(c.id, c.name)}`),
+            `Named together means in the same reports, not a tie between them. For the stories naming both, ask again with with. Page: ${entityPage(a.id, aName)}`,
+          ].join('\n')
+        return {
+          text,
+          data: {
+            entity: { id: a.id, type: a.type, name: aName, url: entityPage(a.id, aName) },
+            namedWith: connections.map(c => ({ id: c.id, type: c.type, name: c.name, reportsTogether: c.shared, url: entityPage(c.id, c.name) })),
+            otherMatches: found.others.map(o => ({ id: o.id, type: o.type, name: o.canonical_name })),
+          },
+        }
+      }
+      const foundB = await findEntity(asker, other)
+      if (!foundB.entity) throw new ToolError(`No person, organisation or place named "${other}" in WorldPulse's reports`)
+      const b = foundB.entity
+      if (b.id === a.id) throw new ToolError(`"${name}" and "${other}" are both ${a.canonical_name}: give two different names`)
+      const { status, body } = await ask(asker, `/api/v1/knowledge-graph/entities/${encodeURIComponent(a.id)}/with/${encodeURIComponent(b.id)}`)
+      if (status === 404) throw new ToolError(`WorldPulse can't open ${a.canonical_name} and ${b.canonical_name} together just now`)
+      if (status !== 200) throw new Error(`shared stories answered ${status}`)
+      const d = (body.data ?? {}) as { stories?: ListedStory[]; latest?: Array<{ id: string; title: string; place?: string | null; verified?: boolean; createdAt?: string }> }
+      const stories = (d.stories ?? []).filter(s => s && typeof s.title === 'string').slice(0, 8)
+      const latest = (d.latest ?? []).filter(r => r && typeof r.title === 'string' && UUID.test(String(r.id))).slice(0, 8)
+      const both = `${a.canonical_name} and ${b.canonical_name}`
+      const pages = `Pages: ${entityPage(a.id, a.canonical_name)} · ${entityPage(b.id, b.canonical_name)}`
+      const text = stories.length === 0 && latest.length === 0
+        ? `None of the newest reports naming either (WorldPulse looks at the newest 100 naming each, of the last 30 days) names both ${both}. ${pages}`
+        : [
+          `${both} in the same reports (of the newest 100 naming each, the last 30 days):`,
+          stories.length ? `Stories naming both, the most outlets first:\n${stories.map(storyLine).join('\n')}` : 'No story naming both was reported by two or more outlets.',
+          latest.length ? `\nThe newest other reports naming both:\n${latest.map((r, i) => `${i + 1}. ${r.title}\n   ${[r.verified ? 'Verified' : 'Not verified yet', r.place, agoLabel(r.createdAt)].filter(Boolean).join(' · ')}\n   ${signalLink(r.id)}`).join('\n')}` : '',
+          `\n${pages}`,
+        ].join('\n').trim()
+      return {
+        text,
+        data: {
+          entities: [a, b].map(e => ({ id: e.id, type: e.type, name: e.canonical_name, url: entityPage(e.id, e.canonical_name) })),
+          stories: stories.map(storyOut),
+          latest: latest.map(r => ({ id: r.id, title: r.title, url: signalLink(r.id), place: r.place ?? null, verified: Boolean(r.verified), at: r.createdAt ?? null })),
+        },
+      }
+    },
+  },
+  {
+    name: 'protests',
+    ...topicTool('protests', 'Protests, strikes, riots and unrest on WorldPulse\'s map in the last 48 hours, place by place: the places with the most reports first, each with its worst severity and its newest headline, with how many outlets carry that story and its link. place narrows it to reports naming a place (e.g. "Kenya"). Found by words in the headline (English, French, Spanish, Portuguese): these count reports, not protests.'),
+  },
+  {
+    name: 'outbreaks',
+    ...topicTool('outbreaks', 'Disease outbreaks on WorldPulse\'s map in the last 72 hours (cholera, measles, mpox, Ebola, bird flu, dengue and others), place by place: the places with the most reports first, each with its worst severity and its newest headline, with how many outlets carry that story and its link. place narrows it to reports naming a place (e.g. "Sudan"). Found by words in the headline (English, French, Spanish, Portuguese): these count reports, not cases.'),
+  },
+  {
+    name: 'displacement',
+    ...topicTool('displacement', 'Refugees, people displaced and asylum seekers on WorldPulse\'s map in the last 72 hours, place by place: the places with the most reports first, each with its worst severity and its newest headline, with how many outlets carry that story and its link. place narrows it to reports naming a place (e.g. "Gaza"). Found by words in the headline (English, French, Spanish, Portuguese): these count reports, not people. For the crises with the fewest outlets for the people displaced, use under_reported.'),
+  },
+  {
+    name: 'who_covers',
+    title: 'The newsrooms WorldPulse reads in a country',
+    description: 'The newsrooms based in a country whose feeds WorldPulse reads (e.g. GL for Greenland): each with its website, its kind (national, local, news agency, official source…), its language and whether a government runs it (state media), and the well-known outlets from there it only sees in GDELT\'s articles. A place with three or fewer is thinly covered: its own stories rest on few voices, and outlets from abroad report on it too. For what is reported there, use country.',
+    inputSchema: {
+      type: 'object',
+      properties: { country: { type: 'string', pattern: '^[A-Za-z]{2}$', description: 'A two-letter country code, e.g. GL' } },
+      required: ['country'],
+      additionalProperties: false,
+    },
+    async run(args) {
+      const given = strArg(args, 'country', { required: true, pattern: /^[A-Za-z]{2}$/, hint: 'must be a two-letter country code such as GL' })!.toUpperCase()
+      const code = given === 'UK' ? 'GB' : given
+      const label = countryLabel(code, false)
+      if (label === code) throw new ToolError(`${code} is not a country code WorldPulse knows`)
+      // one entry per outlet: its websites together (abcnews.com and abcnews.go.com are ABC News)
+      type Newsroom = { name: string; kind: string; state: boolean; lang: string | null; sites: string[]; seen: boolean }
+      const byName = new Map<string, Newsroom>()
+      for (const [site, e] of Object.entries(OUTLET_DIRECTORY)) {
+        if (e.country !== code) continue
+        const n = byName.get(e.name) ?? { name: e.name, kind: e.kind, state: Boolean(e.state), lang: e.lang ?? null, sites: [], seen: Boolean(e.seen) }
+        n.sites.push(site)
+        if (!e.seen) n.seen = false
+        n.lang = n.lang ?? e.lang ?? null
+        byName.set(e.name, n)
+      }
+      const order = (x: Newsroom, y: Newsroom) => x.name.localeCompare(y.name, 'en')
+      const read = [...byName.values()].filter(n => !n.seen).sort(order)
+      const seen = [...byName.values()].filter(n => n.seen).sort(order)
+      const page = `${SITE}/countries/${code.toLowerCase()}`
+      const thin = read.length <= 3
+      const line = (n: Newsroom, i: number) => `${i + 1}. ${n.name} (${n.sites.join(', ')}): ${String(OUTLET_KIND_LABELS[n.kind as keyof typeof OUTLET_KIND_LABELS] ?? n.kind).toLowerCase()}${n.lang ? `, in ${languageLabel(n.lang)}` : ''}${n.state ? ', state media (a government runs it)' : ''}`
+      const text = [
+        read.length === 0
+          ? `WorldPulse reads no newsroom based in ${countryLabel(code)}: what it knows of it comes from outlets elsewhere.`
+          : `WorldPulse reads ${read.length} newsroom${read.length === 1 ? '' : 's'} based in ${countryLabel(code)}:`,
+        ...read.map(line),
+        seen.length ? `\nAlso from ${countryLabel(code)}, seen only in GDELT's articles: ${seen.map(n => `${n.name} (${n.sites.join(', ')})`).join('; ')}` : '',
+        thin && read.length > 0 ? `\nThinly covered: ${read.length === 1 ? 'one newsroom' : `${read.length} newsrooms`} of its own, so its own stories rest on few voices; outlets from abroad report on it too.` : '',
+        `\nWhat is reported there: ${page}. What the kinds mean: ${SITE}/how-we-count#kinds`,
+      ].join('\n').replace(/\n{3,}/g, '\n\n').trim()
+      const out = (n: Newsroom) => ({ name: n.name, sites: n.sites, kind: n.kind, language: n.lang, languageName: n.lang ? languageLabel(n.lang) : null, stateMedia: n.state })
+      return { text, data: { country: code, name: label, url: page, newsrooms: read.map(out), seenInGdelt: seen.map(out), thin } }
     },
   },
 ]

@@ -56,7 +56,7 @@ def feeds():
             f = re.search(name + r":\s*" + STR, blk)
             return unescape(f.group(1)) if f else None
         out.append({'id': m.group(1), 'name': field('name'), 'feed': field('feedUrl') or '',
-                    'bias': field('biasLabel'), 'country': field('countryCode')})
+                    'bias': field('biasLabel'), 'country': field('countryCode'), 'language': field('language')})
     return out
 
 
@@ -241,13 +241,16 @@ def main():
         entry = {'name': conf.get('names', {}).get(r['id']) or clean_name(r['name'] or r['id']),
                  'country': conf.get('country', {}).get(r['id']) or (r['country'] or '').upper(),
                  'kind': kind}
+        if r['language']:
+            entry['lang'] = r['language'].lower()
         if r['bias'] == 'state-media' or r['id'] in conf.get('state', []):
             entry['state'] = True
         for host in conf.get('hosts', {}).get(r['id']) or [site_of_feed(r['feed'])]:
             put(host, dict(entry), r['id'])
     for e in conf.get('extra', []):
         assert e['kind'] in KIND_NAMES, e
-        entry = {'name': e['name'], 'country': e['country'], 'kind': e['kind']}
+        # seen in GDELT's articles, not read from a feed (Nov 9, 2026: the MCP server's who_covers tells them apart)
+        entry = {'name': e['name'], 'country': e['country'], 'kind': e['kind'], 'seen': True}
         if e.get('state'):
             entry['state'] = True
         put(e['host'], entry, 'extra')
@@ -266,7 +269,13 @@ def main():
         '',
         "export type OutletKind = 'agency' | 'international' | 'national' | 'local' | 'specialist' | 'aggregator' | 'official'",
         '',
-        'export interface OutletEntry { name: string; country: string; kind: OutletKind; state?: true }',
+        'export interface OutletEntry {',
+        '  name: string; country: string; kind: OutletKind; state?: true',
+        "  /** The language of the outlet's feed (ISO 639-1); none for an outlet WorldPulse only sees in GDELT's articles */",
+        '  lang?: string',
+        "  /** Seen in GDELT's articles, not read from a feed of its own (Reuters, AP...) */",
+        '  seen?: true',
+        '}',
         '',
         '/** By website, without "www."; a website also stands for its subdomains (edition.cnn.com is cnn.com) */',
         'export const OUTLET_DIRECTORY: Readonly<Record<string, OutletEntry>> = {',
@@ -274,7 +283,9 @@ def main():
     for host in sorted(directory):
         e = directory[host]
         state = ', state: true' if e.get('state') else ''
-        lines.append(f"  {json.dumps(host)}: {{ name: {json.dumps(e['name'], ensure_ascii=False)}, country: {json.dumps(e['country'])}, kind: '{e['kind']}'{state} }},")
+        lang = f", lang: '{e['lang']}'" if e.get('lang') else ''
+        seen = ', seen: true' if e.get('seen') else ''
+        lines.append(f"  {json.dumps(host)}: {{ name: {json.dumps(e['name'], ensure_ascii=False)}, country: {json.dumps(e['country'])}, kind: '{e['kind']}'{state}{lang}{seen} }},")
     lines += ['}', '']
     open(OUT, 'w', encoding='utf-8').write('\n'.join(lines))
     counts = {}

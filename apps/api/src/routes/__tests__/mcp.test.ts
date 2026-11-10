@@ -382,11 +382,46 @@ async function build(): Promise<FastifyInstance> {
       },
     }
   })
+  app.get('/api/v1/knowledge-graph/entities/:id/with/:other', async (req, reply) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    const { id, other } = req.params as { id: string; other: string }
+    if (id !== NATO.id || other !== NATO_PA.id) return reply.code(404).send({ error: 'Entity not found' })
+    return {
+      success: true,
+      data: {
+        stories: [STORY],
+        latest: [
+          { id: LONE_REPORT, title: 'NATO assembly meets in Dayton', category: 'geopolitics', severity: 'low', place: 'Dayton, United States', verified: false, createdAt: hoursAgo(5) },
+          { id: 'not-a-uuid', title: 'Dropped: no report id', createdAt: hoursAgo(6) },
+        ],
+      },
+    }
+  })
+  app.get('/api/v1/map/topics/:topic', async (req, reply) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    const { topic } = req.params as { topic: string }
+    const f = (id: string, title: string, severity: string, place: string | null, h: number) =>
+      ({ type: 'Feature', geometry: { type: 'Point', coordinates: [0, 0] }, properties: { id, title, place, severity, created_at: hoursAgo(h) } })
+    if (topic === 'protests') {
+      return {
+        success: true, cached: true, topic, hours: 48, type: 'FeatureCollection',
+        features: [
+          f(STORY.leadId, 'Police fire tear gas at protesters in Nairobi', 'high', 'Nairobi, Kenya', 3),
+          f(OTHER_REPORT, 'Teachers strike for a second day', 'medium', 'Nairobi', 10),
+          f(LONE_REPORT, 'Farmers protest in Niamey', 'medium', 'Niamey, Niger', 2),
+          f('12121212-1212-4121-8121-121212121212', 'Protesters rally against fuel prices in Lagos', 'critical', 'Lagos, Nigeria', 20),
+          f('not-a-uuid', 'Dropped: no report id', 'high', 'Paris, France', 1),
+        ],
+      }
+    }
+    if (topic === 'outbreaks' || topic === 'displacement') return { success: true, cached: true, topic, hours: 72, type: 'FeatureCollection', features: [] }
+    return reply.code(404).send({ success: false, error: 'Unknown topic' })
+  })
   await app.register(registerMcpRoutes, { prefix: '/mcp' })
   return app
 }
 
-const rpc = (app: FastifyInstance, body: unknown) =>
+const rpc =(app: FastifyInstance, body: unknown) =>
   app.inject({ method: 'POST', url: '/mcp', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, payload: JSON.stringify(body) })
 
 const call = async (app: FastifyInstance, name: string, args: Record<string, unknown> = {}) =>
@@ -420,6 +455,7 @@ describe('MCP server', () => {
       'story_numbers', 'outlet', 'near', 'country', 'daily_brief', 'entity', 'trend', 'check_claim',
       'breaking', 'trending', 'hotspots', 'story_by_country', 'shipping', 'hazards',
       'latest', 'how_verified', 'story_timeline', 'conflicts', 'internet_outages',
+      'connections', 'protests', 'outbreaks', 'displacement', 'who_covers',
     ])
     for (const t of tools) {
       expect(t.inputSchema.type).toBe('object')
@@ -970,5 +1006,94 @@ describe('MCP server: the five tools of Nov 8, 2026, 9 PM (twenty-five in all)',
     expect(cuba.content[0].text).toContain('Internet outages in Cuba in the last 48 hours')
     expect(cuba.content[0].text).not.toContain('Iran')
     expect((await call(app, 'internet_outages', { country: 'DE' })).content[0].text).toBe('No internet outage reported in Germany in the last 72 hours (IODA: routing, probing and telescope signals).')
+  })
+})
+
+describe('MCP server: the five tools of Nov 9, 2026 (thirty in all)', () => {
+  beforeEach(() => { asked = [] })
+
+  it('connections lists who and what an entity is named with, most reports together first', async () => {
+    const app = await build()
+    const r = await call(app, 'connections', { name: 'NATO', limit: 5 })
+    expect(r.isError).toBe(false)
+    expect(asked.map(a => a.url)).toEqual([
+      '/api/v1/knowledge-graph/entities?search=NATO&limit=20&sort=mention_count&lean=1',
+      `/api/v1/knowledge-graph/entities/${NATO.id}/profile`,
+    ])
+    const text = r.content[0].text as string
+    expect(text).toContain('Who and what NATO (organisation) is named with in WorldPulse\'s reports, the last 30 days')
+    expect(text).toContain('1. Ukraine (location): 25 reports together · https://world-pulse.io/entities/ukraine-u1')
+    expect(text).toContain('2. United States (location): 1 report together')
+    expect(text).toContain('not a tie between them')
+    expect(r.structuredContent.namedWith[0]).toEqual({ id: 'u1', type: 'location', name: 'Ukraine', reportsTogether: 25, url: 'https://world-pulse.io/entities/ukraine-u1' })
+  })
+
+  it('connections with a second name gives the stories and newest reports naming both', async () => {
+    const app = await build()
+    const r = await call(app, 'connections', { name: 'NATO', with: 'NATO Parliamentary Assembly' })
+    expect(r.isError).toBe(false)
+    expect(asked.at(-1)!.url).toBe(`/api/v1/knowledge-graph/entities/${NATO.id}/with/${NATO_PA.id}`)
+    const text = r.content[0].text as string
+    expect(text).toContain('NATO and NATO Parliamentary Assembly in the same reports (of the newest 100 naming each, the last 30 days):')
+    expect(text).toContain('1. Ceasefire talks resume in Doha\n   Verified · 14 outlets')
+    expect(text).toContain(`1. NATO assembly meets in Dayton\n   Not verified yet · Dayton, United States · 5h ago\n   https://world-pulse.io/signals/${LONE_REPORT}`)
+    expect(text).not.toContain('Dropped')
+    expect(r.structuredContent.stories[0]).toMatchObject({ id: STORY.id, outlets: 14 })
+    expect(r.structuredContent.latest).toHaveLength(1)
+    // the same entity twice, and a name nobody has
+    expect((await call(app, 'connections', { name: 'NATO', with: 'North Atlantic Treaty Organization' })).content[0].text).toContain('give two different names')
+    const none = await call(app, 'connections', { name: 'NATO', with: 'Zanzibar Hydrofoil Society' })
+    expect(none.isError).toBe(true)
+    expect(none.content[0].text).toContain('No person, organisation or place named "Zanzibar Hydrofoil Society"')
+  })
+
+  it('protests gives the layer\'s reports place by place, the most first, with the newest story\'s outlets', async () => {
+    const app = await build()
+    const r = await call(app, 'protests')
+    expect(r.isError).toBe(false)
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/map/topics/protests', expect.stringMatching(/^\/api\/v1\/stories\/outlets\?ids=/)])
+    const text = r.content[0].text as string
+    expect(text).toContain('Protests and unrest in the last 48 hours: 4 reports in 3 places, the most reports first:')
+    expect(text).toContain(`1. Nairobi, Kenya: 2 reports, worst high\n   Newest: "Police fire tear gas at protesters in Nairobi" (3h ago · Verified · 14 outlets in 9 countries)\n   https://world-pulse.io/signals/${STORY.leadId}`)
+    // two places with one report each: the worse first
+    expect(text.indexOf('Lagos, Nigeria')).toBeLessThan(text.indexOf('Niamey, Niger'))
+    expect(text).toContain('Only one outlet so far: unconfirmed')
+    expect(text).not.toContain('Dropped')
+    expect(r.structuredContent).toMatchObject({ topic: 'protests', hours: 48, reports: 4, placesFound: 3 })
+    expect(r.structuredContent.places[0]).toMatchObject({ place: 'Nairobi, Kenya', reports: 2, worstSeverity: 'high', newest: { id: STORY.leadId, outlets: 14, verified: true } })
+    // a place as a whole word: Niger is not Nigeria
+    const niger = await call(app, 'protests', { place: 'niger' })
+    expect(niger.structuredContent.places.map((p: { place: string }) => p.place)).toEqual(['Niamey, Niger'])
+  })
+
+  it('outbreaks and displacement say when their layer has nothing', async () => {
+    const app = await build()
+    const r = await call(app, 'outbreaks', { place: 'Sudan' })
+    expect(r.isError).toBe(false)
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/map/topics/outbreaks'])
+    expect(r.content[0].text).toContain('No outbreak report naming Sudan in the last 72 hours on WorldPulse\'s map.')
+    expect((await call(app, 'displacement')).content[0].text).toContain('No report of refugees or displacement in the last 72 hours')
+    expect((await call(app, 'displacement', { limit: 50 })).isError).toBe(true)
+  })
+
+  it('who_covers lists the newsrooms WorldPulse reads in a country, from the outlet directory', async () => {
+    const app = await build()
+    const r = await call(app, 'who_covers', { country: 'gl' })
+    expect(r.isError).toBe(false)
+    expect(asked).toEqual([])
+    const text = r.content[0].text as string
+    expect(text).toContain('WorldPulse reads 2 newsrooms based in Greenland:')
+    expect(text).toContain('Sermitsiaq.AG (sermitsiaq.ag): national, in Danish')
+    expect(text).toContain('state media (a government runs it)')
+    expect(text).toContain('Thinly covered: 2 newsrooms of its own')
+    expect(r.structuredContent).toMatchObject({ country: 'GL', name: 'Greenland', thin: true, url: 'https://world-pulse.io/countries/gl' })
+    // an outlet seen only in GDELT's articles is listed apart
+    const gb = await call(app, 'who_covers', { country: 'uk' })
+    expect(gb.structuredContent.country).toBe('GB')
+    expect(gb.structuredContent.seenInGdelt.map((n: { name: string }) => n.name)).toContain('Reuters')
+    expect(gb.structuredContent.newsrooms.map((n: { name: string }) => n.name)).not.toContain('Reuters')
+    expect(gb.structuredContent.thin).toBe(false)
+    expect((await call(app, 'who_covers', { country: 'AQ' })).content[0].text).toContain('WorldPulse reads no newsroom based in Antarctica')
+    expect((await call(app, 'who_covers', { country: 'XX' })).isError).toBe(true)
   })
 })
