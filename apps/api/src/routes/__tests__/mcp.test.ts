@@ -37,6 +37,8 @@ const SQUAWK_REPORT = '44444444-4444-4444-8444-444444444444'
 const DAM_REPORT = '88888888-8888-4888-8888-888888888888'
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString()
 const JUST_VERIFIED = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+const FRENCH_REPORT = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+const ARABIC_REPORT = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
 const CRIT_REPORT = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
 const MEDIUM_REPORT = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
 let dayAsks = 0
@@ -91,6 +93,45 @@ async function build(): Promise<FastifyInstance> {
       },
     }
   })
+  // the languages of the news (GET /api/v1/public/languages, Nov 10, 2026)
+  app.get('/api/v1/public/languages', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    return {
+      success: true,
+      data: {
+        hours: Number((req.query as { hours?: string }).hours) || 24,
+        languages: [
+          { language: 'en', reports: 9000, verified: 2700, waiting: 4000, countries: 150 },
+          { language: 'fr', reports: 800, verified: 120, waiting: 500, countries: 30 },
+          { language: 'ar', reports: 200, verified: 10, waiting: 150, countries: 12 },
+          { language: 'xx1', reports: 5, verified: 0, waiting: 5, countries: 1 },
+        ],
+        verified: [
+          { id: FRENCH_REPORT, title: 'Sénégal : au moins 34 morts dans un naufrage de migrants', language: 'fr', country: 'SN', severity: 'high', category: 'disaster', verifiedAt: hoursAgo(1), storyId: 'story-sn', storyLanguages: ['fr'] },
+          // the same story's other report: listed once
+          { id: '12121212-1212-4212-8212-121212121212', title: 'Naufrage au large de Kébémer', language: 'fr', country: 'SN', severity: 'high', category: 'disaster', verifiedAt: hoursAgo(1.5), storyId: 'story-sn', storyLanguages: ['fr'] },
+          { id: ARABIC_REPORT, title: 'قصف إسرائيلي يستهدف بيت جن في ريف دمشق', language: 'ar', country: 'SY', severity: 'high', category: 'conflict', verifiedAt: hoursAgo(2), storyId: 'story-sy', storyLanguages: ['ar', 'en'] },
+        ],
+      },
+    }
+  })
+  // where news goes unconfirmed (GET /api/v1/public/unconfirmed-places, Nov 10, 2026)
+  app.get('/api/v1/public/unconfirmed-places', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    return {
+      success: true,
+      data: {
+        days: Number((req.query as { days?: string }).days) || 7,
+        places: [
+          { country: 'US', reports: 20000, verified: 9000, waiting: 8000, waitingSerious: 2000, languages: ['en', 'es'] },
+          { country: 'BI', reports: 40, verified: 1, waiting: 36, waitingSerious: 6, languages: ['fr'] },
+          { country: 'SY', reports: 600, verified: 30, waiting: 500, waitingSerious: 90, languages: ['ar', 'en'] },
+          // too few reports to rank
+          { country: 'TV', reports: 3, verified: 0, waiting: 3, waitingSerious: 0, languages: ['en'] },
+        ],
+      },
+    }
+  })
   // the domain check (GET /api/v1/slop/check)
   app.get('/api/v1/slop/check', async (req) => {
     asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
@@ -114,7 +155,7 @@ async function build(): Promise<FastifyInstance> {
       return {
         success: true,
         data: {
-          storyId: 'world-story', size: 9, outlets: 7, outletsAll: 90, verifiedAt: '2026-11-07T16:00:00.000Z', country: 'PL',
+          storyId: 'world-story', size: 9, outlets: 7, outletsAll: 90, verifiedAt: '2026-11-07T16:00:00.000Z', country: 'PL', languages: ['en', 'pl'],
           firstReportAt: '2026-11-07T15:31:00.000Z', latestReportAt: hoursAgo(2),
           outletNames: ['aljazeera.com', 'bbc.co.uk', 'bbc.com', 'notesfrompoland.com', 'tass.com', 'tvpworld.com', 'unknown-site.example'],
           outletInfo: [
@@ -524,6 +565,7 @@ describe('MCP server', () => {
       'latest', 'how_verified', 'story_timeline', 'conflicts', 'internet_outages',
       'connections', 'protests', 'outbreaks', 'displacement', 'who_covers',
       'day', 'unconfirmed', 'newly_verified', 'local_press', 'site_check',
+      'quiet_places', 'story_languages', 'verified_in_languages', 'languages_today', 'missed_in_english',
     ])
     for (const t of tools) {
       expect(t.inputSchema.type).toBe('object')
@@ -1301,5 +1343,81 @@ describe('MCP server: the five tools of Nov 10, 2026 (thirty-five in all)', () =
     expect(shaky.structuredContent.verdict).toBe('caution')
     expect((await call(app, 'site_check', { site: 'nowhere.example' })).content[0].text).toContain('It is not in WorldPulse\'s directory of')
     expect((await call(app, 'site_check', { site: 'not a site' })).isError).toBe(true)
+  })
+})
+
+describe('MCP server: the five tools of Nov 10, 2026, evening (forty in all)', () => {
+  beforeEach(() => { asked = [] })
+
+  it('quiet_places lists the places whose reports most rarely find a second outlet', async () => {
+    const app = await build()
+    const r = await call(app, 'quiet_places', {})
+    expect(r.isError).toBe(false)
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/public/unconfirmed-places?days=7'])
+    const text = r.content[0].text as string
+    expect(text).toContain('Where news goes unconfirmed, the last 7 days')
+    expect(text).toContain('1. Burundi: 40 reports, 1 verified (3%) · 36 waiting for a second outlet, 6 of them serious · in French')
+    expect(text).toContain('2. Syria: 600 reports, 30 verified (5%)')
+    // fewer than 10 reports: not ranked
+    expect(text).not.toContain('Tuvalu')
+    expect(r.structuredContent.places.map((p: { country: string }) => p.country)).toEqual(['BI', 'SY', 'US'])
+    const one = await call(app, 'quiet_places', { country: 'bi', days: 3 })
+    expect(asked.map(a => a.url)).toContain('/api/v1/public/unconfirmed-places?days=3')
+    expect(one.content[0].text).toContain('Burundi, the last 3 days (WorldPulse): 40 reports, 1 verified (3%)')
+    expect((await call(app, 'quiet_places', { country: 'XX' })).isError).toBe(true)
+  })
+
+  it("story_languages lists a story's languages and its outlets in each", async () => {
+    const app = await build()
+    const r = await call(app, 'story_languages', { id: WORLD_REPORT })
+    expect(r.isError).toBe(false)
+    const text = r.content[0].text as string
+    expect(text).toContain('Six killed in Krakow shooting')
+    expect(text).toMatch(/Reported in 2 languages, by 7 outlets in its last two days/)
+    expect(text).toMatch(/- English: \d+ outlets \(Al Jazeera, BBC, Notes from Poland, TASS/)
+    expect(text).toContain('- Polish: its own reports')
+    expect(text).toContain('unknown-site.example')
+    expect(r.structuredContent.languages.map((l: { code: string }) => l.code)).toEqual(['en', 'pl'])
+    expect((await call(app, 'story_languages', { id: 'nope' })).isError).toBe(true)
+  })
+
+  it('verified_in_languages lists the newest verified reports in other languages, each story once', async () => {
+    const app = await build()
+    const r = await call(app, 'verified_in_languages', {})
+    expect(r.isError).toBe(false)
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/public/languages?hours=24'])
+    const text = r.content[0].text as string
+    expect(text).toContain('Just verified in languages other than English, the last 24 hours')
+    expect(text).toContain('1. Sénégal : au moins 34 morts dans un naufrage de migrants\n   French · Senegal · High · verified 1h ago')
+    expect(text).toContain('2. قصف إسرائيلي يستهدف بيت جن في ريف دمشق\n   Arabic · Syria · High · verified 2h ago · its story in Arabic, English')
+    expect(text).not.toContain('Naufrage au large')
+    const ar = await call(app, 'verified_in_languages', { language: 'AR', hours: 48 })
+    expect(asked.map(a => a.url)).toContain('/api/v1/public/languages?hours=48')
+    expect(ar.structuredContent.reports.map((x: { id: string }) => x.id)).toEqual([ARABIC_REPORT])
+    expect((await call(app, 'verified_in_languages', { language: 'en' })).isError).toBe(true)
+  })
+
+  it('languages_today counts the reports in each language, the most first', async () => {
+    const app = await build()
+    const r = await call(app, 'languages_today', { hours: 12 })
+    expect(r.isError).toBe(false)
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/public/languages?hours=12'])
+    const text = r.content[0].text as string
+    expect(text).toContain('The last 12 hours, WorldPulse read reports in 3 languages (10,000 reports), the most first:')
+    expect(text).toContain('1. English: 9,000 reports (90%) from 150 countries · 30% verified · 4,000 waiting for a second outlet')
+    expect(text).toContain('2. French: 800 reports (8%) from 30 countries · 15% verified')
+    expect(text).not.toContain('xx1')
+  })
+
+  it('missed_in_english lists the verified stories with no report in English', async () => {
+    const app = await build()
+    const r = await call(app, 'missed_in_english', {})
+    expect(r.isError).toBe(false)
+    const text = r.content[0].text as string
+    expect(text).toContain('Verified in the last 24 hours, and reported in no English (WorldPulse), newest first:')
+    expect(text).toContain('1. Sénégal : au moins 34 morts dans un naufrage de migrants\n   French · Senegal · High · verified 1h ago')
+    // the Syrian story has an English report
+    expect(text).not.toContain('بيت جن')
+    expect(r.structuredContent.stories).toHaveLength(1)
   })
 })

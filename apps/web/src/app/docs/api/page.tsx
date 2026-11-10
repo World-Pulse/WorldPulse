@@ -566,8 +566,8 @@ export default function ApiDocsPage() {
               who is trending, the map&apos;s hotspots, the shipping news, the natural hazards, the newest reports,
               a report&apos;s checks, the conflict reports, internet outages, what two entities share, the
               map&apos;s protest, outbreak and displacement layers, one day&apos;s top stories, the second outlets
-              found for one-outlet reports and the AI content farm check; outlet and who_covers read the outlet
-              directory), and
+              found for one-outlet reports, the AI content farm check, the languages of the news and where news goes
+              unconfirmed; outlet and who_covers read the outlet directory), and
               those calls count against your limits
               on them too. How to connect Claude, Claude Code or Cursor is on the{' '}
               <Link href={MCP_GUIDE} className="text-amber-400 hover:text-amber-300">developer page</Link>.

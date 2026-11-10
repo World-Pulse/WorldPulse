@@ -8,6 +8,7 @@ import { staleWhileRevalidate } from '../lib/swr-cache'
 import { longQuery } from '../lib/long-query'
 import { signalCategories } from '../lib/categories'
 import { siteInfo, sitesOfLinks } from '../lib/outlets'
+import { signalsHaveStoryIds } from '../lib/stories'
 
 const PUBLIC_CACHE_TTL = 30  // seconds
 
@@ -61,6 +62,104 @@ function matchingTotal(category?: string, severity?: string): Promise<{ total: n
     () => exactTotal(category, severity),
     () => estimatedTotal(category, severity),
   )
+}
+
+/**
+ * The languages of the news (Nov 10, 2026; Devon, 2:51 PM: "AI tools from 35 to 40, built on today's work: the quiet
+ * places, the languages a story is reported in, and the day's newly confirmed non-English stories"). Kept 5 minutes.
+ */
+const LANGUAGES_SWR = { freshSeconds: 300, staleSeconds: 3_600, lockSeconds: 60 }
+
+export interface LanguageCount { language: string; reports: number; verified: number; waiting: number; countries: number }
+export interface VerifiedAbroad {
+  id: string; title: string; language: string; country: string | null; severity: string | null; category: string | null
+  verifiedAt: string | null; storyId: string | null; storyLanguages: string[]
+}
+
+/** Each language's reports of the last `hours`: how many, verified, waiting with one outlet, and from how many countries */
+async function languageCounts(hours: number): Promise<LanguageCount[]> {
+  const result = await longQuery(20, trx => trx.raw(
+    `SELECT trim(language) AS language,
+            count(*)::int AS reports,
+            count(*) FILTER (WHERE status = 'verified')::int AS verified,
+            count(*) FILTER (WHERE status = 'pending' AND COALESCE(source_count, 1) <= 1)::int AS waiting,
+            count(DISTINCT country_code) FILTER (WHERE country_code ~ '^[A-Z]{2}$')::int AS countries
+       FROM signals
+      WHERE created_at > NOW() - make_interval(hours => ?)
+        AND status IN ('verified', 'pending')
+        AND trim(language) ~ '^[a-z]{2}$'
+      GROUP BY 1
+      ORDER BY reports DESC`, [hours]) as unknown as Promise<{ rows?: Array<Record<string, unknown>> }>)
+  return (result.rows ?? []).map(r => ({
+    language: String(r.language), reports: Number(r.reports) || 0, verified: Number(r.verified) || 0,
+    waiting: Number(r.waiting) || 0, countries: Number(r.countries) || 0,
+  }))
+}
+
+/** The newest reports in a language other than English that turned verified in the last `hours`, with their story's languages */
+async function verifiedAbroad(hours: number): Promise<VerifiedAbroad[]> {
+  const stories = await signalsHaveStoryIds()
+  const storyLanguages = stories
+    ? `(SELECT array_agg(DISTINCT trim(m.language)) FROM signals m
+         WHERE m.story_id = s.story_id AND m.status IN ('verified', 'pending') AND trim(m.language) ~ '^[a-z]{2}$')`
+    : 'NULL::text[]'
+  const result = await longQuery(20, trx => trx.raw(
+    `SELECT s.id::text AS id, s.title, trim(s.language) AS language, s.country_code, s.severity::text AS severity,
+            s.category::text AS category, s.verified_at, ${stories ? 's.story_id::text' : 'NULL::text'} AS story_id,
+            ${storyLanguages} AS story_languages
+       FROM signals s
+      WHERE s.status = 'verified'
+        AND s.created_at > NOW() - make_interval(hours => ?)
+        AND s.verified_at > NOW() - make_interval(hours => ?)
+        AND trim(s.language) ~ '^[a-z]{2}$' AND trim(s.language) <> 'en'
+      ORDER BY s.verified_at DESC
+      LIMIT 80`, [hours + 24, hours]) as unknown as Promise<{ rows?: Array<Record<string, unknown>> }>)
+  return (result.rows ?? []).map(r => {
+    const language = String(r.language)
+    const langs = Array.isArray(r.story_languages) ? r.story_languages.map(String).filter(l => /^[a-z]{2}$/.test(l)) : []
+    return {
+      id: String(r.id), title: String(r.title ?? ''), language,
+      country: typeof r.country_code === 'string' && /^[A-Z]{2}$/.test(r.country_code) ? r.country_code : null,
+      severity: typeof r.severity === 'string' ? r.severity : null, category: typeof r.category === 'string' ? r.category : null,
+      verifiedAt: r.verified_at ? new Date(r.verified_at as string).toISOString() : null,
+      storyId: typeof r.story_id === 'string' ? r.story_id : null,
+      storyLanguages: [...new Set([language, ...langs])].sort(),
+    }
+  })
+}
+
+export interface PlaceCount { country: string; reports: number; verified: number; waiting: number; waitingSerious: number; languages: string[] }
+
+/**
+ * Each country's news reports of the last `days` (not a machine feed's: aircraft, fires, quakes): how many, how many
+ * turned verified, and how many wait with one outlet (the serious ones too), with the languages they are in
+ */
+async function placeCounts(days: number): Promise<PlaceCount[]> {
+  const result = await longQuery(25, trx => trx.raw(
+    `SELECT country_code AS country,
+            count(*)::int AS reports,
+            count(*) FILTER (WHERE status = 'verified')::int AS verified,
+            count(*) FILTER (WHERE status = 'pending' AND COALESCE(source_count, 1) <= 1)::int AS waiting,
+            count(*) FILTER (WHERE status = 'pending' AND COALESCE(source_count, 1) <= 1
+                               AND severity IN ('medium', 'high', 'critical'))::int AS waiting_serious,
+            array_agg(DISTINCT trim(language)) FILTER (WHERE trim(language) ~ '^[a-z]{2}$') AS languages
+       FROM signals
+      WHERE created_at > NOW() - make_interval(days => ?)
+        AND status IN ('verified', 'pending')
+        AND country_code ~ '^[A-Z]{2}$'
+        AND (NOT (tags @> ARRAY['osint']::text[]) OR tags @> ARRAY['gdelt']::text[])
+      GROUP BY 1`, [days]) as unknown as Promise<{ rows?: Array<Record<string, unknown>> }>)
+  return (result.rows ?? []).map(r => ({
+    country: String(r.country), reports: Number(r.reports) || 0, verified: Number(r.verified) || 0,
+    waiting: Number(r.waiting) || 0, waitingSerious: Number(r.waiting_serious) || 0,
+    languages: Array.isArray(r.languages) ? r.languages.map(String).sort() : [],
+  }))
+}
+
+/** An integer query value between min and max, else the default */
+function boundedInt(v: unknown, fallback: number, min: number, max: number): number {
+  const n = Number(v)
+  return Number.isInteger(n) && n >= min && n <= max ? n : fallback
 }
 
 export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
@@ -275,6 +374,41 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
       hours_counted_7d: counted.filter(n => n > 0).length,
     }
     return reply.send({ success: true, data: { days: { [days[0]!]: numbers(today), [days[1]!]: numbers(yesterday) }, last_cycle: lastCycle, latest, archive: archived, pulse } })
+  })
+
+  // ─── GET /languages (Nov 10, 2026) ────────────────────────
+  // The languages of the last hours' reports, and the newest reports in another language than English that turned verified
+  app.get('/languages', {
+    schema: { tags: ['public'], summary: 'The languages of the news, and the newest verified reports in other languages than English (public, no auth required)' },
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    reply.header('Access-Control-Allow-Origin', '*')
+    const hours = boundedInt((req.query as Record<string, unknown>)?.hours, 24, 1, 72)
+    try {
+      const [languages, verified] = await Promise.all([
+        staleWhileRevalidate(`public:languages:v1:counts:${hours}`, LANGUAGES_SWR, () => languageCounts(hours)),
+        staleWhileRevalidate(`public:languages:v1:verified:${hours}`, LANGUAGES_SWR, () => verifiedAbroad(hours)),
+      ])
+      return reply.send({ success: true, data: { hours, languages, verified } })
+    } catch {
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The languages could not be counted just now; try again in a minute')
+    }
+  })
+
+  // ─── GET /unconfirmed-places (Nov 10, 2026) ───────────────
+  // Each country's news reports of the last days: how many turned verified, how many wait with one outlet
+  app.get('/unconfirmed-places', {
+    schema: { tags: ['public'], summary: 'Where news goes unconfirmed: each country\'s reports, verified and waiting for a second outlet (public, no auth required)' },
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    reply.header('Access-Control-Allow-Origin', '*')
+    const days = boundedInt((req.query as Record<string, unknown>)?.days, 7, 1, 14)
+    try {
+      const places = await staleWhileRevalidate(`public:unconfirmed-places:v1:${days}`, { freshSeconds: 600, staleSeconds: 3_600, lockSeconds: 60 }, () => placeCounts(days))
+      return reply.send({ success: true, data: { days, places } })
+    } catch {
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The places could not be counted just now; try again in a minute')
+    }
   })
 
   // ─── OPTIONS preflight ────────────────────────────────────

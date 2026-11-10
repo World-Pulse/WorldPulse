@@ -34,7 +34,7 @@ const SITE = (process.env.SITE_URL || 'https://world-pulse.io').replace(/\/+$/, 
 /** Protocol versions this server speaks, newest first */
 export const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'] as const
 
-const SERVER_INFO = { name: 'worldpulse', title: 'WorldPulse', version: '1.6.0' }
+const SERVER_INFO = { name: 'worldpulse', title: 'WorldPulse', version: '1.7.0' }
 
 const INSTRUCTIONS = [
   'WorldPulse groups news reports of one event into one story and counts the outlets (websites) that report it. A story\'s count covers its last two days; a story that has run longer also gives how many outlets have reported it since it began.',
@@ -45,6 +45,7 @@ const INSTRUCTIONS = [
   'And: latest (the newest verified reports, of one subject or country), how_verified (how a story was checked: the outlets, then each comparison of what they report), story_timeline (who reported a story first and how it spread), conflicts (where conflict and military news is reported) and internet_outages (internet outages, from IODA).',
   'And since Nov 9, 2026: connections (who and what a person, organisation or place is named with, or the stories naming two of them), protests, outbreaks and displacement (the map\'s protest, outbreak and refugee reports, place by place) and who_covers (the newsrooms WorldPulse reads in a country).',
   'And since Nov 10, 2026: day (one day\'s top stories, from the last 30 days), unconfirmed (serious reports only one outlet has carried so far: leads, not facts), newly_verified (reports that just found their second outlet), local_press (stories the world reports while their own country\'s press barely appears among the outlets) and site_check (whether a website is a known AI content farm, and the reliability score WorldPulse gives it).',
+  'And for the news in other languages: quiet_places (the places whose news most rarely finds a second outlet), story_languages (the languages a story is reported in, with its outlets in each), verified_in_languages (the newest reports in other languages than English that turned verified), languages_today (the languages the news came in) and missed_in_english (stories verified in other languages with no English report found).',
 ].join(' ')
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -2029,6 +2030,223 @@ export const TOOLS: Tool[] = [
           directory: e ? { name: e.name, kind: e.kind, country: e.country, stateMedia: Boolean(e.state) } : null,
           verdict, warnings: Array.isArray(c.warnings) ? c.warnings.filter((w): w is string => typeof w === 'string') : [],
         },
+      }
+    },
+  },
+  // ─── The five tools of Nov 10, 2026, evening (Devon: "AI tools from 35 to 40, built on today's work") ───
+  {
+    name: 'quiet_places',
+    title: 'Where news goes unconfirmed',
+    description: 'The places whose news most rarely finds a second outlet: of each country\'s news reports in the last days (7 by default, up to 14), how many turned verified (a second, separate outlet reported the same event) and how many still wait with one outlet, the lowest verified share first, among places with 10 reports or more. Each with the languages its reports are in. Give country for one place\'s numbers. A low share often means few newsrooms report on a place, or report in a language few others read: its reports are leads to check (unconfirmed lists the serious ones; who_covers, the newsrooms read there).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        days: { type: 'integer', minimum: 1, maximum: 14, default: 7, description: 'How many days back (1 to 14, default 7)' },
+        country: { type: 'string', pattern: '^[A-Za-z]{2}$', description: 'One place, by its two-letter country code, e.g. BI' },
+        limit: { type: 'integer', minimum: 1, maximum: 30, default: 10, description: 'How many places (1 to 30, default 10)' },
+      },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const days = intArg(args, 'days', 7, 1, 14)
+      const given = strArg(args, 'country', { pattern: /^[A-Za-z]{2}$/, hint: 'must be a two-letter country code such as BI' })?.toUpperCase()
+      const country = given === 'UK' ? 'GB' : given
+      const limit = intArg(args, 'limit', 10, 1, 30)
+      const { status, body } = await ask(asker, `/api/v1/public/unconfirmed-places?days=${days}`)
+      if (status !== 200) throw new Error(`unconfirmed-places answered ${status}`)
+      type Place = { country: string; reports: number; verified: number; waiting: number; waitingSerious: number; languages: string[] }
+      const all = (((body.data ?? {}) as { places?: Place[] }).places ?? []).filter(p => p && /^[A-Z]{2}$/.test(String(p.country)))
+      const share = (p: Place) => (p.reports > 0 ? p.verified / p.reports : 0)
+      const pct = (p: Place) => `${Math.round(share(p) * 100)}%`
+      const langs = (p: Place) => (p.languages?.length ? `in ${p.languages.map(languageLabel).join(', ')}` : '')
+      const line = (p: Place, i: number) =>
+        `${i + 1}. ${countryLabel(p.country, false)}: ${p.reports.toLocaleString('en-US')} reports, ${p.verified.toLocaleString('en-US')} verified (${pct(p)}) · ${p.waiting.toLocaleString('en-US')} waiting for a second outlet${p.waitingSerious ? `, ${p.waitingSerious.toLocaleString('en-US')} of them serious` : ''}${langs(p) ? ` · ${langs(p)}` : ''}`
+      const out = (p: Place) => ({ ...p, name: countryLabel(p.country, false), verifiedShare: Math.round(share(p) * 1000) / 1000, url: `${SITE}/countries/${p.country.toLowerCase()}` })
+      if (country) {
+        const p = all.find(x => x.country === country)
+        if (countryLabel(country, false) === country) throw new ToolError(`${country} is not a country code WorldPulse knows`)
+        const text = p
+          ? [`${countryLabel(country)}, the last ${days} days (WorldPulse): ${line(p, 0).replace(/^1\. [^:]+: /, '')}.`,
+            `Verified means a second, separate outlet reported the same event. The serious ones still waiting: unconfirmed with country ${country}. Its newsrooms: who_covers. ${SITE}/countries/${country.toLowerCase()}`].join('\n')
+          : `No news report was pinned in ${countryLabel(country)} in the last ${days} days. Its newsrooms: who_covers.`
+        return { text, data: { days, country, place: p ? out(p) : null } }
+      }
+      const quiet = all.filter(p => p.reports >= 10).sort((a, b) => share(a) - share(b) || b.reports - a.reports).slice(0, limit)
+      const total = all.reduce((n, p) => n + p.reports, 0)
+      const verified = all.reduce((n, p) => n + p.verified, 0)
+      const text = [
+        quiet.length
+          ? `Where news goes unconfirmed, the last ${days} days: the places whose reports most rarely found a second outlet (10 reports or more), the lowest verified share first (WorldPulse):`
+          : `No place had 10 news reports or more in the last ${days} days.`,
+        ...quiet.map(line),
+        total ? `\nAcross all ${all.length} places: ${total.toLocaleString('en-US')} reports, ${Math.round((verified / total) * 100)}% verified. Verified means a second, separate outlet reported the same event; a low share often means few newsrooms report on the place, or report in a language few others read. Leads to check: unconfirmed. ${SITE}/how-we-count` : '',
+      ].join('\n').replace(/\n{3,}/g, '\n\n').trim()
+      return { text, data: { days, places: quiet.map(out), all: { places: all.length, reports: total, verified } } }
+    },
+  },
+  {
+    name: 'story_languages',
+    title: 'The languages a story is reported in',
+    description: 'The languages a story is reported in, with its outlets in each: give a story id or a report id (as top_stories, story or search_reports give them). For each language, the outlets of the story\'s last two days that write in it, from WorldPulse\'s directory of the newsrooms whose feeds it reads (an outlet seen only in GDELT\'s articles has no language there), and the languages of the story\'s own reports; and how many countries its outlets are from. A story told in many languages is one the world is watching; one told only in languages other than English may be one the English-language press missed (missed_in_english).',
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'string', description: 'A story id or a report id (a UUID)' } },
+      required: ['id'],
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const id = strArg(args, 'id', { required: true, pattern: UUID, hint: 'must be a story or report id (a UUID)' })!
+      const { status, body } = await ask(asker, `/api/v1/stories/${id}`)
+      if (status === 404) throw new ToolError('No story or report with that id')
+      if (status !== 200) throw new Error(`story answered ${status}`)
+      const d = (body.data ?? {}) as {
+        storyId?: string; outlets?: number; outletNames?: string[]; outletCountries?: number; languages?: string[]; verifiedAt?: string | null
+        signals?: Array<{ id: string; title: string }>
+      }
+      const first = d.signals?.[0]
+      const byLanguage = new Map<string, string[]>()
+      const unknown: string[] = []
+      for (const site of d.outletNames ?? []) {
+        const e = outletOf(site)
+        if (!e?.lang) { unknown.push(site); continue }
+        const list = byLanguage.get(e.lang) ?? []
+        if (!list.includes(e.name)) list.push(e.name)
+        byLanguage.set(e.lang, list)
+      }
+      const languages = [...new Set([...(d.languages ?? []), ...byLanguage.keys()])]
+        .sort((a, b) => (byLanguage.get(b)?.length ?? 0) - (byLanguage.get(a)?.length ?? 0) || a.localeCompare(b))
+      const countries = Number(d.outletCountries) || 0
+      const head = languages.length >= 2
+        ? `Reported in ${languages.length} languages${countries >= 2 ? ` across ${countries} countries` : ''}`
+        : languages.length === 1 ? `Reported in ${languageLabel(languages[0]!)} only` : 'Its languages aren\'t known'
+      const named = (names: string[]) => names.length > 6 ? `${names.slice(0, 6).join(', ')} and ${names.length - 6} more` : names.join(', ')
+      const text = [
+        `${first?.title ?? 'Story'}`,
+        `${head}${d.outlets ? `, by ${d.outlets} outlet${d.outlets === 1 ? '' : 's'} in its last two days` : ''}${d.verifiedAt ? '' : ' (not verified yet)'} (WorldPulse):`,
+        ...languages.map(l => {
+          const names = byLanguage.get(l) ?? []
+          return `- ${languageLabel(l)}: ${names.length ? `${names.length} outlet${names.length === 1 ? '' : 's'} (${named(names)})` : 'its own reports'}`
+        }),
+        unknown.length ? `- Language not in the directory: ${unknown.length} outlet${unknown.length === 1 ? '' : 's'} (${named(unknown.map(describeSite))})` : '',
+        `Page: ${signalLink(first?.id ?? id)}`,
+      ].filter(Boolean).join('\n')
+      return {
+        text,
+        data: {
+          storyId: d.storyId ?? id, url: signalLink(first?.id ?? id), title: first?.title ?? null, verified: Boolean(d.verifiedAt),
+          outlets: d.outlets ?? 0, outletCountries: countries,
+          languages: languages.map(l => ({ code: l, name: languageLabel(l), outlets: byLanguage.get(l) ?? [] })),
+          unknownLanguage: unknown,
+        },
+      }
+    },
+  },
+  {
+    name: 'verified_in_languages',
+    title: 'Just verified, in other languages',
+    description: 'The newest reports in languages other than English that turned verified (a second, separate outlet reported the same event), newest first, from the last hours (24 by default, up to 72): each with its language, place, severity, how long ago it turned verified, the languages its story is reported in, and its link. Give language (a two-letter code: fr, es, pt, de, ru, ar…) for one language. WorldPulse reads its feeds in their own languages and looks for second outlets in English, French, German, Spanish, Portuguese, Russian and Arabic articles.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        language: { type: 'string', pattern: '^[A-Za-z]{2}$', description: 'One language, by its two-letter code, e.g. fr' },
+        hours: { type: 'integer', minimum: 1, maximum: 72, default: 24, description: 'How many hours back (1 to 72, default 24)' },
+        limit: { type: 'integer', minimum: 1, maximum: 20, default: 10, description: 'How many reports (1 to 20, default 10)' },
+      },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const language = strArg(args, 'language', { pattern: /^[A-Za-z]{2}$/, hint: 'must be a two-letter language code such as fr' })?.toLowerCase()
+      if (language === 'en') throw new ToolError('language must be one other than English (for the newest verified reports in English, use latest)')
+      const hours = intArg(args, 'hours', 24, 1, 72)
+      const limit = intArg(args, 'limit', 10, 1, 20)
+      const { status, body } = await ask(asker, `/api/v1/public/languages?hours=${hours}`)
+      if (status !== 200) throw new Error(`languages answered ${status}`)
+      type Report = { id: string; title: string; language: string; country: string | null; severity: string | null; category: string | null; verifiedAt: string | null; storyId: string | null; storyLanguages: string[] }
+      const seen = new Set<string>()
+      const shown = ((((body.data ?? {}) as { verified?: Report[] }).verified) ?? [])
+        .filter(r => r && UUID.test(String(r.id)) && typeof r.title === 'string' && (!language || r.language === language))
+        .filter(r => { const k = r.storyId ?? r.id; if (seen.has(k)) return false; seen.add(k); return true })
+        .slice(0, limit)
+      const which = language ? `in ${languageLabel(language)}` : 'in languages other than English'
+      const text = [
+        shown.length
+          ? `Just verified ${which}, the last ${hours} hours, newest first (WorldPulse):`
+          : `No report ${which} turned verified in the last ${hours} hours.`,
+        ...shown.map((r, i) => `${i + 1}. ${r.title}\n   ${[languageLabel(r.language), r.country ? countryLabel(r.country, false) : '', cap(r.severity), r.verifiedAt ? `verified ${agoLabel(r.verifiedAt)}` : ''].filter(Boolean).join(' · ')}${r.storyLanguages.length >= 2 ? ` · its story in ${r.storyLanguages.map(languageLabel).join(', ')}` : ''}\n   ${signalLink(r.id)}`),
+        '\nVerified means a second, separate outlet reported the same event. A story\'s languages: story_languages; the stories reported in no English: missed_in_english.',
+      ].join('\n').replace(/\n{3,}/g, '\n\n').trim()
+      return {
+        text,
+        data: {
+          hours, language: language ?? null,
+          reports: shown.map(r => ({ id: r.id, title: r.title, url: signalLink(r.id), language: r.language, languageName: languageLabel(r.language), country: r.country, severity: r.severity, category: r.category, verifiedAt: r.verifiedAt, storyLanguages: r.storyLanguages })),
+        },
+      }
+    },
+  },
+  {
+    name: 'languages_today',
+    title: 'The languages the news came in',
+    description: 'The languages of the reports WorldPulse read in the last hours (24 by default, up to 72), the most first: for each, how many reports, from how many countries, how many turned verified (a second, separate outlet reported the same event) and how many still wait with one outlet. WorldPulse reads its feeds in their own languages; verified_in_languages lists the newest verified reports in languages other than English.',
+    inputSchema: {
+      type: 'object',
+      properties: { hours: { type: 'integer', minimum: 1, maximum: 72, default: 24, description: 'How many hours back (1 to 72, default 24)' } },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const hours = intArg(args, 'hours', 24, 1, 72)
+      const { status, body } = await ask(asker, `/api/v1/public/languages?hours=${hours}`)
+      if (status !== 200) throw new Error(`languages answered ${status}`)
+      type Count = { language: string; reports: number; verified: number; waiting: number; countries: number }
+      const counts = ((((body.data ?? {}) as { languages?: Count[] }).languages) ?? []).filter(c => c && /^[a-z]{2}$/.test(String(c.language)) && c.reports > 0)
+      const total = counts.reduce((n, c) => n + c.reports, 0)
+      const pct = (a: number, b: number) => `${b ? Math.round((a / b) * 100) : 0}%`
+      const text = [
+        counts.length
+          ? `The last ${hours} hours, WorldPulse read reports in ${counts.length} languages (${total.toLocaleString('en-US')} reports), the most first:`
+          : `WorldPulse read no report in the last ${hours} hours.`,
+        ...counts.map((c, i) => `${i + 1}. ${languageLabel(c.language)}: ${c.reports.toLocaleString('en-US')} reports (${pct(c.reports, total)}) from ${c.countries} countr${c.countries === 1 ? 'y' : 'ies'} · ${pct(c.verified, c.reports)} verified · ${c.waiting.toLocaleString('en-US')} waiting for a second outlet`),
+        '\nVerified means a second, separate outlet reported the same event. The newest verified in other languages: verified_in_languages. Where news goes unconfirmed: quiet_places.',
+      ].join('\n').replace(/\n{3,}/g, '\n\n').trim()
+      return {
+        text,
+        data: { hours, reports: total, languages: counts.map(c => ({ ...c, name: languageLabel(c.language), verifiedShare: c.reports ? Math.round((c.verified / c.reports) * 1000) / 1000 : 0 })) },
+      }
+    },
+  },
+  {
+    name: 'missed_in_english',
+    title: 'Verified, but not in English',
+    description: 'Stories verified in the last hours (24 by default, up to 72) that WorldPulse found reported only in languages other than English: none of their reports is in English. Each with its languages, place, severity, when it turned verified and its link, newest first. A lead on what the English-language press is missing, not proof: WorldPulse reads some newsrooms only through GDELT\'s articles, and an English report can sit in a story of its own.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        hours: { type: 'integer', minimum: 1, maximum: 72, default: 24, description: 'How many hours back (1 to 72, default 24)' },
+        limit: { type: 'integer', minimum: 1, maximum: 20, default: 10, description: 'How many stories (1 to 20, default 10)' },
+      },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const hours = intArg(args, 'hours', 24, 1, 72)
+      const limit = intArg(args, 'limit', 10, 1, 20)
+      const { status, body } = await ask(asker, `/api/v1/public/languages?hours=${hours}`)
+      if (status !== 200) throw new Error(`languages answered ${status}`)
+      type Report = { id: string; title: string; language: string; country: string | null; severity: string | null; verifiedAt: string | null; storyId: string | null; storyLanguages: string[] }
+      const seen = new Set<string>()
+      const stories = ((((body.data ?? {}) as { verified?: Report[] }).verified) ?? [])
+        .filter(r => r && UUID.test(String(r.id)) && typeof r.title === 'string' && !(r.storyLanguages ?? []).includes('en'))
+        .filter(r => { const k = r.storyId ?? r.id; if (seen.has(k)) return false; seen.add(k); return true })
+        .slice(0, limit)
+      const text = [
+        stories.length
+          ? `Verified in the last ${hours} hours, and reported in no English (WorldPulse), newest first:`
+          : `Every story verified in the last ${hours} hours in another language has a report in English too, or none turned verified.`,
+        ...stories.map((r, i) => `${i + 1}. ${r.title}\n   ${[(r.storyLanguages?.length ? r.storyLanguages : [r.language]).map(languageLabel).join(', '), r.country ? countryLabel(r.country, false) : '', cap(r.severity), r.verifiedAt ? `verified ${agoLabel(r.verifiedAt)}` : ''].filter(Boolean).join(' · ')}\n   ${signalLink(r.id)}`),
+        '\nA lead on what the English-language press is missing, not proof: WorldPulse reads some newsrooms only through GDELT\'s articles, and an English report can sit in a story of its own. A story\'s languages: story_languages.',
+      ].join('\n').replace(/\n{3,}/g, '\n\n').trim()
+      return {
+        text,
+        data: { hours, stories: stories.map(r => ({ id: r.id, title: r.title, url: signalLink(r.id), languages: r.storyLanguages?.length ? r.storyLanguages : [r.language], country: r.country, severity: r.severity, verifiedAt: r.verifiedAt })) },
       }
     },
   },

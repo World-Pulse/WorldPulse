@@ -46,6 +46,11 @@ const MCP_TOOLS = [
   { name: 'newly_verified', what: 'Reports that just turned verified, with the second outlets that confirmed them' },
   { name: 'local_press', what: 'Stories the world reports while their own country\'s press barely appears among the outlets' },
   { name: 'site_check', what: 'Whether a website is a known AI content farm, and the reliability score WorldPulse gives it' },
+  { name: 'quiet_places', what: 'The places whose news most rarely finds a second outlet, with the reports still waiting for one' },
+  { name: 'story_languages', what: 'The languages a story is reported in, with its outlets in each' },
+  { name: 'verified_in_languages', what: 'The newest reports in other languages than English that turned verified' },
+  { name: 'languages_today', what: 'The languages the news came in: reports, countries and verified share for each' },
+  { name: 'missed_in_english', what: 'Stories verified in other languages that WorldPulse found no English report of' },
 ]
 const MCP_CURSOR = '{"mcpServers":{"worldpulse":{"url":"https://api.world-pulse.io/mcp"}}}'
 
