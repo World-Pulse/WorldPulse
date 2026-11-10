@@ -10299,6 +10299,30 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['sweden', 'nordics', 'europe'],
     language:        'en',
   },
+  // ── Added Nov 9, 2026, 10 PM (Devon, 10:12 PM: "Check these sources for Greenland", with the outlets Google lists) ──
+  // Sermitsiaq.AG (Nuuk; Sermitsiaq, AG and Nuuk Ugeavis are its papers), in Danish: the last of the four outlets held
+  // back on their terms on Nov 6 (Devon, 10:19 AM: "1 go in anyway"), which waited for its feed's address. The feed is
+  // the front page's (the address feeder.co lists as "Sermitsiaq.AG Nyheder"): read Nov 9, 42 items, the newest that
+  // evening, about 8 in 10 Greenland's own news (the coalition, the budget, Royal Greenland's quota), the rest world news
+  // from the wires (the US midterms, Nvidia, US stocks) and paid posts, which aren't read (skipLinks). Its terms allow
+  // private use only (Devon's call, Nov 6). Greenland's second outlet beside its government's press office. Not KNR
+  // (its feed's last item is from 2017 and its site lists no other), ArcticToday (its robots.txt closes /feed/) or The
+  // Local Denmark (read since Nov 9, counted for Denmark)
+  {
+    id:              'sermitsiaq-gl',
+    name:            'Sermitsiaq.AG',
+    feedUrl:         'https://www.sermitsiaq.ag/?lab_viewport=rss',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.72,
+    countryCode:     'GL',
+    defaultLat:      64.18,
+    defaultLng:      -51.72,
+    defaultLocation: 'Nuuk, Greenland',
+    extraTags:       ['greenland', 'arctic', 'nordics'],
+    language:        'da',
+    skipLinks:       /\/sponsoreret-indhold\//,
+  },
 ]
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────
@@ -10795,6 +10819,9 @@ export const HOME_PIN_SOURCES = new Set([
   // section; of 30 unplaced headlines sampled from each, all but one Paraguay's own); in two days 100 of their unplaced
   // headlines named President Peña during his impeachment, and dozens more the collapse of ueno bank, none of them on the map
   'abc-color-py', 'la-nacion-py', 'el-nacional-py',
+  // Nov 9, 2026: Sermitsiaq.AG, about 8 in 10 of its stories Greenland's own; its wire stories name their place, in
+  // Danish too (local-names.ts)
+  'sermitsiaq-gl',
 ])
 
 export interface InferredGeo {

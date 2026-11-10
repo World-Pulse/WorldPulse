@@ -588,6 +588,7 @@ export const OUTLET_DIRECTORY: Readonly<Record<string, OutletEntry>> = {
   "securitycouncilreport.org": { name: "Security Council Report", country: "US", kind: 'specialist' },
   "semanariouniversidad.com": { name: "Semanario Universidad", country: "CR", kind: 'national' },
   "serbianmonitor.com": { name: "Serbian Monitor", country: "RS", kind: 'national' },
+  "sermitsiaq.ag": { name: "Sermitsiaq.AG", country: "GL", kind: 'national' },
   "shabait.com": { name: "Shabait", country: "ER", kind: 'official', state: true },
   "shafaq.com": { name: "Shafaq News", country: "IQ", kind: 'national' },
   "sibconline.com.sb": { name: "SIBC", country: "SB", kind: 'national' },

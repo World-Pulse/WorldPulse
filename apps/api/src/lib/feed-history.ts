@@ -84,7 +84,7 @@ export const FEED_HISTORY: Readonly<Record<string, FeedHistory>> = {
   GD: { names: ["Grenada", "St. George's"], base: 0, steps: [["2026-10-20", 1]] },
   GE: { names: ["Georgia", "Tbilisi"], base: 0, steps: [["2026-10-14", 2], ["2026-10-20", 3]] },
   GH: { names: ["Ghana", "Accra"], base: 1, steps: [["2026-10-20", 3]] },
-  GL: { names: ["Greenland", "Nuuk"], base: 0, steps: [["2026-10-31", 1]] },
+  GL: { names: ["Greenland", "Nuuk"], base: 0, steps: [["2026-10-31", 1], ["2026-11-09", 2]] },
   GM: { names: ["Gambia", "Banjul"], base: 0, steps: [["2026-10-20", 1], ["2026-10-21", 2]] },
   GN: { names: ["Guinea", "Conakry"], base: 0, steps: [["2026-10-20", 3]] },
   GQ: { names: ["Equatorial Guinea", "Malabo"], base: 0, steps: [["2026-10-20", 1], ["2026-10-21", 2], ["2026-10-31", 3], ["2026-11-06", 4]] },

@@ -114,7 +114,8 @@ describe('place names in the languages added in round 6', () => {
   it('turns every local name into a place the place-finder knows', () => {
     for (const [language, rules] of Object.entries(LOCAL_NAMES)) {
       for (const [pattern, as] of rules) {
-        if (as === '…' || as === 'and') continue
+        // (and the words that only steer the place-finder: "in", "visits", an envoy's title)
+        if (['…', 'and', 'in', 'visits', 'ambassador', 'embassy', 'consulate', 'consul'].includes(as)) continue
         // (a place, a country, or a leader's or institution's seat: "White House", "Kremlin")
         expect(placed(as).countryCode, `${language}: ${pattern.source} → ${as}`).not.toBeNull()
       }

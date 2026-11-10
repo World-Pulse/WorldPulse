@@ -156,6 +156,34 @@ const DANISH: Rule[] = [
   r('tjekkiets?', 'Czechia'), r('rum[æa]niens?', 'Romania'),
   r('k[øo]benhavns?', 'Copenhagen'), r('moskvas?', 'Moscow'), r('bruxelles', 'Brussels'), r('kiev|kyjiv', 'Kyiv'),
   r('det\\s+hvide\\s+hus', 'White House'), r('kreml', 'Kremlin'),
+  // Sermitsiaq.AG (Nov 9, 2026) takes world news from the wires, which named no place: "Amerikanske aktiemarkeder
+  // stabiliserer sig" (adjectives, as English "Russian" counts), "Alaskas valgmyndighed" (a name spelled as in English,
+  // with the genitive s) and other countries' Danish names. Not the Nordic neighbours' adjectives ("norske", "svenske",
+  // "færøske"), common in Greenland's own news
+  r('amerikansk[e]?', 'United States'), r('russisk[e]?', 'Russian'), r('ukrainsk[e]?', 'Ukrainian'),
+  r('kinesisk[e]?', 'Chinese'), r('israelsk[e]?', 'Israeli'), r('iransk[e]?', 'Iranian'), r('tyrkisk[e]?', 'Turkish'),
+  r('britisk[e]?', 'United Kingdom'), r('japansk[e]?', 'Japanese'), r('indisk[e]?', 'Indian'), r('tysk[e]?', 'German'),
+  r('syrisk[e]?', 'Syrian'), r('pal[æa]stinensisk[e]?', 'Palestinian'), r('nordkoreansk[e]?', 'North Korea'),
+  r('sydkoreansk[e]?', 'South Korea'), r('gr[øo]nlandsk[e]?', 'Greenland'),
+  r('alaskas', 'Alaska'), r('ukraines', 'Ukraine'), r('israels', 'Israel'), r('irans', 'Iran'), r('iraks?', 'Iraq'),
+  r('japans', 'Japan'), r('canadas', 'Canada'), r('mexicos', 'Mexico'), r('venezuelas', 'Venezuela'), r('gazas', 'Gaza'),
+  r('saudi-arabiens?', 'Saudi Arabia'), r('irlands?', 'Ireland'), r('skotlands?', 'Scotland'), r('cyperns?', 'Cyprus'),
+  r('kroatiens?', 'Croatia'), r('serbiens?', 'Serbia'), r('indonesiens?', 'Indonesia'), r('filippinerne', 'Philippines'),
+  r('marokkos?', 'Morocco'), r('algeriets?', 'Algeria'), r('libyens?', 'Libya'), r('etiopiens?', 'Ethiopia'),
+  r('f[æa]r[øo]erne', 'Faroe Islands'),
+  r('(?:[øo]st|vest|syd|nord|nordvest|nord[øo]st|sydvest|syd[øo]st|midt)gr[øo]nlands?', 'Greenland'),
+  // "i" (in) and "besøger" (visits) put what follows them where the story is, as in English: "Amerikanske politikere
+  // besøger Grønland" is Greenland's, "Valg i USA" the United States'
+  cs('i', 'in'), r('bes[øo]g(?:er|te|e)', 'visits'),
+  // an envoy's country is not where the story is (geo.ts withoutEnvoyCountries): "Ny amerikansk konsul" is Nuuk's
+  r('ambassad[øo]r(?:en|er|erne)?', 'ambassador'), r('ambassade(?:n|r|rne)?', 'embassy'),
+  r('konsulat(?:et|er|erne)?', 'consulate'), r('konsul(?:en|er|erne)?', 'consul'),
+  ...towns([
+    ['Peking', 'Beijing'], ['Athen', 'Athens'], ['Lissabon', 'Lisbon'], ['Haag', 'The Hague'], ['Kairo', 'Cairo'],
+    ['Teheran', 'Tehran'], ['Bagdad', 'Baghdad'], ['Damaskus', 'Damascus'], ['Warszawa', 'Warsaw'], ['Prag', 'Prague'],
+    ['Wien', 'Vienna'], ['Genève', 'Geneva'], ['Hamborg', 'Hamburg'], ['München', 'Munich'], ['Gøteborg', 'Gothenburg'],
+    ['Vestbredden', 'West Bank'],
+  ]),
 ]
 
 const DUTCH: Rule[] = [
