@@ -31,7 +31,7 @@ import type { Category, SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate }          from '../pipeline/insert-signal'
 import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilience'
 import { extractArticle, setArticleExtractorRedis } from '../pipeline/article-extractor'
-import { extractGeo, mentionedCountries } from '../pipeline/geo'
+import { extractGeo, mentionedCountries, withoutEnvoyCountries, withoutNonPlaceNames } from '../pipeline/geo'
 import { classifyContent }             from '../pipeline/classify'
 import { CAMEO_LABEL }                 from '../pipeline/event-titles'
 import { isoFromFips }                 from '../pipeline/fips-countries'
@@ -419,9 +419,16 @@ export function startGdeltPoller(
         let signalRegion: string | null = null
 
         // Use title + body to detect real event location
-        const geoText = `${title} ${article.body?.slice(0, 500) ?? ''}`
+        // The headline speaks first, then its article (extractGeo's two-part read, M57), and not the country an
+        // envoy or a suspect is from (Nov 10, 2026: AP's "Overnight strikes in Yemen ..." sat in Washington, a
+        // body's city beating the headline's country; Stanford Daily's "alleged Chinese spy" sat in China)
+        const [geoHead, geoBody] = withoutNonPlaceNames(
+          withoutEnvoyCountries(title),
+          withoutEnvoyCountries(article.body?.slice(0, 500) ?? ''),
+        )
+        const geoText = `${geoHead} ${geoBody}`
         try {
-          const geo = await extractGeo(geoText)
+          const geo = await extractGeo(geoHead, geoBody)
           if (geo.point && geo.lat != null && geo.lng != null) {
             signalLat    = geo.lat
             signalLng    = geo.lng
