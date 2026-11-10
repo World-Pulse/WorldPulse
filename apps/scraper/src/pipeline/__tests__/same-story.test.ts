@@ -271,6 +271,27 @@ describe('different places and names are different stories', () => {
     expect(namesDiffer('Breaking: Gunmen kill 12 farmers in Benue', 'Watch: Gunmen kill 12 farmers in Benue')).toBe(false)
     expect(namesDiffer('Breaking: Gunmen kill 12 farmers in Benue', 'Gunmen kill 12 farmers in Delta')).toBe(true)
   })
+
+  it('namesDiffer: two headlines that open with two names tell of what two people did (Nov 10, 2026)', () => {
+    // "Ramos-Horta" opens its headline, so it wasn't read as a name, and the two passed for one story
+    expect(namesDiffer('Xanana Gusmão meets Indonesian President Prabowo in Jakarta', 'Ramos-Horta meets Indonesian President Prabowo in Jakarta')).toBe(true)
+    expect(namesDiffer('NATO warns Russia over drone incursions', 'EU warns Russia over drone incursions')).toBe(true)
+    expect(namesDiffer("Putin's envoy arrives in Washington for talks", "Zelensky's envoy arrives in Washington for talks")).toBe(true)
+    // one person or body named two ways is one story
+    expect(namesDiffer('Ramos-Horta meets Indonesian President Prabowo in Jakarta', 'Timor-Leste president Ramos-Horta meets Prabowo in Jakarta')).toBe(false)
+    expect(namesDiffer('Pope Leo meets Bob Dylan at the Vatican', 'Bob Dylan meets Pope Leo at the Vatican')).toBe(false)
+    expect(namesDiffer('Lionel Messi scores twice as Inter Miami win', 'Messi scores twice as Inter Miami beat Orlando')).toBe(false)
+    expect(namesDiffer('UN warns of famine in Sudan', 'United Nations warns of famine in Sudan')).toBe(false)
+    expect(namesDiffer('US strikes Houthi targets in Yemen', 'U.S. strikes Houthi targets in Yemen')).toBe(false)
+    expect(namesDiffer('Luiz Inácio Lula da Silva meets Xi Jinping in Beijing', 'Lula meets Xi in Beijing')).toBe(false)
+    expect(namesDiffer('Affaire Astou Pierre Ndiaye : Alioune Badara Gaye inculpé pour assassinat',
+      "Alioune Badara Gaye incarcéré pour le meurtre d'Astou Pierre Ndiaye à Dakar")).toBe(false)
+    expect(namesDiffer("Egypt's military has been in Saudi for months, says FM", 'Egyptian forces present in Saudi Arabia for months: FM-Xinhua')).toBe(false)
+    // a word that opens a headline isn't read as a name: "Gunmen" and "Bandits" may tell of one attack
+    expect(namesDiffer('Gunmen kill 12 in Benue village attack', 'Bandits kill 12 in Benue village attack')).toBe(false)
+    // nor a title-cased headline's words
+    expect(namesDiffer('Massive Drone Attack Hits Kyiv Overnight', 'Massive drone attack hits Kyiv overnight, officials say')).toBe(false)
+  })
 })
 
 describe('confirmMergedArticle', () => {

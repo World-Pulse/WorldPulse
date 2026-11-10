@@ -1229,6 +1229,43 @@ const HEADLINE_LABELS = new Set(['breaking', 'watch', 'video', 'videos', 'live',
   'podcast', 'interview', 'review', 'factbox', 'timeline', 'revealed', 'confirmed', 'official', 'urgent', 'alert', 'flash',
   'developing', 'latest', 'recap', 'quiz', 'poll', 'comment', 'letters', 'obituary'])
 
+/** A headline as namesDiffer reads it: curly apostrophes straight, dotted acronyms one word ("U.S." is "US") */
+function tidyHeadline(t: string): string {
+  return t.replace(/[\u2018\u2019]/g, "'").replace(/(?<![\p{L}.])(?:\p{Lu}\.){2,}/gu, m => m.replace(/\./g, ''))
+}
+const tidy = tidyHeadline
+
+/** Particles inside a name ("Lula da Silva", "Ursula von der Leyen") */
+const NAME_PARTICLES = new Set(['da', 'de', 'do', 'dos', 'das', 'del', 'della', 'di', 'van', 'von', 'der', 'den', 'al', 'el', 'bin', 'ibn', 'la', 'le'])
+
+/**
+ * The name a headline opens with, when it is one (Nov 10, 2026). The first word's capital tells nothing, so
+ * only: a hyphenated name ("Ramos-Horta"), a name of two or more capitalised words in a headline whose other
+ * words aren't ("Xanana Gusmão meets …"), one with a capital inside ("McCarthy"), a possessive ("Putin's envoy
+ * …") and an acronym ("NATO warns …"). An acronym is its own kind: "UN" and "United Nations" are one body. A
+ * one-word name ("Putin meets …") can't be told from a word ("Gunmen kill …") and isn't read.
+ */
+export function leadName(title: string): { kind: 'name' | 'acronym'; words: string[] } | null {
+  const words = tidy(title).split(/\s+/).filter(Boolean)
+  const bare = (w: string) => w.replace(/[,;:.!?"”]+$/u, '')
+  const parts = (w: string) => w.replace(/'s$/u, '').split(/[^\p{L}\p{N}]+/u).filter(Boolean).map(x => x.toLowerCase())
+  const first = bare(words[0] ?? '')
+  if (/^\p{Lu}{2,}$/u.test(first)) return { kind: 'acronym', words: [first.toLowerCase()] }
+  if (/^\p{Lu}[\p{L}']*-\p{Lu}/u.test(first) || /^\p{Lu}\p{Ll}+\p{Lu}/u.test(first) || /^\p{Lu}\p{L}+'s$/u.test(first)) {
+    return { kind: 'name', words: parts(first) }
+  }
+  const run: string[] = []
+  for (const w of words.slice(0, 5)) {
+    const b = bare(w)
+    if (/^\p{Lu}\p{Ll}/u.test(b)) run.push(b)
+    else if (run.length > 0 && NAME_PARTICLES.has(b)) continue
+    else break
+    if (b !== w) break
+  }
+  const rest = words.slice(run.length).filter(w => /^\p{L}/u.test(w) && w.length > 3)
+  return run.length >= 2 && rest.some(w => /^\p{Ll}/u.test(w)) ? { kind: 'name', words: run.flatMap(parts) } : null
+}
+
 /**
  * Whether each headline names someone or somewhere the other doesn't: a
  * capitalised word (not the first word) missing from the other headline.
@@ -1237,10 +1274,12 @@ const HEADLINE_LABELS = new Set(['breaking', 'watch', 'video', 'videos', 'live',
  * scraper's topic hash, so merged articles must pass this too. A first word
  * ending in a colon is a name too ("Benue: Gunmen kill 12 …" / "Delta: …",
  * Nigerian outlets' style, matched as one story in the April–May repair of
- * Oct 22, 2026), unless it is a label ("Breaking:").
+ * Oct 22, 2026), unless it is a label ("Breaking:"). Two headlines that open
+ * with two names, neither in the other headline, tell of what two people did
+ * (leadName, Nov 10, 2026): "Xanana Gusmão meets Prabowo in Jakarta" and
+ * "Ramos-Horta meets Prabowo in Jakarta" had passed for one story.
  */
 export function namesDiffer(a: string, b: string): boolean {
-  const tidy = (t: string) => t.replace(/[\u2018\u2019]/g, "'")
   const names = (t: string) => {
     const words = tidy(t).split(/\s+/).filter(Boolean)
     const first = words[0] ?? ''
@@ -1253,8 +1292,10 @@ export function namesDiffer(a: string, b: string): boolean {
     )
   }
   const words = (t: string) => new Set(tidy(t).toLowerCase().replace(/'s\b/g, '').split(/[^\p{L}\p{N}]+/u).filter(Boolean))
-  const [na, nb] = [names(a), names(b)]
   const [wa, wb] = [words(a), words(b)]
+  const [la, lb] = [leadName(a), leadName(b)]
+  if (la && lb && la.kind === lb.kind && !la.words.some(w => wb.has(w)) && !lb.words.some(w => wa.has(w))) return true
+  const [na, nb] = [names(a), names(b)]
   const onlyA = [...na].some(n => !wb.has(n))
   const onlyB = [...nb].some(n => !wa.has(n))
   return onlyA && onlyB

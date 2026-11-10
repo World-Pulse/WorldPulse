@@ -189,3 +189,16 @@ describe('a cycle with the translated list (Nov 10, 2026)', () => {
     expect(stats).toMatchObject({ files: 1, matched: 1, everyday: 0 })
   })
 })
+
+describe('the stricter name check (Nov 10, 2026, evening)', () => {
+  it("doesn't take another leader's meeting for the report's", () => {
+    const tl = report({
+      id: 'sig-tl', title: 'Xanana Gusmão meets Indonesian President Prabowo in Jakarta', category: 'geopolitics', language: 'en',
+      original_urls: ['https://www.tatoli.tl/2026/11/10/xanana-prabowo/'], location_name: 'Jakarta, Indonesia', lat: -6.2, lng: 106.8,
+      tags: ['news', 'rss', 'tatoli-tl', 'tl'],
+    })
+    expect(otherOutlets(tl, [article('https://en.antaranews.com/news/ramos-horta-prabowo', 'Ramos-Horta meets Indonesian President Prabowo in Jakarta')], LATER)).toEqual([])
+    expect(otherOutlets(tl, [article('https://en.antaranews.com/news/xanana-prabowo', 'Prabowo receives Xanana Gusmão in Jakarta for talks on the border')], LATER)
+      .map(f => f.site)).toEqual(['antaranews.com'])
+  })
+})
