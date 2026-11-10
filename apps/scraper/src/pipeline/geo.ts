@@ -2976,12 +2976,16 @@ const JOINED_ALWAYS = new Set([
 ])
 const JOINED_UNLESS_ALONE = new Set(['based', 'born', 'headquartered', 'listed'])
 const JOINED = /(?<![\p{L}\p{N}])(?:(\p{Lu}[\p{L}'’.]*)\s+)?(\p{Lu}[\p{L}'’.]*)[-‑](\p{L}+)(?![\p{L}\p{N}])/gu
-const NON_PLACE_ANY = /\bof\s+\p{Lu}|\p{L}[-‑]\p{L}/u
+/**
+ * A country's people before the person they name: "alleged Chinese agent", "suspected Russian spy" (Nov 9, 2026: five
+ * outlets' Nvidia story sat in China). Where the person is from is not where the story is. Only countries' own names
+ * and peoples, not cities ("Paris tourists").
+ */
+const PERSON_OF = /(?<![\p{L}\p{N}])(\p{Lu}[\p{L}'’.]*)\s+(?:spy|spies|agent|agents|mole|moles|national|nationals|citizen|citizens|tourist|tourists|businessman|businesswoman|tycoon)(?![\p{L}\p{N}])/gu
+const NON_PLACE_ANY = /\bof\s+\p{Lu}|\p{L}[-‑]\p{L}|\p{Lu}[\p{L}'’.]*\s+(?:spy|spies|agent|agents|mole|moles|national|nationals|citizen|citizens|tourist|tourists|businessman|businesswoman|tycoon)/u
 
-/** The country of a place's or a people's whole name: "Edinburgh", "New York", "Saudi", "Iranian" (not "Trump") */
-function placeCountry(name: string): string | null {
-  const known = GAZETTEER[name.toLowerCase()]
-  if (known) return known.country
+/** The country a country's own name or people names ("China", "Chinese"), not a city's */
+function countryOnly(name: string): string | null {
   for (let i = 0; i < COUNTRY_SPANS.length; i++) {
     const p = COUNTRY_SPANS[i]!
     p.lastIndex = 0
@@ -2989,6 +2993,13 @@ function placeCountry(name: string): string | null {
     if (m && m.index === 0 && m[0].length === name.length) return COUNTRY_PATTERNS[i]![1]
   }
   return null
+}
+
+/** The country of a place's or a people's whole name: "Edinburgh", "New York", "Saudi", "Iranian" (not "Trump") */
+function placeCountry(name: string): string | null {
+  const known = GAZETTEER[name.toLowerCase()]
+  if (known) return known.country
+  return countryOnly(name)
 }
 
 type Span = [number, number, string]
@@ -3000,6 +3011,9 @@ function nonPlaceSpans(text: string): { always: Span[]; unlessAlone: Span[] } {
   const unlessAlone: Span[] = []
   if (!text || !NON_PLACE_ANY.test(text)) return { always, unlessAlone }
   for (const m of text.matchAll(TITLE_OF)) always.push([m.index! + m[0].length - m[1]!.length, m.index! + m[0].length, ''])
+  for (const m of text.matchAll(PERSON_OF)) {
+    if (countryOnly(m[1]!)) always.push([m.index!, m.index! + m[1]!.length, ''])
+  }
   for (const m of text.matchAll(JOINED)) {
     const word = m[3]!.toLowerCase()
     const spans = JOINED_ALWAYS.has(word) ? always : JOINED_UNLESS_ALONE.has(word) ? unlessAlone : null

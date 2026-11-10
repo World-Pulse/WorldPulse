@@ -85,3 +85,13 @@ describe('names the reader did not know', () => {
     expect(at('the-hindu-national', 'YSRCP wins key ZPTC seats in Saluru')).toMatchObject({ countryCode: 'IN', locationName: 'Saluru' })
   })
 })
+
+describe("a country's people before a person: where someone is from is not where the story is (Nov 9)", () => {
+  it('blanks "Chinese agent" but keeps the place a story names', () => {
+    const [h] = withoutNonPlaceNames('FBI looks at Nvidia CEO over affair with alleged Chinese agent', '')
+    expect(h).not.toMatch(/Chinese/)
+    expect(at('bbc-world', 'Chinese nationals kidnapped in Lagos')).toMatchObject({ countryCode: 'NG' })
+    expect(at('bbc-world', 'Chinese forces hold drills near Taiwan').countryCode).toBe('CN')
+    expect(at('bbc-world', 'Paris tourists stranded as flights cancelled').countryCode).toBe('FR')
+  })
+})
