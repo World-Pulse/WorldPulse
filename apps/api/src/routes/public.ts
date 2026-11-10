@@ -96,7 +96,12 @@ async function languageCounts(hours: number): Promise<LanguageCount[]> {
   }))
 }
 
-/** The newest reports in a language other than English that turned verified in the last `hours`, with their story's languages */
+/**
+ * The reports in a language other than English that turned verified in the last `hours`, with their story's languages:
+ * each language's newest 25 (a language's own list: verified_in_languages), and the newest 80 whose story has no report
+ * in English (missed_in_english), newest first. One list of the newest 80 of all languages held only the last hour or
+ * so of a day (Nov 10, 2026: 80 of about 850), so a language or a story without English from the morning was missed.
+ */
 async function verifiedAbroad(hours: number): Promise<VerifiedAbroad[]> {
   const stories = await signalsHaveStoryIds()
   const storyLanguages = stories
@@ -104,16 +109,26 @@ async function verifiedAbroad(hours: number): Promise<VerifiedAbroad[]> {
          WHERE m.story_id = s.story_id AND m.status IN ('verified', 'pending') AND trim(m.language) ~ '^[a-z]{2}$')`
     : 'NULL::text[]'
   const result = await longQuery(20, trx => trx.raw(
-    `SELECT s.id::text AS id, s.title, trim(s.language) AS language, s.country_code, s.severity::text AS severity,
-            s.category::text AS category, s.verified_at, ${stories ? 's.story_id::text' : 'NULL::text'} AS story_id,
-            ${storyLanguages} AS story_languages
-       FROM signals s
-      WHERE s.status = 'verified'
-        AND s.created_at > NOW() - make_interval(hours => ?)
-        AND s.verified_at > NOW() - make_interval(hours => ?)
-        AND trim(s.language) ~ '^[a-z]{2}$' AND trim(s.language) <> 'en'
-      ORDER BY s.verified_at DESC
-      LIMIT 80`, [hours + 24, hours]) as unknown as Promise<{ rows?: Array<Record<string, unknown>> }>)
+    `WITH v AS (
+       SELECT s.id::text AS id, s.title, trim(s.language) AS language, s.country_code, s.severity::text AS severity,
+              s.category::text AS category, s.verified_at, ${stories ? 's.story_id::text' : 'NULL::text'} AS story_id,
+              ${storyLanguages} AS story_languages
+         FROM signals s
+        WHERE s.status = 'verified'
+          AND s.created_at > NOW() - make_interval(hours => ?)
+          AND s.verified_at > NOW() - make_interval(hours => ?)
+          AND trim(s.language) ~ '^[a-z]{2}$' AND trim(s.language) <> 'en'
+     ), ranked AS (
+       SELECT v.*,
+              'en' = ANY(COALESCE(v.story_languages, ARRAY[]::text[])) AS with_english,
+              row_number() OVER (PARTITION BY v.language ORDER BY v.verified_at DESC) AS in_language,
+              row_number() OVER (PARTITION BY 'en' = ANY(COALESCE(v.story_languages, ARRAY[]::text[])) ORDER BY v.verified_at DESC) AS in_kind
+         FROM v
+     )
+     SELECT id, title, language, country_code, severity, category, verified_at, story_id, story_languages
+       FROM ranked
+      WHERE in_language <= 25 OR (NOT with_english AND in_kind <= 80)
+      ORDER BY verified_at DESC`, [hours + 24, hours]) as unknown as Promise<{ rows?: Array<Record<string, unknown>> }>)
   return (result.rows ?? []).map(r => {
     const language = String(r.language)
     const langs = Array.isArray(r.story_languages) ? r.story_languages.map(String).filter(l => /^[a-z]{2}$/.test(l)) : []
@@ -377,9 +392,9 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // ─── GET /languages (Nov 10, 2026) ────────────────────────
-  // The languages of the last hours' reports, and the newest reports in another language than English that turned verified
+  // The languages of the last hours' reports, and each other language's newest reports that turned verified
   app.get('/languages', {
-    schema: { tags: ['public'], summary: 'The languages of the news, and the newest verified reports in other languages than English (public, no auth required)' },
+    schema: { tags: ['public'], summary: 'The languages of the news, and the newest verified reports of each language other than English (public, no auth required)' },
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
   }, async (req, reply) => {
     reply.header('Access-Control-Allow-Origin', '*')
@@ -387,7 +402,7 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
     try {
       const [languages, verified] = await Promise.all([
         staleWhileRevalidate(`public:languages:v1:counts:${hours}`, LANGUAGES_SWR, () => languageCounts(hours)),
-        staleWhileRevalidate(`public:languages:v1:verified:${hours}`, LANGUAGES_SWR, () => verifiedAbroad(hours)),
+        staleWhileRevalidate(`public:languages:v2:verified:${hours}`, LANGUAGES_SWR, () => verifiedAbroad(hours)),
       ])
       return reply.send({ success: true, data: { hours, languages, verified } })
     } catch {
