@@ -10410,14 +10410,16 @@ export function detectNewsSeverity(title: string, description: string, category?
  * The article's category from its words (pipeline/categories.ts, shared with
  * classify.ts): the headline first, then the headline and description, else
  * the outlet's own category. Lets a geopolitics outlet (e.g. BBC) file a
- * disease outbreak as health.
+ * disease outbreak as health. A French, Spanish, Portuguese or German feed's
+ * report is read in its language too (Nov 10, 2026).
  */
 export function detectNewsCategory(
   title:           string,
   description:     string,
   sourceDefault:   Category,
+  lang?:           string | null,
 ): Category {
-  return categorizeText(title, description) ?? sourceDefault
+  return categorizeText(title, description, lang) ?? sourceDefault
 }
 
 // ─── HTTP HELPER ──────────────────────────────────────────────────────────────
@@ -11174,7 +11176,7 @@ async function processItem(
   const alert       = source.id === 'gdacs' ? gdacsAlertLevel(item.title, item.alertLevel) : null
   const gdacs       = source.id === 'gdacs' ? tidyGdacsTitle(decodeEntities(item.title)) : null
   const title       = (gdacs?.title ?? decodeEntities(item.title)).slice(0, 500) || `${source.name} — news item`
-  const category    = detectNewsCategory(item.title, text, source.category)
+  const category    = detectNewsCategory(item.title, text, source.category, source.language)
   const severity    = alert ? gdacsSeverity(alert) : detectNewsSeverity(decodeEntities(item.title), text, category, source.language)
   // (the story's own words: a WordPress footer's "appeared first on BENIN WEB TV" named Benin for the outlet's world news)
   const found       = inferGeo(item.title, cleanSummary(text), source, item.point)

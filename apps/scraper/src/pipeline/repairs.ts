@@ -531,7 +531,7 @@ export async function recategorizeRecentNews(): Promise<number> {
   for (const row of rows) {
     const source = (row.tags ?? []).map(t => sources.get(t)).find(Boolean)
     if (!source) continue
-    const category = detectNewsCategory(row.title ?? '', row.summary ?? '', source.category)
+    const category = detectNewsCategory(row.title ?? '', row.summary ?? '', source.category, source.language)
     // (a few sources default to names the database's category list lacks, like "military")
     if (category !== row.category && STORED_CATEGORIES.has(category)) changed.push({ id: row.id, category })
   }

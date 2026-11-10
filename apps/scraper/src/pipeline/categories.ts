@@ -20,6 +20,7 @@
 
 import type { Category } from '@worldpulse/types'
 import { literalText } from './figurative'
+import { languageRules, type Slot } from './category-languages'
 
 const SPORTS_RE = /\b(premier\s+league|champions\s+league|europa\s+league|la\s+liga|serie\s+a|bundesliga|ligue\s+1|world\s+cup|euro\s+20\d\d|olympics?|olympic\s+games|paralympics?|fifa|uefa|nba|nfl|nhl|mlb|pga|lpga|grand\s+prix|formula\s+(?:1|one)|wimbledon|french\s+open|australian\s+open|ryder\s+cup|super\s+bowl|test\s+match|ipl|t20|rugby|cricket|tennis|marathon|ufc|athletics|footballer|goalkeeper|midfielder|head\s+coach|transfer\s+window|hat-trick|player\s+of\s+the\s+year|soccer|strikers?|wingers?|relegation|ten\s+hag|cristiano\s+ronaldo|lionel\s+messi|football\s+(?:club|match|fans|manager|team|league|coach)|basketball|baseball|volleyball|badminton|gymnasts?|gymnastics|swimmers?|sprinters?|weightlift(?:er|ers|ing)|boxing(?!\s+day)|golfers?|tour\s+de\s+france|world\s+championships?|africa\s+cup\s+of\s+nations|afcon|asian\s+cup|copa\s+am[eé]rica|copa\s+libertadores|caf\s+champions\s+league|confederation\s+cup|champions\s+trophy)\b|\bvs\.?\b.{1,60}\blive\b/
 // Before health: "scientists publish a study on a cancer treatment" is science
@@ -51,38 +52,79 @@ const SECURITY_RE = /\b(espionage|spy|spies|spying|intelligence|terror|terrorism
 const CARE_RE = /\b(health|(?<!(?:to|from|in|at)\s)hospitals?|patients|doctors|physicians|nurses|nursing|medical|medicines?|maternity|clinics?|labou?r\s+and\s+delivery)\b/
 const CULTURE_RE = /\b(films?|movies?|music|album|festival|celebrity|museum|exhibition|gallery|actor|actress|singer|concert|box\s+office|novels|novelist|memoir|(?:tv|television)\s+(?:series|shows?|drama)|sitcom|netflix|broadway|oscars|academy\s+awards?|emmys?|grammys?|baftas?|golden\s+globes?|anime|manga|fashion\s+(?:week|shows?))\b/
 
-/** Rules for a headline and its description */
-const RULES: Array<[RegExp, Category]> = [
-  [SPORTS_RE, 'sports'],
-  [SCIENCE_RE, 'science'],
-  [HEALTH_RE, 'health'],
-  [DISASTER_RE, 'disaster'],
-  [ELECTIONS_RE, 'elections'],
-  [ECONOMY_RE, 'economy'],
-  [SPACE_RE, 'space'],
-  [TECH_RE, 'technology'],
-  [CLIMATE_RE, 'climate'],
-  [CYBER_RE, 'security'],
-  [ANIMAL_RE, 'other'],
-  [GEOPOLITICS_RE, 'geopolitics'],
-  [CONFLICT_RE, 'conflict'],
-  [SECURITY_RE, 'security'],
-  [CULTURE_RE, 'culture'],
+/**
+ * The rules in their order, each under its topic's name (category-languages.ts files French, Spanish, Portuguese
+ * and German words under the same names, tried just before the English ones). The care words are read in
+ * headlines only, after conflict.
+ */
+const SLOTS: ReadonlyArray<[Slot, RegExp, Category]> = [
+  ['sports', SPORTS_RE, 'sports'],
+  ['science', SCIENCE_RE, 'science'],
+  ['health', HEALTH_RE, 'health'],
+  ['disaster', DISASTER_RE, 'disaster'],
+  ['elections', ELECTIONS_RE, 'elections'],
+  ['economy', ECONOMY_RE, 'economy'],
+  ['space', SPACE_RE, 'space'],
+  ['technology', TECH_RE, 'technology'],
+  ['climate', CLIMATE_RE, 'climate'],
+  ['cyber', CYBER_RE, 'security'],
+  ['animal', ANIMAL_RE, 'other'],
+  ['geopolitics', GEOPOLITICS_RE, 'geopolitics'],
+  ['conflict', CONFLICT_RE, 'conflict'],
+  ['security', SECURITY_RE, 'security'],
+  ['care', CARE_RE, 'health'],
+  ['culture', CULTURE_RE, 'culture'],
 ]
 
-/** Rules for a headline alone: the above, with care words before culture */
-const HEADLINE_RULES: Array<[RegExp, Category]> = [...RULES.slice(0, -1), [CARE_RE, 'health'], RULES[RULES.length - 1]!]
+/** A rule: its words, its topic, and whether it reads the text as written (a language's own words) or lower-cased (the English ones) */
+type Rule = [RegExp, Category, boolean]
 
-function byRules(text: string, rules: Array<[RegExp, Category]>): Category | null {
+interface RuleSet {
+  /** For a headline alone (with the care words) */
+  headline: Rule[]
+  /** For a headline and its description */
+  text: Rule[]
+  falseFriends?: RegExp
+}
+
+function ruleSet(lang: string | null): RuleSet {
+  const own = languageRules(lang)
+  // A language's own words read the headline only: in these languages' summaries they were as often background
+  // (a footer's "Internet", a war's toll, "selon une étude") as the story
+  const rules = (headline: boolean): Rule[] => SLOTS.flatMap(([slot, re, category]): Rule[] => slot === 'care' && !headline ? [] : [
+    ...(headline ? own?.slots[slot] ?? [] : []).map((words): Rule => [words, category, true]),
+    [re, category, false],
+  ])
+  return { headline: rules(true), text: rules(false), falseFriends: own?.falseFriends }
+}
+
+const RULE_SETS = new Map<string, RuleSet>()
+
+/** The rules for a report's language: English's, or a language's own words before each topic's English ones */
+function rulesFor(lang: string | null | undefined): RuleSet {
+  const key = lang && languageRules(lang) ? lang : ''
+  let rules = RULE_SETS.get(key)
+  if (!rules) RULE_SETS.set(key, rules = ruleSet(key || null))
+  return rules
+}
+
+function byRules(text: string, rules: Rule[], falseFriends?: RegExp): Category | null {
   // "the blue tsunami" of an election is no disaster (figurative.ts, Nov 8, 2026)
-  const lower = literalText(text).toLowerCase()
-  for (const [re, category] of rules) if (re.test(lower)) return category
+  const literal = literalText(text).normalize('NFC')
+  // the English words don't read a German "war" ("was") or a French "j'ai" (category-languages.ts)
+  const lower = (falseFriends ? literal.replace(falseFriends, ' ') : literal).toLowerCase()
+  for (const [re, category, asWritten] of rules) if (re.test(asWritten ? literal : lower)) return category
   return null
 }
 
-/** The category the words give: the headline's if it has one, else the headline and description's; null if neither */
-export function categorizeText(title: string, description = ''): Category | null {
-  return byRules(title, HEADLINE_RULES) ?? (description ? byRules(`${title} ${description}`, RULES) : null)
+/**
+ * The category the words give: the headline's if it has one, else the headline and description's; null if neither.
+ * A report in French, Spanish, Portuguese or German (its feed's language) is read in that language too (Nov 10, 2026).
+ */
+export function categorizeText(title: string, description = '', lang?: string | null): Category | null {
+  const rules = rulesFor(lang)
+  return byRules(title, rules.headline, rules.falseFriends)
+    ?? (description ? byRules(`${title} ${description}`, rules.text, rules.falseFriends) : null)
 }
 
 /**
@@ -100,9 +142,9 @@ export const BREAKING_RE = /\b(breaking|urgent|just\s+in|alerts?|developing\s+st
  * is unavailable): the rules above on the headline and then its opening,
  * then politics, then urgent wording, else "other".
  */
-export function categorizeArticle(title: string, body: string | null | undefined): Category {
+export function categorizeArticle(title: string, body: string | null | undefined, lang?: string | null): Category {
   const opening = lede(body)
-  const ruled = categorizeText(title, opening)
+  const ruled = categorizeText(title, opening, lang)
   if (ruled) return ruled
   const text = `${title} ${opening}`.toLowerCase()
   if (POLITICS_RE.test(text)) return 'geopolitics'
