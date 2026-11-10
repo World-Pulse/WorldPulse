@@ -33,12 +33,16 @@ export const FILE_URL = (stamp: string) => `${GDELT_BUCKET}/${stamp}.gkg.csv.zip
  * GDELT's translated list (Nov 10, 2026): the articles it read in 65 other languages and machine-translated, each
  * file about a quarter of an hour behind the English one ("Translingual"). Its page titles are the articles' own, in
  * their language, and the TranslationInfo field (25) names the language ("srclc:fra;eng:GT-FRA 1.0"). The 17:00 UTC
- * file of Nov 10 held 2,938 articles, 167 of them in French and 302 in German, 11.5 MB compressed.
+ * file of Nov 10 held 2,938 articles, 167 of them in French, 302 in German, 431 in Spanish and 148 in Portuguese,
+ * 11.5 MB compressed.
  */
 export const LASTUPDATE_TRANSLATION_URL = `${GDELT_BUCKET}/lastupdate-translation.txt`
 export const TRANSLATION_FILE_URL = (stamp: string) => `${GDELT_BUCKET}/${stamp}.translation.gkg.csv.zip`
-/** The translated list's languages that are read, by GDELT's code: French and German (Burundi, Comoros, Liechtenstein) */
-export const TRANSLATED_LANGUAGES: Readonly<Record<string, string>> = { fra: 'fr', deu: 'de' }
+/**
+ * The translated list's languages that are read, by GDELT's code: French and German (Burundi, Comoros, Liechtenstein;
+ * Nov 10, 2026, 1:37 PM), Spanish and Portuguese (Latin America, Equatorial Guinea, Lusophone Africa, Timor-Leste; that afternoon)
+ */
+export const TRANSLATED_LANGUAGES: Readonly<Record<string, string>> = { fra: 'fr', deu: 'de', spa: 'es', por: 'pt' }
 /**
  * A fresh address for each request (Oct 22): GDELT lists a file the moment it
  * uploads it (10 to 15 minutes before the time in its name), and a request
@@ -58,7 +62,7 @@ export interface GdeltArticle {
   site: string
   /** When GDELT read it */
   at: Date
-  /** Its language, for an article of the translated list ('fr', 'de'); none for the English list's */
+  /** Its language, for an article of the translated list ('fr', 'de', 'es', 'pt'); none for the English list's */
   lang?: string
 }
 
@@ -229,7 +233,7 @@ export async function fetchArticles(stamp: string, onText?: (stamp: string, text
   return readArticles(text)
 }
 
-/** One file of the translated list: its French and German articles (TRANSLATED_LANGUAGES); null when GDELT doesn't have it */
+/** One file of the translated list: its articles in TRANSLATED_LANGUAGES; null when GDELT doesn't have it */
 export async function fetchTranslatedArticles(stamp: string): Promise<GdeltArticle[] | null> {
   const text = await fetchFileText(stamp, TRANSLATION_FILE_URL(stamp))
   return text === null ? null : readArticles(text, TRANSLATED_LANGUAGES)

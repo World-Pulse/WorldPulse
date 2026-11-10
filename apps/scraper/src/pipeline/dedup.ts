@@ -84,6 +84,15 @@ export const dedup = {
   },
 
   /**
+   * Let go of an event claimed with claimCrossSource when no signal was stored after all (Nov 10, 2026): the claim
+   * stayed "pending" for its 6 hours, so the next read of the article took it for a duplicate of itself, skipped it
+   * and marked it read. SBC's first stories, refused by the database, were lost that way.
+   */
+  async releaseCrossSource(key: string): Promise<void> {
+    if ((await redis.get(key)) === 'pending') await redis.del(key)
+  },
+
+  /**
    * One stored report per news article, whichever reader gets to it first
    * (H-0014, Oct 20, 2026). The scraper has two news readers that read some
    * of the same feeds, sources/news-rss.ts and processArticleGroup in

@@ -34,6 +34,8 @@ export interface SeverityRow {
   severity: string
   /** The second read lowered it (readLoweredSql) */
   read_lowered?: boolean | null
+  /** Its language, read by the severity rules in French, Spanish, Portuguese and German too (Nov 10, 2026) */
+  language?: string | null
 }
 
 /** Fewer outlets than this, a report the second read lowered stays lowered */
@@ -53,7 +55,7 @@ export function heldBySecondRead(row: { read_lowered?: boolean | null }, outlets
 export function liftedSeverity(row: SeverityRow, outlets: number): SignalSeverity | null {
   if (heldBySecondRead(row, outlets)) return null
   const cap = maxSeverityForSourceCount(outlets, row.category)
-  const earned = rateSeverity(row.title, row.summary, row.category)
+  const earned = rateSeverity(row.title, row.summary, row.category, row.language)
   const target = (RANK[earned] ?? 0) < (RANK[cap] ?? 0) ? earned : cap
   return (RANK[target] ?? 0) > (RANK[row.severity] ?? 0) ? target : null
 }

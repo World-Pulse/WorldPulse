@@ -45,7 +45,8 @@
  * thinly covered places whose reports were verified fewer than QUIET_VERIFIED times in 7 days (Dominica, Burundi,
  * Liechtenstein...; about 4 in 5 of their waiting reports are low), matched by the headline test only (the
  * cross-check stays the serious reports'); and French and German reports are compared with the French and German
- * articles of GDELT's translated list (gdelt-articles.ts), held 8 hours like the English ones.
+ * articles of GDELT's translated list (gdelt-articles.ts), held 8 hours like the English ones; Spanish and
+ * Portuguese ones too since that afternoon.
  *
  * Daily counts: second-outlet:day:<date> (GET /api/v1/public/second-outlets);
  * the latest matches, for reading by hand: second-outlet:recent. Off with
@@ -136,11 +137,17 @@ const EVENTISH = new Set([
   'getotet', 'tote', 'toten', 'verletzte', 'verletzt', 'angriff', 'anschlag', 'polizei', 'regierung', 'prasident',
   'minister', 'ministerin', 'wahl', 'wahlen', 'krieg', 'brand', 'feuer', 'hochwasser', 'unfall', 'gericht',
   'prozess', 'land', 'landes', 'streik', 'demonstration', 'preise', 'zwei', 'drei',
+  // ...and Spanish and Portuguese (Nov 10, 2026, afternoon)
+  'muerto', 'muertos', 'muerta', 'muertas', 'herido', 'heridos', 'ataques', 'atentado', 'policia', 'gobierno',
+  'eleccion', 'elecciones', 'ejercito', 'inundaciones', 'protesta', 'protestas', 'huelga', 'accidente', 'pais', 'nacional',
+  'precio', 'precios', 'dos', 'tres', 'morto', 'mortos', 'morta', 'mortas', 'ferido', 'feridos', 'governo', 'eleicao',
+  'eleicoes', 'exercito', 'inundacoes', 'protesto', 'protestos', 'acidente', 'preco', 'precos', 'dois',
 ])
 
 /**
- * Small words of French and German headlines that correlate.ts's FUNCTION_WORDS leaves out because they are English
- * words or names too ("die", "son", "pas"): read as small words in those languages' headlines only (Nov 10, 2026)
+ * Small words of French, German, Spanish and Portuguese headlines that correlate.ts's FUNCTION_WORDS leaves out
+ * because they are English words or names too ("die", "son", "pas", "era"): read as small words in those languages'
+ * headlines only (Nov 10, 2026)
  */
 const FOREIGN_PLAIN = new Set([
   'pas', 'son', 'ces', 'cet', 'dit', 'peut', 'doit', 'veut', 'face', 'suite', 'mise', 'quoi', 'comment', 'pourquoi',
@@ -148,6 +155,8 @@ const FOREIGN_PLAIN = new Set([
   'die', 'fur', 'mit', 'dem', 'aus', 'uber', 'unter', 'durch', 'wegen', 'nun', 'jetzt', 'soll', 'will', 'kann', 'muss',
   'gibt', 'wieder', 'alle', 'immer', 'ohne', 'zwischen', 'diese', 'dieser', 'dieses', 'sie', 'wir', 'was', 'wer', 'warum',
   'erst', 'bis', 'als', 'man', 'hat', 'war', 'sei', 'mehr', 'viele', 'neu',
+  'era', 'mas', 'menos', 'ano', 'anos', 'dia', 'dias', 'ahora', 'aqui', 'asi', 'cada', 'casi', 'como',
+  'nao', 'ate', 'aos', 'num', 'numa', 'pode', 'podem', 'vai', 'vao', 'agora', 'assim', 'muito',
 ])
 
 /**
@@ -310,7 +319,7 @@ export interface HeldReport {
   lat: number | null
   lng: number | null
   tags: string[]
-  /** Its language: 'en' (the default), 'fr' or 'de' (Nov 10, 2026) */
+  /** Its language: 'en' (the default), 'fr', 'de', 'es' or 'pt' (Nov 10, 2026) */
   language?: string
 }
 
@@ -618,8 +627,9 @@ async function quietPlaces(now: Date): Promise<string[]> {
 }
 
 /**
- * The reports waiting for a second outlet: pending, one outlet, settled, from the last 30 hours, in English, French
- * or German, medium or above, or low from a quiet place's own outlets (each feed tags its items with its country)
+ * The reports waiting for a second outlet: pending, one outlet, settled, from the last 30 hours, in English, French,
+ * German, Spanish or Portuguese, medium or above, or low from a quiet place's own outlets (each feed tags its items
+ * with its country)
  */
 export function waitingQuery(quiet: readonly string[], now: Date): { sql: string; bindings: unknown[] } {
   return {
@@ -629,7 +639,7 @@ export function waitingQuery(quiet: readonly string[], now: Date): { sql: string
          FROM signals
         WHERE status = 'pending' AND COALESCE(source_count, 1) <= 1
           AND (severity IN ('medium', 'high', 'critical') OR (severity = 'low' AND tags && ?::text[]))
-          AND language IN ('en', 'fr', 'de')
+          AND language IN ('en', 'fr', 'de', 'es', 'pt')
           AND cardinality(original_urls) >= 1
           AND created_at > ?::timestamptz AND created_at < ?::timestamptz
         ORDER BY created_at DESC

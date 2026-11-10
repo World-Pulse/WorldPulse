@@ -319,7 +319,7 @@ export async function liftCappedSeverities(): Promise<number> {
     .where('source_count', '>=', 2)
     .whereIn('status', ['verified', 'pending'])
     .whereIn('severity', ['info', 'low', 'medium', 'high'])
-    .select('id', 'title', 'summary', 'category', 'severity', 'source_count', db.raw(`${readLoweredSql()} AS read_lowered`))
+    .select('id', 'title', 'summary', 'category', 'severity', 'source_count', 'language', db.raw(`${readLoweredSql()} AS read_lowered`))
     .limit(5000) as Array<SeverityRow & { source_count: number }>
   let raised = 0
   for (const row of rows) {

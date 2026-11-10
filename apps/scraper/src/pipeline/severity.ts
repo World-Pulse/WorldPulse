@@ -13,6 +13,7 @@
 
 import type { SignalSeverity } from '@worldpulse/types'
 import { literalText } from './figurative'
+import { foreignCasualties, foreignEvent, foreignOpinion } from './severity-languages'
 
 const RANK: Record<SignalSeverity, number> = { info: 0, low: 1, medium: 2, high: 3, critical: 4 }
 const BY_RANK: SignalSeverity[] = ['info', 'low', 'medium', 'high', 'critical']
@@ -88,14 +89,23 @@ const OPINION = /\b(?:opinion|op-?ed|editorial|commentary|analysis|column|perspe
  * strikes, bombings, coups, massacres, major quakes and storms high;
  * fighting, protests, disasters, arrests medium), whichever is higher;
  * opinion and analysis stop at medium. Conflict and disaster stories are at
- * least medium.
+ * least medium. A report in French, Spanish, Portuguese or German (`lang`,
+ * its feed's) is read in its language too (severity-languages.ts, Nov 10,
+ * 2026): its headline's dead, injured and kind of event as above; in its
+ * summary, a death or an event lifts it to medium at most, since summaries in
+ * these languages often give a war's or an earthquake's toll as background
+ * ("Conflito já fez 6.600 mortos").
  */
-export function rateSeverity(title: string, body: string | null = null, category?: string | null): SignalSeverity {
+export function rateSeverity(title: string, body: string | null = null, category?: string | null, lang?: string | null): SignalSeverity {
   // "the blue tsunami" of an election is no disaster (figurative.ts, Nov 8, 2026)
   const headline = literalText(title ?? '')
   body = body === null ? null : literalText(body)
   const text = `${headline}. ${body ?? ''}`
-  const { dead, injured, deathsNamed } = casualties(text)
+  const english = casualties(text)
+  const foreign = lang ? foreignCasualties(headline, lang) : null
+  const dead = Math.max(english.dead, foreign?.dead ?? 0)
+  const injured = Math.max(english.injured, foreign?.injured ?? 0)
+  const deathsNamed = english.deathsNamed || (foreign?.deathsNamed ?? false) || Boolean(lang && body && foreignCasualties(body, lang)?.deathsNamed)
 
   // Fighting and disasters are at least medium, whatever the words
   let rank = category === 'conflict' || category === 'disaster' ? RANK.medium : RANK.low
@@ -107,12 +117,15 @@ export function rateSeverity(title: string, body: string | null = null, category
   for (const [re, severity] of EVENT_RULES) {
     if (re.test(headline)) { rank = Math.max(rank, RANK[severity]); break }
   }
+  const event = lang ? foreignEvent(headline, lang) : null
+  if (event) rank = Math.max(rank, RANK[event])
   if (rank < RANK.medium) {
     for (const [re] of EVENT_RULES) {
       if (body && re.test(body)) { rank = RANK.medium; break }
     }
+    if (rank < RANK.medium && body && lang && foreignEvent(body, lang)) rank = RANK.medium
   }
 
-  if (OPINION.test(headline)) rank = Math.min(rank, RANK.medium)
+  if (OPINION.test(headline) || (lang && foreignOpinion(headline, lang))) rank = Math.min(rank, RANK.medium)
   return BY_RANK[rank]!
 }

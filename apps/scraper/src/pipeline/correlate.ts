@@ -1470,7 +1470,7 @@ async function applyCorroborationBoost(
     // With the outlets counted, the single-source severity cap lifts: each
     // report gets the severity its own words earn, up to what the count allows
     const rows = await db('signals').whereIn('id', ids)
-      .select('id', 'title', 'summary', 'category', 'severity', db.raw(`${readLoweredSql()} AS read_lowered`)) as SeverityRow[]
+      .select('id', 'title', 'summary', 'category', 'severity', 'language', db.raw(`${readLoweredSql()} AS read_lowered`)) as SeverityRow[]
     let raised = 0
     for (const row of rows) {
       const severity = liftedSeverity(row, uniqueSources)

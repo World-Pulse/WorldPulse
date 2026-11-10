@@ -10398,9 +10398,10 @@ function toCategory(s: string): Category {
  * Heuristically derive signal severity from article title + description.
  * Errs on the side of 'medium' to avoid alarm fatigue.
  */
-export function detectNewsSeverity(title: string, description: string, category?: Category | null): SignalSeverity {
+export function detectNewsSeverity(title: string, description: string, category?: Category | null, lang?: string | null): SignalSeverity {
   // Counts the dead and injured and weighs the kind of event (pipeline/severity.ts, plan 0u)
-  return rateSeverity(title, (description ?? '').replace(/<[^>]+>/g, ' '), category)
+  // in its feed's language too: French, Spanish, Portuguese and German (severity-languages.ts, Nov 10, 2026)
+  return rateSeverity(title, (description ?? '').replace(/<[^>]+>/g, ' '), category, lang)
 }
 
 // ─── CATEGORY DETECTION ───────────────────────────────────────────────────────
@@ -11174,7 +11175,7 @@ async function processItem(
   const gdacs       = source.id === 'gdacs' ? tidyGdacsTitle(decodeEntities(item.title)) : null
   const title       = (gdacs?.title ?? decodeEntities(item.title)).slice(0, 500) || `${source.name} — news item`
   const category    = detectNewsCategory(item.title, text, source.category)
-  const severity    = alert ? gdacsSeverity(alert) : detectNewsSeverity(decodeEntities(item.title), text, category)
+  const severity    = alert ? gdacsSeverity(alert) : detectNewsSeverity(decodeEntities(item.title), text, category, source.language)
   // (the story's own words: a WordPress footer's "appeared first on BENIN WEB TV" named Benin for the outlet's world news)
   const found       = inferGeo(item.title, cleanSummary(text), source, item.point)
   const geo         = gdacs?.place && !found.locationName ? { ...found, locationName: gdacs.place } : found

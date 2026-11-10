@@ -55,17 +55,19 @@ describe("GDELT's translated list (Nov 10, 2026)", () => {
     expect(newestTranslationStamp('6112611 abd8 http://data.gdeltproject.org/gdeltv2/20261110171500.gkg.csv.zip\n')).toBeNull()
   })
 
-  it('keeps its French and German articles, each with its language', () => {
+  it('keeps its French, German, Spanish and Portuguese articles, each with its language', () => {
     const text = [
       gkgLine('20261110170000', 'https://www.rfi.fr/fr/afrique/burundi-carburant', 'Burundi : hausse de 20 % du prix du carburant à Bujumbura', 'fra'),
       gkgLine('20261110170000', 'https://www.srf.ch/news/liechtenstein-budget', 'Liechtensteiner Regierung verabschiedet Budget 2027', 'deu'),
       gkgLine('20261110170000', 'https://elpais.com/internacional/x', 'El precio del combustible sube en Burundi', 'spa'),
+      gkgLine('20261110170000', 'https://www.publico.pt/mundo/y', 'Cabo Verde aprova orçamento para 2027', 'por'),
+      gkgLine('20261110170000', 'https://www.corriere.it/esteri/z', 'Il prezzo del carburante sale in Burundi', 'ita'),
       gkgLine('20261110170000', 'https://www.lemonde.fr/no-language', 'Une page sans langue', ''),
     ].join('\n')
     const found = readArticles(text, TRANSLATED_LANGUAGES)
-    expect(found.map(a => [a.site, a.lang])).toEqual([['rfi.fr', 'fr'], ['srf.ch', 'de']])
+    expect(found.map(a => [a.site, a.lang])).toEqual([['rfi.fr', 'fr'], ['srf.ch', 'de'], ['elpais.com', 'es'], ['publico.pt', 'pt']])
     // the English list is read as before: every article, no language
-    expect(readArticles(text).map(a => a.lang)).toEqual([undefined, undefined, undefined, undefined])
+    expect(readArticles(text).map(a => a.lang)).toEqual([undefined, undefined, undefined, undefined, undefined, undefined])
   })
 })
 
@@ -100,6 +102,22 @@ describe('French and German headlines (Nov 10, 2026)', () => {
   })
 })
 
+describe('Spanish and Portuguese headlines (Nov 10, 2026, afternoon)', () => {
+  it("take another newsroom's report of the story, not another story of the same people", () => {
+    const py = report({
+      id: 'sig-py', title: 'Paraguay: Peña anuncia aumento del salario mínimo en un 5 %', language: 'es', location_name: 'Asunción, Paraguay',
+      original_urls: ['https://www.abc.com.py/politica/2026/11/10/pena-anuncia-aumento-del-salario-minimo/'], tags: ['news', 'rss', 'abc-color-py', 'py'],
+    })
+    expect(otherOutlets(py, [article('https://www.infobae.com/america/paraguay-salario', 'El Gobierno de Peña aumenta el salario mínimo en Paraguay', 'es')], LATER).map(f => f.site)).toEqual(['infobae.com'])
+    expect(otherOutlets(py, [article('https://www.infobae.com/america/paraguay-ministro', 'Paraguay: Peña anuncia nuevo ministro de Hacienda', 'es')], LATER)).toEqual([])
+    const cv = report({
+      id: 'sig-cv', title: 'Cabo Verde: Governo aprova orçamento de Estado para 2027 com aumento das pensões', language: 'pt', location_name: 'Praia, Cape Verde',
+      original_urls: ['https://www.inforpress.cv/governo-aprova-orcamento-2027/'], tags: ['news', 'rss', 'inforpress-cv', 'cv'],
+    })
+    expect(otherOutlets(cv, [article('https://www.rtp.pt/noticias/mundo/cabo-verde-orcamento', 'Parlamento de Cabo Verde recebe orçamento do Governo para 2027 com aumento das pensões', 'pt')], LATER).map(f => f.site)).toEqual(['rtp.pt'])
+  })
+})
+
 describe("the quiet places' everyday stories (Nov 10, 2026)", () => {
   it(`are those of the thinly covered places with fewer than ${QUIET_VERIFIED} verified reports in a week`, () => {
     const verified = new Map([['GL', 15], ['DM', 0], ['KN', 1], ['MN', 4]])
@@ -110,7 +128,7 @@ describe("the quiet places' everyday stories (Nov 10, 2026)", () => {
   it('are searched beside the serious stories, in English, French and German', () => {
     const { sql, bindings } = waitingQuery(['dm', 'bi'], new Date('2026-11-10T12:00:00Z'))
     expect(sql).toMatch(/severity IN \('medium', 'high', 'critical'\) OR \(severity = 'low' AND tags && \?::text\[\]\)/)
-    expect(sql).toMatch(/language IN \('en', 'fr', 'de'\)/)
+    expect(sql).toMatch(/language IN \('en', 'fr', 'de', 'es', 'pt'\)/)
     expect(bindings[0]).toEqual(['dm', 'bi'])
   })
 })

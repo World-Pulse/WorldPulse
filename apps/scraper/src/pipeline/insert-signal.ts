@@ -262,6 +262,8 @@ export async function insertAndCorrelate(
     ;[signal] = await db('signals').insert(signalWithTier).returning('*')
   } catch (err) {
     await settleArticle(null)
+    // ...and the event's claim, so the next read can store it (dedup.releaseCrossSource, Nov 10, 2026)
+    if (crossSourceKey) await dedup.releaseCrossSource(crossSourceKey).catch(() => {})
     throw err
   }
 
