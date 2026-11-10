@@ -2896,6 +2896,8 @@ const HOME_NAMES: Record<string, { name: RegExp; as: string; unless?: RegExp }> 
   // A Panamanian outlet's "Merca Panamá" is the capital's wholesale market, not Somalia's Merca (Nov 8, 2026: TVN's
   // "Casos de malaria afectan las ventas ... en Merca Panamá")
   PA: { name: /(?<![\p{L}\p{N}])Merca\s+Panam[áa](?![\p{L}\p{N}])/gu, as: 'Panama City' },
+  // A Seychelles outlet's "Sesel" (and "Seselwa", its people) is Seychelles in Creole, as SBC writes (Nov 10, 2026)
+  SC: { name: /\bSesel(?:wa)?\b/g, as: 'Seychelles' },
   // A Peruvian outlet's "Comas:" or "San Juan de Lurigancho:" is one of Lima's districts, as RPP heads its city news
   // (Nov 8, 2026: "Comas: bomberos confinan incendio que se produjo en un edificio de siete pisos" had no place)
   PE: { name: /(?<![\p{L}\p{N}])(?:Comas|Ate|Chorrillos|Santiago\s+de\s+Surco|Surco|San\s+Juan\s+de\s+Lurigancho|San\s+Juan\s+de\s+Miraflores|Villa\s+El\s+Salvador|Villa\s+Mar[íi]a\s+del\s+Triunfo|Los\s+Olivos|San\s+Mart[íi]n\s+de\s+Porres|Puente\s+Piedra|Carabayllo|Independencia|R[íi]mac|Bre[ñn]a|La\s+Victoria|Lince|Jes[úu]s\s+Mar[íi]a|Pueblo\s+Libre|San\s+Isidro|San\s+Borja|San\s+Miguel|Surquillo|Barranco|La\s+Molina|Lur[íi]n|Pachac[áa]mac|Miraflores|Cercado\s+de\s+Lima)(?=\s*:)/gu, as: 'Lima' },

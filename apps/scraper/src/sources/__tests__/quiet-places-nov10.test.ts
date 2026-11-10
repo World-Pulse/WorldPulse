@@ -100,9 +100,16 @@ describe("the Caribbean's territories, for any outlet (Nov 10, 2026)", () => {
   })
 })
 
+describe("every feed's language (Nov 10, 2026)", () => {
+  it("fits the database's two letters", () => {
+    // a report's language is CHAR(2): SBC's stories, filed under Seselwa's three-letter code (crs), weren't stored
+    for (const s of NEWS_SOURCE_REGISTRY) expect(s.language, s.id).toMatch(/^[a-z]{2}$/)
+  })
+})
+
 describe('SBC, Seychelles (Nov 10, 2026)', () => {
-  it("is Seychelles' second feed, in Creole, pinned at home", () => {
-    expect(sbc).toMatchObject({ countryCode: 'SC', language: 'crs', feedUrl: 'https://www.sbc.sc/feed/' })
+  it("is Seychelles' second feed, in Creole (filed as French), pinned at home", () => {
+    expect(sbc).toMatchObject({ countryCode: 'SC', language: 'fr', feedUrl: 'https://www.sbc.sc/feed/' })
     expect(NEWS_SOURCE_REGISTRY.filter(s => s.feedUrl.includes('sbc.sc'))).toHaveLength(1)
     expect(NEWS_SOURCE_REGISTRY.filter(s => s.countryCode === 'SC').map(s => s.id).sort()).toEqual(['sbc-seychelles', 'statehouse-seychelles'])
     expect(HOME_PIN_SOURCES.has(sbc.id)).toBe(true)

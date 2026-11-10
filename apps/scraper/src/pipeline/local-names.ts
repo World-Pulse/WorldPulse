@@ -622,17 +622,10 @@ const FRENCH: Rule[] = towns([
   ['Caroline\\s+du\\s+Sud', 'South Carolina'], ['Nouveau-Mexique', 'New Mexico'],
 ])
 
-/**
- * Seychellois Creole (Kreol Seselwa), the language of SBC's news (Nov 10, 2026): the country's own name ("Sesel", its
- * people and things "Seselwa"); its stories are Seychelles' own and name its towns as the gazetteer does (Praslin,
- * La Digue, Beau Vallon)
- */
-const SESELWA: Rule[] = towns([['Sesel|Seselwa', 'Seychelles']])
-
 export const LOCAL_NAMES: Record<string, Rule[]> = {
   de: GERMAN, it: ITALIAN, ca: CATALAN, da: DANISH, kl: DANISH, nl: DUTCH, ro: ROMANIAN, sl: SLOVENE,
   sr: MONTENEGRIN, cnr: MONTENEGRIN, sq: ALBANIAN, ms: MALAY, es: SPANISH, pt: PORTUGUESE, lt: LITHUANIAN,
-  ar: ARABIC, ru: RUSSIAN, mn: MONGOLIAN, fr: FRENCH, crs: SESELWA,
+  ar: ARABIC, ru: RUSSIAN, mn: MONGOLIAN, fr: FRENCH,
 }
 
 /** The text with its language's place names in English and its look-alike words blanked out, for finding its place */

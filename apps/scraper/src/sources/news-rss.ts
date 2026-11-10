@@ -10359,9 +10359,11 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   // beside the State House's press office. The site-wide feed its pages link (robots.txt allows all; the site's only
   // terms are its streaming service's, SBC+): read Nov 10, its newest 10 items from Nov 9, about 10 a day, in
   // Seychellois Creole (Kreol Seselwa), all Seychelles' own news (the National Assembly, a court charge, schools,
-  // Praslin and La Digue), so a home pin; the reader learns the Creole name of the country (local-names.ts). Its
+  // Praslin and La Digue), so a home pin; the reader learns the Creole name of the country (geo.ts HOME_NAMES). Its
   // English pages from the Seychelles News Agency stopped in 2023. In Creole, its stories won't be matched with the
-  // State House's English ones (or by the second-outlet search, English only), so it adds coverage, not verification
+  // State House's English ones, so it adds coverage more than verification. Filed as French ('fr'): a report's language
+  // is two letters in the database (CHAR(2)), and Seselwa, a French creole, has only a three-letter code (crs), so
+  // its first stories, with 'crs', weren't stored at all (Nov 10, 12:27 to the fix)
   {
     id:              'sbc-seychelles',
     name:            'Seychelles Broadcasting Corporation',
@@ -10373,8 +10375,8 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLat:      -4.62,
     defaultLng:      55.45,
     defaultLocation: 'Victoria, Seychelles',
-    extraTags:       ['seychelles', 'indian-ocean', 'africa'],
-    language:        'crs',
+    extraTags:       ['seychelles', 'indian-ocean', 'africa', 'creole'],
+    language:        'fr',
   },
 ]
 

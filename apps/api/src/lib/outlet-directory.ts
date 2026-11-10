@@ -587,7 +587,7 @@ export const OUTLET_DIRECTORY: Readonly<Record<string, OutletEntry>> = {
   "sanpedrosun.com": { name: "The San Pedro Sun", country: "BZ", kind: 'local', lang: 'en' },
   "sarajevotimes.com": { name: "Sarajevo Times", country: "BA", kind: 'national', lang: 'en' },
   "saudigazette.com.sa": { name: "Saudi Gazette", country: "SA", kind: 'national', lang: 'en' },
-  "sbc.sc": { name: "Seychelles Broadcasting Corporation", country: "SC", kind: 'national', lang: 'crs' },
+  "sbc.sc": { name: "Seychelles Broadcasting Corporation", country: "SC", kind: 'national', lang: 'fr' },
   "sciencealert.com": { name: "ScienceAlert", country: "AU", kind: 'specialist', lang: 'en' },
   "sciencedaily.com": { name: "ScienceDaily", country: "US", kind: 'specialist', lang: 'en' },
   "scmp.com": { name: "South China Morning Post", country: "HK", kind: 'national', lang: 'en' },

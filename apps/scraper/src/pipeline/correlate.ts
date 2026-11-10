@@ -155,6 +155,11 @@ export function setThinPlaces(codes: Iterable<string>): void {
   thinPlaces = new Set([...codes].map(c => c.toUpperCase()))
 }
 
+/** The thinly covered places, upper-case codes (second-outlet.ts: the quiet places' everyday stories, Nov 10, 2026) */
+export function thinPlaceCodes(): string[] {
+  return [...thinPlaces].sort()
+}
+
 /** The thinly covered place whose outlet filed a report (its feed's country tag), or null */
 export function thinHome(c: Pick<CorrelationCandidate, 'tags'>): string | null {
   const home = outletHome(c)
@@ -570,7 +575,7 @@ const HEADLINE_FILLER = new Set([
  * Romanian, Albanian, the languages of the former Yugoslavia and Danish; words that are also English
  * headline words or names were left out (son, care, Kane, Jane, Das, CES, PAS, MAS, NAS, ALS, NYT).
  */
-const FUNCTION_WORDS = new Set((
+export const FUNCTION_WORDS = new Set((
   // es
   'los las una unos unas del con por para que sus sobre tras ante entre hasta desde sin este esta estos estas fue hay muy ser ' +
   'tiene tienen pero nueva nuevo nuevas nuevos otra otro otras otros cuando donde segun durante contra hacia tambien cual quien ' +

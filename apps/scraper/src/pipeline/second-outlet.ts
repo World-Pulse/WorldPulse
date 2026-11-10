@@ -40,6 +40,13 @@
  * files. The files have no such limit and cover every article, not 75 a
  * search. After a restart the last hour of files is read again.
  *
+ * Since Nov 10, 2026 (Devon, 12:10 PM: "yes" to "let that search also check the quiet places' everyday stories,
+ * and read French and German reports"): the quiet places' everyday (low) reports are searched too, those of the
+ * thinly covered places whose reports were verified fewer than QUIET_VERIFIED times in 7 days (Dominica, Burundi,
+ * Liechtenstein...; about 4 in 5 of their waiting reports are low), matched by the headline test only (the
+ * cross-check stays the serious reports'); and French and German reports are compared with the French and German
+ * articles of GDELT's translated list (gdelt-articles.ts), held 8 hours like the English ones.
+ *
  * Daily counts: second-outlet:day:<date> (GET /api/v1/public/second-outlets);
  * the latest matches, for reading by hand: second-outlet:recent. Off with
  * SECOND_OUTLET=off.
@@ -48,12 +55,12 @@
 import { db } from '../lib/postgres'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
-import { confirmMergedArticle, isSameStory, namesDiffer, type CorrelationCandidate } from './correlate'
+import { FUNCTION_WORDS, confirmMergedArticle, foldAccents, isSameStory, namesDiffer, thinPlaceCodes, type CorrelationCandidate } from './correlate'
 import { isEventTemplateTitle } from './event-titles'
 import { isCopyOf } from './independence'
 import { hostOf, sourceKey } from './signal-columns'
 import { cleanUrl } from './text'
-import { fetchArticles, fetchNewestStamp, filesToRead, siteOf, stampDate, type GdeltArticle } from './gdelt-articles'
+import { fetchArticles, fetchNewestStamp, fetchNewestTranslationStamp, fetchTranslatedArticles, filesToRead, siteOf, stampDate, type GdeltArticle } from './gdelt-articles'
 import { queueReindex } from './reindex'
 import { readPulse, recordPulse } from './gkg-pulse'
 
@@ -122,14 +129,41 @@ const EVENTISH = new Set([
   'strikes', 'talks', 'troops', 'war', 'world',
   // counts in words: shared by many stories
   'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'dozen', 'dozens', 'hundreds', 'thousands',
+  // in French and German (Nov 10, 2026), without accents, as storyTokens keeps those languages' words
+  'tue', 'tues', 'tuee', 'tuees', 'mort', 'morts', 'blesse', 'blesses', 'attaque', 'attaques', 'attentat', 'gouvernement',
+  'president', 'presidente', 'ministre', 'election', 'elections', 'armee', 'guerre', 'incendie', 'inondations',
+  'manifestation', 'manifestations', 'greve', 'tribunal', 'proces', 'accident', 'pays', 'nationale', 'prix', 'deux', 'trois',
+  'getotet', 'tote', 'toten', 'verletzte', 'verletzt', 'angriff', 'anschlag', 'polizei', 'regierung', 'prasident',
+  'minister', 'ministerin', 'wahl', 'wahlen', 'krieg', 'brand', 'feuer', 'hochwasser', 'unfall', 'gericht',
+  'prozess', 'land', 'landes', 'streik', 'demonstration', 'preise', 'zwei', 'drei',
 ])
 
-/** A headline's words that can tie it to another outlet's: lower case, 3 or more letters or digits, no plain words */
-export function storyTokens(title: string): string[] {
+/**
+ * Small words of French and German headlines that correlate.ts's FUNCTION_WORDS leaves out because they are English
+ * words or names too ("die", "son", "pas"): read as small words in those languages' headlines only (Nov 10, 2026)
+ */
+const FOREIGN_PLAIN = new Set([
+  'pas', 'son', 'ces', 'cet', 'dit', 'peut', 'doit', 'veut', 'face', 'suite', 'mise', 'quoi', 'comment', 'pourquoi',
+  'faut', 'deja', 'ainsi', 'entre', 'leurs', 'notre', 'votre', 'quand',
+  'die', 'fur', 'mit', 'dem', 'aus', 'uber', 'unter', 'durch', 'wegen', 'nun', 'jetzt', 'soll', 'will', 'kann', 'muss',
+  'gibt', 'wieder', 'alle', 'immer', 'ohne', 'zwischen', 'diese', 'dieser', 'dieses', 'sie', 'wir', 'was', 'wer', 'warum',
+  'erst', 'bis', 'als', 'man', 'hat', 'war', 'sei', 'mehr', 'viele', 'neu',
+])
+
+/**
+ * A headline's words that can tie it to another outlet's: lower case, 3 or more letters or digits, no plain words.
+ * A French or German headline's (Nov 10, 2026) without their accents ("hausse", "hausse"; "prasident"), and without
+ * those languages' small words too (correlate.ts FUNCTION_WORDS, FOREIGN_PLAIN): "les", "pour", "das", "und"
+ */
+export function storyTokens(title: string, lang = 'en'): string[] {
+  const foreign = lang !== 'en'
   const out = new Set<string>()
-  for (const raw of title.replace(/[‘’]/g, "'").toLowerCase().split(/[^\p{L}\p{N}']+/u)) {
-    const word = raw.replace(/'s$/, '').replace(/'/g, '')
+  const text = title.replace(/[‘’]/g, "'")
+  for (const raw of (foreign ? foldAccents(text) : text.toLowerCase()).split(/[^\p{L}\p{N}']+/u)) {
+    // (a French elision is no word of its own: "l'armée", "d'Iran", "qu'il")
+    const word = foreign ? raw.replace(/^(?:[a-z]|qu|jusqu|lorsqu|puisqu)'/, '').replace(/'/g, '') : raw.replace(/'s$/, '').replace(/'/g, '')
     if (word.length < 3 || PLAIN.has(word)) continue
+    if (foreign && (FUNCTION_WORDS.has(word) || FOREIGN_PLAIN.has(word))) continue
     out.add(word)
   }
   return [...out]
@@ -246,13 +280,19 @@ export const FEATURE_RE = /^(?:factbox|fact\s?check|explainer|analysis|timeline|
  * more of the shorter one's words (5 or more) in the longer one ("Nigeria:
  * Kaduna Journalist Granted Bail ..." on a republisher, a wire story's
  * headline reworded on a member paper, "... - ICIJ"). One wire story on
- * several papers is one source.
+ * several papers is one source. In French or German (Nov 10, 2026) by their
+ * headline words without the small words, 4 or more: "de", "du" and "la" made
+ * RFI's "hausse de 20 % du prix du carburant à Bujumbura" a copy of "le prix du
+ * carburant augmente de 20 % à Bujumbura"
  */
-export function nearCopy(a: string, b: string): boolean {
-  const words = (t: string) => t.toLowerCase().replace(/[\u2018\u2019']/g, '').split(/[^\p{L}\p{N}]+/u).filter(w => w.length > 1)
+export function nearCopy(a: string, b: string, lang = 'en'): boolean {
+  const foreign = lang !== 'en'
+  const words = (t: string) => foreign
+    ? storyTokens(t, lang)
+    : t.toLowerCase().replace(/[\u2018\u2019']/g, '').split(/[^\p{L}\p{N}]+/u).filter(w => w.length > 1)
   const [wa, wb] = [words(a), words(b)]
   const [short, long] = wa.length <= wb.length ? [wa, wb] : [wb, wa]
-  if (short.length < 5) return false
+  if (short.length < (foreign ? 4 : 5)) return false
   const inLong = new Set(long)
   return short.filter(w => inLong.has(w)).length / short.length >= 0.85
 }
@@ -270,6 +310,8 @@ export interface HeldReport {
   lat: number | null
   lng: number | null
   tags: string[]
+  /** Its language: 'en' (the default), 'fr' or 'de' (Nov 10, 2026) */
+  language?: string
 }
 
 export interface FoundOutlet { url: string; title: string; site: string; at: Date }
@@ -294,16 +336,20 @@ export function otherOutlets(report: HeldReport, articles: GdeltArticle[], now =
     url: report.original_urls[0] ?? null,
   }
   const sites = new Set(report.original_urls.map(u => ownerOf(siteOf(hostOf(u)))).filter(Boolean))
+  const lang = report.language || 'en'
   const found: FoundOutlet[] = []
-  for (const { url, title, site, at } of articles) {
+  for (const { url, title, site, at, lang: articleLang } of articles) {
     if (found.length >= max) break
+    // a French report with French articles, a German one with German articles, an English one with the English list's
+    if ((articleLang || 'en') !== lang) continue
     if (!site || sites.has(ownerOf(site)) || NOT_OUTLETS.has(site)) continue
     if (at.getTime() > now.getTime() + 10 * 60_000) continue
     if (FEATURE_RE.test(title)) continue
     const other: CorrelationCandidate = { ...held, id: 'gdelt', title, source_id: site, published_at: at, url, lat: null, lng: null }
+    // (German capitalises every noun, so there the names test is strict: a German report finds fewer matches, never looser ones)
     if (!isSameStory(held, other) || namesDiffer(report.title, title)) continue
-    if (isCopyOf({ url, title }, { urls: report.original_urls, title: report.title }) || nearCopy(title, report.title)) continue
-    if (found.some(f => isCopyOf({ url, title }, { urls: [f.url], title: f.title }) || nearCopy(title, f.title))) continue
+    if (isCopyOf({ url, title }, { urls: report.original_urls, title: report.title }) || nearCopy(title, report.title, lang)) continue
+    if (found.some(f => isCopyOf({ url, title }, { urls: [f.url], title: f.title }) || nearCopy(title, f.title, lang))) continue
     sites.add(ownerOf(site))
     found.push({ url: cleanUrl(url), title, site, at })
   }
@@ -311,11 +357,11 @@ export function otherOutlets(report: HeldReport, articles: GdeltArticle[], now =
 }
 
 /** Whether a report is news another outlet could carry: not a machine feed's (aircraft, fires, quakes), not a template headline */
-export function searchable(report: Pick<HeldReport, 'title' | 'tags'>): boolean {
+export function searchable(report: Pick<HeldReport, 'title' | 'tags' | 'language'>): boolean {
   const tags = new Set(report.tags.map(t => String(t).toLowerCase()))
   if (tags.has('osint') && !tags.has('gdelt')) return false
   if (isEventTemplateTitle(report.title)) return false
-  return storyTokens(report.title).length >= 3
+  return storyTokens(report.title, report.language || 'en').length >= 3
 }
 
 // ─── The articles held ───────────────────────────────────────────────────────
@@ -328,7 +374,7 @@ export class ArticleWindow {
 
   add(stamp: string, articles: GdeltArticle[]): void {
     if (this.batches.some(b => b.stamp === stamp)) return
-    this.batches.push({ stamp, articles: articles.map(a => ({ ...a, tokens: storyTokens(a.title) })) })
+    this.batches.push({ stamp, articles: articles.map(a => ({ ...a, tokens: storyTokens(a.title, a.lang || 'en') })) })
     this.batches.sort((a, b) => a.stamp.localeCompare(b.stamp))
   }
 
@@ -356,9 +402,12 @@ export interface FinderState {
   window: ArticleWindow
   /** The newest file each report was compared with */
   compared: Map<string, string>
+  /** The translated list's French and German articles, and how far each French or German report was compared (Nov 10, 2026) */
+  translated: ArticleWindow
+  comparedTranslated: Map<string, string>
 }
 
-export const newState = (): FinderState => ({ window: new ArticleWindow(), compared: new Map() })
+export const newState = (): FinderState => ({ window: new ArticleWindow(), compared: new Map(), translated: new ArticleWindow(), comparedTranslated: new Map() })
 
 // ─── A cycle ─────────────────────────────────────────────────────────────────
 
@@ -372,11 +421,16 @@ export interface CycleStats {
   promoted: number
   crosschecked: number
   errors: number
+  /** Of the reports matched, the quiet places' everyday (low) ones (Nov 10, 2026) */
+  everyday: number
 }
 
 export interface SecondOutletDeps {
   newestStamp(): Promise<string | null>
   fetchArticles(stamp: string): Promise<GdeltArticle[] | null>
+  /** The translated list (Nov 10, 2026): its newest file, and one file's French and German articles; none, none read */
+  newestTranslatedStamp?(): Promise<string | null>
+  fetchTranslated?(stamp: string): Promise<GdeltArticle[] | null>
   /** The reports waiting for a second outlet now */
   waiting(now: Date): Promise<HeldReport[]>
   /** Add the outlets; true when the report turned verified */
@@ -394,7 +448,43 @@ export interface SecondOutletDeps {
 /** What the last cycle read, for GET /api/v1/public/second-outlets (second-outlet:last-cycle) */
 let lastTrace: Record<string, unknown> | null = null
 
-const emptyStats = (): CycleStats => ({ files: 0, articles: 0, reports: 0, pairs: 0, matched: 0, outlets: 0, promoted: 0, crosschecked: 0, errors: 0 })
+const emptyStats = (): CycleStats => ({ files: 0, articles: 0, reports: 0, pairs: 0, matched: 0, outlets: 0, promoted: 0, crosschecked: 0, errors: 0, everyday: 0 })
+
+type FileTrace = { newest: string | null; read: Array<[string, number]>; missing: string[]; failed: Array<[string, string]> }
+
+/** One list's new files into its window: the English list's, or the translated list's French and German (Nov 10, 2026) */
+async function readNewFiles(
+  window: ArticleWindow,
+  newestStamp: () => Promise<string | null>,
+  fetchFile: (stamp: string) => Promise<GdeltArticle[] | null>,
+  stats: CycleStats,
+  list: string,
+): Promise<FileTrace> {
+  const newest = await newestStamp().catch(err => { stats.errors++; logger.warn({ err, list }, 'Second outlet: GDELT file list unreadable'); return null })
+  const trace: FileTrace = { newest, read: [], missing: [], failed: [] }
+  if (!newest) return trace
+  const held = window.newest()
+  // With a window held, a file not read yet stops the cycle (GIVE_UP_MS); after a restart nothing is lost
+  const waitFor = (stamp: string) => held !== null && stampDate(newest).getTime() - stampDate(stamp).getTime() < GIVE_UP_MS
+  for (const stamp of filesToRead(newest, held, held ? MAX_FILES : WARM_FILES)) {
+    let articles: GdeltArticle[] | null = null
+    try {
+      articles = await fetchFile(stamp)
+    } catch (err) {
+      stats.errors++
+      trace.failed.push([stamp, String((err as Error)?.message || err).slice(0, 120)])
+      logger.warn({ err, stamp, list }, 'Second outlet: GDELT file unreadable')
+      if (waitFor(stamp)) break
+      continue
+    }
+    if (!articles) { trace.missing.push(stamp); if (waitFor(stamp)) break; continue }
+    window.add(stamp, articles)
+    stats.files++
+    stats.articles += articles.length
+    trace.read.push([stamp, articles.length])
+  }
+  return trace
+}
 
 /** One cycle: GDELT's new files in, every waiting report compared with what it hasn't been compared with */
 export async function runSecondOutlets(state: FinderState, deps: SecondOutletDeps = liveDeps): Promise<CycleStats> {
@@ -403,72 +493,66 @@ export async function runSecondOutlets(state: FinderState, deps: SecondOutletDep
   const now = new Date(deps.clock())
   const day = now.toISOString().slice(0, 10)
   try {
-    // 1. GDELT's new files
-    const newest = await deps.newestStamp().catch(err => { stats.errors++; logger.warn({ err }, 'Second outlet: GDELT file list unreadable'); return null })
-    const trace: { newest: string | null; read: Array<[string, number]>; missing: string[]; failed: Array<[string, string]> } = { newest, read: [], missing: [], failed: [] }
-    if (newest) {
-      const held = state.window.newest()
-      // With a window held, a file not read yet stops the cycle (GIVE_UP_MS); after a restart nothing is lost
-      const waitFor = (stamp: string) => held !== null && stampDate(newest).getTime() - stampDate(stamp).getTime() < GIVE_UP_MS
-      for (const stamp of filesToRead(newest, held, held ? MAX_FILES : WARM_FILES)) {
-        let articles: GdeltArticle[] | null = null
-        try {
-          articles = await deps.fetchArticles(stamp)
-        } catch (err) {
-          stats.errors++
-          trace.failed.push([stamp, String((err as Error)?.message || err).slice(0, 120)])
-          logger.warn({ err, stamp }, 'Second outlet: GDELT file unreadable')
-          if (waitFor(stamp)) break
-          continue
-        }
-        if (!articles) { trace.missing.push(stamp); if (waitFor(stamp)) break; continue }
-        state.window.add(stamp, articles)
-        stats.files++
-        stats.articles += articles.length
-        trace.read.push([stamp, articles.length])
-      }
-    }
-    lastTrace = { at: now.toISOString(), ...trace }
+    // 1. GDELT's new files: the English list's, and the translated list's French and German articles
+    const trace = await readNewFiles(state.window, () => deps.newestStamp(), stamp => deps.fetchArticles(stamp), stats, 'english')
+    const { newestTranslatedStamp, fetchTranslated } = deps
+    const translated = newestTranslatedStamp && fetchTranslated
+      ? await readNewFiles(state.translated, () => newestTranslatedStamp.call(deps), stamp => fetchTranslated.call(deps, stamp), stats, 'translated')
+      : null
+    lastTrace = { at: now.toISOString(), ...trace, ...(translated ? { translated } : {}) }
     state.window.evict(now)
-    const latest = state.window.newest()
-    if (!latest) return stats
+    state.translated.evict(now)
+    const streams = [
+      { window: state.window, compared: state.compared, latest: state.window.newest(), foreign: false },
+      { window: state.translated, compared: state.comparedTranslated, latest: state.translated.newest(), foreign: true },
+    ]
+    if (!streams.some(s => s.latest)) return stats
 
-    // 2. The reports, each compared with the files it hasn't been compared with
+    // 2. The reports, each compared with the files of its language's list it hasn't been compared with
     const reports = (await deps.waiting(now)).filter(searchable)
     stats.reports = reports.length
-    const groups = new Map<string | null, HeldReport[]>()
-    for (const r of reports) {
-      const since = state.compared.get(r.id) ?? null
-      if (since === latest) continue
-      const list = groups.get(since)
-      if (list) list.push(r); else groups.set(since, [r])
-    }
     const found = new Map<string, { report: HeldReport; outlets: FoundOutlet[] }>()
-    for (const [since, group] of groups) {
-      const articles = state.window.after(since)
-      const pairs = candidatePairs(group.map(r => ({ tokens: storyTokens(r.title) })), articles)
-      let n = 0
-      for (const [i, list] of pairs) {
-        const report = group[i]!
-        const best = list.slice(0, MAX_CANDIDATES)
-        stats.pairs += best.length
-        const outlets = otherOutlets(report, best.map(a => articles[a]!), now)
-        if (outlets.length) found.set(report.id, { report, outlets })
-        // room for the scraper's other work between reports
-        if (++n % 100 === 0) await new Promise(resolve => setImmediate(resolve))
+    for (const stream of streams) {
+      const mine = reports.filter(r => ((r.language || 'en') !== 'en') === stream.foreign)
+      if (!stream.latest) continue
+      const groups = new Map<string, { since: string | null; lang: string; reports: HeldReport[] }>()
+      for (const r of mine) {
+        const since = stream.compared.get(r.id) ?? null
+        if (since === stream.latest) continue
+        const lang = r.language || 'en'
+        const key = `${since ?? ''}|${lang}`
+        const group = groups.get(key)
+        if (group) group.reports.push(r); else groups.set(key, { since, lang, reports: [r] })
       }
+      for (const { since, lang, reports: group } of groups.values()) {
+        const articles = stream.window.after(since).filter(a => (a.lang || 'en') === lang)
+        const pairs = candidatePairs(group.map(r => ({ tokens: storyTokens(r.title, lang) })), articles)
+        let n = 0
+        for (const [i, list] of pairs) {
+          const report = group[i]!
+          const best = list.slice(0, MAX_CANDIDATES)
+          stats.pairs += best.length
+          const outlets = otherOutlets(report, best.map(a => articles[a]!), now)
+          if (outlets.length) found.set(report.id, { report, outlets })
+          // room for the scraper's other work between reports
+          if (++n % 100 === 0) await new Promise(resolve => setImmediate(resolve))
+        }
+      }
+      for (const r of mine) stream.compared.set(r.id, stream.latest)
+      const live = new Set(mine.map(r => r.id))
+      for (const id of stream.compared.keys()) if (!live.has(id)) stream.compared.delete(id)
     }
-    for (const r of reports) state.compared.set(r.id, latest)
-    const live = new Set(reports.map(r => r.id))
-    for (const id of state.compared.keys()) if (!live.has(id)) state.compared.delete(id)
 
     // 3. The outlets found join their reports
     let crossChecks = await deps.crossChecksToday(day).catch(() => CROSSCHECKS_A_DAY)
     for (const { report, outlets } of found.values()) {
-      const crossCheck = crossChecks < CROSSCHECKS_A_DAY
+      // the day's cross-checks are the serious reports': a quiet place's everyday story stands on the headline test
+      const everyday = report.severity === 'low'
+      const crossCheck = !everyday && crossChecks < CROSSCHECKS_A_DAY
       try {
         const promoted = await deps.add(report, outlets, crossCheck)
         stats.matched++
+        if (everyday) stats.everyday++
         stats.outlets += outlets.length
         if (promoted) {
           stats.promoted++
@@ -478,6 +562,7 @@ export async function runSecondOutlets(state: FinderState, deps: SecondOutletDep
           at: new Date(deps.clock()).toISOString(),
           id: report.id,
           severity: report.severity,
+          language: report.language || 'en',
           title: report.title.slice(0, 140),
           promoted,
           found: outlets.map(f => ({ site: f.site, title: f.title.slice(0, 140), url: f.url })),
@@ -489,13 +574,69 @@ export async function runSecondOutlets(state: FinderState, deps: SecondOutletDep
     }
   } finally {
     await deps.count(day, stats).catch(err => logger.warn({ err }, 'Second outlet: counts not saved'))
-    if (lastTrace) await deps.trace({ ...lastTrace, held: state.window.size, stats }).catch(() => {})
+    if (lastTrace) await deps.trace({ ...lastTrace, held: state.window.size, held_translated: state.translated.size, stats }).catch(() => {})
     await deps.unlock().catch(() => {})
   }
   return stats
 }
 
 // ─── The live parts ──────────────────────────────────────────────────────────
+
+/**
+ * The quiet places (Nov 10, 2026): of the thinly covered places (correlate.ts thinPlaceCodes, those with few feeds of
+ * their own), those whose reports were verified fewer than QUIET_VERIFIED times in the last 7 days; their outlets'
+ * everyday (low) reports are searched too. On Nov 10 the 8 with none (Burundi, Comoros, Dominica, Liechtenstein,
+ * Mongolia, Nauru, Seychelles, Tuvalu) had 4 in 5 of their waiting reports low.
+ */
+export const QUIET_VERIFIED = 5
+const QUIET_DAYS = 7
+const QUIET_REFRESH_MS = HOUR
+
+/** The quiet places' tags (lower-case codes, as each feed tags its items) from the thin places and their verified counts */
+export function quietFrom(thin: readonly string[], verified: ReadonlyMap<string, number>, min = QUIET_VERIFIED): string[] {
+  return thin.filter(code => (verified.get(code.toUpperCase()) ?? 0) < min).map(code => code.toLowerCase())
+}
+
+let quietCache: { at: number; codes: string[] } | null = null
+
+/** The quiet places now, counted at most once an hour */
+async function quietPlaces(now: Date): Promise<string[]> {
+  if (quietCache && now.getTime() - quietCache.at < QUIET_REFRESH_MS) return quietCache.codes
+  const thin = thinPlaceCodes()
+  // none until the news reader has listed its feeds (news-rss.ts setThinPlaces): asked again next cycle
+  if (!thin.length) return []
+  const { rows } = await db.raw(
+    `SELECT country_code AS code, COUNT(*)::int AS n
+       FROM signals
+      WHERE status = 'verified' AND created_at > ?::timestamptz AND country_code = ANY(?::text[])
+      GROUP BY country_code`,
+    [new Date(now.getTime() - QUIET_DAYS * 86_400_000).toISOString(), thin],
+  ) as { rows: Array<{ code: string; n: number }> }
+  const codes = quietFrom(thin, new Map(rows.map(r => [String(r.code).toUpperCase(), Number(r.n)])))
+  quietCache = { at: now.getTime(), codes }
+  return codes
+}
+
+/**
+ * The reports waiting for a second outlet: pending, one outlet, settled, from the last 30 hours, in English, French
+ * or German, medium or above, or low from a quiet place's own outlets (each feed tags its items with its country)
+ */
+export function waitingQuery(quiet: readonly string[], now: Date): { sql: string; bindings: unknown[] } {
+  return {
+    sql: `SELECT id, title, category, severity, language, source_ids, original_urls, location_name, tags,
+              COALESCE(event_time, created_at) AS published_at,
+              ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng
+         FROM signals
+        WHERE status = 'pending' AND COALESCE(source_count, 1) <= 1
+          AND (severity IN ('medium', 'high', 'critical') OR (severity = 'low' AND tags && ?::text[]))
+          AND language IN ('en', 'fr', 'de')
+          AND cardinality(original_urls) >= 1
+          AND created_at > ?::timestamptz AND created_at < ?::timestamptz
+        ORDER BY created_at DESC
+        LIMIT 20000`,
+    bindings: [[...quiet], new Date(now.getTime() - LOOKBACK_MS).toISOString(), new Date(now.getTime() - SETTLE_MS).toISOString()],
+  }
+}
 
 interface ReportRow {
   id: string
@@ -509,6 +650,7 @@ interface ReportRow {
   lng: number | string | null
   tags: unknown
   published_at: Date | string
+  language?: string | null
 }
 
 const strings = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : [])
@@ -527,6 +669,7 @@ function toHeld(r: ReportRow): HeldReport {
     lat: num(r.lat),
     lng: num(r.lng),
     tags: strings(r.tags),
+    language: String(r.language || 'en'),
   }
 }
 
@@ -535,21 +678,14 @@ export const liveDeps: SecondOutletDeps = {
   // each file read also adds to the world's press counts (gkg-pulse.ts)
   fetchArticles: (stamp) => fetchArticles(stamp, (s, text) => recordPulse(s, readPulse(text))),
 
+  newestTranslatedStamp: fetchNewestTranslationStamp,
+  fetchTranslated: fetchTranslatedArticles,
+
   async waiting(now) {
-    // Pending, one outlet, medium or above, in English, settled
-    const { rows } = await db.raw(
-      `SELECT id, title, category, severity, source_ids, original_urls, location_name, tags,
-              COALESCE(event_time, created_at) AS published_at,
-              ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng
-         FROM signals
-        WHERE status = 'pending' AND COALESCE(source_count, 1) <= 1
-          AND severity IN ('medium', 'high', 'critical') AND language = 'en'
-          AND cardinality(original_urls) >= 1
-          AND created_at > ?::timestamptz AND created_at < ?::timestamptz
-        ORDER BY created_at DESC
-        LIMIT 20000`,
-      [new Date(now.getTime() - LOOKBACK_MS).toISOString(), new Date(now.getTime() - SETTLE_MS).toISOString()],
-    ) as { rows: ReportRow[] }
+    // Pending, one outlet, medium or above (or low from a quiet place), in English, French or German, settled
+    const quiet = await quietPlaces(now).catch(err => { logger.warn({ err }, 'Second outlet: the quiet places not counted'); return [] as string[] })
+    const { sql, bindings } = waitingQuery(quiet, now)
+    const { rows } = await db.raw(sql, bindings as never[]) as { rows: ReportRow[] }
     return rows.map(toHeld)
   },
 

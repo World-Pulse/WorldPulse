@@ -30,6 +30,16 @@ export const GDELT_BUCKET = 'https://storage.googleapis.com/data.gdeltproject.or
 export const LASTUPDATE_URL = `${GDELT_BUCKET}/lastupdate.txt`
 export const FILE_URL = (stamp: string) => `${GDELT_BUCKET}/${stamp}.gkg.csv.zip`
 /**
+ * GDELT's translated list (Nov 10, 2026): the articles it read in 65 other languages and machine-translated, each
+ * file about a quarter of an hour behind the English one ("Translingual"). Its page titles are the articles' own, in
+ * their language, and the TranslationInfo field (25) names the language ("srclc:fra;eng:GT-FRA 1.0"). The 17:00 UTC
+ * file of Nov 10 held 2,938 articles, 167 of them in French and 302 in German, 11.5 MB compressed.
+ */
+export const LASTUPDATE_TRANSLATION_URL = `${GDELT_BUCKET}/lastupdate-translation.txt`
+export const TRANSLATION_FILE_URL = (stamp: string) => `${GDELT_BUCKET}/${stamp}.translation.gkg.csv.zip`
+/** The translated list's languages that are read, by GDELT's code: French and German (Burundi, Comoros, Liechtenstein) */
+export const TRANSLATED_LANGUAGES: Readonly<Record<string, string>> = { fra: 'fr', deu: 'de' }
+/**
  * A fresh address for each request (Oct 22): GDELT lists a file the moment it
  * uploads it (10 to 15 minutes before the time in its name), and a request
  * that came a moment too early got a "not found" that Google's cache then kept
@@ -48,6 +58,8 @@ export interface GdeltArticle {
   site: string
   /** When GDELT read it */
   at: Date
+  /** Its language, for an article of the translated list ('fr', 'de'); none for the English list's */
+  lang?: string
 }
 
 // ─── Files ───────────────────────────────────────────────────────────────────
@@ -55,6 +67,12 @@ export interface GdeltArticle {
 /** The newest article file's time (20261022180000) from lastupdate.txt, or null */
 export function newestStamp(lastupdate: string): string | null {
   const m = /\/(\d{14})\.gkg\.csv\.zip\b/.exec(lastupdate)
+  return m ? m[1]! : null
+}
+
+/** The newest file of the translated list (20261110170000) from lastupdate-translation.txt, or null */
+export function newestTranslationStamp(lastupdate: string): string | null {
+  const m = /\/(\d{14})\.translation\.gkg\.csv\.zip\b/.exec(lastupdate)
   return m ? m[1]! : null
 }
 
@@ -150,9 +168,11 @@ export function ownCopy(s: string): string {
  * line's fields (GKG 2.1, tab-separated): 1 DATE, 2 SourceCollectionIdentifier,
  * 3 SourceCommonName, 4 DocumentIdentifier (the address), 26 V2EXTRASXML
  * (<PAGE_TITLE>…</PAGE_TITLE>). The strings kept are copies (ownCopy), so the
- * file's text is freed once it has been read.
+ * file's text is freed once it has been read. With `languages` (the translated
+ * list), only the articles in those languages, by field 25's "srclc:", each
+ * with its language.
  */
-export function readArticles(text: string): GdeltArticle[] {
+export function readArticles(text: string, languages?: Readonly<Record<string, string>>): GdeltArticle[] {
   const out: GdeltArticle[] = []
   const seen = new Set<string>()
   for (const line of text.split('\n')) {
@@ -161,13 +181,15 @@ export function readArticles(text: string): GdeltArticle[] {
     if (f.length < 27 || f[2] !== '1') continue
     const url = (f[4] ?? '').trim()
     if (!/^https?:\/\//i.test(url) || REPUBLISHED_URL.test(url) || seen.has(url)) continue
+    const lang = languages ? languages[/\bsrclc:([a-z]{3})\b/.exec(f[25] ?? '')?.[1] ?? ''] : undefined
+    if (languages && !lang) continue
     const m = /<PAGE_TITLE>([\s\S]*?)<\/PAGE_TITLE>/.exec(f[26] ?? '')
     const title = m ? articleTitle(m[1], url) : ''
     const at = gdeltDate(f[1])
     const site = siteOf(hostOf(url))
     if (!title || !at || !site) continue
     seen.add(url)
-    out.push({ url: ownCopy(url), title: ownCopy(title), site: ownCopy(site), at })
+    out.push({ url: ownCopy(url), title: ownCopy(title), site: ownCopy(site), at, ...(lang ? { lang } : {}) })
   }
   return out
 }
@@ -180,9 +202,16 @@ export async function fetchNewestStamp(): Promise<string | null> {
   return newestStamp(await res.text())
 }
 
+/** The translated list's newest file (lastupdate-translation.txt) */
+export async function fetchNewestTranslationStamp(): Promise<string | null> {
+  const res = await fetch(fresh(LASTUPDATE_TRANSLATION_URL), { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(20_000) })
+  if (!res.ok) { void res.body?.cancel().catch(() => {}); throw new Error(`GDELT articles: HTTP ${res.status} for lastupdate-translation.txt`) }
+  return newestTranslationStamp(await res.text())
+}
+
 /** One file's text; null when GDELT doesn't have it (a file it skipped) */
-export async function fetchFileText(stamp: string): Promise<string | null> {
-  const res = await fetch(fresh(FILE_URL(stamp)), { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(90_000) })
+export async function fetchFileText(stamp: string, url = FILE_URL(stamp)): Promise<string | null> {
+  const res = await fetch(fresh(url), { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(90_000) })
   // An answer's body not read is let go at once, not left to the garbage collector
   if (res.status === 404) { void res.body?.cancel().catch(() => {}); return null }
   if (!res.ok) { void res.body?.cancel().catch(() => {}); throw new Error(`GDELT articles: HTTP ${res.status} for ${stamp}`) }
@@ -198,4 +227,10 @@ export async function fetchArticles(stamp: string, onText?: (stamp: string, text
   if (text === null) return null
   if (onText) await onText(stamp, text).catch(() => null)
   return readArticles(text)
+}
+
+/** One file of the translated list: its French and German articles (TRANSLATED_LANGUAGES); null when GDELT doesn't have it */
+export async function fetchTranslatedArticles(stamp: string): Promise<GdeltArticle[] | null> {
+  const text = await fetchFileText(stamp, TRANSLATION_FILE_URL(stamp))
+  return text === null ? null : readArticles(text, TRANSLATED_LANGUAGES)
 }
