@@ -190,15 +190,37 @@ export const MORE_COUNTRIES: CountryEntry[] = [
   c('PY', 'Paraguay', /\bparaguay(?:an)?\b/i, 'Asunción', -25.26, -57.58),
   c('PE', 'Peru', /\b(?:peru|peruvian)\b/i, 'Lima', -12.05, -77.04),
   c('PR', 'Puerto Rico', /\bpuerto ric(?:o|an)\b/i, 'San Juan', 18.47, -66.11),
-  c('LC', 'Saint Lucia', /\b(?:saint|st\.?) lucia\b/i, 'Castries', 14.01, -60.99),
+  // (and its people: "Opportunities for Saint Lucians", Nov 10, 2026)
+  c('LC', 'Saint Lucia', /\b(?:(?:saint|st\.?) lucian?)\b/i, 'Castries', 14.01, -60.99),
   // Oct 31, 2026 (sources round 6): the two countries no pattern named ("St Kitts", "St Vincent"). Not St Vincent's
   // hospitals or St Vincent de Paul
   c('KN', 'Saint Kitts and Nevis', /\b(?:(?:saint|st\.?) kitts(?: and nevis| & nevis)?|kittitians?|nevisians?)\b/i, 'Basseterre', 17.30, -62.73),
   c('VC', 'Saint Vincent and the Grenadines', /\b(?:(?:saint|st\.?) vincent(?: and the grenadines| & the grenadines)?(?![''’]s|\s+de\s+paul)|vincentians?)\b/i, 'Kingstown', 13.16, -61.23),
   c('SR', 'Suriname', /\b(?:suriname|surinamese)\b/i, 'Paramaribo', 5.85, -55.20),
-  c('TT', 'Trinidad and Tobago', /\b(?:trinidad|trinidadian)\b/i, 'Port of Spain', 10.65, -61.51),
+  // "T&T", as the Caribbean press writes it (Nov 10, 2026: EmoNews's "Back-to-Back Wins for T&T at UWI Reparations
+  // Debate Competition" had no pin); not AT&T
+  c('TT', 'Trinidad and Tobago', /(?<![\w&])t&t(?![\w&])|\b(?:trinidad|trinidadian|trinbagonian|tobagonian)\b/i, 'Port of Spain', 10.65, -61.51),
   c('UY', 'Uruguay', /\buruguay(?:an)?\b/i, 'Montevideo', -34.90, -56.16),
   c('VE', 'Venezuela', /\bvenezuela(?:n)?\b/i, 'Caracas', 10.49, -66.88),
+  // Nov 10, 2026: the Caribbean's and the Atlantic's territories, which named no place (EmoNews, Dominica, carries the
+  // region's news: "Anguilla pursues greater share of luxury yachting market", "Martinique expects 275 cruise calls",
+  // "Carnival Corporation highlights stronger Bonaire cruise outlook" had no pin). Each at its capital, as GDELT codes
+  // them (fips-countries.ts). Not Aruba Networks, the Bermuda Triangle, Blue Curaçao or a Porsche Cayman; not
+  // Montserrat (also a Catalan name and Catalonia's mountain abbey), nor Saint Martin (churches, towns, a publisher)
+  // or a bare "Virgin Islands" (the British or the US ones)
+  c('AI', 'Anguilla', /\b(?:anguilla|anguillian)\b/i, 'The Valley', 18.22, -63.06),
+  c('AW', 'Aruba', /\b(?<!hpe\s)(?!aruba\s+network(?:s|ing)\b)(?:aruba|aruban)\b/i, 'Oranjestad', 12.52, -70.03),
+  c('BM', 'Bermuda', /\b(?!bermuda\s+(?:triangle|shorts|grass|onions?)\b)(?:bermuda|bermudian)\b/i, 'Hamilton', 32.29, -64.78),
+  c('BQ', 'Caribbean Netherlands', /\b(?:bonaire|bonairean|sint eustatius|caribbean netherlands)\b/i, 'Kralendijk', 12.15, -68.27),
+  c('CW', 'Curaçao', /\b(?<!blue\s)(?:cura[cç]ao|cura[cç]aoan)\b/i, 'Willemstad', 12.11, -68.93),
+  c('GP', 'Guadeloupe', /\b(?:guadeloupe|guadeloupean)\b/i, 'Basse-Terre', 16.00, -61.73),
+  c('KY', 'Cayman Islands', /\b(?:cayman islands|caymanian)\b/i, 'George Town', 19.29, -81.38),
+  c('MQ', 'Martinique', /\b(?:martinique|martinican)\b/i, 'Fort-de-France', 14.60, -61.07),
+  c('SX', 'Sint Maarten', /\b(?:(?:sint|st\.?)\s+maarten)\b/i, 'Philipsburg', 18.03, -63.05),
+  c('BL', 'Saint Barthélemy', /\b(?:st\.?\s+barths?|st\.?\s+barts|saint[-\s]barth[ée]lemy)\b/i, 'Gustavia', 17.90, -62.85),
+  c('TC', 'Turks and Caicos Islands', /\b(?:turks\s+(?:and|&)\s+caicos)\b/i, 'Cockburn Town', 21.46, -71.14),
+  c('VG', 'British Virgin Islands', /\b(?:british virgin islands|bvi)\b/i, 'Road Town', 18.43, -64.62),
+  c('VI', 'US Virgin Islands', /\b(?:u\.?s\.?\s+virgin islands|united states virgin islands|usvi)\b/i, 'Charlotte Amalie', 18.34, -64.93),
 
   // Oceania
   c('FJ', 'Fiji', /\bfiji(?:an)?\b/i, 'Suva', -18.14, 178.44),
@@ -240,7 +262,8 @@ export function countryNameOf(code: string | null | undefined): string | undefin
  */
 export const ABBREVIATED_COUNTRIES: Array<[RegExp, string]> = [
   // Not "US$" or "US $": Zimbabwe prices things in US dollars, so its stories went to the US (round 4, Oct 20, 2026)
-  [/\bUS\b(?!\s?\$)/, 'US'],
+  // ...nor the US Virgin Islands (Nov 10, 2026: world-countries VI)
+  [/\bUS\b(?!\s?\$)(?!\s+(?:Virgin|VIRGIN)\s+(?:Islands|ISLANDS))/, 'US'],
   [/\bUK\b/, 'GB'],
 ]
 

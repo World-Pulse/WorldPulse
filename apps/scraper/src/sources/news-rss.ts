@@ -10323,6 +10323,59 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     language:        'da',
     skipLinks:       /\/sponsoreret-indhold\//,
   },
+  // ── Added Nov 10, 2026, 11:45 AM (Devon, 11:03 AM: "look for a second newsroom in the 8 quiet places, so their stories can get verified?" - "yes") ──
+  // EmoNews, a Dominica news site (Roseau; © EmoNews), Dominica's third feed beside Dominica News Online and the prime
+  // minister's press room, whose address wasn't found on Nov 10: the RSS feed its footer links, read Nov 10: 50 items
+  // since Oct 8, about one a day, headlines only (no summaries). About 4 in 10 are Dominica's own (DOMLEC's tariffs,
+  // the citizenship by investment programme, the cruise season), the rest the region's news and press releases
+  // (Anguilla, Barbados, Martinique, Saint Lucia's prime minister, the ECCB, the CTO) and paid notices. So no home pin:
+  // a headline that names no place gets none (with one, 11 of the 19 such headlines, the region's, would sit in
+  // Roseau; the place-finder now knows the Caribbean's territories, geo.ts), and its death announcements and job
+  // notices aren't read (skipLinks). Two outlets of a thinly covered place are matched by their headlines up to 48
+  // hours apart (correlate.ts), so its Dominica stories can verify Dominica News Online's. Its terms allow sharing links and
+  // quoting short extracts with credit and a link, and bar copying its content with automated tools without
+  // permission, a clause aimed at scraping (the site offers this feed): we keep the headline and the link. Of the
+  // other quiet places only Seychelles got a feed (SBC, below): not Burundi's other newsrooms (Isanganiro's last story
+  // is from July; Iwacu's English feed stopped years ago), Comoros' Al-Watwan (its site answers with errors) or La
+  // Gazette des Comores (no feed), Mongolia's Montsame and MNB (no feed), Liechtenstein's Vaterland, lie:zeit and
+  // Landesspiegel (no feeds), Seychelles' Nation (no feed) and Seychelles News Agency (turns the reader away), Nauru's
+  // and Tuvalu's (no newsroom with a feed; RNZ's Pacific feed is read)
+  {
+    id:              'emonews-dm',
+    name:            'EmoNews',
+    feedUrl:         'https://emonewsdm.com/feed.xml',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.6,
+    countryCode:     'DM',
+    defaultLat:      15.30,
+    defaultLng:      -61.39,
+    defaultLocation: 'Roseau, Dominica',
+    extraTags:       ['dominica', 'caribbean'],
+    language:        'en',
+    skipLinks:       /\/story\/(?:death-announcement|vacancy-notice|[a-z0-9-]*-vacancies(?:-\d+)?$)/,
+  },
+  // SBC, the Seychelles Broadcasting Corporation (Victoria), the public broadcaster: Seychelles' first newsroom here
+  // beside the State House's press office. The site-wide feed its pages link (robots.txt allows all; the site's only
+  // terms are its streaming service's, SBC+): read Nov 10, its newest 10 items from Nov 9, about 10 a day, in
+  // Seychellois Creole (Kreol Seselwa), all Seychelles' own news (the National Assembly, a court charge, schools,
+  // Praslin and La Digue), so a home pin; the reader learns the Creole name of the country (local-names.ts). Its
+  // English pages from the Seychelles News Agency stopped in 2023. In Creole, its stories won't be matched with the
+  // State House's English ones (or by the second-outlet search, English only), so it adds coverage, not verification
+  {
+    id:              'sbc-seychelles',
+    name:            'Seychelles Broadcasting Corporation',
+    feedUrl:         'https://www.sbc.sc/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.7,
+    countryCode:     'SC',
+    defaultLat:      -4.62,
+    defaultLng:      55.45,
+    defaultLocation: 'Victoria, Seychelles',
+    extraTags:       ['seychelles', 'indian-ocean', 'africa'],
+    language:        'crs',
+  },
 ]
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────
@@ -10822,6 +10875,9 @@ export const HOME_PIN_SOURCES = new Set([
   // Nov 9, 2026: Sermitsiaq.AG, about 8 in 10 of its stories Greenland's own; its wire stories name their place, in
   // Danish too (local-names.ts)
   'sermitsiaq-gl',
+  // Nov 10, 2026: SBC, Seychelles' public broadcaster, all its own country's news (in Creole); not EmoNews (Dominica),
+  // half of whose stories are the region's
+  'sbc-seychelles',
 ])
 
 export interface InferredGeo {

@@ -2680,6 +2680,31 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'turmero': { lat: 10.2286, lng: -67.4764, country: 'VE', name: 'Turmero', region: 'Aragua' },
   'charallave': { lat: 10.2431, lng: -66.8567, country: 'VE', name: 'Charallave', region: 'Miranda' },
   'ocumare del tuy': { lat: 10.1167, lng: -66.7833, country: 'VE', name: 'Ocumare del Tuy', region: 'Miranda' },
+  // Nov 10, 2026: the Caribbean's territories (world-countries.ts) as places too, so that "the French island of
+  // Martinique", "the Dutch island of Aruba" or "the U.S. Virgin Islands" are the island, not France, the
+  // Netherlands or the US (a country's adjective named first wins among countries)
+  'anguilla': { lat: 18.22, lng: -63.06, country: 'AI', name: 'Anguilla' },
+  'aruba': { lat: 12.52, lng: -70.03, country: 'AW', name: 'Aruba' },
+  'bonaire': { lat: 12.15, lng: -68.27, country: 'BQ', name: 'Bonaire' },
+  'sint eustatius': { lat: 17.48, lng: -62.98, country: 'BQ', name: 'Sint Eustatius' },
+  'curaçao': { lat: 12.11, lng: -68.93, country: 'CW', name: 'Curaçao' },
+  'curacao': { lat: 12.11, lng: -68.93, country: 'CW', name: 'Curaçao' },
+  'guadeloupe': { lat: 16.00, lng: -61.73, country: 'GP', name: 'Guadeloupe' },
+  'martinique': { lat: 14.60, lng: -61.07, country: 'MQ', name: 'Martinique' },
+  'sint maarten': { lat: 18.03, lng: -63.05, country: 'SX', name: 'Sint Maarten' },
+  'st. maarten': { lat: 18.03, lng: -63.05, country: 'SX', name: 'Sint Maarten' },
+  'st maarten': { lat: 18.03, lng: -63.05, country: 'SX', name: 'Sint Maarten' },
+  'st. barts': { lat: 17.90, lng: -62.85, country: 'BL', name: 'Saint Barthélemy' },
+  'st barts': { lat: 17.90, lng: -62.85, country: 'BL', name: 'Saint Barthélemy' },
+  'st. barths': { lat: 17.90, lng: -62.85, country: 'BL', name: 'Saint Barthélemy' },
+  'st barths': { lat: 17.90, lng: -62.85, country: 'BL', name: 'Saint Barthélemy' },
+  'saint barthélemy': { lat: 17.90, lng: -62.85, country: 'BL', name: 'Saint Barthélemy' },
+  'cayman islands': { lat: 19.29, lng: -81.38, country: 'KY', name: 'Cayman Islands' },
+  'turks and caicos': { lat: 21.46, lng: -71.14, country: 'TC', name: 'Turks and Caicos Islands' },
+  'british virgin islands': { lat: 18.43, lng: -64.62, country: 'VG', name: 'British Virgin Islands' },
+  'us virgin islands': { lat: 18.34, lng: -64.93, country: 'VI', name: 'US Virgin Islands' },
+  'u.s. virgin islands': { lat: 18.34, lng: -64.93, country: 'VI', name: 'US Virgin Islands' },
+  'united states virgin islands': { lat: 18.34, lng: -64.93, country: 'VI', name: 'US Virgin Islands' },
 }
 
 // ─── NER PATTERNS ────────────────────────────────────────────────────────────
@@ -2786,7 +2811,8 @@ const COUNTRY_PATTERNS: [RegExp, string][] = [
   // "Indiana", and "usa" matched inside "accusation" and "causal" (pinning
   // stories to Washington DC). "Colombia" was misspelled "columbia", so
   // British Columbia and Columbia University counted as Colombia.
-  [/\b(?:united states|usa|u\.s\.a?\.?)(?!\w)/i, 'US'],
+  // (not the US Virgin Islands, world-countries.ts VI: Nov 10, 2026)
+  [/\b(?:united states|usa|u\.s\.a?\.?)(?!\w)(?![.\s]*virgin\s+islands)/i, 'US'],
   [/\b(?:united kingdom|britain|(?<!new )england|scotland|scottish|(?<!new south )wales)\b/i, 'GB'],
   [/\b(?:china|chinese)\b/i, 'CN'],
   [/\b(?:russia|russian federation)\b/i, 'RU'],

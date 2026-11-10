@@ -250,6 +250,9 @@ export function partOfAName(text: string, at: number, end: number, surname?: boo
   if (/^[ \t]+(?:virus|viruses|fever|ebolavirus|strain|variant)\b/i.test(text.slice(end, end + 14))) return true
   // The northern and southern lights, not Aurora, Colorado (Nov 6, 2026: "The Aurora Borealis May Appear In 10 States")
   if (hit.toLowerCase() === 'aurora' && /^[ \t]+(?:borealis|australis)\b/i.test(text.slice(end, end + 12))) return true
+  // HPE's Aruba networking business and the blue liqueur, not the islands (Nov 10, 2026: geo.ts, the Caribbean's territories)
+  if (hit.toLowerCase() === 'aruba' && (/^[ \t]+network(?:s|ing)\b/i.test(text.slice(end, end + 14)) || /\bHPE[ \t]+$/.test(text.slice(Math.max(0, at - 6), at)))) return true
+  if (/^cura[cç]ao$/i.test(hit) && /\bblue[ \t]+$/i.test(text.slice(Math.max(0, at - 6), at))) return true
   // An oil benchmark, not the place (Nov 6, 2026: oilprice.com's "West Texas Intermediate was trading at $91" was
   // pinned in Texas): "Brent crude" (Brent is also a London borough), "West Texas Intermediate", "Urals crude"
   if (/^(?:brent[ \t]+(?:crude|oil|futures|blend|benchmark|prices?)|(?:west[ \t]+)?texas[ \t]+intermediate|urals[ \t]+(?:crude|oil|blend|prices?)|(?:dubai|oman|murban)[ \t]+crude)\b/i.test(text.slice(at, end + 24))) return true
