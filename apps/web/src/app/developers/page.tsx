@@ -41,6 +41,11 @@ const MCP_TOOLS = [
   { name: 'outbreaks', what: 'Disease outbreaks on the map in the last 72 hours, place by place' },
   { name: 'displacement', what: 'Refugees and people displaced on the map in the last 72 hours, place by place' },
   { name: 'who_covers', what: 'The newsrooms WorldPulse reads in a country: their kind, language, state media or not' },
+  { name: 'day', what: 'One day\'s top stories, from the last 30 days, ranked by independent outlets' },
+  { name: 'unconfirmed', what: 'The newest serious reports no second outlet has confirmed yet: leads, not facts' },
+  { name: 'newly_verified', what: 'Reports that just turned verified, with the second outlets that confirmed them' },
+  { name: 'local_press', what: 'Stories the world reports while their own country\'s press barely appears among the outlets' },
+  { name: 'site_check', what: 'Whether a website is a known AI content farm, and the reliability score WorldPulse gives it' },
 ]
 const MCP_CURSOR = '{"mcpServers":{"worldpulse":{"url":"https://api.world-pulse.io/mcp"}}}'
 

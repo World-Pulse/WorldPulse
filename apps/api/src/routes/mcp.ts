@@ -27,13 +27,14 @@ import { countMcpTool, isOutsideUse, isOwnCheck } from '../lib/outside-use'
 import { redis } from '../db/redis'
 import { CHOKEPOINTS } from '../lib/chokepoints'
 import { SQUAWK, notBreakingNews } from '../lib/breaking-news'
+import { KNOWN_AI_CONTENT_FARMS } from '../lib/ai-content-farms'
 
 const SITE = (process.env.SITE_URL || 'https://world-pulse.io').replace(/\/+$/, '')
 
 /** Protocol versions this server speaks, newest first */
 export const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'] as const
 
-const SERVER_INFO = { name: 'worldpulse', title: 'WorldPulse', version: '1.5.0' }
+const SERVER_INFO = { name: 'worldpulse', title: 'WorldPulse', version: '1.6.0' }
 
 const INSTRUCTIONS = [
   'WorldPulse groups news reports of one event into one story and counts the outlets (websites) that report it. A story\'s count covers its last two days; a story that has run longer also gives how many outlets have reported it since it began.',
@@ -43,6 +44,7 @@ const INSTRUCTIONS = [
   'And: breaking (the urgent reports of the last few hours), trending (who and what is in the news most), hotspots (where serious reports of several kinds meet), story_by_country (one story country by country: whose newsrooms carry it and how they headline it), shipping (ships, ports, straits and navies, near a chokepoint) and hazards (earthquakes, volcanoes, tsunamis, wildfires).',
   'And: latest (the newest verified reports, of one subject or country), how_verified (how a story was checked: the outlets, then each comparison of what they report), story_timeline (who reported a story first and how it spread), conflicts (where conflict and military news is reported) and internet_outages (internet outages, from IODA).',
   'And since Nov 9, 2026: connections (who and what a person, organisation or place is named with, or the stories naming two of them), protests, outbreaks and displacement (the map\'s protest, outbreak and refugee reports, place by place) and who_covers (the newsrooms WorldPulse reads in a country).',
+  'And since Nov 10, 2026: day (one day\'s top stories, from the last 30 days), unconfirmed (serious reports only one outlet has carried so far: leads, not facts), newly_verified (reports that just found their second outlet), local_press (stories the world reports while their own country\'s press barely appears among the outlets) and site_check (whether a website is a known AI content farm, and the reliability score WorldPulse gives it).',
 ].join(' ')
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -67,6 +69,9 @@ interface Tool {
 
 /** A tool's own failure (bad arguments, nothing found): reported to the assistant, not a protocol error */
 class ToolError extends Error {}
+
+/** day: how often, and how long apart, it asks again for a day being made in the background (tests set ms to 0) */
+export const DAY_WAIT = { tries: 4, ms: 5_000 }
 
 /** GET one of the API's public routes from inside, as JSON, counted as the asking client */
 async function ask({ app, client }: Asker, url: string): Promise<{ status: number; body: Record<string, unknown> }> {
@@ -1770,6 +1775,261 @@ export const TOOLS: Tool[] = [
       ].join('\n').replace(/\n{3,}/g, '\n\n').trim()
       const out = (n: Newsroom) => ({ name: n.name, sites: n.sites, kind: n.kind, language: n.lang, languageName: n.lang ? languageLabel(n.lang) : null, stateMedia: n.state })
       return { text, data: { country: code, name: label, url: page, newsrooms: read.map(out), seenInGdelt: seen.map(out), thin } }
+    },
+  },
+  // ─── The five tools of Nov 10, 2026 (Devon: "30 ai tools! Nice! - can we get to 35?") ───
+  {
+    name: 'day',
+    title: 'One day\'s top stories',
+    description: 'One day\'s top stories (a UTC day, from the last 30 days), ranked by independent outlets as WorldPulse ranks a week: that day\'s own reports counted, each event once. Without date, yesterday; for today so far, use top_stories with hours 24. Each story with how many outlets carried it that day, from how many countries, whether it is verified, and its link.',
+    inputSchema: {
+      type: 'object',
+      properties: { date: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'A day (UTC), e.g. 2026-11-03; yesterday when left out' } },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const date = strArg(args, 'date', { pattern: /^\d{4}-\d{2}-\d{2}$/, hint: 'must be a day such as 2026-11-03' })
+      const askDay = () => ask(asker, `/api/v1/stories/day${date ? `?date=${date}` : ''}`)
+      let res = await askDay()
+      // a day nobody had asked for is made in the background, in seconds: wait for it a little
+      for (let i = 0; res.status === 503 && i < DAY_WAIT.tries; i++) {
+        await new Promise(resolve => setTimeout(resolve, DAY_WAIT.ms))
+        res = await askDay()
+      }
+      const { status, body } = res
+      if (status === 400 || status === 404) throw new ToolError(String((body as { error?: unknown }).error ?? 'No such day'))
+      if (status === 503) throw new ToolError('That day is still being put together; ask again in a minute')
+      if (status !== 200) throw new Error(`day answered ${status}`)
+      const d = (body.data ?? {}) as { date?: string; stories?: ListedStory[] }
+      const day = typeof d.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.date) ? d.date : date ?? null
+      const label = day
+        ? new Date(`${day}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+        : 'That day'
+      const stories = d.stories ?? []
+      const text = [
+        `${label} (UTC): the top stories by independent outlets, each with the outlets that carried it that day (WorldPulse; how outlets are counted: ${SITE}/how-we-count)`,
+        '',
+        stories.length ? stories.map(storyLine).join('\n') : 'No story was reported by two or more outlets that day.',
+      ].join('\n').trim()
+      return { text, data: { date: day, stories: stories.map(storyOut) } }
+    },
+  },
+  {
+    name: 'unconfirmed',
+    title: 'Reports waiting for a second outlet',
+    description: 'The newest serious reports no second outlet has confirmed yet: early leads, not facts, newest first, each story once, each with its severity, how long ago, its place, its outlet and its link. WorldPulse marks a story verified once separate outlets report it. High and critical severity by default; severity "medium" adds the medium ones. Give category or country to narrow it. The answer also says how many reports are waiting: every 15 minutes WorldPulse looks for a second outlet in GDELT\'s index of news articles (newly_verified lists the ones it found).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        severity: { type: 'string', enum: ['high', 'medium'], default: 'high', description: 'high: high and critical (the default); medium: medium and up' },
+        category: { type: 'string', enum: [...LATEST_CATEGORIES], description: 'One subject, e.g. conflict' },
+        country: { type: 'string', pattern: '^[A-Za-z]{2}$', description: 'A two-letter country code, e.g. KE' },
+        limit: { type: 'integer', minimum: 1, maximum: 20, default: 10, description: 'How many reports (1 to 20, default 10)' },
+      },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const severity = strArg(args, 'severity', { max: 10 })?.toLowerCase() ?? 'high'
+      if (severity !== 'high' && severity !== 'medium') throw new ToolError('severity must be high or medium')
+      const category = strArg(args, 'category', { max: 30 })?.toLowerCase()
+      if (category && !LATEST_CATEGORIES.includes(category)) throw new ToolError(`category must be one of ${LATEST_CATEGORIES.join(', ')}`)
+      const country = strArg(args, 'country', { pattern: /^[A-Za-z]{2}$/, hint: 'must be a two-letter country code such as KE' })?.toUpperCase()
+      const limit = intArg(args, 'limit', 10, 1, 20)
+      const levels = severity === 'medium' ? ['critical', 'high', 'medium'] : ['critical', 'high']
+      const scope = `${category ? `&category=${category}` : ''}${country ? `&country=${country}` : ''}`
+      const [lists, second] = await Promise.all([
+        Promise.all(levels.map(level => ask(asker, `/api/v1/signals?status=pending&severity=${level}&limit=30${scope}`))),
+        ask(asker, `/api/v1/public/second-outlets`).catch(() => null),
+      ])
+      const failed = lists.find(l => l.status !== 200)
+      if (failed) throw new Error(`signals answered ${failed.status}`)
+      type Report = { id: string; title: string; severity?: string; locationName?: string | null; countryCode?: string | null; category?: string; createdAt?: string | null; originalUrls?: unknown }
+      const reports = lists
+        .flatMap(l => ((((l.body.data ?? {}) as { items?: Report[] }).items) ?? []))
+        .filter(r => r && UUID.test(String(r.id)) && typeof r.title === 'string')
+        .sort((a, b) => (Date.parse(b.createdAt ?? '') || 0) - (Date.parse(a.createdAt ?? '') || 0))
+        .slice(0, 60)
+      const counts = await storyCounts(asker, reports.map(r => r.id))
+      // each story once, and none a second outlet has verified since
+      const seen = new Set<string>()
+      const shown: Report[] = []
+      for (const r of reports) {
+        const c = counts[r.id]
+        if (c?.verified) continue
+        const story = c?.storyId ?? r.id
+        if (seen.has(story)) continue
+        seen.add(story)
+        shown.push(r)
+        if (shown.length === limit) break
+      }
+      const placeOf = (r: Report) => r.locationName || (r.countryCode ? countryLabel(r.countryCode, false) : '')
+      const outletOfReport = (r: Report) => (Array.isArray(r.originalUrls) && typeof r.originalUrls[0] === 'string' ? hostOf(r.originalUrls[0]) : '')
+      const days = ((second?.status === 200 ? (second.body.data as { days?: Record<string, Record<string, unknown>> } | undefined)?.days : null) ?? {})
+      const today = days[new Date().toISOString().slice(0, 10)]
+      const waiting = today && typeof today.waiting === 'number'
+        ? { reports: today.waiting, foundToday: Number(today.matched) || 0, verifiedToday: Number(today.promoted) || 0 }
+        : null
+      const what = `${severity === 'medium' ? 'medium, high and critical' : 'high and critical'}${category ? ` ${category}` : ''} reports`
+      const where = country ? ` from ${countryLabel(country, true)}` : ''
+      const text = [
+        shown.length
+          ? `The newest unconfirmed ${what}${where}, newest first: leads to check, not facts (WorldPulse):`
+          : `No unconfirmed ${what}${where} lately: the newest are verified, or none came in. ${SITE}`,
+        ...shown.map((r, i) => {
+          const site = outletOfReport(r)
+          return `${i + 1}. ${r.title}\n   ${[cap(r.severity), agoLabel(r.createdAt), placeOf(r), site ? `via ${describeSite(site)}` : '', proofLine(counts[r.id])].filter(Boolean).join(' · ')}\n   ${signalLink(r.id)}`
+        }),
+        waiting
+          ? `\nEvery 15 minutes WorldPulse looks for a second outlet for each medium-or-higher English report with one outlet, in GDELT's index of news articles: ${waiting.reports.toLocaleString('en-US')} are waiting now; today ${waiting.foundToday.toLocaleString('en-US')} found one and ${waiting.verifiedToday.toLocaleString('en-US')} turned verified (newly_verified lists them).`
+          : '',
+      ].join('\n').replace(/\n{3,}/g, '\n\n').trim()
+      return {
+        text,
+        data: {
+          severity, category: category ?? null, country: country ?? null,
+          reports: shown.map(r => ({
+            id: r.id, title: r.title, url: signalLink(r.id), severity: r.severity ?? null, at: r.createdAt ?? null, place: placeOf(r) || null,
+            outlet: outletOfReport(r) || null, storyOutlets: Number(counts[r.id]?.outlets) || 1,
+          })),
+          waiting,
+        },
+      }
+    },
+  },
+  {
+    name: 'newly_verified',
+    title: 'Just verified',
+    description: 'The reports that most recently turned verified because WorldPulse found a second, separate outlet reporting the same event in GDELT\'s index of news articles (it looks every 15 minutes), newest first: each with the outlets and headlines that confirmed it, and its link. Verification as it happens; for the newest verified reports of a subject, use latest; for the ones still waiting, unconfirmed.',
+    inputSchema: {
+      type: 'object',
+      properties: { limit: { type: 'integer', minimum: 1, maximum: 20, default: 10, description: 'How many reports (1 to 20, default 10)' } },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const limit = intArg(args, 'limit', 10, 1, 20)
+      const { status, body } = await ask(asker, `/api/v1/public/second-outlets`)
+      if (status !== 200) throw new Error(`second-outlets answered ${status}`)
+      type Found = { site?: unknown; title?: unknown; url?: unknown }
+      type Match = { at?: string; id?: string; severity?: string; title?: string; promoted?: boolean; found?: Found[] }
+      const d = (body.data ?? {}) as { days?: Record<string, Record<string, unknown>>; latest?: Match[] }
+      // each report once (a report can find more outlets in a later look), and only those that turned verified
+      const seen = new Set<string>()
+      const shown = (d.latest ?? [])
+        .filter((m): m is Match & { id: string; title: string } => Boolean(m) && m.promoted === true && UUID.test(String(m.id)) && typeof m.title === 'string')
+        .filter(m => !seen.has(m.id) && Boolean(seen.add(m.id)))
+        .slice(0, limit)
+      const confirmedBy = (m: Match) => (Array.isArray(m.found) ? m.found : [])
+        .filter(f => f && typeof f.site === 'string' && f.site !== '')
+        .map(f => ({ site: String(f.site), title: typeof f.title === 'string' ? f.title : null, url: typeof f.url === 'string' ? f.url : null }))
+      const today = (d.days ?? {})[new Date().toISOString().slice(0, 10)]
+      const text = [
+        shown.length
+          ? 'Just verified: reports that turned verified when WorldPulse found a second, separate outlet reporting the same event, newest first:'
+          : 'No report has turned verified this way lately.',
+        ...shown.map((m, i) => {
+          const by = confirmedBy(m).map(f => `${describeSite(f.site)}${f.title ? `: "${f.title}"` : ''}`)
+          return `${i + 1}. ${m.title}\n   ${[cap(m.severity), agoLabel(m.at)].filter(Boolean).join(' · ')}${by.length ? ` · confirmed by ${by.join('; ')}` : ''}\n   ${signalLink(m.id)}`
+        }),
+        today
+          ? `\nToday so far (UTC): ${(Number(today.matched) || 0).toLocaleString('en-US')} reports found a second outlet and ${(Number(today.promoted) || 0).toLocaleString('en-US')} turned verified; ${(Number(today.waiting) || 0).toLocaleString('en-US')} are waiting (unconfirmed lists the newest). How WorldPulse counts: ${SITE}/how-we-count`
+          : '',
+      ].join('\n').replace(/\n{3,}/g, '\n\n').trim()
+      return {
+        text,
+        data: {
+          reports: shown.map(m => ({ id: m.id, title: m.title, url: signalLink(m.id), severity: m.severity ?? null, at: m.at ?? null, confirmedBy: confirmedBy(m) })),
+          today: today ? { found: Number(today.matched) || 0, verified: Number(today.promoted) || 0, waiting: Number(today.waiting) || 0 } : null,
+        },
+      }
+    },
+  },
+  {
+    name: 'local_press',
+    title: 'Covered abroad, quiet at home',
+    description: 'How much of a story\'s coverage comes from newsrooms of the country where it happens. Without country: the top stories of the last 24 hours that outlets from 10 or more countries carry while one or none of the outlets matched to them is based in the story\'s own country, the fewest first. With country (e.g. SN): that country\'s top stories, each with how many of its outlets are based there. Counts cover the outlets WorldPulse matched to each story and knows the home country of; reports in the local language can sit in a story of their own, so a low count is a lead to check, not proof that the local press is silent.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        country: { type: 'string', pattern: '^[A-Za-z]{2}$', description: 'Optional two-letter country code, e.g. SN' },
+        hours: { type: 'integer', minimum: 1, maximum: 72, default: 24, description: 'How many hours back (1 to 72, default 24)' },
+      },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const hours = intArg(args, 'hours', 24, 1, 72)
+      const given = strArg(args, 'country', { pattern: /^[A-Za-z]{2}$/, hint: 'must be a two-letter country code such as SN' })?.toUpperCase()
+      const country = given === 'UK' ? 'GB' : given
+      const { status, body } = await ask(asker, `/api/v1/stories?hours=${hours}&limit=20${country ? `&country=${country}` : ''}`)
+      if (status !== 200) throw new Error(`stories answered ${status}`)
+      const listed = ((body.data as { stories?: ListedStory[] } | undefined)?.stories ?? []).filter(s => s && typeof s.country === 'string' && s.country !== '')
+      const home = (s: ListedStory) => s.localOutlets ?? 0
+      const rows = country
+        ? listed.filter(s => s.country === country)
+        : listed.filter(s => home(s) <= 1 && (s.countries ?? 0) >= 10).sort((a, b) => home(a) - home(b) || (b.countries ?? 0) - (a.countries ?? 0))
+      const homeNote = (s: ListedStory) => home(s)
+        ? `${home(s)} from ${countryLabel(String(s.country))}${s.localNames?.length ? ` (${s.localNames.join(', ')})` : ''}`
+        : `none of them from ${countryLabel(String(s.country))}`
+      const line = (s: ListedStory, i: number) =>
+        `${i + 1}. ${s.title}\n   ${s.outletCount} outlets${(s.countries ?? 0) > 1 ? ` from ${s.countries} countries` : ''} · ${homeNote(s)}${s.verifiedAt ? '' : ' · not verified yet'}\n   ${signalLink(s.leadId)}`
+      const head = country
+        ? `Top stories in ${countryLabel(country)}, the last ${hours} hours: how many of their outlets are based there (WorldPulse):`
+        : `Stories outlets from many countries report while one or none of their outlets is from the country where they happen (of the last ${hours} hours' 20 biggest stories, the fewest home outlets first; WorldPulse):`
+      const none = country
+        ? `No story mostly placed in ${countryLabel(country)} was reported by two or more outlets in the last ${hours} hours.`
+        : `Each of the last ${hours} hours' 20 biggest stories that outlets from 10 or more countries report has two or more outlets from its own country.`
+      const text = [
+        rows.length ? head : none,
+        ...rows.map(line),
+        '\nThese count the outlets WorldPulse matched to each story and knows the home country of. Reports in the local language can sit in a story of their own, so a low count is a lead to check, not proof that the local press is silent. The newsrooms WorldPulse reads in a country: who_covers.',
+      ].join('\n').replace(/\n{3,}/g, '\n\n').trim()
+      return { text, data: { hours, country: country ?? null, stories: rows.map(s => ({ ...storyOut(s), homeOutlets: home(s) })) } }
+    },
+  },
+  {
+    name: 'site_check',
+    title: 'Is this site a content farm?',
+    description: 'Red flags for a website before you trust it: whether it is on WorldPulse\'s list of known AI content farms (sites that publish machine-written articles in bulk; from NewsGuard\'s and the CCDH\'s public reports), the reliability score WorldPulse gives it if it is one of WorldPulse\'s own sources, and what WorldPulse\'s outlet directory knows of it (name, home country, kind, state media). Give a website or an article\'s address. Not on the list only means WorldPulse knows of no problem with it, not that it is reliable.',
+    inputSchema: {
+      type: 'object',
+      properties: { site: { type: 'string', minLength: 3, maxLength: 2048, description: 'A website or an article\'s address, e.g. example.com' } },
+      required: ['site'],
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const given = strArg(args, 'site', { required: true, max: 2048 })!
+      const site = siteOf(given)
+      if (!/^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/i.test(site)) throw new ToolError('site must be a website such as example.com, or an article\'s address')
+      const { status, body } = await ask(asker, `/api/v1/slop/check?domain=${encodeURIComponent(site)}`)
+      if (status === 400) throw new ToolError(String((body as { error?: unknown }).error ?? 'That is not a website WorldPulse can check'))
+      if (status !== 200) throw new Error(`site check answered ${status}`)
+      const c = body as { is_ai_farm?: unknown; reliability_score?: unknown; source_name?: unknown; warnings?: unknown }
+      const farm = c.is_ai_farm === true
+      const farms = KNOWN_AI_CONTENT_FARMS.length
+      const score = typeof c.reliability_score === 'number' && Number.isFinite(c.reliability_score) ? c.reliability_score : null
+      const sourceName = typeof c.source_name === 'string' && c.source_name ? c.source_name : null
+      const e = outletOf(site)
+      const size = Object.keys(OUTLET_DIRECTORY).length
+      const verdict = farm || (score !== null && score < 0.4) ? 'red flag' : score !== null && score < 0.65 ? 'caution' : 'no red flag known'
+      const text = [
+        farm
+          ? `${site}: on WorldPulse's list of ${farms} known AI content farms. Its articles are likely machine-written: don't cite it as a news source.`
+          : `${site}: not on WorldPulse's list of ${farms} known AI content farms (from NewsGuard's and the CCDH's public reports).`,
+        score !== null
+          ? `WorldPulse reads it as a source${sourceName ? ` (${sourceName})` : ''}, with a reliability score of ${Math.round(score * 100)}%${score < 0.4 ? ': low, treat what it says with care' : score < 0.65 ? ': moderate, check its claims elsewhere' : ''}.`
+          : 'It is not one of the sources WorldPulse scores.',
+        e
+          ? `In WorldPulse's outlet directory: ${e.name}, ${String(OUTLET_KIND_LABELS[e.kind]).toLowerCase()}, from ${countryLabel(e.country)}${e.state ? ', state media (a government runs it)' : ''}.`
+          : `It is not in WorldPulse's directory of ${size} outlets.`,
+        `Overall: ${verdict}. Not on the list only means WorldPulse knows of no problem with it, not that it is reliable. The list: https://api.world-pulse.io/api/v1/slop/farms`,
+      ].join('\n')
+      return {
+        text,
+        data: {
+          site, aiContentFarm: farm, farmListSize: farms, reliabilityScore: score, sourceName,
+          directory: e ? { name: e.name, kind: e.kind, country: e.country, stateMedia: Boolean(e.state) } : null,
+          verdict, warnings: Array.isArray(c.warnings) ? c.warnings.filter((w): w is string => typeof w === 'string') : [],
+        },
+      }
     },
   },
 ]

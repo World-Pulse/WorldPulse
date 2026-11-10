@@ -171,6 +171,15 @@ export function computeAiFarmConfidence(
   return 'clean'
 }
 
+/**
+ * The pattern (a Postgres regular expression, matched without regard to case) a source's address must match to
+ * be the domain's: its host is the domain or one of its subdomains (Nov 10, 2026, for the AI tools' site_check).
+ * It was url LIKE '%domain%', so "news.com" took foxnews.com's score. Exported for testing.
+ */
+export function sourceUrlPattern(domain: string): string {
+  return `^https?://([^/?#@]*\\.)?${domain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(:[0-9]+)?([/?#]|$)`
+}
+
 /** Build human-readable warning list. Exported for testing. */
 export function buildDomainWarnings(
   isAiFarm: boolean,
@@ -709,9 +718,9 @@ export const registerSlopRoutes: FastifyPluginAsync = async (app) => {
 
     const isAiFarm = (KNOWN_AI_CONTENT_FARMS as string[]).includes(domain)
 
-    // LEFT JOIN: look up source by matching domain against the source URL
+    // The source whose address is on the domain or one of its subdomains (sourceUrlPattern)
     const sourceRow = await db('sources')
-      .whereRaw('url LIKE ?', [`%${domain}%`])
+      .whereRaw('url ~* ?', [sourceUrlPattern(domain)])
       .select('name', 'trust_score')
       .first()
       .catch(() => null)

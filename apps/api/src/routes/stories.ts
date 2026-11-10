@@ -77,6 +77,16 @@ const FINISHED_WEEK_KEEP: SwrOptions = { freshSeconds: 24 * 3_600, staleSeconds:
 const WARM_FINISHED_WEEKS = 4
 /** How often warmWeeks looks (each look costs a Redis read per week when all are fresh) */
 const WARM_WEEKS_MS = 30 * 60_000
+/**
+ * A day's page (GET /stories/day, Nov 10, 2026: the AI tools' "day"): a finished UTC day's top stories, from the
+ * last DAY_MAX_BACK days. A finished day hardly changes: kept a day, then served for 30 days while remade. Like a
+ * finished week it is made in the background, never while a caller waits, and the last WARM_DAYS are kept made
+ * (warmDays), so asking for one of them never waits
+ */
+const DAY_STORIES = 10
+const DAY_MAX_BACK = 30
+const FINISHED_DAY_KEEP: SwrOptions = { freshSeconds: 24 * 3_600, staleSeconds: 30 * 86_400, lockSeconds: 2 * LIST_QUERY_SECONDS }
+const WARM_DAYS = 7
 
 const MEMBER_COLUMNS = `s.id, s.title, s.category::text AS category, s.status::text AS status,
          CASE s.severity::text WHEN 'critical' THEN 5 WHEN 'high' THEN 4 WHEN 'medium' THEN 3 WHEN 'low' THEN 2 ELSE 1 END AS sev_rank,
@@ -327,14 +337,65 @@ export async function warmWeeks(now = new Date()): Promise<string[]> {
   return made
 }
 
+/** A UTC day from its date ("2026-11-03"): its start, or null when it is not a real date */
+export function parseDay(s: unknown): Date | null {
+  if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return null
+  const d = new Date(`${s}T00:00:00Z`)
+  return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s ? null : d
+}
+
+/** The UTC day `back` days before `now`'s: "2026-11-09" for 1 on Nov 10, 2026 (0 is today) */
+export function dayBefore(now: Date, back: number): string {
+  return new Date(Date.parse(`${now.toISOString().slice(0, 10)}T00:00:00Z`) - back * 86_400_000).toISOString().slice(0, 10)
+}
+
+/** Where a finished day's digest is kept */
+export function dayCacheKey(day: string): string {
+  return `stories:day:v1:${day}`
+}
+
+/** A finished day's top stories, ranked as a finished week ranks them: that day's own reports counted, no fading */
+async function dayDigest(day: string) {
+  const start = parseDay(day)
+  if (!start) throw new Error(`not a day: ${day}`)
+  const end = new Date(start.getTime() + 86_400_000)
+  return {
+    success: true as const,
+    data: { date: day, start: start.toISOString(), end: end.toISOString(), stories: await storiesBetween(start, end, DAY_STORIES), generatedAt: new Date().toISOString() },
+  }
+}
+
+/** A finished day's digest as kept (GET /stories/day): null while it is made in the background */
+export async function keptDay(day: string): Promise<Awaited<ReturnType<typeof dayDigest>> | null> {
+  return staleWhileRevalidate<Awaited<ReturnType<typeof dayDigest>> | null>(dayCacheKey(day), FINISHED_DAY_KEEP, () => dayDigest(day), async () => null)
+}
+
+/** Keeps the last WARM_DAYS finished days made, one at a time, each again once it is a day old; the days it made */
+export async function warmDays(now = new Date()): Promise<string[]> {
+  const made: string[] = []
+  for (let back = 1; back <= WARM_DAYS; back++) {
+    const day = dayBefore(now, back)
+    const key = dayCacheKey(day)
+    const age = await keptAge(key)
+    if (age !== null && age < FINISHED_DAY_KEEP.freshSeconds) continue
+    const ok = await remakeNow(key, FINISHED_DAY_KEEP, () => dayDigest(day))
+      .catch(err => { logger.warn({ err, day }, 'Day digest could not be made (it is tried again later)'); return false })
+    if (ok) made.push(day)
+  }
+  return made
+}
+
 let warmTimer: ReturnType<typeof setInterval> | null = null
 
-/** warmWeeks a minute after start, then every 30 minutes */
+/** warmWeeks, then warmDays, a minute after start, then every 30 minutes */
 export function startWeekWarmer(): void {
   if (warmTimer) return
   const run = () => {
     void warmWeeks()
       .then(made => { if (made.length) logger.info({ weeks: made }, 'WorldPulse Week digests made') })
+      .catch(() => {})
+      .then(() => warmDays())
+      .then(made => { if (made.length) logger.info({ days: made }, 'Day digests made') })
       .catch(() => {})
   }
   setTimeout(run, 60_000).unref?.()
@@ -415,6 +476,29 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
       // A finished week nobody has asked for yet: being made in the background
       reply.header('retry-after', '120')
       return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'This week is being put together; try again in a couple of minutes')
+    }
+    return reply.send(response)
+  })
+
+  /**
+   * GET /api/v1/stories/day?date=2026-11-03 (Nov 10, 2026: the AI tools' "day")
+   * A finished day's top stories (UTC), ranked by outlets and severity as a finished week ranks them: that day's
+   * own reports counted, no fading with age. Without date, yesterday; days of the last 30. A day not kept yet is
+   * made in the background (503 with retry-after); the last 7 are kept made (warmDays).
+   */
+  app.get('/day', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const asked = (req.query as { date?: unknown }).date
+    const now = new Date()
+    const day = asked === undefined ? dayBefore(now, 1) : asked
+    if (!parseDay(day)) return sendError(reply, 400, 'VALIDATION_ERROR', 'date must be a day like 2026-11-03')
+    const date = day as string
+    if (date >= dayBefore(now, 0)) return sendError(reply, 400, 'VALIDATION_ERROR', 'That day is not over yet (days are UTC): GET /api/v1/stories?hours=24 lists the stories now')
+    if (date < dayBefore(now, DAY_MAX_BACK)) return sendError(reply, 404, 'NOT_FOUND', `Days are kept for the last ${DAY_MAX_BACK} days`)
+    const response = await keptDay(date)
+    if (!response) {
+      // A day nobody has asked for yet: being made in the background (seconds, not the minute a week takes)
+      reply.header('retry-after', '30')
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'This day is being put together; try again in half a minute')
     }
     return reply.send(response)
   })

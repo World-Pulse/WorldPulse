@@ -48,6 +48,7 @@ import {
   computeDomainVerdict,
   computeAiFarmConfidence,
   buildDomainWarnings,
+  sourceUrlPattern,
 } from '../slop'
 
 // ─── extractDomainFromInput ───────────────────────────────────────────────────
@@ -186,5 +187,31 @@ describe('buildDomainWarnings', () => {
     const warnings = buildDomainWarnings(true, 0.1, 'fakefarms.info')
     // Farm warnings (2) + low score warning (1) = 3
     expect(warnings).toHaveLength(3)
+  })
+})
+
+// ─── sourceUrlPattern (Nov 10, 2026) ─────────────────────────────────────────
+
+describe('sourceUrlPattern', () => {
+  // Postgres's ~* reads it as JavaScript's RegExp with the i flag does
+  const matches = (domain: string, url: string) => new RegExp(sourceUrlPattern(domain), 'i').test(url)
+
+  it("matches a source whose address is on the domain or one of its subdomains", () => {
+    expect(matches('reuters.com', 'https://reuters.com')).toBe(true)
+    expect(matches('bbc.com', 'https://bbc.com/news/world')).toBe(true)
+    expect(matches('bbc.com', 'https://www.BBC.com/news')).toBe(true)
+    expect(matches('news.com', 'https://feeds.news.com/rss')).toBe(true)
+    expect(matches('example.com', 'http://example.com:8080/x')).toBe(true)
+  })
+
+  it('no longer matches a domain inside another website\'s name or address (it was url LIKE \'%domain%\')', () => {
+    expect(matches('news.com', 'https://foxnews.com/world')).toBe(false)
+    expect(matches('news.com', 'https://news.com.au/world')).toBe(false)
+    expect(matches('reuters.com', 'https://news.google.com/rss/search?q=site:reuters.com')).toBe(false)
+    expect(matches('bbc.com', 'https://bbc.co.uk')).toBe(false)
+  })
+
+  it('reads the domain\'s dots as dots', () => {
+    expect(matches('a.b', 'https://axb')).toBe(false)
   })
 })

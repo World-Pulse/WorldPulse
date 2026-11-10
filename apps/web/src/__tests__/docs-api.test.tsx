@@ -326,9 +326,11 @@ const toolsBlock = (src: string) => src.slice(src.indexOf('export const TOOLS'),
     // Nov 8, 2026: the 25 tools ask 22 routes (latest, story_timeline, story_by_country and how_verified share the
     // reports list, the story and the outlet counts with other tools; outlet reads the directory, asking nothing).
     // Nov 9: 30 tools, 24 routes (protests, outbreaks and displacement share the map's topic layers; connections
-    // asks what two entities share, and an entity's profile as entity does; who_covers reads the directory)
-    expect(MCP_TOOLS.length).toBe(30)
-    expect(asked.length).toBeGreaterThanOrEqual(24)
+    // asks what two entities share, and an entity's profile as entity does; who_covers reads the directory).
+    // Nov 10: 35 tools, 27 routes (day asks one day's stories; unconfirmed and newly_verified the second outlets found,
+    // unconfirmed the reports list and the outlet counts too; local_press the top stories; site_check the farm check)
+    expect(MCP_TOOLS.length).toBe(35)
+    expect(asked.length).toBeGreaterThanOrEqual(27)
     const named: Record<string, string> = {
       '/api/v1/stories': 'the top stories', '/api/v1/stories/:param': 'one story', '/api/v1/search/semantic': 'search by meaning',
       '/api/v1/stories/week': 'the week', '/api/v1/stories/by-link': 'the story of a news link',
@@ -345,6 +347,8 @@ const toolsBlock = (src: string) => src.slice(src.indexOf('export const TOOLS'),
       '/api/v1/outages/recent': 'internet outages',
       '/api/v1/knowledge-graph/entities/:param/with/:param': 'what two entities share',
       '/api/v1/map/topics/:param': 'the map\'s protest, outbreak and displacement layers',
+      '/api/v1/stories/day': 'one day\'s top stories', '/api/v1/public/second-outlets': 'the second outlets found for one-outlet reports',
+      '/api/v1/slop/check': 'the AI content farm check',
     }
     const said = TEXT.slice(TEXT.indexOf('Each tool asks the API\'s own open endpoints'), TEXT.indexOf('How to connect'))
     const routeLike = (path: string) => API_ROUTES.find(r => r.method === 'GET' && r.path.replace(/:[A-Za-z_]+/g, ':param') === path)

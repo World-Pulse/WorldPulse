@@ -42,7 +42,7 @@ vi.mock('../../db/postgres', () => {
   }
 })
 
-import { registerStoryRoutes, warmWeeks } from '../stories'
+import { registerStoryRoutes, warmWeeks, warmDays, dayBefore } from '../stories'
 import {
   rankStories, sameEvent, storyScore, looksLikeEventTemplate, tidyHeadline, textArray, headlineWords,
   type StoryCandidate,
@@ -370,6 +370,92 @@ describe('GET /api/v1/stories/week', () => {
     await app.register(registerStoryRoutes, { prefix: '/api/v1/stories' })
     expect((await app.inject({ method: 'GET', url: '/api/v1/stories/week?week=2026-43' })).statusCode).toBe(400)
     expect((await app.inject({ method: 'GET', url: '/api/v1/stories/week?week=2099-W10' })).statusCode).toBe(404)
+  })
+})
+
+/** One finished day's top stories (Nov 10, 2026: the AI tools' "day") */
+describe('GET /api/v1/stories/day', () => {
+  const day = dayBefore(new Date(), 3)
+  const next = new Date(Date.parse(`${day}T00:00:00Z`) + 86_400_000).toISOString()
+  beforeEach(() => {
+    h.get.mockReset()
+    h.get.mockResolvedValue(null)
+    h.setex.mockClear()
+    h.calls.length = 0
+    h.rows = [{
+      story_key: 's-riyadh', size: 33, first_seen: `${day}T08:00:00Z`, newest: `${day}T20:00:00Z`,
+      verified_at: `${day}T09:00:00Z`, sev_rank: 4, place: 'Riyadh', category: 'conflict', lead_id: 'sig-1',
+      title: 'Twelve killed and 300 injured in attack on airport in Saudi capital Riyadh',
+      urls: ['https://www.aljazeera.com/a', 'https://www.bbc.co.uk/b', 'https://apnews.com/c'],
+    }]
+  })
+
+  it("makes a finished day in the background, then lists that day's top stories by outlets", async () => {
+    const app = Fastify({ logger: false })
+    await app.register(registerStoryRoutes, { prefix: '/api/v1/stories' })
+    // nothing kept: answered at once while the day is made in the background
+    const first = await app.inject({ method: 'GET', url: `/api/v1/stories/day?date=${day}` })
+    expect(first.statusCode).toBe(503)
+    expect(first.headers['retry-after']).toBe('30')
+    for (let i = 0; i < 20 && h.setex.mock.calls.length === 0; i++) await new Promise(r => setTimeout(r, 0))
+    // a finished day is kept a day, then served for 30 days while it is remade
+    expect(h.setex).toHaveBeenCalledWith(`stories:day:v1:${day}`, 24 * 3_600 + 30 * 86_400, expect.any(String))
+    const kept = (h.setex.mock.calls[0] as unknown as [string, number, string])[2]
+    h.get.mockResolvedValue(kept)
+    const res = await app.inject({ method: 'GET', url: `/api/v1/stories/day?date=${day}` })
+    expect(res.statusCode).toBe(200)
+    const d = res.json().data
+    expect(d).toMatchObject({ date: day, start: `${day}T00:00:00.000Z`, end: next })
+    expect(d.stories).toHaveLength(1)
+    expect(d.stories[0]).toMatchObject({ id: 's-riyadh', leadId: 'sig-1', outletCount: 3, verifiedAt: `${day}T09:00:00.000Z` })
+    // the day only, and only its own reports counted, as a finished week counts them
+    const storySql = h.calls.find(c => /JOIN active a/.test(c.sql))!
+    expect(storySql.sql).toMatch(/win AS \(SELECT \?::timestamptz AS lo, \?::timestamptz AS hi\)/)
+    expect(storySql.sql).toMatch(/FILTER \(WHERE TRUE\) AS recent_urls/)
+    expect((storySql.bindings[0] as Date).toISOString()).toBe(`${day}T00:00:00.000Z`)
+    expect((storySql.bindings[1] as Date).toISOString()).toBe(next)
+  })
+
+  it('is yesterday without a date', async () => {
+    h.get.mockResolvedValue(JSON.stringify({ at: Date.now(), value: { success: true, data: { date: 'kept', stories: [] } } }))
+    const app = Fastify({ logger: false })
+    await app.register(registerStoryRoutes, { prefix: '/api/v1/stories' })
+    const res = await app.inject({ method: 'GET', url: '/api/v1/stories/day' })
+    expect(res.statusCode).toBe(200)
+    expect(h.get).toHaveBeenCalledWith(`stories:day:v1:${dayBefore(new Date(), 1)}`)
+    expect(h.calls).toHaveLength(0)
+  })
+
+  it('refuses a day not over yet, a date that is not a day, and a day past the last 30', async () => {
+    const app = Fastify({ logger: false })
+    await app.register(registerStoryRoutes, { prefix: '/api/v1/stories' })
+    const status = async (q: string) => (await app.inject({ method: 'GET', url: `/api/v1/stories/day?date=${q}` })).statusCode
+    expect(await status(dayBefore(new Date(), 0))).toBe(400)   // today (UTC)
+    expect(await status('2099-01-01')).toBe(400)
+    expect(await status('2026-02-30')).toBe(400)
+    expect(await status('yesterday')).toBe(400)
+    expect(await status(dayBefore(new Date(), 31))).toBe(404)
+    expect(await status(dayBefore(new Date(), 30))).toBe(503)  // the oldest day kept: made in the background
+  })
+})
+
+describe('warmDays (the last 7 finished days made ahead of callers)', () => {
+  beforeEach(() => {
+    h.get.mockReset()
+    h.setex.mockClear()
+  })
+
+  it('makes the last 7 finished days, one at a time, when nothing is kept, and none while they are fresh', async () => {
+    h.get.mockResolvedValue(null)
+    const now = new Date('2026-11-10T12:00:00Z')
+    const made = await warmDays(now)
+    expect(made).toEqual(['2026-11-09', '2026-11-08', '2026-11-07', '2026-11-06', '2026-11-05', '2026-11-04', '2026-11-03'])
+    expect(h.setex.mock.calls.map(c => (c as unknown as [string])[0])).toEqual(made.map(d => `stories:day:v1:${d}`))
+    // kept an hour ago: fresh for a day, so nothing is made
+    h.get.mockResolvedValue(JSON.stringify({ at: Date.now() - 3_600_000, value: {} }))
+    h.setex.mockClear()
+    expect(await warmDays(now)).toEqual([])
+    expect(h.setex).not.toHaveBeenCalled()
   })
 })
 

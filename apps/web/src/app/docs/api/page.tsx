@@ -564,8 +564,10 @@ export default function ApiDocsPage() {
               reports in an area, the outlet counts of reports, a country, the Daily Briefing, people, places and
               organisations by name, an entity&apos;s profile, a country&apos;s reports a day, the breaking alerts,
               who is trending, the map&apos;s hotspots, the shipping news, the natural hazards, the newest reports,
-              a report&apos;s checks, the conflict reports, internet outages, what two entities share and the
-              map&apos;s protest, outbreak and displacement layers; outlet and who_covers read the outlet directory), and
+              a report&apos;s checks, the conflict reports, internet outages, what two entities share, the
+              map&apos;s protest, outbreak and displacement layers, one day&apos;s top stories, the second outlets
+              found for one-outlet reports and the AI content farm check; outlet and who_covers read the outlet
+              directory), and
               those calls count against your limits
               on them too. How to connect Claude, Claude Code or Cursor is on the{' '}
               <Link href={MCP_GUIDE} className="text-amber-400 hover:text-amber-300">developer page</Link>.

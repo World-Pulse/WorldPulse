@@ -15,7 +15,7 @@ vi.mock('../../lib/outside-use', async (actual) => ({
   countMcpTool: vi.fn(async (_redis: unknown, tool: string) => { counted.tools.push(tool) }),
 }))
 
-import { registerMcpRoutes, PROTOCOL_VERSIONS } from '../mcp'
+import { registerMcpRoutes, PROTOCOL_VERSIONS, DAY_WAIT } from '../mcp'
 import { internalCallClient } from '../../lib/internal-call'
 import { rateLimitKey } from '../../lib/rate-limit-options'
 
@@ -36,6 +36,20 @@ const WORLD_REPORT = '55555555-5555-4555-8555-555555555555'
 const SQUAWK_REPORT = '44444444-4444-4444-8444-444444444444'
 const DAM_REPORT = '88888888-8888-4888-8888-888888888888'
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString()
+const JUST_VERIFIED = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+const CRIT_REPORT = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+const MEDIUM_REPORT = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+let dayAsks = 0
+/** More of the 20 biggest stories (local_press): from 10 or more countries, with few or many outlets from home */
+const story = (n: number, over: Record<string, unknown>) => ({
+  ...STORY, id: `00000000-0000-4000-8000-00000000000${n}`, leadId: `00000000-0000-4000-8000-0000000000${10 + n}`, ...over,
+})
+const MORE_STORIES = [
+  story(1, { title: 'Migrant boats capsize off Senegal and Greece', country: 'SN', countries: 28, localOutlets: 0, localNames: [], outletCount: 44 }),
+  story(2, { title: 'Trump says the Iran war is effectively over', country: 'IR', countries: 36, localOutlets: 1, localNames: ['IranWire'], outletCount: 71, verifiedAt: null }),
+  story(3, { title: 'ANC slumps to its worst result', country: 'ZA', countries: 18, localOutlets: 3, localNames: ['Daily Maverick', 'News24', 'SABC News'], outletCount: 29 }),
+  story(4, { title: 'A story with no home country', country: null, countries: 30, localOutlets: 0, localNames: [], outletCount: 50 }),
+]
 const days = (n: number, f: (i: number) => number) => Array.from({ length: n }, (_, i) => ({ day: new Date(Date.UTC(2026, 9, 10 + i)).toISOString().slice(0, 10), n: f(i) }))
 
 async function build(): Promise<FastifyInstance> {
@@ -43,7 +57,49 @@ async function build(): Promise<FastifyInstance> {
   // the API's own routes the tools ask, standing in for the real ones
   app.get('/api/v1/stories', async (req) => {
     asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    // local_press asks for the 20 biggest: stories from more places
+    if ((req.query as { limit?: string }).limit === '20') return { success: true, data: { stories: [STORY, ...MORE_STORIES], hours: 24 } }
     return { success: true, data: { stories: [STORY], hours: 12 } }
+  })
+  // one finished day's top stories (Nov 10, 2026): a day not made yet answers 503 once
+  app.get('/api/v1/stories/day', async (req, reply) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    const date = (req.query as { date?: string }).date
+    if (date === '2099-01-01') return reply.code(400).send({ success: false, code: 'VALIDATION_ERROR', error: 'That day is not over yet (days are UTC): GET /api/v1/stories?hours=24 lists the stories now' })
+    if (date === '2026-01-01') return reply.code(404).send({ success: false, code: 'NOT_FOUND', error: 'Days are kept for the last 30 days' })
+    if (date === '2026-11-01' && dayAsks++ === 0) return reply.code(503).header('retry-after', '30').send({ success: false, code: 'SERVICE_UNAVAILABLE', error: 'This day is being put together; try again in half a minute' })
+    if (date === '2026-10-31') return reply.code(503).send({ success: false, code: 'SERVICE_UNAVAILABLE', error: 'This day is being put together; try again in half a minute' })
+    return { success: true, data: { date: date ?? '2026-11-09', start: `${date ?? '2026-11-09'}T00:00:00.000Z`, stories: [STORY] } }
+  })
+  // the second outlets found in GDELT's articles (GET /api/v1/public/second-outlets)
+  app.get('/api/v1/public/second-outlets', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    const today = new Date().toISOString().slice(0, 10)
+    return {
+      success: true,
+      data: {
+        days: { [today]: { matched: 158, promoted: 141, waiting: 3036 } },
+        latest: [
+          { at: hoursAgo(0.2), id: JUST_VERIFIED, severity: 'medium', title: 'Troops rescue three kidnap victims in Adamawa', promoted: true,
+            found: [{ site: 'reuters.com', title: 'Nigerian troops free three hostages', url: 'https://www.reuters.com/x' }, { site: 'quicknews.example', title: 'Troops repel attack in Adamawa', url: 'https://quicknews.example/y' }] },
+          // the same report again, from a later look: listed once
+          { at: hoursAgo(0.1), id: JUST_VERIFIED, severity: 'medium', title: 'Troops rescue three kidnap victims in Adamawa', promoted: true, found: [] },
+          // found an outlet but did not turn verified
+          { at: hoursAgo(0.3), id: LONE_REPORT, severity: 'high', title: 'Not promoted', promoted: false, found: [{ site: 'x.example', title: 'x', url: 'https://x.example' }] },
+          { at: hoursAgo(0.4), id: 'not-a-uuid', severity: 'high', title: 'Dropped: no report id', promoted: true, found: [] },
+        ],
+      },
+    }
+  })
+  // the domain check (GET /api/v1/slop/check)
+  app.get('/api/v1/slop/check', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    const domain = (req.query as { domain?: string }).domain
+    const base = { success: true, domain, signals_indexed: 0, checked_at: new Date().toISOString() }
+    if (domain === 'dailytrendingnews.net') return { ...base, is_ai_farm: true, ai_farm_confidence: 'confirmed', reliability_score: null, source_name: null, verdict: 'unreliable', warnings: ['dailytrendingnews.net is listed in the WorldPulse AI content farm blocklist'] }
+    if (domain === 'reuters.com') return { ...base, is_ai_farm: false, ai_farm_confidence: 'clean', reliability_score: 0.96, source_name: 'Reuters', verdict: 'trusted', warnings: [] }
+    if (domain === 'shaky.example') return { ...base, is_ai_farm: false, ai_farm_confidence: 'clean', reliability_score: 0.5, source_name: 'Shaky News', verdict: 'caution', warnings: ['Moderate reliability score (0.50) — verify claims independently'] }
+    return { ...base, is_ai_farm: false, ai_farm_confidence: 'clean', reliability_score: null, source_name: null, verdict: 'unknown', warnings: [] }
   })
   app.get('/api/v1/stories/week', async (req, reply) => {
     asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
@@ -155,6 +211,17 @@ async function build(): Promise<FastifyInstance> {
     const q = req.query as { status?: string; limit?: string; category?: string; country?: string }
     const st = q.status
     const ago = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString()
+    // unconfirmed asks for the newest pending reports of each severity
+    if (st === 'pending' && (q as { severity?: string }).severity) {
+      const sev = (q as { severity?: string }).severity
+      if (sev === 'critical') return { success: true, data: { items: [{ id: CRIT_REPORT, title: 'Explosion reported at refinery near Basra', status: 'pending', severity: 'critical', locationName: 'Basra', countryCode: 'IQ', category: 'disaster', createdAt: ago(0.5), originalUrls: ['https://www.reuters.com/world/x'] }], cursor: null, hasMore: false } }
+      if (sev === 'high') return { success: true, data: { items: [
+        { id: LONE_REPORT, title: 'Trains collide near Cairo', status: 'pending', severity: 'high', locationName: null, countryCode: 'EG', category: 'disaster', createdAt: ago(2), originalUrls: ['https://lonely.example/a'] },
+        // its story was verified since: left out
+        { id: STORY.leadId, title: STORY.title, status: 'pending', severity: 'high', locationName: 'Doha', countryCode: 'QA', category: 'conflict', createdAt: ago(1) },
+      ], cursor: null, hasMore: false } }
+      return { success: true, data: { items: [{ id: MEDIUM_REPORT, title: 'Port workers walk out in Durban', status: 'pending', severity: 'medium', locationName: 'Durban', countryCode: 'ZA', category: 'economy', createdAt: ago(0.2), originalUrls: [] }], cursor: null, hasMore: false } }
+    }
     // the latest tool asks for 50, with no area
     if (q.limit === '50') {
       if (q.category === 'sports') return { success: true, data: { items: [], cursor: null, hasMore: false } }
@@ -456,6 +523,7 @@ describe('MCP server', () => {
       'breaking', 'trending', 'hotspots', 'story_by_country', 'shipping', 'hazards',
       'latest', 'how_verified', 'story_timeline', 'conflicts', 'internet_outages',
       'connections', 'protests', 'outbreaks', 'displacement', 'who_covers',
+      'day', 'unconfirmed', 'newly_verified', 'local_press', 'site_check',
     ])
     for (const t of tools) {
       expect(t.inputSchema.type).toBe('object')
@@ -1095,5 +1163,143 @@ describe('MCP server: the five tools of Nov 9, 2026 (thirty in all)', () => {
     expect(gb.structuredContent.thin).toBe(false)
     expect((await call(app, 'who_covers', { country: 'AQ' })).content[0].text).toContain('WorldPulse reads no newsroom based in Antarctica')
     expect((await call(app, 'who_covers', { country: 'XX' })).isError).toBe(true)
+  })
+})
+
+describe('MCP server: the five tools of Nov 10, 2026 (thirty-five in all)', () => {
+  beforeEach(() => { asked = []; dayAsks = 0; DAY_WAIT.ms = 0 })
+
+  it("day lists one finished day's top stories; yesterday without a date", async () => {
+    const app = await build()
+    const r = await call(app, 'day', { date: '2026-11-03' })
+    expect(r.isError).toBe(false)
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/stories/day?date=2026-11-03'])
+    const text = r.content[0].text as string
+    expect(text).toContain('Tuesday, November 3, 2026 (UTC): the top stories by independent outlets')
+    expect(text).toContain('1. Ceasefire talks resume in Doha\n   Verified · 14 outlets in 9 countries')
+    expect(r.structuredContent).toMatchObject({ date: '2026-11-03', stories: [{ id: STORY.id, outlets: 14 }] })
+    asked = []
+    const y = await call(app, 'day')
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/stories/day'])
+    expect(y.structuredContent.date).toBe('2026-11-09')
+  })
+
+  it('day waits for a day being made, and passes on the reasons a day is refused', async () => {
+    const app = await build()
+    const r = await call(app, 'day', { date: '2026-11-01' })
+    expect(r.isError).toBe(false)
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/stories/day?date=2026-11-01', '/api/v1/stories/day?date=2026-11-01'])
+    const stuck = await call(app, 'day', { date: '2026-10-31' })
+    expect(stuck).toMatchObject({ isError: true, content: [{ text: 'That day is still being put together; ask again in a minute' }] })
+    expect((await call(app, 'day', { date: '2099-01-01' })).content[0].text).toContain('That day is not over yet')
+    expect((await call(app, 'day', { date: '2026-01-01' })).content[0].text).toContain('the last 30 days')
+    expect((await call(app, 'day', { date: 'Nov 3' })).isError).toBe(true)
+  })
+
+  it('unconfirmed lists the newest serious reports no second outlet has confirmed, each story once, newest first', async () => {
+    const app = await build()
+    const r = await call(app, 'unconfirmed')
+    expect(r.isError).toBe(false)
+    const urls = asked.map(a => a.url)
+    expect(urls).toContain('/api/v1/signals?status=pending&severity=critical&limit=30')
+    expect(urls).toContain('/api/v1/signals?status=pending&severity=high&limit=30')
+    expect(urls).toContain('/api/v1/public/second-outlets')
+    expect(urls.some(u => u.startsWith('/api/v1/stories/outlets?ids='))).toBe(true)
+    expect(urls.some(u => u.includes('severity=medium'))).toBe(false)
+    const text = r.content[0].text as string
+    expect(text).toContain('The newest unconfirmed high and critical reports, newest first: leads to check, not facts (WorldPulse):')
+    expect(text).toContain(`1. Explosion reported at refinery near Basra\n   Critical · 30m ago · Basra · via Reuters`)
+    expect(text).toContain('Only one outlet so far: unconfirmed')
+    expect(text).toContain(`2. Trains collide near Cairo\n   High · 2h ago · Egypt · via lonely.example · Only one outlet so far: unconfirmed\n   https://world-pulse.io/signals/${LONE_REPORT}`)
+    // its story was verified since
+    expect(text).not.toContain('Ceasefire talks resume in Doha')
+    expect(text).toContain('3,036 are waiting now; today 158 found one and 141 turned verified')
+    expect(r.structuredContent).toMatchObject({ severity: 'high', waiting: { reports: 3036, foundToday: 158, verifiedToday: 141 } })
+    expect(r.structuredContent.reports.map((x: { id: string }) => x.id)).toEqual([CRIT_REPORT, LONE_REPORT])
+  })
+
+  it('unconfirmed takes medium ones too, a subject and a country, and refuses others', async () => {
+    const app = await build()
+    const r = await call(app, 'unconfirmed', { severity: 'medium', category: 'economy', country: 'za', limit: 5 })
+    expect(r.isError).toBe(false)
+    expect(asked.map(a => a.url)).toContain('/api/v1/signals?status=pending&severity=medium&limit=30&category=economy&country=ZA')
+    expect(r.content[0].text).toContain('The newest unconfirmed medium, high and critical economy reports from South Africa')
+    expect(r.structuredContent.reports[0]).toMatchObject({ id: MEDIUM_REPORT, outlet: null })
+    expect((await call(app, 'unconfirmed', { severity: 'low' })).isError).toBe(true)
+    expect((await call(app, 'unconfirmed', { category: 'gossip' })).isError).toBe(true)
+  })
+
+  it('newly_verified lists the reports that just found a second outlet, with the outlets that confirmed them', async () => {
+    const app = await build()
+    const r = await call(app, 'newly_verified', { limit: 5 })
+    expect(r.isError).toBe(false)
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/public/second-outlets'])
+    const text = r.content[0].text as string
+    expect(text).toContain('Just verified: reports that turned verified when WorldPulse found a second, separate outlet')
+    expect(text).toContain('1. Troops rescue three kidnap victims in Adamawa\n   Medium · 12m ago · confirmed by Reuters')
+    expect(text).toContain(': "Nigerian troops free three hostages"; quicknews.example: "Troops repel attack in Adamawa"')
+    expect(text).toContain(`https://world-pulse.io/signals/${JUST_VERIFIED}`)
+    // listed once; not the one that didn't turn verified, nor one without a report id
+    expect(text.match(/Troops rescue/g)).toHaveLength(1)
+    expect(text).not.toContain('Not promoted')
+    expect(text).not.toContain('Dropped')
+    expect(text).toContain('Today so far (UTC): 158 reports found a second outlet and 141 turned verified; 3,036 are waiting')
+    expect(r.structuredContent.reports).toHaveLength(1)
+    expect(r.structuredContent.reports[0].confirmedBy).toEqual([
+      { site: 'reuters.com', title: 'Nigerian troops free three hostages', url: 'https://www.reuters.com/x' },
+      { site: 'quicknews.example', title: 'Troops repel attack in Adamawa', url: 'https://quicknews.example/y' },
+    ])
+    expect(r.structuredContent.today).toEqual({ found: 158, verified: 141, waiting: 3036 })
+  })
+
+  it("local_press lists stories many countries' outlets report while few or none are from the story's own country", async () => {
+    const app = await build()
+    const r = await call(app, 'local_press')
+    expect(r.isError).toBe(false)
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/stories?hours=24&limit=20'])
+    const text = r.content[0].text as string
+    expect(text).toContain('Stories outlets from many countries report while one or none of their outlets is from the country where they happen')
+    expect(text).toContain('1. Migrant boats capsize off Senegal and Greece\n   44 outlets from 28 countries · none of them from Senegal\n')
+    expect(text).toContain('2. Trump says the Iran war is effectively over\n   71 outlets from 36 countries · 1 from Iran (IranWire) · not verified yet\n')
+    // three home outlets, too few countries, or no home country: left out
+    expect(text).not.toContain('ANC slumps')
+    expect(text).not.toContain('Ceasefire talks')
+    expect(text).not.toContain('no home country')
+    expect(text).toContain('a low count is a lead to check, not proof that the local press is silent')
+    expect(r.structuredContent.stories.map((s: { homeOutlets: number; country: string }) => [s.country, s.homeOutlets])).toEqual([['SN', 0], ['IR', 1]])
+  })
+
+  it("local_press with a country gives each of its stories' home outlets", async () => {
+    const app = await build()
+    const r = await call(app, 'local_press', { country: 'za', hours: 48 })
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/stories?hours=48&limit=20&country=ZA'])
+    const text = r.content[0].text as string
+    expect(text).toContain('Top stories in South Africa, the last 48 hours: how many of their outlets are based there')
+    expect(text).toContain('1. ANC slumps to its worst result\n   29 outlets from 18 countries · 3 from South Africa (Daily Maverick, News24, SABC News)')
+    expect((await call(app, 'local_press', { country: 'FR' })).content[0].text).toContain('No story mostly placed in France was reported by two or more outlets')
+    expect((await call(app, 'local_press', { country: 'FRA' })).isError).toBe(true)
+  })
+
+  it('site_check says whether a website is a known AI content farm, its score as a source and what the directory knows', async () => {
+    const app = await build()
+    const farm = await call(app, 'site_check', { site: 'https://www.dailytrendingnews.net/2026/11/some-story' })
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/slop/check?domain=dailytrendingnews.net'])
+    expect(farm.isError).toBe(false)
+    expect(farm.content[0].text).toMatch(/^dailytrendingnews\.net: on WorldPulse's list of \d+ known AI content farms\. Its articles are likely machine-written/)
+    expect(farm.content[0].text).toContain('Overall: red flag.')
+    expect(farm.structuredContent).toMatchObject({ site: 'dailytrendingnews.net', aiContentFarm: true, verdict: 'red flag', directory: null })
+    const reuters = await call(app, 'site_check', { site: 'reuters.com' })
+    expect(reuters.content[0].text).toContain('reuters.com: not on WorldPulse\'s list of')
+    expect(reuters.content[0].text).toContain('WorldPulse reads it as a source (Reuters), with a reliability score of 96%.')
+    expect(reuters.content[0].text).toContain('In WorldPulse\'s outlet directory: Reuters, ')
+    expect(reuters.structuredContent).toMatchObject({ reliabilityScore: 0.96, verdict: 'no red flag known', directory: { name: 'Reuters' } })
+    const bbc = await call(app, 'site_check', { site: 'https://www.bbc.co.uk/news/articles/x' })
+    expect(bbc.content[0].text).toContain('It is not one of the sources WorldPulse scores.')
+    expect(bbc.content[0].text).toContain('In WorldPulse\'s outlet directory: BBC, ')
+    const shaky = await call(app, 'site_check', { site: 'shaky.example' })
+    expect(shaky.content[0].text).toContain('reliability score of 50%: moderate, check its claims elsewhere.')
+    expect(shaky.structuredContent.verdict).toBe('caution')
+    expect((await call(app, 'site_check', { site: 'nowhere.example' })).content[0].text).toContain('It is not in WorldPulse\'s directory of')
+    expect((await call(app, 'site_check', { site: 'not a site' })).isError).toBe(true)
   })
 })
