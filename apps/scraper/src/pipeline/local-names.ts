@@ -318,6 +318,9 @@ const ALBANIAN: Rule[] = [
   r('amerikan(?:e|[ëe]t|[ëe]ve|i|it)?', 'United States'), r('kinez(?:e|[ëe]t|[ëe]ve|i|it)?', 'Chinese'),
   r('ukrainas(?:e|i|it)?', 'Ukrainian'), r('izraelit(?:e|[ëe]t|[ëe]ve|i)?', 'Israeli'), r('gjerman(?:e|[ëe]t|[ëe]ve|i|it)?', 'German'),
   r('mali', '…'),
+  // "Beni" before a surname is a man's first name, not the Congo's Beni (Nov 9, 2026: Portalb's "Beni Shaqiri u bë
+  // këshilltar i Gjorgjievskit" sat in Beni)
+  cs('Beni(?=\\s+\\p{Lu})', '…'),
 ]
 
 const MALAY: Rule[] = [
@@ -591,6 +594,8 @@ const PORTUGUESE: Rule[] = [
     ['Quebeque', 'Quebec'], ['Otava', 'Ottawa'], ['Nova\\s+Orle(?:ães|ans)', 'New Orleans'], ['Filadélfia', 'Philadelphia'],
     ['Cisjordânia', 'West Bank'], ['Telavive', 'Tel Aviv'], ['Alepo', 'Aleppo'], ['Mossul', 'Mosul'], ['Bassorá', 'Basra'],
     ['Zaporíjia', 'Zaporizhzhia'], ['Crimeia', 'Crimea'], ['Sebastopol', 'Sevastopol'], ['Lugansk', 'Luhansk'], ['Ormuz', 'Hormuz'],
+    // Puerto Rico, not Porto (Nov 9, 2026: Notícias do Norte's "Armandina Cunha já se encontra no Porto Rico" sat in Portugal)
+    ['Porto\\s+Rico', 'Puerto Rico'],
   ]),
 ]
 /** French: no list until Nov 6, 2026, so Le Monde's "à Londres", "Moscou" or "Bruxelles" named no place */

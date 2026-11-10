@@ -134,6 +134,8 @@ const GIVEN_NAMES = new Set([
   // West Africa's (Nov 7, 2026)
   'issa', 'moussa', 'ousmane', 'amadou', 'mamadou', 'abdoulaye', 'ibrahima', 'seydou', 'boubacar', 'souleymane', 'aliou',
   'modou', 'lamine', 'kofi', 'kwame', 'kwaku', 'kojo', 'kwabena', 'aminata', 'fatoumata', 'mariam',
+  // Nov 9, 2026: "Deputy CM Pawan Kalyan to part ways with wife" (The Hindu) sat in Kalyan, Maharashtra
+  'pawan',
 ])
 /** The small words inside people's names, and not places': "José dos Santos", "Ludwig van Beethoven" */
 const NAME_PARTICLES = new Set(['dos', 'das', 'van', 'von', 'bin', 'ibn'])
