@@ -40,9 +40,11 @@ export const LASTUPDATE_TRANSLATION_URL = `${GDELT_BUCKET}/lastupdate-translatio
 export const TRANSLATION_FILE_URL = (stamp: string) => `${GDELT_BUCKET}/${stamp}.translation.gkg.csv.zip`
 /**
  * The translated list's languages that are read, by GDELT's code: French and German (Burundi, Comoros, Liechtenstein;
- * Nov 10, 2026, 1:37 PM), Spanish and Portuguese (Latin America, Equatorial Guinea, Lusophone Africa, Timor-Leste; that afternoon)
+ * Nov 10, 2026, 1:37 PM), Spanish and Portuguese (Latin America, Equatorial Guinea, Lusophone Africa, Timor-Leste; that
+ * afternoon), Russian and Arabic (Kyrgyzstan, Syria, Bahrain and the Gulf; that evening: 244 and 84 articles of the
+ * 17:00 UTC file)
  */
-export const TRANSLATED_LANGUAGES: Readonly<Record<string, string>> = { fra: 'fr', deu: 'de', spa: 'es', por: 'pt' }
+export const TRANSLATED_LANGUAGES: Readonly<Record<string, string>> = { fra: 'fr', deu: 'de', spa: 'es', por: 'pt', rus: 'ru', ara: 'ar' }
 /**
  * A fresh address for each request (Oct 22): GDELT lists a file the moment it
  * uploads it (10 to 15 minutes before the time in its name), and a request

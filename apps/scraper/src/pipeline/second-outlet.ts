@@ -56,7 +56,7 @@
 import { db } from '../lib/postgres'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
-import { FUNCTION_WORDS, confirmMergedArticle, foldAccents, isSameStory, namesDiffer, thinPlaceCodes, type CorrelationCandidate } from './correlate'
+import { FUNCTION_WORDS, confirmMergedArticle, foldAccents, isSameStory, namesDiffer, otherScriptWords, thinPlaceCodes, westernDigits, type CorrelationCandidate } from './correlate'
 import { isEventTemplateTitle } from './event-titles'
 import { isCopyOf } from './independence'
 import { hostOf, sourceKey } from './signal-columns'
@@ -145,6 +145,22 @@ const EVENTISH = new Set([
 ])
 
 /**
+ * Russian and Arabic event words (Nov 10, 2026, evening), in the one form storyWords gives them (correlate.ts
+ * otherScriptWords: "погибли" and "погибших" are one word, "الحكومة" and "حكومة" another)
+ */
+for (const word of otherScriptWords(foldAccents(
+  'погибли погиб погибших погибшие убиты убит убиты ранены раненых пострадали нападение напали атака атаки армия армии ' +
+  'войска полиция полиции милиция правительство правительства президент президента министр министра министерство выборы ' +
+  'выборов пожар пожара авария аварии дтп протест протесты митинг суд суда люди человек жители страна страны город ' +
+  'города власти депутаты парламент закон закона задержан задержали арестован взрыв удар удары обстрел ' +
+  'مقتل قتلى قتيل جرحى اصابة اصابات هجوم هجمات الجيش جيش قوات الشرطة الحكومة حكومة الرئيس رئيس وزير وزارة انتخابات حريق ' +
+  'حادث احتجاجات مظاهرات محكمة البلاد مواطنين اشخاص شخص المدينة مدينة البرلمان مجلس قانون اعتقال القبض انفجار قصف غارة غارات',
+))) if (!word.startsWith('@') && !word.startsWith('#')) EVENTISH.add(word)
+
+/** The languages read in their own script (Nov 10, 2026): their words as storyWords reads them */
+const OTHER_SCRIPT_LANGUAGES = new Set(['ru', 'ar'])
+
+/**
  * Small words of French, German, Spanish and Portuguese headlines that correlate.ts's FUNCTION_WORDS leaves out
  * because they are English words or names too ("die", "son", "pas", "era"): read as small words in those languages'
  * headlines only (Nov 10, 2026)
@@ -167,6 +183,14 @@ const FOREIGN_PLAIN = new Set([
 export function storyTokens(title: string, lang = 'en'): string[] {
   const foreign = lang !== 'en'
   const out = new Set<string>()
+  if (OTHER_SCRIPT_LANGUAGES.has(lang)) {
+    // A Russian or Arabic headline (Nov 10, 2026): its words in storyWords' one form, without the little words
+    // and the countries; its numbers and Latin words as an English headline's
+    const folded = foldAccents(westernDigits(title))
+    for (const word of otherScriptWords(folded)) if (!word.startsWith('@') && !word.startsWith('#')) out.add(word)
+    for (const raw of folded.split(/[^a-z0-9]+/)) if (raw.length >= 3 && !PLAIN.has(raw)) out.add(raw)
+    return [...out]
+  }
   const text = title.replace(/[‘’]/g, "'")
   for (const raw of (foreign ? foldAccents(text) : text.toLowerCase()).split(/[^\p{L}\p{N}']+/u)) {
     // (a French elision is no word of its own: "l'armée", "d'Iran", "qu'il")
@@ -295,10 +319,12 @@ export const FEATURE_RE = /^(?:factbox|fact\s?check|explainer|analysis|timeline|
  * carburant augmente de 20 % à Bujumbura"
  */
 export function nearCopy(a: string, b: string, lang = 'en'): boolean {
-  const foreign = lang !== 'en'
+  // (a Russian or Arabic headline by its words as written, accents folded: one form of each word made a rewording
+  // with the same words, "зарплаты учителей вырастут" for "о повышении зарплат учителям", a copy; Nov 10, 2026)
+  const foreign = lang !== 'en' && !OTHER_SCRIPT_LANGUAGES.has(lang)
   const words = (t: string) => foreign
     ? storyTokens(t, lang)
-    : t.toLowerCase().replace(/[\u2018\u2019']/g, '').split(/[^\p{L}\p{N}]+/u).filter(w => w.length > 1)
+    : (OTHER_SCRIPT_LANGUAGES.has(lang) ? foldAccents(t) : t.toLowerCase()).replace(/[\u2018\u2019']/g, '').split(/[^\p{L}\p{N}]+/u).filter(w => w.length > 1)
   const [wa, wb] = [words(a), words(b)]
   const [short, long] = wa.length <= wb.length ? [wa, wb] : [wb, wa]
   if (short.length < (foreign ? 4 : 5)) return false
@@ -319,7 +345,7 @@ export interface HeldReport {
   lat: number | null
   lng: number | null
   tags: string[]
-  /** Its language: 'en' (the default), 'fr', 'de', 'es' or 'pt' (Nov 10, 2026) */
+  /** Its language: 'en' (the default), 'fr', 'de', 'es', 'pt', 'ru' or 'ar' (Nov 10, 2026) */
   language?: string
 }
 
@@ -628,8 +654,8 @@ async function quietPlaces(now: Date): Promise<string[]> {
 
 /**
  * The reports waiting for a second outlet: pending, one outlet, settled, from the last 30 hours, in English, French,
- * German, Spanish or Portuguese, medium or above, or low from a quiet place's own outlets (each feed tags its items
- * with its country)
+ * German, Spanish, Portuguese, Russian or Arabic, medium or above, or low from a quiet place's own outlets (each feed
+ * tags its items with its country)
  */
 export function waitingQuery(quiet: readonly string[], now: Date): { sql: string; bindings: unknown[] } {
   return {
@@ -639,7 +665,7 @@ export function waitingQuery(quiet: readonly string[], now: Date): { sql: string
          FROM signals
         WHERE status = 'pending' AND COALESCE(source_count, 1) <= 1
           AND (severity IN ('medium', 'high', 'critical') OR (severity = 'low' AND tags && ?::text[]))
-          AND language IN ('en', 'fr', 'de', 'es', 'pt')
+          AND language IN ('en', 'fr', 'de', 'es', 'pt', 'ru', 'ar')
           AND cardinality(original_urls) >= 1
           AND created_at > ?::timestamptz AND created_at < ?::timestamptz
         ORDER BY created_at DESC

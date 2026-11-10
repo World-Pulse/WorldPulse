@@ -128,7 +128,7 @@ describe("the quiet places' everyday stories (Nov 10, 2026)", () => {
   it('are searched beside the serious stories, in English, French and German', () => {
     const { sql, bindings } = waitingQuery(['dm', 'bi'], new Date('2026-11-10T12:00:00Z'))
     expect(sql).toMatch(/severity IN \('medium', 'high', 'critical'\) OR \(severity = 'low' AND tags && \?::text\[\]\)/)
-    expect(sql).toMatch(/language IN \('en', 'fr', 'de', 'es', 'pt'\)/)
+    expect(sql).toMatch(/language IN \('en', 'fr', 'de', 'es', 'pt', 'ru', 'ar'\)/)
     expect(bindings[0]).toEqual(['dm', 'bi'])
   })
 })
