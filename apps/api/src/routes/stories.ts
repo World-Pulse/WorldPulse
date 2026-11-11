@@ -6,6 +6,7 @@
  * (the home page's "Developing Stories", plan item 12e).
  */
 
+import { regionCountries, type RegionId } from '../lib/regions'
 import type { FastifyPluginAsync } from 'fastify'
 import type { Knex } from 'knex'
 import { db } from '../db/postgres'
@@ -102,17 +103,19 @@ const MEMBER_COLUMNS = `s.id, s.title, s.category::text AS category, s.status::t
  * A story is the signals sharing story_id, or a signal no story has claimed
  * whose links come from at least two addresses.
  */
-export function storyListSql(hasStoryIds: boolean, scope: 'recent' | 'signals' | 'week' | 'country' = 'recent'): string {
+export function storyListSql(hasStoryIds: boolean, scope: 'recent' | 'signals' | 'week' | 'country' | 'countries' = 'recent'): string {
   // scope 'signals': only the stories of the signals in an extra first binding
   // (uuid[]), e.g. the reports that name one entity (lib/entity-profile.ts).
   // scope 'country': only stories with a report placed in the country of an
   // extra first binding (its two-letter code; a country's page, plan 14)
+  // scope 'countries': with a report placed in one of the countries of an extra first binding (bpchar[]: a region's,
+  // lib/regions.ts, Nov 10, 2026)
   // scope 'week': reported between the first two bindings (from, to), the
   // biggest stories first instead of the newest, and only the week's own
   // reports counted, so a finished week stays as it was and a story running
   // for months doesn't top every week (GET /stories/week, plan G11)
   const week = scope === 'week'
-  const only = scope === 'signals' ? 'id = ANY(?::uuid[]) AND ' : scope === 'country' ? 'country_code = ? AND ' : ''
+  const only = scope === 'signals' ? 'id = ANY(?::uuid[]) AND ' : scope === 'country' ? 'country_code = ? AND ' : scope === 'countries' ? 'country_code = ANY(?::bpchar[]) AND ' : ''
   const since = week ? 'created_at >= (SELECT lo FROM win) AND created_at < (SELECT hi FROM win)' : 'created_at >= ?'
   const inWeek = week ? ' AND s.created_at >= (SELECT lo FROM win) AND s.created_at < (SELECT hi FROM win)' : ''
   const order = week ? 'count(*) DESC, max(created_at) DESC' : 'max(created_at) DESC'
@@ -199,12 +202,14 @@ export function storyListSql(hasStoryIds: boolean, scope: 'recent' | 'signals' |
  * The stories most outlets reported in the last `hours`, ranked as
  * GET /api/v1/stories ranks them (also the email briefing's stories, plan G4).
  */
-export async function topStories(hours: number, limit: number, country?: string): Promise<ListedStory[]> {
+export async function topStories(hours: number, limit: number, country?: string, region?: RegionId): Promise<ListedStory[]> {
   const since = new Date(Date.now() - hours * 3_600_000)
   const hasStoryIds = await signalsHaveStoryIds()
   const result = country
     ? await longQuery(LIST_QUERY_SECONDS, trx => trx.raw(storyListSql(hasStoryIds, 'country'), [country, since, EVENT_TEMPLATE_SQL]))
-    : await longQuery(LIST_QUERY_SECONDS, trx => trx.raw(storyListSql(hasStoryIds), [since, EVENT_TEMPLATE_SQL]))
+    : region
+      ? await longQuery(LIST_QUERY_SECONDS, trx => trx.raw(storyListSql(hasStoryIds, 'countries'), [regionCountries(region), since, EVENT_TEMPLATE_SQL]))
+      : await longQuery(LIST_QUERY_SECONDS, trx => trx.raw(storyListSql(hasStoryIds), [since, EVENT_TEMPLATE_SQL]))
   return rankStories(candidatesOf(result), limit)
 }
 
@@ -416,7 +421,8 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
 
   /**
    * GET /api/v1/stories?hours=12&limit=6 (&country=NG: only stories with a
-   * report placed in that country, for its page, plan 14, Oct 20, 2026)
+   * report placed in that country, for its page, plan 14, Oct 20, 2026;
+   * &region=africa: in one of a region's countries, lib/regions.ts, Nov 10, 2026)
    * The stories most outlets are reporting: reported in the last `hours`
    * (1-72) by at least two outlets, ranked by how many outlets and how serious,
    * halving every 6 hours since the last report; each event once.
@@ -425,14 +431,15 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
     const qr = parseQuery(StoryListQuerySchema, req.query)
     if (qr.error) return sendError(reply, 400, 'VALIDATION_ERROR', qr.error)
     const { hours, limit, country } = qr.data
+    const region = country ? undefined : qr.data.region
 
     // The kept list at once; when it is 2 minutes old, one process remakes it in the background
     const response = await staleWhileRevalidate(
-      country ? `stories:list:v2:${country}:${hours}:${limit}` : `stories:list:v2:${hours}:${limit}`,
+      country ? `stories:list:v2:${country}:${hours}:${limit}` : region ? `stories:list:v2:region:${region}:${hours}:${limit}` : `stories:list:v2:${hours}:${limit}`,
       { freshSeconds: LIST_CACHE_TTL, staleSeconds: LIST_KEEP_SECONDS, lockSeconds: LIST_QUERY_SECONDS * 2 },
       async () => ({
         success: true,
-        data: { stories: await topStories(hours, limit, country), hours, ...(country ? { country } : {}), generatedAt: new Date().toISOString() },
+        data: { stories: await topStories(hours, limit, country, region), hours, ...(country ? { country } : {}), ...(region ? { region } : {}), generatedAt: new Date().toISOString() },
       }),
     )
     return reply.send(response)

@@ -61,6 +61,16 @@ const MCP_TOOLS = [
   { name: 'outlet_mix', what: 'What kinds of newsroom carry a story, state media among them' },
   { name: 'country_compare', what: 'Two countries side by side: reports, verified share, languages, newsrooms' },
   { name: 'space_weather', what: "NOAA's space weather alerts and the last day's storm levels" },
+  { name: 'chokepoints_news', what: 'The shipping chokepoints named in the news, in seven languages' },
+  { name: 'exploited_vulnerabilities', what: "CISA's newest Known Exploited Vulnerabilities, ransomware use marked" },
+  { name: 'travel_advice', what: "A country's US State Department level and its US and UK travel notices" },
+  { name: 'first_reporters', what: 'The outlets that most often report a story first' },
+  { name: 'verification_speed', what: 'How fast stories find a second outlet: the median, the fastest, the slowest' },
+  { name: 'topics_today', what: 'The topics of the news now, against the hours before' },
+  { name: 'outlet_reports', what: "One outlet's newest reports, by its website" },
+  { name: 'region_top_stories', what: "A region's top stories: Africa, the Americas, Asia, Europe, the Middle East, Oceania" },
+  { name: 'rising_stories', what: 'New stories spreading fast: begun in the last hours, many outlets already' },
+  { name: 'thin_coverage', what: 'The places WorldPulse reads few newsrooms in, by region' },
 ]
 const MCP_CURSOR = '{"mcpServers":{"worldpulse":{"url":"https://api.world-pulse.io/mcp"}}}'
 

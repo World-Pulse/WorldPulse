@@ -334,8 +334,10 @@ const toolsBlock = (src: string) => src.slice(src.indexOf('export const TOOLS'),
     // Nov 10, night: 50 tools, 37 routes (military_aircraft and emergency_flights share the aircraft now; space_weather
     // asks two; similar_reports, reader_flags and outlet_mix ask one story too; country_compare the places and a
     // country's days)
-    expect(MCP_TOOLS.length).toBe(50)
-    expect(asked.length).toBeGreaterThanOrEqual(37)
+    // Nov 10, night, round 2: 60 tools, 44 routes (seven open counts of public-insights.ts; region_top_stories and
+    // rising_stories ask the top stories; thin_coverage reads the directory)
+    expect(MCP_TOOLS.length).toBe(60)
+    expect(asked.length).toBeGreaterThanOrEqual(44)
     const named: Record<string, string> = {
       '/api/v1/stories': 'the top stories', '/api/v1/stories/:param': 'one story', '/api/v1/search/semantic': 'search by meaning',
       '/api/v1/stories/week': 'the week', '/api/v1/stories/by-link': 'the story of a news link',
@@ -359,6 +361,10 @@ const toolsBlock = (src: string) => src.slice(src.indexOf('export const TOOLS'),
       '/api/v1/signals/count': 'the report counts', '/api/v1/signals/:param/similar': 'a report\'s closest reports',
       '/api/v1/signals/:param/flags': 'a report\'s reader flags', '/api/v1/space-weather/summary': 'the space weather',
       '/api/v1/space-weather/recent': 'the space weather',
+      '/api/v1/public/chokepoints': 'the chokepoints named in the news', '/api/v1/public/vulnerabilities': 'the exploited vulnerabilities',
+      '/api/v1/public/travel-advice': 'the travel advice', '/api/v1/public/first-reporters': 'the first reporters',
+      '/api/v1/public/verification-speed': 'the verification times', '/api/v1/public/topics': 'the topics of the news',
+      '/api/v1/public/outlet-reports': 'an outlet\'s reports',
     }
     const said = TEXT.slice(TEXT.indexOf('Each tool asks the API\'s own open endpoints'), TEXT.indexOf('How to connect'))
     const routeLike = (path: string) => API_ROUTES.find(r => r.method === 'GET' && r.path.replace(/:[A-Za-z_]+/g, ':param') === path)

@@ -33,6 +33,7 @@ import { registerDeveloperRoutes } from './routes/developer'
 import { registerEmbedRoutes } from './routes/embed'
 import { registerStixRoutes } from './routes/stix'
 import { registerPublicRoutes } from './routes/public'
+import { registerPublicInsightRoutes } from './routes/public-insights'
 import { registerNotificationRoutes } from './routes/notifications'
 import { registerPushRoutes } from './routes/push'
 import { registerUploadRoutes } from './routes/uploads'
@@ -324,6 +325,7 @@ async function bootstrap() {
   await app.register(registerEmbedRoutes,        { prefix: '/api/v1/embed' })
   await app.register(registerStixRoutes,         { prefix: '/api/v1/stix' })
   await app.register(registerPublicRoutes,       { prefix: '/api/v1/public' })
+  await app.register(registerPublicInsightRoutes, { prefix: '/api/v1/public' })
   await app.register(registerBriefingRoutes,        { prefix: '/api/v1/briefings' })
   await app.register(registerBriefingDailyRoutes,   { prefix: '/api/v1/briefing' })
   await app.register(registerCountryRoutes,     { prefix: '/api/v1/countries' })

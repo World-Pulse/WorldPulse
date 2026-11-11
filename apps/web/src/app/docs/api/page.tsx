@@ -568,8 +568,9 @@ export default function ApiDocsPage() {
               map&apos;s protest, outbreak and displacement layers, one day&apos;s top stories, the second outlets
               found for one-outlet reports, the AI content farm check, the languages of the news, where news goes
               unconfirmed, the aircraft now, the public cameras, the countries' report counts, the report counts, a
-              report's closest reports, a report's reader flags and the space weather; outlet and who_covers read the
-              outlet directory), and
+              report's closest reports, a report's reader flags, the space weather, the chokepoints named in the news, the
+              exploited vulnerabilities, the travel advice, the first reporters, the verification times, the topics of
+              the news and an outlet's reports; outlet, who_covers and thin_coverage read the outlet directory), and
               those calls count against your limits
               on them too. How to connect Claude, Claude Code or Cursor is on the{' '}
               <Link href={MCP_GUIDE} className="text-amber-400 hover:text-amber-300">developer page</Link>.

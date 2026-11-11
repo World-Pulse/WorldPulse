@@ -163,6 +163,8 @@ export const StoryListQuerySchema = z.object({
   limit: intParam(6, 1, 20),
   // One country's stories (plan 14, Oct 20, 2026): an ISO 3166-1 alpha-2 code
   country: z.string().trim().regex(/^[A-Za-z]{2}$/, 'country must be a two-letter country code').transform(c => c.toUpperCase()).optional(),
+  // One region's stories (lib/regions.ts, Nov 10, 2026); a country, when given too, wins
+  region: z.enum(['africa', 'americas', 'asia', 'europe', 'middle-east', 'oceania']).optional(),
 })
 
 export type StoryListQuery = z.infer<typeof StoryListQuerySchema>
