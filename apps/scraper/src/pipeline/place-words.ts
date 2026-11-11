@@ -241,6 +241,10 @@ export function partOfAName(text: string, at: number, end: number, surname?: boo
   // Spanish "los lagos" is the lakes, not Lagos (Nov 6, 2026: "Los lagos de Palermo se secan" was pinned in Nigeria;
   // Chile's Los Lagos region is a gazetteer place of its own)
   if (hit.toLowerCase() === 'lagos' && wordBefore(text, at)?.toLowerCase() === 'los') return true
+  // The UN envoy María Ángela Holguín, not Cuba's Holguín (Nov 10, 2026: the Cyprus Mail's "Holguin meeting keeps Cyprus
+  // talks going" was pinned in Cuba): her name after a given name or "envoy", or the surname with a meeting, talks or visit
+  if (/^holgu[ií]n$/i.test(hit) && (/\b(?:mar[ií]a[ \t]+[AÁ]ngela|[AÁ]ngela|envoy|ms\.?|mrs\.?)[ \t]+$/i.test(text.slice(Math.max(0, at - 16), at))
+    || /^[ \t]+(?:meeting|meetings|talks|visit|visits|proposal|report|says|said|will|has|met|to[ \t]+(?:meet|visit))\b/i.test(text.slice(end, end + 14)))) return true
   if (!startsUpper(hit)) return false
   // A ship named after a place, not the place (Nov 6, 2026: Antara's "Indonesia, US navies honor USS Houston in joint
   // dive"): "USS Houston", "HMS Belfast", "INS Mumbai", "the MV Ruby"

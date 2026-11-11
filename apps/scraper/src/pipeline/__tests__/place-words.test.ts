@@ -77,3 +77,15 @@ describe('a place that is part of a name', () => {
     expect(placesInText('One more person arrested in connection with Kolkata Durga Puja stampede')).toEqual(['Kolkata'])
   })
 })
+
+describe('the UN envoy Holguín is not Cuba\'s Holguín (Nov 10, 2026)', () => {
+  const read = (t: string, w = 'Holguin') => { const i = t.indexOf(w); return partOfAName(t, i, i + w.length) }
+  it('skips her name and the surname with a meeting', () => {
+    expect(read('Our View: Holguin meeting keeps Cyprus talks going for few more weeks')).toBe(true)
+    expect(read('UN envoy Maria Angela Holguin arrives in Nicosia')).toBe(true)
+  })
+  it('keeps the city', () => {
+    expect(read('Floods hit homes in Holguin province')).toBe(false)
+    expect(read('Un accidente en Holguín deja tres muertos', 'Holguín')).toBe(false)
+  })
+})
