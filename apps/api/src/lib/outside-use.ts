@@ -182,3 +182,55 @@ export async function outsideUse(redis: Pick<Redis, 'hgetall'>, days = 14, now =
   }
   return out
 }
+
+// ─── AI tool use, in public (Devon, Nov 11, 2026: "Yes, ai tools can be public now that we have 100") ───
+// GET /api/v1/public/ai-tools (routes/mcp.ts): the MCP server's tool calls from outside, a UTC day at a time.
+// Counts only, as above: no addresses, keys, user agents or questions.
+
+/** The most days a public answer covers (the counts are kept 45 days) */
+export const AI_TOOLS_DAYS_MAX = 45
+
+export interface AiToolsUse {
+  /** Tools the MCP server offers */
+  offered: number
+  /** The days asked for, oldest first, today (UTC) last */
+  days: Array<{ day: string; calls: number }>
+  today: number
+  last7Days: number
+  /** Over all the days asked for */
+  total: number
+  /** Tools called at least once over the days asked for */
+  toolsUsed: number
+  /** The most called tools over the last 7 days, most first (10 at most) */
+  topTools: Array<{ tool: string; calls: number }>
+}
+
+/** One public answer from each day's tool counts (today first, as readMcpUse gives them) */
+export function aiToolsUse(byDay: Array<{ day: string; mcp: Record<string, string> | null }>, offered: number): AiToolsUse {
+  const days = byDay.map(d => ({ day: d.day, calls: num(d.mcp?.total) }))
+  const week = new Map<string, number>()
+  const used = new Set<string>()
+  byDay.forEach((d, i) => {
+    for (const [tool, n] of Object.entries(d.mcp ?? {})) {
+      if (tool === 'total' || num(n) === 0) continue
+      used.add(tool)
+      if (i < 7) week.set(tool, (week.get(tool) ?? 0) + num(n))
+    }
+  })
+  return {
+    offered,
+    days: [...days].reverse(),
+    today: days[0]?.calls ?? 0,
+    last7Days: days.slice(0, 7).reduce((s, d) => s + d.calls, 0),
+    total: days.reduce((s, d) => s + d.calls, 0),
+    toolsUsed: used.size,
+    topTools: [...week].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 10).map(([tool, calls]) => ({ tool, calls })),
+  }
+}
+
+/** Each of the last `days` UTC days' tool counts, today first */
+export async function readMcpUse(redis: Pick<Redis, 'hgetall'>, days: number, now = new Date()): Promise<Array<{ day: string; mcp: Record<string, string> | null }>> {
+  const n = Math.min(AI_TOOLS_DAYS_MAX, Math.max(1, Math.floor(days) || 1))
+  const dates = Array.from({ length: n }, (_, i) => new Date(now.getTime() - i * 86_400_000))
+  return Promise.all(dates.map(async d => ({ day: day(d), mcp: await redis.hgetall(mcpUseKey(d)).catch(() => null) })))
+}

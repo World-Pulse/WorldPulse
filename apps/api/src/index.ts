@@ -86,7 +86,7 @@ import { registerMapTopicRoutes }        from './routes/map/topics'
 import { registerMapSatelliteRoutes }    from './routes/map/satellites'
 import { registerClaimsRoutes }          from './routes/claims'
 import { registerPulseRoutes }           from './routes/pulse'
-import { registerMcpRoutes }             from './routes/mcp'
+import { registerMcpRoutes, registerAiToolsUseRoute } from './routes/mcp'
 import { registerWSHandler, startRedisSubscriber } from './ws/handler'
 import { registerGraphQL } from './graphql'
 import { metricsPlugin } from './middleware/metrics'
@@ -399,6 +399,8 @@ async function bootstrap() {
   await app.register(registerPulseRoutes,             { prefix: '/api/v1/pulse' })
   // WorldPulse for AI assistants: an MCP server (routes/mcp.ts, plan 15)
   await app.register(registerMcpRoutes,               { prefix: '/mcp' })
+  // How often AI apps call those tools, in public (Nov 11, 2026)
+  await app.register(registerAiToolsUseRoute,         { prefix: '/api/v1/public/ai-tools' })
 
   // ─── GRAPHQL ─────────────────────────────────────────────
   await registerGraphQL(app)

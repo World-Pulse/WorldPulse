@@ -23,7 +23,7 @@ import { rateLimitKey } from '../lib/rate-limit-options'
 import { describeSite, siteInfo, countryLabel, outletOf, OUTLET_KIND_LABELS } from '../lib/outlets'
 import { OUTLET_DIRECTORY } from '../lib/outlet-directory'
 import { hostOf } from '../lib/stories'
-import { countMcpTool, isOutsideUse, isOwnCheck } from '../lib/outside-use'
+import { countMcpTool, isOutsideUse, isOwnCheck, aiToolsUse, readMcpUse, AI_TOOLS_DAYS_MAX, type AiToolsUse } from '../lib/outside-use'
 import { redis } from '../db/redis'
 import { CHOKEPOINTS } from '../lib/chokepoints'
 import { SQUAWK, notBreakingNews } from '../lib/breaking-news'
@@ -4761,4 +4761,30 @@ export const registerMcpRoutes: FastifyPluginAsync = async (app) => {
       })
     }
   }
+}
+
+/**
+ * GET /api/v1/public/ai-tools (Devon, Nov 11, 2026: "Yes, ai tools can be public now that we have 100"): how often AI
+ * apps called the tools above, a UTC day at a time. Only calls from outside are counted (lib/outside-use.ts): not the
+ * website's, not WorldPulse's own checks. Counts only: no addresses, keys or questions. Kept 1 minute.
+ */
+export const registerAiToolsUseRoute: FastifyPluginAsync = async (app) => {
+  let kept: { at: number; days: number; data: AiToolsUse } | null = null
+  app.get('/', {
+    schema: {
+      tags: ['public'],
+      summary: "How often AI apps call WorldPulse's MCP tools, a day at a time (public, no auth required)",
+      description: `Calls to the tools at ${API_SITE}/mcp from outside WorldPulse, by UTC day: today, the last 7 days and the days asked for `
+        + `(?days=1 to ${AI_TOOLS_DAYS_MAX}, 30 by default), with the most called tools of the last 7 days. Counts only: no addresses, keys or questions.`,
+    },
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    reply.header('Access-Control-Allow-Origin', '*')
+    const asked = Number((req.query as { days?: unknown }).days)
+    const days = Number.isInteger(asked) && asked >= 1 && asked <= AI_TOOLS_DAYS_MAX ? asked : 30
+    if (!kept || kept.days !== days || Date.now() - kept.at > 60_000) {
+      kept = { at: Date.now(), days, data: aiToolsUse(await readMcpUse(redis, days), TOOLS.length) }
+    }
+    return reply.send({ success: true, data: { ...kept.data, readAt: new Date(kept.at).toISOString() } })
+  })
 }
