@@ -7,7 +7,7 @@ import { useTheme } from '@/components/providers'
 import { useToast } from '@/components/Toast'
 import DigestSubscription from '@/components/settings/DigestSubscription'
 import { authHref } from '@/lib/auth-next'
-import { deleteMyAccount, DELETE_HELP } from '@/lib/delete-account'
+import { closeMyAccount, CLOSED_DONE, CLOSE_POINTS, CLOSE_AFTER } from '@/lib/close-account'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -72,10 +72,11 @@ function ConfirmModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
       <div className="bg-[#0d0d0d] border border-[rgba(255,59,92,0.3)] rounded-2xl p-6 max-w-sm w-full shadow-2xl">
         <div className="text-[20px] mb-2">⚠️</div>
-        <h2 className="text-[16px] font-bold text-wp-text mb-2">Delete Account</h2>
-        <p className="text-[13px] text-wp-text2 mb-5">
-          Are you sure? This cannot be undone. All your posts, signals, and data will be permanently deleted.
-        </p>
+        <h2 className="text-[16px] font-bold text-wp-text mb-2">Close your account?</h2>
+        <ul className="text-[13px] text-wp-text2 mb-3 list-disc pl-5 space-y-1">
+          {CLOSE_POINTS.map(point => <li key={point}>{point}</li>)}
+        </ul>
+        <p className="text-[13px] text-wp-text2 mb-5">{CLOSE_AFTER}</p>
         <div className="flex gap-3">
           <button
             onClick={onCancel}
@@ -89,7 +90,7 @@ function ConfirmModal({
             disabled={loading}
             className="flex-1 py-2.5 rounded-lg bg-wp-red text-white font-bold text-[13px] hover:bg-[#ff1f45] transition-all disabled:opacity-50"
           >
-            {loading ? 'Deleting…' : 'Delete Account'}
+            {loading ? 'Closing…' : 'Close account'}
           </button>
         </div>
       </div>
@@ -126,6 +127,8 @@ export default function SettingsPage() {
   useEffect(() => {
     const token = localStorage.getItem('wp_access_token')
     if (!token) { router.push(authHref('login', '/settings')); return }
+    // /settings#danger opens on the Danger Zone (the profile page's "Close account in Settings" link)
+    if (window.location.hash === '#danger') setTab('danger')
 
     // Restore notification prefs from localStorage
     try {
@@ -211,22 +214,24 @@ export default function SettingsPage() {
     setNotifPrefs(prev => ({ ...prev, [key]: value }))
   }
 
-  async function deleteAccount() {
+  // Closes the account (Nov 11, 2026; lib/close-account.ts): nothing is deleted, and it is done only when the server
+  // says so
+  async function closeAccount() {
     const token = localStorage.getItem('wp_access_token')
     if (!token) return
     setDeleting(true)
 
-    // done only when the server says so (Nov 11, 2026): a 404 was taken for done, and the reader was signed out with
-    // the account still there
-    if (!(await deleteMyAccount(API_URL, token))) {
-      toast(DELETE_HELP, 'error')
+    const answer = await closeMyAccount(API_URL, token)
+    if (!answer.ok) {
+      toast(answer.message, 'error')
       setDeleting(false)
       setShowDeleteModal(false)
       return
     }
 
-    // Clear all localStorage and redirect
+    // Signed out here too: clear all localStorage and go home
     localStorage.clear()
+    toast(CLOSED_DONE, 'success')
     router.push('/')
   }
 
@@ -263,7 +268,7 @@ export default function SettingsPage() {
     <>
       {showDeleteModal && (
         <ConfirmModal
-          onConfirm={deleteAccount}
+          onConfirm={closeAccount}
           onCancel={() => setShowDeleteModal(false)}
           loading={deleting}
         />
@@ -518,16 +523,17 @@ export default function SettingsPage() {
 
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <div className="text-[14px] font-semibold text-wp-text">Delete Account</div>
+                    <div className="text-[14px] font-semibold text-wp-text">Close account</div>
                     <div className="text-[12px] text-wp-text3 mt-0.5">
-                      Permanently delete your account and all associated data. This action cannot be undone.
+                      Signs you out and stops your sign-in, API keys, email alerts and WorldPulse emails. Nothing is
+                      deleted: to open it again, or to have your data erased, email support@world-pulse.io.
                     </div>
                   </div>
                   <button
                     onClick={() => setShowDeleteModal(true)}
                     className="flex-shrink-0 px-4 py-2 rounded-lg border border-wp-red text-wp-red text-[13px] font-semibold hover:bg-[rgba(255,59,92,0.1)] transition-all"
                   >
-                    Delete Account
+                    Close account
                   </button>
                 </div>
               </div>

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { afterSignIn, authHref, nextFromLocation } from '@/lib/auth-next'
+import { signInErrorText } from '@/lib/sign-in-error'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -23,7 +24,12 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   // The page to return to (?next=, plan G13), read once the page is in the browser
   const [next, setNext] = useState<string | null>(null)
-  useEffect(() => { setNext(nextFromLocation()) }, [])
+  useEffect(() => {
+    setNext(nextFromLocation())
+    // Sent back from GitHub sign-in with ?error= (a closed account, or GitHub didn't answer)
+    const sent = signInErrorText(new URLSearchParams(window.location.search).get('error'))
+    if (sent) setError(sent)
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()

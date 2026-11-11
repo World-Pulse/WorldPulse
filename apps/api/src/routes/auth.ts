@@ -10,6 +10,8 @@ import { sendError } from '../lib/errors'
 import { markSeen } from '../lib/last-seen'
 import { EMAIL_CONFIGURED, sendEmail } from '../lib/email'
 import { signupTrap, signupAllowed, countSignup, noteTrapped } from '../lib/signup-guard'
+import { endSessions } from '../lib/sessions'
+import { isClosed, CLOSED_SIGN_IN_TEXT, CLOSED_EMAIL_TAKEN_TEXT } from '../lib/account-close'
 import {
   resetConfigured, resetToken, parseResetToken, checkResetToken, resetLink, resetEmail, resetCountKey,
   RESETS_PER_HOUR, RESET_SENT_TEXT, RESET_OFFLINE_TEXT, RESET_DONE_TEXT, RESET_EXPIRED_TEXT, RESET_INVALID_TEXT,
@@ -166,6 +168,8 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
 
     if (exists) {
       const field = exists.email === email ? 'email' : 'handle'
+      // A closed account keeps its address (lib/account-close.ts): say how to open it again
+      if (field === 'email' && isClosed(exists)) return sendError(reply, 409, 'CONFLICT', CLOSED_EMAIL_TAKEN_TEXT)
       return sendError(reply, 409, 'CONFLICT', `That ${field} is already taken`)
     }
 
@@ -225,7 +229,7 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
         },
         400: { description: 'Validation error', ...ErrorSchema },
         401: { description: 'Invalid credentials', ...ErrorSchema },
-        403: { description: 'Account suspended', ...ErrorSchema },
+        403: { description: 'Account closed or suspended', ...ErrorSchema },
         429: { description: 'Too many login attempts', ...ErrorSchema },
       },
     },
@@ -251,14 +255,16 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
       return sendError(reply, 401, 'UNAUTHORIZED', 'Invalid credentials')
     }
 
-    if (user.suspended) {
-      return sendError(reply, 403, 'FORBIDDEN', 'Account suspended')
-    }
-
     const valid = await bcrypt.compare(password, user.password_hash)
     if (!valid) {
       await recordFailedLogin(email)
       return sendError(reply, 401, 'UNAUTHORIZED', 'Invalid credentials')
+    }
+
+    // Only once the password is right (Nov 11, 2026): a closed or suspended account isn't told apart from a wrong
+    // password for anyone who doesn't know it. A closed one says how to open it again (lib/account-close.ts).
+    if (user.suspended) {
+      return sendError(reply, 403, 'FORBIDDEN', isClosed(user) ? CLOSED_SIGN_IN_TEXT : 'Account suspended')
     }
 
     // Clear failed attempts on successful login
@@ -449,6 +455,9 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
   }, async (req, reply) => {
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000'
     const errorRedirect = `${frontendUrl}/auth/login?error=oauth_failed`
+    // A closed or suspended account isn't signed in with GitHub either (Nov 11, 2026); the sign-in page says which
+    const refusedRedirect = (u: Record<string, unknown>) =>
+      `${frontendUrl}/auth/login?error=${isClosed(u) ? 'account_closed' : 'account_suspended'}`
 
     const { code, state, error } = req.query as { code?: string; state?: string; error?: string }
 
@@ -507,10 +516,12 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
 
       // Look up existing user by github_id
       let user = await db('users').where('github_id', ghProfile.id).first()
+      if (user?.suspended) return reply.redirect(refusedRedirect(user), 302)
 
       if (!user) {
         // Check if email is already registered — link the account
         user = await db('users').where('email', primaryEmail).first()
+        if (user?.suspended) return reply.redirect(refusedRedirect(user), 302)
 
         if (user) {
           // Merge: attach github_id to existing account
@@ -591,6 +602,8 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
     const { id } = req.user as { id: string }
     const user = await db('users')
       .where('id', id)
+      // a token issued before the account was closed or suspended doesn't show it signed in (Nov 11, 2026)
+      .where('suspended', false)
       .select(['id', 'handle', 'display_name', 'email', 'bio', 'avatar_url',
                'account_type', 'trust_score', 'follower_count', 'following_count',
                'signal_count', 'verified', 'onboarded', 'created_at'])
@@ -602,26 +615,7 @@ export const registerAuthRoutes: FastifyPluginAsync = async (app) => {
 }
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────
-/**
- * Sign an account out everywhere: its refresh tokens (refresh:<token> → user
- * id in Redis, 30 days) are removed, so no device gets a new sign-in token;
- * one already issued lasts out its 24 hours. Up to 50,000 tokens looked at.
- */
-export async function endSessions(userId: string): Promise<number> {
-  let cursor = '0'
-  let ended = 0
-  for (let round = 0; round < 100; round++) {
-    const [next, keys] = await redis.scan(cursor, 'MATCH', 'refresh:*', 'COUNT', 500) as [string, string[]]
-    if (keys.length) {
-      const owners = await redis.mget(...keys)
-      const mine = keys.filter((_, i) => owners[i] === userId)
-      if (mine.length) ended += await redis.del(...mine)
-    }
-    cursor = next
-    if (cursor === '0') break
-  }
-  return ended
-}
+// (endSessions, signing an account out everywhere, is in lib/sessions.ts since Nov 11, 2026)
 
 async function issueTokens(app: Parameters<FastifyPluginAsync>[0], userId: string): Promise<AuthTokens> {
   const accessToken  = app.jwt.sign({ id: userId }, { expiresIn: '24h' })

@@ -6,6 +6,7 @@ import { indexUser } from '../lib/search'
 import { z } from 'zod'
 import { sendError } from '../lib/errors'
 import { BAD_CURSOR, isUuid } from '../lib/cursor'
+import { closeAccount, proStillRunning, CLOSED_DONE_TEXT, CLOSE_PRO_FIRST_TEXT } from '../lib/account-close'
 
 export const OnboardingSchema = z.object({
   interests:     z.array(z.string().max(50)).max(50).default([]),
@@ -128,6 +129,31 @@ export const registerUserRoutes: FastifyPluginAsync = async (app) => {
           : user.created_at,
       },
     })
+  })
+
+  // ─── CLOSE MY ACCOUNT (Nov 11, 2026; lib/account-close.ts) ──
+  // Devon: "Don't fully delete accounts". Closing deletes nothing: the account
+  // can't sign in, what acts for it stops, and support can open it again.
+  app.post('/me/close', {
+    preHandler: [authenticate],
+    config: { rateLimit: { max: 3, timeWindow: '1 minute' } },
+    schema: {
+      summary: 'Close your account',
+      description: 'Closes the signed-in account without deleting it: it is signed out everywhere and can no longer sign in, '
+        + 'and its API keys, alerts, webhooks and WorldPulse emails stop. Its posts and profile stay. 409 while a Pro plan is running: '
+        + 'cancel it first. To open it again, or to have its data erased, email support@world-pulse.io.',
+    },
+  }, async (req, reply) => {
+    const userId = req.user!.id
+    const user = await db('users').where('id', userId).first(['id', 'email'])
+    if (!user) return sendError(reply, 404, 'NOT_FOUND', 'User not found')
+
+    const sub = await db('subscriptions').where('user_id', userId).first(['plan', 'status', 'cancel_at_period_end']).catch(() => undefined)
+    if (proStillRunning(sub)) return sendError(reply, 409, 'CONFLICT', CLOSE_PRO_FIRST_TEXT)
+
+    const stopped = await closeAccount(userId, user.email)
+    req.log.info({ userId, stopped }, 'An account was closed by its owner')
+    return reply.send({ success: true, data: { closed: true, message: CLOSED_DONE_TEXT } })
   })
 
   // ─── FOLLOW / UNFOLLOW ───────────────────────────────────

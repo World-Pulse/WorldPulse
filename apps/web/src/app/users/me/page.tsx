@@ -292,16 +292,14 @@ export default function EditProfilePage() {
       <div className="mt-10 border border-[rgba(255,59,92,0.2)] rounded-xl p-5">
         <h2 className="text-[14px] font-semibold text-wp-red mb-2">Danger Zone</h2>
         <p className="text-[13px] text-wp-text3 mb-4">
-          Account deletion is permanent and cannot be undone. All your posts, signals, and data will be removed.
+          Closing your account signs you out and stops your API keys, email alerts and WorldPulse emails. Nothing is deleted.
         </p>
-        <button
-          type="button"
-          disabled
-          className="px-4 py-2 rounded-lg border border-[rgba(255,59,92,0.4)] text-wp-red text-[13px] font-medium opacity-40 cursor-not-allowed"
-          title="Contact support to delete your account"
+        <Link
+          href="/settings#danger"
+          className="inline-block px-4 py-2 rounded-lg border border-[rgba(255,59,92,0.4)] text-wp-red text-[13px] font-medium hover:bg-[rgba(255,59,92,0.08)] transition-all"
         >
-          Delete Account
-        </button>
+          Close account in Settings
+        </Link>
       </div>
     </div>
   )
