@@ -104,6 +104,9 @@ export default function HelpPage() {
             </section>
           ))}
         </div>
+        <p className="text-sm text-wp-text2 mt-8 leading-relaxed">
+          What WorldPulse keeps about you, and how to have it deleted: the <Link href="/privacy" className="text-wp-amber underline">privacy policy</Link>.
+        </p>
       </main>
     </div>
   )

@@ -361,6 +361,7 @@ export default function DevelopersPage() {
           Reselling or redistributing the data needs a data license: email <span className="text-wp-cyan select-all">support@world-pulse.io</span>.
           The code is open source under the{' '}
           <a href={LICENSE_URL} target="_blank" rel="noopener noreferrer" className="text-wp-cyan hover:underline">MIT license</a>.
+          {' '}What we keep about the people and apps that use it: the <Link href="/privacy" className="text-wp-cyan hover:underline">privacy policy</Link>.
         </div>
       </div>
 

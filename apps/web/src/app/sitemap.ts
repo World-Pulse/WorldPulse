@@ -29,6 +29,8 @@ const PAGES: Array<{ path: string; changeFrequency: 'always' | 'hourly' | 'daily
   { path: '/pricing', changeFrequency: 'monthly', priority: 0.5 },
   { path: '/help', changeFrequency: 'monthly', priority: 0.4 },
   { path: '/how-we-count', changeFrequency: 'monthly', priority: 0.5 },
+  // the privacy policy (Nov 11, 2026), asked for by the AI directories
+  { path: '/privacy', changeFrequency: 'monthly', priority: 0.3 },
   // "Has more than one newsroom reported this?": paste a link, get the count (Oct 20, 2026)
   { path: '/check', changeFrequency: 'monthly', priority: 0.6 },
   { path: '/knowledge-graph', changeFrequency: 'hourly', priority: 0.6 },
