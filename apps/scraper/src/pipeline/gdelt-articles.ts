@@ -42,9 +42,12 @@ export const TRANSLATION_FILE_URL = (stamp: string) => `${GDELT_BUCKET}/${stamp}
  * The translated list's languages that are read, by GDELT's code: French and German (Burundi, Comoros, Liechtenstein;
  * Nov 10, 2026, 1:37 PM), Spanish and Portuguese (Latin America, Equatorial Guinea, Lusophone Africa, Timor-Leste; that
  * afternoon), Russian and Arabic (Kyrgyzstan, Syria, Bahrain and the Gulf; that evening: 244 and 84 articles of the
- * 17:00 UTC file)
+ * 17:00 UTC file), Albanian and Serbian (Kosovo, Albania, North Macedonia, Montenegro; Nov 11: the 13:00 UTC file of
+ * Nov 10 had 69 and 68, from Telegrafi, Zëri, Bota Sot, Radio Free Europe's Albanian service, Politika, Blic...)
  */
-export const TRANSLATED_LANGUAGES: Readonly<Record<string, string>> = { fra: 'fr', deu: 'de', spa: 'es', por: 'pt', rus: 'ru', ara: 'ar' }
+export const TRANSLATED_LANGUAGES: Readonly<Record<string, string>> = {
+  fra: 'fr', deu: 'de', spa: 'es', por: 'pt', rus: 'ru', ara: 'ar', sqi: 'sq', alb: 'sq', srp: 'sr',
+}
 /**
  * A fresh address for each request (Oct 22): GDELT lists a file the moment it
  * uploads it (10 to 15 minutes before the time in its name), and a request
@@ -64,7 +67,7 @@ export interface GdeltArticle {
   site: string
   /** When GDELT read it */
   at: Date
-  /** Its language, for an article of the translated list ('fr', 'de', 'es', 'pt'); none for the English list's */
+  /** Its language, for an article of the translated list ('fr', 'de', 'es', 'pt', 'ru', 'ar', 'sq', 'sr'); none for the English list's */
   lang?: string
 }
 

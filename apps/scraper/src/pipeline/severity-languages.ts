@@ -8,6 +8,9 @@
  * attacks, fighting, protests, arrests, disasters, elections). Applied to a report in that language only (its
  * feed's), so English text never meets a German "Tote" ("tote bag") or a Spanish "mata".
  *
+ * Albanian and Serbian since Nov 11, 2026 (Kosovo, Albania, North Macedonia, Montenegro, Serbia), read without their
+ * accents, Serbian in Latin letters (formOf).
+ *
  * Words are matched whole, letters with accents included: \b doesn't see "é" as a letter, so the patterns use
  * their own edges (B, E) with the u flag.
  */
@@ -32,6 +35,12 @@ const COUNT_WORDS: Record<string, number> = {
   'сотен': 200, 'тысячи': 2000,
   'اثنين': 2, 'اثنان': 2, 'ثلاثه': 3, 'اربعه': 4, 'خمسه': 5, 'سته': 6, 'سبعه': 7, 'ثمانيه': 8, 'تسعه': 9, 'عشره': 10,
   'عشرات': 24, 'مئات': 200, 'الاف': 2000,
+  // Albanian and Serbian (Nov 11, 2026), without their accents as formOf reads them ("katër" is "kater", "četiri" "cetiri")
+  dy: 2, tre: 3, kater: 4, pese: 5, gjashte: 6, shtate: 7, tete: 8, nente: 9, dhjete: 10, dhjetera: 24, qindra: 200,
+  mijera: 2000,
+  dva: 2, dve: 2, dvoje: 2, tri: 3, troje: 3, cetiri: 4, cetvoro: 4, pet: 5, petoro: 5, sest: 6, sestoro: 6, sedam: 7,
+  sedmoro: 7, osam: 8, devet: 9, deset: 10, desetak: 10, dvanaest: 12, petnaest: 15, dvadeset: 20, dvadesetak: 20,
+  desetine: 24, stotine: 200, hiljade: 2000,
 }
 /** A count: digits ("1.200" and "1 200" are a thousand two hundred, as these languages write it) or a word */
 const COUNT = String.raw`(\d{1,3}(?:[.\u00a0\u202f ]\d{3})+|\d+|${Object.keys(COUNT_WORDS).join('|')})`
@@ -44,7 +53,7 @@ export function foreignNumber(raw: string): number {
 }
 
 /** "at least", "more than", "nearly" before a count */
-const ABOUT = String.raw`(?:(?:au\s+moins|plus\s+de|près\s+de|environ|quelque|al\s+menos|más\s+de|casi|unos|unas|cerca\s+de|pelo\s+menos|mais\s+de|quase|cerca\s+de|mindestens|mehr\s+als|fast|rund|etwa|über|не\s+менее|по\s+меньшей\s+мере|более|свыше|около|почти|порядка|نحو|حوالي|قرابه|اكثر\s+من|ما\s+لا\s+يقل\s+عن|ما\s+يزيد\s+عن|ما\s+يقارب)\s+)?`
+const ABOUT = String.raw`(?:(?:au\s+moins|plus\s+de|près\s+de|environ|quelque|al\s+menos|más\s+de|casi|unos|unas|cerca\s+de|pelo\s+menos|mais\s+de|quase|cerca\s+de|mindestens|mehr\s+als|fast|rund|etwa|über|не\s+менее|по\s+меньшей\s+мере|более|свыше|около|почти|порядка|نحو|حوالي|قرابه|اكثر\s+من|ما\s+لا\s+يقل\s+عن|ما\s+يزيد\s+عن|ما\s+يقارب|te\s+pakten|me\s+shume\s+se|rreth|afro|gati|najmanje|vise\s+od|preko|oko|skoro|gotovo)\s+)?`
 
 export interface LanguageRules {
   /** "12 morts", "12 personnes tuées": the count is the first group */
@@ -160,6 +169,44 @@ export const LANGUAGE_RULES: Readonly<Record<string, LanguageRules>> = {
     ],
     opinion: words(`${AR}(?:مقال|راي|تحليل|افتتاحيه|وجهه\\s+نظر)`),
   },
+  // Albanian (Nov 11, 2026; Devon, Nov 10, 10:43 PM: "Yes" to the Albanian and Serbian search for Kosovo, where 705 of
+  // the week's 722 reports were Albanian and 19 were verified), in letters without accents ("të vrarë" is "te vrare"):
+  // many outlets leave them out. Not a striker ("sulmuesi"), an example ("shembull"), a death threat ("kërcënim me
+  // vdekje"), "the fight against crime" ("lufta kundër krimit") or "victims" alone ("100 viktima të mashtrimit" are a
+  // fraud's)
+  sq: {
+    deadAfter: after(
+      'persona|njerez|vete|civile|ushtare|femije|police|emigrante|migrante|pasagjere|punetore|minatore|te\\s+rinj',
+      'jane|kane',
+      'te\\s+vdekur|te\\s+vrare|vdekur|vrare|vdiqen|vdesin|humben\\s+jeten|humbin\\s+jeten|humbur\\s+jeten|u\\s+vrane|vriten|u\\s+mbyten|mbyten'),
+    deadBefore: before('vriten|u\\s+vrane|vdesin|vdiqen|humbin\\s+jeten|humben\\s+jeten|kane\\s+vdekur|kane\\s+humbur\\s+jeten|jane\\s+vrare|bilanci\\s+(?:i\\s+(?:viktimave|te\\s+vdekurve)\\s+)?(?:arrin(?:\\s+ne)?|rritet\\s+ne|shkon\\s+ne)'),
+    injuredAfter: after('persona|njerez|vete|civile|ushtare|femije|police|pasagjere', 'jane|kane', 'te\\s+plagosur|te\\s+lenduar|plagosur|u\\s+plagosen|plagosen|lendohen'),
+    injuredBefore: before('plagosen|u\\s+plagosen|lendohen|u\\s+lenduan|jane\\s+plagosur'),
+    death: words('vdes|vdesin|vdiq|vdiqen|vdekur|(?<!me\\s+)vdekje\\p{L}*|vritet|vriten|u\\s+vra|u\\s+vrane|vrare|vrasje\\p{L}*|vrases\\p{L}*|humbi\\s+jeten|humben\\s+jeten|humb\\s+jeten|humbin\\s+jeten|mbytet|mbyten|u\\s+mbyt|u\\s+mbyten|masaker|masakra|kufoma|kufome|trupi\\s+i\\s+pajete'),
+    events: [
+      [words('bombardim\\p{L}*|sulm\\p{L}*\\s+ajror\\p{L}*|sulm\\p{L}*\\s+terrorist\\p{L}*|atentat\\p{L}*|shperthim\\p{L}*|vetevrases|grusht\\s+shteti|masaker|masakra|pengje|pengmarrje|gjendje\\s+e\\s+jashtezakonshme|gjendje\\s+lufte|ligj\\s+ushtarak|termet\\p{L}*\\s+(?:me\\s+)?(?:magnitude|fuqi)\\s+[6-9]|cunami|uragan\\p{L}*|tajfun\\p{L}*'), 'high'],
+      [words('sulm(?!ues)\\p{L}*|perplasje\\p{L}*|perleshje\\p{L}*|luftim\\p{L}*|(?:lufte|lufta|luften)(?!\\s+kunder)|ushtri\\p{L}*|dron\\p{L}*|raket\\p{L}*|terrorist\\p{L}*|terrorizem|protest\\p{L}*|demonstrat\\p{L}*|trazira|grev\\p{L}*|arrest\\p{L}*|rrembim\\p{L}*|rrembye\\p{L}*|te\\s+shtena|qellohet|qellohen|u\\s+qellua|me\\s+thike|plagos\\p{L}*|termet\\p{L}*|permbytje\\p{L}*|zjarr\\p{L}*|rreshqitje\\s+dheu|stuhi\\p{L}*|thatesire|epidemi\\p{L}*|evakuim\\p{L}*|evakuo\\p{L}*|aksident\\p{L}*|rrezim\\p{L}*|shembet|shemben|u\\s+shemb\\p{L}*|shembje\\p{L}*|zgjedhje\\p{L}*|referendum\\p{L}*|doreheqje\\p{L}*|armepushim\\p{L}*|negociata\\p{L}*|bisedime\\p{L}*|samit\\p{L}*|sanksion\\p{L}*|tarifa\\s+doganore'), 'medium'],
+    ],
+    opinion: words('opinion\\p{L}*|editorial\\p{L}*|analiz\\p{L}*|kolumn\\p{L}*|kendveshtrim\\p{L}*'),
+  },
+  // Serbian (Nov 11, 2026), read in Latin letters without accents (formOf: "Погинуло" and "poginulo", "uhapšen" and
+  // "uhapsen" are one word), and in the Montenegrin and Bosnian forms ("povrijeđen", "djece"). Not a striker
+  // ("napadač"), a shot ("puca"), Armistice Day ("Dan primirja") or "victims" alone ("žrtve prevare" are a fraud's)
+  sr: {
+    deadAfter: after(
+      'osoba|ljudi|lica|civila|vojnika|dece|djece|policajaca|migranata|putnika|radnika|rudara|mladica',
+      'je|su|je\\s+bilo|su\\s+bili',
+      'poginul\\p{L}*|mrtv\\p{L}*|ubijen\\p{L}*|preminul\\p{L}*|stradal\\p{L}*|nastradal\\p{L}*|izgubil\\p{L}*\\s+zivot|udavil\\p{L}*'),
+    deadBefore: before('poginul\\p{L}*|ubijen\\p{L}*|stradal\\p{L}*|nastradal\\p{L}*|preminul\\p{L}*|zivot\\s+(?:je|su)\\s+izgubil\\p{L}*|broj\\s+(?:poginulih|mrtvih|zrtava|stradalih)(?:\\s+\\p{L}+){0,4}?\\s+(?:je\\s+)?(?:porastao|povecan|narastao)\\s+na|broj\\s+(?:poginulih|mrtvih|zrtava|stradalih)(?:\\s+\\p{L}+){0,4}?\\s+(?:je\\s+)?dostigao'),
+    injuredAfter: after('osoba|ljudi|lica|civila|vojnika|dece|djece|policajaca|putnika', 'je|su', 'povreden\\p{L}*|povredjen\\p{L}*|povrijeden\\p{L}*|povrijedjen\\p{L}*|ozlijeden\\p{L}*|ranjen\\p{L}*'),
+    injuredBefore: before('povreden\\p{L}*|povredjen\\p{L}*|povrijeden\\p{L}*|povrijedjen\\p{L}*|ozlijeden\\p{L}*|ranjen\\p{L}*'),
+    death: words('poginu\\p{L}*|pogibij\\p{L}*|ubijen\\p{L}*|ubio|ubila|ubili|ubistv\\p{L}*|ubic[ae]\\p{L}*|preminu\\p{L}*|umro|umrla|umrli|stradal\\p{L}*|nastrada\\p{L}*|smrt|smrti|smrcu|nasmrt|masakr\\p{L}*|les(?:a|u|om|evi|eva)?|bezivotn\\p{L}*|udavi\\p{L}*'),
+    events: [
+      [words('bombardovanj\\p{L}*|bombardovan\\p{L}*|vazdusn\\p{L}*\\s+(?:napad|udar)\\p{L}*|teroristick\\p{L}*\\s+napad\\p{L}*|atentat\\p{L}*|eksplozij\\p{L}*|bombask\\p{L}*|drzavni\\s+udar|puc|masakr\\p{L}*|talac|talaca|taoc\\p{L}*|vanredn\\p{L}*\\s+stanj\\p{L}*|ratno\\s+stanje|zemljotres\\p{L}*\\s+(?:jacine|magnitude)\\s+[6-9]|cunami|uragan\\p{L}*|tajfun\\p{L}*'), 'high'],
+      [words('napad(?!ac)\\p{L}*|napadnut\\p{L}*|sukob\\p{L}*|borbe|borbama|vojsk\\p{L}*|vojni\\p{L}*|dron\\p{L}*|raket\\p{L}*|terorist\\p{L}*|terorizam\\p{L}*|protest\\p{L}*|demonstracij\\p{L}*|nered\\p{L}*|strajk\\p{L}*|policijski\\s+cas|uhapsen\\p{L}*|hapsenj\\p{L}*|priveden\\p{L}*|otmic\\p{L}*|otet\\p{L}*|pucnjav\\p{L}*|upucan\\p{L}*|izboden\\p{L}*|zemljotres\\p{L}*|poplav\\p{L}*|pozar\\p{L}*|klizist\\p{L}*|oluj\\p{L}*|susa|suse|epidemij\\p{L}*|evakuacij\\p{L}*|evakuisan\\p{L}*|nesrec\\p{L}*|saobracajk\\p{L}*|sudar\\p{L}*|udes\\p{L}*|urusavanj\\p{L}*|urusil\\p{L}*|izbor[ia]\\p{L}*|referendum\\p{L}*|smenjen\\p{L}*|smijenjen\\p{L}*|ostavk\\p{L}*|(?<!dan\\s+)primirj\\p{L}*|prekid\\s+vatre|pregovor\\p{L}*|samit\\p{L}*|sankcij\\p{L}*|carine|carinama'), 'medium'],
+    ],
+    opinion: words('kolumn\\p{L}*|analiz\\p{L}*|komentar\\p{L}*|misljenj\\p{L}*|uvodnik\\p{L}*'),
+  },
 }
 
 /** The largest count a pattern finds (years and money aren't people) */
@@ -181,11 +228,35 @@ export function arabicForm(text: string): string {
   return text.replace(/[\u064B-\u065F\u0670\u0640]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي')
 }
 
-/** A text as its language's rules read it: digits in Western form ("١٢" is 12), Arabic in one form, "ё" as "е" */
+/** Serbian Cyrillic in Latin letters (Nov 11, 2026): Serbian is written both ways, its rules in Latin ("Погинуло" is "Poginulo") */
+const SERBIAN_LATIN: Record<string, string> = {
+  а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', ђ: 'đ', е: 'e', ж: 'ž', з: 'z', и: 'i', ј: 'j', к: 'k', л: 'l', љ: 'lj', м: 'm',
+  н: 'n', њ: 'nj', о: 'o', п: 'p', р: 'r', с: 's', т: 't', ћ: 'ć', у: 'u', ф: 'f', х: 'h', ц: 'c', ч: 'č', џ: 'dž', ш: 'š',
+}
+export function serbianLatin(text: string): string {
+  return text.replace(/[\u0400-\u04ff]/g, ch => {
+    const low = ch.toLowerCase()
+    const latin = SERBIAN_LATIN[low]
+    if (latin === undefined) return ch
+    return ch === low ? latin : latin.charAt(0).toUpperCase() + latin.slice(1)
+  })
+}
+
+/** Letters without their accents ("të vrarë", "te vrare"; "uhapšen", "uhapsen"; "đ" as "d"), case kept */
+export function withoutAccents(text: string): string {
+  return text.normalize('NFD').replace(/\p{M}+/gu, '').replace(/[đĐ]/g, d => (d === 'đ' ? 'd' : 'D')).normalize('NFC')
+}
+
+/**
+ * A text as its language's rules read it: digits in Western form ("١٢" is 12), Arabic in one form, "ё" as "е",
+ * Albanian without its accents, Serbian in Latin letters without them
+ */
 function formOf(text: string, lang: string): string {
   const digits = text.replace(/[٠-٩۰-۹]/g, d => String(d.charCodeAt(0) & 0xf))
   if (lang === 'ar') return arabicForm(digits)
   if (lang === 'ru') return digits.replace(/ё/g, 'е').replace(/Ё/g, 'Е')
+  if (lang === 'sq') return withoutAccents(digits)
+  if (lang === 'sr') return withoutAccents(serbianLatin(digits))
   return digits
 }
 

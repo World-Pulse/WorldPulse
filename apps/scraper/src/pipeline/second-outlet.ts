@@ -63,6 +63,7 @@ import { hostOf, sourceKey } from './signal-columns'
 import { cleanUrl } from './text'
 import { fetchArticles, fetchNewestStamp, fetchNewestTranslationStamp, fetchTranslatedArticles, filesToRead, siteOf, stampDate, type GdeltArticle } from './gdelt-articles'
 import { queueReindex } from './reindex'
+import { serbianLatin } from './severity-languages'
 import { readPulse, recordPulse } from './gkg-pulse'
 
 export { siteOf, articleTitle } from './gdelt-articles'
@@ -142,6 +143,21 @@ const EVENTISH = new Set([
   'eleccion', 'elecciones', 'ejercito', 'inundaciones', 'protesta', 'protestas', 'huelga', 'accidente', 'pais', 'nacional',
   'precio', 'precios', 'dos', 'tres', 'morto', 'mortos', 'morta', 'mortas', 'ferido', 'feridos', 'governo', 'eleicao',
   'eleicoes', 'exercito', 'inundacoes', 'protesto', 'protestos', 'acidente', 'preco', 'precos', 'dois',
+  // ...and Albanian and Serbian (Nov 11, 2026), without accents, Serbian in Latin letters; with the places' own names
+  // in these languages ("Kosovës", "Srbije"), which nearly every story of theirs shares
+  'vdekur', 'vrare', 'plagosur', 'aksident', 'aksidenti', 'sulm', 'sulmi', 'sulmet', 'policia', 'policise', 'policine',
+  'qeveria', 'qeverise', 'qeverine', 'zgjedhjet', 'zgjedhjeve', 'zjarr', 'zjarri', 'protesta', 'protestat', 'gjykata',
+  'gjykates', 'kryeministri', 'kryeministrit', 'presidenti', 'presidentja', 'ministri', 'ministrja', 'ministria',
+  'kuvendi', 'kuvendit', 'njerez', 'persona', 'vendi', 'vendit', 'shteti', 'shtetit', 'ushtria', 'lufta', 'luften',
+  'cmimet', 'cmimeve', 'arrestohet', 'arrestimi', 'tre', 'kater', 'pese', 'dhjetera', 'qindra', 'mijera',
+  'kosova', 'kosoves', 'kosove', 'kosoven', 'prishtina', 'prishtine', 'prishtines', 'shqiperi', 'shqiperia', 'shqiperise',
+  'poginulo', 'poginuo', 'poginula', 'poginuli', 'mrtvih', 'ubijen', 'ubijena', 'povredeno', 'povredjeno', 'povreden',
+  'povredjen', 'povrijedeno', 'napad', 'napada', 'napadu', 'policija', 'policije', 'policiji', 'vlada', 'vlade', 'vladi',
+  'izbori', 'izbora', 'nesreca', 'nesreci', 'nesrece', 'saobracajna', 'pozar', 'pozara', 'protesti', 'suda', 'sudu',
+  'predsednik', 'predsednika', 'predsjednik', 'predsjednika', 'premijer', 'premijera', 'ministar', 'ministra', 'ministarstvo',
+  'drzava', 'drzave', 'gradani', 'gradjani', 'ljudi', 'osoba', 'vojska', 'vojske', 'rata', 'cene', 'cijene', 'uhapsen',
+  'uhapseni', 'dva', 'dve', 'tri', 'cetiri', 'deset', 'desetine', 'stotine', 'hiljade',
+  'srbija', 'srbije', 'srbiji', 'srbiju', 'beograd', 'beogradu',
 ])
 
 /**
@@ -160,6 +176,18 @@ for (const word of otherScriptWords(foldAccents(
 /** The languages read in their own script (Nov 10, 2026): their words as storyWords reads them */
 const OTHER_SCRIPT_LANGUAGES = new Set(['ru', 'ar'])
 
+/** A headline's text as it is compared: Serbian, written in both scripts, in Latin letters ("Погинуло", "Poginulo") */
+const comparable = (title: string, lang: string) => (lang === 'sr' ? serbianLatin(title) : title)
+
+/**
+ * Albanian and Serbian names change their endings with their place in a sentence ("Prishtinë", "Prishtinës";
+ * "Bugarska", "Bugarskoj"), so the names test (correlate.ts namesDiffer) reads their words by their first five letters
+ * (Nov 11, 2026)
+ */
+const INFLECTED = new Set(['sq', 'sr'])
+const namesForm = (title: string, lang: string) =>
+  (INFLECTED.has(lang) ? title.replace(/\p{L}+/gu, w => Array.from(w).slice(0, 5).join('')) : title)
+
 /**
  * Small words of French, German, Spanish and Portuguese headlines that correlate.ts's FUNCTION_WORDS leaves out
  * because they are English words or names too ("die", "son", "pas", "era"): read as small words in those languages'
@@ -175,10 +203,31 @@ const FOREIGN_PLAIN = new Set([
   'nao', 'ate', 'aos', 'num', 'numa', 'pode', 'podem', 'vai', 'vao', 'agora', 'assim', 'muito',
 ])
 
+/** Small words of one language's headlines only (Nov 11, 2026): Albanian and Serbian, without accents */
+const PLAIN_IN: Readonly<Record<string, ReadonlySet<string>>> = {
+  sq: new Set([
+    'per', 'nga', 'ndaj', 'gjate', 'sipas', 'kane', 'kemi', 'keni', 'jemi', 'jeni', 'kishte', 'ishin', 'qene', 'tij',
+    'saj', 'tyre', 'atij', 'asaj', 'atyre', 'ketij', 'kesaj', 'keto', 'ato', 'ata', 'ajo', 'cila', 'cili', 'cilat',
+    'cfare', 'pse', 'kush', 'kur', 'ende', 'vetem', 'tani', 'shume', 'mund', 'duhet', 'thote', 'tha', 'behet', 'rreth',
+    'drejt', 'permes', 'prej', 'tek', 'mes', 'midis', 'kunder', 'dje', 'neser', 'por', 'apo', 'nese', 'sepse', 'ndersa',
+    'pasi', 'pra', 'gjithe', 'cdo', 'disa', 'tjeter', 'tjera', 'reja', 'tona', 'tone', 'juaj', 'tuaj',
+  ]),
+  sr: new Set([
+    'kako', 'gde', 'gdje', 'zasto', 'ali', 'jer', 'ako', 'dok', 'sada', 'samo', 'jos', 'kada', 'kad', 'posle', 'poslije',
+    'pre', 'prije', 'iako', 'ovo', 'ova', 'ove', 'ovaj', 'ovog', 'ovom', 'taj', 'tog', 'toga', 'tom', 'ima', 'imaju',
+    'bio', 'bili', 'bude', 'budu', 'nisu', 'treba', 'mogu', 'moze', 'hoce', 'nece', 'evo', 'njegov', 'njegova',
+    'njegove', 'njen', 'njena', 'njihov', 'njihova', 'svoj', 'svoje', 'svoju', 'nas', 'vas', 'njih', 'oni', 'ona',
+    'ono', 'sam', 'smo', 'ste', 'kroz', 'medu', 'medju', 'izmedu', 'iza', 'ispod', 'iznad', 'pored', 'osim', 'nova',
+    'novo', 'novih', 'novog', 'novu', 'godine', 'godina', 'godini', 'dana', 'rekao', 'rekla', 'kaze', 'kazao', 'navodi',
+    'tvrdi', 'izjavio', 'jedan', 'jedna', 'jedno', 'jednog', 'kojem', 'kojoj', 'kojima', 'kojih', 'cak',
+  ]),
+}
+
 /**
  * A headline's words that can tie it to another outlet's: lower case, 3 or more letters or digits, no plain words.
  * A French or German headline's (Nov 10, 2026) without their accents ("hausse", "hausse"; "prasident"), and without
- * those languages' small words too (correlate.ts FUNCTION_WORDS, FOREIGN_PLAIN): "les", "pour", "das", "und"
+ * those languages' small words too (correlate.ts FUNCTION_WORDS, FOREIGN_PLAIN): "les", "pour", "das", "und". An
+ * Albanian or Serbian one's the same way (Nov 11, 2026; PLAIN_IN), a Serbian one in Latin letters
  */
 export function storyTokens(title: string, lang = 'en'): string[] {
   const foreign = lang !== 'en'
@@ -191,12 +240,13 @@ export function storyTokens(title: string, lang = 'en'): string[] {
     for (const raw of folded.split(/[^a-z0-9]+/)) if (raw.length >= 3 && !PLAIN.has(raw)) out.add(raw)
     return [...out]
   }
-  const text = title.replace(/[‘’]/g, "'")
+  const text = comparable(title, lang).replace(/[‘’]/g, "'")
+  const plainHere = PLAIN_IN[lang]
   for (const raw of (foreign ? foldAccents(text) : text.toLowerCase()).split(/[^\p{L}\p{N}']+/u)) {
     // (a French elision is no word of its own: "l'armée", "d'Iran", "qu'il")
     const word = foreign ? raw.replace(/^(?:[a-z]|qu|jusqu|lorsqu|puisqu)'/, '').replace(/'/g, '') : raw.replace(/'s$/, '').replace(/'/g, '')
     if (word.length < 3 || PLAIN.has(word)) continue
-    if (foreign && (FUNCTION_WORDS.has(word) || FOREIGN_PLAIN.has(word))) continue
+    if (foreign && (FUNCTION_WORDS.has(word) || FOREIGN_PLAIN.has(word) || plainHere?.has(word))) continue
     out.add(word)
   }
   return [...out]
@@ -345,7 +395,7 @@ export interface HeldReport {
   lat: number | null
   lng: number | null
   tags: string[]
-  /** Its language: 'en' (the default), 'fr', 'de', 'es', 'pt', 'ru' or 'ar' (Nov 10, 2026) */
+  /** Its language: 'en' (the default), 'fr', 'de', 'es', 'pt', 'ru', 'ar' (Nov 10, 2026), 'sq' or 'sr' (Nov 11) */
   language?: string
 }
 
@@ -356,9 +406,11 @@ export interface FoundOutlet { url: string; title: string; site: string; at: Dat
  * most `max`, in the order given (the most words shared first)
  */
 export function otherOutlets(report: HeldReport, articles: GdeltArticle[], now = new Date(), max = MAX_ADDED): FoundOutlet[] {
+  const lang = report.language || 'en'
   const held: CorrelationCandidate = {
     id: report.id,
-    title: report.title,
+    // a Serbian headline in Latin letters, as its articles are compared (Nov 11, 2026)
+    title: comparable(report.title, lang),
     category: report.category,
     severity: report.severity,
     source_id: sourceKey(report.source_ids, report.original_urls, report.id),
@@ -371,7 +423,6 @@ export function otherOutlets(report: HeldReport, articles: GdeltArticle[], now =
     url: report.original_urls[0] ?? null,
   }
   const sites = new Set(report.original_urls.map(u => ownerOf(siteOf(hostOf(u)))).filter(Boolean))
-  const lang = report.language || 'en'
   const found: FoundOutlet[] = []
   for (const { url, title, site, at, lang: articleLang } of articles) {
     if (found.length >= max) break
@@ -380,9 +431,9 @@ export function otherOutlets(report: HeldReport, articles: GdeltArticle[], now =
     if (!site || sites.has(ownerOf(site)) || NOT_OUTLETS.has(site)) continue
     if (at.getTime() > now.getTime() + 10 * 60_000) continue
     if (FEATURE_RE.test(title)) continue
-    const other: CorrelationCandidate = { ...held, id: 'gdelt', title, source_id: site, published_at: at, url, lat: null, lng: null }
+    const other: CorrelationCandidate = { ...held, id: 'gdelt', title: comparable(title, lang), source_id: site, published_at: at, url, lat: null, lng: null }
     // (German capitalises every noun, so there the names test is strict: a German report finds fewer matches, never looser ones)
-    if (!isSameStory(held, other) || namesDiffer(report.title, title)) continue
+    if (!isSameStory(held, other) || namesDiffer(namesForm(held.title, lang), namesForm(other.title, lang))) continue
     if (isCopyOf({ url, title }, { urls: report.original_urls, title: report.title }) || nearCopy(title, report.title, lang)) continue
     if (found.some(f => isCopyOf({ url, title }, { urls: [f.url], title: f.title }) || nearCopy(title, f.title, lang))) continue
     sites.add(ownerOf(site))
@@ -619,17 +670,30 @@ export async function runSecondOutlets(state: FinderState, deps: SecondOutletDep
 
 /**
  * The quiet places (Nov 10, 2026): of the thinly covered places (correlate.ts thinPlaceCodes, those with few feeds of
- * their own), those whose reports were verified fewer than QUIET_VERIFIED times in the last 7 days; their outlets'
- * everyday (low) reports are searched too. On Nov 10 the 8 with none (Burundi, Comoros, Dominica, Liechtenstein,
+ * their own), those whose reports were verified fewer than QUIET_VERIFIED times in the last 7 days, or rarely
+ * (QUIET_SHARE, Nov 11); their outlets' everyday (low) reports are searched too. On Nov 10 the 8 with none (Burundi, Comoros, Dominica, Liechtenstein,
  * Mongolia, Nauru, Seychelles, Tuvalu) had 4 in 5 of their waiting reports low.
  */
 export const QUIET_VERIFIED = 5
+/**
+ * ...and those whose reports, QUIET_MIN_REPORTS or more in the 7 days, were verified less than QUIET_SHARE of the time
+ * (Nov 11, 2026): Kosovo's 722 reports of the week before, nearly all Lajmi.net's, had 19 verified (2.6%)
+ */
+export const QUIET_SHARE = 0.05
+export const QUIET_MIN_REPORTS = 50
 const QUIET_DAYS = 7
 const QUIET_REFRESH_MS = HOUR
 
-/** The quiet places' tags (lower-case codes, as each feed tags its items) from the thin places and their verified counts */
-export function quietFrom(thin: readonly string[], verified: ReadonlyMap<string, number>, min = QUIET_VERIFIED): string[] {
-  return thin.filter(code => (verified.get(code.toUpperCase()) ?? 0) < min).map(code => code.toLowerCase())
+/**
+ * The quiet places' tags (lower-case codes, as each feed tags its items) from the thin places, their verified counts
+ * and their counts of reports (`totals`)
+ */
+export function quietFrom(thin: readonly string[], verified: ReadonlyMap<string, number>, min = QUIET_VERIFIED, totals: ReadonlyMap<string, number> = new Map()): string[] {
+  return thin.filter(code => {
+    const n = verified.get(code.toUpperCase()) ?? 0
+    const total = totals.get(code.toUpperCase()) ?? 0
+    return n < min || (total >= QUIET_MIN_REPORTS && n < QUIET_SHARE * total)
+  }).map(code => code.toLowerCase())
 }
 
 let quietCache: { at: number; codes: string[] } | null = null
@@ -641,20 +705,25 @@ async function quietPlaces(now: Date): Promise<string[]> {
   // none until the news reader has listed its feeds (news-rss.ts setThinPlaces): asked again next cycle
   if (!thin.length) return []
   const { rows } = await db.raw(
-    `SELECT country_code AS code, COUNT(*)::int AS n
+    `SELECT country_code AS code, COUNT(*) FILTER (WHERE status = 'verified')::int AS n, COUNT(*)::int AS total
        FROM signals
-      WHERE status = 'verified' AND created_at > ?::timestamptz AND country_code = ANY(?::text[])
+      WHERE created_at > ?::timestamptz AND country_code = ANY(?::text[])
       GROUP BY country_code`,
     [new Date(now.getTime() - QUIET_DAYS * 86_400_000).toISOString(), thin],
-  ) as { rows: Array<{ code: string; n: number }> }
-  const codes = quietFrom(thin, new Map(rows.map(r => [String(r.code).toUpperCase(), Number(r.n)])))
+  ) as { rows: Array<{ code: string; n: number; total: number }> }
+  const codes = quietFrom(
+    thin,
+    new Map(rows.map(r => [String(r.code).toUpperCase(), Number(r.n)])),
+    QUIET_VERIFIED,
+    new Map(rows.map(r => [String(r.code).toUpperCase(), Number(r.total)])),
+  )
   quietCache = { at: now.getTime(), codes }
   return codes
 }
 
 /**
  * The reports waiting for a second outlet: pending, one outlet, settled, from the last 30 hours, in English, French,
- * German, Spanish, Portuguese, Russian or Arabic, medium or above, or low from a quiet place's own outlets (each feed
+ * German, Spanish, Portuguese, Russian, Arabic, Albanian or Serbian (Nov 11, 2026), medium or above, or low from a quiet place's own outlets (each feed
  * tags its items with its country)
  */
 export function waitingQuery(quiet: readonly string[], now: Date): { sql: string; bindings: unknown[] } {
@@ -665,7 +734,7 @@ export function waitingQuery(quiet: readonly string[], now: Date): { sql: string
          FROM signals
         WHERE status = 'pending' AND COALESCE(source_count, 1) <= 1
           AND (severity IN ('medium', 'high', 'critical') OR (severity = 'low' AND tags && ?::text[]))
-          AND language IN ('en', 'fr', 'de', 'es', 'pt', 'ru', 'ar')
+          AND language IN ('en', 'fr', 'de', 'es', 'pt', 'ru', 'ar', 'sq', 'sr')
           AND cardinality(original_urls) >= 1
           AND created_at > ?::timestamptz AND created_at < ?::timestamptz
         ORDER BY created_at DESC
