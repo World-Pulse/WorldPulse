@@ -16,7 +16,7 @@ import HotspotLabels from '@/components/map/HotspotLabels'
 import { EnhancedHeatmap } from '@/components/map/EnhancedHeatmap'
 import { PlayOverlay, type PlayDayStats, type PlayTopStory } from '@/components/map/PlayOverlay'
 import { useTimelinePlayback } from '@/hooks/useTimelinePlayback'
-import { parsePlayParam, parsePlayLength, parsePlaySlow, playReplayMs, playStepMs, captionAt, playTimeLabel, playDateLabel, pickTourStop, tourCaption, storyKeyOf, PLAY_INTRO_MS, PLAY_OUTRO_MS, TOUR_EVERY_MS, type PlayPhase, type PlayCaption } from '@/lib/map-play'
+import { parsePlayParam, parsePlayLength, parsePlaySlow, playReplayMs, playStepMs, captionAt, playTimeLabel, playDateLabel, pickTourStop, tourCaption, storyKeyOf, milestoneCrossed, PLAY_INTRO_MS, PLAY_OUTRO_MS, PLAY_MILESTONES, TOUR_EVERY_MS, type PlayPhase, type PlayCaption } from '@/lib/map-play'
 import { parseWindowHash, encodePermalink, type MapPermalinkState, type LayerKey } from '@/lib/map-permalink'
 import {
   Map as MapIcon, Moon, Satellite, Globe2, LocateFixed, Layers as LayersIcon,
@@ -413,6 +413,8 @@ function MapView({ embed = false }: { embed?: boolean }) {
   const [playLen] = useState(() => parsePlayLength(searchParams.get('len')))
   // ?slow=20: the recorder films the play mode that many times slower, then speeds the video back up (Oct 31, 2026)
   const [playSlow] = useState(() => parsePlaySlow(searchParams.get('slow')))
+  // ?milestone=preview: the milestone card (plan K11) before the day, marked PREVIEW on the card
+  const [playMilestonePreview] = useState(() => searchParams.get('milestone') === 'preview')
   const playMode = playRange !== null
   // An embedded map shows the map alone: no toolbar, panels or lists (G17)
   const bare = playMode || embed
@@ -3655,7 +3657,12 @@ function MapView({ embed = false }: { embed?: boolean }) {
     fetch(`${API_URL}/api/v1/signals/count`).then(r => (r.ok ? r.json() : null)).then((j: { data?: Record<string, number> } | null) => {
       const d = j?.data
       if (alive && d && Number(d.last24h) > 0) {
-        setPlayDay({ reports: Number(d.last24h), outlets: Number(d.outlets24h) || 0, countries: Number(d.countries24h) || 0, verified: Number(d.verified24h) || 0 })
+        // the milestone morning (plan K11): the day crossed 750,000 reports, or 1,000,000; the preview shows the next one
+        const total = Number(d.total)
+        const milestone = playMilestonePreview
+          ? (PLAY_MILESTONES.find(m => m > total) ?? PLAY_MILESTONES[PLAY_MILESTONES.length - 1] ?? null)
+          : milestoneCrossed(total, Number(d.last24h))
+        setPlayDay({ reports: Number(d.last24h), outlets: Number(d.outlets24h) || 0, countries: Number(d.countries24h) || 0, verified: Number(d.verified24h) || 0, milestone, preview: playMilestonePreview })
       }
     }).catch(() => {})
     // (the answer is { data: { stories: [...] } }; Oct 30, 2026: read as a bare list, the first closing card had no stories)
@@ -3669,7 +3676,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
       if (alive) setPlayTop(list.filter(s => s.title).map(s => ({ title: String(s.title), outlets: Number(s.outletCount) || 0, countries: Number(s.countries) || 0 })).sort((a, b) => b.outlets - a.outlets))
     }).catch(() => {})
     return () => { alive = false }
-  }, [playMode])
+  }, [playMode, playMilestonePreview])
 
   // Once the map and the day have loaded, and the title card has had its moment: pace the day to about a minute, then start
   useEffect(() => {

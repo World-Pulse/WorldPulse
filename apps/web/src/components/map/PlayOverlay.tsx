@@ -11,6 +11,10 @@ export interface PlayDayStats {
   outlets: number
   countries: number
   verified: number
+  /** The report count the day crossed (750,000, then 1,000,000: lib/map-play.ts milestoneCrossed); null on other days */
+  milestone?: number | null
+  /** ?milestone=preview: the milestone card to look at before the day, marked PREVIEW */
+  preview?: boolean
 }
 
 export interface PlayTopStory {
@@ -103,9 +107,24 @@ export function PlayOverlay({ phase, caption, timeLabel, dateLabel, progress, wi
         style={{ background: 'radial-gradient(120% 75% at 50% 38%, #101a2e 0%, #070a12 62%, #05070d 100%)' }}>
         <span className="w-3 h-3 rounded-full bg-wp-amber wp-play-beat" />
         <div className="mt-5"><Mark size={14} /></div>
-        <h1 className="mt-6 font-display font-bold leading-[1.02] text-[34px] tracking-[1px]">THE WORLD<br />IN {seconds} SECONDS</h1>
-        {dateLabel && <div className="mt-4 font-mono text-[12px] tracking-[2px] text-wp-amber">{dateLabel}</div>}
-        <p className="mt-5 text-[14px] leading-relaxed max-w-[300px] opacity-80">24 hours of world news on one map: every report, and the stories newsrooms confirmed.</p>
+        {day?.milestone ? (
+          // The milestone morning (plan K11): the count the day crossed, then the day itself
+          <>
+            <div className="mt-6 font-mono text-[11px] tracking-[3px] text-wp-amber">{day.preview ? 'PREVIEW · ' : ''}A MILESTONE</div>
+            <h1 className="mt-3 font-display font-bold leading-[1.02] tracking-[1px]">
+              <span className="block text-[46px]">{day.milestone.toLocaleString('en-US')}</span>
+              <span className="block mt-1 text-[24px]">NEWS REPORTS</span>
+            </h1>
+            {dateLabel && <div className="mt-4 font-mono text-[12px] tracking-[2px] text-wp-amber">{dateLabel}</div>}
+            <p className="mt-5 text-[14px] leading-relaxed max-w-[300px] opacity-80">WorldPulse has now read {day.milestone.toLocaleString('en-US')} reports from the world&apos;s newsrooms. The last 24 hours, in {seconds} seconds.</p>
+          </>
+        ) : (
+          <>
+            <h1 className="mt-6 font-display font-bold leading-[1.02] text-[34px] tracking-[1px]">THE WORLD<br />IN {seconds} SECONDS</h1>
+            {dateLabel && <div className="mt-4 font-mono text-[12px] tracking-[2px] text-wp-amber">{dateLabel}</div>}
+            <p className="mt-5 text-[14px] leading-relaxed max-w-[300px] opacity-80">24 hours of world news on one map: every report, and the stories newsrooms confirmed.</p>
+          </>
+        )}
         {day && (
           <div className="mt-7 grid grid-cols-3 gap-3 w-full max-w-[320px] wp-play-in">
             {[[day.reports, 'reports'], [day.outlets, 'outlets'], [day.countries, 'countries']].map(([n, l]) => (
@@ -133,6 +152,7 @@ export function PlayOverlay({ phase, caption, timeLabel, dateLabel, progress, wi
               ))}
             </ol>
             <div className="mt-8 wp-play-in" style={{ animationDelay: `${450 + Math.min(3, topStories.length) * 450}ms` }}>
+              {day?.milestone && <div className="mb-2 font-mono text-[11px] tracking-[2px] text-wp-amber">{day.milestone.toLocaleString('en-US')} NEWS REPORTS READ, AND COUNTING</div>}
               <div className="text-[14px] opacity-90">Don&apos;t trust one headline. Count the newsrooms.</div>
               {/* (the beating dot keeps the page painting, so the recorder films the card to the end: Oct 30, 2026,
                   a still closing card was cut to 2 s) */}

@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { pickTourStop, playCounts, playDateLabel, tourCaption, distanceKm, playbackAdvance, playStepMs, parsePlayLength, parsePlaySlow, playReplayMs, PLAY_TOTAL_MS, PLAY_INTRO_MS, PLAY_OUTRO_MS, TOUR_MIN_HOP_KM, type TourSignal } from '../lib/map-play'
+import { pickTourStop, playCounts, playDateLabel, tourCaption, distanceKm, playbackAdvance, playStepMs, parsePlayLength, parsePlaySlow, playReplayMs, milestoneCrossed, PLAY_MILESTONES, PLAY_TOTAL_MS, PLAY_INTRO_MS, PLAY_OUTRO_MS, TOUR_MIN_HOP_KM, type TourSignal } from '../lib/map-play'
 
 const read = (p: string) => readFileSync(join(__dirname, '..', p), 'utf8')
 const zOf = (src: string, marker: RegExp) => Number(marker.exec(src)?.[1] ?? NaN)
@@ -199,5 +199,33 @@ describe('a 30-second video, filmed in slow motion (Oct 31, 2026: "shorten the v
     // the map's rings (the critical ripple, the gold ring) keep their pace in the sped-up video
     expect(map).toContain('const t = now / playSlow')
     expect(read('components/map/PlayOverlay.tsx')).toContain('IN {seconds} SECONDS')
+  })
+})
+
+describe('the milestone mornings (plan K11; Devon, Nov 5, 2026: "only at 750,000 then 1,000,000")', () => {
+  it('names the milestone the last 24 hours crossed, and nothing on other days', () => {
+    expect(PLAY_MILESTONES).toEqual([750_000, 1_000_000])
+    // 18,500 a day: crossed in the day (it was 735,000 24 hours ago)
+    expect(milestoneCrossed(753_500, 18_500)).toBe(750_000)
+    // exactly on it counts; the day before and the day after don't
+    expect(milestoneCrossed(750_000, 18_500)).toBe(750_000)
+    expect(milestoneCrossed(749_999, 18_500)).toBeNull()
+    expect(milestoneCrossed(768_600, 18_500)).toBeNull()
+    expect(milestoneCrossed(1_004_000, 18_000)).toBe(1_000_000)
+    expect(milestoneCrossed(688_381, 18_550)).toBeNull()
+    expect(milestoneCrossed(Number.NaN, 18_000)).toBeNull()
+    expect(milestoneCrossed(760_000, -1)).toBeNull()
+  })
+  it('opens the video with the milestone and closes with it, and the preview says PREVIEW', () => {
+    const card = read('components/map/PlayOverlay.tsx')
+    expect(card).toContain('{day?.milestone ? (')
+    expect(card).toContain('<span className="block mt-1 text-[24px]">NEWS REPORTS</span>')
+    expect(card).toContain("{day.preview ? 'PREVIEW · ' : ''}A MILESTONE")
+    expect(card).toContain('NEWS REPORTS READ, AND COUNTING')
+    // the ordinary mornings keep their card
+    expect(card).toContain('IN {seconds} SECONDS')
+    const map = read('app/map/page.tsx')
+    expect(map).toContain('milestoneCrossed(total, Number(d.last24h))')
+    expect(map).toContain("searchParams.get('milestone') === 'preview'")
   })
 })

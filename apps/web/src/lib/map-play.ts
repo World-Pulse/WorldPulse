@@ -206,6 +206,23 @@ export function playCounts(buckets: Array<{ signals: Array<{ status?: string }> 
   return { reports, verified }
 }
 
+/**
+ * The milestone videos (plan K11; Devon, Nov 5, 2026: "No video at 600,000, only at 750,000 then 1,000,000"): the
+ * morning video whose 24 hours crossed one of these report counts opens with it
+ */
+export const PLAY_MILESTONES: readonly number[] = [750_000, 1_000_000]
+
+/**
+ * The milestone the last 24 hours crossed: the largest of PLAY_MILESTONES that the count reached in the day (it
+ * was below it 24 hours ago, `total - last24h`, and is at it or past it now); null when none
+ */
+export function milestoneCrossed(total: number, last24h: number, milestones: readonly number[] = PLAY_MILESTONES): number | null {
+  if (!Number.isFinite(total) || !Number.isFinite(last24h) || total <= 0 || last24h < 0) return null
+  const before = total - last24h
+  const crossed = milestones.filter(m => before < m && m <= total)
+  return crossed.length ? Math.max(...crossed) : null
+}
+
 /** "FRIDAY, OCTOBER 30" for the day the window ends on (UTC, like the time label) */
 export function playDateLabel(iso: string | null): string {
   if (!iso) return ''
