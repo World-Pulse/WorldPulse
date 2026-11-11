@@ -7,6 +7,7 @@ import { useTheme } from '@/components/providers'
 import { useToast } from '@/components/Toast'
 import DigestSubscription from '@/components/settings/DigestSubscription'
 import { authHref } from '@/lib/auth-next'
+import { deleteMyAccount, DELETE_HELP } from '@/lib/delete-account'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -215,25 +216,13 @@ export default function SettingsPage() {
     if (!token) return
     setDeleting(true)
 
-    try {
-      const res = await fetch(`${API_URL}/api/v1/users/me`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!res.ok) {
-        const data = await res.json() as { error?: string }
-        throw new Error(data.error ?? 'Delete failed')
-      }
-    } catch (err) {
-      // If 404 or success, still clear and redirect
-      if (!(err instanceof Error && err.message === 'Delete failed')) {
-        // likely a 200/204 or the endpoint doesn't exist yet — clear anyway
-      } else {
-        toast(err.message, 'error')
-        setDeleting(false)
-        setShowDeleteModal(false)
-        return
-      }
+    // done only when the server says so (Nov 11, 2026): a 404 was taken for done, and the reader was signed out with
+    // the account still there
+    if (!(await deleteMyAccount(API_URL, token))) {
+      toast(DELETE_HELP, 'error')
+      setDeleting(false)
+      setShowDeleteModal(false)
+      return
     }
 
     // Clear all localStorage and redirect
