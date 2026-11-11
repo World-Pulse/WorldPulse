@@ -1,6 +1,6 @@
 /**
  * GET /api/v1/stories?region= (Nov 10, 2026, for region_top_stories): a region's stories, one query over its
- * countries (lib/regions.ts), the same ranking as the world's and a country's.
+ * countries (lib/regions.ts), the same ranking as the world's and a country's; and ?category= (topic_top_stories).
  */
 import { describe, it, expect } from 'vitest'
 import { REGIONS, REGION_IDS, regionCountries, allRegionCountries } from '../lib/regions'
@@ -29,6 +29,16 @@ describe('the regions', () => {
     expect(all.length - new Set(all).size).toBe(1)
     expect(allRegionCountries().length).toBeGreaterThan(230)
     expect(REGIONS['middle-east'].label).toBe('the Middle East')
+  })
+})
+
+describe('one topic (Nov 10, 2026, for topic_top_stories)', () => {
+  it("is one of the reader's topics, in any case, and nothing else (each topic's list is kept apart)", () => {
+    expect(StoryListQuerySchema.parse({ category: ' Sports ' }).category).toBe('sports')
+    expect(StoryListQuerySchema.parse({ category: 'geopolitics', region: 'africa' })).toMatchObject({ category: 'geopolitics', region: 'africa' })
+    expect(StoryListQuerySchema.parse({}).category).toBeUndefined()
+    expect(() => StoryListQuerySchema.parse({ category: 'gossip' })).toThrow()
+    expect(() => StoryListQuerySchema.parse({ category: 'aaa' })).toThrow()
   })
 })
 

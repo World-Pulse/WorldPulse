@@ -21,6 +21,15 @@ vi.mock('../lib/long-query', () => ({
     return run({
       raw: async (sql: string, bindings: unknown[]) => {
         calls.push({ sql, bindings })
+        if (sql.includes("date_trunc('hour'")) return { rows: [{ hour: '2026-11-10T22:00:00Z', reports: '900', verified: '150', serious: '80' }] }
+        if (sql.includes('country_code AS country,')) return { rows: [{ country: 'SD', now: '300', before: '100' }, { country: 'XX1', now: '9', before: '1' }, { country: 'US', now: 5000, before: 4800 }] }
+        if (sql.includes('AND country_code IS NOT NULL')) {
+          return { rows: [
+            { id: 's1', title: 'Missile strike on Kharkiv', severity: 'critical', status: 'verified', country_code: 'UA', created_at: '2026-11-10T22:00:00Z' },
+            { id: 's2', title: 'Shelling in Kherson', severity: 'high', status: 'pending', country_code: 'UA', created_at: '2026-11-10T21:00:00Z' },
+            { id: 's3', title: 'Clashes in El Fasher', severity: 'high', status: 'pending', country_code: 'SD', created_at: '2026-11-10T20:00:00Z' },
+          ] }
+        }
         if (sql.includes('title ILIKE ANY') && JSON.stringify(bindings).includes('%hacker%')) {
           return { rows: [
             { id: 'h1', title: 'Hackers hit Polish water utility', status: 'verified', country_code: 'PL', created_at: '2026-11-10T20:00:00Z' },
@@ -49,7 +58,11 @@ vi.mock('../lib/long-query', () => ({
           return { rows: [5, 30, 45, 90, 600].map((m, i) => ({ story_id: `s${i}`, report_id: `r${i}`, title: `Story ${i}`, first_at: '2026-11-10T00:00:00Z', verified_at: '2026-11-10T01:00:00Z', minutes: String(m) })) }
         }
         if (sql.includes('tags @> ?::text[]')) return { rows: [{ id: 'f', title: 'OFAC designates two shipping firms', summary: 'x'.repeat(500), severity: 'medium', country_code: 'IR', location_name: 'Tehran', created_at: '2026-11-09T00:00:00Z', url: 'https://ofac.treasury.gov/x', tags: ['osint', 'sanctions', 'ofac'], total: '3' }] }
-        if (sql.includes('count(*) OVER () AS total')) return { rows: [{ id: 'o', title: 'Sudan talks', status: 'verified', severity: 'medium', topic: 'conflict', country_code: 'SD', created_at: '2026-11-10T20:00:00Z', story_id: 's', total: '31' }] }
+        if (sql.includes('count(*) OVER () AS total')) {
+          // json_agg comes back parsed from node-postgres; a string is read too
+          return { rows: [{ id: 'o', title: 'Sudan talks', status: 'verified', severity: 'medium', topic: 'conflict', country_code: 'SD', created_at: '2026-11-10T20:00:00Z', story_id: 's', total: '31', verified_total: '12',
+            topics: [{ topic: 'conflict', reports: 20 }, { topic: 'geopolitics', reports: 11 }], places: '[{"country":"SD","reports":18},{"country":"zz","reports":2}]' }] }
+        }
         if (sql.includes('category::text AS topic')) return { rows: [{ topic: 'conflict', reports: '120', verified: '40', before: '100' }] }
         return { rows: [] }
       },
@@ -150,6 +163,8 @@ describe('GET /api/v1/public/topics and /outlet-reports', () => {
     const { data } = res.json()
     expect(data).toMatchObject({ site: 'cnn.com', days: 3, total: 31 })
     expect(data.reports[0]).toMatchObject({ id: 'o', country: 'SD', storyId: 's' })
+    // round 5 (outlet_profile, outlet_compare): its verified count, topics and places, from the same scan
+    expect(data).toMatchObject({ verified: 12, topics: [{ topic: 'conflict', reports: 20 }, { topic: 'geopolitics', reports: 11 }], places: [{ country: 'SD', reports: 18 }] })
     expect(calls[0]!.bindings).toEqual([3, 'cnn.com', '%.cnn.com'])
     expect((await get('/api/v1/public/outlet-reports?site=not a site')).statusCode).toBe(400)
     expect(siteFrom('lemonde.fr')).toBe('lemonde.fr')
@@ -218,5 +233,42 @@ describe('GET /api/v1/public/news-watch, /busiest-outlets, and /topics for one c
     expect(data.country).toBe('NG')
     expect(calls[0]!.sql).toContain('AND country_code = ?')
     expect(calls[0]!.bindings).toEqual([12, 12, 12, 24, 'NG'])
+  })
+})
+
+describe('GET /api/v1/public/news-by-hour and /serious-places', () => {
+  it('counts the news reports hour by hour', async () => {
+    const { data } = (await get('/api/v1/public/news-by-hour?hours=3')).json()
+    expect(data).toEqual({ hours: 3, byHour: [{ hour: '2026-11-10T22:00:00.000Z', reports: 900, verified: 150, serious: 80 }] })
+    expect(calls[0]!.bindings).toEqual([3])
+  })
+
+  it('counts the serious reports by country, each with its newest verified one', async () => {
+    const { data } = (await get('/api/v1/public/serious-places')).json()
+    expect(data.places).toEqual([
+      { country: 'UA', serious: 2, critical: 1, verified: 1, latest: { id: 's1', title: 'Missile strike on Kharkiv', severity: 'critical', at: '2026-11-10T22:00:00.000Z' } },
+      { country: 'SD', serious: 1, critical: 0, verified: 0, latest: null },
+    ])
+  })
+})
+
+describe('GET /api/v1/public/country-changes', () => {
+  it("counts each country's news reports of the last days and the days before, and bounds the days", async () => {
+    const { data } = (await get('/api/v1/public/country-changes?days=1')).json()
+    expect(data).toEqual({ days: 1, countries: [{ country: 'SD', now: 300, before: 100 }, { country: 'US', now: 5000, before: 4800 }] })
+    expect(calls[0]!.bindings).toEqual([1, 1, 2])
+    expect(calls[0]!.sql).toContain("NOT (tags @> ARRAY['osint']::text[])")
+    calls.length = 0
+    await get('/api/v1/public/country-changes?days=14')
+    expect(calls[0]!.bindings).toEqual([14, 14, 28])
+    calls.length = 0
+    // out of bounds: the week
+    await get('/api/v1/public/country-changes?days=99')
+    expect(calls[0]!.bindings).toEqual([7, 7, 14])
+  })
+
+  it('answers 503 when the count fails', async () => {
+    fail = true
+    expect((await get('/api/v1/public/country-changes')).statusCode).toBe(503)
   })
 })

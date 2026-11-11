@@ -202,7 +202,7 @@ export function storyListSql(hasStoryIds: boolean, scope: 'recent' | 'signals' |
  * The stories most outlets reported in the last `hours`, ranked as
  * GET /api/v1/stories ranks them (also the email briefing's stories, plan G4).
  */
-export async function topStories(hours: number, limit: number, country?: string, region?: RegionId): Promise<ListedStory[]> {
+export async function topStories(hours: number, limit: number, country?: string, region?: RegionId, category?: string): Promise<ListedStory[]> {
   const since = new Date(Date.now() - hours * 3_600_000)
   const hasStoryIds = await signalsHaveStoryIds()
   const result = country
@@ -210,11 +210,14 @@ export async function topStories(hours: number, limit: number, country?: string,
     : region
       ? await longQuery(LIST_QUERY_SECONDS, trx => trx.raw(storyListSql(hasStoryIds, 'countries'), [regionCountries(region), since, EVENT_TEMPLATE_SQL]))
       : await longQuery(LIST_QUERY_SECONDS, trx => trx.raw(storyListSql(hasStoryIds), [since, EVENT_TEMPLATE_SQL]))
-  if (!region) return rankStories(candidatesOf(result), limit)
+  if (!region && !category) return rankStories(candidatesOf(result), limit)
   // A region's stories are those its countries are the home of: one report placed there (a correspondent in Nairobi,
-  // a misplaced pin) brought the world's biggest stories in, the Bulgarian pile-up first for Africa (Nov 10, 2026)
-  const home = new Set(regionCountries(region))
-  return rankStories(candidatesOf(result), Math.max(60, limit * 4)).filter(s => s.country && home.has(s.country)).slice(0, limit)
+  // a misplaced pin) brought the world's biggest stories in, the Bulgarian pile-up first for Africa (Nov 10, 2026).
+  // A topic's, those its category is (sports, health…), from the same ranking's first candidates
+  const home = region ? new Set(regionCountries(region)) : null
+  return rankStories(candidatesOf(result), Math.max(120, limit * 6))
+    .filter(s => (!home || (s.country && home.has(s.country))) && (!category || s.category === category))
+    .slice(0, limit)
 }
 
 /**
@@ -436,14 +439,16 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
     if (qr.error) return sendError(reply, 400, 'VALIDATION_ERROR', qr.error)
     const { hours, limit, country } = qr.data
     const region = country ? undefined : qr.data.region
+    const category = qr.data.category
 
     // The kept list at once; when it is 2 minutes old, one process remakes it in the background
     const response = await staleWhileRevalidate(
-      country ? `stories:list:v2:${country}:${hours}:${limit}` : region ? `stories:list:v3:region:${region}:${hours}:${limit}` : `stories:list:v2:${hours}:${limit}`,
+      category ? `stories:list:v3:topic:${category}:${country ?? region ?? 'all'}:${hours}:${limit}`
+        : country ? `stories:list:v2:${country}:${hours}:${limit}` : region ? `stories:list:v3:region:${region}:${hours}:${limit}` : `stories:list:v2:${hours}:${limit}`,
       { freshSeconds: LIST_CACHE_TTL, staleSeconds: LIST_KEEP_SECONDS, lockSeconds: LIST_QUERY_SECONDS * 2 },
       async () => ({
         success: true,
-        data: { stories: await topStories(hours, limit, country, region), hours, ...(country ? { country } : {}), ...(region ? { region } : {}), generatedAt: new Date().toISOString() },
+        data: { stories: await topStories(hours, limit, country, region, category), hours, ...(country ? { country } : {}), ...(region ? { region } : {}), ...(category ? { category } : {}), generatedAt: new Date().toISOString() },
       }),
     )
     return reply.send(response)

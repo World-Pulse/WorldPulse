@@ -13,6 +13,9 @@
  *   GET /feed-reports           a government feed's newest reports (sanctions, US weather alerts, carriers)
  *   GET /news-watch             one kind of news by country: cyber attacks, elections, disasters
  *   GET /busiest-outlets        the outlets WorldPulse read the most reports from
+ *   GET /news-by-hour           the last hours' news reports hour by hour
+ *   GET /serious-places         the countries with the most critical and high-severity news reports
+ *   GET /country-changes        each country's news reports of the last days against the days before
  */
 import type { FastifyPluginAsync } from 'fastify'
 import { redis } from '../db/redis'
@@ -241,7 +244,9 @@ export function siteFrom(input: string): string | null {
   return /^(?=.{3,120}$)[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host) ? host : null
 }
 
-async function outletReports(site: string, days: number): Promise<{ total: number; reports: OutletReport[] }> {
+async function outletReports(site: string, days: number): Promise<{ total: number; verified: number; topics: Array<{ topic: string; reports: number }>; places: Array<{ country: string; reports: number }>; reports: OutletReport[] }> {
+  // one scan of the outlet's reports (mine is read four times, so Postgres keeps it): the newest 20, the totals, its
+  // topics and the countries its reports are placed in
   const result = await longQuery(20, trx => trx.raw(
     `WITH mine AS (
        SELECT id::text AS id, title, status::text AS status, severity::text AS severity, category::text AS topic,
@@ -252,15 +257,44 @@ async function outletReports(site: string, days: number): Promise<{ total: numbe
           AND original_urls[1] IS NOT NULL
           AND (${SITE_OF} = ? OR ${SITE_OF} LIKE ?)
      )
-     SELECT *, count(*) OVER () AS total FROM mine ORDER BY created_at DESC LIMIT 20`, [days, site, `%.${site}`]) as unknown as Promise<unknown>)
+     SELECT *, count(*) OVER () AS total, count(*) FILTER (WHERE status = 'verified') OVER () AS verified_total,
+            (SELECT json_agg(json_build_object('topic', t.topic, 'reports', t.n) ORDER BY t.n DESC)
+               FROM (SELECT topic, count(*) AS n FROM mine GROUP BY topic ORDER BY n DESC LIMIT 8) t) AS topics,
+            (SELECT json_agg(json_build_object('country', c.country_code, 'reports', c.n) ORDER BY c.n DESC)
+               FROM (SELECT country_code, count(*) AS n FROM mine WHERE country_code IS NOT NULL GROUP BY 1 ORDER BY n DESC LIMIT 6) c) AS places
+       FROM mine ORDER BY created_at DESC LIMIT 20`, [days, site, `%.${site}`]) as unknown as Promise<unknown>)
   const rows = rowsOf(result)
+  const list = <T>(v: unknown): T[] => (Array.isArray(v) ? v as T[] : typeof v === 'string' ? JSON.parse(v) as T[] : [])
   return {
     total: Number(rows[0]?.total ?? 0),
+    verified: Number(rows[0]?.verified_total ?? 0),
+    topics: list<{ topic: string; reports: number }>(rows[0]?.topics).map(t => ({ topic: String(t.topic), reports: Number(t.reports) || 0 })),
+    places: list<{ country: string; reports: number }>(rows[0]?.places).filter(c => /^[A-Z]{2}$/.test(String(c.country))).map(c => ({ country: String(c.country), reports: Number(c.reports) || 0 })),
     reports: rows.map(r => ({
       id: String(r.id), title: String(r.title ?? ''), status: String(r.status), severity: r.severity ? String(r.severity) : null, topic: r.topic ? String(r.topic) : null,
       country: typeof r.country_code === 'string' && /^[A-Z]{2}$/.test(r.country_code) ? r.country_code : null, at: iso(r.created_at), storyId: r.story_id ? String(r.story_id) : null,
     })),
   }
+}
+
+// ─── The countries whose news rose or fell the most ─────────────────────────────
+
+export interface CountryChange { country: string; now: number; before: number }
+
+async function countryChanges(days: number): Promise<CountryChange[]> {
+  const result = await longQuery(60, trx => trx.raw(
+    `SELECT country_code AS country,
+            count(*) FILTER (WHERE created_at > NOW() - make_interval(days => ?)) AS now,
+            count(*) FILTER (WHERE created_at <= NOW() - make_interval(days => ?)) AS before
+       FROM signals
+      WHERE created_at > NOW() - make_interval(days => ?)
+        AND status IN ('verified', 'pending')
+        AND country_code IS NOT NULL
+        AND ${NEWS_ONLY}
+      GROUP BY 1`, [days, days, days * 2]) as unknown as Promise<unknown>)
+  return rowsOf(result)
+    .filter(r => typeof r.country === 'string' && /^[A-Z]{2}$/.test(r.country))
+    .map(r => ({ country: String(r.country), now: Number(r.now) || 0, before: Number(r.before) || 0 }))
 }
 
 // ─── A data feed's reports (the scraper's government and science feeds, by their tags) ─────────────
@@ -383,6 +417,53 @@ async function busiestOutlets(hours: number): Promise<{ reports: number; outlets
   }
 }
 
+// ─── The news hour by hour, and the serious reports by country ─────────────────────────────
+
+export interface HourCount { hour: string; reports: number; verified: number; serious: number }
+
+async function newsByHour(hours: number): Promise<HourCount[]> {
+  const result = await longQuery(30, trx => trx.raw(
+    `SELECT date_trunc('hour', created_at) AS hour, count(*) AS reports,
+            count(*) FILTER (WHERE status = 'verified') AS verified,
+            count(*) FILTER (WHERE severity IN ('critical', 'high')) AS serious
+       FROM signals
+      WHERE created_at > NOW() - make_interval(hours => ?)
+        AND status IN ('verified', 'pending')
+        AND ${NEWS_ONLY}
+      GROUP BY 1
+      ORDER BY 1`, [hours]) as unknown as Promise<unknown>)
+  return rowsOf(result).map(r => ({ hour: iso(r.hour) ?? '', reports: Number(r.reports) || 0, verified: Number(r.verified) || 0, serious: Number(r.serious) || 0 }))
+}
+
+export interface SeriousPlace { country: string; serious: number; critical: number; verified: number; latest: { id: string; title: string; severity: string; at: string | null } | null }
+
+async function seriousPlaces(hours: number): Promise<SeriousPlace[]> {
+  const result = await longQuery(30, trx => trx.raw(
+    `SELECT id::text AS id, title, severity::text AS severity, status::text AS status, country_code, created_at
+       FROM signals
+      WHERE created_at > NOW() - make_interval(hours => ?)
+        AND status IN ('verified', 'pending')
+        AND severity IN ('critical', 'high')
+        AND country_code IS NOT NULL
+        AND ${NEWS_ONLY}
+      ORDER BY created_at DESC
+      LIMIT 20000`, [hours]) as unknown as Promise<unknown>)
+  const by = new Map<string, SeriousPlace>()
+  for (const r of rowsOf(result)) {
+    const code = typeof r.country_code === 'string' && /^[A-Z]{2}$/.test(r.country_code) ? r.country_code : null
+    if (!code) continue
+    const p = by.get(code) ?? { country: code, serious: 0, critical: 0, verified: 0, latest: null }
+    p.serious++
+    if (r.severity === 'critical') p.critical++
+    if (r.status === 'verified') {
+      p.verified++
+      p.latest ??= { id: String(r.id), title: String(r.title ?? ''), severity: String(r.severity), at: iso(r.created_at) }
+    }
+    by.set(code, p)
+  }
+  return [...by.values()].sort((a, b) => b.serious - a.serious || b.critical - a.critical).slice(0, 50)
+}
+
 // ─── Routes ─────────────────────────────────────────────────────────────
 
 const SWR = (fresh: number) => ({ freshSeconds: fresh, staleSeconds: 6 * 3_600, lockSeconds: 60 })
@@ -494,7 +575,7 @@ export const registerPublicInsightRoutes: FastifyPluginAsync = async (app) => {
     if (!site) return sendError(reply, 400, 'VALIDATION_ERROR', 'site must be a website, e.g. bbc.co.uk')
     const days = boundedInt(q.days, 7, 1, 14)
     try {
-      const data = await staleWhileRevalidate(`public:outlet-reports:v1:${site}:${days}`, SWR(600), () => outletReports(site, days))
+      const data = await staleWhileRevalidate(`public:outlet-reports:v2:${site}:${days}`, SWR(600), () => outletReports(site, days))
       return reply.send({ success: true, data: { site, days, ...data } })
     } catch {
       return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The outlet\'s reports could not be read just now; try again in a minute')
@@ -543,6 +624,45 @@ export const registerPublicInsightRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ success: true, data: { hours, ...data } })
     } catch {
       return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The outlets could not be counted just now; try again in a minute')
+    }
+  })
+
+  app.get('/news-by-hour', {
+    schema: { tags: ['public'], summary: 'The last hours\' news reports hour by hour: reports, verified, serious (public, no auth required)' }, ...OPEN,
+  }, async (req, reply) => {
+    reply.header('Access-Control-Allow-Origin', '*')
+    const hours = boundedInt((req.query as Record<string, unknown>)?.hours, 24, 1, 72)
+    try {
+      const byHour = await staleWhileRevalidate(`public:news-by-hour:v1:${hours}`, SWR(300), () => newsByHour(hours))
+      return reply.send({ success: true, data: { hours, byHour } })
+    } catch {
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The hours could not be counted just now; try again in a minute')
+    }
+  })
+
+  app.get('/serious-places', {
+    schema: { tags: ['public'], summary: 'The countries with the most critical and high-severity news reports in the last hours (public, no auth required)' }, ...OPEN,
+  }, async (req, reply) => {
+    reply.header('Access-Control-Allow-Origin', '*')
+    const hours = boundedInt((req.query as Record<string, unknown>)?.hours, 24, 1, 72)
+    try {
+      const places = await staleWhileRevalidate(`public:serious-places:v1:${hours}`, SWR(600), () => seriousPlaces(hours))
+      return reply.send({ success: true, data: { hours, places } })
+    } catch {
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The places could not be counted just now; try again in a minute')
+    }
+  })
+
+  app.get('/country-changes', {
+    schema: { tags: ['public'], summary: 'Each country\'s news reports of the last days against the days before (public, no auth required)' }, ...OPEN,
+  }, async (req, reply) => {
+    reply.header('Access-Control-Allow-Origin', '*')
+    const days = boundedInt((req.query as Record<string, unknown>)?.days, 7, 1, 14)
+    try {
+      const countries = await staleWhileRevalidate(`public:country-changes:v1:${days}`, { freshSeconds: 1_800, staleSeconds: 86_400, lockSeconds: 120 }, () => countryChanges(days))
+      return reply.send({ success: true, data: { days, countries } })
+    } catch {
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The countries could not be counted just now; try again in a minute')
     }
   })
 }

@@ -79,7 +79,8 @@ async function build(): Promise<FastifyInstance> {
         { ...STORY, firstSeenAt: hoursAgo(20) },
       ], hours: 6 } }
     }
-    if ((req.query as { limit?: string }).limit === '20') return { success: true, data: { stories: [STORY, ...MORE_STORIES], hours: 24 } }
+    // (long_running_stories reads their first reports' times)
+    if ((req.query as { limit?: string }).limit === '20') return { success: true, data: { stories: [{ ...STORY, firstSeenAt: hoursAgo(30), outletCountAll: 300 }, { ...MORE_STORIES[0], firstSeenAt: hoursAgo(24 * 9) }, { ...MORE_STORIES[1], firstSeenAt: hoursAgo(5) }, ...MORE_STORIES.slice(2)], hours: 24 } }
     return { success: true, data: { stories: [STORY], hours: 12 } }
   })
   // one finished day's top stories (Nov 10, 2026): a day not made yet answers 503 once
@@ -331,6 +332,13 @@ async function build(): Promise<FastifyInstance> {
   app.get('/api/v1/knowledge-graph/entities/:id/profile', async (req, reply) => {
     asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
     const { id } = req.params as { id: string }
+    if (id === NATO_PA.id) {
+      return { success: true, data: {
+        entity: { id: NATO_PA.id, type: 'organisation', name: 'NATO Parliamentary Assembly' },
+        activity: { last24h: 2, previous24h: 1, last7d: 9 }, stories: [], latest: [],
+        connections: [{ id: NATO.id, type: 'organisation', name: 'NATO', shared: 7 }],
+      } }
+    }
     if (id !== NATO.id) return reply.code(404).send({ error: 'Entity not found' })
     return {
       success: true,
@@ -677,7 +685,10 @@ async function build(): Promise<FastifyInstance> {
     asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
     const site = (req.query as { site?: string }).site
     if (!site || !site.includes('.')) return reply.code(400).send({ success: false, code: 'VALIDATION_ERROR', error: 'site must be a website' })
-    return { success: true, data: { site, days: 7, total: site === 'lemonde.fr' ? 31 : 0, reports: site === 'lemonde.fr'
+    const lemonde = site === 'lemonde.fr'
+    return { success: true, data: { site, days: 7, total: lemonde ? 31 : 0, verified: lemonde ? 12 : 0,
+      topics: lemonde ? [{ topic: 'geopolitics', reports: 20 }, { topic: 'conflict', reports: 6 }, { topic: 'culture', reports: 5 }] : [],
+      places: lemonde ? [{ country: 'FR', reports: 15 }, { country: 'SD', reports: 3 }] : [], reports: lemonde
       ? [{ id: OTHER_REPORT, title: 'Soudan : reprise des pourparlers', status: 'verified', severity: 'medium', topic: 'geopolitics', country: 'SD', at: hoursAgo(2), storyId: 's' }]
       : [] } }
   })
@@ -714,6 +725,41 @@ async function build(): Promise<FastifyInstance> {
       { site: 'tass.com', name: 'TASS', country: 'RU', kind: 'agency', stateMedia: true, reports: 150, verified: 30 },
       { site: 'bbc.com', name: 'BBC', country: 'GB', kind: 'international', stateMedia: false, reports: 80, verified: 50 },
     ] } }
+  })
+  // Nov 10, 2026, night, round 4
+  app.get('/api/v1/public/news-by-hour', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    return { success: true, data: { hours: 3, byHour: [
+      { hour: '2026-11-10T21:00:00.000Z', reports: 700, verified: 120, serious: 30 },
+      { hour: '2026-11-10T22:00:00.000Z', reports: 900, verified: 150, serious: 80 },
+      { hour: '2026-11-10T23:00:00.000Z', reports: 650, verified: 100, serious: 20 },
+    ] } }
+  })
+  app.get('/api/v1/public/serious-places', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    return { success: true, data: { hours: 24, places: [
+      { country: 'UA', serious: 120, critical: 20, verified: 60, latest: { id: OTHER_REPORT, title: 'Missile strike on Kharkiv', severity: 'critical', at: hoursAgo(2) } },
+      { country: 'SD', serious: 40, critical: 5, verified: 0, latest: null },
+    ] } }
+  })
+  // Nov 10, 2026, night, round 5
+  app.get('/api/v1/public/country-changes', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    return { success: true, data: { days: 1, countries: [
+      { country: 'US', now: 5000, before: 4800 },
+      { country: 'SD', now: 300, before: 100 },
+      { country: 'FJ', now: 5, before: 0 },
+      { country: 'UA', now: 400, before: 900 },
+      { country: 'NG', now: 60, before: 0 },
+    ] } }
+  })
+  app.get('/api/v1/status', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    return { overall: 'operational', checked_at: hoursAgo(0), services: { api: { status: 'operational' }, scraper: { status: 'operational', message: 'Newest report under a minute ago' } } }
+  })
+  app.get('/api/v1/signals/:id/connections', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    return { success: true, data: { connections: [], count: 0, entities: [{ id: 'e1', name: 'Kraków', type: 'location', mentionCount: 1200 }, { id: 'e2', name: 'Donald Tusk', type: 'person', mentionCount: 900 }] } }
   })
   await app.register(registerMcpRoutes, { prefix: '/mcp' })
   return app
@@ -762,6 +808,10 @@ describe('MCP server', () => {
       'topics_today', 'outlet_reports', 'region_top_stories', 'rising_stories', 'thin_coverage',
       'sanctions_actions', 'us_weather_alerts', 'carrier_groups', 'cyber_attacks', 'elections_watch',
       'disaster_news', 'state_media_stories', 'country_topics', 'busiest_outlets', 'local_only_stories',
+      'numbers_differ', 'long_running_stories', 'news_by_hour', 'serious_places', 'state_media_outlets',
+      'outlet_languages', 'how_worldpulse_counts', 'worldpulse_status', 'story_compare', 'report_entities',
+      'topic_top_stories', 'whats_new_today', 'rising_countries', 'entity_compare', 'outlet_compare',
+      'outlet_profile', 'coverage_stats', 'world_today', 'region_snapshot', 'find_outlet',
     ])
     for (const t of tools) {
       expect(t.inputSchema.type).toBe('object')
@@ -1947,5 +1997,193 @@ describe('MCP server: round 3 of Nov 10, 2026, night (seventy in all)', () => {
     expect(text).not.toContain('Krakow shooting')
     expect(text).not.toContain('Village fair')
     expect(text).not.toContain('A world story with a Polish pin')
+  })
+})
+
+describe('MCP server: round 4 of Nov 10, 2026, night (eighty in all)', () => {
+  beforeEach(() => { asked = [] })
+
+  it("numbers_differ reads each top story's figures and lists those with more than one value", async () => {
+    const app = await build()
+    const r = await call(app, 'numbers_differ', {})
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/stories?hours=24&limit=10', `/api/v1/stories/${STORY.leadId}/figures`, `/api/v1/stories/${WORLD_REPORT}/figures`])
+    const text = r.content[0].text as string
+    expect(text).toContain(`1. ${STORY.title}\n   Killed: 6 (50 outlets) · 9 (3 outlets)`)
+    expect(text).not.toContain('Injured')
+    expect(r.structuredContent.looked).toBe(2)
+  })
+
+  it('long_running_stories puts the oldest of the top stories first', async () => {
+    const app = await build()
+    const r = await call(app, 'long_running_stories', {})
+    const text = r.content[0].text as string
+    expect(text).toContain('1. Migrant boats capsize off Senegal and Greece\n   Running for 9 days')
+    expect(text).toContain(`2. ${STORY.title}\n   Running for 30 hours · 14 outlets in its last two days, 300 since it began`)
+    expect(text.indexOf('Trump says')).toBeGreaterThan(text.indexOf(STORY.title))
+  })
+
+  it('news_by_hour lists the hours with the busiest and the most serious', async () => {
+    const app = await build()
+    const r = await call(app, 'news_by_hour', { hours: 3 })
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/public/news-by-hour?hours=3'])
+    const text = r.content[0].text as string
+    expect(text).toContain('2026-11-10 22:00 UTC: 900 · 150 verified · 80 serious')
+    expect(text).toContain('Busiest: 2026-11-10 22:00 UTC (900). Most serious reports: 2026-11-10 22:00 UTC (80).')
+  })
+
+  it('serious_places ranks the countries by their serious reports', async () => {
+    const app = await build()
+    const r = await call(app, 'serious_places', {})
+    const text = r.content[0].text as string
+    expect(text).toContain('1. Ukraine: 120 serious (20 critical), 60 verified\n   Newest verified: Missile strike on Kharkiv (Critical, 2h ago)')
+    expect(text).toContain('2. Sudan: 40 serious (5 critical), 0 verified')
+  })
+
+  it('state_media_outlets and outlet_languages read the directory, asking nothing', async () => {
+    const app = await build()
+    const ru = await call(app, 'state_media_outlets', { country: 'ru' })
+    expect(asked).toEqual([])
+    expect(ru.content[0].text).toContain('TASS (news agency')
+    expect(ru.structuredContent.countries[0].code).toBe('RU')
+    const all = await call(app, 'state_media_outlets', {})
+    expect(all.structuredContent.outlets).toBeGreaterThan(5)
+    const langs = await call(app, 'outlet_languages', { limit: 3 })
+    expect(langs.content[0].text).toMatch(/^The languages of the [\d,]+ newsrooms WorldPulse reads the feeds of/)
+    expect(langs.structuredContent.languages[0].code).toBe('en')
+  })
+
+  it('how_worldpulse_counts explains verified, and worldpulse_status reads the status and the counts', async () => {
+    const app = await build()
+    const how = await call(app, 'how_worldpulse_counts', {})
+    expect(how.content[0].text).toContain('Verified means more than one outlet says so, not that every detail is proven true.')
+    const st = await call(app, 'worldpulse_status', {})
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/status', '/api/v1/signals/count'])
+    expect(st.content[0].text).toContain('WorldPulse is operational')
+    expect(st.content[0].text).toContain('- Scraper: operational (Newest report under a minute ago)')
+    expect(st.content[0].text).toContain('Reports read: 560 in the last hour, 18,660 in the last 24 hours.')
+  })
+
+  it('story_compare sets two stories side by side, and refuses the same story twice', async () => {
+    const app = await build()
+    const r = await call(app, 'story_compare', { a: STORY.leadId, b: WORLD_REPORT })
+    const text = r.content[0].text as string
+    expect(text).toContain(`${STORY.title}\n- Outlets: 2 in its last two days, from 2 countries (1 of them Qatar's own)`)
+    expect(text).toContain('Six killed in Krakow shooting\n- Outlets: 7 in its last two days, 90 since it began')
+    expect(text).toContain('- Languages: English, Polish')
+    expect((await call(app, 'story_compare', { a: WORLD_REPORT, b: WORLD_REPORT })).isError).toBe(true)
+    expect((await call(app, 'story_compare', { a: WORLD_REPORT, b: 'nope' })).isError).toBe(true)
+  })
+
+  it('report_entities lists who and what a report names', async () => {
+    const app = await build()
+    const r = await call(app, 'report_entities', { id: WORLD_REPORT })
+    expect(asked.map(a => a.url)).toContain(`/api/v1/signals/${WORLD_REPORT}/connections?only=entities`)
+    expect(r.content[0].text).toContain('1. Kraków (place, in 1,200 reports in all)')
+    expect(r.content[0].text).toContain('2. Donald Tusk (person, in 900 reports in all)')
+  })
+})
+
+describe('MCP server: round 5 of Nov 10, 2026, night (ninety in all)', () => {
+  beforeEach(() => { asked = [] })
+
+  it("topic_top_stories asks the stories of one topic, politics as the reader's geopolitics, of a country or a region", async () => {
+    const app = await build()
+    const r = await call(app, 'topic_top_stories', { topic: 'Sports', country: 'uk' })
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/stories?hours=24&limit=8&category=sports&country=GB'])
+    expect(r.content[0].text).toContain('The top sports stories in the United Kingdom in the last 24 hours, ranked by independent outlets (WorldPulse):\n1. Ceasefire talks resume in Doha')
+    asked = []
+    const africa = await call(app, 'topic_top_stories', { topic: 'politics', region: 'Africa', hours: 48 })
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/stories?hours=48&limit=8&category=geopolitics&region=africa'])
+    expect(africa.content[0].text).toContain('The top politics stories of Africa in the last 48 hours')
+    expect(africa.content[0].text).toContain('ANC slumps to its worst result')
+    expect((await call(app, 'topic_top_stories', { topic: 'gossip' })).isError).toBe(true)
+  })
+
+  it("whats_new_today keeps the top stories that were not among yesterday's", async () => {
+    const app = await build()
+    const r = await call(app, 'whats_new_today', {})
+    expect(asked.map(a => a.url).sort()).toEqual(['/api/v1/stories/day', '/api/v1/stories?hours=24&limit=20'])
+    const text = r.content[0].text as string
+    expect(text).toContain("The top stories of the last 24 hours that were not among Monday, November 9's top 1 (UTC), the most outlets first (WorldPulse):\n1. Migrant boats capsize off Senegal and Greece")
+    expect(text).toContain('Still running from Monday, November 9: Ceasefire talks resume in Doha (14 outlets)')
+    expect(r.structuredContent.new.map((s: { title: string }) => s.title)).not.toContain(STORY.title)
+  })
+
+  it('rising_countries ranks the countries by how much their news rose, leaving the small ones out', async () => {
+    const app = await build()
+    const r = await call(app, 'rising_countries', {})
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/public/country-changes?days=1'])
+    const text = r.content[0].text as string
+    expect(text).toContain('1. Nigeria: 60 reports, none before\n2. Sudan: 300 reports, up 200% from 100\n3. United States: 5,000 reports, up 4% from 4,800')
+    expect(text).toContain('Fell the most: Ukraine 400 (down 56% from 900)')
+    expect(text).not.toContain('Fiji')
+  })
+
+  it('entity_compare sets two names side by side with the reports naming both', async () => {
+    const app = await build()
+    const r = await call(app, 'entity_compare', { a: 'NATO', b: 'NATO Parliamentary Assembly' })
+    expect(asked.map(a => a.url)).toContain(`/api/v1/knowledge-graph/entities/${NATO.id}/profile`)
+    expect(asked.map(a => a.url)).toContain(`/api/v1/knowledge-graph/entities/${NATO_PA.id}/profile`)
+    const text = r.content[0].text as string
+    expect(text).toContain('NATO (organisation): 10 reports in the last 24 hours (21 the day before), 178 in the last 7 days\n- Biggest stories: Ceasefire talks resume in Doha (14 outlets)\n- In the news with: Ukraine, United States')
+    expect(text).toContain('NATO Parliamentary Assembly (organisation): 2 reports in the last 24 hours (1 the day before), 9 in the last 7 days\n- No story naming it reached two outlets in the last two weeks')
+    expect(text).toContain('Named together in 7 reports; the stories naming both: connections with both names.')
+    expect((await call(app, 'entity_compare', { a: 'NATO', b: 'North Atlantic Treaty Organization' })).isError).toBe(true)
+    expect((await call(app, 'entity_compare', { a: 'NATO', b: 'Zzyzx' })).isError).toBe(true)
+  })
+
+  it("outlet_compare and outlet_profile read an outlet's reports, verified share, topics and places", async () => {
+    const app = await build()
+    const r = await call(app, 'outlet_compare', { a: 'https://www.lemonde.fr/international/x', b: 'bbc.co.uk' })
+    expect(asked.map(a => a.url).sort()).toEqual(['/api/v1/public/outlet-reports?site=bbc.co.uk&days=7', '/api/v1/public/outlet-reports?site=lemonde.fr&days=7'])
+    const text = r.content[0].text as string
+    expect(text).toContain('Le Monde (national, France): 31 reports, 12 verified (39%)\n- Topics: Politics 65%, Conflict 19%, Culture 16%\n- Placed in: France 15, Sudan 3')
+    expect(text).toContain('BBC (international, United Kingdom): no report in these days')
+    expect((await call(app, 'outlet_compare', { a: 'bbc.co.uk', b: 'www.bbc.co.uk' })).isError).toBe(true)
+    const p = await call(app, 'outlet_profile', { site: 'lemonde.fr', days: 7 })
+    expect(p.content[0].text).toContain('What Le Monde (national, France) reported in the last 7 days (WorldPulse):\n- Reports: 31, 12 verified (39%)\n- Topics: Politics 65%, Conflict 19%, Culture 16%\n- Placed in: France 15, Sudan 3\n- Newest:\n  Soudan : reprise des pourparlers (2h ago)')
+    expect(p.structuredContent).toMatchObject({ site: 'lemonde.fr', reports: 31, verified: 12, outlet: { name: 'Le Monde', country: 'FR' } })
+    expect((await call(app, 'outlet_profile', { site: 'bbc.co.uk' })).content[0].text).toBe('No report from BBC (international, United Kingdom) in the last 7 days.')
+  })
+
+  it('coverage_stats and find_outlet read the directory, asking nothing', async () => {
+    const app = await build()
+    const c = await call(app, 'coverage_stats', {})
+    const g = await call(app, 'find_outlet', { query: 'guardian' })
+    expect(asked).toEqual([])
+    expect(c.content[0].text).toMatch(/^WorldPulse reads the feeds of [\d,]+ newsrooms in [\d,]+ countries and territories, in \d+ languages/)
+    expect(c.content[0].text).toMatch(/\n- Africa: [\d,]+ newsrooms; \d+ of its 58 countries/)
+    expect(c.structuredContent.regions).toHaveLength(6)
+    expect(c.structuredContent.newsrooms).toBeGreaterThan(300)
+    expect(g.content[0].text).toContain('1. The Guardian (theguardian.com): national, United Kingdom, in English')
+    expect(g.content[0].text).toContain('Mail & Guardian (mg.co.za)')
+    const ng = await call(app, 'find_outlet', { query: 'guardian', country: 'za' })
+    expect(ng.structuredContent.outlets.map((o: { name: string }) => o.name)).toEqual(['Mail & Guardian'])
+    expect((await call(app, 'find_outlet', { query: 'zzqzzq' })).content[0].text).toContain('No outlet in WorldPulse\'s directory matches "zzqzzq"')
+    expect((await call(app, 'find_outlet', { query: 'x' })).isError).toBe(true)
+  })
+
+  it('world_today puts the counts, the biggest stories, the serious places and the topics in one answer', async () => {
+    const app = await build()
+    const r = await call(app, 'world_today', {})
+    expect(asked.map(a => a.url).sort()).toEqual(['/api/v1/public/serious-places?hours=24', '/api/v1/public/topics?hours=24', '/api/v1/signals/count', '/api/v1/stories?hours=24&limit=5'])
+    const text = r.content[0].text as string
+    expect(text).toContain('The world in the last 24 hours (WorldPulse): 18,660 reports read from 1,862 outlets in 215 countries and territories; 3,600 turned verified.')
+    expect(text).toContain('The biggest stories:\n1. Ceasefire talks resume in Doha')
+    expect(text).toContain('The most serious news (critical and high severity): Ukraine 120 (20 critical), Sudan 40 (5 critical)')
+    expect(text).toContain('The news by topic: Politics 60%, Conflict 30%, Sports 10%')
+  })
+
+  it("region_snapshot keeps the region's countries of the counts and the serious places", async () => {
+    const app = await build()
+    const r = await call(app, 'region_snapshot', { region: 'Africa' })
+    expect(asked.map(a => a.url).sort()).toEqual(['/api/v1/public/country-changes?days=1', '/api/v1/public/serious-places?hours=24', '/api/v1/stories?hours=24&limit=5&region=africa'])
+    const text = r.content[0].text as string
+    expect(text).toContain('Africa in the last 24 hours (WorldPulse):\n\nTop stories:\n1. Migrant boats capsize off Senegal and Greece')
+    expect(text).toContain('Its countries with the most news reports (change on the 24 hours before): Sudan 300 (+200%), Nigeria 60')
+    expect(text).toContain('The most serious news (critical and high severity): Sudan 40 (5 critical)')
+    expect(text).not.toContain('Ukraine')
+    expect(text).not.toContain('United States')
+    expect((await call(app, 'region_snapshot', { region: 'Atlantis' })).isError).toBe(true)
   })
 })

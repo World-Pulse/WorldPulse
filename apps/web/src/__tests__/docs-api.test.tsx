@@ -339,8 +339,12 @@ const toolsBlock = (src: string) => src.slice(src.indexOf('export const TOOLS'),
     // round 3: 70 tools, 47 routes (sanctions_actions, us_weather_alerts and carrier_groups share the government
     // feeds; cyber_attacks, elections_watch and disaster_news the news watches; state_media_stories, country_topics and
     // local_only_stories ask the stories and the topics)
-    expect(MCP_TOOLS.length).toBe(70)
-    expect(asked.length).toBeGreaterThanOrEqual(47)
+    // round 4: 80 tools, 51 routes (news_by_hour, serious_places, the status page and a report's named entities;
+    // numbers_differ asks the stories' figures; state_media_outlets, outlet_languages and how_worldpulse_counts ask nothing)
+    // round 5: 90 tools, 52 routes (rising_countries and region_snapshot ask each country's news against the days before;
+    // the rest ask routes the tools already ask, and coverage_stats and find_outlet read the directory)
+    expect(MCP_TOOLS.length).toBe(90)
+    expect(asked.length).toBeGreaterThanOrEqual(52)
     const named: Record<string, string> = {
       '/api/v1/stories': 'the top stories', '/api/v1/stories/:param': 'one story', '/api/v1/search/semantic': 'search by meaning',
       '/api/v1/stories/week': 'the week', '/api/v1/stories/by-link': 'the story of a news link',
@@ -370,6 +374,9 @@ const toolsBlock = (src: string) => src.slice(src.indexOf('export const TOOLS'),
       '/api/v1/public/outlet-reports': 'an outlet\'s reports',
       '/api/v1/public/feed-reports': 'the government feeds', '/api/v1/public/news-watch': 'the news watches',
       '/api/v1/public/busiest-outlets': 'the busiest outlets',
+      '/api/v1/public/news-by-hour': 'the news hour by hour', '/api/v1/public/serious-places': 'the serious places',
+      '/api/v1/status': 'the status page', '/api/v1/signals/:param/connections': 'a report\'s named entities',
+      '/api/v1/public/country-changes': 'each country\'s news against the days before',
     }
     const said = TEXT.slice(TEXT.indexOf('Each tool asks the API\'s own open endpoints'), TEXT.indexOf('How to connect'))
     const routeLike = (path: string) => API_ROUTES.find(r => r.method === 'GET' && r.path.replace(/:[A-Za-z_]+/g, ':param') === path)
