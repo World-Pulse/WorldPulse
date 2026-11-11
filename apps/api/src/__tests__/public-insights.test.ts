@@ -21,6 +21,16 @@ vi.mock('../lib/long-query', () => ({
     return run({
       raw: async (sql: string, bindings: unknown[]) => {
         calls.push({ sql, bindings })
+        // round 6
+        if (sql.includes("to_char(date_trunc('day'")) return { rows: [{ day: '2026-11-09', reports: '18000', verified: '3500', serious: '900' }, { day: null, reports: '1', verified: '0', serious: '0' }] }
+        if (sql.includes('sum(count(*)) OVER () AS total') && sql.includes('category::text = ?')) return { rows: [{ country: 'US', reports: '200', verified: '50', total: '500' }, { country: 'X1', reports: '1', verified: '0', total: '500' }] }
+        if (sql.includes("SELECT 'site' AS kind")) {
+          return { rows: [
+            { kind: 'site', key: 'aljazeera.com', reports: '200', verified: '120' }, { kind: 'site', key: 'localhost', reports: '3', verified: '0' },
+            { kind: 'language', key: 'en', reports: '600', verified: '0' }, { kind: 'language', key: 'x', reports: '1', verified: '0' },
+            { kind: 'total', key: '', reports: '1000', verified: '300' },
+          ] }
+        }
         if (sql.includes("date_trunc('hour'")) return { rows: [{ hour: '2026-11-10T22:00:00Z', reports: '900', verified: '150', serious: '80' }] }
         if (sql.includes('country_code AS country,')) return { rows: [{ country: 'SD', now: '300', before: '100' }, { country: 'XX1', now: '9', before: '1' }, { country: 'US', now: 5000, before: 4800 }] }
         if (sql.includes('AND country_code IS NOT NULL')) {
@@ -270,5 +280,48 @@ describe('GET /api/v1/public/country-changes', () => {
   it('answers 503 when the count fails', async () => {
     fail = true
     expect((await get('/api/v1/public/country-changes')).statusCode).toBe(503)
+  })
+})
+
+describe('GET /api/v1/public/news-by-day, /topic-countries, /country-coverage and a region\'s /topics (round 6)', () => {
+  it("counts the days, the world's or one topic's, and refuses a topic it does not know", async () => {
+    const { data } = (await get('/api/v1/public/news-by-day?days=14&topic=Elections')).json()
+    expect(data).toEqual({ days: 14, topic: 'elections', byDay: [{ day: '2026-11-09', reports: 18000, verified: 3500, serious: 900 }] })
+    expect(calls[0]!.bindings).toEqual([14, 'elections'])
+    expect(calls[0]!.sql).toContain('AND category::text = ?')
+    calls.length = 0
+    await get('/api/v1/public/news-by-day')
+    expect(calls[0]!.bindings).toEqual([14])
+    expect(calls[0]!.sql).not.toContain('category::text = ?')
+    expect((await get('/api/v1/public/news-by-day?topic=gossip')).statusCode).toBe(400)
+  })
+
+  it("counts one topic's reports by country, with the total", async () => {
+    const { data } = (await get('/api/v1/public/topic-countries?topic=health&days=3')).json()
+    expect(data).toEqual({ topic: 'health', days: 3, total: 500, countries: [{ country: 'US', reports: 200, verified: 50 }] })
+    expect(calls[0]!.bindings).toEqual([3, 'health'])
+    expect((await get('/api/v1/public/topic-countries')).statusCode).toBe(400)
+  })
+
+  it("counts a country's reports by outlet and by language in one scan", async () => {
+    const { data } = (await get('/api/v1/public/country-coverage?country=uk')).json()
+    expect(data).toEqual({ country: 'GB', days: 7, total: 1000, verified: 300, outlets: [{ site: 'aljazeera.com', reports: 200, verified: 120 }], languages: [{ language: 'en', reports: 600 }] })
+    expect(calls[0]!.bindings).toEqual([7, 'GB'])
+    expect((await get('/api/v1/public/country-coverage?country=Sudan')).statusCode).toBe(400)
+  })
+
+  it("counts a region's topics over its countries, and refuses a region it does not know", async () => {
+    const res = await get('/api/v1/public/topics?region=Africa')
+    expect(res.json().data.region).toBe('africa')
+    expect(calls[0]!.sql).toContain('AND country_code = ANY(?::bpchar[])')
+    expect(calls[0]!.bindings.at(-1)).toEqual(expect.arrayContaining(['NG', 'EG', 'ZA']))
+    expect((await get('/api/v1/public/topics?region=atlantis')).statusCode).toBe(400)
+  })
+
+  it('answers 503 when a count fails', async () => {
+    fail = true
+    for (const url of ['/api/v1/public/news-by-day', '/api/v1/public/topic-countries?topic=health', '/api/v1/public/country-coverage?country=SD']) {
+      expect((await get(url)).statusCode).toBe(503)
+    }
   })
 })

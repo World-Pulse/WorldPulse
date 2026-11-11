@@ -15,7 +15,7 @@ vi.mock('../../lib/outside-use', async (actual) => ({
   countMcpTool: vi.fn(async (_redis: unknown, tool: string) => { counted.tools.push(tool) }),
 }))
 
-import { registerMcpRoutes, PROTOCOL_VERSIONS, DAY_WAIT } from '../mcp'
+import { registerMcpRoutes, PROTOCOL_VERSIONS, DAY_WAIT, TOOL_SETS } from '../mcp'
 import { internalCallClient } from '../../lib/internal-call'
 import { rateLimitKey } from '../../lib/rate-limit-options'
 
@@ -673,6 +673,7 @@ async function build(): Promise<FastifyInstance> {
   })
   app.get('/api/v1/public/topics', async (req) => {
     asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    if ((req.query as { region?: string }).region === 'africa') return { success: true, data: { hours: 24, country: null, region: 'africa', topics: [{ topic: 'elections', reports: 50, verified: 10, before: 25 }, { topic: 'conflict', reports: 50, verified: 20, before: 0 }] } }
     if ((req.query as { country?: string }).country === 'NG') return { success: true, data: { hours: 24, country: 'NG', topics: [{ topic: 'security', reports: 30, verified: 10, before: 20 }, { topic: 'elections', reports: 10, verified: 2, before: 0 }] } }
     return { success: true, data: { hours: 24, topics: [
       { topic: 'geopolitics', reports: 600, verified: 200, before: 500 },
@@ -740,6 +741,31 @@ async function build(): Promise<FastifyInstance> {
     return { success: true, data: { hours: 24, places: [
       { country: 'UA', serious: 120, critical: 20, verified: 60, latest: { id: OTHER_REPORT, title: 'Missile strike on Kharkiv', severity: 'critical', at: hoursAgo(2) } },
       { country: 'SD', serious: 40, critical: 5, verified: 0, latest: null },
+    ] } }
+  })
+  // Nov 10, 2026, night, round 6
+  app.get('/api/v1/public/topic-countries', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    return { success: true, data: { topic: 'health', days: 1, total: 500, countries: [{ country: 'US', reports: 200, verified: 50 }, { country: 'IN', reports: 100, verified: 10 }] } }
+  })
+  app.get('/api/v1/public/country-coverage', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    if ((req.query as { country?: string }).country === 'AQ') return { success: true, data: { country: 'AQ', days: 7, total: 0, verified: 0, outlets: [], languages: [] } }
+    return { success: true, data: { country: 'SD', days: 7, total: 1000, verified: 300,
+      outlets: [{ site: 'aljazeera.com', reports: 200, verified: 120 }, { site: 'bbc.co.uk', reports: 90, verified: 70 }, { site: 'dabangasudan.org', reports: 80, verified: 20 }, { site: 'bbc.com', reports: 60, verified: 40 }, { site: 'unknown.example', reports: 10, verified: 0 }],
+      languages: [{ language: 'en', reports: 600 }, { language: 'ar', reports: 350 }, { language: 'fr', reports: 50 }] } }
+  })
+  app.get('/api/v1/public/news-by-day', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    const day = (back: number) => new Date(Date.now() - back * 86_400_000).toISOString().slice(0, 10)
+    if ((req.query as { topic?: string }).topic === 'elections') {
+      return { success: true, data: { days: 14, topic: 'elections', byDay: [
+        ...Array.from({ length: 14 }, (_, i) => ({ day: day(14 - i), reports: i < 7 ? 10 : 20, verified: 1, serious: 0 })),
+        { day: day(0), reports: 5, verified: 0, serious: 0 },
+      ] } }
+    }
+    return { success: true, data: { days: 2, topic: null, byDay: [
+      { day: day(2), reports: 18000, verified: 3500, serious: 900 }, { day: day(1), reports: 19000, verified: 3600, serious: 950 }, { day: day(0), reports: 4000, verified: 700, serious: 200 },
     ] } }
   })
   // Nov 10, 2026, night, round 5
@@ -812,6 +838,8 @@ describe('MCP server', () => {
       'outlet_languages', 'how_worldpulse_counts', 'worldpulse_status', 'story_compare', 'report_entities',
       'topic_top_stories', 'whats_new_today', 'rising_countries', 'entity_compare', 'outlet_compare',
       'outlet_profile', 'coverage_stats', 'world_today', 'region_snapshot', 'find_outlet',
+      'most_global_stories', 'country_rank', 'compare_regions', 'topic_countries', 'who_reports_on',
+      'country_languages', 'news_by_day', 'topic_trend', 'region_topics', 'tool_guide',
     ])
     for (const t of tools) {
       expect(t.inputSchema.type).toBe('object')
@@ -2185,5 +2213,150 @@ describe('MCP server: round 5 of Nov 10, 2026, night (ninety in all)', () => {
     expect(text).not.toContain('Ukraine')
     expect(text).not.toContain('United States')
     expect((await call(app, 'region_snapshot', { region: 'Atlantis' })).isError).toBe(true)
+  })
+})
+
+describe('MCP server: round 6 of Nov 10, 2026, night (a hundred in all)', () => {
+  beforeEach(() => { asked = [] })
+
+  it('most_global_stories puts the stories with outlets from the most countries first', async () => {
+    const app = await build()
+    const r = await call(app, 'most_global_stories', {})
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/stories?hours=24&limit=20'])
+    const text = r.content[0].text as string
+    expect(text).toContain('1. Trump says the Iran war is effectively over\n   Outlets from 36 countries · 71 outlets · not verified yet')
+    expect(text.indexOf('A story with no home country')).toBeLessThan(text.indexOf('Migrant boats'))
+    expect(text.indexOf('Migrant boats')).toBeLessThan(text.indexOf(STORY.title))
+  })
+
+  it("country_rank gives a country's place among the countries in the news, with its neighbours", async () => {
+    const app = await build()
+    const r = await call(app, 'country_rank', { country: 'sd' })
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/public/country-changes?days=1'])
+    expect(r.content[0].text).toBe('Sudan is number 3 of 5 countries in the news in the last 24 hours (WorldPulse): 300 news reports placed there, 5% of all, up 200% on the 24 hours before (100).\nJust above: United States (5,000), Ukraine (400).\nJust below: Nigeria (60), Fiji (5).')
+    expect((await call(app, 'country_rank', { country: 'aq' })).content[0].text).toBe('No news report placed in Antarctica in the last 24 hours.')
+    // "The United States is number 1", with its "the"
+    expect((await call(app, 'country_rank', { country: 'us' })).content[0].text).toMatch(/^The United States is number 1 of 5 countries/)
+  })
+
+  it("compare_regions adds up each region's countries", async () => {
+    const app = await build()
+    const r = await call(app, 'compare_regions', { a: 'africa', b: 'europe' })
+    expect(asked.map(a => a.url).sort()).toEqual(['/api/v1/public/country-changes?days=1', '/api/v1/public/serious-places?hours=24', '/api/v1/stories?hours=24&limit=3&region=africa', '/api/v1/stories?hours=24&limit=3&region=europe'])
+    const text = r.content[0].text as string
+    expect(text).toContain('Africa: 360 news reports (+260% on the 24 hours before), 40 serious (5 critical)\n- Busiest: Sudan 300, Nigeria 60\n- Top stories: Migrant boats capsize off Senegal and Greece (44 outlets); ANC slumps to its worst result (29 outlets)')
+    expect(text).toContain('Europe: 400 news reports (-56% on the 24 hours before), 120 serious (20 critical)\n- Busiest: Ukraine 400\n- No story reached two outlets')
+    expect((await call(app, 'compare_regions', { a: 'asia', b: 'Asia' })).isError).toBe(true)
+    expect((await call(app, 'compare_regions', { a: 'asia', b: 'mars' })).isError).toBe(true)
+  })
+
+  it("topic_countries lists where one topic's news is placed, politics as the reader's geopolitics", async () => {
+    const app = await build()
+    const r = await call(app, 'topic_countries', { topic: 'health' })
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/public/topic-countries?topic=health&days=1'])
+    expect(r.content[0].text).toContain('Where health news came from in the last 24 hours (WorldPulse; 500 news reports placed in a country), the most first:\n1. United States: 200 (40%), 50 verified\n2. India: 100 (20%), 10 verified')
+    asked = []
+    await call(app, 'topic_countries', { topic: 'politics', days: 3 })
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/public/topic-countries?topic=geopolitics&days=3'])
+  })
+
+  it("who_reports_on puts an outlet's websites together and its own press against the rest; country_languages gives the shares", async () => {
+    const app = await build()
+    const r = await call(app, 'who_reports_on', { country: 'sd' })
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/public/country-coverage?country=SD&days=7'])
+    const text = r.content[0].text as string
+    expect(text).toContain('The outlets reporting the most on Sudan in the last 7 days (WorldPulse; 1,000 news reports placed there, 300 verified):')
+    expect(text).toContain('1. Al Jazeera (aljazeera.com): 200 reports, 120 verified · international, Qatar')
+    expect(text).toContain('2. BBC (bbc.co.uk, bbc.com): 150 reports, 110 verified · international, United Kingdom')
+    expect(text).toContain('3. Radio Dabanga (dabangasudan.org): 80 reports, 20 verified · national, Sudan')
+    expect(text).toContain('4. unknown.example: 10 reports, 0 verified · not in the outlet directory')
+    expect(text).toContain("Of the reports of the 5 busiest websites, 18% come from Sudan's own press and 82% from elsewhere.")
+    const l = await call(app, 'country_languages', { country: 'SD' })
+    expect(l.content[0].text).toContain('1. English: 60% (600)\n2. Arabic: 35% (350)\n3. French: 5% (50)')
+    expect((await call(app, 'who_reports_on', { country: 'aq' })).content[0].text).toBe('No news report placed in Antarctica in the last 7 days.')
+  })
+
+  it('news_by_day and topic_trend list the days, the busiest finished day and the last 7 against the 7 before', async () => {
+    const app = await build()
+    const r = await call(app, 'news_by_day', { days: 2 })
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/public/news-by-day?days=2'])
+    const text = r.content[0].text as string
+    expect(text).toContain('(today so far): 4,000 · 700 verified · 200 serious')
+    expect(text).toMatch(/Busiest day: [A-Z][a-z]{2} \d{1,2} \(19,000\)\./)
+    expect(text).not.toContain('The last 7 days')
+    const t = await call(app, 'topic_trend', { topic: 'elections' })
+    expect(asked.at(-1)!.url).toBe('/api/v1/public/news-by-day?days=14&topic=elections')
+    expect(t.content[0].text).toContain('Elections news reports day by day (UTC, WorldPulse):')
+    expect(t.content[0].text).toContain('The last 7 days: 140; the 7 before: 70 (+100%).')
+    expect((await call(app, 'topic_trend', { topic: 'gossip' })).isError).toBe(true)
+  })
+
+  it("region_topics asks the topics of a region's countries", async () => {
+    const app = await build()
+    const r = await call(app, 'region_topics', { region: 'Africa' })
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/public/topics?hours=24&region=africa'])
+    expect(r.content[0].text).toContain("The topics of Africa's 100 news reports of the last 24 hours (WorldPulse; change on the 24 hours before), the most first:\n1. Elections: 50 (50%), 10 verified (+100%)\n2. Conflict: 50 (50%), 20 verified")
+  })
+
+  it('tool_guide puts every tool under one kind, and the closest to a question first', async () => {
+    const app = await build()
+    const r = await call(app, 'tool_guide', { question: 'Who reports on Sudan?' })
+    expect(asked).toEqual([])
+    expect(r.structuredContent.closest[0].name).toBe('who_reports_on')
+    const listed = r.structuredContent.kinds.flatMap((k: { tools: string[] }) => k.tools).sort()
+    const { tools } = (await rpc(app, { jsonrpc: '2.0', id: 4, method: 'tools/list' })).json().result
+    expect(listed).toEqual(tools.map((t: { name: string }) => t.name).sort())
+    expect(r.content[0].text).toContain("WorldPulse's 100 tools by kind:")
+    const plain = await call(app, 'tool_guide', {})
+    expect(plain.content[0].text).toMatch(/^WorldPulse's 100 tools by kind:\n- The news now: world_today, top_stories/)
+  })
+})
+
+describe('MCP server: smaller tool sets on their own addresses (Nov 10, 2026)', () => {
+  beforeEach(() => { asked = [] })
+  const at = (app: FastifyInstance, set: string, body: unknown) =>
+    app.inject({ method: 'POST', url: `/mcp/${set}`, headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, payload: JSON.stringify(body) })
+  const namesAt = async (app: FastifyInstance, set: string) =>
+    ((await at(app, set, { jsonrpc: '2.0', id: 1, method: 'tools/list' })).json().result.tools as Array<{ name: string }>).map(t => t.name)
+
+  it('keeps each set to 40 tools at most, and every tool in one of the topic sets', async () => {
+    const app = await build()
+    const all = ((await rpc(app, { jsonrpc: '2.0', id: 1, method: 'tools/list' })).json().result.tools as Array<{ name: string }>).map(t => t.name)
+    const seen = new Set<string>()
+    for (const id of Object.keys(TOOL_SETS)) {
+      const names = await namesAt(app, id)
+      expect(names.length, id).toBeLessThanOrEqual(40)
+      expect(new Set(names).size, id).toBe(names.length)
+      for (const n of names) expect(all, `${id} ${n}`).toContain(n)
+      if (id !== 'essentials') names.forEach(n => seen.add(n))
+    }
+    expect([...seen].sort()).toEqual([...all].sort())
+    expect(await namesAt(app, 'live')).toEqual(expect.arrayContaining(['military_aircraft', 'hazards', 'sanctions_actions', 'tool_guide']))
+    expect(await namesAt(app, 'news')).not.toContain('military_aircraft')
+  })
+
+  it('says which set it is, refuses a tool of another set with where to find it, and a set it does not have', async () => {
+    const app = await build()
+    const init = (await at(app, 'live', { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } })).json().result
+    expect(init.serverInfo.title).toBe('WorldPulse: live layers and government feeds')
+    expect(init.instructions).toMatch(/This address has \d+ of WorldPulse's 100 tools, live layers and government feeds: tool_guide says which answers what\. All of them: https:\/\/api\.world-pulse\.io\/mcp\./)
+    const wrong = (await at(app, 'live', { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'top_stories', arguments: {} } })).json()
+    expect(wrong.error.message).toBe('Unknown tool: top_stories (it is at https://api.world-pulse.io/mcp)')
+    const ok = (await at(app, 'news', { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'top_stories', arguments: {} } })).json()
+    expect(ok.result.isError).toBe(false)
+    expect((await at(app, 'everything', { jsonrpc: '2.0', id: 4, method: 'tools/list' })).statusCode).toBe(404)
+    expect((await app.inject({ method: 'GET', url: '/mcp/news' })).statusCode).toBe(405)
+  })
+
+  it("offers a set the prompts whose tools it has, and its guide lists the set's own tools", async () => {
+    const app = await build()
+    const prompts = async (set: string) => ((await at(app, set, { jsonrpc: '2.0', id: 1, method: 'prompts/list' })).json().result.prompts as Array<{ name: string }>).map(p => p.name)
+    expect(await prompts('news')).toEqual(['morning_brief', 'check_this_link'])
+    expect(await prompts('places')).toEqual(['country_deep_dive'])
+    expect(await prompts('essentials')).toEqual(['morning_brief', 'check_this_link', 'country_deep_dive'])
+    expect(await prompts('live')).toEqual([])
+    const guide = (await at(app, 'live', { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'tool_guide', arguments: {} } })).json().result
+    expect(guide.content[0].text).toMatch(/^The \d+ tools at this address \(live layers and government feeds; all 100 at https:\/\/api\.world-pulse\.io\/mcp\), by kind:\n- Live layers: military_aircraft/)
+    expect(guide.content[0].text).not.toContain('top_stories')
   })
 })

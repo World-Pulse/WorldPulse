@@ -343,8 +343,10 @@ const toolsBlock = (src: string) => src.slice(src.indexOf('export const TOOLS'),
     // numbers_differ asks the stories' figures; state_media_outlets, outlet_languages and how_worldpulse_counts ask nothing)
     // round 5: 90 tools, 52 routes (rising_countries and region_snapshot ask each country's news against the days before;
     // the rest ask routes the tools already ask, and coverage_stats and find_outlet read the directory)
-    expect(MCP_TOOLS.length).toBe(90)
-    expect(asked.length).toBeGreaterThanOrEqual(52)
+    // round 6: 100 tools, 55 routes (news_by_day and topic_trend ask the news day by day, topic_countries one topic's
+    // countries, who_reports_on and country_languages who reports on a country; tool_guide asks nothing)
+    expect(MCP_TOOLS.length).toBe(100)
+    expect(asked.length).toBeGreaterThanOrEqual(55)
     const named: Record<string, string> = {
       '/api/v1/stories': 'the top stories', '/api/v1/stories/:param': 'one story', '/api/v1/search/semantic': 'search by meaning',
       '/api/v1/stories/week': 'the week', '/api/v1/stories/by-link': 'the story of a news link',
@@ -377,6 +379,8 @@ const toolsBlock = (src: string) => src.slice(src.indexOf('export const TOOLS'),
       '/api/v1/public/news-by-hour': 'the news hour by hour', '/api/v1/public/serious-places': 'the serious places',
       '/api/v1/status': 'the status page', '/api/v1/signals/:param/connections': 'a report\'s named entities',
       '/api/v1/public/country-changes': 'each country\'s news against the days before',
+      '/api/v1/public/news-by-day': 'the news day by day', '/api/v1/public/topic-countries': 'one topic\'s countries',
+      '/api/v1/public/country-coverage': 'who reports on a country',
     }
     const said = TEXT.slice(TEXT.indexOf('Each tool asks the API\'s own open endpoints'), TEXT.indexOf('How to connect'))
     const routeLike = (path: string) => API_ROUTES.find(r => r.method === 'GET' && r.path.replace(/:[A-Za-z_]+/g, ':param') === path)

@@ -571,9 +571,9 @@ export default function ApiDocsPage() {
               report's closest reports, a report's reader flags, the space weather, the chokepoints named in the news, the
               exploited vulnerabilities, the travel advice, the first reporters, the verification times, the topics of
               the news, an outlet's reports, the government feeds, the news watches, the busiest outlets, the news hour by hour,
-              the serious places, the status page, a report's named entities and each country's news against the days
-              before; outlet, who_covers, thin_coverage, state_media_outlets, outlet_languages, coverage_stats and
-              find_outlet read the outlet directory, how_worldpulse_counts asks nothing), and
+              the serious places, the status page, a report's named entities, each country's news against the days
+              before, the news day by day, one topic's countries and who reports on a country; outlet, who_covers, thin_coverage, state_media_outlets, outlet_languages, coverage_stats and
+              find_outlet read the outlet directory, how_worldpulse_counts and tool_guide ask nothing), and
               those calls count against your limits
               on them too. How to connect Claude, Claude Code or Cursor is on the{' '}
               <Link href={MCP_GUIDE} className="text-amber-400 hover:text-amber-300">developer page</Link>.

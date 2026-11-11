@@ -101,8 +101,26 @@ const MCP_TOOLS = [
   { name: 'world_today', what: 'The world in the last 24 hours, in one answer' },
   { name: 'region_snapshot', what: 'A region in the last 24 hours, in one answer' },
   { name: 'find_outlet', what: 'Find a news outlet by name' },
+  { name: 'most_global_stories', what: 'The stories with outlets from the most countries' },
+  { name: 'country_rank', what: 'Where a country stands in the news, with its neighbours' },
+  { name: 'compare_regions', what: 'Two regions side by side' },
+  { name: 'topic_countries', what: "Where one topic's news is reported from" },
+  { name: 'who_reports_on', what: 'The outlets reporting the most on a country, its own press against the rest' },
+  { name: 'country_languages', what: "The languages a country's news comes in" },
+  { name: 'news_by_day', what: 'The news day by day: reports, verified, serious' },
+  { name: 'topic_trend', what: 'One topic day by day, the last week against the one before' },
+  { name: 'region_topics', what: "What a region's news is about" },
+  { name: 'tool_guide', what: 'Which tool answers which question' },
 ]
 const MCP_CURSOR = '{"mcpServers":{"worldpulse":{"url":"https://api.world-pulse.io/mcp"}}}'
+// The smaller sets (routes/mcp.ts TOOL_SETS; a test checks these are the server's)
+const MCP_SETS = [
+  { id: 'essentials', what: 'The essentials: 28 of the most used tools' },
+  { id: 'news', what: 'The news now, one story and checking: 39 tools' },
+  { id: 'places', what: 'Countries, regions and topics: 38 tools' },
+  { id: 'outlets', what: 'Outlets, people and organisations: 19 tools' },
+  { id: 'live', what: 'Live layers (aircraft, ships, hazards) and government feeds: 16 tools' },
+]
 
 /* ──────────────────────────────────────────────────────────────────────── *
  *  WorldPulse Developer Portal                                            *
@@ -605,6 +623,17 @@ export default function DevelopersPage() {
               <p>Claude: Customize, Connectors, &ldquo;+ Add&rdquo;, &ldquo;Add custom connector&rdquo;; paste the address above and choose no sign-in. Then turn WorldPulse on in a chat (&ldquo;+&rdquo;, Connectors). Free accounts can add one custom connector.</p>
               <p>Claude Code: <code className="text-wp-cyan font-mono break-all">claude mcp add --transport http worldpulse https://api.world-pulse.io/mcp</code></p>
               <p>Cursor, in <code className="text-wp-cyan font-mono">.cursor/mcp.json</code>: <code className="text-wp-cyan font-mono break-all">{MCP_CURSOR}</code></p>
+            </div>
+            {/* Nov 10, 2026: apps that take 40 tools at most (Cursor) and assistants that pick better among fewer */}
+            <p className="text-[12px] font-mono text-wp-text3 uppercase tracking-wider mt-5 mb-2">Fewer tools</p>
+            <p className="text-[13px] text-wp-text3 mb-2">For an app that takes 40 tools at most, connect one of these addresses instead: the same server, with one set of its tools.</p>
+            <div className="space-y-1 text-[13px]">
+              {MCP_SETS.map(s => (
+                <div key={s.id} className="flex gap-3">
+                  <code className="text-wp-cyan font-mono min-w-[160px] break-all">{`https://api.world-pulse.io/mcp/${s.id}`}</code>
+                  <span className="text-wp-text3">{s.what}</span>
+                </div>
+              ))}
             </div>
           </div>
         </section>

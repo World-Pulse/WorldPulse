@@ -17,6 +17,7 @@
  *   const { cursor, category, severity, limit } = parsed.data
  */
 
+import { READER_TOPICS } from './topics'
 import { z } from 'zod'
 
 // ─── Shared primitive transformers ────────────────────────────────────────────
@@ -167,11 +168,7 @@ export const StoryListQuerySchema = z.object({
   region: z.enum(['africa', 'americas', 'asia', 'europe', 'middle-east', 'oceania']).optional(),
   // One topic's stories (Nov 10, 2026): the reader's category of the story's reports, e.g. sports. A fixed list, so
   // the kept lists stay few (each is its own query)
-  category: z.preprocess(v => (typeof v === 'string' ? v.trim().toLowerCase() : v), z.enum([
-    'breaking', 'conflict', 'geopolitics', 'politics', 'elections', 'economy', 'finance', 'security', 'military', 'technology',
-    'science', 'health', 'climate', 'weather', 'disaster', 'humanitarian', 'culture', 'sports', 'space', 'aviation', 'maritime',
-    'infrastructure', 'other',
-  ])).optional(),
+  category: z.preprocess(v => (typeof v === 'string' ? v.trim().toLowerCase() : v), z.enum(READER_TOPICS)).optional(),
 })
 
 export type StoryListQuery = z.infer<typeof StoryListQuerySchema>

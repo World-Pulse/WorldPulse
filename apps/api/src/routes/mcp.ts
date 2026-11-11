@@ -17,7 +17,7 @@
  * (lib/internal-call.ts): asking through MCP costs what asking the API
  * directly does. This route has its own limit too (60 POSTs a minute).
  */
-import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
+import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import { internalCallHeaders } from '../lib/internal-call'
 import { rateLimitKey } from '../lib/rate-limit-options'
 import { describeSite, siteInfo, countryLabel, outletOf, OUTLET_KIND_LABELS } from '../lib/outlets'
@@ -31,13 +31,15 @@ import { KNOWN_AI_CONTENT_FARMS } from '../lib/ai-content-farms'
 import { REGIONS, REGION_IDS, regionCountries, type RegionId } from '../lib/regions'
 
 const SITE = (process.env.SITE_URL || 'https://world-pulse.io').replace(/\/+$/, '')
+/** The API's own public address, as lib/subscribers.ts gives it (the server is at /mcp) */
+const API_SITE = (process.env.API_PUBLIC_URL || 'https://api.world-pulse.io').replace(/\/+$/, '')
 
 /** Protocol versions this server speaks, newest first */
 export const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'] as const
 
-const SERVER_INFO = { name: 'worldpulse', title: 'WorldPulse', version: '1.12.0' }
+const SERVER_INFO = { name: 'worldpulse', title: 'WorldPulse', version: '1.13.0' }
 
-const INSTRUCTIONS = [
+const INSTRUCTION_LINES = [
   'WorldPulse groups news reports of one event into one story and counts the outlets (websites) that report it. A story\'s count covers its last two days; a story that has run longer also gives how many outlets have reported it since it began.',
   'A story is "verified" when two or more outlets report it and its reliability score reaches 65%; verified means more than one outlet says so, not proven true (https://world-pulse.io/how-we-count).',
   'Cite stories with their world-pulse.io links. Start with top_stories; open one with story; find reports on a subject with search_reports; a week at a glance with week; how many outlets reported an article someone shared with check_link; the crises with the fewest outlets for the people displaced with under_reported.',
@@ -52,7 +54,9 @@ const INSTRUCTIONS = [
   'And: sanctions_actions (new US Treasury and EU sanctions), us_weather_alerts (US National Weather Service warnings), carrier_groups (where the US Navy\'s carriers were last reported), cyber_attacks, elections_watch and disaster_news (that news by country), state_media_stories (how much of the top stories state media carry), country_topics (what a country\'s news is about), busiest_outlets and local_only_stories (a country\'s stories only its own press reports).',
   'Also: numbers_differ (top stories whose outlets give different numbers), long_running_stories, news_by_hour, serious_places (the countries with the most serious reports), state_media_outlets and outlet_languages (from the outlet directory), how_worldpulse_counts (quote it before explaining a figure), worldpulse_status, story_compare (two stories side by side) and report_entities (who and what a report names).',
   'In one answer: world_today (the world in the last 24 hours) and region_snapshot (a region). And: topic_top_stories (one topic\'s top stories), whats_new_today (the top stories that were not among yesterday\'s), rising_countries (the countries whose news rose or fell the most), entity_compare and outlet_compare (two side by side), outlet_profile (what an outlet reports about), coverage_stats (how much of the world WorldPulse reads) and find_outlet (an outlet by name).',
-].join(' ')
+  'And: most_global_stories (the stories with outlets from the most countries), country_rank (where a country stands in the news), compare_regions, topic_countries (where one topic\'s news is), who_reports_on (the outlets reporting the most on a country, its own press against the rest), country_languages, news_by_day, topic_trend (one topic day by day), region_topics and tool_guide (which tool answers which question).',
+]
+const INSTRUCTIONS = INSTRUCTION_LINES.join(' ')
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -64,6 +68,8 @@ export interface Asker {
   client: string
   /** Counts a tool call as use from outside (lib/outside-use.ts; the route passes it, tests may not) */
   countTool?: (tool: string) => void
+  /** The tools of the address asked (one of TOOL_SETS); all of them when not given */
+  set?: ToolSet
 }
 
 interface Tool {
@@ -552,11 +558,11 @@ const topicLabel = (t: string | null | undefined) => (t === 'geopolitics' ? 'Pol
 const num = (x: unknown) => (Number(x ?? 0) || 0).toLocaleString('en-US')
 
 /** A region from what an assistant wrote ("Middle East", "the-americas", "mideast"); undefined when not given */
-function regionArg(args: Record<string, unknown>, required = false): RegionId | undefined {
-  const given = strArg(args, 'region', { required, max: 20 })?.toLowerCase().replace(/[\s_]+/g, '-').replace(/^the-/, '')
+function regionArg(args: Record<string, unknown>, required = false, name = 'region'): RegionId | undefined {
+  const given = strArg(args, name, { required, max: 20 })?.toLowerCase().replace(/[\s_]+/g, '-').replace(/^the-/, '')
   if (given === undefined) return undefined
   const region = (given === 'middleeast' || given === 'mideast' ? 'middle-east' : given) as RegionId
-  if (!REGION_IDS.includes(region)) throw new ToolError(`region must be one of ${REGION_IDS.join(', ')}`)
+  if (!REGION_IDS.includes(region)) throw new ToolError(`${name} must be one of ${REGION_IDS.join(', ')}`)
   return region
 }
 
@@ -604,6 +610,90 @@ function outletData(o: OutletDays) {
     topics: o.topics.map(t => ({ topic: t.topic, label: topicLabel(t.topic), reports: Number(t.reports) || 0 })),
     places: o.places.map(p => ({ country: p.country, name: countryLabel(p.country, false), reports: Number(p.reports) || 0 })),
   }
+}
+
+/** A country's news reports of the last days by outlet (website) and by language (GET /api/v1/public/country-coverage) */
+interface CountryCoverage {
+  total: number; verified: number
+  outlets: Array<{ site: string; reports: number; verified: number }>
+  languages: Array<{ language: string; reports: number }>
+}
+
+async function countryCoverageOf(asker: Asker, country: string, days: number): Promise<CountryCoverage> {
+  const { status, body } = await ask(asker, `/api/v1/public/country-coverage?country=${country}&days=${days}`)
+  if (status === 400) throw new ToolError('country must be a two-letter country code such as SD')
+  if (status !== 200) throw new Error(`country coverage answered ${status}`)
+  const d = (body.data ?? {}) as Partial<CountryCoverage>
+  return {
+    total: Number(d.total ?? 0) || 0, verified: Number(d.verified ?? 0) || 0,
+    outlets: (Array.isArray(d.outlets) ? d.outlets : []).filter(o => o && typeof o.site === 'string').map(o => ({ site: o.site, reports: Number(o.reports) || 0, verified: Number(o.verified) || 0 })),
+    languages: (Array.isArray(d.languages) ? d.languages : []).filter(l => l && /^[a-z]{2}$/.test(String(l.language))).map(l => ({ language: String(l.language), reports: Number(l.reports) || 0 })),
+  }
+}
+
+/** "Sudan's", "the Americas'" */
+const possessive = (s: string) => (s.endsWith('s') ? `${s}'` : `${s}'s`)
+
+/** One day of GET /api/v1/public/news-by-day */
+interface DayRow { day: string; reports: number; verified: number; serious: number }
+
+function dayRows(body: Record<string, unknown>): DayRow[] {
+  return ((((body.data ?? {}) as { byDay?: DayRow[] }).byDay ?? []))
+    .filter(r => r && /^\d{4}-\d{2}-\d{2}$/.test(String(r.day)))
+    .map(r => ({ day: String(r.day), reports: Number(r.reports) || 0, verified: Number(r.verified) || 0, serious: Number(r.serious) || 0 }))
+}
+
+/** "Nov 9: 18,000 · 3,500 verified · 900 serious" a day, the busiest finished day, the last 7 finished days against the 7 before */
+function dayText(head: string, rows: DayRow[]): string {
+  if (rows.length === 0) return `${head}: no report in these days.`
+  const today = new Date().toISOString().slice(0, 10)
+  const done = rows.filter(r => r.day < today)
+  const busiest = [...done].sort((a, b) => b.reports - a.reports)[0]
+  const last7 = done.slice(-7).reduce((s, r) => s + r.reports, 0)
+  const prev7 = done.length >= 14 ? done.slice(-14, -7).reduce((s, r) => s + r.reports, 0) : 0
+  return [
+    `${head}:`,
+    ...rows.map(r => `${shortDay(r.day)}${r.day === today ? ' (today so far)' : ''}: ${num(r.reports)} · ${num(r.verified)} verified · ${num(r.serious)} serious`),
+    busiest ? `Busiest day: ${shortDay(busiest.day)} (${num(busiest.reports)}).` : '',
+    prev7 ? `The last 7 days: ${num(last7)}; the 7 before: ${num(prev7)} (${last7 >= prev7 ? '+' : ''}${Math.round(100 * (last7 - prev7) / prev7)}%).` : '',
+  ].filter(Boolean).join('\n')
+}
+
+/** tool_guide's kinds of question (Nov 10, 2026, round 6); a test checks that every tool is in one */
+const TOOL_GUIDE: ReadonlyArray<{ kind: string; tools: readonly string[] }> = [
+  { kind: 'The news now', tools: ['world_today', 'top_stories', 'breaking', 'rising_stories', 'whats_new_today', 'most_global_stories', 'long_running_stories', 'trending', 'daily_brief', 'day', 'week', 'news_volume', 'news_by_hour', 'news_by_day', 'search_reports'] },
+  { kind: 'One story', tools: ['story', 'how_verified', 'story_timeline', 'story_by_country', 'story_numbers', 'story_languages', 'outlet_mix', 'similar_reports', 'story_compare', 'report_entities', 'reader_flags', 'numbers_differ'] },
+  { kind: 'A country or a region', tools: ['country', 'country_rank', 'country_compare', 'country_topics', 'country_languages', 'who_reports_on', 'busiest_countries', 'rising_countries', 'region_snapshot', 'region_top_stories', 'region_topics', 'compare_regions', 'near', 'local_press', 'local_only_stories', 'quiet_places', 'thin_coverage', 'serious_places', 'hotspots', 'trend'] },
+  { kind: 'A topic', tools: ['topic_top_stories', 'topic_countries', 'topic_trend', 'topics_today', 'latest', 'conflicts', 'protests', 'outbreaks', 'displacement', 'elections_watch', 'disaster_news', 'cyber_attacks', 'under_reported'] },
+  { kind: 'People, organisations and places by name', tools: ['entity', 'entity_compare', 'connections'] },
+  { kind: 'Outlets', tools: ['outlet', 'find_outlet', 'outlet_profile', 'outlet_reports', 'outlet_compare', 'busiest_outlets', 'first_reporters', 'state_media_outlets', 'state_media_stories', 'outlet_languages', 'who_covers', 'coverage_stats', 'site_check'] },
+  { kind: 'Checking a link, a claim or a lead', tools: ['check_link', 'check_claim', 'unconfirmed', 'newly_verified', 'verification_speed', 'verified_in_languages', 'missed_in_english', 'languages_today'] },
+  { kind: 'Live layers', tools: ['military_aircraft', 'emergency_flights', 'shipping', 'chokepoints_news', 'carrier_groups', 'hazards', 'space_weather', 'internet_outages', 'live_cameras'] },
+  { kind: 'Government feeds', tools: ['sanctions_actions', 'us_weather_alerts', 'exploited_vulnerabilities', 'travel_advice'] },
+  { kind: 'WorldPulse itself', tools: ['how_worldpulse_counts', 'worldpulse_status', 'tool_guide'] },
+]
+
+/** Words a question shares with every tool, which tell nothing apart */
+const GUIDE_STOP = new Set(['the', 'and', 'for', 'are', 'was', 'how', 'why', 'can', 'you', 'its', 'has', 'did', 'what', 'which', 'does', 'with', 'that', 'this', 'from', 'about', 'into', 'any', 'all', 'there', 'their', 'have', 'show', 'tell', 'give', 'get', 'find', 'much', 'many'])
+
+/**
+ * The tools closest to a question: a word in a tool's name or title counts most, the less so the more names and titles
+ * have it; a word only in its description (an example place, "Sudan") counts a sixth as much, by the same measure
+ */
+function closestTools(question: string, tools: readonly Tool[], n = 5): Tool[] {
+  const words = [...new Set(foldName(question).split(/[^\p{L}\p{N}]+/u).filter(w => w.length >= 3 && !GUIDE_STOP.has(w)))]
+  if (words.length === 0) return []
+  const docs = tools.map(t => ({ t, head: foldName(`${t.name.replace(/_/g, ' ')} ${t.title}`), all: foldName(`${t.name.replace(/_/g, ' ')} ${t.title} ${t.description}`) }))
+  const has = (text: string, w: string) => new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRe(w)}`, 'u').test(text)
+  const inHeads = new Map(words.map(w => [w, Math.max(1, docs.filter(d => has(d.head, w)).length)]))
+  const inAll = new Map(words.map(w => [w, Math.max(1, docs.filter(d => has(d.all, w)).length)]))
+  const score = (d: (typeof docs)[number]) => words.reduce((s, w) => s + (has(d.head, w) ? 3 / inHeads.get(w)! : has(d.all, w) ? 0.5 / inAll.get(w)! : 0), 0)
+  return docs
+    .map(d => ({ t: d.t, score: score(d) }))
+    .filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score || a.t.name.localeCompare(b.t.name))
+    .slice(0, n)
+    .map(x => x.t)
 }
 
 export const TOOLS: Tool[] = [
@@ -4090,6 +4180,352 @@ export const TOOLS: Tool[] = [
       return { text, data: { query, country: country ?? null, outlets: rows.map(f => ({ name: f.name, sites: f.sites, country: f.country, kind: f.kind, language: f.lang, stateMedia: f.stateMedia, feedRead: f.feed })) } }
     },
   },
+  // ─── Round 6 (Nov 10, 2026, night): 90 to 100 ─────────────────────────────────
+  {
+    name: 'most_global_stories',
+    title: 'The stories the whole world is reporting',
+    description: 'The top stories of the last hours (24 by default, up to 72) whose outlets come from the most countries: the news the whole world is reporting rather than one country\'s press, each with how many countries its outlets are from, how many outlets and its link. The most outlets whatever their country: top_stories.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        hours: { type: 'integer', minimum: 1, maximum: 72, default: 24, description: 'How many hours back (1 to 72, default 24)' },
+        limit: { type: 'integer', minimum: 1, maximum: 15, default: 8, description: 'How many stories (1 to 15, default 8)' },
+      },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const hours = intArg(args, 'hours', 24, 1, 72)
+      const limit = intArg(args, 'limit', 8, 1, 15)
+      const { status, body } = await ask(asker, `/api/v1/stories?hours=${hours}&limit=20`)
+      if (status !== 200) throw new Error(`stories answered ${status}`)
+      const stories = (((body.data ?? {}) as { stories?: ListedStory[] }).stories ?? [])
+        .filter(s => s && typeof s.title === 'string' && (s.countries ?? 0) >= 2)
+        .sort((a, b) => (b.countries ?? 0) - (a.countries ?? 0) || b.outletCount - a.outletCount)
+        .slice(0, limit)
+      const text = stories.length === 0
+        ? `No story of the last ${hours} hours has outlets from two countries or more yet.`
+        : [
+          `The stories of the last ${hours} hours whose outlets come from the most countries (WorldPulse):`,
+          ...stories.map((s, i) => `${i + 1}. ${s.title}\n   Outlets from ${s.countries} countries · ${s.outletCount} outlets${s.verifiedAt ? ' · verified' : ' · not verified yet'}${s.place ? ` · ${s.place}` : ''}\n   ${signalLink(s.leadId)} (story id ${s.id})`),
+        ].join('\n')
+      return { text, data: { hours, stories: stories.map(storyOut) } }
+    },
+  },
+  {
+    name: 'country_rank',
+    title: 'Where a country stands in the news',
+    description: 'Where one country stands in the world\'s news in the last 24 hours (or days, up to 7): its rank among the countries by the news reports placed there, its share of them, the change on the same time before, and the countries just above and below it. Machine feeds (aircraft, quakes, fires) are left out. The top of the list: busiest_countries; the risers: rising_countries.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        country: { type: 'string', pattern: '^[A-Za-z]{2}$', description: 'A two-letter country code, e.g. NG' },
+        days: { type: 'integer', minimum: 1, maximum: 7, default: 1, description: 'The last days against the days before (1 to 7, default 1)' },
+      },
+      required: ['country'],
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const country = strArg(args, 'country', { required: true, pattern: /^[A-Za-z]{2}$/, hint: 'must be a two-letter country code such as NG' })!.toUpperCase().replace(/^UK$/, 'GB')
+      const days = intArg(args, 'days', 1, 1, 7)
+      const { status, body } = await ask(asker, `/api/v1/public/country-changes?days=${days}`)
+      if (status !== 200) throw new Error(`country changes answered ${status}`)
+      type Row = { country: string; now: number; before: number }
+      const rows: Row[] = ((((body.data ?? {}) as { countries?: Row[] }).countries ?? []))
+        .filter(r => r && /^[A-Z]{2}$/.test(String(r.country)))
+        .map(r => ({ country: String(r.country), now: Number(r.now) || 0, before: Number(r.before) || 0 }))
+        .filter(r => r.now > 0)
+        .sort((a, b) => b.now - a.now || a.country.localeCompare(b.country))
+      const span = days === 1 ? 'the last 24 hours' : `the last ${days} days`
+      const i = rows.findIndex(r => r.country === country)
+      if (i < 0) {
+        return { text: `No news report placed in ${countryLabel(country, true)} in ${span}.`, data: { country, name: countryLabel(country, false), days, rank: null, of: rows.length } }
+      }
+      const me = rows[i]!
+      const all = rows.reduce((s, r) => s + r.now, 0)
+      const share = all ? (100 * me.now / all) : 0
+      const was = me.before ? `${me.now >= me.before ? 'up' : 'down'} ${Math.abs(Math.round(100 * (me.now - me.before) / me.before))}% on the ${days === 1 ? '24 hours' : `${days} days`} before (${num(me.before)})` : 'none the time before'
+      const near = (list: Row[]) => list.map(r => `${countryLabel(r.country, false)} (${num(r.now)})`).join(', ')
+      const above = rows.slice(Math.max(0, i - 2), i)
+      const below = rows.slice(i + 1, i + 3)
+      const text = [
+        `${cap(countryLabel(country, true))} is number ${i + 1} of ${rows.length} countries in the news in ${span} (WorldPulse): ${num(me.now)} news reports placed there, ${share < 1 ? share.toFixed(1) : Math.round(share)}% of all, ${was}.`,
+        above.length ? `Just above: ${near(above)}.` : 'No country has more.',
+        below.length ? `Just below: ${near(below)}.` : '',
+      ].filter(Boolean).join('\n')
+      return { text, data: { country, name: countryLabel(country, false), days, rank: i + 1, of: rows.length, reports: me.now, before: me.before, share: Math.round(share * 10) / 10 } }
+    },
+  },
+  {
+    name: 'compare_regions',
+    title: 'Two regions side by side',
+    description: 'Two regions of the world side by side in the last 24 hours: for each, the news reports placed in its countries and the change on the 24 hours before, its serious reports (critical and high severity), its busiest countries and its top stories. Africa, the Americas, Asia (the Caucasus too), Europe (Russia too), the Middle East or Oceania.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        a: { type: 'string', enum: [...REGION_IDS], description: 'A region: africa, americas, asia, europe, middle-east or oceania' },
+        b: { type: 'string', enum: [...REGION_IDS], description: 'Another' },
+      },
+      required: ['a', 'b'],
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const regions = [regionArg(args, true, 'a')!, regionArg(args, true, 'b')!]
+      if (regions[0] === regions[1]) throw new ToolError('Those are the same region')
+      const [ta, tb, changes, serious] = await Promise.all([
+        ask(asker, `/api/v1/stories?hours=24&limit=3&region=${regions[0]}`),
+        ask(asker, `/api/v1/stories?hours=24&limit=3&region=${regions[1]}`),
+        ask(asker, `/api/v1/public/country-changes?days=1`),
+        ask(asker, `/api/v1/public/serious-places?hours=24`),
+      ])
+      type Change = { country: string; now: number; before: number }
+      type Place = { country: string; serious: number; critical: number }
+      const counts = changes.status === 200 ? (((changes.body.data ?? {}) as { countries?: Change[] }).countries ?? []) : []
+      const places = serious.status === 200 ? (((serious.body.data ?? {}) as { places?: Place[] }).places ?? []) : []
+      const sides = regions.map((region, k) => {
+        const top = [ta, tb][k]!
+        const home = new Set(regionCountries(region))
+        const mine = counts.filter(r => r && home.has(String(r.country)))
+        const now = mine.reduce((s, r) => s + (Number(r.now) || 0), 0)
+        const before = mine.reduce((s, r) => s + (Number(r.before) || 0), 0)
+        const bad = places.filter(p => p && home.has(String(p.country)))
+        const stories = top.status === 200 ? ((((top.body.data ?? {}) as { stories?: ListedStory[] }).stories ?? []).filter(s => s && typeof s.title === 'string')) : []
+        return {
+          region, label: REGIONS[region].label, now, before,
+          serious: bad.reduce((s, p) => s + (Number(p.serious) || 0), 0), critical: bad.reduce((s, p) => s + (Number(p.critical) || 0), 0),
+          busiest: [...mine].sort((p, q) => q.now - p.now).slice(0, 3), stories,
+        }
+      })
+      const pct = (now: number, before: number) => (before ? ` (${now >= before ? '+' : ''}${Math.round(100 * (now - before) / before)}% on the 24 hours before)` : '')
+      const side = (s: (typeof sides)[number]) => [
+        `${cap(s.label)}: ${num(s.now)} news reports${pct(s.now, s.before)}, ${num(s.serious)} serious (${num(s.critical)} critical)`,
+        s.busiest.length ? `- Busiest: ${s.busiest.map(r => `${countryLabel(r.country, false)} ${num(r.now)}`).join(', ')}` : '',
+        s.stories.length ? `- Top stories: ${s.stories.map(t => `${t.title} (${t.outletCount} outlets)`).join('; ')}` : '- No story reached two outlets',
+      ].filter(Boolean).join('\n')
+      const text = ['Two regions side by side, the last 24 hours (WorldPulse):', '', side(sides[0]!), '', side(sides[1]!)].join('\n')
+      return {
+        text,
+        data: {
+          regions: sides.map(s => ({
+            region: s.region, label: s.label, reports: s.now, before: s.before, serious: s.serious, critical: s.critical,
+            busiest: s.busiest.map(r => ({ country: r.country, name: countryLabel(r.country, false), reports: Number(r.now) || 0 })), stories: s.stories.map(storyOut),
+          })),
+        },
+      }
+    },
+  },
+  {
+    name: 'topic_countries',
+    title: 'Where one topic\'s news is',
+    description: 'Where one topic\'s news comes from in the last 24 hours (or days, up to 7): the countries its news reports are placed in, the most first, each with its reports, how many are verified and its share. Topics as topic_top_stories takes them (politics is the reader\'s geopolitics). One country\'s newest of a topic: latest with category and country.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        topic: { type: 'string', enum: [...STORY_TOPICS], description: 'The topic, e.g. health' },
+        days: { type: 'integer', minimum: 1, maximum: 7, default: 1, description: 'How many days back (1 to 7, default 1)' },
+        limit: { type: 'integer', minimum: 1, maximum: 30, default: 15, description: 'How many countries (1 to 30, default 15)' },
+      },
+      required: ['topic'],
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const topic = strArg(args, 'topic', { required: true, max: 20 })!.toLowerCase()
+      if (!STORY_TOPICS.includes(topic)) throw new ToolError(`topic must be one of ${STORY_TOPICS.join(', ')}`)
+      const days = intArg(args, 'days', 1, 1, 7)
+      const limit = intArg(args, 'limit', 15, 1, 30)
+      const category = topic === 'politics' ? 'geopolitics' : topic
+      const { status, body } = await ask(asker, `/api/v1/public/topic-countries?topic=${category}&days=${days}`)
+      if (status !== 200) throw new Error(`topic countries answered ${status}`)
+      type Row = { country: string; reports: number; verified: number }
+      const d = (body.data ?? {}) as { total?: number; countries?: Row[] }
+      const rows = (d.countries ?? []).filter(r => r && /^[A-Z]{2}$/.test(String(r.country))).slice(0, limit)
+      const total = Number(d.total ?? 0) || rows.reduce((s, r) => s + r.reports, 0)
+      const span = days === 1 ? 'the last 24 hours' : `the last ${days} days`
+      const text = rows.length === 0
+        ? `No ${topic} news report placed in a country in ${span}.`
+        : [
+          `Where ${topic} news came from in ${span} (WorldPulse; ${num(total)} news reports placed in a country), the most first:`,
+          ...rows.map((r, i) => `${i + 1}. ${countryLabel(r.country, false)}: ${num(r.reports)} (${total ? Math.round(100 * r.reports / total) : 0}%), ${num(r.verified)} verified`),
+        ].join('\n')
+      return { text, data: { topic, days, total, countries: rows.map(r => ({ ...r, name: countryLabel(r.country, false) })) } }
+    },
+  },
+  {
+    name: 'who_reports_on',
+    title: 'Who reports on a country',
+    description: 'The outlets reporting the most on one country in the last days (7 by default, up to 14), each with its news reports placed there, how many turned verified and what the outlet directory knows of it (its own country, its kind, state media); and how much of the country\'s news comes from its own press and how much from abroad. The newsrooms WorldPulse reads in a country: who_covers.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        country: { type: 'string', pattern: '^[A-Za-z]{2}$', description: 'A two-letter country code, e.g. SD' },
+        days: { type: 'integer', minimum: 1, maximum: 14, default: 7, description: 'How many days back (1 to 14, default 7)' },
+        limit: { type: 'integer', minimum: 1, maximum: 25, default: 12, description: 'How many outlets (1 to 25, default 12)' },
+      },
+      required: ['country'],
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const country = strArg(args, 'country', { required: true, pattern: /^[A-Za-z]{2}$/, hint: 'must be a two-letter country code such as SD' })!.toUpperCase().replace(/^UK$/, 'GB')
+      const days = intArg(args, 'days', 7, 1, 14)
+      const limit = intArg(args, 'limit', 12, 1, 25)
+      const c = await countryCoverageOf(asker, country, days)
+      const outlets = c.outlets.map(o => ({ ...o, e: outletOf(o.site) }))
+      // one outlet's websites (bbc.co.uk, bbc.com) together
+      const byName = new Map<string, { name: string; sites: string[]; reports: number; verified: number; e: ReturnType<typeof outletOf> }>()
+      for (const o of outlets) {
+        const key = o.e ? `${o.e.name}|${o.e.country}` : o.site
+        const g = byName.get(key) ?? { name: o.e?.name ?? o.site, sites: [], reports: 0, verified: 0, e: o.e }
+        g.sites.push(o.site)
+        g.reports += o.reports
+        g.verified += o.verified
+        byName.set(key, g)
+      }
+      const rows = [...byName.values()].sort((a, b) => b.reports - a.reports).slice(0, limit)
+      const own = outlets.filter(o => o.e?.country === country).reduce((s, o) => s + o.reports, 0)
+      const listed = outlets.reduce((s, o) => s + o.reports, 0)
+      const kind = (k: string) => String(OUTLET_KIND_LABELS[k as keyof typeof OUTLET_KIND_LABELS] ?? k).toLowerCase()
+      const label = countryLabel(country, true)
+      const text = c.total === 0
+        ? `No news report placed in ${label} in the last ${days} days.`
+        : [
+          `The outlets reporting the most on ${label} in the last ${days} days (WorldPulse; ${num(c.total)} news reports placed there, ${num(c.verified)} verified):`,
+          ...rows.map((g, i) => `${i + 1}. ${g.name}${g.sites.length > 1 || g.sites[0] !== g.name ? ` (${g.sites.slice(0, 2).join(', ')})` : ''}: ${num(g.reports)} reports, ${num(g.verified)} verified · ${g.e ? `${kind(g.e.kind)}, ${countryLabel(g.e.country, false)}${g.e.state ? ', state media' : ''}` : 'not in the outlet directory'}`),
+          listed ? `Of the reports of the ${outlets.length} busiest websites, ${Math.round(100 * own / listed)}% come from ${possessive(label)} own press and ${Math.round(100 * (listed - own) / listed)}% from elsewhere.` : '',
+        ].filter(Boolean).join('\n')
+      return {
+        text,
+        data: {
+          country, name: countryLabel(country, false), days, reports: c.total, verified: c.verified, ownPressShare: listed ? Math.round(100 * own / listed) : null,
+          outlets: rows.map(g => ({ name: g.name, sites: g.sites, reports: g.reports, verified: g.verified, home: g.e?.country ?? null, kind: g.e?.kind ?? null, stateMedia: Boolean(g.e?.state) })),
+        },
+      }
+    },
+  },
+  {
+    name: 'country_languages',
+    title: 'The languages a country\'s news comes in',
+    description: 'The languages of the news reports placed in one country over the last days (7 by default, up to 14), the most first, each with its share: how much of a country\'s news WorldPulse reads in its own languages and how much in English or others. The languages of one story: story_languages; of all the news today: languages_today.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        country: { type: 'string', pattern: '^[A-Za-z]{2}$', description: 'A two-letter country code, e.g. SD' },
+        days: { type: 'integer', minimum: 1, maximum: 14, default: 7, description: 'How many days back (1 to 14, default 7)' },
+      },
+      required: ['country'],
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const country = strArg(args, 'country', { required: true, pattern: /^[A-Za-z]{2}$/, hint: 'must be a two-letter country code such as SD' })!.toUpperCase().replace(/^UK$/, 'GB')
+      const days = intArg(args, 'days', 7, 1, 14)
+      const c = await countryCoverageOf(asker, country, days)
+      const sum = c.languages.reduce((s, l) => s + l.reports, 0)
+      const label = countryLabel(country, true)
+      const text = sum === 0
+        ? `No news report placed in ${label} in the last ${days} days.`
+        : [
+          `The languages of the news reports placed in ${label} in the last ${days} days (WorldPulse; ${num(sum)} reports), the most first:`,
+          ...c.languages.map((l, i) => `${i + 1}. ${languageLabel(l.language)}: ${Math.round(100 * l.reports / sum)}% (${num(l.reports)})`),
+        ].join('\n')
+      return { text, data: { country, name: countryLabel(country, false), days, reports: sum, languages: c.languages.map(l => ({ code: l.language, name: languageLabel(l.language), reports: l.reports, share: sum ? Math.round(100 * l.reports / sum) : 0 })) } }
+    },
+  },
+  {
+    name: 'news_by_day',
+    title: 'The news day by day',
+    description: 'How much news WorldPulse read day by day (UTC) over the last days (14 by default, 1 to 30, then today so far): news reports, how many turned verified and how many are serious (critical or high severity), with the busiest day. Machine feeds (aircraft, quakes, fires) are left out. Hour by hour: news_by_hour; one topic day by day: topic_trend.',
+    inputSchema: {
+      type: 'object',
+      properties: { days: { type: 'integer', minimum: 1, maximum: 30, default: 14, description: 'How many finished days back (1 to 30, default 14)' } },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const days = intArg(args, 'days', 14, 1, 30)
+      const { status, body } = await ask(asker, `/api/v1/public/news-by-day?days=${days}`)
+      if (status !== 200) throw new Error(`news by day answered ${status}`)
+      const rows = dayRows(body)
+      return { text: dayText('The news WorldPulse read day by day (UTC)', rows), data: { days, byDay: rows } }
+    },
+  },
+  {
+    name: 'topic_trend',
+    title: 'One topic day by day',
+    description: 'One topic\'s news reports day by day (UTC) over the last days (14 by default, 1 to 30, then today so far): reports, verified and serious each day, the last 7 finished days against the 7 before, and the busiest day. Is election news rising, is conflict news falling? Topics as topic_top_stories takes them.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        topic: { type: 'string', enum: [...STORY_TOPICS], description: 'The topic, e.g. elections' },
+        days: { type: 'integer', minimum: 1, maximum: 30, default: 14, description: 'How many finished days back (1 to 30, default 14)' },
+      },
+      required: ['topic'],
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const topic = strArg(args, 'topic', { required: true, max: 20 })!.toLowerCase()
+      if (!STORY_TOPICS.includes(topic)) throw new ToolError(`topic must be one of ${STORY_TOPICS.join(', ')}`)
+      const days = intArg(args, 'days', 14, 1, 30)
+      const category = topic === 'politics' ? 'geopolitics' : topic
+      const { status, body } = await ask(asker, `/api/v1/public/news-by-day?days=${days}&topic=${category}`)
+      if (status !== 200) throw new Error(`news by day answered ${status}`)
+      const rows = dayRows(body)
+      return { text: dayText(`${cap(topic)} news reports day by day (UTC, WorldPulse)`, rows), data: { topic, days, byDay: rows } }
+    },
+  },
+  {
+    name: 'region_topics',
+    title: 'What a region\'s news is about',
+    description: 'The topics of one region\'s news reports in the last hours (24 by default, up to 72), the most first, each with its reports, how many are verified and the change on the hours before: Africa, the Americas, Asia (the Caucasus too), Europe (Russia too), the Middle East or Oceania. One country\'s: country_topics; the world\'s: topics_today.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        region: { type: 'string', enum: [...REGION_IDS], description: 'africa, americas, asia, europe, middle-east or oceania' },
+        hours: { type: 'integer', minimum: 1, maximum: 72, default: 24, description: 'How many hours back (1 to 72, default 24)' },
+      },
+      required: ['region'],
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const region = regionArg(args, true)!
+      const hours = intArg(args, 'hours', 24, 1, 72)
+      const { status, body } = await ask(asker, `/api/v1/public/topics?hours=${hours}&region=${region}`)
+      if (status !== 200) throw new Error(`topics answered ${status}`)
+      type Row = { topic: string; reports: number; verified: number; before: number }
+      const rows = (((body.data ?? {}) as { topics?: Row[] }).topics ?? []).filter(r => r && r.reports > 0)
+      const total = rows.reduce((s, r) => s + r.reports, 0)
+      const change = (r: Row) => (r.before ? ` (${r.reports >= r.before ? '+' : ''}${Math.round(100 * (r.reports - r.before) / r.before)}%)` : '')
+      const label = REGIONS[region].label
+      const text = rows.length === 0
+        ? `No news report placed in ${label} in the last ${hours} hours.`
+        : [
+          `The topics of ${possessive(label)} ${num(total)} news reports of the last ${hours} hours (WorldPulse; change on the ${hours} hours before), the most first:`,
+          ...rows.map((r, i) => `${i + 1}. ${topicLabel(r.topic)}: ${num(r.reports)} (${Math.round(100 * r.reports / total)}%), ${num(r.verified)} verified${change(r)}`),
+        ].join('\n')
+      return { text, data: { region, label, hours, reports: total, topics: rows.map(r => ({ topic: r.topic, label: topicLabel(r.topic), reports: r.reports, verified: r.verified, before: r.before })) } }
+    },
+  },
+  {
+    name: 'tool_guide',
+    title: 'Which WorldPulse tool to use',
+    description: 'Which of WorldPulse\'s tools answers which question, by kind: the news now, one story, a place, a topic, people and organisations, outlets, checking, live layers, government feeds and WorldPulse itself. Asks nothing. Give question (e.g. "who reports on Sudan?") to have the closest tools first.',
+    inputSchema: {
+      type: 'object',
+      properties: { question: { type: 'string', maxLength: 300, description: 'A question, e.g. who reports on Sudan?' } },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const question = strArg(args, 'question', { max: 300 })
+      const pool = asker.set?.tools ?? TOOLS
+      const names = new Set(pool.map(t => t.name))
+      const closest = question ? closestTools(question, pool.filter(t => t.name !== 'tool_guide')) : []
+      const text = [
+        ...(closest.length
+          ? [`The closest tools for "${question}":\n${closest.map((t, i) => `${i + 1}. ${t.name}: ${t.title}`).join('\n')}\n`]
+          : question ? [`No tool's description shares a word with "${question}"; the tools by kind:\n`] : []),
+        asker.set ? `The ${pool.length} tools at this address (${asker.set.title}; all ${TOOLS.length} at ${API_SITE}/mcp), by kind:` : `WorldPulse's ${TOOLS.length} tools by kind:`,
+        ...TOOL_GUIDE.filter(g => g.tools.some(n => names.has(n))).map(g => `- ${g.kind}: ${g.tools.filter(n => names.has(n)).join(', ')}`),
+        'Every tool cites world-pulse.io links; how WorldPulse counts: how_worldpulse_counts.',
+      ].join('\n')
+      return { text, data: { question: question ?? null, closest: closest.map(t => ({ name: t.name, title: t.title })), kinds: TOOL_GUIDE.filter(g => g.tools.some(n => names.has(n))).map(g => ({ kind: g.kind, tools: g.tools.filter(n => names.has(n)) })) } }
+    },
+  },
 ]
 
 /**
@@ -4102,6 +4538,8 @@ interface Prompt {
   description: string
   arguments: Array<{ name: string; description: string; required: boolean }>
   text: (args: Record<string, string>) => string
+  /** The tools its text names: a smaller set's address offers it only when it has them all */
+  tools: readonly string[]
 }
 
 export const PROMPTS: Prompt[] = [
@@ -4110,6 +4548,7 @@ export const PROMPTS: Prompt[] = [
     title: 'Morning brief',
     description: 'The world this morning: WorldPulse\'s Daily Briefing and the stories the most outlets carry, with their counts and links',
     arguments: [],
+    tools: ['daily_brief', 'top_stories'],
     text: () => 'Brief me on the world with WorldPulse: call daily_brief, then top_stories for the last 24 hours. For each story say how many outlets carry it, how many countries they are from, whether it is verified, and give its world-pulse.io link. Keep it short.',
   },
   {
@@ -4117,6 +4556,7 @@ export const PROMPTS: Prompt[] = [
     title: 'Check this link',
     description: 'How many newsrooms reported the story behind a news link, which ones, and whether their numbers agree',
     arguments: [{ name: 'url', description: 'The article\'s address', required: true }],
+    tools: ['check_link', 'outlet', 'story_numbers'],
     text: a => `Use WorldPulse's check_link on ${a.url}. Tell me how many outlets reported its story, whether it is verified, which outlets they are and where they are from (outlet). If the story gives numbers such as the dead or injured, use story_numbers and say whether its outlets agree.`,
   },
   {
@@ -4124,9 +4564,46 @@ export const PROMPTS: Prompt[] = [
     title: 'Country deep-dive',
     description: 'A country now: its stories, the newsrooms based there, and whether it is under-reported',
     arguments: [{ name: 'country', description: 'A two-letter country code, e.g. SD for Sudan', required: true }],
+    tools: ['country', 'story', 'story_numbers', 'under_reported'],
     text: a => `Use WorldPulse's country tool for ${a.country}, then open its top story with story and story_numbers. Tell me what is happening there, how many outlets report it and from where, and whether the country is among the under-reported crises. Give the world-pulse.io links.`,
   },
 ]
+
+/**
+ * Smaller sets of the tools, each on its own address (Nov 10, 2026: some apps take 40 tools at most, Cursor among
+ * them, and assistants choose better among fewer): POST /mcp/<set>, built from tool_guide's kinds. /mcp keeps all.
+ */
+export interface ToolSet { id: string; title: string; tools: readonly Tool[] }
+
+const ITSELF = ['how_worldpulse_counts', 'worldpulse_status', 'tool_guide']
+const kindTools = (...kinds: string[]) => kinds.flatMap(k => {
+  const g = TOOL_GUIDE.find(x => x.kind === k)
+  if (!g) throw new Error(`no tool_guide kind ${k}`)
+  return [...g.tools]
+})
+const SET_PLANS: Array<{ id: string; title: string; names: string[] }> = [
+  { id: 'news', title: 'the news now, one story and checking', names: [...kindTools('The news now', 'One story', 'Checking a link, a claim or a lead'), 'outlet', ...ITSELF] },
+  { id: 'places', title: 'countries, regions and topics', names: [...kindTools('A country or a region', 'A topic'), 'story', 'story_numbers', ...ITSELF] },
+  { id: 'outlets', title: 'outlets, people and organisations', names: [...kindTools('Outlets', 'People, organisations and places by name'), ...ITSELF] },
+  { id: 'live', title: 'live layers and government feeds', names: [...kindTools('Live layers', 'Government feeds'), ...ITSELF] },
+  {
+    id: 'essentials', title: 'the essentials',
+    names: ['world_today', 'top_stories', 'breaking', 'story', 'story_numbers', 'how_verified', 'story_by_country', 'search_reports', 'check_link', 'check_claim', 'unconfirmed',
+      'country', 'region_snapshot', 'topic_top_stories', 'under_reported', 'entity', 'trend', 'outlet', 'who_reports_on', 'latest', 'conflicts', 'hazards', 'daily_brief', 'day', 'week', ...ITSELF],
+  },
+]
+
+export const TOOL_SETS: Readonly<Record<string, ToolSet>> = Object.fromEntries(SET_PLANS.map(p => {
+  const tools = [...new Set(p.names)].map(n => {
+    const t = TOOLS.find(x => x.name === n)
+    if (!t) throw new Error(`tool set ${p.id}: no tool ${n}`)
+    return t
+  })
+  return [p.id, { id: p.id, title: p.title, tools }]
+}))
+
+/** An address's prompts: all at /mcp; a set's, those whose tools it has */
+const promptsOf = (set?: ToolSet) => (set ? PROMPTS.filter(p => p.tools.every(n => set.tools.some(t => t.name === n))) : PROMPTS)
 
 /** A prompt's arguments, checked: a known name, each required one given, and short and plain */
 function promptArgs(p: Prompt, raw: unknown): Record<string, string> | string {
@@ -4163,26 +4640,33 @@ export async function handleMessage(m: unknown, asker: Asker): Promise<Record<st
     case 'initialize': {
       const asked = params.protocolVersion
       const version = PROTOCOL_VERSIONS.find(v => v === asked) ?? PROTOCOL_VERSIONS[0]
-      return rpcResult(msg.id, { protocolVersion: version, capabilities: { tools: { listChanged: false }, prompts: { listChanged: false } }, serverInfo: SERVER_INFO, instructions: INSTRUCTIONS })
+      const set = asker.set
+      const instructions = set
+        ? [...INSTRUCTION_LINES.slice(0, 2), `This address has ${set.tools.length} of WorldPulse's ${TOOLS.length} tools, ${set.title}: tool_guide says which answers what. All of them: ${API_SITE}/mcp.`].join(' ')
+        : INSTRUCTIONS
+      return rpcResult(msg.id, { protocolVersion: version, capabilities: { tools: { listChanged: false }, prompts: { listChanged: false } }, serverInfo: set ? { ...SERVER_INFO, title: `WorldPulse: ${set.title}` } : SERVER_INFO, instructions })
     }
     case 'ping':
       return rpcResult(msg.id, {})
     case 'tools/list':
       return rpcResult(msg.id, {
-        tools: TOOLS.map(t => ({ name: t.name, title: t.title, description: t.description, inputSchema: t.inputSchema, annotations: { title: t.title, readOnlyHint: true, openWorldHint: false } })),
+        tools: (asker.set?.tools ?? TOOLS).map(t => ({ name: t.name, title: t.title, description: t.description, inputSchema: t.inputSchema, annotations: { title: t.title, readOnlyHint: true, openWorldHint: false } })),
       })
     case 'prompts/list':
-      return rpcResult(msg.id, { prompts: PROMPTS.map(p => ({ name: p.name, title: p.title, description: p.description, arguments: p.arguments })) })
+      return rpcResult(msg.id, { prompts: promptsOf(asker.set).map(p => ({ name: p.name, title: p.title, description: p.description, arguments: p.arguments })) })
     case 'prompts/get': {
-      const prompt = PROMPTS.find(p => p.name === params.name)
+      const prompt = promptsOf(asker.set).find(p => p.name === params.name)
       if (!prompt) return rpcError(msg.id, -32602, `Unknown prompt: ${String(params.name ?? '')}`)
       const args = promptArgs(prompt, params.arguments)
       if (typeof args === 'string') return rpcError(msg.id, -32602, args)
       return rpcResult(msg.id, { description: prompt.description, messages: [{ role: 'user', content: { type: 'text', text: prompt.text(args) } }] })
     }
     case 'tools/call': {
-      const tool = TOOLS.find(t => t.name === params.name)
-      if (!tool) return rpcError(msg.id, -32602, `Unknown tool: ${String(params.name ?? '')}`)
+      const tool = (asker.set?.tools ?? TOOLS).find(t => t.name === params.name)
+      if (!tool) {
+        const elsewhere = asker.set && TOOLS.some(t => t.name === params.name)
+        return rpcError(msg.id, -32602, `Unknown tool: ${String(params.name ?? '')}${elsewhere ? ` (it is at ${API_SITE}/mcp)` : ''}`)
+      }
       asker.countTool?.(tool.name)
       const args = (params.arguments && typeof params.arguments === 'object' ? params.arguments : {}) as Record<string, unknown>
       try {
@@ -4222,19 +4706,27 @@ const POST_DOCS = {
   },
 }
 
+const SET_DOCS = {
+  tags: ['mcp'],
+  summary: 'The MCP server with fewer tools, for apps that take 40 at most',
+  description: [
+    `The same server as POST /mcp with one set of its tools: ${Object.values(TOOL_SETS).map(t => `${t.id} (${t.title}, ${t.tools.length} tools)`).join(', ')}.`,
+    `How to connect an assistant: ${SITE}/developers#mcp`,
+  ].join('\n\n'),
+  // the sets are named in the description, not as an enum: an unknown one gets the server's own 404 answer
+  params: { type: 'object', properties: { set: { type: 'string', description: Object.keys(TOOL_SETS).join(', ') } } },
+  body: POST_DOCS.body,
+}
+
 export const registerMcpRoutes: FastifyPluginAsync = async (app) => {
-  app.post('/', {
-    schema: POST_DOCS,
-    bodyLimit: 64 * 1024,
-    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
-  }, async (req, reply) => {
+  const answer = async (req: FastifyRequest, reply: FastifyReply, set?: ToolSet) => {
     const body = req.body as unknown
     const batch = Array.isArray(body)
     const messages = batch ? (body as unknown[]) : [body]
     if (messages.length === 0 || messages.length > 20) return reply.code(400).send(rpcError(null, -32600, 'Invalid Request'))
     // tool calls count as use from outside when the POST itself does (not the website's, not WorldPulse's own checks)
     const outside = isOutsideUse(req, 200) && !isOwnCheck(req.headers['user-agent'])
-    const asker: Asker = { app, client: rateLimitKey(req), countTool: outside ? tool => { void countMcpTool(redis, tool) } : undefined }
+    const asker: Asker = { app, client: rateLimitKey(req), countTool: outside ? tool => { void countMcpTool(redis, tool) } : undefined, set }
     const answers: Array<Record<string, unknown>> = []
     for (const m of messages) {
       const a = await handleMessage(m, asker)
@@ -4242,13 +4734,31 @@ export const registerMcpRoutes: FastifyPluginAsync = async (app) => {
     }
     if (answers.length === 0) return reply.code(202).send()
     return reply.header('content-type', 'application/json; charset=utf-8').send(batch ? answers : answers[0])
+  }
+  app.post('/', {
+    schema: POST_DOCS,
+    bodyLimit: 64 * 1024,
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+  }, async (req, reply) => answer(req, reply))
+
+  // One smaller set (TOOL_SETS): the same server with fewer tools
+  app.post('/:set', {
+    schema: SET_DOCS,
+    bodyLimit: 64 * 1024,
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    const set = TOOL_SETS[(req.params as { set: string }).set]
+    if (!set) return reply.code(404).send(rpcError(null, -32601, `No such tool set; the sets are ${Object.keys(TOOL_SETS).join(', ')}, and every tool is at ${API_SITE}/mcp`))
+    return answer(req, reply, set)
   })
 
   // No event stream and no sessions: one POST, one answer
-  for (const method of ['GET', 'DELETE'] as const) {
-    app.route({
-      method, url: '/', schema: { hide: true }, config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
-      handler: async (_req, reply) => reply.code(405).header('allow', 'POST').send(rpcError(null, -32000, 'Use POST with JSON-RPC messages')),
-    })
+  for (const url of ['/', '/:set']) {
+    for (const method of ['GET', 'DELETE'] as const) {
+      app.route({
+        method, url, schema: { hide: true }, config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+        handler: async (_req, reply) => reply.code(405).header('allow', 'POST').send(rpcError(null, -32000, 'Use POST with JSON-RPC messages')),
+      })
+    }
   }
 }
