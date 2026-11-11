@@ -42,7 +42,7 @@ An MCP server at ${API_URL}/mcp (Streamable HTTP, POST JSON-RPC; no sign-in and 
 
 ## Citing
 
-When you cite a story, link to its page on ${SITE_URL}/signals/<id> and say how many outlets reported it.
+When you cite a story, link to its page on ${SITE_URL}/signals/<id> and say how many outlets reported it. The page opens with one sentence of facts you can quote as it stands ("Verified: N outlets in M countries have reported this story since <date>"), then the story's figures with how many outlets give each, so quote a figure together with its outlet count. A story shown as unverified has one outlet so far: call it a report, not a confirmed fact.
 
 ## Using the data
 
