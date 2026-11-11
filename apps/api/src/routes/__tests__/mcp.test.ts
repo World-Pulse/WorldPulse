@@ -525,6 +525,86 @@ async function build(): Promise<FastifyInstance> {
     if (topic === 'outbreaks' || topic === 'displacement') return { success: true, cached: true, topic, hours: 72, type: 'FeatureCollection', features: [] }
     return reply.code(404).send({ success: false, error: 'Unknown topic' })
   })
+  // Nov 10, 2026, night: the routes of the ten tools that make fifty
+  app.get('/api/v1/aircraft/live', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    const plane = (hex: string, over: Record<string, unknown>) => ({ hex, callsign: null, reg: null, type: null, desc: null, operator: null, lat: 0, lng: 0, alt: null, speed: null, track: null, squawk: null, emergency: null, military: true, ...over })
+    return {
+      at: '2026-11-10T23:51:33.644Z', source: 'adsb.lol', license: 'ODbL 1.0', failed: [],
+      counts: { military: 4, emergency: 1 },
+      aircraft: [
+        plane('ae01', { callsign: 'RCH431 ', type: 'C17', lat: 50.05, lng: 8.57, alt: 31000, speed: 450.4 }),
+        plane('ae02', { callsign: 'QID11', type: 'K35R', lat: 26.3, lng: 52.6, alt: 28000, speed: 420 }),
+        plane('ae03', { callsign: 'NAVY7', type: 'P8', lat: 25.0, lng: 55.0, alt: 'ground', speed: 0 }),
+        plane('ae04', { callsign: null, reg: '15-0001', type: 'C17', lat: -33.9, lng: 151.2, alt: 12000, speed: 300 }),
+        plane('4ca1', { callsign: 'EIN45', type: 'A320', desc: 'AIRBUS A-320', lat: 53.4, lng: -6.2, alt: 9000, speed: 250, squawk: '7700', emergency: 'Emergency', military: false }),
+      ],
+    }
+  })
+  app.get('/api/v1/cameras', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    const cam = (id: string, name: string, cc: string, city: string, lat: number, lng: number, type: string, sourceName: string) =>
+      ({ id, name, region: 'europe', country: cc, countryCode: cc, city, lat, lng, type, isLive: true, sourceName, snapshotUrl: `https://api.world-pulse.io/api/v1/cameras/${id}/image`, embedUrl: 'https://example.org/' })
+    const all = [
+      cam('tfl:1', 'A406 Billet Upass E', 'GB', 'London', 51.6007, -0.0159, 'traffic', 'Transport for London'),
+      cam('tfl:2', 'Strand / Aldwych', 'GB', 'London', 51.5115, -0.1170, 'traffic', 'Transport for London'),
+      cam('fi:1', 'Tie 51 Espoo', 'FI', 'Espoo', 60.17, 24.65, 'weather', 'Fintraffic (Digitraffic, CC BY 4.0)'),
+    ]
+    const type = (req.query as { type?: string }).type
+    const cameras = type ? all.filter(c => c.type === type) : all
+    return { cameras, total: cameras.length, region: 'global', regions: [], sources: [{ key: 'tfl', name: 'Transport for London', count: 2 }, { key: 'fi', name: 'Fintraffic (Digitraffic, CC BY 4.0)', count: 1 }] }
+  })
+  app.get('/api/v1/countries', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    return {
+      window: '24h', total: 3, generated_at: '2026-11-10T23:51:45.134Z',
+      countries: [
+        { code: 'GB', name: 'United Kingdom', risk_score: 80, risk_label: 'Critical', signal_count: 210, recent_6h: 60, trend: 'stable', avg_reliability: 0.88 },
+        { code: 'US', name: 'United States', risk_score: 95, risk_label: 'Critical', signal_count: 439, recent_6h: 132, trend: 'escalating', avg_reliability: 0.91 },
+        { code: 'SY', name: 'Syria', risk_score: 70, risk_label: 'High', signal_count: 40, recent_6h: 5, trend: 'de-escalating', avg_reliability: null },
+      ],
+    }
+  })
+  app.get('/api/v1/signals/count', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    return { success: true, data: { total: 686672, last24h: 18660, lastHour: 560, verified24h: 3600, countries24h: 215, outlets24h: 1862, bySeverity: { critical: 1 } } }
+  })
+  app.get('/api/v1/signals/:id/similar', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    const { id } = req.params as { id: string }
+    return {
+      success: true, count: 3,
+      similar: [
+        { id, title: 'The report itself', status: 'verified' },
+        { id: OTHER_REPORT, title: 'Gunman kills six in Polish city', status: 'verified', severity: 'high', location_name: 'Kraków, Poland', created_at: '2026-11-07T15:40:00.000Z' },
+        { id: LONE_REPORT, title: 'Strzelanina w Krakowie', status: 'pending', severity: 'medium', country_code: 'PL', created_at: '2026-11-08T09:00:00.000Z' },
+      ],
+    }
+  })
+  app.get('/api/v1/signals/:id/flags', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    const { id } = req.params as { id: string }
+    return { success: true, data: id === WORLD_REPORT ? { count: 3, reasons: { inaccurate: 1, duplicate: 2, outdated: 0 } } : { count: 0, reasons: {} } }
+  })
+  app.get('/api/v1/space-weather/summary', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    return { success: true, cached: true, data: { geomagnetic_level: 2, solar_radiation_level: 0, radio_blackout_level: 1, active_events: 3, latest_at: hoursAgo(2), satellite_events_24h: 0 } }
+  })
+  app.get('/api/v1/space-weather/recent', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    const ev = (id: string, title: string, at: string) => ({ id, title, severity: 'low', published_at: at })
+    return {
+      success: true, cached: true,
+      data: {
+        hours: Number((req.query as { hours?: string }).hours), count: 3,
+        events: [
+          ev('9fdbbd18-b018-4e2c-a344-e4880d75baf5', 'Space weather watch: Geomagnetic Storm Category G1 Predicted', '2026-11-07T06:26:14.357Z'),
+          ev('4d3a0176-48b9-4bcf-8563-7a66a02b03b9', 'Space weather watch: Geomagnetic Storm Category G1 Predicted', '2026-11-07T09:01:00.000Z'),
+          ev('5e4b1287-59ca-4adb-9674-f5a3b13c14ca', 'Space weather alert: Geomagnetic K-index of 6 expected (G2)', '2026-11-08T12:00:00.000Z'),
+        ],
+      },
+    }
+  })
   await app.register(registerMcpRoutes, { prefix: '/mcp' })
   return app
 }
@@ -566,6 +646,8 @@ describe('MCP server', () => {
       'connections', 'protests', 'outbreaks', 'displacement', 'who_covers',
       'day', 'unconfirmed', 'newly_verified', 'local_press', 'site_check',
       'quiet_places', 'story_languages', 'verified_in_languages', 'languages_today', 'missed_in_english',
+      'military_aircraft', 'emergency_flights', 'live_cameras', 'busiest_countries', 'news_volume',
+      'similar_reports', 'reader_flags', 'outlet_mix', 'country_compare', 'space_weather',
     ])
     for (const t of tools) {
       expect(t.inputSchema.type).toBe('object')
@@ -1419,5 +1501,136 @@ describe('MCP server: the five tools of Nov 10, 2026, evening (forty in all)', (
     // the Syrian story has an English report
     expect(text).not.toContain('بيت جن')
     expect(r.structuredContent.stories).toHaveLength(1)
+  })
+})
+
+describe('MCP server: the ten tools of Nov 10, 2026, night (fifty in all)', () => {
+  beforeEach(() => { asked = [] })
+
+  it('military_aircraft counts the military aircraft now, their types, and lists the nearest to a place', async () => {
+    const app = await build()
+    const r = await call(app, 'military_aircraft', {})
+    expect(r.isError).toBe(false)
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/aircraft/live'])
+    const text = r.content[0].text as string
+    expect(text).toContain('4 military aircraft broadcasting their position now (adsb.lol, 23:51 UTC). Commonest types: C17 (2), K35R (1), P8 (1).')
+    expect(text).toContain('Squawking an emergency code now: 1 aircraft (emergency_flights).')
+    const gulf = await call(app, 'military_aircraft', { latitude: 26.2, longitude: 52.5, radius_km: 400 })
+    const lines = (gulf.content[0].text as string).split('\n')
+    expect(lines).toContain('Within 400 km of 26.20°N 52.50°E, nearest first:')
+    expect(lines.find(l => l.startsWith('1. '))).toBe('1. QID11 · K35R · 28,000 ft · 420 kt · 26.30°N 52.60°E · 15 km away')
+    expect(lines.find(l => l.startsWith('2. '))).toMatch(/^2\. NAVY7 · P8 · on the ground · 0 kt · 25\.00°N 55\.00°E · \d+ km away$/)
+    expect(gulf.structuredContent.aircraft.map((a: { callsign: string }) => a.callsign)).toEqual(['QID11', 'NAVY7'])
+    expect((await call(app, 'military_aircraft', { latitude: 26.2 })).isError).toBe(true)
+  })
+
+  it('emergency_flights lists the aircraft squawking 7700, 7600 or 7500', async () => {
+    const app = await build()
+    const r = await call(app, 'emergency_flights', { latitude: 53.35, longitude: -6.26 })
+    const text = r.content[0].text as string
+    expect(text).toContain('1 aircraft squawking an emergency code now (adsb.lol, 23:51 UTC), nearest to 53.35°N 6.26°W first:')
+    expect(text).toContain('1. Emergency (7700): EIN45 · AIRBUS A-320 · 9,000 ft · 250 kt · 53.40°N 6.20°W · 7 km away')
+    expect(r.structuredContent.aircraft[0]).toMatchObject({ callsign: 'EIN45', squawk: '7700', emergency: 'Emergency', km: 7 })
+  })
+
+  it('live_cameras says where its cameras are, and lists the nearest to a place or those of a country', async () => {
+    const app = await build()
+    const where = await call(app, 'live_cameras', {})
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/cameras?limit=6000'])
+    expect(where.content[0].text).toContain('3 public live cameras in United Kingdom (2), Finland (1), from Transport for London (2), Fintraffic (Digitraffic, CC BY 4.0) (1).')
+    const london = await call(app, 'live_cameras', { latitude: 51.5074, longitude: -0.1278, radius_km: 20 })
+    const text = london.content[0].text as string
+    expect(text).toContain('Public live cameras within 20 km of 51.51°N 0.13°W, nearest first:')
+    expect(text.indexOf('Strand / Aldwych')).toBeLessThan(text.indexOf('A406 Billet Upass E'))
+    expect(text).toContain('Picture: https://api.world-pulse.io/api/v1/cameras/tfl:2/image')
+    const fi = await call(app, 'live_cameras', { country: 'fi', type: 'weather' })
+    expect(asked.map(a => a.url)).toContain('/api/v1/cameras?limit=6000&type=weather')
+    expect(fi.structuredContent.cameras.map((c: { name: string }) => c.name)).toEqual(['Tie 51 Espoo'])
+    expect((await call(app, 'live_cameras', { country: 'KE' })).content[0].text).toContain('No public camera WorldPulse shows in Kenya')
+    expect((await call(app, 'live_cameras', { type: 'city' })).isError).toBe(true)
+  })
+
+  it("busiest_countries ranks the countries by their last 24 hours' reports, with no risk labels", async () => {
+    const app = await build()
+    const r = await call(app, 'busiest_countries', { limit: 2 })
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/countries'])
+    const text = r.content[0].text as string
+    expect(text).toContain('1. United States: 439 reports, 132 in the last 6 hours (rising) · sources 91% reliable on average')
+    expect(text).toContain('2. United Kingdom: 210 reports, 60 in the last 6 hours (steady)')
+    expect(text).not.toContain('Syria')
+    expect(text).not.toContain('Critical')
+    expect(r.structuredContent.countries.map((c: { code: string }) => c.code)).toEqual(['US', 'GB'])
+  })
+
+  it('news_volume says how much news WorldPulse is reading', async () => {
+    const app = await build()
+    const r = await call(app, 'news_volume', {})
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/signals/count'])
+    expect(r.content[0].text).toContain('WorldPulse read 560 reports in the last hour and 18,660 in the last 24 hours, from 1,862 outlets in 215 countries and territories.')
+    expect(r.content[0].text).toContain('3,600 turned verified in the last 24 hours')
+    expect(r.structuredContent).toMatchObject({ lastHour: 560, total: 686672 })
+  })
+
+  it("similar_reports finds a story's lead report and lists the reports closest to it, leaving it out", async () => {
+    const app = await build()
+    const r = await call(app, 'similar_reports', { id: WORLD_REPORT })
+    expect(asked.map(a => a.url)).toEqual([`/api/v1/stories/${WORLD_REPORT}`, `/api/v1/signals/${WORLD_REPORT}/similar?limit=6`])
+    const text = r.content[0].text as string
+    expect(text).toContain('Reports closest in meaning to "Six killed in Krakow shooting"')
+    expect(text).toContain('1. Gunman kills six in Polish city\n   Verified · High · Kraków, Poland · 2026-11-07')
+    expect(text).toContain('2. Strzelanina w Krakowie\n   Not verified yet · Medium · Poland · 2026-11-08')
+    expect(text).not.toContain('The report itself')
+    expect((await call(app, 'similar_reports', { id: 'nope' })).isError).toBe(true)
+  })
+
+  it('reader_flags gives how many readers flagged a report and why, never who', async () => {
+    const app = await build()
+    const r = await call(app, 'reader_flags', { id: WORLD_REPORT })
+    expect(asked.map(a => a.url)).toContain(`/api/v1/signals/${WORLD_REPORT}/flags`)
+    expect(r.content[0].text).toContain('3 readers flagged "Six killed in Krakow shooting": duplicate (2), inaccurate (1).')
+    expect(r.structuredContent.reasons).toEqual({ duplicate: 2, inaccurate: 1 })
+    const none = await call(app, 'reader_flags', { id: STORY.leadId })
+    expect(none.content[0].text).toContain(`No reader has flagged "${STORY.title}".`)
+  })
+
+  it("outlet_mix counts a story's outlets by kind, each outlet once, and names its state media", async () => {
+    const app = await build()
+    const r = await call(app, 'outlet_mix', { id: WORLD_REPORT })
+    const text = r.content[0].text as string
+    expect(text).toContain('Verified · 6 outlets in its last two days, by kind')
+    expect(text).toContain('- International: 2 (Al Jazeera, BBC)')
+    expect(text).toContain('- National: 2 (Notes from Poland, TVP World)')
+    expect(text).toContain('- News agency: 1 (TASS)')
+    expect(text).toContain('- Not in the directory: 1 (unknown-site.example)')
+    expect(text).toContain('State media (a government runs it): 2 of 6 · TASS (Russia), TVP World (Poland)')
+    expect(text.indexOf('Not in the directory')).toBeGreaterThan(text.indexOf('News agency'))
+    expect(r.structuredContent.stateMedia).toEqual(['TASS (Russia)', 'TVP World (Poland)'])
+  })
+
+  it('country_compare sets two countries side by side', async () => {
+    const app = await build()
+    const r = await call(app, 'country_compare', { a: 'bi', b: 'SY' })
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/public/unconfirmed-places?days=7', '/api/v1/countries/BI/daily?days=14', '/api/v1/countries/SY/daily?days=14'])
+    const text = r.content[0].text as string
+    expect(text).toContain('Burundi and Syria in WorldPulse\'s reports:')
+    expect(text).toContain('Burundi:\n- News reports, last 7 days: 40, 1 verified (3%), 36 waiting for a second outlet')
+    // the stand-in's 14 days: 6 a day with one 40, then 12 a day
+    expect(text).toContain('- Reports a day: 12 this week (+11% on the week before)')
+    expect(text).toContain('- Languages: French')
+    expect(text).toMatch(/- Newsrooms based there whose feeds WorldPulse reads: \d+/)
+    expect((await call(app, 'country_compare', { a: 'SY', b: 'sy' })).isError).toBe(true)
+    expect((await call(app, 'country_compare', { a: 'SY', b: 'XX' })).isError).toBe(true)
+  })
+
+  it("space_weather gives the last day's highest storm levels and NOAA's alerts, each watch once a day", async () => {
+    const app = await build()
+    const r = await call(app, 'space_weather', {})
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/space-weather/summary', '/api/v1/space-weather/recent?hours=168&limit=100'])
+    const text = r.content[0].text as string
+    expect(text).toContain("Highest in NOAA's alerts of the last 24 hours: geomagnetic storms G2, solar radiation S0 (none), radio blackouts R1.")
+    expect(text).toContain('1. Geomagnetic K-index of 6 expected (G2) · 2026-11-08 12:00 UTC')
+    expect(text).toContain('2. Geomagnetic Storm Category G1 Predicted · 2026-11-07 09:01 UTC')
+    expect(text).not.toContain('06:26 UTC')
+    expect(r.structuredContent.alerts).toHaveLength(2)
   })
 })

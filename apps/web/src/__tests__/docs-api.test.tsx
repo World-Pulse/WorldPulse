@@ -331,8 +331,11 @@ const toolsBlock = (src: string) => src.slice(src.indexOf('export const TOOLS'),
     // unconfirmed the reports list and the outlet counts too; local_press the top stories; site_check the farm check)
     // Nov 10, evening: 40 tools, 29 routes (verified_in_languages, languages_today and missed_in_english ask the
     // languages of the news; quiet_places where news goes unconfirmed; story_languages one story)
-    expect(MCP_TOOLS.length).toBe(40)
-    expect(asked.length).toBeGreaterThanOrEqual(29)
+    // Nov 10, night: 50 tools, 37 routes (military_aircraft and emergency_flights share the aircraft now; space_weather
+    // asks two; similar_reports, reader_flags and outlet_mix ask one story too; country_compare the places and a
+    // country's days)
+    expect(MCP_TOOLS.length).toBe(50)
+    expect(asked.length).toBeGreaterThanOrEqual(37)
     const named: Record<string, string> = {
       '/api/v1/stories': 'the top stories', '/api/v1/stories/:param': 'one story', '/api/v1/search/semantic': 'search by meaning',
       '/api/v1/stories/week': 'the week', '/api/v1/stories/by-link': 'the story of a news link',
@@ -352,6 +355,10 @@ const toolsBlock = (src: string) => src.slice(src.indexOf('export const TOOLS'),
       '/api/v1/stories/day': 'one day\'s top stories', '/api/v1/public/second-outlets': 'the second outlets found for one-outlet reports',
       '/api/v1/slop/check': 'the AI content farm check',
       '/api/v1/public/languages': 'the languages of the news', '/api/v1/public/unconfirmed-places': 'where news goes unconfirmed',
+      '/api/v1/aircraft/live': 'the aircraft now', '/api/v1/cameras': 'the public cameras', '/api/v1/countries': 'the countries\' report counts',
+      '/api/v1/signals/count': 'the report counts', '/api/v1/signals/:param/similar': 'a report\'s closest reports',
+      '/api/v1/signals/:param/flags': 'a report\'s reader flags', '/api/v1/space-weather/summary': 'the space weather',
+      '/api/v1/space-weather/recent': 'the space weather',
     }
     const said = TEXT.slice(TEXT.indexOf('Each tool asks the API\'s own open endpoints'), TEXT.indexOf('How to connect'))
     const routeLike = (path: string) => API_ROUTES.find(r => r.method === 'GET' && r.path.replace(/:[A-Za-z_]+/g, ':param') === path)

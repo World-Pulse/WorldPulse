@@ -34,7 +34,7 @@ const SITE = (process.env.SITE_URL || 'https://world-pulse.io').replace(/\/+$/, 
 /** Protocol versions this server speaks, newest first */
 export const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'] as const
 
-const SERVER_INFO = { name: 'worldpulse', title: 'WorldPulse', version: '1.7.0' }
+const SERVER_INFO = { name: 'worldpulse', title: 'WorldPulse', version: '1.8.0' }
 
 const INSTRUCTIONS = [
   'WorldPulse groups news reports of one event into one story and counts the outlets (websites) that report it. A story\'s count covers its last two days; a story that has run longer also gives how many outlets have reported it since it began.',
@@ -46,6 +46,7 @@ const INSTRUCTIONS = [
   'And since Nov 9, 2026: connections (who and what a person, organisation or place is named with, or the stories naming two of them), protests, outbreaks and displacement (the map\'s protest, outbreak and refugee reports, place by place) and who_covers (the newsrooms WorldPulse reads in a country).',
   'And since Nov 10, 2026: day (one day\'s top stories, from the last 30 days), unconfirmed (serious reports only one outlet has carried so far: leads, not facts), newly_verified (reports that just found their second outlet), local_press (stories the world reports while their own country\'s press barely appears among the outlets) and site_check (whether a website is a known AI content farm, and the reliability score WorldPulse gives it).',
   'And for the news in other languages: quiet_places (the places whose news most rarely finds a second outlet), story_languages (the languages a story is reported in, with its outlets in each), verified_in_languages (the newest reports in other languages than English that turned verified), languages_today (the languages the news came in) and missed_in_english (stories verified in other languages with no English report found).',
+  'Live layers and checks: military_aircraft and emergency_flights (adsb.lol\'s aircraft now), live_cameras (public cameras near a place), space_weather (NOAA\'s alerts), busiest_countries, news_volume (how much news WorldPulse reads), country_compare (two countries side by side), similar_reports, reader_flags (what readers flagged on a report) and outlet_mix (what kinds of newsroom carry a story, state media among them).',
 ].join(' ')
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -390,6 +391,65 @@ const topicTool = (topic: TopicTool, description: string): Omit<Tool, 'name'> =>
 const LANGUAGE_NAMES = new Intl.DisplayNames(['en'], { type: 'language' })
 function languageLabel(code: string): string {
   try { return LANGUAGE_NAMES.of(code) ?? code } catch { return code }
+}
+
+/** An optional place: both latitude and longitude, or neither */
+function placeArgs(args: Record<string, unknown>): { lat: number; lng: number } | null {
+  const given = (k: string) => args[k] !== undefined && args[k] !== null && args[k] !== ''
+  if (!given('latitude') && !given('longitude')) return null
+  if (!given('latitude') || !given('longitude')) throw new ToolError('Give both latitude and longitude, or neither')
+  return { lat: numArg(args, 'latitude', -90, 90), lng: numArg(args, 'longitude', -180, 180) }
+}
+
+/** "26.20°N 52.50°E" */
+function coords(lat: number, lng: number): string {
+  return `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? 'N' : 'S'} ${Math.abs(lng).toFixed(2)}°${lng >= 0 ? 'E' : 'W'}`
+}
+
+/** The commonest values, the most first */
+function topCounts(values: string[], n: number): Array<[string, number]> {
+  const c = new Map<string, number>()
+  for (const v of values) c.set(v, (c.get(v) ?? 0) + 1)
+  return [...c.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, n)
+}
+
+/** One aircraft of adsb.lol's (lib/aircraft.ts LiveAircraft) */
+interface Aircraft {
+  hex: string; callsign: string | null; reg: string | null; type: string | null; desc: string | null; operator: string | null
+  lat: number; lng: number; alt: number | 'ground' | null; speed: number | null; squawk: string | null; emergency: string | null; military: boolean
+}
+
+/** adsb.lol's military aircraft and emergency squawks now (GET /api/v1/aircraft/live, read at most every 3 minutes) */
+async function aircraftNow(asker: Asker): Promise<{ at: string | null; aircraft: Aircraft[]; emergency: number }> {
+  const { status, body } = await ask(asker, `/api/v1/aircraft/live`)
+  if (status !== 200) throw new Error(`aircraft answered ${status}`)
+  const d = (body.data ?? body) as { at?: string | null; aircraft?: Aircraft[]; failed?: string[] }
+  if (!d.at && (d.failed ?? []).includes('all')) throw new ToolError('Aircraft positions are not available just now (adsb.lol did not answer); try again in a few minutes')
+  const aircraft = (d.aircraft ?? []).filter(a => a && Number.isFinite(a.lat) && Number.isFinite(a.lng))
+  return { at: d.at ?? null, aircraft, emergency: aircraft.filter(a => a.emergency).length }
+}
+
+const feet = (a: Aircraft) => (typeof a.alt === 'number' && Number.isFinite(a.alt) ? a.alt : null)
+const knots = (a: Aircraft) => (typeof a.speed === 'number' && Number.isFinite(a.speed) ? Math.round(a.speed) : null)
+
+/** "RCH431 · C17 · 31,000 ft · 450 kt · 50.10°N 8.60°E" */
+function aircraftLine(a: Aircraft): string {
+  const alt = a.alt === 'ground' ? 'on the ground' : feet(a) !== null ? `${feet(a)!.toLocaleString('en-US')} ft` : ''
+  return [a.callsign?.trim() || a.reg || a.hex, a.desc || a.type || '', a.operator || '', alt, knots(a) !== null ? `${knots(a)} kt` : '', coords(a.lat, a.lng)].filter(Boolean).join(' · ')
+}
+
+function aircraftData(a: Aircraft) {
+  return {
+    hex: a.hex, callsign: a.callsign?.trim() || null, registration: a.reg ?? null, type: a.type ?? null, description: a.desc ?? null, operator: a.operator ?? null,
+    latitude: a.lat, longitude: a.lng, altitudeFt: feet(a), onGround: a.alt === 'ground', speedKt: knots(a),
+  }
+}
+
+/** How many newsrooms based in a country WorldPulse reads the feeds of (who_covers's list), each outlet once */
+function newsroomsIn(code: string): number {
+  const names = new Set<string>()
+  for (const e of Object.values(OUTLET_DIRECTORY)) if (e.country === code && !e.seen) names.add(e.name)
+  return names.size
 }
 
 export const TOOLS: Tool[] = [
@@ -2247,6 +2307,401 @@ export const TOOLS: Tool[] = [
       return {
         text,
         data: { hours, stories: stories.map(r => ({ id: r.id, title: r.title, url: signalLink(r.id), languages: r.storyLanguages?.length ? r.storyLanguages : [r.language], country: r.country, severity: r.severity, verifiedAt: r.verifiedAt })) },
+      }
+    },
+  },
+  // ── Nov 10, 2026, night (Devon, 6:48 PM: "Let's get to 100 AI tools before we list it on the directories") ──
+  {
+    name: 'military_aircraft',
+    title: 'Military aircraft in the air now',
+    description: 'Military aircraft broadcasting their position right now, from adsb.lol (open data under the ODbL; aircraft that switch their transponder off, or are in privacy programmes, are not there): how many, their commonest types, and, when you give a place\'s latitude and longitude, the ones within a distance of it (500 km by default), the nearest first, each with its callsign, type, altitude, speed and position. Read at most every 3 minutes: a snapshot, not a track, and not every air force broadcasts.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        latitude: { type: 'number', minimum: -90, maximum: 90, description: 'A place\'s latitude, e.g. 26.2 for the Gulf' },
+        longitude: { type: 'number', minimum: -180, maximum: 180, description: 'A place\'s longitude, e.g. 52.5 for the Gulf' },
+        radius_km: { type: 'integer', minimum: 10, maximum: 3000, default: 500, description: 'How far from the place, in km (10 to 3000, default 500)' },
+        limit: { type: 'integer', minimum: 1, maximum: 30, default: 15, description: 'How many to list (1 to 30, default 15)' },
+      },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const place = placeArgs(args)
+      const km = intArg(args, 'radius_km', 500, 10, 3000)
+      const limit = intArg(args, 'limit', 15, 1, 30)
+      const snap = await aircraftNow(asker)
+      const military = snap.aircraft.filter(a => a.military)
+      const types = topCounts(military.map(a => a.type).filter((t): t is string => Boolean(t)), 6)
+      const near = place
+        ? military.map(a => ({ ...a, km: distanceKm(place.lat, place.lng, a.lat, a.lng) })).filter(a => a.km <= km).sort((a, b) => a.km - b.km)
+        : []
+      const at = snap.at ? ` (adsb.lol, ${snap.at.slice(11, 16)} UTC)` : ' (adsb.lol)'
+      const text = [
+        `${military.length.toLocaleString('en-US')} military aircraft broadcasting their position now${at}.${types.length ? ` Commonest types: ${types.map(([t, n]) => `${t} (${n})`).join(', ')}.` : ''}`,
+        place
+          ? near.length
+            ? [`Within ${km} km of ${coords(place.lat, place.lng)}, nearest first:`, ...near.slice(0, limit).map((a, i) => `${i + 1}. ${aircraftLine(a)} · ${Math.round(a.km)} km away`)].join('\n')
+            : `None within ${km} km of ${coords(place.lat, place.lng)}.`
+          : 'Give a place\'s latitude and longitude for the ones near it.',
+        snap.emergency ? `Squawking an emergency code now: ${snap.emergency} aircraft (emergency_flights).` : '',
+        'Aircraft that switch their transponders off are not there. Map: ' + `${SITE}/map`,
+      ].filter(Boolean).join('\n')
+      return {
+        text,
+        data: {
+          at: snap.at, source: 'adsb.lol', license: 'ODbL 1.0', military: military.length, types: types.map(([type, count]) => ({ type, count })),
+          place: place ? { latitude: place.lat, longitude: place.lng, radiusKm: km } : null,
+          aircraft: near.slice(0, limit).map(a => aircraftData(a)),
+        },
+      }
+    },
+  },
+  {
+    name: 'emergency_flights',
+    title: 'Aircraft squawking an emergency now',
+    description: 'Aircraft squawking an emergency code right now, from adsb.lol (open data under the ODbL): 7700 (an emergency), 7600 (radio failure) and 7500 (hijack), each with its callsign, type, altitude, speed and position, and its distance from a place when you give its latitude and longitude. Most of the time there are none or a few: a squawk is a pilot\'s signal, often a precaution, and the news says what it was.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        latitude: { type: 'number', minimum: -90, maximum: 90, description: 'A place\'s latitude, for each aircraft\'s distance from it' },
+        longitude: { type: 'number', minimum: -180, maximum: 180, description: 'A place\'s longitude' },
+        limit: { type: 'integer', minimum: 1, maximum: 30, default: 15, description: 'How many to list (1 to 30, default 15)' },
+      },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const place = placeArgs(args)
+      const limit = intArg(args, 'limit', 15, 1, 30)
+      const snap = await aircraftNow(asker)
+      const squawking = snap.aircraft.filter(a => a.emergency)
+        .map(a => ({ ...a, km: place ? distanceKm(place.lat, place.lng, a.lat, a.lng) : null }))
+        .sort((a, b) => (a.km ?? 0) - (b.km ?? 0))
+      const at = snap.at ? ` (adsb.lol, ${snap.at.slice(11, 16)} UTC)` : ' (adsb.lol)'
+      const text = squawking.length === 0
+        ? `No aircraft is squawking an emergency code now${at}: no 7700 (emergency), 7600 (radio failure) or 7500 (hijack).`
+        : [
+          `${squawking.length} aircraft squawking an emergency code now${at}${place ? `, nearest to ${coords(place.lat, place.lng)} first` : ''}:`,
+          ...squawking.slice(0, limit).map((a, i) => `${i + 1}. ${a.emergency} (${a.squawk}): ${aircraftLine(a)}${a.km !== null ? ` · ${Math.round(a.km)} km away` : ''}`),
+          'A squawk is the crew\'s signal, often a precaution; reports of what happened come later (breaking, search_reports).',
+        ].join('\n')
+      return {
+        text,
+        data: { at: snap.at, source: 'adsb.lol', license: 'ODbL 1.0', count: squawking.length, aircraft: squawking.slice(0, limit).map(a => ({ ...aircraftData(a), emergency: a.emergency, squawk: a.squawk, km: a.km === null ? null : Math.round(a.km) })) },
+      }
+    },
+  },
+  {
+    name: 'live_cameras',
+    title: 'Public live cameras near a place',
+    description: 'Public live cameras, from the agencies that publish them (Transport for London, NYC DOT, Caltrans in Los Angeles and San Francisco, Fintraffic in Finland, Hong Kong\'s Transport Department, New Zealand\'s NZTA): the nearest to a place you give by latitude and longitude, or those of a country, each with its name, city, kind (traffic or weather), distance and a link to its latest picture. About 5,100 cameras in 5 countries; without a place or country, where they are.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        latitude: { type: 'number', minimum: -90, maximum: 90, description: 'A place\'s latitude, e.g. 51.51 for London' },
+        longitude: { type: 'number', minimum: -180, maximum: 180, description: 'A place\'s longitude, e.g. -0.13 for London' },
+        country: { type: 'string', description: 'A two-letter country code, e.g. FI' },
+        type: { type: 'string', enum: ['traffic', 'weather'], description: 'Only traffic or only weather cameras' },
+        radius_km: { type: 'integer', minimum: 1, maximum: 300, default: 25, description: 'How far from the place, in km (1 to 300, default 25)' },
+        limit: { type: 'integer', minimum: 1, maximum: 20, default: 8, description: 'How many (1 to 20, default 8)' },
+      },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const place = placeArgs(args)
+      const country = strArg(args, 'country', { pattern: /^[A-Za-z]{2}$/, hint: 'must be a two-letter country code such as FI' })?.toUpperCase().replace(/^UK$/, 'GB')
+      const type = strArg(args, 'type', { pattern: /^(traffic|weather)$/, hint: 'must be traffic or weather' })
+      const km = intArg(args, 'radius_km', 25, 1, 300)
+      const limit = intArg(args, 'limit', 8, 1, 20)
+      const { status, body } = await ask(asker, `/api/v1/cameras?limit=6000${type ? `&type=${type}` : ''}`)
+      if (status !== 200) throw new Error(`cameras answered ${status}`)
+      type Camera = { id: string; name: string; city?: string | null; country?: string; countryCode?: string; lat: number; lng: number; type?: string; snapshotUrl?: string; embedUrl?: string; sourceName?: string }
+      type Source = { name: string; page?: string; count?: number }
+      const d = ((body.data ?? body) as { cameras?: Camera[]; sources?: Source[] })
+      const cameras = (d.cameras ?? []).filter(c => c && typeof c.name === 'string' && Number.isFinite(c.lat) && Number.isFinite(c.lng))
+      const where = new Map<string, number>()
+      for (const c of cameras) if (c.countryCode) where.set(c.countryCode, (where.get(c.countryCode) ?? 0) + 1)
+      const places = [...where.entries()].sort((a, b) => b[1] - a[1]).map(([code, n]) => `${countryLabel(code, false)} (${n.toLocaleString('en-US')})`).join(', ')
+      if (!place && !country) {
+        const sources = (d.sources ?? []).map(s => `${s.name} (${Number(s.count ?? 0).toLocaleString('en-US')})`).join(', ')
+        return {
+          text: `${cameras.length.toLocaleString('en-US')} public live cameras${type ? ` (${type})` : ''} in ${places || 'no country yet'}, from ${sources || 'their agencies'}. Give a place's latitude and longitude, or a country, for the cameras there. Map: ${SITE}/map`,
+          data: { cameras: cameras.length, countries: [...where.entries()].map(([code, count]) => ({ code, count })), sources: d.sources ?? [] },
+        }
+      }
+      const picked = cameras
+        .filter(c => !country || c.countryCode === country)
+        .map(c => ({ ...c, km: place ? distanceKm(place.lat, place.lng, c.lat, c.lng) : null }))
+        .filter(c => c.km === null || c.km <= km)
+        .sort((a, b) => (a.km ?? 0) - (b.km ?? 0) || a.name.localeCompare(b.name))
+      const scope = place ? `within ${km} km of ${coords(place.lat, place.lng)}${country ? ` in ${countryLabel(country, true)}` : ''}` : `in ${countryLabel(country!, true)}`
+      const text = picked.length === 0
+        ? `No public camera WorldPulse shows ${scope}${type ? ` (${type})` : ''}. It has cameras in ${places}.`
+        : [
+          `Public live cameras ${scope}${type ? ` (${type})` : ''}${place ? ', nearest first' : ''}:`,
+          ...picked.slice(0, limit).map((c, i) => `${i + 1}. ${c.name}${c.city ? `, ${c.city}` : ''} · ${c.type ?? 'camera'}${c.km !== null ? ` · ${c.km < 1 ? '<1' : Math.round(c.km)} km` : ''} · ${c.sourceName ?? ''}\n   Picture: ${c.snapshotUrl ?? ''}`),
+          picked.length > limit ? `…and ${picked.length - limit} more.` : '',
+        ].filter(Boolean).join('\n')
+      return {
+        text,
+        data: {
+          place: place ? { latitude: place.lat, longitude: place.lng, radiusKm: km } : null, country: country ?? null, total: picked.length,
+          cameras: picked.slice(0, limit).map(c => ({ id: c.id, name: c.name, city: c.city ?? null, country: c.countryCode ?? null, type: c.type ?? null, latitude: c.lat, longitude: c.lng, km: c.km === null ? null : Math.round(c.km * 10) / 10, picture: c.snapshotUrl ?? null, page: c.embedUrl ?? null, source: c.sourceName ?? null })),
+        },
+      }
+    },
+  },
+  {
+    name: 'busiest_countries',
+    title: 'The countries with the most news now',
+    description: 'The countries with the most news in WorldPulse\'s reports of the last 24 hours, the most first: each with its reports, how many came in the last 6 hours, whether that is rising, steady or falling, and how reliable its sources are on average. Busy is not the same as dangerous: a big country has many outlets. For where serious things are happening, use hotspots or conflicts; for one country, country.',
+    inputSchema: {
+      type: 'object',
+      properties: { limit: { type: 'integer', minimum: 1, maximum: 30, default: 15, description: 'How many countries (1 to 30, default 15)' } },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const limit = intArg(args, 'limit', 15, 1, 30)
+      const { status, body } = await ask(asker, `/api/v1/countries`)
+      if (status !== 200) throw new Error(`countries answered ${status}`)
+      type Row = { code: string; name?: string; signal_count?: number; recent_6h?: number; trend?: string; avg_reliability?: number | null; latest_signal_at?: string | null }
+      const rows = (((body.data ?? body) as { countries?: Row[] }).countries ?? [])
+        .filter(r => r && /^[A-Z]{2}$/.test(String(r.code)))
+        .sort((a, b) => Number(b.signal_count ?? 0) - Number(a.signal_count ?? 0))
+        .slice(0, limit)
+      const trendWord = (t?: string) => t === 'escalating' || t === 'rising' ? 'rising' : t === 'de-escalating' || t === 'falling' ? 'falling' : 'steady'
+      const text = rows.length === 0
+        ? 'No country counts are available just now.'
+        : [
+          'The countries with the most news in the last 24 hours (WorldPulse), the most first:',
+          ...rows.map((r, i) => `${i + 1}. ${r.name || countryLabel(r.code, false)}: ${Number(r.signal_count ?? 0).toLocaleString('en-US')} reports, ${Number(r.recent_6h ?? 0).toLocaleString('en-US')} in the last 6 hours (${trendWord(r.trend)})${typeof r.avg_reliability === 'number' ? ` · sources ${Math.round(r.avg_reliability * 100)}% reliable on average` : ''}`),
+          'Busy is not the same as dangerous: see hotspots for where serious reports meet. One country: country.',
+        ].join('\n')
+      return {
+        text,
+        data: { hours: 24, countries: rows.map(r => ({ code: r.code, name: r.name || countryLabel(r.code, false), reports: Number(r.signal_count ?? 0), last6h: Number(r.recent_6h ?? 0), trend: trendWord(r.trend), reliability: typeof r.avg_reliability === 'number' ? r.avg_reliability : null, latestAt: r.latest_signal_at ?? null })) },
+      }
+    },
+  },
+  {
+    name: 'news_volume',
+    title: 'How much news WorldPulse is reading',
+    description: 'How much news WorldPulse is reading right now: its reports in the last hour and the last 24 hours, how many turned verified in the last 24 hours (a second, separate outlet reported the same event), from how many outlets (websites) and how many countries and territories, and its reports since it began.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    async run(_args, asker) {
+      const { status, body } = await ask(asker, `/api/v1/signals/count`)
+      if (status !== 200) throw new Error(`counts answered ${status}`)
+      const d = (body.data ?? body) as { total?: number; last24h?: number; lastHour?: number; verified24h?: number; countries24h?: number; outlets24h?: number }
+      const n = (v: unknown) => Number(v ?? 0).toLocaleString('en-US')
+      const text = [
+        `WorldPulse read ${n(d.lastHour)} reports in the last hour and ${n(d.last24h)} in the last 24 hours, from ${n(d.outlets24h)} outlets in ${n(d.countries24h)} countries and territories.`,
+        `${n(d.verified24h)} turned verified in the last 24 hours: a second, separate outlet reported the same event.`,
+        `${n(d.total)} reports since it began. Live: ${SITE}`,
+      ].join('\n')
+      return {
+        text,
+        data: { lastHour: Number(d.lastHour ?? 0), last24h: Number(d.last24h ?? 0), verified24h: Number(d.verified24h ?? 0), outlets24h: Number(d.outlets24h ?? 0), countries24h: Number(d.countries24h ?? 0), total: Number(d.total ?? 0) },
+      }
+    },
+  },
+  {
+    name: 'similar_reports',
+    title: 'Reports like this one',
+    description: 'The reports closest in meaning to one report, from three weeks either side of it, by WorldPulse\'s own text fingerprints (no AI service): the closest first, each with its status (verified or not yet), severity, place, date and link. To find the same event told another way, in another language, or what came before and after it. Give a report id or a story id (search_reports, latest or top_stories give them).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'A report id or a story id (a UUID)' },
+        limit: { type: 'integer', minimum: 1, maximum: 10, default: 6, description: 'How many (1 to 10, default 6)' },
+      },
+      required: ['id'],
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const id = strArg(args, 'id', { required: true, pattern: UUID, hint: 'must be a report or story id (a UUID)' })!
+      const limit = intArg(args, 'limit', 6, 1, 10)
+      const story = await ask(asker, `/api/v1/stories/${id}`)
+      if (story.status === 404) throw new ToolError('No report or story with that id')
+      if (story.status !== 200) throw new Error(`story answered ${story.status}`)
+      const first = (((story.body.data ?? {}) as { signals?: Array<{ id: string; title: string }> }).signals ?? [])[0]
+      const reportId = first?.id && UUID.test(first.id) ? first.id : id
+      const { status, body } = await ask(asker, `/api/v1/signals/${reportId}/similar?limit=${limit}`)
+      if (status !== 200) throw new Error(`similar answered ${status}`)
+      type Similar = { id: string; title: string; status?: string; severity?: string; location_name?: string | null; country_code?: string | null; created_at?: string | null }
+      const similar = (((body as { similar?: Similar[] }).similar) ?? []).filter(s => s && UUID.test(String(s.id)) && typeof s.title === 'string' && s.id !== reportId).slice(0, limit)
+      const text = similar.length === 0
+        ? `No report close to "${first?.title ?? 'this one'}" in the three weeks either side of it.`
+        : [
+          `Reports closest in meaning to "${first?.title ?? 'this report'}" (WorldPulse's text fingerprints), the closest first:`,
+          ...similar.map((s, i) => `${i + 1}. ${s.title}\n   ${[s.status === 'verified' ? 'Verified' : 'Not verified yet', cap(s.severity), s.location_name || (s.country_code ? countryLabel(s.country_code, false) : ''), s.created_at ? s.created_at.slice(0, 10) : ''].filter(Boolean).join(' · ')}\n   ${signalLink(s.id)}`),
+          'Close in meaning, not always the same event: open each to check.',
+        ].join('\n')
+      return {
+        text,
+        data: { id: reportId, title: first?.title ?? null, similar: similar.map(s => ({ id: s.id, title: s.title, url: signalLink(s.id), verified: s.status === 'verified', severity: s.severity ?? null, place: s.location_name ?? null, country: s.country_code ?? null, at: s.created_at ?? null })) },
+      }
+    },
+  },
+  {
+    name: 'reader_flags',
+    title: 'What readers flagged on a report',
+    description: 'Whether WorldPulse readers flagged a report as inaccurate, outdated, a duplicate or misinformation, and how many for each reason. A flag is a reader\'s note that something looks wrong, not a correction: WorldPulse shows the count and reasons, never who flagged it. Give a report id or a story id.',
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'string', description: 'A report id or a story id (a UUID)' } },
+      required: ['id'],
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const id = strArg(args, 'id', { required: true, pattern: UUID, hint: 'must be a report or story id (a UUID)' })!
+      const story = await ask(asker, `/api/v1/stories/${id}`)
+      if (story.status === 404) throw new ToolError('No report or story with that id')
+      if (story.status !== 200) throw new Error(`story answered ${story.status}`)
+      const first = (((story.body.data ?? {}) as { signals?: Array<{ id: string; title: string }> }).signals ?? [])[0]
+      const reportId = first?.id && UUID.test(first.id) ? first.id : id
+      const { status, body } = await ask(asker, `/api/v1/signals/${reportId}/flags`)
+      if (status !== 200) throw new Error(`flags answered ${status}`)
+      const d = (body.data ?? {}) as { count?: number; reasons?: Record<string, number> }
+      const count = Number(d.count ?? 0)
+      const reasons = Object.entries(d.reasons ?? {}).filter(([, n]) => Number(n) > 0).sort((a, b) => Number(b[1]) - Number(a[1]))
+      const text = count === 0
+        ? `No reader has flagged "${first?.title ?? 'this report'}". ${signalLink(reportId)}`
+        : `${count} reader${count === 1 ? '' : 's'} flagged "${first?.title ?? 'this report'}": ${reasons.map(([r, n]) => `${r} (${n})`).join(', ')}. A flag is a reader's note, not a correction. ${signalLink(reportId)}`
+      return { text, data: { id: reportId, title: first?.title ?? null, url: signalLink(reportId), flags: count, reasons: Object.fromEntries(reasons) } }
+    },
+  },
+  {
+    name: 'outlet_mix',
+    title: 'What kinds of newsroom carry a story',
+    description: 'What kinds of newsroom carry a story: of its outlets (websites) in its last two days, how many are news agencies, international, national or local outlets, specialists, aggregators and official sources, from WorldPulse\'s directory of outlets, and how many a government runs (state media), with their names. A story carried mostly by state media or by one kind of outlet is one to read with care. Give a story id or a report id.',
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'string', description: 'A story id or a report id (a UUID)' } },
+      required: ['id'],
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const id = strArg(args, 'id', { required: true, pattern: UUID, hint: 'must be a story or report id (a UUID)' })!
+      const { status, body } = await ask(asker, `/api/v1/stories/${id}`)
+      if (status === 404) throw new ToolError('No story or report with that id')
+      if (status !== 200) throw new Error(`story answered ${status}`)
+      type Info = { site: string; name: string | null; kind: string; country: string | null; stateMedia: boolean }
+      const d = (body.data ?? {}) as { outlets?: number; outletNames?: string[]; outletInfo?: Info[]; verifiedAt?: string | null; signals?: Array<{ id: string; title: string }> }
+      const info: Info[] = d.outletInfo ?? siteInfo(d.outletNames ?? [])
+      // each outlet once by name: bbc.co.uk and bbc.com are the BBC
+      const outlets = new Map<string, Info>()
+      for (const o of info) if (!outlets.has(o.name ?? o.site)) outlets.set(o.name ?? o.site, o)
+      const byKind = new Map<string, string[]>()
+      for (const [name, o] of outlets) byKind.set(o.kind, [...(byKind.get(o.kind) ?? []), name])
+      const state = [...outlets.entries()].filter(([, o]) => o.stateMedia).map(([name, o]) => `${name}${o.country ? ` (${countryLabel(o.country, false)})` : ''}`)
+      const label = (kind: string) => kind === 'unknown' ? 'Not in the directory' : String(OUTLET_KIND_LABELS[kind as keyof typeof OUTLET_KIND_LABELS] ?? kind)
+      const order = [...byKind.entries()].sort((a, b) => Number(a[0] === 'unknown') - Number(b[0] === 'unknown') || b[1].length - a[1].length)
+      const named = (names: string[]) => names.length > 6 ? `${names.slice(0, 6).join(', ')} and ${names.length - 6} more` : names.join(', ')
+      const first = d.signals?.[0]
+      const total = outlets.size
+      const text = [
+        first?.title ?? 'Story',
+        `${d.verifiedAt ? 'Verified' : 'Not verified yet'} · ${total} outlet${total === 1 ? '' : 's'} in its last two days, by kind (WorldPulse's outlet directory):`,
+        ...order.map(([kind, names]) => `- ${label(kind)}: ${names.length} (${named(names)})`),
+        state.length
+          ? `State media (a government runs it): ${state.length} of ${total}${state.length * 2 > total ? ', more than half: read with care' : ''} · ${named(state)}`
+          : 'State media: none among them.',
+        `Page: ${signalLink(first?.id ?? id)}`,
+      ].join('\n')
+      return {
+        text,
+        data: {
+          url: signalLink(first?.id ?? id), title: first?.title ?? null, verified: Boolean(d.verifiedAt), outlets: total,
+          kinds: order.map(([kind, names]) => ({ kind, label: label(kind), count: names.length, outlets: names })),
+          stateMedia: state,
+        },
+      }
+    },
+  },
+  {
+    name: 'country_compare',
+    title: 'Two countries side by side',
+    description: 'Two countries side by side in WorldPulse\'s reports: news reports in the last 7 days, how many turned verified and how many wait for a second outlet, the languages they come in, the newsrooms based there whose feeds WorldPulse reads, and reports a day this week against the week before. Give two two-letter country codes, e.g. KE and TZ.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        a: { type: 'string', description: 'A two-letter country code, e.g. KE' },
+        b: { type: 'string', description: 'Another one, e.g. TZ' },
+      },
+      required: ['a', 'b'],
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const code = (name: 'a' | 'b') => {
+        const c = strArg(args, name, { required: true, pattern: /^[A-Za-z]{2}$/, hint: 'must be a two-letter country code such as KE' })!.toUpperCase().replace(/^UK$/, 'GB')
+        if (countryLabel(c, false) === c) throw new ToolError(`${c} is not a country code WorldPulse knows`)
+        return c
+      }
+      const [a, b] = [code('a'), code('b')]
+      if (a === b) throw new ToolError('Give two different countries')
+      const places = await ask(asker, `/api/v1/public/unconfirmed-places?days=7`)
+      if (places.status !== 200) throw new Error(`places answered ${places.status}`)
+      type Place = { country: string; reports: number; verified: number; waiting: number; languages: string[] }
+      const all = (((places.body.data ?? {}) as { places?: Place[] }).places ?? [])
+      const sides = await Promise.all([a, b].map(async c => {
+        const daily = await ask(asker, `/api/v1/countries/${c}/daily?days=14`)
+        const days = daily.status === 200 ? ((((daily.body.data ?? {}) as { daily?: Array<{ day: string; reports: number }> }).daily) ?? []) : []
+        const sum = (list: Array<{ reports: number }>) => list.reduce((s, x) => s + Number(x.reports || 0), 0)
+        const thisWeek = sum(days.slice(-7))
+        const weekBefore = sum(days.slice(-14, -7))
+        const p = all.find(x => x.country === c)
+        return { code: c, name: countryLabel(c, false), reports: Number(p?.reports ?? 0), verified: Number(p?.verified ?? 0), waiting: Number(p?.waiting ?? 0), languages: p?.languages ?? [], newsrooms: newsroomsIn(c), thisWeek, weekBefore, days: days.length }
+      }))
+      const share = (s: (typeof sides)[number]) => s.reports ? `${Math.round(100 * s.verified / s.reports)}%` : '–'
+      const change = (s: (typeof sides)[number]) => s.days < 14 || !s.weekBefore ? '' : ` (${s.thisWeek >= s.weekBefore ? '+' : ''}${Math.round(100 * (s.thisWeek - s.weekBefore) / s.weekBefore)}% on the week before)`
+      const line = (s: (typeof sides)[number]) => [
+        `${s.name}:`,
+        `- News reports, last 7 days: ${s.reports.toLocaleString('en-US')}, ${s.verified.toLocaleString('en-US')} verified (${share(s)}), ${s.waiting.toLocaleString('en-US')} waiting for a second outlet`,
+        `- Reports a day: ${s.days ? `${Math.round(s.thisWeek / 7).toLocaleString('en-US')} this week${change(s)}` : 'not counted'}`,
+        `- Languages: ${s.languages.length ? s.languages.map(languageLabel).join(', ') : 'none counted'}`,
+        `- Newsrooms based there whose feeds WorldPulse reads: ${s.newsrooms}${s.newsrooms <= 3 ? ' (thinly covered)' : ''}`,
+        `- Page: ${SITE}/countries/${s.code.toLowerCase()}`,
+      ].join('\n')
+      const text = [`${sides[0]!.name} and ${sides[1]!.name} in WorldPulse's reports:`, ...sides.map(line)].join('\n\n')
+      return { text, data: { countries: sides.map(s => ({ code: s.code, name: s.name, reports7d: s.reports, verified7d: s.verified, waiting7d: s.waiting, languages: s.languages, newsrooms: s.newsrooms, perDayThisWeek: Math.round(s.thisWeek / 7), thisWeek: s.thisWeek, weekBefore: s.weekBefore })) } }
+    },
+  },
+  {
+    name: 'space_weather',
+    title: 'Space weather alerts',
+    description: 'Space weather from NOAA\'s Space Weather Prediction Center: the highest levels in its alerts of the last 24 hours on NOAA\'s three scales (geomagnetic storms G1 to G5, solar radiation storms S1 to S5, radio blackouts R1 to R5; 0 is none), and the alerts, warnings and watches it issued in the last days (7 by default, up to 30), newest first, each once. Strong storms can disturb satellites, GPS, radio and power grids, and bring auroras far from the poles.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        days: { type: 'integer', minimum: 1, maximum: 30, default: 7, description: 'How many days back (1 to 30, default 7)' },
+        limit: { type: 'integer', minimum: 1, maximum: 15, default: 8, description: 'How many alerts (1 to 15, default 8)' },
+      },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const days = intArg(args, 'days', 7, 1, 30)
+      const limit = intArg(args, 'limit', 8, 1, 15)
+      const [summary, recent] = await Promise.all([ask(asker, `/api/v1/space-weather/summary`), ask(asker, `/api/v1/space-weather/recent?hours=${days * 24}&limit=100`)])
+      if (summary.status !== 200 || recent.status !== 200) throw new Error(`space weather answered ${summary.status}, ${recent.status}`)
+      const s = (summary.body.data ?? {}) as { geomagnetic_level?: number; solar_radiation_level?: number; radio_blackout_level?: number }
+      type Event = { id: string; title: string; severity?: string; published_at?: string | null }
+      const seen = new Set<string>()
+      const events = ((((recent.body.data ?? {}) as { events?: Event[] }).events) ?? [])
+        .filter(e => e && typeof e.title === 'string')
+        .sort((x, y) => String(y.published_at ?? '').localeCompare(String(x.published_at ?? '')))
+        // NOAA reissues a watch: each title once a day
+        .filter(e => { const k = `${e.title}|${String(e.published_at ?? '').slice(0, 10)}`; if (seen.has(k)) return false; seen.add(k); return true })
+        .slice(0, limit)
+      const level = (letter: string, n?: number) => Number(n) > 0 ? `${letter}${n}` : `${letter}0 (none)`
+      const text = [
+        `Highest in NOAA's alerts of the last 24 hours: geomagnetic storms ${level('G', s.geomagnetic_level)}, solar radiation ${level('S', s.solar_radiation_level)}, radio blackouts ${level('R', s.radio_blackout_level)}.`,
+        events.length
+          ? [`NOAA's alerts, warnings and watches, the last ${days} days, newest first:`, ...events.map((e, i) => `${i + 1}. ${e.title.replace(/^Space weather (alert|warning|watch|summary): /i, '')} · ${e.published_at ? `${e.published_at.slice(0, 16).replace('T', ' ')} UTC` : ''}\n   ${signalLink(e.id)}`)].join('\n')
+          : `No NOAA alert, warning or watch in the last ${days} days.`,
+        'Source: NOAA SWPC, https://www.swpc.noaa.gov/',
+      ].join('\n')
+      return {
+        text,
+        data: { levels24h: { geomagnetic: Number(s.geomagnetic_level ?? 0), solarRadiation: Number(s.solar_radiation_level ?? 0), radioBlackout: Number(s.radio_blackout_level ?? 0) }, days, alerts: events.map(e => ({ id: e.id, title: e.title, url: signalLink(e.id), at: e.published_at ?? null })) },
       }
     },
   },

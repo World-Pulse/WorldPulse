@@ -51,6 +51,16 @@ const MCP_TOOLS = [
   { name: 'verified_in_languages', what: 'The newest reports in other languages than English that turned verified' },
   { name: 'languages_today', what: 'The languages the news came in: reports, countries and verified share for each' },
   { name: 'missed_in_english', what: 'Stories verified in other languages that WorldPulse found no English report of' },
+  { name: 'military_aircraft', what: 'Military aircraft in the air now (adsb.lol), and the ones near a place' },
+  { name: 'emergency_flights', what: 'Aircraft squawking an emergency, radio failure or hijack code now' },
+  { name: 'live_cameras', what: 'Public traffic and weather cameras near a place, with their latest picture' },
+  { name: 'busiest_countries', what: 'The countries with the most news in the last 24 hours' },
+  { name: 'news_volume', what: 'How much news WorldPulse is reading: reports an hour and a day, outlets, countries' },
+  { name: 'similar_reports', what: 'The reports closest in meaning to one report' },
+  { name: 'reader_flags', what: 'What readers flagged on a report, and why' },
+  { name: 'outlet_mix', what: 'What kinds of newsroom carry a story, state media among them' },
+  { name: 'country_compare', what: 'Two countries side by side: reports, verified share, languages, newsrooms' },
+  { name: 'space_weather', what: "NOAA's space weather alerts and the last day's storm levels" },
 ]
 const MCP_CURSOR = '{"mcpServers":{"worldpulse":{"url":"https://api.world-pulse.io/mcp"}}}'
 

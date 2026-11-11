@@ -26,7 +26,7 @@ describe('the developer page on the MCP server', () => {
   it("lists exactly the server's tools", () => {
     const served = [...toolsBlock(server).matchAll(/^\s{4}name: '([a-z_]+)',$/gm)].map(m => m[1]).sort()
     const listed = [...page.matchAll(/\{ name: '([a-z_]+)', what:/g)].map(m => m[1]).sort()
-    expect(served).toEqual(['breaking', 'check_claim', 'check_link', 'conflicts', 'connections', 'country', 'daily_brief', 'day', 'displacement', 'entity', 'hazards', 'hotspots', 'how_verified', 'internet_outages', 'languages_today', 'latest', 'local_press', 'missed_in_english', 'near', 'newly_verified', 'outbreaks', 'outlet', 'protests', 'quiet_places', 'search_reports', 'shipping', 'site_check', 'story', 'story_by_country', 'story_languages', 'story_numbers', 'story_timeline', 'top_stories', 'trend', 'trending', 'unconfirmed', 'under_reported', 'verified_in_languages', 'week', 'who_covers'])
+    expect(served).toEqual(['breaking', 'busiest_countries', 'check_claim', 'check_link', 'conflicts', 'connections', 'country', 'country_compare', 'daily_brief', 'day', 'displacement', 'emergency_flights', 'entity', 'hazards', 'hotspots', 'how_verified', 'internet_outages', 'languages_today', 'latest', 'live_cameras', 'local_press', 'military_aircraft', 'missed_in_english', 'near', 'newly_verified', 'news_volume', 'outbreaks', 'outlet', 'outlet_mix', 'protests', 'quiet_places', 'reader_flags', 'search_reports', 'shipping', 'similar_reports', 'site_check', 'space_weather', 'story', 'story_by_country', 'story_languages', 'story_numbers', 'story_timeline', 'top_stories', 'trend', 'trending', 'unconfirmed', 'under_reported', 'verified_in_languages', 'week', 'who_covers'])
     expect(listed).toEqual(served)
   })
 })
