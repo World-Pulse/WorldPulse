@@ -132,11 +132,16 @@ export function FiguresView({ data, bare = false, now }: { data: StoryFiguresDat
   )
 }
 
-/** Asks the API in the browser, like the story so far; nothing shows until it answers */
-export function StoryFigures({ signalId, bare = false }: { signalId: string; bare?: boolean }) {
-  const [data, setData] = useState<StoryFiguresData | null>(null)
+/**
+ * Asks the API in the browser, like the story so far; nothing shows until it answers. A verified story's page
+ * brings them in its own HTML (`initial`, Nov 11, 2026), so search engines and AI assistants that don't run the
+ * page's scripts read them too, and the browser doesn't ask again.
+ */
+export function StoryFigures({ signalId, bare = false, initial = null }: { signalId: string; bare?: boolean; initial?: StoryFiguresData | null }) {
+  const [data, setData] = useState<StoryFiguresData | null>(initial)
 
   useEffect(() => {
+    if (initial) return
     let cancelled = false
     fetch(`${API_URL}/api/v1/stories/${encodeURIComponent(signalId)}/figures`)
       .then(r => (r.ok ? r.json() : null))
@@ -145,7 +150,7 @@ export function StoryFigures({ signalId, bare = false }: { signalId: string; bar
       })
       .catch(() => { /* non-fatal: the section stays hidden */ })
     return () => { cancelled = true }
-  }, [signalId])
+  }, [signalId, initial])
 
   return data ? <FiguresView data={data} bare={bare} /> : null
 }

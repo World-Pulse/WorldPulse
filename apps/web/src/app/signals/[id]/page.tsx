@@ -3,7 +3,7 @@ import type { Metadata } from 'next'
 import type { Signal, Post } from '@worldpulse/types'
 import { SignalDetailClient } from './SignalDetailClient'
 import { displaySummary } from '@/lib/signal-text'
-import { storyPageTitle, storyIndexable, storyCanonicalPath, storyFactLine } from '@/lib/story-count'
+import { storyPageTitle, storyIndexable, storyCanonicalPath, storyFactLine, topFigure, type StoryOutletCounts, type StoryFactExtras } from '@/lib/story-count'
 import { SITE_NAME, SITE_URL, newsArticleJsonLd, jsonLdText, metaDescription } from '@/lib/page-metadata'
 import { cachedFetch } from '@/lib/server-fetch'
 import Link from 'next/link'
@@ -15,6 +15,8 @@ import type { CountryStory } from '@/components/countries/CountryTopStories'
 import { fetchStoryOutletCounts } from '@/lib/story-outlets'
 import type { SecondReadInfo } from '@/lib/second-read'
 import type { OutletInfo } from '@/lib/outlet-kinds'
+import type { StoryFiguresData } from './StoryFigures'
+import type { StoryDetail } from './StoryMembers'
 
 const API_BASE = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -88,6 +90,48 @@ async function fetchEntityLinks(id: string): Promise<StoryLink[]> {
   }
 }
 
+/** One part of a story from the API, or null when it doesn't answer in 4 seconds (the browser asks then) */
+async function fetchStoryPart<T>(path: string): Promise<T | null> {
+  try {
+    const res = await cachedFetch(`${API_BASE}${path}`, 60_000, 4_000)
+    if (!res.ok) return null
+    const json = await res.json() as { success?: boolean; data?: T }
+    return json.success && json.data ? json.data : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * A story's figures and its reports so far, in the page's own HTML (Nov 11, 2026; G28, Devon: "Proceed" to full
+ * pages for verified stories): the browser used to ask for them after the page loaded, so search engines and AI
+ * assistants that read the page without running it saw neither, nor the story's other outlets. Asked for a story
+ * two or more outlets carry (one report has neither); kept a minute, shared by the page and its description.
+ */
+async function fetchStoryParts(id: string, counts: StoryOutletCounts | null): Promise<{ figures: StoryFiguresData | null; story: StoryDetail | null }> {
+  if (!counts || counts.outlets < 2) return { figures: null, story: null }
+  const key = encodeURIComponent(id)
+  const [figures, story] = await Promise.all([
+    fetchStoryPart<StoryFiguresData>(`/api/v1/stories/${key}/figures`),
+    fetchStoryPart<StoryDetail>(`/api/v1/stories/${key}`),
+  ])
+  return { figures, story }
+}
+
+/** What the fact line adds from those parts: the story's own country's newsrooms and its most-reported figure */
+function factExtras(parts: { figures: StoryFiguresData | null; story: StoryDetail | null }): StoryFactExtras {
+  return { local: parts.story?.localOutlets, country: parts.story?.country, figure: topFigure(parts.figures) }
+}
+
+/** The outlets' own articles in the story, for its structured data: one per outlet, newest first */
+function storyCitations(story: StoryDetail | null): Array<{ url: string; outlet: string }> {
+  if (!story || !Array.isArray(story.signals)) return []
+  return [...story.signals]
+    .filter(m => m && typeof m.url === 'string' && typeof m.outlet === 'string' && m.outlet)
+    .sort((a, b) => (Date.parse(b.createdAt ?? '') || 0) - (Date.parse(a.createdAt ?? '') || 0))
+    .map(m => ({ url: m.url as string, outlet: m.outlet }))
+}
+
 async function fetchSignalPosts(id: string): Promise<{ items: Post[]; total: number }> {
   try {
     const res = await cachedFetch(`${API_BASE}/api/v1/signals/${id}/posts?limit=20&sort=recent`, 10_000)
@@ -122,12 +166,14 @@ export async function generateMetadata(
   // (the same count the page shows; kept 60 s, so the page's own call reuses it)
   const counts = await fetchStoryOutletCounts(signal.id)
   const title = storyPageTitle(signal.title, counts)
-  // The story's facts first (Nov 8, 2026): what a search result or an AI assistant quotes
+  // The story's facts first (Nov 8, 2026): what a search result or an AI assistant quotes; with its own country's
+  // newsrooms and its most-reported figure since Nov 11 (the same parts the page shows, kept a minute)
   const fact = storyFactLine({
     verified: counts?.verified === true || signal.status === 'verified',
     outlets: counts?.outlets ?? 0,
     countries: counts?.countries,
     firstReportAt: counts?.firstReportAt ?? signal.firstReported,
+    ...factExtras(await fetchStoryParts(signal.id, counts)),
   })
   const description = metaDescription([fact, displaySummary(signal.summary, signal.title) || signal.title].filter(Boolean).join(' '))
   // The page's own address and the site name: this openGraph replaces the
@@ -172,6 +218,7 @@ export default async function SignalDetailPage(
     fetchEntityLinks(signal.id),
     fetchStoryOutletCounts(signal.id),
   ])
+  const parts = await fetchStoryParts(signal.id, storyCounts)
   const related = rankRelatedStories(
     { storyId: storyCounts?.storyId, signalId: signal.id, category: signal.category },
     relatedLists.country,
@@ -180,15 +227,24 @@ export default async function SignalDetailPage(
   const country = countryLink(signal.countryCode)
   const week = weekLink(signal.firstReported ?? signal.createdAt)
 
-  // What search engines read about the story (schema.org NewsArticle, plan G2)
+  // What search engines read about the story (schema.org NewsArticle, plan G2): its facts first, as on the page,
+  // and the outlets' own articles as citations (Nov 11, 2026)
+  const fact = storyFactLine({
+    verified: storyCounts?.verified === true || signal.status === 'verified',
+    outlets: storyCounts?.outlets ?? 0,
+    countries: storyCounts?.countries,
+    firstReportAt: storyCounts?.firstReportAt ?? signal.firstReported,
+    ...factExtras(parts),
+  })
   const jsonLd = newsArticleJsonLd({
     id:          signal.id,
     title:       signal.title,
-    description: metaDescription(displaySummary(signal.summary, signal.title) || signal.title, 300),
+    description: metaDescription([fact, displaySummary(signal.summary, signal.title) || signal.title].filter(Boolean).join(' '), 300),
     published:   signal.firstReported ?? signal.createdAt,
     modified:    signal.lastUpdated,
     place:       signal.locationName,
     image:       `${SITE_URL}/signals/${signal.id}/opengraph-image`,
+    citations:   storyCitations(parts.story),
   })
 
   return (
@@ -200,6 +256,8 @@ export default async function SignalDetailPage(
         initialPosts={postsData.items}
         postsTotal={postsData.total}
         initialStoryCounts={storyCounts}
+        initialFigures={parts.figures}
+        initialStory={parts.story}
       />
       {(country || entities.length > 0 || week) && (
         <nav aria-label="About this story" className="mx-auto max-w-5xl px-4 pb-8 text-[12px] text-wp-text3 flex flex-wrap items-center gap-x-3 gap-y-1">

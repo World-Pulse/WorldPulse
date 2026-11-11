@@ -69,9 +69,20 @@ export function newsArticleJsonLd(s: {
   modified?: string | null
   place?: string | null
   image?: string
+  /**
+   * The outlets' own articles the story is told from (Nov 11, 2026): each as a citation with its outlet, so search
+   * engines and AI assistants see who reported it, not only that some did (at most 20, one per outlet)
+   */
+  citations?: Array<{ url: string; outlet: string }>
 }): Record<string, unknown> {
   const url = `${SITE_URL}/signals/${s.id}`
   const published = s.published ?? undefined
+  const seen = new Set<string>()
+  const citation = (s.citations ?? [])
+    .filter(c => /^https?:\/\//i.test(c?.url ?? '') && typeof c.outlet === 'string' && c.outlet.trim() !== '')
+    .filter(c => (seen.has(c.outlet) ? false : (seen.add(c.outlet), true)))
+    .slice(0, 20)
+    .map(c => ({ '@type': 'NewsArticle', url: c.url, publisher: { '@type': 'Organization', name: c.outlet } }))
   return {
     '@context': 'https://schema.org',
     '@type': 'NewsArticle',
@@ -83,6 +94,7 @@ export function newsArticleJsonLd(s: {
     ...(published ? { datePublished: published } : {}),
     ...(s.modified || published ? { dateModified: s.modified ?? published } : {}),
     ...(s.place ? { contentLocation: { '@type': 'Place', name: s.place } } : {}),
+    ...(citation.length ? { citation } : {}),
     author: { '@type': 'Organization', name: SITE_NAME, url: SITE_URL },
     publisher: {
       '@type': 'Organization',

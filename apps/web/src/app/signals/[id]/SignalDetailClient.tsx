@@ -29,7 +29,9 @@ import { distinctOutlets } from '@/components/signals/SourceChain'
 import { PredictionMarkets } from '@/components/signals/PredictionMarkets'
 import { ShareMenu } from '@/components/signals/ShareMenu'
 import { displaySummary, isStateMedia, STATE_MEDIA_NOTE, storyTags } from '@/lib/signal-text'
-import { storyCountsOf, storyFactLine, type StoryOutletCounts } from '@/lib/story-count'
+import { storyCountsOf, storyFactLine, topFigure, type StoryOutletCounts } from '@/lib/story-count'
+import type { StoryFiguresData } from './StoryFigures'
+import type { StoryDetail } from './StoryMembers'
 import { howSure } from '@/lib/how-sure'
 import { HowSureBlock } from '@/components/signals/HowSureBlock'
 import { FollowStory } from '@/components/signals/FollowStory'
@@ -159,6 +161,9 @@ interface Props {
   postsTotal:   number
   /** Outlets that carried this report's story, from the server (null: the API couldn't say) */
   initialStoryCounts?: StoryOutletCounts | null
+  /** A verified story's figures and reports so far, from the server, in the page's HTML (Nov 11, 2026) */
+  initialFigures?: StoryFiguresData | null
+  initialStory?: StoryDetail | null
 }
 
 // ─── AI Slop Badge ────────────────────────────────────────────────────────────
@@ -201,7 +206,7 @@ interface CIBStatus {
   label: string
 }
 
-export function SignalDetailClient({ signal, related, initialPosts, postsTotal, initialStoryCounts = null }: Props) {
+export function SignalDetailClient({ signal, related, initialPosts, postsTotal, initialStoryCounts = null, initialFigures = null, initialStory = null }: Props) {
   const color      = SEV_COLOR[signal.severity] ?? '#8892a4'
   const bg         = SEV_BG[signal.severity]    ?? 'rgba(136,146,164,0.12)'
   const srcUrl     = signal.originalUrls?.[0] ?? null
@@ -372,7 +377,11 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal, 
             {/* The story's facts in one sentence, first, for readers and for the search engines and AI assistants
                 that quote the page (Nov 8, 2026): "Verified: 81 outlets in 36 countries have reported this story since Nov 7." */}
             {storyAsked && (() => {
-              const fact = storyFactLine({ verified: storyVerified, outlets: outletCount, countries: storyCounts?.countries, firstReportAt: storyCounts?.firstReportAt ?? signal.firstReported })
+              const fact = storyFactLine({
+                verified: storyVerified, outlets: outletCount, countries: storyCounts?.countries, firstReportAt: storyCounts?.firstReportAt ?? signal.firstReported,
+                // its own country's newsrooms and its most-reported figure, as its search description says (Nov 11, 2026)
+                local: initialStory?.localOutlets, country: initialStory?.country, figure: topFigure(initialFigures),
+              })
               return fact ? <p className="text-[14px] leading-relaxed text-wp-text2" data-story-facts>{fact}</p> : null
             })()}
 
@@ -463,6 +472,8 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal, 
               originalUrls={signal.originalUrls ?? []}
               storyOutlets={storyCounts ? outletsAll : null}
               outletInfo={signal.outletInfo ?? null}
+              initialFigures={initialFigures}
+              initialStory={initialStory}
             />
 
             {/* AI Summary — WorldPulse differentiator vs Ground News Ground Summary */}

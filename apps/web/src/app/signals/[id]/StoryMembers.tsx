@@ -123,13 +123,20 @@ const SEVERITY_TEXT: Record<string, string> = { critical: 'text-red-400', high: 
  * `bare`: inside the story page's one "Who reported it" block (plan P2, step
  * 3), under the report's own outlets: no card of its own, "The story so far"
  */
-export function StoryMembers({ signalId, bare = false }: { signalId: string; bare?: boolean }) {
-  const [story, setStory] = useState<StoryDetail | null>(null)
+export function StoryMembers({ signalId, bare = false, initial = null }: { signalId: string; bare?: boolean; initial?: StoryDetail | null }) {
+  // a verified story's page brings it in its own HTML (Nov 11, 2026), for search engines and AI assistants too
+  const [story, setStory] = useState<StoryDetail | null>(initial)
   const [seenAt, setSeenAt] = useState<number | null>(null)
   const [expanded, setExpanded] = useState(false)
   const [showOutlets, setShowOutlets] = useState(false)
 
   useEffect(() => {
+    if (initial) {
+      // The last look first, then this one counts as seen
+      setSeenAt(readSeen(initial.storyId))
+      writeSeen(initial.storyId)
+      return
+    }
     let cancelled = false
     fetch(`${API_URL}/api/v1/stories/${encodeURIComponent(signalId)}`)
       .then(r => (r.ok ? r.json() : null))
@@ -142,7 +149,7 @@ export function StoryMembers({ signalId, bare = false }: { signalId: string; bar
       })
       .catch(() => { /* non-fatal: the section stays hidden */ })
     return () => { cancelled = true }
-  }, [signalId])
+  }, [signalId, initial])
 
   const others = otherMembers(story, signalId)
   if (!story || others.length === 0) return null

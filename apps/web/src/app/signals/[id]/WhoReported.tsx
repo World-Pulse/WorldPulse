@@ -16,8 +16,8 @@
 import type { Source } from '@worldpulse/types'
 import type { OutletInfo } from '@/lib/outlet-kinds'
 import { SourceChain, computeSourceChainMode } from '@/components/signals/SourceChain'
-import { StoryMembers } from './StoryMembers'
-import { StoryFigures } from './StoryFigures'
+import { StoryMembers, type StoryDetail } from './StoryMembers'
+import { StoryFigures, type StoryFiguresData } from './StoryFigures'
 
 interface Props {
   signalId: string
@@ -28,15 +28,18 @@ interface Props {
   storyOutlets: number | null
   /** What each linked website is (plan 15, Oct 22, 2026) */
   outletInfo?: OutletInfo[] | null
+  /** The story's figures and its reports so far, when the page brought them in its HTML (Nov 11, 2026) */
+  initialFigures?: StoryFiguresData | null
+  initialStory?: StoryDetail | null
 }
 
-export function WhoReported({ signalId, sources, sourceUrl, originalUrls, storyOutlets, outletInfo = null }: Props) {
+export function WhoReported({ signalId, sources, sourceUrl, originalUrls, storyOutlets, outletInfo = null, initialFigures = null, initialStory = null }: Props) {
   // A report with no link of its own: the story so far alone, in its own card
   if (computeSourceChainMode(sources, sourceUrl) === 'hidden') {
     return (
       <>
-        <StoryFigures signalId={signalId} />
-        <StoryMembers signalId={signalId} />
+        <StoryFigures signalId={signalId} initial={initialFigures} />
+        <StoryMembers signalId={signalId} initial={initialStory} />
       </>
     )
   }
@@ -45,8 +48,8 @@ export function WhoReported({ signalId, sources, sourceUrl, originalUrls, storyO
     <section aria-label="Who reported it" className="p-4 rounded-xl border border-white/10 bg-white/[0.02] space-y-3">
       <h2 className="font-mono text-[11px] tracking-widest uppercase text-wp-text2">Who reported it</h2>
       <SourceChain bare sources={sources} sourceUrl={sourceUrl} originalUrls={originalUrls} storyOutlets={storyOutlets} outletInfo={outletInfo} />
-      <StoryFigures bare signalId={signalId} />
-      <StoryMembers bare signalId={signalId} />
+      <StoryFigures bare signalId={signalId} initial={initialFigures} />
+      <StoryMembers bare signalId={signalId} initial={initialStory} />
     </section>
   )
 }
