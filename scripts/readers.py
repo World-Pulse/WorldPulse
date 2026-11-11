@@ -70,6 +70,12 @@ hour (UTC) each visitor arrived, by channel, for today and yesterday
 ("hourly"), and which post or email brought them ("posts"): links in HQ's
 ready-to-post drafts and the email briefing carry utm_campaign (hq,
 briefing, weekly) and utm_content (the story's first 8 characters).
+Since Nov 11, 2026 (Devon, Nov 10: readers per post, "embed it into the
+database and learn from it"), the morning video's post (utm_campaign
+daily-video, utm_content its date: "video:2026-11-11") and the weekly What's
+missed post ("missed:2026-w46-sd") count too, and "post_channels" gives each
+post's readers by the channel they came from (X, LinkedIn...), so HQ's sync
+can learn which kinds of post bring readers, and where.
 
 AI assistants (plan K9, Nov 5, 2026): readers sent by ChatGPT, Perplexity,
 Claude, Gemini, Copilot and the others (AI_ASSISTANTS) are the channel "ai
@@ -365,13 +371,18 @@ def primary_language(line_rest):
 
 
 def post_key(query):
-    """'hq:83b746ee' for a link from an HQ post draft or an email briefing, else None"""
+    """'hq:83b746ee' for a link from an HQ post draft or an email briefing, 'video:2026-11-11' for the morning video's
+    post, 'missed:2026-w46-sd' for the weekly What's missed post; else None"""
     q = parse_qs(query)
     campaign = (q.get('utm_campaign') or [''])[0].strip().lower()
     content = (q.get('utm_content') or [''])[0].strip().lower()
-    if campaign not in ('hq', 'briefing', 'weekly') or not re.fullmatch(r'[0-9a-f]{8}', content):
-        return None
-    return f'{campaign}:{content}'
+    if campaign in ('hq', 'briefing', 'weekly') and re.fullmatch(r'[0-9a-f]{8}', content):
+        return f'{campaign}:{content}'
+    if campaign == 'daily-video' and re.fullmatch(r'\d{4}-\d{2}-\d{2}', content):
+        return f'video:{content}'
+    if campaign == 'hq' and re.fullmatch(r'missed-\d{4}-w\d{2}-[a-z]{2}', content):
+        return 'missed:' + content[len('missed-'):]
+    return None
 
 
 def ref_site(ref):
@@ -403,6 +414,7 @@ def summary(d):
     channels, pages, sites, views, people, unconfirmed, scripts_only, sign_in_only = {}, {}, {}, 0, 0, 0, 0, 0
     no_language = 0
     hours, posts, agents, sections, languages = {}, {}, {}, {}, {}
+    post_channels = {}   # each post's readers by the channel they came from (Nov 11, 2026)
     # Page views by the channel that brought each visitor (plan G18 (3), Oct 20, 2026):
     # whether readers who came from X, search or a post read a second story
     channel_views = {}
@@ -447,6 +459,7 @@ def summary(d):
             add(hours.setdefault(v['h'], {}), ch)
         if v.get('k'):
             add(posts, v['k'])
+            add(post_channels.setdefault(v['k'], {}), ch)
         for kind, n in v['p'].items():
             add(pages, kind, n)
             add(channel_views, ch, n)
@@ -462,6 +475,7 @@ def summary(d):
             'people_agents': by_count(agents, 8), 'people_sections': by_count(sections, 12),
             'people_languages': by_count(languages, 12),
             'hours': dict(sorted(hours.items())), 'posts': by_count(posts, 20),
+            'post_channels': {k: by_count(post_channels[k], 6) for k in by_count(posts, 20)},
             'ai_referrals': by_count(ai_referrals), 'ai_reads': by_count(d.get('ai_reads') or {}),
             'ai_search': by_count(d.get('ai_search') or {})}
 
@@ -690,7 +704,7 @@ def main():
     del out['hours']
     out['updated'] = now.isoformat(timespec='seconds')
     out['log_read'] = ok
-    out['history'] = [{**{k: h.get(k) for k in ('day', 'visitors', 'views', 'channels', 'channel_views', 'views_per_visitor', 'posts', 'crawlers',
+    out['history'] = [{**{k: h.get(k) for k in ('day', 'visitors', 'views', 'channels', 'channel_views', 'views_per_visitor', 'posts', 'post_channels', 'crawlers',
                                                 'unconfirmed', 'scripts_only', 'sign_in_only', 'no_language', 'rule', 'note', 'visitors_loose')},
                        'ai_referrals': ai_referrals_of(h), 'ai_reads': h.get('ai_reads') or {}, 'ai_search': h.get('ai_search') or {}}
                       for h in st['history'][-14:]]

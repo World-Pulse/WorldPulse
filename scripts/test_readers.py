@@ -86,3 +86,26 @@ class Languages(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ReadersPerPost(unittest.TestCase):
+    """Devon, Nov 10, 2026: readers per post, "embed it into the database and learn from it" (Nov 11)"""
+
+    def test_hq_drafts_briefings_the_morning_video_and_whats_missed_are_posts(self):
+        self.assertEqual(readers.post_key('utm_source=x&utm_campaign=hq&utm_content=83B746EE'), 'hq:83b746ee')
+        self.assertEqual(readers.post_key('utm_campaign=briefing&utm_content=0a1b2c3d'), 'briefing:0a1b2c3d')
+        self.assertEqual(readers.post_key('utm_source=x&utm_medium=social&utm_campaign=daily-video&utm_content=2026-11-11'), 'video:2026-11-11')
+        self.assertEqual(readers.post_key('utm_source=linkedin&utm_campaign=hq&utm_content=missed-2026-W46-SD'), 'missed:2026-w46-sd')
+
+    def test_anything_else_is_no_post(self):
+        for q in ('', 'utm_campaign=hq', 'utm_campaign=hq&utm_content=nothex12', 'utm_campaign=daily-video&utm_content=today',
+                  'utm_campaign=ads&utm_content=83b746ee', 'utm_campaign=hq&utm_content=missed-2026-W46-sudan'):
+            self.assertIsNone(readers.post_key(q), q)
+
+    def test_each_posts_readers_by_the_channel_they_came_from(self):
+        s = readers.summary(day_with(a={'p': {'map': 1}, 'js': True, 'l': 'en', 'c': 'x', 'k': 'video:2026-11-11'},
+                                     b={'p': {'map': 2}, 'js': True, 'l': 'en', 'c': 'linkedin', 'k': 'video:2026-11-11'},
+                                     c={'p': {'story': 1}, 'js': True, 'l': 'en', 'c': 'x', 'k': 'hq:83b746ee'},
+                                     d={'p': {'story': 1}, 'l': 'en', 'c': 'x', 'k': 'hq:83b746ee'}))
+        self.assertEqual(s['posts'], {'video:2026-11-11': 2, 'hq:83b746ee': 1})   # d never ran the page
+        self.assertEqual(s['post_channels'], {'video:2026-11-11': {'x': 1, 'linkedin': 1}, 'hq:83b746ee': {'x': 1}})
