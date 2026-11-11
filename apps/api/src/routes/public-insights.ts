@@ -10,6 +10,7 @@
  *   GET /verification-speed     how long the last hours' verified stories took to find a second outlet
  *   GET /topics                 the last hours' news reports by topic, against the hours before
  *   GET /outlet-reports         one outlet's newest reports
+ *   GET /feed-reports           a government or science feed's newest reports (nuclear, sanctions, weather…)
  */
 import type { FastifyPluginAsync } from 'fastify'
 import { redis } from '../db/redis'
@@ -58,7 +59,7 @@ export interface ChokepointNews { id: string; name: string; reports: number; ver
 
 async function chokepointNews(days: number): Promise<ChokepointNews[]> {
   const like = CHOKEPOINT_NAMES.flatMap(c => c.like).map(f => `%${f}%`)
-  const result = await longQuery(30, trx => trx.raw(
+  const result = await longQuery(60, trx => trx.raw(
     `SELECT id::text AS id, title, status::text AS status, created_at
        FROM signals
       WHERE created_at > NOW() - make_interval(days => ?)
@@ -259,6 +260,43 @@ async function outletReports(site: string, days: number): Promise<{ total: numbe
   }
 }
 
+// ─── A data feed's reports (the scraper's government and science feeds, by their tags) ─────────────
+
+/** The feeds GET /feed-reports reads: each one's reports carry all of one of its tag sets */
+export const FEEDS: Record<string, { label: string; tags: string[][] }> = {
+  nuclear: { label: 'IAEA nuclear and radiological events', tags: [['iaea']] },
+  radiation: { label: 'Safecast radiation readings', tags: [['safecast']] },
+  sanctions: { label: 'US Treasury (OFAC) and EU sanctions actions', tags: [['sanctions', 'ofac'], ['sanctions', 'eu']] },
+  'us-weather': { label: 'US National Weather Service alerts', tags: [['nws']] },
+  carriers: { label: 'US Navy carrier strike groups', tags: [['csg']] },
+  humanitarian: { label: 'UN ReliefWeb disasters and reports', tags: [['reliefweb']] },
+  'emergency-mapping': { label: 'Copernicus Emergency Management Service activations', tags: [['cems']] },
+}
+
+export interface FeedReport { id: string; title: string; summary: string | null; severity: string | null; country: string | null; place: string | null; at: string | null; url: string | null; tags: string[] }
+
+async function feedReports(feed: string, days: number): Promise<{ total: number; reports: FeedReport[] }> {
+  const sets = FEEDS[feed]!.tags
+  const result = await longQuery(20, trx => trx.raw(
+    `WITH mine AS (
+       SELECT id::text AS id, title, summary, severity::text AS severity, country_code, location_name, created_at, original_urls[1] AS url, tags
+         FROM signals
+        WHERE created_at > NOW() - make_interval(days => ?)
+          AND (${sets.map(() => 'tags @> ?::text[]').join(' OR ')})
+     )
+     SELECT *, count(*) OVER () AS total FROM mine ORDER BY created_at DESC LIMIT 50`, [days, ...sets]) as unknown as Promise<unknown>)
+  const rows = rowsOf(result)
+  return {
+    total: Number(rows[0]?.total ?? 0),
+    reports: rows.map(r => ({
+      id: String(r.id), title: String(r.title ?? ''), summary: r.summary ? String(r.summary).slice(0, 400) : null, severity: r.severity ? String(r.severity) : null,
+      country: typeof r.country_code === 'string' && /^[A-Z]{2}$/.test(r.country_code) ? r.country_code : null,
+      place: r.location_name ? String(r.location_name) : null, at: iso(r.created_at), url: r.url ? String(r.url) : null,
+      tags: Array.isArray(r.tags) ? (r.tags as unknown[]).map(String) : [],
+    })),
+  }
+}
+
 // ─── Routes ─────────────────────────────────────────────────────────────
 
 const SWR = (fresh: number) => ({ freshSeconds: fresh, staleSeconds: 6 * 3_600, lockSeconds: 60 })
@@ -271,7 +309,8 @@ export const registerPublicInsightRoutes: FastifyPluginAsync = async (app) => {
     reply.header('Access-Control-Allow-Origin', '*')
     const days = boundedInt((req.query as Record<string, unknown>)?.days, 7, 1, 14)
     try {
-      const chokepoints = await staleWhileRevalidate(`public:chokepoints:v1:${days}`, SWR(900), () => chokepointNews(days))
+      // a week of headlines takes about 25 seconds: kept half an hour, served up to a day old while remade
+      const chokepoints = await staleWhileRevalidate(`public:chokepoints:v1:${days}`, { freshSeconds: 1_800, staleSeconds: 86_400, lockSeconds: 120 }, () => chokepointNews(days))
       return reply.send({ success: true, data: { days, chokepoints } })
     } catch {
       return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The chokepoints could not be counted just now; try again in a minute')
@@ -370,6 +409,22 @@ export const registerPublicInsightRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ success: true, data: { site, days, ...data } })
     } catch {
       return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The outlet\'s reports could not be read just now; try again in a minute')
+    }
+  })
+
+  app.get('/feed-reports', {
+    schema: { tags: ['public'], summary: 'A government or science feed\'s newest reports: nuclear, radiation, sanctions, us-weather, carriers, humanitarian, emergency-mapping (public, no auth required)' }, ...OPEN,
+  }, async (req, reply) => {
+    reply.header('Access-Control-Allow-Origin', '*')
+    const q = (req.query ?? {}) as Record<string, unknown>
+    const feed = String(q.feed ?? '')
+    if (!Object.hasOwn(FEEDS, feed)) return sendError(reply, 400, 'VALIDATION_ERROR', `feed must be one of ${Object.keys(FEEDS).join(', ')}`)
+    const days = boundedInt(q.days, 7, 1, 30)
+    try {
+      const data = await staleWhileRevalidate(`public:feed-reports:v1:${feed}:${days}`, SWR(600), () => feedReports(feed, days))
+      return reply.send({ success: true, data: { feed, label: FEEDS[feed]!.label, days, ...data } })
+    } catch {
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The feed could not be read just now; try again in a minute')
     }
   })
 }

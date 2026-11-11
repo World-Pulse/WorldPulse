@@ -38,6 +38,7 @@ vi.mock('../lib/long-query', () => ({
         if (sql.includes('AS minutes')) {
           return { rows: [5, 30, 45, 90, 600].map((m, i) => ({ story_id: `s${i}`, report_id: `r${i}`, title: `Story ${i}`, first_at: '2026-11-10T00:00:00Z', verified_at: '2026-11-10T01:00:00Z', minutes: String(m) })) }
         }
+        if (sql.includes('tags @> ?::text[]')) return { rows: [{ id: 'f', title: 'OFAC designates two shipping firms', summary: 'x'.repeat(500), severity: 'medium', country_code: 'IR', location_name: 'Tehran', created_at: '2026-11-09T00:00:00Z', url: 'https://ofac.treasury.gov/x', tags: ['osint', 'sanctions', 'ofac'], total: '3' }] }
         if (sql.includes('count(*) OVER () AS total')) return { rows: [{ id: 'o', title: 'Sudan talks', status: 'verified', severity: 'medium', topic: 'conflict', country_code: 'SD', created_at: '2026-11-10T20:00:00Z', story_id: 's', total: '31' }] }
         if (sql.includes('category::text AS topic')) return { rows: [{ topic: 'conflict', reports: '120', verified: '40', before: '100' }] }
         return { rows: [] }
@@ -152,5 +153,20 @@ describe('GET /api/v1/public/topics and /outlet-reports', () => {
       expect(res.statusCode, u).toBe(503)
       expect(res.json().code).toBe('SERVICE_UNAVAILABLE')
     }
+  })
+})
+
+describe('GET /api/v1/public/feed-reports', () => {
+  it("lists a feed's newest reports by its tag sets, and refuses a feed it doesn't know", async () => {
+    const res = await get('/api/v1/public/feed-reports?feed=sanctions&days=14')
+    expect(res.statusCode).toBe(200)
+    const { data } = res.json()
+    expect(data).toMatchObject({ feed: 'sanctions', label: 'US Treasury (OFAC) and EU sanctions actions', days: 14, total: 3 })
+    expect(data.reports[0]).toMatchObject({ id: 'f', country: 'IR', place: 'Tehran', url: 'https://ofac.treasury.gov/x' })
+    expect(data.reports[0].summary).toHaveLength(400)
+    expect(calls[0]!.sql).toContain('(tags @> ?::text[] OR tags @> ?::text[])')
+    expect(calls[0]!.bindings).toEqual([14, ['sanctions', 'ofac'], ['sanctions', 'eu']])
+    expect((await get('/api/v1/public/feed-reports?feed=constructor')).statusCode).toBe(400)
+    expect((await get('/api/v1/public/feed-reports')).statusCode).toBe(400)
   })
 })
