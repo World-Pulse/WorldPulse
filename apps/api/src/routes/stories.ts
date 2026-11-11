@@ -210,7 +210,11 @@ export async function topStories(hours: number, limit: number, country?: string,
     : region
       ? await longQuery(LIST_QUERY_SECONDS, trx => trx.raw(storyListSql(hasStoryIds, 'countries'), [regionCountries(region), since, EVENT_TEMPLATE_SQL]))
       : await longQuery(LIST_QUERY_SECONDS, trx => trx.raw(storyListSql(hasStoryIds), [since, EVENT_TEMPLATE_SQL]))
-  return rankStories(candidatesOf(result), limit)
+  if (!region) return rankStories(candidatesOf(result), limit)
+  // A region's stories are those its countries are the home of: one report placed there (a correspondent in Nairobi,
+  // a misplaced pin) brought the world's biggest stories in, the Bulgarian pile-up first for Africa (Nov 10, 2026)
+  const home = new Set(regionCountries(region))
+  return rankStories(candidatesOf(result), Math.max(60, limit * 4)).filter(s => s.country && home.has(s.country)).slice(0, limit)
 }
 
 /**
@@ -435,7 +439,7 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
 
     // The kept list at once; when it is 2 minutes old, one process remakes it in the background
     const response = await staleWhileRevalidate(
-      country ? `stories:list:v2:${country}:${hours}:${limit}` : region ? `stories:list:v2:region:${region}:${hours}:${limit}` : `stories:list:v2:${hours}:${limit}`,
+      country ? `stories:list:v2:${country}:${hours}:${limit}` : region ? `stories:list:v3:region:${region}:${hours}:${limit}` : `stories:list:v2:${hours}:${limit}`,
       { freshSeconds: LIST_CACHE_TTL, staleSeconds: LIST_KEEP_SECONDS, lockSeconds: LIST_QUERY_SECONDS * 2 },
       async () => ({
         success: true,

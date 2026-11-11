@@ -21,7 +21,7 @@ vi.mock('../lib/long-query', () => ({
     return run({
       raw: async (sql: string, bindings: unknown[]) => {
         calls.push({ sql, bindings })
-        if (sql.includes('title ~* ?')) {
+        if (sql.includes('title ILIKE ANY')) {
           return { rows: [
             { id: 'a', title: 'Le détroit d\'Ormuz sous tension', status: 'pending', created_at: '2026-11-10T21:00:00Z' },
             { id: 'b', title: 'Tanker hit near the Strait of Hormuz', status: 'verified', created_at: '2026-11-10T00:00:00Z' },
@@ -71,6 +71,7 @@ describe('GET /api/v1/public/chokepoints', () => {
     expect(data.chokepoints.at(-1).reports).toBe(0)
     expect(calls[0]!.sql).toContain("NOT (tags @> ARRAY['osint']::text[])")
     expect(calls[0]!.bindings[0]).toBe(3)
+    expect(calls[0]!.bindings[1]).toEqual(expect.arrayContaining(['%ormuz%', '%рмуз%', '%suez%']))
   })
 
   it('names every chokepoint lib/chokepoints.ts places, and only those', () => {

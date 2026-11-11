@@ -33,35 +33,40 @@ const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : v ? new Date(
 
 // ─── Chokepoints ─────────────────────────────────────────────────────────────
 
-/** Each chokepoint's names in the languages WorldPulse reads most (lib/chokepoints.ts has its place) */
-export const CHOKEPOINT_NAMES: Array<{ id: string; name: string; words: string }> = [
-  { id: 'hormuz', name: 'Strait of Hormuz', words: 'hormuz|ormuz|hormus|هرمز|[Оо]рмуз' },
-  { id: 'suez', name: 'Suez Canal', words: 'suez|السويس|[Сс]уэц' },
-  { id: 'bab-el-mandeb', name: 'Bab el-Mandeb', words: 'bab[ -]?el[ -]?mandeb|bab al[ -]mandab|باب المندب|[Бб]аб-эль-[Мм]андеб' },
-  { id: 'malacca', name: 'Strait of Malacca', words: 'malacca|malaca|malakka|selat melaka' },
-  { id: 'panama', name: 'Panama Canal', words: 'panama canal|canal de panam[aá]|canal du panama|panamakanal|[Пп]анамск[а-я]* канал' },
-  { id: 'taiwan', name: 'Taiwan Strait', words: 'taiwan strait|strait of taiwan|estrecho de taiw[aá]n|d[ée]troit de ta[iï]wan|taiwanstra[sß]e|[Тт]айваньск[а-я]* пролив' },
-  { id: 'bosporus', name: 'Turkish Straits', words: 'bosporus|bosphorus|b[oó]sforo|bosphore|dardanelles|dardanelos|turkish straits|[Бб]осфор' },
-  { id: 'gibraltar', name: 'Strait of Gibraltar', words: 'strait of gibraltar|gibraltar strait|estrecho de gibraltar|d[ée]troit de gibraltar|stra[sß]e von gibraltar' },
-  { id: 'dover', name: 'Strait of Dover', words: 'strait of dover|dover strait|d[ée]troit du pas[ -]de[ -]calais' },
-  { id: 'good-hope', name: 'Cape of Good Hope', words: 'cape of good hope|cabo da boa esperan[çc]a|cap de bonne[ -]esp[ée]rance|cabo de buena esperanza|kap der guten hoffnung' },
-  { id: 'danish-straits', name: 'Danish Straits', words: 'danish straits|[øöo]resund|great belt|storeb[æa]lt' },
-  { id: 'lombok', name: 'Lombok Strait', words: 'lombok strait|selat lombok' },
+/**
+ * Each chokepoint's names in the languages WorldPulse reads most (lib/chokepoints.ts has its place): `words` decides
+ * whether a headline names it; `like`, simple fragments every such headline holds, finds the candidates fast (a
+ * case-blind regex over a week of headlines ran past 20 seconds, Nov 10, 2026). A Russian fragment leaves out its
+ * first letter, so "Ормуз" and "ормуз" both hold "рмуз" whatever the database's locale makes of case.
+ */
+export const CHOKEPOINT_NAMES: Array<{ id: string; name: string; words: string; like: string[] }> = [
+  { id: 'hormuz', name: 'Strait of Hormuz', words: 'hormuz|ormuz|hormus|هرمز|[Оо]рмуз', like: ['ormuz', 'hormus', 'هرمز', 'рмуз'] },
+  { id: 'suez', name: 'Suez Canal', words: 'suez|السويس|[Сс]уэц', like: ['suez', 'السويس', 'уэц'] },
+  { id: 'bab-el-mandeb', name: 'Bab el-Mandeb', words: 'bab[ -]?el[ -]?mandeb|bab al[ -]mandab|باب المندب|[Бб]аб-эль-[Мм]андеб', like: ['mandeb', 'mandab', 'المندب', 'андеб'] },
+  { id: 'malacca', name: 'Strait of Malacca', words: 'malacca|malaca|malakka|selat melaka', like: ['malac', 'malakka', 'selat melaka'] },
+  { id: 'panama', name: 'Panama Canal', words: 'panama canal|canal de panam[aá]|canal du panama|panamakanal|[Пп]анамск[а-я]* канал', like: ['panama canal', 'canal de panam', 'canal du panama', 'panamakanal', 'анамск'] },
+  { id: 'taiwan', name: 'Taiwan Strait', words: 'taiwan strait|strait of taiwan|estrecho de taiw[aá]n|d[ée]troit de ta[iï]wan|taiwanstra[sß]e|[Тт]айваньск[а-я]* пролив', like: ['taiwan strait', 'strait of taiwan', 'estrecho de taiw', 'troit de ta', 'taiwanstra', 'айваньск'] },
+  { id: 'bosporus', name: 'Turkish Straits', words: 'bosporus|bosphorus|b[oó]sforo|bosphore|dardanelles|dardanelos|turkish straits|[Бб]осфор', like: ['bospor', 'bosphor', 'sforo', 'dardanel', 'turkish straits', 'осфор'] },
+  { id: 'gibraltar', name: 'Strait of Gibraltar', words: 'strait of gibraltar|gibraltar strait|estrecho de gibraltar|d[ée]troit de gibraltar|stra[sß]e von gibraltar', like: ['strait of gibraltar', 'gibraltar strait', 'estrecho de gibraltar', 'troit de gibraltar', 'von gibraltar'] },
+  { id: 'dover', name: 'Strait of Dover', words: 'strait of dover|dover strait|d[ée]troit du pas[ -]de[ -]calais', like: ['strait of dover', 'dover strait', 'troit du pas'] },
+  { id: 'good-hope', name: 'Cape of Good Hope', words: 'cape of good hope|cabo da boa esperan[çc]a|cap de bonne[ -]esp[ée]rance|cabo de buena esperanza|kap der guten hoffnung', like: ['good hope', 'boa esperan', 'bonne-esp', 'bonne esp', 'buena esperanza', 'guten hoffnung'] },
+  { id: 'danish-straits', name: 'Danish Straits', words: 'danish straits|[øöo]resund|great belt|storeb[æa]lt', like: ['danish straits', 'resund', 'great belt', 'storeb'] },
+  { id: 'lombok', name: 'Lombok Strait', words: 'lombok strait|selat lombok', like: ['lombok strait', 'selat lombok'] },
 ]
 
 export interface ChokepointNews { id: string; name: string; reports: number; verified: number; latest: { id: string; title: string; at: string | null; verified: boolean } | null }
 
 async function chokepointNews(days: number): Promise<ChokepointNews[]> {
-  const all = CHOKEPOINT_NAMES.map(c => c.words).join('|')
-  const result = await longQuery(20, trx => trx.raw(
+  const like = CHOKEPOINT_NAMES.flatMap(c => c.like).map(f => `%${f}%`)
+  const result = await longQuery(30, trx => trx.raw(
     `SELECT id::text AS id, title, status::text AS status, created_at
        FROM signals
       WHERE created_at > NOW() - make_interval(days => ?)
         AND status IN ('verified', 'pending')
         AND ${NEWS_ONLY}
-        AND title ~* ?
+        AND title ILIKE ANY (?::text[])
       ORDER BY created_at DESC
-      LIMIT 5000`, [days, `(${all})`]) as unknown as Promise<unknown>)
+      LIMIT 20000`, [days, like]) as unknown as Promise<unknown>)
   const rows = rowsOf(result)
   return CHOKEPOINT_NAMES.map(c => {
     const re = new RegExp(c.words, 'iu')
