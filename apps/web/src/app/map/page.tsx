@@ -16,7 +16,7 @@ import HotspotLabels from '@/components/map/HotspotLabels'
 import { EnhancedHeatmap } from '@/components/map/EnhancedHeatmap'
 import { PlayOverlay, type PlayDayStats, type PlayTopStory } from '@/components/map/PlayOverlay'
 import { useTimelinePlayback } from '@/hooks/useTimelinePlayback'
-import { parsePlayParam, parsePlayLength, parsePlaySlow, playReplayMs, playStepMs, captionAt, playTimeLabel, playDateLabel, pickTourStop, tourCaption, storyKeyOf, milestoneCrossed, PLAY_INTRO_MS, PLAY_OUTRO_MS, PLAY_MILESTONES, TOUR_EVERY_MS, type PlayPhase, type PlayCaption } from '@/lib/map-play'
+import { parsePlayParam, parsePlayLength, parsePlaySlow, playReplayMs, playStepMs, captionAt, playTimeLabel, playDateLabel, pickTourStop, tourCaption, storyKeyOf, milestoneCrossed, playCard, PLAY_INTRO_MS, PLAY_OUTRO_MS, PLAY_MILESTONES, TOUR_EVERY_MS, type PlayPhase, type PlayCaption } from '@/lib/map-play'
 import { parseWindowHash, encodePermalink, type MapPermalinkState, type LayerKey } from '@/lib/map-permalink'
 import {
   Map as MapIcon, Moon, Satellite, Globe2, LocateFixed, Layers as LayersIcon,
@@ -3694,6 +3694,11 @@ function MapView({ embed = false }: { embed?: boolean }) {
     }, PLAY_INTRO_MS * playSlow)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playMode, timeline.loading, timeline.data, mapReady])
+
+  // What the video shows, for the recorder to save beside it (data-play-card on <html>; lib/map-play.ts playCard)
+  useEffect(() => {
+    if (playMode && playDay) document.documentElement.dataset.playCard = JSON.stringify(playCard(playDay, playTop))
+  }, [playMode, playDay, playTop])
 
   // The recorder trims the video's start by the moment the replay begins (data-play-phase on <html>)
   useEffect(() => {

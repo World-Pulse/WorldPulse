@@ -241,3 +241,35 @@ export function playTimeLabel(iso: string | null): string {
   const mm = String(d.getUTCMinutes()).padStart(2, '0')
   return `${month} ${d.getUTCDate()} · ${hh}:${mm} UTC`
 }
+
+/**
+ * What the morning video shows, for the recorder to save beside it (Nov 11, 2026; Devon: "Ok" to the Dev Room getting
+ * the daily video and its post ready every morning): the title card's numbers and the closing card's three
+ * most-reported stories, as they were on screen. The page puts it on <html data-play-card>, the recorder writes it
+ * next to the video (world-in-60s-<date>.json), and the morning post is written from it, so the post's numbers are
+ * the video's.
+ */
+export interface PlayCard {
+  reports: number
+  outlets: number
+  countries: number
+  verified: number
+  milestone: number | null
+  top: Array<{ title: string; outlets: number; countries: number }>
+}
+
+export function playCard(
+  day: { reports: number; outlets: number; countries: number; verified: number; milestone?: number | null; preview?: boolean },
+  top: ReadonlyArray<{ title: string; outlets: number; countries?: number }>,
+): PlayCard {
+  const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : 0)
+  return {
+    reports: n(day.reports),
+    outlets: n(day.outlets),
+    countries: n(day.countries),
+    verified: n(day.verified),
+    // a preview's milestone isn't the day's (the card says PREVIEW)
+    milestone: !day.preview && typeof day.milestone === 'number' ? day.milestone : null,
+    top: top.slice(0, 3).map(s => ({ title: s.title.trim().slice(0, 200), outlets: n(s.outlets), countries: n(s.countries) })),
+  }
+}

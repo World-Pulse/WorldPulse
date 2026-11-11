@@ -4,7 +4,8 @@
 #  Served at https://world-pulse.io/ops-status.json so the autopilot can see
 #  server health without logging in. No logs, keys or user data go in here:
 #  only counts, plus the scraper's most frequent error and warning messages
-#  (digits and links blanked out) and its AI settings as yes/no (no keys).
+#  (digits and links blanked out), its AI settings as yes/no (no keys) and the
+#  morning video's three headlines (public news, Nov 11, 2026).
 # ─────────────────────────────────────────────────────────────────────────────
 cd "$(dirname "$0")/.."
 mkdir -p logs/public
@@ -959,7 +960,9 @@ ssh_guard() {
 # the newest video it made (name, size, time and public address), from the
 # uploads volume nginx serves. The deploy starts the recorder when it isn't
 # running (scripts/server-deploy.sh, step 8); start_note is that start's last
-# log line.
+# log line. Since Nov 11, 2026, "card": what that video showed, from the file
+# the recorder saves beside it (its numbers and the three most-reported
+# stories' headlines, all public), so the morning post gives the video's own.
 daily_video() {
   local state src newest note
   state=$(timeout 10 docker inspect -f '{{.State.Status}}' wp_recorder 2>/dev/null) || state=absent
@@ -977,6 +980,19 @@ if newest and os.path.isfile(newest):
     out.update(newest=name, bytes=st.st_size,
                at=datetime.datetime.fromtimestamp(st.st_mtime, datetime.timezone.utc).isoformat(timespec='seconds'),
                url='https://world-pulse.io/uploads/video/' + name)
+    card_path = newest[:-4] + '.json'
+    try:
+        c = json.load(open(card_path, encoding='utf-8')) if os.path.getsize(card_path) < 20000 else None
+    except (OSError, ValueError):
+        c = None
+    if isinstance(c, dict):
+        n = lambda v: v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else None
+        top = [{'title': t['title'][:200], 'outlets': n(t.get('outlets')), 'countries': n(t.get('countries'))}
+               for t in (c.get('top') if isinstance(c.get('top'), list) else [])[:3]
+               if isinstance(t, dict) and isinstance(t.get('title'), str) and t['title'].strip()]
+        out['card'] = {'date': str(c.get('date') or '')[:10], 'recorded_at': str(c.get('recorded_at') or '')[:30],
+                       'reports': n(c.get('reports')), 'outlets': n(c.get('outlets')), 'countries': n(c.get('countries')),
+                       'verified': n(c.get('verified')), 'milestone': n(c.get('milestone')), 'top': top}
 if note:
     out['start_note'] = note
 print(json.dumps(out, separators=(',', ':')))

@@ -25,6 +25,9 @@
  * from the minute-long video, so the links and the status file still find it),
  * kept KEEP_DAYS days; with the uploads volume as OUT_DIR they are served at
  * https://world-pulse.io/uploads/video/world-in-60s-YYYY-MM-DD.mp4.
+ * Beside it since Nov 11, 2026, world-in-60s-YYYY-MM-DD.json: what the video
+ * showed (the page's data-play-card: the title card's numbers and the closing
+ * card's stories), so the morning post gives the video's own numbers.
  */
 
 import { execFile } from 'node:child_process'
@@ -148,6 +151,46 @@ async function encode(inputArgs, date, extraVideoArgs = []) {
   return out
 }
 
+/**
+ * What the video showed (Nov 11, 2026): the page's data-play-card (apps/web/src/lib/map-play.ts playCard), checked
+ * and kept to its numbers and three stories; null when the page had none (an older site) or it isn't a card
+ */
+export function cardFile(raw, date, now = new Date()) {
+  let card
+  try { card = JSON.parse(String(raw)) } catch { return null }
+  if (!card || typeof card !== 'object') return null
+  const n = v => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : 0)
+  if (n(card.reports) === 0) return null
+  const top = (Array.isArray(card.top) ? card.top : [])
+    .filter(t => t && typeof t.title === 'string' && t.title.trim())
+    .slice(0, 3)
+    .map(t => ({ title: t.title.trim().slice(0, 200), outlets: n(t.outlets), countries: n(t.countries) }))
+  return {
+    date, video: `world-in-60s-${date}.mp4`, recorded_at: now.toISOString(),
+    reports: n(card.reports), outlets: n(card.outlets), countries: n(card.countries), verified: n(card.verified),
+    milestone: n(card.milestone) || null, top,
+  }
+}
+
+/** The card as the page has it now (before the page closes); null when it has none */
+async function readCard(page) {
+  return page.evaluate(() => document.documentElement.dataset.playCard || null).catch(() => null)
+}
+
+/** Saves the card beside the video, once the video is saved (never fails the recording) */
+async function saveCard(raw, date) {
+  const card = cardFile(raw, date)
+  if (!card) { log('no card on the page: the video is saved without its numbers'); return }
+  try {
+    const tmp = join(OUT_DIR, `.world-in-60s-${date}.json`), out = join(OUT_DIR, `world-in-60s-${date}.json`)
+    await writeFile(tmp, JSON.stringify(card))
+    await rename(tmp, out)
+    log('saved', out, `(${card.reports} reports, ${card.top.length} stories)`)
+  } catch (err) {
+    log('the card was not saved:', err?.message ?? err)
+  }
+}
+
 /** In slow motion (since Oct 31, 2026): smooth and sharp whatever the machine's drawing speed */
 export async function recordOnce() {
   const { date } = nyParts()
@@ -207,9 +250,12 @@ export async function recordOnce() {
     for (let i = 0; i < frames.length; i++) await link(join(shots, `s${String(frames[i]).padStart(6, '0')}.jpg`), join(seq, frameName(i)))
     const distinct = new Set(frames).size
     log(`filmed ${at.length} drawings in ${Math.round((Date.now() - t0) / 1000)} s: ${frames.length} frames (${(frames.length / FPS).toFixed(1)} s of video, ${distinct} different)`)
+    const card = await readCard(page)
     await context.close()
     // (the screencast comes at the page's 450 x 800, drawn at 1.6 times that and scaled down: made 720 x 1280)
-    return await encode(['-framerate', String(FPS), '-i', join(seq, 'f%05d.jpg')], date, ['-vf', `scale=${OUT_W}:${OUT_H}:flags=lanczos`])
+    const out = await encode(['-framerate', String(FPS), '-i', join(seq, 'f%05d.jpg')], date, ['-vf', `scale=${OUT_W}:${OUT_H}:flags=lanczos`])
+    await saveCard(card, date)
+    return out
   } finally {
     await browser.close().catch(() => {})
     await rm(work, { recursive: true, force: true }).catch(() => {})
@@ -243,12 +289,15 @@ export async function recordLive() {
       .catch(() => log(`no data-play-done after ${RECORD_MS / 1000} s: keeping what was recorded`))
     await page.waitForTimeout(TAIL_MS)
     const video = page.video()
+    const card = await readCard(page)
     await context.close()                       // writes the video
     const trim = trimStart(playStarted)
     log(`the replay began ${Number.isFinite(playStarted) ? `${(playStarted / 1000).toFixed(1)} s` : 'at an unknown time'} in; cutting ${trim} s`)
     const webm = await video.path()
     // the start of loading cut; the page's 450 × 800 made 720 × 1280
-    return await encode(['-ss', String(trim), '-i', webm], date, ['-vf', `scale=${OUT_W}:${OUT_H}:flags=lanczos`])
+    const out = await encode(['-ss', String(trim), '-i', webm], date, ['-vf', `scale=${OUT_W}:${OUT_H}:flags=lanczos`])
+    await saveCard(card, date)
+    return out
   } finally {
     await browser.close().catch(() => {})
     await rm(work, { recursive: true, force: true }).catch(() => {})
@@ -258,7 +307,7 @@ export async function recordLive() {
 async function prune() {
   const cutoff = Date.now() - KEEP_DAYS * 86_400_000
   for (const f of await readdir(OUT_DIR).catch(() => [])) {
-    if (!/^world-in-60s-\d{4}-\d{2}-\d{2}\.mp4$/.test(f)) continue
+    if (!/^world-in-60s-\d{4}-\d{2}-\d{2}\.(mp4|json)$/.test(f)) continue
     const p = join(OUT_DIR, f)
     if ((await stat(p)).mtimeMs < cutoff) { await rm(p, { force: true }); log('removed old', f) }
   }

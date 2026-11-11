@@ -1,7 +1,7 @@
 // node --test infrastructure/recorder/record.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { msUntilNext, trimStart, layOut, slowUrl, frameName } from './record.mjs'
+import { msUntilNext, trimStart, layOut, slowUrl, frameName, cardFile } from './record.mjs'
 
 test('the next recording is at 05:30 New York time, today or tomorrow', () => {
   // 09:00 UTC on Oct 21, 2026 is 05:00 in New York (EDT): 30 minutes to go
@@ -35,4 +35,26 @@ test('slow motion: each video frame shows the newest drawing by its time, sped b
 test('the page is asked to play slower, and the frames are numbered for ffmpeg', () => {
   assert.equal(slowUrl('https://world-pulse.io/map?play=24h&frame=vertical&len=30', 30), 'https://world-pulse.io/map?play=24h&frame=vertical&len=30&slow=30')
   assert.equal(frameName(7), 'f00007.jpg')
+})
+
+test("the video's card is saved as the page had it: its numbers and three stories (Nov 11, 2026)", () => {
+  const raw = JSON.stringify({
+    reports: 18508, outlets: 1827, countries: 215, verified: 3471, milestone: null,
+    top: [{ title: ' Senator calls on Nvidia CEO to step down ', outlets: 170, countries: 57 }, { title: 'B', outlets: 90, countries: 0 },
+      { title: 'C', outlets: 80, countries: 12 }, { title: 'D', outlets: 70, countries: 9 }],
+  })
+  const card = cardFile(raw, '2026-11-11', new Date('2026-11-11T10:47:51Z'))
+  assert.deepEqual(card, {
+    date: '2026-11-11', video: 'world-in-60s-2026-11-11.mp4', recorded_at: '2026-11-11T10:47:51.000Z',
+    reports: 18508, outlets: 1827, countries: 215, verified: 3471, milestone: null,
+    top: [{ title: 'Senator calls on Nvidia CEO to step down', outlets: 170, countries: 57 }, { title: 'B', outlets: 90, countries: 0 }, { title: 'C', outlets: 80, countries: 12 }],
+  })
+  assert.equal(cardFile(JSON.stringify({ reports: 750123, milestone: 750000, top: [] }), '2026-11-13').milestone, 750000)
+})
+
+test('no card when the page had none or it is not one', () => {
+  assert.equal(cardFile(null, '2026-11-11'), null)
+  assert.equal(cardFile('not json', '2026-11-11'), null)
+  assert.equal(cardFile(JSON.stringify({ reports: 0 }), '2026-11-11'), null)
+  assert.equal(cardFile(JSON.stringify([1, 2]), '2026-11-11'), null)
 })
