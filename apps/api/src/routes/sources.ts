@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify'
+import { staleWhileRevalidate } from '../lib/swr-cache'
 import { db } from '../db/postgres'
 import { optionalAuth, authenticate } from '../middleware/auth'
 import { z } from 'zod'
@@ -190,19 +191,21 @@ export const registerSourceRoutes: FastifyPluginAsync = async (app) => {
 
   // ─── BIAS DISTRIBUTION ─────────────────────────────────────
   app.get('/bias-distribution', { preHandler: [optionalAuth] }, async (req, reply) => {
-    const rows = await db('sources')
-      .where('active', true)
-      .whereNot('bias_label', 'unknown')
-      .groupBy('bias_label')
-      .select('bias_label')
-      .count('id as count')
-
-    const distribution: Record<string, number> = {}
-    for (const row of rows) {
-      distribution[row.bias_label as string] = Number(row.count)
-    }
-
-    return reply.send({ success: true, data: distribution })
+    // Each active source's lean as /:id/bias gives it (lib/source-bias.ts: the seed list, then the heuristics). It
+    // counted the sources table's bias_label, a column migration 020 adds but production never got, and answered
+    // 500 (Nov 10, 2026); the column would have read "unknown" for nearly all of them anyway
+    const data = await staleWhileRevalidate('sources:bias-distribution:v2', { freshSeconds: 3_600, staleSeconds: 24 * 3_600, lockSeconds: 60 }, async () => {
+      const rows = await db('sources').where('active', true).select('url')
+      const distribution: Record<string, number> = {}
+      for (const row of rows as Array<{ url?: string | null }>) {
+        if (!row.url) continue
+        const bias = await getSourceBias(String(row.url))
+        if (bias.label === 'unknown') continue
+        distribution[bias.label] = (distribution[bias.label] ?? 0) + 1
+      }
+      return distribution
+    })
+    return reply.send({ success: true, data })
   })
 
   // ─── ADMIN: REVIEW SUGGESTION ──────────────────────────────

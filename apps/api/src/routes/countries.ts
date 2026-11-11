@@ -236,96 +236,87 @@ export const registerCountryRoutes: FastifyPluginAsync = async (app) => {
     const limit      = Math.min(Number(query.limit ?? 50), 200)
     const minSignals = Number(query.min_signals ?? 3)
 
-    const cacheKey = `country:resilience:rankings:${limit}:${minSignals}`
-    const cached = await redis.get(cacheKey).catch(() => null)
-    if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
+    // The 60 days' counts take seconds and failed now and then at the pool's 5-second limit (500 on Nov 10, 2026):
+    // they run as a long query, kept 20 minutes and served while they are remade; one list for every limit
+    type Ranking = { country_code: string; country_name: string; composite_score: number; risk_level: string; risk_color: string; signal_count: number; trend: string; trend_delta: number }
+    const all = await staleWhileRevalidate(`country:resilience:rankings:v2:${minSignals}`, { freshSeconds: RANKINGS_CACHE_TTL, staleSeconds: 6 * 3_600, lockSeconds: 60 }, () =>
+      longQuery(30, async (trx) => {
+        const now      = new Date()
+        const since30d = new Date(now.getTime() - 30 * 24 * 3600 * 1000).toISOString()
+        const since60d = new Date(now.getTime() - 60 * 24 * 3600 * 1000).toISOString()
 
-    const now      = new Date()
-    const since30d = new Date(now.getTime() - 30 * 24 * 3600 * 1000).toISOString()
-    const since60d = new Date(now.getTime() - 60 * 24 * 3600 * 1000).toISOString()
+        // Fetch all signal rows for both current and previous period in one query
+        const allRows = await trx('signals')
+          .whereNotNull('country_code')
+          .where('status', 'verified')
+          .where('created_at', '>=', since60d)
+          .select(
+            'country_code',
+            'category',
+            trx.raw('CASE WHEN created_at >= ? THEN \'current\' ELSE \'prev\' END as period', [since30d]),
+            trx.raw('COUNT(*) as cnt'),
+            trx.raw(`SUM(CASE
+              WHEN severity = 'critical' THEN ${SEVERITY_WEIGHT.critical}
+              WHEN severity = 'high'     THEN ${SEVERITY_WEIGHT.high}
+              WHEN severity = 'medium'   THEN ${SEVERITY_WEIGHT.medium}
+              WHEN severity = 'low'      THEN ${SEVERITY_WEIGHT.low}
+              ELSE ${SEVERITY_WEIGHT.info}
+            END) as risk_sum`),
+          )
+          // Grouped by the period column's position: Postgres can't tell that the
+          // GROUP BY's own copy of the CASE (with its own parameter) is the same
+          // expression, so this failed with "created_at must appear in the GROUP BY
+          // clause" and the rankings answered 500 (found Oct 13, 2026)
+          .groupByRaw('country_code, category, 3')
 
-    // Fetch all signal rows for both current and previous period in one query
-    const allRows = await db('signals')
-      .whereNotNull('country_code')
-      .where('status', 'verified')
-      .where('created_at', '>=', since60d)
-      .select(
-        'country_code',
-        'category',
-        db.raw('CASE WHEN created_at >= ? THEN \'current\' ELSE \'prev\' END as period', [since30d]),
-        db.raw('COUNT(*) as cnt'),
-        db.raw(`SUM(CASE
-          WHEN severity = 'critical' THEN ${SEVERITY_WEIGHT.critical}
-          WHEN severity = 'high'     THEN ${SEVERITY_WEIGHT.high}
-          WHEN severity = 'medium'   THEN ${SEVERITY_WEIGHT.medium}
-          WHEN severity = 'low'      THEN ${SEVERITY_WEIGHT.low}
-          ELSE ${SEVERITY_WEIGHT.info}
-        END) as risk_sum`),
-      )
-      // Grouped by the period column's position: Postgres can't tell that the
-      // GROUP BY's own copy of the CASE (with its own parameter) is the same
-      // expression, so this failed with "created_at must appear in the GROUP BY
-      // clause" and the rankings answered 500 (found Oct 13, 2026)
-      .groupByRaw('country_code, category, 3')
+        // Group rows by country + period
+        const byCountry: Record<string, { current: SignalRow[]; prev: SignalRow[] }> = {}
+        for (const row of allRows as Array<SignalRow & { country_code: string; period: string }>) {
+          const cc = row.country_code
+          byCountry[cc] ??= { current: [], prev: [] }
+          if (row.period === 'current') {
+            byCountry[cc]!.current.push(row)
+          } else {
+            byCountry[cc]!.prev.push(row)
+          }
+        }
 
-    // Group rows by country + period
-    const byCountry: Record<string, { current: SignalRow[]; prev: SignalRow[] }> = {}
-    for (const row of allRows as Array<SignalRow & { country_code: string; period: string }>) {
-      const cc = row.country_code
-      byCountry[cc] ??= { current: [], prev: [] }
-      if (row.period === 'current') {
-        byCountry[cc]!.current.push(row)
-      } else {
-        byCountry[cc]!.prev.push(row)
-      }
-    }
+        const rankings: Array<{
+          country_code:    string
+          country_name:    string
+          composite_score: number
+          risk_level:      string
+          risk_color:      string
+          signal_count:    number
+          trend:           string
+          trend_delta:     number
+        }> = []
 
-    const rankings: Array<{
-      country_code:    string
-      country_name:    string
-      composite_score: number
-      risk_level:      string
-      risk_color:      string
-      signal_count:    number
-      trend:           string
-      trend_delta:     number
-    }> = []
+        for (const [cc, { current, prev }] of Object.entries(byCountry)) {
+          const { composite_score, signals_analyzed } = computeResilienceFromRows(current)
+          if (signals_analyzed < minSignals) continue
 
-    for (const [cc, { current, prev }] of Object.entries(byCountry)) {
-      const { composite_score, signals_analyzed } = computeResilienceFromRows(current)
-      if (signals_analyzed < minSignals) continue
+          const { composite_score: prevScore } = computeResilienceFromRows(prev)
+          const trend_delta = composite_score - prevScore
+          const trend = trend_delta > 2 ? 'improving' : trend_delta < -2 ? 'deteriorating' : 'stable'
+          const band  = resilienceBand(composite_score)
 
-      const { composite_score: prevScore } = computeResilienceFromRows(prev)
-      const trend_delta = composite_score - prevScore
-      const trend = trend_delta > 2 ? 'improving' : trend_delta < -2 ? 'deteriorating' : 'stable'
-      const band  = resilienceBand(composite_score)
-
-      rankings.push({
-        country_code:    cc,
-        country_name:    COUNTRY_NAMES[cc] ?? cc,
-        composite_score,
-        risk_level:      band.label,
-        risk_color:      band.color,
-        signal_count:    signals_analyzed,
-        trend,
-        trend_delta,
-      })
-    }
-
-    // Sort by composite_score descending (most resilient first)
-    rankings.sort((a, b) => b.composite_score - a.composite_score)
-    const sliced = rankings.slice(0, limit)
-
-    const result = {
-      success:      true,
-      total:        sliced.length,
-      period_days:  30,
-      rankings:     sliced,
-      generated_at: now.toISOString(),
-    }
-
-    await redis.setex(cacheKey, RANKINGS_CACHE_TTL, JSON.stringify(result)).catch(() => {})
-    return reply.send(result)
+          rankings.push({
+            country_code:    cc,
+            country_name:    COUNTRY_NAMES[cc] ?? cc,
+            composite_score,
+            risk_level:      band.label,
+            risk_color:      band.color,
+            signal_count:    signals_analyzed,
+            trend,
+            trend_delta,
+          })
+        }
+        rankings.sort((a, b) => b.composite_score - a.composite_score)
+        return { rankings: rankings as Ranking[], generated_at: now.toISOString() }
+      }))
+    const sliced = all.rankings.slice(0, limit)
+    return reply.send({ success: true, total: sliced.length, period_days: 30, rankings: sliced, generated_at: all.generated_at })
   })
 
   // ─── GET /api/v1/countries/:code/resilience ───────────────────────────────

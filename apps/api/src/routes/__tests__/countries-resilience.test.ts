@@ -49,6 +49,11 @@ vi.mock('../../db/redis', () => ({
 
 // ─── Helpers Mock ─────────────────────────────────────────────────────────────
 
+// The rankings run as a long query, kept and remade by the stale-while-revalidate cache (Nov 10, 2026)
+vi.mock('../../lib/long-query', () => ({ longQuery: vi.fn((_seconds: number, run: (trx: unknown) => unknown) => run(mockDb)) }))
+vi.mock('../../lib/swr-cache', () => ({ staleWhileRevalidate: vi.fn((_key: string, _opts: unknown, make: () => unknown) => make()) }))
+
+
 vi.mock('../../lib/errors', () => ({
   sendError: vi.fn((reply: { code: (n: number) => { send: (b: unknown) => unknown } }, status: number, _code: string, msg: string) =>
     reply.code(status).send({ success: false, error: msg }),
