@@ -10378,6 +10378,35 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['seychelles', 'indian-ocean', 'africa', 'creole'],
     language:        'fr',
   },
+  // ── Added Nov 11, 2026 (Devon, Nov 10, 10:25 PM: "Run another scan on your end, give me the country names and I'll
+  // look on my end too": second newsrooms for the places one outlet reads) ──
+  // Tonga Independent News (tongaindependent.com), a Tongan news site, Tonga's second feed beside Kaniva Tonga: the
+  // site-wide feed its pages link, read Nov 11: 10 items since Oct 31, about one a day, 7 in English and 3 in Tongan,
+  // nearly all Tonga's own (its climate fund, the drought, inflation, a court case, the national rugby league team),
+  // so a home pin as Kaniva Tonga has. Tonga is thinly covered, so the two outlets' stories are matched by their
+  // headlines up to 48 hours apart (correlate.ts). Its conditions of use bar copying or reproducing its content
+  // without permission; we keep the headline, the start of its summary and the link, as for every outlet.
+  // The scan's other finds were left out: NK News (its terms bar reading by automated systems), the PNG government's
+  // news service (info.gov.pg: personal, non-commercial use only), The Bhutanese (weekly, as on Oct 31), The Scoop
+  // (Brunei: about one item a week since August), WEE FM (Grenada: two a week, mostly sport and schools) and the Holy
+  // See Press Office's bulletin (the day's two items, under the same two titles every day, so it can't confirm another
+  // outlet's story). Loop PNG didn't answer and Palestine Chronicle turned the reader away (429). No feed was found
+  // for Laos' KPL and Vientiane Times, Palestine's WAFA, French Polynesia's Radio1, Micronesia's Kaselehlie Press, or
+  // a second newsroom in the Marshall Islands, Palau, the Cook Islands, Kiribati, Nauru or Tuvalu
+  {
+    id:              'tonga-independent',
+    name:            'Tonga Independent News',
+    feedUrl:         'https://tongaindependent.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.65,
+    countryCode:     'TO',
+    defaultLat:      -21.14,
+    defaultLng:      -175.2,
+    defaultLocation: 'Nuku\'alofa, Tonga',
+    extraTags:       ['tonga', 'pacific', 'oceania'],
+    language:        'en',
+  },
 ]
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────
@@ -10883,6 +10912,8 @@ export const HOME_PIN_SOURCES = new Set([
   // Nov 10, 2026: SBC, Seychelles' public broadcaster, all its own country's news (in Creole); not EmoNews (Dominica),
   // half of whose stories are the region's
   'sbc-seychelles',
+  // Nov 11, 2026: Tonga Independent News, nearly all Tonga's own news (in English and Tongan), as Kaniva Tonga's
+  'tonga-independent',
 ])
 
 export interface InferredGeo {
