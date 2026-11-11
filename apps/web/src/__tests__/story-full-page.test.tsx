@@ -69,6 +69,11 @@ describe("a verified story's full page", () => {
     // the story's other outlets and their own headlines, not only this report's link
     expect(html).toContain('novinite.com')
     expect(html).toContain('Bulgaria: People killed in massive highway pileup')
+    // times in UTC, the same here and in the browser's first render, which must match this HTML: the server's clock
+    // isn't the reader's ("9:26 AM" here was "4:26 AM" in New York, and React threw the HTML away, error 418)
+    expect(html).toContain('Nov 10, 9:26 AM UTC')
+    expect(html).toContain('latest Nov 11, 1:31 AM UTC')
+    expect(html).not.toMatch(/\d+[mhd] ago/)
   })
 
   it('without them, as before: the browser asks', () => {

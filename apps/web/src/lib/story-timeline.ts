@@ -129,6 +129,14 @@ export function clockLabel(at: number, now = Date.now()): string {
     : { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 }
 
+/**
+ * A time in UTC, the same on the server and in any browser: "Nov 10, 9:26 AM UTC". The story page's own HTML says its
+ * times this way (Nov 11, 2026), and the browser's first render must say the same; then the reader's clock takes over.
+ */
+export function utcClockLabel(at: number): string {
+  return `${new Date(at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'UTC' })} UTC`
+}
+
 /** How long after the first report: "+25 min", "+3 h", "+2 d" */
 export function sinceFirst(at: number, firstAt: number): string {
   const minutes = Math.max(0, Math.round((at - firstAt) / 60_000))

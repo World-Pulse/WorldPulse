@@ -13,6 +13,7 @@
 
 import { useEffect, useState } from 'react'
 import { STORY_COUNT_DAYS } from '@/lib/story-count'
+import { utcClockLabel } from '@/lib/story-timeline'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
@@ -71,7 +72,8 @@ export function hasFigures(data: StoryFiguresData | null): data is StoryFiguresD
   return !!data && data.reports > 1 && Array.isArray(data.figures) && data.figures.some(f => Array.isArray(f.values) && f.values.length > 0)
 }
 
-export function FiguresView({ data, bare = false, now }: { data: StoryFiguresData; bare?: boolean; now?: number }) {
+/** `utc`: times in UTC rather than "2h ago", as the page's own HTML says them (StoryFigures, before it runs) */
+export function FiguresView({ data, bare = false, now, utc = false }: { data: StoryFiguresData; bare?: boolean; now?: number; utc?: boolean }) {
   const [open, setOpen] = useState<Record<string, boolean>>({})
   if (!hasFigures(data)) return null
   const days = Math.round((data.countedHours || STORY_COUNT_DAYS * 24) / 24)
@@ -102,7 +104,7 @@ export function FiguresView({ data, bare = false, now }: { data: StoryFiguresDat
                     <span className="font-mono text-[10px] text-wp-text3" title={(v.outletNames || []).join(', ')}>
                       {outletsLine(v)}
                     </span>
-                    {v.lastAt && <span className="font-mono text-[10px] text-wp-text3">· latest {timeAgo(v.lastAt, now)}</span>}
+                    {v.lastAt && <span className="font-mono text-[10px] text-wp-text3">· latest {utc ? utcClockLabel(new Date(v.lastAt).getTime()) : timeAgo(v.lastAt, now)}</span>}
                   </div>
                   {v.headline && (
                     v.url ? (
@@ -139,6 +141,9 @@ export function FiguresView({ data, bare = false, now }: { data: StoryFiguresDat
  */
 export function StoryFigures({ signalId, bare = false, initial = null }: { signalId: string; bare?: boolean; initial?: StoryFiguresData | null }) {
   const [data, setData] = useState<StoryFiguresData | null>(initial)
+  // "2h ago" once the page runs; UTC times before that, the same in the page's HTML and the first render (Nov 11, 2026)
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
 
   useEffect(() => {
     if (initial) return
@@ -152,5 +157,5 @@ export function StoryFigures({ signalId, bare = false, initial = null }: { signa
     return () => { cancelled = true }
   }, [signalId, initial])
 
-  return data ? <FiguresView data={data} bare={bare} /> : null
+  return data ? <FiguresView data={data} bare={bare} utc={!mounted} /> : null
 }

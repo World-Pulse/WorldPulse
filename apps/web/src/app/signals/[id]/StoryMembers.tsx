@@ -11,7 +11,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { storyTimeline, foldTimeline, clockLabel, sinceFirst } from '@/lib/story-timeline'
+import { storyTimeline, foldTimeline, clockLabel, sinceFirst, utcClockLabel } from '@/lib/story-timeline'
 import { STORY_COUNT_DAYS } from '@/lib/story-count'
 import { reachOf, countriesLabel, localLabel, type StoryReach } from '@/lib/story-reach'
 
@@ -129,6 +129,11 @@ export function StoryMembers({ signalId, bare = false, initial = null }: { signa
   const [seenAt, setSeenAt] = useState<number | null>(null)
   const [expanded, setExpanded] = useState(false)
   const [showOutlets, setShowOutlets] = useState(false)
+  // Times in the reader's own clock once the page runs; in UTC in the page's HTML and the browser's first render,
+  // which must match it (Nov 11, 2026: the server's clock isn't the reader's, and React threw the page's HTML away)
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+  const clock = (at: number) => (mounted ? clockLabel(at) : utcClockLabel(at))
 
   useEffect(() => {
     if (initial) {
@@ -189,7 +194,7 @@ export function StoryMembers({ signalId, bare = false, initial = null }: { signa
           </span>
         )}
         {story.verifiedAt && (
-          <span className="ml-auto font-mono text-[10px] text-wp-green">✓ Verified {timeAgo(story.verifiedAt)}</span>
+          <span className="ml-auto font-mono text-[10px] text-wp-green">✓ Verified {mounted ? timeAgo(story.verifiedAt) : utcClockLabel(new Date(story.verifiedAt).getTime())}</span>
         )}
       </div>
 
@@ -228,7 +233,7 @@ export function StoryMembers({ signalId, bare = false, initial = null }: { signa
               <li key={`v-${i}`} className="relative pl-4 py-1.5">
                 <span className="absolute -left-[7px] top-[7px] w-[13px] h-[13px] rounded-full bg-wp-green text-[9px] leading-[13px] text-center text-black font-bold" aria-hidden="true">✓</span>
                 <span className="text-[12px] text-wp-green">Verified: a second independent outlet reported it</span>
-                <span className="ml-2 font-mono text-[10px] text-wp-text3">{clockLabel(e.at)} · {sinceFirst(e.at, firstAt)}</span>
+                <span className="ml-2 font-mono text-[10px] text-wp-text3">{clock(e.at)} · {sinceFirst(e.at, firstAt)}</span>
               </li>
             )
           }
@@ -245,7 +250,7 @@ export function StoryMembers({ signalId, bare = false, initial = null }: { signa
             <li key={m.id} className={`relative pl-4 py-1.5 ${e.current ? 'bg-white/[0.03] rounded-r-lg' : ''}`}>
               <span className={`absolute -left-[5px] top-[11px] w-[9px] h-[9px] rounded-full ${e.first ? 'bg-wp-amber' : m.status === 'verified' ? 'bg-wp-green' : 'bg-white/40'} ${e.current ? 'ring-2 ring-white/60' : ''}`} aria-hidden="true" />
               <div className="flex flex-wrap items-baseline gap-x-2 font-mono text-[10px] text-wp-text3">
-                <span>{clockLabel(e.at)}</span>
+                <span>{clock(e.at)}</span>
                 {e.first ? <span className="text-wp-amber">First report</span> : <span>{sinceFirst(e.at, firstAt)}</span>}
                 {e.isNew && <span className="px-1 rounded bg-[rgba(245,166,35,0.15)] text-wp-amber">NEW</span>}
                 {e.current && <span className="text-wp-text2">· you’re reading this</span>}
