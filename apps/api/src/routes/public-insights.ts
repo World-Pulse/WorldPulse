@@ -301,7 +301,7 @@ async function feedReports(feed: string, days: number): Promise<{ total: number;
 // ─── News watches: one kind of news, by country (cyber attacks, elections, disasters) ─────────────
 
 /** What each watch reads: a topic the reader gave the reports, or fragments of their headlines */
-export const WATCHES: Record<string, { label: string; topic?: string; like?: string[] }> = {
+export const WATCHES: Record<string, { label: string; topic?: string; like?: string[]; not?: string[] }> = {
   cyber: {
     label: 'cyber attacks',
     // "hack" alone is Hackney and hackathons; "Cyber" alone is a ministry's name
@@ -309,6 +309,8 @@ export const WATCHES: Record<string, { label: string; topic?: string; like?: str
       'ddos', 'malware', 'phishing', 'spyware', 'ciberataque', 'ataque cibern', 'ataque hacker', 'piratage', 'cyberangriff', 'hackerangriff',
       // both cases of a Russian word's first letter: the database's locale may not fold Cyrillic
       'кибератак', 'Кибератак', 'хакер', 'Хакер', 'هجوم سيبراني', 'هجوم إلكتروني', 'قراصنة'],
+    // a killing is not a cyber attack ("Mother, son hacked to death")
+    not: ['hacked to death', 'hacked to pieces', 'hacking cough'],
   },
   elections: { label: 'elections', topic: 'elections' },
   disasters: { label: 'disasters', topic: 'disaster' },
@@ -321,6 +323,7 @@ async function newsWatch(watch: string, days: number): Promise<{ total: number; 
   const w = WATCHES[watch]!
   const filter = w.topic ? 'category::text = ?' : 'title ILIKE ANY (?::text[])'
   const binding = w.topic ?? (w.like ?? []).map(f => `%${f}%`)
+  const notLike = (w.not ?? []).map(f => `%${f}%`)
   const result = await longQuery(60, trx => trx.raw(
     `SELECT id::text AS id, title, status::text AS status, country_code, created_at
        FROM signals
@@ -328,8 +331,9 @@ async function newsWatch(watch: string, days: number): Promise<{ total: number; 
         AND status IN ('verified', 'pending')
         AND ${NEWS_ONLY}
         AND ${filter}
+        ${notLike.length ? 'AND NOT (title ILIKE ANY (?::text[]))' : ''}
       ORDER BY created_at DESC
-      LIMIT 20000`, [days, binding]) as unknown as Promise<unknown>)
+      LIMIT 20000`, [days, binding, ...(notLike.length ? [notLike] : [])]) as unknown as Promise<unknown>)
   const rows = rowsOf(result)
   const byCountry = new Map<string, WatchCountry>()
   for (const r of rows) {

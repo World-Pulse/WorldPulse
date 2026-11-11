@@ -191,6 +191,9 @@ describe('GET /api/v1/public/news-watch, /busiest-outlets, and /topics for one c
     expect(calls[0]!.bindings[1]).toEqual(expect.arrayContaining(['%hacker%', '%ransomware%', '%кибератак%']))
     // "hack" alone would be Hackney and hackathons
     expect(calls[0]!.bindings[1]).not.toContain('%hack%')
+    // a killing is not a cyber attack
+    expect(calls[0]!.sql).toContain('AND NOT (title ILIKE ANY (?::text[]))')
+    expect(calls[0]!.bindings[2]).toContain('%hacked to death%')
   })
 
   it("reads a topic's reports for a topic watch, and refuses a watch it doesn't know", async () => {
