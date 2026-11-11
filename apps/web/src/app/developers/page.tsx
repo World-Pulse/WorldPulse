@@ -71,6 +71,16 @@ const MCP_TOOLS = [
   { name: 'region_top_stories', what: "A region's top stories: Africa, the Americas, Asia, Europe, the Middle East, Oceania" },
   { name: 'rising_stories', what: 'New stories spreading fast: begun in the last hours, many outlets already' },
   { name: 'thin_coverage', what: 'The places WorldPulse reads few newsrooms in, by region' },
+  { name: 'sanctions_actions', what: 'New US Treasury (OFAC) and EU sanctions actions' },
+  { name: 'us_weather_alerts', what: 'US National Weather Service severe weather warnings' },
+  { name: 'carrier_groups', what: "Where the US Navy's aircraft carriers were last reported" },
+  { name: 'cyber_attacks', what: 'Cyber attacks in the news, by country, in seven languages' },
+  { name: 'elections_watch', what: 'Where elections are in the news, by country' },
+  { name: 'disaster_news', what: 'Disasters in the news, by country' },
+  { name: 'state_media_stories', what: 'How much of the top stories state media carry' },
+  { name: 'country_topics', what: "What a country's news is about, topic by topic" },
+  { name: 'busiest_outlets', what: 'The outlets WorldPulse reads the most reports from' },
+  { name: 'local_only_stories', what: "A country's stories only its own press is reporting" },
 ]
 const MCP_CURSOR = '{"mcpServers":{"worldpulse":{"url":"https://api.world-pulse.io/mcp"}}}'
 

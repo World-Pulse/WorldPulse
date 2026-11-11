@@ -10,7 +10,9 @@
  *   GET /verification-speed     how long the last hours' verified stories took to find a second outlet
  *   GET /topics                 the last hours' news reports by topic, against the hours before
  *   GET /outlet-reports         one outlet's newest reports
- *   GET /feed-reports           a government or science feed's newest reports (nuclear, sanctions, weather…)
+ *   GET /feed-reports           a government feed's newest reports (sanctions, US weather alerts, carriers)
+ *   GET /news-watch             one kind of news by country: cyber attacks, elections, disasters
+ *   GET /busiest-outlets        the outlets WorldPulse read the most reports from
  */
 import type { FastifyPluginAsync } from 'fastify'
 import { redis } from '../db/redis'
@@ -213,7 +215,7 @@ async function verificationSpeed(hours: number): Promise<SpeedStory[]> {
 
 export interface TopicCount { topic: string; reports: number; verified: number; before: number }
 
-async function topicCounts(hours: number): Promise<TopicCount[]> {
+async function topicCounts(hours: number, country: string | null = null): Promise<TopicCount[]> {
   const result = await longQuery(20, trx => trx.raw(
     `SELECT category::text AS topic,
             count(*) FILTER (WHERE created_at > NOW() - make_interval(hours => ?)) AS reports,
@@ -223,8 +225,9 @@ async function topicCounts(hours: number): Promise<TopicCount[]> {
       WHERE created_at > NOW() - make_interval(hours => ?)
         AND status IN ('verified', 'pending')
         AND ${NEWS_ONLY}
+        ${country ? 'AND country_code = ?' : ''}
       GROUP BY 1
-      ORDER BY reports DESC`, [hours, hours, hours, hours * 2]) as unknown as Promise<unknown>)
+      ORDER BY reports DESC`, [hours, hours, hours, hours * 2, ...(country ? [country] : [])]) as unknown as Promise<unknown>)
   return rowsOf(result).map(r => ({ topic: String(r.topic), reports: Number(r.reports) || 0, verified: Number(r.verified) || 0, before: Number(r.before) || 0 }))
 }
 
@@ -264,13 +267,11 @@ async function outletReports(site: string, days: number): Promise<{ total: numbe
 
 /** The feeds GET /feed-reports reads: each one's reports carry all of one of its tag sets */
 export const FEEDS: Record<string, { label: string; tags: string[][] }> = {
-  nuclear: { label: 'IAEA nuclear and radiological events', tags: [['iaea']] },
-  radiation: { label: 'Safecast radiation readings', tags: [['safecast']] },
+  // IAEA, ReliefWeb and Copernicus EMS had no report in 30 days live (Nov 10, 2026, 8 PM) and Safecast none since
+  // Oct 18: left out until their readers work again
   sanctions: { label: 'US Treasury (OFAC) and EU sanctions actions', tags: [['sanctions', 'ofac'], ['sanctions', 'eu']] },
   'us-weather': { label: 'US National Weather Service alerts', tags: [['nws']] },
   carriers: { label: 'US Navy carrier strike groups', tags: [['csg']] },
-  humanitarian: { label: 'UN ReliefWeb disasters and reports', tags: [['reliefweb']] },
-  'emergency-mapping': { label: 'Copernicus Emergency Management Service activations', tags: [['cems']] },
 }
 
 export interface FeedReport { id: string; title: string; summary: string | null; severity: string | null; country: string | null; place: string | null; at: string | null; url: string | null; tags: string[] }
@@ -294,6 +295,87 @@ async function feedReports(feed: string, days: number): Promise<{ total: number;
       place: r.location_name ? String(r.location_name) : null, at: iso(r.created_at), url: r.url ? String(r.url) : null,
       tags: Array.isArray(r.tags) ? (r.tags as unknown[]).map(String) : [],
     })),
+  }
+}
+
+// ─── News watches: one kind of news, by country (cyber attacks, elections, disasters) ─────────────
+
+/** What each watch reads: a topic the reader gave the reports, or fragments of their headlines */
+export const WATCHES: Record<string, { label: string; topic?: string; like?: string[] }> = {
+  cyber: {
+    label: 'cyber attacks',
+    // "hack" alone is Hackney and hackathons; "Cyber" alone is a ministry's name
+    like: ['hacker', 'hacked', 'hacking', 'cyberattack', 'cyber attack', 'cyber-attack', 'cyber-attaque', 'cyberattaque', 'ransomware', 'data breach',
+      'ddos', 'malware', 'phishing', 'spyware', 'ciberataque', 'ataque cibern', 'ataque hacker', 'piratage', 'cyberangriff', 'hackerangriff',
+      // both cases of a Russian word's first letter: the database's locale may not fold Cyrillic
+      'кибератак', 'Кибератак', 'хакер', 'Хакер', 'هجوم سيبراني', 'هجوم إلكتروني', 'قراصنة'],
+  },
+  elections: { label: 'elections', topic: 'elections' },
+  disasters: { label: 'disasters', topic: 'disaster' },
+}
+
+export interface WatchCountry { country: string; reports: number; verified: number; latest: { id: string; title: string; at: string | null } | null }
+export interface WatchReport { id: string; title: string; status: string; country: string | null; at: string | null }
+
+async function newsWatch(watch: string, days: number): Promise<{ total: number; countries: WatchCountry[]; newest: WatchReport[] }> {
+  const w = WATCHES[watch]!
+  const filter = w.topic ? 'category::text = ?' : 'title ILIKE ANY (?::text[])'
+  const binding = w.topic ?? (w.like ?? []).map(f => `%${f}%`)
+  const result = await longQuery(60, trx => trx.raw(
+    `SELECT id::text AS id, title, status::text AS status, country_code, created_at
+       FROM signals
+      WHERE created_at > NOW() - make_interval(days => ?)
+        AND status IN ('verified', 'pending')
+        AND ${NEWS_ONLY}
+        AND ${filter}
+      ORDER BY created_at DESC
+      LIMIT 20000`, [days, binding]) as unknown as Promise<unknown>)
+  const rows = rowsOf(result)
+  const byCountry = new Map<string, WatchCountry>()
+  for (const r of rows) {
+    const code = typeof r.country_code === 'string' && /^[A-Z]{2}$/.test(r.country_code) ? r.country_code : null
+    if (!code) continue
+    const c = byCountry.get(code) ?? { country: code, reports: 0, verified: 0, latest: null }
+    c.reports++
+    if (r.status === 'verified') {
+      c.verified++
+      // newest first: the first verified one met is the newest
+      c.latest ??= { id: String(r.id), title: String(r.title ?? ''), at: iso(r.created_at) }
+    }
+    byCountry.set(code, c)
+  }
+  return {
+    total: rows.length,
+    countries: [...byCountry.values()].sort((a, b) => b.reports - a.reports || a.country.localeCompare(b.country)).slice(0, 40),
+    newest: rows.slice(0, 30).map(r => ({
+      id: String(r.id), title: String(r.title ?? ''), status: String(r.status),
+      country: typeof r.country_code === 'string' && /^[A-Z]{2}$/.test(r.country_code) ? r.country_code : null, at: iso(r.created_at),
+    })),
+  }
+}
+
+// ─── The busiest outlets ─────────────────────────────────────────────────────────────
+
+export interface BusyOutlet { site: string; name: string | null; country: string | null; kind: string | null; stateMedia: boolean; reports: number; verified: number }
+
+async function busiestOutlets(hours: number): Promise<{ reports: number; outlets: BusyOutlet[] }> {
+  const result = await longQuery(30, trx => trx.raw(
+    `SELECT ${SITE_OF} AS site, count(*) AS reports, count(*) FILTER (WHERE status = 'verified') AS verified, sum(count(*)) OVER () AS total
+       FROM signals
+      WHERE created_at > NOW() - make_interval(hours => ?)
+        AND status IN ('verified', 'pending')
+        AND ${NEWS_ONLY}
+        AND original_urls[1] IS NOT NULL
+      GROUP BY 1
+      ORDER BY reports DESC
+      LIMIT 80`, [hours]) as unknown as Promise<unknown>)
+  const rows = rowsOf(result).filter(r => r.site)
+  return {
+    reports: Number(rows[0]?.total ?? 0),
+    outlets: rows.map(r => {
+      const e = outletOf(String(r.site))
+      return { site: String(r.site), name: e?.name ?? null, country: e?.country ?? null, kind: e?.kind ?? null, stateMedia: Boolean(e?.state), reports: Number(r.reports) || 0, verified: Number(r.verified) || 0 }
+    }),
   }
 }
 
@@ -384,13 +466,16 @@ export const registerPublicInsightRoutes: FastifyPluginAsync = async (app) => {
   })
 
   app.get('/topics', {
-    schema: { tags: ['public'], summary: 'The last hours\' news reports by topic, against the hours before (public, no auth required)' }, ...OPEN,
+    schema: { tags: ['public'], summary: 'The last hours\' news reports by topic, against the hours before, the world\'s or one country\'s (public, no auth required)' }, ...OPEN,
   }, async (req, reply) => {
     reply.header('Access-Control-Allow-Origin', '*')
-    const hours = boundedInt((req.query as Record<string, unknown>)?.hours, 24, 1, 72)
+    const q = (req.query ?? {}) as Record<string, unknown>
+    const hours = boundedInt(q.hours, 24, 1, 72)
+    const given = String(q.country ?? '').toUpperCase()
+    const country = /^[A-Z]{2}$/.test(given) ? (given === 'UK' ? 'GB' : given) : null
     try {
-      const topics = await staleWhileRevalidate(`public:topics:v1:${hours}`, SWR(600), () => topicCounts(hours))
-      return reply.send({ success: true, data: { hours, topics } })
+      const topics = await staleWhileRevalidate(`public:topics:v1:${hours}:${country ?? 'all'}`, SWR(600), () => topicCounts(hours, country))
+      return reply.send({ success: true, data: { hours, country, topics } })
     } catch {
       return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The topics could not be counted just now; try again in a minute')
     }
@@ -413,7 +498,7 @@ export const registerPublicInsightRoutes: FastifyPluginAsync = async (app) => {
   })
 
   app.get('/feed-reports', {
-    schema: { tags: ['public'], summary: 'A government or science feed\'s newest reports: nuclear, radiation, sanctions, us-weather, carriers, humanitarian, emergency-mapping (public, no auth required)' }, ...OPEN,
+    schema: { tags: ['public'], summary: 'A government feed\'s newest reports: sanctions, us-weather, carriers (public, no auth required)' }, ...OPEN,
   }, async (req, reply) => {
     reply.header('Access-Control-Allow-Origin', '*')
     const q = (req.query ?? {}) as Record<string, unknown>
@@ -425,6 +510,35 @@ export const registerPublicInsightRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ success: true, data: { feed, label: FEEDS[feed]!.label, days, ...data } })
     } catch {
       return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The feed could not be read just now; try again in a minute')
+    }
+  })
+
+  app.get('/news-watch', {
+    schema: { tags: ['public'], summary: 'One kind of news by country: cyber attacks, elections or disasters (public, no auth required)' }, ...OPEN,
+  }, async (req, reply) => {
+    reply.header('Access-Control-Allow-Origin', '*')
+    const q = (req.query ?? {}) as Record<string, unknown>
+    const watch = String(q.watch ?? '')
+    if (!Object.hasOwn(WATCHES, watch)) return sendError(reply, 400, 'VALIDATION_ERROR', `watch must be one of ${Object.keys(WATCHES).join(', ')}`)
+    const days = boundedInt(q.days, 7, 1, 14)
+    try {
+      const data = await staleWhileRevalidate(`public:news-watch:v1:${watch}:${days}`, { freshSeconds: 1_200, staleSeconds: 86_400, lockSeconds: 120 }, () => newsWatch(watch, days))
+      return reply.send({ success: true, data: { watch, label: WATCHES[watch]!.label, days, ...data } })
+    } catch {
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The news could not be counted just now; try again in a minute')
+    }
+  })
+
+  app.get('/busiest-outlets', {
+    schema: { tags: ['public'], summary: 'The outlets WorldPulse read the most reports from in the last hours (public, no auth required)' }, ...OPEN,
+  }, async (req, reply) => {
+    reply.header('Access-Control-Allow-Origin', '*')
+    const hours = boundedInt((req.query as Record<string, unknown>)?.hours, 24, 1, 72)
+    try {
+      const data = await staleWhileRevalidate(`public:busiest-outlets:v1:${hours}`, SWR(900), () => busiestOutlets(hours))
+      return reply.send({ success: true, data: { hours, ...data } })
+    } catch {
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The outlets could not be counted just now; try again in a minute')
     }
   })
 }

@@ -35,7 +35,7 @@ const SITE = (process.env.SITE_URL || 'https://world-pulse.io').replace(/\/+$/, 
 /** Protocol versions this server speaks, newest first */
 export const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'] as const
 
-const SERVER_INFO = { name: 'worldpulse', title: 'WorldPulse', version: '1.9.0' }
+const SERVER_INFO = { name: 'worldpulse', title: 'WorldPulse', version: '1.10.0' }
 
 const INSTRUCTIONS = [
   'WorldPulse groups news reports of one event into one story and counts the outlets (websites) that report it. A story\'s count covers its last two days; a story that has run longer also gives how many outlets have reported it since it began.',
@@ -49,6 +49,7 @@ const INSTRUCTIONS = [
   'And for the news in other languages: quiet_places (the places whose news most rarely finds a second outlet), story_languages (the languages a story is reported in, with its outlets in each), verified_in_languages (the newest reports in other languages than English that turned verified), languages_today (the languages the news came in) and missed_in_english (stories verified in other languages with no English report found).',
   'Live layers and checks: military_aircraft and emergency_flights (adsb.lol\'s aircraft now), live_cameras (public cameras near a place), space_weather (NOAA\'s alerts), busiest_countries, news_volume (how much news WorldPulse reads), country_compare (two countries side by side), similar_reports, reader_flags (what readers flagged on a report) and outlet_mix (what kinds of newsroom carry a story, state media among them).',
   'More: chokepoints_news (the shipping chokepoints in the news), exploited_vulnerabilities (CISA\'s catalogue of flaws attackers use), travel_advice (US and UK advice for a country), first_reporters (the outlets first on a story), verification_speed (how fast stories find a second outlet), topics_today, outlet_reports (one outlet\'s newest reports), region_top_stories (a region\'s top stories), rising_stories (new stories spreading fast) and thin_coverage (the places WorldPulse reads few newsrooms in).',
+  'And: sanctions_actions (new US Treasury and EU sanctions), us_weather_alerts (US National Weather Service warnings), carrier_groups (where the US Navy\'s carriers were last reported), cyber_attacks, elections_watch and disaster_news (that news by country), state_media_stories (how much of the top stories state media carry), country_topics (what a country\'s news is about), busiest_outlets and local_only_stories (a country\'s stories only its own press reports).',
 ].join(' ')
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -452,6 +453,91 @@ function newsroomsIn(code: string): number {
   const names = new Set<string>()
   for (const e of Object.values(OUTLET_DIRECTORY)) if (e.country === code && !e.seen) names.add(e.name)
   return names.size
+}
+
+/** One report of GET /api/v1/public/feed-reports (routes/public-insights.ts) */
+interface FeedRow { id: string; title: string; summary: string | null; severity: string | null; country: string | null; place: string | null; at: string | null; url: string | null }
+
+/** The first sentence of a feed's summary, at most 220 characters */
+const firstLine = (s?: string | null) => String(s ?? '').replace(/\s+/g, ' ').trim().split(/(?<=[.!?])\s/)[0]!.slice(0, 220)
+
+/**
+ * A tool on one feed of GET /api/v1/public/feed-reports: its newest reports in the last days, one country's when
+ * asked, each with its place, date, first line and links (Nov 10, 2026, round 3 of the AI tools)
+ */
+function feedTool(t: { name: string; title: string; description: string; feed: string; source: string; none: string; onePer?: (title: string) => string }): Tool {
+  return {
+    name: t.name,
+    title: t.title,
+    description: t.description,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        days: { type: 'integer', minimum: 1, maximum: 30, default: 7, description: 'How many days back (1 to 30, default 7)' },
+        country: { type: 'string', description: 'Only one country: a two-letter code, e.g. JP' },
+        limit: { type: 'integer', minimum: 1, maximum: 20, default: 8, description: 'How many (1 to 20, default 8)' },
+      },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const days = intArg(args, 'days', 7, 1, 30)
+      const country = strArg(args, 'country', { pattern: /^[A-Za-z]{2}$/, hint: 'must be a two-letter country code such as JP' })?.toUpperCase().replace(/^UK$/, 'GB')
+      const limit = intArg(args, 'limit', 8, 1, 20)
+      const { status, body } = await ask(asker, `/api/v1/public/feed-reports?feed=${t.feed}&days=${days}`)
+      if (status !== 200) throw new Error(`${t.feed} answered ${status}`)
+      const d = (body.data ?? {}) as { total?: number; reports?: FeedRow[] }
+      const seen = new Set<string>()
+      const rows = (d.reports ?? []).filter(r => r && typeof r.title === 'string' && (!country || r.country === country))
+        // newest first: the first of each key is its latest
+        .filter(r => { if (!t.onePer) return true; const k = t.onePer(r.title); if (seen.has(k)) return false; seen.add(k); return true })
+      const scope = `in the last ${days} days${country ? ` for ${countryLabel(country, true)}` : ''}`
+      const total = country || t.onePer ? rows.length : Number(d.total ?? rows.length)
+      const text = rows.length === 0
+        ? `${t.none} ${scope}.`
+        : [
+          `${t.title}, ${scope}: ${total.toLocaleString('en-US')}${total > rows.length ? ` (the newest ${Math.min(limit, rows.length)} here)` : ''}, newest first (${t.source}, as WorldPulse reads it):`,
+          ...rows.slice(0, limit).map((r, i) => `${i + 1}. ${r.title}\n   ${[r.place || (r.country ? countryLabel(r.country, false) : ''), r.at ? r.at.slice(0, 10) : '', cap(r.severity)].filter(Boolean).join(' · ')}${r.summary && !r.title.includes(firstLine(r.summary)) ? `\n   ${firstLine(r.summary)}` : ''}\n   ${signalLink(r.id)}${r.url ? ` · source: ${r.url}` : ''}`),
+        ].join('\n')
+      return { text, data: { feed: t.feed, days, country: country ?? null, total, reports: rows.slice(0, limit).map(r => ({ ...r, link: signalLink(r.id) })) } }
+    },
+  }
+}
+
+/** One country of GET /api/v1/public/news-watch */
+interface WatchRow { country: string; reports: number; verified: number; latest: { id: string; title: string; at: string | null } | null }
+
+/** A tool on one watch of GET /api/v1/public/news-watch: the countries with the most of that news, and the newest */
+function watchTool(t: { name: string; title: string; description: string; watch: string; what: string }): Tool {
+  return {
+    name: t.name,
+    title: t.title,
+    description: t.description,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        days: { type: 'integer', minimum: 1, maximum: 14, default: 7, description: 'How many days back (1 to 14, default 7)' },
+        limit: { type: 'integer', minimum: 1, maximum: 25, default: 10, description: 'How many countries (1 to 25, default 10)' },
+      },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const days = intArg(args, 'days', 7, 1, 14)
+      const limit = intArg(args, 'limit', 10, 1, 25)
+      const { status, body } = await ask(asker, `/api/v1/public/news-watch?watch=${t.watch}&days=${days}`)
+      if (status !== 200) throw new Error(`${t.watch} answered ${status}`)
+      const d = (body.data ?? {}) as { total?: number; countries?: WatchRow[]; newest?: Array<{ id: string; title: string; status: string; country: string | null; at: string | null }> }
+      const countries = (d.countries ?? []).slice(0, limit)
+      const total = Number(d.total ?? 0)
+      const text = total === 0
+        ? `No news report about ${t.what} in the last ${days} days.`
+        : [
+          `${total.toLocaleString('en-US')} news reports about ${t.what} in the last ${days} days (WorldPulse). The countries with the most:`,
+          ...countries.map((c, i) => `${i + 1}. ${countryLabel(c.country, false)}: ${c.reports} report${c.reports === 1 ? '' : 's'}, ${c.verified} verified${c.latest ? `\n   Newest verified: ${c.latest.title} (${agoLabel(c.latest.at)}) ${signalLink(c.latest.id)}` : ''}`),
+          (d.newest ?? []).length ? `Newest of all: ${d.newest![0]!.title} (${agoLabel(d.newest![0]!.at)}${d.newest![0]!.status === 'verified' ? ', verified' : ', not verified yet'}) ${signalLink(d.newest![0]!.id)}` : '',
+        ].filter(Boolean).join('\n')
+      return { text, data: { watch: t.watch, days, total, countries: countries.map(c => ({ ...c, name: countryLabel(c.country, false), latest: c.latest ? { ...c.latest, url: signalLink(c.latest.id) } : null })), newest: (d.newest ?? []).slice(0, 10).map(r => ({ ...r, url: signalLink(r.id) })) } }
+    },
+  }
 }
 
 export const TOOLS: Tool[] = [
@@ -3038,6 +3124,188 @@ export const TOOLS: Tool[] = [
         'Their news also comes from outlets abroad and GDELT\'s articles. One place\'s newsrooms: who_covers.',
       ].join('\n')
       return { text, data: { atMost: most, places: count, regions: regions.map(r => ({ id: r.id, label: r.label, places: r.places })) } }
+    },
+  },
+  // ── Nov 10, 2026, night: round 3 of 6, the government and science feeds and three news watches ──
+  feedTool({
+    name: 'sanctions_actions',
+    title: 'New sanctions actions',
+    description: 'New sanctions actions of the US Treasury (its Office of Foreign Assets Control, OFAC) and the European Union: people, companies, ships and countries added, removed or changed, newest first, in the last days (7 by default, up to 30), one country\'s when asked, each with its date, a line of what was decided and its links (the government\'s own notice among them).',
+    feed: 'sanctions', source: 'OFAC and the EU', none: 'No US Treasury or EU sanctions action',
+  }),
+  feedTool({
+    name: 'us_weather_alerts',
+    title: 'US severe weather alerts',
+    description: 'Severe weather alerts of the US National Weather Service (tornado, hurricane, flood, winter storm, extreme heat and other warnings), newest first, in the last days (7 by default, up to 30), each with its area, date, a line of the warning and its links. For the United States only; elsewhere, use hazards or disaster_news.',
+    feed: 'us-weather', source: 'the US National Weather Service', none: 'No severe weather alert from the US National Weather Service',
+  }),
+  feedTool({
+    name: 'carrier_groups',
+    title: 'Where the US Navy\'s carriers are',
+    description: 'Where the US Navy\'s aircraft carriers were last reported, from the carrier tracker WorldPulse reads: each carrier once, its latest report (deployment, port arrival, exercise) with its area and date, in the last days (7 by default, up to 30). Reported positions, often days old, not live tracks.',
+    feed: 'carriers', source: 'the carrier tracker', none: 'No carrier report', onePer: title => title.split(':')[0]!.trim(),
+  }),
+  watchTool({
+    name: 'cyber_attacks',
+    title: 'Cyber attacks in the news',
+    description: 'Cyber attacks in the news, by country: the last days\' news reports (7 by default, up to 14) whose headline names hackers, ransomware, a data breach, DDoS, malware, phishing or spyware, in English, French, Spanish, Portuguese, German, Russian or Arabic, the countries with the most first, each with its newest verified headline. For the software flaws attackers use, exploited_vulnerabilities.',
+    watch: 'cyber', what: 'cyber attacks',
+  }),
+  watchTool({
+    name: 'elections_watch',
+    title: 'Elections in the news',
+    description: 'Where elections are in the news: the countries with the most election reports in the last days (7 by default, up to 14), each with how many are verified and its newest verified headline: votes, campaigns, results, disputes and electoral reforms, as WorldPulse\'s topic reader files them.',
+    watch: 'elections', what: 'elections',
+  }),
+  watchTool({
+    name: 'disaster_news',
+    title: 'Disasters in the news',
+    description: 'Disasters in the news, by country: the last days\' news reports (7 by default, up to 14) WorldPulse files as disasters (floods, fires, storms, crashes, collapses, shipwrecks), the countries with the most first, each with its newest verified headline. For hazards measured by sensors (quakes, volcanoes, tsunamis), use hazards.',
+    watch: 'disasters', what: 'disasters',
+  }),
+  {
+    name: 'state_media_stories',
+    title: 'Top stories carried by state media',
+    description: 'How much of each top story\'s coverage comes from state media (outlets a government runs, from WorldPulse\'s outlet directory): of the last hours\' top stories (24 by default, up to 72), each with its outlets in its last two days, how many are state media and which, the most state-carried first. A story carried mostly by state media, and little by independent outlets, is one to read with care.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        hours: { type: 'integer', minimum: 1, maximum: 72, default: 24, description: 'How many hours back (1 to 72, default 24)' },
+        limit: { type: 'integer', minimum: 1, maximum: 10, default: 10, description: 'How many top stories to look at (1 to 10, default 10)' },
+      },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const hours = intArg(args, 'hours', 24, 1, 72)
+      const limit = intArg(args, 'limit', 10, 1, 10)
+      const { status, body } = await ask(asker, `/api/v1/stories?hours=${hours}&limit=${limit}`)
+      if (status !== 200) throw new Error(`stories answered ${status}`)
+      const stories = (((body.data ?? {}) as { stories?: ListedStory[] }).stories ?? []).filter(s => s && UUID.test(String(s.leadId)))
+      type Info = { site: string; name: string | null; country: string | null; stateMedia: boolean }
+      const looked = await Promise.all(stories.map(async s => {
+        const one = await ask(asker, `/api/v1/stories/${s.leadId}`)
+        const d = (one.status === 200 ? one.body.data ?? {} : {}) as { outletNames?: string[]; outletInfo?: Info[] }
+        const info: Info[] = d.outletInfo ?? siteInfo(d.outletNames ?? [])
+        const byName = new Map<string, Info>()
+        for (const o of info) if (!byName.has(o.name ?? o.site)) byName.set(o.name ?? o.site, o)
+        const state = [...byName.entries()].filter(([, o]) => o.stateMedia).map(([name, o]) => `${name}${o.country ? ` (${countryLabel(o.country, false)})` : ''}`)
+        return { story: s, outlets: byName.size, state }
+      }))
+      const order = looked.filter(x => x.outlets > 0).sort((a, b) => b.state.length / b.outlets - a.state.length / a.outlets || b.state.length - a.state.length)
+      const pct = (x: (typeof order)[number]) => Math.round(100 * x.state.length / x.outlets)
+      const text = order.length === 0
+        ? `No top story in the last ${hours} hours.`
+        : [
+          `State media in the last ${hours} hours' top ${order.length} stories (WorldPulse's outlet directory), the most state-carried first:`,
+          ...order.map((x, i) => `${i + 1}. ${x.story.title}\n   ${x.state.length} of ${x.outlets} outlets are state media (${pct(x)}%)${x.state.length ? `: ${x.state.slice(0, 5).join(', ')}${x.state.length > 5 ? `, and ${x.state.length - 5} more` : ''}` : ''}${pct(x) > 50 ? ' · mostly state media: read with care' : ''}\n   ${signalLink(x.story.leadId)}`),
+          'One story by kind of outlet: outlet_mix.',
+        ].join('\n')
+      return { text, data: { hours, stories: order.map(x => ({ id: x.story.id, title: x.story.title, url: signalLink(x.story.leadId), outlets: x.outlets, stateMedia: x.state, stateShare: pct(x) / 100 })) } }
+    },
+  },
+  {
+    name: 'country_topics',
+    title: 'What a country\'s news is about',
+    description: 'The topics of one country\'s news reports in the last hours (24 by default, up to 72), the most first: politics, conflict, economy, disaster, health, sports and the rest, each with its reports, how many are verified and the change from the hours before. Reports placed in the country, from its own press and outlets abroad. The world\'s topics: topics_today.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        country: { type: 'string', description: 'A two-letter country code, e.g. NG' },
+        hours: { type: 'integer', minimum: 1, maximum: 72, default: 24, description: 'How many hours back (1 to 72, default 24)' },
+      },
+      required: ['country'],
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const country = strArg(args, 'country', { required: true, pattern: /^[A-Za-z]{2}$/, hint: 'must be a two-letter country code such as NG' })!.toUpperCase().replace(/^UK$/, 'GB')
+      if (countryLabel(country, false) === country) throw new ToolError(`${country} is not a country code WorldPulse knows`)
+      const hours = intArg(args, 'hours', 24, 1, 72)
+      const { status, body } = await ask(asker, `/api/v1/public/topics?hours=${hours}&country=${country}`)
+      if (status !== 200) throw new Error(`topics answered ${status}`)
+      type Row = { topic: string; reports: number; verified: number; before: number }
+      const rows = (((body.data ?? {}) as { topics?: Row[] }).topics ?? []).filter(r => r && r.reports > 0)
+      const total = rows.reduce((s, r) => s + r.reports, 0)
+      const label = (t: string) => (t === 'geopolitics' ? 'Politics' : t === 'other' ? 'Other' : cap(t))
+      const text = rows.length === 0
+        ? `No news report placed in ${countryLabel(country, true)} in the last ${hours} hours.`
+        : [
+          `What ${countryLabel(country, true)}'s news is about: the last ${hours} hours' ${total.toLocaleString('en-US')} reports placed there (WorldPulse), the most first:`,
+          ...rows.map((r, i) => `${i + 1}. ${label(r.topic)}: ${r.reports} (${Math.round(100 * r.reports / total)}%), ${r.verified} verified${r.before ? ` (${r.reports >= r.before ? '+' : ''}${Math.round(100 * (r.reports - r.before) / r.before)}% on the ${hours} hours before)` : ''}`),
+          `Its stories: country. Page: ${SITE}/countries/${country.toLowerCase()}`,
+        ].join('\n')
+      return { text, data: { country, hours, reports: total, topics: rows.map(r => ({ ...r, label: label(r.topic) })) } }
+    },
+  },
+  {
+    name: 'busiest_outlets',
+    title: 'The outlets with the most reports now',
+    description: 'The news outlets (websites) WorldPulse read the most reports from in the last hours (24 by default, up to 72), the most first, each with its reports, how many turned verified, its kind and country and whether a government runs it (state media), from WorldPulse\'s outlet directory. A busy outlet publishes much, which is not the same as being first (first_reporters) or reliable (site_check).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        hours: { type: 'integer', minimum: 1, maximum: 72, default: 24, description: 'How many hours back (1 to 72, default 24)' },
+        limit: { type: 'integer', minimum: 1, maximum: 30, default: 15, description: 'How many outlets (1 to 30, default 15)' },
+      },
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const hours = intArg(args, 'hours', 24, 1, 72)
+      const limit = intArg(args, 'limit', 15, 1, 30)
+      const { status, body } = await ask(asker, `/api/v1/public/busiest-outlets?hours=${hours}`)
+      if (status !== 200) throw new Error(`busiest outlets answered ${status}`)
+      type Row = { site: string; name: string | null; country: string | null; kind: string | null; stateMedia: boolean; reports: number; verified: number }
+      const d = (body.data ?? {}) as { reports?: number; outlets?: Row[] }
+      // each outlet once by name: bbc.co.uk and bbc.com are the BBC
+      const byName = new Map<string, Row & { sites: string[] }>()
+      for (const r of d.outlets ?? []) {
+        const key = r.name ?? r.site
+        const had = byName.get(key)
+        byName.set(key, had ? { ...had, reports: had.reports + r.reports, verified: had.verified + r.verified, sites: [...had.sites, r.site] } : { ...r, sites: [r.site] })
+      }
+      const rows = [...byName.values()].sort((a, b) => b.reports - a.reports).slice(0, limit)
+      const total = Number(d.reports ?? 0)
+      const kind = (k: string | null) => (k ? String(OUTLET_KIND_LABELS[k as keyof typeof OUTLET_KIND_LABELS] ?? k).toLowerCase() : 'not in the directory')
+      const text = rows.length === 0
+        ? `No news report in the last ${hours} hours.`
+        : [
+          `The outlets WorldPulse read the most from in the last ${hours} hours (${total.toLocaleString('en-US')} news reports in all), the most first:`,
+          ...rows.map((r, i) => `${i + 1}. ${r.name ?? r.site}: ${r.reports.toLocaleString('en-US')} reports, ${r.verified.toLocaleString('en-US')} verified · ${kind(r.kind)}${r.country ? `, ${countryLabel(r.country, false)}` : ''}${r.stateMedia ? ', state media' : ''}`),
+        ].join('\n')
+      return { text, data: { hours, reports: total, outlets: rows.map(r => ({ name: r.name ?? r.site, sites: r.sites, kind: r.kind, country: r.country, stateMedia: r.stateMedia, reports: r.reports, verified: r.verified })) } }
+    },
+  },
+  {
+    name: 'local_only_stories',
+    title: 'Stories only a country\'s own press reports',
+    description: 'A country\'s stories that only its own newsrooms are reporting, with no outlet from abroad yet, in the last hours (24 by default, up to 72): what the world may be missing there, each with its outlets and link. The opposite of local_press, which finds stories the world reports and the local press doesn\'t. Needs at least two of its outlets, so a lone report is in unconfirmed instead.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        country: { type: 'string', description: 'A two-letter country code, e.g. PE' },
+        hours: { type: 'integer', minimum: 1, maximum: 72, default: 24, description: 'How many hours back (1 to 72, default 24)' },
+        limit: { type: 'integer', minimum: 1, maximum: 15, default: 8, description: 'How many stories (1 to 15, default 8)' },
+      },
+      required: ['country'],
+      additionalProperties: false,
+    },
+    async run(args, asker) {
+      const country = strArg(args, 'country', { required: true, pattern: /^[A-Za-z]{2}$/, hint: 'must be a two-letter country code such as PE' })!.toUpperCase().replace(/^UK$/, 'GB')
+      if (countryLabel(country, false) === country) throw new ToolError(`${country} is not a country code WorldPulse knows`)
+      const hours = intArg(args, 'hours', 24, 1, 72)
+      const limit = intArg(args, 'limit', 8, 1, 15)
+      const { status, body } = await ask(asker, `/api/v1/stories?hours=${hours}&limit=20&country=${country}`)
+      if (status !== 200) throw new Error(`stories answered ${status}`)
+      const stories = (((body.data ?? {}) as { stories?: ListedStory[] }).stories ?? [])
+        .filter(s => s && typeof s.title === 'string' && s.country === country && (s.countries ?? 0) <= 1 && (s.localOutlets ?? 0) >= 2 && (s.localOutlets ?? 0) >= s.outletCount)
+        .slice(0, limit)
+      const text = stories.length === 0
+        ? `No story of ${countryLabel(country, true)} in the last ${hours} hours that only its own press reports (at least two of its outlets, none from abroad).`
+        : [
+          `Stories of ${countryLabel(country, true)} only its own press is reporting, the last ${hours} hours (WorldPulse):`,
+          ...stories.map((s, i) => `${i + 1}. ${s.title}\n   ${s.outletCount} outlets, all based there${s.localNames?.length ? `: ${s.localNames.join(', ')}` : ''}${s.verifiedAt ? ' · verified' : ''}${s.place ? ` · ${s.place}` : ''}\n   ${signalLink(s.leadId)} (story id ${s.id})`),
+          'What outlets abroad haven\'t picked up yet: a lead, not proof they missed it.',
+        ].join('\n')
+      return { text, data: { country, hours, stories: stories.map(storyOut) } }
     },
   },
 ]

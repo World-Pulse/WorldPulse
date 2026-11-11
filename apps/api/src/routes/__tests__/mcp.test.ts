@@ -62,6 +62,16 @@ async function build(): Promise<FastifyInstance> {
     // local_press asks for the 20 biggest: stories from more places
     const q = req.query as { limit?: string; hours?: string; region?: string }
     if (q.region) return { success: true, data: { stories: q.region === 'africa' ? [MORE_STORIES[0], MORE_STORIES[2]] : [], hours: Number(q.hours), region: q.region } }
+    if (q.limit === '10') return { success: true, data: { stories: [STORY, { ...STORY, id: 'world-story', leadId: WORLD_REPORT, title: 'Six killed in Krakow shooting' }], hours: Number(q.hours) } }
+    if (q.limit === '20' && (q as { country?: string }).country === 'PL') {
+      const pl = (over: Record<string, unknown>) => ({ ...STORY, country: 'PL', countries: 1, verifiedAt: null, ...over })
+      return { success: true, data: { stories: [
+        pl({ id: 'pl-1', leadId: LONE_REPORT, title: 'Strike at the Gdańsk shipyard', outletCount: 3, localOutlets: 3, localNames: ['TVN24', 'Onet', 'Notes from Poland'] }),
+        pl({ id: 'pl-2', leadId: OTHER_REPORT, title: 'Krakow shooting', outletCount: 40, localOutlets: 5, countries: 12 }),
+        pl({ id: 'pl-3', leadId: JUST_VERIFIED, title: 'Village fair', outletCount: 1, localOutlets: 1 }),
+        pl({ id: 'pl-4', leadId: DAM_REPORT, title: 'A world story with a Polish pin', country: 'US', outletCount: 3, localOutlets: 0 }),
+      ], hours: Number(q.hours), country: 'PL' } }
+    }
     if (q.hours === '6' && q.limit === '20') {
       return { success: true, data: { stories: [
         { ...MORE_STORIES[0], firstSeenAt: hoursAgo(2), outletCount: 12 },
@@ -655,6 +665,7 @@ async function build(): Promise<FastifyInstance> {
   })
   app.get('/api/v1/public/topics', async (req) => {
     asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    if ((req.query as { country?: string }).country === 'NG') return { success: true, data: { hours: 24, country: 'NG', topics: [{ topic: 'security', reports: 30, verified: 10, before: 20 }, { topic: 'elections', reports: 10, verified: 2, before: 0 }] } }
     return { success: true, data: { hours: 24, topics: [
       { topic: 'geopolitics', reports: 600, verified: 200, before: 500 },
       { topic: 'conflict', reports: 300, verified: 150, before: 400 },
@@ -669,6 +680,40 @@ async function build(): Promise<FastifyInstance> {
     return { success: true, data: { site, days: 7, total: site === 'lemonde.fr' ? 31 : 0, reports: site === 'lemonde.fr'
       ? [{ id: OTHER_REPORT, title: 'Soudan : reprise des pourparlers', status: 'verified', severity: 'medium', topic: 'geopolitics', country: 'SD', at: hoursAgo(2), storyId: 's' }]
       : [] } }
+  })
+  // Nov 10, 2026, night, round 3
+  app.get('/api/v1/public/feed-reports', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    const feed = (req.query as { feed?: string }).feed
+    const r = (id: string, title: string, over: Record<string, unknown> = {}) => ({ id, title, summary: null, severity: 'medium', country: null, place: null, at: '2026-11-10T00:00:00.000Z', url: null, tags: [], ...over })
+    if (feed === 'carriers') {
+      return { success: true, data: { feed, days: 7, total: 3, reports: [
+        r(OTHER_REPORT, 'USS Harry S. Truman (CVN-75): Deployment', { place: 'Eastern Mediterranean', at: '2026-11-11T00:00:00.000Z' }),
+        r(LONE_REPORT, 'USS Theodore Roosevelt (CVN-71): Port Arrival', { place: 'San Diego', at: '2026-11-10T00:00:00.000Z' }),
+        r(JUST_VERIFIED, 'USS Harry S. Truman (CVN-75): OSINT Update', { at: '2026-11-09T00:00:00.000Z' }),
+      ] } }
+    }
+    return { success: true, data: { feed, days: 7, total: 17, reports: [
+      r(OTHER_REPORT, 'OFAC Sanctions: Iran-related Designations', { country: 'IR', summary: 'Treasury sanctions 12 people and 4 ships that move Iranian oil. More follows.', url: 'https://ofac.treasury.gov/recent-actions/x' }),
+      r(LONE_REPORT, 'EU Council: Russia sanctions amended', { country: 'RU' }),
+    ] } }
+  })
+  app.get('/api/v1/public/news-watch', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    const watch = (req.query as { watch?: string }).watch
+    if (watch === 'disasters') return { success: true, data: { watch, days: 7, total: 0, countries: [], newest: [] } }
+    return { success: true, data: { watch, days: 7, total: 40, countries: [
+      { country: 'PL', reports: 12, verified: 5, latest: { id: OTHER_REPORT, title: 'Hackers hit Polish water utility', at: hoursAgo(5) } },
+      { country: 'FR', reports: 3, verified: 0, latest: null },
+    ], newest: [{ id: LONE_REPORT, title: 'Ransomware gang leaks hospital data', status: 'pending', country: 'PL', at: hoursAgo(1) }] } }
+  })
+  app.get('/api/v1/public/busiest-outlets', async (req) => {
+    asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    return { success: true, data: { hours: 24, reports: 18000, outlets: [
+      { site: 'bbc.co.uk', name: 'BBC', country: 'GB', kind: 'international', stateMedia: false, reports: 100, verified: 60 },
+      { site: 'tass.com', name: 'TASS', country: 'RU', kind: 'agency', stateMedia: true, reports: 150, verified: 30 },
+      { site: 'bbc.com', name: 'BBC', country: 'GB', kind: 'international', stateMedia: false, reports: 80, verified: 50 },
+    ] } }
   })
   await app.register(registerMcpRoutes, { prefix: '/mcp' })
   return app
@@ -715,6 +760,8 @@ describe('MCP server', () => {
       'similar_reports', 'reader_flags', 'outlet_mix', 'country_compare', 'space_weather',
       'chokepoints_news', 'exploited_vulnerabilities', 'travel_advice', 'first_reporters', 'verification_speed',
       'topics_today', 'outlet_reports', 'region_top_stories', 'rising_stories', 'thin_coverage',
+      'sanctions_actions', 'us_weather_alerts', 'carrier_groups', 'cyber_attacks', 'elections_watch',
+      'disaster_news', 'state_media_stories', 'country_topics', 'busiest_outlets', 'local_only_stories',
     ])
     for (const t of tools) {
       expect(t.inputSchema.type).toBe('object')
@@ -1816,5 +1863,89 @@ describe('MCP server: round 2 of Nov 10, 2026, night (sixty in all)', () => {
     expect(text).toMatch(/^\d+ places where WorldPulse reads the feeds of no newsroom based there, in Oceania:/)
     for (const p of r.structuredContent.regions[0].places) expect(p.newsrooms).toBe(0)
     expect((await call(app, 'thin_coverage', { region: 'mars' })).isError).toBe(true)
+  })
+})
+
+describe('MCP server: round 3 of Nov 10, 2026, night (seventy in all)', () => {
+  beforeEach(() => { asked = [] })
+
+  it("sanctions_actions lists a feed's newest reports, with a first line and the government's own notice", async () => {
+    const app = await build()
+    const r = await call(app, 'sanctions_actions', {})
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/public/feed-reports?feed=sanctions&days=7'])
+    const text = r.content[0].text as string
+    expect(text).toContain('New sanctions actions, in the last 7 days: 17 (the newest 2 here), newest first (OFAC and the EU, as WorldPulse reads it):')
+    expect(text).toContain('1. OFAC Sanctions: Iran-related Designations\n   Iran · 2026-11-10 · Medium\n   Treasury sanctions 12 people and 4 ships that move Iranian oil.')
+    expect(text).toContain('source: https://ofac.treasury.gov/recent-actions/x')
+    const ru = await call(app, 'sanctions_actions', { country: 'ru' })
+    expect(ru.structuredContent.reports.map((x: { title: string }) => x.title)).toEqual(['EU Council: Russia sanctions amended'])
+    expect((await call(app, 'us_weather_alerts', { days: 3 })).isError).toBe(false)
+    expect(asked.map(a => a.url)).toContain('/api/v1/public/feed-reports?feed=us-weather&days=3')
+  })
+
+  it('carrier_groups gives each carrier once, its latest report', async () => {
+    const app = await build()
+    const r = await call(app, 'carrier_groups', {})
+    const text = r.content[0].text as string
+    expect(text).toContain("Where the US Navy's carriers are, in the last 7 days: 2, newest first")
+    expect(text).toContain('1. USS Harry S. Truman (CVN-75): Deployment\n   Eastern Mediterranean · 2026-11-11')
+    expect(text).toContain('2. USS Theodore Roosevelt (CVN-71): Port Arrival')
+    expect(text).not.toContain('OSINT Update')
+  })
+
+  it('cyber_attacks and elections_watch rank the countries with the most of that news', async () => {
+    const app = await build()
+    const r = await call(app, 'cyber_attacks', {})
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/public/news-watch?watch=cyber&days=7'])
+    const text = r.content[0].text as string
+    expect(text).toContain('40 news reports about cyber attacks in the last 7 days (WorldPulse). The countries with the most:')
+    expect(text).toContain('1. Poland: 12 reports, 5 verified\n   Newest verified: Hackers hit Polish water utility (5h ago)')
+    expect(text).toContain('2. France: 3 reports, 0 verified')
+    expect(text).toContain('Newest of all: Ransomware gang leaks hospital data (1h ago, not verified yet)')
+    expect((await call(app, 'elections_watch', { days: 14 })).isError).toBe(false)
+    expect(asked.map(a => a.url)).toContain('/api/v1/public/news-watch?watch=elections&days=14')
+    expect((await call(app, 'disaster_news', {})).content[0].text).toBe('No news report about disasters in the last 7 days.')
+  })
+
+  it("state_media_stories looks at each top story's outlets and puts the most state-carried first", async () => {
+    const app = await build()
+    const r = await call(app, 'state_media_stories', {})
+    // (the stand-in story route notes only the Krakow story's asks)
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/stories?hours=24&limit=10', `/api/v1/stories/${WORLD_REPORT}`])
+    const text = r.content[0].text as string
+    // Krakow: TASS and TVP World of 6 outlets (BBC once), Doha: none of 2
+    expect(text).toContain('1. Six killed in Krakow shooting\n   2 of 6 outlets are state media (33%): TASS (Russia), TVP World (Poland)')
+    expect(text).toContain(`2. ${STORY.title}\n   0 of 2 outlets are state media (0%)`)
+  })
+
+  it("country_topics counts one country's topics", async () => {
+    const app = await build()
+    const r = await call(app, 'country_topics', { country: 'ng' })
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/public/topics?hours=24&country=NG'])
+    const text = r.content[0].text as string
+    expect(text).toContain("What Nigeria's news is about: the last 24 hours' 40 reports placed there (WorldPulse), the most first:")
+    expect(text).toContain('1. Security: 30 (75%), 10 verified (+50% on the 24 hours before)')
+    expect(text).toContain('2. Elections: 10 (25%), 2 verified')
+    expect((await call(app, 'country_topics', { country: 'XX' })).isError).toBe(true)
+  })
+
+  it('busiest_outlets ranks the outlets by their reports, each outlet once by name', async () => {
+    const app = await build()
+    const r = await call(app, 'busiest_outlets', {})
+    const text = r.content[0].text as string
+    expect(text).toContain('The outlets WorldPulse read the most from in the last 24 hours (18,000 news reports in all), the most first:')
+    expect(text).toContain('1. BBC: 180 reports, 110 verified · international, United Kingdom')
+    expect(text).toContain('2. TASS: 150 reports, 30 verified · news agency, Russia, state media')
+  })
+
+  it("local_only_stories keeps a country's stories that only its own outlets report", async () => {
+    const app = await build()
+    const r = await call(app, 'local_only_stories', { country: 'pl' })
+    expect(asked.map(a => a.url)).toEqual(['/api/v1/stories?hours=24&limit=20&country=PL'])
+    const text = r.content[0].text as string
+    expect(text).toContain('1. Strike at the Gdańsk shipyard\n   3 outlets, all based there: TVN24, Onet, Notes from Poland')
+    expect(text).not.toContain('Krakow shooting')
+    expect(text).not.toContain('Village fair')
+    expect(text).not.toContain('A world story with a Polish pin')
   })
 })

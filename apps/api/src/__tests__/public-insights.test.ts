@@ -21,6 +21,16 @@ vi.mock('../lib/long-query', () => ({
     return run({
       raw: async (sql: string, bindings: unknown[]) => {
         calls.push({ sql, bindings })
+        if (sql.includes('title ILIKE ANY') && JSON.stringify(bindings).includes('%hacker%')) {
+          return { rows: [
+            { id: 'h1', title: 'Hackers hit Polish water utility', status: 'verified', country_code: 'PL', created_at: '2026-11-10T20:00:00Z' },
+            { id: 'h2', title: 'Ransomware gang leaks hospital data', status: 'pending', country_code: 'PL', created_at: '2026-11-10T10:00:00Z' },
+            { id: 'h3', title: 'Cyberattaque contre une mairie', status: 'pending', country_code: 'FR', created_at: '2026-11-09T10:00:00Z' },
+            { id: 'h4', title: 'Data breach at a bank', status: 'verified', country_code: null, created_at: '2026-11-08T10:00:00Z' },
+          ] }
+        }
+        if (sql.includes('category::text = ?')) return { rows: [{ id: 'e1', title: 'Polls open in Chile', status: 'verified', country_code: 'CL', created_at: '2026-11-10T12:00:00Z' }] }
+        if (sql.includes('AS site, count(*) AS reports')) return { rows: [{ site: 'reuters.com', reports: '120', verified: '80', total: '18000' }, { site: 'tass.com', reports: '90', verified: '20', total: '18000' }, { site: '', reports: '5', verified: '0', total: '18000' }] }
         if (sql.includes('title ILIKE ANY')) {
           return { rows: [
             { id: 'a', title: 'Le détroit d\'Ormuz sous tension', status: 'pending', created_at: '2026-11-10T21:00:00Z' },
@@ -168,5 +178,42 @@ describe('GET /api/v1/public/feed-reports', () => {
     expect(calls[0]!.bindings).toEqual([14, ['sanctions', 'ofac'], ['sanctions', 'eu']])
     expect((await get('/api/v1/public/feed-reports?feed=constructor')).statusCode).toBe(400)
     expect((await get('/api/v1/public/feed-reports')).statusCode).toBe(400)
+  })
+})
+
+describe('GET /api/v1/public/news-watch, /busiest-outlets, and /topics for one country', () => {
+  it('groups a watch\'s reports by country, the most first, each with its newest verified headline', async () => {
+    const { data } = (await get('/api/v1/public/news-watch?watch=cyber&days=3')).json()
+    expect(data).toMatchObject({ watch: 'cyber', label: 'cyber attacks', days: 3, total: 4 })
+    expect(data.countries[0]).toEqual({ country: 'PL', reports: 2, verified: 1, latest: { id: 'h1', title: 'Hackers hit Polish water utility', at: '2026-11-10T20:00:00.000Z' } })
+    expect(data.countries[1]).toEqual({ country: 'FR', reports: 1, verified: 0, latest: null })
+    expect(data.newest.map((r: { id: string }) => r.id)).toEqual(['h1', 'h2', 'h3', 'h4'])
+    expect(calls[0]!.bindings[1]).toEqual(expect.arrayContaining(['%hacker%', '%ransomware%', '%кибератак%']))
+    // "hack" alone would be Hackney and hackathons
+    expect(calls[0]!.bindings[1]).not.toContain('%hack%')
+  })
+
+  it("reads a topic's reports for a topic watch, and refuses a watch it doesn't know", async () => {
+    const { data } = (await get('/api/v1/public/news-watch?watch=elections')).json()
+    expect(data.countries[0]).toMatchObject({ country: 'CL', reports: 1, verified: 1 })
+    expect(calls[0]!.bindings).toEqual([7, 'elections'])
+    expect((await get('/api/v1/public/news-watch?watch=sports')).statusCode).toBe(400)
+  })
+
+  it('counts each website\'s reports, the most first, with what the directory knows of it', async () => {
+    const { data } = (await get('/api/v1/public/busiest-outlets?hours=12')).json()
+    expect(data.reports).toBe(18000)
+    expect(data.outlets).toEqual([
+      { site: 'reuters.com', name: 'Reuters', country: 'GB', kind: 'agency', stateMedia: false, reports: 120, verified: 80 },
+      { site: 'tass.com', name: 'TASS', country: 'RU', kind: 'agency', stateMedia: true, reports: 90, verified: 20 },
+    ])
+    expect(calls[0]!.bindings).toEqual([12])
+  })
+
+  it("counts one country's topics", async () => {
+    const { data } = (await get('/api/v1/public/topics?hours=12&country=ng')).json()
+    expect(data.country).toBe('NG')
+    expect(calls[0]!.sql).toContain('AND country_code = ?')
+    expect(calls[0]!.bindings).toEqual([12, 12, 12, 24, 'NG'])
   })
 })

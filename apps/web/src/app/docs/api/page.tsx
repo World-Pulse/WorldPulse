@@ -570,7 +570,8 @@ export default function ApiDocsPage() {
               unconfirmed, the aircraft now, the public cameras, the countries' report counts, the report counts, a
               report's closest reports, a report's reader flags, the space weather, the chokepoints named in the news, the
               exploited vulnerabilities, the travel advice, the first reporters, the verification times, the topics of
-              the news and an outlet's reports; outlet, who_covers and thin_coverage read the outlet directory), and
+              the news, an outlet's reports, the government feeds, the news watches and the busiest outlets; outlet, who_covers
+              and thin_coverage read the outlet directory), and
               those calls count against your limits
               on them too. How to connect Claude, Claude Code or Cursor is on the{' '}
               <Link href={MCP_GUIDE} className="text-amber-400 hover:text-amber-300">developer page</Link>.

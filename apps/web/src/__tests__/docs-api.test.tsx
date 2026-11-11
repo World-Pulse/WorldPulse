@@ -336,8 +336,11 @@ const toolsBlock = (src: string) => src.slice(src.indexOf('export const TOOLS'),
     // country's days)
     // Nov 10, night, round 2: 60 tools, 44 routes (seven open counts of public-insights.ts; region_top_stories and
     // rising_stories ask the top stories; thin_coverage reads the directory)
-    expect(MCP_TOOLS.length).toBe(60)
-    expect(asked.length).toBeGreaterThanOrEqual(44)
+    // round 3: 70 tools, 47 routes (sanctions_actions, us_weather_alerts and carrier_groups share the government
+    // feeds; cyber_attacks, elections_watch and disaster_news the news watches; state_media_stories, country_topics and
+    // local_only_stories ask the stories and the topics)
+    expect(MCP_TOOLS.length).toBe(70)
+    expect(asked.length).toBeGreaterThanOrEqual(47)
     const named: Record<string, string> = {
       '/api/v1/stories': 'the top stories', '/api/v1/stories/:param': 'one story', '/api/v1/search/semantic': 'search by meaning',
       '/api/v1/stories/week': 'the week', '/api/v1/stories/by-link': 'the story of a news link',
@@ -365,6 +368,8 @@ const toolsBlock = (src: string) => src.slice(src.indexOf('export const TOOLS'),
       '/api/v1/public/travel-advice': 'the travel advice', '/api/v1/public/first-reporters': 'the first reporters',
       '/api/v1/public/verification-speed': 'the verification times', '/api/v1/public/topics': 'the topics of the news',
       '/api/v1/public/outlet-reports': 'an outlet\'s reports',
+      '/api/v1/public/feed-reports': 'the government feeds', '/api/v1/public/news-watch': 'the news watches',
+      '/api/v1/public/busiest-outlets': 'the busiest outlets',
     }
     const said = TEXT.slice(TEXT.indexOf('Each tool asks the API\'s own open endpoints'), TEXT.indexOf('How to connect'))
     const routeLike = (path: string) => API_ROUTES.find(r => r.method === 'GET' && r.path.replace(/:[A-Za-z_]+/g, ':param') === path)
