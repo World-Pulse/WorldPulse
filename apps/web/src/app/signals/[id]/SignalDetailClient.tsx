@@ -32,6 +32,7 @@ import { displaySummary, isStateMedia, STATE_MEDIA_NOTE, storyTags } from '@/lib
 import { storyCountsOf, storyFactLine, topFigure, type StoryOutletCounts } from '@/lib/story-count'
 import type { StoryFiguresData } from './StoryFigures'
 import type { StoryDetail } from './StoryMembers'
+import { StoryFactChecks, type StoryFactChecksData } from './StoryFactChecks'
 import { howSure } from '@/lib/how-sure'
 import { HowSureBlock } from '@/components/signals/HowSureBlock'
 import { FollowStory } from '@/components/signals/FollowStory'
@@ -164,6 +165,8 @@ interface Props {
   /** A verified story's figures and reports so far, from the server, in the page's HTML (Nov 11, 2026) */
   initialFigures?: StoryFiguresData | null
   initialStory?: StoryDetail | null
+  /** Fact-checks of claims about the story, from the server, in the page's HTML (Nov 11, 2026) */
+  initialFactChecks?: StoryFactChecksData | null
 }
 
 // ─── AI Slop Badge ────────────────────────────────────────────────────────────
@@ -206,7 +209,7 @@ interface CIBStatus {
   label: string
 }
 
-export function SignalDetailClient({ signal, related, initialPosts, postsTotal, initialStoryCounts = null, initialFigures = null, initialStory = null }: Props) {
+export function SignalDetailClient({ signal, related, initialPosts, postsTotal, initialStoryCounts = null, initialFigures = null, initialStory = null, initialFactChecks = null }: Props) {
   const color      = SEV_COLOR[signal.severity] ?? '#8892a4'
   const bg         = SEV_BG[signal.severity]    ?? 'rgba(136,146,164,0.12)'
   const srcUrl     = signal.originalUrls?.[0] ?? null
@@ -474,6 +477,14 @@ export function SignalDetailClient({ signal, related, initialPosts, postsTotal, 
               outletInfo={signal.outletInfo ?? null}
               initialFigures={initialFigures}
               initialStory={initialStory}
+            />
+
+            {/* Fact-checks of claims about the story (Nov 11, 2026): fact-checkers' own words, credited and
+                linked; hidden when there are none */}
+            <StoryFactChecks
+              storyKey={storyCounts?.storyId ?? signal.id}
+              initial={initialFactChecks}
+              ask={(storyCounts?.outlets ?? 0) >= 2}
             />
 
             {/* AI Summary — WorldPulse differentiator vs Ground News Ground Summary */}

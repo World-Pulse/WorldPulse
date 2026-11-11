@@ -91,6 +91,7 @@ import { startUsdaPsdPoller } from './usda-psd'
 import { startWorldBankPricesPoller } from './worldbank-prices'
 import { startBaciTradePoller } from './baci-trade'
 import { startLloydsListPoller } from './lloyds-list'
+import { startFactChecksPoller } from './fact-checks'
 import { startWorldBankWdiPoller } from './worldbank-wdi'
 import { startCommodityWatch } from '../commodity/watch'
 import { startNewsRssPoller, NEWS_SOURCE_REGISTRY } from './news-rss'
@@ -322,6 +323,14 @@ export function startOsintPollers(
     cleanups.push(startLloydsListPoller(redis))
   } catch (err) {
     logger.error({ err }, "Failed to start Lloyd's List headlines poller")
+  }
+
+  // Fact-checks beside verified stories (Nov 11, 2026): fact-checkers' own feeds, shown credited with
+  // links beside the stories they are about; kept in Redis, never signals, never counted as outlets
+  try {
+    cleanups.push(startFactChecksPoller(redis))
+  } catch (err) {
+    logger.error({ err }, 'Failed to start fact-checks poller')
   }
 
   // Country economics (Oct 23, 2026): the World Bank's World Development Indicators (CC BY 4.0), daily

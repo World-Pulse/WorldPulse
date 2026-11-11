@@ -27,6 +27,8 @@ import { rateLimitKey } from '../lib/rate-limit-options'
 import { inCountedWindow, STORY_COUNT_HOURS } from '../lib/story-window'
 import { storyFigures, type FigureReport } from '../lib/story-figures'
 import { siteInfo, outletReach, outletLanguages } from '../lib/outlets'
+import { CHECKER_SITES, loadFactChecks, matchFactChecks, parseVectorText, type FactCheckMatch } from '../lib/fact-checks'
+import { FINGERPRINT_MODEL } from '../lib/fingerprint'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MAX_SIGNALS = 50
@@ -759,6 +761,71 @@ export const registerStoryRoutes: FastifyPluginAsync = async (app) => {
     })
     if (!data.reports) return sendError(reply, 404, 'NOT_FOUND', 'Story not found')
     return reply.send({ success: true, data })
+  })
+
+  /**
+   * GET /api/v1/stories/:id/fact-checks (Nov 11, 2026; lib/fact-checks.ts): fact-checkers' checks of claims
+   * about the story, closest first, at most 3: each checker's own headline, the claim it checked and its
+   * rating where it gives one, linked to the check. Found by meaning (the average of the fingerprints of the
+   * story's latest 150 reports) and by headline words; kept 10 minutes.
+   */
+  app.get('/:id/fact-checks', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+    if (!UUID_RE.test(id)) return sendError(reply, 400, 'VALIDATION_ERROR', 'id: must be a story or signal id')
+
+    const hasStories = await signalsHaveStoryIds()
+    let storyId = id
+    if (hasStories) {
+      const row = await db('signals').where('id', id).first('story_id') as { story_id?: string | null } | undefined
+      if (row?.story_id) storyId = String(row.story_id)
+    }
+    const scope = hasStories ? '(story_id = ? OR id = ?)' : 'id = ?'
+    const scopeParams = hasStories ? [storyId, storyId] : [storyId]
+    const checkers = Object.values(CHECKER_SITES)
+
+    const loaded = await loadFactChecks()
+    if (!loaded) return reply.send({ success: true, data: { storyId, available: false, checks: [], checkers } })
+
+    const data = await staleWhileRevalidate(`stories:factchecks:v1:${storyId}`, { freshSeconds: 600, staleSeconds: 3600, lockSeconds: 30 }, async () => {
+      const sScope = scope.replace(/story_id|\bid\b/g, c => `s.${c}`)
+      const result = await db.raw(
+        `WITH m AS (
+           SELECT id, title, created_at
+             FROM signals
+            WHERE status IN ('verified', 'pending') AND ${scope}
+            ORDER BY created_at DESC
+            LIMIT 150
+         )
+         SELECT (SELECT array_agg(m.title) FROM m)                                       AS titles,
+                (SELECT max(m.created_at) FROM m)                                        AS latest_at,
+                (SELECT min(s.created_at) FROM signals s
+                  WHERE s.status IN ('verified', 'pending') AND ${sScope})               AS first_at`,
+        [...scopeParams, ...scopeParams],
+      ) as { rows: Array<{ titles: unknown; latest_at: unknown; first_at: unknown }> }
+      const row = result.rows[0]
+      const titles = textArray(row?.titles).filter(Boolean)
+      if (!row || titles.length === 0) return { storyId, reports: 0, checks: [] as FactCheckMatch[] }
+      // the story's fingerprint: the average of its latest reports' (none yet: no checks)
+      let centroid: Float32Array | null = null
+      try {
+        const avg = await db.raw(
+          `SELECT avg(f.vec)::text AS centroid
+             FROM signal_fingerprints f
+             JOIN (SELECT id FROM signals WHERE status IN ('verified', 'pending') AND ${scope} ORDER BY created_at DESC LIMIT 150) m
+               ON m.id = f.signal_id
+            WHERE f.model = ?`,
+          [...scopeParams, FINGERPRINT_MODEL],
+        ) as { rows: Array<{ centroid: unknown }> }
+        centroid = parseVectorText(avg.rows[0]?.centroid)
+      } catch {
+        centroid = null
+      }
+      const at = (v: unknown): number => (v ? new Date(v as string).getTime() : Number.NaN)
+      const checks = matchFactChecks({ centroid, titles, firstAt: at(row.first_at), latestAt: at(row.latest_at) }, loaded.items)
+      return { storyId, reports: titles.length, checks }
+    })
+    if (!data.reports) return sendError(reply, 404, 'NOT_FOUND', 'Story not found')
+    return reply.send({ success: true, data: { storyId, available: true, checks: data.checks, checkers, readAt: loaded.updatedAt } })
   })
 
   app.get('/:id', { preHandler: [optionalAuth], config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {

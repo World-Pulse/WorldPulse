@@ -17,6 +17,7 @@ import type { SecondReadInfo } from '@/lib/second-read'
 import type { OutletInfo } from '@/lib/outlet-kinds'
 import type { StoryFiguresData } from './StoryFigures'
 import type { StoryDetail } from './StoryMembers'
+import type { StoryFactChecksData } from './StoryFactChecks'
 
 const API_BASE = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -108,14 +109,16 @@ async function fetchStoryPart<T>(path: string): Promise<T | null> {
  * assistants that read the page without running it saw neither, nor the story's other outlets. Asked for a story
  * two or more outlets carry (one report has neither); kept a minute, shared by the page and its description.
  */
-async function fetchStoryParts(id: string, counts: StoryOutletCounts | null): Promise<{ figures: StoryFiguresData | null; story: StoryDetail | null }> {
-  if (!counts || counts.outlets < 2) return { figures: null, story: null }
+async function fetchStoryParts(id: string, counts: StoryOutletCounts | null): Promise<{ figures: StoryFiguresData | null; story: StoryDetail | null; factChecks: StoryFactChecksData | null }> {
+  if (!counts || counts.outlets < 2) return { figures: null, story: null, factChecks: null }
   const key = encodeURIComponent(id)
-  const [figures, story] = await Promise.all([
+  const [figures, story, factChecks] = await Promise.all([
     fetchStoryPart<StoryFiguresData>(`/api/v1/stories/${key}/figures`),
     fetchStoryPart<StoryDetail>(`/api/v1/stories/${key}`),
+    // fact-checkers' checks of claims about it (Nov 11, 2026)
+    fetchStoryPart<StoryFactChecksData>(`/api/v1/stories/${key}/fact-checks`),
   ])
-  return { figures, story }
+  return { figures, story, factChecks }
 }
 
 /** What the fact line adds from those parts: the story's own country's newsrooms and its most-reported figure */
@@ -258,6 +261,7 @@ export default async function SignalDetailPage(
         initialStoryCounts={storyCounts}
         initialFigures={parts.figures}
         initialStory={parts.story}
+        initialFactChecks={parts.factChecks}
       />
       {(country || entities.length > 0 || week) && (
         <nav aria-label="About this story" className="mx-auto max-w-5xl px-4 pb-8 text-[12px] text-wp-text3 flex flex-wrap items-center gap-x-3 gap-y-1">
