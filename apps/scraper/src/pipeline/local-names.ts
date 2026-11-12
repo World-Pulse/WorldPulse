@@ -620,6 +620,9 @@ const FRENCH: Rule[] = towns([
   ['Bhoutan', 'Bhutan'], ['(?<=(?:[Aa]u|[Dd]u|[Ll]e)\\s)Salvador', 'El Salvador'], ['Floride', 'Florida'], ['Californie', 'California'],
   ['Louisiane', 'Louisiana'], ['Pennsylvanie', 'Pennsylvania'], ['Caroline\\s+du\\s+Nord', 'North Carolina'],
   ['Caroline\\s+du\\s+Sud', 'South Carolina'], ['Nouveau-Mexique', 'New Mexico'],
+  // Haiti's central bank, whose daily rate Haitian outlets post as "Taux de référence de la BRH pour le 12 novembre" with no
+  // place word (Nov 12, 2026: one such post sat in the United States, its sibling that said "Haïti" in Haiti)
+  ['BRH', 'Haiti'],
 ])
 
 export const LOCAL_NAMES: Record<string, Rule[]> = {
