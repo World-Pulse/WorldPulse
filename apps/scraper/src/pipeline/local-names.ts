@@ -282,6 +282,11 @@ const MONTENEGRIN: Rule[] = [
   r('rusk(?:i|a|o|e|og|oga|om|omu|oj|u|ih|im|ima)', 'Russian'), r('ukrajinsk(?:i|a|o|e|og|oga|om|omu|oj|u|ih|im|ima)', 'Ukrainian'),
   r('ameri[čc]k(?:i|a|o|e|og|oga|om|omu|oj|u|ih|im|ima)', 'United States'), r('kinesk(?:i|a|o|e|og|oga|om|omu|oj|u|ih|im|ima)', 'Chinese'),
   r('izraelsk(?:i|a|o|e|og|oga|om|omu|oj|u|ih|im|ima)', 'Israeli'),
+  // Bosnian and Serbian towns in the cases a sentence puts them in ("u Zenici", "u Tuzli"), which no gazetteer lists
+  r('zenic(?:a|e|i|u|om)', 'Zenica'), r('tuzl(?:a|e|i|u|om)', 'Tuzla'), r('mostar(?:a|u|om)?', 'Mostar'),
+  r('banj(?:a|e|oj|u)\\s+luk(?:a|e|i|u|om)|banj(?:a|e|oj|u)\\s+luc(?:i)|banjaluk(?:a|e|i|u|om)', 'Banja Luka'),
+  r('biha[ćc](?:a|u|em)?', 'Bihac'), r('bijeljin(?:a|e|i|u|om)', 'Bijeljina'), r('travnik(?:a|u|om)?', 'Travnik'),
+  r('novog\\s+sada|novom\\s+sadu', 'Novi Sad'), r('kragujevc(?:a|u|em)|kragujevac', 'Kragujevac'),
   r('mali', '…'),
 ]
 
