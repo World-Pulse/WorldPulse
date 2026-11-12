@@ -31,6 +31,7 @@ import { BAD_CURSOR, isUuid } from '../lib/cursor'
 import { visitorHash, alreadyFlagged, flagSummary } from '../lib/signal-flags'
 import { siteInfo, sitesOfLinks } from '../lib/outlets'
 import { gdeltSlot, gdeltDone } from '../lib/gdelt-slot'
+import { COUNTED_CODES } from '../lib/counted-places'
 
 const SIGNAL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -785,7 +786,8 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
         .where('created_at', '>', trx.raw("NOW() - INTERVAL '24 hours'"))
         .first(
           trx.raw("count(*) FILTER (WHERE status = 'verified')::int AS verified"),
-          trx.raw('count(DISTINCT country_code)::int AS countries'),
+          // (only the 202 places the site says it covers: Nov 12, 2026, the morning video said 211 countries)
+          trx.raw('count(DISTINCT upper(country_code)) FILTER (WHERE upper(country_code) = ANY(?::text[]))::int AS countries', [COUNTED_CODES]),
           trx.raw("count(DISTINCT lower(regexp_replace(substring(original_urls[1] from ?), ?, '')))::int AS outlets", ['^https?://([^/:?#]+)', '^www\\.']),
         ) as { verified?: number; countries?: number; outlets?: number } | undefined
 

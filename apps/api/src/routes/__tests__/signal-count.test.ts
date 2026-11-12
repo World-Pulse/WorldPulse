@@ -57,6 +57,7 @@ vi.mock('../../db/postgres', () => {
 })
 
 import { registerSignalRoutes } from '../signals'
+import { COUNTED_CODES } from '../../lib/counted-places'
 
 describe('GET /api/v1/signals/count', () => {
   beforeEach(() => { h.calls.length = 0; h.kept = {} })
@@ -75,7 +76,10 @@ describe('GET /api/v1/signals/count', () => {
     // One query for the day's figures; the outlet is the website of each signal's article
     const first = h.calls.find(c => c.method === 'first')
     const raws = (first?.args ?? []) as Array<{ sql: string; bindings?: unknown[] }>
-    expect(raws.map(r => r.sql).join(' ')).toMatch(/FILTER \(WHERE status = 'verified'\).*count\(DISTINCT country_code\).*original_urls\[1\]/)
+    expect(raws.map(r => r.sql).join(' ')).toMatch(/FILTER \(WHERE status = 'verified'\).*count\(DISTINCT upper\(country_code\)\) FILTER \(WHERE upper\(country_code\) = ANY\(\?::text\[\]\)\).*original_urls\[1\]/)
+    // only the 202 places the coverage map counts, so the day's countries never pass what the site says it covers (Nov 12, 2026)
+    expect(raws[1]?.bindings).toEqual([COUNTED_CODES])
+    expect(COUNTED_CODES).toHaveLength(202)
     // the address pattern goes to Postgres as a value (a "?" in knex's SQL is a placeholder)
     expect(raws[2]?.bindings).toEqual(['^https?://([^/:?#]+)', '^www\\.'])
   })
