@@ -4012,5 +4012,8 @@ const COMMON_WORDS = new Set([
   // pinned two unrelated stories, "Spring" Texas a Latin America column, "Sabha"
   // Libya an Indian parliament story (Lok Sabha, Rajya Sabha)
   'council', 'spring', 'summer', 'winter', 'autumn', 'sabha',
+  // "The Centre" is India's national government ("Centre extends ban on ..."), not the French region
+  // Centre-Val de Loire the geocoder offers (Nov 13, 2026, a Daily Pioneer story pinned in France)
+  'centre', 'center',
 ])
 

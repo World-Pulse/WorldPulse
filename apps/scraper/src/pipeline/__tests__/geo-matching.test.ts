@@ -696,3 +696,12 @@ describe('metro communes and towns of South America get their own pins (M79)', (
     expect(findGazetteerPlace('Lautaro Martínez marcó dos goles')).toBeNull()
   })
 })
+
+describe('US air bases in England', () => {
+  it('reads Lakenheath and Mildenhall as the Suffolk villages, not Suffolk in Virginia', () => {
+    const p = findGazetteerPlace('RAF Lakenheath Sounds Alarm After Suspected Unauthorized Drone Activity')
+    expect(p?.coords.country).toBe('GB')
+    expect(p?.coords.name).toBe('Lakenheath')
+    expect(findGazetteerPlace('Drones seen over RAF Mildenhall')?.coords.country).toBe('GB')
+  })
+})
