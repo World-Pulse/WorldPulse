@@ -9,8 +9,8 @@ import { NewPostsBar } from '@/components/feed/NewPostsBar'
 import { DevelopingStories } from '@/components/feed/DevelopingStories'
 import { FollowedStories } from '@/components/home/FollowedStories'
 import { InTheNews } from '@/components/feed/InTheNews'
-import { OnboardingModal } from '@/components/OnboardingModal'
 import type { HomeBrief } from '@/lib/home-brief'
+import type { DevelopingStory } from '@/lib/developing-stories'
 
 type FeedTab    = 'global' | 'following' | 'verified' | 'digest' | 'for_you'
 type FilterCat  = 'all' | 'breaking' | 'conflict' | 'climate' | 'economy' | 'technology' | 'health'
@@ -33,7 +33,7 @@ const FILTERS: { id: FilterCat; label: string }[] = [
   { id: 'health',     label: 'Health'   },
 ]
 
-export function HomeFeed({ brief = null }: { brief?: HomeBrief | null } = {}) {
+export function HomeFeed({ brief = null, developing = [], developingAt }: { brief?: HomeBrief | null; developing?: DevelopingStory[]; developingAt?: number } = {}) {
   const [activeTab,    setActiveTab]    = useState<FeedTab>('global')
   const [activeFilter, setActiveFilter] = useState<FilterCat>('all')
   const [newCount,     setNewCount]     = useState(0)
@@ -45,7 +45,7 @@ export function HomeFeed({ brief = null }: { brief?: HomeBrief | null } = {}) {
 
   return (
     <>
-    <OnboardingModal />
+    {/* (the first-scroll pop-up is gone, Nov 12, 2026: the home page's welcome band says it once, without covering the news) */}
     <div className="min-h-[calc(100vh-52px)] md:grid md:grid-cols-[240px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)_300px]">
 
       {/* LEFT SIDEBAR — tablet+ */}
@@ -118,7 +118,7 @@ export function HomeFeed({ brief = null }: { brief?: HomeBrief | null } = {}) {
 
         {/* Developing Stories — escalating/developing event threads; "Overnight" in the reader's morning,
             with what changed and what to watch from the Daily Briefing (plan N6) */}
-        <DevelopingStories brief={brief} />
+        <DevelopingStories brief={brief} initial={developing} initialNow={developingAt} />
 
         {/* In the news: the people, places and organisations named most, each with its page */}
         <InTheNews />

@@ -93,7 +93,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // lang="en": its stories are in English (lib/locale.ts)
   const locale = localeFromCookie((await cookies()).get(LOCALE_COOKIE)?.value)
   return (
-    <html lang="en" dir="ltr" className="dark">
+    <html lang="en" dir="ltr" className="dark" suppressHydrationWarning>{/* (the home page marks a returning reader on this element before it is drawn: lib/welcome.ts) */}
       <Script
         src="https://www.googletagmanager.com/gtag/js?id=G-YJXNFP4046"
         strategy="afterInteractive"

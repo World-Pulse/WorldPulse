@@ -7,6 +7,9 @@ import { X_HANDLE } from '@/lib/share-links'
 import { cachedFetch } from '@/lib/server-fetch'
 import { fetchHomeTotals } from '@/lib/home-totals'
 import { fetchHomeBrief } from '@/lib/home-brief'
+import { WelcomeBand } from '@/components/home/WelcomeBand'
+import { WELCOME_SCRIPT } from '@/lib/welcome'
+import { toDevelopingStories, type DevelopingStory } from '@/lib/developing-stories'
 
 // The feed is a client component, so the home page's HTML used to carry no
 // stories, no structured data and no feed address: a crawler saw an empty
@@ -73,8 +76,19 @@ const STRUCTURED_DATA = [
   },
 ]
 
+/** The Developing Stories block's own list (the last 12 hours' five), so the block is in the page as sent */
+async function fetchDeveloping(): Promise<DevelopingStory[]> {
+  try {
+    const res = await cachedFetch(`${API_BASE}/api/v1/stories?hours=12&limit=5`, 120_000)
+    return res.ok ? toDevelopingStories(await res.json()) : []
+  } catch {
+    return []
+  }
+}
+
 export default async function HomePage() {
-  const [stories, totals, brief] = await Promise.all([fetchStories(), fetchHomeTotals(), fetchHomeBrief(API_BASE)])
+  const [stories, totals, brief, developing] = await Promise.all([fetchStories(), fetchHomeTotals(), fetchHomeBrief(API_BASE), fetchDeveloping()])
+  const developingAt = Date.now()
   const verified = stories.filter(s => s.outletCount >= 2)
   const widestStory = verified.reduce<HomeStory | null>((m, s) => (!m || s.outletCount > m.outletCount ? s : m), null)
   const widest = widestStory?.outletCount ?? 0
@@ -88,6 +102,14 @@ export default async function HomePage() {
         // Fixed data from this file; "<" escaped so nothing can close the tag
         dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED_DATA).replace(/</g, '\\u003c') }}
       />
+      {/* The page's one heading for search engines and screen readers: no visible element said what the page is (Nov 12, 2026) */}
+      <h1 className="sr-only">WorldPulse: world news with the number of newsrooms that reported each story</h1>
+      {/* A first visit only: what WorldPulse is, and what to do next. The script marks the page for a reader who
+          has been here before the band is drawn, so it never shows for them and nothing moves (lib/welcome.ts) */}
+      {/* (the rule sits beside the script, so it holds before the site's stylesheet has loaded) */}
+      <style dangerouslySetInnerHTML={{ __html: 'html[data-welcomed] .wp-welcome{display:none}' }} />
+      <script dangerouslySetInnerHTML={{ __html: WELCOME_SCRIPT }} />
+      <WelcomeBand />
       {(totals.verified24h || verified.length > 0) && (
         // The day's verified stories and sources from the status file; when
         // it doesn't answer, the stories list's own count ("20+": at least)
@@ -103,7 +125,7 @@ export default async function HomePage() {
       )}
       <UnderReportedStrip />
       {/* The first block says what changed and what to watch (plan N6), from the Daily Briefing */}
-      <HomeFeed brief={brief} />
+      <HomeFeed brief={brief} developing={developing} developingAt={developingAt} />
       {stories.length > 0 && (
         // The stories most outlets report, as plain links for search engines
         // and readers without JavaScript; kept out of the visual layout

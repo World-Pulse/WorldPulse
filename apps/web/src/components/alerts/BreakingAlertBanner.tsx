@@ -91,6 +91,21 @@ export function BreakingAlertBanner() {
     })
   }, [shown])
 
+  // The banner is fixed under the top menu, so it used to lie over the first lines of every page (the home
+  // page's "stories verified" line sat hidden beneath it). A spacer of its own height now moves the page down
+  // while it shows (Nov 12, 2026).
+  const [bar, setBar] = useState<HTMLDivElement | null>(null)
+  const [height, setHeight] = useState(0)
+  useEffect(() => {
+    if (!bar) { setHeight(0); return }
+    const measure = () => setHeight(bar.offsetHeight)
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const watch = new ResizeObserver(measure)
+    watch.observe(bar)
+    return () => watch.disconnect()
+  }, [bar])
+
   if (bannerHiddenOn(pathname) || shown.length === 0) return null
   const alert = shown[index % shown.length]
   if (!alert) return null
@@ -98,7 +113,10 @@ export function BreakingAlertBanner() {
   const proof = proofText(alert.story)
 
   return (
+    <>
+    <div aria-hidden="true" style={{ height }} />
     <div
+      ref={setBar}
       className={`fixed top-[52px] left-0 right-0 z-[999] ${styles.bg} ${styles.border} backdrop-blur-sm shadow-lg`}
       role="region"
       aria-label="Breaking news"
@@ -150,5 +168,6 @@ export function BreakingAlertBanner() {
         </button>
       </div>
     </div>
+    </>
   )
 }

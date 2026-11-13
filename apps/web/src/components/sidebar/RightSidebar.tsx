@@ -212,7 +212,7 @@ export function RightSidebar() {
             </div>
           ))}
         </div>
-        <p className="mt-2 font-mono text-[9px] text-wp-text3">Countries and outlets: last 24 hours</p>
+        <p className="mt-2 font-mono text-[9px] text-wp-text3">Countries covered · outlets in the last 24 hours</p>
       </Widget>
 
       {/* ─── SOURCE INTEGRITY ─────────────────────────────── */}

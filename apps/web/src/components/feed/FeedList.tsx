@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, Fragment } from 'react'
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import Link from 'next/link'
 import type { Post, PollData } from '@worldpulse/types'
 import { PollDisplay } from './PollDisplay'
@@ -26,6 +26,7 @@ import { Users, Cpu, Radio, Newspaper } from 'lucide-react'
 import { displaySummary, isStateMedia, STATE_MEDIA_NOTE, outletSite } from '@/lib/signal-text'
 import { freshDigest, lastDigestUpdate, updatedAgo } from './digest'
 import { BriefingSignup } from '@/components/briefing/BriefingSignup'
+import { isDigestOnlyPiece, isPulsePiece, plainPulse, PULSE_MACHINE_TAGS } from './pulse-text'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
@@ -362,6 +363,28 @@ const SOURCE_LABELS: Record<string, string> = {
   who: 'WHO', usgs: 'USGS', wp: 'WorldPulse',
 }
 
+/** An AI Bureau piece in the feed: its first two sentences, the whole of it on "Read more" (lib: ./pulse-text) */
+function PulseBody({ raw }: { raw: string }) {
+  const [open, setOpen] = useState(false)
+  const piece = useMemo(() => plainPulse(raw), [raw])
+  if (!piece.full) return null
+  return (
+    <div className="mb-[10px]">
+      <div className="text-[14px] text-wp-text leading-[1.6] whitespace-pre-line">{open ? piece.full : piece.preview}</div>
+      {piece.more && (
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          aria-expanded={open}
+          className="mt-1 text-[13px] text-wp-cyan hover:underline"
+        >
+          {open ? 'Show less' : 'Read more'}
+        </button>
+      )}
+    </div>
+  )
+}
+
 function formatCount(n: number): string {
   return n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M`
     : n >= 1000 ? `${(n / 1000).toFixed(1)}K`
@@ -443,27 +466,28 @@ function ActionBar({ item }: { item: FeedItem }) {
     <div className="flex items-center gap-0 mt-2" role="group" aria-label="Post actions">
       <button
         className="flex items-center gap-[5px] px-2 sm:px-3 py-[6px] rounded-full text-[12px] text-wp-text3 hover:text-wp-amber hover:bg-[rgba(245,166,35,0.1)] transition-all"
-        aria-label={`Reply — ${formatCount(item.replies)} replies`}
+        aria-label={item.replies > 0 ? `Reply — ${formatCount(item.replies)} replies` : 'Reply'}
       >
-        <span aria-hidden="true">💬</span> {formatCount(item.replies)}
+        {/* (a count shows once there is something to count: sixty zeros on the home page read as an empty room; Devon, Nov 12, 2026) */}
+        <span aria-hidden="true">💬</span>{item.replies > 0 && <> {formatCount(item.replies)}</>}
       </button>
       <button
         onClick={toggleBoost}
-        aria-label={`Boost — ${formatCount(boosts)} boosts`}
+        aria-label={boosts > 0 ? `Boost — ${formatCount(boosts)} boosts` : 'Boost'}
         aria-pressed={boosted}
         className={`flex items-center gap-[5px] px-2 sm:px-3 py-[6px] rounded-full text-[12px] transition-all
           ${boosted ? 'text-wp-green' : 'text-wp-text3 hover:text-wp-green hover:bg-[rgba(0,230,118,0.1)]'}`}
       >
-        <span aria-hidden="true">🔁</span> {formatCount(boosts)}
+        <span aria-hidden="true">🔁</span>{boosts > 0 && <> {formatCount(boosts)}</>}
       </button>
       <button
         onClick={toggleLike}
-        aria-label={liked ? `Unlike — ${formatCount(likes)} likes` : `Like — ${formatCount(likes)} likes`}
+        aria-label={likes > 0 ? (liked ? `Unlike — ${formatCount(likes)} likes` : `Like — ${formatCount(likes)} likes`) : (liked ? 'Unlike' : 'Like')}
         aria-pressed={liked}
         className={`flex items-center gap-[5px] px-2 sm:px-3 py-[6px] rounded-full text-[12px] transition-all
           ${liked ? 'text-wp-red' : 'text-wp-text3 hover:text-wp-red hover:bg-[rgba(255,59,92,0.1)]'}`}
       >
-        <span aria-hidden="true">❤️</span> {formatCount(likes)}
+        <span aria-hidden="true">❤️</span>{likes > 0 && <> {formatCount(likes)}</>}
       </button>
       <button
         onClick={toggleBookmark}
@@ -688,6 +712,11 @@ export function FeedList({ tab, category, signupAfter }: { tab: string; category
         return adaptPost(item as Post)
       })
 
+      // Analyses and fact-checks are read on the AI Digest tab; the other tabs keep to the day's stories
+      if (tab !== 'digest' && tab !== 'following') {
+        mapped = mapped.filter(item => !isDigestOnlyPiece(item.author.handle, item.content, item.tags))
+      }
+
       let more: boolean = data.hasMore ?? false
       // The AI Digest without months-old briefings, and no paging on into them (P5)
       if (tab === 'digest') {
@@ -797,6 +826,10 @@ export function FeedList({ tab, category, signupAfter }: { tab: string; category
               {item.type === 'ai_digest' && (
                 <span className="source-badge badge-ai">AI SYNTHESIS</span>
               )}
+              {/* The AI Bureau's pieces in the main feed say so once, here (their byline line is no longer in the text) */}
+              {item.type !== 'ai_digest' && isPulsePiece(item.author.handle, item.type, item.content) && (
+                <span className="source-badge badge-ai" title="Written by WorldPulse's AI from the reports it cites">AI SUMMARY</span>
+              )}
               {item.breaking && (
                 <span className="source-badge bg-wp-red text-white animate-flash-tag">⚡ BREAKING</span>
               )}
@@ -902,6 +935,8 @@ export function FeedList({ tab, category, signupAfter }: { tab: string; category
 
             {/* Post content — skip if it duplicates the signal title/summary */}
             {item.content && (() => {
+              // The AI Bureau's pieces: two plain sentences, the rest behind "Read more" (Devon, Nov 12, 2026)
+              if (isPulsePiece(item.author.handle, item.type, item.content)) return <PulseBody raw={item.content} />
               const text = item.content.replace(/\*\*(.*?)\*\*/g, '$1').trim()
               // If there's an event card, suppress content that repeats the title or summary
               if (item.event?.title) {
@@ -946,9 +981,11 @@ export function FeedList({ tab, category, signupAfter }: { tab: string; category
             )}
 
             {/* Tags */}
-            {item.tags && item.tags.length > 0 && (
-              <TagPills tags={item.tags} types={item.tagTypes} />
-            )}
+            {(() => {
+              // (an AI Bureau piece's own filing labels, "pulse" and "flash-brief", say nothing to a reader)
+              const tags = isPulsePiece(item.author.handle, item.type, item.content) ? (item.tags ?? []).filter(t => !PULSE_MACHINE_TAGS.has(String(t).toLowerCase())) : (item.tags ?? [])
+              return tags.length > 0 ? <TagPills tags={tags} types={item.tagTypes} /> : null
+            })()}
 
             {/* Actions */}
             <ActionBar item={item} />

@@ -33,9 +33,12 @@ const MORNING_UNTIL = 12
  * reader's morning, and leads with what changed and ends with what to watch,
  * one line each from the Daily Briefing, read by the page's server (brief).
  */
-export function DevelopingStories({ brief = null }: { brief?: HomeBrief | null } = {}) {
-  const [stories, setStories] = useState<DevelopingStory[]>([])
-  const [now, setNow] = useState(() => Date.now())
+export function DevelopingStories({ brief = null, initial = [], initialNow }: { brief?: HomeBrief | null; initial?: DevelopingStory[]; initialNow?: number } = {}) {
+  // The block is in the page as the server sends it (initial, with the server's clock so both draw the same
+  // "2h ago"): it used to arrive a second and a half after the page and push everything under it down, a
+  // layout shift of 0.48 on a phone (search engines count over 0.25 as poor; SEO check, Nov 12, 2026).
+  const [stories, setStories] = useState<DevelopingStory[]>(initial)
+  const [now, setNow] = useState(() => initialNow ?? Date.now())
   // The reader's own hour, known only in the browser (the server's would be wrong)
   const [hour, setHour] = useState<number | null>(null)
   useEffect(() => { setHour(new Date().getHours()) }, [])
