@@ -594,7 +594,7 @@ async function build(): Promise<FastifyInstance> {
   })
   app.get('/api/v1/signals/count', async (req) => {
     asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
-    return { success: true, data: { total: 686672, last24h: 18660, lastHour: 560, verified24h: 3600, countries24h: 215, outlets24h: 1862, bySeverity: { critical: 1 } } }
+    return { success: true, data: { total: 686672, last24h: 18660, lastHour: 560, verified24h: 3600, countries24h: 199, outlets24h: 1862, bySeverity: { critical: 1 } } }
   })
   app.get('/api/v1/signals/:id/similar', async (req) => {
     asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
@@ -1758,7 +1758,8 @@ describe('MCP server: the ten tools of Nov 10, 2026, night (fifty in all)', () =
     const app = await build()
     const r = await call(app, 'news_volume', {})
     expect(asked.map(a => a.url)).toEqual(['/api/v1/signals/count'])
-    expect(r.content[0].text).toContain('WorldPulse read 560 reports in the last hour and 18,660 in the last 24 hours, from 1,862 outlets in 215 countries and territories.')
+    // (Nov 12, 2026: every country covered is said, with the day's count beside it; Devon: "Always list total amount of countries covered not just for that day")
+    expect(r.content[0].text).toContain('WorldPulse read 560 reports in the last hour and 18,660 in the last 24 hours, from 1,862 outlets. It covers 202 countries and territories (199 had news in the last 24 hours).')
     expect(r.content[0].text).toContain('3,600 turned verified in the last 24 hours')
     expect(r.structuredContent).toMatchObject({ lastHour: 560, total: 686672 })
   })
@@ -2196,7 +2197,7 @@ describe('MCP server: round 5 of Nov 10, 2026, night (ninety in all)', () => {
     const r = await call(app, 'world_today', {})
     expect(asked.map(a => a.url).sort()).toEqual(['/api/v1/public/serious-places?hours=24', '/api/v1/public/topics?hours=24', '/api/v1/signals/count', '/api/v1/stories?hours=24&limit=5'])
     const text = r.content[0].text as string
-    expect(text).toContain('The world in the last 24 hours (WorldPulse): 18,660 reports read from 1,862 outlets in 215 countries and territories; 3,600 turned verified.')
+    expect(text).toContain('The world in the last 24 hours (WorldPulse): 18,660 reports read from 1,862 outlets; 3,600 turned verified. It covers 202 countries and territories (199 had news in that time).')
     expect(text).toContain('The biggest stories:\n1. Ceasefire talks resume in Doha')
     expect(text).toContain('The most serious news (critical and high severity): Ukraine 120 (20 critical), Sudan 40 (5 critical)')
     expect(text).toContain('The news by topic: Politics 60%, Conflict 30%, Sports 10%')

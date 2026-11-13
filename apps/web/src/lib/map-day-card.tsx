@@ -5,13 +5,15 @@
  * reply linked to /map, whose picture is the live map card: other numbers than the video's, and X kept
  * showing a copy it had saved days before (2,623 verified stories under a video recorded with 3,470).
  * Each day's link now has a picture of its own, drawn from the card the recorder saves beside the video
- * (world-in-60s-<date>.json: the numbers that were on screen), so the two always agree, and a new
- * address each day means no saved copy from another day.
+ * (world-in-60s-<date>.json: the reports and outlets that were on screen), so the two always agree, and
+ * a new address each day means no saved copy from another day. Countries are the 202 covered, as in the
+ * video since Nov 13, 2026.
  *
  * What it says is kept apart from the drawing so it can be tested. Drawn by next/og (flexbox only).
  */
 
 import { COLOR, Pill, Rings } from './story-card'
+import { COUNTRIES_COVERED } from './coverage-count'
 
 export interface DayCard {
   date: string
@@ -63,7 +65,7 @@ export function dayTitle(date: string): string {
 /** One line for the link's description, in the video's numbers */
 export function dayDescription(card: DayCard | null): string {
   return card
-    ? `24 hours of world news on one map: ${num(card.reports)} reports from ${num(card.outlets)} outlets in ${num(card.countries)} countries.`
+    ? `24 hours of world news on one map: ${num(card.reports)} reports from ${num(card.outlets)} outlets. ${num(COUNTRIES_COVERED)} countries covered.`
     : '24 hours of world news on one map: every report, and the stories newsrooms confirmed.'
 }
 
@@ -73,7 +75,9 @@ export function dayCardText(card: DayCard): DayCardText {
     stats: [
       { value: num(card.reports), label: 'REPORTS' },
       { value: num(card.outlets), label: 'OUTLETS' },
-      { value: num(card.countries), label: 'COUNTRIES' },
+      // every country covered, not the day's count, whatever that day's video said (Devon, Nov 12, 2026:
+      // "Always list total amount of countries covered not just for that day")
+      { value: num(COUNTRIES_COVERED), label: 'COUNTRIES COVERED' },
     ],
   }
 }
@@ -96,7 +100,7 @@ export function MapDayCard({ text }: { text: DayCardText }) {
         </div>
         <div style={{ display: 'flex', fontSize: 64, fontWeight: 700, letterSpacing: -1, marginTop: 40 }}>The world in 30 seconds</div>
         <div style={{ display: 'flex', fontSize: 30, color: COLOR.text2, marginTop: 10 }}>24 hours of world news on one map</div>
-        <div style={{ display: 'flex', gap: 64, marginTop: 44 }}>
+        <div style={{ display: 'flex', gap: 56, marginTop: 44 }}>
           {text.stats.map(s => (
             <div key={s.label} style={{ display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', fontSize: 96, fontWeight: 700, color: COLOR.amber, letterSpacing: -2 }}>{s.value}</div>

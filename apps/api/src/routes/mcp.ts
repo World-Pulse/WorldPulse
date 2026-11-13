@@ -29,6 +29,7 @@ import { CHOKEPOINTS } from '../lib/chokepoints'
 import { SQUAWK, notBreakingNews } from '../lib/breaking-news'
 import { KNOWN_AI_CONTENT_FARMS } from '../lib/ai-content-farms'
 import { REGIONS, REGION_IDS, regionCountries, type RegionId } from '../lib/regions'
+import { COUNTED_CODES } from '../lib/counted-places'
 
 const SITE = (process.env.SITE_URL || 'https://world-pulse.io').replace(/\/+$/, '')
 /** The API's own public address, as lib/subscribers.ts gives it (the server is at /mcp) */
@@ -2737,7 +2738,7 @@ export const TOOLS: Tool[] = [
       const d = (body.data ?? body) as { total?: number; last24h?: number; lastHour?: number; verified24h?: number; countries24h?: number; outlets24h?: number }
       const n = (v: unknown) => Number(v ?? 0).toLocaleString('en-US')
       const text = [
-        `WorldPulse read ${n(d.lastHour)} reports in the last hour and ${n(d.last24h)} in the last 24 hours, from ${n(d.outlets24h)} outlets in ${n(d.countries24h)} countries and territories.`,
+        `WorldPulse read ${n(d.lastHour)} reports in the last hour and ${n(d.last24h)} in the last 24 hours, from ${n(d.outlets24h)} outlets. It covers ${COUNTED_CODES.length} countries and territories (${n(d.countries24h)} had news in the last 24 hours).`,
         `${n(d.verified24h)} turned verified in the last 24 hours: a second, separate outlet reported the same event.`,
         `${n(d.total)} reports since it began. Live: ${SITE}`,
       ].join('\n')
@@ -4067,7 +4068,7 @@ export const TOOLS: Tool[] = [
       const total = rows.reduce((s, t) => s + Number(t.reports), 0)
       const text = [
         c
-          ? `The world in the last 24 hours (WorldPulse): ${num(c.last24h)} reports read from ${num(c.outlets24h)} outlets in ${num(c.countries24h)} countries and territories; ${num(c.verified24h)} turned verified.`
+          ? `The world in the last 24 hours (WorldPulse): ${num(c.last24h)} reports read from ${num(c.outlets24h)} outlets; ${num(c.verified24h)} turned verified. It covers ${COUNTED_CODES.length} countries and territories (${num(c.countries24h)} had news in that time).`
           : 'The world in the last 24 hours (WorldPulse):',
         '',
         stories.length ? `The biggest stories:\n${stories.map(storyLine).join('\n')}` : 'No story reached two outlets in the last 24 hours.',

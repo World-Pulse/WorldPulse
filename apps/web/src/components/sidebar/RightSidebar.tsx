@@ -9,6 +9,7 @@ import { SignalCounter } from '@/components/SignalCounter'
 
 import { MarketPulse } from '@/components/MarketPulse'
 import { SEVERITY_COLOR } from '@/lib/map-style'
+import { COUNTRIES_COVERED } from '@/lib/coverage-count'
 
 const SpinningGlobe = lazy(() => import('./SpinningGlobe').then(m => ({ default: m.SpinningGlobe })))
 
@@ -200,7 +201,7 @@ export function RightSidebar() {
           {[
             { value: counts ? formatPulseCount(counts.total) : null,        label: 'Signals',   color: 'text-wp-cyan',  title: 'Signals on WorldPulse, all time' },
             { value: counts ? formatPulseCount(counts.last24h) : null,      label: 'Last 24h',  color: 'text-wp-green', title: 'New signals in the last 24 hours' },
-            { value: counts?.countries24h != null ? String(counts.countries24h) : null,          label: 'Countries', color: 'text-wp-red',   title: 'Countries the last 24 hours\' signals are in' },
+            { value: String(COUNTRIES_COVERED),                                                 label: 'Countries', color: 'text-wp-red',   title: 'Countries and territories WorldPulse covers' },
             { value: counts?.outlets24h != null ? formatPulseCount(counts.outlets24h) : null,   label: 'Outlets',   color: 'text-wp-amber', title: 'News websites that reported them, last 24 hours' },
           ].map(stat => (
             <div key={stat.label} className="bg-wp-s2 rounded-lg p-[10px] text-center" title={stat.title}>

@@ -127,10 +127,11 @@ export function PlayOverlay({ phase, caption, timeLabel, dateLabel, progress, wi
         )}
         {day && (
           <div className="mt-7 grid grid-cols-3 gap-3 w-full max-w-[320px] wp-play-in">
-            {[[day.reports, 'reports'], [day.outlets, 'outlets'], [day.countries, 'countries']].map(([n, l]) => (
+            {/* (the third is every country covered, not the day's count: Devon, Nov 12, 2026) */}
+            {[[day.reports, 'reports'], [day.outlets, 'outlets'], [day.countries, 'countries covered']].map(([n, l]) => (
               <div key={l as string} className="rounded-lg border border-[rgba(255,255,255,0.12)] bg-[rgba(255,255,255,0.04)] py-2">
                 <div className="font-display font-bold text-[19px]">{(n as number).toLocaleString()}</div>
-                <div className="font-mono text-[9.5px] tracking-wider opacity-60 uppercase">{l as string}</div>
+                <div className="font-mono text-[9.5px] leading-[1.25] tracking-wider opacity-60 uppercase px-1">{l as string}</div>
               </div>
             ))}
           </div>

@@ -6,6 +6,7 @@
  */
 
 import { COLOR, Pill, Rings } from './story-card'
+import { COUNTRIES_COVERED } from './coverage-count'
 
 export interface MapDay {
   verified24h: number
@@ -22,14 +23,9 @@ export interface MapCardText {
 
 const num = (n: number) => n.toLocaleString('en-US')
 
-/**
- * The countries and territories WorldPulse reads the news from: all 202 on its coverage map (the
- * UN's members and observers, Kosovo, Taiwan, Hong Kong, Macau, Puerto Rico, Greenland and New
- * Caledonia) since Oct 31, 2026 (Q9). The card says this, not the day's count of countries with
- * news (Devon, Oct 31, 2:52 PM: "the graphic needs to say 202 countries not 200"); the scraper's
- * last-four-places test keeps a feed for every one of them.
- */
-export const COUNTRIES_COVERED = 202
+// The 202 countries and territories covered: the card says this, not the day's count of countries with
+// news (Devon, Oct 31, 2:52 PM: "the graphic needs to say 202 countries not 200"). lib/coverage-count.ts
+export { COUNTRIES_COVERED }
 
 /** "Ukraine" for "UA", or null for anything that isn't a country code */
 function countryName(code: string): string | null {

@@ -17,6 +17,7 @@ import { EnhancedHeatmap } from '@/components/map/EnhancedHeatmap'
 import { PlayOverlay, type PlayDayStats, type PlayTopStory } from '@/components/map/PlayOverlay'
 import { useTimelinePlayback } from '@/hooks/useTimelinePlayback'
 import { parsePlayParam, parsePlayLength, parsePlaySlow, playReplayMs, playStepMs, captionAt, playTimeLabel, playDateLabel, pickTourStop, tourCaption, storyKeyOf, milestoneCrossed, playCard, PLAY_INTRO_MS, PLAY_OUTRO_MS, PLAY_MILESTONES, TOUR_EVERY_MS, type PlayPhase, type PlayCaption } from '@/lib/map-play'
+import { COUNTRIES_COVERED } from '@/lib/coverage-count'
 import { parseWindowHash, encodePermalink, type MapPermalinkState, type LayerKey } from '@/lib/map-permalink'
 import {
   Map as MapIcon, Moon, Satellite, Globe2, LocateFixed, Layers as LayersIcon,
@@ -3662,7 +3663,8 @@ function MapView({ embed = false }: { embed?: boolean }) {
         const milestone = playMilestonePreview
           ? (PLAY_MILESTONES.find(m => m > total) ?? PLAY_MILESTONES[PLAY_MILESTONES.length - 1] ?? null)
           : milestoneCrossed(total, Number(d.last24h))
-        setPlayDay({ reports: Number(d.last24h), outlets: Number(d.outlets24h) || 0, countries: Number(d.countries24h) || 0, verified: Number(d.verified24h) || 0, milestone, preview: playMilestonePreview })
+        // (countries: the 202 covered, not the day's count; Devon, Nov 12, 2026: "Always list total amount of countries covered not just for that day")
+        setPlayDay({ reports: Number(d.last24h), outlets: Number(d.outlets24h) || 0, countries: COUNTRIES_COVERED, verified: Number(d.verified24h) || 0, milestone, preview: playMilestonePreview })
       }
     }).catch(() => {})
     // (the answer is { data: { stories: [...] } }; Oct 30, 2026: read as a bare list, the first closing card had no stories)

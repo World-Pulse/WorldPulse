@@ -39,11 +39,12 @@ describe('what the picture and the link say', () => {
     const card = readDayCard(SAVED, '2026-11-12')!
     expect(dayCardText(card)).toEqual({
       day: 'THURSDAY, NOVEMBER 12',
-      stats: [{ value: '18,344', label: 'REPORTS' }, { value: '1,826', label: 'OUTLETS' }, { value: '211', label: 'COUNTRIES' }],
+      // (202: every country covered, though that morning's video still said 211)
+      stats: [{ value: '18,344', label: 'REPORTS' }, { value: '1,826', label: 'OUTLETS' }, { value: '202', label: 'COUNTRIES COVERED' }],
     })
     expect(dayTitle('2026-11-12')).toBe('The world in 30 seconds: Thursday, Nov 12')
     expect(dayLabel('2026-11-01')).toBe('Sunday, Nov 1')
-    expect(dayDescription(card)).toBe('24 hours of world news on one map: 18,344 reports from 1,826 outlets in 211 countries.')
+    expect(dayDescription(card)).toBe('24 hours of world news on one map: 18,344 reports from 1,826 outlets. 202 countries covered.')
   })
   it('gives no numbers before the video exists', () => {
     expect(dayDescription(null)).toBe('24 hours of world news on one map: every report, and the stories newsrooms confirmed.')
