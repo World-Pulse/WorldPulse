@@ -2315,6 +2315,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'dubrovnik': { lat: 42.6507, lng: 18.0944, country: 'HR', name: 'Dubrovnik' },
   'tuzla': { lat: 44.5384, lng: 18.6671, country: 'BA', name: 'Tuzla' },
   'bihac': { lat: 44.8169, lng: 15.8708, country: 'BA', name: 'Bihac' },
+  'travnik': { lat: 44.2264, lng: 17.6667, country: 'BA', name: 'Travnik' },
   'bihać': { lat: 44.8169, lng: 15.8708, country: 'BA', name: 'Bihac' },
   'srebrenica': { lat: 44.1053, lng: 19.2976, country: 'BA', name: 'Srebrenica' },
   'tetovo': { lat: 42.0069, lng: 20.9715, country: 'MK', name: 'Tetovo' },

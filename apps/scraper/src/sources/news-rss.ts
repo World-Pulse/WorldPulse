@@ -10941,6 +10941,13 @@ const RUSSIA_NOUN = /\b(?:russia|moscow|kremlin)\b/
 const NO_PLACE_TOPIC = /\b(?:premier league|champions league|europa league|la liga|serie a|bundesliga|man(?:chester)? (?:utd|united|city)|binance|coinbase|bitcoin|ethereum|crypto(?:currency)? (?:exchange|hack)|horoscopes?|horoskop[aeiu]?|hor[oó]scopos?|oroscopo)\b/i
 
 /**
+ * A big tech service's outage reaches readers everywhere (Nov 12-13, 2026: the Microsoft Outlook outage sat at an
+ * outlet's home in Samoa, Jamaica, Uganda, Thailand and Canada, five outlets in two days): with no place in the
+ * headline it gets no pin, like league football above.
+ */
+const NO_PLACE_OUTAGE = /\b(?:global|worldwide|world-wide)\s+(?:\w+\s+){0,2}(?:outage|disruption)s?\b|\b(?:microsoft|outlook|office 365|microsoft 365|azure|aws|amazon web services|cloudflare|google cloud|gmail|youtube|whatsapp|chatgpt)\s+(?:\w+\s+){0,2}(?:outage|disrupt\w*)|\boutage\b[^.]{0,60}\b(?:worldwide|globally|around the world)\b/i
+
+/**
  * Countries whose own Congress the English-language press calls just "Congress": India's and Nepal's
  * parties, the Philippines' legislature and Latin America's congresses
  */
@@ -11118,7 +11125,7 @@ export function inferGeo(
   // dateline says otherwise (Oct 30, 2026, M57: a place found anywhere in the summary won before, so
   // Haaretz's column on Netanyahu sat in Washington, a Penang court case in Myanmar, Japan's new
   // prime minister in Beijing and a Khyber Pakhtunkhwa story in Tehran: about 1 in 8 placeless headlines)
-  if (HOME_PIN_SOURCES.has(source.id) && !NO_PLACE_TOPIC.test(`${title} ${description}`)) {
+  if (HOME_PIN_SOURCES.has(source.id) && !NO_PLACE_TOPIC.test(`${title} ${description}`) && !NO_PLACE_OUTAGE.test(title)) {
     return datelinePlace(body) ?? ownPlace(body, source) ?? sportsVenue(title, body)
       ?? { lat: source.defaultLat, lng: source.defaultLng, locationName: source.defaultLocation, countryCode: source.countryCode }
   }
