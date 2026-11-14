@@ -287,6 +287,11 @@ const MONTENEGRIN: Rule[] = [
   r('banj(?:a|e|oj|u)\\s+luk(?:a|e|i|u|om)|banj(?:a|e|oj|u)\\s+luc(?:i)|banjaluk(?:a|e|i|u|om)', 'Banja Luka'),
   r('biha[ćc](?:a|u|em)?', 'Bihac'), r('bijeljin(?:a|e|i|u|om)', 'Bijeljina'), r('travnik(?:a|u|om)?', 'Travnik'),
   r('novog\\s+sada|novom\\s+sadu', 'Novi Sad'), r('kragujevc(?:a|u|em)|kragujevac', 'Kragujevac'),
+  // Montenegro's other towns and Sofia in their cases (Nov 14: Aktuelno's "zaobilaznica oko Bara" and "konferenciji u Sofiji" sat at
+  // Podgorica); Bar, Plav and Sofija are also a word, a colour and a given name, so they are read capitalised after a place preposition
+  cs('(?<=(?:^|[^\\p{L}])(?:u|iz|oko|kod|do|za|na|sa|prema|blizu)\\s)Bar(?:a|u|om)', 'Bar, Montenegro'), cs('(?<=(?:^|[^\\p{L}])(?:u|iz|oko|kod|do|za|na|sa|prema|blizu)\\s)Sofij(?:i|e|u)', 'Sofia'),
+  r('kola[šs]in(?:a|u|om)?', 'Kolasin'), r('[žz]abljak(?:a|u|om)?', 'Zabljak'), r('mojkovc(?:a|u|em)|mojkovac', 'Mojkovac'),
+  r('danilovgrad(?:a|u|om)?', 'Danilovgrad'), r('ro[žz]aj(?:e|a|ama)', 'Rozaje'), r('andrijevic(?:a|e|i|u|om)', 'Andrijevica'),
   r('mali', '…'),
 ]
 
