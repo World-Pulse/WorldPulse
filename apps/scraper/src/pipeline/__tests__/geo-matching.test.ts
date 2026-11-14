@@ -119,7 +119,9 @@ describe('findGazetteerPlace', () => {
   })
 
   it('ignores newspaper names', () => {
-    expect(findGazetteerPlace('US troops on Okinawa face new limits, the Washington Post reported')).toBeNull()
+    // (Okinawa itself is on the map since Nov 14, 2026; the newspaper's Washington still isn't read)
+    expect(findGazetteerPlace('US troops on Okinawa face new limits, the Washington Post reported')?.place).toBe('okinawa')
+    expect(findGazetteerPlace('US troops face new limits, the Washington Post reported')).toBeNull()
     expect(findGazetteerPlace('According to the New York Times, talks in Cairo resumed')?.place).toBe('cairo')
   })
 })
@@ -170,10 +172,11 @@ describe('extractGeo', () => {
   }, 15_000)
 
   it('keeps a geocoder hit in a mentioned country', async () => {
-    fetchMock.mockResolvedValue(nominatim('jp', 26.2, 127.7))
-    const geo = await extractGeo('Protests in Okinawa over Japanese base expansion')
+    // (Ishigaki: Okinawa itself is on the map since Nov 14, 2026, so the geocoder isn't asked for it)
+    fetchMock.mockResolvedValue(nominatim('jp', 24.34, 124.16, 'Ishigaki'))
+    const geo = await extractGeo('Protests in Ishigaki over Japanese base expansion')
     expect(geo.countryCode).toBe('JP')
-    expect(geo.lat).toBeCloseTo(26.2)
+    expect(geo.lat).toBeCloseTo(24.34)
   }, 15_000)
 
   it('does not pin a story to a hamlet that shares a word of its headline', async () => {

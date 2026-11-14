@@ -1647,6 +1647,8 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'petaling jaya': { lat: 3.1073, lng: 101.6067, country: 'MY', name: 'Petaling Jaya' },
   'langkawi': { lat: 6.35, lng: 99.8, country: 'MY', name: 'Langkawi' },
   'naha': { lat: 26.2124, lng: 127.6809, country: 'JP', name: 'Naha' },
+  // Nov 14, 2026 (the first weekly accuracy read): three outlets' "US Air Force captain arrested in Japan's Okinawa" sat in Tokyo and Washington
+  'okinawa': { lat: 26.2124, lng: 127.6809, country: 'JP', name: 'Okinawa' },
   'saitama': { lat: 35.8617, lng: 139.6455, country: 'JP', name: 'Saitama' },
   'niigata': { lat: 37.9162, lng: 139.0364, country: 'JP', name: 'Niigata' },
   'kagoshima': { lat: 31.5966, lng: 130.5571, country: 'JP', name: 'Kagoshima' },
@@ -3014,7 +3016,62 @@ const JOINED = /(?<![\p{L}\p{N}])(?:(\p{Lu}[\p{L}'’.]*)\s+)?(\p{Lu}[\p{L}'’.
  */
 const PERSON_OF = /(?<![\p{L}\p{N}])(\p{Lu}[\p{L}'’.]*)\s+(?:spy|spies|agent|agents|mole|moles|national|nationals|citizen|citizens|tourist|tourists|businessman|businesswoman|tycoon)(?![\p{L}\p{N}])/gu
 const RIVER_NAMED = /(?<![\p{L}\p{N}])(\p{Lu}[\p{L}'’.]*)\s+River(?![\p{L}\p{N}])/gu
+/**
+ * A country named in passing (Nov 14, 2026: the first weekly accuracy read graded 200 verified stories, and in 12 of
+ * the 26 misplaced ones the pin followed a country the headline names without the story being there). Blanked out
+ * like the names above, whatever else the text names, so the place the text does name is read, or else the outlet's
+ * own country:
+ * - a side taken: "for Being Pro-Israel", "anti-China protest" (an actor's feud sat in Israel);
+ * - an airline's name: "Air Serbia", "Er Srbije", "Kenya Airways" (Montenegro's fans turned away at Podgorica sat in
+ *   Serbia, three outlets);
+ * - where something heads: "Moving Toward U.S. Border" (Mexico's president on a caravan sat in the United States);
+ *   not whom it is against: "sanctions against Belarusian boxers" is Belarus's story, and a town in its summary
+ *   (Acapulco, where the boxing council met) was the worse pin;
+ * - a trip not yet made: "ahead of China visit" (Nepali lawmakers meeting in Kathmandu sat in China).
+ * Only countries' own names and peoples, not cities.
+ */
+const SIDE_TAKEN = /(?<![\p{L}\p{N}])(?:pro|anti)[-‑](\p{Lu}[\p{L}'’.]*)/giu
+const AIRLINE_NAMED = /(?<![\p{L}\p{N}])(?:Air|Er)\s+(\p{Lu}[\p{L}'’.]*)|(?<![\p{L}\p{N}])(\p{Lu}[\p{L}'’.]*)\s+(?:Airlines|Airways)(?![\p{L}\p{N}])/gu
+const HEADED_FOR = /(?<![\p{L}\p{N}])[Tt]owards?\s+(?:the\s+)?(\p{Lu}[\p{L}'’.]*(?:\s+\p{Lu}[\p{L}'’.]*)?)/gu
+const TRIP_AHEAD = /(?<![\p{L}\p{N}])(?:[Aa]head\s+[Oo]f|[Bb]efore|[Pp]rior\s+[Tt]o)\s+(?:(?:his|her|their|its|the|a|an|official|state|upcoming|planned|first)\s+){0,3}(\p{Lu}[\p{L}'’.]*(?:\s+\p{Lu}[\p{L}'’.]*)?)\s+(?:[Vv]isit|[Tt]rip|[Tt]our)(?![\p{L}\p{N}])/gu
+const PASSING_ANY = /(?:pro|anti)[-‑]\p{Lu}|(?:Air|Er)\s+\p{Lu}|\s(?:Airlines|Airways)(?![\p{L}\p{N}])|towards?\s|\s(?:visit|trip|tour)(?![\p{L}\p{N}])/iu
+
+/** The spans of countries a text names only in passing, each with its country */
+function passingSpans(text: string): Span[] {
+  const spans: Span[] = []
+  if (!text || !PASSING_ANY.test(text)) return spans
+  const add = (m: RegExpMatchArray, name: string | undefined) => {
+    if (!name) return
+    // "U.S. Border": the country's own words, without a capitalised word that only follows it
+    const first = name.split(/\s+/)[0]!
+    // (countryOnly knows the names and peoples; mentionedCountries also the short forms: "U.S.", "UK", "UAE")
+    const short = (t: string) => { const cs = mentionedCountries(t); return cs.length === 1 ? cs[0]! : null }
+    for (const hit of [name, first]) {
+      const cc = countryOnly(hit) ?? (hit === first ? short(hit) : null)
+      if (!cc) continue
+      const at = m.index! + m[0].lastIndexOf(hit)
+      spans.push([at, at + hit.length, cc])
+      return
+    }
+  }
+  for (const m of text.matchAll(SIDE_TAKEN)) add(m, m[1])
+  for (const m of text.matchAll(AIRLINE_NAMED)) add(m, m[1] ?? m[2])
+  for (const m of text.matchAll(HEADED_FOR)) add(m, m[1])
+  for (const m of text.matchAll(TRIP_AHEAD)) add(m, m[1])
+  return spans
+}
+
+/**
+ * A headline without its site's name after a bar: "Pope stops at former diocese in Peru visit | Arkansas Democrat
+ * Gazette" sat in Arkansas, "... - National | Globalnews.ca" (Nov 14, 2026). Only a last, short part after " | ".
+ */
+export function withoutSiteSuffix(title: string): string {
+  return title.replace(/\s+\|\s+[^|]{2,60}$/, '')
+}
+
 const NON_PLACE_ANY = /\bof\s+\p{Lu}|\p{Lu}[\p{L}'’.]*\s+River(?![\p{L}\p{N}])|\p{L}[-‑]\p{L}|\p{Lu}[\p{L}'’.]*\s+(?:spy|spies|agent|agents|mole|moles|national|nationals|citizen|citizens|tourist|tourists|businessman|businesswoman|tycoon)/u
+
+type Span = [number, number, string]
 
 /** The country a country's own name or people names ("China", "Chinese"), not a city's */
 function countryOnly(name: string): string | null {
@@ -3034,7 +3091,6 @@ function placeCountry(name: string): string | null {
   return countryOnly(name)
 }
 
-type Span = [number, number, string]
 const blankSpans = (text: string, spans: Span[]): string =>
   spans.reduce((out, [s, e]) => out.slice(0, s) + ' '.repeat(e - s) + out.slice(e), text)
 
@@ -3075,8 +3131,9 @@ function nonPlaceSpans(text: string): { always: Span[]; unlessAlone: Span[] } {
 export function withoutNonPlaceNames(head: string, body: string, home?: string | null): [string, string] {
   const h = nonPlaceSpans(head)
   const b = nonPlaceSpans(body)
-  const head1 = blankSpans(head, h.always)
-  const body1 = blankSpans(body, b.always)
+  // (a country named in passing is blanked out whatever else is named: passingSpans)
+  const head1 = blankSpans(blankSpans(head, h.always), passingSpans(head))
+  const body1 = blankSpans(blankSpans(body, b.always), passingSpans(body))
   if (h.unlessAlone.length === 0 && b.unlessAlone.length === 0) return [head1, body1]
   const head2 = blankSpans(head1, h.unlessAlone)
   const body2 = blankSpans(body1, b.unlessAlone)

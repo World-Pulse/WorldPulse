@@ -31,7 +31,7 @@ import type { Category, SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate }          from '../pipeline/insert-signal'
 import { fetchWithResilience, CircuitOpenError } from '../lib/fetch-with-resilience'
 import { extractArticle, setArticleExtractorRedis } from '../pipeline/article-extractor'
-import { extractGeo, mentionedCountries, withoutEnvoyCountries, withoutNonPlaceNames } from '../pipeline/geo'
+import { extractGeo, mentionedCountries, withoutEnvoyCountries, withoutNonPlaceNames, withoutSiteSuffix } from '../pipeline/geo'
 import { classifyContent }             from '../pipeline/classify'
 import { CAMEO_LABEL }                 from '../pipeline/event-titles'
 import { isoFromFips }                 from '../pipeline/fips-countries'
@@ -423,7 +423,8 @@ export function startGdeltPoller(
         // envoy or a suspect is from (Nov 10, 2026: AP's "Overnight strikes in Yemen ..." sat in Washington, a
         // body's city beating the headline's country; Stanford Daily's "alleged Chinese spy" sat in China)
         const [geoHead, geoBody] = withoutNonPlaceNames(
-          withoutEnvoyCountries(title),
+          // (without the site's own name after a bar: "... | Arkansas Democrat Gazette" sat in Arkansas, Nov 14, 2026)
+          withoutEnvoyCountries(withoutSiteSuffix(title)),
           withoutEnvoyCountries(article.body?.slice(0, 500) ?? ''),
         )
         const geoText = `${geoHead} ${geoBody}`

@@ -106,7 +106,7 @@ import { noteCoverage } from './coverage'
 import { MAX_ITEM_AGE_MS, isStaleItem } from '../pipeline/freshness'
 // Feeds send "&#x27;" and "&amp;" in titles and summaries
 import { decodeEntities, cleanSummary, repeatsTitle, feedText, clipText } from '../pipeline/text'
-import { placeFromText, splitPlaces, withHomeNames, mentionedCountries, homePlaceFromText, findGazetteerPlace, namedCountryHomePlace, homeTwinPlace, placeInCountry, withoutEnvoyCountries, withoutNonPlaceNames } from '../pipeline/geo'
+import { placeFromText, splitPlaces, withHomeNames, mentionedCountries, homePlaceFromText, findGazetteerPlace, namedCountryHomePlace, homeTwinPlace, placeInCountry, withoutEnvoyCountries, withoutNonPlaceNames, withoutSiteSuffix } from '../pipeline/geo'
 import { withLocalNames } from '../pipeline/local-names'
 import { rateSeverity } from '../pipeline/severity'
 import { categorizeText } from '../pipeline/categories'
@@ -10693,6 +10693,10 @@ interface GeoHint { lat: number; lng: number; name: string; code?: string }
 
 /** Rough keyword → coordinates for common geographic entities in headlines. */
 const GEO_HINTS: Array<{ keywords: string[]; geo: GeoHint }> = [
+  // Nov 14, 2026 (the first weekly accuracy read): the Punch's "Democrats pledge climate action at COP31 despite Trump's
+  // absence" sat in Washington, and Nation News' "FAA orders nationwide ground stop for all flights" in Bridgetown
+  { keywords: ['cop31'], geo: { lat: 36.8969, lng: 30.7133, name: 'Antalya, Turkey', code: 'TR' } },
+  { keywords: ['faa', 'federal aviation administration'], geo: { lat: 38.90, lng: -77.04, name: 'United States', code: 'US' } },
   { keywords: ['ukraine', 'kyiv', 'zaporizhzhia', 'zaporizhia', 'kharkiv', 'donetsk', 'kherson', 'odesa', 'dnipropetrovsk', 'chernihiv', 'sumy'],      geo: { lat: 50.45,  lng: 30.52,   name: 'Ukraine',          code: 'UA' } },
   { keywords: ['russia', 'moscow', 'kremlin', 'putin'],             geo: { lat: 55.75,  lng: 37.62,   name: 'Moscow, Russia',   code: 'RU' } },
   { keywords: ['israel', 'tel aviv', 'jerusalem', 'idf', 'netanyahu'], geo: { lat: 31.77, lng: 35.22, name: 'Israel',           code: 'IL' } },
@@ -10945,7 +10949,7 @@ const NO_PLACE_TOPIC = /\b(?:premier league|champions league|europa league|la li
  * outlet's home in Samoa, Jamaica, Uganda, Thailand and Canada, five outlets in two days): with no place in the
  * headline it gets no pin, like league football above.
  */
-const NO_PLACE_OUTAGE = /\b(?:global|worldwide|world-wide)\s+(?:\w+\s+){0,2}(?:outage|disruption)s?\b|\b(?:microsoft|outlook|office 365|microsoft 365|azure|aws|amazon web services|cloudflare|google cloud|gmail|youtube|whatsapp|chatgpt)\s+(?:\w+\s+){0,2}(?:outage|disrupt\w*)|\boutage\b[^.]{0,60}\b(?:worldwide|globally|around the world)\b/i
+const NO_PLACE_OUTAGE = /\b(?:global|worldwide|world-wide)\s+(?:\w+\s+){0,2}(?:outage|disruption)s?\b|\b(?:microsoft|outlook|office 365|microsoft 365|azure|aws|amazon web services|cloudflare|google cloud|gmail|youtube|whatsapp|chatgpt)\s+(?:\w+\s+){0,2}(?:outage|disrupt\w*)|\boutage\b[^.]{0,60}\b(?:worldwide|globally|around the world)\b|\b(?:ca[ií]da|apag[oó]n|interrupci[oó]n|falla|queda|falha|apag[aã]o|panne|coupure)\s+(?:global|mundial|mondiale)\b/i
 
 /**
  * Countries whose own Congress the English-language press calls just "Congress": India's and Nepal's
@@ -11032,6 +11036,16 @@ function ownPlace(text: string, source: NewsSource): InferredGeo | null {
     : fromHome(text, source)
 }
 
+/** A result between two sides: "Japan stun Brazil 3-2", "Wales defeat All Blacks", "India beat Pakistan" */
+const RESULT_HEADLINE = /\s(?:beats?|stuns?|defeats?|edges?|thrash(?:es)?|downs?|sinks?|shocks?|upsets?|routs?|crush(?:es)?|overcomes?|vence|derrota|golea|bat|schlägt)\s+\p{Lu}/u
+/** The place a summary says a match was played "in" or "at" (as sportsVenue, without needing a stadium word) */
+function playedIn(body: string): InferredGeo | null {
+  const place = fromPlace(body)
+  if (!place?.locationName) return null
+  const name = place.locationName.split(',')[0]!.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`\\b(?:in|at)\\s+(?:the\\s+)?${name}(?![\\p{L}])`, 'iu').test(body) ? place : null
+}
+
 /** A town only its own country's outlets are read for (geo.ts homePlaceFromText): "Mandeville" in a Jamaican outlet */
 function fromHome(text: string, source: NewsSource): InferredGeo | null {
   const place = homePlaceFromText(text, source.countryCode)
@@ -11085,6 +11099,10 @@ export function inferGeo(
   // geo.ts withoutEnvoyCountries, Nov 7, 2026); nor a title's place, or a place joined to who backs, runs or flags
   // something ("Duchess of Edinburgh due Monday", "Pakistan-based group", "Liberia-flagged tanker"; geo.ts
   // withoutNonPlaceNames, Nov 8, 2026)
+  // ...nor the site's own name after a bar ("... | Arkansas Democrat Gazette"; geo.ts withoutSiteSuffix, Nov 14, 2026)
+  title = withoutSiteSuffix(title)
+  // (a country the headline names only in passing, "Moving Toward U.S. Border", "ahead of China visit", "Air Serbia",
+  // is blanked out too: geo.ts passingSpans, Nov 14, 2026)
   const [head, body] = withoutNonPlaceNames(
     withoutEnvoyCountries(withLocalNames(withHomeNames(title, source.countryCode), source.language)),
     withoutEnvoyCountries(withLocalNames(withHomeNames(description, source.countryCode), source.language)),
@@ -11123,6 +11141,12 @@ export function inferGeo(
   if (fromHead && fromHead.countryCode !== source.countryCode && PRESS_OFFICES.has(source.id)
     && (HOSTING_WORDS.test(head) || mentionedCountries(head).includes(source.countryCode))) {
     return { lat: source.defaultLat, lng: source.defaultLng, locationName: source.defaultLocation, countryCode: source.countryCode }
+  }
+  // Two national sides and a result ("Japan stun Brazil 3-2"): where the summary says it was played ("in Singapore"),
+  // not the side named first (Nov 14, 2026: the Punch's sat in Japan)
+  if (fromHead && RESULT_HEADLINE.test(head) && new Set(mentionedCountries(head)).size >= 2) {
+    const venue = playedIn(body)
+    if (venue && !mentionedCountries(head).includes(venue.countryCode ?? '')) return venue
   }
   if (fromHead) return fromHead
   // A national outlet's story that names no place in its headline is about its own country unless its
