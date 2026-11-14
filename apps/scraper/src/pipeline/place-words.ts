@@ -245,6 +245,9 @@ export function partOfAName(text: string, at: number, end: number, surname?: boo
   // talks going" was pinned in Cuba): her name after a given name or "envoy", or the surname with a meeting, talks or visit
   if (/^holgu[ií]n$/i.test(hit) && (/\b(?:mar[ií]a[ \t]+[AÁ]ngela|[AÁ]ngela|envoy|ms\.?|mrs\.?)[ \t]+$/i.test(text.slice(Math.max(0, at - 16), at))
     || /^[ \t]+(?:meeting|meetings|talks|visit|visits|proposal|report|says|said|will|has|met|to[ \t]+(?:meet|visit))\b/i.test(text.slice(end, end + 14)))) return true
+  // Chile's Justice Minister Fernando Rabat, not Morocco's capital (Nov 14, 2026: Radio Cooperativa's "decretos ... firmados por
+  // el ministro Fernando Rabat" was pinned at Rabat, Morocco): his given name or a minister's title right before the surname
+  if (hit === 'Rabat' && /\b(?:Fernando|ministro|ministra|minister|ministerio)[ \t]+(?:de[ \t]+Justicia[ \t]+)?$/i.test(text.slice(Math.max(0, at - 30), at))) return true
   if (!startsUpper(hit)) return false
   // A ship named after a place, not the place (Nov 6, 2026: Antara's "Indonesia, US navies honor USS Houston in joint
   // dive"): "USS Houston", "HMS Belfast", "INS Mumbai", "the MV Ruby"
