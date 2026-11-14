@@ -11104,6 +11104,10 @@ export function inferGeo(
   // ...and its own country's town of the same name before another country's ("Los Ángeles" in a Chilean outlet)
   const twin = fromTwin(head, source, named)
   const fromHead = twin ?? home ?? ofNamed ?? named ?? fromHints(head, source.countryCode, HOME_PIN_SOURCES.has(source.id))
+  // Two national sides ("Germany v Serbia"): the match is in neither country (Nov 13, 2026: it sat at Berlin)
+  if (fromHead && FIXTURE_HEADLINE.test(head) && new Set(mentionedCountries(head)).size >= 2) {
+    return { lat: null, lng: null, locationName: null, countryCode: null }
+  }
   // AllAfrica files each story under its country, named first: "Malawi: 'Ngora Has No Power to Deregister HRDC'" is
   // Malawi's NGO regulator, not Uganda's Ngora district (Nov 6, 2026); another country's place there is a name
   const filedUnder = source.id === 'allafrica' ? /^([^:]{3,40}):\s/.exec(title)?.[1] : undefined

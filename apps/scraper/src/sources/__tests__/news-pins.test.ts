@@ -31,6 +31,11 @@ describe('inferGeo', () => {
     expect(inferGeo('Christa Pike released', 'The Tennessee inmate survived', source('abc-au-world')).locationName).toBe('Tennessee')
   })
 
+  it('gives a fixture between two countries no pin (Nov 13, 2026)', () => {
+    expect(inferGeo('Germany v Serbia: World Cup qualifier preview', '', source('bbc-world'))).toMatchObject({ lat: null, countryCode: null })
+    expect(inferGeo('Floods in Germany leave thousands without power', '', source('bbc-world')).countryCode).toBe('DE')
+  })
+
   it('reads the summary when the headline names no place', () => {
     const geo = inferGeo('Christa Pike released from hospital', 'The Tennessee inmate survived a failed execution', source('abc-au-world'))
     expect(geo).toMatchObject({ locationName: 'Tennessee', countryCode: 'US' })
