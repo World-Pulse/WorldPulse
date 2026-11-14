@@ -204,6 +204,12 @@ export function LeftSidebar() {
         <div className="font-mono text-[11px]" style={{ color: threatLevel?.color ?? '#ffd700' }}>
           {tCommon('level').toUpperCase()} {threatLevel?.level ?? '…'} · {(threatLevel?.label ?? tCommon('elevated')).toUpperCase()}
         </div>
+        {/* what the five bars measure, in plain words (the API: the share of the last 6 hours' reports marked high or critical) */}
+        {locale === 'en' && (
+          <p className="mt-1.5 text-[10px] leading-snug text-wp-text3">
+            How serious the last 6 hours of news are, from 1 (calm) to 5 (critical): the more reports marked high or critical, the higher it reads.
+          </p>
+        )}
       </div>
 
       {/* Navigation */}

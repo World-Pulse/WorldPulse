@@ -18,7 +18,7 @@ export function BottomTabBar() {
   return (
     <nav
       aria-label="Mobile tab navigation"
-      className="fixed bottom-0 left-0 right-0 glass border-t border-[rgba(255,255,255,0.07)] flex md:hidden z-[900]"
+      className="fixed bottom-0 left-0 right-0 bg-wp-bg border-t border-[rgba(255,255,255,0.07)] flex md:hidden z-[900]"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       {TABS.map(tab => {

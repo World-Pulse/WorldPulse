@@ -199,8 +199,8 @@ export function RightSidebar() {
       <Widget title="Platform Pulse">
         <div className="grid grid-cols-2 gap-2">
           {[
-            { value: counts ? formatPulseCount(counts.total) : null,        label: 'Signals',   color: 'text-wp-cyan',  title: 'Signals on WorldPulse, all time' },
-            { value: counts ? formatPulseCount(counts.last24h) : null,      label: 'Last 24h',  color: 'text-wp-green', title: 'New signals in the last 24 hours' },
+            { value: counts ? formatPulseCount(counts.total) : null,        label: 'Reports',   color: 'text-wp-cyan',  title: 'Reports on WorldPulse, all time' },
+            { value: counts ? formatPulseCount(counts.last24h) : null,      label: 'Last 24h',  color: 'text-wp-green', title: 'New reports in the last 24 hours' },
             { value: String(COUNTRIES_COVERED),                                                 label: 'Countries', color: 'text-wp-red',   title: 'Countries and territories WorldPulse covers' },
             { value: counts?.outlets24h != null ? formatPulseCount(counts.outlets24h) : null,   label: 'Outlets',   color: 'text-wp-amber', title: 'News websites that reported them, last 24 hours' },
           ].map(stat => (
@@ -298,7 +298,7 @@ export function RightSidebar() {
                   </span>
                 </div>
               </div>
-              <span className="font-mono text-[9px] text-wp-text3">{escalation.current_count} signals</span>
+              <span className="font-mono text-[9px] text-wp-text3">{escalation.current_count} reports</span>
             </div>
 
             {/* Score bar */}

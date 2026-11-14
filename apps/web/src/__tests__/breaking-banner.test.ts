@@ -69,7 +69,11 @@ describe('where and what it opens', () => {
     expect(banner).toContain('top-[52px]')
     expect(banner).not.toContain('new WebSocket')
     expect(banner).not.toContain('/dismiss')
-    // on phones every link is at least 44 px tall: the headline is centered in a flex box, truncated in its span
-    expect(banner).toMatch(/className="flex-1 min-w-0 flex items-center[^"]*"[^>]*>\s*<span className="truncate">/)
+    // on phones every link is at least 44 px tall: the headline is centered in a flex box, on two lines there
+    // (one line cut it off) and on one truncated line on wider screens
+    expect(banner).toMatch(/className="flex-1 min-w-0 flex items-center[^"]*"[^>]*>[\s\S]{0,200}<span className="sm:hidden line-clamp-2[^"]*">\{alert\.title\}<\/span>\s*<span className="hidden sm:block truncate">\{alert\.title\}<\/span>/)
+    // its room is kept from the first paint, with or without an alert, so the page never jumps when alerts arrive
+    expect(banner).toMatch(/if \(!alert\) return <div aria-hidden="true" className=\{BANNER_ROOM\} \/>/)
+    expect(banner).toMatch(/<div aria-hidden="true" className=\{BANNER_ROOM\} style=\{height > 0 \? \{ height \} : undefined\} \/>/)
   })
 })

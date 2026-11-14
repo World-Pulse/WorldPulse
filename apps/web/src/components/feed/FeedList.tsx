@@ -8,7 +8,7 @@ import { RichMediaEmbed, extractFirstEmbedUrl } from '@/components/RichMediaEmbe
 import { ImageGallery } from '@/components/ImageGallery'
 import { EmptyState } from '@/components/EmptyState'
 import { useToast } from '@/components/Toast'
-import { ReliabilityDots } from '@/components/signals/ReliabilityDots'
+import { ReliabilityDots, scoreBand } from '@/components/signals/ReliabilityDots'
 import { RiskScoreGauge } from '@/components/signals/RiskScoreGauge'
 import { FlagModal } from '@/components/signals/FlagModal'
 import { ReportModal } from '@/components/community/ReportModal'
@@ -914,11 +914,16 @@ export function FeedList({ tab, category, signupAfter }: { tab: string; category
                     )}
                   </div>
                 )}
-                <div className="flex items-center gap-2 pt-2 border-t border-[rgba(255,255,255,0.05)]">
-                  <span className="font-mono text-[9px] text-wp-text3">RELIABILITY</span>
+                {/* The bar took the story's severity colour, so a well-sourced report of something critical read as
+                    "red: unreliable"; it now takes the colour of its own score, and says what the score is */}
+                <div
+                  className="flex items-center gap-2 pt-2 border-t border-[rgba(255,255,255,0.05)]"
+                  title={`Reliability ${item.event.impact}% (${scoreBand(item.event.impact / 100).label.toLowerCase()}): how well sourced this report is, from the outlet's rating and how many independent outlets reported it. It does not say how serious the event is.`}
+                >
+                  <span className="font-mono text-[9px] text-wp-text3">SOURCE RELIABILITY</span>
                   <div className="flex-1 h-1 bg-wp-s3 rounded-full overflow-hidden">
                     <div className="h-full rounded-full transition-all duration-1000"
-                      style={{ width: `${item.event.impact}%`, background: item.event.impactColor }} />
+                      style={{ width: `${item.event.impact}%`, background: scoreBand(item.event.impact / 100).color }} />
                   </div>
                   <span className="font-mono text-[9px] text-wp-text3">{item.event.impact}%</span>
                   {item.riskScore && (
@@ -1007,7 +1012,7 @@ export function FeedList({ tab, category, signupAfter }: { tab: string; category
             disabled={loadingMore}
             className="px-6 py-[10px] rounded-full border border-[rgba(255,255,255,0.1)] text-[13px] text-wp-text2 hover:border-wp-amber hover:text-wp-amber hover:bg-[rgba(245,166,35,0.05)] transition-all font-medium disabled:opacity-50"
           >
-            {loadingMore ? 'Loading…' : 'Load more signals'}
+            {loadingMore ? 'Loading…' : 'Load more reports'}
           </button>
         </div>
       )}

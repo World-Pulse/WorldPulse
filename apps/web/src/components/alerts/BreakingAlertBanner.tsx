@@ -17,6 +17,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 const POLL_MS = 90_000
 const ROTATE_MS = 8_000
 const CLOSED_KEY = 'wp-breaking-closed'
+/** The banner's height before it is measured: a phone's two-line banner, and the one line of wider screens */
+const BANNER_ROOM = 'h-[49px] sm:h-[35px]'
 
 const SEVERITY_STYLES: Record<string, { bg: string; border: string; dot: string }> = {
   critical: { bg: 'bg-red-950/95', border: 'border-b border-red-500', dot: 'bg-red-500' },
@@ -106,33 +108,38 @@ export function BreakingAlertBanner() {
     return () => watch.disconnect()
   }, [bar])
 
-  if (bannerHiddenOn(pathname) || shown.length === 0) return null
-  const alert = shown[index % shown.length]
-  if (!alert) return null
+  if (bannerHiddenOn(pathname)) return null
+  const alert = shown.length > 0 ? shown[index % shown.length] : undefined
+  // The banner's room is kept from the first paint, banner or not: the alerts arrive a second after the page,
+  // and the room they then took pushed the whole page down (on a phone a layout shift of 0.29, Nov 13, 2026).
+  if (!alert) return <div aria-hidden="true" className={BANNER_ROOM} />
   const styles = SEVERITY_STYLES[alert.severity] ?? SEVERITY_STYLES.high!
   const proof = proofText(alert.story)
 
   return (
     <>
-    <div aria-hidden="true" style={{ height }} />
+    <div aria-hidden="true" className={BANNER_ROOM} style={height > 0 ? { height } : undefined} />
     <div
       ref={setBar}
       className={`fixed top-[52px] left-0 right-0 z-[999] ${styles.bg} ${styles.border} backdrop-blur-sm shadow-lg`}
       role="region"
       aria-label="Breaking news"
     >
-      <div className="mx-auto max-w-7xl px-3 py-0.5 sm:py-1.5 flex items-center gap-3">
+      <div className="mx-auto max-w-7xl px-3 py-0.5 sm:py-1.5 flex items-center gap-2 sm:gap-3">
         <div className="flex items-center gap-2 shrink-0">
           <span className="relative flex h-2 w-2" aria-hidden="true">
             <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${styles.dot} opacity-75`} />
             <span className={`relative inline-flex rounded-full h-2 w-2 ${styles.dot}`} />
           </span>
-          <span className="text-[11px] font-bold tracking-wider text-white uppercase">Breaking</span>
+          {/* a phone keeps the pulsing dot and gives the word's room to the headline */}
+          <span className="sr-only sm:not-sr-only sm:text-[11px] sm:font-bold sm:tracking-wider sm:text-white sm:uppercase">Breaking</span>
         </div>
 
         {/* a flex box: on phones every link is at least 44 px tall (globals.css), so the headline sits in its middle */}
         <Link href={alertHref(alert)} className="flex-1 min-w-0 flex items-center text-left text-[13px] font-medium text-white hover:underline" title={alert.title}>
-          <span className="truncate">{alert.title}</span>
+          {/* a phone shows the headline on two lines (one line cut it off after five words); the banner keeps one height */}
+          <span className="sm:hidden line-clamp-2 text-[12.5px] leading-[1.25]">{alert.title}</span>
+          <span className="hidden sm:block truncate">{alert.title}</span>
         </Link>
 
         {proof && (
@@ -141,7 +148,7 @@ export function BreakingAlertBanner() {
             title={proof}
           >
             <span className="hidden sm:inline">{proof}</span>
-            <span className="sm:hidden">{alert.story?.verified ? `✓ ${alert.story.outlets} outlets` : `${alert.story?.outlets ?? 2} outlets`}</span>
+            <span className="sm:hidden" aria-label={`${alert.story?.outlets ?? 2} outlets`}>{alert.story?.verified ? `✓ ${alert.story.outlets}` : `${alert.story?.outlets ?? 2}`}</span>
           </span>
         )}
 
