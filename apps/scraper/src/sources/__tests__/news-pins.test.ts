@@ -36,6 +36,12 @@ describe('inferGeo', () => {
     expect(inferGeo('Floods in Germany leave thousands without power', '', source('bbc-world')).countryCode).toBe('DE')
   })
 
+  it('gives a Spanish result between two countries no pin (Nov 14, 2026)', () => {
+    expect(inferGeo('Dinamarca golea y humilla a Portugal en el partido de despedida', '', source('bbc-world'))).toMatchObject({ lat: null, countryCode: null })
+    expect(inferGeo('Dinamarca vence a Portugal', '', source('bbc-world'))).toMatchObject({ lat: null, countryCode: null })
+    expect(inferGeo('Russia beats back drones over Moscow', '', source('bbc-world')).countryCode).toBe('RU')
+  })
+
   it('reads the summary when the headline names no place', () => {
     const geo = inferGeo('Christa Pike released from hospital', 'The Tennessee inmate survived a failed execution', source('abc-au-world'))
     expect(geo).toMatchObject({ locationName: 'Tennessee', countryCode: 'US' })
