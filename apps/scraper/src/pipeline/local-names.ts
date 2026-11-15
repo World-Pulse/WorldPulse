@@ -373,6 +373,9 @@ const ARABIC: Rule[] = ([
   r(`${AL}بوندسليغا|${AL}بوندسليجا`, 'Germany'), r(`${AL}ليغا|${AL}ليجا`, 'Spain'),
   r(`${AL}بريميرليغ|${AL}بريمرليغ`, 'England'), r(`${AL}كالتشيو`, 'Italy'),
   r(`${AL}اردن${PEOPLE}`, 'Jordanian'), r(`${AL}اربد`, 'Irbid'), r(`${AL_ONLY}عقب[ةه]`, 'Aqaba'),
+  // Nov 15, 2026: Jordan's other governorate towns (Roya's Hamoud church verdict story named "بالكرك" and sat unpinned)
+  r(`${AL}كرك`, 'Karak'), r(`${AL_ONLY}زرقاء`, 'Az Zarqa'), r(`${AL_ONLY}مفرق`, 'Mafraq'), r(`${AL}جرش`, 'Jerash'),
+  r(`${AL}مادبا`, 'Madaba'), r(`${AL_ONLY}طفيل[ةه]`, 'Tafilah'), r(`${AL}عجلون`, 'Ajloun'),
   r(`${AL}سوري(?:ا|[ةه]|ون|ين)?`, 'Syria'), r(`${AL}دمشق`, 'Damascus'), r(`${AL}حلب`, 'Aleppo'), r(`${AL}حمص`, 'Homs'),
   r(`${AL}ادلب`, 'Idlib'), r(`${AL_ONLY}لاذقي[ةه]`, 'Latakia'), r(`${AL}درعا`, 'Daraa'), r(`${AL_ONLY}حسك[ةه]`, 'Hasakah'),
   r(`${AL}دير\\s+الزور`, 'Deir ez-Zor'), r(`${AL_ONLY}سويداء`, 'Suwayda'), r(`${AL}طرطوس`, 'Tartus'),
