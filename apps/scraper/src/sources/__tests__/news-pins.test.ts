@@ -36,6 +36,11 @@ describe('inferGeo', () => {
     expect(inferGeo('Floods in Germany leave thousands without power', '', source('bbc-world')).countryCode).toBe('DE')
   })
 
+  it('keeps the pin of war news that uses a match verb between two countries (QA, Nov 14, 2026)', () => {
+    expect(inferGeo('Israel downs Iranian drones over Golan', '', source('bbc-world')).countryCode).not.toBeNull()
+    expect(inferGeo('Russia sinks Ukrainian vessel in Black Sea', '', source('bbc-world')).countryCode).not.toBeNull()
+  })
+
   it('gives a Spanish result between two countries no pin (Nov 14, 2026)', () => {
     expect(inferGeo('Dinamarca golea y humilla a Portugal en el partido de despedida', '', source('bbc-world'))).toMatchObject({ lat: null, countryCode: null })
     expect(inferGeo('Dinamarca vence a Portugal', '', source('bbc-world'))).toMatchObject({ lat: null, countryCode: null })

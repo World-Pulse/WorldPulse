@@ -11038,6 +11038,8 @@ function ownPlace(text: string, source: NewsSource): InferredGeo | null {
 
 /** A result between two sides: "Japan stun Brazil 3-2", "Wales defeat All Blacks", "India beat Pakistan" */
 const RESULT_HEADLINE = /\s(?:beats?|stuns?|defeats?|edges?|thrash(?:es)?|downs?|sinks?|shocks?|upsets?|routs?|crush(?:es)?|overcomes?|vence|derrota|golea|bat|schlägt)\s+(?:y\s+\p{L}+\s+)?(?:(?:a|al)\s+)?\p{Lu}/u
+/** Words that make a "X beats Y" headline a match, not a strike or a sinking: a score, a competition, a Spanish result verb */
+const SPORT_RESULT = /\d\s*[-–]\s*\d|\b(?:match|game|cup|league|qualifier|friendly|goals?|tournament|final|semi-?final|rugby|cricket|football|soccer|basketball|volleyball|tennis|partido|copa|mundial|goles?|fútbol|amistoso|humilla|golea|vence|derrota)\b/i
 /** The place a summary says a match was played "in" or "at" (as sportsVenue, without needing a stadium word) */
 function playedIn(body: string): InferredGeo | null {
   const place = fromPlace(body)
@@ -11149,7 +11151,8 @@ export function inferGeo(
     if (venue && !mentionedCountries(head).includes(venue.countryCode ?? '')) return venue
     // ...and with no venue, and no "at home" to say it was the first side's ground, the match is in neither country
     // (Nov 14, 2026: "Dinamarca golea y humilla a Portugal" sat at Copenhagen)
-    if (!/\bat home\b|\bhome (?:win|soil|crowd|ground|defeat)\b|\ben casa\b|\bde local\b/i.test(body)) {
+    // (only for a match: "Israel downs Iranian drones" and "Russia sinks Ukrainian vessel" are war news that keep their pin)
+    if (SPORT_RESULT.test(`${head} ${body}`) && !/\bat home\b|\bhome (?:win|soil|crowd|ground|defeat)\b|\ben casa\b|\bde local\b/i.test(body)) {
       return { lat: null, lng: null, locationName: null, countryCode: null }
     }
   }
