@@ -614,7 +614,8 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     if (!signal) return sendError(reply, 404, 'NOT_FOUND', 'Signal not found')
 
     const userId  = req.user?.id ?? null
-    const ipRaw   = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim() ?? req.ip ?? ''
+    // req.ip is the address nginx saw (lib/client-address.ts); the X-Forwarded-For header is written by the client
+    const ipRaw   = req.ip || ''
     // A keyed hash, not the address (H-0020): the same visitor matches, nobody can read it back
     const ipHash  = ipRaw ? visitorHash(ipRaw) : null
 
