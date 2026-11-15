@@ -3034,7 +3034,8 @@ const SIDE_TAKEN = /(?<![\p{L}\p{N}])(?:pro|anti)[-‑](\p{Lu}[\p{L}'’.]*)/giu
 const AIRLINE_NAMED = /(?<![\p{L}\p{N}])(?:Air|Er)\s+(\p{Lu}[\p{L}'’.]*)|(?<![\p{L}\p{N}])(\p{Lu}[\p{L}'’.]*)\s+(?:Airlines|Airways)(?![\p{L}\p{N}])/gu
 const HEADED_FOR = /(?<![\p{L}\p{N}])[Tt]owards?\s+(?:the\s+)?(\p{Lu}[\p{L}'’.]*(?:\s+\p{Lu}[\p{L}'’.]*)?)/gu
 const TRIP_AHEAD = /(?<![\p{L}\p{N}])(?:[Aa]head\s+[Oo]f|[Bb]efore|[Pp]rior\s+[Tt]o)\s+(?:(?:his|her|their|its|the|a|an|official|state|upcoming|planned|first)\s+){0,3}(\p{Lu}[\p{L}'’.]*(?:\s+\p{Lu}[\p{L}'’.]*)?)\s+(?:[Vv]isit|[Tt]rip|[Tt]our)(?![\p{L}\p{N}])/gu
-const PASSING_ANY = /(?:pro|anti)[-‑]\p{Lu}|(?:Air|Er)\s+\p{Lu}|\s(?:Airlines|Airways)(?![\p{L}\p{N}])|towards?\s|\s(?:visit|trip|tour)(?![\p{L}\p{N}])/iu
+const DELEGATION_ARRIVES = /(?<![\p{L}\p{N}])((?:\p{Lu}[\p{L}'’.]*(?:,\s*|,?\s+and\s+|\s*&\s*))*\p{Lu}[\p{L}'’.]*)\s+(?:PMs?|prime\s+ministers?|presidents?|leaders|ministers?|delegations?|officials|envoys?)\s+(?:arrives?|arrived|lands?|landed|flies|fly|flew|travel(?:s|led)?)\s+(?:in|at|into|to)(?![\p{L}\p{N}])/gu
+const PASSING_ANY = /arriv|land|fl(?:y|ies|ew)\s|travel|(?:pro|anti)[-‑]\p{Lu}|(?:Air|Er)\s+\p{Lu}|\s(?:Airlines|Airways)(?![\p{L}\p{N}])|towards?\s|\s(?:visit|trip|tour)(?![\p{L}\p{N}])/iu
 
 /** The spans of countries a text names only in passing, each with its country */
 function passingSpans(text: string): Span[] {
@@ -3058,6 +3059,15 @@ function passingSpans(text: string): Span[] {
   for (const m of text.matchAll(AIRLINE_NAMED)) add(m, m[1] ?? m[2])
   for (const m of text.matchAll(HEADED_FOR)) add(m, m[1])
   for (const m of text.matchAll(TRIP_AHEAD)) add(m, m[1])
+  // visiting leaders: "Lao, Vietnamese PMs arrive in PH for ASEAN Summit" is the host's story, not Laos's or Vietnam's
+  for (const m of text.matchAll(DELEGATION_ARRIVES)) {
+    let off = m.index! + m[0].indexOf(m[1]!)
+    for (const part of m[1]!.split(/(,\s*|,?\s+and\s+|\s*&\s*)/)) {
+      const cc = countryOnly(part)
+      if (cc) spans.push([off, off + part.length, cc])
+      off += part.length
+    }
+  }
   return spans
 }
 
