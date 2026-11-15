@@ -7583,21 +7583,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['mauritius', 'indian-ocean', 'africa', 'francophone'],
     language:        'fr',
   },
-  // Congo-Brazzaville's state news agency (French); headlines say bare "Congo", which the place-finder reads as DR Congo
-  {
-    id:              'aci-congo',
-    name:            'ACI (Agence Congolaise d\'Information)',
-    feedUrl:         'https://www.aci.cg/feed/',
-    category:        'geopolitics',
-    biasLabel:       'state-media',
-    reliability:     0.50,
-    countryCode:     'CG',
-    defaultLat:      -4.27,
-    defaultLng:      15.28,
-    defaultLocation: 'Brazzaville, Republic of the Congo',
-    extraTags:       ['congo-brazzaville', 'central-africa', 'africa', 'state-media'],
-    language:        'fr',
-  },
   // Malawian online news site; partisan tone in some headlines, plus opinion and letters
   {
     id:              'malawi-voice',
