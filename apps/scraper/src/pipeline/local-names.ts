@@ -320,6 +320,10 @@ const ALBANIAN: Rule[] = [
   r('prisht(?:ina|in[ëe]s?|in[ëe]n)', 'Pristina'), r('prizren(?:i|it|in)', 'Prizren'), r('mitrovic(?:a|[ëe]s?|[ëe]n)', 'Mitrovica'),
   r('pej(?:a|[ëe]s?|[ëe]n)', 'Peja'), r('gjakov(?:a|[ëe]s?|[ëe]n)', 'Gjakova'), r('ferizaj(?:i|t|n)', 'Ferizaj'),
   r('gjilan(?:i|it|in)', 'Gjilan'), r('podujev(?:a|[ëe]s?|[ëe]n)', 'Podujeva'), r('vushtrri(?:a|s[ëe]|n[ëe])', 'Vushtrri'),
+  // Kosovo's smaller towns by their Albanian names (Nov 16: an Albanian outlet's "Han i Elezit" story sat at Skopje, the outlet's home)
+  r('han(?:i)?\\s+i\\s+elezit', 'Hani i Elezit'), r('ka[çc]anik(?:u|ut)?', 'Kacanik'), r('lipjan(?:i|it|in)?', 'Lipljan'),
+  r('fush[ëe]\\s+kosov(?:a|[ëe]s?|[ëe]n)', 'Kosovo Polje'), r('malishev(?:a|[ëe]s?|[ëe]n)', 'Malisevo'),
+  r('rahovec(?:i|it|in)?', 'Orahovac'), r('suhar(?:ek[ëe]|ek[ëe]s|ek[ëe]n)', 'Suva Reka'), r('de[çc]an(?:i|it|in)?', 'Decani'),
   r('tiran(?:a|[ëe]s?|[ëe]n)', 'Tirana'), r('beograd(?:i|it|in)?', 'Belgrade'), r('shkup(?:i|it|in)?', 'Skopje'),
   r('bruksel(?:i|it|in)?', 'Brussels'), r('mosk(?:va|[ëe]s?|[ëe]n)', 'Moscow'), r('uashington(?:i|it|in)?', 'Washington'),
   r('kiev(?:i|it|in)?', 'Kyiv'),

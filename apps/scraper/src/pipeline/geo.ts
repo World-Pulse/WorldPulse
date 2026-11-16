@@ -806,6 +806,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'gjilan':           { lat: 42.4635, lng: 21.4694, country: 'XK' },
   'podujeva':         { lat: 42.9106, lng: 21.1931, country: 'XK' },
   'vushtrri':         { lat: 42.8231, lng: 20.9675, country: 'XK' },
+  'hani i elezit':    { lat: 42.1544, lng: 21.2969, country: 'XK', name: 'Hani i Elezit' },
   'escaldes-engordany': { lat: 42.5089, lng: 1.5397, country: 'AD', name: 'Escaldes-Engordany' },
   'canillo':          { lat: 42.5676, lng: 1.5976,  country: 'AD' },
   'la massana':       { lat: 42.5450, lng: 1.5148,  country: 'AD' },
