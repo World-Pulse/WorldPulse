@@ -7,6 +7,7 @@ import crypto from 'node:crypto'
 import { pipeline } from 'node:stream/promises'
 import sharp from 'sharp'
 import { sendError } from '../lib/errors'
+import { uploadAllowed, countUpload } from '../lib/upload-quota'
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────
 const UPLOADS_DIR = process.env.UPLOADS_DIR ?? path.join(process.cwd(), 'uploads', 'post-media')
@@ -101,12 +102,19 @@ export const registerUploadRoutes: FastifyPluginAsync = async (app) => {
   // Returns: { success: true, data: { url, urls, type } }
   app.post('/', { preHandler: [authenticate] }, async (req, reply) => {
     const files: Array<{ url: string; type: 'image' | 'video' }> = []
+    const userId = (req.user as { id: string }).id
 
     try {
       const parts = req.files()
 
       for await (const part of parts) {
         const mimeType = part.mimetype
+
+        // A daily cap per account (H-0056): files and bytes, checked before each file is written
+        if (!(await uploadAllowed(userId))) {
+          part.file.resume()
+          return sendError(reply, 429, 'RATE_LIMITED', 'Daily upload limit reached for this account. Try again tomorrow.')
+        }
 
         if (!ALL_ALLOWED_TYPES.has(mimeType)) {
           // Drain stream to avoid memory leaks
@@ -142,6 +150,7 @@ export const registerUploadRoutes: FastifyPluginAsync = async (app) => {
             return sendError(reply, 400, 'VALIDATION_ERROR', 'Video exceeds 50 MB size limit')
           }
 
+          await countUpload(userId, bytesWritten)
           files.push({ url: buildPublicUrl(filename), type: 'video' })
         } else {
           // Process image with sharp: resize if oversized, normalize format
@@ -167,6 +176,7 @@ export const registerUploadRoutes: FastifyPluginAsync = async (app) => {
             .webp({ quality: 85 })
             .toFile(outputPath)
 
+          await countUpload(userId, totalBytes)
           files.push({ url: buildPublicUrl(outputFilename), type: 'image' })
         }
       }
