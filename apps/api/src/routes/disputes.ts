@@ -14,6 +14,11 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { authenticate, optionalAuth } from '../middleware/auth'
 import { db } from '../db/postgres'
+import { sendError } from '../lib/errors'
+import {
+  DISPUTE_TYPES, DISPUTE_REASON_MAX, DISPUTE_VALUE_MAX,
+  isUuid, disputeAllowed, countDispute, correctableValue,
+} from '../lib/dispute-guard'
 
 export const registerDisputeRoutes: FastifyPluginAsync = async (app) => {
 
@@ -21,7 +26,20 @@ export const registerDisputeRoutes: FastifyPluginAsync = async (app) => {
   app.post('/signals/:signalId/dispute', { preHandler: [authenticate] }, async (req, reply) => {
     const userId = (req as any).user.id
     const { signalId } = req.params as any
-    const body = req.body as any
+    const body = (req.body && typeof req.body === 'object' ? req.body : {}) as any
+
+    // H-0056: only the types the table allows, short text, a real signal id, a cap per account per day
+    if (!isUuid(signalId)) return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid signal id')
+    if (!DISPUTE_TYPES.includes(body.type)) return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid dispute type')
+    for (const [field, max] of [['reason', DISPUTE_REASON_MAX], ['suggested_value', DISPUTE_VALUE_MAX]] as const) {
+      const v = body[field]
+      if (v != null && (typeof v !== 'string' || v.length > max)) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', `${field} must be text of at most ${max} characters`)
+      }
+    }
+    if (!(await disputeAllowed(userId))) {
+      return sendError(reply, 429, 'RATE_LIMITED', 'Daily dispute limit reached for this account. Try again tomorrow.')
+    }
 
     // Validate signal exists
     const signal = await db('signals').where('id', signalId).first('id', 'category', 'severity', 'location_name')
@@ -47,20 +65,23 @@ export const registerDisputeRoutes: FastifyPluginAsync = async (app) => {
       suggested_value: body.suggested_value || null,
       reason: body.reason || null,
     }).returning('*')
+    await countDispute(userId)
 
     // Auto-resolve: if 3+ users dispute the same thing, apply correction
     const sameDisputes = await db('signal_disputes')
       .where({ signal_id: signalId, dispute_type: body.type, status: 'pending' })
       .count('id as count')
 
-    if (Number(sameDisputes[0].count) >= 3 && body.suggested_value) {
+    // only a category or severity that exists is ever written to the signal
+    const corrected = correctableValue(body.type, body.suggested_value)
+    if (Number(sameDisputes[0].count) >= 3 && corrected) {
       // Auto-apply correction
       const updateField = body.type === 'wrong_category' ? 'category'
         : body.type === 'wrong_severity' ? 'severity'
         : null
 
       if (updateField) {
-        await db('signals').where('id', signalId).update({ [updateField]: body.suggested_value })
+        await db('signals').where('id', signalId).update({ [updateField]: corrected })
         await db('signal_disputes')
           .where({ signal_id: signalId, dispute_type: body.type, status: 'pending' })
           .update({ status: 'auto_resolved', resolved_at: db.raw('NOW()') })
