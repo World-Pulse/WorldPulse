@@ -667,6 +667,17 @@ pipeline_stats() {
              WHERE v.check_type = 'second_read' AND v.verdict = 'not_event'
              ORDER BY v.created_at DESC LIMIT 30) x), '[]'::jsonb))"
   part second_read_not_event db_json 10 "$q8"
+  # What loads the database (Nov 15, 2026: Postgres at 86% of the server's processor time on 2 CPUs, the
+  # load near 3.5): the tables read most by full scans (rows read without an index), with their index
+  # reads and size, and whether pg_stat_statements is on. Table names and counts only, no query text
+  q9="SELECT json_build_object(
+        'since', (SELECT stats_reset FROM pg_stat_database WHERE datname = current_database()),
+        'statements_ext', (SELECT count(*) > 0 FROM pg_extension WHERE extname = 'pg_stat_statements'),
+        'tables', coalesce((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.seq_rows DESC) FROM (
+            SELECT relname AS t, seq_scan AS scans, seq_tup_read AS seq_rows, coalesce(idx_scan, 0) AS idx_scans,
+                   n_live_tup AS rows, pg_total_relation_size(relid) / 1048576 AS mb
+              FROM pg_stat_user_tables ORDER BY seq_tup_read DESC LIMIT 8) x), '[]'::jsonb))"
+  part db_load db_json 10 "$q9"
   # ... and GDELT's file list as the second-outlet reader last read it: files per
   # hour for 24 hours and the last cycle's missing and failed files (counts only)
   part gdelt gdelt_stats
@@ -705,7 +716,7 @@ def part(name):
     return value
 out = {'window': '24h', 'checked': checked}
 out['db'] = [v if isinstance(v, dict) else None for v in (part('db%d' % i) for i in range(1, 6))]
-for name in ('scraper_30m', 'llm', 'fingerprints', 'claude', 'sources', 'api_limits', 'disk', 'readers', 'report_rate', 'gdelt', 'second_read_not_event'):
+for name in ('scraper_30m', 'llm', 'fingerprints', 'claude', 'sources', 'api_limits', 'disk', 'readers', 'report_rate', 'gdelt', 'second_read_not_event', 'db_load'):
     out[name] = part(name)
 # Members: in the pipeline block, and with the readers too (the HQ copies the readers block
 # whole); null when the query failed
