@@ -10932,6 +10932,14 @@ const RUSSIA_NOUN = /\b(?:russia|moscow|kremlin)\b/
  * Analitika's and Dan's daily one, "Horoskop za 6. novembar"). They get no pin
  * unless the text names a place.
  */
+/** Names only a Chilean story carries: its institutions, president, regions, parties as the press writes them
+ * ("Vodanovic (PS)") and football clubs; used by HOME_WHEN_NAMED */
+const CHILE_MARKS = /(?<![\p{L}\p{N}])(?:Chile|chilen[oa]s?|La Moneda|Kast|Congreso|Senado|Cámara de Diputad[oa]s|diputad[oa]s?|senador(?:a|es|as)?|Carabineros|PDI|Senapred|Minsal|Mineduc|MOP|Metro de Santiago|red de Metro|Cadem|Criteria|Contraloría|Corte Suprema|Servel|Colo[- ]Colo|Universidad de Chile|U\. de Chile|Universidad Católica|Cobreloa|Primera B|ANFP|[Ss]eremi|Biobío|Ñuble|Araucanía|Atacama|Coquimbo|Valparaíso|Antofagasta|Tarapacá|Magallanes|Maule|Los Lagos|Aysén|Limarí|Rancagua|Temuco|Iquique|Arica|Talca|Concepción|Puerto Montt|Viña del Mar)(?![\p{L}\p{N}])|\((?:PS|UDI|RN|PC|PDG|FA|DC|PPD|PR|Rep\.?)\)/u
+/** Outlets whose placeless stories are pinned at home only when they name their own country (inferGeo) */
+const HOME_WHEN_NAMED: Record<string, RegExp> = { 'la-tercera-cl': CHILE_MARKS, 'cooperativa-cl': CHILE_MARKS }
+/** Another country named in Spanish, often as an adjective ("el Congreso argentino"), which mentionedCountries misses */
+const FOREIGN_ES = /(?<![\p{L}])(?:argentin[oa]s?|Argentina|Buenos Aires|peruan[oa]s?|Perú|Lima|bolivian[oa]s?|Bolivia|brasileñ[oa]s?|Brasil|venezolan[oa]s?|Venezuela|colombian[oa]s?|Colombia|mexican[oa]s?|México|estadounidense|EE\.\s?UU\.?|Estados Unidos|Washington|uruguay[oa]s?|Uruguay|paraguay[oa]s?|Paraguay|ecuatorian[oa]s?|Ecuador|español[ae]?s?|España|panameñ[oa]s?|Panamá|cuban[oa]s?|Cuba|chin[oa]s?|China|rus[oa]s?|Rusia|ucranian[oa]s?|Ucrania|israelíes|Israel|europe[oa]s?|Europa|Vaticano|Papa|León XIV)(?![\p{L}])/u
+
 const NO_PLACE_TOPIC = /\b(?:premier league|champions league|europa league|la liga|serie a|bundesliga|man(?:chester)? (?:utd|united|city)|binance|coinbase|bitcoin|ethereum|crypto(?:currency)? (?:exchange|hack)|horoscopes?|horoskop[aeiu]?|hor[oó]scopos?|oroscopo)\b/i
 
 /**
@@ -11147,6 +11155,16 @@ export function inferGeo(
     }
   }
   if (fromHead) return fromHead
+  // A national paper that carries much foreign news (La Tercera, Cooperativa: Chile) pins a placeless story at home
+  // only when it names something of its own country and no other (Nov 15, 2026: of their placeless stories, Kast's
+  // ratings, Senapred's warnings and a Congress vote are Chile's; Milei, Nvidia and an ATP final are not)
+  const ownMarks = HOME_WHEN_NAMED[source.id]
+  if (ownMarks && ownMarks.test(`${title} ${description}`)
+    && !FOREIGN_ES.test(`${title} ${description}`)
+    && mentionedCountries(`${title} ${description}`).every((cc) => cc === source.countryCode)) {
+    return datelinePlace(body) ?? ownPlace(body, source)
+      ?? { lat: source.defaultLat, lng: source.defaultLng, locationName: source.defaultLocation, countryCode: source.countryCode }
+  }
   // A national outlet's story that names no place in its headline is about its own country unless its
   // dateline says otherwise (Oct 30, 2026, M57: a place found anywhere in the summary won before, so
   // Haaretz's column on Netanyahu sat in Washington, a Penang court case in Myanmar, Japan's new
