@@ -24,6 +24,7 @@ describe('inferGeo', () => {
   it('gives league football and crypto-exchange stories no home pin (Oct 30, 2026)', () => {
     expect(inferGeo('Binance hit by hack, users told to freeze accounts', '', source('rte-news'))).toMatchObject({ lat: null, countryCode: null })
     expect(inferGeo('Everton v Manchester United: Premier League preview', '', source('myjoyonline-gh')).lat).toBeNull()
+    expect(inferGeo('Klopp says FIFA worse under Infantino than Blatter', '', source('myjoyonline-gh'))).toMatchObject({ lat: null, countryCode: null })
   })
 
   it('does not pin a fixture to a club city found only in the summary (Nov 3, 2026)', () => {

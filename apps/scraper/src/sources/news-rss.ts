@@ -11168,7 +11168,7 @@ const HOME_WHEN_NAMED: Record<string, RegExp> = { 'la-tercera-cl': CHILE_MARKS, 
 /** Another country named in Spanish, often as an adjective ("el Congreso argentino"), which mentionedCountries misses */
 const FOREIGN_ES = /(?<![\p{L}])(?:argentin[oa]s?|Argentina|Buenos Aires|peruan[oa]s?|Perú|Lima|bolivian[oa]s?|Bolivia|brasileñ[oa]s?|Brasil|venezolan[oa]s?|Venezuela|colombian[oa]s?|Colombia|mexican[oa]s?|México|estadounidense|EE\.\s?UU\.?|Estados Unidos|Washington|uruguay[oa]s?|Uruguay|paraguay[oa]s?|Paraguay|ecuatorian[oa]s?|Ecuador|español[ae]?s?|España|panameñ[oa]s?|Panamá|cuban[oa]s?|Cuba|chin[oa]s?|China|rus[oa]s?|Rusia|ucranian[oa]s?|Ucrania|israelíes|Israel|europe[oa]s?|Europa|Vaticano|Papa|León XIV)(?![\p{L}])/u
 
-const NO_PLACE_TOPIC = /\b(?:premier league|champions league|europa league|la liga|serie a|bundesliga|man(?:chester)? (?:utd|united|city)|binance|coinbase|bitcoin|ethereum|crypto(?:currency)? (?:exchange|hack)|horoscopes?|horoskop[aeiu]?|hor[oó]scopos?|oroscopo)\b/i
+const NO_PLACE_TOPIC = /\b(?:premier league|champions league|europa league|la liga|serie a|bundesliga|man(?:chester)? (?:utd|united|city)|fifa|uefa|infantino|binance|coinbase|bitcoin|ethereum|crypto(?:currency)? (?:exchange|hack)|horoscopes?|horoskop[aeiu]?|hor[oó]scopos?|oroscopo)\b/i
 
 /**
  * A big tech service's outage reaches readers everywhere (Nov 12-13, 2026: the Microsoft Outlook outage sat at an
