@@ -192,8 +192,13 @@ export function tidyGeoName(name: string): string {
  */
 export function actionGeoIsNamed(countryCode: string, text: string): boolean {
   if (!countryCode) return true
+  // "Georgia" alone is as often the US state, which GDELT codes as the country: "Ossoff wins reelection in Georgia"
+  // and the state's governor race sat in the Caucasus (Nov 15, 2026). The country needs its own words.
+  if (countryCode === 'GE') return GEORGIA_COUNTRY.test(text)
   return mentionedCountries(text).includes(countryCode)
 }
+/** Words only the country of Georgia's stories carry (the US state's never) */
+const GEORGIA_COUNTRY = /\b(?:tbilisi|batumi|kutaisi|rustavi|poti|zugdidi|gori|georgian dream|georgians?(?! (?:voters?|senators?|governors?|residents?|lawmakers?|bulldogs?|tech))|ivanishvili|kobakhidze|kavelashvili|zourabichvili|abkhaz\w*|south ossetia|republic of georgia|caucasus)\b/i
 
 /**
  * Parse one tab-separated GDELT event row.
