@@ -4544,7 +4544,7 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['switzerland', 'europe', 'french'],
     language:        'fr',
   },
-  // Portugal's public broadcaster, its national (País) news feed; Portuguese, so no home pin
+  // Portugal's public broadcaster, its national (País) news feed; home pin since Nov 15, 2026 (HOME_PIN_SOURCES)
   {
     id:              'rtp-noticias',
     name:            'RTP Notícias (Portugal)',
@@ -10903,6 +10903,11 @@ export const HOME_PIN_SOURCES = new Set([
   'sbc-seychelles',
   // Nov 11, 2026: Tonga Independent News, nearly all Tonga's own news (in English and Tongan), as Kaniva Tonga's
   'tonga-independent',
+  // Nov 15, 2026 (weekly accuracy read, missing pins): RTP's national (País) feed and Juno7 (Haiti). Their 50 and 10
+  // newest stories, run both ways: 33 placeless stories gained their own country's pin and no pin moved abroad.
+  // Not La Tercera or Cooperativa (Chile): about 1 in 4 of the stories that would change were Argentina's, Panama's,
+  // Nvidia's or a tennis final's
+  'rtp-noticias', 'juno7-ht',
 ])
 
 export interface InferredGeo {
