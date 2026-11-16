@@ -118,6 +118,7 @@ import { ensureStoryFollowsTable } from './lib/story-follows'
 import { ensureContentReportsTable } from './lib/content-reports'
 import { registerStoryFollowRoutes } from './routes/story-follows'
 import { ensureEntitySignalsIndex } from './lib/entity-index'
+import { ensureThreadSignalIndex } from './lib/thread-index'
 import { hashStoredFlagAddresses } from './lib/signal-flags'
 import { corsDecision } from './lib/cors-policy'
 import { TRUSTED_PROXIES } from './lib/client-address'
@@ -494,6 +495,11 @@ async function bootstrap() {
   // stopping the scraper's writes; later starts find it and do nothing
   ensureEntitySignalsIndex()
     .then(r => { if (r !== 'ready') logger.info({ result: r }, 'Entity report index') })
+    .catch(() => {})
+  // ─── STORY THREADS: an index on the reports linked into threads (Nov 15, 2026: the table was read end to
+  // end 3.8 million times, the database's main load); built once, in the background; later starts do nothing
+  ensureThreadSignalIndex()
+    .then(r => { if (r !== 'ready') logger.info({ result: r }, 'Thread report index') })
     .catch(() => {})
 
   // Readers' flags stored before H-0020 kept the visitor's address readable

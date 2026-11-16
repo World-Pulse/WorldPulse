@@ -673,6 +673,8 @@ pipeline_stats() {
   q9="SELECT json_build_object(
         'since', (SELECT stats_reset FROM pg_stat_database WHERE datname = current_database()),
         'statements_ext', (SELECT count(*) > 0 FROM pg_extension WHERE extname = 'pg_stat_statements'),
+        'thread_indexes', coalesce((SELECT jsonb_agg(c.relname ORDER BY c.relname) FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
+                                     WHERE i.indrelid = to_regclass('public.event_thread_signals') AND i.indisvalid), '[]'::jsonb),
         'tables', coalesce((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.seq_rows DESC) FROM (
             SELECT relname AS t, seq_scan AS scans, seq_tup_read AS seq_rows, coalesce(idx_scan, 0) AS idx_scans,
                    n_live_tup AS rows, pg_total_relation_size(relid) / 1048576 AS mb
