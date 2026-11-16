@@ -292,6 +292,11 @@ const MONTENEGRIN: Rule[] = [
   cs('(?<=(?:^|[^\\p{L}])(?:u|iz|oko|kod|do|za|na|sa|prema|blizu)\\s)Bar(?:a|u|om)', 'Bar, Montenegro'), cs('(?<=(?:^|[^\\p{L}])(?:u|iz|oko|kod|do|za|na|sa|prema|blizu)\\s)Sofij(?:i|e|u)', 'Sofia'),
   r('kola[šs]in(?:a|u|om)?', 'Kolasin'), r('[žz]abljak(?:a|u|om)?', 'Zabljak'), r('mojkovc(?:a|u|em)|mojkovac', 'Mojkovac'),
   r('danilovgrad(?:a|u|om)?', 'Danilovgrad'), r('ro[žz]aj(?:e|a|ama)', 'Rozaje'), r('andrijevic(?:a|e|i|u|om)', 'Andrijevica'),
+  // Foreign capitals in their cases (Nov 16: Portal Analitika's "Podrška evropskih liberala u Dablinu" and "Drakić na Bečkom ekonomskom forumu"
+  // sat at Podgorica, the outlet's home)
+  r('dablin(?:a|u|om)?', 'Dublin'), r('be[čc](?:a|u|om|kom|ki|kog|koj|kim)', 'Vienna'), r('pariz(?:a|u|om)?', 'Paris'),
+  r('berlin(?:a|u|om)', 'Berlin'), r('london(?:a|u|om)', 'London'), r('budimpe[šs]t(?:a|e|i|u|om)', 'Budapest'),
+  r('var[šs]av(?:a|e|i|u|om)', 'Warsaw'), r('lisabon(?:a|u|om)?', 'Lisbon'), r('madrid(?:a|u|om)', 'Madrid'),
   r('mali', '…'),
 ]
 
