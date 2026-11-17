@@ -121,7 +121,7 @@ export default function SourcesPage() {
         <div>
           <h1 className="text-[22px] font-bold text-wp-text">Intelligence Sources</h1>
           <p className="text-[13px] text-wp-text3 mt-0.5">
-            {sources.length} verified sources · Continuously monitored
+            {loading || error ? 'Continuously monitored' : `${sources.length} verified sources · Continuously monitored`}
           </p>
         </div>
         <Link
@@ -140,9 +140,10 @@ export default function SourcesPage() {
           { label: 'Active Now',      value: sources.filter(s => s.active).length },
           { label: 'Avg Trust',       value: `${Math.round(sources.reduce((s, src) => s + src.trustScore, 0) / (sources.length || 1) * 100)}%` },
         ].map(stat => (
+          // A dash until the list has loaded, so the page never shows 0 sources (H-0058).
           <div key={stat.label} className="bg-wp-surface border border-[rgba(255,255,255,0.07)] rounded-xl p-4">
             <div className="font-mono text-[10px] tracking-[2px] text-wp-text3 uppercase mb-1">{stat.label}</div>
-            <div className="text-[22px] font-bold text-wp-amber">{stat.value}</div>
+            <div className="text-[22px] font-bold text-wp-amber">{loading || error ? '–' : stat.value}</div>
           </div>
         ))}
       </div>
