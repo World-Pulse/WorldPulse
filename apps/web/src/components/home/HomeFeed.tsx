@@ -11,6 +11,7 @@ import { FollowedStories } from '@/components/home/FollowedStories'
 import { InTheNews } from '@/components/feed/InTheNews'
 import type { HomeBrief } from '@/lib/home-brief'
 import type { DevelopingStory } from '@/lib/developing-stories'
+import { AlertsInvite } from '@/components/alerts/PushAlerts'
 
 type FeedTab    = 'global' | 'following' | 'verified' | 'digest' | 'for_you'
 type FilterCat  = 'all' | 'breaking' | 'conflict' | 'climate' | 'economy' | 'technology' | 'health'
@@ -119,6 +120,9 @@ export function HomeFeed({ brief = null, developing = [], developingAt }: { brie
         {/* Developing Stories — escalating/developing event threads; "Overnight" in the reader's morning,
             with what changed and what to watch from the Daily Briefing (plan N6) */}
         <DevelopingStories brief={brief} initial={developing} initialNow={developingAt} />
+
+        {/* Breaking-news alerts, one tap (Nov 16, 2026); hidden once on or after "Not now" */}
+        <AlertsInvite className="mx-4 my-3" />
 
         {/* In the news: the people, places and organisations named most, each with its page */}
         <InTheNews />

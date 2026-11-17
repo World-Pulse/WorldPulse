@@ -13,6 +13,7 @@ import {
   pushSupport, getKey, readState, turnOn, turnOff, nextWant, pushErrorText, PUSH_OFF,
   type PushSupport, type PushState,
 } from '@/lib/push-client'
+import { INVITE_KEY, inviteHidden } from '@/lib/alerts-invite'
 
 const HOME_SCREEN = 'On iPhone or iPad: tap Share, then “Add to Home Screen”, and open WorldPulse from your Home Screen to turn alerts on there.'
 const UNSUPPORTED = 'This browser can’t show alerts. Chrome, Edge, Firefox and Safari can.'
@@ -94,6 +95,56 @@ export function PushAlertsCard() {
             {busy ? '…' : on ? 'On · Turn off' : 'Turn on'}
           </button>
         )}
+      </div>
+    </section>
+  )
+}
+
+/** The invitation on the home page and story pages (Nov 16, 2026): one tap to turn breaking-news
+ *  alerts on. Not shown where alerts can't work, where they're already on, or for 30 days after
+ *  "Not now". On an iPhone in the browser it says how to add WorldPulse to the Home Screen. */
+export function AlertsInvite({ className = '' }: { className?: string }) {
+  const { support, key, state, busy, note, press } = usePush()
+  const [hidden, setHidden] = useState(true)
+  const [justOn, setJustOn] = useState(false)
+  useEffect(() => {
+    try { setHidden(inviteHidden(localStorage.getItem(INVITE_KEY))) } catch { setHidden(false) }
+  }, [])
+  if (support === null || support === 'unsupported' || hidden) return null
+  if (state.subscribed && !justOn) return null
+  function notNow() {
+    try { localStorage.setItem(INVITE_KEY, new Date().toISOString()) } catch { /* ignore */ }
+    setHidden(true)
+  }
+  return (
+    <section aria-label="Breaking news alerts" className={`rounded-xl border border-[rgba(245,166,35,0.35)] bg-[rgba(245,166,35,0.06)] p-4 ${className}`}>
+      <div className="flex items-start gap-3">
+        <BellRing className="w-5 h-5 text-wp-amber flex-shrink-0 mt-0.5" aria-hidden="true" />
+        <div className="flex-1 min-w-0">
+          <p className="text-[14px] font-semibold text-wp-text">Get breaking news the moment it’s confirmed</p>
+          <p className="text-[13px] text-wp-text3 mt-1">
+            A notification when several independent outlets confirm a major story. 6 a day at most, no account needed.
+          </p>
+          {support === 'ios-home-screen' && <p className="text-[12px] text-wp-amber mt-2">{HOME_SCREEN}</p>}
+          {note && <p role="status" className="text-[12px] text-wp-amber mt-2">{note}</p>}
+          {!justOn && (
+            <div className="flex flex-wrap items-center gap-3 mt-3">
+              {support === 'ok' && (
+                <button
+                  type="button"
+                  onClick={async () => { setJustOn(true); await press({ breaking: true }, 'Alerts are on. A first one is on its way.') }}
+                  disabled={busy || !key}
+                  className="px-4 py-2 rounded-lg bg-wp-amber text-black text-[13px] font-bold hover:bg-[#ffb84d] transition-all disabled:opacity-50"
+                >
+                  {busy ? '…' : 'Turn on alerts'}
+                </button>
+              )}
+              <button type="button" onClick={notNow} className="text-[12px] text-wp-text3 underline underline-offset-2 hover:text-wp-text">
+                Not now
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </section>
   )
