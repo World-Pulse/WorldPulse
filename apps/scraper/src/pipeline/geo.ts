@@ -3478,6 +3478,11 @@ const MAX_NOMINATIM_LOOKUPS = 4
  * world-gazetteer.ts is generated, so they live here.
  */
 const HOME_HAND: Record<string, Record<string, TownEntry>> = {
+  // Nov 17, 2026: KSBW's "ICE agents use pepper spray, shove protestor to the ground in Santa Cruz" sat at Washington DC;
+  // Santa Cruz is also Bolivia's, Spain's and Chile's, so only an American outlet reads it as California's
+  US: {
+    'Santa Cruz': { lat: 36.9741, lng: -122.0308, country: 'US', name: 'Santa Cruz', region: 'California' },
+  },
   CL: {
     'Estación Central': { lat: -33.46, lng: -70.68, country: 'CL', name: 'Estación Central', region: 'Santiago' },
     'Estacion Central': { lat: -33.46, lng: -70.68, country: 'CL', name: 'Estación Central', region: 'Santiago' },
