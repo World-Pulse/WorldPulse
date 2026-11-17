@@ -4,6 +4,7 @@ import { redis } from '../db/redis'
 import { authenticate, optionalAuth } from '../middleware/auth'
 import { z } from 'zod'
 import { sendError } from '../lib/errors'
+import { pollAllowed, countPoll } from '../lib/poll-guard'
 
 const CreatePollSchema = z.object({
   question:  z.string().min(1).max(500),
@@ -33,6 +34,11 @@ export const registerPollRoutes: FastifyPluginAsync = async (app) => {
     const userId = req.user!.id
     const d = body.data
 
+    // A daily cap per account (H-0056)
+    if (!(await pollAllowed(userId))) {
+      return sendError(reply, 429, 'RATE_LIMITED', 'Daily poll limit reached for this account. Try again tomorrow.')
+    }
+
     // If postId provided, ensure the post exists and belongs to caller
     if (d.postId) {
       const post = await db('posts').where('id', d.postId).whereNull('deleted_at').first('id, author_id')
@@ -52,6 +58,8 @@ export const registerPollRoutes: FastifyPluginAsync = async (app) => {
         post_id:    d.postId ?? null,
       })
       .returning('*')
+
+    await countPoll(userId)
 
     const formatted = formatPoll(poll, null)
     return reply.status(201).send({ success: true, data: formatted })
