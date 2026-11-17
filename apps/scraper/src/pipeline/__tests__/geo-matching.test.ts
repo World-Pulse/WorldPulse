@@ -234,6 +234,16 @@ describe('extractGeo', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   }, 15_000)
 
+  it('does not read the film character "Batman" as the Turkish city (live, Nov 16, 2026)', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => [hit('Batman', 'tr', { importance: 0.6 }, 37.7874, 41.2574)],
+    })
+    const geo = await extractGeo('Robert Pattinson Is James Bond and Batman at Once: How the New 007 Will Juggle Two Giant Film Franchises')
+    expect(geo.lat).not.toBeCloseTo(37.7874)
+    expect(fetchMock.mock.calls.some(c => String(c[0]).includes('q=batman'))).toBe(false)
+  }, 15_000)
+
   it('does not pin a climate story to Lima', async () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => [] })
     const geo = await extractGeo('Climate pledges fall short as emissions keep rising')

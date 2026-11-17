@@ -4102,5 +4102,8 @@ const COMMON_WORDS = new Set([
   // "The Centre" is India's national government ("Centre extends ban on ..."), not the French region
   // Centre-Val de Loire the geocoder offers (Nov 13, 2026, a Daily Pioneer story pinned in France)
   'centre', 'center',
+  // The film character, not the Turkish city (Nov 16, 2026: a story on the new James Bond who is also
+  // Batman was pinned at Batman, Turkey). Only the geocoder's guess is skipped; the gazetteer is unchanged.
+  'batman',
 ])
 
