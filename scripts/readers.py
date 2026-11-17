@@ -105,6 +105,11 @@ API_HOST = 'api.' + SITE_HOST
 OWN_SITES = (SITE_HOST, 'world-pulse.app')   # world-pulse.app points at the same server
 IP_ADDRESS = re.compile(r'^\d{1,3}(?:\.\d{1,3}){3}$|^[0-9a-f]*:[0-9a-f:.]*$')
 STATE_VERSION = 4
+# A person is reading (Nov 16, 2026): from this day (UTC) a reader counts only once the page has said so,
+# after 8 seconds in view and a scroll or tap (apps/web/src/components/ReaderSeen.tsx). Automated
+# browsers that ran the page but never stayed are counted apart as "ran_only"
+SEEN_FROM = '2026-11-18'
+SEEN_PATH = '/api/v1/public/seen'
 # Days counted before the API rule whose count a crawler clearly inflated: shown as not known (the
 # server's log no longer covers the day, so it can't be counted again); the old number is kept apart
 LOOSE_DAYS = ('2026-10-20',)
@@ -413,6 +418,8 @@ def summary(d):
     """The day's totals, counting only visitors whose browser ran the page"""
     channels, pages, sites, views, people, unconfirmed, scripts_only, sign_in_only = {}, {}, {}, 0, 0, 0, 0, 0
     no_language = 0
+    ran_only, stayed = 0, 0   # ran the page but never stayed; stayed: the page said a person is reading
+    strict = d['day'] >= SEEN_FROM
     hours, posts, agents, sections, languages = {}, {}, {}, {}, {}
     post_channels = {}   # each post's readers by the channel they came from (Nov 11, 2026)
     # Page views by the channel that brought each visitor (plan G18 (3), Oct 20, 2026):
@@ -441,6 +448,11 @@ def summary(d):
         if v.get('l') == 'not sent':
             # ran the page, but its browser asked for no language at all: automation (plan LR5, Oct 23, 2026)
             no_language += 1
+            continue
+        if v.get('i'):
+            stayed += 1
+        elif strict:
+            ran_only += 1
             continue
         people += 1
         add(agents, v.get('a') or 'other')
@@ -471,7 +483,8 @@ def summary(d):
             'sites': by_count(sites, 8), 'pages': by_count(pages), 'crawlers': by_count(d['crawlers']),
             'bots': top_bots(d), 'bot_pages': by_count(d.get('bot_pages') or {}, 12), 'bots_since': d.get('bots_since'),
             'unconfirmed': unconfirmed, 'scripts_only': scripts_only, 'sign_in_only': sign_in_only, 'no_language': no_language,
-            'rule': 'api, a language, no sign-in pages',
+            'rule': 'api, a language, no sign-in pages' + (', stayed 8 s and scrolled or tapped' if strict else ''),
+            'ran_only': ran_only, 'stayed': stayed,
             'people_agents': by_count(agents, 8), 'people_sections': by_count(sections, 12),
             'people_languages': by_count(languages, 12),
             'hours': dict(sorted(hours.items())), 'posts': by_count(posts, 20),
@@ -645,7 +658,10 @@ def count(st, lines):
         who = hashlib.sha256(f"{today['salt']}|{m['ip']}|{ua}".encode()).hexdigest()[:16]
         # The browser ran the page: its top bar called the API as the page loaded
         if host == API_HOST or (host is None and path.startswith('/api/')):
-            today['visitors'].setdefault(who, {'p': {}})['js'] = True
+            v = today['visitors'].setdefault(who, {'p': {}})
+            v['js'] = True
+            if path == SEEN_PATH:
+                v['i'] = True   # stayed 8 seconds and scrolled or tapped (Nov 16, 2026)
             continue
         # It only downloaded the site's scripts: not proof that it ran them (Oct 20, 2026)
         if path.startswith('/_next/static/'):
@@ -705,7 +721,8 @@ def main():
     out['updated'] = now.isoformat(timespec='seconds')
     out['log_read'] = ok
     out['history'] = [{**{k: h.get(k) for k in ('day', 'visitors', 'views', 'channels', 'channel_views', 'views_per_visitor', 'posts', 'post_channels', 'crawlers',
-                                                'unconfirmed', 'scripts_only', 'sign_in_only', 'no_language', 'rule', 'note', 'visitors_loose')},
+                                                'unconfirmed', 'scripts_only', 'sign_in_only', 'no_language', 'rule', 'note', 'visitors_loose',
+                                                'ran_only', 'stayed')},
                        'ai_referrals': ai_referrals_of(h), 'ai_reads': h.get('ai_reads') or {}, 'ai_search': h.get('ai_search') or {}}
                       for h in st['history'][-14:]]
     out['ai_week'] = ai_week(out, st['history'][-6:])

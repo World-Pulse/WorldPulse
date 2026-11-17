@@ -109,3 +109,33 @@ class ReadersPerPost(unittest.TestCase):
                                      d={'p': {'story': 1}, 'l': 'en', 'c': 'x', 'k': 'hq:83b746ee'}))
         self.assertEqual(s['posts'], {'video:2026-11-11': 2, 'hq:83b746ee': 1})   # d never ran the page
         self.assertEqual(s['post_channels'], {'video:2026-11-11': {'x': 1, 'linkedin': 1}, 'hq:83b746ee': {'x': 1}})
+
+
+class StayedToRead(unittest.TestCase):
+    """Nov 16, 2026: from SEEN_FROM a reader counts only once the page said a person is reading"""
+
+    def strict_day(self, **visitors):
+        d = readers.empty_day(readers.SEEN_FROM)
+        d['visitors'] = visitors
+        return d
+
+    def test_from_the_switch_only_visitors_who_stayed_count(self):
+        s = readers.summary(self.strict_day(a={'p': {'home': 1}, 'js': True, 'l': 'en'},
+                                            b={'p': {'story': 2}, 'js': True, 'i': True, 'l': 'en'}))
+        self.assertEqual((s['visitors'], s['views'], s['ran_only'], s['stayed']), (1, 2, 1, 1))
+        self.assertIn('stayed 8 s', s['rule'])
+
+    def test_before_the_switch_the_old_rule_still_counts_them_and_says_how_many_stayed(self):
+        s = readers.summary(day_with(a={'p': {'home': 1}, 'js': True, 'l': 'en'},
+                                     b={'p': {'story': 2}, 'js': True, 'i': True, 'l': 'en'}))
+        self.assertEqual((s['visitors'], s['ran_only'], s['stayed']), (2, 0, 1))
+        self.assertEqual(s['rule'], 'api, a language, no sign-in pages')
+
+    def test_the_seen_question_marks_the_visitor_who_asked_it(self):
+        st = {'since': None, 'history': [], 'today': readers.empty_day('2026-11-18')}
+        ua = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1'
+        def line(ts, host, target):
+            return f'{ts} 203.0.113.9 - - [x] "GET {target} HTTP/2.0" 204 0 "-" "{ua}" host={host}\n'
+        readers.count(st, [line('2026-11-18T10:00:00+00:00', readers.API_HOST, readers.SEEN_PATH)])
+        v = list(st['today']['visitors'].values())[0]
+        self.assertTrue(v.get('js') and v.get('i'))

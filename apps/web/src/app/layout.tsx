@@ -10,6 +10,7 @@ import { BreakingAlertBanner } from '@/components/alerts/BreakingAlertBanner'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { CommandPaletteProvider, CommandPalette } from '@/components/CommandPalette'
 import { HideOnEmbed } from '@/components/nav/HideOnEmbed'
+import { ReaderSeen } from '@/components/ReaderSeen'
 import { LocaleProvider } from '@/components/locale/LocaleProvider'
 import { LOCALE_COOKIE, localeFromCookie } from '@/lib/locale'
 import { X_HANDLE } from '@/lib/share-links'
@@ -136,6 +137,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <ErrorBoundary>{children}</ErrorBoundary>
               </main>
               <HideOnEmbed><BottomTabBar /></HideOnEmbed>
+              {/* Tells the reader count a person is here: 8 s in view and a scroll or tap (Nov 16, 2026) */}
+              <HideOnEmbed><ReaderSeen /></HideOnEmbed>
             </CommandPaletteProvider>
           </Providers>
         </LocaleProvider>

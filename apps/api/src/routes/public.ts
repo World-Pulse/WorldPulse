@@ -179,6 +179,15 @@ function boundedInt(v: unknown, fallback: number, min: number, max: number): num
 
 export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
 
+  // ─── GET /seen ─────────────────────────────────────────────
+  // "A person is reading" (Nov 16, 2026): the page asks this once a visitor has had it in view for
+  // 8 seconds and scrolled or tapped (apps/web/src/components/ReaderSeen.tsx). It answers nothing and
+  // stores nothing; the server's access log is what scripts/readers.py counts.
+  app.get('/seen', { schema: { hide: true } }, async (_req, reply) => {
+    reply.header('Cache-Control', 'no-store')
+    return reply.code(204).send()
+  })
+
   // ─── GET /signals ──────────────────────────────────────────
   app.get('/signals', {
     schema: {
