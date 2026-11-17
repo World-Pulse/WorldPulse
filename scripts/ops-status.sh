@@ -652,6 +652,19 @@ pipeline_stats() {
       FROM f"
   part members_detail db_json 10 "$q7d"
   part signup_trap signup_trap_stats
+  # The email briefing's sign-ups (Devon, Nov 17, 2026: "figure out" why 73 never confirmed): counts only,
+  # never an address. When the unconfirmed ones signed up (by day), from which page, and how many share a
+  # mail domain with others (a script's sign-ups usually come from one or two)
+  q7b="WITH u AS (SELECT * FROM digest_subscriptions WHERE is_active AND confirmed_at IS NULL)
+    SELECT json_build_object(
+        'by_day',    (SELECT coalesce(json_object_agg(d, n ORDER BY d), '{}'::json)
+                        FROM (SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS d, count(*) AS n FROM u GROUP BY 1) x),
+        'by_source', (SELECT coalesce(json_object_agg(src, n), '{}'::json)
+                        FROM (SELECT coalesce(source, 'none') AS src, count(*) AS n FROM u GROUP BY 1) x),
+        'top_domain_share', (SELECT coalesce(max(n), 0) FROM (SELECT count(*) AS n FROM u GROUP BY lower(split_part(email, '@', 2))) x),
+        'domains',   (SELECT count(DISTINCT lower(split_part(email, '@', 2))) FROM u),
+        'signed_in', (SELECT count(*) FROM u WHERE user_id IS NOT NULL))"
+  part signups_detail db_json 10 "$q7b"
   # The second read's "not an event" verdicts (plan 11a, Oct 30, 2026): how many
   # there are, and the newest 30 with their report's title and the verdict's
   # line, to read whether they're right before such a verdict may lower a
@@ -728,6 +741,8 @@ if isinstance(out['members'], dict):
     out['members']['detail'] = part('members_detail')
     # The sign-ups the bot trap stopped (Nov 4, 2026); null when Redis couldn't be read
     out['members']['trapped'] = part('signup_trap')
+    # The briefing's unconfirmed sign-ups, counts only (Nov 17, 2026); null when that query failed
+    out['members']['unconfirmed_detail'] = part('signups_detail')
 if isinstance(out.get('readers'), dict):
     out['readers']['members'] = out['members']
 # The coverage map's numbers (Nov 6, 2026): null until the news poller has written them once, which
