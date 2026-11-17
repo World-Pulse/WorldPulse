@@ -108,7 +108,7 @@ STATE_VERSION = 4
 # A person is reading (Nov 16, 2026): from this day (UTC) a reader counts only once the page has said so,
 # after 8 seconds in view and a scroll or tap (apps/web/src/components/ReaderSeen.tsx). Automated
 # browsers that ran the page but never stayed are counted apart as "ran_only"
-SEEN_FROM = '2026-11-18'
+SEEN_FROM = '2026-11-17'   # Devon, Nov 17: count only real readers from today on
 SEEN_PATH = '/api/v1/public/seen'
 # Days counted before the API rule whose count a crawler clearly inflated: shown as not known (the
 # server's log no longer covers the day, so it can't be counted again); the old number is kept apart

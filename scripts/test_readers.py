@@ -132,7 +132,7 @@ class StayedToRead(unittest.TestCase):
         self.assertEqual(s['rule'], 'api, a language, no sign-in pages')
 
     def test_the_seen_question_marks_the_visitor_who_asked_it(self):
-        st = {'since': None, 'history': [], 'today': readers.empty_day('2026-11-18')}
+        st = {'since': None, 'history': [], 'today': readers.empty_day(readers.SEEN_FROM)}
         ua = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1'
         def line(ts, host, target):
             return f'{ts} 203.0.113.9 - - [x] "GET {target} HTTP/2.0" 204 0 "-" "{ua}" host={host}\n'
