@@ -647,10 +647,125 @@ const FRENCH: Rule[] = towns([
   ['BRH', 'Haiti'],
 ])
 
+/**
+ * Turkish, Polish, Hungarian, Czech, Indonesian and Ukrainian (Nov 18, 2026; Devon: "Let's work in parallel on languages
+ * as a priority"): the countries, capitals and towns their headlines name most, with the endings each language adds
+ * to a name, and the peoples' adjectives, so a story from a feed in one of them finds its place as an English one does.
+ * Turkish joins its endings to a name with an apostrophe ("Türkiye'de", "ABD'nin", "İstanbul'da"); Hungarian joins
+ * them straight on ("Magyarországon", "Budapesten", "Kijevből"); Polish, Czech and Ukrainian decline ("w Polsce", "v
+ * Praze", "у Києві"). Left out: names that are everyday words ("Fas" only as written: Morocco; Turkish "Çin" only with
+ * its capital: China; Indonesian "AS" only in capitals: the United States, "as" is a word; Polish "Włochy" is Italy but
+ * also a Warsaw district, kept since the country is far more common).
+ */
+const TR_END = "(?:['’]\\p{L}+)?"
+const tr = (stem: string, as: string): Rule => r(`(?:${stem})${TR_END}`, as)
+const trAsWritten = (stem: string, as: string): Rule => cs(`(?:${stem})${TR_END}`, as)
+const TURKISH: Rule[] = [
+  tr('türkiye|turkiye', 'Turkey'), trAsWritten('ABD', 'United States'), tr('amerika\\s+birleşik\\s+devletleri', 'United States'),
+  tr('rusya', 'Russia'), tr('ukrayna', 'Ukraine'), trAsWritten('Çin', 'China'), tr('i̇ran|İran|iran', 'Iran'),
+  tr('irak', 'Iraq'), tr('suriye', 'Syria'), tr('i̇srail|İsrail|israil', 'Israel'), tr('filistin', 'Palestine'),
+  tr('gazze', 'Gaza'), tr('lübnan', 'Lebanon'), tr('mısır', 'Egypt'), tr('suudi\\s+arabistan', 'Saudi Arabia'),
+  tr('katar', 'Qatar'), tr('birleşik\\s+arap\\s+emirlikleri', 'United Arab Emirates'), trAsWritten('BAE', 'United Arab Emirates'),
+  tr('yunanistan', 'Greece'), tr('kıbrıs', 'Cyprus'), tr('almanya', 'Germany'), tr('fransa', 'France'),
+  tr('i̇ngiltere|İngiltere|ingiltere|birleşik\\s+krallık', 'United Kingdom'), tr('i̇talya|İtalya|italya', 'Italy'),
+  tr('i̇spanya|İspanya|ispanya', 'Spain'), tr('azerbaycan', 'Azerbaijan'), tr('ermenistan', 'Armenia'),
+  tr('gürcistan', 'Republic of Georgia'), tr('hindistan', 'India'), tr('afganistan', 'Afghanistan'), tr('japonya', 'Japan'),
+  tr('güney\\s+kore', 'South Korea'), tr('kuzey\\s+kore', 'North Korea'), tr('cezayir', 'Algeria'), trAsWritten('Fas', 'Morocco'),
+  tr('tunus', 'Tunisia'), tr('ürdün', 'Jordanian'), tr('yemen', 'Yemen'), tr('libya', 'Libya'), tr('somali', 'Somalia'),
+  tr('i̇stanbul|İstanbul|istanbul', 'Istanbul'), tr('i̇zmir|İzmir|izmir', 'Izmir'), tr('moskova', 'Moscow'),
+  tr('brüksel', 'Brussels'), tr('tahran', 'Tehran'), trAsWritten('Şam', 'Damascus'), tr('bağdat', 'Baghdad'),
+  tr('kahire', 'Cairo'), tr('atina', 'Athens'), tr('londra', 'London'), tr('pekin', 'Beijing'), tr('halep', 'Aleppo'),
+  tr('kudüs', 'Jerusalem'), tr('beyaz\\s+saray', 'White House'),
+  // adjectives and peoples ("Rus askerleri", "İsrailli yetkililer")
+  cs('Rus', 'Russian'), tr('i̇srailli|İsrailli|israilli', 'Israeli'), tr('i̇ranlı|İranlı|iranlı', 'Iranian'), tr('çinli', 'Chinese'),
+  tr('ukraynalı', 'Ukrainian'), tr('amerikan', 'United States'),
+]
+
+const POLISH: Rule[] = [
+  r('polsk(?:a|i|ę|ą)|polsce', 'Poland'), r('warszaw(?:a|y|ie|ę|ą)', 'Warsaw'), r('krak(?:ów|owa|owie|owem)', 'Krakow'),
+  r('gdańsk(?:a|u|iem)?', 'Gdansk'), r('wrocław(?:ia|iu|iem)?', 'Wroclaw'), r('pozna(?:ń|nia|niu)', 'Poznan'),
+  r('łód(?:ź)|łodzi', 'Lodz'), r('lublin(?:a|ie)?', 'Lublin'), r('rosj(?:a|i|ę|ą)', 'Russia'), r('ukrain(?:a|y|ie|ę|ą)', 'Ukraine'),
+  r('białoru(?:ś|si|sią)', 'Belarus'), r('niem(?:cy|iec|czech|com)', 'Germany'), r('francj(?:a|i|ę|ą)', 'France'),
+  r('wielk(?:a|iej)\\s+brytani(?:a|i|ę|ą)', 'United Kingdom'), r('stan(?:y|ów|ach|ami)\\s+zjednoczon(?:e|ych|ymi)', 'United States'),
+  cs('USA', 'United States'), r('chin(?:y|ach|om|ami)', 'China'), r('litw(?:a|y|ie|ę|ą)', 'Lithuania'),
+  r('łotw(?:a|y|ie|ę|ą)', 'Latvia'), r('estoni(?:a|i|ę|ą)', 'Estonia'), r('czech(?:y|ach)', 'Czechia'),
+  r('słowacj(?:a|i|ę|ą)', 'Slovakia'), r('węg(?:ry|ier|rzech)', 'Hungary'), r('izrael(?:a|u|em)?', 'Israel'),
+  r('iran(?:u|ie|em)?', 'Iran'), r('turcj(?:a|i|ę|ą)', 'Turkey'), r('włoch(?:y)?', 'Italy'), r('hiszpani(?:a|i|ę|ą)', 'Spain'),
+  r('szwecj(?:a|i|ę|ą)', 'Sweden'), r('norwegi(?:a|i|ę|ą)', 'Norway'), cs('Dani(?:a|i|ę|ą)', 'Denmark'),
+  r('finlandi(?:a|i|ę|ą)', 'Finland'), r('rumuni(?:a|i|ę|ą)', 'Romania'), r('bułgari(?:a|i|ę|ą)', 'Bulgaria'),
+  r('grecj(?:a|i|ę|ą)', 'Greece'), r('japoni(?:a|i|ę|ą)', 'Japan'), r('kore(?:a|i|ę)\\s+północn(?:a|ej|ą)', 'North Korea'),
+  r('kore(?:a|i|ę)\\s+południow(?:a|ej|ą)', 'South Korea'), r('strefi?(?:a|e|ie)\\s+gazy', 'Gaza'),
+  r('moskw(?:a|y|ie|ę|ą)', 'Moscow'), r('kij(?:ów|owa|owie|owem)', 'Kyiv'), r('bruksel(?:a|i|ę|ą)', 'Brussels'),
+  r('waszyngton(?:ie|u)?', 'Washington'), r('biał(?:y|ego|ym)\\s+dom(?:u|em)?', 'White House'), r('krem(?:l|la|lu)', 'Kremlin'),
+  r('rosyjsk\\p{L}*', 'Russian'), r('ukraińsk\\p{L}*', 'Ukrainian'), r('chińsk\\p{L}*', 'Chinese'),
+  r('amerykańsk\\p{L}*', 'United States'), r('izraelsk\\p{L}*', 'Israeli'), r('irańsk\\p{L}*', 'Iranian'),
+  r('białorusk\\p{L}*', 'Belarus'),
+]
+
+const HUNGARIAN: Rule[] = [
+  r('magyarorsz[áa]g\\p{L}*', 'Hungary'), r('budapest\\p{L}*', 'Budapest'), r('debrecen\\p{L}*', 'Debrecen'),
+  r('szeged\\p{L}*', 'Szeged'), r('miskolc\\p{L}*', 'Miskolc'), r('oroszorsz[áa]g\\p{L}*', 'Russia'),
+  r('ukrajn[áa]\\p{L}*', 'Ukraine'), r('németorsz[áa]g\\p{L}*', 'Germany'), r('franciaorsz[áa]g\\p{L}*', 'France'),
+  r('olaszorsz[áa]g\\p{L}*', 'Italy'), r('spanyolorsz[áa]g\\p{L}*', 'Spain'), r('lengyelorsz[áa]g\\p{L}*', 'Poland'),
+  r('horvátorsz[áa]g\\p{L}*', 'Croatia'), r('csehorsz[áa]g\\p{L}*', 'Czechia'), r('törökorsz[áa]g\\p{L}*', 'Turkey'),
+  r('görögorsz[áa]g\\p{L}*', 'Greece'), r('nagy-britanni\\p{L}*|egyesült\\s+királyság\\p{L}*', 'United Kingdom'),
+  r('egyesült\\s+államok\\p{L}*', 'United States'), cs('USA\\p{L}*|USA-\\p{L}+', 'United States'),
+  r('kín[áa](?:ban|ba|ból|nak|val|hoz|tól)?|kínai\\p{L}*', 'China'), r('izrael\\p{L}*', 'Israel'), r('ir[áa]n(?:ban|ba|ból|nal|i|nak)?', 'Iran'),
+  r('szerbi[áa]\\p{L}*', 'Serbia'), r('románi[áa]\\p{L}*', 'Romania'), r('szlováki[áa]\\p{L}*', 'Slovakia'),
+  r('ausztri[áa]\\p{L}*', 'Austria'), r('japán\\p{L}*', 'Japan'), r('brüsszel\\p{L}*', 'Brussels'),
+  r('moszkv[áa]\\p{L}*', 'Moscow'), r('kijev\\p{L}*', 'Kyiv'), r('bécs\\p{L}*', 'Vienna'),
+  r('fehér\\s+ház\\p{L}*', 'White House'), r('kreml\\p{L}*', 'Kremlin'),
+  r('orosz\\p{L}*', 'Russian'), r('ukrán\\p{L}*', 'Ukrainian'), r('amerikai\\p{L}*', 'United States'),
+]
+
+const CZECH: Rule[] = [
+  r('česk(?:o|a|u|em)|česk(?:á|é|ou)\\s+republi(?:ka|ky|ce|ku|kou)', 'Czechia'), r('prah(?:a|y|u|ou)|praze', 'Prague'),
+  r('brn(?:o|a|ě|em)', 'Brno'), r('ostrav(?:a|y|ě|u|ou)', 'Ostrava'), r('plz(?:eň|ně|ni|ní)', 'Plzen'),
+  r('slovensk(?:o|a|u|em)', 'Slovakia'), r('rusk(?:o|a|u|em)', 'Russia'), r('ukrajin(?:a|y|ě|u|ou)', 'Ukraine'),
+  r('německ(?:o|a|u|em)', 'Germany'), r('rakousk(?:o|a|u|em)', 'Austria'), r('polsk(?:o|a|u|em)', 'Poland'),
+  r('maďarsk(?:o|a|u|em)', 'Hungary'), r('franci(?:e|i)', 'France'), r('itáli(?:e|i)', 'Italy'),
+  r('španělsk(?:o|a|u|em)', 'Spain'), r('(?:velk(?:á|é|ou)\\s+)?británi(?:e|i)', 'United Kingdom'),
+  r('spojen(?:é|ých|ým)\\s+stát(?:y|ů|ech|ům)', 'United States'), cs('USA', 'United States'), r('čín(?:a|y|ě|u|ou)', 'China'),
+  r('izrael(?:e|i|em)?', 'Israel'), r('írán(?:u|em)?', 'Iran'), r('moskv(?:a|y|ě|u|ou)', 'Moscow'),
+  r('kyjev(?:a|ě|em)?', 'Kyiv'), r('brusel(?:u|em)?', 'Brussels'), r('bíl(?:ý|ého|ém)\\s+d(?:ům|omu|omě)', 'White House'),
+  r('krem(?:l|lu)', 'Kremlin'), r('rusk(?:ý|á|é|ých|ou|ého|ému|ým|ými)', 'Russian'),
+  r('ukrajinsk\\p{L}*', 'Ukrainian'), r('americk\\p{L}*', 'United States'), r('čínsk\\p{L}*', 'Chinese'),
+  r('izraelsk\\p{L}*', 'Israeli'),
+]
+
+const INDONESIAN: Rule[] = [
+  r('amerika\\s+serikat', 'United States'), cs('AS', 'United States'), r('tiongkok|cina', 'China'), r('jepang', 'Japan'),
+  r('korea\\s+selatan', 'South Korea'), r('korea\\s+utara', 'North Korea'), r('rusia', 'Russia'), r('ukraina', 'Ukraine'),
+  r('inggris', 'United Kingdom'), r('prancis', 'France'), r('jerman', 'Germany'), r('belanda', 'Netherlands'),
+  r('italia', 'Italy'), r('spanyol', 'Spain'), r('arab\\s+saudi', 'Saudi Arabia'), r('mesir', 'Egypt'), r('turki', 'Turkey'),
+  r('irak', 'Iraq'), r('suriah', 'Syria'), r('palestina', 'Palestine'), r('yordania', 'Jordanian'),
+  r('uni\\s+emirat\\s+arab', 'United Arab Emirates'), r('filipina', 'Philippines'), r('singapura', 'Singapore'),
+  r('kamboja', 'Cambodia'), r('selandia\\s+baru', 'New Zealand'), r('afganistan', 'Afghanistan'),
+  r('gedung\\s+putih', 'White House'),
+]
+
+const UKRAINIAN: Rule[] = [
+  r('україн(?:а|и|і|у|ою)', 'Ukraine'), r('ки(?:їв|єва|єву|єві|євом)|київщин\\p{L}*', 'Kyiv'), r('харк(?:ів|ова|ову|ові|овом)', 'Kharkiv'),
+  r('одес(?:а|и|і|у|ою)', 'Odesa'), r('льв(?:ів|ова|ову|ові|овом)', 'Lviv'), r('дніпр(?:о|а|і|ом)', 'Dnipro'),
+  r('запоріжж(?:я|і|ям)', 'Zaporizhzhia'), r('херсон(?:а|і|у|ом)?', 'Kherson'), r('донецьк(?:а|у|ом)?', 'Donetsk'),
+  r('луганськ(?:а|у|ом)?', 'Luhansk'), r('донбас(?:у|і)?', 'Donbas'), r('крим(?:у|ом)?', 'Crimea'),
+  r('маріупол(?:ь|я|і)', 'Mariupol'), r('микола(?:їв|єва|єву|єві|євом)', 'Mykolaiv'), cs('Сум(?:и|ах|ам)', 'Sumy'),
+  r('черніг(?:ів|ова|ову|ові|овом)', 'Chernihiv'), r('полтав(?:а|и|і|у)', 'Poltava'), r('покровськ(?:а|у)?', 'Pokrovsk'),
+  r('росі(?:я|ї|ю|єю)', 'Russia'), r('москв(?:а|и|і|у|ою)', 'Moscow'), r('білорус(?:ь|і|сю)', 'Belarus'),
+  cs('США', 'United States'), r('польщ(?:а|і|у|ею)', 'Poland'), r('німеччин(?:а|и|і|у|ою)', 'Germany'),
+  r('франці(?:я|ї|ю|єю)', 'France'), r('британі(?:я|ї|ю|єю)', 'United Kingdom'), r('кита(?:й|ю|ї|єм)', 'China'),
+  r('туреччин(?:а|и|і|у|ою)', 'Turkey'), r('іран(?:у|і|ом)?', 'Iran'), r('ізра(?:їль|їлю|їлем)', 'Israel'),
+  r('угорщин(?:а|и|і|у|ою)', 'Hungary'), r('румуні(?:я|ї|ю|єю)', 'Romania'), r('молдов(?:а|и|і|у|ою)', 'Moldova'),
+  r('біл(?:ий|ого|ому)\\s+д(?:ім|ому|омі)', 'White House'), r('кремл(?:ь|я|і|ем)', 'Kremlin'),
+  r('вашингтон(?:а|і|у|ом)?', 'Washington'), r('брюссел(?:ь|я|і|ем)', 'Brussels'),
+  r('російськ\\p{L}*', 'Russian'), r('українськ\\p{L}*', 'Ukrainian'), r('американськ\\p{L}*', 'United States'),
+]
+
 export const LOCAL_NAMES: Record<string, Rule[]> = {
   de: GERMAN, it: ITALIAN, ca: CATALAN, da: DANISH, kl: DANISH, nl: DUTCH, ro: ROMANIAN, sl: SLOVENE,
   sr: MONTENEGRIN, cnr: MONTENEGRIN, sq: ALBANIAN, ms: MALAY, es: SPANISH, pt: PORTUGUESE, lt: LITHUANIAN,
   ar: ARABIC, ru: RUSSIAN, mn: MONGOLIAN, fr: FRENCH,
+  tr: TURKISH, pl: POLISH, hu: HUNGARIAN, cs: CZECH, id: INDONESIAN, uk: UKRAINIAN,
 }
 
 /** The text with its language's place names in English and its look-alike words blanked out, for finding its place */
