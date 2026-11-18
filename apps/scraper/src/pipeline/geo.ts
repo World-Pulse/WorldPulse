@@ -3036,8 +3036,14 @@ const AIRLINE_NAMED = /(?<![\p{L}\p{N}])(?:Air|Er)\s+(\p{Lu}[\p{L}'’.]*)|(?<![
 const HEADED_FOR = /(?<![\p{L}\p{N}])[Tt]owards?\s+(?:the\s+)?(\p{Lu}[\p{L}'’.]*(?:\s+\p{Lu}[\p{L}'’.]*)?)/gu
 const TRIP_AHEAD = /(?<![\p{L}\p{N}])(?:[Aa]head\s+[Oo]f|[Bb]efore|[Pp]rior\s+[Tt]o)\s+(?:(?:his|her|their|its|the|a|an|official|state|upcoming|planned|first)\s+){0,3}(\p{Lu}[\p{L}'’.]*(?:\s+\p{Lu}[\p{L}'’.]*)?)\s+(?:[Vv]isit|[Tt]rip|[Tt]our)(?![\p{L}\p{N}])/gu
 const DELEGATION_ARRIVES = /(?<![\p{L}\p{N}])((?:\p{Lu}[\p{L}'’.]*(?:,\s*|,?\s+and\s+|\s*&\s*))*\p{Lu}[\p{L}'’.]*)\s+(?:PMs?|prime\s+ministers?|presidents?|leaders|ministers?|delegations?|officials|envoys?)\s+(?:arrives?|arrived|lands?|landed|flies|fly|flew|travel(?:s|led)?)\s+(?:in|at|into|to)(?![\p{L}\p{N}])/gu
+/**
+ * A guest's country after a role, once the story says who received them (Nov 18, 2026: the Times of Oman's "Royal Office
+ * Minister receives Deputy National Security Advisor of India" sat in New Delhi). Where the guest is from is not where
+ * the story is: the country is blanked out, so the place the text names is read, or else the outlet's own country.
+ */
+const GUEST_RECEIVED = /(?<![\p{L}\p{N}])(?:receives?|received|welcomes?|welcomed|meets?|met|hosts?|hosted)\s+(?:(?:the|a|his|her|its|visiting)\s+)?(?:[\p{L}'’.-]+\s+){0,6}?(?:minister|advis[eo]r|secretary|chairman|chairperson|commander|director|governor|president|head|chief|delegation|envoy|official|leader|general|chancellor|speaker)s?\s+(?:of|from)\s+(?:the\s+)?(\p{Lu}[\p{L}'’.]*(?:\s+\p{Lu}[\p{L}'’.]*)?)/giu
 const COMPARED_TO = /(?<![\p{L}\p{N}])(?:[Ll]ike|[Uu]nlike)\s+(?:in\s+)?(\p{Lu}[\p{L}'’.]*(?:\s+\p{Lu}[\p{L}'’.]*)?)(?=\s*[,:]|\s+(?:before|did|has|had|was|were|is|are)(?![\p{L}\p{N}]))/gu
-const PASSING_ANY = /(?:like|unlike)\s|arriv|land|fl(?:y|ies|ew)\s|travel|(?:pro|anti)[-‑]\p{Lu}|(?:Air|Er)\s+\p{Lu}|\s(?:Airlines|Airways)(?![\p{L}\p{N}])|towards?\s|\s(?:visit|trip|tour)(?![\p{L}\p{N}])/iu
+const PASSING_ANY = /(?:like|unlike)\s|receiv|welcom|meets?\s|met\s|host|arriv|land|fl(?:y|ies|ew)\s|travel|(?:pro|anti)[-‑]\p{Lu}|(?:Air|Er)\s+\p{Lu}|\s(?:Airlines|Airways)(?![\p{L}\p{N}])|towards?\s|\s(?:visit|trip|tour)(?![\p{L}\p{N}])/iu
 
 /** The spans of countries a text names only in passing, each with its country */
 function passingSpans(text: string): Span[] {
@@ -3061,6 +3067,7 @@ function passingSpans(text: string): Span[] {
   for (const m of text.matchAll(AIRLINE_NAMED)) add(m, m[1] ?? m[2])
   for (const m of text.matchAll(HEADED_FOR)) add(m, m[1])
   for (const m of text.matchAll(TRIP_AHEAD)) add(m, m[1])
+  for (const m of text.matchAll(GUEST_RECEIVED)) add(m, m[1])
   // a comparison: "2027: Like Lagos, NDC campaign attacked in Kano" is Kano's story, a city or country named only to compare
   for (const m of text.matchAll(COMPARED_TO)) {
     const name = m[1]!
