@@ -174,7 +174,7 @@ for (const word of otherScriptWords(foldAccents(
 ))) if (!word.startsWith('@') && !word.startsWith('#')) EVENTISH.add(word)
 
 /** The languages read in their own script (Nov 10, 2026): their words as storyWords reads them (Persian, Urdu, Greek and Korean from Nov 18) */
-const OTHER_SCRIPT_LANGUAGES = new Set(['ru', 'ar', 'fa', 'ur', 'el', 'ko'])
+const OTHER_SCRIPT_LANGUAGES = new Set(['ru', 'ar', 'fa', 'ur', 'el', 'ko', 'ja', 'zh', 'th'])
 
 /** A headline's text as it is compared: Serbian, written in both scripts, in Latin letters ("Погинуло", "Poginulo") */
 const comparable = (title: string, lang: string) => (lang === 'sr' ? serbianLatin(title) : title)

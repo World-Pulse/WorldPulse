@@ -243,11 +243,13 @@ describe('NEWS_SOURCE_REGISTRY', () => {
   it('leaves out the feeds earlier rounds left out on their terms or content, Nov 18, 2026', () => {
     // Nyasa Times forbids robots and scraping, Free Malaysia Today forbids automated reading (both
     // left out on Oct 20 and Nov 10), and about a quarter of Hiiraan Online's items repost other
-    // outlets' stories, which would count as a second outlet; all three were added again by mistake on Nov 18
-    for (const id of ['nyasa-times', 'fmt-my', 'hiiraan']) {
+    // outlets' stories, which would count as a second outlet; all three were added again by mistake on Nov 18.
+    // So was LIGA.net (its terms forbid robots; left out on Oct 20, added in the language round of Nov 18), and
+    // Club of Mozambique, an aggregator, left out on Oct 20, nearly so the same evening
+    for (const id of ['nyasa-times', 'fmt-my', 'hiiraan', 'liga-net', 'club-of-mozambique']) {
       expect(NEWS_SOURCE_REGISTRY.find(s => s.id === id)).toBeUndefined()
     }
-    for (const host of ['nyasatimes.com', 'freemalaysiatoday.com', 'hiiraan.com']) {
+    for (const host of ['nyasatimes.com', 'freemalaysiatoday.com', 'hiiraan.com', 'liga.net', 'clubofmozambique.com']) {
       expect(NEWS_SOURCE_REGISTRY.some(s => s.feedUrl.includes(host))).toBe(false)
     }
   })

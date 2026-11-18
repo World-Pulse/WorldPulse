@@ -919,7 +919,59 @@ const HINDI: Rule[] = [
   hi('दक्षिण कोरिया', 'South Korea'), hi('कनाडा', 'Canada'), hi('ऑस्ट्रेलिया', 'Australia'), hi('तुर्की', 'Turkey'),
 ]
 
+/**
+ * Japanese, Chinese and Thai (Nov 18, 2026; Devon: "Add ... Japanese, Chinese and Thai"). They write no spaces, so a
+ * name is found wherever it stands, without word edges. Left out or narrowed: "米" alone (rice) — the United States
+ * only in "米国", "米軍", "日米" and their kin; "美" alone (beautiful) — only "美国", "美軍", "中美"; Japanese "中国" in
+ * "中国地方" (a region of Japan) and "中国電力"; "タイ" alone (a tie, a sea bream) — Thailand only as "タイ政府" and kin;
+ * Thai "ลาว" (Laos) inside "ลาวา" (lava).
+ */
+// (the English name set apart by spaces, so the place-finder reads it as a word inside unspaced text)
+const cjk = (alts: string, as: string): Rule => [new RegExp(`(?:${alts})`, 'gu'), ` ${as} `]
+const cjkMask = (alts: string): Rule => [new RegExp(`(?:${alts})`, 'gu'), '…']
+const JAPANESE: Rule[] = [
+  cjkMask('中国地方|中国電力|中国新聞|中国自動車道'),
+  cjk('米国|米軍|米政府|米大統領|米国務|米国防|米中|米露|米ロ|米朝|日米|対米|訪米|駐米|全米|米側|米紙|米兵|米財務|米連邦|ホワイトハウス|ワシントン', 'United States'),
+  cjk('中国|中国政府|中国軍', 'China'), cjk('北京', 'Beijing'), cjk('上海', 'Shanghai'), cjk('深セン|深圳', 'Shenzhen'),
+  cjk('香港', 'Hong Kong'), cjk('台湾', 'Taiwan'), cjk('台北', 'Taipei'), cjk('韓国', 'South Korea'), cjk('ソウル', 'Seoul'),
+  cjk('北朝鮮', 'North Korea'), cjk('平壌', 'Pyongyang'), cjk('ロシア', 'Russia'), cjk('モスクワ', 'Moscow'), cjk('クレムリン', 'Kremlin'),
+  cjk('ウクライナ', 'Ukraine'), cjk('キーウ|キエフ', 'Kyiv'), cjk('イスラエル', 'Israel'), cjk('ガザ', 'Gaza'), cjk('イラン', 'Iran'),
+  cjk('サウジアラビア|サウジ', 'Saudi Arabia'), cjk('イエメン', 'Yemen'), cjk('レバノン', 'Lebanon'), cjk('シリア', 'Syria'),
+  cjk('イギリス|英国|英政府', 'United Kingdom'), cjk('フランス', 'France'), cjk('ドイツ', 'Germany'), cjk('インド', 'India'),
+  cjk('パキスタン', 'Pakistan'), cjk('フィリピン', 'Philippines'), cjk('ベトナム', 'Vietnam'), cjk('タイ政府|タイ王国|タイ首相|タイ国内|タイ・カンボジア', 'Thailand'),
+  cjk('カンボジア', 'Cambodia'), cjk('ミャンマー', 'Myanmar'), cjk('インドネシア', 'Indonesia'), cjk('オーストラリア|豪州', 'Australia'),
+  cjk('カナダ', 'Canada'), cjk('メキシコ', 'Mexico'), cjk('ブラジル', 'Brazil'), cjk('ベネズエラ', 'Venezuela'), cjk('トルコ', 'Turkey'),
+  cjk('沖縄', 'Okinawa'), cjk('東京', 'Tokyo'), cjk('大阪', 'Osaka'), cjk('京都', 'Kyoto'), cjk('名古屋', 'Nagoya'), cjk('北海道|札幌', 'Sapporo'),
+  cjk('福岡', 'Fukuoka'), cjk('広島', 'Hiroshima'), cjk('神戸', 'Kobe'), cjk('仙台', 'Sendai'), cjk('横浜', 'Yokohama'), cjk('日本|政府与党', 'Japan'),
+]
+const CHINESE: Rule[] = [
+  cjk('美国|美國|美军|美軍|美方|中美|美中|访美|訪美|白宫|白宮|华盛顿|華盛頓|特朗普|川普', 'United States'),
+  cjk('中国大陆|中國大陸|大陆|大陸|中国|中國|中共|解放军|解放軍', 'China'), cjk('北京', 'Beijing'), cjk('上海', 'Shanghai'), cjk('深圳', 'Shenzhen'),
+  cjk('广州|廣州', 'Guangzhou'), cjk('香港', 'Hong Kong'), cjk('澳门|澳門', 'Macau'), cjk('台湾|台灣|臺灣', 'Taiwan'), cjk('台北|臺北', 'Taipei'),
+  cjk('台中|臺中', 'Taichung'), cjk('台南|臺南', 'Tainan'), cjk('高雄', 'Kaohsiung'), cjk('日本', 'Japan'), cjk('东京|東京', 'Tokyo'),
+  cjk('韩国|韓國|南韩|南韓', 'South Korea'), cjk('首尔|首爾', 'Seoul'), cjk('朝鲜|朝鮮|北韩|北韓', 'North Korea'), cjk('平壤', 'Pyongyang'),
+  cjk('俄罗斯|俄羅斯|俄国|俄國|俄军|俄軍|俄乌|俄烏|普京|普丁', 'Russia'), cjk('莫斯科', 'Moscow'), cjk('克里姆林宫|克里姆林宮', 'Kremlin'),
+  cjk('乌克兰|烏克蘭', 'Ukraine'), cjk('基辅|基輔', 'Kyiv'), cjk('以色列|以军|以軍', 'Israel'), cjk('加沙|加薩', 'Gaza'), cjk('伊朗', 'Iran'),
+  cjk('沙特|沙乌地|沙烏地', 'Saudi Arabia'), cjk('也门|葉門', 'Yemen'), cjk('黎巴嫩', 'Lebanon'), cjk('叙利亚|敘利亞', 'Syria'),
+  cjk('英国|英國', 'United Kingdom'), cjk('法国|法國', 'France'), cjk('德国|德國', 'Germany'), cjk('印度', 'India'),
+  cjk('巴基斯坦', 'Pakistan'), cjk('菲律宾|菲律賓', 'Philippines'), cjk('越南', 'Vietnam'), cjk('泰国|泰國', 'Thailand'),
+  cjk('柬埔寨', 'Cambodia'), cjk('缅甸|緬甸', 'Myanmar'), cjk('印尼|印度尼西亚', 'Indonesia'), cjk('马来西亚|馬來西亞', 'Malaysia'),
+  cjk('新加坡', 'Singapore'), cjk('澳大利亚|澳洲', 'Australia'), cjk('加拿大', 'Canada'), cjk('墨西哥', 'Mexico'), cjk('巴西', 'Brazil'),
+  cjk('委内瑞拉|委內瑞拉', 'Venezuela'), cjk('土耳其', 'Turkey'),
+]
+const THAI: Rule[] = [
+  cjkMask('ลาวา'),
+  cjk('ประเทศไทย|ไทย', 'Thailand'), cjk('กรุงเทพมหานคร|กรุงเทพฯ|กรุงเทพ|กทม\\.', 'Bangkok'), cjk('เชียงใหม่', 'Chiang Mai'),
+  cjk('ภูเก็ต', 'Phuket'), cjk('พัทยา', 'Pattaya'), cjk('กัมพูชา', 'Cambodia'), cjk('เมียนมา|พม่า', 'Myanmar'), cjk('ลาว', 'Laos'),
+  cjk('มาเลเซีย', 'Malaysia'), cjk('สหรัฐอเมริกา|สหรัฐฯ|สหรัฐ|ทำเนียบขาว|วอชิงตัน', 'United States'), cjk('จีน', 'China'),
+  cjk('ปักกิ่ง', 'Beijing'), cjk('ญี่ปุ่น', 'Japan'), cjk('รัสเซีย', 'Russia'), cjk('ยูเครน', 'Ukraine'), cjk('อิสราเอล', 'Israel'),
+  cjk('อิหร่าน', 'Iran'), cjk('กาซา', 'Gaza'), cjk('เวียดนาม', 'Vietnam'), cjk('อินเดีย', 'India'), cjk('อังกฤษ', 'United Kingdom'),
+  cjk('ฝรั่งเศส', 'France'), cjk('เยอรมนี', 'Germany'), cjk('เกาหลีใต้', 'South Korea'), cjk('เกาหลีเหนือ', 'North Korea'),
+  cjk('สิงคโปร์', 'Singapore'), cjk('อินโดนีเซีย', 'Indonesia'), cjk('ฟิลิปปินส์', 'Philippines'),
+]
+
 export const LOCAL_NAMES: Record<string, Rule[]> = {
+  ja: JAPANESE, zh: CHINESE, th: THAI,
   hi: HINDI,
   de: GERMAN, it: ITALIAN, ca: CATALAN, da: DANISH, kl: DANISH, nl: DUTCH, ro: ROMANIAN, sl: SLOVENE,
   sr: MONTENEGRIN, cnr: MONTENEGRIN, sq: ALBANIAN, ms: MALAY, es: SPANISH, pt: PORTUGUESE, lt: LITHUANIAN,

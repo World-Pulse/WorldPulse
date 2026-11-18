@@ -971,9 +971,48 @@ export function otherScriptCities(title: string): string[] {
  * The words of a headline's Arabic and Cyrillic parts, as storyWords compares them: stems, and the countries
  * named, marked "@JO" (text: the headline after foldAccents)
  */
-export function otherScriptWords(text: string): string[] {
+/**
+ * Chinese, Japanese and Thai (Nov 18, 2026; Devon: "Add ... Japanese, Chinese and Thai"). They write no spaces between
+ * words, so a headline is read in overlapping pieces: two characters of Chinese characters (kanji), a katakana word
+ * whole (Japanese spells foreign names in it: "トランプ", "ウクライナ"), three letters of Thai. Hiragana (Japanese
+ * grammar) is skipped. A piece that is a country's name stands for the country; the commonest pieces are not story
+ * words. foldAccents has already dropped Japanese voicing marks and Thai vowel marks, alike in every headline.
+ */
+const CJK_RUNS = /\p{sc=Han}{2,}|[\p{sc=Katakana}ー]{2,}|\p{sc=Thai}{3,}/gu
+const CJK_STOP = new Set([
+  // zh
+  '表示', '宣布', '今天', '今日', '记者', '記者', '报道', '報導', '新闻', '新聞', '可能', '问题', '問題', '进行', '進行', '已经', '已經',
+  '我们', '我們', '他们', '他們', '这个', '這個', '一个', '一個', '没有', '沒有', '时间', '時間', '目前', '最新', '视频', '影片', '直播',
+  // ja
+  '発表', '速報', '動画', '写真', '関連', '記事', '会見', '明らか', '方針', '必要', '可能性', '中継', 'ニュース', 'ライブ',
+].map(w => foldAccents(w)))
+const CJK_COUNTRIES = new Map(([
+  ['CN', '中国 中國 北京 上海 中共 習近平 习近平'], ['JP', '日本 東京 东京 政府与党'], ['US', '米国 米軍 米政府 美国 美國 美军 美軍 白宫 白宮 トランプ 特朗普 川普 ワシントン 华盛顿 華盛頓'],
+  ['TW', '台湾 台灣 臺灣 台北 臺北'], ['KR', '韓国 韓國 韩国 南韓 ソウル 首尔 首爾'], ['KP', '北朝鮮 朝鲜 朝鮮 北韓 平壌 平壤'],
+  ['RU', 'ロシア 俄罗斯 俄羅斯 プーチン 普京 莫斯科 モスクワ'], ['UA', 'ウクライナ 乌克兰 烏克蘭 キーウ 基辅 基輔'], ['IL', 'イスラエル 以色列'],
+  ['PS', 'ガザ 加沙 加薩'], ['IR', 'イラン 伊朗'], ['SA', 'サウジ 沙特'], ['GB', '英国 英國 イギリス'], ['FR', 'フランス 法国 法國'],
+  ['DE', 'ドイツ 德国 德國'], ['IN', 'インド 印度'], ['PH', 'フィリピン 菲律宾 菲律賓'], ['VN', 'ベトナム 越南'], ['TH', '泰国 泰國 ไทย'],
+  ['HK', '香港'], ['KH', 'กัมพูชา 柬埔寨 カンボジア'], ['MM', 'เมียนมา พม่า 缅甸 緬甸 ミャンマー'],
+] as Array<[string, string]>).flatMap(([code, names]) => names.split(' ').map(n => [foldAccents(n), code] as [string, string])))
+/** The pieces of a headline's Chinese, Japanese and Thai, and the countries they name */
+export function cjkWords(text: string): string[] {
   const out: string[] = []
-  let rest = text
+  for (const m of text.matchAll(CJK_RUNS)) {
+    const run = m[0]
+    const thai = /\p{sc=Thai}/u.test(run)
+    const katakana = /[\p{sc=Katakana}]/u.test(run) && !/\p{sc=Han}/u.test(run)
+    const size = thai ? 3 : 2
+    const pieces = katakana ? [run] : run.length <= size ? [run] : Array.from({ length: run.length - size + 1 }, (_, i) => run.slice(i, i + size))
+    // a country's name inside a run ("中国外交部", "ไทยกัมพูชา")
+    for (const [name, code] of CJK_COUNTRIES) if (run.includes(name)) out.push(`@${code}`)
+    for (const piece of pieces) if (!CJK_STOP.has(piece) && !CJK_COUNTRIES.has(piece)) out.push(piece)
+  }
+  return [...new Set(out)]
+}
+
+export function otherScriptWords(text: string): string[] {
+  const out: string[] = cjkWords(text)
+  let rest = text.replace(CJK_RUNS, ' ')
   for (const [re, code] of ARABIC_COUNTRY_PHRASES) rest = rest.replace(re, () => { out.push(`@${code}`); return ' ' })
   const steppe = STEPPE_LETTERS.test(rest)
   for (const token of rest.split(/[^\p{L}]+/u)) {
