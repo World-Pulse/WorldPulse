@@ -240,6 +240,18 @@ describe('NEWS_SOURCE_REGISTRY', () => {
     }
   })
 
+  it('leaves out the feeds earlier rounds left out on their terms or content, Nov 18, 2026', () => {
+    // Nyasa Times forbids robots and scraping, Free Malaysia Today forbids automated reading (both
+    // left out on Oct 20 and Nov 10), and about a quarter of Hiiraan Online's items repost other
+    // outlets' stories, which would count as a second outlet; all three were added again by mistake on Nov 18
+    for (const id of ['nyasa-times', 'fmt-my', 'hiiraan']) {
+      expect(NEWS_SOURCE_REGISTRY.find(s => s.id === id)).toBeUndefined()
+    }
+    for (const host of ['nyasatimes.com', 'freemalaysiatoday.com', 'hiiraan.com']) {
+      expect(NEWS_SOURCE_REGISTRY.some(s => s.feedUrl.includes(host))).toBe(false)
+    }
+  })
+
   it("drops the feeds our server can't read, Oct 21, 2026", () => {
     // Paused overnight after failing every poll from the server while answering other networks:
     // Middle East Eye (404), Guam PDN (429), Jornal Tribuna de Macau (401), Le Quotidien (403),
