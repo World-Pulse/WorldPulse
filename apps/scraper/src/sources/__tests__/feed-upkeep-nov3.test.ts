@@ -37,10 +37,10 @@ describe('feed upkeep (Nov 3, 2026)', () => {
     expect(HOME_PIN_SOURCES.has('canary-media')).toBe(false)
   })
 
-  it('keeps Kenya at three feeds and Mauritius at two', () => {
+  it('keeps Kenya at three feeds and Mauritius at three (ION News since Nov 18)', () => {
     expect(NEWS_SOURCE_REGISTRY.filter(s => s.countryCode === 'KE').map(s => s.id).sort())
       .toEqual(['capitalfm-ke', 'kbc-ke', 'standard-ke'])
-    expect(NEWS_SOURCE_REGISTRY.filter(s => s.countryCode === 'MU')).toHaveLength(2)
+    expect(NEWS_SOURCE_REGISTRY.filter(s => s.countryCode === 'MU')).toHaveLength(3)
   })
 })
 

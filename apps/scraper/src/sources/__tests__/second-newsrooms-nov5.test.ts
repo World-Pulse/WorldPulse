@@ -57,9 +57,9 @@ describe('feeds added Nov 5, 2026, 11:45 PM', () => {
 describe('thinly covered places (Nov 5, 2026)', () => {
   it(`are those with ${THIN_PLACE_FEEDS} feeds of their own or fewer`, () => {
     const thin = new Set(thinPlaces())
-    for (const code of ['DM', 'LC', 'TO', 'VU', 'GD', 'HR', 'DJ', 'LB', 'JO', 'EE', 'LT']) expect(thin.has(code), code).toBe(true)
-    // Honduras has four since El Pulso, Syria five since its Arabic press (Nov 6)
-    for (const code of ['US', 'GB', 'IN', 'NG', 'FR', 'HN', 'SY']) expect(thin.has(code), code).toBe(false)
+    for (const code of ['DM', 'LC', 'TO', 'VU', 'GD', 'HR', 'DJ', 'LB', 'EE', 'LT']) expect(thin.has(code), code).toBe(true)
+    // Honduras has four since El Pulso, Syria five since its Arabic press (Nov 6), Jordan four since Al Ghad (Nov 18)
+    for (const code of ['US', 'GB', 'IN', 'NG', 'FR', 'HN', 'SY', 'JO']) expect(thin.has(code), code).toBe(false)
     expect(thinPlaces([{ ...src('naharnet')!, countryCode: 'ZZ' }])).toEqual(['ZZ'])
   })
 })
