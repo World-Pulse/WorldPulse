@@ -761,18 +761,180 @@ const UKRAINIAN: Rule[] = [
   r('російськ\\p{L}*', 'Russian'), r('українськ\\p{L}*', 'Ukrainian'), r('американськ\\p{L}*', 'United States'),
 ]
 
+/**
+ * Greek, Korean, Urdu, Persian and Vietnamese (Nov 18, 2026; Devon: "we need to add more language coverage").
+ *
+ * Greek is read without its accents (greekPlain: "Ελλάδα", "ΕΛΛΑΔΑ" and "ελλαδα" are one word to these rules) and
+ * declines its names ("της Ελλάδας", "στην Κύπρο", "του Κιέβου"). Left out: "Κάιρο" (Cairo; "καιρό" is the weather),
+ * "Μακεδονία" alone (a Greek region; North Macedonia is "Βόρεια Μακεδονία" or "Σκόπια"); "Κίνα" only with its capital
+ * ("κινά" is "moves"). Rhodes and Ioannina, which the place-finder doesn't know by name, count for Greece.
+ */
+const GREEK: Rule[] = [
+  r('ελλαδ(?:α|ας|ος)|ελληνικ\\p{L}*', 'Greece'), r('αθην(?:α|ας|ων)', 'Athens'), r('θεσσαλονικ(?:η|ης)', 'Thessaloniki'),
+  r('πειραι(?:ας|α|ως)', 'Piraeus'), r('πατρ(?:α|ας|ων)', 'Patras'), r('κρητ(?:η|ης)', 'Crete'), r('ροδο(?:ς|υ)?', 'Greece'),
+  r('ηρακλει(?:ο|ου)', 'Heraklion'), r('λαρισ(?:α|ας|ης)', 'Larissa'), r('ιωαννιν(?:α|ων)', 'Greece'),
+  r('λεσβο(?:ς|υ)?', 'Lesbos'), r('κερκυρ(?:α|ας)', 'Corfu'), r('σαντοριν(?:η|ης)', 'Santorini'),
+  r('κυπρ(?:ος|ου|ο)|κυπριακ\\p{L}*', 'Cyprus'), r('λευκωσι(?:α|ας)', 'Nicosia'), r('λεμεσ(?:ος|ου|ο)', 'Limassol'),
+  r('λαρνακ(?:α|ας)', 'Larnaca'), r('παφ(?:ος|ου|ο)', 'Paphos'), r('αμμοχωστ(?:ος|ου|ο)', 'Famagusta'),
+  r('τουρκι(?:α|ας)|τουρκικ\\p{L}*|τουρκ(?:ος|οι|ων)', 'Turkey'), r('αγκυρ(?:α|ας)', 'Ankara'),
+  r('κωνσταντινουπολ(?:η|ης)|ισταμπουλ', 'Istanbul'), r('ρωσι(?:α|ας)|ρωσικ\\p{L}*|ρωσ(?:οι|ων)', 'Russia'),
+  r('μοσχ(?:α|ας)', 'Moscow'), r('κρεμλιν(?:ο|ου)', 'Kremlin'), r('ουκρανι(?:α|ας)|ουκρανικ\\p{L}*|ουκραν(?:οι|ων)', 'Ukraine'),
+  r('κιεβ(?:ο|ου)', 'Kyiv'), r('ηπα', 'United States'), r('αμερικ(?:η|ης)|αμερικαν\\p{L}*', 'United States'),
+  r('ουασιγκτον', 'Washington'), r('λευκ(?:ος|ου|ο)\\s+οικ(?:ος|ου|ο)', 'White House'),
+  cs('Κιν(?:α|ας)|ΚΙΝ(?:Α|ΑΣ)', 'China'), r('κινεζ\\p{L}*', 'China'), r('πεκιν(?:ο|ου)', 'Beijing'),
+  r('ισραηλ|ισραηλιν\\p{L}*', 'Israel'), r('ιερουσαλημ', 'Jerusalem'), r('τελ\\s+αβιβ', 'Tel Aviv'),
+  r('ιραν|ιρανικ\\p{L}*|ιραν(?:οι|ων)', 'Iran'), r('τεχεραν(?:η|ης)?', 'Tehran'), r('γαζ(?:α|ας)', 'Gaza'),
+  r('παλαιστιν(?:η|ης)', 'Palestine'), r('λιβαν(?:ος|ου|ο)', 'Lebanon'), r('συρι(?:α|ας)', 'Syria'),
+  r('αιγυπτ(?:ος|ου|ο)', 'Egypt'), r('ιρακ', 'Iraq'), r('σαουδικ(?:η|ης)\\s+αραβι(?:α|ας)', 'Saudi Arabia'),
+  r('ιορδανι(?:α|ας)', 'Jordanian'), r('λιβυ(?:η|ης)', 'Libya'), r('γερμανι(?:α|ας)|γερμανικ\\p{L}*', 'Germany'),
+  r('βερολιν(?:ο|ου)', 'Berlin'), r('γαλλι(?:α|ας)|γαλλικ\\p{L}*', 'France'), r('παρισι(?:ου)?', 'Paris'),
+  r('βρετανι(?:α|ας)|βρετανικ\\p{L}*|ηνωμενο\\s+βασιλειο', 'United Kingdom'), r('λονδιν(?:ο|ου)', 'London'),
+  r('ιταλι(?:α|ας)', 'Italy'), r('ισπανι(?:α|ας)', 'Spain'), r('πολωνι(?:α|ας)', 'Poland'), r('σερβι(?:α|ας)', 'Serbia'),
+  r('αλβανι(?:α|ας)', 'Albania'), r('βουλγαρι(?:α|ας)', 'Bulgaria'), r('ρουμανι(?:α|ας)', 'Romania'),
+  r('βορει(?:α|ας)\\s+μακεδονι(?:α|ας)|σκοπι(?:α|ων)', 'North Macedonia'), r('βρυξελλ(?:ες|ων)', 'Brussels'),
+  r('ιαπωνι(?:α|ας)', 'Japan'), r('ινδι(?:α|ας)', 'India'), r('βορει(?:α|ας)\\s+κορε(?:α|ας)', 'North Korea'),
+  r('νοτι(?:α|ας)\\s+κορε(?:α|ας)', 'South Korea'), r('βενεζουελ(?:α|ας)', 'Venezuela'), r('αρμενι(?:α|ας)', 'Armenia'),
+  r('αφγανισταν', 'Afghanistan'), r('πακισταν', 'Pakistan'),
+]
+
+/** Greek without its accents, for the rules above to read ("Ελλάδας" as "Ελλαδας") */
+export function greekPlain(text: string): string {
+  return text.normalize('NFD').replace(/[̀-ͯ]/g, '').normalize('NFC')
+}
+
+/**
+ * Korean joins its particles to the name ("미국의", of the US; "중국에서", in China; "북한은"), and its people ("미국인").
+ * "가자" alone is "let's go": Gaza is "가자지구". "인도" is also the pavement and humane ("인도적", "인도주의"), blanked
+ * first; Indonesia before India. Vietnamese "Ý" (Italy) only with its capital and not "Ý kiến" (opinion) and its kin.
+ */
+const KO_END = '(?:에서는|에서도|에게서|으로는|에서|에게|으로|까지|부터|과의|와의|에선|에도|은|는|이|가|을|를|의|에|로|와|과|도|만|인|산|측|발|군|정부)?'
+const ko = (stem: string, as: string): Rule => r(`(?:${stem})${KO_END}`, as)
+const KOREAN: Rule[] = [
+  mask('인도적|인도주의\\p{L}*'), ko('인도네시아', 'Indonesia'),
+  ko('한국|대한민국|남한', 'South Korea'), ko('북한', 'North Korea'), ko('미국', 'United States'), ko('중국', 'China'),
+  ko('일본', 'Japan'), ko('러시아', 'Russia'), ko('우크라이나', 'Ukraine'), ko('이란', 'Iran'), ko('이스라엘', 'Israel'),
+  ko('가자지구', 'Gaza'), ko('팔레스타인', 'Palestine'), ko('레바논', 'Lebanon'), ko('시리아', 'Syria'), ko('이라크', 'Iraq'),
+  ko('사우디아라비아|사우디', 'Saudi Arabia'), ko('튀르키예|터키', 'Turkey'), ko('이집트', 'Egypt'), ko('카타르', 'Qatar'),
+  ko('예멘', 'Yemen'), ko('독일', 'Germany'), ko('프랑스', 'France'), ko('영국', 'United Kingdom'), ko('이탈리아', 'Italy'),
+  ko('스페인', 'Spain'), ko('폴란드', 'Poland'), ko('대만', 'Taiwan'), ko('베트남', 'Vietnam'), ko('태국', 'Thailand'),
+  ko('필리핀', 'Philippines'), ko('인도', 'India'), ko('파키스탄', 'Pakistan'), ko('호주', 'Australia'), ko('캐나다', 'Canada'),
+  ko('멕시코', 'Mexico'), ko('브라질', 'Brazil'), ko('베네수엘라', 'Venezuela'), ko('몽골', 'Mongolia'),
+  ko('싱가포르', 'Singapore'), ko('말레이시아', 'Malaysia'),
+  ko('서울', 'Seoul'), ko('부산', 'Busan'), ko('인천', 'Incheon'), ko('대구', 'Daegu'), ko('광주', 'Gwangju'),
+  ko('대전', 'Daejeon'), ko('울산', 'Ulsan'), ko('제주', 'Jeju'), ko('평양', 'Pyongyang'), ko('베이징|북경', 'Beijing'),
+  ko('상하이', 'Shanghai'), ko('홍콩', 'Hong Kong'), ko('도쿄', 'Tokyo'), ko('오사카', 'Osaka'), ko('워싱턴', 'Washington'),
+  ko('백악관', 'White House'), ko('모스크바', 'Moscow'), ko('크렘린', 'Kremlin'), ko('키이우|키예프', 'Kyiv'),
+  ko('예루살렘', 'Jerusalem'), ko('테헤란', 'Tehran'), ko('브뤼셀', 'Brussels'), ko('런던', 'London'), ko('베를린', 'Berlin'),
+]
+
+/**
+ * Urdu and Persian are read like Arabic (arabicPlain: no vowel marks; آ as ا), with their own letters folded to one
+ * spelling (urduPersianPlain: Arabic ي and ك as ی and ک, which some of their sites type). Urdu's little words stand
+ * apart ("پاکستان میں", "امریکا کے"); its peoples end in ی ("پاکستانی", "بھارتی"). Left out: Urdu "شام" (Syria, also
+ * evening), "چینی" (Chinese, also sugar) and "بے چین" (restless, not China); Persian "هند" is India.
+ */
+const URDU: Rule[] = ([
+  mask('بے\\s?چین(?:ی)?|سکون\\s+و\\s+چین|چین\\s+و\\s+سکون'),
+  r('پاکستان(?:ی)?', 'Pakistan'), r('اسلام\\s?آباد', 'Islamabad'), r('کراچی', 'Karachi'), r('لاہور', 'Lahore'),
+  r('پشاور', 'Peshawar'), r('کوئٹہ', 'Quetta'), r('راولپنڈی', 'Rawalpindi'), r('ملتان', 'Multan'), r('فیصل\\s?آباد', 'Faisalabad'),
+  r('گوادر', 'Gwadar'), r('بلوچستان', 'Balochistan'), r('خیبر\\s+پختونخوا', 'Khyber Pakhtunkhwa'), r('سندھ', 'Sindh'),
+  r('گلگت(?:[-\\s]بلتستان)?', 'Gilgit'), r('بھارت(?:ی)?|ہندوستان(?:ی)?', 'India'),
+  r('نئی\\s+دہلی|دہلی', 'New Delhi'), r('ممبئی', 'Mumbai'), r('افغانستان|افغان', 'Afghanistan'), r('کابل', 'Kabul'),
+  r('ایران(?:ی)?', 'Iran'), r('تہران', 'Tehran'), r('چین', 'China'), r('بیجنگ', 'Beijing'),
+  r('امریکا|امریکہ|امریکی', 'United States'), r('واشنگٹن', 'Washington'), r('وائٹ\\s+ہاؤس', 'White House'),
+  r('روس(?:ی)?', 'Russia'), r('ماسکو', 'Moscow'), r('یوکرین(?:ی)?', 'Ukraine'), r('اسرائیل(?:ی)?', 'Israel'),
+  r('غزہ', 'Gaza'), r('فلسطین(?:ی)?', 'Palestine'), r('سعودی\\s+عرب|سعودی', 'Saudi Arabia'), r('قطر', 'Qatar'),
+  r('متحدہ\\s+عرب\\s+امارات', 'United Arab Emirates'), r('دبئی', 'Dubai'), r('ترکی', 'Turkey'), r('مصر', 'Egypt'),
+  r('عراق', 'Iraq'), r('لبنان', 'Lebanon'), r('یمن', 'Yemen'), r('برطانیہ|برطانوی', 'United Kingdom'), r('لندن', 'London'),
+  r('فرانس', 'France'), r('جرمنی', 'Germany'), r('جاپان', 'Japan'), r('بنگلہ\\s?دیش', 'Bangladesh'), r('ڈھاکہ', 'Dhaka'),
+  r('سری\\s?لنکا', 'Sri Lanka'), r('نیپال', 'Nepal'),
+] as Rule[]).map(([pattern, as]): Rule => [new RegExp(urduPersianPlain(pattern.source), pattern.flags), as])
+
+const PERSIAN: Rule[] = ([
+  r('ایران(?:ی)?', 'Iran'), r('تهران', 'Tehran'), r('اصفهان', 'Isfahan'), r('مشهد', 'Mashhad'), r('شیراز', 'Shiraz'),
+  r('تبریز', 'Tabriz'), r('اهواز', 'Ahvaz'), r('کرمانشاه', 'Kermanshah'), r('بندر\\s?عباس', 'Bandar Abbas'),
+  r('تنگه\\s+هرمز|هرمز', 'Hormuz'), r('آمریکا(?:یی)?|ایالات\\s+متحده', 'United States'), r('واشنگتن', 'Washington'),
+  r('کاخ\\s+سفید', 'White House'), r('روسیه', 'Russia'), r('مسکو', 'Moscow'), r('کرملین', 'Kremlin'), r('چین', 'China'),
+  r('پکن', 'Beijing'), r('اسرائیل(?:ی)?', 'Israel'), r('غزه', 'Gaza'), r('فلسطین(?:ی)?', 'Palestine'), r('لبنان', 'Lebanon'),
+  r('بیروت', 'Beirut'), r('سوریه', 'Syria'), r('دمشق', 'Damascus'), r('عراق', 'Iraq'), r('بغداد', 'Baghdad'),
+  r('عربستان(?:\\s+سعودی)?', 'Saudi Arabia'), r('ترکیه', 'Turkey'), r('آنکارا', 'Ankara'), r('افغانستان', 'Afghanistan'),
+  r('کابل', 'Kabul'), r('هرات', 'Herat'), r('قندهار', 'Kandahar'), r('پاکستان', 'Pakistan'), r('هند', 'India'),
+  r('اوکراین', 'Ukraine'), r('آلمان', 'Germany'), r('فرانسه', 'France'), r('انگلیس|بریتانیا', 'United Kingdom'),
+  r('لندن', 'London'), r('پاریس', 'Paris'), r('ژاپن', 'Japan'), r('کره\\s+شمالی', 'North Korea'), r('کره\\s+جنوبی', 'South Korea'),
+  r('یمن', 'Yemen'), r('قطر', 'Qatar'), r('امارات', 'United Arab Emirates'), r('بحرین', 'Bahrain'), r('کویت', 'Kuwait'),
+  r('عمان', 'Oman'), r('مصر', 'Egypt'), r('جمهوری\\s+آذربایجان', 'Azerbaijan'), r('باکو', 'Baku'), r('ارمنستان', 'Armenia'),
+] as Rule[]).map(([pattern, as]): Rule => [new RegExp(urduPersianPlain(pattern.source), pattern.flags), as])
+
+/** Urdu and Persian as arabicPlain leaves them, with Arabic ي and ك as their ی and ک */
+export function urduPersianPlain(text: string): string {
+  return arabicPlain(text).replace(/ي/g, 'ی').replace(/ك/g, 'ک')
+}
+
+/**
+ * Vietnamese writes most names in two syllables ("Trung Quốc", "Hàn Quốc"). The one-syllable names are everyday words
+ * or people's names too, so: "Mỹ" (the United States) only with its capital and not in a place or a name ("Mỹ Đình",
+ * "Mỹ Tho", "Mỹ Linh"); "Nga" (Russia) not after a woman's name ("Thị Nga"); "Pháp" (France) not in "Pháp luật" (law)
+ * and its kin; "Đức" (Germany) and "Anh" (Britain) only where a country stands ("tại Đức", "Thủ tướng Anh"), both being
+ * common names.
+ */
+const VI_BEFORE = '(?<=(?:nước|tại|ở|của|với|sang|từ|người|và|Thủ tướng|Tổng thống|Bộ trưởng|Ngoại trưởng|Đại sứ|chính phủ|Chính phủ|Mỹ,|Pháp,|Nga,|Đức,|Anh,)\\s)'
+const VIETNAMESE: Rule[] = [
+  r('việt\\s+nam', 'Vietnam'), r('hà\\s+nội', 'Hanoi'),
+  r('tp\\.?\\s?hcm|tp\\.?\\s+hồ\\s+chí\\s+minh|thành\\s+phố\\s+hồ\\s+chí\\s+minh|sài\\s+gòn', 'Ho Chi Minh City'),
+  r('đà\\s+nẵng', 'Da Nang'), r('hải\\s+phòng', 'Haiphong'), r('cần\\s+thơ', 'Can Tho'), cs('Huế', 'Vietnam'),
+  r('nha\\s+trang', 'Nha Trang'), r('hạ\\s+long', 'Ha Long'), r('hoa\\s+kỳ', 'United States'),
+  cs('Mỹ(?!\\s+(?:Đình|Tho|Linh|Tâm|Phước|Hào|Lộc|Hạnh|Xuyên|Lệ|Duyên|Hương|Ngọc|An|Hòa|Thuận))', 'United States'),
+  r('trung\\s+quốc', 'China'), r('nhật\\s+bản', 'Japan'), r('hàn\\s+quốc', 'South Korea'), r('triều\\s+tiên', 'North Korea'),
+  cs('(?<!(?:Thị|Thiên|Hằng|Quỳnh|Thúy|Thanh|Tuyết|Kim|Thu|Hồng|Lê|Nguyễn|Trần)\\s)Nga', 'Russia'),
+  cs('Pháp(?!\\s+(?:luật|lý|chế|y|nhân|định|quyền|lệnh|môn|sư|hội|bảo|danh|trị|đình))', 'France'),
+  cs(`${VI_BEFORE}Đức`, 'Germany'), r('cộng\\s+hòa\\s+liên\\s+bang\\s+đức', 'Germany'),
+  cs(`${VI_BEFORE}Anh(?!\\s+(?:ấy|ta|em|chị|trai))`, 'United Kingdom'), r('vương\\s+quốc\\s+anh', 'United Kingdom'),
+  r('ấn\\s+độ', 'India'), r('thái\\s+lan', 'Thailand'), r('campuchia', 'Cambodia'), cs('Lào', 'Laos'), cs('Úc', 'Australia'),
+  r('ả\\s+rập\\s+xê\\s+út', 'Saudi Arabia'), r('thổ\\s+nhĩ\\s+kỳ', 'Turkey'), r('đài\\s+loan', 'Taiwan'),
+  r('bắc\\s+kinh', 'Beijing'), r('mát-?xcơ-?va', 'Moscow'), r('nhà\\s+trắng', 'White House'), r('điện\\s+kremlin', 'Kremlin'),
+  r('bình\\s+nhưỡng', 'Pyongyang'), r('hồng\\s+kông', 'Hong Kong'), r('thượng\\s+hải', 'Shanghai'), r('ai\\s+cập', 'Egypt'),
+  r('i-?ran', 'Iran'), r('i-?xra-?en', 'Israel'), r('dải\\s+gaza', 'Gaza'), r('tây\\s+ban\\s+nha', 'Spain'),
+  cs('Ý(?!\\s+(?:kiến|tưởng|nghĩa|định|chí|thức|muốn|tế))', 'Italy'),
+]
+
+/**
+ * Hindi (Nov 18, 2026; Aaj Tak and Navbharat Times, added on Devon's word). Its little words stand apart ("भारत में",
+ * "अमेरिका के"), and a word's vowel signs are marks, not letters, so a name ends only where no letter or mark follows:
+ * "चीन" (China) is not "चीनी" (Chinese, also sugar), left out. Nukta spellings are read either way ("ग़ाज़ा", "गाजा").
+ */
+const HB = '(?<![\\p{L}\\p{M}\\p{N}])'
+const HE = '(?![\\p{L}\\p{M}\\p{N}])'
+const hi = (alts: string, as: string): Rule => [new RegExp(`${HB}(?:${alts})${HE}`, 'gu'), as]
+const HINDI: Rule[] = [
+  hi('भारत|भारतीय|हिंदुस्तान', 'India'), hi('दिल्ली|नई दिल्ली', 'New Delhi'), hi('मुंबई', 'Mumbai'), hi('कोलकाता', 'Kolkata'),
+  hi('चेन्नई', 'Chennai'), hi('बेंगलुरु|बेंगलुरू', 'Bengaluru'), hi('हैदराबाद', 'India'), hi('लखनऊ', 'Lucknow'),
+  hi('पटना', 'Patna'), hi('जयपुर', 'Jaipur'), hi('भोपाल', 'Bhopal'), hi('अहमदाबाद', 'Ahmedabad'), hi('पुणे', 'Pune'),
+  hi('पाकिस्तान|पाकिस्तानी', 'Pakistan'), hi('इस्लामाबाद', 'Islamabad'), hi('बांग्लादेश|बांग्लादेशी', 'Bangladesh'),
+  hi('ढाका', 'Dhaka'), hi('नेपाल', 'Nepal'), hi('श्रीलंका', 'Sri Lanka'), hi('अफगानिस्तान|अफ़ग़ानिस्तान', 'Afghanistan'),
+  hi('चीन', 'China'), hi('बीजिंग', 'Beijing'), hi('अमेरिका|अमेरिकी', 'United States'), hi('वॉशिंगटन|वाशिंगटन', 'Washington'),
+  hi('व्हाइट हाउस', 'White House'), hi('रूस|रूसी', 'Russia'), hi('मॉस्को|मास्को', 'Moscow'), hi('यूक्रेन', 'Ukraine'),
+  hi('ईरान|ईरानी', 'Iran'), hi('इजरायल|इज़राइल|इजराइल|इस्राइल|इजरायली', 'Israel'), hi('गाजा|ग़ाज़ा|गाज़ा', 'Gaza'),
+  hi('सऊदी अरब|सऊदी', 'Saudi Arabia'), hi('कतर|क़तर', 'Qatar'), hi('दुबई', 'Dubai'), hi('ब्रिटेन', 'United Kingdom'),
+  hi('लंदन', 'London'), hi('फ्रांस', 'France'), hi('जर्मनी', 'Germany'), hi('जापान', 'Japan'), hi('उत्तर कोरिया', 'North Korea'),
+  hi('दक्षिण कोरिया', 'South Korea'), hi('कनाडा', 'Canada'), hi('ऑस्ट्रेलिया', 'Australia'), hi('तुर्की', 'Turkey'),
+]
+
 export const LOCAL_NAMES: Record<string, Rule[]> = {
+  hi: HINDI,
   de: GERMAN, it: ITALIAN, ca: CATALAN, da: DANISH, kl: DANISH, nl: DUTCH, ro: ROMANIAN, sl: SLOVENE,
   sr: MONTENEGRIN, cnr: MONTENEGRIN, sq: ALBANIAN, ms: MALAY, es: SPANISH, pt: PORTUGUESE, lt: LITHUANIAN,
   ar: ARABIC, ru: RUSSIAN, mn: MONGOLIAN, fr: FRENCH,
   tr: TURKISH, pl: POLISH, hu: HUNGARIAN, cs: CZECH, id: INDONESIAN, uk: UKRAINIAN,
+  el: GREEK, ko: KOREAN, ur: URDU, fa: PERSIAN, vi: VIETNAMESE,
 }
 
 /** The text with its language's place names in English and its look-alike words blanked out, for finding its place */
 export function withLocalNames(text: string, language: string | null | undefined): string {
   const rules = language ? LOCAL_NAMES[language.toLowerCase().split('-')[0]!] : undefined
   if (!rules || !text) return text
-  let out = rules === ARABIC ? arabicPlain(text) : text
+  let out = rules === ARABIC ? arabicPlain(text)
+    : rules === URDU || rules === PERSIAN ? urduPersianPlain(text)
+      : rules === GREEK ? greekPlain(text) : text
   for (const [pattern, as] of rules) out = out.replace(pattern, as)
   return out
 }

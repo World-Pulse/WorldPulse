@@ -617,7 +617,8 @@ const LETTER_FOLDS: Record<string, string> = { 'ß': 'ss', 'æ': 'ae', 'œ': 'oe
  * "kova"; "d", "l", "gation" for "délégation"), so the same name in two outlets' spellings never matched.
  */
 export function foldAccents(text: string): string {
-  return text.toLowerCase().normalize('NFD').replace(/\p{M}+/gu, '').replace(/[ßæœøđðłıþħ]/g, ch => LETTER_FOLDS[ch] ?? ch)
+  // (recomposed at the end: a Korean syllable comes apart into its letters in the decomposition, Nov 18, 2026)
+  return text.toLowerCase().normalize('NFD').replace(/\p{M}+/gu, '').replace(/[ßæœøđðłıþħ]/g, ch => LETTER_FOLDS[ch] ?? ch).normalize('NFC')
 }
 
 /**
@@ -728,9 +729,12 @@ export function westernDigits(text: string): string {
   return text.replace(/[٠-٩۰-۹]/g, d => String(d.charCodeAt(0) & 0xf))
 }
 
-/** One spelling of an Arabic word, after foldAccents (which drops the vowel marks and hamzas): no tatweel, ى as ي, ة as ه */
+/**
+ * One spelling of an Arabic word, after foldAccents (which drops the vowel marks and hamzas): no tatweel, ى as ي, ة as ه;
+ * and Urdu's and Persian's own letters as Arabic's (Nov 18, 2026): ی as ي, ک as ك, ہ and ۀ as ه ("ایران" is "إيران")
+ */
 function arabicLetters(word: string): string {
-  return word.replace(/ـ/g, '').replace(/ى/g, 'ي').replace(/ة/g, 'ه')
+  return word.replace(/ـ/g, '').replace(/[ىی]/g, 'ي').replace(/ة/g, 'ه').replace(/ک/g, 'ك').replace(/[ہۀ]/g, 'ه')
 }
 
 /** The article and the little words joined to it: "والحكومه", "بالعاصمه" and "للرئيس" are "حكومه", "عاصمه" and "رئيس" */
@@ -785,13 +789,37 @@ const STEPPE_ENDINGS = [
 ].sort((a, b) => b.length - a.length)
 const STEPPE_LETTERS = /[өүң]/u
 
+/**
+ * Greek and Korean (Nov 18, 2026; Devon: "we need to add more language coverage"). A Greek word, after foldAccents
+ * (lower case, no accents), loses one ending, the longest that leaves 3 letters, and keeps its first six letters, as a
+ * Russian one does ("κυβέρνησης" and "κυβέρνηση" are "κυβερν"). A Korean word loses the particle joined to it ("정부는",
+ * "정부의" and "정부가" are "정부"), leaving 2 syllables.
+ */
+const GREEK_ENDINGS = ['ουσ', 'εων', 'ων', 'ου', 'οσ', 'εσ', 'ασ', 'ησ', 'οι', 'ει', 'ια', 'α', 'η', 'ο', 'ι', 'ε', 'υ']
+export function greekStem(word: string): string {
+  let w = word.replace(/ς/g, 'σ')
+  for (const end of GREEK_ENDINGS) {
+    if (w.endsWith(end) && w.length - end.length >= 3) { w = w.slice(0, -end.length); break }
+  }
+  return w.slice(0, 6)
+}
+const HANGUL_PARTICLES = ['에서는', '에서도', '에게서', '으로는', '에서', '에게', '으로', '까지', '부터', '처럼', '보다', '과의', '와의',
+  '에선', '에도', '이나', '은', '는', '이', '가', '을', '를', '의', '에', '로', '와', '과', '도', '만']
+export function hangulStem(word: string): string {
+  for (const end of HANGUL_PARTICLES) if (word.endsWith(end) && word.length - end.length >= 2) return word.slice(0, -end.length)
+  return word
+}
+
 // (Script_Extensions: the tatweel is a letter of Arabic and of other scripts)
 const ARABIC_SCRIPT = /^\p{scx=Arabic}+$/u
 const CYRILLIC_SCRIPT = /^\p{scx=Cyrillic}+$/u
+const GREEK_SCRIPT = /^\p{scx=Greek}+$/u
+const HANGUL_SCRIPT = /^\p{scx=Hangul}+$/u
 /** A word's form in its script, as storyWords compares them (and the stop lists below are built) */
 function otherScriptStem(word: string): string {
   const w = foldAccents(word)
-  return ARABIC_SCRIPT.test(w) ? arabicStem(w) : cyrillicStem(w, STEPPE_LETTERS.test(w))
+  return ARABIC_SCRIPT.test(w) ? arabicStem(w) : GREEK_SCRIPT.test(w) ? greekStem(w) : HANGUL_SCRIPT.test(w) ? hangulStem(w)
+    : cyrillicStem(w, STEPPE_LETTERS.test(w))
 }
 const stemsOf = (list: string) => new Set(list.split(/\s+/).filter(Boolean).map(otherScriptStem))
 
@@ -809,6 +837,19 @@ const OTHER_SCRIPT_STOP = new Set([
   'жана менен үчүн боюнча деп бул ал да дагы анын алар болуп керек тууралуу кийин чейин',
   // mn
   'ба болон нь юм энэ тэр байна гэж гэв хийх тухай дээр үед шинэ өнөөдөр',
+  // fa (Nov 18, 2026)
+  'از به در با که این آن را و برای تا بر یک هم می شود شد شده است بود خود های ها ای پس پیش روی درباره علیه بین اما یا نیز همه ' +
+  'چه چرا ویدیو گزارش گفت گفته کرد کند کرده دارد امروز دیروز جدید شوند کنند دهد',
+  // ur
+  'کا کی کے میں نے سے کو پر اور ہے ہیں تھا تھی تھے یہ وہ ایک بھی لیے لئے گیا گئی گئے کر کہ ہو ہوں جو کیا کریں کرنے والے والی بعد ' +
+  'پہلے ساتھ خلاف تک اب نہیں ویڈیو رپورٹ کہا بتایا آج نیا نئی',
+  // el
+  'και να το τα η ο οι του της των στο στη στην στον στις στους στα σε με για από που θα δεν μια ένα ενός μιας ως κατά μετά ' +
+  'πριν προς χωρίς όταν αλλά ή είναι ήταν έχει έχουν νέο νέα νέος βίντεο φωτογραφίες σήμερα χθες λέει είπε δήλωσε τι πώς ' +
+  'γιατί όλα πιο τον την τη τις τους αυτό αυτή μέσα πάνω κάτω',
+  // ko
+  '대해 관련 위해 따라 통해 대한 및 또 더 수 것 중 전 후 오늘 어제 속보 단독 종합 영상 사진 포토 기자 밝혀 말했다 했다 한다 ' +
+  '했다고 한다고 있다 없다 된다 됐다 위한 이번 올해 내년 지난',
 ].join(' ').split(/\s+/).filter(Boolean).flatMap(w => [foldAccents(w), otherScriptStem(w)]))
 
 /** Kinds of events and their usual actors (see EVENT_WORDS) */
@@ -820,7 +861,11 @@ for (const stem of stemsOf(
   'убит убиты погиб погибли погибших атака атаки удар удары обстрел взрыв ранен ранены раненых война войны бой бои арест ' +
   'задержан полиция армия военные военный президент правительство министр министерство глава власти страна государство ' +
   'пожар наводнение землетрясение авария человек люди граждане өкмөт милиция кырсык өрт ерөнхийлөгч засгийн сайд цагдаа ' +
-  'гал осол хүн иргэд улс',
+  'гал осол хүн иргэд улс ' +
+  // el, ko (Nov 18, 2026)
+  'νεκροί νεκρός νεκρά σκοτώθηκαν τραυματίες τραυματίστηκαν επίθεση επιθέσεις πόλεμος πολέμου σεισμός φωτιά πυρκαγιά ' +
+  'αστυνομία στρατός κυβέρνηση πρωθυπουργός πρόεδρος υπουργός υπουργείο έκρηξη σύλληψη συνελήφθη τροχαίο ' +
+  '사망 숨져 부상 공격 전쟁 지진 화재 경찰 군 정부 대통령 총리 장관 사고 폭발 체포 시위 국민',
 )) EVENT_WORDS.add(stem)
 
 /** Numbers in words, as their stems: "ثلاثة" and "три" are #3, like "three" */
@@ -828,13 +873,17 @@ const OTHER_SCRIPT_COUNTS = new Map<string, number>(([
   [1, 'واحد один одна одного'], [2, 'اثنان اثنين اثنتان два две двое двух'], [3, 'ثلاث ثلاثة три трое трех'],
   [4, 'أربع أربعة четыре четырех'], [5, 'خمس خمسة пять пяти'], [6, 'ستة шесть шести'], [7, 'سبع سبعة семь семи'],
   [8, 'ثماني ثمانية восемь восьми'], [9, 'تسع تسعة девять девяти'], [10, 'عشر عشرة десять десяти'],
+  [1, 'ένας μία ένα'], [2, 'δύο'], [3, 'τρεις τρία'], [4, 'τέσσερις τέσσερα'], [5, 'πέντε'], [6, 'έξι'], [7, 'επτά εφτά'],
+  [8, 'οκτώ οχτώ'], [9, 'εννέα'], [10, 'δέκα'],
 ] as Array<[number, string]>).flatMap(([n, names]) => names.split(' ').map(w => [otherScriptStem(w), n] as [string, number])))
 
 /** Things many unrelated events happen to or in (see COMMON_THINGS) */
 for (const stem of stemsOf(
   'طائرة مروحية قطار حافلة سفينة قارب شاحنة سيارة مستشفى مدرسة سوق مسجد كنيسة جسر مبنى منزل فندق مطار ' +
   'самолет вертолет поезд автобус судно корабль лодка грузовик автомобиль машина больница школа рынок мечеть церковь мост ' +
-  'здание дом гостиница отель аэропорт',
+  'здание дом гостиница отель аэропорт ' +
+  'αεροπλάνο ελικόπτερο τρένο λεωφορείο πλοίο σκάφος φορτηγό αυτοκίνητο νοσοκομείο σχολείο αεροδρόμιο ' +
+  '비행기 헬기 열차 버스 선박 트럭 차량 병원 학교 공항 건물',
 )) COMMON_THINGS.add(stem)
 
 /**
@@ -864,9 +913,24 @@ const OTHER_SCRIPT_COUNTRIES = new Map<string, string>(([
   ['UA', 'украина украины украинский киев'], ['BY', 'беларусь белоруссия минск'], ['TR', 'турция турции турецкий түркия'],
   ['IR', 'иран ирана иранский'], ['JP', 'япония японии японский япон'], ['DE', 'германия германии'],
   ['FR', 'франция франции'], ['GB', 'великобритания британия'], ['IN', 'индия индии'], ['AF', 'афганистан'], ['PK', 'пакистан'],
+  // fa, ur (Nov 18, 2026; their letters folded as Arabic's: "ایران" is already Iran above)
+  ['IR', 'ایرانی تهران تہران'], ['PK', 'پاکستان پاکستانی کراچی لاہور'], ['IN', 'بھارت بھارتی هند ہندوستان'],
+  ['US', 'آمریکا امریکا امریکہ امریکی آمریکایی'], ['RU', 'روسیه روس روسی'], ['CN', 'چین'], ['TR', 'ترکیه ترکی'],
+  ['UA', 'اوکراین یوکرین'], ['GB', 'برطانیہ انگلیس'], ['PS', 'غزه غزہ'], ['SA', 'عربستان'], ['AF', 'افغان کابل'],
+  // el
+  ['GR', 'ελλάδα ελλάδας ελληνική ελληνικής ελληνικό αθήνα αθήνας θεσσαλονίκη'], ['CY', 'κύπρος κύπρου κύπρο λευκωσία λεμεσός'],
+  ['TR', 'τουρκία τουρκίας τουρκικό τουρκική άγκυρα'], ['RU', 'ρωσία ρωσίας ρωσικό ρωσική μόσχα'], ['UA', 'ουκρανία ουκρανίας κίεβο'],
+  ['US', 'ηπα αμερική αμερικανικό αμερικανική ουάσιγκτον'], ['CN', 'κίνα κίνας πεκίνο'], ['IL', 'ισραήλ ισραηλινό ισραηλινή'],
+  ['IR', 'ιράν ιρανικό'], ['DE', 'γερμανία γερμανίας'], ['FR', 'γαλλία γαλλίας'], ['GB', 'βρετανία βρετανίας'],
+  // ko
+  ['KR', '한국 대한민국 남한 서울'], ['KP', '북한 평양'], ['US', '미국 워싱턴'], ['CN', '중국 베이징'], ['JP', '일본 도쿄'],
+  ['RU', '러시아 모스크바'], ['UA', '우크라이나'], ['IR', '이란'], ['IL', '이스라엘'], ['TW', '대만'], ['DE', '독일'],
+  ['FR', '프랑스'], ['GB', '영국'], ['IN', '인도'],
 ] as Array<[string, string]>).flatMap(([code, names]) => names.split(' ').flatMap(n => {
   const w = foldAccents(n)
-  return ARABIC_SCRIPT.test(w) ? [[arabicBase(w), code]] : [[cyrillicStem(w), code], [cyrillicStem(w, true), code]]
+  return ARABIC_SCRIPT.test(w) ? [[arabicBase(w), code]]
+    : GREEK_SCRIPT.test(w) ? [[greekStem(w), code]] : HANGUL_SCRIPT.test(w) ? [[hangulStem(w), code]]
+      : [[cyrillicStem(w), code], [cyrillicStem(w, true), code]]
 }) as Array<[string, string]>))
 
 /** Arabic country names of two words, found before the words are split (as foldAccents leaves them); with a city's name */
@@ -915,14 +979,16 @@ export function otherScriptWords(text: string): string[] {
   for (const token of rest.split(/[^\p{L}]+/u)) {
     if (!token) continue
     const arabic = ARABIC_SCRIPT.test(token)
-    if (!arabic && !CYRILLIC_SCRIPT.test(token)) continue
+    const greek = !arabic && GREEK_SCRIPT.test(token)
+    const hangul = !arabic && !greek && HANGUL_SCRIPT.test(token)
+    if (!arabic && !greek && !hangul && !CYRILLIC_SCRIPT.test(token)) continue
     if (OTHER_SCRIPT_STOP.has(token)) continue
-    const stem = arabic ? arabicStem(token) : cyrillicStem(token, steppe)
+    const stem = arabic ? arabicStem(token) : greek ? greekStem(token) : hangul ? hangulStem(token) : cyrillicStem(token, steppe)
     const code = OTHER_SCRIPT_COUNTRIES.get(arabic ? arabicBase(token) : stem) ?? (steppe ? OTHER_SCRIPT_COUNTRIES.get(cyrillicStem(token)) : undefined)
     if (code) { out.push(`@${code}`); continue }
     const count = OTHER_SCRIPT_COUNTS.get(stem)
     if (count !== undefined) { out.push(`#${count}`); continue }
-    if (stem.length < (arabic ? 2 : 3) || OTHER_SCRIPT_STOP.has(stem)) continue
+    if (stem.length < (arabic || hangul ? 2 : 3) || OTHER_SCRIPT_STOP.has(stem)) continue
     out.push(stem)
   }
   return out
@@ -1001,6 +1067,12 @@ export function searchWords(title: string): string[] {
     if (ARABIC_SCRIPT.test(foldAccents(token))) {
       const stem = arabicStem(foldAccents(token))
       if (stem.length >= 3 && !OTHER_SCRIPT_STOP.has(stem) && !OTHER_SCRIPT_STOP.has(foldAccents(token))) forms.push(stem, `ال${stem}`)
+    }
+    // A Korean word (Nov 18, 2026) without its particle, from 2 syllables: "정부는" finds "정부" and "정부가"
+    if (HANGUL_SCRIPT.test(token)) {
+      const stem = hangulStem(token)
+      if (stem.length >= 2 && !OTHER_SCRIPT_STOP.has(stem) && !OTHER_SCRIPT_STOP.has(token) && !out.includes(stem)) { base++; out.push(stem) }
+      continue
     }
     let counted = false
     for (const form of forms) {

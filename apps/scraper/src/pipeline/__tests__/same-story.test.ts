@@ -853,3 +853,65 @@ describe('headlines in Arabic and Cyrillic letters (Nov 6, 2026)', () => {
     )).toBe(true)
   })
 })
+
+// Nov 18, 2026 (Devon: "we need to add more language coverage"): Greek, Korean, Urdu and Persian headlines, written as
+// Sigmalive, ERT, Naftemporiki, VOA Korean, Express and MM News write them
+describe('headlines in Greek, Korean, Urdu and Persian (Nov 18, 2026)', () => {
+  const at = (title: string, source_id: string) => sig({ id: source_id, title, source_id, category: 'geopolitics' })
+  const look = { secondLook: { busy: new Set<string>() } }
+
+  it('reads Greek words without their accents and endings, with their countries', () => {
+    const words = storyWords('Η κυβέρνηση της Ελλάδας ανακοίνωσε νέα μέτρα για τους πυρόπληκτους')
+    expect(words.has('@GR')).toBe(true)
+    expect(words.has('κυβερν') && storyWords('Νέα μέτρα από την κυβέρνηση').has('κυβερν')).toBe(true)
+    // little words are not story words
+    expect([...words].some(w => ['της', 'τησ', 'για', 'τους', 'νεα'].includes(w))).toBe(false)
+    expect(storyWords('ΗΠΑ - Βενεζουέλα: Συμφωνία στρατιωτικής συνεργασίας').has('@US')).toBe(true)
+    expect(storyWords('Σεισμός 5,2 Ρίχτερ στην Κρήτη: τρεις τραυματίες').has('#3')).toBe(true)
+  })
+
+  it('reads Korean words without their particles, with their countries', async () => {
+    const { searchWords } = await import('../correlate')
+    const words = storyWords('정부는 오늘 북한의 미사일 발사를 규탄했다')
+    expect(words.has('@KR') || words.has('@KP')).toBe(true)
+    expect(words.has('@KP')).toBe(true)
+    expect(words.has('미사일') && storyWords('미사일 발사에 정부가 규탄').has('미사일')).toBe(true)
+    expect(storyWords('제프리스, 미국 역사상 첫 흑인 하원의장 유력').has('@US')).toBe(true)
+    // the search finds a word by its two syllables, without its particle
+    expect(searchWords('정부는 미사일 발사를 규탄')).toEqual(expect.arrayContaining(['정부', '미사일', '발사']))
+  })
+
+  it("reads Urdu and Persian words in Arabic's spelling, with their countries", () => {
+    expect(storyWords('ایران اور امریکا کے درمیان مذاکرات کا نیا دور').has('@IR')).toBe(true)
+    expect(storyWords('ایران اور امریکا کے درمیان مذاکرات کا نیا دور').has('@US')).toBe(true)
+    expect(storyWords('مذاکرات ایران و آمریکا در عمان').has('@IR')).toBe(true)
+    expect(storyWords('کراچی کی مصروف تجارتی شاہراہ اچانک بند').has('@PK')).toBe(true)
+    // little words are not story words
+    const ur = storyWords('کراچی میں بارش سے نظام زندگی مفلوج')
+    expect([...ur].some(w => ['ميں', 'میں', 'سے'].includes(w))).toBe(false)
+  })
+
+  it('joins one story told by two outlets, and keeps two stories apart', () => {
+    expect(isSameStory(
+      at('Σεισμός 5,2 Ρίχτερ στην Κρήτη - Αισθητός στο Ηράκλειο', 'ertnews.gr'),
+      at('Ισχυρός σεισμός 5,2 Ρίχτερ ταρακούνησε την Κρήτη', 'naftemporiki.gr'),
+      look,
+    )).toBe(true)
+    expect(isSameStory(
+      at('북한, 동해상으로 탄도미사일 발사', 'voakorea.com'),
+      at('북한 탄도미사일 동해상 발사…합참 "추가 도발 대비"', 'yna.co.kr'),
+      look,
+    )).toBe(true)
+    expect(isSameStory(
+      at('کراچی میں شدید بارش، شہر کی سڑکیں زیر آب', 'express.pk'),
+      at('کراچی میں موسلا دھار بارش سے سڑکیں زیر آب آ گئیں', 'mmnews.tv'),
+      look,
+    )).toBe(true)
+    // a kind of event and a country are not a story
+    expect(isSameStory(
+      at('Σεισμός στην Κρήτη', 'ertnews.gr'),
+      at('Φωτιά στην Κρήτη', 'naftemporiki.gr'),
+      look,
+    )).toBe(false)
+  })
+})
