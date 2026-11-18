@@ -3042,8 +3042,16 @@ const DELEGATION_ARRIVES = /(?<![\p{L}\p{N}])((?:\p{Lu}[\p{L}'’.]*(?:,\s*|,?\s
  * the story is: the country is blanked out, so the place the text names is read, or else the outlet's own country.
  */
 const GUEST_RECEIVED = /(?<![\p{L}\p{N}])(?:receives?|received|welcomes?|welcomed|meets?|met|hosts?|hosted)\s+(?:(?:the|a|his|her|its|visiting)\s+)?(?:[\p{L}'’.-]+\s+){0,6}?(?:minister|advis[eo]r|secretary|chairman|chairperson|commander|director|governor|president|head|chief|delegation|envoy|official|leader|general|chancellor|speaker)s?\s+(?:of|from)\s+(?:the\s+)?(\p{Lu}[\p{L}'’.]*(?:\s+\p{Lu}[\p{L}'’.]*)?)/giu
+/**
+ * A country named as who is helped or fought, not where the story is (Nov 18, 2026: the live feed's "US Arrests Alleged
+ * Russian Agent for Spying on Defense Firm Aiding Ukraine" sat in Ukraine, "Prince Harry says he would return to the
+ * Army to fight against Russia" in Russia). The country is blanked out, so the place the text names is read, or else
+ * the outlet's own country. "against" alone stays as it was (sanctions against a country are its story).
+ */
+const AID_GIVEN = /(?<![\p{L}\p{N}])(?:[Aa]iding|[Hh]elping|[Aa]ssisting|[Aa]rming|[Ss]upplying)\s+(?:the\s+)?(\p{Lu}[\p{L}'’.]*(?:\s+\p{Lu}[\p{L}'’.]*)?)/gu
+const FOUGHT_AGAINST = /(?<![\p{L}\p{N}])(?:[Ff]ight(?:ing)?|[Cc]ombat(?:ing)?|[Cc]ombatir)\s+(?:against|contra)\s+(?:the\s+|la\s+)?(\p{Lu}[\p{L}'’.]*(?:\s+\p{Lu}[\p{L}'’.]*)?)/gu
 const COMPARED_TO = /(?<![\p{L}\p{N}])(?:[Ll]ike|[Uu]nlike)\s+(?:in\s+)?(\p{Lu}[\p{L}'’.]*(?:\s+\p{Lu}[\p{L}'’.]*)?)(?=\s*[,:]|\s+(?:before|did|has|had|was|were|is|are)(?![\p{L}\p{N}]))/gu
-const PASSING_ANY = /(?:like|unlike)\s|receiv|welcom|meets?\s|met\s|host|arriv|land|fl(?:y|ies|ew)\s|travel|(?:pro|anti)[-‑]\p{Lu}|(?:Air|Er)\s+\p{Lu}|\s(?:Airlines|Airways)(?![\p{L}\p{N}])|towards?\s|\s(?:visit|trip|tour)(?![\p{L}\p{N}])/iu
+const PASSING_ANY = /(?:like|unlike)\s|aiding|helping|assisting|arming|supplying|fight|combat|receiv|welcom|meets?\s|met\s|host|arriv|land|fl(?:y|ies|ew)\s|travel|(?:pro|anti)[-‑]\p{Lu}|(?:Air|Er)\s+\p{Lu}|\s(?:Airlines|Airways)(?![\p{L}\p{N}])|towards?\s|\s(?:visit|trip|tour)(?![\p{L}\p{N}])/iu
 
 /** The spans of countries a text names only in passing, each with its country */
 function passingSpans(text: string): Span[] {
@@ -3068,6 +3076,8 @@ function passingSpans(text: string): Span[] {
   for (const m of text.matchAll(HEADED_FOR)) add(m, m[1])
   for (const m of text.matchAll(TRIP_AHEAD)) add(m, m[1])
   for (const m of text.matchAll(GUEST_RECEIVED)) add(m, m[1])
+  for (const m of text.matchAll(AID_GIVEN)) add(m, m[1])
+  for (const m of text.matchAll(FOUGHT_AGAINST)) add(m, m[1])
   // a comparison: "2027: Like Lagos, NDC campaign attacked in Kano" is Kano's story, a city or country named only to compare
   for (const m of text.matchAll(COMPARED_TO)) {
     const name = m[1]!
