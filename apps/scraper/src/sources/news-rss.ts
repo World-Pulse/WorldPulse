@@ -15271,6 +15271,51 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['egypt', 'north-africa', 'middle-east', 'arabic'],
     language:        'ar',
   },
+  // China round (Nov 19, 2026; Devon, 4:11 PM: "3 sources for a country with a billion people means we're practically not covering China at all"): Phoenix New Media's portal, one of the mainland's largest, in Chinese, from the news sitemap its robots.txt names (no feed advertised); its pages say only "版权所有 ... All Rights Reserved". Licensed on the mainland, so it reports within its rules: 0.55
+  {
+    id:              'ifeng',
+    name:            'Phoenix News (ifeng.com)',
+    feedUrl:         'https://www.ifeng.com/sitemap/google-news/1.xml',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.55,
+    countryCode:     'CN',
+    defaultLat:      39.9,
+    defaultLng:      116.4,
+    defaultLocation: 'Beijing, China',
+    extraTags:       ['china', 'east-asia', 'chinese', 'mainland-media'],
+    language:        'zh',
+  },
+  // the People's Daily group's English tabloid, so labelled state media at 0.42, from the news sitemap its robots.txt names; its pages carry a copyright line only
+  {
+    id:              'global-times',
+    name:            'Global Times',
+    feedUrl:         'https://www.globaltimes.cn/sitemap.xml',
+    category:        'geopolitics',
+    biasLabel:       'state-media',
+    reliability:     0.42,
+    countryCode:     'CN',
+    defaultLat:      39.9,
+    defaultLng:      116.4,
+    defaultLocation: 'Beijing, China',
+    extraTags:       ['china', 'east-asia', 'state-media'],
+    language:        'en',
+  },
+  // the Times's Chinese-language edition, much of it on China, from the feed its homepage advertises (the Times's English feeds are listed already)
+  {
+    id:              'nyt-chinese',
+    name:            'The New York Times Chinese',
+    feedUrl:         'https://cn.nytimes.com/rss/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.8,
+    countryCode:     'CN',
+    defaultLat:      39.9,
+    defaultLng:      116.4,
+    defaultLocation: 'Beijing, China',
+    extraTags:       ['china', 'east-asia', 'chinese'],
+    language:        'zh',
+  },
 ]
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────
