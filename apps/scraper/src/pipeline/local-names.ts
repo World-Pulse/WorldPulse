@@ -1080,6 +1080,85 @@ const SOMALI: Rule[] = [
   r('kenya', 'Kenya'), r('jabuuti', 'Djibouti'), r('imaaraadka', 'United Arab Emirates'), r('mareykanka', 'United States'),
 ]
 
+/**
+ * The languages of India's own scripts, Sindhi and Amharic (Nov 19, 2026; Devon, 5:33 PM: "more local language
+ * coverage"): Tamil, Telugu, Kannada, Malayalam, Marathi, Gujarati, Odia and Assamese join their endings to a name
+ * ("சென்னையில்", in Chennai; "हैदराबादमध्ये"; "ভাৰতত"), so a name is read from its start and the whole word taken;
+ * Amharic puts its little words before it ("በአዲስ አበባ", in Addis Ababa). Hyderabad is read as Telangana (Pakistan
+ * has one too), Sindhi's as Sindh. Left out: short names that begin other words (Tamil "காசா", Gaza, begins "காசாளர்",
+ * a cashier; "சீன", Chinese, begins "சீனிவாசன்", a name).
+ */
+const ag = (alts: string, as: string): Rule => [new RegExp(`${HB}(?:${alts})[\\p{L}\\p{M}]*`, 'gu'), as]
+const TAMIL: Rule[] = [
+  ag('இந்திய', 'India'), ag('தமிழ்நாட|தமிழக', 'Tamil Nadu'), ag('சென்னை', 'Chennai'), ag('கோவை|கோயம்புத்தூ', 'Coimbatore'),
+  ag('மதுரை', 'Madurai'), ag('புதுச்சேரி', 'Puducherry'), ag('கேரள', 'Kerala'), ag('கர்நாடக', 'Karnataka'),
+  ag('டெல்லி|தில்லி', 'New Delhi'), ag('மும்பை', 'Mumbai'), ag('பெங்களூ', 'Bengaluru'), ag('இலங்கை', 'Sri Lanka'),
+  ag('கொழும்ப', 'Colombo'), ag('யாழ்ப்பாண', 'Jaffna'), ag('பாகிஸ்தான', 'Pakistan'), ag('வங்கதேச', 'Bangladesh'),
+  ag('நேபாள', 'Nepal'), ag('சீனா', 'China'), ag('அமெரிக்க', 'United States'), ag('ரஷ்ய', 'Russia'), ag('உக்ரைன', 'Ukraine'),
+  ag('ஈரான', 'Iran'), ag('இஸ்ரேல', 'Israel'), ag('ஜப்பான', 'Japan'), ag('பிரிட்டன', 'United Kingdom'),
+]
+const TELUGU: Rule[] = [
+  ag('భారత', 'India'), ag('తెలంగాణ', 'Telangana'), ag('హైదరాబాద', 'Telangana'), ag('ఆంధ్రప్రదేశ|ఏపీ', 'Andhra Pradesh'),
+  ag('విజయవాడ', 'Vijayawada'), ag('విశాఖ', 'Visakhapatnam'), ag('తిరుపతి', 'Tirupati'), ag('వరంగల', 'Warangal'),
+  ag('చెన్నై', 'Chennai'), ag('బెంగళూరు', 'Bengaluru'), ag('ఢిల్లీ', 'New Delhi'), ag('ముంబై', 'Mumbai'),
+  ag('పాకిస్తాన|పాకిస్థాన', 'Pakistan'), ag('బంగ్లాదేశ', 'Bangladesh'), ag('శ్రీలంక', 'Sri Lanka'), ag('నేపాల', 'Nepal'),
+  ag('చైనా', 'China'), ag('అమెరికా', 'United States'), ag('రష్యా', 'Russia'), ag('ఉక్రెయిన', 'Ukraine'), ag('ఇరాన', 'Iran'),
+  ag('ఇజ్రాయెల', 'Israel'), ag('జపాన', 'Japan'), ag('బ్రిటన', 'United Kingdom'),
+]
+const KANNADA: Rule[] = [
+  ag('ಭಾರತ', 'India'), ag('ಕರ್ನಾಟಕ', 'Karnataka'), ag('ಬೆಂಗಳೂರ', 'Bengaluru'), ag('ಮೈಸೂರ', 'Mysuru'), ag('ಮಂಗಳೂರ', 'Mangaluru'),
+  ag('ಹುಬ್ಬಳ್ಳಿ', 'Karnataka'), ag('ಬೆಳಗಾವಿ', 'Belagavi'), ag('ಕೇರಳ', 'Kerala'), ag('ದೆಹಲಿ', 'New Delhi'), ag('ಮುಂಬೈ', 'Mumbai'),
+  ag('ಚೆನ್ನೈ', 'Chennai'), ag('ಹೈದರಾಬಾದ', 'Telangana'), ag('ಪಾಕಿಸ್ತಾನ', 'Pakistan'), ag('ಬಾಂಗ್ಲಾದೇಶ', 'Bangladesh'),
+  ag('ಶ್ರೀಲಂಕಾ', 'Sri Lanka'), ag('ನೇಪಾಳ', 'Nepal'), ag('ಚೀನಾ', 'China'), ag('ಅಮೆರಿಕ', 'United States'), ag('ರಷ್ಯಾ', 'Russia'),
+  ag('ಉಕ್ರೇನ', 'Ukraine'), ag('ಇರಾನ', 'Iran'), ag('ಇಸ್ರೇಲ', 'Israel'), ag('ಜಪಾನ', 'Japan'),
+]
+const MALAYALAM: Rule[] = [
+  ag('ഇന്ത്യ', 'India'), ag('കേരള', 'Kerala'), ag('തിരുവനന്തപുര', 'Thiruvananthapuram'), ag('കൊച്ചി', 'Kochi'),
+  ag('കോഴിക്കോട', 'Kozhikode'), ag('തൃശ്ശൂ|തൃശൂ', 'Thrissur'), ag('കണ്ണൂ', 'Kannur'), ag('മലപ്പുറ', 'Malappuram'),
+  ag('ഡൽഹി|ദില്ലി', 'New Delhi'), ag('മുംബൈ', 'Mumbai'), ag('ചെന്നൈ', 'Chennai'), ag('ബെംഗളൂരു|ബംഗളൂരു', 'Bengaluru'),
+  ag('പാകിസ്ഥാ|പാക്കിസ്ഥാ', 'Pakistan'), ag('ചൈന', 'China'), ag('അമേരിക്ക', 'United States'), ag('റഷ്യ', 'Russia'),
+  ag('യുക്രെയ്|യുക്രൈ', 'Ukraine'), ag('ഇറാ[നൻ]', 'Iran'), ag('ഇസ്രായേ|ഇസ്രയേ', 'Israel'), ag('ഗാസ', 'Gaza'),
+  ag('സൗദി', 'Saudi Arabia'), ag('യുഎഇ', 'United Arab Emirates'), ag('ദുബായ', 'Dubai'), ag('ഖത്ത', 'Qatar'),
+  ag('ശ്രീലങ്ക', 'Sri Lanka'), ag('ജപ്പാ', 'Japan'),
+]
+const MARATHI: Rule[] = [
+  ag('भारत', 'India'), ag('महाराष्ट्र', 'Maharashtra'), ag('मुंबई', 'Mumbai'), ag('पुणे|पुण्या', 'Pune'), ag('नागपूर', 'Nagpur'),
+  ag('नाशिक', 'Nashik'), ag('ठाणे|ठाण्या', 'Thane'), ag('कोल्हापूर', 'Kolhapur'),
+  ag('दिल्ली', 'New Delhi'), ag('गुजरात', 'Gujarat'), ag('कर्नाटक', 'Karnataka'), ag('पाकिस्तान', 'Pakistan'),
+  ag('बांगलादेश', 'Bangladesh'), ag('चीन', 'China'), ag('अमेरिके|अमेरिका', 'United States'), ag('रशिया', 'Russia'),
+  ag('युक्रेन', 'Ukraine'), ag('इराण', 'Iran'), ag('इस्रायल', 'Israel'), ag('जपान', 'Japan'), ag('ब्रिटन', 'United Kingdom'),
+]
+const GUJARATI: Rule[] = [
+  ag('ભારત', 'India'), ag('ગુજરાત', 'Gujarat'), ag('અમદાવાદ', 'Ahmedabad'), ag('સુરત', 'Surat'), ag('વડોદરા', 'Vadodara'),
+  ag('રાજકોટ', 'Rajkot'), ag('ગાંધીનગર', 'Gandhinagar'), ag('મુંબઈ', 'Mumbai'), ag('દિલ્હી', 'New Delhi'),
+  ag('પાકિસ્તાન', 'Pakistan'), ag('ચીન', 'China'), ag('અમેરિકા', 'United States'), ag('રશિયા', 'Russia'), ag('યુક્રેન', 'Ukraine'),
+  ag('ઈરાન|ઇરાન', 'Iran'), ag('ઇઝરાયલ|ઈઝરાયેલ|ઇઝરાયેલ', 'Israel'), ag('બાંગ્લાદેશ', 'Bangladesh'), ag('જાપાન', 'Japan'),
+]
+const ODIA: Rule[] = [
+  ag('ଭାରତ', 'India'), ag('ଓଡ଼ିଶା|ଓଡିଶା', 'Odisha'), ag('ଭୁବନେଶ୍ୱର', 'Bhubaneswar'), ag('କଟକ', 'Cuttack'),
+  ag('ସମ୍ବଲପୁର', 'Sambalpur'), ag('ଦିଲ୍ଲୀ', 'New Delhi'), ag('ପାକିସ୍ତାନ', 'Pakistan'), ag('ଚୀନ', 'China'),
+  ag('ଆମେରିକା', 'United States'), ag('ଋଷିଆ|ରୁଷିଆ', 'Russia'), ag('ୟୁକ୍ରେନ', 'Ukraine'), ag('ଇରାନ', 'Iran'), ag('ବାଂଲାଦେଶ', 'Bangladesh'),
+]
+const ASSAMESE: Rule[] = [
+  ag('ভাৰত', 'India'), ag('অসম', 'Assam'), ag('গুৱাহাটী', 'Guwahati'), ag('ডিব্ৰুগড়', 'Dibrugarh'), ag('যোৰহাট', 'Assam'),
+  ag('শিলচৰ', 'Silchar'), ag('মেঘালয়', 'Meghalaya'), ag('মণিপুৰ', 'Manipur'), ag('নাগালেণ্ড|নাগালেণ্ড', 'Nagaland'),
+  ag('অৰুণাচল', 'Arunachal Pradesh'), ag('বাংলাদেশ', 'Bangladesh'), ag('দিল্লী', 'New Delhi'), ag('পাকিস্তান', 'Pakistan'),
+  ag('চীন', 'China'), ag('আমেৰিকা', 'United States'), ag('ৰাছিয়া|ৰুছ', 'Russia'), ag('ইউক্ৰেইন', 'Ukraine'), ag('ইৰাণ|ইৰান', 'Iran'),
+]
+const SINDHI: Rule[] = [
+  ag('پاڪستان|پاکستان', 'Pakistan'), ag('سنڌ', 'Sindh'), ag('حيدرآباد', 'Sindh'), ag('ڪراچي|کراچی', 'Karachi'),
+  ag('لاڙڪاڻ', 'Larkana'), ag('سکر', 'Sukkur'), ag('اسلام آباد', 'Islamabad'), ag('لاهور', 'Lahore'), ag('ڪوئيٽا', 'Quetta'),
+  ag('بلوچستان', 'Balochistan'), ag('ڀارت|بھارت', 'India'), ag('افغانستان', 'Afghanistan'), ag('ايران', 'Iran'),
+  ag('آمريڪا|امريڪا', 'United States'), ag('چين', 'China'),
+]
+const am = (alts: string, as: string): Rule => [new RegExp(`${HB}(?:[በለየከ]|ከነ)?(?:${alts})[\\p{L}\\p{M}]*`, 'gu'), as]
+const AMHARIC: Rule[] = [
+  am('ኢትዮጵያ', 'Ethiopia'), am('አዲስ አበባ', 'Addis Ababa'), am('ትግራይ', 'Tigray'), am('ኦሮሚያ', 'Oromia'), am('ባሕር ዳር|ባህር ዳር', 'Bahir Dar'),
+  am('መቀሌ', 'Mekelle'), am('ድሬዳዋ|ድሬ ዳዋ', 'Dire Dawa'), am('ጎንደር', 'Gondar'), am('ሀዋሳ|ሐዋሳ', 'Hawassa'), am('ኤርትራ', 'Eritrea'),
+  am('ሱዳን', 'Sudan'), am('ሶማሊያ', 'Somalia'), am('ኬንያ', 'Kenya'), am('ግብፅ', 'Egypt'), am('ጅቡቲ', 'Djibouti'),
+  am('አሜሪካ', 'United States'), am('ቻይና', 'China'), am('ሩሲያ', 'Russia'), am('እስራኤል', 'Israel'),
+]
+
 export const LOCAL_NAMES: Record<string, Rule[]> = {
   ja: JAPANESE, zh: CHINESE, th: THAI,
   hi: HINDI,
@@ -1089,6 +1168,7 @@ export const LOCAL_NAMES: Record<string, Rule[]> = {
   tr: TURKISH, pl: POLISH, hu: HUNGARIAN, cs: CZECH, id: INDONESIAN, uk: UKRAINIAN,
   el: GREEK, ko: KOREAN, ur: URDU, fa: PERSIAN, vi: VIETNAMESE, sw: SWAHILI, bn: BENGALI, he: HEBREW, sk: SLOVAK, et: ESTONIAN, lv: LATVIAN,
   bg: BULGARIAN, mk: MACEDONIAN, no: NORWEGIAN, nb: NORWEGIAN, fi: FINNISH, is: ICELANDIC, hr: MONTENEGRIN, ka: GEORGIAN, so: SOMALI,
+  ta: TAMIL, te: TELUGU, kn: KANNADA, ml: MALAYALAM, mr: MARATHI, gu: GUJARATI, or: ODIA, as: ASSAMESE, sd: SINDHI, am: AMHARIC,
 }
 
 /** The text with its language's place names in English and its look-alike words blanked out, for finding its place */

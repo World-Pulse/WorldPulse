@@ -53,7 +53,7 @@ export function foreignNumber(raw: string): number {
 }
 
 /** "at least", "more than", "nearly" before a count */
-const ABOUT = String.raw`(?:(?:au\s+moins|plus\s+de|près\s+de|environ|quelque|al\s+menos|más\s+de|casi|unos|unas|cerca\s+de|pelo\s+menos|mais\s+de|quase|cerca\s+de|mindestens|mehr\s+als|fast|rund|etwa|über|не\s+менее|по\s+меньшей\s+мере|более|свыше|около|почти|порядка|نحو|حوالي|قرابه|اكثر\s+من|ما\s+لا\s+يقل\s+عن|ما\s+يزيد\s+عن|ما\s+يقارب|te\s+pakten|me\s+shume\s+se|rreth|afro|gati|najmanje|vise\s+od|preko|oko|skoro|gotovo)\s+)?`
+const ABOUT = String.raw`(?:(?:au\s+moins|plus\s+de|près\s+de|environ|quelque|al\s+menos|más\s+de|casi|unos|unas|cerca\s+de|pelo\s+menos|mais\s+de|quase|cerca\s+de|mindestens|mehr\s+als|fast|rund|etwa|über|не\s+менее|по\s+меньшей\s+мере|более|свыше|около|почти|порядка|نحو|حوالي|قرابه|اكثر\s+من|ما\s+لا\s+يقل\s+عن|ما\s+يزيد\s+عن|ما\s+يقارب|te\s+pakten|me\s+shume\s+se|rreth|afro|gati|najmanje|vise\s+od|preko|oko|skoro|gotovo|co\s+najmniej|ponad|około|blisko|prawie|en\s+az|ít\s+nhất|hơn|khoảng|gần|sedikitnya|setidaknya|sekitar|lebih\s+dari|hampir|almeno|oltre|circa|quasi|minstens|ruim|bijna|zeker|cel\s+puțin|peste|aproape|щонайменше|понад|майже|близько)\s+)?`
 
 export interface LanguageRules {
   /** "12 morts", "12 personnes tuées": the count is the first group */
@@ -78,6 +78,35 @@ const before = (what: string) => new RegExp(`${B}(?:${what})\\s+(?:a\\s+)?${ABOU
 /** Arabic joins "و" (and) to the count it starts: "54 قتيلا و147 جريحا" */
 const afterAr = (people: string, what: string) =>
   new RegExp(`${B}و?${ABOUT}${COUNT}(?:\\s+(?:${people}))?(?:\\s+على\\s+الاقل)?\\s+(?:${what})${E}`, 'giu')
+
+/**
+ * Word edges for the Indian scripts (Nov 19, 2026): their vowel signs are marks, not letters, so an edge must not
+ * fall between a consonant and its sign ("मौत" is a word, "मौते" a different one only by its sign)
+ */
+const MB = String.raw`(?<![\p{L}\p{M}\p{N}])`
+const ME = String.raw`(?![\p{L}\p{M}\p{N}])`
+const wordsM = (alts: string) => new RegExp(`${MB}(?:${alts})${ME}`, 'u')
+/** Tamil, Telugu, Kannada and Malayalam join their endings to the word ("தாக்குதலில்", in the attack): a start edge only */
+const stemsM = (alts: string) => new RegExp(`${MB}(?:${alts})`, 'u')
+/** A count, the people perhaps, a joining word perhaps, then what happened to them (Indian scripts) */
+const afterM = (people: string, join: string, what: string, end = true) =>
+  new RegExp(`${MB}(\\d+)\\s*(?:(?:${people})\\s*)?(?:(?:${join})\\s+)?(?:${what})${end ? ME : ''}`, 'gu')
+const beforeM = (what: string) => new RegExp(`${MB}(?:${what})\\s*(?:\\S+\\s+)?(\\d+)`, 'gu')
+
+/** Indonesian and Malay share their news words (rules below, for both) */
+const INDONESIAN: LanguageRules = {
+  deadAfter: after('orang|warga|penumpang|pekerja|anggota|prajurit|tentara|polisi|santri|siswa|korban', 'telah|dilaporkan', 'tewas|meninggal(?:\\s+dunia)?|terbunuh|maut|terkorban|korban\\s+jiwa'),
+  deadBefore: before('(?:jumlah\\s+)?korban\\s+(?:tewas|meninggal(?:\\s+dunia)?|jiwa)(?:\\s+(?:bertambah|naik))?(?:\\s+menjadi)?|jumlah\\s+korban(?:\\s+(?:bertambah|naik))?(?:\\s+menjadi)?|kematian(?:\\s+bertambah)?(?:\\s+menjadi)?|menewaskan'),
+  injuredAfter: after('orang|warga|penumpang|pekerja|siswa', 'telah|dilaporkan', 'luka(?:-luka)?|terluka|cedera|luka\\s+berat|cedera\\s+parah'),
+  death: words('tewas|meninggal|terbunuh|pembunuhan|dibunuh|jenazah|mayat|korban\\s+jiwa|maut|terkorban'),
+  events: [
+    [words('serangan\\s+udara|pengeboman|bom\\s+bunuh\\s+diri|ledakan\\s+bom|kudeta|pembantaian|sandera|darurat\\s+militer|keadaan\\s+darurat|tsunami|erupsi|letusan|gempa\\s+(?:bumi\\s+)?(?:berkekuatan\\s+)?(?:m\\s*)?[6-9](?:[.,]\\d)?'), 'high'],
+    [words('serangan|menyerang|bentrok|bentrokan|tentara|militer|rudal|drone|teroris|terorisme|demo|demonstrasi|unjuk\\s+rasa|tunjuk\\s+perasaan|mogok|ditangkap|penangkapan|diculik|penculikan|penembakan|ditembak|gempa|banjir|banjir\\s+kilat|kebakaran|longsor|tanah\\s+longsor|kekeringan|wabah|kecelakaan|kemalangan|pemilu|pilkada|pilihan\\s+raya|mengundurkan\\s+diri|gencatan\\s+senjata|sanksi|tarif|kerusuhan|ricuh'), 'medium'],
+  ],
+  opinion: words('opini|tajuk(?:\\s+rencana)?|kolom|analisis|editorial|pendapat|rencana'),
+}
+
+
 /** An Arabic word with "و" (and), "ف" (so), "ب" (by), "ل" (for) or the article joined to it: "بمقتل", "والجيش" */
 const AR = '(?:و|ف|ب|ل|وب|ول|فب|وال|بال|فال|لل|ال)?'
 
@@ -298,6 +327,148 @@ export const LANGUAGE_RULES: Readonly<Record<string, LanguageRules>> = {
     ],
     opinion: /บทบรรณาธิการ|ความเห็น|วิเคราะห์|คอลัมน์/u,
   },
+  // Nov 19, 2026 (Devon, 5:33 PM: "Proceed with 1-3"; "more local language coverage"): the languages of the most
+  // populous countries' own press, so their serious news reaches the second-outlet search. Hindi, Bengali, Marathi:
+  // "5 लोगों की मौत", "৫ জন নিহত", "५ जणांचा मृत्यू"
+  hi: {
+    deadAfter: afterM('लोगों|लोग|व्यक्तियों|यात्रियों|जवानों|सैनिकों|बच्चों|मजदूरों|श्रद्धालुओं|नागरिकों|पुलिसकर्मियों', 'की', 'मौत|मृत्यु|मारे\\s+गए|मारे\\s+गये|की\\s+जान\\s+गई|ने\\s+दम\\s+तोड़ा|शहीद|हलाक'),
+    deadBefore: beforeM('मृतकों\\s+की\\s+संख्या|मरने\\s+वालों\\s+की\\s+संख्या|मौतों\\s+का\\s+आंकड़ा'),
+    injuredAfter: afterM('लोग|लोगों|व्यक्ति|यात्री|जवान|बच्चे|मजदूर', 'से\\s+ज्यादा|से\\s+अधिक', 'घायल|जख्मी|ज़ख्मी'),
+    death: wordsM('मौत|मौतें|मृत्यु|मारे\\s+गए|हत्या|शव|लाश|शहीद|मृतक'),
+    events: [
+      [wordsM('हवाई\\s+हमला|हवाई\\s+हमले|बमबारी|विस्फोट|आतंकी\\s+हमला|आतंकी\\s+हमले|आत्मघाती|तख्तापलट|नरसंहार|बंधक|सुनामी|चक्रवात'), 'high'],
+      [wordsM('धमाका|धमाके|आपातकाल|हमला|हमले|हमलों|मुठभेड़|झड़प|सेना|मिसाइल|ड्रोन|आतंकी|आतंकवादी|आतंकवाद|नक्सली|उग्रवादी|विरोध\\s+प्रदर्शन|हड़ताल|गिरफ्तार|गिरफ्तारी|अपहरण|फायरिंग|गोलीबारी|भूकंप|बाढ़|आग|भूस्खलन|सूखा|महामारी|हैजा|हादसा|हादसे|दुर्घटना|चुनाव|इस्तीफा|युद्धविराम|प्रतिबंध|टैरिफ|दंगा|हिंसा|कर्फ्यू'), 'medium'],
+    ],
+    opinion: wordsM('संपादकीय|विश्लेषण|ब्लॉग|राय|नज़रिया|नजरिया'),
+  },
+  bn: {
+    deadAfter: afterM('জন|জনের|জনই|শিশু|শিশুসহ|শ্রমিক|যাত্রী|পুলিশ', 'আরও', 'নিহত|মৃত্যু|মারা\\s+গেছেন|মারা\\s+গেল|মারা\\s+যান|প্রাণহানি|প্রাণ\\s+গেল'),
+    deadBefore: beforeM('নিহতের\\s+সংখ্যা|মৃতের\\s+সংখ্যা|মৃত্যুর\\s+সংখ্যা|নিহত'),
+    injuredAfter: afterM('জন|জনের|শিশু|যাত্রী|শ্রমিক', 'আরও', 'আহত|গুরুতর\\s+আহত'),
+    injuredBefore: beforeM('আহত'),
+    death: wordsM('নিহত|মৃত্যু|হত্যা|খুন|লাশ|মরদেহ|প্রাণহানি'),
+    events: [
+      [wordsM('বিমান\\s+হামলা|বোমা\\s+হামলা|বিস্ফোরণ|জঙ্গি\\s+হামলা|আত্মঘাতী|অভ্যুত্থান|গণহত্যা|জিম্মি|জরুরি\\s+অবস্থা|সুনামি|ঘূর্ণিঝড়'), 'high'],
+      [wordsM('হামলা|সংঘর্ষ|সেনা|সেনাবাহিনী|ক্ষেপণাস্ত্র|ড্রোন|বিক্ষোভ|প্রতিবাদ|আন্দোলন|হরতাল|অবরোধ|গ্রেপ্তার|গ্রেফতার|অপহরণ|গুলি|গুলিবর্ষণ|ভূমিকম্প|বন্যা|অগ্নিকাণ্ড|আগুন|ভূমিধস|খরা|দুর্ঘটনা|নির্বাচন|পদত্যাগ|যুদ্ধবিরতি|নিষেধাজ্ঞা|শুল্ক|সহিংসতা|কারফিউ'), 'medium'],
+    ],
+    opinion: wordsM('সম্পাদকীয়|মতামত|বিশ্লেষণ|কলাম|উপসম্পাদকীয়'),
+  },
+  mr: {
+    deadAfter: afterM('जणांचा|जणांचे|जण|जणांना|लोकांचा|प्रवाशांचा|मजुरांचा|जवानांचा', 'तरुणांचा', 'मृत्यू|ठार|बळी|मृत'),
+    deadBefore: beforeM('मृतांची\\s+संख्या|मृतांचा\\s+आकडा|बळींची\\s+संख्या'),
+    injuredAfter: afterM('जण|जणांना|जणांचा|प्रवासी', 'तरुण', 'जखमी|गंभीर\\s+जखमी'),
+    death: wordsM('मृत्यू|ठार|बळी|हत्या|मृतदेह|खून'),
+    events: [
+      [wordsM('हवाई\\s+हल्ला|बॉम्बस्फोट|स्फोट|दहशतवादी\\s+हल्ला|आत्मघाती|त्सुनामी|चक्रीवादळ'), 'high'],
+      [wordsM('हल्ला|हल्ल्यात|चकमक|लष्कर|सैन्य|क्षेपणास्त्र|ड्रोन|आंदोलन|निदर्शने|मोर्चा|संप|अटक|अपहरण|गोळीबार|भूकंप|पूर|आग|दरड|दुष्काळ|अपघात|निवडणूक|निवडणुका|राजीनामा|युद्धबंदी|निर्बंध|शुल्क|हिंसाचार|संचारबंदी'), 'medium'],
+    ],
+    opinion: wordsM('अग्रलेख|संपादकीय|विश्लेषण|लेख'),
+  },
+  // Tamil and Telugu join their endings to a word ("தாக்குதலில்", "దాడిలో"): their words are matched from the start
+  ta: {
+    deadAfter: afterM('பேர்|பேரும்|பேருக்கு|நபர்கள்|மாணவர்கள்|தொழிலாளர்கள்|வீரர்கள்', 'பேர்', 'பலி|உயிரிழப்பு|உயிரிழந்தனர்|உயிரிழந்த|மரணம்|கொல்லப்பட்டனர்|சாவு', false),
+    deadBefore: beforeM('பலி\\s+எண்ணிக்கை|உயிரிழப்பு\\s+எண்ணிக்கை|உயிரிழந்தோர்\\s+எண்ணிக்கை'),
+    injuredAfter: afterM('பேர்|பேருக்கு|நபர்கள்', 'பேர்', 'காயம்|படுகாயம்|காயமடைந்தனர்|காயமடைந்த', false),
+    death: stemsM('பலி|உயிரிழ|கொலை|மரணம்|சடலம்|கொல்லப்பட்'),
+    events: [
+      [stemsM('வான்வழித்\\s*தாக்குதல்|குண்டுவெடிப்பு|குண்டு\\s+வெடிப்பு|தற்கொலைப்\\s*படை|பயங்கரவாதத்\\s*தாக்குதல்|சுனாமி|புயல்'), 'high'],
+      [stemsM('தாக்குதல்|மோதல்|ராணுவ|ஏவுகணை|ட்ரோன்|போராட்ட|ஆர்ப்பாட்ட|மறியல்|வேலைநிறுத்த|கைது|கடத்தல்|துப்பாக்கிச்\\s*சூடு|நிலநடுக்க|வெள்ள|தீ\\s+விபத்து|நிலச்சரிவு|வறட்சி|விபத்து|தேர்தல்|ராஜினாமா|போர்\\s+நிறுத்த|தடை|வரி\\s+விதிப்பு|கலவர'), 'medium'],
+    ],
+    opinion: stemsM('தலையங்கம்|கட்டுரை'),
+  },
+  te: {
+    deadAfter: afterM('మంది|మందికి|మంది\\s+వ్యక్తులు|మంది\\s+ప్రయాణికులు', 'మంది', 'మృతి|మృతులు|మరణం|మరణించారు|చనిపోయారు|దుర్మరణం|హతం', false),
+    deadBefore: beforeM('మృతుల\\s+సంఖ్య|మరణాల\\s+సంఖ్య'),
+    injuredAfter: afterM('మంది|మందికి', 'మంది', 'గాయాలు|గాయపడ్డారు|తీవ్ర\\s+గాయాలు', false),
+    death: stemsM('మృతి|మరణ|హత్య|హతం|దుర్మరణ|మృతదేహ|చనిపో'),
+    events: [
+      [stemsM('వైమానిక\\s+దాడి|బాంబు\\s+పేలుడు|పేలుడు|ఉగ్రదాడి|ఆత్మాహుతి|సునామీ|తుఫాను'), 'high'],
+      [stemsM('దాడి|ఘర్షణ|సైన్య|క్షిపణి|డ్రోన్|నిరసన|ఆందోళన|సమ్మె|అరెస్టు|కిడ్నాప్|కాల్పులు|భూకంప|వరద|అగ్నిప్రమాద|కొండచరియ|కరువు|ప్రమాద|ఎన్నిక|రాజీనామా|కాల్పుల\\s+విరమణ|నిషేధ|సుంకా|అల్లర్ల'), 'medium'],
+    ],
+    opinion: stemsM('సంపాదకీయ|విశ్లేషణ'),
+  },
+  // Vietnamese, Turkish, Italian, Polish, Dutch, Romanian and Ukrainian: their feeds' own words for the dead, the
+  // injured and the kinds of event
+  vi: {
+    deadAfter: after('người|nạn\\s+nhân|chiến\\s+sĩ|công\\s+nhân|học\\s+sinh', 'đã', 'chết|tử\\s+vong|thiệt\\s+mạng|tử\\s+nạn|bị\\s+giết'),
+    deadBefore: before('số\\s+người\\s+(?:chết|tử\\s+vong|thiệt\\s+mạng)(?:\\s+(?:đã\\s+)?tăng\\s+lên)?|số\\s+nạn\\s+nhân\\s+(?:tử\\s+vong|thiệt\\s+mạng)(?:\\s+(?:đã\\s+)?tăng\\s+lên)?'),
+    injuredAfter: after('người|nạn\\s+nhân|học\\s+sinh', 'đã', 'bị\\s+thương|trọng\\s+thương|nhập\\s+viện'),
+    death: words('chết|tử\\s+vong|thiệt\\s+mạng|tử\\s+nạn|sát\\s+hại|thi\\s+thể|thương\\s+vong'),
+    events: [
+      [words('không\\s+kích|đánh\\s+bom|nổ\\s+bom|khủng\\s+bố|đảo\\s+chính|thảm\\s+sát|con\\s+tin|tình\\s+trạng\\s+khẩn\\s+cấp|thiết\\s+quân\\s+luật|sóng\\s+thần|siêu\\s+bão'), 'high'],
+      [words('tấn\\s+công|đụng\\s+độ|giao\\s+tranh|quân\\s+đội|tên\\s+lửa|máy\\s+bay\\s+không\\s+người\\s+lái|biểu\\s+tình|đình\\s+công|bắt\\s+giữ|bắt\\s+giam|bắt\\s+cóc|nổ\\s+súng|xả\\s+súng|động\\s+đất|lũ\\s+lụt|lũ\\s+quét|ngập\\s+lụt|hỏa\\s+hoạn|cháy|sạt\\s+lở|hạn\\s+hán|dịch\\s+bệnh|tai\\s+nạn|bầu\\s+cử|từ\\s+chức|ngừng\\s+bắn|trừng\\s+phạt|thuế\\s+quan|bão'), 'medium'],
+    ],
+    opinion: words('bình\\s+luận|xã\\s+luận|quan\\s+điểm|góc\\s+nhìn'),
+  },
+  id: INDONESIAN,
+  ms: INDONESIAN,
+  tr: {
+    deadAfter: after('kişi|asker|polis|vatandaş|yolcu|işçi|çocuk|sivil', 'daha', 'öldü|hayatını\\s+kaybetti|yaşamını\\s+yitirdi|can\\s+verdi|şehit\\s+oldu|şehit|ölü'),
+    deadBefore: before('ölü\\s+sayısı|can\\s+kaybı|hayatını\\s+kaybedenlerin\\s+sayısı|ölenlerin\\s+sayısı'),
+    injuredAfter: after('kişi|asker|polis|yolcu|işçi|çocuk', 'daha', 'yaralandı|yaralı|ağır\\s+yaralı'),
+    death: words('öldü|öldürüldü|ölü|hayatını\\s+kaybetti|yaşamını\\s+yitirdi|cinayet|cansız\\s+beden|ceset|şehit'),
+    events: [
+      [words('hava\\s+saldırısı|bombalı\\s+saldırı|patlama|terör\\s+saldırısı|intihar\\s+saldırısı|darbe|katliam|rehine|olağanüstü\\s+hal|sıkıyönetim|tsunami|kasırga'), 'high'],
+      [words('saldırı|çatışma|çatışmalar|ordu|füze|iha|siha|terör|terörist|protesto|grev|gözaltı|tutuklandı|tutuklama|kaçırıldı|silahlı|ateş\\s+açıldı|deprem|sel|yangın|heyelan|kuraklık|salgın|kaza|seçim|istifa|ateşkes|yaptırım|gümrük\\s+vergisi'), 'medium'],
+    ],
+    opinion: words('yorum|köşe\\s+yazısı|analiz|görüş'),
+  },
+  it: {
+    deadAfter: after('persone|civili|soldati|migranti|operai|bambini|turisti', 'sono|sarebbero', 'morti|morte|uccisi|uccise|deceduti|decedute|hanno\\s+perso\\s+la\\s+vita'),
+    deadBefore: before('bilancio\\s+(?:delle\\s+vittime|dei\\s+morti)(?:\\s+(?:sale|salito|è))?(?:\\s+(?:a|di))?|uccide|uccidono'),
+    injuredAfter: after('persone|civili|bambini', 'sono', 'feriti|ferite|ferito'),
+    death: words('morto|morta|morti|ucciso|uccisa|uccisi|omicidio|cadavere|deceduto'),
+    events: [
+      [words('raid\\s+aereo|raid\\s+aerei|bombardamento|bombardamenti|esplosione|attentato|kamikaze|colpo\\s+di\\s+stato|strage|massacro|ostaggi|stato\\s+di\\s+emergenza|legge\\s+marziale|tsunami|uragano'), 'high'],
+      [words('attacco|attacchi|scontri|esercito|militari|missile|missili|drone|droni|terrorismo|terroristi|protesta|proteste|manifestazione|corteo|sciopero|arrestato|arrestati|arresto|rapito|sequestro|sparatoria|spari|terremoto|scossa|alluvione|inondazione|incendio|frana|siccità|epidemia|incidente|elezioni|dimissioni|cessate\\s+il\\s+fuoco|tregua|sanzioni|dazi'), 'medium'],
+    ],
+    opinion: words('editoriale|commento|analisi|opinione'),
+  },
+  pl: {
+    deadAfter: after('osób|osoby|osoba|żołnierzy|cywilów|ludzi|dzieci', 'nie', 'zginęło|zginęły|zginął|zginęła|nie\\s+żyje|nie\\s+żyją|zabitych|zmarło|ofiar\\s+śmiertelnych|zabici'),
+    deadBefore: before('liczba\\s+ofiar(?:\\s+śmiertelnych)?(?:\\s+wzrosła\\s+do)?|bilans\\s+ofiar|zginęło|nie\\s+żyje|nie\\s+żyją'),
+    injuredAfter: after('osób|osoby|ludzi|dzieci', 'zostało', 'rannych|ranne|ranni|poszkodowanych'),
+    death: words('zginął|zginęła|zginęło|zginęli|zabity|zabici|nie\\s+żyje|zabójstwo|ciało|ofiar\\s+śmiertelnych'),
+    events: [
+      [words('nalot|naloty|bombardowanie|wybuch|eksplozja|zamach|zamachowiec|pucz|masakra|zakładnicy|stan\\s+wyjątkowy|stan\\s+wojenny|tsunami|huragan'), 'high'],
+      [words('atak|ataki|starcia|wojsko|armia|rakieta|rakiety|pocisk|dron|drony|terroryści|terroryzm|protest|protesty|demonstracja|strajk|zatrzymany|zatrzymani|aresztowany|porwanie|strzelanina|trzęsienie\\s+ziemi|powódź|pożar|osuwisko|susza|epidemia|wypadek|katastrofa|wybory|dymisja|rezygnacja|zawieszenie\\s+broni|rozejm|sankcje|cła'), 'medium'],
+    ],
+    opinion: words('komentarz|felieton|opinia|analiza'),
+  },
+  nl: {
+    deadAfter: after('mensen|personen|burgers|soldaten|kinderen', 'zijn', 'doden|dood|omgekomen|gedood|om\\s+het\\s+leven|overleden|verongelukt'),
+    deadBefore: before('dodental(?:\\s+(?:stijgt\\s+naar|gestegen\\s+tot|is))?|aantal\\s+doden(?:\\s+(?:stijgt\\s+naar|is))?'),
+    injuredAfter: after('mensen|personen|kinderen', 'zijn|raakten', 'gewonden|gewond|zwaargewond'),
+    death: words('dood|doden|omgekomen|gedood|overleden|moord|lichaam|dodelijk|doodgeschoten'),
+    events: [
+      [words('luchtaanval|luchtaanvallen|bombardement|explosie|aanslag|zelfmoordaanslag|staatsgreep|bloedbad|gijzeling|noodtoestand|staat\\s+van\\s+beleg|tsunami|orkaan'), 'high'],
+      [words('aanval|aanvallen|gevechten|leger|militairen|raket|raketten|drone|drones|terrorist|terreur|protest|demonstratie|staking|aangehouden|gearresteerd|arrestatie|ontvoering|schietpartij|beschoten|aardbeving|overstroming|brand|aardverschuiving|droogte|epidemie|ongeluk|verkiezingen|ontslag|treedt\\s+af|staakt-het-vuren|sancties|heffingen'), 'medium'],
+    ],
+    opinion: words('column|opinie|commentaar|analyse'),
+  },
+  ro: {
+    deadAfter: after('persoane|oameni|militari|copii|civili', 'au', 'morți|morti|au\\s+murit|și-au\\s+pierdut\\s+viața|decedați|uciși'),
+    deadBefore: before('bilanțul\\s+(?:victimelor|morților|deceselor)(?:\\s+(?:a\\s+crescut\\s+la|urcă\\s+la|este\\s+de))?|bilanțul\\s+(?:a\\s+crescut\\s+la|urcă\\s+la)|numărul\\s+(?:morților|deceselor)(?:\\s+(?:a\\s+crescut\\s+la|urcă\\s+la|este\\s+de))?'),
+    injuredAfter: after('persoane|oameni|copii', 'au\\s+fost', 'răniți|rănite|răniti'),
+    death: words('mort|morți|a\\s+murit|au\\s+murit|ucis|uciși|ucisă|deces|crimă|cadavru'),
+    events: [
+      [words('atac\\s+aerian|bombardament|explozie|atentat|kamikaze|lovitură\\s+de\\s+stat|masacru|ostatici|stare\\s+de\\s+urgență|lege\\s+marțială|tsunami|uragan'), 'high'],
+      [words('atac|atacuri|lupte|ciocniri|armată|armata|militari|rachetă|rachete|dronă|drone|terorist|terorism|protest|proteste|manifestație|grevă|reținut|arestat|răpire|împușcături|cutremur|inundații|incendiu|alunecare\\s+de\\s+teren|secetă|epidemie|accident|alegeri|demisie|încetarea\\s+focului|armistițiu|sancțiuni|tarife'), 'medium'],
+    ],
+    opinion: words('editorial|opinie|comentariu|analiză'),
+  },
+  uk: {
+    deadAfter: after('людей|людини|осіб|особи|військових|цивільних|дітей|мешканців', 'вже', 'загинули|загинуло|загинув|загинула|вбито|вбиті|загиблих|загиблі|загинуть'),
+    deadBefore: before('кількість\\s+загиблих(?:\\s+зросла\\s+до)?|загинули|загинуло|загиблих|вбили|вбито'),
+    injuredAfter: after('людей|осіб|дітей|цивільних', 'ще', 'поранені|поранено|поранених|травмовані|постраждали|постраждалих'),
+    injuredBefore: before('поранено|поранені|постраждали|постраждалих'),
+    death: words('загинув|загинула|загинули|загибель|вбив|вбили|вбито|смерть|тіло|загиблі|загиблих'),
+    events: [
+      [words('авіаудар|ракетний\\s+удар|масована\\s+атака|масований\\s+обстріл|обстріл|обстріли|вибух|вибухи|теракт|переворот|різанина|заручники|надзвичайний\\s+стан|воєнний\\s+стан|цунамі'), 'high'],
+      [words('удар|удари|атака|атаки|бої|зіткнення|армія|зсу|ракета|ракети|дрон|дрони|безпілотник|безпілотники|бпла|шахед|шахеди|протест|мітинг|страйк|затримали|затримано|арешт|викрадення|стрілянина|землетрус|повінь|пожежа|зсув|посуха|епідемія|аварія|дтп|вибори|відставка|перемир\'я|санкції|мита'), 'medium'],
+    ],
+    opinion: words('колонка|думка|аналітика|блог'),
+  },
 }
 
 /** The largest count a pattern finds (years and money aren't people) */
@@ -344,12 +515,20 @@ export function withoutAccents(text: string): string {
  */
 function formOf(text: string, lang: string): string {
   const digits = text.replace(/[٠-٩۰-۹]/g, d => String(d.charCodeAt(0) & 0xf)).replace(/[０-９]/g, d => String(d.charCodeAt(0) - 0xff10))
+    // the Indian scripts' digits (Nov 19, 2026): each block's zero is at ..66 or ..E6, so (code - 6) & 15 is the digit
+    .replace(/[\u0966-\u096F\u09E6-\u09EF\u0A66-\u0A6F\u0AE6-\u0AEF\u0B66-\u0B6F\u0BE6-\u0BEF\u0C66-\u0C6F\u0CE6-\u0CEF\u0D66-\u0D6F]/g, d => String((d.charCodeAt(0) - 6) & 0xf))
   if (lang === 'ar') return arabicForm(digits)
   if (lang === 'ru') return digits.replace(/ё/g, 'е').replace(/Ё/g, 'Е')
   if (lang === 'sq') return withoutAccents(digits)
   if (lang === 'sr') return withoutAccents(serbianLatin(digits))
   if (lang === 'el') return withoutAccents(digits)
   if (lang === 'fa' || lang === 'ur') return digits.replace(/ي/g, 'ی').replace(/ك/g, 'ک')
+  if (lang === 'vi') return digits.normalize('NFC')
+  // Romanian's s and t with a cedilla (older keyboards) are its letters with a comma
+  if (lang === 'ro') return digits.replace(/ş/g, 'ș').replace(/Ş/g, 'Ș').replace(/ţ/g, 'ț').replace(/Ţ/g, 'Ț')
+  // Turkish: "İ" and "I" are the capitals of "i" and "ı", which case-insensitive matching doesn't know
+  if (lang === 'tr') return digits.replace(/İ/g, 'i').replace(/I/g, 'ı').toLowerCase()
+  if (lang === 'uk') return digits.replace(/[’ʼ`]/g, "'")
   return digits
 }
 

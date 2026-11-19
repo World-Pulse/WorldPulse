@@ -173,8 +173,14 @@ for (const word of otherScriptWords(foldAccents(
   'حادث احتجاجات مظاهرات محكمة البلاد مواطنين اشخاص شخص المدينة مدينة البرلمان مجلس قانون اعتقال القبض انفجار قصف غارة غارات',
 ))) if (!word.startsWith('@') && !word.startsWith('#')) EVENTISH.add(word)
 
-/** The languages read in their own script (Nov 10, 2026): their words as storyWords reads them (Persian, Urdu, Greek and Korean from Nov 18) */
-const OTHER_SCRIPT_LANGUAGES = new Set(['ru', 'ar', 'fa', 'ur', 'el', 'ko', 'ja', 'zh', 'th'])
+/**
+ * The languages read in their own script (Nov 10, 2026): their words as storyWords reads them (Persian, Urdu, Greek and
+ * Korean from Nov 18; Ukrainian, Bulgarian, Macedonian, the languages of India's own scripts and Amharic from Nov 19)
+ */
+const OTHER_SCRIPT_LANGUAGES = new Set([
+  'ru', 'ar', 'fa', 'ur', 'el', 'ko', 'ja', 'zh', 'th', 'uk', 'bg', 'mk',
+  'hi', 'mr', 'ne', 'bn', 'as', 'pa', 'gu', 'or', 'ta', 'te', 'kn', 'ml', 'si', 'am',
+])
 
 /** A headline's text as it is compared: Serbian, written in both scripts, in Latin letters ("Погинуло", "Poginulo") */
 const comparable = (title: string, lang: string) => (lang === 'sr' ? serbianLatin(title) : title)
@@ -182,9 +188,10 @@ const comparable = (title: string, lang: string) => (lang === 'sr' ? serbianLati
 /**
  * Albanian and Serbian names change their endings with their place in a sentence ("Prishtinë", "Prishtinës";
  * "Bugarska", "Bugarskoj"), so the names test (correlate.ts namesDiffer) reads their words by their first five letters
- * (Nov 11, 2026)
+ * (Nov 11, 2026); Croatian, Bosnian, Slovene, Polish, Ukrainian, Bulgarian and Macedonian too (Nov 19: "Warszawa",
+ * "Warszawie"; "Київ", "Києві")
  */
-const INFLECTED = new Set(['sq', 'sr'])
+const INFLECTED = new Set(['sq', 'sr', 'hr', 'bs', 'sl', 'pl', 'uk', 'bg', 'mk'])
 const namesForm = (title: string, lang: string) =>
   (INFLECTED.has(lang) ? title.replace(/\p{L}+/gu, w => Array.from(w).slice(0, 5).join('')) : title)
 
@@ -203,8 +210,46 @@ const FOREIGN_PLAIN = new Set([
   'nao', 'ate', 'aos', 'num', 'numa', 'pode', 'podem', 'vai', 'vao', 'agora', 'assim', 'muito',
 ])
 
+/** Indonesian's and Malay's small words (Nov 19, 2026), one list for both */
+const INDONESIAN_PLAIN = new Set([
+  'yang', 'dan', 'dengan', 'untuk', 'dari', 'pada', 'dalam', 'akan', 'tidak', 'ini', 'itu', 'ada', 'juga', 'oleh',
+  'karena', 'kepada', 'bagi', 'atas', 'sudah', 'telah', 'masih', 'bisa', 'dapat', 'harus', 'lebih', 'saat', 'setelah',
+  'sebelum', 'hingga', 'sampai', 'antara', 'tentang', 'seperti', 'para', 'jadi', 'menjadi', 'kata', 'ujar', 'sebut',
+  'menurut', 'baru', 'hari', 'tahun', 'bulan', 'kini', 'begini', 'begitu', 'apa', 'siapa', 'kenapa', 'mengapa', 'bagaimana',
+  'kapan', 'mana', 'soal', 'terkait', 'usai', 'jelang', 'agar', 'demi', 'tapi', 'namun', 'atau', 'kami', 'kita', 'mereka',
+  'dia', 'ia', 'nya', 'lagi', 'sejumlah', 'resmi', 'viral', 'video', 'foto', 'berita', 'terkini', 'ternyata',
+  'yg', 'tak', 'pun', 'lah', 'kah', 'sangat', 'banyak', 'semua', 'beberapa', 'sebagai', 'adalah', 'yakni', 'bakal',
+  'dgn', 'utk', 'kerana', 'selepas', 'ialah', 'iaitu',
+])
 /** Small words of one language's headlines only (Nov 11, 2026): Albanian and Serbian, without accents */
 const PLAIN_IN: Readonly<Record<string, ReadonlySet<string>>> = {
+  // Nov 19, 2026 (Devon, 5:33 PM: "Proceed with 1-3"): Vietnamese, Indonesian and Malay, Turkish and Polish, without
+  // their accents as storyTokens reads them (a Vietnamese word is its syllables)
+  vi: new Set([
+    'cua', 'cho', 'voi', 'nhung', 'mot', 'cac', 'trong', 'tren', 'duoi', 'sau', 'truoc', 'khi', 'neu', 'thi', 'nhu',
+    'nay', 'theo', 'duoc', 'dang', 'cung', 'van', 'rat', 'nhieu', 'hon', 'nhat', 'ngay', 'thang', 'gio', 'moi', 'khong',
+    'chua', 'the', 'sao', 'nao', 'dau', 'nen', 'hay', 'hoac', 'den', 'vao', 'len', 'xuong', 'lai', 'con', 'boi', 'nhan',
+    'clip', 'video', 'truc', 'tiep', 'tin', 'tuc', 'hom', 'qua', 'dieu', 'viec', 'nguoi', 'chi',
+  ]),
+  id: INDONESIAN_PLAIN,
+  ms: INDONESIAN_PLAIN,
+  tr: new Set([
+    'icin', 'bir', 'gibi', 'kadar', 'sonra', 'once', 'olan', 'olarak', 'oldu', 'olmak', 'daha', 'cok', 'nasil', 'neden',
+    'kim', 'hangi', 'her', 'tum', 'butun', 'ama', 'ancak', 'fakat', 'veya', 'yeni', 'son', 'ilk', 'iki', 'dedi', 'acikladi',
+    'aciklama', 'iddia', 'haberi', 'haber', 'canli', 'video', 'foto', 'galeri', 'sicak', 'gelisme', 'gundem', 'bugun',
+    'dun', 'yarin', 'karsi', 'uzere', 'diye', 'artik', 'hala', 'bile', 'sadece', 'bunu', 'buna', 'bunun', 'sey', 'var',
+    'yok', 'geldi', 'etti', 'edildi', 'yapti', 'yapildi', 'verdi', 'aldi', 'ile', 'icinde', 'uzerine', 'hakkinda', 'gore',
+    'tarafindan', 'dakika', 'flas', 'aciklandi', 'belli', 'oldugu', 'olacak', 'oluyor',
+  ]),
+  pl: new Set([
+    'jest', 'nie', 'sie', 'dla', 'oraz', 'jak', 'jako', 'ale', 'czy', 'tak', 'juz', 'jeszcze', 'tylko', 'przez', 'przy',
+    'pod', 'nad', 'bez', 'ten', 'tego', 'tej', 'tym', 'ktory', 'ktora', 'ktore', 'ktorzy', 'jego', 'jej', 'ich', 'byl',
+    'byla', 'bylo', 'byli', 'bedzie', 'moze', 'maja', 'mial', 'teraz', 'dzis', 'wczoraj', 'jutro', 'nowy', 'nowa', 'nowe',
+    'roku', 'lat', 'lata', 'dni', 'powiedzial', 'mowi', 'twierdzi', 'wiadomosci', 'relacja', 'wideo', 'zdjecia', 'kiedy',
+    'gdzie', 'dlaczego', 'kto', 'wiecej', 'bardzo', 'pierwszy', 'pierwsza', 'sobie', 'swoje', 'swoj', 'jednak', 'nawet',
+    'po', 'przed', 'miedzy', 'wobec', 'podczas', 'wsrod', 'okolo', 'ponad', 'prawie', 'wszystko', 'wszyscy', 'zostal',
+    'zostala', 'zostalo', 'zostali', 'beda', 'tez', 'takze', 'chce', 'trzeba', 'pilne', 'oto',
+  ]),
   sq: new Set([
     'per', 'nga', 'ndaj', 'gjate', 'sipas', 'kane', 'kemi', 'keni', 'jemi', 'jeni', 'kishte', 'ishin', 'qene', 'tij',
     'saj', 'tyre', 'atij', 'asaj', 'atyre', 'ketij', 'kesaj', 'keto', 'ato', 'ata', 'ajo', 'cila', 'cili', 'cilat',
@@ -727,6 +772,18 @@ async function quietPlaces(now: Date): Promise<string[]> {
  * Persian, Urdu or Thai (Nov 18), medium or above, or low from a quiet place's own outlets (each feed
  * tags its items with its country)
  */
+/**
+ * The languages whose waiting reports are searched for: the English list's, and the translated list's (gdelt-articles.ts
+ * TRANSLATED_LANGUAGES). Nov 19, 2026: Hindi, Bengali, Marathi, Tamil, Telugu, Kannada, Malayalam, Gujarati, Punjabi,
+ * Vietnamese, Indonesian, Malay, Turkish, Italian, Polish, Dutch, Romanian, Ukrainian, Danish, Croatian, Bosnian,
+ * Slovenian, Bulgarian and Macedonian too
+ */
+export const SEARCHED_LANGUAGES = [
+  'en', 'fr', 'de', 'es', 'pt', 'ru', 'ar', 'sq', 'sr', 'ja', 'zh', 'ko', 'el', 'fa', 'ur', 'th',
+  'hi', 'bn', 'mr', 'ta', 'te', 'kn', 'ml', 'gu', 'pa', 'vi', 'id', 'ms', 'tr', 'it', 'pl', 'nl', 'ro', 'uk', 'da', 'hr',
+  'bs', 'sl', 'bg', 'mk',
+] as const
+
 export function waitingQuery(quiet: readonly string[], now: Date): { sql: string; bindings: unknown[] } {
   return {
     sql: `SELECT id, title, category, severity, language, source_ids, original_urls, location_name, tags,
@@ -735,7 +792,7 @@ export function waitingQuery(quiet: readonly string[], now: Date): { sql: string
          FROM signals
         WHERE status = 'pending' AND COALESCE(source_count, 1) <= 1
           AND (severity IN ('medium', 'high', 'critical') OR (severity = 'low' AND tags && ?::text[]))
-          AND language IN ('en', 'fr', 'de', 'es', 'pt', 'ru', 'ar', 'sq', 'sr', 'ja', 'zh', 'ko', 'el', 'fa', 'ur', 'th')
+          AND language IN (${SEARCHED_LANGUAGES.map(l => `'${l}'`).join(', ')})
           AND cardinality(original_urls) >= 1
           AND created_at > ?::timestamptz AND created_at < ?::timestamptz
         ORDER BY created_at DESC

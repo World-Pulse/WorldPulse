@@ -50,6 +50,13 @@ export const TRANSLATED_LANGUAGES: Readonly<Record<string, string>> = {
   // Nov 18, 2026 (Devon, 10:51 PM: "proceed with 1-3"): the newer languages whose headlines storyWords reads in their
   // own script. The 03:45 UTC file of Nov 19 held 355 Chinese, 18 Japanese, 15 Greek, 8 Urdu and 5 Korean articles
   zho: 'zh', chi: 'zh', jpn: 'ja', kor: 'ko', ell: 'el', gre: 'el', fas: 'fa', per: 'fa', urd: 'ur', tha: 'th',
+  // Nov 19, 2026 (Devon, 5:33 PM: "Proceed with 1-3"): the languages of the most populous countries' own press, and
+  // Europe's that storyTokens reads with their small words. The 22:45 UTC file of Nov 19 held 80 Turkish, 60 Italian,
+  // 51 Romanian, 27 Dutch, 23 Croatian, 19 Bosnian, 18 Vietnamese, 15 Danish, 11 Ukrainian, 10 Macedonian, 8 Hindi, 8
+  // Indonesian, 6 Polish, 5 Bulgarian, 3 Slovenian, 2 Bengali and 1 Kannada article
+  hin: 'hi', ben: 'bn', mar: 'mr', tam: 'ta', tel: 'te', kan: 'kn', mal: 'ml', guj: 'gu', pan: 'pa',
+  vie: 'vi', ind: 'id', msa: 'ms', may: 'ms', tur: 'tr', ita: 'it', pol: 'pl', nld: 'nl', dut: 'nl',
+  ron: 'ro', rum: 'ro', ukr: 'uk', dan: 'da', hrv: 'hr', bos: 'bs', slv: 'sl', bul: 'bg', mkd: 'mk', mac: 'mk',
 }
 /**
  * A fresh address for each request (Oct 22): GDELT lists a file the moment it

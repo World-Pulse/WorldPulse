@@ -764,6 +764,9 @@ const COMMON_THINGS = new Set([
 /** Arabic-Indic digits (٠١٢ and ۰۱۲) as 0-9, so a toll counts in either script */
 export function westernDigits(text: string): string {
   return text.replace(/[٠-٩۰-۹]/g, d => String(d.charCodeAt(0) & 0xf))
+    // and the Indian scripts' (Nov 19, 2026): each block's zero is at ..66 or ..E6, so (code - 6) & 15 is the digit
+    .replace(/[\u0966-\u096F\u09E6-\u09EF\u0A66-\u0A6F\u0AE6-\u0AEF\u0B66-\u0B6F\u0BE6-\u0BEF\u0C66-\u0C6F\u0CE6-\u0CEF\u0D66-\u0D6F]/g,
+      d => String((d.charCodeAt(0) - 6) & 0xf))
 }
 
 /**
@@ -852,6 +855,52 @@ const ARABIC_SCRIPT = /^\p{scx=Arabic}+$/u
 const CYRILLIC_SCRIPT = /^\p{scx=Cyrillic}+$/u
 const GREEK_SCRIPT = /^\p{scx=Greek}+$/u
 const HANGUL_SCRIPT = /^\p{scx=Hangul}+$/u
+/**
+ * The Indian scripts and Ethiopic (Nov 19, 2026; Devon, 5:33 PM: "more local language coverage"). foldAccents drops
+ * their vowel signs, which are marks, so a word is read as its letters without them ("हमला", "हमले", "हमलों" are all
+ * "हमल"), and by its first three, as Marathi, Tamil, Telugu, Kannada and Malayalam join their endings to a word
+ * ("தாக்குதலில்", in the attack, is "தாக்குதல்", the attack, with one; "भारतात", in India, "भारत"). Bengali's endings
+ * are one letter without their signs ("ঢাকায়", "ঢাকার", "ঢাকাকে", "ঢাকাতে": in, of, to, at Dhaka), dropped first;
+ * Amharic's little words come before the word ("በአዲስ", in Addis), dropped first, and it keeps four syllables.
+ */
+const INDIC_SCRIPT = /^[\p{scx=Devanagari}\p{scx=Bengali}\p{scx=Gurmukhi}\p{scx=Gujarati}\p{scx=Oriya}\p{scx=Tamil}\p{scx=Telugu}\p{scx=Kannada}\p{scx=Malayalam}\p{scx=Sinhala}\p{scx=Ethiopic}]+$/u
+/** Joiners inside a word of these scripts (Malayalam's and Kannada's older spellings): no break between its letters */
+const INDIC_JOINERS = /(?<=[\p{scx=Devanagari}\p{scx=Bengali}\p{scx=Gurmukhi}\p{scx=Gujarati}\p{scx=Oriya}\p{scx=Tamil}\p{scx=Telugu}\p{scx=Kannada}\p{scx=Malayalam}\p{scx=Sinhala}])[\u200c\u200d]/gu
+const BENGALI_LETTERS = /^\p{scx=Bengali}+$/u
+const ETHIOPIC_LETTERS = /^\p{scx=Ethiopic}+$/u
+export function indicStem(word: string): string {
+  let letters = Array.from(foldAccents(word))
+  if (ETHIOPIC_LETTERS.test(word)) {
+    if (letters.length >= 3 && /[በየለከ]/u.test(letters[0]!)) letters = letters.slice(1)
+    return letters.slice(0, 4).join('')
+  }
+  if (BENGALI_LETTERS.test(word) && letters.length >= 3 && /[যরকত]/u.test(letters[letters.length - 1]!)) letters = letters.slice(0, -1)
+  return letters.slice(0, 3).join('')
+}
+/**
+ * Their little words, reporting verbs and headline labels (as written; compared as indicStem leaves them). Most of
+ * their little words are one letter without its vowel sign ("में", "की", "से"), too short to count anyway
+ */
+const INDIC_STOP = new Set([
+  // hi, mr (Devanagari)
+  'और एक यह वह इस उस इन उन पर लिए बाद साथ तक कहा गया गई गए किया करने होने नहीं अब जब कब क्या कैसे क्यों बीच दौरान लेकर ' +
+  'बताया मामले खबर न्यूज़ लाइव अपडेट वीडियो फोटो आज कल अपने उनके इसके उसके रहे रहा रही होगा होगी सकता सकती दिया दी ' +
+  'आणि आहे होते केले केली झाले झाली यांनी त्यांच्या नाही तसेच म्हणजे बातमी व्हिडिओ आता',
+  // bn, as
+  'এবং করে থেকে জন্য নিয়ে হয়েছে দিয়ে সাথে পর আর কি এই সেই বলেন বললেন জানান খবর আজ এক একটি তার তাদের হবে হয় হলো ভিডিও ছবি',
+  // ta
+  'மற்றும் இந்த அந்த என்று அவர் ஒரு பற்றி குறித்து என்ன எப்படி ஏன் உள்ள இல்லை வீடியோ செய்தி இன்று நேற்று',
+  // te
+  'మరియు ఒక కోసం అని చెప్పారు వార్తలు ఈరోజు నేడు వీడియో ఎలా ఎందుకు ఏమి లేదు',
+  // kn
+  'ಮತ್ತು ಒಂದು ಈ ಆ ಎಂದು ಬಗ್ಗೆ ವಿಡಿಯೋ ಸುದ್ದಿ ಇಂದು ಹೇಗೆ ಏಕೆ ಇಲ್ಲ',
+  // ml
+  'ഒരു ഈ ആ എന്ന് എന്നും വീഡിയോ വാർത്ത ഇന്ന് എങ്ങനെ എന്തുകൊണ്ട് ഇല്ല',
+  // gu, pa, or
+  'અને એક આ તે માટે પછી સાથે વીડિયો સમાચાર આજે ਅਤੇ ਇੱਕ ਇਸ ਉਸ ਲਈ ਬਾਅਦ ਨਾਲ ਖ਼ਬਰ ਅੱਜ ଏବଂ ଏକ ଏହି ପାଇଁ ପରେ ସହ ଖବର ଆଜି',
+  // am
+  'እና ላይ ውስጥ ጋር ስለ ወደ ነው ናቸው ዛሬ ዜና',
+].join(' ').split(/\s+/).filter(Boolean).map(indicStem).filter(w => w.length >= 2))
 /** A word's form in its script, as storyWords compares them (and the stop lists below are built) */
 function otherScriptStem(word: string): string {
   const w = foldAccents(word)
@@ -1044,12 +1093,13 @@ export function cjkWords(text: string): string[] {
 }
 
 /**
- * The words of a headline's Arabic, Cyrillic, Greek, Korean, Chinese, Japanese and Thai parts, as storyWords compares
- * them: stems, and the countries named, marked "@JO" (text: the headline after foldAccents)
+ * The words of a headline's Arabic, Cyrillic, Greek, Korean, Chinese, Japanese and Thai parts (and, from Nov 19, 2026,
+ * its Indian scripts' and Ethiopic), as storyWords compares them: stems, and the countries named, marked "@JO" (text:
+ * the headline after foldAccents)
  */
 export function otherScriptWords(text: string): string[] {
   const out: string[] = cjkWords(text)
-  let rest = text.replace(CJK_RUNS, ' ')
+  let rest = text.replace(CJK_RUNS, ' ').replace(INDIC_JOINERS, '')
   for (const [re, code] of ARABIC_COUNTRY_PHRASES) rest = rest.replace(re, () => { out.push(`@${code}`); return ' ' })
   const steppe = STEPPE_LETTERS.test(rest)
   for (const token of rest.split(/[^\p{L}]+/u)) {
@@ -1057,6 +1107,11 @@ export function otherScriptWords(text: string): string[] {
     const arabic = ARABIC_SCRIPT.test(token)
     const greek = !arabic && GREEK_SCRIPT.test(token)
     const hangul = !arabic && !greek && HANGUL_SCRIPT.test(token)
+    if (!arabic && !greek && !hangul && INDIC_SCRIPT.test(token)) {
+      const stem = indicStem(token)
+      if (stem.length >= 2 && !INDIC_STOP.has(stem)) out.push(stem)
+      continue
+    }
     if (!arabic && !greek && !hangul && !CYRILLIC_SCRIPT.test(token)) continue
     if (OTHER_SCRIPT_STOP.has(token)) continue
     const stem = arabic ? arabicStem(token) : greek ? greekStem(token) : hangul ? hangulStem(token) : cyrillicStem(token, steppe)
@@ -1135,6 +1190,16 @@ export function searchWords(title: string): string[] {
     && !OTHER_SCRIPT_STOP.has(foldAccents(w))
   const out: string[] = []
   let base = 0
+  // A word of the Indian scripts (Nov 19, 2026) by its letters up to its first virama or nukta: the database's word
+  // index may break a word there ("दिल्ली" as "दिल" and "ली"), and the word's start is found either way
+  for (const token of title.split(/[^\p{L}\p{M}\p{N}]+/u)) {
+    if (base >= 12) break
+    if (!token || !INDIC_SCRIPT.test(foldAccents(token))) continue
+    const lead = /^\p{Alphabetic}+/u.exec(token)?.[0] ?? ''
+    if ((lead.match(/\p{L}/gu)?.length ?? 0) < 2 || INDIC_STOP.has(indicStem(lead)) || out.includes(lead)) continue
+    base++
+    out.push(lead)
+  }
   for (const token of takeDates(title).text.toLowerCase().split(/[^\p{L}\p{N}]+/u)) {
     if (base >= 12) break
     // As written in plain letters (as before), as written with its accents, and without them
