@@ -14205,8 +14205,29 @@ const OWN_CONGRESS = new Set(['IN', 'NP', 'PH', 'MX', 'GT', 'HN', 'DO', 'CO', 'P
  */
 const FIXTURE_HEADLINE = /\S\s(?:vs?\.?|contra|frente a|gegen|contre)\s+\p{Lu}/u
 
+/**
+ * Leaders' names among the hints. Two countries' leaders in one headline with no place named are a meeting or a quarrel
+ * between them, not a place (Nov 19, 2026: "Xi-Trump-Putin summit seen as more optics than outcomes" in Japan Today and
+ * "Trump tells Putin of long-standing ties at APEC" in Nikkei Asia sat in Moscow, the first of them on the list; the
+ * summit was in Shenzhen).
+ */
+const LEADER_HINTS = new Set(['putin', 'xi jinping', 'trump', 'biden', 'modi', 'macron', 'netanyahu', 'erdogan', 'lula', 'maduro', 'kim jong', 'abe'])
+
+/** The hints that match are only leaders' names, of two or more countries */
+function leadersOnly(lower: string): boolean {
+  const countries = new Set<string>()
+  for (const { keywords, geo } of GEO_HINTS) {
+    const hit = keywords.filter(kw => hintMatches(lower, kw))
+    if (hit.length === 0) continue
+    if (!hit.every(kw => LEADER_HINTS.has(kw))) return false
+    countries.add(geo.code ?? geo.name)
+  }
+  return countries.size >= 2
+}
+
 function fromHints(text: string, homeCountry?: string, national = false): InferredGeo | null {
   const lower = text.toLowerCase()
+  if (leadersOnly(lower)) return null
   for (const { keywords, geo } of GEO_HINTS) {
     if (geo.code === 'RU' && homeCountry === 'UA' && !RUSSIA_NOUN.test(lower)) continue
     // A bare "Congress" from a national outlet of a country with its own is that one (Oct 30, 2026: The Hindu's
