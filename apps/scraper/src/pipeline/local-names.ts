@@ -980,6 +980,22 @@ const SWAHILI: Rule[] = [
   r('uarabuni\\s+wa\\s+saudi|saudia', 'Saudi Arabia'), r('korea\\s+kusini', 'South Korea'), r('korea\\s+kaskazini', 'North Korea'),
 ]
 
+/**
+ * Bengali (Nov 19, 2026: Dainik Azadi of Chittagong, the list's first Bengali feed). Its case endings join the name
+ * ("ঢাকায়" in Dhaka, "বাংলাদেশের" of Bangladesh, "চট্টগ্রামে" in Chittagong), so a name may carry one; its vowel signs are
+ * marks, so "চীন" (China) is not "চীনা" (Chinese).
+ */
+const bn = (alts: string, as: string): Rule => [new RegExp(`${HB}(?:${alts})(?:ের|এর|য়|য়|ে|র|কে)?${HE}`, 'gu'), as]
+const BENGALI: Rule[] = [
+  bn('বাংলাদেশ', 'Bangladesh'), bn('ঢাকা', 'Dhaka'), bn('চট্টগ্রাম', 'Chittagong'), bn('সিলেট', 'Sylhet'), bn('খুলনা', 'Khulna'),
+  bn('রাজশাহী', 'Rajshahi'), bn('বরিশাল', 'Barisal'), bn('রংপুর', 'Rangpur'), bn('কক্সবাজার', "Cox's Bazar"),
+  bn('ময়মনসিংহ', 'Mymensingh'), bn('কুমিল্লা', 'Comilla'), bn('ভারত', 'India'), bn('কলকাতা', 'Kolkata'),
+  bn('পশ্চিমবঙ্গ', 'West Bengal'), bn('মিয়ানমার|মায়ানমার', 'Myanmar'), bn('পাকিস্তান', 'Pakistan'), bn('নেপাল', 'Nepal'),
+  bn('চীন', 'China'), bn('যুক্তরাষ্ট্র|মার্কিন যুক্তরাষ্ট্র', 'United States'), bn('রাশিয়া', 'Russia'), bn('ইউক্রেন', 'Ukraine'),
+  bn('ইরান', 'Iran'), bn('ইসরায়েল|ইসরাইল', 'Israel'), bn('গাজা', 'Gaza'), bn('সৌদি আরব', 'Saudi Arabia'),
+  bn('যুক্তরাজ্য|ব্রিটেন', 'United Kingdom'), bn('জাপান', 'Japan'),
+]
+
 export const LOCAL_NAMES: Record<string, Rule[]> = {
   ja: JAPANESE, zh: CHINESE, th: THAI,
   hi: HINDI,
@@ -987,7 +1003,7 @@ export const LOCAL_NAMES: Record<string, Rule[]> = {
   sr: MONTENEGRIN, cnr: MONTENEGRIN, sq: ALBANIAN, ms: MALAY, es: SPANISH, pt: PORTUGUESE, lt: LITHUANIAN,
   ar: ARABIC, ru: RUSSIAN, mn: MONGOLIAN, fr: FRENCH,
   tr: TURKISH, pl: POLISH, hu: HUNGARIAN, cs: CZECH, id: INDONESIAN, uk: UKRAINIAN,
-  el: GREEK, ko: KOREAN, ur: URDU, fa: PERSIAN, vi: VIETNAMESE, sw: SWAHILI,
+  el: GREEK, ko: KOREAN, ur: URDU, fa: PERSIAN, vi: VIETNAMESE, sw: SWAHILI, bn: BENGALI,
 }
 
 /** The text with its language's place names in English and its look-alike words blanked out, for finding its place */
