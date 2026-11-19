@@ -968,10 +968,6 @@ export function otherScriptCities(title: string): string[] {
 }
 
 /**
- * The words of a headline's Arabic and Cyrillic parts, as storyWords compares them: stems, and the countries
- * named, marked "@JO" (text: the headline after foldAccents)
- */
-/**
  * Chinese, Japanese and Thai (Nov 18, 2026; Devon: "Add ... Japanese, Chinese and Thai"). They write no spaces between
  * words, so a headline is read in overlapping pieces: two characters of Chinese characters (kanji), a katakana word
  * whole (Japanese spells foreign names in it: "トランプ", "ウクライナ"), three letters of Thai. Hiragana (Japanese
@@ -1010,6 +1006,10 @@ export function cjkWords(text: string): string[] {
   return [...new Set(out)]
 }
 
+/**
+ * The words of a headline's Arabic, Cyrillic, Greek, Korean, Chinese, Japanese and Thai parts, as storyWords compares
+ * them: stems, and the countries named, marked "@JO" (text: the headline after foldAccents)
+ */
 export function otherScriptWords(text: string): string[] {
   const out: string[] = cjkWords(text)
   let rest = text.replace(CJK_RUNS, ' ')
