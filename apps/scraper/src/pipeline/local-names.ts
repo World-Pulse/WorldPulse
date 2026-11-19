@@ -996,6 +996,42 @@ const BENGALI: Rule[] = [
   bn('যুক্তরাজ্য|ব্রিটেন', 'United Kingdom'), bn('জাপান', 'Japan'),
 ]
 
+/**
+ * Hebrew (Nov 19, 2026: Bizportal, the list's first Hebrew feed). Its little words join the name as one letter
+ * ("בישראל" in Israel, "לעזה" to Gaza, "מאיראן" from Iran, "והמצרים"), so a name may carry one or two of them.
+ */
+const he = (alts: string, as: string): Rule => [new RegExp(`${HB}(?:[ובלמהש]{0,2})(?:${alts})${HE}`, 'gu'), as]
+const HEBREW: Rule[] = [
+  he('ישראל', 'Israel'), he('תל אביב', 'Tel Aviv'), he('ירושלים', 'Jerusalem'), he('חיפה', 'Haifa'), he('עזה', 'Gaza'),
+  he('ארה"ב|ארה״ב|ארצות הברית', 'United States'), he('איראן', 'Iran'), he('לבנון', 'Lebanon'), he('סוריה', 'Syria'),
+  he('מצרים', 'Egypt'), he('ירדן', 'Jordanian'), he('רוסיה', 'Russia'), he('אוקראינה', 'Ukraine'), he('סין', 'China'),
+  he('בריטניה', 'United Kingdom'), he('צרפת', 'France'), he('גרמניה', 'Germany'), he('יפן', 'Japan'),
+]
+
+/**
+ * Slovak, Estonian and Latvian (Nov 19, 2026: the thin-countries round's first feeds in them). Their case endings join
+ * the name ("v Rusku", "Venemaal", "Krievijā"), so the forms they take are listed; the adjectives ("ruský", "Vene",
+ * "Krievijas" aside) are not places.
+ */
+const SLOVAK: Rule[] = [
+  r('rusk[oua]|ruskom', 'Russia'), r('ukrajin[aeuy]|ukrajinou', 'Ukraine'), r('nemeck[oua]|nemeckom', 'Germany'),
+  r('rak[uú]sk[oua]', 'Austria'), r('maďarsk[oua]', 'Hungary'), r('poľsk[oua]', 'Poland'), r('česk[oua]|česká republika|českej republike', 'Czech Republic'),
+  r('francúzsk[oua]', 'France'), r('veľk[aá] británi[ae]|veľkej británii', 'United Kingdom'), r('čín[aeuy]|číne', 'China'),
+  r('spojen[ée] štáty|spojených štátoch|usa', 'United States'), r('izrael[ia]?|izraeli', 'Israel'),
+]
+const ESTONIAN: Rule[] = [
+  r('venemaa(?:l|le|lt|ga|st|sse|d)?', 'Russia'), r('ukraina(?:s|sse|st|l|le|lt|ga|t)?', 'Ukraine'), r('saksamaa(?:l|le|lt|ga|d)?', 'Germany'),
+  r('soome(?:s|sse|st|ga)?', 'Finland'), r('läti(?:s|sse|st|ga)?', 'Latvia'), r('leedu(?:s|sse|st|ga)?', 'Lithuania'),
+  r('rootsi(?:s|sse|st|ga)?', 'Sweden'), r('hiina(?:s|sse|st|ga)?', 'China'), r('prantsusmaa(?:l|le|lt|ga)?', 'France'),
+  r('suurbritannia(?:s|sse|st|ga)?', 'United Kingdom'), r('ameerika ühendriigi(?:d|des|dega|dest)?|usa(?:s|sse|st|ga)?', 'United States'),
+]
+const LATVIAN: Rule[] = [
+  r('krievij[aāsiu]|krievijā', 'Russia'), r('ukrain[aāsiu]|ukrainā', 'Ukraine'), r('vācij[aāsiu]|vācijā', 'Germany'),
+  r('lietuv[aāsiu]|lietuvā', 'Lithuania'), r('igaunij[aāsiu]|igaunijā', 'Estonia'), r('polij[aāsiu]|polijā', 'Poland'),
+  r('ķīn[aāsiu]|ķīnā', 'China'), r('francij[aāsiu]|francijā', 'France'), r('lielbritānij[aāsiu]|lielbritānijā', 'United Kingdom'),
+  r('zviedrij[aāsiu]|zviedrijā', 'Sweden'), r('somij[aāsiu]|somijā', 'Finland'), r('asv', 'United States'),
+]
+
 export const LOCAL_NAMES: Record<string, Rule[]> = {
   ja: JAPANESE, zh: CHINESE, th: THAI,
   hi: HINDI,
@@ -1003,7 +1039,7 @@ export const LOCAL_NAMES: Record<string, Rule[]> = {
   sr: MONTENEGRIN, cnr: MONTENEGRIN, sq: ALBANIAN, ms: MALAY, es: SPANISH, pt: PORTUGUESE, lt: LITHUANIAN,
   ar: ARABIC, ru: RUSSIAN, mn: MONGOLIAN, fr: FRENCH,
   tr: TURKISH, pl: POLISH, hu: HUNGARIAN, cs: CZECH, id: INDONESIAN, uk: UKRAINIAN,
-  el: GREEK, ko: KOREAN, ur: URDU, fa: PERSIAN, vi: VIETNAMESE, sw: SWAHILI, bn: BENGALI,
+  el: GREEK, ko: KOREAN, ur: URDU, fa: PERSIAN, vi: VIETNAMESE, sw: SWAHILI, bn: BENGALI, he: HEBREW, sk: SLOVAK, et: ESTONIAN, lv: LATVIAN,
 }
 
 /** The text with its language's place names in English and its look-alike words blanked out, for finding its place */

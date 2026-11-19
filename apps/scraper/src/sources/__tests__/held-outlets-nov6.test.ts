@@ -35,10 +35,12 @@ describe('the five held back on terms, and LRT in Lithuanian (Nov 6, 2026)', () 
   it('gives Lebanon, Estonia and Saint Vincent a second outlet (Lithuania\'s, 15min, parked on Nov 7)', () => {
     const hosts = (code: string) => new Set(NEWS_SOURCE_REGISTRY.filter(s => s.countryCode === code && !s.parked)
       .map(s => new URL(s.feedUrl).hostname.replace(/^www\./, '')))
-    for (const code of ['LB', 'EE', 'VC']) expect(hosts(code).size, code).toBe(2)
+    // (Lebanon and Estonia have more since the thin-countries round of Nov 19)
+    for (const code of ['LB', 'EE']) expect(hosts(code).size, code).toBeGreaterThan(2)
+    expect(hosts('VC').size).toBe(2)
     expect(hosts('LT').size).toBe(1)
     // still thinly covered, so their own outlets' reports are matched across two days
-    for (const code of ['LB', 'EE', 'LT', 'VC']) expect(thinPlaces().includes(code), code).toBe(true)
+    for (const code of ['LT', 'VC']) expect(thinPlaces().includes(code), code).toBe(true)
   })
 
   it("reads 15min less its world section, whose places are in Lithuanian", () => {
