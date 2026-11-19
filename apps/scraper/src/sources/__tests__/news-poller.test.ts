@@ -49,11 +49,12 @@ describe('cyclePause', () => {
   })
 })
 
-describe('two feeds at a time (Oct 20, 2026, 475 feeds)', () => {
+describe('feeds read a few at a time (Oct 20, 2026, 475 feeds; six at a time from Nov 19, 1,004 feeds)', () => {
   it('splits the cycle into rounds of READ_AT_ONCE feeds from where it starts', () => {
-    expect(READ_AT_ONCE).toBe(2)
-    expect(readRounds(5, 0)).toEqual([[0, 2], [2, 4], [4, 5]])
-    expect(readRounds(5, 3)).toEqual([[3, 5]])            // a cycle carried on after a restart
+    expect(READ_AT_ONCE).toBe(6)
+    expect(readRounds(5, 0, 2)).toEqual([[0, 2], [2, 4], [4, 5]])
+    expect(readRounds(5, 3, 2)).toEqual([[3, 5]])
+    expect(readRounds(14, 0)).toEqual([[0, 6], [6, 12], [12, 14]])            // a cycle carried on after a restart
     expect(readRounds(5, 5)).toEqual([])
     expect(readRounds(3, 0, 1)).toEqual([[0, 1], [1, 2], [2, 3]])
     expect(readRounds(4, -2, 0)).toEqual([[0, 1], [1, 2], [2, 3], [3, 4]])
@@ -119,9 +120,14 @@ describe('cycleStart', () => {
     expect(cycleStart({ startedAt, nextId: 'c' }, ids, now)).toEqual({ index: 2, startedAt })
   })
 
-  it('starts at the top when nothing is saved, the cycle is over an hour old, or its feed is gone', () => {
+  it('carries on across a long pass too (Nov 19, 2026: a pass took hours, and every deploy sent it back to the top)', () => {
+    const startedAt = now - 5 * 3_600_000
+    expect(cycleStart({ startedAt, nextId: 'd' }, ids, now)).toEqual({ index: 3, startedAt })
+  })
+
+  it('starts at the top when nothing is saved, the cycle is over half a day old, or its feed is gone', () => {
     expect(cycleStart(null, ids, now)).toEqual({ index: 0, startedAt: now })
-    expect(cycleStart({ startedAt: now - 61 * 60_000, nextId: 'c' }, ids, now)).toEqual({ index: 0, startedAt: now })
+    expect(cycleStart({ startedAt: now - 13 * 3_600_000, nextId: 'c' }, ids, now)).toEqual({ index: 0, startedAt: now })
     expect(cycleStart({ startedAt: now - 60_000, nextId: 'removed' }, ids, now)).toEqual({ index: 0, startedAt: now })
     expect(cycleStart({ startedAt: Number.NaN, nextId: 'c' } as never, ids, now)).toEqual({ index: 0, startedAt: now })
     expect(cycleStart({ startedAt: now - 60_000, nextId: 'a' }, ids, now)).toEqual({ index: 0, startedAt: now })

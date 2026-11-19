@@ -166,8 +166,16 @@ export function cyclePause(feedsLeft: number, msLeft: number, avgReadMs: number)
  * feed is on its own host) a round takes about as long as its slower read, and
  * a pass has room to grow well past 500. The geocoder books its own slots
  * (throttleNominatim), so two readers never ask it at once.
+ *
+ * Six at a time (Nov 19, 2026, 1,004 feeds): a pass took 4 to 6 hours, not 30
+ * minutes. The live reports showed the reader 100 to 160 feeds further on each
+ * hour (it reached the 261st an hour after the 8:06 deploy), so every feed
+ * added that day, from the 899th on, went unread: a round waits for the slower
+ * of its feeds, and a feed that is slow to answer (up to its 20-second limit)
+ * held the next one back. Each feed is on its own host, and the geocoder keeps
+ * its own pace however many feeds are read.
  */
-export const READ_AT_ONCE = 2
+export const READ_AT_ONCE = 6
 
 /** The cycle's rounds from startAt: [first, end) index ranges of READ_AT_ONCE feeds (the last may be shorter) */
 export function readRounds(total: number, startAt: number, size = READ_AT_ONCE): Array<[number, number]> {
@@ -193,8 +201,12 @@ export function oneCycleAtATime(run: () => Promise<void>, onSkip?: () => void): 
 }
 /** Where an interrupted cycle stands, kept across restarts (every deploy restarts the scraper) */
 const CYCLE_KEY = 'news-rss:cycle'
-/** A saved place older than this starts a fresh cycle instead */
-const CYCLE_RESUME_MS = 2 * POLL_INTERVAL
+/**
+ * A saved place older than this starts a fresh cycle instead. An hour until Nov 19, 2026: a pass took longer than
+ * that, so every deploy sent the reader back to the top, and on a day of four deploys it never got past the 900th
+ * feed. Half a day now: a pass carries on to the end of the list across deploys.
+ */
+export const CYCLE_RESUME_MS = 12 * 3_600_000
 
 export interface CyclePlace { startedAt: number; nextId: string }
 
