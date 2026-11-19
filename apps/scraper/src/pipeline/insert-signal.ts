@@ -130,6 +130,13 @@ export function cleanSignalText(row: Record<string, unknown>): Record<string, un
   return row
 }
 
+/**
+ * How long storing and story-matching take (Nov 19, 2026): the news reader covered about two feeds a minute with
+ * two or six read at once, so a step after the fetch works one item at a time. Totals since the scraper started;
+ * the news reader publishes them with its own (readerTiming in news-rss.ts).
+ */
+export const insertTimings = { inserts: 0, insertMs: 0, correlations: 0, correlateMs: 0, dedupMs: 0 }
+
 export async function insertAndCorrelate(
   incoming: Record<string, unknown>,
   meta: CorrelationMeta,
@@ -174,7 +181,9 @@ export async function insertAndCorrelate(
   //     still counts as corroboration for the signal that holds the event.
   let crossSourceKey: string | null = null
   try {
+    const tDedup = Date.now()
     const { key, seen } = await dedup.claimCrossSource(rawTitle, rawCategory)
+    insertTimings.dedupMs += Date.now() - tDedup
     crossSourceKey = key
     if (seen !== null) {
       // The held signal takes this article's link when the article corroborates it
@@ -259,7 +268,9 @@ export async function insertAndCorrelate(
   // 1. Insert the signal
   let signal: Record<string, any>
   try {
+    const tInsert = Date.now()
     ;[signal] = await db('signals').insert(signalWithTier).returning('*')
+    insertTimings.inserts++; insertTimings.insertMs += Date.now() - tInsert
   } catch (err) {
     await settleArticle(null)
     // ...and the event's claim, so the next read can store it (dedup.releaseCrossSource, Nov 10, 2026)
@@ -303,7 +314,9 @@ export async function insertAndCorrelate(
       tags:             Array.isArray(signal.tags) ? signal.tags : [],
     }
 
+    const tCorrelate = Date.now()
     const cluster = await correlateSignal(candidate)
+    insertTimings.correlations++; insertTimings.correlateMs += Date.now() - tCorrelate
 
     if (cluster) {
       logger.info({

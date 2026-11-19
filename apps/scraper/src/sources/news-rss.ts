@@ -99,9 +99,9 @@ import type Redis        from 'ioredis'
 import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { Category, SignalSeverity } from '@worldpulse/types'
-import { insertAndCorrelate } from '../pipeline/insert-signal'
+import { insertAndCorrelate, insertTimings } from '../pipeline/insert-signal'
 import { setThinPlaces } from '../pipeline/correlate'
-import { noteCoverage } from './coverage'
+import { noteCoverage, COVERAGE_KEY } from './coverage'
 // Feed items published more than 3 days ago aren't news
 import { MAX_ITEM_AGE_MS, isStaleItem } from '../pipeline/freshness'
 // Feeds send "&#x27;" and "&amp;" in titles and summaries
@@ -16463,6 +16463,52 @@ export async function forgetRemovedFeeds(redis: Redis, keep: Iterable<string>): 
 
 // ─── POLL ONE SOURCE ─────────────────────────────────────────────────────────
 
+/**
+ * Where the time of a pass goes (Nov 19, 2026; Devon, 1:12 PM: "How fast can we test this and figure it out? This is
+ * a major bottle neck in our growth"). A pass meant for 30 minutes took 4 to 6 hours, and reading six feeds at once
+ * instead of two left it at about two feeds a minute. Totals since the scraper started: fetching, the items'
+ * processing, and within it storing and story-matching (insertTimings), with the reader's place in the list and its
+ * slowest feeds. Written into news-rss:coverage as "reader" every few rounds, so /ops-status.json carries it.
+ */
+export const readerTiming = {
+  since: new Date().toISOString(), feeds: 0, fetchMs: 0, processMs: 0, items: 0, newItems: 0,
+  position: 0 as number, of: 0 as number, slowest: [] as Array<{ id: string; ms: number; items: number }>,
+}
+
+/** Note one feed's read: its fetch and processing time, and keep the five slowest */
+export function noteFeedRead(id: string, fetchMs: number, processMs: number, items: number, created: number): void {
+  readerTiming.feeds++; readerTiming.fetchMs += fetchMs; readerTiming.processMs += processMs
+  readerTiming.items += items; readerTiming.newItems += created
+  const ms = fetchMs + processMs
+  const list = readerTiming.slowest.filter(s => s.id !== id)
+  list.push({ id, ms, items: created })
+  list.sort((a, b) => b.ms - a.ms)
+  readerTiming.slowest = list.slice(0, 5)
+}
+
+/** The reader's timing as plain numbers (averages in ms) */
+export function readerTimingSummary(timings: typeof insertTimings = insertTimings): Record<string, unknown> {
+  const t = readerTiming
+  const per = (ms: number, n: number) => (n > 0 ? Math.round(ms / n) : null)
+  return {
+    since: t.since, at: new Date().toISOString(), position: t.position, of: t.of, feeds_read: t.feeds,
+    avg_fetch_ms: per(t.fetchMs, t.feeds), avg_process_ms: per(t.processMs, t.feeds), new_items: t.newItems,
+    avg_insert_ms: per(timings.insertMs, timings.inserts), avg_correlate_ms: per(timings.correlateMs, timings.correlations),
+    avg_dedup_ms: per(timings.dedupMs, timings.inserts + 0), stored: timings.inserts, slowest: t.slowest,
+  }
+}
+
+/** Write the timing into the coverage note (best effort) */
+async function noteReaderTiming(redis: Pick<Redis, 'get' | 'set'>): Promise<void> {
+  try {
+    const raw = await redis.get(COVERAGE_KEY)
+    const cov = raw ? JSON.parse(raw) as Record<string, unknown> : null
+    if (!cov || typeof cov !== 'object') return
+    cov.reader = readerTimingSummary()
+    await redis.set(COVERAGE_KEY, JSON.stringify(cov))
+  } catch { /* the next round tries again */ }
+}
+
 async function pollSource(
   db:       Knex,
   redis:    Redis,
@@ -16487,6 +16533,7 @@ async function pollSource(
   }
 
   let xml: string
+  const tFetch = Date.now()
   try {
     xml = await fetchUrl(source.feedUrl)
   } catch (err) {
@@ -16514,12 +16561,15 @@ async function pollSource(
 
   let created = 0
   let stale = 0
+  const fetchMs = Date.now() - tFetch
+  const tProcess = Date.now()
   for (const item of items) {
     if (skippedLink(source, item.link)) continue
     const result = await processItem(db, redis, producer, source, item)
     if (result === 'created') created++
     else if (result === 'stale') stale++
   }
+  noteFeedRead(source.id, fetchMs, Date.now() - tProcess, items.length, created)
   if (stale > 0) {
     // Logged once per item (they're remembered): a feed that only lists old stories shows up here
     sourceLog.info({ stale, total: items.length }, 'News feed items skipped as old')
@@ -16592,6 +16642,8 @@ export function startNewsRssPoller(
         log.warn({ err, sourceId: source.id }, 'News feed poll error'),
       )))
       roundMs += Date.now() - t0; read += batch.length
+      readerTiming.position = to; readerTiming.of = NEWS_SOURCE_REGISTRY.length
+      if (r % 5 === 4) void noteReaderTiming(redis)
       // A pause between rounds, shorter when the cycle runs behind (each feed is on its own host)
       if (!stopped) {
         const pause = Math.min(delay, cyclePause(rounds.length - r - 1, budgetEnd - Date.now(), roundMs / (r + 1)))
