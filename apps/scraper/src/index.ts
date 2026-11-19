@@ -23,7 +23,7 @@ import { extractGeo, geocodePlace, placeFromText } from './pipeline/geo'
 import { isStaleItem } from './pipeline/freshness'
 import { decodeEntities, cleanUrl, withoutOutletName, articleSummary, storyPostText } from './pipeline/text'
 import { dedup } from './pipeline/dedup'
-import { correlateSignal, confirmMergedArticle, RELIABILITY_CEILING } from './pipeline/correlate'
+import { correlateSignal, confirmMergedArticle, RELIABILITY_CEILING, ensureTitleSearchIndex } from './pipeline/correlate'
 import type { CorrelationCandidate } from './pipeline/correlate'
 import { computeTrending } from './pipeline/trending'
 import { backfillUnprocessed } from './backfill'
@@ -177,6 +177,11 @@ async function bootstrap() {
   backfillRecentPublishedAt(3)
     .then(rows => { if (rows > 0) logger.info({ rows }, 'Filled published_at for recent signals') })
     .catch(err => logger.warn({ err }, 'published_at backfill failed (non-fatal)'))
+
+  // The same-story search's title index (pipeline/correlate.ts, Nov 19, 2026): built in the background
+  ensureTitleSearchIndex()
+    .then(r => { if (r !== 'failed') logger.info({ result: r }, 'Title search index ready') })
+    .catch(() => {})
 
   // signals.story_id groups same-story signals for the feed (pipeline/stories.ts)
   ensureStoryIdColumn()

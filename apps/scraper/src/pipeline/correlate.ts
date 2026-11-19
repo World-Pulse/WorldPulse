@@ -23,7 +23,7 @@
  * @module pipeline/correlate
  */
 
-import { db } from '../lib/postgres'
+import { db, pgPool } from '../lib/postgres'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
 import { sourceKey, hostOf } from './signal-columns'
@@ -369,6 +369,43 @@ async function fetchRecentSignals(signal: CorrelationCandidate): Promise<Correla
  * compared. Only used for same-story corroboration, not for clusters. With
  * `older`, the day before the window (the second look, for thinly covered places).
  */
+/** The title search's index (see ensureTitleSearchIndex) */
+export const TITLE_SEARCH_INDEX = 'idx_signals_title_simple'
+export const TITLE_SEARCH_INDEX_SQL =
+  `CREATE INDEX CONCURRENTLY IF NOT EXISTS ${TITLE_SEARCH_INDEX} ON signals USING gin (to_tsvector('simple', title))`
+
+/**
+ * An index for the same-story search's title words (Nov 19, 2026; Devon, 3:39 PM: "Yes"). The search below asks
+ * to_tsvector('simple', title) of every signal of the last 24 to 48 hours, and no index matched it (the text index
+ * is 'english', on title and summary), so the database read all their titles for each new item: 9.3 s of the news
+ * reader's 9.9 s per item that afternoon (its timing on /ops-status.json), and a pass of 1,004 feeds took hours.
+ * Built CONCURRENTLY, so inserts go on while it builds (a few minutes); a build that failed leaves an invalid index,
+ * which is dropped and built again. Production doesn't run knex migrations on deploy, so the scraper makes it at
+ * start, like signals.story_id's (stories.ts). Removing it: DROP INDEX CONCURRENTLY idx_signals_title_simple.
+ */
+export async function ensureTitleSearchIndex(): Promise<'ready' | 'built' | 'failed'> {
+  try {
+    const found = await db.raw(
+      `SELECT i.indisvalid FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid WHERE c.relname = ?`, [TITLE_SEARCH_INDEX])
+    const row = ((found as { rows?: Array<{ indisvalid: boolean }> }).rows ?? [])[0]
+    if (row?.indisvalid) return 'ready'
+    // On its own connection, with room to finish: the scraper's statements stop at 2 minutes, and a build cut off
+    // there would leave an invalid index to build again at every start
+    const client = await pgPool.connect()
+    try {
+      await client.query(`SET statement_timeout = '30min'`)
+      if (row && !row.indisvalid) await client.query(`DROP INDEX CONCURRENTLY IF EXISTS ${TITLE_SEARCH_INDEX}`)
+      await client.query(TITLE_SEARCH_INDEX_SQL)
+    } finally {
+      client.release()
+    }
+    return 'built'
+  } catch (err) {
+    logger.warn({ err }, 'Could not build the title search index (the same-story search stays slow)')
+    return 'failed'
+  }
+}
+
 async function fetchSameStoryCandidates(signal: CorrelationCandidate, older = false): Promise<CorrelationCandidate[]> {
   // Each word by its stem, as a prefix ("attack:*" finds "attacks" and "attacked"; isSameStory compares stems).
   // Not its date: "october:*" and "2026:*" would find every daily feature
