@@ -723,7 +723,8 @@ async function quietPlaces(now: Date): Promise<string[]> {
 
 /**
  * The reports waiting for a second outlet: pending, one outlet, settled, from the last 30 hours, in English, French,
- * German, Spanish, Portuguese, Russian, Arabic, Albanian or Serbian (Nov 11, 2026), medium or above, or low from a quiet place's own outlets (each feed
+ * German, Spanish, Portuguese, Russian, Arabic, Albanian or Serbian (Nov 11, 2026), Japanese, Chinese, Korean, Greek,
+ * Persian, Urdu or Thai (Nov 18), medium or above, or low from a quiet place's own outlets (each feed
  * tags its items with its country)
  */
 export function waitingQuery(quiet: readonly string[], now: Date): { sql: string; bindings: unknown[] } {
@@ -734,7 +735,7 @@ export function waitingQuery(quiet: readonly string[], now: Date): { sql: string
          FROM signals
         WHERE status = 'pending' AND COALESCE(source_count, 1) <= 1
           AND (severity IN ('medium', 'high', 'critical') OR (severity = 'low' AND tags && ?::text[]))
-          AND language IN ('en', 'fr', 'de', 'es', 'pt', 'ru', 'ar', 'sq', 'sr')
+          AND language IN ('en', 'fr', 'de', 'es', 'pt', 'ru', 'ar', 'sq', 'sr', 'ja', 'zh', 'ko', 'el', 'fa', 'ur', 'th')
           AND cardinality(original_urls) >= 1
           AND created_at > ?::timestamptz AND created_at < ?::timestamptz
         ORDER BY created_at DESC

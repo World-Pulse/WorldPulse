@@ -970,6 +970,16 @@ const THAI: Rule[] = [
   cjk('สิงคโปร์', 'Singapore'), cjk('อินโดนีเซีย', 'Indonesia'), cjk('ฟิลิปปินส์', 'Philippines'),
 ]
 
+/** Swahili (Nov 18, 2026: HabariLEO, the list's first Swahili feed); East Africa's own place names are spelt as in English */
+const SWAHILI: Rule[] = [
+  r('ikulu\\s+ya\\s+marekani', 'White House'), r('marekani', 'United States'), r('uingereza', 'United Kingdom'),
+  r('ufaransa', 'France'), r('ujerumani', 'Germany'), r('urusi', 'Russia'), r('japani', 'Japan'), r('uchina', 'China'),
+  r('afrika\\s+kusini', 'South Africa'), r('sudan\\s+kusini', 'South Sudan'), r('misri', 'Egypt'), r('msumbiji', 'Mozambique'),
+  r('jamhuri\\s+ya\\s+kidemokrasia\\s+ya\\s+kongo', 'Democratic Republic of the Congo'), r('uhindi', 'India'),
+  r('israeli', 'Israel'), r('irani', 'Iran'), r('uturuki', 'Turkey'), r('ugiriki', 'Greece'), r('uholanzi', 'Netherlands'),
+  r('uarabuni\\s+wa\\s+saudi|saudia', 'Saudi Arabia'), r('korea\\s+kusini', 'South Korea'), r('korea\\s+kaskazini', 'North Korea'),
+]
+
 export const LOCAL_NAMES: Record<string, Rule[]> = {
   ja: JAPANESE, zh: CHINESE, th: THAI,
   hi: HINDI,
@@ -977,7 +987,7 @@ export const LOCAL_NAMES: Record<string, Rule[]> = {
   sr: MONTENEGRIN, cnr: MONTENEGRIN, sq: ALBANIAN, ms: MALAY, es: SPANISH, pt: PORTUGUESE, lt: LITHUANIAN,
   ar: ARABIC, ru: RUSSIAN, mn: MONGOLIAN, fr: FRENCH,
   tr: TURKISH, pl: POLISH, hu: HUNGARIAN, cs: CZECH, id: INDONESIAN, uk: UKRAINIAN,
-  el: GREEK, ko: KOREAN, ur: URDU, fa: PERSIAN, vi: VIETNAMESE,
+  el: GREEK, ko: KOREAN, ur: URDU, fa: PERSIAN, vi: VIETNAMESE, sw: SWAHILI,
 }
 
 /** The text with its language's place names in English and its look-alike words blanked out, for finding its place */

@@ -47,6 +47,9 @@ export const TRANSLATION_FILE_URL = (stamp: string) => `${GDELT_BUCKET}/${stamp}
  */
 export const TRANSLATED_LANGUAGES: Readonly<Record<string, string>> = {
   fra: 'fr', deu: 'de', spa: 'es', por: 'pt', rus: 'ru', ara: 'ar', sqi: 'sq', alb: 'sq', srp: 'sr',
+  // Nov 18, 2026 (Devon, 10:51 PM: "proceed with 1-3"): the newer languages whose headlines storyWords reads in their
+  // own script. The 03:45 UTC file of Nov 19 held 355 Chinese, 18 Japanese, 15 Greek, 8 Urdu and 5 Korean articles
+  zho: 'zh', chi: 'zh', jpn: 'ja', kor: 'ko', ell: 'el', gre: 'el', fas: 'fa', per: 'fa', urd: 'ur', tha: 'th',
 }
 /**
  * A fresh address for each request (Oct 22): GDELT lists a file the moment it
@@ -67,7 +70,7 @@ export interface GdeltArticle {
   site: string
   /** When GDELT read it */
   at: Date
-  /** Its language, for an article of the translated list ('fr', 'de', 'es', 'pt', 'ru', 'ar', 'sq', 'sr'); none for the English list's */
+  /** Its language, for an article of the translated list ('fr', 'de', 'es', 'pt', 'ru', 'ar', 'sq', 'sr', and since Nov 18 'zh', 'ja', 'ko', 'el', 'fa', 'ur', 'th'); none for the English list's */
   lang?: string
 }
 

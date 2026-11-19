@@ -13635,6 +13635,40 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['the-herald', 'south-africa', 'eastern-cape', 'africa'],
     language:        'en',
   },
+  // The list's first Persian feed (Nov 18, 2026; Devon, 10:51 PM: "We can exceed the 900 limit"): VOA's Persian
+  // service, from the feed its homepage advertises; 20 items, the newest that night. A US government broadcaster,
+  // so labelled state media like VOA News; its terms put VOA's own text, audio and pictures in the public domain
+  {
+    id:              'voa-persian',
+    name:            'VOA Persian',
+    feedUrl:         'https://ir.voanews.com/api/',
+    category:        'geopolitics',
+    biasLabel:       'state-media',
+    reliability:     0.55,
+    countryCode:     'IR',
+    defaultLat:      35.69,
+    defaultLng:      51.39,
+    defaultLocation: 'Tehran, Iran',
+    extraTags:       ['voa', 'iran', 'middle-east', 'state-media', 'us-government', 'persian'],
+    language:        'fa',
+  },
+  // The list's first Swahili feed: HabariLEO, the Swahili daily of Tanzania Standard Newspapers (the government's
+  // newspaper company, which also runs the Daily News), so labelled state media like it; from the feed its
+  // homepage advertises, 10 items, the newest Nov 18; its footer says only "Haki Zote Zimehifadhiwa" (all rights reserved)
+  {
+    id:              'habarileo-tz',
+    name:            'HabariLEO (Tanzania)',
+    feedUrl:         'https://habarileo.co.tz/feed/',
+    category:        'geopolitics',
+    biasLabel:       'state-media',
+    reliability:     0.55,
+    countryCode:     'TZ',
+    defaultLat:      -6.79,
+    defaultLng:      39.21,
+    defaultLocation: 'Dar es Salaam, Tanzania',
+    extraTags:       ['tanzania', 'east-africa', 'africa', 'state-media', 'swahili'],
+    language:        'sw',
+  },
 ]
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────

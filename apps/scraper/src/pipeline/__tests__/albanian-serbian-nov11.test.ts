@@ -141,6 +141,6 @@ describe('the second-outlet search in Albanian and Serbian', () => {
   })
 
   it('takes Albanian and Serbian reports into the search', () => {
-    expect(waitingQuery(['xk'], new Date('2026-11-11T12:00:00Z')).sql).toMatch(/language IN \('en', 'fr', 'de', 'es', 'pt', 'ru', 'ar', 'sq', 'sr'\)/)
+    expect(waitingQuery(['xk'], new Date('2026-11-11T12:00:00Z')).sql).toMatch(/language IN \('en', 'fr', 'de', 'es', 'pt', 'ru', 'ar', 'sq', 'sr'[,)]/)
   })
 })

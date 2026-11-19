@@ -108,7 +108,8 @@ describe('feed upkeep (Nov 5, 2026)', () => {
     const read = (cc: string) => NEWS_SOURCE_REGISTRY.filter(s => s.countryCode === cc && !s.parked).length
     expect(['BB', 'ME', 'HT', 'BW', 'EC'].map(read)).toEqual([3, 4, 4, 2, 3])
     // and the places with a site down, or one that turns the server away for now, have one more
-    expect(['PR', 'UG', 'TZ'].map(read)).toEqual([3, 4, 3])
+    // (Tanzania's fourth, HabariLEO, came Nov 18)
+    expect(['PR', 'UG', 'TZ'].map(read)).toEqual([3, 4, 4])
   })
 })
 
