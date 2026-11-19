@@ -1032,6 +1032,54 @@ const LATVIAN: Rule[] = [
   r('zviedrij[aāsiu]|zviedrijā', 'Sweden'), r('somij[aāsiu]|somijā', 'Finland'), r('asv', 'United States'),
 ]
 
+/**
+ * Bulgarian, Macedonian, Norwegian, Finnish and Icelandic (Nov 19, 2026: the push to 1,000's first feeds in them);
+ * Croatian is read with the Montenegrin names, the same words. Finnish and Icelandic join their case endings to the
+ * name ("Venäjällä", "Úkraínu"), so the forms they take are listed.
+ */
+const BULGARIAN: Rule[] = [
+  r('русия', 'Russia'), r('украйна', 'Ukraine'), r('германия', 'Germany'), r('турция', 'Turkey'), r('гърция', 'Greece'),
+  r('румъния', 'Romania'), r('сърбия', 'Serbia'), r('северна македония', 'North Macedonia'), r('сащ', 'United States'),
+  r('китай', 'China'), r('франция', 'France'), r('великобритания', 'United Kingdom'), r('израел', 'Israel'), r('иран', 'Iran'),
+]
+const MACEDONIAN: Rule[] = [
+  r('русија', 'Russia'), r('украина', 'Ukraine'), r('германија', 'Germany'), r('турција', 'Turkey'), r('грција', 'Greece'),
+  r('бугарија', 'Bulgaria'), r('србија', 'Serbia'), r('албанија', 'Albania'), r('косово', 'Kosovo'), r('сад', 'United States'),
+  r('кина', 'China'), r('франција', 'France'), r('израел', 'Israel'),
+]
+const NORWEGIAN: Rule[] = [
+  r('russland', 'Russia'), r('ukraina', 'Ukraine'), r('tyskland', 'Germany'), r('sverige', 'Sweden'), r('danmark', 'Denmark'),
+  r('finland', 'Finland'), r('kina', 'China'), r('frankrike', 'France'), r('storbritannia', 'United Kingdom'), r('usa', 'United States'),
+  r('israel', 'Israel'), r('iran', 'Iran'), r('svalbard', 'Svalbard'),
+]
+const FINNISH: Rule[] = [
+  r('venäjä(?:llä|lle|ltä|n|ä|stä|än)?|venäjää', 'Russia'), r('ukraina(?:n|ssa|an|sta|lle|lla)?|ukrainaa', 'Ukraine'),
+  r('ruotsi(?:n|ssa|in|sta)?|ruotsia', 'Sweden'), r('saksa(?:n|ssa|an|sta)?|saksaa', 'Germany'), r('viro(?:n|ssa|on|sta)?|viroa', 'Estonia'),
+  r('norja(?:n|ssa|an|sta)?|norjaa', 'Norway'), r('kiina(?:n|ssa|an|sta)?|kiinaa', 'China'), r('ranska(?:n|ssa|an|sta)?|ranskaa', 'France'),
+  r('yhdysvallat|yhdysvaltojen|yhdysvalloissa|yhdysvaltoihin', 'United States'), r('israel(?:in|issa|iin)?', 'Israel'),
+]
+const ICELANDIC: Rule[] = [
+  r('rússland(?:i|s)?', 'Russia'), r('úkraín(?:a|u|ar)', 'Ukraine'), r('bandaríkin|bandaríkjunum|bandaríkjanna', 'United States'),
+  r('noreg(?:ur|i|s)', 'Norway'), r('danmörk(?:u)?|danmerkur', 'Denmark'), r('svíþjóð(?:ar)?', 'Sweden'), r('þýskaland(?:i|s)?', 'Germany'),
+  r('bretland(?:i|s)?', 'United Kingdom'), r('grænland(?:i|s)?', 'Greenland'), r('kína', 'China'), r('ísrael', 'Israel'),
+]
+
+/**
+ * Georgian and Somali (Nov 19, 2026: Netgazeti and Caasimada, the push to 1,000's first feeds in them). Georgian joins
+ * its case endings to the name ("რუსეთში" in Russia, "უკრაინაში" in Ukraine), so a name may carry one.
+ */
+const ka = (alts: string, as: string): Rule => [new RegExp(`${HB}(?:${alts})(?:ში|ის|მა|ს|დან|თან|ზე)?${HE}`, 'gu'), as]
+const GEORGIAN: Rule[] = [
+  ka('საქართველო|საქართველოს|საქართველოში', 'Republic of Georgia'), ka('თბილის[ი]?', 'Tbilisi'), ka('ბათუმ[ი]?', 'Batumi'), ka('რუსეთ[ი]?', 'Russia'),
+  ka('უკრაინა|უკრაინ', 'Ukraine'), ka('სომხეთ[ი]?', 'Armenia'),
+  ka('აზერბაიჯან[ი]?', 'Azerbaijan'), ka('თურქეთ[ი]?', 'Turkey'), ka('აშშ', 'United States'),
+]
+const SOMALI: Rule[] = [
+  r('muqdisho', 'Mogadishu'), r('soomaaliya', 'Somalia'), r('soomaaliland', 'Somaliland'), r('puntland|garoowe', 'Garowe'),
+  r('hargeysa', 'Hargeisa'), r('kismaayo', 'Kismayo'), r('baydhabo', 'Baidoa'), r('gaalkacyo', 'Galkayo'), r('itoobiya', 'Ethiopia'),
+  r('kenya', 'Kenya'), r('jabuuti', 'Djibouti'), r('imaaraadka', 'United Arab Emirates'), r('mareykanka', 'United States'),
+]
+
 export const LOCAL_NAMES: Record<string, Rule[]> = {
   ja: JAPANESE, zh: CHINESE, th: THAI,
   hi: HINDI,
@@ -1040,6 +1088,7 @@ export const LOCAL_NAMES: Record<string, Rule[]> = {
   ar: ARABIC, ru: RUSSIAN, mn: MONGOLIAN, fr: FRENCH,
   tr: TURKISH, pl: POLISH, hu: HUNGARIAN, cs: CZECH, id: INDONESIAN, uk: UKRAINIAN,
   el: GREEK, ko: KOREAN, ur: URDU, fa: PERSIAN, vi: VIETNAMESE, sw: SWAHILI, bn: BENGALI, he: HEBREW, sk: SLOVAK, et: ESTONIAN, lv: LATVIAN,
+  bg: BULGARIAN, mk: MACEDONIAN, no: NORWEGIAN, nb: NORWEGIAN, fi: FINNISH, is: ICELANDIC, hr: MONTENEGRIN, ka: GEORGIAN, so: SOMALI,
 }
 
 /** The text with its language's place names in English and its look-alike words blanked out, for finding its place */

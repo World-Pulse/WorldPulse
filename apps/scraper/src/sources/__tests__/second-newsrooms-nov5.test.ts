@@ -58,8 +58,9 @@ describe('thinly covered places (Nov 5, 2026)', () => {
   it(`are those with ${THIN_PLACE_FEEDS} feeds of their own or fewer`, () => {
     const thin = new Set(thinPlaces())
     // (Lebanon and Estonia left the list on Nov 19, with the thin-countries round's Annahar, Al Jadeed, ERR, Delfi and Aripaev)
-    for (const code of ['DM', 'LC', 'TO', 'VU', 'GD', 'HR', 'DJ', 'LT']) expect(thin.has(code), code).toBe(true)
-    for (const code of ['LB', 'EE']) expect(thin.has(code), code).toBe(false)
+    // (and Croatia, with Telegram.hr in the push to 1,000)
+    for (const code of ['DM', 'LC', 'TO', 'VU', 'GD', 'DJ', 'LT']) expect(thin.has(code), code).toBe(true)
+    for (const code of ['LB', 'EE', 'HR']) expect(thin.has(code), code).toBe(false)
     // Honduras has four since El Pulso, Syria five since its Arabic press (Nov 6), Jordan four since Al Ghad (Nov 18)
     for (const code of ['US', 'GB', 'IN', 'NG', 'FR', 'HN', 'SY', 'JO']) expect(thin.has(code), code).toBe(false)
     expect(thinPlaces([{ ...src('naharnet')!, countryCode: 'ZZ' }])).toEqual(['ZZ'])
