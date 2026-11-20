@@ -23,6 +23,28 @@ describe('eventFingerprint', () => {
     expect(eventFingerprint('أمن الأردن مسؤولية الجميع', 'geopolitics')).toBe(eventFingerprint('أَمْنُ الأُرْدُنِّ مَسْؤُولِيَّةُ الجَمِيعِ', 'geopolitics'))
   })
 
+  // Nov 19, 2026: the other scripts' headlines (Dinamani's and Andhra Jyothy's first 20 had one fingerprint between them)
+  it('tells apart headlines in every other script, and not from the bare category', () => {
+    const pairs: Array<[string, string]> = [
+      ['சிவகிரி மருத்துவமனையில் அவசர சிகிச்சைக்கான புதிய கட்டடம்', 'தாராபுரம் பகுதியில் கனிமவளம் இருப்பதாக பரவும் தகவல்'],
+      ['రోడ్డు భద్రతకు 5 సూత్రాలు', 'సైయెంట్‌ సెమీకండక్టర్స్‌కు రూ.94 కోట్ల నిధులు'],
+      ['मुंबई में भारी बारिश, लोकल ट्रेन सेवा ठप', 'दिल्ली में नई मेट्रो लाइन का उद्घाटन'],
+      ['ঢাকায় সংঘর্ষ, গ্রেপ্তার ২০', 'ঢাকায় নতুন বইমেলা শুরু'],
+      ['国务院常务会议研究部署经济工作', '台风登陆广东 多地停课'],
+      ['大分県で土砂崩れ 3人死亡', '新商品の発売日が決定'],
+      ['화재로 4명 숨지고 12명 부상', '북 미사일 발사 합참 동해상으로'],
+      ['ชุมนุมประท้วงหน้าทำเนียบรัฐบาล', 'ไฟดับหลายพื้นที่ในกรุงเทพฯ'],
+      ['Σεισμός στην Κρήτη: 3 νεκροί', 'Νέο μουσείο στη Θεσσαλονίκη'],
+      ['הממשלה אישרה את התקציב', 'שריפה גדולה בצפון'],
+      ['የመደመር መንግሥት ለቡና ልማት በሰጠው ትኩረት', 'በአዲስ አበባ ከባድ ዝናብ'],
+    ]
+    for (const [a, b] of pairs) {
+      expect(eventFingerprint(a, 'geopolitics'), a).not.toBe(eventFingerprint(b, 'geopolitics'))
+      expect(eventFingerprint(a, 'geopolitics'), a).not.toBe(eventFingerprint('', 'geopolitics'))
+      expect(eventFingerprint(a, 'geopolitics'), a).toBe(eventFingerprint(`${a}!`, 'geopolitics'))
+    }
+  })
+
   it('reads Latin headlines as before', () => {
     // the old rule: only a-z, 0-9 and spaces kept, words over 2 letters, English stop words out, sorted, the first 5
     expect(eventFingerprint('Bulgaria seeks suspects in Germany after Starlink sabotage', 'politics'))

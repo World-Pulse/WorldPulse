@@ -193,8 +193,15 @@ export function eventFingerprint(title: string, category: string): string {
     .toLowerCase()
     // Latin letters as before, and Arabic and Cyrillic letters too (Nov 6, 2026): with Latin letters only, every
     // Arabic or Russian headline had the same fingerprint, its category alone, so after the first one each six hours
-    // the others were thrown away as its duplicates (Roya News, JO24, 24.kg and Vesti.kg on their first day)
-    .replace(/[^a-z0-9\s\p{Script=Arabic}\p{Script=Cyrillic}]/gu, '')
+    // the others were thrown away as its duplicates (Roya News, JO24, 24.kg and Vesti.kg on their first day).
+    // And every other script's (Nov 19, 2026): a headline in Chinese, Japanese, Korean, Thai, Greek, Hebrew, Amharic or
+    // an Indian script still kept none of its words, so the same thing happened to them all, across every one of those
+    // languages at once: Dinamani's and Andhra Jyothy's first 20 headlines had one fingerprint between them, China News
+    // Service's 20 had five, and their reports after the first were dropped. As before, a Latin letter with an accent is
+    // left out ("Sécurité" is "scurit"), and so are the marks every script shares (Arabic's vowel marks) and the letters
+    // no script owns (the tatweel)
+    .replace(/(?![a-z])\p{Script=Latin}|\p{Script=Inherited}|(?=\p{L})\p{Script=Common}/gu, '')
+    .replace(/[^\p{L}\p{M}\p{N}\s]/gu, '')
     .split(/\s+/)
     .filter(w => w.length > 2 && !STOP_WORDS.has(w))
     .sort()
