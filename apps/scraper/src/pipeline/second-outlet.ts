@@ -189,9 +189,10 @@ const comparable = (title: string, lang: string) => (lang === 'sr' ? serbianLati
  * Albanian and Serbian names change their endings with their place in a sentence ("Prishtinë", "Prishtinës";
  * "Bugarska", "Bugarskoj"), so the names test (correlate.ts namesDiffer) reads their words by their first five letters
  * (Nov 11, 2026); Croatian, Bosnian, Slovene, Polish, Ukrainian, Bulgarian and Macedonian too (Nov 19: "Warszawa",
- * "Warszawie"; "Київ", "Києві")
+ * "Warszawie"; "Київ", "Києві"); Czech, Slovak, Hungarian, Finnish, Estonian, Lithuanian and Latvian too (Nov 19, evening:
+ * "Budapest", "Budapesten"; "Helsinki", "Helsingissä")
  */
-const INFLECTED = new Set(['sq', 'sr', 'hr', 'bs', 'sl', 'pl', 'uk', 'bg', 'mk'])
+const INFLECTED = new Set(['sq', 'sr', 'hr', 'bs', 'sl', 'pl', 'uk', 'bg', 'mk', 'cs', 'sk', 'hu', 'fi', 'et', 'lt', 'lv'])
 const namesForm = (title: string, lang: string) =>
   (INFLECTED.has(lang) ? title.replace(/\p{L}+/gu, w => Array.from(w).slice(0, 5).join('')) : title)
 
@@ -221,6 +222,12 @@ const INDONESIAN_PLAIN = new Set([
   'yg', 'tak', 'pun', 'lah', 'kah', 'sangat', 'banyak', 'semua', 'beberapa', 'sebagai', 'adalah', 'yakni', 'bakal',
   'dgn', 'utk', 'kerana', 'selepas', 'ialah', 'iaitu',
 ])
+/** Norwegian's small words (Bokmål as 'no' and 'nb'), without accents */
+const NORWEGIAN_PLAIN = new Set([
+  'var', 'blir', 'ble', 'har', 'hadde', 'som', 'det', 'den', 'til', 'fra', 'med', 'for', 'ikke', 'men', 'eller',
+  'ogsa', 'bare', 'etter', 'mellom', 'over', 'under', 'nye', 'nytt', 'aret', 'dag', 'sier', 'kan', 'skal', 'vil',
+  'video', 'bilder', 'hvorfor', 'hvordan', 'hva', 'hvem', 'hvor', 'nar',
+])
 /** Small words of one language's headlines only (Nov 11, 2026): Albanian and Serbian, without accents */
 const PLAIN_IN: Readonly<Record<string, ReadonlySet<string>>> = {
   // Nov 19, 2026 (Devon, 5:33 PM: "Proceed with 1-3"): Vietnamese, Indonesian and Malay, Turkish and Polish, without
@@ -233,6 +240,55 @@ const PLAIN_IN: Readonly<Record<string, ReadonlySet<string>>> = {
   ]),
   id: INDONESIAN_PLAIN,
   ms: INDONESIAN_PLAIN,
+  // Nov 19, 2026, evening: Hungarian, Czech, Slovak, Finnish, Estonian, Lithuanian, Latvian, Norwegian and Swahili, without
+  // their accents as storyTokens reads them
+  hu: new Set([
+    'egy', 'hogy', 'nem', 'van', 'volt', 'lesz', 'mar', 'meg', 'csak', 'mint', 'mert', 'fel', 'utan', 'elott', 'kozott',
+    'alatt', 'felett', 'miatt', 'szerint', 'ujabb', 'nagy', 'tobb', 'minden', 'ezt', 'azt', 'ezek', 'azok', 'itt', 'ott',
+    'most', 'tegnap', 'holnap', 'evi', 'eves', 'kiderult', 'video', 'fotok', 'ilyen', 'olyan', 'amely', 'aki', 'ami',
+    'mely', 'miert', 'hogyan', 'mikor', 'mit', 'kik', 'neki', 'nekik', 'vele', 'veluk', 'sem', 'pedig', 'vagy', 'illetve',
+    'tovabba', 'lett', 'lehet', 'kell', 'fog', 'fognak', 'nincs', 'sincs', 'jon', 'megint', 'mondta', 'szerda', 'csutortok',
+  ]),
+  cs: new Set([
+    'jak', 'uz', 'jen', 'take', 'ale', 'nebo', 'ten', 'tento', 'tato', 'toto', 'ktere', 'ktery', 'ktera', 'jsou', 'byl',
+    'byla', 'bylo', 'byli', 'bude', 'budou', 'maji', 'neni', 'nove', 'novy', 'nova', 'roku', 'let', 'dnes', 'vcera',
+    'zitra', 'proc', 'kdy', 'kde', 'kdo', 'jake', 'video', 'foto', 'muze', 'mohou', 'chce', 'rekl', 'uvedl', 'podle',
+    'pred', 'mezi', 'pres', 'kvuli', 'behem', 'vice', 'nejen', 'vsak', 'tak', 'jako', 'nez', 'aby', 'pro', 'pri',
+  ]),
+  sk: new Set([
+    'ako', 'uz', 'len', 'tiez', 'ale', 'alebo', 'ten', 'tento', 'tato', 'toto', 'ktore', 'ktory', 'ktora', 'bol', 'bola',
+    'bolo', 'boli', 'bude', 'budu', 'maju', 'nie', 'nove', 'novy', 'nova', 'roku', 'rokov', 'dnes', 'vcera', 'zajtra',
+    'preco', 'kedy', 'kde', 'kto', 'ake', 'video', 'foto', 'moze', 'mozu', 'chce', 'povedal', 'uviedol', 'podla', 'pred',
+    'medzi', 'cez', 'kvoli', 'pocas', 'viac', 'vsak', 'tak', 'nez', 'aby', 'pre', 'pri',
+  ]),
+  fi: new Set([
+    'oli', 'ovat', 'olla', 'kun', 'jos', 'etta', 'mutta', 'tai', 'myos', 'nyt', 'vain', 'viela', 'kaikki', 'tama',
+    'tassa', 'nain', 'sen', 'sita', 'siita', 'joka', 'jotka', 'mika', 'miksi', 'miten', 'missa', 'milloin', 'kuka', 'uusi',
+    'uuden', 'vuoden', 'vuonna', 'paivan', 'tanaan', 'eilen', 'huomenna', 'video', 'kuvat', 'mukaan', 'jalkeen', 'ennen',
+    'aikana', 'yli', 'alle', 'noin', 'lahes', 'kertoo', 'sanoo', 'voi', 'pitaa', 'tulee', 'ei',
+  ]),
+  et: new Set([
+    'oli', 'see', 'kui', 'aga', 'voi', 'veel', 'juba', 'ainult', 'koik', 'mis', 'kes', 'miks', 'kuidas', 'kus', 'millal',
+    'uus', 'uue', 'aasta', 'tana', 'eile', 'homme', 'video', 'fotod', 'parast', 'enne', 'vahel', 'ule', 'umbes',
+    'peaaegu', 'utleb', 'saab', 'peab', 'tuleb', 'pole',
+  ]),
+  lt: new Set([
+    'yra', 'buvo', 'bus', 'kad', 'kai', 'jei', 'bet', 'taip', 'pat', 'dar', 'jau', 'tik', 'visi', 'visos', 'kuris',
+    'kuri', 'kurie', 'kas', 'kodel', 'kaip', 'kur', 'kada', 'naujas', 'nauja', 'metu', 'siandien', 'vakar', 'rytoj',
+    'video', 'nuotraukos', 'pagal', 'pries', 'tarp', 'per', 'apie', 'del', 'daugiau', 'sako', 'teigia', 'gali', 'turi',
+  ]),
+  lv: new Set([
+    'bija', 'bus', 'kad', 'bet', 'vai', 'ari', 'vel', 'jau', 'tikai', 'visi', 'kas', 'kurs', 'kura', 'kuri', 'kapec',
+    'kur', 'jauns', 'jauna', 'gada', 'sodien', 'vakar', 'rit', 'video', 'foto', 'pec', 'pirms', 'starp', 'par', 'del',
+    'vairak', 'saka', 'var', 'nav',
+  ]),
+  no: NORWEGIAN_PLAIN,
+  nb: NORWEGIAN_PLAIN,
+  sw: new Set([
+    'katika', 'kuwa', 'huku', 'hiyo', 'hii', 'hizi', 'hayo', 'huo', 'yake', 'wake', 'zake', 'yao', 'wao', 'sasa', 'leo',
+    'jana', 'kesho', 'mpya', 'zaidi', 'baada', 'kabla', 'kati', 'juu', 'chini', 'dhidi', 'kama', 'lakini', 'pia', 'bado',
+    'kuhusu', 'video', 'picha', 'asema', 'alisema', 'amesema', 'wasema', 'kwa',
+  ]),
   tr: new Set([
     'icin', 'bir', 'gibi', 'kadar', 'sonra', 'once', 'olan', 'olarak', 'oldu', 'olmak', 'daha', 'cok', 'nasil', 'neden',
     'kim', 'hangi', 'her', 'tum', 'butun', 'ama', 'ancak', 'fakat', 'veya', 'yeni', 'son', 'ilk', 'iki', 'dedi', 'acikladi',
@@ -776,12 +832,15 @@ async function quietPlaces(now: Date): Promise<string[]> {
  * The languages whose waiting reports are searched for: the English list's, and the translated list's (gdelt-articles.ts
  * TRANSLATED_LANGUAGES). Nov 19, 2026: Hindi, Bengali, Marathi, Tamil, Telugu, Kannada, Malayalam, Gujarati, Punjabi,
  * Vietnamese, Indonesian, Malay, Turkish, Italian, Polish, Dutch, Romanian, Ukrainian, Danish, Croatian, Bosnian,
- * Slovenian, Bulgarian and Macedonian too
+ * Slovenian, Bulgarian and Macedonian too; Hungarian, Czech, Slovak, Finnish, Estonian, Lithuanian, Latvian, Norwegian and
+ * Swahili from that evening
  */
 export const SEARCHED_LANGUAGES = [
   'en', 'fr', 'de', 'es', 'pt', 'ru', 'ar', 'sq', 'sr', 'ja', 'zh', 'ko', 'el', 'fa', 'ur', 'th',
   'hi', 'bn', 'mr', 'ta', 'te', 'kn', 'ml', 'gu', 'pa', 'vi', 'id', 'ms', 'tr', 'it', 'pl', 'nl', 'ro', 'uk', 'da', 'hr',
   'bs', 'sl', 'bg', 'mk',
+  // Nov 19, evening
+  'hu', 'cs', 'sk', 'fi', 'et', 'lt', 'lv', 'no', 'nb', 'sw',
 ] as const
 
 export function waitingQuery(quiet: readonly string[], now: Date): { sql: string; bindings: unknown[] } {

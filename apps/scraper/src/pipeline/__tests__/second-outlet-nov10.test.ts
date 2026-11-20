@@ -61,8 +61,8 @@ describe("GDELT's translated list (Nov 10, 2026)", () => {
       gkgLine('20261110170000', 'https://www.srf.ch/news/liechtenstein-budget', 'Liechtensteiner Regierung verabschiedet Budget 2027', 'deu'),
       gkgLine('20261110170000', 'https://elpais.com/internacional/x', 'El precio del combustible sube en Burundi', 'spa'),
       gkgLine('20261110170000', 'https://www.publico.pt/mundo/y', 'Cabo Verde aprova orçamento para 2027', 'por'),
-      // (a language still not read: Hungarian; Italian has been read since Nov 19)
-      gkgLine('20261110170000', 'https://hvg.hu/vilag/z', 'Emelkedik az üzemanyag ára Burundiban', 'hun'),
+      // (a language still not read: Armenian; Italian and Hungarian have been read since Nov 19)
+      gkgLine('20261110170000', 'https://news.am/arm/z', 'Բուրունդիում վառելիքը թանկացել է', 'hye'),
       gkgLine('20261110170000', 'https://www.lemonde.fr/no-language', 'Une page sans langue', ''),
     ].join('\n')
     const found = readArticles(text, TRANSLATED_LANGUAGES)

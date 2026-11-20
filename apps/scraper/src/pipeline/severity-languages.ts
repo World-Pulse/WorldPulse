@@ -53,7 +53,7 @@ export function foreignNumber(raw: string): number {
 }
 
 /** "at least", "more than", "nearly" before a count */
-const ABOUT = String.raw`(?:(?:au\s+moins|plus\s+de|près\s+de|environ|quelque|al\s+menos|más\s+de|casi|unos|unas|cerca\s+de|pelo\s+menos|mais\s+de|quase|cerca\s+de|mindestens|mehr\s+als|fast|rund|etwa|über|не\s+менее|по\s+меньшей\s+мере|более|свыше|около|почти|порядка|نحو|حوالي|قرابه|اكثر\s+من|ما\s+لا\s+يقل\s+عن|ما\s+يزيد\s+عن|ما\s+يقارب|te\s+pakten|me\s+shume\s+se|rreth|afro|gati|najmanje|vise\s+od|preko|oko|skoro|gotovo|co\s+najmniej|ponad|około|blisko|prawie|en\s+az|ít\s+nhất|hơn|khoảng|gần|sedikitnya|setidaknya|sekitar|lebih\s+dari|hampir|almeno|oltre|circa|quasi|minstens|ruim|bijna|zeker|cel\s+puțin|peste|aproape|щонайменше|понад|майже|близько)\s+)?`
+const ABOUT = String.raw`(?:(?:au\s+moins|plus\s+de|près\s+de|environ|quelque|al\s+menos|más\s+de|casi|unos|unas|cerca\s+de|pelo\s+menos|mais\s+de|quase|cerca\s+de|mindestens|mehr\s+als|fast|rund|etwa|über|не\s+менее|по\s+меньшей\s+мере|более|свыше|около|почти|порядка|نحو|حوالي|قرابه|اكثر\s+من|ما\s+لا\s+يقل\s+عن|ما\s+يزيد\s+عن|ما\s+يقارب|te\s+pakten|me\s+shume\s+se|rreth|afro|gati|najmanje|vise\s+od|preko|oko|skoro|gotovo|co\s+najmniej|ponad|około|blisko|prawie|en\s+az|ít\s+nhất|hơn|khoảng|gần|sedikitnya|setidaknya|sekitar|lebih\s+dari|hampir|almeno|oltre|circa|quasi|minstens|ruim|bijna|zeker|cel\s+puțin|peste|aproape|щонайменше|понад|майже|близько|legalább|több\s+mint|mintegy|csaknem|közel|nejméně|nejmíň|přes|téměř|zhruba|najmenej|vyše|takmer|približne)\s+)?`
 
 export interface LanguageRules {
   /** "12 morts", "12 personnes tuées": the count is the first group */
@@ -92,6 +92,9 @@ const stemsM = (alts: string) => new RegExp(`${MB}(?:${alts})`, 'u')
 const afterM = (people: string, join: string, what: string, end = true) =>
   new RegExp(`${MB}(\\d+)\\s*(?:(?:${people})\\s*)?(?:(?:${join})\\s+)?(?:${what})${end ? ME : ''}`, 'gu')
 const beforeM = (what: string) => new RegExp(`${MB}(?:${what})\\s*(?:\\S+\\s+)?(\\d+)`, 'gu')
+
+/** A word's start (Hungarian, Czech and Slovak join endings to it: "robbanásban", in the explosion; "útoku", of the attack) */
+const stems = (alts: string) => new RegExp(`${B}(?:${alts})`, 'iu')
 
 /** Indonesian and Malay share their news words (rules below, for both) */
 const INDONESIAN: LanguageRules = {
@@ -468,6 +471,45 @@ export const LANGUAGE_RULES: Readonly<Record<string, LanguageRules>> = {
       [words('удар|удари|атака|атаки|бої|зіткнення|армія|зсу|ракета|ракети|дрон|дрони|безпілотник|безпілотники|бпла|шахед|шахеди|протест|мітинг|страйк|затримали|затримано|арешт|викрадення|стрілянина|землетрус|повінь|пожежа|зсув|посуха|епідемія|аварія|дтп|вибори|відставка|перемир\'я|санкції|мита'), 'medium'],
     ],
     opinion: words('колонка|думка|аналітика|блог'),
+  },
+  // Nov 19, 2026, evening (Devon: "where should we add and improve now?"): Hungarian, Czech and Slovak, the most read
+  // of the European languages the second-outlet search didn't take ("5 ember meghalt", "zahynulo 5 lidí", "5 mŕtvych")
+  hu: {
+    deadAfter: after('ember|személy|katona|civil|gyerek|gyermek|utas', 'is', 'meghalt|meghaltak|halott|halottak|halálos\\s+áldozat|halálos\\s+áldozata|életét\\s+vesztette|vesztette\\s+életét|elhunyt'),
+    deadBefore: before('halálos\\s+áldozatok\\s+száma(?:\\s+(?:emelkedett|nőtt))?|halottak\\s+száma(?:\\s+(?:emelkedett|nőtt))?|meghalt|meghaltak'),
+    injuredAfter: after('ember|személy|gyerek|gyermek|utas', 'is', 'megsérült|megsérültek|sérült|sérültek|sebesült|sebesültek|megsebesült'),
+    death: stems('meghalt|halott|halál|elhunyt|megölt|meggyilkol|holttest'),
+    events: [
+      [stems('légicsapás|bombáz|robbanás|robbantás|terrortámadás|merénylet|puccs|mészárlás|túsz|szükségállapot|hadiállapot|cunami|hurrikán'), 'high'],
+      [stems('támadás|megtámad|összecsap|hadsereg|rakéta|drón|tüntet|sztrájk|letartóztat|őrizetbe|elrabol|lövöldöz|földreng|árvíz|tűzvész|földcsuszam|aszály|járvány|baleset|választás|lemond|tűzszünet|szankció|vámok|vámháború'), 'medium'],
+    ],
+    opinion: stems('vélemény|elemzés|publicisztika|jegyzet|kommentár'),
+  },
+  cs: {
+    deadAfter: after('lidí|osob|vojáků|civilistů|dětí|lidé|osoby', 'už|již', 'zemřelo|zemřeli|zemřel|zemřela|zahynulo|zahynuli|zahynul|zahynula|mrtvých|mrtví|bylo\\s+zabito|přišlo\\s+o\\s+život|přišli\\s+o\\s+život'),
+    deadBefore: before('počet\\s+obětí(?:\\s+(?:stoupl|vzrostl)\\s+na)?|počet\\s+mrtvých(?:\\s+(?:stoupl|vzrostl)\\s+na)?|zemřelo|zemřeli|zahynulo|zahynuli|zabilo'),
+    injuredAfter: after('lidí|osob|dětí|lidé|osoby', 'bylo|byli', 'zraněno|zraněných|zraněni|zranění'),
+    injuredBefore: before('zranilo|zraněno'),
+    death: words('zemřel|zemřela|zemřelo|zemřeli|zahynul|zahynula|zahynuli|zahynulo|mrtví|mrtvých|zabit|zabita|zabito|zabiti|vražda|vraždy'),
+    events: [
+      [stems('nálet|bombardov|výbuch|exploz|teroristick|sebevražedn|převrat|masakr|rukojm|výjimečný\\s+stav|stanné\\s+právo|tsunami|hurikán'), 'high'],
+      [stems('útok|útoky|útoku|armád|raket|dron|protest|demonstr|stávk|zatčen|zadržen|unesen|únos|střelb|zemětřes|povodn|povodeň|požár|sesuv|epidemi|nehod|havári|volby|voleb|rezign|příměří|sankc'), 'medium'],
+      [words('střety|střetech|střetů|cla|clo'), 'medium'],
+    ],
+    opinion: stems('komentář|názor|analýz|glosa|sloupek'),
+  },
+  sk: {
+    deadAfter: after('ľudí|osôb|vojakov|civilistov|detí|ľudia|osoby', 'už', 'zomrelo|zomreli|zomrel|zomrela|zahynulo|zahynuli|zahynul|zahynula|mŕtvych|mŕtvi|prišlo\\s+o\\s+život|prišli\\s+o\\s+život'),
+    deadBefore: before('počet\\s+obetí(?:\\s+(?:stúpol|vzrástol)\\s+na)?|počet\\s+mŕtvych(?:\\s+(?:stúpol|vzrástol)\\s+na)?|zomrelo|zomreli|zahynulo|zahynuli|zabilo'),
+    injuredAfter: after('ľudí|osôb|detí|ľudia|osoby', 'bolo|boli', 'zranených|zranení|zranilo'),
+    injuredBefore: before('zranilo|zranených'),
+    death: words('zomrel|zomrela|zomrelo|zomreli|zahynul|zahynula|zahynuli|zahynulo|mŕtvi|mŕtvych|zabitý|zabitá|zabití|vražda|vraždy'),
+    events: [
+      [stems('nálet|bombardov|výbuch|explózi|teroristick|samovražedn|prevrat|masaker|rukojem|výnimočný\\s+stav|stanné\\s+právo|cunami|tsunami|hurikán'), 'high'],
+      [stems('útok|útoky|útoku|armád|rakiet|raket|dron|protest|demonštr|štrajk|zatkn|zadržan|unesen|únos|streľb|zemetras|povodn|povodeň|požiar|zosuv|epidémi|nehod|havári|voľby|volieb|rezign|prímeri|sankci'), 'medium'],
+      [words('strety|stretoch|stretov|clá|clo'), 'medium'],
+    ],
+    opinion: stems('komentár|názor|analýz|glosa|stĺpček'),
   },
 }
 

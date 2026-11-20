@@ -57,6 +57,10 @@ export const TRANSLATED_LANGUAGES: Readonly<Record<string, string>> = {
   hin: 'hi', ben: 'bn', mar: 'mr', tam: 'ta', tel: 'te', kan: 'kn', mal: 'ml', guj: 'gu', pan: 'pa',
   vie: 'vi', ind: 'id', msa: 'ms', may: 'ms', tur: 'tr', ita: 'it', pol: 'pl', nld: 'nl', dut: 'nl',
   ron: 'ro', rum: 'ro', ukr: 'uk', dan: 'da', hrv: 'hr', bos: 'bs', slv: 'sl', bul: 'bg', mkd: 'mk', mac: 'mk',
+  // that evening: Hungarian, Czech, Slovak, Finnish, Estonian, Lithuanian, Latvian, Norwegian, Swahili (the 22:45 UTC file
+  // of Nov 19: 5 Hungarian, 5 Finnish, 2 Lithuanian, 1 Slovak, 1 Norwegian article)
+  hun: 'hu', ces: 'cs', cze: 'cs', slk: 'sk', slo: 'sk', fin: 'fi', est: 'et', lit: 'lt', lav: 'lv', nor: 'no', nob: 'no',
+  swa: 'sw',
 }
 /**
  * A fresh address for each request (Oct 22): GDELT lists a file the moment it
