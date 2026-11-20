@@ -334,6 +334,11 @@ const MORE_PLACES_RE = new RegExp(
   'giu',
 )
 
+/** The place as world-places.ts spells it, when the name is one of its places ("sao jose dos campos" → "São José dos Campos") */
+export function listedPlace(name: string): string | undefined {
+  return MORE_PLACES.get(unaccent(name.trim()).toLowerCase())
+}
+
 /** Places from world-places.ts the text names (at most 3), beyond `known` (what placesInText found) */
 export function morePlacesInText(title: string, body: string | null, known: readonly string[] = []): string[] {
   const text = unaccent(`${title}. ${body ?? ''}`)

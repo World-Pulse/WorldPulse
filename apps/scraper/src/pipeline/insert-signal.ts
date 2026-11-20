@@ -23,7 +23,9 @@
 import { db } from '../lib/postgres'
 import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
-import { correlateSignal, corroborateWithDuplicate } from './correlate'
+import { correlateSignal, corroborateWithDuplicate, storyWords } from './correlate'
+import { countryNameOf } from './world-countries'
+import { placesInText } from './geo'
 import type { CorrelationCandidate } from './correlate'
 import { recordSuccess } from '../health'
 import { computeReliabilityScore, maxSeverityForSourceCount } from './reliability-score'
@@ -32,6 +34,25 @@ import { processSignalForKnowledgeGraph, extractEntitiesRuleBased, upsertEntityN
 import { fingerprintSignal } from './fingerprints'
 import { signalsHavePublishedAt, publishedAtFor, sourceKey } from './signal-columns'
 import { decodeEntities, cleanUrl, cleanTitle, summaryWithoutNotes, feedText, HTML_TAG_RE, withoutOutletName } from './text'
+
+/**
+ * The countries a headline names in any script, as the story matcher reads them (Nov 20, 2026), named as the
+ * gazetteer names them ("United States"), at most two. The rules read English names in Latin letters: of 30,323
+ * reports of 13 hours, they found a place in the headlines of under 1% of those in Arabic, Russian or Chinese; with
+ * the countries the matcher reads in Arabic, Cyrillic, Greek, Chinese, Japanese, Korean and Thai letters, 40%, 41%
+ * and 17%. Used when the rules found no place.
+ */
+export function matcherCountries(title: string): string[] {
+  const out: string[] = []
+  for (const word of storyWords(title)) {
+    if (!word.startsWith('@') || out.length >= 2) continue
+    const name = countryNameOf(word.slice(1))
+    // as the gazetteer names it, or not at all: a name it doesn't know would be dropped by the start-up repair
+    const [place] = name ? placesInText(name) : []
+    if (place && !out.includes(place)) out.push(place)
+  }
+  return out
+}
 
 /** Signal ids are UUIDs; the dedup store can also hold '1' or 'pending' */
 const SIGNAL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -394,10 +415,16 @@ export async function insertAndCorrelate(
 
     if (signalSeverity === 'high' || signalSeverity === 'critical') {
       // Full LLM extraction for high-value signals (with rule-based fallback)
-      await processSignalForKnowledgeGraph(signalId, signalTitle, signalSummary, signalTime)
+      const graph = await processSignalForKnowledgeGraph(signalId, signalTitle, signalSummary, signalTime)
+      if (!graph.entities.some(e => e.type === 'location')) {
+        for (const name of matcherCountries(signalTitle)) await upsertEntityNode({ name, type: 'location', salience: 0.5 }, signalId, signalTime)
+      }
     } else {
       // Rule-based extraction only — zero API cost
       const extraction = extractEntitiesRuleBased(signalTitle, signalSummary)
+      if (!extraction.entities.some(e => e.type === 'location')) {
+        for (const name of matcherCountries(signalTitle)) extraction.entities.push({ name, type: 'location', salience: 0.5 })
+      }
       for (const entity of extraction.entities) {
         await upsertEntityNode(entity, signalId, signalTime)
       }
