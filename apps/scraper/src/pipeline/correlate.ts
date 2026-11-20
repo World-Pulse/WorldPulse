@@ -642,11 +642,21 @@ export const FUNCTION_WORDS = new Set((
   'kod nakon zbog koji koja koje kojeg biti vise nije ili sto kao pri preko prema protiv tokom oko bez izmedju nove novi sve ' +
   'svi sta danas juce sutra ter tudi kot kjer zaradi proti brez nad bil bila bilo bodo lahko vec ' +
   // da
-  'det til har ikke efter fra som vil skal blev bliver ved mellem nye hendes deres eller ogsa'
+  'det til har ikke efter fra som vil skal blev bliver ved mellem nye hendes deres eller ogsa ' +
+  // ha (Nov 20, 2026), as foldAccents leaves them; not those that are English words or names ("game", "sun", "take",
+  // "Wanda", "Sai", "Amma")
+  'daga cikin kuma domin saboda yanzu tare wajen inda yadda cewa wadanda wadda zai zata suka aka masu wani wata wasu yau ' +
+  'jiya yayin lokacin bayan kafin yake suke ake'
 ).split(' '))
 
-/** Letters that lose their marks but don't come apart in Unicode's decomposition */
-const LETTER_FOLDS: Record<string, string> = { 'ß': 'ss', 'æ': 'ae', 'œ': 'oe', 'ø': 'o', 'đ': 'd', 'ð': 'd', 'ł': 'l', 'ı': 'i', 'þ': 'th', 'ħ': 'h' }
+/**
+ * Letters that lose their marks but don't come apart in Unicode's decomposition; Hausa's hooked letters too (Nov 20,
+ * 2026): "ƙasar" and "kasar", "ɗan" and "dan" are one word each, and storyWords kept only a-z, so "Ƙasar" was "asar"
+ */
+const LETTER_FOLDS: Record<string, string> = {
+  'ß': 'ss', 'æ': 'ae', 'œ': 'oe', 'ø': 'o', 'đ': 'd', 'ð': 'd', 'ł': 'l', 'ı': 'i', 'þ': 'th', 'ħ': 'h',
+  'ɓ': 'b', 'ɗ': 'd', 'ƙ': 'k', 'ƴ': 'y',
+}
 
 /**
  * Lower-case text without its accents (Nov 5, 2026): "Mišo Kovač" and "Miso Kovac", "Sécurité" and
@@ -655,7 +665,7 @@ const LETTER_FOLDS: Record<string, string> = { 'ß': 'ss', 'æ': 'ae', 'œ': 'oe
  */
 export function foldAccents(text: string): string {
   // (recomposed at the end: a Korean syllable comes apart into its letters in the decomposition, Nov 18, 2026)
-  return text.toLowerCase().normalize('NFD').replace(/\p{M}+/gu, '').replace(/[ßæœøđðłıþħ]/g, ch => LETTER_FOLDS[ch] ?? ch).normalize('NFC')
+  return text.toLowerCase().normalize('NFD').replace(/\p{M}+/gu, '').replace(/[ßæœøđðłıþħɓɗƙƴ]/g, ch => LETTER_FOLDS[ch] ?? ch).normalize('NFC')
 }
 
 /**

@@ -7,7 +7,7 @@ import { describe, it, expect, vi } from 'vitest'
 
 vi.mock('../../lib/redis', () => ({ redis: {} }))
 
-const { sourceDelay, cyclePause, CYCLE_BUDGET, SOURCE_PAUSE_MIN, oneCycleAtATime, cycleStart, NEWS_SOURCE_REGISTRY, READ_AT_ONCE, readRounds } = await import('../news-rss')
+const { sourceDelay, cyclePause, CYCLE_BUDGET, SOURCE_PAUSE_MIN, oneCycleAtATime, cycleStart, NEWS_SOURCE_REGISTRY, READ_AT_ONCE, readRounds, neverRead } = await import('../news-rss')
 
 describe('sourceDelay', () => {
   it('keeps 5 s while the list is small, then shortens so the pauses take at most 22.5 of the 30 minutes', () => {
@@ -79,6 +79,27 @@ describe('feeds read a few at a time (Oct 20, 2026, 475 feeds; six at a time fro
     expect(pass(475, 6_000, 2)).toBeLessThan(30)
     expect(pass(700, 4_000, 2)).toBeLessThan(30)
     expect(pass(475, 4_000, 1)).toBeGreaterThan(30)          // what one at a time would do if reads slowed to 4 s
+  })
+})
+
+describe('the feeds never read yet first (Nov 20, 2026)', () => {
+  const ids = ['a', 'b', 'c', 'd', 'e']
+  it('names the feeds the record has never seen, by their place in the list', () => {
+    expect(neverRead(ids, { a: 't', b: 't', d: 't' })).toEqual([2, 4])
+    expect(neverRead(ids, { a: 't', b: 't', c: 't', d: 't', e: 't', gone: 't' })).toEqual([])
+  })
+
+  it('names none while the record is missing or new: every feed would look new', () => {
+    expect(neverRead(ids, null)).toEqual([])
+    expect(neverRead(ids, {})).toEqual([])
+    expect(neverRead(ids, { a: 't', b: 't' })).toEqual([])   // fewer than half known
+    expect(neverRead(ids, { a: 't', b: 't' }, 2)).toEqual([])
+  })
+
+  it("reads the list's newest feeds first while the record knows none (new outlets are added at its end)", () => {
+    expect(neverRead(ids, {}, 2)).toEqual([3, 4])
+    expect(neverRead(ids, {}, 9)).toEqual([0, 1, 2, 3, 4])
+    expect(neverRead(ids, null, 2)).toEqual([])             // Redis didn't answer: no record at all
   })
 })
 

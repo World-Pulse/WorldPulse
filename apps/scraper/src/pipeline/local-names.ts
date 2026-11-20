@@ -1294,6 +1294,32 @@ const SWEDISH: Rule[] = [
   r('vita\\s+huset', 'White House'),
 ]
 
+/**
+ * Hausa (Nov 20, 2026; Devon, Nov 19, 8:37 PM: "cover languages where readers are"): about 94 million speakers in
+ * Nigeria, Niger and beyond, the list's first feeds in it. A name may take the linker "-r" or "-n" ("Najeriyar", "the
+ * Nigeria"), and is written with the hooked letters ɗ ƙ ɓ or without them ("Iraƙi", "Iraki"). Nigeria's states and
+ * cities keep their English names in Hausa (Kano, Kaduna, Borno, Abuja), so only the others are here; Niger State
+ * ("Neja") and Plateau ("Filato") read as Nigeria. China is "Sin" with its capital only. "mali" (wealth) is blanked
+ * out in lower case: the country is "Mali". Chad ("Chadi") as "Chadian": the place-finder doesn't read "Chad" alone, a
+ * first name.
+ */
+const ha = (alts: string, as: string): Rule => r(`(?:${alts})[rn]?`, as)
+const HAUSA: Rule[] = [
+  mask('mali'),
+  ha('n[ai]jeriya', 'Nigeria'), ha('legas', 'Lagos'), ha('zariya', 'Zaria'), ha('fatakwal', 'Port Harcourt'),
+  ha('neja|filato|binuwai|benuwai', 'Nigeria'),
+  ha('nijar', 'Niger'), ha('yamai', 'Niamey'), ha('agadas', 'Agadez'), ha('damagaram', 'Zinder'),
+  ha('chadi|cadi', 'Chadian'), ha('kamaru', 'Cameroon'), ha('libiya', 'Libya'), ha('aljeriya', 'Algeria'), ha('masar', 'Egypt'),
+  ha('moroko', 'Morocco'), ha('tunisiya', 'Tunisia'), ha('habasha', 'Ethiopia'), r('sudan\\s+ta\\s+kudu', 'South Sudan'),
+  r('afirka\\s+ta\\s+kudu', 'South Africa'),
+  ha('amurka', 'United States'), ha('birtaniya|ingila', 'United Kingdom'), ha('landan', 'London'), ha('faransa', 'France'),
+  ha('jamus', 'Germany'), ha('rasha', 'Russia'), cs('Sin', 'China'), ha('indiya', 'India'), ha('ira[ƙk]i', 'Iraq'),
+  ha('siriya', 'Syria'), ha("isra[’'‘ʼ]?ila", 'Israel'), ha('falas[ɗd]inu', 'Palestine'), ha('labanan', 'Lebanon'),
+  ha('saudiyy?a|saudi\\s+arabiya', 'Saudi Arabia'), ha('turkiyy?a', 'Turkey'), ha('yukuren|yukren', 'Ukraine'),
+  ha('afganistan', 'Afghanistan'), ha('katar', 'Qatar'), r('koriya\\s+ta\\s+arewa', 'North Korea'),
+  r('koriya\\s+ta\\s+kudu', 'South Korea'), ha('kanada', 'Canada'), ha('barazil', 'Brazil'),
+]
+
 export const LOCAL_NAMES: Record<string, Rule[]> = {
   ja: JAPANESE, zh: CHINESE, th: THAI,
   hi: HINDI,
@@ -1306,6 +1332,7 @@ export const LOCAL_NAMES: Record<string, Rule[]> = {
   ta: TAMIL, te: TELUGU, kn: KANNADA, ml: MALAYALAM, mr: MARATHI, gu: GUJARATI, or: ODIA, as: ASSAMESE, sd: SINDHI, am: AMHARIC,
   pa: PUNJABI, si: SINHALA, my: BURMESE, tl: FILIPINO, fil: FILIPINO,
   ne: NEPALI, hy: ARMENIAN, bs: BOSNIAN, uz: UZBEK, kk: KAZAKH, sv: SWEDISH, az: AZERBAIJANI,
+  ha: HAUSA,
 }
 
 /** The text with its language's place names in English and its look-alike words blanked out, for finding its place */

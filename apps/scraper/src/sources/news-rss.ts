@@ -210,6 +210,28 @@ export const CYCLE_RESUME_MS = 12 * 3_600_000
 
 export interface CyclePlace { startedAt: number; nextId: string }
 
+/** When each feed was last read: a hash of feed id → time (Nov 20, 2026; neverRead) */
+const READ_KEY = 'news-rss:read'
+
+/**
+ * The feeds a cycle reads before the others: those never read yet (Nov 20, 2026), by their place in the list. A feed
+ * added to the list waited for the reader to reach it at the end of a pass, which took over three hours that morning
+ * on the overloaded server: the 37 outlets that went live at 7:44 AM had no report by 9 AM. Read first, a new outlet's
+ * stories come in within minutes of its deploy. While the record knows fewer than half the feeds (new, or lost with
+ * Redis), every feed would look new: then none, except when it knows none at all, the list's `newest` feeds (new
+ * outlets are added at its end), so the outlets added just before the record began are read first too.
+ */
+export function neverRead(ids: readonly string[], readAt: Readonly<Record<string, string>> | null | undefined, newest = 0): number[] {
+  if (!readAt || typeof readAt !== 'object') return []
+  const known = ids.filter(id => Object.hasOwn(readAt, id)).length
+  if (known === 0) return ids.map((_, i) => i).slice(Math.max(0, ids.length - Math.max(0, Math.floor(newest))))
+  if (known < ids.length / 2) return []
+  return ids.flatMap((id, i) => (Object.hasOwn(readAt, id) ? [] : [i]))
+}
+
+/** The list's newest feeds read first while the record of reads is empty (neverRead): Nov 20, 2026's 46 and a few more */
+export const NEWEST_FIRST = 50
+
 /**
  * Where a poll cycle starts (Oct 20, 2026). Every deploy restarts the
  * scraper, and a cycle always started again at the top of the list, so on a
@@ -1169,20 +1191,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     language:        'en',
   },
   {
-    id:              'abc-pacific',
-    name:            'ABC Pacific (Australia)',
-    feedUrl:         'https://www.abc.net.au/news/feed/51120/rss.xml',
-    category:        'geopolitics',
-    biasLabel:       'center',
-    reliability:     0.85,
-    countryCode:     'AU',
-    defaultLat:      -25.27,
-    defaultLng:      133.77,
-    defaultLocation: 'Pacific / Australia',
-    extraTags:       ['abc-australia', 'pacific', 'pacific-islands', 'australia'],
-    language:        'en',
-  },
-  {
     id:              'rnz-national',
     name:            'RNZ National News',
     feedUrl:         'https://www.rnz.co.nz/rss/national.xml',
@@ -1819,8 +1827,10 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
   },
   {
     id:              'abc-au-world',
-    name:            'ABC Australia World',
-    feedUrl:         'https://www.abc.net.au/news/feed/51120/rss.xml',
+    name:            'ABC News (Australia)',
+    // ABC's current "Just In" (Nov 20, 2026): 51120, read before by this entry and by abc-pacific (removed), is the
+    // old address of that list, its newest item 14 hours older than this one's
+    feedUrl:         'https://www.abc.net.au/news/feed/10719976/rss.xml',
     category:        'breaking',
     biasLabel:       'center',
     reliability:     0.86,
@@ -13381,20 +13391,8 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['okinawa-times', 'japan', 'okinawa', 'us-bases'],
     language:        'ja',
   },
-  {
-    id:              'rfi-chinese',
-    name:            'RFI Chinese',
-    feedUrl:         'https://www.rfi.fr/cn/rss',
-    category:        'geopolitics',
-    biasLabel:       'state-media',
-    reliability:     0.58,
-    countryCode:     'FR',
-    defaultLat:      48.85,
-    defaultLng:      2.35,
-    defaultLocation: 'Paris, France',
-    extraTags:       ['rfi', 'china', 'state-media', 'chinese-language'],
-    language:        'zh',
-  },
+  // (RFI Chinese left the list on Nov 20, 2026: France Médias Monde's terms reserve text and data mining, under article
+  // L122-5-3 of France's intellectual property code, and bar automatic copying for AI; RFI Hausa wasn't added for it)
   {
     id:              'voa-chinese',
     name:            'VOA Chinese',
@@ -17506,21 +17504,6 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['cyprus', 'europe', 'greek'],
     language:        'el',
   },
-  // Chiba Nippo, Chiba prefecture
-  {
-    id:              'chiba-nippo',
-    name:            'Chiba Nippo',
-    feedUrl:         'https://www.chibanippo.co.jp/rss.xml',
-    category:        'geopolitics',
-    biasLabel:       'center',
-    reliability:     0.65,
-    countryCode:     'JP',
-    defaultLat:      35.61,
-    defaultLng:      140.12,
-    defaultLocation: 'Chiba, Japan',
-    extraTags:       ['japan', 'east-asia', 'japanese'],
-    language:        'ja',
-  },
   // Fukui Shimbun, Fukui prefecture
   {
     id:              'fukui-shimbun',
@@ -18376,6 +18359,146 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     extraTags:       ['greece', 'europe', 'greek', 'business'],
     language:        'el',
   },
+  // Hausa (Nov 20, 2026; Devon, Nov 19, 8:37 PM: "cover languages where readers are"): about 94 million speakers, and not
+  // in GDELT's translated list. The list's first three outlets in it, each advertised on its homepage, fresh and allowed by
+  // robots.txt (local-names, severity-languages and correlate read it)
+  // Premium Times Hausa, Abuja
+  {
+    id:              'premium-times-hausa',
+    name:            'Premium Times Hausa',
+    feedUrl:         'https://hausa.premiumtimesng.com/feed',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.74,
+    countryCode:     'NG',
+    defaultLat:      9.08,
+    defaultLng:      7.4,
+    defaultLocation: 'Abuja, Nigeria',
+    extraTags:       ['premium-times', 'nigeria', 'west-africa', 'hausa'],
+    language:        'ha',
+  },
+  // TRT Afrika Hausa (Turkey's state broadcaster, 0.5 as TRT Haber); its terms bar overloading the site with automated programs, not reading it
+  {
+    id:              'trt-afrika-hausa',
+    name:            'TRT Afrika Hausa',
+    feedUrl:         'https://www.trtafrika.com/hausa/feed/rss.xml',
+    category:        'geopolitics',
+    biasLabel:       'state-media',
+    reliability:     0.5,
+    countryCode:     'TR',
+    defaultLat:      41.01,
+    defaultLng:      28.98,
+    defaultLocation: 'Istanbul, Turkey',
+    extraTags:       ['trt', 'nigeria', 'niger', 'west-africa', 'state-media', 'hausa'],
+    language:        'ha',
+  },
+  // Freedom Radio Nigeria, Kano
+  {
+    id:              'freedom-radio-kano',
+    name:            'Freedom Radio Nigeria',
+    feedUrl:         'https://freedomradionig.com/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.62,
+    countryCode:     'NG',
+    defaultLat:      12.0,
+    defaultLng:      8.52,
+    defaultLocation: 'Kano, Nigeria',
+    extraTags:       ['freedom-radio', 'nigeria', 'kano', 'west-africa', 'hausa'],
+    language:        'ha',
+  },
+  // Pakistan and Bangladesh (Nov 20, 2026), the coverage balance's next gaps: 7 feeds each for about 250 and 175 million
+  // people. Each feed or news sitemap named by the site itself, fresh and allowed by robots.txt
+  // Aaj News, Karachi, in Urdu
+  {
+    id:              'aaj-news',
+    name:            'Aaj News',
+    feedUrl:         'https://www.aaj.tv/feeds/home',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.62,
+    countryCode:     'PK',
+    defaultLat:      24.86,
+    defaultLng:      67.01,
+    defaultLocation: 'Karachi, Pakistan',
+    extraTags:       ['aaj-news', 'pakistan', 'south-asia', 'urdu'],
+    language:        'ur',
+  },
+  // Geo News (Jang Group), Karachi, from its news sitemap (it advertises no feed)
+  {
+    id:              'geo-news',
+    name:            'Geo News',
+    feedUrl:         'https://www.geo.tv/assets/uploads/google_news_latest.xml',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.66,
+    countryCode:     'PK',
+    defaultLat:      24.86,
+    defaultLng:      67.01,
+    defaultLocation: 'Karachi, Pakistan',
+    extraTags:       ['geo-news', 'pakistan', 'south-asia'],
+    language:        'en',
+  },
+  // ARY News, Karachi, from its news sitemap; its terms limit use to personal use and ask bots not to send more requests than a person would
+  {
+    id:              'ary-news',
+    name:            'ARY News',
+    feedUrl:         'https://arynews.tv/sitemap/news_sitemap.xml',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.6,
+    countryCode:     'PK',
+    defaultLat:      24.86,
+    defaultLng:      67.01,
+    defaultLocation: 'Karachi, Pakistan',
+    extraTags:       ['ary-news', 'pakistan', 'south-asia'],
+    language:        'en',
+  },
+  // The News International (Jang Group), Karachi, from its news sitemap
+  {
+    id:              'the-news-pk',
+    name:            'The News International',
+    feedUrl:         'https://www.thenews.com.pk/assets/uploads/google_news_latest.xml',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.68,
+    countryCode:     'PK',
+    defaultLat:      24.86,
+    defaultLng:      67.01,
+    defaultLocation: 'Karachi, Pakistan',
+    extraTags:       ['the-news', 'pakistan', 'south-asia'],
+    language:        'en',
+  },
+  // The Daily Star, Dhaka, from its news sitemap (it advertises no feed); its notice bars commercial use without permission
+  {
+    id:              'daily-star-bd',
+    name:            'The Daily Star (Bangladesh)',
+    feedUrl:         'https://www.thedailystar.net/googlenews.xml',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.74,
+    countryCode:     'BD',
+    defaultLat:      23.81,
+    defaultLng:      90.41,
+    defaultLocation: 'Dhaka, Bangladesh',
+    extraTags:       ['daily-star-bd', 'bangladesh', 'south-asia'],
+    language:        'en',
+  },
+  // Pakistan Observer, Islamabad; its terms limit use to personal, non-business use
+  {
+    id:              'pakistan-observer',
+    name:            'Pakistan Observer',
+    feedUrl:         'https://pakobserver.net/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.6,
+    countryCode:     'PK',
+    defaultLat:      33.69,
+    defaultLng:      73.06,
+    defaultLocation: 'Islamabad, Pakistan',
+    extraTags:       ['pakistan-observer', 'pakistan', 'south-asia'],
+    language:        'en',
+  },
 ]
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────
@@ -18620,7 +18743,7 @@ export function parseFeedItems(xml: string): FeedItem[] {
  * source rounds advertise no feed, but many publish a Google News sitemap and name it themselves in robots.txt:
  * each <url> gives the article's address, its <news:title> and <news:publication_date>, and no summary.
  */
-export function parseNewsSitemap(xml: string): FeedItem[] {
+export function parseNewsSitemap(xml: string, now: number = Date.now()): FeedItem[] {
   const items: FeedItem[] = []
   const unwrap = (s: string) => s.replace(/^\s*<!\[CDATA\[([\s\S]*?)\]\]>\s*$/, '$1').trim()
   const tag = (block: string, name: string) => {
@@ -18633,9 +18756,21 @@ export function parseNewsSitemap(xml: string): FeedItem[] {
     const link = tag(block, 'loc').replace(/&amp;/g, '&')
     const title = tag(block, 'news:title')
     if (!link || !title) continue
-    items.push({ title, link, pubDate: tag(block, 'news:publication_date') || dateFromLink(link), description: '', point: null })
+    items.push({ title, link, pubDate: sitemapDay(tag(block, 'news:publication_date'), now) || dateFromLink(link, now), description: '', point: null })
   }
   return items
+}
+
+/**
+ * A news sitemap's day without a time (Nov 20, 2026: Geo News and The News give "2026-11-20"): read as midnight UTC,
+ * today's stories sat up to a day behind. Today's, or a later day's (a site ahead of UTC), counts as now, when the
+ * reader first sees it (each article is stored once, the first time); an earlier day's as its noon UTC, as dateFromLink
+ * dates a link's day. Any other value as it is.
+ */
+export function sitemapDay(value: string, now: number = Date.now()): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+  const today = new Date(now).toISOString().slice(0, 10)
+  return value >= today ? new Date(now).toISOString() : `${value}T12:00:00.000Z`
 }
 
 /**
@@ -19734,6 +19869,22 @@ export function startNewsRssPoller(
       startAt > 0 ? '📰 News RSS: carrying on with the poll cycle a restart interrupted' : '📰 News RSS: starting poll cycle',
     )
 
+    // A feed read, and noted for neverRead (best effort)
+    const readOne = async (source: NewsSource): Promise<void> => {
+      await pollSource(db, redis, producer, source).catch(err => log.warn({ err, sourceId: source.id }, 'News feed poll error'))
+      await redis.hset(READ_KEY, source.id, new Date().toISOString()).catch(() => {})
+    }
+    // The feeds never read yet first, READ_AT_ONCE at a time, so a new outlet's stories come in within minutes of its
+    // deploy (neverRead); the rounds below leave them out
+    let readAt: Record<string, string> | null = null
+    try { readAt = await redis.hgetall(READ_KEY) } catch { readAt = null }
+    const first = neverRead(NEWS_SOURCE_REGISTRY.map(s => s.id), readAt, NEWEST_FIRST)
+    if (first.length > 0) log.info({ feeds: first.length }, '📰 News RSS: reading the feeds never read yet first')
+    for (let k = 0; k < first.length && !stopped; k += READ_AT_ONCE) {
+      await Promise.all(first.slice(k, k + READ_AT_ONCE).map(i => readOne(NEWS_SOURCE_REGISTRY[i]!)))
+    }
+    const readFirst = new Set(first)
+
     let roundMs = 0, read = 0
     const rounds = readRounds(NEWS_SOURCE_REGISTRY.length, startAt)
     for (let r = 0; r < rounds.length; r++) {
@@ -19743,9 +19894,7 @@ export function startNewsRssPoller(
       // Where the cycle is, before the round: a restart during it reads these feeds again rather than skipping them
       await redis.set(CYCLE_KEY, JSON.stringify({ startedAt, nextId: batch[0]!.id }), 'EX', CYCLE_RESUME_MS / 1000).catch(() => {})
       const t0 = Date.now()
-      await Promise.all(batch.map(source => pollSource(db, redis, producer, source).catch(err =>
-        log.warn({ err, sourceId: source.id }, 'News feed poll error'),
-      )))
+      await Promise.all(batch.filter((_, k) => !readFirst.has(from + k)).map(readOne))
       roundMs += Date.now() - t0; read += batch.length
       readerTiming.position = to; readerTiming.of = NEWS_SOURCE_REGISTRY.length
       if (r % 5 === 4) void noteReaderTiming(redis)

@@ -44,6 +44,10 @@ const COUNT_WORDS: Record<string, number> = {
   // Swedish (Nov 19, 2026); "sex" (six) left out, as it is an English word
   'två': 2, fyra: 4, fem: 5, sju: 7, 'åtta': 8, nio: 9, tio: 10, tolv: 12, tjugo: 20, tiotals: 24, hundratals: 200,
   tusentals: 2000,
+  // Hausa (Nov 20, 2026), the words no other language here uses ("tara", nine, and "goma", ten, are Spanish words too;
+  // "dari", a hundred without its hook, is Indonesian's "from")
+  biyu: 2, uku: 3, 'huɗu': 4, hudu: 4, biyar: 5, shida: 6, bakwai: 7, takwas: 8, ashirin: 20, talatin: 30, hamsin: 50,
+  'ɗari': 100, dubu: 1000, 'ɗaruruwa': 200, daruruwa: 200, dubbai: 2000,
 }
 /** A count: digits ("1.200" and "1 200" are a thousand two hundred, as these languages write it) or a word */
 const COUNT = String.raw`(\d{1,3}(?:[.\u00a0\u202f ]\d{3})+|\d+|${Object.keys(COUNT_WORDS).join('|')})`
@@ -133,6 +137,11 @@ const SERBIAN: LanguageRules = {
 
 /** Uzbek's o‘ and g‘ (Nov 19, 2026): written with any of several marks, or none */
 const UZ_AP = "[‘ʻ'’`]?"
+
+/** Hausa's apostrophe ("'yan", "ta'addanci"), written with any mark or none (Nov 20, 2026) */
+const HA_AP = "[’'‘ʼ]?"
+/** Before a Hausa count: "at least", "more than", "nearly", "over", then the people counted ("an kashe aƙalla mutum 10") */
+const HA_SOME = String.raw`(?:\s+(?:a[ƙk]alla|fiye\s+da|kusan|sama\s+da))?(?:\s+(?:mutane|mutanen|mutum))?`
 
 /** An Arabic word with "و" (and), "ف" (so), "ب" (by), "ل" (for) or the article joined to it: "بمقتل", "والجيش" */
 const AR = '(?:و|ف|ب|ل|وب|ول|فب|وال|بال|فال|لل|ال)?'
@@ -598,6 +607,21 @@ export const LANGUAGE_RULES: Readonly<Record<string, LanguageRules>> = {
       [words('attack\\p{L}*|anfall\\p{L}*|strider|sammandrabbning\\p{L}*|militär\\p{L}*|armé\\p{L}*|drönar\\p{L}*|terror\\p{L}*|protest\\p{L}*|demonstration\\p{L}*|strejk\\p{L}*|gripen|gripits|greps|anhållen|anhållna|häktad\\p{L}*|kidnapp\\p{L}*|skottlossning\\p{L}*|skjutning\\p{L}*|skjuten|knivattack\\p{L}*|knivhugg\\p{L}*|jordbävning\\p{L}*|översvämning\\p{L}*|branden|bränder|brand\\s+(?:i|på)|skogsbrand\\p{L}*|storbrand\\p{L}*|jordskred\\p{L}*|storm\\p{L}*|torka|epidemi\\p{L}*|olycka|olyckan|olyckor|krock\\p{L}*|kollision\\p{L}*|riksdagsval\\p{L}*|presidentval\\p{L}*|parlamentsval\\p{L}*|folkomröstning\\p{L}*|avgår|avgick|avgång\\p{L}*|vapenvila\\p{L}*|sanktion\\p{L}*|tullar|strafftull\\p{L}*'), 'medium'],
     ],
     opinion: words('ledarsidan|krönika|kolumn\\p{L}*|analys|debattartikel'),
+  },
+  // Hausa (Nov 20, 2026): the count follows the people ("mutum 10 sun mutu", ten people died; "an kashe mutane 15",
+  // fifteen people were killed), its words with the hooked letters or without them ("[ƙk]", "[ɗd]", "[ɓb]"). "sun kashe"
+  // alone is who killed, not who died; "an kashe kuɗi" is money spent
+  ha: {
+    deadAfter: after('mutane|mutum', 'ne\\s+suka|suka|sun', 'mutu|rasu|halaka|hallaka|rasa\\s+ran\\p{L}*|rasa\\s+rayuka\\p{L}*|(?:ne\\s+)?aka\\s+kashe'),
+    deadBefore: before(`(?:an|aka|sun|suka|ya|ta)\\s+(?:kashe|hallaka|halaka)${HA_SOME}|(?:yi\\s+)?(?:sanadin\\s+)?(?:mutuwar|rasuwar)${HA_SOME}|adadin\\s+(?:wa[ɗd]anda|mutanen\\s+da)\\s+(?:suka|aka)\\s+(?:mutu|rasu|kashe)(?:\\s+ya)?\\s+(?:kai|[ƙk]aru\\s+zuwa)`),
+    injuredAfter: after('mutane|mutum', 'ne\\s+suka|suka|sun|aka', 'jikkata|ji\\s+rauni|ji\\s+raunuka|samu\\s+raunuka|samu\\s+rauni'),
+    injuredBefore: before(`(?:an|aka|sun|suka|ya|ta)\\s+(?:jikkata|raunata)${HA_SOME}`),
+    death: words('mutu|mutuwa\\p{L}*|rasu|rasuwa\\p{L}*|kisa|kisan|halaka|hallaka|gawa|gawar|gawarwak\\p{L}*|rasa\\s+ran\\p{L}*|rasa\\s+rayuka\\p{L}*|(?:an|aka|sun|suka)\\s+kashe(?!\\s+(?:ku[ɗd]i|naira|biliyan|miliyan|wuta))'),
+    events: [
+      [words('harin\\s+bam|tashin\\s+bam|bama-?bamai|kunar\\s+ba[ƙk]in\\s+wake|harin\\s+(?:jirgin\\s+)?sama|juyin\\s+mulki|kisan\\s+kiyashi|dokar\\s+ta-?[ɓb]aci|tsunami|girgizar\\s+[ƙk]asa\\s+mai\\s+[ƙk]arfin\\s+(?:maki\\s+)?[6-9](?:[.,]\\d)?'), 'high'],
+      [words(`hari|harin|farmaki|fafatawa|rikici|rikicin|ya[ƙk]i|ya[ƙk]in|sojoji|sojojin|makami\\s+mai\\s+linzami|jirgi\\s+mara\\s+matu[ƙk]i|ta${HA_AP}addanci|${HA_AP}yan\\s+ta${HA_AP}adda|${HA_AP}yan\\s+bindiga|zanga-?zanga|yajin\\s+aiki|(?:an|sun|ta|ya|suka|aka)\\s+(?:kama|cafke|kame)|garkuwa|(?:an|sun|aka|suka)\\s+sace|satar\\s+mutane|harbe|harbi|ambaliya\\p{L}*|gobara|zaftarewar\\s+[ƙk]asa|girgizar\\s+[ƙk]asa|annoba|hatsari|hatsarin|za[ɓb]e|za[ɓb]en|murabus|tsagaita\\s+wuta|takunkumi`), 'medium'],
+    ],
+    opinion: words(`sharhi|ra${HA_AP}ayi|nazari|tsokaci`),
   },
 }
 

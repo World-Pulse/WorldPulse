@@ -27,7 +27,8 @@ describe("the depth round's feeds", () => {
   it("adds each feed once, at an address no other entry reads", () => {
     const ids = ['unn-uk', 'espreso-tv', 'glavcom', 'il-messaggero', 'il-mattino', 'il-gazzettino', 'il-giorno', 'la-nazione',
       'il-resto-del-carlino', 'gazzetta-del-mezzogiorno', 'open-online', 'swr', 'wdr', 'cnn-greece', 'efsyn', 'newsbomb', 'enikos',
-      'sigmalive', 'chiba-nippo', 'fukui-shimbun', 'hokkoku-shimbun', 'j-cast', 'akita-sakigake', 'haber7', 'mynet-haber',
+      // (Chiba Nippo left the list on Nov 20, 2026: its feed holds a daily digest, not its stories)
+      'sigmalive', 'fukui-shimbun', 'hokkoku-shimbun', 'j-cast', 'akita-sakigake', 'haber7', 'mynet-haber',
       // round 2: news sitemaps, and N1 Bosnia and Khabarhub's Nepali edition on Devon's word (Nov 19, 10:08 PM)
       'srf-news', 'dw-deutsch', 'ta-nea', 'avvenire', 'chunichi', 'fukushima-minyu', 'ntv-turkey', 'timeturk', 'hromadske',
       'lb-ua', 'nv-ua', 'ukrinform', 'n1-bih', 'khabarhub-ne']
