@@ -28,6 +28,7 @@ import { redis } from '../lib/redis'
 import { logger } from '../lib/logger'
 import { sourceKey, hostOf } from './signal-columns'
 import { findGazetteerPlace, oneArea, splitPlaces } from './geo'
+import { cjkPlaces } from './cjk-places'
 import { isEventTemplateTitle } from './event-titles'
 import { countIndependentOutlets, isCopyOf } from './independence'
 import { joinStory, ensureStoryIdColumn } from './stories'
@@ -201,7 +202,7 @@ export interface SameStoryOptions {
 /**
  * Chinese, Japanese and Thai headlines are read in overlapping pieces (cjkWords), about one a character, so a
  * 25-character headline is some 24 words and two outlets' wordings of one story share 6 to 12 of 40: a fifth, not the
- * first look's 40% (Nov 20, 2026; Devon, 10:18 AM: the brain "still needs help on matching multiple sources in a
+ * first look's 40% (Nov 20, 2026; Devon, 10:18 AM: "still needs help on matching multiple sources in a
  * verification"). That morning 5% of Chinese, 3% of Japanese and 5% of Thai reports were confirmed by a second outlet,
  * against 17% of all; of 40 such pairs the first look turned down, read by hand, 35 were one story ("追加預算三讀　
  * 卓榮泰：感謝兩院良性互動回應民意" and "追加預算6076億全數通過 卓榮泰：感謝立院朝野"), and of those sharing 6 pieces or
@@ -305,31 +306,134 @@ export class RecentWordOutlets {
 export const recentWords = new RecentWordOutlets()
 
 /**
- * Fill recentWords from the last 12 hours' reports when the scraper starts, a few hundred at a time so the reader
- * isn't held up; the rare-words look waits for it. One query of about 20,000 titles.
+ * The same-story search for headlines in Chinese, Japanese and Thai (Nov 20, 2026, afternoon). The headline-word
+ * search (fetchSameStoryCandidates) asks the database's word index, which keeps a run of characters written without
+ * spaces as one word ("追加預算三讀"), so it finds another outlet's report only when a run starts alike: replayed on
+ * the 30,323 reports of the 13 hours to 3:20 PM, it and the newest 200 brought up 35 of 119 pairs read by hand as one
+ * story. So the reader keeps the day's pieces (cjkWords) in memory with the reports that used each, looks up the
+ * rarest 8 of a new headline's that other reports used (60 at most: "政府" or "台灣" single out nothing) and adds the 50
+ * reports sharing the most. Replayed, it brought up 76 of the 80 matches the other two found and 145 more (106 reports
+ * confirmed that weren't; of 40 read by hand, 37 one story), in 0.03 ms a headline. Filled at start from the warm-up's
+ * 12 hours (warmRecentWords), then with each new report; about 30,000 pieces.
  */
-export async function warmRecentWords(words: RecentWordOutlets = recentWords): Promise<number> {
+const PIECE_SEARCH_MIN = 3
+const PIECE_SEARCH_PICK = 8
+const PIECE_SEARCH_MAX_REPORTS = 60
+const PIECE_SEARCH_LIMIT = 50
+
+/** A headline's pieces of Chinese, Japanese and Thai (its storyWords) */
+export function pieceWords(words: ReadonlySet<string>): string[] {
+  return [...words].filter(w => PIECE_WORD.test(w))
+}
+
+export class RecentPieces {
+  /** piece -> the reports that used it, oldest first, as [id, when (ms)] */
+  private readonly lists = new Map<string, Array<[string, number]>>()
+  private added = 0
+  constructor(private readonly windowMs = TEMPORAL_WINDOW_HOURS * 60 * 60 * 1000) {}
+
+  add(id: string, pieces: Iterable<string>, at: number): void {
+    if (!id) return
+    for (const p of new Set(pieces)) {
+      const list = this.lists.get(p)
+      if (!list) { this.lists.set(p, [[id, at]]); continue }
+      if (list.some(e => e[0] === id)) continue
+      list.push([id, at])
+      // a piece more reports use than the search reads keeps only its newest
+      if (list.length > PIECE_SEARCH_MAX_REPORTS + 4) list.shift()
+    }
+    if (++this.added % 2000 === 0) this.prune(Date.now())
+  }
+
+  /** The reports of the window sharing most of the rarest pieces others used, the most first (then the newest) */
+  search(pieces: Iterable<string>, now = Date.now(), exclude = ''): string[] {
+    const chosen: Array<Array<[string, number]>> = []
+    for (const p of new Set(pieces)) {
+      const fresh = (this.lists.get(p) ?? []).filter(e => now - e[1] <= this.windowMs && e[0] !== exclude)
+      if (fresh.length >= 1 && fresh.length <= PIECE_SEARCH_MAX_REPORTS) chosen.push(fresh)
+    }
+    chosen.sort((a, b) => a.length - b.length)
+    const hits = new Map<string, { n: number; at: number }>()
+    for (const list of chosen.slice(0, PIECE_SEARCH_PICK)) {
+      for (const [id, at] of list) {
+        const h = hits.get(id)
+        if (h) h.n++
+        else hits.set(id, { n: 1, at })
+      }
+    }
+    return [...hits].sort((a, b) => b[1].n - a[1].n || b[1].at - a[1].at).slice(0, PIECE_SEARCH_LIMIT).map(([id]) => id)
+  }
+
+  /** Drop the reports older than the window */
+  prune(now: number): void {
+    for (const [p, list] of this.lists) {
+      const fresh = list.filter(e => now - e[1] <= this.windowMs)
+      if (fresh.length === 0) this.lists.delete(p)
+      else if (fresh.length < list.length) this.lists.set(p, fresh)
+    }
+  }
+
+  get size(): number { return this.lists.size }
+}
+
+/** The news reader's pieces (correlateSignal) */
+export const recentPieces = new RecentPieces()
+
+/**
+ * Fill recentWords from the last 12 hours' reports when the scraper starts, a few hundred at a time so the reader
+ * isn't held up; the rare-words look waits for it. One query of about 20,000 titles. (And recentPieces, from the
+ * same rows.)
+ */
+export async function warmRecentWords(words: RecentWordOutlets = recentWords, pieces: RecentPieces = recentPieces): Promise<number> {
   const rows = await db('signals')
-    .select('title', db.raw('source_ids[1]::text as source_id'), db.raw('original_urls[1] as first_url'),
-      db.raw('COALESCE(event_time, created_at) as published_at'))
+    .select('id', 'title', db.raw('source_ids[1]::text as source_id'), db.raw('original_urls[1] as first_url'),
+      db.raw('COALESCE(event_time, created_at) as published_at'), 'created_at')
     .where('created_at', '>=', new Date(Date.now() - RARE_WINDOW_MS).toISOString()) as Array<Record<string, unknown>>
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i]!
     const at = Math.min(Date.now(), new Date(r.published_at as string).getTime() || Date.now())
-    words.add(storyWords(String(r.title ?? '')), sourceKey(r.source_id, r.first_url), at)
+    const story = storyWords(String(r.title ?? ''))
+    words.add(story, sourceKey(r.source_id, r.first_url), at)
+    const own = pieceWords(story)
+    if (own.length > 0 && r.id) pieces.add(String(r.id), own, new Date(r.created_at as string).getTime() || at)
     if (i % 500 === 499) await new Promise(resolve => setImmediate(resolve))
   }
   words.ready = true
   return rows.length
 }
 
+/**
+ * How many separate words a headline's shared rare words are (Nov 20, 2026): in Chinese, Japanese and Thai a word of
+ * three characters or more is two or more overlapping pieces ("意見交換" is "意見", "見交" and "交換"), and one shared
+ * word passed the rare-words look as three. "大学生と盛岡市議会議員が意見交換 ... 岩手県" and "クマ対策 ... 秋田県、都内で
+ * 地元国会議員と意見交換" (Iwate and Akita) and the emergency landings at Kochi's and Ishigaki's airports ("緊急着陸")
+ * were matched that way when the pieces search brought them up. Pieces that follow on from each other in the
+ * headline ("意見" then "見交", where it reads "意見交") count once.
+ */
+export function separateWords(title: string, words: string[]): number {
+  const pieces = words.filter(w => PIECE_WORD.test(w))
+  if (pieces.length === 0) return words.length
+  const text = foldAccents(title)
+  const group = pieces.map((_, i) => i)
+  const root = (i: number): number => (group[i] === i ? i : (group[i] = root(group[i]!)))
+  for (let i = 0; i < pieces.length; i++) {
+    for (let j = 0; j < pieces.length; j++) {
+      const a = pieces[i]!
+      const b = pieces[j]!
+      if (i === j || a.length !== b.length || a.length < 2) continue
+      if (a.slice(1) === b.slice(0, -1) && text.includes(a + b.slice(-1))) group[root(i)] = root(j)
+    }
+  }
+  return words.length - pieces.length + pieces.filter((_, i) => root(i) === i).length
+}
+
 /** The rare-words look (see RARE_MAX_OUTLETS) */
-function rareLook(wordsA: Set<string>, wordsB: Set<string>, shared: number, jaccard: number, rare: RecentWordOutlets): boolean {
+function rareLook(titleA: string, wordsA: Set<string>, wordsB: Set<string>, shared: number, jaccard: number, rare: RecentWordOutlets): boolean {
   if (!rare.ready || shared < RARE_LOOK_MIN_SHARED || jaccard < RARE_LOOK_MIN_JACCARD) return false
   const now = Date.now()
-  let few = 0
-  for (const w of wordsA) if (wordsB.has(w) && !/^[@#~%]/.test(w) && rare.outlets(w, now) <= RARE_MAX_OUTLETS) few++
-  if (few < RARE_LOOK_MIN_RARE) return false
+  const few: string[] = []
+  for (const w of wordsA) if (wordsB.has(w) && !/^[@#~%]/.test(w) && rare.outlets(w, now) <= RARE_MAX_OUTLETS) few.push(w)
+  if (few.length < RARE_LOOK_MIN_RARE || separateWords(titleA, few) < RARE_LOOK_MIN_RARE) return false
   const countries = (words: Set<string>) => [...words].filter(w => w.startsWith('@')).sort().join(' ')
   const countriesA = countries(wordsA)
   const countriesB = countries(wordsB)
@@ -409,6 +513,8 @@ const SEVERITY_ORDER: Record<string, number> = {
 export const matchTimings = {
   signals: 0, recentMs: 0, titleSearches: 0, titleSearchMs: 0, titleRows: 0, compareMs: 0, olderSearches: 0,
   olderSearchMs: 0, boosts: 0, boostMs: 0,
+  // the pieces search (RecentPieces): the headlines it looked up, its time, the reports it added
+  pieceSearches: 0, pieceSearchMs: 0, pieceRows: 0,
 }
 
 /**
@@ -448,9 +554,19 @@ export async function correlateSignal(signal: CorrelationCandidate): Promise<Eve
       return [] as CorrelationCandidate[]
     })
     matchTimings.titleSearchMs += Date.now() - t; matchTimings.titleSearches++; matchTimings.titleRows += wider.length
-    t = Date.now()
     const pool = new Map<string, CorrelationCandidate>()
     for (const c of [...candidates, ...wider]) pool.set(c.id, c)
+    // ...and, for a headline in Chinese, Japanese or Thai, the reports sharing its rarest pieces (RecentPieces)
+    const pieces = pieceWords(storyWords(signal.title ?? ''))
+    if (pieces.length >= PIECE_SEARCH_MIN) {
+      t = Date.now()
+      const ids = recentPieces.search(pieces, t, signal.id).filter(id => !pool.has(id))
+      const found = ids.length > 0 ? await fetchCandidatesById(ids).catch(() => [] as CorrelationCandidate[]) : []
+      for (const c of found) pool.set(c.id, c)
+      matchTimings.pieceSearchMs += Date.now() - t; matchTimings.pieceSearches++; matchTimings.pieceRows += found.length
+    }
+    if (pieces.length > 0) recentPieces.add(signal.id, pieces, Date.now())
+    t = Date.now()
     // each match counted by the look that found it (matchLooks)
     const matched = (options: SameStoryOptions) => [...pool.values()].filter(c => {
       const look: { name?: keyof typeof matchLooks } = {}
@@ -626,6 +742,24 @@ async function fetchSameStoryCandidates(signal: CorrelationCandidate, older = fa
     .whereRaw(`to_tsvector('simple', title) @@ to_tsquery('simple', ?)`, [tsquery])
     .orderByRaw(`ts_rank(to_tsvector('simple', title), to_tsquery('simple', ?)) DESC`, [tsquery])
     .limit(older ? 25 : 50)
+  return rows.map(toCandidate)
+}
+
+/** The reports the pieces search brought up (RecentPieces), those of the window still there, by their ids */
+async function fetchCandidatesById(ids: string[]): Promise<CorrelationCandidate[]> {
+  const since = new Date(Date.now() - TEMPORAL_WINDOW_HOURS * 60 * 60 * 1000)
+  const rows = await db('signals')
+    .select(
+      'id', 'title', 'category', 'severity',
+      db.raw('source_ids[1]::text as source_id'),
+      db.raw('original_urls[1] as first_url'),
+      'location_name', 'reliability_score', 'tags',
+      db.raw('COALESCE(event_time, created_at) as published_at'),
+      db.raw('ST_Y(location::geometry) as lat'),
+      db.raw('ST_X(location::geometry) as lng'),
+    )
+    .whereIn('id', ids)
+    .where('created_at', '>=', since.toISOString())
   return rows.map(toCandidate)
 }
 
@@ -1758,6 +1892,19 @@ function secondLook(a: CorrelationCandidate, b: CorrelationCandidate, wordsA: Se
 }
 
 /**
+ * The cities of cjkPlaces' list in a province or prefecture of it, which the gazetteer doesn't say of Japan's: a
+ * headline naming one and one naming the other ("横浜" and "神奈川") can be one story
+ */
+const CJK_PLACE_IN: Record<string, string> = {
+  Yokohama: 'Kanagawa Prefecture', Nagoya: 'Aichi Prefecture', 'Kōbe': 'Hyōgo Prefecture',
+  Wuhan: 'Hubei', Hangzhou: 'Zhejiang', Nanjing: 'Jiangsu', Suzhou: 'Jiangsu', "Xi'an": 'Shaanxi',
+}
+function cjkOneArea(p: string, q: string): boolean {
+  if (p === q || CJK_PLACE_IN[p] === q || CJK_PLACE_IN[q] === p) return true
+  return CJK_PLACE_IN[p] !== undefined && CJK_PLACE_IN[p] === CJK_PLACE_IN[q]
+}
+
+/**
  * Whether two signals are independent reports of the same story: two different
  * known outlets, within the time window, headlines that share most of their
  * content words and name no different places, and, for an event tied to a
@@ -1801,7 +1948,7 @@ export function isSameStory(a: CorrelationCandidate, b: CorrelationCandidate, op
   // ...or the rare-words look (see RARE_MAX_OUTLETS), within 6 hours, not for Vietnamese
   const rare = !firstLook && withinDay && hours <= RARE_LOOK_HOURS && options.rareWords !== undefined
     && !(VIETNAMESE_LETTERS.test(a.title ?? '') && VIETNAMESE_LETTERS.test(b.title ?? ''))
-    && rareLook(wordsA, wordsB, shared, jaccard, options.rareWords)
+    && rareLook(a.title ?? '', wordsA, wordsB, shared, jaccard, options.rareWords)
   // The second look is never for events tied to a spot (PLACE_BOUND_CATEGORIES), which recur there: an
   // aftershock, the next day's flood, two road accidents on San Marino's Superstrada in one day
   const placeBound = PLACE_BOUND_CATEGORIES.has(a.category) || PLACE_BOUND_CATEGORIES.has(b.category)
@@ -1857,6 +2004,11 @@ export function isSameStory(a: CorrelationCandidate, b: CorrelationCandidate, op
   const citiesA = otherScriptCities(a.title ?? '')
   const citiesB = otherScriptCities(b.title ?? '')
   if (citiesA.length > 0 && citiesB.length > 0 && !citiesA.some(c => citiesB.includes(c))) return false
+  // ...and the cities, provinces and prefectures named in Chinese, Japanese or Korean (cjkPlaces; Nov 20, 2026): two
+  // vote-buying cases, in Pingtung and in Taitung, and two cryptocurrency frauds, in Ehime and in Akita, shared their pieces
+  const cjkA = cjkPlaces(a.title ?? '')
+  const cjkB = cjkPlaces(b.title ?? '')
+  if (cjkA.length > 0 && cjkB.length > 0 && !cjkA.some(p => cjkB.some(q => cjkOneArea(p, q)))) return false
   if (farApartEvents(a, b, samePlace)) return false
   if (options.look) {
     options.look.name = !firstLook ? (rare ? 'rare' : 'second')

@@ -100,7 +100,7 @@ import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { Category, SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate, insertTimings } from '../pipeline/insert-signal'
-import { matchTimings, matchLooks, recentWords, setThinPlaces } from '../pipeline/correlate'
+import { matchTimings, matchLooks, recentWords, recentPieces, setThinPlaces } from '../pipeline/correlate'
 import { noteCoverage, COVERAGE_KEY } from './coverage'
 // Feed items published more than 3 days ago aren't news
 import { MAX_ITEM_AGE_MS, isStaleItem } from '../pipeline/freshness'
@@ -20068,6 +20068,9 @@ export function readerTimingSummary(timings: typeof insertTimings = insertTiming
       title_rows: per(match.titleRows, match.titleSearches), compare_ms: per(match.compareMs, match.signals),
       older_searches: match.olderSearches, older_search_ms: per(match.olderSearchMs, match.olderSearches),
       boosts: match.boosts, boost_ms: per(match.boostMs, match.boosts),
+      // the Chinese, Japanese and Thai pieces search (correlate.ts RecentPieces): headlines, ms each, reports added
+      piece_searches: match.pieceSearches ?? 0, piece_search_ms: per(match.pieceSearchMs ?? 0, match.pieceSearches ?? 0),
+      piece_rows: match.pieceRows ?? 0, pieces_kept: recentPieces.size,
     },
     // ...which look found its matches, and whether the rare-words look has its counts (correlate.ts matchLooks)
     matching_looks: { ...looks, rare_ready: recentWords.ready, rare_words: recentWords.size },

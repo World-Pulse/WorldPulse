@@ -1,5 +1,5 @@
 /**
- * More of one story's reports matched (Nov 20, 2026; Devon, 10:18 AM: the brain "still needs help on matching
+ * More of one story's reports matched (Nov 20, 2026; Devon, 10:18 AM: "still needs help on matching
  * multiple sources in a verification", its lowest part: 19% of 30 days' reports confirmed by 2+ outlets). Of the 13
  * hours' 30,319 reports, the search had found nearly every pair the rules accept (3,194 of 3,361 both verified); the
  * rules themselves turned down many: Chinese, Japanese and Thai headlines read in overlapping pieces, and headlines

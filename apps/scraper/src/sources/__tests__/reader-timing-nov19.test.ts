@@ -33,6 +33,8 @@ describe('the reader timing', () => {
     expect(s.matching).toEqual({
       reports: 4, recent_ms: 100, title_search_ms: 1500, title_rows: 30, compare_ms: 200,
       older_searches: 1, older_search_ms: 500, boosts: 2, boost_ms: 300,
+      // the pieces search (Nov 20, 2026, afternoon): none here
+      piece_searches: 0, piece_search_ms: null, piece_rows: 0, pieces_kept: 0,
     })
     // before any report, averages are null rather than 0
     const empty = readerTimingSummary({ inserts: 0, insertMs: 0, correlations: 0, correlateMs: 0, dedupMs: 0 }, {
