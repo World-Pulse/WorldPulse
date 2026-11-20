@@ -105,6 +105,26 @@ class WhatItCatches(unittest.TestCase):
         self.assertEqual(c['status'], 'warn')
         self.assertTrue(c['line'].startswith("GDELT's files: 18 of 24 read in the last 6 hours (short: "), c['line'])
 
+    def test_gdelts_counter_that_couldnt_be_read_is_a_warning_not_an_alarm(self):
+        # Nov 20, 2026: the night's load made the counter's reads fail; every hour came back 0 and the alarm rose
+        s = healthy(); g = s['pipeline']['gdelt']
+        g['last_24h'] = {}; g['last_cycle'] = {'at': None, 'newest': None, 'missing': None, 'failed': None}; g['unread'] = ['last_cycle', 'hours']
+        c = check(dh.health(s, now=NOW), 'gdelt')
+        self.assertEqual(c['status'], 'warn')
+        self.assertTrue(c['line'].startswith("GDELT's counter couldn't be read just now"), c['line'])
+        # the API's answer from before it named what it couldn't read: every hour 0 and no last cycle
+        s = healthy(); g = s['pipeline']['gdelt']
+        g['last_24h'] = {k: 0 for k in g['last_24h']}; g['last_cycle'] = {'at': None, 'newest': None, 'missing': None, 'failed': None}
+        self.assertEqual(check(dh.health(s, now=NOW), 'gdelt')['status'], 'warn')
+
+    def test_gdelts_files_not_read_still_raise_the_alarm(self):
+        # the counter read, its reader running, no files: the alarm stands
+        s = healthy(); g = s['pipeline']['gdelt']
+        g['last_24h'] = {k: 0 for k in g['last_24h']}; g['unread'] = []
+        c = check(dh.health(s, now=NOW), 'gdelt')
+        self.assertEqual(c['status'], 'alarm')
+        self.assertTrue(c['line'].startswith("GDELT's files: 0 of 24 read in the last 6 hours"), c['line'])
+
     def test_gdelts_reader_stopped(self):
         s = healthy(); s['pipeline']['gdelt']['last_cycle']['at'] = iso(150)
         self.assertEqual(check(dh.health(s, now=NOW), 'gdelt_cycle')['status'], 'alarm')

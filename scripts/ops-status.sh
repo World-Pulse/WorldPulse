@@ -406,7 +406,8 @@ d = d.get("data", d) if isinstance(d, dict) else {}
 p = d.get("pulse") or {}
 c = d.get("last_cycle") or {}
 print(json.dumps({"last_24h": p.get("last_24h") or {},
-                  "last_cycle": {k: c.get(k) for k in ("at", "newest", "missing", "failed")}}, separators=(",", ":")))' 2>/dev/null \
+                  "last_cycle": {k: c.get(k) for k in ("at", "newest", "missing", "failed")},
+                  "unread": d.get("unread") or []}, separators=(",", ":")))' 2>/dev/null \
     || printf 'null'
 }
 fingerprint_stats() {

@@ -10,10 +10,22 @@ const today = new Date().toISOString().slice(0, 10)
 const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
 const hourAgo = (n: number) => new Date(Math.floor(Date.now() / 3_600_000) * 3_600_000 - n * 3_600_000).toISOString().slice(0, 13).replace(/[-T]/g, '')
 
+// a read that fails (Nov 20, 2026): the last cycle's key, the hourly counters' round trip
+const failing = { lastCycle: false, hours: false }
+const hourFiles = (key: string, field: string) => (field === '_files' && key === `gkg:pulse:2:${hourAgo(1)}` ? '4' : field === '_files' && key === `gkg:pulse:2:${hourAgo(30)}` ? '1' : null)
 vi.mock('../db/redis', () => ({
   redis: {
-    get: async (key: string) => (key === 'repair:archive-outlets:2026-10-22:done' ? '2026-10-22T23:10:00Z' : null),
-    hget: async (key: string, field: string) => (field === '_files' && key === `gkg:pulse:2:${hourAgo(1)}` ? '4' : field === '_files' && key === `gkg:pulse:2:${hourAgo(30)}` ? '1' : null),
+    get: async (key: string) => {
+      if (key === 'second-outlet:last-cycle' && failing.lastCycle) throw new Error('Command timed out')
+      return key === 'repair:archive-outlets:2026-10-22:done' ? '2026-10-22T23:10:00Z' : null
+    },
+    hget: async (key: string, field: string) => hourFiles(key, field),
+    pipeline: (commands: string[][]) => ({
+      exec: async () => {
+        if (failing.hours) throw new Error('Command timed out')
+        return commands.map(([, key, field]) => [null, hourFiles(key!, field!)])
+      },
+    }),
     setex: async () => 'OK',
     hgetall: async (key: string) => (key.endsWith(today) ? { searched: '40', matched: '9', outlets: '13', promoted: '8' }
       : key === 'repair:archive-outlets:stats' ? { days: '46', verified: '1200', last_day: '2026-05-20' }
@@ -52,5 +64,29 @@ describe('GET /api/v1/public/second-outlets', () => {
     expect(data.pulse.last_24h[hourAgo(1)]).toBe(4)
     expect(data.pulse.last_24h[hourAgo(2)]).toBe(0)
     expect(data.pulse.hours_counted_7d).toBe(2)
+    expect(data.unread).toEqual([])
+  })
+
+  // Nov 20, 2026: under the night's load the counters' reads ran past Redis's 2-second limit and every failure read
+  // as "no files": the status page raised GDELT's alarm while GDELT's files were all read
+  it("names what it couldn't read, its counts null rather than 0", async () => {
+    failing.hours = true
+    failing.lastCycle = true
+    try {
+      const app = Fastify()
+      await app.register(registerPublicRoutes, { prefix: '/api/v1/public' })
+      const res = await app.inject({ method: 'GET', url: '/api/v1/public/second-outlets' })
+      expect(res.statusCode).toBe(200)
+      const { data } = res.json()
+      expect(data.unread).toEqual(['last_cycle', 'hours'])
+      expect(data.pulse.last_24h).toBeNull()
+      expect(data.pulse.hours_counted_7d).toBeNull()
+      expect(data.last_cycle).toBeNull()
+      // the rest still answers
+      expect(data.days[today]).toEqual({ searched: 40, matched: 9, outlets: 13, promoted: 8 })
+    } finally {
+      failing.hours = false
+      failing.lastCycle = false
+    }
   })
 })

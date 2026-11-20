@@ -145,7 +145,15 @@ def health(status, now=None):
     g = p.get('gdelt') if isinstance(p.get('gdelt'), dict) else None
     if g:
         hours = g.get('last_24h') if isinstance(g.get('last_24h'), dict) else {}
-        if hours and checked:
+        cyc0 = g.get('last_cycle') if isinstance(g.get('last_cycle'), dict) else {}
+        unread = g.get('unread') if isinstance(g.get('unread'), list) else []
+        # Nov 20, 2026: a counter that couldn't be read isn't GDELT's files not read. The API names what it couldn't
+        # read; before it did, a failed read came back as every hour 0 and no last cycle, which raised the alarm all
+        # night while GDELT's 4 files an hour were all read.
+        unreadable = 'hours' in unread or (bool(hours) and not any(int(v or 0) for v in hours.values()) and not cyc0.get('at'))
+        if unreadable:
+            add('gdelt', 'warn', "GDELT's counter couldn't be read just now (the database was slow); its files weren't counted this time")
+        elif hours and checked:
             # the 6 full UTC hours before the counts were made
             top = int(checked // 3600) * 3600
             keys = [time.strftime('%Y%m%d%H', time.gmtime(top - 3600 * i)) for i in range(1, 7)]

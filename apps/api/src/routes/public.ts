@@ -365,19 +365,30 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
     // the world's coverage counts (apps/scraper/src/pipeline/gkg-pulse.ts): the files counted each hour, the last 7 days
     const hourNow = Math.floor(Date.now() / 3_600_000) * 3_600_000
     const hours = Array.from({ length: 168 }, (_, i) => new Date(hourNow - i * 3_600_000).toISOString().slice(0, 13).replace(/[-T]/g, ''))
-    const [today, yesterday, recent, last, archive, archiveDone, week, weekDone, hourFiles] = await Promise.all([
+    // A read that fails is told apart from a counter that is zero (Nov 20, 2026): the night before, the 168 hourly
+    // counters, read one command each, ran past Redis's 2-second limit under the server's load, every failure read as
+    // "no files", and the status page raised GDELT's alarm while GDELT's 4 files an hour were all read. They are read
+    // in one round trip now, and what couldn't be read is named in "unread" (its counts null, not 0).
+    const unread: string[] = []
+    const FAILED = Symbol('failed')
+    const [today, yesterday, recent, lastRead, archive, archiveDone, week, weekDone, hourFiles] = await Promise.all([
       redis.hgetall(`second-outlet:day:${days[0]}`).catch(() => null),
       redis.hgetall(`second-outlet:day:${days[1]}`).catch(() => null),
       redis.lrange('second-outlet:recent', 0, 49).catch(() => [] as string[]),
-      redis.get('second-outlet:last-cycle').catch(() => null),
+      redis.get('second-outlet:last-cycle').catch(() => FAILED),
       // the April–May repair (apps/scraper/src/pipeline/archive-outlets.ts)
       redis.hgetall('repair:archive-outlets:stats').catch(() => null),
       redis.get('repair:archive-outlets:2026-10-22:done').catch(() => null),
       // version 2's keys (Oct 22, 5:30 PM: the tighter kinds of event)
       redis.hgetall('gkg:pulse:2:backfill').catch(() => null),
       redis.get('repair:gkg-pulse-week:2026-10-22b:done').catch(() => null),
-      Promise.all(hours.map(h => redis.hget(`gkg:pulse:2:${h}`, '_files').catch(() => null))),
+      redis.pipeline(hours.map(h => ['hget', `gkg:pulse:2:${h}`, '_files'])).exec()
+        .then(res => (res && res.length === hours.length && res.every(([err]) => !err) ? res.map(([, v]) => v as string | null) : null))
+        .catch(() => null),
     ])
+    if (lastRead === FAILED) unread.push('last_cycle')
+    if (hourFiles === null) unread.push('hours')
+    const last = typeof lastRead === 'string' ? lastRead : null
     const numbers = (h: Record<string, string> | null) =>
       Object.fromEntries(Object.entries(h ?? {}).map(([k, v]) => [k, Number(v) || 0]))
     const latest = (recent ?? []).flatMap(entry => {
@@ -390,14 +401,15 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
       : null
     // counts as numbers; "last" is a file's time (20261018041500), kept as written
     const values = (h: Record<string, string> | null) => Object.fromEntries(Object.entries(h ?? {}).map(([k, v]) => [k, k !== 'last' && /^\d+$/.test(v) ? Number(v) : v]))
-    const counted = hourFiles.map(v => Number(v) || 0)
+    const counted = hourFiles ? hourFiles.map(v => Number(v) || 0) : null
     const pulse = {
       week: week && Object.keys(week).length ? { ...values(week), done_at: weekDone ?? null } : null,
-      // the files counted in each of the last 24 hours, oldest first, the hour now last (4 an hour when every file is read)
-      last_24h: Object.fromEntries(hours.slice(0, 24).map((h, i) => [h, counted[i]!]).reverse()),
-      hours_counted_7d: counted.filter(n => n > 0).length,
+      // the files counted in each of the last 24 hours, oldest first, the hour now last (4 an hour when every file is
+      // read); null when the counters couldn't be read
+      last_24h: counted ? Object.fromEntries(hours.slice(0, 24).map((h, i) => [h, counted[i]!]).reverse()) : null,
+      hours_counted_7d: counted ? counted.filter(n => n > 0).length : null,
     }
-    return reply.send({ success: true, data: { days: { [days[0]!]: numbers(today), [days[1]!]: numbers(yesterday) }, last_cycle: lastCycle, latest, archive: archived, pulse } })
+    return reply.send({ success: true, data: { days: { [days[0]!]: numbers(today), [days[1]!]: numbers(yesterday) }, last_cycle: lastCycle, latest, archive: archived, pulse, unread } })
   })
 
   // ─── GET /languages (Nov 10, 2026) ────────────────────────

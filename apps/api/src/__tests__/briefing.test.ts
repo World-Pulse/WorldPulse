@@ -167,7 +167,7 @@ describe('briefing-generator', () => {
 
       const result = await generateDailyBriefing(24)
       expect(result.model).toBe('extractive')
-      expect(result.executive_summary).toContain('processed')
+      expect(result.executive_summary).toContain('WorldPulse read 42 reports')
       expect(result.key_developments.length).toBeGreaterThan(0)
     })
 
