@@ -229,7 +229,7 @@ source_stats() {
   local pw out off
   pw=$(redis_pw) || pw=""
   off=$(timeout 15 docker exec wp_postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAq -c "$1"' sh \
-        "SELECT id FROM sources WHERE NOT active" 2>/dev/null | tr -cd '0-9a-f\n-') || off=""
+        "SELECT id || ' ' || slug FROM sources WHERE NOT active" 2>/dev/null | tr -cd '0-9a-zA-Z_. \n-') || off=""
   out=$(timeout 40 docker exec -e REDISCLI_AUTH="$pw" wp_redis sh -c '
       echo "tracked=$(redis-cli --raw SCARD scraper:health:index)"
       redis-cli --raw SMEMBERS scraper:health:index | head -n 2000 | sed "s/^/member=/"
@@ -249,7 +249,11 @@ source_stats() {
   OUT="$out" OFF="$off" python3 - <<'PY' 2>/dev/null || printf 'null'
 import calendar, json, os, re, time
 lines = os.environ.get('OUT', '').splitlines()
-off = set(os.environ.get('OFF', '').split())
+off_names = {}
+for l in os.environ.get('OFF', '').splitlines():
+    parts = l.split()
+    if parts: off_names[parts[0]] = (parts[1] if len(parts) > 1 else parts[0])[:60]
+off = set(off_names)
 now_ms = time.time() * 1000
 def num(v):
     try: return int(v)
@@ -280,6 +284,7 @@ def ms_of(text):
     try: return calendar.timegm(time.strptime(text[:19], '%Y-%m-%dT%H:%M:%S')) * 1000
     except (TypeError, ValueError): return 0
 tracked, failing, stale, feeds, members = 0, [], 0, [], set()
+stale_names = []
 parked, parked_ok = set(), set()
 for line in lines:
     if line.startswith('tracked='):
@@ -297,6 +302,7 @@ for line in lines:
         until = num(open_until)
         if until <= now_ms and now_ms - ms_of(failed_at) > 48 * 3600 * 1000:
             stale += 1
+            stale_names.append((slug or name or sid)[:60])
             continue
         d = newest.get(sid) or {}
         failing.append({
@@ -321,7 +327,8 @@ if members:
     tracked = len(members - off)
 print(json.dumps({'tracked': tracked, 'failing': len(failing),
                   'paused': sum(1 for s in failing if s['paused_until']),
-                  'stale': stale, 'switched_off': len(off), 'list': failing[:40],
+                  'stale': stale, 'stale_list': sorted(stale_names)[:40],
+                  'switched_off': len(off), 'switched_off_list': sorted(off_names.values())[:40], 'list': failing[:40],
                   'news_feeds': {'failing': len(feeds), 'paused': sum(1 for f in feeds if f['paused']),
                                  'list': feeds[:40],
                                  # answering: it answered again, so it is read as usual (for a week from its last answer)
