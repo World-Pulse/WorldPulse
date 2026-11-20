@@ -194,6 +194,8 @@ export function busyWords(candidates: Iterable<CorrelationCandidate>): Set<strin
 export interface SameStoryOptions {
   secondLook?: { busy: ReadonlySet<string> }
   rareWords?: RecentWordOutlets
+  /** set to the look that found a match (matchLooks) */
+  look?: { name?: keyof typeof matchLooks }
 }
 
 /**
@@ -409,6 +411,14 @@ export const matchTimings = {
   olderSearchMs: 0, boosts: 0, boostMs: 0,
 }
 
+/**
+ * Which look found each same-story match since the scraper started (Nov 20, 2026, afternoon: the confirmed share of
+ * the hours after the pieces and the rare-words look went live, 17% to 18%, didn't show the 20% the replay promised,
+ * and nothing said which looks were matching): most words in common, Chinese, Japanese and Thai pieces, the
+ * rare-words look, the second look
+ */
+export const matchLooks = { words: 0, pieces: 0, rare: 0, second: 0 }
+
 
 /**
  * Correlate a newly ingested signal against recent signals.
@@ -441,7 +451,14 @@ export async function correlateSignal(signal: CorrelationCandidate): Promise<Eve
     t = Date.now()
     const pool = new Map<string, CorrelationCandidate>()
     for (const c of [...candidates, ...wider]) pool.set(c.id, c)
-    let sameStory = [...pool.values()].filter(c => isSameStory(signal, c, { rareWords: recentWords }))
+    // each match counted by the look that found it (matchLooks)
+    const matched = (options: SameStoryOptions) => [...pool.values()].filter(c => {
+      const look: { name?: keyof typeof matchLooks } = {}
+      if (!isSameStory(signal, c, { ...options, look })) return false
+      if (look.name) matchLooks[look.name]++
+      return true
+    })
+    let sameStory = matched({ rareWords: recentWords })
     if (sameStory.length === 0) {
       // Nothing the usual way: the second look (see SLOW_WINDOW_HOURS), also at the day before for a
       // thinly covered place's own outlets
@@ -452,7 +469,7 @@ export async function correlateSignal(signal: CorrelationCandidate): Promise<Eve
         for (const c of older) pool.set(c.id, c)
       }
       const busy = busyWords(pool.values())
-      sameStory = [...pool.values()].filter(c => isSameStory(signal, c, { secondLook: { busy }, rareWords: recentWords }))
+      sameStory = matched({ secondLook: { busy }, rareWords: recentWords })
     }
     matchTimings.compareMs += Date.now() - t
     if (sameStory.length > 0) {
@@ -1841,6 +1858,10 @@ export function isSameStory(a: CorrelationCandidate, b: CorrelationCandidate, op
   const citiesB = otherScriptCities(b.title ?? '')
   if (citiesA.length > 0 && citiesB.length > 0 && !citiesA.some(c => citiesB.includes(c))) return false
   if (farApartEvents(a, b, samePlace)) return false
+  if (options.look) {
+    options.look.name = !firstLook ? (rare ? 'rare' : 'second')
+      : shared >= SAME_STORY_MIN_SHARED && jaccard >= SAME_STORY_MIN_JACCARD ? 'words' : 'pieces'
+  }
   return true
 }
 

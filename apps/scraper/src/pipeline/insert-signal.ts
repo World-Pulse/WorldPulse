@@ -27,6 +27,8 @@ import { correlateSignal, corroborateWithDuplicate, storyWords } from './correla
 import { countryNameOf } from './world-countries'
 import { placesInText } from './geo'
 import { indicPlaces } from './indic-places'
+import { cyrillicPlaces } from './cyrillic-places'
+import { cjkPlaces } from './cjk-places'
 import type { CorrelationCandidate } from './correlate'
 import { recordSuccess } from '../health'
 import { computeReliabilityScore, maxSeverityForSourceCount } from './reliability-score'
@@ -56,12 +58,18 @@ export function matcherCountries(title: string): string[] {
 }
 
 /**
- * The places a headline names in another script, for a report the rules found no place in: its countries as the
- * matcher reads them, or else the places of India, Nepal and Bangladesh in their scripts (indic-places.ts)
+ * The places a headline names in another script, for a report the rules found no place in, at most two: its
+ * countries as the matcher reads them, then the places of India, Nepal and Bangladesh in their scripts
+ * (indic-places.ts), of Ukrainian and the Ukrainian cities in Russian (cyrillic-places.ts) and the cities and
+ * provinces in Chinese, Japanese and Korean (cjk-places.ts, Nov 20, 2026)
  */
 export function scriptPlaces(title: string): string[] {
-  const countries = matcherCountries(title)
-  return countries.length ? countries : indicPlaces(title)
+  const out: string[] = []
+  for (const name of [...matcherCountries(title), ...indicPlaces(title), ...cyrillicPlaces(title), ...cjkPlaces(title)]) {
+    if (!out.includes(name)) out.push(name)
+    if (out.length >= 2) break
+  }
+  return out
 }
 
 /** Signal ids are UUIDs; the dedup store can also hold '1' or 'pending' */

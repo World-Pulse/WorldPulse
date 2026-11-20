@@ -100,7 +100,7 @@ import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { Category, SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate, insertTimings } from '../pipeline/insert-signal'
-import { matchTimings, setThinPlaces } from '../pipeline/correlate'
+import { matchTimings, matchLooks, recentWords, setThinPlaces } from '../pipeline/correlate'
 import { noteCoverage, COVERAGE_KEY } from './coverage'
 // Feed items published more than 3 days ago aren't news
 import { MAX_ITEM_AGE_MS, isStaleItem } from '../pipeline/freshness'
@@ -17808,10 +17808,12 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     language:        'ne',
   },
   // Devon, Nov 20, 2026, 7:03 AM, on adding new outlets whose terms say personal or non-commercial use only: "proceed". Outlets left out earlier only on those terms, re-checked: each feed still fresh and allowed by robots.txt, and no ban on robots, scraping, data mining or AI training in their terms. Still out: Siasat, Prajavani, Legit.ng, Amar Ujala and Mathrubhumi (their terms ban scraping, bots or AI training), RBC-Ukraine (its feed is 7.9 MB, over the reader's limit), Isolezwe (the only Zulu outlet so far). Manorama Online and TV9 Bangla bar automated systems that send more requests than a person would; the reader asks once a pass
+  // I am Gujarat (Nov 20, 2026, afternoon): both feeds its homepage advertises stopped at 6:30 PM IST on Nov 19 (the same
+  // 28 items), so it is read from the news sitemap its robots.txt names, fresh (about 5 items a day)
   {
     id:              'iamgujarat',
     name:            'I am Gujarat',
-    feedUrl:         'https://www.iamgujarat.com/langapi/sitemap/gstandrssfeed.xml',
+    feedUrl:         'https://www.iamgujarat.com/staticsitemap/iag/news/sitemap-48hours.xml',
     category:        'geopolitics',
     biasLabel:       'center',
     reliability:     0.55,
@@ -18792,6 +18794,36 @@ export const NEWS_SOURCE_REGISTRY: NewsSource[] = [
     defaultLocation: 'Manila, Philippines',
     extraTags:       ['philippines', 'southeast-asia', 'filipino'],
     language:        'tl',
+  },
+  // Batumelebi, Batumi (Netgazeti's sister newsroom; the same terms), from the feed its homepage advertises (Nov 20, 2026: Georgian's second outlet)
+  {
+    id:              'batumelebi-ge',
+    name:            'Batumelebi (Georgia)',
+    feedUrl:         'https://batumelebi.ge/feed/',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.7,
+    countryCode:     'GE',
+    defaultLat:      41.64,
+    defaultLng:      41.63,
+    defaultLocation: 'Batumi, Georgia',
+    extraTags:       ['georgia', 'caucasus', 'georgian', 'independent-media'],
+    language:        'ka',
+  },
+  // Bolod, Ulaanbaatar news site, from the feed its homepage advertises (Nov 20, 2026: Mongolian's second outlet)
+  {
+    id:              'bolod-mn',
+    name:            'Bolod (Mongolia)',
+    feedUrl:         'https://bolod.mn/engine/rss.php',
+    category:        'geopolitics',
+    biasLabel:       'center',
+    reliability:     0.6,
+    countryCode:     'MN',
+    defaultLat:      47.89,
+    defaultLng:      106.91,
+    defaultLocation: 'Ulaanbaatar, Mongolia',
+    extraTags:       ['mongolia', 'east-asia', 'asia', 'mongolian-language'],
+    language:        'mn',
   },
 ]
 
@@ -20021,7 +20053,8 @@ export function noteFeedRead(id: string, fetchMs: number, processMs: number, ite
 }
 
 /** The reader's timing as plain numbers (averages in ms) */
-export function readerTimingSummary(timings: typeof insertTimings = insertTimings, match: typeof matchTimings = matchTimings): Record<string, unknown> {
+export function readerTimingSummary(timings: typeof insertTimings = insertTimings, match: typeof matchTimings = matchTimings,
+  looks: typeof matchLooks = matchLooks): Record<string, unknown> {
   const t = readerTiming
   const per = (ms: number, n: number) => (n > 0 ? Math.round(ms / n) : null)
   return {
@@ -20036,6 +20069,8 @@ export function readerTimingSummary(timings: typeof insertTimings = insertTiming
       older_searches: match.olderSearches, older_search_ms: per(match.olderSearchMs, match.olderSearches),
       boosts: match.boosts, boost_ms: per(match.boostMs, match.boosts),
     },
+    // ...which look found its matches, and whether the rare-words look has its counts (correlate.ts matchLooks)
+    matching_looks: { ...looks, rare_ready: recentWords.ready, rare_words: recentWords.size },
   }
 }
 
