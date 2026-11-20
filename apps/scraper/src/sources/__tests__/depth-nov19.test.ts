@@ -16,18 +16,21 @@ const { NEWS_SOURCE_REGISTRY } = await import('../news-rss')
 describe("the depth round's feeds", () => {
   it('reads more outlets in Italian, Japanese, Ukrainian, Greek, Turkish and German', () => {
     const count = (lang: string) => NEWS_SOURCE_REGISTRY.filter(s => s.language === lang).length
-    expect(count('it')).toBeGreaterThanOrEqual(13)
-    expect(count('ja')).toBeGreaterThanOrEqual(11)
-    expect(count('uk')).toBeGreaterThanOrEqual(7)
-    expect(count('el')).toBeGreaterThanOrEqual(8)
-    expect(count('tr')).toBeGreaterThanOrEqual(9)
-    expect(count('de')).toBeGreaterThanOrEqual(15)
+    expect(count('it')).toBeGreaterThanOrEqual(14)
+    expect(count('ja')).toBeGreaterThanOrEqual(13)
+    expect(count('uk')).toBeGreaterThanOrEqual(11)
+    expect(count('el')).toBeGreaterThanOrEqual(9)
+    expect(count('tr')).toBeGreaterThanOrEqual(11)
+    expect(count('de')).toBeGreaterThanOrEqual(17)
   })
 
   it("adds each feed once, at an address no other entry reads", () => {
     const ids = ['unn-uk', 'espreso-tv', 'glavcom', 'il-messaggero', 'il-mattino', 'il-gazzettino', 'il-giorno', 'la-nazione',
       'il-resto-del-carlino', 'gazzetta-del-mezzogiorno', 'open-online', 'swr', 'wdr', 'cnn-greece', 'efsyn', 'newsbomb', 'enikos',
-      'sigmalive', 'chiba-nippo', 'fukui-shimbun', 'hokkoku-shimbun', 'j-cast', 'akita-sakigake', 'haber7', 'mynet-haber']
+      'sigmalive', 'chiba-nippo', 'fukui-shimbun', 'hokkoku-shimbun', 'j-cast', 'akita-sakigake', 'haber7', 'mynet-haber',
+      // round 2: news sitemaps, and N1 Bosnia and Khabarhub's Nepali edition on Devon's word (Nov 19, 10:08 PM)
+      'srf-news', 'dw-deutsch', 'ta-nea', 'avvenire', 'chunichi', 'fukushima-minyu', 'ntv-turkey', 'timeturk', 'hromadske',
+      'lb-ua', 'nv-ua', 'ukrinform', 'n1-bih', 'khabarhub-ne']
     for (const id of ids) {
       const entries = NEWS_SOURCE_REGISTRY.filter(s => s.id === id)
       expect(entries.length, id).toBe(1)
