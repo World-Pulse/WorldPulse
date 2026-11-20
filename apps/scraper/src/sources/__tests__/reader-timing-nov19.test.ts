@@ -24,4 +24,20 @@ describe('the reader timing', () => {
     expect(s).toMatchObject({ feeds_read: 8, avg_insert_ms: 100, avg_correlate_ms: 2000, avg_dedup_ms: 10, stored: 4, new_items: 21 })
     expect((s.slowest as Array<{ id: string }>).map(x => x.id)).toEqual(['f5', 'f4', 'f3', 'f2', 'f6'])
   })
+
+  it("splits story-matching's time into its steps (Nov 20, 2026: 4.3 s a report, where does it go)", () => {
+    const s = readerTimingSummary({ inserts: 4, insertMs: 400, correlations: 4, correlateMs: 8000, dedupMs: 40 }, {
+      signals: 4, recentMs: 400, titleSearches: 4, titleSearchMs: 6000, titleRows: 120, compareMs: 800,
+      olderSearches: 1, olderSearchMs: 500, boosts: 2, boostMs: 600,
+    })
+    expect(s.matching).toEqual({
+      reports: 4, recent_ms: 100, title_search_ms: 1500, title_rows: 30, compare_ms: 200,
+      older_searches: 1, older_search_ms: 500, boosts: 2, boost_ms: 300,
+    })
+    // before any report, averages are null rather than 0
+    const empty = readerTimingSummary({ inserts: 0, insertMs: 0, correlations: 0, correlateMs: 0, dedupMs: 0 }, {
+      signals: 0, recentMs: 0, titleSearches: 0, titleSearchMs: 0, titleRows: 0, compareMs: 0, olderSearches: 0, olderSearchMs: 0, boosts: 0, boostMs: 0,
+    })
+    expect((empty.matching as Record<string, unknown>).title_search_ms).toBeNull()
+  })
 })

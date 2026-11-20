@@ -250,6 +250,20 @@ const SEVERITY_ORDER: Record<string, number> = {
 // ─── MAIN CORRELATION FUNCTION ───────────────────────────────────────────────
 
 /**
+ * Where story-matching's time goes (Nov 20, 2026): it took 4.3 s a new report that morning (1.35 s on Nov 19), most of
+ * a feed's 17 s of processing, and the reader then covered 5.6 feeds a minute. The steps of correlateSignal, totals
+ * since the scraper started: the newest 200 reports (recent), the headline-word search over the window (titleSearch,
+ * with the rows it returned), comparing them and the second look (compare, with the day before's search for a thinly
+ * covered place, olderSearch), and raising a verified story (boost). The
+ * news reader publishes them with its timing (readerTimingSummary in news-rss.ts).
+ */
+export const matchTimings = {
+  signals: 0, recentMs: 0, titleSearches: 0, titleSearchMs: 0, titleRows: 0, compareMs: 0, olderSearches: 0,
+  olderSearchMs: 0, boosts: 0, boostMs: 0,
+}
+
+
+/**
  * Correlate a newly ingested signal against recent signals.
  *
  * Called after a signal is inserted into the DB. Looks for nearby signals
@@ -260,15 +274,20 @@ export async function correlateSignal(signal: CorrelationCandidate): Promise<Eve
 
   try {
     // 1. Fetch recent signals in the temporal window
+    let t = Date.now()
     const candidates = await fetchRecentSignals(signal)
+    matchTimings.recentMs += Date.now() - t
 
     // 2. Independent reports of the same story: the only corroboration that
     //    raises reliability or verifies anything (see isSameStory). Looked for
     //    among the newest signals and, by headline words, the whole window.
+    t = Date.now()
     const wider = await fetchSameStoryCandidates(signal).catch(err => {
       logger.warn({ err, signal_id: signal.id }, 'Same-story search failed (non-fatal)')
       return [] as CorrelationCandidate[]
     })
+    matchTimings.titleSearchMs += Date.now() - t; matchTimings.titleSearches++; matchTimings.titleRows += wider.length
+    t = Date.now()
     const pool = new Map<string, CorrelationCandidate>()
     for (const c of [...candidates, ...wider]) pool.set(c.id, c)
     let sameStory = [...pool.values()].filter(c => isSameStory(signal, c))
@@ -276,17 +295,23 @@ export async function correlateSignal(signal: CorrelationCandidate): Promise<Eve
       // Nothing the usual way: the second look (see SLOW_WINDOW_HOURS), also at the day before for a
       // thinly covered place's own outlets
       if (thinHome(signal)) {
+        const t0 = Date.now()
         const older = await fetchSameStoryCandidates(signal, true).catch(() => [] as CorrelationCandidate[])
+        matchTimings.olderSearchMs += Date.now() - t0; matchTimings.olderSearches++
         for (const c of older) pool.set(c.id, c)
       }
       const busy = busyWords(pool.values())
       sameStory = [...pool.values()].filter(c => isSameStory(signal, c, { secondLook: { busy } }))
     }
+    matchTimings.compareMs += Date.now() - t
     if (sameStory.length > 0) {
       // ...kept to one story: a report that matches two stories doesn't join them (oneStory)
+      t = Date.now()
       const stories = await storiesOf(sameStory.map(c => c.id)).catch(() => new Map<string, string>())
       await applyCorroborationBoost(signal, oneStory(sameStory, stories))
+      matchTimings.boostMs += Date.now() - t; matchTimings.boosts++
     }
+    matchTimings.signals++
 
     if (candidates.length === 0) return null
 
@@ -646,7 +671,45 @@ export const FUNCTION_WORDS = new Set((
   // ha (Nov 20, 2026), as foldAccents leaves them; not those that are English words or names ("game", "sun", "take",
   // "Wanda", "Sai", "Amma")
   'daga cikin kuma domin saboda yanzu tare wajen inda yadda cewa wadanda wadda zai zata suka aka masu wani wata wasu yau ' +
-  'jiya yayin lokacin bayan kafin yake suke ake'
+  'jiya yayin lokacin bayan kafin yake suke ake ' +
+  // Nov 20, 2026: weekdays, months and "today" in the reader's other languages, and Turkish's TV listing words. Two
+  // headlines of one day shared them as words of the story ("Dólar blue hoy ... viernes 20 de noviembre" and "Precio
+  // del dólar ... hoy, viernes 20 de noviembre"; "F1 Las Vegas GP ne zaman, saat kaçta, hangi kanalda?" and
+  // "Galatasaray-Samsunspor maçı ne zaman, saat kaçta ve hangi kanalda?"). A date itself is one word (takeForeignDates).
+  // Not those that are names, places or other words too (Marco, Mars, Mayo, Julio, Abril, Janeiro, Maja, Marta, Mart,
+  // Kasım, Nisan, Ekim, Aralık, Ocak, Domingo, Segunda, Pazar, Salı, Marti, Marte), nor English's month names.
+  // Weekdays: es, pt, fr, it, de, nl, ca, ro, pl, cs, sk, hu, the former Yugoslavia's, sq, tr, uz, id, ms, tl, sw, ha,
+  // sv, da, no, fi, et, lv, lt
+  'lunes martes miercoles jueves viernes sabado terca quarta quinta sexta feira lundi mardi mercredi jeudi vendredi samedi ' +
+  'dimanche lunedi martedi mercoledi giovedi venerdi sabato domenica montag dienstag mittwoch donnerstag freitag samstag ' +
+  'sonntag maandag dinsdag woensdag donderdag vrijdag zaterdag zondag dilluns dimarts dimecres dijous divendres dissabte ' +
+  'diumenge luni miercuri joi vineri sambata duminica poniedzialek wtorek sroda czwartek piatek sobota niedziela pondeli ' +
+  'utery streda ctvrtek patek nedele pondelok utorok stvrtok piatok nedela hetfo kedd szerda csutortok pentek szombat ' +
+  'vasarnap ponedjeljak ponedeljak ponedeljek utorak torek srijeda sreda cetvrtak cetrtek petak petek subota nedjelja ' +
+  'nedelja hene merkure enjte premte shtune diel pazartesi carsamba persembe cuma cumartesi dushanba seshanba chorshanba ' +
+  'payshanba shanba yakshanba senin selasa rabu kamis jumat sabtu minggu isnin khamis jumaat ahad miyerkules huwebes ' +
+  'biyernes linggo jumatatu jumanne jumatano alhamisi ijumaa jumamosi jumapili litinin talata laraba alhamis juma asabar ' +
+  'lahadi mandag tirsdag tisdag onsdag torsdag fredag lordag sondag maanantai maanantaina tiistai tiistaina keskiviikko ' +
+  'keskiviikkona torstai torstaina perjantai perjantaina lauantai lauantaina sunnuntai sunnuntaina esmaspaev teisipaev ' +
+  'kolmapaev neljapaev reede laupaev puhapaev pirmdiena otrdiena tresdiena ceturtdiena piektdiena sestdiena svetdiena ' +
+  'pirmadienis antradienis treciadienis ketvirtadienis penktadienis sestadienis sekmadienis ' +
+  // months
+  'enero febrero junio agosto septiembre octubre noviembre diciembre fevereiro maio junho julho setembro outubro novembro ' +
+  'dezembro gennaio febbraio aprile maggio giugno luglio settembre ottobre novembre dicembre janvier fevrier avril juin ' +
+  'juillet aout septembre octobre decembre gener febrer maig juny juliol agost setembre desembre ianuarie februarie ' +
+  'martie aprilie iunie iulie septembrie octombrie noiembrie decembrie januar februar marz dezember januari februari ' +
+  'maret agustus desember subat mayis haziran temmuz agustos eylul stycznia lutego marca kwietnia czerwca lipca sierpnia ' +
+  'wrzesnia pazdziernika listopada grudnia ledna unora brezna dubna kvetna cervna cervence srpna rijna listopadu prosince ' +
+  'januara februara aprila juna jula avgusta septembra oktobra novembra decembra septembar oktobar novembar decembar ' +
+  'sijecnja veljace ozujka travnja svibnja lipnja srpnja kolovoza rujna studenoga studenog prosinca shkurt prill qershor ' +
+  'korrik gusht shtator tetor nentor dhjetor yanvar fevral aprel iyun iyul avgust avqust sentyabr sentabr oktyabr oktabr ' +
+  'noyabr dekabr marcius aprilis majus augusztus szeptember machi aprili julai agosti septemba oktoba novemba desemba ' +
+  'janairu fabrairu afrilu yuni yuli satumba nuwamba disamba pebrero marso hunyo hulyo setyembre oktubre nobyembre ' +
+  'disyembre augusti marts jaanuar veebruar aprill juuni juuli oktoober detsember ' +
+  // today
+  'hoy hoje aujourd hui bugun vandaag azi astazi dzis dzisiaj dnes avui idag ngayon hom nay ngay ' +
+  // Turkish's listings of when a match or a race is on, and on which channel
+  'zaman saat kacta hangi kanalda sifresiz canli izle'
 ).split(' '))
 
 /**
@@ -718,9 +781,136 @@ const DATE_FORMS: Array<{ re: RegExp; word: (g: string[]) => string }> = [
   { re: new RegExp(`\\b${MONTH_NAME},?\\s+((?:19|20)\\d{2})(?!\\d)`, 'gi'), word: g => `~${monthNumber(g[1]!)}/${g[2]}` },
   // 2026-10-15
   { re: /\b(?:19|20)\d{2}-(\d{1,2})-(\d{1,2})\b/g, word: g => `~${Number(g[1])}-${Number(g[2])}` },
-  // 10/15/2026 · 15.10.2026, as written (which comes first differs by country)
-  { re: /\b(\d{1,2})[/.](\d{1,2})[/.](?:(?:19|20)\d{2}|\d{2})\b/g, word: g => `~${Number(g[1])}-${Number(g[2])}` },
+  // 10/15/2026 · 15.10.2026: month first when the order shows (Nov 20, 2026: "15.10.2026" is "15 October"), else as written
+  { re: /\b(\d{1,2})[/.](\d{1,2})[/.](?:(?:19|20)\d{2}|\d{2})\b/g, word: g => numericDate(Number(g[1]), Number(g[2])) || `~${Number(g[1])}-${Number(g[2])}` },
 ]
+
+/**
+ * Dates in the reader's other languages (Nov 20, 2026), on a headline as foldAccents leaves it. takeDates reads
+ * English month names only, so "viernes 20 de noviembre", "dal 20 al 22 novembre", "Vendredi 20 Novembre 2026",
+ * "20 Kasım", "20 نوفمبر 2026", "20 ноября", "20-11-2026", "hôm nay 20/11", "11月20日" and "20 नवंबर" left a day and a
+ * year as two shared counts and the month and weekday as two shared words: of the 30 "different event" cross-check
+ * verdicts on the morning of Nov 20, a third were two headlines that shared little but the date ("Precio del dólar en
+ * República Dominicana hoy, viernes 20 de noviembre" and "Dólar blue hoy: a cuánto opera este viernes 20 de
+ * noviembre"). Each now becomes one date word, as an English one does. The month only next to a day: "Marco", "Mars"
+ * and "Kasım" are names too. Iran's and Afghanistan's solar months are their own ("~sh8-29": 29 Aban); a day alone,
+ * after a weekday ("viernes 20", "nesta sexta-feira (20)") or as Japanese and Chinese write it ("20日"), is "~d20".
+ * Not the months that are other words of their scripts once foldAccents has dropped the vowel signs (June in Hindi,
+ * Bengali and Kannada is "जन", "জন", "ಜನ": people), nor Lithuanian's month-then-day.
+ */
+const FOREIGN_MONTHS: Array<[number, string]> = [
+  [1, 'enero|janeiro|gennaio|janvier|ianuarie|gener|januar|januari|januara|ocak|stycznia|sijecnja|janar|jaanuar|janvari|ledna|tammikuuta|yanvar|janairu|' +
+    'января|січня|јануара|јануар|януари|јануари|қаңтар|يناير|كانون الثاني|ژانویه|جنوری|Ιανουαρίου|जनवरी|जानेवारी|জানুয়ারি|ஜனவரி|జనవరి|ಜನವರಿ|ജനുവരി|જાન્યુઆરી|มกราคม'],
+  [2, 'febrero|fevereiro|febbraio|fevrier|februarie|februar|februari|februara|febrer|subat|lutego|veljace|shkurt|veebruar|unora|helmikuuta|fevral|fabrairu|pebrero|' +
+    'февраля|лютого|фебруара|фебруар|февруари|ақпан|فبراير|شباط|فوریه|فروری|Φεβρουαρίου|फरवरी|फ़रवरी|फेब्रुवारी|फेब्रुअरी|ফেব্রুয়ারি|பிப்ரவரி|ఫిబ్రవరి|ಫೆಬ್ರವರಿ|ഫെബ്രുവരി|ફેબ્રુઆરી|กุมภาพันธ์'],
+  [3, 'marzo|marco|mars|martie|maart|marz|maret|marta|mart|marca|ozujka|marts|marec|brezna|maaliskuuta|machi|maris|marso|marcius|' +
+    'марта|березня|март|наурыз|مارس|اذار|آذار|مارچ|Μαρτίου|मार्च|মার্চ|மார்ச்|మార్చి|ಮಾರ್ಚ್|മാർച്ച്|માર્ચ|มีนาคม'],
+  [4, 'abril|aprile|avril|aprilie|april|aprila|nisan|kwietnia|travnja|prill|aprill|dubna|huhtikuuta|aprili|afrilu|aprel|aprilis|' +
+    'апреля|квітня|априла|април|сәуір|ابريل|أبريل|نيسان|آوریل|اپریل|Απριλίου|अप्रैल|एप्रिल|अप्रिल|এপ্রিল|ஏப்ரல்|ఏప్రిల్|ಏಪ್ರಿಲ್|ഏപ്രിൽ|એપ્રિલ|เมษายน'],
+  [5, 'mayo|maio|maggio|mai|mei|maja|maj|mayis|svibnja|maig|kvetna|toukokuuta|mayu|maija|majus|' +
+    'мая|травня|маја|мај|май|мамыр|مايو|ايار|أيار|مئی|Μαΐου|मई|พฤษภาคม'],
+  [6, 'junio|junho|giugno|juin|iunie|juni|juna|haziran|czerwca|lipnja|qershor|juny|juuni|junija|cervna|kesakuuta|yuni|iyun|hunyo|junius|' +
+    'июня|червня|јуна|јун|юни|јуни|маусым|يونيو|حزيران|ژوئن|جون|Ιουνίου|มิถุนายน'],
+  [7, 'julio|julho|luglio|juillet|iulie|juli|jula|temmuz|lipca|srpnja|korrik|juliol|juuli|julija|cervence|heinakuuta|yuli|iyul|hulyo|julai|julius|' +
+    'июля|липня|јула|јул|юли|јули|шілде|يوليو|تموز|ژوئیه|جولائی|Ιουλίου|जुलाई|জুলাই|ஜூலை|జూలై|ಜುಲೈ|ജൂലൈ|જુલાઈ|กรกฎาคม'],
+  [8, 'agosto|aout|august|augustus|agustus|avgusta|augusta|agustos|sierpnia|kolovoza|gusht|augusti|agost|srpna|elokuuta|agusta|avqust|agosti|ogos|augusztus|avgust|' +
+    'августа|серпня|августа|август|тамыз|اغسطس|أغسطس|آب|اوت|اگست|Αυγούστου|अगस्त|ऑगस्ट|अगस्ट|আগস্ট|ஆகஸ்ட்|ఆగస్టు|ಆಗಸ್ಟ್|ഓഗസ്റ്റ്|ઓગસ્ટ|สิงหาคม'],
+  [9, 'septiembre|setembro|settembre|septembre|septembrie|september|septembra|eylul|wrzesnia|rujna|shtator|zari|syyskuuta|satumba|sentyabr|sentabr|septemba|setyembre|septembri|szeptember|setembre|septembar|' +
+    'сентября|вересня|септембра|септембар|септември|қыркүйек|سبتمبر|ايلول|أيلول|سپتامبر|ستمبر|Σεπτεμβρίου|सितंबर|सितम्बर|सप्टेंबर|सेप्टेम्बर|সেপ্টেম্বর|செப்டம்பர்|సెప్టెంబర్|ಸೆಪ್ಟೆಂಬರ್|സെപ്റ്റംബർ|સપ્ટેમ્બર|กันยายน'],
+  [10, 'octubre|outubro|ottobre|octobre|octombrie|oktober|oktobra|ekim|pazdziernika|tetor|oktoober|rijna|lokakuuta|oktyabr|oktabr|oktoba|oktubre|oktobri|oktobar|' +
+    'октября|жовтня|октобра|октобар|октомври|қазан|اكتوبر|أكتوبر|تشرين الاول|تشرين الأول|اکتبر|اکتوبر|Οκτωβρίου|अक्टूबर|अक्तूबर|ऑक्टोबर|अक्टोबर|অক্টোবর|அக்டோபர்|అక్టోబర్|ಅಕ್ಟೋಬರ್|ഒക്ടോബർ|ઓક્ટોબર|ตุลาคม'],
+  [11, 'noviembre|novembro|novembre|noiembrie|november|novembra|kasim|listopada|studenoga|studenog|nentor|listopadu|marraskuuta|nuwamba|noyabr|novemba|nobyembre|novembri|novembar|' +
+    'ноября|листопада|новембра|новембар|ноември|қараша|نوفمبر|تشرين الثاني|نوامبر|نومبر|Νοεμβρίου|नवंबर|नवम्बर|नोव्हेंबर|नोभेम्बर|নভেম্বর|நவம்பர்|నవంబర్|ನವೆಂಬರ್|നവംബർ|નવેમ્બર|พฤศจิกายน'],
+  [12, 'diciembre|dezembro|dicembre|decembre|decembrie|dezember|december|desember|decembra|aralik|grudnia|prosinca|dhjetor|detsember|prosince|joulukuuta|disamba|dekabr|desemba|disyembre|decembri|decembar|desembre|disember|' +
+    'декабря|грудня|децембра|децембар|декември|желтоқсан|ديسمبر|كانون الاول|كانون الأول|دسامبر|دسمبر|Δεκεμβρίου|दिसंबर|दिसम्बर|डिसेंबर|डिसेम्बर|ডিসেম্বর|டிசம்பர்|డిసెంబర్|ಡಿಸೆಂಬರ್|ഡിസംബർ|ડિસેમ્બર|ธันวาคม'],
+  // Iran's solar months, then Afghanistan's
+  [101, 'فروردین|حمل'], [102, 'اردیبهشت|ثور'], [103, 'خرداد|جوزا'], [104, 'تیر|سرطان'], [105, 'مرداد|اسد'], [106, 'شهریور|سنبله'],
+  [107, 'مهر|میزان'], [108, 'آبان|عقرب'], [109, 'آذر|قوس'], [110, 'دی|جدی'], [111, 'بهمن|دلو'], [112, 'اسفند|حوت'],
+]
+const FOREIGN_MONTH_NUMBER = new Map<string, number>()
+const INDIC_LETTER = /[\p{scx=Devanagari}\p{scx=Bengali}\p{scx=Gujarati}\p{scx=Tamil}\p{scx=Telugu}\p{scx=Kannada}\p{scx=Malayalam}]/u
+for (const [n, names] of FOREIGN_MONTHS) {
+  for (const name of names.split('|')) {
+    const folded = foldAccents(name)
+    // (not a name of the Indian scripts that is two letters once folded: "ஜூலை", July, is "ஜல", and "జల" is water)
+    if (Array.from(folded).length < (INDIC_LETTER.test(folded) && folded !== 'मई' ? 3 : 2)) continue
+    if (!FOREIGN_MONTH_NUMBER.has(folded)) FOREIGN_MONTH_NUMBER.set(folded, n)
+  }
+}
+const FOREIGN_MONTH = `(${[...FOREIGN_MONTH_NUMBER.keys()].sort((a, b) => b.length - a.length).map(m => m.replace(/ /g, '\\s+')).join('|')})`
+/** The first word of each month's name, to see quickly whether a headline may have one */
+const FOREIGN_MONTH_FIRST = new Set([...FOREIGN_MONTH_NUMBER.keys()].map(m => m.split(' ')[0]!))
+// (word edges for every script: \b sees no letter in Arabic or Cyrillic)
+const FB = '(?<![\\p{L}\\p{N}])'
+const FE = '(?![\\p{L}\\p{N}])'
+// (the year after a date: ours, Iran's and Afghanistan's 14xx, Thailand's 25xx)
+const FOREIGN_YEAR = '(?:,?\\s+(?:de\\s+|del\\s+)?(?:(?:19|20|14|25)\\d{2}))?'
+const FOREIGN_DAY_OF = '(?:\\.?\\s+|-)(?:(?:de|di|ga)\\s+|d[\'’]\\s*)?'
+const foreignMonth = (name: string) => FOREIGN_MONTH_NUMBER.get(name.replace(/\s+/g, ' ')) ?? 0
+/** A month and day's word: "~11-20", or "~sh8-29" for a solar month; none for a day no month has */
+const monthDay = (month: number, day: number): string =>
+  !month || day < 1 || day > 31 ? '' : month > 100 ? `~sh${month - 100}-${day}` : `~${month}-${day}`
+/**
+ * The word for a date in numbers: month first when the order shows (one of the two is over 12: "20/11" and "11/20" are
+ * both "~11-20"), else as written ("05/06")
+ */
+export function numericDate(first: number, second: number): string {
+  if (first < 1 || second < 1 || first > 31 || second > 31 || (first > 12 && second > 12)) return ''
+  return first > 12 ? `~${second}-${first}` : `~${first}-${second}`
+}
+/** A weekday the day's number follows without its month: "viernes 20", "sexta-feira (20)", "vendredi 20" */
+const WEEKDAY_BEFORE_DAY = '(?:lunes|martes|miercoles|jueves|viernes|sabado|domingo|lundi|mardi|mercredi|jeudi|vendredi|samedi|' +
+  'dimanche|lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica|dilluns|dimarts|dimecres|dijous|divendres|dissabte|' +
+  'diumenge|luni|marti|miercuri|joi|vineri|sambata|duminica|(?:segunda|terca|quarta|quinta|sexta)-feira)'
+const FOREIGN_DATE_FORMS: Array<{ re: RegExp; word: (g: string[]) => string }> = [
+  // "dal 20 al 22 novembre", "del 20 al 22 de noviembre", "20-22 novembre", "vom 20. bis 22. November": the first day
+  { re: new RegExp(`${FB}(\\d{1,2})\\.?\\s*(?:al|a|au|bis|-|–|y|e|et|i|ve|do)\\s*\\d{1,2}${FOREIGN_DAY_OF}${FOREIGN_MONTH}${FE}${FOREIGN_YEAR}`, 'gu'), word: g => monthDay(foreignMonth(g[2]!), Number(g[1])) },
+  // "20 de noviembre de 2026", "20 novembre 2026", "20. November", "20 Kasım", "20 نوفمبر 2026", "20 ноября", "20-noyabr"
+  { re: new RegExp(`${FB}(\\d{1,2})${FOREIGN_DAY_OF}${FOREIGN_MONTH}${FE}${FOREIGN_YEAR}`, 'gu'), word: g => monthDay(foreignMonth(g[2]!), Number(g[1])) },
+  // "október 20.", "2026. szeptember 20-án" (Hungarian), "Nobyembre 20, 2026" (Tagalog): the month first, and the day
+  // ending a phrase (not "mayo 15 personas", a count)
+  { re: new RegExp(`${FB}(?:(?:19|20)\\d{2}\\.?\\s+)?${FOREIGN_MONTH}\\s+(\\d{1,2})\\.?(?:-[a-z]{1,4})?(?:,?\\s+(?:19|20)\\d{2})?${FE}(?=\\s*(?:[,.:;!?)\\]–—|-]|$))`, 'gu'), word: g => monthDay(foreignMonth(g[1]!), Number(g[2])) },
+  // "ngày 20 tháng 11" (Vietnamese)
+  { re: new RegExp(`${FB}(\\d{1,2})\\s+thang\\s+(\\d{1,2})${FE}(?:\\s+nam\\s+(?:19|20)\\d{2})?`, 'gu'), word: g => monthDay(Number(g[2]), Number(g[1])) },
+  // "2026年11月20日", "11月20日" (Chinese, Japanese), "11월 20일" (Korean)
+  { re: /(?<!\d)(?:(?:19|20)\d{2}\s*[年년]\s*)?(\d{1,2})\s*[月월]\s*(\d{1,2})\s*[日일号號]/gu, word: g => (Number(g[1]) <= 12 ? monthDay(Number(g[1]), Number(g[2])) : '') },
+  // "20日" (Japanese, Chinese: on the 20th; not "日本", Japan, nor "20日間", 20 days)
+  { re: /(?<!\d)(\d{1,2})日(?![本間间])/gu, word: g => (Number(g[1]) >= 1 && Number(g[1]) <= 31 ? `~d${Number(g[1])}` : '') },
+  // "nesta sexta-feira (20)", "el próximo viernes 20", "vendredi 20," and Brazil's "nesta sexta (20)": the day in brackets
+  // or ending a phrase (not "el martes 3 muertos", a toll)
+  { re: new RegExp(`${FB}${WEEKDAY_BEFORE_DAY}(?:,\\s*|\\s+)(?:\\(\\s*(\\d{1,2})\\s*\\)|(\\d{1,2})${FE}(?=\\s*(?:[,.:;!?)\\]–—|-]|$)))`, 'gu'), word: g => { const day = Number(g[1] || g[2]); return day >= 1 && day <= 31 ? `~d${day}` : '' } },
+  { re: new RegExp(`${FB}(?:segunda|terca|quarta|quinta|sexta|sabado|domingo)\\s*\\(\\s*(\\d{1,2})\\s*\\)`, 'gu'), word: g => (Number(g[1]) >= 1 && Number(g[1]) <= 31 ? `~d${Number(g[1])}` : '') },
+  // "20-11-2026"
+  { re: /(?<![\d-])(\d{1,2})-(\d{1,2})-(?:19|20)\d{2}(?![\d-])/g, word: g => numericDate(Number(g[1]), Number(g[2])) },
+  // "20/11" without a year (Vietnamese and others write today's date so); not "20.11", a decimal
+  { re: /(?<![\d/.,])(\d{1,2})\/(\d{1,2})(?![\d/.,]?\d)/g, word: g => numericDate(Number(g[1]), Number(g[2])) },
+]
+
+const WEEKDAY_WORD = new RegExp(`${FB}${WEEKDAY_BEFORE_DAY}${FE}`, 'u')
+/** Whether a folded headline may have a date in another language: a digit, and a month's name or a date's marks */
+function mayHaveForeignDate(folded: string): boolean {
+  if (!/\d/.test(folded)) return false
+  if (/\d\s*(?:thang|[月월日])|\d[-/]\d|\d\s*\)/.test(folded) || WEEKDAY_WORD.test(folded)) return true
+  for (const token of folded.split(/[^\p{L}]+/u)) if (token && FOREIGN_MONTH_FIRST.has(token)) return true
+  return false
+}
+
+/** A folded headline without its dates in the other languages, and the dates as words ("~11-20") */
+export function takeForeignDates(folded: string): { text: string; dates: string[] } {
+  const dates: string[] = []
+  if (!mayHaveForeignDate(folded)) return { text: folded, dates }
+  let text = folded
+  for (const { re, word } of FOREIGN_DATE_FORMS) {
+    text = text.replace(re, (...args: unknown[]) => {
+      const g = args.slice(0, -2).map(a => String(a ?? ''))
+      const date = word(g)
+      if (!date) return g[0]!
+      dates.push(date)
+      return ' '
+    })
+  }
+  return { text, dates }
+}
 
 /** A headline without its dates, and the dates as words ("~10-15") */
 export function takeDates(title: string): { text: string; dates: string[] } {
@@ -936,6 +1126,30 @@ const INDIC_STOP = new Set([
   // am
   'እና ላይ ውስጥ ጋር ስለ ወደ ነው ናቸው ዛሬ ዜና',
 ].join(' ').split(/\s+/).filter(Boolean).map(indicStem).filter(w => w.length >= 2))
+/**
+ * Their weekdays and months (Nov 20, 2026), whole, as foldAccents leaves them: their three-letter stems are other
+ * words' too ("शुक्रवार", Friday, begins as "शंकर", Shankar, does). Not March, a march too ("कैंडल मार्च"), nor June and
+ * Marathi's July, people and water once folded ("जन", "জন", "जल")
+ */
+const INDIC_WHOLE_STOP = new Set([
+  // hi, mr, ne
+  'सोमवार मंगलवार मंगळवार बुधवार गुरुवार बृहस्पतिवार शुक्रवार शनिवार रविवार आइतबार सोमबार मंगलबार बुधबार बिहीबार शुक्रबार शनिबार ' +
+  'जनवरी फरवरी फ़रवरी अप्रैल मई जुलाई अगस्त सितंबर सितम्बर अक्टूबर अक्तूबर नवंबर नवम्बर दिसंबर दिसम्बर जानेवारी फेब्रुवारी ' +
+  'एप्रिल ऑगस्ट सप्टेंबर ऑक्टोबर नोव्हेंबर डिसेंबर फेब्रुअरी अप्रिल अगस्ट सेप्टेम्बर अक्टोबर नोभेम्बर डिसेम्बर',
+  // bn
+  'সোমবার মঙ্গলবার বুধবার বৃহস্পতিবার শুক্রবার শনিবার রবিবার জানুয়ারি ফেব্রুয়ারি এপ্রিল জুলাই আগস্ট সেপ্টেম্বর অক্টোবর নভেম্বর ডিসেম্বর',
+  // gu
+  'સોમવાર મંગળવાર બુધવાર ગુરુવાર શુક્રવાર શનિવાર રવિવાર જાન્યુઆરી ફેબ્રુઆરી એપ્રિલ જુલાઈ ઓગસ્ટ સપ્ટેમ્બર ઓક્ટોબર નવેમ્બર ડિસેમ્બર',
+  // te
+  'సోమవారం మంగళవారం బుధవారం గురువారం శుక్రవారం శనివారం ఆదివారం జనవరి ఫిబ్రవరి ఏప్రిల్ ఆగస్టు సెప్టెంబర్ అక్టోబర్ నవంబర్ డిసెంబర్',
+  // kn
+  'ಸೋಮವಾರ ಮಂಗಳವಾರ ಬುಧವಾರ ಗುರುವಾರ ಶುಕ್ರವಾರ ಶನಿವಾರ ಭಾನುವಾರ ಜನವರಿ ಫೆಬ್ರವರಿ ಏಪ್ರಿಲ್ ಆಗಸ್ಟ್ ಸೆಪ್ಟೆಂಬರ್ ಅಕ್ಟೋಬರ್ ನವೆಂಬರ್ ಡಿಸೆಂಬರ್',
+  // ml
+  'തിങ്കളാഴ്ച ചൊവ്വാഴ്ച ബുധനാഴ്ച വ്യാഴാഴ്ച വെള്ളിയാഴ്ച ശനിയാഴ്ച ഞായറാഴ്ച ജനുവരി ഫെബ്രുവരി ഏപ്രിൽ ഓഗസ്റ്റ് സെപ്റ്റംബർ ഒക്ടോബർ നവംബർ ഡിസംബർ',
+  // ta (the weekdays whole: "வெள்ளி", Friday, is silver too)
+  'திங்கள்கிழமை செவ்வாய்க்கிழமை புதன்கிழமை வியாழக்கிழமை வெள்ளிக்கிழமை சனிக்கிழமை ஞாயிற்றுக்கிழமை ஜனவரி பிப்ரவரி ஏப்ரல் ஆகஸ்ட் ' +
+  'செப்டம்பர் அக்டோபர் நவம்பர் டிசம்பர்',
+].join(' ').split(/\s+/).filter(Boolean).map(w => foldAccents(w)))
 /** A word's form in its script, as storyWords compares them (and the stop lists below are built) */
 function otherScriptStem(word: string): string {
   const w = foldAccents(word)
@@ -971,7 +1185,45 @@ const OTHER_SCRIPT_STOP = new Set([
   // ko
   '대해 관련 위해 따라 통해 대한 및 또 더 수 것 중 전 후 오늘 어제 속보 단독 종합 영상 사진 포토 기자 밝혀 말했다 했다 한다 ' +
   '했다고 한다고 있다 없다 된다 됐다 위한 이번 올해 내년 지난',
+  // ko (Nov 20, 2026): weekdays, and tomorrow
+  '월요일 화요일 수요일 목요일 금요일 토요일 일요일 내일',
 ].join(' ').split(/\s+/).filter(Boolean).flatMap(w => [foldAccents(w), otherScriptStem(w)]))
+
+/**
+ * Weekdays and months (Nov 20, 2026; a date is one word: takeForeignDates) of Arabic, Persian, Urdu, Russian, Ukrainian,
+ * Serbian, Bulgarian, Macedonian, Kazakh and Greek, and Arabic's market words ("أكبر انخفاض أسبوعي منذ مارس", the
+ * biggest weekly drop since March, of shares and of gold), whole as foldAccents leaves them: their stems are other words'
+ * too ("الجمعة", Friday, is "جمع" as "جمعية", an association, is; "четверг", Thursday, begins as "четвертьфинал"). Not
+ * "الاثنين", Monday, which is also "two"; Urdu's "پیر", Monday, a saint's title, and "مارچ", a march too ("آزادی مارچ");
+ * "среда", Wednesday, also the environment; Kazakh's "қазан", "наурыз" and "маусым", also Kazan, the Nauryz holiday and a
+ * season
+ */
+const OTHER_SCRIPT_WHOLE_STOP = new Set([
+  // ar
+  'السبت الاحد الأحد الثلاثاء الاربعاء الأربعاء الخميس الجمعة يناير فبراير مارس ابريل أبريل مايو يونيو يوليو اغسطس أغسطس ' +
+  'سبتمبر اكتوبر أكتوبر نوفمبر ديسمبر اكبر أكبر اسبوعي أسبوعي',
+  // fa, ur
+  'شنبه یکشنبه دوشنبه چهارشنبه پنجشنبه جمعه فروردین اردیبهشت خرداد مرداد شهریور آبان بهمن اسفند ژانویه فوریه آوریل ژوئن ' +
+  'ژوئیه سپتامبر اکتبر نوامبر دسامبر منگل جمعرات جمعہ ہفتہ اتوار جنوری فروری اپریل جولائی ستمبر نومبر دسمبر',
+  // ru (and "в пятницу", on Friday; "в ноябре", in November)
+  'понедельник вторник четверг пятница пятницу суббота субботу воскресенье января февраля марта апреля июня июля августа ' +
+  'сентября октября ноября декабря январе феврале марте апреле мае июне июле августе сентябре октябре ноябре декабре',
+  // uk
+  'понеділок вівторок середа середу четвер пʼятниця пʼятницю ятниця ятницю субота суботу неділя неділю січня лютого ' +
+  'березня квітня травня червня липня серпня вересня жовтня листопада грудня січні лютому березні квітні травні червні ' +
+  'липні серпні вересні жовтні листопаді грудні',
+  // sr, bg, mk
+  'понедељак уторак четвртак петак субота суботу недеља недељу јануара фебруара априла јуна јула септембра октобра новембра ' +
+  'децембра понеделник сряда четвъртък петък събота неделя четврток петок сабота недела януари февруари септември октомври ' +
+  'ноември декември јануари февруари',
+  // kk
+  'дүйсенбі сейсенбі сәрсенбі бейсенбі жұма сенбі жексенбі қаңтар ақпан сәуір мамыр шілде тамыз қыркүйек қараша желтоқсан',
+  // el
+  'Δευτέρα Τρίτη Τετάρτη Πέμπτη Παρασκευή Σάββατο Κυριακή Ιανουαρίου Φεβρουαρίου Μαρτίου Απριλίου Μαΐου Ιουνίου Ιουλίου ' +
+  'Αυγούστου Σεπτεμβρίου Οκτωβρίου Νοεμβρίου Δεκεμβρίου Ιανουάριο Φεβρουάριο Μάρτιο Απρίλιο Μάιο Ιούνιο Ιούλιο Αύγουστο ' +
+  'Σεπτέμβριο Οκτώβριο Νοέμβριο Δεκέμβριο Ιανουάριος Φεβρουάριος Μάρτιος Απρίλιος Μάιος Ιούνιος Ιούλιος Αύγουστος ' +
+  'Σεπτέμβριος Οκτώβριος Νοέμβριος Δεκέμβριος',
+].join(' ').split(/\s+/).filter(Boolean).flatMap(w => [foldAccents(w), arabicLetters(foldAccents(w))]))
 
 /** Kinds of events and their usual actors (see EVENT_WORDS) */
 for (const stem of stemsOf(
@@ -1102,6 +1354,10 @@ const CJK_STOP = new Set([
   '我们', '我們', '他们', '他們', '这个', '這個', '一个', '一個', '没有', '沒有', '时间', '時間', '目前', '最新', '视频', '影片', '直播',
   // ja
   '発表', '速報', '動画', '写真', '関連', '記事', '会見', '明らか', '方針', '必要', '可能性', '中継', 'ニュース', 'ライブ',
+  // weekdays and days (Nov 20, 2026), as the pieces of "金曜日", "星期五" and "本周" are
+  '曜日', '月曜', '火曜', '水曜', '木曜', '金曜', '土曜', '日曜', '星期', '期一', '期二', '期三', '期四', '期五', '期六', '期日', '期天',
+  '周一', '周二', '周三', '周四', '周五', '周六', '周日', '週一', '週二', '週三', '週四', '週五', '週六', '週日', '昨天', '昨日', '明天',
+  '明日', '本日', '本周', '本週', '上周', '上週', '下周', '下週', '今年', '去年', '明年',
 ].map(w => foldAccents(w)))
 const CJK_COUNTRIES = new Map(([
   ['CN', '中国 中國 北京 上海 中共 習近平 习近平'], ['JP', '日本 東京 东京 政府与党'], ['US', '米国 米軍 米政府 美国 美國 美军 美軍 白宫 白宮 トランプ 特朗普 川普 ワシントン 华盛顿 華盛頓'],
@@ -1135,6 +1391,8 @@ export function cjkWords(text: string): string[] {
 export function otherScriptWords(text: string): string[] {
   const out: string[] = cjkWords(text)
   let rest = text.replace(CJK_RUNS, ' ').replace(INDIC_JOINERS, '')
+    // (Persian's Tuesday and Thursday, "سه‌شنبه" and "پنج‌شنبه", are not three and five: Nov 20, 2026)
+    .replace(/(?<![\p{L}])(?:سه|پنج)[\u200c\s]?شنبه(?![\p{L}])/gu, ' ')
   for (const [re, code] of ARABIC_COUNTRY_PHRASES) rest = rest.replace(re, () => { out.push(`@${code}`); return ' ' })
   const steppe = STEPPE_LETTERS.test(rest)
   for (const token of rest.split(/[^\p{L}]+/u)) {
@@ -1143,6 +1401,7 @@ export function otherScriptWords(text: string): string[] {
     const greek = !arabic && GREEK_SCRIPT.test(token)
     const hangul = !arabic && !greek && HANGUL_SCRIPT.test(token)
     if (!arabic && !greek && !hangul && INDIC_SCRIPT.test(token)) {
+      if (INDIC_WHOLE_STOP.has(token)) continue
       const stem = indicStem(token)
       if (stem.length >= 2 && !INDIC_STOP.has(stem)) out.push(stem)
       continue
@@ -1153,7 +1412,7 @@ export function otherScriptWords(text: string): string[] {
       continue
     }
     if (!arabic && !greek && !hangul && !CYRILLIC_SCRIPT.test(token)) continue
-    if (OTHER_SCRIPT_STOP.has(token)) continue
+    if (OTHER_SCRIPT_STOP.has(token) || OTHER_SCRIPT_WHOLE_STOP.has(token) || OTHER_SCRIPT_WHOLE_STOP.has(arabicLetters(token))) continue
     const stem = arabic ? arabicStem(token) : greek ? greekStem(token) : hangul ? hangulStem(token) : cyrillicStem(token, steppe)
     const code = OTHER_SCRIPT_COUNTRIES.get(arabic ? arabicBase(token) : stem) ?? (steppe ? OTHER_SCRIPT_COUNTRIES.get(cyrillicStem(token)) : undefined)
     if (code) { out.push(`@${code}`); continue }
@@ -1200,7 +1459,10 @@ export function storyWords(title: string): Set<string> {
   for (const date of dates) words.add(date)
   // Accents folded (foldAccents): "Kovač" and "Kovac" are one word, not "kova" and "kovac"
   // (and Arabic-Indic digits as digits: a toll counts in either script)
-  const text = foldAccents(westernDigits(undated)).replace(/(\d),(?=\d{3}\b)/g, '$1')
+  // ...and the other languages' dates, read on the folded words ("viernes 20 de noviembre": takeForeignDates)
+  const foreign = takeForeignDates(foldAccents(westernDigits(undated)).replace(/(\d),(?=\d{3}\b)/g, '$1'))
+  for (const date of foreign.dates) words.add(date)
+  const text = foreign.text
   for (const raw of text.replace(/[^a-z0-9\s-]/g, ' ').split(/[\s-]+/)) {
     if (!raw) continue
     if (/^\d+$/.test(raw)) { words.add(`#${Number(raw)}`); continue }
@@ -1227,7 +1489,7 @@ export function storyWords(title: string): Set<string> {
  */
 export function searchWords(title: string): string[] {
   const keep = (w: string) => w.length >= 4 && !STOP_WORDS.has(w) && !HEADLINE_FILLER.has(w) && !FUNCTION_WORDS.has(w)
-    && !OTHER_SCRIPT_STOP.has(foldAccents(w))
+    && !OTHER_SCRIPT_STOP.has(foldAccents(w)) && !OTHER_SCRIPT_WHOLE_STOP.has(foldAccents(w))
   const out: string[] = []
   let base = 0
   // A word of the Indian scripts (Nov 19, 2026) by its letters up to its first virama or nukta: the database's word
@@ -1236,13 +1498,16 @@ export function searchWords(title: string): string[] {
     if (base >= 12) break
     if (!token || !INDIC_SCRIPT.test(foldAccents(token))) continue
     const lead = /^\p{Alphabetic}+/u.exec(token)?.[0] ?? ''
-    if ((lead.match(/\p{L}/gu)?.length ?? 0) < 2 || INDIC_STOP.has(indicStem(lead)) || out.includes(lead)) continue
+    if ((lead.match(/\p{L}/gu)?.length ?? 0) < 2 || INDIC_STOP.has(indicStem(lead)) || INDIC_WHOLE_STOP.has(foldAccents(token)) || out.includes(lead)) continue
     base++
     out.push(lead)
   }
   for (const token of takeDates(title).text.toLowerCase().split(/[^\p{L}\p{N}]+/u)) {
     if (base >= 12) break
     // As written in plain letters (as before), as written with its accents, and without them
+    if (OTHER_SCRIPT_WHOLE_STOP.has(foldAccents(token)) || OTHER_SCRIPT_WHOLE_STOP.has(arabicLetters(foldAccents(token)))) continue
+    // (nor a year, Nov 20, 2026: "2026" found every headline of the day that has one, "20 novembre 2026" and "Budget 2026")
+    if (/^(?:19|20)\d{2}$/.test(token)) continue
     const forms = [...token.split(/[^a-z0-9]+/), token, foldAccents(token)]
     // An Arabic word also without its article and with it (Nov 6, 2026): "الحكومة" finds "حكومة" and the reverse
     if (ARABIC_SCRIPT.test(foldAccents(token))) {

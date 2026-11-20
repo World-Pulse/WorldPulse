@@ -100,7 +100,7 @@ import type { Producer } from 'kafkajs'
 import { logger as rootLogger } from '../lib/logger'
 import type { Category, SignalSeverity } from '@worldpulse/types'
 import { insertAndCorrelate, insertTimings } from '../pipeline/insert-signal'
-import { setThinPlaces } from '../pipeline/correlate'
+import { matchTimings, setThinPlaces } from '../pipeline/correlate'
 import { noteCoverage, COVERAGE_KEY } from './coverage'
 // Feed items published more than 3 days ago aren't news
 import { MAX_ITEM_AGE_MS, isStaleItem } from '../pipeline/freshness'
@@ -19727,7 +19727,7 @@ export function noteFeedRead(id: string, fetchMs: number, processMs: number, ite
 }
 
 /** The reader's timing as plain numbers (averages in ms) */
-export function readerTimingSummary(timings: typeof insertTimings = insertTimings): Record<string, unknown> {
+export function readerTimingSummary(timings: typeof insertTimings = insertTimings, match: typeof matchTimings = matchTimings): Record<string, unknown> {
   const t = readerTiming
   const per = (ms: number, n: number) => (n > 0 ? Math.round(ms / n) : null)
   return {
@@ -19735,6 +19735,13 @@ export function readerTimingSummary(timings: typeof insertTimings = insertTiming
     avg_fetch_ms: per(t.fetchMs, t.feeds), avg_process_ms: per(t.processMs, t.feeds), new_items: t.newItems,
     avg_insert_ms: per(timings.insertMs, timings.inserts), avg_correlate_ms: per(timings.correlateMs, timings.correlations),
     avg_dedup_ms: per(timings.dedupMs, timings.inserts + 0), stored: timings.inserts, slowest: t.slowest,
+    // Story-matching's steps (Nov 20, 2026; correlate.ts matchTimings), each a report's average
+    matching: {
+      reports: match.signals, recent_ms: per(match.recentMs, match.signals), title_search_ms: per(match.titleSearchMs, match.titleSearches),
+      title_rows: per(match.titleRows, match.titleSearches), compare_ms: per(match.compareMs, match.signals),
+      older_searches: match.olderSearches, older_search_ms: per(match.olderSearchMs, match.olderSearches),
+      boosts: match.boosts, boost_ms: per(match.boostMs, match.boosts),
+    },
   }
 }
 
