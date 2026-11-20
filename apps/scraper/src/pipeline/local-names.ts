@@ -795,6 +795,33 @@ const GREEK: Rule[] = [
   r('ιαπωνι(?:α|ας)', 'Japan'), r('ινδι(?:α|ας)', 'India'), r('βορει(?:α|ας)\\s+κορε(?:α|ας)', 'North Korea'),
   r('νοτι(?:α|ας)\\s+κορε(?:α|ας)', 'South Korea'), r('βενεζουελ(?:α|ας)', 'Venezuela'), r('αρμενι(?:α|ας)', 'Armenia'),
   r('αφγανισταν', 'Afghanistan'), r('πακισταν', 'Pakistan'),
+  // Nov 20, 2026 (Greek round 2): a "Γουατεμάλα: ... από τις ΗΠΑ" story sat at Washington and the Los Angeles and
+  // San Francisco floods at Washington too: the list above knew 70 names and no Latin America, Africa south of Libya,
+  // Gulf state other than Saudi Arabia, or American city. Left out: "Κούβα" and "Περού" in lower case ("κουβά" is
+  // a bucket), "Σόφια" (a first name), "Γεωργία" (the American state as often as the country).
+  r('γουατεμαλ(?:α|ας)', 'Guatemala'), r('μεξικ(?:ο|ου)|μεξικαν\\p{L}*', 'Mexico'), r('βραζιλι(?:α|ας)|βραζιλιαν\\p{L}*', 'Brazil'),
+  r('αργεντιν(?:η|ης)', 'Argentina'), r('χιλη(?:ς)?', 'Chile'), r('κολομβι(?:α|ας)', 'Colombia'), cs('Περου|ΠΕΡΟΥ', 'Peru'),
+  cs('Κουβα|ΚΟΥΒΑ', 'Cuba'), r('καναδ(?:ας|α|ου)', 'Canada'), r('αυστραλι(?:α|ας)', 'Australia'),
+  r('νιγηρι(?:α|ας)', 'Nigeria'), r('κενυα(?:ς)?', 'Kenya'), r('αιθιοπι(?:α|ας)', 'Ethiopia'),
+  r('νοτι(?:ο|ου)\\s+σουδαν', 'South Sudan'), r('σουδαν', 'Sudan'), r('υεμεν(?:η|ης)', 'Yemen'),
+  cs('Κατ[αά]ρ|ΚΑΤΑΡ', 'Qatar'), r('κουβειτ', 'Kuwait'), cs('Ομαν|ΟΜΑΝ', 'Oman'), r('εμιρατ(?:α|ων)', 'United Arab Emirates'),
+  r('ντουμπαι', 'Dubai'), r('ταιβαν', 'Taiwan'), r('φιλιππιν(?:ες|ων)', 'Philippines'), r('ινδονησι(?:α|ας)', 'Indonesia'),
+  r('μπαγκλαντες', 'Bangladesh'), r('καζακσταν', 'Kazakhstan'), r('αζερμπαιτζαν', 'Azerbaijan'),
+  r('ιρλανδι(?:α|ας)', 'Ireland'), r('σουηδι(?:α|ας)', 'Sweden'), r('νορβηγι(?:α|ας)', 'Norway'),
+  r('φινλανδι(?:α|ας)', 'Finland'), r('δανι(?:α|ας)', 'Denmark'), r('ολλανδι(?:α|ας)', 'Netherlands'),
+  r('βελγι(?:ο|ου)', 'Belgium'), r('αυστρι(?:α|ας)', 'Austria'), r('ελβετι(?:α|ας)', 'Switzerland'),
+  r('ουγγαρι(?:α|ας)', 'Hungary'), r('τσεχι(?:α|ας)', 'Czechia'), r('κροατι(?:α|ας)', 'Croatia'),
+  r('βοσνι(?:α|ας)', 'Bosnia'), r('μαυροβουνι(?:ο|ου)', 'Montenegro'), r('κοσοβ(?:ο|ου)', 'Kosovo'),
+  r('μολδαβι(?:α|ας)', 'Moldova'), r('λευκορωσι(?:α|ας)', 'Belarus'),
+  r('ουασινγκτον', 'Washington'), r('λος\\s+αντζελες', 'Los Angeles'), r('σαν\\s+φρανσισκο', 'San Francisco'),
+  r('νε(?:α|ας)\\s+υορκ(?:η|ης)', 'New York'), r('σικαγ(?:ο|ου)', 'Chicago'), r('μαιαμι', 'Miami'),
+  r('τεξας', 'Texas'), r('καλιφορνι(?:α|ας)', 'California'), r('φλοριντα', 'Florida'), r('λας\\s+βεγκας', 'Las Vegas'),
+  r('βοστων(?:η|ης)', 'Boston'), r('βηρυτ(?:ος|ου|ο)', 'Beirut'), r('δαμασκ(?:ος|ου|ο)', 'Damascus'),
+  r('βαγδατ(?:η|ης)', 'Baghdad'), r('ριαντ', 'Riyadh'), r('δελχι', 'Delhi'), r('τοκιο', 'Tokyo'), r('σεουλ', 'Seoul'),
+  r('μαδριτ(?:η|ης)', 'Madrid'), r('ρωμ(?:η|ης)', 'Rome'), r('βιεννη(?:ς)?', 'Vienna'), r('βαρσοβι(?:α|ας)', 'Warsaw'),
+  r('βελιγραδι(?:ου)?', 'Belgrade'), r('τιρανα', 'Tirana'), r('βουκουρεστι(?:ου)?', 'Bucharest'),
+  r('πραγα(?:ς)?', 'Prague'), r('στοκχολμ(?:η|ης)', 'Stockholm'), r('οδησσ(?:ος|ου|ο)', 'Odesa'),
+  r('χαρκοβ(?:ο|ου)', 'Kharkiv'), r('ντονετσκ', 'Donetsk'),
 ]
 
 /** Greek without its accents, for the rules above to read ("Ελλάδας" as "Ελλαδας") */
