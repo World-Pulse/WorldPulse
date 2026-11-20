@@ -90,6 +90,7 @@ describe("the Caribbean's territories, for any outlet (Nov 10, 2026)", () => {
     expect(at('Blue Curaçao cocktails for summer', world).countryCode).not.toBe('CW')
     expect(at('Porsche Cayman recall announced', world).countryCode).not.toBe('KY')
     expect(at('AT&T earnings beat forecasts', world).countryCode).not.toBe('TT')
+    expect(at('T&T Group units win nod for wind, urban projects in Lang Son', world).countryCode).not.toBe('TT')
     // not Montserrat (also a Catalan name): Montserrat Caballé's tribute is Barcelona's
     expect(at('Montserrat Caballé tribute concert in Barcelona', world).countryCode).toBe('ES')
   })

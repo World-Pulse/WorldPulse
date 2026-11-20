@@ -1514,6 +1514,8 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'rijeka': { lat: 45.3271, lng: 14.4422, country: 'HR', name: 'Rijeka', asWritten: 'Rijeka' },
   'osijek': { lat: 45.555, lng: 18.6955, country: 'HR', name: 'Osijek' },
   'gomel': { lat: 52.4345, lng: 30.9754, country: 'BY', name: 'Gomel' },
+  'homiel': { lat: 52.4345, lng: 30.9754, country: 'BY', name: 'Homiel' },
+  'homyel': { lat: 52.4345, lng: 30.9754, country: 'BY', name: 'Homyel' },
   'homel': { lat: 52.4345, lng: 30.9754, country: 'BY', name: 'Homel' },
   'coimbra': { lat: 40.2033, lng: -8.4103, country: 'PT', name: 'Coimbra' },
   'funchal': { lat: 32.6669, lng: -16.9241, country: 'PT', name: 'Funchal' },

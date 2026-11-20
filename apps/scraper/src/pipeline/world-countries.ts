@@ -198,8 +198,8 @@ export const MORE_COUNTRIES: CountryEntry[] = [
   c('VC', 'Saint Vincent and the Grenadines', /\b(?:(?:saint|st\.?) vincent(?: and the grenadines| & the grenadines)?(?![''’]s|\s+de\s+paul)|vincentians?)\b/i, 'Kingstown', 13.16, -61.23),
   c('SR', 'Suriname', /\b(?:suriname|surinamese)\b/i, 'Paramaribo', 5.85, -55.20),
   // "T&T", as the Caribbean press writes it (Nov 10, 2026: EmoNews's "Back-to-Back Wins for T&T at UWI Reparations
-  // Debate Competition" had no pin); not AT&T
-  c('TT', 'Trinidad and Tobago', /(?<![\w&])t&t(?![\w&])|\b(?:trinidad|trinidadian|trinbagonian|tobagonian)\b/i, 'Port of Spain', 10.65, -61.51),
+  // Debate Competition" had no pin); not AT&T, nor Vietnam's T&T Group (Nov 20, 2026: "T&T Group units win nod for wind, urban projects in Lang Son" sat in Port of Spain)
+  c('TT', 'Trinidad and Tobago', /(?<![\w&])t&t(?![\w&])(?!\s+(?:group|holdings?|corp(?:oration)?|jsc|co\b|ltd|inc\b|supermarkets?|logistics))|\b(?:trinidad|trinidadian|trinbagonian|tobagonian)\b/i, 'Port of Spain', 10.65, -61.51),
   c('UY', 'Uruguay', /\buruguay(?:an)?\b/i, 'Montevideo', -34.90, -56.16),
   c('VE', 'Venezuela', /\bvenezuela(?:n)?\b/i, 'Caracas', 10.49, -66.88),
   // Nov 10, 2026: the Caribbean's and the Atlantic's territories, which named no place (EmoNews, Dominica, carries the
