@@ -26,6 +26,7 @@ import { logger } from '../lib/logger'
 import { correlateSignal, corroborateWithDuplicate, storyWords } from './correlate'
 import { countryNameOf } from './world-countries'
 import { placesInText } from './geo'
+import { indicPlaces } from './indic-places'
 import type { CorrelationCandidate } from './correlate'
 import { recordSuccess } from '../health'
 import { computeReliabilityScore, maxSeverityForSourceCount } from './reliability-score'
@@ -52,6 +53,15 @@ export function matcherCountries(title: string): string[] {
     if (place && !out.includes(place)) out.push(place)
   }
   return out
+}
+
+/**
+ * The places a headline names in another script, for a report the rules found no place in: its countries as the
+ * matcher reads them, or else the places of India, Nepal and Bangladesh in their scripts (indic-places.ts)
+ */
+export function scriptPlaces(title: string): string[] {
+  const countries = matcherCountries(title)
+  return countries.length ? countries : indicPlaces(title)
 }
 
 /** Signal ids are UUIDs; the dedup store can also hold '1' or 'pending' */
@@ -417,13 +427,13 @@ export async function insertAndCorrelate(
       // Full LLM extraction for high-value signals (with rule-based fallback)
       const graph = await processSignalForKnowledgeGraph(signalId, signalTitle, signalSummary, signalTime)
       if (!graph.entities.some(e => e.type === 'location')) {
-        for (const name of matcherCountries(signalTitle)) await upsertEntityNode({ name, type: 'location', salience: 0.5 }, signalId, signalTime)
+        for (const name of scriptPlaces(signalTitle)) await upsertEntityNode({ name, type: 'location', salience: 0.5 }, signalId, signalTime)
       }
     } else {
       // Rule-based extraction only — zero API cost
       const extraction = extractEntitiesRuleBased(signalTitle, signalSummary)
       if (!extraction.entities.some(e => e.type === 'location')) {
-        for (const name of matcherCountries(signalTitle)) extraction.entities.push({ name, type: 'location', salience: 0.5 })
+        for (const name of scriptPlaces(signalTitle)) extraction.entities.push({ name, type: 'location', salience: 0.5 })
       }
       for (const entity of extraction.entities) {
         await upsertEntityNode(entity, signalId, signalTime)

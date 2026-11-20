@@ -17,12 +17,16 @@ import { entityId, type EntityType } from './entity-graph'
 import { cleanStoredEntity, listedPlace } from './entity-rules'
 import { placesInText } from './geo'
 
-interface NodeRow {
+/** What the plan reads of each entity */
+interface NameRow {
   id: string
   type: string
   canonical_name: string
-  aliases: string[] | null
   mention_count: number
+}
+
+interface NodeRow extends NameRow {
+  aliases: string[] | null
   signal_ids: string[] | null
   first_seen: Date | string
   last_seen: Date | string
@@ -65,12 +69,12 @@ export function refinePlace(name: string, mentions: number): { type: string; nam
 }
 
 /** The plan for the stored entities: what to write and what to delete */
-export function planEntityCleanup(rows: NodeRow[]): {
-  upserts: Array<{ id: string; type: string; name: string; members: NodeRow[] }>
+export function planEntityCleanup<R extends NameRow>(rows: R[]): {
+  upserts: Array<{ id: string; type: string; name: string; members: R[] }>
   deletes: string[]
   totals: EntityCleanup
 } {
-  const groups = new Map<string, { id: string; type: string; name: string; members: NodeRow[] }>()
+  const groups = new Map<string, { id: string; type: string; name: string; members: R[] }>()
   const deletes: string[] = []
   const totals: EntityCleanup = { merged: 0, removed: 0, retyped: 0, renamed: 0 }
   for (const row of rows) {
@@ -82,7 +86,7 @@ export function planEntityCleanup(rows: NodeRow[]): {
     group.members.push(row)
     groups.set(id, group)
   }
-  const upserts: Array<{ id: string; type: string; name: string; members: NodeRow[] }> = []
+  const upserts: Array<{ id: string; type: string; name: string; members: R[] }> = []
   for (const group of groups.values()) {
     const [only] = group.members
     if (group.members.length === 1 && only!.id === group.id && only!.canonical_name === group.name && only!.type === group.type) continue
@@ -109,15 +113,31 @@ export function mergedSignalIds(members: ReadonlyArray<Pick<NodeRow, 'signal_ids
   return [...new Set(members.flatMap(m => m.signal_ids ?? []))]
 }
 
+/** The full rows of the entities to fold together, read for those alone, 500 at a time */
+async function fullRows(ids: string[]): Promise<Map<string, NodeRow>> {
+  const out = new Map<string, NodeRow>()
+  for (let i = 0; i < ids.length; i += 500) {
+    const { rows } = await db.query(
+      `SELECT id, type, canonical_name, aliases, mention_count, signal_ids, first_seen, last_seen, metadata
+         FROM entity_nodes WHERE id = ANY($1::text[])`,
+      [ids.slice(i, i + 500)],
+    )
+    for (const row of rows as NodeRow[]) out.set(row.id, row)
+  }
+  return out
+}
+
 export async function cleanEntityGraph(): Promise<EntityCleanup> {
-  const { rows } = await db.query(
-    `SELECT id, type, canonical_name, aliases, mention_count, signal_ids, first_seen, last_seen, metadata
-       FROM entity_nodes`,
-  )
-  const { upserts, deletes, totals } = planEntityCleanup(rows as NodeRow[])
+  // Names first, and the report ids only of the entities to fold together (Nov 20, 2026): every start read every
+  // entity's list of reports (the United States alone holds 30,898) to change a handful
+  const { rows } = await db.query('SELECT id, type, canonical_name, mention_count FROM entity_nodes')
+  const { upserts, deletes, totals } = planEntityCleanup(rows as NameRow[])
+  const full = await fullRows(upserts.flatMap(group => group.members.map(m => m.id)))
 
   for (const group of upserts) {
-    const members = [...group.members].sort((a, b) => (b.mention_count ?? 0) - (a.mention_count ?? 0))
+    const members = group.members.map(m => full.get(m.id)).filter((m): m is NodeRow => m !== undefined)
+      .sort((a, b) => (b.mention_count ?? 0) - (a.mention_count ?? 0))
+    if (!members.length) continue
     const signalIds = mergedSignalIds(members)
     const aliases = [...new Set(members.flatMap(m => [...(m.aliases ?? []), m.canonical_name]))]
     const firstSeen = new Date(Math.min(...members.map(m => time(m.first_seen)))).toISOString()

@@ -15,7 +15,8 @@ vi.mock('../../lib/logger', () => {
   return { logger }
 })
 
-const { refinePlace, mergedSignalIds, planEntityCleanup } = await import('../entity-cleanup')
+const { refinePlace, mergedSignalIds, planEntityCleanup, cleanEntityGraph } = await import('../entity-cleanup')
+const { pgPool } = await import('../../lib/postgres')
 const { listedPlace } = await import('../entity-rules')
 const { matcherCountries } = await import('../insert-signal')
 const { entityId } = await import('../entity-graph')
@@ -47,6 +48,38 @@ describe('the start-up repair', () => {
     const merged = mergedSignalIds([{ signal_ids: many }, { signal_ids: [...many.slice(0, 10), 'ffffffff-0000-4000-8000-000000000000'] }, { signal_ids: null }])
     expect(merged).toHaveLength(151)
     expect(merged).toContain('ffffffff-0000-4000-8000-000000000000')
+  })
+})
+
+describe('the start-up repair reads', () => {
+  it("the names first, and the reports only of the entities it folds together", async () => {
+    const mexico = entityId('location', 'Mexico')
+    const names = [
+      { id: mexico, type: 'location', canonical_name: 'Mexico', mention_count: 2867 },
+      { id: 'beach-id', type: 'location', canonical_name: 'Mexico Coercion', mention_count: 3 },
+      { id: entityId('location', 'Peru'), type: 'location', canonical_name: 'Peru', mention_count: 900 },
+    ]
+    const sql: Array<{ text: string; values?: unknown[] }> = []
+    vi.mocked(pgPool.query).mockImplementation((async (text: string, values?: unknown[]) => {
+      sql.push({ text, values })
+      if (/FROM entity_nodes$/.test(text.trim())) return { rows: names }
+      if (/WHERE id = ANY/.test(text)) {
+        return { rows: [
+          { ...names[0], aliases: ['Mexico'], signal_ids: ['a', 'b'], first_seen: '2026-04-26T00:00:00Z', last_seen: '2026-11-20T00:00:00Z', metadata: {} },
+          { ...names[1], aliases: ['Mexico Coercion'], signal_ids: ['c'], first_seen: '2026-05-01T00:00:00Z', last_seen: '2026-11-19T00:00:00Z', metadata: {} },
+        ] }
+      }
+      return { rows: [] }
+    }) as never)
+    const totals = await cleanEntityGraph()
+    expect(totals.merged).toBe(1)
+    expect(sql[0]!.text).not.toMatch(/signal_ids/)
+    const full = sql.find(q => /WHERE id = ANY/.test(q.text))!
+    expect(full.values![0]).toEqual(expect.arrayContaining([mexico, 'beach-id']))
+    expect(full.values![0]).not.toContain(entityId('location', 'Peru'))
+    const upsert = sql.find(q => /INSERT INTO entity_nodes/.test(q.text))!
+    expect(upsert.values![7]).toEqual(['a', 'b', 'c'])
+    expect(sql.find(q => /DELETE FROM entity_nodes/.test(q.text))!.values![0]).toEqual(['beach-id'])
   })
 })
 
