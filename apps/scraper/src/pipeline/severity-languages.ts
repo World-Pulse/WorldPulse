@@ -41,6 +41,9 @@ const COUNT_WORDS: Record<string, number> = {
   dva: 2, dve: 2, dvoje: 2, tri: 3, troje: 3, cetiri: 4, cetvoro: 4, pet: 5, petoro: 5, sest: 6, sestoro: 6, sedam: 7,
   sedmoro: 7, osam: 8, devet: 9, deset: 10, desetak: 10, dvanaest: 12, petnaest: 15, dvadeset: 20, dvadesetak: 20,
   desetine: 24, stotine: 200, hiljade: 2000,
+  // Swedish (Nov 19, 2026); "sex" (six) left out, as it is an English word
+  'två': 2, fyra: 4, fem: 5, sju: 7, 'åtta': 8, nio: 9, tio: 10, tolv: 12, tjugo: 20, tiotals: 24, hundratals: 200,
+  tusentals: 2000,
 }
 /** A count: digits ("1.200" and "1 200" are a thousand two hundred, as these languages write it) or a word */
 const COUNT = String.raw`(\d{1,3}(?:[.\u00a0\u202f ]\d{3})+|\d+|${Object.keys(COUNT_WORDS).join('|')})`
@@ -53,7 +56,7 @@ export function foreignNumber(raw: string): number {
 }
 
 /** "at least", "more than", "nearly" before a count */
-const ABOUT = String.raw`(?:(?:au\s+moins|plus\s+de|près\s+de|environ|quelque|al\s+menos|más\s+de|casi|unos|unas|cerca\s+de|pelo\s+menos|mais\s+de|quase|cerca\s+de|mindestens|mehr\s+als|fast|rund|etwa|über|не\s+менее|по\s+меньшей\s+мере|более|свыше|около|почти|порядка|نحو|حوالي|قرابه|اكثر\s+من|ما\s+لا\s+يقل\s+عن|ما\s+يزيد\s+عن|ما\s+يقارب|te\s+pakten|me\s+shume\s+se|rreth|afro|gati|najmanje|vise\s+od|preko|oko|skoro|gotovo|co\s+najmniej|ponad|około|blisko|prawie|en\s+az|ít\s+nhất|hơn|khoảng|gần|sedikitnya|setidaknya|sekitar|lebih\s+dari|hampir|almeno|oltre|circa|quasi|minstens|ruim|bijna|zeker|cel\s+puțin|peste|aproape|щонайменше|понад|майже|близько|legalább|több\s+mint|mintegy|csaknem|közel|nejméně|nejmíň|přes|téměř|zhruba|najmenej|vyše|takmer|približne)\s+)?`
+const ABOUT = String.raw`(?:(?:au\s+moins|plus\s+de|près\s+de|environ|quelque|al\s+menos|más\s+de|casi|unos|unas|cerca\s+de|pelo\s+menos|mais\s+de|quase|cerca\s+de|mindestens|mehr\s+als|fast|rund|etwa|über|не\s+менее|по\s+меньшей\s+мере|более|свыше|около|почти|порядка|نحو|حوالي|قرابه|اكثر\s+من|ما\s+لا\s+يقل\s+عن|ما\s+يزيد\s+عن|ما\s+يقارب|te\s+pakten|me\s+shume\s+se|rreth|afro|gati|najmanje|vise\s+od|preko|oko|skoro|gotovo|co\s+najmniej|ponad|około|blisko|prawie|en\s+az|ít\s+nhất|hơn|khoảng|gần|sedikitnya|setidaknya|sekitar|lebih\s+dari|hampir|almeno|oltre|circa|quasi|minstens|ruim|bijna|zeker|cel\s+puțin|peste|aproape|щонайменше|понад|майже|близько|legalább|több\s+mint|mintegy|csaknem|közel|nejméně|nejmíň|přes|téměř|zhruba|najmenej|vyše|takmer|približne|minst|drygt|nästan|uppemot|omkring|kamida|qariyb|deyarli|кемінде|шамамен|кем\s+дегенде|առնվազն|մոտ|ən\s+azı|təxminən)\s+)?`
 
 export interface LanguageRules {
   /** "12 morts", "12 personnes tuées": the count is the first group */
@@ -109,6 +112,27 @@ const INDONESIAN: LanguageRules = {
   opinion: words('opini|tajuk(?:\\s+rencana)?|kolom|analisis|editorial|pendapat|rencana'),
 }
 
+
+/** Serbian, and Croatian and Bosnian (Nov 19, 2026: their words for the dead, injured and events are Serbian's, read
+ * without accents) */
+const SERBIAN: LanguageRules = {
+  deadAfter: after(
+    'osoba|osobe|ljudi|lica|civila|vojnika|dece|djece|policajaca|migranata|putnika|radnika|rudara|mladica',
+    'je|su|je\\s+bilo|su\\s+bili',
+    'poginul\\p{L}*|mrtv\\p{L}*|ubijen\\p{L}*|preminul\\p{L}*|stradal\\p{L}*|nastradal\\p{L}*|izgubil\\p{L}*\\s+zivot|udavil\\p{L}*'),
+  deadBefore: before('poginul\\p{L}*|ubijen\\p{L}*|stradal\\p{L}*|nastradal\\p{L}*|preminul\\p{L}*|zivot\\s+(?:je|su)\\s+izgubil\\p{L}*|broj\\s+(?:poginulih|mrtvih|zrtava|stradalih)(?:\\s+\\p{L}+){0,4}?\\s+(?:je\\s+)?(?:porastao|povecan|narastao)\\s+na|broj\\s+(?:poginulih|mrtvih|zrtava|stradalih)(?:\\s+\\p{L}+){0,4}?\\s+(?:je\\s+)?dostigao'),
+  injuredAfter: after('osoba|osobe|ljudi|lica|civila|vojnika|dece|djece|policajaca|putnika', 'je|su', 'povreden\\p{L}*|povredjen\\p{L}*|povrijeden\\p{L}*|povrijedjen\\p{L}*|ozlijeden\\p{L}*|ranjen\\p{L}*'),
+  injuredBefore: before('povreden\\p{L}*|povredjen\\p{L}*|povrijeden\\p{L}*|povrijedjen\\p{L}*|ozlijeden\\p{L}*|ranjen\\p{L}*'),
+  death: words('poginu\\p{L}*|pogibij\\p{L}*|ubijen\\p{L}*|ubio|ubila|ubili|ubistv\\p{L}*|ubic[ae]\\p{L}*|preminu\\p{L}*|umro|umrla|umrli|stradal\\p{L}*|nastrada\\p{L}*|smrt|smrti|smrcu|nasmrt|masakr\\p{L}*|les(?:a|u|om|evi|eva)?|bezivotn\\p{L}*|udavi\\p{L}*'),
+  events: [
+    [words('bombardovanj\\p{L}*|bombardovan\\p{L}*|vazdusn\\p{L}*\\s+(?:napad|udar)\\p{L}*|teroristick\\p{L}*\\s+napad\\p{L}*|atentat\\p{L}*|eksplozij\\p{L}*|bombask\\p{L}*|drzavni\\s+udar|puc|masakr\\p{L}*|talac|talaca|taoc\\p{L}*|vanredn\\p{L}*\\s+stanj\\p{L}*|ratno\\s+stanje|zemljotres\\p{L}*\\s+(?:jacine|magnitude)\\s+[6-9]|cunami|uragan\\p{L}*|tajfun\\p{L}*'), 'high'],
+    [words('napad(?!ac)\\p{L}*|napadnut\\p{L}*|sukob\\p{L}*|borbe|borbama|vojsk\\p{L}*|vojni\\p{L}*|dron\\p{L}*|raket\\p{L}*|terorist\\p{L}*|terorizam\\p{L}*|protest\\p{L}*|demonstracij\\p{L}*|nered\\p{L}*|strajk\\p{L}*|policijski\\s+cas|uhapsen\\p{L}*|hapsenj\\p{L}*|priveden\\p{L}*|otmic\\p{L}*|otet\\p{L}*|pucnjav\\p{L}*|upucan\\p{L}*|izboden\\p{L}*|zemljotres\\p{L}*|poplav\\p{L}*|pozar\\p{L}*|klizist\\p{L}*|oluj\\p{L}*|susa|suse|epidemij\\p{L}*|evakuacij\\p{L}*|evakuisan\\p{L}*|nesrec\\p{L}*|saobracajk\\p{L}*|sudar\\p{L}*|udes\\p{L}*|urusavanj\\p{L}*|urusil\\p{L}*|izbor[ia]\\p{L}*|referendum\\p{L}*|smenjen\\p{L}*|smijenjen\\p{L}*|ostavk\\p{L}*|(?<!dan\\s+)primirj\\p{L}*|prekid\\s+vatre|pregovor\\p{L}*|samit\\p{L}*|sankcij\\p{L}*|carine|carinama'), 'medium'],
+  ],
+  opinion: words('kolumn\\p{L}*|analiz\\p{L}*|komentar\\p{L}*|misljenj\\p{L}*|uvodnik\\p{L}*'),
+}
+
+/** Uzbek's o‘ and g‘ (Nov 19, 2026): written with any of several marks, or none */
+const UZ_AP = "[‘ʻ'’`]?"
 
 /** An Arabic word with "و" (and), "ف" (so), "ب" (by), "ل" (for) or the article joined to it: "بمقتل", "والجيش" */
 const AR = '(?:و|ف|ب|ل|وب|ول|فب|وال|بال|فال|لل|ال)?'
@@ -224,21 +248,9 @@ export const LANGUAGE_RULES: Readonly<Record<string, LanguageRules>> = {
   // Serbian (Nov 11, 2026), read in Latin letters without accents (formOf: "Погинуло" and "poginulo", "uhapšen" and
   // "uhapsen" are one word), and in the Montenegrin and Bosnian forms ("povrijeđen", "djece"). Not a striker
   // ("napadač"), a shot ("puca"), Armistice Day ("Dan primirja") or "victims" alone ("žrtve prevare" are a fraud's)
-  sr: {
-    deadAfter: after(
-      'osoba|ljudi|lica|civila|vojnika|dece|djece|policajaca|migranata|putnika|radnika|rudara|mladica',
-      'je|su|je\\s+bilo|su\\s+bili',
-      'poginul\\p{L}*|mrtv\\p{L}*|ubijen\\p{L}*|preminul\\p{L}*|stradal\\p{L}*|nastradal\\p{L}*|izgubil\\p{L}*\\s+zivot|udavil\\p{L}*'),
-    deadBefore: before('poginul\\p{L}*|ubijen\\p{L}*|stradal\\p{L}*|nastradal\\p{L}*|preminul\\p{L}*|zivot\\s+(?:je|su)\\s+izgubil\\p{L}*|broj\\s+(?:poginulih|mrtvih|zrtava|stradalih)(?:\\s+\\p{L}+){0,4}?\\s+(?:je\\s+)?(?:porastao|povecan|narastao)\\s+na|broj\\s+(?:poginulih|mrtvih|zrtava|stradalih)(?:\\s+\\p{L}+){0,4}?\\s+(?:je\\s+)?dostigao'),
-    injuredAfter: after('osoba|ljudi|lica|civila|vojnika|dece|djece|policajaca|putnika', 'je|su', 'povreden\\p{L}*|povredjen\\p{L}*|povrijeden\\p{L}*|povrijedjen\\p{L}*|ozlijeden\\p{L}*|ranjen\\p{L}*'),
-    injuredBefore: before('povreden\\p{L}*|povredjen\\p{L}*|povrijeden\\p{L}*|povrijedjen\\p{L}*|ozlijeden\\p{L}*|ranjen\\p{L}*'),
-    death: words('poginu\\p{L}*|pogibij\\p{L}*|ubijen\\p{L}*|ubio|ubila|ubili|ubistv\\p{L}*|ubic[ae]\\p{L}*|preminu\\p{L}*|umro|umrla|umrli|stradal\\p{L}*|nastrada\\p{L}*|smrt|smrti|smrcu|nasmrt|masakr\\p{L}*|les(?:a|u|om|evi|eva)?|bezivotn\\p{L}*|udavi\\p{L}*'),
-    events: [
-      [words('bombardovanj\\p{L}*|bombardovan\\p{L}*|vazdusn\\p{L}*\\s+(?:napad|udar)\\p{L}*|teroristick\\p{L}*\\s+napad\\p{L}*|atentat\\p{L}*|eksplozij\\p{L}*|bombask\\p{L}*|drzavni\\s+udar|puc|masakr\\p{L}*|talac|talaca|taoc\\p{L}*|vanredn\\p{L}*\\s+stanj\\p{L}*|ratno\\s+stanje|zemljotres\\p{L}*\\s+(?:jacine|magnitude)\\s+[6-9]|cunami|uragan\\p{L}*|tajfun\\p{L}*'), 'high'],
-      [words('napad(?!ac)\\p{L}*|napadnut\\p{L}*|sukob\\p{L}*|borbe|borbama|vojsk\\p{L}*|vojni\\p{L}*|dron\\p{L}*|raket\\p{L}*|terorist\\p{L}*|terorizam\\p{L}*|protest\\p{L}*|demonstracij\\p{L}*|nered\\p{L}*|strajk\\p{L}*|policijski\\s+cas|uhapsen\\p{L}*|hapsenj\\p{L}*|priveden\\p{L}*|otmic\\p{L}*|otet\\p{L}*|pucnjav\\p{L}*|upucan\\p{L}*|izboden\\p{L}*|zemljotres\\p{L}*|poplav\\p{L}*|pozar\\p{L}*|klizist\\p{L}*|oluj\\p{L}*|susa|suse|epidemij\\p{L}*|evakuacij\\p{L}*|evakuisan\\p{L}*|nesrec\\p{L}*|saobracajk\\p{L}*|sudar\\p{L}*|udes\\p{L}*|urusavanj\\p{L}*|urusil\\p{L}*|izbor[ia]\\p{L}*|referendum\\p{L}*|smenjen\\p{L}*|smijenjen\\p{L}*|ostavk\\p{L}*|(?<!dan\\s+)primirj\\p{L}*|prekid\\s+vatre|pregovor\\p{L}*|samit\\p{L}*|sankcij\\p{L}*|carine|carinama'), 'medium'],
-    ],
-    opinion: words('kolumn\\p{L}*|analiz\\p{L}*|komentar\\p{L}*|misljenj\\p{L}*|uvodnik\\p{L}*'),
-  },
+  sr: SERBIAN,
+  hr: SERBIAN,
+  bs: SERBIAN,
   // Japanese, Chinese, Korean, Greek, Persian, Urdu and Thai (Nov 18, 2026; Devon, 10:51 PM: "proceed with 1-3": the
   // second-outlet search in the newer languages). Their reports were all rated low (no rules read them), so the search,
   // which takes medium and above, never looked for their second outlet: 0 of 44 Japanese, 1 of 40 Chinese and 0 of 18
@@ -511,6 +523,82 @@ export const LANGUAGE_RULES: Readonly<Record<string, LanguageRules>> = {
     ],
     opinion: stems('komentár|názor|analýz|glosa|stĺpček'),
   },
+  // Nepali, Armenian, Uzbek, Kazakh, Swedish and Azerbaijani (Nov 19, 2026; Devon, 8:37 PM: "cover languages where readers are").
+  // Nepali counts people with "जना" ("५ जनाको मृत्यु", the death of 5); Armenian, Uzbek and Kazakh put the count first
+  // and the verb last ("5 մարդ է զոհվել", "5 kishi halok bo‘ldi", "5 адам қаза тапты"); Uzbek's o‘ and g‘ are written
+  // with several marks, or none. Left out: Nepali "प्रदर्शन" alone (a show, a team's form), "गोली" alone (a bullet and a
+  // pill), "विचार" (consideration); Armenian "ցույց" (a rally, and showing); Uzbek "qurbon" alone (also the Eid);
+  // Swedish "robot" (a missile, and a robot), "val" (an election, a whale, a choice), "ledare" (an editorial, a leader).
+  ne: {
+    deadAfter: afterM('जनाको|जना|व्यक्तिको|यात्रुको|मजदुरको|बालबालिकाको|सर्वसाधारणको', 'भन्दा\\s+बढीको', 'मृत्यु|मारिए|मारिएका|मरे|ज्यान\\s+गयो|ज्यान\\s+गुमाए|ज्यान\\s+गुमाएका'),
+    deadBefore: beforeM('मृतकको\\s+संख्या|मृत्यु\\s+हुनेको\\s+संख्या|मृतक\\s+संख्या'),
+    injuredAfter: afterM('जना|जनाको|व्यक्ति|यात्रु', 'भन्दा\\s+बढी', 'घाइते|गम्भीर\\s+घाइते'),
+    death: wordsM('मृत्यु|मारिए|मारिएका|हत्या|शव|लास|मृतक|निधन'),
+    events: [
+      [wordsM('हवाई\\s+आक्रमण|बम\\s+विस्फोट|विस्फोट|आत्मघाती|आतंककारी\\s+आक्रमण|आतंकवादी\\s+आक्रमण|नरसंहार|बन्धक|संकटकाल|सङ्कटकाल|सुनामी'), 'high'],
+      [wordsM('आक्रमण|हमला|झडप|सेना|मिसाइल|ड्रोन|आतंककारी|विरोध\\s+प्रदर्शन|आन्दोलन|हडताल|पक्राउ|गिरफ्तार|अपहरण|गोलीबारी|गोली\\s+प्रहार|भूकम्प|बाढी|पहिरो|आगलागी|डढेलो|खडेरी|महामारी|हैजा|दुर्घटना|निर्वाचन|चुनाव|राजीनामा|युद्धविराम|प्रतिबन्ध|हिंसा|कर्फ्यु|निषेधाज्ञा'), 'medium'],
+    ],
+    opinion: wordsM('सम्पादकीय|विश्लेषण|ब्लग'),
+  },
+  hy: {
+    deadAfter: after('մարդ|անձ|քաղաքացի|զինծառայող|զինվոր|երեխա|ուղևոր|ուղեւոր', 'է|են', 'զոհվ\\p{L}*|մահաց\\p{L}*|սպանվ\\p{L}*|զոհ|զոհեր'),
+    deadBefore: before('զոհվ\\p{L}*\\s+(?:է|են)|մահաց\\p{L}*\\s+(?:է|են)|սպանվ\\p{L}*\\s+(?:է|են)|զոհերի\\s+թիվը(?:\\s+\\p{L}+){0,2}?'),
+    injuredAfter: after('մարդ|անձ|քաղաքացի|զինծառայող|զինվոր|երեխա', 'է|են', 'վիրավորվ\\p{L}*|վիրավոր'),
+    injuredBefore: before('վիրավորվ\\p{L}*\\s+(?:է|են)'),
+    death: words('զոհվ\\p{L}*|մահաց\\p{L}*|սպանվ\\p{L}*|սպանություն\\p{L}*|դիակ\\p{L}*|զոհ|զոհեր\\p{L}*'),
+    events: [
+      [words('ավիահարված\\p{L}*|ռմբակոծ\\p{L}*|պայթյուն\\p{L}*|պայթուցիկ\\p{L}*|ահաբեկչական\\s+գործողություն\\p{L}*|հեղաշրջում\\p{L}*|պատանդ\\p{L}*|արտակարգ\\s+դրություն\\p{L}*|ռազմական\\s+դրություն\\p{L}*|ցունամի'), 'high'],
+      [words('հարձակ\\p{L}*|կրակոց\\p{L}*|հրաձգություն\\p{L}*|բախում\\p{L}*|զորք\\p{L}*|բանակ\\p{L}*|հրթիռ\\p{L}*|անօդաչու\\p{L}*|ահաբեկ\\p{L}*|բողոքի\\s+ակցիա\\p{L}*|գործադուլ\\p{L}*|ձերբակալ\\p{L}*|առևանգ\\p{L}*|առեւանգ\\p{L}*|երկրաշարժ\\p{L}*|ջրհեղեղ\\p{L}*|հրդեհ\\p{L}*|սողանք\\p{L}*|վթար\\p{L}*|ավտովթար\\p{L}*|ընտրություն\\p{L}*|հրաժարական\\p{L}*|հրադադար\\p{L}*|պատժամիջոց\\p{L}*'), 'medium'],
+    ],
+    opinion: words('վերլուծություն\\p{L}*|խմբագրական|սյունակ'),
+  },
+  uz: {
+    deadAfter: after('nafar\\s+odam|nafar\\s+kishi|nafar|kishi|odam|fuqaro|harbiy|askar|bola|yo‘lovchi|yo\'lovchi|yolovchi', 'ham',
+      `halok\\s+bo${UZ_AP}l\\p{L}*|vafot\\s+et\\p{L}*|o${UZ_AP}ld\\p{L}*|o${UZ_AP}ldiril\\p{L}*|qurbon\\s+bo${UZ_AP}l\\p{L}*|hayotdan\\s+ko${UZ_AP}z\\s+yum\\p{L}*`),
+    deadBefore: before(`halok\\s+bo${UZ_AP}lganlar\\s+soni(?:\\s+\\p{L}+){0,2}?|qurbonlar\\s+soni(?:\\s+\\p{L}+){0,2}?|o${UZ_AP}lganlar\\s+soni(?:\\s+\\p{L}+){0,2}?`),
+    injuredAfter: after('nafar\\s+odam|nafar\\s+kishi|nafar|kishi|odam|fuqaro|harbiy|bola', 'ham', 'jarohat\\s+ol\\p{L}*|yaralan\\p{L}*|shikastlan\\p{L}*'),
+    death: words(`halok\\p{L}*|vafot\\p{L}*|o${UZ_AP}ldi\\p{L}*|o${UZ_AP}ldiril\\p{L}*|qotillik\\p{L}*|jasad\\p{L}*|murda\\p{L}*`),
+    events: [
+      [words(`havo\\s+hujum\\p{L}*|bombardimon\\p{L}*|portlash\\p{L}*|terakt\\p{L}*|davlat\\s+to${UZ_AP}ntarish\\p{L}*|garovga\\s+olin\\p{L}*|favqulodda\\s+holat\\p{L}*|harbiy\\s+holat\\p{L}*|tsunami|sunami`), 'high'],
+      [words(`hujum\\p{L}*|to${UZ_AP}qnash\\p{L}*|armiya\\p{L}*|qo${UZ_AP}shin\\p{L}*|raketa\\p{L}*|dron\\p{L}*|terror\\p{L}*|namoyish\\p{L}*|norozilik\\p{L}*|ish\\s+tashlash\\p{L}*|hibsga\\s+olin\\p{L}*|qo${UZ_AP}lga\\s+olin\\p{L}*|otishma\\p{L}*|zilzila\\p{L}*|yer\\s+silkin\\p{L}*|toshqin\\p{L}*|yong${UZ_AP}in\\p{L}*|ko${UZ_AP}chki\\p{L}*|qurg${UZ_AP}oqchilik\\p{L}*|epidemiya\\p{L}*|avariya\\p{L}*|halokat\\p{L}*|saylov\\p{L}*|referendum\\p{L}*|iste${UZ_AP}fo\\p{L}*|sanksiya\\p{L}*|tarif\\p{L}*`), 'medium'],
+    ],
+    opinion: words('tahlil\\p{L}*|kolumna\\p{L}*'),
+  },
+  kk: {
+    deadAfter: after('адам|кісі|тұрғын|жолаушы|сарбаз|әскери|бала|адамның', 'тағы', 'қаза\\s+тап\\p{L}*|қайтыс\\s+бол\\p{L}*|мерт\\s+бол\\p{L}*|көз\\s+жұм\\p{L}*|құрбан\\s+бол\\p{L}*|опат\\s+бол\\p{L}*|өлтіріл\\p{L}*|өлді'),
+    deadBefore: before('қаза\\s+тапқандар\\s+саны(?:\\s+\\p{L}+){0,2}?|құрбандар\\s+саны(?:\\s+\\p{L}+){0,2}?|қайтыс\\s+болғандар\\s+саны(?:\\s+\\p{L}+){0,2}?'),
+    injuredAfter: after('адам|кісі|тұрғын|жолаушы|сарбаз|бала', 'тағы', 'жарақат\\s+ал\\p{L}*|жаралан\\p{L}*|жараланды'),
+    death: words('қаза|қайтыс|мерт|өлтіріл\\p{L}*|мәйіт\\p{L}*|өлік\\p{L}*|опат'),
+    events: [
+      [words('әуе\\s+шабуыл\\p{L}*|бомбала\\p{L}*|жарылыс\\p{L}*|теракт\\p{L}*|террорлық\\s+акт\\p{L}*|мемлекеттік\\s+төңкеріс\\p{L}*|кепілге\\s+ал\\p{L}*|төтенше\\s+жағдай\\p{L}*|соғыс\\s+жағдай\\p{L}*|цунами'), 'high'],
+      [words('шабуыл\\p{L}*|қақтығыс\\p{L}*|әскер\\p{L}*|зымыран\\p{L}*|дрон\\p{L}*|террор\\p{L}*|наразылық\\p{L}*|митинг\\p{L}*|ереуіл\\p{L}*|ұсталды|ұсталған|тұтқындал\\p{L}*|атыс\\p{L}*|жер\\s+сілкін\\p{L}*|су\\s+тасқын\\p{L}*|өрт\\p{L}*|көшкін\\p{L}*|құрғақшылық\\p{L}*|індет\\p{L}*|жол\\s+апат\\p{L}*|апат\\p{L}*|сайлау\\p{L}*|референдум\\p{L}*|отставка\\p{L}*|санкция\\p{L}*'), 'medium'],
+    ],
+    opinion: words('талдау|сараптама|колумнист\\p{L}*|бас\\s+мақала'),
+  },
+  az: {
+    deadAfter: after('nəfər|insan|şəxs|adam|hərbçi|əsgər|uşaq|sərnişin|mülki', 'artıq',
+      'ölüb|öldü|həlak\\s+olub|həlak\\s+oldu|dünyasını\\s+dəyişib|öldürülüb|şəhid\\s+olub|qətlə\\s+yetirilib|həyatını\\s+itirib'),
+    deadBefore: before('ölənlərin\\s+sayı(?:\\s+\\p{L}+){0,2}?|həlak\\s+olanların\\s+sayı(?:\\s+\\p{L}+){0,2}?|qurbanların\\s+sayı(?:\\s+\\p{L}+){0,2}?'),
+    injuredAfter: after('nəfər|insan|şəxs|adam|hərbçi|əsgər|uşaq|sərnişin', 'artıq', 'yaralanıb|yaralandı|xəsarət\\s+alıb|xəsarət\\s+aldı'),
+    death: words('ölüb|öldü|həlak|öldürül\\p{L}*|qətl\\p{L}*|meyit\\p{L}*|cəsəd\\p{L}*|ölüm\\p{L}*|şəhid'),
+    events: [
+      [words('hava\\s+hücum\\p{L}*|bombardman\\p{L}*|partlayış\\p{L}*|terror\\s+akt\\p{L}*|terror\\s+hücum\\p{L}*|dövlət\\s+çevriliş\\p{L}*|girov\\p{L}*|fövqəladə\\s+vəziyyət\\p{L}*|hərbi\\s+vəziyyət\\p{L}*|sunami'), 'high'],
+      [words('hücum\\p{L}*|toqquşma\\p{L}*|ordu\\p{L}*|qoşun\\p{L}*|raket\\p{L}*|dron\\p{L}*|terror\\p{L}*|etiraz\\p{L}*|saxlanılıb|həbs\\p{L}*|atışma\\p{L}*|zəlzələ\\p{L}*|daşqın\\p{L}*|sel|yanğın\\p{L}*|sürüşmə\\p{L}*|quraqlıq\\p{L}*|epidemiya\\p{L}*|qəza\\p{L}*|seçki\\p{L}*|referendum\\p{L}*|istefa\\p{L}*|atəşkəs\\p{L}*|sanksiya\\p{L}*|tarif\\p{L}*'), 'medium'],
+    ],
+    opinion: words('təhlil|analitika|köşə\\s+yazısı|redaksiya\\s+məqaləsi'),
+  },
+  sv: {
+    deadAfter: after('personer|människor|civila|soldater|barn|passagerare|arbetare|poliser', 'har|uppges\\s+ha|ska\\s+ha|har\\s+nu',
+      'dödats|dött|omkommit|omkom|dog|döda|dödade|skjutits\\s+ihjäl|mördats|mist\\s+livet'),
+    deadBefore: before('dödstalet\\s+(?:har\\s+)?(?:stigit\\s+)?till|antalet\\s+döda\\s+(?:har\\s+)?(?:stigit\\s+)?till|dödade|dödar'),
+    injuredAfter: after('personer|människor|civila|soldater|barn|passagerare', 'har|uppges\\s+ha|ska\\s+ha', 'skadats|skadades|skadade|skadad|allvarligt\\s+skadade'),
+    death: words('död|döda|dödad\\p{L}*|dödats|dödsfall\\p{L}*|omkom\\p{L}*|mord\\p{L}*|mördad\\p{L}*|ihjälskjut\\p{L}*|avliden|avled'),
+    events: [
+      [words('flyganfall\\p{L}*|bombning\\p{L}*|bombattack\\p{L}*|explosion\\p{L}*|sprängning\\p{L}*|sprängdåd\\p{L}*|terrorattack\\p{L}*|terrordåd\\p{L}*|självmordsattack\\p{L}*|statskupp\\p{L}*|massaker\\p{L}*|gisslan\\p{L}*|undantagstillstånd\\p{L}*|tsunami|orkan\\p{L}*'), 'high'],
+      [words('attack\\p{L}*|anfall\\p{L}*|strider|sammandrabbning\\p{L}*|militär\\p{L}*|armé\\p{L}*|drönar\\p{L}*|terror\\p{L}*|protest\\p{L}*|demonstration\\p{L}*|strejk\\p{L}*|gripen|gripits|greps|anhållen|anhållna|häktad\\p{L}*|kidnapp\\p{L}*|skottlossning\\p{L}*|skjutning\\p{L}*|skjuten|knivattack\\p{L}*|knivhugg\\p{L}*|jordbävning\\p{L}*|översvämning\\p{L}*|branden|bränder|brand\\s+(?:i|på)|skogsbrand\\p{L}*|storbrand\\p{L}*|jordskred\\p{L}*|storm\\p{L}*|torka|epidemi\\p{L}*|olycka|olyckan|olyckor|krock\\p{L}*|kollision\\p{L}*|riksdagsval\\p{L}*|presidentval\\p{L}*|parlamentsval\\p{L}*|folkomröstning\\p{L}*|avgår|avgick|avgång\\p{L}*|vapenvila\\p{L}*|sanktion\\p{L}*|tullar|strafftull\\p{L}*'), 'medium'],
+    ],
+    opinion: words('ledarsidan|krönika|kolumn\\p{L}*|analys|debattartikel'),
+  },
 }
 
 /** The largest count a pattern finds (years and money aren't people) */
@@ -563,13 +651,14 @@ function formOf(text: string, lang: string): string {
   if (lang === 'ru') return digits.replace(/ё/g, 'е').replace(/Ё/g, 'Е')
   if (lang === 'sq') return withoutAccents(digits)
   if (lang === 'sr') return withoutAccents(serbianLatin(digits))
+  if (lang === 'hr' || lang === 'bs') return withoutAccents(digits)
   if (lang === 'el') return withoutAccents(digits)
   if (lang === 'fa' || lang === 'ur') return digits.replace(/ي/g, 'ی').replace(/ك/g, 'ک')
   if (lang === 'vi') return digits.normalize('NFC')
   // Romanian's s and t with a cedilla (older keyboards) are its letters with a comma
   if (lang === 'ro') return digits.replace(/ş/g, 'ș').replace(/Ş/g, 'Ș').replace(/ţ/g, 'ț').replace(/Ţ/g, 'Ț')
-  // Turkish: "İ" and "I" are the capitals of "i" and "ı", which case-insensitive matching doesn't know
-  if (lang === 'tr') return digits.replace(/İ/g, 'i').replace(/I/g, 'ı').toLowerCase()
+  // Turkish and Azerbaijani: "İ" and "I" are the capitals of "i" and "ı", which case-insensitive matching doesn't know
+  if (lang === 'tr' || lang === 'az') return digits.replace(/İ/g, 'i').replace(/I/g, 'ı').toLowerCase()
   if (lang === 'uk') return digits.replace(/[’ʼ`]/g, "'")
   return digits
 }

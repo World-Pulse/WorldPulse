@@ -1190,6 +1190,83 @@ const FILIPINO: Rule[] = [
   r('estados unidos|amerika', 'United States'), r('tsina', 'China'), r('rusya', 'Russia'), r('ukranya', 'Ukraine'),
 ]
 
+/**
+ * Nepali, Armenian, Bosnian, Uzbek, Kazakh, Swedish and Azerbaijani (Nov 19, 2026; Devon, 8:37 PM: "cover languages where readers
+ * are"): the lists' first feeds in them. Nepali and Armenian join their endings to a name ("काठमाडौंमा", in Kathmandu;
+ * "Երևանում", in Yerevan), as Uzbek and Kazakh do ("Toshkentda", "Астанада"): a name is read from its start. Nepal's
+ * towns the gazetteer doesn't tell apart from India's (Lalitpur, Janakpur) are read as Nepal; so are its provinces.
+ * Left out: Nepali "कतार" (Qatar, and a queue), Swedish "Vasa" (a Finnish town, a warship and a king's house).
+ */
+const agi = (alts: string, as: string): Rule => [new RegExp(`${HB}(?:${alts})[\\p{L}\\p{M}]*`, 'giu'), as]
+const NEPALI: Rule[] = [
+  ag('नेपाल', 'Nepal'), ag('काठमाडौं|काठमाडौँ|काठमाण्डौ|काठमाण्डू', 'Kathmandu'), ag('पोखरा', 'Pokhara'), ag('विराटनगर', 'Biratnagar'),
+  ag('ललितपुर|भक्तपुर|जनकपुर|वीरगन्ज|वीरगञ्ज|बीरगन्ज|बीरगञ्ज|धरान|बुटवल|धनगढी|हेटौंडा|इटहरी', 'Nepal'),
+  ag('कोशी|मधेश|बागमती|गण्डकी|लुम्बिनी|कर्णाली|सुदूरपश्चिम', 'Nepal'),
+  ag('भारत', 'India'), ag('नयाँ दिल्ली|दिल्ली', 'New Delhi'), ag('चीन', 'China'), ag('बेइजिङ', 'Beijing'), ag('अमेरिका', 'United States'),
+  ag('बेलायत', 'United Kingdom'), ag('लन्डन', 'London'), ag('जापान', 'Japan'), ag('रुस|रूस', 'Russia'), ag('युक्रेन', 'Ukraine'),
+  ag('पाकिस्तान', 'Pakistan'), ag('बंगलादेश|बङ्गलादेश|बाङ्लादेश', 'Bangladesh'), ag('भुटान', 'Bhutan'), ag('श्रीलंका|श्रीलङ्का', 'Sri Lanka'),
+  ag('इजरायल|इजराइल', 'Israel'), ag('इरान|ईरान', 'Iran'), ag('साउदी', 'Saudi Arabia'), ag('मलेसिया', 'Malaysia'),
+  ag('दक्षिण कोरिया', 'South Korea'), ag('संयुक्त अरब इमिरेट्स|युएई', 'United Arab Emirates'), ag('अष्ट्रेलिया|अस्ट्रेलिया', 'Australia'),
+  ag('क्यानडा', 'Canada'),
+]
+const ARMENIAN: Rule[] = [
+  agi('Հայաստան', 'Armenia'), agi('Երևան|Երեւան', 'Yerevan'), agi('Գյումրի', 'Gyumri'), agi('Վանաձոր', 'Vanadzor'),
+  agi('Սյունիք|Տավուշ|Շիրակ|Լոռի|Կոտայք|Գեղարքունիք|Արմավիր|Արագածոտն', 'Armenia'), agi('Արցախ|Լեռնային Ղարաբաղ', 'Azerbaijan'),
+  agi('Ադրբեջան', 'Azerbaijan'), agi('Բաքու', 'Baku'), agi('Վրաստան', 'Republic of Georgia'), agi('Թբիլիսի', 'Tbilisi'),
+  agi('Թուրքիա', 'Turkey'), agi('Իրան', 'Iran'), agi('Ռուսաստան', 'Russia'), agi('Մոսկվա', 'Moscow'), agi('Ուկրաինա', 'Ukraine'),
+  agi('ԱՄՆ', 'United States'), agi('Վաշինգտոն', 'Washington'), agi('Ֆրանսիա', 'France'), agi('Փարիզ', 'Paris'),
+  agi('Գերմանիա', 'Germany'), agi('Իսրայել', 'Israel'), agi('Չինաստան', 'China'), agi('Հնդկաստան', 'India'),
+]
+const BOSNIAN: Rule[] = [
+  cs('BiH', 'Bosnia'), r('republik(?:a|e|i|u|om)\\s+srpsk(?:a|e|oj|u|om)', 'Bosnia'), r('mostar(?:a|u|om)?', 'Mostar'),
+  r('banj(?:a|e|i|u|om)\\s+luk(?:a|e|i|u|om)', 'Banja Luka'),
+  ...MONTENEGRIN,
+]
+// Uzbek's o‘ and g‘ are written with several marks, or none
+const AP = "[‘ʻ'’`]?"
+const UZBEK: Rule[] = [
+  agi(`o${AP}zbekiston`, 'Uzbekistan'), agi('toshkent', 'Tashkent'), agi('samarqand', 'Samarkand'), agi('buxoro', 'Bukhara'),
+  agi(`farg${AP}ona`, 'Fergana'), agi('andijon', 'Andijan'), agi('namangan', 'Namangan'), agi('nukus', 'Nukus'),
+  agi(`qoraqalpog${AP}iston`, 'Uzbekistan'), agi(`qozog${AP}iston`, 'Kazakhstan'), agi(`qirg${AP}iziston`, 'Kyrgyzstan'),
+  agi('tojikiston', 'Tajikistan'), agi('turkmaniston', 'Turkmenistan'), agi(`afg${AP}oniston`, 'Afghanistan'),
+  agi('rossiya', 'Russia'), agi('moskva', 'Moscow'), agi('xitoy', 'China'), agi('aqsh', 'United States'), agi('turkiya', 'Turkey'),
+  agi('eron', 'Iran'), agi('isroil', 'Israel'), agi('ukraina', 'Ukraine'), agi('germaniya', 'Germany'), agi('fransiya', 'France'),
+  agi('yaponiya', 'Japan'), agi('hindiston', 'India'), agi('pokiston', 'Pakistan'), agi('janubiy\\s+koreya', 'South Korea'),
+]
+const KAZAKH: Rule[] = [
+  agi('Қазақстан', 'Kazakhstan'), agi('Астана', 'Astana'), agi('Алматы', 'Almaty'), agi('Шымкент', 'Shymkent'),
+  agi('Қарағанды', 'Karaganda'), agi('Ақтөбе', 'Aktobe'), agi('Атырау', 'Atyrau'), agi('Ресей', 'Russia'), agi('Мәскеу', 'Moscow'),
+  agi('Қытай', 'China'), agi('Бейжің', 'Beijing'), agi('АҚШ', 'United States'), agi('Өзбекстан', 'Uzbekistan'),
+  agi('Қырғызстан', 'Kyrgyzstan'), agi('Тәжікстан', 'Tajikistan'), agi('Түрікменстан', 'Turkmenistan'), agi('Түркия', 'Turkey'),
+  agi('Иран', 'Iran'), agi('Израиль', 'Israel'), agi('Украина', 'Ukraine'), agi('Германия', 'Germany'), agi('Франция', 'France'),
+  agi('Жапония', 'Japan'), agi('Үндістан', 'India'), agi('Ауғанстан', 'Afghanistan'),
+]
+// Azerbaijani writes "İ" for its capital i, which case-insensitive matching doesn't take for "i"; "Çin" (China) only
+// with its own endings ("çinar" is a plane tree); Ganja as Azerbaijan (the place-finder reads "Ganja" only with its
+// country, as it is also cannabis)
+const AZERBAIJANI: Rule[] = [
+  agi('azərbaycan', 'Azerbaijan'), agi('bakı', 'Baku'), agi('gəncə|sumqayıt|naxçıvan|lənkəran|şəki|mingəçevir', 'Azerbaijan'),
+  agi('qarabağ|xankəndi|şuşa', 'Azerbaijan'), agi('ermənistan', 'Armenia'), agi('[İi]rəvan', 'Yerevan'),
+  agi('gürcüstan', 'Republic of Georgia'), agi('tiflis', 'Tbilisi'), agi('türkiyə', 'Turkey'), agi('ankara', 'Ankara'),
+  agi('[İi]stanbul', 'Istanbul'), agi('rusiya', 'Russia'), agi('moskva', 'Moscow'), agi('[İi]ran', 'Iran'), agi('ukrayna', 'Ukraine'),
+  cs('ABŞ', 'United States'), agi('vaşinqton', 'Washington'), agi('fransa', 'France'), agi('almaniya', 'Germany'),
+  r('böyük\\s+britaniya(?:nın|da|ya)?', 'United Kingdom'), r('çin(?:in|ə|də|dən|lə)?', 'China'), agi('[İi]srail', 'Israel'),
+  agi('fələstin', 'Palestine'), agi('qəzza', 'Gaza'), agi('hindistan', 'India'), agi('qazaxıstan', 'Kazakhstan'),
+  agi('özbəkistan', 'Uzbekistan'), r('ağ\\s+ev(?:in|də|dən)?', 'White House'),
+]
+const sv = (alts: string, as: string): Rule => r(`(?:${alts})s?`, as)
+const SWEDISH: Rule[] = [
+  sv('sverige', 'Sweden'), sv('göteborg', 'Gothenburg'), sv('malmö', 'Malmö'), sv('helsingfors', 'Helsinki'),
+  sv('åbo|esbo|vanda|tammerfors|uleåborg|borgå|jakobstad|karleby', 'Finland'), sv('norge', 'Norway'), sv('danmark', 'Denmark'),
+  sv('köpenhamn', 'Copenhagen'), sv('tyskland', 'Germany'), sv('frankrike', 'France'), sv('ryssland', 'Russia'), sv('kina', 'China'),
+  sv('peking', 'Beijing'), sv('polen', 'Poland'), sv('storbritannien', 'United Kingdom'), sv('nederländerna', 'Netherlands'),
+  sv('spanien', 'Spain'), sv('italien', 'Italy'), sv('grekland', 'Greece'), sv('turkiet', 'Turkey'), sv('ukraina', 'Ukraine'),
+  sv('indien', 'India'), sv('sydkorea', 'South Korea'), sv('nordkorea', 'North Korea'), sv('sydafrika', 'South Africa'),
+  sv('österrike', 'Austria'), sv('schweiz', 'Switzerland'), sv('belgien', 'Belgium'), sv('estland', 'Estonia'), sv('lettland', 'Latvia'),
+  sv('litauen', 'Lithuania'), cs('Islands?', 'Iceland'), sv('grönland', 'Greenland'), sv('bryssel', 'Brussels'), sv('moskva', 'Moscow'),
+  r('vita\\s+huset', 'White House'),
+]
+
 export const LOCAL_NAMES: Record<string, Rule[]> = {
   ja: JAPANESE, zh: CHINESE, th: THAI,
   hi: HINDI,
@@ -1201,6 +1278,7 @@ export const LOCAL_NAMES: Record<string, Rule[]> = {
   bg: BULGARIAN, mk: MACEDONIAN, no: NORWEGIAN, nb: NORWEGIAN, fi: FINNISH, is: ICELANDIC, hr: MONTENEGRIN, ka: GEORGIAN, so: SOMALI,
   ta: TAMIL, te: TELUGU, kn: KANNADA, ml: MALAYALAM, mr: MARATHI, gu: GUJARATI, or: ODIA, as: ASSAMESE, sd: SINDHI, am: AMHARIC,
   pa: PUNJABI, si: SINHALA, my: BURMESE, tl: FILIPINO, fil: FILIPINO,
+  ne: NEPALI, hy: ARMENIAN, bs: BOSNIAN, uz: UZBEK, kk: KAZAKH, sv: SWEDISH, az: AZERBAIJANI,
 }
 
 /** The text with its language's place names in English and its look-alike words blanked out, for finding its place */

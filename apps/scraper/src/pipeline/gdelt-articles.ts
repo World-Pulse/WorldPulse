@@ -61,6 +61,9 @@ export const TRANSLATED_LANGUAGES: Readonly<Record<string, string>> = {
   // of Nov 19: 5 Hungarian, 5 Finnish, 2 Lithuanian, 1 Slovak, 1 Norwegian article)
   hun: 'hu', ces: 'cs', cze: 'cs', slk: 'sk', slo: 'sk', fin: 'fi', est: 'et', lit: 'lt', lav: 'lv', nor: 'no', nob: 'no',
   swa: 'sw',
+  // Nov 19, 2026, night: Nepali, Armenian and Swedish (the 00:00 to 01:45 UTC files of Nov 20: 47 Swedish articles from 20
+  // outlets, 30 Armenian, 28 Nepali)
+  nep: 'ne', hye: 'hy', arm: 'hy', swe: 'sv',
 }
 /**
  * A fresh address for each request (Oct 22): GDELT lists a file the moment it

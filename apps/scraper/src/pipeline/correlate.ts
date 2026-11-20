@@ -824,10 +824,14 @@ const STEPPE_ENDINGS = [
   'тон', 'төн', 'лар', 'лер', 'лор', 'лөр', 'дар', 'дер', 'дор', 'дөр', 'тар', 'тер', 'тор', 'төр', 'га', 'ге', 'го', 'гө', 'ка',
   'ке', 'ко', 'кө', 'да', 'де', 'до', 'дө', 'та', 'те', 'то', 'тө', 'ды', 'ди', 'ду', 'дү', 'ты', 'ти', 'ту', 'тү', 'ны', 'ни',
   'ну', 'нү', 'сы', 'си', 'су', 'сү',
+  // kk (Nov 19, 2026): "Астанадағы" (in Astana's), "Қазақстанның" (Kazakhstan's), "Ресеймен" (with Russia)
+  'ндағы', 'ндегі', 'дағы', 'дегі', 'тағы', 'тегі', 'ның', 'нің', 'дың', 'дің', 'тың', 'тің', 'нан', 'нен', 'мен', 'бен', 'пен',
+  'ға', 'қа', 'на', 'не', 'ні', 'ді', 'ті',
   // mn, one letter
   'д', 'т', 'н', 'г',
 ].sort((a, b) => b.length - a.length)
-const STEPPE_LETTERS = /[өүң]/u
+// Kazakh's own letters too (Nov 19, 2026): ә ғ қ ұ һ, which Kyrgyz, Mongolian and Russian don't use
+const STEPPE_LETTERS = /[өүңәғқұһ]/u
 
 /**
  * Greek and Korean (Nov 18, 2026; Devon: "we need to add more language coverage"). A Greek word, after foldAccents
@@ -877,6 +881,27 @@ export function indicStem(word: string): string {
   if (BENGALI_LETTERS.test(word) && letters.length >= 3 && /[যরকত]/u.test(letters[letters.length - 1]!)) letters = letters.slice(0, -1)
   return letters.slice(0, 3).join('')
 }
+/**
+ * Armenian (Nov 19, 2026; Devon, 8:37 PM: "cover languages where readers are"): a word, after foldAccents (lower
+ * case), loses one ending of its case, plural or article, the longest that leaves 3 letters, and keeps its first six
+ * letters, as a Russian one does ("Երևանում", in Yerevan, and "Երևանի", of Yerevan, are "երևան"; "ընտրությունների"
+ * and "ընտրություններ" are "ընտրու"). "եւ" is written for "և" too. Not the article "ն", the last letter of many names
+ * ("Երևան", "Հայաստան").
+ */
+const ARMENIAN_SCRIPT = /^\p{scx=Armenian}+$/u
+const ARMENIAN_ENDINGS = ['ներից', 'ներով', 'ներին', 'ների', 'ները', 'ներն', 'ներ', 'երից', 'երով', 'երին', 'երի', 'երը', 'երն', 'եր',
+  'ում', 'ից', 'ով', 'ին', 'ը', 'ի']
+export function armenianStem(word: string): string {
+  let w = foldAccents(word).replace(/եւ/g, 'և')
+  for (const end of ARMENIAN_ENDINGS) {
+    if (w.endsWith(end) && Array.from(w).length - Array.from(end).length >= 3) { w = w.slice(0, -end.length); break }
+  }
+  return Array.from(w).slice(0, 6).join('')
+}
+/** Armenian's little words, reporting verbs and headline labels (compared as armenianStem leaves them) */
+const ARMENIAN_STOP = new Set(('և որ է են էր էին այս այդ այն մեկ մի համար հետ մասին վրա կողմից նաև իսկ բայց թե ինչ ինչպես ինչու ' +
+  'երբ որտեղ այսօր երեկ տեսանյութ լուսանկար լուր լուրեր ասել հայտարարել նշել').split(/\s+/).map(armenianStem))
+
 /**
  * Their little words, reporting verbs and headline labels (as written; compared as indicStem leaves them). Most of
  * their little words are one letter without its vowel sign ("में", "की", "से"), too short to count anyway
@@ -1112,6 +1137,11 @@ export function otherScriptWords(text: string): string[] {
       if (stem.length >= 2 && !INDIC_STOP.has(stem)) out.push(stem)
       continue
     }
+    if (!arabic && !greek && !hangul && ARMENIAN_SCRIPT.test(token)) {
+      const stem = armenianStem(token)
+      if (stem.length >= 3 && !ARMENIAN_STOP.has(stem)) out.push(stem)
+      continue
+    }
     if (!arabic && !greek && !hangul && !CYRILLIC_SCRIPT.test(token)) continue
     if (OTHER_SCRIPT_STOP.has(token)) continue
     const stem = arabic ? arabicStem(token) : greek ? greekStem(token) : hangul ? hangulStem(token) : cyrillicStem(token, steppe)
@@ -1208,6 +1238,12 @@ export function searchWords(title: string): string[] {
     if (ARABIC_SCRIPT.test(foldAccents(token))) {
       const stem = arabicStem(foldAccents(token))
       if (stem.length >= 3 && !OTHER_SCRIPT_STOP.has(stem) && !OTHER_SCRIPT_STOP.has(foldAccents(token))) forms.push(stem, `ال${stem}`)
+    }
+    // An Armenian word (Nov 19, 2026) by its stem: "Երևանում" finds "Երևանի" and "Երևան"
+    if (ARMENIAN_SCRIPT.test(token)) {
+      const stem = armenianStem(token)
+      if (stem.length >= 3 && !ARMENIAN_STOP.has(stem) && !out.includes(stem)) { base++; out.push(stem) }
+      continue
     }
     // A Korean word (Nov 18, 2026) without its particle, from 2 syllables: "정부는" finds "정부" and "정부가"
     if (HANGUL_SCRIPT.test(token)) {

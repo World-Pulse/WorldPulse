@@ -180,6 +180,8 @@ for (const word of otherScriptWords(foldAccents(
 const OTHER_SCRIPT_LANGUAGES = new Set([
   'ru', 'ar', 'fa', 'ur', 'el', 'ko', 'ja', 'zh', 'th', 'uk', 'bg', 'mk',
   'hi', 'mr', 'ne', 'bn', 'as', 'pa', 'gu', 'or', 'ta', 'te', 'kn', 'ml', 'si', 'am',
+  // Nov 19, 2026, night: Armenian and Kazakh
+  'hy', 'kk',
 ])
 
 /** A headline's text as it is compared: Serbian, written in both scripts, in Latin letters ("Погинуло", "Poginulo") */
@@ -192,7 +194,8 @@ const comparable = (title: string, lang: string) => (lang === 'sr' ? serbianLati
  * "Warszawie"; "Київ", "Києві"); Czech, Slovak, Hungarian, Finnish, Estonian, Lithuanian and Latvian too (Nov 19, evening:
  * "Budapest", "Budapesten"; "Helsinki", "Helsingissä")
  */
-const INFLECTED = new Set(['sq', 'sr', 'hr', 'bs', 'sl', 'pl', 'uk', 'bg', 'mk', 'cs', 'sk', 'hu', 'fi', 'et', 'lt', 'lv'])
+// (and Armenian, Uzbek, Kazakh and Azerbaijani, Nov 19, night: "Երևան", "Երևանում"; "Toshkent", "Toshkentda"; "Астана", "Астанада")
+const INFLECTED = new Set(['sq', 'sr', 'hr', 'bs', 'sl', 'pl', 'uk', 'bg', 'mk', 'cs', 'sk', 'hu', 'fi', 'et', 'lt', 'lv', 'hy', 'uz', 'kk', 'az'])
 const namesForm = (title: string, lang: string) =>
   (INFLECTED.has(lang) ? title.replace(/\p{L}+/gu, w => Array.from(w).slice(0, 5).join('')) : title)
 
@@ -227,6 +230,16 @@ const NORWEGIAN_PLAIN = new Set([
   'var', 'blir', 'ble', 'har', 'hadde', 'som', 'det', 'den', 'til', 'fra', 'med', 'for', 'ikke', 'men', 'eller',
   'ogsa', 'bare', 'etter', 'mellom', 'over', 'under', 'nye', 'nytt', 'aret', 'dag', 'sier', 'kan', 'skal', 'vil',
   'video', 'bilder', 'hvorfor', 'hvordan', 'hva', 'hvem', 'hvor', 'nar',
+])
+/** Serbian's small words (Nov 11, 2026), without accents; Croatian's and Bosnian's too */
+const SERBIAN_PLAIN = new Set([
+  'kako', 'gde', 'gdje', 'zasto', 'ali', 'jer', 'ako', 'dok', 'sada', 'samo', 'jos', 'kada', 'kad', 'posle', 'poslije',
+  'pre', 'prije', 'iako', 'ovo', 'ova', 'ove', 'ovaj', 'ovog', 'ovom', 'taj', 'tog', 'toga', 'tom', 'ima', 'imaju',
+  'bio', 'bili', 'bude', 'budu', 'nisu', 'treba', 'mogu', 'moze', 'hoce', 'nece', 'evo', 'njegov', 'njegova',
+  'njegove', 'njen', 'njena', 'njihov', 'njihova', 'svoj', 'svoje', 'svoju', 'nas', 'vas', 'njih', 'oni', 'ona',
+  'ono', 'sam', 'smo', 'ste', 'kroz', 'medu', 'medju', 'izmedu', 'iza', 'ispod', 'iznad', 'pored', 'osim', 'nova',
+  'novo', 'novih', 'novog', 'novu', 'godine', 'godina', 'godini', 'dana', 'rekao', 'rekla', 'kaze', 'kazao', 'navodi',
+  'tvrdi', 'izjavio', 'jedan', 'jedna', 'jedno', 'jednog', 'kojem', 'kojoj', 'kojima', 'kojih', 'cak',
 ])
 /** Small words of one language's headlines only (Nov 11, 2026): Albanian and Serbian, without accents */
 const PLAIN_IN: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -313,14 +326,26 @@ const PLAIN_IN: Readonly<Record<string, ReadonlySet<string>>> = {
     'drejt', 'permes', 'prej', 'tek', 'mes', 'midis', 'kunder', 'dje', 'neser', 'por', 'apo', 'nese', 'sepse', 'ndersa',
     'pasi', 'pra', 'gjithe', 'cdo', 'disa', 'tjeter', 'tjera', 'reja', 'tona', 'tone', 'juaj', 'tuaj',
   ]),
-  sr: new Set([
-    'kako', 'gde', 'gdje', 'zasto', 'ali', 'jer', 'ako', 'dok', 'sada', 'samo', 'jos', 'kada', 'kad', 'posle', 'poslije',
-    'pre', 'prije', 'iako', 'ovo', 'ova', 'ove', 'ovaj', 'ovog', 'ovom', 'taj', 'tog', 'toga', 'tom', 'ima', 'imaju',
-    'bio', 'bili', 'bude', 'budu', 'nisu', 'treba', 'mogu', 'moze', 'hoce', 'nece', 'evo', 'njegov', 'njegova',
-    'njegove', 'njen', 'njena', 'njihov', 'njihova', 'svoj', 'svoje', 'svoju', 'nas', 'vas', 'njih', 'oni', 'ona',
-    'ono', 'sam', 'smo', 'ste', 'kroz', 'medu', 'medju', 'izmedu', 'iza', 'ispod', 'iznad', 'pored', 'osim', 'nova',
-    'novo', 'novih', 'novog', 'novu', 'godine', 'godina', 'godini', 'dana', 'rekao', 'rekla', 'kaze', 'kazao', 'navodi',
-    'tvrdi', 'izjavio', 'jedan', 'jedna', 'jedno', 'jednog', 'kojem', 'kojoj', 'kojima', 'kojih', 'cak',
+  sr: SERBIAN_PLAIN,
+  // Croatian and Bosnian (Nov 19, 2026, night): Serbian's small words
+  hr: SERBIAN_PLAIN,
+  bs: SERBIAN_PLAIN,
+  // Nov 19, 2026, night: Swedish, Azerbaijani and Uzbek, without accents and apostrophes as storyTokens reads them
+  sv: new Set([
+    'och', 'att', 'det', 'som', 'den', 'till', 'for', 'med', 'fran', 'efter', 'under', 'over', 'mot', 'inte', 'har', 'hade',
+    'var', 'blir', 'blev', 'kan', 'ska', 'vill', 'nya', 'nytt', 'aret', 'dag', 'idag', 'igar', 'sager', 'enligt', 'video',
+    'bilder', 'hur', 'varfor', 'vad', 'vem', 'nar', 'dar', 'alla', 'mer', 'manga', 'inga', 'men', 'eller', 'ocksa', 'bara',
+    'mellan', 'kommer', 'gor', 'far', 'fick', 'finns', 'stor', 'stora', 'forsta', 'han', 'hon',
+  ]),
+  az: new Set([
+    'ilə', 'ucun', 'olan', 'olub', 'edib', 'bir', 'daha', 'artiq', 'sonra', 'əvvəl', 'barədə', 'gorə', 'kimi', 'yeni', 'gun',
+    'bugun', 'dunən', 'necə', 'niyə', 'video', 'foto', 'dedi', 'bildirib', 'aciqlayib', 'deyib', 'olacaq', 'edəcək', 'isə',
+    'həm', 'amma', 'lakin', 'cox', 'hər', 'onun', 'onlar', 'biz', 'siz', 'xəbər', 'xəbərlər',
+  ]),
+  uz: new Set([
+    'bilan', 'uchun', 'esa', 'ham', 'shu', 'bir', 'yangi', 'yil', 'kun', 'bugun', 'kecha', 'qanday', 'nima', 'nega', 'qachon',
+    'emas', 'bor', 'yoq', 'haqida', 'boyicha', 'keyin', 'oldin', 'orqali', 'kabi', 'yana', 'endi', 'hali', 'barcha', 'koplab',
+    'video', 'foto', 'dedi', 'aytdi', 'malum', 'qildi', 'boldi', 'etdi', 'mumkin', 'kerak', 'uning', 'ular', 'biz', 'siz',
   ]),
 }
 
@@ -341,7 +366,8 @@ export function storyTokens(title: string, lang = 'en'): string[] {
     for (const raw of folded.split(/[^a-z0-9]+/)) if (raw.length >= 3 && !PLAIN.has(raw)) out.add(raw)
     return [...out]
   }
-  const text = comparable(title, lang).replace(/[‘’]/g, "'")
+  // (Uzbek's o‘ and g‘ with any of their marks, Nov 19, 2026: "O‘zbekiston", "Oʻzbekiston", "O'zbekiston")
+  const text = comparable(title, lang).replace(/[‘’ʻʼ`]/g, "'")
   const plainHere = PLAIN_IN[lang]
   for (const raw of (foreign ? foldAccents(text) : text.toLowerCase()).split(/[^\p{L}\p{N}']+/u)) {
     // (a French elision is no word of its own: "l'armée", "d'Iran", "qu'il")
@@ -841,6 +867,8 @@ export const SEARCHED_LANGUAGES = [
   'bs', 'sl', 'bg', 'mk',
   // Nov 19, evening
   'hu', 'cs', 'sk', 'fi', 'et', 'lt', 'lv', 'no', 'nb', 'sw',
+  // Nov 19, night: Nepali, Armenian and Swedish (GDELT's translated list has them)
+  'ne', 'hy', 'sv',
 ] as const
 
 export function waitingQuery(quiet: readonly string[], now: Date): { sql: string; bindings: unknown[] } {
