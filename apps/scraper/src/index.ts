@@ -23,7 +23,7 @@ import { extractGeo, geocodePlace, placeFromText } from './pipeline/geo'
 import { isStaleItem } from './pipeline/freshness'
 import { decodeEntities, cleanUrl, withoutOutletName, articleSummary, storyPostText } from './pipeline/text'
 import { dedup } from './pipeline/dedup'
-import { correlateSignal, confirmMergedArticle, RELIABILITY_CEILING, ensureTitleSearchIndex } from './pipeline/correlate'
+import { correlateSignal, confirmMergedArticle, RELIABILITY_CEILING, ensureTitleSearchIndex, warmRecentWords } from './pipeline/correlate'
 import type { CorrelationCandidate } from './pipeline/correlate'
 import { computeTrending } from './pipeline/trending'
 import { backfillUnprocessed } from './backfill'
@@ -182,6 +182,12 @@ async function bootstrap() {
   ensureTitleSearchIndex()
     .then(r => { if (r !== 'failed') logger.info({ result: r }, 'Title search index ready') })
     .catch(() => {})
+
+  // Which outlets used each headline word in the last 12 hours, for story matching's rare-words look
+  // (pipeline/correlate.ts, Nov 20, 2026): filled from the database in the background, the look off until then
+  warmRecentWords()
+    .then(rows => logger.info({ rows }, 'Story matching word counts ready'))
+    .catch(err => logger.warn({ err }, 'Story matching word counts not filled (the rare-words look stays off)'))
 
   // signals.story_id groups same-story signals for the feed (pipeline/stories.ts)
   ensureStoryIdColumn()

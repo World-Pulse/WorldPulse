@@ -187,9 +187,156 @@ export function busyWords(candidates: Iterable<CorrelationCandidate>): Set<strin
   return new Set([...outlets].filter(([, set]) => set.size >= BUSY_WORD_OUTLETS).map(([w]) => w))
 }
 
-/** isSameStory's options: the second look, with the words busy among the report's candidates (correlateSignal only) */
+/**
+ * isSameStory's options: the second look, with the words busy among the report's candidates, and the rare-words look,
+ * with the outlets that used each word in the last 12 hours (correlateSignal only)
+ */
 export interface SameStoryOptions {
   secondLook?: { busy: ReadonlySet<string> }
+  rareWords?: RecentWordOutlets
+}
+
+/**
+ * Chinese, Japanese and Thai headlines are read in overlapping pieces (cjkWords), about one a character, so a
+ * 25-character headline is some 24 words and two outlets' wordings of one story share 6 to 12 of 40: a fifth, not the
+ * first look's 40% (Nov 20, 2026; Devon, 10:18 AM: the brain "still needs help on matching multiple sources in a
+ * verification"). That morning 5% of Chinese, 3% of Japanese and 5% of Thai reports were confirmed by a second outlet,
+ * against 17% of all; of 40 such pairs the first look turned down, read by hand, 35 were one story ("追加預算三讀　
+ * 卓榮泰：感謝兩院良性互動回應民意" and "追加預算6076億全數通過 卓榮泰：感謝立院朝野"), and of those sharing 6 pieces or
+ * more, 33 of 34. Headlines mostly in pieces (half their words or more) are one story from 6 words in common and a
+ * fifth of all, within the day. (A place named only in Chinese characters isn't read as a place yet: two vote-buying
+ * cases, in Hualien and in Taitung, shared 6 pieces and passed.)
+ */
+const PIECE_WORD = /^[\p{sc=Han}\p{sc=Katakana}ー\p{sc=Thai}]+$/u
+const SAME_STORY_MIN_PIECES = 6
+const SAME_STORY_MIN_PIECE_JACCARD = 0.2
+function mostlyPieces(words: ReadonlySet<string>): boolean {
+  let n = 0
+  let pieces = 0
+  for (const w of words) {
+    if (/^[@#~%]/.test(w)) continue
+    n++
+    if (PIECE_WORD.test(w)) pieces++
+  }
+  return n > 0 && pieces * 2 >= n
+}
+
+/**
+ * The rare-words look (Nov 20, 2026): two headlines of one story that word it differently share few of their words,
+ * but the ones they share few outlets used that day. Of the 30,319 reports of the 13 hours to 10 AM, 1,605 pairs of
+ * still-unconfirmed reports from two outlets shared 3 words or more and a fifth of all and were turned down; read by
+ * hand, 57% were one story ("Two people killed ... in enemy attack on Sknyliv station in Lviv" and "Russians attack
+ * railway station in Lviv: two killed"; "Beyoğlu'nda halıya sarılı ceset soruşturması. Katil zanlısı İzmir'de
+ * Yunanistan'a kaçarken yakalandı" and "Beyoğlu cinayetinde kaçış planı yarım kaldı: Şüpheli Yunanistan'a kaçarken
+ * yakalandı"). Those with 3 shared words that at most 5 outlets used in the 12 hours were one story 21 times of 22;
+ * a word more outlets use is the day's topic ("Trump", "attack", "gold price"). Within 6 hours, the countries named
+ * agreeing and sums of 10 or more agreeing, as in the second look; then isSameStory's other checks. Replayed on those
+ * 13 hours it matched 885 more pairs, 44 of 50 read by hand one story; 3 of the 6 others were Vietnamese, whose words
+ * are syllables ("đặc biệt", "kết quả"), so not for Vietnamese headlines. Two places named only in Ukrainian or Kazakh
+ * aren't told apart yet (Ivano-Frankivsk and Kyiv in one night's strikes).
+ */
+/** Letters only Vietnamese writes (Latin with its own marks) */
+const VIETNAMESE_LETTERS = /[ăắằẳẵặâấầẩẫậđêếềểễệôốồổỗộơớờởỡợưứừửữựạảẹẻẽỉịọỏụủỳỵỷỹ]/i
+const RARE_WINDOW_MS = 12 * 60 * 60 * 1000
+const RARE_MAX_OUTLETS = 5
+const RARE_LOOK_HOURS = 6
+const RARE_LOOK_MIN_RARE = 3
+const RARE_LOOK_MIN_SHARED = 3
+const RARE_LOOK_MIN_JACCARD = 0.2
+
+/**
+ * Which outlets used each story word in the last 12 hours (countries, counts, dates and ordinals left out): per word
+ * the outlets and when each last used it, up to one more than RARE_MAX_OUTLETS (a word that many outlets use is not
+ * rare, and how many more doesn't matter). Fed by correlateSignal with every new report, and at start from the last
+ * 12 hours' reports (warmRecentWords); until then the rare-words look is off. About 100,000 words a day, most used
+ * by one or two outlets.
+ */
+export class RecentWordOutlets {
+  private readonly outletIds = new Map<string, number>()
+  /** word -> [outlet id, last used (ms), outlet id, last used, ...] */
+  private readonly words = new Map<string, number[]>()
+  private added = 0
+  ready = false
+
+  add(words: Iterable<string>, outlet: string, at: number): void {
+    if (!outlet) return
+    let id = this.outletIds.get(outlet)
+    if (id === undefined) this.outletIds.set(outlet, id = this.outletIds.size)
+    for (const w of words) {
+      if (/^[@#~%]/.test(w)) continue
+      const list = this.words.get(w)
+      if (!list) { this.words.set(w, [id, at]); continue }
+      let k = 0
+      for (; k < list.length; k += 2) if (list[k] === id) break
+      if (k < list.length) { if (at > list[k + 1]!) list[k + 1] = at; continue }
+      if (list.length < 2 * (RARE_MAX_OUTLETS + 1)) { list.push(id, at); continue }
+      // full: the outlet that used it longest ago gives way
+      let oldest = 1
+      for (let j = 3; j < list.length; j += 2) if (list[j]! < list[oldest]!) oldest = j
+      if (at > list[oldest]!) { list[oldest - 1] = id; list[oldest] = at }
+    }
+    if (++this.added % 2000 === 0) this.prune(Date.now())
+  }
+
+  /** How many outlets used the word in the 12 hours to `now` (up to RARE_MAX_OUTLETS + 1) */
+  outlets(word: string, now = Date.now()): number {
+    const list = this.words.get(word)
+    if (!list) return 0
+    let n = 0
+    for (let k = 1; k < list.length; k += 2) if (now - list[k]! <= RARE_WINDOW_MS) n++
+    return n
+  }
+
+  /** Drop the words no outlet used in the window */
+  prune(now: number): void {
+    for (const [w, list] of this.words) {
+      let fresh = false
+      for (let k = 1; k < list.length; k += 2) if (now - list[k]! <= RARE_WINDOW_MS) { fresh = true; break }
+      if (!fresh) this.words.delete(w)
+    }
+  }
+
+  get size(): number { return this.words.size }
+}
+
+/** The news reader's word counts (correlateSignal) */
+export const recentWords = new RecentWordOutlets()
+
+/**
+ * Fill recentWords from the last 12 hours' reports when the scraper starts, a few hundred at a time so the reader
+ * isn't held up; the rare-words look waits for it. One query of about 20,000 titles.
+ */
+export async function warmRecentWords(words: RecentWordOutlets = recentWords): Promise<number> {
+  const rows = await db('signals')
+    .select('title', db.raw('source_ids[1]::text as source_id'), db.raw('original_urls[1] as first_url'),
+      db.raw('COALESCE(event_time, created_at) as published_at'))
+    .where('created_at', '>=', new Date(Date.now() - RARE_WINDOW_MS).toISOString()) as Array<Record<string, unknown>>
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i]!
+    const at = Math.min(Date.now(), new Date(r.published_at as string).getTime() || Date.now())
+    words.add(storyWords(String(r.title ?? '')), sourceKey(r.source_id, r.first_url), at)
+    if (i % 500 === 499) await new Promise(resolve => setImmediate(resolve))
+  }
+  words.ready = true
+  return rows.length
+}
+
+/** The rare-words look (see RARE_MAX_OUTLETS) */
+function rareLook(wordsA: Set<string>, wordsB: Set<string>, shared: number, jaccard: number, rare: RecentWordOutlets): boolean {
+  if (!rare.ready || shared < RARE_LOOK_MIN_SHARED || jaccard < RARE_LOOK_MIN_JACCARD) return false
+  const now = Date.now()
+  let few = 0
+  for (const w of wordsA) if (wordsB.has(w) && !/^[@#~%]/.test(w) && rare.outlets(w, now) <= RARE_MAX_OUTLETS) few++
+  if (few < RARE_LOOK_MIN_RARE) return false
+  const countries = (words: Set<string>) => [...words].filter(w => w.startsWith('@')).sort().join(' ')
+  const countriesA = countries(wordsA)
+  const countriesB = countries(wordsB)
+  if (countriesA && countriesB && countriesA !== countriesB) return false
+  const sums = (words: Set<string>) => [...words].filter(w => w.startsWith('#') && strongWord(w))
+  const sumsA = sums(wordsA)
+  const sumsB = sums(wordsB)
+  if (sumsA.length > 0 && sumsB.length > 0 && !sumsA.some(w => wordsB.has(w))) return false
+  return true
 }
 
 /**
@@ -273,6 +420,10 @@ export async function correlateSignal(signal: CorrelationCandidate): Promise<Eve
   const span = { start: Date.now() }
 
   try {
+    // 0. Its words in the day's count of who used which (the rare-words look, see RARE_MAX_OUTLETS)
+    recentWords.add(storyWords(signal.title ?? ''), signal.source_id,
+      Math.min(Date.now(), new Date(signal.published_at).getTime() || Date.now()))
+
     // 1. Fetch recent signals in the temporal window
     let t = Date.now()
     const candidates = await fetchRecentSignals(signal)
@@ -290,7 +441,7 @@ export async function correlateSignal(signal: CorrelationCandidate): Promise<Eve
     t = Date.now()
     const pool = new Map<string, CorrelationCandidate>()
     for (const c of [...candidates, ...wider]) pool.set(c.id, c)
-    let sameStory = [...pool.values()].filter(c => isSameStory(signal, c))
+    let sameStory = [...pool.values()].filter(c => isSameStory(signal, c, { rareWords: recentWords }))
     if (sameStory.length === 0) {
       // Nothing the usual way: the second look (see SLOW_WINDOW_HOURS), also at the day before for a
       // thinly covered place's own outlets
@@ -301,7 +452,7 @@ export async function correlateSignal(signal: CorrelationCandidate): Promise<Eve
         for (const c of older) pool.set(c.id, c)
       }
       const busy = busyWords(pool.values())
-      sameStory = [...pool.values()].filter(c => isSameStory(signal, c, { secondLook: { busy } }))
+      sameStory = [...pool.values()].filter(c => isSameStory(signal, c, { secondLook: { busy }, rareWords: recentWords }))
     }
     matchTimings.compareMs += Date.now() - t
     if (sameStory.length > 0) {
@@ -708,6 +859,9 @@ export const FUNCTION_WORDS = new Set((
   'disyembre augusti marts jaanuar veebruar aprill juuni juuli oktoober detsember ' +
   // today
   'hoy hoje aujourd hui bugun vandaag azi astazi dzis dzisiaj dnes avui idag ngayon hom nay ngay ' +
+  // Vietnamese's little words, read a syllable at a time: "của" (of), "những" (the), "với" (with), "một" (a), "nhiều"
+  // (many), "khi" (when), "được" (be), "này" (this); two headlines shared them as words of the story
+  'cua nhung voi mot nhieu khi duoc ' +
   // Turkish's listings of when a match or a race is on, and on which channel
   'zaman saat kacta hangi kanalda sifresiz canli izle'
 ).split(' '))
@@ -1624,11 +1778,17 @@ export function isSameStory(a: CorrelationCandidate, b: CorrelationCandidate, op
   }
   for (const w of wordsB) if (!wordsA.has(w) && !w.startsWith('#')) all++
   const jaccard = shared / Math.max(1, all)
-  const firstLook = withinDay && shared >= SAME_STORY_MIN_SHARED && jaccard >= SAME_STORY_MIN_JACCARD
+  const firstLook = withinDay && ((shared >= SAME_STORY_MIN_SHARED && jaccard >= SAME_STORY_MIN_JACCARD)
+    // (headlines in Chinese, Japanese or Thai pieces: see PIECE_WORD)
+    || (shared >= SAME_STORY_MIN_PIECES && jaccard >= SAME_STORY_MIN_PIECE_JACCARD && mostlyPieces(wordsA) && mostlyPieces(wordsB)))
+  // ...or the rare-words look (see RARE_MAX_OUTLETS), within 6 hours, not for Vietnamese
+  const rare = !firstLook && withinDay && hours <= RARE_LOOK_HOURS && options.rareWords !== undefined
+    && !(VIETNAMESE_LETTERS.test(a.title ?? '') && VIETNAMESE_LETTERS.test(b.title ?? ''))
+    && rareLook(wordsA, wordsB, shared, jaccard, options.rareWords)
   // The second look is never for events tied to a spot (PLACE_BOUND_CATEGORIES), which recur there: an
   // aftershock, the next day's flood, two road accidents on San Marino's Superstrada in one day
   const placeBound = PLACE_BOUND_CATEGORIES.has(a.category) || PLACE_BOUND_CATEGORIES.has(b.category)
-  if (!firstLook && (!second || placeBound || !secondLook(a, b, wordsA, wordsB, shared, jaccard, second.busy))) return false
+  if (!firstLook && !rare && (!second || placeBound || !secondLook(a, b, wordsA, wordsB, shared, jaccard, second.busy))) return false
   // ...and something particular in common: a name, a thing or a count, not just
   // the kind of event and the country ("Russian attack kills seven in Ukraine's
   // Zaporizhzhia" and "Russian attacks kill 24 across Ukraine" share only that)
