@@ -23,7 +23,7 @@ import { extractGeo, geocodePlace, placeFromText } from './pipeline/geo'
 import { isStaleItem } from './pipeline/freshness'
 import { decodeEntities, cleanUrl, withoutOutletName, articleSummary, storyPostText } from './pipeline/text'
 import { dedup } from './pipeline/dedup'
-import { correlateSignal, confirmMergedArticle, RELIABILITY_CEILING, ensureTitleSearchIndex, warmRecentWords } from './pipeline/correlate'
+import { correlateSignal, confirmMergedArticle, RELIABILITY_CEILING, ensureTitleSearchIndex, warmRecentWords, warmRecentTitles } from './pipeline/correlate'
 import type { CorrelationCandidate } from './pipeline/correlate'
 import { computeTrending } from './pipeline/trending'
 import { backfillUnprocessed } from './backfill'
@@ -188,6 +188,11 @@ async function bootstrap() {
   warmRecentWords()
     .then(rows => logger.info({ rows }, 'Story matching word counts ready'))
     .catch(err => logger.warn({ err }, 'Story matching word counts not filled (the rare-words look stays off)'))
+    // ...then the day's headlines, for the headline-word search in memory (pipeline/correlate.ts RecentTitles,
+    // Nov 20, 2026); the database search until they're in, and if they can't be read
+    .then(() => warmRecentTitles())
+    .then(rows => logger.info({ rows }, 'Story matching headlines ready (searched in memory)'))
+    .catch(err => logger.warn({ err }, 'Story matching headlines not filled (the database search goes on)'))
 
   // signals.story_id groups same-story signals for the feed (pipeline/stories.ts)
   ensureStoryIdColumn()

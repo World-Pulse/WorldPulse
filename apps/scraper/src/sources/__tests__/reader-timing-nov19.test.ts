@@ -35,6 +35,8 @@ describe('the reader timing', () => {
       older_searches: 1, older_search_ms: 500, boosts: 2, boost_ms: 300,
       // the pieces search (Nov 20, 2026, afternoon): none here
       piece_searches: 0, piece_search_ms: null, piece_rows: 0, pieces_kept: 0,
+      // the headline-word search in memory (Nov 20, 2026, evening): not filled here
+      memory_searches: 0, memory_search_ms: null, memory_rows: null, titles_kept: 0, titles_ready: false,
     })
     // before any report, averages are null rather than 0
     const empty = readerTimingSummary({ inserts: 0, insertMs: 0, correlations: 0, correlateMs: 0, dedupMs: 0 }, {

@@ -380,6 +380,129 @@ export class RecentPieces {
 export const recentPieces = new RecentPieces()
 
 /**
+ * The headline-word search, in memory (Nov 20, 2026, evening). fetchSameStoryCandidates asks the database's word
+ * index for the day's reports whose headline words start with a new headline's search words (searchWords, each as a
+ * prefix), the 50 matching the most; on the busy server that took 0.6 to 2 s of a report's 1.1 to 3.5 s of matching
+ * (title_search_ms on /ops-status.json), most of the time a feed takes to read. The reader now keeps the day's
+ * headlines' words in memory as that index splits them (lower case, letters and digits), each report under its
+ * words' first 3 letters (2 in Korean and the scripts of India, whose search words start at 2), and looks the same
+ * search words up as prefixes, ranked as the database ranks them. Replayed on the 30,323 reports of the 13 hours to
+ * 3:20 PM, both with the newest 200 and the pieces search: 5,355 reports confirmed against the database search's
+ * 5,362, in 0.7 ms a headline. Filled at start from the day's reports, an hour of them a query (warmRecentTitles);
+ * until it's filled, and if that fails, the database search as before.
+ */
+const TITLE_LIST_MAX = 1000
+const TITLE_SEARCH_LIMIT = 50
+const TITLE_SHORT_KEY = /^[\p{sc=Hangul}\p{sc=Devanagari}\p{sc=Bengali}\p{sc=Gurmukhi}\p{sc=Gujarati}\p{sc=Oriya}\p{sc=Tamil}\p{sc=Telugu}\p{sc=Kannada}\p{sc=Malayalam}\p{sc=Sinhala}]/u
+
+/** A headline's words as the database's word index splits them, lower case */
+export function titleTokens(title: string): string[] {
+  return [...new Set(title.toLowerCase().match(/[\p{L}\p{M}\p{N}]+/gu) ?? [])]
+}
+const titleKey = (word: string) => word.slice(0, TITLE_SHORT_KEY.test(word) ? 2 : 3)
+
+export class RecentTitles {
+  /** a word's first letters -> the reports with a word starting so, as two lists (ids, when) */
+  private readonly lists = new Map<string, { ids: string[]; ats: number[] }>()
+  /** report id -> its words, each after a space (" kyiv drone attack"), and when it came */
+  private readonly words = new Map<string, { text: string; at: number }>()
+  private added = 0
+  ready = false
+  constructor(private readonly windowMs = TEMPORAL_WINDOW_HOURS * 60 * 60 * 1000, private readonly maxPerKey = TITLE_LIST_MAX) {}
+
+  add(id: string, title: string, at: number): void {
+    if (!id || this.words.has(id)) return
+    const tokens = titleTokens(title)
+    if (tokens.length === 0) return
+    this.words.set(id, { text: ' ' + tokens.join(' '), at })
+    for (const key of new Set(tokens.map(titleKey))) {
+      let list = this.lists.get(key)
+      if (!list) this.lists.set(key, list = { ids: [], ats: [] })
+      list.ids.push(id)
+      list.ats.push(at)
+      if (list.ids.length > this.maxPerKey) {
+        // the oldest gives way (the warm-up's reports come in after some new ones)
+        let oldest = 0
+        for (let k = 1; k < list.ats.length; k++) if (list.ats[k]! < list.ats[oldest]!) oldest = k
+        list.ids.splice(oldest, 1)
+        list.ats.splice(oldest, 1)
+      }
+    }
+    if (++this.added % 5000 === 0) this.prune(Date.now())
+  }
+
+  /** The window's reports with words starting with the most of the search words, then the newest (as the database ranks them) */
+  search(terms: string[], now = Date.now(), exclude = '', limit = TITLE_SEARCH_LIMIT): string[] {
+    const hits = new Map<string, { n: number; at: number }>()
+    for (const term of new Set(terms.map(t => t.toLowerCase()).filter(t => t.length > 0))) {
+      const list = this.lists.get(titleKey(term))
+      if (!list) continue
+      const start = ' ' + term
+      for (let k = 0; k < list.ids.length; k++) {
+        const at = list.ats[k]!
+        const id = list.ids[k]!
+        if (now - at > this.windowMs || id === exclude) continue
+        if (!this.words.get(id)?.text.includes(start)) continue
+        const h = hits.get(id)
+        if (h) h.n++
+        else hits.set(id, { n: 1, at })
+      }
+    }
+    return [...hits].sort((a, b) => b[1].n - a[1].n || b[1].at - a[1].at).slice(0, limit).map(([id]) => id)
+  }
+
+  /** Drop the reports older than the window */
+  prune(now: number): void {
+    for (const [id, w] of this.words) if (now - w.at > this.windowMs) this.words.delete(id)
+    for (const [key, list] of this.lists) {
+      let kept = 0
+      for (let k = 0; k < list.ids.length; k++) {
+        if (now - list.ats[k]! > this.windowMs) continue
+        list.ids[kept] = list.ids[k]!
+        list.ats[kept] = list.ats[k]!
+        kept++
+      }
+      if (kept === 0) this.lists.delete(key)
+      else { list.ids.length = kept; list.ats.length = kept }
+    }
+  }
+
+  /** How many reports it holds */
+  get size(): number { return this.words.size }
+}
+
+/** The news reader's headlines (correlateSignal) */
+export const recentTitles = new RecentTitles()
+
+/**
+ * Fill recentTitles with the day's reports when the scraper starts: an hour of them a query, oldest first, so no
+ * query runs long on a busy database (a failed hour is tried once more). The same-story search asks the database
+ * until it's done; when an hour can't be read, it goes on asking the database.
+ */
+export async function warmRecentTitles(titles: RecentTitles = recentTitles, retryMs = 30_000): Promise<number> {
+  const now = Date.now()
+  const HOUR_MS = 60 * 60 * 1000
+  let rows = 0
+  for (let h = TEMPORAL_WINDOW_HOURS; h > 0; h--) {
+    const read = () => db('signals').select('id', 'title', 'created_at')
+      .where('created_at', '>=', new Date(now - h * HOUR_MS).toISOString())
+      .where('created_at', '<', new Date(now - (h - 1) * HOUR_MS).toISOString()) as Promise<Array<Record<string, unknown>>>
+    const hour = await read().then(found => found, async () => {
+      await new Promise(resolve => setTimeout(resolve, retryMs))
+      return read()
+    })
+    for (let i = 0; i < hour.length; i++) {
+      const r = hour[i]!
+      titles.add(String(r.id ?? ''), String(r.title ?? ''), new Date(r.created_at as string).getTime() || now)
+      if (i % 500 === 499) await new Promise(resolve => setImmediate(resolve))
+    }
+    rows += hour.length
+  }
+  titles.ready = true
+  return rows
+}
+
+/**
  * Fill recentWords from the last 12 hours' reports when the scraper starts, a few hundred at a time so the reader
  * isn't held up; the rare-words look waits for it. One query of about 20,000 titles. (And recentPieces, from the
  * same rows.)
@@ -515,6 +638,8 @@ export const matchTimings = {
   olderSearchMs: 0, boosts: 0, boostMs: 0,
   // the pieces search (RecentPieces): the headlines it looked up, its time, the reports it added
   pieceSearches: 0, pieceSearchMs: 0, pieceRows: 0,
+  // the headline-word search in memory (RecentTitles), in place of titleSearch once it's filled
+  memorySearches: 0, memorySearchMs: 0, memoryRows: 0,
 }
 
 /**
@@ -536,9 +661,14 @@ export async function correlateSignal(signal: CorrelationCandidate): Promise<Eve
   const span = { start: Date.now() }
 
   try {
-    // 0. Its words in the day's count of who used which (the rare-words look, see RARE_MAX_OUTLETS)
+    // 0. Its words in the day's count of who used which (the rare-words look, see RARE_MAX_OUTLETS), and its
+    //    headline and pieces in the in-memory searches (RecentTitles, RecentPieces). Added before anything waits, so
+    //    two outlets' reports read at once find each other, as they do in the database
     recentWords.add(storyWords(signal.title ?? ''), signal.source_id,
       Math.min(Date.now(), new Date(signal.published_at).getTime() || Date.now()))
+    const pieces = pieceWords(storyWords(signal.title ?? ''))
+    if (pieces.length > 0) recentPieces.add(signal.id, pieces, Date.now())
+    recentTitles.add(signal.id, signal.title ?? '', Date.now())
 
     // 1. Fetch recent signals in the temporal window
     let t = Date.now()
@@ -547,17 +677,22 @@ export async function correlateSignal(signal: CorrelationCandidate): Promise<Eve
 
     // 2. Independent reports of the same story: the only corroboration that
     //    raises reliability or verifies anything (see isSameStory). Looked for
-    //    among the newest signals and, by headline words, the whole window.
+    //    among the newest signals and, by headline words, the whole window:
+    //    in memory once the day's headlines are in (RecentTitles), else in the database
     t = Date.now()
-    const wider = await fetchSameStoryCandidates(signal).catch(err => {
+    const inMemory = recentTitles.ready
+    const wider = await (inMemory ? fetchTitleMatches(signal) : fetchSameStoryCandidates(signal)).catch(err => {
       logger.warn({ err, signal_id: signal.id }, 'Same-story search failed (non-fatal)')
       return [] as CorrelationCandidate[]
     })
-    matchTimings.titleSearchMs += Date.now() - t; matchTimings.titleSearches++; matchTimings.titleRows += wider.length
+    if (inMemory) {
+      matchTimings.memorySearchMs += Date.now() - t; matchTimings.memorySearches++; matchTimings.memoryRows += wider.length
+    } else {
+      matchTimings.titleSearchMs += Date.now() - t; matchTimings.titleSearches++; matchTimings.titleRows += wider.length
+    }
     const pool = new Map<string, CorrelationCandidate>()
     for (const c of [...candidates, ...wider]) pool.set(c.id, c)
     // ...and, for a headline in Chinese, Japanese or Thai, the reports sharing its rarest pieces (RecentPieces)
-    const pieces = pieceWords(storyWords(signal.title ?? ''))
     if (pieces.length >= PIECE_SEARCH_MIN) {
       t = Date.now()
       const ids = recentPieces.search(pieces, t, signal.id).filter(id => !pool.has(id))
@@ -565,7 +700,6 @@ export async function correlateSignal(signal: CorrelationCandidate): Promise<Eve
       for (const c of found) pool.set(c.id, c)
       matchTimings.pieceSearchMs += Date.now() - t; matchTimings.pieceSearches++; matchTimings.pieceRows += found.length
     }
-    if (pieces.length > 0) recentPieces.add(signal.id, pieces, Date.now())
     t = Date.now()
     // each match counted by the look that found it (matchLooks)
     const matched = (options: SameStoryOptions) => [...pool.values()].filter(c => {
@@ -743,6 +877,14 @@ async function fetchSameStoryCandidates(signal: CorrelationCandidate, older = fa
     .orderByRaw(`ts_rank(to_tsvector('simple', title), to_tsquery('simple', ?)) DESC`, [tsquery])
     .limit(older ? 25 : 50)
   return rows.map(toCandidate)
+}
+
+/** The headline-word search in memory (RecentTitles): the same words as fetchSameStoryCandidates, its reports read by id */
+async function fetchTitleMatches(signal: CorrelationCandidate): Promise<CorrelationCandidate[]> {
+  const words = searchWords(signal.title ?? '')
+  if (words.length < SAME_STORY_MIN_SHARED) return []
+  const ids = recentTitles.search(words, Date.now(), signal.id)
+  return ids.length > 0 ? fetchCandidatesById(ids) : []
 }
 
 /** The reports the pieces search brought up (RecentPieces), those of the window still there, by their ids */
