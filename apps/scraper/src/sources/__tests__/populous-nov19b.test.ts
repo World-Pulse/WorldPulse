@@ -23,8 +23,9 @@ describe('the populous countries round 2', () => {
 
   it('leaves out the outlets whose terms keep them out', () => {
     const hosts = NEWS_SOURCE_REGISTRY.map(s => new URL(s.feedUrl).hostname)
-    for (const host of ['tribune.com.pk', 'bhaskar.com', 'divyabhaskar.co.in', 'amarujala.com', 'sangbadpratidin.in', 'tv9bangla.com',
-      'mathrubhumi.com', 'eastmojo.com', 'satyahindi.com', 'ntvtelugu.com', 'ratopati.com', 'sunstar.com.ph', 'isolezwe.co.za',
+    // (Dainik Bhaskar, Divya Bhaskar, Sangbad Pratidin, TV9 Bangla, EastMojo, Satya Hindi, NTV Telugu, Ratopati and SunStar
+    // are read since Devon's word, Nov 20, 7:03 AM; Isolezwe waits for Zulu, the only Zulu outlet so far)
+    for (const host of ['tribune.com.pk', 'amarujala.com', 'mathrubhumi.com', 'isolezwe.co.za',
       'chandrikadaily.com', 'deccanherald.com', 'apa.az', 'dn.se', 'sydsvenskan.se', 'expressen.se', 'aftonbladet.se', 'svd.se',
       'svt.se', 'storm.mg', 'stheadline.com']) {
       expect(hosts.some(h => h === host || h.endsWith(`.${host}`)), host).toBe(false)

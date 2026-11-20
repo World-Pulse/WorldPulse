@@ -34,14 +34,23 @@ describe('the populous countries round', () => {
     }
   })
 
-  // (BusinessDay's news sitemap is left out too; its feed has been on the list since before the terms rule)
+  // (BusinessDay's news sitemap is left out too; its feed has been on the list since before the terms rule.) Since Devon's
+  // word (Nov 20, 2026, 7:03 AM: "proceed"), terms that only limit use to personal or non-commercial use don't keep an
+  // outlet out; bans on robots, scraping, data mining or AI training still do.
   it('leaves out the outlets whose terms keep them out', () => {
     const hosts = NEWS_SOURCE_REGISTRY.map(s => new URL(s.feedUrl).hostname)
-    for (const host of ['iamgujarat.com', 'loksatta.com', 'siasat.com', 'prajavani.net', 'vijaykarnataka.com', 'asianetnews.com',
-      'janmabhumi.in', 'manoramaonline.com', 'madhyamam.com', 'legit.ng', 'ntnews.com', 'eenadu.net', 'on.cc',
-      'excelsior.com.mx', 'abplive.com', 'sabah.com.tr', 'trthaber.com', 'tokyo-np.co.jp', 'icirnigeria.org', 'vijayavani.net',
-      'haberturk.com', 'yomiuri.co.jp', 'jiji.com', 'chugoku-np.co.jp']) {
+    for (const host of ['siasat.com', 'prajavani.net', 'legit.ng', 'icirnigeria.org', 'vijayavani.net', 'haberturk.com',
+      'yomiuri.co.jp', 'jiji.com', 'chugoku-np.co.jp']) {
       expect(hosts.some(h => h === host || h.endsWith(`.${host}`)), host).toBe(false)
+    }
+  })
+
+  it('reads the outlets whose terms only limited use to personal or non-commercial use', () => {
+    const hosts = NEWS_SOURCE_REGISTRY.map(s => new URL(s.feedUrl).hostname)
+    for (const host of ['iamgujarat.com', 'loksatta.com', 'vijaykarnataka.com', 'asianetnews.com', 'janmabhumi.in',
+      'manoramaonline.com', 'madhyamam.com', 'ntnews.com', 'eenadu.net', 'on.cc', 'excelsior.com.mx', 'abplive.com',
+      'sabah.com.tr', 'trthaber.com', 'tokyo-np.co.jp']) {
+      expect(hosts.some(h => h === host || h.endsWith(`.${host}`)), host).toBe(true)
     }
   })
 
