@@ -37,9 +37,9 @@ describe('feed upkeep (Nov 3, 2026)', () => {
     expect(HOME_PIN_SOURCES.has('canary-media')).toBe(false)
   })
 
-  it('keeps Kenya at its feeds (The Elephant and the Judiciary since Nov 18) and Mauritius at three (ION News since Nov 18)', () => {
+  it('keeps Kenya at its feeds (The Elephant and the Judiciary since Nov 18, Taifa Leo since Nov 19) and Mauritius at three (ION News since Nov 18)', () => {
     expect(NEWS_SOURCE_REGISTRY.filter(s => s.countryCode === 'KE').map(s => s.id).sort())
-      .toEqual(['capitalfm-ke', 'judiciary-kenya', 'kbc-ke', 'standard-ke', 'the-elephant'])
+      .toEqual(['capitalfm-ke', 'judiciary-kenya', 'kbc-ke', 'standard-ke', 'taifa-leo', 'the-elephant'])
     expect(NEWS_SOURCE_REGISTRY.filter(s => s.countryCode === 'MU')).toHaveLength(3)
   })
 })

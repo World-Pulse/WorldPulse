@@ -1159,6 +1159,37 @@ const AMHARIC: Rule[] = [
   am('አሜሪካ', 'United States'), am('ቻይና', 'China'), am('ሩሲያ', 'Russia'), am('እስራኤል', 'Israel'),
 ]
 
+/**
+ * Punjabi (Gurmukhi), Sinhala, Burmese and Filipino (Nov 19, 2026: the lists' first feeds in them). Punjabi and Sinhala
+ * join their endings to a name like the Indian scripts above ("ලංකාවේ", in Lanka); Burmese writes no spaces between
+ * its words, so its names are found anywhere, as Chinese and Thai ones are. Filipino shares most place names with
+ * English; its own are its names for countries and Manila ("hapon", Japan, is also the afternoon: left out). Punjab is
+ * read as India's (Pakistan has one too).
+ */
+const PUNJABI: Rule[] = [
+  ag('ਭਾਰਤ', 'India'), ag('ਪੰਜਾਬ', 'Chandigarh'), ag('ਚੰਡੀਗੜ੍ਹ', 'Chandigarh'), ag('ਅੰਮ੍ਰਿਤਸਰ', 'Amritsar'), ag('ਲੁਧਿਆਣ', 'Ludhiana'),
+  ag('ਜਲੰਧਰ', 'Jalandhar'), ag('ਪਟਿਆਲ', 'Patiala'), ag('ਦਿੱਲੀ', 'New Delhi'), ag('ਹਰਿਆਣ', 'Haryana'), ag('ਪਾਕਿਸਤਾਨ', 'Pakistan'),
+  ag('ਲਾਹੌਰ', 'Lahore'), ag('ਕੈਨੇਡਾ', 'Canada'), ag('ਅਮਰੀਕ', 'United States'), ag('ਇੰਗਲੈਂਡ|ਬ੍ਰਿਟੇਨ', 'United Kingdom'),
+  ag('ਆਸਟ੍ਰੇਲੀਆ', 'Australia'), ag('ਚੀਨ', 'China'), ag('ਰੂਸ', 'Russia'), ag('ਯੂਕਰੇਨ', 'Ukraine'), ag('ਇਜ਼ਰਾਈਲ|ਇਜ਼ਰਾਇਲ', 'Israel'),
+  ag('ਈਰਾਨ', 'Iran'), ag('ਗ੍ਰੀਨਲੈਂਡ', 'Greenland'),
+]
+const SINHALA: Rule[] = [
+  ag('ලංකා', 'Sri Lanka'), ag('කොළඹ', 'Colombo'), ag('මහනුවර', 'Kandy'), ag('ගාල්ල', 'Galle'), ag('යාපනය', 'Jaffna'),
+  ag('ත්‍රිකුණාමල|ත්රිකුණාමල', 'Trincomalee'), ag('මඩකලපුව', 'Batticaloa'), ag('ඉන්දියා', 'India'), ag('චීන', 'China'),
+  ag('ඇමරිකා', 'United States'), ag('රුසියා', 'Russia'), ag('යුක්රේන', 'Ukraine'), ag('ඊශ්‍රායල|ඊශ්රායල', 'Israel'), ag('ඉරාන', 'Iran'),
+  ag('පකිස්තාන', 'Pakistan'), ag('මාලදිවයින', 'Maldives'), ag('බංග්ලාදේශ', 'Bangladesh'), ag('ජපාන', 'Japan'),
+  ag('එංගලන්ත|බ්‍රිතාන්‍ය|බ්රිතාන්ය', 'United Kingdom'),
+]
+const BURMESE: Rule[] = [
+  cjk('မြန်မာ', 'Myanmar'), cjk('ရန်ကုန်', 'Yangon'), cjk('နေပြည်တော်', 'Naypyidaw'), cjk('မန္တလေး', 'Mandalay'), cjk('ရခိုင်', 'Rakhine'),
+  cjk('ကချင်', 'Kachin'), cjk('စစ်ကိုင်း', 'Sagaing'), cjk('တရုတ်', 'China'), cjk('ထိုင်း', 'Thailand'), cjk('အိန္ဒိယ', 'India'),
+  cjk('ဘင်္ဂလားဒေ့ရှ်', 'Bangladesh'), cjk('အမေရိကန်', 'United States'), cjk('ရုရှား', 'Russia'), cjk('ဂျပန်', 'Japan'),
+]
+const FILIPINO: Rule[] = [
+  r('pilipinas|pinas', 'Philippines'), r('maynila|kamaynilaan', 'Manila'), r('lungsod quezon', 'Quezon City'),
+  r('estados unidos|amerika', 'United States'), r('tsina', 'China'), r('rusya', 'Russia'), r('ukranya', 'Ukraine'),
+]
+
 export const LOCAL_NAMES: Record<string, Rule[]> = {
   ja: JAPANESE, zh: CHINESE, th: THAI,
   hi: HINDI,
@@ -1169,6 +1200,7 @@ export const LOCAL_NAMES: Record<string, Rule[]> = {
   el: GREEK, ko: KOREAN, ur: URDU, fa: PERSIAN, vi: VIETNAMESE, sw: SWAHILI, bn: BENGALI, he: HEBREW, sk: SLOVAK, et: ESTONIAN, lv: LATVIAN,
   bg: BULGARIAN, mk: MACEDONIAN, no: NORWEGIAN, nb: NORWEGIAN, fi: FINNISH, is: ICELANDIC, hr: MONTENEGRIN, ka: GEORGIAN, so: SOMALI,
   ta: TAMIL, te: TELUGU, kn: KANNADA, ml: MALAYALAM, mr: MARATHI, gu: GUJARATI, or: ODIA, as: ASSAMESE, sd: SINDHI, am: AMHARIC,
+  pa: PUNJABI, si: SINHALA, my: BURMESE, tl: FILIPINO, fil: FILIPINO,
 }
 
 /** The text with its language's place names in English and its look-alike words blanked out, for finding its place */
