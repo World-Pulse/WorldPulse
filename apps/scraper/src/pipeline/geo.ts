@@ -3017,7 +3017,7 @@ const JOINED = /(?<![\p{L}\p{N}])(?:(\p{Lu}[\p{L}'’.]*)\s+)?(\p{Lu}[\p{L}'’.
  * outlets' Nvidia story sat in China). Where the person is from is not where the story is. Only countries' own names
  * and peoples, not cities ("Paris tourists").
  */
-const PERSON_OF = /(?<![\p{L}\p{N}])(\p{Lu}[\p{L}'’.]*)\s+(?:spy|spies|agent|agents|mole|moles|national|nationals|citizen|citizens|tourist|tourists|businessman|businesswoman|tycoon)(?![\p{L}\p{N}])/gu
+const PERSON_OF = /(?<![\p{L}\p{N}])(\p{Lu}[\p{L}'’.]*)\s+(?:spy|spies|agent|agents|mole|moles|national|nationals|citizen|citizens|tourist|tourists|businessman|businesswoman|tycoon|diplomats?|diplomaten|attach[ée]s?|Diplomaten|Attach[ée]s?)(?![\p{L}\p{N}])/gu
 const RIVER_NAMED = /(?<![\p{L}\p{N}])(\p{Lu}[\p{L}'’.]*)\s+River(?![\p{L}\p{N}])/gu
 /**
  * A country named in passing (Nov 14, 2026: the first weekly accuracy read graded 200 verified stories, and in 12 of
@@ -3111,7 +3111,7 @@ export function withoutSiteSuffix(title: string): string {
   return title.replace(/\s+\|\s+[^|]{2,60}$/, '')
 }
 
-const NON_PLACE_ANY = /\bof\s+\p{Lu}|\p{Lu}[\p{L}'’.]*\s+River(?![\p{L}\p{N}])|\p{L}[-‑]\p{L}|\p{Lu}[\p{L}'’.]*\s+(?:spy|spies|agent|agents|mole|moles|national|nationals|citizen|citizens|tourist|tourists|businessman|businesswoman|tycoon)/u
+const NON_PLACE_ANY = /\bof\s+\p{Lu}|\p{Lu}[\p{L}'’.]*\s+River(?![\p{L}\p{N}])|\p{L}[-‑]\p{L}|\p{Lu}[\p{L}'’.]*\s+(?:spy|spies|agent|agents|mole|moles|national|nationals|citizen|citizens|tourist|tourists|businessman|businesswoman|tycoon|[Dd]iplomats?|[Dd]iplomaten|[Aa]ttach[ée]s?)/u
 
 type Span = [number, number, string]
 
@@ -3148,7 +3148,8 @@ function nonPlaceSpans(text: string): { always: Span[]; unlessAlone: Span[] } {
     if (one) unlessAlone.push([m.index!, m.index! + m[0].length, one])
   }
   for (const m of text.matchAll(PERSON_OF)) {
-    if (countryOnly(m[1]!)) always.push([m.index!, m.index! + m[1]!.length, ''])
+    // ("Russian" is no country name to the finder, which reads it as Russia by its own list: "Alleged Russian spy" sat in Moscow)
+    if (countryOnly(m[1]!) || /^Russians?$/.test(m[1]!)) always.push([m.index!, m.index! + m[1]!.length, ''])
   }
   for (const m of text.matchAll(JOINED)) {
     const word = m[3]!.toLowerCase()

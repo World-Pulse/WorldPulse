@@ -46,3 +46,13 @@ describe("an envoy's own country", () => {
       'Election Commission of India announces dates']) expect(withoutEnvoyCountries(text)).toBe(text)
   })
 })
+
+describe('an expelled diplomat (Nov 20, 2026)', () => {
+  it("is not where the story is: Denmark's expulsion sat in Moscow in two outlets", () => {
+    expect(country('tagesschau', 'Dänen weisen russischen Diplomaten aus')).not.toBe('RU')
+    expect(country('tagesschau', 'Mutmaßlicher Anschlagsplan: Dänen weisen russischen Diplomaten aus')).not.toBe('RU')
+    expect(country('tagesschau', 'Dänen weisen russischen Diplomaten aus')).toBeNull()
+    expect(country('tagesschau', 'Russian diplomats arrive in Vienna')).toBe('AT')
+    expect(country('tagesschau', 'Alleged Russian spy held')).toBeNull()
+  })
+})
