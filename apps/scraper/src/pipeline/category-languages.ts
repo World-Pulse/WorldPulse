@@ -129,7 +129,34 @@ const de: LanguageRules = {
   falseFriends: unwords('war|siege|shooting|hack'),
 }
 
-export const CATEGORY_LANGUAGES: Readonly<Record<string, LanguageRules>> = { fr, es, pt, de }
+// Arabic and Russian (Nov 21, 2026): a football match, a TV series or an Apple assistant from a Yemeni, Egyptian or
+// Kazakh outlet sat under the outlet's own "Politics". Only the plain topics (sports, culture, technology, science,
+// health, space); no conflict or politics words, which the outlets' own topic already says. Arabic's one-letter
+// prefixes (the "al-", "wa-", "bi-") are read before a word.
+const AR = String.raw`(?:[وبلكف]?ال|[وبلكف])?`
+
+const ar: LanguageRules = {
+  slots: {
+    sports: [words(`${AR}(?:كرة\\s+القدم|دوري\\s+(?:أبطال|الأبطال|المحترفين|الدرجة|روشن|نجوم|الخليج|السعودي|الإنجليزي|الإسباني|الإيطالي|الألماني|الفرنسي|المصري|الممتاز|المغربي|الأوروبي)|ليغا|كأس\\s+العالم|ركلات?\\s+(?:ال)?جزاء|مباراة(?!\\s+(?:التوظيف|ولوج))|مباريات|لاعب(?:ين|و)?|ريال\\s+مدريد|برشلونة|ليفربول|مانشستر|أرسنال|تشيلسي|يوفنتوس|رونالدو|ميسي|تنس|هدافين?)`)],
+    science: [words(`${AR}(?:ثقب\\s+أسود|ثقوب\\s+سوداء|حفريات|حفرية|علماء\\s+(?:فلك|آثار|الفلك|الآثار))`)],
+    health: [words(`${AR}(?:وباء|أوبئة|فيروس|فيروسات|لقاح|لقاحات|سرطان|كوليرا|حصبة|سكري)`)],
+    space: [words(`${AR}(?:رائد\\s+فضاء|رواد\\s+الفضاء|ناسا|سبيس\\s+إكس)`)],
+    technology: [words(`${AR}(?:ذكاء\\s+اصطناعي|ذكاء\\s+الاصطناعي|آبل|أبل|غوغل|جوجل|مايكروسوفت|شات\\s*جي\\s*بي\\s*تي|أشباه\\s+الموصلات|هواتف?\\s+الذكية|آيفون|ايفون|سامسونج|سامسونغ|إنفيديا|انفيديا|تسلا)`)],
+    culture: [words(`${AR}(?:فيلم|أفلام|مسلسل|مسلسلات|فنان|فنانة|ألبوم|أغنية|أغاني|مغني|مغنية|سينما|متحف|الأوسكار|أوسكار|نتفليكس|مهرجان\\s+(?:ال)?(?:سينما|موسيقى|أفلام))`)],
+  },
+}
+
+const ru: LanguageRules = {
+  slots: {
+    sports: [words(String.raw`футбол\p{L}*|хоккей\p{L}*|хоккеист\p{L}*|теннис\p{L}*|биатлон\p{L}*|чемпионат\p{L}*|матч\p{L}*|олимпийск\p{L}*|олимпиад\p{L}*|сборн(?:ая|ой|ую|ые|ых)|лига\s+чемпионов|тренер\p{L}*|спортсмен\p{L}*|Роналду|Месси`)],
+    health: [words(String.raw`вирус\p{L}*|вакцин\p{L}*|эпидеми\p{L}*|пандеми\p{L}*|онколог\p{L}*|холер\p{L}*|корь|диабет\p{L}*`), asWritten('ВОЗ')],
+    space: [words(String.raw`космос\p{L}*|космонавт\p{L}*|астронавт\p{L}*`), asWritten('НАСА')],
+    technology: [words(String.raw`искусственн(?:ый|ого|ому|ым|ом)\s+интеллект\p{L}*|нейросет\p{L}*|смартфон\p{L}*|айфон\p{L}*|ChatGPT|чатбот\p{L}*|полупроводник\p{L}*|Apple|Google|Samsung|Nvidia`)],
+    culture: [words(String.raw`фильм\p{L}*|сериал\p{L}*|кинотеатр\p{L}*|кинофестивал\p{L}*|певиц\p{L}*|певец|актёр\p{L}*|актер\p{L}*|актрис\p{L}*|концерт(?:а|е|у|ом|ы|ов|ах)?|альбом\p{L}*|музе(?:й|я|е|ев|ями)|выставк\p{L}*|театр(?!\s+(?:военных|боевых))\p{L}*|писател\p{L}*`)],
+  },
+}
+
+export const CATEGORY_LANGUAGES: Readonly<Record<string, LanguageRules>> = { fr, es, pt, de, ar, ru }
 
 /** A language's own topic words, or null for English and the languages without them */
 export function languageRules(lang: string | null | undefined): LanguageRules | null {
