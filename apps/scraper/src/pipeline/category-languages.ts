@@ -156,7 +156,171 @@ const ru: LanguageRules = {
   },
 }
 
-export const CATEGORY_LANGUAGES: Readonly<Record<string, LanguageRules>> = { fr, es, pt, de, ar, ru }
+// Ten more languages (Nov 21, 2026; Devon, 10:39 AM: "Proceed", with topic words for the languages that have none):
+// 63% of the day's reports (30,198 of 47,941) were filed as Politics, the outlet's own topic when no word fits: a
+// Murakami lecture in Kyoto counted as Politics in Kyoto. Chinese, Greek, Hindi, Ukrainian,
+// Turkish, Indonesian, Korean, Italian, Tamil and Telugu, about a quarter of the reports: as for Arabic and Russian, the
+// plain topics (sports, culture, technology, science, health, space), and disasters by their own words (earthquakes,
+// floods, storms, landslides, eruptions); no politics, conflict or economy words, which the outlet's topic already
+// says. Chinese is read without word boundaries (it has none); Korean, Tamil and Telugu from a word's start, as their
+// endings and particles are written on ("축구는", "சென்னையில்"). Left out as too often something else: Chinese "比赛"
+// (any contest) and "手机" (a phone scam is no technology story); Korean "경기" (a match, and the economy), "암" (cancer,
+// one syllable), "배우" (an actor, and "to learn"); Italian "partita" (a match, and a political "game"), "influenza"
+// (also influence), "mostra" (also "shows"); Greek "ΠΟΥ" (the WHO, and "that"); rockets everywhere (Gaza's and North
+// Korea's are no space story); Turkish "aşırı" (excessive) beside "aşı" (vaccine), "çığlık" (a scream) beside "çığ"
+// (avalanche); Ukrainian "театр бойових дій" (the theatre of war), "супутник" (also a companion), and fires, which in
+// Ukraine are mostly from strikes; Telugu's "flood of lies" (అబద్ధాల వరద).
+// Hand-checked on the day's headlines: of 100 changed, 83 right; with the war, market and crime guards and the fixes
+// below, 89 of the next 100; of 100 that change a stored topic, 85 (the stored one was right for 10); of a fourth 100
+// such, 91 to 93 (two were borderline), and 6 of the 9 doubtful are fixed (a marathon runner called a "scientist",
+// house prices, a flood of lies, a research ship in the sea dispute, sanctions on athletes, an AI in a president's
+// mouth). On the day: 776 of 13,064 headlines change.
+const within = (alts: string) => new RegExp(`(?:${alts})`, 'u')
+const starts = (alts: string) => new RegExp(`${B}(?:${alts})`, 'iu')
+/** The words, unless the headline also says `guard`: a museum hit by a drone is the war's story, not culture's */
+const unless = (guard: string, re: RegExp) => new RegExp(`^(?![\\s\\S]*(?:${guard}))[\\s\\S]*?(?:${re.source})`, re.flags)
+/** Chinese: a chip, a rocket or a "tsunami" on the stock market is the market's story ("台股遭綠海嘯", "芯片ETF") */
+const ZH_MARKET = String.raw`股|指数|指數|ETF|基金|大盘|大盤|涨停|漲停|跌停|公告|营收|營收|财报|財報|获利|獲利|EPS|\d{6}\.S[HZ]`
+/** Greek: fires after an attack, a concert in a murder plot, are the war's and the crime's stories */
+const EL_WAR = 'επίθεσ|πόλεμ|ρωσικ|drone|πύραυλ|βομβαρδ|δολοφον|εκτελ|συνελήφθ|σύλληψ|ένοπλ|τρομοκρατ'
+/** Greek: a court case is the court's story, whatever the illness */
+const EL_COURT = 'δικαστ|εδώλιο|στρατοδικ|δίκη'
+/** Greek: a research ship in the Turkish-Libyan zone is the sea dispute's story */
+const EL_SEA = 'Navtex|ΑΟΖ|τουρκολιβυκ|υφαλοκρηπ'
+/** Italian: an AI in a president's mouth is politics */
+const IT_POLITICS = String.raw`Trump|Putin|Xi\s+Jinping|Teheran|Pechino|Cremlino|Casa\s+Bianca|dazi`
+/** Turkish: an earthquake on the stock market, a singer's murder */
+const TR_MARKET = 'borsa|bitcoin|kripto|dolar|piyasa|hisse'
+const TR_CRIME = 'cinayet|öldür|tutukla|gözaltı|saldırı'
+/** Hindi: a fight at a cricket match is the police's story */
+const HI_CRIME = 'FIR|मारपीट|हत्या|गिरफ्तार'
+
+const zh: LanguageRules = {
+  slots: {
+    sports: [within('足球|篮球|籃球|网球|網球|排球|乒乓|羽毛球|奥运|奧運|冬奥|冬奧|世界杯|世界盃|欧冠|歐冠|英超|西甲|意甲|德甲|中超|NBA|联赛|聯賽|进球|進球|球员(?!兼裁判)|球員(?!兼裁判)|国足|國足|马拉松|馬拉松|F1(?![0-9])|大满贯|大滿貫|桌球')],
+    science: [within('科学家|科學家|研究人员|研究人員|研究团队|研究團隊|考古|黑洞')],
+    health: [within('疫苗|病毒|疫情|流感|癌症|糖尿病|登革热|登革熱|麻疹|结核|結核|艾滋|愛滋|世卫|世衛')],
+    disaster: [unless(ZH_MARKET, within('地震|洪水|洪灾|洪災|(?<![一两兩几幾每])台风|颱風|暴雨|山火|森林火灾|森林火災|泥石流|土石流|山体滑坡|山崩|火山喷发|火山爆發|火山噴發|雪崩|龙卷风|龍捲風'))],
+    space: [unless(ZH_MARKET, within('航天|航太|太空|宇航员|宇航員|航天员|航天員|太空人|空间站|太空站|卫星发射|衛星發射|探月|嫦娥|神舟|火箭(?!弹|彈|军|軍|炮)'))],
+    technology: [unless(ZH_MARKET, within('人工智能|人工智慧|芯片|晶片|半导体|半導體|智能手机|智慧型手機|ChatGPT|大模型|机器人|機器人'))],
+    culture: [unless('投票|选举|選舉|罢免|罷免|公投|大选|大選|立委|议员|議員', within('电影|電影|电视剧|電視劇|影视|影視|演唱会|演唱會|歌手|专辑|專輯|博物馆|博物館|展览|展覽|票房|艺人|藝人|演员|演員|导演|導演|综艺|綜藝|小说|小說|作家|音乐|音樂|话剧|話劇|金马|金馬'))],
+  },
+}
+
+const el: LanguageRules = {
+  slots: {
+    sports: [words(String.raw`ποδ[οό]σφαιρ\p{L}*|μπ[αά]σκετ|τ[εέ]νις|ολυμπιακ(?:ός|ού|όν|ος|ου|ον|οί\s+αγ[ωώ]νες|ών\s+αγ[ωώ]νων)|ολυμπιακ[οό](?!\s+(?:ιππικ|κ[εέ]ντρ|στ[αά]δι|ακ[ιί]νητ))|παναθηνα[ιϊ]κ\p{L}*|ΠΑΟΚ|ΑΕΚ|champions\s+league|euroleague|μουντι[αά]λ|προπονητ\p{L}*|γκολ|πρωτ[αά]θλημα|superleague|βόλεϊ|βολε[ιϊ]|μαραθ[ωώ]νι\p{L}*`)],
+    science: [unless(EL_SEA, words(String.raw`επιστ[ηή]μον\p{L}*|ερευνητ\p{L}*|απολ[ιί]θωμα\p{L}*|αρχαιολ[οό]γ\p{L}*`))],
+    health: [unless(EL_COURT, words(String.raw`εμβ[οό]λι\p{L}*|καρκ[ιί]ν\p{L}*|πανδημ[ιί]\p{L}*|επιδημ[ιί]\p{L}*|γρ[ιί]πη\p{L}*|διαβ[ηή]τη\p{L}*|ιλαρ[αά]`))],
+    disaster: [unless(EL_WAR, words(String.raw`σεισμ(?:ός|ού|ό|οί|ών|ούς|ος|ου|ο|οι|ων|ους)|σεισμικ(?:ή|η)\s+δ[οό]νηση|πλημμ[υύ]ρ\p{L}*|πυρκαγι\p{L}*|κακοκαιρ[ιί]\p{L}*|κατολ[ιί]σθη\p{L}*|ηφαιστει\p{L}*|ηφαίστει\p{L}*|τσουν[αά]μι|χιονοθ[υύ]ελλ\p{L}*`))],
+    space: [words(String.raw`διαστημ\p{L}*|αστροναύτ\p{L}*|αστροναυτ\p{L}*|NASA|spacex`)],
+    technology: [words(String.raw`τεχνητ[ηή]ς?\s+νοημοσ[υύ]νη\p{L}*|chatgpt|ημιαγωγ\p{L}*|smartphone`)],
+    culture: [unless(EL_WAR, words(String.raw`ταιν[ιί]\p{L}*|σινεμ[αά]|κινηματογρ[αά]φ(?:ος|ου|ο)|ηθοποι[οό]\p{L}*|τραγουδ\p{L}*|συναυλ[ιί]\p{L}*|[αά]λμπουμ|μουσε[ιί]\p{L}*|θ[εέ]ατρ\p{L}*|netflix|eurovision|γιουροβίζιον`))],
+  },
+}
+
+const hi: LanguageRules = {
+  slots: {
+    sports: [unless(HI_CRIME, starts('क्रिकेट|फुटबॉल|फ़ुटबॉल|हॉकी|टेनिस|बैडमिंटन|ओलंपिक|विश्व कप|वर्ल्ड कप|आईपीएल|टेस्ट मैच|वनडे|टी20|बल्लेबाज|गेंदबाज|कबड्डी|पहलवान|कुश्ती|खिलाड़ी')), unless(HI_CRIME, words('IPL|ODI|IND\\s+vs'))],
+    science: [starts('वैज्ञानिक|शोधकर्ता|वैज्ञानिकों')],
+    health: [starts('वैक्सीन|वायरस|कैंसर|डेंगू|मलेरिया|डायबिटीज|मधुमेह|महामारी|टीबी|खसरा')],
+    disaster: [starts('भूकंप|(?<!की\\s)बाढ़|चक्रवात|भूस्खलन|बादल फट|सुनामी|ज्वालामुखी|भीषण आग|आंधी-तूफान')],
+    space: [starts('इसरो|अंतरिक्ष|उपग्रह|सैटेलाइट|चंद्रयान|गगनयान|नासा')],
+    technology: [starts('आर्टिफिशियल इंटेलिजेंस|एआई|स्मार्टफोन|सेमीकंडक्टर|चैटजीपीटी'), asWritten('AI')],
+    culture: [starts('फिल्म|फ़िल्म|बॉलीवुड|अभिनेता|अभिनेत्री|गायक|गायिका|बॉक्स ऑफिस|वेब सीरीज|संग्रहालय|एक्टर|एक्ट्रेस|सिंगर')],
+  },
+}
+
+/** Ukrainian: the war's words; with them, a museum, a film studio or an AI is the war's story */
+const UK_WAR = String.raw`атак|обстріл|удар(?:и|ів|ом|ами)?(?![\p{L}])|дрон|ракет|знищ|окупант|ЗСУ|фронт|війн|бомб|вибух|зґвалт|вбив|убив|арешт`
+/** Korean: an AI or a chip in politics or the stock market is their story */
+const KO_NOT_TECH = '트럼프|푸틴|시진핑|의회|국회|증시|주가|코스피|코스닥|나스닥|물가|특구|도시공사|집값|부동산|아파트'
+
+const uk: LanguageRules = {
+  slots: {
+    sports: [unless('санкці', words(String.raw`футбол\p{L}*|хокей\p{L}*|теніс\p{L}*|біатлон\p{L}*|чемпіонат\p{L}*|матч\p{L}*|олімпійськ\p{L}*|олімпіад\p{L}*|збірн(?:а|ої|у|ій)|ліга\s+чемпіонів|тренер\p{L}*|спортсмен\p{L}*|боксер\p{L}*|Усик\p{L}*|Ломаченк\p{L}*`))],
+    science: [unless(UK_WAR, words(String.raw`науковц\p{L}*|вчені|дослідник\p{L}*|археолог\p{L}*|палеонтолог\p{L}*`))],
+    health: [words(String.raw`вірус\p{L}*|вакцин\p{L}*|епідемі\p{L}*|пандемі\p{L}*|онколог\p{L}*|грип\p{L}*|діабет\p{L}*`), asWritten('ВООЗ')],
+    disaster: [words(String.raw`землетрус\p{L}*|повін\p{L}*|повен\p{L}*|ураган\p{L}*|буревій\p{L}*|зсув\p{L}*\s+ґрунту|сніговій\p{L}*`)],
+    space: [unless(String.raw`${UK_WAR}|навіть\s+з\s+космосу`, words(String.raw`космос\p{L}*|космічн\p{L}*|астронавт\p{L}*|космонавт\p{L}*`)), unless(UK_WAR, asWritten('NASA|НАСА'))],
+    technology: [unless(UK_WAR, words(String.raw`штучн(?:ий|ого|ому|им|ім)\s+інтелект\p{L}*|смартфон\p{L}*|чатбот\p{L}*|ChatGPT|напівпровідник\p{L}*`)), unless(UK_WAR, asWritten('ШІ'))],
+    culture: [unless(UK_WAR, words(String.raw`фільм\p{L}*|серіал\p{L}*|кінофестивал\p{L}*|співак\p{L}*|співачк\p{L}*|актор\p{L}*|акторк\p{L}*|концерт\p{L}*|альбом\p{L}*|музе(?:й|ю|ї|їв|ях)|виставк\p{L}*|театр(?!\s+(?:бойових|воєнних))\p{L}*|письменни\p{L}*|Євробачен\p{L}*`))],
+  },
+}
+
+const tr: LanguageRules = {
+  slots: {
+    sports: [words(String.raw`futbol\p{L}*|basketbol\p{L}*|voleybol\p{L}*|tenis\p{L}*|olimpiyat\p{L}*|dünya\s+kupası\p{L}*|süper\s+lig\p{L}*|şampiyonlar\s+ligi\p{L}*|teknik\s+direktör\p{L}*|maç(?:ı|ta|tan|a|ın|lar\p{L}*|ında)?|gol(?:ü|cü\p{L}*|ler\p{L}*|leri)?|galatasaray\p{L}*|fenerbahçe\p{L}*|trabzonspor\p{L}*|milli\s+takım\p{L}*`)],
+    science: [words(String.raw`bilim\s+insan\p{L}*|bilim\s+adam\p{L}*|araştırmacı\p{L}*|fosil\p{L}*|arkeolog\p{L}*`)],
+    health: [words(String.raw`aşı(?:sı|lar\p{L}*|lama\p{L}*|nın|yı)?|virüs\p{L}*|kanser\p{L}*|salgın\p{L}*|grip\p{L}*|diyabet\p{L}*|kızamık\p{L}*`), asWritten('DSÖ')],
+    disaster: [unless(TR_MARKET, words(String.raw`deprem\p{L}*|sel(?:de|den|e|i|in|ler\p{L}*|felaket\p{L}*)|orman\s+yangın\p{L}*|heyelan\p{L}*|kasırga\p{L}*|fırtına\p{L}*|tsunami\p{L}*|yanardağ\p{L}*`))],
+    space: [words(String.raw`uzay\p{L}*|astronot\p{L}*|uydu\p{L}*|NASA|SpaceX`)],
+    technology: [words(String.raw`yapay\s+zeka\p{L}*|yapay\s+zekâ\p{L}*|akıllı\s+telefon\p{L}*|yarı\s+iletken\p{L}*|chatgpt`)],
+    culture: [unless(TR_CRIME, words(String.raw`film\p{L}*|dizi(?:si|de|nin|ler\p{L}*|nde)?|sinema\p{L}*|konser\p{L}*|albüm\p{L}*|şarkı\p{L}*|müze\p{L}*|sergi\p{L}*|festival\p{L}*|tiyatro\p{L}*|roman(?:ı|ları|cı\p{L}*)|netflix`))],
+  },
+}
+
+const id: LanguageRules = {
+  slots: {
+    sports: [words(String.raw`sepak\s?bola|liga\s+1|timnas|bulu\s+tangkis|badminton|motogp|piala\s+(?:dunia|asia|aff)|pelatih|persib|persija|futsal|voli`)],
+    science: [words(String.raw`ilmuwan|peneliti|fosil|arkeolog\p{L}*`)],
+    health: [words(String.raw`vaksin\p{L}*|virus|kanker|demam\s+berdarah|dbd|diabetes|tbc|wabah|campak`)],
+    disaster: [words(String.raw`gempa(?:\s+bumi)?|banjir|tanah\s+longsor|longsor|erupsi|gunung\s+(?:meletus|api)|kebakaran\s+hutan|puting\s+beliung|tsunami|angin\s+kencang`)],
+    space: [words(String.raw`antariksa|astronot|satelit|nasa`)],
+    technology: [words(String.raw`kecerdasan\s+buatan|semikonduktor|chatgpt|ponsel\s+pintar`), asWritten('AI')],
+    culture: [words(String.raw`film|sinetron|konser|musisi|penyanyi|album|aktor|aktris|museum|pameran|festival|drakor|drama\s+korea|netflix`)],
+  },
+}
+
+const ko: LanguageRules = {
+  slots: {
+    sports: [starts('축구|야구|농구|배구|골프|올림픽|월드컵|프로야구|K리그|손흥민|이강인|김하성|오타니|챔피언스리그|프리미어리그|홈런|국가대표팀')],
+    science: [starts('과학자|연구진|연구팀|화석|고고학')],
+    health: [unless('토마토|작물|농작물|농가', starts('백신|바이러스|독감|감염병|당뇨|홍역|결핵'))],
+    disaster: [starts('지진|태풍|홍수|산불|폭우|산사태|화산|쓰나미|폭설')],
+    space: [starts('우주|위성|누리호|다누리|우주인')],
+    technology: [unless(KO_NOT_TECH, starts('인공지능|반도체|스마트폰|챗GPT|챗봇')), unless(KO_NOT_TECH, asWritten('AI'))],
+    culture: [starts('영화|드라마|가수|콘서트|앨범|박물관|전시회|뮤지컬|아이돌|K팝|케이팝|넷플릭스|BTS|블랙핑크')],
+  },
+}
+
+const it: LanguageRules = {
+  slots: {
+    sports: [words(String.raw`calcio|serie\s+[ab]|champions(?:\s+league)?|europa\s+league|conference\s+league|mondiali|olimpiadi|olimpic\p{L}*|tennis|sinner|formula\s+1|f1|motogp|allenatore|gol|scudetto|juventus|juve|nerazzurri|rossoneri|bianconeri|giallorossi|azzurri|pallavolo|basket|ciclismo|giro\s+d${AP}italia`)],
+    science: [words(String.raw`scienziat\p{L}*|ricercator\p{L}*|fossil\p{L}*|archeolog\p{L}*`)],
+    health: [words(String.raw`vaccin\p{L}*|virus|tumor[ei]|cancro|epidemia|pandemia|diabete|morbillo|oms`)],
+    disaster: [words(String.raw`terremot[oi]|sisma|scossa\s+di\s+terremoto|alluvion[ei]|fran[ae]|esondazion\p{L}*|maltempo|nubifragi[oi]|tromba\s+d${AP}aria|eruzion[ei]|valangh?[ae]`)],
+    space: [words(String.raw`spazial[ei]|astronaut\p{L}*|satellit\p{L}*|nasa`)],
+    technology: [unless(IT_POLITICS, words(String.raw`intelligenza\s+artificiale|chatgpt|semicondutt\p{L}*|smartphone`)), unless(IT_POLITICS, asWritten('IA|AI'))],
+    culture: [words(String.raw`film|cinema|attor[ei]|attric[ei]|cantant[ei]|album|concert[oi]|festival|sanremo|muse[oi]|teatro|romanzo|serie\s+tv|netflix|oscar`)],
+  },
+}
+
+const ta: LanguageRules = {
+  slots: {
+    sports: [starts('கிரிக்கெட்|கால்பந்து|ஒலிம்பிக்|டென்னிஸ்|ஹாக்கி|கபடி|உலகக் கோப்பை|ஐபிஎல்|பேட்ஸ்மேன்|பவுலர்'), words('IPL|IND\\s+vs')],
+    science: [starts('விஞ்ஞானிகள்|ஆராய்ச்சியாளர்கள்')],
+    health: [starts('தடுப்பூசி|வைரஸ்|புற்றுநோய்|டெங்கு|நீரிழிவு')],
+    disaster: [starts('நிலநடுக்கம்|வெள்ளம்|வெள்ளத்|புயல்|நிலச்சரிவு|கனமழை|சுனாமி')],
+    space: [starts('இஸ்ரோ|விண்வெளி|செயற்கைக்கோள்')],
+    technology: [starts('செயற்கை நுண்ணறிவு|ஸ்மார்ட்போன்'), asWritten('AI')],
+    culture: [starts('திரைப்பட|சினிமா|நடிகர்|நடிகை|பாடகர்|இசையமைப்பாளர்|பாக்ஸ் ஆபிஸ்')],
+  },
+}
+
+const te: LanguageRules = {
+  slots: {
+    sports: [starts('క్రికెట్|ఫుట్‌బాల్|ఫుట్బాల్|ఒలింపిక్|టెన్నిస్|హాకీ|కబడ్డీ|సెంచరీ|ఐపీఎల్|ప్రపంచ కప్|బ్యాటర్|బౌలర్'), words('IPL|IND\\s+vs')],
+    science: [starts('శాస్త్రవేత్త')],
+    health: [starts('వ్యాక్సిన్|వైరస్|క్యాన్సర్|డెంగ్యూ|మధుమేహ')],
+    disaster: [starts('భూకంప|(?<!(?:అబద్ధాల|హామీల|విమర్శల)\\s)వరద|తుపాను|తుఫాన్|కొండచరియలు|భారీ వర్ష')],
+    space: [starts('ఇస్రో|అంతరిక్ష|ఉపగ్రహ')],
+    technology: [starts('కృత్రిమ మేధ|స్మార్ట్‌ఫోన్|స్మార్ట్ ఫోన్'), asWritten('AI')],
+    culture: [starts('సినిమా|నటుడు|బాక్సాఫీస్|టాలీవుడ్|బాలీవుడ్|సంగీత దర్శకు|హీరోయిన్')],
+  },
+}
+
+export const CATEGORY_LANGUAGES: Readonly<Record<string, LanguageRules>> = { fr, es, pt, de, ar, ru, zh, el, hi, uk, tr, id, ko, it, ta, te }
 
 /** A language's own topic words, or null for English and the languages without them */
 export function languageRules(lang: string | null | undefined): LanguageRules | null {
