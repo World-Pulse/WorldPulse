@@ -38,9 +38,11 @@ describe('the five held back on terms, and LRT in Lithuanian (Nov 6, 2026)', () 
     // (Lebanon and Estonia have more since the thin-countries round of Nov 19)
     for (const code of ['LB', 'EE']) expect(hosts(code).size, code).toBeGreaterThan(2)
     expect(hosts('VC').size).toBe(2)
-    expect(hosts('LT').size).toBe(1)
-    // still thinly covered, so their own outlets' reports are matched across two days
-    for (const code of ['LT', 'VC']) expect(thinPlaces().includes(code), code).toBe(true)
+    // (Lithuania has TV3.lt and MadeinVilnius.lt beside LRT since Nov 21, so it is no longer thinly covered)
+    expect(hosts('LT').size).toBe(3)
+    expect(thinPlaces().includes('LT')).toBe(false)
+    // still thinly covered, so its own outlets' reports are matched across two days
+    expect(thinPlaces().includes('VC')).toBe(true)
   })
 
   it("reads 15min less its world section, whose places are in Lithuanian", () => {

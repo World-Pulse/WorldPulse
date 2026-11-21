@@ -108,8 +108,9 @@ describe('feed upkeep (Nov 5, 2026)', () => {
     const read = (cc: string) => NEWS_SOURCE_REGISTRY.filter(s => s.countryCode === cc && !s.parked).length
     expect(['BB', 'ME', 'HT', 'BW', 'EC'].map(read)).toEqual([3, 4, 4, 2, 3])
     // and the places with a site down, or one that turns the server away for now, have one more
-    // (Tanzania's fourth, HabariLEO, came Nov 18; Jamhuri, Global Publishers and Michuzi Nov 19)
-    expect(['PR', 'UG', 'TZ'].map(read)).toEqual([3, 4, 7])
+    // (Tanzania's fourth, HabariLEO, came Nov 18; Jamhuri, Global Publishers and Michuzi Nov 19; Uganda's fifth, SoftPower
+    // News, Nov 21)
+    expect(['PR', 'UG', 'TZ'].map(read)).toEqual([3, 5, 7])
   })
 })
 
