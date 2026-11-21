@@ -30,10 +30,12 @@ vi.mock('../db/redis', () => ({
     hgetall: async (key: string) => (key.endsWith(today) ? { searched: '40', matched: '9', outlets: '13', promoted: '8' }
       : key === 'repair:archive-outlets:stats' ? { days: '46', verified: '1200', last_day: '2026-05-20' }
       : key === 'gkg:pulse:2:backfill' ? { files: '120', skipped: '2', missing: '0', failed: '1', last: '20261018041500', updated_at: '2026-10-22T21:52:00.000Z' } : {}),
-    lrange: async () => [
-      JSON.stringify({ id: 's1', title: 'Six dead as bus hits tree in Chhattisgarh', found: [{ site: 'ndtv.com', title: 'Six killed after bus hits tree in Chhattisgarh', url: 'https://www.ndtv.com/a' }] }),
-      'not json',
-    ],
+    lrange: async (key: string) => (key === 'second-outlet:trial'
+      ? [JSON.stringify({ id: 't1', severity: 'low', title: 'Lantern festival draws crowds in Raipur', found: [{ site: 'ndtv.com', title: 'Raipur lantern festival', url: 'https://www.ndtv.com/b' }] }), '{bad']
+      : [
+        JSON.stringify({ id: 's1', title: 'Six dead as bus hits tree in Chhattisgarh', found: [{ site: 'ndtv.com', title: 'Six killed after bus hits tree in Chhattisgarh', url: 'https://www.ndtv.com/a' }] }),
+        'not json',
+      ]),
   },
 }))
 vi.mock('../db/postgres', () => ({ db: Object.assign(() => ({}), { raw: (s: string) => s }) }))
@@ -88,5 +90,17 @@ describe('GET /api/v1/public/second-outlets', () => {
       failing.hours = false
       failing.lastCycle = false
     }
+  })
+
+  // Nov 21, 2026: the trial on everyday reports, read by hand before it is switched on
+  it('answers what the everyday trial would have added only when asked', async () => {
+    const app = Fastify()
+    await app.register(registerPublicRoutes, { prefix: '/api/v1/public' })
+    const plain = (await app.inject({ method: 'GET', url: '/api/v1/public/second-outlets' })).json().data
+    expect(plain.trial).toBeUndefined()
+    const asked = (await app.inject({ method: 'GET', url: '/api/v1/public/second-outlets?trial=1' })).json().data
+    expect(asked.trial).toEqual([{ id: 't1', severity: 'low', title: 'Lantern festival draws crowds in Raipur', found: [{ site: 'ndtv.com', title: 'Raipur lantern festival', url: 'https://www.ndtv.com/b' }] }])
+    expect(asked.latest[0].id).toBe('s1')
+    expect(asked.unread).toEqual([])
   })
 })

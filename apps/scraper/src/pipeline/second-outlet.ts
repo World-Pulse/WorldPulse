@@ -48,6 +48,12 @@
  * articles of GDELT's translated list (gdelt-articles.ts), held 8 hours like the English ones; Spanish and
  * Portuguese ones too since that afternoon.
  *
+ * Since Nov 21, 2026, on trial (Devon, 10:39 AM: "Proceed" with looking for a second outlet on everyday reports too,
+ * run "for a few hours without confirming anything", 100 matches checked by hand with a 95% bar before it is switched
+ * on): the other places' everyday (low) reports, about 5 in 6 of those waiting, are read as they come in and compared
+ * with GDELT's articles the same way for EVERYDAY_HOLD_MS; what would join them is only written down
+ * (second-outlet:trial, GET /api/v1/public/second-outlets?trial=1). No outlet is added, no report turns verified.
+ *
  * Daily counts: second-outlet:day:<date> (GET /api/v1/public/second-outlets);
  * the latest matches, for reading by hand: second-outlet:recent. Off with
  * SECOND_OUTLET=off.
@@ -97,6 +103,18 @@ export const MAX_ADDED = 3
 /** The articles a report is compared with in one cycle, the most words shared first */
 const MAX_CANDIDATES = 40
 const CROSSCHECKS_A_DAY = Number(process.env.SECOND_OUTLET_CROSSCHECKS) || 100
+
+/** The other places' everyday reports (Nov 21, 2026): on trial, written down only; 'off' leaves them out */
+export const EVERYDAY: 'trial' | 'off' = 'trial'
+/** How long an everyday report on trial is compared with the articles that come in: most outlets carry a story within hours */
+export const EVERYDAY_HOLD_MS = 6 * HOUR
+/** At most this many held at once (about 6 hours of them), the oldest let go first */
+export const EVERYDAY_MAX_HELD = 10_000
+/** New everyday reports read in one cycle, oldest first; after a restart those of the last EVERYDAY_WARM_MS */
+export const EVERYDAY_READ = 4_000
+const EVERYDAY_WARM_MS = 2 * HOUR
+export const TRIAL_KEY = 'second-outlet:trial'
+const TRIAL_KEEP = 1_000
 
 // ─── Headline words ──────────────────────────────────────────────────────────
 
@@ -618,9 +636,22 @@ export interface FinderState {
   /** The translated list's French and German articles, and how far each French or German report was compared (Nov 10, 2026) */
   translated: ArticleWindow
   comparedTranslated: Map<string, string>
+  /** The everyday reports on trial (Nov 21, 2026) */
+  everyday: EverydayState
 }
 
-export const newState = (): FinderState => ({ window: new ArticleWindow(), compared: new Map(), translated: new ArticleWindow(), comparedTranslated: new Map() })
+/** The everyday reports on trial: those held, read up to `since` (their newest created_at), how far each was compared, those written down */
+export interface EverydayState {
+  held: Map<string, { report: HeldReport; readAt: number }>
+  since: string | null
+  compared: Map<string, string>
+  comparedTranslated: Map<string, string>
+  noted: Set<string>
+}
+
+const newEveryday = (): EverydayState => ({ held: new Map(), since: null, compared: new Map(), comparedTranslated: new Map(), noted: new Set() })
+
+export const newState = (): FinderState => ({ window: new ArticleWindow(), compared: new Map(), translated: new ArticleWindow(), comparedTranslated: new Map(), everyday: newEveryday() })
 
 // ─── A cycle ─────────────────────────────────────────────────────────────────
 
@@ -636,6 +667,11 @@ export interface CycleStats {
   errors: number
   /** Of the reports matched, the quiet places' everyday (low) ones (Nov 10, 2026) */
   everyday: number
+  /** The other places' everyday reports on trial (Nov 21, 2026): read this cycle, articles compared, matched, outlets they would get */
+  trial_read: number
+  trial_pairs: number
+  trial_matched: number
+  trial_outlets: number
 }
 
 export interface SecondOutletDeps {
@@ -656,12 +692,21 @@ export interface SecondOutletDeps {
   /** The last cycle's files and counts, kept for reading */
   trace(entry: Record<string, unknown>): Promise<void>
   clock(): number
+  /** On trial (Nov 21, 2026): the other places' everyday reports created after `since` (or lately), oldest first */
+  everydayNew?(since: string | null, now: Date): Promise<Array<HeldReport & { created_at: string }>>
+  /** Of these reports, those still waiting (pending, one outlet) */
+  stillWaiting?(ids: string[]): Promise<Set<string>>
+  /** Write down what the trial found */
+  note?(entry: Record<string, unknown>): Promise<void>
 }
 
 /** What the last cycle read, for GET /api/v1/public/second-outlets (second-outlet:last-cycle) */
 let lastTrace: Record<string, unknown> | null = null
 
-const emptyStats = (): CycleStats => ({ files: 0, articles: 0, reports: 0, pairs: 0, matched: 0, outlets: 0, promoted: 0, crosschecked: 0, errors: 0, everyday: 0 })
+const emptyStats = (): CycleStats => ({
+  files: 0, articles: 0, reports: 0, pairs: 0, matched: 0, outlets: 0, promoted: 0, crosschecked: 0, errors: 0, everyday: 0,
+  trial_read: 0, trial_pairs: 0, trial_matched: 0, trial_outlets: 0,
+})
 
 type FileTrace = { newest: string | null; read: Array<[string, number]>; missing: string[]; failed: Array<[string, string]> }
 
@@ -725,36 +770,7 @@ export async function runSecondOutlets(state: FinderState, deps: SecondOutletDep
     const reports = (await deps.waiting(now)).filter(searchable)
     stats.reports = reports.length
     const found = new Map<string, { report: HeldReport; outlets: FoundOutlet[] }>()
-    for (const stream of streams) {
-      const mine = reports.filter(r => ((r.language || 'en') !== 'en') === stream.foreign)
-      if (!stream.latest) continue
-      const groups = new Map<string, { since: string | null; lang: string; reports: HeldReport[] }>()
-      for (const r of mine) {
-        const since = stream.compared.get(r.id) ?? null
-        if (since === stream.latest) continue
-        const lang = r.language || 'en'
-        const key = `${since ?? ''}|${lang}`
-        const group = groups.get(key)
-        if (group) group.reports.push(r); else groups.set(key, { since, lang, reports: [r] })
-      }
-      for (const { since, lang, reports: group } of groups.values()) {
-        const articles = stream.window.after(since).filter(a => (a.lang || 'en') === lang)
-        const pairs = candidatePairs(group.map(r => ({ tokens: storyTokens(r.title, lang) })), articles)
-        let n = 0
-        for (const [i, list] of pairs) {
-          const report = group[i]!
-          const best = list.slice(0, MAX_CANDIDATES)
-          stats.pairs += best.length
-          const outlets = otherOutlets(report, best.map(a => articles[a]!), now)
-          if (outlets.length) found.set(report.id, { report, outlets })
-          // room for the scraper's other work between reports
-          if (++n % 100 === 0) await new Promise(resolve => setImmediate(resolve))
-        }
-      }
-      for (const r of mine) stream.compared.set(r.id, stream.latest)
-      const live = new Set(mine.map(r => r.id))
-      for (const id of stream.compared.keys()) if (!live.has(id)) stream.compared.delete(id)
-    }
+    for (const stream of streams) stats.pairs += await compareReports(reports, stream, found, now)
 
     // 3. The outlets found join their reports
     let crossChecks = await deps.crossChecksToday(day).catch(() => CROSSCHECKS_A_DAY)
@@ -785,12 +801,107 @@ export async function runSecondOutlets(state: FinderState, deps: SecondOutletDep
         logger.warn({ err, id: report.id }, 'Second outlet: outlets not added')
       }
     }
+
+    // 4. On trial (Nov 21, 2026): the other places' everyday reports, written down only
+    if (EVERYDAY === 'trial' && deps.everydayNew) {
+      await everydayTrial(state, deps, now, stats).catch(err => { stats.errors++; logger.warn({ err }, 'Second outlet: everyday trial failed (non-fatal)') })
+    }
   } finally {
     await deps.count(day, stats).catch(err => logger.warn({ err }, 'Second outlet: counts not saved'))
-    if (lastTrace) await deps.trace({ ...lastTrace, held: state.window.size, held_translated: state.translated.size, stats }).catch(() => {})
+    if (lastTrace) {
+      await deps.trace({ ...lastTrace, held: state.window.size, held_translated: state.translated.size, everyday_held: state.everyday.held.size, stats }).catch(() => {})
+    }
     await deps.unlock().catch(() => {})
   }
   return stats
+}
+
+type Stream = { window: ArticleWindow; compared: Map<string, string>; latest: string | null; foreign: boolean }
+
+/**
+ * The reports of one list's languages, each compared with the articles of its language it hasn't been compared
+ * with; the other outlets found go into `found`. The articles compared, counted.
+ */
+async function compareReports(reports: HeldReport[], stream: Stream, found: Map<string, { report: HeldReport; outlets: FoundOutlet[] }>, now: Date): Promise<number> {
+  const mine = reports.filter(r => ((r.language || 'en') !== 'en') === stream.foreign)
+  if (!stream.latest) return 0
+  let compared = 0
+  const groups = new Map<string, { since: string | null; lang: string; reports: HeldReport[] }>()
+  for (const r of mine) {
+    const since = stream.compared.get(r.id) ?? null
+    if (since === stream.latest) continue
+    const lang = r.language || 'en'
+    const key = `${since ?? ''}|${lang}`
+    const group = groups.get(key)
+    if (group) group.reports.push(r); else groups.set(key, { since, lang, reports: [r] })
+  }
+  for (const { since, lang, reports: group } of groups.values()) {
+    const articles = stream.window.after(since).filter(a => (a.lang || 'en') === lang)
+    const pairs = candidatePairs(group.map(r => ({ tokens: storyTokens(r.title, lang) })), articles)
+    let n = 0
+    for (const [i, list] of pairs) {
+      const report = group[i]!
+      const best = list.slice(0, MAX_CANDIDATES)
+      compared += best.length
+      const outlets = otherOutlets(report, best.map(a => articles[a]!), now)
+      if (outlets.length) found.set(report.id, { report, outlets })
+      // room for the scraper's other work between reports
+      if (++n % 100 === 0) await new Promise(resolve => setImmediate(resolve))
+    }
+  }
+  for (const r of mine) stream.compared.set(r.id, stream.latest)
+  const live = new Set(mine.map(r => r.id))
+  for (const id of stream.compared.keys()) if (!live.has(id)) stream.compared.delete(id)
+  return compared
+}
+
+/**
+ * The trial (Nov 21, 2026): the everyday reports new since the last cycle join those held; each held one is compared
+ * with the articles it hasn't been compared with, like the reports above; one that would get an outlet and is still
+ * waiting is written down once and let go. Nothing is added to any report.
+ */
+async function everydayTrial(state: FinderState, deps: SecondOutletDeps, now: Date, stats: CycleStats): Promise<void> {
+  const ev = state.everyday
+  const fresh = await deps.everydayNew!(ev.since, now)
+  stats.trial_read += fresh.length
+  for (const r of fresh) {
+    if (!ev.since || r.created_at > ev.since) ev.since = r.created_at
+    if (ev.held.has(r.id) || ev.noted.has(r.id) || !searchable(r)) continue
+    ev.held.set(r.id, { report: r, readAt: now.getTime() })
+  }
+  for (const [id, h] of ev.held) if (now.getTime() - h.readAt > EVERYDAY_HOLD_MS) ev.held.delete(id)
+  // (a Map keeps the order its keys came in: the first are the oldest)
+  for (const id of ev.held.keys()) { if (ev.held.size <= EVERYDAY_MAX_HELD) break; ev.held.delete(id) }
+  const held = [...ev.held.values()].map(h => h.report)
+  const found = new Map<string, { report: HeldReport; outlets: FoundOutlet[] }>()
+  const streams: Stream[] = [
+    { window: state.window, compared: ev.compared, latest: state.window.newest(), foreign: false },
+    { window: state.translated, compared: ev.comparedTranslated, latest: state.translated.newest(), foreign: true },
+  ]
+  for (const stream of streams) stats.trial_pairs += await compareReports(held, stream, found, now)
+  if (!found.size) return
+  const ids = [...found.keys()]
+  const waiting = deps.stillWaiting ? await deps.stillWaiting(ids) : new Set(ids)
+  for (const id of ids) {
+    const { report, outlets } = found.get(id)!
+    ev.held.delete(id)
+    // one of our own outlets, or the search above, got there first
+    if (!waiting.has(id)) continue
+    ev.noted.add(id)
+    stats.trial_matched++
+    stats.trial_outlets += outlets.length
+    await deps.note?.({
+      at: new Date(deps.clock()).toISOString(),
+      id: report.id,
+      severity: report.severity,
+      language: report.language || 'en',
+      category: report.category,
+      title: report.title.slice(0, 160),
+      found: outlets.map(f => ({ site: f.site, title: f.title.slice(0, 160), url: f.url })),
+    })
+  }
+  // those written down are remembered only as long as a report can be held
+  if (ev.noted.size > 4 * EVERYDAY_MAX_HELD) ev.noted = new Set([...ev.noted].slice(-2 * EVERYDAY_MAX_HELD))
 }
 
 // ─── The live parts ──────────────────────────────────────────────────────────
@@ -885,6 +996,32 @@ export function waitingQuery(quiet: readonly string[], now: Date): { sql: string
         ORDER BY created_at DESC
         LIMIT 20000`,
     bindings: [[...quiet], new Date(now.getTime() - LOOKBACK_MS).toISOString(), new Date(now.getTime() - SETTLE_MS).toISOString()],
+  }
+}
+
+/**
+ * The everyday reports on trial (Nov 21, 2026): low, pending, one outlet, in the searched languages, not a quiet place's
+ * (those are searched above), created after `since` (or in the last EVERYDAY_WARM_MS) and settled, oldest first. Each
+ * cycle reads only the new ones: a few hundred rows, not the 30 hours of them.
+ */
+export function everydayQuery(quiet: readonly string[], since: string | null, now: Date): { sql: string; bindings: unknown[] } {
+  return {
+    sql: `SELECT id, title, category, severity, language, source_ids, original_urls, location_name, tags,
+              COALESCE(event_time, created_at) AS published_at, created_at,
+              ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng
+         FROM signals
+        WHERE status = 'pending' AND COALESCE(source_count, 1) <= 1
+          AND severity = 'low' AND NOT (COALESCE(tags, '{}'::text[]) && ?::text[])
+          AND language IN (${SEARCHED_LANGUAGES.map(l => `'${l}'`).join(', ')})
+          AND cardinality(original_urls) >= 1
+          AND created_at > ?::timestamptz AND created_at < ?::timestamptz
+        ORDER BY created_at
+        LIMIT ${EVERYDAY_READ}`,
+    bindings: [
+      [...quiet],
+      since ?? new Date(now.getTime() - EVERYDAY_WARM_MS).toISOString(),
+      new Date(now.getTime() - SETTLE_MS).toISOString(),
+    ],
   }
 }
 
@@ -1006,6 +1143,22 @@ export const liveDeps: SecondOutletDeps = {
   },
 
   clock: () => Date.now(),
+
+  async everydayNew(since, now) {
+    const quiet = await quietPlaces(now).catch(() => [] as string[])
+    const { sql, bindings } = everydayQuery(quiet, since, now)
+    const { rows } = await db.raw(sql, bindings as never[]) as { rows: Array<ReportRow & { created_at: Date | string }> }
+    return rows.map(r => ({ ...toHeld(r), created_at: new Date(r.created_at).toISOString() }))
+  },
+
+  async stillWaiting(ids) {
+    const rows = await db('signals').whereIn('id', ids).select('id', 'status', 'source_count') as Array<{ id: string; status?: string; source_count?: number | null }>
+    return new Set(rows.filter(r => r.status === 'pending' && Number(r.source_count ?? 1) <= 1).map(r => String(r.id)))
+  },
+
+  async note(entry) {
+    await redis.multi().lpush(TRIAL_KEY, JSON.stringify(entry)).ltrim(TRIAL_KEY, 0, TRIAL_KEEP - 1).expire(TRIAL_KEY, 7 * 86_400).exec()
+  },
 }
 
 /** Every 15 minutes, a few minutes after GDELT publishes (off with SECOND_OUTLET=off) */

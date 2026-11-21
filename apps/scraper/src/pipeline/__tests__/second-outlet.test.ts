@@ -14,7 +14,7 @@ vi.mock('../crosscheck', () => ({ crossCheckLater: vi.fn() }))
 import { readArticles, ownCopy, filesToRead, newestStamp, unzipFirst, stampOf, type GdeltArticle } from '../gdelt-articles'
 import {
   storyTokens, candidatePairs, siteOf, ownerOf, nearCopy, otherOutlets, searchable, runSecondOutlets, newState,
-  MAX_ADDED, FEATURE_RE, type HeldReport, type SecondOutletDeps, type CycleStats,
+  everydayQuery, MAX_ADDED, FEATURE_RE, EVERYDAY_HOLD_MS, EVERYDAY_READ, type HeldReport, type SecondOutletDeps, type CycleStats,
 } from '../second-outlet'
 
 const AT = new Date('2026-10-22T10:00:00Z')
@@ -262,5 +262,88 @@ describe('a cycle', () => {
     const locked = deps({ '20261022120000': [ndtv] }, [report()], { lock: async () => false })
     expect((await runSecondOutlets(newState(), locked.d)).files).toBe(0)
     expect(locked.calls.fetched).toEqual([])
+  })
+})
+
+// Nov 21, 2026 (Devon, 10:39 AM: "Proceed"): the other places' everyday reports, on trial before they are switched on
+describe('everyday reports on trial', () => {
+  const ndtv = article('https://www.ndtv.com/india-news/six-killed-40-injured-after-bus-hits-tree-in-chhattisgarh-123', 'Six killed, 40 injured after bus rams tree in Chhattisgarh')
+  const other = article('https://www.example-news.com/a', 'Peso closes at record low for fourth day')
+  const everyday = (over: Partial<HeldReport> = {}) => ({ ...report({ id: 'low-1', severity: 'low', category: 'other', ...over }), created_at: '2026-10-22T10:05:00.000Z' })
+
+  const deps = (files: Record<string, GdeltArticle[]>, fresh: Array<HeldReport & { created_at: string }>, over: Partial<SecondOutletDeps> = {}) => {
+    const calls = { added: [] as string[], noted: [] as Array<Record<string, unknown>>, since: [] as Array<string | null>, asked: [] as string[][] }
+    const d: SecondOutletDeps = {
+      newestStamp: async () => Object.keys(files).sort().pop() ?? null,
+      fetchArticles: async stamp => files[stamp] ?? null,
+      waiting: async () => [],
+      add: async r => { calls.added.push(r.id); return true },
+      crossChecksToday: async () => 0,
+      lock: async () => true,
+      unlock: async () => {},
+      count: async () => {},
+      remember: async () => {},
+      trace: async () => {},
+      clock: () => LATER.getTime(),
+      everydayNew: async since => { calls.since.push(since); return fresh },
+      stillWaiting: async ids => { calls.asked.push(ids); return new Set(ids) },
+      note: async entry => { calls.noted.push(entry) },
+      ...over,
+    }
+    return { d, calls }
+  }
+
+  it('writes down the outlets an everyday report would get, and adds nothing', async () => {
+    const { d, calls } = deps({ '20261022120000': [ndtv] }, [everyday()])
+    const stats = await runSecondOutlets(newState(), d)
+    expect(calls.added).toEqual([])
+    expect(stats).toMatchObject({ matched: 0, promoted: 0, trial_read: 1, trial_matched: 1, trial_outlets: 1 })
+    expect(calls.noted).toHaveLength(1)
+    expect(calls.noted[0]).toMatchObject({ id: 'low-1', severity: 'low', language: 'en', found: [{ site: 'ndtv.com' }] })
+  })
+
+  it('holds a report for the articles that come later, reading only the reports new since', async () => {
+    const state = newState()
+    const files: Record<string, GdeltArticle[]> = { '20261022120000': [other] }
+    const first = deps(files, [everyday()])
+    expect((await runSecondOutlets(state, first.d)).trial_matched).toBe(0)
+    expect(state.everyday.held.size).toBe(1)
+    files['20261022121500'] = [ndtv]
+    const second = deps(files, [], { clock: () => LATER.getTime() + 15 * 60_000 })
+    const stats = await runSecondOutlets(state, second.d)
+    expect(second.calls.since).toEqual(['2026-10-22T10:05:00.000Z'])
+    expect(stats.trial_matched).toBe(1)
+    expect(state.everyday.held.size).toBe(0)
+    // written down once: read again, it is not held again
+    const third = deps(files, [everyday()], { clock: () => LATER.getTime() + 30 * 60_000 })
+    await runSecondOutlets(state, third.d)
+    expect(state.everyday.held.size).toBe(0)
+    expect(third.calls.noted).toEqual([])
+  })
+
+  it('leaves out a report one of our outlets got to first, and lets go of those held too long', async () => {
+    const asked: string[][] = []
+    const taken = deps({ '20261022120000': [ndtv] }, [everyday()], { stillWaiting: async ids => { asked.push(ids); return new Set() } })
+    const state = newState()
+    const stats = await runSecondOutlets(state, taken.d)
+    expect(asked).toEqual([['low-1']])
+    expect(stats.trial_matched).toBe(0)
+    expect(taken.calls.noted).toEqual([])
+    expect(state.everyday.held.size).toBe(0)
+    const old = newState()
+    old.everyday.held.set('low-2', { report: everyday({ id: 'low-2', title: 'Lantern festival draws crowds in Raipur' }), readAt: LATER.getTime() - EVERYDAY_HOLD_MS - 60_000 })
+    await runSecondOutlets(old, deps({ '20261022120000': [other] }, []).d)
+    expect(old.everyday.held.size).toBe(0)
+  })
+
+  it('reads the new everyday reports of the places not searched already, oldest first', () => {
+    const now = new Date('2026-11-21T16:00:00Z')
+    const { sql, bindings } = everydayQuery(['dm', 'bi'], null, now)
+    expect(sql).toMatch(/severity = 'low' AND NOT \(COALESCE\(tags, '\{\}'::text\[\]\) && \?::text\[\]\)/)
+    expect(sql).toMatch(/status = 'pending' AND COALESCE\(source_count, 1\) <= 1/)
+    expect(sql).toMatch(/ORDER BY created_at\s+LIMIT 4000/)
+    expect(EVERYDAY_READ).toBe(4000)
+    expect(bindings).toEqual([['dm', 'bi'], '2026-11-21T14:00:00.000Z', '2026-11-21T15:40:00.000Z'])
+    expect(everydayQuery([], '2026-11-21T15:30:00.123Z', now).bindings[1]).toBe('2026-11-21T15:30:00.123Z')
   })
 })
