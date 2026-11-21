@@ -176,7 +176,7 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'singapore':        { lat: 1.3521, lng: 103.8198, country: 'SG' },
   'pyongyang':        { lat: 39.0392, lng: 125.7625, country: 'KP' },
   'seoul':            { lat: 37.5665, lng: 126.9780, country: 'KR', region: 'Seoul Capital Area' },
-  'kabul':            { lat: 34.5553, lng: 69.2075, country: 'AF' },
+  'kabul':            { lat: 34.5553, lng: 69.2075, country: 'AF', asWritten: 'Kabul' },
   'baghdad':          { lat: 33.3152, lng: 44.3661, country: 'IQ' },
   'mosul':            { lat: 36.3350, lng: 43.1189, country: 'IQ', asWritten: 'Mosul' },
   'damascus':         { lat: 33.5138, lng: 36.2765, country: 'SY' },
