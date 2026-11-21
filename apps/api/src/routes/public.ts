@@ -421,7 +421,9 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // ─── GET /languages (Nov 10, 2026) ────────────────────────
-  // The languages of the last hours' reports, and each other language's newest reports that turned verified
+  // The languages of the last hours' reports, and each other language's newest reports that turned verified; and
+  // (Nov 21, 2026) how far the once-only names re-read of the week before has got (names_relink: days done of 7,
+  // reports read and linked; apps/scraper/src/pipeline/names-relink.ts), null before it starts
   app.get('/languages', {
     schema: { tags: ['public'], summary: 'The languages of the news, and the newest verified reports of each language other than English (public, no auth required)' },
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
@@ -429,11 +431,14 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
     reply.header('Access-Control-Allow-Origin', '*')
     const hours = boundedInt((req.query as Record<string, unknown>)?.hours, 24, 1, 72)
     try {
-      const [languages, verified] = await Promise.all([
+      const [languages, verified, relink] = await Promise.all([
         staleWhileRevalidate(`public:languages:v1:counts:${hours}`, LANGUAGES_SWR, () => languageCounts(hours)),
         staleWhileRevalidate(`public:languages:v2:verified:${hours}`, LANGUAGES_SWR, () => verifiedAbroad(hours)),
+        redis.get('names-relink:progress').catch(() => null),
       ])
-      return reply.send({ success: true, data: { hours, languages, verified } })
+      let names_relink: unknown = null
+      try { names_relink = relink ? JSON.parse(relink) : null } catch { names_relink = null }
+      return reply.send({ success: true, data: { hours, languages, verified, names_relink } })
     } catch {
       return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The languages could not be counted just now; try again in a minute')
     }

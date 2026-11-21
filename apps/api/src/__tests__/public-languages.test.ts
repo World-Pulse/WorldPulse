@@ -8,7 +8,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const calls: Array<{ sql: string; bindings: unknown[] }> = []
 let fail = false
 
-vi.mock('../db/redis', () => ({ redis: { get: async () => null, setex: async () => 'OK' } }))
+let relinkProgress: string | null = null
+vi.mock('../db/redis', () => ({ redis: { get: async (key: string) => (key === 'names-relink:progress' ? relinkProgress : null), setex: async () => 'OK' } }))
 vi.mock('../db/postgres', () => ({ db: Object.assign(() => ({}), { raw: (s: string) => s }) }))
 vi.mock('../lib/categories', () => ({ signalCategories: async () => ['conflict'] }))
 vi.mock('../lib/stories', () => ({ signalsHaveStoryIds: async () => true }))
@@ -47,7 +48,7 @@ async function app() {
   return a
 }
 
-beforeEach(() => { calls.length = 0; fail = false })
+beforeEach(() => { calls.length = 0; fail = false; relinkProgress = null })
 
 describe('GET /api/v1/public/languages', () => {
   it("answers each language's counts as numbers, and the verified reports with their story's languages", async () => {
@@ -70,6 +71,15 @@ describe('GET /api/v1/public/languages', () => {
     expect(verified.sql).not.toMatch(/LIMIT 80/)
     // reports made in the window and a day before it, verified in the window
     expect(verified.bindings).toEqual([96, 72])
+  })
+
+  it("tells how far the names re-read of the week before has got, null before it starts or when unreadable (Nov 21)", async () => {
+    expect((await (await app()).inject({ method: 'GET', url: '/api/v1/public/languages' })).json().data.names_relink).toBeNull()
+    relinkProgress = JSON.stringify({ days_done: 3, of: 7, reports: 105000, named: 31000, added: 29000 })
+    expect((await (await app()).inject({ method: 'GET', url: '/api/v1/public/languages' })).json().data.names_relink)
+      .toEqual({ days_done: 3, of: 7, reports: 105000, named: 31000, added: 29000 })
+    relinkProgress = '{not json'
+    expect((await (await app()).inject({ method: 'GET', url: '/api/v1/public/languages' })).json().data.names_relink).toBeNull()
   })
 
   it('takes 1 to 72 hours, else 24', async () => {

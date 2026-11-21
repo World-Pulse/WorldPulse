@@ -46,6 +46,7 @@ import { startEditor, catchUpEditor } from './pipeline/editor'
 import { startSecondReads } from './pipeline/second-read'
 import { startSecondOutlets } from './pipeline/second-outlet'
 import { verifyArchive } from './pipeline/archive-outlets'
+import { relinkNames } from './pipeline/names-relink'
 import { backfillPulse } from './pipeline/gkg-pulse'
 import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames, fixGdeltFipsCountries, stripOutletNotes, stripOutletNames, repairHeadlineSummaries, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability, switchOffRetiredSources, splitDniproFromSpainTrainStory, splitHelicopterCrashStories } from './pipeline/repairs'
 import { batchValidateGeo } from './pipeline/geo-validator'
@@ -389,6 +390,14 @@ async function bootstrap() {
 
   // ── The hosted build's engine: its own jobs (event threads, pattern
   //    detection; src/engine-loader.ts, none in the open-source edition) ──
+  // Once: the 7 days of reports before names in every language went live (12:45 PM ET, Nov 21) linked to the names
+  // their headlines carry in their own language (Devon, Nov 21, 3:31 PM: "Proceed with the rerun"); a day at a time,
+  // a restart carrying on after the last day done (pipeline/names-relink.ts)
+  setTimeout(() => {
+    runOnce('repair:names-relink:2026-11-21', () => relinkNames())
+      .then(t => { if (t) logger.info(t, 'Names re-link: the 7 days before linked') })
+      .catch(err => logger.warn({ err }, 'Names re-link failed (non-fatal)'))
+  }, 5 * 60_000)
   void loadEngine().then(engine => engine?.startJobs())
 
   // In-house fingerprints: the table at start, then every 10 min the reports

@@ -384,6 +384,37 @@ export async function upsertEntityNode(
   return node
 }
 
+/**
+ * Several reports at once for one entity (the names re-read, Nov 21, 2026: names-relink.ts). One statement however
+ * many reports, where upsertEntityNode is one a report and hands back the whole report list (Russia's is over 11,000
+ * ids): a report it holds already is counted once and its count isn't raised for it; the dates move only the right
+ * way. Its cached node (kg:node:<id>, with the old list) is dropped. How many of the reports were new to it.
+ */
+export async function linkEntityToReports(entity: ExtractedEntity, reportIds: string[], oldest: string, newest: string): Promise<number> {
+  if (reportIds.length === 0) return 0
+  const canonical = resolveCanonicalName(entity.name, entity.type)
+  const id = entityId(entity.type, canonical)
+  const result = await db.query(
+    `WITH fresh AS (
+       SELECT unnest($6::text[]) AS sid
+       EXCEPT
+       SELECT unnest(signal_ids) FROM entity_nodes WHERE id = $1
+     )
+     INSERT INTO entity_nodes (id, type, canonical_name, aliases, first_seen, last_seen, mention_count, signal_ids, metadata)
+     VALUES ($1, $2, $3, $4, $5, $7, (SELECT count(*) FROM fresh), ARRAY(SELECT sid FROM fresh ORDER BY sid), $8)
+     ON CONFLICT (id) DO UPDATE SET
+       first_seen = LEAST(entity_nodes.first_seen, $5::timestamptz),
+       last_seen = GREATEST(entity_nodes.last_seen, $7::timestamptz),
+       mention_count = entity_nodes.mention_count + (SELECT count(*) FROM fresh),
+       signal_ids = (SELECT array_agg(DISTINCT sid) FROM unnest(entity_nodes.signal_ids || $6::text[]) AS sid),
+       aliases = (SELECT array_agg(DISTINCT a) FROM unnest(entity_nodes.aliases || $4::text[]) AS a)
+     RETURNING (SELECT count(*) FROM fresh)::int AS added`,
+    [id, entity.type, canonical, [entity.name], oldest, reportIds, newest, JSON.stringify({ salience: entity.salience })],
+  )
+  await redis.del(`kg:node:${id}`).catch(() => {})
+  return Number(result.rows[0]?.added ?? 0)
+}
+
 export async function upsertEntityEdge(
   rel: ExtractedRelationship,
   sourceType: EntityType,
