@@ -110,6 +110,21 @@ STATE_VERSION = 4
 # browsers that ran the page but never stayed are counted apart as "ran_only"
 SEEN_FROM = '2026-11-17'   # Devon, Nov 17: count only real readers from today on
 SEEN_PATH = '/api/v1/public/seen'
+# Out-of-date browsers (Nov 21, 2026; Devon: "Yes", then "Proceed", to not counting browsers more than about 6 months
+# out of date). From 10 AM ET on Nov 20 about 50 "readers" an hour came straight to one story page each, all "direct",
+# in Chrome builds from 2022 to early 2026 on Windows (Chrome 116, 103, 108, 105, 131, 132 among the 8 most common),
+# while Chrome was at 158; they stayed 8 seconds and scrolled. Chrome and Edge update themselves on a computer, so one
+# more than OUTDATED_RELEASES releases behind (about 6 months) is not someone browsing. From this day (UTC) they are
+# counted apart ("outdated", "outdated_agents"), not as readers. Phones, tablets and Chromebooks are left alone (an old
+# one stays on the last version it can run), and so are the last versions old computers can run: Chrome 109 on
+# Windows 7 and 8.1, 116 on macOS 10.13 and 10.14, 128 on macOS 10.15. Firefox (its long-support version lags on
+# purpose), Safari (it moves with the system) and other browsers are not judged by version.
+OUTDATED_FROM = '2026-11-21'
+CHROME_AT = (158, '2026-11-18')   # Chrome's stable version on a known day (Chrome Releases); one more every 4 weeks or so
+CHROME_RELEASE_DAYS = 28
+OUTDATED_RELEASES = 6
+LAST_FOR_OLD_SYSTEMS = {'Windows': {109}, 'Mac': {116, 128}}
+OUTDATED_AGENT = re.compile(r'^(?:Chrome|Edge) (\d+) · (Windows|Mac|Linux)$')
 # Days counted before the API rule whose count a crawler clearly inflated: shown as not known (the
 # server's log no longer covers the day, so it can't be counted again); the old number is kept apart
 LOOSE_DAYS = ('2026-10-20',)
@@ -334,6 +349,25 @@ def agent_family(ua):
     return browser
 
 
+def chrome_now(day):
+    """Chrome's stable major version on a day ('2026-11-21'): the known one, plus one every CHROME_RELEASE_DAYS after"""
+    known, on = CHROME_AT
+    days = (datetime.strptime(day, '%Y-%m-%d') - datetime.strptime(on, '%Y-%m-%d')).days
+    return known + max(0, days) // CHROME_RELEASE_DAYS
+
+
+def outdated(agent, day):
+    """Whether a visitor's browser (agent_family: 'Chrome 116 · Windows') is a computer's Chrome or Edge more than
+    OUTDATED_RELEASES releases behind on that day; the last versions old systems can run are not"""
+    m = OUTDATED_AGENT.match(agent or '')
+    if not m:
+        return False
+    version, system = int(m.group(1)), m.group(2)
+    if version in LAST_FOR_OLD_SYSTEMS.get(system, ()):
+        return False
+    return chrome_now(day) - version > OUTDATED_RELEASES
+
+
 def own_site(host):
     """One of our own addresses (world-pulse.io, world-pulse.app or a subdomain of either), or a bare IP
     address (the server's own, when someone opened the site by its number): not a website that sent people"""
@@ -420,6 +454,8 @@ def summary(d):
     no_language = 0
     ran_only, stayed = 0, 0   # ran the page but never stayed; stayed: the page said a person is reading
     strict = d['day'] >= SEEN_FROM
+    judge_version = d['day'] >= OUTDATED_FROM
+    old_browsers, old_agents = 0, {}   # a computer's Chrome or Edge too far behind (Nov 21, 2026)
     hours, posts, agents, sections, languages = {}, {}, {}, {}, {}
     post_channels = {}   # each post's readers by the channel they came from (Nov 11, 2026)
     # Page views by the channel that brought each visitor (plan G18 (3), Oct 20, 2026):
@@ -448,6 +484,11 @@ def summary(d):
         if v.get('l') == 'not sent':
             # ran the page, but its browser asked for no language at all: automation (plan LR5, Oct 23, 2026)
             no_language += 1
+            continue
+        if judge_version and outdated(v.get('a'), d['day']):
+            # a computer's Chrome or Edge more than 6 releases behind, though it updates itself (Nov 21, 2026)
+            old_browsers += 1
+            add(old_agents, v.get('a'))
             continue
         if v.get('i'):
             stayed += 1
@@ -483,8 +524,10 @@ def summary(d):
             'sites': by_count(sites, 8), 'pages': by_count(pages), 'crawlers': by_count(d['crawlers']),
             'bots': top_bots(d), 'bot_pages': by_count(d.get('bot_pages') or {}, 12), 'bots_since': d.get('bots_since'),
             'unconfirmed': unconfirmed, 'scripts_only': scripts_only, 'sign_in_only': sign_in_only, 'no_language': no_language,
-            'rule': 'api, a language, no sign-in pages' + (', stayed 8 s and scrolled or tapped' if strict else ''),
+            'rule': ('api, a language, no sign-in pages' + (', stayed 8 s and scrolled or tapped' if strict else '')
+                     + (", not a computer's Chrome or Edge more than 6 releases behind" if judge_version else '')),
             'ran_only': ran_only, 'stayed': stayed,
+            'outdated': old_browsers, 'outdated_agents': by_count(old_agents, 8),
             'people_agents': by_count(agents, 8), 'people_sections': by_count(sections, 12),
             'people_languages': by_count(languages, 12),
             'hours': dict(sorted(hours.items())), 'posts': by_count(posts, 20),

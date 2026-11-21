@@ -139,3 +139,40 @@ class StayedToRead(unittest.TestCase):
         readers.count(st, [line('2026-11-18T10:00:00+00:00', readers.API_HOST, readers.SEEN_PATH)])
         v = list(st['today']['visitors'].values())[0]
         self.assertTrue(v.get('js') and v.get('i'))
+
+
+class OutdatedBrowsers(unittest.TestCase):
+    """Nov 21, 2026 (Devon: "Proceed"): a computer's Chrome or Edge more than 6 releases behind is not a reader"""
+
+    @staticmethod
+    def day(day, **agents):
+        d = readers.empty_day(day)
+        d['visitors'] = {k: {'p': {'story': 1}, 'js': True, 'l': 'en', 'i': True, 'a': a} for k, a in agents.items()}
+        return d
+
+    def test_chrome_moves_on_about_every_4_weeks_from_a_known_release(self):
+        self.assertEqual(readers.chrome_now('2026-11-18'), 158)
+        self.assertEqual(readers.chrome_now('2026-11-21'), 158)
+        self.assertEqual(readers.chrome_now('2026-12-16'), 159)
+        self.assertEqual(readers.chrome_now('2027-05-19'), 164)
+
+    def test_a_computers_chrome_or_edge_too_far_behind_is_counted_apart(self):
+        s = readers.summary(self.day('2026-11-21', a='Chrome 116 · Windows', b='Chrome 158 · Windows', c='Chrome 152 · Mac',
+                                     d='Chrome 151 · Linux', e='Edge 131 · Windows', f='Chrome 146 · Windows'))
+        self.assertEqual((s['visitors'], s['outdated']), (2, 4))
+        self.assertEqual(s['outdated_agents'], {'Chrome 116 · Windows': 1, 'Chrome 151 · Linux': 1, 'Edge 131 · Windows': 1,
+                                                'Chrome 146 · Windows': 1})
+        self.assertEqual(set(s['people_agents']), {'Chrome 158 · Windows', 'Chrome 152 · Mac'})
+        self.assertEqual(s['stayed'], 2)
+        self.assertTrue(s['rule'].endswith("not a computer's Chrome or Edge more than 6 releases behind"))
+
+    def test_phones_chromebooks_old_systems_last_versions_and_other_browsers_still_count(self):
+        s = readers.summary(self.day('2026-11-21', a='Chrome 119 · Android', b='Chrome 100 · ChromeOS', c='Chrome 109 · Windows',
+                                     d='Chrome 116 · Mac', e='Chrome 128 · Mac', f='Firefox 115 · Windows',
+                                     g='Safari 15 · iPhone', h='Samsung 20 · Android', i='other'))
+        self.assertEqual((s['visitors'], s['outdated']), (9, 0))
+
+    def test_days_before_the_rule_are_counted_as_they_were(self):
+        s = readers.summary(self.day('2026-11-20', a='Chrome 116 · Windows', b='Chrome 158 · Windows'))
+        self.assertEqual((s['visitors'], s['outdated']), (2, 0))
+        self.assertNotIn('releases behind', s['rule'])
