@@ -1280,6 +1280,8 @@ const AZERBAIJANI: Rule[] = [
   r('böyük\\s+britaniya(?:nın|da|ya)?', 'United Kingdom'), r('çin(?:in|ə|də|dən|lə)?', 'China'), agi('[İi]srail', 'Israel'),
   agi('fələstin', 'Palestine'), agi('qəzza', 'Gaza'), agi('hindistan', 'India'), agi('qazaxıstan', 'Kazakhstan'),
   agi('özbəkistan', 'Uzbekistan'), r('ağ\\s+ev(?:in|də|dən)?', 'White House'),
+  // Nov 21, 2026: "Hanoyda" (in Hanoi) left a state visit's stories with no pin, and "Vyetnam" none of its stories
+  agi('hanoy', 'Hanoi'), agi('vyetnam', 'Vietnam'), agi('pekin', 'Beijing'), agi('yaponiya', 'Japan'),
 ]
 const sv = (alts: string, as: string): Rule => r(`(?:${alts})s?`, as)
 const SWEDISH: Rule[] = [
