@@ -35,7 +35,7 @@ const ECONOMY_RE = /\b(stock\s+markets?|stocks|recession|inflation|gdp|central\s
 // Space before technology, which also names SpaceX and NASA. No bare "moon"
 // ("Moon Jae-in", "Ban Ki-moon") or "mars" (the chocolate company)
 const SPACE_RE = /\b(space\s+launch|rockets?|satellites?|iss|international\s+space\s+station|lunar|moon\s+(?:landing|mission|base)|(?:to|on)\s+mars|mars\s+(?:rover|mission|landing)|nasa|esa|spacex|boeing\s+starliner|astronauts?)\b/
-const TECH_RE = /\b(ai\s+|artificial\s+intelligence|cybersecurity|hack|data\s+breach|tech\s+giant|silicon\s+valley|openai|semiconductors?|chipmakers?)\b/
+const TECH_RE = /\b(ai\s+|artificial\s+intelligence|cybersecurity|hack|data\s+breach|tech\s+giant|silicon\s+valley|openai|anthropic|chatgpt|semiconductors?|chipmakers?)\b/
 const CLIMATE_RE = /\b(climate\s+(?:change|action|crisis|policy|targets?|goals?|finance|summit|activists?)|global\s+warming|carbon|emissions|cop[0-9]+|fossil\s+fuel|renewable\s+energy|deforestation|sea\s+ice|glaciers?|ice\s+sheets?|sea\s+levels?|coral\s+reefs?|biodiversity|permafrost)\b/
 // Before conflict, whose words include "attack"
 const CYBER_RE = /\b(cyber\s*-?attacks?|ransomware|malware|phishing)\b/
@@ -50,7 +50,7 @@ const SECURITY_RE = /\b(espionage|spy|spies|spying|intelligence|terror|terrorism
 // nursing shortage health, but "rushed to hospital" and a description's
 // "medical evacuation" don't make a story about health
 const CARE_RE = /\b(health|(?<!(?:to|from|in|at)\s)hospitals?|patients|doctors|physicians|nurses|nursing|medical|medicines?|maternity|clinics?|labou?r\s+and\s+delivery)\b/
-const CULTURE_RE = /\b(films?|movies?|music|album|festival|celebrity|museum|exhibition|gallery|actor|actress|singer|concert|box\s+office|novels|novelist|memoir|(?:tv|television)\s+(?:series|shows?|drama)|sitcom|netflix|broadway|oscars|academy\s+awards?|emmys?|grammys?|baftas?|golden\s+globes?|anime|manga|fashion\s+(?:week|shows?))\b/
+const CULTURE_RE = /\b(films?|movies?|music|album|festival|celebrity|museum|exhibition|gallery|actor|actress|singer|concert|box\s+office|sequels?|video\s+games?|grand\s+theft\s+auto|hollywood|bollywood|disney|blockbusters?|novels|novelist|memoir|(?:tv|television)\s+(?:series|shows?|drama)|sitcom|netflix|broadway|oscars|academy\s+awards?|emmys?|grammys?|baftas?|golden\s+globes?|anime|manga|fashion\s+(?:week|shows?))\b/
 
 /**
  * The rules in their order, each under its topic's name (category-languages.ts files French, Spanish, Portuguese

@@ -24,6 +24,12 @@ describe('categorizeText', () => {
     expect(categorizeText('Tunisia\'s Carthage Music Days puts its faith in the local scene')).toBe('culture')
   })
 
+  it('files a game, a film sequel and an AI lab story by topic, not by the outlet (Nov 20 live read)', () => {
+    expect(categorizeText('Grand Theft Auto VI takes record $3.8 bn on first day')).toBe('culture')
+    expect(categorizeText("'Home Alone' sequel at Disney: Macaulay Culkin to return as Kevin McCallister")).toBe('culture')
+    expect(categorizeText("Claude solved math's greatest riddle, says Anthropic researcher")).toBe('technology')
+  })
+
   it('files club football as sports, not politics, and leaves strikes alone', () => {
     expect(categorizeText('Ten Hag tells Ronaldo he is not in his plans')).toBe('sports')
     expect(categorizeText('Soccer striker completes move after transfer talks')).toBe('sports')
