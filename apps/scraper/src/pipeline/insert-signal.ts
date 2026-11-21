@@ -29,6 +29,7 @@ import { placesInText } from './geo'
 import { indicPlaces } from './indic-places'
 import { cyrillicPlaces } from './cyrillic-places'
 import { cjkPlaces } from './cjk-places'
+import { namesInTitle } from './world-names'
 import type { CorrelationCandidate } from './correlate'
 import { recordSuccess } from '../health'
 import { computeReliabilityScore, maxSeverityForSourceCount } from './reliability-score'
@@ -70,6 +71,18 @@ export function scriptPlaces(title: string): string[] {
     if (out.length >= 2) break
   }
   return out
+}
+
+/**
+ * The people, places and organisations a headline in another language names in that language (world-names.ts, Nov 21,
+ * 2026), those the rules didn't find already: the rules read English names in Latin letters, so on Nov 20-21 they
+ * linked 28% of the headlines in other languages to a name, three quarters of the reports, against 55% of the English
+ */
+export function ownLanguageNames(title: string, lang: string, found: ReadonlyArray<{ name: string; type: string }>): Array<{ name: string; type: 'location' | 'person' | 'organisation'; salience: number }> {
+  const have = new Set(found.map(e => `${e.type}:${e.name.toLowerCase()}`))
+  return namesInTitle(title, lang)
+    .filter(e => !have.has(`${e.type}:${e.name.toLowerCase()}`))
+    .map(e => ({ name: e.name, type: e.type, salience: 0.5 }))
 }
 
 /** Signal ids are UUIDs; the dedup store can also hold '1' or 'pending' */
@@ -430,19 +443,26 @@ export async function insertAndCorrelate(
     const signalTime     = signal.created_at instanceof Date
       ? signal.created_at.toISOString()
       : String(signal.created_at ?? new Date().toISOString())
+    const signalLanguage = String(signalData.language ?? signal.language ?? 'en')
 
     if (signalSeverity === 'high' || signalSeverity === 'critical') {
       // Full LLM extraction for high-value signals (with rule-based fallback)
       const graph = await processSignalForKnowledgeGraph(signalId, signalTitle, signalSummary, signalTime)
+      const found = graph.entities.map(e => ({ name: e.canonical_name, type: e.type }))
       if (!graph.entities.some(e => e.type === 'location')) {
-        for (const name of scriptPlaces(signalTitle)) await upsertEntityNode({ name, type: 'location', salience: 0.5 }, signalId, signalTime)
+        for (const name of scriptPlaces(signalTitle)) {
+          await upsertEntityNode({ name, type: 'location', salience: 0.5 }, signalId, signalTime)
+          found.push({ name, type: 'location' })
+        }
       }
+      for (const entity of ownLanguageNames(signalTitle, signalLanguage, found)) await upsertEntityNode(entity, signalId, signalTime)
     } else {
       // Rule-based extraction only — zero API cost
       const extraction = extractEntitiesRuleBased(signalTitle, signalSummary)
       if (!extraction.entities.some(e => e.type === 'location')) {
         for (const name of scriptPlaces(signalTitle)) extraction.entities.push({ name, type: 'location', salience: 0.5 })
       }
+      extraction.entities.push(...ownLanguageNames(signalTitle, signalLanguage, extraction.entities))
       for (const entity of extraction.entities) {
         await upsertEntityNode(entity, signalId, signalTime)
       }
