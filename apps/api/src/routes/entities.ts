@@ -22,6 +22,58 @@ export const TIMELINE_MAX = 100
 export const CO_ENTITIES_SHOWN = 5
 /** The page's co-entities are read in one query under this limit; past it the page answers without them */
 export const CO_ENTITY_SECONDS = 4
+/**
+ * A big entity's page (Nov 21, 2026, 3:55 PM: Russia's, Donald Trump's and the United States', of 12,000 to 34,000
+ * reports, still answered 500 after the first fix): looking up every one of its reports by id to sort them took
+ * past the 5-second limit. From BIG_ENTITY reports up, the page reads the reports of the RECENT_DAYS up to its last
+ * mention, newest first, keeping its own (the newest hundred of Russia's are in the last hours); only a page reaching
+ * further back looks its reports up by id, under PAGE_SECONDS, and a page that gives up answers what it has.
+ */
+export const BIG_ENTITY = 2_000
+export const RECENT_DAYS = 30
+export const PAGE_SECONDS = 10
+const PAGE_COLUMNS = 'id, title, category, severity, location_name, reliability_score, source_count, published_at, created_at'
+
+type Row = Record<string, any>
+
+/** A page of the entity's reports, newest first, and whether it is the whole of the page asked for */
+export async function reportPage(ids: string[], lastSeen: unknown, limit: number, offset: number): Promise<{ rows: Row[]; partial: boolean }> {
+  const byId = (trx: { raw: (sql: string, b: unknown[]) => Promise<unknown> }) => trx.raw(`
+    SELECT ${PAGE_COLUMNS}
+      FROM signals
+     WHERE id = ANY(?::uuid[])
+     ORDER BY created_at DESC, id DESC
+     LIMIT ? OFFSET ?
+  `, [ids, limit, offset]) as Promise<{ rows?: Row[] }>
+  const last = lastSeen ? new Date(lastSeen as string) : null
+  if (ids.length < BIG_ENTITY || !last || Number.isNaN(last.getTime())) {
+    return { rows: (await longQuery(PAGE_SECONDS, byId)).rows ?? [], partial: false }
+  }
+  // the window's reports streamed newest first from the created_at index (OFFSET 0 keeps the planner from looking
+  // every id up first), its own kept until the page is full
+  const recent = await longQuery(PAGE_SECONDS, trx => trx.raw(`
+    SELECT r.*
+      FROM (
+        SELECT ${PAGE_COLUMNS}
+          FROM signals
+         WHERE created_at <= ?::timestamptz + interval '1 day'
+           AND created_at > ?::timestamptz - interval '${RECENT_DAYS} days'
+         ORDER BY created_at DESC
+        OFFSET 0
+      ) r
+     WHERE r.id = ANY(?::uuid[])
+     LIMIT ? OFFSET ?
+  `, [last.toISOString(), last.toISOString(), ids, limit, offset])) as { rows?: Row[] }
+  const rows = recent.rows ?? []
+  if (rows.length >= limit) return { rows, partial: false }
+  // the page reaches past the window: its reports looked up by id, or what the window had
+  try {
+    return { rows: (await longQuery(PAGE_SECONDS, byId)).rows ?? [], partial: false }
+  } catch (err) {
+    logger.warn({ err, reports: ids.length, offset }, 'Entity timeline: the reports before the window gave up, page shown with the window\'s')
+    return { rows, partial: true }
+  }
+}
 
 type CoEntity = { id: string; name: string; type: string }
 
@@ -195,14 +247,14 @@ export const registerEntityRoutes: FastifyPluginAsync = async (app) => {
     }
 
     // The page of its reports, newest first (one array parameter however many ids: Russia's are over 11,000)
-    const page = await db.raw(`
-      SELECT id, title, category, severity, location_name, reliability_score, source_count, published_at, created_at
-        FROM signals
-       WHERE id = ANY(?::uuid[])
-       ORDER BY COALESCE(published_at, created_at) DESC, id DESC
-       LIMIT ? OFFSET ?
-    `, [signalIds, limit, offset]) as { rows?: Array<Record<string, any>> }
-    const signals = page.rows ?? []
+    let page: { rows: Row[]; partial: boolean }
+    try {
+      page = await reportPage(signalIds, entity.last_seen, limit, offset)
+    } catch (err) {
+      logger.warn({ err, entity: id, reports: signalIds.length }, 'Entity timeline: the reports could not be read in time')
+      return reply.status(503).send({ success: false, error: 'The timeline could not be read in time; try again in a minute' })
+    }
+    const signals = page.rows
 
     // The other entities naming each, in one query; the page still answers when it gives up
     const times = signals.map(s => new Date(s.published_at ?? s.created_at).getTime()).filter(Number.isFinite)
@@ -240,10 +292,11 @@ export const registerEntityRoutes: FastifyPluginAsync = async (app) => {
       trend: metadata.trend ?? null,
       importance_score: metadata.importance_score ?? null,
       ...(coEntities ? {} : { co_entities_unavailable: true }),
+      ...(page.partial ? { partial: true } : {}),
     }
 
-    // (a page without its co-entities is kept a shorter while: the next one may have them)
-    await redis.setex(cacheKey, coEntities ? CACHE_TTL : 30, JSON.stringify(result)).catch(() => {})
+    // (a page without its co-entities, or cut short, is kept a shorter while: the next one may be whole)
+    await redis.setex(cacheKey, coEntities && !page.partial ? CACHE_TTL : 30, JSON.stringify(result)).catch(() => {})
     return reply.send(result)
   })
 }
