@@ -20767,6 +20767,7 @@ async function pollSource(
   const tProcess = Date.now()
   for (const item of items) {
     if (skippedLink(source, item.link)) continue
+    if (isLotteryResult(item.title)) continue
     const result = await processItem(db, redis, producer, source, item)
     if (result === 'created') created++
     else if (result === 'stale') stale++
@@ -20787,6 +20788,19 @@ async function pollSource(
 /** An item from a section of its feed the reader skips (NewsSource.skipLinks) */
 export function skippedLink(source: Pick<NewsSource, 'skipLinks'>, link: string | null | undefined): boolean {
   return Boolean(source.skipLinks && link && source.skipLinks.test(link))
+}
+
+/**
+ * A lottery draw's result ("Resultado da Mega-Sena", "Powerball winning
+ * numbers"): a number list, not news. Brazilian outlets publish one per draw,
+ * two outlets each, and the pair read as a verified story (Nov 19: 3 of the
+ * newest 10 signals, H-0064). Needs the game's name together with a result
+ * word, so a story about a winner, a scandal or a court case is still read.
+ */
+const LOTTERY_GAME = /\b(?:mega[\s-]?sena|lotof[áa]cil|timemania|lotomania|dupla[\s-]?sena|dia de sorte|super sete|quina|powerball|mega millions)\b/i
+const LOTTERY_RESULT = /\b(?:resultado|sorteio|concurso|n[úu]meros sorteados|dezenas|winning numbers|results?|numbers drawn)\b/i
+export function isLotteryResult(title: string | null | undefined): boolean {
+  return Boolean(title && LOTTERY_GAME.test(title) && LOTTERY_RESULT.test(title))
 }
 
 // ─── MAIN POLLER ─────────────────────────────────────────────────────────────
