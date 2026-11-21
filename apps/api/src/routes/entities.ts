@@ -12,8 +12,50 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
 import { redis } from '../db/redis'
+import { mentionIds } from '../lib/entity-profile'
+import { longQuery } from '../lib/long-query'
+import { logger } from '../lib/logger'
 
 const CACHE_TTL = 120
+/** The timeline's page of reports, at most; and the other entities shown with each, at most */
+export const TIMELINE_MAX = 100
+export const CO_ENTITIES_SHOWN = 5
+/** The page's co-entities are read in one query under this limit; past it the page answers without them */
+export const CO_ENTITY_SECONDS = 4
+
+type CoEntity = { id: string; name: string; type: string }
+
+/**
+ * The other entities naming each of a page's reports (Nov 21, 2026): one query for the page, the most-named first,
+ * at most CO_ENTITIES_SHOWN a report. It was one query a report, each reading every entity's report list as text
+ * (signal_ids::text LIKE), so a big entity's page of 100 (Tokyo's, of 772 reports) ran past the 5-second limit and
+ * answered 500. Null when it gives up.
+ */
+export async function coEntitiesOf(entityId: string, reportIds: string[], oldest: Date | null): Promise<Map<string, CoEntity[]> | null> {
+  const out = new Map<string, CoEntity[]>()
+  if (reportIds.length === 0) return out
+  try {
+    const result = await longQuery(CO_ENTITY_SECONDS, trx => trx.raw(`
+      SELECT lower(u.sid) AS sid, n.id, n.canonical_name AS name, n.type
+        FROM entity_nodes n
+        CROSS JOIN LATERAL unnest(n.signal_ids) AS u(sid)
+       WHERE n.id <> ?
+         AND n.signal_ids && ?::text[]
+         AND lower(u.sid) = ANY(?::text[])
+         AND (?::timestamptz IS NULL OR n.last_seen >= ?::timestamptz - interval '3 days')
+       ORDER BY n.mention_count DESC, n.canonical_name
+    `, [entityId, reportIds, reportIds, oldest, oldest])) as { rows?: Array<{ sid: string; id: string; name: string; type: string }> }
+    for (const r of result.rows ?? []) {
+      const list = out.get(r.sid) ?? []
+      if (list.length < CO_ENTITIES_SHOWN && !list.some(e => e.id === r.id)) list.push({ id: r.id, name: r.name, type: r.type })
+      out.set(r.sid, list)
+    }
+    return out
+  } catch (err) {
+    logger.warn({ err, entity: entityId, reports: reportIds.length }, 'Entity timeline: co-entities gave up, page shown without them')
+    return null
+  }
+}
 
 export const registerEntityRoutes: FastifyPluginAsync = async (app) => {
 
@@ -126,7 +168,9 @@ export const registerEntityRoutes: FastifyPluginAsync = async (app) => {
     },
   }, async (req, reply) => {
     const { id } = req.params as { id: string }
-    const { limit = 50, offset = 0 } = req.query as { limit?: number; offset?: number }
+    const query = req.query as { limit?: number; offset?: number }
+    const limit = Math.min(Math.max(Math.trunc(Number(query.limit) || 50), 1), TIMELINE_MAX)
+    const offset = Math.max(Math.trunc(Number(query.offset) || 0), 0)
 
     const cacheKey = `entity:timeline:${id}:${limit}:${offset}`
     const cached = await redis.get(cacheKey).catch(() => null)
@@ -137,10 +181,8 @@ export const registerEntityRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(404).send({ success: false, error: 'Entity not found' })
     }
 
-    // Parse signal_ids from entity
-    const signalIds: string[] = Array.isArray(entity.signal_ids)
-      ? entity.signal_ids
-      : JSON.parse(entity.signal_ids ?? '[]')
+    // The entity's report ids, well-formed only: a malformed one failed the whole query as a uuid
+    const signalIds = mentionIds(Array.isArray(entity.signal_ids) ? entity.signal_ids : JSON.parse(entity.signal_ids ?? '[]'))
 
     if (signalIds.length === 0) {
       return reply.send({
@@ -152,44 +194,32 @@ export const registerEntityRoutes: FastifyPluginAsync = async (app) => {
       })
     }
 
-    // Get signals with details, paginated
-    const signals = await db('signals')
-      .whereIn('id', signalIds)
-      .select(
-        'id', 'title', 'category', 'severity', 'location_name',
-        'reliability_score', 'source_count', 'published_at', 'created_at',
-      )
-      .orderBy('published_at', 'desc')
-      .limit(Math.min(limit, 100))
-      .offset(offset)
+    // The page of its reports, newest first (one array parameter however many ids: Russia's are over 11,000)
+    const page = await db.raw(`
+      SELECT id, title, category, severity, location_name, reliability_score, source_count, published_at, created_at
+        FROM signals
+       WHERE id = ANY(?::uuid[])
+       ORDER BY COALESCE(published_at, created_at) DESC, id DESC
+       LIMIT ? OFFSET ?
+    `, [signalIds, limit, offset]) as { rows?: Array<Record<string, any>> }
+    const signals = page.rows ?? []
 
-    // Compute co-appearing entities for each signal
-    const timelineEntries: Array<Record<string, unknown>> = []
+    // The other entities naming each, in one query; the page still answers when it gives up
+    const times = signals.map(s => new Date(s.published_at ?? s.created_at).getTime()).filter(Number.isFinite)
+    const oldest = times.length ? new Date(Math.min(...times)) : null
+    const coEntities = await coEntitiesOf(id, signals.map(s => String(s.id).toLowerCase()), oldest)
 
-    for (const signal of signals) {
-      // Find other entities that also reference this signal
-      const coEntities = await db('entity_nodes')
-        .where('id', '!=', id)
-        .whereRaw("signal_ids::text LIKE ?", [`%${signal.id}%`])
-        .select('id', 'canonical_name', 'type')
-        .limit(5)
-
-      timelineEntries.push({
-        signal_id: signal.id,
-        title: signal.title,
-        category: signal.category,
-        severity: signal.severity,
-        location: signal.location_name,
-        reliability: signal.reliability_score,
-        source_count: signal.source_count,
-        published_at: signal.published_at,
-        co_entities: coEntities.map((e: any) => ({
-          id: e.id,
-          name: e.canonical_name,
-          type: e.type,
-        })),
-      })
-    }
+    const timelineEntries = signals.map(signal => ({
+      signal_id: signal.id,
+      title: signal.title,
+      category: signal.category,
+      severity: signal.severity,
+      location: signal.location_name,
+      reliability: signal.reliability_score,
+      source_count: signal.source_count,
+      published_at: signal.published_at,
+      co_entities: coEntities?.get(String(signal.id).toLowerCase()) ?? [],
+    }))
 
     // Trend data from metadata
     const metadata = typeof entity.metadata === 'string'
@@ -209,9 +239,11 @@ export const registerEntityRoutes: FastifyPluginAsync = async (app) => {
       total: signalIds.length,
       trend: metadata.trend ?? null,
       importance_score: metadata.importance_score ?? null,
+      ...(coEntities ? {} : { co_entities_unavailable: true }),
     }
 
-    await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(result)).catch(() => {})
+    // (a page without its co-entities is kept a shorter while: the next one may have them)
+    await redis.setex(cacheKey, coEntities ? CACHE_TTL : 30, JSON.stringify(result)).catch(() => {})
     return reply.send(result)
   })
 }
