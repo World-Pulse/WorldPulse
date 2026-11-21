@@ -14,7 +14,7 @@ vi.mock('../crosscheck', () => ({ crossCheckLater: vi.fn() }))
 import { readArticles, ownCopy, filesToRead, newestStamp, unzipFirst, stampOf, type GdeltArticle } from '../gdelt-articles'
 import {
   storyTokens, candidatePairs, siteOf, ownerOf, nearCopy, otherOutlets, searchable, runSecondOutlets, newState,
-  everydayQuery, MAX_ADDED, FEATURE_RE, EVERYDAY_HOLD_MS, EVERYDAY_READ, type HeldReport, type SecondOutletDeps, type CycleStats,
+  everydayQuery, MAX_ADDED, FEATURE_RE, EVERYDAY, EVERYDAY_HOLD_MS, EVERYDAY_READ, type HeldReport, type SecondOutletDeps, type CycleStats,
 } from '../second-outlet'
 
 const AT = new Date('2026-10-22T10:00:00Z')
@@ -288,6 +288,7 @@ describe('everyday reports on trial', () => {
       everydayNew: async since => { calls.since.push(since); return fresh },
       stillWaiting: async ids => { calls.asked.push(ids); return new Set(ids) },
       note: async entry => { calls.noted.push(entry) },
+      everyday: 'trial',
       ...over,
     }
     return { d, calls }
@@ -334,6 +335,40 @@ describe('everyday reports on trial', () => {
     old.everyday.held.set('low-2', { report: everyday({ id: 'low-2', title: 'Lantern festival draws crowds in Raipur' }), readAt: LATER.getTime() - EVERYDAY_HOLD_MS - 60_000 })
     await runSecondOutlets(old, deps({ '20261022120000': [other] }, []).d)
     expect(old.everyday.held.size).toBe(0)
+  })
+
+  it('switched on, adds the outlets found to an everyday report, without a cross-check, and still writes it down', async () => {
+    const crossChecks: boolean[] = []
+    const remembered: Array<Record<string, unknown>> = []
+    const { d, calls } = deps({ '20261022120000': [ndtv] }, [everyday()], {
+      everyday: 'on',
+      add: async (r, _found, crossCheck) => { calls.added.push(r.id); crossChecks.push(crossCheck); return true },
+      remember: async entry => { remembered.push(entry) },
+    })
+    const stats = await runSecondOutlets(newState(), d)
+    expect(calls.added).toEqual(['low-1'])
+    expect(crossChecks).toEqual([false])
+    expect(stats).toMatchObject({ matched: 0, trial_matched: 1, everyday_added: 1, everyday_promoted: 1 })
+    expect(remembered[0]).toMatchObject({ id: 'low-1', promoted: true, everyday: true, found: [{ site: 'ndtv.com' }] })
+    expect(calls.noted[0]).toMatchObject({ id: 'low-1', added: true, promoted: true })
+  })
+
+  it('switched on, adds nothing to a report one of our outlets got to first, and counts a failed add as an error', async () => {
+    const taken = deps({ '20261022120000': [ndtv] }, [everyday()], { everyday: 'on', stillWaiting: async () => new Set() })
+    expect((await runSecondOutlets(newState(), taken.d)).everyday_added).toBe(0)
+    expect(taken.calls.added).toEqual([])
+    const failing = deps({ '20261022120000': [ndtv] }, [everyday()], { everyday: 'on', add: async () => { throw new Error('db down') } })
+    const stats = await runSecondOutlets(newState(), failing.d)
+    expect(stats).toMatchObject({ everyday_added: 0, errors: 1 })
+    expect(failing.calls.noted).toEqual([])
+  })
+
+  it('is switched on, and off leaves the everyday reports alone', async () => {
+    expect(EVERYDAY).toBe('on')
+    const off = deps({ '20261022120000': [ndtv] }, [everyday()], { everyday: 'off' })
+    const stats = await runSecondOutlets(newState(), off.d)
+    expect(off.calls.since).toEqual([])
+    expect(stats).toMatchObject({ trial_read: 0, trial_matched: 0, everyday_added: 0 })
   })
 
   it('reads the new everyday reports of the places not searched already, oldest first', () => {

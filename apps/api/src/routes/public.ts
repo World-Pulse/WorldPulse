@@ -354,8 +354,9 @@ export const registerPublicRoutes: FastifyPluginAsync = async (app) => {
   // Oct 22, 2026): the scraper searches GDELT's news index for them
   // (apps/scraper/src/pipeline/second-outlet.ts). Today's and yesterday's
   // counts (UTC days) and the latest reports it found outlets for, so anyone
-  // can read the matches. With ?trial=1 (Nov 21, 2026), also what the trial
-  // on everyday reports would have added, newest first (nothing was added).
+  // can read the matches. With ?trial=1 (Nov 21, 2026), also the outlets found
+  // for everyday reports, newest first: on trial written down only, since the
+  // switch-on the same day added too ("added": true).
   app.get('/second-outlets', {
     schema: { tags: ['public'], summary: 'Other outlets found for one-outlet reports (public, no auth required)' },
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } },

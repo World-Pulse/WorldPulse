@@ -53,6 +53,12 @@
  * on): the other places' everyday (low) reports, about 5 in 6 of those waiting, are read as they come in and compared
  * with GDELT's articles the same way for EVERYDAY_HOLD_MS; what would join them is only written down
  * (second-outlet:trial, GET /api/v1/public/second-outlets?trial=1). No outlet is added, no report turns verified.
+ * Switched on the same day (EVERYDAY = 'on') after the hand check: of the 101 reports written down by 12:29 PM ET,
+ * all read by hand, 100 had the same story from another outlet (the other was doubtful: an airport's security
+ * workshop, and its mock drill a week later). The outlets found now join those reports, without a cross-check (as
+ * for the quiet places' everyday ones), and each is still written down there, for reading by hand. After a restart
+ * the last EVERYDAY_WARM_MS are read again: on trial that wrote some down twice (19 of 120); switched on, a report
+ * given its outlet has two and is not read again.
  *
  * Daily counts: second-outlet:day:<date> (GET /api/v1/public/second-outlets);
  * the latest matches, for reading by hand: second-outlet:recent. Off with
@@ -104,8 +110,12 @@ export const MAX_ADDED = 3
 const MAX_CANDIDATES = 40
 const CROSSCHECKS_A_DAY = Number(process.env.SECOND_OUTLET_CROSSCHECKS) || 100
 
-/** The other places' everyday reports (Nov 21, 2026): on trial, written down only; 'off' leaves them out */
-export const EVERYDAY: 'trial' | 'off' = 'trial'
+/**
+ * The other places' everyday reports (Nov 21, 2026): 'on' adds the outlets found to them (and writes them down);
+ * 'trial' only writes them down, as on the morning of the trial; 'off' leaves them out
+ */
+export type EverydayMode = 'on' | 'trial' | 'off'
+export const EVERYDAY: EverydayMode = 'on'
 /** How long an everyday report on trial is compared with the articles that come in: most outlets carry a story within hours */
 export const EVERYDAY_HOLD_MS = 6 * HOUR
 /** At most this many held at once (about 6 hours of them), the oldest let go first */
@@ -667,11 +677,14 @@ export interface CycleStats {
   errors: number
   /** Of the reports matched, the quiet places' everyday (low) ones (Nov 10, 2026) */
   everyday: number
-  /** The other places' everyday reports on trial (Nov 21, 2026): read this cycle, articles compared, matched, outlets they would get */
+  /** The other places' everyday reports (Nov 21, 2026): read this cycle, articles compared, matched, outlets found */
   trial_read: number
   trial_pairs: number
   trial_matched: number
   trial_outlets: number
+  /** ...of those matched, the ones the outlets joined (switched on), and the ones that turned verified */
+  everyday_added: number
+  everyday_promoted: number
 }
 
 export interface SecondOutletDeps {
@@ -692,12 +705,14 @@ export interface SecondOutletDeps {
   /** The last cycle's files and counts, kept for reading */
   trace(entry: Record<string, unknown>): Promise<void>
   clock(): number
-  /** On trial (Nov 21, 2026): the other places' everyday reports created after `since` (or lately), oldest first */
+  /** The other places' everyday reports (Nov 21, 2026) created after `since` (or lately), oldest first */
   everydayNew?(since: string | null, now: Date): Promise<Array<HeldReport & { created_at: string }>>
   /** Of these reports, those still waiting (pending, one outlet) */
   stillWaiting?(ids: string[]): Promise<Set<string>>
-  /** Write down what the trial found */
+  /** Write down what was found for them */
   note?(entry: Record<string, unknown>): Promise<void>
+  /** Their mode, when not EVERYDAY (the tests') */
+  everyday?: EverydayMode
 }
 
 /** What the last cycle read, for GET /api/v1/public/second-outlets (second-outlet:last-cycle) */
@@ -705,7 +720,7 @@ let lastTrace: Record<string, unknown> | null = null
 
 const emptyStats = (): CycleStats => ({
   files: 0, articles: 0, reports: 0, pairs: 0, matched: 0, outlets: 0, promoted: 0, crosschecked: 0, errors: 0, everyday: 0,
-  trial_read: 0, trial_pairs: 0, trial_matched: 0, trial_outlets: 0,
+  trial_read: 0, trial_pairs: 0, trial_matched: 0, trial_outlets: 0, everyday_added: 0, everyday_promoted: 0,
 })
 
 type FileTrace = { newest: string | null; read: Array<[string, number]>; missing: string[]; failed: Array<[string, string]> }
@@ -802,9 +817,10 @@ export async function runSecondOutlets(state: FinderState, deps: SecondOutletDep
       }
     }
 
-    // 4. On trial (Nov 21, 2026): the other places' everyday reports, written down only
-    if (EVERYDAY === 'trial' && deps.everydayNew) {
-      await everydayTrial(state, deps, now, stats).catch(err => { stats.errors++; logger.warn({ err }, 'Second outlet: everyday trial failed (non-fatal)') })
+    // 4. The other places' everyday reports (Nov 21, 2026): the outlets found join them ('on'), or are written down only
+    const mode = deps.everyday ?? EVERYDAY
+    if (mode !== 'off' && deps.everydayNew) {
+      await everydayReports(state, deps, now, stats, mode === 'on').catch(err => { stats.errors++; logger.warn({ err }, 'Second outlet: everyday reports failed (non-fatal)') })
     }
   } finally {
     await deps.count(day, stats).catch(err => logger.warn({ err }, 'Second outlet: counts not saved'))
@@ -856,11 +872,11 @@ async function compareReports(reports: HeldReport[], stream: Stream, found: Map<
 }
 
 /**
- * The trial (Nov 21, 2026): the everyday reports new since the last cycle join those held; each held one is compared
- * with the articles it hasn't been compared with, like the reports above; one that would get an outlet and is still
- * waiting is written down once and let go. Nothing is added to any report.
+ * The everyday reports (Nov 21, 2026): those new since the last cycle join those held; each held one is compared with
+ * the articles it hasn't been compared with, like the reports above; one that gets an outlet and is still waiting has
+ * the outlets added (`add`; on trial, not), without a cross-check, and is written down once and let go.
  */
-async function everydayTrial(state: FinderState, deps: SecondOutletDeps, now: Date, stats: CycleStats): Promise<void> {
+async function everydayReports(state: FinderState, deps: SecondOutletDeps, now: Date, stats: CycleStats, add: boolean): Promise<void> {
   const ev = state.everyday
   const fresh = await deps.everydayNew!(ev.since, now)
   stats.trial_read += fresh.length
@@ -890,14 +906,30 @@ async function everydayTrial(state: FinderState, deps: SecondOutletDeps, now: Da
     ev.noted.add(id)
     stats.trial_matched++
     stats.trial_outlets += outlets.length
+    const at = new Date(deps.clock()).toISOString()
+    const seen = outlets.map(f => ({ site: f.site, title: f.title.slice(0, 160), url: f.url }))
+    let promoted: boolean | undefined
+    if (add) {
+      try {
+        promoted = await deps.add(report, outlets, false)
+        stats.everyday_added++
+        if (promoted) stats.everyday_promoted++
+        await deps.remember({ at, id: report.id, severity: report.severity, language: report.language || 'en', title: report.title.slice(0, 140), promoted, everyday: true, found: seen })
+      } catch (err) {
+        stats.errors++
+        logger.warn({ err, id: report.id }, 'Second outlet: everyday outlets not added')
+        continue
+      }
+    }
     await deps.note?.({
-      at: new Date(deps.clock()).toISOString(),
+      at,
       id: report.id,
       severity: report.severity,
       language: report.language || 'en',
       category: report.category,
       title: report.title.slice(0, 160),
-      found: outlets.map(f => ({ site: f.site, title: f.title.slice(0, 160), url: f.url })),
+      ...(add ? { added: true, promoted } : {}),
+      found: seen,
     })
   }
   // those written down are remembered only as long as a report can be held
