@@ -1,13 +1,13 @@
 'use client'
 /**
- * The map's travel advisories layer (Nov 22, 2026): every country shaded by the US State Department's level
- * (lib/travel-levels.ts). Like the country economics layer, the shading is scenery: a click goes through to the
+ * The map's travel advisories layer (Nov 22, 2026): every country shaded by the US State Department's level, or by
+ * Canada's advice as a second opinion (lib/travel-levels.ts). Like the country economics layer, the shading is scenery: a click goes through to the
  * country, whose page has its advice.
  */
 
 import { useEffect, useState, type MutableRefObject } from 'react'
 import { whenStyleUsable } from '@/lib/map-utils'
-import { travelShading, travelCounts } from '@/lib/travel-levels'
+import { travelShading, travelCounts, type TravelFrom } from '@/lib/travel-levels'
 import { shade, unshade } from './useTradeLayers'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
@@ -17,7 +17,7 @@ type MapRef = MutableRefObject<any>
 
 const IDS = { src: 'travel-geo', fill: 'travel-fill', line: 'travel-border' }
 
-export function useTravelAdvisoryLayer(mapRef: MapRef, mapReady: boolean, on: boolean) {
+export function useTravelAdvisoryLayer(mapRef: MapRef, mapReady: boolean, on: boolean, from: TravelFrom = 'us') {
   const [loading, setLoading] = useState(false)
   const [count, setCount] = useState(0)
   const [byLevel, setByLevel] = useState<[number, number, number, number]>([0, 0, 0, 0])
@@ -29,7 +29,7 @@ export function useTravelAdvisoryLayer(mapRef: MapRef, mapReady: boolean, on: bo
       if (!on) { unshade(map, IDS); setCount(0); return }
       setLoading(true)
       try {
-        const res = await fetch(`${API_URL}/api/v1/public/travel-advice`)
+        const res = await fetch(`${API_URL}/api/v1/public/travel-advice${from === 'us' ? '' : `?from=${from}`}`)
         const json = res.ok ? await res.json() as { success?: boolean; data?: { levels?: unknown } } : null
         if (cancelled) return
         const rows = travelShading(json?.success ? json.data?.levels : [])
@@ -48,6 +48,6 @@ export function useTravelAdvisoryLayer(mapRef: MapRef, mapReady: boolean, on: bo
     const timer = on ? setInterval(() => { void apply() }, 60 * 60_000) : null
     return () => { cancelled = true; if (timer) clearInterval(timer) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [on, mapReady])
+  }, [on, mapReady, from])
   return { loading, count, byLevel }
 }

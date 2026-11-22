@@ -34,7 +34,7 @@ import { CommodityBriefSection } from '@/components/commodities/CommodityBriefSe
 import { EconomyBriefSection } from '@/components/commodities/EconomyBriefSection'
 import { useEconomyLayer, usePriceMovesLayer } from '@/components/map/useTradeLayers'
 import { useTravelAdvisoryLayer } from '@/components/map/useTravelAdvisoryLayer'
-import { TRAVEL_LEVELS, TRAVEL_SOURCE_URL } from '@/lib/travel-levels'
+import { TRAVEL_LEVELS, TRAVEL_FROM, type TravelFrom } from '@/lib/travel-levels'
 import { ScaleLegend } from '@/components/map/ScaleLegend'
 import { ECON_LAYER_KEYS, ECON_SCALES, MOVE_SCALE, scaleLabels } from '@/lib/trade-layers'
 import { scoreColor, LEVEL_COLOR, EU_MEMBERS, euFlagMembers, type MapRow } from '@/lib/commodities'
@@ -403,6 +403,8 @@ function MapView({ embed = false }: { embed?: boolean }) {
   const [priceMovesMode,   setPriceMovesMode]   = useState(false)
   // ── Travel advisories: the US State Department's level for each country (Nov 22, 2026) ──
   const [travelMode,       setTravelMode]       = useState(false)
+  // whose advice: the US State Department's, or Canada's as a second opinion
+  const [travelFrom,       setTravelFrom]       = useState<TravelFrom>('us')
 
   // ── Conflict Zone Overlay layer state (BAT-17) ─────────────────────────────
   const [conflictMode,    setConflictMode]    = useState(playParam)
@@ -3655,7 +3657,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
   // Country economics (World Bank) and price moves (World Bank prices over each country's exports)
   const economyLayer = useEconomyLayer(mapRef, mapReady, economyMode, economyIndicator)
   const priceMovesLayer = usePriceMovesLayer(mapRef, mapReady, priceMovesMode)
-  const travelLayer = useTravelAdvisoryLayer(mapRef, mapReady, travelMode)
+  const travelLayer = useTravelAdvisoryLayer(mapRef, mapReady, travelMode, travelFrom)
 
   // ── Play mode (G9): the title card, the start, the camera's tour and the closing card ──
   // The title card's numbers and the closing card's stories (the same public answers the home page reads)
@@ -3946,12 +3948,21 @@ function MapView({ embed = false }: { embed?: boolean }) {
           on: navalMode, loading: navalLoading, count: navalCount, toggle: () => setNavalMode(v => !v) },
         overlayItem('protests', Megaphone),
         overlayItem('bases', Shield),
-        { key: 'travel', label: 'Travel advisories', description: 'Countries shaded by the US State Department’s travel advisory level, updated hourly', icon: Luggage, color: '#fda4af',
+        { key: 'travel', label: 'Travel advisories', description: 'Countries shaded by the US State Department’s travel advisory level, or Canada’s advice as a second opinion', icon: Luggage, color: '#fda4af',
           on: travelMode, loading: travelLayer.loading, count: travelLayer.count, toggle: () => setTravelMode(v => !v),
           extra: (
             <div className="space-y-1.5">
-              <ScaleLegend title="US State Department level" colors={TRAVEL_LEVELS.map(l => l.color)} labels={TRAVEL_LEVELS.map((l, i) => `${l.level} ${l.label}${travelLayer.count ? ` (${travelLayer.byLevel[i]})` : ''}`)} />
-              <a href={TRAVEL_SOURCE_URL} target="_blank" rel="noopener noreferrer" className="text-[11px] text-[#fda4af] underline underline-offset-2 hover:text-wp-text">Each country’s advisory on travel.state.gov →</a>
+              <div role="group" aria-label="Whose travel advice" className="inline-flex rounded-md border border-wp-border overflow-hidden text-[11px]">
+                {(Object.keys(TRAVEL_FROM) as TravelFrom[]).map(f => (
+                  <button key={f} type="button" aria-pressed={travelFrom === f} onClick={() => setTravelFrom(f)}
+                    className={`px-2 py-0.5 ${travelFrom === f ? 'bg-[#fda4af]/20 text-wp-text' : 'text-wp-text3 hover:text-wp-text'}`}>{TRAVEL_FROM[f].name}</button>
+                ))}
+              </div>
+              <ScaleLegend title={TRAVEL_FROM[travelFrom].legend} colors={TRAVEL_LEVELS.map(l => l.color)} labels={TRAVEL_FROM[travelFrom].labels.map((label, i) => `${i + 1} ${label}${travelLayer.count ? ` (${travelLayer.byLevel[i]})` : ''}`)} />
+              <a href={TRAVEL_FROM[travelFrom].url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-[#fda4af] underline underline-offset-2 hover:text-wp-text">{TRAVEL_FROM[travelFrom].link}</a>
+              {TRAVEL_FROM[travelFrom].licence && (
+                <a href={TRAVEL_FROM[travelFrom].licence!.url} target="_blank" rel="noopener noreferrer" className="block text-[10px] text-wp-text3 hover:text-wp-text">{TRAVEL_FROM[travelFrom].licence!.line}</a>
+              )}
             </div>
           ) },
       ],

@@ -15,7 +15,7 @@ vi.mock('../lib/swr-cache', () => ({
 }))
 
 import Fastify from 'fastify'
-import { asamFeatures, seaWarningFeatures, positionsIn, middleOf, warningKind, issuedAt, registerSeaFeedRoutes, ASAM_URL, SEA_WARNINGS_URL } from '../routes/map/sea-feeds'
+import { asamFeatures, seaWarningFeatures, positionsIn, middleOf, warningKind, issuedAt, whyFailed, registerSeaFeedRoutes, ASAM_URL, SEA_WARNINGS_URL } from '../routes/map/sea-feeds'
 
 const NOW = Date.parse('2026-11-22T12:00:00Z')
 const asam = (over: Record<string, unknown>) => ({
@@ -118,10 +118,20 @@ describe('the routes', () => {
     const a = await app()
     const down = await a.inject({ method: 'GET', url: '/api/v1/map/sea-warnings' })
     expect(down.statusCode).toBe(503)
-    expect(down.json().error).toBe('NGA did not answer; try again in a few minutes')
+    // what went wrong is in the message (Nov 22: the first live reads failed in 2 s, and only the log said why)
+    expect(down.json().error).toBe('NGA did not answer (HTTP 503); try again in a few minutes')
     still = true
     const reading = await a.inject({ method: 'GET', url: '/api/v1/map/ship-attacks' })
     expect(reading.statusCode).toBe(503)
     expect(reading.headers['retry-after']).toBe('60')
+  })
+})
+
+describe('whyFailed', () => {
+  it("says a read's HTTP status, a timeout, or the network's own words", () => {
+    expect(whyFailed(new Error('HTTP 403'))).toBe('HTTP 403')
+    expect(whyFailed(Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' }))).toBe('no answer in 45 seconds')
+    expect(whyFailed(Object.assign(new TypeError('fetch failed'), { cause: { code: 'ENOTFOUND' } }))).toBe('fetch failed: ENOTFOUND')
+    expect(whyFailed('x'.repeat(200))).toHaveLength(80)
   })
 })

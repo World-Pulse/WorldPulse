@@ -17,6 +17,25 @@ export const TRAVEL_LEVELS = [
 
 export const TRAVEL_SOURCE_URL = 'https://travel.state.gov/content/travel/en/traveladvisories/traveladvisories.html'
 
+/**
+ * Whose advice shades the map (Nov 22, 2026; Devon: "ok to proceed"): the US State Department's, or Canada's as a
+ * second opinion (Global Affairs Canada's open data, levels 1 to 4 from its four states). Canada's licence asks for
+ * its line wherever its data is shown, so the legend gives it with Canada's advice.
+ */
+export type TravelFrom = 'us' | 'ca'
+export const TRAVEL_FROM: Record<TravelFrom, { name: string; legend: string; labels: readonly string[]; url: string; link: string; licence?: { line: string; url: string } }> = {
+  us: {
+    name: 'US', legend: 'US State Department level', labels: TRAVEL_LEVELS.map(l => l.label),
+    url: TRAVEL_SOURCE_URL, link: 'Each country’s advisory on travel.state.gov →',
+  },
+  ca: {
+    name: 'Canada', legend: 'Government of Canada advice',
+    labels: ['Normal precautions', 'High degree of caution', 'Avoid non-essential travel', 'Avoid all travel'],
+    url: 'https://travel.gc.ca/travelling/advisories', link: 'Each country’s advice on travel.gc.ca →',
+    licence: { line: 'Contains information licensed under the Open Government Licence – Canada', url: 'https://open.canada.ca/en/open-government-licence-canada' },
+  },
+}
+
 /** The countries to shade: a real level and a two-letter code each, one row per country */
 export function travelShading(rows: unknown): Array<{ iso: string; color: string; level: number }> {
   if (!Array.isArray(rows)) return []

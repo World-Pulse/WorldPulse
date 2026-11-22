@@ -188,6 +188,40 @@ describe('GET /api/v1/public/travel-advice', () => {
     expect(data.notices.map((n: { from: string }) => n.from)).toEqual(['us', 'uk'])
     expect(calls[0]!.bindings).toEqual(['IR'])
   })
+
+  // Nov 22, 2026: Canada's advice as a second opinion, from Global Affairs Canada's open file (its members as it has them)
+  const CANADA = {
+    metadata: { generated: { timestamp: 1795196415, date: '2026-11-20 12:40:15' } },
+    data: {
+      AF: { 'country-id': 1000, 'country-iso': 'AF', 'country-eng': 'Afghanistan', 'advisory-state': 3, 'date-published': { timestamp: 1791975710, date: '2026-10-14 07:01:50' }, 'has-advisory-warning': 1, 'has-regional-advisory': 0 },
+      FR: { 'country-id': 92000, 'country-iso': 'FR', 'country-eng': 'France', 'advisory-state': 1, 'date-published': { date: '2026-11-20 07:53:20' }, 'has-advisory-warning': 0, 'has-regional-advisory': 0 },
+      CO: { 'country-iso': 'CO', 'advisory-state': 1, 'date-published': { date: '2026-11-01 09:00:00' }, 'has-regional-advisory': 1 },
+      'PT-20': { 'country-iso': 'PT-20', 'country-eng': 'Azores', 'advisory-state': 0 },
+      XX: { 'country-iso': 'XX', 'advisory-state': 7 },
+    },
+  }
+
+  it("with from=ca, gives Canada's advice as levels 1 to 4 by two-letter code, its regional advisories, and its licence line", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(CANADA), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const res = await get('/api/v1/public/travel-advice?from=ca')
+      expect(res.statusCode).toBe(200)
+      const { data } = res.json()
+      expect(data.levels).toEqual([
+        { country: 'AF', level: 4, since: '2026-10-14', regional: false }, { country: 'FR', level: 2, since: '2026-11-20', regional: false },
+        { country: 'CO', level: 2, since: '2026-11-01', regional: true },
+      ])
+      expect(data.source).toEqual({ name: 'Global Affairs Canada (travel.gc.ca)', licence: 'Contains information licensed under the Open Government Licence – Canada' })
+      expect((fetchMock.mock.calls[0] as unknown[])[0]).toBe('https://data.international.gc.ca/travel-voyage/index-alpha-eng.json')
+      expect((await get('/api/v1/public/travel-advice?from=ca&country=af')).json().data.ca).toEqual({ country: 'AF', level: 4, since: '2026-10-14', regional: false })
+      expect((await get('/api/v1/public/travel-advice?from=xx')).statusCode).toBe(400)
+      vi.stubGlobal('fetch', vi.fn(async () => new Response('busy', { status: 503 })))
+      expect((await get('/api/v1/public/travel-advice?from=ca')).statusCode).toBe(503)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
 })
 
 describe('GET /api/v1/public/first-reporters', () => {

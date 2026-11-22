@@ -170,6 +170,45 @@ async function usLevels(): Promise<TravelLevel[]> {
   return [...byCountry.values()]
 }
 
+/**
+ * Canada's advice for every country, a second opinion on the US levels (Nov 22, 2026; Devon, 10:53 AM: "ok to
+ * proceed", with its licence line shown). Global Affairs Canada publishes it as one file of open data
+ * (data.international.gc.ca, the source of travel.gc.ca's advisories; Open Government Licence – Canada, which asks for
+ * its line wherever the data is shown). Its four states, 0 to 3 (take normal security precautions, exercise a high
+ * degree of caution, avoid non-essential travel, avoid all travel), are given as levels 1 to 4 like the US ones; a
+ * country with a regional advisory (parts of it rated higher than the whole) says so.
+ */
+export const CANADA_ADVICE_URL = 'https://data.international.gc.ca/travel-voyage/index-alpha-eng.json'
+export const CANADA_LICENCE_LINE = 'Contains information licensed under the Open Government Licence – Canada'
+const FEED_UA = 'WorldPulse/1.0 (+https://world-pulse.io; map layer, cached)'
+
+export interface CanadaLevel extends TravelLevel { regional: boolean }
+
+/** Canada's file made into levels by two-letter country: its parts with codes of their own (the Azores, "PT-20") left out */
+export function canadaLevels(answer: unknown): CanadaLevel[] {
+  const data = (answer as { data?: unknown } | null)?.data
+  if (!data || typeof data !== 'object') return []
+  const out: CanadaLevel[] = []
+  for (const [key, v] of Object.entries(data as Record<string, unknown>)) {
+    if (!v || typeof v !== 'object') continue
+    const r = v as Record<string, unknown>
+    const given = String(r['country-iso'] ?? key).toUpperCase()
+    if (!/^[A-Z]{2}$/.test(given)) continue
+    const state = Number(r['advisory-state'])
+    if (!Number.isInteger(state) || state < 0 || state > 3) continue
+    const published = (r['date-published'] as Record<string, unknown> | null | undefined)?.date
+    const since = typeof published === 'string' && /^\d{4}-\d{2}-\d{2}/.test(published) ? published.slice(0, 10) : null
+    out.push({ country: given === 'UK' ? 'GB' : given, level: state + 1, since, regional: Number(r['has-regional-advisory']) === 1 })
+  }
+  return out
+}
+
+async function fetchCanadaAdvice(): Promise<unknown> {
+  const res = await fetch(CANADA_ADVICE_URL, { headers: { 'user-agent': FEED_UA, accept: 'application/json' }, signal: AbortSignal.timeout(30_000) })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
 async function travelNotices(country: string): Promise<TravelNotice[]> {
   const result = await longQuery(20, trx => trx.raw(
     `SELECT id::text AS id, title, created_at, original_urls[1] AS url, tags
@@ -688,11 +727,26 @@ export const registerPublicInsightRoutes: FastifyPluginAsync = async (app) => {
   })
 
   app.get('/travel-advice', {
-    schema: { tags: ['public'], summary: 'The US State Department\'s travel levels, and a country\'s US and UK travel notices (public, no auth required)' }, ...OPEN,
+    schema: { tags: ['public'], summary: 'The US State Department\'s travel levels, and a country\'s US and UK travel notices; with from=ca, Canada\'s levels (public, no auth required)' }, ...OPEN,
   }, async (req, reply) => {
     reply.header('Access-Control-Allow-Origin', '*')
-    const given = String((req.query as Record<string, unknown>)?.country ?? '').toUpperCase()
+    const q = (req.query ?? {}) as Record<string, unknown>
+    const given = String(q.country ?? '').toUpperCase()
     const country = /^[A-Z]{2}$/.test(given) ? (given === 'UK' ? 'GB' : given) : null
+    const from = String(q.from ?? 'us').toLowerCase()
+    if (from !== 'us' && from !== 'ca') return sendError(reply, 400, 'VALIDATION_ERROR', 'from must be us or ca')
+    if (from === 'ca') {
+      try {
+        const levels = await staleWhileRevalidate('public:travel-levels:ca:v1', { freshSeconds: 6 * 3_600, staleSeconds: 3 * 86_400, lockSeconds: 60, waitSeconds: 20 },
+          async () => canadaLevels(await fetchCanadaAdvice()))
+        const source = { name: 'Global Affairs Canada (travel.gc.ca)', licence: CANADA_LICENCE_LINE }
+        if (!country) return reply.send({ success: true, data: { from, country: null, source, levels } })
+        return reply.send({ success: true, data: { from, country, source, ca: levels.find(l => l.country === country) ?? null } })
+      } catch (err) {
+        if (err instanceof StillMaking) return sendStillMaking(reply, 'Canada\'s travel advice is being read')
+        return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'Canada\'s travel advice could not be read just now; try again in a few minutes')
+      }
+    }
     try {
       // v2: the levels by two-letter country (v1 kept the empty list the three-letter keys gave)
       const levels = await staleWhileRevalidate('public:travel-levels:v2', SWR(1_800), () => usLevels())

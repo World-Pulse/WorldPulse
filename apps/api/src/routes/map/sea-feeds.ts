@@ -176,6 +176,19 @@ async function fetchNga(url: string): Promise<unknown> {
   return JSON.parse(text)
 }
 
+/**
+ * Why a read of NGA failed, for the 503's message (Nov 22, 2026: the first reads from the server failed in 2 seconds,
+ * and only the server's log said why): its HTTP status, a timeout, or the network's own words, cut short
+ */
+export function whyFailed(err: unknown): string {
+  const e = err as { name?: unknown; message?: unknown; cause?: { code?: unknown; message?: unknown } } | null
+  if (e?.name === 'TimeoutError' || e?.name === 'AbortError') return 'no answer in 45 seconds'
+  const message = typeof e?.message === 'string' ? e.message : String(err)
+  if (/^HTTP \d{3}$/.test(message)) return message
+  const cause = e?.cause && (typeof e.cause.code === 'string' ? e.cause.code : typeof e.cause.message === 'string' ? e.cause.message : null)
+  return (cause ? `${message}: ${cause}` : message).replace(/[^\w .:()-]/g, ' ').slice(0, 80)
+}
+
 export const registerSeaFeedRoutes: FastifyPluginAsync = async (app) => {
   app.get('/ship-attacks', {
     config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
@@ -193,7 +206,7 @@ export const registerSeaFeedRoutes: FastifyPluginAsync = async (app) => {
     } catch (err) {
       if (err instanceof StillMaking) return sendStillMaking(reply, "NGA's ship attack reports are being read")
       app.log.warn({ err: String(err), layer: 'ship-attacks' }, 'map sea feed: NGA failed and nothing was kept')
-      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'NGA did not answer; try again in a few minutes')
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', `NGA did not answer (${whyFailed(err)}); try again in a few minutes`)
     }
   })
 
@@ -213,7 +226,7 @@ export const registerSeaFeedRoutes: FastifyPluginAsync = async (app) => {
     } catch (err) {
       if (err instanceof StillMaking) return sendStillMaking(reply, "NGA's navigational warnings are being read")
       app.log.warn({ err: String(err), layer: 'sea-warnings' }, 'map sea feed: NGA failed and nothing was kept')
-      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'NGA did not answer; try again in a few minutes')
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', `NGA did not answer (${whyFailed(err)}); try again in a few minutes`)
     }
   })
 }
