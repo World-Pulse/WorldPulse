@@ -30,6 +30,12 @@ import messagesZh from '../../messages/zh.json'
 import messagesJa from '../../messages/ja.json'
 import messagesHi from '../../messages/hi.json'
 import messagesRu from '../../messages/ru.json'
+import messagesKo from '../../messages/ko.json'
+import messagesVi from '../../messages/vi.json'
+import messagesId from '../../messages/id.json'
+import messagesUk from '../../messages/uk.json'
+import messagesTr from '../../messages/tr.json'
+import messagesIt from '../../messages/it.json'
 
 type Messages = typeof messagesEn
 
@@ -50,6 +56,12 @@ const ALL_MESSAGES: Record<SupportedLocale, Messages> = {
   ja: messagesJa as unknown as Messages,
   hi: messagesHi as unknown as Messages,
   ru: messagesRu as unknown as Messages,
+  ko: messagesKo as unknown as Messages,
+  vi: messagesVi as unknown as Messages,
+  id: messagesId as unknown as Messages,
+  uk: messagesUk as unknown as Messages,
+  tr: messagesTr as unknown as Messages,
+  it: messagesIt as unknown as Messages,
 }
 
 /** The reader's language, set by the root layout (components/locale/LocaleProvider.tsx) */

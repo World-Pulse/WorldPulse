@@ -48,9 +48,15 @@ describe('useTranslations()', () => {
     expect(inLocale('fr', () => useTranslations('nav')('language'))).toBe('Langue')
   })
 
-  it('English for a phrase a language lacks, the name only when English lacks it too', () => {
-    // German has no "language" phrase (the menu doesn't offer German)
-    expect(inLocale('de', () => useTranslations('nav')('language'))).toBe('Language')
+  it('the languages added on Nov 21, 2026', () => {
+    // German had no "language" phrase until then (the menu didn't offer it)
+    expect(inLocale('de', () => useTranslations('nav')('language'))).toBe('Sprache')
+    expect(inLocale('ko', () => useTranslations('nav')('liveFeed'))).toBe('실시간 피드')
+    expect(inLocale('it', () => useTranslations('nav')('worldMap'))).toBe('Mappa del mondo')
+    expect(inLocale('uk', () => useTranslations('nav')('language'))).toBe('Мова')
+  })
+
+  it('the name only when English lacks the phrase too', () => {
     expect(inLocale('fr', () => useTranslations('nav')('definitelyMissingKey'))).toBe('definitelyMissingKey')
   })
 
@@ -68,8 +74,8 @@ describe('useIsRTL()', () => {
 })
 
 describe('the languages', () => {
-  it('all 10 in messages/', () => {
-    expect([...SUPPORTED_LOCALES].sort()).toEqual(['ar', 'de', 'en', 'es', 'fr', 'hi', 'ja', 'pt', 'ru', 'zh'])
+  it('all 16 in messages/ (6 added Nov 21, 2026)', () => {
+    expect([...SUPPORTED_LOCALES].sort()).toEqual(['ar', 'de', 'en', 'es', 'fr', 'hi', 'id', 'it', 'ja', 'ko', 'pt', 'ru', 'tr', 'uk', 'vi', 'zh'])
     expect(RTL_LOCALES).toEqual(['ar'])
   })
 })

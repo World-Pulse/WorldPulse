@@ -19,6 +19,18 @@ export const LANGUAGES: ReadonlyArray<{ code: MenuLocale; label: string; flag: s
   { code: 'fr', label: 'Français',   flag: '🇫🇷' },
   { code: 'pt', label: 'Português',  flag: '🇧🇷' },
   { code: 'zh', label: '中文',        flag: '🇨🇳' },
+  // Nov 21, 2026: the five half-done languages finished, and six of the languages the reports come in most
+  { code: 'ar', label: 'العربية',     flag: '🇸🇦' },
+  { code: 'de', label: 'Deutsch',    flag: '🇩🇪' },
+  { code: 'hi', label: 'हिन्दी',       flag: '🇮🇳' },
+  { code: 'ja', label: '日本語',      flag: '🇯🇵' },
+  { code: 'ko', label: '한국어',      flag: '🇰🇷' },
+  { code: 'ru', label: 'Русский',    flag: '🇷🇺' },
+  { code: 'uk', label: 'Українська', flag: '🇺🇦' },
+  { code: 'tr', label: 'Türkçe',     flag: '🇹🇷' },
+  { code: 'vi', label: 'Tiếng Việt', flag: '🇻🇳' },
+  { code: 'id', label: 'Bahasa Indonesia', flag: '🇮🇩' },
+  { code: 'it', label: 'Italiano',   flag: '🇮🇹' },
 ]
 
 type LocaleCode = MenuLocale
@@ -72,7 +84,7 @@ export function LanguageSwitcher({ up = false }: { up?: boolean } = {}) {
 
       {open && (
         <div
-          className={`absolute right-0 ${up ? 'bottom-full mb-2' : 'top-full mt-2'} w-44 bg-wp-surface border border-[rgba(255,255,255,0.1)] rounded-xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] overflow-hidden z-[2000]`}
+          className={`absolute right-0 ${up ? 'bottom-full mb-2' : 'top-full mt-2'} w-52 max-h-[min(60vh,420px)] overflow-y-auto bg-wp-surface border border-[rgba(255,255,255,0.1)] rounded-xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] z-[2000]`}
           role="listbox"
           aria-label="Select language"
         >
@@ -89,7 +101,8 @@ export function LanguageSwitcher({ up = false }: { up?: boolean } = {}) {
                 }`}
             >
               <span className="text-[16px]">{lang.flag}</span>
-              <span>{lang.label}</span>
+              {/* (each name in its own language, for screen readers; 16 since Nov 21, 2026: the list scrolls) */}
+              <span lang={lang.code} dir="auto">{lang.label}</span>
               {lang.code === locale && (
                 <span className="ml-auto text-wp-amber text-[12px]">✓</span>
               )}

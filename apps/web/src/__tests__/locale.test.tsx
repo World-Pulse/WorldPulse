@@ -5,7 +5,7 @@
  * /fr, /de, /ar…, which don't exist.
  */
 import { describe, it, expect, vi } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { renderToStaticMarkup } from 'react-dom/server'
 
@@ -25,8 +25,11 @@ describe('the cookie', () => {
     expect(localeFromCookie(' ES ')).toBe('es')
     expect(localeFromCookie('pt')).toBe('pt')
     expect(localeFromCookie('zh')).toBe('zh')
-    expect(localeFromCookie('de')).toBe('en') // in messages/, but missing phrases: not offered
-    expect(localeFromCookie('ar')).toBe('en')
+    // finished Nov 21, 2026, and six more
+    expect(localeFromCookie('de')).toBe('de')
+    expect(localeFromCookie('ar')).toBe('ar')
+    expect(localeFromCookie('KO')).toBe('ko')
+    expect(localeFromCookie('it')).toBe('it')
     expect(localeFromCookie('xx')).toBe('en')
     expect(localeFromCookie('')).toBe('en')
     expect(localeFromCookie(undefined)).toBe('en')
@@ -46,9 +49,29 @@ describe('the cookie', () => {
 })
 
 describe('the menu', () => {
-  it('offers English, Spanish, French, Portuguese and Chinese', () => {
+  it('offers the 16 languages with every phrase (Nov 21, 2026: 11 more than English, Spanish, French, Portuguese and Chinese)', () => {
     expect(LANGUAGES.map(l => l.code)).toEqual([...MENU_LOCALES])
+    expect(MENU_LOCALES).toHaveLength(16)
     for (const l of MENU_LOCALES) expect(SUPPORTED_LOCALES).toContain(l)
+    // every language in messages/ is offered: none is left half done
+    const files = readdirSync(join(__dirname, '..', '..', 'messages')).filter(f => f.endsWith('.json')).map(f => f.slice(0, -5))
+    expect(files.sort()).toEqual([...MENU_LOCALES].sort())
+  })
+
+  it("leaves no menu phrase in English in a language that isn't (brand names, addresses and placeholders aside)", () => {
+    const en = messages('en')
+    const flat = (o: Record<string, unknown>, at = ''): Array<[string, string]> =>
+      Object.entries(o).flatMap(([k, v]) => (v && typeof v === 'object' ? flat(v as Record<string, unknown>, `${at}${k}.`) : [[`${at}${k}`, String(v)]]))
+    const enOf = new Map(flat(en))
+    // words the same in English and the language, or names
+    const same = new Set(['common.worldpulse', 'composer.characterCount', 'auth.register.handlePlaceholder'])
+    const latinSameOk = new Set(['fr', 'de', 'it', 'id', 'tr', 'vi', 'es', 'pt'])
+    for (const lang of MENU_LOCALES) {
+      if (lang === 'en') continue
+      const left = flat(messages(lang)).filter(([k, v]) => v === enOf.get(k) && !same.has(k) && !/(Placeholder|Url)$/.test(k)
+        && !(latinSameOk.has(lang) && v.split(' ').length <= 2))
+      expect(left, lang).toEqual([])
+    }
   })
 
   it('each language it offers has every English phrase', () => {

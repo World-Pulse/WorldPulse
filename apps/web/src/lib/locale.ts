@@ -7,9 +7,12 @@
  * after it loads. The menu sent readers to /fr, /de, /ar… until Oct 20, and
  * those pages don't exist.
  *
- * The menu offers the languages with every phrase translated: Spanish,
- * French, Portuguese and, since Oct 31, Chinese (a test keeps them complete). The others in
- * messages/ are missing phrases, so a cookie naming one shows English.
+ * The menu offers the languages with every phrase translated (a test keeps
+ * them complete): Spanish, French, Portuguese, Chinese (since Oct 31), and
+ * since Nov 21, 2026 (Devon: "Yes let's add more site languages") Arabic,
+ * German, Hindi, Japanese and Russian, finished, and Korean, Vietnamese,
+ * Indonesian, Ukrainian, Turkish and Italian, among the languages WorldPulse's
+ * reports come in most. A cookie naming any other language shows English.
  *
  * Only the top menu and the left sidebar are translated; the stories are in
  * English. So the page's own language stays English (<html lang="en">) and
@@ -20,14 +23,14 @@
  */
 
 /** All the languages in messages/ */
-export const SUPPORTED_LOCALES = ['en', 'fr', 'es', 'de', 'pt', 'ar', 'zh', 'ja', 'hi', 'ru'] as const
+export const SUPPORTED_LOCALES = ['en', 'fr', 'es', 'de', 'pt', 'ar', 'zh', 'ja', 'hi', 'ru', 'ko', 'vi', 'id', 'uk', 'tr', 'it'] as const
 export type SupportedLocale = typeof SUPPORTED_LOCALES[number]
 
 /** Right-to-left languages */
 export const RTL_LOCALES: SupportedLocale[] = ['ar']
 
 /** The languages the menu offers: every phrase translated */
-export const MENU_LOCALES = ['en', 'es', 'fr', 'pt', 'zh'] as const
+export const MENU_LOCALES = ['en', 'es', 'fr', 'pt', 'zh', 'ar', 'de', 'hi', 'ja', 'ko', 'ru', 'uk', 'tr', 'vi', 'id', 'it'] as const
 export type MenuLocale = typeof MENU_LOCALES[number]
 
 export const LOCALE_COOKIE = 'wp_lang'
