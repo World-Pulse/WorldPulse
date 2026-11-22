@@ -213,6 +213,9 @@ export interface CyclePlace { startedAt: number; nextId: string }
 /** When each feed was last read: a hash of feed id → time (Nov 20, 2026; neverRead) */
 const READ_KEY = 'news-rss:read'
 
+/** When each feed last brought a new report: a hash of feed id → time (Nov 22, 2026; /ops-status.json quiet feeds) */
+const NEW_KEY = 'news-rss:new'
+
 /**
  * The feeds a cycle reads before the others: those never read yet (Nov 20, 2026), by their place in the list. A feed
  * added to the list waited for the reader to reach it at the end of a pass, which took over three hours that morning
@@ -20773,6 +20776,7 @@ async function pollSource(
     else if (result === 'stale') stale++
   }
   noteFeedRead(source.id, fetchMs, Date.now() - tProcess, items.length, created)
+  if (created > 0) await redis.hset(NEW_KEY, source.id, new Date().toISOString()).catch(() => {})
   if (stale > 0) {
     // Logged once per item (they're remembered): a feed that only lists old stories shows up here
     sourceLog.info({ stale, total: items.length }, 'News feed items skipped as old')
