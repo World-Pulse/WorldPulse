@@ -21,6 +21,12 @@ vi.mock('../db/redis', () => ({
   redis: { get: vi.fn(async () => null), set: vi.fn(async () => 'OK'), setex: vi.fn(async () => 'OK'), del: vi.fn(async () => 1) },
 }))
 
+// in its own transaction with 45 seconds (Nov 22, 2026): here, db.raw as above
+vi.mock('../lib/long-query', async () => {
+  const pg = await import('../db/postgres')
+  return { longQuery: async (_s: number, run: (trx: unknown) => Promise<unknown>) => run({ raw: (...a: unknown[]) => (pg.db as unknown as { raw: (...x: unknown[]) => unknown }).raw(...a) }) }
+})
+
 import { registerCountryRoutes } from '../routes/countries'
 
 async function get(url: string) {

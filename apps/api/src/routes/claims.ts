@@ -4,6 +4,8 @@ import { redis } from '../db/redis'
 import { optionalAuth } from '../middleware/auth'
 import { z } from 'zod'
 import { sendError } from '../lib/errors'
+import { longQuery } from '../lib/long-query'
+import { staleWhileRevalidate } from '../lib/swr-cache'
 import { fingerprint, fingerprintStatus, similarity } from '../lib/fingerprint'
 import { searchByMeaning } from '../lib/fingerprint-search'
 
@@ -514,21 +516,24 @@ export const registerClaimsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/stats', {
     preHandler: [optionalAuth],
   }, async (_request, reply) => {
-    const cacheKey = `${CLAIMS_CACHE_PREFIX}stats`
-
+    // Kept and remade in the background with 30 seconds for its counts (Nov 22, 2026: counting every report took
+    // 4.7 s on the busy server, next to the pool's 5 s limit, and the Claims page's numbers failed when it went over)
     try {
-      const cached = await redis.get(cacheKey)
-      if (cached) return reply.send(JSON.parse(cached))
-    } catch { /* miss */ }
+      return reply.send(await staleWhileRevalidate(`${CLAIMS_CACHE_PREFIX}stats:v2`, { freshSeconds: 300, staleSeconds: 6 * 3_600, lockSeconds: 60 }, claimStats))
+    } catch {
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The claim checker\'s numbers could not be counted just now; try again in a minute')
+    }
+  })
 
+  /** The claim checker's numbers: reports read in the last day and in all, sources by trust */
+  async function claimStats() {
     // Count signals processed in last 24h
     const dayAgo = new Date(Date.now() - 86_400_000).toISOString()
 
-    const [signalCount] = await db('signals')
-      .where('created_at', '>=', dayAgo)
-      .count('* as count')
-
-    const [totalSignals] = await db('signals').count('* as count')
+    const [[signalCount], [totalSignals]] = await longQuery(30, trx => Promise.all([
+      trx('signals').where('created_at', '>=', dayAgo).count('* as count'),
+      trx('signals').count('* as count'),
+    ]))
 
     // Count sources by trust tier.
     // NOTE: `sources.tier` is an existing enum column, so we use the alias
@@ -572,10 +577,6 @@ export const registerClaimsRoutes: FastifyPluginAsync = async (fastify) => {
       },
     }
 
-    try {
-      await redis.set(cacheKey, JSON.stringify(stats), 'EX', 300) // 5 min cache
-    } catch { /* non-fatal */ }
-
-    return reply.send(stats)
-  })
+    return stats
+  }
 }

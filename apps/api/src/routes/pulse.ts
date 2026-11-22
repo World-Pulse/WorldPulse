@@ -17,6 +17,7 @@ import { scoreOf } from '../lib/score'
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify'
 import { db } from '../db/postgres'
 import { signalsHaveStoryIds, storyKeyOf } from '../lib/stories'
+import { longQuery } from '../lib/long-query'
 import { staleWhileRevalidate } from '../lib/swr-cache'
 import { optionalAuth } from '../middleware/auth'
 import { sendError } from '../lib/errors'
@@ -142,7 +143,10 @@ async function overnightBriefing(
   now: Date,
 ): Promise<OvernightBriefing> {
   const hasStories = await signalsHaveStoryIds()
-  let signalQ = db('signals')
+  // in its own transaction with 30 seconds (Nov 22, 2026: on the busy server this sort of the night's reports went
+  // past the pool's 5 s and the briefing answered 500 to the first reader of the morning)
+  const rows = await longQuery(30, trx => {
+  let signalQ = trx('signals')
     .whereIn('status', ['verified', 'pending'])
     .where('created_at', '>', window.start)
     .where('created_at', '<=', window.end)
@@ -168,8 +172,10 @@ async function overnightBriefing(
       ...(hasStories ? ['story_id'] : []),
     ])
   if (regionFilter) signalQ = signalQ.where('country_code', regionFilter)
+  return signalQ
+  })
 
-  const signals = diverseEvents(oneEventPerStory(await signalQ as any[]), limit)
+  const signals = diverseEvents(oneEventPerStory(rows as any[]), limit)
 
   // ── Trend detection — "Escalating" tags ──────────────────────────────
   let escalating: OvernightBriefing['escalatingStories'] = []

@@ -9,6 +9,7 @@ import { rateLimitKey } from '../lib/rate-limit-options'
 import { trendingEntityRows, KG_TYPE_FOR_API, type KgTrendingItem } from '../lib/trending-entities'
 import { staleWhileRevalidate } from '../lib/swr-cache'
 import { longQuery } from '../lib/long-query'
+import { sendError } from '../lib/errors'
 
 const THREAT_INDEX_TTL      = 120  // 2 min cache
 const MARKETS_CACHE_TTL     = 300  // 5 min cache — respects Yahoo Finance rate limits
@@ -327,19 +328,26 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
       ? (rawWindow as '24h' | '48h' | '7d')
       : '24h'
 
-    const cacheKey = `analytics:escalation:${windowParam}`
-    const cached = await redis.get(cacheKey).catch(() => null)
-    if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
+    // Kept and remade in the background with 30 seconds for its counts (Nov 22, 2026: the home page's escalation
+    // score answered 500 when its counts went past the pool's 5 s on the busy server)
+    try {
+      return reply.send(await staleWhileRevalidate(`analytics:escalation:v2:${windowParam}`, { freshSeconds: ESCALATION_CACHE_TTL, staleSeconds: 6 * 3_600, lockSeconds: 60 }, () => escalationIndex(windowParam)))
+    } catch {
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The escalation index could not be worked out just now; try again in a minute')
+    }
+  })
 
+  /** The 0-100 escalation score of one window, from conflict and GDELT reports */
+  async function escalationIndex(windowParam: '24h' | '48h' | '7d') {
     const hours = parseWindowHours(windowParam)
     const nowMs = Date.now()
     const windowStart  = new Date(nowMs - hours * 3600 * 1000).toISOString()
     const prevStart    = new Date(nowMs - hours * 2 * 3600 * 1000).toISOString()
 
     // Query current window: conflict/gdelt signals with severity breakdown
-    const [currentRows, prevCountRows, topRegionRows, prevScoreRows] = await Promise.all([
+    const [currentRows, prevCountRows, topRegionRows, prevScoreRows] = await longQuery(30, trx => Promise.all([
       // Current window: severity breakdown
-      db('signals')
+      trx('signals')
         .where('created_at', '>=', windowStart)
         .where(builder => {
           builder
@@ -351,7 +359,7 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
         .groupBy('severity') as Promise<Array<{ severity: string; count: string }>>,
 
       // Previous same-length window: total count only
-      db('signals')
+      trx('signals')
         .where('created_at', '>=', prevStart)
         .where('created_at', '<', windowStart)
         .where(builder => {
@@ -363,7 +371,7 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
         .first() as Promise<{ count: string } | undefined>,
 
       // Top regions by signal count in current window
-      db('signals')
+      trx('signals')
         .where('created_at', '>=', windowStart)
         .whereNotNull('location_name')
         .where(builder => {
@@ -378,7 +386,7 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
         .limit(5) as unknown as Promise<Array<{ location_name: string; count: string }>>,
 
       // Previous 6h window for trend comparison (always 6h lookback)
-      db('signals')
+      trx('signals')
         .where('created_at', '>=', new Date(nowMs - 12 * 3600 * 1000).toISOString())
         .where('created_at', '<', new Date(nowMs - 6 * 3600 * 1000).toISOString())
         .where(builder => {
@@ -389,7 +397,7 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
         .select('severity')
         .count('* as count')
         .groupBy('severity') as Promise<Array<{ severity: string; count: string }>>,
-    ])
+    ]))
 
     // Assemble severity counts for current window
     const severityCounts: SeverityCounts = { critical: 0, high: 0, medium: 0, low: 0, info: 0 }
@@ -457,10 +465,8 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
       baseline_context,
       generated_at: new Date().toISOString(),
     }
-
-    await redis.setex(cacheKey, ESCALATION_CACHE_TTL, JSON.stringify(result)).catch(() => {})
-    return reply.send(result)
-  })
+    return result
+  }
 
   // ─── PERSONAL ANALYTICS ──────────────────────────────────
   // GET /api/v1/analytics/me

@@ -1,13 +1,15 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/postgres'
-import { redis } from '../db/redis'
 import { sendError } from '../lib/errors'
 import { parseQuery, CountryIndexQuerySchema, CountryDetailQuerySchema } from '../lib/query-schemas'
 import { longQuery } from '../lib/long-query'
 import { staleWhileRevalidate } from '../lib/swr-cache'
 
 const COUNTRY_LIST_TTL   = 300  // 5 min — list is heavy (all countries aggregated)
-const COUNTRY_DETAIL_TTL = 120  // 2 min — per-country detail
+/** A country's page and its resilience score: fresh 2 minutes, then served for up to 6 hours while the next is made */
+export const COUNTRY_KEEP = { freshSeconds: 120, staleSeconds: 6 * 3_600, lockSeconds: 60 }
+/** Each remake's queries get 30 seconds, not the pool's 5 */
+export const COUNTRY_QUERY_SECONDS = 30
 /**
  * The list answered 500 on Oct 20, 2026 (a week of verified stories grouped by
  * country passed the pool's 5 seconds), and with it /countries and the
@@ -335,16 +337,23 @@ export const registerCountryRoutes: FastifyPluginAsync = async (app) => {
     const { code } = req.params as { code: string }
     const upperCode = code.toUpperCase()
 
-    const cacheKey = `country:resilience:${upperCode}`
-    const cached = await redis.get(cacheKey).catch(() => null)
-    if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
+    // Kept and remade in the background like the country's page (Nov 22, 2026: the United States' took 4.9 s)
+    try {
+      const result = await staleWhileRevalidate(`country:resilience:v2:${upperCode}`, { ...COUNTRY_KEEP, freshSeconds: RESILIENCE_CACHE_TTL }, () => countryResilience(upperCode))
+      return reply.send(result)
+    } catch {
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'This country\'s resilience score could not be worked out just now; try again in a minute')
+    }
+  })
 
+  /** One country's resilience score over the last 30 days, against the 30 before */
+  async function countryResilience(upperCode: string) {
     const now      = new Date()
     const since30d = new Date(now.getTime() - 30 * 24 * 3600 * 1000).toISOString()
     const since60d = new Date(now.getTime() - 60 * 24 * 3600 * 1000).toISOString()
 
     // Fetch current and previous period in one query
-    const allRows = await db('signals')
+    const allRows = await longQuery(COUNTRY_QUERY_SECONDS, trx => trx('signals')
       .where('country_code', upperCode)
       .where('status', 'verified')
       .where('created_at', '>=', since60d)
@@ -361,7 +370,7 @@ export const registerCountryRoutes: FastifyPluginAsync = async (app) => {
         END) as risk_sum`),
       )
       // (by position: see the rankings query above)
-      .groupByRaw('category, 2')
+      .groupByRaw('category, 2'))
 
     const currentRows: SignalRow[] = []
     const prevRows:    SignalRow[] = []
@@ -377,7 +386,7 @@ export const registerCountryRoutes: FastifyPluginAsync = async (app) => {
     const trend       = trend_delta > 2 ? 'improving' : trend_delta < -2 ? 'deteriorating' : 'stable'
     const band        = resilienceBand(composite_score)
 
-    const result = {
+    return {
       success: true,
       data: {
         country_code:     upperCode,
@@ -393,10 +402,7 @@ export const registerCountryRoutes: FastifyPluginAsync = async (app) => {
         computed_at:      now.toISOString(),
       },
     }
-
-    await redis.setex(cacheKey, RESILIENCE_CACHE_TTL, JSON.stringify(result)).catch(() => {})
-    return reply.send(result)
-  })
+  }
 
   // ─── GET /api/v1/countries ─────────────────────────────────────────────────
   // Returns all countries that have signals, sorted by risk score desc.
@@ -504,10 +510,11 @@ export const registerCountryRoutes: FastifyPluginAsync = async (app) => {
     if (!/^[A-Z]{2}$/.test(code)) return sendError(reply, 400, 'VALIDATION_ERROR', 'code: a two-letter country code such as SD')
     const asked = Number((req.query as { days?: unknown } | undefined)?.days)
     const days = Number.isInteger(asked) && asked >= 7 && asked <= 90 ? asked : 30
-    const data = await staleWhileRevalidate(`countries:daily:v1:${code}:${days}`, { freshSeconds: 1_800, staleSeconds: 6 * 3_600, lockSeconds: 30 }, async () => {
+    // Nov 22, 2026: the AI tools' trend for Ukraine timed out at the pool's 5 s on the busy server: 45 s now, kept a day
+    const make = async () => {
       const today = new Date()
       const first = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - (days - 1)))
-      const result = await db.raw(
+      const result = await longQuery(45, trx => trx.raw(
         `SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
                 count(*)::int AS reports,
                 count(*) FILTER (WHERE status = 'verified')::int AS verified
@@ -515,7 +522,7 @@ export const registerCountryRoutes: FastifyPluginAsync = async (app) => {
           WHERE country_code = ? AND created_at >= ? AND status IN ('verified', 'pending')
           GROUP BY 1`,
         [code, first],
-      ) as { rows?: Array<{ day: string; reports: number; verified: number }> }
+      )) as unknown as { rows?: Array<{ day: string; reports: number; verified: number }> }
       const byDay = new Map((result.rows ?? []).map(r => [String(r.day), r]))
       const daily = Array.from({ length: days }, (_, i) => {
         const day = new Date(first.getTime() + i * 86_400_000).toISOString().slice(0, 10)
@@ -523,8 +530,12 @@ export const registerCountryRoutes: FastifyPluginAsync = async (app) => {
         return { day, reports: Number(r?.reports) || 0, verified: Number(r?.verified) || 0 }
       })
       return { success: true, data: { code, name: COUNTRY_NAMES[code] ?? code, days, daily, generatedAt: today.toISOString() } }
-    })
-    return reply.send(data)
+    }
+    try {
+      return reply.send(await staleWhileRevalidate(`countries:daily:v1:${code}:${days}`, { freshSeconds: 1_800, staleSeconds: 24 * 3_600, lockSeconds: 90 }, make))
+    } catch {
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The day-by-day counts could not be read just now; try again in a minute')
+    }
   })
 
   // ─── GET /api/v1/countries/:code ──────────────────────────────────────────
@@ -553,17 +564,29 @@ export const registerCountryRoutes: FastifyPluginAsync = async (app) => {
     const { window, limit } = qr.data
     const upperCode = code.toUpperCase()
 
-    const cacheKey = `countries:detail:${upperCode}:${window}:${limit}`
-    const cached = await redis.get(cacheKey).catch(() => null)
-    if (cached) return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached))
+    // Kept in Redis and remade in the background with 30 seconds for its queries (Nov 22, 2026: the United States'
+    // page took 4.5 s on the busy server, next to the pool's 5 s limit, and showed "Something went wrong" when it
+    // went over); a country with no reports in the window is kept as null and answered 404
+    let result: Awaited<ReturnType<typeof countryDetail>>
+    try {
+      result = await staleWhileRevalidate(`countries:detail:v2:${upperCode}:${window}:${limit}`, COUNTRY_KEEP, () => countryDetail(upperCode, window ?? '7d', Number(limit)))
+    } catch {
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'This country could not be read just now; try again in a minute')
+    }
+    if (!result) return sendError(reply, 404, 'NOT_FOUND', 'No signal data found for this country')
+    return reply.send(result)
+  })
+}
 
+/** One country's page: its verified reports' topics and risk, its newest reports and its last 24 hours by hour; null with none */
+async function countryDetail(upperCode: string, window: string, limit: number) {
     const windowHours = window === '30d' ? 720 : window === '7d' ? 168 : window === '48h' ? 48 : 24
     const since = new Date(Date.now() - windowHours * 3600 * 1000).toISOString()
 
     // Category breakdown
-    const [categoryBreakdown, recentSignals, hourlyTrend] = await Promise.all([
+    const [categoryBreakdown, recentSignals, hourlyTrend] = await longQuery(COUNTRY_QUERY_SECONDS, trx => Promise.all([
       // Category signal counts
-      db('signals')
+      trx('signals')
         .where('country_code', upperCode)
         .where('status', 'verified')
         .where('created_at', '>=', since)
@@ -577,16 +600,16 @@ export const registerCountryRoutes: FastifyPluginAsync = async (app) => {
         .orderBy('count', 'desc'),
 
       // Most recent signals
-      db('signals')
+      trx('signals')
         .where('country_code', upperCode)
         .where('status', 'verified')
         .where('created_at', '>=', since)
         .select('id', 'title', 'summary', 'severity', 'category', 'reliability_score', 'source_count', 'created_at', 'location_name')
         .orderBy('created_at', 'desc')
-        .limit(Number(limit)),
+        .limit(limit),
 
       // 24-hour signal volume by 4-hour buckets (for sparkline)
-      db('signals')
+      trx('signals')
         .where('country_code', upperCode)
         .where('status', 'verified')
         .where('created_at', '>=', new Date(Date.now() - 24 * 3600 * 1000).toISOString())
@@ -594,7 +617,7 @@ export const registerCountryRoutes: FastifyPluginAsync = async (app) => {
         .count('* as count')
         .groupByRaw(`date_trunc('hour', created_at)`)
         .orderByRaw(`date_trunc('hour', created_at) asc`),
-    ])
+    ]))
 
     const totalSignals = categoryBreakdown.reduce((sum: number, r: Record<string, unknown>) => sum + Number(r.count ?? 0), 0)
 
@@ -610,11 +633,9 @@ export const registerCountryRoutes: FastifyPluginAsync = async (app) => {
       : 0
     const band = riskBand(normalizedScore)
 
-    if (totalSignals === 0) {
-      return sendError(reply, 404, 'NOT_FOUND', 'No signal data found for this country')
-    }
+    if (totalSignals === 0) return null
 
-    const result = {
+    return {
       code:           upperCode,
       name:           COUNTRY_NAMES[upperCode] ?? upperCode,
       window,
@@ -635,8 +656,4 @@ export const registerCountryRoutes: FastifyPluginAsync = async (app) => {
       })),
       generated_at: new Date().toISOString(),
     }
-
-    await redis.setex(cacheKey, COUNTRY_DETAIL_TTL, JSON.stringify(result)).catch(() => {})
-    return reply.send(result)
-  })
 }

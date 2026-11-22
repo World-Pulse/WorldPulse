@@ -17,6 +17,7 @@ import { registerFeedRoutes } from './routes/feed'
 import { registerStoryRoutes, startWeekWarmer, stopWeekWarmer } from './routes/stories'
 import { registerCoverageGapRoutes } from './routes/coverage-gap'
 import { startCoverageGapWarmer, stopCoverageGapWarmer } from './lib/coverage-gap'
+import { startToolAnswerWarmer } from './routes/public-insights'
 import { registerAuthRoutes } from './routes/auth'
 import { registerPostRoutes } from './routes/posts'
 import { registerSignalRoutes } from './routes/signals'
@@ -482,6 +483,11 @@ async function bootstrap() {
   startWeekWarmer()
   // The coverage gap's last 7 days and its last 4 finished weeks, made the same way
   startCoverageGapWarmer()
+  // The slowest AI tools' default answers kept from going cold (Nov 22, 2026)
+  if (process.env.NODE_ENV !== 'test') {
+    const stopToolWarmer = startToolAnswerWarmer(app.log)
+    app.addHook('onClose', async () => { stopToolWarmer() })
+  }
 
   // ─── EMAIL BRIEFING (plan G4) ─────────────────────────────
   // Creates the subscribers table if missing (Devon approved, Oct 11, 2026),

@@ -24,7 +24,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { redis } from '../db/redis'
 import { sendError } from '../lib/errors'
 import { longQuery } from '../lib/long-query'
-import { staleWhileRevalidate } from '../lib/swr-cache'
+import { staleWhileRevalidate, keptAge, remakeNow, type SwrOptions } from '../lib/swr-cache'
 import { outletOf } from '../lib/outlets'
 import { REGION_IDS, regionCountries, type RegionId } from '../lib/regions'
 import { READER_TOPICS, isReaderTopic } from '../lib/topics'
@@ -70,7 +70,7 @@ export interface ChokepointNews { id: string; name: string; reports: number; ver
 
 async function chokepointNews(days: number): Promise<ChokepointNews[]> {
   const like = CHOKEPOINT_NAMES.flatMap(c => c.like).map(f => `%${f}%`)
-  const result = await longQuery(60, trx => trx.raw(
+  const result = await longQuery(SLOW_SCAN_SECONDS, trx => trx.raw(
     `SELECT id::text AS id, title, status::text AS status, created_at
        FROM signals
       WHERE created_at > NOW() - make_interval(days => ?)
@@ -236,7 +236,7 @@ async function verificationSpeed(hours: number): Promise<SpeedStory[]> {
 export interface TopicCount { topic: string; reports: number; verified: number; before: number }
 
 async function topicCounts(hours: number, country: string | null = null, countries: string[] | null = null): Promise<TopicCount[]> {
-  const result = await longQuery(20, trx => trx.raw(
+  const result = await longQuery(TOOL_QUERY_SECONDS, trx => trx.raw(
     `SELECT category::text AS topic,
             count(*) FILTER (WHERE created_at > NOW() - make_interval(hours => ?)) AS reports,
             count(*) FILTER (WHERE created_at > NOW() - make_interval(hours => ?) AND status = 'verified') AS verified,
@@ -264,7 +264,7 @@ export function siteFrom(input: string): string | null {
 async function outletReports(site: string, days: number): Promise<{ total: number; verified: number; topics: Array<{ topic: string; reports: number }>; places: Array<{ country: string; reports: number }>; reports: OutletReport[] }> {
   // one scan of the outlet's reports (mine is read four times, so Postgres keeps it): the newest 20, the totals, its
   // topics and the countries its reports are placed in
-  const result = await longQuery(20, trx => trx.raw(
+  const result = await longQuery(TOOL_QUERY_SECONDS, trx => trx.raw(
     `WITH mine AS (
        SELECT id::text AS id, title, status::text AS status, severity::text AS severity, category::text AS topic,
               country_code, created_at, story_id::text AS story_id
@@ -329,7 +329,7 @@ export interface FeedReport { id: string; title: string; summary: string | null;
 
 async function feedReports(feed: string, days: number): Promise<{ total: number; reports: FeedReport[] }> {
   const sets = FEEDS[feed]!.tags
-  const result = await longQuery(20, trx => trx.raw(
+  const result = await longQuery(TOOL_QUERY_SECONDS, trx => trx.raw(
     `WITH mine AS (
        SELECT id::text AS id, title, summary, severity::text AS severity, country_code, location_name, created_at, original_urls[1] AS url, tags
          FROM signals
@@ -375,7 +375,7 @@ async function newsWatch(watch: string, days: number): Promise<{ total: number; 
   const filter = w.topic ? 'category::text = ?' : 'title ILIKE ANY (?::text[])'
   const binding = w.topic ?? (w.like ?? []).map(f => `%${f}%`)
   const notLike = (w.not ?? []).map(f => `%${f}%`)
-  const result = await longQuery(60, trx => trx.raw(
+  const result = await longQuery(SLOW_SCAN_SECONDS, trx => trx.raw(
     `SELECT id::text AS id, title, status::text AS status, country_code, created_at
        FROM signals
       WHERE created_at > NOW() - make_interval(days => ?)
@@ -568,7 +568,57 @@ async function countryCoverage(country: string, days: number): Promise<CountryCo
 // ─── Routes ─────────────────────────────────────────────────────────────
 
 const SWR = (fresh: number) => ({ freshSeconds: fresh, staleSeconds: 6 * 3_600, lockSeconds: 60 })
+
+/**
+ * The AI tools that ran out of time in the Nov 22, 2026 test of all 100 (the server overloaded, 3.6 times last
+ * week's reports): their queries get longer (a week's headlines read for names: 120 s, was 60; a feed, an outlet
+ * or a region's topics: 45 s, was 20), their answers are kept a day while remade, and the defaults the tools ask
+ * for are kept from going cold (warmToolAnswers).
+ */
+export const SLOW_SCAN_SECONDS = 120
+export const TOOL_QUERY_SECONDS = 45
+/** Fresh this long, then served up to a day old while one process remakes it */
+const TOOL_KEEP = (fresh: number, query = TOOL_QUERY_SECONDS) => ({ freshSeconds: fresh, staleSeconds: 86_400, lockSeconds: query + 60 })
 const OPEN = { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }
+
+const chokepointsKey = (days: number) => `public:chokepoints:v1:${days}`
+const feedReportsKey = (feed: string, days: number) => `public:feed-reports:v1:${feed}:${days}`
+const newsWatchKey = (watch: string, days: number) => `public:news-watch:v1:${watch}:${days}`
+
+/** The tools' default answers kept from going cold: chokepoints_news, cyber_attacks and us_weather_alerts (7 days each) */
+export const WARM_TOOL_ANSWERS: Array<{ key: string; opts: SwrOptions; make: () => Promise<unknown> }> = [
+  { key: chokepointsKey(7), opts: TOOL_KEEP(1_800, SLOW_SCAN_SECONDS), make: () => chokepointNews(7) },
+  { key: newsWatchKey('cyber', 7), opts: TOOL_KEEP(1_200, SLOW_SCAN_SECONDS), make: () => newsWatch('cyber', 7) },
+  { key: feedReportsKey('us-weather', 7), opts: TOOL_KEEP(600), make: () => feedReports('us-weather', 7) },
+]
+/** An answer older than this (or none) is remade by the warmer; younger ones are left to the callers' own remakes */
+export const WARM_WHEN_OLDER_S = 12 * 3_600
+
+/** Remake, one at a time, each default answer that is missing or older than WARM_WHEN_OLDER_S; the keys it made */
+export async function warmToolAnswers(jobs = WARM_TOOL_ANSWERS): Promise<string[]> {
+  const made: string[] = []
+  for (const job of jobs) {
+    const age = await keptAge(job.key)
+    if (age !== null && age < WARM_WHEN_OLDER_S) continue
+    const ok = await remakeNow(job.key, job.opts, job.make).catch(() => false)
+    if (ok) made.push(job.key)
+  }
+  return made
+}
+
+let warmTimer: ReturnType<typeof setInterval> | null = null
+/** warmToolAnswers 5 minutes after start, then every 3 hours: light, since a warm answer is skipped */
+export function startToolAnswerWarmer(log: { info: (o: object, m: string) => void; warn: (o: object, m: string) => void }): () => void {
+  const run = () => {
+    void warmToolAnswers()
+      .then(made => { if (made.length) log.info({ made }, 'AI tool answers kept warm') })
+      .catch(err => log.warn({ err: String(err) }, 'AI tool answers could not be kept warm'))
+  }
+  setTimeout(run, 5 * 60_000).unref?.()
+  warmTimer = setInterval(run, 3 * 3_600_000)
+  warmTimer.unref?.()
+  return () => { if (warmTimer) clearInterval(warmTimer); warmTimer = null }
+}
 
 export const registerPublicInsightRoutes: FastifyPluginAsync = async (app) => {
   app.get('/chokepoints', {
@@ -578,7 +628,7 @@ export const registerPublicInsightRoutes: FastifyPluginAsync = async (app) => {
     const days = boundedInt((req.query as Record<string, unknown>)?.days, 7, 1, 14)
     try {
       // a week of headlines takes about 25 seconds: kept half an hour, served up to a day old while remade
-      const chokepoints = await staleWhileRevalidate(`public:chokepoints:v1:${days}`, { freshSeconds: 1_800, staleSeconds: 86_400, lockSeconds: 120 }, () => chokepointNews(days))
+      const chokepoints = await staleWhileRevalidate(chokepointsKey(days), TOOL_KEEP(1_800, SLOW_SCAN_SECONDS), () => chokepointNews(days))
       return reply.send({ success: true, data: { days, chokepoints } })
     } catch {
       return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The chokepoints could not be counted just now; try again in a minute')
@@ -665,7 +715,7 @@ export const registerPublicInsightRoutes: FastifyPluginAsync = async (app) => {
     if (named !== null && !(REGION_IDS as readonly string[]).includes(named)) return sendError(reply, 400, 'VALIDATION_ERROR', `region must be one of ${REGION_IDS.join(', ')}`)
     const region = country ? null : (named as RegionId | null)
     try {
-      const topics = await staleWhileRevalidate(`public:topics:v1:${hours}:${country ?? (region ? `region:${region}` : 'all')}`, SWR(600), () => topicCounts(hours, country, region ? regionCountries(region) : null))
+      const topics = await staleWhileRevalidate(`public:topics:v1:${hours}:${country ?? (region ? `region:${region}` : 'all')}`, TOOL_KEEP(600), () => topicCounts(hours, country, region ? regionCountries(region) : null))
       return reply.send({ success: true, data: { hours, country, ...(region ? { region } : {}), topics } })
     } catch {
       return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The topics could not be counted just now; try again in a minute')
@@ -681,7 +731,7 @@ export const registerPublicInsightRoutes: FastifyPluginAsync = async (app) => {
     if (!site) return sendError(reply, 400, 'VALIDATION_ERROR', 'site must be a website, e.g. bbc.co.uk')
     const days = boundedInt(q.days, 7, 1, 14)
     try {
-      const data = await staleWhileRevalidate(`public:outlet-reports:v2:${site}:${days}`, SWR(600), () => outletReports(site, days))
+      const data = await staleWhileRevalidate(`public:outlet-reports:v2:${site}:${days}`, TOOL_KEEP(600), () => outletReports(site, days))
       return reply.send({ success: true, data: { site, days, ...data } })
     } catch {
       return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The outlet\'s reports could not be read just now; try again in a minute')
@@ -697,7 +747,7 @@ export const registerPublicInsightRoutes: FastifyPluginAsync = async (app) => {
     if (!Object.hasOwn(FEEDS, feed)) return sendError(reply, 400, 'VALIDATION_ERROR', `feed must be one of ${Object.keys(FEEDS).join(', ')}`)
     const days = boundedInt(q.days, 7, 1, 30)
     try {
-      const data = await staleWhileRevalidate(`public:feed-reports:v1:${feed}:${days}`, SWR(600), () => feedReports(feed, days))
+      const data = await staleWhileRevalidate(feedReportsKey(feed, days), TOOL_KEEP(600), () => feedReports(feed, days))
       return reply.send({ success: true, data: { feed, label: FEEDS[feed]!.label, days, ...data } })
     } catch {
       return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The feed could not be read just now; try again in a minute')
@@ -713,7 +763,7 @@ export const registerPublicInsightRoutes: FastifyPluginAsync = async (app) => {
     if (!Object.hasOwn(WATCHES, watch)) return sendError(reply, 400, 'VALIDATION_ERROR', `watch must be one of ${Object.keys(WATCHES).join(', ')}`)
     const days = boundedInt(q.days, 7, 1, 14)
     try {
-      const data = await staleWhileRevalidate(`public:news-watch:v1:${watch}:${days}`, { freshSeconds: 1_200, staleSeconds: 86_400, lockSeconds: 120 }, () => newsWatch(watch, days))
+      const data = await staleWhileRevalidate(newsWatchKey(watch, days), TOOL_KEEP(1_200, SLOW_SCAN_SECONDS), () => newsWatch(watch, days))
       return reply.send({ success: true, data: { watch, label: WATCHES[watch]!.label, days, ...data } })
     } catch {
       return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The news could not be counted just now; try again in a minute')

@@ -183,19 +183,14 @@ describe('GET /countries/:code/resilience', () => {
     await app.close()
   })
 
-  it('serves from Redis cache when available', async () => {
-    const cached = JSON.stringify({
-      country_code: 'US', country_name: 'United States',
-      composite_score: 72, risk_level: 'Moderate', risk_color: '#ffd700',
-      trend: 'stable', trend_delta: 0, dimensions: {},
-      signals_analyzed: 10, period_days: 30, computed_at: new Date().toISOString(),
-    })
-    mockRedisGet.mockResolvedValueOnce(cached)
+  it('is kept and remade in the background, with 30 seconds for its query (Nov 22, 2026: the United States took 4.9 s)', async () => {
+    const { staleWhileRevalidate } = await import('../../lib/swr-cache')
+    const { longQuery } = await import('../../lib/long-query')
     const app = await buildApp()
     const res = await app.inject({ method: 'GET', url: '/countries/US/resilience' })
     expect(res.statusCode).toBe(200)
-    // DB should NOT have been called
-    expect(mockDb).not.toHaveBeenCalled()
+    expect(staleWhileRevalidate).toHaveBeenCalledWith('country:resilience:v2:US', expect.objectContaining({ freshSeconds: 600, staleSeconds: 6 * 3_600 }), expect.any(Function))
+    expect(longQuery).toHaveBeenCalledWith(30, expect.any(Function))
     await app.close()
   })
 })
