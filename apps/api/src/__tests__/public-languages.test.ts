@@ -9,7 +9,13 @@ const calls: Array<{ sql: string; bindings: unknown[] }> = []
 let fail = false
 
 let relinkProgress: string | null = null
-vi.mock('../db/redis', () => ({ redis: { get: async (key: string) => (key === 'names-relink:progress' ? relinkProgress : null), setex: async () => 'OK' } }))
+let everyNameProgress: string | null = null
+vi.mock('../db/redis', () => ({
+  redis: {
+    get: async (key: string) => (key === 'names-relink:progress' ? relinkProgress : key === 'entities-relink:progress' ? everyNameProgress : null),
+    setex: async () => 'OK',
+  },
+}))
 vi.mock('../db/postgres', () => ({ db: Object.assign(() => ({}), { raw: (s: string) => s }) }))
 vi.mock('../lib/categories', () => ({ signalCategories: async () => ['conflict'] }))
 vi.mock('../lib/stories', () => ({ signalsHaveStoryIds: async () => true }))
@@ -48,7 +54,7 @@ async function app() {
   return a
 }
 
-beforeEach(() => { calls.length = 0; fail = false; relinkProgress = null })
+beforeEach(() => { calls.length = 0; fail = false; relinkProgress = null; everyNameProgress = null })
 
 describe('GET /api/v1/public/languages', () => {
   it("answers each language's counts as numbers, and the verified reports with their story's languages", async () => {
@@ -80,6 +86,18 @@ describe('GET /api/v1/public/languages', () => {
       .toEqual({ days_done: 3, of: 7, reports: 105000, named: 31000, added: 29000 })
     relinkProgress = '{not json'
     expect((await (await app()).inject({ method: 'GET', url: '/api/v1/public/languages' })).json().data.names_relink).toBeNull()
+  })
+
+  it("and how far the re-read of the week's older reports for every name has got (Nov 22)", async () => {
+    const get = async () => (await (await app()).inject({ method: 'GET', url: '/api/v1/public/languages' })).json().data
+    expect((await get()).entities_relink).toBeNull()
+    everyNameProgress = JSON.stringify({ days_done: 2, of: 7, reports: 61000, linked: 33000, links: 70000, added: 21000, failed: 0 })
+    const data = await get()
+    expect(data.entities_relink).toEqual({ days_done: 2, of: 7, reports: 61000, linked: 33000, links: 70000, added: 21000, failed: 0 })
+    // the names re-read's own field is its own
+    expect(data.names_relink).toBeNull()
+    everyNameProgress = '{not json'
+    expect((await get()).entities_relink).toBeNull()
   })
 
   it('takes 1 to 72 hours, else 24', async () => {

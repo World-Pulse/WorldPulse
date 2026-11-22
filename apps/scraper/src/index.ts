@@ -47,6 +47,7 @@ import { startSecondReads } from './pipeline/second-read'
 import { startSecondOutlets } from './pipeline/second-outlet'
 import { verifyArchive } from './pipeline/archive-outlets'
 import { relinkNames } from './pipeline/names-relink'
+import { relinkEntities } from './pipeline/entities-relink'
 import { backfillPulse } from './pipeline/gkg-pulse'
 import { fixLocalhostUploadUrls, undoTemplateCorroboration, undoCopyVerifications, retractStaleFeedItems, recheckGeocodedPlaces, decodeStoredEntities, liftCappedSeverities, stripFeedFooters, tidyGdeltPlaceNames, fixGdeltFipsCountries, stripOutletNotes, stripOutletNames, repairHeadlineSummaries, recategorizeRecentArticles, retractShoppingItems, recalibrateFlatReliability, switchOffRetiredSources, splitDniproFromSpainTrainStory, splitHelicopterCrashStories } from './pipeline/repairs'
 import { batchValidateGeo } from './pipeline/geo-validator'
@@ -398,6 +399,14 @@ async function bootstrap() {
       .then(t => { if (t) logger.info(t, 'Names re-link: the 7 days before linked') })
       .catch(err => logger.warn({ err }, 'Names re-link failed (non-fatal)'))
   }, 5 * 60_000)
+  // Once: the week's older reports read again for the people, places and organisations they name, with the live path's
+  // rules and no model (Devon, Nov 22, 1:48 PM: "1 ok"); from 8 days before the first start up to the names going live,
+  // a day at a time, a restart carrying on after the last day done (pipeline/entities-relink.ts)
+  setTimeout(() => {
+    runOnce('repair:entities-relink:2026-11-22', cutoff => relinkEntities(cutoff))
+      .then(t => { if (t) logger.info(t, 'Entities re-link: the week before linked') })
+      .catch(err => logger.warn({ err }, 'Entities re-link failed (non-fatal)'))
+  }, 10 * 60_000)
   void loadEngine().then(engine => engine?.startJobs())
 
   // In-house fingerprints: the table at start, then every 10 min the reports
