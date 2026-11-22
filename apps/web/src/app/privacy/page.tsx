@@ -115,7 +115,8 @@ export default function PrivacyPage() {
           ))}
         </div>
         <p className="text-sm text-wp-text2 mt-10 leading-relaxed">
-          See also <Link href="/how-we-count" className="text-wp-amber underline">how we count outlets</Link>, the{' '}
+          See also the <Link href="/terms" className="text-wp-amber underline">terms of use</Link>,{' '}
+          <Link href="/how-we-count" className="text-wp-amber underline">how we count outlets</Link>, the{' '}
           <Link href="/developers" className="text-wp-amber underline">API and AI tools</Link>, or the{' '}
           <Link href="/help" className="text-wp-amber underline">Help &amp; FAQ</Link>.
         </p>
