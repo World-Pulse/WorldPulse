@@ -347,6 +347,8 @@ export function RightSidebar() {
         <Link href="/help" className="text-wp-amber hover:underline">Help &amp; FAQ</Link>
         {' · '}
         <Link href="/how-we-count" className="text-wp-amber hover:underline">How We Count</Link>
+        {' · '}
+        <Link href="/ai" className="text-wp-amber hover:underline">Use in AI</Link>
       </div>
     </aside>
   )

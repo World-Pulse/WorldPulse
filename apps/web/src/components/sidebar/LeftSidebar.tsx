@@ -11,7 +11,7 @@ import {
   TrendingUp, Shield, Unplug, Satellite, Lock, Waves, Landmark,
   Wheat, KeyRound, Droplets, Pickaxe, Map, ScrollText, Users, Search,
   Mic, Video, Radio, Wrench, Settings, Activity, Anchor, CalendarDays, Camera,
-  CircleDot, Swords, LineChart, Leaf, Pill, FlaskConical, Vote, Globe2, Network, Newspaper, Link2, BadgeCheck, EyeOff,
+  CircleDot, Swords, LineChart, Leaf, Pill, FlaskConical, Vote, Globe2, Network, Newspaper, Link2, BadgeCheck, EyeOff, Bot,
   type LucideProps,
 } from 'lucide-react'
 
@@ -32,6 +32,7 @@ const CORE_ITEMS = [
   { href: '/entities',   icon: Newspaper,     labelKey: 'inTheNews',  badge: 'NEW', badgeColor: 'purple' }, // who's in the news: the entity pages' index (Oct 13, 2026)
   { href: '/countries',  icon: Map,            labelKey: 'countries' },
   { href: '/how-we-count', icon: BadgeCheck,  labelKey: 'howWeCount' },
+  { href: '/ai',         icon: Bot,           labelKey: 'aiAssistants' }, // WorldPulse in Claude, ChatGPT and Gemini (Nov 21, 2026)
 ] as const
 
 /** Every other section, as before */
