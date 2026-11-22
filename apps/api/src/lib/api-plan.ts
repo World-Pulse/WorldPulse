@@ -26,6 +26,8 @@ import type Redis from 'ioredis'
 import { db } from '../db/postgres'
 import { hashKey } from './api-keys'
 import { maxKeyTier, asKeyTier, type KeyTier } from './key-tier'
+import { aiPlatformOfKey, AI_PLATFORM_PER_MINUTE } from './ai-platforms'
+import { rateLimitKey } from './rate-limit-options'
 
 export interface ApiPlan {
   keyId: string
@@ -125,6 +127,20 @@ export function routeMaxFor(plan: ApiPlan | null, max: number): number {
 }
 
 /**
+ * A request's limit on such an endpoint: a Pro key's, or the same for an AI company's published server
+ * (lib/ai-platforms.ts: Claude's and ChatGPT's tool calls, each address in its own budget), else the endpoint's own
+ */
+export function routeMaxForRequest(req: FastifyRequest, max: number): number {
+  if (req.apiPlan) return routeMaxFor(req.apiPlan, max)
+  return aiPlatformRouteMax(req, max)
+}
+
+/** An endpoint's limit for an AI company's published server: ten times its own, up to 600; anyone else, its own */
+export function aiPlatformRouteMax(req: FastifyRequest, max: number): number {
+  return aiPlatformOfKey(rateLimitKey(req)) ? Math.max(max, Math.min(AI_PLATFORM_PER_MINUTE, max * ROUTE_MULTIPLIER)) : max
+}
+
+/**
  * Wire Pro keys into the API. Call before registering @fastify/rate-limit:
  * its route hook reads req.apiPlan (set here, on each request, first), and
  * the read endpoints' own limits become functions of it before the plugin
@@ -134,14 +150,19 @@ export function registerApiPlans(app: FastifyInstance, redis: Redis): void {
   app.decorateRequest('apiPlan', null)
 
   app.addHook('onRoute', (route) => {
-    const config = route.config as { rateLimit?: unknown } | undefined
+    const config = route.config as { rateLimit?: unknown; aiPlatforms?: unknown } | undefined
     const rl = config?.rateLimit as { max?: unknown } | false | undefined
     if (!rl || typeof rl !== 'object' || typeof rl.max !== 'number') return
     const methods = Array.isArray(route.method) ? route.method : [route.method]
-    if (!methods.every(m => m === 'GET' || m === 'HEAD')) return
     const max = rl.max
+    // A route that changes nothing but takes POST (the AI tools, routes/mcp.ts) can ask for the AI companies' allowance
+    if (config?.aiPlatforms === true && !methods.every(m => m === 'GET' || m === 'HEAD')) {
+      route.config = { ...config, rateLimit: { ...rl, max: (req: FastifyRequest) => aiPlatformRouteMax(req, max) } } as typeof route.config
+      return
+    }
+    if (!methods.every(m => m === 'GET' || m === 'HEAD')) return
     // Copies, not the objects themselves: one config can be shared by a route's GET and its PUT
-    route.config = { ...config, rateLimit: { ...rl, max: (req: FastifyRequest) => routeMaxFor(req.apiPlan, max) } } as typeof route.config
+    route.config = { ...config, rateLimit: { ...rl, max: (req: FastifyRequest) => routeMaxForRequest(req, max) } } as typeof route.config
   })
 
   app.addHook('onRequest', async (req, reply) => {

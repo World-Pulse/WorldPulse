@@ -29,6 +29,7 @@ import type { FastifySchema, RouteOptions } from 'fastify'
 import type { FastifyDynamicSwaggerOptions, SwaggerTransform } from '@fastify/swagger'
 import { authenticate, apiKeyAuth } from '../middleware/auth'
 import { PRO_KEY_LIMITS, ROUTE_MULTIPLIER } from './api-plan'
+import { AI_PLATFORM_PER_MINUTE } from './ai-platforms'
 
 /** Where the guides and code examples are */
 export const DEVELOPERS_URL = 'https://world-pulse.io/developers'
@@ -202,6 +203,7 @@ const DESCRIPTION = [
   '## Rate limits',
   `Requests are counted per client address, whatever credential they carry, except a Pro API key's. Endpoints without a limit of their own share one budget: ${SHARED_PER_MINUTE} requests a minute. Many endpoints have a limit of their own, counted for that endpoint alone (5 a minute to sign in or register), and each of those says so below.`,
   `A Pro API key ([WorldPulse Pro](https://world-pulse.io/pricing), $12 a month), sent as \`X-Api-Key\`, counts in its own budget: ${PRO_KEY_LIMITS.perMinute} requests a minute across the API, each read endpoint up to ${ROUTE_MULTIPLIER} times its own limit (at most ${PRO_KEY_LIMITS.perMinute}), and ${PRO_KEY_LIMITS.perDay.toLocaleString('en-US')} a day (it starts again at midnight UTC). A free key counts like no key.`,
+  `The addresses Anthropic and OpenAI publish for their assistants' tool calls (Claude, ChatGPT), which many people share, get ${AI_PLATFORM_PER_MINUTE} requests a minute across the API and on \`POST /mcp\`, each read endpoint up to ${ROUTE_MULTIPLIER} times its own limit (at most ${AI_PLATFORM_PER_MINUTE}), each address counted on its own.`,
   'Answers carry `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset` (seconds until the count starts again); past the limit the API answers 429 with `Retry-After`.',
 ].join('\n')
 

@@ -486,6 +486,12 @@ export default function ApiDocsPage() {
               {PRO_KEY_BUDGET.routeMultiplier} times its own limit (at most {PRO_KEY_BUDGET.perMinute}), and{' '}
               {PRO_KEY_BUDGET.perDay.toLocaleString('en-US')} a day (it starts again at midnight UTC). A free key counts like no key.
             </p>
+            {/* Nov 21, 2026: apps/api/src/lib/ai-platforms.ts */}
+            <p className="mt-2 text-[12px] text-zinc-500">
+              The addresses Anthropic and OpenAI publish for their assistants&apos; tool calls (Claude, ChatGPT), which many people share,
+              get {PRO_KEY_BUDGET.perMinute} requests a minute across the API and on <InlineCode>POST /mcp</InlineCode>, each read endpoint
+              up to {PRO_KEY_BUDGET.routeMultiplier} times its own limit, each address counted on its own.
+            </p>
 
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
               {RATE_LIMIT_HEADERS.map((h) => (

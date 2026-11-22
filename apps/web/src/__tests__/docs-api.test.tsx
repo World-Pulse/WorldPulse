@@ -219,7 +219,10 @@ describe('credentials (apps/api/src/middleware/auth.ts, lib/api-keys.ts)', () =>
 
 describe('rate limits (apps/api/src/lib/rate-limit-options.ts and each route\'s config)', () => {
   it('names the budget the routes without their own limit share', () => {
-    expect(api('lib/rate-limit-options.ts')).toMatch(new RegExp(`max:\\s+\\(req\\) => req\\.apiPlan\\?\\.perMinute \\?\\? ${DEFAULT_PER_MINUTE},`))
+    expect(api('lib/rate-limit-options.ts')).toMatch(new RegExp(`max:\\s+\\(req\\) => req\\.apiPlan\\?\\.perMinute \\?\\? \\(aiPlatformOfKey\\(rateLimitKey\\(req\\)\\) \\? AI_PLATFORM_PER_MINUTE : ${DEFAULT_PER_MINUTE}\\),`))
+    // the AI companies' published servers (Nov 21, 2026): the same 600 as a Pro key, each address on its own
+    expect(api('lib/ai-platforms.ts')).toMatch(new RegExp(`AI_PLATFORM_PER_MINUTE = ${PRO_KEY_BUDGET.perMinute}\\b`))
+    expect(TEXT).toContain("publish for their assistants' tool calls (Claude, ChatGPT)")
     expect(TEXT).toContain(`Endpoints without a limit of their own share one budget: ${DEFAULT_PER_MINUTE} requests a minute`)
     expect(TEXT).toContain('counted for that endpoint alone')
   })

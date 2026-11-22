@@ -20,6 +20,7 @@
 import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import { internalCallHeaders } from '../lib/internal-call'
 import { rateLimitKey } from '../lib/rate-limit-options'
+import { aiPlatformStatus } from '../lib/ai-platforms'
 import { describeSite, siteInfo, countryLabel, outletOf, OUTLET_KIND_LABELS } from '../lib/outlets'
 import { OUTLET_DIRECTORY } from '../lib/outlet-directory'
 import { hostOf } from '../lib/stories'
@@ -4736,17 +4737,20 @@ export const registerMcpRoutes: FastifyPluginAsync = async (app) => {
     if (answers.length === 0) return reply.code(202).send()
     return reply.header('content-type', 'application/json; charset=utf-8').send(batch ? answers : answers[0])
   }
+  // 60 a minute per address; aiPlatforms: 600 for an address Anthropic or OpenAI publishes for their assistants' tool
+  // calls (lib/ai-platforms.ts and lib/api-plan.ts, Nov 21, 2026): everyone using WorldPulse in Claude or ChatGPT
+  // asks from those few addresses
   app.post('/', {
     schema: POST_DOCS,
     bodyLimit: 64 * 1024,
-    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' }, aiPlatforms: true },
   }, async (req, reply) => answer(req, reply))
 
   // One smaller set (TOOL_SETS): the same server with fewer tools
   app.post('/:set', {
     schema: SET_DOCS,
     bodyLimit: 64 * 1024,
-    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' }, aiPlatforms: true },
   }, async (req, reply) => {
     const set = TOOL_SETS[(req.params as { set: string }).set]
     if (!set) return reply.code(404).send(rpcError(null, -32601, `No such tool set; the sets are ${Object.keys(TOOL_SETS).join(', ')}, and every tool is at ${API_SITE}/mcp`))
@@ -4786,6 +4790,7 @@ export const registerAiToolsUseRoute: FastifyPluginAsync = async (app) => {
     if (!kept || kept.days !== days || Date.now() - kept.at > 60_000) {
       kept = { at: Date.now(), days, data: aiToolsUse(await readMcpUse(redis, days), TOOLS.length) }
     }
-    return reply.send({ success: true, data: { ...kept.data, readAt: new Date(kept.at).toISOString() } })
+    // and the bigger allowance for the AI companies' servers: how many published ranges it covers now
+    return reply.send({ success: true, data: { ...kept.data, readAt: new Date(kept.at).toISOString(), aiPlatforms: aiPlatformStatus() } })
   })
 }

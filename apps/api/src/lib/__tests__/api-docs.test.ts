@@ -233,7 +233,9 @@ describe('the OpenAPI document, over stub routes', () => {
 
   it('names the rate limits the code sets', () => {
     // 200 a minute shared by the routes without their own (lib/rate-limit-options.ts), 5 to sign in or register (routes/auth.ts)
-    expect(source('lib/rate-limit-options.ts')).toMatch(new RegExp(`max:\\s+\\(req\\) => req\\.apiPlan\\?\\.perMinute \\?\\? ${SHARED_PER_MINUTE},`))
+    expect(source('lib/rate-limit-options.ts')).toMatch(new RegExp(`max:\\s+\\(req\\) => req\\.apiPlan\\?\\.perMinute \\?\\? \\(aiPlatformOfKey\\(rateLimitKey\\(req\\)\\) \\? AI_PLATFORM_PER_MINUTE : ${SHARED_PER_MINUTE}\\),`))
+    // the AI companies' published servers (Nov 21, 2026; lib/ai-platforms.ts): 600 a minute, each address on its own
+    expect(spec.info.description).toContain("The addresses Anthropic and OpenAI publish for their assistants' tool calls (Claude, ChatGPT), which many people share, get 600 requests a minute across the API and on `POST /mcp`")
     // a Pro key's own budget (lib/api-plan.ts; Devon, Oct 21, 2026: 600 a minute, 50,000 a day)
     expect(spec.info.description).toContain('counts in its own budget: 600 requests a minute across the API, each read endpoint up to 10 times its own limit (at most 600), and 50,000 a day')
     expect(spec.info.description).toContain(`Endpoints without a limit of their own share one budget: ${SHARED_PER_MINUTE} requests a minute.`)
@@ -333,7 +335,7 @@ describe('the OpenAPI document, over the API\'s own route files', () => {
     expect(mcp.post.security).toBeUndefined()
     expect(mcp.post.tags).toEqual(['mcp'])
     expect(mcp.post.description).toContain('Read-only and open: no sign-in or key.')
-    expect(source('routes/mcp.ts')).toMatch(/app\.post\('\/', \{\s*schema: POST_DOCS,\s*bodyLimit: 64 \* 1024,\s*config: \{ rateLimit: \{ max: 60, timeWindow: '1 minute' \} \}/)
+    expect(source('routes/mcp.ts')).toMatch(/app\.post\('\/', \{\s*schema: POST_DOCS,\s*bodyLimit: 64 \* 1024,\s*config: \{ rateLimit: \{ max: 60, timeWindow: '1 minute' \}, aiPlatforms: true \}/)
     expect(mcp.post.description).toContain('Rate limit: 60 requests a minute per client address, counted for this endpoint alone.')
     expect(mcp.post.requestBody?.content['application/json']?.example).toEqual({ jsonrpc: '2.0', id: 1, method: 'tools/list' })
     // every tool the server has, by name (five since check_link)

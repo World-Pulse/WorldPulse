@@ -4,6 +4,7 @@ import type Redis from 'ioredis'
 import { buildCfAwareKeyGenerator } from '../middleware/cloudflare'
 import { internalCallClient } from './internal-call'
 import { isSiteCall } from './site-calls'
+import { aiPlatformOfKey, AI_PLATFORM_PER_MINUTE } from './ai-platforms'
 // req.apiPlan's type (lib/api-plan.ts sets it): type-only, so loading these options doesn't
 // open the database (the MCP server's tests exited on it, Oct 21, 2026)
 import type {} from './api-plan'
@@ -40,10 +41,15 @@ export function rateLimitKey(req: FastifyRequest): string {
  * Pro keys (plan V3d, Oct 21, 2026; lib/api-plan.ts): a request with a Pro
  * key counts in the key's own budget, 600 a minute, instead of the user's or
  * address's 200; read endpoints' own limits are raised for it there.
+ *
+ * The AI companies' servers (Nov 21, 2026; lib/ai-platforms.ts): an address
+ * Anthropic or OpenAI publishes for their assistants' tool calls gets 600 a
+ * minute too, still counted per address: everyone using WorldPulse in Claude
+ * or ChatGPT asks from those few addresses.
  */
 export function rateLimitOptions(redis: Redis): RateLimitPluginOptions {
   return {
-    max:         (req) => req.apiPlan?.perMinute ?? 200,
+    max:         (req) => req.apiPlan?.perMinute ?? (aiPlatformOfKey(rateLimitKey(req)) ? AI_PLATFORM_PER_MINUTE : 200),
     timeWindow:  '1 minute',
     redis,
     skipOnError: true,

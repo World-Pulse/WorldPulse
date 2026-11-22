@@ -95,6 +95,7 @@ import { securityPlugin } from './middleware/security'
 import { cloudflareMiddlewarePlugin } from './middleware/cloudflare'
 import { rateLimitOptions } from './lib/rate-limit-options'
 import { registerApiPlans } from './lib/api-plan'
+import { startOpenAiRefresh } from './lib/ai-platforms'
 import { registerHealthRoutes } from './routes/health'
 import { registerStatusRoutes } from './routes/status'
 import { logger } from './lib/logger'
@@ -251,6 +252,13 @@ async function bootstrap() {
 
   // Served even when Redis can't count a request (lib/rate-limit-options.ts)
   await app.register(rateLimit, rateLimitOptions(redis))
+
+  // The addresses ChatGPT's connectors call from, read now and every 12 hours, for their
+  // bigger allowance (lib/ai-platforms.ts; Anthropic's are fixed in the code)
+  if (process.env.NODE_ENV !== 'test') {
+    const stopOpenAiRefresh = startOpenAiRefresh(app.log)
+    app.addHook('onClose', async () => { stopOpenAiRefresh() })
+  }
 
   await app.register(websocket)
   await app.register(metricsPlugin)

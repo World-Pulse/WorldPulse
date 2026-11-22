@@ -608,7 +608,7 @@ export default function DevelopersPage() {
               AI assistants can ask WorldPulse directly. Its MCP server (MCP is the protocol assistants such as Claude use to call
               outside tools) is at <code className="text-wp-cyan font-mono">https://api.world-pulse.io/mcp</code>: no sign-up, no key,
               read-only. Every answer gives the outlet count, whether the story is verified and its world-pulse.io link, as text and as
-              structured data. It allows 60 requests a minute per address, and each tool call counts as a call to the route it asks.
+              structured data. It allows 60 requests a minute per address (600 for the addresses Anthropic and OpenAI publish for Claude&apos;s and ChatGPT&apos;s tool calls, which many people share), and each tool call counts as a call to the route it asks.
             </p>
             <p className="text-[12px] font-mono text-wp-text3 uppercase tracking-wider mb-2">Tools</p>
             <div className="space-y-1 text-[13px] mb-5">
