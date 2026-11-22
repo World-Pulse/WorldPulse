@@ -85,6 +85,7 @@ import laborRightsPlugin                 from './routes/labor-rights'
 import { registerMapOgRoutes }           from './routes/map/og'
 import { registerMapTopicRoutes }        from './routes/map/topics'
 import { registerEarthFeedRoutes, registerSatelliteMapRoute } from './routes/map/earth-feeds'
+import { registerSeaFeedRoutes } from './routes/map/sea-feeds'
 import { registerMapSatelliteRoutes }    from './routes/map/satellites'
 import { registerClaimsRoutes }          from './routes/claims'
 import { registerPulseRoutes }           from './routes/pulse'
@@ -403,6 +404,7 @@ async function bootstrap() {
   await app.register(registerMapTopicRoutes,          { prefix: '/api/v1/map' })
   await app.register(registerEarthFeedRoutes,         { prefix: '/api/v1/map' })
   await app.register(registerSatelliteMapRoute,       { prefix: '/api/v1/map' })
+  await app.register(registerSeaFeedRoutes,           { prefix: '/api/v1/map' })
   await app.register(registerMapSatelliteRoutes,      { prefix: '/api/v1/map' })
   // "Pro coming soon": the waitlist (Devon, Oct 21, 2026: "Waitlist now, price later")
   await app.register(registerProWaitlistRoutes,       { prefix: '/api/v1/pro' })
