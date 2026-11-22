@@ -2504,6 +2504,8 @@ const GAZETTEER: Record<string, { lat: number; lng: number; country: string; reg
   'gulf of oman': { lat: 24.8, lng: 58.6, country: 'OM', name: 'Gulf of Oman' },
   'sea of oman': { lat: 24.8, lng: 58.6, country: 'OM', name: 'Gulf of Oman' },
   'gulf of aden': { lat: 12.0, lng: 48.0, country: 'YE', name: 'Gulf of Aden' },
+  // Nov 22, 2026: ABC's "attack on Russia-bound ship in the Gulf of Finland" sat at Moscow; the water is where the story is
+  'gulf of finland': { lat: 59.8, lng: 25.0, country: 'FI', name: 'Gulf of Finland' },
   'bab el-mandeb': { lat: 12.5833, lng: 43.3333, country: 'YE', name: 'Bab el-Mandeb' },
   'bab al-mandab': { lat: 12.5833, lng: 43.3333, country: 'YE', name: 'Bab el-Mandeb' },
   'taiwan strait': { lat: 24.0000, lng: 119.5000, country: 'TW', name: 'Taiwan Strait' },
