@@ -6,10 +6,12 @@
  *
  * Fresh for `freshSeconds`: served as is. Then, for up to `staleSeconds`
  * more, still served, while one process (a Redis lock) makes the next.
- * With nothing kept, or Redis unavailable, it is made while the caller waits.
+ * With nothing kept, or Redis unavailable, it is made while the caller waits
+ * (with `waitSeconds`, at most that long: then the make goes on without them).
  */
 
 import { redis } from '../db/redis'
+import { StillMaking } from './still-making'
 
 interface Kept<T> { at: number; value: T }
 
@@ -18,6 +20,11 @@ export interface SwrOptions {
   staleSeconds: number
   /** How long one process may take to make the next value before another may try */
   lockSeconds?: number
+  /**
+   * With nothing kept, how long a caller waits for the value (Nov 22, 2026): past that it gets StillMaking
+   * (lib/still-making.ts) while the make goes on and keeps the value for the next caller. Unset: it waits it out.
+   */
+  waitSeconds?: number
 }
 
 async function store<T>(key: string, value: T, opts: SwrOptions): Promise<void> {
@@ -117,5 +124,21 @@ export async function staleWhileRevalidate<T>(key: string, opts: SwrOptions, mak
   }
 
   // Nothing kept: made while the caller waits, and callers arriving meanwhile wait for the same one
-  return makeAndKeep(key, opts, make)
+  const job = makeAndKeep(key, opts, make)
+  if (!opts.waitSeconds) return job
+  return waitAtMost(job, opts.waitSeconds, key)
+}
+
+/** The value, if it is made within `seconds`; else StillMaking, and the make goes on (its failure then is the next caller's) */
+async function waitAtMost<T>(job: Promise<T>, seconds: number, key: string): Promise<T> {
+  job.catch(() => { /* nobody may be waiting by then: the next caller tries again */ })
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const gaveUp = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new StillMaking(key)), seconds * 1000)
+  })
+  try {
+    return await Promise.race([job, gaveUp])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
 }

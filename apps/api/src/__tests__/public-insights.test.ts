@@ -2,10 +2,11 @@
  * The open counts of Nov 10, 2026, night (routes/public-insights.ts), which round 2 of the AI tools asks: each route's
  * answer, its bounds and its 503, with the database and Redis stood in for (the queries ran on a test Postgres).
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const calls: Array<{ sql: string; bindings: unknown[] }> = []
 let fail = false
+let stillMaking = false
 
 // the keys the scraper writes (sources/travel-advisories.ts): the State Department's codes, "level|day"
 const TRAVEL_KEPT: Record<string, string> = {
@@ -22,7 +23,13 @@ vi.mock('../db/redis', () => ({
   },
 }))
 vi.mock('../db/postgres', () => ({ db: Object.assign(() => ({}), { raw: (s: string) => s }) }))
-vi.mock('../lib/swr-cache', () => ({ staleWhileRevalidate: async (_key: string, _opts: unknown, make: () => Promise<unknown>) => make() }))
+vi.mock('../lib/swr-cache', () => ({
+  staleWhileRevalidate: async (key: string, _opts: unknown, make: () => Promise<unknown>) => {
+    // a caller who stopped waiting (lib/still-making.ts): the real class, so the routes know it
+    if (stillMaking) throw new (await import('../lib/still-making')).StillMaking(key)
+    return make()
+  },
+}))
 vi.mock('../lib/long-query', () => ({
   longQuery: async (_seconds: number, run: (trx: unknown) => Promise<unknown>) => {
     if (fail) throw new Error('canceling statement due to statement timeout')
@@ -99,21 +106,53 @@ async function app() {
 }
 const get = async (url: string) => (await app()).inject({ method: 'GET', url })
 
-beforeEach(() => { calls.length = 0; fail = false })
+beforeEach(() => { calls.length = 0; fail = false; stillMaking = false })
+afterEach(() => { vi.useRealTimers() })
+
+/** The weeks read a day at a time count from now: the stood-in rows are of Nov 7 to 10, 2026 */
+function atNov10() {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-11-10T23:30:00Z'))
+}
 
 describe('GET /api/v1/public/chokepoints', () => {
   it('counts the reports naming each chokepoint, in other languages too, the most first, machine feeds left out', async () => {
-    const res = await get('/api/v1/public/chokepoints?days=3')
+    atNov10()
+    const res = await get('/api/v1/public/chokepoints?days=4')
     expect(res.statusCode).toBe(200)
     expect(res.headers['access-control-allow-origin']).toBe('*')
     const { data } = res.json()
-    expect(data.days).toBe(3)
+    expect(data.days).toBe(4)
     expect(data.chokepoints[0]).toEqual({ id: 'hormuz', name: 'Strait of Hormuz', reports: 2, verified: 1, latest: { id: 'b', title: 'Tanker hit near the Strait of Hormuz', at: '2026-11-10T00:00:00.000Z', verified: true } })
     expect(data.chokepoints[1]).toMatchObject({ id: 'suez', reports: 1 })
     expect(data.chokepoints.at(-1).reports).toBe(0)
     expect(calls[0]!.sql).toContain("NOT (tags @> ARRAY['osint']::text[])")
-    expect(calls[0]!.bindings[0]).toBe(3)
-    expect(calls[0]!.bindings[1]).toEqual(expect.arrayContaining(['%ormuz%', '%рмуз%', '%suez%']))
+    // read a day at a time (lib/day-scans.ts): four days back from Nov 10, 23:30 UTC is Nov 6 to Nov 10, five days
+    expect(calls.map(c => c.bindings[0])).toEqual(['2026-11-06T00:00:00.000Z', '2026-11-07T00:00:00.000Z', '2026-11-08T00:00:00.000Z', '2026-11-09T00:00:00.000Z', '2026-11-10T00:00:00.000Z'])
+    expect(calls[0]!.bindings[1]).toBe('2026-11-07T00:00:00.000Z')
+    expect(calls[0]!.bindings[2]).toEqual(expect.arrayContaining(['%ormuz%', '%рмуз%', '%suez%']))
+  })
+
+  it('leaves out the reports older than the days asked for', async () => {
+    atNov10()
+    // three days back is Nov 7, 23:30: the Suez report of Nov 7, 00:00 is older
+    const { data } = (await get('/api/v1/public/chokepoints?days=3')).json()
+    expect(data.chokepoints.find((c: { id: string }) => c.id === 'suez')).toMatchObject({ reports: 0, latest: null })
+    expect(data.chokepoints[0]).toMatchObject({ id: 'hormuz', reports: 2 })
+  })
+
+  it('answers 503 with retry-after while an answer nothing kept is still being made', async () => {
+    stillMaking = true
+    const res = await get('/api/v1/public/chokepoints')
+    expect(res.statusCode).toBe(503)
+    expect(res.headers['retry-after']).toBe('60')
+    expect(res.headers['x-still-making']).toBe('1')
+    expect(res.json()).toMatchObject({ code: 'SERVICE_UNAVAILABLE', error: 'The chokepoints are being counted on a busy server; try again in a minute' })
+    for (const u of ['/api/v1/public/news-watch?watch=cyber', '/api/v1/public/feed-reports?feed=us-weather', '/api/v1/public/outlet-reports?site=bbc.co.uk', '/api/v1/public/topics']) {
+      const r = await get(u)
+      expect(r.statusCode, u).toBe(503)
+      expect(r.headers['retry-after'], u).toBe('60')
+    }
   })
 
   it('names every chokepoint lib/chokepoints.ts places, and only those', () => {
@@ -204,14 +243,18 @@ describe('GET /api/v1/public/topics and /outlet-reports', () => {
 
 describe('GET /api/v1/public/feed-reports', () => {
   it("lists a feed's newest reports by its tag sets, and refuses a feed it doesn't know", async () => {
+    atNov10()
     const res = await get('/api/v1/public/feed-reports?feed=sanctions&days=14')
     expect(res.statusCode).toBe(200)
     const { data } = res.json()
-    expect(data).toMatchObject({ feed: 'sanctions', label: 'US Treasury (OFAC) and EU sanctions actions', days: 14, total: 3 })
-    expect(data.reports[0]).toMatchObject({ id: 'f', country: 'IR', place: 'Tehran', url: 'https://ofac.treasury.gov/x' })
+    // the stood-in report is of Nov 9: one, in the one day it was made
+    expect(data).toMatchObject({ feed: 'sanctions', label: 'US Treasury (OFAC) and EU sanctions actions', days: 14, total: 1 })
+    expect(data.reports[0]).toMatchObject({ id: 'f', country: 'IR', place: 'Tehran', url: 'https://ofac.treasury.gov/x', at: '2026-11-09T00:00:00.000Z' })
     expect(data.reports[0].summary).toHaveLength(400)
     expect(calls[0]!.sql).toContain('(tags @> ?::text[] OR tags @> ?::text[])')
-    expect(calls[0]!.bindings).toEqual([14, ['sanctions', 'ofac'], ['sanctions', 'eu']])
+    // fourteen days back from Nov 10, 23:30 is Oct 27, 23:30: fifteen days read, one query each
+    expect(calls).toHaveLength(15)
+    expect(calls[0]!.bindings).toEqual(['2026-10-27T00:00:00.000Z', '2026-10-28T00:00:00.000Z', ['sanctions', 'ofac'], ['sanctions', 'eu']])
     expect((await get('/api/v1/public/feed-reports?feed=constructor')).statusCode).toBe(400)
     expect((await get('/api/v1/public/feed-reports')).statusCode).toBe(400)
   })
@@ -219,23 +262,25 @@ describe('GET /api/v1/public/feed-reports', () => {
 
 describe('GET /api/v1/public/news-watch, /busiest-outlets, and /topics for one country', () => {
   it('groups a watch\'s reports by country, the most first, each with its newest verified headline', async () => {
+    atNov10()
     const { data } = (await get('/api/v1/public/news-watch?watch=cyber&days=3')).json()
     expect(data).toMatchObject({ watch: 'cyber', label: 'cyber attacks', days: 3, total: 4 })
     expect(data.countries[0]).toEqual({ country: 'PL', reports: 2, verified: 1, latest: { id: 'h1', title: 'Hackers hit Polish water utility', at: '2026-11-10T20:00:00.000Z' } })
     expect(data.countries[1]).toEqual({ country: 'FR', reports: 1, verified: 0, latest: null })
     expect(data.newest.map((r: { id: string }) => r.id)).toEqual(['h1', 'h2', 'h3', 'h4'])
-    expect(calls[0]!.bindings[1]).toEqual(expect.arrayContaining(['%hacker%', '%ransomware%', '%кибератак%']))
+    expect(calls[0]!.bindings[2]).toEqual(expect.arrayContaining(['%hacker%', '%ransomware%', '%кибератак%']))
     // "hack" alone would be Hackney and hackathons
-    expect(calls[0]!.bindings[1]).not.toContain('%hack%')
+    expect(calls[0]!.bindings[2]).not.toContain('%hack%')
     // a killing is not a cyber attack
     expect(calls[0]!.sql).toContain('AND NOT (title ILIKE ANY (?::text[]))')
-    expect(calls[0]!.bindings[2]).toContain('%hacked to death%')
+    expect(calls[0]!.bindings[3]).toContain('%hacked to death%')
   })
 
   it("reads a topic's reports for a topic watch, and refuses a watch it doesn't know", async () => {
+    atNov10()
     const { data } = (await get('/api/v1/public/news-watch?watch=elections')).json()
     expect(data.countries[0]).toMatchObject({ country: 'CL', reports: 1, verified: 1 })
-    expect(calls[0]!.bindings).toEqual([7, 'elections'])
+    expect(calls[0]!.bindings).toEqual(['2026-11-03T00:00:00.000Z', '2026-11-04T00:00:00.000Z', 'elections'])
     expect((await get('/api/v1/public/news-watch?watch=sports')).statusCode).toBe(400)
   })
 

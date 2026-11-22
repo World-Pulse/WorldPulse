@@ -19,6 +19,7 @@
  */
 import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import { internalCallHeaders } from '../lib/internal-call'
+import { STILL_MAKING_HEADER } from '../lib/still-making'
 import { rateLimitKey } from '../lib/rate-limit-options'
 import { aiPlatformStatus } from '../lib/ai-platforms'
 import { describeSite, siteInfo, countryLabel, outletOf, OUTLET_KIND_LABELS } from '../lib/outlets'
@@ -94,6 +95,10 @@ async function ask({ app, client }: Asker, url: string): Promise<{ status: numbe
   if (res.statusCode === 429) throw new ToolError('Too many questions from you just now; try again in a minute')
   let body: Record<string, unknown> = {}
   try { body = res.json() as Record<string, unknown> } catch { /* not JSON */ }
+  // an answer still being made after the route's wait (lib/still-making.ts): its own words, and when to ask again
+  if (res.statusCode === 503 && res.headers[STILL_MAKING_HEADER]) {
+    throw new ToolError(typeof body.error === 'string' && body.error ? body.error : 'WorldPulse is still preparing this answer; try again in a minute')
+  }
   return { status: res.statusCode, body }
 }
 

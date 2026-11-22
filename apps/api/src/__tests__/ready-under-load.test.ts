@@ -20,7 +20,10 @@ function builder(rows: unknown) {
   return b
 }
 const COUNTRY_ROWS = [{ category: 'conflict', count: '40', max_sev: 3, avg_rel: 0.8 }]
-const trx = Object.assign((table: string) => builder(table === 'signals' ? COUNTRY_ROWS : []), { raw: (s: string) => s })
+// the claims count's estimate of all reports (pg_class.reltuples) comes back as rows; other raw SQL is passed through
+const trx = Object.assign((table: string) => builder(table === 'signals' ? COUNTRY_ROWS : []), {
+  raw: (s: string) => (s.includes('reltuples') ? Promise.resolve({ rows: [{ count: '959920' }] }) : s),
+})
 
 vi.mock('../db/postgres', () => ({ db: Object.assign((t: string) => builder(t === 'sources' ? [{ trust_bucket: 'high_trust', count: '30' }] : [{ count: '7' }]), { raw: (s: string) => s }) }))
 vi.mock('../db/redis', () => ({ redis: { get: vi.fn(async () => null), set: vi.fn(async () => 'OK'), setex: vi.fn(async () => 'OK'), del: vi.fn(async () => 1) } }))
@@ -61,14 +64,16 @@ describe("a country's page", () => {
 })
 
 describe("the Claims page's numbers and the home page's escalation score", () => {
-  it('claims/stats: kept and remade, both counts in one transaction with 30 seconds', async () => {
+  it("claims/stats: kept and remade, the last day counted and all reports the database's estimate, in one transaction with 30 seconds", async () => {
     const { registerClaimsRoutes } = await import('../routes/claims')
     const app = Fastify({ logger: false })
     await app.register(registerClaimsRoutes, { prefix: '/api/v1/claims' })
     const res = await app.inject({ method: 'GET', url: '/api/v1/claims/stats' })
     expect(res.statusCode).toBe(200)
-    expect(res.json()).toMatchObject({ signalsLast24h: 40, totalSignals: 40 })
+    expect(res.json()).toMatchObject({ signalsLast24h: 40, totalSignals: 959920 })
     expect(h.keys[0]).toMatch(/stats:v2$/)
+    // with nothing kept, a caller waits 20 seconds at most (lib/still-making.ts)
+    expect(h.opts[0]).toMatchObject({ freshSeconds: 300, waitSeconds: 20 })
     expect(h.seconds).toEqual([30])
     h.fail = true
     expect((await app.inject({ method: 'GET', url: '/api/v1/claims/stats' })).statusCode).toBe(503)
@@ -88,12 +93,15 @@ describe("the Claims page's numbers and the home page's escalation score", () =>
 })
 
 describe('the slowest AI tools', () => {
-  it('get more time and are kept a day', async () => {
+  it('get more time, read their weeks a day at a time, keep a caller 20 seconds at most, and are kept a day', async () => {
     const m = await import('../routes/public-insights')
-    expect(m.SLOW_SCAN_SECONDS).toBe(120)
     expect(m.TOOL_QUERY_SECONDS).toBe(45)
-    expect(m.WARM_TOOL_ANSWERS.map(j => j.key)).toEqual(['public:chokepoints:v1:7', 'public:news-watch:v1:cyber:7', 'public:feed-reports:v1:us-weather:7'])
-    for (const j of m.WARM_TOOL_ANSWERS) expect(j.opts.staleSeconds).toBe(86_400)
+    expect(m.TOOL_WAIT_SECONDS).toBe(20)
+    expect(m.DAY_SCAN_SECONDS).toBe(60)
+    expect(m.TODAY_SECONDS).toBe(900)
+    expect(m.WARM_TOOL_ANSWERS.map(j => j.key)).toEqual(['public:chokepoints:v2:7', 'public:news-watch:v2:cyber:7', 'public:feed-reports:v2:us-weather:7'])
+    for (const j of m.WARM_TOOL_ANSWERS) expect(j.opts).toMatchObject({ staleSeconds: 86_400, lockSeconds: m.DAY_SCAN_LOCK_SECONDS, waitSeconds: 20 })
+    expect(m.CHOKEPOINT_DAYS).toMatchObject({ prefix: 'public:chokepoints:v2', todaySeconds: 900, querySeconds: 60 })
   })
 
   it('their default answers are remade when missing or older than 12 hours, and left alone when warm', async () => {

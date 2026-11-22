@@ -25,6 +25,8 @@ import { redis } from '../db/redis'
 import { sendError } from '../lib/errors'
 import { longQuery } from '../lib/long-query'
 import { staleWhileRevalidate, keptAge, remakeNow, type SwrOptions } from '../lib/swr-cache'
+import { windowRows, msOf, type DayScan } from '../lib/day-scans'
+import { StillMaking, sendStillMaking } from '../lib/still-making'
 import { outletOf } from '../lib/outlets'
 import { REGION_IDS, regionCountries, type RegionId } from '../lib/regions'
 import { READER_TOPICS, isReaderTopic } from '../lib/topics'
@@ -68,26 +70,44 @@ export const CHOKEPOINT_NAMES: Array<{ id: string; name: string; words: string; 
 
 export interface ChokepointNews { id: string; name: string; reports: number; verified: number; latest: { id: string; title: string; at: string | null; verified: boolean } | null }
 
-async function chokepointNews(days: number): Promise<ChokepointNews[]> {
-  const like = CHOKEPOINT_NAMES.flatMap(c => c.like).map(f => `%${f}%`)
-  const result = await longQuery(SLOW_SCAN_SECONDS, trx => trx.raw(
+// ─── Weeks read a day at a time (lib/day-scans.ts, Nov 22, 2026) ─────────────────────────────
+
+/** Each day's query in a week read a day at a time */
+export const DAY_SCAN_SECONDS = 60
+/** Today's reports are read again when today's read is older than this */
+export const TODAY_SECONDS = 900
+
+interface HeadlineRow { id: string; title: string; status: string; at: number }
+
+const CHOKEPOINT_WORDS = CHOKEPOINT_NAMES.map(c => new RegExp(c.words, 'iu'))
+const CHOKEPOINT_LIKE = CHOKEPOINT_NAMES.flatMap(c => c.like).map(f => `%${f}%`)
+
+/** The headlines naming a chokepoint, a day at a time: the fragments find the candidates, the names decide */
+export const CHOKEPOINT_DAYS: DayScan<HeadlineRow> = {
+  prefix: 'public:chokepoints:v2', todaySeconds: TODAY_SECONDS, querySeconds: DAY_SCAN_SECONDS, at: r => r.at,
+  read: async (trx, from, to) => rowsOf(await (trx.raw(
     `SELECT id::text AS id, title, status::text AS status, created_at
        FROM signals
-      WHERE created_at > NOW() - make_interval(days => ?)
+      WHERE created_at >= ?::timestamptz AND created_at < ?::timestamptz
         AND status IN ('verified', 'pending')
         AND ${NEWS_ONLY}
         AND title ILIKE ANY (?::text[])
       ORDER BY created_at DESC
-      LIMIT 20000`, [days, like]) as unknown as Promise<unknown>)
-  const rows = rowsOf(result)
-  return CHOKEPOINT_NAMES.map(c => {
-    const re = new RegExp(c.words, 'iu')
-    const mine = rows.filter(r => re.test(String(r.title ?? '')))
+      LIMIT 5000`, [from, to, CHOKEPOINT_LIKE]) as unknown as Promise<unknown>))
+    .map(r => ({ id: String(r.id), title: String(r.title ?? ''), status: String(r.status), at: msOf(r.created_at) }))
+    .filter(r => CHOKEPOINT_WORDS.some(re => re.test(r.title))),
+}
+
+async function chokepointNews(days: number): Promise<ChokepointNews[]> {
+  const rows = await windowRows(CHOKEPOINT_DAYS, days)
+  return CHOKEPOINT_NAMES.map((c, i) => {
+    const re = CHOKEPOINT_WORDS[i]!
+    const mine = rows.filter(r => re.test(r.title))
     const verified = mine.filter(r => r.status === 'verified')
     const latest = verified[0] ?? mine[0]
     return {
       id: c.id, name: c.name, reports: mine.length, verified: verified.length,
-      latest: latest ? { id: String(latest.id), title: String(latest.title), at: iso(latest.created_at), verified: latest.status === 'verified' } : null,
+      latest: latest ? { id: latest.id, title: latest.title, at: new Date(latest.at).toISOString(), verified: latest.status === 'verified' } : null,
     }
   }).sort((a, b) => b.reports - a.reports || a.name.localeCompare(b.name))
 }
@@ -327,26 +347,32 @@ export const FEEDS: Record<string, { label: string; tags: string[][] }> = {
 
 export interface FeedReport { id: string; title: string; summary: string | null; severity: string | null; country: string | null; place: string | null; at: string | null; url: string | null; tags: string[] }
 
-async function feedReports(feed: string, days: number): Promise<{ total: number; reports: FeedReport[] }> {
+type FeedRow = Omit<FeedReport, 'at'> & { at: number }
+
+/** A feed's reports by its tag sets, a day at a time (lib/day-scans.ts) */
+function feedDays(feed: string): DayScan<FeedRow> {
   const sets = FEEDS[feed]!.tags
-  const result = await longQuery(TOOL_QUERY_SECONDS, trx => trx.raw(
-    `WITH mine AS (
-       SELECT id::text AS id, title, summary, severity::text AS severity, country_code, location_name, created_at, original_urls[1] AS url, tags
-         FROM signals
-        WHERE created_at > NOW() - make_interval(days => ?)
-          AND (${sets.map(() => 'tags @> ?::text[]').join(' OR ')})
-     )
-     SELECT *, count(*) OVER () AS total FROM mine ORDER BY created_at DESC LIMIT 50`, [days, ...sets]) as unknown as Promise<unknown>)
-  const rows = rowsOf(result)
   return {
-    total: Number(rows[0]?.total ?? 0),
-    reports: rows.map(r => ({
+    prefix: `public:feed-reports:v2:${feed}`, todaySeconds: TODAY_SECONDS, querySeconds: DAY_SCAN_SECONDS, at: r => r.at,
+    read: async (trx, from, to) => rowsOf(await (trx.raw(
+      `SELECT id::text AS id, title, summary, severity::text AS severity, country_code, location_name, created_at, original_urls[1] AS url, tags
+         FROM signals
+        WHERE created_at >= ?::timestamptz AND created_at < ?::timestamptz
+          AND (${sets.map(() => 'tags @> ?::text[]').join(' OR ')})
+        ORDER BY created_at DESC
+        LIMIT 5000`, [from, to, ...sets]) as unknown as Promise<unknown>)).map(r => ({
       id: String(r.id), title: String(r.title ?? ''), summary: r.summary ? String(r.summary).slice(0, 400) : null, severity: r.severity ? String(r.severity) : null,
       country: typeof r.country_code === 'string' && /^[A-Z]{2}$/.test(r.country_code) ? r.country_code : null,
-      place: r.location_name ? String(r.location_name) : null, at: iso(r.created_at), url: r.url ? String(r.url) : null,
+      place: r.location_name ? String(r.location_name) : null, at: msOf(r.created_at), url: r.url ? String(r.url) : null,
       tags: Array.isArray(r.tags) ? (r.tags as unknown[]).map(String) : [],
     })),
   }
+}
+const FEED_DAYS: Record<string, DayScan<FeedRow>> = Object.fromEntries(Object.keys(FEEDS).map(f => [f, feedDays(f)]))
+
+async function feedReports(feed: string, days: number): Promise<{ total: number; reports: FeedReport[] }> {
+  const rows = await windowRows(FEED_DAYS[feed]!, days)
+  return { total: rows.length, reports: rows.slice(0, 50).map(r => ({ ...r, at: new Date(r.at).toISOString() })) }
 }
 
 // ─── News watches: one kind of news, by country (cyber attacks, elections, disasters) ─────────────
@@ -370,42 +396,51 @@ export const WATCHES: Record<string, { label: string; topic?: string; like?: str
 export interface WatchCountry { country: string; reports: number; verified: number; latest: { id: string; title: string; at: string | null } | null }
 export interface WatchReport { id: string; title: string; status: string; country: string | null; at: string | null }
 
-async function newsWatch(watch: string, days: number): Promise<{ total: number; countries: WatchCountry[]; newest: WatchReport[] }> {
+type WatchRow = HeadlineRow & { country: string | null }
+
+/** One watch's reports, a day at a time (lib/day-scans.ts): a topic's, or the headlines holding its fragments */
+function watchDays(watch: string): DayScan<WatchRow> {
   const w = WATCHES[watch]!
   const filter = w.topic ? 'category::text = ?' : 'title ILIKE ANY (?::text[])'
   const binding = w.topic ?? (w.like ?? []).map(f => `%${f}%`)
   const notLike = (w.not ?? []).map(f => `%${f}%`)
-  const result = await longQuery(SLOW_SCAN_SECONDS, trx => trx.raw(
-    `SELECT id::text AS id, title, status::text AS status, country_code, created_at
-       FROM signals
-      WHERE created_at > NOW() - make_interval(days => ?)
-        AND status IN ('verified', 'pending')
-        AND ${NEWS_ONLY}
-        AND ${filter}
-        ${notLike.length ? 'AND NOT (title ILIKE ANY (?::text[]))' : ''}
-      ORDER BY created_at DESC
-      LIMIT 20000`, [days, binding, ...(notLike.length ? [notLike] : [])]) as unknown as Promise<unknown>)
-  const rows = rowsOf(result)
+  return {
+    prefix: `public:news-watch:v2:${watch}`, todaySeconds: TODAY_SECONDS, querySeconds: DAY_SCAN_SECONDS, at: r => r.at,
+    read: async (trx, from, to) => rowsOf(await (trx.raw(
+      `SELECT id::text AS id, title, status::text AS status, country_code, created_at
+         FROM signals
+        WHERE created_at >= ?::timestamptz AND created_at < ?::timestamptz
+          AND status IN ('verified', 'pending')
+          AND ${NEWS_ONLY}
+          AND ${filter}
+          ${notLike.length ? 'AND NOT (title ILIKE ANY (?::text[]))' : ''}
+        ORDER BY created_at DESC
+        LIMIT 5000`, [from, to, binding, ...(notLike.length ? [notLike] : [])]) as unknown as Promise<unknown>)).map(r => ({
+      id: String(r.id), title: String(r.title ?? ''), status: String(r.status),
+      country: typeof r.country_code === 'string' && /^[A-Z]{2}$/.test(r.country_code) ? r.country_code : null, at: msOf(r.created_at),
+    })),
+  }
+}
+const WATCH_DAYS: Record<string, DayScan<WatchRow>> = Object.fromEntries(Object.keys(WATCHES).map(w => [w, watchDays(w)]))
+
+async function newsWatch(watch: string, days: number): Promise<{ total: number; countries: WatchCountry[]; newest: WatchReport[] }> {
+  const rows = await windowRows(WATCH_DAYS[watch]!, days)
   const byCountry = new Map<string, WatchCountry>()
   for (const r of rows) {
-    const code = typeof r.country_code === 'string' && /^[A-Z]{2}$/.test(r.country_code) ? r.country_code : null
-    if (!code) continue
-    const c = byCountry.get(code) ?? { country: code, reports: 0, verified: 0, latest: null }
+    if (!r.country) continue
+    const c = byCountry.get(r.country) ?? { country: r.country, reports: 0, verified: 0, latest: null }
     c.reports++
     if (r.status === 'verified') {
       c.verified++
       // newest first: the first verified one met is the newest
-      c.latest ??= { id: String(r.id), title: String(r.title ?? ''), at: iso(r.created_at) }
+      c.latest ??= { id: r.id, title: r.title, at: new Date(r.at).toISOString() }
     }
-    byCountry.set(code, c)
+    byCountry.set(r.country, c)
   }
   return {
     total: rows.length,
     countries: [...byCountry.values()].sort((a, b) => b.reports - a.reports || a.country.localeCompare(b.country)).slice(0, 40),
-    newest: rows.slice(0, 30).map(r => ({
-      id: String(r.id), title: String(r.title ?? ''), status: String(r.status),
-      country: typeof r.country_code === 'string' && /^[A-Z]{2}$/.test(r.country_code) ? r.country_code : null, at: iso(r.created_at),
-    })),
+    newest: rows.slice(0, 30).map(r => ({ id: r.id, title: r.title, status: r.status, country: r.country, at: new Date(r.at).toISOString() })),
   }
 }
 
@@ -571,25 +606,28 @@ const SWR = (fresh: number) => ({ freshSeconds: fresh, staleSeconds: 6 * 3_600, 
 
 /**
  * The AI tools that ran out of time in the Nov 22, 2026 test of all 100 (the server overloaded, 3.6 times last
- * week's reports): their queries get longer (a week's headlines read for names: 120 s, was 60; a feed, an outlet
- * or a region's topics: 45 s, was 20), their answers are kept a day while remade, and the defaults the tools ask
- * for are kept from going cold (warmToolAnswers).
+ * week's reports): an outlet's reports or a region's topics get 45 s (was 20); a week of headlines or of a feed is
+ * read a day at a time (lib/day-scans.ts); answers are kept a day while remade; a caller waits at most
+ * TOOL_WAIT_SECONDS for one nothing kept (then 503 "being counted" while the make goes on, lib/still-making.ts);
+ * and the defaults the tools ask for are kept from going cold (warmToolAnswers).
  */
-export const SLOW_SCAN_SECONDS = 120
 export const TOOL_QUERY_SECONDS = 45
-/** Fresh this long, then served up to a day old while one process remakes it */
-const TOOL_KEEP = (fresh: number, query = TOOL_QUERY_SECONDS) => ({ freshSeconds: fresh, staleSeconds: 86_400, lockSeconds: query + 60 })
+export const TOOL_WAIT_SECONDS = 20
+/** A week read a day at a time may read every one of its days in one remake */
+export const DAY_SCAN_LOCK_SECONDS = 600
+/** Fresh this long, then served up to a day old while one process (holding the lock up to `lock` seconds) remakes it */
+const TOOL_KEEP = (fresh: number, lock = TOOL_QUERY_SECONDS + 60): SwrOptions => ({ freshSeconds: fresh, staleSeconds: 86_400, lockSeconds: lock, waitSeconds: TOOL_WAIT_SECONDS })
 const OPEN = { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }
 
-const chokepointsKey = (days: number) => `public:chokepoints:v1:${days}`
-const feedReportsKey = (feed: string, days: number) => `public:feed-reports:v1:${feed}:${days}`
-const newsWatchKey = (watch: string, days: number) => `public:news-watch:v1:${watch}:${days}`
+const chokepointsKey = (days: number) => `public:chokepoints:v2:${days}`
+const feedReportsKey = (feed: string, days: number) => `public:feed-reports:v2:${feed}:${days}`
+const newsWatchKey = (watch: string, days: number) => `public:news-watch:v2:${watch}:${days}`
 
 /** The tools' default answers kept from going cold: chokepoints_news, cyber_attacks and us_weather_alerts (7 days each) */
 export const WARM_TOOL_ANSWERS: Array<{ key: string; opts: SwrOptions; make: () => Promise<unknown> }> = [
-  { key: chokepointsKey(7), opts: TOOL_KEEP(1_800, SLOW_SCAN_SECONDS), make: () => chokepointNews(7) },
-  { key: newsWatchKey('cyber', 7), opts: TOOL_KEEP(1_200, SLOW_SCAN_SECONDS), make: () => newsWatch('cyber', 7) },
-  { key: feedReportsKey('us-weather', 7), opts: TOOL_KEEP(600), make: () => feedReports('us-weather', 7) },
+  { key: chokepointsKey(7), opts: TOOL_KEEP(1_800, DAY_SCAN_LOCK_SECONDS), make: () => chokepointNews(7) },
+  { key: newsWatchKey('cyber', 7), opts: TOOL_KEEP(1_200, DAY_SCAN_LOCK_SECONDS), make: () => newsWatch('cyber', 7) },
+  { key: feedReportsKey('us-weather', 7), opts: TOOL_KEEP(600, DAY_SCAN_LOCK_SECONDS), make: () => feedReports('us-weather', 7) },
 ]
 /** An answer older than this (or none) is remade by the warmer; younger ones are left to the callers' own remakes */
 export const WARM_WHEN_OLDER_S = 12 * 3_600
@@ -627,10 +665,11 @@ export const registerPublicInsightRoutes: FastifyPluginAsync = async (app) => {
     reply.header('Access-Control-Allow-Origin', '*')
     const days = boundedInt((req.query as Record<string, unknown>)?.days, 7, 1, 14)
     try {
-      // a week of headlines takes about 25 seconds: kept half an hour, served up to a day old while remade
-      const chokepoints = await staleWhileRevalidate(chokepointsKey(days), TOOL_KEEP(1_800, SLOW_SCAN_SECONDS), () => chokepointNews(days))
+      // a week of headlines, read a day at a time: kept half an hour, served up to a day old while remade
+      const chokepoints = await staleWhileRevalidate(chokepointsKey(days), TOOL_KEEP(1_800, DAY_SCAN_LOCK_SECONDS), () => chokepointNews(days))
       return reply.send({ success: true, data: { days, chokepoints } })
-    } catch {
+    } catch (err) {
+      if (err instanceof StillMaking) return sendStillMaking(reply, 'The chokepoints are being counted')
       return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The chokepoints could not be counted just now; try again in a minute')
     }
   })
@@ -717,7 +756,8 @@ export const registerPublicInsightRoutes: FastifyPluginAsync = async (app) => {
     try {
       const topics = await staleWhileRevalidate(`public:topics:v1:${hours}:${country ?? (region ? `region:${region}` : 'all')}`, TOOL_KEEP(600), () => topicCounts(hours, country, region ? regionCountries(region) : null))
       return reply.send({ success: true, data: { hours, country, ...(region ? { region } : {}), topics } })
-    } catch {
+    } catch (err) {
+      if (err instanceof StillMaking) return sendStillMaking(reply, 'The topics are being counted')
       return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The topics could not be counted just now; try again in a minute')
     }
   })
@@ -733,7 +773,8 @@ export const registerPublicInsightRoutes: FastifyPluginAsync = async (app) => {
     try {
       const data = await staleWhileRevalidate(`public:outlet-reports:v2:${site}:${days}`, TOOL_KEEP(600), () => outletReports(site, days))
       return reply.send({ success: true, data: { site, days, ...data } })
-    } catch {
+    } catch (err) {
+      if (err instanceof StillMaking) return sendStillMaking(reply, 'The outlet\'s reports are being read')
       return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The outlet\'s reports could not be read just now; try again in a minute')
     }
   })
@@ -747,9 +788,10 @@ export const registerPublicInsightRoutes: FastifyPluginAsync = async (app) => {
     if (!Object.hasOwn(FEEDS, feed)) return sendError(reply, 400, 'VALIDATION_ERROR', `feed must be one of ${Object.keys(FEEDS).join(', ')}`)
     const days = boundedInt(q.days, 7, 1, 30)
     try {
-      const data = await staleWhileRevalidate(feedReportsKey(feed, days), TOOL_KEEP(600), () => feedReports(feed, days))
+      const data = await staleWhileRevalidate(feedReportsKey(feed, days), TOOL_KEEP(600, DAY_SCAN_LOCK_SECONDS), () => feedReports(feed, days))
       return reply.send({ success: true, data: { feed, label: FEEDS[feed]!.label, days, ...data } })
-    } catch {
+    } catch (err) {
+      if (err instanceof StillMaking) return sendStillMaking(reply, 'The feed\'s reports are being read')
       return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The feed could not be read just now; try again in a minute')
     }
   })
@@ -763,9 +805,10 @@ export const registerPublicInsightRoutes: FastifyPluginAsync = async (app) => {
     if (!Object.hasOwn(WATCHES, watch)) return sendError(reply, 400, 'VALIDATION_ERROR', `watch must be one of ${Object.keys(WATCHES).join(', ')}`)
     const days = boundedInt(q.days, 7, 1, 14)
     try {
-      const data = await staleWhileRevalidate(newsWatchKey(watch, days), TOOL_KEEP(1_200, SLOW_SCAN_SECONDS), () => newsWatch(watch, days))
+      const data = await staleWhileRevalidate(newsWatchKey(watch, days), TOOL_KEEP(1_200, DAY_SCAN_LOCK_SECONDS), () => newsWatch(watch, days))
       return reply.send({ success: true, data: { watch, label: WATCHES[watch]!.label, days, ...data } })
-    } catch {
+    } catch (err) {
+      if (err instanceof StillMaking) return sendStillMaking(reply, 'The news is being counted')
       return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The news could not be counted just now; try again in a minute')
     }
   })

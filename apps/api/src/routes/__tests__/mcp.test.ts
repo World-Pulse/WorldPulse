@@ -17,6 +17,7 @@ vi.mock('../../lib/outside-use', async (actual) => ({
 
 import { registerMcpRoutes, PROTOCOL_VERSIONS, DAY_WAIT, TOOL_SETS } from '../mcp'
 import { internalCallClient } from '../../lib/internal-call'
+import { sendStillMaking } from '../../lib/still-making'
 import { rateLimitKey } from '../../lib/rate-limit-options'
 
 const STORY = {
@@ -633,8 +634,10 @@ async function build(): Promise<FastifyInstance> {
     }
   })
   // Nov 10, 2026, night, round 2: the open counts of routes/public-insights.ts
-  app.get('/api/v1/public/chokepoints', async (req) => {
+  app.get('/api/v1/public/chokepoints', async (req, reply) => {
     asked.push({ url: req.url, client: internalCallClient(req.headers as Record<string, unknown>) })
+    // Nov 22, 2026: an answer nothing kept, still being made after the route's wait
+    if ((req.query as { days?: string }).days === '9') return sendStillMaking(reply, 'The chokepoints are being counted')
     return { success: true, data: { days: Number((req.query as { days?: string }).days), chokepoints: [
       { id: 'hormuz', name: 'Strait of Hormuz', reports: 42, verified: 20, latest: { id: STORY.leadId, title: 'Tanker hit near the Strait of Hormuz', at: hoursAgo(3), verified: true } },
       { id: 'suez', name: 'Suez Canal', reports: 5, verified: 1, latest: { id: OTHER_REPORT, title: 'Suez Canal traffic recovers', at: hoursAgo(30), verified: false } },
@@ -1840,6 +1843,13 @@ describe('MCP server: round 2 of Nov 10, 2026, night (sixty in all)', () => {
     expect(text).toContain('1. Strait of Hormuz: 42 reports, 20 verified\n   Newest verified: Tanker hit near the Strait of Hormuz (3h ago)')
     expect(text).toContain('2. Suez Canal: 5 reports, 1 verified\n   Newest: Suez Canal traffic recovers')
     expect(text).toContain('Not named: Lombok Strait.')
+  })
+
+  it('passes on the words of an answer still being made, and when to ask again, instead of a general failure (Nov 22, 2026)', async () => {
+    const app = await build()
+    const r = await call(app, 'chokepoints_news', { days: 9 })
+    expect(r.isError).toBe(true)
+    expect(r.content[0].text).toBe('The chokepoints are being counted on a busy server; try again in a minute')
   })
 
   it("exploited_vulnerabilities lists CISA's newest catalogue entries, one maker's when asked", async () => {

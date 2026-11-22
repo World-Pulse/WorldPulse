@@ -127,3 +127,37 @@ describe('staleWhileRevalidate', () => {
     expect(await staleWhileRevalidate('fails', opts, async () => 'ok')).toBe('ok')
   })
 })
+
+describe('staleWhileRevalidate with waitSeconds (Nov 22, 2026)', () => {
+  beforeEach(() => { store.clear(); vi.clearAllMocks() })
+
+  it('answers StillMaking past the wait while the make goes on, and the next caller gets what it kept', async () => {
+    const { StillMaking } = await import('../still-making')
+    let finish: (v: string) => void = () => {}
+    const make = vi.fn(() => new Promise<string>(r => { finish = r }))
+    const o = { freshSeconds: 900, staleSeconds: 7200, waitSeconds: 0.05 }
+    await expect(staleWhileRevalidate('w', o, make)).rejects.toBeInstanceOf(StillMaking)
+    // a caller meanwhile waits for the same make, not a second one
+    await expect(staleWhileRevalidate('w', o, make)).rejects.toBeInstanceOf(StillMaking)
+    expect(make).toHaveBeenCalledTimes(1)
+    finish('made')
+    await flush(); await flush(); await flush()
+    expect(await staleWhileRevalidate('w', o, make)).toBe('made')
+    expect(make).toHaveBeenCalledTimes(1)
+  })
+
+  it('gives the value made within the wait, and the failure that comes within it', async () => {
+    const o = { freshSeconds: 900, staleSeconds: 7200, waitSeconds: 1 }
+    expect(await staleWhileRevalidate('q', o, async () => 'quick')).toBe('quick')
+    await expect(staleWhileRevalidate('f', o, async () => { throw new Error('statement timeout') })).rejects.toThrow('statement timeout')
+  })
+
+  it('a make failing after its caller stopped waiting is left quietly, and the next caller makes it again', async () => {
+    let fail: (e: Error) => void = () => {}
+    const o = { freshSeconds: 900, staleSeconds: 7200, waitSeconds: 0.02 }
+    await expect(staleWhileRevalidate('z', o, () => new Promise<string>((_resolve, reject) => { fail = reject }))).rejects.toThrow('still being made')
+    fail(new Error('statement timeout'))
+    await flush(); await flush()
+    expect(await staleWhileRevalidate('z', o, async () => 'second')).toBe('second')
+  })
+})

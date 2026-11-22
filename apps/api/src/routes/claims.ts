@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { sendError } from '../lib/errors'
 import { longQuery } from '../lib/long-query'
 import { staleWhileRevalidate } from '../lib/swr-cache'
+import { StillMaking, sendStillMaking } from '../lib/still-making'
 import { fingerprint, fingerprintStatus, similarity } from '../lib/fingerprint'
 import { searchByMeaning } from '../lib/fingerprint-search'
 
@@ -517,23 +518,29 @@ export const registerClaimsRoutes: FastifyPluginAsync = async (fastify) => {
     preHandler: [optionalAuth],
   }, async (_request, reply) => {
     // Kept and remade in the background with 30 seconds for its counts (Nov 22, 2026: counting every report took
-    // 4.7 s on the busy server, next to the pool's 5 s limit, and the Claims page's numbers failed when it went over)
+    // 4.7 s on the busy server, next to the pool's 5 s limit, and the Claims page's numbers failed when it went over).
+    // With nothing kept, a caller waits 20 seconds at most, then the count goes on without them.
     try {
-      return reply.send(await staleWhileRevalidate(`${CLAIMS_CACHE_PREFIX}stats:v2`, { freshSeconds: 300, staleSeconds: 6 * 3_600, lockSeconds: 60 }, claimStats))
-    } catch {
+      return reply.send(await staleWhileRevalidate(`${CLAIMS_CACHE_PREFIX}stats:v2`, { freshSeconds: 300, staleSeconds: 6 * 3_600, lockSeconds: 60, waitSeconds: 20 }, claimStats))
+    } catch (err) {
+      if (err instanceof StillMaking) return sendStillMaking(reply, 'The claim checker\'s numbers are being counted')
       return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The claim checker\'s numbers could not be counted just now; try again in a minute')
     }
   })
 
-  /** The claim checker's numbers: reports read in the last day and in all, sources by trust */
+  /** The claim checker's numbers: reports read in the last day and in all (the database's own estimate), sources by trust */
   async function claimStats() {
     // Count signals processed in last 24h
     const dayAgo = new Date(Date.now() - 86_400_000).toISOString()
 
-    const [[signalCount], [totalSignals]] = await longQuery(30, trx => Promise.all([
+    // All reports: Postgres's row estimate, which it keeps as it vacuums and analyzes the table, within about 1%
+    // (Nov 22, 2026: counting all 960,000 one by one ran past 30 seconds on the busy server; the page shows only
+    // the last day's count)
+    const [[signalCount], estimate] = await longQuery(30, trx => Promise.all([
       trx('signals').where('created_at', '>=', dayAgo).count('* as count'),
-      trx('signals').count('* as count'),
+      trx.raw(`SELECT reltuples::bigint AS count FROM pg_class WHERE oid = 'signals'::regclass`) as unknown as Promise<{ rows?: Array<{ count: string | number }> }>,
     ]))
+    const totalSignals = { count: Math.max(0, Number(estimate?.rows?.[0]?.count ?? 0)) }
 
     // Count sources by trust tier.
     // NOTE: `sources.tier` is an existing enum column, so we use the alias
