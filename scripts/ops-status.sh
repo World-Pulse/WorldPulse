@@ -243,6 +243,7 @@ source_stats() {
         printf "feed=%s\t%s\t%s\t%s\n" "$id" "$(redis-cli --raw GET "$k")" "$(redis-cli --raw EXISTS "news-rss:pause:$id")" \
           "$(redis-cli --raw GET "news-rss:why:$id")"
       done
+      redis-cli --raw HGETALL news-rss:new | head -n 4000 | paste -d "\t" - - | sed "s/^/newat=/"
       redis-cli --raw SMEMBERS news-rss:parked | head -n 100 | sed "s/^/parked=/"
       redis-cli --raw --scan --pattern "news-rss:parked-works:*" | head -n 100 | sed "s/^news-rss:parked-works:/parked_ok=/"
       redis-cli --raw LRANGE scraper:dlq 0 299 | sed "s/^/dlq=/"' 2>/dev/null) || out=""
@@ -286,12 +287,17 @@ def ms_of(text):
 tracked, failing, stale, feeds, members = 0, [], 0, [], set()
 stale_names = []
 parked, parked_ok = set(), set()
+new_at = {}
 for line in lines:
     if line.startswith('tracked='):
         tracked = num(line[8:])
     elif line.startswith('parked='):
         # feeds parked behind a bot check (news-rss.ts, Nov 5, 2026): tried once a day, not counted as failing
         if re.fullmatch(r'[a-z0-9-]{1,60}', line[7:].strip()): parked.add(line[7:].strip())
+    elif line.startswith('newat='):
+        # a feed's last new report (news-rss.ts NEW_KEY, Nov 22, 2026): id, tab, ISO time
+        nid, _, nat = line[6:].partition('\t')
+        if re.fullmatch(r'[A-Za-z0-9_.-]{1,60}', nid.strip()) and ms_of(nat.strip()): new_at[nid.strip()] = ms_of(nat.strip())
     elif line.startswith('parked_ok='):
         parked_ok.add(line[10:].strip()[:60])
     elif line.startswith('member='):
@@ -331,6 +337,12 @@ print(json.dumps({'tracked': tracked, 'failing': len(failing),
                   'switched_off': len(off), 'switched_off_list': sorted(off_names.values())[:40], 'list': failing[:40],
                   'news_feeds': {'failing': len(feeds), 'paused': sum(1 for f in feeds if f['paused']),
                                  'list': feeds[:40],
+                                 # quiet: its last new report is over 48 hours old (the record began Nov 22, 2026, so
+                                 # nothing shows before Nov 24); oldest first, with the time
+                                 'new_known': len(new_at),
+                                 'quiet': sum(1 for t in new_at.values() if now_ms - t > 48 * 3600 * 1000),
+                                 'quiet_list': [{'id': k, 'last_new': iso(t)} for k, t in sorted(new_at.items(), key=lambda kv: kv[1])
+                                                if now_ms - t > 48 * 3600 * 1000][:40],
                                  # answering: it answered again, so it is read as usual (for a week from its last answer)
                                  'parked': len(parked),
                                  'parked_list': [{'id': p, 'answering': p in parked_ok} for p in sorted(parked)][:40]}},
