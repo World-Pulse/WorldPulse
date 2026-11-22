@@ -28,6 +28,7 @@ import { staleWhileRevalidate } from '../lib/swr-cache'
 import { outletOf } from '../lib/outlets'
 import { REGION_IDS, regionCountries, type RegionId } from '../lib/regions'
 import { READER_TOPICS, isReaderTopic } from '../lib/topics'
+import { usTravelCountry } from '../lib/us-travel-codes'
 
 /** News reports, not a machine feed's (aircraft, fires, quakes): GDELT's articles are news (as public.ts counts) */
 const NEWS_ONLY = "(NOT (tags @> ARRAY['osint']::text[]) OR tags @> ARRAY['gdelt']::text[])"
@@ -121,7 +122,11 @@ async function vulnerabilities(days: number): Promise<Vulnerability[]> {
 export interface TravelLevel { country: string; level: number; since: string | null }
 export interface TravelNotice { id: string; title: string; at: string | null; url: string | null; from: 'us' | 'uk' }
 
-/** Every country's US level, as the scraper keeps it (osint:travel-us:<code> = "level|day") */
+/**
+ * Every country's US level, as the scraper keeps it (osint:travel-us:<code> = "level|day", the State Department's
+ * code: "irn"), by two-letter country (lib/us-travel-codes.ts). Two pages for one country (Gaza and the West Bank
+ * are both PS) give its higher level, then its newer day.
+ */
 async function usLevels(): Promise<TravelLevel[]> {
   const keys: string[] = []
   let cursor = '0'
@@ -132,10 +137,17 @@ async function usLevels(): Promise<TravelLevel[]> {
   } while (cursor !== '0' && keys.length < 1_000)
   if (keys.length === 0) return []
   const values = await redis.mget(...keys)
-  return keys.map((k, i) => {
-    const [level, day] = String(values[i] ?? '').split('|')
-    return { country: k.slice('osint:travel-us:'.length).toUpperCase(), level: Number(level), since: day || null }
-  }).filter(l => /^[A-Z]{2}$/.test(l.country) && l.level >= 1 && l.level <= 4)
+  const byCountry = new Map<string, TravelLevel>()
+  keys.forEach((k, i) => {
+    const country = usTravelCountry(k.slice('osint:travel-us:'.length))
+    const [raw, day] = String(values[i] ?? '').split('|')
+    const level = Number(raw)
+    if (!country || !Number.isInteger(level) || level < 1 || level > 4) return
+    const since = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : null
+    const had = byCountry.get(country)
+    if (!had || level > had.level || (level === had.level && (since ?? '') > (had.since ?? ''))) byCountry.set(country, { country, level, since })
+  })
+  return [...byCountry.values()]
 }
 
 async function travelNotices(country: string): Promise<TravelNotice[]> {
@@ -593,7 +605,8 @@ export const registerPublicInsightRoutes: FastifyPluginAsync = async (app) => {
     const given = String((req.query as Record<string, unknown>)?.country ?? '').toUpperCase()
     const country = /^[A-Z]{2}$/.test(given) ? (given === 'UK' ? 'GB' : given) : null
     try {
-      const levels = await staleWhileRevalidate('public:travel-levels:v1', SWR(1_800), () => usLevels())
+      // v2: the levels by two-letter country (v1 kept the empty list the three-letter keys gave)
+      const levels = await staleWhileRevalidate('public:travel-levels:v2', SWR(1_800), () => usLevels())
       if (!country) return reply.send({ success: true, data: { country: null, levels } })
       const notices = await staleWhileRevalidate(`public:travel-notices:v1:${country}`, SWR(1_800), () => travelNotices(country))
       return reply.send({ success: true, data: { country, us: levels.find(l => l.country === country) ?? null, notices } })

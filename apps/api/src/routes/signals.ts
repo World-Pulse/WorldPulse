@@ -35,6 +35,13 @@ import { COUNTED_CODES } from '../lib/counted-places'
 
 const SIGNAL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+/**
+ * The conflict zones and hotspots layers (Nov 22, 2026): kept 2 minutes, then served while one process remakes
+ * them, for up to 6 hours, so a slow database shows the last layer instead of none; each query gets 30 seconds.
+ */
+export const MAP_LAYER_SWR = { freshSeconds: 120, staleSeconds: 6 * 3600, lockSeconds: 60 }
+export const MAP_LAYER_QUERY_SECONDS = 30
+
 // ─── Bbox Validation Helper ───────────────────────────────────────────────────
 /**
  * The list's cache key. An area (bbox) is part of it since Nov 8, 2026: it wasn't, so a list asked for one
@@ -1224,12 +1231,17 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     if (qr.error) return sendError(reply, 400, 'VALIDATION_ERROR', qr.error)
     const { hours, min_categories: minCat, limit } = qr.data
 
-    const cacheKey = `signals:hotspots:${hours}:${minCat}:${limit}`
-    const cached = await redis.get(cacheKey).catch(() => null)
-    if (cached) {
-      try { return reply.send(JSON.parse(cached)) } catch { /* fallthrough */ }
+    // Kept in Redis and remade in the background, with more than the pool's 5 seconds (Nov 22, 2026: with the
+    // server overloaded the query crossed 5 seconds and answered 500 every time)
+    try {
+      const payload = await staleWhileRevalidate(`signals:hotspots:v2:${hours}:${minCat}:${limit}`, MAP_LAYER_SWR, () => hotspotsOf(hours, minCat, limit))
+      return reply.send(payload)
+    } catch {
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The hotspots could not be counted just now; try again in a minute')
     }
+  })
 
+  async function hotspotsOf(hours: number, minCat: number, limit: number) {
     // Use validated integers — safe for template literal interpolation.
     // Only medium-or-worse signals count towards a convergence, and cells are
     // ranked by how serious they are: by plain counts the top cells were the
@@ -1239,7 +1251,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     // array node-pg doesn't parse), which crashed the map's list; the centre
     // was the cell's south-west-most point, and MAX(severity) followed the
     // enum's order, not seriousness.
-    const result = await db.raw<{ rows: Array<Record<string, unknown>> }>(`
+    const result = await longQuery(MAP_LAYER_QUERY_SECONDS, trx => trx.raw(`
       WITH s AS (
         SELECT
           ST_Y(location::geometry) AS lat,
@@ -1272,7 +1284,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       HAVING COUNT(DISTINCT category) FILTER (WHERE sev_rank >= 3) >= ${minCat}
       ORDER BY weight DESC, category_count DESC, signal_count DESC
       LIMIT ${limit}
-    `)
+    `) as unknown as Promise<{ rows: Array<Record<string, unknown>> }>)
 
     const hotspots = result.rows.map(r => ({
       cellLat:         r.cell_lat,
@@ -1290,10 +1302,8 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       sampleIds:       pgTextArray(r.sample_ids),
     }))
 
-    const payload = { success: true, data: { hotspots, hours, minCategoryCount: minCat, generatedAt: new Date().toISOString() } }
-    redis.setex(cacheKey, 120, JSON.stringify(payload)).catch(() => {})
-    return reply.send(payload)
-  })
+    return { success: true, data: { hotspots, hours, minCategoryCount: minCat, generatedAt: new Date().toISOString() } }
+  }
 
   // ─── ADS-B AVIATION SIGNALS MAP ──────────────────────────────────────────────
   // GET /api/v1/signals/map/adsb
@@ -1430,13 +1440,20 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
     },
     config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
   }, async (_req, reply) => {
-    const cacheKey = 'signals:map:conflict-zones:v2'
-    const cached = await redis.get(cacheKey).catch(() => null)
-    if (cached) {
-      try { return reply.header('X-Cache-Hit', 'true').send(JSON.parse(cached)) } catch { /* fallthrough */ }
+    // Kept in Redis and remade in the background, with more than the pool's 5 seconds (Nov 22, 2026: with the
+    // server overloaded the query crossed 5 seconds and the layer answered 500 to everyone, the morning video too)
+    let payload: { type: 'FeatureCollection'; features: unknown[] }
+    try {
+      payload = await staleWhileRevalidate('signals:map:conflict-zones:v3', MAP_LAYER_SWR, () => conflictZones())
+    } catch {
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'The conflict zones could not be read just now; try again in a minute')
     }
+    return reply.send(payload)
+  })
 
-    const result = await db.raw<{ rows: Array<Record<string, unknown>> }>(`
+  /** The conflict zones layer's points: conflict and military reports of the last 72 hours */
+  async function conflictZones(): Promise<{ type: 'FeatureCollection'; features: unknown[] }> {
+    const result = await longQuery(MAP_LAYER_QUERY_SECONDS, trx => trx.raw(`
       SELECT id, title, severity, category, reliability_score, location_name,
         created_at AS published_at,
         ST_Y(location::geometry) AS lat,
@@ -1451,7 +1468,7 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
         AND created_at > NOW() - INTERVAL '72 hours'
       ORDER BY created_at DESC
       LIMIT 1500
-    `)
+    `) as unknown as Promise<{ rows: Array<Record<string, unknown>> }>)
 
     const features = result.rows.map(r => ({
       type: 'Feature' as const,
@@ -1472,14 +1489,8 @@ export const registerSignalRoutes: FastifyPluginAsync = async (app) => {
       },
     }))
 
-    const payload = {
-      type: 'FeatureCollection' as const,
-      features,
-    }
-
-    redis.setex(cacheKey, 90, JSON.stringify(payload)).catch(() => {})
-    return reply.send(payload)
-  })
+    return { type: 'FeatureCollection' as const, features }
+  }
 
   // ─── GDELT TV CLIPS ───────────────────────────────────────────────────────────
   // GET /api/v1/signals/:id/tv-clips

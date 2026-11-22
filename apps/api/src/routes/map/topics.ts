@@ -12,6 +12,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../../db/postgres'
 import { longQuery } from '../../lib/long-query'
 import { staleWhileRevalidate } from '../../lib/swr-cache'
+import { sendError } from '../../lib/errors'
 import { firstOfEach, headlineKey } from '../../lib/sea-headlines'
 import { MAP_TOPICS, MAP_TOPIC_RULES, isMapTopic, isTopicReport, topicCandidate, type MapTopic } from '../../lib/map-topics'
 
@@ -19,9 +20,13 @@ import { MAP_TOPICS, MAP_TOPIC_RULES, isMapTopic, isTopicReport, topicCandidate,
 export const TOPIC_READ = 600
 /** Points a layer shows */
 export const TOPIC_POINTS = 300
-export const TOPIC_FRESH_SECONDS = 600
-// Oct 21, 10:28 AM, live: protests (48 h) took 15 s, outbreaks (72 h) 22 s, displacement (7 days) past 30 s
-const TOPIC_QUERY_SECONDS = 45
+// Oct 21, 10:28 AM, live: protests (48 h) took 15 s, outbreaks (72 h) 22 s, displacement (7 days) past 30 s.
+// Nov 22, 2026, live: protests past 45 s (3.6 times last week's reports, the server overloaded), so the layer
+// answered 500 for hours: each remake now gets 90 seconds, one every 30 minutes, and the last layer is served for a
+// day while the next can't be made.
+export const TOPIC_FRESH_SECONDS = 1_800
+export const TOPIC_STALE_SECONDS = 24 * 3600
+const TOPIC_QUERY_SECONDS = 90
 
 export interface TopicRow {
   id:            string
@@ -82,25 +87,30 @@ export const registerMapTopicRoutes: FastifyPluginAsync = async (app) => {
     if (!isMapTopic(topic)) return reply.code(404).send({ success: false, error: 'Unknown topic', topics: MAP_TOPICS })
     const rule = MAP_TOPIC_RULES[topic]
     let made = false
-    const features = await staleWhileRevalidate(
-      `map:topic:${topic}:v1`,
-      { freshSeconds: TOPIC_FRESH_SECONDS, staleSeconds: 6 * 3600, lockSeconds: 2 * TOPIC_QUERY_SECONDS },
-      async () => {
-        made = true
-        const since = new Date(Date.now() - rule.hours * 3600_000)
-        const rows = await longQuery(TOPIC_QUERY_SECONDS, trx => trx('signals')
-          .select('id', 'title', 'category', 'severity', 'location_name', 'created_at',
-            db.raw('ST_X(location::geometry) as lng'),
-            db.raw('ST_Y(location::geometry) as lat'))
-          .whereRaw('title ~* ?', [topicCandidate(topic)])
-          .whereNotNull('location')
-          .whereIn('status', ['verified', 'pending'])
-          .where('created_at', '>', since)
-          .orderBy('created_at', 'desc')
-          .limit(TOPIC_READ)) as TopicRow[]
-        return topicFeatures(topic, rows)
-      },
-    )
+    let features: TopicFeature[]
+    try {
+      features = await staleWhileRevalidate(
+        `map:topic:${topic}:v1`,
+        { freshSeconds: TOPIC_FRESH_SECONDS, staleSeconds: TOPIC_STALE_SECONDS, lockSeconds: 2 * TOPIC_QUERY_SECONDS },
+        async () => {
+          made = true
+          const since = new Date(Date.now() - rule.hours * 3600_000)
+          const rows = await longQuery(TOPIC_QUERY_SECONDS, trx => trx('signals')
+            .select('id', 'title', 'category', 'severity', 'location_name', 'created_at',
+              db.raw('ST_X(location::geometry) as lng'),
+              db.raw('ST_Y(location::geometry) as lat'))
+            .whereRaw('title ~* ?', [topicCandidate(topic)])
+            .whereNotNull('location')
+            .whereIn('status', ['verified', 'pending'])
+            .where('created_at', '>', since)
+            .orderBy('created_at', 'desc')
+            .limit(TOPIC_READ)) as TopicRow[]
+          return topicFeatures(topic, rows)
+        },
+      )
+    } catch {
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'This layer could not be read just now; try again in a few minutes')
+    }
     void reply.header('Cache-Control', 'public, max-age=300')
     return reply.send({ success: true, cached: !made, topic, hours: rule.hours, type: 'FeatureCollection', features })
   })

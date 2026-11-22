@@ -18,12 +18,19 @@ vi.mock('../db/redis', () => ({
   redis: {
     get:    vi.fn(async () => null),
     setex:  vi.fn(async () => 'OK'),
+    set:    vi.fn(async () => 'OK'),
+    del:    vi.fn(async () => 1),
   },
 }))
 vi.mock('../middleware/auth', () => ({
   authenticate: (_req: unknown, _rep: unknown, done: () => void) => done(),
   optionalAuth: (_req: unknown, _rep: unknown, done: () => void) => done(),
 }))
+// The query gets more than the pool's 5 seconds in its own transaction (Nov 22, 2026): here, db.raw as each test sets it
+vi.mock('../lib/long-query', async () => {
+  const pg = await import('../db/postgres')
+  return { longQuery: async (_s: number, run: (trx: unknown) => Promise<unknown>) => run({ raw: (...a: unknown[]) => (pg.db as unknown as { raw: (...x: unknown[]) => unknown }).raw(...a) }) }
+})
 
 import { db }    from '../db/postgres'
 import { redis } from '../db/redis'
@@ -156,7 +163,8 @@ describe('GET /api/v1/signals/map/hotspots', () => {
   })
 
   it('serves from Redis cache when available', async () => {
-    const cached = JSON.stringify({
+    // kept as lib/swr-cache.ts keeps a value: when it was made, and the answer
+    const cached = JSON.stringify({ at: Date.now(), value: {
       success: true,
       data: {
         hotspots:         [makeHotspotRow()],
@@ -164,7 +172,7 @@ describe('GET /api/v1/signals/map/hotspots', () => {
         minCategoryCount: 3,
         generatedAt:      '2026-03-27T09:00:00Z',
       },
-    })
+    } })
     ;(redis.get as ReturnType<typeof vi.fn>).mockResolvedValue(cached)
 
     const mockRaw = vi.fn()
@@ -186,11 +194,30 @@ describe('GET /api/v1/signals/map/hotspots', () => {
     const app = await buildApp()
     await app.inject({ method: 'GET', url: '/api/v1/signals/map/hotspots' })
 
+    // kept 2 minutes fresh, then served for up to 6 hours while the next is made
     expect(redis.setex).toHaveBeenCalledWith(
-      expect.stringContaining('signals:hotspots:'),
-      120,
+      expect.stringContaining('signals:hotspots:v2:'),
+      120 + 6 * 3600,
       expect.any(String),
     )
+    await app.close()
+  })
+
+  it('serves the last hotspots while a slow database makes the next, and 503 with nothing kept', async () => {
+    const old = { success: true, data: { hotspots: [], hours: 24, minCategoryCount: 3, generatedAt: '2026-11-22T04:00:00Z' } }
+    ;(redis.get as ReturnType<typeof vi.fn>).mockResolvedValue(JSON.stringify({ at: Date.now() - 3600_000, value: old }))
+    const slow = vi.fn().mockRejectedValue(new Error('canceling statement due to statement timeout'))
+    ;(db as unknown as { raw: ReturnType<typeof vi.fn> }).raw = slow
+
+    const app = await buildApp()
+    const stale = await app.inject({ method: 'GET', url: '/api/v1/signals/map/hotspots' })
+    expect(stale.statusCode).toBe(200)
+    expect(stale.json().data.generatedAt).toBe('2026-11-22T04:00:00Z')
+
+    ;(redis.get as ReturnType<typeof vi.fn>).mockResolvedValue(null)
+    const none = await app.inject({ method: 'GET', url: '/api/v1/signals/map/hotspots' })
+    expect(none.statusCode).toBe(503)
+    expect(none.json()).toMatchObject({ success: false, code: 'SERVICE_UNAVAILABLE' })
     await app.close()
   })
 

@@ -20,9 +20,9 @@ type MapRef = MutableRefObject<any>
 
 interface Shading { iso: string; color: string }
 
-/** One shading layer: countries filled with their colour, outlined faintly */
+/** One shading layer: countries filled with their colour, outlined faintly (the travel advisories layer uses it too) */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function shade(map: any, ids: { src: string; fill: string; line: string }, rows: Shading[], opacity = 0.42): Promise<boolean> {
+export async function shade(map: any, ids: { src: string; fill: string; line: string }, rows: Shading[], opacity = 0.42): Promise<boolean> {
   const shapes = await loadCountryShapes().catch(() => null)
   if (!shapes) return false
   const byIso = new Map(rows.map(r => [r.iso, r.color]))
@@ -47,7 +47,7 @@ async function shade(map: any, ids: { src: string; fill: string; line: string },
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function unshade(map: any, ids: { src: string; fill: string; line: string }): void {
+export function unshade(map: any, ids: { src: string; fill: string; line: string }): void {
   try {
     for (const id of [ids.line, ids.fill]) if (map.getLayer(id)) map.removeLayer(id)
     if (map.getSource(ids.src)) map.removeSource(ids.src)

@@ -420,3 +420,77 @@ describe('airports, seaports and big power plants: open data kept as files (Nov 
     expect(infrastructure).toContain("overlayItem('power', Factory)")
   })
 })
+
+describe('storms and floods (NASA EONET) and the aurora forecast (NOAA), from the API (Nov 22, 2026)', () => {
+  // shaped like GET /api/v1/map/storms (apps/api/src/routes/map/earth-feeds.ts) on Nov 21, 2026
+  const storms = { success: true, type: 'FeatureCollection', features: [
+    { type: 'Feature', geometry: { type: 'Point', coordinates: [86.8, 11.4] }, properties: { id: 'EONET_26494', title: 'Tropical Cyclone Akvan', category: 'severeStorms', at: '2026-11-16T18:00:00Z', wind_kts: 35, now: false, source: 'JTWC', link: 'https://www.metoc.navy.mil/jtwc/products/io0526.tcw' } },
+    { type: 'Feature', geometry: { type: 'Point', coordinates: [84.7, 17.2] }, properties: { id: 'EONET_26494', title: 'Tropical Cyclone Akvan', category: 'severeStorms', at: '2026-11-19T18:00:00Z', wind_kts: 70, now: true, positions: 13, since: '2026-11-16T18:00:00Z', source: 'JTWC', link: 'https://www.metoc.navy.mil/jtwc/products/io0526.tcw' } },
+    { type: 'Feature', geometry: { type: 'Point', coordinates: [44.8, 2.8] }, properties: { id: 'EONET_9', title: 'Floods in <Somalia>', category: 'floods', at: '2026-11-20T00:00:00Z', now: true, source: 'GDACS', link: 'javascript:alert(1)' } },
+    { type: 'Feature', geometry: { type: 'Point', coordinates: [140, 36] }, properties: { title: 'M 6.1 Japan', category: 'earthquakes', now: true } },
+  ] }
+
+  it('a cyclone at its newest position, sized and coloured by its winds, with its track paler and smaller', () => {
+    expect(OVERLAYS.storms).toMatchObject({ path: '/api/v1/map/storms', bySeverity: true })
+    const f = OVERLAYS.storms.toFeatures(storms)
+    expect(f).toHaveLength(3)
+    expect(f.map(x => [x.properties.severity, x.properties.color])).toEqual([['low', '#fda4af'], ['critical', '#f43f5e'], ['medium', '#60a5fa']])
+  })
+
+  it('popups: what it is, its winds and when, how long it has been tracked, its source; text escaped, bad links dropped', () => {
+    const [, akvan, flood] = OVERLAYS.storms.toFeatures(storms)
+    const html = OVERLAYS.storms.popup(akvan!.properties)
+    expect(html).toContain('TROPICAL CYCLONE')
+    expect(html).toContain('70 kt winds (130 km/h) · as of Nov 19, 18:00 UTC')
+    expect(html).toContain('Tracked since Nov 16, 13 positions')
+    expect(html).toContain('href="https://www.metoc.navy.mil/jtwc/products/io0526.tcw"')
+    expect(html).toContain('NASA EONET')
+    const fhtml = OVERLAYS.storms.popup(flood!.properties)
+    expect(fhtml).toContain('FLOOD')
+    expect(fhtml).toContain('Floods in &lt;Somalia&gt;')
+    expect(fhtml).not.toContain('javascript:')
+  })
+
+  it("aurora: brighter the likelier, with NOAA's forecast time", () => {
+    expect(OVERLAYS.aurora).toMatchObject({ path: '/api/v1/map/aurora', bySeverity: false })
+    const f = OVERLAYS.aurora.toFeatures({ features: [
+      { geometry: { coordinates: [11, 65] }, properties: { chance: 40, forecast: '2026-11-22T05:20:00Z' } },
+      { geometry: { coordinates: [-9, 67] }, properties: { chance: 75, forecast: '2026-11-22T05:20:00Z' } },
+      { geometry: { coordinates: [0, 60] }, properties: { chance: 120 } },
+    ] })
+    expect(f.map(x => x.properties.color)).toEqual(['#4ade80', '#bbf7d0'])
+    const html = OVERLAYS.aurora.popup(f[0]!.properties)
+    expect(html).toContain('40% chance of aurora overhead')
+    expect(html).toContain('NOAA&#39;s forecast for Nov 22, 05:20 UTC')
+  })
+
+  it('are in the Layers panel: storms with natural hazards, aurora in Space', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const page = readFileSync(resolve(__dirname, '../../app/map/page.tsx'), 'utf8')
+    const earth = page.slice(page.indexOf("title: 'Earth & context'"), page.indexOf("title: 'Commodities & trade'"))
+    expect(earth).toContain("overlayItem('storms', CloudLightning)")
+    const space = page.slice(page.indexOf("title: 'Space'"))
+    expect(space).toContain("overlayItem('aurora', Sparkles)")
+  })
+})
+
+describe("satellite disaster maps (Copernicus EMS), from the API (Nov 22, 2026)", () => {
+  const answer = { success: true, type: 'FeatureCollection', features: [
+    { type: 'Feature', geometry: { type: 'Point', coordinates: [0.023, 38.8163] }, properties: { code: 'EMSR935', name: 'Flood in Alicante-Valencia Regions, Spain', category: 'Flood', countries: 'Spain', activated_at: '2026-10-19T16:03:00', closed: true, maps: 2, link: 'https://rapidmapping.emergency.copernicus.eu/EMSR935' } },
+    { type: 'Feature', geometry: { type: 'Point', coordinates: [-80.67, 8.0067] }, properties: { code: 'EMSR934', name: 'Earthquake in Los Santos, Panama', category: 'Earthquake', countries: 'Panama', activated_at: '2026-10-09T23:19:00', closed: false, maps: 13, link: 'https://rapidmapping.emergency.copernicus.eu/EMSR934' } },
+    { type: 'Feature', geometry: { type: 'Point', coordinates: [1, 1] }, properties: { code: '<img>', name: 'x' } },
+  ] }
+
+  it('each activation, bigger while still being mapped, coloured by the kind of disaster, credited', () => {
+    expect(OVERLAYS['disaster-maps']).toMatchObject({ path: '/api/v1/map/satellite-maps', bySeverity: true })
+    const f = OVERLAYS['disaster-maps'].toFeatures(answer)
+    expect(f.map(x => [x.properties.code, x.properties.severity, x.properties.color])).toEqual([['EMSR935', 'medium', '#60a5fa'], ['EMSR934', 'high', '#f97316']])
+    const html = OVERLAYS['disaster-maps'].popup(f[1]!.properties)
+    expect(html).toContain('SATELLITE DISASTER MAPS · EMSR934')
+    expect(html).toContain('Earthquake · Panama · activated Oct 9')
+    expect(html).toContain('Still being mapped: 13 maps so far')
+    expect(html).toContain('href="https://rapidmapping.emergency.copernicus.eu/EMSR934"')
+    expect(html).toContain('Copernicus Emergency Management Service (© European Union)')
+  })
+})

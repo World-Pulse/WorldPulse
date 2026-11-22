@@ -27,6 +27,12 @@
  * seaports (Natural Earth, public domain) and power plants of 1,000 MW or more (WRI's Global Power Plant
  * Database, CC BY 4.0 and credited; WRI last updated it in 2021, which the layer says).
  *
+ * And (Nov 22, 2026; Devon: "add more map layers where it makes sense and is free and automated") two from
+ * public feeds that update themselves, through the API so readers never wait on the source
+ * (apps/api/src/routes/map/earth-feeds.ts): storms, floods and other open events from NASA's EONET, with a
+ * cyclone's track, NOAA's aurora forecast, and where the EU's Copernicus Emergency Management Service had
+ * satellites map a disaster in the last 12 months.
+ *
  * And (plan R4; Devon, Oct 21: "Add - added refugee and displacement data")
  * UNHCR's figures for each country (CC BY 4.0), one circle a country sized by
  * the people displaced from it: inside it and abroad. Kept as a file too
@@ -40,9 +46,9 @@ import { escapeHtml, safeHttpUrl, timeAgo } from './map-utils'
 import { prepareSatellites, satellitePositions, type PreparedSats } from './map-satellites'
 import { DISPLACED_FILE, UNHCR_DATA_URL, displacedFigures, displacedLines } from './displaced'
 
-export type OverlayKey = 'protests' | 'outbreaks' | 'displacement' | 'displaced' | 'outages' | 'cable-landings' | 'ai-dc' | 'nuclear' | 'bases' | 'spaceports' | 'satellites' | 'shipping-news' | 'airports' | 'ports' | 'power'
+export type OverlayKey = 'protests' | 'outbreaks' | 'displacement' | 'displaced' | 'outages' | 'cable-landings' | 'ai-dc' | 'nuclear' | 'bases' | 'spaceports' | 'satellites' | 'shipping-news' | 'airports' | 'ports' | 'power' | 'storms' | 'aurora' | 'disaster-maps'
 
-export const OVERLAY_KEYS: readonly OverlayKey[] = ['protests', 'outbreaks', 'displacement', 'displaced', 'outages', 'cable-landings', 'ai-dc', 'nuclear', 'bases', 'spaceports', 'satellites', 'shipping-news', 'airports', 'ports', 'power']
+export const OVERLAY_KEYS: readonly OverlayKey[] = ['protests', 'outbreaks', 'displacement', 'displaced', 'outages', 'cable-landings', 'ai-dc', 'nuclear', 'bases', 'spaceports', 'satellites', 'shipping-news', 'airports', 'ports', 'power', 'storms', 'aurora', 'disaster-maps']
 
 export function isOverlayKey(value: unknown): value is OverlayKey {
   return typeof value === 'string' && (OVERLAY_KEYS as readonly string[]).includes(value)
@@ -355,6 +361,137 @@ function powerPopup(p: Record<string, unknown>): string {
     `<div style="${META};font-size:10px">${escapeHtml(WRI_CREDIT)}</div>`
 }
 
+// ── Storms and other open events (NASA EONET) and the aurora forecast (NOAA), Nov 22, 2026 ──
+
+export const EONET_LABEL: Record<string, string> = {
+  severeStorms: 'SEVERE STORM', floods: 'FLOOD', landslides: 'LANDSLIDE', dustHaze: 'DUST AND HAZE', drought: 'DROUGHT',
+  tempExtremes: 'HEAT OR COLD', snow: 'HEAVY SNOW', manmade: 'MAN-MADE EVENT',
+}
+const EONET_COLOR: Record<string, string> = {
+  floods: '#60a5fa', landslides: '#d97706', dustHaze: '#d6d3d1', drought: '#eab308', tempExtremes: '#f87171', snow: '#e0f2fe', manmade: '#c4b5fd',
+}
+/** A storm's colour by its winds (knots): hurricane or typhoon strength, a tropical storm, weaker; its earlier positions paler */
+function stormColor(kts: number | null, now: boolean): string {
+  if (!now) return '#fda4af'
+  return kts !== null && kts >= 64 ? '#f43f5e' : kts !== null && kts >= 34 ? '#fb923c' : '#fcd34d'
+}
+const STORM_NAME = /\b(tropical cyclone|cyclone|hurricane|typhoon|tropical storm|tropical depression)\b/i
+const utcTime = (iso: unknown) => {
+  // a time written without a zone is UTC
+  const t = String(iso ?? '')
+  const d = new Date(/T\d\d:\d\d(:\d\d(\.\d+)?)?$/.test(t) ? `${t}Z` : t)
+  return Number.isNaN(d.getTime()) ? null : `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}, ${d.toISOString().slice(11, 16)} UTC`
+}
+
+function eonetFeatures(json: unknown): OverlayFeature[] {
+  const list = (json as { features?: unknown })?.features
+  if (!Array.isArray(list)) return []
+  const out: OverlayFeature[] = []
+  for (const f of list as Array<{ geometry?: { coordinates?: unknown }; properties?: Record<string, unknown> }>) {
+    const c = Array.isArray(f?.geometry?.coordinates) ? f.geometry!.coordinates as unknown[] : []
+    const at = pointAt(c[1], c[0])
+    const p = f?.properties ?? {}
+    const category = str(p.category)
+    if (!at || !str(p.title) || !category || !EONET_LABEL[category]) continue
+    const now = p.now !== false
+    const kts = num(p.wind_kts)
+    // the dot's size: a storm's strength at its newest position, the rest the smallest
+    const severity = !now ? 'low' : category !== 'severeStorms' ? 'medium' : kts !== null && kts >= 64 ? 'critical' : kts !== null && kts >= 34 ? 'high' : 'medium'
+    out.push(feature(at, {
+      title: str(p.title), category, now: now ? 1 : 0, at: str(p.at), since: str(p.since), positions: num(p.positions), wind_kts: kts,
+      source: str(p.source), link: safeHttpUrl(p.link), severity,
+      color: category === 'severeStorms' ? stormColor(kts, now) : (EONET_COLOR[category] ?? null),
+    }))
+  }
+  return out
+}
+
+function eonetPopup(p: Record<string, unknown>): string {
+  const category = String(p.category ?? '')
+  const title = String(p.title ?? '')
+  const kts = num(p.wind_kts)
+  const label = category === 'severeStorms' && STORM_NAME.test(title) ? 'TROPICAL CYCLONE' : (EONET_LABEL[category] ?? 'EVENT')
+  const now = num(p.now) !== 0
+  const when = utcTime(p.at)
+  const wind = kts !== null ? `${Math.round(kts)} kt winds (${Math.round(kts * 1.852)} km/h)` : null
+  const line = now ? [wind, when ? `as of ${when}` : null] : [when ? `Position on ${when}` : null, wind]
+  const since = utcTime(p.since)
+  const tracked = now && category === 'severeStorms' && num(p.positions) && since ? `Tracked since ${since.replace(/, \d\d:\d\d UTC$/, '')}, ${num(p.positions)} positions` : null
+  return header(stormColor(kts, true), label) +
+    `<div style="${TITLE}">${escapeHtml(title)}</div>` +
+    (line.filter(Boolean).length ? `<div style="${META}">${escapeHtml(line.filter(Boolean).join(' · '))}</div>` : '') +
+    (tracked ? `<div style="${META}">${escapeHtml(tracked)}</div>` : '') +
+    outLink(p.link, str(p.source) ?? 'Source') +
+    `<div style="${META};font-size:10px">NASA EONET; not an official source for exact places and times</div>`
+}
+
+/** The chance of aurora overhead: brighter the likelier */
+function auroraColor(chance: number): string {
+  return chance >= 60 ? '#bbf7d0' : chance >= 30 ? '#4ade80' : '#15803d'
+}
+
+function auroraFeatures(json: unknown): OverlayFeature[] {
+  const list = (json as { features?: unknown })?.features
+  if (!Array.isArray(list)) return []
+  const out: OverlayFeature[] = []
+  for (const f of list as Array<{ geometry?: { coordinates?: unknown }; properties?: Record<string, unknown> }>) {
+    const c = Array.isArray(f?.geometry?.coordinates) ? f.geometry!.coordinates as unknown[] : []
+    const at = pointAt(c[1], c[0])
+    const chance = num(f?.properties?.chance)
+    if (!at || chance === null || chance < 1 || chance > 100) continue
+    out.push(feature(at, { chance: Math.round(chance), forecast: str(f?.properties?.forecast), color: auroraColor(chance) }))
+  }
+  return out
+}
+
+function auroraPopup(p: Record<string, unknown>): string {
+  const chance = num(p.chance)
+  const when = utcTime(p.forecast)
+  return header('#4ade80', 'AURORA FORECAST') +
+    `<div style="${TITLE}">${escapeHtml(chance !== null ? `${chance}% chance of aurora overhead` : 'Aurora likely')}</div>` +
+    `<div style="${META}">${escapeHtml(when ? `NOAA's forecast for ${when}` : "NOAA's forecast for the next 30 to 90 minutes")}</div>` +
+    `<div style="${META};font-size:10px">NOAA SWPC, OVATION model</div>`
+}
+
+/** A Copernicus EMS activation's colour by the kind of disaster */
+const CEMS_COLOR: Record<string, string> = { flood: '#60a5fa', earthquake: '#f97316', wildfire: '#ef4444', 'forest fire': '#ef4444', storm: '#c084fc', 'wind storm': '#c084fc', landslide: '#d97706', volcano: '#fb7185' }
+export const CEMS_CREDIT = 'Copernicus Emergency Management Service (© European Union)'
+
+function cemsFeatures(json: unknown): OverlayFeature[] {
+  const list = (json as { features?: unknown })?.features
+  if (!Array.isArray(list)) return []
+  const out: OverlayFeature[] = []
+  for (const f of list as Array<{ geometry?: { coordinates?: unknown }; properties?: Record<string, unknown> }>) {
+    const c = Array.isArray(f?.geometry?.coordinates) ? f.geometry!.coordinates as unknown[] : []
+    const at = pointAt(c[1], c[0])
+    const p = f?.properties ?? {}
+    const code = str(p.code)
+    if (!at || !code || !/^EMSR\d+$/.test(code) || !str(p.name)) continue
+    const closed = p.closed === true
+    out.push(feature(at, {
+      code, name: str(p.name), category: str(p.category), countries: str(p.countries), activated_at: str(p.activated_at),
+      closed: closed ? 1 : 0, maps: num(p.maps), link: safeHttpUrl(p.link),
+      // still being mapped: a bigger dot
+      severity: closed ? 'medium' : 'high',
+      color: CEMS_COLOR[String(p.category ?? '').toLowerCase()] ?? '#e2e8f0',
+    }))
+  }
+  return out
+}
+
+function cemsPopup(p: Record<string, unknown>): string {
+  const when = utcTime(p.activated_at)
+  const maps = num(p.maps)
+  const line = [str(p.category), str(p.countries), when ? `activated ${when.replace(/, \d\d:\d\d UTC$/, '')}` : null].filter(Boolean).join(' · ')
+  const state = num(p.closed) === 1 ? `Closed${maps ? `: ${maps} maps made` : ''}` : `Still being mapped${maps ? `: ${maps} maps so far` : ''}`
+  return header('#38bdf8', `SATELLITE DISASTER MAPS · ${escapeHtml(p.code)}`) +
+    `<div style="${TITLE}">${escapeHtml(p.name)}</div>` +
+    (line ? `<div style="${META}">${escapeHtml(line)}</div>` : '') +
+    `<div style="${META}">${escapeHtml(state)}</div>` +
+    outLink(p.link, 'The maps') +
+    `<div style="${META};font-size:10px">${escapeHtml(CEMS_CREDIT)}</div>`
+}
+
 // ── Shipping headlines (Lloyd's List's free feed, credited) ───────────────────
 
 const SHIPPING_COLOR = '#22d3ee'
@@ -514,6 +651,24 @@ export const OVERLAYS: Record<OverlayKey, OverlayDef> = {
       }
     }),
     popup: powerPopup,
+  },
+  storms: {
+    key: 'storms', label: 'Storms & floods', color: '#fb7185',
+    description: 'Tropical cyclones where they are now, with their tracks, and floods, landslides, dust storms, droughts, heat and cold waves tracked by NASA (EONET, public domain); updated every 30 minutes',
+    path: '/api/v1/map/storms', refreshMs: 30 * MINUTE, bySeverity: true,
+    toFeatures: eonetFeatures, popup: eonetPopup,
+  },
+  aurora: {
+    key: 'aurora', label: 'Aurora now', color: '#4ade80',
+    description: "Where the northern and southern lights are likely in the next 30 to 90 minutes, brighter the likelier: NOAA's forecast (public domain), updated every 15 minutes",
+    path: '/api/v1/map/aurora', refreshMs: 15 * MINUTE, bySeverity: false,
+    toFeatures: auroraFeatures, popup: auroraPopup,
+  },
+  'disaster-maps': {
+    key: 'disaster-maps', label: 'Satellite disaster maps', color: '#7dd3fc',
+    description: "Where the EU's Copernicus emergency service had satellites map a disaster in the last 12 months, each with a link to its maps (© European Union); bigger while still being mapped",
+    path: '/api/v1/map/satellite-maps', refreshMs: HOUR, bySeverity: true,
+    toFeatures: cemsFeatures, popup: cemsPopup,
   },
   satellites: {
     key: 'satellites', label: 'Satellites', color: '#e2e8f0',

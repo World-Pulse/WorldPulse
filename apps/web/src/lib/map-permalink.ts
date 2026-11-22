@@ -37,6 +37,7 @@ export type LayerKey =
   | 'commodities'
   | 'economy'
   | 'price-moves'
+  | 'travel'
 
 export interface MapPermalinkState {
   /** Center latitude */

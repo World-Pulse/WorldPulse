@@ -10,7 +10,12 @@ import Fastify from 'fastify'
 
 const h = vi.hoisted(() => ({ sql: '' }))
 
-vi.mock('../../db/redis', () => ({ redis: { get: vi.fn(async () => null), setex: vi.fn(async () => 'OK') } }))
+vi.mock('../../db/redis', () => ({ redis: { get: vi.fn(async () => null), setex: vi.fn(async () => 'OK'), set: vi.fn(async () => 'OK'), del: vi.fn(async () => 1) } }))
+// the query runs in its own transaction with more than the pool's 5 seconds (Nov 22, 2026): here, db.raw
+vi.mock('../../lib/long-query', async () => {
+  const pg = await import('../../db/postgres')
+  return { longQuery: async (_s: number, run: (trx: unknown) => Promise<unknown>) => run({ raw: (...a: unknown[]) => (pg.db as unknown as { raw: (...x: unknown[]) => unknown }).raw(...a) }) }
+})
 vi.mock('../../middleware/auth', () => ({
   authenticate: (_req: unknown, _rep: unknown, done: () => void) => done(),
   optionalAuth: (_req: unknown, _rep: unknown, done: () => void) => done(),

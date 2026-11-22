@@ -8,12 +8,18 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('../db/postgres', () => ({ db: { raw: (s: string) => s } }))
 vi.mock('../db/redis', () => ({ redis: {} }))
 vi.mock('../lib/swr-cache', () => ({ staleWhileRevalidate: (_k: string, _o: unknown, make: () => Promise<unknown>) => make() }))
-const rowsFor = vi.hoisted(() => ({ rows: [] as unknown[] }))
-vi.mock('../lib/long-query', () => ({ longQuery: async () => rowsFor.rows }))
+const rowsFor = vi.hoisted(() => ({ rows: [] as unknown[], fail: false, seconds: 0 }))
+vi.mock('../lib/long-query', () => ({
+  longQuery: async (seconds: number) => {
+    rowsFor.seconds = seconds
+    if (rowsFor.fail) throw new Error('canceling statement due to statement timeout')
+    return rowsFor.rows
+  },
+}))
 
 import Fastify from 'fastify'
 import { MAP_TOPICS, isMapTopic, isTopicReport, topicCandidate } from '../lib/map-topics'
-import { registerMapTopicRoutes, topicFeatures, type TopicRow } from '../routes/map/topics'
+import { registerMapTopicRoutes, topicFeatures, TOPIC_FRESH_SECONDS, TOPIC_STALE_SECONDS, type TopicRow } from '../routes/map/topics'
 
 describe('protests and unrest', () => {
   it.each([
@@ -169,5 +175,16 @@ describe('GET /api/v1/map/topics/:topic', () => {
   it('refuses a topic it doesn\'t have', async () => {
     const res = await (await app()).inject({ method: 'GET', url: '/api/v1/map/topics/sports' })
     expect(res.statusCode).toBe(400)
+  })
+
+  it('a query that runs out of time (Nov 22, 2026: protests past 45 s) answers 503, not 500; each gets 90 seconds', async () => {
+    rowsFor.fail = true
+    const res = await (await app()).inject({ method: 'GET', url: '/api/v1/map/topics/protests' })
+    rowsFor.fail = false
+    expect(res.statusCode).toBe(503)
+    expect(res.json()).toMatchObject({ success: false, code: 'SERVICE_UNAVAILABLE' })
+    expect(rowsFor.seconds).toBe(90)
+    expect(TOPIC_FRESH_SECONDS).toBe(1_800)
+    expect(TOPIC_STALE_SECONDS).toBe(24 * 3600)
   })
 })

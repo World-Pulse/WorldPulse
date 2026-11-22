@@ -7,10 +7,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const calls: Array<{ sql: string; bindings: unknown[] }> = []
 let fail = false
 
+// the keys the scraper writes (sources/travel-advisories.ts): the State Department's codes, "level|day"
+const TRAVEL_KEPT: Record<string, string> = {
+  'osint:travel-us:irn': '4|2026-11-03', 'osint:travel-us:fra': '2|2026-06-01', 'osint:travel-us:ven': '4|2026-10-01',
+  // Gaza and the West Bank are both PS: the higher level counts
+  'osint:travel-us:xwb': '3|2026-11-01', 'osint:travel-us:xgz': '4|2026-09-15',
+  // an older page named by place, and a code nobody has: one kept, one left out
+  'osint:travel-us:french-west-indies': '1|2026-05-05', 'osint:travel-us:xx1': '2|2026-01-01',
+}
 vi.mock('../db/redis', () => ({
   redis: {
-    scan: async () => ['0', ['osint:travel-us:ir', 'osint:travel-us:fr', 'osint:travel-us:ve', 'osint:travel-us:xx1']],
-    mget: async (...keys: string[]) => keys.map(k => ({ 'osint:travel-us:ir': '4|2026-11-03', 'osint:travel-us:fr': '2|2026-06-01', 'osint:travel-us:ve': '4|2026-10-01' } as Record<string, string>)[k] ?? '9|x'),
+    scan: async () => ['0', [...Object.keys(TRAVEL_KEPT), 'osint:travel-us:deu', 'osint:travel-us:ir']],
+    mget: async (...keys: string[]) => keys.map(k => TRAVEL_KEPT[k] ?? (k.endsWith(':deu') ? '9|x' : null)),
   },
 }))
 vi.mock('../db/postgres', () => ({ db: Object.assign(() => ({}), { raw: (s: string) => s }) }))
@@ -127,9 +135,12 @@ describe('GET /api/v1/public/vulnerabilities', () => {
 })
 
 describe('GET /api/v1/public/travel-advice', () => {
-  it("gives every country's US level, leaving what isn't a level out", async () => {
+  it("gives every country's US level by its two-letter code, leaving what isn't a level out", async () => {
     const { data } = (await get('/api/v1/public/travel-advice')).json()
-    expect(data.levels).toEqual([{ country: 'IR', level: 4, since: '2026-11-03' }, { country: 'FR', level: 2, since: '2026-06-01' }, { country: 'VE', level: 4, since: '2026-10-01' }])
+    expect(data.levels).toEqual([
+      { country: 'IR', level: 4, since: '2026-11-03' }, { country: 'FR', level: 2, since: '2026-06-01' }, { country: 'VE', level: 4, since: '2026-10-01' },
+      { country: 'PS', level: 4, since: '2026-09-15' }, { country: 'GP', level: 1, since: '2026-05-05' },
+    ])
   })
 
   it("gives one country's US level and its US and UK notices", async () => {

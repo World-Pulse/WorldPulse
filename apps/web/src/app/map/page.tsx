@@ -23,7 +23,7 @@ import {
   Map as MapIcon, Moon, Satellite, Globe2, LocateFixed, Layers as LayersIcon,
   Flame, History, Swords, Crosshair, RadioTower, Anchor, Plane, Ship, Activity, ShieldAlert, Video, List as ListIcon,
   SunMoon, Compass, Megaphone, Biohazard, Tent, WifiOff, Cable, Server, Atom, Rocket, Shield, Orbit, Wheat, Landmark, TrendingUp,
-  PlaneLanding, Container, Factory,
+  PlaneLanding, Container, Factory, CloudLightning, Sparkles, ScanSearch, Luggage,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { LayersPanel, activeLayerCount, type MapLayerGroup } from '@/components/map/LayersPanel'
@@ -33,6 +33,8 @@ import { CountryBrief, type CountryRisk } from '@/components/map/CountryBrief'
 import { CommodityBriefSection } from '@/components/commodities/CommodityBriefSection'
 import { EconomyBriefSection } from '@/components/commodities/EconomyBriefSection'
 import { useEconomyLayer, usePriceMovesLayer } from '@/components/map/useTradeLayers'
+import { useTravelAdvisoryLayer } from '@/components/map/useTravelAdvisoryLayer'
+import { TRAVEL_LEVELS, TRAVEL_SOURCE_URL } from '@/lib/travel-levels'
 import { ScaleLegend } from '@/components/map/ScaleLegend'
 import { ECON_LAYER_KEYS, ECON_SCALES, MOVE_SCALE, scaleLabels } from '@/lib/trade-layers'
 import { scoreColor, LEVEL_COLOR, EU_MEMBERS, euFlagMembers, type MapRow } from '@/lib/commodities'
@@ -399,6 +401,8 @@ function MapView({ embed = false }: { embed?: boolean }) {
   const [economyMode,      setEconomyMode]      = useState(false)
   const [economyIndicator, setEconomyIndicator] = useState<string>('growth')
   const [priceMovesMode,   setPriceMovesMode]   = useState(false)
+  // ── Travel advisories: the US State Department's level for each country (Nov 22, 2026) ──
+  const [travelMode,       setTravelMode]       = useState(false)
 
   // ── Conflict Zone Overlay layer state (BAT-17) ─────────────────────────────
   const [conflictMode,    setConflictMode]    = useState(playParam)
@@ -647,13 +651,13 @@ function MapView({ embed = false }: { embed?: boolean }) {
       [heatmapMode, 'heat'], [timelineActive, 'timeline'], [showAircraft, 'adsb'], [showShips, 'ships'],
       [showCameras, 'cameras'], [navalMode, 'naval'], [threatMode, 'threats'], [jammingMode, 'jamming'],
       [hazardsMode, 'hazards'], [satelliteMode, 'sat'], [countryRiskMode, 'country-risk'], [conflictMode, 'conflict'],
-      [commodityMode, 'commodities'], [economyMode, 'economy'], [priceMovesMode, 'price-moves'],
+      [commodityMode, 'commodities'], [economyMode, 'economy'], [priceMovesMode, 'price-moves'], [travelMode, 'travel'],
       ...OVERLAY_KEYS.map(k => [overlayOn[k], k] as [boolean, LayerKey]),
     ]
     activeLayerKeysRef.current = on.filter(([isOn]) => isOn).map(([, key]) => key)
     updateHash()
   }, [heatmapMode, timelineActive, showAircraft, showShips, showCameras, navalMode, threatMode, jammingMode,
-      hazardsMode, satelliteMode, countryRiskMode, conflictMode, commodityMode, economyMode, priceMovesMode, overlayOn, updateHash])
+      hazardsMode, satelliteMode, countryRiskMode, conflictMode, commodityMode, economyMode, priceMovesMode, travelMode, overlayOn, updateHash])
 
   // A shared link opens with its layers and basemap (M10). Applied after the first
   // render: the server can't see the #hash, so doing it in useState broke hydration
@@ -677,6 +681,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
     if (has('commodities'))  setCommodityMode(true)
     if (has('economy'))      setEconomyMode(true)
     if (has('price-moves'))  setPriceMovesMode(true)
+    if (has('travel'))       setTravelMode(true)
     const linked = OVERLAY_KEYS.filter(k => has(k))
     if (linked.length) setOverlayOn(o => ({ ...o, ...Object.fromEntries(linked.map(k => [k, true])) }))
     if (link.timelineRange) { setTimelineRange(link.timelineRange); setTimelineActive(true) }
@@ -3650,6 +3655,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
   // Country economics (World Bank) and price moves (World Bank prices over each country's exports)
   const economyLayer = useEconomyLayer(mapRef, mapReady, economyMode, economyIndicator)
   const priceMovesLayer = usePriceMovesLayer(mapRef, mapReady, priceMovesMode)
+  const travelLayer = useTravelAdvisoryLayer(mapRef, mapReady, travelMode)
 
   // ── Play mode (G9): the title card, the start, the camera's tour and the closing card ──
   // The title card's numbers and the closing card's stories (the same public answers the home page reads)
@@ -3940,6 +3946,14 @@ function MapView({ embed = false }: { embed?: boolean }) {
           on: navalMode, loading: navalLoading, count: navalCount, toggle: () => setNavalMode(v => !v) },
         overlayItem('protests', Megaphone),
         overlayItem('bases', Shield),
+        { key: 'travel', label: 'Travel advisories', description: 'Countries shaded by the US State Department’s travel advisory level, updated hourly', icon: Luggage, color: '#fda4af',
+          on: travelMode, loading: travelLayer.loading, count: travelLayer.count, toggle: () => setTravelMode(v => !v),
+          extra: (
+            <div className="space-y-1.5">
+              <ScaleLegend title="US State Department level" colors={TRAVEL_LEVELS.map(l => l.color)} labels={TRAVEL_LEVELS.map((l, i) => `${l.level} ${l.label}${travelLayer.count ? ` (${travelLayer.byLevel[i]})` : ''}`)} />
+              <a href={TRAVEL_SOURCE_URL} target="_blank" rel="noopener noreferrer" className="text-[11px] text-[#fda4af] underline underline-offset-2 hover:text-wp-text">Each country’s advisory on travel.state.gov →</a>
+            </div>
+          ) },
       ],
     },
     {
@@ -3965,6 +3979,8 @@ function MapView({ embed = false }: { embed?: boolean }) {
       items: [
         { key: 'hazards', label: 'Natural hazards', description: 'Earthquakes, volcanoes, tsunamis and wildfires, last 48 h', icon: Activity, color: '#fb923c',
           on: hazardsMode, loading: hazardsLoading, count: hazardsCount, toggle: () => setHazardsMode(v => !v) },
+        overlayItem('storms', CloudLightning),
+        overlayItem('disaster-maps', ScanSearch),
         { key: 'risk', label: 'Country risk', description: 'Countries shaded by today’s signal activity', icon: ShieldAlert, color: '#fbbf24',
           on: countryRiskMode, loading: countryRiskLoading, count: countryRiskCount, toggle: () => setCountryRiskMode(v => !v) },
         { key: 'nasa', label: 'Daily satellite photo', description: 'NASA MODIS image of the chosen day (clouds included)', icon: Satellite, color: '#34d399',
@@ -4042,6 +4058,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
       items: [
         overlayItem('satellites', Orbit),
         overlayItem('spaceports', Rocket),
+        overlayItem('aurora', Sparkles),
       ],
     },
   ]
