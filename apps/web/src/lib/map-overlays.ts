@@ -22,6 +22,11 @@
  * shipping headlines, from the free feed it offers websites: a circle per country or sea area the
  * headlines are tagged with, each headline linking to its article on lloydslist.com, credited.
  *
+ * And (Nov 21, 2026; Devon: "keep me updated on more map layers") three from open data, kept as files too
+ * (scripts/map-data/open-layers.mjs): large airports with scheduled flights (OurAirports, public domain),
+ * seaports (Natural Earth, public domain) and power plants of 1,000 MW or more (WRI's Global Power Plant
+ * Database, CC BY 4.0 and credited; WRI last updated it in 2021, which the layer says).
+ *
  * And (plan R4; Devon, Oct 21: "Add - added refugee and displacement data")
  * UNHCR's figures for each country (CC BY 4.0), one circle a country sized by
  * the people displaced from it: inside it and abroad. Kept as a file too
@@ -35,9 +40,9 @@ import { escapeHtml, safeHttpUrl, timeAgo } from './map-utils'
 import { prepareSatellites, satellitePositions, type PreparedSats } from './map-satellites'
 import { DISPLACED_FILE, UNHCR_DATA_URL, displacedFigures, displacedLines } from './displaced'
 
-export type OverlayKey = 'protests' | 'outbreaks' | 'displacement' | 'displaced' | 'outages' | 'cable-landings' | 'ai-dc' | 'nuclear' | 'bases' | 'spaceports' | 'satellites' | 'shipping-news'
+export type OverlayKey = 'protests' | 'outbreaks' | 'displacement' | 'displaced' | 'outages' | 'cable-landings' | 'ai-dc' | 'nuclear' | 'bases' | 'spaceports' | 'satellites' | 'shipping-news' | 'airports' | 'ports' | 'power'
 
-export const OVERLAY_KEYS: readonly OverlayKey[] = ['protests', 'outbreaks', 'displacement', 'displaced', 'outages', 'cable-landings', 'ai-dc', 'nuclear', 'bases', 'spaceports', 'satellites', 'shipping-news']
+export const OVERLAY_KEYS: readonly OverlayKey[] = ['protests', 'outbreaks', 'displacement', 'displaced', 'outages', 'cable-landings', 'ai-dc', 'nuclear', 'bases', 'spaceports', 'satellites', 'shipping-news', 'airports', 'ports', 'power']
 
 export function isOverlayKey(value: unknown): value is OverlayKey {
   return typeof value === 'string' && (OVERLAY_KEYS as readonly string[]).includes(value)
@@ -293,6 +298,63 @@ function wikidataPopup(label: string, color: string, facts: (p: Record<string, u
   }
 }
 
+// ── Airports, seaports and big power plants: open data kept as files (Nov 21, 2026) ──
+
+/** A plant's main fuel; others (cogeneration, geothermal, petcoke) take the layer's colour */
+const POWER_COLOR: Record<string, string> = { Coal: '#a8a29e', Gas: '#fb923c', Oil: '#d97706', Hydro: '#38bdf8', Solar: '#fde047', Wind: '#86efac' }
+/** The biggest plant in the file (Three Gorges): a circle's area follows a plant's power against it */
+const POWER_MAX_MW = 22_500
+export const WRI_CREDIT = 'WRI Global Power Plant Database (CC BY 4.0), last updated 2021'
+
+function placeFeatures(extra: (p: Record<string, unknown>) => OverlayFeature['properties']) {
+  return (json: unknown): OverlayFeature[] => {
+    const list = (json as { features?: unknown })?.features
+    if (!Array.isArray(list)) return []
+    const out: OverlayFeature[] = []
+    for (const f of list as Array<{ geometry?: { coordinates?: unknown }; properties?: Record<string, unknown> }>) {
+      const c = Array.isArray(f?.geometry?.coordinates) ? f.geometry!.coordinates as unknown[] : []
+      const at = pointAt(c[1], c[0])
+      const p = f?.properties ?? {}
+      if (!at || !str(p.name)) continue
+      out.push(feature(at, { name: str(p.name), country: str(p.country), ...extra(p) }))
+    }
+    return out
+  }
+}
+
+function outLink(url: unknown, text: string): string {
+  const href = safeHttpUrl(url)
+  return href ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" style="${LINK};color:#94a3b8">${escapeHtml(text)} ↗</a>` : ''
+}
+
+function airportPopup(p: Record<string, unknown>): string {
+  const place = [str(p.city), str(p.country)].filter(Boolean).join(', ')
+  return header('#93c5fd', 'AIRPORT') +
+    `<div style="${TITLE}">${escapeHtml(p.name)}</div>` +
+    (str(p.code) ? `<div style="${META}">${escapeHtml(p.code)}</div>` : '') +
+    (place ? `<div style="${META}">${escapeHtml(place)}</div>` : '') +
+    outLink(p.link, 'Wikipedia')
+}
+
+function portPopup(p: Record<string, unknown>): string {
+  return header('#5eead4', 'SEAPORT') +
+    `<div style="${TITLE}">${escapeHtml(p.name)}</div>` +
+    (str(p.country) ? `<div style="${META}">${escapeHtml(p.country)}</div>` : '') +
+    outLink(p.link, 'Website')
+}
+
+function powerPopup(p: Record<string, unknown>): string {
+  const mw = num(p.mw)
+  const year = num(p.year)
+  const line = [str(p.fuel), mw ? `${mw.toLocaleString('en-US')} MW` : null, year ? `since ${year}` : null].filter(Boolean).join(' · ')
+  return header('#fdba74', 'POWER PLANT') +
+    `<div style="${TITLE}">${escapeHtml(p.name)}</div>` +
+    (str(p.country) ? `<div style="${META}">${escapeHtml(p.country)}</div>` : '') +
+    (line ? `<div style="${META}">${escapeHtml(line)}</div>` : '') +
+    (str(p.owner) ? `<div style="${META}">${escapeHtml(p.owner)}</div>` : '') +
+    `<div style="${META};font-size:10px">${escapeHtml(WRI_CREDIT)}</div>`
+}
+
 // ── Shipping headlines (Lloyd's List's free feed, credited) ───────────────────
 
 const SHIPPING_COLOR = '#22d3ee'
@@ -422,6 +484,36 @@ export const OVERLAYS: Record<OverlayKey, OverlayDef> = {
     description: "Lloyd's List's headlines on the countries and sea lanes they're about (its free feed, credited; each opens on lloydslist.com)",
     path: '/api/v1/maritime/headlines?limit=100', refreshMs: 30 * MINUTE, bySeverity: false, sized: true,
     toFeatures: shippingFeatures, popup: shippingPopup,
+  },
+  airports: {
+    key: 'airports', label: 'Airports', color: '#93c5fd',
+    description: 'About 1,150 large airports with scheduled flights (OurAirports, public domain)',
+    path: '/geo/airports.v1.geojson', base: 'site', refreshMs: 24 * HOUR, bySeverity: false,
+    toFeatures: placeFeatures(p => ({ code: str(p.code), city: str(p.city), link: safeHttpUrl(p.link) })),
+    popup: airportPopup,
+  },
+  ports: {
+    key: 'ports', label: 'Seaports', color: '#5eead4',
+    description: 'About 1,100 seaports (Natural Earth, public domain)',
+    path: '/geo/ports.v1.geojson', base: 'site', refreshMs: 24 * HOUR, bySeverity: false,
+    toFeatures: placeFeatures(p => ({ link: safeHttpUrl(p.link) })),
+    popup: portPopup,
+  },
+  power: {
+    key: 'power', label: 'Power plants (1 GW+)', color: '#fdba74',
+    description: 'About 1,450 coal (grey), gas (orange), oil (amber) and hydro (blue) plants of 1,000 MW or more, sized by power. WRI\'s database (CC BY 4.0), last updated 2021: newer plants are missing. Nuclear plants are their own layer.',
+    path: '/geo/power-plants.v1.geojson', base: 'site', refreshMs: 24 * HOUR, bySeverity: false, sized: true,
+    toFeatures: placeFeatures(p => {
+      const mw = num(p.mw)
+      const fuel = str(p.fuel)
+      return {
+        fuel, mw, owner: str(p.owner), year: num(p.year),
+        // the circle's area follows the plant's power
+        size: mw && mw > 0 ? Math.min(1, Math.sqrt(mw / POWER_MAX_MW)) : null,
+        color: (fuel && POWER_COLOR[fuel]) ?? null,
+      }
+    }),
+    popup: powerPopup,
   },
   satellites: {
     key: 'satellites', label: 'Satellites', color: '#e2e8f0',

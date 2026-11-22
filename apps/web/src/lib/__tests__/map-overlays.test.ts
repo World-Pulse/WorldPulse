@@ -333,3 +333,90 @@ describe('displaced people (UNHCR\'s figures, plan R4)', () => {
   })
 })
 
+
+describe('airports, seaports and big power plants: open data kept as files (Nov 21, 2026)', () => {
+  const read = async (key: 'airports' | 'ports' | 'power') => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    return JSON.parse(readFileSync(resolve(__dirname, '../../../public', OVERLAYS[key].path.slice(1)), 'utf8'))
+  }
+
+  it('come from the site, each with its source in the file and its credit in the description', async () => {
+    const credits = { airports: 'OurAirports (public domain)', ports: 'Natural Earth 1:10m ports (public domain)', power: 'WRI Global Power Plant Database v1.3.0 (CC BY 4.0)' }
+    for (const key of ['airports', 'ports', 'power'] as const) {
+      expect(OVERLAYS[key]).toMatchObject({ base: 'site', bySeverity: false })
+      const json = await read(key)
+      const f = OVERLAYS[key].toFeatures(json)
+      expect(f.length, key).toBeGreaterThan(1000)
+      expect(f.length, key).toBe(json.features.length)
+      expect(json.about, key).toContain(credits[key])
+    }
+    expect(OVERLAYS.power.description).toContain('CC BY 4.0')
+    expect(OVERLAYS.power.description).toContain('last updated 2021')
+  })
+
+  it('airports: name, codes, city and country, and its Wikipedia page', () => {
+    const [f] = OVERLAYS.airports.toFeatures({ features: [
+      { geometry: { coordinates: [-84.4281, 33.6367] }, properties: { name: 'Hartsfield-Jackson Atlanta International Airport', code: 'ATL · KATL', city: 'Atlanta', country: 'United States', link: 'https://en.wikipedia.org/wiki/Hartsfield–Jackson_Atlanta_International_Airport' } },
+    ] })
+    const html = OVERLAYS.airports.popup(f!.properties)
+    expect(html).toContain('AIRPORT')
+    expect(html).toContain('ATL · KATL')
+    expect(html).toContain('Atlanta, United States')
+    expect(html).toContain('href="https://en.wikipedia.org/wiki/Hartsfield%E2%80%93Jackson_Atlanta_International_Airport"')
+  })
+
+  it('popups escape what the files say, and drop a link that is not a web address', () => {
+    const [f] = OVERLAYS.ports.toFeatures({ features: [
+      { geometry: { coordinates: [1, 1] }, properties: { name: '<img src=x onerror=alert(1)>', country: '<b>', link: 'javascript:alert(1)' } },
+    ] })
+    expect(f!.properties).toMatchObject({ link: null })
+    const html = OVERLAYS.ports.popup(f!.properties)
+    expect(html).not.toContain('<img')
+    expect(html).not.toContain('javascript:')
+    expect(html).toContain('&lt;img')
+  })
+
+  it('seaports: countries as the UN sees them', async () => {
+    const ports = OVERLAYS.ports.toFeatures(await read('ports'))
+    const at = (name: string) => ports.filter(p => p.properties.name === name).map(p => p.properties.country)
+    // Natural Earth draws Crimea as Russia's, Northern Cyprus and Somaliland apart, Western Sahara as Morocco's
+    expect(at('Sevastopol')).toEqual(['Ukraine'])
+    expect(at('Kerch')).toEqual(['Ukraine'])
+    expect(at('Famagusta')).toEqual(['Cyprus'])
+    expect(at('Berbera')).toEqual(['Somalia'])
+    expect(at('Dakhla')).toEqual(['Western Sahara'])
+    expect(at('Gibraltar')).toEqual(['Gibraltar'])
+    expect(ports.every(p => p.properties.country)).toBe(true)
+    const rotterdam = ports.find(p => p.properties.name === 'Rotterdam')!
+    expect(rotterdam.properties.country).toBe('Netherlands')
+    expect(OVERLAYS.ports.popup(rotterdam.properties)).toContain('SEAPORT')
+  })
+
+  it('power plants: 1,000 MW or more, no nuclear (its own layer), coloured by fuel and sized by power, credited', async () => {
+    const plants = OVERLAYS.power.toFeatures(await read('power'))
+    expect(plants.every(p => Number(p.properties.mw) >= 1000)).toBe(true)
+    expect(plants.some(p => p.properties.fuel === 'Nuclear')).toBe(false)
+    const gorges = plants.find(p => p.properties.name === 'Three Gorges Dam')!
+    expect(gorges.properties).toMatchObject({ country: 'China', fuel: 'Hydro', mw: 22500, size: 1, color: '#38bdf8' })
+    const html = OVERLAYS.power.popup(gorges.properties)
+    expect(html).toContain('POWER PLANT')
+    expect(html).toContain('Hydro · 22,500 MW · since 2003')
+    expect(html).toContain('WRI Global Power Plant Database (CC BY 4.0), last updated 2021')
+    const [gw] = OVERLAYS.power.toFeatures({ features: [{ geometry: { coordinates: [10, 50] }, properties: { name: 'A', fuel: 'Coal', mw: 1000 } }] })
+    expect(gw!.properties.size).toBeCloseTo(Math.sqrt(1000 / 22500), 6)
+    expect(gw!.properties.color).toBe('#a8a29e')
+    expect(OVERLAYS.power.sized).toBe(true)
+  })
+
+  it('are in the Layers panel: airports and seaports with aircraft and ships, power plants with infrastructure', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const page = readFileSync(resolve(__dirname, '../../app/map/page.tsx'), 'utf8')
+    const movement = page.slice(page.indexOf("title: 'Movement'"), page.indexOf("title: 'Earth & context'"))
+    expect(movement).toContain("overlayItem('airports', PlaneLanding)")
+    expect(movement).toContain("overlayItem('ports', Container)")
+    const infrastructure = page.slice(page.indexOf("title: 'Infrastructure'"), page.indexOf("title: 'Space'"))
+    expect(infrastructure).toContain("overlayItem('power', Factory)")
+  })
+})

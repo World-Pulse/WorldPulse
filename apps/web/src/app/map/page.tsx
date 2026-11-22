@@ -23,6 +23,7 @@ import {
   Map as MapIcon, Moon, Satellite, Globe2, LocateFixed, Layers as LayersIcon,
   Flame, History, Swords, Crosshair, RadioTower, Anchor, Plane, Ship, Activity, ShieldAlert, Video, List as ListIcon,
   SunMoon, Compass, Megaphone, Biohazard, Tent, WifiOff, Cable, Server, Atom, Rocket, Shield, Orbit, Wheat, Landmark, TrendingUp,
+  PlaneLanding, Container, Factory,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { LayersPanel, activeLayerCount, type MapLayerGroup } from '@/components/map/LayersPanel'
@@ -3955,6 +3956,8 @@ function MapView({ embed = false }: { embed?: boolean }) {
           on: showAircraft, count: aircraftCount, toggle: () => setShowAircraft(v => !v) },
         { key: 'ships', label: 'Ships', description: 'Live ships in 12 straits and canals (AIS: aisstream.io; arrows: tankers red, cargo green, passenger blue, navies amber), and ship, port and strait news (last 3 days)', icon: Ship, color: '#f59e0b',
           on: showShips, count: shipCount + liveShipCount, toggle: () => setShowShips(v => !v) },
+        overlayItem('airports', PlaneLanding),
+        overlayItem('ports', Container),
       ],
     },
     {
@@ -4031,6 +4034,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
         overlayItem('cable-landings', Cable),
         overlayItem('ai-dc', Server),
         overlayItem('nuclear', Atom),
+        overlayItem('power', Factory),
       ],
     },
     {
