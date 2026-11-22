@@ -7,10 +7,13 @@ import { CopyText } from '@/components/ai/CopyText'
 // help page, as of Nov 21, 2026: support.claude.com 11175166, help.openai.com 12584461, support.google.com/gemini
 // 17209137, help.mistral.ai 393572, VS Code's MCP configuration reference and Gemini CLI's MCP docs. The developer
 // page (/developers#mcp) has the full tool list; a test checks the count and the smaller sets against the server.
+// Nov 22, 2026 (Devon: "can you do these for me?"): Grok and Le Chat as their own cards, Perplexity and Microsoft
+// Copilot Studio with the other apps, from docs.x.ai/grok/connectors, help.mistral.ai 393572, Microsoft Learn's
+// "Connect your agent to an existing MCP server" and a Perplexity setup guide (Perplexity has no public page on it).
 export const metadata = pageMetadata({
   path: '/ai',
   title: 'Use WorldPulse in Claude, ChatGPT or Gemini',
-  description: 'Add WorldPulse to Claude, ChatGPT, Gemini or any AI assistant and get answers that say how many independent outlets reported each story. Free, no sign-up, no key.',
+  description: 'Add WorldPulse to Claude, ChatGPT, Gemini, Grok, Le Chat, Perplexity, Copilot or any AI assistant and get answers that say how many independent outlets reported each story. Free, no sign-up, no key.',
 })
 
 const MCP_URL = 'https://api.world-pulse.io/mcp'
@@ -60,6 +63,31 @@ const APPS: Array<{ id: string; name: string; where: string; who: React.ReactNod
     ],
     help: 'https://support.google.com/gemini/answer/17209137',
   },
+  {
+    id: 'grok',
+    name: 'Grok',
+    where: 'On grok.com.',
+    who: 'Every Grok user. On Grok Business or Enterprise, a team admin sets up connectors first.',
+    steps: [
+      <>Go to <a href="https://grok.com/connectors" className="text-wp-amber underline" rel="noopener noreferrer" target="_blank">grok.com/connectors</a>.</>,
+      <>Click <B>New Connector</B>, then <B>Custom</B>.</>,
+      <>Paste the address above. WorldPulse needs no sign-in.</>,
+      <>Ask Grok about the news.</>,
+    ],
+    help: 'https://docs.x.ai/grok/connectors',
+  },
+  {
+    id: 'le-chat',
+    name: 'Le Chat',
+    where: 'On chat.mistral.ai.',
+    who: 'Free, Pro and Student plans: the account owner adds it.',
+    steps: [
+      <>In the side panel, open <B>Intelligence</B>, then <B>Connectors</B>.</>,
+      <>Click <B>+ Add Connector</B> and open the <B>Custom MCP Connector</B> tab.</>,
+      <>Name it worldpulse, paste the address in <B>Connection server</B> and click <B>Connect</B>. WorldPulse needs no sign-in.</>,
+    ],
+    help: 'https://help.mistral.ai/en/articles/393572-configuring-a-custom-connector',
+  },
 ]
 
 /** Apps set up with one command or one line of settings */
@@ -98,7 +126,7 @@ export default function UseInAiPage() {
       <main className="max-w-2xl mx-auto px-4 py-10">
         <h1 className="text-2xl font-bold text-wp-text text-balance">Use WorldPulse in Claude, ChatGPT or Gemini</h1>
         <p className="text-sm text-wp-text2 mt-2 leading-relaxed">
-          Add WorldPulse to your AI assistant and ask it about the news. Its answers then say how many independent outlets reported
+          Add WorldPulse to your AI assistant (Claude, ChatGPT, Gemini, Grok, Le Chat, Perplexity, Copilot and more) and ask it about the news. Its answers then say how many independent outlets reported
           each story, whether the story is verified, and link to it, so you can check. Free, no account, no key, and it only reads.
         </p>
 
@@ -146,8 +174,13 @@ export default function UseInAiPage() {
               </div>
             ))}
             <p className="text-sm text-wp-text2 leading-relaxed">
-              <span className="font-semibold text-wp-text">Mistral Le Chat.</span> In the side panel, <B>Intelligence</B>, then <B>Connectors</B>,{' '}
-              <B>+ Add Connector</B> and the <B>Custom MCP Connector</B> tab. Name it worldpulse, paste the address in <B>Connection server</B> and click <B>Connect</B>.
+              <span className="font-semibold text-wp-text">Perplexity</span> (Pro and Enterprise). In <B>Settings</B>, click <B>+ Custom connector</B> and choose{' '}
+              <B>Remote</B>. Name it WorldPulse, paste the address and click <B>Add</B>; it needs no sign-in. On Enterprise, an admin first allows custom connectors.
+            </p>
+            <p className="text-sm text-wp-text2 leading-relaxed">
+              <span className="font-semibold text-wp-text">Microsoft Copilot Studio</span> (for a company&rsquo;s own agents). In your agent, open <B>Tools</B>,{' '}
+              <B>Add a tool</B>, <B>New tool</B>, then <B>Model Context Protocol</B>. Name it WorldPulse, paste the address, choose <B>None</B> for authentication and click{' '}
+              <B>Create</B>, then <B>Add to agent</B>.
             </p>
             <p className="text-sm text-wp-text2 leading-relaxed">
               <span className="font-semibold text-wp-text">Any other app that takes MCP servers.</span> Add the address as a remote server (Streamable HTTP), with no sign-in.

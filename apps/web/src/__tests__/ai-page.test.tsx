@@ -24,7 +24,7 @@ describe('the page', () => {
 
   it('gives the address to add, and a section for each assistant', () => {
     expect(html).toContain('https://api.world-pulse.io/mcp')
-    for (const id of ['address', 'claude', 'chatgpt', 'gemini', 'ask', 'other', 'fewer', 'what']) expect(html).toContain(`id="${id}"`)
+    for (const id of ['address', 'claude', 'chatgpt', 'gemini', 'grok', 'le-chat', 'ask', 'other', 'fewer', 'what']) expect(html).toContain(`id="${id}"`)
     expect(String(metadata.title)).toMatch(/Use WorldPulse in Claude, ChatGPT or Gemini/)
   })
 
@@ -38,6 +38,18 @@ describe('the page', () => {
     expect(html).toContain('href="https://support.claude.com/en/articles/11175166')
     expect(html).toContain('href="https://help.openai.com/en/articles/12584461"')
     expect(html).toContain('href="https://support.google.com/gemini/answer/17209137"')
+  })
+
+  it('has Grok and Le Chat as their own cards, and Perplexity and Copilot Studio with the other apps (Nov 22, 2026)', () => {
+    // docs.x.ai/grok/connectors
+    for (const s of ['https://grok.com/connectors', 'New Connector', 'Custom']) expect(html).toContain(s)
+    expect(html).toContain('href="https://docs.x.ai/grok/connectors"')
+    // help.mistral.ai 393572
+    for (const s of ['Custom MCP Connector', 'Connection server']) expect(html).toContain(s)
+    expect(html).toContain('href="https://help.mistral.ai/en/articles/393572-configuring-a-custom-connector"')
+    // Perplexity (Pro and Enterprise) and Microsoft Copilot Studio (Learn: connect your agent to an existing MCP server)
+    for (const s of ['Perplexity', '+ Custom connector', 'Remote', 'Microsoft Copilot Studio', 'Model Context Protocol', 'Add to agent']) expect(html).toContain(s)
+    expect(String(metadata.description)).toMatch(/Grok, Le Chat, Perplexity, Copilot/)
   })
 
   it('gives the same commands as the developer page, and Gemini CLI and VS Code', () => {
