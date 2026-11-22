@@ -193,6 +193,124 @@ export function tourCaption(stop: TourSignal, storyTitles?: ReadonlyMap<string, 
   }
 }
 
+// ── The story tour (Nov 22, 2026; Devon on Grok's read of the video, "it should be 1, 2, and 3": a hook in the
+// first 2 to 3 seconds, one or two stories held longer with a clear English headline, an end card with the map's
+// address, and a 15-second cut). The video opens on the day's most-reported story and visits the top stories in
+// turn, each with its subject, its country, and how many outlets and countries carry it.
+
+/** Stories the tour visits at most, and at least (with fewer the camera picks moments as before) */
+export const TOUR_STORIES_MAX = 5
+export const TOUR_STORIES_MIN = 3
+/** Subjects the tour leaves out (as HQ's X drafts do) */
+const TOUR_SKIP_CATEGORIES = new Set(['other', 'sports', 'culture', 'entertainment', 'lifestyle', 'celebrity'])
+
+const ENGLISH_WORDS = /\b(the|of|to|and|for|on|in|with|after|over|says|said|from|at|by|is|are|as|has|have|was|were|will|into|amid|new)\b/gi
+// Small words of other languages, counted only in lower case: in English headlines they come as names ("El Chapo",
+// "Le Pen", "Las Vegas"), in other languages' headlines mid-sentence ("sismo de magnitud 6,7 en Perú")
+const OTHER_WORDS = /\b(de|la|le|les|des|du|et|el|los|las|und|der|das|il|della|che|em|do|da|dos|um|uma|com|para|por|pelo|pela|en|con|una|uno|del|y|sobre|tras|nel|per|sul|dei|au|aux|dans|pour|avec|sur|zu|im|ein|eine|nach|bei|di|yang|ke|dari|untuk|ng|mga|och|og|ile|bir)\b/g
+
+/**
+ * A headline in English (the test HQ's X drafts use): in Latin letters, with more small English words ("the",
+ * "after") than other languages' ("de", "em"), or with neither and no letter outside plain ASCII
+ */
+export function isEnglishHeadline(title: string): boolean {
+  const t = (title ?? '').trim()
+  if (t.length < 20) return false
+  const letters = t.match(/\p{L}/gu) ?? []
+  if (!letters.length) return false
+  const ascii = letters.filter(ch => ch.charCodeAt(0) < 128).length
+  if (ascii < 0.9 * letters.length) return false
+  const other = (t.replace('von der Leyen', '').match(OTHER_WORDS) ?? []).length
+  const ours = (t.match(ENGLISH_WORDS) ?? []).length
+  return ours > other || (ours === 0 && other === 0 && ascii === letters.length)
+}
+
+/** One of the day's stories, as /api/v1/stories gives it */
+export interface DayStory {
+  id: string
+  title: string
+  outlets: number
+  countries: number
+  category?: string
+  /** ISO 3166 alpha-2 */
+  country?: string
+  severity?: string
+  firstSeenAt?: string
+  verifiedAt?: string | null
+}
+
+export interface TourStory extends DayStory {
+  lat: number
+  lng: number
+}
+
+const clipTitle = (t: string) => (t.length > CAPTION_MAX ? `${t.slice(0, CAPTION_MAX - 1).trimEnd()}…` : t)
+
+/**
+ * The stories the tour visits, the most outlets first: verified ones, of a subject the tour keeps and not of low
+ * seriousness, with an English headline (the story's own, else an English report of it in the day's replay) and a
+ * place on the map (where its best-ranked report in the replay is). Two stories at the same place are one stop.
+ */
+export function pickTourStories(
+  stories: ReadonlyArray<DayStory>,
+  buckets: ReadonlyArray<{ signals: TourSignal[] }>,
+  max = TOUR_STORIES_MAX,
+): TourStory[] {
+  const reportsOf = new Map<string, TourSignal[]>()
+  for (const b of buckets) {
+    for (const s of b.signals ?? []) {
+      if (!Number.isFinite(s.lat) || !Number.isFinite(s.lng) || (s.lat === 0 && s.lng === 0)) continue
+      const k = storyKeyOf(s)
+      const list = reportsOf.get(k)
+      if (list) list.push(s)
+      else reportsOf.set(k, [s])
+    }
+  }
+  const out: TourStory[] = []
+  for (const st of [...stories].sort((a, b) => (b.outlets || 0) - (a.outlets || 0))) {
+    if (out.length >= max) break
+    if (!st?.id || !st.verifiedAt || TOUR_SKIP_CATEGORIES.has(String(st.category ?? '').toLowerCase())) continue
+    if (String(st.severity ?? '').toLowerCase() === 'low') continue
+    const reports = reportsOf.get(st.id) ?? []
+    if (!reports.length) continue
+    const place = reports.reduce((a, b) => (rank(b) > rank(a) ? b : a))
+    const title = isEnglishHeadline(st.title) ? st.title.trim() : reports.map(r => (r.title ?? '').trim()).find(isEnglishHeadline)
+    if (!title) continue
+    if (out.some(o => distanceKm(o, place) < 50)) continue
+    out.push({ ...st, title: clipTitle(title), lat: place.lat, lng: place.lng, severity: st.severity || place.severity })
+  }
+  return out
+}
+
+/** "103 outlets · 37 countries · verified in 7 min" */
+export function trustLine(s: Pick<DayStory, 'outlets' | 'countries' | 'firstSeenAt' | 'verifiedAt'>): string {
+  const parts = [`${(s.outlets || 0).toLocaleString('en-US')} outlets`]
+  if ((s.countries || 0) >= 2) parts.push(`${s.countries} countries`)
+  const a = Date.parse(s.firstSeenAt ?? ''), b = Date.parse(s.verifiedAt ?? '')
+  if (Number.isFinite(a) && Number.isFinite(b) && b >= a) {
+    const m = (b - a) / 60_000
+    if (m < 1.5) parts.push('verified within a minute')
+    else if (m < 90) parts.push(`verified in ${Math.round(m)} min`)
+    else if (m <= 48 * 60) parts.push(`verified in ${Math.round(m / 60)} h`)
+  }
+  return parts.join(' · ')
+}
+
+/** "CONFLICT · MEXICO": the story's subject and its country's name (from `countryName`, else its code) */
+export function storyTag(s: Pick<DayStory, 'category' | 'country'>, countryName?: (code: string) => string | undefined): string {
+  const subject = String(s.category ?? '').replace(/_/g, ' ').trim().toUpperCase()
+  const code = typeof s.country === 'string' && /^[A-Z]{2}$/.test(s.country) ? s.country : ''
+  const name = code ? (countryName?.(code) || code) : ''
+  return [subject, name.toUpperCase()].filter(Boolean).join(' · ')
+}
+
+/** The tour story on screen at a point of the replay (0 to 1): each story gets an equal share, the first at 0 */
+export function tourIndexAt(progress: number, count: number): number {
+  if (count <= 0) return -1
+  if (!Number.isFinite(progress) || progress <= 0) return 0
+  return Math.min(count - 1, Math.floor(progress * count))
+}
+
 /** Reports and verified reports on the map by a step (the replay shows every moment up to it) */
 export function playCounts(buckets: Array<{ signals: Array<{ status?: string }> }>, index: number): { reports: number; verified: number } {
   let reports = 0

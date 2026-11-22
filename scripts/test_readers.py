@@ -96,10 +96,14 @@ class ReadersPerPost(unittest.TestCase):
         self.assertEqual(readers.post_key('utm_campaign=briefing&utm_content=0a1b2c3d'), 'briefing:0a1b2c3d')
         self.assertEqual(readers.post_key('utm_source=x&utm_medium=social&utm_campaign=daily-video&utm_content=2026-11-11'), 'video:2026-11-11')
         self.assertEqual(readers.post_key('utm_source=linkedin&utm_campaign=hq&utm_content=missed-2026-W46-SD'), 'missed:2026-w46-sd')
+        # the new X formats (Nov 22, 2026): One map, three stories (daily) and How we count (weekly)
+        self.assertEqual(readers.post_key('utm_source=x&utm_campaign=hq&utm_content=map3-2026-11-22'), 'map3:2026-11-22')
+        self.assertEqual(readers.post_key('utm_source=x&utm_campaign=hq&utm_content=howcount-2026-W47'), 'howcount:2026-w47')
 
     def test_anything_else_is_no_post(self):
         for q in ('', 'utm_campaign=hq', 'utm_campaign=hq&utm_content=nothex12', 'utm_campaign=daily-video&utm_content=today',
-                  'utm_campaign=ads&utm_content=83b746ee', 'utm_campaign=hq&utm_content=missed-2026-W46-sudan'):
+                  'utm_campaign=ads&utm_content=83b746ee', 'utm_campaign=hq&utm_content=missed-2026-W46-sudan',
+                  'utm_campaign=hq&utm_content=map3-today', 'utm_campaign=hq&utm_content=howcount-2026-11-22'):
             self.assertIsNone(readers.post_key(q), q)
 
     def test_each_posts_readers_by_the_channel_they_came_from(self):

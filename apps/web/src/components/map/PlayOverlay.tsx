@@ -24,6 +24,19 @@ export interface PlayTopStory {
   countries?: number
 }
 
+/** A story of the tour as the video shows it (Nov 22, 2026): "CONFLICT · MEXICO", the headline, "103 outlets · 37 countries · verified in 7 min" */
+export interface PlayStoryCard {
+  tag: string
+  title: string
+  trust: string
+  outlets: number
+  countries: number
+  severity: string
+  /** Its place in the tour, from 1, and the tour's length */
+  n: number
+  of: number
+}
+
 interface PlayOverlayProps {
   phase: PlayPhase
   caption: PlayCaption | null
@@ -40,6 +53,9 @@ interface PlayOverlayProps {
   topStories: PlayTopStory[]
   /** The video's length for the title card ("THE WORLD IN 30 SECONDS"; ?len=, Oct 31, 2026) */
   seconds?: number
+  /** The story tour (Nov 22, 2026): the day's most-reported story, the video's opening, and the story on screen now */
+  hook?: PlayStoryCard | null
+  story?: PlayStoryCard | null
 }
 
 /** Keyframes for the cards, the captions and the ripple at the story the camera visits (page.tsx) */
@@ -51,6 +67,7 @@ const PLAY_CSS = `
 .wp-play-ripple i { position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--c, #f5a623); animation: wpPlayRing 1.6s ease-out infinite }
 .wp-play-ripple i + i { animation-delay: .8s }
 .wp-play-ripple b { position: absolute; left: 9px; top: 9px; width: 8px; height: 8px; border-radius: 50%; background: var(--c, #f5a623); box-shadow: 0 0 14px 3px var(--c, #f5a623) }
+.wp-play-ripple.big { transform: scale(1.7) }
 @keyframes wpPlayBeat { 0% { box-shadow: 0 0 0 0 rgba(245,166,35,.55) } 100% { box-shadow: 0 0 0 22px rgba(245,166,35,0) } }
 .wp-play-beat { animation: wpPlayBeat 1.4s ease-out infinite }
 `
@@ -62,17 +79,20 @@ const Mark = ({ size = 15 }: { size?: number }) => (
 )
 
 /**
- * What the video shows over the map while /map?play= plays (plan G9): a title card, the clock and the headline
- * of each moment during the replay, and the day's most-reported stories at the end
+ * What the video shows over the map while /map?play= plays (plan G9): the opening (the day's most-reported story
+ * since Nov 22, 2026; a title card when the tour has too few stories, or on a milestone morning), the clock and the
+ * story the camera is at during the replay, and the closing card with the live map's address
  */
-export function PlayOverlay({ phase, caption, timeLabel, dateLabel, progress, windowLabel, day, topStories, seconds = 60 }: PlayOverlayProps) {
+export function PlayOverlay({ phase, caption, timeLabel, dateLabel, progress, windowLabel, day, topStories, seconds = 60, hook = null, story = null }: PlayOverlayProps) {
   const sev = caption ? SEV_DOT[caption.severity] ?? '#8892a4' : '#8892a4'
+  const opening = phase === 'intro' && hook && !day?.milestone ? hook : null
   return (
     <>
       <style>{PLAY_CSS}</style>
 
       {/* The replay: the mark, the clock, the moment's headline and the progress line */}
-      <div className="absolute top-4 left-4 right-4 z-20 flex items-start justify-between pointer-events-none text-wp-text">
+      {/* (hidden under the opening, whose own first line says what it is) */}
+      <div className={`absolute top-4 left-4 right-4 z-20 flex items-start justify-between pointer-events-none text-wp-text ${opening ? 'opacity-0' : ''}`}>
         <div className="drop-shadow">
           <Mark />
           <div className="font-mono text-[10px] tracking-wider opacity-70 mt-0.5">world-pulse.io</div>
@@ -87,7 +107,18 @@ export function PlayOverlay({ phase, caption, timeLabel, dateLabel, progress, wi
       </div>
 
       <div className="absolute left-4 right-4 bottom-8 z-20 pointer-events-none" aria-live="polite">
-        {caption && phase === 'play' && (
+        {story && phase === 'play' && (
+          <div key={story.title} className="wp-play-in bg-[rgba(6,7,13,0.88)] border border-[rgba(255,255,255,0.14)] rounded-xl px-4 py-3.5 backdrop-blur-xl max-w-[640px] mx-auto"
+            style={{ borderLeft: `4px solid ${SEV_DOT[story.severity] ?? '#f5a623'}` }}>
+            <div className="flex items-center justify-between gap-2 font-mono text-[10.5px] tracking-wider mb-1.5">
+              <span style={{ color: SEV_DOT[story.severity] ?? '#f5a623' }}>{story.tag}</span>
+              <span className="opacity-60">{story.n} / {story.of}</span>
+            </div>
+            <div className="text-[19px] leading-snug text-wp-text font-semibold">{story.title}</div>
+            <div className="mt-2 font-mono text-[11px] tracking-wide text-wp-amber">{story.trust}</div>
+          </div>
+        )}
+        {!story && caption && phase === 'play' && (
           <div key={caption.title} className="wp-play-in bg-[rgba(6,7,13,0.84)] border border-[rgba(255,255,255,0.12)] rounded-xl px-4 py-3 backdrop-blur-xl max-w-[640px] mx-auto"
             style={{ borderLeft: `3px solid ${sev}` }}>
             <div className="flex items-center gap-2 font-mono text-[10px] tracking-wider mb-1" style={{ color: sev }}>
@@ -102,8 +133,28 @@ export function PlayOverlay({ phase, caption, timeLabel, dateLabel, progress, wi
         </div>
       </div>
 
+      {/* The opening (Nov 22, 2026): the day's most-reported story, over the map at its place, from the first second */}
+      {opening && (
+        <div className="absolute inset-0 z-30 flex flex-col justify-between px-6 pt-16 pb-10 text-wp-text pointer-events-none"
+          style={{ background: 'linear-gradient(180deg, rgba(5,7,13,0.92) 0%, rgba(5,7,13,0.55) 34%, rgba(5,7,13,0) 50%, rgba(5,7,13,0.6) 66%, rgba(5,7,13,0.94) 100%)' }}>
+          <div className="wp-play-in">
+            <div className="font-mono text-[11px] tracking-[2px] text-wp-amber">THE LAST 24 HOURS{dateLabel ? ` · ${dateLabel}` : ''}</div>
+            <div className="mt-4 font-display font-bold leading-[1.02] tracking-[1px]">
+              <span className="block text-[46px]">{opening.outlets.toLocaleString('en-US')} OUTLETS</span>
+              {opening.countries >= 2 && <span className="block mt-1 text-[24px]">IN {opening.countries} COUNTRIES</span>}
+            </div>
+            <div className="mt-2 text-[15px] opacity-85">reported one story:</div>
+          </div>
+          <div className="wp-play-in" style={{ animationDelay: '250ms' }}>
+            <div className="font-mono text-[11px] tracking-wider" style={{ color: SEV_DOT[opening.severity] ?? '#f5a623' }}>{opening.tag}</div>
+            <div className="mt-1.5 text-[22px] font-semibold leading-snug">{opening.title}</div>
+            <div className="mt-2 font-mono text-[11px] tracking-wide text-wp-amber">{opening.trust}</div>
+          </div>
+        </div>
+      )}
+
       {/* The title card: shown from the first frame, while the map and the day's data load */}
-      <div className={`absolute inset-0 z-30 flex flex-col items-center justify-center text-center px-6 text-wp-text pointer-events-none transition-opacity duration-700 ${phase === 'intro' ? 'opacity-100' : 'opacity-0'}`}
+      <div className={`absolute inset-0 z-30 flex flex-col items-center justify-center text-center px-6 text-wp-text pointer-events-none transition-opacity duration-700 ${phase === 'intro' && !opening ? 'opacity-100' : 'opacity-0'}`}
         style={{ background: 'radial-gradient(120% 75% at 50% 38%, #101a2e 0%, #070a12 62%, #05070d 100%)' }}>
         <span className="w-3 h-3 rounded-full bg-wp-amber wp-play-beat" />
         <div className="mt-5"><Mark size={14} /></div>
@@ -141,7 +192,27 @@ export function PlayOverlay({ phase, caption, timeLabel, dateLabel, progress, wi
       {/* The closing card: the day's most-reported stories, over the finished map */}
       <div className={`absolute inset-0 z-30 flex flex-col justify-end px-6 pb-14 text-wp-text pointer-events-none transition-opacity duration-700 ${phase === 'outro' ? 'opacity-100' : 'opacity-0'}`}
         style={{ background: 'linear-gradient(180deg, rgba(5,7,13,0) 0%, rgba(5,7,13,0.78) 38%, rgba(5,7,13,0.97) 64%)' }}>
-        {phase === 'outro' && (
+        {phase === 'outro' && hook && (
+          // The end card (Nov 22, 2026): the day in three numbers and the live map's address
+          <>
+            <div className="font-mono text-[11px] tracking-[2px] text-wp-amber wp-play-in">THE LAST 24 HOURS</div>
+            {day && (
+              <div className="mt-4 grid grid-cols-3 gap-3 w-full max-w-[340px] wp-play-in" style={{ animationDelay: '200ms' }}>
+                {[[day.reports, 'reports'], [day.outlets, 'outlets'], [day.countries, 'countries covered']].map(([n, l]) => (
+                  <div key={l as string} className="rounded-lg border border-[rgba(255,255,255,0.12)] bg-[rgba(255,255,255,0.04)] py-2 text-center">
+                    <div className="font-display font-bold text-[19px]">{(n as number).toLocaleString()}</div>
+                    <div className="font-mono text-[9.5px] leading-[1.25] tracking-wider opacity-60 uppercase px-1">{l as string}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="mt-7 wp-play-in" style={{ animationDelay: '500ms' }}>
+              <div className="font-display font-bold text-[24px] leading-tight">Full interactive map<span className="text-wp-amber"> →</span></div>
+              <div className="mt-1 font-mono text-[17px] tracking-wide text-wp-amber">world-pulse.io/map</div>
+            </div>
+          </>
+        )}
+        {phase === 'outro' && !hook && (
           <>
             <div className="font-mono text-[11px] tracking-[2px] text-wp-amber wp-play-in">THE DAY&apos;S MOST-REPORTED STORIES</div>
             <ol className="mt-4 flex flex-col gap-4">
@@ -152,7 +223,11 @@ export function PlayOverlay({ phase, caption, timeLabel, dateLabel, progress, wi
                 </li>
               ))}
             </ol>
-            <div className="mt-8 wp-play-in" style={{ animationDelay: `${450 + Math.min(3, topStories.length) * 450}ms` }}>
+          </>
+        )}
+        {phase === 'outro' && (
+          <>
+            <div className="mt-8 wp-play-in" style={{ animationDelay: `${hook ? 800 : 450 + Math.min(3, topStories.length) * 450}ms` }}>
               {day?.milestone && <div className="mb-2 font-mono text-[11px] tracking-[2px] text-wp-amber">{day.milestone.toLocaleString('en-US')} NEWS REPORTS READ, AND COUNTING</div>}
               <div className="text-[14px] opacity-90">Don&apos;t trust one headline. Count the newsrooms.</div>
               {/* (the beating dot keeps the page painting, so the recorder films the card to the end: Oct 30, 2026,

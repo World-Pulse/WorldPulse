@@ -30,6 +30,10 @@
  * Beside it since Nov 11, 2026, world-in-60s-YYYY-MM-DD.json: what the video
  * showed (the page's data-play-card: the title card's numbers and the closing
  * card's stories), so the morning post gives the video's own numbers.
+ * And since Nov 22, 2026 (Devon, on Grok's read of the video: "it should be 1,
+ * 2, and 3"), world-in-15s-YYYY-MM-DD.mp4: a 15-second cut, the video's first
+ * SHORT_HEAD_S seconds (the opening story and the next) and its last
+ * SHORT_TAIL_S (the end card with the map's address).
  */
 
 import { execFile } from 'node:child_process'
@@ -73,6 +77,9 @@ const TRIES = Number(process.env.TRIES || 8)
 const CATCH_UP_MIN = Number(process.env.CATCH_UP_MIN || 240)
 /** The page's own questions and the encoder get this long before a recording counts as stuck */
 const EVAL_MS = 15_000, CLOSE_MS = 30_000, ENCODE_MS = 15 * 60_000
+/** The 15-second cut: this many seconds from the start, and this many from the end */
+const SHORT_HEAD_S = Number(process.env.SHORT_HEAD_S || 10.5)
+const SHORT_TAIL_S = Number(process.env.SHORT_TAIL_S || 4.5)
 /** What the recorder is doing, for the status page (scripts/ops-status.sh daily_video: status) */
 const STATUS_FILE = 'recorder-status.json'
 
@@ -200,6 +207,38 @@ async function encode(inputArgs, date, extraVideoArgs = []) {
 }
 
 /**
+ * ffmpeg's arguments for the 15-second cut of a video `duration` seconds long: its start and its end, one after the
+ * other, with the same quiet audio track; null when the video is too short to cut (the whole of it is short already)
+ */
+export function shortCutArgs(input, output, duration, head = SHORT_HEAD_S, tail = SHORT_TAIL_S) {
+  if (!Number.isFinite(duration) || duration < head + tail + 2) return null
+  const from = Math.round((duration - tail) * 100) / 100
+  return ['-y', '-i', input, '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo',
+    '-filter_complex', `[0:v]trim=0:${head},setpts=PTS-STARTPTS[a];[0:v]trim=start=${from},setpts=PTS-STARTPTS[b];[a][b]concat=n=2:v=1:a=0[v]`,
+    '-map', '[v]', '-map', '1:a', '-shortest',
+    '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p', '-r', String(FPS), '-c:a', 'aac', '-b:a', '64k',
+    '-movflags', '+faststart', output]
+}
+
+/** The 15-second cut beside the video (world-in-15s-<date>.mp4); a failure is logged, never the morning's failure */
+async function cutShort(full, date) {
+  try {
+    const duration = Number(String(await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', full])).trim())
+    const tmp = join(OUT_DIR, `.world-in-15s-${date}.mp4`)
+    const out = join(OUT_DIR, `world-in-15s-${date}.mp4`)
+    const args = shortCutArgs(full, tmp, duration)
+    if (!args) { log(`the video is ${duration} s: no 15-second cut`); return null }
+    await run('ffmpeg', args)
+    await rename(tmp, out)
+    log('saved', out, `${Math.round((await stat(out)).size / 1024)} KB`)
+    return out
+  } catch (err) {
+    log('no 15-second cut:', String(err?.message ?? err).slice(0, 200))
+    return null
+  }
+}
+
+/**
  * What the video showed (Nov 11, 2026): the page's data-play-card (apps/web/src/lib/map-play.ts playCard), checked
  * and kept to its numbers and three stories; null when the page had none (an older site) or it isn't a card
  */
@@ -306,6 +345,7 @@ export async function recordOnce() {
     // (the screencast comes at the page's 450 x 800, drawn at 1.6 times that and scaled down: made 720 x 1280)
     const out = await encode(['-framerate', String(FPS), '-i', join(seq, 'f%05d.jpg')], date, ['-vf', `scale=${OUT_W}:${OUT_H}:flags=lanczos`])
     await saveCard(card, date)
+    await cutShort(out, date)
     return out
   } finally {
     await within(browser.close(), CLOSE_MS, 'closing the browser').catch(() => {})
@@ -348,6 +388,7 @@ export async function recordLive() {
     // the start of loading cut; the page's 450 × 800 made 720 × 1280
     const out = await encode(['-ss', String(trim), '-i', webm], date, ['-vf', `scale=${OUT_W}:${OUT_H}:flags=lanczos`])
     await saveCard(card, date)
+    await cutShort(out, date)
     return out
   } finally {
     await within(browser.close(), CLOSE_MS, 'closing the browser').catch(() => {})
@@ -358,7 +399,7 @@ export async function recordLive() {
 async function prune() {
   const cutoff = Date.now() - KEEP_DAYS * 86_400_000
   for (const f of await readdir(OUT_DIR).catch(() => [])) {
-    if (!/^world-in-60s-\d{4}-\d{2}-\d{2}\.(mp4|json)$/.test(f)) continue
+    if (!/^world-in-(60s-\d{4}-\d{2}-\d{2}\.(mp4|json)|15s-\d{4}-\d{2}-\d{2}\.mp4)$/.test(f)) continue
     const p = join(OUT_DIR, f)
     if ((await stat(p)).mtimeMs < cutoff) { await rm(p, { force: true }); log('removed old', f) }
   }

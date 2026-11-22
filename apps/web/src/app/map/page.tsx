@@ -14,9 +14,9 @@ import { TimeSlider } from '@/components/map/TimeSlider'
 import { ShareButton } from '@/components/map/ShareButton'
 import HotspotLabels from '@/components/map/HotspotLabels'
 import { EnhancedHeatmap } from '@/components/map/EnhancedHeatmap'
-import { PlayOverlay, type PlayDayStats, type PlayTopStory } from '@/components/map/PlayOverlay'
+import { PlayOverlay, type PlayDayStats, type PlayTopStory, type PlayStoryCard } from '@/components/map/PlayOverlay'
 import { useTimelinePlayback } from '@/hooks/useTimelinePlayback'
-import { parsePlayParam, parsePlayLength, parsePlaySlow, playReplayMs, playStepMs, captionAt, playTimeLabel, playDateLabel, pickTourStop, tourCaption, storyKeyOf, milestoneCrossed, playCard, PLAY_INTRO_MS, PLAY_OUTRO_MS, PLAY_MILESTONES, TOUR_EVERY_MS, type PlayPhase, type PlayCaption } from '@/lib/map-play'
+import { parsePlayParam, parsePlayLength, parsePlaySlow, playReplayMs, playStepMs, captionAt, playTimeLabel, playDateLabel, pickTourStop, tourCaption, storyKeyOf, milestoneCrossed, playCard, pickTourStories, trustLine, storyTag, tourIndexAt, PLAY_INTRO_MS, PLAY_OUTRO_MS, PLAY_MILESTONES, TOUR_EVERY_MS, TOUR_STORIES_MIN, type PlayPhase, type PlayCaption, type DayStory, type TourSignal } from '@/lib/map-play'
 import { COUNTRIES_COVERED } from '@/lib/coverage-count'
 import { parseWindowHash, encodePermalink, type MapPermalinkState, type LayerKey } from '@/lib/map-permalink'
 import {
@@ -436,6 +436,9 @@ function MapView({ embed = false }: { embed?: boolean }) {
   const [playPhase, setPlayPhase] = useState<PlayPhase>('intro')
   const [playDay, setPlayDay] = useState<PlayDayStats | null>(null)
   const [playTop, setPlayTop] = useState<PlayTopStory[]>([])
+  // The day's stories with their subject, country and times, for the story tour (Nov 22, 2026); done once read or failed
+  const [playStories, setPlayStories] = useState<DayStory[]>([])
+  const [playStoriesDone, setPlayStoriesDone] = useState(false)
   // The day's stories' headlines by story id, for the tour's captions (Nov 8, 2026)
   const storyTitlesRef = useRef<Map<string, string>>(new Map())
   /** The headline of the story the camera is at (the play mode's caption once the tour starts) */
@@ -3659,6 +3662,56 @@ function MapView({ embed = false }: { embed?: boolean }) {
   const priceMovesLayer = usePriceMovesLayer(mapRef, mapReady, priceMovesMode)
   const travelLayer = useTravelAdvisoryLayer(mapRef, mapReady, travelMode, travelFrom)
 
+  // The camera flies to the story of the moment every few seconds, with a ripple where it happened; the caption is
+  // that story's headline, and no story is visited twice
+  const tourRef = useRef<{ at: number; id: string | null; lat: number; lng: number } | null>(null)
+  const tourSeenRef = useRef<Set<string>>(new Set())
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rippleRef = useRef<any>(null)
+
+  // The story tour (Nov 22, 2026): the day's most-reported stories with an English headline and a place, the first
+  // the video's opening; with fewer than TOUR_STORIES_MIN the camera picks the moments' stories as before
+  const tourStories = useMemo(() => {
+    if (!playMode || !timeline.data || !playStories.length) return []
+    const picked = pickTourStories(playStories, timeline.data.buckets as unknown as Array<{ signals: TourSignal[] }>)
+    return picked.length >= TOUR_STORIES_MIN ? picked : []
+  }, [playMode, timeline.data, playStories])
+  const countryName = useMemo(() => {
+    try { const names = new Intl.DisplayNames(['en'], { type: 'region' }); return (code: string) => names.of(code) } catch { return () => undefined }
+  }, [])
+  const tourCards: PlayStoryCard[] = useMemo(() => tourStories.map((s, i) => ({
+    tag: storyTag(s, countryName), title: s.title, trust: trustLine(s), outlets: s.outlets, countries: s.countries,
+    severity: s.severity ?? 'medium', n: i + 1, of: tourStories.length,
+  })), [tourStories, countryName])
+  const playProgress = timeline.data && timeline.data.buckets.length > 1 ? timeline.currentIndex / (timeline.data.buckets.length - 1) : 0
+  const tourIndex = tourStories.length ? tourIndexAt(playProgress, tourStories.length) : -1
+  /** The camera to a story's place, with its ripple (bigger for the tour's stories); `fly`: a flight, else a jump */
+  const showTourStop = useCallback((stop: { lat: number; lng: number; severity?: string }, fly: boolean, big = true) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const map = mapRef.current as any
+    if (!map) return
+    try {
+      const canvas = map.getCanvas()
+      const zoom = worldZoom(canvas.clientWidth, canvas.clientHeight, projectionRef.current) + 1.1
+      if (fly) map.flyTo({ center: [stop.lng, stop.lat], zoom, duration: 2400 * playSlow, curve: 1.3, essential: true })
+      else map.jumpTo({ center: [stop.lng, stop.lat], zoom })
+    } catch { /* map busy */ }
+    const color = ({ critical: '#ff3b5c', high: '#ff9f43', medium: '#f5a623', low: '#00d4aa' } as Record<string, string>)[stop.severity ?? ''] ?? '#f5a623'
+    void (async () => {
+      const { default: ml } = await import('maplibre-gl')
+      if (!rippleRef.current) {
+        const el = document.createElement('div')
+        el.className = 'wp-play-ripple'
+        el.innerHTML = '<i></i><i></i><b></b>'
+        rippleRef.current = new ml.Marker({ element: el }).setLngLat([stop.lng, stop.lat]).addTo(map)
+      }
+      rippleRef.current.setLngLat([stop.lng, stop.lat])
+      const el = rippleRef.current.getElement()
+      el.style.setProperty('--c', color)
+      el.classList.toggle('big', big)
+    })()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playSlow])
   // ── Play mode (G9): the title card, the start, the camera's tour and the closing card ──
   // The title card's numbers and the closing card's stories (the same public answers the home page reads)
   useEffect(() => {
@@ -3677,7 +3730,7 @@ function MapView({ embed = false }: { embed?: boolean }) {
       }
     }).catch(() => {})
     // (the answer is { data: { stories: [...] } }; Oct 30, 2026: read as a bare list, the first closing card had no stories)
-    type TopStory = { id?: string; title?: string; outletCount?: number; countries?: number }
+    type TopStory = { id?: string; title?: string; outletCount?: number; countries?: number; category?: string; country?: string; severity?: string; firstSeenAt?: string; verifiedAt?: string | null }
     // (20 stories: the closing card's three most-reported, and the headlines the tour's captions use)
     fetch(`${API_URL}/api/v1/stories?hours=24&limit=20`).then(r => (r.ok ? r.json() : null)).then((j: { data?: { stories?: TopStory[] } | TopStory[] } | null) => {
       const d = j?.data
@@ -3685,15 +3738,24 @@ function MapView({ embed = false }: { embed?: boolean }) {
       for (const s of list) if (typeof s.id === 'string' && typeof s.title === 'string' && s.title.trim()) storyTitlesRef.current.set(s.id, s.title)
       // (the most outlets first: the card says "most-reported")
       if (alive) setPlayTop(list.filter(s => s.title).map(s => ({ title: String(s.title), outlets: Number(s.outletCount) || 0, countries: Number(s.countries) || 0 })).sort((a, b) => b.outlets - a.outlets))
-    }).catch(() => {})
+      if (alive) {
+        setPlayStories(list.filter(s => typeof s.id === 'string' && typeof s.title === 'string' && s.title.trim()).map(s => ({
+          id: String(s.id), title: String(s.title), outlets: Number(s.outletCount) || 0, countries: Number(s.countries) || 0,
+          category: s.category, country: s.country, severity: s.severity, firstSeenAt: s.firstSeenAt, verifiedAt: s.verifiedAt ?? null,
+        })))
+      }
+    }).catch(() => {}).finally(() => { if (alive) setPlayStoriesDone(true) })
     return () => { alive = false }
   }, [playMode, playMilestonePreview])
 
   // Once the map and the day have loaded, and the title card has had its moment: pace the day to about a minute, then start
   useEffect(() => {
-    if (!playMode || playStartedRef.current || timeline.loading || !timeline.data || !mapReady) return
+    if (!playMode || playStartedRef.current || timeline.loading || !timeline.data || !mapReady || !playStoriesDone) return
     if (timeline.data.buckets.length === 0) return
     playStartedRef.current = true
+    // The opening (Nov 22, 2026): the camera starts at the day's most-reported story, its ripple on
+    const first = tourStories[0]
+    if (first) showTourStop(first, false)
     const buckets = timeline.data.buckets.length
     // The recorder films from here, frame by frame on the page's clock (Oct 31, 2026): the title card's moment first
     document.documentElement.dataset.playReady = '1'
@@ -3704,12 +3766,13 @@ function MapView({ embed = false }: { embed?: boolean }) {
       timeline.togglePlay()
     }, PLAY_INTRO_MS * playSlow)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playMode, timeline.loading, timeline.data, mapReady])
+  }, [playMode, timeline.loading, timeline.data, mapReady, playStoriesDone])
 
-  // What the video shows, for the recorder to save beside it (data-play-card on <html>; lib/map-play.ts playCard)
+  // What the video shows, for the recorder to save beside it (data-play-card on <html>; lib/map-play.ts playCard):
+  // the tour's stories when there is a tour, so the morning post's top story is the video's, in English
   useEffect(() => {
-    if (playMode && playDay) document.documentElement.dataset.playCard = JSON.stringify(playCard(playDay, playTop))
-  }, [playMode, playDay, playTop])
+    if (playMode && playDay) document.documentElement.dataset.playCard = JSON.stringify(playCard(playDay, tourStories.length ? tourStories : playTop))
+  }, [playMode, playDay, playTop, tourStories])
 
   // The recorder trims the video's start by the moment the replay begins (data-play-phase on <html>)
   useEffect(() => {
@@ -3726,14 +3789,18 @@ function MapView({ embed = false }: { embed?: boolean }) {
     return () => clearInterval(id)
   }, [playMode, playSlow])
 
-  // The camera flies to the story of the moment every few seconds, with a ripple where it happened; the caption is
-  // that story's headline, and no story is visited twice
-  const tourRef = useRef<{ at: number; id: string | null; lat: number; lng: number } | null>(null)
-  const tourSeenRef = useRef<Set<string>>(new Set())
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rippleRef = useRef<any>(null)
+  // The tour: each story gets an equal share of the replay, and the camera flies to it when its share begins
+  const tourShownRef = useRef(0)
   useEffect(() => {
-    if (!playMode || playPhase !== 'play' || !timeline.data) return
+    if (!playMode || playPhase !== 'play' || tourIndex < 0) return
+    if (tourIndex === tourShownRef.current) return
+    tourShownRef.current = tourIndex
+    const stop = tourStories[tourIndex]
+    if (stop) showTourStop(stop, true)
+  }, [playMode, playPhase, tourIndex, tourStories, showTourStop])
+
+  useEffect(() => {
+    if (!playMode || playPhase !== 'play' || !timeline.data || tourStories.length) return
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const map = mapRef.current as any
     if (!map) return
@@ -3746,23 +3813,9 @@ function MapView({ embed = false }: { embed?: boolean }) {
     tourSeenRef.current.add(stop.id)
     tourSeenRef.current.add(storyKeyOf(stop))
     setTourCaptionNow(tourCaption(stop, storyTitlesRef.current))
-    const canvas = map.getCanvas()
-    const zoom = worldZoom(canvas.clientWidth, canvas.clientHeight, projectionRef.current) + 1.1
-    try { map.flyTo({ center: [stop.lng, stop.lat], zoom, duration: 2400 * playSlow, curve: 1.3, essential: true }) } catch { /* map busy */ }
-    const color = ({ critical: '#ff3b5c', high: '#ff9f43', medium: '#f5a623', low: '#00d4aa' } as Record<string, string>)[stop.severity] ?? '#f5a623'
-    void (async () => {
-      const { default: ml } = await import('maplibre-gl')
-      if (!rippleRef.current) {
-        const el = document.createElement('div')
-        el.className = 'wp-play-ripple'
-        el.innerHTML = '<i></i><i></i><b></b>'
-        rippleRef.current = new ml.Marker({ element: el }).setLngLat([stop.lng, stop.lat]).addTo(map)
-      }
-      rippleRef.current.setLngLat([stop.lng, stop.lat])
-      rippleRef.current.getElement().style.setProperty('--c', color)
-    })()
+    showTourStop(stop, true, false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playMode, playPhase, timeline.currentIndex, timeline.data])
+  }, [playMode, playPhase, timeline.currentIndex, timeline.data, tourStories])
 
   // When the day has played: the closing card over the whole world, then the recorder may stop (data-play-done)
   const outroRef = useRef(false)
@@ -4612,11 +4665,13 @@ function MapView({ embed = false }: { embed?: boolean }) {
             caption={tourCaptionNow ?? captionAt(timeline.data?.buckets ?? [], timeline.currentIndex)}
             timeLabel={playTimeLabel(timeline.currentTime)}
             dateLabel={playDateLabel(timeline.data?.buckets.at(-1)?.t ?? null)}
-            progress={timeline.data && timeline.data.buckets.length > 1 ? timeline.currentIndex / (timeline.data.buckets.length - 1) : 0}
+            progress={playProgress}
             windowLabel={`LAST ${timelineRange.toUpperCase()}`}
             day={playDay}
             topStories={playTop}
             seconds={playLen ?? 60}
+            hook={tourCards[0] ?? null}
+            story={tourIndex >= 0 ? tourCards[tourIndex] ?? null : null}
           />
         )}
 

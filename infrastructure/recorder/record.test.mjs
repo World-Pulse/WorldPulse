@@ -1,7 +1,7 @@
 // node --test infrastructure/recorder/record.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { msUntilNext, trimStart, layOut, slowUrl, frameName, cardFile, within, statusRecord, shouldCatchUp, recordMorning } from './record.mjs'
+import { msUntilNext, trimStart, layOut, slowUrl, frameName, cardFile, within, statusRecord, shouldCatchUp, recordMorning, shortCutArgs } from './record.mjs'
 
 test('the next recording is at 05:30 New York time, today or tomorrow', () => {
   // 09:00 UTC on Oct 21, 2026 is 05:00 in New York (EDT): 30 minutes to go
@@ -117,4 +117,16 @@ test('the status file holds the time, the state and a short plain note', () => {
   const s = statusRecord('failed', 'try 2 of 8: line one\nline two', new Date('2026-11-22T10:35:00Z'), { try: 2 })
   assert.deepEqual(s, { at: '2026-11-22T10:35:00.000Z', state: 'failed', note: 'try 2 of 8: line one line two', try: 2 })
   assert.equal(statusRecord('failed', 'x'.repeat(500)).note.length, 200)
+})
+
+test("the 15-second cut: the video's first 10.5 s and its last 4.5 s, with the quiet audio track (Nov 22, 2026)", () => {
+  const args = shortCutArgs('/out/video/world-in-60s-2026-11-23.mp4', '/out/video/.world-in-15s-2026-11-23.mp4', 31.7)
+  const graph = args[args.indexOf('-filter_complex') + 1]
+  assert.equal(graph, '[0:v]trim=0:10.5,setpts=PTS-STARTPTS[a];[0:v]trim=start=27.2,setpts=PTS-STARTPTS[b];[a][b]concat=n=2:v=1:a=0[v]')
+  assert.deepEqual(args.slice(0, 3), ['-y', '-i', '/out/video/world-in-60s-2026-11-23.mp4'])
+  assert.ok(args.includes('anullsrc=r=44100:cl=stereo') && args.includes('-shortest'))
+  assert.equal(args.at(-1), '/out/video/.world-in-15s-2026-11-23.mp4')
+  // a video too short to cut, or of no known length, has none
+  assert.equal(shortCutArgs('a.mp4', 'b.mp4', 16), null)
+  assert.equal(shortCutArgs('a.mp4', 'b.mp4', Number.NaN), null)
 })

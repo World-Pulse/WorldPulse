@@ -411,7 +411,8 @@ def primary_language(line_rest):
 
 def post_key(query):
     """'hq:83b746ee' for a link from an HQ post draft or an email briefing, 'video:2026-11-11' for the morning video's
-    post, 'missed:2026-w46-sd' for the weekly What's missed post; else None"""
+    post, 'missed:2026-w46-sd' for the weekly What's missed post, and since Nov 22, 2026 (the new X formats)
+    'map3:2026-11-22' for One map, three stories and 'howcount:2026-w47' for How we count; else None"""
     q = parse_qs(query)
     campaign = (q.get('utm_campaign') or [''])[0].strip().lower()
     content = (q.get('utm_content') or [''])[0].strip().lower()
@@ -421,6 +422,10 @@ def post_key(query):
         return f'video:{content}'
     if campaign == 'hq' and re.fullmatch(r'missed-\d{4}-w\d{2}-[a-z]{2}', content):
         return 'missed:' + content[len('missed-'):]
+    if campaign == 'hq' and re.fullmatch(r'map3-\d{4}-\d{2}-\d{2}', content):
+        return 'map3:' + content[len('map3-'):]
+    if campaign == 'hq' and re.fullmatch(r'howcount-\d{4}-w\d{2}', content):
+        return 'howcount:' + content[len('howcount-'):]
     return None
 
 
