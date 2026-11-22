@@ -3018,6 +3018,7 @@ const JOINED = /(?<![\p{L}\p{N}])(?:(\p{Lu}[\p{L}'’.]*)\s+)?(\p{Lu}[\p{L}'’.
  * and peoples, not cities ("Paris tourists").
  */
 const PERSON_OF = /(?<![\p{L}\p{N}])(\p{Lu}[\p{L}'’.]*)\s+(?:spy|spies|agent|agents|mole|moles|national|nationals|citizen|citizens|tourist|tourists|businessman|businesswoman|tycoon|diplomats?|diplomaten|attach[ée]s?|Diplomaten|Attach[ée]s?)(?![\p{L}\p{N}])/gu
+const WASHINGTON_STATE = /(?<![\p{L}\p{N}])Washington\s+(?:[Ss]tate(?![\p{L}\p{N}])|[Gg]overnor|[Gg]ov\b|[Aa]ttorney\s+[Gg]eneral)/gu
 const RIVER_NAMED = /(?<![\p{L}\p{N}])(\p{Lu}[\p{L}'’.]*)\s+River(?![\p{L}\p{N}])/gu
 /**
  * A country named in passing (Nov 14, 2026: the first weekly accuracy read graded 200 verified stories, and in 12 of
@@ -3111,7 +3112,7 @@ export function withoutSiteSuffix(title: string): string {
   return title.replace(/\s+\|\s+[^|]{2,60}$/, '')
 }
 
-const NON_PLACE_ANY = /\bof\s+\p{Lu}|\p{Lu}[\p{L}'’.]*\s+River(?![\p{L}\p{N}])|\p{L}[-‑]\p{L}|\p{Lu}[\p{L}'’.]*\s+(?:spy|spies|agent|agents|mole|moles|national|nationals|citizen|citizens|tourist|tourists|businessman|businesswoman|tycoon|[Dd]iplomats?|[Dd]iplomaten|[Aa]ttach[ée]s?)/u
+const NON_PLACE_ANY = /Washington\s+(?:state|governor|gov\b|attorney|state)|\bof\s+\p{Lu}|\p{Lu}[\p{L}'’.]*\s+River(?![\p{L}\p{N}])|\p{L}[-‑]\p{L}|\p{Lu}[\p{L}'’.]*\s+(?:spy|spies|agent|agents|mole|moles|national|nationals|citizen|citizens|tourist|tourists|businessman|businesswoman|tycoon|[Dd]iplomats?|[Dd]iplomaten|[Aa]ttach[ée]s?)/u
 
 type Span = [number, number, string]
 
@@ -3140,6 +3141,9 @@ function nonPlaceSpans(text: string): { always: Span[]; unlessAlone: Span[] } {
   const always: Span[] = []
   const unlessAlone: Span[] = []
   if (!text || !NON_PLACE_ANY.test(text)) return { always, unlessAlone }
+  // Washington state's own office-holders ("Washington governor denounces ICE arrests at Seattle airport" sat at
+  // Washington, D.C. in two outlets, Nov 22, 2026): the state is not the capital city, and its towns name the story
+  for (const m of text.matchAll(WASHINGTON_STATE)) always.push([m.index!, m.index! + 'Washington'.length, ''])
   for (const m of text.matchAll(TITLE_OF)) always.push([m.index! + m[0].length - m[1]!.length, m.index! + m[0].length, ''])
   // a river named like a state or country ("Mississippi River", "Niger River") is not that place: kept only when the
   // text names nothing else
