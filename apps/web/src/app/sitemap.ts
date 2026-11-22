@@ -30,6 +30,7 @@ const PAGES: Array<{ path: string; changeFrequency: 'always' | 'hourly' | 'daily
   { path: '/help', changeFrequency: 'monthly', priority: 0.4 },
   { path: '/how-we-count', changeFrequency: 'monthly', priority: 0.5 },
   { path: '/ai', changeFrequency: 'monthly', priority: 0.6 },
+  { path: '/ai/tools', changeFrequency: 'weekly', priority: 0.5 },
   // the privacy policy (Nov 11, 2026), asked for by the AI directories
   { path: '/privacy', changeFrequency: 'monthly', priority: 0.3 },
   { path: '/terms', changeFrequency: 'monthly', priority: 0.3 },

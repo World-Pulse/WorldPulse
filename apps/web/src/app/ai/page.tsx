@@ -134,7 +134,8 @@ export default function UseInAiPage() {
           <h2 className="text-xs font-mono uppercase tracking-wider text-wp-text3 mb-2">The address to add</h2>
           <CopyText text={MCP_URL} />
           <p className="text-xs text-wp-text3 mt-2 leading-relaxed">
-            It is an MCP server: MCP is the standard way AI assistants call outside tools. Your assistant connects to it for you.
+            It is an MCP server: MCP is the standard way AI assistants call outside tools. Your assistant connects to it for you.{' '}
+            <Link href="/ai/tools" className="underline hover:text-wp-text">All {TOOL_COUNT} tools, each with a question it answers</Link>.
           </p>
         </section>
 
