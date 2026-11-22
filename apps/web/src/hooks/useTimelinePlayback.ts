@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { playbackAdvance } from '@/lib/map-play'
+import { fetchJsonWithRetry } from '@/lib/timeline-fetch'
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
@@ -174,11 +175,9 @@ export function useTimelinePlayback(stepMs?: number): TimelinePlaybackState & Ti
       if (severity && severity !== 'all') params.set('severity', severity)
       if (bbox) params.set('bbox', bbox)
 
-      const res = await fetch(`${API_URL}/api/v1/signals/map/timeline?${params}`)
-      if (!res.ok) throw new Error(`Timeline API returned ${res.status}`)
-
-      const json = await res.json()
-      setData(json.data as TimelineData)
+      // asked again twice when it fails (Nov 21, 2026: the morning video waited on this one answer)
+      const json = await fetchJsonWithRetry<{ data?: TimelineData }>(`${API_URL}/api/v1/signals/map/timeline?${params}`)
+      setData((json?.data ?? null) as TimelineData)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch timeline')
       setData(null)

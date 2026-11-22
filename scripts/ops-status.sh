@@ -1006,10 +1006,21 @@ daily_video() {
   newest=""
   [ -n "$src" ] && newest=$(ls -1t "$src"/video/world-in-60s-*.mp4 2>/dev/null | head -n 1)
   note=$(tail -n 1 logs/recorder-start.log 2>/dev/null | tr -d '"\\' | tr -d '\000-\037' | cut -c1-160)
-  python3 - "${state:-absent}" "$newest" "$note" <<'PY'
+  python3 - "${state:-absent}" "$newest" "$note" "${src:+$src/video/recorder-status.json}" <<'PY'
 import datetime, json, os, sys
 state, newest, note = sys.argv[1], sys.argv[2], sys.argv[3]
+status_path = sys.argv[4] if len(sys.argv) > 4 else ''
 out = {'recorder': state}
+# What the recorder did last, from the file it writes beside the videos (Nov 21, 2026: two mornings went without a
+# video and nothing here said why): waiting, recording (which try), saved, failed (with the reason) or gave_up
+try:
+    s = json.load(open(status_path, encoding='utf-8')) if status_path and os.path.getsize(status_path) < 4000 else None
+except (OSError, ValueError):
+    s = None
+if isinstance(s, dict) and isinstance(s.get('state'), str):
+    clean = lambda v, n: str(v).replace('"', '').replace('\\', '')[:n]
+    out['status'] = {k: (clean(s[k], 200) if isinstance(s[k], str) else s[k]) for k in ('at', 'state', 'note', 'try', 'next_at', 'file')
+                     if k in s and (isinstance(s[k], str) or (isinstance(s[k], int) and not isinstance(s[k], bool)))}
 if newest and os.path.isfile(newest):
     st = os.stat(newest)
     name = os.path.basename(newest)

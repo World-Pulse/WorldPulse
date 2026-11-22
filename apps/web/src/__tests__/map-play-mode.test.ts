@@ -115,11 +115,12 @@ describe('the video, round 2 (Oct 30, 2026: the camera sat on Indonesia, caption
     const rec = read('../../../infrastructure/recorder/record.mjs')
     expect(rec).toContain("dataset.playPhase === 'play'")
     expect(rec).toContain('page.waitForTimeout(TAIL_MS)')
-    // a page without its stylesheets, or a replay that never begins, is not saved; the morning run tries once more,
-    // filmed live (Oct 31, 2026: slow motion first)
+    // a page without its stylesheets, or a replay that never begins, is not saved; the morning run tries again every
+    // 5 minutes, 8 times, then once filmed live (Oct 31, 2026: slow motion first; Nov 21: more than one retry)
     expect(rec).toContain('document.styleSheets')
     expect(rec).toContain("the replay didn't begin within")
-    expect(rec).toContain('trying again live in')
+    expect(rec).toContain("i < tries ? `; trying again in ${retryMs / 60_000} min` : '; trying once live'")
+    expect(rec).toContain('const out = await live()')
     // a deploy clears the pages nginx kept from the old build, whose scripts are gone
     expect(read('../../../scripts/server-deploy.sh')).toContain("find /var/cache/nginx/pages -type f -delete")
     expect(read('components/map/PlayOverlay.tsx')).toContain('wp-play-beat" /></div>')

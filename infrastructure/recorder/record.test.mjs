@@ -1,7 +1,7 @@
 // node --test infrastructure/recorder/record.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { msUntilNext, trimStart, layOut, slowUrl, frameName, cardFile } from './record.mjs'
+import { msUntilNext, trimStart, layOut, slowUrl, frameName, cardFile, within, statusRecord, shouldCatchUp, recordMorning } from './record.mjs'
 
 test('the next recording is at 05:30 New York time, today or tomorrow', () => {
   // 09:00 UTC on Oct 21, 2026 is 05:00 in New York (EDT): 30 minutes to go
@@ -57,4 +57,64 @@ test('no card when the page had none or it is not one', () => {
   assert.equal(cardFile('not json', '2026-11-11'), null)
   assert.equal(cardFile(JSON.stringify({ reports: 0 }), '2026-11-11'), null)
   assert.equal(cardFile(JSON.stringify([1, 2]), '2026-11-11'), null)
+})
+
+// Nov 21, 2026: on Nov 20 and 21 the page's day didn't come in time at 5:30, the one retry failed the same way, and
+// there was no video. Now the morning keeps trying, each step goes in a status file, and nothing waits forever.
+
+test('a morning tries frame by frame up to 8 times, 5 minutes apart, and stops at the first video', async () => {
+  const statuses = [], sleeps = []
+  let n = 0
+  const out = await recordMorning({
+    tries: 8, retryMs: 300_000,
+    once: async () => { n++; if (n < 3) throw new Error("the map and the day weren't ready within 100 s: nothing saved"); return '/out/video/world-in-60s-2026-11-22.mp4' },
+    live: async () => { throw new Error('not asked') },
+    status: async (state, note, extra = {}) => { statuses.push([state, note, extra.try ?? null]) },
+    sleep: async ms => { sleeps.push(ms) },
+  })
+  assert.equal(out, '/out/video/world-in-60s-2026-11-22.mp4')
+  assert.equal(n, 3)
+  assert.deepEqual(sleeps, [300_000, 300_000])
+  assert.deepEqual(statuses.map(s => s[0]), ['recording', 'failed', 'recording', 'failed', 'recording', 'saved'])
+  assert.match(statuses[1][1], /^try 1 of 8: the map and the day weren't ready/)
+  assert.deepEqual(statuses[5], ['saved', 'saved on try 3', 3])
+})
+
+test('when every try fails it films once live, and says it gave up when that fails too', async () => {
+  const statuses = []
+  let lives = 0
+  const status = async (state, note) => { statuses.push(state + ': ' + note) }
+  const none = await recordMorning({
+    tries: 2, retryMs: 1,
+    once: async () => { throw new Error('stuck') },
+    live: async () => { lives++; throw new Error("the replay didn't begin") },
+    status, sleep: async () => {},
+  })
+  assert.equal(none, null)
+  assert.equal(lives, 1)
+  assert.equal(statuses.at(-1), "gave_up: every try failed; the last: the replay didn't begin")
+  const live = await recordMorning({ tries: 1, retryMs: 1, once: async () => { throw new Error('x') }, live: async () => '/out/video/v.mp4', status: async () => {}, sleep: async () => {} })
+  assert.equal(live, '/out/video/v.mp4')
+})
+
+test('nothing waits forever: within gives up after its time, and passes a quick answer through', async () => {
+  assert.equal(await within(Promise.resolve(7), 1000, 'x'), 7)
+  await assert.rejects(within(new Promise(() => {}), 20, 'the page'), /the page took more than 0 s/)
+  await assert.rejects(within(Promise.reject(new Error('own')), 1000, 'x'), /own/)
+})
+
+test("a recorder started in the morning records the day's missing video now, not tomorrow", () => {
+  // 11:00 UTC on Nov 22, 2026 is 6:00 in New York (EST): 30 minutes after 5:30, no video yet
+  assert.equal(shouldCatchUp(new Date('2026-11-22T11:00:00Z'), ['world-in-60s-2026-11-21.mp4'], '05:30', 240), true)
+  // the day's video is there
+  assert.equal(shouldCatchUp(new Date('2026-11-22T11:00:00Z'), ['world-in-60s-2026-11-22.mp4'], '05:30', 240), false)
+  // before 5:30 (the day's recording is still to come), and past the morning (4 hours on)
+  assert.equal(shouldCatchUp(new Date('2026-11-22T10:00:00Z'), [], '05:30', 240), false)
+  assert.equal(shouldCatchUp(new Date('2026-11-22T14:31:00Z'), [], '05:30', 240), false)
+})
+
+test('the status file holds the time, the state and a short plain note', () => {
+  const s = statusRecord('failed', 'try 2 of 8: line one\nline two', new Date('2026-11-22T10:35:00Z'), { try: 2 })
+  assert.deepEqual(s, { at: '2026-11-22T10:35:00.000Z', state: 'failed', note: 'try 2 of 8: line one line two', try: 2 })
+  assert.equal(statusRecord('failed', 'x'.repeat(500)).note.length, 200)
 })

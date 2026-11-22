@@ -14,8 +14,10 @@
  * recorder takes each drawing of the screen (drawn at 1.6 times the page's
  * 450 x 800, for smooth edges) with the time it came, and the drawings are
  * laid out SLOW times faster at 30 frames a second, as 720 x 1280: a smooth
- * video whatever the machine. If that fails, the
- * second try films live, the way until Oct 31.
+ * video whatever the machine. If that fails it tries again every 5 minutes, 8
+ * times in all, then once filmed live, the way until Oct 31 (Nov 21, 2026: two
+ * mornings were lost to a page whose day didn't come in time; each step is in
+ * OUT_DIR/recorder-status.json, which the status page shows).
  *
  *   node record.mjs                wait for RECORD_AT each day, record, repeat
  *   node record.mjs --now          record once now and stop
@@ -60,8 +62,19 @@ const TAIL_MS = Number(process.env.TAIL_MS || 3_000)
  * started as a deploy finished got the page without its stylesheets and filmed 4 minutes of bare text)
  */
 const START_MS = Number(process.env.START_MS || 100_000)
-/** After a failed morning recording, wait this long and try once more */
-const RETRY_MS = Number(process.env.RETRY_MS || 180_000)
+/**
+ * After a failed morning recording, wait this long and try again, frame by frame, up to TRIES times in all, then
+ * once live (Nov 21, 2026: on Nov 20 and 21 the page's day didn't come in time at 5:30, the one retry 3 minutes
+ * later failed the same way, and there was no video; now the tries run for about an hour)
+ */
+const RETRY_MS = Number(process.env.RETRY_MS || 300_000)
+const TRIES = Number(process.env.TRIES || 8)
+/** A started recorder catches up on the day's video when it is missing and the morning is this young (minutes) */
+const CATCH_UP_MIN = Number(process.env.CATCH_UP_MIN || 240)
+/** The page's own questions and the encoder get this long before a recording counts as stuck */
+const EVAL_MS = 15_000, CLOSE_MS = 30_000, ENCODE_MS = 15 * 60_000
+/** What the recorder is doing, for the status page (scripts/ops-status.sh daily_video: status) */
+const STATUS_FILE = 'recorder-status.json'
 
 /** Where the video starts: INTRO_KEEP seconds before the replay began, never before TRIM_START */
 export function trimStart(playStartedAfterMs) {
@@ -106,6 +119,41 @@ export function layOut(at, fps = FPS, slow = SLOW) {
 
 const log = (...a) => console.log(new Date().toISOString(), '[recorder]', ...a)
 
+/** A promise that gives up after `ms` (the page or ffmpeg stuck: Nov 21, 2026) */
+export function within(promise, ms, what) {
+  let timer
+  return Promise.race([
+    promise.finally(() => clearTimeout(timer)),
+    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`${what} took more than ${Math.round(ms / 1000)} s`)), ms) }),
+  ])
+}
+
+/** The status file's contents: what happened last, plain words, no more than the status page shows */
+export function statusRecord(state, note, now = new Date(), extra = {}) {
+  return { at: now.toISOString(), state, note: String(note ?? '').replace(/[\u0000-\u001f]/g, ' ').slice(0, 200), ...extra }
+}
+
+/** Writes the status file beside the videos (never fails the recorder) */
+async function setStatus(state, note, extra = {}) {
+  try {
+    await mkdir(OUT_DIR, { recursive: true })
+    const tmp = join(OUT_DIR, `.${STATUS_FILE}`)
+    await writeFile(tmp, JSON.stringify(statusRecord(state, note, new Date(), extra)))
+    await rename(tmp, join(OUT_DIR, STATUS_FILE))
+  } catch { /* the status is a convenience */ }
+}
+
+/**
+ * Whether a recorder that has just started should record now: today's video is missing and the morning's
+ * RECORD_AT passed less than CATCH_UP_MIN minutes ago (a deploy or a restart in the morning no longer skips a day)
+ */
+export function shouldCatchUp(now, files, at = RECORD_AT, windowMin = CATCH_UP_MIN) {
+  const { date, minutes } = nyParts(now)
+  const [h, m] = at.split(':').map(Number)
+  const since = minutes - (h * 60 + m)
+  return since >= 0 && since < windowMin && !files.includes(`world-in-60s-${date}.mp4`)
+}
+
 function nyParts(d = new Date()) {
   const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
@@ -124,7 +172,7 @@ export function msUntilNext(now = new Date(), at = RECORD_AT) {
 }
 
 function run(cmd, args) {
-  return new Promise((resolve, reject) => execFile(cmd, args, { maxBuffer: 1 << 24 }, (err, stdout, stderr) => (err ? reject(new Error(`${cmd}: ${stderr || err.message}`)) : resolve(stdout))))
+  return new Promise((resolve, reject) => execFile(cmd, args, { maxBuffer: 1 << 24, timeout: ENCODE_MS, killSignal: 'SIGKILL' }, (err, stdout, stderr) => (err ? reject(new Error(`${cmd}: ${stderr || err.message}`)) : resolve(stdout))))
 }
 
 /** The page must run the play mode with its stylesheets (the site's own: the map's and the page's inline styles load
@@ -174,7 +222,7 @@ export function cardFile(raw, date, now = new Date()) {
 
 /** The card as the page has it now (before the page closes); null when it has none */
 async function readCard(page) {
-  return page.evaluate(() => document.documentElement.dataset.playCard || null).catch(() => null)
+  return within(page.evaluate(() => document.documentElement.dataset.playCard || null), EVAL_MS, 'reading the card').catch(() => null)
 }
 
 /** Saves the card beside the video, once the video is saved (never fails the recording) */
@@ -233,10 +281,12 @@ export async function recordOnce() {
     const maxMs = MAX_VIDEO_S * SLOW * 1000
     let doneAt = null
     while (Date.now() - t0 < maxMs) {
-      if (await page.evaluate(() => document.documentElement.dataset.playDone === '1')) { doneAt = Date.now() - t0; break }
+      // (a page too busy to answer within EVAL_MS counts as not done yet: the loop still ends by maxMs)
+      const done = await within(page.evaluate(() => document.documentElement.dataset.playDone === '1'), EVAL_MS, 'the page').catch(() => false)
+      if (done) { doneAt = Date.now() - t0; break }
       await new Promise(r => setTimeout(r, 250))
     }
-    await cdp.send('Page.stopScreencast').catch(() => {})
+    await within(cdp.send('Page.stopScreencast'), EVAL_MS, 'stopping the screencast').catch(() => {})
     await Promise.all(writes)
     if (!at.length) throw new Error('the page drew nothing while it played: nothing saved')
     // the last drawing stays on screen until the end (a still closing card sends no frames)
@@ -251,13 +301,14 @@ export async function recordOnce() {
     const distinct = new Set(frames).size
     log(`filmed ${at.length} drawings in ${Math.round((Date.now() - t0) / 1000)} s: ${frames.length} frames (${(frames.length / FPS).toFixed(1)} s of video, ${distinct} different)`)
     const card = await readCard(page)
-    await context.close()
+    // (the frames are on disk: a page that won't close doesn't cost the video)
+    await within(context.close(), CLOSE_MS, 'closing the page').catch(err => log(err?.message ?? err))
     // (the screencast comes at the page's 450 x 800, drawn at 1.6 times that and scaled down: made 720 x 1280)
     const out = await encode(['-framerate', String(FPS), '-i', join(seq, 'f%05d.jpg')], date, ['-vf', `scale=${OUT_W}:${OUT_H}:flags=lanczos`])
     await saveCard(card, date)
     return out
   } finally {
-    await browser.close().catch(() => {})
+    await within(browser.close(), CLOSE_MS, 'closing the browser').catch(() => {})
     await rm(work, { recursive: true, force: true }).catch(() => {})
   }
 }
@@ -290,7 +341,7 @@ export async function recordLive() {
     await page.waitForTimeout(TAIL_MS)
     const video = page.video()
     const card = await readCard(page)
-    await context.close()                       // writes the video
+    await within(context.close(), 2 * CLOSE_MS, 'writing the live video')   // writes the video
     const trim = trimStart(playStarted)
     log(`the replay began ${Number.isFinite(playStarted) ? `${(playStarted / 1000).toFixed(1)} s` : 'at an unknown time'} in; cutting ${trim} s`)
     const webm = await video.path()
@@ -299,7 +350,7 @@ export async function recordLive() {
     await saveCard(card, date)
     return out
   } finally {
-    await browser.close().catch(() => {})
+    await within(browser.close(), CLOSE_MS, 'closing the browser').catch(() => {})
     await rm(work, { recursive: true, force: true }).catch(() => {})
   }
 }
@@ -313,18 +364,52 @@ async function prune() {
   }
 }
 
+/**
+ * One morning's video: frame by frame up to `tries` times, `retryMs` apart, then once live; the status file says
+ * each step. Resolves with the file saved, or null when every try failed. (`steps` are swapped in tests.)
+ */
+export async function recordMorning({ tries = TRIES, retryMs = RETRY_MS, once = recordOnce, live = recordLive, status = setStatus, sleep = ms => new Promise(r => setTimeout(r, ms)) } = {}) {
+  for (let i = 1; i <= tries; i++) {
+    await status('recording', `try ${i} of ${tries}, frame by frame`, { try: i })
+    try {
+      const out = await once()
+      await status('saved', `saved on try ${i}`, { try: i, file: String(out).split('/').pop() })
+      return out
+    } catch (err) {
+      const why = err?.message ?? String(err)
+      log(`failed (try ${i} of ${tries}):`, why, i < tries ? `; trying again in ${retryMs / 60_000} min` : '; trying once live')
+      await status('failed', `try ${i} of ${tries}: ${why}`, { try: i })
+      if (i < tries) await sleep(retryMs)
+    }
+  }
+  try {
+    await status('recording', 'last try, filmed live')
+    const out = await live()
+    await status('saved', 'saved filmed live', { file: String(out).split('/').pop() })
+    return out
+  } catch (err) {
+    const why = err?.message ?? String(err)
+    log('failed again, live:', why)
+    await status('gave_up', `every try failed; the last: ${why}`)
+    return null
+  }
+}
+
 async function main() {
   if (process.argv.includes('--now')) { await (process.argv.includes('--live') ? recordLive() : recordOnce()); return }
   log(`recording ${URL_TO_RECORD} every day at ${RECORD_AT} New York time, ${SLOW} times slower, at ${FPS} frames a second`)
+  // started in the morning with no video yet (a deploy, a restart): today's now
+  if (shouldCatchUp(new Date(), await readdir(OUT_DIR).catch(() => []))) {
+    log("today's video is missing: recording it now")
+    await recordMorning()
+    await prune().catch(() => {})
+  }
   for (;;) {
     const wait = msUntilNext()
     log(`next recording in ${Math.round(wait / 60_000)} min`)
+    await setStatus('waiting', `next recording in ${Math.round(wait / 60_000)} min`, { next_at: new Date(Date.now() + wait).toISOString() })
     await new Promise(r => setTimeout(r, wait))
-    try { await recordOnce() } catch (err) {
-      log('failed:', err?.message ?? err, `; trying again live in ${RETRY_MS / 60_000} min`)
-      await new Promise(r => setTimeout(r, RETRY_MS))
-      try { await recordLive() } catch (err2) { log('failed again:', err2?.message ?? err2) }
-    }
+    await recordMorning()
     await prune().catch(() => {})
     await new Promise(r => setTimeout(r, 120_000))   // never twice in one minute
   }
