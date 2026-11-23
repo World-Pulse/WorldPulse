@@ -3473,7 +3473,7 @@ export function findGazetteerPlace(text: string): { place: string; coords: typeo
   if (best) {
     // a place at sea named after "off" is where the story is, not the first country named as the one acting (Nov 23,
     // 2026: "Ukraine claims it sank Russian warship off Libya" sat in Ukraine in four outlets)
-    for (const m of clean.matchAll(OFF_PLACE)) {
+    for (const m of [...clean.matchAll(OFF_PLACE), ...clean.matchAll(OFF_ADJECTIVE_COAST)]) {
       if (m.index! + m[0].lastIndexOf(m[1]!) <= best.index) continue
       // (the name alone, or with the capitalised word after it: "Libya's Coast", "Cape Verde")
       const off = findGazetteerPlace(m[1]!) ?? findGazetteerPlace(m[1]!.split(/[\s'’]/)[0]!)
@@ -3490,6 +3490,9 @@ export function findGazetteerPlace(text: string): { place: string; coords: typeo
 
 /** The place named right after "off" or "off the coast of" ("off Libya's coast", "off the coast of Somalia") */
 const OFF_PLACE = /(?<![\p{L}\p{N}])[Oo]ff\s+(?:the\s+coast\s+of\s+)?(\p{Lu}[\p{L}'’.-]*(?:\s+\p{Lu}[\p{L}'’.-]*)?)/gu
+
+/** "off the Libyan coast": the country's adjective between "off the" and "coast" or "shores" */
+const OFF_ADJECTIVE_COAST = /(?<![\p{L}\p{N}])[Oo]ff\s+the\s+(\p{Lu}[\p{L}'’-]+)\s+(?:coast|coastline|shores?|waters)/gu
 
 /** A place's shown name, as the story writes it when that is the name with its accents ("Bogotá" for "Bogota") */
 function shownName(coords: typeof GAZETTEER[string], place: string, written?: string): string {
