@@ -10,15 +10,15 @@ import Fastify from 'fastify'
 
 const h = vi.hoisted(() => {
   const state = { keys: [] as string[], limits: [] as number[], rows: [] as unknown[], calls: [] as string[] }
-  // A stand-in transaction: any chain of query-builder calls, ending in select()
+  // A stand-in transaction: any chain of query-builder calls, which reads as the rows when awaited
   const chain: Record<string, unknown> = new Proxy({}, {
     get: (_t, prop) => {
-      if (prop === 'then') return undefined
-      if (prop === 'select') return async () => state.rows
+      if (prop === 'then') return (resolve: (v: unknown) => unknown) => resolve(state.rows)
+      if (prop === 'toJSON') return () => '<query>'
       return (...args: unknown[]) => { state.calls.push(`${String(prop)}(${args.map(a => JSON.stringify(a)).join(',')})`); return chain }
     },
   })
-  const trx = Object.assign((_table: string) => chain, { raw: (sql: string) => sql })
+  const trx = Object.assign((_table: string) => chain, { raw: (sql: string) => sql, queryBuilder: () => chain })
   return { state, trx }
 })
 
@@ -35,7 +35,8 @@ vi.mock('../../lib/long-query', () => ({
   longQuery: async (seconds: number, run: (trx: unknown) => Promise<unknown>) => { h.state.limits.push(seconds); return run(h.trx) },
 }))
 
-import { SEA_SIGNALS_QUERY_SECONDS, SEA_SIGNALS_KEEP, nearKey, registerMaritimeRoutes } from '../maritime'
+import knexLib from 'knex'
+import { SEA_SIGNALS_QUERY_SECONDS, SEA_SIGNALS_KEEP, SEA_LIST_READ, nearKey, registerMaritimeRoutes, seaSignalsRead } from '../maritime'
 import { dailyVolume } from '../analytics'
 
 async function maritimeApp() {
@@ -94,5 +95,28 @@ describe('the maritime feed (GET /maritime/signals)', () => {
     expect(res.statusCode).toBe(200)
     expect(h.state.keys).toEqual(['maritime:signals:v2:all::'])
     expect(h.state.calls.some(c => c.includes('ST_DWithin'))).toBe(false)
+  })
+
+  // Nov 22, 2026: asked for the newest 400 directly, the read ran past its 25 seconds and answered 500
+  it('reads the week\'s sea reports as a set first, then takes the newest of them', async () => {
+    h.state.rows = [row()]
+    await (await maritimeApp()).inject({ method: 'GET', url: '/api/v1/maritime/signals?limit=8' })
+    const at = (p: string) => h.state.calls.findIndex(c => c.startsWith(p))
+    expect(at('withMaterialized("sea"')).toBeGreaterThan(-1)
+    expect(h.state.calls.filter(c => c.startsWith('orderBy('))).toEqual(['orderBy("created_at","desc")'])
+    expect(at('orderBy(')).toBeGreaterThan(at('withMaterialized('))   // the sort is the outer query's, not the set's
+    expect(h.state.calls).toContain(`limit(${SEA_LIST_READ})`)
+  })
+
+  it('makes one WITH ... AS MATERIALIZED, its filters inside and the sort and limit outside', () => {
+    const k = knexLib({ client: 'pg' })
+    const { sql, bindings } = seaSignalsRead(k, { type: 'piracy', place: '12.60,43.30', radius: 300 }).toSQL()
+    expect(sql).toMatch(/^with "sea" as materialized \(select .+ from "signals" where .+\) select \* from "sea" order by "created_at" desc limit \?$/)
+    const inner = sql.slice(0, sql.indexOf(') select * from "sea"'))
+    expect(inner).toContain("interval '7 days'")
+    expect(inner).toContain("tags @> ARRAY['piracy']::text[]")
+    expect(inner).toContain('ST_DWithin(')
+    expect(inner).not.toContain('order by')
+    expect(bindings).toEqual(['verified', 'pending', 43.3, 12.6, 300000, SEA_LIST_READ])
   })
 })
