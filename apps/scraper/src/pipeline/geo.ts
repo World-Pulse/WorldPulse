@@ -2927,7 +2927,7 @@ const SINGULAR_MATCHERS = new Map(COUNTRY_PATTERNS.map(([pattern, code]) => [cod
  * "في" (in), as the Arabic press's names are read in English (local-names.ts; Nov 6, 2026: "ملاحقة قضائية للاجئ سوري في
  * بلجيكا", a Syrian refugee prosecuted in Belgium, is Belgium's)
  */
-const LOCATIVE_BEFORE = /(?:^|[\s,(])(?:in|inside|visits?|visited|visiting|visitará|visita|visitó|en|em|à|au|aux|في)\s+(?:the\s+)?$/i
+const LOCATIVE_BEFORE = /(?:^|[\s,(])(?:in|inside|off(?:\s+the\s+coast\s+of)?|visits?|visited|visiting|visitará|visita|visitó|en|em|à|au|aux|في)\s+(?:the\s+)?$/i
 
 /**
  * Countries the text names, in order of first mention (the headline comes first), except that a country
@@ -3470,8 +3470,26 @@ export function findGazetteerPlace(text: string): { place: string; coords: typeo
       break
     }
   }
-  return best ? { place: best.place, coords: best.coords, written: best.written } : null
+  if (best) {
+    // a place at sea named after "off" is where the story is, not the first country named as the one acting (Nov 23,
+    // 2026: "Ukraine claims it sank Russian warship off Libya" sat in Ukraine in four outlets)
+    for (const m of clean.matchAll(OFF_PLACE)) {
+      if (m.index! + m[0].lastIndexOf(m[1]!) <= best.index) continue
+      // (the name alone, or with the capitalised word after it: "Libya's Coast", "Cape Verde")
+      const off = findGazetteerPlace(m[1]!) ?? findGazetteerPlace(m[1]!.split(/[\s'’]/)[0]!)
+      if (off && off.coords.country !== best.coords.country) return off
+      // (a country the gazetteer does not hold is pinned at its capital)
+      const cc = off ? null : mentionedCountries(m[1]!.split(/[\s'’]/)[0]!, true)[0]
+      const at = cc && cc !== best.coords.country ? COUNTRY_CENTROIDS[cc] : null
+      if (cc && at) return { place: (countryNameOf(cc) ?? at.name).toLowerCase(), coords: { lat: at.lat, lng: at.lng, country: cc, name: countryNameOf(cc) ?? at.name }, written: m[1]!.split(/[\s'’]/)[0]! }
+    }
+    return { place: best.place, coords: best.coords, written: best.written }
+  }
+  return null
 }
+
+/** The place named right after "off" or "off the coast of" ("off Libya's coast", "off the coast of Somalia") */
+const OFF_PLACE = /(?<![\p{L}\p{N}])[Oo]ff\s+(?:the\s+coast\s+of\s+)?(\p{Lu}[\p{L}'’.-]*(?:\s+\p{Lu}[\p{L}'’.-]*)?)/gu
 
 /** A place's shown name, as the story writes it when that is the name with its accents ("Bogotá" for "Bogota") */
 function shownName(coords: typeof GAZETTEER[string], place: string, written?: string): string {
