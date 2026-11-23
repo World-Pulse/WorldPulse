@@ -108,6 +108,28 @@ export const SEA_LIST_READ = 400
 export const SEA_SIGNALS_QUERY_SECONDS = 25
 export const SEA_SIGNALS_KEEP = { freshSeconds: 120, staleSeconds: 12 * 3_600, lockSeconds: 60 }
 
+/** How long the Maritime overview is kept: 12 hours past fresh, like the feed (SEA_SIGNALS_KEEP; Nov 23, 2026) */
+export const SEA_OVERVIEW_KEEP = { freshSeconds: MARITIME_CACHE_TTL, staleSeconds: 12 * 3_600, lockSeconds: 60 }
+
+/**
+ * The Maritime overview's newest reports about the sea (48 hours, SEA_LIST_READ
+ * at most), read as a set first and then sorted, as the feed is
+ * (seaSignalsRead, Nov 23, 2026): asked for the newest directly, the read can
+ * walk all of the two days' reports from the newest down to find the few
+ * about the sea.
+ */
+export function seaRecentRead(trx: Knex | Knex.Transaction) {
+  const sea = trx('signals')
+    .whereIn('status', ['verified', 'pending'])
+    .whereRaw("created_at > now() - interval '48 hours'")
+    .whereRaw("(category IN ('military','maritime','economy','conflict') AND (tags @> ARRAY['maritime']::text[] OR tags @> ARRAY['shipping']::text[] OR tags @> ARRAY['naval']::text[] OR category = 'military'))")
+    .select('id', 'title', 'category', 'severity', 'location_name', 'source_url', 'created_at',
+      trx.raw('ST_X(location::geometry) as lng'),
+      trx.raw('ST_Y(location::geometry) as lat'),
+    )
+  return trx.queryBuilder().withMaterialized('sea', sea).select('*').from('sea').orderBy('created_at', 'desc').limit(SEA_LIST_READ)
+}
+
 /**
  * The maritime feed's read (GET /signals): the week's reports about the sea,
  * newest first, SEA_LIST_READ at most.
@@ -304,8 +326,10 @@ export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
     },
   }, async (_req, reply) => {
     // Oct 20, 2026: a week of sea counts passed the pool's 5 seconds and the Maritime page's overview
-    // answered 500; it is made under a longer limit and served while one process remakes it
-    const response = await staleWhileRevalidate('maritime:overview:v2', { freshSeconds: MARITIME_CACHE_TTL, staleSeconds: 6 * 3_600, lockSeconds: 60 }, () =>
+    // answered 500; it is made under a longer limit and served while one process remakes it. Kept 12 hours
+    // past fresh (Nov 23, 2026; was 6), as the feed is (SEA_SIGNALS_KEEP): the first visitor after a quiet
+    // evening waited 12 seconds for it to be made from nothing
+    const response = await staleWhileRevalidate('maritime:overview:v2', SEA_OVERVIEW_KEEP, () =>
       longQuery(25, async (trx) => {
         // Signal counts for maritime-tagged content (last 7 days)
         // Include both verified and pending — RSS-ingested signals stay pending
@@ -322,16 +346,7 @@ export const registerMaritimeRoutes: FastifyPluginAsync = async (app) => {
           ) as [{ total_signals: string; high_severity: string; military_signals: string; piracy_alerts: string }]
 
         // Recent maritime signals (top 20)
-        const recentSignals = await trx('signals')
-          .whereIn('status', ['verified', 'pending'])
-          .whereRaw("created_at > now() - interval '48 hours'")
-          .whereRaw("(category IN ('military','maritime','economy','conflict') AND (tags @> ARRAY['maritime']::text[] OR tags @> ARRAY['shipping']::text[] OR tags @> ARRAY['naval']::text[] OR category = 'military'))")
-          .orderBy('created_at', 'desc')
-          .limit(SEA_LIST_READ)
-          .select('id', 'title', 'category', 'severity', 'location_name', 'source_url', 'created_at',
-            trx.raw('ST_X(location::geometry) as lng'),
-            trx.raw('ST_Y(location::geometry) as lat'),
-          )
+        const recentSignals = await seaRecentRead(trx)
 
         const made = {
           success: true,

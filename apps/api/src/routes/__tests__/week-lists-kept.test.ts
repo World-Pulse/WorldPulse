@@ -36,7 +36,7 @@ vi.mock('../../lib/long-query', () => ({
 }))
 
 import knexLib from 'knex'
-import { SEA_SIGNALS_QUERY_SECONDS, SEA_SIGNALS_KEEP, SEA_LIST_READ, nearKey, registerMaritimeRoutes, seaSignalsRead } from '../maritime'
+import { SEA_SIGNALS_QUERY_SECONDS, SEA_SIGNALS_KEEP, SEA_OVERVIEW_KEEP, SEA_LIST_READ, nearKey, registerMaritimeRoutes, seaSignalsRead, seaRecentRead } from '../maritime'
 import { dailyVolume } from '../analytics'
 
 async function maritimeApp() {
@@ -65,8 +65,20 @@ describe('the maritime feed (GET /maritime/signals)', () => {
   beforeEach(() => { h.state.keys = []; h.state.limits = []; h.state.calls = []; h.state.rows = [] })
 
   // Nov 22, 2026: after a quiet 8 to 10 hours nothing was kept, and the first ask gave up waiting for the week's read
-  it('keeps the last list across a quiet night of 10 hours', () => {
+  it('keeps the last list and the last overview across a quiet night of 10 hours', () => {
     expect(SEA_SIGNALS_KEEP.freshSeconds + SEA_SIGNALS_KEEP.staleSeconds).toBeGreaterThanOrEqual(10 * 3600)
+    expect(SEA_OVERVIEW_KEEP.freshSeconds + SEA_OVERVIEW_KEEP.staleSeconds).toBeGreaterThanOrEqual(10 * 3600)
+  })
+
+  // Nov 23, 2026: the overview's newest reports read the way the feed does
+  it("reads the overview's newest sea reports as a set first, the sort and limit outside", () => {
+    const k = knexLib({ client: 'pg' })
+    const { sql, bindings } = seaRecentRead(k).toSQL()
+    expect(sql).toMatch(/^with "sea" as materialized \(select .+ from "signals" where .+\) select \* from "sea" order by "created_at" desc limit \?$/)
+    const inner = sql.slice(0, sql.indexOf(') select * from "sea"'))
+    expect(inner).toContain("interval '48 hours'")
+    expect(inner).not.toContain('order by')
+    expect(bindings).toEqual(['verified', 'pending', SEA_LIST_READ])
   })
 
   it('keeps one copy per filter, and rounds a place to about a kilometre', () => {
