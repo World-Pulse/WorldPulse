@@ -98,9 +98,14 @@ export const SEA_LIST_READ = 400
  * 5 seconds and answered 500 every time. Kept in Redis instead and remade off
  * the request path by one process at a time, with its own time limit
  * (lib/long-query.ts, lib/swr-cache.ts), as GET /overview already is.
+ *
+ * Kept 12 hours past fresh (Nov 22, 2026; was 6): after a quiet evening or
+ * night of 8 to 10 hours nothing was kept, so the first ask waited for the
+ * week's read and gave up at 20 seconds (in four of the week's mornings and
+ * evenings). Kept, it gets the last list at once while a new one is made.
  */
 export const SEA_SIGNALS_QUERY_SECONDS = 25
-export const SEA_SIGNALS_KEEP = { freshSeconds: 120, staleSeconds: 6 * 3_600, lockSeconds: 60 }
+export const SEA_SIGNALS_KEEP = { freshSeconds: 120, staleSeconds: 12 * 3_600, lockSeconds: 60 }
 
 /** "lat,lng" rounded to about a kilometre, or '' when it isn't two numbers (then no place filter, as before) */
 export function nearKey(near: string | undefined): string {

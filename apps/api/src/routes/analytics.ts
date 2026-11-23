@@ -1038,9 +1038,13 @@ export const registerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
     const counted = hours === 1 ? '1h' : hours === 6 ? '6h' : hours === 168 ? '7d' : '24h'
     // Kept and remade in the background, each count with up to 20 seconds
     // (plan R3, Oct 21, 2026: the 7-day count read a week of reports on every
-    // miss, ran into the 5-second limit and answered 500)
+    // miss, ran into the 5-second limit and answered 500). The day's and the
+    // week's counts are kept 12 hours past fresh (Nov 22, 2026; was 6): asked a
+    // few times a day, 6 to 10 hours apart, the first ask after a long gap
+    // found nothing kept, counted while it waited and answered 500 when the
+    // database was busy; kept, it gets the last count at once while a new one is made.
     const result = await staleWhileRevalidate(`analytics:category-breakdown:v2:${hours}`,
-      { freshSeconds: hours >= 168 ? 1800 : 120, staleSeconds: 6 * 3600, lockSeconds: 60 },
+      { freshSeconds: hours >= 168 ? 1800 : 120, staleSeconds: (hours >= 24 ? 12 : 6) * 3600, lockSeconds: 60 },
       async () => {
         const since = new Date(Date.now() - hours * 3600 * 1000).toISOString()
         const rows = await longQuery(20, trx => trx('signals')

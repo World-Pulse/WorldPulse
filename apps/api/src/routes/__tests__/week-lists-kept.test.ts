@@ -35,7 +35,7 @@ vi.mock('../../lib/long-query', () => ({
   longQuery: async (seconds: number, run: (trx: unknown) => Promise<unknown>) => { h.state.limits.push(seconds); return run(h.trx) },
 }))
 
-import { SEA_SIGNALS_QUERY_SECONDS, nearKey, registerMaritimeRoutes } from '../maritime'
+import { SEA_SIGNALS_QUERY_SECONDS, SEA_SIGNALS_KEEP, nearKey, registerMaritimeRoutes } from '../maritime'
 import { dailyVolume } from '../analytics'
 
 async function maritimeApp() {
@@ -62,6 +62,11 @@ describe('the 7-day count (GET /analytics/signal-volume)', () => {
 
 describe('the maritime feed (GET /maritime/signals)', () => {
   beforeEach(() => { h.state.keys = []; h.state.limits = []; h.state.calls = []; h.state.rows = [] })
+
+  // Nov 22, 2026: after a quiet 8 to 10 hours nothing was kept, and the first ask gave up waiting for the week's read
+  it('keeps the last list across a quiet night of 10 hours', () => {
+    expect(SEA_SIGNALS_KEEP.freshSeconds + SEA_SIGNALS_KEEP.staleSeconds).toBeGreaterThanOrEqual(10 * 3600)
+  })
 
   it('keeps one copy per filter, and rounds a place to about a kilometre', () => {
     expect(nearKey('26.512345,56.345678')).toBe('26.51,56.35')
