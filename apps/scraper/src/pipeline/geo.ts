@@ -3341,8 +3341,12 @@ const OUTLET_NAMES = /\b(?:usa today|washington (?:post|times|examiner)|new york
  *  Louisiana or nothing. "LA Times" is an outlet and is blanked out first. */
 const LA_WORDS = ['mayor', 'mayoral', 'county', 'metro', 'unified', 'dodgers', 'lakers', 'clippers', 'rams', 'chargers', 'olympics', 'wildfires?', 'city council', 'police', 'fire department']
 const LA_CITY = new RegExp(`\\bLA(?=\\s+(?:${LA_WORDS.map(w => w.replace(/^./, c => `[${c}${c.toUpperCase()}]`)).join('|')})\\b)`, 'g')
+// The same newspapers named in Arabic, Russian and Ukrainian (Nov 24, 2026: Khaberni's "New York Times: cyber breach
+// reached an intelligence agency" sat at New York). \b only sees Latin letters, so these match as written.
+const OUTLET_NAMES_NON_LATIN = /نيويورك تايمز|واشنطن بوست|واشنطن تايمز|لوس أنجلوس تايمز|وول ستريت جورنال|Нью-Йорк[ -]?[Тт]айм[сз]|Вашингтон[ -]?[Пп]ост|Нью-Йорк[ -]?[Пп]ост/g
+
 function cleanText(text: string): string {
-  return text.replace(OUTLET_NAMES, ' ').replace(/\bLA Times\b/g, ' ').replace(LA_CITY, 'Los Angeles')
+  return text.replace(OUTLET_NAMES, ' ').replace(OUTLET_NAMES_NON_LATIN, ' ').replace(/\bLA Times\b/g, ' ').replace(LA_CITY, 'Los Angeles')
 }
 
 function escapeRegExp(s: string): string {

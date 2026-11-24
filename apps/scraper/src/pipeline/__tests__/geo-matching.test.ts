@@ -123,6 +123,10 @@ describe('findGazetteerPlace', () => {
     expect(findGazetteerPlace('US troops on Okinawa face new limits, the Washington Post reported')?.place).toBe('okinawa')
     expect(findGazetteerPlace('US troops face new limits, the Washington Post reported')).toBeNull()
     expect(findGazetteerPlace('According to the New York Times, talks in Cairo resumed')?.place).toBe('cairo')
+    // the same papers in Arabic, Russian and Ukrainian
+    expect(findGazetteerPlace('نيويورك تايمز: اختراق إلكتروني وصل إلى معلومات غير سرية')).toBeNull()
+    expect(findGazetteerPlace('Вашингтон пост сообщила о новых ограничениях')).toBeNull()
+    expect(findGazetteerPlace('Нью-Йорк Таймс повідомила про переговори')).toBeNull()
   })
 })
 
