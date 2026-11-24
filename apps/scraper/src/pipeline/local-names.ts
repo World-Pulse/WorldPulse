@@ -745,6 +745,8 @@ const INDONESIAN: Rule[] = [
 ]
 
 const UKRAINIAN: Rule[] = [
+  // Nov 24, 2026 live read: three Ukrainian outlets' "Зеленський підтвердив удар ... у Фінській затоці" sat at Ukraine (the first country named); the water is where the story is
+  r('фінськ(?:а|ій|ої|у|ою)\\s+затоц(?:і|а|и|у|ею)', 'in the Gulf of Finland'),
   r('україн(?:а|и|і|у|ою)', 'Ukraine'), r('ки(?:їв|єва|єву|єві|євом)|київщин\\p{L}*', 'Kyiv'), r('харк(?:ів|ова|ову|ові|овом)', 'Kharkiv'),
   r('одес(?:а|и|і|у|ою)', 'Odesa'), r('льв(?:ів|ова|ову|ові|овом)', 'Lviv'), r('дніпр(?:о|а|і|ом)', 'Dnipro'),
   r('запоріжж(?:я|і|ям)', 'Zaporizhzhia'), r('херсон(?:а|і|у|ом)?', 'Kherson'), r('донецьк(?:а|у|ом)?', 'Donetsk'),
@@ -799,6 +801,8 @@ const UKRAINIAN: Rule[] = [
  * ("κινά" is "moves"). Rhodes and Ioannina, which the place-finder doesn't know by name, count for Greece.
  */
 const GREEK: Rule[] = [
+  // Nov 24, 2026 live read: "Ζελένσκι: Η Ουκρανία πίσω από την επίθεση ... στον Κόλπο της Φινλανδίας" (tanea) sat at Ukraine; the water is where the story is
+  r('κολπ(?:ο|ου)\\s+(?:της\\s+)?φινλανδι(?:ας|α)', 'in the Gulf of Finland'),
   r('ελλαδ(?:α|ας|ος)|ελληνικ\\p{L}*', 'Greece'), r('αθην(?:α|ας|ων)', 'Athens'), r('θεσσαλονικ(?:η|ης)', 'Thessaloniki'),
   r('πειραι(?:ας|α|ως)', 'Piraeus'), r('πατρ(?:α|ας|ων)', 'Patras'), r('κρητ(?:η|ης)', 'Crete'), r('ροδο(?:ς|υ)?', 'Greece'),
   r('ηρακλει(?:ο|ου)', 'Heraklion'), r('λαρισ(?:α|ας|ης)', 'Larissa'), r('ιωαννιν(?:α|ων)', 'Greece'),

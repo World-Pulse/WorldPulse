@@ -3478,6 +3478,12 @@ export function findGazetteerPlace(text: string): { place: string; coords: typeo
     // 2026: "Ukraine claims it sank Russian warship off Libya" sat in Ukraine in four outlets)
     // ("off" alone also means repelled or put aside: "Ukraine fends off Russia" is Ukraine's, so a bare "off Place" counts only
     // when the text is about the sea; "off the coast of" and "off the Libyan coast" always do)
+    // "in the Gulf of Finland" after the country that acted: the ship strike is at the gulf (Nov 24, 2026: Zelensky confirmed
+    // Ukraine's strike there; three Ukrainian outlets and a Greek one sat in Ukraine). Only this gulf, only after "in the".
+    const gulf = IN_GULF_OF_FINLAND.exec(clean)
+    if (gulf && gulf.index > best.index && best.place !== 'gulf of finland') {
+      return { place: 'gulf of finland', coords: GAZETTEER['gulf of finland']!, written: 'Gulf of Finland' }
+    }
     const atSea = SEA_WORDS.test(clean)
     for (const m of [...(atSea ? clean.matchAll(OFF_PLACE) : clean.matchAll(OFF_COAST_OF)), ...clean.matchAll(OFF_ADJECTIVE_COAST)]) {
       if (m.index! + m[0].lastIndexOf(m[1]!) <= best.index) continue
@@ -3493,6 +3499,8 @@ export function findGazetteerPlace(text: string): { place: string; coords: typeo
   }
   return null
 }
+
+const IN_GULF_OF_FINLAND = /(?<![\p{L}\p{N}])in\s+the\s+Gulf\s+of\s+Finland(?![\p{L}\p{N}])/iu
 
 /** The place named right after "off" or "off the coast of" ("off Libya's coast", "off the coast of Somalia") */
 const OFF_PLACE = /(?<![\p{L}\p{N}])[Oo]ff\s+(?:the\s+coast\s+of\s+)?(\p{Lu}[\p{L}'’.-]*(?:\s+\p{Lu}[\p{L}'’.-]*)?)/gu
