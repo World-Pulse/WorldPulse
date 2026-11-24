@@ -11,3 +11,8 @@ it("'off' as repelled is not a place at sea (QA, Nov 23)", () => {
   expect(at('Ukraine fends off Russia in Kharkiv').countryCode).not.toBe('RU')
   expect(at('Kyiv fends off Russia').countryCode).toBe('UA')
 })
+it("a country after a bare 'off' is not the place unless the story is at sea (Nov 24)", () => {
+  expect(at('Germany fends off Russia').countryCode).toBe('DE')
+  expect(at('Poland repels Russia drones').countryCode).toBe('PL')
+  expect(at('Ukraine claims it sank Russian warship off Libya').countryCode).toBe('LY')
+})

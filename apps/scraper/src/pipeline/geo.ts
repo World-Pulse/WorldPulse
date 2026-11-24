@@ -2927,7 +2927,9 @@ const SINGULAR_MATCHERS = new Map(COUNTRY_PATTERNS.map(([pattern, code]) => [cod
  * "في" (in), as the Arabic press's names are read in English (local-names.ts; Nov 6, 2026: "ملاحقة قضائية للاجئ سوري في
  * بلجيكا", a Syrian refugee prosecuted in Belgium, is Belgium's)
  */
-const LOCATIVE_BEFORE = /(?:^|[\s,(])(?:in|inside|off(?:\s+the\s+coast\s+of)?|visits?|visited|visiting|visitará|visita|visitó|en|em|à|au|aux|في)\s+(?:the\s+)?$/i
+/** A bare "off" places what follows only in a story about the sea ("Germany fends off Russia" is Germany's; Nov 24, 2026) */
+const BARE_OFF_BEFORE = /(?:^|[\s,(])off\s+(?:the\s+)?$/i
+const LOCATIVE_BEFORE = /(?:^|[\s,(])(?:in|inside|off\s+the\s+coast\s+of|visits?|visited|visiting|visitará|visita|visitó|en|em|à|au|aux|في)\s+(?:the\s+)?$/i
 
 /**
  * Countries the text names, in order of first mention (the headline comes first), except that a country
@@ -2938,6 +2940,7 @@ const LOCATIVE_BEFORE = /(?:^|[\s,(])(?:in|inside|off(?:\s+the\s+coast\s+of)?|vi
  */
 export function mentionedCountries(text: string, byNameOnly = false): string[] {
   const hits: Array<{ code: string; index: number; people: boolean; there: boolean }> = []
+  const before = (index: number) => text.slice(Math.max(0, index - 24), index)
   COUNTRY_PATTERNS.forEach(([original, code], i) => {
     const pattern = COUNTRY_MATCHERS[i]![0]
     const m = pattern.exec(text)
@@ -2945,7 +2948,7 @@ export function mentionedCountries(text: string, byNameOnly = false): string[] {
     const singular = SINGULAR_MATCHERS.get(code + original.source)
     const people = pattern !== original && !!singular && !singular.test(m[0])
     if (byNameOnly && people) return
-    hits.push({ code, index: m.index, people, there: !people && LOCATIVE_BEFORE.test(text.slice(Math.max(0, m.index - 24), m.index)) })
+    hits.push({ code, index: m.index, people, there: !people && (LOCATIVE_BEFORE.test(before(m.index)) || (BARE_OFF_BEFORE.test(before(m.index)) && SEA_WORDS.test(text))) })
   })
   const rank = (h: { people: boolean; there: boolean }) => (h.there ? 0 : h.people ? 2 : 1)
   return [...new Set(hits.sort((a, b) => rank(a) - rank(b) || a.index - b.index).map(h => h.code))]
