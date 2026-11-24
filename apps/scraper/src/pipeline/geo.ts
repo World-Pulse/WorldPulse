@@ -3473,7 +3473,10 @@ export function findGazetteerPlace(text: string): { place: string; coords: typeo
   if (best) {
     // a place at sea named after "off" is where the story is, not the first country named as the one acting (Nov 23,
     // 2026: "Ukraine claims it sank Russian warship off Libya" sat in Ukraine in four outlets)
-    for (const m of [...clean.matchAll(OFF_PLACE), ...clean.matchAll(OFF_ADJECTIVE_COAST)]) {
+    // ("off" alone also means repelled or put aside: "Ukraine fends off Russia" is Ukraine's, so a bare "off Place" counts only
+    // when the text is about the sea; "off the coast of" and "off the Libyan coast" always do)
+    const atSea = SEA_WORDS.test(clean)
+    for (const m of [...(atSea ? clean.matchAll(OFF_PLACE) : clean.matchAll(OFF_COAST_OF)), ...clean.matchAll(OFF_ADJECTIVE_COAST)]) {
       if (m.index! + m[0].lastIndexOf(m[1]!) <= best.index) continue
       // (the name alone, or with the capitalised word after it: "Libya's Coast", "Cape Verde")
       const off = findGazetteerPlace(m[1]!) ?? findGazetteerPlace(m[1]!.split(/[\s'’]/)[0]!)
@@ -3490,6 +3493,12 @@ export function findGazetteerPlace(text: string): { place: string; coords: typeo
 
 /** The place named right after "off" or "off the coast of" ("off Libya's coast", "off the coast of Somalia") */
 const OFF_PLACE = /(?<![\p{L}\p{N}])[Oo]ff\s+(?:the\s+coast\s+of\s+)?(\p{Lu}[\p{L}'’.-]*(?:\s+\p{Lu}[\p{L}'’.-]*)?)/gu
+
+/** Words that make "off <place>" a position at sea (Nov 23, 2026, QA: "Ukraine fends off Russia" must stay Ukraine's) */
+const SEA_WORDS = /\b(?:coast(?:al|line)?|shores?|waters|sea|ocean|gulf|strait|ships?|vessels?|warships?|tankers?|boats?|freighters?|cargo|navy|naval|coast guard|fleet|islands?|port|offshore|oil rig|platform|migrants?|sinks?|sank|sunk|capsiz\w*|shipwreck|submarines?|frigates?|trawlers?|fishing)\b/i
+
+/** "off the coast of <place>" only: the form that is about the sea without other words */
+const OFF_COAST_OF = /(?<![\p{L}\p{N}])[Oo]ff\s+the\s+coast\s+of\s+(\p{Lu}[\p{L}'’.-]*(?:\s+\p{Lu}[\p{L}'’.-]*)?)/gu
 
 /** "off the Libyan coast": the country's adjective between "off the" and "coast" or "shores" */
 const OFF_ADJECTIVE_COAST = /(?<![\p{L}\p{N}])[Oo]ff\s+the\s+(\p{Lu}[\p{L}'’-]+)\s+(?:coast|coastline|shores?|waters)/gu

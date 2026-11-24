@@ -7,3 +7,7 @@ it("'off Libya' is Libya's story, not the attacker's", () => {
   expect(at('Russian news agencies and TV channels ignore Ukraine\'s sinking of a Russian warship off the Libyan coast').countryCode).toBe('LY')
   expect(at('Ukraine claims it sank warship').countryCode).toBe('UA')
 })
+it("'off' as repelled is not a place at sea (QA, Nov 23)", () => {
+  expect(at('Ukraine fends off Russia in Kharkiv').countryCode).not.toBe('RU')
+  expect(at('Kyiv fends off Russia').countryCode).toBe('UA')
+})
