@@ -30,7 +30,7 @@ vi.mock('../routes/stories', () => ({ topStories: vi.fn(async () => h.stories) }
 // (briefing-email, for newYorkTime, would otherwise connect to Postgres)
 vi.mock('../db/postgres', () => ({ db: vi.fn() }))
 
-import { runSocialPosts, postableStories, blueskyText, blueskyIdentifier, telegramText, xText } from '../lib/social-posters'
+import { runSocialPosts, postableStories, blueskyText, blueskyIdentifier, blueskySignInShape, telegramText, xText } from '../lib/social-posters'
 
 const story = (n: number, extra: Partial<ListedStory> = {}): ListedStory => ({
   id: `story-${n}`, leadId: `${n}${n}${n}${n}${n}${n}${n}${n}-0000-0000-0000-000000000000`,
@@ -160,6 +160,32 @@ describe('X (plan G7; Devon, Oct 21, 2026: "Yes, 3 a day")', () => {
     process.env.TWITTER_API_KEY = 'ck'; process.env.TWITTER_API_SECRET = 'cs'
     process.env.TWITTER_ACCESS_TOKEN = 'at'; process.env.TWITTER_ACCESS_SECRET = 'as'
   }
+
+  it('a refused Bluesky sign-in says what it was given, never the password (Nov 25, 2026)', async () => {
+    process.env.BLUESKY_HANDLE = 'world-pulse.io'
+    process.env.BLUESKY_APP_PASSWORD = 'abcd-efgh-ijkl-mnop'
+    delete process.env.TELEGRAM_BOT_TOKEN
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.endsWith('createSession')) return new Response(JSON.stringify({ error: 'AuthenticationRequired', message: 'Invalid identifier or password' }), { status: 401 })
+      return new Response('{}', { status: 200 })
+    }))
+    const r = await runSocialPosts(MORNING)
+    expect(r.bluesky).toContain('401: Invalid identifier or password')
+    expect(r.bluesky).toContain('as "world-pulse.io"; password in app-password form')
+    expect(r.bluesky).not.toContain('abcd-efgh-ijkl-mnop')
+  })
+
+  it('describes the sign-in without the password', () => {
+    expect(blueskySignInShape('world-pulse.io', 'abcd-efgh-ijkl-mnop')).toBe('as "world-pulse.io"; password in app-password form')
+    expect(blueskySignInShape('did:plc:h6qv2my3og23ufuykl4rwdv3', 'x')).toBe('as "did:plc:h6qv2my3og23ufuykl4rwdv3"; password not in app-password form (1 characters)')
+    expect(blueskySignInShape('someone@example.com', 'abcd-efgh-ijkl-mnop')).toBe('as an email address; password in app-password form')
+    expect(blueskySignInShape("'world-pulse.io'", "'abcd-efgh-ijkl-mnop'")).toBe('as a name that is neither a handle nor a did; password not in app-password form (21 characters)')
+    expect(blueskySignInShape('did=did:plc:abc', 'ABCD-EFGH-IJKL-MNOP')).toContain('neither a handle nor a did')
+    // the keys swapped: the "handle" holds the app password (made name.bsky.social), which is never shown
+    const swapped = blueskySignInShape(blueskyIdentifier('abcd-efgh-ijkl-mnop'), 'world-pulse.io')
+    expect(swapped).toBe('as a name in app-password form (the two keys may be swapped); password not in app-password form (14 characters)')
+    expect(swapped).not.toContain('abcd')
+  })
 
   it('fits 280 characters, a link counting as 23', () => {
     const t = xText(story(1, { title: 'A'.repeat(400) }))

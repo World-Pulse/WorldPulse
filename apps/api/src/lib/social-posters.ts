@@ -141,12 +141,40 @@ export function blueskyIdentifier(raw: string | undefined): string {
   return v
 }
 
+/**
+ * What a refused sign-in was given, safe for the status file (Nov 25, 2026: every sign-in since Oct 30 was
+ * refused with "Invalid identifier or password", with three different sets of keys): the name it signed in
+ * with when that is a handle or a did: (both public; an email address is only called one), and whether the
+ * password has an app password's form (four groups of four letters or digits, xxxx-xxxx-xxxx-xxxx). Never
+ * the password itself.
+ */
+export function blueskySignInShape(identifier: string, password: string): string {
+  // a name holding an app password (the two keys swapped) is never shown either
+  const swapped = /[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}/i.test(identifier) || (password.length > 0 && identifier.includes(password))
+  const who = identifier.includes('@') ? 'an email address'
+    : swapped ? 'a name in app-password form (the two keys may be swapped)'
+    : /^(did:[a-z0-9]+:[A-Za-z0-9._:-]{1,200}|[A-Za-z0-9.-]{1,253})$/.test(identifier) ? `"${identifier}"`
+    : 'a name that is neither a handle nor a did'
+  const form = /^[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$/.test(password)
+    ? 'in app-password form' : `not in app-password form (${password.length} characters)`
+  return `as ${who}; password ${form}`
+}
+
 async function blueskyPost(s: ListedStory): Promise<void> {
-  const session = await bsky<{ accessJwt: string; did: string }>('com.atproto.server.createSession', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ identifier: blueskyIdentifier(process.env.BLUESKY_HANDLE), password: (process.env.BLUESKY_APP_PASSWORD || '').trim() }),
-  })
+  const identifier = blueskyIdentifier(process.env.BLUESKY_HANDLE)
+  const password = (process.env.BLUESKY_APP_PASSWORD || '').trim()
+  let session: { accessJwt: string; did: string }
+  try {
+    session = await bsky<{ accessJwt: string; did: string }>('com.atproto.server.createSession', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier, password }),
+    })
+  } catch (err) {
+    const message = String((err as Error)?.message ?? err)
+    if (/ 401: /.test(message)) throw new Error(`${message.slice(0, 90)} (${blueskySignInShape(identifier, password)})`)
+    throw err
+  }
   const auth = { Authorization: `Bearer ${session.accessJwt}` }
   // The story's own card as the link preview (Bluesky doesn't fetch cards itself)
   let thumb: unknown
