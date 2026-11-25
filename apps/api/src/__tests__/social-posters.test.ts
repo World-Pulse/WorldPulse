@@ -24,6 +24,7 @@ vi.mock('../db/redis', () => ({
     expire: async () => 1,
     sadd: async (k: string, v: string) => { const s = h.sets.get(k) ?? new Set(); s.add(v); h.sets.set(k, s); return 1 },
     sismember: async (k: string, v: string) => (h.sets.get(k)?.has(v) ? 1 : 0),
+    ttl: async (k: string) => (h.kv.has(k) ? 3540 : -2),
   },
 }))
 vi.mock('../routes/stories', () => ({ topStories: vi.fn(async () => h.stories) }))
@@ -185,6 +186,23 @@ describe('X (plan G7; Devon, Oct 21, 2026: "Yes, 3 a day")', () => {
     const swapped = blueskySignInShape(blueskyIdentifier('abcd-efgh-ijkl-mnop'), 'world-pulse.io')
     expect(swapped).toBe('as a name in app-password form (the two keys may be swapped); password not in app-password form (14 characters)')
     expect(swapped).not.toContain('abcd')
+  })
+
+  it('keeps each channel\'s last try, with the pause left, where a later pass can\'t erase it (Nov 25, 2026)', async () => {
+    process.env.BLUESKY_HANDLE = 'world-pulse.io'
+    process.env.BLUESKY_APP_PASSWORD = 'abcd-efgh-ijkl-mnop'
+    delete process.env.TELEGRAM_BOT_TOKEN
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.endsWith('createSession')) return new Response(JSON.stringify({ message: 'Rate Limit Exceeded' }), { status: 429 })
+      return new Response('{}', { status: 200 })
+    }))
+    await runSocialPosts(MORNING)
+    expect(JSON.parse(h.kv.get('social:bluesky:last_try')!)).toEqual({ at: MORNING.toISOString(), outcome: 'error: Bluesky com.atproto.server.createSession 429: Rate Limit Exceeded' })
+    await runSocialPosts(minutes(MORNING, 10))                // paused: the try stays on record
+    const st = JSON.parse(h.kv.get('social:status')!)
+    expect(st.last_pass.bluesky).toBe('paused after an error')
+    expect(st.last_tries.bluesky).toEqual({ at: MORNING.toISOString(), outcome: 'error: Bluesky com.atproto.server.createSession 429: Rate Limit Exceeded', paused_minutes_left: 59 })
+    expect(JSON.stringify(st)).not.toContain('abcd-efgh-ijkl-mnop')
   })
 
   it('fits 280 characters, a link counting as 23', () => {

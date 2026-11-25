@@ -211,6 +211,33 @@ async function blueskyPost(s: ListedStory): Promise<void> {
 const POSTERS: Record<Channel, (s: ListedStory) => Promise<void>> = { telegram: telegramPost, bluesky: blueskyPost, x: xPost }
 const status: Record<string, unknown> = {}
 
+/**
+ * Each channel's last real try, posted or refused, kept in Redis for a week (Nov 25, 2026: the status file
+ * read "paused after an error" with no error beside it, the try's record gone from the in-memory status
+ * before it was shown), and the minutes its pause has left. The status file shows both as last_tries.
+ */
+const LAST_TRY_TTL = 7 * 86_400
+async function noteTry(channel: Channel, now: Date, outcome: string): Promise<void> {
+  await redis.set(`social:${channel}:last_try`, JSON.stringify({ at: now.toISOString(), outcome: outcome.slice(0, 200) }), 'EX', LAST_TRY_TTL)
+    .catch(() => {})
+}
+async function lastTries(channels: Channel[]): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = {}
+  for (const c of channels) {
+    let record: Record<string, unknown> = {}
+    try {
+      const raw = await redis.get(`social:${c}:last_try`)
+      if (raw) record = JSON.parse(raw) as Record<string, unknown>
+    } catch { /* a help, never a failure */ }
+    try {
+      const left = Number(await redis.ttl(`social:${c}:pause`))
+      if (left > 0) record.paused_minutes_left = Math.ceil(left / 60)
+    } catch { /* idem */ }
+    if (Object.keys(record).length > 0) out[c] = record
+  }
+  return out
+}
+
 /** One pass: each configured channel posts at most one story (exported for tests) */
 export async function runSocialPosts(now: Date = new Date()): Promise<Record<Channel, string>> {
   const result = { telegram: 'off', bluesky: 'off', x: 'off' } as Record<Channel, string>
@@ -249,11 +276,13 @@ export async function runSocialPosts(now: Date = new Date()): Promise<Record<Cha
       await redis.set(key('last'), String(now.getTime()))
       result[channel] = `posted: ${story.title.slice(0, 80)}`
       status[channel] = { last_at: now.toISOString(), last_title: story.title.slice(0, 120), today: today + 1, last_error: null }
+      await noteTry(channel, now, result[channel])
     } catch (err) {
       const message = String((err as Error)?.message ?? err).replace(/bot\d+:[\w-]+/g, 'bot***').slice(0, 160)
       await redis.set(key('pause'), '1', 'EX', 3600).catch(() => {})
       result[channel] = `error: ${message}`
       status[channel] = { ...(status[channel] as object ?? {}), last_error: message, error_at: now.toISOString() }
+      await noteTry(channel, now, `error: ${message}`)
       console.error(`[SOCIAL] ${channel} post failed; paused for an hour: ${message}`)
     }
   }
@@ -261,6 +290,7 @@ export async function runSocialPosts(now: Date = new Date()): Promise<Record<Cha
   // status file shows why nothing went out (Oct 30, 2026: after Bluesky's refused sign-ins, hours with no post
   // and no error said nothing either way)
   status.last_pass = { at: now.toISOString(), ...Object.fromEntries(channels.map(c => [c, result[c].slice(0, 120)])) }
+  status.last_tries = await lastTries(channels)
   await redis.set('social:status', JSON.stringify(status), 'EX', 2 * 86_400).catch(() => {})
   return result
 }
