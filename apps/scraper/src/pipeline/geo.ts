@@ -3531,6 +3531,15 @@ export function findGazetteerPlace(text: string): { place: string; coords: typeo
     if (gulf && gulf.index > best.index && best.place !== 'gulf of finland') {
       return { place: 'gulf of finland', coords: GAZETTEER['gulf of finland']!, written: 'Gulf of Finland' }
     }
+    // a strike "in Russia's Samara region" after the country that acted: the place named is where it happened (Nov 25, 2026:
+    // The Hindu's "Ukraine says it struck two oil refineries in Russia's Samara region" sat in Ukraine). Only a place the
+    // gazetteer holds in the very country named before the 's, and only after a word of going or striking.
+    for (const m of clean.matchAll(STRUCK_IN_POSSESSIVE)) {
+      if (m.index! + m[0].lastIndexOf(m[2]!) <= best.index) continue
+      const owner = countryOnly(m[1]!)
+      const there = findGazetteerPlace(m[2]!)
+      if (owner && there && there.coords.country === owner && owner !== best.coords.country) return there
+    }
     const atSea = SEA_WORDS.test(clean)
     for (const m of [...(atSea ? clean.matchAll(OFF_PLACE) : clean.matchAll(OFF_COAST_OF)), ...clean.matchAll(OFF_ADJECTIVE_COAST)]) {
       if (m.index! + m[0].lastIndexOf(m[1]!) <= best.index) continue
@@ -3546,6 +3555,8 @@ export function findGazetteerPlace(text: string): { place: string; coords: typeo
   }
   return null
 }
+
+const STRUCK_IN_POSSESSIVE = /(?<![\p{L}\p{N}])(?:in|on|into|hit|hits|struck|strikes?|attacks?|targets?)\s+(\p{Lu}[\p{L}.]*)['’]s\s+(\p{Lu}[\p{L}'’.-]*)(?:\s+(?:region|oblast|province|krai|governorate|county))?/gu
 
 const IN_GULF_OF_FINLAND = /(?<![\p{L}\p{N}])in\s+the\s+Gulf\s+of\s+Finland(?![\p{L}\p{N}])/iu
 
