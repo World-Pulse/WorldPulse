@@ -171,6 +171,16 @@ describe('briefing-generator', () => {
       expect(result.key_developments.length).toBeGreaterThan(0)
     })
 
+    it('writes the day\'s report count with its thousands comma (the home page read "43747 reports")', async () => {
+      delete process.env.ANTHROPIC_API_KEY
+      mockDb.mockImplementation(() => queryOf([{
+        id: 'sig-x', title: 'Floods in Valencia', summary: null, category: 'disaster', severity: 'high', status: 'verified',
+        reliability_score: 0.9, location_name: 'Valencia', country_code: 'ES', source_domain: 'elpais.com', created_at: new Date().toISOString(),
+      }], 43747))
+      const result = await generateDailyBriefing(24)
+      expect(result.executive_summary).toContain('WorldPulse read 43,747 reports in the last 24 hours')
+    })
+
     it('briefs each story once, however many outlets reported it', async () => {
       delete process.env.ANTHROPIC_API_KEY
       delete process.env.OPENAI_API_KEY

@@ -505,7 +505,8 @@ function buildExtractiveBriefing(
   const highSignals = signals.filter(s => s.severity === 'high')
 
   const verifiedStories = signals.filter(s => s.status === 'verified' && outletsOf(s) >= 2)
-  const executive_summary = `WorldPulse read ${totalSignals} reports in the last 24 hours across ${categories.length} categories: ${verifiedStories.length} of the top stories were verified by two or more outlets; ${criticalSignals.length} critical and ${highSignals.length} high-severity reports${clusters.length > 0 ? `, with ${clusters.length} correlated event clusters identified` : ''}.`
+  // The count with its thousands comma (Nov 25, 2026: the home page's "What changed" read "43747 reports")
+  const executive_summary = `WorldPulse read ${totalSignals.toLocaleString('en-US')} reports in the last 24 hours across ${categories.length} categories: ${verifiedStories.length} of the top stories were verified by two or more outlets; ${criticalSignals.length} critical and ${highSignals.length} high-severity reports${clusters.length > 0 ? `, with ${clusters.length} correlated event clusters identified` : ''}.`
 
   // Verified stories first, each with its outlets (plan 9, Oct 21, 2026)
   const lead = [...verifiedStories, ...signals.filter(s => !verifiedStories.includes(s))]
