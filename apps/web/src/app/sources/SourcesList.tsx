@@ -3,8 +3,22 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Radio } from 'lucide-react'
+import { COUNTRIES_COVERED } from '@/lib/coverage-count'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
+
+/**
+ * The page's count line (Nov 25, 2026; Devon: "we have over 1,400 sources now ... Across 202 countries and
+ * territories"): the sources the scraper reads, from the server's status file as on the home page and How we
+ * count, and the countries and territories covered. It said "19 verified sources": the length of the curated
+ * list below (the sources table), which doesn't hold the news and data feeds.
+ */
+export function sourcesLine(sourcesRead: number | null): string {
+  const where = `${COUNTRIES_COVERED} countries and territories`
+  return sourcesRead
+    ? `${sourcesRead.toLocaleString('en-US')} sources read in ${where} · Continuously monitored`
+    : `News outlets and data feeds in ${where} · Continuously monitored`
+}
 
 const TIER_CONFIG: Record<string, { label: string; color: string; desc: string }> = {
   wire:      { label: 'Wire Service',  color: 'text-wp-red   border-wp-red   bg-[rgba(255,59,92,0.08)]',   desc: 'Global wire services — highest trust' },
@@ -50,7 +64,8 @@ function TrustBar({ score }: { score: number }) {
   )
 }
 
-export default function SourcesPage() {
+/** sourcesRead: the sources the scraper reads (the server's status file), or null when it didn't answer */
+export default function SourcesPage({ sourcesRead = null }: { sourcesRead?: number | null }) {
   const [sources, setSources]     = useState<Source[]>([])
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState<string | null>(null)
@@ -120,9 +135,7 @@ export default function SourcesPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-[22px] font-bold text-wp-text">Intelligence Sources</h1>
-          <p className="text-[13px] text-wp-text3 mt-0.5">
-            {loading || error ? 'Continuously monitored' : `${sources.length} verified sources · Continuously monitored`}
-          </p>
+          <p className="text-[13px] text-wp-text3 mt-0.5">{sourcesLine(sourcesRead)}</p>
         </div>
         <Link
           href="/sources/suggest"
@@ -132,21 +145,25 @@ export default function SourcesPage() {
         </Link>
       </div>
 
-      {/* Stats row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+      {/* Stats row: the sources read and the countries covered (the site's own totals), then the curated list's
+          count and average trust. A dash for any count not known yet, so the page never shows 0 sources (H-0058). */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
         {[
-          { label: 'Total Sources',   value: sources.length },
-          { label: 'Wire Services',   value: sources.filter(s => s.tier === 'wire').length },
-          { label: 'Active Now',      value: sources.filter(s => s.active).length },
-          { label: 'Avg Trust',       value: `${Math.round(sources.reduce((s, src) => s + src.trustScore, 0) / (sources.length || 1) * 100)}%` },
+          { label: 'Sources read',      value: sourcesRead ? sourcesRead.toLocaleString('en-US') : '–' },
+          { label: 'Countries covered', value: String(COUNTRIES_COVERED) },
+          { label: 'Curated sources',   value: loading || error ? '–' : String(sources.length) },
+          { label: 'Curated avg trust', value: loading || error ? '–' : `${Math.round(sources.reduce((s, src) => s + src.trustScore, 0) / (sources.length || 1) * 100)}%` },
         ].map(stat => (
-          // A dash until the list has loaded, so the page never shows 0 sources (H-0058).
           <div key={stat.label} className="bg-wp-surface border border-[rgba(255,255,255,0.07)] rounded-xl p-4">
             <div className="font-mono text-[10px] tracking-[2px] text-wp-text3 uppercase mb-1">{stat.label}</div>
-            <div className="text-[22px] font-bold text-wp-amber">{loading || error ? '–' : stat.value}</div>
+            <div className="text-[22px] font-bold text-wp-amber">{stat.value}</div>
           </div>
         ))}
       </div>
+      <p className="text-[12px] text-wp-text3 mb-6">
+        Below: the curated sources, each with its trust score. The sources read also include the news and data feeds read around the clock.{' '}
+        <Link href="/how-we-count" className="underline underline-offset-2 hover:text-wp-amber">How we count</Link>
+      </p>
 
       {/* Filters */}
       <div className="flex flex-col gap-3 mb-6">

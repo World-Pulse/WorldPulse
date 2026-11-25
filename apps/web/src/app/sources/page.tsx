@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 import { pageMetadata } from '@/lib/page-metadata'
+import { fetchHomeTotals } from '@/lib/home-totals'
+import { COUNTRIES_COVERED } from '@/lib/coverage-count'
 import SourcesList from './SourcesList'
 
 // The list is a client component, so its title, description and address for
@@ -8,9 +10,13 @@ import SourcesList from './SourcesList'
 export const metadata: Metadata = pageMetadata({
   path: '/sources',
   title: 'Sources: the outlets and feeds we read',
-  description: 'The news outlets, wire services, government feeds and open-source data WorldPulse reads, each with its trust score.',
+  description: `The news outlets, wire services, government feeds and open data WorldPulse reads in ${COUNTRIES_COVERED} countries and territories.`,
 })
 
-export default function Page() {
-  return <SourcesList />
+// The sources read come from the server's status file, as on the home page and How we count, and are in
+// the page as sent, so a crawler or an AI assistant reads them too (Nov 25, 2026: the page said
+// "19 verified sources", the curated list's length, against 1,442 sources read)
+export default async function Page() {
+  const totals = await fetchHomeTotals()
+  return <SourcesList sourcesRead={totals.sources} />
 }
