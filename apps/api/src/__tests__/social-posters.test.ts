@@ -8,6 +8,7 @@ import type { ListedStory } from '../lib/story-list'
 
 const h = vi.hoisted(() => ({
   kv: new Map<string, string>(),
+  ex: new Map<string, number>(),     // each key's EX seconds, as set
   sets: new Map<string, Set<string>>(),
   stories: [] as ListedStory[],
 }))
@@ -17,21 +18,25 @@ vi.mock('../db/redis', () => ({
     get: async (k: string) => h.kv.get(k) ?? null,
     set: async (k: string, v: string, ...opts: unknown[]) => {
       if (opts.includes('NX') && h.kv.has(k)) return null
-      h.kv.set(k, v); return 'OK'
+      h.kv.set(k, v)
+      const i = opts.indexOf('EX')
+      if (i >= 0) h.ex.set(k, Number(opts[i + 1]))
+      return 'OK'
     },
-    del: async (k: string) => { h.kv.delete(k); return 1 },
+    del: async (k: string) => { h.kv.delete(k); h.ex.delete(k); return 1 },
     incr: async (k: string) => { const n = Number(h.kv.get(k) ?? 0) + 1; h.kv.set(k, String(n)); return n },
     expire: async () => 1,
     sadd: async (k: string, v: string) => { const s = h.sets.get(k) ?? new Set(); s.add(v); h.sets.set(k, s); return 1 },
     sismember: async (k: string, v: string) => (h.sets.get(k)?.has(v) ? 1 : 0),
-    ttl: async (k: string) => (h.kv.has(k) ? 3540 : -2),
+    // a minute after it was set
+    ttl: async (k: string) => (h.kv.has(k) ? (h.ex.get(k) ?? 3600) - 60 : -2),
   },
 }))
 vi.mock('../routes/stories', () => ({ topStories: vi.fn(async () => h.stories) }))
 // (briefing-email, for newYorkTime, would otherwise connect to Postgres)
 vi.mock('../db/postgres', () => ({ db: vi.fn() }))
 
-import { runSocialPosts, postableStories, blueskyText, blueskyIdentifier, blueskySignInShape, telegramText, xText } from '../lib/social-posters'
+import { runSocialPosts, postableStories, blueskyText, blueskyIdentifier, blueskySignInShape, blueskyServer, pauseSeconds, storyLink, telegramText, xText } from '../lib/social-posters'
 
 const story = (n: number, extra: Partial<ListedStory> = {}): ListedStory => ({
   id: `story-${n}`, leadId: `${n}${n}${n}${n}${n}${n}${n}${n}-0000-0000-0000-000000000000`,
@@ -46,7 +51,7 @@ const minutes = (d: Date, m: number) => new Date(d.getTime() + m * 60_000)
 
 let calls: Array<{ url: string; body: unknown }>
 beforeEach(() => {
-  h.kv.clear(); h.sets.clear()
+  h.kv.clear(); h.ex.clear(); h.sets.clear()
   h.stories = [story(1), story(2), story(3)]
   calls = []
   process.env.TELEGRAM_BOT_TOKEN = '123:secret'
@@ -121,6 +126,7 @@ describe('posting', () => {
     expect(r.telegram).toMatch(/^error: Telegram 403/)
     expect(r.telegram).not.toContain('123:secret')
     expect(h.kv.get('social:telegram:pause')).toBe('1')
+    expect(h.ex.get('social:telegram:pause')).toBe(3600)
     expect((await runSocialPosts(minutes(MORNING, 10))).telegram).toBe('paused after an error')
     expect(JSON.parse(h.kv.get('social:status')!).telegram.last_error).toMatch(/Telegram 403/)
     // each pass says what it did, so an hour with no post and no error still reads (Oct 30, 2026)
@@ -152,6 +158,79 @@ describe('posting', () => {
     process.env.BLUESKY_APP_PASSWORD = ' app-pass\t'
     expect((await runSocialPosts(MORNING)).bluesky).toMatch(/^posted:/)
     expect(calls.find(c => c.url.endsWith('createSession'))!.body).toEqual({ identifier: 'worldpulse.bsky.social', password: 'app-pass' })
+  })
+})
+
+describe('Bluesky, steadier (Nov 25, 2026: the 4:16 PM post failed at "createRecord 502: UpstreamFailure")', () => {
+  const PDS = 'https://fibercap.us-west.host.bsky.network'
+  const pdsDoc = { service: [{ id: '#atproto_pds', type: 'AtprotoPersonalDataServer', serviceEndpoint: PDS }] }
+  // Bluesky as it answers: the sign-in with its DID document, the account's latest posts, then the picture and the post
+  const bluesky = (over: { records?: unknown[]; createRecord?: Response } = {}) => {
+    delete process.env.TELEGRAM_BOT_TOKEN
+    process.env.BLUESKY_HANDLE = 'world-pulse.io'
+    process.env.BLUESKY_APP_PASSWORD = 'abcd-efgh-ijkl-mnop'
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, body: typeof init?.body === 'string' ? JSON.parse(init.body) : init?.body })
+      if (url.endsWith('createSession')) return new Response(JSON.stringify({ accessJwt: 'jwt', did: 'did:plc:wp', didDoc: pdsDoc }), { status: 200 })
+      if (url.includes('com.atproto.repo.listRecords')) return new Response(JSON.stringify({ records: over.records ?? [] }), { status: 200 })
+      if (url.endsWith('/opengraph-image')) return new Response(new Uint8Array([137, 80, 78, 71]), { status: 200 })
+      if (url.endsWith('uploadBlob')) return new Response(JSON.stringify({ blob: { ref: 'blob1' } }), { status: 200 })
+      if (url.endsWith('createRecord')) return over.createRecord ?? new Response(JSON.stringify({ uri: 'at://x' }), { status: 200 })
+      return new Response('{}', { status: 404 })
+    }))
+  }
+
+  it('signs in at bsky.social, then sends the picture and the post straight to the account\'s own server', async () => {
+    bluesky()
+    expect((await runSocialPosts(MORNING)).bluesky).toMatch(/^posted: Earthquake number 1/)
+    expect(calls.find(c => c.url.endsWith('createSession'))!.url).toBe('https://bsky.social/xrpc/com.atproto.server.createSession')
+    expect(calls.find(c => c.url.endsWith('uploadBlob'))!.url).toBe(`${PDS}/xrpc/com.atproto.repo.uploadBlob`)
+    expect(calls.find(c => c.url.endsWith('createRecord'))!.url).toBe(`${PDS}/xrpc/com.atproto.repo.createRecord`)
+    expect(calls.find(c => c.url.includes('listRecords'))!.url).toBe(`${PDS}/xrpc/com.atproto.repo.listRecords?repo=did%3Aplc%3Awp&collection=app.bsky.feed.post&limit=10`)
+  })
+
+  it('counts a story already on the account (a try whose answer was lost) instead of posting it twice', async () => {
+    bluesky({ records: [{ value: { embed: { external: { uri: storyLink(story(1), 'bluesky') } } } }] })
+    expect((await runSocialPosts(MORNING)).bluesky).toMatch(/^posted: Earthquake number 1/)
+    expect(calls.some(c => c.url.endsWith('createRecord'))).toBe(false)
+    expect(h.sets.get('social:bluesky:posted')?.has(story(1).leadId)).toBe(true)
+    expect(h.kv.get('social:bluesky:count:2026-10-12')).toBe('1')
+  })
+
+  it('posts when the account\'s posts can\'t be read', async () => {
+    bluesky()
+    const real = globalThis.fetch as unknown as (u: string, i?: RequestInit) => Promise<Response>
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => (url.includes('listRecords') ? new Response('{}', { status: 500 }) : real(url, init))))
+    expect((await runSocialPosts(MORNING)).bluesky).toMatch(/^posted:/)
+    expect(calls.some(c => c.url.endsWith('createRecord'))).toBe(true)
+  })
+
+  it('waits 15 minutes after Bluesky\'s own server fails, then tries again', async () => {
+    bluesky({ createRecord: new Response(JSON.stringify({ error: 'UpstreamFailure', message: 'UpstreamFailure' }), { status: 502 }) })
+    expect((await runSocialPosts(MORNING)).bluesky).toBe('error: Bluesky com.atproto.repo.createRecord 502: UpstreamFailure')
+    expect(h.ex.get('social:bluesky:pause')).toBe(900)
+    await runSocialPosts(minutes(MORNING, 10))
+    expect(JSON.parse(h.kv.get('social:status')!).last_tries.bluesky.paused_minutes_left).toBe(14)
+  })
+
+  it('pauses 15 minutes for a server error or no answer, an hour for anything else', () => {
+    expect(pauseSeconds('Bluesky com.atproto.repo.createRecord 502: UpstreamFailure')).toBe(900)
+    expect(pauseSeconds('Telegram 503: Service Unavailable')).toBe(900)
+    expect(pauseSeconds('The operation was aborted due to timeout')).toBe(900)
+    expect(pauseSeconds('fetch failed')).toBe(900)
+    expect(pauseSeconds('Bluesky com.atproto.server.createSession 401: Invalid identifier or password (as "world-pulse.io"; password in app-password form)')).toBe(3600)
+    expect(pauseSeconds('Bluesky com.atproto.server.createSession 429: Rate Limit Exceeded')).toBe(3600)
+    expect(pauseSeconds('Telegram 403: Forbidden')).toBe(3600)
+  })
+
+  it('takes the account\'s server from the DID document, else bsky.social', () => {
+    expect(blueskyServer(pdsDoc)).toBe(PDS)
+    expect(blueskyServer({ service: [{ id: 'did:plc:wp#atproto_pds', type: 'AtprotoPersonalDataServer', serviceEndpoint: 'https://pds.example.com/' }] })).toBe('https://pds.example.com')
+    expect(blueskyServer(undefined)).toBe('https://bsky.social')
+    expect(blueskyServer({ service: 'nope' })).toBe('https://bsky.social')
+    expect(blueskyServer({ service: [{ id: '#atproto_pds', type: 'AtprotoPersonalDataServer', serviceEndpoint: 'http://pds.example.com' }] })).toBe('https://bsky.social')
+    expect(blueskyServer({ service: [{ id: '#atproto_pds', type: 'AtprotoPersonalDataServer', serviceEndpoint: 'https://pds.example.com/x?y=1' }] })).toBe('https://bsky.social')
+    expect(blueskyServer({ service: [{ id: '#atproto_labeler', type: 'AtprotoLabeler', serviceEndpoint: 'https://labeler.example.com' }] })).toBe('https://bsky.social')
   })
 })
 

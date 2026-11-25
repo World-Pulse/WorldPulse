@@ -16,8 +16,9 @@
  * highest-ranked verified story of the last 12 hours it hasn't posted yet: 3+
  * independent outlets, an English headline, not sports or culture. At most
  * PER_DAY a day per channel and GAP_MINUTES apart. A failure pauses that
- * channel for an hour. Each story goes out once per channel. ops-status shows
- * the result (Redis social:status).
+ * channel for an hour, or 15 minutes when the channel's own server failed or
+ * didn't answer (pauseSeconds). Each story goes out once per channel. ops-status
+ * shows the result (Redis social:status).
  */
 
 import { redis } from '../db/redis'
@@ -119,11 +120,53 @@ async function telegramPost(s: ListedStory): Promise<void> {
   if (!res.ok || !body?.ok) throw new Error(`Telegram ${res.status}: ${String(body?.description ?? 'no answer').slice(0, 120)}`)
 }
 
-async function bsky<T>(path: string, init: RequestInit): Promise<T> {
-  const res = await fetch(`${BLUESKY_HOST}/xrpc/${path}`, { ...init, signal: AbortSignal.timeout(20_000) })
+async function bsky<T>(path: string, init: RequestInit, server: string = BLUESKY_HOST): Promise<T> {
+  const res = await fetch(`${server}/xrpc/${path}`, { ...init, signal: AbortSignal.timeout(20_000) })
   const body = await res.json().catch(() => null) as (T & { message?: string }) | null
-  if (!res.ok || !body) throw new Error(`Bluesky ${path} ${res.status}: ${String(body?.message ?? 'no answer').slice(0, 120)}`)
+  if (!res.ok || !body) throw new Error(`Bluesky ${path.split('?')[0]} ${res.status}: ${String(body?.message ?? 'no answer').slice(0, 120)}`)
   return body
+}
+
+/**
+ * The account's own server (its PDS), named in the DID document Bluesky's sign-in answers with, so the picture and
+ * the post go to it straight rather than through bsky.social, as Bluesky's own app does (Nov 25, 2026: the second
+ * post, at 4:16 PM, failed at "com.atproto.repo.createRecord 502: UpstreamFailure", bsky.social's call on to the
+ * account's server). bsky.social when the document names no https server.
+ */
+export function blueskyServer(didDoc: unknown): string {
+  const services = (didDoc && typeof didDoc === 'object' ? (didDoc as { service?: unknown }).service : null)
+  if (!Array.isArray(services)) return BLUESKY_HOST
+  for (const s of services) {
+    const { id, type, serviceEndpoint } = (s && typeof s === 'object' ? s : {}) as { id?: unknown; type?: unknown; serviceEndpoint?: unknown }
+    if (typeof id === 'string' && id.endsWith('#atproto_pds') && type === 'AtprotoPersonalDataServer'
+      && typeof serviceEndpoint === 'string' && /^https:\/\/[a-z0-9.-]+(:\d+)?\/?$/i.test(serviceEndpoint)) {
+      return serviceEndpoint.replace(/\/$/, '')
+    }
+  }
+  return BLUESKY_HOST
+}
+
+/**
+ * Whether the account's latest posts already link this story (an answer like a 502 can come after the post was
+ * saved, and the next try would post it twice). A check that fails is no reason not to post.
+ */
+async function blueskyHasPosted(server: string, did: string, link: string): Promise<boolean> {
+  try {
+    const page = await bsky<{ records?: Array<{ value?: { embed?: { external?: { uri?: unknown } } } }> }>(
+      `com.atproto.repo.listRecords?repo=${encodeURIComponent(did)}&collection=app.bsky.feed.post&limit=10`, { method: 'GET' }, server)
+    return (page.records ?? []).some(r => r?.value?.embed?.external?.uri === link)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * How long a channel waits after a failed try: 15 minutes when the channel's own server failed (a 5xx answer) or
+ * didn't answer in time, which usually passes in minutes (Nov 25, 2026: Bluesky's 502 at 4:16 PM held the second
+ * post for an hour); an hour for anything else, such as a refused sign-in or a rate limit.
+ */
+export function pauseSeconds(message: string): number {
+  return / 5\d\d: /.test(message) || /timeout|timed out|aborted|fetch failed/i.test(message) ? 900 : 3600
 }
 
 /**
@@ -163,9 +206,9 @@ export function blueskySignInShape(identifier: string, password: string): string
 async function blueskyPost(s: ListedStory): Promise<void> {
   const identifier = blueskyIdentifier(process.env.BLUESKY_HANDLE)
   const password = (process.env.BLUESKY_APP_PASSWORD || '').trim()
-  let session: { accessJwt: string; did: string }
+  let session: { accessJwt: string; did: string; didDoc?: unknown }
   try {
-    session = await bsky<{ accessJwt: string; did: string }>('com.atproto.server.createSession', {
+    session = await bsky<{ accessJwt: string; did: string; didDoc?: unknown }>('com.atproto.server.createSession', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ identifier, password }),
@@ -176,6 +219,10 @@ async function blueskyPost(s: ListedStory): Promise<void> {
     throw err
   }
   const auth = { Authorization: `Bearer ${session.accessJwt}` }
+  const server = blueskyServer(session.didDoc)
+  const link = storyLink(s, 'bluesky')
+  // Already on the account (a try whose answer was lost): counted as posted, not posted twice
+  if (await blueskyHasPosted(server, session.did, link)) return
   // The story's own card as the link preview (Bluesky doesn't fetch cards itself)
   let thumb: unknown
   const img = await fetch(`${SITE_URL}/signals/${encodeURIComponent(s.leadId)}/opengraph-image`, { signal: AbortSignal.timeout(20_000) })
@@ -185,7 +232,7 @@ async function blueskyPost(s: ListedStory): Promise<void> {
     if (bytes.length > 0 && bytes.length < 950_000) {
       thumb = (await bsky<{ blob: unknown }>('com.atproto.repo.uploadBlob', {
         method: 'POST', headers: { ...auth, 'Content-Type': 'image/png' }, body: bytes,
-      })).blob
+      }, server)).blob
     }
   }
   await bsky('com.atproto.repo.createRecord', {
@@ -201,11 +248,11 @@ async function blueskyPost(s: ListedStory): Promise<void> {
         langs: ['en'],
         embed: {
           $type: 'app.bsky.embed.external',
-          external: { uri: storyLink(s, 'bluesky'), title: s.title.slice(0, 300), description: verifiedLine(s), ...(thumb ? { thumb } : {}) },
+          external: { uri: link, title: s.title.slice(0, 300), description: verifiedLine(s), ...(thumb ? { thumb } : {}) },
         },
       },
     }),
-  })
+  }, server)
 }
 
 const POSTERS: Record<Channel, (s: ListedStory) => Promise<void>> = { telegram: telegramPost, bluesky: blueskyPost, x: xPost }
@@ -279,11 +326,12 @@ export async function runSocialPosts(now: Date = new Date()): Promise<Record<Cha
       await noteTry(channel, now, result[channel])
     } catch (err) {
       const message = String((err as Error)?.message ?? err).replace(/bot\d+:[\w-]+/g, 'bot***').slice(0, 160)
-      await redis.set(key('pause'), '1', 'EX', 3600).catch(() => {})
+      const pause = pauseSeconds(message)
+      await redis.set(key('pause'), '1', 'EX', pause).catch(() => {})
       result[channel] = `error: ${message}`
       status[channel] = { ...(status[channel] as object ?? {}), last_error: message, error_at: now.toISOString() }
       await noteTry(channel, now, `error: ${message}`)
-      console.error(`[SOCIAL] ${channel} post failed; paused for an hour: ${message}`)
+      console.error(`[SOCIAL] ${channel} post failed; paused for ${pause / 60} minutes: ${message}`)
     }
   }
   // What each channel did this pass ("paused after an error", "waiting between posts", "posted: ..."), so the
