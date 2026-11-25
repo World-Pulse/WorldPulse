@@ -5,7 +5,7 @@
  *
  * GET /api/v1/threads          — List active threads
  * GET /api/v1/threads/:id      — Thread detail with timeline
- * GET /api/v1/threads/active    — Count of active threads by status
+ * GET /api/v1/threads/active/summary — Count of threads by status
  *
  * @module routes/threads
  */
@@ -15,6 +15,9 @@ import { db } from '../db/postgres'
 import { redis } from '../db/redis'
 
 const CACHE_TTL = 120 // 2 min
+
+/** A thread's id is a UUID; anything else ("active", a crawler's guess) is no thread, not a database error */
+export const THREAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export const registerThreadRoutes: FastifyPluginAsync = async (app) => {
 
@@ -103,6 +106,9 @@ export const registerThreadRoutes: FastifyPluginAsync = async (app) => {
     },
   }, async (req, reply) => {
     const { id } = req.params as { id: string }
+    // Nov 25, 2026: GET /api/v1/threads/active (named in this file's header) answered 500, the id going to
+    // Postgres as a UUID; it is 404 now, as for any id that is not a UUID
+    if (!THREAD_ID.test(id)) return reply.status(404).send({ success: false, error: 'Thread not found' })
 
     const thread = await db('event_threads').where('id', id).first()
     if (!thread) {
