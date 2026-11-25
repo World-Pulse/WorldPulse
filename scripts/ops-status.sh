@@ -288,9 +288,13 @@ source_stats() {
       redis-cli --raw SMEMBERS news-rss:parked | head -n 100 | sed "s/^/parked=/"
       redis-cli --raw --scan --pattern "news-rss:parked-works:*" | head -n 100 | sed "s/^news-rss:parked-works:/parked_ok=/"
       redis-cli --raw LRANGE scraper:dlq 0 299 | sed "s/^/dlq=/"' sh "$SOURCE_CB_LUA" "$SOURCE_FEED_LUA" 2>/dev/null) || out=""
-  OUT="$out" OFF="$off" python3 - <<'PY' 2>/dev/null || printf 'null'
+  # The read goes to Python on file descriptor 3, not in the environment (Nov 25, 2026): once the read
+  # finished in time it was over Linux's 128 KB limit for one environment string (the 300 newest
+  # dead-letter items alone are about 290 KB), so Python could not start and the part read as null
+  OFF="$off" python3 - 3<<<"$out" <<'PY' 2>/dev/null || printf 'null'
 import calendar, json, os, re, sys, time
-lines = os.environ.get('OUT', '').splitlines()
+with os.fdopen(3, encoding='utf-8', errors='replace') as fh:
+    lines = fh.read().splitlines()
 # Not read is not "0 failing" (H-0072): the tracked count must be a number and both lists must say they ended
 if not (any(re.fullmatch(r'tracked=\d+', l.strip()) for l in lines)
         and any(l.startswith('cb_done=') for l in lines) and any(l.startswith('feed_done=') for l in lines)):
