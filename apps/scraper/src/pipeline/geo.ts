@@ -3117,7 +3117,9 @@ export function withoutSiteSuffix(title: string): string {
   return title.replace(/\s+\|\s+[^|]{2,60}$/, '')
 }
 
-const NON_PLACE_ANY = /Washington\s+(?:state|governor|gov\b|attorney|state)|\bof\s+\p{Lu}|\p{Lu}[\p{L}'’.]*\s+River(?![\p{L}\p{N}])|\p{L}[-‑]\p{L}|\p{Lu}[\p{L}'’.]*\s+(?:spy|spies|agent|agents|mole|moles|national|nationals|citizen|citizens|tourist|tourists|businessman|businesswoman|tycoon|[Dd]iplomats?|[Dd]iplomaten|[Aa]ttach[ée]s?)/u
+const SPACECRAFT = /\b(?:Shenzhou|Tianzhou|Tianwen|Chang['’]?e|Chandrayaan|Gaganyaan|Soyuz(?:\s+MS)?)[-‑\s]?\d+\b|\bTiangong\b/g
+
+const NON_PLACE_ANY = /Shenzhou|Tianzhou|Tianwen|Chang['’]?e|Chandrayaan|Gaganyaan|Soyuz|Tiangong|Washington\s+(?:state|governor|gov\b|attorney|state)|\bof\s+\p{Lu}|\p{Lu}[\p{L}'’.]*\s+River(?![\p{L}\p{N}])|\p{L}[-‑]\p{L}|\p{Lu}[\p{L}'’.]*\s+(?:spy|spies|agent|agents|mole|moles|national|nationals|citizen|citizens|tourist|tourists|businessman|businesswoman|tycoon|[Dd]iplomats?|[Dd]iplomaten|[Aa]ttach[ée]s?)/u
 
 type Span = [number, number, string]
 
@@ -3148,6 +3150,8 @@ function nonPlaceSpans(text: string): { always: Span[]; unlessAlone: Span[] } {
   if (!text || !NON_PLACE_ANY.test(text)) return { always, unlessAlone }
   // Washington state's own office-holders ("Washington governor denounces ICE arrests at Seattle airport" sat at
   // Washington, D.C. in two outlets, Nov 22, 2026): the state is not the capital city, and its towns name the story
+  // Chinese, Indian and Russian spacecraft ("Shenzhou-24 docks" sat at Shenzhou City, Hebei, Nov 25, 2026): not towns
+  for (const m of text.matchAll(SPACECRAFT)) always.push([m.index!, m.index! + m[0].length, ''])
   for (const m of text.matchAll(WASHINGTON_STATE)) always.push([m.index!, m.index! + 'Washington'.length, ''])
   for (const m of text.matchAll(TITLE_OF)) always.push([m.index! + m[0].length - m[1]!.length, m.index! + m[0].length, ''])
   // a river named like a state or country ("Mississippi River", "Niger River") is not that place: kept only when the
