@@ -225,31 +225,77 @@ else:
     print(json.dumps(res))
 PY
 }
+# Read in one Redis call per list (H-0072, Nov 25, 2026). The circuit breakers and the news feeds were
+# read with one redis-cli started per key, two or three each: about 2,000 programs started inside the
+# Redis container, which under the launch-week load (30 on 2 CPUs) took longer than the 40-second
+# limit (41 s at 10:15 AM). The cut-off read came back empty and was printed as "0 tracked, 0 failing",
+# so data_health said "0 sources and 0 news feeds failing" while nothing had been read. Now each list
+# is one EVAL that returns the same lines (a few milliseconds inside Redis) and ends with a count line
+# (cb_done=, feed_done=); a read without its tracked count or either count line prints null, so the
+# part is named in "failed" ("Not read this time: sources") instead of reading as all clear.
+SOURCE_CB_LUA=$(cat <<'LUA'
+local function s(v)
+  if type(v) ~= 'string' then return '' end
+  return (string.gsub(v, '[\t\r\n]', ' '))
+end
+local out = {}
+for _, k in ipairs(KEYS) do
+  local id = string.sub(k, 12)
+  local a = redis.pcall('HMGET', k, 'failures', 'open_until', 'open_count', 'last_failed_at')
+  local b = redis.pcall('HMGET', 'scraper:health:' .. id, 'source_name', 'source_slug', 'last_seen')
+  if type(a) == 'table' and not a.err then
+    if type(b) ~= 'table' or b.err then b = {} end
+    out[#out + 1] = 'cb=' .. s(id) .. '\t' .. s(a[1]) .. '\t' .. s(a[2]) .. '\t' .. s(a[3]) .. '\t' .. s(a[4])
+      .. '\t' .. s(b[1]) .. '\t' .. s(b[2]) .. '\t' .. s(b[3])
+  end
+end
+out[#out + 1] = 'cb_done=' .. #KEYS
+return out
+LUA
+)
+SOURCE_FEED_LUA=$(cat <<'LUA'
+local function s(v)
+  if type(v) ~= 'string' then return '' end
+  return (string.gsub(v, '[\t\r\n]', ' '))
+end
+local out = {}
+for _, k in ipairs(KEYS) do
+  local id = string.sub(k, 15)
+  local fails = redis.pcall('GET', k)
+  local paused = redis.pcall('EXISTS', 'news-rss:pause:' .. id)
+  local why = redis.pcall('GET', 'news-rss:why:' .. id)
+  out[#out + 1] = 'feed=' .. s(id) .. '\t' .. s(fails) .. '\t' .. (paused == 1 and '1' or '0') .. '\t' .. s(why)
+end
+out[#out + 1] = 'feed_done=' .. #KEYS
+return out
+LUA
+)
 source_stats() {
   local pw out off
   pw=$(redis_pw) || pw=""
   off=$(timeout 15 docker exec wp_postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAq -c "$1"' sh \
         "SELECT id || ' ' || slug FROM sources WHERE NOT active" 2>/dev/null | tr -cd '0-9a-zA-Z_. \n-') || off=""
   out=$(timeout 40 docker exec -e REDISCLI_AUTH="$pw" wp_redis sh -c '
+      set -f
+      cb_lua=$1; feed_lua=$2
       echo "tracked=$(redis-cli --raw SCARD scraper:health:index)"
       redis-cli --raw SMEMBERS scraper:health:index | head -n 2000 | sed "s/^/member=/"
-      redis-cli --raw --scan --pattern "scraper:cb:*" | head -n 400 | while read -r k; do
-        id=${k#scraper:cb:}
-        printf "cb=%s\t%s\t%s\n" "$id" "$(redis-cli --raw HMGET "$k" failures open_until open_count last_failed_at | paste -s -)" \
-          "$(redis-cli --raw HMGET "scraper:health:$id" source_name source_slug last_seen | paste -s -)"
-      done
-      redis-cli --raw --scan --pattern "news-rss:fail:*" | head -n 400 | while read -r k; do
-        id=${k#news-rss:fail:}
-        printf "feed=%s\t%s\t%s\t%s\n" "$id" "$(redis-cli --raw GET "$k")" "$(redis-cli --raw EXISTS "news-rss:pause:$id")" \
-          "$(redis-cli --raw GET "news-rss:why:$id")"
-      done
+      set -- $(redis-cli --raw --scan --pattern "scraper:cb:*" | head -n 400)
+      if [ $# -gt 0 ]; then redis-cli --raw EVAL "$cb_lua" $# "$@"; else echo "cb_done=0"; fi
+      set -- $(redis-cli --raw --scan --pattern "news-rss:fail:*" | head -n 400)
+      if [ $# -gt 0 ]; then redis-cli --raw EVAL "$feed_lua" $# "$@"; else echo "feed_done=0"; fi
       redis-cli --raw HGETALL news-rss:new | head -n 4000 | paste -d "\t" - - | sed "s/^/newat=/"
       redis-cli --raw SMEMBERS news-rss:parked | head -n 100 | sed "s/^/parked=/"
       redis-cli --raw --scan --pattern "news-rss:parked-works:*" | head -n 100 | sed "s/^news-rss:parked-works:/parked_ok=/"
-      redis-cli --raw LRANGE scraper:dlq 0 299 | sed "s/^/dlq=/"' 2>/dev/null) || out=""
+      redis-cli --raw LRANGE scraper:dlq 0 299 | sed "s/^/dlq=/"' sh "$SOURCE_CB_LUA" "$SOURCE_FEED_LUA" 2>/dev/null) || out=""
   OUT="$out" OFF="$off" python3 - <<'PY' 2>/dev/null || printf 'null'
-import calendar, json, os, re, time
+import calendar, json, os, re, sys, time
 lines = os.environ.get('OUT', '').splitlines()
+# Not read is not "0 failing" (H-0072): the tracked count must be a number and both lists must say they ended
+if not (any(re.fullmatch(r'tracked=\d+', l.strip()) for l in lines)
+        and any(l.startswith('cb_done=') for l in lines) and any(l.startswith('feed_done=') for l in lines)):
+    print('null')
+    sys.exit(0)
 off_names = {}
 for l in os.environ.get('OFF', '').splitlines():
     parts = l.split()
@@ -301,7 +347,8 @@ for line in lines:
     elif line.startswith('parked_ok='):
         parked_ok.add(line[10:].strip()[:60])
     elif line.startswith('member='):
-        members.add(line[7:])
+        if line[7:].strip():   # an empty set prints one blank line, which is no source
+            members.add(line[7:])
     elif line.startswith('cb='):
         sid, failures, open_until, open_count, failed_at, name, slug, last_seen = (line[3:].split('\t') + [''] * 8)[:8]
         if num(failures) < 1 or sid in off: continue
