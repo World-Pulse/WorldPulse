@@ -132,14 +132,15 @@ export default function SourcesPage({ sourcesRead = null }: { sourcesRead?: numb
     <div className="max-w-4xl mx-auto px-4 py-8">
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
+      {/* The button keeps to one line beside the longer count line (Nov 25: on a phone it broke into three) */}
+      <div className="flex items-center justify-between gap-3 mb-6">
+        <div className="min-w-0">
           <h1 className="text-[22px] font-bold text-wp-text">Intelligence Sources</h1>
           <p className="text-[13px] text-wp-text3 mt-0.5">{sourcesLine(sourcesRead)}</p>
         </div>
         <Link
           href="/sources/suggest"
-          className="px-4 py-2 rounded-lg bg-wp-amber text-black text-[13px] font-bold hover:bg-[#ffb84d] transition-all"
+          className="flex-shrink-0 whitespace-nowrap px-4 py-2 rounded-lg bg-wp-amber text-black text-[13px] font-bold hover:bg-[#ffb84d] transition-all"
         >
           + Suggest Source
         </Link>
