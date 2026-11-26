@@ -89,4 +89,14 @@ describe("an outlet's own country at home", () => {
     expect(names(withHomeNames('Maurice : le budget adopté', 'FR'))).toEqual([])
     expect(names("Sommet à l'île Maurice")).toEqual(['MU'])
   })
+
+  it("reads a Baltic outlet's parliament as its own country", () => {
+    expect(names(withHomeNames('Saeimas deputātu vairākums atbalsta galvojumu airBaltic', 'LV'))).toEqual(['LV'])
+    expect(names(withHomeNames('Seimas priėmė biudžetą', 'LT'))).toEqual(['LT'])
+    expect(names(withHomeNames('Riigikogu arutab eelarvet', 'EE'))).toEqual(['EE'])
+    expect(inferGeo('Saeimas deputātu vairākums pirmajā lasījumā atbalsta galvojumu "airBaltic" līdz 175 miljoniem eiro',
+      'The guarantee would fund the airline\'s Chapter 11 restructuring in the United States.', outlet('LV')).countryCode).toBe('LV')
+    // ...only at the country's own outlets
+    expect(names(withHomeNames('Saeimas deputātu vairākums', 'EE'))).toEqual([])
+  })
 })

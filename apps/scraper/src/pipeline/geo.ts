@@ -2952,6 +2952,11 @@ const HOME_NAMES: Record<string, { name: RegExp; as: string; unless?: RegExp }> 
   SC: { name: /\bSesel(?:wa)?\b/g, as: 'Seychelles' },
   // A Peruvian outlet's "Comas:" or "San Juan de Lurigancho:" is one of Lima's districts, as RPP heads its city news
   // (Nov 8, 2026: "Comas: bomberos confinan incendio que se produjo en un edificio de siete pisos" had no place)
+  // A Baltic outlet's parliament names its country (Nov 26, 2026: diena.lv's "Saeimas deputātu vairākums ... atbalsta
+  // galvojumu airBaltic" was pinned in the United States, which its summary names for the airline's Chapter 11 case)
+  LV: { name: /(?<![\p{L}\p{N}])Saeim(?:a|as|ā|u|ai)(?![\p{L}\p{N}])/gu, as: 'Latvia' },
+  LT: { name: /(?<![\p{L}\p{N}])Seim(?:as|o|e|ui|ą)(?![\p{L}\p{N}])/gu, as: 'Lithuania' },
+  EE: { name: /(?<![\p{L}\p{N}])Riigikogu(?:s|l|ga|t|le)?(?![\p{L}\p{N}])/gu, as: 'Estonia' },
   PE: { name: /(?<![\p{L}\p{N}])(?:Comas|Ate|Chorrillos|Santiago\s+de\s+Surco|Surco|San\s+Juan\s+de\s+Lurigancho|San\s+Juan\s+de\s+Miraflores|Villa\s+El\s+Salvador|Villa\s+Mar[íi]a\s+del\s+Triunfo|Los\s+Olivos|San\s+Mart[íi]n\s+de\s+Porres|Puente\s+Piedra|Carabayllo|Independencia|R[íi]mac|Bre[ñn]a|La\s+Victoria|Lince|Jes[úu]s\s+Mar[íi]a|Pueblo\s+Libre|San\s+Isidro|San\s+Borja|San\s+Miguel|Surquillo|Barranco|La\s+Molina|Lur[íi]n|Pachac[áa]mac|Miraflores|Cercado\s+de\s+Lima)(?=\s*:)/gu, as: 'Lima' },
 }
 
