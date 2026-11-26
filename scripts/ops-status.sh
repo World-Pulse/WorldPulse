@@ -832,6 +832,28 @@ try:
 except (OSError, ValueError):
     pass
 out['took_ms'] = took
+# The last sources count that was read, with its time (Nov 25, 2026: from about 7 PM the sources part ran
+# out of time under launch week's load, and every restart of the website forgot the count it had kept in
+# memory). The count moves slowly, so the site may use this one for a day; "sources" itself stays null
+# when it wasn't read, so data_health still says so
+last_path = 'logs/sources-last.json'
+try:
+    tracked = out['sources']['tracked']
+    if isinstance(tracked, int) and not isinstance(tracked, bool) and tracked > 0:
+        import datetime
+        last = {'tracked': tracked, 'at': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}
+        with open(last_path, 'w', encoding='utf-8') as fh:
+            fh.write(json.dumps(last))
+        out['sources_last'] = last
+    else:
+        raise ValueError('not read')
+except (OSError, ValueError, KeyError, TypeError):
+    try:
+        with open(last_path, encoding='utf-8') as fh:
+            last = json.loads(fh.read())
+        out['sources_last'] = last if isinstance(last, dict) else None
+    except (OSError, ValueError):
+        out['sources_last'] = None
 out['failed'] = failed
 print(json.dumps(out, separators=(',', ':')))
 PY

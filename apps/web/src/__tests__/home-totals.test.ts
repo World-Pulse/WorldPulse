@@ -44,6 +44,23 @@ describe("the home page's day totals", () => {
   })
 })
 
+describe("the status file's own copy of the last sources count", () => {
+  const NOW = Date.parse('2026-11-26T01:10:00Z')
+  const pass = (last: unknown) => ({ pipeline: { db: [], sources: null, sources_last: last } })
+
+  it('is used for a day when this pass could not count the sources', () => {
+    expect(totalsOf(pass({ tracked: 1442, at: '2026-11-25T23:40:00Z' }), NOW).sources).toBe(1442)
+  })
+
+  it('is not used once a day old, with no time, or beside a count that was read', () => {
+    expect(totalsOf(pass({ tracked: 1442, at: '2026-11-24T23:40:00Z' }), NOW).sources).toBeNull()
+    expect(totalsOf(pass({ tracked: 1442 }), NOW).sources).toBeNull()
+    expect(totalsOf(pass({ tracked: 'many', at: '2026-11-25T23:40:00Z' }), NOW).sources).toBeNull()
+    const read = { pipeline: { db: [], sources: { tracked: 1500 }, sources_last: { tracked: 1442, at: '2026-11-25T23:40:00Z' } } }
+    expect(totalsOf(read, NOW).sources).toBe(1500)
+  })
+})
+
 describe('reading the status file', () => {
   beforeEach(() => { cachedFetch.mockReset(); resetHomeTotals() })
 

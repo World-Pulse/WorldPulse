@@ -24,15 +24,27 @@ const countOf = (v: unknown): number | null => {
  * fixed order (each null when it failed or ran out of time), one of them
  * holding stories_verified_24h; pipeline.sources.tracked is the sources read.
  */
-export function totalsOf(status: unknown): HomeTotals {
+export function totalsOf(status: unknown, now = Date.now()): HomeTotals {
   if (!status || typeof status !== 'object') return NONE
   const pipeline = (status as { pipeline?: unknown }).pipeline
   if (!pipeline || typeof pipeline !== 'object') return NONE
-  const { db, sources } = pipeline as { db?: unknown; sources?: unknown }
+  const { db, sources, sources_last } = pipeline as { db?: unknown; sources?: unknown; sources_last?: unknown }
   const answers: unknown[] = Array.isArray(db) ? db : []
   const stories = answers.find((x): x is { stories_verified_24h?: unknown } => !!x && typeof x === 'object' && 'stories_verified_24h' in x)
   const tracked = sources && typeof sources === 'object' ? (sources as { tracked?: unknown }).tracked : undefined
-  return { verified24h: countOf(stories?.stories_verified_24h), sources: countOf(tracked) }
+  return { verified24h: countOf(stories?.stories_verified_24h), sources: countOf(tracked) ?? lastTracked(sources_last, now) }
+}
+
+/**
+ * The status file's own copy of the last sources count it read (pipeline.sources_last, kept on the server across
+ * restarts), used for a day when this pass could not count them; null when it is older or has no time
+ */
+function lastTracked(last: unknown, now: number): number | null {
+  if (!last || typeof last !== 'object') return null
+  const { tracked, at } = last as { tracked?: unknown; at?: unknown }
+  const when = typeof at === 'string' ? Date.parse(at) : NaN
+  if (!Number.isFinite(when) || now - when >= SOURCES_KEEP_MS || when - now > 3_600_000) return null
+  return countOf(tracked)
 }
 
 /** How long the totals are kept, and how long a failed read is not retried */
@@ -69,7 +81,7 @@ export async function fetchHomeTotals(now = Date.now()): Promise<HomeTotals> {
   try {
     const res = await cachedFetch(`${SITE_URL}/ops-status.json`, KEEP_MS, WAIT_MS)
     if (!res.ok) { failedAt = now; return withLastSources(NONE, now) }
-    return withLastSources(totalsOf(await res.json()), now)
+    return withLastSources(totalsOf(await res.json(), now), now)
   } catch {
     failedAt = now
     return withLastSources(NONE, now)
