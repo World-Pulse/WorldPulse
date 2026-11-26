@@ -2933,6 +2933,9 @@ const HOME_NAMES: Record<string, { name: RegExp; as: string; unless?: RegExp }> 
   // A Malaysian outlet's "Bursa" is its stock exchange, not Türkiye's Bursa (Nov 6, 2026: the NST's "Oil price slide
   // hits Bursa energy stocks")
   MY: { name: /\bBursa\b/g, as: 'the bourse', unless: /\bt(?:urkey|ürkiye|urkiye)\b/i },
+  // An Indonesian outlet's "Bursa" is the stock exchange too (Nov 25, 2026: okezone's "Industri Kripto Masuk Bursa ICEx"
+  // was pinned in Bursa, Türkiye), unless the text says Turki
+  ID: { name: /\bBursa\b/g, as: 'the bourse', unless: /\b(?:turki|t(?:urkey|ürkiye|urkiye))\b/i },
   // A Mexican outlet's "la Roma" is Mexico City's Colonia Roma (Nov 6, 2026: "5 actividades para este fin de semana en
   // CDMX" was pinned in Rome), as are "Roma Norte" and "Roma-Condesa"
   MX: { name: /\b[Ll]a\s+Roma\b(?![\s-]+(?:Italia|italiana))|\bRoma(?=[\s-]+(?:Norte|Sur|Condesa)\b)/g, as: 'Colonia Roma' },

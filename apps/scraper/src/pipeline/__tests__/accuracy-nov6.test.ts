@@ -85,6 +85,9 @@ describe('benchmarks, an exchange, a company and the straits', () => {
     expect(at('nst-malaysia', 'Oil price slide hits Bursa energy stocks').countryCode).toBe('MY')
     expect(country('Bursa Malaysia closes higher')).not.toBe('TR')
     expect(country('Earthquake shakes Bursa')).toBe('TR')
+    // Indonesia's exchange (Nov 25): okezone's headline was pinned in Bursa, Türkiye
+    expect(at('okezone', 'Penguatan Pasar, Industri Kripto Masuk Bursa ICEx').countryCode).not.toBe('TR')
+    expect(at('okezone', 'Gempa guncang Bursa, Turki').countryCode).toBe('TR')
   })
 
   it('places the straits in the news', () => {
