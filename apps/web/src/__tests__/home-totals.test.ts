@@ -63,4 +63,26 @@ describe('reading the status file', () => {
     expect(await fetchHomeTotals(t0 + 11 * 60_000)).toEqual({ verified24h: 803, sources: 651 })
     expect(cachedFetch).toHaveBeenCalledTimes(2)
   })
+
+  // Nov 25, 2026: from about 7 PM the status pass didn't finish its count of the sources ("Not read this time:
+  // sources") and the pages lost their "1,442 sources read"
+  it('keeps the last sources count for a day when a read has none', async () => {
+    const t0 = Date.UTC(2026, 10, 25, 22, 0)
+    const notRead = { ...STATUS, pipeline: { ...STATUS.pipeline, sources: null } }
+    cachedFetch.mockResolvedValueOnce(new Response(JSON.stringify(STATUS), { status: 200 }))
+    expect(await fetchHomeTotals(t0)).toEqual({ verified24h: 803, sources: 651 })
+    cachedFetch.mockResolvedValueOnce(new Response(JSON.stringify(notRead), { status: 200 }))
+    expect(await fetchHomeTotals(t0 + 30 * 60_000)).toEqual({ verified24h: 803, sources: 651 })
+    // a failed read too: the stories count goes (it changes by the hour), the sources count stays
+    cachedFetch.mockRejectedValueOnce(new Error('timed out'))
+    expect(await fetchHomeTotals(t0 + 60 * 60_000)).toEqual({ verified24h: null, sources: 651 })
+    // after a day without a count, none is shown rather than an old one
+    cachedFetch.mockResolvedValueOnce(new Response(JSON.stringify(notRead), { status: 200 }))
+    expect(await fetchHomeTotals(t0 + 25 * 3_600_000)).toEqual({ verified24h: 803, sources: null })
+  })
+
+  it('shows no sources count when none has been read yet', async () => {
+    cachedFetch.mockResolvedValueOnce(new Response(JSON.stringify({ ...STATUS, pipeline: { ...STATUS.pipeline, sources: null } }), { status: 200 }))
+    expect(await fetchHomeTotals()).toEqual({ verified24h: 803, sources: null })
+  })
 })

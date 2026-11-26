@@ -42,23 +42,42 @@ const WAIT_MS = 3_000
 let failedAt = 0
 
 /**
+ * The last sources count read, and when, used for a day when a read of the status file has none (Nov 25, 2026:
+ * from about 7 PM the server's status pass didn't finish its count of the sources under launch week's load,
+ * "Not read this time: sources", and the Sources page, the home page and How we count lost their "1,442 sources
+ * read"). The count moves slowly, so the last one read stays right; never a guess when none was read.
+ */
+const SOURCES_KEEP_MS = 24 * 3_600_000
+let lastSources: { n: number; at: number } | null = null
+
+function withLastSources(totals: HomeTotals, now: number): HomeTotals {
+  if (totals.sources) {
+    lastSources = { n: totals.sources, at: now }
+    return totals
+  }
+  if (lastSources && now - lastSources.at < SOURCES_KEEP_MS) return { ...totals, sources: lastSources.n }
+  return totals
+}
+
+/**
  * The day's totals, kept 10 minutes; nulls when the status file doesn't
  * answer, and then for 10 minutes without asking again (the page shows the
  * stories list's own count meanwhile)
  */
 export async function fetchHomeTotals(now = Date.now()): Promise<HomeTotals> {
-  if (failedAt && now - failedAt < KEEP_MS) return NONE
+  if (failedAt && now - failedAt < KEEP_MS) return withLastSources(NONE, now)
   try {
     const res = await cachedFetch(`${SITE_URL}/ops-status.json`, KEEP_MS, WAIT_MS)
-    if (!res.ok) { failedAt = now; return NONE }
-    return totalsOf(await res.json())
+    if (!res.ok) { failedAt = now; return withLastSources(NONE, now) }
+    return withLastSources(totalsOf(await res.json()), now)
   } catch {
     failedAt = now
-    return NONE
+    return withLastSources(NONE, now)
   }
 }
 
-/** (tests) forget a failed read */
+/** (tests) forget a failed read and the last sources count */
 export function resetHomeTotals(): void {
   failedAt = 0
+  lastSources = null
 }
