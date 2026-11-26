@@ -233,6 +233,11 @@ PY
 # is one EVAL that returns the same lines (a few milliseconds inside Redis) and ends with a count line
 # (cb_done=, feed_done=); a read without its tracked count or either count line prints null, so the
 # part is named in "failed" ("Not read this time: sources") instead of reading as all clear.
+# The three key searches ask Redis for 1,000 keys a step, not redis-cli's 10 (Nov 25, 2026): from about 7 PM the
+# searches through the whole store, 10 keys a step, ran past the 40-second limit under launch week's load (41.9 s)
+# and the sources read "Not read this time" all evening, so the site's "1,442 sources read" went blank. A step of
+# 1,000 is a hundredth of the round trips (redis-cli 7.4's --count; the server runs redis:7.4-alpine), and the
+# limit is 60 seconds for what's left of the load.
 SOURCE_CB_LUA=$(cat <<'LUA'
 local function s(v)
   if type(v) ~= 'string' then return '' end
@@ -275,18 +280,18 @@ source_stats() {
   pw=$(redis_pw) || pw=""
   off=$(timeout 15 docker exec wp_postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAq -c "$1"' sh \
         "SELECT id || ' ' || slug FROM sources WHERE NOT active" 2>/dev/null | tr -cd '0-9a-zA-Z_. \n-') || off=""
-  out=$(timeout 40 docker exec -e REDISCLI_AUTH="$pw" wp_redis sh -c '
+  out=$(timeout 60 docker exec -e REDISCLI_AUTH="$pw" wp_redis sh -c '
       set -f
       cb_lua=$1; feed_lua=$2
       echo "tracked=$(redis-cli --raw SCARD scraper:health:index)"
       redis-cli --raw SMEMBERS scraper:health:index | head -n 2000 | sed "s/^/member=/"
-      set -- $(redis-cli --raw --scan --pattern "scraper:cb:*" | head -n 400)
+      set -- $(redis-cli --raw --scan --count 1000 --pattern "scraper:cb:*" | head -n 400)
       if [ $# -gt 0 ]; then redis-cli --raw EVAL "$cb_lua" $# "$@"; else echo "cb_done=0"; fi
-      set -- $(redis-cli --raw --scan --pattern "news-rss:fail:*" | head -n 400)
+      set -- $(redis-cli --raw --scan --count 1000 --pattern "news-rss:fail:*" | head -n 400)
       if [ $# -gt 0 ]; then redis-cli --raw EVAL "$feed_lua" $# "$@"; else echo "feed_done=0"; fi
       redis-cli --raw HGETALL news-rss:new | head -n 4000 | paste -d "\t" - - | sed "s/^/newat=/"
       redis-cli --raw SMEMBERS news-rss:parked | head -n 100 | sed "s/^/parked=/"
-      redis-cli --raw --scan --pattern "news-rss:parked-works:*" | head -n 100 | sed "s/^news-rss:parked-works:/parked_ok=/"
+      redis-cli --raw --scan --count 1000 --pattern "news-rss:parked-works:*" | head -n 100 | sed "s/^news-rss:parked-works:/parked_ok=/"
       redis-cli --raw LRANGE scraper:dlq 0 299 | sed "s/^/dlq=/"' sh "$SOURCE_CB_LUA" "$SOURCE_FEED_LUA" 2>/dev/null) || out=""
   # The read goes to Python on file descriptor 3, not in the environment (Nov 25, 2026): once the read
   # finished in time it was over Linux's 128 KB limit for one environment string (the 300 newest
